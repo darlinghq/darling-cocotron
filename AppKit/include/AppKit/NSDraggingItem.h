@@ -19,6 +19,9 @@
 
 #import <Foundation/NSObject.h>
 
+typedef NSString *NSDraggingImageComponentKey;
+extern const NSDraggingImageComponentKey NSDraggingImageComponentIconKey;
+
 @interface NSDraggingImageComponent : NSObject
 @end
 

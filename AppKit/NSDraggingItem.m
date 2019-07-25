@@ -19,6 +19,8 @@
 
 #import <AppKit/NSDraggingItem.h>
 
+const NSDraggingImageComponentKey NSDraggingImageComponentIconKey = @"icon";
+
 @implementation NSDraggingImageComponent
 @end
 
