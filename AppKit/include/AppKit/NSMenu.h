@@ -12,6 +12,8 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 @protocol NSMenuDelegate;
 
+extern const NSNotificationName NSMenuDidEndTrackingNotification;
+
 @interface NSMenu : NSObject <NSCopying> {
     NSMenu *_supermenu;
     NSString *_title;
