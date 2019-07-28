@@ -19,8 +19,8 @@
 
 #import <Foundation/NSObject.h>
 
-@interface NSSharingService : NSObject {
+@interface NSSharingService : NSObject
 @end
 
-@interface NSItemProvider (NSCloudKitSharing)
-@end
+// @interface NSItemProvider (NSCloudKitSharing)
+// @end

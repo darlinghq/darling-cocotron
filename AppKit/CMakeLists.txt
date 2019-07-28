@@ -393,6 +393,8 @@ set(AppKit_sources
 	NSATSTypesetter.m
 	NSOpenGLLayer.m
 	NSCollectionViewLayout.m
+
+	NSSharingService.m
 )
 
 set_source_files_properties(${AppKit_sources} LANGUAGE C)
