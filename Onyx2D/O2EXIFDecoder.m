@@ -186,9 +186,9 @@ static tEXIFTagToLabel EXIFTagToLabel[] = {
     {kImage, kImage_YCbCrPositioning, @"YCbCrPositioning"},
     {kImage, kImage_ReferenceBlackWhite, @"ReferenceBlackWhite"},
     {kImage, kImage_Copyright, @"Copyright"},
-    {kImage, kImage_ExifIFDOffset, 0    },
-    {kImage, kImage_GPSIFDOffset, 0    },
-    
+    {kImage, kImage_ExifIFDOffset, 0},
+    {kImage, kImage_GPSIFDOffset, 0},
+
     {kTIFF, kTIFF_TIFFNewSubfileType, @"NewSubfileType"},
     {kTIFF, kTIFF_TIFFSubfileType, @"SubfileType"},
     {kTIFF, kTIFF_TIFFImageWidth, @"ImageWidth"},
@@ -203,7 +203,7 @@ static tEXIFTagToLabel EXIFTagToLabel[] = {
     {kTIFF, kTIFF_TIFFImageDescription, @"ImageDescription"},
     {kTIFF, kTIFF_TIFFMake, @"Make"},
     {kTIFF, kTIFF_TIFFModel, @"Model"},
-    {kTIFF, kTIFF_TIFFStripOffsets, 0    },
+    {kTIFF, kTIFF_TIFFStripOffsets, 0},
     {kTIFF, kTIFF_TIFFOrientation, @"Orientation"},
     {kTIFF, kTIFF_TIFFSamplesPerPixel, @"SamplesPerPixel"},
     {kTIFF, kTIFF_TIFFRowsPerStrip, @"RowsPerStrip"},
@@ -230,7 +230,7 @@ static tEXIFTagToLabel EXIFTagToLabel[] = {
     {kTIFF, kTIFF_TIFFReferenceBlackWhite, @"ReferenceBlackWhite"},
     {kTIFF, kTIFF_TIFFCopyright, @"Copyright"},
     {kTIFF, kTIFF_TIFFUserComment, @"UserComment"},
-    
+
     {kEXIF, kEXIF_ExposureTime, @"ExposureTime"},
     {kEXIF, kEXIF_FNumber, @"FNumber"},
     {kEXIF, kEXIF_ExposureProgram, @"ExposureProgram"},
@@ -274,13 +274,13 @@ static tEXIFTagToLabel EXIFTagToLabel[] = {
     {kEXIF, kEXIF_FileSource, @"FileSource"},
     {kEXIF, kEXIF_SceneType, @"SceneType"},
     {kEXIF, kEXIF_CFAPattern, @"CFAPattern"},
-    
+
     {kInterop, kInterop_InteroperabilityIndex, @"InteroperabilityIndex"},
     {kInterop, kInterop_InteroperabilityVersion, @"InteroperabilityVersion"},
     {kInterop, kInterop_RelatedImageFileFormat, @"RelatedImageFileFormat"},
     {kInterop, kInterop_RelatedImageWidth, @"RelatedImageWidth"},
     {kInterop, kInterop_RelatedImageLength, @"RelatedImageLength"},
-    
+
     {kGPS, kGPS_GPSVersionID, @"GPSVersionID"},
     {kGPS, kGPS_GPSLatitudeRef, @"GPSLatitudeRef"},
     {kGPS, kGPS_GPSLatitude, @"GPSLatitude"},
@@ -308,9 +308,8 @@ static tEXIFTagToLabel EXIFTagToLabel[] = {
     {kGPS, kGPS_GPSDestBearing, @"GPSDestBearing"},
     {kGPS, kGPS_GPSDestDistanceRef, @"GPSDestDistanceRef"},
     {kGPS, kGPS_GPSDestDistance, @"GPSDestDistance"},
-    
-    {-1, -1, nil}
-};
+
+    {-1, -1, nil}};
 
 typedef enum valueType {
     tByte = 1,
@@ -328,70 +327,70 @@ typedef enum valueType {
 } valueType;
 
 // Algorithm inspired from JpegMeta.php source code
-static unsigned char _getByte(const unsigned char* data, size_t offset, bool bigendian)
-{
+static unsigned char _getByte(const unsigned char *data, size_t offset,
+                              bool bigendian) {
     return data[offset];
 }
 
-static unsigned short _getShort(const unsigned char* data, size_t offset, bool bigendian)
-{
+static unsigned short _getShort(const unsigned char *data, size_t offset,
+                                bool bigendian) {
     data += offset;
     unsigned int v1 = data[0];
     unsigned int v2 = data[1];
-    if (bigendian)
-        return (v1<<8) + v2;
-    else
-        return (v2<<8) + v1;
+    if (bigendian) {
+        return (v1 << 8) + v2;
+    } else {
+        return (v2 << 8) + v1;
+    }
 }
 
-static unsigned long _getLong(const unsigned char*data, size_t offset, bool bigendian)
-{
+static unsigned long _getLong(const unsigned char *data, size_t offset,
+                              bool bigendian) {
     data += offset;
     unsigned int v1 = data[0];
     unsigned int v2 = data[1];
     unsigned int v3 = data[2];
     unsigned int v4 = data[3];
-    if (bigendian)
-        return (((((v1<<8) + v2)<<8) + v3)<<8) + v4;
-    else
-        return (((((v4<<8) + v3)<<8) + v2)<<8) + v1;
+    if (bigendian) {
+        return (((((v1 << 8) + v2) << 8) + v3) << 8) + v4;
+    } else {
+        return (((((v4 << 8) + v3) << 8) + v2) << 8) + v1;
+    }
 }
 
-- (id)keyForType:(int)type
-{
+- (id) keyForType: (int) type {
     id typeKey = nil;
     switch (type) {
-        case kImage:
-            typeKey = @"{TIFF}";
-            break;
-        case kTIFF:
-            typeKey = @"{TIFF}";
-            break;
-        case kInterop:
-            typeKey = @"{Interop}";
-            break;
-        case kGPS:
-            typeKey = @"{GPS}";
-            break;
-        case kEXIF:
-            typeKey = @"{Exif}";
-            break;
-        case kJFIF:
-            typeKey = @"{JFIF}";
-            break;
-        default:
-            typeKey = [NSString stringWithFormat:@"{%d}", type];
-            break;
+    case kImage:
+        typeKey = @"{TIFF}";
+        break;
+    case kTIFF:
+        typeKey = @"{TIFF}";
+        break;
+    case kInterop:
+        typeKey = @"{Interop}";
+        break;
+    case kGPS:
+        typeKey = @"{GPS}";
+        break;
+    case kEXIF:
+        typeKey = @"{Exif}";
+        break;
+    case kJFIF:
+        typeKey = @"{JFIF}";
+        break;
+    default:
+        typeKey = [NSString stringWithFormat: @"{%d}", type];
+        break;
     }
     return typeKey;
 }
 
-- (id)keyForType:(int)type tag:(int)tagNumber
-{
+- (id) keyForType: (int) type tag: (int) tagNumber {
     NSString *numberKey = nil;
     tEXIFTagToLabel *info = EXIFTagToLabel;
     while (info->type != -1) {
-        if (info->type==type && info->tag == tagNumber) {
+        if (info->type == type && info->tag == tagNumber) {
             numberKey = info->label;
             break;
         }
@@ -404,239 +403,246 @@ static unsigned long _getLong(const unsigned char*data, size_t offset, bool bige
     return numberKey;
 }
 
-- (id)tagForKey:(int)type number:(int)tagNumber
-{
-    id typeKey = [self keyForType:type];
-    id numberKey = [self keyForType:type tag:tagNumber];
+- (id) tagForKey: (int) type number: (int) tagNumber {
+    id typeKey = [self keyForType: type];
+    id numberKey = [self keyForType: type tag: tagNumber];
     if (type && numberKey) {
-        return [[_tags objectForKey:typeKey] objectForKey:numberKey];
+        return [[_tags objectForKey: typeKey] objectForKey: numberKey];
     } else {
         return nil;
     }
 }
 
-- (id)tagForTypeKey:(id)typeKey numberKey:(id)numberKey
-{
+- (id) tagForTypeKey: (id) typeKey numberKey: (id) numberKey {
     if (typeKey && numberKey) {
-        return [[_tags objectForKey:typeKey] objectForKey:numberKey];
+        return [[_tags objectForKey: typeKey] objectForKey: numberKey];
     } else if (numberKey) {
-        return [_tags objectForKey:numberKey];
-    } else  {
+        return [_tags objectForKey: numberKey];
+    } else {
         return nil;
     }
 }
 
-- (void)setTagForTypeKey:(id)typeKey numberKey:(id)numberKey value:(id)tagValue
-{
+- (void) setTagForTypeKey: (id) typeKey
+                numberKey: (id) numberKey
+                    value: (id) tagValue {
     NSMutableDictionary *dict = _tags;
     if (typeKey) {
-        dict = [_tags objectForKey:typeKey];
+        dict = [_tags objectForKey: typeKey];
         if (dict == nil) {
             dict = [NSMutableDictionary dictionary];
-            [_tags setObject:dict forKey:typeKey];
+            [_tags setObject: dict forKey: typeKey];
         }
     }
     if (numberKey && tagValue) {
-        [dict setObject:tagValue forKey:numberKey];
+        [dict setObject: tagValue forKey: numberKey];
     }
 }
 
-- (void)setTagForType:(int)type number:(int)tagNumber value:(id)tagValue
-{
+- (void) setTagForType: (int) type
+                number: (int) tagNumber
+                 value: (id) tagValue {
     // switzzle type & tagNumber to strings keys
-    id typeKey = [self keyForType:type];
-    id numberKey = [self keyForType:type tag:tagNumber];
-    [self setTagForTypeKey:typeKey numberKey:numberKey value:tagValue];
+    id typeKey = [self keyForType: type];
+    id numberKey = [self keyForType: type tag: tagNumber];
+    [self setTagForTypeKey: typeKey numberKey: numberKey value: tagValue];
 }
 
+#define CHECK_AVAILABLE_BYTES(offset, s)                                       \
+    if (offset + s > size) {                                                   \
+        return 0;                                                              \
+    }
 
-
-#define CHECK_AVAILABLE_BYTES(offset,s) if(offset+s>size) { return 0; }
-
-- (size_t)_readIFD:(const uint8_t *)data offset:(size_t)offset bigendian:(BOOL)bigendian mode:(int)mode
-              size:(size_t)size
-{
-    CHECK_AVAILABLE_BYTES(offset,2);
+- (size_t) _readIFD: (const uint8_t *) data
+             offset: (size_t) offset
+          bigendian: (BOOL) bigendian
+               mode: (int) mode
+               size: (size_t) size {
+    CHECK_AVAILABLE_BYTES(offset, 2);
     short numEntries = _getShort(data, offset, bigendian);
     offset += 2;
     // Reading the data :
     //	We have a TOC of (tag,type,count,data)
-    //	If data length is > 4 bytes, then the real data is stored after the TOC, and "data" is the offset to the real data
+    //	If data length is > 4 bytes, then the real data is stored after the
+    // TOC,
+    // and "data" is the offset to the real data
     for (int i = 0; i < numEntries; i++) {
-        const unsigned char* rawValue;
-        id val  = nil;
-        
-        CHECK_AVAILABLE_BYTES(offset,2);
-        unsigned short tag = _getShort(data, offset,  bigendian);
+        const unsigned char *rawValue;
+        id val = nil;
+
+        CHECK_AVAILABLE_BYTES(offset, 2);
+        unsigned short tag = _getShort(data, offset, bigendian);
         offset += 2;
-        CHECK_AVAILABLE_BYTES(offset,2);
-        unsigned short type = _getShort(data, offset,  bigendian);
+        CHECK_AVAILABLE_BYTES(offset, 2);
+        unsigned short type = _getShort(data, offset, bigendian);
         offset += 2;
-        CHECK_AVAILABLE_BYTES(offset,4);
+        CHECK_AVAILABLE_BYTES(offset, 4);
         long count = _getLong(data, offset, bigendian);
         offset += 4;
-        
+
         if ((type < 1) || (type > 12)) {
             return -1; // Unexpected Type
         }
-        
-        int typeLengths[] = {-1, 1, 1, 2, 4, 8, 1, 1, 2, 4, 8, 4, 8 };
+
+        int typeLengths[] = {-1, 1, 1, 2, 4, 8, 1, 1, 2, 4, 8, 4, 8};
         int dataLength = typeLengths[type] * count;
-        
+
         if (dataLength > 4) {
             // The 4 bytes data is just an offset to the real data
-            CHECK_AVAILABLE_BYTES(offset,4);
+            CHECK_AVAILABLE_BYTES(offset, 4);
             long dataOffset = _getLong(data, offset, bigendian);
             rawValue = data + dataOffset;
-            CHECK_AVAILABLE_BYTES(dataOffset,dataLength);
-        }
-        else {
+            CHECK_AVAILABLE_BYTES(dataOffset, dataLength);
+        } else {
             // The 4 bytes data is the real data
             rawValue = data + offset;
-            CHECK_AVAILABLE_BYTES(offset,dataLength);
+            CHECK_AVAILABLE_BYTES(offset, dataLength);
         }
         offset += 4;
-        
+
         long value = 0;
         switch (type) {
-            case tByte:
-            case tSByte:
-            case tUndefined:
-                if (count == 1) {
-                    value = _getByte(rawValue, 0, bigendian);
-                    val = [NSNumber numberWithChar:value];
-                }
-                else {
-                    val = [NSData dataWithBytes:rawValue length:dataLength];
-                }
-                break;
-            case tAscii:
-                // Kill the \0 marker if there is one
-                if (count > 0 && rawValue[count-1] == 0) {
-                    count--;
-                }
-                val = [[[NSString alloc] initWithBytes:rawValue length:count encoding:NSUTF8StringEncoding] autorelease];
-                break;
-            case tShort:
-                if (count == 1) {
-                    value = _getShort(rawValue, 0, bigendian);
-                    val = [NSNumber numberWithShort:value];
-                }
-                else {
-                    val = [NSMutableArray arrayWithCapacity:count];
-                    for (int i = 0; i < count; ++i) {
-                        value = _getShort(rawValue, i*2, bigendian);
-                        [val addObject:[NSNumber numberWithShort:value]];
-                    }
-                }
-                break;
-            case tLong:
-                if (count == 1) {
-                    value = _getLong(rawValue, 0, bigendian);
-                    val = [NSNumber numberWithUnsignedLong:value];
-                }
-                else {
-                    val = [NSMutableArray arrayWithCapacity:count];
-                    for (int j = 0; j < count; j++) {
-                        value  = _getLong(rawValue, j * 4, bigendian);
-                        [val addObject:[NSNumber numberWithUnsignedLong:value]];
-                    }
-                }
-                break;
-            case tRational:
-                if (count == 1) {
-                    unsigned long a = _getLong(rawValue, 0, bigendian);
-                    unsigned long b = _getLong(rawValue, 4, bigendian);
-                    val = [NSNumber numberWithFloat:a/(float)b];
-                }
-                else {
-                    val = [NSMutableArray arrayWithCapacity:count];
-                    for (int j = 0; j < count; j++) {
-                        unsigned long a = _getLong(rawValue, j*8, bigendian);
-                        unsigned long b = _getLong(rawValue, j*8+4, bigendian);
-                        [val addObject:[NSNumber numberWithFloat:a/(float)b]];
-                    }
-                }
-                break;
-            case tSShort:
-                if (count == 1) {
-                    value = _getShort(rawValue, 0, bigendian);
-                    val = [NSNumber numberWithInt:(signed short)value];
-                }
-                else {
-                    val = [NSMutableArray arrayWithCapacity:count];
-                    for (int i = 0; i < count; ++i) {
-                        signed short value = _getShort(rawValue, i*2, bigendian);
-                        [val addObject:[NSNumber numberWithInt:value]];
-                    }
-                }
-                break;
-            case tSLong:
-                if (count == 1) {
-                    value = _getLong(rawValue, 0, bigendian);
-                    val = [NSNumber numberWithLong:value];
-                }
-                else {
-                    val = [NSMutableArray arrayWithCapacity:count];
-                    for (int j = 0; j < count; j++) {
-                        value  = _getLong(rawValue, j * 4, bigendian);
-                        [val addObject:[NSNumber numberWithLong:value]];
-                    }
-                }
-                break;
-            case tSRational:
-                if (count == 1) {
-                    long a = _getLong(rawValue, 0, bigendian);
-                    long b = _getLong(rawValue, 4, bigendian);
-                    val = [NSNumber numberWithFloat:a/(float)b];
-                }
-                else {
-                    val = [NSMutableArray arrayWithCapacity:count];
-                    for (int j = 0; j < count; j++) {
-                        long a = _getLong(rawValue, j*8, bigendian);
-                        long b = _getLong(rawValue, j*8+4, bigendian);
-                        [val addObject:[NSNumber numberWithFloat:a/(float)b]];
-                    }
-                }
-                break;
-            case tFloat:
-            {
-                float *value = (float *)rawValue;
-                val = [NSNumber numberWithFloat:*value];
+        case tByte:
+        case tSByte:
+        case tUndefined:
+            if (count == 1) {
+                value = _getByte(rawValue, 0, bigendian);
+                val = [NSNumber numberWithChar: value];
+            } else {
+                val = [NSData dataWithBytes: rawValue length: dataLength];
             }
-                break;
-                
-            case tDouble:
-            {
-                double *value = (double *)rawValue;
-                val = [NSNumber numberWithDouble:*value];
+            break;
+        case tAscii:
+            // Kill the \0 marker if there is one
+            if (count > 0 && rawValue[count - 1] == 0) {
+                count--;
             }
-                break;
-            default:
-                return false; // Unexpected Type
+            val = [[[NSString alloc] initWithBytes: rawValue
+                                            length: count
+                                          encoding: NSUTF8StringEncoding]
+                autorelease];
+            break;
+        case tShort:
+            if (count == 1) {
+                value = _getShort(rawValue, 0, bigendian);
+                val = [NSNumber numberWithShort: value];
+            } else {
+                val = [NSMutableArray arrayWithCapacity: count];
+                for (int i = 0; i < count; ++i) {
+                    value = _getShort(rawValue, i * 2, bigendian);
+                    [val addObject: [NSNumber numberWithShort: value]];
+                }
+            }
+            break;
+        case tLong:
+            if (count == 1) {
+                value = _getLong(rawValue, 0, bigendian);
+                val = [NSNumber numberWithUnsignedLong: value];
+            } else {
+                val = [NSMutableArray arrayWithCapacity: count];
+                for (int j = 0; j < count; j++) {
+                    value = _getLong(rawValue, j * 4, bigendian);
+                    [val addObject: [NSNumber numberWithUnsignedLong: value]];
+                }
+            }
+            break;
+        case tRational:
+            if (count == 1) {
+                unsigned long a = _getLong(rawValue, 0, bigendian);
+                unsigned long b = _getLong(rawValue, 4, bigendian);
+                val = [NSNumber numberWithFloat: a / (float) b];
+            } else {
+                val = [NSMutableArray arrayWithCapacity: count];
+                for (int j = 0; j < count; j++) {
+                    unsigned long a = _getLong(rawValue, j * 8, bigendian);
+                    unsigned long b = _getLong(rawValue, j * 8 + 4, bigendian);
+                    [val addObject: [NSNumber numberWithFloat: a / (float) b]];
+                }
+            }
+            break;
+        case tSShort:
+            if (count == 1) {
+                value = _getShort(rawValue, 0, bigendian);
+                val = [NSNumber numberWithInt: (signed short) value];
+            } else {
+                val = [NSMutableArray arrayWithCapacity: count];
+                for (int i = 0; i < count; ++i) {
+                    signed short value = _getShort(rawValue, i * 2, bigendian);
+                    [val addObject: [NSNumber numberWithInt: value]];
+                }
+            }
+            break;
+        case tSLong:
+            if (count == 1) {
+                value = _getLong(rawValue, 0, bigendian);
+                val = [NSNumber numberWithLong: value];
+            } else {
+                val = [NSMutableArray arrayWithCapacity: count];
+                for (int j = 0; j < count; j++) {
+                    value = _getLong(rawValue, j * 4, bigendian);
+                    [val addObject: [NSNumber numberWithLong: value]];
+                }
+            }
+            break;
+        case tSRational:
+            if (count == 1) {
+                long a = _getLong(rawValue, 0, bigendian);
+                long b = _getLong(rawValue, 4, bigendian);
+                val = [NSNumber numberWithFloat: a / (float) b];
+            } else {
+                val = [NSMutableArray arrayWithCapacity: count];
+                for (int j = 0; j < count; j++) {
+                    long a = _getLong(rawValue, j * 8, bigendian);
+                    long b = _getLong(rawValue, j * 8 + 4, bigendian);
+                    [val addObject: [NSNumber numberWithFloat: a / (float) b]];
+                }
+            }
+            break;
+        case tFloat: {
+            float *value = (float *) rawValue;
+            val = [NSNumber numberWithFloat: *value];
+        } break;
+
+        case tDouble: {
+            double *value = (double *) rawValue;
+            val = [NSNumber numberWithDouble: *value];
+        } break;
+        default:
+            return false; // Unexpected Type
         }
-        
-        if ((mode == kIFD0) && (tag == kImage_ExifIFDOffset)) {  // ExifIFDOffset
-            [self _readIFD:data offset:value bigendian:bigendian mode:kEXIF size:size];
+
+        if ((mode == kIFD0) && (tag == kImage_ExifIFDOffset)) { // ExifIFDOffset
+            [self _readIFD: data
+                    offset: value
+                 bigendian: bigendian
+                      mode: kEXIF
+                      size: size];
+        } else if ((mode == kIFD0) &&
+                   (tag == kImage_GPSIFDOffset)) { // GPSIFDOffset
+            [self _readIFD: data
+                    offset: value
+                 bigendian: bigendian
+                      mode: kGPS
+                      size: size];
+        } else if ((mode == kEXIF) &&
+                   (tag == kEXIF_InteropIFDOffset)) { // InteropIFDOffset
+            [self _readIFD: data
+                    offset: value
+                 bigendian: bigendian
+                      mode: kInterop
+                      size: size];
         }
-        else if ((mode == kIFD0) && (tag == kImage_GPSIFDOffset)) {  // GPSIFDOffset
-            [self _readIFD:data offset:value bigendian:bigendian mode:kGPS size:size];
-        }
-        else if ((mode == kEXIF) && (tag == kEXIF_InteropIFDOffset)) {  // InteropIFDOffset
-            [self _readIFD:data offset:value bigendian:bigendian mode:kInterop size:size];
-        }
-        
+
         if (val) {
-            [self setTagForType:mode number:tag value:val];
+            [self setTagForType: mode number: tag value: val];
         }
     }
     // Returns the offset for the next bloc
-    CHECK_AVAILABLE_BYTES(offset,4);
+    CHECK_AVAILABLE_BYTES(offset, 4);
     return _getLong(data, offset, bigendian);
 }
 
-- (void)_decodeJFIF:(const uint8_t *)bytes length:(int)length
-{
+- (void) _decodeJFIF: (const uint8_t *) bytes length: (int) length {
     if (length < 12) {
         return;
     }
@@ -645,25 +651,35 @@ static unsigned long _getLong(const unsigned char*data, size_t offset, bool bige
     }
     BOOL bigendian = YES;
     size_t offset = 5;
-    uint8_t versionH = _getByte(bytes, offset,  bigendian);
+    uint8_t versionH = _getByte(bytes, offset, bigendian);
     offset += 1;
-    uint8_t versionL = _getByte(bytes, offset,  bigendian);
+    uint8_t versionL = _getByte(bytes, offset, bigendian);
     offset += 1;
-    uint8_t  density = _getByte(bytes, offset, bigendian);
+    uint8_t density = _getByte(bytes, offset, bigendian);
     offset += 1;
-    uint16_t xResolution = _getShort(bytes, offset,  bigendian);
+    uint16_t xResolution = _getShort(bytes, offset, bigendian);
     offset += 2;
-    uint16_t yResolution = _getShort(bytes, offset,  bigendian);
+    uint16_t yResolution = _getShort(bytes, offset, bigendian);
     offset += 2;
-    
-    id typekey = [self keyForType:kJFIF];
-    [self setTagForTypeKey:typekey numberKey:@"DensityUnit" value:[NSNumber numberWithInt:density]];
-    [self setTagForTypeKey:typekey numberKey:@"XDensity" value:[NSNumber numberWithInt:xResolution]];
-    [self setTagForTypeKey:typekey numberKey:@"YDensity" value:[NSNumber numberWithInt:yResolution]];
-    [self setTagForTypeKey:typekey numberKey:@"JFIFVersion" value:[NSArray arrayWithObjects:
-                                                                   [NSNumber numberWithInt:versionH],
-                                                                   [NSNumber numberWithInt:versionL],
-                                                                   nil]];
+
+    id typekey = [self keyForType: kJFIF];
+    [self setTagForTypeKey: typekey
+                 numberKey: @"DensityUnit"
+                     value: [NSNumber numberWithInt: density]];
+    [self setTagForTypeKey: typekey
+                 numberKey: @"XDensity"
+                     value: [NSNumber numberWithInt: xResolution]];
+    [self setTagForTypeKey: typekey
+                 numberKey: @"YDensity"
+                     value: [NSNumber numberWithInt: yResolution]];
+    [self setTagForTypeKey: typekey
+                 numberKey: @"JFIFVersion"
+                     value: [NSArray
+                                arrayWithObjects: [NSNumber
+                                                      numberWithInt: versionH],
+                                                  [NSNumber
+                                                      numberWithInt: versionL],
+                                                  nil]];
     float DPIWidth = 0;
     float DPIHeight = 0;
     if (density == 1 || density == 2) {
@@ -677,15 +693,18 @@ static unsigned long _getLong(const unsigned char*data, size_t offset, bool bige
     }
     // Set the global DPI settings to the one from the JFIF
     if (DPIWidth > 0) {
-        [self setTagForTypeKey:nil numberKey:kO2ImagePropertyDPIWidth value:[NSNumber numberWithFloat:DPIWidth]];
+        [self setTagForTypeKey: nil
+                     numberKey: kO2ImagePropertyDPIWidth
+                         value: [NSNumber numberWithFloat: DPIWidth]];
     }
     if (DPIHeight > 0) {
-        [self setTagForTypeKey:nil numberKey:kO2ImagePropertyDPIHeight value:[NSNumber numberWithFloat:DPIHeight]];
+        [self setTagForTypeKey: nil
+                     numberKey: kO2ImagePropertyDPIHeight
+                         value: [NSNumber numberWithFloat: DPIHeight]];
     }
 }
 
-- (void)_decodeEXIF:(const uint8_t *)bytes length:(int)length
-{
+- (void) _decodeEXIF: (const uint8_t *) bytes length: (int) length {
     if (length < 6) {
         return;
     }
@@ -696,170 +715,196 @@ static unsigned long _getLong(const unsigned char*data, size_t offset, bool bige
     length -= 6;
     short endianness = _getShort(bytes, 0, true);
     BOOL bigendian = (endianness == 0x4d4d);
-    
+
     short align = _getShort(bytes, 2, bigendian);
     if (align != 0x2a) {
         return;
     }
-    
+
     long offsetIFD0 = _getLong(bytes, 4, bigendian);
-    
+
     if (offsetIFD0 && offsetIFD0 != -1) {
-        size_t offset = [self _readIFD:bytes offset:offsetIFD0 bigendian:bigendian mode:kIFD0 size:length];
-        
-        // I don't think the following block is ever needed - and it seems we can have several blocks of TIFF data
-        // At least when using Windows Explorer rotate function on an already rotated image - you have some
-        // TIFF data with the new orientation then at the end you still have the old one
-        // So let's try at least to avoid that
+        size_t offset = [self _readIFD: bytes
+                                offset: offsetIFD0
+                             bigendian: bigendian
+                                  mode: kIFD0
+                                  size: length];
+
+        // I don't think the following block is ever needed - and it seems we
+        // can have several blocks of TIFF data At least when using Windows
+        // Explorer rotate function on an already rotated image - you have some
+        // TIFF data with the new orientation then at the end you still have the
+        // old one So let's try at least to avoid that
         if (offset && offset != -1) {
-            id typeKey = [self keyForType:kIFD1];
-            if ([_tags objectForKey:typeKey] == nil) {
+            id typeKey = [self keyForType: kIFD1];
+            if ([_tags objectForKey: typeKey] == nil) {
                 // No tiff data yet - let's try to decode this block
-                [self _readIFD:bytes offset:offset bigendian:bigendian mode:kIFD1 size:length];
+                [self _readIFD: bytes
+                        offset: offset
+                     bigendian: bigendian
+                          mode: kIFD1
+                          size: length];
             }
         }
     }
 }
 
-- (void)_analyze:(const uint8_t *)data length:(size_t)length
-{
+- (void) _analyze: (const uint8_t *) data length: (size_t) length {
     size_t index = 0;
     uint8_t c1 = data[index++];
     uint8_t c2 = data[index++];
     // Check for the JPEG signature
-	
-    if (c1 != 0xFF || c2 != 0xD8) {   // (0xFF + SOI)
-        return;  // ERROR: File is not a JPEG
+
+    if (c1 != 0xFF || c2 != 0xD8) { // (0xFF + SOI)
+        return;                     // ERROR: File is not a JPEG
     }
-	
+
     // Scan for the EXIF & JFIF blocks
     while (1) {
         int marker;
-		
+
         // First, skip any non 0xFF bytes
         int discarded = 0;
         uint8_t c = data[index++];
-        while (index<length && (c != 0xFF)) {
+        while (index < length && (c != 0xFF)) {
             discarded++;
             c = data[index++];
         }
         // Then skip all 0xFF until the marker byte
         do {
             marker = data[index++];
-        } while (index<length && (marker == 0xFF));
-		
-        if (index>=length) {
-			break; // ERROR: Unexpected EOF
+        } while (index < length && (marker == 0xFF));
+
+        if (index >= length) {
+            break; // ERROR: Unexpected EOF
         }
         if (discarded != 0) {
             break; // ERROR: Extraneous data
         }
         int len = data[index++];
-		len = len*256 + data[index++];
-		
-		if (index>=length) {
-			break; // ERROR: Unexpected EOF
-		}
-		if (len < 2) {
-			break; // ERROR: Extraneous data
-		}
-		len = len - 2; // The length we got counts itself
-		
+        len = len * 256 + data[index++];
+
+        if (index >= length) {
+            break; // ERROR: Unexpected EOF
+        }
+        if (len < 2) {
+            break; // ERROR: Extraneous data
+        }
+        len = len - 2; // The length we got counts itself
+
         if (marker == 0xDA) {
-            // SOS: Start of scan... the image itself and the last block on the file
+            // SOS: Start of scan... the image itself and the last block on the
+            // file
             break;
         }
-		if (marker == 0xE1) {
-            [self _decodeEXIF:data+index length:length];
-		}
-        
+        if (marker == 0xE1) {
+            [self _decodeEXIF: data + index length: length];
+        }
+
         if (marker == 0xE0) {
-            [self _decodeJFIF:data+index length:length];
-		}
-        
-		index += len;
-	}
-    
-    
-    // promote some TIFF & EXIF keys to the main level (orientation, dpi, pixel size...)
-    id value = [self tagForKey:kTIFF number:kTIFF_TIFFOrientation];
-    if (value) {
-        [self setTagForTypeKey:nil numberKey:@"Orientation" value:value];
+            [self _decodeJFIF: data + index length: length];
+        }
+
+        index += len;
     }
-    
-    // Try to use the EXIF one if none is set by the JFIF block - else, update the EXIF one so
-    // everything is consistent - that's what Quartz is doing
-    value = [self tagForKey:kTIFF number:kTIFF_TIFFXResolution];
+
+    // promote some TIFF & EXIF keys to the main level (orientation, dpi, pixel
+    // size...)
+    id value = [self tagForKey: kTIFF number: kTIFF_TIFFOrientation];
     if (value) {
-        id currentValue = [self tagForTypeKey:nil numberKey:kO2ImagePropertyDPIWidth];
+        [self setTagForTypeKey: nil numberKey: @"Orientation" value: value];
+    }
+
+    // Try to use the EXIF one if none is set by the JFIF block - else, update
+    // the EXIF one so everything is consistent - that's what Quartz is doing
+    value = [self tagForKey: kTIFF number: kTIFF_TIFFXResolution];
+    if (value) {
+        id currentValue = [self tagForTypeKey: nil
+                                    numberKey: kO2ImagePropertyDPIWidth];
         if (currentValue == nil) {
-            int unit = [[self tagForKey:kTIFF number:kTIFF_TIFFResolutionUnit] intValue];
-            if (unit == 2 ||  unit == 3) {
+            int unit = [[self tagForKey: kTIFF
+                                 number: kTIFF_TIFFResolutionUnit] intValue];
+            if (unit == 2 || unit == 3) {
                 float dpi = [value floatValue];
                 if (unit == 3) {
                     // pixels/cm
                     dpi /= 2.54;
                 }
-                [self setTagForTypeKey:nil numberKey:kO2ImagePropertyDPIWidth value:[NSNumber numberWithFloat:dpi]];
+                [self setTagForTypeKey: nil
+                             numberKey: kO2ImagePropertyDPIWidth
+                                 value: [NSNumber numberWithFloat: dpi]];
             }
         } else {
             // Update the TIFF info
-            [self setTagForType:kTIFF number:kTIFF_TIFFXResolution value:currentValue];
+            [self setTagForType: kTIFF
+                         number: kTIFF_TIFFXResolution
+                          value: currentValue];
             // Set the resolution unit to inch
-            [self setTagForType:kTIFF number:kTIFF_TIFFResolutionUnit value:[NSNumber numberWithInt:2]];
+            [self setTagForType: kTIFF
+                         number: kTIFF_TIFFResolutionUnit
+                          value: [NSNumber numberWithInt: 2]];
         }
     }
-    
-    value = [self tagForKey:kTIFF number:kTIFF_TIFFYResolution];
+
+    value = [self tagForKey: kTIFF number: kTIFF_TIFFYResolution];
     if (value) {
-        id currentValue = [self tagForTypeKey:0 numberKey:kO2ImagePropertyDPIHeight];
+        id currentValue = [self tagForTypeKey: 0
+                                    numberKey: kO2ImagePropertyDPIHeight];
         if (currentValue == nil) {
-            int unit = [[self tagForKey:kTIFF number:kTIFF_TIFFResolutionUnit] intValue];
-            if (unit == 2 ||  unit == 3) {
+            int unit = [[self tagForKey: kTIFF
+                                 number: kTIFF_TIFFResolutionUnit] intValue];
+            if (unit == 2 || unit == 3) {
                 float dpi = [value floatValue];
                 if (unit == 3) {
                     // pixels/cm
                     dpi /= 2.54;
                 }
-                [self setTagForTypeKey:nil numberKey:kO2ImagePropertyDPIHeight value:[NSNumber numberWithFloat:dpi]];
+                [self setTagForTypeKey: nil
+                             numberKey: kO2ImagePropertyDPIHeight
+                                 value: [NSNumber numberWithFloat: dpi]];
             }
         } else {
             // Update the TIFF info
-            [self setTagForType:kTIFF number:kTIFF_TIFFYResolution value:currentValue];
+            [self setTagForType: kTIFF
+                         number: kTIFF_TIFFYResolution
+                          value: currentValue];
             // Set the resolution unit to inch
-            [self setTagForType:kTIFF number:kTIFF_TIFFResolutionUnit value:[NSNumber numberWithInt:2]];
+            [self setTagForType: kTIFF
+                         number: kTIFF_TIFFResolutionUnit
+                          value: [NSNumber numberWithInt: 2]];
         }
     }
-    
-    value = [self tagForKey:kEXIF number:kEXIF_PixelXDimension];
+
+    value = [self tagForKey: kEXIF number: kEXIF_PixelXDimension];
     if (value) {
-        [self setTagForTypeKey:nil numberKey:kO2ImagePropertyPixelWidth value:value];
+        [self setTagForTypeKey: nil
+                     numberKey: kO2ImagePropertyPixelWidth
+                         value: value];
     }
-    value = [self tagForKey:kEXIF number:kEXIF_PixelYDimension];
+    value = [self tagForKey: kEXIF number: kEXIF_PixelYDimension];
     if (value) {
-        [self setTagForTypeKey:nil numberKey:kO2ImagePropertyPixelHeight value:value];
+        [self setTagForTypeKey: nil
+                     numberKey: kO2ImagePropertyPixelHeight
+                         value: value];
     }
 }
 
-- (id)initWithBytes:(const uint8_t *)s length:(size_t)length
-{
+- (id) initWithBytes: (const uint8_t *) s length: (size_t) length {
     if ((self = [super init])) {
         _tags = [[NSMutableDictionary alloc] init];
         if (s && length) {
-            [self _analyze:s length:length];
+            [self _analyze: s length: length];
         }
     }
     return self;
 }
 
-- (void)dealloc
-{
+- (void) dealloc {
     [_tags release];
     [super dealloc];
 }
 
-- (NSMutableDictionary *)tags
-{
+- (NSMutableDictionary *) tags {
     return [[_tags retain] autorelease];
 }
 

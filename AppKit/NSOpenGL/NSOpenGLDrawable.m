@@ -1,28 +1,29 @@
 #import <AppKit/NSOpenGLDrawable.h>
 
-@implementation NSOpenGLDrawable 
+@implementation NSOpenGLDrawable
 
--initWithPixelFormat:(NSOpenGLPixelFormat *)pixelFormat view:(NSView *)view {
-   return self;
+- initWithPixelFormat: (NSOpenGLPixelFormat *) pixelFormat
+                 view: (NSView *) view {
+    return self;
 }
 
--(CGLContextObj)createGLContext {
-   return NULL;
+- (CGLContextObj) createGLContext {
+    return NULL;
 }
 
--(void)invalidate {
+- (void) invalidate {
 }
 
--(void)updateWithView:(NSView *)view {
+- (void) updateWithView: (NSView *) view {
 }
 
--(void)makeCurrentWithGLContext:(CGLContextObj)glContext {
+- (void) makeCurrentWithGLContext: (CGLContextObj) glContext {
 }
 
--(void)clearCurrentWithGLContext:(CGLContextObj)glContext {
+- (void) clearCurrentWithGLContext: (CGLContextObj) glContext {
 }
 
--(void)swapBuffers {
+- (void) swapBuffers {
 }
 
 @end

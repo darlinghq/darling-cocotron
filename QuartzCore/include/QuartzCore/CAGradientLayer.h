@@ -19,9 +19,9 @@
 
 #import <QuartzCore/CALayer.h>
 
-CA_EXPORT NSString * const kCAGradientLayerAxial;
-CA_EXPORT NSString * const kCAGradientLayerRadial;
-CA_EXPORT NSString * const kCAGradientLayerConic;
+CA_EXPORT NSString *const kCAGradientLayerAxial;
+CA_EXPORT NSString *const kCAGradientLayerRadial;
+CA_EXPORT NSString *const kCAGradientLayerConic;
 
 @interface CAGradientLayer : CALayer
 @end

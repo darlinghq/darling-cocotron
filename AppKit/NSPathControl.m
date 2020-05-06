@@ -4,110 +4,105 @@
 
 @implementation NSPathControl
 
--(BOOL)isFlipped {
-   return YES;
+- (BOOL) isFlipped {
+    return YES;
 }
 
-- (NSPathStyle)pathStyle;
+- (NSPathStyle) pathStyle;
 {
-	NSPathCell *cell = [self cell];
-	return [cell pathStyle];
+    NSPathCell *cell = [self cell];
+    return [cell pathStyle];
 }
 
-- (void)setPathStyle:(NSPathStyle)style;
+- (void) setPathStyle: (NSPathStyle) style;
 {
-	NSPathCell *cell = [self cell];
-	[cell setPathStyle: style];
+    NSPathCell *cell = [self cell];
+    [cell setPathStyle: style];
 }
 
 - (NSColor *) backgroundColor;
 {
-	NSPathCell *cell = [self cell];
-	return [cell backgroundColor];
+    NSPathCell *cell = [self cell];
+    return [cell backgroundColor];
 }
 
-- (void)setBackgroundColor:(NSColor *)color;
+- (void) setBackgroundColor: (NSColor *) color;
 {
-	NSPathCell *cell = [self cell];
-	[cell setBackgroundColor: color];
+    NSPathCell *cell = [self cell];
+    [cell setBackgroundColor: color];
 }
 
-- (NSPathComponentCell *)clickedPathComponentCell
-{
-	NSPathCell *cell = [self cell];
-	return [cell clickedPathComponentCell];
+- (NSPathComponentCell *) clickedPathComponentCell {
+    NSPathCell *cell = [self cell];
+    return [cell clickedPathComponentCell];
 }
 
-- (NSArray *)pathComponentCells;
+- (NSArray *) pathComponentCells;
 {
-	NSPathCell *cell = [self cell];
-	return [cell pathComponentCells];
+    NSPathCell *cell = [self cell];
+    return [cell pathComponentCells];
 }
 
-- (void)setPathComponentCells:(NSArray *)cells;
+- (void) setPathComponentCells: (NSArray *) cells;
 {
-	NSPathCell *cell = [self cell];
-	[cell setPathComponentCells: cells];
+    NSPathCell *cell = [self cell];
+    [cell setPathComponentCells: cells];
 }
 
-
-- (SEL)doubleAction;
+- (SEL) doubleAction;
 {
-	NSPathCell *cell = [self cell];
-	return [cell doubleAction];
+    NSPathCell *cell = [self cell];
+    return [cell doubleAction];
 }
 
-- (void)setDoubleAction:(SEL)action;
+- (void) setDoubleAction: (SEL) action;
 {
-	NSPathCell *cell = [self cell];
-	[cell setDoubleAction: action];
+    NSPathCell *cell = [self cell];
+    [cell setDoubleAction: action];
 }
 
-- (NSURL *)URL;
+- (NSURL *) URL;
 {
-	NSPathCell *cell = [self cell];
-	return [cell URL];
+    NSPathCell *cell = [self cell];
+    return [cell URL];
 }
-- (void)setURL:(NSURL *)url;
+- (void) setURL: (NSURL *) url;
 {
-	NSPathCell *cell = [self cell];
-	[cell setURL: url];
-}
-
-- (id < NSPathControlDelegate >)delegate;
-{
-	NSUnimplementedMethod();
-	return nil;
+    NSPathCell *cell = [self cell];
+    [cell setURL: url];
 }
 
-- (void)setDelegate:(id < NSPathControlDelegate >)delegate;
+- (id<NSPathControlDelegate>) delegate;
 {
-	NSUnimplementedMethod();
+    NSUnimplementedMethod();
+    return nil;
 }
 
-- (void)setDraggingSourceOperationMask:(NSDragOperation)mask forLocal:(BOOL)isLocal;
+- (void) setDelegate: (id<NSPathControlDelegate>) delegate;
+{ NSUnimplementedMethod(); }
+
+- (void) setDraggingSourceOperationMask: (NSDragOperation) mask
+                               forLocal: (BOOL) isLocal;
+{ NSUnimplementedMethod(); }
+
+- (NSMenu *) menu;
 {
-	NSUnimplementedMethod();
+    NSPathCell *cell = [self cell];
+    //	return [cell menu];
+    return nil;
 }
 
-- (NSMenu *)menu;
+- (void) setMenu: (NSMenu *) menu;
 {
-	NSPathCell *cell = [self cell];
-//	return [cell menu];
-	return nil;
-}
-
-- (void)setMenu:(NSMenu *)menu;
-{
-	NSPathCell *cell = [self cell];
-//	[cell setMenu: menu];
+    NSPathCell *cell = [self cell];
+    //	[cell setMenu: menu];
 }
 
 + (void) initialize;
 {
-	if (self == [NSPathControl class]) {
-		[self setCellClass: [NSPathCell class]];
-	}
+    if (self == [NSPathControl class]) {
+        [self setCellClass: [NSPathCell class]];
+    }
 }
 
 @end

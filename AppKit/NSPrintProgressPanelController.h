@@ -12,15 +12,15 @@
     IBOutlet NSProgressIndicator *progressIndicator;
 }
 
-+ (NSPrintProgressPanelController *)printProgressPanelController;
++ (NSPrintProgressPanelController *) printProgressPanelController;
 
-- (void)setTitle:(NSString *)title;
+- (void) setTitle: (NSString *) title;
 
-- (void)setMaxPages:(NSInteger)maxPages;
+- (void) setMaxPages: (NSInteger) maxPages;
 
-- (void)setCurrentPage:(NSInteger)currentPage;
+- (void) setCurrentPage: (NSInteger) currentPage;
 
-- (void)showPanel;
-- (void)hidePanel;
+- (void) showPanel;
+- (void) hidePanel;
 
 @end

@@ -33,15 +33,21 @@ APPKIT_EXPORT NSString *const NSAccessibilitySharedCharacterRangeAttribute;
 APPKIT_EXPORT NSString *const NSAccessibilitySharedTextUIElementsAttribute;
 APPKIT_EXPORT NSString *const NSAccessibilityVisibleCharacterRangeAttribute;
 
-APPKIT_EXPORT NSString *const NSAccessibilityAttributedStringForRangeParameterizedAttribute;
-APPKIT_EXPORT NSString *const NSAccessibilityBoundsForRangeParameterizedAttribute;
+APPKIT_EXPORT NSString
+    *const NSAccessibilityAttributedStringForRangeParameterizedAttribute;
+APPKIT_EXPORT NSString
+    *const NSAccessibilityBoundsForRangeParameterizedAttribute;
 APPKIT_EXPORT NSString *const NSAccessibilityLineForIndexParameterizedAttribute;
 APPKIT_EXPORT NSString *const NSAccessibilityRTFForRangeParameterizedAttribute;
-APPKIT_EXPORT NSString *const NSAccessibilityRangeForIndexParameterizedAttribute;
+APPKIT_EXPORT NSString
+    *const NSAccessibilityRangeForIndexParameterizedAttribute;
 APPKIT_EXPORT NSString *const NSAccessibilityRangeForLineParameterizedAttribute;
-APPKIT_EXPORT NSString *const NSAccessibilityRangeForPositionParameterizedAttribute;
-APPKIT_EXPORT NSString *const NSAccessibilityStringForRangeParameterizedAttribute;
-APPKIT_EXPORT NSString *const NSAccessibilityStyleRangeForIndexParameterizedAttribute;
+APPKIT_EXPORT NSString
+    *const NSAccessibilityRangeForPositionParameterizedAttribute;
+APPKIT_EXPORT NSString
+    *const NSAccessibilityStringForRangeParameterizedAttribute;
+APPKIT_EXPORT NSString
+    *const NSAccessibilityStyleRangeForIndexParameterizedAttribute;
 
 APPKIT_EXPORT NSString *const NSAccessibilityAttachmentTextAttribute;
 APPKIT_EXPORT NSString *const NSAccessibilityBackgroundColorTextAttribute;
@@ -111,7 +117,8 @@ APPKIT_EXPORT NSString *const NSAccessibilityDisclosureLevelAttribute;
 APPKIT_EXPORT NSString *const NSAccessibilitySelectedCellsAttribute;
 APPKIT_EXPORT NSString *const NSAccessibilityVisibleCellsAttribute;
 
-APPKIT_EXPORT NSString *const NSAccessibilityCellForColumnAndRowParameterizedAttribute;
+APPKIT_EXPORT NSString
+    *const NSAccessibilityCellForColumnAndRowParameterizedAttribute;
 
 APPKIT_EXPORT NSString *const NSAccessibilityRowIndexRangeAttribute;
 APPKIT_EXPORT NSString *const NSAccessibilityColumnIndexRangeAttribute;
@@ -125,10 +132,14 @@ APPKIT_EXPORT NSString *const NSAccessibilityVerticalUnitsAttribute;
 APPKIT_EXPORT NSString *const NSAccessibilityHorizontalUnitDescriptionAttribute;
 APPKIT_EXPORT NSString *const NSAccessibilityVerticalUnitDescriptionAttribute;
 
-APPKIT_EXPORT NSString *const NSAccessibilityLayoutPointForScreenPointParameterizedAttribute;
-APPKIT_EXPORT NSString *const NSAccessibilityLayoutSizeForScreenSizeParameterizedAttribute;
-APPKIT_EXPORT NSString *const NSAccessibilityScreenPointForLayoutPointParameterizedAttribute;
-APPKIT_EXPORT NSString *const NSAccessibilityScreenSizeForLayoutSizeParameterizedAttribute;
+APPKIT_EXPORT NSString
+    *const NSAccessibilityLayoutPointForScreenPointParameterizedAttribute;
+APPKIT_EXPORT NSString
+    *const NSAccessibilityLayoutSizeForScreenSizeParameterizedAttribute;
+APPKIT_EXPORT NSString
+    *const NSAccessibilityScreenPointForLayoutPointParameterizedAttribute;
+APPKIT_EXPORT NSString
+    *const NSAccessibilityScreenSizeForLayoutSizeParameterizedAttribute;
 
 APPKIT_EXPORT NSString *const NSAccessibilityHandlesAttribute;
 
@@ -165,7 +176,8 @@ APPKIT_EXPORT NSString *const NSAccessibilityPointsUnitValue;
 APPKIT_EXPORT NSString *const NSAccessibilityUnknownUnitValue;
 
 APPKIT_EXPORT NSString *const NSAccessibilityLinkedUIElementsAttribute;
-APPKIT_EXPORT NSString *const NSAccessibilityServesAsTitleForUIElementsAttribute;
+APPKIT_EXPORT NSString
+    *const NSAccessibilityServesAsTitleForUIElementsAttribute;
 APPKIT_EXPORT NSString *const NSAccessibilityTitleUIElementAttribute;
 
 APPKIT_EXPORT NSString *const NSAccessibilityDecrementButtonAttribute;
@@ -281,7 +293,8 @@ APPKIT_EXPORT NSString *const NSAccessibilityShowMenuAction;
 
 APPKIT_EXPORT NSString *const NSAccessibilityMainWindowChangedNotification;
 APPKIT_EXPORT NSString *const NSAccessibilityFocusedWindowChangedNotification;
-APPKIT_EXPORT NSString *const NSAccessibilityFocusedUIElementChangedNotification;
+APPKIT_EXPORT NSString
+    *const NSAccessibilityFocusedUIElementChangedNotification;
 
 APPKIT_EXPORT NSString *const NSAccessibilityWindowCreatedNotification;
 APPKIT_EXPORT NSString *const NSAccessibilityWindowDeminiaturizedNotification;
@@ -306,7 +319,8 @@ APPKIT_EXPORT NSString *const NSAccessibilityValueChangedNotification;
 
 APPKIT_EXPORT NSString *const NSAccessibilityHelpTagCreatedNotification;
 APPKIT_EXPORT NSString *const NSAccessibilityRowCountChangedNotification;
-APPKIT_EXPORT NSString *const NSAccessibilitySelectedChildrenChangedNotification;
+APPKIT_EXPORT NSString
+    *const NSAccessibilitySelectedChildrenChangedNotification;
 APPKIT_EXPORT NSString *const NSAccessibilitySelectedColumnsChangedNotification;
 APPKIT_EXPORT NSString *const NSAccessibilitySelectedRowsChangedNotification;
 APPKIT_EXPORT NSString *const NSAccessibilitySelectedTextChangedNotification;
@@ -323,11 +337,12 @@ APPKIT_EXPORT NSString *const NSAccessibilityEventSourceStateIDKey;
 APPKIT_EXPORT NSString *const NSAccessibilityEventSourceUserDataKey;
 APPKIT_EXPORT NSString *const NSAccessibilityEventTimestampKey;
 APPKIT_EXPORT NSString *const NSAccessibilityMainThreadIdleNotification;
-APPKIT_EXPORT NSString *const NSAccessibilitySupportsMainThreadIdleNotificationAttribute;
+APPKIT_EXPORT NSString
+    *const NSAccessibilitySupportsMainThreadIdleNotificationAttribute;
 /* End undocumented */
 
 APPKIT_EXPORT NSString *const NSAccessibilityErrorCodeExceptionInfo;
-APPKIT_EXPORT NSString * const NSAccessibilityLayoutChangedNotification;
-APPKIT_EXPORT NSString * const NSAccessibilityUIElementsKey;
+APPKIT_EXPORT NSString *const NSAccessibilityLayoutChangedNotification;
+APPKIT_EXPORT NSString *const NSAccessibilityUIElementsKey;
 
-APPKIT_EXPORT NSString * const NSAccessibilityToggleSubrole;
+APPKIT_EXPORT NSString *const NSAccessibilityToggleSubrole;

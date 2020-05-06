@@ -1,5 +1,5 @@
-#import <Foundation/NSObject.h>
 #import <AppKit/AppKitExport.h>
+#import <Foundation/NSObject.h>
 
 @class NSMutableDictionary;
 
@@ -22,15 +22,15 @@ typedef NSInteger NSPrintPanelOptions;
     NSInteger _options;
 }
 
-+ (NSPrintPanel *)printPanel;
++ (NSPrintPanel *) printPanel;
 
-- (void)setOptions:(NSPrintPanelOptions)options;
-- (NSPrintPanelOptions)options;
+- (void) setOptions: (NSPrintPanelOptions) options;
+- (NSPrintPanelOptions) options;
 
-- (int)runModal;
+- (int) runModal;
 
-- (void)updateFromPrintInfo;
-- (void)finalWritePrintInfo;
+- (void) updateFromPrintInfo;
+- (void) finalWritePrintInfo;
 
 @end
 

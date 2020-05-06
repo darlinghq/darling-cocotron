@@ -2,8 +2,8 @@
 
 @implementation NSPredicateEditorRowTemplate
 
--initWithCoder:(NSCoder *)coder {
-   return self;
+- initWithCoder: (NSCoder *) coder {
+    return self;
 }
 
 @end

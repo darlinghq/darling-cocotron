@@ -11,10 +11,10 @@
  * including without limitation the rights to use, copy, modify, merge,
  * publish, distribute, sublicense, and/or sell copies of the Materials,
  * and to permit persons to whom the Materials are furnished to do so,
- * subject to the following conditions: 
+ * subject to the following conditions:
  *
- * The above copyright notice and this permission notice shall be included 
- * in all copies or substantial portions of the Materials. 
+ * The above copyright notice and this permission notice shall be included
+ * in all copies or substantial portions of the Materials.
  *
  * THE MATERIALS ARE PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
  * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
@@ -45,9 +45,13 @@ typedef struct {
     GradientStop *_colorStops;
 }
 
-O2argb32f O2PaintIntegrateColorRamp(O2Paint_ramp *self, O2Float gmin, O2Float gmax);
-O2argb32f O2PaintColorRamp(O2Paint_ramp *self, O2Float gradient, O2Float rho, int *skip);
+O2argb32f O2PaintIntegrateColorRamp(O2Paint_ramp *self, O2Float gmin,
+                                    O2Float gmax);
+O2argb32f O2PaintColorRamp(O2Paint_ramp *self, O2Float gradient, O2Float rho,
+                           int *skip);
 
-- initWithShading:(O2Shading *)shading deviceTransform:(O2AffineTransform)deviceTransform numberOfSamples:(int)numberOfSamples;
+- initWithShading: (O2Shading *) shading
+    deviceTransform: (O2AffineTransform) deviceTransform
+    numberOfSamples: (int) numberOfSamples;
 
 @end

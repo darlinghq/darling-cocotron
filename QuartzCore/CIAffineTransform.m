@@ -1,31 +1,31 @@
-#import <QuartzCore/CIAffineTransform.h>
+#import <AppKit/NSRaise.h>
 #import <Foundation/NSKeyedUnarchiver.h>
 #import <Foundation/NSString.h>
-#import <AppKit/NSRaise.h>
+#import <QuartzCore/CIAffineTransform.h>
 
 @implementation CIAffineTransform
 
--(void)encodeWithCoder:(NSCoder *)coder {
-   NSUnimplementedMethod();
+- (void) encodeWithCoder: (NSCoder *) coder {
+    NSUnimplementedMethod();
 }
 
--initWithCoder:(NSCoder *)coder {
-   if([coder allowsKeyedCoding]){
-    NSKeyedUnarchiver *keyed=(NSKeyedUnarchiver *)coder;
-    
-    _transform=[[keyed decodeObjectForKey:@"CI_inputTransform"] copy];
-    _ciEnabled=[keyed decodeBoolForKey:@"CIEnabled"];
-   }
-   return self;
+- initWithCoder: (NSCoder *) coder {
+    if ([coder allowsKeyedCoding]) {
+        NSKeyedUnarchiver *keyed = (NSKeyedUnarchiver *) coder;
+
+        _transform = [[keyed decodeObjectForKey: @"CI_inputTransform"] copy];
+        _ciEnabled = [keyed decodeBoolForKey: @"CIEnabled"];
+    }
+    return self;
 }
 
--(void)dealloc {
-  [_transform release];
-  [super dealloc];
+- (void) dealloc {
+    [_transform release];
+    [super dealloc];
 }
 
--(NSAffineTransform *)affineTransform {
-   return _transform;
+- (NSAffineTransform *) affineTransform {
+    return _transform;
 }
 
 @end

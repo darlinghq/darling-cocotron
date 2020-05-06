@@ -1,12 +1,23 @@
 /* Copyright (c) 2006-2007 Christopher J. W. Lloyd
 
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software is furnished to do so,
+subject to the following conditions:
 
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
-#import <Foundation/NSObject.h>
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSFont.h>
+#import <Foundation/NSObject.h>
 
 @class NSAffineTransform;
 
@@ -60,92 +71,116 @@ typedef enum {
     unsigned _lineJoinStyleIsDefault : 1;
 }
 
-+ (NSBezierPath *)bezierPath;
-+ (NSBezierPath *)bezierPathWithOvalInRect:(NSRect)rect;
-+ (NSBezierPath *)bezierPathWithRect:(NSRect)rect;
-+ (NSBezierPath *)bezierPathWithRoundedRect:(NSRect)rect xRadius:(CGFloat)xRadius yRadius:(CGFloat)yRadius;
++ (NSBezierPath *) bezierPath;
++ (NSBezierPath *) bezierPathWithOvalInRect: (NSRect) rect;
++ (NSBezierPath *) bezierPathWithRect: (NSRect) rect;
++ (NSBezierPath *) bezierPathWithRoundedRect: (NSRect) rect
+                                     xRadius: (CGFloat) xRadius
+                                     yRadius: (CGFloat) yRadius;
 
-+ (CGFloat)defaultLineWidth;
-+ (CGFloat)defaultMiterLimit;
-+ (CGFloat)defaultFlatness;
-+ (NSWindingRule)defaultWindingRule;
-+ (NSLineCapStyle)defaultLineCapStyle;
-+ (NSLineJoinStyle)defaultLineJoinStyle;
++ (CGFloat) defaultLineWidth;
++ (CGFloat) defaultMiterLimit;
++ (CGFloat) defaultFlatness;
++ (NSWindingRule) defaultWindingRule;
++ (NSLineCapStyle) defaultLineCapStyle;
++ (NSLineJoinStyle) defaultLineJoinStyle;
 
-+ (void)setDefaultLineWidth:(CGFloat)width;
-+ (void)setDefaultMiterLimit:(CGFloat)limit;
-+ (void)setDefaultFlatness:(CGFloat)flatness;
-+ (void)setDefaultWindingRule:(NSWindingRule)rule;
-+ (void)setDefaultLineCapStyle:(NSLineCapStyle)style;
-+ (void)setDefaultLineJoinStyle:(NSLineJoinStyle)style;
++ (void) setDefaultLineWidth: (CGFloat) width;
++ (void) setDefaultMiterLimit: (CGFloat) limit;
++ (void) setDefaultFlatness: (CGFloat) flatness;
++ (void) setDefaultWindingRule: (NSWindingRule) rule;
++ (void) setDefaultLineCapStyle: (NSLineCapStyle) style;
++ (void) setDefaultLineJoinStyle: (NSLineJoinStyle) style;
 
-+ (void)fillRect:(NSRect)rect;
-+ (void)strokeRect:(NSRect)rect;
-+ (void)strokeLineFromPoint:(NSPoint)point toPoint:(NSPoint)point;
-+ (void)drawPackedGlyphs:(const char *)packed atPoint:(NSPoint)point;
-+ (void)clipRect:(NSRect)rect;
++ (void) fillRect: (NSRect) rect;
++ (void) strokeRect: (NSRect) rect;
++ (void) strokeLineFromPoint: (NSPoint) point toPoint: (NSPoint) point;
++ (void) drawPackedGlyphs: (const char *) packed atPoint: (NSPoint) point;
++ (void) clipRect: (NSRect) rect;
 
-- (CGFloat)lineWidth;
-- (CGFloat)miterLimit;
-- (CGFloat)flatness;
-- (NSWindingRule)windingRule;
-- (NSLineCapStyle)lineCapStyle;
-- (NSLineJoinStyle)lineJoinStyle;
+- (CGFloat) lineWidth;
+- (CGFloat) miterLimit;
+- (CGFloat) flatness;
+- (NSWindingRule) windingRule;
+- (NSLineCapStyle) lineCapStyle;
+- (NSLineJoinStyle) lineJoinStyle;
 
-- (void)getLineDash:(CGFloat *)dashes count:(int *)count phase:(CGFloat *)phase;
+- (void) getLineDash: (CGFloat *) dashes
+               count: (int *) count
+               phase: (CGFloat *) phase;
 
-- (BOOL)cachesBezierPath;
+- (BOOL) cachesBezierPath;
 
-- (int)elementCount;
-- (NSBezierPathElement)elementAtIndex:(int)index;
-- (NSBezierPathElement)elementAtIndex:(int)index associatedPoints:(NSPoint *)points;
+- (int) elementCount;
+- (NSBezierPathElement) elementAtIndex: (int) index;
+- (NSBezierPathElement) elementAtIndex: (int) index
+                      associatedPoints: (NSPoint *) points;
 
-- (void)setLineWidth:(CGFloat)width;
-- (void)setMiterLimit:(CGFloat)limit;
-- (void)setFlatness:(CGFloat)flatness;
-- (void)setWindingRule:(NSWindingRule)rule;
-- (void)setLineCapStyle:(NSLineCapStyle)style;
-- (void)setLineJoinStyle:(NSLineJoinStyle)style;
-- (void)setLineDash:(const CGFloat *)dashes count:(int)count phase:(CGFloat)phase;
-- (void)setCachesBezierPath:(BOOL)flag;
+- (void) setLineWidth: (CGFloat) width;
+- (void) setMiterLimit: (CGFloat) limit;
+- (void) setFlatness: (CGFloat) flatness;
+- (void) setWindingRule: (NSWindingRule) rule;
+- (void) setLineCapStyle: (NSLineCapStyle) style;
+- (void) setLineJoinStyle: (NSLineJoinStyle) style;
+- (void) setLineDash: (const CGFloat *) dashes
+               count: (int) count
+               phase: (CGFloat) phase;
+- (void) setCachesBezierPath: (BOOL) flag;
 
-- (BOOL)isEmpty;
-- (NSRect)bounds;
-- (NSRect)controlPointBounds;
-- (BOOL)containsPoint:(NSPoint)point;
-- (NSPoint)currentPoint;
+- (BOOL) isEmpty;
+- (NSRect) bounds;
+- (NSRect) controlPointBounds;
+- (BOOL) containsPoint: (NSPoint) point;
+- (NSPoint) currentPoint;
 
-- (void)moveToPoint:(NSPoint)point;
-- (void)lineToPoint:(NSPoint)point;
-- (void)curveToPoint:(NSPoint)point controlPoint1:(NSPoint)cp1 controlPoint2:(NSPoint)cp2;
-- (void)closePath;
-- (void)relativeMoveToPoint:(NSPoint)point;
-- (void)relativeLineToPoint:(NSPoint)point;
-- (void)relativeCurveToPoint:(NSPoint)point controlPoint1:(NSPoint)cp1 controlPoint2:(NSPoint)cp2;
+- (void) moveToPoint: (NSPoint) point;
+- (void) lineToPoint: (NSPoint) point;
+- (void) curveToPoint: (NSPoint) point
+        controlPoint1: (NSPoint) cp1
+        controlPoint2: (NSPoint) cp2;
+- (void) closePath;
+- (void) relativeMoveToPoint: (NSPoint) point;
+- (void) relativeLineToPoint: (NSPoint) point;
+- (void) relativeCurveToPoint: (NSPoint) point
+                controlPoint1: (NSPoint) cp1
+                controlPoint2: (NSPoint) cp2;
 
-- (void)appendBezierPathWithPoints:(NSPoint *)points count:(unsigned)count;
-- (void)appendBezierPathWithRect:(NSRect)rect;
-- (void)appendBezierPathWithOvalInRect:(NSRect)rect;
-- (void)appendBezierPathWithArcFromPoint:(NSPoint)point toPoint:(NSPoint)toPoint radius:(CGFloat)radius;
-- (void)appendBezierPathWithRoundedRect:(NSRect)rect xRadius:(CGFloat)radius yRadius:(CGFloat)yRadius;
-- (void)appendBezierPathWithArcWithCenter:(NSPoint)center radius:(CGFloat)radius startAngle:(CGFloat)startAngle endAngle:(CGFloat)endAngle;
-- (void)appendBezierPathWithArcWithCenter:(NSPoint)center radius:(CGFloat)radius startAngle:(CGFloat)startAngle endAngle:(CGFloat)endAngle clockwise:(BOOL)clockwise;
-- (void)appendBezierPathWithGlyph:(NSGlyph)glyph inFont:(NSFont *)font;
-- (void)appendBezierPathWithGlyphs:(NSGlyph *)glyphs count:(unsigned)count inFont:(NSFont *)font;
-- (void)appendBezierPathWithPackedGlyphs:(const char *)packed;
-- (void)appendBezierPath:(NSBezierPath *)other;
+- (void) appendBezierPathWithPoints: (NSPoint *) points count: (unsigned) count;
+- (void) appendBezierPathWithRect: (NSRect) rect;
+- (void) appendBezierPathWithOvalInRect: (NSRect) rect;
+- (void) appendBezierPathWithArcFromPoint: (NSPoint) point
+                                  toPoint: (NSPoint) toPoint
+                                   radius: (CGFloat) radius;
+- (void) appendBezierPathWithRoundedRect: (NSRect) rect
+                                 xRadius: (CGFloat) radius
+                                 yRadius: (CGFloat) yRadius;
+- (void) appendBezierPathWithArcWithCenter: (NSPoint) center
+                                    radius: (CGFloat) radius
+                                startAngle: (CGFloat) startAngle
+                                  endAngle: (CGFloat) endAngle;
+- (void) appendBezierPathWithArcWithCenter: (NSPoint) center
+                                    radius: (CGFloat) radius
+                                startAngle: (CGFloat) startAngle
+                                  endAngle: (CGFloat) endAngle
+                                 clockwise: (BOOL) clockwise;
+- (void) appendBezierPathWithGlyph: (NSGlyph) glyph inFont: (NSFont *) font;
+- (void) appendBezierPathWithGlyphs: (NSGlyph *) glyphs
+                              count: (unsigned) count
+                             inFont: (NSFont *) font;
+- (void) appendBezierPathWithPackedGlyphs: (const char *) packed;
+- (void) appendBezierPath: (NSBezierPath *) other;
 
-- (void)transformUsingAffineTransform:(NSAffineTransform *)matrix;
-- (void)removeAllPoints;
-- (void)setAssociatedPoints:(NSPoint *)points atIndex:(int)index;
+- (void) transformUsingAffineTransform: (NSAffineTransform *) matrix;
+- (void) removeAllPoints;
+- (void) setAssociatedPoints: (NSPoint *) points atIndex: (int) index;
 
-- (NSBezierPath *)bezierPathByFlatteningPath;
-- (NSBezierPath *)bezierPathByReversingPath;
+- (NSBezierPath *) bezierPathByFlatteningPath;
+- (NSBezierPath *) bezierPathByReversingPath;
 
-- (void)stroke;
-- (void)fill;
+- (void) stroke;
+- (void) fill;
 
-- (void)addClip;
-- (void)setClip;
+- (void) addClip;
+- (void) setClip;
 
 @end

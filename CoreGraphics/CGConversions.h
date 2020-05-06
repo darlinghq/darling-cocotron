@@ -4,8 +4,8 @@
 #import <CoreGraphics/CGPattern.h>
 #import <Onyx2D/O2AffineTransform.h>
 #import <Onyx2D/O2Function.h>
-#import <Onyx2D/O2Pattern.h>
 #import <Onyx2D/O2Path.h>
+#import <Onyx2D/O2Pattern.h>
 
 static inline CGAffineTransform CGAffineTransformFromO2(O2AffineTransform xform) {
     CGAffineTransform result = {xform.a, xform.b, xform.c, xform.d, xform.tx, xform.ty};

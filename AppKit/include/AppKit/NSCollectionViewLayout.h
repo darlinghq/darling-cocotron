@@ -17,10 +17,11 @@
  along with Darling.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#import <Foundation/NSString.h>
 #import <AppKit/AppKitExport.h>
 #import <AppKit/NSCollectionView.h>
+#import <Foundation/NSString.h>
 
-typedef NSString * NSCollectionViewDecorationElementKind;
+typedef NSString *NSCollectionViewDecorationElementKind;
 
-APPKIT_EXPORT NSCollectionViewSupplementaryElementKind const NSCollectionElementKindInterItemGapIndicator;
+APPKIT_EXPORT NSCollectionViewSupplementaryElementKind const
+    NSCollectionElementKindInterItemGapIndicator;

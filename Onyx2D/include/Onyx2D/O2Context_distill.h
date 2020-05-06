@@ -8,12 +8,15 @@
 }
 
 - delegate;
-- (void)setDelegate:delegate;
+- (void) setDelegate: delegate;
 
 @end
 
 @interface NSObject (O2Context_distill)
 
-- (void)distiller:(O2Context_distill *)distiller unicode:(unichar *)unicode rects:(O2Rect *)rect count:(NSUInteger)count;
+- (void) distiller: (O2Context_distill *) distiller
+           unicode: (unichar *) unicode
+             rects: (O2Rect *) rect
+             count: (NSUInteger) count;
 
 @end

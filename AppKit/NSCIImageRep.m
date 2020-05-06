@@ -1,12 +1,12 @@
+#import <AppKit/NSBitmapImageRep.h>
 #import <AppKit/NSCIImageRep.h>
 #import <AppKit/NSImageRep.h>
 #import <AppKit/NSRaise.h>
-#import <AppKit/NSBitmapImageRep.h>
 
-@implementation CIImage(CIImageRepAdditions)
+@implementation CIImage (CIImageRepAdditions)
 
--initWithBitmapImageRep:(NSBitmapImageRep *)bitmapImageRep {
-   return [self initWithCGImage:[bitmapImageRep CGImage]];
+- initWithBitmapImageRep: (NSBitmapImageRep *) bitmapImageRep {
+    return [self initWithCGImage: [bitmapImageRep CGImage]];
 }
 
 @end

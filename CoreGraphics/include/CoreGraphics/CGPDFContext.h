@@ -31,7 +31,9 @@ typedef struct CF_BRIDGED_TYPE(id) O2PDFContext *CGPDFContextRef;
 
 CF_IMPLICIT_BRIDGING_ENABLED
 
-COREGRAPHICS_EXPORT CGContextRef CGPDFContextCreate(CGDataConsumerRef consumer, const CGRect *mediaBox, CFDictionaryRef auxiliaryInfo);
+COREGRAPHICS_EXPORT CGContextRef
+CGPDFContextCreate(CGDataConsumerRef consumer, const CGRect *mediaBox,
+                   CFDictionaryRef auxiliaryInfo);
 COREGRAPHICS_EXPORT void CGPDFContextClose(CGContextRef self);
 
 CF_IMPLICIT_BRIDGING_DISABLED

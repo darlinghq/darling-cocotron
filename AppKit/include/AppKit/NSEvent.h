@@ -1,14 +1,25 @@
 /* Copyright (c) 2006-2007 Christopher J. W. Lloyd
                  2010 Markus Hitter <mah@jump-ing.de>
 
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software is furnished to do so,
+subject to the following conditions:
 
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
-#import <Foundation/Foundation.h>
 #import <AppKit/AppKitExport.h>
+#import <Foundation/Foundation.h>
 
 @class NSWindow, NSGraphicsContext, NSTrackingArea;
 
@@ -114,7 +125,7 @@ typedef NS_OPTIONS(NSUInteger, NSEventModifierFlags) {
     NSDeviceIndependentModifierFlagsMask = 0xffff0000UL
 };
 
-enum: unsigned int {
+enum : unsigned int {
     NSUpArrowFunctionKey = 0xF700,
     NSDownArrowFunctionKey = 0xF701,
     NSLeftArrowFunctionKey = 0xF702,
@@ -189,10 +200,7 @@ enum: unsigned int {
     NSModeSwitchFunctionKey = 0xF747
 };
 
-enum {
-    NSApplicationActivated = 0,
-    NSApplicationDeactivated = 1
-};
+enum { NSApplicationActivated = 0, NSApplicationDeactivated = 1 };
 
 @interface NSEvent : NSObject {
     NSEventType _type;
@@ -247,15 +255,15 @@ enum {
                         pressure: (float) pressure;
 
 + (NSEvent *) keyEventWithType: (NSEventType) type
-                      location: (NSPoint) location
-                 modifierFlags: (NSEventModifierFlags) modifierFlags
-                     timestamp: (NSTimeInterval) timestamp
-                  windowNumber: (NSInteger) windowNumber
-                       context: (NSGraphicsContext *) context
-                    characters: (NSString *) characters
-   charactersIgnoringModifiers: (NSString *) charactersIgnoringModifiers
-                     isARepeat: (BOOL) isARepeat
-                       keyCode: (unsigned short) keyCode;
+                       location: (NSPoint) location
+                  modifierFlags: (NSEventModifierFlags) modifierFlags
+                      timestamp: (NSTimeInterval) timestamp
+                   windowNumber: (NSInteger) windowNumber
+                        context: (NSGraphicsContext *) context
+                     characters: (NSString *) characters
+    charactersIgnoringModifiers: (NSString *) charactersIgnoringModifiers
+                      isARepeat: (BOOL) isARepeat
+                        keyCode: (unsigned short) keyCode;
 
 + (NSEvent *) otherEventWithType: (NSEventType) type
                         location: (NSPoint) location
@@ -283,7 +291,8 @@ enum {
 - (NSString *) charactersIgnoringModifiers;
 - (unsigned short) keyCode;
 
-+ (void) startPeriodicEventsAfterDelay: (NSTimeInterval) delay withPeriod: (NSTimeInterval) period;
++ (void) startPeriodicEventsAfterDelay: (NSTimeInterval) delay
+                            withPeriod: (NSTimeInterval) period;
 + (void) stopPeriodicEvents;
 
 - (short) subtype;

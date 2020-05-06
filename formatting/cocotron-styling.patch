@@ -1,0 +1,34 @@
+--- llvm/clang/lib/Format/TokenAnnotator.cpp
++++ llvm/clang/lib/Format/TokenAnnotator.cpp
+@@ -3188,7 +3188,7 @@ bool TokenAnnotator::spaceRequiredBefore(const AnnotatedLine &Line,
+       // Don't space between ')' and <id> or ')' and 'new'. 'new' is not a
+       // keyword in Objective-C, and '+ (instancetype)new;' is a standard class
+       // method declaration.
+-      return false;
++      return true;
+   }
+   if (Line.Type == LT_ObjCProperty &&
+       (Right.is(tok::equal) || Left.is(tok::equal)))
+@@ -3005,6 +3007,22 @@ bool TokenAnnotator::spaceRequiredBefore(const AnnotatedLine &Line,
+   if (Right.is(TT_RangeBasedForLoopColon) &&
+       !Style.SpaceBeforeRangeBasedForLoopColon)
+     return false;
++  if (Left.is(tok::colon) && Left.is(TT_ObjCMethodExpr) && Left.Previous && Left.Previous->is(TT_SelectorName)) {
++    bool isInSelector = false;
++    FormatToken *tok = Left.Previous->Previous;
++    while (tok) {
++      if (tok->closesScope()) {
++        break;
++      } else if (tok->opensScope() && tok->Previous && tok->Previous->isObjCAtKeyword(tok::objc_selector) && tok->Previous->Previous && tok->Previous->Previous->is(tok::at)) {
++        isInSelector = true;
++        break;
++      }
++      tok = tok->Previous;
++    }
++    if (!isInSelector) {
++      return true;
++    }
++  }
+   if (Right.is(tok::colon)) {
+     if (Line.First->isOneOf(tok::kw_case, tok::kw_default) ||
+         !Right.getNextNonComment() || Right.getNextNonComment()->is(tok::semi))

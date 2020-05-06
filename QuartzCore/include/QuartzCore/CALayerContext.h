@@ -1,6 +1,6 @@
+#import <CoreGraphics/CGGeometry.h>
 #import <Foundation/NSObject.h>
 #import <OpenGL/OpenGL.h>
-#import <CoreGraphics/CGGeometry.h>
 
 @class CARenderer, CALayer, CGLPixelSurface, NSTimer, NSMutableArray, NSNumber;
 
@@ -16,17 +16,17 @@
     NSTimer *_timer;
 }
 
-- initWithFrame:(CGRect)rect;
+- initWithFrame: (CGRect) rect;
 
-- (void)setFrame:(CGRect)value;
-- (void)setLayer:(CALayer *)layer;
+- (void) setFrame: (CGRect) value;
+- (void) setLayer: (CALayer *) layer;
 
-- (void)invalidate;
+- (void) invalidate;
 
-- (void)render;
+- (void) render;
 
-- (void)startTimerIfNeeded;
+- (void) startTimerIfNeeded;
 
-- (void)deleteTextureId:(NSNumber *)textureId;
+- (void) deleteTextureId: (NSNumber *) textureId;
 
 @end

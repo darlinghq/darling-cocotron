@@ -17,83 +17,80 @@
  along with Darling.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include <stdio.h>
 #include <CoreFoundation/CoreFoundation.h>
 #include <CoreGraphics/CGDirectDisplay.h>
 #include <CoreGraphics/CGGeometry.h>
+#include <stdio.h>
 
 typedef float CGGammaValue;
 typedef int32_t CGWindowLevel;
 
 static int verbose = 0;
 
-__attribute__((constructor))
-static void initme(void) {
+__attribute__((constructor)) static void initme(void) {
     verbose = getenv("STUB_VERBOSE") != NULL;
 }
 
-boolean_t CGCursorIsVisible(void)
-{
-    if (verbose) puts("STUB: CGCursorIsVisible called");
-	return false;
+boolean_t CGCursorIsVisible(void) {
+    if(verbose)
+        puts("STUB: CGCursorIsVisible called");
+    return false;
 }
 
-CGOpenGLDisplayMask CGDisplayIDToOpenGLDisplayMask(CGDirectDisplayID a)
-{
-    if (verbose) puts("STUB: CGDisplayIDToOpenGLDisplayMask called");
-	return 0;
+CGOpenGLDisplayMask CGDisplayIDToOpenGLDisplayMask(CGDirectDisplayID a) {
+    if(verbose)
+        puts("STUB: CGDisplayIDToOpenGLDisplayMask called");
+    return 0;
 }
 
-CGError CGDisplayMoveCursorToPoint(CGDirectDisplayID a, CGPoint b)
-{
-    if (verbose) puts("STUB: CGDisplayMoveCursorToPoint called");
-	return (CGError)0;
+CGError CGDisplayMoveCursorToPoint(CGDirectDisplayID a, CGPoint b) {
+    if(verbose)
+        puts("STUB: CGDisplayMoveCursorToPoint called");
+    return (CGError)0;
 }
 
-void CGDisplayRestoreColorSyncSettings(void)
-{
-    if (verbose) puts("STUB: CGDisplayRestoreColorSyncSettings called");
-	
+void CGDisplayRestoreColorSyncSettings(void) {
+    if(verbose)
+        puts("STUB: CGDisplayRestoreColorSyncSettings called");
 }
 
-CGError CGGetDisplayTransferByFormula(CGDirectDisplayID a, CGGammaValue *b, CGGammaValue *c, CGGammaValue *d, CGGammaValue *e, CGGammaValue *f, CGGammaValue *g, CGGammaValue *h, CGGammaValue *i, CGGammaValue *j)
-{
-    if (verbose) puts("STUB: CGGetDisplayTransferByFormula called");
-	return (CGError)0;
+CGError CGGetDisplayTransferByFormula(CGDirectDisplayID a, CGGammaValue *b, CGGammaValue *c, CGGammaValue *d, CGGammaValue *e, CGGammaValue *f, CGGammaValue *g, CGGammaValue *h, CGGammaValue *i, CGGammaValue *j) {
+    if(verbose)
+        puts("STUB: CGGetDisplayTransferByFormula called");
+    return (CGError)0;
 }
 
-CGError CGGetDisplayTransferByTable(CGDirectDisplayID a, uint32_t b, CGGammaValue *c, CGGammaValue *d, CGGammaValue *e, uint32_t *f)
-{
-    if (verbose) puts("STUB: CGGetDisplayTransferByTable called");
-	return (CGError)0;
+CGError CGGetDisplayTransferByTable(CGDirectDisplayID a, uint32_t b, CGGammaValue *c, CGGammaValue *d, CGGammaValue *e, uint32_t *f) {
+    if(verbose)
+        puts("STUB: CGGetDisplayTransferByTable called");
+    return (CGError)0;
 }
 
-void CGGetLastMouseDelta(int32_t *a, int32_t *b)
-{
-    if (verbose) puts("STUB: CGGetLastMouseDelta called");
-	
+void CGGetLastMouseDelta(int32_t *a, int32_t *b) {
+    if(verbose)
+        puts("STUB: CGGetLastMouseDelta called");
 }
 
-CGError CGSetDisplayTransferByFormula(CGDirectDisplayID a, CGGammaValue b, CGGammaValue c, CGGammaValue d, CGGammaValue e, CGGammaValue f, CGGammaValue g, CGGammaValue h, CGGammaValue i, CGGammaValue j)
-{
-    if (verbose) puts("STUB: CGSetDisplayTransferByFormula called");
-	return (CGError)0;
+CGError CGSetDisplayTransferByFormula(CGDirectDisplayID a, CGGammaValue b, CGGammaValue c, CGGammaValue d, CGGammaValue e, CGGammaValue f, CGGammaValue g, CGGammaValue h, CGGammaValue i, CGGammaValue j) {
+    if(verbose)
+        puts("STUB: CGSetDisplayTransferByFormula called");
+    return (CGError)0;
 }
 
-CGError CGSetDisplayTransferByTable(CGDirectDisplayID a, uint32_t b, const CGGammaValue *c, const CGGammaValue *d, const CGGammaValue *e)
-{
-    if (verbose) puts("STUB: CGSetDisplayTransferByTable called");
-	return (CGError)0;
+CGError CGSetDisplayTransferByTable(CGDirectDisplayID a, uint32_t b, const CGGammaValue *c, const CGGammaValue *d, const CGGammaValue *e) {
+    if(verbose)
+        puts("STUB: CGSetDisplayTransferByTable called");
+    return (CGError)0;
 }
 
-CGError CGSetLocalEventsSuppressionInterval(CFTimeInterval a)
-{
-    if (verbose) puts("STUB: CGSetLocalEventsSuppressionInterval called");
-	return (CGError)0;
+CGError CGSetLocalEventsSuppressionInterval(CFTimeInterval a) {
+    if(verbose)
+        puts("STUB: CGSetLocalEventsSuppressionInterval called");
+    return (CGError)0;
 }
 
-CGWindowLevel CGShieldingWindowLevel(void)
-{
-    if (verbose) puts("STUB: CGShieldingWindowLevel called");
-	return 0;
+CGWindowLevel CGShieldingWindowLevel(void) {
+    if(verbose)
+        puts("STUB: CGShieldingWindowLevel called");
+    return 0;
 }

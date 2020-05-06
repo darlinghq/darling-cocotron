@@ -4,7 +4,7 @@
     NSURL *_URL;
 }
 
-- (NSURL *)URL;
-- (void)setURL:(NSURL *)value;
+- (NSURL *) URL;
+- (void) setURL: (NSURL *) value;
 
 @end

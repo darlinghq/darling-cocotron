@@ -1,6 +1,6 @@
-#import <Foundation/Foundation.h>
 #import <ApplicationServices/ApplicationServices.h>
 #import <CoreVideo/CoreVideo.h>
+#import <Foundation/Foundation.h>
 #import <QuartzCore/CABase.h>
 
 CA_EXPORT NSString *const kCARendererColorSpace;
@@ -16,12 +16,14 @@ CA_EXPORT NSString *const kCARendererColorSpace;
 @property(assign) CGRect bounds;
 @property(retain) CALayer *layer;
 
-+ (CARenderer *)rendererWithCGLContext:(void *)cglContext options:(NSDictionary *)options;
++ (CARenderer *) rendererWithCGLContext: (void *) cglContext
+                                options: (NSDictionary *) options;
 
-- (void)beginFrameAtTime:(CFTimeInterval)currentTime timeStamp:(CVTimeStamp *)timeStamp;
+- (void) beginFrameAtTime: (CFTimeInterval) currentTime
+                timeStamp: (CVTimeStamp *) timeStamp;
 
-- (void)render;
+- (void) render;
 
-- (void)endFrame;
+- (void) endFrame;
 
 @end

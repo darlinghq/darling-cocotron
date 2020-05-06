@@ -1,10 +1,21 @@
 /* Copyright (c) 2008 Christopher J. W. Lloyd
 
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software is furnished to do so,
+subject to the following conditions:
 
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Foundation/NSObject.h>
 #import <Onyx2D/O2Geometry.h>
 
@@ -21,7 +32,9 @@ typedef uint16_t O2Glyph;
 #define O2FONTLOGGINGENABLED 0
 
 #if O2FONTLOGGINGENABLED
-#define O2FontLog(format, args...) NSLog(@"%s line: %d | %@", __PRETTY_FUNCTION__, __LINE__, [NSString stringWithFormat:format, ##args])
+#define O2FontLog(format, args...)                                             \
+    NSLog(@"%s line: %d | %@", __PRETTY_FUNCTION__, __LINE__,                  \
+          [NSString stringWithFormat: format, ##args])
 #else
 #define O2FontLog(format, args...)
 #endif
@@ -56,30 +69,30 @@ typedef enum {
 // these methods in a category O2Font(<platformname>) if some
 // mapping is needed between the font postscript names and the
 // native names used by the platform
-+ (NSString *)nativeFontNameForPostscriptName:(NSString *)name;
-+ (NSString *)postscriptNameForNativeName:(NSString *)name;
-+ (NSString *)postscriptNameForDisplayName:(NSString *)name;
-+ (NSString *)displayNameForPostscriptName:(NSString *)name;
-+ (NSString *)postscriptNameForFontName:(NSString *)name;
++ (NSString *) nativeFontNameForPostscriptName: (NSString *) name;
++ (NSString *) postscriptNameForNativeName: (NSString *) name;
++ (NSString *) postscriptNameForDisplayName: (NSString *) name;
++ (NSString *) displayNameForPostscriptName: (NSString *) name;
++ (NSString *) postscriptNameForFontName: (NSString *) name;
 
-+ (NSArray *)preferredFontNames;
-+ (void)setPreferredFontNames:(NSArray *)fontNames;
++ (NSArray *) preferredFontNames;
++ (void) setPreferredFontNames: (NSArray *) fontNames;
 
-- initWithFontName:(NSString *)name;
-- initWithDataProvider:(O2DataProviderRef)provider;
+- initWithFontName: (NSString *) name;
+- initWithDataProvider: (O2DataProviderRef) provider;
 
-- (NSData *)copyTableForTag:(uint32_t)tag;
+- (NSData *) copyTableForTag: (uint32_t) tag;
 
-- (O2Glyph)glyphWithGlyphName:(NSString *)name;
-- (NSString *)copyGlyphNameForGlyph:(O2Glyph)glyph;
+- (O2Glyph) glyphWithGlyphName: (NSString *) name;
+- (NSString *) copyGlyphNameForGlyph: (O2Glyph) glyph;
 
-- (NSCharacterSet *)coveredCharacterSet;
+- (NSCharacterSet *) coveredCharacterSet;
 
-- (O2Float)nativeSizeForSize:(O2Float)size;
+- (O2Float) nativeSizeForSize: (O2Float) size;
 
-- (void)fetchAdvances;
+- (void) fetchAdvances;
 
-- (O2Encoding *)createEncodingForTextEncoding:(O2TextEncoding)encoding;
+- (O2Encoding *) createEncodingForTextEncoding: (O2TextEncoding) encoding;
 
 O2FontRef O2FontCreateWithFontName(NSString *name);
 O2FontRef O2FontCreateWithDataProvider(O2DataProviderRef provider);
@@ -101,7 +114,8 @@ O2Rect O2FontGetFontBBox(O2FontRef self);
 NSCharacterSet *O2FontGetCoveredCharacterSet(O2FontRef self);
 
 size_t O2FontGetNumberOfGlyphs(O2FontRef self);
-BOOL O2FontGetGlyphAdvances(O2FontRef self, const O2Glyph *glyphs, size_t count, int *advances);
+BOOL O2FontGetGlyphAdvances(O2FontRef self, const O2Glyph *glyphs, size_t count,
+                            int *advances);
 
 O2Glyph O2FontGetGlyphWithGlyphName(O2FontRef self, CFStringRef name);
 NSString *O2FontCopyGlyphNameForGlyph(O2FontRef self, O2Glyph glyph);

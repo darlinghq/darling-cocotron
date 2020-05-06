@@ -1,13 +1,24 @@
 /* Copyright (c) 2006-2007 Christopher J. W. Lloyd
 
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software is furnished to do so,
+subject to the following conditions:
 
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
-#import <AppKit/NSImageRep.h>
 #import <AppKit/NSGraphics.h>
+#import <AppKit/NSImageRep.h>
 #import <ApplicationServices/ApplicationServices.h>
 
 typedef enum {
@@ -36,7 +47,7 @@ typedef enum {
     NSFloatingPointSamplesBitmapFormat = 0x04,
 } NSBitmapFormat;
 
-typedef NSString * NSBitmapImageRepPropertyKey;
+typedef NSString *NSBitmapImageRepPropertyKey;
 
 APPKIT_EXPORT NSBitmapImageRepPropertyKey NSImageCompressionFactor;
 APPKIT_EXPORT NSBitmapImageRepPropertyKey NSImageCompressionMethod;
@@ -67,63 +78,94 @@ APPKIT_EXPORT NSBitmapImageRepPropertyKey NSImageCurrentFrame;
     CGImageRef _cgImage;
 }
 
-+ (void)getTIFFCompressionTypes:(const NSTIFFCompression **)types count:(int *)count;
-+ (NSString *)localizedNameForTIFFCompressionType:(NSTIFFCompression)type;
-+ (NSData *)TIFFRepresentationOfImageRepsInArray:(NSArray *)array;
-+ (NSData *)TIFFRepresentationOfImageRepsInArray:(NSArray *)array usingCompression:(NSTIFFCompression)compression factor:(float)factor;
++ (void) getTIFFCompressionTypes: (const NSTIFFCompression **) types
+                           count: (int *) count;
++ (NSString *) localizedNameForTIFFCompressionType: (NSTIFFCompression) type;
++ (NSData *) TIFFRepresentationOfImageRepsInArray: (NSArray *) array;
++ (NSData *) TIFFRepresentationOfImageRepsInArray: (NSArray *) array
+                                 usingCompression:
+                                     (NSTIFFCompression) compression
+                                           factor: (float) factor;
 
-+ (NSData *)representationOfImageRepsInArray:(NSArray *)array usingType:(NSBitmapImageFileType)type properties:(NSDictionary *)properties;
++ (NSData *) representationOfImageRepsInArray: (NSArray *) array
+                                    usingType: (NSBitmapImageFileType) type
+                                   properties: (NSDictionary *) properties;
 
-+ (NSArray *)imageRepsWithData:(NSData *)data;
-+ imageRepWithData:(NSData *)data;
++ (NSArray *) imageRepsWithData: (NSData *) data;
++ imageRepWithData: (NSData *) data;
 
-- initWithBitmapDataPlanes:(unsigned char **)planes pixelsWide:(int)width pixelsHigh:(int)height bitsPerSample:(int)bitsPerSample samplesPerPixel:(int)samplesPerPixel hasAlpha:(BOOL)hasAlpha isPlanar:(BOOL)isPlanar colorSpaceName:(NSString *)colorSpaceName bitmapFormat:(NSBitmapFormat)bitmapFormat bytesPerRow:(int)bytesPerRow bitsPerPixel:(int)bitsPerPixel;
+- initWithBitmapDataPlanes: (unsigned char **) planes
+                pixelsWide: (int) width
+                pixelsHigh: (int) height
+             bitsPerSample: (int) bitsPerSample
+           samplesPerPixel: (int) samplesPerPixel
+                  hasAlpha: (BOOL) hasAlpha
+                  isPlanar: (BOOL) isPlanar
+            colorSpaceName: (NSString *) colorSpaceName
+              bitmapFormat: (NSBitmapFormat) bitmapFormat
+               bytesPerRow: (int) bytesPerRow
+              bitsPerPixel: (int) bitsPerPixel;
 
-- initWithBitmapDataPlanes:(unsigned char **)planes pixelsWide:(int)width pixelsHigh:(int)height bitsPerSample:(int)bitsPerSample samplesPerPixel:(int)samplesPerPixel hasAlpha:(BOOL)hasAlpha isPlanar:(BOOL)isPlanar colorSpaceName:(NSString *)colorSpaceName bytesPerRow:(int)bytesPerRow bitsPerPixel:(int)bitsPerPixel;
+- initWithBitmapDataPlanes: (unsigned char **) planes
+                pixelsWide: (int) width
+                pixelsHigh: (int) height
+             bitsPerSample: (int) bitsPerSample
+           samplesPerPixel: (int) samplesPerPixel
+                  hasAlpha: (BOOL) hasAlpha
+                  isPlanar: (BOOL) isPlanar
+            colorSpaceName: (NSString *) colorSpaceName
+               bytesPerRow: (int) bytesPerRow
+              bitsPerPixel: (int) bitsPerPixel;
 
 - initForIncrementalLoad;
 
-- initWithFocusedViewRect:(NSRect)rect;
+- initWithFocusedViewRect: (NSRect) rect;
 
-- initWithData:(NSData *)data;
-- initWithContentsOfFile:(NSString *)path;
-- initWithCGImage:(CGImageRef)cgImage;
+- initWithData: (NSData *) data;
+- initWithContentsOfFile: (NSString *) path;
+- initWithCGImage: (CGImageRef) cgImage;
 
-- (int)incrementalLoadFromData:(NSData *)data complete:(BOOL)complete;
+- (int) incrementalLoadFromData: (NSData *) data complete: (BOOL) complete;
 
-- (int)bitsPerPixel;
-- (int)samplesPerPixel;
-- (int)bytesPerRow;
-- (BOOL)isPlanar;
-- (int)numberOfPlanes;
-- (int)bytesPerPlane;
+- (int) bitsPerPixel;
+- (int) samplesPerPixel;
+- (int) bytesPerRow;
+- (BOOL) isPlanar;
+- (int) numberOfPlanes;
+- (int) bytesPerPlane;
 
-- (NSBitmapFormat)bitmapFormat;
-- (unsigned char *)bitmapData;
+- (NSBitmapFormat) bitmapFormat;
+- (unsigned char *) bitmapData;
 
-- (void)getBitmapDataPlanes:(unsigned char **)planes;
+- (void) getBitmapDataPlanes: (unsigned char **) planes;
 
-- (void)getPixel:(NSUInteger[])pixel atX:(NSInteger)x y:(NSInteger)y;
-- (void)setPixel:(NSUInteger[])pixel atX:(NSInteger)x y:(NSInteger)y;
+- (void) getPixel: (NSUInteger[]) pixel atX: (NSInteger) x y: (NSInteger) y;
+- (void) setPixel: (NSUInteger[]) pixel atX: (NSInteger) x y: (NSInteger) y;
 
-- (NSColor *)colorAtX:(NSInteger)x y:(NSInteger)y;
-- (void)setColor:(NSColor *)color atX:(NSInteger)x y:(NSInteger)y;
+- (NSColor *) colorAtX: (NSInteger) x y: (NSInteger) y;
+- (void) setColor: (NSColor *) color atX: (NSInteger) x y: (NSInteger) y;
 
-- valueForProperty:(NSString *)property;
-- (void)setProperty:(NSString *)property withValue:value;
+- valueForProperty: (NSString *) property;
+- (void) setProperty: (NSString *) property withValue: value;
 
-- (void)colorizeByMappingGray:(CGFloat)gray toColor:(NSColor *)color blackMapping:(NSColor *)blackMapping whiteMapping:(NSColor *)whiteMapping;
+- (void) colorizeByMappingGray: (CGFloat) gray
+                       toColor: (NSColor *) color
+                  blackMapping: (NSColor *) blackMapping
+                  whiteMapping: (NSColor *) whiteMapping;
 
-- (void)getCompression:(NSTIFFCompression *)compression factor:(float *)factor;
-- (void)setCompression:(NSTIFFCompression)compression factor:(float)factor;
+- (void) getCompression: (NSTIFFCompression *) compression
+                 factor: (float *) factor;
+- (void) setCompression: (NSTIFFCompression) compression factor: (float) factor;
 
-- (BOOL)canBeCompressedUsing:(NSTIFFCompression)compression;
+- (BOOL) canBeCompressedUsing: (NSTIFFCompression) compression;
 
-- (NSData *)representationUsingType:(NSBitmapImageFileType)type properties:(NSDictionary *)properties;
+- (NSData *) representationUsingType: (NSBitmapImageFileType) type
+                          properties: (NSDictionary *) properties;
 
-- (NSData *)TIFFRepresentation;
-- (NSData *)TIFFRepresentationUsingCompression:(NSTIFFCompression)compression factor:(float)factor;
+- (NSData *) TIFFRepresentation;
+- (NSData *) TIFFRepresentationUsingCompression: (NSTIFFCompression) compression
+                                         factor: (float) factor;
 
-- (CGImageRef)CGImage;
+- (CGImageRef) CGImage;
 
 @end

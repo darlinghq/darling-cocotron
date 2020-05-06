@@ -20,12 +20,16 @@
 #import <AppKit/AppKitExport.h>
 #import <Foundation/Foundation.h>
 
-typedef NSString * NSTouchBarItemIdentifier;
+typedef NSString *NSTouchBarItemIdentifier;
 
-APPKIT_EXPORT NSTouchBarItemIdentifier const NSTouchBarItemIdentifierFixedSpaceLarge;
-APPKIT_EXPORT NSTouchBarItemIdentifier const NSTouchBarItemIdentifierFixedSpaceSmall;
-APPKIT_EXPORT NSTouchBarItemIdentifier const NSTouchBarItemIdentifierFlexibleSpace;
-APPKIT_EXPORT NSTouchBarItemIdentifier const NSTouchBarItemIdentifierOtherItemsProxy;
+APPKIT_EXPORT NSTouchBarItemIdentifier const
+    NSTouchBarItemIdentifierFixedSpaceLarge;
+APPKIT_EXPORT NSTouchBarItemIdentifier const
+    NSTouchBarItemIdentifierFixedSpaceSmall;
+APPKIT_EXPORT NSTouchBarItemIdentifier const
+    NSTouchBarItemIdentifierFlexibleSpace;
+APPKIT_EXPORT NSTouchBarItemIdentifier const
+    NSTouchBarItemIdentifierOtherItemsProxy;
 
 @interface NSTouchBarItem : NSObject <NSCoding>
 

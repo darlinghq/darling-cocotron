@@ -17,9 +17,9 @@ You should have received a copy of the GNU General Public License
 along with Darling.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#import "X11Display.h"
 #import <AppKit/NSPasteboard.h>
 #import <X11/Xlib.h>
-#import "X11Display.h"
 
 @interface X11Pasteboard : NSPasteboard {
     NSPasteboardName _name;
@@ -28,15 +28,12 @@ along with Darling.  If not, see <http://www.gnu.org/licenses/>.
     Atom _selectionName;
 
     NSMutableDictionary<NSPasteboardType, NSData *> *_typeToData;
-    NSMutableDictionary<NSPasteboardType, id<NSPasteboardTypeOwner>> *_typeToOwner;
+    NSMutableDictionary<NSPasteboardType, id<NSPasteboardTypeOwner>>
+        *_typeToOwner;
     NSInteger _changeCount;
 
     Atom _receivingProperty;
-    enum {
-        WAITING,
-        SUCCESS,
-        NONE
-    } _selectionNotifyResult;
+    enum { WAITING, SUCCESS, NONE } _selectionNotifyResult;
 }
 
 - (instancetype) initWithName: (NSPasteboardName) name;

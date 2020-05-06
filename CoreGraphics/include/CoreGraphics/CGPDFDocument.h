@@ -12,8 +12,8 @@ typedef struct CF_BRIDGED_TYPE(id) O2PDFDoument *CGPDFDocumentRef;
 
 #import <CoreFoundation/CFURL.h>
 
-#import <CoreGraphics/CGPDFPage.h>
 #import <CoreGraphics/CGDataProvider.h>
+#import <CoreGraphics/CGPDFPage.h>
 
 CF_IMPLICIT_BRIDGING_ENABLED
 

@@ -14,8 +14,8 @@
     NSMutableSet *_ignoredWords;
 }
 
-- (void)ignoreWord:(NSString *)word;
-- (NSArray *)ignoredWords;
-- (void)setIgnoredWords:(NSArray *)words;
+- (void) ignoreWord: (NSString *) word;
+- (NSArray *) ignoredWords;
+- (void) setIgnoredWords: (NSArray *) words;
 
 @end

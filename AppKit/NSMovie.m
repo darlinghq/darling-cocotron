@@ -2,7 +2,7 @@
 
 @implementation NSMovie
 
-+(NSArray *)movieUnfilteredPasteboardTypes {
++ (NSArray *) movieUnfilteredPasteboardTypes {
     return [[[NSArray alloc] init] autorelease];
 }
 

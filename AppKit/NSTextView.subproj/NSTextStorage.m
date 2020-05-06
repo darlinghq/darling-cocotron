@@ -1,95 +1,108 @@
 /* Copyright (c) 2006-2007 Christopher J. W. Lloyd <cjwl@objc.net>
 
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+   Permission is hereby granted, free of charge, to any person obtaining a copy
+   of this software and associated documentation files (the "Software"), to
+   deal in the Software without restriction, including without limitation the
+   rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+   sell copies of the Software, and to permit persons to whom the Software is
+   furnished to do so, subject to the following conditions:
 
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+   The above copyright notice and this permission notice shall be included in
+   all copies or substantial portions of the Software.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+   FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+   IN THE SOFTWARE. */
 
-#import <AppKit/NSTextStorage.h>
-#import"NSTextStorage_concrete.h"
-#import <AppKit/NSLayoutManager.h>
+#import "NSTextStorage_concrete.h"
 #import <AppKit/NSAttributedString.h>
+#import <AppKit/NSLayoutManager.h>
+#import <AppKit/NSTextStorage.h>
 #import <Foundation/NSKeyedArchiver.h>
 
-NSString * const NSTextStorageWillProcessEditingNotification=@"NSTextStorageWillProcessEditingNotification";
-NSString * const NSTextStorageDidProcessEditingNotification=@"NSTextStorageDidProcessEditingNotification";
+NSString *const NSTextStorageWillProcessEditingNotification =
+    @"NSTextStorageWillProcessEditingNotification";
+NSString *const NSTextStorageDidProcessEditingNotification =
+    @"NSTextStorageDidProcessEditingNotification";
 
 @implementation NSTextStorage
 
-+allocWithZone:(NSZone *)zone {
-   if(self==[NSTextStorage class])
-    return NSAllocateObject([NSTextStorage_concrete class],0,NULL);
++ allocWithZone: (NSZone *) zone {
+    if (self == [NSTextStorage class]) {
+        return NSAllocateObject([NSTextStorage_concrete class], 0, NULL);
+    }
 
-   return NSAllocateObject(self,0,zone);
+    return NSAllocateObject(self, 0, zone);
 }
 
--initWithCoder:(NSCoder *)coder {
-   _layoutManagers=[NSMutableArray new];
-   return self;
+- initWithCoder: (NSCoder *) coder {
+    _layoutManagers = [NSMutableArray new];
+    return self;
 }
 
--(void)encodeWithCoder:(NSCoder *)coder {
-  
+- (void) encodeWithCoder: (NSCoder *) coder {
 }
 
--initWithString:(NSString *)string {
-   _layoutManagers=[NSMutableArray new];
-   return self;
+- initWithString: (NSString *) string {
+    _layoutManagers = [NSMutableArray new];
+    return self;
 }
 
--(void)dealloc {
-   [_layoutManagers release];
-   [super dealloc];
+- (void) dealloc {
+    [_layoutManagers release];
+    [super dealloc];
 }
 
--delegate {
-   return _delegate;
+- delegate {
+    return _delegate;
 }
 
--(NSArray *)layoutManagers {
-   return _layoutManagers;
+- (NSArray *) layoutManagers {
+    return _layoutManagers;
 }
 
--(int)changeInLength {
-   return _changeInLength;
+- (int) changeInLength {
+    return _changeInLength;
 }
 
--(unsigned)editedMask {
-   return _editedMask;
+- (unsigned) editedMask {
+    return _editedMask;
 }
 
--(NSRange)editedRange {
-   return _editedRange;
+- (NSRange) editedRange {
+    return _editedRange;
 }
 
--(void)setDelegate:delegate {
-   _delegate=delegate;
+- (void) setDelegate: delegate {
+    _delegate = delegate;
 }
 
--(void)addLayoutManager:(NSLayoutManager *)layoutManager {
-   [_layoutManagers addObject:layoutManager];
-   [layoutManager setTextStorage:self];
+- (void) addLayoutManager: (NSLayoutManager *) layoutManager {
+    [_layoutManagers addObject: layoutManager];
+    [layoutManager setTextStorage: self];
 }
 
--(void)removeLayoutManager:(NSLayoutManager *)layoutManager {
-   [_layoutManagers removeObjectIdenticalTo:layoutManager];
+- (void) removeLayoutManager: (NSLayoutManager *) layoutManager {
+    [_layoutManagers removeObjectIdenticalTo: layoutManager];
 }
 
--(void)beginEditing {
+- (void) beginEditing {
+    if (_beginEditing == 0) {
+        _editedMask = 0;
+        _editedRange = NSMakeRange(-1, -1);
+        _changeInLength = 0;
+    }
 
-   if(_beginEditing==0){
-    _editedMask=0;
-    _editedRange=NSMakeRange(-1,-1);
-    _changeInLength=0;
-   }
-
-   _beginEditing++;
+    _beginEditing++;
 }
 
--(void)endEditing {
-   _beginEditing--;
-    if(_beginEditing==0) {
+- (void) endEditing {
+    _beginEditing--;
+    if (_beginEditing == 0) {
         // Prevent any change to trigger more notification
         _beginEditing++;
         [self processEditing];
@@ -97,67 +110,83 @@ NSString * const NSTextStorageDidProcessEditingNotification=@"NSTextStorageDidPr
     }
 }
 
--(NSRange)invalidatedRange {
-   return _editedRange;
+- (NSRange) invalidatedRange {
+    return _editedRange;
 }
 
--(void)processEditing {
-   int i,count;
+- (void) processEditing {
+    int i, count;
 
-	if ([_delegate respondsToSelector: @selector(textStorageWillProcessEditing:)]) {
-		NSNotification* note = [NSNotification notificationWithName: NSTextStorageWillProcessEditingNotification object: self userInfo: nil];
-		[_delegate textStorageWillProcessEditing: note];
-	}
-	
-    [[NSNotificationCenter defaultCenter] postNotificationName: NSTextStorageWillProcessEditingNotification object:self];
+    if ([_delegate
+            respondsToSelector: @selector(textStorageWillProcessEditing:)]) {
+        NSNotification *note = [NSNotification
+            notificationWithName: NSTextStorageWillProcessEditingNotification
+                          object: self
+                        userInfo: nil];
+        [_delegate textStorageWillProcessEditing: note];
+    }
 
-    [self fixAttributesInRange:_editedRange];
+    [[NSNotificationCenter defaultCenter]
+        postNotificationName: NSTextStorageWillProcessEditingNotification
+                      object: self];
 
-	if ([_delegate respondsToSelector: @selector(textStorageDidProcessEditing:)]) {
-		NSNotification* note = [NSNotification notificationWithName: NSTextStorageDidProcessEditingNotification object: self userInfo: nil];
-		[_delegate textStorageDidProcessEditing: note];
-	}
-	
-   [[NSNotificationCenter defaultCenter] postNotificationName: NSTextStorageDidProcessEditingNotification object:self];
+    [self fixAttributesInRange: _editedRange];
 
-   count=[_layoutManagers count];
-   for(i=0;i<count;i++){
-    NSLayoutManager *layout=[_layoutManagers objectAtIndex:i];
+    if ([_delegate
+            respondsToSelector: @selector(textStorageDidProcessEditing:)]) {
+        NSNotification *note = [NSNotification
+            notificationWithName: NSTextStorageDidProcessEditingNotification
+                          object: self
+                        userInfo: nil];
+        [_delegate textStorageDidProcessEditing: note];
+    }
 
-    [layout textStorage:self edited:[self editedMask] range:[self editedRange]
-       changeInLength:[self changeInLength]
-      invalidatedRange:[self invalidatedRange]];
-   }
+    [[NSNotificationCenter defaultCenter]
+        postNotificationName: NSTextStorageDidProcessEditingNotification
+                      object: self];
+
+    count = [_layoutManagers count];
+    for (i = 0; i < count; i++) {
+        NSLayoutManager *layout = [_layoutManagers objectAtIndex: i];
+
+        [layout textStorage: self
+                      edited: [self editedMask]
+                       range: [self editedRange]
+              changeInLength: [self changeInLength]
+            invalidatedRange: [self invalidatedRange]];
+    }
 }
 
--(void)edited:(unsigned)editedMask range:(NSRange)range changeInLength:(int)delta {
+- (void) edited: (unsigned) editedMask
+             range: (NSRange) range
+    changeInLength: (int) delta {
+    if (_beginEditing == 0) {
+        _editedMask = editedMask;
+        _changeInLength = delta;
+        range.length += delta;
+        _editedRange = range;
 
-   if(_beginEditing==0){
-    _editedMask=editedMask;
-    _changeInLength=delta;
-    range.length+=delta;
-    _editedRange=range;
+        // Prevent any change to trigger more notification
+        _beginEditing++;
+        [self processEditing];
+        _beginEditing--;
+    } else {
+        _editedMask |= editedMask;
+        _changeInLength += delta;
+        range.length += delta;
 
-       // Prevent any change to trigger more notification
-       _beginEditing++;
-       [self processEditing];
-       _beginEditing--;
-   }
-   else {
-    _editedMask|=editedMask;
-    _changeInLength+=delta;
-    range.length+=delta;
-
-    if(_editedRange.location==-1 && _editedRange.length==-1)
-     _editedRange=range;
-    else
-     _editedRange=NSUnionRange(_editedRange,range);
-   }
+        if (_editedRange.location == -1 && _editedRange.length == -1) {
+            _editedRange = range;
+        } else {
+            _editedRange = NSUnionRange(_editedRange, range);
+        }
+    }
 }
 
--(void)setFont:(NSFont *)font {
-   [self addAttribute:NSFontAttributeName value:font range:NSMakeRange(0,[self length])];
+- (void) setFont: (NSFont *) font {
+    [self addAttribute: NSFontAttributeName
+                 value: font
+                 range: NSMakeRange(0, [self length])];
 }
 
 @end
-

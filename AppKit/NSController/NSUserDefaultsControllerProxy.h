@@ -13,9 +13,9 @@
     NSUserDefaultsController *_controller;
     NSMutableDictionary *_cachedValues;
 }
-- (id)initWithController:(NSUserDefaultsController *)controller;
-- (void)save;
-- (void)revert;
-- (void)revertToInitialValues;
-- (BOOL)hasUnappliedChanges;
+- (id) initWithController: (NSUserDefaultsController *) controller;
+- (void) save;
+- (void) revert;
+- (void) revertToInitialValues;
+- (BOOL) hasUnappliedChanges;
 @end

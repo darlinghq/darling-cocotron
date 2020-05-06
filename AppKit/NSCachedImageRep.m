@@ -1,16 +1,28 @@
 /* Copyright (c) 2006-2007 Christopher J. W. Lloyd
 
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+   Permission is hereby granted, free of charge, to any person obtaining a copy
+   of this software and associated documentation files (the "Software"), to
+   deal in the Software without restriction, including without limitation the
+   rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+   sell copies of the Software, and to permit persons to whom the Software is
+   furnished to do so, subject to the following conditions:
 
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+   The above copyright notice and this permission notice shall be included in
+   all copies or substantial portions of the Software.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+   FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+   IN THE SOFTWARE. */
 #import <AppKit/NSCachedImageRep.h>
-#import <AppKit/NSGraphicsContextFunctions.h>
-#import <AppKit/NSWindow.h>
 #import <AppKit/NSGraphicsContext.h>
-#import <CoreGraphics/CGWindow.h>
+#import <AppKit/NSGraphicsContextFunctions.h>
 #import <AppKit/NSWindow-Private.h>
+#import <AppKit/NSWindow.h>
+#import <CoreGraphics/CGWindow.h>
 
 @implementation NSCachedImageRep
 
@@ -21,28 +33,32 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
     // This is a little broken, the windows get resized to larger size when
     // on-screen.
-    if ([[NSUserDefaults standardUserDefaults] boolForKey: @"NSShowAllWindows"])
+    if ([[NSUserDefaults standardUserDefaults]
+            boolForKey: @"NSShowAllWindows"]) {
         [_window orderFront: nil];
+    }
     return self;
 }
 
 - (instancetype) initWithSize: (NSSize) size
                         depth: (NSWindowDepth) windowDepth
                      separate: (BOOL) separateWindow
-                        alpha: (BOOL) hasAlpha
-{
-    // FIXME: Implement shared caches, but also update NSImage to handle caching in them.
+                        alpha: (BOOL) hasAlpha {
+    // FIXME: Implement shared caches, but also update NSImage to handle caching
+    // in them.
     NSWindowStyleMask styleMask = NSBorderlessWindowMask;
-    if ([[NSUserDefaults standardUserDefaults] boolForKey: @"NSShowAllWindows"] == NO) {
+    if ([[NSUserDefaults standardUserDefaults]
+            boolForKey: @"NSShowAllWindows"] == NO) {
         styleMask |= NSAppKitPrivateWindow;
     }
-    NSRect rect = { NSZeroPoint, size };
-    NSWindow *window = [[NSWindow alloc] initWithContentRect: rect
-                                                   styleMask: styleMask
-                                                     backing: NSBackingStoreBuffered
-                                                       defer: NO];
+    NSRect rect = {NSZeroPoint, size};
+    NSWindow *window =
+        [[NSWindow alloc] initWithContentRect: rect
+                                    styleMask: styleMask
+                                      backing: NSBackingStoreBuffered
+                                        defer: NO];
 
-    NSDictionary *entries = @{ @"CGContext": @"Onyx" };
+    NSDictionary *entries = @{@"CGContext" : @"Onyx"};
     [[window platformWindow] addEntriesToDeviceDictionary: entries];
     [self initWithWindow: window rect: rect];
     [window release];
@@ -63,21 +79,23 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 }
 
 - (BOOL) drawAtPoint: (NSPoint) point {
-    NSRect rect = {point,_size};
-    CGImageRef imageRef = CGBitmapContextCreateImage([[_window graphicsContext] graphicsPort]);
+    NSRect rect = {point, _size};
+    CGImageRef imageRef =
+        CGBitmapContextCreateImage([[_window graphicsContext] graphicsPort]);
     CGContextDrawImage(NSCurrentGraphicsPort(), rect, imageRef);
     CGImageRelease(imageRef);
     return YES;
 }
 
 - (BOOL) drawInRect: (NSRect) rect {
-    CGImageRef imageRef = CGBitmapContextCreateImage([[_window graphicsContext] graphicsPort]);
+    CGImageRef imageRef =
+        CGBitmapContextCreateImage([[_window graphicsContext] graphicsPort]);
     CGContextDrawImage(NSCurrentGraphicsPort(), rect, imageRef);
     CGImageRelease(imageRef);
     return YES;
 }
 
 - (BOOL) draw {
-    return [self drawInRect:[self rect]];
+    return [self drawInRect: [self rect]];
 }
 @end

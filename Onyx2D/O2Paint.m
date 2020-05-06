@@ -11,10 +11,10 @@
  * including without limitation the rights to use, copy, modify, merge,
  * publish, distribute, sublicense, and/or sell copies of the Materials,
  * and to permit persons to whom the Materials are furnished to do so,
- * subject to the following conditions: 
+ * subject to the following conditions:
  *
- * The above copyright notice and this permission notice shall be included 
- * in all copies or substantial portions of the Materials. 
+ * The above copyright notice and this permission notice shall be included
+ * in all copies or substantial portions of the Materials.
  *
  * THE MATERIALS ARE PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
  * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
@@ -29,20 +29,21 @@
 
 @implementation O2Paint
 
-O2PaintRef O2PaintInitWithTransform(O2PaintRef self,O2AffineTransform transform) {
-   self->m_surfaceToPaintMatrix = transform;
-   self->isOpaque=FALSE;
-   return self;
+O2PaintRef O2PaintInitWithTransform(O2PaintRef self,
+                                    O2AffineTransform transform) {
+    self->m_surfaceToPaintMatrix = transform;
+    self->isOpaque = FALSE;
+    return self;
 }
 
 O2PaintRef O2PaintRetain(O2PaintRef self) {
-   return (self!=NULL)?(O2PaintRef)CFRetain(self):NULL;
+    return (self != NULL) ? (O2PaintRef) CFRetain(self) : NULL;
 }
 
 void O2PaintRelease(O2PaintRef self) {
-   if(self!=NULL)
-    CFRelease(self);
+    if (self != NULL) {
+        CFRelease(self);
+    }
 }
 
 @end
-

@@ -2,6 +2,6 @@
 
 @interface NSWindow (scripting)
 
-- (NSInteger)orderedIndex;
+- (NSInteger) orderedIndex;
 
 @end

@@ -11,6 +11,6 @@
 @interface O2EXIFDecoder : NSObject {
     NSMutableDictionary *_tags;
 }
-- (id)initWithBytes:(const uint8_t *)bytes length:(size_t)length;
-- (NSMutableDictionary *)tags;
+- (id) initWithBytes: (const uint8_t *) bytes length: (size_t) length;
+- (NSMutableDictionary *) tags;
 @end

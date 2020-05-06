@@ -56,7 +56,8 @@ typedef struct CGGlyphMetricsSet {
     HDC _dc;
 }
 
-- (Win32Font *)createGDIFontSelectedInDC:(HDC)dc;
-- (CGSize)advancementForNominalGlyphs:(const CGGlyph *)glyphs count:(unsigned)count;
+- (Win32Font *) createGDIFontSelectedInDC: (HDC) dc;
+- (CGSize) advancementForNominalGlyphs: (const CGGlyph *) glyphs
+                                 count: (unsigned) count;
 
 @end

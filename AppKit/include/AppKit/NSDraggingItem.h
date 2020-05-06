@@ -17,8 +17,8 @@
  along with Darling.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#import <Foundation/NSObject.h>
 #import <AppKit/AppKitExport.h>
+#import <Foundation/NSObject.h>
 
 typedef NSString *NSDraggingImageComponentKey;
 APPKIT_EXPORT const NSDraggingImageComponentKey NSDraggingImageComponentIconKey;

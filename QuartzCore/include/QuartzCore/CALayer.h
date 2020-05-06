@@ -1,8 +1,8 @@
 
-#import <Foundation/Foundation.h>
 #import <ApplicationServices/ApplicationServices.h>
-#import <QuartzCore/CATransform3D.h>
+#import <Foundation/Foundation.h>
 #import <QuartzCore/CAAction.h>
+#import <QuartzCore/CATransform3D.h>
 
 @class CAAnimation, CALayerContext;
 
@@ -23,24 +23,24 @@ CA_EXPORT NSString *const kCAFilterTrilinear;
 CA_EXPORT NSString *const kCAGravityResizeAspect;
 CA_EXPORT NSString *const kCAGravityResizeAspectFill;
 
-CA_EXPORT NSString * const kCAGravityCenter;
-CA_EXPORT NSString * const kCAGravityTop;
-CA_EXPORT NSString * const kCAGravityBottom;
-CA_EXPORT NSString * const kCAGravityLeft;
-CA_EXPORT NSString * const kCAGravityRight;
-CA_EXPORT NSString * const kCAGravityTopLeft;
-CA_EXPORT NSString * const kCAGravityTopRight;
-CA_EXPORT NSString * const kCAGravityBottomLeft;
-CA_EXPORT NSString * const kCAGravityBottomRight;
-CA_EXPORT NSString * const kCAGravityResize;
+CA_EXPORT NSString *const kCAGravityCenter;
+CA_EXPORT NSString *const kCAGravityTop;
+CA_EXPORT NSString *const kCAGravityBottom;
+CA_EXPORT NSString *const kCAGravityLeft;
+CA_EXPORT NSString *const kCAGravityRight;
+CA_EXPORT NSString *const kCAGravityTopLeft;
+CA_EXPORT NSString *const kCAGravityTopRight;
+CA_EXPORT NSString *const kCAGravityBottomLeft;
+CA_EXPORT NSString *const kCAGravityBottomRight;
+CA_EXPORT NSString *const kCAGravityResize;
 
-CA_EXPORT NSString * const kCAOnOrderIn;
-CA_EXPORT NSString * const kCAOnOrderOut;
-CA_EXPORT NSString * const kCATransition;
+CA_EXPORT NSString *const kCAOnOrderIn;
+CA_EXPORT NSString *const kCAOnOrderOut;
+CA_EXPORT NSString *const kCATransition;
 
-CA_EXPORT NSString * const kCAContentsFormatRGBA8Uint;
-CA_EXPORT NSString * const kCAContentsFormatRGBA16Float;
-CA_EXPORT NSString * const kCAContentsFormatGray8Uint;
+CA_EXPORT NSString *const kCAContentsFormatRGBA8Uint;
+CA_EXPORT NSString *const kCAContentsFormatRGBA16Float;
+CA_EXPORT NSString *const kCAContentsFormatGray8Uint;
 
 @interface CALayer : NSObject {
     CALayerContext *_context;
@@ -82,38 +82,38 @@ CA_EXPORT NSString * const kCAContentsFormatGray8Uint;
 
 - init;
 
-- (void)addSublayer:(CALayer *)layer;
-- (void)replaceSublayer:(CALayer *)layer with:(CALayer *)other;
-- (void)display;
-- (void)displayIfNeeded;
-- (void)drawInContext:(CGContextRef)context;
-- (BOOL)needsDisplay;
-- (void)removeFromSuperlayer;
-- (void)setNeedsDisplay;
-- (void)setNeedsDisplayInRect:(CGRect)rect;
+- (void) addSublayer: (CALayer *) layer;
+- (void) replaceSublayer: (CALayer *) layer with: (CALayer *) other;
+- (void) display;
+- (void) displayIfNeeded;
+- (void) drawInContext: (CGContextRef) context;
+- (BOOL) needsDisplay;
+- (void) removeFromSuperlayer;
+- (void) setNeedsDisplay;
+- (void) setNeedsDisplayInRect: (CGRect) rect;
 
-- (void)addAnimation:(CAAnimation *)animation forKey:(NSString *)key;
-- (CAAnimation *)animationForKey:(NSString *)key;
-- (void)removeAllAnimations;
-- (void)removeAnimationForKey:(NSString *)key;
-- (NSArray *)animationKeys;
+- (void) addAnimation: (CAAnimation *) animation forKey: (NSString *) key;
+- (CAAnimation *) animationForKey: (NSString *) key;
+- (void) removeAllAnimations;
+- (void) removeAnimationForKey: (NSString *) key;
+- (NSArray *) animationKeys;
 
-- (id<CAAction>)actionForKey:(NSString *)key;
+- (id<CAAction>) actionForKey: (NSString *) key;
 
 @end
 
 @interface NSObject (CALayerDelegate)
 
-- (void)displayLayer:(CALayer *)layer;
-- (void)drawLayer:(CALayer *)layer inContext:(CGContextRef)context;
+- (void) displayLayer: (CALayer *) layer;
+- (void) drawLayer: (CALayer *) layer inContext: (CGContextRef) context;
 
 @end
 
 @protocol CALayoutManager <NSObject>
 @optional
 
-- (CGSize)preferredSizeOfLayer:(CALayer *)layer;
-- (void)invalidateLayoutOfLayer:(CALayer *)layer;
-- (void)layoutSublayersOfLayer:(CALayer *)layer;
+- (CGSize) preferredSizeOfLayer: (CALayer *) layer;
+- (void) invalidateLayoutOfLayer: (CALayer *) layer;
+- (void) layoutSublayersOfLayer: (CALayer *) layer;
 
 @end

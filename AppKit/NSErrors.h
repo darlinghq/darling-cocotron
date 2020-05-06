@@ -1,6 +1,6 @@
 
-#import <Foundation/Foundation.h>
 #import <AppKit/AppKitExport.h>
+#import <Foundation/Foundation.h>
 
 APPKIT_EXPORT NSExceptionName NSTextLineTooLongException;
 APPKIT_EXPORT NSExceptionName NSTextNoSelectionException;
@@ -38,4 +38,3 @@ APPKIT_EXPORT NSExceptionName NSImageCacheException;
 APPKIT_EXPORT NSExceptionName NSNibLoadingException;
 APPKIT_EXPORT NSExceptionName NSBrowserIllegalDelegateException;
 APPKIT_EXPORT NSExceptionName NSAccessibilityException;
-

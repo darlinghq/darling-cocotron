@@ -2,10 +2,9 @@
 
 @implementation X11Event
 
--initWithXEvent:(XEvent)event {
-   _event=event;
-   return self;
+- initWithXEvent: (XEvent) event {
+    _event = event;
+    return self;
 }
-
 
 @end

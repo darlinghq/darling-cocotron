@@ -1,8 +1,8 @@
 #ifndef _CARBONKEYS_H
 #define _CARBONKEYS_H
 
-#include <stdint.h>
 #include <HIToolbox/Events.h>
+#include <stdint.h>
 
 // The contents of this file are hardware specific to a certain degree,
 // but this is probably as good as we can do.
@@ -233,6 +233,5 @@ static const uint8_t carbonToX11[256] = {
     [kVK_DownArrow] = 116,
     [kVK_UpArrow] = 111,
 };
-
 
 #endif

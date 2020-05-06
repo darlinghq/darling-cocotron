@@ -11,26 +11,26 @@
 
 @implementation NSSpellCheckerTagData
 
--init {
-   _ignoredWords=[[NSMutableSet alloc] init];
-   return self;
+- init {
+    _ignoredWords = [[NSMutableSet alloc] init];
+    return self;
 }
 
--(void)dealloc {
-   [_ignoredWords release];
-   [super dealloc];
+- (void) dealloc {
+    [_ignoredWords release];
+    [super dealloc];
 }
 
--(void)ignoreWord:(NSString *)word {
-   [_ignoredWords addObject:[[word copy] autorelease]];
+- (void) ignoreWord: (NSString *) word {
+    [_ignoredWords addObject: [[word copy] autorelease]];
 }
 
--(NSArray *)ignoredWords {
-   return [_ignoredWords allObjects];
+- (NSArray *) ignoredWords {
+    return [_ignoredWords allObjects];
 }
 
--(void)setIgnoredWords:(NSArray *)words {
-   [_ignoredWords setByAddingObjectsFromArray:words];
+- (void) setIgnoredWords: (NSArray *) words {
+    [_ignoredWords setByAddingObjectsFromArray: words];
 }
 
 @end

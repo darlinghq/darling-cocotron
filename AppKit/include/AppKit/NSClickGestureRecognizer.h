@@ -18,8 +18,8 @@
 */
 
 #import <AppKit/AppKitExport.h>
-#import <Foundation/Foundation.h>
 #import <AppKit/NSGestureRecognizer.h>
+#import <Foundation/Foundation.h>
 
 @interface NSClickGestureRecognizer : NSGestureRecognizer <NSCoding>
 @end

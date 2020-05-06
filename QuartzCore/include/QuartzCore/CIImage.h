@@ -1,5 +1,5 @@
-#import <Foundation/NSObject.h>
 #import <CoreGraphics/CoreGraphics.h>
+#import <Foundation/NSObject.h>
 
 @class CIFilter;
 
@@ -8,9 +8,9 @@
     CIFilter *_filter;
 }
 
-+ (CIImage *)emptyImage;
++ (CIImage *) emptyImage;
 
-- initWithCGImage:(CGImageRef)cgImage;
-- (CGRect)extent;
+- initWithCGImage: (CGImageRef) cgImage;
+- (CGRect) extent;
 
 @end

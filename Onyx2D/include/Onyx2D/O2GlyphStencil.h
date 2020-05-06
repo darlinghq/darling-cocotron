@@ -8,7 +8,9 @@ typedef struct O2GlyphStencil {
     uint8_t *_coverage;
 } * O2GlyphStencilRef;
 
-O2GlyphStencilRef O2GlyphStencilCreate(size_t width, size_t height, uint8_t *coverage, size_t bytesPerRow, size_t left, size_t top);
+O2GlyphStencilRef O2GlyphStencilCreate(size_t width, size_t height,
+                                       uint8_t *coverage, size_t bytesPerRow,
+                                       size_t left, size_t top);
 void O2GlyphStencilDealloc(O2GlyphStencilRef self);
 
 size_t O2GlyphStencilGetWidth(O2GlyphStencilRef self);

@@ -1,97 +1,103 @@
 /* Copyright (c) 2006-2007 Christopher J. W. Lloyd <cjwl@objc.net>
 
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+   Permission is hereby granted, free of charge, to any person obtaining a copy
+   of this software and associated documentation files (the "Software"), to
+   deal in the Software without restriction, including without limitation the
+   rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+   sell copies of the Software, and to permit persons to whom the Software is
+   furnished to do so, subject to the following conditions:
 
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+   The above copyright notice and this permission notice shall be included in
+   all copies or substantial portions of the Software.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+   FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+   IN THE SOFTWARE. */
 #import <AppKit/NSActionCell.h>
-#import <Foundation/NSKeyedArchiver.h>
 #import <AppKit/NSControl.h>
+#import <Foundation/NSKeyedArchiver.h>
 
 @implementation NSActionCell
 @class NSControl;
 
--(void)encodeWithCoder:(NSCoder *)coder {
-   [super encodeWithCoder:coder];
-   [coder encodeInt:_tag forKey:@"NSActionCell tag"];
+- (void) encodeWithCoder: (NSCoder *) coder {
+    [super encodeWithCoder: coder];
+    [coder encodeInt: _tag forKey: @"NSActionCell tag"];
 }
 
--initWithCoder:(NSCoder *)coder {
-   [super initWithCoder:coder];
-   
-   if([coder allowsKeyedCoding]){
-    NSKeyedUnarchiver *keyed=(NSKeyedUnarchiver *)coder;
- 
-    _tag=[keyed decodeIntForKey:@"NSTag"];
-    _action = NSSelectorFromString([keyed decodeObjectForKey:@"NSAction"]);
-    [self setTarget: [keyed decodeObjectForKey: @"NSTarget"]];
-   }
-   else {
-      NSInteger version = [coder versionForClassName: @"NSActionCell"];
+- initWithCoder: (NSCoder *) coder {
+    [super initWithCoder: coder];
 
-      if (version <= 16)
-      {
-         [self setTarget: [coder decodeObject]];
-         [coder decodeValuesOfObjCTypes: "i:", &_tag, &_action];
-      }
-      else
-      {
-         [coder decodeValuesOfObjCTypes: "i:", &_tag, &_action];
-         [self setTarget: [coder decodeObject]];
-         [self setControlView: [coder decodeObject]];
-      }
-   }
-   return self;
+    if ([coder allowsKeyedCoding]) {
+        NSKeyedUnarchiver *keyed = (NSKeyedUnarchiver *) coder;
+
+        _tag = [keyed decodeIntForKey: @"NSTag"];
+        _action = NSSelectorFromString([keyed decodeObjectForKey: @"NSAction"]);
+        [self setTarget: [keyed decodeObjectForKey: @"NSTarget"]];
+    } else {
+        NSInteger version = [coder versionForClassName: @"NSActionCell"];
+
+        if (version <= 16) {
+            [self setTarget: [coder decodeObject]];
+            [coder decodeValuesOfObjCTypes: "i:", &_tag, &_action];
+        } else {
+            [coder decodeValuesOfObjCTypes: "i:", &_tag, &_action];
+            [self setTarget: [coder decodeObject]];
+            [self setControlView: [coder decodeObject]];
+        }
+    }
+    return self;
 }
 
--(NSView *)controlView {
-   return _controlView;
+- (NSView *) controlView {
+    return _controlView;
 }
 
--target {
-   return _target;
+- target {
+    return _target;
 }
 
--(SEL)action {
-   return _action;
+- (SEL) action {
+    return _action;
 }
 
--(NSInteger)tag {
-   return _tag;
+- (NSInteger) tag {
+    return _tag;
 }
 
-
--(void)setControlView:(NSView *)value {
-   _controlView=value;
+- (void) setControlView: (NSView *) value {
+    _controlView = value;
 }
 
--(void)setTarget:target {
-   _target=target;
+- (void) setTarget: target {
+    _target = target;
 }
 
--(void)setAction:(SEL)action {
-   _action=action;
+- (void) setAction: (SEL) action {
+    _action = action;
 }
 
--(void)setTag:(NSInteger)tag {
-   _tag=tag;
+- (void) setTag: (NSInteger) tag {
+    _tag = tag;
 }
 
-- (void)_validateEditing
-{
+- (void) _validateEditing {
     if ([_controlView isKindOfClass: [NSControl class]]) {
-        [(NSControl *)_controlView validateEditing];
+        [(NSControl *) _controlView validateEditing];
     }
 }
 
-// Cocoa is validating the editing everytime the ask is being asked - let's do the same
-// That's what will ensure the values are always properly formatted by the current formatter (if any)
+// Cocoa is validating the editing everytime the ask is being asked - let's do
+// the same That's what will ensure the values are always properly formatted by
+// the current formatter (if any)
 /**
  * Retrieve the value of the receiver
  */
-- (id) objectValue
-{
+- (id) objectValue {
     [self _validateEditing];
     return [super objectValue];
 }
@@ -99,8 +105,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 /**
  * Retrieve the value of the receiver as an NSAttributedString.
  */
-- (NSAttributedString*) attributedStringValue
-{
+- (NSAttributedString *) attributedStringValue {
     [self _validateEditing];
     return [super attributedStringValue];
 }
@@ -108,8 +113,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 /**
  * Retrieve the value of the receiver as an NSString.
  */
-- (NSString *) stringValue
-{
+- (NSString *) stringValue {
     [self _validateEditing];
     return [super stringValue];
 }
@@ -117,8 +121,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 /**
  * Retrieve the value of the receiver as a double.
  */
-- (double) doubleValue
-{
+- (double) doubleValue {
     [self _validateEditing];
     return [super doubleValue];
 }
@@ -126,8 +129,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 /**
  * Retrieve the value of the receiver as a float.
  */
-- (float) floatValue
-{
+- (float) floatValue {
     [self _validateEditing];
     return [super floatValue];
 }
@@ -135,8 +137,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 /**
  * Retrieve the value of the receiver as an int.
  */
-- (int) intValue
-{
+- (int) intValue {
     [self _validateEditing];
     return [super intValue];
 }
@@ -144,8 +145,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 /**
  * Retrieve the value of the receiver as an NSInteger.
  */
-- (NSInteger) integerValue
-{
+- (NSInteger) integerValue {
     [self _validateEditing];
     return [super integerValue];
 }

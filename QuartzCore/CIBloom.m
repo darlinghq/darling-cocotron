@@ -5,19 +5,20 @@
 
 @implementation CIBloom
 
--initWithCoder:(NSCoder *)coder {
-   if([coder allowsKeyedCoding]){
+- initWithCoder: (NSCoder *) coder {
+    if ([coder allowsKeyedCoding]) {
 #if 0
 // Raising keyed unarchiving exceptions, investigate
-    _inputRadius=[coder decodeDoubleForKey:@"CI_inputRadius"];
-    _inputIntensity=[coder decodeDoubleForKey:@"CI_inputIntensity"];
-    _enabled=[coder decodeBoolForKey:@"CI_inputRadius"];
+        _inputRadius = [coder decodeDoubleForKey: @"CI_inputRadius"];
+        _inputIntensity = [coder decodeDoubleForKey: @"CI_inputIntensity"];
+        _enabled = [coder decodeBoolForKey: @"CI_inputRadius"];
 #endif
-   }
-   else {
-    [NSException raise:NSInvalidArgumentException format:@"-[%@ %s] does not support non-keyed coding",[self class],_cmd];
-   }
-   return self;
+    } else {
+        [NSException raise: NSInvalidArgumentException
+                    format: @"-[%@ %s] does not support non-keyed coding",
+                            [self class], _cmd];
+    }
+    return self;
 }
 
 @end

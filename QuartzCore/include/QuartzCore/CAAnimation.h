@@ -1,7 +1,7 @@
 #import <Foundation/NSObject.h>
+#import <QuartzCore/CAAction.h>
 #import <QuartzCore/CABase.h>
 #import <QuartzCore/CAMediaTiming.h>
-#import <QuartzCore/CAAction.h>
 
 @class CAMediaTimingFunction, CAPropertyAnimation;
 
@@ -15,14 +15,14 @@ CA_EXPORT NSString *const kCATransitionFromRight;
 CA_EXPORT NSString *const kCATransitionFromTop;
 CA_EXPORT NSString *const kCATransitionFromBottom;
 
-CA_EXPORT NSString * const kCAAnimationLinear;
-CA_EXPORT NSString * const kCAAnimationDiscrete;
-CA_EXPORT NSString * const kCAAnimationPaced;
-CA_EXPORT NSString * const kCAAnimationCubic;
-CA_EXPORT NSString * const kCAAnimationCubicPaced;
+CA_EXPORT NSString *const kCAAnimationLinear;
+CA_EXPORT NSString *const kCAAnimationDiscrete;
+CA_EXPORT NSString *const kCAAnimationPaced;
+CA_EXPORT NSString *const kCAAnimationCubic;
+CA_EXPORT NSString *const kCAAnimationCubicPaced;
 
-CA_EXPORT NSString * const kCAAnimationRotateAuto;
-CA_EXPORT NSString * const kCAAnimationRotateAutoReverse;
+CA_EXPORT NSString *const kCAAnimationRotateAuto;
+CA_EXPORT NSString *const kCAAnimationRotateAutoReverse;
 
 @interface CAAnimation : NSObject <NSCopying, CAMediaTiming, CAAction> {
     id _delegate;
@@ -49,8 +49,8 @@ CA_EXPORT NSString * const kCAAnimationRotateAutoReverse;
 @end
 
 @interface NSObject (CAAnimationDelegate)
-- (void)animationDidStart:(CAAnimation *)animation;
-- (void)animationDidStop:(CAAnimation *)animation finished:(BOOL)finished;
+- (void) animationDidStart: (CAAnimation *) animation;
+- (void) animationDidStop: (CAAnimation *) animation finished: (BOOL) finished;
 @end
 
 @interface CAPropertyAnimation : CAAnimation {
@@ -59,7 +59,7 @@ CA_EXPORT NSString * const kCAAnimationRotateAutoReverse;
     BOOL _cumulative;
 }
 
-+ animationWithKeyPath:(NSString *)keyPath;
++ animationWithKeyPath: (NSString *) keyPath;
 @property(copy) NSString *keyPath;
 @property(getter=isAdditive) BOOL additive;
 @property(getter=isCumulative) BOOL cumulative;
@@ -82,5 +82,5 @@ CA_EXPORT NSString * const kCAAnimationRotateAutoReverse;
 
 @end
 
-#import <QuartzCore/CATransition.h>
 #import <QuartzCore/CAAnimationGroup.h>
+#import <QuartzCore/CATransition.h>

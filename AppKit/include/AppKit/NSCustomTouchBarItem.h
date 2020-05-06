@@ -18,8 +18,8 @@
 */
 
 #import <AppKit/AppKitExport.h>
-#import <Foundation/Foundation.h>
 #import <AppKit/NSTouchBarItem.h>
+#import <Foundation/Foundation.h>
 
 @interface NSCustomTouchBarItem : NSTouchBarItem
 @end

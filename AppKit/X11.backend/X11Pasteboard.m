@@ -1,22 +1,21 @@
 /*
-This file is part of Darling.
+   This file is part of Darling.
 
-Copyright (C) 2019 Lubos Dolezel
+   Copyright (C) 2019 Lubos Dolezel
 
-Darling is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
+   Darling is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
 
-Darling is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+   Darling is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with Darling.  If not, see <http://www.gnu.org/licenses/>.
-*/
-
+   You should have received a copy of the GNU General Public License
+   along with Darling.  If not, see <http://www.gnu.org/licenses/>.
+ */
 
 #import "X11Pasteboard.h"
 
@@ -27,7 +26,7 @@ static NSMutableDictionary<NSPasteboardName, X11Pasteboard *> *nameToPboard;
 + (X11Pasteboard *) pasteboardWithName: (NSPasteboardName) name {
     static dispatch_once_t once;
     dispatch_once(&once, ^{
-        nameToPboard = [NSMutableDictionary new];
+      nameToPboard = [NSMutableDictionary new];
     });
 
     if ([name isEqual: NSGeneralPboard]) {
@@ -52,8 +51,11 @@ static NSMutableDictionary<NSPasteboardName, X11Pasteboard *> *nameToPboard;
     _receivingProperty = XInternAtom(_display, "RECEIVING_PROPERTY", False);
 
     int screen = DefaultScreen(_display);
-    _window = XCreateSimpleWindow(_display, RootWindow(_display, screen), -10, -10, 1, 1, 0, 0, 0);
-    XSelectInput(_display, _window, SelectionClear | SelectionRequest | SelectionNotify | PropertyNotify);
+    _window = XCreateSimpleWindow(_display, RootWindow(_display, screen), -10,
+                                  -10, 1, 1, 0, 0, 0);
+    XSelectInput(_display, _window,
+                 SelectionClear | SelectionRequest | SelectionNotify |
+                     PropertyNotify);
 
     [x11Display setWindow: self forID: _window];
 
@@ -66,7 +68,8 @@ static NSMutableDictionary<NSPasteboardName, X11Pasteboard *> *nameToPboard;
         return;
     }
 
-    XSetSelectionOwner(_display, _selectionName, _window, CurrentTime);  // FIXME: don't use CurrentTime
+    XSetSelectionOwner(_display, _selectionName, _window,
+                       CurrentTime); // FIXME: don't use CurrentTime
     XFlush(_display);
 
     _typeToData = [NSMutableDictionary new];
@@ -122,18 +125,20 @@ static NSMutableDictionary<NSPasteboardName, X11Pasteboard *> *nameToPboard;
 
 + (NSArray<NSString *> *) targetsForType: (NSPasteboardType) type {
     if ([type isEqual: NSStringPboardType]) {
-        return @[@"UTF8_STRING", @"STRING", @"TEXT", @"text/plain", @"text/plain;charset=utf-8"];
+        return @[
+            @"UTF8_STRING", @"STRING", @"TEXT", @"text/plain",
+            @"text/plain;charset=utf-8"
+        ];
     }
     // TODO...
-    return @[type];
+    return @[ type ];
 }
 
 + (NSPasteboardType) typeForTarget: (NSString *) target {
-    if ([target isEqual: @"STRING"]
-     || [target isEqual: @"TEXT"]
-     || [target isEqual: @"text/plain"]
-     || [target isEqual: @"text/plain;charset=utf-8"]
-     || [target isEqual: @"UTF8_STRING"]) {
+    if ([target isEqual: @"STRING"] || [target isEqual: @"TEXT"] ||
+        [target isEqual: @"text/plain"] ||
+        [target isEqual: @"text/plain;charset=utf-8"] ||
+        [target isEqual: @"UTF8_STRING"]) {
         return NSStringPboardType;
     }
     // TODO...
@@ -147,7 +152,8 @@ static NSMutableDictionary<NSPasteboardName, X11Pasteboard *> *nameToPboard;
     unsigned long num_items, remaining;
 
     XGetWindowProperty(_display, _window, _receivingProperty, 0, ~0L, True,
-                       AnyPropertyType, &type, &format, &num_items, &remaining, &propValue);
+                       AnyPropertyType, &type, &format, &num_items, &remaining,
+                       &propValue);
 
     if (type == None) {
         return nil;
@@ -171,7 +177,6 @@ static NSMutableDictionary<NSPasteboardName, X11Pasteboard *> *nameToPboard;
 }
 
 - (NSData *) dataForType: (NSPasteboardType) type {
-
     if (_typeToOwner != nil) {
         // We're the owner; just fetch the data directly.
         id<NSPasteboardTypeOwner> owner = _typeToOwner[type];
@@ -181,15 +186,17 @@ static NSMutableDictionary<NSPasteboardName, X11Pasteboard *> *nameToPboard;
 
     NSString *target = [X11Pasteboard targetsForType: type][0];
     Atom targetAtom = XInternAtom(_display, [target UTF8String], False);
-    XConvertSelection(_display, _selectionName, targetAtom,
-                      _receivingProperty, _window, CurrentTime);  // FIXME: don't use CurrentTime
+    XConvertSelection(_display, _selectionName, targetAtom, _receivingProperty,
+                      _window,
+                      CurrentTime); // FIXME: don't use CurrentTime
 
     _selectionNotifyResult = WAITING;
     while (_selectionNotifyResult == WAITING) {
-        [[NSDisplay currentDisplay] nextEventMatchingMask: NSAnyEventMask
-                                                untilDate: [NSDate distantFuture]
-                                                   inMode: NSDefaultRunLoopMode
-                                                  dequeue: NO];
+        [[NSDisplay currentDisplay]
+            nextEventMatchingMask: NSAnyEventMask
+                        untilDate: [NSDate distantFuture]
+                           inMode: NSDefaultRunLoopMode
+                          dequeue: NO];
     }
 
     return [self readDataFromReceivingProperty];
@@ -202,10 +209,12 @@ static NSMutableDictionary<NSPasteboardName, X11Pasteboard *> *nameToPboard;
     if ([type isEqual: NSStringPboardType]) {
         encoding = NSUTF8StringEncoding;
     }
-    return [[[NSString alloc] initWithData: data encoding: encoding] autorelease];
+    return [[[NSString alloc] initWithData: data
+                                  encoding: encoding] autorelease];
 }
 
-- (NSInteger) addTypes: (NSArray<NSPasteboardType> *) types owner: (id<NSPasteboardTypeOwner>) owner {
+- (NSInteger) addTypes: (NSArray<NSPasteboardType> *) types
+                 owner: (id<NSPasteboardTypeOwner>) owner {
     [self ensureSelectionOwner];
     for (NSPasteboardType type in types) {
         [_typeToData removeObjectForKey: type];
@@ -214,7 +223,8 @@ static NSMutableDictionary<NSPasteboardName, X11Pasteboard *> *nameToPboard;
     return _changeCount;
 }
 
-- (NSInteger) declareTypes: (NSArray<NSPasteboardType> *) types owner: (id<NSPasteboardTypeOwner>) owner {
+- (NSInteger) declareTypes: (NSArray<NSPasteboardType> *) types
+                     owner: (id<NSPasteboardTypeOwner>) owner {
     [self clearContents];
     return [self addTypes: types owner: owner];
 }
@@ -240,7 +250,8 @@ static NSMutableDictionary<NSPasteboardName, X11Pasteboard *> *nameToPboard;
 }
 
 - (NSArray<NSPasteboardType> *) types {
-    return [[_typeToData allKeys] arrayByAddingObjectsFromArray: [_typeToOwner allKeys]];
+    return [[_typeToData allKeys]
+        arrayByAddingObjectsFromArray: [_typeToOwner allKeys]];
 }
 
 - (void) selectionNotify: (XSelectionEvent *) event {
@@ -253,16 +264,16 @@ static NSMutableDictionary<NSPasteboardName, X11Pasteboard *> *nameToPboard;
 
 - (void) selectionRequest: (XSelectionRequestEvent *) event {
     void (^reply)(BOOL success) = ^(BOOL success) {
-        XEvent replyEvent;
-        XSelectionEvent *re = &replyEvent.xselection;
-        re->type = SelectionNotify;
-        re->requestor = event->requestor;
-        re->selection = event->selection;
-        re->target = event->target;
-        re->property = success ? event->property : None;
-        re->time = event->time;
-        XSendEvent(_display, event->requestor, True, NoEventMask, &replyEvent);
-        XFlush(_display);
+      XEvent replyEvent;
+      XSelectionEvent *re = &replyEvent.xselection;
+      re->type = SelectionNotify;
+      re->requestor = event->requestor;
+      re->selection = event->selection;
+      re->target = event->target;
+      re->property = success ? event->property : None;
+      re->time = event->time;
+      XSendEvent(_display, event->requestor, True, NoEventMask, &replyEvent);
+      XFlush(_display);
     };
 
     if (event->target == None) {
@@ -289,10 +300,11 @@ static NSMutableDictionary<NSPasteboardName, X11Pasteboard *> *nameToPboard;
                 targets[i++] = XInternAtom(_display, [t UTF8String], False);
             }
         }
-        targets[i++] = event->target;  // TARGETS itself
+        targets[i++] = event->target; // TARGETS itself
 
-        XChangeProperty(_display, event->requestor, event->property, event->target,
-                        32, PropModeReplace, (unsigned char *) targets, count);
+        XChangeProperty(_display, event->requestor, event->property,
+                        event->target, 32, PropModeReplace,
+                        (unsigned char *) targets, count);
         reply(YES);
         return;
     }

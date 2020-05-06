@@ -7,6 +7,7 @@
     NSSet *_set;
 }
 
-- initWithManagedObjectContext:(NSManagedObjectContext *)context set:(NSSet *)set;
+- initWithManagedObjectContext: (NSManagedObjectContext *) context
+                           set: (NSSet *) set;
 
 @end

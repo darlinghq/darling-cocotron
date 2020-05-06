@@ -7,6 +7,7 @@
     NSEnumerator *_enumerator;
 }
 
-- initWithManagedObjectContext:(NSManagedObjectContext *)context objectEnumerator:(NSEnumerator *)enumerator;
+- initWithManagedObjectContext: (NSManagedObjectContext *) context
+              objectEnumerator: (NSEnumerator *) enumerator;
 
 @end

@@ -59,3 +59,24 @@ SpacesInSquareBrackets: false
 Standard: Cpp11
 TabWidth: 8
 UseTab: Never
+---
+Language: ObjC
+BasedOnStyle: LLVM
+IndentWidth: 4
+UseTab: Never
+SpaceBeforeParens: ControlStatements
+SpaceBeforeRangeBasedForLoopColon: true
+BreakBeforeBraces: Attach
+AlwaysBreakAfterReturnType: None
+AlwaysBreakAfterDefinitionReturnType: None
+AllowShortBlocksOnASingleLine: Never
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: false
+AllowShortIfStatementsOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
+AlwaysBreakBeforeMultilineStrings: false
+AlwaysBreakTemplateDeclarations: false
+PointerAlignment: Right
+SpaceAfterCStyleCast: true
+IndentCaseLabels: false
+...

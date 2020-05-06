@@ -18,8 +18,8 @@
 */
 
 #import <AppKit/AppKitExport.h>
-#import <Foundation/NSString.h>
 #import <Foundation/NSObject.h>
+#import <Foundation/NSString.h>
 
 APPKIT_EXPORT NSString *const NSVoiceName;
 

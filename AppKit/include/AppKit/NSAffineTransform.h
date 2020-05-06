@@ -4,9 +4,9 @@
 
 @interface NSAffineTransform (AppKit)
 
-- (void)concat;
-- (void)set;
+- (void) concat;
+- (void) set;
 
-- (NSBezierPath *)transformBezierPath:(NSBezierPath *)bezierPath;
+- (NSBezierPath *) transformBezierPath: (NSBezierPath *) bezierPath;
 
 @end

@@ -26,9 +26,9 @@
  *
  *-------------------------------------------------------------------*/
 
-#import <math.h>
-#import <Onyx2D/O2Geometry.h>
 #import <Foundation/Foundation.h>
+#import <Onyx2D/O2Geometry.h>
+#import <math.h>
 
 //#define RI_ASSERT(_) NSCParameterAssert(_)
 #define RI_ASSERT(_)

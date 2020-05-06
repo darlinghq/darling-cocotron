@@ -1,1 +1,0 @@
-To run the tests, you’ll need to build the TestingHarness project first, then copy local_server_config_example.sh to local_server_config.sh and edit it to contain the correct values for your system.

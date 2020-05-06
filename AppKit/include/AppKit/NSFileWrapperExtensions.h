@@ -2,8 +2,8 @@
 
 @class NSImage;
 
-@interface NSFileWrapper(NSExtensions)
+@interface NSFileWrapper (NSExtensions)
 
-@property (nullable, strong) NSImage *icon;
+@property(nullable, strong) NSImage *icon;
 
 @end

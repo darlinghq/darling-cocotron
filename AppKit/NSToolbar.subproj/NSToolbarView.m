@@ -1,27 +1,39 @@
 /* Copyright (c) 2006-2009 Christopher J. W. Lloyd
 
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+   Permission is hereby granted, free of charge, to any person obtaining a copy
+   of this software and associated documentation files (the "Software"), to
+   deal in the Software without restriction, including without limitation the
+   rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+   sell copies of the Software, and to permit persons to whom the Software is
+   furnished to do so, subject to the following conditions:
 
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+   The above copyright notice and this permission notice shall be included in
+   all copies or substantial portions of the Software.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+   FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+   IN THE SOFTWARE. */
 #import <AppKit/AppKitExport.h>
-#import <AppKit/NSToolbarView.h>
-#import <AppKit/NSToolbar.h>
-#import <AppKit/NSToolbarItem.h>
-#import <AppKit/NSToolbarCustomizationView.h>
-#import <AppKit/NSColor.h>
-#import <AppKit/NSGraphics.h>
-#import <AppKit/NSParagraphStyle.h>
-#import <AppKit/NSText.h>
 #import <AppKit/NSAttributedString.h>
-#import <AppKit/NSStringDrawing.h>
+#import <AppKit/NSColor.h>
 #import <AppKit/NSFont.h>
-#import <AppKit/NSWindow.h>
+#import <AppKit/NSGraphics.h>
 #import <AppKit/NSImage.h>
 #import <AppKit/NSMenu.h>
-#import <AppKit/NSMenuWindow.h>
 #import <AppKit/NSMenuView.h>
+#import <AppKit/NSMenuWindow.h>
+#import <AppKit/NSParagraphStyle.h>
+#import <AppKit/NSStringDrawing.h>
+#import <AppKit/NSText.h>
+#import <AppKit/NSToolbar.h>
+#import <AppKit/NSToolbarCustomizationView.h>
+#import <AppKit/NSToolbarItem.h>
+#import <AppKit/NSToolbarView.h>
+#import <AppKit/NSWindow.h>
 
 @interface NSToolbar (Private)
 - (NSArray *) _itemsWithIdentifiers: (NSArray *) identifiers;
@@ -44,13 +56,13 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 @implementation NSToolbarView
 
 - (instancetype) initWithFrame: (NSRect) frame {
-    [super initWithFrame:frame];
+    [super initWithFrame: frame];
     [self setAutoresizesSubviews: YES];
     [self setAutoresizingMask: NSViewWidthSizable | NSViewMinYMargin];
     _minXMargin = 6.0;
     _minYMargin = 2.0;
     _visibleItems = [[NSMutableArray alloc] init];
-    [self registerForDraggedTypes: @[NSToolbarItemIdentifierPboardType]];
+    [self registerForDraggedTypes: @[ NSToolbarItemIdentifierPboardType ]];
     return self;
 }
 
@@ -73,7 +85,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
     return _visibleItems;
 }
 
-- (NSImage *) overflowImage  {
+- (NSImage *) overflowImage {
     return [NSImage imageNamed: @"NSToolbarOverflowArrow"];
 }
 
@@ -99,16 +111,18 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
     return result;
 }
 
-- (void) layoutViewsWithWidth: (CGFloat) desiredWidth setFrame: (BOOL) setFrame {
+- (void) layoutViewsWithWidth: (CGFloat) desiredWidth
+                     setFrame: (BOOL) setFrame {
     NSArray *items = [_toolbar items];
-    NSUInteger count=[items count];
+    NSUInteger count = [items count];
     NSRect frames[count];
     BOOL isFlexible[count];
     BOOL notSpace[count];
     BOOL visible[count];
     NSSize overflowSize = [self overflowImageSizeWithMargins];
     CGFloat leftMargin = 5, rightMargin = 5;
-    CGFloat consumedWidth = leftMargin + rightMargin, resultHeight = overflowSize.height;
+    CGFloat consumedWidth = leftMargin + rightMargin,
+            resultHeight = overflowSize.height;
     NSInteger totalNonSpace = 0, totalVisibleNonSpace = 0;
     NSInteger totalVisible = 0;
 
@@ -117,7 +131,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
         NSToolbarItemVisibilityPriorityHigh,
         NSToolbarItemVisibilityPriorityStandard,
         NSToolbarItemVisibilityPriorityLow,
-   };
+    };
     int priorityCount = 4;
 
     [_visibleItems removeAllObjects];
@@ -134,19 +148,20 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
         isFlexible[i] = NO;
         notSpace[i] = NO;
 
-        if ([identifier isEqualToString: NSToolbarFlexibleSpaceItemIdentifier]) {
+        if ([identifier
+                isEqualToString: NSToolbarFlexibleSpaceItemIdentifier]) {
             isFlexible[i] = YES;
-        } else if (
-            ![identifier isEqualToString: NSToolbarSeparatorItemIdentifier] &&
-            ![identifier isEqualToString: NSToolbarSpaceItemIdentifier]
-        ) {
+        } else if (![identifier
+                       isEqualToString: NSToolbarSeparatorItemIdentifier] &&
+                   ![identifier
+                       isEqualToString: NSToolbarSpaceItemIdentifier]) {
             notSpace[i] = YES;
             totalNonSpace++;
         }
     }
 
     // Consume available space based on priority.
-    for(int p = 0; p < priorityCount; p++) {
+    for (int p = 0; p < priorityCount; p++) {
         NSInteger priority = priorities[p];
 
         for (NSUInteger i = 0; i < count; i++) {
@@ -157,16 +172,18 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
                 // If there are still items which can go in the overflow menu we
                 // need to accomodate the menu.
-                if (totalVisibleNonSpace + 1 < totalNonSpace)
+                if (totalVisibleNonSpace + 1 < totalNonSpace) {
                     availableWidth -= overflowSize.width;
+                }
 
                 if (frames[i].size.width < availableWidth) {
                     [_visibleItems addObject: item];
                     visible[i] = YES;
                     totalVisible++;
                     consumedWidth += frames[i].size.width;
-                    if (notSpace[i])
+                    if (notSpace[i]) {
                         totalVisibleNonSpace++;
+                    }
                 }
             }
         }
@@ -184,10 +201,12 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
     BOOL useFlexible = NO;
 
     while (consumedWidth < desiredWidth && totalConsumers > 0) {
-        CGFloat availablePerItem = floor((desiredWidth - consumedWidth) / totalConsumers);
+        CGFloat availablePerItem =
+            floor((desiredWidth - consumedWidth) / totalConsumers);
 
-        if (availablePerItem < 1)
+        if (availablePerItem < 1) {
             break;
+        }
 
         totalConsumers = 0;
         for (NSUInteger i = 0; i < count && consumedWidth < desiredWidth; i++) {
@@ -213,7 +232,8 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
     if (setFrame) {
         NSRect frame = [self frame];
 
-        [self setFrame: NSMakeRect(frame.origin.x, frame.origin.y, desiredWidth, resultHeight)];
+        [self setFrame: NSMakeRect(frame.origin.x, frame.origin.y, desiredWidth,
+                                   resultHeight)];
     }
 
     CGFloat x = leftMargin;
@@ -236,7 +256,6 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
     [self setNeedsDisplay: YES];
 }
-
 
 - (void) drawRect: (NSRect) rect {
     if (_overflow) {
@@ -263,11 +282,12 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 }
 
 - (void) _removeItemAtIndex: (NSInteger) index {
-    [[[[self subviews] copy] autorelease] makeObjectsPerformSelector: @selector(removeFromSuperview)];
+    [[[[self subviews] copy] autorelease]
+        makeObjectsPerformSelector: @selector(removeFromSuperview)];
     [self layoutViews];
 }
 
-- (void) resizeWithOldSuperviewSize: (NSSize) oldSize  {
+- (void) resizeWithOldSuperviewSize: (NSSize) oldSize {
     [super resizeWithOldSuperviewSize: oldSize];
     [self layoutViews];
 }
@@ -276,8 +296,9 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 }
 
 // NSView dragging destination settings.
-// - as drop target: if decoded object is an item, then insert; if NSArray, then replace all
-- (NSDragOperation) draggingEntered: (id <NSDraggingInfo>) sender {
+// - as drop target: if decoded object is an item, then insert; if NSArray,
+// then replace all
+- (NSDragOperation) draggingEntered: (id<NSDraggingInfo>) sender {
     if ([_toolbar customizationPaletteIsRunning]) {
         NSPasteboard *pboard = [NSPasteboard pasteboardWithName: NSDragPboard];
         NSData *data = [pboard dataForType: NSToolbarItemIdentifierPboardType];
@@ -285,12 +306,11 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
         if ([droppedObject isKindOfClass: [NSString class]]) {
             NSToolbarItem *item;
-            item = [_toolbar _itemForItemIdentifier: droppedObject willBeInsertedIntoToolbar: NO];
+            item = [_toolbar _itemForItemIdentifier: droppedObject
+                          willBeInsertedIntoToolbar: NO];
 
-            if (
-                [[_toolbar itemIdentifiers] containsObject: droppedObject] &&
-                ![item allowsDuplicatesInToolbar]
-            ) {
+            if ([[_toolbar itemIdentifiers] containsObject: droppedObject] &&
+                ![item allowsDuplicatesInToolbar]) {
                 return NSDragOperationNone;
             }
         }
@@ -301,25 +321,28 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 }
 
 // It'd be nice to do the OSX-style visual toolbar item insertion stuff
-- (NSDragOperation) draggingUpdated: (id <NSDraggingInfo>) sender {
+- (NSDragOperation) draggingUpdated: (id<NSDraggingInfo>) sender {
     return NSDragOperationCopy;
 }
 
-- (BOOL) prepareForDragOperation: (id <NSDraggingInfo>) sender {
+- (BOOL) prepareForDragOperation: (id<NSDraggingInfo>) sender {
     return YES;
 }
 
-- (BOOL) performDragOperation: (id <NSDraggingInfo>) sender {
+- (BOOL) performDragOperation: (id<NSDraggingInfo>) sender {
     NSPasteboard *pboard = [sender draggingPasteboard];
     if ([_toolbar customizationPaletteIsRunning]) {
-        if ([[pboard types] containsObject: NSToolbarItemIdentifierPboardType]) {
-            NSData *data = [pboard dataForType: NSToolbarItemIdentifierPboardType];
+        if ([[pboard types]
+                containsObject: NSToolbarItemIdentifierPboardType]) {
+            NSData *data =
+                [pboard dataForType: NSToolbarItemIdentifierPboardType];
             id droppedObject = [NSUnarchiver unarchiveObjectWithData: data];
 
-            if ([droppedObject isKindOfClass:[NSArray class]]) {
+            if ([droppedObject isKindOfClass: [NSArray class]]) {
                 [_toolbar _setItemsWithIdentifiersFromArray: droppedObject];
             } else {
-                NSPoint location = [self convertPoint: [sender draggingLocation] fromView: nil];
+                NSPoint location = [self convertPoint: [sender draggingLocation]
+                                             fromView: nil];
                 NSArray *subviews = [self subviews];
                 NSUInteger i, count = [subviews count];
 
@@ -329,10 +352,12 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
                 for (i = 0; i < count; i++) {
                     NSRect frame = [subviews[i] frame];
                     frame.origin.x -= floor(frame.size.width / 2);
-                    if (NSPointInRect(location, frame))
+                    if (NSPointInRect(location, frame)) {
                         break;
+                    }
                 }
-                [_toolbar insertItemWithItemIdentifier:droppedObject atIndex:i];
+                [_toolbar insertItemWithItemIdentifier: droppedObject
+                                               atIndex: i];
             }
             return YES;
         }
@@ -350,9 +375,12 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
         NSView *subview = [self hitTest: [event locationInWindow]];
         int index = [[self subviews] indexOfObject: subview];
         NSToolbarItem *item = [[_toolbar items][index] retain];
-        NSRect frame = NSMakeRect(0, 0, [subview frame].size.width + 4, [subview frame].size.height + 4);
-        NSImage *image = [[[NSImage alloc] initWithSize:frame.size] autorelease];
-        NSData *data = [NSArchiver archivedDataWithRootObject: [item itemIdentifier]];
+        NSRect frame = NSMakeRect(0, 0, [subview frame].size.width + 4,
+                                  [subview frame].size.height + 4);
+        NSImage *image =
+            [[[NSImage alloc] initWithSize: frame.size] autorelease];
+        NSData *data =
+            [NSArchiver archivedDataWithRootObject: [item itemIdentifier]];
 
         [image setCachedSeparately: YES];
         [image lockFocus];
@@ -361,13 +389,15 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
         NSFrameRect(frame);
         [image unlockFocus];
 
-        [pboard declareTypes: @[NSToolbarItemIdentifierPboardType] owner:nil];
+        [pboard declareTypes: @[ NSToolbarItemIdentifierPboardType ]
+                       owner: nil];
         [pboard setData: data forType: NSToolbarItemIdentifierPboardType];
 
         [_toolbar removeItemAtIndex: index];
 
         [self dragImage: image
-                     at: NSMakePoint([[item image] size].width / 2, [[item image] size].height / 2)
+                     at: NSMakePoint([[item image] size].width / 2,
+                                     [[item image] size].height / 2)
                  offset: NSZeroSize
                   event: event
              pasteboard: pboard
@@ -378,71 +408,74 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
         return;
     }
 
-    if (!_overflow)
+    if (!_overflow) {
         return;
+    }
 
-    if (!NSPointInRect([self convertPoint: [event locationInWindow] fromView: nil], [self overflowRect]))
+    if (!NSPointInRect([self convertPoint: [event locationInWindow]
+                                 fromView: nil],
+                       [self overflowRect])) {
         return;
+    }
 
     NSArray *items = [_toolbar items];
-    NSString *menuTitle =  NSLocalizedStringFromTableInBundle(
-        @"Overflow",
-        nil,
-        [NSBundle bundleForClass: [NSToolbarView class]],
-        @"Describes the overflow area of the toolbar"
-    );
+    NSString *menuTitle = NSLocalizedStringFromTableInBundle(
+        @"Overflow", nil, [NSBundle bundleForClass: [NSToolbarView class]],
+        @"Describes the overflow area of the toolbar");
     NSMenu *menu = [[NSMenu alloc] initWithTitle: menuTitle];
     NSRect menuFrame = [self frame];
 
     for (NSToolbarItem *item in items) {
         NSToolbarItemIdentifier identifier = [item itemIdentifier];
 
-        if (
-            [identifier isEqualToString: NSToolbarFlexibleSpaceItemIdentifier] ||
+        if ([identifier
+                isEqualToString: NSToolbarFlexibleSpaceItemIdentifier] ||
             [identifier isEqualToString: NSToolbarSeparatorItemIdentifier] ||
-            [identifier isEqualToString: NSToolbarSpaceItemIdentifier]
-        ) {
+            [identifier isEqualToString: NSToolbarSpaceItemIdentifier]) {
             continue;
         }
 
         if ([[item _enclosingView] superview] == nil) {
             [menu addItem: [item menuFormRepresentation]];
         }
-   }
+    }
 
-   for (NSUInteger i = 0; i < [menu numberOfItems]; ++i) {
-       NSToolbarItem *item = [[menu itemAtIndex: i] representedObject];
+    for (NSUInteger i = 0; i < [menu numberOfItems]; ++i) {
+        NSToolbarItem *item = [[menu itemAtIndex: i] representedObject];
 
-       if ([[item label] sizeWithAttributes: nil].width > menuFrame.size.width)
-           menuFrame.size.width = [[item label] sizeWithAttributes: nil].width + 20.0;  // argh
-   }
+        if ([[item label] sizeWithAttributes: nil].width >
+            menuFrame.size.width) {
+            menuFrame.size.width =
+                [[item label] sizeWithAttributes: nil].width + 20.0; // argh
+        }
+    }
 
-   NSMenuWindow *window = [[NSMenuWindow alloc] initWithMenu:menu];
+    NSMenuWindow *window = [[NSMenuWindow alloc] initWithMenu: menu];
 
-   menuFrame.origin.x = NSMaxX([self frame]);
-   menuFrame.origin.y = [self frame].origin.y + [self frame].size.height / 2;
-   menuFrame.origin = [[self window] convertBaseToScreen:menuFrame.origin];
+    menuFrame.origin.x = NSMaxX([self frame]);
+    menuFrame.origin.y = [self frame].origin.y + [self frame].size.height / 2;
+    menuFrame.origin = [[self window] convertBaseToScreen: menuFrame.origin];
 
-   menuFrame.origin.y -= [[window menuView] frame].size.height;
+    menuFrame.origin.y -= [[window menuView] frame].size.height;
 
-   [window setFrameOrigin: menuFrame.origin];
-   [window orderFront: nil];
+    [window setFrameOrigin: menuFrame.origin];
+    [window orderFront: nil];
 
-   BOOL didAccept = [window acceptsMouseMovedEvents];
+    BOOL didAccept = [window acceptsMouseMovedEvents];
 
-   [window setAcceptsMouseMovedEvents: YES];
-   NSMenuItem *menuItem = [[window menuView] trackForEvent: event];
-   [window setAcceptsMouseMovedEvents: didAccept];
+    [window setAcceptsMouseMovedEvents: YES];
+    NSMenuItem *menuItem = [[window menuView] trackForEvent: event];
+    [window setAcceptsMouseMovedEvents: didAccept];
 
-   [window close];
+    [window close];
 
-   if (menuItem != nil) {
-       [NSApp sendAction: [menuItem action]
-                      to: [menuItem target]
-                    from: [menuItem representedObject]];
-   }
+    if (menuItem != nil) {
+        [NSApp sendAction: [menuItem action]
+                       to: [menuItem target]
+                     from: [menuItem representedObject]];
+    }
 
-   [menu release];
+    [menu release];
 }
 
 @end

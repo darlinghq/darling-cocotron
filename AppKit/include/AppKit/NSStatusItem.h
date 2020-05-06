@@ -1,13 +1,24 @@
 /* Copyright (c) 2006-2007 Christopher J. W. Lloyd
 
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software is furnished to do so,
+subject to the following conditions:
 
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
-#import <Foundation/Foundation.h>
 #import <CoreFoundation/CFBase.h>
+#import <Foundation/Foundation.h>
 #ifdef WIN32
 #import <windows.h>
 #endif
@@ -16,15 +27,15 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
     SEL _action;
     SEL _doubleAction;
     id _target;
-    //Image-Based Item Vars
+    // Image-Based Item Vars
     NSImage *_image;
     NSImage *_alternateImage;
-    //Text-Based Item Vars
+    // Text-Based Item Vars
     NSString *_title;
     NSAttributedString *_atrTitle;
-    //View-Based Item Vars
+    // View-Based Item Vars
     NSView *_view;
-    //Other Vars
+    // Other Vars
     BOOL _highlightMode;
     BOOL _enabled;
     CGFloat _length;
@@ -36,44 +47,45 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
     HMENU _win32Menu;
 #endif
 }
-- (NSStatusBar *)statusBar;
+- (NSStatusBar *) statusBar;
 
-- (SEL)action;
-- (void)setAction:(SEL)action;
-- (SEL)doubleAction;
-- (void)setDoubleAction:(SEL)action;
-- (id)target;
-- (void)setTarget:(id)target;
+- (SEL) action;
+- (void) setAction: (SEL) action;
+- (SEL) doubleAction;
+- (void) setDoubleAction: (SEL) action;
+- (id) target;
+- (void) setTarget: (id) target;
 
-- (NSImage *)image;
-- (void)setImage:(NSImage *)image;
-- (NSImage *)alternateImage;
-- (void)setAlternateImage:(NSImage *)image;
+- (NSImage *) image;
+- (void) setImage: (NSImage *) image;
+- (NSImage *) alternateImage;
+- (void) setAlternateImage: (NSImage *) image;
 
-- (NSString *)title;
-- (void)setTitle:(NSString *)title;
-- (void)setToolTip:(NSString *)toolTip;
-- (NSAttributedString *)attributedTitle;
-- (void)setAttributedTitle:(NSAttributedString *)title;
+- (NSString *) title;
+- (void) setTitle: (NSString *) title;
+- (void) setToolTip: (NSString *) toolTip;
+- (NSAttributedString *) attributedTitle;
+- (void) setAttributedTitle: (NSAttributedString *) title;
 
-- (NSView *)view;
-- (void)setView:(NSView *)view;
+- (NSView *) view;
+- (void) setView: (NSView *) view;
 
-- (BOOL)highlightMode;
-- (void)setHighlightMode:(BOOL)flag;
+- (BOOL) highlightMode;
+- (void) setHighlightMode: (BOOL) flag;
 
-- (BOOL)isEnabled;
-- (void)setEnabled:(BOOL)flag;
+- (BOOL) isEnabled;
+- (void) setEnabled: (BOOL) flag;
 
-- (CGFloat)length;
-- (void)setLength:(CGFloat)len;
+- (CGFloat) length;
+- (void) setLength: (CGFloat) len;
 
-- (NSMenu *)menu;
-- (void)setMenu:(NSMenu *)menu;
+- (NSMenu *) menu;
+- (void) setMenu: (NSMenu *) menu;
 
-- (void)popUpStatusItemMenu:(NSMenu *)menu;
-- (NSInteger)sendActionOn:(NSInteger)mask;
+- (void) popUpStatusItemMenu: (NSMenu *) menu;
+- (NSInteger) sendActionOn: (NSInteger) mask;
 
-- (void)drawStatusBarBackgroundInRect:(NSRect)rect withHighlight:(BOOL)highlight;
+- (void) drawStatusBarBackgroundInRect: (NSRect) rect
+                         withHighlight: (BOOL) highlight;
 
 @end

@@ -1,11 +1,11 @@
-#import <QuartzCore/CABase.h>
 #import <CoreFoundation/CoreFoundation.h>
 #import <Foundation/Foundation.h>
+#import <QuartzCore/CABase.h>
 
-CA_EXPORT NSString * const kCAFillModeForwards;
-CA_EXPORT NSString * const kCAFillModeBackwards;
-CA_EXPORT NSString * const kCAFillModeBoth;
-CA_EXPORT NSString * const kCAFillModeRemoved;
+CA_EXPORT NSString *const kCAFillModeForwards;
+CA_EXPORT NSString *const kCAFillModeBackwards;
+CA_EXPORT NSString *const kCAFillModeBoth;
+CA_EXPORT NSString *const kCAFillModeRemoved;
 
 @protocol CAMediaTiming
 

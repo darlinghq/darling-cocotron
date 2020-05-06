@@ -14,12 +14,18 @@ CA_EXPORT NSString *const kCAMediaTimingFunctionDefault;
     CGFloat _c2y;
 }
 
-- (id)initWithControlPoints:(CGFloat)c1x:(CGFloat)c1y:(CGFloat)c2x:(CGFloat)c2y;
+- (id) initWithControlPoints: (CGFloat)
+                         c1x: (CGFloat) c1y
+                            :(CGFloat) c2x
+                            :(CGFloat) c2y;
 
-+ functionWithControlPoints:(CGFloat)c1x:(CGFloat)c1y:(CGFloat)c2x:(CGFloat)c2y;
++ functionWithControlPoints: (CGFloat)
+                        c1x: (CGFloat) c1y
+                           :(CGFloat) c2x
+                           :(CGFloat) c2y;
 
-+ functionWithName:(NSString *)name;
++ functionWithName: (NSString *) name;
 
-- (void)getControlPointAtIndex:(size_t)index values:(CGFloat[2])ptr;
+- (void) getControlPointAtIndex: (size_t) index values: (CGFloat[2]) ptr;
 
 @end

@@ -1,20 +1,32 @@
 /* Copyright (c) 2006-2007 Christopher J. W. Lloyd
 
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software is furnished to do so,
+subject to the following conditions:
 
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <Foundation/NSObject.h>
-#import <Onyx2D/O2Geometry.h>
 #import <Onyx2D/O2Font.h>
+#import <Onyx2D/O2Geometry.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-@class O2Image, O2ColorSpace, O2Color, O2Pattern, O2MutablePath, O2Path, NSArray, NSMutableArray, O2Font, O2Encoding, O2PDFCharWidths, O2ClipState;
+@class O2Image, O2ColorSpace, O2Color, O2Pattern, O2MutablePath, O2Path,
+    NSArray, NSMutableArray, O2Font, O2Encoding, O2PDFCharWidths, O2ClipState;
 
 @interface O2GState : NSObject {
   @public
@@ -62,23 +74,24 @@ extern "C" {
     int _antialiasingQuality;
 }
 
-- initWithDeviceTransform:(O2AffineTransform)deviceTransform;
-- initFlippedWithDeviceHeight:(O2Float)height;
-- initFlippedWithDeviceHeight:(O2Float)height concat:(O2AffineTransform)concat;
+- initWithDeviceTransform: (O2AffineTransform) deviceTransform;
+- initFlippedWithDeviceHeight: (O2Float) height;
+- initFlippedWithDeviceHeight: (O2Float) height
+                       concat: (O2AffineTransform) concat;
 - init;
 
 O2GState *O2GStateCopyWithZone(O2GState *self, NSZone *zone);
 
-- (O2AffineTransform)userSpaceToDeviceSpaceTransform;
+- (O2AffineTransform) userSpaceToDeviceSpaceTransform;
 O2AffineTransform O2GStateUserSpaceTransform(O2GState *self);
-- (O2Rect)clipBoundingBox;
-- (O2InterpolationQuality)interpolationQuality;
-- (O2Point)convertPointToDeviceSpace:(O2Point)point;
-- (O2Point)convertPointToUserSpace:(O2Point)point;
-- (O2Size)convertSizeToDeviceSpace:(O2Size)size;
-- (O2Size)convertSizeToUserSpace:(O2Size)size;
-- (O2Rect)convertRectToDeviceSpace:(O2Rect)rect;
-- (O2Rect)convertRectToUserSpace:(O2Rect)rect;
+- (O2Rect) clipBoundingBox;
+- (O2InterpolationQuality) interpolationQuality;
+- (O2Point) convertPointToDeviceSpace: (O2Point) point;
+- (O2Point) convertPointToUserSpace: (O2Point) point;
+- (O2Size) convertSizeToDeviceSpace: (O2Size) size;
+- (O2Size) convertSizeToUserSpace: (O2Size) size;
+- (O2Rect) convertRectToDeviceSpace: (O2Rect) rect;
+- (O2Rect) convertRectToUserSpace: (O2Rect) rect;
 
 void O2GStateSetDeviceSpaceCTM(O2GState *self, O2AffineTransform transform);
 void O2GStateSetUserSpaceCTM(O2GState *self, O2AffineTransform transform);
@@ -99,27 +112,31 @@ void O2GStateSetFillColor(O2GState *self, O2ColorRef color);
 O2Size O2GStatePatternPhase(O2GState *self);
 void O2GStateSetPatternPhase(O2GState *self, O2Size value);
 
-- (void)setStrokePattern:(O2Pattern *)pattern components:(const O2Float *)components;
-- (void)setFillPattern:(O2Pattern *)pattern components:(const O2Float *)components;
+- (void) setStrokePattern: (O2Pattern *) pattern
+               components: (const O2Float *) components;
+- (void) setFillPattern: (O2Pattern *) pattern
+             components: (const O2Float *) components;
 
-- (void)setTextDrawingMode:(int)textMode;
+- (void) setTextDrawingMode: (int) textMode;
 O2FontRef O2GStateFont(O2GState *self);
 O2Float O2GStatePointSize(O2GState *self);
 
 O2Encoding *O2GStateEncoding(O2GState *self);
 O2PDFCharWidths *O2GStateCharWidths(O2GState *self);
 
-- (O2Encoding *)encoding;
-- (O2PDFCharWidths *)pdfCharWidths;
-- (void)setPDFCharWidths:(O2PDFCharWidths *)value;
+- (O2Encoding *) encoding;
+- (O2PDFCharWidths *) pdfCharWidths;
+- (void) setPDFCharWidths: (O2PDFCharWidths *) value;
 
 void O2GStateClearFontIsDirty(O2GState *self);
-- (id)fontState;
-- (void)setFontState:(id)fontState;
+- (id) fontState;
+- (void) setFontState: (id) fontState;
 void O2GStateSetFont(O2GState *self, O2Font *font);
 void O2GStateSetFontSize(O2GState *self, O2Float size);
 void O2GStateSetFontEncoding(O2GState *self, O2Encoding *encoding);
-- (void)selectFontWithName:(const char *)name size:(O2Float)size encoding:(O2TextEncoding)encoding;
+- (void) selectFontWithName: (const char *) name
+                       size: (O2Float) size
+                   encoding: (O2TextEncoding) encoding;
 
 O2Float O2GStateCharacterSpacing(O2GState *self);
 O2Float O2GStateWordSpacing(O2GState *self);
@@ -133,30 +150,33 @@ void O2GStateSetTextLeading(O2GState *self, O2Float value);
 void O2GStateSetTextRise(O2GState *self, O2Float value);
 void O2GStateSetTextHorizontalScaling(O2GState *self, O2Float value);
 
-- (void)setShouldSmoothFonts:(BOOL)yesOrNo;
+- (void) setShouldSmoothFonts: (BOOL) yesOrNo;
 
 void O2GStateSetLineWidth(O2GState *self, O2Float width);
 void O2GStateSetLineCap(O2GState *self, int lineCap);
 void O2GStateSetLineJoin(O2GState *self, int lineJoin);
 void O2GStateSetMiterLimit(O2GState *self, O2Float limit);
-void O2GStateSetLineDash(O2GState *self, O2Float phase, const O2Float *lengths, size_t count);
+void O2GStateSetLineDash(O2GState *self, O2Float phase, const O2Float *lengths,
+                         size_t count);
 
-- (void)setRenderingIntent:(O2ColorRenderingIntent)intent;
+- (void) setRenderingIntent: (O2ColorRenderingIntent) intent;
 O2BlendMode O2GStateBlendMode(O2GState *self);
 void O2GStateSetBlendMode(O2GState *self, O2BlendMode mode);
 O2Float O2GStateAlpha(O2GState *self);
 void O2GStateSetAlpha(O2GState *self, O2Float alpha);
 
-- (void)setFlatness:(O2Float)flatness;
-- (void)setInterpolationQuality:(O2InterpolationQuality)quality;
+- (void) setFlatness: (O2Float) flatness;
+- (void) setInterpolationQuality: (O2InterpolationQuality) quality;
 
-- (void)setShadowOffset:(O2Size)offset blur:(O2Float)blur color:(O2ColorRef)color;
-- (void)setShadowOffset:(O2Size)offset blur:(O2Float)blur;
+- (void) setShadowOffset: (O2Size) offset
+                    blur: (O2Float) blur
+                   color: (O2ColorRef) color;
+- (void) setShadowOffset: (O2Size) offset blur: (O2Float) blur;
 
-- (void)setShouldAntialias:(BOOL)flag;
+- (void) setShouldAntialias: (BOOL) flag;
 
 // temporary?
-- (void)setAntialiasingQuality:(int)value;
+- (void) setAntialiasingQuality: (int) value;
 
 @end
 

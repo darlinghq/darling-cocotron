@@ -14,44 +14,38 @@
 
 @implementation NSPrintProgressPanelController
 
-+ (NSPrintProgressPanelController *)printProgressPanelController
-{
-    return [[[NSPrintProgressPanelController alloc] initWithWindowNibName: @"NSPrintProgressPanel"] autorelease];
++ (NSPrintProgressPanelController *) printProgressPanelController {
+    return [[[NSPrintProgressPanelController alloc]
+        initWithWindowNibName: @"NSPrintProgressPanel"] autorelease];
 }
 
-- (void)windowDidLoad
-{
+- (void) windowDidLoad {
     [super windowDidLoad];
-    
-    // Implement this method to handle any initialization after your window controller's window has been loaded from its nib file.
+
+    // Implement this method to handle any initialization after your window
+    // controller's window has been loaded from its nib file.
 }
 
-- (void)setTitle:(NSString *)title
-{
+- (void) setTitle: (NSString *) title {
     [[self window] setTitle: title];
 }
 
-- (void)setMaxPages:(NSInteger)maxPages
-{
+- (void) setMaxPages: (NSInteger) maxPages {
     [progressIndicator setDoubleValue: 0];
     [progressIndicator setMaxValue: maxPages];
 }
 
-- (void)setCurrentPage:(NSInteger)currentPage
-{
+- (void) setCurrentPage: (NSInteger) currentPage {
     [progressIndicator setDoubleValue: currentPage];
     [progressIndicator displayIfNeeded];
 }
 
-- (void)showPanel
-{
+- (void) showPanel {
     [[self window] center];
     [self showWindow: nil];
 }
 
-
-- (void)hidePanel
-{
+- (void) hidePanel {
     [self close];
 }
 

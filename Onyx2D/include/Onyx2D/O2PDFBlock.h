@@ -8,7 +8,7 @@
 
 + pdfBlock;
 
-- (NSArray *)objects;
-- (void)addObject:object;
+- (NSArray *) objects;
+- (void) addObject: object;
 
 @end

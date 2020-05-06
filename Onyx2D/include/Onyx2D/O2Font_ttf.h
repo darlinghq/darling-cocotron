@@ -7,6 +7,6 @@
     NSInteger *_glyphLocations;
 }
 
-- initWithDataProvider:(O2DataProviderRef)provider;
+- initWithDataProvider: (O2DataProviderRef) provider;
 
 @end

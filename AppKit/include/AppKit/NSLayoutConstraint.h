@@ -18,8 +18,8 @@
 */
 
 #import <AppKit/AppKitExport.h>
-#import <Foundation/NSString.h>
 #import <CoreGraphics/CoreGraphics.h>
+#import <Foundation/NSString.h>
 
 APPKIT_EXPORT const CGFloat NSViewNoInstrinsicMetric;
 APPKIT_EXPORT const CGFloat NSViewNoIntrinsicMetric;

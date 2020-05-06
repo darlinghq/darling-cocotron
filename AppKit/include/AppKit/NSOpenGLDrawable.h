@@ -5,14 +5,15 @@
 
 @interface NSOpenGLDrawable : NSObject
 
-- initWithPixelFormat:(NSOpenGLPixelFormat *)pixelFormat view:(NSView *)view;
+- initWithPixelFormat: (NSOpenGLPixelFormat *) pixelFormat
+                 view: (NSView *) view;
 
-- (CGLContextObj)createGLContext;
+- (CGLContextObj) createGLContext;
 
-- (void)invalidate;
-- (void)updateWithView:(NSView *)view;
-- (void)makeCurrentWithGLContext:(CGLContextObj)glContext;
-- (void)clearCurrentWithGLContext:(CGLContextObj)glContext;
-- (void)swapBuffers;
+- (void) invalidate;
+- (void) updateWithView: (NSView *) view;
+- (void) makeCurrentWithGLContext: (CGLContextObj) glContext;
+- (void) clearCurrentWithGLContext: (CGLContextObj) glContext;
+- (void) swapBuffers;
 
 @end

@@ -1,5 +1,0 @@
-#include "linux-ppc"
-#include "platform-framework"
-
-EXECUTABLE_SUFFIX = .so
-EXECUTABLE_PREFIX = lib

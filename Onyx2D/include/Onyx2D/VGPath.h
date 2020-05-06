@@ -11,10 +11,10 @@
  * including without limitation the rights to use, copy, modify, merge,
  * publish, distribute, sublicense, and/or sell copies of the Materials,
  * and to permit persons to whom the Materials are furnished to do so,
- * subject to the following conditions: 
+ * subject to the following conditions:
  *
- * The above copyright notice and this permission notice shall be included 
- * in all copies or substantial portions of the Materials. 
+ * The above copyright notice and this permission notice shall be included
+ * in all copies or substantial portions of the Materials.
  *
  * THE MATERIALS ARE PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
  * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
@@ -26,9 +26,9 @@
  *
  *-------------------------------------------------------------------*/
 
-#import <Onyx2D/VGmath.h>
-#import <Onyx2D/O2Path.h>
 #import <Onyx2D/O2Context_builtin.h>
+#import <Onyx2D/O2Path.h>
+#import <Onyx2D/VGmath.h>
 
 @interface VGPath : NSObject {
     O2Path *_path;
@@ -45,15 +45,25 @@
     O2Float m_userMaxy;
 }
 
-- initWithKGPath:(O2Path *)path;
+- initWithKGPath: (O2Path *) path;
 
-void VGPathFill(VGPath *self, O2AffineTransform pathToSurface, O2Context_builtin *context);
-void VGPathStroke(VGPath *self, O2AffineTransform pathToSurface, O2Context_builtin *context, const O2Float *dashPattern, int dashPatternSize, O2Float dashPhase, BOOL dashPhaseReset, O2Float strokeWidth, O2LineCap capStyle, O2LineJoin joinStyle, O2Float miterLimit);
+void VGPathFill(VGPath *self, O2AffineTransform pathToSurface,
+                O2Context_builtin *context);
+void VGPathStroke(VGPath *self, O2AffineTransform pathToSurface,
+                  O2Context_builtin *context, const O2Float *dashPattern,
+                  int dashPatternSize, O2Float dashPhase, BOOL dashPhaseReset,
+                  O2Float strokeWidth, O2LineCap capStyle, O2LineJoin joinStyle,
+                  O2Float miterLimit);
 
-void VGPathGetPointAlong(VGPath *self, int startIndex, int numSegments, O2Float distance, O2Point *p, O2Point *t);
+void VGPathGetPointAlong(VGPath *self, int startIndex, int numSegments,
+                         O2Float distance, O2Point *p, O2Point *t);
 O2Float VGPathGetLength(VGPath *self, int startIndex, int numSegments);
-void VGPathGetPathBounds(VGPath *self, O2Float *minx, O2Float *miny, O2Float *maxx, O2Float *maxy);
-void VGPathGetPathTransformedBounds(VGPath *self, O2AffineTransform pathToSurface, O2Float *minx, O2Float *miny, O2Float *maxx, O2Float *maxy);
+void VGPathGetPathBounds(VGPath *self, O2Float *minx, O2Float *miny,
+                         O2Float *maxx, O2Float *maxy);
+void VGPathGetPathTransformedBounds(VGPath *self,
+                                    O2AffineTransform pathToSurface,
+                                    O2Float *minx, O2Float *miny, O2Float *maxx,
+                                    O2Float *maxy);
 
 void VGPathTessellateIfNeeded(VGPath *self);
 

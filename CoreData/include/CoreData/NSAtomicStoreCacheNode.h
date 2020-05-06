@@ -7,16 +7,16 @@
     NSMutableDictionary *_propertyCache;
 }
 
-- initWithObjectID:(NSManagedObjectID *)objectID;
+- initWithObjectID: (NSManagedObjectID *) objectID;
 
-- (NSManagedObjectID *)objectID;
+- (NSManagedObjectID *) objectID;
 
-- (NSMutableDictionary *)propertyCache;
+- (NSMutableDictionary *) propertyCache;
 
-- (void)setPropertyCache:(NSMutableDictionary *)value;
+- (void) setPropertyCache: (NSMutableDictionary *) value;
 
-- (void)setValue:value forKey:(NSString *)key;
+- (void) setValue: value forKey: (NSString *) key;
 
-- valueForKey:(NSString *)key;
+- valueForKey: (NSString *) key;
 
 @end

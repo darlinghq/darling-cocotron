@@ -17,21 +17,23 @@
  along with Darling.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#import <AppKit/AppKitExport.h>
 #import <Foundation/NSObject.h>
 #import <Foundation/NSString.h>
-#import <AppKit/AppKitExport.h>
 
-APPKIT_EXPORT NSString * const NSAppearanceNameAqua;
-APPKIT_EXPORT NSString * const NSAppearanceNameDarkAqua;
-APPKIT_EXPORT NSString * const NSAppearanceNameLightContent;
-APPKIT_EXPORT NSString * const NSAppearanceNameVibrantDark;
-APPKIT_EXPORT NSString * const NSAppearanceNameVibrantLight;
-APPKIT_EXPORT NSString * const NSAppearanceNameAccessibilityHighContrastAqua;
-APPKIT_EXPORT NSString * const NSAppearanceNameAccessibilityHighContrastDarkAqua;
-APPKIT_EXPORT NSString * const NSAppearanceNameAccessibilityHighContrastVibrantLight;
-APPKIT_EXPORT NSString * const NSAppearanceNameAccessibilityHighContrastVibrantDark;
+APPKIT_EXPORT NSString *const NSAppearanceNameAqua;
+APPKIT_EXPORT NSString *const NSAppearanceNameDarkAqua;
+APPKIT_EXPORT NSString *const NSAppearanceNameLightContent;
+APPKIT_EXPORT NSString *const NSAppearanceNameVibrantDark;
+APPKIT_EXPORT NSString *const NSAppearanceNameVibrantLight;
+APPKIT_EXPORT NSString *const NSAppearanceNameAccessibilityHighContrastAqua;
+APPKIT_EXPORT NSString *const NSAppearanceNameAccessibilityHighContrastDarkAqua;
+APPKIT_EXPORT NSString
+    *const NSAppearanceNameAccessibilityHighContrastVibrantLight;
+APPKIT_EXPORT NSString
+    *const NSAppearanceNameAccessibilityHighContrastVibrantDark;
 
-APPKIT_EXPORT NSString *const NSAppearanceNameControlStrip; //Undocumented
+APPKIT_EXPORT NSString *const NSAppearanceNameControlStrip; // Undocumented
 
 @interface NSAppearance : NSObject <NSSecureCoding>
 

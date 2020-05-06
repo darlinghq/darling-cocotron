@@ -20,12 +20,10 @@
 #include <CoreGraphics/CGEvent.h>
 #include <stdio.h>
 
-void CGEventPost(CGEventTapLocation tapLocation, CGEventRef event)
-{
-	printf("STUB CGEventPost called\n");
+void CGEventPost(CGEventTapLocation tapLocation, CGEventRef event) {
+    printf("STUB CGEventPost called\n");
 }
 
-CGError CGPostMouseEvent(CGPoint mouseCursorPosition, boolean_t updateMouseCursorPosition, CGButtonCount buttonCount, boolean_t mouseButtonDown, ...)
-{
-	printf("STUB CGPostMouseEvent called\n");
+CGError CGPostMouseEvent(CGPoint mouseCursorPosition, boolean_t updateMouseCursorPosition, CGButtonCount buttonCount, boolean_t mouseButtonDown, ...) {
+    printf("STUB CGPostMouseEvent called\n");
 }

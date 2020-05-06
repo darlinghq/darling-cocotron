@@ -17,9 +17,9 @@
  along with Darling.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#import <Foundation/NSObject.h>
 #import <AppKit/NSAccessibility.h>
+#import <Foundation/NSObject.h>
 
-@interface NSAccessibilityElement: NSObject <NSAccessibility>
+@interface NSAccessibilityElement : NSObject <NSAccessibility>
 
 @end

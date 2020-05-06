@@ -1,14 +1,25 @@
 /* Copyright (c) 2006-2007 Christopher J. W. Lloyd
 
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software is furnished to do so,
+subject to the following conditions:
 
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
-#import <Foundation/NSObject.h>
 #import <AppKit/NSCell.h>
 #import <AppKit/NSUserInterfaceValidation.h>
+#import <Foundation/NSObject.h>
 
 @class NSMenu, NSImage, NSAttributedString;
 
@@ -35,58 +46,58 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
     NSImage *_mixedStateImage;
 }
 
-+ (NSMenuItem *)separatorItem;
++ (NSMenuItem *) separatorItem;
 
 - (instancetype) initWithTitle: (NSString *) title
                         action: (SEL) action
                  keyEquivalent: (NSString *) keyEquivalent;
 
-- (NSMenu *)menu;
-- (NSString *)title;
-- (NSAttributedString *)attributedTitle;
-- (NSString *)mnemonic;
-- (unsigned)mnemonicLocation;
+- (NSMenu *) menu;
+- (NSString *) title;
+- (NSAttributedString *) attributedTitle;
+- (NSString *) mnemonic;
+- (unsigned) mnemonicLocation;
 - (id) target;
-- (SEL)action;
-- (NSInteger)indentationLevel;
-- (NSInteger)tag;
-- (NSControlStateValue)state;
-- (NSString *)keyEquivalent;
-- (unsigned)keyEquivalentModifierMask;
-- (NSImage *)image;
-- (NSImage *)onStateImage;
-- (NSImage *)offStateImage;
-- (NSImage *)mixedStateImage;
+- (SEL) action;
+- (NSInteger) indentationLevel;
+- (NSInteger) tag;
+- (NSControlStateValue) state;
+- (NSString *) keyEquivalent;
+- (unsigned) keyEquivalentModifierMask;
+- (NSImage *) image;
+- (NSImage *) onStateImage;
+- (NSImage *) offStateImage;
+- (NSImage *) mixedStateImage;
 
 - representedObject;
 
-- (BOOL)hasSubmenu;
-- (NSMenu *)submenu;
+- (BOOL) hasSubmenu;
+- (NSMenu *) submenu;
 
-- (BOOL)isSeparatorItem;
-- (BOOL)isEnabled;
-- (BOOL)isHidden;
+- (BOOL) isSeparatorItem;
+- (BOOL) isEnabled;
+- (BOOL) isHidden;
 
-- (void)setTitle:(NSString *)title;
-- (void)setAttributedTitle:(NSAttributedString *)title;
-- (void)setTitleWithMnemonic:(NSString *)mnemonic;
-- (void)setMnemonicLocation:(unsigned)location;
-- (void)setTarget:target;
-- (void)setAction:(SEL)action;
-- (void)setIndentationLevel:(NSInteger)indentationLevel;
-- (void)setTag:(NSInteger)tag;
-- (void)setState:(NSControlStateValue)state;
-- (void)setKeyEquivalent:(NSString *)keyEquivalent;
-- (void)setKeyEquivalentModifierMask:(unsigned)mask;
-- (void)setImage:(NSImage *)image;
-- (void)setOnStateImage:(NSImage *)image;
-- (void)setOffStateImage:(NSImage *)image;
-- (void)setMixedStateImage:(NSImage *)image;
-- (void)setRepresentedObject:object;
-- (void)setSubmenu:(NSMenu *)submenu;
-- (void)setEnabled:(BOOL)flag;
-- (void)setHidden:(BOOL)flag;
+- (void) setTitle: (NSString *) title;
+- (void) setAttributedTitle: (NSAttributedString *) title;
+- (void) setTitleWithMnemonic: (NSString *) mnemonic;
+- (void) setMnemonicLocation: (unsigned) location;
+- (void) setTarget: target;
+- (void) setAction: (SEL) action;
+- (void) setIndentationLevel: (NSInteger) indentationLevel;
+- (void) setTag: (NSInteger) tag;
+- (void) setState: (NSControlStateValue) state;
+- (void) setKeyEquivalent: (NSString *) keyEquivalent;
+- (void) setKeyEquivalentModifierMask: (unsigned) mask;
+- (void) setImage: (NSImage *) image;
+- (void) setOnStateImage: (NSImage *) image;
+- (void) setOffStateImage: (NSImage *) image;
+- (void) setMixedStateImage: (NSImage *) image;
+- (void) setRepresentedObject: object;
+- (void) setSubmenu: (NSMenu *) submenu;
+- (void) setEnabled: (BOOL) flag;
+- (void) setHidden: (BOOL) flag;
 
-- (NSString *)_keyEquivalentDescription;
+- (NSString *) _keyEquivalentDescription;
 
 @end

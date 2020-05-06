@@ -1,17 +1,30 @@
 /* Copyright (c) 2006-2009 Christopher J. W. Lloyd
 
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software is furnished to do so,
+subject to the following conditions:
 
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
-#import <Foundation/NSObject.h>
 #import <AppKit/AppKitExport.h>
-#import <Foundation/NSNotification.h>
 #import <AppKit/NSToolbarItem.h>
+#import <Foundation/NSNotification.h>
+#import <Foundation/NSObject.h>
 
-@class NSString, NSMutableArray, NSArray, NSDictionary, NSNotification, NSMutableDictionary, NSWindow, NSView, NSToolbarItem, NSToolbarView, NSToolbarCustomizationPalette;
+@class NSString, NSMutableArray, NSArray, NSDictionary, NSNotification,
+    NSMutableDictionary, NSWindow, NSView, NSToolbarItem, NSToolbarView,
+    NSToolbarCustomizationPalette;
 
 typedef enum {
     NSToolbarSizeModeDefault,
@@ -59,49 +72,50 @@ typedef NSString *NSToolbarIdentifier;
 
 - (NSToolbarIdentifier) identifier;
 - (id<NSToolbarDelegate>) delegate;
-- (BOOL)isVisible;
-- (NSToolbarSizeMode)sizeMode;
-- (NSToolbarDisplayMode)displayMode;
-- (BOOL)showsBaselineSeparator;
-- (NSArray *)items;
-- (NSArray *)visibleItems;
-- (NSDictionary *)configurationDictionary;
-- (BOOL)autosavesConfiguration;
-- (BOOL)allowsUserCustomization;
-- (NSString *)selectedItemIdentifier;
+- (BOOL) isVisible;
+- (NSToolbarSizeMode) sizeMode;
+- (NSToolbarDisplayMode) displayMode;
+- (BOOL) showsBaselineSeparator;
+- (NSArray *) items;
+- (NSArray *) visibleItems;
+- (NSDictionary *) configurationDictionary;
+- (BOOL) autosavesConfiguration;
+- (BOOL) allowsUserCustomization;
+- (NSString *) selectedItemIdentifier;
 
 - (void) setDelegate: (id<NSToolbarDelegate>) delegate;
-- (void)setVisible:(BOOL)flag;
-- (void)setSizeMode:(NSToolbarSizeMode)mode;
-- (void)setDisplayMode:(NSToolbarDisplayMode)mode;
-- (void)setShowsBaselineSeparator:(BOOL)value;
-- (void)setConfigurationFromDictionary:(NSDictionary *)dictionary;
-- (void)setAutosavesConfiguration:(BOOL)flag;
-- (void)setAllowsUserCustomization:(BOOL)flag;
-- (void)setSelectedItemIdentifier:(NSString *)identifier;
+- (void) setVisible: (BOOL) flag;
+- (void) setSizeMode: (NSToolbarSizeMode) mode;
+- (void) setDisplayMode: (NSToolbarDisplayMode) mode;
+- (void) setShowsBaselineSeparator: (BOOL) value;
+- (void) setConfigurationFromDictionary: (NSDictionary *) dictionary;
+- (void) setAutosavesConfiguration: (BOOL) flag;
+- (void) setAllowsUserCustomization: (BOOL) flag;
+- (void) setSelectedItemIdentifier: (NSString *) identifier;
 
-- (void) insertItemWithItemIdentifier: (NSToolbarItemIdentifier) identifier atIndex: (NSInteger) index;
+- (void) insertItemWithItemIdentifier: (NSToolbarItemIdentifier) identifier
+                              atIndex: (NSInteger) index;
 - (void) removeItemAtIndex: (NSInteger) index;
 
-- (void)validateVisibleItems;
+- (void) validateVisibleItems;
 
-- (BOOL)customizationPaletteIsRunning;
-- (void)runCustomizationPalette:sender;
+- (BOOL) customizationPaletteIsRunning;
+- (void) runCustomizationPalette: sender;
 
 @end
 
 @interface NSToolbar (NSToolbarCustomization)
 
-- (Class)toolbarItemClass;
+- (Class) toolbarItemClass;
 
 @end
 
-@protocol NSToolbarDelegate<NSObject>
+@protocol NSToolbarDelegate <NSObject>
 
 @optional
 - (NSToolbarItem *) toolbar: (NSToolbar *) toolbar
-      itemForItemIdentifier: (NSToolbarItemIdentifier) identifier
-  willBeInsertedIntoToolbar: (BOOL) flag;
+        itemForItemIdentifier: (NSToolbarItemIdentifier) identifier
+    willBeInsertedIntoToolbar: (BOOL) flag;
 
 - (NSArray *) toolbarDefaultItemIdentifiers: (NSToolbar *) toolbar;
 - (NSArray *) toolbarAllowedItemIdentifiers: (NSToolbar *) toolbar;

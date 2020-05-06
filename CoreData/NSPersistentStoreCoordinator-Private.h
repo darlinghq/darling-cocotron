@@ -3,7 +3,8 @@
 @class NSManagedObjectID;
 
 @interface NSPersistentStoreCoordinator (private)
-- (NSPersistentStore *)_persistentStoreWithIdentifier:(NSString *)identifier;
-- (NSPersistentStore *)_persistentStoreForObjectID:(NSManagedObjectID *)object;
-- (NSPersistentStore *)_persistentStoreForObject:(NSManagedObject *)object;
+- (NSPersistentStore *) _persistentStoreWithIdentifier: (NSString *) identifier;
+- (NSPersistentStore *) _persistentStoreForObjectID:
+    (NSManagedObjectID *) object;
+- (NSPersistentStore *) _persistentStoreForObject: (NSManagedObject *) object;
 @end

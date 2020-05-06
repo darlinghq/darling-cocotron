@@ -1,5 +1,5 @@
-#import <CoreData/NSAtomicStore.h>
 #import "NSXMLPersistentStore.h"
+#import <CoreData/NSAtomicStore.h>
 
 @interface NSInMemoryPersistentStore : NSXMLPersistentStore
 

@@ -37,10 +37,10 @@
     BOOL _cursorGrabbed;
 }
 
-- (Display *)display;
+- (Display *) display;
 
-- (void)setWindow:(id)window forID:(XID)i;
+- (void) setWindow: (id) window forID: (XID) i;
 
-- (CGFloat)doubleClickInterval;
-- (int)handleError:(XErrorEvent *)errorEvent;
+- (CGFloat) doubleClickInterval;
+- (int) handleError: (XErrorEvent *) errorEvent;
 @end

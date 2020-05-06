@@ -1,10 +1,21 @@
 /* Copyright (c) 2006-2007 Christopher J. W. Lloyd
 
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software is furnished to do so,
+subject to the following conditions:
 
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSTextFieldCell.h>
 
@@ -27,50 +38,51 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 }
 
 - dataSource;
-- (BOOL)usesDataSource;
-- (BOOL)isButtonBordered;
-- (CGFloat)itemHeight;
-- (BOOL)hasVerticalScroller;
-- (NSSize)intercellSpacing;
-- (BOOL)completes;
-- (NSInteger)numberOfVisibleItems;
+- (BOOL) usesDataSource;
+- (BOOL) isButtonBordered;
+- (CGFloat) itemHeight;
+- (BOOL) hasVerticalScroller;
+- (NSSize) intercellSpacing;
+- (BOOL) completes;
+- (NSInteger) numberOfVisibleItems;
 
-- (void)setDataSource:value;
-- (void)setUsesDataSource:(BOOL)value;
-- (void)setButtonBordered:(BOOL)value;
-- (void)setItemHeight:(CGFloat)value;
-- (void)setHasVerticalScroller:(BOOL)value;
-- (void)setIntercellSpacing:(NSSize)value;
-- (void)setCompletes:(BOOL)completes;
-- (void)setNumberOfVisibleItems:(NSInteger)value;
+- (void) setDataSource: value;
+- (void) setUsesDataSource: (BOOL) value;
+- (void) setButtonBordered: (BOOL) value;
+- (void) setItemHeight: (CGFloat) value;
+- (void) setHasVerticalScroller: (BOOL) value;
+- (void) setIntercellSpacing: (NSSize) value;
+- (void) setCompletes: (BOOL) completes;
+- (void) setNumberOfVisibleItems: (NSInteger) value;
 
-- (NSInteger)numberOfItems;
-- (NSArray *)objectValues;
-- itemObjectValueAtIndex:(NSInteger)index;
-- (NSInteger)indexOfItemWithObjectValue:object;
-- (void)addItemWithObjectValue:object;
-- (void)addItemsWithObjectValues:(NSArray *)objects;
-- (void)removeAllItems;
-- (void)removeItemAtIndex:(NSInteger)index;
-- (void)removeItemWithObjectValue:value;
-- (void)insertItemWithObjectValue:value atIndex:(NSInteger)index;
+- (NSInteger) numberOfItems;
+- (NSArray *) objectValues;
+- itemObjectValueAtIndex: (NSInteger) index;
+- (NSInteger) indexOfItemWithObjectValue: object;
+- (void) addItemWithObjectValue: object;
+- (void) addItemsWithObjectValues: (NSArray *) objects;
+- (void) removeAllItems;
+- (void) removeItemAtIndex: (NSInteger) index;
+- (void) removeItemWithObjectValue: value;
+- (void) insertItemWithObjectValue: value atIndex: (NSInteger) index;
 
-- (NSInteger)indexOfSelectedItem;
+- (NSInteger) indexOfSelectedItem;
 - objectValueOfSelectedItem;
-- (void)selectItemAtIndex:(NSInteger)index;
-- (void)selectItemWithObjectValue:value;
-- (void)deselectItemAtIndex:(NSInteger)index;
+- (void) selectItemAtIndex: (NSInteger) index;
+- (void) selectItemWithObjectValue: value;
+- (void) deselectItemAtIndex: (NSInteger) index;
 
-- (void)scrollItemAtIndexToTop:(NSInteger)index;
-- (void)scrollItemAtIndexToVisible:(NSInteger)index;
+- (void) scrollItemAtIndexToTop: (NSInteger) index;
+- (void) scrollItemAtIndexToVisible: (NSInteger) index;
 
-- (void)noteNumberOfItemsChanged;
-- (void)reloadData;
+- (void) noteNumberOfItemsChanged;
+- (void) reloadData;
 
-- (NSString *)completedString:(NSString *)string;
+- (NSString *) completedString: (NSString *) string;
 
 @end
 
 @interface NSObject (NSComboBoxCell_dataSource)
-- (NSString *)comboBoxCell:(NSComboBoxCell *)cell completedString:(NSString *)string;
+- (NSString *) comboBoxCell: (NSComboBoxCell *) cell
+            completedString: (NSString *) string;
 @end

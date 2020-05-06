@@ -4,7 +4,7 @@
 
 @interface O2Image (PDF)
 
-- (O2PDFObject *)encodeReferenceWithContext:(O2PDFContext *)context;
-+ (O2Image *)imageWithPDFObject:(O2PDFObject *)object;
+- (O2PDFObject *) encodeReferenceWithContext: (O2PDFContext *) context;
++ (O2Image *) imageWithPDFObject: (O2PDFObject *) object;
 
 @end

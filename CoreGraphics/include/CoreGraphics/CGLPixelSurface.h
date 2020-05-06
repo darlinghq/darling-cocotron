@@ -16,13 +16,13 @@
     O2Surface *_surface;
 }
 
-- initWithSize:(O2Size)size;
+- initWithSize: (O2Size) size;
 
-- (void)setFrameSize:(O2Size)value;
-- (void)setOpaque:(BOOL)value;
+- (void) setFrameSize: (O2Size) value;
+- (void) setOpaque: (BOOL) value;
 
-- (void)readBuffer;
+- (void) readBuffer;
 
-- (O2Surface *)validSurface;
+- (O2Surface *) validSurface;
 
 @end

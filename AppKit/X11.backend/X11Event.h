@@ -7,6 +7,6 @@
     XEvent _event;
 }
 
-- initWithXEvent:(XEvent)event;
+- initWithXEvent: (XEvent) event;
 
 @end

@@ -1,3 +1,0 @@
-#include "platform"
-
-INSTALL_PATH = /Frameworks

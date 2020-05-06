@@ -40,4 +40,3 @@ const CFStringRef kCTKernAttributeName = CFSTR("CTKernAttributeName");
 const CFStringRef kCTLanguageAttributeName = CFSTR("CTLanguageAttributeName");
 const CFStringRef kCTTypesetterOptionForcedEmbeddingLevel = CFSTR("CTTypesetterOptionForcedEmbeddingLevel");
 const CFStringRef kCTVerticalFormsAttributeName = CFSTR("CTVerticalFormsAttributeName");
-

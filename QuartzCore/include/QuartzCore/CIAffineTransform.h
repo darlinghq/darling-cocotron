@@ -5,6 +5,6 @@
     BOOL _ciEnabled;
 }
 
-- (NSAffineTransform *)affineTransform;
+- (NSAffineTransform *) affineTransform;
 
 @end

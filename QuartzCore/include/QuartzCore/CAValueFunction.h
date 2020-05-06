@@ -19,7 +19,7 @@ CA_EXPORT NSString *const kCAValueFunctionRotateZ;
     NSString *_name;
 }
 
-+ functionWithName:(NSString *)name;
++ functionWithName: (NSString *) name;
 
 @property(readonly) NSString *name;
 

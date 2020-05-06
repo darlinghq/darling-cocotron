@@ -1,5 +1,5 @@
-#import <Foundation/NSString.h>
 #import <CoreData/CoreDataExports.h>
+#import <Foundation/NSString.h>
 
 COREDATA_EXPORT NSString *const NSAffectedStoresErrorKey;
 COREDATA_EXPORT NSString *const NSDetailedErrorsKey;

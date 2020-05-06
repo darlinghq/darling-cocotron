@@ -19,14 +19,14 @@
 
 #import <QuartzCore/CALayer.h>
 
-CA_EXPORT NSString * const kCAFillRuleNonZero;
-CA_EXPORT NSString * const kCAFillRuleEvenOdd;
-CA_EXPORT NSString * const kCALineJoinMiter;
-CA_EXPORT NSString * const kCALineJoinRound;
-CA_EXPORT NSString * const kCALineJoinBevel;
-CA_EXPORT NSString * const kCALineCapButt;
-CA_EXPORT NSString * const kCALineCapRound;
-CA_EXPORT NSString * const kCALineCapSquare;
+CA_EXPORT NSString *const kCAFillRuleNonZero;
+CA_EXPORT NSString *const kCAFillRuleEvenOdd;
+CA_EXPORT NSString *const kCALineJoinMiter;
+CA_EXPORT NSString *const kCALineJoinRound;
+CA_EXPORT NSString *const kCALineJoinBevel;
+CA_EXPORT NSString *const kCALineCapButt;
+CA_EXPORT NSString *const kCALineCapRound;
+CA_EXPORT NSString *const kCALineCapSquare;
 
 @interface CAShapeLayer : CALayer
 @end

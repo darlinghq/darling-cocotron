@@ -1,5 +1,5 @@
 @interface NSMovie : NSObject
 
-+(NSArray *)movieUnfilteredPasteboardTypes;
++ (NSArray *) movieUnfilteredPasteboardTypes;
 
 @end

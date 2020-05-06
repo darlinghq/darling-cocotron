@@ -10,76 +10,111 @@
 
 // TODO: provide different images for different kinds of markers
 @implementation NSRulerMarker (NSTextExtensions)
-+ (NSRulerMarker *)leftTabMarkerWithRulerView:(NSRulerView *)ruler location:(CGFloat)location
-{
-    NSImage *image = [NSImage imageNamed:@"NSRulerMarkerTab"];
++ (NSRulerMarker *) leftTabMarkerWithRulerView: (NSRulerView *) ruler
+                                      location: (CGFloat) location {
+    NSImage *image = [NSImage imageNamed: @"NSRulerMarkerTab"];
     NSPoint imageOrigin = NSMakePoint(0, 0);
-    NSRulerMarker *marker = [[[NSRulerMarker alloc] initWithRulerView:ruler markerLocation:location image:image imageOrigin:imageOrigin] autorelease];
+    NSRulerMarker *marker =
+        [[[NSRulerMarker alloc] initWithRulerView: ruler
+                                   markerLocation: location
+                                            image: image
+                                      imageOrigin: imageOrigin] autorelease];
     return marker;
 }
 
-+ (NSRulerMarker *)rightTabMarkerWithRulerView:(NSRulerView *)ruler location:(CGFloat)location
-{
-    NSImage *image = [NSImage imageNamed:@"NSRulerMarkerTab"];
++ (NSRulerMarker *) rightTabMarkerWithRulerView: (NSRulerView *) ruler
+                                       location: (CGFloat) location {
+    NSImage *image = [NSImage imageNamed: @"NSRulerMarkerTab"];
     NSPoint imageOrigin = NSMakePoint(0, 0);
-    NSRulerMarker *marker = [[[NSRulerMarker alloc] initWithRulerView:ruler markerLocation:location image:image imageOrigin:imageOrigin] autorelease];
+    NSRulerMarker *marker =
+        [[[NSRulerMarker alloc] initWithRulerView: ruler
+                                   markerLocation: location
+                                            image: image
+                                      imageOrigin: imageOrigin] autorelease];
     return marker;
 }
 
-
-+ (NSRulerMarker *)centerTabMarkerWithRulerView:(NSRulerView *)ruler location:(CGFloat)location
-{
-    NSImage *image = [NSImage imageNamed:@"NSRulerMarkerTab"];
++ (NSRulerMarker *) centerTabMarkerWithRulerView: (NSRulerView *) ruler
+                                        location: (CGFloat) location {
+    NSImage *image = [NSImage imageNamed: @"NSRulerMarkerTab"];
     NSPoint imageOrigin = NSMakePoint(0, 0);
-    NSRulerMarker *marker = [[[NSRulerMarker alloc] initWithRulerView:ruler markerLocation:location image:image imageOrigin:imageOrigin] autorelease];
+    NSRulerMarker *marker =
+        [[[NSRulerMarker alloc] initWithRulerView: ruler
+                                   markerLocation: location
+                                            image: image
+                                      imageOrigin: imageOrigin] autorelease];
     return marker;
 }
 
-+ (NSRulerMarker *)decimalTabMarkerWithRulerView:(NSRulerView *)ruler location:(CGFloat)location
-{
-    NSImage *image = [NSImage imageNamed:@"NSRulerMarkerTab"];
++ (NSRulerMarker *) decimalTabMarkerWithRulerView: (NSRulerView *) ruler
+                                         location: (CGFloat) location {
+    NSImage *image = [NSImage imageNamed: @"NSRulerMarkerTab"];
     NSPoint imageOrigin = NSMakePoint(0, 0);
-    NSRulerMarker *marker = [[[NSRulerMarker alloc] initWithRulerView:ruler markerLocation:location image:image imageOrigin:imageOrigin] autorelease];
+    NSRulerMarker *marker =
+        [[[NSRulerMarker alloc] initWithRulerView: ruler
+                                   markerLocation: location
+                                            image: image
+                                      imageOrigin: imageOrigin] autorelease];
     return marker;
 }
 
-+ (NSRulerMarker *)leftMarginMarkerWithRulerView:(NSRulerView *)ruler location:(CGFloat)location
-{
-    NSImage *image = [NSImage imageNamed:@"NSRulerMarkerTab"];
++ (NSRulerMarker *) leftMarginMarkerWithRulerView: (NSRulerView *) ruler
+                                         location: (CGFloat) location {
+    NSImage *image = [NSImage imageNamed: @"NSRulerMarkerTab"];
     NSPoint imageOrigin = NSMakePoint(0, 0);
-    NSRulerMarker *marker = [[[NSRulerMarker alloc] initWithRulerView:ruler markerLocation:location image:image imageOrigin:imageOrigin] autorelease];
+    NSRulerMarker *marker =
+        [[[NSRulerMarker alloc] initWithRulerView: ruler
+                                   markerLocation: location
+                                            image: image
+                                      imageOrigin: imageOrigin] autorelease];
     return marker;
 }
 
-+ (NSRulerMarker *)rightMarginMarkerWithRulerView:(NSRulerView *)ruler location:(CGFloat)location
-{
-    NSImage *image = [NSImage imageNamed:@"NSRulerMarkerTab"];
++ (NSRulerMarker *) rightMarginMarkerWithRulerView: (NSRulerView *) ruler
+                                          location: (CGFloat) location {
+    NSImage *image = [NSImage imageNamed: @"NSRulerMarkerTab"];
     NSPoint imageOrigin = NSMakePoint(0, 0);
-    NSRulerMarker *marker = [[[NSRulerMarker alloc] initWithRulerView:ruler markerLocation:location image:image imageOrigin:imageOrigin] autorelease];
+    NSRulerMarker *marker =
+        [[[NSRulerMarker alloc] initWithRulerView: ruler
+                                   markerLocation: location
+                                            image: image
+                                      imageOrigin: imageOrigin] autorelease];
     return marker;
 }
 
-+ (NSRulerMarker *)firstIndentMarkerWithRulerView:(NSRulerView *)ruler location:(CGFloat)location
-{
-    NSImage *image = [NSImage imageNamed:@"NSRulerMarkerTab"];
++ (NSRulerMarker *) firstIndentMarkerWithRulerView: (NSRulerView *) ruler
+                                          location: (CGFloat) location {
+    NSImage *image = [NSImage imageNamed: @"NSRulerMarkerTab"];
     NSPoint imageOrigin = NSMakePoint(0, 0);
-    NSRulerMarker *marker = [[[NSRulerMarker alloc] initWithRulerView:ruler markerLocation:location image:image imageOrigin:imageOrigin] autorelease];
+    NSRulerMarker *marker =
+        [[[NSRulerMarker alloc] initWithRulerView: ruler
+                                   markerLocation: location
+                                            image: image
+                                      imageOrigin: imageOrigin] autorelease];
     return marker;
 }
 
-+ (NSRulerMarker *)leftIndentMarkerWithRulerView:(NSRulerView *)ruler location:(CGFloat)location
-{
-    NSImage *image = [NSImage imageNamed:@"NSRulerMarkerTab"];
++ (NSRulerMarker *) leftIndentMarkerWithRulerView: (NSRulerView *) ruler
+                                         location: (CGFloat) location {
+    NSImage *image = [NSImage imageNamed: @"NSRulerMarkerTab"];
     NSPoint imageOrigin = NSMakePoint(0, 0);
-    NSRulerMarker *marker = [[[NSRulerMarker alloc] initWithRulerView:ruler markerLocation:location image:image imageOrigin:imageOrigin] autorelease];
+    NSRulerMarker *marker =
+        [[[NSRulerMarker alloc] initWithRulerView: ruler
+                                   markerLocation: location
+                                            image: image
+                                      imageOrigin: imageOrigin] autorelease];
     return marker;
 }
 
-+ (NSRulerMarker *)rightIndentMarkerWithRulerView:(NSRulerView *)ruler location:(CGFloat)location
-{
-    NSImage *image = [NSImage imageNamed:@"NSRulerMarkerTab"];
++ (NSRulerMarker *) rightIndentMarkerWithRulerView: (NSRulerView *) ruler
+                                          location: (CGFloat) location {
+    NSImage *image = [NSImage imageNamed: @"NSRulerMarkerTab"];
     NSPoint imageOrigin = NSMakePoint(0, 0);
-    NSRulerMarker *marker = [[[NSRulerMarker alloc] initWithRulerView:ruler markerLocation:location image:image imageOrigin:imageOrigin] autorelease];
+    NSRulerMarker *marker =
+        [[[NSRulerMarker alloc] initWithRulerView: ruler
+                                   markerLocation: location
+                                            image: image
+                                      imageOrigin: imageOrigin] autorelease];
     return marker;
 }
 @end

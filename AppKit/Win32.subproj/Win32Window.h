@@ -1,14 +1,25 @@
 /* Copyright (c) 2006-2007 Christopher J. W. Lloyd
 
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software is furnished to do so,
+subject to the following conditions:
 
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <CoreGraphics/CGWindow.h>
-#import <OpenGL/OpenGL.h>
 #import <Onyx2D/O2Geometry.h>
+#import <OpenGL/OpenGL.h>
 
 #undef WINVER
 #define WINVER 0x501 // XP drop shadow constants
@@ -61,56 +72,62 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
     id _delegate;
     NSMutableDictionary *_deviceDictionary;
 
-    int     _dirtyRectCap, _dirtyRectCnt;
+    int _dirtyRectCap, _dirtyRectCnt;
     NSRect *_dirtyRectSet;
 }
 
-- initWithFrame:(CGRect)frame styleMask:(unsigned)styleMask isPanel:(BOOL)isPanel backingType:(CGSBackingStoreType)backingType;
+- initWithFrame: (CGRect) frame
+      styleMask: (unsigned) styleMask
+        isPanel: (BOOL) isPanel
+    backingType: (CGSBackingStoreType) backingType;
 
-- (void)setDelegate:delegate;
+- (void) setDelegate: delegate;
 - delegate;
 
-- (void)invalidate;
+- (void) invalidate;
 
-- (void)lock;
-- (void)unlock;
+- (void) lock;
+- (void) unlock;
 
-- (HWND)windowHandle;
-- (CGRect)frame;
+- (HWND) windowHandle;
+- (CGRect) frame;
 
-- (void)showWindowForAppActivation:(CGRect)frame;
-- (void)hideWindowForAppDeactivation:(CGRect)frame;
+- (void) showWindowForAppActivation: (CGRect) frame;
+- (void) hideWindowForAppDeactivation: (CGRect) frame;
 
-- (void)hideWindow;
-- (void)showWindowWithoutActivation;
-- (void)bringToTop;
-- (void)makeTransparent;
-- (void)placeAboveWindow:(Win32Window *)other;
-- (void)placeBelowWindow:(Win32Window *)other;
+- (void) hideWindow;
+- (void) showWindowWithoutActivation;
+- (void) bringToTop;
+- (void) makeTransparent;
+- (void) placeAboveWindow: (Win32Window *) other;
+- (void) placeBelowWindow: (Win32Window *) other;
 
-- (void)makeKey;
-- (void)captureEvents;
-- (void)miniaturize;
-- (void)deminiaturize;
-- (BOOL)isMiniaturized;
+- (void) makeKey;
+- (void) captureEvents;
+- (void) miniaturize;
+- (void) deminiaturize;
+- (BOOL) isMiniaturized;
 
-- (BOOL)isLayeredWindow;
+- (BOOL) isLayeredWindow;
 
-- (void)flushBuffer;
+- (void) flushBuffer;
 
-- (NSPoint)convertPOINTLToBase:(POINTL)point;
-- (NSPoint)mouseLocationOutsideOfEventStream;
+- (NSPoint) convertPOINTLToBase: (POINTL) point;
+- (NSPoint) mouseLocationOutsideOfEventStream;
 
-- (void)adjustEventLocation:(NSPoint *)location childWindow:(BOOL)childWindow;
+- (void) adjustEventLocation: (NSPoint *) location
+                 childWindow: (BOOL) childWindow;
 
-- (void)sendEvent:(CGEvent *)event;
+- (void) sendEvent: (CGEvent *) event;
 
-- (int)WM_SETCURSOR_wParam:(WPARAM)wParam lParam:(LPARAM)lParam;
-- (int)WM_APP1_wParam:(WPARAM)wParam lParam:(LPARAM)lParam;
+- (int) WM_SETCURSOR_wParam: (WPARAM) wParam lParam: (LPARAM) lParam;
+- (int) WM_APP1_wParam: (WPARAM) wParam lParam: (LPARAM) lParam;
 
 @end
 
-void CGNativeBorderFrameWidthsForStyle(unsigned styleMask, CGFloat *top, CGFloat *left, CGFloat *bottom, CGFloat *right);
+void CGNativeBorderFrameWidthsForStyle(unsigned styleMask, CGFloat *top,
+                                       CGFloat *left, CGFloat *bottom,
+                                       CGFloat *right);
 
 static inline CGRect CGRectFromRECT(RECT rect) {
     CGRect result;

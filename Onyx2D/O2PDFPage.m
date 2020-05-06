@@ -1,73 +1,93 @@
 /* Copyright (c) 2007 Christopher J. W. Lloyd
 
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+   Permission is hereby granted, free of charge, to any person obtaining a copy
+   of this software and associated documentation files (the "Software"), to
+   deal in the Software without restriction, including without limitation the
+   rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+   sell copies of the Software, and to permit persons to whom the Software is
+   furnished to do so, subject to the following conditions:
 
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+   The above copyright notice and this permission notice shall be included in
+   all copies or substantial portions of the Software.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+   FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+   IN THE SOFTWARE. */
 
-#import <Onyx2D/O2PDFPage.h>
-#import <Onyx2D/O2PDFContentStream.h>
-#import <Onyx2D/O2PDFOperatorTable.h>
-#import <Onyx2D/O2PDFScanner.h>
-#import <Onyx2D/O2PDFDocument.h>
-#import <Onyx2D/O2PDFDictionary.h>
 #import <Onyx2D/O2PDFArray.h>
+#import <Onyx2D/O2PDFContentStream.h>
+#import <Onyx2D/O2PDFDictionary.h>
+#import <Onyx2D/O2PDFDocument.h>
+#import <Onyx2D/O2PDFOperatorTable.h>
+#import <Onyx2D/O2PDFPage.h>
+#import <Onyx2D/O2PDFScanner.h>
 
 @implementation O2PDFPage
 
--initWithDocument:(O2PDFDocument *)document pageNumber:(int)pageNumber dictionary:(O2PDFDictionary *)dictionary {
-   _document=[document retain];
-   _pageNumber=pageNumber;
-   _dictionary=[dictionary retain];
-   return self;
+- initWithDocument: (O2PDFDocument *) document
+        pageNumber: (int) pageNumber
+        dictionary: (O2PDFDictionary *) dictionary {
+    _document = [document retain];
+    _pageNumber = pageNumber;
+    _dictionary = [dictionary retain];
+    return self;
 }
 
--(void)dealloc {
-   [_document release];
-   [_dictionary release];
-   [super dealloc];
+- (void) dealloc {
+    [_document release];
+    [_dictionary release];
+    [super dealloc];
 }
 
-+(O2PDFPage *)pdfPageWithDocument:(O2PDFDocument *)document pageNumber:(int)pageNumber dictionary:(O2PDFDictionary *)dictionary {
-   return [[[self alloc] initWithDocument:document pageNumber:pageNumber dictionary:dictionary] autorelease];
++ (O2PDFPage *) pdfPageWithDocument: (O2PDFDocument *) document
+                         pageNumber: (int) pageNumber
+                         dictionary: (O2PDFDictionary *) dictionary {
+    return [[[self alloc] initWithDocument: document
+                                pageNumber: pageNumber
+                                dictionary: dictionary] autorelease];
 }
 
--(O2PDFDocument *)document {
-   return _document;
+- (O2PDFDocument *) document {
+    return _document;
 }
 
--(int)pageNumber {
-   return _pageNumber;
+- (int) pageNumber {
+    return _pageNumber;
 }
 
--(O2PDFDictionary *)dictionary {
-   return _dictionary;
+- (O2PDFDictionary *) dictionary {
+    return _dictionary;
 }
 
-BOOL O2PDFGetPageObjectForKey(O2PDFPage *page,const char *key,O2PDFObject **object){
-   O2PDFDictionary *dictionary=[page dictionary];
-   
-   do{
-    O2PDFObject *check;
-    
-    if([dictionary getObjectForKey:key value:&check]){
-     *object=check;
-     return YES;
-    }
-    
-   }while([dictionary getDictionaryForKey:"Parent" value:&dictionary]);
-   
-   return NO;
-}
+BOOL O2PDFGetPageObjectForKey(O2PDFPage *page, const char *key,
+                              O2PDFObject **object) {
+    O2PDFDictionary *dictionary = [page dictionary];
 
-BOOL O2PDFGetPageArrayForKey(O2PDFPage *page,const char *key,O2PDFArray **arrayp){
-   O2PDFObject *check;
-   
-   if(!O2PDFGetPageObjectForKey(page,key,&check))
+    do {
+        O2PDFObject *check;
+
+        if ([dictionary getObjectForKey: key value: &check]) {
+            *object = check;
+            return YES;
+        }
+    } while ([dictionary getDictionaryForKey: "Parent" value: &dictionary]);
+
     return NO;
-    
-   return [check checkForType:kO2PDFObjectTypeArray value:arrayp];
+}
+
+BOOL O2PDFGetPageArrayForKey(O2PDFPage *page, const char *key,
+                             O2PDFArray **arrayp) {
+    O2PDFObject *check;
+
+    if (!O2PDFGetPageObjectForKey(page, key, &check)) {
+        return NO;
+    }
+
+    return [check checkForType: kO2PDFObjectTypeArray value: arrayp];
 }
 
 - (BOOL) getRect: (O2Rect *) rect forBox: (O2PDFBox) box {
@@ -77,11 +97,21 @@ BOOL O2PDFGetPageArrayForKey(O2PDFPage *page,const char *key,O2PDFArray **arrayp
     NSUInteger count;
 
     switch (box) {
-    case kO2PDFMediaBox: string="MediaBox"; break;
-    case kO2PDFCropBox:  string="CropBox"; break;
-    case kO2PDFBleedBox: string="BleedBox"; break;
-    case kO2PDFTrimBox:  string="TrimBox"; break;
-    case kO2PDFArtBox:   string="ArtBox"; break;
+    case kO2PDFMediaBox:
+        string = "MediaBox";
+        break;
+    case kO2PDFCropBox:
+        string = "CropBox";
+        break;
+    case kO2PDFBleedBox:
+        string = "BleedBox";
+        break;
+    case kO2PDFTrimBox:
+        string = "TrimBox";
+        break;
+    case kO2PDFArtBox:
+        string = "ArtBox";
+        break;
     }
 
     if (string == NULL) {
@@ -114,13 +144,10 @@ BOOL O2PDFGetPageArrayForKey(O2PDFPage *page,const char *key,O2PDFArray **arrayp
     return 0;
 }
 
-
-O2AffineTransform O2PDFPageGetDrawingTransform(O2PDFPageRef self,
-                                               O2PDFBox box,
+O2AffineTransform O2PDFPageGetDrawingTransform(O2PDFPageRef self, O2PDFBox box,
                                                O2Rect rect,
                                                int clockwiseDegrees,
                                                bool preserveAspectRatio) {
-
     O2AffineTransform result = O2AffineTransformIdentity;
     O2Rect boxRect, mediaBoxRect;
 
@@ -138,32 +165,45 @@ O2AffineTransform O2PDFPageGetDrawingTransform(O2PDFPageRef self,
     O2Float scaleY = rect.size.height / boxRect.size.height;
 
     if (preserveAspectRatio) {
-        if (scaleX < scaleY) scaleY = scaleX;
-        if (scaleY < scaleX) scaleX = scaleY;
+        if (scaleX < scaleY) {
+            scaleY = scaleX;
+        }
+        if (scaleY < scaleX) {
+            scaleX = scaleY;
+        }
     }
 
     // Move the origin to the center of the target rect.
     result = O2AffineTransformTranslate(result, rect.origin.x, rect.origin.y);
-    result = O2AffineTransformTranslate(result, rect.size.width / 2, rect.size.height / 2);
-    // From here on, the task is to render the page scaled & centered at the origin.
+    result = O2AffineTransformTranslate(result, rect.size.width / 2,
+                                        rect.size.height / 2);
+    // From here on, the task is to render the page scaled & centered at the
+    // origin.
 
     // Apply the scale.
     result = O2AffineTransformScale(result, scaleX, scaleY);
     // From here on, the task is to render the page at the origin, unscaled.
 
     // ...
-    result = O2AffineTransformTranslate(result, -boxRect.origin.x, -boxRect.origin.y);
-    result = O2AffineTransformTranslate(result, -boxRect.size.width / 2, -boxRect.size.height / 2);
+    result = O2AffineTransformTranslate(result, -boxRect.origin.x,
+                                        -boxRect.origin.y);
+    result = O2AffineTransformTranslate(result, -boxRect.size.width / 2,
+                                        -boxRect.size.height / 2);
 
     return result;
 }
 
--(void)drawInContext:(O2Context *)context {
-   O2PDFContentStream *contentStream=[[[O2PDFContentStream alloc] initWithPage:self] autorelease];
-   O2PDFOperatorTable *operatorTable=[O2PDFOperatorTable renderingOperatorTable];
-   O2PDFScanner       *scanner=[[[O2PDFScanner alloc] initWithContentStream:contentStream operatorTable:operatorTable info:context] autorelease];
+- (void) drawInContext: (O2Context *) context {
+    O2PDFContentStream *contentStream =
+        [[[O2PDFContentStream alloc] initWithPage: self] autorelease];
+    O2PDFOperatorTable *operatorTable =
+        [O2PDFOperatorTable renderingOperatorTable];
+    O2PDFScanner *scanner =
+        [[[O2PDFScanner alloc] initWithContentStream: contentStream
+                                       operatorTable: operatorTable
+                                                info: context] autorelease];
 
-   [scanner scan];
+    [scanner scan];
 }
 
 @end

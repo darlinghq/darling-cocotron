@@ -7,6 +7,6 @@
     NSString *_key;
 }
 
-- initWithManagedObject:(NSManagedObject *)object key:(NSString *)key;
+- initWithManagedObject: (NSManagedObject *) object key: (NSString *) key;
 
 @end

@@ -1,6 +1,0 @@
-#include "freebsd-i386"
-#include "platform-framework"
-
-EXECUTABLE_SUFFIX = .so
-EXECUTABLE_PREFIX = lib
-LD_DEPENDENCY_INFO_FILE =

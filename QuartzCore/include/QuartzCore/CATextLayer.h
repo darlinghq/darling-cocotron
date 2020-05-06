@@ -18,8 +18,8 @@
 */
 
 #import <Foundation/Foundation.h>
-#import <QuartzCore/CALayer.h>
 #import <QuartzCore/CABase.h>
+#import <QuartzCore/CALayer.h>
 
 CA_EXPORT NSString *const kCAAlignmentNatural;
 CA_EXPORT NSString *const kCAAlignmentLeft;

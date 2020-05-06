@@ -6,8 +6,8 @@
     NSFetchRequest *_fetchRequest;
 }
 
-- (NSFetchRequest *)fetchRequest;
+- (NSFetchRequest *) fetchRequest;
 
-- (void)setFetchRequest:(NSFetchRequest *)value;
+- (void) setFetchRequest: (NSFetchRequest *) value;
 
 @end

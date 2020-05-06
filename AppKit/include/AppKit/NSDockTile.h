@@ -1,5 +1,5 @@
-#import <Foundation/NSObject.h>
 #import <Foundation/NSGeometry.h>
+#import <Foundation/NSObject.h>
 
 @class NSView;
 
@@ -11,17 +11,17 @@
     BOOL _showsApplicationBadge;
 }
 
-- (NSSize)size;
+- (NSSize) size;
 - owner;
 
-- (NSString *)badgeLabel;
-- (NSView *)contentView;
-- (BOOL)showsApplicationBadge;
+- (NSString *) badgeLabel;
+- (NSView *) contentView;
+- (BOOL) showsApplicationBadge;
 
-- (void)setBadgeLabel:(NSString *)value;
-- (void)setContentView:(NSView *)view;
-- (void)setShowsApplicationBadge:(BOOL)value;
+- (void) setBadgeLabel: (NSString *) value;
+- (void) setContentView: (NSView *) view;
+- (void) setShowsApplicationBadge: (BOOL) value;
 
-- (void)display;
+- (void) display;
 
 @end

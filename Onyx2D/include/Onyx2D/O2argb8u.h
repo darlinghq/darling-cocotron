@@ -42,10 +42,10 @@ static inline uint32_t multiplyByCoverage(uint32_t value, uint32_t coverage) {
 
 static inline uint32_t O2Image_16u_div_255(uint32_t t) {
     // t/255
-    // From Imaging Compositing Fundamentals, Technical Memo 4 by Alvy Ray Smith, Aug 15, 1995
-    // Faster and more accurate in that it rounds instead of truncates
-    // Perfectly accurate for 8 and 16 bit values
-    // (loses a small amount of precision for >16 bits values)
+    // From Imaging Compositing Fundamentals, Technical Memo 4 by Alvy Ray
+    // Smith, Aug 15, 1995 Faster and more accurate in that it rounds instead of
+    // truncates Perfectly accurate for 8 and 16 bit values (loses a small
+    // amount of precision for >16 bits values)
     t = t + 0x80;
     t = ((((t) >> 8) + (t)) >> 8);
 
@@ -67,7 +67,8 @@ ONYX2D_STATIC_INLINE uint32_t Mul8x2(uint32_t pair, uint32_t alpha) {
     return (i + ((i >> 8) & rbmask)) >> 8 & rbmask;
 }
 
-static inline O2argb8u O2argb8uMultiplyByMask8u(O2argb8u result, uint32_t value) {
+static inline O2argb8u O2argb8uMultiplyByMask8u(O2argb8u result,
+                                                uint32_t value) {
     result.r = O2Image_8u_mul_8u_div_255(result.r, value);
     result.g = O2Image_8u_mul_8u_div_255(result.g, value);
     result.b = O2Image_8u_mul_8u_div_255(result.b, value);
@@ -76,7 +77,8 @@ static inline O2argb8u O2argb8uMultiplyByMask8u(O2argb8u result, uint32_t value)
     return result;
 }
 
-static inline O2argb8u O2argb8uMultiplyByCoverageNoBypass(O2argb8u result, unsigned value) {
+static inline O2argb8u O2argb8uMultiplyByCoverageNoBypass(O2argb8u result,
+                                                          unsigned value) {
     result.r = multiplyByCoverage(result.r, value);
     result.g = multiplyByCoverage(result.g, value);
     result.b = multiplyByCoverage(result.b, value);
@@ -85,15 +87,19 @@ static inline O2argb8u O2argb8uMultiplyByCoverageNoBypass(O2argb8u result, unsig
     return result;
 }
 
-static inline O2argb8u O2argb8uMultiplyByCoverage(O2argb8u result, unsigned value) {
-    if(value != COVERAGE_MULTIPLIER)
+static inline O2argb8u O2argb8uMultiplyByCoverage(O2argb8u result,
+                                                  unsigned value) {
+    if (value != COVERAGE_MULTIPLIER)
         result = O2argb8uMultiplyByCoverageNoBypass(result, value);
 
     return result;
 }
 
-static inline O2argb8u O2argb8uMultiplyByCoverageAdd(O2argb8u left, uint32_t leftCoverage, O2argb8u right, uint32_t rightCoverage) {
-    uint32_t srb = *(uint32_t *)&left;
+static inline O2argb8u O2argb8uMultiplyByCoverageAdd(O2argb8u left,
+                                                     uint32_t leftCoverage,
+                                                     O2argb8u right,
+                                                     uint32_t rightCoverage) {
+    uint32_t srb = *(uint32_t *) &left;
     uint32_t sag = srb >> 8;
 
     sag &= 0x00FF00FF;
@@ -101,7 +107,7 @@ static inline O2argb8u O2argb8uMultiplyByCoverageAdd(O2argb8u left, uint32_t lef
     sag = ((sag * leftCoverage) >> 8) & 0x00FF00FF;
     srb = ((srb * leftCoverage) >> 8) & 0x00FF00FF;
 
-    uint32_t drb = *(uint32_t *)&right;
+    uint32_t drb = *(uint32_t *) &right;
     uint32_t dag = drb >> 8;
 
     dag &= 0x00FF00FF;
@@ -119,24 +125,29 @@ static inline O2argb8u O2argb8uMultiplyByCoverageAdd(O2argb8u left, uint32_t lef
     r |= RI_INT_MIN(srb, 0x00FF0000);
     r |= RI_INT_MIN(srb & 0xFFFF, 255);
 
-    return *(O2argb8u *)&r;
+    return *(O2argb8u *) &r;
 }
 
 static inline O2argb8u O2argb8uAdd(O2argb8u result, O2argb8u other) {
-    result.r = RI_INT_MIN((unsigned)result.r + (unsigned)other.r, 255);
-    result.g = RI_INT_MIN((unsigned)result.g + (unsigned)other.g, 255);
-    result.b = RI_INT_MIN((unsigned)result.b + (unsigned)other.b, 255);
-    result.a = RI_INT_MIN((unsigned)result.a + (unsigned)other.a, 255);
+    result.r = RI_INT_MIN((unsigned) result.r + (unsigned) other.r, 255);
+    result.g = RI_INT_MIN((unsigned) result.g + (unsigned) other.g, 255);
+    result.b = RI_INT_MIN((unsigned) result.b + (unsigned) other.b, 255);
+    result.a = RI_INT_MIN((unsigned) result.a + (unsigned) other.a, 255);
     return result;
 }
 
-void O2ApplyCoverageAndMaskToSpan_largb8u_PRE(O2argb8u *dst, uint32_t icoverage, uint8_t *mask, O2argb8u *src, int length);
+void O2ApplyCoverageAndMaskToSpan_largb8u_PRE(O2argb8u *dst, uint32_t icoverage,
+                                              uint8_t *mask, O2argb8u *src,
+                                              int length);
 
-void O2ApplyCoverageToSpan_largb8u_PRE(O2argb8u *dst, int coverage, O2argb8u *src, int length);
+void O2ApplyCoverageToSpan_largb8u_PRE(O2argb8u *dst, int coverage,
+                                       O2argb8u *src, int length);
 
-void O2argb8u_sover_by_coverage(O2argb8u *src, O2argb8u *dst, unsigned coverage, int length);
+void O2argb8u_sover_by_coverage(O2argb8u *src, O2argb8u *dst, unsigned coverage,
+                                int length);
 
-void O2argb8u_copy_by_coverage(O2argb8u *src, O2argb8u *dst, unsigned coverage, int length);
+void O2argb8u_copy_by_coverage(O2argb8u *src, O2argb8u *dst, unsigned coverage,
+                               int length);
 
 void O2BlendSpanNormal_8888(O2argb8u *src, O2argb8u *dst, int length);
 

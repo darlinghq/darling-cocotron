@@ -1,16 +1,27 @@
 /* Copyright (c) 2006-2007 Christopher J. W. Lloyd
 
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software is furnished to do so,
+subject to the following conditions:
 
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
-#import <Foundation/Foundation.h>
-#import <CoreGraphics/CGWindowLevel.h>
-#import <CoreGraphics/CGSubWindow.h>
-#import <OpenGL/CGLTypes.h>
 #include <CoreFoundation/CoreFoundation.h>
+#import <CoreGraphics/CGSubWindow.h>
+#import <CoreGraphics/CGWindowLevel.h>
+#import <Foundation/Foundation.h>
+#import <OpenGL/CGLTypes.h>
 
 extern const CFStringRef kCGWindowAlpha;
 extern const CFStringRef kCGWindowBounds;
@@ -27,64 +38,65 @@ typedef enum {
 
 @interface CGWindow : NSObject
 
-- (void)setDelegate:delegate;
+- (void) setDelegate: delegate;
 - delegate;
 
-- (void)invalidate;
-- (void)syncDelegateProperties;
+- (void) invalidate;
+- (void) syncDelegateProperties;
 
 // Goes in private interface
 //- (O2Context *)cgContext;
-- (CGLContextObj)cglContext;
+- (CGLContextObj) cglContext;
 
-- (NSUInteger)styleMask;
+- (NSUInteger) styleMask;
 
-- (void)setLevel:(int)value;
-- (void)setStyleMask:(NSUInteger)mask;
-- (void)setTitle:(NSString *)title;
-- (void)setFrame:(CGRect)frame;
-- (void)setOpaque:(BOOL)value;
-- (void)setAlphaValue:(CGFloat)value;
-- (void)setHasShadow:(BOOL)value;
+- (void) setLevel: (int) value;
+- (void) setStyleMask: (NSUInteger) mask;
+- (void) setTitle: (NSString *) title;
+- (void) setFrame: (CGRect) frame;
+- (void) setOpaque: (BOOL) value;
+- (void) setAlphaValue: (CGFloat) value;
+- (void) setHasShadow: (BOOL) value;
 
-- (void)sheetOrderFrontFromFrame:(NSRect)frame aboveWindow:(CGWindow *)aboveWindow;
-- (void)sheetOrderOutToFrame:(NSRect)frame;
+- (void) sheetOrderFrontFromFrame: (NSRect) frame
+                      aboveWindow: (CGWindow *) aboveWindow;
+- (void) sheetOrderOutToFrame: (NSRect) frame;
 
-- (void)showWindowForAppActivation:(NSRect)frame;
-- (void)hideWindowForAppDeactivation:(NSRect)frame;
+- (void) showWindowForAppActivation: (NSRect) frame;
+- (void) hideWindowForAppDeactivation: (NSRect) frame;
 
-- (void)hideWindow;
-- (void)showWindowWithoutActivation;
+- (void) hideWindow;
+- (void) showWindowWithoutActivation;
 
-+ windowWithWindowNumber:(NSInteger)windowNumber;
++ windowWithWindowNumber: (NSInteger) windowNumber;
 
-- (NSInteger)windowNumber;
+- (NSInteger) windowNumber;
 
-- (void)placeAboveWindow:(NSInteger)otherNumber;
-- (void)placeBelowWindow:(NSInteger)otherNumber;
+- (void) placeAboveWindow: (NSInteger) otherNumber;
+- (void) placeBelowWindow: (NSInteger) otherNumber;
 
-- (void)makeKey;
-- (void)makeMain;
-- (void)captureEvents;
-- (void)miniaturize;
-- (void)deminiaturize;
-- (BOOL)isMiniaturized;
+- (void) makeKey;
+- (void) makeMain;
+- (void) captureEvents;
+- (void) miniaturize;
+- (void) deminiaturize;
+- (BOOL) isMiniaturized;
 
-- (void)disableFlushWindow;
-- (void)enableFlushWindow;
-- (void)flushBuffer;
+- (void) disableFlushWindow;
+- (void) enableFlushWindow;
+- (void) flushBuffer;
 
-- (NSPoint)mouseLocationOutsideOfEventStream;
+- (NSPoint) mouseLocationOutsideOfEventStream;
 
-- (void)sendEvent:(CGEvent *)event;
+- (void) sendEvent: (CGEvent *) event;
 
-- (void)addEntriesToDeviceDictionary:(NSDictionary *)entries;
-- (void)flashWindow;
+- (void) addEntriesToDeviceDictionary: (NSDictionary *) entries;
+- (void) flashWindow;
 
-- (void)addCGLContext:(CGLContextObj)cglContext;
-- (void)removeCGLContext:(CGLContextObj)cglContext;
+- (void) addCGLContext: (CGLContextObj) cglContext;
+- (void) removeCGLContext: (CGLContextObj) cglContext;
 
-- (void)flushCGLContext:(CGLContextObj)cglContext;
+- (void) flushCGLContext: (CGLContextObj) cglContext;
 
 - (CGSubWindow *) createSubWindowWithFrame: (CGRect) frame;
 
@@ -92,32 +104,37 @@ typedef enum {
 
 @interface NSObject (CGWindow_delegate)
 
-- (void)platformWindow:(CGWindow *)window frameChanged:(NSRect)frame didSize:(BOOL)didSize;
-- (NSSize)platformWindow:(CGWindow *)window frameSizeWillChange:(NSSize)size;
-- (void)platformWindowWillBeginSizing:(CGWindow *)window;
-- (void)platformWindowDidEndSizing:(CGWindow *)window;
-- (void)platformWindowExitMove:(CGWindow *)window;
+- (void) platformWindow: (CGWindow *) window
+           frameChanged: (NSRect) frame
+                didSize: (BOOL) didSize;
+- (NSSize) platformWindow: (CGWindow *) window
+      frameSizeWillChange: (NSSize) size;
+- (void) platformWindowWillBeginSizing: (CGWindow *) window;
+- (void) platformWindowDidEndSizing: (CGWindow *) window;
+- (void) platformWindowExitMove: (CGWindow *) window;
 
-- (void)platformWindow:(CGWindow *)window needsDisplayInRect:(NSRect)rect;
-- (void)platformWindowStyleChanged:(CGWindow *)window;
-- (void)platformWindowWillClose:(CGWindow *)window;
+- (void) platformWindow: (CGWindow *) window needsDisplayInRect: (NSRect) rect;
+- (void) platformWindowStyleChanged: (CGWindow *) window;
+- (void) platformWindowWillClose: (CGWindow *) window;
 
-- (void)platformWindowWillMove:(CGWindow *)window;
-- (void)platformWindowDidMove:(CGWindow *)window;
+- (void) platformWindowWillMove: (CGWindow *) window;
+- (void) platformWindowDidMove: (CGWindow *) window;
 
-- (void)platformWindowDeminiaturized:(CGWindow *)window;
-- (void)platformWindowMiniaturized:(CGWindow *)window;
-- (void)platformWindowActivated:(CGWindow *)window displayIfNeeded:(BOOL)displayIfNeeded;
-- (void)platformWindowDeactivated:(CGWindow *)window checkForAppDeactivation:(BOOL)checkForApp;
+- (void) platformWindowDeminiaturized: (CGWindow *) window;
+- (void) platformWindowMiniaturized: (CGWindow *) window;
+- (void) platformWindowActivated: (CGWindow *) window
+                 displayIfNeeded: (BOOL) displayIfNeeded;
+- (void) platformWindowDeactivated: (CGWindow *) window
+           checkForAppDeactivation: (BOOL) checkForApp;
 
-- (void)platformWindowExposed:(CGWindow *)window inRect:(NSRect)rect;
+- (void) platformWindowExposed: (CGWindow *) window inRect: (NSRect) rect;
 
-- (BOOL)platformWindowIgnoreModalMessages:(CGWindow *)window;
+- (BOOL) platformWindowIgnoreModalMessages: (CGWindow *) window;
 
-- (BOOL)platformWindowSetCursorEvent:(CGWindow *)window;
+- (BOOL) platformWindowSetCursorEvent: (CGWindow *) window;
 
-- (void)platformWindowDidInvalidateCGContext:(CGWindow *)window;
+- (void) platformWindowDidInvalidateCGContext: (CGWindow *) window;
 
-- (void)platformWindowShouldZoom:(CGWindow *)window;
+- (void) platformWindowShouldZoom: (CGWindow *) window;
 
 @end

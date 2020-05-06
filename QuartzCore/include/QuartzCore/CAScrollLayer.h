@@ -19,10 +19,10 @@
 
 #import <QuartzCore/CALayer.h>
 
-CA_EXPORT NSString * const kCAScrollNone;
-CA_EXPORT NSString * const kCAScrollVertically;
-CA_EXPORT NSString * const kCAScrollHorizontally;
-CA_EXPORT NSString * const kCAScrollBoth;
+CA_EXPORT NSString *const kCAScrollNone;
+CA_EXPORT NSString *const kCAScrollVertically;
+CA_EXPORT NSString *const kCAScrollHorizontally;
+CA_EXPORT NSString *const kCAScrollBoth;
 
 @interface CAScrollLayer : CALayer
 @end

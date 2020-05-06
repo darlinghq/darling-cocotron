@@ -1,6 +1,6 @@
 #import <Foundation/NSObject.h>
-#import <Onyx2D/O2Geometry.h>
 #import <Onyx2D/O2AffineTransform.h>
+#import <Onyx2D/O2Geometry.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -22,8 +22,10 @@ typedef enum {
 }
 
 O2ClipPhase *O2ClipPhaseInitWithNonZeroPath(O2ClipPhase *self, O2Path *path);
-- initWithEOPath:(O2Path *)path;
-- initWithMask:(O2Image *)mask rect:(O2Rect)rect transform:(O2AffineTransform)transform;
+- initWithEOPath: (O2Path *) path;
+- initWithMask: (O2Image *) mask
+          rect: (O2Rect) rect
+     transform: (O2AffineTransform) transform;
 
 O2ClipPhaseType O2ClipPhasePhaseType(O2ClipPhase *self);
 id O2ClipPhaseObject(O2ClipPhase *self);

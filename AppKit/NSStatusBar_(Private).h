@@ -6,8 +6,8 @@
 //  Copyright (c) 2012 BP Software. All rights reserved.
 //
 
-#import <Foundation/NSObject.h>
 #import <CoreFoundation/CFBase.h>
+#import <Foundation/NSObject.h>
 #ifdef Win32Assert
 #import <AppKit.h/NSWindow.h>
 #import <AppKit.h/Win32Window.h>
@@ -20,7 +20,7 @@
 
 @interface NSStatusBar (Private)
 #ifdef WIN32
-- (void)_trayNotificationForID:(int)aTrayID event:(int)anEvent;
-- (Win32Window *)fakeWindow;
+- (void) _trayNotificationForID: (int) aTrayID event: (int) anEvent;
+- (Win32Window *) fakeWindow;
 #endif
 @end
