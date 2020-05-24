@@ -20,6 +20,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <CoreGraphics/CGFont.h>
 #import <Onyx2D/O2Font.h>
 
+const CFStringRef kCGFontNameKeyCopyright = CFSTR("CGFontNameKeyCopyright");
+
 CGFontRef CGFontCreateWithFontName(CFStringRef name) {
     return O2FontCreateWithFontName((NSString *) name);
 }
