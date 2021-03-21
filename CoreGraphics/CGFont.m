@@ -20,6 +20,15 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <CoreGraphics/CGFont.h>
 #import <Onyx2D/O2Font.h>
 
+const CFStringRef kCGFontNameKeyCopyright = CFSTR("CGFontNameKeyCopyright");
+const CFStringRef kCGFontNameKeyFontFamily = CFSTR("CGFontNameKeyFontFamily");
+const CFStringRef kCGFontNameKeyFontSubfamily = CFSTR("CGFontNameKeyFontSubfamily");
+const CFStringRef kCGFontNameKeyFullName = CFSTR("CGFontNameKeyFullName");
+const CFStringRef kCGFontNameKeyPostScriptName = CFSTR("CGFontNameKeyPostScriptName");
+const CFStringRef kCGFontNameKeyPreferredFamily = CFSTR("CGFontNameKeyPreferredFamily");
+const CFStringRef kCGFontNameKeyPreferredSubfamily = CFSTR("CGFontNameKeyPreferredSubfamily");
+const CFStringRef kCGFontNameKeyVersion = CFSTR("CGFontNameKeyPreferredSubfamily");
+
 CGFontRef CGFontCreateWithFontName(CFStringRef name) {
     return O2FontCreateWithFontName((NSString *) name);
 }

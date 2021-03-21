@@ -41,6 +41,9 @@ NSString *const NSFontWeightTrait = @"NSFontWeightTrait";
 NSString *const NSFontWidthTrait = @"NSFontWidthTrait";
 NSString *const NSFontSlantTrait = @"NSFontSlantTrait";
 
+NSString *const NSFontFeatureSelectorIdentifierKey = @"NSFontFeatureSelectorIdentifier";
+NSString *const NSFontFeatureTypeIdentifierKey = @"NSFontFeatureTypeIdentifierKey";
+
 const NSFontWeight NSFontWeightThin = 0xbfe3333340000000;
 const NSFontWeight NSFontWeightLight = 0xbfd99999a0000000;
 const NSFontWeight NSFontWeightUltraLight = 0xbfe99999a0000000;
