@@ -636,6 +636,10 @@ static NSData *makeWindowIcon() {
     return [self transformFrame: _frame];
 }
 
+- (O2Rect) realFrame {
+    return [self transformFrame: _realFrame];
+}
+
 static int ignoreBadWindow(Display *display, XErrorEvent *errorEvent) {
     if (errorEvent->error_code == BadWindow)
         return 0;
@@ -674,6 +678,7 @@ static int ignoreBadWindow(Display *display, XErrorEvent *errorEvent) {
 
         [self invalidateContextWithNewSize: rect.size];
         _frame = rect;
+        _realFrame = _frame;
     } @finally {
         XSetErrorHandler(previousHandler);
     }
