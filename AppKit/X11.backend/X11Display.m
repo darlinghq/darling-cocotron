@@ -1147,7 +1147,8 @@ static NSDictionary *modeInfoToDictionary(const XRRModeInfo *mi, int depth) {
         }
         [delegate platformWindowActivated: window displayIfNeeded: YES];
         lastFocusedWindow = delegate;
-        XSetICFocus(window->_xic);
+        if (window != nil)
+            XSetICFocus(window->_xic);
         break;
 
     case FocusOut:
@@ -1157,7 +1158,8 @@ static NSDictionary *modeInfoToDictionary(const XRRModeInfo *mi, int depth) {
         lastFocusedWindow = nil;
         if (_cursorGrabbed)
             [self grabMouse: NO];
-        XUnsetICFocus(window->_xic);
+        if (window != nil)
+            XUnsetICFocus(window->_xic);
         break;
 
     case KeymapNotify:
