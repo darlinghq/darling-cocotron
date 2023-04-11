@@ -231,6 +231,7 @@ const CGFloat NSStringDrawerLargeDimension = 1000000.;
     NSAttributedString *string = [[[NSAttributedString alloc]
             initWithString: self
                 attributes: attributes] autorelease];
+
     [string _clipAndDrawInRect: rect truncatingTail: truncateTail];
 }
 
@@ -238,6 +239,7 @@ const CGFloat NSStringDrawerLargeDimension = 1000000.;
 - (void) _clipAndDrawInRect: (NSRect) rect
              withAttributes: (NSDictionary *) attributes
 {
+    
     [self _clipAndDrawInRect: rect
               withAttributes: attributes
               truncatingTail: YES];
@@ -249,44 +251,107 @@ const CGFloat NSStringDrawerLargeDimension = 1000000.;
 
 // Draw self in the rect, clipped - add ellipsis if needed
 - (void) _clipAndDrawInRect: (NSRect) rect truncatingTail: (BOOL) truncateTail {
+    if (truncateTail) {
+        [self _clipAndDrawInRect: rect
+                    lineBreakMode: NSLineBreakByTruncatingTail];
+    } else {
+        [self _clipAndDrawInRect: rect
+                    lineBreakMode: NSLineBreakByClipping];
+    }
+}
+
+
+- (void) _clipAndDrawInRect: (NSRect) rect {
+    [self _clipAndDrawInRect: rect truncatingTail: YES];
+}
+
+- (void)_clipAndDrawInRect:(NSRect)rect lineBreakMode:(NSLineBreakMode)lineBreakMode {
     CGContextRef graphicsPort = NSCurrentGraphicsPort();
     CGContextSaveGState(graphicsPort);
     CGContextClipToRect(graphicsPort, rect);
 
-    // In a perfect world, we could use the NSLineBreakByTruncatingTail
-    // attribute, but that's not supported for now by Cocotron
     NSAttributedString *string = self;
     NSSize size = [string size];
-    if (truncateTail && size.width > rect.size.width && [string length]) {
-        // Create a "..." attributed string with the attributes of the last char
-        // of this string
-        NSDictionary *attributes =
-                [string attributesAtIndex: [string length] - 1
-                           effectiveRange: NULL];
-        NSAttributedString *ellipsis = [[[NSAttributedString alloc]
-                initWithString: @"..."
-                    attributes: attributes] autorelease];
-        NSAttributedString *clippedTitle = string;
-        do {
-            clippedTitle = [clippedTitle
-                    attributedSubstringFromRange: NSMakeRange(0,
-                                                              [clippedTitle
-                                                                      length] -
-                                                                      1)];
-            NSMutableAttributedString *tmpString =
-                    [[clippedTitle mutableCopy] autorelease];
-            [tmpString appendAttributedString: ellipsis];
-            string = tmpString;
-            size = [string size];
-        } while ([clippedTitle length] && size.width > rect.size.width);
-    }
-    [[NSStringDrawer sharedStringDrawer] drawAttributedString: string
-                                                       inRect: rect];
-    CGContextRestoreGState(graphicsPort);
-}
 
-- (void) _clipAndDrawInRect: (NSRect) rect {
-    [self _clipAndDrawInRect: rect truncatingTail: YES];
+    if (size.width > rect.size.width && [string length]) {
+        NSDictionary *attributes = [string attributesAtIndex:[string length] - 1 effectiveRange:NULL];
+        NSAttributedString *ellipsis = [[NSAttributedString alloc] initWithString:@"..." attributes:attributes];
+
+        NSInteger left = 0;
+        NSInteger right = [string length];
+        NSInteger mid;
+        
+        NSAttributedString *clippedTitle;
+        NSMutableAttributedString *tmpString;
+
+        while (left < right) {
+            mid = (left + right) / 2;
+
+            switch (lineBreakMode) {
+                case NSLineBreakByTruncatingHead:
+                    clippedTitle = [string attributedSubstringFromRange:NSMakeRange(mid, [string length] - mid)];
+                    tmpString = [[[NSAttributedString alloc] initWithAttributedString:ellipsis] mutableCopy];
+                    [tmpString appendAttributedString:clippedTitle];
+                    break;
+
+                case NSLineBreakByTruncatingMiddle:
+                    clippedTitle = [string attributedSubstringFromRange:NSMakeRange(0, mid)];
+                    NSAttributedString *clippedTail = [string attributedSubstringFromRange:NSMakeRange([string length] - mid, mid)];
+
+                    tmpString = [[[NSAttributedString alloc] initWithAttributedString:clippedTitle] mutableCopy];
+                    [tmpString appendAttributedString:ellipsis];
+                    [tmpString appendAttributedString:clippedTail];
+                    break;
+
+                case NSLineBreakByTruncatingTail:
+                default:
+                    clippedTitle = [string attributedSubstringFromRange:NSMakeRange(0, mid)];
+                    tmpString = [[[NSAttributedString alloc] initWithAttributedString:clippedTitle] mutableCopy];
+                    [tmpString appendAttributedString:ellipsis];
+                    break;
+            }
+
+            CGSize tmpSize = [tmpString size];
+
+            if (tmpSize.width > rect.size.width) {
+                right = mid;
+            } else {
+                left = mid + 1;
+            }
+        }
+
+        switch (lineBreakMode) {
+            case NSLineBreakByTruncatingHead:
+                clippedTitle = [string attributedSubstringFromRange:NSMakeRange(left, [string length] - left)];
+                tmpString = [[[NSAttributedString alloc] initWithAttributedString:ellipsis] mutableCopy];
+                [tmpString appendAttributedString:clippedTitle];
+                break;
+
+            case NSLineBreakByTruncatingMiddle:
+                clippedTitle = [string attributedSubstringFromRange:NSMakeRange(0, left)];
+                NSAttributedString *clippedTail = [string attributedSubstringFromRange:NSMakeRange([string length] - left, left)];
+
+                tmpString = [[[NSAttributedString alloc] initWithAttributedString:clippedTitle] mutableCopy];
+                [tmpString appendAttributedString:ellipsis];
+                [tmpString appendAttributedString:clippedTail];
+                break;
+
+            case NSLineBreakByTruncatingTail:
+                clippedTitle = [string attributedSubstringFromRange:NSMakeRange(0, left - 1)];
+                tmpString = [[[NSAttributedString alloc] initWithAttributedString:clippedTitle] mutableCopy];
+                [tmpString appendAttributedString:ellipsis];
+                break;
+
+            default:
+                // NSLineBreakByClipping
+                break;
+        }
+
+        string = tmpString;
+    }
+
+    [[NSStringDrawer sharedStringDrawer] drawAttributedString:string inRect:rect];
+    CGContextRestoreGState(graphicsPort);
 }
 
 @end
