@@ -304,10 +304,12 @@ const CGFloat NSStringDrawerLargeDimension = 1000000.;
                     break;
 
                 case NSLineBreakByTruncatingTail:
-                default:
                     clippedTitle = [string attributedSubstringFromRange:NSMakeRange(0, mid)];
                     tmpString = [[[NSAttributedString alloc] initWithAttributedString:clippedTitle] mutableCopy];
                     [tmpString appendAttributedString:ellipsis];
+                    break;
+                default:
+                    // NSLineBreakByClipping
                     break;
             }
 
