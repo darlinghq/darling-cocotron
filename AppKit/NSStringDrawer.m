@@ -310,6 +310,8 @@ const CGFloat NSStringDrawerLargeDimension = 1000000.;
                     break;
                 default:
                     // NSLineBreakByClipping
+                    clippedTitle = [string attributedSubstringFromRange:NSMakeRange(0, mid)];
+                    tmpString = [[[NSAttributedString alloc] initWithAttributedString:clippedTitle] mutableCopy];
                     break;
             }
 
@@ -346,10 +348,18 @@ const CGFloat NSStringDrawerLargeDimension = 1000000.;
 
             default:
                 // NSLineBreakByClipping
+                clippedTitle = [string attributedSubstringFromRange:NSMakeRange(0, left - 1)];
+                tmpString = [[[NSAttributedString alloc] initWithAttributedString:clippedTitle] mutableCopy];
                 break;
         }
 
         string = tmpString;
+    }
+
+    if (lineBreakMode == NSLineBreakByClipping) {
+        NSStringDrawingOptions options = NSStringDrawingUsesLineFragmentOrigin | NSStringDrawingTruncatesLastVisibleLine;
+        CGRect drawingRect = CGRectMake(rect.origin.x, rect.origin.y, rect.size.width, CGFLOAT_MAX);
+        [string boundingRectWithSize:drawingRect.size options:options context:nil];
     }
 
     [[NSStringDrawer sharedStringDrawer] drawAttributedString:string inRect:rect];

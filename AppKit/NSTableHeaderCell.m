@@ -48,6 +48,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
             drawTableViewHeaderInRect: cellFrame
                           highlighted: [self isHighlighted]];
 
+    // Draw the title
     [[self attributedStringValue]
             _clipAndDrawInRect: [self titleRectForBounds: cellFrame]
                  lineBreakMode: _lineBreakMode];                
