@@ -51,7 +51,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     // Draw the title respecting the line break mode
     [[self attributedStringValue]
             _clipAndDrawInRect: [self titleRectForBounds: cellFrame]
-                 lineBreakMode: _lineBreakMode];                
+                 lineBreakMode: _lineBreakMode];
 }
 
 @end

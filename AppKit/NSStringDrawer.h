@@ -41,14 +41,14 @@ APPKIT_EXPORT const CGFloat NSStringDrawerLargeDimension;
                  inSize: (NSSize) maxSize;
 
 - (void) drawString: (NSString *) string
-        withAttributes: (NSDictionary *) attributes
-                inRect: (NSRect) rect;
+     withAttributes: (NSDictionary *) attributes
+             inRect: (NSRect) rect;
 
 // Use a size of NSZeroSize for unlimited dimensions.
 - (void) drawString: (NSString *) string
-        withAttributes: (NSDictionary *) attributes
-               atPoint: (NSPoint) point
-                inSize: (NSSize) maxSize;
+     withAttributes: (NSDictionary *) attributes
+            atPoint: (NSPoint) point
+             inSize: (NSSize) maxSize;
 
 // Use a size of NSZeroSize for unlimited dimensions.
 - (NSSize) sizeOfAttributedString: (NSAttributedString *) astring
@@ -75,7 +75,7 @@ APPKIT_EXPORT const CGFloat NSStringDrawerLargeDimension;
              withAttributes: (NSDictionary *) attributes;
 
 - (void) _clipAndDrawInRect:(NSRect)rect 
-             lineBreakMode:(NSLineBreakMode)lineBreakMode;
+              lineBreakMode:(NSLineBreakMode)lineBreakMode;
 
 @end
 

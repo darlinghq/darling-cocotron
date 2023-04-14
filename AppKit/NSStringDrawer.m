@@ -109,8 +109,8 @@ const CGFloat NSStringDrawerLargeDimension = 1000000.;
 }
 
 - (void) drawString: (NSString *) string
-        withAttributes: (NSDictionary *) attributes
-                inRect: (NSRect) rect
+     withAttributes: (NSDictionary *) attributes
+             inRect: (NSRect) rect
 {
     NSRange glyphRange;
 
@@ -131,9 +131,9 @@ const CGFloat NSStringDrawerLargeDimension = 1000000.;
 }
 
 - (void) drawString: (NSString *) string
-        withAttributes: (NSDictionary *) attributes
-               atPoint: (NSPoint) point
-                inSize: (NSSize) maxSize
+     withAttributes: (NSDictionary *) attributes
+            atPoint: (NSPoint) point
+             inSize: (NSSize) maxSize
 {
     NSRange glyphRange;
 
@@ -262,11 +262,11 @@ const CGFloat NSStringDrawerLargeDimension = 1000000.;
 }
 
 - (void) _clipAndDrawInRect: (NSRect) rect {
-    [self _clipAndDrawInRect: rect truncatingTail: YES];
+   [self _clipAndDrawInRect: rect truncatingTail: YES];
 }
 
-- (void) _clipAndDrawInRect:(NSRect)rect 
-             lineBreakMode:(NSLineBreakMode)lineBreakMode {
+- (void) _clipAndDrawInRect: (NSRect) rect 
+              lineBreakMode: (NSLineBreakMode) lineBreakMode {
 
     // Get the current graphics context and save its state
     CGContextRef graphicsPort = NSCurrentGraphicsPort();
@@ -286,15 +286,15 @@ const CGFloat NSStringDrawerLargeDimension = 1000000.;
          lineBreakMode == NSLineBreakByTruncatingTail)) {
 
         // Get the attributes of the last character
-        NSDictionary *attributes = [string attributesAtIndex:[string length] - 1 effectiveRange:NULL];
-        NSAttributedString *ellipsis = [[NSAttributedString alloc] initWithString:@"…" attributes:attributes];
+        NSDictionary *attributes = [string attributesAtIndex:[string length] - 1 effectiveRange: NULL];
+        NSAttributedString *ellipsis = [[NSAttributedString alloc] initWithString:@"…" attributes: attributes];
 
         NSInteger left = 0;
         NSInteger right = [string length];
         NSInteger mid;
         
         NSAttributedString *clippedTitle;
-        NSMutableAttributedString *tmpString;
+        NSMutableAttributedString *tmpString = nil;
 
         // Handle each truncation case separately
         // Search for the truncation point using binary search (fast approach)
@@ -302,9 +302,9 @@ const CGFloat NSStringDrawerLargeDimension = 1000000.;
             case NSLineBreakByTruncatingHead:
                 while (left < right) {
                     mid = (left + right) / 2;
-                    clippedTitle = [string attributedSubstringFromRange:NSMakeRange(mid, [string length] - mid)];
-                    tmpString = [[[NSAttributedString alloc] initWithAttributedString:ellipsis] mutableCopy];
-                    [tmpString appendAttributedString:clippedTitle];
+                    clippedTitle = [string attributedSubstringFromRange:NSMakeRange([string length] - mid, mid)];
+                    tmpString = [[NSMutableAttributedString alloc] initWithAttributedString:clippedTitle];
+                    [tmpString appendAttributedString:ellipsis];
 
                     CGSize tmpSize = [tmpString size];
 
@@ -314,9 +314,9 @@ const CGFloat NSStringDrawerLargeDimension = 1000000.;
                         left = mid + 1;
                     }
                 }
-                clippedTitle = [string attributedSubstringFromRange:NSMakeRange(left, [string length] - left)];
-                tmpString = [[[NSAttributedString alloc] initWithAttributedString:ellipsis] mutableCopy];
-                [tmpString appendAttributedString:clippedTitle];
+                clippedTitle = [string attributedSubstringFromRange:NSMakeRange([string length] - left, left)];
+                tmpString = [[NSMutableAttributedString alloc] initWithAttributedString:clippedTitle];
+                [tmpString appendAttributedString:ellipsis];
                 break;
 
             case NSLineBreakByTruncatingMiddle:
@@ -325,7 +325,7 @@ const CGFloat NSStringDrawerLargeDimension = 1000000.;
                     clippedTitle = [string attributedSubstringFromRange:NSMakeRange(0, mid)];
                     NSAttributedString *clippedTail = [string attributedSubstringFromRange:NSMakeRange([string length] - mid, mid)];
 
-                    tmpString = [[[NSAttributedString alloc] initWithAttributedString:clippedTitle] mutableCopy];
+                    tmpString = [[NSMutableAttributedString alloc] initWithAttributedString:clippedTitle];
                     [tmpString appendAttributedString:ellipsis];
                     [tmpString appendAttributedString:clippedTail];
 
@@ -340,7 +340,7 @@ const CGFloat NSStringDrawerLargeDimension = 1000000.;
                 clippedTitle = [string attributedSubstringFromRange:NSMakeRange(0, left)];
                 NSAttributedString *clippedTail = [string attributedSubstringFromRange:NSMakeRange([string length] - left, left)];
 
-                tmpString = [[[NSAttributedString alloc] initWithAttributedString:clippedTitle] mutableCopy];
+                tmpString = [[NSMutableAttributedString alloc] initWithAttributedString:clippedTitle];
                 [tmpString appendAttributedString:ellipsis];
                 [tmpString appendAttributedString:clippedTail];
                 break;
@@ -349,7 +349,7 @@ const CGFloat NSStringDrawerLargeDimension = 1000000.;
                 while (left < right) {
                     mid = (left + right) / 2;
                     clippedTitle = [string attributedSubstringFromRange:NSMakeRange(0, mid)];
-                    tmpString = [[[NSAttributedString alloc] initWithAttributedString:clippedTitle] mutableCopy];
+                    tmpString = [[NSMutableAttributedString alloc] initWithAttributedString:clippedTitle];
                     [tmpString appendAttributedString:ellipsis];
 
                     CGSize tmpSize = [tmpString size];
@@ -361,7 +361,7 @@ const CGFloat NSStringDrawerLargeDimension = 1000000.;
                     }
                 }
                 clippedTitle = [string attributedSubstringFromRange:NSMakeRange(0, left - 1)];
-                tmpString = [[[NSAttributedString alloc] initWithAttributedString:clippedTitle] mutableCopy];
+                tmpString = [[NSMutableAttributedString alloc] initWithAttributedString:clippedTitle];
                 [tmpString appendAttributedString:ellipsis];
                 break;
             default:
@@ -369,6 +369,7 @@ const CGFloat NSStringDrawerLargeDimension = 1000000.;
         }
 
         string = tmpString;
+        [ellipsis release];  
     }
 
     [[NSStringDrawer sharedStringDrawer] drawAttributedString:string inRect:rect];
@@ -379,8 +380,8 @@ const CGFloat NSStringDrawerLargeDimension = 1000000.;
 
 @implementation NSStringDrawer_CacheItem
 -(instancetype) initWithString: (NSString *) string
-     attributes: (NSDictionary *) attribs
-        maxSize: (NSSize) size
+                    attributes: (NSDictionary *) attribs
+                       maxSize: (NSSize) size
 {
     _string = [string retain];
     _attributes = [attribs retain];
