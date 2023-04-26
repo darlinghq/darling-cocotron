@@ -18,6 +18,32 @@
 */
 
 #import <QuartzCore/CALayer.h>
+#import <Metal/Metal.h>
+#import <CoreGraphics/CoreGraphics.h>
+#import <Foundation/Foundation.h>
+
+@protocol CAMetalDrawable;
+
+@class CAEDRMetadata;
+
+struct _CAMetalLayerPrivate;
 
 @interface CAMetalLayer : CALayer
+
+@property(retain) id<MTLDevice> device;
+@property(readonly) id<MTLDevice> preferredDevice;
+@property MTLPixelFormat pixelFormat;
+@property CGColorSpaceRef colorspace;
+@property BOOL framebufferOnly;
+@property CGSize drawableSize;
+@property BOOL presentsWithTransaction;
+@property BOOL displaySyncEnabled;
+@property BOOL wantsExtendedDynamicRangeContent;
+@property(strong) CAEDRMetadata* EDRMetadata;
+@property NSUInteger maximumDrawableCount;
+@property BOOL allowsNextDrawableTimeout;
+@property(copy) NSDictionary* developerHUDProperties;
+
+- (id<CAMetalDrawable>)nextDrawable;
+
 @end

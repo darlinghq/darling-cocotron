@@ -1,5 +1,9 @@
 #import <CoreFoundation/CoreFoundation.h>
 
-#define CA_EXPORT extern
+#if __cplusplus
+	#define CA_EXPORT extern "C"
+#else
+	#define CA_EXPORT extern
+#endif
 
 CA_EXPORT CFTimeInterval CACurrentMediaTime(void);

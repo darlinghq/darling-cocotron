@@ -2,17 +2,11 @@
 #import <Onyx2D/O2Surface.h>
 #import <OpenGL/OpenGL.h>
 #import <QuartzCore/CAAnimation.h>
-#import <QuartzCore/CALayer.h>
 #import <QuartzCore/CAMediaTimingFunction.h>
 #import <QuartzCore/CARenderer.h>
+#import "CALayerInternal.h"
 
 NSString *const kCARendererColorSpace = @"kCARendererColorSpace";
-
-@interface CALayer (private)
-- (void) _setContext: (CALayerContext *) context;
-- (void) _setTextureId: (NSNumber *) value;
-- (NSNumber *) _textureId;
-@end
 
 @implementation CARenderer
 

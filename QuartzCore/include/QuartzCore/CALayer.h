@@ -4,7 +4,7 @@
 #import <QuartzCore/CAAction.h>
 #import <QuartzCore/CATransform3D.h>
 
-@class CAAnimation, CALayerContext;
+@class CAAnimation, CALayerContext, CALayer;
 
 enum {
     kCALayerNotSizable = 0x00,
@@ -42,6 +42,24 @@ CA_EXPORT NSString *const kCAContentsFormatRGBA8Uint;
 CA_EXPORT NSString *const kCAContentsFormatRGBA16Float;
 CA_EXPORT NSString *const kCAContentsFormatGray8Uint;
 
+@protocol CALayerDelegate <NSObject>
+
+@optional
+
+- (void)displayLayer: (CALayer*)layer;
+
+- (void)drawLayer: (CALayer*)layer
+        inContext: (CGContextRef)ctx;
+
+- (void)layerWillDraw: (CALayer*)layer;
+
+- (void)layoutSublayersOfLayer: (CALayer*)layer;
+
+- (id<CAAction>)actionForLayer: (CALayer*)layer
+                        forKey: (NSString*)event;
+
+@end
+
 @interface CALayer : NSObject {
     CALayerContext *_context;
     CALayer *_superlayer;
@@ -66,7 +84,7 @@ CA_EXPORT NSString *const kCAContentsFormatGray8Uint;
 
 @property(readonly) CALayer *superlayer;
 @property(copy) NSArray *sublayers;
-@property(assign) id delegate;
+@property(assign) id<CALayerDelegate> delegate;
 @property CGPoint anchorPoint;
 @property CGPoint position;
 @property CGRect bounds;
@@ -99,13 +117,6 @@ CA_EXPORT NSString *const kCAContentsFormatGray8Uint;
 - (NSArray *) animationKeys;
 
 - (id<CAAction>) actionForKey: (NSString *) key;
-
-@end
-
-@interface NSObject (CALayerDelegate)
-
-- (void) displayLayer: (CALayer *) layer;
-- (void) drawLayer: (CALayer *) layer inContext: (CGContextRef) context;
 
 @end
 

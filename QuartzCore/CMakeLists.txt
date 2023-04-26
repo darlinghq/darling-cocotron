@@ -58,11 +58,12 @@ set(QuartzCore_sources
 	CAReplicatorLayer.m
 	CAScrollLayer.m
 	CAOpenGLLayer.m
-	CAMetalLayer.m
+	CAMetalLayer.mm
+	CAMetalDrawable.mm
 	CASpringAnimation.m
 )
 
-set_source_files_properties(${QuartzCore_sources} LANGUAGE C)
+#set_source_files_properties(${QuartzCore_sources} LANGUAGE C)
 
 set(DYLIB_COMPAT_VERSION "1.2.0")
 set(DYLIB_CURRENT_VERSION "1.11.0")
@@ -73,6 +74,12 @@ generate_sdk_framework(QuartzCore
     VERSION ${FRAMEWORK_VERSION}
     HEADER "include/QuartzCore"
 )
+
+if (BUILD_METAL)
+	set(QUARTZCORE_LINK_INDIUM_PRIVATE indium_private)
+else()
+	set(QUARTZCORE_LINK_INDIUM_PRIVATE "")
+endif()
 
 add_framework(QuartzCore
 	FAT
@@ -88,10 +95,20 @@ add_framework(QuartzCore
 		Onyx2D
 		OpenGL
 		CoreGraphics
+		Metal_private
+		${QUARTZCORE_LINK_INDIUM_PRIVATE}
+		cxx
 	LINK_FLAGS
 	" -Wl,-reexport_library,${CMAKE_BINARY_DIR}/src/frameworks/CoreImage/CoreImage \
 	-Wl,-reexport_library,${CMAKE_BINARY_DIR}/src/frameworks/CoreVideo/CoreVideo \
 	-Wl,-reexport_library,${CMAKE_BINARY_DIR}/src/external/objc4/runtime/libobjc.A.dylib "
+)
+
+set_target_properties(QuartzCore
+	PROPERTIES
+		CXX_STANDARD 17
+		CXX_EXTENSIONS ON
+		CXX_STANDARD_REQUIRED ON
 )
 
 add_dependencies(QuartzCore CoreImage CoreVideo)

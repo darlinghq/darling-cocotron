@@ -2,14 +2,14 @@
 #import <QuartzCore/CALayer.h>
 #import <QuartzCore/CALayerContext.h>
 #import <QuartzCore/CARenderer.h>
+#import "CALayerInternal.h"
+#import <OpenGL/CGLInternal.h>
 
-@interface CALayer (private)
-- (void) _setContext: (CALayerContext *) context;
-- (NSNumber *) _textureId;
-- (void) _setTextureId: (NSNumber *) value;
-@end
+@class CAMetalLayerInternal;
 
 @implementation CALayerContext
+
+@synthesize glContext = _glContext;
 
 - initWithFrame: (CGRect) rect {
     CGLError error;
@@ -28,19 +28,6 @@
 
     _frame = rect;
 
-    GLint width = rect.size.width;
-    GLint height = rect.size.height;
-
-    GLint backingOrigin[2] = {rect.origin.x, rect.origin.y};
-    GLint backingSize[2] = {width, height};
-
-    // FIXME: convert to CGSubWindow
-    // CGLSetParameter(_glContext,kCGLCPSurfaceBackingOrigin,backingOrigin);
-    // CGLSetParameter(_glContext,kCGLCPSurfaceBackingSize,backingSize);
-
-    GLint opacity = 0;
-    // CGLSetParameter(_glContext,kCGLCPSurfaceOpacity,&opacity);
-
     _renderer = [[CARenderer rendererWithCGLContext: _glContext
                                             options: nil] retain];
 
@@ -50,20 +37,17 @@
 - (void) dealloc {
     [_timer invalidate];
     [_timer release];
+    [_renderer release];
+    CGLReleaseContext(_glContext);
+    CGLDestroyWindow(_cglWindow);
+    [_subwindow release];
+    [_layer release];
     [super dealloc];
 }
 
 - (void) setFrame: (CGRect) rect {
     _frame = rect;
-
-    GLint width = rect.size.width;
-    GLint height = rect.size.height;
-
-    GLint backingOrigin[2] = {rect.origin.x, rect.origin.y};
-    GLint backingSize[2] = {width, height};
-
-    // CGLSetParameter(_glContext,kCGLCPSurfaceBackingOrigin,backingOrigin);
-    // CGLSetParameter(_glContext,kCGLCPSurfaceBackingSize,backingSize);
+    [_subwindow setFrame: _frame];
 }
 
 - (void) setLayer: (CALayer *) layer {
@@ -73,6 +57,24 @@
 
     [_layer _setContext: self];
     [_renderer setLayer: layer];
+}
+
+- (void) setSubwindow: (CGSubWindow*) subwindow
+{
+    CGSubWindow* oldSubwindow = _subwindow;
+
+    if (_cglWindow) {
+        CGLDestroyWindow(_cglWindow);
+    }
+
+    _subwindow = [subwindow retain];
+    _cglWindow = CGLGetWindow([_subwindow nativeWindow]);
+
+    [_subwindow show];
+
+    [oldSubwindow release];
+
+    [_subwindow setFrame: _frame];
 }
 
 - (void) invalidate {
@@ -92,7 +94,7 @@
 }
 
 - (void) renderLayer: (CALayer *) layer {
-    CGLSetCurrentContext(_glContext);
+    CGLContextMakeCurrentAndAttachToWindow(_glContext, _cglWindow);
 
     glEnable(GL_DEPTH_TEST);
     glShadeModel(GL_SMOOTH);
@@ -117,6 +119,12 @@
     [_deleteTextureIds removeAllObjects];
 
     [self assignTextureIdsToLayerTree: layer];
+
+    // this is where the Metal layer renders to an internal texture for us to use
+    if ([[layer class] isSubclassOfClass: [CAMetalLayerInternal class]]) {
+        CAMetalLayerInternal* mtl = (CAMetalLayerInternal*)layer;
+        [mtl prepareRender];
+    }
 
     [_renderer render];
 }
@@ -144,6 +152,10 @@
 
 - (void) deleteTextureId: (NSNumber *) textureId {
     [_deleteTextureIds addObject: textureId];
+}
+
+- (void) flush {
+    CGLFlushDrawable(_glContext);
 }
 
 @end

@@ -67,12 +67,12 @@ const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPresentationOptio
 
 @implementation NSView
 
-static BOOL NSViewLayersEnabled = NO;
+static BOOL NSViewLayersEnabled = YES;
 static BOOL NSShowAllViews = NO;
 
 + (void) initialize {
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-    NSViewLayersEnabled = [defaults boolForKey: @"NSViewLayersEnabled"];
+    //NSViewLayersEnabled = [defaults boolForKey: @"NSViewLayersEnabled"];
     NSShowAllViews = [defaults boolForKey: @"NSShowAllViews"];
 }
 
@@ -369,6 +369,11 @@ typedef struct __VFlags {
     _transformFromWindow = CGAffineTransformIdentity;
     _transformToWindow = CGAffineTransformIdentity;
     _transformToLayer = CGAffineTransformIdentity;
+
+    // according to some Apple sample code ("Creating a Custom Metal View"),
+    // it's valid for a subclass of NSView to set `wantsLayer` before invoking the superclass `initWithFrame:`.
+    // thus, we might have a layer context already but with an incorrect frame.
+    [_layerContext setFrame: _frame];
 
     return self;
 }
@@ -1090,6 +1095,10 @@ static inline void buildTransformsIfNeeded(NSView *self) {
 
         _window = window;
 
+        if (_layerContext) {
+            [_layerContext setSubwindow: [_window _createSubWindowWithFrame: [self frame]]];
+        }
+
         [_subviews makeObjectsPerformSelector: _cmd withObject: window];
         _validTrackingAreas = NO;
         [_window invalidateCursorRectsForView: self]; // this also invalidates
@@ -1757,6 +1766,9 @@ static inline void buildTransformsIfNeeded(NSView *self) {
     if ([_superview layer] == nil) {
         _layerContext = [[CALayerContext alloc] initWithFrame: [self frame]];
         [_layerContext setLayer: _layer];
+        if (_window) {
+            [_layerContext setSubwindow: [_window _createSubWindowWithFrame: [self frame]]];
+        }
     }
 }
 
@@ -2138,6 +2150,7 @@ static NSView *viewBeingPrinted = nil;
     if (viewBeingPrinted == nil && _layer != nil) {
         CGImageRef image = CGBitmapContextCreateImage(context);
         [_layer setContents: image];
+        CGImageRelease(image);
     }
 
     CGContextRestoreGState(context);
@@ -2418,6 +2431,8 @@ static NSView *viewBeingPrinted = nil;
     }
 
     if (shouldFlush) {
+        [_layerContext flush];
+
         // We do the flushWindow here. If any of the display* methods are being
         // used, you want it to update on screen immediately. If the view
         // hierarchy is being displayed as needed at the end of an event,
@@ -2807,6 +2822,12 @@ static NSView *viewBeingPrinted = nil;
 - (NSString *) description {
     return [NSString stringWithFormat: @"<%@[%p] frame: %@>", [self class],
                                        self, NSStringFromRect(_frame)];
+}
+
+// XXX: this probably shouldn't be here, but it's a convenient way for CALayers to request a re-render
+- (void)displayLayer: (CALayer*)layer
+{
+    [self display];
 }
 
 @end

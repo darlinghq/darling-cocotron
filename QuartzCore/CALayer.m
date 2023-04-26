@@ -70,11 +70,11 @@ NSString *const kCAContentsFormatGray8Uint = @"Gray8";
                                 withObject: _context];
 }
 
-- (id) delegate {
+- (id<CALayerDelegate>) delegate {
     return _delegate;
 }
 
-- (void) setDelegate: value {
+- (void) setDelegate: (id<CALayerDelegate>)value {
     _delegate = value;
 }
 
