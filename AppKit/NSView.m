@@ -646,8 +646,45 @@ static inline void buildTransformsIfNeeded(NSView *self) {
     return _postsNotificationOnBoundsChange;
 }
 
+// todo after implementing this, i need to implement magnification support in nsscrollview
 - (void) scaleUnitSquareToSize: (NSSize) size {
-    NSUnimplementedMethod();
+    if (size.width != 1.0 || size.height != 1.0) {
+        if (size.width < 0) {
+            size.width = 0;
+        }
+        if (size.height < 0) {
+            size.height = 0;
+        }
+        if (_bounds == nil) {
+            // todo set _bounds. would _bounds ever by nil? need to look into that
+            // _bounds = [NSAffineTransform new]
+        }
+
+        // todo need to get scaleXBy in here, located in darling-foundation
+        [_bounds scaleXBy: size.width yBy: size.height];
+
+        _bounds.origin.x = _bounds.origin.x / size.width;
+        _bounds.origin.y = _bounds.origin.y / size.height;
+        _bounds.size.width = _bounds.size.width / size.width;
+        _bounds.size.height = _bounds.size.height / size.height;
+
+        isRotatedOrScaledFromBase = YES;
+
+        /* code from gnustep
+        todo flag should be located in appkit/include/nsview.h
+
+        if (_coordinates_valid)
+            {
+            (*invalidateImp)(self, invalidateSel);
+            }
+        */
+        [self resetCursorRects]
+        if (_postsNotificationOnBoundsChange) {
+            [[NSNotificationCenter defaultCenter]
+                postNotificationName: NSViewBoundsDidChangeNotification
+                object: self];
+        }       
+    }
 }
 
 - (NSWindow *) window {
