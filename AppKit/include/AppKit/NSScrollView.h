@@ -51,6 +51,7 @@ APPKIT_EXPORT NSString *const NSScrollViewDidLiveScrollNotification;
     BOOL _rulersVisible;
     BOOL _scrollsDynamically;
     BOOL _autohidesScrollers;
+    BOOL _allowsMagnification;
     NSCursor *_documentCursor;
     BOOL _allowsMagnification;
     CGFloat _magnification;
@@ -110,6 +111,7 @@ APPKIT_EXPORT NSString *const NSScrollViewDidLiveScrollNotification;
 - (CGFloat) pageScroll;
 - (BOOL) scrollsDynamically;
 - (BOOL) autohidesScrollers;
+- (BOOL) allowsMagnification;
 
 - (NSCursor *) documentCursor;
 - (CGFloat) magnification;

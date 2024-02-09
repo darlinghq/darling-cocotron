@@ -189,6 +189,8 @@ static Class _rulerViewClass = nil;
             _drawsBackground = [_clipView drawsBackground];
         }
 
+        _allowsMagnification = NO;
+
         _verticalLineScroll = 10.0; // the default value in IB is 10
         _verticalPageScroll = 10.0;
         _horizontalLineScroll = 10.0;
@@ -422,6 +424,7 @@ static Class _rulerViewClass = nil;
     _drawsBackground = YES;
     _borderType = NSNoBorder;
     _backgroundColor = [[NSColor controlBackgroundColor] copy];
+    _allowsMagnification = NO;
 
     [self setLineScroll: 1.0];
     [self setPageScroll: 10.0]; // entirely arbitrary
@@ -652,7 +655,7 @@ static Class _rulerViewClass = nil;
 
 - (BOOL) allowsMagnification {
     return _allowsMagnification;
-}
+};
 
 - (void) setDocumentView: (NSView *) view {
     [_clipView setDocumentView: view];
@@ -819,6 +822,7 @@ static Class _rulerViewClass = nil;
     // FIXME: tile or hide/show scrollers?
 }
 
+<<<<<<< HEAD
 - (void) setMagnification: (CGFloat) value {
     if (value == _magnification)
         return;
@@ -848,6 +852,9 @@ static Class _rulerViewClass = nil;
 }
 
 - (void) setAllowsMagnification: (BOOL) value {
+=======
+- (void) allowsMagnification: (BOOL) value {
+>>>>>>> e9908511 (implemented boolean allowsMagnification)
     _allowsMagnification = value;
 }
 
@@ -1076,5 +1083,6 @@ static Class _rulerViewClass = nil;
     if ([self hasHorizontalScroller])
         [self _horizontalScroll: _horizontalScroller];
 }
+
 
 @end
