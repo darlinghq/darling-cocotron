@@ -190,6 +190,7 @@ static Class _rulerViewClass = nil;
         }
 
         _allowsMagnification = NO;
+        _magnification = 1.0;
 
         _verticalLineScroll = 10.0; // the default value in IB is 10
         _verticalPageScroll = 10.0;
@@ -425,6 +426,7 @@ static Class _rulerViewClass = nil;
     _borderType = NSNoBorder;
     _backgroundColor = [[NSColor controlBackgroundColor] copy];
     _allowsMagnification = NO;
+    _magnification = 1.0;
 
     [self setLineScroll: 1.0];
     [self setPageScroll: 10.0]; // entirely arbitrary
@@ -657,6 +659,10 @@ static Class _rulerViewClass = nil;
     return _allowsMagnification;
 };
 
+- (CGFloat) magnification {
+    return _magnification;
+}
+
 - (void) setDocumentView: (NSView *) view {
     [_clipView setDocumentView: view];
     [self reflectScrolledClipView: _clipView];
@@ -822,7 +828,6 @@ static Class _rulerViewClass = nil;
     // FIXME: tile or hide/show scrollers?
 }
 
-<<<<<<< HEAD
 - (void) setMagnification: (CGFloat) value {
     if (value == _magnification)
         return;
@@ -851,11 +856,12 @@ static Class _rulerViewClass = nil;
         [self setMagnification: value];
 }
 
-- (void) setAllowsMagnification: (BOOL) value {
-=======
 - (void) allowsMagnification: (BOOL) value {
->>>>>>> e9908511 (implemented boolean allowsMagnification)
     _allowsMagnification = value;
+}
+
+- (void) setMagnification: (CGFloat) value {
+    _magnification = value;
 }
 
 - (void) tile {
