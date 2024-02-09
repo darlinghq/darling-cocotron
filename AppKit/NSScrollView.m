@@ -191,6 +191,8 @@ static Class _rulerViewClass = nil;
 
         _allowsMagnification = NO;
         _magnification = 1.0;
+        _maxMagnification = 4.0;
+        _minMagnification = 0.25;
 
         _verticalLineScroll = 10.0; // the default value in IB is 10
         _verticalPageScroll = 10.0;
@@ -427,6 +429,8 @@ static Class _rulerViewClass = nil;
     _backgroundColor = [[NSColor controlBackgroundColor] copy];
     _allowsMagnification = NO;
     _magnification = 1.0;
+    _maxMagnification = 4.0;
+    _minMagnification = 0.25;
 
     [self setLineScroll: 1.0];
     [self setPageScroll: 10.0]; // entirely arbitrary
@@ -663,6 +667,14 @@ static Class _rulerViewClass = nil;
     return _magnification;
 }
 
+- (CGFloat) maxMagnification {
+    return _maxMagnification;
+}
+
+- (CGFloat) minMagnification {
+     return _minMagnification;
+}
+
 - (void) setDocumentView: (NSView *) view {
     [_clipView setDocumentView: view];
     [self reflectScrolledClipView: _clipView];
@@ -862,6 +874,18 @@ static Class _rulerViewClass = nil;
 
 - (void) setMagnification: (CGFloat) value {
     _magnification = value;
+}
+
+- (void) setMaxMagnification: (CGFloat) value {
+    if (value >= _minMagnification) {
+        _maxMagnification = value;
+    }
+}
+
+- (void) setMinMagnification: (CGFloat) value {
+    if (value <= _maxMagnification) {
+        _minMagnification = value;
+    }
 }
 
 - (void) tile {
@@ -1090,5 +1114,13 @@ static Class _rulerViewClass = nil;
         [self _horizontalScroll: _horizontalScroller];
 }
 
+- (void) magnifyToFitRect: (NSRect) rect {
+    NSUnimplementedMethod();
+    /*
+        todo
+        Magnifies the content view proportionally such that the given rectangle fits centered in the scroll view.
+        The resulting magnification value is clipped to the minMagnification and maxMagnification values
+    */
+}
 
 @end

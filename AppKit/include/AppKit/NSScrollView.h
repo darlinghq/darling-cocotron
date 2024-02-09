@@ -43,6 +43,8 @@ APPKIT_EXPORT NSString *const NSScrollViewDidLiveScrollNotification;
     CGFloat _horizontalLineScroll;
     CGFloat _horizontalPageScroll;
     CGFloat _magnification;
+    CGFloat _maxMagnification;
+    CGFloat _minMagnification;
     int _borderType;
     BOOL _drawsBackground;
     BOOL _hasVerticalScroller;
@@ -111,6 +113,8 @@ APPKIT_EXPORT NSString *const NSScrollViewDidLiveScrollNotification;
 - (CGFloat) lineScroll;
 - (CGFloat) pageScroll;
 - (CGFloat) magnification;
+- (CGFloat) maxMagnification;
+- (CGFLoat) minMagnification;
 - (BOOL) scrollsDynamically;
 - (BOOL) autohidesScrollers;
 - (BOOL) allowsMagnification;
@@ -146,9 +150,12 @@ APPKIT_EXPORT NSString *const NSScrollViewDidLiveScrollNotification;
 - (void) setMinMagnification: (CGFloat) value;
 - (void) setMaxMagnification: (CGFloat) value;
 - (void) setAllowsMagnification: (BOOL) value;
+- (void) setMaxMagnification: (CGFloat) value;
 - (void) setMagnification: (CGFloat) value;
+- (void) minMagnification: (CGFloat) value;
 
 - (void) tile;
 - (void) reflectScrolledClipView: (NSClipView *) clipView;
+- (void) magnifyToFitRect: (NSRect) rect;
 
 @end
