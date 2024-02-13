@@ -1,7 +1,0 @@
-{
-    "files.associations": {
-        "*.embeddedhtml": "html",
-        "type_traits": "cpp",
-        "xtr1common": "cpp"
-    }
-}

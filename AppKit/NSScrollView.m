@@ -872,19 +872,23 @@ static Class _rulerViewClass = nil;
     _allowsMagnification = value;
 }
 
-- (void) setMagnification: (CGFloat) value {
-    _magnification = value;
-}
-
 - (void) setMaxMagnification: (CGFloat) value {
     if (value >= _minMagnification) {
         _maxMagnification = value;
+    } else {
+        [NSException raise: NSInvalidArgumentException
+                    format: @"maxMagnification (%.3f) must be greater than or equal to minMagnification (%.3f).",
+                            value, _minMagnification];
     }
 }
 
 - (void) setMinMagnification: (CGFloat) value {
     if (value <= _maxMagnification) {
         _minMagnification = value;
+    } else {
+        [NSException raise: NSInvalidArgumentException
+                    format: @"minMagnification (%.3f) must be less than or equal to maxMagnification (%.3f).",
+                            value, _maxMagnification];
     }
 }
 
@@ -1114,13 +1118,36 @@ static Class _rulerViewClass = nil;
         [self _horizontalScroll: _horizontalScroller];
 }
 
+- (void) setMagnification:(CGFloat) magnification 
+         centeredAtPoint:(NSPoint) point {
+    // scale the content view centered at the given point
+    NSRect frame = [_clipView frame];
+    NSSize scaledSize = NSMakeSize(frame.size.width*magnification, frame.size.height*magnification);
+    NSPoint centeredOrigin = NSMakePoint(point.x - (newSize.width/2), point.y - (newSize.height/2));
+    [_clipView setFrame:NSMakeRect(centeredOrigin.x, centeredOrigin.y, scaledSize.width, scaledSize.height)];
+
+    // clip the resulting magnification value to min and max magnification
+    magnification = MAX(_minMagnification, magnification);
+    magnification = MIN(_maxMagnification, magnification);
+
+    self._magnification = magnification;
+}
+
 - (void) magnifyToFitRect: (NSRect) rect {
-    NSUnimplementedMethod();
-    /*
-        todo
-        Magnifies the content view proportionally such that the given rectangle fits centered in the scroll view.
-        The resulting magnification value is clipped to the minMagnification and maxMagnification values
-    */
+    if (_allowsMagnification) {
+        // find magnification value needed to scale the content view to the given rectangle without morphing
+        CGFloat widthMagnification = NSWidth(_clipView.bounds) / NSWidth(rect);
+        CGFloat heightMagnification = NSHeight(_clipView.bounds) / NSHeight(rect);
+        CGFloat magnification = MIN(widthMagnification, heightMagnification);
+
+        // The resulting magnification value is clipped to the min/max magnification
+        magnification = MAX(_minMagnification, magnification);
+        magnification = MIN(_maxMagnification, magnification);
+
+        (NSPoint) point = NSMakePoint(NSMidX(rect), NSMidY(rect));
+
+        [_clipView setMagnification:magnification centeredAtPoint:point];
+    }
 }
 
 @end

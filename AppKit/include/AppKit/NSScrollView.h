@@ -151,11 +151,12 @@ APPKIT_EXPORT NSString *const NSScrollViewDidLiveScrollNotification;
 - (void) setMaxMagnification: (CGFloat) value;
 - (void) setAllowsMagnification: (BOOL) value;
 - (void) setMaxMagnification: (CGFloat) value;
-- (void) setMagnification: (CGFloat) value;
 - (void) minMagnification: (CGFloat) value;
 
 - (void) tile;
 - (void) reflectScrolledClipView: (NSClipView *) clipView;
+- (void) setMagnification:(CGFloat) magnification 
+         centeredAtPoint:(NSPoint) point;
 - (void) magnifyToFitRect: (NSRect) rect;
 
 @end
