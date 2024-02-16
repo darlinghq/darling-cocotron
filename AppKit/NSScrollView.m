@@ -663,18 +663,6 @@ static Class _rulerViewClass = nil;
     return _allowsMagnification;
 };
 
-- (CGFloat) magnification {
-    return _magnification;
-}
-
-- (CGFloat) maxMagnification {
-    return _maxMagnification;
-}
-
-- (CGFloat) minMagnification {
-     return _minMagnification;
-}
-
 - (void) setDocumentView: (NSView *) view {
     [_clipView setDocumentView: view];
     [self reflectScrolledClipView: _clipView];
@@ -838,34 +826,6 @@ static Class _rulerViewClass = nil;
 - (void) setAutohidesScrollers: (BOOL) value {
     _autohidesScrollers = value;
     // FIXME: tile or hide/show scrollers?
-}
-
-- (void) setMagnification: (CGFloat) value {
-    if (value == _magnification)
-        return;
-
-    _magnification = value;
-
-    if (_magnification < _minMagnification)
-        _magnification = _minMagnification;
-    if (_magnification < _maxMagnification)
-        _magnification = _maxMagnification;
-
-    // TODO: calculate new bounds and call setBounds
-}
-
-- (void) setMinMagnification: (CGFloat) value {
-    _minMagnification = value;
-
-    if (_minMagnification > _magnification)
-        [self setMagnification: value];
-}
-
-- (void) setMaxMagnification: (CGFloat) value {
-    _maxMagnification = value;
-
-    if (_maxMagnification < _magnification)
-        [self setMagnification: value];
 }
 
 - (void) allowsMagnification: (BOOL) value {
