@@ -1083,14 +1083,14 @@ static Class _rulerViewClass = nil;
     // scale the content view centered at the given point
     NSRect frame = [_clipView frame];
     NSSize scaledSize = NSMakeSize(frame.size.width*magnification, frame.size.height*magnification);
-    NSPoint centeredOrigin = NSMakePoint(point.x - (newSize.width/2), point.y - (newSize.height/2));
+    NSPoint centeredOrigin = NSMakePoint(point.x - (scaledSize.width/2), point.y - (scaledSize.height/2));
     [_clipView setFrame:NSMakeRect(centeredOrigin.x, centeredOrigin.y, scaledSize.width, scaledSize.height)];
 
     // clip the resulting magnification value to min and max magnification
     magnification = MAX(_minMagnification, magnification);
     magnification = MIN(_maxMagnification, magnification);
 
-    self._magnification = magnification;
+    _magnification = magnification;
 }
 
 - (void) magnifyToFitRect: (NSRect) rect {
