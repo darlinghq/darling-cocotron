@@ -49,4 +49,5 @@ APPKIT_EXPORT NSString *NSTabColumnTerminatorsAttributeName;
 
 - (CGFloat) location;
 
+- (NSComparisonResult) compare: (id) anObject;
 @end

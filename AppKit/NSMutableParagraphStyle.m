@@ -128,9 +128,29 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (void) setTabStops: (NSArray *) tabStops {
-    tabStops = [tabStops copy];
-    [_tabStops release];
-    _tabStops = tabStops;
+    if (tabStops != _tabStops) {
+        [_tabStops removeAllObjects];
+        [_tabStops addObjectsFromArray: tabStops];
+        [_tabStops sortUsingSelector: @selector(compare:)];
+    }
+}
+
+- (void) addTabStop: (NSTextTab *) tabStop {
+    NSUInteger index = [_tabStops
+            indexOfObjectPassingTest: ^BOOL(NSTextTab *other, NSUInteger id,
+                                            BOOL *stop) {
+              return [other compare: tabStop] == NSOrderedAscending;
+            }];
+
+    if (index == NSNotFound) {
+        [_tabStops insertObject: tabStop atIndex: 0];
+    } else {
+        [_tabStops insertObject: tabStop atIndex: index];
+    }
+}
+
+- (void) removeTabStop: (NSTextTab *) tabStop {
+    [_tabStops removeObject: tabStop];
 }
 
 - (void) setHyphenationFactor: (float) factor {

@@ -24,95 +24,112 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 @class NSFont, NSColor, NSParagraphStyle, NSTextAttachment, NSFileWrapper,
         NSTextList, NSTextBlock, NSTextTable;
 
-APPKIT_EXPORT NSString *const NSFontAttributeName;
-APPKIT_EXPORT NSString *const NSParagraphStyleAttributeName;
-APPKIT_EXPORT NSString *const NSForegroundColorAttributeName;
-APPKIT_EXPORT NSString *const NSBackgroundColorAttributeName;
-APPKIT_EXPORT NSString *const NSUnderlineStyleAttributeName;
-APPKIT_EXPORT NSString *const NSUnderlineColorAttributeName;
-APPKIT_EXPORT NSString *const NSAttachmentAttributeName;
-APPKIT_EXPORT NSString *const NSKernAttributeName;
-APPKIT_EXPORT NSString *const NSLigatureAttributeName;
-APPKIT_EXPORT NSString *const NSStrikethroughStyleAttributeName;
-APPKIT_EXPORT NSString *const NSStrikethroughColorAttributeName;
-APPKIT_EXPORT NSString *const NSObliquenessAttributeName;
-APPKIT_EXPORT NSString *const NSStrokeWidthAttributeName;
-APPKIT_EXPORT NSString *const NSStrokeColorAttributeName;
-APPKIT_EXPORT NSString *const NSBaselineOffsetAttributeName;
-APPKIT_EXPORT NSString *const NSSuperscriptAttributeName;
-APPKIT_EXPORT NSString *const NSLinkAttributeName;
-APPKIT_EXPORT NSString *const NSShadowAttributeName;
-APPKIT_EXPORT NSString *const NSExpansionAttributeName;
-APPKIT_EXPORT NSString *const NSCursorAttributeName;
-APPKIT_EXPORT NSString *const NSToolTipAttributeName;
+typedef NSString *NSAttributedStringDocumentReadingOptionKey;
+typedef NSString *NSAttributedStringDocumentAttributeKey;
+typedef NSString *NSAttributedStringDocumentType;
+typedef NSString *NSTextLayoutSectionKey;
+typedef NSString *NSAttributedStringKey;
 
-APPKIT_EXPORT NSString *const NSSpellingStateAttributeName;
+// The following constants are *not* declared as `const` in Apple's AppKit (they are located in __data)
+APPKIT_EXPORT NSAttributedStringKey NSFontAttributeName;
+APPKIT_EXPORT NSAttributedStringKey NSParagraphStyleAttributeName;
+APPKIT_EXPORT NSAttributedStringKey NSForegroundColorAttributeName;
+APPKIT_EXPORT NSAttributedStringKey NSBackgroundColorAttributeName;
+APPKIT_EXPORT NSAttributedStringKey NSUnderlineStyleAttributeName;
+APPKIT_EXPORT NSAttributedStringKey NSUnderlineColorAttributeName;
+APPKIT_EXPORT NSAttributedStringKey NSAttachmentAttributeName;
+APPKIT_EXPORT NSAttributedStringKey NSKernAttributeName;
+APPKIT_EXPORT NSAttributedStringKey NSLigatureAttributeName;
+APPKIT_EXPORT NSAttributedStringKey NSStrikethroughStyleAttributeName;
+APPKIT_EXPORT NSAttributedStringKey NSStrikethroughColorAttributeName;
+APPKIT_EXPORT NSAttributedStringKey NSObliquenessAttributeName;
+APPKIT_EXPORT NSAttributedStringKey NSStrokeWidthAttributeName;
+APPKIT_EXPORT NSAttributedStringKey NSStrokeColorAttributeName;
+APPKIT_EXPORT NSAttributedStringKey NSBaselineOffsetAttributeName;
+APPKIT_EXPORT NSAttributedStringKey NSSuperscriptAttributeName;
+APPKIT_EXPORT NSAttributedStringKey NSLinkAttributeName;
+APPKIT_EXPORT NSAttributedStringKey NSShadowAttributeName;
+APPKIT_EXPORT NSAttributedStringKey NSExpansionAttributeName;
+APPKIT_EXPORT NSAttributedStringKey NSCursorAttributeName;
+APPKIT_EXPORT NSAttributedStringKey NSToolTipAttributeName;
 
-APPKIT_EXPORT NSString *const NSDocumentTypeDocumentAttribute;
-APPKIT_EXPORT NSString *const NSConvertedDocumentAttribute;
-APPKIT_EXPORT NSString *const NSFileTypeDocumentAttribute;
-APPKIT_EXPORT NSString *const NSTitleDocumentAttribute;
-APPKIT_EXPORT NSString *const NSCompanyDocumentAttribute;
-APPKIT_EXPORT NSString *const NSCopyrightDocumentAttribute;
-APPKIT_EXPORT NSString *const NSSubjectDocumentAttribute;
-APPKIT_EXPORT NSString *const NSAuthorDocumentAttribute;
-APPKIT_EXPORT NSString *const NSKeywordsDocumentAttribute;
-APPKIT_EXPORT NSString *const NSCommentDocumentAttribute;
-APPKIT_EXPORT NSString *const NSEditorDocumentAttribute;
-APPKIT_EXPORT NSString *const NSCreationTimeDocumentAttribute;
-APPKIT_EXPORT NSString *const NSModificationTimeDocumentAttribute;
-APPKIT_EXPORT NSString *const NSManagerDocumentAttribute;
-APPKIT_EXPORT NSString *const NSCategoryDocumentAttribute;
-APPKIT_EXPORT NSString *const NSAppearanceDocumentAttribute;
-APPKIT_EXPORT NSString *const NSCharacterEncodingDocumentAttribute;
-APPKIT_EXPORT NSString *const NSDefaultAttributesDocumentAttribute;
-APPKIT_EXPORT NSString *const NSPaperSizeDocumentAttribute;
-APPKIT_EXPORT NSString *const NSLeftMarginDocumentAttribute;
-APPKIT_EXPORT NSString *const NSRightMarginDocumentAttribute;
-APPKIT_EXPORT NSString *const NSTopMarginDocumentAttribute;
-APPKIT_EXPORT NSString *const NSBottomMarginDocumentAttribute;
-APPKIT_EXPORT NSString *const NSViewSizeDocumentAttribute;
-APPKIT_EXPORT NSString *const NSViewZoomDocumentAttribute;
-APPKIT_EXPORT NSString *const NSViewModeDocumentAttribute;
-APPKIT_EXPORT NSString *const NSReadOnlyDocumentAttribute;
-APPKIT_EXPORT NSString *const NSBackgroundColorDocumentAttribute;
-APPKIT_EXPORT NSString *const NSHyphenationFactorDocumentAttribute;
-APPKIT_EXPORT NSString *const NSDefaultTabIntervalDocumentAttribute;
-APPKIT_EXPORT NSString *const NSTextLayoutSectionsAttribute;
-APPKIT_EXPORT NSString *const NSExcludedElementsDocumentAttribute;
-APPKIT_EXPORT NSString *const NSTextEncodingNameDocumentAttribute;
-APPKIT_EXPORT NSString *const NSPrefixSpacesDocumentAttribute;
+// The following constant is *not* declared as `const` in Apple's AppKit (they are located in __data)
+APPKIT_EXPORT NSAttributedStringKey NSSpellingStateAttributeName;
 
-APPKIT_EXPORT NSString *const NSDocumentTypeDocumentOption;
-APPKIT_EXPORT NSString *const NSDefaultAttributesDocumentOption;
-APPKIT_EXPORT NSString *const NSCharacterEncodingDocumentOption;
-APPKIT_EXPORT NSString *const NSTextEncodingNameDocumentOption;
-APPKIT_EXPORT NSString *const NSBaseURLDocumentOption;
-APPKIT_EXPORT NSString *const NSTimeoutDocumentOption;
-APPKIT_EXPORT NSString *const NSWebPreferencesDocumentOption;
-APPKIT_EXPORT NSString *const NSWebResourceLoadDelegateDocumentOption;
-APPKIT_EXPORT NSString *const NSTextSizeMultiplierDocumentOption;
-APPKIT_EXPORT NSString *const NSFileTypeDocumentOption;
+// The following constants are *not* declared as `const` in Apple's AppKit (they are located in __data)
+APPKIT_EXPORT NSAttributedStringDocumentAttributeKey NSDocumentTypeDocumentAttribute;
+APPKIT_EXPORT NSAttributedStringDocumentAttributeKey NSConvertedDocumentAttribute;
+APPKIT_EXPORT NSAttributedStringDocumentAttributeKey NSFileTypeDocumentAttribute;
+APPKIT_EXPORT NSAttributedStringDocumentAttributeKey NSTitleDocumentAttribute;
+APPKIT_EXPORT NSAttributedStringDocumentAttributeKey NSCompanyDocumentAttribute;
+APPKIT_EXPORT NSAttributedStringDocumentAttributeKey NSCopyrightDocumentAttribute;
+APPKIT_EXPORT NSAttributedStringDocumentAttributeKey NSSubjectDocumentAttribute;
+APPKIT_EXPORT NSAttributedStringDocumentAttributeKey NSAuthorDocumentAttribute;
+APPKIT_EXPORT NSAttributedStringDocumentAttributeKey NSKeywordsDocumentAttribute;
+APPKIT_EXPORT NSAttributedStringDocumentAttributeKey NSCommentDocumentAttribute;
+APPKIT_EXPORT NSAttributedStringDocumentAttributeKey NSEditorDocumentAttribute;
+APPKIT_EXPORT NSAttributedStringDocumentAttributeKey NSCreationTimeDocumentAttribute;
+APPKIT_EXPORT NSAttributedStringDocumentAttributeKey NSModificationTimeDocumentAttribute;
+APPKIT_EXPORT NSAttributedStringDocumentAttributeKey NSManagerDocumentAttribute;
+APPKIT_EXPORT NSAttributedStringDocumentAttributeKey NSCategoryDocumentAttribute;
+APPKIT_EXPORT NSAttributedStringDocumentAttributeKey NSAppearanceDocumentAttribute;
+APPKIT_EXPORT NSAttributedStringDocumentAttributeKey NSCharacterEncodingDocumentAttribute;
+APPKIT_EXPORT NSAttributedStringDocumentAttributeKey NSDefaultAttributesDocumentAttribute;
+APPKIT_EXPORT NSAttributedStringDocumentAttributeKey NSPaperSizeDocumentAttribute;
+APPKIT_EXPORT NSAttributedStringDocumentAttributeKey NSLeftMarginDocumentAttribute;
+APPKIT_EXPORT NSAttributedStringDocumentAttributeKey NSRightMarginDocumentAttribute;
+APPKIT_EXPORT NSAttributedStringDocumentAttributeKey NSTopMarginDocumentAttribute;
+APPKIT_EXPORT NSAttributedStringDocumentAttributeKey NSBottomMarginDocumentAttribute;
+APPKIT_EXPORT NSAttributedStringDocumentAttributeKey NSViewSizeDocumentAttribute;
+APPKIT_EXPORT NSAttributedStringDocumentAttributeKey NSViewZoomDocumentAttribute;
+APPKIT_EXPORT NSAttributedStringDocumentAttributeKey NSViewModeDocumentAttribute;
+APPKIT_EXPORT NSAttributedStringDocumentAttributeKey NSReadOnlyDocumentAttribute;
+APPKIT_EXPORT NSAttributedStringDocumentAttributeKey NSBackgroundColorDocumentAttribute;
+APPKIT_EXPORT NSAttributedStringDocumentAttributeKey NSHyphenationFactorDocumentAttribute;
+APPKIT_EXPORT NSAttributedStringDocumentAttributeKey NSDefaultTabIntervalDocumentAttribute;
+APPKIT_EXPORT NSAttributedStringDocumentAttributeKey NSTextLayoutSectionsAttribute;
+APPKIT_EXPORT NSAttributedStringDocumentAttributeKey NSExcludedElementsDocumentAttribute;
+APPKIT_EXPORT NSAttributedStringDocumentAttributeKey NSTextEncodingNameDocumentAttribute;
+APPKIT_EXPORT NSAttributedStringDocumentAttributeKey NSPrefixSpacesDocumentAttribute;
+APPKIT_EXPORT NSAttributedStringDocumentAttributeKey NSCocoaVersionDocumentAttribute;
 
-APPKIT_EXPORT NSString *const NSPlainTextDocumentType;
-APPKIT_EXPORT NSString *const NSRTFTextDocumentType;
-APPKIT_EXPORT NSString *const NSRTFDTextDocumentType;
-APPKIT_EXPORT NSString *const NSHTMLTextDocumentType;
-APPKIT_EXPORT NSString *const NSMacSimpleTextDocumentType;
-APPKIT_EXPORT NSString *const NSDocFormatTextDocumentType;
-APPKIT_EXPORT NSString *const NSWordMLTextDocumentType;
-APPKIT_EXPORT NSString *const NSWebArchiveTextDocumentType;
-APPKIT_EXPORT NSString *const NSOfficeOpenXMLTextDocumentType;
-APPKIT_EXPORT NSString *const NSOpenDocumentTextDocumentType;
+// The following constants are *not* declared as `const` in Apple's AppKit (they are located in __data)
+APPKIT_EXPORT NSAttributedStringDocumentReadingOptionKey NSDocumentTypeDocumentOption;
+APPKIT_EXPORT NSAttributedStringDocumentReadingOptionKey NSDefaultAttributesDocumentOption;
+APPKIT_EXPORT NSAttributedStringDocumentReadingOptionKey NSCharacterEncodingDocumentOption;
+APPKIT_EXPORT NSAttributedStringDocumentReadingOptionKey NSTextEncodingNameDocumentOption;
+APPKIT_EXPORT NSAttributedStringDocumentReadingOptionKey NSBaseURLDocumentOption;
+APPKIT_EXPORT NSAttributedStringDocumentReadingOptionKey NSTimeoutDocumentOption;
+APPKIT_EXPORT NSAttributedStringDocumentReadingOptionKey NSWebPreferencesDocumentOption;
+APPKIT_EXPORT NSAttributedStringDocumentReadingOptionKey NSWebResourceLoadDelegateDocumentOption;
+APPKIT_EXPORT NSAttributedStringDocumentReadingOptionKey NSTextSizeMultiplierDocumentOption;
+APPKIT_EXPORT NSAttributedStringDocumentReadingOptionKey NSFileTypeDocumentOption;
 
-APPKIT_EXPORT NSString *const NSTextLayoutSectionOrientation;
-APPKIT_EXPORT NSString *const NSTextLayoutSectionRange;
+// The following constants are *not* declared as `const` in Apple's AppKit (they are located in __data)
+APPKIT_EXPORT NSAttributedStringDocumentType NSPlainTextDocumentType;
+APPKIT_EXPORT NSAttributedStringDocumentType NSRTFTextDocumentType;
+APPKIT_EXPORT NSAttributedStringDocumentType NSRTFDTextDocumentType;
+APPKIT_EXPORT NSAttributedStringDocumentType NSHTMLTextDocumentType;
+APPKIT_EXPORT NSAttributedStringDocumentType NSMacSimpleTextDocumentType;
+APPKIT_EXPORT NSAttributedStringDocumentType NSDocFormatTextDocumentType;
+APPKIT_EXPORT NSAttributedStringDocumentType NSWordMLTextDocumentType;
+APPKIT_EXPORT NSAttributedStringDocumentType NSWebArchiveTextDocumentType;
+APPKIT_EXPORT NSAttributedStringDocumentType NSOfficeOpenXMLTextDocumentType;
+APPKIT_EXPORT NSAttributedStringDocumentType NSOpenDocumentTextDocumentType;
 
-APPKIT_EXPORT NSString *const NSCharacterShapeAttributeName;
-APPKIT_EXPORT NSString *const NSUsesScreenFontsDocumentAttribute;
+// The following constants are *not* declared as `const` in Apple's AppKit (they are located in __data)
+APPKIT_EXPORT NSTextLayoutSectionKey NSTextLayoutSectionOrientation;
+APPKIT_EXPORT NSTextLayoutSectionKey NSTextLayoutSectionRange;
 
-APPKIT_EXPORT NSString *const NSTextEffectAttributeName;
+// The following constants are *not* declared as `const` in Apple's AppKit (they are located in __data)
+APPKIT_EXPORT NSAttributedStringKey NSCharacterShapeAttributeName;
+APPKIT_EXPORT NSAttributedStringKey NSUsesScreenFontsDocumentAttribute;
 
+APPKIT_EXPORT const NSAttributedStringKey NSTextEffectAttributeName;
+// The following constant is *not* declared as `const` in Apple's AppKit (they are located in __data)
+APPKIT_EXPORT NSAttributedStringKey NSWritingDirectionAttributeName;
+
+// The following constants are *not* declared as `const` in Apple's AppKit (they are located in __data)
 APPKIT_EXPORT NSUInteger NSUnderlineStrikethroughMask;
 APPKIT_EXPORT NSUInteger NSUnderlineByWordMask;
 
@@ -238,6 +255,13 @@ enum {
 
 - (NSRect) boundingRectWithSize: (NSSize) size
                         options: (NSStringDrawingOptions) options;
+
+#pragma mark -
+#pragma mark Getting Attribute Data
+- (void)enumerateAttribute: (NSAttributedStringKey) attrName 
+                   inRange: (NSRange) enumerationRange 
+                   options: (NSAttributedStringEnumerationOptions) opts 
+                usingBlock: (void (^)(id value, NSRange range, BOOL *stop)) block;
 
 #pragma mark -
 #pragma mark Testing String Data Sources

@@ -143,6 +143,37 @@ NSString *const NSAllRomanInputSourcesLocaleIdentifier =
     NSUnimplementedMethod();
 }
 
+- (void) _setTextStorage: (NSTextStorage *) storage {
+    if (_ownsTextStorage)
+        [_textStorage release];
+
+    _textStorage = storage;
+    _ownsTextStorage = NO;
+
+    NSMutableDictionary *typingAttributes =
+            [[_textStorage attributesAtIndex: 0
+                              effectiveRange: NULL] mutableCopy];
+    if (![typingAttributes objectForKey: NSFontAttributeName]) {
+        [typingAttributes setObject: _font forKey: NSFontAttributeName];
+    }
+    if (![typingAttributes objectForKey: NSForegroundColorAttributeName]) {
+        [typingAttributes setObject: _textColor
+                             forKey: NSForegroundColorAttributeName];
+    }
+
+    [_typingAttributes release];
+    _typingAttributes = typingAttributes;
+
+    [_defaultParagraphStyle release];
+    if ([typingAttributes objectForKey: NSParagraphStyleAttributeName]) {
+        _defaultParagraphStyle = [[typingAttributes
+                objectForKey: NSParagraphStyleAttributeName] copy];
+    } else {
+        _defaultParagraphStyle =
+                [[NSParagraphStyle defaultParagraphStyle] copy];
+    }
+}
+
 - initWithCoder: (NSCoder *) coder {
     [super initWithCoder: coder];
 
@@ -240,8 +271,6 @@ NSString *const NSAllRomanInputSourcesLocaleIdentifier =
 - initWithFrame: (NSRect) frame textContainer: (NSTextContainer *) container {
     [super initWithFrame: frame];
 
-    _textStorage = [[container layoutManager] textStorage];
-    _ownsTextStorage = NO;
     _textContainer = [container retain];
     [_textContainer setTextView: self];
     _textContainerInset = NSMakeSize(0, 0);
@@ -263,26 +292,6 @@ NSString *const NSAllRomanInputSourcesLocaleIdentifier =
     _selectedRanges = [[NSMutableArray alloc] init];
     [_selectedRanges addObject: [NSValue valueWithRange: NSMakeRange(0, 0)]];
 
-    NSMutableDictionary *typingAttributes =
-            [[_textStorage attributesAtIndex: 0
-                              effectiveRange: NULL] mutableCopy];
-    if (![typingAttributes objectForKey: NSFontAttributeName]) {
-        [typingAttributes setObject: _font forKey: NSFontAttributeName];
-    }
-    if (![typingAttributes objectForKey: NSForegroundColorAttributeName]) {
-        [typingAttributes setObject: _textColor
-                             forKey: NSForegroundColorAttributeName];
-    }
-    _typingAttributes = typingAttributes;
-
-    if ([typingAttributes objectForKey: NSParagraphStyleAttributeName]) {
-        _defaultParagraphStyle = [[typingAttributes
-                objectForKey: NSParagraphStyleAttributeName] copy];
-    } else {
-        _defaultParagraphStyle =
-                [[NSParagraphStyle defaultParagraphStyle] copy];
-    }
-
     _rangeForUserCompletion = NSMakeRange(NSNotFound, 0);
     _selectedTextAttributes = [[NSDictionary
             dictionaryWithObjectsAndKeys: [NSColor selectedTextColor],
@@ -291,9 +300,12 @@ NSString *const NSAllRomanInputSourcesLocaleIdentifier =
                                           NSBackgroundColorAttributeName, nil]
             retain];
 
+    [self _setTextStorage: [[container layoutManager] textStorage]];
+
     [self setBoundsOrigin: NSMakePoint(-_textContainerInset.width,
                                        -_textContainerInset.height)];
     [self configureMenu];
+
     [self registerForDraggedTypes: [NSArray
                                            arrayWithObjects: NSRTFPboardType,
                                                              NSStringPboardType,
@@ -3389,9 +3401,7 @@ NSString *const NSAllRomanInputSourcesLocaleIdentifier =
 - (void) _continuousSpellCheckWithInvalidatedRange: (NSRange) invalidatedRange {
     NSString *string = [self string];
     NSUInteger start, end;
-
     // TODO, truncate invalidated range to string size if needed
-
     // round range to nearest paragraphs
 
     [string getParagraphStart: &start
@@ -3433,10 +3443,8 @@ NSString *const NSAllRomanInputSourcesLocaleIdentifier =
 }
 
 - (void) _continuousSpellCheck {
-    [self _continuousSpellCheckWithInvalidatedRange: NSMakeRange(
-                                                             0,
-                                                             [[self string]
-                                                                     length])];
+    NSRange invalidatedRange = NSMakeRange(0, [[self string] length]);
+    [self _continuousSpellCheckWithInvalidatedRange: invalidatedRange];
 }
 
 - (void) checkSpelling: sender {
@@ -3628,6 +3636,22 @@ NSString *const NSAllRomanInputSourcesLocaleIdentifier =
 - (void) setEnabledTextCheckingTypes: (NSTextCheckingTypes) checkingTypes {
     _enabledTextCheckingTypes = checkingTypes;
     NSUnimplementedMethod();
+}
+
+- (BOOL) smartInsertDeleteEnabled {
+    return _smartInsertDeleteEnabled;
+}
+
+- (void) setSmartInsertDeleteEnabled: (BOOL) boolForKey {
+    _smartInsertDeleteEnabled = boolForKey;
+}
+
+- (BOOL) allowsDocumentBackgroundColorChange {
+    return _allowsDocumentBackgroundColorChange;
+}
+
+- (void) setAllowsDocumentBackgroundColorChange: (BOOL) value {
+    _allowsDocumentBackgroundColorChange = value;
 }
 
 - (void) setSpellingState: (NSInteger) value range: (NSRange) characterRange {
@@ -3956,6 +3980,110 @@ NSString *const NSAllRomanInputSourcesLocaleIdentifier =
 - (id) replacementObjectForKeyedArchiver {
     NSUnimplementedMethod();
     return self;
+}
+- (NSTextLayoutOrientation) layoutOrientation {
+    NSUnimplementedMethod();
+    return _layoutOrientation;
+}
+
+- (void) setLayoutOrientation: (NSTextLayoutOrientation) orientation {
+    _layoutOrientation = orientation;
+    NSUnimplementedMethod();
+}
+
+- (BOOL) isIncrementalSearchingEnabled {
+    NSUnimplementedMethod();
+    return _incrementalSearchingEnabled;
+}
+
+- (BOOL) usesFindBar {
+    NSUnimplementedMethod();
+    return _usesFindBar;
+}
+
+- (BOOL) usesInspectorBar {
+    NSUnimplementedMethod();
+    return _usesInspectorBar;
+}
+
+- (void) setIncrementalSearchingEnabled: (BOOL) value {
+    NSUnimplementedMethod();
+    _incrementalSearchingEnabled = value;
+}
+
+- (void) setUsesFindBar: (BOOL) value {
+    NSUnimplementedMethod();
+    _usesFindBar = value;
+}
+
+- (void) setUsesInspectorBar: (BOOL) value {
+    NSUnimplementedMethod();
+    _usesInspectorBar = value;
+}
+
+- (BOOL) isGrammarCheckingEnabled {
+    NSUnimplementedMethod();
+    return _grammarCheckingEnabled;
+}
+
+- (BOOL) isAutomaticQuoteSubstitutionEnabled {
+    NSUnimplementedMethod();
+    return _automaticQuoteSubstitutionEnabled;
+}
+
+- (BOOL) isAutomaticDashSubstitutionEnabled {
+    NSUnimplementedMethod();
+    return _automaticDashSubstitutionEnabled;
+}
+
+- (BOOL) isAutomaticLinkDetectionEnabled {
+    NSUnimplementedMethod();
+    return _automaticLinkDetectionEnabled;
+}
+
+- (BOOL) isAutomaticDataDetectionEnabled {
+    NSUnimplementedMethod();
+    return _automaticDataDetectionEnabled;
+}
+
+- (BOOL) isAutomaticTextReplacementEnabled {
+    NSUnimplementedMethod();
+    return _automaticTextReplacementEnabled;
+}
+
+- (void) setGrammarCheckingEnabled: (BOOL) value {
+    NSUnimplementedMethod();
+    _grammarCheckingEnabled = value;
+}
+
+- (void) setAutomaticQuoteSubstitutionEnabled: (BOOL) value {
+    NSUnimplementedMethod();
+    _automaticQuoteSubstitutionEnabled = value;
+}
+
+- (void) setAutomaticDashSubstitutionEnabled: (BOOL) value {
+    NSUnimplementedMethod();
+    _automaticDashSubstitutionEnabled = value;
+}
+
+- (void) setAutomaticLinkDetectionEnabled: (BOOL) value {
+    NSUnimplementedMethod();
+    _automaticLinkDetectionEnabled = value;
+}
+
+- (void) setAutomaticDataDetectionEnabled: (BOOL) value {
+    NSUnimplementedMethod();
+    _automaticDataDetectionEnabled = value;
+}
+
+- (void) setAutomaticTextReplacementEnabled: (BOOL) value {
+    NSUnimplementedMethod();
+    _automaticTextReplacementEnabled = value;
+}
+
+// Is defined in NSText but throws an NSInvalidAbstractInvocation Exception
+- (void) setImportsGraphics: (BOOL) value {
+    NSUnimplementedMethod();
 }
 
 @end

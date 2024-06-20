@@ -46,6 +46,12 @@ enum {
     NSOnlyScrollerArrows = 1,
     NSAllScrollerParts = 2,
 };
+
+typedef NS_ENUM(NSInteger, NSScrollerStyle) {
+    NSScrollerStyleLegacy,
+    NSScrollerStyleOverlay,
+};
+
 typedef NSUInteger NSUsableScrollerParts;
 
 @interface NSScroller : NSControl {
@@ -64,6 +70,8 @@ typedef NSUInteger NSUsableScrollerParts;
     NSScrollerPart _hitPart;
     BOOL _isEnabled;
     BOOL _isHighlighted;
+
+    NSScrollerStyle _scrollerStyle;
 }
 
 + (CGFloat) scrollerWidth;
@@ -71,11 +79,14 @@ typedef NSUInteger NSUsableScrollerParts;
 - (CGFloat) knobProportion;
 - (NSScrollArrowPosition) arrowsPosition;
 - (NSControlSize) controlSize;
+- (NSScrollerStyle) scrollerStyle;
++ (NSScrollerStyle) preferredScrollerStyle;
 
 - (void) setFloatValue: (float) zeroToOneValue
         knobProportion: (CGFloat) zeroToOneKnob;
 - (void) setArrowsPosition: (NSScrollArrowPosition) position;
 - (void) setControlSize: (NSControlSize) value;
+- (void) setScrollerStyle: (NSScrollerStyle) style;
 
 - (NSRect) rectForPart: (NSScrollerPart) part;
 - (void) checkSpaceForParts;

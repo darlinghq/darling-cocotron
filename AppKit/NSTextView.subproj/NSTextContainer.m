@@ -189,6 +189,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (void) setLayoutManager: (NSLayoutManager *) layoutManager {
     _layoutManager = layoutManager;
+    [_textView _setTextStorage: [_layoutManager textStorage]];
 }
 
 - (void) replaceLayoutManager: (NSLayoutManager *) layoutManager {

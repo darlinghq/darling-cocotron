@@ -45,12 +45,14 @@ typedef enum {
     CGFloat _lineHeightMultiple;
     CGFloat _lineSpacing;
     CGFloat _defaultTabInterval;
-    NSArray *_tabStops;
+    NSMutableArray *_tabStops;
     float _hyphenationFactor;
     float _tighteningFactorForTruncation;
 }
 
 + (NSParagraphStyle *) defaultParagraphStyle;
+
++ (NSWritingDirection)defaultWritingDirectionForLanguage: (NSString *)languageName;
 
 - (NSWritingDirection) baseWritingDirection;
 

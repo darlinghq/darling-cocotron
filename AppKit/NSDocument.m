@@ -426,6 +426,10 @@ static int untitled_document_number = 0;
     case NSChangeAutosaved:
         NSUnimplementedMethod();
         break;
+
+    case NSChangeRedone:
+        _changeCount++; //Opposite of Undo - this may be wrong
+        break;
     }
 
     BOOL edited = [self isDocumentEdited];
@@ -467,6 +471,7 @@ static int untitled_document_number = 0;
         if ([self _isSelectorOverridden: @selector(readFromFile:ofType:)]) {
             return [self readFromFile: [url path] ofType: type];
         } else {
+
             NSFileWrapper *fileWrapper = [[[NSFileWrapper alloc]
                     initWithPath: [url path]] autorelease];
 
@@ -695,8 +700,8 @@ static int untitled_document_number = 0;
 
 #if 0
     // setAllowedFileTypes: is unimplemented - so don't call it.
-	NSArray* writableTypes = [self writableTypesForSaveOperation: operation];
-	[savePanel setAllowedFileTypes: writableTypes];
+    NSArray* writableTypes = [self writableTypesForSaveOperation: operation];
+    [savePanel setAllowedFileTypes: writableTypes];
 #endif
 
     if ([self prepareSavePanel: savePanel] == NO) {
@@ -1197,9 +1202,8 @@ static int untitled_document_number = 0;
     return self;
 }
 
-- initWithContentsOfURL: (NSURL *) url ofType: (NSString *) type {
+- (id) initWithContentsOfURL: (NSURL *) url ofType: (NSString *) type {
     NSError *error;
-
     [self init];
 
     error = nil;
@@ -1222,6 +1226,7 @@ static int untitled_document_number = 0;
 
     return self;
 }
+
 
 - (BOOL) loadDataRepresentation: (NSData *) data ofType: (NSString *) type {
     [NSException raise: NSInternalInconsistencyException
@@ -1505,6 +1510,20 @@ static int untitled_document_number = 0;
 - (void) performSynchronousFileAccessUsingBlock: (void (^)(void)) block {
     // FIXME: this is just a stub for now that performs no synchronization
     block();
+}
+
+- (void) saveToURL: (NSURL *) url
+            ofType: (NSString *) typeName
+  forSaveOperation: (NSSaveOperationType) saveOperation
+ completionHandler: (void (^)(NSError *errorOrNil)) completionHandler
+ {
+    NSUnimplementedMethod();
+}
+
+- (void) autosaveWithImplicitCancellability: (BOOL) autosavingIsImplicitlyCancellable
+                          completionHandler: (void (^)(NSError *errorOrNil)) completionHandler
+{
+    NSUnimplementedMethod();
 }
 
 @end
