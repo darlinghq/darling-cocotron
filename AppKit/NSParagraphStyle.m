@@ -34,6 +34,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return shared;
 }
 
++ (NSWritingDirection) defaultWritingDirectionForLanguage: (NSString *) languageName {
+    NSUnimplementedMethod();
+    return NSWritingDirectionNatural;
+}
+
 + (NSArray *) _defaultTabStops {
     static NSArray *shared = nil;
 
@@ -69,7 +74,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     _lineHeightMultiple = 0;
     _lineSpacing = 0;
     _defaultTabInterval = 0;
-    _tabStops = [[[self class] _defaultTabStops] retain];
+    _tabStops = [[[self class] _defaultTabStops] mutableCopy];
     _hyphenationFactor = 0;
     _tighteningFactorForTruncation = 0;
 }

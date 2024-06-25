@@ -24,6 +24,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSAnimation.h>
 #import <AppKit/NSGraphics.h>
 #import <AppKit/NSResponder.h>
+#import <AppKit/NSUserInterfaceItemIdentification.h>
 #import <ApplicationServices/ApplicationServices.h>
 #import <AppKit/NSUserInterfaceItemIdentification.h>
 #import <AppKit/NSLayoutConstraint.h>
@@ -109,6 +110,7 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPre
     NSInteger _rectsBeingRedrawnCount;
     CGFloat _frameRotation;
     CGFloat _boundsRotation;
+    BOOL _translatesAutoresizingMaskIntoConstraints;
 
     BOOL _validTrackingAreas;
     BOOL _validTransforms;
@@ -134,7 +136,6 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPre
     NSLayoutPriority _verticalContentHuggingPriority;
     NSLayoutPriority _horizontalContentCompressionResistancePriority;
     NSLayoutPriority _verticalContentCompressionResistancePriority;
-    BOOL _translatesAutoresizingMaskIntoConstraints;
 }
 
 @property(class, readonly) BOOL requiresConstraintBasedLayout;

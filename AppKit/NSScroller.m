@@ -34,6 +34,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return [[NSDisplay currentDisplay] scrollerWidth];
 }
 
++ (NSScrollerStyle) preferredScrollerStyle {
+    NSUnimplementedMethod();
+}
 /* OS X has a global default "AppleScrollBarVariant" with the values: Single,
  DoubleMin, DoubleMax, and DoubleBoth This controls the default position of the
  scroller. This should be controlling the positioning.
@@ -141,6 +144,11 @@ static NSAppleScrollBarVariant appleScrollBarVariant(NSScroller *self) {
     return _controlSize;
 }
 
+- (NSScrollerStyle) scrollerStyle {
+    return _scrollerStyle;
+}
+
+
 - (void) setFloatValue: (float) zeroToOneValue
         knobProportion: (CGFloat) zeroToOneKnob
 {
@@ -183,6 +191,10 @@ static NSAppleScrollBarVariant appleScrollBarVariant(NSScroller *self) {
 - (void) setControlSize: (NSControlSize) value {
     _controlSize = value;
     [self setNeedsDisplay: YES];
+}
+
+- (void) setScrollerStyle: (NSScrollerStyle) style {
+    _scrollerStyle = style;
 }
 
 - (NSRect) frameOfDecrementPage {

@@ -19,6 +19,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/AppKitExport.h>
 #import <AppKit/NSView.h>
+#import <AppKit/NSControl.h>
+#import <AppKit/NSScroller.h>
 #import <Foundation/NSString.h>
 
 @class NSClipView, NSScroller, NSColor, NSRulerView;
@@ -50,16 +52,32 @@ APPKIT_EXPORT NSString *const NSScrollViewDidLiveScrollNotification;
     BOOL _scrollsDynamically;
     BOOL _autohidesScrollers;
     NSCursor *_documentCursor;
+    BOOL _allowsMagnification;
+    CGFloat _magnification;
+    CGFloat _minMagnification;
+    CGFloat _maxMagnification;
 }
 
 + (NSSize) frameSizeForContentSize: (NSSize) contentSize
              hasHorizontalScroller: (BOOL) hasHorizontalScroller
                hasVerticalScroller: (BOOL) hasVerticalScroller
                         borderType: (NSBorderType) borderType;
++ (NSSize)frameSizeForContentSize: (NSSize)cSize 
+          horizontalScrollerClass: (Class)horizontalScrollerClass 
+            verticalScrollerClass: (Class)verticalScrollerClass 
+                       borderType: (NSBorderType)type 
+                      controlSize: (NSControlSize)controlSize 
+                    scrollerStyle: (NSScrollerStyle)scrollerStyle;
 + (NSSize) contentSizeForFrameSize: (NSSize) fSize
              hasHorizontalScroller: (BOOL) hasHorizontalScroller
                hasVerticalScroller: (BOOL) hasVerticalScroller
                         borderType: (NSBorderType) borderType;
++ (NSSize)contentSizeForFrameSize: (NSSize)fSize 
+          horizontalScrollerClass: (Class)horizontalScrollerClass 
+            verticalScrollerClass: (Class)verticalScrollerClass 
+                       borderType: (NSBorderType)type 
+                      controlSize: (NSControlSize)controlSize 
+                    scrollerStyle: (NSScrollerStyle)scrollerStyle;
 
 + (void) setRulerViewClass: (Class) aClass;
 + (Class) rulerViewClass;
@@ -94,6 +112,10 @@ APPKIT_EXPORT NSString *const NSScrollViewDidLiveScrollNotification;
 - (BOOL) autohidesScrollers;
 
 - (NSCursor *) documentCursor;
+- (CGFloat) magnification;
+- (CGFloat) minMagnification;
+- (CGFloat) maxMagnification;
+- (BOOL) allowsMagnification;
 
 - (void) setDocumentView: (NSView *) view;
 - (void) setContentView: (NSClipView *) clipView;
@@ -116,6 +138,10 @@ APPKIT_EXPORT NSString *const NSScrollViewDidLiveScrollNotification;
 - (void) setScrollsDynamically: (BOOL) flag;
 - (void) setDocumentCursor: (NSCursor *) cursor;
 - (void) setAutohidesScrollers: (BOOL) value;
+- (void) setMagnification: (CGFloat) value;
+- (void) setMinMagnification: (CGFloat) value;
+- (void) setMaxMagnification: (CGFloat) value;
+- (void) setAllowsMagnification: (BOOL) value;
 
 - (void) tile;
 - (void) reflectScrolledClipView: (NSClipView *) clipView;

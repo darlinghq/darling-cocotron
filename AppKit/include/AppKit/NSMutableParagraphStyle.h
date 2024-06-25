@@ -18,6 +18,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSParagraphStyle.h>
+#import <AppKit/NSTextTab.h>
 
 @interface NSMutableParagraphStyle : NSParagraphStyle
 
@@ -47,6 +48,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (void) setDefaultTabInterval: (CGFloat) interval;
 - (void) setTabStops: (NSArray *) tabStops;
+- (void) addTabStop: (NSTextTab *) tabStop;
+- (void) removeTabStop: (NSTextTab *) tabStop;
+
 
 - (void) setHyphenationFactor: (float) factor;
 - (void) setTighteningFactorForTruncation: (float) factor;

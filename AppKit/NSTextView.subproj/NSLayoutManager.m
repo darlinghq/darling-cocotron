@@ -30,7 +30,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSTypesetter.h>
 #import <AppKit/NSWindow.h>
 
-#import <Foundation/NSRangeEntries.h>
 #import <AppKit/NSAttributedString.h>
 #import <AppKit/NSColor.h>
 #import <AppKit/NSGraphics.h>
@@ -39,6 +38,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <ApplicationServices/ApplicationServices.h>
 #import <Foundation/NSKeyedArchiver.h>
 #import <Foundation/NSRaiseException.h>
+#import <Foundation/NSRangeEntries.h>
 
 #import "NSBidiHelper.h"
 #import "NSRulerMarker+NSTextExtensions.h"
@@ -177,11 +177,17 @@ static inline NSGlyphFragment *fragmentAtGlyphIndex(NSLayoutManager *self,
 }
 
 - (NSTextView *) firstTextView {
-    return [[_textContainers objectAtIndex: 0] textView];
+    for (NSTextContainer *container in _textContainers) {
+        NSTextView *textView = [container textView];
+        if (textView) {
+            return textView;
+        }
+    }
+    return nil;
 }
 
 - (NSTextView *) textViewForBeginningOfSelection {
-    return [[_textContainers objectAtIndex: 0] textView];
+    return [self firstTextView];
 }
 
 - (BOOL) layoutManagerOwnsFirstResponderInWindow: (NSWindow *) window {
@@ -724,6 +730,10 @@ static inline NSGlyphFragment *fragmentAtGlyphIndex(NSLayoutManager *self,
 
 - (NSTextContainer *) extraLineFragmentTextContainer {
     return _extraLineFragmentTextContainer;
+}
+
+- (BOOL) allowsNonContiguousLayout {
+    return _allowsNonContiguousLayout;
 }
 
 - (void) setTextContainer: (NSTextContainer *) container
@@ -1365,7 +1375,7 @@ static inline void _appendRectToCache(NSLayoutManager *self, NSRect rect) {
 #if DEBUG_rectArrayForGlyphRange_withinSelectedGlyphRange_inTextContainer_rectCount
             NSLog(@"This existing range is %@\n", NSStringFromRange(range));
 #endif
-            
+
             // The part of the that we are interested in - start with the full
             // rect, we'll change it if we don't want the full fragment
             NSRect fill = fragment->rect;
@@ -1374,7 +1384,8 @@ static inline void _appendRectToCache(NSLayoutManager *self, NSRect rect) {
                 NSRange intersect;
                 if (remainder.length > 0)
                     intersect = NSIntersectionRange(remainder, range);
-                else // NSIntersectionRange's returned location is undefined for 0-length ranges
+                else // NSIntersectionRange's returned location is undefined for
+                     // 0-length ranges
                     intersect = NSMakeRange(remainder.location, 0);
 
 #if DEBUG_rectArrayForGlyphRange_withinSelectedGlyphRange_inTextContainer_rectCount
@@ -2908,5 +2919,10 @@ static inline void _appendRectToCache(NSLayoutManager *self, NSRect rect) {
                                    enabled: (BOOL) isEnabled
 {
     return nil;
+}
+
+- (void) setAllowsNonContiguousLayout: (BOOL) value {
+    _allowsNonContiguousLayout = value;
+    NSUnimplementedMethod();
 }
 @end

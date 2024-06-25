@@ -32,6 +32,11 @@ typedef enum {
     NSGlyphInscribeOverBelow,
 } NSGlyphInscription;
 
+typedef NS_ENUM(NSInteger, NSTextLayoutOrientation) {
+    NSTextLayoutOrientationHorizontal,
+    NSTextLayoutOrientationVertical,
+};
+
 @interface NSLayoutManager : NSObject {
     NSTextStorage *_textStorage;
     NSGlyphGenerator *_glyphGenerator;
@@ -47,6 +52,7 @@ typedef enum {
     struct NSRangeEntries *_rangeToTemporaryAttributes;
 
     BOOL _layoutInvalid;
+    BOOL _allowsNonContiguousLayout;
 
     NSRect _extraLineFragmentRect;
     NSRect _extraLineFragmentUsedRect;
@@ -125,6 +131,8 @@ typedef enum {
 - (NSRect) extraLineFragmentRect;
 - (NSRect) extraLineFragmentUsedRect;
 - (NSTextContainer *) extraLineFragmentTextContainer;
+
+- (BOOL) allowsNonContiguousLayout;
 
 - (void) setTextContainer: (NSTextContainer *) container
             forGlyphRange: (NSRange) glyphRange;
@@ -268,6 +276,8 @@ typedef enum {
                             paragraphStyle: (NSParagraphStyle *) style
                                      ruler: (NSRulerView *) ruler
                                    enabled: (BOOL) isEnabled;
+
+- (void) setAllowsNonContiguousLayout: (BOOL) value;
 @end
 
 @protocol NSLayoutManagerDelegate <NSObject>
@@ -283,5 +293,7 @@ typedef enum {
 @end
 
 @protocol NSTextLayoutOrientationProvider
+
+- (NSTextLayoutOrientation) layoutOrientation;
 
 @end

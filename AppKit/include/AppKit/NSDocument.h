@@ -23,18 +23,23 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 @class NSWindow, NSWindowController, NSSavePanel, NSMenuItem, NSFileWrapper,
         NSPrintOperation, NSPrintInfo, NSPageLayout, NSView;
 
-typedef enum {
+typedef enum NSDocumentChangeType : NSUInteger {
     NSChangeDone,
     NSChangeUndone,
     NSChangeCleared,
     NSChangeReadOtherContents,
     NSChangeAutosaved,
+    NSChangeRedone,
+    NSChangeDiscardable = 256,
 } NSDocumentChangeType;
 
 typedef enum {
     NSSaveOperation,
     NSSaveAsOperation,
     NSSaveToOperation,
+    NSAutosaveElsewhereOperation,
+    NSAutosaveInPlaceOperation,
+    NSAutosaveAsOperation,
     NSAutosaveOperation,
 } NSSaveOperationType;
 
@@ -230,7 +235,7 @@ typedef enum {
         (NSSaveOperationType) operation;
 - (NSFileWrapper *) fileWrapperRepresentationOfType: (NSString *) type;
 - initWithContentsOfFile: (NSString *) path ofType: (NSString *) type;
-- initWithContentsOfURL: (NSURL *) url ofType: (NSString *) type;
+- (id) initWithContentsOfURL: (NSURL *) url ofType: (NSString *) type;
 - (BOOL) loadDataRepresentation: (NSData *) data ofType: (NSString *) type;
 - (BOOL) loadFileWrapperRepresentation: (NSFileWrapper *) wrapper
                                 ofType: (NSString *) type;
@@ -258,5 +263,13 @@ typedef enum {
 - (BOOL) writeWithBackupToFile: (NSString *) path
                         ofType: (NSString *) type
                  saveOperation: (NSSaveOperationType) operation;
+
+- (void)saveToURL: (NSURL *) url 
+           ofType: (NSString *) typeName 
+ forSaveOperation: (NSSaveOperationType) saveOperation 
+completionHandler: (void (^)(NSError *errorOrNil)) completionHandler;
+
+- (void)autosaveWithImplicitCancellability: (BOOL) autosavingIsImplicitlyCancellable 
+                         completionHandler: (void (^)(NSError *errorOrNil)) completionHandler;
 
 @end

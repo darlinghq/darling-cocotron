@@ -592,10 +592,10 @@ static NSDictionary *modeInfoToDictionary(const XRRModeInfo *mi, int depth) {
     if ([colorName isEqual: @"windowFrameColor"])
         return [NSColor lightGrayColor];
     if ([colorName isEqual: @"selectedTextBackgroundColor"])
-        return [NSColor colorWithCalibratedRed: 0x33
-                                         green: 0x8f
-                                          blue: 0xff
-                                         alpha: 1.0f];
+        return [NSColor colorWithCalibratedRed: 0.20f
+                                         green: 0.55f
+                                          blue: 1.00f
+                                         alpha: 1.00f];
 
     NSLog(@"missing color for %@", colorName);
     return [NSColor redColor];

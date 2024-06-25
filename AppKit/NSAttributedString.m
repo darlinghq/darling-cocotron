@@ -27,108 +27,95 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSStringDrawer.h>
 #import <AppKit/NSTextAttachment.h>
 
-NSString *const NSFontAttributeName = @"NSFontAttributeName";
-NSString *const NSParagraphStyleAttributeName =
-        @"NSParagraphStyleAttributeName";
-NSString *const NSForegroundColorAttributeName =
-        @"NSForegroundColorAttributeName";
-NSString *const NSBackgroundColorAttributeName =
-        @"NSBackgroundColorAttributeName";
-NSString *const NSUnderlineStyleAttributeName =
-        @"NSUnderlineStyleAttributeName";
-NSString *const NSUnderlineColorAttributeName =
-        @"NSUnderlineColorAttributeName";
-NSString *const NSAttachmentAttributeName = @"NSAttachmentAttributeName";
-NSString *const NSKernAttributeName = @"NSKernAttributeName";
-NSString *const NSLigatureAttributeName = @"NSLigatureAttributeName";
-NSString *const NSStrikethroughStyleAttributeName =
-        @"NSStrikethroughStyleAttributeName";
-NSString *const NSStrikethroughColorAttributeName =
-        @"NSStrikethroughColorAttributeName";
-NSString *const NSObliquenessAttributeName = @"NSObliquenessAttributeName";
-NSString *const NSStrokeWidthAttributeName = @"NSStrokeWidthAttributeName";
-NSString *const NSStrokeColorAttributeName = @"NSStrokeColorAttributeName";
-NSString *const NSBaselineOffsetAttributeName =
-        @"NSBaselineOffsetAttributeName";
-NSString *const NSSuperscriptAttributeName = @"NSSuperscriptAttributeName";
-NSString *const NSLinkAttributeName = @"NSLinkAttributeName";
-NSString *const NSShadowAttributeName = @"NSShadowAttributeName";
-NSString *const NSExpansionAttributeName = @"NSExpansionAttributeName";
-NSString *const NSCursorAttributeName = @"NSCursorAttributeName";
-NSString *const NSToolTipAttributeName = @"NSToolTipAttributeName";
-NSString *const NSSpellingStateAttributeName =
-        @"NSSpellingStateAttributeName"; // temporary attribute
+NSAttributedStringKey NSFontAttributeName = @"NSFontAttributeName";
+NSAttributedStringKey NSParagraphStyleAttributeName = @"NSParagraphStyleAttributeName";
+NSAttributedStringKey NSForegroundColorAttributeName = @"NSForegroundColorAttributeName";
+NSAttributedStringKey NSBackgroundColorAttributeName = @"NSBackgroundColorAttributeName";
+NSAttributedStringKey NSUnderlineStyleAttributeName = @"NSUnderlineStyleAttributeName";
+NSAttributedStringKey NSUnderlineColorAttributeName = @"NSUnderlineColorAttributeName";
+NSAttributedStringKey NSAttachmentAttributeName = @"NSAttachmentAttributeName";
+NSAttributedStringKey NSKernAttributeName = @"NSKernAttributeName";
+NSAttributedStringKey NSLigatureAttributeName = @"NSLigatureAttributeName";
+NSAttributedStringKey NSStrikethroughStyleAttributeName = @"NSStrikethroughStyleAttributeName";
+NSAttributedStringKey NSStrikethroughColorAttributeName = @"NSStrikethroughColorAttributeName";
+NSAttributedStringKey NSObliquenessAttributeName = @"NSObliquenessAttributeName";
+NSAttributedStringKey NSStrokeWidthAttributeName = @"NSStrokeWidthAttributeName";
+NSAttributedStringKey NSStrokeColorAttributeName = @"NSStrokeColorAttributeName";
+NSAttributedStringKey NSBaselineOffsetAttributeName = @"NSBaselineOffsetAttributeName";
+NSAttributedStringKey NSSuperscriptAttributeName = @"NSSuperscriptAttributeName";
+NSAttributedStringKey NSLinkAttributeName = @"NSLinkAttributeName";
+NSAttributedStringKey NSShadowAttributeName = @"NSShadowAttributeName";
+NSAttributedStringKey NSExpansionAttributeName = @"NSExpansionAttributeName";
+NSAttributedStringKey NSCursorAttributeName = @"NSCursorAttributeName";
+NSAttributedStringKey NSToolTipAttributeName = @"NSToolTipAttributeName";
+NSAttributedStringKey NSSpellingStateAttributeName = @"NSSpellingStateAttributeName"; // temporary attribute
 
-NSString *const NSDocumentTypeDocumentAttribute = @"DocumentType";
-NSString *const NSConvertedDocumentAttribute = @"Converted";
-NSString *const NSFileTypeDocumentAttribute = @"UTI";
-NSString *const NSTitleDocumentAttribute = @"NSTitleDocumentAttribute";
-NSString *const NSCompanyDocumentAttribute = @"NSCompanyDocumentAttribute";
-NSString *const NSCopyrightDocumentAttribute = @"NSCopyrightDocumentAttribute";
-NSString *const NSSubjectDocumentAttribute = @"NSSubjectDocumentAttribute";
-NSString *const NSAuthorDocumentAttribute = @"NSAuthorDocumentAttribute";
-NSString *const NSKeywordsDocumentAttribute = @"NSKeywordsDocumentAttribute";
-NSString *const NSCommentDocumentAttribute = @"NSCommentDocumentAttribute";
-NSString *const NSEditorDocumentAttribute = @"NSEditorDocumentAttribute";
-NSString *const NSCreationTimeDocumentAttribute =
-        @"NSCreationTimeDocumentAttribute";
-NSString *const NSModificationTimeDocumentAttribute =
-        @"NSModificationTimeDocumentAttribute";
-NSString *const NSManagerDocumentAttribute = @"NSManagerDocumentAttribute";
-NSString *const NSCategoryDocumentAttribute = @"NSCategoryDocumentAttribute";
-NSString *const NSAppearanceDocumentAttribute =
-        @"NSAppearanceDocumentAttribute";
-NSString *const NSCharacterEncodingDocumentAttribute = @"CharacterEncoding";
-NSString *const NSDefaultAttributesDocumentAttribute = @"DefaultAttributes";
-NSString *const NSPaperSizeDocumentAttribute = @"PaperSize";
-NSString *const NSLeftMarginDocumentAttribute = @"LeftMargin";
-NSString *const NSRightMarginDocumentAttribute = @"RightMargin";
-NSString *const NSTopMarginDocumentAttribute = @"TopMargin";
-NSString *const NSBottomMarginDocumentAttribute = @"BottomMargin";
-NSString *const NSViewSizeDocumentAttribute = @"ViewSize";
-NSString *const NSViewZoomDocumentAttribute = @"ViewZoom";
-NSString *const NSViewModeDocumentAttribute = @"ViewMode";
-NSString *const NSReadOnlyDocumentAttribute = @"ReadOnly";
-NSString *const NSBackgroundColorDocumentAttribute = @"BackgroundColor";
-NSString *const NSHyphenationFactorDocumentAttribute = @"HyphenationFactor";
-NSString *const NSDefaultTabIntervalDocumentAttribute = @"DefaultTabInterval";
-NSString *const NSTextLayoutSectionsAttribute =
-        @"NSTextLayoutSectionsAttribute";
-NSString *const NSExcludedElementsDocumentAttribute = @"ExcludedElements";
-NSString *const NSTextEncodingNameDocumentAttribute = @"TextEncodingName";
-NSString *const NSPrefixSpacesDocumentAttribute = @"PrefixSpaces";
+NSAttributedStringDocumentAttributeKey NSDocumentTypeDocumentAttribute = @"DocumentType";
+NSAttributedStringDocumentAttributeKey NSConvertedDocumentAttribute = @"Converted";
+NSAttributedStringDocumentAttributeKey NSFileTypeDocumentAttribute = @"UTI";
+NSAttributedStringDocumentAttributeKey NSTitleDocumentAttribute = @"NSTitleDocumentAttribute";
+NSAttributedStringDocumentAttributeKey NSCompanyDocumentAttribute = @"NSCompanyDocumentAttribute";
+NSAttributedStringDocumentAttributeKey NSCopyrightDocumentAttribute = @"NSCopyrightDocumentAttribute";
+NSAttributedStringDocumentAttributeKey NSSubjectDocumentAttribute = @"NSSubjectDocumentAttribute";
+NSAttributedStringDocumentAttributeKey NSAuthorDocumentAttribute = @"NSAuthorDocumentAttribute";
+NSAttributedStringDocumentAttributeKey NSKeywordsDocumentAttribute = @"NSKeywordsDocumentAttribute";
+NSAttributedStringDocumentAttributeKey NSCommentDocumentAttribute = @"NSCommentDocumentAttribute";
+NSAttributedStringDocumentAttributeKey NSEditorDocumentAttribute = @"NSEditorDocumentAttribute";
+NSAttributedStringDocumentAttributeKey NSCreationTimeDocumentAttribute = @"NSCreationTimeDocumentAttribute";
+NSAttributedStringKey NSModificationTimeDocumentAttribute = @"NSModificationTimeDocumentAttribute";
+NSAttributedStringDocumentAttributeKey NSManagerDocumentAttribute = @"NSManagerDocumentAttribute";
+NSAttributedStringDocumentAttributeKey NSCategoryDocumentAttribute = @"NSCategoryDocumentAttribute";
+NSAttributedStringDocumentAttributeKey NSAppearanceDocumentAttribute = @"NSAppearanceDocumentAttribute";
+NSAttributedStringDocumentAttributeKey NSCharacterEncodingDocumentAttribute = @"CharacterEncoding";
+NSAttributedStringDocumentAttributeKey NSDefaultAttributesDocumentAttribute = @"DefaultAttributes";
+NSAttributedStringDocumentAttributeKey NSPaperSizeDocumentAttribute = @"PaperSize";
+NSAttributedStringDocumentAttributeKey NSLeftMarginDocumentAttribute = @"LeftMargin";
+NSAttributedStringDocumentAttributeKey NSRightMarginDocumentAttribute = @"RightMargin";
+NSAttributedStringDocumentAttributeKey NSTopMarginDocumentAttribute = @"TopMargin";
+NSAttributedStringDocumentAttributeKey NSBottomMarginDocumentAttribute = @"BottomMargin";
+NSAttributedStringDocumentAttributeKey NSViewSizeDocumentAttribute = @"ViewSize";
+NSAttributedStringDocumentAttributeKey NSViewZoomDocumentAttribute = @"ViewZoom";
+NSAttributedStringDocumentAttributeKey NSViewModeDocumentAttribute = @"ViewMode";
+NSAttributedStringDocumentAttributeKey NSReadOnlyDocumentAttribute = @"ReadOnly";
+NSAttributedStringDocumentAttributeKey NSBackgroundColorDocumentAttribute = @"BackgroundColor";
+NSAttributedStringDocumentAttributeKey NSHyphenationFactorDocumentAttribute = @"HyphenationFactor";
+NSAttributedStringDocumentAttributeKey NSDefaultTabIntervalDocumentAttribute = @"DefaultTabInterval";
+NSAttributedStringDocumentAttributeKey NSTextLayoutSectionsAttribute = @"NSTextLayoutSectionsAttribute";
+NSAttributedStringDocumentAttributeKey NSExcludedElementsDocumentAttribute = @"ExcludedElements";
+NSAttributedStringDocumentAttributeKey NSTextEncodingNameDocumentAttribute = @"TextEncodingName";
+NSAttributedStringDocumentAttributeKey NSPrefixSpacesDocumentAttribute = @"PrefixSpaces";
+NSAttributedStringDocumentAttributeKey NSCocoaVersionDocumentAttribute = @"NSCocoaVersionDocumentAttribute";
 
-NSString *const NSDocumentTypeDocumentOption = @"DocumentType";
-NSString *const NSDefaultAttributesDocumentOption = @"DefaultAttributes";
-NSString *const NSCharacterEncodingDocumentOption = @"CharacterEncoding";
-NSString *const NSTextEncodingNameDocumentOption = @"TextEncodingName";
-NSString *const NSBaseURLDocumentOption = @"BaseURL";
-NSString *const NSTimeoutDocumentOption = @"Timeout";
-NSString *const NSWebPreferencesDocumentOption = @"WebPreferences";
-NSString *const NSWebResourceLoadDelegateDocumentOption =
-        @"WebResourceLoadDelegate";
-NSString *const NSTextSizeMultiplierDocumentOption = @"TextSizeMultiplier";
-NSString *const NSFileTypeDocumentOption = @"UTI";
+NSAttributedStringDocumentReadingOptionKey NSDocumentTypeDocumentOption = @"DocumentType";
+NSAttributedStringDocumentReadingOptionKey NSDefaultAttributesDocumentOption = @"DefaultAttributes";
+NSAttributedStringDocumentReadingOptionKey NSCharacterEncodingDocumentOption = @"CharacterEncoding";
+NSAttributedStringDocumentReadingOptionKey NSTextEncodingNameDocumentOption = @"TextEncodingName";
+NSAttributedStringDocumentReadingOptionKey NSBaseURLDocumentOption = @"BaseURL";
+NSAttributedStringDocumentReadingOptionKey NSTimeoutDocumentOption = @"Timeout";
+NSAttributedStringDocumentReadingOptionKey NSWebPreferencesDocumentOption = @"WebPreferences";
+NSAttributedStringDocumentReadingOptionKey NSWebResourceLoadDelegateDocumentOption = @"WebResourceLoadDelegate";
+NSAttributedStringDocumentReadingOptionKey NSTextSizeMultiplierDocumentOption = @"TextSizeMultiplier";
+NSAttributedStringDocumentReadingOptionKey NSFileTypeDocumentOption = @"UTI";
 
-NSString *const NSPlainTextDocumentType = @"NSPlainText";
-NSString *const NSRTFTextDocumentType = @"NSRTF";
-NSString *const NSRTFDTextDocumentType = @"NSRTFD";
-NSString *const NSHTMLTextDocumentType = @"NSHTML";
-NSString *const NSMacSimpleTextDocumentType = @"NSMacSimpleText";
-NSString *const NSDocFormatTextDocumentType = @"NSDocFormat";
-NSString *const NSWordMLTextDocumentType = @"NSWordML";
-NSString *const NSWebArchiveTextDocumentType = @"NSWebArchive";
-NSString *const NSOfficeOpenXMLTextDocumentType = @"NSOfficeOpenXML";
-NSString *const NSOpenDocumentTextDocumentType = @"NSOpenDocument";
+NSAttributedStringDocumentType NSPlainTextDocumentType = @"NSPlainText";
+NSAttributedStringDocumentType NSRTFTextDocumentType = @"NSRTF";
+NSAttributedStringDocumentType NSRTFDTextDocumentType = @"NSRTFD";
+NSAttributedStringDocumentType NSHTMLTextDocumentType = @"NSHTML";
+NSAttributedStringDocumentType NSMacSimpleTextDocumentType = @"NSMacSimpleText";
+NSAttributedStringDocumentType NSDocFormatTextDocumentType = @"NSDocFormat";
+NSAttributedStringDocumentType NSWordMLTextDocumentType = @"NSWordML";
+NSAttributedStringDocumentType NSWebArchiveTextDocumentType = @"NSWebArchive";
+NSAttributedStringDocumentType NSOfficeOpenXMLTextDocumentType = @"NSOfficeOpenXML";
+NSAttributedStringDocumentType NSOpenDocumentTextDocumentType = @"NSOpenDocument";
 
-NSString *const NSTextLayoutSectionOrientation =
-        @"NSTextLayoutSectionOrientation";
-NSString *const NSTextLayoutSectionRange = @"NSTextLayoutSectionRange";
+NSTextLayoutSectionKey NSTextLayoutSectionOrientation = @"NSTextLayoutSectionOrientation";
+NSTextLayoutSectionKey NSTextLayoutSectionRange = @"NSTextLayoutSectionRange";
 
-NSString *const NSCharacterShapeAttributeName = @"NSCharacterShape";
-NSString *const NSUsesScreenFontsDocumentAttribute = @"UsesScreenFonts";
+NSAttributedStringKey NSCharacterShapeAttributeName = @"NSCharacterShape";
+NSAttributedStringKey NSUsesScreenFontsDocumentAttribute = @"UsesScreenFonts";
 
-NSString *const NSTextEffectAttributeName = @"NSTextEffect";
+const NSAttributedStringKey NSTextEffectAttributeName = @"NSTextEffect";
+NSAttributedStringKey NSWritingDirectionAttributeName = @"NSWritingDirectionAttribute";
 
 NSUInteger NSUnderlineStrikethroughMask = 0x4000;
 NSUInteger NSUnderlineByWordMask = 0x8000;
@@ -157,7 +144,89 @@ NSUInteger NSUnderlineByWordMask = 0x8000;
                      error: (NSError **) error
 {
     NSUnimplementedMethod();
+    NSString *docType = [options objectForKey:NSDocumentTypeDocumentAttribute];
+   
+    //Infer the document format if not provided
+    if(docType == nil){
+        //Extract a prefix from the document to identify the type
+        //FIXME: use 64 bit ready types and check encoding
+        char prefix[14];
+        NSUInteger dataLength = [data length];
+        
+        if(dataLength < sizeof(prefix))
+        {
+            [data getBytes: prefix length: dataLength];
+            prefix[dataLength] = 0;
+        }
+        else
+        {
+            [data getBytes: prefix length: sizeof(prefix)];
+        }
+
+        //Use the prefix to determine the document format
+        // FIXME extend the list
+        if (strncmp(prefix, "{\\rtf", 5) == 0)
+        {
+            docType = NSRTFTextDocumentType;
+        }
+        else if (strncasecmp(prefix, "<!doctype html", 14) == 0 ||
+                 strncasecmp(prefix, "<head", 5) == 0 ||
+                 strncasecmp(prefix, "<title", 6) == 0 ||
+                 strncasecmp(prefix, "<html", 5) == 0 ||
+                 strncmp(prefix, "<!--", 4) == 0 ||
+                 strncasecmp(prefix, "<h1", 3) == 0)
+        {
+            docType = NSHTMLTextDocumentType;
+        }
+        else
+        {
+            docType = NSPlainTextDocumentType;
+        }
+    }
+
+    //Read the document based on its type
+    //TODO: Implement reading for all types
+    if([docType isEqual: NSDocFormatTextDocumentType]){
+        return nil;
+    }
+    else if([docType isEqual: NSHTMLTextDocumentType]){
+        NSLog(@"NSAttributedString initFromData - dont know how to parse %@", docType);
+        return nil;
+    }
+    else if([docType isEqual: NSMacSimpleTextDocumentType]){
+        NSLog(@"NSAttributedString initFromData - dont know how to parse %@", docType);
+        return nil;
+    }
+    else if([docType isEqual: NSOfficeOpenXMLTextDocumentType]){
+        NSLog(@"NSAttributedString initFromData - dont know how to parse %@", docType);
+        return nil;
+    }
+    else if([docType isEqual: NSOpenDocumentTextDocumentType]){
+        NSLog(@"NSAttributedString initFromData - dont know how to parse %@", docType);
+        return nil;
+    }
+    else if([docType isEqual: NSPlainTextDocumentType]){
+        NSLog(@"NSAttributedString initFromData - dont know how to parse %@", docType);
+        return nil;
+    }
+    else if([docType isEqual: NSRTFTextDocumentType]){
+        return [self initWithRTF: data documentAttributes: attributes];
+    }
+    else if([docType isEqual: NSRTFDTextDocumentType]){
+        NSLog(@"NSAttributedString initFromData - dont know how to parse %@", docType);
+        return nil;
+    }
+    else if([docType isEqual: NSWebArchiveTextDocumentType]){
+        NSLog(@"NSAttributedString initFromData - dont know how to parse %@", docType);
+        return nil;
+    }
+    else if([docType isEqual: NSWordMLTextDocumentType]){
+        NSLog(@"NSAttributedString initFromData - dont know how to parse %@", docType);
+        return nil;
+    }
+    else {
     return nil;
+    }
 }
 
 - initWithDocFormat: (NSData *) werd
@@ -203,6 +272,8 @@ NSUInteger NSUnderlineByWordMask = 0x8000;
 }
 
 - initWithRTF: (NSData *) rtf documentAttributes: (NSDictionary **) attributes {
+    *attributes = [NSDictionary dictionaryWithObject: NSRTFTextDocumentType 
+                                              forKey: NSDocumentTypeDocumentAttribute];
     NSAttributedString *string =
             [NSRichTextReader attributedStringWithData: rtf];
     if (string == nil) {
@@ -236,8 +307,8 @@ NSUInteger NSUnderlineByWordMask = 0x8000;
         documentAttributes: (NSDictionary **) attributes
                      error: (NSError **) error
 {
-    NSUnimplementedMethod();
-    return nil;
+    NSData *data = [NSData dataWithContentsOfURL: url];
+    return [self initWithData: data options: options documentAttributes: attributes error: error]; 
 }
 
 #pragma mark -

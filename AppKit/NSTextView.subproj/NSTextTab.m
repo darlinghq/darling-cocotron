@@ -136,4 +136,20 @@ NSString *NSTabColumnTerminatorsAttributeName =
     return self.location == other.location &&
            self.tabStopType == other.tabStopType;
 }
+
+- (NSComparisonResult) compare: (id) anObject {
+    CGFloat loc;
+
+    if (anObject == self)
+        return NSOrderedSame;
+    if (anObject == nil || ![anObject isKindOfClass: [self class]])
+        return NSOrderedAscending;
+    loc = ((NSTextTab *) anObject)->_location;
+    if (_location < loc)
+        return NSOrderedAscending;
+    else if (_location > loc)
+        return NSOrderedDescending;
+    else
+        return NSOrderedSame;
+}
 @end

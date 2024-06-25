@@ -203,4 +203,22 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [self endEditing];
 }
 
+- (BOOL) readFromURL: (NSURL *) url
+             options: (NSDictionary<NSAttributedStringDocumentReadingOptionKey, id> *) opts
+  documentAttributes: (NSDictionary<NSAttributedStringDocumentAttributeKey, id> *_Nullable *) dict
+               error: (NSError *_Nullable *) error
+{
+    NSAttributedString *str = [NSAttributedString alloc];
+    str = [str initWithURL: url
+                   options: opts
+        documentAttributes: dict
+                     error: error];
+    if (str == nil) {
+        return NO;
+    }
+    [self setAttributedString: str];
+    [str release];
+    return YES;
+}
+
 @end
