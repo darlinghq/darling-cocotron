@@ -18,6 +18,7 @@
 */
 
 #include <CoreFoundation/CoreFoundation.h>
+#include <CoreFoundation/CFString.h>
 
 const CFStringRef kCTFontAttributeName = CFSTR("NSFont");
 const CFStringRef kCTFontSymbolicTrait = CFSTR("NSCTFontSymbolicTrait");

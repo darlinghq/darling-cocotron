@@ -1,4 +1,4 @@
-#import <CoreFoundation/CFBase.h>
+#import <CoreFoundation/CFString.h>
 #import <CoreText/CoreTextExport.h>
 #import <CoreText/CTFontTraits.h>
 
