@@ -21,7 +21,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <CoreText/CoreText.h>
 #import <CoreText/KTFont.h>
 
-const CFStringRef kCTFontCopyrightNameKey = CFSTR("CTFontCopyrightName")
+const CFStringRef kCTFontCopyrightNameKey = CFSTR("CTFontCopyrightName");
 const CFStringRef kCTFontFamilyNameKey = CFSTR("CTFontFamilyName");
 const CFStringRef kCTFontSubFamilyNameKey = CFSTR("CTFontSubFamilyName");
 const CFStringRef kCTFontStyleNameKey = CFSTR("CTFontSubFamilyName");
