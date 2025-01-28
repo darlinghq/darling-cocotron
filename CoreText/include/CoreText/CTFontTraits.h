@@ -20,5 +20,5 @@ typedef enum CTFontSymbolicTraits : uint32_t {
   kCTFontTraitColorGlyphs = (1 << 13),
   kCTFontTraitComposite = (1 << 14),
   kCTFontTraitClassMask = (15U << kCTFontClassMaskShift),
-  kCTFontClassMaskTrait = (15 << 28), // Deprecated
+  kCTFontClassMaskTrait = (15U << 28), // Deprecated
 } CTFontSymbolicTraits;
