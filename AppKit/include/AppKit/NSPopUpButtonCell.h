@@ -17,7 +17,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
-#import <AppKit/NSButtonCell.h>
+#import <AppKit/NSMenuItemCell.h>
 
 @class NSMenuItem;
 
@@ -27,7 +27,7 @@ typedef enum {
     NSPopUpArrowAtBottom = 2
 } NSPopUpArrowPosition;
 
-@interface NSPopUpButtonCell : NSButtonCell {
+@interface NSPopUpButtonCell : NSMenuItemCell {
     NSMenu *_menu;
     NSInteger _selectedIndex;
     BOOL _pullsDown;
@@ -35,6 +35,7 @@ typedef enum {
     BOOL _usesItemFromMenu;
     NSPopUpArrowPosition _arrowPosition;
     NSRectEdge _preferredEdge;
+    BOOL _syncTitleNeeded;
 }
 
 - initTextCell: (NSString *) string pullsDown: (BOOL) pullDown;

@@ -66,6 +66,8 @@ APPKIT_EXPORT const NSPasteboardName NSFontPboard;
 APPKIT_EXPORT const NSPasteboardName NSGeneralPboard;
 APPKIT_EXPORT const NSPasteboardName NSRulerPboard;
 
+APPKIT_EXPORT const NSPasteboardName NSPasteboardNameFind;
+APPKIT_EXPORT const NSPasteboardName NSPasteboardNameFont;
 APPKIT_EXPORT const NSPasteboardName NSPasteboardNameGeneral;
 
 typedef NSString *NSPasteboardReadingOptionKey;

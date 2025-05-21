@@ -42,9 +42,15 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         _destination = [[keyed decodeObjectForKey: @"NSDestination"] retain];
         _label = [[keyed decodeObjectForKey: @"NSLabel"] retain];
     } else {
-        [NSException raise: NSInvalidArgumentException
-                    format: @"-[%@ %s] is not implemented for coder %@",
-                            [self class], sel_getName(_cmd), coder];
+        NSInteger version = [coder versionForClassName: @"NSNibConnector"];
+
+        if (version > 10) {
+            [coder decodeValuesOfObjCTypes:"@@@", &_source, &_destination, &_label];
+        } else {
+            [NSException raise: NSInvalidArgumentException
+                        format: @"-[%@ %s] is not implemented for coder %@",
+                                [self class], sel_getName(_cmd), coder];
+        }
     }
     return self;
 }

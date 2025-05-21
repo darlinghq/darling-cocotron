@@ -342,6 +342,27 @@ NSBitmapImageRepPropertyKey NSImageCurrentFrame = @"NSImageCurrentFrame";
     return [self initWithData: data];
 }
 
+- (instancetype) initWithCoder:(NSCoder *) coder {
+    if ([coder allowsKeyedCoding]) {
+        [NSException raise: NSInvalidArgumentException
+                    format: @"-[%@ %s] is not implemented for coder %@",
+                            [self class], sel_getName(_cmd), coder];
+        return nil;
+    } else {
+        NSInteger version = [coder versionForClassName: @"NSImageRep"];
+
+        if (version >= 17) {
+            NSData *data = [coder decodeDataObject];
+            return [self initWithData: data];
+        } else {
+            [NSException raise: NSInvalidArgumentException
+                    format: @"-[%@ %s] is not implemented for coder %@",
+                            [self class], sel_getName(_cmd), coder];
+            return nil;
+        }
+    }
+}
+
 - (void) createBitmapIfNeeded {
     if (_bitmapPlanes == NULL) {
         _freeWhenDone = YES;

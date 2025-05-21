@@ -35,6 +35,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     NSMutableSet *_visibleWindows;
     id _firstResponder;
     BOOL _shouldEncodeDesigntimeData;
+    NSMapTable *_instantiatedObjectTable;
 }
 
 @property(copy) NSString *targetFramework;

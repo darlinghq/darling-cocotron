@@ -37,29 +37,18 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - initWithCoder: (NSCoder *) coder {
     [super initWithCoder: coder];
 
+    id selectedCell;
+    int flags;
+
     if ([coder allowsKeyedCoding]) {
         NSKeyedUnarchiver *keyed = (NSKeyedUnarchiver *) coder;
-        int flags = [keyed decodeIntForKey: @"NSMatrixFlags"];
+        flags = [keyed decodeIntForKey: @"NSMatrixFlags"];
         NSString *name;
 
         _numberOfRows = [keyed decodeIntForKey: @"NSNumRows"];
         _numberOfColumns = [keyed decodeIntForKey: @"NSNumCols"];
         _cellSize = [keyed decodeSizeForKey: @"NSCellSize"];
         _intercellSpacing = [keyed decodeSizeForKey: @"NSIntercellSpacing"];
-        _tabKeyTraversesCells = (flags & 0x00200000) ? YES : NO;
-        _autosizesCells = (flags & 0x00800000) ? YES : NO;
-        _drawsBackground = (flags & 0x01000000) ? YES : NO;
-        _drawsCellBackground = (flags & 0x02000000) ? YES : NO;
-        _selectionByRect = (flags & 0x04000000) ? YES : NO;
-        _isAutoscroll = (flags & 0x08000000) ? YES : NO;
-        _allowsEmptySelection = (flags & 0x10000000) ? YES : NO;
-        _mode = NSTrackModeMatrix;
-        if (flags & 0x20000000)
-            _mode = NSListModeMatrix;
-        if (flags & 0x40000000)
-            _mode = NSRadioModeMatrix;
-        if (flags & 0x80000000)
-            _mode = NSHighlightModeMatrix;
         _backgroundColor =
                 [[keyed decodeObjectForKey: @"NSBackgroundColor"] retain];
         _cellBackgroundColor =
@@ -75,16 +64,53 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         _protoCell = [[keyed decodeObjectForKey: @"NSProtoCell"] retain];
         _cells = [[NSMutableArray alloc]
                 initWithArray: [keyed decodeObjectForKey: @"NSCells"]];
-        id selectedCell = [keyed decodeObjectForKey: @"NSSelectedCell"];
-        if ((_selectedIndex = [_cells
-                     indexOfObjectIdenticalTo: selectedCell]) != NSNotFound)
+        selectedCell = [keyed decodeObjectForKey: @"NSSelectedCell"];
+    } else {
+        NSInteger version = [coder versionForClassName: @"NSMatrix"];
+
+        if (version > 40) {
+            // When decoding the below NSCell objects, they can actually reference this instance of the NSMatrix via the controlView.
+            // NSCell will try to access the cells when the image is set.
+
+            int selectedRow, selectedColumn;
+            SEL errorAction;
+            float cellWidth, cellHeight;
+            float cellSpacingWidth, cellSpacingHeight;
+
+            [coder decodeValuesOfObjCTypes:"#iiii:::ffffi@@@@@", &_cellClass, &selectedRow, &selectedColumn, &_numberOfRows, &_numberOfColumns, &_action, &_doubleAction, &errorAction, &cellWidth, &cellHeight, &cellSpacingWidth, &cellSpacingHeight, &flags, &_cells, &_backgroundColor, &_cellBackgroundColor, &_font, &_protoCell];
+
+            _cellSize = CGSizeMake(cellWidth, cellHeight);
+            _intercellSpacing = CGSizeMake(cellSpacingWidth, cellSpacingHeight);
+
+            _delegate = [coder decodeObject];
+            _target = [coder decodeObject];
+            selectedCell = [coder decodeObject];
+        } else {
+            [NSException raise: NSInvalidArgumentException
+                        format: @"-[%@ %s] is not implemented for coder %@",
+                                [self class], sel_getName(_cmd), coder];
+        }
+
+        _tabKeyTraversesCells = (flags & 0x00200000) ? YES : NO;
+        _autosizesCells = (flags & 0x00800000) ? YES : NO;
+        _drawsBackground = (flags & 0x01000000) ? YES : NO;
+        _drawsCellBackground = (flags & 0x02000000) ? YES : NO;
+        _selectionByRect = (flags & 0x04000000) ? YES : NO;
+        _isAutoscroll = (flags & 0x08000000) ? YES : NO;
+        _allowsEmptySelection = (flags & 0x10000000) ? YES : NO;
+
+        _mode = NSTrackModeMatrix;
+        if (flags & 0x20000000)
+            _mode = NSListModeMatrix;
+        if (flags & 0x40000000)
+            _mode = NSRadioModeMatrix;
+        if (flags & 0x80000000)
+            _mode = NSHighlightModeMatrix;
+
+        if ((_selectedIndex = [_cells indexOfObjectIdenticalTo: selectedCell]) != NSNotFound)
             [self selectCell: selectedCell];
         else
             _selectedIndex = -1;
-    } else {
-        [NSException raise: NSInvalidArgumentException
-                    format: @"-[%@ %s] is not implemented for coder %@",
-                            [self class], sel_getName(_cmd), coder];
     }
     return self;
 }
@@ -312,6 +338,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
          column: (NSInteger *) column
          ofCell: (NSCell *) cell
 {
+    // This method can get called during initWithCoder before we have decoded the cells,
+    // so make sure we don't try to use _cells in that case
+    if (_cells == nil) {
+        return NO;
+    }
+
     NSInteger index = [_cells indexOfObjectIdenticalTo: cell];
 
     if (index != NSNotFound) {

@@ -64,6 +64,8 @@ const NSPasteboardName NSFontPboard = @"NSFontPboard";
 const NSPasteboardName NSGeneralPboard = @"NSGeneralPboard";
 const NSPasteboardName NSRulerPboard = @"NSRulerPboard";
 
+const NSPasteboardName NSPasteboardNameFind = @"Apple CFPasteboard find";
+const NSPasteboardName NSPasteboardNameFont = @"Apple CFPasteboard font";
 const NSPasteboardName NSPasteboardNameGeneral = @"Apple CFPasteboard general";
 
 const NSPasteboardReadingOptionKey

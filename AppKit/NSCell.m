@@ -363,7 +363,7 @@ typedef NS_OPTIONS(unsigned int, NSCellAppleFlags2) {
 
 - initTextCell: (NSString *) string {
     _focusRingType = [[self class] defaultFocusRingType];
-    _state = NSOffState;
+    _state = NSControlStateValueOff;
     _font = [[NSFont userFontOfSize: 0] retain];
     _objectValue = [string copy];
     _image = nil;
@@ -382,7 +382,7 @@ typedef NS_OPTIONS(unsigned int, NSCellAppleFlags2) {
 
 - initImageCell: (NSImage *) image {
     _focusRingType = [[self class] defaultFocusRingType];
-    _state = NSOffState;
+    _state = NSControlStateValueOff;
     _font = nil;
     _objectValue = nil;
     _image = [image retain];

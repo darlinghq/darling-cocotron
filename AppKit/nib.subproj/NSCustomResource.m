@@ -31,10 +31,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
         _className = [[keyed decodeObjectForKey: @"NSClassName"] retain];
         _resourceName = [[keyed decodeObjectForKey: @"NSResourceName"] retain];
-    } else
-        [NSException raise: NSInvalidArgumentException
-                    format: @"-[%@ %s] can not decode from a %@", [self class],
-                            sel_getName(_cmd), [coder class]];
+    } else {
+        [coder decodeValuesOfObjCTypes:"@@", &_className, &_resourceName];
+    }
 
     return self;
 }

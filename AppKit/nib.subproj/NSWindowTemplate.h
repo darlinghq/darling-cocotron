@@ -53,6 +53,7 @@ typedef NS_OPTIONS(uint32_t, NSWindowTemplateFlags) {
     NSSize _contentMaxSize;
     NSRect screenRect;
     id _viewClass;
+    id _extension;
     NSWindowTemplateFlags _wtFlags;
     NSInteger _windowBacking;
     NSString *_windowClass;

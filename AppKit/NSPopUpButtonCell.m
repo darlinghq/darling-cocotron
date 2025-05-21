@@ -32,7 +32,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - init {
     self = [super init];
     _pullsDown = NO;
-    _menu = [[[NSMenu alloc] init] retain];
+    _menu = [[NSMenu alloc] init];
     _selectedIndex = -1;
     _arrowPosition = NSPopUpArrowAtCenter;
     _preferredEdge = NSMaxYEdge;
@@ -44,7 +44,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - initWithCoder: (NSCoder *) coder {
-    [super initWithCoder: coder];
+    self = [super initWithCoder: coder];
     if ([coder allowsKeyedCoding]) {
         _pullsDown = [coder decodeBoolForKey: @"NSPullDown"];
         _menu = [[coder decodeObjectForKey: @"NSMenu"] retain];
@@ -55,9 +55,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
         [self synchronizeTitleAndSelectedItem];
     } else {
-        [NSException raise: NSInvalidArgumentException
-                    format: @"%@ can not initWithCoder:%@", [self class],
-                            [coder class]];
+        int flags; // TODO: Handle flags
+        [coder decodeValuesOfObjCTypes:"i@i", &flags, &_menu, &_selectedIndex];
+
+        // We can't call synchronizeTitleAndSelectedItem, as the _menu may not be finished decoding and we can't access the items
+        _syncTitleNeeded = YES;
     }
     return self;
 }
@@ -71,7 +73,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - initTextCell: (NSString *) string pullsDown: (BOOL) pullDown {
-    [super initTextCell: string];
+    self = [super initTextCell: string];
     _menu = [[NSMenu alloc] initWithTitle: string];
     [_menu addItemWithTitle: string action: [self action] keyEquivalent: @""];
     _arrowPosition = NSPopUpArrowAtCenter;
@@ -574,4 +576,16 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     }
     [NSApp sendAction: [self action] to: [self target] from: _controlView];
 }
+
+- (void) setControlView: (NSView *) view {
+    [super setControlView: view];
+
+    // Is this hacky? We need to a way to sync the title after _menu is fully initialized
+    if (_syncTitleNeeded) {
+        [self synchronizeTitleAndSelectedItem];
+        _syncTitleNeeded = NO;
+
+    }
+}
+
 @end

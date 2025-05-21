@@ -87,9 +87,30 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
             [_customData setObject: obj forKey: @"NSFillColor2"];
         }
     } else {
-        [NSException raise: NSInvalidArgumentException
-                    format: @"%@ can not initWithCoder:%@", [self class],
-                            [coder class]];
+        NSInteger version = [coder versionForClassName: @"NSBox"];
+
+        if (version > 40) {
+            NSView *contentView;
+            float width, height;
+            uint8_t borderType, titlePosition, boxType;
+
+            [coder decodeValuesOfObjCTypes:"ff@@ccc", &width, &height, &_titleCell, &contentView, &borderType, &titlePosition, &boxType];
+
+             // This is already added as a subview in NSView decoding
+            [contentView release];
+
+            _borderType = borderType;
+            _titlePosition = titlePosition;
+            _boxType = boxType;
+
+            _contentViewMargins = CGSizeMake(width, height);
+
+            id object = [coder decodeObject];
+        } else {
+            [NSException raise: NSInvalidArgumentException
+                        format: @"%@ can not initWithCoder:%@", [self class],
+                                [coder class]];
+        }
     }
     return self;
 }

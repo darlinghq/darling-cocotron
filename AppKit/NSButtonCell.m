@@ -62,7 +62,7 @@ static const CGFloat kImageMargin = 2.;
               forKey: @"NSButtonCell keyEquivalentModifierMask"];
 }
 
-- _applyButtonCellAppleFlags: (unsigned) flags flags2: (unsigned) flags2 {
+- (void) _applyButtonCellAppleFlags: (unsigned) flags flags2: (unsigned) flags2 {
     _imagePosition = NSNoImage;
     if ((flags & 0x00480000) == 0x00400000)
         _imagePosition = NSImageOnly;
@@ -141,7 +141,7 @@ static const CGFloat kImageMargin = 2.;
         if ([[altImageSource name] isEqualToString: @"NSSwitch"])
             [self setButtonType: NSSwitchButton];
         if ([[altImageSource name] isEqualToString: @"NSRadioButton"])
-            [self setButtonType: NSPushOnPushOffButton];
+            [self setButtonType: NSRadioButton];
     } else {
         if (([[[self image] name] isEqualToString: @"NSRadioButton"] &&
              [[[self alternateImage] name]
@@ -316,7 +316,7 @@ static const CGFloat kImageMargin = 2.;
             [self setKeyEquivalentFont: [coder decodeObject]];
             [self setImage: [coder decodeObject]];
             [self setAlternateImage: [coder decodeObject]];
-            [self setSoundImage: [coder decodeObject]];
+            [self setSound: [coder decodeObject]];
 
             unsigned int var50;
             if (version >= 19)
@@ -342,11 +342,26 @@ static const CGFloat kImageMargin = 2.;
             flags2 &= 0xFFFFFFD8;
         } else {
             short periodicDelay, periodicInterval;
+            id alternateImageOrFont;
             [coder decodeValuesOfObjCTypes: "ssii@@@@@", &periodicDelay,
                                             &periodicInterval, &flags2, &flags,
                                             &_alternateTitle, &_keyEquivalent,
-                                            &_normalImage, &_alternateImage,
+                                            &_normalImage, &alternateImageOrFont,
                                             &_sound];
+
+            if ([alternateImageOrFont isKindOfClass:[NSButtonImageSource class]]) {
+                _alternateImage = alternateImageOrFont;
+            } else if ([alternateImageOrFont isKindOfClass:[NSFont class]]) {
+                _keyEquivalentFont = alternateImageOrFont;
+            } else {
+                [alternateImageOrFont release];
+            }
+
+            // Title is in the _objectValue decoded in NSCell
+            NSString* stringValue = [self stringValue];
+            if ([stringValue length] > 0) {
+                [self setTitle: stringValue];
+            }
 
             [self setPeriodicDelay: periodicDelay / 1000.0f
                           interval: periodicInterval / 1000.0f];

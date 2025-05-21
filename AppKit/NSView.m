@@ -363,14 +363,18 @@ typedef struct __VFlags {
 
             vflags.value = flags & 0xFFC00000;
 
-            id dummy, frameMatrix;
+            id drawMatrix, frameMatrix;
 
             float fx, fy, fw, fh;
             float bx, by, bw, bh;
-            [coder decodeValuesOfObjCTypes: "@@@@ffffffff", &_draggedTypes,
-                                            &_subviews, &dummy, &frameMatrix,
-                                            &fx, &fy, &fw, &fh, &bx, &by, &bx,
+            [coder decodeValuesOfObjCTypes: "@@@@ffffffff", &_subviews,
+                                            &drawMatrix, &frameMatrix, &_draggedTypes,
+                                            &fx, &fy, &fw, &fh, &bx, &by, &bw,
                                             &bh];
+
+            // Discard for now
+            [drawMatrix release];
+            [frameMatrix release];
 
             _frame = NSMakeRect(fx, fy, fw, fh);
             _bounds = NSMakeRect(bx, by, bw, bh);
@@ -378,7 +382,7 @@ typedef struct __VFlags {
             _superview = [coder decodeObject];
             _window = [coder decodeObject];
             [self setNextKeyView: [coder decodeObject]];
-            dummy = [coder decodeObject];
+            id dummy = [coder decodeObject];
         }
 
         _autoresizingMask = vflags.vf.autosizing;

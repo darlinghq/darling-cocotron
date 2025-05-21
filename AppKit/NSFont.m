@@ -438,7 +438,7 @@ static NSLock *_cacheLock = nil;
 
     NSLog(@"NSFont decoding done\n");
 
-    [self dealloc];
+    [self release];
     NSFont *realFont = [[NSFont fontWithName: name size: size] retain];
 
     O2FontLog(@"coded font name: %@ translated font name: %@ rendered font: %@",

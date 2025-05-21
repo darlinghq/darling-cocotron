@@ -1,7 +1,7 @@
 /*
  * This file is part of Darling.
  *
- * Copyright (C) 2023 Darling Developers
+ * Copyright (C) 2024 Darling Developers
  *
  * Darling is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,19 +17,15 @@
  * along with Darling.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#import <AppKit/NSView.h>
+#import <AppKit/NSButtonCell.h>
 
-@interface NSScrubber : NSView
-@end
+@class NSMenuItem;
 
-@interface NSScrubberLayout : NSObject
-@end
+@interface NSMenuItemCell : NSButtonCell  {
+    // In Apple's AppKit this is stored in _extraData (NSExtraMICData)
+    NSMenuItem *_menuItem;
+ }
 
-@interface NSScrubberFlowLayout : NSScrubberLayout
-@end
+@property(retain) NSMenuItem *menuItem;
 
-@interface NSScrubberProportionalLayout : NSScrubberLayout
-@end
-
-@interface NSScrubberSelectionStyle : NSObject <NSCoding>
 @end

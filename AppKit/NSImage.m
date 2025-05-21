@@ -401,11 +401,44 @@ NSImageName const NSImageNameTouchBarVolumeUpTemplate =
 
         [_representations addObject: rep];
     } else {
-        [NSException raise: NSInvalidArgumentException
+        NSInteger version = [coder versionForClassName: @"NSImage"];
+
+        if (version >= 17) {
+            _name = [[coder decodeObject] retain];
+
+            NSUnarchiver *unarchiver = (NSUnarchiver *)coder;
+
+            uint8_t byteOne = [unarchiver decodeByte];
+            uint8_t byteTwo = [unarchiver decodeByte];
+
+            // TODO: There's some logic involving these decoded
+            // bytes and the internal _flags of NSImage to determine
+            // decoding the rest of these.
+
+            for (int i = 0; i < 12; ++i) {
+                uint8_t btye = [unarchiver decodeByte];
+            }
+
+            _size = [coder decodeSize];
+
+            short shortValue;
+            [coder decodeValueOfObjCType:"s" at: &shortValue];
+
+            uint8_t anotherBtye = [unarchiver decodeByte];
+
+            NSBitmapImageRep *rep = [coder decodeObject];
+            _representations = [NSMutableArray new];
+            [_representations addObject: rep];
+
+            _backgroundColor = [[coder decodeObject] retain];
+            _delegate = [coder decodeObject];
+        } else {
+            [NSException raise: NSInvalidArgumentException
                     format: @"-[%@ %s] is not implemented for coder %@",
                             [self class], sel_getName(_cmd), coder];
+        }
     }
-    return nil;
+    return self;
 }
 
 - initWithSize: (NSSize) size {

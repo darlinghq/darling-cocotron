@@ -20,12 +20,16 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <CoreGraphics/CGDirectDisplay.h>
 #import <Foundation/Foundation.h>
 
+typedef NSString *NSDeviceDescriptionKey;
+
 @interface NSScreen : NSObject {
     NSRect _frame;
     NSRect _visibleFrame;
     NSData *_edid;
     CGDirectDisplayID _directDisplayID;
 }
+
+@property(readonly, copy) NSDictionary<NSDeviceDescriptionKey, id> *deviceDescription;
 
 + (NSScreen *) mainScreen;
 

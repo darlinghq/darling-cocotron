@@ -73,7 +73,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
         if (version < 25) {
             [self setNextKeyView: [coder decodeObject]];
-            [self setNextKeyView: [coder decodeObject]];
+            [[coder decodeObject] setNextKeyView: self];
         }
 
         [self setDelegate: [coder decodeObject]];

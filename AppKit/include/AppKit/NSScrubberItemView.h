@@ -1,7 +1,7 @@
 /*
  * This file is part of Darling.
  *
- * Copyright (C) 2023 Darling Developers
+ * Copyright (C) 2024 Darling Developers
  *
  * Darling is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -19,17 +19,11 @@
 
 #import <AppKit/NSView.h>
 
-@interface NSScrubber : NSView
+@interface NSScrubberArrangedView : NSView
 @end
 
-@interface NSScrubberLayout : NSObject
+@interface NSScrubberItemView : NSScrubberArrangedView
 @end
 
-@interface NSScrubberFlowLayout : NSScrubberLayout
-@end
-
-@interface NSScrubberProportionalLayout : NSScrubberLayout
-@end
-
-@interface NSScrubberSelectionStyle : NSObject <NSCoding>
+@interface NSScrubberTextItemView : NSScrubberItemView
 @end

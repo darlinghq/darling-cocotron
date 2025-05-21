@@ -49,6 +49,32 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 @synthesize maxSize = _maxSize;
 @synthesize className = _windowClass;
 
+- (int) _NXReadWindowSizeLimits:(NSCoder *) coder sizeOne: (CGSize *) sizeOne sizeTwo: (CGSize *) sizeTwo {
+    uint8_t byte;
+    [coder decodeValuesOfObjCTypes:"c", &byte];
+
+    if (sizeOne) {
+        if ((byte & 0x1) == 0x0) {
+            sizeOne->width = 0;
+            sizeOne->height = 0;
+        } else {
+            *sizeOne = [coder decodeSize];
+        }
+    }
+
+    if (sizeTwo) {
+        if ((byte & 0x2) == 0x0) {
+            sizeTwo->width = FLT_MAX;
+            sizeTwo->height = FLT_MAX;
+        } else {
+            *sizeTwo = [coder decodeSize];
+        }
+    }
+
+    return byte != 0x0 ? 0x1 : 0x0;
+
+}
+
 - (instancetype) init {
     self = [super init];
 
@@ -118,19 +144,49 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         _autorecalculatesContentBorderThicknessForMaxYEdge =
                 [keyed decodeBoolForKey:
                     @"NSAutorecalculatesContentBorderThicknessMaxY"];
-
-        if ([NSScreen mainScreen])
-            windowRect.origin.y -= screenRect.size.height -
-                                    [[NSScreen mainScreen] frame].size.height;
-        if ([NSClassFromString(_windowClass)
-                    hasMainMenuForStyleMask: _windowStyleMask])
-            windowRect.origin.y -= [NSMainMenuView
-                    menuHeight]; // compensation for the additional menu bar
     } else {
-        [NSException raise: NSInvalidArgumentException
+        NSInteger version = [coder versionForClassName: @"NSWindowTemplate"];
+
+        if (version > 40) {
+
+            float windowRectX, windowRectY, windowRectWidth, windowRectHeight;
+            uint8 isEqualToDefaultScreenRect;   // 0x1 or 0x0 if screen rect is equal to _NXDefaultScreenRecet
+
+            [coder decodeValuesOfObjCTypes:"iiffffi@@@@@c", &_windowStyleMask, &_windowBacking, &windowRectX, &windowRectY, &windowRectWidth, &windowRectHeight, &_wtFlags, &_windowTitle, &_windowClass, &_viewClass, &windowView, &_extension, &isEqualToDefaultScreenRect];
+
+
+            windowRect = CGRectMake(windowRectX, windowRectY, windowRectWidth, windowRectHeight);
+            screenRect = [coder decodeRect];
+
+            [self _NXReadWindowSizeLimits: coder sizeOne: &_minSize sizeTwo: nil];
+
+            if (version >= 43) {
+                _windowAutosave = [[coder decodeObject] retain];
+
+                [self _NXReadWindowSizeLimits: coder sizeOne: nil sizeTwo: &_maxSize];
+            }
+        } else {
+            [NSException raise: NSInvalidArgumentException
                     format: @"%@ can not initWithCoder:%@", [self class],
                             [coder class]];
+        }
     }
+
+    // Apple's AppKit can have maxSize as 0,0 when initWithCoder finishes,
+    // but this causes problems with our implemenationm, so we set it to biggest possible
+    if (CGSizeEqualToSize(_maxSize, CGSizeZero)) {
+        _maxSize.width = FLT_MAX;
+        _maxSize.height = FLT_MAX;
+    }
+
+    if ([NSScreen mainScreen])
+        windowRect.origin.y -= screenRect.size.height -
+                                [[NSScreen mainScreen] frame].size.height;
+    if ([NSClassFromString(_windowClass)
+                hasMainMenuForStyleMask: _windowStyleMask])
+        windowRect.origin.y -= [NSMainMenuView
+                menuHeight]; // compensation for the additional menu bar
+
     return self;
 }
 

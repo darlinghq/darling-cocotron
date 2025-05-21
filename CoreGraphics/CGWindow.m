@@ -22,8 +22,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 const CFStringRef kCGWindowAlpha = CFSTR("kCGWindowAlpha");
 const CFStringRef kCGWindowBounds = CFSTR("kCGWindowBounds");
 const CFStringRef kCGWindowLayer = CFSTR("kCGWindowLayer");
+const CFStringRef kCGWindowOwnerName = CFSTR("kCGWindowOwnerName");
 const CFStringRef kCGWindowOwnerPID = CFSTR("kCGWindowOwnerPID");
 const CFStringRef kCGWindowNumber = CFSTR("kCGWindowNumber");
+const CFStringRef kCGWindowName = CFSTR("kCGWindowName");
 
 @implementation CGWindow
 

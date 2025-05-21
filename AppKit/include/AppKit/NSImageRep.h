@@ -56,6 +56,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 + imageRepWithContentsOfURL: (NSURL *) url;
 + imageRepWithPasteboard: (NSPasteboard *) pasteboard;
 
+- (instancetype) initWithCoder:(NSCoder *) coder;
+
 - (NSSize) size;
 - (int) pixelsWide;
 - (int) pixelsHigh;

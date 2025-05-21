@@ -247,6 +247,14 @@ static NSMutableArray *_registeredClasses = nil;
     return nil;
 }
 
+- (instancetype) initWithCoder:(NSCoder *) coder
+{
+    [NSException raise: NSInvalidArgumentException
+                    format: @"-[%@ %s] is not implemented for coder %@",
+                            [self class], sel_getName(_cmd), coder];
+    return nil;
+}
+
 - copyWithZone: (NSZone *) zone {
     NSImageRep *result = NSCopyObject(self, 0, zone);
     result->_colorSpaceName = [_colorSpaceName copy];

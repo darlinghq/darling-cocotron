@@ -18,6 +18,7 @@ AN ACTION OF CONTRACT,TORT OR OTHERWISE,ARISING FROM,OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <CoreGraphics/CoreGraphicsExport.h>
+#import <CoreFoundation/CFBase.h>
 
 typedef struct CF_BRIDGED_TYPE(id) O2Context *CGContextRef;
 

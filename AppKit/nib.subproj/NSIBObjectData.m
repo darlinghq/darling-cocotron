@@ -364,6 +364,23 @@ NSString *const IBCocoaFramework = @"IBCocoaFramework";
                 [coder decodeValueOfObjCType: @encode(int) at: &nextOid];
                 _nextOid = nextOid;
             }
+
+            if (version > 23) {
+                [coder decodeValueOfObjCType: @encode(int) at: &count];
+
+                for (int i = 0; i < count; i++) {
+                    NSObject *key, *value;
+
+                    [coder decodeValuesOfObjCTypes: "@@", &key, &value];
+                    NSMapInsert(_instantiatedObjectTable, key, value);
+                }
+            }
+
+            if (version <= 223) {
+                _framework = [IBCocoaFramework copy];
+            } else {
+                _framework = [[coder decodeObject] retain];
+            }
         }
 
         if (!NSMapMember(_oidTable, _fileOwner, NULL, NULL)) {
@@ -535,7 +552,8 @@ NSString *const IBCocoaFramework = @"IBCocoaFramework";
         id formerOwner = [_fileOwner autorelease];
         _fileOwner = [owner retain];
 
-        for (id aKey in _objectTable) {
+        NSArray *keys = NSAllMapTableKeys(_objectTable);
+        for (id aKey in keys) {
             id aValue = [_objectTable objectForKey: aKey];
             if (aValue == formerOwner) {
                 [_objectTable setObject: _fileOwner forKey: aKey];

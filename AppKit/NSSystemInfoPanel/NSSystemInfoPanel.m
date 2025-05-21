@@ -53,8 +53,7 @@ static NSSystemInfoPanel *_sharedInfoPanel = nil;
     if (icon != nil)
         [appIconView setImage: icon];
 
-    [appNameField setStringValue: [[[NSBundle mainBundle] infoDictionary]
-                                          objectForKey: @"CFBundleName"]];
+    [appNameField setStringValue: [[NSBundle mainBundle] objectForInfoDictionaryKey: @"CFBundleName"]];
 
     NSString *bundleVersion = [[[NSBundle mainBundle] infoDictionary]
             objectForKey: @"CFBundleVersion"];

@@ -76,9 +76,42 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
             _title = nil;
         }
     } else {
-        [NSException raise: NSInvalidArgumentException
-                    format: @"%@ can not initWithCoder:%@", [self class],
-                            [coder class]];
+        NSInteger version = [coder versionForClassName: @"NSMenuItem"];
+
+        if (version == NSNotFound) {
+            version = [coder versionForClassName: @"NSMenuCell"];
+        }
+
+        _menu = [coder decodeObject];
+
+        int flags;
+
+        // TODO: Figure this out, encodeWithCoder is writing this as 0xffffffffffffffff
+        unsigned int unused;
+
+        [coder decodeValuesOfObjCTypes:"i@@IIi@@@@:i@", &flags, &_title, &_keyEquivalent, &_keyEquivalentModifierMask, &unused, &_state, &_image, &_onStateImage, &_mixedStateImage, &_offStateImage, &_action, &_tag, &_representedObject];
+
+
+        // If we have an empty title, it is for a separator, discard it, see isSeparatorItem
+        if (_title && [_title length] == 0) {
+            [_title release];
+            _title = nil;
+        }
+
+        if (version <= 320) {
+            if (_action != @selector(submenuAction:)) {
+                _target = [coder decodeObject];
+            } else {
+                _submenu = [[coder decodeObject] retain];
+            }
+        } else {
+            _target = [coder decodeObject];
+            _submenu = [[coder decodeObject] retain];
+        }
+
+        // Set other default values from [initWithTitle: action: keyEquivalent:]
+        _mnemonic = @"";
+        _enabled = YES;
     }
 
     return self;
@@ -404,20 +437,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                              [self class], self, [self title],
                              NSStringFromSelector(_action),
                              ([self hasSubmenu] ? @"YES" : @"NO")];
-}
-
-@end
-
-@implementation NSMenuItemCell
-
-- (NSMethodSignature *)methodSignatureForSelector:(SEL)aSelector
-{
-    return [NSMethodSignature signatureWithObjCTypes: "v@:"];
-}
-
-- (void)forwardInvocation:(NSInvocation *)anInvocation
-{
-    NSLog(@"Stub called: %@ in %@", NSStringFromSelector([anInvocation selector]), [self class]);
 }
 
 @end

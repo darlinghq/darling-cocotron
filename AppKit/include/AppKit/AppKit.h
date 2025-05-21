@@ -39,6 +39,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSButtonCell.h>
 #import <AppKit/NSCIImageRep.h>
 #import <AppKit/NSCachedImageRep.h>
+#import <AppKit/NSCandidateListTouchBarItem.h>
 #import <AppKit/NSCell.h>
 #import <AppKit/NSClickGestureRecognizer.h>
 #import <AppKit/NSClipView.h>
@@ -71,6 +72,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSEvent.h>
 #import <AppKit/NSFileWrapperExtensions.h>
 #import <AppKit/NSFont.h>
+#import <AppKit/NSFontCollection.h>
 #import <AppKit/NSFontDescriptor.h>
 #import <AppKit/NSFontManager.h>
 #import <AppKit/NSFontPanel.h>
@@ -141,6 +143,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSScrollView.h>
 #import <AppKit/NSScroller.h>
 #import <AppKit/NSScrubber.h>
+#import <AppKit/NSScrubberItemView.h>
 #import <AppKit/NSSearchField.h>
 #import <AppKit/NSSearchFieldCell.h>
 #import <AppKit/NSSecureTextField.h>

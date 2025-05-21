@@ -141,9 +141,7 @@ NSString *const _NSWindowsMenuName = @"Window";
         } else {
             int flags;
 
-            [coder decodeValueOfObjCType: @encode(int) at: &flags];
-
-            [coder decodeValuesOfObjCTypes: "@@@", &_title, &_itemArray,
+            [coder decodeValuesOfObjCTypes: "i@@@", &flags, &_title, &_itemArray,
                                             &_name];
 
             _autoenablesItems = !(flags & 0x80000000);
