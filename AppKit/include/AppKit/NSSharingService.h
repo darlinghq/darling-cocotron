@@ -17,7 +17,21 @@
  along with Darling.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#import <AppKit/AppKitExport.h>
 #import <Foundation/NSObject.h>
+
+typedef NSString *NSSharingServiceName;
+
+APPKIT_EXPORT NSSharingServiceName const NSSharingServiceNameAddToIPhoto;
+APPKIT_EXPORT NSSharingServiceName const NSSharingServiceNameComposeEmail;
+APPKIT_EXPORT NSSharingServiceName const NSSharingServiceNameComposeMessage;
+
+/* Deprecated */
+APPKIT_EXPORT NSSharingServiceName const NSSharingServiceNamePostOnFacebook;
+APPKIT_EXPORT NSSharingServiceName const NSSharingServiceNamePostOnLinkedIn;
+APPKIT_EXPORT NSSharingServiceName const NSSharingServiceNamePostOnSinaWeibo;
+APPKIT_EXPORT NSSharingServiceName const NSSharingServiceNamePostOnTencentWeibo;
+APPKIT_EXPORT NSSharingServiceName const NSSharingServiceNamePostOnTwitter;
 
 @interface NSSharingService : NSObject
 @end

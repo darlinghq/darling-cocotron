@@ -24,45 +24,41 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Foundation/NSThread.h>
 #import <Foundation/NSValue.h>
 
-NSString *const NSPrintPrinter = @"NSPrintPrinter";
-NSString *const NSPrintPrinterName = @"NSPrintPrinterName";
-NSString *const NSPrintJobDisposition = @"NSPrintJobDisposition";
-NSString *const NSPrintDetailedErrorReporting =
-        @"NSPrintDetailedErrorReporting";
+NSPrintInfoAttributeKey const NSPrintPaperName = @"NSPrintPaperName";
+NSPrintInfoAttributeKey const NSPrintPaperSize = @"NSPrintPaperSize";
+NSPrintInfoAttributeKey const NSPrintOrientation = @"NSPrintOrientation";
 
-NSString *const NSPrintSpoolJob = @"NSPrintSpoolJob";
-NSString *const NSPrintPreviewJob = @"NSPrintPreviewJob";
-NSString *const NSPrintSaveJob = @"NSPrintSaveJob";
-NSString *const NSPrintCancelJob = @"NSPrintCancelJob";
+NSPrintInfoAttributeKey const NSPrintLeftMargin = @"NSPrintLeftMargin";
+NSPrintInfoAttributeKey const NSPrintRightMargin = @"NSPrintRightMargin";
+NSPrintInfoAttributeKey const NSPrintTopMargin = @"NSPrintTopMargin";
+NSPrintInfoAttributeKey const NSPrintBottomMargin = @"NSPrintBottomMargin";
+NSPrintInfoAttributeKey const NSPrintHorizontallyCentered = @"NSPrintHorizontallyCentered";
+NSPrintInfoAttributeKey const NSPrintVerticallyCentered = @"NSPrintVerticallyCentered";
+NSPrintInfoAttributeKey const NSPrintHorizontalPagination = @"NSPrintHorizontalPagination";
+NSPrintInfoAttributeKey const NSPrintVerticalPagination = @"NSPrintVerticalPagination";
+
+NSPrintInfoAttributeKey const NSPrintAllPages = @"NSPrintAllPages";
+NSPrintInfoAttributeKey const NSPrintCopies = @"NSPrintCopies";
+NSPrintInfoAttributeKey const NSPrintDetailedErrorReporting = @"NSPrintDetailedErrorReporting";
+NSPrintInfoAttributeKey const NSPrintFirstPage = @"NSPrintFirstPage";
+NSPrintInfoAttributeKey const NSPrintHeaderAndFooter = @"NSPrintHeaderAndFooter";
+NSPrintInfoAttributeKey const NSPrintJobDisposition = @"NSPrintJobDisposition";
+NSPrintInfoAttributeKey const NSPrintJobSavingURL = @"NSJobSavingURL";
+NSPrintInfoAttributeKey const NSPrintLastPage = @"NSPrintLastPage";
+NSPrintInfoAttributeKey const NSPrintMustCollate = @"NSPrintMustCollate";
+NSPrintInfoAttributeKey const NSPrintPrinter = @"NSPrintPrinter";
+NSPrintInfoAttributeKey const NSPrintPrinterName = @"NSPrintPrinterName";
+NSPrintInfoAttributeKey const NSPrintSelectionOnly = @"NSPrintSelectionOnly";
+
+NSPrintJobDispositionValue const NSPrintSpoolJob = @"NSPrintSpoolJob";
+NSPrintJobDispositionValue const NSPrintPreviewJob = @"NSPrintPreviewJob";
+NSPrintJobDispositionValue const NSPrintSaveJob = @"NSPrintSaveJob";
+NSPrintJobDispositionValue const NSPrintCancelJob = @"NSPrintCancelJob";
 
 NSString *const NSPrintSavePath = @"NSPrintSavePath";
 
-NSString *const NSPrintCopies = @"NSPrintCopies";
-NSString *const NSPrintAllPages = @"NSPrintAllPages";
-NSString *const NSPrintFirstPage = @"NSPrintFirstPage";
-NSString *const NSPrintLastPage = @"NSPrintLastPage";
-
-NSString *const NSPrintPaperName = @"NSPrintPaperName";
-NSString *const NSPrintPaperSize = @"NSPrintPaperSize";
-NSString *const NSPrintOrientation = @"NSPrintOrientation";
-
-NSString *const NSPrintHorizontalPagination = @"NSPrintHorizontalPagination";
-NSString *const NSPrintVerticalPagination = @"NSPrintVerticalPagination";
-
-NSString *const NSPrintTopMargin = @"NSPrintTopMargin";
-NSString *const NSPrintBottomMargin = @"NSPrintBottomMargin";
-NSString *const NSPrintLeftMargin = @"NSPrintLeftMargin";
-NSString *const NSPrintRightMargin = @"NSPrintRightMargin";
-NSString *const NSPrintHorizontallyCentered = @"NSPrintHorizontallyCentered";
-NSString *const NSPrintVerticallyCentered = @"NSPrintVerticallyCentered";
-
-NSString *const NSPrintHeaderAndFooter = @"NSPrintHeaderAndFooter";
-NSString *const NSPrintMustCollate = @"NSPrintMustCollate";
-NSString *const NSPrintSelectionOnly = @"NSPrintSelectionOnly";
-
 const NSPrintingPaginationMode NSFitPagination = NSPrintingPaginationModeFit;
-const NSPrintingPaginationMode NSAutoPagination =
-        NSPrintingPaginationModeAutomatic;
+const NSPrintingPaginationMode NSAutoPagination = NSPrintingPaginationModeAutomatic;
 const NSPrintingPaginationMode NSClipPagination = NSPrintingPaginationModeClip;
 
 @implementation NSPrintInfo
