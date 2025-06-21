@@ -1,6 +1,14 @@
 #import <AppKit/NSSharingService.h>
 
-NSString* const NSSharingServiceNameComposeEmail = @"NSSharingServiceNameComposeEmail";
+NSSharingServiceName const NSSharingServiceNameAddToIPhoto = @"com.apple.share.System.add-to-iphoto";
+NSSharingServiceName const NSSharingServiceNameComposeEmail = @"NSSharingServiceNameComposeEmail";
+NSSharingServiceName const NSSharingServiceNameComposeMessage = @"com.apple.messages.ShareExtension";
+
+NSSharingServiceName const NSSharingServiceNamePostOnFacebook = @"com.apple.share.Facebook.post";
+NSSharingServiceName const NSSharingServiceNamePostOnTwitter = @"com.apple.share.Twitter.post";
+NSSharingServiceName const NSSharingServiceNamePostOnSinaWeibo = @"com.apple.share.SinaWeibo.post";
+NSSharingServiceName const NSSharingServiceNamePostOnTencentWeibo = @"com.apple.share.TencentWeibo.post";
+NSSharingServiceName const NSSharingServiceNamePostOnLinkedIn = @"com.apple.share.LinkedIn.post";
 
 @implementation NSSharingService
 

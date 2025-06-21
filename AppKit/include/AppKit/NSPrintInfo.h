@@ -26,8 +26,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 typedef enum NSPrintingPaginationMode : int {
     NSPrintingPaginationModeAutomatic,
     NSPrintingPaginationModeFit,
-    NSPrintingPaginationModeClip
-
+    NSPrintingPaginationModeClip,
 } NSPrintingPaginationMode;
 
 APPKIT_EXPORT const NSPrintingPaginationMode NSFitPagination;
@@ -39,40 +38,45 @@ typedef enum {
     NSLandscapeOrientation,
 } NSPrintingOrientation;
 
-APPKIT_EXPORT NSString *const NSPrintPrinter;
-APPKIT_EXPORT NSString *const NSPrintPrinterName;
-APPKIT_EXPORT NSString *const NSPrintJobDisposition;
-APPKIT_EXPORT NSString *const NSPrintDetailedErrorReporting;
+typedef NSString *NSPrintInfoAttributeKey;
 
-APPKIT_EXPORT NSString *const NSPrintSpoolJob;
-APPKIT_EXPORT NSString *const NSPrintPreviewJob;
-APPKIT_EXPORT NSString *const NSPrintSaveJob;
-APPKIT_EXPORT NSString *const NSPrintCancelJob;
+/* Page Setup */
+APPKIT_EXPORT NSPrintInfoAttributeKey const NSPrintPaperName;
+APPKIT_EXPORT NSPrintInfoAttributeKey const NSPrintPaperSize;
+APPKIT_EXPORT NSPrintInfoAttributeKey const NSPrintOrientation;
+
+/* Pagination */
+APPKIT_EXPORT NSPrintInfoAttributeKey const NSPrintLeftMargin;
+APPKIT_EXPORT NSPrintInfoAttributeKey const NSPrintRightMargin;
+APPKIT_EXPORT NSPrintInfoAttributeKey const NSPrintTopMargin;
+APPKIT_EXPORT NSPrintInfoAttributeKey const NSPrintBottomMargin;
+APPKIT_EXPORT NSPrintInfoAttributeKey const NSPrintHorizontallyCentered;
+APPKIT_EXPORT NSPrintInfoAttributeKey const NSPrintVerticallyCentered;
+APPKIT_EXPORT NSPrintInfoAttributeKey const NSPrintHorizontalPagination;
+APPKIT_EXPORT NSPrintInfoAttributeKey const NSPrintVerticalPagination;
+
+/* Other */
+APPKIT_EXPORT NSPrintInfoAttributeKey const NSPrintAllPages;
+APPKIT_EXPORT NSPrintInfoAttributeKey const NSPrintCopies;
+APPKIT_EXPORT NSPrintInfoAttributeKey const NSPrintDetailedErrorReporting;
+APPKIT_EXPORT NSPrintInfoAttributeKey const NSPrintFirstPage;
+APPKIT_EXPORT NSPrintInfoAttributeKey const NSPrintHeaderAndFooter;
+APPKIT_EXPORT NSPrintInfoAttributeKey const NSPrintJobDisposition;
+APPKIT_EXPORT NSPrintInfoAttributeKey const NSPrintJobSavingURL;
+APPKIT_EXPORT NSPrintInfoAttributeKey const NSPrintLastPage;
+APPKIT_EXPORT NSPrintInfoAttributeKey const NSPrintMustCollate;
+APPKIT_EXPORT NSPrintInfoAttributeKey const NSPrintPrinter;
+APPKIT_EXPORT NSPrintInfoAttributeKey const NSPrintPrinterName;
+APPKIT_EXPORT NSPrintInfoAttributeKey const NSPrintSelectionOnly;
+
+typedef NSString *NSPrintJobDispositionValue;
+
+APPKIT_EXPORT NSPrintJobDispositionValue const NSPrintSpoolJob;
+APPKIT_EXPORT NSPrintJobDispositionValue const NSPrintPreviewJob;
+APPKIT_EXPORT NSPrintJobDispositionValue const NSPrintSaveJob;
+APPKIT_EXPORT NSPrintJobDispositionValue const NSPrintCancelJob;
 
 APPKIT_EXPORT NSString *const NSPrintSavePath;
-
-APPKIT_EXPORT NSString *const NSPrintCopies;
-APPKIT_EXPORT NSString *const NSPrintAllPages;
-APPKIT_EXPORT NSString *const NSPrintFirstPage;
-APPKIT_EXPORT NSString *const NSPrintLastPage;
-
-APPKIT_EXPORT NSString *const NSPrintPaperName;
-APPKIT_EXPORT NSString *const NSPrintPaperSize;
-APPKIT_EXPORT NSString *const NSPrintOrientation;
-
-APPKIT_EXPORT NSString *const NSPrintHorizontalPagination;
-APPKIT_EXPORT NSString *const NSPrintVerticalPagination;
-
-APPKIT_EXPORT NSString *const NSPrintTopMargin;
-APPKIT_EXPORT NSString *const NSPrintBottomMargin;
-APPKIT_EXPORT NSString *const NSPrintLeftMargin;
-APPKIT_EXPORT NSString *const NSPrintRightMargin;
-APPKIT_EXPORT NSString *const NSPrintHorizontallyCentered;
-APPKIT_EXPORT NSString *const NSPrintVerticallyCentered;
-
-APPKIT_EXPORT NSString *const NSPrintHeaderAndFooter;
-APPKIT_EXPORT NSString *const NSPrintMustCollate;
-APPKIT_EXPORT NSString *const NSPrintSelectionOnly;
 
 @interface NSPrintInfo : NSObject <NSCopying> {
     NSMutableDictionary *_attributes;
