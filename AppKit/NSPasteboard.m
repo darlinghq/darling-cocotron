@@ -33,6 +33,8 @@ const NSPasteboardType NSPasteboardTypeFont = @"NSFontPboardType";
 const NSPasteboardType NSPasteboardTypeRuler = @"NSRulerPboardType";
 const NSPasteboardType NSPasteboardTypeColor = @"NSColorPboardType";
 const NSPasteboardType NSPasteboardTypeFileURL = @"public.file-url";
+const NSPasteboardType NSPasteboardTypeMultipleTextSelection =
+        @"com.apple.cocoa.pasteboard.multiple-text-selection";
 
 const NSPasteboardType NSColorPboardType = @"NSColorPboardType";
 const NSPasteboardType NSFileContentsPboardType = @"NSFileContentsPboardType";
@@ -50,6 +52,9 @@ const NSPasteboardType NSTIFFPboardType = @"NSTIFFPboardType";
 const NSPasteboardType NSURLPboardType = @"NSURLPboardType";
 const NSPasteboardType NSHTMLPboardType = @"Apple HTML pasteboard type";
 const NSPasteboardType NSVCardPboardType = @"NSVCardPboardType";
+const NSPasteboardType NSInkTextPboardType = @"Apple InkText pasteboard type";
+const NSPasteboardType NSMultipleTextSelectionPboardType =
+        @"Apple multiple text selection pasteboard type";
 
 const NSPasteboardType NSFilesPromisePboardType =
         @"Apple files promise pasteboard type";

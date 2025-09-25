@@ -34,11 +34,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 static int NSColor_ignoresAlpha = -1;
 
-NSString *const NSSystemColorsDidChangeNotification = @"NSSystemColorsDidChangeNotification";
+NSNotificationName const NSSystemColorsDidChangeNotification =
+        @"NSSystemColorsDidChangeNotification";
 
 @interface NSColor (private)
-- (NSString *) catalogName;
-- (NSString *) colorName;
+- (NSColorListName) catalogName;
+- (NSColorName) colorName;
 @end
 
 @implementation NSColor
@@ -46,7 +47,7 @@ NSString *const NSSystemColorsDidChangeNotification = @"NSSystemColorsDidChangeN
 - (void) encodeWithCoder: (NSCoder *) coder {
 
     if ([coder allowsKeyedCoding]) {
-        NSString *spaceName = [self colorSpaceName];
+        NSColorSpaceName spaceName = [self colorSpaceName];
 
         if ([spaceName isEqualToString: NSCalibratedRGBColorSpace]) {
             CGFloat r, g, b, a;
@@ -103,8 +104,10 @@ NSString *const NSSystemColorsDidChangeNotification = @"NSSystemColorsDidChangeN
                         forKey: @"NSCMYK"];
         } else if ([spaceName isEqualToString: NSNamedColorSpace]) {
             [coder encodeInt: 6 forKey: @"NSColorSpace"];
-            [coder encodeObject: [self catalogName] forKey: @"NSCatalogName"];
-            [coder encodeObject: [self colorName] forKey: @"NSColorName"];
+            [coder encodeObject: [self catalogNameComponent]
+                         forKey: @"NSCatalogName"];
+            [coder encodeObject: [self colorNameComponent]
+                         forKey: @"NSColorName"];
             // FIXME: encode @"NSColor"
         }
 
@@ -244,7 +247,8 @@ NSString *const NSSystemColorsDidChangeNotification = @"NSSystemColorsDidChangeN
 
     case 6: // NSCatalogColor
     {
-        NSString *catalogName, *colorName;
+        NSColorListName catalogName;
+        NSColorName colorName;
         NSColor *color;
 
         if (keyed != nil) {
@@ -453,6 +457,48 @@ NSString *const NSSystemColorsDidChangeNotification = @"NSSystemColorsDidChangeN
                                colorName: @"menuItemTextColor"];
 }
 
++ (NSColor *) labelColor {
+    return [NSColor colorWithCatalogName: @"System" colorName: @"labelColor"];
+}
+
++ (NSColor *) unemphasizedSelectedTextColor {
+    return [NSColor colorWithCatalogName: @"System"
+                               colorName: @"unemphasizedSelectedTextColor"];
+}
+
++ (NSColor *) unemphasizedSelectedTextBackgroundColor {
+    return [NSColor
+            colorWithCatalogName: @"System"
+                       colorName: @"unemphasizedSelectedTextBackgroundColor"];
+}
+
++ (NSColor *) linkColor {
+    return [NSColor colorWithCatalogName: @"System" colorName: @"linkColor"];
+}
+
++ (NSColor *) selectedContentBackgroundColor {
+    return [NSColor colorWithCatalogName: @"System"
+                               colorName: @"selectedContentBackgroundColor"];
+}
+
++ (NSColor *) unemphasizedSelectedContentBackgroundColor {
+    return [NSColor
+            colorWithCatalogName: @"System"
+                       colorName:
+                               @"unemphasizedSelectedContentBackgroundColor"];
+}
+
++ (NSColor *) alternatingContentBackgroundColor {
+    return [NSColor colorWithCatalogName: @"System"
+                               colorName: @"alternatingContentBackgroundColor"];
+}
+
++ (NSArray<NSColor *> *) alternatingContentBackgroundColors {
+    return [NSArray arrayWithObjects: [self controlBackgroundColor],
+                                      [self alternatingContentBackgroundColor],
+                                      nil];
+}
+
 + (NSColor *) clearColor {
     return [NSColor colorWithCalibratedRed: 0 green: 0 blue: 0 alpha: 0];
 }
@@ -641,11 +687,19 @@ NSString *const NSSystemColorsDidChangeNotification = @"NSSystemColorsDidChangeN
                                spaceName: NSCalibratedRGBColorSpace];
 }
 
-+ (NSColor *) colorWithCatalogName: (NSString *) catalogName
-                         colorName: (NSString *) colorName
++ (NSColor *) colorWithCatalogName: (NSColorListName) catalogName
+                         colorName: (NSColorName) colorName
 {
     return [NSColor_catalog colorWithCatalogName: catalogName
                                        colorName: colorName];
+}
+
++ (NSColor *) colorWithGenericGamma22White: (CGFloat) white
+                                     alpha: (CGFloat) alpha
+{
+    return [NSColor_CGColor colorWithGray: white
+                                    alpha: alpha
+                                spaceName: NSCustomColorSpace];
 }
 
 + (NSColor *) colorFromPasteboard: (NSPasteboard *) pasteboard {
@@ -698,7 +752,12 @@ static void releasePatternInfo(void *info) {
     return result;
 }
 
-- (NSString *) colorSpaceName {
+- (NSImage *) patternImage {
+    NSInvalidAbstractInvocation();
+    return nil;
+}
+
+- (NSColorSpaceName) colorSpaceName {
     NSInvalidAbstractInvocation();
     return nil;
 }
@@ -828,25 +887,37 @@ static void releasePatternInfo(void *info) {
     return 1.0;
 }
 
+- (NSColorListName) catalogNameComponent {
+    NSInvalidAbstractInvocation();
+    return nil;
+}
+
+- (NSColorName) colorNameComponent {
+    NSInvalidAbstractInvocation();
+    return nil;
+}
+
+- (CGColorRef) CGColor {
+    NSInvalidAbstractInvocation();
+    return nil;
+}
+
 - (NSColor *) colorWithAlphaComponent: (CGFloat) alpha {
     if (alpha >= 1.0)
         return self;
     return nil;
 }
 
-- (NSColor *) colorUsingColorSpaceName: (NSString *) colorSpace {
-    return [self colorUsingColorSpaceName: colorSpace device: nil];
+- (NSColor *) colorUsingColorSpaceName: (NSColorSpaceName) colorSpace {
+    NSInvalidAbstractInvocation();
+    return nil;
 }
 
-- (NSColor *) colorUsingColorSpaceName: (NSString *) colorSpace
+- (NSColor *) colorUsingColorSpaceName: (NSColorSpaceName) colorSpace
                                 device: (NSDictionary *) device
 {
-    if ([[self colorSpaceName] isEqualToString: colorSpace])
-        return self;
-
-    // NSLog(@"Warning, ignoring differences between color space %@ and %@",
-    // colorSpace, [self colorSpaceName]);
-    return self;
+    NSInvalidAbstractInvocation();
+    return nil;
 }
 
 - (NSColor *) blendedColorWithFraction: (CGFloat) fraction

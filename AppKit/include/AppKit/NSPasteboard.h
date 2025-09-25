@@ -37,6 +37,7 @@ APPKIT_EXPORT const NSPasteboardType NSPasteboardTypeFont;
 APPKIT_EXPORT const NSPasteboardType NSPasteboardTypeRuler;
 APPKIT_EXPORT const NSPasteboardType NSPasteboardTypeColor;
 APPKIT_EXPORT const NSPasteboardType NSPasteboardTypeFileURL;
+APPKIT_EXPORT const NSPasteboardType NSPasteboardTypeMultipleTextSelection;
 
 // Old Pasteboard Types
 APPKIT_EXPORT const NSPasteboardType NSColorPboardType;
@@ -55,6 +56,8 @@ APPKIT_EXPORT const NSPasteboardType NSTIFFPboardType;
 APPKIT_EXPORT const NSPasteboardType NSURLPboardType;
 APPKIT_EXPORT const NSPasteboardType NSHTMLPboardType;
 APPKIT_EXPORT const NSPasteboardType NSVCardPboardType;
+APPKIT_EXPORT const NSPasteboardType NSInkTextPboardType;
+APPKIT_EXPORT const NSPasteboardType NSMultipleTextSelectionPboardType;
 
 APPKIT_EXPORT const NSPasteboardType NSFilesPromisePboardType;
 APPKIT_EXPORT const NSPasteboardType NSPasteboardNameDrag;

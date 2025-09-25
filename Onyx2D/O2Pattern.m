@@ -92,4 +92,24 @@ void O2PatternRelease(O2PatternRef self) {
     [self release];
 }
 
+void *O2PatternGetImage(O2PatternRef self) {
+    return self->_info;
+}
+
+O2Rect O2PatternGetBounds(O2PatternRef self) {
+    return self->_bounds;
+}
+
+O2AffineTransform O2PatternGetMatrix(O2PatternRef self) {
+    return self->_matrix;
+}
+
+O2PatternTiling O2PatternGetTiling(O2PatternRef self) {
+    return self->_tiling;
+}
+
+BOOL O2PatternIsColored(O2PatternRef self) {
+    return self->_isColored;
+}
+
 @end

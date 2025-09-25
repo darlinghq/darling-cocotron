@@ -146,6 +146,12 @@ typedef enum {
            fromRect: (NSRect) source
           operation: (NSCompositingOperation) operation
            fraction: (CGFloat) fraction;
+- (void) drawInRect: (NSRect) rect
+              fromRect: (NSRect) source
+             operation: (NSCompositingOperation) operation
+              fraction: (CGFloat) fraction
+        respectFlipped: (BOOL) respectFlipped
+                 hints: (NSDictionary<NSString *, id> *) hints;
 
 @end
 

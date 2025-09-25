@@ -50,6 +50,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return [[NSDisplay currentDisplay] screens];
 }
 
+- (NSWindowDepth) depth {
+    return _depth;
+}
+
 - (NSRect) frame {
     return _frame;
 }
@@ -93,4 +97,5 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (void) setCgDirectDisplayID: (CGDirectDisplayID) displayID {
     self->_directDisplayID = displayID;
 }
+
 @end

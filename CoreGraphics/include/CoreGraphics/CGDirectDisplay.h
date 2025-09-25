@@ -51,6 +51,7 @@ COREGRAPHICS_EXPORT CGError CGGetDisplaysWithRect(
 COREGRAPHICS_EXPORT size_t CGDisplayPixelsHigh(CGDirectDisplayID display);
 COREGRAPHICS_EXPORT size_t CGDisplayPixelsWide(CGDirectDisplayID display);
 
+COREGRAPHICS_EXPORT boolean_t CGDisplayIsInMirrorSet(CGDirectDisplayID display);
 COREGRAPHICS_EXPORT Boolean CGDisplayIsMain(CGDirectDisplayID display);
 COREGRAPHICS_EXPORT CGDirectDisplayID
 CGDisplayMirrorsDisplay(CGDirectDisplayID display);
@@ -67,10 +68,9 @@ COREGRAPHICS_EXPORT CFDictionaryRef
 CGDisplayCurrentMode(CGDirectDisplayID display);
 COREGRAPHICS_EXPORT void CGDisplayModeRelease(CGDisplayModeRef mode);
 COREGRAPHICS_EXPORT CGDisplayModeRef CGDisplayModeRetain(CGDisplayModeRef mode);
-COREGRAPHICS_EXPORT CGDisplayModeRef
-CGDisplayCopyDisplayMode(CGDirectDisplayID displayId);
 COREGRAPHICS_EXPORT boolean_t CGDisplayIsCaptured(CGDirectDisplayID display);
 COREGRAPHICS_EXPORT double CGDisplayModeGetRefreshRate(CGDisplayModeRef mode);
 COREGRAPHICS_EXPORT CGError CGDisplaySwitchToMode(CGDirectDisplayID display,
                                                   CFDictionaryRef mode);
 COREGRAPHICS_EXPORT size_t CGDisplayModeGetPixelWidth(CGDisplayModeRef mode);
+COREGRAPHICS_EXPORT CGSize CGDisplayScreenSize(CGDirectDisplayID display);

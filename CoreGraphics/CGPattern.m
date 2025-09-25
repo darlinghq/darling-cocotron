@@ -39,3 +39,23 @@ CGPatternRef CGPatternCreate(void *info, CGRect bounds,
                            ystep, tiling, isColored,
                            O2PatternCallbacksFromCG(callbacks));
 }
+
+void *CGPatternGetImage(CGPatternRef self) {
+    return O2PatternGetImage(self);
+}
+
+CGRect CGPatternGetBounds(CGPatternRef self) {
+    return O2PatternGetBounds(self);
+}
+
+CGAffineTransform CGPatternGetMatrix(CGPatternRef self) {
+    return CGAffineTransformFromO2(O2PatternGetMatrix(self));
+}
+
+CGPatternTiling CGPatternGetTiling(CGPatternRef self) {
+    return O2PatternGetTiling(self);
+}
+
+bool CGPatternIsColored(CGPatternRef self) {
+    return O2PatternIsColored(self);
+}

@@ -20,6 +20,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSColor_CGColor.h>
 #import <AppKit/NSGraphics.h>
 #import <AppKit/NSGraphicsContextFunctions.h>
+#import <AppKit/NSImage.h>
 #import <ApplicationServices/ApplicationServices.h>
 
 #import <Foundation/NSDebug.h>
@@ -29,14 +30,25 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 @implementation NSColor_CGColor
 
 - initWithColorRef: (CGColorRef) colorRef spaceName: (NSString *) spaceName {
+    _catalogName = @"";
     _colorRef = CGColorRetain(colorRef);
     _colorSpaceName = [spaceName copy];
+    _pattern = nil;
+
+    if (_colorRef != nil &&
+        [_colorSpaceName isEqualToString: NSPatternColorSpace]) {
+        CGPatternRef pattern = CGColorGetPattern(_colorRef);
+        _pattern = (NSImage *) CGPatternGetImage(pattern);
+    }
+
     return self;
 }
 
 - (void) dealloc {
+    [_catalogName release];
     CGColorRelease(_colorRef);
     [_colorSpaceName release];
+    [_pattern release];
     [super dealloc];
 }
 
@@ -212,6 +224,8 @@ static inline CGFloat calibratedWhiteFromRGB(CGFloat r, CGFloat g, CGFloat b) {
                                          yellow: 0
                                           black: 1 - white
                                           alpha: alpha];
+
+        NSLog(@"Other space %@ from NSDeviceWhiteColorSpace", otherSpaceName);
     } else if ([_colorSpaceName isEqualToString: NSDeviceRGBColorSpace]) {
         CGFloat red = components[0];
         CGFloat green = components[1];
@@ -240,6 +254,8 @@ static inline CGFloat calibratedWhiteFromRGB(CGFloat r, CGFloat g, CGFloat b) {
             return [NSColor colorWithCalibratedWhite: calibratedWhiteFromRGB(
                                                               red, green, blue)
                                                alpha: alpha];
+
+        NSLog(@"Other space %@ from NSDeviceRGBColorSpace", otherSpaceName);
     } else if ([_colorSpaceName isEqualToString: NSDeviceCMYKColorSpace]) {
         CGFloat cyan = components[0];
         CGFloat magenta = components[1];
@@ -265,6 +281,8 @@ static inline CGFloat calibratedWhiteFromRGB(CGFloat r, CGFloat g, CGFloat b) {
             return [NSColor colorWithCalibratedWhite: (white > 0 ? white : 0)
                                                alpha: alpha];
         }
+
+        NSLog(@"Other space %@ from NSDeviceCMYKColorSpace", otherSpaceName);
     } else if ([_colorSpaceName isEqualToString: NSCalibratedBlackColorSpace]) {
     } else if ([_colorSpaceName isEqualToString: NSCalibratedWhiteColorSpace]) {
         CGFloat white = components[0];
@@ -289,6 +307,26 @@ static inline CGFloat calibratedWhiteFromRGB(CGFloat r, CGFloat g, CGFloat b) {
                                          yellow: 0
                                           black: 1 - white
                                           alpha: alpha];
+
+        if ([otherSpaceName isEqualToString: NSPatternColorSpace]) {
+            CGColorSpaceRef currentColorSpace = CGColorGetColorSpace(_colorRef);
+            CGColorSpaceRef patternColorSpace =
+                    CGColorSpaceCreatePattern(currentColorSpace);
+            CGPatternCallbacks callbacks = {0, drawPattern, releasePatternInfo};
+            NSImage *image =
+                    [[NSImage alloc] initWithSize: NSMakeSize(1.0, 1.0)];
+            CGPatternRef pattern = CGPatternCreate(
+                    image, CGRectMake(0, 0, 1, 1), CGAffineTransformIdentity, 1,
+                    1, kCGPatternTilingNoDistortion, YES, &callbacks);
+            CGColorRef cgColor = CGColorCreateWithPattern(patternColorSpace,
+                                                          pattern, components);
+
+            return [self initWithColorRef: cgColor
+                                spaceName: NSPatternColorSpace];
+        }
+
+        NSLog(@"Other space %@ from NSCalibratedWhiteColorSpace",
+              otherSpaceName);
     } else if ([_colorSpaceName isEqualToString: NSCalibratedRGBColorSpace]) {
         CGFloat red = components[0];
         CGFloat green = components[1];
@@ -317,10 +355,85 @@ static inline CGFloat calibratedWhiteFromRGB(CGFloat r, CGFloat g, CGFloat b) {
                                          green: green
                                           blue: blue
                                          alpha: alpha];
+
+        if ([otherSpaceName isEqualToString: NSPatternColorSpace]) {
+            CGColorSpaceRef currentColorSpace = CGColorGetColorSpace(_colorRef);
+            CGColorSpaceRef patternColorSpace =
+                    CGColorSpaceCreatePattern(currentColorSpace);
+            CGPatternCallbacks callbacks = {0, drawPattern, releasePatternInfo};
+            NSImage *image =
+                    [[NSImage alloc] initWithSize: NSMakeSize(1.0, 1.0)];
+            CGPatternRef pattern = CGPatternCreate(
+                    image, CGRectMake(0, 0, 1, 1), CGAffineTransformIdentity, 1,
+                    1, kCGPatternTilingNoDistortion, YES, &callbacks);
+            CGColorRef cgColor = CGColorCreateWithPattern(patternColorSpace,
+                                                          pattern, components);
+
+            return [self initWithColorRef: cgColor
+                                spaceName: NSPatternColorSpace];
+        }
+
+        NSLog(@"Other space %@ from NSCalibratedRGBColorSpace", otherSpaceName);
+    } else if ([_colorSpaceName isEqualToString: NSNamedColorSpace]) {
+        CGFloat red = components[0], green = components[1],
+                blue = components[2], alpha = components[3];
+
+        if ([otherSpaceName isEqualToString: NSPatternColorSpace]) {
+            CGColorSpaceRef currentColorSpace = CGColorGetColorSpace(_colorRef);
+            CGColorSpaceRef patternColorSpace =
+                    CGColorSpaceCreatePattern(currentColorSpace);
+            CGPatternCallbacks callbacks = {0, drawPattern, releasePatternInfo};
+            NSImage *image =
+                    [[NSImage alloc] initWithSize: NSMakeSize(1.0, 1.0)];
+            CGPatternRef pattern = CGPatternCreate(
+                    image, CGRectMake(0, 0, 1, 1), CGAffineTransformIdentity, 1,
+                    1, kCGPatternTilingNoDistortion, YES, &callbacks);
+            CGColorRef cgColor = CGColorCreateWithPattern(patternColorSpace,
+                                                          pattern, components);
+
+            return [self initWithColorRef: cgColor
+                                spaceName: NSPatternColorSpace];
+        }
+
+        if ([otherSpaceName isEqualToString: NSDeviceRGBColorSpace])
+            return [NSColor colorWithDeviceRed: red
+                                         green: green
+                                          blue: blue
+                                         alpha: alpha];
+
+        NSLog(@"Other space %@ from NSNamedColorSpace", otherSpaceName);
+    } else if ([_colorSpaceName isEqualToString: NSCustomColorSpace]) {
+        CGFloat white = components[0], alpha = components[1];
+
+        if ([otherSpaceName isEqualToString: NSDeviceRGBColorSpace])
+            return [NSColor colorWithDeviceRed: white
+                                         green: white
+                                          blue: white
+                                         alpha: alpha];
+
+        if ([otherSpaceName isEqualToString: NSPatternColorSpace]) {
+            CGColorSpaceRef currentColorSpace = CGColorGetColorSpace(_colorRef);
+            CGColorSpaceRef patternColorSpace =
+                    CGColorSpaceCreatePattern(currentColorSpace);
+            CGPatternCallbacks callbacks = {0, drawPattern, releasePatternInfo};
+            NSImage *image =
+                    [[NSImage alloc] initWithSize: NSMakeSize(1.0, 1.0)];
+            CGPatternRef pattern = CGPatternCreate(
+                    image, CGRectMake(0, 0, 1, 1), CGAffineTransformIdentity, 1,
+                    1, kCGPatternTilingNoDistortion, YES, &callbacks);
+            CGColorRef cgColor = CGColorCreateWithPattern(patternColorSpace,
+                                                          pattern, components);
+
+            return [self initWithColorRef: cgColor
+                                spaceName: NSPatternColorSpace];
+        }
+
+        NSLog(@"Other space %@ from NSCustomColorSpace", otherSpaceName);
     }
 
-    if (NSDebugEnabled)
-        NSLog(@"Unable to convert color to space %@", otherSpaceName);
+    NSLog(@"Unable to convert color to space %@ from %@", otherSpaceName,
+          _colorSpaceName);
+
     return nil;
 }
 
@@ -433,6 +546,14 @@ static inline CGFloat calibratedWhiteFromRGB(CGFloat r, CGFloat g, CGFloat b) {
     NSLog(@"-[%@ %s] failed", [self class], _cmd);
 }
 
+- (NSColorListName) catalogNameComponent {
+    return _catalogName;
+}
+
+- (NSImage *) patternImage {
+    return _pattern;
+}
+
 - (CGColorRef) CGColor {
     return CGColorRetain(_colorRef);
 }
@@ -443,6 +564,26 @@ static inline CGFloat calibratedWhiteFromRGB(CGFloat r, CGFloat g, CGFloat b) {
 
 - (void) setFill {
     CGContextSetFillColorWithColor(NSCurrentGraphicsPort(), _colorRef);
+}
+
+static void drawPattern(void *info, CGContextRef cgContext) {
+    NSImage *image = (NSImage *) info;
+    NSSize size = [image size];
+    NSGraphicsContext *context =
+            [NSGraphicsContext graphicsContextWithGraphicsPort: cgContext
+                                                       flipped: NO];
+
+    [NSGraphicsContext saveGraphicsState];
+    [NSGraphicsContext setCurrentContext: context];
+    [image drawInRect: NSMakeRect(0, 0, size.width, size.height)
+             fromRect: NSZeroRect
+            operation: NSCompositeCopy
+             fraction: 1.0];
+    [NSGraphicsContext restoreGraphicsState];
+}
+
+static void releasePatternInfo(void *info) {
+    [(NSImage *) info release];
 }
 
 @end

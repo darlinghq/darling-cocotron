@@ -97,6 +97,23 @@ typedef NS_ENUM(NSInteger, NSUserInterfaceLayoutDirection) {
     NSUserInterfaceLayoutDirectionRightToLeft = 1,
 };
 
+typedef NS_ENUM(NSUInteger, NSApplicationPresentationOptions) {
+    NSApplicationPresentationDefault = 0,
+    NSApplicationPresentationAutoHideDock = 1 << 0,
+    NSApplicationPresentationHideDock = 1 << 1,
+    NSApplicationPresentationAutoHideMenuBar = 1 << 2,
+    NSApplicationPresentationHideMenuBar = 1 << 3,
+    NSApplicationPresentationDisableAppleMenu = 1 << 4,
+    NSApplicationPresentationDisableProcessSwitching = 1 << 5,
+    NSApplicationPresentationDisableForceQuit = 1 << 6,
+    NSApplicationPresentationDisableSessionTermination = 1 << 7,
+    NSApplicationPresentationDisableHideApplication = 1 << 8,
+    NSApplicationPresentationDisableMenuBarTransparency = 1 << 9,
+    NSApplicationPresentationFullScreen = 1 << 10,
+    NSApplicationPresentationAutoHideToolbar = 1 << 11,
+    NSApplicationPresentationDisableCursorLocationAssistance = 1 << 12,
+};
+
 @interface NSApplication : NSResponder {
     NSDisplay *_display;
     id _delegate;
@@ -105,6 +122,7 @@ typedef NS_ENUM(NSInteger, NSUserInterfaceLayoutDirection) {
     NSWindow *_mainWindow;
     NSMenu *_mainMenu;
     NSMenu *_windowsMenu;
+    NSMenu *_servicesMenu;
 
     NSImage *_applicationIconImage;
 
@@ -119,7 +137,12 @@ typedef NS_ENUM(NSInteger, NSUserInterfaceLayoutDirection) {
     void *_lock;
     NSMutableArray *_orderedWindows; // get rid of
     NSTimer *_attentionTimer;
+    NSApplicationPresentationOptions _presentationOptions;
 }
+
+@property(readonly)
+        NSApplicationPresentationOptions currentSystemPresentationOptions;
+@property NSApplicationPresentationOptions presentationOptions;
 
 + (NSApplication *) sharedApplication;
 

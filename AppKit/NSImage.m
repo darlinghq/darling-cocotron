@@ -1244,6 +1244,21 @@ NSImageName const NSImageNameTouchBarVolumeUpTemplate =
     [pool release];
 }
 
+- (void) drawInRect: (NSRect) rect
+           fromRect: (NSRect) source
+          operation: (NSCompositingOperation) operation
+           fraction: (CGFloat) fraction
+     respectFlipped: (BOOL) respectFlipped
+                 hints: (NSDictionary<NSString *, id> *) hints
+{
+    printf("STUB %s\n", __PRETTY_FUNCTION__);
+
+    [self drawInRect: rect
+            fromRect: source
+           operation: operation
+            fraction: fraction];
+}
+
 - (NSString *) description {
     NSSize size = [self size];
 

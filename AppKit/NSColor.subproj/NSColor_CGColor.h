@@ -22,31 +22,32 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @interface NSColor_CGColor : NSColor {
     CGColorRef _colorRef;
-    NSString *_colorSpaceName;
+    NSColorSpaceName _colorSpaceName;
 }
 
-- initWithColorRef: (CGColorRef) colorRef spaceName: (NSString *) spaceName;
+- initWithColorRef: (CGColorRef) colorRef
+         spaceName: (NSColorSpaceName) spaceName;
 
 + (NSColor *) colorWithColorRef: (CGColorRef) colorRef
-                      spaceName: (NSString *) spaceName;
+                      spaceName: (NSColorSpaceName) spaceName;
 + (NSColor *) colorWithGray: (CGFloat) gray
                       alpha: (CGFloat) alpha
-                  spaceName: (NSString *) spaceName;
+                  spaceName: (NSColorSpaceName) spaceName;
 + (NSColor *) colorWithCyan: (CGFloat) cyan
                     magenta: (CGFloat) magenta
                      yellow: (CGFloat) yellow
                       black: (CGFloat) black
                       alpha: (CGFloat) alpha
-                  spaceName: (NSString *) spaceName;
+                  spaceName: (NSColorSpaceName) spaceName;
 + (NSColor *) colorWithRed: (CGFloat) red
                      green: (CGFloat) green
                       blue: (CGFloat) blue
                      alpha: (CGFloat) alpha
-                 spaceName: (NSString *) spaceName;
+                 spaceName: (NSColorSpaceName) spaceName;
 + (NSColor *) colorWithHue: (CGFloat) hue
                 saturation: (CGFloat) saturation
                 brightness: (CGFloat) brightness
                      alpha: (CGFloat) alpha
-                 spaceName: (NSString *) spaceName;
+                 spaceName: (NSColorSpaceName) spaceName;
 
 @end

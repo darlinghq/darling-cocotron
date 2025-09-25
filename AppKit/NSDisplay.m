@@ -16,9 +16,11 @@ FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
 COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
+
 #import <AppKit/NSDisplay.h>
 #import <AppKit/NSErrors.h>
 #import <AppKit/NSRaise.h>
+#import <AppKit/NSColorList.h>
 
 @implementation NSDisplay
 
@@ -332,9 +334,16 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 void NSColorSetCatalogColor(NSString *catalogName, NSString *colorName,
                             NSColor *color)
 {
-    [[NSDisplay currentDisplay] _addSystemColor: color forName: colorName];
+    NSColorList *colors = [NSColorList colorListNamed: catalogName];
+
+    [colors setColor: color forKey: colorName];
 }
 
 NSColor *NSColorGetCatalogColor(NSString *catalogName, NSString *colorName) {
-    return [[NSDisplay currentDisplay] colorWithName: colorName];
+    NSColorList *colors = [NSColorList colorListNamed: catalogName];
+
+    if (colors != nil)
+        return [colors colorWithKey: colorName];
+
+    return nil;
 }

@@ -60,6 +60,8 @@ typedef enum {
                                                 flipped: (BOOL) flipped;
 + (NSGraphicsContext *) graphicsContextWithBitmapImageRep:
         (NSBitmapImageRep *) imageRep;
++ (NSGraphicsContext *) graphicsContextWithCGContext: (CGContextRef) context
+                                             flipped: (BOOL) flipped;
 
 + (NSGraphicsContext *) currentContext;
 + (void) setCurrentContext: (NSGraphicsContext *) context;
