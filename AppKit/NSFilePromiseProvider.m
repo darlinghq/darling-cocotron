@@ -1,7 +1,7 @@
 /*
  This file is part of Darling.
 
- Copyright (C) 2019 Lubos Dolezel
+ Copyright (C) 2025 Darling Developers
 
  Darling is free software: you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by
@@ -17,16 +17,20 @@
  along with Darling.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#import <AppKit/AppKitExport.h>
-#import <Foundation/NSObject.h>
+#import <AppKit/NSFilePromiseProvider.h>
+#import <Foundation/NSMethodSignature.h>
+#import <Foundation/NSInvocation.h>
 
-typedef NSString *NSDraggingImageComponentKey;
+@implementation NSFilePromiseProvider
 
-APPKIT_EXPORT NSDraggingImageComponentKey const NSDraggingImageComponentIconKey;
-APPKIT_EXPORT NSDraggingImageComponentKey const NSDraggingImageComponentLabelKey;
+- (NSMethodSignature *)methodSignatureForSelector:(SEL)aSelector
+{
+    return [NSMethodSignature signatureWithObjCTypes: "v@:"];
+}
 
-@interface NSDraggingImageComponent : NSObject
-@end
+- (void)forwardInvocation:(NSInvocation *)anInvocation
+{
+    NSLog(@"Stub called: %@ in %@", NSStringFromSelector([anInvocation selector]), [self class]);
+}
 
-@interface NSDraggingItem : NSObject
 @end

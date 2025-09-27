@@ -476,6 +476,8 @@ NSString *const NSAccessibilityIncrementAction =
 NSString *const NSAccessibilityPickAction = @"NSAccessibilityPickAction";
 NSString *const NSAccessibilityPressAction = @"NSAccessibilityPressAction";
 NSString *const NSAccessibilityRaiseAction = @"NSAccessibilityRaiseAction";
+NSAccessibilityActionName const NSAccessibilityShowAlternateUIAction = @"AXShowAlternateUI";
+NSAccessibilityActionName const NSAccessibilityShowDefaultUIAction = @"AXShowDefaultUI";
 NSString *const NSAccessibilityShowMenuAction =
         @"NSAccessibilityShowMenuAction";
 

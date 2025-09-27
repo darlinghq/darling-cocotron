@@ -57,6 +57,7 @@ const NSNotificationName NSWorkspaceSessionDidBecomeActiveNotification =
         @"NSWorkspaceSessionDidBecomeActiveNotification";
 const NSNotificationName NSWorkspaceSessionDidResignActiveNotification =
         @"NSWorkspaceSessionDidResignActiveNotification";
+NSNotificationName const NSWorkspaceDidActivateApplicationNotification = @"NSWorkspaceDidActivateApplicationNotification";
 
 const NSNotificationName
         NSWorkspaceAccessibilityDisplayOptionsDidChangeNotification =

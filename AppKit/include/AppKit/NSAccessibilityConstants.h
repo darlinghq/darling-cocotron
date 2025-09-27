@@ -1,6 +1,8 @@
 #import <AppKit/AppKitExport.h>
 #import <Foundation/Foundation.h>
 
+typedef NSString *NSAccessibilityActionName;
+
 APPKIT_EXPORT NSString *const NSAccessibilityChildrenAttribute;
 APPKIT_EXPORT NSString *const NSAccessibilityContentsAttribute;
 APPKIT_EXPORT NSString *const NSAccessibilityDescriptionAttribute;
@@ -288,6 +290,8 @@ APPKIT_EXPORT NSString *const NSAccessibilityIncrementAction;
 APPKIT_EXPORT NSString *const NSAccessibilityPickAction;
 APPKIT_EXPORT NSString *const NSAccessibilityPressAction;
 APPKIT_EXPORT NSString *const NSAccessibilityRaiseAction;
+APPKIT_EXPORT NSAccessibilityActionName const NSAccessibilityShowAlternateUIAction;
+APPKIT_EXPORT NSAccessibilityActionName const NSAccessibilityShowDefaultUIAction;
 APPKIT_EXPORT NSString *const NSAccessibilityShowMenuAction;
 
 APPKIT_EXPORT NSString *const NSAccessibilityMainWindowChangedNotification;
