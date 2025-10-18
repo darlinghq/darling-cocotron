@@ -261,6 +261,15 @@ static NSMutableDictionary *_namedColorLists = nil;
                        forKey: @"windowBackgroundColor"];
     [systemColorList setColor: [NSColor windowFrameColor]
                        forKey: @"windowFrameColor"];
+    [systemColorList setColor: [NSColor labelColor] forKey: @"labelColor"];
+    [systemColorList setColor: [NSColor linkColor] forKey: @"linkColor"];
+    [systemColorList setColor: [NSColor unemphasizedSelectedTextColor]
+                       forKey: @"unemphasizedSelectedTextColor"];
+    [systemColorList setColor: [NSColor selectedContentBackgroundColor]
+                       forKey: @"selectedContentBackgroundColor"];
+    [systemColorList
+            setColor: [NSColor unemphasizedSelectedContentBackgroundColor]
+              forKey: @"unemphasizedSelectedContentBackgroundColor"];
 
     _namedColorLists = [[NSMutableDictionary alloc] init];
     [_namedColorLists setObject: basicColorList forKey: @"Basic"];

@@ -20,15 +20,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSColor.h>
 
 @interface NSColor_catalog : NSColor {
-    NSString *_catalogName;
-    NSString *_colorName;
     NSColor *_color;
 }
 
-+ (NSColor *) colorWithCatalogName: (NSString *) catalogName
-                         colorName: (NSString *) colorName;
-+ (NSColor *) colorWithCatalogName: (NSString *) catalogName
-                         colorName: (NSString *) colorName
++ (NSColor *) colorWithCatalogName: (NSColorListName) catalogName
+                         colorName: (NSColorName) colorName;
++ (NSColor *) colorWithCatalogName: (NSColorListName) catalogName
+                         colorName: (NSColorName) colorName
                              color: (NSColor *) color;
+- (NSColor *) highlightWithLevel: (CGFloat) level;
 
 @end

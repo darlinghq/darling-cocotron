@@ -48,4 +48,10 @@ CGPatternCreate(void *info, CGRect bounds, CGAffineTransform matrix,
                 CGFloat xstep, CGFloat ystep, CGPatternTiling tiling,
                 bool isColored, const CGPatternCallbacks *callbacks);
 
+COREGRAPHICS_EXPORT void *CGPatternGetImage(CGPatternRef self);
+COREGRAPHICS_EXPORT CGRect CGPatternGetBounds(CGPatternRef self);
+COREGRAPHICS_EXPORT CGAffineTransform CGPatternGetMatrix(CGPatternRef self);
+COREGRAPHICS_EXPORT CGPatternTiling CGPatternGetTiling(CGPatternRef self);
+COREGRAPHICS_EXPORT bool CGPatternIsColored(CGPatternRef self);
+
 CF_IMPLICIT_BRIDGING_DISABLED

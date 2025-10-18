@@ -21,58 +21,159 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <ApplicationServices/ApplicationServices.h>
 #import <Foundation/Foundation.h>
 
-APPKIT_EXPORT NSString *const NSSystemColorsDidChangeNotification;
+APPKIT_EXPORT NSNotificationName const NSSystemColorsDidChangeNotification;
+
+typedef NSString *NSColorListName;
+typedef NSString *NSColorName;
+typedef NSString *NSColorSpaceName;
 
 @class NSImage;
 @class NSPasteboard;
 
-@interface NSColor : NSObject <NSCopying, NSCoding>
+@interface NSColor : NSObject <NSCopying, NSCoding> {
+    NSColorListName _catalogName;
+    NSColorName _colorName;
+    NSImage *_pattern;
+}
+
+@property(class, strong, readonly) NSColor *labelColor;
+
+@property(class, strong, readonly) NSColor *textColor;
+@property(class, strong, readonly) NSColor *selectedTextColor;
+@property(class, strong, readonly) NSColor *textBackgroundColor;
+@property(class, strong, readonly) NSColor *selectedTextBackgroundColor;
+@property(class, strong, readonly) NSColor *keyboardFocusIndicatorColor;
+@property(class, strong, readonly) NSColor *unemphasizedSelectedTextColor;
+@property(class, strong, readonly)
+        NSColor *unemphasizedSelectedTextBackgroundColor;
+
+@property(class, strong, readonly) NSColor *linkColor;
+@property(class, strong, readonly) NSColor *selectedContentBackgroundColor;
+@property(class, strong, readonly)
+        NSColor *unemphasizedSelectedContentBackgroundColor;
+
+@property(class, strong, readonly) NSColor *selectedMenuItemTextColor;
+
+@property(class, strong, readonly) NSColor *gridColor;
+@property(class, strong, readonly) NSColor *headerTextColor;
+@property(class, strong, readonly)
+        NSArray<NSColor *> *alternatingContentBackgroundColors;
+
+@property(class, strong, readonly) NSColor *controlColor;
+@property(class, strong, readonly) NSColor *controlBackgroundColor;
+@property(class, strong, readonly) NSColor *controlTextColor;
+@property(class, strong, readonly) NSColor *disabledControlTextColor;
+@property(class, strong, readonly) NSColor *selectedControlColor;
+@property(class, strong, readonly) NSColor *selectedControlTextColor;
+@property(class, strong, readonly) NSColor *alternateSelectedControlTextColor;
+
+@property(class, strong, readonly) NSColor *windowBackgroundColor;
+
+@property(class, strong, readonly) NSColor *highlightColor;
+@property(class, strong, readonly) NSColor *shadowColor;
+
+@property(class, strong, readonly) NSColor *alternateSelectedControlColor;
+@property(class, strong, readonly)
+        NSArray<NSColor *> *controlAlternatingRowBackgroundColors;
+@property(class, strong, readonly) NSColor *controlHighlightColor;
+@property(class, strong, readonly) NSColor *controlLightHighlightColor;
+@property(class, strong, readonly) NSColor *controlShadowColor;
+@property(class, strong, readonly) NSColor *controlDarkShadowColor;
+@property(class, strong, readonly) NSColor *headerColor;
+@property(class, strong, readonly) NSColor *knobColor;
+@property(class, strong, readonly) NSColor *selectedKnobColor;
+@property(class, strong, readonly) NSColor *scrollBarColor;
+@property(class, strong, readonly) NSColor *secondarySelectedControlColor;
+@property(class, strong, readonly) NSColor *selectedMenuItemColor;
+@property(class, strong, readonly) NSColor *windowFrameColor;
+
+@property(class, strong, readonly) NSColor *clearColor;
+
+@property(class, strong, readonly) NSColor *blackColor;
+@property(class, strong, readonly) NSColor *blueColor;
+@property(class, strong, readonly) NSColor *brownColor;
+@property(class, strong, readonly) NSColor *cyanColor;
+@property(class, strong, readonly) NSColor *darkGrayColor;
+@property(class, strong, readonly) NSColor *grayColor;
+@property(class, strong, readonly) NSColor *greenColor;
+@property(class, strong, readonly) NSColor *lightGrayColor;
+@property(class, strong, readonly) NSColor *magentaColor;
+@property(class, strong, readonly) NSColor *orangeColor;
+@property(class, strong, readonly) NSColor *purpleColor;
+@property(class, strong, readonly) NSColor *redColor;
+@property(class, strong, readonly) NSColor *whiteColor;
+@property(class, strong, readonly) NSColor *yellowColor;
+
+@property(copy, readonly) NSImage *patternImage;
+
+@property(readonly) NSInteger numberOfComponents;
+
+@property(readonly) CGFloat alphaComponent;
+@property(readonly) CGFloat whiteComponent;
+@property(readonly) CGFloat redComponent;
+@property(readonly) CGFloat greenComponent;
+@property(readonly) CGFloat blueComponent;
+@property(readonly) CGFloat cyanComponent;
+@property(readonly) CGFloat magentaComponent;
+@property(readonly) CGFloat yellowComponent;
+@property(readonly) CGFloat blackComponent;
+@property(readonly) CGFloat hueComponent;
+@property(readonly) CGFloat saturationComponent;
+@property(readonly) CGFloat brightnessComponent;
+@property(copy, readonly) NSColorListName catalogNameComponent;
+@property(copy, readonly) NSColorName colorNameComponent;
+
+@property(readonly) CGColorRef CGColor;
+
+@property(class) BOOL ignoresAlpha;
+@property(copy, readonly) NSColorSpaceName colorSpaceName;
+
++ (NSColor *) labelColor;
+
++ (NSColor *) textColor;
++ (NSColor *) selectedTextColor;
++ (NSColor *) textBackgroundColor;
++ (NSColor *) selectedTextBackgroundColor;
++ (NSColor *) keyboardFocusIndicatorColor;
++ (NSColor *) unemphasizedSelectedTextColor;
++ (NSColor *) unemphasizedSelectedTextBackgroundColor;
+
++ (NSColor *) linkColor;
++ (NSColor *) selectedContentBackgroundColor;
++ (NSColor *) unemphasizedSelectedContentBackgroundColor;
+
++ (NSColor *) selectedMenuItemTextColor;
+
++ (NSColor *) gridColor;
++ (NSColor *) headerTextColor;
++ (NSArray<NSColor *> *) alternatingContentBackgroundColors;
+
++ (NSColor *) controlColor;
++ (NSColor *) controlBackgroundColor;
++ (NSColor *) controlTextColor;
++ (NSColor *) disabledControlTextColor;
++ (NSColor *) selectedControlColor;
++ (NSColor *) selectedControlTextColor;
++ (NSColor *) alternateSelectedControlTextColor;
+
++ (NSColor *) windowBackgroundColor;
 
 + (NSColor *) highlightColor;
 + (NSColor *) shadowColor;
-+ (NSColor *) gridColor;
 
 + (NSColor *) alternateSelectedControlColor;
-+ (NSColor *) alternateSelectedControlTextColor;
-+ (NSColor *) controlColor;
-+ (NSColor *) secondarySelectedControlColor;
-+ (NSColor *) selectedControlColor;
-+ (NSColor *) controlTextColor;
-+ (NSColor *) selectedControlTextColor;
-+ (NSColor *) disabledControlTextColor;
-+ (NSColor *) controlBackgroundColor;
-+ (NSColor *) controlDarkShadowColor;
++ (NSArray *) controlAlternatingRowBackgroundColors;
 + (NSColor *) controlHighlightColor;
 + (NSColor *) controlLightHighlightColor;
 + (NSColor *) controlShadowColor;
-+ (NSArray *) controlAlternatingRowBackgroundColors;
-
-+ (NSColor *) keyboardFocusIndicatorColor;
-
-+ (NSColor *) textColor;
-+ (NSColor *) textBackgroundColor;
-+ (NSColor *) selectedTextColor;
-+ (NSColor *) selectedTextBackgroundColor;
-
++ (NSColor *) controlDarkShadowColor;
 + (NSColor *) headerColor;
-+ (NSColor *) headerTextColor;
-
-+ (NSColor *) scrollBarColor;
 + (NSColor *) knobColor;
 + (NSColor *) selectedKnobColor;
-
-+ (NSColor *) windowBackgroundColor;
-+ (NSColor *) windowFrameColor;
-
++ (NSColor *) scrollBarColor;
++ (NSColor *) secondarySelectedControlColor;
 + (NSColor *) selectedMenuItemColor;
-+ (NSColor *) selectedMenuItemTextColor;
-
-@property(class) BOOL ignoresAlpha;
-
-// private
-+ (NSColor *) mainMenuBarColor;
-+ (NSColor *) menuBackgroundColor;
-+ (NSColor *) menuItemTextColor;
++ (NSColor *) windowFrameColor;
 
 + (NSColor *) clearColor;
 
@@ -91,99 +192,104 @@ APPKIT_EXPORT NSString *const NSSystemColorsDidChangeNotification;
 + (NSColor *) whiteColor;
 + (NSColor *) yellowColor;
 
-+ (NSColor *) colorWithDeviceWhite: (CGFloat) white alpha: (CGFloat) alpha;
-+ (NSColor *) colorWithWhite: (CGFloat) white alpha: (CGFloat) alpha;
-+ (NSColor *) colorWithDeviceRed: (CGFloat) red
-                           green: (CGFloat) green
-                            blue: (CGFloat) blue
-                           alpha: (CGFloat) alpha;
-+ (NSColor *) colorWithRed: (CGFloat) red
-                     green: (CGFloat) green
-                      blue: (CGFloat) blue
-                     alpha: (CGFloat) alpha;
++ (NSColor *) colorWithCatalogName: (NSString *) catalogName
+                         colorName: (NSString *) colorName;
 + (NSColor *) colorWithSRGBRed: (CGFloat) red
                          green: (CGFloat) green
                           blue: (CGFloat) blue
                          alpha: (CGFloat) alpha;
++ (NSColor *) colorWithRed: (CGFloat) red
+                     green: (CGFloat) green
+                      blue: (CGFloat) blue
+                     alpha: (CGFloat) alpha;
++ (NSColor *) colorWithCalibratedRed: (CGFloat) red
+                               green: (CGFloat) green
+                                blue: (CGFloat) blue
+                               alpha: (CGFloat) alpha;
++ (NSColor *) colorWithDeviceRed: (CGFloat) red
+                           green: (CGFloat) green
+                            blue: (CGFloat) blue
+                           alpha: (CGFloat) alpha;
+
++ (NSColor *) colorWithCalibratedHue: (CGFloat) hue
+                          saturation: (CGFloat) saturation
+                          brightness: (CGFloat) brightness
+                               alpha: (CGFloat) alpha;
 + (NSColor *) colorWithDeviceHue: (CGFloat) hue
                       saturation: (CGFloat) saturation
                       brightness: (CGFloat) brightness
                            alpha: (CGFloat) alpha;
+
 + (NSColor *) colorWithDeviceCyan: (CGFloat) cyan
                           magenta: (CGFloat) magenta
                            yellow: (CGFloat) yellow
                             black: (CGFloat) black
                             alpha: (CGFloat) alpha;
 
++ (NSColor *) colorWithWhite: (CGFloat) white alpha: (CGFloat) alpha;
 + (NSColor *) colorWithCalibratedWhite: (CGFloat) white alpha: (CGFloat) alpha;
-+ (NSColor *) colorWithCalibratedRed: (CGFloat) red
-                               green: (CGFloat) green
-                                blue: (CGFloat) blue
-                               alpha: (CGFloat) alpha;
-+ (NSColor *) colorWithCalibratedHue: (CGFloat) hue
-                          saturation: (CGFloat) saturation
-                          brightness: (CGFloat) brightness
-                               alpha: (CGFloat) alpha;
-
-+ (NSColor *) colorWithCatalogName: (NSString *) catalogName
-                         colorName: (NSString *) colorName;
-
-+ (NSColor *) colorFromPasteboard: (NSPasteboard *) pasteboard;
++ (NSColor *) colorWithDeviceWhite: (CGFloat) white alpha: (CGFloat) alpha;
++ (NSColor *) colorWithGenericGamma22White: (CGFloat) white
+                                     alpha: (CGFloat) alpha;
 
 + (NSColor *) colorWithPatternImage: (NSImage *) image;
+- (NSImage *) patternImage;
 
-- (NSString *) colorSpaceName;
+- (NSColor *) blendedColorWithFraction: (CGFloat) fraction
+                               ofColor: (NSColor *) color;
+- (NSColor *) colorWithAlphaComponent: (CGFloat) alpha;
 
-- (NSInteger) numberOfComponents;
-- (void) getComponents: (CGFloat *) components;
++ (NSColor *) colorFromPasteboard: (NSPasteboard *) pasteboard;
+- (void) writeToPasteboard: (NSPasteboard *) pasteboard;
 
-- (void) getWhite: (CGFloat *) white alpha: (CGFloat *) alpha;
-- (void) getRed: (CGFloat *) red
-          green: (CGFloat *) green
-           blue: (CGFloat *) blue
-          alpha: (CGFloat *) alpha;
-- (void) getHue: (CGFloat *) hue
-        saturation: (CGFloat *) saturation
-        brightness: (CGFloat *) brightness
-             alpha: (CGFloat *) alpha;
 - (void) getCyan: (CGFloat *) cyan
          magenta: (CGFloat *) magenta
           yellow: (CGFloat *) yellow
            black: (CGFloat *) black
            alpha: (CGFloat *) alpha;
+- (void) getHue: (CGFloat *) hue
+        saturation: (CGFloat *) saturation
+        brightness: (CGFloat *) brightness
+             alpha: (CGFloat *) alpha;
+- (void) getRed: (CGFloat *) red
+          green: (CGFloat *) green
+           blue: (CGFloat *) blue
+          alpha: (CGFloat *) alpha;
+- (void) getWhite: (CGFloat *) white alpha: (CGFloat *) alpha;
+- (NSInteger) numberOfComponents;
+- (void) getComponents: (CGFloat *) components;
 
+- (CGFloat) alphaComponent;
 - (CGFloat) whiteComponent;
-
 - (CGFloat) redComponent;
 - (CGFloat) greenComponent;
 - (CGFloat) blueComponent;
-
-- (CGFloat) hueComponent;
-- (CGFloat) saturationComponent;
-- (CGFloat) brightnessComponent;
-
 - (CGFloat) cyanComponent;
 - (CGFloat) magentaComponent;
 - (CGFloat) yellowComponent;
 - (CGFloat) blackComponent;
+- (CGFloat) hueComponent;
+- (CGFloat) saturationComponent;
+- (CGFloat) brightnessComponent;
+- (NSColorListName) catalogNameComponent;
+- (NSColorName) colorNameComponent;
 
-- (CGFloat) alphaComponent;
-
-- (NSColor *) colorWithAlphaComponent: (CGFloat) alpha;
-
-- (NSColor *) colorUsingColorSpaceName: (NSString *) colorSpace;
-- (NSColor *) colorUsingColorSpaceName: (NSString *) colorSpace
-                                device: (NSDictionary *) device;
-
-- (NSColor *) blendedColorWithFraction: (CGFloat) fraction
-                               ofColor: (NSColor *) color;
-
-- (void) set;
-- (void) setStroke;
-- (void) setFill;
+- (CGColorRef) CGColor;
 
 - (void) drawSwatchInRect: (NSRect) rect;
+- (void) set;
+- (void) setFill;
+- (void) setStroke;
 
-- (void) writeToPasteboard: (NSPasteboard *) pasteboard;
+- (NSColorSpaceName) colorSpaceName;
+
+- (NSColor *) colorUsingColorSpaceName: (NSColorSpaceName) colorSpace;
+- (NSColor *) colorUsingColorSpaceName: (NSColorSpaceName) colorSpace
+                                device: (NSDictionary *) device;
+
+// private
++ (NSColor *) mainMenuBarColor;
++ (NSColor *) menuBackgroundColor;
++ (NSColor *) menuItemTextColor;
 
 @end

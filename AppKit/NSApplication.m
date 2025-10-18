@@ -160,6 +160,7 @@ NSApplication *NSApp = nil;
 
     _windows = [NSMutableArray new];
     _mainMenu = nil;
+    _servicesMenu = nil;
 
     _dockTile = [[NSDockTile alloc] initWithOwner: self];
     _modalStack = [NSMutableArray new];
@@ -1340,7 +1341,13 @@ NSApplication *NSApp = nil;
 }
 
 - (void) setServicesMenu: (NSMenu *) menu {
-    NSUnimplementedMethod();
+    [_servicesMenu autorelease];
+
+    if ([menu _name] == nil) {
+        [menu _setMenuName: @"_NSServicesMenu"];
+    }
+
+    _servicesMenu = [menu retain];
 }
 
 - servicesProvider {
@@ -1530,6 +1537,72 @@ NSApplication *NSApp = nil;
 
 + (void) load {
     // Xcode expects this method to exist for some reason?
+}
+
+- (NSApplicationPresentationOptions) currentSystemPresentationOptions {
+    return [self presentationOptions];
+}
+
+- (NSApplicationPresentationOptions) presentationOptions {
+    return _presentationOptions;
+}
+
+- (void) setPresentationOptions: (NSApplicationPresentationOptions) options {
+    if (options & NSApplicationPresentationAutoHideDock &&
+        options & NSApplicationPresentationHideDock) {
+        [NSException raise: NSInvalidArgumentException
+                    format: @"Both NSApplicationPresentationHideDock and "
+                            @"NSApplicationPresentationAutoHideDock were "
+                            @"specified; only one is allowed"];
+    }
+
+    if (options & NSApplicationPresentationHideMenuBar &&
+        (options & NSApplicationPresentationHideDock) == 0) {
+        [NSException raise: NSInvalidArgumentException
+                    format: @"NSApplicationPresentationHideMenuBar specified "
+                            @"without NSApplicationPresentationHideDock"];
+    }
+
+    if (options & NSApplicationPresentationAutoHideMenuBar &&
+        options & NSApplicationPresentationHideMenuBar) {
+        [NSException raise: NSInvalidArgumentException
+                    format: @"Both NSApplicationPresentationHideMenuBar and "
+                            @"NSApplicationPresentationAutoHideMenuBar were "
+                            @"specified; only one is allowed"];
+    }
+
+    if ((options & NSApplicationPresentationDisableForceQuit ||
+         options & NSApplicationPresentationDisableMenuBarTransparency ||
+         options & NSApplicationPresentationDisableProcessSwitching ||
+         options & NSApplicationPresentationDisableSessionTermination) &&
+        ((options & NSApplicationPresentationHideDock) == 0 ||
+         (options & NSApplicationPresentationAutoHideDock) == 0)) {
+        [NSException
+                 raise: NSInvalidArgumentException
+                format: @"One of NSApplicationPresentationDisableForceQuit, "
+                        @"NSApplicationPresentationDisableMenuBarTransparency, "
+                        @"NSApplicationPresentationDisableProcessSwitching, or "
+                        @"NSApplicationPresentationDisableSessionTermination "
+                        @"was specified without either "
+                        @"NSApplicationPresentationHideDock or "
+                        @"NSApplicationPresentationAutoHideDock"];
+    }
+#if 0 // The behaviour exists but I couldn't reproduce it at High Sierra and
+      // Mojave (need test in newer versions)
+    if (
+        options & NSApplicationPresentationAutoHideToolbar
+        && (
+            (options & NSApplicationPresentationFullScreen) == 0
+            || (options & NSApplicationPresentationAutoHideMenuBar) == 0
+        )
+    ) {
+        [NSException
+                 raise: NSInvalidArgumentException
+                format: @""];
+    }
+#endif
+
+    _presentationOptions = options;
 }
 
 @end

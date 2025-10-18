@@ -249,6 +249,12 @@ CFArrayRef CGDisplayAvailableModes(CGDirectDisplayID displayIndex) {
     return (CFArrayRef) [display modesForScreen: displayIndex - 1];
 }
 
+boolean_t CGDisplayIsInMirrorSet(CGDirectDisplayID display) {
+    printf("STUB %s\n", __PRETTY_FUNCTION__);
+
+    return FALSE;
+}
+
 Boolean CGDisplayIsMain(CGDirectDisplayID display) {
     return display == 1;
 }
@@ -345,6 +351,20 @@ static NSData *edidForDisplay(CGDirectDisplayID displayId) {
         return edid;
 
     return nil;
+}
+
+CGSize CGDisplayScreenSize(CGDirectDisplayID display) {
+    printf("STUB %s\n", __PRETTY_FUNCTION__);
+
+    NSData *edid = edidForDisplay(display);
+
+    if (!edid) {
+        CGRect bounds = CGDisplayBounds(display);
+
+        return bounds.size;
+    }
+
+    return (CGSize){.width = 0, .height = 0};
 }
 
 uint32_t CGDisplaySerialNumber(CGDirectDisplayID displayId) {

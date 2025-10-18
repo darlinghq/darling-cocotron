@@ -122,6 +122,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return [[[self alloc] initWithBitmapImageRep: imageRep] autorelease];
 }
 
++ (NSGraphicsContext *) graphicsContextWithCGContext: (CGContextRef) context
+                                             flipped: (BOOL) flipped
+{
+    return [[[self alloc] initWithGraphicsPort: context
+                                       flipped: flipped] autorelease];
+}
+
 static NSMutableArray *_contextStack() {
     NSMutableDictionary *shared = [NSCurrentThread() sharedDictionary];
     NSMutableArray *stack = [shared objectForKey: @"NSGraphicsContext.stack"];

@@ -24,9 +24,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     CGColorSpaceRef _cgColorSpace;
 }
 
+@property(class, strong, readonly) NSColorSpace *deviceRGBColorSpace;
 @property(class, strong, readonly) NSColorSpace *sRGBColorSpace;
 
 + (NSColorSpace *) deviceRGBColorSpace;
+
++ (NSColorSpace *) sRGBColorSpace;
 
 - initWithCGColorSpace: (CGColorSpaceRef) cgColorSpace;
 

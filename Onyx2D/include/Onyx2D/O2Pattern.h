@@ -66,5 +66,10 @@ O2PatternRef O2PatternCreate(void *info, O2Rect bounds,
 
 O2PatternRef O2PatternRetain(O2PatternRef self);
 void O2PatternRelease(O2PatternRef self);
+void *O2PatternGetImage(O2PatternRef self);
+O2Rect O2PatternGetBounds(O2PatternRef self);
+O2AffineTransform O2PatternGetMatrix(O2PatternRef self);
+O2PatternTiling O2PatternGetTiling(O2PatternRef self);
+BOOL O2PatternIsColored(O2PatternRef self);
 
 @end

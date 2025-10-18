@@ -17,21 +17,24 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#import <AppKit/NSColor_CGColor.h>
 #import <AppKit/NSColor_catalog.h>
+#import <AppKit/NSDisplay.h>
 #import <AppKit/NSGraphics.h>
 
 @interface NSColor (NSAppKitPrivate)
 - (CGColorRef) CGColorRef;
 @end
 
-void NSColorSetCatalogColor(NSString *catalogName, NSString *colorName,
+void NSColorSetCatalogColor(NSColorListName catalogName, NSColorName colorName,
                             NSColor *color);
-NSColor *NSColorGetCatalogColor(NSString *catalogName, NSString *colorName);
+NSColor *NSColorGetCatalogColor(NSColorListName catalogName,
+                                NSColorName colorName);
 
 @implementation NSColor_catalog
 
-- initWithCatalogName: (NSString *) catalogName
-            colorName: (NSString *) colorName
+- initWithCatalogName: (NSColorListName) catalogName
+            colorName: (NSColorName) colorName
                 color: (NSColor *) color
 {
     _catalogName = [catalogName copy];
@@ -69,16 +72,19 @@ NSColor *NSColorGetCatalogColor(NSString *catalogName, NSString *colorName);
                                        _colorName];
 }
 
-+ (NSColor *) colorWithCatalogName: (NSString *) catalogName
-                         colorName: (NSString *) colorName
++ (NSColor *) colorWithCatalogName: (NSColorListName) catalogName
+                         colorName: (NSColorName) colorName
 {
-    return [[[self alloc] initWithCatalogName: catalogName
-                                    colorName: colorName
-                                        color: nil] autorelease];
+    return [[[self alloc]
+            initWithCatalogName: catalogName
+                      colorName: colorName
+                          color: [[NSDisplay currentDisplay]
+                                         colorWithName: colorName]]
+            autorelease];
 }
 
-+ (NSColor *) colorWithCatalogName: (NSString *) catalogName
-                         colorName: (NSString *) colorName
++ (NSColor *) colorWithCatalogName: (NSColorListName) catalogName
+                         colorName: (NSColorName) colorName
                              color: (NSColor *) color
 {
     if (NSColorGetCatalogColor(catalogName, colorName) == nil)
@@ -89,34 +95,42 @@ NSColor *NSColorGetCatalogColor(NSString *catalogName, NSString *colorName);
                                         color: color] autorelease];
 }
 
-- (NSString *) colorSpaceName {
+- (NSColorSpaceName) colorSpaceName {
     return NSNamedColorSpace;
 }
 
-- (NSString *) catalogName {
+- (NSColorListName) catalogNameComponent {
     return _catalogName;
 }
 
-- (NSString *) colorName {
+- (NSColorName) colorNameComponent {
     return _colorName;
 }
 
-- (NSColor *) colorUsingColorSpaceName: (NSString *) colorSpace
+- (NSImage *) patternImage {
+    return [_color patternImage];
+}
+
+- (CGColorRef) CGColor {
+    if (_color != nil)
+        return [_color CGColor];
+
+    return nil;
+}
+
+- (NSColor *) colorUsingColorSpaceName: (NSColorSpaceName) colorSpace {
+    return [self colorUsingColorSpaceName: colorSpace device: nil];
+}
+
+- (NSColor *) colorUsingColorSpaceName: (NSColorSpaceName) colorSpace
                                 device: (NSDictionary *) device
 {
-    NSColor *result;
-
     if ([colorSpace isEqualToString: [self colorSpaceName]])
         return self;
 
-    result = [NSColorGetCatalogColor(_catalogName, _colorName)
-            colorUsingColorSpaceName: colorSpace
-                              device: device];
+    _color = [_color colorUsingColorSpaceName: colorSpace device: device];
 
-    if (result == nil)
-        NSLog(@"result ==nil %@ %@", _colorName, colorSpace);
-
-    return result;
+    return _color;
 }
 
 - (CGColorRef) CGColorRef {
@@ -143,6 +157,18 @@ NSColor *NSColorGetCatalogColor(NSString *catalogName, NSString *colorName);
                             _catalogName];
 
     [color setStroke];
+}
+
+- (NSColor *) highlightWithLevel: (CGFloat) level {
+    printf("STUB %s\n", __PRETTY_FUNCTION__);
+
+    level = MIN(1.0, MAX(0.0, level));
+
+    // TODO: verify if it is a use of blendedColorWithFraction:ofColor:
+    // that use highlightColor
+    // NSLog(@"Level %f", level);
+
+    return self;
 }
 
 @end
