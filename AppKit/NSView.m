@@ -651,7 +651,32 @@ static inline void buildTransformsIfNeeded(NSView *self) {
 }
 
 - (void) scaleUnitSquareToSize: (NSSize) size {
-    NSUnimplementedMethod();
+    if (size.width != 1.0 || size.height != 1.0) {
+        // todo what if width or height is zero?
+
+        [_bounds scaleXBy: size.width yBy: size.height];
+
+        _bounds.origin.x = _bounds.origin.x / size.width;
+        _bounds.origin.y = _bounds.origin.y / size.height;
+        _bounds.size.width = _bounds.size.width / size.width;
+        _bounds.size.height = _bounds.size.height / size.height;
+
+        isRotatedOrScaledFromBase = YES;
+
+        /* code from gnustep
+        todo
+        if (_coordinates_valid)
+            {
+            (*invalidateImp)(self, invalidateSel);
+            }
+        */
+        [self resetCursorRects]
+        if (_postsNotificationOnBoundsChange) {
+            [[NSNotificationCenter defaultCenter]
+                postNotificationName: NSViewBoundsDidChangeNotification
+                object: self];
+        }       
+    }
 }
 
 - (NSWindow *) window {
