@@ -28,6 +28,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 extern const CFStringRef kCGWindowAlpha;
 extern const CFStringRef kCGWindowBounds;
+extern const CFStringRef kCGWindowIsOnscreen;
 extern const CFStringRef kCGWindowLayer;
 extern const CFStringRef kCGWindowName;
 extern const CFStringRef kCGWindowOwnerName;
