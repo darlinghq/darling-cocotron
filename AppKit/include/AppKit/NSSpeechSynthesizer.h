@@ -20,8 +20,17 @@
 #import <AppKit/AppKitExport.h>
 #import <Foundation/NSObject.h>
 #import <Foundation/NSString.h>
+#import <CoreFoundation/CFBase.h>
+
+typedef NSString *NSSpeechPropertyKey;
+typedef NSString *NSVoiceAttributeKey;
 
 APPKIT_EXPORT NSString *const NSVoiceName;
+
+APPKIT_EXPORT const NSSpeechPropertyKey NSSpeechPitchBaseProperty;
+APPKIT_EXPORT const NSSpeechPropertyKey NSSpeechRateProperty;
+APPKIT_EXPORT const NSVoiceAttributeKey NSVoiceLocaleIdentifier;
+APPKIT_EXPORT const CFStringRef NSSpeechVolumeProperty;
 
 @interface NSSpeechSynthesizer : NSObject
 @end

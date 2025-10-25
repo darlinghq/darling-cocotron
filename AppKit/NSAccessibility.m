@@ -466,6 +466,15 @@ NSString *const NSAccessibilityContentListSubrole =
 NSString *const NSAccessibilityDefinitionListSubrole =
         @"NSAccessibilityDefinitionListSubrole";
 
+NSAccessibilityRole const NSAccessibilityLevelIndicatorRole =
+        @"NSAccessibilityLevelIndicatorRole";
+
+NSAttributedStringKey const NSAccessibilityMarkedMisspelledTextAttribute =
+        @"NSAccessibilityMarkedMisspelledTextAttribute";
+
+NSAccessibilityAttributeName const NSAccessibilityRequiredAttribute =
+        @"NSAccessibilityRequiredAttribute";
+
 NSString *const NSAccessibilityCancelAction = @"NSAccessibilityCancelAction";
 NSString *const NSAccessibilityConfirmAction = @"NSAccessibilityConfirmAction";
 NSString *const NSAccessibilityDecrementAction =

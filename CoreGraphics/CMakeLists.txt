@@ -25,6 +25,7 @@ set_property(SOURCE
 	CGDataProvider.m
 	CGDirectDisplay.m
 	CGDisplayConfiguration.m
+	CGDisplayStream.m
 	CGFont.m
 	CGFunction.m
 	CGGeometry.m
@@ -76,6 +77,7 @@ set(CoreGraphics_sources
 	CGDataProvider.m
 	CGDirectDisplay.m
 	CGDisplayConfiguration.m
+	CGDisplayStream.m
 	src/CGEvent.c
 	src/stubs.c
 	CGFont.m

@@ -1,5 +1,7 @@
 #import <CoreText/CTFontCollection.h>
 
+const CFStringRef kCTFontCollectionRemoveDuplicatesOption = CFSTR("CTFontCollectionRemoveDuplicatesOption");
+
 CTFontCollectionRef CTFontCollectionCreateFromAvailableFonts(CFDictionaryRef options)
 {
     printf("STUB %s\n", __PRETTY_FUNCTION__);

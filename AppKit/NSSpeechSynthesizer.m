@@ -21,6 +21,11 @@
 
 NSString *const NSVoiceName = @"VoiceName";
 
+const NSSpeechPropertyKey NSSpeechPitchBaseProperty = CFSTR("SpeechPitchBaseProperty");
+const NSSpeechPropertyKey NSSpeechRateProperty = CFSTR("SpeechRateProperty");
+const NSVoiceAttributeKey NSVoiceLocaleIdentifier = CFSTR("VoiceLocaleIdentifier");
+const CFStringRef NSSpeechVolumeProperty = CFSTR("SpeechVolumeProperty");
+
 @implementation NSSpeechSynthesizer
 
 - (NSMethodSignature *)methodSignatureForSelector:(SEL)aSelector
