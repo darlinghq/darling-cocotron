@@ -284,4 +284,10 @@ NSString *const NSNibTopLevelObjects = @"NSNibTopLevelObjects";
     return result;
 }
 
+#warning -[NSNib instantiateWithOwner:topLevelObjects:] method makes darling be a zombie process and need to restart device
+
+/* - (BOOL) instantiateWithOwner: (id) owner topLevelObjects: (NSArray **) objects {
+    return [self instantiateNibWithOwner: owner topLevelObjects: objects];
+} */
+
 @end

@@ -47,6 +47,7 @@ NSAttributedStringKey NSLinkAttributeName = @"NSLinkAttributeName";
 NSAttributedStringKey NSShadowAttributeName = @"NSShadowAttributeName";
 NSAttributedStringKey NSExpansionAttributeName = @"NSExpansionAttributeName";
 NSAttributedStringKey NSCursorAttributeName = @"NSCursorAttributeName";
+NSAttributedStringKey NSMarkedClauseSegmentAttributeName = @"NSMarkedClauseSegment";
 NSAttributedStringKey NSToolTipAttributeName = @"NSToolTipAttributeName";
 NSAttributedStringKey NSSpellingStateAttributeName = @"NSSpellingStateAttributeName"; // temporary attribute
 

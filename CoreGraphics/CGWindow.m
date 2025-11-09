@@ -26,6 +26,7 @@ const CFStringRef kCGWindowOwnerName = CFSTR("kCGWindowOwnerName");
 const CFStringRef kCGWindowOwnerPID = CFSTR("kCGWindowOwnerPID");
 const CFStringRef kCGWindowNumber = CFSTR("kCGWindowNumber");
 const CFStringRef kCGWindowName = CFSTR("kCGWindowName");
+const CFStringRef kCGWindowIsOnscreen = CFSTR("kCGWindowIsOnscreen");
 
 @implementation CGWindow
 

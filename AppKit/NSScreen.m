@@ -23,6 +23,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSScreen.h>
 #import <AppKit/NSWindow.h>
 
+NSNotificationName const NSScreenColorSpaceDidChangeNotification = @"NSScreenColorSpaceDidChangeNotification";
+
 @implementation NSScreen
 
 - initWithFrame: (NSRect) frame visibleFrame: (NSRect) visibleFrame {

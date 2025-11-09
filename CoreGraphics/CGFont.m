@@ -99,3 +99,8 @@ CGFontRef _Nullable CGFontCreateWithDataProvider(CGDataProviderRef _Nullable pro
     printf("STUB %s\n", __PRETTY_FUNCTION__);
     return nil;
 }
+
+CFStringRef const kCGFontVariationAxisName = CFSTR("kCGFontVariationAxisName");
+CFStringRef const kCGFontVariationAxisMinValue = CFSTR("kCGFontVariationAxisMinValue");
+CFStringRef const kCGFontVariationAxisDefaultValue = CFSTR("kCGFontVariationAxisDefaultValue");
+CFStringRef const kCGFontVariationAxisMaxValue = CFSTR("kCGFontVariationAxisMaxValue");

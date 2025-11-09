@@ -161,6 +161,7 @@ NSApplication *NSApp = nil;
     _windows = [NSMutableArray new];
     _mainMenu = nil;
     _servicesMenu = nil;
+    _helpMenu = nil;
 
     _dockTile = [[NSDockTile alloc] initWithOwner: self];
     _modalStack = [NSMutableArray new];
@@ -1348,6 +1349,20 @@ NSApplication *NSApp = nil;
     }
 
     _servicesMenu = [menu retain];
+}
+
+- (NSMenu *) helpMenu {
+    return [[NSApp mainMenu] _menuWithName: @"_NSHelpMenu"];
+}
+
+- (void) setHelpMenu: (NSMenu *) menu {
+    [_helpMenu autorelease];
+
+    if ([menu _name] == nil) {
+        [menu _setMenuName: @"_NSHelpMenu"];
+    }
+
+    _helpMenu = [menu retain];
 }
 
 - servicesProvider {

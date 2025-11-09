@@ -30,6 +30,7 @@ extern const CFStringRef kCGWindowAlpha;
 extern const CFStringRef kCGWindowBounds;
 extern const CFStringRef kCGWindowLayer;
 extern const CFStringRef kCGWindowName;
+extern const CFStringRef kCGWindowIsOnscreen;
 extern const CFStringRef kCGWindowOwnerName;
 extern const CFStringRef kCGWindowOwnerPID;
 

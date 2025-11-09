@@ -123,6 +123,7 @@ typedef NS_OPTIONS(NSUInteger, NSApplicationPresentationOptions) {
     NSMenu *_mainMenu;
     NSMenu *_windowsMenu;
     NSMenu *_servicesMenu;
+    NSMenu *_helpMenu;
 
     NSImage *_applicationIconImage;
 
@@ -140,6 +141,7 @@ typedef NS_OPTIONS(NSUInteger, NSApplicationPresentationOptions) {
     NSApplicationPresentationOptions _presentationOptions;
 }
 
+@property(strong) NSMenu *helpMenu;
 @property(readonly) NSApplicationPresentationOptions currentSystemPresentationOptions;
 @property NSApplicationPresentationOptions presentationOptions;
 

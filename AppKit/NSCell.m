@@ -105,6 +105,8 @@ typedef NS_OPTIONS(unsigned int, NSCellAppleFlags2) {
     NSCellAppleFlag2Reserved19            = 1u << 0,
 };
 
+NSNotificationName NSControlTintDidChangeNotification = @"NSControlTintDidChangeNotification";
+
 @implementation NSCell
 
 @synthesize identifier = _identifier;
