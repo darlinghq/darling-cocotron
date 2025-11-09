@@ -21,6 +21,8 @@
 #import <Foundation/NSObject.h>
 #import <Foundation/NSString.h>
 
+typedef NSString* NSAppearanceName;
+
 APPKIT_EXPORT NSString *const NSAppearanceNameAqua;
 APPKIT_EXPORT NSString *const NSAppearanceNameDarkAqua;
 APPKIT_EXPORT NSString *const NSAppearanceNameLightContent;
@@ -36,5 +38,14 @@ APPKIT_EXPORT NSString
 APPKIT_EXPORT NSString *const NSAppearanceNameControlStrip; // Undocumented
 
 @interface NSAppearance : NSObject <NSSecureCoding>
+
++ (NSAppearance *) appearanceNamed: (NSAppearanceName) name;
+
+@end
+
+@protocol NSAppearanceCustomization <NSObject>
+
+@required
+@property (strong) NSAppearance *appearance;
 
 @end

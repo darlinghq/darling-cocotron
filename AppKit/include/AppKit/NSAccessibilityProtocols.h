@@ -20,4 +20,8 @@
 #import <Foundation/NSObject.h>
 
 @protocol NSAccessibility <NSObject>
+
+@required
+@property(getter = isAccessibilityElement) BOOL accessibilityElement;
+
 @end

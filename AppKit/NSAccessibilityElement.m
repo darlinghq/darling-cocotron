@@ -22,6 +22,8 @@
 
 @implementation NSAccessibilityElement
 
+@synthesize accessibilityElement = _isAccessible;
+
 - (NSMethodSignature *) methodSignatureForSelector: (SEL) aSelector {
     return [NSMethodSignature signatureWithObjCTypes: "v@:"];
 }

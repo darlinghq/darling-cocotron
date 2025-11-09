@@ -480,8 +480,16 @@ static NSData *makeWindowIcon() {
     _frame = frame;
 }
 
+- (void) setHasShadow: (BOOL) value {
+    _hasShadow = value;
+}
+
 - (void) setLevel: (int) value {
     _level = value;
+}
+
+- (void) setOpaque: (BOOL) value {
+    _isOpaque = value;
 }
 
 - (void) sheetOrderFrontFromFrame: (NSRect) frame
