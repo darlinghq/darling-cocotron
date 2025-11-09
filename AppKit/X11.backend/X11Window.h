@@ -43,6 +43,7 @@
 
     NSMutableDictionary *_deviceDictionary;
     O2Rect _frame;
+    O2Rect _realFrame;
     NSUInteger _styleMask;
     BOOL _mapped;
     CGPoint _lastMotionPos;
@@ -54,7 +55,8 @@
 
 + (void) removeDecorationForWindow: (Window) w onDisplay: (Display *) dpy;
 - (instancetype) initWithDelegate: (NSWindow *) delegate;
-- (O2Rect) frame;
+- (O2Rect) frame; // This frame is set by -[X11Window setFrame] and -[X11Window frameChanged]
+- (O2Rect) realFrame; // This frame is only set by -[X11Window frameChanged]
 - (Visual *) visual;
 - (Drawable) drawable;
 - (NSPoint) transformPoint: (NSPoint) pos;
