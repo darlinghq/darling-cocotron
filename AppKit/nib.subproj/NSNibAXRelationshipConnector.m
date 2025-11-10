@@ -1,8 +1,5 @@
 #import "NSNibAXRelationshipConnector.h"
 
-@interface NSNibAXAttributeConnector : NSObject
-@end
-
 @implementation NSNibAXRelationshipConnector
 
 - (NSMethodSignature *)methodSignatureForSelector:(SEL)aSelector
@@ -19,14 +16,13 @@
 
 @implementation NSNibAXAttributeConnector
 
-- (NSMethodSignature *)methodSignatureForSelector:(SEL)aSelector
-{
-    return [NSMethodSignature signatureWithObjCTypes: "v@:"];
+- (void) encodeWithCoder: (NSCoder *) aCoder {
+    printf("STUB %s\n", __PRETTY_FUNCTION__);
 }
 
-- (void)forwardInvocation:(NSInvocation *)anInvocation
-{
-    NSLog(@"Stub called: %@ in %@", NSStringFromSelector([anInvocation selector]), [self class]);
+- (id) initWithCoder: (NSCoder *) coder {
+    printf("STUB %s\n", __PRETTY_FUNCTION__);
+    return [[NSNibAXAttributeConnector alloc] init];
 }
 
 @end
