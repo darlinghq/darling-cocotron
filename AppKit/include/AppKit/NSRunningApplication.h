@@ -26,4 +26,7 @@ typedef enum {
 } NSApplicationActivationPolicy;
 
 @interface NSRunningApplication : NSObject
+
++ (NSArray<NSRunningApplication *> *) runningApplicationsWithBundleIdentifier: (NSString *) bundleIdentifier;
+
 @end
