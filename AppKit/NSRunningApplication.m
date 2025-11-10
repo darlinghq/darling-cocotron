@@ -21,12 +21,10 @@
 @end
 
 @implementation NSRunningApplication
-+ (NSMethodSignature *) methodSignatureForSelector: (SEL) aSelector {
-    return [NSMethodSignature signatureWithObjCTypes: "v@:"];
+
++ (NSArray<NSRunningApplication *> *) runningApplicationsWithBundleIdentifier: (NSString *) bundleIdentifier {
+    printf("STUB %s\n", __PRETTY_FUNCTION__);
+    return nil;
 }
 
-+ (void) forwardInvocation: (NSInvocation *) anInvocation {
-    NSLog(@"Stub called: %@ in %@",
-          NSStringFromSelector([anInvocation selector]), self);
-}
 @end
