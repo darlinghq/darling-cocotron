@@ -270,6 +270,10 @@ static NSMutableDictionary *_namedColorLists = nil;
     [systemColorList
             setColor: [NSColor unemphasizedSelectedContentBackgroundColor]
               forKey: @"unemphasizedSelectedContentBackgroundColor"];
+    [systemColorList setColor: [NSColor mainMenuBarColor]
+                       forKey: @"mainMenuBarColor"];
+    [systemColorList setColor: [NSColor menuItemTextColor]
+                       forKey: @"menuItemTextColor"];
 
     _namedColorLists = [[NSMutableDictionary alloc] init];
     [_namedColorLists setObject: basicColorList forKey: @"Basic"];
