@@ -47,6 +47,8 @@
     BOOL _mapped;
     CGPoint _lastMotionPos;
     BOOL _isModal;
+    BOOL _isOpaque;
+    BOOL _hasShadow;
 
 @public
     XIC _xic;

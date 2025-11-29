@@ -72,6 +72,7 @@ const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPresentationOptio
 
 @synthesize identifier = _identifier;
 @synthesize translatesAutoresizingMaskIntoConstraints = _translatesAutoresizingMaskIntoConstraints;
+@synthesize appearance = _appearance;
 
 static BOOL NSViewLayersEnabled = YES;
 static BOOL NSShowAllViews = NO;

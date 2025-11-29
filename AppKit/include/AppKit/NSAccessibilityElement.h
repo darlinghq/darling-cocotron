@@ -20,6 +20,8 @@
 #import <AppKit/NSAccessibility.h>
 #import <Foundation/NSObject.h>
 
-@interface NSAccessibilityElement : NSObject <NSAccessibility>
+@interface NSAccessibilityElement : NSObject <NSAccessibility> {
+    BOOL _isAccessible;
+}
 
 @end

@@ -26,6 +26,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <ApplicationServices/ApplicationServices.h>
 #import <CoreGraphics/CGSubWindow.h>
 #import <AppKit/NSUserInterfaceItemIdentification.h>
+#import <AppKit/NSAccessibilityProtocols.h>
 
 @class NSView, NSEvent, NSColor, NSColorSpace, NSCursor, NSImage, NSScreen,
         NSText, NSTextView, CGWindow, NSPasteboard, NSSheetContext,
@@ -146,7 +147,7 @@ APPKIT_EXPORT const NSNotificationName NSWindowWillEnterFullScreenNotification;
 APPKIT_EXPORT const NSNotificationName NSWindowWillExitFullScreenNotification;
 APPKIT_EXPORT const NSNotificationName NSWindowDidExposeNotification;
 
-@interface NSWindow : NSResponder <NSUserInterfaceItemIdentification> {
+@interface NSWindow : NSResponder <NSUserInterfaceItemIdentification, NSAccessibility> {
     NSRect _frame;
     NSWindowStyleMask _styleMask;
     NSBackingStoreType _backingType;
@@ -244,6 +245,8 @@ APPKIT_EXPORT const NSNotificationName NSWindowDidExposeNotification;
     NSPoint _mouseDownLocationInWindow;
 
     NSUserInterfaceItemIdentifier _identifier;
+
+    BOOL _isAccessible;
 }
 
 @property(class) BOOL allowsAutomaticWindowTabbing;
