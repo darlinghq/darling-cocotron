@@ -1,6 +1,7 @@
 #import <AppKit/NSSharingService.h>
 
 NSSharingServiceName const NSSharingServiceNameAddToIPhoto = @"com.apple.share.System.add-to-iphoto";
+NSSharingServiceName const NSSharingServiceNameAddToSafariReadingList = @"com.apple.share.System.add-to-safari-reading-list";
 NSSharingServiceName const NSSharingServiceNameComposeEmail = @"com.apple.share.Mail.compose";
 NSSharingServiceName const NSSharingServiceNameComposeMessage = @"com.apple.messages.ShareExtension";
 
