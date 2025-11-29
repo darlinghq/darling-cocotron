@@ -96,6 +96,7 @@ NSString *const NSAccessibilityForegroundColorTextAttribute =
         @"NSAccessibilityForegroundColorTextAttribute";
 NSString *const NSAccessibilityLinkTextAttribute =
         @"NSAccessibilityLinkTextAttribute";
+NSAttributedStringKey const NSAccessibilityMarkedMisspelledTextAttribute = @"AXMarkedMisspelled";
 NSString *const NSAccessibilityMisspelledTextAttribute =
         @"NSAccessibilityMisspelledTextAttribute";
 NSString *const NSAccessibilityShadowTextAttribute =
@@ -369,6 +370,7 @@ NSString *const NSAccessibilityLayoutAreaRole =
         @"NSAccessibilityLayoutAreaRole";
 NSString *const NSAccessibilityLayoutItemRole =
         @"NSAccessibilityLayoutItemRole";
+NSAccessibilityRole const NSAccessibilityLevelIndicatorRole = @"AXLevelIndicator";
 NSString *const NSAccessibilityLinkRole = @"NSAccessibilityLinkRole";
 NSString *const NSAccessibilityListRole = @"NSAccessibilityListRole";
 NSString *const NSAccessibilityMatteRole = @"NSAccessibilityMatteRole";

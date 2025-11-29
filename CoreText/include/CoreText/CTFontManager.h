@@ -12,6 +12,8 @@ typedef NS_ENUM(uint32_t, CTFontManagerScope)
     kCTFontManagerScopeUser = 2,
 };
 
+CORETEXT_EXPORT const CFStringRef kCTFontManagerRegisteredFontsChangedNotification;
+
 CORETEXT_EXPORT bool CTFontManagerRegisterGraphicsFont(CGFontRef font, CFErrorRef* error);
 CORETEXT_EXPORT bool CTFontManagerUnregisterGraphicsFont(CGFontRef font, CFErrorRef *error);
 

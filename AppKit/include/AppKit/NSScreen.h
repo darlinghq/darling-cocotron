@@ -20,6 +20,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <CoreGraphics/CGDirectDisplay.h>
 #import <Foundation/Foundation.h>
 
+extern NSNotificationName const NSScreenColorSpaceDidChangeNotification;
+
 typedef NSString *NSDeviceDescriptionKey;
 
 @interface NSScreen : NSObject {

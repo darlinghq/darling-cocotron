@@ -61,4 +61,9 @@ COREGRAPHICS_EXPORT CFDataRef CGFontCopyTableForTag(CGFontRef self,
 
 COREGRAPHICS_EXPORT CGFontRef CGFontCreateWithDataProvider(CGDataProviderRef provider);
 
+COREGRAPHICS_EXPORT CFStringRef const kCGFontVariationAxisName;
+COREGRAPHICS_EXPORT CFStringRef const kCGFontVariationAxisMinValue;
+COREGRAPHICS_EXPORT CFStringRef const kCGFontVariationAxisDefaultValue;
+COREGRAPHICS_EXPORT CFStringRef const kCGFontVariationAxisMaxValue;
+
 CF_IMPLICIT_BRIDGING_DISABLED

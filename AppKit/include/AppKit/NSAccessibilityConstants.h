@@ -1,5 +1,6 @@
 #import <AppKit/AppKitExport.h>
 #import <Foundation/Foundation.h>
+#import <AppKit/NSAttributedString.h>
 
 typedef NSString *NSAccessibilityActionName;
 
@@ -59,6 +60,7 @@ APPKIT_EXPORT NSString *const NSAccessibilityFontSizeKey;
 APPKIT_EXPORT NSString *const NSAccessibilityFontTextAttribute;
 APPKIT_EXPORT NSString *const NSAccessibilityForegroundColorTextAttribute;
 APPKIT_EXPORT NSString *const NSAccessibilityLinkTextAttribute;
+APPKIT_EXPORT NSAttributedStringKey const NSAccessibilityMarkedMisspelledTextAttribute;
 APPKIT_EXPORT NSString *const NSAccessibilityMisspelledTextAttribute;
 APPKIT_EXPORT NSString *const NSAccessibilityShadowTextAttribute;
 APPKIT_EXPORT NSString *const NSAccessibilityStrikethroughColorTextAttribute;
@@ -202,6 +204,8 @@ APPKIT_EXPORT NSString *const NSAccessibilityWarningValueAttribute;
 APPKIT_EXPORT NSString *const NSAccessibilityCriticalValueAttribute;
 APPKIT_EXPORT NSString *const NSAccessibilityPlaceholderValueAttribute;
 
+typedef NSString* NSAccessibilityRole;
+
 APPKIT_EXPORT NSString *const NSAccessibilityApplicationRole;
 APPKIT_EXPORT NSString *const NSAccessibilityBrowserRole;
 APPKIT_EXPORT NSString *const NSAccessibilityBusyIndicatorRole;
@@ -222,6 +226,7 @@ APPKIT_EXPORT NSString *const NSAccessibilityImageRole;
 APPKIT_EXPORT NSString *const NSAccessibilityIncrementorRole;
 APPKIT_EXPORT NSString *const NSAccessibilityLayoutAreaRole;
 APPKIT_EXPORT NSString *const NSAccessibilityLayoutItemRole;
+APPKIT_EXPORT NSAccessibilityRole const NSAccessibilityLevelIndicatorRole;
 APPKIT_EXPORT NSString *const NSAccessibilityLinkRole;
 APPKIT_EXPORT NSString *const NSAccessibilityListRole;
 APPKIT_EXPORT NSString *const NSAccessibilityMatteRole;

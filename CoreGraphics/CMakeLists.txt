@@ -76,6 +76,7 @@ set(CoreGraphics_sources
 	CGDataProvider.m
 	CGDirectDisplay.m
 	CGDisplayConfiguration.m
+	CGDisplayStream.m
 	src/CGEvent.c
 	src/stubs.c
 	CGFont.m

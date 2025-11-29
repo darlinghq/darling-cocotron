@@ -51,6 +51,7 @@ APPKIT_EXPORT NSAttributedStringKey NSLinkAttributeName;
 APPKIT_EXPORT NSAttributedStringKey NSShadowAttributeName;
 APPKIT_EXPORT NSAttributedStringKey NSExpansionAttributeName;
 APPKIT_EXPORT NSAttributedStringKey NSCursorAttributeName;
+APPKIT_EXPORT NSAttributedStringKey NSMarkedClauseSegmentAttributeName;
 APPKIT_EXPORT NSAttributedStringKey NSToolTipAttributeName;
 
 // The following constant is *not* declared as `const` in Apple's AppKit (they are located in __data)

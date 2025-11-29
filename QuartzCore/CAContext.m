@@ -1,7 +1,7 @@
 /*
  This file is part of Darling.
 
- Copyright (C) 2019 Lubos Dolezel
+ Copyright (C) 2025 Darling Developers
 
  Darling is free software: you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by
@@ -17,20 +17,11 @@
  along with Darling.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#import <AppKit/NSSpeechSynthesizer.h>
+#import <QuartzCore/CAContext.h>
+#import <Foundation/NSMethodSignature.h>
+#import <Foundation/NSInvocation.h>
 
-NSVoiceGenderName const NSVoiceGenderFemale = @"VoiceGenderFemale";
-NSVoiceGenderName const NSVoiceGenderMale = @"VoiceGenderMale";
-
-NSVoiceAttributeKey const NSVoiceName = @"VoiceName";
-NSVoiceAttributeKey const NSVoiceGender = @"VoiceGender";
-NSVoiceAttributeKey const NSVoiceLocaleIdentifier = @"VoiceLocaleIdentifier";
-
-NSSpeechPropertyKey const NSSpeechRateProperty = @"rate";
-NSSpeechPropertyKey const NSSpeechPitchBaseProperty = @"pbas";
-NSSpeechPropertyKey const NSSpeechVolumeProperty = @"volm";
-
-@implementation NSSpeechSynthesizer
+@implementation CAContext
 
 - (NSMethodSignature *)methodSignatureForSelector:(SEL)aSelector
 {

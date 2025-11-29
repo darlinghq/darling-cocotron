@@ -1,5 +1,7 @@
 #import <CoreText/CTFontManager.h>
 
+const CFStringRef kCTFontManagerRegisteredFontsChangedNotification = CFSTR("CTFontManagerFontChangedNotification");
+
 bool CTFontManagerRegisterGraphicsFont(CGFontRef font, CFErrorRef* error)
 {
     printf("STUB %s\n", __PRETTY_FUNCTION__);
