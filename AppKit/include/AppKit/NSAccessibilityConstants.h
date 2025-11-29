@@ -2,6 +2,9 @@
 #import <Foundation/Foundation.h>
 
 typedef NSString *NSAccessibilityActionName;
+typedef NSString *NSAccessibilityAttributeName;
+typedef NSString *NSAttributedStringKey;
+typedef NSString *NSAccessibilityRole;
 
 APPKIT_EXPORT NSString *const NSAccessibilityChildrenAttribute;
 APPKIT_EXPORT NSString *const NSAccessibilityContentsAttribute;
@@ -281,6 +284,12 @@ APPKIT_EXPORT NSString *const NSAccessibilitySortButtonSubrole;
 APPKIT_EXPORT NSString *const NSAccessibilityRatingIndicatorSubrole;
 APPKIT_EXPORT NSString *const NSAccessibilityContentListSubrole;
 APPKIT_EXPORT NSString *const NSAccessibilityDefinitionListSubrole;
+
+APPKIT_EXPORT const NSAccessibilityRole NSAccessibilityLevelIndicatorRole;
+
+APPKIT_EXPORT const NSAttributedStringKey NSAccessibilityMarkedMisspelledTextAttribute;
+
+APPKIT_EXPORT const NSAccessibilityAttributeName NSAccessibilityRequiredAttribute;
 
 APPKIT_EXPORT NSString *const NSAccessibilityCancelAction;
 APPKIT_EXPORT NSString *const NSAccessibilityConfirmAction;
