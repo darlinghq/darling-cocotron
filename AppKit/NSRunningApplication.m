@@ -1,4 +1,4 @@
-#import <Foundation/NSObject.h>
+#import <AppKit/NSRunningApplication.h>
 
 // DUMMY
 
@@ -17,16 +17,11 @@
 // All apps: _LSCopyRunningApplicationArray() - returns an array of ASNs.
 // Running apps: _LSCopyRunningApplicationArray() - ditto.
 
-@interface NSRunningApplication : NSObject
-@end
-
 @implementation NSRunningApplication
-+ (NSMethodSignature *) methodSignatureForSelector: (SEL) aSelector {
-    return [NSMethodSignature signatureWithObjCTypes: "v@:"];
+
++ (NSArray<NSRunningApplication *> *) runningApplicationsWithBundleIdentifier: (NSString *) bundleIdentifier {
+    printf("STUB %s\n", __PRETTY_FUNCTION__);
+    return [NSArray array];
 }
 
-+ (void) forwardInvocation: (NSInvocation *) anInvocation {
-    NSLog(@"Stub called: %@ in %@",
-          NSStringFromSelector([anInvocation selector]), self);
-}
 @end
