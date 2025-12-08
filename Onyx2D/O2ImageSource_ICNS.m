@@ -296,6 +296,24 @@ static uint32_t nextUnsigned32(O2ImageSource_ICNS *self) {
         bitsPerPixel = 8;
         break;
 
+    case BigEndianOSType('i', 'c', 'p', '4'):
+        width = 16;
+        height = 16;
+        bitsPerPixel = 24;
+        break;
+
+    case BigEndianOSType('i', 'c', 'p', '5'):
+        width = 32;
+        height = 32;
+        bitsPerPixel = 24;
+        break;
+
+    case BigEndianOSType('i', 'c', 'p', '6'):
+        width = 64;
+        height = 64;
+        bitsPerPixel = 24;
+        break;
+
     case BigEndianOSType('i', 's', '3', '2'):
         width = 16;
         height = 16;
@@ -378,6 +396,11 @@ static uint32_t nextUnsigned32(O2ImageSource_ICNS *self) {
         bitsPerPixel = 8;
         isMask = TRUE;
         break;
+    case BigEndianOSType('i', 'c', '0', '7'):
+        width = 128;
+        height = 128;
+        bitsPerPixel = 32;
+        break;
 
     case BigEndianOSType('i', 'c', '0', '8'):
         width = 256;
@@ -389,6 +412,30 @@ static uint32_t nextUnsigned32(O2ImageSource_ICNS *self) {
         width = 512;
         height = 512;
         bitsPerPixel = 0;
+        break;
+
+    case BigEndianOSType('i', 'c', '1', '1'):
+        width = 64;
+        height = 64;
+        bitsPerPixel = 32;
+        break;
+
+    case BigEndianOSType('i', 'c', '1', '2'):
+        width = 64;
+        height = 64;
+        bitsPerPixel = 32;
+        break;
+
+    case BigEndianOSType('i', 'c', '1', '3'):
+        width = 256;
+        height = 256;
+        bitsPerPixel = 32;
+        break;
+
+    case BigEndianOSType('i', 'c', '1', '4'):
+        width = 512;
+        height = 512;
+        bitsPerPixel = 32;
         break;
 
     default:
@@ -498,10 +545,13 @@ static uint32_t nextUnsigned32(O2ImageSource_ICNS *self) {
                                              isMask: FALSE];
         int pixelCount = width * height;
         O2rgba8u_BE *pixels = node->samples;
+        const uint8_t *bytes = _bytes + _position;
+        CFDataRef imageData = CFDataCreate(kCFAllocatorDefault, bytes, length);
+        O2ImageSourceRef imageSource = [O2ImageSource newImageSourceWithData: imageData
+                                                                     options: nil];
 
         if (length == width * height * 3) {
             int pixelOffset = 0, byteOffset = 0;
-            const uint8_t *bytes = _bytes + _position;
 
             for (byteOffset = 0; byteOffset < length;) {
                 pixels[pixelOffset].r = bytes[byteOffset++];
@@ -509,9 +559,104 @@ static uint32_t nextUnsigned32(O2ImageSource_ICNS *self) {
                 pixels[pixelOffset].b = bytes[byteOffset++];
                 pixelOffset++;
             }
+        } else if (CFStringCompare([imageSource type], CFSTR("public.png"), 0) == kCFCompareEqualTo) {
+            O2ImageRef image = O2ImageSourceCreateImageAtIndex(imageSource, 0, nil);
+            O2DataProviderRef dataProvider = O2ImageGetDataProvider(image);
+            CFDataRef data = O2DataProviderCopyData(dataProvider);
+            size_t bitsPerComponent = O2ImageGetBitsPerComponent(image);
+            bitsPerPixel = O2ImageGetBitsPerPixel(image);
+            size_t bytesPerRow = O2ImageGetBytesPerRow(image);
+            size_t bytesPerPixel = bitsPerPixel / 8;
+            O2ImageAlphaInfo alpha = O2ImageGetAlphaInfo(image);
+            O2ColorSpaceModel model = O2ColorSpaceGetModel(O2ImageGetColorSpace(image));
+            uint8_t *pixelData = (uint8_t *)CFDataGetBytePtr(data);
+            O2ICNSNode *node = [self createNodeForWidth: width
+                                                 height: height
+                                           bitsPerPixel: bitsPerPixel
+                                                 isMask: FALSE];
+            O2rgba8u_BE *pixels = node->samples;
+
+            for (size_t y = 0; y < height; y++) {
+                const uint8_t *row = pixelData + y * bytesPerRow;
+
+                for (size_t x = 0; x < width; x++) {
+                    const uint8_t *pixel = row + x * bytesPerPixel;
+                    size_t index = y * width + x;
+                    // As a fallback
+                    pixels[index].r = 0;
+                    pixels[index].g = 0;
+                    pixels[index].b = 0;
+                    pixels[index].a = 255;
+
+                    if (model == kO2ColorSpaceModelMonochrome) {
+                        if (bitsPerComponent == 8) {
+                            uint8_t gray = pixel[0];
+                            pixels[index].r = gray;
+                            pixels[index].g = gray;
+                            pixels[index].b = gray;
+
+                            if (alpha == kO2ImageAlphaNone) {
+                                pixels[index].a = 255;
+                            } else if (bytesPerPixel == 32) {
+                                pixels[index].a = pixel[1];
+                            }
+                        } else if (bitsPerComponent == 16) {
+                            uint16_t rawGray = (pixel[0] << 8) | pixel[1];
+                            uint8_t gray = rawGray >> 16;
+                            pixels[index].r = gray;
+                            pixels[index].g = gray;
+                            pixels[index].b = gray;
+                            uint16_t rawAlpha = (pixel[2] << 8) | pixel[3];
+                            pixels[index].a = rawAlpha >> 8;
+                        }
+                    } else if (model == kO2ColorSpaceModelRGB) {
+                        if (bitsPerComponent == 8) {
+                            switch (alpha) {
+                                case kO2ImageAlphaPremultipliedLast: 
+                                case kO2ImageAlphaLast:
+                                case kO2ImageAlphaNoneSkipLast:
+                                    pixels[index].r = pixel[0];
+                                    pixels[index].g = pixel[1];
+                                    pixels[index].b = pixel[2];
+                                    pixels[index].a = (alpha == kO2ImageAlphaNoneSkipLast) ? 255 : pixel[3];
+                                    break;
+
+                                case kO2ImageAlphaPremultipliedFirst:
+                                case kO2ImageAlphaFirst:
+                                case kO2ImageAlphaNoneSkipFirst:
+                                    pixels[index].a = (alpha == kO2ImageAlphaNoneSkipFirst) ? 255 : pixel[0];
+                                    pixels[index].r = pixel[1];
+                                    pixels[index].g = pixel[2];
+                                    pixels[index].b = pixel[3];
+                                    break;
+
+                                default:
+                                    break;
+                            }
+                        } else if (bitsPerComponent == 16) {
+                            uint16_t rawRed   = (pixel[0] << 8) | pixel[1];
+                            uint16_t rawGreen = (pixel[2] << 8) | pixel[3];
+                            uint16_t rawBlue  = (pixel[4] << 8) | pixel[5];
+                            pixels[index].r = rawRed   >> 8;
+                            pixels[index].g = rawGreen >> 8;
+                            pixels[index].b = rawBlue  >> 8;
+
+                            if (bitsPerPixel == 64) {
+                                uint16_t rawAlpha = (pixel[6] << 8) | pixel[7];
+                                pixels[index].a = rawAlpha >> 8;
+                            } else {
+                                pixels[index].a = 255;
+                            }
+                        }
+                    }
+                }
+            }
+
+            CFRelease(imageData);
+            CFRelease(data);
+            O2ImageRelease(image);
         } else {
             int pixelOffset, rleOffset = 0;
-            const uint8_t *rleBytes = _bytes + _position;
             enum {
                 COMPONENT_R,
                 COMPONENT_G,
@@ -519,16 +664,16 @@ static uint32_t nextUnsigned32(O2ImageSource_ICNS *self) {
             } componentSlot = COMPONENT_R;
 
             // 24 is RLE encoded.
-            if (rleBytes[0] == 0 && rleBytes[1] == 0 && rleBytes[2] == 0 &&
-                rleBytes[3] == 0)
+            if (bytes[0] == 0 && bytes[1] == 0 && bytes[2] == 0 &&
+                bytes[3] == 0)
                 rleOffset += 4;
 
             for (; rleOffset < length;) {
                 for (pixelOffset = 0; pixelOffset < pixelCount;) {
-                    if (rleBytes[rleOffset] & 0x80) {
-                        unsigned rleInfo = rleBytes[rleOffset++];
+                    if (bytes[rleOffset] & 0x80) {
+                        unsigned rleInfo = bytes[rleOffset++];
                         unsigned i, chunkLength = (rleInfo & 0x7F) + 3;
-                        uint8_t componentValue = rleBytes[rleOffset++];
+                        uint8_t componentValue = bytes[rleOffset++];
 
                         for (i = 0; i < chunkLength; i++) {
                             switch (componentSlot) {
@@ -544,24 +689,128 @@ static uint32_t nextUnsigned32(O2ImageSource_ICNS *self) {
                             }
                         }
                     } else {
-                        unsigned i, chunkLength = rleBytes[rleOffset++] + 1;
+                        unsigned i, chunkLength = bytes[rleOffset++] + 1;
 
                         for (i = 0; i < chunkLength; i++)
                             switch (componentSlot) {
                             case COMPONENT_R:
-                                pixels[pixelOffset++].r = rleBytes[rleOffset++];
+                                pixels[pixelOffset++].r = bytes[rleOffset++];
                                 break;
                             case COMPONENT_G:
-                                pixels[pixelOffset++].g = rleBytes[rleOffset++];
+                                pixels[pixelOffset++].g = bytes[rleOffset++];
                                 break;
                             case COMPONENT_B:
-                                pixels[pixelOffset++].b = rleBytes[rleOffset++];
+                                pixels[pixelOffset++].b = bytes[rleOffset++];
                                 break;
                             }
                     }
                 }
                 componentSlot++;
             }
+        }
+    }
+    else if (bitsPerPixel == 32) {
+        const uint8_t *bytes = _bytes + _position;
+        CFDataRef imageData = CFDataCreate(kCFAllocatorDefault, bytes, length);
+        O2ImageSourceRef imageSource = [O2ImageSource newImageSourceWithData: imageData
+                                                                     options: nil];
+
+        if (CFStringCompare([imageSource type], CFSTR("public.png"), 0) == kCFCompareEqualTo) {
+            O2ImageRef image = O2ImageSourceCreateImageAtIndex(imageSource, 0, nil);
+            O2DataProviderRef dataProvider = O2ImageGetDataProvider(image);
+            CFDataRef data = O2DataProviderCopyData(dataProvider);
+            size_t bitsPerComponent = O2ImageGetBitsPerComponent(image);
+            bitsPerPixel = O2ImageGetBitsPerPixel(image);
+            size_t bytesPerRow = O2ImageGetBytesPerRow(image);
+            size_t bytesPerPixel = bitsPerPixel / 8;
+            O2ImageAlphaInfo alpha = O2ImageGetAlphaInfo(image);
+            O2ColorSpaceModel model = O2ColorSpaceGetModel(O2ImageGetColorSpace(image));
+            uint8_t *pixelData = (uint8_t *)CFDataGetBytePtr(data);
+            O2ICNSNode *node = [self createNodeForWidth: width
+                                                 height: height
+                                           bitsPerPixel: bitsPerPixel
+                                                 isMask: FALSE];
+            O2rgba8u_BE *pixels = node->samples;
+
+            for (size_t y = 0; y < height; y++) {
+                const uint8_t *row = pixelData + y * bytesPerRow;
+
+                for (size_t x = 0; x < width; x++) {
+                    const uint8_t *pixel = row + x * bytesPerPixel;
+                    size_t index = y * width + x;
+                    // As a fallback
+                    pixels[index].r = 0;
+                    pixels[index].g = 0;
+                    pixels[index].b = 0;
+                    pixels[index].a = 255;
+
+                    if (model == kO2ColorSpaceModelMonochrome) {
+                        if (bitsPerComponent == 8) {
+                            uint8_t gray = pixel[0];
+                            pixels[index].r = gray;
+                            pixels[index].g = gray;
+                            pixels[index].b = gray;
+
+                            if (alpha == kO2ImageAlphaNone) {
+                                pixels[index].a = 255;
+                            } else if (bytesPerPixel == 32) {
+                                pixels[index].a = pixel[1];
+                            }
+                        } else if (bitsPerComponent == 16) {
+                            uint16_t rawGray = (pixel[0] << 8) | pixel[1];
+                            uint8_t gray = rawGray >> 16;
+                            pixels[index].r = gray;
+                            pixels[index].g = gray;
+                            pixels[index].b = gray;
+                            uint16_t rawAlpha = (pixel[2] << 8) | pixel[3];
+                            pixels[index].a = rawAlpha >> 8;
+                        }
+                    } else if (model == kO2ColorSpaceModelRGB) {
+                        if (bitsPerComponent == 8) {
+                            switch (alpha) {
+                                case kO2ImageAlphaPremultipliedLast: 
+                                case kO2ImageAlphaLast:
+                                case kO2ImageAlphaNoneSkipLast:
+                                    pixels[index].r = pixel[0];
+                                    pixels[index].g = pixel[1];
+                                    pixels[index].b = pixel[2];
+                                    pixels[index].a = (alpha == kO2ImageAlphaNoneSkipLast) ? 255 : pixel[3];
+                                    break;
+
+                                case kO2ImageAlphaPremultipliedFirst:
+                                case kO2ImageAlphaFirst:
+                                case kO2ImageAlphaNoneSkipFirst:
+                                    pixels[index].a = (alpha == kO2ImageAlphaNoneSkipFirst) ? 255 : pixel[0];
+                                    pixels[index].r = pixel[1];
+                                    pixels[index].g = pixel[2];
+                                    pixels[index].b = pixel[3];
+                                    break;
+
+                                default:
+                                    break;
+                            }
+                        } else if (bitsPerComponent == 16) {
+                            uint16_t rawRed   = (pixel[0] << 8) | pixel[1];
+                            uint16_t rawGreen = (pixel[2] << 8) | pixel[3];
+                            uint16_t rawBlue  = (pixel[4] << 8) | pixel[5];
+                            pixels[index].r = rawRed   >> 8;
+                            pixels[index].g = rawGreen >> 8;
+                            pixels[index].b = rawBlue  >> 8;
+
+                            if (bitsPerPixel == 64) {
+                                uint16_t rawAlpha = (pixel[6] << 8) | pixel[7];
+                                pixels[index].a = rawAlpha >> 8;
+                            } else {
+                                pixels[index].a = 255;
+                            }
+                        }
+                    }
+                }
+            }
+
+            CFRelease(imageData);
+            CFRelease(data);
+            O2ImageRelease(image);
         }
     }
 
