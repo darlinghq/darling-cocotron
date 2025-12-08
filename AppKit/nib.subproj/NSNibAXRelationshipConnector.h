@@ -4,3 +4,6 @@
 }
 
 @end
+
+@interface NSNibAXAttributeConnector : NSObject <NSCoding>
+@end
