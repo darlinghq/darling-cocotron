@@ -29,6 +29,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSTableCornerView.h>
 #import <Foundation/NSKeyedArchiver.h>
 #import <Foundation/NSURL.h>
+#import <UIFoundation/UIFoundation.h>
 
 NSString *const NSNibOwner = @"NSOwner";
 NSString *const NSNibTopLevelObjects = @"NSNibTopLevelObjects";
@@ -179,7 +180,6 @@ NSString *const NSNibTopLevelObjects = @"NSNibTopLevelObjects";
 }
 
 - (BOOL) instantiateNibWithExternalNameTable: (NSDictionary *) nameTable {
-
     NIBDEBUG(@"instantiateNibWithExternalNameTable: %@", nameTable);
 
     _nameTable = [nameTable retain];
@@ -200,22 +200,27 @@ NSString *const NSNibTopLevelObjects = @"NSNibTopLevelObjects";
         NSArray *topLevelObjects;
 
         if (_flags._isKeyed) {
-            NSKeyedUnarchiver *keyed;
-            unarchiver = keyed = [[[NSKeyedUnarchiver alloc]
-                    initForReadingWithData: _data] autorelease];
-            [keyed setDelegate: self];
+            if (UIDataLooksLikeNibArchive(_data)) {
+                UINibDecoder *decoder = [[[UINibDecoder alloc] initForReadingWithData: _data] autorelease];
+                objectData = [decoder decodeObjectForKey: @"IB.objectdata"];
+            } else {
+                NSKeyedUnarchiver *keyed = [[[NSKeyedUnarchiver alloc] initForReadingWithData: _data] autorelease];
 
-            /*
-            TO DO:
-            - utf8 in the multinational panel
-            - misaligned objects in boxes everywhere
-            */
-            [keyed setClass: [NSTableCornerView class]
-                    forClassName: @"_NSCornerView"];
-            [keyed setClass: [NSNibHelpConnector class]
-                    forClassName: @"NSIBHelpConnector"];
+                [keyed setDelegate: self];
 
-            objectData = [keyed decodeObjectForKey: @"IB.objectdata"];
+                /*
+                TO DO:
+                - utf8 in the multinational panel
+                - misaligned objects in boxes everywhere
+                */
+
+                [keyed setClass: [NSTableCornerView class]
+                   forClassName: @"_NSCornerView"];
+                [keyed setClass: [NSNibHelpConnector class]
+                   forClassName: @"NSIBHelpConnector"];
+
+                objectData = [keyed decodeObjectForKey: @"IB.objectdata"];
+            }
         } else {
             NSUnarchiver *unkeyed;
             unarchiver = unkeyed = [[[NSUnarchiver alloc]
