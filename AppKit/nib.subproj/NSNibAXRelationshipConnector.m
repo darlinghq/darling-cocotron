@@ -22,7 +22,7 @@
 
 - (id) initWithCoder: (NSCoder *) coder {
     printf("STUB %s\n", __PRETTY_FUNCTION__);
-    return [[NSNibAXAttributeConnector alloc] init];
+    return self;
 }
 
 @end
