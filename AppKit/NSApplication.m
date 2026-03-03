@@ -1119,7 +1119,7 @@ NSApplication *NSApp = nil;
         IMP function = [[context modalDelegate]
                 methodForSelector: [context didEndSelector]];
         if (function != NULL) {
-            function([context modalDelegate], [context didEndSelector], sheet,
+            ((void(*)(id, SEL, id, NSModalResponse, void *))function)([context modalDelegate], [context didEndSelector], sheet,
                      returnCode, [context contextInfo]);
         }
         [sheet _setSheetContext: nil];
@@ -1139,7 +1139,7 @@ NSApplication *NSApp = nil;
                 function = [[context modalDelegate]
                         methodForSelector: [context didEndSelector]];
                 if (function != NULL)
-                    function([context modalDelegate], [context didEndSelector],
+                    ((void(*)(id, SEL, id, NSModalResponse, void *))function)([context modalDelegate], [context didEndSelector],
                              sheet, returnCode, [context contextInfo]);
 
                 return;
