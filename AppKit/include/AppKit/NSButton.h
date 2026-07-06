@@ -66,4 +66,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (BOOL) performKeyEquivalent: (NSEvent *) event;
 - (void) performClick: sender;
 
+// Convenience constructors (10.12)
++ (instancetype) buttonWithTitle: (NSString *) title
+                          target: (id) target
+                          action: (SEL) action;
++ (instancetype) buttonWithImage: (NSImage *) image
+                          target: (id) target
+                          action: (SEL) action;
+
 @end
