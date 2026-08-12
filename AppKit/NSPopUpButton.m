@@ -201,7 +201,22 @@ static NSString *const NSPopUpButtonBindingObservationContext =
     if ([self pullsDown]) {
         // The title gets stored in the zero index item in the menu - it made
         // sense to Apple at some point...
-        [[_cell itemAtIndex: 0] setTitle: title];
+        /* DARLING-ARM64 FIX (FINDINGS.md F72): this called -itemAtIndex:0
+         * unguarded. A pull-down button whose menu is still empty therefore raised
+         * NSRangeException, and since nothing catches it the whole application
+         * terminated. Unmodified iTerm2 hits this during window creation --
+         * PSMOverflowPopUpButton is built as a pull-down and its title is set
+         * before any item exists -- so iTerm2 died before showing a window.
+         *
+         * macOS does not throw here. Creating the item the title is meant to
+         * occupy preserves the caller's intent; the cell already does the
+         * equivalent on its non-pull-down path (NSPopUpButtonCell.m:440), so this
+         * is the existing policy applied consistently rather than a new one. */
+        if ([_cell numberOfItems] == 0) {
+            [_cell addItemWithTitle: (title != nil) ? title : @""];
+        } else {
+            [[_cell itemAtIndex: 0] setTitle: title];
+        }
         [self synchronizeTitleAndSelectedItem];
     } else {
         [super setTitle: title];
