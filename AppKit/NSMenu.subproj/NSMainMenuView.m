@@ -86,7 +86,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
          previousBorderRect: (NSRect) previousBorderRect
 {
     NSRect result;
-    NSSize titleSize = [[self graphicsStyle] menuItemTextSize: [item title]];
+    NSSize titleSize = [[self graphicsStyle] menuItemTextSize: [item _mainMenuTitle]];
 
     result.origin = NSMakePoint(
             NSMaxX(previousBorderRect) + 6,
@@ -121,7 +121,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
     for (i = 0; i < count; i++) {
         NSMenuItem *item = [items objectAtIndex: i];
-        NSString *title = [item title];
+        NSString *title = [item _mainMenuTitle];
         NSSize size = [title sizeWithAttributes: [self titleAttributes]];
 
         height = MAX(height, size.height);
@@ -191,7 +191,7 @@ static void drawSunkenBorder(NSRect rect) {
 
     for (i = 0; i < count; i++) {
         NSMenuItem *item = [items objectAtIndex: i];
-        NSString *title = [item title];
+        NSString *title = [item _mainMenuTitle];
         NSRect titleRect = [self titleRectForItem: item
                                previousBorderRect: previousBorderRect];
         NSRect borderRect = [self borderRectFromTitleRect: titleRect];

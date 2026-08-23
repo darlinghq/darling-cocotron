@@ -439,4 +439,20 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                              ([self hasSubmenu] ? @"YES" : @"NO")];
 }
 
+// This is used by NSMainMenuView To Display The Correct Title
+- (NSString *) _mainMenuTitle {
+    // On MacOS, main menu items display the title of their sub-menu rather than their own title
+    if ([[self menu] supermenu] == nil) {
+        // Check if sub-menu exists
+        if ([self hasSubmenu]) {
+            // Check if sub-menu title exists
+            NSString *submenuTitle = [[self submenu] title];
+            if (submenuTitle != nil) {
+                return submenuTitle;
+            }
+        }
+    }
+    return _title;
+}
+
 @end
