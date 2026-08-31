@@ -32,6 +32,11 @@ CGDataProviderRef CGDataProviderCreateWithCFData(CFDataRef data) {
     return (CGDataProviderRef)O2DataProviderCreateWithCFData(data);
 }
 
+CGDataProviderRef CGDataProviderCreateWithURL(CFURLRef url)
+{
+    return O2DataProviderCreateWithURL((NSURL *) url);
+}
+
 // NULL for a NULL name and for a file that cannot be opened for reading
 // (observed on macOS 26.7.3 for a missing file).
 CGDataProviderRef CGDataProviderCreateWithFilename(const char *filename) {
