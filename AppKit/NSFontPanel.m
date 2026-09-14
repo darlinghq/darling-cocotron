@@ -18,6 +18,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSApplication.h>
+#import <AppKit/NSBox.h>
 #import <AppKit/NSButton.h>
 #import <AppKit/NSFont.h>
 #import <AppKit/NSFontManager.h>
@@ -270,4 +271,16 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [self buildSampleTextField];
 }
 
+@end
+
+// NSFontEffectsBox is the NSBox subclass that nibs use for the font panel's
+// text effects area (colours, shadow, strike-through). Nib files reference it by
+// class name, so the class has to exist for them to decode. Cocotron's font panel
+// has no effects controls yet, so it behaves like a plain NSBox: NSBox's
+// initWithCoder: decodes the box keys (NSBoxType, NSTitleCell, NSOffsets, ...)
+// and the subviews.
+@interface NSFontEffectsBox : NSBox
+@end
+
+@implementation NSFontEffectsBox
 @end
