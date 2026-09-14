@@ -31,6 +31,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 @implementation NSSavePanel
 
 @synthesize showsHiddenFiles=_showsHiddenFiles;
+@synthesize canSelectHiddenExtension = _canSelectHiddenExtension;
+@synthesize extensionHidden = _extensionHidden;
 
 // Like macOS, panels start in ~/Documents when there is one.
 static NSString *defaultDirectory(void) {

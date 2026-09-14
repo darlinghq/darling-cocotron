@@ -65,6 +65,42 @@ static NSMutableArray *_registeredClasses = nil;
     return [NSArray array];
 }
 
+// There is no type database to consult, so this covers the extensions the
+// built-in image reps read.
+static NSArray *typesForFileTypes(NSArray *fileTypes) {
+    NSDictionary *utis = @{
+        @"png" : @"public.png",
+        @"tiff" : @"public.tiff",
+        @"tif" : @"public.tiff",
+        @"jpg" : @"public.jpeg",
+        @"jpeg" : @"public.jpeg",
+        @"jpe" : @"public.jpeg",
+        @"gif" : @"com.compuserve.gif",
+        @"bmp" : @"com.microsoft.bmp",
+        @"icns" : @"com.apple.icns",
+        @"pdf" : @"com.adobe.pdf",
+    };
+    NSMutableArray *result = [NSMutableArray array];
+
+    for (NSString *fileType in fileTypes) {
+        NSString *uti = [utis objectForKey: [fileType lowercaseString]];
+        if (uti != nil && ![result containsObject: uti])
+            [result addObject: uti];
+    }
+    return result;
+}
+
++ (NSArray *) imageTypes {
+    // +imageFileTypes merges every registered class, which only suits NSImageRep itself.
+    if (self != [NSImageRep class])
+        return typesForFileTypes([self imageUnfilteredFileTypes]);
+    return typesForFileTypes([self imageFileTypes]);
+}
+
++ (NSArray *) imageUnfilteredTypes {
+    return typesForFileTypes([self imageUnfilteredFileTypes]);
+}
+
 + (NSArray *) imagePasteboardTypes {
     NSMutableSet *result = [NSMutableSet set];
     int i, count = [_registeredClasses count];

@@ -79,6 +79,7 @@ static NSPrintOperation *_currentOperation = nil;
     [_view release];
     [_printInfo release];
     [_printPanel release];
+    [_path release];
     [_context release];
     [_mutableData release];
     [_jobTitle release];
@@ -117,6 +118,20 @@ static NSPrintOperation *_currentOperation = nil;
                             insideRect: rect
                                 toData: data
                                   type: NSPrintOperationPDFInRect] autorelease];
+}
+
+// The PDF goes into data as for toData:, and -runOperation writes it to path.
++ (NSPrintOperation *) PDFOperationWithView: (NSView *) view
+                                 insideRect: (NSRect) rect
+                                     toPath: (NSString *) path
+                                  printInfo: (NSPrintInfo *) printInfo
+{
+    NSPrintOperation *operation = [self PDFOperationWithView: view
+                                                  insideRect: rect
+                                                      toData: [NSMutableData data]
+                                                   printInfo: printInfo];
+    operation->_path = [path copy];
+    return operation;
 }
 
 + (NSPrintOperation *) EPSOperationWithView: (NSView *) view
@@ -438,6 +453,8 @@ static NSPrintOperation *_currentOperation = nil;
 
     _currentOperation = nil;
 
+    if (_path != nil)
+        return [_mutableData writeToFile: _path atomically: YES];
     return YES;
 }
 

@@ -1126,7 +1126,16 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 }
 
 - (void) selectColumn: (NSInteger) column byExtendingSelection: (BOOL) extend {
-    NSTableColumn *tableColumn = [_tableColumns objectAtIndex: column];
+    [self selectColumnIndexes: [NSIndexSet indexSetWithIndex: column]
+         byExtendingSelection: extend];
+}
+
+- (void) selectColumnIndexes: (NSIndexSet *) indexes
+        byExtendingSelection: (BOOL) extend
+{
+    // Like selectRowIndexes:, out-of-range indexes leave the selection untouched.
+    if ([indexes count] > 0 && [indexes lastIndex] >= [_tableColumns count])
+        return;
 
     // selecting a column deselects all rows
     [self selectRowIndexes: [NSIndexSet indexSet] byExtendingSelection: NO];
@@ -1134,14 +1143,22 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     if (extend == NO)
         [_selectedColumns removeAllObjects];
 
-    if ([_selectedColumns containsObject: tableColumn] == NO) {
-        if ([self delegateShouldSelectTableColumn: tableColumn] == YES)
+    for (NSUInteger i = [indexes firstIndex]; i != NSNotFound;
+         i = [indexes indexGreaterThanIndex: i]) {
+        NSTableColumn *tableColumn = [_tableColumns objectAtIndex: i];
+
+        if (![_selectedColumns containsObject: tableColumn] &&
+            [self delegateShouldSelectTableColumn: tableColumn])
             [_selectedColumns addObject: tableColumn];
     }
 
     [self noteSelectionDidChange];
     [self setNeedsDisplay: YES];
     [_headerView setNeedsDisplay: YES];
+}
+
+- (NSIndexSet *) columnIndexesInRect: (NSRect) rect {
+    return [NSIndexSet indexSetWithIndexesInRange: [self columnsInRect: rect]];
 }
 
 - (void) deselectRow: (NSInteger) row {

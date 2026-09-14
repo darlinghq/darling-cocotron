@@ -293,6 +293,14 @@ NSImageName const NSImageNameTouchBarVolumeUpTemplate =
     return [self imageUnfilteredFileTypes];
 }
 
++ (NSArray *) imageTypes {
+    return [NSImageRep imageTypes];
+}
+
++ (NSArray *) imageUnfilteredTypes {
+    return [self imageTypes];
+}
+
 + (NSArray *) imageUnfilteredFileTypes {
     NSMutableArray *result = [NSMutableArray array];
     NSArray *allClasses = [NSImageRep registeredImageRepClasses];
@@ -470,6 +478,17 @@ NSImageName const NSImageNameTouchBarVolumeUpTemplate =
 
 - init {
     return [self initWithSize: NSMakeSize(0, 0)];
+}
+
+// Not in the public headers; Grapher sends it to a new NSImage.
+- initWithImageRep: (NSImageRep *) rep {
+    if (rep == nil) {
+        [self release];
+        return nil;
+    }
+    self = [self initWithSize: [rep size]];
+    [self addRepresentation: rep];
+    return self;
 }
 
 - initWithData: (NSData *) data {

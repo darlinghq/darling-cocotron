@@ -39,6 +39,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 + (NSArray *) imageFileTypes;
 + (NSArray *) imageUnfilteredFileTypes;
++ (NSArray *) imageTypes;
++ (NSArray *) imageUnfilteredTypes;
 + (NSArray *) imagePasteboardTypes;
 + (NSArray *) imageUnfilteredPasteboardTypes;
 
