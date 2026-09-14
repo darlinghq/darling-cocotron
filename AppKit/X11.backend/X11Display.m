@@ -148,14 +148,17 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type,
     [_blankCursor release];
     [_defaultCursor release];
 
-    XCloseIM(_xim);
+    // -init releases self when it cannot connect to the X server, so none of these may exist yet.
+    if (_xim)
+        XCloseIM(_xim);
 
     if (_display)
         XCloseDisplay(_display);
 #ifdef DARLING
-    CFRunLoopRemoveSource(CFRunLoopGetMain(), _source, kCFRunLoopCommonModes);
-    if (_source != NULL)
+    if (_source != NULL) {
+        CFRunLoopRemoveSource(CFRunLoopGetMain(), _source, kCFRunLoopCommonModes);
         CFRelease(_source);
+    }
     if (_cfSocket != NULL)
         CFRelease(_cfSocket);
 #endif
