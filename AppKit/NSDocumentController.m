@@ -918,3 +918,32 @@ static BOOL actionIsDocumentController(SEL selector) {
 }
 
 @end
+
+@implementation NSDocumentController (NSDocumentDuplication)
+
+- (id) duplicateDocumentWithContentsOfURL: (NSURL *) url
+                                  copying: (BOOL) duplicateByCopying
+                              displayName: (NSString *) displayNameOrNil
+                                    error: (NSError **) error
+{
+    NSString *type = [self typeForContentsOfURL: url error: error];
+    NSDocument *document = nil;
+    if (type != nil)
+        document = [self makeDocumentForURL: nil
+                          withContentsOfURL: url
+                                     ofType: type
+                                      error: error];
+    if (document == nil) {
+        if (error != NULL && *error == nil)
+            *error = [NSError errorWithDomain: NSCocoaErrorDomain
+                                         code: NSFileReadUnknownError
+                                     userInfo: nil];
+        return nil;
+    }
+    [self addDocument: document];
+    [document makeWindowControllers];
+    [document showWindows];
+    return document;
+}
+
+@end

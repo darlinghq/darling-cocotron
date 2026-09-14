@@ -1617,3 +1617,14 @@ static int untitled_document_number = 0;
 }
 
 @end
+
+@implementation NSDocument (NSDocumentViewingAndSaveType)
+
+- (BOOL) isInViewingMode {
+    return NO;
+}
+
+- (void) changeSaveType: (id) sender {
+}
+
+@end

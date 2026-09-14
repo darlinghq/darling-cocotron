@@ -23,6 +23,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSPageLayout.h>
 #import <AppKit/NSPrintInfo.h>
 #import <AppKit/NSWindow.h>
+#import <objc/message.h>
 
 @implementation NSPageLayout
 
@@ -37,6 +38,18 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (int) runModal {
     return [self runModalWithPrintInfo: [NSPrintInfo sharedPrintInfo]];
+}
+
+- (void) beginSheetWithPrintInfo: (NSPrintInfo *) printInfo
+                  modalForWindow: (NSWindow *) docWindow
+                        delegate: (id) delegate
+                  didEndSelector: (SEL) didEndSelector
+                     contextInfo: (void *) contextInfo
+{
+    NSInteger returnCode = [self runModalWithPrintInfo: printInfo];
+    if (delegate != nil && didEndSelector != NULL)
+        ((void (*)(id, SEL, NSPageLayout *, NSInteger, void *)) objc_msgSend)(
+                delegate, didEndSelector, self, returnCode, contextInfo);
 }
 
 @end

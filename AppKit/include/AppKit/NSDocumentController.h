@@ -127,3 +127,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                                   cancellable: (BOOL) cancellable;
 
 @end
+
+@interface NSDocumentController (NSDocumentDuplication)
+// Opens the contents as a new untitled document (added and shown), or returns
+// nil with an error. The contents are read into memory, so copying makes no
+// difference, and the display name isn't used.
+- (id) duplicateDocumentWithContentsOfURL: (NSURL *) url
+                                  copying: (BOOL) duplicateByCopying
+                              displayName: (NSString *) displayNameOrNil
+                                    error: (NSError **) error;
+@end
