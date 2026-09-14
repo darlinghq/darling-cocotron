@@ -516,6 +516,9 @@ static NSData *makeWindowIcon() {
 - (void) hideWindow {
     XUnmapWindow(_display, _window);
     _mapped = NO;
+    // A focus request still waiting for MapNotify is void once the window is
+    // ordered out; otherwise a later non-key orderFront would take focus.
+    _wantsInputFocus = NO;
 }
 
 - (void) placeAboveWindow: (NSInteger) otherNumber {
@@ -547,25 +550,37 @@ static NSData *makeWindowIcon() {
 // received FocusIn, which left -[NSApplication keyWindow] nil. Ask for focus
 // explicitly: through the EWMH _NET_ACTIVE_WINDOW request when a window manager
 // is running, otherwise with XSetInputFocus once the window is viewable.
+static Window supportingWMCheckWindow(Display *display, Window window,
+                                      Atom check)
+{
+    Atom type;
+    int format;
+    unsigned long count, remaining;
+    unsigned char *data = NULL;
+    Window result = None;
+
+    if (XGetWindowProperty(display, window, check, 0, 1, False, XA_WINDOW,
+                           &type, &format, &count, &remaining, &data) ==
+                Success &&
+        data != NULL && type == XA_WINDOW && format == 32 && count == 1)
+        result = (Window) * (long *) data;
+    if (data != NULL)
+        XFree(data);
+    return result;
+}
+
 static BOOL windowManagerIsRunning(Display *display) {
     Atom check = XInternAtom(display, "_NET_SUPPORTING_WM_CHECK", True);
     if (check == None)
         return NO;
 
-    Atom type;
-    int format;
-    unsigned long count, remaining;
-    unsigned char *data = NULL;
-    BOOL running = NO;
-
-    if (XGetWindowProperty(display, DefaultRootWindow(display), check, 0, 1,
-                           False, XA_WINDOW, &type, &format, &count,
-                           &remaining, &data) == Success &&
-        data != NULL)
-        running = (type == XA_WINDOW && count == 1);
-    if (data != NULL)
-        XFree(data);
-    return running;
+    // A window manager that exited can leave the root property behind. Per
+    // EWMH the child window it names must carry the same property naming
+    // itself; a stale id fails that (the BadWindow is only logged).
+    Window child =
+            supportingWMCheckWindow(display, DefaultRootWindow(display), check);
+    return child != None &&
+           supportingWMCheckWindow(display, child, check) == child;
 }
 
 - (void) requestInputFocus {
