@@ -1559,4 +1559,35 @@ static int untitled_document_number = 0;
 - (void) invalidateRestorableState {
 }
 
++ (NSArray *) restorableStateKeyPaths {
+    return [NSArray array];
+}
+
+- (void) encodeRestorableStateWithCoder: (NSCoder *) coder {
+}
+
+- (void) encodeRestorableStateWithCoder: (NSCoder *) coder backgroundQueue: (NSOperationQueue *) queue {
+    [self encodeRestorableStateWithCoder: coder];
+}
+
+- (void) restoreStateWithCoder: (NSCoder *) coder {
+}
+
+- (void) restoreDocumentWindowWithIdentifier: (NSString *) identifier
+                                       state: (NSCoder *) state
+                           completionHandler: (void (^)(NSWindow *window, NSError *error)) completionHandler
+{
+    if ([[self windowControllers] count] == 0) {
+        [self makeWindowControllers];
+    }
+    for (NSWindowController *controller in [self windowControllers]) {
+        NSWindow *window = [controller window];
+        if ([[window identifier] isEqualToString: identifier]) {
+            completionHandler(window, nil);
+            return;
+        }
+    }
+    completionHandler(nil, [NSError errorWithDomain: NSCocoaErrorDomain code: NSFeatureUnsupportedError userInfo: nil]);
+}
+
 @end

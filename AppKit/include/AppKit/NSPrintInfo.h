@@ -84,6 +84,8 @@ APPKIT_EXPORT NSString *const NSPrintSavePath;
 }
 
 + (NSPrintInfo *) sharedPrintInfo;
+// Like +sharedPrintInfo, per thread; nil goes back to a default print info.
++ (void) setSharedPrintInfo: (NSPrintInfo *) printInfo;
 
 - initWithDictionary: (NSDictionary *) dictionary;
 

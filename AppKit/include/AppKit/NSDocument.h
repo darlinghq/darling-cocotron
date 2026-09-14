@@ -287,4 +287,14 @@ completionHandler: (void (^)(NSError *errorOrNil)) completionHandler;
 // Does nothing: Cocotron doesn't restore state.
 - (void) invalidateRestorableState;
 
+// State restoration: nothing is saved, so the encode/restore hooks do nothing.
+@property(class, readonly, copy) NSArray *restorableStateKeyPaths;
+- (void) encodeRestorableStateWithCoder: (NSCoder *) coder;
+- (void) encodeRestorableStateWithCoder: (NSCoder *) coder backgroundQueue: (NSOperationQueue *) queue;
+- (void) restoreStateWithCoder: (NSCoder *) coder;
+// Calls the handler with the document window whose identifier matches, or nil and an error.
+- (void) restoreDocumentWindowWithIdentifier: (NSString *) identifier
+                                       state: (NSCoder *) state
+                           completionHandler: (void (^)(NSWindow *window, NSError *error)) completionHandler;
+
 @end
