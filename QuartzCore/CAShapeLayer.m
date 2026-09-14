@@ -206,7 +206,10 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
             CGContextFillPath(context);
     }
 
-    if (_strokeColor != NULL && _lineWidth > 0) {
+    // Trimming to strokeStart/strokeEnd isn't implemented, but an empty range
+    // (e.g. the 0/0 start of a "draw the outline" animation) strokes nothing.
+    if (_strokeColor != NULL && _lineWidth > 0 &&
+        MIN(_strokeEnd, 1) > MAX(_strokeStart, 0)) {
         CGLineCap cap = kCGLineCapButt;
         if ([_lineCap isEqualToString: kCALineCapRound])
             cap = kCGLineCapRound;
