@@ -534,6 +534,14 @@ NSAttributedStringDocumentReadingOptionKey const
     _templateTextContainer = container;
 }
 
+- (BOOL) usesDefaultHyphenation {
+    return _usesDefaultHyphenation;
+}
+
+- (void) setUsesDefaultHyphenation: (BOOL) flag {
+    _usesDefaultHyphenation = flag;
+}
+
 - (NSTextRange *) rangeForTextContainerAtIndex: (NSUInteger) index {
     if (index != 0)
         return nil;

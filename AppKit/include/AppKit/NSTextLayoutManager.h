@@ -30,6 +30,7 @@
     NSTextContainer *_textContainer;
     NSLayoutManager *_layoutManager;
     NSTextContainer *_templateTextContainer;
+    BOOL _usesDefaultHyphenation;
 }
 
 @property(readonly, assign) NSTextContentManager *textContentManager;
@@ -42,6 +43,8 @@
 
 // Stored only: layout uses textContainer, with no containers made from it.
 @property(retain) NSTextContainer *templateTextContainer;
+// Stored only (NO by default): there's no hyphenation.
+@property BOOL usesDefaultHyphenation;
 // Invalidates the TextKit 1 layout of the whole document.
 - (void) invalidateLayoutForRange: (NSTextRange *) range;
 // The characters laid out in textContainer for index 0 (the whole document
