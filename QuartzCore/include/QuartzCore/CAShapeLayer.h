@@ -28,5 +28,33 @@ CA_EXPORT NSString *const kCALineCapButt;
 CA_EXPORT NSString *const kCALineCapRound;
 CA_EXPORT NSString *const kCALineCapSquare;
 
-@interface CAShapeLayer : CALayer
+// Draws a path with an optional fill and stroke into the layer's contents.
+@interface CAShapeLayer : CALayer {
+    CGPathRef _path;
+    CGColorRef _fillColor;
+    NSString *_fillRule;
+    CGColorRef _strokeColor;
+    CGFloat _strokeStart;
+    CGFloat _strokeEnd;
+    CGFloat _lineWidth;
+    CGFloat _miterLimit;
+    NSString *_lineCap;
+    NSString *_lineJoin;
+    CGFloat _lineDashPhase;
+    NSArray *_lineDashPattern;
+}
+
+@property CGPathRef path;
+@property CGColorRef fillColor;     // default opaque black; NULL for no fill
+@property(copy) NSString *fillRule; // kCAFillRuleNonZero (default) or kCAFillRuleEvenOdd
+@property CGColorRef strokeColor;   // default NULL (no stroke)
+@property CGFloat strokeStart;
+@property CGFloat strokeEnd;
+@property CGFloat lineWidth;        // default 1
+@property CGFloat miterLimit;       // default 10
+@property(copy) NSString *lineCap;  // default kCALineCapButt
+@property(copy) NSString *lineJoin; // default kCALineJoinMiter
+@property CGFloat lineDashPhase;
+@property(copy) NSArray *lineDashPattern;
+
 @end
