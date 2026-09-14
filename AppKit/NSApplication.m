@@ -1877,3 +1877,23 @@ BOOL NSPerformService(NSString *itemName, NSPasteboard *pasteboard) {
     NSUnimplementedFunction();
     return NO;
 }
+
+@implementation NSApplication (NSWindowEnumeration)
+
+- (void) enumerateWindowsWithOptions: (NSWindowListOptions) options
+                          usingBlock: (void (^)(NSWindow *window, BOOL *stop)) block
+{
+    if (block == nil)
+        return;
+    NSArray *windows = (options & NSWindowListOrderedFrontToBack)
+                               ? [self orderedWindows]
+                               : [[[self windows] copy] autorelease];
+    BOOL stop = NO;
+    for (NSWindow *window in windows) {
+        block(window, &stop);
+        if (stop)
+            break;
+    }
+}
+
+@end

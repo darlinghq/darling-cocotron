@@ -441,3 +441,17 @@ static NSPrintOperation *_currentOperation = nil;
 }
 
 @end
+
+@implementation NSPrintOperation (NSJobTitle)
+
+- (NSString *) jobTitle {
+    return _jobTitle;
+}
+
+- (void) setJobTitle: (NSString *) title {
+    title = [title copy];
+    [_jobTitle release];
+    _jobTitle = title;
+}
+
+@end

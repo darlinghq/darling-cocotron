@@ -210,3 +210,13 @@ typedef NS_OPTIONS(NSUInteger, NSWorkspaceLaunchOptions) {
 @property cpu_type_t architecture;
 
 @end
+
+@class NSRunningApplication;
+
+@interface NSWorkspace (NSOpenURLsWithApplication)
+- (NSRunningApplication *) openURLs: (NSArray<NSURL *> *) urls
+               withApplicationAtURL: (NSURL *) applicationURL
+                            options: (NSUInteger) options
+                      configuration: (NSDictionary *) configuration
+                              error: (NSError **) error;
+@end

@@ -33,6 +33,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     NSMutableData *_mutableData;
     int _type;
     BOOL _showsPrintProgressPanel;
+    NSString *_jobTitle;
 }
 
 + (NSPrintOperation *) currentOperation;
@@ -76,4 +77,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (BOOL) runOperation;
 
+@end
+
+@interface NSPrintOperation (NSJobTitle)
+// Title of the print job (stored; the printing backend doesn't use it).
+- (NSString *) jobTitle;
+- (void) setJobTitle: (NSString *) title;
 @end

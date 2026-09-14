@@ -362,3 +362,11 @@ NS_ASSUME_NONNULL_END
 // Switches between horizontal and vertical layout.
 - (void) changeLayoutOrientation: (id) sender;
 @end
+
+@class NSPasteboard;
+
+@interface NSTextView (NSFindIndicatorAndPasteboard)
+- (void) showFindIndicatorForRange: (NSRange) range;
+- (void) orderFrontLinkPanel: (id) sender;
+- (BOOL) readSelectionFromPasteboard: (NSPasteboard *) pasteboard type: (NSString *) type;
+@end
