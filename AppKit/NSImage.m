@@ -124,6 +124,8 @@ NSImageName const NSImageNameTouchBarAddDetailTemplate =
         @"NSImageNameTouchBarAddDetailTemplate";
 NSImageName const NSImageNameTouchBarAddTemplate =
         @"NSImageNameTouchBarAddTemplate";
+NSImageName const NSImageNameTouchBarAddTabTemplate =
+        @"NSImageNameTouchBarAddTabTemplate";
 NSImageName const NSImageNameTouchBarAlarmTemplate =
         @"NSImageNameTouchBarAlarmTemplate";
 NSImageName const NSImageNameTouchBarAudioInputMuteTemplate =

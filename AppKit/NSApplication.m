@@ -59,6 +59,8 @@ const NSNotificationName NSApplicationWillFinishLaunchingNotification =
         @"NSApplicationWillFinishLaunchingNotification";
 const NSNotificationName NSApplicationDidFinishLaunchingNotification =
         @"NSApplicationDidFinishLaunchingNotification";
+const NSNotificationName NSApplicationDidFinishRestoringWindowsNotification =
+        @"NSApplicationDidFinishRestoringWindowsNotification";
 
 const NSNotificationName NSApplicationWillBecomeActiveNotification =
         @"NSApplicationWillBecomeActiveNotification";

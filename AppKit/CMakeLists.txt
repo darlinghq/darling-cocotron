@@ -207,6 +207,7 @@ set(AppKit_sources
 	_NSRuleEditorViewSliceHolder.m
 	NSSearchField.m
 	NSFontPanel.m
+	NSFindIndicator.m
 	NSTrackingArea.m
 
 	NSController/NSArrayController.m

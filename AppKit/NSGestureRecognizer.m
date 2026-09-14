@@ -19,6 +19,18 @@
 
 #import <AppKit/NSGestureRecognizer.h>
 
+// Private. Darling has no force touch input, so the recognizer never fires.
+@interface NSImmediateActionGestureRecognizer : NSGestureRecognizer
+@end
+
+@implementation NSImmediateActionGestureRecognizer
+
+- (instancetype) initWithTarget: (id) target action: (SEL) action {
+    return [super init];
+}
+
+@end
+
 @interface NSMagnificationGestureRecognizer : NSGestureRecognizer
 @end
 

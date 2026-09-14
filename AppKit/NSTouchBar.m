@@ -28,6 +28,19 @@
 @interface NSTouchBarItemContainerView : NSTouchBarView
 @end
 
+// Private: the Touch Bar hardware. Apps check its availability.
+@interface NSFunctionRow : NSObject
+@end
+
+@implementation NSFunctionRow
+
++ (BOOL) isDynamicFunctionRowAvailable
+{
+    return NO;
+}
+
+@end
+
 @implementation NSTouchBar
 
 @synthesize delegate = _delegate;

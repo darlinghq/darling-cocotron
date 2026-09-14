@@ -37,6 +37,8 @@ APPKIT_EXPORT const NSNotificationName
         NSApplicationWillFinishLaunchingNotification;
 APPKIT_EXPORT const NSNotificationName
         NSApplicationDidFinishLaunchingNotification;
+APPKIT_EXPORT const NSNotificationName
+        NSApplicationDidFinishRestoringWindowsNotification;
 
 APPKIT_EXPORT const NSNotificationName
         NSApplicationWillBecomeActiveNotification;

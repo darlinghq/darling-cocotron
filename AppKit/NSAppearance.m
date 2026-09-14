@@ -46,6 +46,10 @@ NSString *const NSAppearanceNameAccessibilityHighContrastVibrantDark =
 NSString *const NSAppearanceNameControlStrip =
         @"NSAppearanceNameControlStrip"; // Undocumented
 
+BOOL NSSolariumEnabled(void) {
+    return NO;
+}
+
 @implementation NSAppearance
 
 static NSString *const NSAppearanceThreadKey = @"NSAppearanceCurrentDrawingAppearance";
