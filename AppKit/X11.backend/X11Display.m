@@ -1032,7 +1032,9 @@ static NSDictionary *modeInfoToDictionary(const XRRModeInfo *mi, int depth) {
         if (XFilterEvent(ev, None)) // XIM processing
             break;
 
-        if (ev->type == KeyPress) {
+        // A window has no input context when the display couldn't open an input method or
+        // XCreateIC() failed, and Xutf8LookupString() dereferences its XIC unconditionally.
+        if (ev->type == KeyPress && window != nil && window->_xic != NULL) {
             strLen = Xutf8LookupString(window->_xic, (XKeyPressedEvent *) ev, buf, sizeof(buf) - 1, &keySym, NULL);
             buf[strLen] = 0;
         } else {
@@ -1259,7 +1261,8 @@ static NSDictionary *modeInfoToDictionary(const XRRModeInfo *mi, int depth) {
         lastFocusedWindow = nil;
         if (_cursorGrabbed)
             [self grabMouse: NO];
-        if (window != nil)
+        // Unlike XSetICFocus(), XUnsetICFocus() doesn't accept a NULL XIC.
+        if (window != nil && window->_xic != NULL)
             XUnsetICFocus(window->_xic);
         break;
 

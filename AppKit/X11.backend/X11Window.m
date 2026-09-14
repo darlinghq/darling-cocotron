@@ -412,7 +412,11 @@ static NSData *makeWindowIcon() {
     }
 
     if (_window) {
-        XDestroyIC(_xic);
+        // _xic is NULL when there is no input method; XDestroyIC() doesn't accept NULL.
+        if (_xic != NULL) {
+            XDestroyIC(_xic);
+            _xic = NULL;
+        }
 
         [(X11Display *) [NSDisplay currentDisplay] setWindow: nil
                                                        forID: _window];
