@@ -22,6 +22,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSImage.h>
 #import <AppKit/NSMenu.h>
 #import <AppKit/NSMenuItem.h>
+#import <AppKit/NSObject+BindingSupport.h>
 #import <Foundation/NSKeyedArchiver.h>
 #import <AppKit/NSButtonCell.h>
 
@@ -198,6 +199,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         return @"state";
     }
     return [super _replacementKeyPathForBinding: binding];
+}
+
+// A bound value that is nil (an unset default with no transformer) unchecks the item.
+- (void) setNilValueForKey: (NSString *) key {
+    if ([key isEqualToString: @"state"])
+        [self setState: NSOffState];
+    else
+        [super setNilValueForKey: key];
 }
 
 - (NSMenu *) menu {
