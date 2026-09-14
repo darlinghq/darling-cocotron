@@ -252,9 +252,11 @@ APPKIT_EXPORT const NSNotificationName NSWindowDidExposeNotification;
     NSUserInterfaceItemIdentifier _identifier;
 
     BOOL _isAccessible;
+    BOOL _restorable;
 }
 
 @property(class) BOOL allowsAutomaticWindowTabbing;
+@property(getter=isRestorable) BOOL restorable;
 
 + (NSWindowDepth) defaultDepthLimit;
 

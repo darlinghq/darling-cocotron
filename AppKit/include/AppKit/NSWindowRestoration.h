@@ -1,5 +1,9 @@
 #import <Foundation/NSObject.h>
 
-@protocol NSWindowRestoration <NSObject>
+@class NSCoder, NSError, NSString, NSWindow;
 
+@protocol NSWindowRestoration <NSObject>
++ (void) restoreWindowWithIdentifier: (NSString *) identifier
+                               state: (NSCoder *) state
+                   completionHandler: (void (^)(NSWindow *window, NSError *error)) completionHandler;
 @end
