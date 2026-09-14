@@ -432,6 +432,15 @@ static CFTypeRef createConvertedObject(Converter *c, CFIndex index)
         }
     }
 
+    // Dictionaries alternate keys and values. With an unpaired key, NSDictionary's
+    // -initWithObjects:forKeys: would raise while the nib is decoded, so reject the nib instead.
+    if (isDictionary && CFArrayGetCount(elementKeys) != CFArrayGetCount(elements)) {
+        CFRelease(elements);
+        CFRelease(elementKeys);
+        CFRelease(result);
+        return NULL;
+    }
+
     if (isList || isDictionary)
         CFDictionarySetValue(result, CFSTR("NS.objects"), elements);
     if (isDictionary)
@@ -467,6 +476,13 @@ NSData *NSKeyedArchiveDataFromNibArchiveData(NSData *data)
         CFArrayAppendValue(c.objects, kCFNull);
     for (CFIndex i = 0; i < nib.objectCount; i++) {
         CFTypeRef converted = createConvertedObject(&c, i);
+        if (converted == NULL) {
+            NSLog(@"NSNib: malformed NIBArchive object %ld", (long) i);
+            CFRelease(c.objects);
+            CFRelease(c.classes);
+            freeNibArchive(&nib);
+            return nil;
+        }
         CFArraySetValueAtIndex(c.objects, slotForObject((uint32_t) i), converted);
         CFRelease(converted);
     }
