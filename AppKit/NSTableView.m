@@ -1137,8 +1137,14 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     if ([indexes count] > 0 && [indexes lastIndex] >= [_tableColumns count])
         return;
 
-    // selecting a column deselects all rows
-    [self selectRowIndexes: [NSIndexSet indexSet] byExtendingSelection: NO];
+    // Selecting a column deselects all rows. Not through selectRowIndexes:, which
+    // also clears the columns and, without allowsEmptySelection, re-selects row 0.
+    if ([_selectedRowIndexes count] > 0) {
+        [self willChangeValueForKey: @"selectedRowIndexes"];
+        [_selectedRowIndexes release];
+        _selectedRowIndexes = [[NSIndexSet alloc] init];
+        [self didChangeValueForKey: @"selectedRowIndexes"];
+    }
 
     if (extend == NO)
         [_selectedColumns removeAllObjects];
