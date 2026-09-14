@@ -196,6 +196,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSTextFinder.h>
 #import <AppKit/NSTextList.h>
 #import <AppKit/NSTextStorage.h>
+#import <AppKit/NSTextRange.h>
+#import <AppKit/NSTextContentManager.h>
+#import <AppKit/NSTextLayoutManager.h>
 #import <AppKit/NSTextTab.h>
 #import <AppKit/NSTextTable.h>
 #import <AppKit/NSTextTableBlock.h>
