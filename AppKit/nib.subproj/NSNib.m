@@ -19,6 +19,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import "NSCustomObject.h"
 #import "NSIBObjectData.h"
+#import "NSNibArchive.h"
 #import "NSNibHelpConnector.h"
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSMenu.h>
@@ -98,6 +99,20 @@ NSString *const NSNibTopLevelObjects = @"NSNibTopLevelObjects";
     if ((_data = [[NSData alloc] initWithContentsOfFile: objects]) == nil) {
         [self release];
         return nil;
+    }
+
+    // Nibs compiled for current SDKs use the binary NIBArchive format; convert them into the
+    // keyed archive that the rest of NSNib expects.
+    if (NSNibArchiveDataIsNibArchive(_data)) {
+        NSData *keyed = NSKeyedArchiveDataFromNibArchiveData(_data);
+        if (keyed == nil) {
+            NSLog(@"%s: unable to read NIBArchive nib %@", __PRETTY_FUNCTION__, objects);
+            [self release];
+            return nil;
+        }
+        [_data release];
+        _data = [keyed retain];
+        _flags._isKeyed = TRUE;
     }
 
     _allObjects = [NSMutableArray new];
