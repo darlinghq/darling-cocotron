@@ -19,6 +19,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import "NSCustomView.h"
 #import <Foundation/NSKeyedArchiver.h>
 #import <Foundation/NSString.h>
+#import <objc/runtime.h>
 
 @implementation NSCustomView
 
@@ -27,9 +28,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         NSString *className = [(NSKeyedUnarchiver *) coder
                 decodeObjectForKey: @"NSClassName"];
         Class class = NSClassFromString(className);
-        if (class == nil) {
-            NSLog(@"NSCustomView unknown class %@", className);
-            return self;
+        if (class == nil || ![class isSubclassOfClass: [NSView class]]) {
+            NSLog(@"NSCustomView: %@ is not a known NSView subclass, using NSView",
+                  className);
+            object_setClass(self, [NSView class]);
+            return [super initWithCoder: coder];
         } else {
             NSRect frame = NSZeroRect;
             if ([coder containsValueForKey: @"NSFrame"])
@@ -37,13 +40,16 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
             else if ([coder containsValueForKey: @"NSFrameSize"])
                 frame.size = [coder decodeSizeForKey: @"NSFrameSize"];
 
-            NSView *newView = nil;
-            if ([class isSubclassOfClass: [NSView class]])
-                newView = [[class alloc] initWithFrame: frame];
-            // Decoding nil would drop the whole subviews array this view is in.
+            NSView *newView = [[class alloc] initWithFrame: frame];
             if (newView == nil) {
-                newView = [[NSView alloc] initWithFrame: frame];
+                NSLog(@"NSCustomView: -[%@ initWithFrame:] returned nil, using NSView",
+                      className);
+                object_setClass(self, [NSView class]);
+                return [super initWithCoder: coder];
             }
+            // Subviews' NSNextKeyView references to this view must resolve to newView.
+            [(id) coder replaceObject: self withObject: newView];
+
             if ([coder containsValueForKey: @"NSvFlags"]) {
                 unsigned vFlags = [coder decodeIntForKey: @"NSvFlags"];
 
