@@ -468,10 +468,6 @@ static void roundedRectOutline(CGRect r, CGFloat radius, GLfloat *xy) {
                  position.y - (bounds.size.height * anchorPoint.y), 0);
 
     [self _drawBackgroundOfLayer: layer bounds: bounds opacity: opacity];
-    // Layers that draw their content (-drawInContext:, CATextLayer,
-    // CAShapeLayer, a drawing delegate) produce it here when marked as needing
-    // display.
-    [layer displayIfNeeded];
     [self _drawContentsOfLayer: layer bounds: bounds opacity: opacity];
     [self _drawBorderOfLayer: layer bounds: bounds opacity: opacity];
 
@@ -483,7 +479,28 @@ static void roundedRectOutline(CGRect r, CGFloat radius, GLfloat *xy) {
     glPopMatrix();
 }
 
+// Layers that draw their content (-drawInContext:, CATextLayer, CAShapeLayer,
+// a drawing delegate) produce it when marked as needing display. This runs
+// before any GL drawing: a delegate's -displayLayer: can run arbitrary code (an
+// NSView delegate redisplays the view, which renders this layer tree again), and
+// doing that in the middle of the traversal would clear the frame and reset the
+// matrix stack under it.
+static void displayLayerTreeIfNeeded(CALayer *layer) {
+    if (layer.hidden)
+        return;
+
+    [layer displayIfNeeded];
+
+    // Copied: drawing code may add or remove sublayers.
+    NSArray *sublayers = [layer.sublayers copy];
+    for (CALayer *child in sublayers)
+        displayLayerTreeIfNeeded(child);
+    [sublayers release];
+}
+
 - (void) render {
+    displayLayerTreeIfNeeded(_rootLayer);
+
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
 
