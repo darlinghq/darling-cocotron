@@ -273,6 +273,14 @@ NSAttributedStringDocumentReadingOptionKey const
     _automaticallySynchronizesToBackingStore = value;
 }
 
+- (BOOL) includesTextListMarkers {
+    return _includesTextListMarkers;
+}
+
+- (void) setIncludesTextListMarkers: (BOOL) value {
+    _includesTextListMarkers = value;
+}
+
 - (void) addTextLayoutManager: (NSTextLayoutManager *) manager {
     if (manager == nil ||
         [_textLayoutManagers indexOfObjectIdenticalTo: manager] != NSNotFound)
@@ -441,6 +449,7 @@ NSAttributedStringDocumentReadingOptionKey const
     [_textContentManager removeTextLayoutManager: self];
     [[_layoutManager textStorage] removeLayoutManager: _layoutManager];
     [_textContainer release];
+    [_templateTextContainer release];
     [_layoutManager release];
     [super dealloc];
 }
@@ -513,6 +522,43 @@ NSAttributedStringDocumentReadingOptionKey const
 - (void) ensureLayoutForRange: (NSTextRange *) range {
     if (_textContainer != nil)
         [_layoutManager glyphRangeForTextContainer: _textContainer];
+}
+
+- (NSTextContainer *) templateTextContainer {
+    return _templateTextContainer;
+}
+
+- (void) setTemplateTextContainer: (NSTextContainer *) container {
+    [container retain];
+    [_templateTextContainer release];
+    _templateTextContainer = container;
+}
+
+- (NSTextRange *) rangeForTextContainerAtIndex: (NSUInteger) index {
+    if (index != 0)
+        return nil;
+    if (_textContainer == nil)
+        return [self documentRange];
+
+    NSRange glyphs = [_layoutManager glyphRangeForTextContainer: _textContainer];
+    NSRange characters = [_layoutManager characterRangeForGlyphRange: glyphs
+                                                     actualGlyphRange: NULL];
+    if (characters.length == 0)
+        return [self documentRange];
+    return [[[NSTextRange alloc]
+            initWithLocation: [_NSTextOffsetLocation
+                                      locationWithOffset: characters.location]
+                 endLocation: [_NSTextOffsetLocation
+                                      locationWithOffset: NSMaxRange(characters)]]
+            autorelease];
+}
+
+// Locations don't map to glyphs here, so the whole document is invalidated.
+- (void) invalidateLayoutForRange: (NSTextRange *) range {
+    NSUInteger length = [[_layoutManager textStorage] length];
+    [_layoutManager invalidateLayoutForCharacterRange: NSMakeRange(0, length)
+                                               isSoft: NO
+                                 actualCharacterRange: NULL];
 }
 
 @end

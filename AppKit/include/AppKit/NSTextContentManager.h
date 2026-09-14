@@ -32,6 +32,7 @@ APPKIT_EXPORT NSString *const NSTextContentStorageUnsupportedAttributeAddedNotif
     BOOL _automaticallySynchronizesTextLayoutManagers;
     BOOL _automaticallySynchronizesToBackingStore;
     NSInteger _editingTransactionDepth;
+    BOOL _includesTextListMarkers;
 }
 
 @property(readonly, copy) NSArray *textLayoutManagers;
@@ -40,6 +41,8 @@ APPKIT_EXPORT NSString *const NSTextContentStorageUnsupportedAttributeAddedNotif
 @property BOOL automaticallySynchronizesToBackingStore;
 @property(readonly) BOOL hasEditingTransaction;
 @property(readonly, retain) NSTextRange *documentRange;
+// Stored only: there are no text list elements.
+@property BOOL includesTextListMarkers;
 
 - (void) addTextLayoutManager: (NSTextLayoutManager *) textLayoutManager;
 - (void) removeTextLayoutManager: (NSTextLayoutManager *) textLayoutManager;

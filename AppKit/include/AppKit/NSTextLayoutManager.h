@@ -29,6 +29,7 @@
     NSTextContentManager *_textContentManager; // not retained (it owns us)
     NSTextContainer *_textContainer;
     NSLayoutManager *_layoutManager;
+    NSTextContainer *_templateTextContainer;
 }
 
 @property(readonly, assign) NSTextContentManager *textContentManager;
@@ -38,6 +39,14 @@
 
 - (void) replaceTextContentManager: (NSTextContentManager *) textContentManager;
 - (void) ensureLayoutForRange: (NSTextRange *) range;
+
+// Stored only: layout uses textContainer, with no containers made from it.
+@property(retain) NSTextContainer *templateTextContainer;
+// Invalidates the TextKit 1 layout of the whole document.
+- (void) invalidateLayoutForRange: (NSTextRange *) range;
+// The characters laid out in textContainer for index 0 (the whole document
+// before layout places any); nil for other indexes.
+- (NSTextRange *) rangeForTextContainerAtIndex: (NSUInteger) index;
 
 @end
 
