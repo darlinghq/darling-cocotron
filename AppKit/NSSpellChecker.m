@@ -29,6 +29,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Foundation/NSOrthography.h>
 #import <Foundation/NSSpellEngine.h>
 #import <dispatch/dispatch.h>
+#import <Foundation/NSUserDefaults.h>
 
 NSString *const NSSpellCheckerDidChangeAutomaticTextReplacementNotification =
         @"NSSpellCheckerDidChangeAutomaticTextReplacementNotification";
@@ -50,6 +51,12 @@ NSString *const NSTextCheckingDocumentAuthorKey =
         @"NSTextCheckingDocumentAuthorKey";
 
 #define SPELLCHECK_DEBUG 0
+
+// macOS enables every automatic text substitution until the user turns it off.
+static BOOL automaticSettingEnabled(NSString *key) {
+    id value = [[NSUserDefaults standardUserDefaults] objectForKey: key];
+    return value ? [value boolValue] : YES;
+}
 
 @implementation NSSpellChecker
 
@@ -536,8 +543,7 @@ static NSSpellChecker *shared = nil;
 #pragma mark Automatic Spelling Correction
 
 + (BOOL) isAutomaticSpellingCorrectionEnabled {
-    NSUnimplementedMethod();
-    return 0;
+    return automaticSettingEnabled(@"NSAutomaticSpellingCorrectionEnabled");
 }
 
 #if defined(NS_BLOCKS) || defined(__BLOCKS__)
@@ -579,8 +585,30 @@ static NSSpellChecker *shared = nil;
 #pragma mark Automatic Text Replacement
 
 + (BOOL) isAutomaticTextReplacementEnabled {
-    NSUnimplementedMethod();
-    return 0;
+    return automaticSettingEnabled(@"NSAutomaticTextReplacementEnabled");
+}
+
+#pragma mark -
+#pragma mark Automatic Substitution Settings
+
++ (BOOL) isAutomaticQuoteSubstitutionEnabled {
+    return automaticSettingEnabled(@"NSAutomaticQuoteSubstitutionEnabled");
+}
+
++ (BOOL) isAutomaticDashSubstitutionEnabled {
+    return automaticSettingEnabled(@"NSAutomaticDashSubstitutionEnabled");
+}
+
++ (BOOL) isAutomaticCapitalizationEnabled {
+    return automaticSettingEnabled(@"NSAutomaticCapitalizationEnabled");
+}
+
++ (BOOL) isAutomaticPeriodSubstitutionEnabled {
+    return automaticSettingEnabled(@"NSAutomaticPeriodSubstitutionEnabled");
+}
+
++ (BOOL) isAutomaticTextCompletionEnabled {
+    return automaticSettingEnabled(@"NSAutomaticTextCompletionEnabled");
 }
 
 @end
