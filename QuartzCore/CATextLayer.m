@@ -18,6 +18,7 @@
 */
 
 #import <QuartzCore/CATextLayer.h>
+#import <CoreText/CTFont.h>
 
 NSString *const kCAAlignmentNatural = @"natural";
 NSString *const kCAAlignmentLeft = @"left";
@@ -30,15 +31,271 @@ NSString *const kCATruncationStart = @"start";
 NSString *const kCATruncationEnd = @"end";
 NSString *const kCATruncationMiddle = @"middle";
 
-@implementation CATextLayer
-
-- (NSMethodSignature *) methodSignatureForSelector: (SEL) aSelector {
-    return [NSMethodSignature signatureWithObjCTypes: "v@:"];
+static void replaceColor(CGColorRef *slot, CGColorRef value) {
+    if (*slot == value)
+        return;
+    if (value)
+        CGColorRetain(value);
+    if (*slot)
+        CGColorRelease(*slot);
+    *slot = value;
 }
 
-- (void) forwardInvocation: (NSInvocation *) anInvocation {
-    NSLog(@"Stub called: %@ in %@",
-          NSStringFromSelector([anInvocation selector]), [self class]);
+// A graphics font for the layer's font property: a font name, or any font object
+// that knows its name (NSFont, CTFont). Falls back to Helvetica and other common
+// families when the name can't be resolved.
+static CGFontRef createGraphicsFont(CFTypeRef font) {
+    NSString *name = nil;
+    id object = (id) font;
+
+    if ([object isKindOfClass: [NSString class]])
+        name = object;
+    else if ([object respondsToSelector: @selector(fontName)])
+        name = [object fontName];
+    else if ([object respondsToSelector: @selector(postScriptName)])
+        name = [object postScriptName];
+
+    NSMutableArray *candidates = [NSMutableArray array];
+    if (name != nil)
+        [candidates addObject: name];
+    [candidates addObjectsFromArray: @[ @"Helvetica", @"Arial", @"DejaVu Sans" ]];
+
+    for (NSString *candidate in candidates) {
+        CGFontRef result = CGFontCreateWithFontName((CFStringRef) candidate);
+        if (result != NULL)
+            return result;
+    }
+    return NULL;
+}
+
+// Glyphs and advances for a line of text; the caller frees both arrays.
+static CGFloat layoutLine(CTFontRef font, NSString *line, CGGlyph **outGlyphs,
+                          CGSize **outAdvances)
+{
+    NSUInteger length = [line length];
+    UniChar *characters = malloc(MAX(length, 1) * sizeof(UniChar));
+    CGGlyph *glyphs = malloc(MAX(length, 1) * sizeof(CGGlyph));
+    CGSize *advances = malloc(MAX(length, 1) * sizeof(CGSize));
+    CGFloat width = 0;
+
+    if (length > 0) {
+        [line getCharacters: characters range: NSMakeRange(0, length)];
+        CTFontGetGlyphsForCharacters(font, characters, glyphs, length);
+        CTFontGetAdvancesForGlyphs(font, 0, glyphs, advances, length);
+        for (NSUInteger i = 0; i < length; i++)
+            width += advances[i].width;
+    }
+    free(characters);
+
+    if (outGlyphs)
+        *outGlyphs = glyphs;
+    else
+        free(glyphs);
+    if (outAdvances)
+        *outAdvances = advances;
+    else
+        free(advances);
+    return width;
+}
+
+@implementation CATextLayer
+
+- init {
+    self = [super init];
+    if (self != nil) {
+        _fontSize = 36;
+        _foregroundColor = CGColorCreateGenericRGB(1, 1, 1, 1);
+        _alignmentMode = [kCAAlignmentNatural copy];
+        _truncationMode = [kCATruncationNone copy];
+        _needsDisplay = YES;
+    }
+    return self;
+}
+
+- (void) dealloc {
+    [_string release];
+    if (_font)
+        CFRelease(_font);
+    if (_foregroundColor)
+        CGColorRelease(_foregroundColor);
+    [_alignmentMode release];
+    [_truncationMode release];
+    [super dealloc];
+}
+
+- (id) string {
+    return _string;
+}
+
+- (void) setString: (id) string {
+    string = [string copy];
+    [_string release];
+    _string = string;
+    [self setNeedsDisplay];
+}
+
+- (CFTypeRef) font {
+    return _font;
+}
+
+- (void) setFont: (CFTypeRef) font {
+    if (font)
+        CFRetain(font);
+    if (_font)
+        CFRelease(_font);
+    _font = font;
+    [self setNeedsDisplay];
+}
+
+- (CGFloat) fontSize {
+    return _fontSize;
+}
+
+- (void) setFontSize: (CGFloat) size {
+    _fontSize = size;
+    [self setNeedsDisplay];
+}
+
+- (CGColorRef) foregroundColor {
+    return _foregroundColor;
+}
+
+- (void) setForegroundColor: (CGColorRef) color {
+    replaceColor(&_foregroundColor, color);
+    [self setNeedsDisplay];
+}
+
+- (BOOL) isWrapped {
+    return _wrapped;
+}
+
+- (void) setWrapped: (BOOL) wrapped {
+    _wrapped = wrapped;
+    [self setNeedsDisplay];
+}
+
+- (NSString *) alignmentMode {
+    return _alignmentMode;
+}
+
+- (void) setAlignmentMode: (NSString *) mode {
+    mode = [mode copy];
+    [_alignmentMode release];
+    _alignmentMode = mode;
+    [self setNeedsDisplay];
+}
+
+- (NSString *) truncationMode {
+    return _truncationMode;
+}
+
+- (void) setTruncationMode: (NSString *) mode {
+    mode = [mode copy];
+    [_truncationMode release];
+    _truncationMode = mode;
+    [self setNeedsDisplay];
+}
+
+- (BOOL) allowsFontSubpixelQuantization {
+    return _allowsFontSubpixelQuantization;
+}
+
+- (void) setAllowsFontSubpixelQuantization: (BOOL) value {
+    _allowsFontSubpixelQuantization = value;
+}
+
+// Splits the text at line breaks and, when wrapped, at spaces to fit the width.
+- (NSArray *) _linesForText: (NSString *) text
+                       font: (CTFontRef) font
+                      width: (CGFloat) width
+{
+    NSArray *paragraphs = [text componentsSeparatedByCharactersInSet:
+                                        [NSCharacterSet newlineCharacterSet]];
+    if (!_wrapped || width <= 0)
+        return paragraphs;
+
+    NSMutableArray *lines = [NSMutableArray array];
+    for (NSString *paragraph in paragraphs) {
+        NSMutableString *current = [NSMutableString string];
+        for (NSString *word in [paragraph componentsSeparatedByString: @" "]) {
+            NSString *candidate =
+                    [current length] ? [current stringByAppendingFormat: @" %@", word]
+                                     : word;
+            if ([current length] && layoutLine(font, candidate, NULL, NULL) > width) {
+                [lines addObject: [[current copy] autorelease]];
+                [current setString: word];
+            } else {
+                [current setString: candidate];
+            }
+        }
+        [lines addObject: [[current copy] autorelease]];
+    }
+    return lines;
+}
+
+// Lines are laid out from the top of the bounds down, aligned per alignmentMode.
+- (void) drawInContext: (CGContextRef) context {
+    [super drawInContext: context];
+
+    NSString *text = nil;
+    if ([_string isKindOfClass: [NSAttributedString class]])
+        text = [_string string];
+    else if ([_string isKindOfClass: [NSString class]])
+        text = _string;
+    if ([text length] == 0 || _fontSize <= 0 || _foregroundColor == NULL)
+        return;
+
+    CGFontRef graphicsFont = createGraphicsFont(_font);
+    if (graphicsFont == NULL)
+        return;
+    CTFontRef font =
+            CTFontCreateWithGraphicsFont(graphicsFont, _fontSize, NULL, NULL);
+    if (font == NULL) {
+        CGFontRelease(graphicsFont);
+        return;
+    }
+
+    CGRect bounds = [self bounds];
+    CGFloat ascent = CTFontGetAscent(font);
+    CGFloat descent = fabs(CTFontGetDescent(font));
+    CGFloat lineHeight = ceil(ascent + descent + CTFontGetLeading(font));
+
+    CGContextSaveGState(context);
+    CGContextSetFillColorWithColor(context, _foregroundColor);
+    CGContextSetFont(context, graphicsFont);
+    CGContextSetFontSize(context, _fontSize);
+    CGContextSetTextMatrix(context, CGAffineTransformIdentity);
+
+    CGFloat baseline = CGRectGetMaxY(bounds) - ascent;
+    for (NSString *line in [self _linesForText: text
+                                          font: font
+                                         width: bounds.size.width]) {
+        if (baseline + ascent < CGRectGetMinY(bounds))
+            break;
+
+        CGGlyph *glyphs;
+        CGSize *advances;
+        CGFloat width = layoutLine(font, line, &glyphs, &advances);
+
+        CGFloat x = CGRectGetMinX(bounds);
+        if ([_alignmentMode isEqualToString: kCAAlignmentRight])
+            x = CGRectGetMaxX(bounds) - width;
+        else if ([_alignmentMode isEqualToString: kCAAlignmentCenter])
+            x = CGRectGetMinX(bounds) + (bounds.size.width - width) / 2;
+
+        if ([line length] > 0) {
+            CGContextSetTextPosition(context, x, baseline);
+            CGContextShowGlyphsWithAdvances(context, glyphs, advances,
+                                            [line length]);
+        }
+        free(glyphs);
+        free(advances);
+        baseline -= lineHeight;
+    }
+
+    CGContextRestoreGState(context);
+    CFRelease(font);
+    CGFontRelease(graphicsFont);
 }
 
 @end

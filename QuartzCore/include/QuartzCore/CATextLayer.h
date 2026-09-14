@@ -32,6 +32,25 @@ CA_EXPORT NSString *const kCATruncationStart;
 CA_EXPORT NSString *const kCATruncationEnd;
 CA_EXPORT NSString *const kCATruncationMiddle;
 
-@interface CATextLayer : CALayer
+// Draws a plain string into the layer's contents.
+@interface CATextLayer : CALayer {
+    id _string;
+    CFTypeRef _font;
+    CGFloat _fontSize;
+    CGColorRef _foregroundColor;
+    BOOL _wrapped;
+    NSString *_alignmentMode;
+    NSString *_truncationMode;
+    BOOL _allowsFontSubpixelQuantization;
+}
+
+@property(copy) id string;          // NSString or NSAttributedString (drawn as plain text)
+@property CFTypeRef font;           // font name (NSString), NSFont, CTFontRef or CGFontRef; default Helvetica
+@property CGFloat fontSize;         // default 36
+@property CGColorRef foregroundColor; // default opaque white
+@property(getter=isWrapped) BOOL wrapped;
+@property(copy) NSString *alignmentMode;  // kCAAlignmentNatural (default), Left, Right, Center, Justified
+@property(copy) NSString *truncationMode; // stored; truncation isn't implemented
+@property BOOL allowsFontSubpixelQuantization;
 
 @end
