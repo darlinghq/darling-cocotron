@@ -3431,4 +3431,21 @@ static id anchorForView(NSView *view, Class anchorClass, NSLayoutAttribute attri
     return anchorForView(self, [NSLayoutYAxisAnchor class], NSLayoutAttributeCenterY);
 }
 
+- (void) layoutSubtreeIfNeeded {
+    _needsLayout = NO;
+    [_subviews makeObjectsPerformSelector: _cmd];
+}
+
+@end
+
+@implementation NSView (NSViewEffectiveAppearance)
+
+- (NSAppearance *) effectiveAppearance {
+    if (_appearance != nil)
+        return _appearance;
+    if (_superview != nil)
+        return [_superview effectiveAppearance];
+    return [NSAppearance currentAppearance];
+}
+
 @end

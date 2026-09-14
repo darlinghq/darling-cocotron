@@ -571,6 +571,16 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPre
 @property(readonly, retain) NSLayoutYAxisAnchor *bottomAnchor;
 @property(readonly, retain) NSLayoutYAxisAnchor *centerYAnchor;
 
+// Clears needsLayout in the subtree; frames aren't recomputed.
+- (void) layoutSubtreeIfNeeded;
+
+@end
+
+@interface NSView (NSViewEffectiveAppearance)
+
+// The view's own appearance, else its superview's, else the current appearance.
+@property(readonly) NSAppearance *effectiveAppearance;
+
 @end
 
 @protocol NSViewToolTipOwner <NSObject>
