@@ -944,7 +944,10 @@ static NSDictionary *modeInfoToDictionary(const XRRModeInfo *mi, int depth) {
 
 - (NSSet *) allFontFamilyNames {
     FcPattern *pat = FcPatternCreate();
-    FcObjectSet *props = FcObjectSetBuild(FC_FAMILY, NULL);
+    // Avoid the variadic FcObjectSetBuild(): fontconfig is a native (Linux) library, and on
+    // arm64 Darwin and Linux pass variadic arguments differently (stack vs. registers).
+    FcObjectSet *props = FcObjectSetCreate();
+    FcObjectSetAdd(props, FC_FAMILY);
 
     FcFontSet *set = FcFontList(O2FontSharedFontConfig(), pat, props);
     NSMutableSet *ret = [NSMutableSet set];
@@ -999,8 +1002,13 @@ static NSDictionary *modeInfoToDictionary(const XRRModeInfo *mi, int depth) {
     FcPattern *pat = FcPatternCreate();
     FcPatternAddString(pat, FC_FAMILY,
                        (unsigned char *) [familyName UTF8String]);
-    FcObjectSet *props = FcObjectSetBuild(FC_FAMILY, FC_STYLE, FC_SLANT,
-                                          FC_WIDTH, FC_WEIGHT, NULL);
+    // Not FcObjectSetBuild(): see -allFontFamilyNames.
+    FcObjectSet *props = FcObjectSetCreate();
+    FcObjectSetAdd(props, FC_FAMILY);
+    FcObjectSetAdd(props, FC_STYLE);
+    FcObjectSetAdd(props, FC_SLANT);
+    FcObjectSetAdd(props, FC_WIDTH);
+    FcObjectSetAdd(props, FC_WEIGHT);
 
     FcFontSet *set = FcFontList(O2FontSharedFontConfig(), pat, props);
     NSMutableArray *ret = [NSMutableArray array];

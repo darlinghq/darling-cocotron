@@ -366,11 +366,23 @@ static NSData *makeWindowIcon() {
         XSetTransientForHint(_display, _window, [mainWindow windowHandle]);
     }
 
+#if defined(DARLING) && defined(__arm64__)
+    // XCreateIC() is variadic and lives in the native (Linux) libX11. Darwin arm64 passes
+    // variadic arguments on the stack, Linux arm64 in registers, so call it through a
+    // non-variadic prototype: all 8 arguments then go in x0-x7, where libX11 reads them.
+    _xic = ((XIC (*)(XIM, const char *, long, const char *, Window, const char *, Window, void *)) XCreateIC)(
+        x11disp->_xim,
+        XNInputStyle, XIMPreeditNothing | XIMStatusNothing,
+        XNClientWindow, _window,
+        XNFocusWindow, _window,
+        NULL);
+#else
     _xic = XCreateIC(x11disp->_xim,
         XNInputStyle, XIMPreeditNothing | XIMStatusNothing,
         XNClientWindow, _window,
         XNFocusWindow, _window,
         NULL);
+#endif
 
     [(X11Display *) [NSDisplay currentDisplay] setWindow: self forID: _window];
 
