@@ -158,14 +158,17 @@ static NSDocumentController *shared = nil;
     return _autosavingDelay;
 }
 
+// The CFBundleDocumentTypes entry for a type: its CFBundleTypeName, or one of its
+// LSItemContentTypes (the uniform type identifiers modern apps use as type names).
 - (NSDictionary *) _infoForType: (NSString *) type {
-    int i, count = [_fileTypes count];
-
-    for (i = 0; i < count; i++) {
-        NSDictionary *check = [_fileTypes objectAtIndex: i];
-        NSString *name = [check objectForKey: @"CFBundleTypeName"];
-
-        if ([name isEqualToString: type])
+    if (type == nil)
+        return nil;
+    for (NSDictionary *check in _fileTypes) {
+        if ([type isEqualToString: [check objectForKey: @"CFBundleTypeName"]])
+            return check;
+    }
+    for (NSDictionary *check in _fileTypes) {
+        if ([[check objectForKey: @"LSItemContentTypes"] containsObject: type])
             return check;
     }
     return nil;
@@ -179,13 +182,7 @@ static NSDocumentController *shared = nil;
 }
 
 - (Class) documentClassForType: (NSString *) type {
-    NSString *result = nil;
-    for (NSDictionary *fileType in _fileTypes) {
-        if ([type isEqualToString: [fileType objectForKey: @"CFBundleTypeName"]]) {
-            result = [fileType objectForKey: @"NSDocumentClass"];
-            break;
-        }
-    }
+    NSString *result = [[self _infoForType: type] objectForKey: @"NSDocumentClass"];
 
     return (result == nil) ? nil : NSClassFromString(result);
 }
