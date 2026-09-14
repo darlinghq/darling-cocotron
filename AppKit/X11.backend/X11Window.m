@@ -542,9 +542,85 @@ static NSData *makeWindowIcon() {
     }
 }
 
+// Without a window manager nothing moves X input focus: it stays PointerRoot, so
+// key events went to whichever window was under the pointer and no window ever
+// received FocusIn, which left -[NSApplication keyWindow] nil. Ask for focus
+// explicitly: through the EWMH _NET_ACTIVE_WINDOW request when a window manager
+// is running, otherwise with XSetInputFocus once the window is viewable.
+static BOOL windowManagerIsRunning(Display *display) {
+    Atom check = XInternAtom(display, "_NET_SUPPORTING_WM_CHECK", True);
+    if (check == None)
+        return NO;
+
+    Atom type;
+    int format;
+    unsigned long count, remaining;
+    unsigned char *data = NULL;
+    BOOL running = NO;
+
+    if (XGetWindowProperty(display, DefaultRootWindow(display), check, 0, 1,
+                           False, XA_WINDOW, &type, &format, &count,
+                           &remaining, &data) == Success &&
+        data != NULL)
+        running = (type == XA_WINDOW && count == 1);
+    if (data != NULL)
+        XFree(data);
+    return running;
+}
+
+- (void) requestInputFocus {
+    Window focused;
+    int revert;
+    XGetInputFocus(_display, &focused, &revert);
+    if (focused == _window) {
+        _wantsInputFocus = NO;
+        return;
+    }
+
+    if (windowManagerIsRunning(_display)) {
+        XEvent event;
+        memset(&event, 0, sizeof(event));
+        event.xclient.type = ClientMessage;
+        event.xclient.window = _window;
+        event.xclient.message_type =
+                XInternAtom(_display, "_NET_ACTIVE_WINDOW", False);
+        event.xclient.format = 32;
+        event.xclient.data.l[0] = 1; // source indication: application
+        event.xclient.data.l[1] = CurrentTime;
+        XSendEvent(_display, DefaultRootWindow(_display), False,
+                   SubstructureRedirectMask | SubstructureNotifyMask, &event);
+        XFlush(_display);
+        _wantsInputFocus = NO;
+        return;
+    }
+
+    XWindowAttributes attributes;
+    if (XGetWindowAttributes(_display, _window, &attributes) &&
+        attributes.map_state == IsViewable) {
+        XSetInputFocus(_display, _window, RevertToPointerRoot, CurrentTime);
+        // Send it now: an idle run loop may not flush Xlib's output buffer until the
+        // next event, so key events typed meanwhile would still go to the old window.
+        XFlush(_display);
+        _wantsInputFocus = NO;
+    } else {
+        // Not viewable yet (the map request is still pending): retry on MapNotify.
+        _wantsInputFocus = YES;
+    }
+}
+
+- (void) mapNotified {
+    if (_wantsInputFocus)
+        [self requestInputFocus];
+}
+
 - (void) makeKey {
     [self ensureMapped];
     XRaiseWindow(_display, _window);
+    // FocusIn activates the NSWindow, which makes it key again and ends up here.
+    // Requesting focus from that path would answer every (possibly stale) FocusIn
+    // with a new focus change, and two windows would bounce focus forever.
+    if (!_receivingFocus)
+        [self requestInputFocus];
 }
 
 - (void) makeMain {

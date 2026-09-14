@@ -49,9 +49,12 @@
     BOOL _isModal;
     BOOL _isOpaque;
     BOOL _hasShadow;
+    BOOL _wantsInputFocus;
 
 @public
     XIC _xic;
+    // YES while X11Display delivers FocusIn for this window (see -makeKey).
+    BOOL _receivingFocus;
 }
 
 + (void) removeDecorationForWindow: (Window) w onDisplay: (Display *) dpy;
@@ -68,6 +71,9 @@
 - (void) setLastKnownCursorPosition: (CGPoint) point;
 
 - (void) setStyleMaskInternal: (NSUInteger) styleMask force: (BOOL) force;
+
+- (void) requestInputFocus;
+- (void) mapNotified;
 
 @end
 

@@ -925,8 +925,29 @@ NSApplication *NSApp = nil;
     [_windows makeObjectsPerformSelector: @selector(update)];
 }
 
+// There are no other Darling applications to take activation from, so activating
+// means making a window key again, which asks the platform for input focus: the
+// key window, else the main window, else the frontmost window that can become key.
 - (void) activateIgnoringOtherApps: (BOOL) flag {
-    NSUnimplementedMethod();
+    NSWindow *window = _keyWindow;
+
+    if (![window isVisible])
+        window = _mainWindow;
+    if (![window isVisible]) {
+        window = nil;
+        for (NSWindow *check in [self orderedWindows]) {
+            if ([check isVisible] && [check canBecomeKeyWindow]) {
+                window = check;
+                break;
+            }
+        }
+    }
+
+    [window makeKeyAndOrderFront: self];
+}
+
+- (void) activate {
+    [self activateIgnoringOtherApps: NO];
 }
 
 - (void) deactivate {
