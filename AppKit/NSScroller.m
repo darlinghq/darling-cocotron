@@ -109,6 +109,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return [[NSDisplay currentDisplay] scrollerWidth];
 }
 
+// Cocotron draws legacy scrollers, which take up space next to the content.
 + (NSScrollerStyle) preferredScrollerStyle {
     // The "Show scroll bars" setting. Its automatic choice depends on
     // whether a trackpad is in use, which is not known here, so it gives
