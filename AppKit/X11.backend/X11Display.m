@@ -1525,14 +1525,44 @@ static NSInteger cocoaButtonNumber(unsigned int xButton) {
     }
 }
 
+// Returns the window numbers of this app's windows, frontmost first, using the X server's stacking
+// order: XQueryTree lists the root's children bottom to top. Under a reparenting window manager our
+// top-level windows are children of frame windows, so each root child is matched against our windows
+// and their ancestors.
 - (NSArray *) orderedWindowNumbers {
     NSMutableArray *result = [NSMutableArray array];
+    NSMutableDictionary *byTopLevel = [NSMutableDictionary dictionary];
+    Window root = DefaultRootWindow(_display);
 
-    for (NSWindow *win in [NSApp windows]) {
-        [result addObject: @([win windowNumber])];
+    for (NSNumber *xid in _windowsByID) {
+        Window w = (Window) [xid unsignedLongValue];
+        Window rootRet, parent, *children = NULL;
+        unsigned int count;
+
+        // Walk up to the root's direct child that contains this window.
+        while (XQueryTree(_display, w, &rootRet, &parent, &children, &count)) {
+            if (children)
+                XFree(children);
+            children = NULL;
+            if (parent == root || parent == None)
+                break;
+            w = parent;
+        }
+        byTopLevel[@((unsigned long) w)] = _windowsByID[xid];
     }
 
-    NSUnimplementedFunction(); // (Window numbers not even remotely ordered)
+    Window rootRet, parent, *children = NULL;
+    unsigned int count = 0;
+    if (!XQueryTree(_display, root, &rootRet, &parent, &children, &count))
+        return result;
+
+    for (unsigned int i = count; i > 0; i--) {
+        id window = byTopLevel[@((unsigned long) children[i - 1])];
+        if (window != nil)
+            [result addObject: @([window windowNumber])];
+    }
+    if (children)
+        XFree(children);
 
     return result;
 }
