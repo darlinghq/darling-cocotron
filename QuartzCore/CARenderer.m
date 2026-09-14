@@ -464,6 +464,10 @@ static void roundedRectOutline(CGRect r, CGFloat radius, GLfloat *xy) {
                  position.y - (bounds.size.height * anchorPoint.y), 0);
 
     [self _drawBackgroundOfLayer: layer bounds: bounds opacity: opacity];
+    // Layers that draw their content (-drawInContext:, CATextLayer,
+    // CAShapeLayer, a drawing delegate) produce it here when marked as needing
+    // display.
+    [layer displayIfNeeded];
     [self _drawContentsOfLayer: layer bounds: bounds opacity: opacity];
     [self _drawBorderOfLayer: layer bounds: bounds opacity: opacity];
 

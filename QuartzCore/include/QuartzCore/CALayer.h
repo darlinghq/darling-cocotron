@@ -85,6 +85,7 @@ CA_EXPORT NSString *const kCAContentsFormatGray8Uint;
     BOOL _masksToBounds;
     BOOL _hidden;
     id _textureContents;
+    BOOL _needsDisplayOnBoundsChange;
 }
 
 + layer;
@@ -113,6 +114,9 @@ CA_EXPORT NSString *const kCAContentsFormatGray8Uint;
 @property CGFloat cornerRadius;
 @property BOOL masksToBounds;
 @property(getter=isHidden) BOOL hidden;
+
+// When YES, a change of the bounds size marks the layer as needing display.
+@property BOOL needsDisplayOnBoundsChange;
 
 - init;
 

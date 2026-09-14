@@ -117,7 +117,10 @@ NSString *const kCAContentsFormatGray8Uint = @"Gray8";
             [self addAnimation: action forKey: @"bounds"];
     }
 
+    BOOL sizeChanged = !CGSizeEqualToSize(_bounds.size, value.size);
     _bounds = value;
+    if (sizeChanged && _needsDisplayOnBoundsChange)
+        [self setNeedsDisplay];
 }
 
 - (CGRect) frame {
@@ -333,22 +336,56 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
     layer->_superlayer = nil;
 }
 
+// Draws the layer's content with -drawInContext: (or the delegate's
+// -drawLayer:inContext:) into a bitmap the size of the bounds and makes that the
+// layer's contents, which the renderer uploads as a texture. A delegate that
+// implements -displayLayer: sets the contents itself instead.
 - (void) display {
-    if ([_delegate respondsToSelector: @selector(displayLayer:)])
+    if ([_delegate respondsToSelector: @selector(displayLayer:)]) {
         [_delegate displayLayer: self];
-    else {
-#if 0
-
-#warning create bitmap context
-
-    [self drawInContext:context];
-    _contents=image;
-    [self setContents:image];
-#endif
+        return;
     }
+
+    size_t width = (size_t) ceil(MAX(_bounds.size.width, 0));
+    size_t height = (size_t) ceil(MAX(_bounds.size.height, 0));
+    if (width == 0 || height == 0) {
+        [self setContents: nil];
+        return;
+    }
+
+    CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
+    CGContextRef context = CGBitmapContextCreate(
+            NULL, width, height, 8, 0, colorSpace,
+            kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Host);
+    CGColorSpaceRelease(colorSpace);
+    if (context == NULL)
+        return;
+
+    CGContextClearRect(context, CGRectMake(0, 0, width, height));
+    // Layer coordinates: the bounds origin is the bitmap's bottom-left corner.
+    CGContextTranslateCTM(context, -_bounds.origin.x, -_bounds.origin.y);
+    [self drawInContext: context];
+
+    CGImageRef image = CGBitmapContextCreateImage(context);
+    [self setContents: (id) image];
+    if (image != NULL)
+        CGImageRelease(image);
+    CGContextRelease(context);
 }
 
 - (void) displayIfNeeded {
+    if (_needsDisplay) {
+        _needsDisplay = NO;
+        [self display];
+    }
+}
+
+- (BOOL) needsDisplayOnBoundsChange {
+    return _needsDisplayOnBoundsChange;
+}
+
+- (void) setNeedsDisplayOnBoundsChange: (BOOL) value {
+    _needsDisplayOnBoundsChange = value;
 }
 
 - (void) drawInContext: (CGContextRef) context {
@@ -368,10 +405,13 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
 
 - (void) setNeedsDisplay {
     _needsDisplay = YES;
+    // Get a frame rendered: the context's timer renders, presents, and stops
+    // again once no animations are running.
+    [_context startTimerIfNeeded];
 }
 
 - (void) setNeedsDisplayInRect: (CGRect) rect {
-    _needsDisplay = YES;
+    [self setNeedsDisplay];
 }
 
 - (void) addAnimation: (CAAnimation *) animation forKey: (NSString *) key {
