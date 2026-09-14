@@ -192,6 +192,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     }
 }
 
+// A menu item's value binding drives its state (checkmark), not an objectValue.
+- (id) _replacementKeyPathForBinding: (id) binding {
+    if ([binding isEqual: @"value"]) {
+        return @"state";
+    }
+    return [super _replacementKeyPathForBinding: binding];
+}
+
 - (NSMenu *) menu {
     return _menu;
 }
