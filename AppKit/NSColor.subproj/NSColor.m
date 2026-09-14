@@ -833,6 +833,24 @@ NSNotificationName const NSSystemColorsDidChangeNotification = @"NSSystemColorsD
                                        colorName: colorName];
 }
 
++ (NSColor *) colorNamed: (NSColorName) name {
+    return [self colorNamed: name bundle: nil];
+}
+
+// Looks a color up by name. Asset catalogs (Assets.car) aren't supported, so only system colors
+// resolve: names that match an NSColor class method such as +textColor or +labelColor. Like macOS,
+// an unknown name returns nil (the display's color table falls back to red instead).
++ (NSColor *) colorNamed: (NSColorName) name bundle: (NSBundle *) bundle {
+    if (name == nil || ![name hasSuffix: @"Color"])
+        return nil;
+
+    SEL selector = NSSelectorFromString(name);
+    if (![NSColor respondsToSelector: selector])
+        return nil;
+
+    return [self colorWithCatalogName: @"System" colorName: name];
+}
+
 + (NSColor *) colorWithGenericGamma22White: (CGFloat) white
                                      alpha: (CGFloat) alpha
 {

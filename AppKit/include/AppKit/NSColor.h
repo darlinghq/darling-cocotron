@@ -250,6 +250,9 @@ enum {
 + (NSColor *) colorWithCatalogName: (NSString *) catalogName
                          colorName: (NSString *) colorName;
 
++ (NSColor *) colorNamed: (NSColorName) name;
++ (NSColor *) colorNamed: (NSColorName) name bundle: (NSBundle *) bundle;
+
 NS_ASSUME_NONNULL_BEGIN
 + (NSColor *) colorWithName: (nullable NSColorName) colorName
                dynamicProvider: (NSColor * (^)(NSAppearance *appearance)) dynamicProvider;
