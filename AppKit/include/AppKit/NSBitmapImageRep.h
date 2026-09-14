@@ -29,6 +29,14 @@ typedef enum {
     NSJPEGFileType,
     NSPNGFileType,
     NSJPEG2000FileType,
+
+    // Names used by the macOS 10.12+ SDK.
+    NSBitmapImageFileTypeTIFF = NSTIFFFileType,
+    NSBitmapImageFileTypeBMP = NSBMPFileType,
+    NSBitmapImageFileTypeGIF = NSGIFFileType,
+    NSBitmapImageFileTypeJPEG = NSJPEGFileType,
+    NSBitmapImageFileTypePNG = NSPNGFileType,
+    NSBitmapImageFileTypeJPEG2000 = NSJPEG2000FileType,
 } NSBitmapImageFileType;
 
 typedef enum {
