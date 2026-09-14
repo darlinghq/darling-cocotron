@@ -81,6 +81,7 @@ static NSPrintOperation *_currentOperation = nil;
     [_printPanel release];
     [_context release];
     [_mutableData release];
+    [_jobTitle release];
     [super dealloc];
 }
 
