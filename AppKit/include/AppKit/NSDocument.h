@@ -275,4 +275,16 @@ completionHandler: (void (^)(NSError *errorOrNil)) completionHandler;
 - (void)autosaveWithImplicitCancellability: (BOOL) autosavingIsImplicitlyCancellable 
                          completionHandler: (void (^)(NSError *errorOrNil)) completionHandler;
 
+// Cocotron has no document activity queue: each block runs at once on the
+// calling thread, and completion handlers passed to it do nothing.
+- (void) continueActivityUsingBlock: (void (^)(void)) block;
+- (void) performActivityWithSynchronousWaiting: (BOOL) waitSynchronously
+                                    usingBlock: (void (^)(void (^activityCompletionHandler)(void))) block;
+- (void) performAsynchronousFileAccessUsingBlock: (void (^)(void (^fileAccessCompletionHandler)(void))) block;
+
+// Does nothing: there are no document versions to browse.
+- (void) browseDocumentVersions: (id) sender;
+// Does nothing: Cocotron doesn't restore state.
+- (void) invalidateRestorableState;
+
 @end

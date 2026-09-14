@@ -517,6 +517,24 @@ static NSDocumentController *shared = nil;
     }
 }
 
+- (void) openDocumentWithContentsOfURL: (NSURL *) url
+                               display: (BOOL) display
+                     completionHandler: (void (^)(NSDocument *document, BOOL documentWasAlreadyOpen, NSError *error)) completionHandler
+{
+    BOOL wasAlreadyOpen = url != nil && [self documentForURL: url] != nil;
+    NSError *error = nil;
+    NSDocument *document = [self openDocumentWithContentsOfURL: url
+                                                       display: display
+                                                         error: &error];
+    if (document == nil && error == nil)
+        error = [NSError errorWithDomain: NSCocoaErrorDomain
+                                    code: NSFileReadUnknownError
+                                userInfo: nil];
+    if (completionHandler)
+        completionHandler(document, document != nil && wasAlreadyOpen,
+                          document != nil ? nil : error);
+}
+
 - (BOOL) reopenDocumentForURL: (NSURL *) url
             withContentsOfURL: (NSURL *) contentsUL
                         error: (NSError **) error
