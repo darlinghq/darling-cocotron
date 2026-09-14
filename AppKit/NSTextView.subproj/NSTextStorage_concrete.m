@@ -194,3 +194,14 @@ replaceCharactersInRangeWithAttributedString(NSTextStorage_concrete *self,
 }
 
 @end
+
+// NSSubTextStorage is referenced by name by applications (Script Editor imports
+// the class). AppKit doesn't document it; here it is simply a concrete text
+// storage, so subclasses and instances get working storage, attributes and
+// layout manager notifications.
+@interface NSSubTextStorage : NSTextStorage_concrete
+@end
+
+@implementation NSSubTextStorage
+@end
+
