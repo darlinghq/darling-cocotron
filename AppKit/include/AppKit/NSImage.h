@@ -18,9 +18,11 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSBitmapImageRep.h>
+#import <AppKit/NSFontDescriptor.h>
 #import <AppKit/NSGraphics.h>
 
 @class NSImageRep;
+@class NSImageSymbolConfiguration;
 
 typedef enum {
     NSImageCacheDefault,
@@ -46,6 +48,8 @@ typedef enum {
     BOOL _isDataRetained;
     BOOL _cacheIsValid;
     NSImageCacheMode _cacheMode;
+    NSString *_accessibilityDescription;
+    NSImageSymbolConfiguration *_symbolConfiguration;
 }
 
 + (NSArray *) imageFileTypes;
@@ -152,6 +156,43 @@ typedef enum {
               fraction: (CGFloat) fraction
         respectFlipped: (BOOL) respectFlipped
                  hints: (NSDictionary<NSString *, id> *) hints;
+
+- (NSString *) accessibilityDescription;
+- (void) setAccessibilityDescription: (NSString *) description;
+
+// SF Symbols. Darling has no symbol artwork: these return a generic template
+// placeholder glyph for any non-empty name (nil for a nil or empty name).
++ (instancetype) imageWithSystemSymbolName: (NSString *) name
+                  accessibilityDescription: (NSString *) description;
++ (instancetype) imageWithSystemSymbolName: (NSString *) name
+                             variableValue: (double) value
+                  accessibilityDescription: (NSString *) description;
+- (NSImage *) imageWithSymbolConfiguration:
+        (NSImageSymbolConfiguration *) configuration;
+- (NSImageSymbolConfiguration *) symbolConfiguration;
+
+@end
+
+typedef NS_ENUM(NSInteger, NSImageSymbolScale) {
+    NSImageSymbolScaleSmall = 1,
+    NSImageSymbolScaleMedium = 2,
+    NSImageSymbolScaleLarge = 3,
+};
+
+@interface NSImageSymbolConfiguration : NSObject <NSCopying> {
+    CGFloat _pointSize;
+    NSFontWeight _weight;
+    NSImageSymbolScale _scale;
+}
+
++ (instancetype) configurationWithPointSize: (CGFloat) pointSize
+                                     weight: (NSFontWeight) weight;
++ (instancetype) configurationWithPointSize: (CGFloat) pointSize
+                                     weight: (NSFontWeight) weight
+                                      scale: (NSImageSymbolScale) scale;
++ (instancetype) configurationWithScale: (NSImageSymbolScale) scale;
+- (NSImageSymbolConfiguration *) configurationByApplyingConfiguration:
+        (NSImageSymbolConfiguration *) configuration;
 
 @end
 

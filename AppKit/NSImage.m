@@ -17,6 +17,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#import <AppKit/NSBezierPath.h>
 #import <AppKit/NSBitmapImageRep.h>
 #import <AppKit/NSCachedImageRep.h>
 #import <AppKit/NSColor.h>
@@ -29,6 +30,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSPasteboard.h>
 #import <AppKit/NSRaise.h>
 #import <Foundation/NSKeyedArchiver.h>
+
+@interface NSImageSymbolConfiguration (Private)
+- (CGFloat) _placeholderSide;
+@end
 
 NSImageName const NSImageNameActionTemplate = @"NSActionTemplate";
 NSImageName const NSImageNameAddTemplate = @"NSAddTemplate";
@@ -545,6 +550,8 @@ NSImageName const NSImageNameTouchBarVolumeUpTemplate =
     [_name release];
     [_backgroundColor release];
     [_representations release];
+    [_accessibilityDescription release];
+    [_symbolConfiguration release];
     [super dealloc];
 }
 
@@ -554,6 +561,8 @@ NSImageName const NSImageNameTouchBarVolumeUpTemplate =
     result->_name = [_name copy];
     result->_backgroundColor = [_backgroundColor copy];
     result->_representations = [_representations mutableCopy];
+    result->_accessibilityDescription = [_accessibilityDescription copy];
+    result->_symbolConfiguration = [_symbolConfiguration retain];
 
     return result;
 }
@@ -1267,6 +1276,174 @@ NSImageName const NSImageNameTouchBarVolumeUpTemplate =
                     @"<%@[%p] name: %@ size: { %f, %f } representations: %@>",
                     [self class], self, _name, size.width, size.height,
                     _representations];
+}
+
+- (NSString *) accessibilityDescription {
+    return _accessibilityDescription;
+}
+
+- (void) setAccessibilityDescription: (NSString *) description {
+    description = [description copy];
+    [_accessibilityDescription release];
+    _accessibilityDescription = description;
+}
+
+// Darling does not ship SF Symbols artwork (it is Apple's proprietary asset
+// catalog), so every system symbol is drawn as the same generic template glyph:
+// a rounded square outline sized like a symbol at the configured point size.
+// Apple returns nil for names it doesn't know; here only nil or empty names do,
+// because there is no symbol list to check against and apps usually expect an
+// image for the names they ship with.
++ (NSImage *) _symbolPlaceholderWithDescription: (NSString *) description
+                                  configuration:
+                                          (NSImageSymbolConfiguration *)
+                                                  configuration
+{
+    static BOOL logged = NO;
+    if (!logged) {
+        logged = YES;
+        NSLog(@"NSImage: SF Symbols are not available, system symbol images "
+              @"are drawn as placeholders");
+    }
+
+    if (configuration == nil)
+        configuration = [NSImageSymbolConfiguration
+                configurationWithScale: NSImageSymbolScaleMedium];
+
+    CGFloat side = [configuration _placeholderSide];
+    NSSize size = NSMakeSize(side, side);
+    NSCustomImageRep *rep = [[NSCustomImageRep alloc]
+            initWithDrawSelector: @selector(_drawSymbolPlaceholder:)
+                        delegate: [NSImageSymbolConfiguration class]];
+    [rep setSize: size];
+
+    NSImage *image = [[[self alloc] initWithSize: size] autorelease];
+    [image addRepresentation: rep];
+    [rep release];
+    [image setTemplate: YES];
+    [image setAccessibilityDescription: description];
+    image->_symbolConfiguration = [configuration retain];
+    return image;
+}
+
++ (instancetype) imageWithSystemSymbolName: (NSString *) name
+                  accessibilityDescription: (NSString *) description
+{
+    if ([name length] == 0)
+        return nil;
+    return [self _symbolPlaceholderWithDescription: description
+                                     configuration: nil];
+}
+
++ (instancetype) imageWithSystemSymbolName: (NSString *) name
+                             variableValue: (double) value
+                  accessibilityDescription: (NSString *) description
+{
+    return [self imageWithSystemSymbolName: name
+                  accessibilityDescription: description];
+}
+
+- (NSImage *) imageWithSymbolConfiguration:
+        (NSImageSymbolConfiguration *) configuration
+{
+    if (_symbolConfiguration == nil)
+        return [[self copy] autorelease];
+
+    NSImageSymbolConfiguration *merged = [_symbolConfiguration
+            configurationByApplyingConfiguration: configuration];
+    return [[self class]
+            _symbolPlaceholderWithDescription: _accessibilityDescription
+                                configuration: merged];
+}
+
+- (NSImageSymbolConfiguration *) symbolConfiguration {
+    return _symbolConfiguration;
+}
+
+@end
+
+@implementation NSImageSymbolConfiguration
+
++ (instancetype) configurationWithPointSize: (CGFloat) pointSize
+                                     weight: (NSFontWeight) weight
+                                      scale: (NSImageSymbolScale) scale
+{
+    NSImageSymbolConfiguration *result = [[[self alloc] init] autorelease];
+    result->_pointSize = pointSize;
+    result->_weight = weight;
+    result->_scale = scale;
+    return result;
+}
+
++ (instancetype) configurationWithPointSize: (CGFloat) pointSize
+                                     weight: (NSFontWeight) weight
+{
+    return [self configurationWithPointSize: pointSize
+                                     weight: weight
+                                      scale: 0];
+}
+
++ (instancetype) configurationWithScale: (NSImageSymbolScale) scale {
+    return [self configurationWithPointSize: 0 weight: 0 scale: scale];
+}
+
+- (NSImageSymbolConfiguration *) configurationByApplyingConfiguration:
+        (NSImageSymbolConfiguration *) configuration
+{
+    NSImageSymbolConfiguration *result = [[self copy] autorelease];
+    if (configuration != nil) {
+        if (configuration->_pointSize > 0) {
+            result->_pointSize = configuration->_pointSize;
+            result->_weight = configuration->_weight;
+        }
+        if (configuration->_scale != 0)
+            result->_scale = configuration->_scale;
+    }
+    return result;
+}
+
+- copyWithZone: (NSZone *) zone {
+    return [self retain];
+}
+
+- (BOOL) isEqual: (id) other {
+    if (other == self)
+        return YES;
+    if (![other isKindOfClass: [NSImageSymbolConfiguration class]])
+        return NO;
+    NSImageSymbolConfiguration *o = other;
+    return o->_pointSize == _pointSize && o->_weight == _weight &&
+           o->_scale == _scale;
+}
+
+- (NSUInteger) hash {
+    return (NSUInteger) (_pointSize * 31) ^ (NSUInteger) _scale;
+}
+
+// Side of the square placeholder: the point size (default: the system font
+// size) plus a little padding, adjusted for the symbol scale.
+- (CGFloat) _placeholderSide {
+    CGFloat pointSize = _pointSize > 0 ? _pointSize : 13.0;
+    CGFloat factor = 1.0;
+    if (_scale == NSImageSymbolScaleSmall)
+        factor = 0.8;
+    else if (_scale == NSImageSymbolScaleLarge)
+        factor = 1.3;
+    return ceil(pointSize * factor + 3.0);
+}
+
++ (void) _drawSymbolPlaceholder: (NSCustomImageRep *) rep {
+    NSSize size = [rep size];
+    CGFloat line = MAX(1.0, floor(size.width / 12.0));
+    NSRect box = NSInsetRect(NSMakeRect(0, 0, size.width, size.height),
+                             line * 1.5, line * 1.5);
+    CGFloat radius = box.size.width / 5.0;
+    NSBezierPath *path = [NSBezierPath bezierPathWithRoundedRect: box
+                                                         xRadius: radius
+                                                         yRadius: radius];
+    [path setLineWidth: line];
+    [[NSColor blackColor] setStroke];
+    [path stroke];
 }
 
 @end
