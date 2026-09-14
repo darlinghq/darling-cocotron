@@ -131,6 +131,12 @@ ONYX2D_STATIC BOOL initFunctionsForRGBColorSpace(O2Image *self,
                 case kO2BitmapByteOrder32Little:
                     self->_read_argb8u = O2ImageRead_BGRA8888_to_argb8u;
                     return YES;
+
+                case kO2BitmapByteOrder16Big:
+                case kO2BitmapByteOrder32Big:
+                    // A, R, G, B bytes; the XRGB reader keeps the first byte as alpha.
+                    self->_read_argb8u = O2ImageRead_XRGB8888_to_argb8u;
+                    return YES;
                 }
                 break;
 

@@ -466,8 +466,15 @@ NSBitmapImageRepPropertyKey NSImageCurrentFrame = @"NSImageCurrentFrame";
             const unsigned char *bytes = CFDataGetBytePtr(bitmapData);
             int i, length = _bytesPerRow * _pixelsHigh;
 
+            // The planes use component order, with alpha first when
+            // _bitmapFormat says so (see -CGBitmapInfo). Big-endian
+            // premultiplied sources are already in that order.
+            BOOL alphaFirst = (_bitmapFormat & NSAlphaFirstBitmapFormat) != 0;
+
             if (bitmapInfo ==
-                (kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big)) {
+                        (kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big) ||
+                bitmapInfo ==
+                        (kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Big)) {
                 for (i = 0; i < length; i++)
                     _bitmapPlanes[0][i] = bytes[i];
             } else {
@@ -477,10 +484,17 @@ NSBitmapImageRepPropertyKey NSImageCurrentFrame = @"NSImageCurrentFrame";
                     unsigned char r = bytes[i + 2];
                     unsigned char a = bytes[i + 3];
 
-                    _bitmapPlanes[0][i + 0] = r;
-                    _bitmapPlanes[0][i + 1] = g;
-                    _bitmapPlanes[0][i + 2] = b;
-                    _bitmapPlanes[0][i + 3] = a;
+                    if (alphaFirst) {
+                        _bitmapPlanes[0][i + 0] = a;
+                        _bitmapPlanes[0][i + 1] = r;
+                        _bitmapPlanes[0][i + 2] = g;
+                        _bitmapPlanes[0][i + 3] = b;
+                    } else {
+                        _bitmapPlanes[0][i + 0] = r;
+                        _bitmapPlanes[0][i + 1] = g;
+                        _bitmapPlanes[0][i + 2] = b;
+                        _bitmapPlanes[0][i + 3] = a;
+                    }
                 }
             }
             CFRelease(bitmapData);
