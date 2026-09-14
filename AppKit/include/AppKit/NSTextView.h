@@ -148,6 +148,7 @@ APPKIT_EXPORT NSString *const NSAllRomanInputSourcesLocaleIdentifier;
 
     BOOL _usesInspectorBar;
     BOOL _usesAdaptiveColorMappingForDarkAppearance;
+    BOOL _importsGraphics;
 }
 
 - initWithFrame: (NSRect) frame textContainer: (NSTextContainer *) container;
