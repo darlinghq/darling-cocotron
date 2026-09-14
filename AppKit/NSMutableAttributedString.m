@@ -173,6 +173,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [self fixParagraphStyleAttributeInRange: range];
 }
 
+- (void) invalidateAttributesInRange: (NSRange) range {
+    [self fixAttributesInRange: range];
+}
+
 - (void) applyFontTraits: (NSFontTraitMask) traits range: (NSRange) range {
     unsigned location = range.location;
     unsigned limit = NSMaxRange(range);

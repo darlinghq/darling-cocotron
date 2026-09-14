@@ -111,6 +111,8 @@ enum {
 - (NSFont *) selectedFont;
 
 - (void) setSelectedFont: (NSFont *) font isMultiple: (BOOL) isMultiple;
+// Uses the NSFontAttributeName font; other attributes are ignored.
+- (void) setSelectedAttributes: (NSDictionary *) attributes isMultiple: (BOOL) flag;
 
 - (NSFont *) convertFont: (NSFont *) font;
 - (NSFont *) convertFont: (NSFont *) font toSize: (CGFloat) size;
