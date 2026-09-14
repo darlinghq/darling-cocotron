@@ -155,6 +155,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [_view release];
     [_toolTip release];
     [_badge release];
+    [_actionImage release];
     [super dealloc];
 }
 
@@ -175,6 +176,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     copy->_view = [_view retain];
     copy->_toolTip = [_toolTip copyWithZone: zone];
     copy->_badge = [_badge retain];
+    copy->_actionImage = [_actionImage retain];
     return copy;
 }
 
@@ -468,6 +470,19 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                              [self class], self, [self title],
                              NSStringFromSelector(_action),
                              ([self hasSubmenu] ? @"YES" : @"NO")];
+}
+
+// Private AppKit API (macOS 26): an image describing the item's action, which
+// apps set from a system symbol image. Stored and returned; Cocotron's menus
+// don't draw it.
+- (NSImage *) _actionImage {
+    return _actionImage;
+}
+
+- (void) _setActionImage: (NSImage *) image {
+    image = [image retain];
+    [_actionImage release];
+    _actionImage = image;
 }
 
 @end
