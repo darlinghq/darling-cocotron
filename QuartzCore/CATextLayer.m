@@ -41,19 +41,34 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
     *slot = value;
 }
 
-// A graphics font for the layer's font property: a font name, or any font object
-// that knows its name (NSFont, CTFont). Falls back to Helvetica and other common
-// families when the name can't be resolved.
+// Name accessors of the font objects createGraphicsFont accepts (KTFont's
+// -copyName, NSFont's -fontName), declared here to avoid importing their
+// headers.
+@interface NSObject (CATextLayerFontNames)
+- (CFStringRef) copyName;
+- (NSString *) fontName;
+@end
+
+// A graphics font for the layer's font property: a CGFont, a font name, or a
+// font object with a name (NSFont, CTFont). Falls back to Helvetica and other
+// common families when the name can't be resolved.
 static CGFontRef createGraphicsFont(CFTypeRef font) {
     NSString *name = nil;
     id object = (id) font;
 
+    // CGFontRef and CTFontRef are the O2Font and KTFont classes here. Neither
+    // answers -fontName, and CoreText's CTFontCopyGraphicsFont and
+    // CTFontCopyPostScriptName are stubs.
+    if ([object isKindOfClass: NSClassFromString(@"O2Font")])
+        return CGFontRetain((CGFontRef) font);
+
     if ([object isKindOfClass: [NSString class]])
         name = object;
+    else if ([object isKindOfClass: NSClassFromString(@"KTFont")] &&
+             [object respondsToSelector: @selector(copyName)])
+        name = [(NSString *) [object copyName] autorelease];
     else if ([object respondsToSelector: @selector(fontName)])
         name = [object fontName];
-    else if ([object respondsToSelector: @selector(postScriptName)])
-        name = [object postScriptName];
 
     NSMutableArray *candidates = [NSMutableArray array];
     if (name != nil)
@@ -209,8 +224,12 @@ static CGFloat layoutLine(CTFontRef font, NSString *line, CGGlyph **outGlyphs,
                        font: (CTFontRef) font
                       width: (CGFloat) width
 {
-    NSArray *paragraphs = [text componentsSeparatedByCharactersInSet:
-                                        [NSCharacterSet newlineCharacterSet]];
+    // Line enumeration treats CRLF as one break; splitting at every newline
+    // character would add an empty line for each CRLF.
+    NSMutableArray *paragraphs = [NSMutableArray array];
+    [text enumerateLinesUsingBlock: ^(NSString *line, BOOL *stop) {
+        [paragraphs addObject: line];
+    }];
     if (!_wrapped || width <= 0)
         return paragraphs;
 
