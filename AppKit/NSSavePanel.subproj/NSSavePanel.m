@@ -145,6 +145,8 @@ static NSSavePanel *_newPanel = nil;
                                runModalForDirectory: [self directory]
                                                file: [self filename]];
     } else {
+        // Like macOS, show the panel centered rather than at the (screen-clamped) origin saved in its nib.
+        [self center];
         res = [NSApp runModalForWindow: self];
         [self close];
     }

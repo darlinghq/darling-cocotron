@@ -127,6 +127,8 @@ static NSOpenPanel *_newPanel = nil;
                                                file: [self filename]
                                               types: [self allowedFileTypes]];
     } else {
+        // Like macOS, show the panel centered rather than at the (screen-clamped) origin saved in its nib.
+        [self center];
         res = [NSApp runModalForWindow: self];
         [self close];
     }
