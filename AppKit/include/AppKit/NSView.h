@@ -155,6 +155,12 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPre
     int _frameChangeDepth;
     BOOL _canDrawConcurrently;
     NSMutableArray *_constraints;
+
+    BOOL _needsLayout;
+    BOOL _needsUpdateConstraints;
+    BOOL _clipsToBounds;
+    BOOL _hasPreparedContentRect;
+    NSRect _preparedContentRect;
 }
 
 // Constraints installed on this view, in the order they were added. A
@@ -537,6 +543,18 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPre
 - (NSArray *) _draggedTypes;
 - (void) _setWindow: (NSWindow *) window;
 - (void) _collectTrackingAreasForWindowInto: (NSMutableArray *) collector;
+
+@end
+
+@interface NSView (NSViewLayoutState)
+
+// Stored only: Cocotron has no constraint solver or deferred layout pass.
+@property BOOL needsLayout;
+@property BOOL needsUpdateConstraints;
+// Stored only; drawing isn't clipped differently.
+@property BOOL clipsToBounds;
+// The visible rect until set.
+@property NSRect preparedContentRect;
 
 @end
 

@@ -3347,6 +3347,43 @@ static NSMutableArray *installedViewLayoutGuides(NSView *view, BOOL create) {
 
 @end
 
+@implementation NSView (NSViewLayoutState)
+
+- (BOOL) needsLayout {
+    return _needsLayout;
+}
+
+- (void) setNeedsLayout: (BOOL) flag {
+    _needsLayout = flag;
+}
+
+- (BOOL) needsUpdateConstraints {
+    return _needsUpdateConstraints;
+}
+
+- (void) setNeedsUpdateConstraints: (BOOL) flag {
+    _needsUpdateConstraints = flag;
+}
+
+- (BOOL) clipsToBounds {
+    return _clipsToBounds;
+}
+
+- (void) setClipsToBounds: (BOOL) flag {
+    _clipsToBounds = flag;
+}
+
+- (NSRect) preparedContentRect {
+    return _hasPreparedContentRect ? _preparedContentRect : [self visibleRect];
+}
+
+- (void) setPreparedContentRect: (NSRect) rect {
+    _preparedContentRect = rect;
+    _hasPreparedContentRect = YES;
+}
+
+@end
+
 @implementation NSView (NSViewLayoutAnchors)
 
 static id anchorForView(NSView *view, Class anchorClass, NSLayoutAttribute attribute)
