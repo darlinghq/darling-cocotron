@@ -241,6 +241,16 @@ static Class _rulerViewClass = nil;
     return bounds;
 }
 
+// Private AppKit: how far the border insets the content on each side.
+- (NSEdgeInsets) _boundsInsetForBorder {
+    NSRect bounds = [self bounds];
+    NSRect inset = [self insetBounds];
+    return NSEdgeInsetsMake(NSMinY(inset) - NSMinY(bounds),
+                            NSMinX(inset) - NSMinX(bounds),
+                            NSMaxY(bounds) - NSMaxY(inset),
+                            NSMaxX(bounds) - NSMaxX(inset));
+}
+
 - (NSView *) _headerView {
     NSView *document = [self documentView];
 

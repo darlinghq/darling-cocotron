@@ -21,6 +21,28 @@
 
 @implementation NSStackView
 
+- (void) dealloc {
+    [_visibilityPriorities release];
+    [super dealloc];
+}
+
+- (void) setVisibilityPriority: (NSStackViewVisibilityPriority) priority
+                       forView: (NSView *) view
+{
+    if (view == nil)
+        return;
+    if (_visibilityPriorities == nil)
+        _visibilityPriorities = [[NSMutableDictionary alloc] init];
+    [_visibilityPriorities setObject: [NSNumber numberWithFloat: priority]
+                              forKey: [NSValue valueWithNonretainedObject: view]];
+}
+
+- (NSStackViewVisibilityPriority) visibilityPriorityForView: (NSView *) view {
+    NSNumber *priority = [_visibilityPriorities
+            objectForKey: [NSValue valueWithNonretainedObject: view]];
+    return priority ? [priority floatValue] : NSStackViewVisibilityPriorityMustHold;
+}
+
 - (NSMethodSignature *)methodSignatureForSelector:(SEL)aSelector
 {
     return [NSMethodSignature signatureWithObjCTypes: "v@:"];

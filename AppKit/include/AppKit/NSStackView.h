@@ -19,5 +19,20 @@
 
 #import <AppKit/NSView.h>
 
-@interface NSStackView : NSView
+typedef float NSStackViewVisibilityPriority;
+
+static const NSStackViewVisibilityPriority NSStackViewVisibilityPriorityMustHold = 1000;
+static const NSStackViewVisibilityPriority NSStackViewVisibilityPriorityDetachOnlyIfNecessary = 900;
+static const NSStackViewVisibilityPriority NSStackViewVisibilityPriorityNotVisible = 0;
+
+@interface NSStackView : NSView {
+    NSMutableDictionary *_visibilityPriorities;
+}
+
+// Stored only: Cocotron's stack view doesn't arrange or detach views. Entries
+// are keyed by view identity and kept for the stack view's lifetime.
+- (void) setVisibilityPriority: (NSStackViewVisibilityPriority) priority
+                       forView: (NSView *) view;
+- (NSStackViewVisibilityPriority) visibilityPriorityForView: (NSView *) view;
+
 @end

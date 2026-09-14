@@ -19,7 +19,26 @@
 
 #import <AppKit/AppKitExport.h>
 #import <Foundation/Foundation.h>
+#import <AppKit/NSLayoutConstraint.h>
 
-@interface NSSplitViewItem : NSObject <NSCoding>
+@class NSViewController;
+
+@interface NSSplitViewItem : NSObject <NSCoding> {
+    NSViewController *_viewController;
+    BOOL _collapsed;
+    BOOL _canCollapse;
+    NSLayoutPriority _holdingPriority;
+}
+
++ (instancetype) splitViewItemWithViewController: (NSViewController *) viewController;
+
+@property(retain) NSViewController *viewController;
+// Stored only: the split view doesn't hide or resize a collapsed item's view.
+@property(getter=isCollapsed) BOOL collapsed;
+@property BOOL canCollapse;
+@property NSLayoutPriority holdingPriority;
+
+// Changes apply immediately; there are no animations.
+- (instancetype) animator;
 
 @end

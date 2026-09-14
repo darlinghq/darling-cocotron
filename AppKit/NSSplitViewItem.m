@@ -18,8 +18,44 @@
 */
 
 #import <AppKit/NSSplitViewItem.h>
+#import <AppKit/NSViewController.h>
 
 @implementation NSSplitViewItem
+
+@synthesize collapsed = _collapsed;
+@synthesize canCollapse = _canCollapse;
+@synthesize holdingPriority = _holdingPriority;
+
++ (instancetype) splitViewItemWithViewController: (NSViewController *) viewController {
+    NSSplitViewItem *item = [[[self alloc] init] autorelease];
+    [item setViewController: viewController];
+    return item;
+}
+
+- (instancetype) init {
+    if ((self = [super init]))
+        _holdingPriority = NSLayoutPriorityDefaultLow;
+    return self;
+}
+
+- (void) dealloc {
+    [_viewController release];
+    [super dealloc];
+}
+
+- (NSViewController *) viewController {
+    return _viewController;
+}
+
+- (void) setViewController: (NSViewController *) viewController {
+    viewController = [viewController retain];
+    [_viewController release];
+    _viewController = viewController;
+}
+
+- (instancetype) animator {
+    return self;
+}
 
 - (NSMethodSignature *)methodSignatureForSelector:(SEL)aSelector
 {

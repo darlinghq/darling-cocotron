@@ -21,6 +21,20 @@
 #import <Foundation/Foundation.h>
 #import <AppKit/NSViewController.h>
 
-@interface NSSplitViewController : NSViewController
+@class NSSplitView, NSSplitViewItem;
+
+@interface NSSplitViewController : NSViewController {
+    NSSplitView *_splitView;
+    NSArray *_splitViewItems;
+}
+
+// The controller's view; a new NSSplitView unless one was set before the view
+// loaded.
+@property(retain) NSSplitView *splitView;
+// Each item's view controller view becomes a subview of splitView once the
+// controller's view is loaded.
+@property(copy) NSArray *splitViewItems;
+
+- (NSSplitViewItem *) splitViewItemForViewController: (NSViewController *) viewController;
 
 @end
