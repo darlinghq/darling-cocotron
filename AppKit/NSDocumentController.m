@@ -222,10 +222,9 @@ static NSDocumentController *shared = nil;
     return nil;
 }
 
+// Stored only: Cocotron doesn't autosave documents.
 - (void) setAutosavingDelay: (NSTimeInterval) value {
     _autosavingDelay = value;
-
-    NSUnimplementedMethod();
 }
 
 - (NSArray *) documents {
