@@ -48,7 +48,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     BOOL _alternate;
     BOOL _allowsKeyEquivalentWhenHidden;
     NSUserInterfaceItemIdentifier _identifier;
+    NSString *_toolTip;
 }
+
+@property(copy) NSString *toolTip;
 
 @property(getter=isAlternate) BOOL alternate;
 @property BOOL allowsKeyEquivalentWhenHidden;
