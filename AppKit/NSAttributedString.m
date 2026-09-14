@@ -21,6 +21,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSColor.h>
 #import <AppKit/NSFont.h>
 #import <AppKit/NSParagraphStyle.h>
+#import <AppKit/NSPasteboard.h>
 #import <AppKit/NSRaise.h>
 #import <AppKit/NSRichTextReader.h>
 #import <AppKit/NSRichTextWriter.h>
@@ -608,6 +609,11 @@ NSUInteger NSUnderlineByWordMask = 0x8000;
 + (NSArray *) textUnfilteredPasteboardTypes {
     NSUnimplementedMethod();
     return nil;
+}
+
++ (NSArray *) readableTypesForPasteboard: (NSPasteboard *) pasteboard {
+    return [NSArray arrayWithObjects: NSPasteboardTypeRTFD, NSPasteboardTypeRTF,
+                                      NSPasteboardTypeString, nil];
 }
 
 @end

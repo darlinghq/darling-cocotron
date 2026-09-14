@@ -19,12 +19,16 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSAttributedString.h>
 #import <AppKit/NSFontManager.h>
+#import <AppKit/NSText.h>
 
 @interface NSMutableAttributedString (NSMutableString_AppKit)
 - (void) fixFontAttributeInRange: (NSRange) range;
 - (void) fixParagraphStyleAttributeInRange: (NSRange) range;
 - (void) fixAttributesInRange: (NSRange) range;
 - (void) applyFontTraits: (NSFontTraitMask) traits range: (NSRange) range;
+// Sets the base writing direction of the paragraph styles in the range.
+- (void) setBaseWritingDirection: (NSWritingDirection) direction
+                           range: (NSRange) range;
 
 - (BOOL) readFromURL: (NSURL *) url 
              options: (NSDictionary<NSAttributedStringDocumentReadingOptionKey, id> *) opts 

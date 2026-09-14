@@ -120,6 +120,7 @@ static inline NSGlyphFragment *fragmentAtGlyphIndex(NSLayoutManager *self,
         _glyphFragments = NSCreateRangeToOwnedPointerEntries(2);
         _invalidFragments = NSCreateRangeToOwnedPointerEntries(2);
         _layoutInvalid = YES;
+        _defaultAttachmentScaling = NSImageScaleNone;
         _rectCacheCapacity = 16;
         _rectCacheCount = 0;
         _rectCache = NSZoneMalloc(NULL, sizeof(NSRect) * _rectCacheCapacity);
@@ -132,6 +133,7 @@ static inline NSGlyphFragment *fragmentAtGlyphIndex(NSLayoutManager *self,
 }
 
 - init {
+    _defaultAttachmentScaling = NSImageScaleNone;
     _typesetter = [NSTypesetter new];
     _glyphGenerator = [[NSGlyphGenerator sharedGlyphGenerator] retain];
     _textContainers = [NSMutableArray new];
@@ -174,6 +176,14 @@ static inline NSGlyphFragment *fragmentAtGlyphIndex(NSLayoutManager *self,
 
 - (NSArray *) textContainers {
     return [[_textContainers retain] autorelease];
+}
+
+- (NSImageScaling) defaultAttachmentScaling {
+    return _defaultAttachmentScaling;
+}
+
+- (void) setDefaultAttachmentScaling: (NSImageScaling) scaling {
+    _defaultAttachmentScaling = scaling;
 }
 
 - (NSTextView *) firstTextView {

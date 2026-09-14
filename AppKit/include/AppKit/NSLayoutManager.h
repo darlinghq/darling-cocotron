@@ -17,6 +17,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#import <AppKit/NSCell.h>
 #import <AppKit/NSFont.h>
 #import <Foundation/Foundation.h>
 
@@ -60,6 +61,8 @@ typedef NS_ENUM(NSInteger, NSTextLayoutOrientation) {
 
     NSUInteger _rectCacheCapacity, _rectCacheCount;
     NSRect *_rectCache;
+
+    NSImageScaling _defaultAttachmentScaling;
 }
 
 - init;
@@ -278,6 +281,11 @@ typedef NS_ENUM(NSInteger, NSTextLayoutOrientation) {
                                    enabled: (BOOL) isEnabled;
 
 - (void) setAllowsNonContiguousLayout: (BOOL) value;
+
+// Stored only: attachments are drawn at their own size. NSImageScaleNone
+// by default.
+- (NSImageScaling) defaultAttachmentScaling;
+- (void) setDefaultAttachmentScaling: (NSImageScaling) scaling;
 @end
 
 @protocol NSLayoutManagerDelegate <NSObject>

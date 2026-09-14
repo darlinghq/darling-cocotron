@@ -4286,3 +4286,71 @@ static NSTextView *s_targetTextView = nil;
 }
 
 @end
+
+@implementation NSTextView (NSTextViewLayoutOrientationAndHighlights)
+
++ (NSArray *) _textHighlightMenuItems {
+    return [NSArray array];
+}
+
+- (BOOL) usesAdaptiveColorMappingForDarkAppearance {
+    return _usesAdaptiveColorMappingForDarkAppearance;
+}
+
+- (void) setUsesAdaptiveColorMappingForDarkAppearance: (BOOL) flag {
+    _usesAdaptiveColorMappingForDarkAppearance = flag;
+}
+
+- (void) changeLayoutOrientation: (id) sender {
+    [self setLayoutOrientation: [self layoutOrientation] ==
+                                                NSTextLayoutOrientationVertical
+                                        ? NSTextLayoutOrientationHorizontal
+                                        : NSTextLayoutOrientationVertical];
+}
+
+// Sets the paragraph styles' writing direction over the range, with undo, and
+// in the typing attributes when the insertion point is in the range.
+- (void) setBaseWritingDirection: (NSWritingDirection) direction
+                           range: (NSRange) range
+{
+    NSTextStorage *storage = [self textStorage];
+    if (NSMaxRange(range) > [storage length])
+        [NSException raise: NSRangeException
+                    format: @"%@: range %@ beyond length %lu",
+                            NSStringFromSelector(_cmd),
+                            NSStringFromRange(range),
+                            (unsigned long) [storage length]];
+
+    if (range.length > 0) {
+        if (![self shouldChangeTextInRange: range replacementString: nil])
+            return;
+        if (_allowsUndo && self.undoManager) {
+            [self breakUndoCoalescing];
+            NSUndoSetAttributes *undoSetAttributes = [[[NSUndoSetAttributes alloc]
+                    initWithAffectedRange: range
+                            layoutManager: self.layoutManager
+                              undoManager: self.undoManager] autorelease];
+            [[self.undoManager prepareWithInvocationTarget: undoSetAttributes]
+                    undoRedo: storage];
+        }
+        [storage setBaseWritingDirection: direction range: range];
+        [self didChangeText];
+    }
+
+    NSRange selection = [self selectedRange];
+    if (selection.location >= range.location &&
+        selection.location <= NSMaxRange(range)) {
+        NSMutableDictionary *attributes =
+                [[[self typingAttributes] mutableCopy] autorelease];
+        NSParagraphStyle *style =
+                [attributes objectForKey: NSParagraphStyleAttributeName];
+        NSMutableParagraphStyle *changed =
+                [[(style ? style : [NSParagraphStyle defaultParagraphStyle])
+                        mutableCopy] autorelease];
+        [changed setBaseWritingDirection: direction];
+        [attributes setObject: changed forKey: NSParagraphStyleAttributeName];
+        [self setTypingAttributes: attributes];
+    }
+}
+
+@end

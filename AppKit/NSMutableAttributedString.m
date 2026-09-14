@@ -21,6 +21,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSFont.h>
 #import <AppKit/NSFontManager.h>
 #import <AppKit/NSMutableAttributedString.h>
+#import <AppKit/NSMutableParagraphStyle.h>
 
 @implementation NSMutableAttributedString (NSMutableAttributedString_AppKit)
 
@@ -198,6 +199,39 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
         [self setAttributes: attributes range: effectiveRange];
 
+        location = NSMaxRange(effectiveRange);
+    }
+    [self endEditing];
+}
+
+- (void) setBaseWritingDirection: (NSWritingDirection) direction
+                           range: (NSRange) range
+{
+    NSUInteger end = NSMaxRange(range);
+    if (end > [self length])
+        [NSException raise: NSRangeException
+                    format: @"%@: range %@ beyond length %lu",
+                            NSStringFromSelector(_cmd),
+                            NSStringFromRange(range),
+                            (unsigned long) [self length]];
+
+    [self beginEditing];
+    NSUInteger location = range.location;
+    while (location < end) {
+        NSRange effectiveRange;
+        NSParagraphStyle *style = [self attribute: NSParagraphStyleAttributeName
+                                          atIndex: location
+                                   effectiveRange: &effectiveRange];
+        effectiveRange = NSIntersectionRange(
+                effectiveRange, NSMakeRange(location, end - location));
+        NSMutableParagraphStyle *changed =
+                [(style ? style : [NSParagraphStyle defaultParagraphStyle])
+                        mutableCopy];
+        [changed setBaseWritingDirection: direction];
+        [self addAttribute: NSParagraphStyleAttributeName
+                     value: changed
+                     range: effectiveRange];
+        [changed release];
         location = NSMaxRange(effectiveRange);
     }
     [self endEditing];

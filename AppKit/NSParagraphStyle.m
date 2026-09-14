@@ -137,6 +137,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     _tabStops = [other->_tabStops copy];
     _hyphenationFactor = other->_hyphenationFactor;
     _tighteningFactorForTruncation = other->_tighteningFactorForTruncation;
+    _horizontalAlignment = other->_horizontalAlignment;
     return self;
 }
 
@@ -195,6 +196,10 @@ static inline id mutableCopyWithZone(NSParagraphStyle *self, NSZone *zone) {
 
 - mutableCopyWithZone: (NSZone *) zone {
     return mutableCopyWithZone(self, zone);
+}
+
+- (NSInteger) horizontalAlignment {
+    return _horizontalAlignment;
 }
 
 - (NSWritingDirection) baseWritingDirection {
