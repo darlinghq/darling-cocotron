@@ -762,6 +762,11 @@ static NSData *makeWindowIcon() {
 // Window opacity through the EWMH _NET_WM_WINDOW_OPACITY property (a CARDINAL
 // where 0xffffffff is fully opaque), honoured by compositing window managers.
 - (void) setAlphaValue: (CGFloat) value {
+    // After -invalidate there is no X window (CGSSetWindowAlpha can still find
+    // this object by number until it is deallocated).
+    if (_window == 0)
+        return;
+
     Atom opacity = XInternAtom(_display, "_NET_WM_WINDOW_OPACITY", False);
 
     if (value >= 1.0) {
