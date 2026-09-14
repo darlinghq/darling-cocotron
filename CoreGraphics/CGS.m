@@ -22,6 +22,7 @@
 #include <stdatomic.h>
 #import <CoreGraphics/CGSConnection.h>
 #import <CoreGraphics/CGSWindow.h>
+#import <CoreGraphics/CGWindow.h>
 #import <CoreGraphics/CGSSurface.h>
 #include <pthread.h>
 #include <math.h>
@@ -272,20 +273,75 @@ CGError CGSMoveWindow(CGSConnectionID cid, CGSWindowID wid, const CGPoint *windo
 }
 
 extern CGError CGSSetWindowOpacity(CGSConnectionID cid, CGSWindowID wid, bool isOpaque);
-extern CGError CGSSetWindowAlpha(CGSConnectionID cid, CGSWindowID wid, float alpha);
 extern CGError CGSSetWindowLevel(CGSConnectionID cid, CGSWindowID wid, CGWindowLevel level);
+
+// Window server calls on application windows. There is no separate window
+// server: the window id is the AppKit window number, which maps to the
+// process's platform window (CGWindow, e.g. the X11 backend window). The
+// connection id isn't checked, because applications typically pass
+// -[NSGraphicsContext contextID] and every window belongs to this process.
+
+static CGWindow* platformWindowForID(CGSWindowID wid)
+{
+	return [CGWindow windowWithWindowNumber: wid];
+}
 
 CGError CGSSetWindowAlpha(CGSConnectionID cid, CGSWindowID wid, float alpha)
 {
-	CGSWindow* window;
-	CGError err = getWindow(cid, wid, &window);
-
-	if (err != kCGSErrorSuccess)
-		return err;
-	if (isnan(alpha))
+	CGWindow* window = platformWindowForID(wid);
+	if (!window)
 		return kCGErrorIllegalArgument;
 
-	return [window setAlpha: fminf(fmaxf(alpha, 0.0f), 1.0f)];
+	if (!(alpha >= 0)) // also catches NaN
+		alpha = 0;
+	if (alpha > 1)
+		alpha = 1;
+
+	[window setAlphaValue: alpha];
+	return kCGSErrorSuccess;
+}
+
+// Transforms are recorded and reported back, but not applied: the X11 backend
+// has no way to scale or rotate a top-level window. Apps use them for window
+// animations, which then simply don't show.
+static NSMutableDictionary<NSNumber*, NSValue*>* g_windowTransforms = nil;
+
+CGError CGSSetWindowTransformAtPlacement(CGSConnectionID cid, CGSWindowID wid, int32_t placement, int32_t reserved, CGAffineTransform transform)
+{
+	if (!platformWindowForID(wid))
+		return kCGErrorIllegalArgument;
+
+	NSValue* value = [NSValue valueWithBytes: &transform objCType: @encode(CGAffineTransform)];
+	@synchronized([CGWindow class])
+	{
+		if (!g_windowTransforms)
+			g_windowTransforms = [NSMutableDictionary new];
+		g_windowTransforms[@(wid)] = value;
+	}
+	return kCGSErrorSuccess;
+}
+
+CGError CGSGetWindowTransformAtPlacement(CGSConnectionID cid, CGSWindowID wid, int32_t placement, void *reserved, CGAffineTransform *outTransform)
+{
+	if (!outTransform)
+		return kCGErrorIllegalArgument;
+	if (!platformWindowForID(wid))
+		return kCGErrorIllegalArgument;
+
+	CGAffineTransform transform = CGAffineTransformIdentity;
+	@synchronized([CGWindow class])
+	{
+		NSValue* value = g_windowTransforms[@(wid)];
+		if (value)
+			[value getValue: &transform];
+	}
+	*outTransform = transform;
+	return kCGSErrorSuccess;
+}
+
+int CGSServerOperationState(int state)
+{
+	return 0;
 }
 
 // Windows are not composited, so they cannot be transformed or warped. The

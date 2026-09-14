@@ -71,6 +71,15 @@ extern CGError CGSSetWindowTransform(CGSConnectionID cid, CGSWindowID wid, CGAff
 extern CGError CGSSetWindowWarp(CGSConnectionID cid, CGSWindowID wid, int w, int h, float *mesh);
 extern CGError CGSSetWindowCaptureExcludeShape(CGSConnectionID cid, CGSWindowID wid, CGRegionRef shape);
 
+// Window transforms. Argument layout as applications call these functions:
+// two 32-bit values (a placement selector and a reserved value; both 0 in
+// practice) come before the transform, which is passed by value.
+extern CGError CGSSetWindowTransformAtPlacement(CGSConnectionID cid, CGSWindowID wid, int32_t placement, int32_t reserved, CGAffineTransform transform);
+extern CGError CGSGetWindowTransformAtPlacement(CGSConnectionID cid, CGSWindowID wid, int32_t placement, void *reserved, CGAffineTransform *outTransform);
+
+// Queried window server state; 0 means the server is running normally.
+extern int CGSServerOperationState(int state);
+
 // Subwindows (for CGL)
 extern CGError CGSAddSurface(CGSConnectionID cid, CGSWindowID wid, CGSSurfaceID *sid);
 extern CGError CGSRemoveSurface(CGSConnectionID cid, CGSWindowID wid, CGSSurfaceID sid);

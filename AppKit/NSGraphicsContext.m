@@ -19,6 +19,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSBitmapImageRep-Private.h>
 #import <AppKit/NSCachedImageRep.h>
 #import <AppKit/NSGraphicsContext.h>
+#import <CoreGraphics/CoreGraphicsPrivate.h>
 #import <AppKit/NSRaise.h>
 #import <AppKit/NSWindow-Private.h>
 #import <ApplicationServices/ApplicationServices.h>
@@ -27,6 +28,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 @class NSColor;
 
 @implementation NSGraphicsContext
+
+- (NSInteger) contextID {
+    return CGSMainConnectionID();
+}
 
 + (void) initialize {
     NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];

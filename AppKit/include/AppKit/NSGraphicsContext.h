@@ -96,6 +96,10 @@ typedef enum {
 
 - (void) flushGraphics;
 
+// The window server connection id for this context, as passed to CGS* calls.
+// All windows belong to the process's main connection.
+- (NSInteger) contextID;
+
 @end
 
 @interface NSGraphicsContext (QuartzDebugging)
