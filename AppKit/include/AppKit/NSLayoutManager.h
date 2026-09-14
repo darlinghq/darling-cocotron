@@ -63,6 +63,7 @@ typedef NS_ENUM(NSInteger, NSTextLayoutOrientation) {
     NSRect *_rectCache;
 
     NSImageScaling _defaultAttachmentScaling;
+    BOOL _usesDefaultHyphenation;
 }
 
 - init;
@@ -286,6 +287,9 @@ typedef NS_ENUM(NSInteger, NSTextLayoutOrientation) {
 // by default.
 - (NSImageScaling) defaultAttachmentScaling;
 - (void) setDefaultAttachmentScaling: (NSImageScaling) scaling;
+// Stored only (NO by default): the typesetter doesn't hyphenate.
+- (BOOL) usesDefaultHyphenation;
+- (void) setUsesDefaultHyphenation: (BOOL) flag;
 @end
 
 @protocol NSLayoutManagerDelegate <NSObject>

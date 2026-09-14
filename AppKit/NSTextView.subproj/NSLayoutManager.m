@@ -186,6 +186,14 @@ static inline NSGlyphFragment *fragmentAtGlyphIndex(NSLayoutManager *self,
     _defaultAttachmentScaling = scaling;
 }
 
+- (BOOL) usesDefaultHyphenation {
+    return _usesDefaultHyphenation;
+}
+
+- (void) setUsesDefaultHyphenation: (BOOL) flag {
+    _usesDefaultHyphenation = flag;
+}
+
 - (NSTextView *) firstTextView {
     for (NSTextContainer *container in _textContainers) {
         NSTextView *textView = [container textView];
@@ -2934,8 +2942,8 @@ static inline void _appendRectToCache(NSLayoutManager *self, NSRect rect) {
     return nil;
 }
 
+// Stored only: layout is always contiguous.
 - (void) setAllowsNonContiguousLayout: (BOOL) value {
     _allowsNonContiguousLayout = value;
-    NSUnimplementedMethod();
 }
 @end

@@ -670,6 +670,11 @@ static NSTextView *s_targetTextView = nil;
                   affinity: (NSSelectionAffinity) affinity
             stillSelecting: (BOOL) stillSelecting
 {
+    // A nil array leaves the selection alone: TextEdit copies the selection of
+    // a text view that doesn't exist yet into its first one. Only a non-nil
+    // empty array raises.
+    if (ranges == nil)
+        return;
     if ([ranges count] == 0)
         [NSException raise: NSInvalidArgumentException
                     format: @"-[%@ %s] ranges should not be empty",
@@ -3820,7 +3825,6 @@ static NSTextView *s_targetTextView = nil;
 
 - (void) setAutomaticSpellingCorrectionEnabled: (BOOL) value {
     _isAutomaticSpellingCorrectionEnabled = value;
-    NSUnimplementedMethod();
 }
 
 - (void) toggleAutomaticSpellingCorrection: sender {
@@ -4181,102 +4185,82 @@ static NSTextView *s_targetTextView = nil;
     return self;
 }
 - (NSTextLayoutOrientation) layoutOrientation {
-    NSUnimplementedMethod();
     return _layoutOrientation;
 }
 
 - (void) setLayoutOrientation: (NSTextLayoutOrientation) orientation {
     _layoutOrientation = orientation;
-    NSUnimplementedMethod();
 }
 
 - (BOOL) isIncrementalSearchingEnabled {
-    NSUnimplementedMethod();
     return _incrementalSearchingEnabled;
 }
 
 - (BOOL) usesFindBar {
-    NSUnimplementedMethod();
     return _usesFindBar;
 }
 
 - (BOOL) usesInspectorBar {
-    NSUnimplementedMethod();
     return _usesInspectorBar;
 }
 
 - (void) setIncrementalSearchingEnabled: (BOOL) value {
-    NSUnimplementedMethod();
     _incrementalSearchingEnabled = value;
 }
 
 - (void) setUsesFindBar: (BOOL) value {
-    NSUnimplementedMethod();
     _usesFindBar = value;
 }
 
 - (void) setUsesInspectorBar: (BOOL) value {
-    NSUnimplementedMethod();
     _usesInspectorBar = value;
 }
 
 - (BOOL) isGrammarCheckingEnabled {
-    NSUnimplementedMethod();
     return _grammarCheckingEnabled;
 }
 
 - (BOOL) isAutomaticQuoteSubstitutionEnabled {
-    NSUnimplementedMethod();
     return _automaticQuoteSubstitutionEnabled;
 }
 
 - (BOOL) isAutomaticDashSubstitutionEnabled {
-    NSUnimplementedMethod();
     return _automaticDashSubstitutionEnabled;
 }
 
 - (BOOL) isAutomaticLinkDetectionEnabled {
-    NSUnimplementedMethod();
     return _automaticLinkDetectionEnabled;
 }
 
 - (BOOL) isAutomaticDataDetectionEnabled {
-    NSUnimplementedMethod();
     return _automaticDataDetectionEnabled;
 }
 
 - (BOOL) isAutomaticTextReplacementEnabled {
-    NSUnimplementedMethod();
     return _automaticTextReplacementEnabled;
 }
 
 - (void) setGrammarCheckingEnabled: (BOOL) value {
-    NSUnimplementedMethod();
     _grammarCheckingEnabled = value;
 }
 
 - (void) setAutomaticQuoteSubstitutionEnabled: (BOOL) value {
-    NSUnimplementedMethod();
     _automaticQuoteSubstitutionEnabled = value;
 }
 
 - (void) setAutomaticDashSubstitutionEnabled: (BOOL) value {
-    NSUnimplementedMethod();
     _automaticDashSubstitutionEnabled = value;
 }
 
 - (void) setAutomaticLinkDetectionEnabled: (BOOL) value {
-    NSUnimplementedMethod();
     _automaticLinkDetectionEnabled = value;
 }
 
 - (void) setAutomaticDataDetectionEnabled: (BOOL) value {
-    NSUnimplementedMethod();
     _automaticDataDetectionEnabled = value;
 }
 
 - (void) setAutomaticTextReplacementEnabled: (BOOL) value {
-    NSUnimplementedMethod();
     _automaticTextReplacementEnabled = value;
 }
 
