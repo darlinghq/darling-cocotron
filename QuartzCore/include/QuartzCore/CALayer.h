@@ -106,8 +106,9 @@ CA_EXPORT NSString *const kCAContentsFormatGray8Uint;
 @property(copy) NSString *minificationFilter;
 @property(copy) NSString *magnificationFilter;
 
-// Appearance. CARenderer draws the background, then the contents, then the
-// border, all clipped to the rounded rect given by cornerRadius.
+// Appearance. CARenderer draws the background and the border as rounded rects
+// with cornerRadius, and the contents between them (not clipped to the corners).
+// masksToBounds is stored but sublayers aren't clipped yet.
 @property CGColorRef backgroundColor;
 @property CGColorRef borderColor;
 @property CGFloat borderWidth;

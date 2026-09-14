@@ -289,15 +289,19 @@ static BOOL setPremultipliedColor(CGColorRef color, CGFloat opacity) {
 
     size_t count = CGColorGetNumberOfComponents(color);
     const CGFloat *c = CGColorGetComponents(color);
+    CGColorSpaceModel model =
+            CGColorSpaceGetModel(CGColorGetColorSpace(color));
     CGFloat r, g, b, a;
 
     if (c == NULL)
         return NO;
-    if (count >= 4) {
+    // Only RGB and grey components can be used as they are; a CMYK colour also
+    // has 4+ components, which must not be read as RGBA.
+    if (model == kCGColorSpaceModelRGB && count >= 4) {
         r = c[0]; g = c[1]; b = c[2]; a = c[3];
-    } else if (count == 3) {
+    } else if (model == kCGColorSpaceModelRGB && count == 3) {
         r = c[0]; g = c[1]; b = c[2]; a = 1;
-    } else if (count == 2) {
+    } else if (model == kCGColorSpaceModelMonochrome && count >= 2) {
         r = g = b = c[0]; a = c[1];
     } else {
         return NO;

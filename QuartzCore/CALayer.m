@@ -265,8 +265,11 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
     return _backgroundColor;
 }
 
+// Appearance changes need a new frame even when no view is redisplayed: the
+// context's timer renders and presents one, then stops again once idle.
 - (void) setBackgroundColor: (CGColorRef) value {
     replaceColor(&_backgroundColor, value);
+    [_context startTimerIfNeeded];
 }
 
 - (CGColorRef) borderColor {
@@ -275,6 +278,7 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
 
 - (void) setBorderColor: (CGColorRef) value {
     replaceColor(&_borderColor, value);
+    [_context startTimerIfNeeded];
 }
 
 - (CGFloat) borderWidth {
@@ -283,6 +287,7 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
 
 - (void) setBorderWidth: (CGFloat) value {
     _borderWidth = value;
+    [_context startTimerIfNeeded];
 }
 
 - (CGFloat) cornerRadius {
@@ -291,6 +296,7 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
 
 - (void) setCornerRadius: (CGFloat) value {
     _cornerRadius = value;
+    [_context startTimerIfNeeded];
 }
 
 - (BOOL) masksToBounds {
@@ -299,6 +305,7 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
 
 - (void) setMasksToBounds: (BOOL) value {
     _masksToBounds = value;
+    [_context startTimerIfNeeded];
 }
 
 - (BOOL) isHidden {
@@ -307,6 +314,7 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
 
 - (void) setHidden: (BOOL) value {
     _hidden = value;
+    [_context startTimerIfNeeded];
 }
 
 - (void) _setSuperLayer: (CALayer *) parent {
