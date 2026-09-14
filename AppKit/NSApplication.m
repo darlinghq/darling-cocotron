@@ -206,13 +206,16 @@ NSApplication *NSApp = nil;
     return _windows;
 }
 
+// Window numbers come from CGWindow's registry, so look the number up there.
+// Asking every window for its number instead would create a platform window
+// for each window that doesn't have one yet, now on every mouse event too.
 - (NSWindow *) windowWithWindowNumber: (NSInteger) number {
-    for (NSWindow *window in _windows) {
-        if ([window windowNumber] == number) {
-            return window;
-        }
-    }
-    return nil;
+    NSWindow *window = [[CGWindow windowWithWindowNumber: number] delegate];
+
+    if (window == nil ||
+        [_windows indexOfObjectIdenticalTo: window] == NSNotFound)
+        return nil;
+    return window;
 }
 
 - (NSMenu *) mainMenu {
