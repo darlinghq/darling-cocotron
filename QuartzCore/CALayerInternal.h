@@ -23,4 +23,7 @@
 - (void) _setContext: (CALayerContext *) context;
 - (NSNumber *) _textureId;
 - (void) _setTextureId: (NSNumber *) value;
+// The contents object last uploaded to the layer's texture.
+- (id) _textureContents;
+- (void) _setTextureContents: (id) value;
 @end

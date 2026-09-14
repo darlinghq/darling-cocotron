@@ -78,6 +78,13 @@ CA_EXPORT NSString *const kCAContentsFormatGray8Uint;
     BOOL _needsDisplay;
     NSMutableDictionary *_animations;
     NSNumber *_textureId;
+    CGColorRef _backgroundColor;
+    CGColorRef _borderColor;
+    CGFloat _borderWidth;
+    CGFloat _cornerRadius;
+    BOOL _masksToBounds;
+    BOOL _hidden;
+    id _textureContents;
 }
 
 + layer;
@@ -97,6 +104,15 @@ CA_EXPORT NSString *const kCAContentsFormatGray8Uint;
 
 @property(copy) NSString *minificationFilter;
 @property(copy) NSString *magnificationFilter;
+
+// Appearance. CARenderer draws the background, then the contents, then the
+// border, all clipped to the rounded rect given by cornerRadius.
+@property CGColorRef backgroundColor;
+@property CGColorRef borderColor;
+@property CGFloat borderWidth;
+@property CGFloat cornerRadius;
+@property BOOL masksToBounds;
+@property(getter=isHidden) BOOL hidden;
 
 - init;
 

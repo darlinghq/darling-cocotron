@@ -89,8 +89,16 @@ static CGFloat mediaTimingScale(CAAnimation *animation,
 {
     CFTimeInterval begin = [animation beginTime];
     CFTimeInterval duration = [animation duration];
+    // beginTime is set by the first animation frame; a render before that
+    // (e.g. from a view display) shows the start value. Clamp so a late render
+    // can't extrapolate far past the end value.
+    if (begin <= 0)
+        return 0;
+    if (duration <= 0)
+        return 1;
+
     CFTimeInterval delta = currentTime - begin;
-    double zeroToOne = delta / duration;
+    double zeroToOne = MIN(MAX(delta / duration, 0.0), 1.0);
     CAMediaTimingFunction *function = [animation timingFunction];
 
     if (function == nil)
@@ -274,28 +282,137 @@ void CATexImage2DCGImage(CGImageRef image) {
                  glFormat, glType, pixelBytes);
 }
 
-- (void) _renderLayer: (CALayer *) layer
-                    z: (CGFloat) z
-          currentTime: (CFTimeInterval) currentTime
-{
-    NSNumber *textureId = [layer _textureId];
-    GLuint texture = [textureId unsignedIntValue];
-    GLboolean loadPixelData = GL_FALSE;
+// Premultiplied colour (the blend function is GL_ONE, GL_ONE_MINUS_SRC_ALPHA).
+static BOOL setPremultipliedColor(CGColorRef color, CGFloat opacity) {
+    if (color == NULL)
+        return NO;
 
-    if (texture == 0)
-        loadPixelData = GL_TRUE;
-    else {
+    size_t count = CGColorGetNumberOfComponents(color);
+    const CGFloat *c = CGColorGetComponents(color);
+    CGFloat r, g, b, a;
 
-        if (glIsTexture(texture) == GL_FALSE) {
-            loadPixelData = GL_TRUE;
-        }
-        glBindTexture(GL_TEXTURE_2D, texture);
+    if (c == NULL)
+        return NO;
+    if (count >= 4) {
+        r = c[0]; g = c[1]; b = c[2]; a = c[3];
+    } else if (count == 3) {
+        r = c[0]; g = c[1]; b = c[2]; a = 1;
+    } else if (count == 2) {
+        r = g = b = c[0]; a = c[1];
+    } else {
+        return NO;
     }
 
-    if (loadPixelData) {
-        CGImageRef image = (CGImageRef)layer.contents;
+    a *= opacity;
+    if (a <= 0)
+        return NO;
+    glColor4f(r * a, g * a, b * a, a);
+    return YES;
+}
 
+enum { kCornerSegments = 8, kRoundedRectPoints = 4 * (kCornerSegments + 1) };
+
+// Outline of a rounded rect, counter-clockwise from the bottom-right corner.
+// Always kRoundedRectPoints points (a zero radius repeats the corner), so an
+// outer and an inner outline can be zipped into a border triangle strip.
+static void roundedRectOutline(CGRect r, CGFloat radius, GLfloat *xy) {
+    radius = MAX(0, MIN(radius, MIN(r.size.width, r.size.height) / 2));
+
+    const CGFloat cx[4] = {CGRectGetMaxX(r) - radius, CGRectGetMaxX(r) - radius,
+                           CGRectGetMinX(r) + radius, CGRectGetMinX(r) + radius};
+    const CGFloat cy[4] = {CGRectGetMinY(r) + radius, CGRectGetMaxY(r) - radius,
+                           CGRectGetMaxY(r) - radius, CGRectGetMinY(r) + radius};
+    int n = 0;
+
+    for (int corner = 0; corner < 4; corner++) {
+        CGFloat start = (corner - 1) * M_PI_2;
+        for (int i = 0; i <= kCornerSegments; i++) {
+            CGFloat angle = start + M_PI_2 * i / kCornerSegments;
+            xy[n++] = cx[corner] + radius * cos(angle);
+            xy[n++] = cy[corner] + radius * sin(angle);
+        }
+    }
+}
+
+- (void) _drawBackgroundOfLayer: (CALayer *) layer
+                         bounds: (CGRect) bounds
+                        opacity: (CGFloat) opacity
+{
+    if (!setPremultipliedColor(layer.backgroundColor, opacity))
+        return;
+
+    GLfloat fan[2 * (kRoundedRectPoints + 2)];
+    CGRect rect = CGRectMake(0, 0, bounds.size.width, bounds.size.height);
+
+    fan[0] = CGRectGetMidX(rect);
+    fan[1] = CGRectGetMidY(rect);
+    roundedRectOutline(rect, layer.cornerRadius, fan + 2);
+    fan[2 * (kRoundedRectPoints + 1)] = fan[2];
+    fan[2 * (kRoundedRectPoints + 1) + 1] = fan[3];
+
+    glVertexPointer(2, GL_FLOAT, 0, fan);
+    glDrawArrays(GL_TRIANGLE_FAN, 0, kRoundedRectPoints + 2);
+}
+
+- (void) _drawBorderOfLayer: (CALayer *) layer
+                     bounds: (CGRect) bounds
+                    opacity: (CGFloat) opacity
+{
+    CGFloat width = layer.borderWidth;
+
+    if (width <= 0 || !setPremultipliedColor(layer.borderColor, opacity))
+        return;
+
+    CGRect outerRect = CGRectMake(0, 0, bounds.size.width, bounds.size.height);
+    CGRect innerRect = CGRectInset(outerRect, width, width);
+    if (innerRect.size.width < 0 || innerRect.size.height < 0)
+        innerRect = CGRectMake(CGRectGetMidX(outerRect), CGRectGetMidY(outerRect), 0, 0);
+
+    GLfloat outer[2 * kRoundedRectPoints], inner[2 * kRoundedRectPoints];
+    GLfloat strip[2 * 2 * (kRoundedRectPoints + 1)];
+
+    roundedRectOutline(outerRect, layer.cornerRadius, outer);
+    roundedRectOutline(innerRect, MAX(0, layer.cornerRadius - width), inner);
+
+    for (int i = 0; i <= kRoundedRectPoints; i++) {
+        int j = i % kRoundedRectPoints;
+        strip[4 * i] = outer[2 * j];
+        strip[4 * i + 1] = outer[2 * j + 1];
+        strip[4 * i + 2] = inner[2 * j];
+        strip[4 * i + 3] = inner[2 * j + 1];
+    }
+
+    glVertexPointer(2, GL_FLOAT, 0, strip);
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 2 * (kRoundedRectPoints + 1));
+}
+
+- (void) _drawContentsOfLayer: (CALayer *) layer
+                       bounds: (CGRect) bounds
+                      opacity: (CGFloat) opacity
+{
+    CGImageRef image = (CGImageRef) layer.contents;
+
+    if (image == NULL)
+        return;
+
+    NSNumber *textureId = [layer _textureId];
+    GLuint texture = [textureId unsignedIntValue];
+
+    // Upload when the texture object doesn't exist yet (check before binding:
+    // glBindTexture creates it) or when the layer got new contents since the
+    // last upload (a layer-backed NSView sets a new image on every display).
+    BOOL upload = texture == 0 || glIsTexture(texture) == GL_FALSE ||
+                  [layer _textureContents] != layer.contents;
+
+    glEnable(GL_TEXTURE_2D);
+    glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+
+    if (texture != 0)
+        glBindTexture(GL_TEXTURE_2D, texture);
+
+    if (upload) {
         CATexImage2DCGImage(image);
+        [layer _setTextureContents: layer.contents];
 
         GLint minFilter = interpolationFromName(layer.minificationFilter);
         GLint magFilter = interpolationFromName(layer.magnificationFilter);
@@ -307,59 +424,53 @@ void CATexImage2DCGImage(CGImageRef image) {
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
     }
 
+    const GLfloat textureVertices[4 * 2] = {0, 1, 1, 1, 0, 0, 1, 0};
+    const GLfloat vertices[4 * 2] = {0, 0, bounds.size.width, 0,
+                                     0, bounds.size.height,
+                                     bounds.size.width, bounds.size.height};
+
+    glTexCoordPointer(2, GL_FLOAT, 0, textureVertices);
+    glVertexPointer(2, GL_FLOAT, 0, vertices);
+    glColor4f(opacity, opacity, opacity, opacity);
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+
+    glDisableClientState(GL_TEXTURE_COORD_ARRAY);
+    glDisable(GL_TEXTURE_2D);
+}
+
+// Layers are composited in painter's order: a layer's background, contents and
+// border, then its sublayers in array order. Opacity multiplies down the tree.
+- (void) _renderLayer: (CALayer *) layer
+          currentTime: (CFTimeInterval) currentTime
+        parentOpacity: (CGFloat) parentOpacity
+{
+    if (layer.hidden)
+        return;
+
     CGPoint anchorPoint =
             interpolatePointInLayerKey(layer, @"anchorPoint", currentTime);
     CGPoint position =
             interpolatePointInLayerKey(layer, @"position", currentTime);
     CGRect bounds = interpolateRectInLayerKey(layer, @"bounds", currentTime);
     CGFloat opacity =
-            interpolateFloatInLayerKey(layer, @"opacity", currentTime);
+            interpolateFloatInLayerKey(layer, @"opacity", currentTime) *
+            parentOpacity;
 
-    GLfloat textureVertices[4 * 2];
-    GLfloat vertices[4 * 3];
-
-    textureVertices[0] = 0;
-    textureVertices[1] = 1;
-    textureVertices[2] = 1;
-    textureVertices[3] = 1;
-    textureVertices[4] = 0;
-    textureVertices[5] = 0;
-    textureVertices[6] = 1;
-    textureVertices[7] = 0;
-
-    vertices[0] = 0;
-    vertices[1] = 0;
-    vertices[2] = z;
-
-    vertices[3] = bounds.size.width;
-    vertices[4] = 0;
-    vertices[5] = z;
-
-    vertices[6] = 0;
-    vertices[7] = bounds.size.height;
-    vertices[8] = z;
-
-    vertices[9] = bounds.size.width;
-    vertices[10] = bounds.size.height;
-    vertices[11] = z;
+    if (opacity <= 0)
+        return;
 
     glPushMatrix();
-    //  glTranslatef(width/2,height/2,0);
-    glTexCoordPointer(2, GL_FLOAT, 0, textureVertices);
-    glVertexPointer(3, GL_FLOAT, 0, vertices);
-
     glTranslatef(position.x - (bounds.size.width * anchorPoint.x),
                  position.y - (bounds.size.height * anchorPoint.y), 0);
-    // glTranslatef(position.x,position.y,0);
-    // glScalef(bounds.size.width,bounds.size.height,1);
 
-    //  glRotatef(1,0,0,1);
-    glColor4f(opacity, opacity, opacity, opacity);
-
-    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    [self _drawBackgroundOfLayer: layer bounds: bounds opacity: opacity];
+    [self _drawContentsOfLayer: layer bounds: bounds opacity: opacity];
+    [self _drawBorderOfLayer: layer bounds: bounds opacity: opacity];
 
     for (CALayer *child in layer.sublayers)
-        [self _renderLayer: child z: z + 1 currentTime: currentTime];
+        [self _renderLayer: child
+                currentTime: currentTime
+              parentOpacity: opacity];
 
     glPopMatrix();
 }
@@ -371,12 +482,12 @@ void CATexImage2DCGImage(CGImageRef image) {
     glClearColor(0, 0, 0, 1);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    glEnable(GL_DEPTH_TEST);
-    glDepthFunc(GL_LEQUAL);
+    // Painter's order instead of depth testing: every layer used to get z+1,
+    // which put layers nested two or more deep outside the [-1, 1] depth range
+    // of CALayerContext's glOrtho projection, so they were clipped away.
+    glDisable(GL_DEPTH_TEST);
 
-    glEnable(GL_TEXTURE_2D);
     glEnableClientState(GL_VERTEX_ARRAY);
-    glEnableClientState(GL_TEXTURE_COORD_ARRAY);
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
@@ -384,7 +495,9 @@ void CATexImage2DCGImage(CGImageRef image) {
     glAlphaFunc(GL_GREATER, 0);
     glEnable(GL_ALPHA_TEST);
 
-    [self _renderLayer: _rootLayer z: 0 currentTime: CACurrentMediaTime()];
+    [self _renderLayer: _rootLayer
+            currentTime: CACurrentMediaTime()
+          parentOpacity: 1.0];
 
     glFlush();
 }

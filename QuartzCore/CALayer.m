@@ -240,7 +240,70 @@ NSString *const kCAContentsFormatGray8Uint = @"Gray8";
     [_animations release];
     [_minificationFilter release];
     [_magnificationFilter release];
+    if (_backgroundColor)
+        CGColorRelease(_backgroundColor);
+    if (_borderColor)
+        CGColorRelease(_borderColor);
+    [_textureContents release];
     [super dealloc];
+}
+
+static void replaceColor(CGColorRef *slot, CGColorRef value) {
+    if (*slot == value)
+        return;
+    if (value)
+        CGColorRetain(value);
+    if (*slot)
+        CGColorRelease(*slot);
+    *slot = value;
+}
+
+- (CGColorRef) backgroundColor {
+    return _backgroundColor;
+}
+
+- (void) setBackgroundColor: (CGColorRef) value {
+    replaceColor(&_backgroundColor, value);
+}
+
+- (CGColorRef) borderColor {
+    return _borderColor;
+}
+
+- (void) setBorderColor: (CGColorRef) value {
+    replaceColor(&_borderColor, value);
+}
+
+- (CGFloat) borderWidth {
+    return _borderWidth;
+}
+
+- (void) setBorderWidth: (CGFloat) value {
+    _borderWidth = value;
+}
+
+- (CGFloat) cornerRadius {
+    return _cornerRadius;
+}
+
+- (void) setCornerRadius: (CGFloat) value {
+    _cornerRadius = value;
+}
+
+- (BOOL) masksToBounds {
+    return _masksToBounds;
+}
+
+- (void) setMasksToBounds: (BOOL) value {
+    _masksToBounds = value;
+}
+
+- (BOOL) isHidden {
+    return _hidden;
+}
+
+- (void) setHidden: (BOOL) value {
+    _hidden = value;
 }
 
 - (void) _setSuperLayer: (CALayer *) parent {
@@ -362,6 +425,16 @@ NSString *const kCAContentsFormatGray8Uint = @"Gray8";
     value = [value copy];
     [_textureId release];
     _textureId = value;
+}
+
+- (id) _textureContents {
+    return _textureContents;
+}
+
+- (void) _setTextureContents: (id) value {
+    value = [value retain];
+    [_textureContents release];
+    _textureContents = value;
 }
 
 @end

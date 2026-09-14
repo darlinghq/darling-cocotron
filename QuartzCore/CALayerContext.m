@@ -133,12 +133,32 @@
     [self renderLayer: _layer];
 }
 
+static BOOL layerTreeHasAnimations(CALayer *layer) {
+    if ([[layer animationKeys] count] > 0)
+        return YES;
+    for (CALayer *child in layer.sublayers)
+        if (layerTreeHasAnimations(child))
+            return YES;
+    return NO;
+}
+
 - (void) timer: (NSTimer *) timer {
     [_renderer beginFrameAtTime: CACurrentMediaTime() timeStamp: NULL];
 
     [self render];
 
     [_renderer endFrame];
+
+    // Animation frames aren't part of a view display pass, so present them here.
+    [self flush];
+
+    // beginFrameAtTime: drops finished animations. Once none are left, the frame
+    // just drawn shows the final values: stop until an animation is added again.
+    if (!layerTreeHasAnimations(_layer)) {
+        [_timer invalidate];
+        [_timer release];
+        _timer = nil;
+    }
 }
 
 - (void) startTimerIfNeeded {
