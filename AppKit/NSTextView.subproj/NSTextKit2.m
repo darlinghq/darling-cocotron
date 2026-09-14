@@ -278,11 +278,15 @@ NSAttributedStringDocumentReadingOptionKey const
         [_textLayoutManagers indexOfObjectIdenticalTo: manager] != NSNotFound)
         return;
 
+    // The old content manager may hold the only reference, so keep the manager
+    // alive while it moves.
+    [manager retain];
     [manager.textContentManager removeTextLayoutManager: manager];
     [_textLayoutManagers addObject: manager];
     if (_primaryTextLayoutManager == nil)
         _primaryTextLayoutManager = manager;
     [manager _setTextContentManager: self];
+    [manager release];
 }
 
 - (void) removeTextLayoutManager: (NSTextLayoutManager *) manager {
