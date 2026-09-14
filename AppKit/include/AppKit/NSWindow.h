@@ -147,7 +147,7 @@ APPKIT_EXPORT const NSNotificationName NSWindowWillEnterFullScreenNotification;
 APPKIT_EXPORT const NSNotificationName NSWindowWillExitFullScreenNotification;
 APPKIT_EXPORT const NSNotificationName NSWindowDidExposeNotification;
 
-@interface NSWindow : NSResponder <NSUserInterfaceItemIdentification, NSAccessibility> {
+@interface NSWindow : NSResponder <NSUserInterfaceItemIdentification, NSAccessibility, NSAppearanceCustomization> {
     NSRect _frame;
     NSWindowStyleMask _styleMask;
     NSBackingStoreType _backingType;
@@ -244,6 +244,7 @@ APPKIT_EXPORT const NSNotificationName NSWindowDidExposeNotification;
     NSRect _savedFrame;
     NSPoint _mouseDownLocationInWindow;
 
+    NSAppearance *_appearance;
     NSUserInterfaceItemIdentifier _identifier;
 
     BOOL _isAccessible;
@@ -458,6 +459,18 @@ APPKIT_EXPORT const NSNotificationName NSWindowDidExposeNotification;
 
 - (NSPoint) convertBaseToScreen: (NSPoint) point;
 - (NSPoint) convertScreenToBase: (NSPoint) point;
+- (NSPoint) convertPointToScreen: (NSPoint) point;
+- (NSPoint) convertPointFromScreen: (NSPoint) point;
+- (NSRect) convertRectToScreen: (NSRect) rect;
+- (NSRect) convertRectFromScreen: (NSRect) rect;
+- (CGFloat) backingScaleFactor;
+
+- (void) beginSheet: (NSWindow *) sheet
+        completionHandler: (void (^)(NSInteger returnCode)) handler;
+- (void) endSheet: (NSWindow *) sheet;
+- (void) endSheet: (NSWindow *) sheet returnCode: (NSInteger) returnCode;
+
+@property(readonly, strong) NSAppearance *effectiveAppearance;
 
 - (NSRect) frameRectForContentRect: (NSRect) rect;
 - (NSRect) contentRectForFrameRect: (NSRect) rect;

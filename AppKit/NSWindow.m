@@ -204,8 +204,41 @@ NSInteger NSBitsPerPixelFromDepth(NSWindowDepth depth) {
 
 @end
 
+// Modal delegate that hands the return code of a sheet to a completion handler.
+@interface NSWindowSheetCompletion : NSObject {
+    void (^_handler)(NSInteger returnCode);
+}
+@end
+
+@implementation NSWindowSheetCompletion
+
+- initWithHandler: (void (^)(NSInteger returnCode)) handler {
+    if ((self = [super init]))
+        _handler = [handler copy];
+    return self;
+}
+
+- (void) dealloc {
+    [_handler release];
+    [super dealloc];
+}
+
+- (void) sheetDidEnd: (NSWindow *) sheet
+          returnCode: (NSInteger) returnCode
+         contextInfo: (void *) contextInfo
+{
+    if (_handler != nil)
+        _handler(returnCode);
+    // NSSheetContext doesn't retain its delegate, so this balances the alloc
+    // in -beginSheet:completionHandler:.
+    [self release];
+}
+
+@end
+
 @implementation NSWindow
 
+@synthesize appearance = _appearance;
 @synthesize identifier = _identifier;
 @synthesize accessibilityElement = _isAccessible;
 
@@ -404,6 +437,7 @@ static BOOL _allowsAutomaticWindowTabbing;
     [_title release];
     [_miniwindowTitle release];
     [_miniwindowImage release];
+    [_appearance release];
     [_backgroundView _setWindow: nil];
     [_backgroundView release];
     [_menu release];
@@ -3496,6 +3530,58 @@ static BOOL _allowsAutomaticWindowTabbing;
 
 + (void) setAllowsAutomaticWindowTabbing: (BOOL) allowsAutomaticWindowTabbing {
     _allowsAutomaticWindowTabbing = allowsAutomaticWindowTabbing;
+}
+
+- (NSAppearance *) effectiveAppearance {
+    return _appearance != nil ? _appearance : [NSApp effectiveAppearance];
+}
+
+- (CGFloat) backingScaleFactor {
+    NSScreen *screen = [self screen];
+    return screen != nil ? [screen backingScaleFactor] : 1.0;
+}
+
+- (NSPoint) convertPointToScreen: (NSPoint) point {
+    return [self convertBaseToScreen: point];
+}
+
+- (NSPoint) convertPointFromScreen: (NSPoint) point {
+    return [self convertScreenToBase: point];
+}
+
+- (NSRect) convertRectToScreen: (NSRect) rect {
+    rect.origin = [self convertBaseToScreen: rect.origin];
+    return rect;
+}
+
+- (NSRect) convertRectFromScreen: (NSRect) rect {
+    rect.origin = [self convertScreenToBase: rect.origin];
+    return rect;
+}
+
+- (void) beginSheet: (NSWindow *) sheet
+        completionHandler: (void (^)(NSInteger returnCode)) handler
+{
+    // Sheets aren't queued: attaching would drop the current sheet's context
+    // without ending it, so a second sheet is refused and its handler never runs.
+    if ([self attachedSheet] != nil) {
+        NSLog(@"-[NSWindow beginSheet:completionHandler:] %@ already has a sheet", self);
+        return;
+    }
+    [NSApp beginSheet: sheet
+            modalForWindow: self
+             modalDelegate: [[NSWindowSheetCompletion alloc]
+                                    initWithHandler: handler]
+            didEndSelector: @selector(sheetDidEnd:returnCode:contextInfo:)
+               contextInfo: NULL];
+}
+
+- (void) endSheet: (NSWindow *) sheet {
+    [NSApp endSheet: sheet];
+}
+
+- (void) endSheet: (NSWindow *) sheet returnCode: (NSInteger) returnCode {
+    [NSApp endSheet: sheet returnCode: returnCode];
 }
 
 @end

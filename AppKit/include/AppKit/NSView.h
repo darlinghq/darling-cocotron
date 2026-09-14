@@ -134,6 +134,7 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPre
     id __remove;
     NSUserInterfaceItemIdentifier _identifier;
     NSLayoutPriority _horizontalContentHuggingPriority;
+    BOOL _wantsBestResolutionOpenGLSurface;
     NSLayoutPriority _verticalContentHuggingPriority;
     NSLayoutPriority _horizontalContentCompressionResistancePriority;
     NSLayoutPriority _verticalContentCompressionResistancePriority;
@@ -447,6 +448,16 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPre
 - (NSSize) convertSizeToBase: (NSSize) aSize;
 - (NSRect) convertRectFromBase: (NSRect) aRect;
 - (NSRect) convertRectToBase: (NSRect) aRect;
+
+- (NSRect) convertRectToBacking: (NSRect) rect;
+- (NSRect) convertRectFromBacking: (NSRect) rect;
+- (NSPoint) convertPointToBacking: (NSPoint) point;
+- (NSPoint) convertPointFromBacking: (NSPoint) point;
+- (NSSize) convertSizeToBacking: (NSSize) size;
+- (NSSize) convertSizeFromBacking: (NSSize) size;
+
+// Stored and archived; the X11 backend has no high-resolution surfaces.
+@property BOOL wantsBestResolutionOpenGLSurface;
 
 - (void) showDefinitionForAttributedString: (NSAttributedString *) string
                                    atPoint: (NSPoint) origin;

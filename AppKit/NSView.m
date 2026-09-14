@@ -75,6 +75,7 @@ const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPresentationOptio
 @synthesize identifier = _identifier;
 @synthesize translatesAutoresizingMaskIntoConstraints = _translatesAutoresizingMaskIntoConstraints;
 @synthesize appearance = _appearance;
+@synthesize wantsBestResolutionOpenGLSurface = _wantsBestResolutionOpenGLSurface;
 
 static BOOL NSViewLayersEnabled = YES;
 static BOOL NSShowAllViews = NO;
@@ -187,6 +188,8 @@ typedef struct __VFlags {
         [coder encodeInteger: _layerContentsRedrawPolicy
                       forKey: @"NSViewLayerContentsRedrawPolicy"];
         [coder encodeObject: _contentFilters forKey: @"NSViewContentFilters"];
+        [coder encodeBool: _wantsBestResolutionOpenGLSurface
+                   forKey: @"NSViewWantsBestResolutionOpenGLSurface"];
     } else {
         [NSException raise: NSInvalidArchiveOperationException
                     format: @"TODO: support unkeyed encoding in NSView"];
@@ -229,6 +232,8 @@ typedef struct __VFlags {
         // alternative for enabling it when it should be.
         _autoresizesSubviews = YES;
         _isHidden = (vFlags & 0x80000000) ? YES : NO;
+        _wantsBestResolutionOpenGLSurface = [keyed
+                decodeBoolForKey: @"NSViewWantsBestResolutionOpenGLSurface"];
         _tag = 0; // IB assigns a default tag id of 0 - which is different from
                   // the default in the docs.
         if ([keyed containsValueForKey: @"NSTag"])
@@ -2862,6 +2867,40 @@ static NSView *viewBeingPrinted = nil;
 
 - (NSRect) convertRectToBase: (NSRect) aRect {
     return aRect;
+}
+
+static NSRect scaleRect(NSRect rect, CGFloat scale) {
+    return NSMakeRect(rect.origin.x * scale, rect.origin.y * scale,
+                      rect.size.width * scale, rect.size.height * scale);
+}
+
+static CGFloat backingScaleFactor(NSView *view) {
+    NSWindow *window = [view window];
+    return window != nil ? [window backingScaleFactor] : 1.0;
+}
+
+- (NSRect) convertRectToBacking: (NSRect) rect {
+    return scaleRect(rect, backingScaleFactor(self));
+}
+
+- (NSRect) convertRectFromBacking: (NSRect) rect {
+    return scaleRect(rect, 1.0 / backingScaleFactor(self));
+}
+
+- (NSPoint) convertPointToBacking: (NSPoint) point {
+    return [self convertRectToBacking: (NSRect){point, NSZeroSize}].origin;
+}
+
+- (NSPoint) convertPointFromBacking: (NSPoint) point {
+    return [self convertRectFromBacking: (NSRect){point, NSZeroSize}].origin;
+}
+
+- (NSSize) convertSizeToBacking: (NSSize) size {
+    return [self convertRectToBacking: (NSRect){NSZeroPoint, size}].size;
+}
+
+- (NSSize) convertSizeFromBacking: (NSSize) size {
+    return [self convertRectFromBacking: (NSRect){NSZeroPoint, size}].size;
 }
 
 - (void) showDefinitionForAttributedString: (NSAttributedString *) string
