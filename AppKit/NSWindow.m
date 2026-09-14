@@ -630,6 +630,7 @@ static BOOL _allowsAutomaticWindowTabbing;
     [_threadToContext release];
     [_undoManager release];
     [_identifier release];
+    [_titlebarAccessoryViewControllers release];
     [super dealloc];
 }
 
@@ -4202,6 +4203,26 @@ static inline NSRect scaleWindowRect(NSRect rect, CGFloat scale) {
     }
 
     return _platformWindow;
+}
+
+@end
+
+@implementation NSWindow (NSWindowTitlebarAccessories)
+
+- (NSArray *) titlebarAccessoryViewControllers {
+    return _titlebarAccessoryViewControllers
+            ? [NSArray arrayWithArray: _titlebarAccessoryViewControllers]
+            : [NSArray array];
+}
+
+- (void) addTitlebarAccessoryViewController:
+        (NSTitlebarAccessoryViewController *) controller
+{
+    if (controller == nil)
+        return;
+    if (_titlebarAccessoryViewControllers == nil)
+        _titlebarAccessoryViewControllers = [[NSMutableArray alloc] init];
+    [_titlebarAccessoryViewControllers addObject: controller];
 }
 
 @end

@@ -30,6 +30,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSView, NSEvent, NSColor, NSColorSpace, NSCursor, NSImage, NSScreen,
         NSText, NSTextView, CGWindow, NSPasteboard, NSSheetContext,
+        NSTitlebarAccessoryViewController,
         NSUndoManager, NSButton, NSButtonCell, NSDrawer, NSDockTile, NSToolbar,
         NSWindowAnimationContext, NSTrackingArea, NSThemeFrame,
         NSWindowController, NSMenuItem, CARenderer;
@@ -300,6 +301,8 @@ APPKIT_EXPORT const NSNotificationName NSWindowDidExposeNotification;
     BOOL _titlebarAppearsTransparent;
     BOOL _isMovable;
     NSButton *_standardWindowButtons[3];
+
+    NSMutableArray *_titlebarAccessoryViewControllers;
 }
 
 @property(class) BOOL allowsAutomaticWindowTabbing;
@@ -712,6 +715,13 @@ APPKIT_EXPORT const NSNotificationName NSWindowDidExposeNotification;
 
 - (CGSubWindow *) _createSubWindowWithFrame: (CGRect) frame;
 
+@end
+
+@interface NSWindow (NSWindowTitlebarAccessories)
+// Stored only: accessories aren't shown.
+@property(readonly, copy) NSArray *titlebarAccessoryViewControllers;
+- (void) addTitlebarAccessoryViewController:
+        (NSTitlebarAccessoryViewController *) controller;
 @end
 
 @interface NSWindow (Darling)

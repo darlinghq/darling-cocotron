@@ -17,7 +17,10 @@ APPKIT_EXPORT id NSAccessibilityUnignoredDescendant(id element);
 APPKIT_EXPORT NSArray *NSAccessibilityUnignoredChildren(NSArray *originalChildren);
 APPKIT_EXPORT NSArray *NSAccessibilityUnignoredChildrenForOnlyChild(id originalChild);
 
+// There is no accessibility server: objects have no attributes and overrides
+// aren't kept.
 @interface NSObject (NSAccessibility)
 - (NSArray *) accessibilityAttributeNames;
 - accessibilityAttributeValue: (NSString *) attribute;
+- (BOOL) accessibilitySetOverrideValue: (id) value forAttribute: (NSString *) attribute;
 @end

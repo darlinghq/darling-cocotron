@@ -23,6 +23,7 @@
 #import <Foundation/NSDictionary.h>
 #import <Foundation/NSException.h>
 #import <Foundation/NSThread.h>
+#import <AppKit/NSColor.h>
 
 NSString *const NSAppearanceNameAqua = @"NSAppearanceNameAqua";
 NSString *const NSAppearanceNameDarkAqua = @"NSAppearanceNameDarkAqua";
@@ -150,6 +151,16 @@ static BOOL isDarkAppearanceName(NSAppearanceName name) {
             [thread removeObjectForKey: NSAppearanceThreadKey];
         [previous release];
     }
+}
+
+// How far colorByAdjustingLightnessOfColor:darker: blends towards black or white.
+static const CGFloat NSAppearanceLightnessAdjustment = 0.1;
+
++ (NSColor *) colorByAdjustingLightnessOfColor: (NSColor *) color darker: (BOOL) darker {
+    NSColor *target = darker ? [NSColor blackColor] : [NSColor whiteColor];
+    NSColor *result = [color blendedColorWithFraction: NSAppearanceLightnessAdjustment
+                                              ofColor: target];
+    return result ? result : color;
 }
 
 - (void) encodeWithCoder: (NSCoder *) aCoder {

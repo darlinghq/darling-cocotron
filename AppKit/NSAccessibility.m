@@ -610,6 +610,22 @@ NSArray *NSAccessibilityUnignoredChildrenForOnlyChild(id originalChild) {
     return nil;
 }
 
+@implementation NSObject (NSAccessibility)
+
+- (NSArray *) accessibilityAttributeNames {
+    return [NSArray array];
+}
+
+- accessibilityAttributeValue: (NSString *) attribute {
+    return nil;
+}
+
+- (BOOL) accessibilitySetOverrideValue: (id) value forAttribute: (NSString *) attribute {
+    return NO;
+}
+
+@end
+
 void NSAccessibilityPostNotificationWithUserInfo(id element,
                                                  NSAccessibilityNotificationName notification,
                                                  NSDictionary<NSAccessibilityNotificationUserInfoKey, id> *userInfo)
