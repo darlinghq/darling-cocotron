@@ -138,6 +138,13 @@ extern CGError CGSRemoveNotifyProc(CGSNotifyProcPtr proc, CGSNotificationType no
 /* Whether font smoothing is disabled for the current user. */
 extern bool CGFontRenderingGetFontSmoothingDisabled(void);
 
+// Context state getters and font smoothing style (a graphics state value)
+extern bool CGContextGetAllowsAntialiasing(CGContextRef context);
+extern bool CGContextGetAllowsFontSmoothing(CGContextRef context);
+extern bool CGContextGetShouldSmoothFonts(CGContextRef context);
+extern uint32_t CGContextGetFontSmoothingStyle(CGContextRef context);
+extern void CGContextSetFontSmoothingStyle(CGContextRef context, uint32_t style);
+
 // Darling extras, e.g. for CGL
 void* _CGSNativeDisplay(CGSConnectionID connId);
 void* _CGSNativeWindowForID(CGSConnectionID connId, CGSWindowID winId);

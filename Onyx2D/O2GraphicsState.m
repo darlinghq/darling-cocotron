@@ -378,6 +378,18 @@ void O2GStateSetTextHorizontalScaling(O2GState *self, O2Float value) {
     _fontIsDirty = YES;
 }
 
+- (BOOL) shouldSmoothFonts {
+    return _shouldSmoothFonts;
+}
+
+- (uint32_t) fontSmoothingStyle {
+    return _fontSmoothingStyle;
+}
+
+- (void) setFontSmoothingStyle: (uint32_t) style {
+    _fontSmoothingStyle = style;
+}
+
 void O2GStateSetLineWidth(O2GState *self, O2Float width) {
     self->_lineWidth = width;
 }
