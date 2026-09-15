@@ -120,6 +120,7 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 
     struct wl_cursor_theme *_cursorTheme;
     struct wl_proxy *_cursorSurface;
+    struct wl_proxy *_imageCursorBuffer;
     WaylandCursor *_cursor;
 }
 

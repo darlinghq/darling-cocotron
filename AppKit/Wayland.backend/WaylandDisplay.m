@@ -233,16 +233,15 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         _cursorTheme = WL.wl_cursor_theme_load(getenv("XCURSOR_THEME"),
                                                size > 0 ? size : 24,
                                                (struct wl_shm *) _shm);
-        if (_cursorTheme != NULL) {
-            args[0].o = NULL;
-            _cursorSurface = WaylandCreateObject(
-                    _compositor, WP_COMPOSITOR_CREATE_SURFACE,
-                    &wl_surface_interface, args, 0, nil);
-        } else {
+        if (_cursorTheme == NULL) {
             NSLog(@"Wayland backend: no cursor theme, the compositor's cursor "
                   @"stays");
         }
     }
+    // Image cursors only need wl_shm, even without libwayland-cursor or a theme.
+    args[0].o = NULL;
+    _cursorSurface = WaylandCreateObject(_compositor, WP_COMPOSITOR_CREATE_SURFACE,
+                                        &wl_surface_interface, args, 0, nil);
 
     CFSocketContext context = {.version = 0, .info = self};
     _wlSocket = CFSocketCreateWithNative(NULL, WL.wl_display_get_fd(_wlDisplay),
@@ -293,7 +292,7 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         WL.wl_cursor_theme_destroy(_cursorTheme);
     if (_wlDisplay != NULL) {
         // wl_display_disconnect() doesn't free proxies.
-        struct wl_proxy *proxies[] = {_cursorSurface, _pointer, _keyboard,
+        struct wl_proxy *proxies[] = {_imageCursorBuffer, _cursorSurface, _pointer, _keyboard,
                                       _seat, _decorationManager, _wmBase,
                                       _shm, _compositor, _registry};
         for (size_t i = 0; i < sizeof(proxies) / sizeof(proxies[0]); i++)
@@ -1199,6 +1198,41 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
 
 #pragma mark - Cursors
 
+- (struct wl_proxy *) imageCursorBuffer {
+    if (_imageCursorBuffer != NULL)
+        return _imageCursorBuffer;
+    NSData *pixels = [_cursor pixels];
+    if (pixels == nil)
+        return NULL;
+
+    size_t size = [pixels length];
+    int fd = WaylandCreateAnonymousFile(size);
+    if (fd < 0)
+        return NULL;
+    void *data = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    if (data == MAP_FAILED) {
+        close(fd);
+        return NULL;
+    }
+    memcpy(data, [pixels bytes], size);
+    // Immutable storage: the queued request owns a duplicate of fd and the
+    // compositor keeps its mapping. We never rewrite pixels still in use.
+    munmap(data, size);
+    union wl_argument poolArgs[3] = {{.o = NULL}, {.h = fd}, {.i = (int32_t) size}};
+    struct wl_proxy *pool = WaylandCreateObject(_shm, WP_SHM_CREATE_POOL,
+                                                &wl_shm_pool_interface, poolArgs, 0, nil);
+    close(fd);
+    NSSize dimensions = [_cursor size];
+    union wl_argument bufferArgs[6] = {{.o = NULL}, {.i = 0},
+        {.i = (int32_t) dimensions.width}, {.i = (int32_t) dimensions.height},
+        {.i = (int32_t) dimensions.width * 4}, {.u = WP_SHM_FORMAT_ARGB8888}};
+    _imageCursorBuffer = WaylandCreateObject(pool, WP_SHM_POOL_CREATE_BUFFER,
+            &wl_buffer_interface, bufferArgs, 0, nil);
+    union wl_argument none[1] = {{.o = NULL}};
+    WaylandMarshal(pool, WP_SHM_POOL_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY, none);
+    return _imageCursorBuffer;
+}
+
 - (void) applyCursor {
     if (_pointer == NULL || _pointerEnterSerial == 0)
         return;
@@ -1214,36 +1248,45 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         [self flush];
         return;
     }
-    if (_cursorTheme == NULL || _cursorSurface == NULL)
+    if (_cursorSurface == NULL)
         return;
 
-    static const char *const arrowNames[] = {"default", "left_ptr", NULL};
-    const char *const *names = _cursor ? [_cursor names] : arrowNames;
-    struct wl_cursor *cursor = NULL;
-    for (int i = 0; cursor == NULL && names[i] != NULL; i++)
-        cursor = WL.wl_cursor_theme_get_cursor(_cursorTheme, names[i]);
-    for (int i = 0; cursor == NULL && arrowNames[i] != NULL; i++)
-        cursor = WL.wl_cursor_theme_get_cursor(_cursorTheme, arrowNames[i]);
-    if (cursor == NULL || cursor->image_count == 0)
-        return;
+    struct wl_proxy *buffer = [self imageCursorBuffer];
+    NSSize size = [_cursor size];
+    NSPoint hotSpot = [_cursor hotSpot];
+    if (buffer == NULL) {
+        if (_cursorTheme == NULL)
+            return;
+        static const char *const arrowNames[] = {"default", "left_ptr", NULL};
+        const char *const *names = _cursor ? [_cursor names] : arrowNames;
+        struct wl_cursor *cursor = NULL;
+        for (int i = 0; cursor == NULL && names[i] != NULL; i++)
+            cursor = WL.wl_cursor_theme_get_cursor(_cursorTheme, names[i]);
+        for (int i = 0; cursor == NULL && arrowNames[i] != NULL; i++)
+            cursor = WL.wl_cursor_theme_get_cursor(_cursorTheme, arrowNames[i]);
+        if (cursor == NULL || cursor->image_count == 0)
+            return;
 
-    struct wl_cursor_image *image = cursor->images[0];
-    struct wl_buffer *buffer = WL.wl_cursor_image_get_buffer(image);
-    if (buffer == NULL)
-        return;
+        struct wl_cursor_image *image = cursor->images[0];
+        buffer = (struct wl_proxy *) WL.wl_cursor_image_get_buffer(image);
+        if (buffer == NULL)
+            return;
+        size = NSMakeSize(image->width, image->height);
+        hotSpot = NSMakePoint(image->hotspot_x, image->hotspot_y);
+    }
 
     union wl_argument attach[3] = {{.o = (struct wl_object *) buffer}, {.i = 0}, {.i = 0}};
     WaylandMarshal(_cursorSurface, WP_SURFACE_ATTACH, NULL, 0, attach);
     union wl_argument damage[4] = {{.i = 0}, {.i = 0},
-                                   {.i = (int32_t) image->width},
-                                   {.i = (int32_t) image->height}};
+                                   {.i = (int32_t) size.width},
+                                   {.i = (int32_t) size.height}};
     WaylandMarshal(_cursorSurface, WP_SURFACE_DAMAGE, NULL, 0, damage);
     union wl_argument none[1] = {{.o = NULL}};
     WaylandMarshal(_cursorSurface, WP_SURFACE_COMMIT, NULL, 0, none);
 
     args[1].o = (struct wl_object *) _cursorSurface;
-    args[2].i = (int32_t) image->hotspot_x;
-    args[3].i = (int32_t) image->hotspot_y;
+    args[2].i = (int32_t) hotSpot.x;
+    args[3].i = (int32_t) hotSpot.y;
     WaylandMarshal(_pointer, WP_POINTER_SET_CURSOR, NULL, 0, args);
     [self flush];
 }
@@ -1278,15 +1321,23 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
 }
 
 - (id) cursorWithImage: (NSImage *) image hotSpot: (NSPoint) hotSpot {
-    // Image cursors aren't supported yet.
-    return [self cursorWithName: @"arrowCursor"];
+    WaylandCursor *cursor = [[[WaylandCursor alloc] initWithImage: image hotSpot: hotSpot] autorelease];
+    return cursor != nil ? cursor : [self cursorWithName: @"arrowCursor"];
 }
 
 - (void) setCursor: (id) cursor {
     if (![cursor isKindOfClass: [WaylandCursor class]])
         return;
+    // Retain first: AppKit can select the currently active cursor again.
+    [cursor retain];
+    if (cursor != _cursor && _imageCursorBuffer != NULL) {
+        union wl_argument none[1] = {{.o = NULL}};
+        WaylandMarshal(_imageCursorBuffer, WP_BUFFER_DESTROY, NULL,
+                        WL_MARSHAL_FLAG_DESTROY, none);
+        _imageCursorBuffer = NULL;
+    }
     [_cursor release];
-    _cursor = [cursor retain];
+    _cursor = cursor;
     [self applyCursor];
 }
 

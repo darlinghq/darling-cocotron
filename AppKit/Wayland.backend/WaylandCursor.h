@@ -17,16 +17,27 @@
  SOFTWARE. */
 
 #import <Foundation/NSObject.h>
+#import <Foundation/NSGeometry.h>
+
+@class NSData, NSImage;
 
 // A cursor of the Wayland backend: the names to look up in the cursor theme, most
-// preferred first, or a blank cursor. The display loads and attaches the image.
+// preferred first, an immutable ARGB image, or a blank cursor. Native resources
+// belong to the display, so cached cursors can outlive its Wayland connection.
 @interface WaylandCursor : NSObject {
     const char *_names[3];
     BOOL _blank;
+    NSData *_pixels;
+    NSSize _size;
+    NSPoint _hotSpot;
 }
 
 - (instancetype) initWithName: (const char *) name fallback: (const char *) fallback;
 - (instancetype) initBlank;
+- (instancetype) initWithImage: (NSImage *) image hotSpot: (NSPoint) hotSpot;
+- (NSData *) pixels;
+- (NSSize) size;
+- (NSPoint) hotSpot;
 
 // NULL-terminated.
 - (const char *const *) names;
