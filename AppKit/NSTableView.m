@@ -132,6 +132,17 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
         _editedRow = -1;
         _numberOfRows = -1;
         _draggingRow = -1;
+        _draggingSourceMaskLocal = NSDragOperationEvery;
+        _draggingSourceMaskNonLocal = NSDragOperationNone;
+        // Nibs archive "every operation" as -1; NSDragOperationEvery is 32 bits wide here.
+        if ([keyed containsValueForKey: @"NSDraggingSourceMaskForLocal"])
+            _draggingSourceMaskLocal = (NSDragOperation) [keyed
+                    decodeIntegerForKey: @"NSDraggingSourceMaskForLocal"] &
+                    NSDragOperationEvery;
+        if ([keyed containsValueForKey: @"NSDraggingSourceMaskForNonLocal"])
+            _draggingSourceMaskNonLocal = (NSDragOperation) [keyed
+                    decodeIntegerForKey: @"NSDraggingSourceMaskForNonLocal"] &
+                    NSDragOperationEvery;
 
         // row background and grid attributes for OS X >= 10.3
         _alternatingRowBackground = (flags & 0x00800000) ? YES : NO;
@@ -227,6 +238,8 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
     _editedRow = -1;
     _numberOfRows = -1;
     _draggingRow = -1;
+    _draggingSourceMaskLocal = NSDragOperationEvery;
+    _draggingSourceMaskNonLocal = NSDragOperationNone;
 
     _allowsColumnReordering = YES;
     _allowsColumnResizing = YES;
@@ -2114,8 +2127,17 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     [self tile];
 }
 
+- (void) setDraggingSourceOperationMask: (NSDragOperation) mask
+                               forLocal: (BOOL) isLocal
+{
+    if (isLocal)
+        _draggingSourceMaskLocal = mask;
+    else
+        _draggingSourceMaskNonLocal = mask;
+}
+
 - (NSDragOperation) draggingSourceOperationMaskForLocal: (BOOL) isLocal {
-    return NSDragOperationCopy;
+    return isLocal ? _draggingSourceMaskLocal : _draggingSourceMaskNonLocal;
 }
 
 - (NSInteger) _getDraggedRow: (id<NSDraggingInfo>) info {
