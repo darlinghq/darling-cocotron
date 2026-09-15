@@ -722,10 +722,18 @@ static int untitled_document_number = 0;
     NSString *extension = [path pathExtension];
     if ([extension length] == 0) {
         extension = [[[NSDocumentController sharedDocumentController]
-                fileExtensionsFromType: [self fileType]] objectAtIndex: 0];
+                fileExtensionsFromType: [self fileType]] firstObject];
     }
     NSSavePanel *savePanel = [NSSavePanel savePanel];
     [savePanel setRequiredFileType: extension];
+    // Suggest a name before prepareSavePanel:, which may replace it.
+    if (_fileURL) {
+        // Suggest saving alongside the original file
+        [savePanel setDirectory: [path stringByDeletingLastPathComponent]];
+        [savePanel setNameFieldStringValue: [path lastPathComponent]];
+    } else {
+        [savePanel setNameFieldStringValue: [self displayName]];
+    }
 
 #if 0
     // setAllowedFileTypes: is unimplemented - so don't call it.
@@ -739,27 +747,16 @@ static int untitled_document_number = 0;
         return;
     }
 
-    int saveResult;
-    if (_fileURL) {
-        // Suggest saving alongside the original file
-        saveResult = [savePanel
-                runModalForDirectory: [path stringByDeletingLastPathComponent]
-                                file: [path lastPathComponent]];
-    } else {
-        NSString *directory = [savePanel directory];
-        if (directory == nil) {
-            // Suggest saving in some reasonable directory
-            directory = [[NSDocumentController sharedDocumentController]
-                    currentDirectory];
-        }
-        saveResult = [savePanel runModalForDirectory: directory
-                                                file: [self displayName]];
-    }
+    NSInteger saveResult = [savePanel runModal];
     if (saveResult) {
         NSString *savePath = [savePanel filename];
         NSString *extension = [savePath pathExtension];
         NSString *fileType = [[NSDocumentController sharedDocumentController]
                 typeFromFileExtension: extension];
+        // Types named only by content type identifiers list no extensions to match; like macOS, which takes the
+        // type from the panel rather than the extension, keep the document's type.
+        if (fileType == nil)
+            fileType = [self fileType];
 
         [[NSUserDefaults standardUserDefaults]
                 setObject: [savePath stringByDeletingLastPathComponent]
