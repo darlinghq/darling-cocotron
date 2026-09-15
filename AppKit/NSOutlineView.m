@@ -29,6 +29,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSStringDrawing.h>
 #import <AppKit/NSTableColumn.h>
 #import <AppKit/NSTextFieldCell.h>
+#import <AppKit/NSObject+BindingSupport.h>
+#import <AppKit/NSTreeController.h>
+#import <AppKit/NSTreeNode.h>
+#import "NSKeyValueBinding/NSBinder.h"
 #import <Foundation/NSKeyedArchiver.h>
 
 NSString *const NSOutlineViewItemWillExpandNotification =
@@ -78,7 +82,31 @@ NSString *const NSOutlineViewDisclosureButtonKey =
 
 @end
 
+@interface NSTableView (NSOutlineViewBindings)
+- (void) _establishBindingsWithDestinationIfUnbound: (id) destination;
+- (void) _boundValuesChanged;
+@end
+
 @implementation NSOutlineView
+
++ (void) initialize {
+    [self setKeys: [NSArray arrayWithObject: @"selectedRowIndexes"]
+            triggerChangeNotificationsForDependentKey: @"selectedIndexPaths"];
+}
+
+// Items come from the data source when it provides content, else from the tree
+// controller's arrangedObjects that "content" is bound to.
+static inline BOOL usesDataSourceContent(NSOutlineView *self) {
+    return [self->_dataSource respondsToSelector: @selector
+                              (outlineView:child:ofItem:)];
+}
+
+static inline NSTreeNode *boundNode(NSOutlineView *self, id item) {
+    if (item != nil)
+        return item;
+    id binder = [self _binderForBinding: @"content"];
+    return [[binder destination] valueForKeyPath: [binder keyPath]];
+}
 
 static inline BOOL isItemExpanded(NSOutlineView *self, id item) {
     return (BOOL)((unsigned) NSMapGet(self->_itemToExpansionState, item));
@@ -92,8 +120,10 @@ static inline NSInteger numberOfChildrenOfItemAndReload(NSOutlineView *self,
     if (!reload)
         result = (NSInteger) NSMapGet(self->_itemToNumberOfChildren, item);
     else {
-        result = [self->_dataSource outlineView: self
-                         numberOfChildrenOfItem: item];
+        result = usesDataSourceContent(self)
+                         ? [self->_dataSource outlineView: self
+                                   numberOfChildrenOfItem: item]
+                         : [[boundNode(self, item) childNodes] count];
 
         NSMapInsert(self->_itemToNumberOfChildren, item, (void *) result);
     }
@@ -106,7 +136,12 @@ static inline id childOfItemAtIndex(NSOutlineView *self, id item,
 {
 #if 1
     // NSLog(@"%s %d",__FILE__,__LINE__);
-    id result = [self->_dataSource outlineView: self child: index ofItem: item];
+    id result = usesDataSourceContent(self)
+                        ? [self->_dataSource outlineView: self
+                                                   child: index
+                                                  ofItem: item]
+                        : [[boundNode(self, item) childNodes]
+                                  objectAtIndex: index];
 
     // NSLog(@"item %@ child %d = %@",item,index,result);
 
@@ -290,6 +325,8 @@ static inline id childOfItemAtIndex(NSOutlineView *self, id item,
 }
 
 - (BOOL) isExpandable: (id) item {
+    if (!usesDataSourceContent(self))
+        return ![boundNode(self, item) isLeaf];
     return [_dataSource outlineView: self isItemExpandable: item];
 }
 
@@ -383,7 +420,7 @@ static inline id childOfItemAtIndex(NSOutlineView *self, id item,
                        numberOfChildrenOfItemAndReload(self, item, YES);
 
         for (i = 0; i < numberOfChildren; ++i) {
-            id child = [_dataSource outlineView: self child: i ofItem: item];
+            id child = childOfItemAtIndex(self, item, i);
 
             if ([self _delayResizeButExpandItem: child expandChildren: YES])
                 noteNumberOfRowsChanged = YES;
@@ -493,7 +530,7 @@ static inline id childOfItemAtIndex(NSOutlineView *self, id item,
                              numberOfChildrenOfItemAndReload(self, item, YES);
 
         for (i = 0; i < numberOfChildren; ++i) {
-            id child = [_dataSource outlineView: self child: i ofItem: item];
+            id child = childOfItemAtIndex(self, item, i);
 
             [self collapseItem: child collapseChildren: YES];
         }
@@ -575,8 +612,10 @@ static inline id childOfItemAtIndex(NSOutlineView *self, id item,
                                NULL};
     NSInteger i;
 
+    // With bound content a data source may implement only drag and drop methods.
+    BOOL providesContent = [dataSource respondsToSelector: requiredSelectors[0]];
     for (i = 0; requiredSelectors[i] != NULL; ++i)
-        if (dataSource != nil &&
+        if (providesContent &&
             ![dataSource respondsToSelector: requiredSelectors[i]])
             [NSException
                      raise: NSInternalInconsistencyException
@@ -635,7 +674,7 @@ static void loadItemIntoMapTables(NSOutlineView *self, id item,
             numberOfChildren = numberOfChildrenOfItemAndReload(self, item, YES);
 
     for (i = 0; i < numberOfChildren; ++i) {
-        id child = [self->_dataSource outlineView: self child: i ofItem: item];
+        id child = childOfItemAtIndex(self, item, i);
 
         NSHashRemove(removeItems, child);
 
@@ -1061,9 +1100,88 @@ static void loadItemIntoMapTables(NSOutlineView *self, id item,
 - (id) dataSourceObjectValueForTableColumn: (NSTableColumn *) tableColumn
                                        row: (NSInteger) row
 {
+    // Bound columns get their values from -[NSTableColumn prepareCell:inRow:].
+    if (![_dataSource respondsToSelector: @selector
+                      (outlineView:objectValueForTableColumn:byItem:)])
+        return nil;
     return [_dataSource outlineView: self
             objectValueForTableColumn: tableColumn
                                byItem: [self itemAtRow: row]];
+}
+
+#pragma mark Tree controller bindings
+
+- (id) _replacementKeyPathForBinding: (id) binding {
+    if ([binding isEqual: @"selectionIndexPaths"])
+        return @"selectedIndexPaths";
+    return [super _replacementKeyPathForBinding: binding];
+}
+
+- (void) _establishBindingsWithDestinationIfUnbound: (id) destination {
+    if (![destination isKindOfClass: [NSTreeController class]]) {
+        [super _establishBindingsWithDestinationIfUnbound: destination];
+        return;
+    }
+    if ([[self _allUsedBinders] count] == 0) {
+        [self bind: @"content"
+                   toObject: destination
+                withKeyPath: @"arrangedObjects"
+                    options: nil];
+        [self bind: @"sortDescriptors"
+                   toObject: destination
+                withKeyPath: @"sortDescriptors"
+                    options: nil];
+        [self bind: @"selectionIndexPaths"
+                   toObject: destination
+                withKeyPath: @"selectionIndexPaths"
+                    options: nil];
+    }
+}
+
+// The tree controller replaced its nodes: expansion state keyed by the old ones is stale.
+- (void) _boundValuesChanged {
+    if (!usesDataSourceContent(self))
+        NSResetMapTable(_itemToExpansionState);
+    [super _boundValuesChanged];
+}
+
+// KVC key "selectedIndexPaths": the selected rows as tree node index paths.
+- (NSArray *) _selectedIndexPaths {
+    NSMutableArray *paths = [NSMutableArray array];
+    NSIndexSet *rows = [self selectedRowIndexes];
+    NSUInteger row;
+
+    for (row = [rows firstIndex]; row != NSNotFound;
+         row = [rows indexGreaterThanIndex: row]) {
+        id item = [self itemAtRow: row];
+        if ([item isKindOfClass: [NSTreeNode class]])
+            [paths addObject: [item indexPath]];
+    }
+    return paths;
+}
+
+- (void) _setSelectedIndexPaths: (NSArray *) paths {
+    NSMutableIndexSet *rows = [NSMutableIndexSet indexSet];
+    NSTreeNode *root = boundNode(self, nil);
+    void *row;
+
+    for (NSIndexPath *path in paths) {
+        NSTreeNode *node = [root descendantNodeAtIndexPath: path];
+        if (node == nil)
+            continue;
+        // A selected node under a collapsed parent has no row until it is revealed.
+        NSMutableArray *ancestors = [NSMutableArray array];
+        for (NSTreeNode *parent = [node parentNode]; parent != nil && parent != root;
+             parent = [parent parentNode])
+            [ancestors insertObject: parent atIndex: 0];
+        for (NSTreeNode *parent in ancestors)
+            if (!isItemExpanded(self, parent))
+                [self expandItem: parent];
+        [self numberOfRows]; // loads the row map
+        if (NSMapMember(_itemToRow, node, NULL, &row))
+            [rows addIndex: (NSUInteger) row];
+    }
+    [self selectRowIndexes: rows byExtendingSelection: NO];
 }
 
 - (void) _willDisplayCell: (NSCell *) cell
