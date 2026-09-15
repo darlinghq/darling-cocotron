@@ -113,6 +113,79 @@ static void CGPathConverter(void *info, const CGPathElement *element) {
     return self;
 }
 
+// NSArchiver (typedstream) form, class version 524: an "i" point count, a
+// "cff" group (element type, x, y) per point, then "iiifffi": winding rule,
+// line cap, line join, line width, miter limit, flatness and dash count. A
+// curve is three groups: control point 1, control point 2, end point.
+- initWithCoder: (NSCoder *) coder {
+    if ([coder allowsKeyedCoding] ||
+        [coder versionForClassName: @"NSBezierPath"] != 524) {
+        [self release];
+        [NSException raise: NSInvalidArgumentException
+                    format: @"NSBezierPath: only version 524 NSArchiver archives are supported"];
+    }
+    self = [self init];
+
+    int count = 0, curvePoints = 0;
+    NSPoint curve[2];
+    [coder decodeValueOfObjCType: @encode(int) at: &count];
+    for (int i = 0; i < count; i++) {
+        char type = -1;
+        float x = 0, y = 0;
+        [coder decodeValuesOfObjCTypes: "cff", &type, &x, &y];
+        if (curvePoints > 0 && type != NSCurveToBezierPathElement)
+            type = -1;
+        switch (type) {
+        case NSMoveToBezierPathElement:
+            [self moveToPoint: NSMakePoint(x, y)];
+            break;
+        case NSLineToBezierPathElement:
+            [self lineToPoint: NSMakePoint(x, y)];
+            break;
+        case NSCurveToBezierPathElement:
+            if (curvePoints < 2)
+                curve[curvePoints++] = NSMakePoint(x, y);
+            else {
+                [self curveToPoint: NSMakePoint(x, y)
+                     controlPoint1: curve[0]
+                     controlPoint2: curve[1]];
+                curvePoints = 0;
+            }
+            break;
+        case NSClosePathBezierPathElement:
+            [self closePath];
+            break;
+        default:
+            [self release];
+            [NSException raise: NSInvalidArgumentException
+                        format: @"NSBezierPath: unsupported archived element type %d", type];
+        }
+    }
+    if (curvePoints > 0) {
+        [self release];
+        [NSException raise: NSInvalidArgumentException
+                    format: @"NSBezierPath: archived curve is missing points"];
+    }
+
+    int windingRule = _windingRule, lineCap = _lineCapStyle,
+        lineJoin = _lineJoinStyle, dashCount = 0;
+    float lineWidth = _lineWidth, miterLimit = _miterLimit, flatness = _flatness;
+    [coder decodeValuesOfObjCTypes: "iiifffi", &windingRule, &lineCap, &lineJoin,
+                                    &lineWidth, &miterLimit, &flatness, &dashCount];
+    if (dashCount != 0) {
+        [self release];
+        [NSException raise: NSInvalidArgumentException
+                    format: @"NSBezierPath: archived line dashes are not supported"];
+    }
+    [self setWindingRule: windingRule];
+    [self setLineCapStyle: lineCap];
+    [self setLineJoinStyle: lineJoin];
+    [self setLineWidth: lineWidth];
+    [self setMiterLimit: miterLimit];
+    [self setFlatness: flatness];
+    return self;
+}
+
 - (void) dealloc {
     NSZoneFree(NULL, _elements);
     NSZoneFree(NULL, _points);
