@@ -16,6 +16,7 @@ FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
 COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
+#import <AppKit/NSBitmapImageRep.h>
 #import <AppKit/NSCachedImageRep.h>
 #import <AppKit/NSGraphicsContext.h>
 #import <AppKit/NSGraphicsContextFunctions.h>
@@ -61,6 +62,27 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [self initWithWindow: window rect: rect];
     [window release];
     return self;
+}
+
+// Typedstream archives keep a cached image as TIFF data followed by a char and three ints. The window it was cached in
+// doesn't exist when unarchiving, so the image comes back as the bitmap rep of that TIFF data.
+- (instancetype) initWithCoder: (NSCoder *) coder {
+    if ([coder allowsKeyedCoding])
+        return [super initWithCoder: coder];
+
+    NSData *tiff = [coder decodeDataObject];
+    char unknownChar;
+    int unknownInts[3];
+    [coder decodeValuesOfObjCTypes: "c", &unknownChar];
+    [coder decodeValuesOfObjCTypes: "iii", &unknownInts[0], &unknownInts[1], &unknownInts[2]];
+
+    NSBitmapImageRep *bitmap = [[NSBitmapImageRep alloc] initWithData: tiff];
+    if (bitmap == nil)
+        [NSException raise: NSInvalidArgumentException
+                    format: @"-[%@ %s]: unreadable TIFF data (%lu bytes)", [self class], sel_getName(_cmd),
+                            (unsigned long) [tiff length]];
+    [self release];
+    return bitmap;
 }
 
 - (void) dealloc {
