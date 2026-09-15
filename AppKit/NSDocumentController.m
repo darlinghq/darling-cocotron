@@ -197,8 +197,23 @@ static NSDocumentController *shared = nil;
 
 - (NSArray *) fileExtensionsFromType: (NSString *) type {
     NSDictionary *info = [self _infoForType: type];
+    NSArray *extensions = [info objectForKey: @"CFBundleTypeExtensions"];
+    if ([extensions count] > 0)
+        return extensions;
 
-    return [info objectForKey: @"CFBundleTypeExtensions"];
+    // Types named only by content type identifiers list no extensions; UTType knows them.
+    NSArray *identifiers = [info objectForKey: @"LSItemContentTypes"];
+    if (identifiers == nil && type != nil)
+        identifiers = [NSArray arrayWithObject: type];
+    Class contentType = NSClassFromString(@"UTType");
+    NSMutableArray *result = [NSMutableArray array];
+    for (NSString *identifier in identifiers) {
+        NSString *extension = [[contentType typeWithIdentifier: identifier]
+                preferredFilenameExtension];
+        if ([extension length] > 0 && ![result containsObject: extension])
+            [result addObject: extension];
+    }
+    return [result count] > 0 ? result : nil;
 }
 
 - (NSArray *) _allFileExtensions {
