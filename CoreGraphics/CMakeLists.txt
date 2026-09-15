@@ -149,6 +149,12 @@ add_framework(CoreGraphics
 # NSBundle finds the backends through the framework's Resources link.
 InstallSymlink("Versions/Current/Resources" "${CMAKE_INSTALL_PREFIX}/libexec/darling/System/Library/Frameworks/CoreGraphics.framework/Resources")
 
+# Since macOS 14 the CoreGraphics Swift overlay is part of CoreGraphics.framework, so apps bind symbols such as
+# $sSo12CGContextRefa12CoreGraphicsE7addLine2toySo7CGPointV_tF to CoreGraphics. Re-export the overlay from
+# src/external/swift (installed as /usr/lib/swift/libswiftCoreGraphics.dylib) so those binds resolve.
+set_property(TARGET CoreGraphics APPEND_STRING PROPERTY
+	LINK_FLAGS " -Wl,-reexport_library,${CMAKE_SOURCE_DIR}/src/external/swift/libswiftCoreGraphics.dylib ")
+
 function(add_backend name)
 	cmake_parse_arguments(BACKEND "" "INFO_PLIST" "SOURCES;DEPENDENCIES;RESOURCES" ${ARGN})
 	set(path "/System/Library/Frameworks/CoreGraphics.framework/Versions/${FRAMEWORK_VERSION}/Resources/Backends/${name}.backend/Contents")
