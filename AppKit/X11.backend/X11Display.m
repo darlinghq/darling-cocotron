@@ -997,6 +997,47 @@ static NSDictionary *modeInfoToDictionary(const XRRModeInfo *mi, int depth) {
     return res;
 }
 
+// NSUnboldFontMask and NSUnitalicFontMask are conversion requests, not face
+// traits.
+static NSFontTraitMask fontTraitsOfPattern(FcPattern *p) {
+    int slant = FC_SLANT_ROMAN, width = FC_WIDTH_NORMAL,
+        weight = FC_WEIGHT_REGULAR;
+    FcPatternGetInteger(p, FC_SLANT, 0, &slant);
+    FcPatternGetInteger(p, FC_WIDTH, 0, &width);
+    FcPatternGetInteger(p, FC_WEIGHT, 0, &weight);
+
+    NSFontTraitMask traits = 0;
+    if (slant == FC_SLANT_OBLIQUE || slant == FC_SLANT_ITALIC)
+        traits |= NSItalicFontMask;
+    if (weight >= FC_WEIGHT_SEMIBOLD)
+        traits |= NSBoldFontMask;
+    if (width <= FC_WIDTH_SEMICONDENSED)
+        traits |= NSNarrowFontMask;
+    else if (width >= FC_WIDTH_SEMIEXPANDED)
+        traits |= NSExpandedFontMask;
+    return traits;
+}
+
+// -[NSFontFamily typefaceWithTraits:] takes the first face with a trait mask,
+// so list the faces nearest to regular (or bold) weight and normal width first,
+// then regular, italic, bold, bold italic.
+static int fontPatternDistance(FcPattern *p) {
+    int slant = FC_SLANT_ROMAN, width = FC_WIDTH_NORMAL,
+        weight = FC_WEIGHT_REGULAR;
+    FcPatternGetInteger(p, FC_SLANT, 0, &slant);
+    FcPatternGetInteger(p, FC_WIDTH, 0, &width);
+    FcPatternGetInteger(p, FC_WEIGHT, 0, &weight);
+    BOOL bold = weight >= FC_WEIGHT_SEMIBOLD;
+    int target = bold ? FC_WEIGHT_BOLD : FC_WEIGHT_REGULAR;
+    return (abs(weight - target) * 1000 + abs(width - FC_WIDTH_NORMAL)) * 4 +
+           bold * 2 + (slant != FC_SLANT_ROMAN);
+}
+
+static int compareFontPatterns(const void *a, const void *b) {
+    return fontPatternDistance(*(FcPattern *const *) a) -
+           fontPatternDistance(*(FcPattern *const *) b);
+}
+
 - (NSArray<NSFontTypeface *> *) fontTypefacesForFamilyName:
         (NSString *) familyName
 {
@@ -1017,6 +1058,7 @@ static NSDictionary *modeInfoToDictionary(const XRRModeInfo *mi, int depth) {
 
     FcFontSet *set = FcFontList(O2FontSharedFontConfig(), pat, props);
     NSMutableArray *ret = [NSMutableArray array];
+    qsort(set->fonts, set->nfont, sizeof(FcPattern *), compareFontPatterns);
 
     for (int i = 0; i < set->nfont; i++) {
         FcChar8 *typeface;
@@ -1044,40 +1086,10 @@ static NSDictionary *modeInfoToDictionary(const XRRModeInfo *mi, int depth) {
             if (name == nil)
                 name = traitName;
 
-            NSFontTraitMask traits = 0;
-            // Read the first value of each property; a face that doesn't
-            // have one (or has a range, as variable fonts do) is upright,
-            // regular and of normal width.
-            int slant = FC_SLANT_ROMAN, width = FC_WIDTH_NORMAL,
-                weight = FC_WEIGHT_REGULAR;
-            FcPatternGetInteger(p, FC_SLANT, 0, &slant);
-            FcPatternGetInteger(p, FC_WIDTH, 0, &width);
-            FcPatternGetInteger(p, FC_WEIGHT, 0, &weight);
-
-            switch (slant) {
-            case FC_SLANT_OBLIQUE:
-            case FC_SLANT_ITALIC:
-                traits |= NSItalicFontMask;
-                break;
-            default:
-                traits |= NSUnitalicFontMask;
-                break;
-            }
-
-            if (weight <= FC_WEIGHT_LIGHT)
-                traits |= NSUnboldFontMask;
-            else if (weight >= FC_WEIGHT_SEMIBOLD)
-                traits |= NSBoldFontMask;
-
-            if (width <= FC_WIDTH_SEMICONDENSED)
-                traits |= NSNarrowFontMask;
-            else if (width >= FC_WIDTH_SEMIEXPANDED)
-                traits |= NSExpandedFontMask;
-
-            NSFontTypeface *face =
-                    [[NSFontTypeface alloc] initWithName: name
-                                               traitName: traitName
-                                                  traits: traits];
+            NSFontTypeface *face = [[NSFontTypeface alloc]
+                    initWithName: name
+                       traitName: traitName
+                          traits: fontTraitsOfPattern(p)];
             if (face != nil) {
                 [ret addObject: face];
                 [face release];
