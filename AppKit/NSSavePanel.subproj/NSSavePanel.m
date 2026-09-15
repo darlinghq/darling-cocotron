@@ -211,9 +211,15 @@ static NSSavePanel *_newPanel = nil;
             NSBeep();
             return;
         }
-        [self _setFilename: [[self _selectedDirectory]
+        // Like macOS, a typed path starting with / or ~ names the folder too.
+        NSString *path = [name stringByExpandingTildeInPath];
+        if (![path isAbsolutePath])
+            path = [[self _selectedDirectory]
+                    stringByAppendingPathComponent: name];
+        [self _setFilename: [[path stringByDeletingLastPathComponent]
                                     stringByAppendingPathComponent:
-                                            [self _nameWithAllowedExtension: name]]];
+                                            [self _nameWithAllowedExtension:
+                                                          [path lastPathComponent]]]];
     }
 
     [self _endWithCode: NSOKButton];
