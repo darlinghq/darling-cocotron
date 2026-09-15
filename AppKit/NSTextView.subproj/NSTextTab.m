@@ -70,9 +70,12 @@ NSString *NSTabColumnTerminatorsAttributeName =
             _type = [aDecoder decodeIntForKey: @"Type"];
             _location = [aDecoder decodeFloatForKey: @"Location"];
         } else {
-            NSUnimplementedMethod();
-            [self release];
-            self = nil;
+            // Typedstream: the tab type as a char and the location as a float.
+            unsigned char type;
+            float location;
+            [aDecoder decodeValuesOfObjCTypes: "Cf", &type, &location];
+            _type = type;
+            _location = location;
         }
     }
     return self;

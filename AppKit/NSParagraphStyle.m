@@ -104,9 +104,28 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         _tighteningFactorForTruncation =
                 [coder decodeFloatForKey: @"TighteningFactor"];
     } else {
-        [NSException raise: NSInvalidArgumentException
-                    format: @"-[%@ %s] is not implemented for coder %@",
-                            [self class], sel_getName(_cmd), coder];
+        // Typedstream: the alignment (NSLeftTextAlignment..NSNaturalTextAlignment), a char, the tab stops (nil for the
+        // default ones) and a short of flags. Flag 0x10 appends one float as "[1f]" whose meaning isn't established, so
+        // it is read but not applied; any other flag or a nonzero char is refused.
+        unsigned char alignment, unknownChar;
+        NSArray *tabStops;
+        unsigned short flags;
+        [coder decodeValuesOfObjCTypes: "CC@S", &alignment, &unknownChar, &tabStops, &flags];
+        [tabStops autorelease];
+        if (alignment > NSNaturalTextAlignment || unknownChar != 0 || (flags & ~0x10) != 0)
+            [NSException raise: NSInvalidArgumentException
+                        format: @"-[%@ %s]: unsupported archived values %u %u %u", [self class], sel_getName(_cmd),
+                                alignment, unknownChar, flags];
+        if (flags & 0x10) {
+            float unknownFloat[1];
+            [coder decodeValueOfObjCType: "[1f]" at: unknownFloat];
+        }
+        [self _initWithDefaults];
+        _alignment = alignment;
+        if (tabStops != nil) {
+            [_tabStops release];
+            _tabStops = [tabStops mutableCopy];
+        }
     }
 
     return self;
