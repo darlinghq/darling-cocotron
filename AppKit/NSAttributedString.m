@@ -27,8 +27,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSStringDrawer.h>
 #import <AppKit/NSTextAttachment.h>
 
-NSAttributedStringKey NSFontAttributeName = @"NSFontAttributeName";
-NSAttributedStringKey NSParagraphStyleAttributeName = @"NSParagraphStyleAttributeName";
+// Font, paragraph style and superscript use the key strings archived attributed strings carry, as CoreText's
+// kCTFontAttributeName and kCTParagraphStyleAttributeName do.
+NSAttributedStringKey NSFontAttributeName = @"NSFont";
+NSAttributedStringKey NSParagraphStyleAttributeName = @"NSParagraphStyle";
 NSAttributedStringKey NSForegroundColorAttributeName = @"NSForegroundColorAttributeName";
 NSAttributedStringKey NSBackgroundColorAttributeName = @"NSBackgroundColorAttributeName";
 NSAttributedStringKey NSUnderlineStyleAttributeName = @"NSUnderlineStyleAttributeName";
@@ -42,7 +44,7 @@ NSAttributedStringKey NSObliquenessAttributeName = @"NSObliquenessAttributeName"
 NSAttributedStringKey NSStrokeWidthAttributeName = @"NSStrokeWidthAttributeName";
 NSAttributedStringKey NSStrokeColorAttributeName = @"NSStrokeColorAttributeName";
 NSAttributedStringKey NSBaselineOffsetAttributeName = @"NSBaselineOffsetAttributeName";
-NSAttributedStringKey NSSuperscriptAttributeName = @"NSSuperscriptAttributeName";
+NSAttributedStringKey NSSuperscriptAttributeName = @"NSSuperScript";
 NSAttributedStringKey NSLinkAttributeName = @"NSLinkAttributeName";
 NSAttributedStringKey NSShadowAttributeName = @"NSShadowAttributeName";
 NSAttributedStringKey NSExpansionAttributeName = @"NSExpansionAttributeName";
