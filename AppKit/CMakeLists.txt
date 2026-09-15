@@ -675,3 +675,78 @@ add_backend(X11
 )
 
 set_source_files_properties(DarlingLayout.mm PROPERTIES LANGUAGE CXX COMPILE_FLAGS "-std=c++14 -fexceptions")
+
+# Wayland backend, selected at run time with DARLING_APPKIT_BACKEND=wayland.
+# libwayland-client and libxkbcommon are loaded with dlopen() only when it is
+# selected, so building it needs just their headers, wayland-scanner and the
+# protocol files. It is skipped when any of them is missing.
+# 1.20 added wl_proxy_marshal_array_flags.
+pkg_check_modules(WAYLAND_CLIENT wayland-client>=1.20)
+pkg_check_modules(WAYLAND_CURSOR wayland-cursor)
+pkg_check_modules(XKBCOMMON xkbcommon)
+pkg_check_modules(WAYLAND_PROTOCOLS wayland-protocols)
+pkg_check_modules(WAYLAND_SCANNER wayland-scanner)
+find_program(WAYLAND_SCANNER_EXECUTABLE wayland-scanner)
+
+if (WAYLAND_SCANNER_FOUND AND WAYLAND_PROTOCOLS_FOUND)
+	pkg_get_variable(WAYLAND_CORE_PROTOCOL_DIR wayland-scanner pkgdatadir)
+	pkg_get_variable(WAYLAND_PROTOCOLS_DIR wayland-protocols pkgdatadir)
+endif ()
+set(WAYLAND_PROTOCOL_FILES
+	"${WAYLAND_CORE_PROTOCOL_DIR}/wayland.xml"
+	"${WAYLAND_PROTOCOLS_DIR}/stable/xdg-shell/xdg-shell.xml"
+	"${WAYLAND_PROTOCOLS_DIR}/unstable/xdg-decoration/xdg-decoration-unstable-v1.xml")
+set(WAYLAND_PROTOCOL_FILES_FOUND TRUE)
+foreach(protocol ${WAYLAND_PROTOCOL_FILES})
+	if (NOT EXISTS "${protocol}")
+		set(WAYLAND_PROTOCOL_FILES_FOUND FALSE)
+	endif ()
+endforeach()
+
+if (WAYLAND_CLIENT_FOUND AND WAYLAND_CURSOR_FOUND AND XKBCOMMON_FOUND
+		AND WAYLAND_SCANNER_EXECUTABLE AND WAYLAND_PROTOCOL_FILES_FOUND)
+	set(WAYLAND_PROTOCOL_SOURCES)
+	foreach(protocol ${WAYLAND_PROTOCOL_FILES})
+		get_filename_component(protocol_name "${protocol}" NAME_WE)
+		# Generated as .m: AppKit's C flags pre-include Foundation.
+		set(protocol_source "${CMAKE_CURRENT_BINARY_DIR}/Wayland.backend/${protocol_name}-protocol.m")
+		add_custom_command(
+			OUTPUT "${protocol_source}"
+			COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/Wayland.backend"
+			COMMAND "${WAYLAND_SCANNER_EXECUTABLE}" private-code "${protocol}" "${protocol_source}"
+			DEPENDS "${protocol}"
+		)
+		list(APPEND WAYLAND_PROTOCOL_SOURCES "${protocol_source}")
+	endforeach()
+
+	add_backend(Wayland
+		SOURCES
+			Wayland.backend/WaylandCursor.m
+			Wayland.backend/WaylandDisplay.m
+			Wayland.backend/WaylandLibrary.m
+			Wayland.backend/WaylandWindow.m
+			${WAYLAND_PROTOCOL_SOURCES}
+		INFO_PLIST
+			Wayland.backend/Info.plist
+		DEPENDENCIES
+			objc
+			system
+			CoreFoundation
+			Foundation
+			AppKit
+			Onyx2D
+			CoreGraphics
+			# WaylandDisplay subclasses X11Display for its backend-independent parts.
+			X11_backend
+	)
+	target_include_directories(Wayland_backend PRIVATE
+		Wayland.backend
+		${CMAKE_SOURCE_DIR}/src/startup/mldr/elfcalls
+		${WAYLAND_CLIENT_INCLUDE_DIRS}
+		${WAYLAND_CURSOR_INCLUDE_DIRS}
+		${XKBCOMMON_INCLUDE_DIRS}
+	)
+else ()
+	message(STATUS "AppKit: not building the Wayland backend (needs wayland-client >= 1.20, "
+		"wayland-cursor, xkbcommon and wayland-protocols headers and wayland-scanner)")
+endif ()
