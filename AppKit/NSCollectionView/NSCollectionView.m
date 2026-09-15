@@ -20,10 +20,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSRaise.h>
 #import <AppKit/NSWindow.h>
 
-@implementation NSCollectionView {
-    NSMutableDictionary *_itemClasses;
-    NSSet *_selectionIndexPaths;
-}
+@implementation NSCollectionView
+@synthesize collectionViewLayout = _collectionViewLayout;
+@synthesize selectionIndexPaths = _selectionIndexPaths;
 
 - initWithCoder: (NSCoder *) coder {
     [super initWithCoder: coder];

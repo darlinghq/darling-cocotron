@@ -34,6 +34,9 @@ typedef NSString *NSCollectionViewSupplementaryElementKind;
     NSArray *_backgroundColors;
     BOOL _allowsMultipleSelection;
     NSIndexSet *_selectionIndexes;
+    NSCollectionViewLayout *_collectionViewLayout;
+    NSMutableDictionary *_itemClasses;
+    NSSet *_selectionIndexPaths;
 }
 
 - (NSArray *) content;
