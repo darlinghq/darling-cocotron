@@ -121,6 +121,7 @@ static NSSavePanel *_newPanel = nil;
     [_requiredFileType release];
     [_accessoryView release];
     [_nameField release];
+    [_sheetCompletionHandler release];
     [super dealloc];
 }
 
@@ -215,15 +216,61 @@ static NSSavePanel *_newPanel = nil;
                                             [self _nameWithAllowedExtension: name]]];
     }
 
-    [NSApp stopModalWithCode: NSOKButton];
+    [self _endWithCode: NSOKButton];
 }
 
 - (IBAction) _cancel: (id) sender {
-    [NSApp stopModalWithCode: NSCancelButton];
+    [self _endWithCode: NSCancelButton];
+}
+
+- (void) _endWithCode: (NSModalResponse) code {
+    if (_runsAsSheet)
+        [NSApp endSheet: self returnCode: code];
+    else
+        [NSApp stopModalWithCode: code];
 }
 
 - (void) beginWithCompletionHandler: (void (^)(NSModalResponse result)) handler {
     NSUnimplementedMethod();
+}
+
+- (void) beginSheetModalForWindow: (NSWindow *) window
+                completionHandler: (void (^)(NSModalResponse result)) handler
+{
+    if (_runsAsSheet)
+        [NSException raise: NSInternalInconsistencyException
+                    format: @"-[%@ %@]: the panel is already a sheet",
+                            [self class], NSStringFromSelector(_cmd)];
+    if (window == nil) {
+        NSModalResponse result = [self runModal];
+        if (handler != nil)
+            handler(result);
+        return;
+    }
+
+    _sheetCompletionHandler = [handler copy];
+    _styleMaskBeforeSheet = [self styleMask];
+    _runsAsSheet = YES;
+    [NSApp beginSheet: self
+            modalForWindow: window
+             modalDelegate: self
+            didEndSelector: @selector(_sheetDidEnd:returnCode:contextInfo:)
+               contextInfo: NULL];
+}
+
+- (void) _sheetDidEnd: (NSWindow *) sheet
+           returnCode: (NSModalResponse) code
+          contextInfo: (void *) info
+{
+    void (^handler)(NSModalResponse) = _sheetCompletionHandler;
+    _sheetCompletionHandler = nil;
+    _runsAsSheet = NO;
+    [self orderOut: nil];
+    [self setStyleMask: _styleMaskBeforeSheet];
+    if (handler != nil) {
+        handler(code);
+        [handler release];
+    }
 }
 
 - (NSInteger) runModalForDirectory: (NSString *) directory
