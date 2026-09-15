@@ -1044,6 +1044,11 @@ static inline NSGlyphFragment *fragmentAtGlyphIndex(NSLayoutManager *self,
     NSRange range;
     NSGlyphFragment *fragment;
     NSRangeEnumerator state;
+    // Fragments are in glyph order, but bidi lines are reordered visually:
+    // the point is left of its line only if it is left of every fragment.
+    BOOL leftOfLine = YES;
+    CGFloat lineMinX = CGFLOAT_MAX;
+    NSUInteger lineStart = NSNotFound;
 
     [self validateGlyphsAndLayoutForContainer: container];
 
@@ -1053,6 +1058,11 @@ static inline NSGlyphFragment *fragmentAtGlyphIndex(NSLayoutManager *self,
 
     while (NSNextRangeEnumeratorEntry(&state, &range, (void **) &fragment)) {
         if (point.y < NSMinY(fragment->rect)) {
+            // Otherwise a click in the line's left padding would return
+            // the end of the line.
+            if (leftOfLine && lineStart != NSNotFound) {
+                return lineStart;
+            }
             if (endOfFragment > 0) {
                 // if we're at the end of a line we want to back up before the
                 // newline This is a very ugly way to do it
@@ -1131,11 +1141,18 @@ static inline NSGlyphFragment *fragmentAtGlyphIndex(NSLayoutManager *self,
                 } else {
                     result = NSMaxRange(range);
                 }
-            } else if (point.x > NSMaxX(fragment->rect)) {
-                if (fragment->leftToRight) {
-                    result = NSMaxRange(range);
-                } else {
-                    result = range.location;
+                if (NSMinX(fragment->rect) < lineMinX) {
+                    lineMinX = NSMinX(fragment->rect);
+                    lineStart = result;
+                }
+            } else {
+                leftOfLine = NO;
+                if (point.x > NSMaxX(fragment->rect)) {
+                    if (fragment->leftToRight) {
+                        result = NSMaxRange(range);
+                    } else {
+                        result = range.location;
+                    }
                 }
             }
             endOfFragment = NSMaxRange(range);
@@ -1146,6 +1163,9 @@ static inline NSGlyphFragment *fragmentAtGlyphIndex(NSLayoutManager *self,
     NSLog(@"returning: %u", result);
 #endif
 
+    if (leftOfLine && lineStart != NSNotFound) {
+        return lineStart;
+    }
     return result;
 }
 
@@ -1352,6 +1372,8 @@ static inline void _appendRectToCache(NSLayoutManager *self, NSRect rect) {
 #define DEBUG_rectArrayForGlyphRange_withinSelectedGlyphRange_inTextContainer_rectCount \
     0
 #endif
+
+    [self validateGlyphsAndLayoutForContainer: container];
 
     NSRange remainder =
             (selGlyphRange.location == NSNotFound) ? glyphRange : selGlyphRange;

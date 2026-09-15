@@ -144,13 +144,11 @@ static void loadGlyphAndCharacterCacheForLocation(NSTypesetter_concrete *self,
 #if DEBUG_GETLINEFRAGMENTRECT
         NSLog(@"applying padding: %f", _container.lineFragmentPadding);
 #endif
-        // We have some room available in the container
-        // Add left/right padding
-        _scanRect.size.width -= _container.lineFragmentPadding;
+        // Pad the first fragment of a line on both sides; later fragments
+        // of the line are already bounded by _fullLineRect.
         if ([_glyphRangesInLine count] == 0) {
-            // Add left padding too for the first fragment of the line
-            _scanRect.size.width -= _container.lineFragmentPadding;
             _scanRect.origin.x += _container.lineFragmentPadding;
+            _scanRect.size.width -= 2 * _container.lineFragmentPadding;
             _fullLineRect = _scanRect;
 #if DEBUG_GETLINEFRAGMENTRECT
             NSLog(@"_fullLineRect.size.width: %f", _fullLineRect.size.width);
@@ -1086,6 +1084,7 @@ static void loadGlyphAndCharacterCacheForLocation(NSTypesetter_concrete *self,
                                           movementDirection: NSLineMovesDown
                                               remainingRect: &remainingRect];
         NSRect usedRect = _scanRect;
+        usedRect.origin.x += _container.lineFragmentPadding;
         usedRect.size.width = 10;
         [_layoutManager setExtraLineFragmentRect: _scanRect
                                         usedRect: usedRect
