@@ -21,7 +21,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSPanel.h>
 #import <Foundation/NSURL.h>
 
-@class NSView, NSOutlineView;
+@class NSView, NSOutlineView, NSTextField;
 
 enum {
     NSFileHandlingPanelCancelButton = NSCancelButton,
@@ -45,6 +45,8 @@ enum {
     NSView *_accessoryView;
 
     IBOutlet NSOutlineView *_outlineView;
+    NSTextField *_nameField;
+    BOOL _allowsOtherFileTypes;
 }
 
 @property (copy) NSString *nameFieldStringValue;
