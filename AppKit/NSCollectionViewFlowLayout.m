@@ -36,4 +36,10 @@ NSString *const NSCollectionElementKindSectionFooter =
     NSLog(@"Stub called: %@ in %@", NSStringFromSelector([anInvocation selector]), [self class]);
 }
 
+- (instancetype) init {
+    if ((self = [super init]) != nil)
+        _itemSize = NSMakeSize(50, 50);
+    return self;
+}
+
 @end

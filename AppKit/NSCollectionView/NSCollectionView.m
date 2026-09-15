@@ -20,7 +20,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSRaise.h>
 #import <AppKit/NSWindow.h>
 
-@implementation NSCollectionView
+@implementation NSCollectionView {
+    NSMutableDictionary *_itemClasses;
+    NSSet *_selectionIndexPaths;
+}
 
 - initWithCoder: (NSCoder *) coder {
     [super initWithCoder: coder];
@@ -130,6 +133,65 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (NSCollectionViewItem *) newItemForRepresentedObject: object {
     NSUnimplementedMethod();
     return nil;
+}
+
+- (void) dealloc {
+    [_content release];
+    [_itemPrototype release];
+    [_backgroundColors release];
+    [_selectionIndexes release];
+    [_collectionViewLayout release];
+    [_selectionIndexPaths release];
+    [_itemClasses release];
+    [super dealloc];
+}
+
+- (NSSet *) selectionIndexPaths {
+    return _selectionIndexPaths ? _selectionIndexPaths : [NSSet set];
+}
+
+- (void) setSelectionIndexPaths: (NSSet *) value {
+    value = [value copy];
+    [_selectionIndexPaths release];
+    _selectionIndexPaths = value;
+}
+
+- (void) registerClass: (Class) itemClass forItemWithIdentifier: (NSString *) identifier {
+    if (_itemClasses == nil)
+        _itemClasses = [[NSMutableDictionary alloc] init];
+    if (itemClass != Nil)
+        [_itemClasses setObject: itemClass forKey: identifier];
+    else
+        [_itemClasses removeObjectForKey: identifier];
+}
+
+// Items aren't reused: nothing lays them out or recycles them yet.
+- (NSCollectionViewItem *) makeItemWithIdentifier: (NSString *) identifier
+                                     forIndexPath: (NSIndexPath *) indexPath
+{
+    Class itemClass = [_itemClasses objectForKey: identifier];
+    if (itemClass == Nil)
+        [NSException raise: NSInternalInconsistencyException
+                    format: @"-[%@ %s]: no item class registered for identifier %@",
+                            [self class], sel_getName(_cmd), identifier];
+    return [[[itemClass alloc] init] autorelease];
+}
+
+@end
+
+@implementation NSIndexPath (NSCollectionViewAdditions)
+
++ (NSIndexPath *) indexPathForItem: (NSInteger) item inSection: (NSInteger) section {
+    NSUInteger indexes[2] = {section, item};
+    return [self indexPathWithIndexes: indexes length: 2];
+}
+
+- (NSInteger) item {
+    return [self indexAtPosition: 1];
+}
+
+- (NSInteger) section {
+    return [self indexAtPosition: 0];
 }
 
 @end

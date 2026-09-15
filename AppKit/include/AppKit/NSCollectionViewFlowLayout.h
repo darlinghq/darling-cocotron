@@ -26,4 +26,6 @@ APPKIT_EXPORT NSString *const NSCollectionElementKindSectionFooter;
 
 @interface NSCollectionViewFlowLayout : NSCollectionViewLayout
 
+@property NSSize itemSize;
+
 @end
