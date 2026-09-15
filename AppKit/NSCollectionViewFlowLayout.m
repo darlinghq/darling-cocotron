@@ -25,6 +25,7 @@ NSString *const NSCollectionElementKindSectionFooter =
         @"UICollectionElementKindSectionFooter";
 
 @implementation NSCollectionViewFlowLayout
+@synthesize itemSize = _itemSize;
 
 - (NSMethodSignature *)methodSignatureForSelector:(SEL)aSelector
 {
