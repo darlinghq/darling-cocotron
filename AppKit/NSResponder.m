@@ -51,8 +51,29 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return self;
 }
 
+- (void) dealloc {
+    [_touchBar release];
+    [super dealloc];
+}
+
 - (NSResponder *) nextResponder {
     return _nextResponder;
+}
+
+- (NSTouchBar *) touchBar {
+    if (_touchBar == nil)
+        _touchBar = [[self makeTouchBar] retain];
+    return _touchBar;
+}
+
+- (void) setTouchBar: (NSTouchBar *) touchBar {
+    [touchBar retain];
+    [_touchBar release];
+    _touchBar = touchBar;
+}
+
+- (NSTouchBar *) makeTouchBar {
+    return nil;
 }
 
 - (NSMenu *) menu {

@@ -33,4 +33,7 @@ APPKIT_EXPORT NSTouchBarItemIdentifier const
 
 @interface NSTouchBarItem : NSObject <NSCoding>
 
+- (instancetype) initWithIdentifier: (NSTouchBarItemIdentifier) identifier;
+@property(readonly, copy) NSTouchBarItemIdentifier identifier;
+
 @end

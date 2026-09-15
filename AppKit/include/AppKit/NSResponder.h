@@ -20,13 +20,17 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSEvent.h>
 #import <Foundation/Foundation.h>
 
-@class NSMenu, NSUndoManager;
+@class NSMenu, NSUndoManager, NSTouchBar;
 
 @interface NSResponder : NSObject <NSCoding> {
     id _nextResponder;
+    NSTouchBar *_touchBar;
 }
 
 - (NSResponder *) nextResponder;
+
+@property(retain) NSTouchBar *touchBar;
+- (NSTouchBar *) makeTouchBar;
 
 - (NSMenu *) menu;
 - (NSUndoManager *) undoManager;

@@ -18,6 +18,7 @@
 */
 
 #import <AppKit/NSGroupTouchBarItem.h>
+#import <AppKit/NSTouchBar.h>
 
 @implementation NSGroupTouchBarItem
 
@@ -29,6 +30,22 @@
 - (void)forwardInvocation:(NSInvocation *)anInvocation
 {
     NSLog(@"Stub called: %@ in %@", NSStringFromSelector([anInvocation selector]), [self class]);
+}
+
+// The alert style only affects Touch Bar layout, which nothing draws here.
++ (instancetype) alertStyleGroupItemWithIdentifier: (NSTouchBarItemIdentifier) identifier {
+    return [[[self alloc] initWithIdentifier: identifier] autorelease];
+}
+
+- (instancetype) initWithIdentifier: (NSTouchBarItemIdentifier) identifier {
+    if ((self = [super initWithIdentifier: identifier]) != nil)
+        _groupTouchBar = [[NSTouchBar alloc] init];
+    return self;
+}
+
+- (void) dealloc {
+    [_groupTouchBar release];
+    [super dealloc];
 }
 
 @end

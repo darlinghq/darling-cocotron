@@ -31,6 +31,12 @@
     NSLog(@"Stub called: %@ in %@", NSStringFromSelector([anInvocation selector]), [self class]);
 }
 
+- (void) dealloc {
+    [_view release];
+    [_customizationLabel release];
+    [super dealloc];
+}
+
 @end
 
 @implementation NSButtonGroupTouchBarItem
