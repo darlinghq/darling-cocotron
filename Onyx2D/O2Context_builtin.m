@@ -150,6 +150,17 @@ void O2DContextClipAndFillEdges(O2Context_builtin *self, int fillRuleMask);
     return O2SizeMake(O2ImageGetWidth(_surface), O2ImageGetHeight(_surface));
 }
 
+- (O2ContextRef) createCompatibleContextWithSize: (O2Size) size
+                                          unused: (NSDictionary *) unused
+{
+    O2Surface *surface = [self createSurfaceWithWidth: ceil(size.width)
+                                               height: ceil(size.height)];
+    O2ContextRef result = [[[self class] alloc] initWithSurface: surface
+                                                        flipped: NO];
+    [surface release];
+    return result;
+}
+
 - (void) beginTransparencyLayerWithInfo: (NSDictionary *) unused {
     O2LayerRef layer = O2LayerCreateWithContext(self, [self size], unused);
 
@@ -178,6 +189,16 @@ void O2DContextClipAndFillEdges(O2Context_builtin *self, int fillRuleMask);
 
     O2Size size = [self size];
 
+    // The layer holds device pixels: composite it without the current user CTM.
+    O2GState *gState = O2ContextCurrentGState(self);
+    O2AffineTransform base = O2AffineTransformConcat(
+            O2AffineTransformInvert(gState->_userSpaceTransform),
+            gState->_deviceSpaceTransform);
+    O2ContextSaveGState(self);
+    O2GStateSetUserSpaceCTM(O2ContextCurrentGState(self),
+                            O2AffineTransformIdentity);
+    O2GStateSetDeviceSpaceCTM(O2ContextCurrentGState(self), base);
+
     if (O2ContextCurrentGState(self)->_shadowKernel) {
         O2Surface *shadow =
                 [self createSurfaceWithWidth: O2ImageGetWidth(_surface)
@@ -197,6 +218,7 @@ void O2DContextClipAndFillEdges(O2Context_builtin *self, int fillRuleMask);
 
     O2ContextDrawLayerInRect(self, O2RectMake(0, 0, size.width, size.height),
                              layer);
+    O2ContextRestoreGState(self);
     O2LayerRelease(layer);
 }
 
