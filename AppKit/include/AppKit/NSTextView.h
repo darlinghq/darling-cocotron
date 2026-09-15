@@ -156,6 +156,7 @@ APPKIT_EXPORT NSString *const NSAllRomanInputSourcesLocaleIdentifier;
 - initWithFrame: (NSRect) frame;
 
 - (void) _setTextStorage: (NSTextStorage *) storage;
+- (void) replaceTextStorage: (NSTextStorage *) textStorage;
 
 - (NSTextContainer *) textContainer;
 

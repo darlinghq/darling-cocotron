@@ -238,8 +238,38 @@ static inline NSGlyphFragment *fragmentAtGlyphIndex(NSLayoutManager *self,
     _layoutInvalid = YES;
 }
 
+// Moves every layout manager of the current text storage, and their text views, to textStorage.
 - (void) replaceTextStorage: (NSTextStorage *) textStorage {
-    [self setTextStorage: textStorage];
+    if (textStorage == nil)
+        [NSException raise: NSInvalidArgumentException
+                    format: @"-[NSLayoutManager replaceTextStorage:] nil text storage"];
+    if (textStorage == _textStorage)
+        return;
+
+    NSTextStorage *oldStorage = [_textStorage retain];
+    // Nib-loaded text views add their shared layout manager once each, so the old list can repeat it.
+    NSMutableArray *layoutManagers = [NSMutableArray array];
+    for (NSLayoutManager *layoutManager in [oldStorage layoutManagers]) {
+        if ([layoutManagers indexOfObjectIdenticalTo: layoutManager] == NSNotFound)
+            [layoutManagers addObject: layoutManager];
+    }
+    if ([layoutManagers indexOfObjectIdenticalTo: self] == NSNotFound)
+        [layoutManagers addObject: self];
+
+    NSUInteger length = [textStorage length];
+    for (NSLayoutManager *layoutManager in layoutManagers) {
+        [textStorage addLayoutManager: layoutManager];
+        [oldStorage removeLayoutManager: layoutManager];
+        for (NSTextContainer *container in [layoutManager textContainers]) {
+            NSTextView *textView = [container textView];
+            [textView _setTextStorage: textStorage];
+            NSRange selection = [textView selectedRange];
+            if (textView && NSMaxRange(selection) > length)
+                [textView setSelectedRange: NSMakeRange(MIN(selection.location, length), 0)];
+        }
+        [layoutManager invalidateDisplayForCharacterRange: NSMakeRange(0, length)];
+    }
+    [oldStorage release];
 }
 
 - (void) setGlyphGenerator: (NSGlyphGenerator *) generator {
