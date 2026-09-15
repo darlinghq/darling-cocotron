@@ -71,6 +71,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return _textView;
 }
 
+- (NSTextLayoutOrientation) layoutOrientation {
+    return _textView ? [_textView layoutOrientation]
+                     : NSTextLayoutOrientationHorizontal;
+}
+
 - (BOOL) widthTracksTextView {
     return _widthTracksTextView;
 }

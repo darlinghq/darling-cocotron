@@ -35,6 +35,7 @@
 
 @property(readonly, assign) NSTextContentManager *textContentManager;
 @property(retain) NSTextContainer *textContainer;
+@property(readonly) NSArray *textContainers;
 @property(readonly) NSRect usageBoundsForTextContainer;
 @property(readonly, retain) NSTextRange *documentRange;
 

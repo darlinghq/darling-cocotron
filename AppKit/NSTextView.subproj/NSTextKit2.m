@@ -489,6 +489,11 @@ NSAttributedStringDocumentReadingOptionKey const
     return _textContainer;
 }
 
+- (NSArray *) textContainers {
+    return _textContainer ? [NSArray arrayWithObject: _textContainer]
+                          : [NSArray array];
+}
+
 - (void) setTextContainer: (NSTextContainer *) container {
     if (container == _textContainer)
         return;
