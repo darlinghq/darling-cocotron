@@ -51,6 +51,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     // for now but should be extended to contains the whole current state for a
     // more complete parser
     NSMutableArray *_states;
+
+    // Offset of the placeholder byte after the last attachment group
+    NSUInteger _attachmentPlaceholder;
 }
 
 - initWithData: (NSData *) data;

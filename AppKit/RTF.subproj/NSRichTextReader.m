@@ -54,6 +54,9 @@ enum {
 static const NSString *kStateDestinationKey = @"destination";
 static const NSString *kStateCharacterBytesCountKey = @"characterBytesCount";
 
+// The byte Apple's RTFD writer puts after each attachment group
+static const unsigned char kAttachmentPlaceholder = 0xAC;
+
 @implementation NSRichTextReader
 
 - initWithData: (NSData *) data {
@@ -61,6 +64,7 @@ static const NSString *kStateCharacterBytesCountKey = @"characterBytesCount";
     _bytes = [_data bytes];
     _length = [_data length];
     _range = NSMakeRange(0, 0);
+    _attachmentPlaceholder = NSNotFound;
     _state = STATE_SCANNING;
     _fontTable = [NSMutableDictionary new];
     _colorTable = [NSMutableDictionary new];
@@ -89,10 +93,10 @@ static const NSString *kStateCharacterBytesCountKey = @"characterBytesCount";
                 stringByAppendingPathExtension: @"rtf"];
         NSData *data = [NSData dataWithContentsOfFile: txt];
 
-        if (data != nil)
-            return [self initWithData: data];
-
-        _imageDirectory = [path copy];
+        if (data != nil && (self = [self initWithData: data]) != nil) {
+            _imageDirectory = [path copy];
+            return self;
+        }
     }
 
     [self dealloc];
@@ -342,6 +346,20 @@ static inline void flushPreviousString(NSRichTextReader *self) {
     return c;
 }
 
+// An RTFD attachment is a file in the .rtfd bundle.
+- (NSTextAttachment *) _attachmentWithFileName: (NSString *) name {
+    if (_imageDirectory == nil)
+        return nil;
+    NSURL *url = [NSURL
+            fileURLWithPath: [_imageDirectory stringByAppendingPathComponent: name]];
+    NSFileWrapper *wrapper = [[[NSFileWrapper alloc] initWithURL: url
+                                                         options: 0
+                                                           error: NULL] autorelease];
+    if (wrapper == nil)
+        return nil;
+    return [[[NSTextAttachment alloc] initWithFileWrapper: wrapper] autorelease];
+}
+
 - (void) processControlWithArgValue: (int) argument {
     NSRange save = _range;
     flushPreviousString(self);
@@ -541,10 +559,8 @@ static inline void flushPreviousString(NSRichTextReader *self) {
             _range.length++;
         }
         _range.length--; {
-            NSString *path =
-                    [_imageDirectory stringByAppendingPathComponent: self];
-            NSTextAttachment *attachment = [[[NSTextAttachment alloc]
-                    initWithContentsOfFile: path] autorelease];
+            NSTextAttachment *attachment =
+                    [self _attachmentWithFileName: self];
             unichar attachChar = NSAttachmentCharacter;
 
             if (attachment != nil) {
@@ -558,6 +574,14 @@ static inline void flushPreviousString(NSRichTextReader *self) {
                 [_currentAttributes
                         removeObjectForKey: NSAttachmentAttributeName];
             }
+            // Apple's writer follows the group with a placeholder:
+            // {{\NeXTGraphic name ...}<placeholder>}
+            NSUInteger close = NSMaxRange(_range);
+            while (close < _length && _bytes[close] != '}')
+                close++;
+            if (close + 1 < _length &&
+                _bytes[close + 1] == kAttachmentPlaceholder)
+                _attachmentPlaceholder = close + 1;
         }
         _range.length++;
         save = _range;
@@ -619,7 +643,8 @@ static inline void flushPreviousString(NSRichTextReader *self) {
                 if (_bufferIn == nil) {
                     _bufferIn = [[NSMutableData alloc] init];
                 }
-                [_bufferIn appendBytes: _bytes + _range.location length: 1];
+                if (position != _attachmentPlaceholder)
+                    [_bufferIn appendBytes: _bytes + _range.location length: 1];
                 _range.location++;
                 _range.length = 0;
             }
