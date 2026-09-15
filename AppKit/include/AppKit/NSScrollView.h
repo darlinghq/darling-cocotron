@@ -70,6 +70,8 @@ typedef NS_ENUM(NSInteger, NSScrollElasticity) {
 @property NSScrollerKnobStyle scrollerKnobStyle;
 @property NSScrollElasticity horizontalScrollElasticity;
 @property NSScrollElasticity verticalScrollElasticity;
+@property BOOL automaticallyAdjustsContentInsets;
+@property NSEdgeInsets contentInsets;
 
 + (NSSize) frameSizeForContentSize: (NSSize) contentSize
              hasHorizontalScroller: (BOOL) hasHorizontalScroller

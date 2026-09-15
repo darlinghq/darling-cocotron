@@ -991,6 +991,23 @@ static Class _rulerViewClass = nil;
         [self setMagnification: value];
 }
 
+// The content insets live on the clip view, where nibs archive them.
+- (BOOL) automaticallyAdjustsContentInsets {
+    return [_clipView automaticallyAdjustsContentInsets];
+}
+
+- (void) setAutomaticallyAdjustsContentInsets: (BOOL) value {
+    [_clipView setAutomaticallyAdjustsContentInsets: value];
+}
+
+- (NSEdgeInsets) contentInsets {
+    return [_clipView contentInsets];
+}
+
+- (void) setContentInsets: (NSEdgeInsets) insets {
+    [_clipView setContentInsets: insets];
+}
+
 - (void) setAllowsMagnification: (BOOL) value {
     _allowsMagnification = value;
 }

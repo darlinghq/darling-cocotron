@@ -42,6 +42,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         _drawsBackground = (flags & 0x04) ? YES : NO;
         _backgroundColor = [[keyed decodeObjectForKey: @"NSBGColor"] retain];
         _docView = [[keyed decodeObjectForKey: @"NSDocView"] retain];
+        _automaticallyAdjustsContentInsets =
+                [keyed containsValueForKey: @"NSAutomaticallyAdjustsContentInsets"]
+                        ? [keyed decodeBoolForKey: @"NSAutomaticallyAdjustsContentInsets"]
+                        : YES;
 
         if (_docView != nil)
             [[NSNotificationCenter defaultCenter]
@@ -107,6 +111,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [super initWithFrame: frame];
     _backgroundColor = [[NSColor controlBackgroundColor] retain];
     _drawsBackground = YES;
+    _automaticallyAdjustsContentInsets = YES;
     return self;
 }
 
@@ -119,6 +124,23 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (BOOL) drawsBackground {
     return _drawsBackground;
+}
+
+// Stored only: document view layout doesn't apply content insets yet.
+- (BOOL) automaticallyAdjustsContentInsets {
+    return _automaticallyAdjustsContentInsets;
+}
+
+- (void) setAutomaticallyAdjustsContentInsets: (BOOL) value {
+    _automaticallyAdjustsContentInsets = value;
+}
+
+- (NSEdgeInsets) contentInsets {
+    return _contentInsets;
+}
+
+- (void) setContentInsets: (NSEdgeInsets) insets {
+    _contentInsets = insets;
 }
 
 - (BOOL) copiesOnScroll {

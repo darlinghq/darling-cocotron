@@ -146,6 +146,7 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPre
     NSLayoutPriority _verticalContentHuggingPriority;
     NSLayoutPriority _horizontalContentCompressionResistancePriority;
     NSLayoutPriority _verticalContentCompressionResistancePriority;
+    NSString *_accessibilityTitle;
 
     NSAppearance *_appearance;
     NSTouchTypeMask _allowedTouchTypes;
@@ -262,6 +263,8 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPre
 - (NSRect) convertRect: (NSRect) rect fromView: (NSView *) viewOrNil;
 - (NSRect) convertRect: (NSRect) rect toView: (NSView *) viewOrNil;
 - (NSRect) centerScanRect: (NSRect) rect;
+- (NSRect) backingAlignedRect: (NSRect) rect options: (NSAlignmentOptions) options;
+@property(copy) NSString *accessibilityTitle;
 
 - (void) setFrameSize: (NSSize) size;
 - (void) setFrameOrigin: (NSPoint) origin;

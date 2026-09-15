@@ -77,6 +77,9 @@ typedef enum {
 - initWithContentsOfFile: (NSString *) path;
 - initWithContentsOfURL: (NSURL *) url;
 - initWithCGImage: (CGImageRef) cgImage size: (NSSize) size;
+- (CGImageRef) CGImageForProposedRect: (NSRect *) proposedDestRect
+                              context: (NSGraphicsContext *) context
+                                hints: (NSDictionary *) hints;
 
 - initWithPasteboard: (NSPasteboard *) pasteboard;
 - initByReferencingFile: (NSString *) path;

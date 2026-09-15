@@ -558,6 +558,41 @@ NSImageName const NSImageNameTouchBarVolumeUpTemplate =
     return self;
 }
 
+- (CGImageRef) CGImageForProposedRect: (NSRect *) proposedDestRect
+                              context: (NSGraphicsContext *) context
+                                hints: (NSDictionary *) hints
+{
+    NSSize size = (proposedDestRect != NULL) ? proposedDestRect->size : [self size];
+    if (!(size.width > 0 && size.height > 0 && isfinite(size.width) && isfinite(size.height)))
+        return NULL;
+    size_t width = ceil(size.width), height = ceil(size.height);
+
+    CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
+    // An explicit byte order: Onyx2D stores the default order as ABGR, unlike Apple's RGBA.
+    CGContextRef bitmap = CGBitmapContextCreate(NULL, width, height, 8, width * 4,
+            colorSpace, kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big);
+    CGColorSpaceRelease(colorSpace);
+    if (bitmap == NULL)
+        return NULL;
+    CGContextClearRect(bitmap, CGRectMake(0, 0, width, height));
+
+    // The thread dictionary may be the only owner of the current context.
+    NSGraphicsContext *previous = [[NSGraphicsContext currentContext] retain];
+    [NSGraphicsContext setCurrentContext:
+            [NSGraphicsContext graphicsContextWithGraphicsPort: bitmap flipped: NO]];
+    [self drawInRect: NSMakeRect(0, 0, width, height)
+            fromRect: NSZeroRect
+           operation: NSCompositeSourceOver
+            fraction: 1.0];
+    [NSGraphicsContext setCurrentContext: previous];
+    [previous release];
+    CGImageRef image = CGBitmapContextCreateImage(bitmap);
+    CGContextRelease(bitmap);
+
+    // The caller doesn't own the result.
+    return (CGImageRef) [(id) image autorelease];
+}
+
 - initWithPasteboard: (NSPasteboard *) pasteboard {
 
     NSString *available =
