@@ -1549,6 +1549,9 @@ static int ignoreBadWindowWhileOrdering(Display *display, XErrorEvent *errorEven
     previousOrderingErrorHandler = previousHandler;
     @try {
         for (NSNumber *xid in _windowsByID) {
+            // X11Pasteboard registers its helper X window in the same map; it has no window number.
+            if (![_windowsByID[xid] isKindOfClass: [X11Window class]])
+                continue;
             Window w = (Window) [xid unsignedLongValue];
             Window rootRet, parent, *children = NULL;
             unsigned int count;
