@@ -289,6 +289,8 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
 
 - (void) dealloc {
     [self stopKeyRepeat];
+    [self cancelPendingModifier];
+    [_heldKeyIdentities release];
 
     if (_wlSource != NULL) {
         CFRunLoopRemoveSource(CFRunLoopGetMain(), _wlSource,
@@ -586,6 +588,11 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         [self pointerEvent: opcode arguments: args];
         break;
 
+    case WaylandObjectKeyboardSync:
+        if (proxy == _modifierSync && opcode == WP_CALLBACK_EV_DONE)
+            [self flushPendingModifier];
+        break;
+
     case WaylandObjectKeyboard:
         [self keyboardEvent: opcode arguments: args];
         break;
@@ -653,6 +660,7 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
 #pragma mark - Pointer
 
 - (void) pointerEvent: (uint32_t) opcode arguments: (union wl_argument *) args {
+    [self flushPendingModifier];
     switch (opcode) {
     case WP_POINTER_EV_ENTER:
         _pointerEnterSerial = args[0].u;
@@ -872,9 +880,63 @@ static int modifierCarbonKeycode(xkb_keysym_t sym) {
     }
 }
 
-- (void) resetKeyboardModifiers {
-    _syncModifierFlags = NO;
+// Device-dependent NSEvent bits, defined by IOKit's IOLLEvent.h. The aggregate
+// high bits still come exclusively from the compositor's XKB modifier mask.
+static NSUInteger modifierDeviceMask(int code) {
+    switch (code) {
+    case kVK_Control: return 0x0001;
+    case kVK_Shift: return 0x0002;
+    case kVK_RightShift: return 0x0004;
+    case kVK_Command: return 0x0008;
+    case 0x36: return 0x0010;
+    case kVK_Option: return 0x0020;
+    case kVK_RightOption: return 0x0040;
+    case kVK_RightControl: return 0x2000;
+    default: return 0;
+    }
+}
+
+- (void) cancelPendingModifier {
+    if (_modifierSync != NULL) {
+        WL.wl_proxy_destroy(_modifierSync);
+        _modifierSync = NULL;
+    }
     _hasModifierKeycode = NO;
+}
+
+- (void) postModifierKeycode: (unsigned short) code {
+    NSWindow *delegate = [_keyboardWindow delegate];
+    if (delegate == nil)
+        return;
+    NSEvent *event = [NSEvent keyEventWithType: NSFlagsChanged
+            location: [_keyboardWindow mouseLocationOutsideOfEventStream]
+            modifierFlags: [self currentModifierFlags] timestamp: 0.0
+            windowNumber: [delegate windowNumber] context: nil
+            characters: @"" charactersIgnoringModifiers: @""
+            isARepeat: NO keyCode: code];
+    [self postEvent: event atStart: NO];
+}
+
+- (void) flushPendingModifier {
+    if (_hasModifierKeycode)
+        [self postModifierKeycode: _modifierKeycode];
+    [self cancelPendingModifier];
+}
+
+- (void) classifyHeldKeys {
+    for (NSNumber *key in [_heldKeyIdentities allKeys]) {
+        int identity = modifierCarbonKeycode(WL.xkb_state_key_get_one_sym(
+                _xkbState, [key unsignedIntValue]));
+        [_heldKeyIdentities setObject: @(identity) forKey: key];
+    }
+    _classifyHeldKeys = NO;
+}
+
+- (void) resetKeyboardModifiers {
+    [self cancelPendingModifier];
+    [_heldKeyIdentities removeAllObjects];
+    _syncModifierFlags = NO;
+    _classifyHeldKeys = NO;
     if (_xkbState != NULL)
         WL.xkb_state_update_mask(_xkbState, 0, 0, 0, 0, 0, 0);
 }
@@ -885,11 +947,22 @@ static int modifierCarbonKeycode(xkb_keysym_t sym) {
         [self keymapWithFormat: args[0].u fd: args[1].h size: args[2].u];
         break;
 
-    case WP_KEYBOARD_EV_ENTER:
+    case WP_KEYBOARD_EV_ENTER: {
+        [self resetKeyboardModifiers];
         _keyboardWindow = [self windowForSurface: (struct wl_proxy *) args[1].o];
-        _hasModifierKeycode = NO;
+        if (_heldKeyIdentities == nil)
+            _heldKeyIdentities = [NSMutableDictionary new];
+        struct wl_array *keys = args[2].a;
+        for (size_t i = 0; i < keys->size / sizeof(uint32_t); i++) {
+            uint32_t raw = ((uint32_t *)keys->data)[i];
+            [_heldKeyIdentities setObject: @(-1) forKey: @(raw + 8)];
+        }
+        // Enter is followed by modifiers: classify under that current group,
+        // without inventing key presses for keys held before focus arrived.
+        _classifyHeldKeys = YES;
         _syncModifierFlags = YES;
         break;
+    }
 
     case WP_KEYBOARD_EV_LEAVE:
         _keyboardWindow = nil;
@@ -898,9 +971,9 @@ static int modifierCarbonKeycode(xkb_keysym_t sym) {
         break;
 
     case WP_KEYBOARD_EV_KEY: {
-        if (_xkbState == NULL)
+        if (_xkbState == NULL || _keyboardWindow == nil)
             break;
-        // Wayland sends evdev codes; XKB keycodes are 8 higher.
+        [self flushPendingModifier];
         xkb_keycode_t keycode = args[2].u + 8;
         BOOL pressed = args[3].u == WP_KEYBOARD_KEY_STATE_PRESSED;
         if (pressed) {
@@ -910,13 +983,26 @@ static int modifierCarbonKeycode(xkb_keysym_t sym) {
             _inputWindow = nil;
         }
 
-        int modifier = modifierCarbonKeycode(
+        NSNumber *held = [_heldKeyIdentities objectForKey: @(keycode)];
+        int modifier = held != nil ? [held intValue] : modifierCarbonKeycode(
                 WL.xkb_state_key_get_one_sym(_xkbState, keycode));
-        _hasModifierKeycode = modifier >= 0;
-        if (_hasModifierKeycode) {
+        if (pressed)
+            [_heldKeyIdentities setObject: @(modifier) forKey: @(keycode)];
+        else
+            [_heldKeyIdentities removeObjectForKey: @(keycode)];
+        if (modifier >= 0) {
             _modifierKeycode = modifier;
-            // Do not insert modifier keys as text or start their repeat timer.
-            break;
+            _hasModifierKeycode = YES;
+            // A mask-changing key is followed by modifiers; an overlapping
+            // modifier need not be. A sync drains the compositor's already
+            // queued events even across socket reads before the idle fallback.
+            // It is not a keyboard frame or a fence for future input events.
+            union wl_argument syncArgs[1] = {{.o = NULL}};
+            _modifierSync = WaylandCreateObject((struct wl_proxy *)_wlDisplay,
+                    WP_DISPLAY_SYNC, &wl_callback_interface, syncArgs,
+                    WaylandObjectKeyboardSync, self);
+            [self flush];
+            break; // Modifiers are neither text nor repeatable keys.
         }
         [self postKeyEventForKeycode: keycode pressed: pressed repeat: NO];
         if (pressed && _repeatRate > 0 &&
@@ -929,23 +1015,17 @@ static int modifierCarbonKeycode(xkb_keysym_t sym) {
 
     case WP_KEYBOARD_EV_MODIFIERS: {
         NSUInteger oldFlags = [self currentModifierFlags];
-        if (_xkbState != NULL)
+        if (_xkbState != NULL) {
             WL.xkb_state_update_mask(_xkbState, args[1].u, args[2].u, args[3].u,
                                      0, 0, args[4].u);
-        NSUInteger flags = [self currentModifierFlags];
-        NSWindow *delegate = [_keyboardWindow delegate];
-        if (delegate != nil && (_syncModifierFlags || flags != oldFlags)) {
-            NSEvent *event = [NSEvent keyEventWithType: NSFlagsChanged
-                    location: [_keyboardWindow mouseLocationOutsideOfEventStream]
-                    modifierFlags: flags timestamp: 0.0
-                    windowNumber: [delegate windowNumber] context: nil
-                    characters: @"" charactersIgnoringModifiers: @""
-                    isARepeat: NO
-                    keyCode: _hasModifierKeycode ? _modifierKeycode : 0xFFFF];
-            [self postEvent: event atStart: NO];
+            if (_classifyHeldKeys)
+                [self classifyHeldKeys];
         }
+        if (_hasModifierKeycode)
+            [self flushPendingModifier];
+        else if (_syncModifierFlags || [self currentModifierFlags] != oldFlags)
+            [self postModifierKeycode: 0xFFFF];
         _syncModifierFlags = NO;
-        _hasModifierKeycode = NO;
         break;
     }
 
@@ -996,7 +1076,9 @@ static int modifierCarbonKeycode(xkb_keysym_t sym) {
         WL.xkb_keymap_unref(_xkbKeymap);
     _xkbKeymap = keymap;
     _xkbState = state;
-    _hasModifierKeycode = NO;
+    [self cancelPendingModifier];
+    // Preserve press-time identities through keymap changes until release.
+    // Only enter-seeded keys need classification under the current group.
     _syncModifierFlags = _keyboardWindow != nil;
 }
 
@@ -1009,6 +1091,8 @@ static int modifierCarbonKeycode(xkb_keysym_t sym) {
 // The same mapping as -[X11Display modifierFlagsForState:].
 - (NSUInteger) currentModifierFlags {
     NSUInteger flags = 0;
+    for (NSNumber *identity in [_heldKeyIdentities allValues])
+        flags |= modifierDeviceMask([identity intValue]);
 
     if ([self isModifierActive: XKB_MOD_NAME_SHIFT])
         flags |= NSShiftKeyMask;

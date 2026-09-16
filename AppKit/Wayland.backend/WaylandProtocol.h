@@ -49,6 +49,7 @@ extern const struct wl_interface zxdg_toplevel_decoration_v1_interface;
 // Opcodes are the zero-based positions of <request> and <event> elements in the
 // protocol XML. WaylandCheckOpcodes() verifies each one against the generated tables.
 enum {
+    WP_DISPLAY_SYNC = 0,
     WP_DISPLAY_GET_REGISTRY = 1,
 
     WP_REGISTRY_BIND = 0,
