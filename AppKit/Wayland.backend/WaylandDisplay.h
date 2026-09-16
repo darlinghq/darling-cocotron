@@ -161,6 +161,8 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 }
 
 - (WaylandWindow *) windowForSurface: (struct wl_proxy *) surface;
+// Caller owns the returned native immutable buffer.
+- (struct wl_proxy *) newARGBBuffer: (NSData *) pixels pixelSize: (NSSize) size;
 - (struct wl_proxy *) dragDataDevice;
 - (WaylandWindow *) dragOriginForEvent: (NSEvent *) event;
 - (uint32_t) dragSerialForEvent: (NSEvent *) event;

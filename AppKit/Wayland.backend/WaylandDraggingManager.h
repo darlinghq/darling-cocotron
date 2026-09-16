@@ -19,9 +19,11 @@
 #import <AppKit/NSDraggingManager.h>
 #import "WaylandDisplay.h"
 
+@class WaylandDragIcon;
 @interface WaylandDraggingManager : NSDraggingManager {
     WaylandDisplay *_display; // Display owns manager.
     WaylandWindow *_origin;
+    WaylandDragIcon *_icon;
     id _localSource;
     struct wl_proxy *_source;
     NSDictionary *_snapshot;
@@ -33,6 +35,8 @@
 - (id) initWithDisplay: (WaylandDisplay *) display;
 - (BOOL) localCopyAllowed;
 - (void) cancel;
+- (void) outputRemoved: (struct wl_proxy *) output;
+- (void) outputsChanged;
 - (void) invalidate;
 - (void) windowUnmapped: (WaylandWindow *) window;
 - (void) handleEvent: (uint32_t) opcode kind: (WaylandObjectKind) kind

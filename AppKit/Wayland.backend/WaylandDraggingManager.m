@@ -21,6 +21,8 @@
 #import "WaylandProtocol.h"
 #import "WaylandPasteboard.h"
 #import "WaylandWindow.h"
+#import "WaylandDragIcon.h"
+#include <math.h>
 #import <AppKit/AppKit.h>
 #include <unistd.h>
 #include <time.h>
@@ -48,7 +50,11 @@ static BOOL monotonicSeconds(double *seconds) {
     _finished = YES;
     _action = 0;
 }
-- (void) invalidate { [self cancel]; [self destroySource]; [_display flush]; _display = nil; }
+- (void) invalidate {
+    [self cancel]; [_icon invalidate]; [self destroySource]; [_display flush]; _display = nil;
+}
+- (void) outputRemoved: (struct wl_proxy *) output { [_icon outputRemoved: output]; }
+- (void) outputsChanged { [_icon scheduleScaleUpdate]; }
 - (void) windowUnmapped: (WaylandWindow *) window {
     if (_origin == window) [self cancel];
 }
@@ -62,6 +68,7 @@ static BOOL monotonicSeconds(double *seconds) {
 }
 - (void) dealloc {
     [self destroySource];
+    [_icon invalidate]; [_icon release];
     [_snapshot release]; [_origin release]; [_localSource release];
     [super dealloc];
 }
@@ -126,7 +133,14 @@ static BOOL monotonicSeconds(double *seconds) {
                     [snapshot setObject: copy forKey: mime];
             }
         }
-        // Lazy providers may run the event loop, release the button or unmap.
+        if (image != nil && [snapshot count] && !_finished && _display) {
+            NSPoint pointer = [event locationInWindow];
+            NSPoint iconOffset = NSMakePoint(location.x - pointer.x,
+                    pointer.y - location.y - ceil([image size].height));
+            _icon = [[WaylandDragIcon alloc] initWithImage: image display: _display
+                    scale: [origin bufferScale] offset: iconOffset];
+        }
+        // Lazy providers/image drawing may run the event loop, release the button or unmap.
         if ([snapshot count] && !_finished && _display &&
             [_display dragOriginForEvent: event] == origin &&
             [_display dragSerialForEvent: event] == serial) {
@@ -142,10 +156,11 @@ static BOOL monotonicSeconds(double *seconds) {
             WaylandMarshal(_source, WP_DATA_SOURCE_SET_ACTIONS, NULL, 0, args);
             args[0].o = (struct wl_object *) _source;
             args[1].o = (struct wl_object *) [origin surface];
-            args[2].o = NULL; // Dedicated drag icon is a separate follow-up.
+            args[2].o = (struct wl_object *) [_icon surface];
             args[3].u = serial;
             [_display consumeDragPress];
             WaylandMarshal(device, WP_DATA_DEVICE_START_DRAG, NULL, 0, args);
+            [_icon show];
             [_display flush]; began = YES;
             if ([source respondsToSelector: @selector(draggedImage:beganAt:)])
                 [source draggedImage: heldImage beganAt: location];
@@ -172,6 +187,7 @@ static BOOL monotonicSeconds(double *seconds) {
             if (_finished && _action == 1) result = NSDragOperationCopy;
         }
     } @finally {
+        [_icon invalidate]; [_icon release]; _icon = nil;
         [self destroySource];
         [_display flush];
         [_snapshot release]; _snapshot = nil;

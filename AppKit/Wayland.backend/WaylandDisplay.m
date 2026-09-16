@@ -618,6 +618,7 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
             if (output->_logicalProxy)
                 WaylandMarshal(output->_logicalProxy, WP_LOGICAL_OUTPUT_DESTROY, NULL,
                                WL_MARSHAL_FLAG_DESTROY, NULL);
+            [_draggingManager outputRemoved: output->_proxy];
             WL.wl_proxy_destroy(output->_proxy);
             [_outputs removeObject: output];
             [self invalidateScreens];
@@ -650,6 +651,7 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
     [output->_modes release];
     output->_modes = [output->_pendingModes copy];
     [self invalidateScreens];
+    [_draggingManager outputsChanged];
     for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
         [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) scheduleScaleUpdate];
 }
