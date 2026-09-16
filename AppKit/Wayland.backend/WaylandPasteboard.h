@@ -24,7 +24,8 @@
     WaylandDisplay *_display; // display owns pasteboards
     NSString *_name;
     struct wl_proxy *_manager, *_device, *_source, *_selection, *_dragOffer;
-    NSMutableDictionary *_offers;
+    NSMutableDictionary *_offers, *_offerActions;
+    id _dragSession;
     NSMutableArray *_types;
     NSMutableDictionary *_data, *_owners;
     NSDictionary *_sourceData;

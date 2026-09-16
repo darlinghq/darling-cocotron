@@ -17,6 +17,7 @@
  SOFTWARE. */
 
 #import "WaylandPasteboard.h"
+#import "WaylandDropSession.h"
 #import "WaylandLibrary.h"
 #import "WaylandProtocol.h"
 #include <unistd.h>
@@ -102,6 +103,7 @@ static void destroyProxy(struct wl_proxy *proxy, uint32_t opcode) {
         _name = [name copy];
         _manager = manager;
         _offers = [NSMutableDictionary new];
+        _offerActions = [NSMutableDictionary new];
         _types = [NSMutableArray new];
         _data = [NSMutableDictionary new];
         _owners = [NSMutableDictionary new];
@@ -114,6 +116,7 @@ static void destroyProxy(struct wl_proxy *proxy, uint32_t opcode) {
     return self;
 }
 - (void) invalidate {
+    [_dragSession invalidate]; [_dragSession release]; _dragSession = nil;
     destroyProxy(_source, WP_DATA_SOURCE_DESTROY);
     _source = NULL;
     for (NSValue *key in _offers)
@@ -131,7 +134,7 @@ static void destroyProxy(struct wl_proxy *proxy, uint32_t opcode) {
 }
 - (void) dealloc {
     [self invalidate];
-    [_name release]; [_offers release]; [_types release];
+    [_name release]; [_offers release]; [_offerActions release]; [_types release];
     [_data release]; [_owners release]; [_sourceData release];
     [super dealloc];
 }
@@ -297,6 +300,7 @@ static void destroyProxy(struct wl_proxy *proxy, uint32_t opcode) {
 - (void) removeOffer: (struct wl_proxy *) offer {
     if (!offer) return;
     [_offers removeObjectForKey: [NSValue valueWithPointer: offer]];
+    [_offerActions removeObjectForKey: [NSValue valueWithPointer: offer]];
     destroyProxy(offer, WP_DATA_OFFER_DESTROY);
 }
 - (void) handleEvent: (uint32_t) opcode kind: (WaylandObjectKind) kind
@@ -320,14 +324,39 @@ static void destroyProxy(struct wl_proxy *proxy, uint32_t opcode) {
             // A local source may receive its own offer. Cancellation tells us
             // when ownership actually changes; NULL on focus loss is not loss.
         } else if (opcode == WP_DATA_DEVICE_EV_ENTER) {
+            WaylandDropSession *old = _dragSession;
+            if (old) [_display performAfterDispatch: ^{ [old leave]; }];
             _dragOffer = (struct wl_proxy *) args[4].o;
-            if (_dragOffer) {
-                union wl_argument reject[2] = {{.u = args[0].u}, {.s = NULL}};
-                WaylandMarshal(_dragOffer, WP_DATA_OFFER_ACCEPT, NULL, 0, reject);
-            }
+            NSValue *key = [NSValue valueWithPointer: _dragOffer];
+            _dragSession = [[WaylandDropSession alloc] initWithOffer: _dragOffer
+                types: [_offers objectForKey: key] display: _display
+                window: [_display windowForSurface: (struct wl_proxy *) args[1].o]
+                serial: args[0].u sourceActions: [[_offerActions objectForKey: key] unsignedIntValue]];
+            // Session now owns the drag offer; clipboard offers stay independent.
+            [_offers removeObjectForKey: key]; [_offerActions removeObjectForKey: key];
+            [old release];
+            WaylandDropSession *session = _dragSession;
+            CGPoint point = CGPointMake(wl_fixed_to_double(args[2].f), wl_fixed_to_double(args[3].f));
+            [_display performAfterDispatch: ^{ [session motion: point]; }];
+        } else if (opcode == WP_DATA_DEVICE_EV_MOTION) {
+            WaylandDropSession *session = _dragSession;
+            CGPoint point = CGPointMake(wl_fixed_to_double(args[1].f), wl_fixed_to_double(args[2].f));
+            [_display performAfterDispatch: ^{ [session motion: point]; }];
+        } else if (opcode == WP_DATA_DEVICE_EV_DROP) {
+            WaylandDropSession *session = _dragSession;
+            [session markDropped];
+            [_display performAfterDispatch: ^{ [session drop]; }];
         } else if (opcode == WP_DATA_DEVICE_EV_LEAVE) {
-            [self removeOffer: _dragOffer]; _dragOffer = NULL;
+            WaylandDropSession *session = _dragSession;
+            [_display performAfterDispatch: ^{ [session leave]; }];
+            [_dragSession release]; _dragSession = nil; _dragOffer = NULL;
         }
+    } else if (kind == WaylandObjectDataOffer && opcode == WP_DATA_OFFER_EV_SOURCE_ACTIONS) {
+        if (proxy == _dragOffer) [_dragSession sourceActions: args[0].u];
+        else [_offerActions setObject: [NSNumber numberWithUnsignedInt: args[0].u]
+                               forKey: [NSValue valueWithPointer: proxy]];
+    } else if (kind == WaylandObjectDataOffer && opcode == WP_DATA_OFFER_EV_ACTION) {
+        if (proxy == _dragOffer) [_dragSession selectedAction: args[0].u];
     } else if (kind == WaylandObjectDataOffer && opcode == WP_DATA_OFFER_EV_OFFER) {
         if (args[0].s) {
             NSString *mime = [NSString stringWithUTF8String: args[0].s];

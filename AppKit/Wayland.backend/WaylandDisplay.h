@@ -29,7 +29,8 @@
 // It never opens an X connection and overrides every method that uses one.
 //
 // Toplevel origins remain virtual because Wayland controls global placement.
-// Clipboard uses wl_data_device; drag/drop and OpenGL subwindows are follow-ons.
+// Clipboard and incoming copy drops use wl_data_device; outgoing drags and
+// OpenGL subwindows are follow-ons.
 
 #import "X11Display.h"
 #include <stdint.h>
@@ -155,6 +156,7 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     NSMutableDictionary *_namedPasteboards;
 }
 
+- (WaylandWindow *) windowForSurface: (struct wl_proxy *) surface;
 - (void) flush;
 - (void) processPendingEvents;
 - (uint32_t) clipboardSerial;
