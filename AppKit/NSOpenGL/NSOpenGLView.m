@@ -22,6 +22,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSOpenGLView.h>
 #import <AppKit/NSRaise.h>
 #import <Foundation/NSKeyedArchiver.h>
+#import <Foundation/NSArray.h>
+#import <Foundation/NSNull.h>
+
+#include <math.h>
+@interface NSOpenGLContext (DrawableScale)
+- (NSSize) _drawablePixelSize;
+- (BOOL) _drawableAttachmentSucceeded;
+@end
 
 @implementation NSOpenGLView
 
@@ -39,6 +47,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
     _pixelFormat = [pixelFormat retain];
     _context = nil;
+    _lastDrawablePixelSize = NSZeroSize;
 
     return self;
 }
@@ -48,6 +57,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
     _pixelFormat = [[[self class] defaultPixelFormat] retain];
     _context = nil;
+    _lastDrawablePixelSize = NSZeroSize;
 
     return self;
 }
@@ -64,6 +74,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (void) dealloc {
+    [_focusContexts release];
     [_pixelFormat release];
     [_context release];
     [super dealloc];
@@ -101,6 +112,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     context = [context retain];
     [_context release];
     _context = context;
+    _lastDrawablePixelSize = NSZeroSize;
     [_context setView: self];
     _needsReshape = YES;
 }
@@ -134,24 +146,40 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (void) lockFocus {
     [super lockFocus];
-    // create if needed
     NSOpenGLContext *context = [self openGLContext];
-
+    if (!_focusContexts) _focusContexts = [NSMutableArray new];
+    // The paired unlock must use the context we locked, even if application
+    // prepareOpenGL/reshape replaces it or recursively focuses another view.
+    [_focusContexts addObject: context ?: (id)[NSNull null]];
     CGLLockContext([context CGLContextObj]);
-    [_context setView: self];
-    [context makeCurrentContext];
-
-    if (_needsReshape) {
-        [self reshape];
-        _needsReshape = NO;
+    @try {
+        [context setView: self];
+        [context makeCurrentContext];
+        if (_context == context && [context view] == self && [context _drawableAttachmentSucceeded] &&
+            [NSOpenGLContext currentContext] == context &&
+            CGLGetCurrentContext() == [context CGLContextObj]) {
+            NSSize pixels = [context _drawablePixelSize];
+            if (!NSEqualSizes(pixels, _lastDrawablePixelSize)) {
+                _lastDrawablePixelSize = pixels;
+                _needsReshape = YES;
+            }
+            if (_needsReshape) {
+                _needsReshape = NO;
+                [self reshape];
+            }
+        }
+    } @catch (id exception) {
+        if (_context == context) _needsReshape = YES;
+        [self unlockFocus];
+        @throw;
     }
 }
 
 - (void) unlockFocus {
-    // Cocoa _does not_ flushBuffer
-    // Single buffered contexts need to be updated somehow else
-    CGLUnlockContext([_context CGLContextObj]);
-
+    id context = [[_focusContexts lastObject] retain];
+    if (context != nil) [_focusContexts removeLastObject];
+    if (context != [NSNull null]) CGLUnlockContext([context CGLContextObj]);
+    [context release];
     [super unlockFocus];
 }
 
@@ -159,6 +187,33 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [_context clearDrawable];
     [_context release];
     _context = nil;
+    _lastDrawablePixelSize = NSZeroSize;
+}
+
+// Backing coordinates belong to this GL drawable, whose preferred scale can
+// differ from its parent surface. Map full bounds to the exact allocation.
+- (BOOL) _drawableSize: (NSSize *) pixels logicalSize: (NSSize *) logical {
+    if ([_context view] != self) return NO;
+    *pixels = [_context _drawablePixelSize]; *logical = [self bounds].size;
+    return isfinite(pixels->width) && isfinite(pixels->height) &&
+        pixels->width > 0 && pixels->height > 0 &&
+        floor(pixels->width) == pixels->width && floor(pixels->height) == pixels->height &&
+        isfinite(logical->width) && isfinite(logical->height) &&
+        logical->width > 0 && logical->height > 0;
+}
+- (NSRect) convertRectToBacking: (NSRect) rect {
+    NSSize pixels, logical;
+    if (![self _drawableSize: &pixels logicalSize: &logical]) return [super convertRectToBacking: rect];
+    // Divide first so full bounds map exactly to integral allocation dimensions
+    // (71 * (124 / 71) can otherwise become 123.999..., then truncate to 123).
+    return NSMakeRect(rect.origin.x / logical.width * pixels.width, rect.origin.y / logical.height * pixels.height,
+        rect.size.width / logical.width * pixels.width, rect.size.height / logical.height * pixels.height);
+}
+- (NSRect) convertRectFromBacking: (NSRect) rect {
+    NSSize pixels, logical;
+    if (![self _drawableSize: &pixels logicalSize: &logical]) return [super convertRectFromBacking: rect];
+    return NSMakeRect(rect.origin.x / pixels.width * logical.width, rect.origin.y / pixels.height * logical.height,
+        rect.size.width / pixels.width * logical.width, rect.size.height / pixels.height * logical.height);
 }
 
 // -setFrame: goes through both of these.

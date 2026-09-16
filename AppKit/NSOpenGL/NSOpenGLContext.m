@@ -161,6 +161,7 @@ static inline void _clearCurrentContext() {
         if (_currentContext() == self) _setCurrentContext(nil);
     }
     _hasPrepared = NO;
+    _drawableAttachmentSucceeded = NO;
     _view = view;
 
     if (_cglWindow != NULL) {
@@ -176,6 +177,7 @@ static inline void _clearCurrentContext() {
 
 - (void) makeCurrentContext {
     CGLError error;
+    _drawableAttachmentSucceeded = NO;
 
     // Viewless contexts have no window geometry to update. In particular,
     // background resource uploads must not wait for a main-thread run loop.
@@ -211,6 +213,7 @@ static inline void _clearCurrentContext() {
     }
 
     _setCurrentContext(self);
+    _drawableAttachmentSucceeded = YES;
 
     if (!_hasPrepared) {
         _hasPrepared = YES;
@@ -266,6 +269,14 @@ static inline void _clearCurrentContext() {
                           colorBuffer: (unsigned long) source
 {
     NSUnimplementedMethod();
+}
+
+- (BOOL) _drawableAttachmentSucceeded { return _drawableAttachmentSucceeded; }
+
+// Do not create a drawable just to answer a backing-coordinate query.
+- (NSSize) _drawablePixelSize {
+    return [_subwindow respondsToSelector: @selector(drawablePixelSize)]
+        ? [_subwindow drawablePixelSize] : NSZeroSize;
 }
 
 - (void) update {
