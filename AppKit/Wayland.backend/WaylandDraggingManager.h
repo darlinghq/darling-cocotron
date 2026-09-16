@@ -21,6 +21,7 @@
 #import "WaylandDisplay.h"
 
 @class WaylandDragIcon;
+extern NSString * const WaylandLocalDragMime;
 @interface WaylandDraggingManager : NSDraggingManager {
     WaylandDisplay *_display; // Display owns manager.
     WaylandWindow *_origin;
@@ -28,13 +29,24 @@
     id _localSource;
     struct wl_proxy *_source;
     NSDictionary *_snapshot;
-    BOOL _busy, _finished, _dropped;
+    BOOL _busy, _finished, _dropped, _nativeStarted, _localOnly;
+    NSDictionary *_localSnapshot;
+    NSString *_localMime;
+    id _localSession; // Nonretained identity, revoked before session teardown.
+    NSUInteger _localGeneration;
+    uint32_t _completedLocalAction;
     uint32_t _action, _offeredActions;
     double _dropDeadline;
     NSDragOperation _localOperations;
 }
 - (id) initWithDisplay: (WaylandDisplay *) display;
 - (NSDragOperation) localOperations;
+- (NSDictionary *) localSnapshotForSession: (id) session mimes: (NSArray *) mimes
+                               generation: (NSUInteger *) generation;
+- (BOOL) permitsLocalSession: (id) session generation: (NSUInteger) generation;
+- (void) revokeLocalSession: (id) session generation: (NSUInteger) generation;
+- (BOOL) completeLocalSession: (id) session generation: (NSUInteger) generation
+                       action: (uint32_t) action;
 - (void) cancel;
 - (void) outputRemoved: (struct wl_proxy *) output;
 - (void) outputsChanged;

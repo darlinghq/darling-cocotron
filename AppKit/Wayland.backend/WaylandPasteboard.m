@@ -362,6 +362,7 @@ void WaylandSendData(WaylandDisplay *display, NSData *data, int fd) {
             // when ownership actually changes; NULL on focus loss is not loss.
         } else if (opcode == WP_DATA_DEVICE_EV_ENTER) {
             WaylandDropSession *old = _dragSession;
+            [old willLeave];
             if (old) [_display performAfterDispatch: ^{ [old leave]; }];
             _dragOffer = (struct wl_proxy *) args[4].o;
             NSValue *key = [NSValue valueWithPointer: _dragOffer];
@@ -385,6 +386,7 @@ void WaylandSendData(WaylandDisplay *display, NSData *data, int fd) {
             [_display performAfterDispatch: ^{ [session drop]; }];
         } else if (opcode == WP_DATA_DEVICE_EV_LEAVE) {
             WaylandDropSession *session = _dragSession;
+            [session willLeave];
             [_display performAfterDispatch: ^{ [session leave]; }];
             [_dragSession release]; _dragSession = nil; _dragOffer = NULL;
         }

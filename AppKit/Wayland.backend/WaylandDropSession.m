@@ -47,7 +47,10 @@
             for (NSString *type in [WaylandPasteboard typesForMime:mime])
                 if (![types containsObject:type]) [types addObject:type];
         }
-        _types = [types copy];
+        _localSnapshot = [[manager localSnapshotForSession:self mimes:mimes
+                generation:&_localGeneration] retain];
+        if (_localSnapshot) _localManager = [manager retain];
+        _types = _localSnapshot ? [[_localSnapshot allKeys] copy] : [types copy];
         _sourceActions = actions;
         if (offer && WL.wl_proxy_get_version(offer) < 3) _sourceActions = _action = 1;
         static int nextSequence = 0;
@@ -55,7 +58,20 @@
     }
     return self;
 }
+- (BOOL) hasLocalAccess {
+    return _localSnapshot && _offer && [_window isMapped] && [_localManager
+            permitsLocalSession:self generation:_localGeneration];
+}
+- (void) willLeave {
+    // Native leave precedes deferred app callbacks. Post-drop leave is normal;
+    // keep that session alive through the already-queued perform/finish path.
+    if (!_dropAnnounced)
+        [_localManager
+                revokeLocalSession:self generation:_localGeneration];
+}
 - (void) invalidate {
+    [_localManager
+            revokeLocalSession:self generation:_localGeneration];
     if (_offer) {
         WaylandMarshal(_offer, WP_DATA_OFFER_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
         _offer = NULL;
@@ -65,6 +81,7 @@
 - (void) dealloc {
     [self invalidate];
     [_window release]; [_destination release]; [_receiver release];
+    [_localSnapshot release]; [_localManager release];
     [_mimes release]; [_types release]; [_cache release]; [_wireCache release]; [_localSource release];
     [super dealloc];
 }
@@ -77,6 +94,7 @@
 }
 - (NSString *) mimeForType: (NSString *) type {
     if ([type isEqual: @"DELETE"]) return nil;
+    if (_localSnapshot) return [self hasLocalAccess] && [_localSnapshot objectForKey:type] ? [_mimes objectAtIndex:0] : nil;
     if ([type isEqual:NSFilenamesPboardType] && [_mimes containsObject:@"text/uri-list"])
         return @"text/uri-list";
     if ([type isEqual: NSStringPboardType]) {
@@ -95,6 +113,10 @@
 }
 - (NSData *) dataForType: (NSString *) type {
     if ([type isEqual: @"DELETE"]) return nil;
+    if (_localSnapshot) {
+        if (![self hasLocalAccess]) { _transferFailed = YES; return nil; }
+        return [_localSnapshot objectForKey:type];
+    }
     NSData *cached = [_cache objectForKey: type];
     if (cached) return cached;
     NSString *mime = [self mimeForType: type];
@@ -209,7 +231,7 @@
     if (_negotiationDepth) { _accepted = NO; _acceptedActions = 0; }
 }
 - (BOOL) hasAcceptedAction {
-    return _offer && _accepted && WaylandIsFinalDragAction(_action) &&
+    return _offer && _accepted && (!_localSnapshot || [self hasLocalAccess]) && WaylandIsFinalDragAction(_action) &&
            (_action & _acceptedActions & _sourceActions) != 0;
 }
 - (void) drop {
@@ -221,6 +243,8 @@
             [_receiver prepareForDragOperation: self] && [_window isMapped] &&
             [_destination _receiverForDragSession: self] == _receiver && [self hasAcceptedAction] &&
             [_receiver performDragOperation: self] && !_transferFailed && [self hasAcceptedAction]) {
+            if (_localSnapshot && ![_localManager
+                    completeLocalSession:self generation:_localGeneration action:_action]) return;
             if (WL.wl_proxy_get_version(_offer) >= 3)
                 WaylandMarshal(_offer, WP_DATA_OFFER_FINISH, NULL, 0, NULL);
             [self invalidate];

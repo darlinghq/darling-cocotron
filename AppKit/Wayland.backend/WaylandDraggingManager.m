@@ -28,6 +28,9 @@
 #include <unistd.h>
 #include <time.h>
 #include <poll.h>
+#include <stdlib.h>
+
+NSString * const WaylandLocalDragMime = @"application/x-darling-local-drag";
 
 static BOOL monotonicSeconds(double *seconds) {
     struct timespec now;
@@ -44,12 +47,38 @@ static BOOL monotonicSeconds(double *seconds) {
 // Incoming drops already inspect registered view types while hit testing.
 - (void) registerWindow: (NSWindow *) window dragTypes: (NSArray *) types {}
 - (void) unregisterWindow: (NSWindow *) window {}
-- (id) localDraggingSource { return _busy && !_finished ? _localSource : nil; }
-- (NSDragOperation) localOperations { return _busy && !_finished ? _localOperations : NSDragOperationNone; }
+- (id) localDraggingSource { return _nativeStarted && !_finished ? _localSource : nil; }
+- (NSDragOperation) localOperations { return _nativeStarted && !_finished ? _localOperations : NSDragOperationNone; }
+// The marker carries no payload or capability. Only our currently active drag
+// and exact destination session may access the in-process typed snapshot.
+- (NSDictionary *) localSnapshotForSession: (id) session mimes: (NSArray *) mimes
+                               generation: (NSUInteger *) generation {
+    if (!_nativeStarted || _finished || !_localOnly ||
+        [mimes count] != 1 || ![[mimes objectAtIndex:0] isEqual:_localMime]) return nil;
+    _localSession = session;
+    _completedLocalAction = 0;
+    *generation = _localGeneration;
+    return _localSnapshot;
+}
+- (BOOL) permitsLocalSession: (id) session generation: (NSUInteger) generation {
+    return _nativeStarted && !_finished && _localOnly &&
+           session == _localSession && generation == _localGeneration;
+}
+- (void) revokeLocalSession: (id) session generation: (NSUInteger) generation {
+    if (session == _localSession && generation == _localGeneration) _localSession = nil;
+}
+- (BOOL) completeLocalSession: (id) session generation: (NSUInteger) generation
+                       action: (uint32_t) action {
+    if (![self permitsLocalSession:session generation:generation] ||
+        !WaylandIsFinalDragAction(action) || !(action & _offeredActions)) return NO;
+    _completedLocalAction = action;
+    return YES;
+}
 - (void) cancel {
     if (_finished) return;
     _finished = YES;
     _action = 0;
+    _localSession = nil;
 }
 - (void) invalidate {
     [self cancel]; [_icon invalidate]; [self destroySource]; [_display flush]; _display = nil;
@@ -70,13 +99,14 @@ static BOOL monotonicSeconds(double *seconds) {
 - (void) dealloc {
     [self destroySource];
     [_icon invalidate]; [_icon release];
+    [_localSnapshot release]; [_localMime release];
     [_snapshot release]; [_origin release]; [_localSource release];
     [super dealloc];
 }
 - (void) handleEvent: (uint32_t) opcode kind: (WaylandObjectKind) kind
               proxy: (struct wl_proxy *) proxy arguments: (union wl_argument *) args {
     if (opcode == WP_DATA_SOURCE_EV_SEND) {
-        if (proxy != _source || _finished) { close(args[1].h); return; }
+        if (proxy != _source || _finished || _localOnly) { close(args[1].h); return; }
         NSString *mime = args[0].s ? [NSString stringWithUTF8String: args[0].s] : nil;
         WaylandSendData(_display, mime ? [_snapshot objectForKey: mime] : nil, args[1].h);
         return;
@@ -108,6 +138,8 @@ static BOOL monotonicSeconds(double *seconds) {
     if (!origin || !serial) return;
     [self retain]; // Display invalidation may release its ownership while pumping.
     _busy = YES; _finished = NO; _dropped = NO; _action = 0;
+    _nativeStarted = NO; _localOnly = NO; _localSession = nil;
+    ++_localGeneration; _completedLocalAction = 0;
     _origin = [origin retain]; _localSource = [source retain];
     NSImage *heldImage = [image retain];
     BOOL began = NO;
@@ -122,14 +154,17 @@ static BOOL monotonicSeconds(double *seconds) {
         NSMutableDictionary *snapshot = [NSMutableDictionary dictionary];
         NSUInteger bytes = 0;
         _offeredActions = WaylandActionsFromOperations(allowed);
+        _localOnly = !_offeredActions && WaylandActionsFromOperations(_localOperations);
+        if (_localOnly) _offeredActions = WaylandActionsFromOperations(_localOperations);
         if (_offeredActions) {
             for (NSString *type in [[[pasteboard types] copy] autorelease]) {
+                if ([type isEqual:@"DELETE"]) continue;
                 NSData *data = [pasteboard dataForType: type];
                 if (!data) {
                     if ([type isEqual:NSFilenamesPboardType]) { [snapshot removeAllObjects]; break; }
                     continue;
                 }
-                data = [WaylandPasteboard encodeData:data forType:type];
+                if (!_localOnly) data = [WaylandPasteboard encodeData:data forType:type];
                 // A partial filename selection could make a MOVE source remove
                 // files that were never delivered. Reject that drag atomically.
                 if (!data) { [snapshot removeAllObjects]; break; }
@@ -138,6 +173,10 @@ static BOOL monotonicSeconds(double *seconds) {
                 }
                 bytes += [data length];
                 NSData *copy = [[data copy] autorelease];
+                if (_localOnly) {
+                    [snapshot setObject:copy forKey:type];
+                    continue;
+                }
                 for (NSString *mime in [WaylandPasteboard mimeTypesForType: type])
                     if ([type isEqual:mime] || ![snapshot objectForKey:mime])
                         [snapshot setObject:copy forKey:mime];
@@ -154,7 +193,14 @@ static BOOL monotonicSeconds(double *seconds) {
         if ([snapshot count] && !_finished && _display &&
             [_display dragOriginForEvent: event] == origin &&
             [_display dragSerialForEvent: event] == serial) {
-            _snapshot = [snapshot copy];
+            if (_localOnly) {
+                _localSnapshot = [snapshot copy];
+                // Unique correlation marker rejects stale offers. It contains
+                // no user payload/type names and is never a data capability.
+                _localMime = [[NSString alloc] initWithFormat:@"%@-%08x%08x%08x%08x",
+                        WaylandLocalDragMime, arc4random(), arc4random(), arc4random(), arc4random()];
+                _snapshot = [@{_localMime:[NSData data]} copy];
+            } else _snapshot = [snapshot copy];
             union wl_argument args[4] = {{.o = NULL}};
             _source = WaylandCreateObject(manager, WP_DATA_MANAGER_CREATE_SOURCE,
                     &wl_data_source_interface, args, WaylandObjectDataSource, self);
@@ -170,6 +216,7 @@ static BOOL monotonicSeconds(double *seconds) {
             args[3].u = serial;
             [_display consumeDragPress];
             WaylandMarshal(device, WP_DATA_DEVICE_START_DRAG, NULL, 0, args);
+            _nativeStarted = YES;
             [_icon show];
             [_display flush]; began = YES;
             if ([source respondsToSelector: @selector(draggedImage:beganAt:)])
@@ -194,10 +241,14 @@ static BOOL monotonicSeconds(double *seconds) {
                     }
                 }
             }
-            if (_finished && WaylandIsFinalDragAction(_action) && (_action & _offeredActions))
+            if (_finished && WaylandIsFinalDragAction(_action) && (_action & _offeredActions) &&
+                (!_localOnly || _completedLocalAction == _action))
                 result = WaylandOperationsFromActions(_action);
         }
     } @finally {
+        _nativeStarted = NO; _localSession = nil;
+        [_localSnapshot release]; _localSnapshot = nil;
+        [_localMime release]; _localMime = nil;
         [_icon invalidate]; [_icon release]; _icon = nil;
         [self destroySource];
         [_display flush];

@@ -19,7 +19,7 @@
 #import <AppKit/NSPasteboard.h>
 #import <AppKit/NSDragging.h>
 #import "WaylandDisplay.h"
-@class WaylandWindow;
+@class WaylandWindow, WaylandDraggingManager;
 
 // One incoming offer. Its pasteboard never touches the clipboard.
 @interface WaylandDropSession : NSPasteboard <NSDraggingInfo> {
@@ -29,6 +29,9 @@
     struct wl_proxy *_offer;
     NSArray *_mimes, *_types;
     NSMutableDictionary *_cache, *_wireCache;
+    NSDictionary *_localSnapshot;
+    WaylandDraggingManager *_localManager;
+    NSUInteger _localGeneration;
     id _receiver, _localSource;
     NSDragOperation _localOperations;
     NSPoint _point;
@@ -45,6 +48,7 @@
 - (void) selectedAction: (uint32_t) action;
 - (void) markDropped;
 - (void) drop;
+- (void) willLeave;
 - (void) leave;
 - (void) invalidate;
 @end
