@@ -1,6 +1,7 @@
 #import <AppKit/AppKit.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 @interface NSObject (IconRasterProbe)
 - (NSData *)pixelsForScale:(int32_t)scale;
 @end
@@ -10,9 +11,29 @@ static id sourceView;
 @end
 @implementation TargetView
 - (void)drawRect:(NSRect)rect { [[NSColor blueColor] set];NSRectFill([self bounds]); }
-- (NSDragOperation)draggingEntered:(id<NSDraggingInfo>)info { return NSDragOperationCopy; }
-- (BOOL)prepareForDragOperation:(id<NSDraggingInfo>)info { return YES; }
+- (NSDragOperation)draggingEntered:(id<NSDraggingInfo>)info { return getenv("TARGET_MOVE") ? NSDragOperationMove : NSDragOperationCopy; }
+- (NSDragOperation)draggingUpdated:(id<NSDraggingInfo>)info {
+    if(getenv("NESTED_DROP")) {
+        puts("NEGOTIATING");fflush(stdout);
+        NSDate *until=[NSDate dateWithTimeIntervalSinceNow:1.5];
+        while([until timeIntervalSinceNow]>0) {
+            [NSApp nextEventMatchingMask:NSAnyEventMask untilDate:[NSDate date]
+                                 inMode:NSDefaultRunLoopMode dequeue:YES];
+            usleep(1000);
+        }
+        return NSDragOperationNone;
+    }
+    return [self draggingEntered:info];
+}
+- (BOOL)prepareForDragOperation:(id<NSDraggingInfo>)info {
+    NSDragOperation expected=getenv("TARGET_MOVE")?NSDragOperationMove:NSDragOperationCopy;
+    if([info draggingSourceOperationMask]!=expected)failures++;
+    printf("PREPARE mask=%lu\n",(unsigned long)[info draggingSourceOperationMask]);fflush(stdout);
+    if(getenv("PREPARE_UNMAP"))[[self window]orderOut:nil];
+    return YES;
+}
 - (BOOL)performDragOperation:(id<NSDraggingInfo>)info {
+    if(getenv("PREPARE_UNMAP"))failures++;
     BOOL ok=[[[info draggingPasteboard]stringForType:NSStringPboardType]isEqual:@"Darling outgoing — café"];
     BOOL local=[info draggingSource]==sourceView;
     if(!ok || !local)failures++;
@@ -24,7 +45,10 @@ static id sourceView;
 @end
 @implementation SourceView
 - (void)drawRect:(NSRect)rect { [[NSColor greenColor] set]; NSRectFill([self bounds]); }
-- (NSDragOperation)draggingSourceOperationMaskForLocal:(BOOL)local { return (local && getenv("LOCAL_REJECT")) ? NSDragOperationNone : NSDragOperationCopy; }
+- (NSDragOperation)draggingSourceOperationMaskForLocal:(BOOL)local { if(local && getenv("LOCAL_REJECT"))return NSDragOperationNone;
+    if(getenv("SOURCE_LINK"))return NSDragOperationLink;
+    if(getenv("SOURCE_BOTH"))return NSDragOperationCopy|NSDragOperationMove;
+    return getenv("SOURCE_MOVE") ? NSDragOperationMove : NSDragOperationCopy; }
 - (void)mouseDown:(NSEvent *)event {
     NSPasteboard *pb=[NSPasteboard pasteboardWithName:NSDragPboard];
     [pb declareTypes:@[NSStringPboardType] owner:getenv("INVALID_PROVIDER") ? self : nil];
@@ -59,7 +83,7 @@ static id sourceView;
     [self dragImage:image at:imageLocation offset:NSZeroSize event:event
         pasteboard:pb source:self slideBack:NO];
     printf("RETURN ended=%d failures=%d\n",ended,failures);fflush(stdout);
-    exit(ended==(getenv("INVALID_PROVIDER") ? 0 : 1) && failures==0 ? 0:1);
+    exit(ended==((getenv("INVALID_PROVIDER") || getenv("SOURCE_LINK")) ? 0 : 1) && failures==0 ? 0:1);
 }
 - (void)pasteboard:(NSPasteboard *)pasteboard provideDataForType:(NSString *)type {
     [pasteboard setString:@"Darling outgoing — café" forType:type];
@@ -76,7 +100,7 @@ static id sourceView;
     ended++;
     if(ticks!=1)failures++;
     BOOL cancel=getenv("EXPECT_CANCEL")!=NULL;
-    if(operation!=(cancel?NSDragOperationNone:NSDragOperationCopy))failures++;
+    if(operation!=(cancel?NSDragOperationNone:(getenv("EXPECT_MOVE")?NSDragOperationMove:NSDragOperationCopy)))failures++;
     printf("ENDED op=%lu\n",(unsigned long)operation);fflush(stdout);
 }
 @end

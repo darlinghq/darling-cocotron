@@ -21,7 +21,7 @@
 #import "WaylandDisplay.h"
 @class WaylandWindow;
 
-// One incoming, copy-only offer. Its pasteboard never touches the clipboard.
+// One incoming offer. Its pasteboard never touches the clipboard.
 @interface WaylandDropSession : NSPasteboard <NSDraggingInfo> {
     WaylandDisplay *_display;
     WaylandWindow *_window;
@@ -30,11 +30,12 @@
     NSArray *_mimes, *_types;
     NSMutableDictionary *_cache;
     id _receiver, _localSource;
-    BOOL _localCopyAllowed;
+    NSDragOperation _localOperations;
     NSPoint _point;
-    uint32_t _serial, _sourceActions, _action;
+    uint32_t _serial, _sourceActions, _action, _acceptedActions;
     BOOL _dropAnnounced, _dropped, _accepted, _transferFailed;
     int _sequence;
+    NSUInteger _negotiationDepth, _motionGeneration;
 }
 - (id) initWithOffer: (struct wl_proxy *) offer types: (NSArray *) mimes
             display: (WaylandDisplay *) display window: (WaylandWindow *) window

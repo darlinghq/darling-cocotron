@@ -17,6 +17,7 @@
  SOFTWARE. */
 
 #import "WaylandDropSession.h"
+#import "WaylandDragOperations.h"
 #import "WaylandDraggingManager.h"
 #import "WaylandWindow.h"
 #import "WaylandLibrary.h"
@@ -42,11 +43,12 @@ static NSString *typeForMime(NSString *mime) {
         _display = display; _offer = offer; _serial = serial;
         WaylandDraggingManager *manager = (WaylandDraggingManager *) [display draggingManager];
         _localSource = [[manager localDraggingSource] retain];
-        _localCopyAllowed = [manager localCopyAllowed];
+        _localOperations = [manager localOperations];
         _window = [window retain]; _destination = [[window delegate] retain];
         _mimes = [mimes copy]; _cache = [NSMutableDictionary new];
         NSMutableArray *types = [NSMutableArray array];
         for (NSString *mime in mimes) {
+            if ([mime isEqual: @"DELETE"]) continue; // Control target, never pasteboard data.
             NSString *type = typeForMime(mime);
             if (![types containsObject: type]) [types addObject: type];
         }
@@ -71,14 +73,15 @@ static NSString *typeForMime(NSString *mime) {
     [_mimes release]; [_types release]; [_cache release]; [_localSource release];
     [super dealloc];
 }
-- (void) sourceActions: (uint32_t) actions { _sourceActions = actions; }
-- (void) selectedAction: (uint32_t) action { _action = action; }
+- (void) sourceActions: (uint32_t) actions { if (!_dropAnnounced) _sourceActions = actions; }
+- (void) selectedAction: (uint32_t) action { if (!_dropAnnounced) _action = action; }
 - (NSArray *) types { return _types; }
 - (NSString *) availableTypeFromArray: (NSArray *) types {
     for (NSString *type in types) if ([_types containsObject: type]) return type;
     return nil;
 }
 - (NSString *) mimeForType: (NSString *) type {
+    if ([type isEqual: @"DELETE"]) return nil;
     if ([type isEqual: NSStringPboardType]) {
         for (NSString *mime in @[@"text/plain;charset=utf-8", @"text/plain", @"UTF8_STRING"])
             if ([_mimes containsObject: mime]) return mime;
@@ -88,6 +91,7 @@ static NSString *typeForMime(NSString *mime) {
 - (NSString *) name { return NSDragPboard; }
 - (NSInteger) changeCount { return _sequence; }
 - (NSData *) dataForType: (NSString *) type {
+    if ([type isEqual: @"DELETE"]) return nil;
     NSData *cached = [_cache objectForKey: type];
     if (cached) return cached;
     NSString *mime = [self mimeForType: type];
@@ -141,17 +145,39 @@ static NSString *typeForMime(NSString *mime) {
 }
 - (void) motion: (CGPoint) point {
     if (!_offer || _dropped) return;
+    NSUInteger generation = ++_motionGeneration;
     _point = [_window transformPoint: point];
-    id receiver = [_window isMapped] && ![_window isDecorationPoint: point] ?
-        [_destination _receiverForDragSession: self] : nil;
+    // Motion queued before the native drop still supplies its final position,
+    // but must not renegotiate the action already selected at drop time.
+    if (_dropAnnounced) {
+        if ([_window isDecorationPoint: point]) _accepted = NO;
+        return;
+    }
     NSDragOperation operation = NSDragOperationNone;
-    if (receiver != _receiver) {
-        id old = _receiver; _receiver = [receiver retain];
-        @try { [old draggingExited: self]; } @finally { [old release]; }
-        operation = [_receiver draggingEntered: self];
-    } else operation = [_receiver draggingUpdated: self];
-    if (!_offer) return; // Application callbacks can cancel a session.
-    _accepted = (operation & [self draggingSourceOperationMask] & NSDragOperationCopy) != 0;
+    _negotiationDepth++;
+    @try {
+        id receiver = [_window isMapped] && ![_window isDecorationPoint: point] ?
+            [_destination _receiverForDragSession: self] : nil;
+        if (generation != _motionGeneration) return;
+        if (receiver != _receiver) {
+            _accepted = NO; _acceptedActions = 0;
+            id old = _receiver; _receiver = [receiver retain];
+            @try { [old draggingExited: self]; } @finally { [old release]; }
+            if (generation != _motionGeneration) return;
+            operation = [_receiver draggingEntered: self];
+        } else operation = [_receiver draggingUpdated: self];
+    } @finally { _negotiationDepth--; }
+    if (!_offer || generation != _motionGeneration) return; // Cancelled or superseded.
+    uint32_t actions = WaylandActionsFromOperations(operation & [self draggingSourceOperationMask]);
+    if (_dropAnnounced) {
+        // A callback pumped the native drop: only narrow prior acceptance.
+        _acceptedActions &= actions;
+        _accepted = _accepted && _acceptedActions != 0;
+        return;
+    }
+    _acceptedActions = actions;
+    if (WL.wl_proxy_get_version(_offer) < 3) _acceptedActions &= 1;
+    _accepted = _acceptedActions != 0;
     NSString *mime = nil;
     if (_accepted) {
         // Use a type registered by this receiver, not an unrelated first offer.
@@ -161,23 +187,35 @@ static NSString *typeForMime(NSString *mime) {
         }
     }
     _accepted = _accepted && mime != nil;
+    if (!_accepted) _acceptedActions = 0;
     union wl_argument args[2] = {{.u = _serial}, {.s = _accepted ? [mime UTF8String] : NULL}};
     WaylandMarshal(_offer, WP_DATA_OFFER_ACCEPT, NULL, 0, args);
     if (WL.wl_proxy_get_version(_offer) >= 3) {
-        args[0].u = args[1].u = _accepted ? 1 : 0;
+        args[0].u = _acceptedActions;
+        args[1].u = (_acceptedActions & 1) ? 1 : (_acceptedActions & 2);
         WaylandMarshal(_offer, WP_DATA_OFFER_SET_ACTIONS, NULL, 0, args);
     }
     [_display flush];
 }
-- (void) markDropped { _dropAnnounced = YES; }
+- (void) markDropped {
+    _dropAnnounced = YES;
+    // A receiver may pump a nested drop before returning its operation. Do not
+    // perform using the previous motion's acceptance while that answer is pending.
+    if (_negotiationDepth) { _accepted = NO; _acceptedActions = 0; }
+}
+- (BOOL) hasAcceptedAction {
+    return _offer && _accepted && WaylandIsFinalDragAction(_action) &&
+           (_action & _acceptedActions & _sourceActions) != 0;
+}
 - (void) drop {
     _dropped = YES;
     if (!_offer) return;
     @try {
-        if (_accepted && _action == 1 && [_window isMapped] &&
+        if ([self hasAcceptedAction] && [_window isMapped] &&
             [_destination _receiverForDragSession: self] == _receiver &&
-            [_receiver prepareForDragOperation: self] &&
-            [_receiver performDragOperation: self] && !_transferFailed && _offer) {
+            [_receiver prepareForDragOperation: self] && [_window isMapped] &&
+            [_destination _receiverForDragSession: self] == _receiver && [self hasAcceptedAction] &&
+            [_receiver performDragOperation: self] && !_transferFailed && [self hasAcceptedAction]) {
             if (WL.wl_proxy_get_version(_offer) >= 3)
                 WaylandMarshal(_offer, WP_DATA_OFFER_FINISH, NULL, 0, NULL);
             [self invalidate];
@@ -194,8 +232,11 @@ static NSString *typeForMime(NSString *mime) {
 }
 - (NSPasteboard *) draggingPasteboard { return self; }
 - (NSDragOperation) draggingSourceOperationMask {
-    return (_sourceActions & 1) && (!_localSource || _localCopyAllowed)
-            ? NSDragOperationCopy : NSDragOperationNone;
+    // Once dropped, tell the receiver which operation the compositor chose.
+    // NSDraggingInfo has no separate selected-operation accessor.
+    uint32_t actions = _dropped ? ([self hasAcceptedAction] ? _action : 0) : _sourceActions;
+    NSDragOperation operations = WaylandOperationsFromActions(actions);
+    return _localSource ? (operations & _localOperations) : operations;
 }
 - (NSPoint) draggingLocation { return _point; }
 - (NSWindow *) draggingDestinationWindow { return _destination; }

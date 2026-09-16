@@ -17,6 +17,7 @@
  SOFTWARE. */
 
 #import "WaylandDraggingManager.h"
+#import "WaylandDragOperations.h"
 #import "WaylandLibrary.h"
 #import "WaylandProtocol.h"
 #import "WaylandPasteboard.h"
@@ -44,7 +45,7 @@ static BOOL monotonicSeconds(double *seconds) {
 - (void) registerWindow: (NSWindow *) window dragTypes: (NSArray *) types {}
 - (void) unregisterWindow: (NSWindow *) window {}
 - (id) localDraggingSource { return _busy && !_finished ? _localSource : nil; }
-- (BOOL) localCopyAllowed { return _busy && !_finished && _localCopyAllowed; }
+- (NSDragOperation) localOperations { return _busy && !_finished ? _localOperations : NSDragOperationNone; }
 - (void) cancel {
     if (_finished) return;
     _finished = YES;
@@ -89,7 +90,7 @@ static BOOL monotonicSeconds(double *seconds) {
     }
     else if (opcode == WP_DATA_SOURCE_EV_CANCELLED) [self cancel];
     else if (opcode == WP_DATA_SOURCE_EV_FINISHED) {
-        if (!_dropped || _action != 1) _action = 0;
+        if (!_dropped || !WaylandIsFinalDragAction(_action) || !(_action & _offeredActions)) _action = 0;
         _finished = YES;
     }
 }
@@ -113,14 +114,15 @@ static BOOL monotonicSeconds(double *seconds) {
     NSDragOperation result = NSDragOperationNone;
     @try {
         NSDragOperation allowed = NSDragOperationCopy;
-        _localCopyAllowed = YES;
+        _localOperations = NSDragOperationCopy;
         if ([source respondsToSelector: @selector(draggingSourceOperationMaskForLocal:)]) {
             allowed = [source draggingSourceOperationMaskForLocal: NO];
-            _localCopyAllowed = ([source draggingSourceOperationMaskForLocal: YES] & NSDragOperationCopy) != 0;
+            _localOperations = [source draggingSourceOperationMaskForLocal: YES];
         }
         NSMutableDictionary *snapshot = [NSMutableDictionary dictionary];
         NSUInteger bytes = 0;
-        if (allowed & NSDragOperationCopy) {
+        _offeredActions = WaylandActionsFromOperations(allowed);
+        if (_offeredActions) {
             for (NSString *type in [[[pasteboard types] copy] autorelease]) {
                 NSData *data = [pasteboard dataForType: type];
                 if (!data) continue;
@@ -152,7 +154,7 @@ static BOOL monotonicSeconds(double *seconds) {
                 args[0].s = [mime UTF8String];
                 WaylandMarshal(_source, WP_DATA_SOURCE_OFFER, NULL, 0, args);
             }
-            args[0].u = 1; // Copy only, matching incoming support.
+            args[0].u = _offeredActions;
             WaylandMarshal(_source, WP_DATA_SOURCE_SET_ACTIONS, NULL, 0, args);
             args[0].o = (struct wl_object *) _source;
             args[1].o = (struct wl_object *) [origin surface];
@@ -184,7 +186,8 @@ static BOOL monotonicSeconds(double *seconds) {
                     }
                 }
             }
-            if (_finished && _action == 1) result = NSDragOperationCopy;
+            if (_finished && WaylandIsFinalDragAction(_action) && (_action & _offeredActions))
+                result = WaylandOperationsFromActions(_action);
         }
     } @finally {
         [_icon invalidate]; [_icon release]; _icon = nil;

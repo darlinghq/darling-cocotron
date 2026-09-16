@@ -18,6 +18,7 @@ static void get_data(GtkWidget *w,GdkDragContext *c,GtkSelectionData *s,guint in
 }
 static void begin(GtkWidget *w,GdkDragContext *c,gpointer unused) {puts("SOURCE_BEGIN");fflush(stdout);}
 static void end(GtkWidget *w,GdkDragContext *c,gpointer unused) {printf("SOURCE_END action=%u\n",gdk_drag_context_get_selected_action(c));fflush(stdout);}
+static void deleted(GtkWidget*w,GdkDragContext*c,gpointer unused) { puts("SOURCE_DELETE_REQUEST");fflush(stdout); }
 static gboolean failed(GtkWidget*w,GdkDragContext*c,GtkDragResult result,gpointer unused) {printf("SOURCE_FAILED result=%d\n",result);fflush(stdout);return FALSE;}
 int main(int argc,char **argv) {
     mode=getenv("DROP_MODE");if(!mode)mode="accept";
@@ -28,9 +29,10 @@ int main(int argc,char **argv) {
     gtk_container_add(GTK_CONTAINER(label),gtk_label_new("Drag this text to the green target"));
     gtk_container_add(GTK_CONTAINER(window),label);
     GtkTargetEntry target={(gchar*)(!strcmp(mode,"unsupported")?"application/x-unsupported-test":"text/plain;charset=utf-8"),0,0};
-    gtk_drag_source_set(label,GDK_BUTTON1_MASK,&target,1,!strcmp(mode,"move-only")?GDK_ACTION_MOVE:GDK_ACTION_COPY);
+    gtk_drag_source_set(label,GDK_BUTTON1_MASK,&target,1,(!strcmp(mode,"move-only") || !strcmp(mode,"move-accept"))?GDK_ACTION_MOVE:GDK_ACTION_COPY);
     g_signal_connect(label,"drag-begin",G_CALLBACK(begin),NULL);
     g_signal_connect(label,"drag-data-get",G_CALLBACK(get_data),NULL);
+    g_signal_connect(label,"drag-data-delete",G_CALLBACK(deleted),NULL);
     g_signal_connect(label,"drag-end",G_CALLBACK(end),NULL);
     g_signal_connect(label,"drag-failed",G_CALLBACK(failed),NULL);
     gtk_widget_show_all(window);puts("SOURCE_READY");fflush(stdout);gtk_main();return 0;

@@ -15,14 +15,17 @@ static void dropCheck(BOOL value, const char *what) {
     [[NSColor greenColor] setFill]; NSRectFill([self bounds]);
 }
 - (NSDragOperation) draggingEntered: (id<NSDraggingInfo>) info {
+    dropCheck(![[[info draggingPasteboard] types] containsObject:@"DELETE"] && [[info draggingPasteboard] dataForType:@"DELETE"] == nil, "DELETE control target hidden");
     entered++; printf("ENTER types=%s x=%.1f y=%.1f\n", [[[[info draggingPasteboard] types] description] UTF8String], [info draggingLocation].x, [info draggingLocation].y); fflush(stdout);
-    dropCheck(([info draggingSourceOperationMask] & NSDragOperationMove) == 0, "copy-only destination mask");
-    return NSDragOperationCopy;
+    dropCheck([info draggingSourceOperationMask] == ((!strcmp(mode,"move-only") || !strcmp(mode,"move-accept")) ? NSDragOperationMove : NSDragOperationCopy), "source action mask");
+    return !strcmp(mode,"move-accept") ? NSDragOperationMove : NSDragOperationCopy;
 }
-- (NSDragOperation) draggingUpdated: (id<NSDraggingInfo>) info { updated++; return NSDragOperationCopy; }
+- (NSDragOperation) draggingUpdated: (id<NSDraggingInfo>) info { updated++; return !strcmp(mode,"move-accept") ? NSDragOperationMove : NSDragOperationCopy; }
 - (void) draggingExited: (id<NSDraggingInfo>) info { exited++; printf("EXIT\n"); fflush(stdout); }
 - (BOOL) prepareForDragOperation: (id<NSDraggingInfo>) info {
-    prepared++; return strcmp(mode, "prepare-reject") != 0;
+    prepared++;
+    dropCheck([info draggingSourceOperationMask] == (!strcmp(mode,"move-accept") ? NSDragOperationMove : NSDragOperationCopy), "negotiated operation in prepare");
+    return strcmp(mode, "prepare-reject") != 0;
 }
 - (BOOL) performDragOperation: (id<NSDraggingInfo>) info {
     performed++;
@@ -46,7 +49,7 @@ static void dropCheck(BOOL value, const char *what) {
 @end
 @implementation Driver
 - (void) done: (NSTimer *) timer {
-    if (!strcmp(mode, "accept")) {
+    if (!strcmp(mode, "accept") || !strcmp(mode,"move-accept")) {
         dropCheck(entered > 0 && updated > 0 && prepared == 1 && performed == 1 && concluded == 1, "accepted callback lifecycle");
     } else if (!strcmp(mode, "leave")) {
         dropCheck(entered > 0 && exited > 0 && prepared == 0 && performed == 0 && concluded == 0, "leave without drop");

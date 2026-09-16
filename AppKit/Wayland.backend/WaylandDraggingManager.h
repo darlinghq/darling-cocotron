@@ -17,6 +17,7 @@
  SOFTWARE. */
 
 #import <AppKit/NSDraggingManager.h>
+#import <AppKit/NSDragging.h>
 #import "WaylandDisplay.h"
 
 @class WaylandDragIcon;
@@ -28,12 +29,12 @@
     struct wl_proxy *_source;
     NSDictionary *_snapshot;
     BOOL _busy, _finished, _dropped;
-    uint32_t _action;
+    uint32_t _action, _offeredActions;
     double _dropDeadline;
-    BOOL _localCopyAllowed;
+    NSDragOperation _localOperations;
 }
 - (id) initWithDisplay: (WaylandDisplay *) display;
-- (BOOL) localCopyAllowed;
+- (NSDragOperation) localOperations;
 - (void) cancel;
 - (void) outputRemoved: (struct wl_proxy *) output;
 - (void) outputsChanged;
