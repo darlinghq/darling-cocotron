@@ -17,6 +17,7 @@
  SOFTWARE. */
 
 #import "WaylandWindow.h"
+#import "WaylandSubWindow.h"
 #import "WaylandLibrary.h"
 #import "WaylandProtocol.h"
 #import <AppKit/NSApplication.h>
@@ -78,7 +79,8 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     _deviceDictionary = [NSMutableDictionary new];
     _surfaceOutputs = [NSMutableSet new];
     _bufferScale = 1;
-    _display = (WaylandDisplay *) [NSDisplay currentDisplay];
+    _display = [(WaylandDisplay *) [NSDisplay currentDisplay] retain];
+    _subwindows = [NSMutableArray new];
 
     _frame = [delegate frame];
     _frame.size.width = MAX(_frame.size.width, 1.0);
@@ -90,6 +92,10 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 
 - (void) dealloc {
     [self invalidate];
+    if (_surface)
+        sendRequest(_surface, WP_SURFACE_DESTROY, WL_MARSHAL_FLAG_DESTROY);
+    [_subwindows release];
+    [_display release];
     [_deviceDictionary release];
     [_surfaceOutputs release];
     [_title release];
@@ -98,6 +104,8 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 
 - (void) invalidate {
     // Like X11Window, this can run several times.
+    if (_invalidated) return;
+    _invalidated = YES;
     [_context release];
     _context = nil;
 
@@ -107,7 +115,8 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     [self unmap];
     if (_display != nil) {
         [_display windowDestroyed: self];
-        _display = nil;
+        // Children retain this window until their EGL surfaces are released.
+        // Keep the native parent surface/display alive for that whole lifetime.
     }
 }
 
@@ -126,6 +135,37 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     return _surface;
 }
 
+- (struct wl_proxy *) ensureSurface {
+    if (!_surface && !_invalidated) {
+        union wl_argument args[] = {{.o = NULL}};
+        _surface = WaylandCreateObject(_display->_compositor, WP_COMPOSITOR_CREATE_SURFACE,
+            &wl_surface_interface, args, WaylandObjectSurface, self);
+    }
+    return _surface;
+}
+- (WaylandDisplay *) waylandDisplay { return _display; }
+- (BOOL) isInvalidated { return _invalidated; }
+- (void) addSubwindow: (WaylandSubWindow *) child {
+    [_subwindows addObject: [NSValue valueWithPointer: child]];
+}
+- (void) removeSubwindow: (WaylandSubWindow *) child {
+    [_subwindows removeObject: [NSValue valueWithPointer: child]];
+}
+- (void) stackSubwindows {
+    struct wl_proxy *below = _surface;
+    for (NSValue *value in _subwindows) {
+        WaylandSubWindow *child = [value pointerValue];
+        if ([child presentedSurface]) {
+            [child placeAboveSurface: below];
+            below = [child presentedSurface];
+        }
+    }
+}
+- (void) updateSubwindows {
+    for (NSValue *value in _subwindows)
+        [(WaylandSubWindow *) [value pointerValue] updateGeometry];
+}
+
 - (BOOL) isMapped {
     return _mapped;
 }
@@ -138,7 +178,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 #pragma mark - Mapping
 
 - (void) ensureMapped {
-    if (_mapped || _display == nil)
+    if (_mapped || _invalidated)
         return;
     _surfaceGeneration++;
     _configureUpdatePending = NO;
@@ -155,11 +195,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 
     union wl_argument args[4];
 
-    args[0].o = NULL;
-    _surface = WaylandCreateObject(_display->_compositor,
-                                   WP_COMPOSITOR_CREATE_SURFACE,
-                                   &wl_surface_interface, args,
-                                   WaylandObjectSurface, self);
+    [self ensureSurface];
 
     args[0].o = NULL;
     args[1].o = (struct wl_object *) _surface;
@@ -297,8 +333,12 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     if (_toplevel != NULL)
         sendRequest(_toplevel, WP_TOPLEVEL_DESTROY, WL_MARSHAL_FLAG_DESTROY);
     sendRequest(_xdgSurface, WP_XDG_SURFACE_DESTROY, WL_MARSHAL_FLAG_DESTROY);
-    sendRequest(_surface, WP_SURFACE_DESTROY, WL_MARSHAL_FLAG_DESTROY);
-    _toplevel = _xdgSurface = _surface = NULL;
+    // Retain the parent wl_surface across hide/show: EGL child surfaces keep
+    // their native-window identity. A NULL buffer unmaps the entire subtree.
+    union wl_argument detach[] = {{.o = NULL}, {.i = 0}, {.i = 0}};
+    WaylandMarshal(_surface, WP_SURFACE_ATTACH, NULL, 0, detach);
+    sendRequest(_surface, WP_SURFACE_COMMIT, 0);
+    _toplevel = _xdgSurface = NULL;
     [_surfaceOutputs removeAllObjects];
     [self destroyBuffers];
 
@@ -440,8 +480,8 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 }
 
 - (CGSubWindow *) createSubWindowWithFrame: (CGRect) frame {
-    // OpenGL subwindows aren't supported yet.
-    return nil;
+    if (!_display->_eglAvailable || _invalidated) return nil;
+    return [[[WaylandSubWindow alloc] initWithParentWindow: self frame: frame] autorelease];
 }
 
 #pragma mark - Geometry
@@ -466,6 +506,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
         sendRequest(positioner, WP_POSITIONER_DESTROY, WL_MARSHAL_FLAG_DESTROY);
         [_display flush];
     }
+    [self updateSubwindows];
     if (sized) {
         [self updateSizeLimits];
         [_display flush];
@@ -555,6 +596,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
         if (scale == self->_bufferScale)
             return;
         self->_bufferScale = scale;
+        [self updateSubwindows];
         [self->_context release];
         self->_context = nil;
         self->_needsPresent = NO;
@@ -916,6 +958,8 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
         _frame = frame;
         sized = YES;
     }
+
+    [self updateSubwindows];
 
     BOOL activationChanged = _pendingActivated != _activated;
     BOOL activated = _pendingActivated;

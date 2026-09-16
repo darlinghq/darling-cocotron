@@ -29,8 +29,8 @@
 // It never opens an X connection and overrides every method that uses one.
 //
 // Toplevel origins remain virtual because Wayland controls global placement.
-// Clipboard and incoming copy drops use wl_data_device; outgoing drags and
-// OpenGL subwindows are follow-ons.
+// Clipboard and incoming copy drops use wl_data_device; EGL subwindows use
+// synchronized subsurfaces. Outgoing drags are a follow-on.
 
 #import "X11Display.h"
 #include <stdint.h>
@@ -89,6 +89,9 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     struct wl_proxy *_compositor;
     struct wl_proxy *_logicalOutputManager, *_legacyLogicalOutputManager;
     uint32_t _logicalOutputManagerName;
+    struct wl_proxy *_subcompositor;
+    struct wl_proxy *_viewporter;
+    BOOL _eglAvailable;
     struct wl_proxy *_shm;
     struct wl_proxy *_wmBase;
     struct wl_proxy *_decorationManager;

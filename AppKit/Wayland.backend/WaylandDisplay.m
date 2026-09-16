@@ -23,6 +23,8 @@
 #import "WaylandCursor.h"
 #import "WaylandPasteboard.h"
 #import "WaylandDraggingManager.h"
+#import <OpenGL/CGLInternal.h>
+#include <dlfcn.h>
 #import "WaylandLibrary.h"
 #import "WaylandProtocol.h"
 #import "WaylandWindow.h"
@@ -269,6 +271,16 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         return nil;
     }
 
+    // An additive CGL entry point selects Wayland explicitly, without changing
+    // EGL_PLATFORM process-wide or relying on Mesa's default platform (X11).
+    // Older runtimes keep their CPU backend and report the missing capability.
+    CGLError (*registerPlatform)(void *, unsigned int) =
+        dlsym(RTLD_DEFAULT, "CGLRegisterNativeDisplayForPlatform");
+    _eglAvailable = WL.hasEGL && _subcompositor && registerPlatform &&
+        registerPlatform(_wlDisplay, 0x31D8 /* EGL_PLATFORM_WAYLAND_KHR */) == kCGLNoError;
+    if (!_eglAvailable)
+        NSLog(@"Wayland backend: EGL subwindows unavailable; CPU drawing remains enabled");
+
     _generalPasteboard = [[WaylandPasteboard alloc] initWithName: NSGeneralPboard display: self
                                                       manager: _dataDeviceManager seat: _seat];
 
@@ -352,7 +364,7 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         // wl_display_disconnect() doesn't free proxies.
         struct wl_proxy *proxies[] = {_imageCursorBuffer, _cursorSurface, _pinchGesture, _pointerGestures, _pointer, _keyboard,
                                       _seat, _decorationManager, _dataDeviceManager, _wmBase,
-                                      _shm, _logicalOutputManager,
+                                      _shm, _viewporter, _subcompositor, _logicalOutputManager,
                                       _legacyLogicalOutputManager, _compositor, _registry};
         for (size_t i = 0; i < sizeof(proxies) / sizeof(proxies[0]); i++)
             if (proxies[i] != NULL)
@@ -486,6 +498,12 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
                                version: _compositorVersion
                                   kind: 0
                                 object: nil];
+    } else if (strcmp(interface, "wp_viewporter") == 0 && _viewporter == NULL) {
+        _viewporter = [self bindGlobal: name interface: &wp_viewporter_interface
+                               version: 1 kind: 0 object: nil];
+    } else if (strcmp(interface, "wl_subcompositor") == 0 && _subcompositor == NULL) {
+        _subcompositor = [self bindGlobal: name interface: &wl_subcompositor_interface
+                                  version: 1 kind: 0 object: nil];
     } else if (strcmp(interface, "wl_data_device_manager") == 0 && _dataDeviceManager == NULL) {
         _dataDeviceManager = [self bindGlobal: name interface: &wl_data_device_manager_interface
                                     version: MIN(version, 3) kind: 0 object: nil];

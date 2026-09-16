@@ -22,7 +22,7 @@
 
 #import "WaylandDisplay.h"
 
-@class NSWindow, O2Context;
+@class NSWindow, O2Context, WaylandSubWindow;
 
 struct WaylandBuffer {
     struct wl_proxy *buffer;
@@ -38,6 +38,8 @@ struct WaylandBuffer {
 @interface WaylandWindow : CGWindow {
     NSWindow *_delegate;
     WaylandDisplay *_display;
+    BOOL _invalidated;
+    NSMutableArray *_subwindows; // nonretained pointers; children retain their parent
     int _level;
     NSUInteger _styleMask;
     CGSBackingStoreType _backingType; // stored, but ignored
@@ -82,6 +84,13 @@ struct WaylandBuffer {
 - (O2Rect) frame;
 - (O2Context *) cgContext;
 - (struct wl_proxy *) surface;
+- (struct wl_proxy *) ensureSurface;
+- (WaylandDisplay *) waylandDisplay;
+- (void) addSubwindow: (WaylandSubWindow *) child;
+- (void) removeSubwindow: (WaylandSubWindow *) child;
+- (void) updateSubwindows;
+- (void) stackSubwindows;
+- (BOOL) isInvalidated;
 - (BOOL) isMapped;
 - (int32_t) bufferScale;
 - (void) outputRemoved: (struct wl_proxy *) output;

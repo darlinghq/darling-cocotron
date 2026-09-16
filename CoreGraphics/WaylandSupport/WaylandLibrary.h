@@ -26,6 +26,7 @@
 #include <stdint.h>
 #include <wayland-client-core.h>
 #include <wayland-cursor.h>
+#include <wayland-egl-core.h>
 #include <xkbcommon/xkbcommon.h>
 
 // libwayland-client, libwayland-cursor and libxkbcommon are Linux libraries. They are
@@ -81,17 +82,24 @@
     X(wl_cursor_theme_get_cursor)                                              \
     X(wl_cursor_image_get_buffer)
 
+#define WAYLAND_EGL_FUNCTIONS(X)                                               \
+    X(wl_egl_window_create)                                                    \
+    X(wl_egl_window_destroy)                                                   \
+    X(wl_egl_window_resize)
+
 // Each member has the exact type of the prototype in the host headers.
 struct WaylandLibrary {
 #define WAYLAND_FUNCTION_POINTER(name) __typeof__(name) *name;
     WAYLAND_CLIENT_FUNCTIONS(WAYLAND_FUNCTION_POINTER)
     XKBCOMMON_FUNCTIONS(WAYLAND_FUNCTION_POINTER)
     WAYLAND_CURSOR_FUNCTIONS(WAYLAND_FUNCTION_POINTER)
+    WAYLAND_EGL_FUNCTIONS(WAYLAND_FUNCTION_POINTER)
 #undef WAYLAND_FUNCTION_POINTER
     // From the native C library, NULL when unavailable.
     int (*memfd_create)(const char *name, unsigned int flags);
     // NO when libwayland-cursor couldn't be loaded; cursors are then left to the compositor.
     bool hasCursor;
+    bool hasEGL;
 };
 
 extern struct WaylandLibrary WL;
