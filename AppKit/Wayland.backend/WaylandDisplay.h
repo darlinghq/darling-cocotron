@@ -60,6 +60,7 @@ typedef enum {
     WaylandObjectSurface,
     WaylandObjectXdgSurface,
     WaylandObjectToplevel,
+    WaylandObjectPopup,
     WaylandObjectDecoration,
     WaylandObjectFrameCallback,
     WaylandObjectBuffer,
@@ -108,6 +109,9 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     NSUInteger _pressedButtons;
     NSTimeInterval _lastClickTime;
     NSInteger _clickCount;
+    uint32_t _inputSerial;
+    NSEvent *_inputEvent;
+    WaylandWindow *_inputWindow;
 
     struct xkb_context *_xkbContext;
     struct xkb_keymap *_xkbKeymap;
@@ -119,12 +123,21 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     CFRunLoopTimerRef _repeatTimer;
 
     struct wl_cursor_theme *_cursorTheme;
+    int32_t _cursorThemeScale;
     struct wl_proxy *_cursorSurface;
     struct wl_proxy *_imageCursorBuffer;
+    int32_t _imageCursorBufferScale;
     WaylandCursor *_cursor;
 }
 
 - (void) flush;
+- (int32_t) scaleForOutput: (struct wl_proxy *) output;
+- (void) windowScaleChanged: (WaylandWindow *) window;
+- (WaylandWindow *) popupParentForWindow: (WaylandWindow *) window;
+- (uint32_t) popupGrabSerialForParent: (WaylandWindow *) parent;
+- (struct wl_proxy *) seat;
+- (void) unmapPopupsForParent: (WaylandWindow *) parent;
+- (void) cancelPopupMenus;
 
 // Runs a block after libwayland has returned from dispatching events. Event
 // handlers queue application-facing calls this way, so application code never

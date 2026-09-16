@@ -28,6 +28,8 @@
     const char *_names[3];
     BOOL _blank;
     NSData *_pixels;
+    NSImage *_image;
+    int32_t _pixelScale;
     NSSize _size;
     NSPoint _hotSpot;
 }
@@ -36,6 +38,7 @@
 - (instancetype) initBlank;
 - (instancetype) initWithImage: (NSImage *) image hotSpot: (NSPoint) hotSpot;
 - (NSData *) pixels;
+- (NSData *) pixelsForScale: (int32_t) scale;
 - (NSSize) size;
 - (NSPoint) hotSpot;
 

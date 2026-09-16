@@ -41,6 +41,8 @@ extern const struct wl_interface wl_output_interface;
 extern const struct wl_interface xdg_wm_base_interface;
 extern const struct wl_interface xdg_surface_interface;
 extern const struct wl_interface xdg_toplevel_interface;
+extern const struct wl_interface xdg_positioner_interface;
+extern const struct wl_interface xdg_popup_interface;
 extern const struct wl_interface zxdg_decoration_manager_v1_interface;
 extern const struct wl_interface zxdg_toplevel_decoration_v1_interface;
 
@@ -68,7 +70,10 @@ enum {
     WP_SURFACE_DAMAGE = 2,
     WP_SURFACE_FRAME = 3,
     WP_SURFACE_COMMIT = 6,
+    WP_SURFACE_SET_BUFFER_SCALE = 8,
     WP_SURFACE_DAMAGE_BUFFER = 9,
+    WP_SURFACE_EV_ENTER = 0,
+    WP_SURFACE_EV_LEAVE = 1,
 
     WP_SEAT_GET_POINTER = 0,
     WP_SEAT_GET_KEYBOARD = 1,
@@ -95,20 +100,39 @@ enum {
     WP_OUTPUT_EV_DONE = 2,
     WP_OUTPUT_EV_SCALE = 3,
 
+    WP_WM_BASE_CREATE_POSITIONER = 1,
     WP_WM_BASE_GET_XDG_SURFACE = 2,
     WP_WM_BASE_PONG = 3,
     WP_WM_BASE_EV_PING = 0,
 
     WP_XDG_SURFACE_DESTROY = 0,
     WP_XDG_SURFACE_GET_TOPLEVEL = 1,
+    WP_XDG_SURFACE_GET_POPUP = 2,
     WP_XDG_SURFACE_ACK_CONFIGURE = 4,
     WP_XDG_SURFACE_EV_CONFIGURE = 0,
+
+    WP_POSITIONER_DESTROY = 0,
+    WP_POSITIONER_SET_SIZE = 1,
+    WP_POSITIONER_SET_ANCHOR_RECT = 2,
+    WP_POSITIONER_SET_ANCHOR = 3,
+    WP_POSITIONER_SET_GRAVITY = 4,
+    WP_POSITIONER_SET_CONSTRAINT_ADJUSTMENT = 5,
+    WP_POSITIONER_SET_OFFSET = 6,
+    WP_POPUP_DESTROY = 0,
+    WP_POPUP_GRAB = 1,
+    WP_POPUP_REPOSITION = 2,
+    WP_POPUP_EV_CONFIGURE = 0,
+    WP_POPUP_EV_DONE = 1,
 
     WP_TOPLEVEL_DESTROY = 0,
     WP_TOPLEVEL_SET_TITLE = 2,
     WP_TOPLEVEL_SET_APP_ID = 3,
+    WP_TOPLEVEL_MOVE = 5,
+    WP_TOPLEVEL_RESIZE = 6,
     WP_TOPLEVEL_SET_MAX_SIZE = 7,
     WP_TOPLEVEL_SET_MIN_SIZE = 8,
+    WP_TOPLEVEL_SET_MAXIMIZED = 9,
+    WP_TOPLEVEL_UNSET_MAXIMIZED = 10,
     WP_TOPLEVEL_SET_MINIMIZED = 13,
     WP_TOPLEVEL_EV_CONFIGURE = 0,
     WP_TOPLEVEL_EV_CLOSE = 1,
@@ -116,6 +140,7 @@ enum {
     WP_DECORATION_MANAGER_GET_TOPLEVEL_DECORATION = 1,
     WP_TOPLEVEL_DECORATION_DESTROY = 0,
     WP_TOPLEVEL_DECORATION_SET_MODE = 1,
+    WP_TOPLEVEL_DECORATION_EV_CONFIGURE = 0,
 };
 
 // Enum values from the same protocol files.
@@ -131,7 +156,15 @@ enum {
     WP_SHM_FORMAT_ARGB8888 = 0,
     WP_SHM_FORMAT_XRGB8888 = 1,
     WP_TOPLEVEL_STATE_ACTIVATED = 4,
+    WP_TOPLEVEL_STATE_MAXIMIZED = 1,
+    WP_TOPLEVEL_DECORATION_MODE_CLIENT_SIDE = 1,
     WP_TOPLEVEL_DECORATION_MODE_SERVER_SIDE = 2,
+    WP_POSITIONER_ANCHOR_TOP_LEFT = 5,
+    WP_POSITIONER_GRAVITY_BOTTOM_RIGHT = 8,
+    WP_POSITIONER_SLIDE_X = 1,
+    WP_POSITIONER_SLIDE_Y = 2,
+    WP_POSITIONER_FLIP_X = 4,
+    WP_POSITIONER_FLIP_Y = 8,
 };
 
 // Linux input event codes (linux/input-event-codes.h) carried by wl_pointer.button.

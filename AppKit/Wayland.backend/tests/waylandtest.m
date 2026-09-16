@@ -21,6 +21,7 @@ static void logLine(const char *format, ...) {
 // non-panel window is visible, so the main window stays up.)
 static NSWindow *gSecondWindow;
 static NSCursor *gImageCursor;
+static unsigned gMenuActions;
 
 static NSCursor *imageCursor(void) {
     BOOL unpremultiplied = getenv("UNPREMULT_CURSOR") != NULL;
@@ -90,6 +91,13 @@ static const char *typeName(NSEventType type) {
 {
     [_color set];
     NSRectFill([self bounds]);
+    if (getenv("HIDPI_TEST") && strcmp(_name, "red") == 0) {
+        [[NSColor whiteColor] set];
+        NSRectFill(NSMakeRect(10, 10, 0.5, 40));
+        CGAffineTransform device = CGContextGetCTM([[NSGraphicsContext currentContext] graphicsPort]);
+        logLine("drawing device scale %.1f,%.1f screen scale %.1f\n", device.a, device.d,
+                [[NSScreen mainScreen] backingScaleFactor]);
+    }
     logLine("draw %s %.0fx%.0f\n", _name, [self bounds].size.width, [self bounds].size.height);
 }
 - (void)resetCursorRects
@@ -102,6 +110,26 @@ static const char *typeName(NSEventType type) {
     NSPoint p = [self convertPoint:[event locationInWindow] fromView:nil];
     logLine("view %s mouseDown at %.0f,%.0f clicks=%ld button=%ld\n", _name, p.x, p.y, (long)[event clickCount],
             (long)[event buttonNumber]);
+    if (getenv("POPUP_TEST") && strcmp(_name, "green") == 0) {
+        NSMenu *menu = [[[NSMenu alloc] initWithTitle:@"Wayland popup test"] autorelease];
+        [menu setAutoenablesItems:NO];
+        NSMenuItem *branch = [[[NSMenuItem alloc] initWithTitle:@"Branch" action:NULL keyEquivalent:@""] autorelease];
+        NSMenu *nested = [[[NSMenu alloc] initWithTitle:@"Nested"] autorelease];
+        [nested setAutoenablesItems:NO];
+        NSMenuItem *leaf = [nested addItemWithTitle:@"Leaf" action:@selector(menuAction:) keyEquivalent:@""];
+        [leaf setTarget:self];
+        [branch setSubmenu:nested];
+        [menu addItem:branch];
+        NSMenuItem *select = [menu addItemWithTitle:@"Select" action:@selector(menuAction:) keyEquivalent:@""];
+        [select setTarget:self];
+        logLine("popup opening actions=%u\n", gMenuActions);
+        [NSMenu popUpContextMenu:menu withEvent:event forView:self];
+        logLine("popup returned actions=%u\n", gMenuActions);
+    }
+}
+- (void)menuAction:(id)sender
+{
+    logLine("popup action %s count=%u\n", [[sender title] UTF8String], ++gMenuActions);
 }
 - (void)mouseUp:(NSEvent *)event
 {

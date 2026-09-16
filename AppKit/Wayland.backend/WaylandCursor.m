@@ -43,21 +43,41 @@
     _hotSpot = NSMakePoint(MAX(0, MIN(floor(hotSpot.x), width - 1)),
                           MAX(0, MIN(floor(hotSpot.y), height - 1)));
 
+    _image = [image retain];
+    @try {
+        if ([self pixelsForScale: 1] == nil) {
+            [self release];
+            return nil;
+        }
+    } @catch (id exception) {
+        [self release];
+        @throw;
+    }
+    return self;
+}
+
+- (NSData *) pixelsForScale: (int32_t) scale {
+    if (_image == nil)
+        return nil;
+    if (_pixels != nil && _pixelScale == scale)
+        return _pixels;
+    double width = _size.width * scale, height = _size.height * scale;
+    if (scale < 1 || width > INT32_MAX / 4 || height > INT32_MAX / (width * 4))
+        return nil;
     CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
     CGContextRef context = CGBitmapContextCreate(NULL, width, height, 8, 0,
             colorSpace, kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Little);
     CGColorSpaceRelease(colorSpace);
-    if (context == NULL) {
-        [self release];
+    if (context == NULL)
         return nil;
-    }
     @try {
         [NSGraphicsContext saveGraphicsState];
         @try {
             [NSGraphicsContext setCurrentContext:
                     [NSGraphicsContext graphicsContextWithGraphicsPort: context flipped: NO]];
-            [image drawInRect: NSMakeRect(0, 0, width, height)
-                    fromRect: NSZeroRect operation: NSCompositeCopy fraction: 1.0];
+            CGContextScaleCTM(context, scale, scale);
+            [_image drawInRect: NSMakeRect(0, 0, _size.width, _size.height)
+                     fromRect: NSZeroRect operation: NSCompositeCopy fraction: 1.0];
         } @finally {
             [NSGraphicsContext restoreGraphicsState];
         }
@@ -68,18 +88,19 @@
         for (size_t row = 0; row < (size_t) height; row++)
             memcpy((uint8_t *) [pixels mutableBytes] + row * stride,
                    source + row * sourceStride, stride);
-        _pixels = [pixels copy];
-    } @catch (id exception) {
-        [self release];
-        @throw;
+        NSData *snapshot = [pixels copy];
+        [_pixels release];
+        _pixels = snapshot;
+        _pixelScale = scale;
     } @finally {
         CGContextRelease(context);
     }
-    return self;
+    return _pixels;
 }
 
 - (void) dealloc {
     [_pixels release];
+    [_image release];
     [super dealloc];
 }
 

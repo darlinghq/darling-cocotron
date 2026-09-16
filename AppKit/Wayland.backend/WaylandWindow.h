@@ -54,6 +54,11 @@ struct WaylandBuffer {
     struct wl_proxy *_surface;
     struct wl_proxy *_xdgSurface;
     struct wl_proxy *_toplevel;
+    struct wl_proxy *_popup;
+    WaylandWindow *_popupParent;
+    uint32_t _popupGrabSerial;
+    uint32_t _repositionToken;
+    int32_t _pendingPopupX, _pendingPopupY;
     struct wl_proxy *_decoration;
     struct wl_proxy *_frameCallback;
     struct WaylandBuffer _buffers[2];
@@ -63,6 +68,13 @@ struct WaylandBuffer {
     BOOL _configured;
     BOOL _needsPresent;
     BOOL _activated;
+    NSMutableSet *_surfaceOutputs;
+    int32_t _bufferScale;
+    BOOL _scaleUpdatePending;
+    BOOL _clientDecorated, _pendingClientDecorated;
+    BOOL _maximized, _pendingMaximized;
+    BOOL _configureUpdatePending;
+    NSUInteger _surfaceGeneration;
 }
 
 - (instancetype) initWithDelegate: (NSWindow *) delegate;
@@ -71,6 +83,18 @@ struct WaylandBuffer {
 - (O2Context *) cgContext;
 - (struct wl_proxy *) surface;
 - (BOOL) isMapped;
+- (int32_t) bufferScale;
+- (void) outputRemoved: (struct wl_proxy *) output;
+- (void) scheduleScaleUpdate;
+- (BOOL) isPopup;
+- (WaylandWindow *) popupParent;
+- (uint32_t) popupGrabSerial;
+- (struct wl_proxy *) xdgSurface;
+- (void) unmap;
+- (NSPoint) contentOffset;
+- (BOOL) isDecorationPoint: (CGPoint) point;
+- (BOOL) decorationButton: (uint32_t) button pressed: (BOOL) pressed
+                   serial: (uint32_t) serial atPoint: (CGPoint) point;
 
 // Converts a surface-local point (origin top left) to window coordinates.
 - (NSPoint) transformPoint: (CGPoint) surfacePoint;

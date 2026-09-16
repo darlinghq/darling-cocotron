@@ -47,11 +47,34 @@ correctly premultiply this input, so transparent/partial-alpha pixels can render
 incorrectly. The normal fixture supplies premultiplied data to test the backend
 independently of that shared drawing issue.
 
+## HiDPI, menus and decorations
+
+Surface output membership controls integer HiDPI rendering and cursor scale.
+Set `HIDPI_TEST=1` and change the test output between scale 1 and 2: the half-point
+white stripe in the red view should become one physical pixel wide at scale 2.
+Input coordinates and AppKit window dimensions remain logical.
+
+Menus use `xdg_popup` with parent-relative placement and nested grabs.
+`POPUP_TEST=1` opens a context menu from the green view. Open its Branch submenu,
+then click outside; cancellation must log `popup returned actions=0`.
+Repositioning requires xdg-shell version 3.
+
+Titled windows negotiate decorations and draw a client frame when requested by
+the compositor or when the decoration protocol is absent. Set
+`DARLING_WAYLAND_DECORATIONS=client` to request this path explicitly. Test close,
+minimize, maximize, title-bar move and border resize. Compositor policy determines
+final placement and supported actions.
+
+Headless Sway validation covers 1x/2x/1x transitions, nested menu grabs and
+outside-click cancellation, typing, resize, hide/show and client close delivery.
+Client title dragging and border resizing change compositor geometry; maximize
+and minimize requests are delivered, with final behavior governed by policy.
+The half-point stripe is exactly one physical pixel at 2x. Image-cursor colors
+at 2x currently differ by up to two channel values from the 1x reference.
+Multiple physical outputs and fractional scales have not been validated.
+
 ## Remaining milestones
 
-M2: xdg_popup menus, output-aware HiDPI rendering/cursors, and client-side title
-bars where server decorations are absent. Current buffers use scale 1, menus are
-separate toplevels, and the compositor controls window placement.
 M3: clipboard and drag/drop. M4: EGL/OpenGL subwindows.
 
 All native calls use fixed-arity functions; requests use

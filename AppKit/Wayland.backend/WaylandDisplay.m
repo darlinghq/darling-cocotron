@@ -28,6 +28,9 @@
 #import <AppKit/NSCursor.h>
 #import <AppKit/NSScreen.h>
 #import <AppKit/NSWindow.h>
+#import <AppKit/NSMenuWindow.h>
+#import <AppKit/NSMenuView.h>
+#import <AppKit/NSPopUpWindow.h>
 #import <objc/message.h>
 #include <errno.h>
 #include <poll.h>
@@ -35,6 +38,16 @@
 #include <strings.h>
 #include <sys/mman.h>
 #include <unistd.h>
+#include <limits.h>
+
+@interface WaylandScreen : NSScreen {
+@public
+    CGFloat _waylandScale;
+}
+@end
+@implementation WaylandScreen
+- (CGFloat) backingScaleFactor { return _waylandScale; }
+@end
 
 // A wl_output and the modes it advertised.
 @interface WaylandOutput : NSObject {
@@ -78,6 +91,7 @@ int WaylandDispatch(const void *kind, void *proxy, uint32_t opcode,
             case WaylandObjectSurface:
             case WaylandObjectXdgSurface:
             case WaylandObjectToplevel:
+            case WaylandObjectPopup:
             case WaylandObjectDecoration:
             case WaylandObjectFrameCallback:
             case WaylandObjectBuffer:
@@ -233,6 +247,7 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         _cursorTheme = WL.wl_cursor_theme_load(getenv("XCURSOR_THEME"),
                                                size > 0 ? size : 24,
                                                (struct wl_shm *) _shm);
+        _cursorThemeScale = 1;
         if (_cursorTheme == NULL) {
             NSLog(@"Wayland backend: no cursor theme, the compositor's cursor "
                   @"stays");
@@ -304,6 +319,7 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
     }
 
     [_cursor release];
+    [_inputEvent release];
     [_screens release];
     [_outputs release];
     [_afterDispatch release];
@@ -431,7 +447,7 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
     } else if (strcmp(interface, "xdg_wm_base") == 0 && _wmBase == NULL) {
         _wmBase = [self bindGlobal: name
                          interface: &xdg_wm_base_interface
-                           version: 1
+                           version: MIN(version, 3)
                               kind: WaylandObjectWmBase
                             object: self];
     } else if (strcmp(interface, "zxdg_decoration_manager_v1") == 0 &&
@@ -470,12 +486,26 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
 - (void) registryGlobalRemoved: (uint32_t) name {
     for (WaylandOutput *output in _outputs) {
         if (output->_globalName == name) {
+            for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
+                [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) outputRemoved: output->_proxy];
             WL.wl_proxy_destroy(output->_proxy);
             [_outputs removeObject: output];
             [self invalidateScreens];
             break;
         }
     }
+}
+
+- (int32_t) scaleForOutput: (struct wl_proxy *) proxy {
+    for (WaylandOutput *output in _outputs)
+        if (output->_proxy == proxy)
+            return output->_scale;
+    return 1;
+}
+
+- (void) windowScaleChanged: (WaylandWindow *) window {
+    if (window == _pointerWindow)
+        [self applyCursor];
 }
 
 - (void) invalidateScreens {
@@ -509,6 +539,8 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         break;
     case WP_OUTPUT_EV_DONE:
         [self invalidateScreens];
+        for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
+            [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) scheduleScaleUpdate];
         break;
     }
 }
@@ -624,12 +656,13 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
                                            wl_fixed_to_double(args[3].f));
         [_pointerWindow setLastKnownCursorPosition:
                                 [_pointerWindow transformPoint: _pointerSurfacePoint]];
-        [self applyCursor];
+        [self performAfterDispatch: ^{ [self applyCursor]; }];
         break;
 
     case WP_POINTER_EV_LEAVE:
         _lastMouseLocation = [self mouseLocation];
         _pointerWindow = nil;
+        _pointerEnterSerial = 0;
         break;
 
     case WP_POINTER_EV_MOTION:
@@ -638,6 +671,16 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         break;
 
     case WP_POINTER_EV_BUTTON:
+        if (_pressedButtons == 0 && [_pointerWindow decorationButton: args[2].u
+                pressed: args[3].u == WP_POINTER_BUTTON_STATE_PRESSED
+                serial: args[0].u atPoint: _pointerSurfacePoint])
+            break;
+        if (args[3].u == WP_POINTER_BUTTON_STATE_PRESSED) {
+            _inputSerial = args[0].u;
+            [_inputEvent release];
+            _inputEvent = nil;
+            _inputWindow = nil;
+        }
         [self pointerButton: args[2].u
                     pressed: args[3].u == WP_POINTER_BUTTON_STATE_PRESSED];
         break;
@@ -657,6 +700,11 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
     NSPoint location = [window transformPoint: _pointerSurfacePoint];
     NSPoint last = [window mouseLocationOutsideOfEventStream];
     [window setLastKnownCursorPosition: location];
+
+    if (_pressedButtons == 0 && [window isDecorationPoint: _pointerSurfacePoint]) {
+        [self performAfterDispatch: ^{ [self applyCursor]; }];
+        return;
+    }
 
     NSWindow *delegate = [window delegate];
     NSEventType type = NSMouseMoved;
@@ -733,6 +781,10 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
                         deltaX: 0.0
                         deltaY: 0.0];
     [(NSEvent_mouse *) event _setButtonNumber: number];
+    if (pressed) {
+        _inputEvent = [event retain];
+        _inputWindow = window;
+    }
     [self postEvent: event atStart: NO];
 }
 
@@ -797,6 +849,12 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         // Wayland sends evdev codes; XKB keycodes are 8 higher.
         xkb_keycode_t keycode = args[2].u + 8;
         BOOL pressed = args[3].u == WP_KEYBOARD_KEY_STATE_PRESSED;
+        if (pressed) {
+            _inputSerial = args[0].u;
+            [_inputEvent release];
+            _inputEvent = nil;
+            _inputWindow = nil;
+        }
 
         [self postKeyEventForKeycode: keycode pressed: pressed repeat: NO];
         if (pressed && _repeatRate > 0 &&
@@ -964,6 +1022,10 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
      charactersIgnoringModifiers: charactersIgnoringModifiers
                        isARepeat: repeat
                          keyCode: keycode < 256 ? x11ToCarbon[keycode] : 0];
+    if (pressed && !repeat) {
+        _inputEvent = [event retain];
+        _inputWindow = window;
+    }
     [self postEvent: event atStart: NO];
 }
 
@@ -1098,8 +1160,9 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
     for (WaylandOutput *output in [self outputsWithModes]) {
         NSRect frame = NSMakeRect(x, 0, output->_width / output->_scale,
                                   output->_height / output->_scale);
-        NSScreen *screen = [[[NSScreen alloc] initWithFrame: frame
+        WaylandScreen *screen = [[[WaylandScreen alloc] initWithFrame: frame
                                                visibleFrame: frame] autorelease];
+        screen->_waylandScale = output->_scale;
         [screen setCgDirectDisplayID: [screens count] + 1];
         [screens addObject: screen];
         x += frame.size.width;
@@ -1150,6 +1213,76 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
 
 #pragma mark - Windows
 
+- (struct wl_proxy *) seat { return _seat; }
+
+- (WaylandWindow *) popupParentForWindow: (WaylandWindow *) window {
+    // Menu tracking can open nested menus with keyboard or timer events. The
+    // newest mapped popup is the parent even if pointer focus has not moved.
+    for (CFIndex i = CFArrayGetCount(_windows); i > 0; i--) {
+        WaylandWindow *candidate = (WaylandWindow *) CFArrayGetValueAtIndex(_windows, i - 1);
+        if (candidate != window && [candidate isMapped] && [candidate isPopup])
+            return candidate;
+    }
+    if (_inputWindow != window && [_inputWindow isMapped])
+        return _inputWindow;
+    if (_pointerWindow != window && [_pointerWindow isMapped])
+        return _pointerWindow;
+    id key = [[NSApp keyWindow] platformWindow];
+    if (key != window && [key isKindOfClass: [WaylandWindow class]] && [key isMapped])
+        return key;
+    return nil;
+}
+
+- (uint32_t) popupGrabSerialForParent: (WaylandWindow *) parent {
+    if ([parent isPopup])
+        return [parent popupGrabSerial];
+    // Never use a stale serial for a programmatically opened popup.
+    return _inputWindow == parent && _inputEvent != nil && [NSApp currentEvent] == _inputEvent
+            ? _inputSerial : 0;
+}
+
+- (void) unmapPopupsForParent: (WaylandWindow *) parent {
+    // Retain a snapshot: unmapping releases each child's parent reference.
+    NSMutableArray *children = [NSMutableArray array];
+    for (CFIndex i = CFArrayGetCount(_windows); i > 0; i--) {
+        WaylandWindow *window = (WaylandWindow *) CFArrayGetValueAtIndex(_windows, i - 1);
+        if ([window popupParent] == parent)
+            [children addObject: window];
+    }
+    if ([children count] != 0 && ![parent isPopup]) {
+        [self cancelPopupMenus];
+        return;
+    }
+    for (WaylandWindow *window in children)
+        [window unmap];
+}
+
+- (void) cancelPopupMenus {
+    // Tracking loops own menu windows. Do not close/release them underneath
+    // their stack frames. Clear selection and wake tracking with cancellation.
+    NSMutableArray *popups = [NSMutableArray array];
+    for (CFIndex i = CFArrayGetCount(_windows); i > 0; i--) {
+        WaylandWindow *window = (WaylandWindow *) CFArrayGetValueAtIndex(_windows, i - 1);
+        if ([window isPopup])
+            [popups addObject: window];
+    }
+    if ([popups count] == 0)
+        return;
+    for (WaylandWindow *window in popups) {
+        id delegate = [window delegate];
+        if ([delegate isKindOfClass: [NSMenuWindow class]])
+            [[delegate menuView] setSelectedItemIndex: NSNotFound];
+        else if ([delegate isKindOfClass: [NSPopUpWindow class]])
+            [delegate selectItemAtIndex: -1];
+        [window unmap];
+    }
+    _pressedButtons = 0;
+    NSEvent *cancel = [NSEvent otherEventWithType: NSAppKitDefined location: NSZeroPoint
+                                   modifierFlags: 0 timestamp: 0 windowNumber: 0 context: nil
+                                         subtype: NSApplicationDeactivated data1: 0 data2: 0];
+    [self postEvent: cancel atStart: YES];
+}
+
 - (CGWindow *) newWindowWithDelegate: (NSWindow *) delegate {
     return [[WaylandWindow alloc] initWithDelegate: delegate];
 }
@@ -1170,6 +1303,11 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
 - (void) windowUnmapped: (WaylandWindow *) window {
     if (_pointerWindow == window)
         _pointerWindow = nil;
+    if (_inputWindow == window) {
+        _inputWindow = nil;
+        [_inputEvent release];
+        _inputEvent = nil;
+    }
     if (_keyboardWindow == window) {
         _keyboardWindow = nil;
         [self stopKeyRepeat];
@@ -1198,10 +1336,15 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
 
 #pragma mark - Cursors
 
-- (struct wl_proxy *) imageCursorBuffer {
+- (struct wl_proxy *) imageCursorBufferForScale: (int32_t) scale {
+    if (_imageCursorBuffer != NULL && _imageCursorBufferScale != scale) {
+        union wl_argument none[1] = {{.o = NULL}};
+        WaylandMarshal(_imageCursorBuffer, WP_BUFFER_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY, none);
+        _imageCursorBuffer = NULL;
+    }
     if (_imageCursorBuffer != NULL)
         return _imageCursorBuffer;
-    NSData *pixels = [_cursor pixels];
+    NSData *pixels = [_cursor pixelsForScale: scale];
     if (pixels == nil)
         return NULL;
 
@@ -1223,11 +1366,14 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
                                                 &wl_shm_pool_interface, poolArgs, 0, nil);
     close(fd);
     NSSize dimensions = [_cursor size];
+    dimensions.width *= scale;
+    dimensions.height *= scale;
     union wl_argument bufferArgs[6] = {{.o = NULL}, {.i = 0},
         {.i = (int32_t) dimensions.width}, {.i = (int32_t) dimensions.height},
         {.i = (int32_t) dimensions.width * 4}, {.u = WP_SHM_FORMAT_ARGB8888}};
     _imageCursorBuffer = WaylandCreateObject(pool, WP_SHM_POOL_CREATE_BUFFER,
             &wl_buffer_interface, bufferArgs, 0, nil);
+    _imageCursorBufferScale = scale;
     union wl_argument none[1] = {{.o = NULL}};
     WaylandMarshal(pool, WP_SHM_POOL_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY, none);
     return _imageCursorBuffer;
@@ -1240,7 +1386,8 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
     union wl_argument args[4];
     args[0].u = _pointerEnterSerial;
 
-    if ([_cursor isBlank]) {
+    BOOL decoration = [_pointerWindow isDecorationPoint: _pointerSurfacePoint];
+    if (!decoration && [_cursor isBlank]) {
         args[1].o = NULL;
         args[2].i = 0;
         args[3].i = 0;
@@ -1251,14 +1398,32 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
     if (_cursorSurface == NULL)
         return;
 
-    struct wl_proxy *buffer = [self imageCursorBuffer];
+    int32_t scale = _pointerWindow != nil ? [_pointerWindow bufferScale] : 1;
+    struct wl_proxy *buffer = decoration ? NULL : [self imageCursorBufferForScale: scale];
     NSSize size = [_cursor size];
+    size.width *= scale;
+    size.height *= scale;
     NSPoint hotSpot = [_cursor hotSpot];
     if (buffer == NULL) {
+        if (WL.hasCursor && _cursorThemeScale != scale) {
+            const char *sizeString = getenv("XCURSOR_SIZE");
+            int cursorSize = sizeString ? atoi(sizeString) : 0;
+            if (cursorSize <= 0 || cursorSize > INT_MAX / scale)
+                cursorSize = 24;
+            struct wl_cursor_theme *theme = scale <= INT_MAX / cursorSize
+                    ? WL.wl_cursor_theme_load(getenv("XCURSOR_THEME"), cursorSize * scale,
+                                               (struct wl_shm *) _shm) : NULL;
+            if (theme != NULL) {
+                if (_cursorTheme != NULL)
+                    WL.wl_cursor_theme_destroy(_cursorTheme);
+                _cursorTheme = theme;
+                _cursorThemeScale = scale;
+            }
+        }
         if (_cursorTheme == NULL)
             return;
         static const char *const arrowNames[] = {"default", "left_ptr", NULL};
-        const char *const *names = _cursor ? [_cursor names] : arrowNames;
+        const char *const *names = !decoration && _cursor ? [_cursor names] : arrowNames;
         struct wl_cursor *cursor = NULL;
         for (int i = 0; cursor == NULL && names[i] != NULL; i++)
             cursor = WL.wl_cursor_theme_get_cursor(_cursorTheme, names[i]);
@@ -1272,14 +1437,24 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         if (buffer == NULL)
             return;
         size = NSMakeSize(image->width, image->height);
-        hotSpot = NSMakePoint(image->hotspot_x, image->hotspot_y);
+        scale = _cursorThemeScale;
+        // Themes may pick a different available size. Never commit a buffer
+        // whose dimensions aren't divisible by its surface scale.
+        if (image->width % scale != 0 || image->height % scale != 0)
+            scale = 1;
+        hotSpot = NSMakePoint(image->hotspot_x / scale, image->hotspot_y / scale);
+    }
+
+    if (_compositorVersion >= 3) {
+        union wl_argument scaleArgs[1] = {{.i = scale}};
+        WaylandMarshal(_cursorSurface, WP_SURFACE_SET_BUFFER_SCALE, NULL, 0, scaleArgs);
     }
 
     union wl_argument attach[3] = {{.o = (struct wl_object *) buffer}, {.i = 0}, {.i = 0}};
     WaylandMarshal(_cursorSurface, WP_SURFACE_ATTACH, NULL, 0, attach);
     union wl_argument damage[4] = {{.i = 0}, {.i = 0},
-                                   {.i = (int32_t) size.width},
-                                   {.i = (int32_t) size.height}};
+                                   {.i = (int32_t) size.width / scale},
+                                   {.i = (int32_t) size.height / scale}};
     WaylandMarshal(_cursorSurface, WP_SURFACE_DAMAGE, NULL, 0, damage);
     union wl_argument none[1] = {{.o = NULL}};
     WaylandMarshal(_cursorSurface, WP_SURFACE_COMMIT, NULL, 0, none);

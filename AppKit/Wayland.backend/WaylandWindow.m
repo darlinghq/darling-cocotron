@@ -21,6 +21,13 @@
 #import "WaylandProtocol.h"
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSWindow.h>
+#import <AppKit/NSGraphicsContext.h>
+#import <AppKit/NSGraphics.h>
+#import <AppKit/NSBezierPath.h>
+#import <AppKit/NSFont.h>
+#import <AppKit/NSColor.h>
+#import <AppKit/NSAttributedString.h>
+#import <AppKit/NSStringDrawing.h>
 #import <Foundation/NSProcessInfo.h>
 #import <Foundation/NSRunLoop.h>
 #import <Onyx2D/O2Context_builtin_FT.h>
@@ -29,8 +36,30 @@
 #include <string.h>
 #include <sys/mman.h>
 #include <unistd.h>
+#include <limits.h>
+#include <math.h>
+
+// NSView replaces the user CTM whenever it locks focus. Keep scaling in the
+// device transform, alongside Onyx2D's bottom-left to top-left conversion.
+@interface WaylandDrawingContext : O2Context_builtin_FT
+- (id) initWithSurface: (O2Surface *) surface scale: (int32_t) scale border: (CGFloat) border;
+@end
+
+@implementation WaylandDrawingContext
+- (id) initWithSurface: (O2Surface *) surface scale: (int32_t) scale border: (CGFloat) border {
+    if ((self = [super initWithSurface: surface flipped: NO]) != nil) {
+        _userToDeviceTransform = O2AffineTransformMake(scale, 0, 0, -scale, border * scale,
+                                                       O2SurfaceGetHeight(surface) - border * scale);
+        O2ContextSetCTM(self, O2AffineTransformIdentity);
+    }
+    return self;
+}
+@end
 
 @implementation WaylandWindow
+
+static const CGFloat WaylandTitleHeight = 28;
+static const CGFloat WaylandBorder = 6;
 
 static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags) {
     union wl_argument args[1] = {{.o = NULL}};
@@ -47,6 +76,8 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     _backingType = (CGSBackingStoreType) [delegate backingType];
     _isOpaque = [delegate isOpaque];
     _deviceDictionary = [NSMutableDictionary new];
+    _surfaceOutputs = [NSMutableSet new];
+    _bufferScale = 1;
     _display = (WaylandDisplay *) [NSDisplay currentDisplay];
 
     _frame = [delegate frame];
@@ -60,6 +91,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 - (void) dealloc {
     [self invalidate];
     [_deviceDictionary release];
+    [_surfaceOutputs release];
     [_title release];
     [super dealloc];
 }
@@ -98,13 +130,23 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     return _mapped;
 }
 
+- (BOOL) isPopup { return _popup != NULL; }
+- (WaylandWindow *) popupParent { return _popupParent; }
+- (uint32_t) popupGrabSerial { return _popupGrabSerial; }
+- (struct wl_proxy *) xdgSurface { return _xdgSurface; }
+
 #pragma mark - Mapping
 
 - (void) ensureMapped {
     if (_mapped || _display == nil)
         return;
+    _surfaceGeneration++;
+    _configureUpdatePending = NO;
+    BOOL forceClient = getenv("DARLING_WAYLAND_DECORATIONS") != NULL &&
+            strcmp(getenv("DARLING_WAYLAND_DECORATIONS"), "client") == 0;
+    _pendingClientDecorated = _display->_decorationManager == NULL || forceClient;
 
-    union wl_argument args[2];
+    union wl_argument args[4];
 
     args[0].o = NULL;
     _surface = WaylandCreateObject(_display->_compositor,
@@ -119,35 +161,95 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
                                       &xdg_surface_interface, args,
                                       WaylandObjectXdgSurface, self);
 
-    args[0].o = NULL;
-    _toplevel = WaylandCreateObject(_xdgSurface, WP_XDG_SURFACE_GET_TOPLEVEL,
+    BOOL menu = [_delegate isKindOfClass: NSClassFromString(@"NSMenuWindow")] ||
+                [_delegate isKindOfClass: NSClassFromString(@"NSPopUpWindow")];
+    WaylandWindow *parent = menu ? [_display popupParentForWindow: self] : nil;
+    if (parent != nil && parent->_configured) {
+        _popupParent = [parent retain];
+        [self createPopupRole];
+    } else {
+        args[0].o = NULL;
+        _toplevel = WaylandCreateObject(_xdgSurface, WP_XDG_SURFACE_GET_TOPLEVEL,
                                     &xdg_toplevel_interface, args,
                                     WaylandObjectToplevel, self);
 
-    [self updateTitle];
-    args[0].s = [[[NSProcessInfo processInfo] processName] UTF8String];
-    if (args[0].s != NULL)
-        WaylandMarshal(_toplevel, WP_TOPLEVEL_SET_APP_ID, NULL, 0, args);
-    [self updateSizeLimits];
+        [self updateTitle];
+        args[0].s = [[[NSProcessInfo processInfo] processName] UTF8String];
+        if (args[0].s != NULL)
+            WaylandMarshal(_toplevel, WP_TOPLEVEL_SET_APP_ID, NULL, 0, args);
+        [self updateSizeLimits];
 
-    if (_display->_decorationManager != NULL) {
-        args[0].o = NULL;
-        args[1].o = (struct wl_object *) _toplevel;
-        _decoration = WaylandCreateObject(
-                _display->_decorationManager,
-                WP_DECORATION_MANAGER_GET_TOPLEVEL_DECORATION,
-                &zxdg_toplevel_decoration_v1_interface, args,
-                WaylandObjectDecoration, self);
-        args[0].u = WP_TOPLEVEL_DECORATION_MODE_SERVER_SIDE;
-        WaylandMarshal(_decoration, WP_TOPLEVEL_DECORATION_SET_MODE, NULL, 0, args);
+        if (_display->_decorationManager != NULL && (_styleMask & NSWindowStyleMaskTitled)) {
+            args[0].o = NULL;
+            args[1].o = (struct wl_object *) _toplevel;
+            _decoration = WaylandCreateObject(
+                    _display->_decorationManager,
+                    WP_DECORATION_MANAGER_GET_TOPLEVEL_DECORATION,
+                    &zxdg_toplevel_decoration_v1_interface, args,
+                    WaylandObjectDecoration, self);
+            args[0].u = forceClient ? WP_TOPLEVEL_DECORATION_MODE_CLIENT_SIDE
+                                     : WP_TOPLEVEL_DECORATION_MODE_SERVER_SIDE;
+            WaylandMarshal(_decoration, WP_TOPLEVEL_DECORATION_SET_MODE, NULL, 0, args);
+        }
     }
 
+    _pendingWidth = _pendingHeight = 0;
+    _pendingActivated = NO;
     // The initial commit has no buffer; content follows the first configure.
     sendRequest(_surface, WP_SURFACE_COMMIT, 0);
     _mapped = YES;
     _configured = NO;
     _needsPresent = _context != nil;
     [_display flush];
+}
+
+- (struct wl_proxy *) newPopupPositioner {
+    union wl_argument args[4] = {{.o = NULL}};
+    struct wl_proxy *positioner = WaylandCreateObject(_display->_wmBase,
+            WP_WM_BASE_CREATE_POSITIONER, &xdg_positioner_interface, args, 0, nil);
+    args[0].i = MAX(1, (int32_t) ceil(_frame.size.width));
+    args[1].i = MAX(1, (int32_t) ceil(_frame.size.height));
+    WaylandMarshal(positioner, WP_POSITIONER_SET_SIZE, NULL, 0, args);
+    NSRect parent = [_popupParent frame];
+    NSPoint offset = [_popupParent contentOffset];
+    int32_t x = (int32_t) floor(_frame.origin.x - parent.origin.x + offset.x);
+    int32_t y = (int32_t) floor(NSMaxY(parent) - NSMaxY(_frame) + offset.y);
+    // A submenu can start beyond its parent edge. Keep the anchor inside the
+    // parent geometry, expressing the remaining displacement as an offset.
+    int32_t anchorX = MAX(0, MIN(x, (int32_t) ceil(parent.size.width + 2 * offset.x) - 1));
+    int32_t anchorY = MAX(0, MIN(y, (int32_t) ceil(parent.size.height + offset.x + offset.y) - 1));
+    args[0].i = anchorX;
+    args[1].i = anchorY;
+    args[2].i = args[3].i = 1;
+    WaylandMarshal(positioner, WP_POSITIONER_SET_ANCHOR_RECT, NULL, 0, args);
+    args[0].i = x - anchorX;
+    args[1].i = y - anchorY;
+    WaylandMarshal(positioner, WP_POSITIONER_SET_OFFSET, NULL, 0, args);
+    args[0].u = WP_POSITIONER_ANCHOR_TOP_LEFT;
+    WaylandMarshal(positioner, WP_POSITIONER_SET_ANCHOR, NULL, 0, args);
+    args[0].u = WP_POSITIONER_GRAVITY_BOTTOM_RIGHT;
+    WaylandMarshal(positioner, WP_POSITIONER_SET_GRAVITY, NULL, 0, args);
+    args[0].u = WP_POSITIONER_SLIDE_X | WP_POSITIONER_SLIDE_Y |
+                WP_POSITIONER_FLIP_X | WP_POSITIONER_FLIP_Y;
+    WaylandMarshal(positioner, WP_POSITIONER_SET_CONSTRAINT_ADJUSTMENT, NULL, 0, args);
+    return positioner;
+}
+
+- (void) createPopupRole {
+    struct wl_proxy *positioner = [self newPopupPositioner];
+    union wl_argument args[3];
+    args[0].o = NULL;
+    args[1].o = (struct wl_object *) [_popupParent xdgSurface];
+    args[2].o = (struct wl_object *) positioner;
+    _popup = WaylandCreateObject(_xdgSurface, WP_XDG_SURFACE_GET_POPUP,
+            &xdg_popup_interface, args, WaylandObjectPopup, self);
+    sendRequest(positioner, WP_POSITIONER_DESTROY, WL_MARSHAL_FLAG_DESTROY);
+    _popupGrabSerial = [_display popupGrabSerialForParent: _popupParent];
+    if (_popupGrabSerial != 0 && [_display seat] != NULL) {
+        args[0].o = (struct wl_object *) [_display seat];
+        args[1].u = _popupGrabSerial;
+        WaylandMarshal(_popup, WP_POPUP_GRAB, NULL, 0, args);
+    }
 }
 
 - (void) destroyBuffers {
@@ -167,6 +269,8 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     if (!_mapped)
         return;
 
+    [_display unmapPopupsForParent: self];
+
     if (_frameCallback != NULL) {
         WL.wl_proxy_destroy(_frameCallback);
         _frameCallback = NULL;
@@ -176,13 +280,23 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
                     WL_MARSHAL_FLAG_DESTROY);
         _decoration = NULL;
     }
-    sendRequest(_toplevel, WP_TOPLEVEL_DESTROY, WL_MARSHAL_FLAG_DESTROY);
+    if (_popup != NULL) {
+        sendRequest(_popup, WP_POPUP_DESTROY, WL_MARSHAL_FLAG_DESTROY);
+        _popup = NULL;
+        [_popupParent release];
+        _popupParent = nil;
+        _popupGrabSerial = 0;
+    }
+    if (_toplevel != NULL)
+        sendRequest(_toplevel, WP_TOPLEVEL_DESTROY, WL_MARSHAL_FLAG_DESTROY);
     sendRequest(_xdgSurface, WP_XDG_SURFACE_DESTROY, WL_MARSHAL_FLAG_DESTROY);
     sendRequest(_surface, WP_SURFACE_DESTROY, WL_MARSHAL_FLAG_DESTROY);
     _toplevel = _xdgSurface = _surface = NULL;
+    [_surfaceOutputs removeAllObjects];
     [self destroyBuffers];
 
     _mapped = NO;
+    _configureUpdatePending = NO;
     _configured = NO;
     _activated = NO;
     [_display windowUnmapped: self];
@@ -280,6 +394,8 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     [_title release];
     _title = [title copy];
     [self updateTitle];
+    if (_clientDecorated)
+        [self flushBuffer];
     [_display flush];
 }
 
@@ -289,8 +405,8 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 
     union wl_argument args[2] = {{.i = 0}, {.i = 0}};
     if (!(_styleMask & NSWindowStyleMaskResizable)) {
-        args[0].i = (int32_t) _frame.size.width;
-        args[1].i = (int32_t) _frame.size.height;
+        args[0].i = (int32_t) _frame.size.width + (_clientDecorated ? 2 * WaylandBorder : 0);
+        args[1].i = (int32_t) _frame.size.height + (_clientDecorated ? 2 * WaylandBorder + WaylandTitleHeight : 0);
     }
     WaylandMarshal(_toplevel, WP_TOPLEVEL_SET_MIN_SIZE, NULL, 0, args);
     WaylandMarshal(_toplevel, WP_TOPLEVEL_SET_MAX_SIZE, NULL, 0, args);
@@ -331,9 +447,18 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     frame.size.width = MAX(frame.size.width, 1.0);
     frame.size.height = MAX(frame.size.height, 1.0);
 
+    BOOL moved = !NSEqualPoints(frame.origin, _frame.origin);
     BOOL sized = !NSEqualSizes(frame.size, _frame.size);
     [self invalidateContextWithNewSize: frame.size];
     _frame = frame;
+    if (_popup != NULL && (moved || sized) && WL.wl_proxy_get_version(_popup) >= 3) {
+        struct wl_proxy *positioner = [self newPopupPositioner];
+        union wl_argument args[2] = {{.o = (struct wl_object *) positioner},
+                                     {.u = ++_repositionToken}};
+        WaylandMarshal(_popup, WP_POPUP_REPOSITION, NULL, 0, args);
+        sendRequest(positioner, WP_POSITIONER_DESTROY, WL_MARSHAL_FLAG_DESTROY);
+        [_display flush];
+    }
     if (sized) {
         [self updateSizeLimits];
         [_display flush];
@@ -341,7 +466,54 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 }
 
 - (NSPoint) transformPoint: (CGPoint) surfacePoint {
-    return NSMakePoint(surfacePoint.x, _frame.size.height - surfacePoint.y);
+    NSPoint offset = [self contentOffset];
+    return NSMakePoint(surfacePoint.x - offset.x, _frame.size.height - surfacePoint.y + offset.y);
+}
+
+- (NSPoint) contentOffset {
+    return _clientDecorated ? NSMakePoint(WaylandBorder, WaylandBorder + WaylandTitleHeight) : NSZeroPoint;
+}
+
+- (BOOL) isDecorationPoint: (CGPoint) point {
+    if (!_clientDecorated)
+        return NO;
+    NSPoint offset = [self contentOffset];
+    return point.x < offset.x || point.y < offset.y ||
+           point.x >= offset.x + _frame.size.width || point.y >= offset.y + _frame.size.height;
+}
+
+- (BOOL) decorationButton: (uint32_t) button pressed: (BOOL) pressed
+                   serial: (uint32_t) serial atPoint: (CGPoint) point
+{
+    if (![self isDecorationPoint: point])
+        return NO;
+    if (!pressed || button != WP_BTN_LEFT || _toplevel == NULL || [_display seat] == NULL)
+        return YES;
+    CGFloat width = _frame.size.width + 2 * WaylandBorder;
+    CGFloat height = _frame.size.height + 2 * WaylandBorder + WaylandTitleHeight;
+    uint32_t edge = 0;
+    if (point.y < WaylandBorder) edge |= 1;
+    if (point.y >= height - WaylandBorder) edge |= 2;
+    if (point.x < WaylandBorder) edge |= 4;
+    if (point.x >= width - WaylandBorder) edge |= 8;
+    union wl_argument args[3] = {{.o = (struct wl_object *) [_display seat]},
+                                 {.u = serial}, {.u = edge}};
+    if (edge != 0) {
+        if (_styleMask & NSWindowStyleMaskResizable)
+            WaylandMarshal(_toplevel, WP_TOPLEVEL_RESIZE, NULL, 0, args);
+    } else if (point.y < WaylandBorder + WaylandTitleHeight) {
+        CGFloat x = point.x - WaylandBorder;
+        if (x >= 4 && x < 22 && (_styleMask & NSWindowStyleMaskClosable))
+            [self closeRequested];
+        else if (x >= 24 && x < 42 && (_styleMask & NSWindowStyleMaskMiniaturizable))
+            [self miniaturize];
+        else if (x >= 44 && x < 62 && (_styleMask & NSWindowStyleMaskResizable))
+            sendRequest(_toplevel, _maximized ? WP_TOPLEVEL_UNSET_MAXIMIZED : WP_TOPLEVEL_SET_MAXIMIZED, 0);
+        else
+            WaylandMarshal(_toplevel, WP_TOPLEVEL_MOVE, NULL, 0, args);
+    }
+    [_display flush];
+    return YES;
 }
 
 - (void) setLastKnownCursorPosition: (CGPoint) point {
@@ -354,21 +526,64 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 
 #pragma mark - Drawing
 
+- (int32_t) bufferScale { return _bufferScale; }
+
+- (void) outputRemoved: (struct wl_proxy *) output {
+    [_surfaceOutputs removeObject: [NSValue valueWithPointer: output]];
+    [self scheduleScaleUpdate];
+}
+
+- (void) scheduleScaleUpdate {
+    if (_scaleUpdatePending)
+        return;
+    _scaleUpdatePending = YES;
+    [_display performAfterDispatch: ^{
+        self->_scaleUpdatePending = NO;
+        if (!self->_mapped || self->_delegate == nil)
+            return;
+        int32_t scale = 1;
+        if (self->_display->_compositorVersion >= 3)
+            for (NSValue *output in self->_surfaceOutputs)
+                scale = MAX(scale, [self->_display scaleForOutput: [output pointerValue]]);
+        if (scale == self->_bufferScale)
+            return;
+        self->_bufferScale = scale;
+        [self->_context release];
+        self->_context = nil;
+        self->_needsPresent = NO;
+        [self->_delegate platformWindowDidInvalidateCGContext: self];
+        [self->_delegate platformWindowExposed: self
+                                      inRect: NSMakeRect(0, 0, self->_frame.size.width,
+                                                         self->_frame.size.height)];
+        // Expose only posts a notification in Cocotron. A new backing surface
+        // needs a full redraw, even when no view has invalidated its contents.
+        [self->_delegate display];
+        [self->_display windowScaleChanged: self];
+    }];
+}
+
 - (O2Context *) createCGContextIfNeeded {
     if (_context == nil) {
+        double width = (ceil(_frame.size.width) + (_clientDecorated ? 2 * WaylandBorder : 0)) * _bufferScale;
+        double height = (ceil(_frame.size.height) + (_clientDecorated ? 2 * WaylandBorder + WaylandTitleHeight : 0)) * _bufferScale;
+        if (!isfinite(width) || !isfinite(height) || width < 1 || height < 1 ||
+            width > INT32_MAX / 4 || height > INT32_MAX / (width * 4)) {
+            NSLog(@"Wayland backend: window buffer dimensions exceed wl_shm limits");
+            return nil;
+        }
         O2ColorSpaceRef colorSpace = O2ColorSpaceCreateDeviceRGB();
         O2Surface *surface = [[O2Surface alloc]
                    initWithBytes: NULL
-                           width: _frame.size.width
-                          height: _frame.size.height
+                           width: width
+                          height: height
                 bitsPerComponent: 8
                      bytesPerRow: 0
                       colorSpace: colorSpace
                       bitmapInfo: kO2ImageAlphaPremultipliedFirst |
                                   kO2BitmapByteOrder32Little];
         O2ColorSpaceRelease(colorSpace);
-        _context = [[O2Context_builtin_FT alloc] initWithSurface: surface
-                                                         flipped: NO];
+        _context = [[WaylandDrawingContext alloc] initWithSurface: surface scale: _bufferScale
+                                                          border: _clientDecorated ? WaylandBorder : 0];
         [surface release];
     }
     return _context;
@@ -381,17 +596,49 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 - (void) invalidateContextWithNewSize: (NSSize) size {
     if (!NSEqualSizes(_frame.size, size)) {
         _frame.size = size;
-        if (![_context resizeWithNewSize: size]) {
-            [_context release];
-            _context = nil;
-            [_delegate platformWindowDidInvalidateCGContext: self];
+        [_context release];
+        _context = nil;
+        [_delegate platformWindowDidInvalidateCGContext: self];
+    }
+}
+
+- (void) drawDecorations {
+    if (!_clientDecorated || _context == nil)
+        return;
+    [NSGraphicsContext saveGraphicsState];
+    O2ContextSaveGState(_context);
+    @try {
+        [NSGraphicsContext setCurrentContext:
+            [NSGraphicsContext graphicsContextWithGraphicsPort: (CGContextRef) _context flipped: NO]];
+        O2ContextResetClip(_context);
+        O2ContextSetCTM(_context, O2AffineTransformIdentity);
+        CGFloat w = _frame.size.width, h = _frame.size.height;
+        [[NSColor colorWithCalibratedWhite: _activated ? 0.82 : 0.92 alpha: 1] set];
+        NSRectFill(NSMakeRect(-WaylandBorder, h, w + 2 * WaylandBorder,
+                              WaylandTitleHeight + WaylandBorder));
+        NSRectFill(NSMakeRect(-WaylandBorder, -WaylandBorder, w + 2 * WaylandBorder, WaylandBorder));
+        NSRectFill(NSMakeRect(-WaylandBorder, 0, WaylandBorder, h));
+        NSRectFill(NSMakeRect(w, 0, WaylandBorder, h));
+        NSUInteger masks[] = {NSWindowStyleMaskClosable, NSWindowStyleMaskMiniaturizable,
+                               NSWindowStyleMaskResizable};
+        NSColor *colors[] = {[NSColor redColor], [NSColor yellowColor], [NSColor greenColor]};
+        for (int i = 0; i < 3; ++i) {
+            [(_styleMask & masks[i] ? colors[i] : [NSColor grayColor]) set];
+            [[NSBezierPath bezierPathWithOvalInRect: NSMakeRect(7 + i * 20, h + 8, 12, 12)] fill];
         }
+        [_title drawInRect: NSMakeRect(76, h + 6, MAX(0, w - 90), 18)
+           withAttributes: @{NSFontAttributeName: [NSFont systemFontOfSize: 12],
+                             NSForegroundColorAttributeName: [NSColor blackColor]}];
+    } @finally {
+        O2ContextRestoreGState(_context);
+        [NSGraphicsContext restoreGraphicsState];
     }
 }
 
 - (void) flushBuffer {
     if (_context == nil)
         return;
+    [self drawDecorations];
     O2ContextFlush(_context);
     _needsPresent = YES;
     [self presentIfPossible];
@@ -415,6 +662,10 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     }
     // Both buffers are still in use: present again when one is released.
     if (reusable == NULL)
+        return NULL;
+
+    if (width < 1 || height < 1 || width > INT32_MAX / 4 ||
+        height > INT32_MAX / (width * 4))
         return NULL;
 
     if (reusable->buffer != NULL)
@@ -467,7 +718,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 // Copies the current content into a shm buffer and commits it, at most once
 // per frame callback.
 - (void) presentIfPossible {
-    if (!_needsPresent || !_mapped || !_configured || _frameCallback != NULL ||
+    if (!_needsPresent || !_mapped || !_configured || _configureUpdatePending || _frameCallback != NULL ||
         _context == nil)
         return;
 
@@ -495,12 +746,16 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     union wl_argument args[4] = {{.o = (struct wl_object *) buffer->buffer},
                                  {.i = 0},
                                  {.i = 0}};
+    if (_display->_compositorVersion >= 3) {
+        union wl_argument scale[1] = {{.i = _bufferScale}};
+        WaylandMarshal(_surface, WP_SURFACE_SET_BUFFER_SCALE, NULL, 0, scale);
+    }
     WaylandMarshal(_surface, WP_SURFACE_ATTACH, NULL, 0, args);
 
     args[0].i = 0;
     args[1].i = 0;
-    args[2].i = (int32_t) width;
-    args[3].i = (int32_t) height;
+    args[2].i = (int32_t) width / (_display->_compositorVersion >= 4 ? 1 : _bufferScale);
+    args[3].i = (int32_t) height / (_display->_compositorVersion >= 4 ? 1 : _bufferScale);
     WaylandMarshal(_surface,
                    _display->_compositorVersion >= 4 ? WP_SURFACE_DAMAGE_BUFFER
                                                      : WP_SURFACE_DAMAGE,
@@ -525,6 +780,14 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
            arguments: (union wl_argument *) args
 {
     switch (kind) {
+    case WaylandObjectSurface:
+        if (opcode == WP_SURFACE_EV_ENTER) {
+            [_surfaceOutputs addObject: [NSValue valueWithPointer: args[0].o]];
+            [self scheduleScaleUpdate];
+        } else if (opcode == WP_SURFACE_EV_LEAVE) {
+            [self outputRemoved: (struct wl_proxy *) args[0].o];
+        }
+        break;
     case WaylandObjectXdgSurface:
         if (opcode == WP_XDG_SURFACE_EV_CONFIGURE)
             [self configure: args[0].u];
@@ -535,13 +798,37 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
             _pendingWidth = args[0].i;
             _pendingHeight = args[1].i;
             _pendingActivated = NO;
+            _pendingMaximized = NO;
             struct wl_array *states = args[2].a;
             uint32_t *state;
-            wl_array_for_each (state, states)
+            wl_array_for_each (state, states) {
                 if (*state == WP_TOPLEVEL_STATE_ACTIVATED)
                     _pendingActivated = YES;
+                if (*state == WP_TOPLEVEL_STATE_MAXIMIZED)
+                    _pendingMaximized = YES;
+            }
         } else if (opcode == WP_TOPLEVEL_EV_CLOSE) {
             [self closeRequested];
+        }
+        break;
+
+    case WaylandObjectDecoration:
+        if (opcode == WP_TOPLEVEL_DECORATION_EV_CONFIGURE)
+            _pendingClientDecorated = args[0].u != WP_TOPLEVEL_DECORATION_MODE_SERVER_SIDE;
+        break;
+
+    case WaylandObjectPopup:
+        if (opcode == WP_POPUP_EV_CONFIGURE) {
+            _pendingPopupX = args[0].i;
+            _pendingPopupY = args[1].i;
+            _pendingWidth = args[2].i;
+            _pendingHeight = args[3].i;
+        } else if (opcode == WP_POPUP_EV_DONE) {
+            NSUInteger generation = _surfaceGeneration;
+            [_display performAfterDispatch: ^{
+                if (self->_mapped && self->_surfaceGeneration == generation)
+                    [self->_display cancelPopupMenus];
+            }];
         }
         break;
 
@@ -570,18 +857,54 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     union wl_argument args[1] = {{.u = serial}};
     WaylandMarshal(_xdgSurface, WP_XDG_SURFACE_ACK_CONFIGURE, NULL, 0, args);
 
+    if (_configureUpdatePending)
+        return;
+    _configureUpdatePending = YES;
+    NSUInteger generation = _surfaceGeneration;
+    [_display performAfterDispatch: ^{
+        if (!self->_mapped || self->_surfaceGeneration != generation)
+            return;
+        self->_configureUpdatePending = NO;
+        [self applyConfigure];
+    }];
+}
+
+- (void) applyConfigure {
+    BOOL clientDecorated = _toplevel != NULL && (_styleMask & NSWindowStyleMaskTitled) && _pendingClientDecorated;
+    BOOL decorationChanged = clientDecorated != _clientDecorated;
+    _clientDecorated = clientDecorated;
+    _maximized = _pendingMaximized;
+    if (decorationChanged) {
+        [_context release];
+        _context = nil;
+        _needsPresent = NO;
+        [_delegate platformWindowDidInvalidateCGContext: self];
+        [self updateSizeLimits];
+    }
+    int32_t width = _pendingWidth - (_clientDecorated ? 2 * WaylandBorder : 0);
+    int32_t height = _pendingHeight - (_clientDecorated ? 2 * WaylandBorder + WaylandTitleHeight : 0);
     BOOL firstConfigure = !_configured;
     _configured = YES;
 
     BOOL sized = NO;
-    if (_pendingWidth > 0 && _pendingHeight > 0 &&
-        (_pendingWidth != (int32_t) _frame.size.width ||
-         _pendingHeight != (int32_t) _frame.size.height))
+    BOOL moved = NO;
+    if (_popupParent != nil) {
+        NSRect parent = [_popupParent frame];
+        NSPoint offset = [_popupParent contentOffset];
+        NSPoint origin = NSMakePoint(parent.origin.x + _pendingPopupX - offset.x,
+                NSMaxY(parent) - _pendingPopupY + offset.y - _pendingHeight);
+        moved = !NSEqualPoints(_frame.origin, origin);
+        _frame.origin = origin;
+    }
+    if (width > 0 && height > 0 &&
+        (width != (int32_t) _frame.size.width ||
+         height != (int32_t) _frame.size.height))
     {
         // Keep the top edge where it was, as the compositor does on screen.
         O2Rect frame = _frame;
-        frame.origin.y += frame.size.height - _pendingHeight;
-        frame.size = NSMakeSize(_pendingWidth, _pendingHeight);
+        if (_popupParent == nil)
+            frame.origin.y += frame.size.height - height;
+        frame.size = NSMakeSize(width, height);
         [self invalidateContextWithNewSize: frame.size];
         _frame = frame;
         sized = YES;
@@ -591,20 +914,24 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     BOOL activated = _pendingActivated;
     _activated = activated;
 
-    if (firstConfigure || sized || activationChanged) {
+    if (firstConfigure || sized || moved || activationChanged || decorationChanged) {
         [_display performAfterDispatch: ^{
           NSWindow *delegate = self->_delegate;
           if (delegate == nil)
               return;
-          if (sized)
+          if (sized || moved)
               [delegate platformWindow: self
                           frameChanged: self->_frame
-                               didSize: YES];
+                               didSize: sized];
           if (firstConfigure || sized)
               [delegate platformWindowExposed: self
                                        inRect: NSMakeRect(0, 0,
                                                           self->_frame.size.width,
                                                           self->_frame.size.height)];
+          if (firstConfigure || sized || decorationChanged)
+              [delegate display];
+          else if (activationChanged)
+              [self flushBuffer];
           if (activationChanged && activated) {
               [self->_display windowActivated: self];
               if ([delegate attachedSheet] != nil)
