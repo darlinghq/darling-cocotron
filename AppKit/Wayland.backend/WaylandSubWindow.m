@@ -21,6 +21,7 @@
 #import "WaylandLibrary.h"
 #import "WaylandProtocol.h"
 #include <math.h>
+#import "WaylandScale.h"
 
 static void request(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags) {
     union wl_argument args[] = {{.o = NULL}};
@@ -48,6 +49,7 @@ static BOOL validFrame(CGRect frame) {
         _viewport = WaylandCreateObject(display->_viewporter, WP_VIEWPORTER_GET_VIEWPORT,
                                        &wp_viewport_interface, args, 0, nil);
     }
+    if (_viewport) _fractionalScale = [display newFractionalScaleForSurface: _surface owner: (id)self];
     // Let AppKit hit-test child views using the parent's input coordinates.
     args[0].o = NULL;
     struct wl_proxy *region = WaylandCreateObject(display->_compositor, WP_COMPOSITOR_CREATE_REGION,
@@ -72,6 +74,7 @@ static BOOL validFrame(CGRect frame) {
     [_parent removeSubwindow: self];
     if (_eglWindow) WL.wl_egl_window_destroy(_eglWindow);
     [self removeRole];
+    if (_fractionalScale) request(_fractionalScale, WP_FRACTIONAL_DESTROY, WL_MARSHAL_FLAG_DESTROY);
     if (_viewport) request(_viewport, WP_VIEWPORT_DESTROY, WL_MARSHAL_FLAG_DESTROY);
     if (_surface) request(_surface, WP_SURFACE_DESTROY, WL_MARSHAL_FLAG_DESTROY);
     [[_parent waylandDisplay] flush];
@@ -79,7 +82,21 @@ static BOOL validFrame(CGRect frame) {
     [super dealloc];
 }
 - (void *) nativeWindow { return _eglWindow; }
-- (CGFloat) backingScaleFactor { return [_parent bufferScale]; }
+- (uint32_t) renderScale120 {
+    return _fractionalScale ? (_preferredScale120 ?: [_parent renderScale120])
+        : (uint32_t)MIN((uint64_t)[_parent bufferScale] * 120, UINT32_MAX);
+}
+- (CGFloat) backingScaleFactor { return [self renderScale120] / 120.0; }
+- (void) preferredScaleChanged: (uint32_t) scale120 {
+    if (!_fractionalScale || !scale120 || scale120 == _preferredScale120) return;
+    _preferredScale120 = scale120; _needsScaleRedraw = YES; _scaleRedrawRequested = NO;
+    if (_scaleUpdatePending) return;
+    _scaleUpdatePending = YES;
+    [[_parent waylandDisplay] performAfterDispatch: ^{
+        self->_scaleUpdatePending = NO;
+        if (![self->_parent isInvalidated]) [self updateGeometry];
+    }];
+}
 - (CGSize) drawablePixelSize { return _drawablePixelSize; }
 - (void) updateGeometry {
     if (!_eglWindow) return;
@@ -92,29 +109,51 @@ static BOOL validFrame(CGRect frame) {
     bounds.size.width = floor(bounds.size.width); bounds.size.height = floor(bounds.size.height);
     CGRect crop = CGRectIntersection(full, bounds);
     int scale = [_parent bufferScale];
-    _clipped = CGRectIsEmpty(crop) || full.size.width * scale > 16384 || full.size.height * scale > 16384;
+    int32_t width, height;
+    BOOL allocatedSizeValid = WaylandScaleExtent((int32_t)full.size.width, [self renderScale120], 16384, &width) &&
+        WaylandScaleExtent((int32_t)full.size.height, [self renderScale120], 16384, &height);
+    _clipped = CGRectIsEmpty(crop) || !allocatedSizeValid;
     // Without viewporter, suppress partial children instead of drawing beyond
     // the parent's content/decorations. Fully contained children still work.
     if (!_viewport && !CGRectContainsRect(bounds, full)) _clipped = YES;
     if (_clipped || !CGRectContainsRect(bounds, _presentedRect)) [self removeRole];
-    if (_clipped) { [[_parent waylandDisplay] flush]; return; }
+    if (_clipped) { _scaleRedrawRequested = NO; [[_parent waylandDisplay] flush]; return; }
     _pendingRect = crop;
     if (_viewport) {
-        union wl_argument source[] = {
-            {.f = wl_fixed_from_int((int)(crop.origin.x - full.origin.x))},
-            {.f = wl_fixed_from_int((int)(crop.origin.y - full.origin.y))},
-            {.f = wl_fixed_from_int((int)crop.size.width)},
-            {.f = wl_fixed_from_int((int)crop.size.height)}};
+        int32_t x, y, w, h;
+        if (_fractionalScale) {
+            if (!WaylandScaleCrop((int32_t)full.size.width, width,
+                    (int32_t)(crop.origin.x - full.origin.x), (int32_t)(CGRectGetMaxX(crop) - full.origin.x), &x, &w) ||
+                !WaylandScaleCrop((int32_t)full.size.height, height,
+                    (int32_t)(crop.origin.y - full.origin.y), (int32_t)(CGRectGetMaxY(crop) - full.origin.y), &y, &h)) {
+                _clipped = YES; _scaleRedrawRequested = NO; [self removeRole]; [[_parent waylandDisplay] flush]; return;
+            }
+        } else {
+            x = wl_fixed_from_int((int)(crop.origin.x - full.origin.x));
+            y = wl_fixed_from_int((int)(crop.origin.y - full.origin.y));
+            w = wl_fixed_from_int((int)crop.size.width); h = wl_fixed_from_int((int)crop.size.height);
+        }
+        union wl_argument source[] = {{.f = x}, {.f = y}, {.f = w}, {.f = h}};
         WaylandMarshal(_viewport, WP_VIEWPORT_SET_SOURCE, NULL, 0, source);
+        union wl_argument destination[] = {{.i = _fractionalScale ? (int)crop.size.width : -1},
+                                          {.i = _fractionalScale ? (int)crop.size.height : -1}};
+        WaylandMarshal(_viewport, WP_VIEWPORT_SET_DESTINATION, NULL, 0, destination);
     }
     if ([_parent waylandDisplay]->_compositorVersion >= 3) {
-        union wl_argument scaling[] = {{.i = scale}};
+        union wl_argument scaling[] = {{.i = _fractionalScale ? 1 : scale}};
         WaylandMarshal(_surface, WP_SURFACE_SET_BUFFER_SCALE, NULL, 0, scaling);
     }
-    _drawablePixelSize = CGSizeMake((int)full.size.width * scale,
-                                    (int)full.size.height * scale);
+    CGSize pixels = CGSizeMake(width, height);
+    if (!CGSizeEqualToSize(pixels, _drawablePixelSize)) {
+        _needsScaleRedraw = YES; _scaleRedrawRequested = NO;
+    }
+    _drawablePixelSize = pixels;
     WL.wl_egl_window_resize(_eglWindow, (int)_drawablePixelSize.width,
                             (int)_drawablePixelSize.height, 0, 0);
+    if (_needsScaleRedraw && _visible && !_scaleRedrawRequested) {
+        _scaleRedrawRequested = YES;
+        [_parent scheduleSubwindowRedraw];
+    }
     // No child commit here: crop/scale must apply with the matching EGL buffer.
     // No parent commit either: position changes belong to the post-swap flush.
 }
@@ -124,6 +163,7 @@ static BOOL validFrame(CGRect frame) {
 }
 - (void) hide {
     _visible = NO;
+    _scaleRedrawRequested = NO;
     [self removeRole];
     [[_parent waylandDisplay] flush];
 }
@@ -152,6 +192,10 @@ static BOOL validFrame(CGRect frame) {
     [_parent stackSubwindows];
     request(parentSurface, WP_SURFACE_COMMIT, 0);
     _presentedRect = _pendingRect;
+    // The caller invokes flush only after a successful drawable swap. A queued
+    // preference still needs its geometry/redraw pass; don't consume it here.
+    if (!_scaleUpdatePending) _needsScaleRedraw = NO;
+    _scaleRedrawRequested = NO;
     [[_parent waylandDisplay] flush];
 }
 @end

@@ -45,6 +45,10 @@ struct xkb_state;
 
 @class WaylandCursor, WaylandWindow, WaylandPasteboard, WaylandDraggingManager;
 
+@protocol WaylandFractionalScaleOwner
+- (void) preferredScaleChanged: (uint32_t) scale120;
+@end
+
 // Identifies the object a dispatched event belongs to.
 typedef enum {
     WaylandObjectRegistry = 1,
@@ -66,6 +70,7 @@ typedef enum {
     WaylandObjectDataDevice,
     WaylandObjectDataOffer,
     WaylandObjectDataSource,
+    WaylandObjectFractionalScale,
 } WaylandObjectKind;
 
 // The dispatcher installed on every proxy (see WaylandLibrary.h for why listeners
@@ -87,10 +92,11 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     struct wl_display *_wlDisplay;
     struct wl_proxy *_registry;
     struct wl_proxy *_compositor;
+    struct wl_proxy *_viewporter, *_fractionalScaleManager;
+    uint32_t _viewporterName, _fractionalScaleManagerName;
     struct wl_proxy *_logicalOutputManager, *_legacyLogicalOutputManager;
     uint32_t _logicalOutputManagerName;
     struct wl_proxy *_subcompositor;
-    struct wl_proxy *_viewporter;
     BOOL _eglAvailable;
     struct wl_proxy *_shm;
     struct wl_proxy *_wmBase;
@@ -153,10 +159,11 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     CFRunLoopTimerRef _repeatTimer;
 
     struct wl_cursor_theme *_cursorTheme;
-    int32_t _cursorThemeScale;
-    struct wl_proxy *_cursorSurface;
+    uint32_t _cursorThemeScale120;
+    struct wl_proxy *_cursorSurface, *_cursorFractionalScale, *_cursorViewport;
+    uint32_t _cursorPreferredScale120;
     struct wl_proxy *_imageCursorBuffer;
-    int32_t _imageCursorBufferScale;
+    uint32_t _imageCursorBufferScale120;
     WaylandCursor *_cursor;
     BOOL _applyingCursor, _cursorApplyPending, _cursorApplyQueued;
     WaylandPasteboard *_generalPasteboard;
@@ -174,6 +181,7 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 - (void) processPendingEvents;
 - (uint32_t) clipboardSerial;
 - (int32_t) scaleForOutput: (struct wl_proxy *) output;
+- (void) preferredScaleChanged: (uint32_t) scale120;
 - (void) windowScaleChanged: (WaylandWindow *) window;
 - (WaylandWindow *) popupParentForWindow: (WaylandWindow *) window;
 - (uint32_t) popupGrabSerialForParent: (WaylandWindow *) parent;
@@ -191,4 +199,5 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 - (void) windowUnmapped: (WaylandWindow *) window;
 - (void) windowDestroyed: (WaylandWindow *) window;
 
+- (struct wl_proxy *) newFractionalScaleForSurface: (struct wl_proxy *) surface owner: (id<WaylandFractionalScaleOwner>) owner;
 @end

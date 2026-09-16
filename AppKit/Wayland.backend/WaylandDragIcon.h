@@ -22,15 +22,17 @@
     WaylandDisplay *_display;
     WaylandCursor *_image;
     NSMutableSet *_outputs;
-    struct wl_proxy *_surface, *_buffer;
+    struct wl_proxy *_surface, *_buffer, *_fractionalScale, *_viewport;
     NSPoint _offset;
-    int32_t _scale;
+    uint32_t _scale120, _preferredScale120, _initialScale120;
+    int32_t _initialBufferScale;
     BOOL _shown, _positioned, _rendering, _scaleDirty, _scaleQueued;
 }
 - (id) initWithImage: (NSImage *) image display: (WaylandDisplay *) display
-              scale: (int32_t) scale offset: (NSPoint) offset;
+              scale120: (uint32_t) scale120 fallbackScale: (int32_t) fallbackScale offset: (NSPoint) offset;
 - (struct wl_proxy *) surface;
 - (void) show;
+- (void) preferredScaleChanged: (uint32_t) scale120;
 - (void) invalidate;
 - (void) outputRemoved: (struct wl_proxy *) output;
 - (void) scheduleScaleUpdate;

@@ -29,7 +29,7 @@
     BOOL _blank;
     NSData *_pixels;
     NSImage *_image;
-    int32_t _pixelScale;
+    uint32_t _pixelScale120;
     NSSize _size;
     NSPoint _hotSpot;
 }
@@ -39,6 +39,8 @@
 - (instancetype) initWithImage: (NSImage *) image hotSpot: (NSPoint) hotSpot;
 - (NSData *) pixels;
 - (NSData *) pixelsForScale: (int32_t) scale;
+- (NSData *) pixelsForScale120: (uint32_t) scale120;
+- (NSSize) pixelSizeForScale120: (uint32_t) scale120;
 - (NSSize) size;
 - (NSPoint) hotSpot;
 

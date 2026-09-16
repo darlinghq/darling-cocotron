@@ -71,8 +71,10 @@ struct WaylandBuffer {
     BOOL _needsPresent;
     BOOL _activated;
     NSMutableSet *_surfaceOutputs;
-    int32_t _bufferScale;
-    BOOL _scaleUpdatePending;
+    int32_t _bufferScale; // Integer output fallback, not fractional wire scale.
+    uint32_t _preferredScale120, _renderScale120;
+    struct wl_proxy *_fractionalScale, *_viewport;
+    BOOL _scaleUpdatePending, _subwindowRedrawPending, _subwindowRedrawNeeded;
     BOOL _clientDecorated, _pendingClientDecorated;
     BOOL _maximized, _pendingMaximized;
     BOOL _configureUpdatePending;
@@ -89,10 +91,13 @@ struct WaylandBuffer {
 - (void) addSubwindow: (WaylandSubWindow *) child;
 - (void) removeSubwindow: (WaylandSubWindow *) child;
 - (void) updateSubwindows;
+- (void) scheduleSubwindowRedraw;
 - (void) stackSubwindows;
 - (BOOL) isInvalidated;
 - (BOOL) isMapped;
 - (int32_t) bufferScale;
+- (uint32_t) renderScale120;
+- (void) preferredScaleChanged: (uint32_t) scale120;
 - (void) outputRemoved: (struct wl_proxy *) output;
 - (void) scheduleScaleUpdate;
 - (BOOL) isPopup;

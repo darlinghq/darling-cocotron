@@ -38,19 +38,22 @@
 #include <sys/mman.h>
 #include <unistd.h>
 #include <limits.h>
+#import "WaylandScale.h"
 #include <math.h>
 
 // NSView replaces the user CTM whenever it locks focus. Keep scaling in the
 // device transform, alongside Onyx2D's bottom-left to top-left conversion.
 @interface WaylandDrawingContext : O2Context_builtin_FT
-- (id) initWithSurface: (O2Surface *) surface scale: (int32_t) scale border: (CGFloat) border;
+- (id) initWithSurface: (O2Surface *) surface logicalSize: (NSSize) logicalSize border: (CGFloat) border;
 @end
 
 @implementation WaylandDrawingContext
-- (id) initWithSurface: (O2Surface *) surface scale: (int32_t) scale border: (CGFloat) border {
+- (id) initWithSurface: (O2Surface *) surface logicalSize: (NSSize) logicalSize border: (CGFloat) border {
     if ((self = [super initWithSurface: surface flipped: NO]) != nil) {
-        _userToDeviceTransform = O2AffineTransformMake(scale, 0, 0, -scale, border * scale,
-                                                       O2SurfaceGetHeight(surface) - border * scale);
+        CGFloat sx = O2SurfaceGetWidth(surface) / logicalSize.width;
+        CGFloat sy = O2SurfaceGetHeight(surface) / logicalSize.height;
+        _userToDeviceTransform = O2AffineTransformMake(sx, 0, 0, -sy, border * sx,
+                                                       O2SurfaceGetHeight(surface) - border * sy);
         O2ContextSetCTM(self, O2AffineTransformIdentity);
     }
     return self;
@@ -78,7 +81,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     _isOpaque = [delegate isOpaque];
     _deviceDictionary = [NSMutableDictionary new];
     _surfaceOutputs = [NSMutableSet new];
-    _bufferScale = 1;
+    _bufferScale = 1; _renderScale120 = 120;
     _display = [(WaylandDisplay *) [NSDisplay currentDisplay] retain];
     _subwindows = [NSMutableArray new];
 
@@ -92,6 +95,8 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 
 - (void) dealloc {
     [self invalidate];
+    if (_fractionalScale) sendRequest(_fractionalScale, WP_FRACTIONAL_DESTROY, WL_MARSHAL_FLAG_DESTROY);
+    if (_viewport) sendRequest(_viewport, WP_VIEWPORT_DESTROY, WL_MARSHAL_FLAG_DESTROY);
     if (_surface)
         sendRequest(_surface, WP_SURFACE_DESTROY, WL_MARSHAL_FLAG_DESTROY);
     [_subwindows release];
@@ -140,6 +145,12 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
         union wl_argument args[] = {{.o = NULL}};
         _surface = WaylandCreateObject(_display->_compositor, WP_COMPOSITOR_CREATE_SURFACE,
             &wl_surface_interface, args, WaylandObjectSurface, self);
+        _fractionalScale = [_display newFractionalScaleForSurface: _surface owner: (id)self];
+        if (_fractionalScale) {
+            union wl_argument viewportArgs[] = {{.o = NULL}, {.o = (struct wl_object *)_surface}};
+            _viewport = WaylandCreateObject(_display->_viewporter, WP_VIEWPORTER_GET_VIEWPORT,
+                &wp_viewport_interface, viewportArgs, 0, nil);
+        }
     }
     return _surface;
 }
@@ -164,6 +175,18 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 - (void) updateSubwindows {
     for (NSValue *value in _subwindows)
         [(WaylandSubWindow *) [value pointerValue] updateGeometry];
+}
+
+- (void) scheduleSubwindowRedraw {
+    _subwindowRedrawNeeded = YES;
+    if (_subwindowRedrawPending) return;
+    _subwindowRedrawPending = YES;
+    [_display performAfterDispatch: ^{
+        self->_subwindowRedrawPending = NO;
+        if (!self->_mapped || self->_invalidated || !self->_delegate) return;
+        self->_subwindowRedrawNeeded = NO;
+        [self->_delegate display];
+    }];
 }
 
 - (BOOL) isMapped {
@@ -241,6 +264,8 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     // The initial commit has no buffer; content follows the first configure.
     sendRequest(_surface, WP_SURFACE_COMMIT, 0);
     _mapped = YES;
+    [self scheduleScaleUpdate];
+    if (_subwindowRedrawNeeded) [self scheduleSubwindowRedraw];
     _configured = NO;
     _needsPresent = _context != nil;
     [_display flush];
@@ -575,7 +600,17 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 #pragma mark - Drawing
 
 - (int32_t) bufferScale { return _bufferScale; }
-- (CGFloat) backingScaleFactor { return _bufferScale; }
+- (CGFloat) backingScaleFactor { return _renderScale120 / 120.0; }
+- (uint32_t) renderScale120 { return _renderScale120; }
+- (void) preferredScaleChanged: (uint32_t) scale120 {
+    if (!_fractionalScale || scale120 == 0 || scale120 == _preferredScale120) return;
+    _preferredScale120 = scale120;
+    [self scheduleScaleUpdate];
+}
+- (NSSize) logicalSurfaceSize {
+    return NSMakeSize(ceil(_frame.size.width) + (_clientDecorated ? 2 * WaylandBorder : 0),
+        ceil(_frame.size.height) + (_clientDecorated ? 2 * WaylandBorder + WaylandTitleHeight : 0));
+}
 
 - (void) outputRemoved: (struct wl_proxy *) output {
     [_surfaceOutputs removeObject: [NSValue valueWithPointer: output]];
@@ -594,9 +629,11 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
         if (self->_display->_compositorVersion >= 3)
             for (NSValue *output in self->_surfaceOutputs)
                 scale = MAX(scale, [self->_display scaleForOutput: [output pointerValue]]);
-        if (scale == self->_bufferScale)
-            return;
+        uint32_t render = self->_fractionalScale && self->_preferredScale120
+            ? self->_preferredScale120 : (uint32_t)MIN((uint64_t)scale * 120, UINT32_MAX);
+        if (scale == self->_bufferScale && render == self->_renderScale120) return;
         self->_bufferScale = scale;
+        self->_renderScale120 = render;
         [self updateSubwindows];
         [self->_context release];
         self->_context = nil;
@@ -614,10 +651,12 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 
 - (O2Context *) createCGContextIfNeeded {
     if (_context == nil) {
-        double width = (ceil(_frame.size.width) + (_clientDecorated ? 2 * WaylandBorder : 0)) * _bufferScale;
-        double height = (ceil(_frame.size.height) + (_clientDecorated ? 2 * WaylandBorder + WaylandTitleHeight : 0)) * _bufferScale;
-        if (!isfinite(width) || !isfinite(height) || width < 1 || height < 1 ||
-            width > INT32_MAX / 4 || height > INT32_MAX / (width * 4)) {
+        NSSize logical = [self logicalSurfaceSize];
+        int32_t width, height;
+        if (!isfinite(logical.width) || !isfinite(logical.height) || logical.width < 1 || logical.height < 1 ||
+            logical.width > INT32_MAX || logical.height > INT32_MAX ||
+            !WaylandScaleExtent((int32_t)logical.width, _renderScale120, INT32_MAX / 4, &width) ||
+            !WaylandScaleExtent((int32_t)logical.height, _renderScale120, INT32_MAX / (width * 4), &height)) {
             NSLog(@"Wayland backend: window buffer dimensions exceed wl_shm limits");
             return nil;
         }
@@ -632,7 +671,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
                       bitmapInfo: kO2ImageAlphaPremultipliedFirst |
                                   kO2BitmapByteOrder32Little];
         O2ColorSpaceRelease(colorSpace);
-        _context = [[WaylandDrawingContext alloc] initWithSurface: surface scale: _bufferScale
+        _context = [[WaylandDrawingContext alloc] initWithSurface: surface logicalSize: logical
                                                           border: _clientDecorated ? WaylandBorder : 0];
         [surface release];
     }
@@ -797,15 +836,20 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
                                  {.i = 0},
                                  {.i = 0}};
     if (_display->_compositorVersion >= 3) {
-        union wl_argument scale[1] = {{.i = _bufferScale}};
+        union wl_argument scale[1] = {{.i = _fractionalScale ? 1 : _bufferScale}};
         WaylandMarshal(_surface, WP_SURFACE_SET_BUFFER_SCALE, NULL, 0, scale);
+    }
+    NSSize logical = [self logicalSurfaceSize];
+    if (_viewport) {
+        union wl_argument destination[] = {{.i = (int32_t)logical.width}, {.i = (int32_t)logical.height}};
+        WaylandMarshal(_viewport, WP_VIEWPORT_SET_DESTINATION, NULL, 0, destination);
     }
     WaylandMarshal(_surface, WP_SURFACE_ATTACH, NULL, 0, args);
 
     args[0].i = 0;
     args[1].i = 0;
-    args[2].i = (int32_t) width / (_display->_compositorVersion >= 4 ? 1 : _bufferScale);
-    args[3].i = (int32_t) height / (_display->_compositorVersion >= 4 ? 1 : _bufferScale);
+    args[2].i = _display->_compositorVersion >= 4 ? (int32_t)width : (int32_t)logical.width;
+    args[3].i = _display->_compositorVersion >= 4 ? (int32_t)height : (int32_t)logical.height;
     WaylandMarshal(_surface,
                    _display->_compositorVersion >= 4 ? WP_SURFACE_DAMAGE_BUFFER
                                                      : WP_SURFACE_DAMAGE,

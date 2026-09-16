@@ -34,6 +34,8 @@ extern const struct wl_interface wl_surface_interface;
 extern const struct wl_interface wl_subcompositor_interface;
 extern const struct wl_interface wl_subsurface_interface;
 extern const struct wl_interface wl_region_interface;
+extern const struct wl_interface wp_fractional_scale_manager_v1_interface;
+extern const struct wl_interface wp_fractional_scale_v1_interface;
 extern const struct wl_interface wp_viewporter_interface;
 extern const struct wl_interface wp_viewport_interface;
 extern const struct wl_interface wl_shm_interface;
@@ -101,9 +103,15 @@ enum {
     WP_COMPOSITOR_CREATE_SURFACE = 0,
     WP_COMPOSITOR_CREATE_REGION = 1,
     WP_REGION_DESTROY = 0,
+    WP_FRACTIONAL_MANAGER_DESTROY = 0,
+    WP_FRACTIONAL_MANAGER_GET_SCALE = 1,
+    WP_FRACTIONAL_DESTROY = 0,
+    WP_FRACTIONAL_EV_PREFERRED = 0,
+    WP_VIEWPORTER_DESTROY = 0,
     WP_VIEWPORTER_GET_VIEWPORT = 1,
     WP_VIEWPORT_DESTROY = 0,
     WP_VIEWPORT_SET_SOURCE = 1,
+    WP_VIEWPORT_SET_DESTINATION = 2,
     WP_SUBCOMPOSITOR_GET_SUBSURFACE = 1,
     WP_SUBSURFACE_DESTROY = 0,
     WP_SUBSURFACE_SET_POSITION = 1,
