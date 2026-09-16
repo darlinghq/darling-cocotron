@@ -575,6 +575,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 #pragma mark - Drawing
 
 - (int32_t) bufferScale { return _bufferScale; }
+- (CGFloat) backingScaleFactor { return _bufferScale; }
 
 - (void) outputRemoved: (struct wl_proxy *) output {
     [_surfaceOutputs removeObject: [NSValue valueWithPointer: output]];

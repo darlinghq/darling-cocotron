@@ -27,6 +27,7 @@ struct wl_egl_window;
     WaylandWindow *_parent;
     struct wl_proxy *_surface, *_subsurface, *_viewport;
     struct wl_egl_window *_eglWindow;
+    CGSize _drawablePixelSize;
     CGRect _frame, _pendingRect, _presentedRect;
     BOOL _visible, _clipped;
 }

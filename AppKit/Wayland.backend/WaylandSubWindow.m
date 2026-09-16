@@ -57,6 +57,7 @@ static BOOL validFrame(CGRect frame) {
     request(region, WP_REGION_DESTROY, WL_MARSHAL_FLAG_DESTROY);
     _eglWindow = WL.wl_egl_window_create((struct wl_surface *) _surface, 1, 1);
     if (!_eglWindow) { [self release]; return nil; }
+    _drawablePixelSize = CGSizeMake(1, 1);
     [parent addSubwindow: self];
     [self updateGeometry];
     return self;
@@ -79,6 +80,7 @@ static BOOL validFrame(CGRect frame) {
 }
 - (void *) nativeWindow { return _eglWindow; }
 - (CGFloat) backingScaleFactor { return [_parent bufferScale]; }
+- (CGSize) drawablePixelSize { return _drawablePixelSize; }
 - (void) updateGeometry {
     if (!_eglWindow) return;
     NSPoint offset = [_parent contentOffset];
@@ -109,8 +111,10 @@ static BOOL validFrame(CGRect frame) {
         union wl_argument scaling[] = {{.i = scale}};
         WaylandMarshal(_surface, WP_SURFACE_SET_BUFFER_SCALE, NULL, 0, scaling);
     }
-    WL.wl_egl_window_resize(_eglWindow, (int)full.size.width * scale,
-                            (int)full.size.height * scale, 0, 0);
+    _drawablePixelSize = CGSizeMake((int)full.size.width * scale,
+                                    (int)full.size.height * scale);
+    WL.wl_egl_window_resize(_eglWindow, (int)_drawablePixelSize.width,
+                            (int)_drawablePixelSize.height, 0, 0);
     // No child commit here: crop/scale must apply with the matching EGL buffer.
     // No parent commit either: position changes belong to the post-swap flush.
 }
