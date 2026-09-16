@@ -28,7 +28,7 @@
     NSWindow *_destination;
     struct wl_proxy *_offer;
     NSArray *_mimes, *_types;
-    NSMutableDictionary *_cache;
+    NSMutableDictionary *_cache, *_wireCache;
     id _receiver, _localSource;
     NSDragOperation _localOperations;
     NSPoint _point;

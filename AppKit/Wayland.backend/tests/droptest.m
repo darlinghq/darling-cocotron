@@ -4,6 +4,7 @@
 
 static int entered, updated, exited, prepared, performed, concluded, failures;
 static const char *mode;
+static NSString *fileEnv(const char *key) { return [NSString stringWithUTF8String:getenv(key)]; }
 static void dropCheck(BOOL value, const char *what) {
     printf("CHECK %s %s\n", value ? "PASS" : "FAIL", what); fflush(stdout);
     if (!value) failures++;
@@ -29,6 +30,16 @@ static void dropCheck(BOOL value, const char *what) {
 }
 - (BOOL) performDragOperation: (id<NSDraggingInfo>) info {
     performed++;
+    if(getenv("FILE_DRAG")) {
+        NSPasteboard *pb=[info draggingPasteboard];
+        NSArray *files=[pb propertyListForType:NSFilenamesPboardType];
+        dropCheck([[[pb types] description] length]>0 && [[pb types] containsObject:@"text/uri-list"] && [[pb types] containsObject:NSFilenamesPboardType],"raw and converted types exposed");
+        dropCheck(getenv("FILE_BAD") ? files==nil : [files isEqual:@[fileEnv("FILE_ONE"),fileEnv("FILE_TWO")]],"atomic filename conversion");
+        NSData *raw=[pb dataForType:@"text/uri-list"];
+        dropCheck([raw isEqual:[fileEnv("FILE_WIRE") dataUsingEncoding:NSUTF8StringEncoding]],"raw URI preserved after conversion");
+        if(!getenv("FILE_BAD"))dropCheck([[pb propertyListForType:NSFilenamesPboardType] isEqual:files],"converted cache stable");
+        return YES; // Deliberately accepts even failed conversion; backend must refuse finish.
+    }
     NSTimeInterval started = [NSDate timeIntervalSinceReferenceDate];
     NSString *value = [[info draggingPasteboard] stringForType: NSStringPboardType];
     NSTimeInterval elapsed = [NSDate timeIntervalSinceReferenceDate] - started;
@@ -49,7 +60,9 @@ static void dropCheck(BOOL value, const char *what) {
 @end
 @implementation Driver
 - (void) done: (NSTimer *) timer {
-    if (!strcmp(mode, "accept") || !strcmp(mode,"move-accept")) {
+    if(getenv("FILE_BAD")) {
+        dropCheck(prepared==1 && performed==1 && concluded==0,"conversion failure blocks completion");
+    } else if (!strcmp(mode, "accept") || !strcmp(mode,"move-accept")) {
         dropCheck(entered > 0 && updated > 0 && prepared == 1 && performed == 1 && concluded == 1, "accepted callback lifecycle");
     } else if (!strcmp(mode, "leave")) {
         dropCheck(entered > 0 && exited > 0 && prepared == 0 && performed == 0 && concluded == 0, "leave without drop");
@@ -75,7 +88,7 @@ int main(void) {
         NSWindow *window = [[NSWindow alloc] initWithContentRect: NSMakeRect(0,0,400,300) styleMask: NSTitledWindowMask backing: NSBackingStoreBuffered defer: NO];
         [window setTitle: @"Wayland drop target"];
         DropView *view = [[DropView alloc] initWithFrame: NSMakeRect(0,0,400,300)];
-        [view registerForDraggedTypes: @[NSStringPboardType]];
+        [view registerForDraggedTypes: getenv("FILE_DRAG") ? @[NSFilenamesPboardType] : @[NSStringPboardType]];
         [window setContentView: view]; [window makeKeyAndOrderFront: nil];
         Driver *driver = [Driver new];
         [NSTimer scheduledTimerWithTimeInterval: 18 target: driver selector: @selector(done:) userInfo: nil repeats: NO];

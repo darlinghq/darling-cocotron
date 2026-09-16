@@ -17,6 +17,7 @@
  SOFTWARE. */
 
 #import "WaylandDropSession.h"
+#import "WaylandPasteboard.h"
 #import "WaylandDragOperations.h"
 #import "WaylandDraggingManager.h"
 #import "WaylandWindow.h"
@@ -29,12 +30,6 @@
 #include <poll.h>
 #include <errno.h>
 
-static NSString *typeForMime(NSString *mime) {
-    if ([mime isEqual: @"text/plain;charset=utf-8"] || [mime isEqual: @"text/plain"] ||
-        [mime isEqual: @"UTF8_STRING"]) return NSStringPboardType;
-    return mime;
-}
-
 @implementation WaylandDropSession
 - (id) initWithOffer: (struct wl_proxy *) offer types: (NSArray *) mimes
             display: (WaylandDisplay *) display window: (WaylandWindow *) window
@@ -45,12 +40,12 @@ static NSString *typeForMime(NSString *mime) {
         _localSource = [[manager localDraggingSource] retain];
         _localOperations = [manager localOperations];
         _window = [window retain]; _destination = [[window delegate] retain];
-        _mimes = [mimes copy]; _cache = [NSMutableDictionary new];
+        _mimes = [mimes copy]; _cache = [NSMutableDictionary new]; _wireCache = [NSMutableDictionary new];
         NSMutableArray *types = [NSMutableArray array];
         for (NSString *mime in mimes) {
             if ([mime isEqual: @"DELETE"]) continue; // Control target, never pasteboard data.
-            NSString *type = typeForMime(mime);
-            if (![types containsObject: type]) [types addObject: type];
+            for (NSString *type in [WaylandPasteboard typesForMime:mime])
+                if (![types containsObject:type]) [types addObject:type];
         }
         _types = [types copy];
         _sourceActions = actions;
@@ -70,7 +65,7 @@ static NSString *typeForMime(NSString *mime) {
 - (void) dealloc {
     [self invalidate];
     [_window release]; [_destination release]; [_receiver release];
-    [_mimes release]; [_types release]; [_cache release]; [_localSource release];
+    [_mimes release]; [_types release]; [_cache release]; [_wireCache release]; [_localSource release];
     [super dealloc];
 }
 - (void) sourceActions: (uint32_t) actions { if (!_dropAnnounced) _sourceActions = actions; }
@@ -82,6 +77,8 @@ static NSString *typeForMime(NSString *mime) {
 }
 - (NSString *) mimeForType: (NSString *) type {
     if ([type isEqual: @"DELETE"]) return nil;
+    if ([type isEqual:NSFilenamesPboardType] && [_mimes containsObject:@"text/uri-list"])
+        return @"text/uri-list";
     if ([type isEqual: NSStringPboardType]) {
         for (NSString *mime in @[@"text/plain;charset=utf-8", @"text/plain", @"UTF8_STRING"])
             if ([_mimes containsObject: mime]) return mime;
@@ -90,12 +87,20 @@ static NSString *typeForMime(NSString *mime) {
 }
 - (NSString *) name { return NSDragPboard; }
 - (NSInteger) changeCount { return _sequence; }
+- (NSData *) convertedData: (NSData *) raw type: (NSString *) type mime: (NSString *) mime {
+    NSData *data = [WaylandPasteboard decodeData:raw forType:type mime:mime];
+    if (!data) { _transferFailed = YES; return nil; }
+    [_cache setObject:data forKey:type];
+    return data;
+}
 - (NSData *) dataForType: (NSString *) type {
     if ([type isEqual: @"DELETE"]) return nil;
     NSData *cached = [_cache objectForKey: type];
     if (cached) return cached;
     NSString *mime = [self mimeForType: type];
     if (!_offer || !mime) return nil;
+    NSData *wire = [_wireCache objectForKey:mime];
+    if (wire) return [self convertedData:wire type:type mime:mime];
     int fds[2];
     if (pipe(fds) != 0) { _transferFailed = YES; return nil; }
     fcntl(fds[0], F_SETFD, FD_CLOEXEC); fcntl(fds[1], F_SETFD, FD_CLOEXEC);
@@ -135,8 +140,8 @@ static NSString *typeForMime(NSString *mime) {
         NSLog(@"Wayland drop: transfer %@", _offer ? failure : @"cancelled");
         return nil;
     }
-    [_cache setObject: data forKey: type];
-    return data;
+    [_wireCache setObject:data forKey:mime];
+    return [self convertedData:data type:type mime:mime];
 }
 - (NSString *) stringForType: (NSString *) type {
     NSData *data = [self dataForType: type];

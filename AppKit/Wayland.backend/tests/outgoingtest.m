@@ -7,6 +7,9 @@
 @end
 static int ended, failures, ticks;
 static id sourceView;
+static NSString *fileEnv(const char *key) { return [NSString stringWithUTF8String:getenv(key)]; }
+static NSArray *filePaths(void) { return @[fileEnv("FILE_ONE"),fileEnv("FILE_TWO")]; }
+static BOOL noStartExpected(void) { return getenv("INVALID_PROVIDER") || getenv("SOURCE_LINK") || getenv("FILE_BAD") || getenv("FILE_NIL"); }
 @interface TargetView : NSView
 @end
 @implementation TargetView
@@ -34,7 +37,9 @@ static id sourceView;
 }
 - (BOOL)performDragOperation:(id<NSDraggingInfo>)info {
     if(getenv("PREPARE_UNMAP"))failures++;
-    BOOL ok=[[[info draggingPasteboard]stringForType:NSStringPboardType]isEqual:@"Darling outgoing — café"];
+    BOOL ok=getenv("FILE_DRAG")
+        ? [[[info draggingPasteboard] propertyListForType:NSFilenamesPboardType] isEqual:filePaths()]
+        : [[ [info draggingPasteboard] stringForType:NSStringPboardType] isEqual:@"Darling outgoing — café"];
     BOOL local=[info draggingSource]==sourceView;
     if(!ok || !local)failures++;
     printf("LOCAL data=%d source=%d\n",ok,local);fflush(stdout);return ok;
@@ -51,9 +56,19 @@ static id sourceView;
     return getenv("SOURCE_MOVE") ? NSDragOperationMove : NSDragOperationCopy; }
 - (void)mouseDown:(NSEvent *)event {
     NSPasteboard *pb=[NSPasteboard pasteboardWithName:NSDragPboard];
-    [pb declareTypes:@[NSStringPboardType] owner:getenv("INVALID_PROVIDER") ? self : nil];
-    if (!getenv("INVALID_PROVIDER"))
-        [pb setString:@"Darling outgoing — café" forType:NSStringPboardType];
+    if(getenv("FILE_DRAG")) {
+        NSArray *types=getenv("FILE_RAW") ? (getenv("REVERSE_RAW")
+            ? @[@"text/uri-list",NSFilenamesPboardType] : @[NSFilenamesPboardType,@"text/uri-list"])
+            : @[NSStringPboardType,NSFilenamesPboardType];
+        [pb declareTypes:types owner:getenv("FILE_NIL") ? self : nil];
+        [pb setString:@"fallback must not authorize lost files" forType:NSStringPboardType];
+        if(!getenv("FILE_NIL")) [pb setPropertyList:getenv("FILE_BAD")
+            ? @[fileEnv("FILE_ONE"),@"/guest-only-not-exportable"] : filePaths() forType:NSFilenamesPboardType];
+        if(getenv("FILE_RAW")) [pb setData:[fileEnv("FILE_WIRE") dataUsingEncoding:NSUTF8StringEncoding] forType:@"text/uri-list"];
+    } else {
+        [pb declareTypes:@[NSStringPboardType] owner:getenv("INVALID_PROVIDER") ? self : nil];
+        if (!getenv("INVALID_PROVIDER")) [pb setString:@"Darling outgoing — café" forType:NSStringPboardType];
+    }
     puts("STARTING");fflush(stdout);
     NSImage *image=nil;
     NSPoint imageLocation=NSMakePoint(10,10);
@@ -83,9 +98,10 @@ static id sourceView;
     [self dragImage:image at:imageLocation offset:NSZeroSize event:event
         pasteboard:pb source:self slideBack:NO];
     printf("RETURN ended=%d failures=%d\n",ended,failures);fflush(stdout);
-    exit(ended==((getenv("INVALID_PROVIDER") || getenv("SOURCE_LINK")) ? 0 : 1) && failures==0 ? 0:1);
+    exit(ended==(noStartExpected() ? 0 : 1) && failures==0 ? 0:1);
 }
 - (void)pasteboard:(NSPasteboard *)pasteboard provideDataForType:(NSString *)type {
+    if(getenv("FILE_NIL")) { puts("FILE_PROVIDER_NIL");fflush(stdout);return; }
     [pasteboard setString:@"Darling outgoing — café" forType:type];
     [[self window] orderOut:nil];
     puts("PROVIDER_UNMAPPED");fflush(stdout);
@@ -116,7 +132,7 @@ int main(void) {
             styleMask:NSTitledWindowMask backing:NSBackingStoreBuffered defer:NO];
         [target setTitle:@"Darling local target"];
         TargetView *view=[[[TargetView alloc]initWithFrame:NSMakeRect(0,0,300,220)]autorelease];
-        [view registerForDraggedTypes:@[NSStringPboardType]];
+        [view registerForDraggedTypes:getenv("FILE_DRAG") ? @[NSFilenamesPboardType] : @[NSStringPboardType]];
         [target setContentView:view];[target orderFront:nil];
     }
     [w makeKeyAndOrderFront:nil];puts("READY");fflush(stdout);[NSApp run];return 2;

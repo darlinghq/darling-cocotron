@@ -731,6 +731,7 @@ if (WAYLAND_CLIENT_FOUND AND WAYLAND_CURSOR_FOUND AND XKBCOMMON_FOUND
 			Wayland.backend/WaylandDropSession.m
 			Wayland.backend/WaylandDraggingManager.m
 			Wayland.backend/WaylandDragIcon.m
+			Wayland.backend/WaylandFileURLs.m
 			Wayland.backend/WaylandPasteboard.m
 			Wayland.backend/WaylandWindow.m
 			${WAYLAND_PROTOCOL_SOURCES}

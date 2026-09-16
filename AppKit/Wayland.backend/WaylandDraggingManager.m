@@ -125,14 +125,22 @@ static BOOL monotonicSeconds(double *seconds) {
         if (_offeredActions) {
             for (NSString *type in [[[pasteboard types] copy] autorelease]) {
                 NSData *data = [pasteboard dataForType: type];
-                if (!data) continue;
+                if (!data) {
+                    if ([type isEqual:NSFilenamesPboardType]) { [snapshot removeAllObjects]; break; }
+                    continue;
+                }
+                data = [WaylandPasteboard encodeData:data forType:type];
+                // A partial filename selection could make a MOVE source remove
+                // files that were never delivered. Reject that drag atomically.
+                if (!data) { [snapshot removeAllObjects]; break; }
                 if ([data length] > 16 * 1024 * 1024 - bytes) {
                     [snapshot removeAllObjects]; break;
                 }
                 bytes += [data length];
                 NSData *copy = [[data copy] autorelease];
                 for (NSString *mime in [WaylandPasteboard mimeTypesForType: type])
-                    [snapshot setObject: copy forKey: mime];
+                    if ([type isEqual:mime] || ![snapshot objectForKey:mime])
+                        [snapshot setObject:copy forKey:mime];
             }
         }
         if (image != nil && [snapshot count] && !_finished && _display) {

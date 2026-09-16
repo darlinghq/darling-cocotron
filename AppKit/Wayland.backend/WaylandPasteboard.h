@@ -39,6 +39,9 @@ void WaylandSendData(WaylandDisplay *display, NSData *data, int fd);
            manager: (struct wl_proxy *) manager seat: (struct wl_proxy *) seat;
 - (struct wl_proxy *) dataDevice;
 + (NSArray *) mimeTypesForType: (NSString *) type;
++ (NSArray *) typesForMime: (NSString *) mime;
++ (NSData *) encodeData: (NSData *) data forType: (NSString *) type;
++ (NSData *) decodeData: (NSData *) data forType: (NSString *) type mime: (NSString *) mime;
 - (void) invalidate;
 - (void) inputAvailable;
 - (void) handleEvent: (uint32_t) opcode kind: (WaylandObjectKind) kind

@@ -17,6 +17,7 @@
  SOFTWARE. */
 
 #import "WaylandPasteboard.h"
+#import "WaylandFileURLs.h"
 #import "WaylandDropSession.h"
 #import "WaylandLibrary.h"
 #import "WaylandProtocol.h"
@@ -98,6 +99,7 @@ void WaylandSendData(WaylandDisplay *display, NSData *data, int fd) {
 
 
 + (NSArray *) mimeTypesForType: (NSString *) type {
+    if ([type isEqual:NSFilenamesPboardType]) return @[@"text/uri-list"];
     if ([type isEqual: NSStringPboardType])
         return @[@"text/plain;charset=utf-8", @"text/plain", @"UTF8_STRING"];
     return @[type];
@@ -107,6 +109,27 @@ void WaylandSendData(WaylandDisplay *display, NSData *data, int fd) {
         [mime isEqual: @"UTF8_STRING"])
         return NSStringPboardType;
     return mime;
+}
+// Keep the native bytes available alongside the converted Cocoa representation.
++ (NSArray *) typesForMime: (NSString *) mime {
+    if ([mime isEqual:@"text/uri-list"]) return @[mime, NSFilenamesPboardType];
+    return @[[self typeForMime:mime]];
+}
++ (NSData *) encodeData: (NSData *) data forType: (NSString *) type {
+    if (!data || [data length] > TransferLimit) return nil;
+    if (![type isEqual:NSFilenamesPboardType]) return data;
+    id files = [NSPropertyListSerialization propertyListFromData:data
+            mutabilityOption:NSPropertyListImmutable format:NULL errorDescription:NULL];
+    return WaylandURIListFromFilenames(files);
+}
++ (NSData *) decodeData: (NSData *) data forType: (NSString *) type mime: (NSString *) mime {
+    if (!data || [data length] > TransferLimit) return nil;
+    if (![type isEqual:NSFilenamesPboardType] || ![mime isEqual:@"text/uri-list"]) return data;
+    NSArray *files = WaylandFilenamesFromURIList(data);
+    if (!files) return nil;
+    NSData *plist = [NSPropertyListSerialization dataFromPropertyList:files
+            format:NSPropertyListXMLFormat_v1_0 errorDescription:NULL];
+    return [plist length] <= TransferLimit ? plist : nil;
 }
 - (id) initWithName: (NSString *) name display: (WaylandDisplay *) display
            manager: (struct wl_proxy *) manager seat: (struct wl_proxy *) seat {
@@ -220,8 +243,8 @@ void WaylandSendData(WaylandDisplay *display, NSData *data, int fd) {
     if (_owned || !_device) return [[_types copy] autorelease];
     NSMutableArray *types = [NSMutableArray array];
     for (NSString *mime in [_offers objectForKey: [NSValue valueWithPointer: _selection]]) {
-        NSString *type = [WaylandPasteboard typeForMime: mime];
-        if (![types containsObject: type]) [types addObject: type];
+        for (NSString *type in [WaylandPasteboard typesForMime:mime])
+            if (![types containsObject:type]) [types addObject:type];
     }
     return types;
 }
@@ -238,10 +261,11 @@ void WaylandSendData(WaylandDisplay *display, NSData *data, int fd) {
     _publishing = YES;
     @try {
         for (NSString *type in [[_types copy] autorelease]) {
-            NSData *data = [self localDataForType: type];
+            NSData *data = [WaylandPasteboard encodeData:[self localDataForType:type] forType:type];
             if (data && [data length] <= TransferLimit)
                 for (NSString *mime in [WaylandPasteboard mimeTypesForType: type])
-                    [snapshot setObject: data forKey: mime];
+                    if ([type isEqual:mime] || ![snapshot objectForKey:mime])
+                        [snapshot setObject:data forKey:mime];
         }
     } @finally { _publishing = NO; }
     union wl_argument args[2] = {{.o = NULL}};
@@ -305,7 +329,8 @@ void WaylandSendData(WaylandDisplay *display, NSData *data, int fd) {
             poll(&ready, 1, 20);
         }
     } @finally { close(fds[0]); }
-    return complete && generation == _selectionGeneration ? data : nil;
+    return complete && generation == _selectionGeneration
+            ? [WaylandPasteboard decodeData:data forType:type mime:mime] : nil;
 }
 - (oneway void) releaseGlobally { [self clearContents]; }
 
