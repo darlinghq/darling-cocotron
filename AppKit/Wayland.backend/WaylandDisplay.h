@@ -143,6 +143,7 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     struct wl_proxy *_imageCursorBuffer;
     int32_t _imageCursorBufferScale;
     WaylandCursor *_cursor;
+    BOOL _applyingCursor, _cursorApplyPending, _cursorApplyQueued;
 }
 
 - (void) flush;

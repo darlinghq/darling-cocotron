@@ -735,6 +735,7 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
     } else if (!(capabilities & WP_SEAT_CAPABILITY_POINTER) && _pointer != NULL) {
         [self releaseInputDevice: &_pointer opcode: WP_POINTER_RELEASE];
         _pointerWindow = nil;
+        _pointerEnterSerial = 0;
         _pressedButtons = 0;
         _lastClickWindow = nil;
         [_buttonClickCounts removeAllObjects];
@@ -1596,6 +1597,7 @@ static NSUInteger modifierDeviceMask(int code) {
         _lastClickWindow = nil;
     if (_pointerWindow == window) {
         _pointerWindow = nil;
+        _pointerEnterSerial = 0;
         _pressedButtons = 0;
         [_buttonClickCounts removeAllObjects];
     }
@@ -1633,7 +1635,7 @@ static NSUInteger modifierDeviceMask(int code) {
 
 #pragma mark - Cursors
 
-- (struct wl_proxy *) imageCursorBufferForScale: (int32_t) scale {
+- (struct wl_proxy *) imageCursorBufferForScale: (int32_t) scale cursor: (WaylandCursor *) cursor {
     if (_imageCursorBuffer != NULL && _imageCursorBufferScale != scale) {
         union wl_argument none[1] = {{.o = NULL}};
         WaylandMarshal(_imageCursorBuffer, WP_BUFFER_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY, none);
@@ -1641,10 +1643,25 @@ static NSUInteger modifierDeviceMask(int code) {
     }
     if (_imageCursorBuffer != NULL)
         return _imageCursorBuffer;
-    NSData *pixels = [_cursor pixelsForScale: scale];
-    if (pixels == nil)
+    NSData *pixels = [cursor pixelsForScale: scale];
+    // Rendering an NSImage can select a different cursor or dispatch input.
+    // Never install that obsolete result as the active cursor buffer.
+    if (_cursorApplyPending || cursor != _cursor || pixels == nil)
         return NULL;
 
+    NSSize dimensions = [cursor size];
+    dimensions.width *= scale; dimensions.height *= scale;
+    _imageCursorBuffer = [self newARGBBuffer: pixels pixelSize: dimensions];
+    _imageCursorBufferScale = scale;
+    return _imageCursorBuffer;
+}
+
+- (struct wl_proxy *) newARGBBuffer: (NSData *) pixels pixelSize: (NSSize) dimensions {
+    double width = dimensions.width, height = dimensions.height;
+    if (!isfinite(width) || !isfinite(height) || width < 1 || height < 1 ||
+        width != floor(width) || height != floor(height) ||
+        width > INT32_MAX / 4 || height > INT32_MAX / (width * 4) ||
+        [pixels length] != (NSUInteger) (width * height * 4)) return NULL;
     size_t size = [pixels length];
     int fd = WaylandCreateAnonymousFile(size);
     if (fd < 0)
@@ -1662,29 +1679,29 @@ static NSUInteger modifierDeviceMask(int code) {
     struct wl_proxy *pool = WaylandCreateObject(_shm, WP_SHM_CREATE_POOL,
                                                 &wl_shm_pool_interface, poolArgs, 0, nil);
     close(fd);
-    NSSize dimensions = [_cursor size];
-    dimensions.width *= scale;
-    dimensions.height *= scale;
     union wl_argument bufferArgs[6] = {{.o = NULL}, {.i = 0},
-        {.i = (int32_t) dimensions.width}, {.i = (int32_t) dimensions.height},
-        {.i = (int32_t) dimensions.width * 4}, {.u = WP_SHM_FORMAT_ARGB8888}};
-    _imageCursorBuffer = WaylandCreateObject(pool, WP_SHM_POOL_CREATE_BUFFER,
+        {.i = (int32_t) width}, {.i = (int32_t) height},
+        {.i = (int32_t) width * 4}, {.u = WP_SHM_FORMAT_ARGB8888}};
+    struct wl_proxy *buffer = WaylandCreateObject(pool, WP_SHM_POOL_CREATE_BUFFER,
             &wl_buffer_interface, bufferArgs, 0, nil);
-    _imageCursorBufferScale = scale;
     union wl_argument none[1] = {{.o = NULL}};
     WaylandMarshal(pool, WP_SHM_POOL_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY, none);
-    return _imageCursorBuffer;
+    return buffer;
 }
 
-- (void) applyCursor {
+- (void) applyCursorSnapshot: (WaylandCursor *) cursor {
     if (_pointer == NULL || _pointerEnterSerial == 0)
         return;
 
+    struct wl_proxy *pointer = _pointer, *surface = _cursorSurface;
+    uint32_t serial = _pointerEnterSerial;
+    WaylandWindow *window = _pointerWindow;
+    CGPoint point = _pointerSurfacePoint;
     union wl_argument args[4];
-    args[0].u = _pointerEnterSerial;
+    args[0].u = serial;
 
     BOOL decoration = [_pointerWindow isDecorationPoint: _pointerSurfacePoint];
-    if (!decoration && [_cursor isBlank]) {
+    if (!decoration && [cursor isBlank]) {
         args[1].o = NULL;
         args[2].i = 0;
         args[3].i = 0;
@@ -1696,11 +1713,19 @@ static NSUInteger modifierDeviceMask(int code) {
         return;
 
     int32_t scale = _pointerWindow != nil ? [_pointerWindow bufferScale] : 1;
-    struct wl_proxy *buffer = decoration ? NULL : [self imageCursorBufferForScale: scale];
-    NSSize size = [_cursor size];
+    struct wl_proxy *buffer = decoration ? NULL : [self imageCursorBufferForScale: scale cursor: cursor];
+    if (_cursorApplyPending || cursor != _cursor || pointer != _pointer ||
+        surface != _cursorSurface || serial != _pointerEnterSerial ||
+        window != _pointerWindow || !CGPointEqualToPoint(point, _pointerSurfacePoint) ||
+        decoration != [_pointerWindow isDecorationPoint: _pointerSurfacePoint] ||
+        scale != (_pointerWindow ? [_pointerWindow bufferScale] : 1)) {
+        _cursorApplyPending = YES;
+        return;
+    }
+    NSSize size = [cursor size];
     size.width *= scale;
     size.height *= scale;
-    NSPoint hotSpot = [_cursor hotSpot];
+    NSPoint hotSpot = [cursor hotSpot];
     if (buffer == NULL) {
         if (WL.hasCursor && _cursorThemeScale != scale) {
             const char *sizeString = getenv("XCURSOR_SIZE");
@@ -1720,7 +1745,7 @@ static NSUInteger modifierDeviceMask(int code) {
         if (_cursorTheme == NULL)
             return;
         static const char *const arrowNames[] = {"default", "left_ptr", NULL};
-        const char *const *names = !decoration && _cursor ? [_cursor names] : arrowNames;
+        const char *const *names = !decoration && cursor ? [cursor names] : arrowNames;
         struct wl_cursor *cursor = NULL;
         for (int i = 0; cursor == NULL && names[i] != NULL; i++)
             cursor = WL.wl_cursor_theme_get_cursor(_cursorTheme, names[i]);
@@ -1761,6 +1786,30 @@ static NSUInteger modifierDeviceMask(int code) {
     args[3].i = (int32_t) hotSpot.y;
     WaylandMarshal(_pointer, WP_POINTER_SET_CURSOR, NULL, 0, args);
     [self flush];
+}
+
+- (void) applyCursor {
+    if (_applyingCursor) { _cursorApplyPending = YES; return; }
+    _applyingCursor = YES;
+    // Keep the image receiver alive even if drawing changes the display cursor.
+    WaylandCursor *cursor = [_cursor retain];
+    WaylandWindow *window = [_pointerWindow retain];
+    @try { [self applyCursorSnapshot: cursor]; }
+    @finally {
+        [window release];
+        [cursor release];
+        _applyingCursor = NO;
+        if (_cursorApplyPending) {
+            _cursorApplyPending = NO;
+            if (!_cursorApplyQueued) {
+                _cursorApplyQueued = YES;
+                [self performAfterDispatch: ^{
+                    self->_cursorApplyQueued = NO;
+                    [self applyCursor];
+                }];
+            }
+        }
+    }
 }
 
 // Names from the freedesktop cursor specification, then the older X11 names.
