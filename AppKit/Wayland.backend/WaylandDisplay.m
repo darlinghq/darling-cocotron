@@ -634,6 +634,7 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         [self releaseInputDevice: &_keyboard opcode: WP_KEYBOARD_RELEASE];
         [self stopKeyRepeat];
         _keyboardWindow = nil;
+        [self resetKeyboardModifiers];
     }
 }
 
@@ -853,6 +854,31 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
 
 #pragma mark - Keyboard
 
+// Physical identity is metadata only: the compositor's following modifiers
+// event is authoritative for effective flags (including locks/layout changes).
+static int modifierCarbonKeycode(xkb_keysym_t sym) {
+    switch (sym) {
+    case XKB_KEY_Shift_L: return kVK_Shift;
+    case XKB_KEY_Shift_R: return kVK_RightShift;
+    case XKB_KEY_Control_L: return kVK_Control;
+    case XKB_KEY_Control_R: return kVK_RightControl;
+    case XKB_KEY_Alt_L: return kVK_Option;
+    case XKB_KEY_Alt_R: return kVK_RightOption;
+    case XKB_KEY_Super_L: case XKB_KEY_Meta_L: return kVK_Command;
+    case XKB_KEY_Super_R: case XKB_KEY_Meta_R: return 0x36; // Right Command.
+    case XKB_KEY_Caps_Lock: return kVK_CapsLock;
+    case XKB_KEY_ISO_Level3_Shift: case XKB_KEY_Mode_switch: return kVK_Function;
+    default: return -1;
+    }
+}
+
+- (void) resetKeyboardModifiers {
+    _syncModifierFlags = NO;
+    _hasModifierKeycode = NO;
+    if (_xkbState != NULL)
+        WL.xkb_state_update_mask(_xkbState, 0, 0, 0, 0, 0, 0);
+}
+
 - (void) keyboardEvent: (uint32_t) opcode arguments: (union wl_argument *) args {
     switch (opcode) {
     case WP_KEYBOARD_EV_KEYMAP:
@@ -861,11 +887,14 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
 
     case WP_KEYBOARD_EV_ENTER:
         _keyboardWindow = [self windowForSurface: (struct wl_proxy *) args[1].o];
+        _hasModifierKeycode = NO;
+        _syncModifierFlags = YES;
         break;
 
     case WP_KEYBOARD_EV_LEAVE:
         _keyboardWindow = nil;
         [self stopKeyRepeat];
+        [self resetKeyboardModifiers];
         break;
 
     case WP_KEYBOARD_EV_KEY: {
@@ -881,6 +910,14 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
             _inputWindow = nil;
         }
 
+        int modifier = modifierCarbonKeycode(
+                WL.xkb_state_key_get_one_sym(_xkbState, keycode));
+        _hasModifierKeycode = modifier >= 0;
+        if (_hasModifierKeycode) {
+            _modifierKeycode = modifier;
+            // Do not insert modifier keys as text or start their repeat timer.
+            break;
+        }
         [self postKeyEventForKeycode: keycode pressed: pressed repeat: NO];
         if (pressed && _repeatRate > 0 &&
             WL.xkb_keymap_key_repeats(_xkbKeymap, keycode))
@@ -890,11 +927,27 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         break;
     }
 
-    case WP_KEYBOARD_EV_MODIFIERS:
+    case WP_KEYBOARD_EV_MODIFIERS: {
+        NSUInteger oldFlags = [self currentModifierFlags];
         if (_xkbState != NULL)
             WL.xkb_state_update_mask(_xkbState, args[1].u, args[2].u, args[3].u,
                                      0, 0, args[4].u);
+        NSUInteger flags = [self currentModifierFlags];
+        NSWindow *delegate = [_keyboardWindow delegate];
+        if (delegate != nil && (_syncModifierFlags || flags != oldFlags)) {
+            NSEvent *event = [NSEvent keyEventWithType: NSFlagsChanged
+                    location: [_keyboardWindow mouseLocationOutsideOfEventStream]
+                    modifierFlags: flags timestamp: 0.0
+                    windowNumber: [delegate windowNumber] context: nil
+                    characters: @"" charactersIgnoringModifiers: @""
+                    isARepeat: NO
+                    keyCode: _hasModifierKeycode ? _modifierKeycode : 0xFFFF];
+            [self postEvent: event atStart: NO];
+        }
+        _syncModifierFlags = NO;
+        _hasModifierKeycode = NO;
         break;
+    }
 
     case WP_KEYBOARD_EV_REPEAT_INFO:
         _repeatRate = args[0].i;
@@ -943,6 +996,8 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         WL.xkb_keymap_unref(_xkbKeymap);
     _xkbKeymap = keymap;
     _xkbState = state;
+    _hasModifierKeycode = NO;
+    _syncModifierFlags = _keyboardWindow != nil;
 }
 
 - (BOOL) isModifierActive: (const char *) name {
@@ -1341,6 +1396,7 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
     if (_keyboardWindow == window) {
         _keyboardWindow = nil;
         [self stopKeyRepeat];
+        [self resetKeyboardModifiers];
     }
 }
 

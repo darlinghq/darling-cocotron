@@ -121,6 +121,9 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     struct xkb_keymap *_xkbKeymap;
     struct xkb_state *_xkbState;
     WaylandWindow *_keyboardWindow;
+    BOOL _syncModifierFlags;
+    BOOL _hasModifierKeycode;
+    unsigned short _modifierKeycode;
     int32_t _repeatRate;
     int32_t _repeatDelay;
     uint32_t _repeatKeycode;
