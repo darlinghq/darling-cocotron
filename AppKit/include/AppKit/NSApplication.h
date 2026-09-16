@@ -146,6 +146,8 @@ typedef NS_OPTIONS(NSUInteger, NSApplicationPresentationOptions) {
     BOOL _windowClosedSinceTerminateCheck;
 }
 
+@property(readonly) NSUserInterfaceLayoutDirection userInterfaceLayoutDirection;
+
 @property(strong) NSMenu *helpMenu;
 @property(readonly) NSApplicationPresentationOptions currentSystemPresentationOptions;
 @property NSApplicationPresentationOptions presentationOptions;
