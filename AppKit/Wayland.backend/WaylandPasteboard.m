@@ -83,7 +83,19 @@ static void destroyProxy(struct wl_proxy *proxy, uint32_t opcode) {
 }
 @end
 
+void WaylandSendData(WaylandDisplay *display, NSData *data, int fd) {
+    if (data == nil) { close(fd); return; }
+    WaylandClipboardWriter *writer = [[[WaylandClipboardWriter alloc]
+            initWithData: data descriptor: fd] autorelease];
+    [display performAfterDispatch: ^{
+        [NSThread detachNewThreadSelector: @selector(writeData:)
+                                toTarget: writer withObject: nil];
+    }];
+}
+
 @implementation WaylandPasteboard
+- (struct wl_proxy *) dataDevice { return _device; }
+
 
 + (NSArray *) mimeTypesForType: (NSString *) type {
     if ([type isEqual: NSStringPboardType])
@@ -368,10 +380,7 @@ static void destroyProxy(struct wl_proxy *proxy, uint32_t opcode) {
             NSString *mime = args[0].s ? [NSString stringWithUTF8String: args[0].s] : nil;
             NSData *data = mime ? [_sourceData objectForKey: mime] : nil;
             if (!data || proxy != _source) { close(fd); return; }
-            WaylandClipboardWriter *writer = [[[WaylandClipboardWriter alloc] initWithData: data descriptor: fd] autorelease];
-            [_display performAfterDispatch: ^{
-                [NSThread detachNewThreadSelector: @selector(writeData:) toTarget: writer withObject: nil];
-            }];
+            WaylandSendData(_display, data, fd);
         } else if (opcode == WP_DATA_SOURCE_EV_CANCELLED && proxy == _source) {
             destroyProxy(_source, WP_DATA_SOURCE_DESTROY); _source = NULL;
             [_sourceData release]; _sourceData = nil;

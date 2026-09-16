@@ -29,7 +29,8 @@
     struct wl_proxy *_offer;
     NSArray *_mimes, *_types;
     NSMutableDictionary *_cache;
-    id _receiver;
+    id _receiver, _localSource;
+    BOOL _localCopyAllowed;
     NSPoint _point;
     uint32_t _serial, _sourceActions, _action;
     BOOL _dropAnnounced, _dropped, _accepted, _transferFailed;

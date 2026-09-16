@@ -22,6 +22,7 @@
 #import "NSEvent_mouse.h"
 #import "WaylandCursor.h"
 #import "WaylandPasteboard.h"
+#import "WaylandDraggingManager.h"
 #import "WaylandLibrary.h"
 #import "WaylandProtocol.h"
 #import "WaylandWindow.h"
@@ -317,6 +318,9 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
 }
 
 - (void) dealloc {
+    [_draggingManager invalidate];
+    [_draggingManager release];
+    [self consumeDragPress];
     [_generalPasteboard invalidate];
     [_generalPasteboard release];
     for (WaylandPasteboard *pasteboard in [_namedPasteboards allValues])
@@ -774,6 +778,8 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         [self attachPinchGesture];
     } else if (!(capabilities & WP_SEAT_CAPABILITY_POINTER) && _pointer != NULL) {
         [self detachPinchGesture];
+        [_draggingManager cancel];
+        [self consumeDragPress];
         [self releaseInputDevice: &_pointer opcode: WP_POINTER_RELEASE];
         _pointerWindow = nil;
         _pointerEnterSerial = 0;
@@ -831,6 +837,7 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
     case WP_POINTER_EV_LEAVE:
         _pressedButtons = 0;
         [_buttonClickCounts removeAllObjects];
+        [self consumeDragPress];
         _lastMouseLocation = [self mouseLocation];
         _pointerWindow = nil;
         _pointerEnterSerial = 0;
@@ -844,7 +851,8 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
                              y: wl_fixed_to_double(args[2].f)];
         break;
 
-    case WP_POINTER_EV_BUTTON:
+    case WP_POINTER_EV_BUTTON: {
+        BOOL firstPress = _pressedButtons == 0;
         if (_pressedButtons == 0 && [_pointerWindow decorationButton: args[2].u
                 pressed: args[3].u == WP_POINTER_BUTTON_STATE_PRESSED
                 serial: args[0].u atPoint: _pointerSurfacePoint])
@@ -859,8 +867,19 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         [self pointerButton: args[2].u
                     pressed: args[3].u == WP_POINTER_BUTTON_STATE_PRESSED
                        time: args[1].u];
+        if (firstPress && args[3].u == WP_POINTER_BUTTON_STATE_PRESSED && _inputEvent != nil) {
+            [self consumeDragPress];
+            _dragPressEvent = [_inputEvent retain];
+            _dragPressWindow = _pointerWindow;
+            _dragPressSerial = args[0].u;
+            _dragPressButton = args[2].u;
+        } else if (args[3].u != WP_POINTER_BUTTON_STATE_PRESSED &&
+                   args[2].u == _dragPressButton) {
+            [self consumeDragPress];
+        }
         break;
 
+    }
     case WP_POINTER_EV_AXIS:
         [self pointerAxis: args[1].u value: wl_fixed_to_double(args[2].f)];
         break;
@@ -1768,6 +1787,8 @@ static NSUInteger modifierDeviceMask(int code) {
         _wlLastClickWindow = nil;
     if (_pinchWindow == window)
         [self postPinchPhase: NSEventPhaseCancelled];
+    [_draggingManager windowUnmapped: window];
+    if (_dragPressWindow == window) [self consumeDragPress];
     if (_pointerWindow == window) {
         _pointerWindow = nil;
         _pointerEnterSerial = 0;
@@ -2056,6 +2077,31 @@ static NSUInteger modifierDeviceMask(int code) {
 
 - (uint32_t) clipboardSerial {
     return _keyboardWindow != nil ? _inputSerial : 0;
+}
+
+- (NSDraggingManager *) draggingManager {
+    if (_draggingManager == nil)
+        _draggingManager = [[WaylandDraggingManager alloc] initWithDisplay: self];
+    return _draggingManager;
+}
+- (struct wl_proxy *) dragDataDevice { return [_generalPasteboard dataDevice]; }
+- (void) consumeDragPress {
+    [_dragPressEvent release]; _dragPressEvent = nil;
+    _dragPressWindow = nil; _dragPressSerial = 0;
+}
+- (WaylandWindow *) dragOriginForEvent: (NSEvent *) event {
+    if (_dragPressEvent == nil || _dragPressSerial == 0 ||
+        _dragPressWindow == nil || ![_dragPressWindow isMapped]) return nil;
+    if (event == _dragPressEvent) return _dragPressWindow;
+    // A drag may start from the down event or the currently dispatched motion.
+    if (_dragPressButton != WP_BTN_LEFT && _dragPressButton != WP_BTN_RIGHT) return nil;
+    NSEventType expected = _dragPressButton == WP_BTN_LEFT ? NSLeftMouseDragged : NSRightMouseDragged;
+    if ([NSApp currentEvent] == event && [event type] == expected &&
+        [event window] == [_dragPressWindow delegate]) return _dragPressWindow;
+    return nil;
+}
+- (uint32_t) dragSerialForEvent: (NSEvent *) event {
+    return [self dragOriginForEvent: event] ? _dragPressSerial : 0;
 }
 
 - (NSPasteboard *) pasteboardWithName: (NSString *) name {

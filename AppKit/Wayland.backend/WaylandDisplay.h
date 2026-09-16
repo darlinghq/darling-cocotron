@@ -43,7 +43,7 @@ struct xkb_context;
 struct xkb_keymap;
 struct xkb_state;
 
-@class WaylandCursor, WaylandWindow, WaylandPasteboard;
+@class WaylandCursor, WaylandWindow, WaylandPasteboard, WaylandDraggingManager;
 
 // Identifies the object a dispatched event belongs to.
 typedef enum {
@@ -128,6 +128,10 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     uint32_t _inputSerial;
     NSEvent *_inputEvent;
     WaylandWindow *_inputWindow;
+    NSEvent *_dragPressEvent;
+    WaylandWindow *_dragPressWindow; // Nonretained; invalidated on unmap.
+    uint32_t _dragPressSerial, _dragPressButton;
+    WaylandDraggingManager *_draggingManager;
 
     struct xkb_context *_xkbContext;
     struct xkb_keymap *_xkbKeymap;
@@ -157,6 +161,10 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 }
 
 - (WaylandWindow *) windowForSurface: (struct wl_proxy *) surface;
+- (struct wl_proxy *) dragDataDevice;
+- (WaylandWindow *) dragOriginForEvent: (NSEvent *) event;
+- (uint32_t) dragSerialForEvent: (NSEvent *) event;
+- (void) consumeDragPress;
 - (void) flush;
 - (void) processPendingEvents;
 - (uint32_t) clipboardSerial;

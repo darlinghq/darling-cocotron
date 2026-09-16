@@ -17,6 +17,7 @@
  SOFTWARE. */
 
 #import "WaylandDropSession.h"
+#import "WaylandDraggingManager.h"
 #import "WaylandWindow.h"
 #import "WaylandLibrary.h"
 #import "WaylandProtocol.h"
@@ -39,6 +40,9 @@ static NSString *typeForMime(NSString *mime) {
              serial: (uint32_t) serial sourceActions: (uint32_t) actions {
     if ((self = [super init])) {
         _display = display; _offer = offer; _serial = serial;
+        WaylandDraggingManager *manager = (WaylandDraggingManager *) [display draggingManager];
+        _localSource = [[manager localDraggingSource] retain];
+        _localCopyAllowed = [manager localCopyAllowed];
         _window = [window retain]; _destination = [[window delegate] retain];
         _mimes = [mimes copy]; _cache = [NSMutableDictionary new];
         NSMutableArray *types = [NSMutableArray array];
@@ -64,7 +68,7 @@ static NSString *typeForMime(NSString *mime) {
 - (void) dealloc {
     [self invalidate];
     [_window release]; [_destination release]; [_receiver release];
-    [_mimes release]; [_types release]; [_cache release];
+    [_mimes release]; [_types release]; [_cache release]; [_localSource release];
     [super dealloc];
 }
 - (void) sourceActions: (uint32_t) actions { _sourceActions = actions; }
@@ -189,12 +193,15 @@ static NSString *typeForMime(NSString *mime) {
     [_receiver draggingExited: self];
 }
 - (NSPasteboard *) draggingPasteboard { return self; }
-- (NSDragOperation) draggingSourceOperationMask { return (_sourceActions & 1) ? NSDragOperationCopy : NSDragOperationNone; }
+- (NSDragOperation) draggingSourceOperationMask {
+    return (_sourceActions & 1) && (!_localSource || _localCopyAllowed)
+            ? NSDragOperationCopy : NSDragOperationNone;
+}
 - (NSPoint) draggingLocation { return _point; }
 - (NSWindow *) draggingDestinationWindow { return _destination; }
 - (NSImage *) draggedImage { return nil; }
 - (NSPoint) draggedImageLocation { return _point; }
-- (id) draggingSource { return nil; }
+- (id) draggingSource { return _localSource; }
 - (int) draggingSequenceNumber { return _sequence; }
 - (void) slideDraggedImageTo: (NSPoint) point {}
 - (NSArray *) namesOfPromisedFilesDroppedAtDestination: (NSURL *) destination { return nil; }

@@ -1,0 +1,190 @@
+/* Permission is hereby granted, free of charge, to any person obtaining a copy of
+ this software and associated documentation files (the "Software"), to deal in
+ the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do
+ so, subject to the following conditions:
+
+ The above copyright notice and this permission notice shall be included in all
+ copies or substantial portions of the Software.
+
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ SOFTWARE. */
+
+#import "WaylandDraggingManager.h"
+#import "WaylandLibrary.h"
+#import "WaylandProtocol.h"
+#import "WaylandPasteboard.h"
+#import "WaylandWindow.h"
+#import <AppKit/AppKit.h>
+#include <unistd.h>
+#include <time.h>
+#include <poll.h>
+
+static BOOL monotonicSeconds(double *seconds) {
+    struct timespec now;
+    if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) return NO;
+    *seconds = now.tv_sec + now.tv_nsec / 1e9;
+    return YES;
+}
+
+@implementation WaylandDraggingManager
+- (id) initWithDisplay: (WaylandDisplay *) display {
+    if ((self = [super init])) _display = display;
+    return self;
+}
+// Incoming drops already inspect registered view types while hit testing.
+- (void) registerWindow: (NSWindow *) window dragTypes: (NSArray *) types {}
+- (void) unregisterWindow: (NSWindow *) window {}
+- (id) localDraggingSource { return _busy && !_finished ? _localSource : nil; }
+- (BOOL) localCopyAllowed { return _busy && !_finished && _localCopyAllowed; }
+- (void) cancel {
+    if (_finished) return;
+    _finished = YES;
+    _action = 0;
+}
+- (void) invalidate { [self cancel]; [self destroySource]; [_display flush]; _display = nil; }
+- (void) windowUnmapped: (WaylandWindow *) window {
+    if (_origin == window) [self cancel];
+}
+- (void) destroySource {
+    if (_source != NULL) {
+        union wl_argument args[1] = {{.o = NULL}};
+        WaylandMarshal(_source, WP_DATA_SOURCE_DESTROY, NULL,
+                       WL_MARSHAL_FLAG_DESTROY, args);
+        _source = NULL;
+    }
+}
+- (void) dealloc {
+    [self destroySource];
+    [_snapshot release]; [_origin release]; [_localSource release];
+    [super dealloc];
+}
+- (void) handleEvent: (uint32_t) opcode kind: (WaylandObjectKind) kind
+              proxy: (struct wl_proxy *) proxy arguments: (union wl_argument *) args {
+    if (opcode == WP_DATA_SOURCE_EV_SEND) {
+        if (proxy != _source || _finished) { close(args[1].h); return; }
+        NSString *mime = args[0].s ? [NSString stringWithUTF8String: args[0].s] : nil;
+        WaylandSendData(_display, mime ? [_snapshot objectForKey: mime] : nil, args[1].h);
+        return;
+    }
+    if (proxy != _source || _finished) return;
+    if (opcode == WP_DATA_SOURCE_EV_ACTION) _action = args[0].u;
+    else if (opcode == WP_DATA_SOURCE_EV_DROP_PERFORMED) {
+        _dropped = YES;
+        if (!monotonicSeconds(&_dropDeadline)) [self cancel];
+        else _dropDeadline += 10;
+    }
+    else if (opcode == WP_DATA_SOURCE_EV_CANCELLED) [self cancel];
+    else if (opcode == WP_DATA_SOURCE_EV_FINISHED) {
+        if (!_dropped || _action != 1) _action = 0;
+        _finished = YES;
+    }
+}
+- (void) dragImage: (NSImage *) image at: (NSPoint) location
+            offset: (NSSize) offset event: (NSEvent *) event
+        pasteboard: (NSPasteboard *) pasteboard source: (id) source
+         slideBack: (BOOL) slideBack {
+    if (_busy || ![NSThread isMainThread] || _display == nil) return;
+    struct wl_proxy *manager = _display->_dataDeviceManager;
+    struct wl_proxy *device = [_display dragDataDevice];
+    // Older protocol versions cannot reliably report outgoing completion.
+    if (!manager || !device || WL.wl_proxy_get_version(manager) < 3) return;
+    WaylandWindow *origin = [_display dragOriginForEvent: event];
+    uint32_t serial = [_display dragSerialForEvent: event];
+    if (!origin || !serial) return;
+    [self retain]; // Display invalidation may release its ownership while pumping.
+    _busy = YES; _finished = NO; _dropped = NO; _action = 0;
+    _origin = [origin retain]; _localSource = [source retain];
+    NSImage *heldImage = [image retain];
+    BOOL began = NO;
+    NSDragOperation result = NSDragOperationNone;
+    @try {
+        NSDragOperation allowed = NSDragOperationCopy;
+        _localCopyAllowed = YES;
+        if ([source respondsToSelector: @selector(draggingSourceOperationMaskForLocal:)]) {
+            allowed = [source draggingSourceOperationMaskForLocal: NO];
+            _localCopyAllowed = ([source draggingSourceOperationMaskForLocal: YES] & NSDragOperationCopy) != 0;
+        }
+        NSMutableDictionary *snapshot = [NSMutableDictionary dictionary];
+        NSUInteger bytes = 0;
+        if (allowed & NSDragOperationCopy) {
+            for (NSString *type in [[[pasteboard types] copy] autorelease]) {
+                NSData *data = [pasteboard dataForType: type];
+                if (!data) continue;
+                if ([data length] > 16 * 1024 * 1024 - bytes) {
+                    [snapshot removeAllObjects]; break;
+                }
+                bytes += [data length];
+                NSData *copy = [[data copy] autorelease];
+                for (NSString *mime in [WaylandPasteboard mimeTypesForType: type])
+                    [snapshot setObject: copy forKey: mime];
+            }
+        }
+        // Lazy providers may run the event loop, release the button or unmap.
+        if ([snapshot count] && !_finished && _display &&
+            [_display dragOriginForEvent: event] == origin &&
+            [_display dragSerialForEvent: event] == serial) {
+            _snapshot = [snapshot copy];
+            union wl_argument args[4] = {{.o = NULL}};
+            _source = WaylandCreateObject(manager, WP_DATA_MANAGER_CREATE_SOURCE,
+                    &wl_data_source_interface, args, WaylandObjectDataSource, self);
+            for (NSString *mime in _snapshot) {
+                args[0].s = [mime UTF8String];
+                WaylandMarshal(_source, WP_DATA_SOURCE_OFFER, NULL, 0, args);
+            }
+            args[0].u = 1; // Copy only, matching incoming support.
+            WaylandMarshal(_source, WP_DATA_SOURCE_SET_ACTIONS, NULL, 0, args);
+            args[0].o = (struct wl_object *) _source;
+            args[1].o = (struct wl_object *) [origin surface];
+            args[2].o = NULL; // Dedicated drag icon is a separate follow-up.
+            args[3].u = serial;
+            [_display consumeDragPress];
+            WaylandMarshal(device, WP_DATA_DEVICE_START_DRAG, NULL, 0, args);
+            [_display flush]; began = YES;
+            if ([source respondsToSelector: @selector(draggedImage:beganAt:)])
+                [source draggedImage: heldImage beganAt: location];
+            while (!_finished && _display != nil) {
+                @autoreleasepool {
+                    [_display processPendingEvents];
+                    if (_dropped) {
+                        double now;
+                        if (!monotonicSeconds(&now) || now >= _dropDeadline) [self cancel];
+                    }
+                    if (!_finished) {
+                        // Pump timers/sources without a nested timed Mach wait.
+                        // The native display fd bounds the sleep even when a
+                        // drop destination never sends its completion event.
+                        CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0, true);
+                        if (!_finished && _display != nil) {
+                            struct pollfd ready = {.fd = WL.wl_display_get_fd(_display->_wlDisplay),
+                                                   .events = POLLIN};
+                            poll(&ready, 1, 10);
+                        }
+                    }
+                }
+            }
+            if (_finished && _action == 1) result = NSDragOperationCopy;
+        }
+    } @finally {
+        [self destroySource];
+        [_display flush];
+        [_snapshot release]; _snapshot = nil;
+        [_origin release]; _origin = nil;
+        id finishedSource = _localSource;
+        _localSource = nil;
+        _busy = NO;
+        @try {
+            // Core Wayland supplies no global drop coordinates; retain the
+            // documented virtual starting location rather than invent one.
+            if (began && [finishedSource respondsToSelector: @selector(draggedImage:endedAt:operation:)])
+                [finishedSource draggedImage: heldImage endedAt: location operation: result];
+        } @finally { [finishedSource release]; [heldImage release]; [self release]; }
+    }
+}
+@end

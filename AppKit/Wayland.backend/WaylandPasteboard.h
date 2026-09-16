@@ -19,6 +19,8 @@
 #import <AppKit/NSPasteboard.h>
 #import "WaylandDisplay.h"
 
+void WaylandSendData(WaylandDisplay *display, NSData *data, int fd);
+
 // General pasteboard uses wl_data_device; other names are process-local.
 @interface WaylandPasteboard : NSPasteboard {
     WaylandDisplay *_display; // display owns pasteboards
@@ -35,6 +37,8 @@
 }
 - (id) initWithName: (NSString *) name display: (WaylandDisplay *) display
            manager: (struct wl_proxy *) manager seat: (struct wl_proxy *) seat;
+- (struct wl_proxy *) dataDevice;
++ (NSArray *) mimeTypesForType: (NSString *) type;
 - (void) invalidate;
 - (void) inputAvailable;
 - (void) handleEvent: (uint32_t) opcode kind: (WaylandObjectKind) kind
