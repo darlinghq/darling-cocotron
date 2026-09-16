@@ -959,6 +959,11 @@ O2argb8u *O2ImageRead_RGBA8888_to_argb8u(O2Image *self, int x, int y,
         result.g = scanline[1];
         result.b = scanline[2];
         result.a = scanline[3];
+        if ((self->_bitmapInfo & kO2BitmapAlphaInfoMask) == kO2ImageAlphaLast) {
+            result.r = (result.r * result.a + 127) / 255;
+            result.g = (result.g * result.a + 127) / 255;
+            result.b = (result.b * result.a + 127) / 255;
+        }
         *span++ = result;
         scanline += 4;
     }
@@ -982,6 +987,11 @@ O2argb8u *O2ImageRead_ABGR8888_to_argb8u(O2Image *self, int x, int y,
         result.b = *scanline++;
         result.g = *scanline++;
         result.r = *scanline++;
+        if ((self->_bitmapInfo & kO2BitmapAlphaInfoMask) == kO2ImageAlphaLast) {
+            result.r = (result.r * result.a + 127) / 255;
+            result.g = (result.g * result.a + 127) / 255;
+            result.b = (result.b * result.a + 127) / 255;
+        }
         *span++ = result;
     }
     return NULL;
