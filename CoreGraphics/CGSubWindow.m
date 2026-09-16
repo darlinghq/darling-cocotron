@@ -19,6 +19,10 @@
     return NULL;
 }
 
+- (CGFloat) backingScaleFactor { return 1.0; }
+- (void) flush {}
+- (BOOL) requiresMainThreadPresentation { return NO; }
+
 - (void) show {
     O2InvalidAbstractInvocation();
 }

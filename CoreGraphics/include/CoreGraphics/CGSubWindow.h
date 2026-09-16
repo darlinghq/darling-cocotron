@@ -17,6 +17,13 @@
 // it re-evaluates, as the subwindow's or its parent's geometry may have changed.
 - (void *) sharedCGLWindow;
 
+// Physical drawable pixels per logical point (1 for unscaled backends).
+- (CGFloat) backingScaleFactor;
+
+// Present after a successful drawable swap, on the window/UI thread.
+- (void) flush;
+- (BOOL) requiresMainThreadPresentation;
+
 - (void) show;
 - (void) hide;
 

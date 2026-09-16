@@ -6,6 +6,7 @@
 #import <QuartzCore/CARenderer.h>
 #import "CALayerInternal.h"
 #import <OpenGL/CGLInternal.h>
+#include <math.h>
 
 // The methods of CAMetalLayerInternal used here. Its header is Objective-C++.
 @interface CAMetalLayerInternal : CAMetalLayer
@@ -206,7 +207,45 @@ static GLint metalLayerSwapInterval(CALayer *layer);
     _swapInterval = -1;
 }
 
+// The largest drawable dimension, in pixels, that the layer context renders.
+#define MAX_DRAWABLE_DIMENSION 16384
+
+// Sizes a drawable of the given size in points: the whole-point size used for
+// the projection, and the size in pixels for the viewport, which depends on the
+// subwindow's backing scale. Returns NO when the size or scale is unusable.
+static BOOL drawableSizes(CGSubWindow *subwindow, CGSize size, GLint *width,
+                          GLint *height, GLsizei *pixelWidth, GLsizei *pixelHeight)
+{
+    if (!isfinite(size.width) || !isfinite(size.height) || size.width <= 0 ||
+        size.height <= 0 || size.width > MAX_DRAWABLE_DIMENSION ||
+        size.height > MAX_DRAWABLE_DIMENSION)
+        return NO;
+
+    CGFloat scale = [subwindow backingScaleFactor];
+    if (!isfinite(scale) || scale <= 0 ||
+        ceil(size.width) * scale > MAX_DRAWABLE_DIMENSION ||
+        ceil(size.height) * scale > MAX_DRAWABLE_DIMENSION)
+        return NO;
+
+    *width = ceil(size.width);
+    *height = ceil(size.height);
+    *pixelWidth = floor(ceil(size.width) * scale);
+    *pixelHeight = floor(ceil(size.height) * scale);
+    return YES;
+}
+
 - (void) renderLayer: (CALayer *) layer {
+    // A backend that presents on its own thread cannot be rendered into from
+    // another one.
+    if ([_subwindow requiresMainThreadPresentation] && ![NSThread isMainThread])
+        return;
+
+    GLint width, height;
+    GLsizei pixelWidth, pixelHeight;
+    if (!drawableSizes(_subwindow, _frame.size, &width, &height, &pixelWidth,
+                       &pixelHeight))
+        return;
+
     // The application's own context is current on this thread when a view
     // displays; give it back afterwards, also when nothing was current or the
     // tree's drawing raises.
@@ -224,8 +263,10 @@ static GLint metalLayerSwapInterval(CALayer *layer);
         glReadBuffer(GL_BACK);
 
         [self _drawLayerTree: layer
-                       width: _frame.size.width
-                      height: _frame.size.height
+                       width: width
+                      height: height
+                 pixelsWidth: pixelWidth
+                pixelsHeight: pixelHeight
                  topRowFirst: NO];
     } @finally {
         if (previous != _glContext)
@@ -238,10 +279,27 @@ static GLint metalLayerSwapInterval(CALayer *layer);
                  height: (GLint) height
             topRowFirst: (BOOL) topRowFirst
 {
+    [self _drawLayerTree: layer
+                   width: width
+                  height: height
+             pixelsWidth: width
+            pixelsHeight: height
+             topRowFirst: topRowFirst];
+}
+
+// The projection covers width x height points and the viewport the given number
+// of pixels, which differs from it on a scaled drawable.
+- (void) _drawLayerTree: (CALayer *) layer
+                  width: (GLint) width
+                 height: (GLint) height
+            pixelsWidth: (GLsizei) pixelsWidth
+           pixelsHeight: (GLsizei) pixelsHeight
+            topRowFirst: (BOOL) topRowFirst
+{
     glEnable(GL_DEPTH_TEST);
     glShadeModel(GL_SMOOTH);
 
-    glViewport(0, 0, width, height);
+    glViewport(0, 0, pixelsWidth, pixelsHeight);
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
     // Framebuffer row 0 is the bottom of the picture on a window. Pixels read
@@ -362,6 +420,10 @@ static GLint metalLayerSwapInterval(CALayer *layer) {
     if (_cglWindow == NULL)
         return;
 
+    // See -renderLayer:.
+    if ([_subwindow requiresMainThreadPresentation] && ![NSThread isMainThread])
+        return;
+
     // The swap applies to the current context's surface. Code run during the
     // frame, such as a Metal layer's present, may have made another context
     // current, so make this one current on its window first.
@@ -377,7 +439,10 @@ static GLint metalLayerSwapInterval(CALayer *layer) {
         CGLSetParameter(_glContext, kCGLCPSwapInterval, &interval) == kCGLNoError)
         _swapInterval = interval;
 
-    CGLFlushDrawable(_glContext);
+    // The swap and whatever the backend does to present it happen together on
+    // the thread the backend requires.
+    if (CGLFlushDrawable(_glContext) == kCGLNoError)
+        [_subwindow flush];
     if (previous != _glContext)
         CGLSetCurrentContext(previous);
 }
