@@ -85,6 +85,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (void) _setWindow: (NSWindow *) window {
+    if ([self window] != window) [_context clearDrawable];
     [super _setWindow: window];
     [_context setView: self];
 }
@@ -122,13 +123,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (void) viewDidHide {
-    // reflect hidden setting
-    [_context setView: self];
+    // setView:self is a no-op when the view is unchanged.
+    [_context update];
 }
 
 - (void) viewDidUnhide {
-    // reflect hidden setting
-    [_context setView: self];
+    // setView:self is a no-op when the view is unchanged.
+    [_context update];
 }
 
 - (void) lockFocus {

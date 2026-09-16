@@ -130,6 +130,7 @@ static inline void _clearCurrentContext() {
 }
 
 - (void) updateViewParameters {
+    if (_view == nil || [_view window] == nil) return;
     NSRect rect = [_view bounds];
 
     if ([_view window] != nil)
@@ -152,6 +153,13 @@ static inline void _clearCurrentContext() {
     if (_view == view)
         return;
 
+    // Detach before native-window destruction; EGL can defer destroying a
+    // drawable that remains current. Keep self alive across the thread release.
+    [self retain];
+    if (CGLGetCurrentContext() == _glContext) {
+        if (CGLSetCurrentContext(NULL) != kCGLNoError) { [self release]; return; }
+        if (_currentContext() == self) _setCurrentContext(nil);
+    }
     _hasPrepared = NO;
     _view = view;
 
@@ -163,6 +171,7 @@ static inline void _clearCurrentContext() {
     _subwindow = nil;
 
     [self updateViewParameters];
+    [self release];
 }
 
 - (void) makeCurrentContext {
@@ -180,6 +189,11 @@ static inline void _clearCurrentContext() {
         }
     }
 
+    if ([_subwindow respondsToSelector: @selector(requiresMainThreadPresentation)] &&
+        [_subwindow requiresMainThreadPresentation] && ![NSThread isMainThread]) {
+        NSLog(@"This window backend requires OpenGL rendering on the main thread");
+        return;
+    }
     if (_cglWindow != NULL) {
         if ((error = CGLContextMakeCurrentAndAttachToWindow(
                      _glContext, _cglWindow)) != kCGLNoError) {
