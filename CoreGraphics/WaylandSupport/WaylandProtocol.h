@@ -40,6 +40,10 @@ extern const struct wl_interface wl_keyboard_interface;
 extern const struct wl_interface wl_output_interface;
 extern const struct wl_interface zxdg_output_manager_v1_interface;
 extern const struct wl_interface zxdg_output_v1_interface;
+extern const struct wl_interface wl_data_device_manager_interface;
+extern const struct wl_interface wl_data_device_interface;
+extern const struct wl_interface wl_data_source_interface;
+extern const struct wl_interface wl_data_offer_interface;
 extern const struct wl_interface xdg_wm_base_interface;
 extern const struct wl_interface xdg_surface_interface;
 extern const struct wl_interface xdg_toplevel_interface;
@@ -54,6 +58,22 @@ extern const struct wl_interface zwp_pointer_gesture_pinch_v1_interface;
 // protocol XML. WaylandCheckOpcodes() verifies each one against the generated tables.
 enum {
     WP_DISPLAY_SYNC = 0,
+    WP_DATA_MANAGER_CREATE_SOURCE = 0,
+    WP_DATA_MANAGER_GET_DEVICE = 1,
+    WP_DATA_DEVICE_SET_SELECTION = 1,
+    WP_DATA_DEVICE_RELEASE = 2,
+    WP_DATA_DEVICE_EV_OFFER = 0,
+    WP_DATA_DEVICE_EV_ENTER = 1,
+    WP_DATA_DEVICE_EV_LEAVE = 2,
+    WP_DATA_DEVICE_EV_SELECTION = 5,
+    WP_DATA_SOURCE_OFFER = 0,
+    WP_DATA_SOURCE_DESTROY = 1,
+    WP_DATA_SOURCE_EV_SEND = 1,
+    WP_DATA_SOURCE_EV_CANCELLED = 2,
+    WP_DATA_OFFER_ACCEPT = 0,
+    WP_DATA_OFFER_RECEIVE = 1,
+    WP_DATA_OFFER_DESTROY = 2,
+    WP_DATA_OFFER_EV_OFFER = 0,
     WP_DISPLAY_GET_REGISTRY = 1,
 
     WP_REGISTRY_BIND = 0,
