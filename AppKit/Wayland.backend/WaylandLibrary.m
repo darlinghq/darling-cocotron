@@ -158,6 +158,7 @@ bool WaylandCheckOpcodes(void) {
             {&wl_keyboard_interface, true, WP_KEYBOARD_EV_MODIFIERS, "modifiers"},
             {&wl_keyboard_interface, true, WP_KEYBOARD_EV_REPEAT_INFO, "repeat_info"},
             {&wl_output_interface, false, WP_OUTPUT_RELEASE, "release"},
+            {&wl_output_interface, true, WP_OUTPUT_EV_GEOMETRY, "geometry"},
             {&wl_output_interface, true, WP_OUTPUT_EV_MODE, "mode"},
             {&wl_output_interface, true, WP_OUTPUT_EV_DONE, "done"},
             {&wl_output_interface, true, WP_OUTPUT_EV_SCALE, "scale"},

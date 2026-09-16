@@ -49,14 +49,18 @@
 - (CGFloat) backingScaleFactor { return _waylandScale; }
 @end
 
+// Mode pixels are untransformed. Publish v2 properties together at wl_output.done.
+typedef struct { int32_t width, height, refresh, scale, transform; } WaylandOutputState;
+
 // A wl_output and the modes it advertised.
 @interface WaylandOutput : NSObject {
 @public
     struct wl_proxy *_proxy;
-    uint32_t _globalName;
+    uint32_t _globalName, _version;
     WaylandDisplay *_display;
-    int32_t _width, _height, _refresh, _scale;
-    NSMutableArray *_modes;
+    WaylandOutputState _current, _pending;
+    NSArray *_modes;
+    NSMutableArray *_pendingModes;
 }
 @end
 
@@ -64,6 +68,7 @@
 
 - (void) dealloc {
     [_modes release];
+    [_pendingModes release];
     [super dealloc];
 }
 
@@ -475,12 +480,14 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         WaylandOutput *output = [[WaylandOutput new] autorelease];
         output->_globalName = name;
         output->_display = self;
-        output->_scale = 1;
-        output->_modes = [NSMutableArray new];
+        output->_current.scale = output->_pending.scale = 1;
+        output->_version = MIN(version, 2);
+        output->_pendingModes = [NSMutableArray new];
+        output->_modes = [NSArray new];
         // Version 2 has scale and done.
         output->_proxy = [self bindGlobal: name
                                 interface: &wl_output_interface
-                                  version: MIN(version, 2)
+                                  version: output->_version
                                      kind: WaylandObjectOutput
                                    object: output];
         if (output->_proxy != NULL)
@@ -504,7 +511,7 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
 - (int32_t) scaleForOutput: (struct wl_proxy *) proxy {
     for (WaylandOutput *output in _outputs)
         if (output->_proxy == proxy)
-            return output->_scale;
+            return output->_current.scale;
     return 1;
 }
 
@@ -518,16 +525,33 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
     _screens = nil;
 }
 
+- (void) publishOutput: (WaylandOutput *) output {
+    output->_current = output->_pending;
+    [output->_modes release];
+    output->_modes = [output->_pendingModes copy];
+    [self invalidateScreens];
+    for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
+        [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) scheduleScaleUpdate];
+}
+
 - (void) outputEvent: (uint32_t) opcode
               output: (WaylandOutput *) output
            arguments: (union wl_argument *) args
 {
     switch (opcode) {
+    case WP_OUTPUT_EV_GEOMETRY:
+        // Geometry's transform is its eighth argument; dispatch avoids native
+        // variadic/listener ABI differences. Ignore unknown enum values.
+        if (args[7].i >= 0 && args[7].i <= 7)
+            output->_pending.transform = args[7].i;
+        break;
     case WP_OUTPUT_EV_MODE: {
+        if (args[1].i <= 0 || args[2].i <= 0 || args[3].i < 0)
+            return;
         if (args[0].u & WP_OUTPUT_MODE_CURRENT) {
-            output->_width = args[1].i;
-            output->_height = args[2].i;
-            output->_refresh = args[3].i;
+            output->_pending.width = args[1].i;
+            output->_pending.height = args[2].i;
+            output->_pending.refresh = args[3].i;
         }
         NSDictionary *mode = @{
             @"Width" : @(args[1].i),
@@ -535,19 +559,22 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
             @"Depth" : @(24),
             @"RefreshRate" : @(args[3].i / 1000.0)
         };
-        if (![output->_modes containsObject: mode])
-            [output->_modes addObject: mode];
+        if (![output->_pendingModes containsObject: mode])
+            [output->_pendingModes addObject: mode];
         break;
     }
     case WP_OUTPUT_EV_SCALE:
-        output->_scale = MAX(args[0].i, 1);
+        output->_pending.scale = MAX(args[0].i, 1);
         break;
     case WP_OUTPUT_EV_DONE:
-        [self invalidateScreens];
-        for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
-            [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) scheduleScaleUpdate];
-        break;
+        [self publishOutput: output];
+        return;
+    default:
+        return;
     }
+    // Version 1 has no done event. Do not leave the fallback screen cached.
+    if (output->_version < 2)
+        [self publishOutput: output];
 }
 
 #pragma mark - Event routing
@@ -1308,13 +1335,13 @@ static NSUInteger modifierDeviceMask(int code) {
 - (NSArray *) outputsWithModes {
     NSMutableArray *result = [NSMutableArray array];
     for (WaylandOutput *output in _outputs)
-        if (output->_width > 0 && output->_height > 0)
+        if (output->_current.width > 0 && output->_current.height > 0)
             [result addObject: output];
     return result;
 }
 
-// Outputs are laid out left to right in logical pixels: Wayland doesn't tell
-// clients where outputs are.
+// Until xdg-output logical positions are supported, use a virtual left-to-right
+// layout. wl_output geometry positions are not reliable desktop coordinates.
 - (NSArray *) screens {
     if (_screens != nil)
         return [[_screens retain] autorelease];
@@ -1322,11 +1349,14 @@ static NSUInteger modifierDeviceMask(int code) {
     NSMutableArray *screens = [NSMutableArray array];
     CGFloat x = 0;
     for (WaylandOutput *output in [self outputsWithModes]) {
-        NSRect frame = NSMakeRect(x, 0, output->_width / output->_scale,
-                                  output->_height / output->_scale);
+        BOOL rotated = (output->_current.transform & 1) != 0;
+        CGFloat width = rotated ? output->_current.height : output->_current.width;
+        CGFloat height = rotated ? output->_current.width : output->_current.height;
+        NSRect frame = NSMakeRect(x, 0, width / output->_current.scale,
+                                  height / output->_current.scale);
         WaylandScreen *screen = [[[WaylandScreen alloc] initWithFrame: frame
                                                visibleFrame: frame] autorelease];
-        screen->_waylandScale = output->_scale;
+        screen->_waylandScale = output->_current.scale;
         [screen setCgDirectDisplayID: [screens count] + 1];
         [screens addObject: screen];
         x += frame.size.width;
@@ -1364,10 +1394,10 @@ static NSUInteger modifierDeviceMask(int code) {
         return @{};
     WaylandOutput *output = outputs[screenIndex];
     return @{
-        @"Width" : @(output->_width),
-        @"Height" : @(output->_height),
+        @"Width" : @(output->_current.width),
+        @"Height" : @(output->_current.height),
         @"Depth" : @(24),
-        @"RefreshRate" : @(output->_refresh / 1000.0)
+        @"RefreshRate" : @(output->_current.refresh / 1000.0)
     };
 }
 
