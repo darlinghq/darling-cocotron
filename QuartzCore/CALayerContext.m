@@ -12,6 +12,10 @@
 @synthesize glContext = _glContext;
 
 - initWithFrame: (CGRect) rect {
+    self = [super init];
+    if (self == nil)
+        return nil;
+
     CGLError error;
 
     CGLPixelFormatAttribute attributes[1] = {
@@ -19,12 +23,20 @@
     };
     GLint numberOfVirtualScreens;
 
-    CGLChoosePixelFormat(attributes, &_pixelFormat, &numberOfVirtualScreens);
+    error = CGLChoosePixelFormat(attributes, &_pixelFormat, &numberOfVirtualScreens);
+    if (error != kCGLNoError) {
+        NSLog(@"CGLChoosePixelFormat failed with %d", error);
+        [self release];
+        return nil;
+    }
 
     if ((error = CGLCreateContext(_pixelFormat, NULL, &_glContext)) !=
-        kCGLNoError)
+        kCGLNoError) {
         NSLog(@"CGLCreateContext failed with %d in %s %d", error, __FILE__,
               __LINE__);
+        [self release];
+        return nil;
+    }
 
     _frame = rect;
 
@@ -39,7 +51,9 @@
     [_timer release];
     [_renderer release];
     CGLReleaseContext(_glContext);
-    CGLDestroyWindow(_cglWindow);
+    CGLReleasePixelFormat(_pixelFormat);
+    if (_cglWindow != NULL)
+        CGLDestroyWindow(_cglWindow);
     [_subwindow release];
     [_layer release];
     [super dealloc];
