@@ -65,6 +65,7 @@ typedef enum {
     WaylandObjectFrameCallback,
     WaylandObjectBuffer,
     WaylandObjectKeyboardSync,
+    WaylandObjectLogicalOutput,
 } WaylandObjectKind;
 
 // The dispatcher installed on every proxy (see WaylandLibrary.h for why listeners
@@ -86,6 +87,8 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     struct wl_display *_wlDisplay;
     struct wl_proxy *_registry;
     struct wl_proxy *_compositor;
+    struct wl_proxy *_logicalOutputManager, *_legacyLogicalOutputManager;
+    uint32_t _logicalOutputManagerName;
     struct wl_proxy *_shm;
     struct wl_proxy *_wmBase;
     struct wl_proxy *_decorationManager;

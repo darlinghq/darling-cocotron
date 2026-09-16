@@ -52,13 +52,19 @@
 // Mode pixels are untransformed. Publish v2 properties together at wl_output.done.
 typedef struct { int32_t width, height, refresh, scale, transform; } WaylandOutputState;
 
+typedef struct {
+    int32_t x, y, width, height;
+    BOOL hasPosition, hasSize;
+} WaylandLogicalOutputState;
+
 // A wl_output and the modes it advertised.
 @interface WaylandOutput : NSObject {
 @public
-    struct wl_proxy *_proxy;
-    uint32_t _globalName, _version;
+    struct wl_proxy *_proxy, *_logicalProxy;
+    uint32_t _globalName, _version, _logicalVersion;
     WaylandDisplay *_display;
     WaylandOutputState _current, _pending;
+    WaylandLogicalOutputState _logicalCurrent, _logicalPending;
     NSArray *_modes;
     NSMutableArray *_pendingModes;
 }
@@ -75,6 +81,9 @@ typedef struct { int32_t width, height, refresh, scale, transform; } WaylandOutp
 @end
 
 @interface WaylandDisplay (Private)
+- (void) logicalOutputEvent: (uint32_t) opcode output: (WaylandOutput *) output
+                 arguments: (union wl_argument *) args;
+- (void) attachLogicalOutput: (WaylandOutput *) output;
 - (void) processPendingEvents;
 - (void) handleEvent: (uint32_t) opcode
                 kind: (WaylandObjectKind) kind
@@ -104,6 +113,10 @@ int WaylandDispatch(const void *kind, void *proxy, uint32_t opcode,
                                                  kind: objectKind
                                                 proxy: proxy
                                             arguments: args];
+                break;
+            case WaylandObjectLogicalOutput:
+                [((WaylandOutput *) object)->_display logicalOutputEvent: opcode
+                                                                  output: object arguments: args];
                 break;
             case WaylandObjectOutput:
                 [((WaylandOutput *) object)->_display handleEvent: opcode
@@ -318,12 +331,15 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         // wl_display_disconnect() doesn't free proxies.
         struct wl_proxy *proxies[] = {_imageCursorBuffer, _cursorSurface, _pointer, _keyboard,
                                       _seat, _decorationManager, _wmBase,
-                                      _shm, _compositor, _registry};
+                                      _shm, _logicalOutputManager,
+                                      _legacyLogicalOutputManager, _compositor, _registry};
         for (size_t i = 0; i < sizeof(proxies) / sizeof(proxies[0]); i++)
             if (proxies[i] != NULL)
                 WL.wl_proxy_destroy(proxies[i]);
-        for (WaylandOutput *output in _outputs)
+        for (WaylandOutput *output in _outputs) {
+            if (output->_logicalProxy) WL.wl_proxy_destroy(output->_logicalProxy);
             WL.wl_proxy_destroy(output->_proxy);
+        }
         WL.wl_display_disconnect(_wlDisplay);
     }
 
@@ -476,6 +492,11 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
                          version: MIN(version, 5)
                             kind: WaylandObjectSeat
                           object: self];
+    } else if (strcmp(interface, "zxdg_output_manager_v1") == 0 && _logicalOutputManager == NULL) {
+        _logicalOutputManagerName = name;
+        _logicalOutputManager = [self bindGlobal: name interface: &zxdg_output_manager_v1_interface
+                                        version: MIN(version, 3) kind: 0 object: nil];
+        for (WaylandOutput *output in _outputs) [self attachLogicalOutput: output];
     } else if (strcmp(interface, "wl_output") == 0) {
         WaylandOutput *output = [[WaylandOutput new] autorelease];
         output->_globalName = name;
@@ -490,16 +511,74 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
                                   version: output->_version
                                      kind: WaylandObjectOutput
                                    object: output];
-        if (output->_proxy != NULL)
+        if (output->_proxy != NULL) {
             [_outputs addObject: output];
+            [self attachLogicalOutput: output];
+        }
+    }
+}
+
+- (void) attachLogicalOutput: (WaylandOutput *) output {
+    if (!_logicalOutputManager || output->_logicalProxy) return;
+    struct wl_proxy *manager = _logicalOutputManager;
+    // Typed new_id inherits the server-side manager version. A core v1 output
+    // cannot receive wl_output.done, so it needs a genuinely v2 factory binding.
+    if (output->_version < 2 && WL.wl_proxy_get_version(manager) >= 3) {
+        if (!_legacyLogicalOutputManager)
+            _legacyLogicalOutputManager = [self bindGlobal: _logicalOutputManagerName
+                    interface: &zxdg_output_manager_v1_interface version: 2 kind: 0 object: nil];
+        manager = _legacyLogicalOutputManager;
+    }
+    if (!manager) return;
+    output->_logicalVersion = WL.wl_proxy_get_version(manager);
+    union wl_argument args[2] = {{.o = NULL}, {.o = (struct wl_object *)output->_proxy}};
+    output->_logicalProxy = WaylandCreateObject(manager, WP_LOGICAL_MANAGER_GET_OUTPUT,
+            &zxdg_output_v1_interface, args, WaylandObjectLogicalOutput, output);
+}
+
+- (void) logicalOutputEvent: (uint32_t) opcode output: (WaylandOutput *) output
+                 arguments: (union wl_argument *) args {
+    switch (opcode) {
+    case WP_LOGICAL_OUTPUT_EV_POSITION:
+        output->_logicalPending.x = args[0].i;
+        output->_logicalPending.y = args[1].i;
+        output->_logicalPending.hasPosition = YES;
+        break;
+    case WP_LOGICAL_OUTPUT_EV_SIZE:
+        if (args[0].i > 0 && args[1].i > 0) {
+            output->_logicalPending.width = args[0].i;
+            output->_logicalPending.height = args[1].i;
+            output->_logicalPending.hasSize = YES;
+        }
+        break;
+    case WP_LOGICAL_OUTPUT_EV_DONE:
+        if (output->_logicalVersion < 3) {
+            output->_logicalCurrent = output->_logicalPending;
+            [self invalidateScreens];
+        }
+        break;
     }
 }
 
 - (void) registryGlobalRemoved: (uint32_t) name {
+    if (_logicalOutputManager && name == _logicalOutputManagerName) {
+        if (_legacyLogicalOutputManager)
+            WaylandMarshal(_legacyLogicalOutputManager, WP_LOGICAL_MANAGER_DESTROY, NULL,
+                           WL_MARSHAL_FLAG_DESTROY, NULL);
+        WaylandMarshal(_logicalOutputManager, WP_LOGICAL_MANAGER_DESTROY, NULL,
+                       WL_MARSHAL_FLAG_DESTROY, NULL);
+        _logicalOutputManager = _legacyLogicalOutputManager = NULL;
+        _logicalOutputManagerName = 0;
+        // Existing logical-output children survive factory removal.
+        return;
+    }
     for (WaylandOutput *output in _outputs) {
         if (output->_globalName == name) {
             for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
                 [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) outputRemoved: output->_proxy];
+            if (output->_logicalProxy)
+                WaylandMarshal(output->_logicalProxy, WP_LOGICAL_OUTPUT_DESTROY, NULL,
+                               WL_MARSHAL_FLAG_DESTROY, NULL);
             WL.wl_proxy_destroy(output->_proxy);
             [_outputs removeObject: output];
             [self invalidateScreens];
@@ -527,6 +606,8 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
 
 - (void) publishOutput: (WaylandOutput *) output {
     output->_current = output->_pending;
+    if (output->_logicalVersion >= 3)
+        output->_logicalCurrent = output->_logicalPending;
     [output->_modes release];
     output->_modes = [output->_pendingModes copy];
     [self invalidateScreens];
@@ -1340,20 +1421,36 @@ static NSUInteger modifierDeviceMask(int code) {
     return result;
 }
 
-// Until xdg-output logical positions are supported, use a virtual left-to-right
-// layout. wl_output geometry positions are not reliable desktop coordinates.
+// Prefer complete compositor logical topology. If any output is still missing
+// metadata, keep the entire set in the core-protocol horizontal fallback.
 - (NSArray *) screens {
     if (_screens != nil)
         return [[_screens retain] autorelease];
 
     NSMutableArray *screens = [NSMutableArray array];
     CGFloat x = 0;
-    for (WaylandOutput *output in [self outputsWithModes]) {
+    NSArray *outputs = [self outputsWithModes];
+    BOOL logical = [outputs count] > 0;
+    for (WaylandOutput *output in outputs)
+        if (!output->_logicalCurrent.hasPosition || !output->_logicalCurrent.hasSize)
+            logical = NO;
+    CGFloat referenceX = 0, referenceTop = 0;
+    if (logical) {
+        WaylandOutput *first = [outputs objectAtIndex: 0];
+        referenceX = first->_logicalCurrent.x;
+        referenceTop = (CGFloat)first->_logicalCurrent.y + first->_logicalCurrent.height;
+    }
+    for (WaylandOutput *output in outputs) {
         BOOL rotated = (output->_current.transform & 1) != 0;
         CGFloat width = rotated ? output->_current.height : output->_current.width;
         CGFloat height = rotated ? output->_current.width : output->_current.height;
         NSRect frame = NSMakeRect(x, 0, width / output->_current.scale,
                                   height / output->_current.scale);
+        if (logical) {
+            WaylandLogicalOutputState state = output->_logicalCurrent;
+            frame = NSMakeRect((CGFloat)state.x - referenceX,
+                    referenceTop - (CGFloat)state.y - state.height, state.width, state.height);
+        }
         WaylandScreen *screen = [[[WaylandScreen alloc] initWithFrame: frame
                                                visibleFrame: frame] autorelease];
         screen->_waylandScale = output->_current.scale;
