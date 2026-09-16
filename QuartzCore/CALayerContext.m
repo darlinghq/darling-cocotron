@@ -211,7 +211,10 @@ static GLint metalLayerSwapInterval(CALayer *layer);
 #define MAX_DRAWABLE_DIMENSION 16384
 
 // Sizes a drawable of the given size in points: the whole-point size used for
-// the projection, and the size in pixels for the viewport, which depends on the
+// the projection, and the size in pixels for the viewport. The pixel size is the
+// one the subwindow reports for its allocation when it reports one, since
+// repeating the multiplication by the scale here could round differently and
+// leave an edge of the drawable stale; otherwise it follows from the
 // subwindow's backing scale. Returns NO when the size or scale is unusable.
 static BOOL drawableSizes(CGSubWindow *subwindow, CGSize size, GLint *width,
                           GLint *height, GLsizei *pixelWidth, GLsizei *pixelHeight)
@@ -221,16 +224,28 @@ static BOOL drawableSizes(CGSubWindow *subwindow, CGSize size, GLint *width,
         size.height > MAX_DRAWABLE_DIMENSION)
         return NO;
 
-    CGFloat scale = [subwindow backingScaleFactor];
-    if (!isfinite(scale) || scale <= 0 ||
-        ceil(size.width) * scale > MAX_DRAWABLE_DIMENSION ||
-        ceil(size.height) * scale > MAX_DRAWABLE_DIMENSION)
+    CGSize pixels = [subwindow drawablePixelSize];
+    if (CGSizeEqualToSize(pixels, CGSizeZero)) {
+        CGFloat scale = [subwindow backingScaleFactor];
+        if (!isfinite(scale) || scale <= 0 ||
+            ceil(size.width) * scale > MAX_DRAWABLE_DIMENSION ||
+            ceil(size.height) * scale > MAX_DRAWABLE_DIMENSION)
+            return NO;
+        pixels = CGSizeMake(floor(ceil(size.width) * scale),
+                            floor(ceil(size.height) * scale));
+    } else if (!isfinite(pixels.width) || !isfinite(pixels.height) ||
+               pixels.width < 1 || pixels.height < 1 ||
+               pixels.width > MAX_DRAWABLE_DIMENSION ||
+               pixels.height > MAX_DRAWABLE_DIMENSION ||
+               floor(pixels.width) != pixels.width ||
+               floor(pixels.height) != pixels.height) {
         return NO;
+    }
 
     *width = ceil(size.width);
     *height = ceil(size.height);
-    *pixelWidth = floor(ceil(size.width) * scale);
-    *pixelHeight = floor(ceil(size.height) * scale);
+    *pixelWidth = pixels.width;
+    *pixelHeight = pixels.height;
     return YES;
 }
 

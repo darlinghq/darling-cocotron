@@ -20,6 +20,7 @@
 }
 
 - (CGFloat) backingScaleFactor { return 1.0; }
+- (CGSize) drawablePixelSize { return CGSizeZero; }
 - (void) flush {}
 - (BOOL) requiresMainThreadPresentation { return NO; }
 

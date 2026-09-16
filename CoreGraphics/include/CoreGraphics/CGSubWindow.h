@@ -20,6 +20,10 @@
 // Physical drawable pixels per logical point (1 for unscaled backends).
 - (CGFloat) backingScaleFactor;
 
+// Exact allocated drawable size, or CGSizeZero when this backend does not
+// expose it. Nonzero dimensions must be positive integral physical pixels.
+- (CGSize) drawablePixelSize;
+
 // Present after a successful drawable swap, on the window/UI thread.
 - (void) flush;
 - (BOOL) requiresMainThreadPresentation;
