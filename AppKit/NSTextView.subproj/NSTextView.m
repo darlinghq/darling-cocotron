@@ -3700,23 +3700,31 @@ static NSTextView *s_targetTextView = nil;
     NSMenu *menu = [[[NSMenu alloc] initWithTitle: @""] autorelease];
 
     @try {
-        NSRange range = [_textStorage
-                doubleClickAtIndex:
-                        [self glyphIndexForPoint: point
-                                fractionOfDistanceThroughGlyph: &fraction]];
+        NSUInteger clickedIndex = [self glyphIndexForPoint: point
+                                fractionOfDistanceThroughGlyph: &fraction];
+        NSRange range = [_textStorage doubleClickAtIndex: clickedIndex];
 
-        [self setSelectedRange: range];
+        // A contextual click inside an existing selection should operate on
+        // that selection (as on macOS). Only move the selection to the word
+        // under the pointer when the click is outside it or there is no
+        // selection yet.
+        NSRange selection = [self selectedRange];
+        BOOL clickInSelection = selection.length != 0 &&
+                clickedIndex >= selection.location &&
+                clickedIndex < NSMaxRange(selection);
+        if (!clickInSelection) {
+            [self setSelectedRange: range];
 
-        NSSpellChecker *checker = [NSSpellChecker sharedSpellChecker];
-        NSArray *guesses =
+            NSSpellChecker *checker = [NSSpellChecker sharedSpellChecker];
+            NSArray *guesses =
                 [checker guessesForWordRange: range
                                       inString: [self string]
                                       language: [[NSLocale currentLocale]
                                                         localeIdentifier]
                         inSpellDocumentWithTag: [self spellCheckerDocumentTag]];
 
-        if ([guesses count] == 0) {
-            NSMenuItem *item = [menu
+            if ([guesses count] == 0) {
+                NSMenuItem *item = [menu
                     addItemWithTitle:
                             NSLocalizedStringFromTableInBundle(
                                     @"No Guesses Found", nil,
@@ -3725,12 +3733,13 @@ static NSTextView *s_targetTextView = nil;
                                     @"Spell checker guesses")
                               action: @selector(cut:)
                        keyEquivalent: @""];
-            [item setEnabled: NO];
-        } else {
-            for (NSString *guess in guesses) {
-                [menu addItemWithTitle: guess
+                [item setEnabled: NO];
+            } else {
+                for (NSString *guess in guesses) {
+                    [menu addItemWithTitle: guess
                                 action: @selector(_changeSpellingFromMenuItem:)
                          keyEquivalent: @""];
+                }
             }
         }
         [menu addItem: [NSMenuItem separatorItem]];
