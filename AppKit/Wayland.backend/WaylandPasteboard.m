@@ -102,12 +102,20 @@ void WaylandSendData(WaylandDisplay *display, NSData *data, int fd) {
     if ([type isEqual:NSFilenamesPboardType]) return @[@"text/uri-list"];
     if ([type isEqual: NSStringPboardType])
         return @[@"text/plain;charset=utf-8", @"text/plain", @"UTF8_STRING"];
+    if ([type isEqual: NSPasteboardTypePNG] || [type isEqual: @"NSPNGPPboardType"])
+        return @[@"image/png"];
+    if ([type isEqual: NSPasteboardTypeTIFF] || [type isEqual: NSTIFFPboardType])
+        return @[@"image/tiff"];
     return @[type];
 }
 + (NSString *) typeForMime: (NSString *) mime {
     if ([mime isEqual: @"text/plain;charset=utf-8"] || [mime isEqual: @"text/plain"] ||
         [mime isEqual: @"UTF8_STRING"])
         return NSStringPboardType;
+    if ([mime isEqual: @"image/png"])
+        return NSPasteboardTypePNG;
+    if ([mime isEqual: @"image/tiff"])
+        return NSPasteboardTypeTIFF;
     return mime;
 }
 // Keep the native bytes available alongside the converted Cocoa representation.
