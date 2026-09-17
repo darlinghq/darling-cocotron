@@ -111,6 +111,11 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     NSPoint _lastMouseLocation;
     uint32_t _pointerEnterSerial;
     NSUInteger _pressedButtons;
+    CGFloat _pendingScrollX, _pendingScrollY;
+    WaylandWindow *_pendingScrollWindow;
+    CGPoint _pendingScrollSurfacePoint;
+    NSUInteger _pendingScrollModifiers;
+    BOOL _pendingScrollActive;
     uint32_t _lastClickTime; // Compositor milliseconds, wraps modulo 2^32.
     uint32_t _lastClickButton;
     WaylandWindow *_lastClickWindow; // Nonretained; cleared on unmap/device loss.

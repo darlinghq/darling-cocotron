@@ -737,6 +737,9 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         _pointerWindow = nil;
         _pointerEnterSerial = 0;
         _pressedButtons = 0;
+        _pendingScrollX = _pendingScrollY = 0;
+        _pendingScrollWindow = nil;
+        _pendingScrollActive = NO;
         _lastClickWindow = nil;
         [_buttonClickCounts removeAllObjects];
     }
@@ -769,6 +772,8 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
 #pragma mark - Pointer
 
 - (void) pointerEvent: (uint32_t) opcode arguments: (union wl_argument *) args {
+    if (opcode != WP_POINTER_EV_AXIS && opcode != WP_POINTER_EV_FRAME)
+        [self postPendingScroll];
     [self flushPendingModifier];
     switch (opcode) {
     case WP_POINTER_EV_ENTER:
@@ -788,6 +793,9 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         _lastMouseLocation = [self mouseLocation];
         _pointerWindow = nil;
         _pointerEnterSerial = 0;
+        _pendingScrollX = _pendingScrollY = 0;
+        _pendingScrollWindow = nil;
+        _pendingScrollActive = NO;
         break;
 
     case WP_POINTER_EV_MOTION:
@@ -813,6 +821,10 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
 
     case WP_POINTER_EV_AXIS:
         [self pointerAxis: args[1].u value: wl_fixed_to_double(args[2].f)];
+        break;
+
+    case WP_POINTER_EV_FRAME:
+        [self postPendingScroll];
         break;
     }
 }
@@ -939,14 +951,49 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
     // One wheel notch is 10 units, scrolling down is positive; the X11 backend
     // reports a notch up as deltaY 1.
     CGFloat delta = -value / 10.0;
+    if (axis != WP_POINTER_AXIS_HORIZONTAL_SCROLL &&
+        axis != WP_POINTER_AXIS_VERTICAL_SCROLL)
+        return;
+    if (!_pendingScrollActive) {
+        _pendingScrollWindow = window;
+        _pendingScrollSurfacePoint = _pointerSurfacePoint;
+        _pendingScrollModifiers = [self currentModifierFlags];
+        _pendingScrollActive = YES;
+    }
+    if (axis == WP_POINTER_AXIS_HORIZONTAL_SCROLL)
+        _pendingScrollX += delta;
+    else if (axis == WP_POINTER_AXIS_VERTICAL_SCROLL)
+        _pendingScrollY += delta;
+
+    // wl_pointer.frame was added in version 5. Older seats deliver each axis
+    // event independently, so preserve their immediate behavior.
+    if (WL.wl_proxy_get_version(_pointer) < 5)
+        [self postPendingScroll];
+}
+
+- (void) postPendingScroll {
+    CGFloat deltaX = _pendingScrollX;
+    CGFloat deltaY = _pendingScrollY;
+    WaylandWindow *window = _pendingScrollWindow;
+    CGPoint surfacePoint = _pendingScrollSurfacePoint;
+    NSUInteger modifiers = _pendingScrollModifiers;
+    _pendingScrollX = _pendingScrollY = 0;
+    _pendingScrollWindow = nil;
+    _pendingScrollActive = NO;
+    if (deltaX == 0 && deltaY == 0)
+        return;
+
+    if (window == nil)
+        return;
+
     NSEvent *event = [NSEvent
             mouseEventWithType: NSScrollWheel
-                      location: [window transformPoint: _pointerSurfacePoint]
-                 modifierFlags: [self currentModifierFlags]
+                      location: [window transformPoint: surfacePoint]
+                 modifierFlags: modifiers
                         window: [window delegate]
                     clickCount: 1
-                        deltaX: axis == WP_POINTER_AXIS_HORIZONTAL_SCROLL ? delta : 0.0
-                        deltaY: axis == WP_POINTER_AXIS_VERTICAL_SCROLL ? delta : 0.0];
+                        deltaX: deltaX
+                        deltaY: deltaY];
     [self postEvent: event atStart: NO];
 }
 
@@ -1051,6 +1098,7 @@ static NSUInteger modifierDeviceMask(int code) {
 }
 
 - (void) keyboardEvent: (uint32_t) opcode arguments: (union wl_argument *) args {
+    [self postPendingScroll];
     switch (opcode) {
     case WP_KEYBOARD_EV_KEYMAP:
         [self keymapWithFormat: args[0].u fd: args[1].h size: args[2].u];
@@ -1599,6 +1647,9 @@ static NSUInteger modifierDeviceMask(int code) {
         _pointerWindow = nil;
         _pointerEnterSerial = 0;
         _pressedButtons = 0;
+        _pendingScrollX = _pendingScrollY = 0;
+        _pendingScrollWindow = nil;
+        _pendingScrollActive = NO;
         [_buttonClickCounts removeAllObjects];
     }
     if (_inputWindow == window) {
