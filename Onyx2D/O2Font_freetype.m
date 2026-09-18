@@ -421,6 +421,40 @@ static NSString *filenameOfFirstScalableFace(FcFontSet *set) {
     return (NSData *)result;
 }
 
+- (NSCharacterSet *) coveredCharacterSet {
+    if (_coveredCharSet == nil && _face != NULL) {
+        @synchronized(self) {
+            if (_coveredCharSet == nil && _face != NULL) {
+                CFMutableCharacterSetRef set = CFCharacterSetCreateMutable(kCFAllocatorDefault);
+                FT_UInt gindex = 0;
+                FT_ULong charcode = FT_Get_First_Char(_face, &gindex);
+                FT_ULong rangeStart = 0;
+                FT_ULong rangeLength = 0;
+
+                while (gindex != 0) {
+                    if (charcode <= 0x10FFFF) {
+                        if (rangeLength > 0 && charcode == rangeStart + rangeLength) {
+                            rangeLength++;
+                        } else {
+                            if (rangeLength > 0) {
+                                CFCharacterSetAddCharactersInRange(set, CFRangeMake(rangeStart, rangeLength));
+                            }
+                            rangeStart = charcode;
+                            rangeLength = 1;
+                        }
+                    }
+                    charcode = FT_Get_Next_Char(_face, charcode, &gindex);
+                }
+                if (rangeLength > 0) {
+                    CFCharacterSetAddCharactersInRange(set, CFRangeMake(rangeStart, rangeLength));
+                }
+                _coveredCharSet = (NSCharacterSet *) set;
+            }
+        }
+    }
+    return _coveredCharSet;
+}
+
 FT_Face O2FontFreeTypeFace(O2Font_freetype *self) {
     return self->_face;
 }
