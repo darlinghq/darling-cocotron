@@ -160,6 +160,8 @@ static Class _fontPanelFactory;
 
 - (NSArray *) availableMembersOfFontFamily: (NSString *) familyName {
     NSMutableArray *result = [NSMutableArray array];
+    if (familyName == nil)
+        return result;
     NSFontFamily *family = [NSFontFamily fontFamilyWithName: familyName];
     NSArray *typefaces = [family typefaces];
     int i, count = [typefaces count];
@@ -168,6 +170,11 @@ static Class _fontPanelFactory;
         NSFontTypeface *typeface = [typefaces objectAtIndex: i];
         NSString *name = [typeface name];
         NSString *traitName = [typeface traitName];
+
+        if (name == nil)
+            name = familyName;
+        if (traitName == nil)
+            traitName = @"Regular";
 
         // Callers expect an array of four objects
         [result addObject: [NSArray arrayWithObjects: name, traitName,

@@ -62,11 +62,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 + (NSFontFamily *) addFontFamilyWithName: (NSString *) familyName {
+    if (familyName == nil)
+        return nil;
     NSFontFamily *family = [[self alloc] initWithName: familyName];
     [self addFontFamily: family];
     NSArray *typefaces =
             [[NSDisplay currentDisplay] fontTypefacesForFamilyName: familyName];
-    [family addTypefaces: typefaces];
+    if (typefaces != nil)
+        [family addTypefaces: typefaces];
     return [family autorelease];
 }
 

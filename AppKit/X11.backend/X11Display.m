@@ -955,9 +955,14 @@ static NSDictionary *modeInfoToDictionary(const XRRModeInfo *mi, int depth) {
     for (int i = 0; i < set->nfont; i++) {
         FcChar8 *family;
         if (FcPatternGetString(set->fonts[i], FC_FAMILY, 0, &family) ==
-            FcResultMatch) {
-            [ret addObject: [NSString stringWithUTF8String: (const char *)
-                                                                    family]];
+            FcResultMatch && family != NULL) {
+            NSString *familyStr = [NSString stringWithCString: (const char *) family
+                                                     encoding: NSUTF8StringEncoding];
+            if (familyStr == nil)
+                familyStr = [NSString stringWithCString: (const char *) family
+                                               encoding: NSISOLatin1StringEncoding];
+            if (familyStr != nil)
+                [ret addObject: familyStr];
         }
     }
 
@@ -1016,13 +1021,28 @@ static NSDictionary *modeInfoToDictionary(const XRRModeInfo *mi, int depth) {
     for (int i = 0; i < set->nfont; i++) {
         FcChar8 *typeface;
         FcPattern *p = set->fonts[i];
-        if (FcPatternGetString(p, FC_STYLE, 0, &typeface) == FcResultMatch) {
+        if (FcPatternGetString(p, FC_STYLE, 0, &typeface) == FcResultMatch && typeface != NULL) {
             NSString *traitName =
-                    [NSString stringWithUTF8String: (const char *) typeface];
+                    [NSString stringWithCString: (const char *) typeface
+                                       encoding: NSUTF8StringEncoding];
+            if (traitName == nil)
+                traitName = [NSString stringWithCString: (const char *) typeface
+                                               encoding: NSISOLatin1StringEncoding];
+            if (traitName == nil)
+                traitName = @"Regular";
+
             FcChar8 *pattern = FcNameUnparse(p);
-            NSString *name =
-                    [NSString stringWithUTF8String: (const char *) pattern];
-            FcStrFree(pattern);
+            NSString *name = nil;
+            if (pattern != NULL) {
+                name = [NSString stringWithCString: (const char *) pattern
+                                          encoding: NSUTF8StringEncoding];
+                if (name == nil)
+                    name = [NSString stringWithCString: (const char *) pattern
+                                              encoding: NSISOLatin1StringEncoding];
+                FcStrFree(pattern);
+            }
+            if (name == nil)
+                name = traitName;
 
             NSFontTraitMask traits = 0;
             // Read the first value of each property; a face that doesn't
@@ -1058,8 +1078,10 @@ static NSDictionary *modeInfoToDictionary(const XRRModeInfo *mi, int depth) {
                     [[NSFontTypeface alloc] initWithName: name
                                                traitName: traitName
                                                   traits: traits];
-            [ret addObject: face];
-            [face release];
+            if (face != nil) {
+                [ret addObject: face];
+                [face release];
+            }
         }
     }
 
