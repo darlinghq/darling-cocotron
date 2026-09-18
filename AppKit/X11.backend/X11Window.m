@@ -493,6 +493,17 @@ static NSData *makeWindowIcon() {
     _isOpaque = value;
 }
 
+- (void) setAlphaValue: (CGFloat) value {
+    if (value < 0.0) value = 0.0;
+    if (value > 1.0) value = 1.0;
+    unsigned long opacity = (unsigned long)(value * 0xFFFFFFFFUL);
+    XChangeProperty(
+            _display, _window,
+            XInternAtom(_display, "_NET_WM_WINDOW_OPACITY", False),
+            XA_CARDINAL, 32, PropModeReplace,
+            (unsigned char *) &opacity, 1);
+}
+
 - (void) sheetOrderFrontFromFrame: (NSRect) frame
                       aboveWindow: (CGWindow *) aboveWindow
 {
