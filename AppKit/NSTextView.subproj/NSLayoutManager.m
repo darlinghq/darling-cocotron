@@ -1588,17 +1588,12 @@ static inline void _appendRectToCache(NSLayoutManager *self, NSRect rect) {
                      color: (NSColor *) color
         printingAdjustment: (NSSize) printingAdjustment
 {
-
-#if DEBUG_LM_DRAWING
-    NSLog(@"showPackedGlyphs: %p length: %d glyphRange: %@ atPoint: %@ font: "
-          @"%@ color: %@ printingAdjustment: %@",
-          glyphs, length, NSStringFromRange(glyphRange),
-          NSStringFromPoint(point), font, color,
-          NSStringFromSize(printingAdjustment));
-#define DEBUG_LM_SHOWPACKEDGLYPHS 0
-#endif
-
     CGContextRef context = NSCurrentGraphicsPort();
+    [font setInContext: [NSGraphicsContext currentContext]];
+    if (color)
+        [color setFill];
+    else
+        [[NSColor controlTextColor] setFill];
     CGGlyph *cgGlyphs = (CGGlyph *) glyphs;
     NSInteger cgGlyphsLength = length / 2;
     CGSize advances[cgGlyphsLength];
@@ -2381,13 +2376,6 @@ static inline void _appendRectToCache(NSLayoutManager *self, NSRect rect) {
 - (void) drawGlyphsForGlyphRange: (NSRange) glyphRange
                          atPoint: (NSPoint) origin
 {
-
-#if DEBUG_LM_DRAWING
-    NSLog(@"drawGlyphsForGlyphRange: %@ atPoint: %@",
-          NSStringFromRange(glyphRange), NSStringFromPoint(origin));
-#define DEBUG_LM_DRAWGLYPHSFORGLYPHRANGE 0
-#endif
-
     NSTextView *textView = [self textViewForBeginningOfSelection];
     NSRange selectedRange =
             (textView == nil) ? NSMakeRange(0, 0) : [textView selectedRange];

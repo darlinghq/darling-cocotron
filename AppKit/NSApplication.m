@@ -1304,7 +1304,7 @@ NSApplication *NSApp = nil;
 }
 
 - (void) reportException: (NSException *) exception {
-    NSLog(@"NSApplication got exception: %@", exception);
+    NSLog(@"NSApplication got exception: %@, reason: %@, stack: %@", exception, [exception reason], [exception callStackSymbols]);
 }
 
 - (void) _attentionTimer: (NSTimer *) timer {

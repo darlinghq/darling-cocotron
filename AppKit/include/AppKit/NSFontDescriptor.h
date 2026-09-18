@@ -43,6 +43,32 @@ APPKIT_EXPORT NSFontDescriptorFeatureKey NSFontFeatureTypeIdentifierKey;
 APPKIT_EXPORT NSFontDescriptorFeatureKey NSFontFeatureSelectorIdentifierKey;
 
 typedef unsigned NSFontSymbolicTraits;
+
+enum {
+    NSFontUnknownClass = 0 << 28,
+    NSFontOldStyleSerifsClass = 1 << 28,
+    NSFontTransitionalSerifsClass = 2 << 28,
+    NSFontModernSerifsClass = 3 << 28,
+    NSFontClarendonSerifsClass = 4 << 28,
+    NSFontSlabSerifsClass = 5 << 28,
+    NSFontFreeformSerifsClass = 7 << 28,
+    NSFontSansSerifClass = 8 << 28,
+    NSFontOrnamentalsClass = 9 << 28,
+    NSFontScriptsClass = 10 << 28,
+    NSFontSymbolicClass = 12 << 28,
+    NSFontFamilyClassMask = 0xF0000000
+};
+
+enum {
+    NSFontItalicTrait = (1 << 0),
+    NSFontBoldTrait = (1 << 1),
+    NSFontExpandedTrait = (1 << 5),
+    NSFontCondensedTrait = (1 << 6),
+    NSFontMonoSpaceTrait = (1 << 10),
+    NSFontVerticalTrait = (1 << 11),
+    NSFontUIOptimizedTrait = (1 << 12)
+};
+
 typedef NSString *NSFontDescriptorTraitKey;
 
 APPKIT_EXPORT NSFontDescriptorTraitKey NSFontSymbolicTrait;

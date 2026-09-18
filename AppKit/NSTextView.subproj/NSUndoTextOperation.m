@@ -149,7 +149,12 @@
                                layoutManager: layoutManager
                                  undoManager: undoManager])) {
         _replacementRange = replacementRange;
-        _attributedString = [[layoutManager.textStorage
+        NSTextStorage *storage = layoutManager.textStorage;
+        if (affectedRange.location == NSNotFound || affectedRange.location > [storage length])
+            affectedRange = NSMakeRange([storage length], 0);
+        if (affectedRange.location + affectedRange.length > [storage length])
+            affectedRange.length = [storage length] - affectedRange.location;
+        _attributedString = [[storage
                 attributedSubstringFromRange: affectedRange] mutableCopy];
     }
     return self;
@@ -165,6 +170,9 @@
                  selectedRange: (NSRange) selectedRange
                           text: (NSAttributedString *) string
 {
+    if (affectedRange.location == NSNotFound || replacementRange.location == NSNotFound || selectedRange.location == NSNotFound)
+        return NO;
+
     // - selection is at the end of the known replaced range and zero length and
     // the affected & replacement range location matches
     if ((selectedRange.length == 0) &&
@@ -184,17 +192,26 @@
                 // the original text - we must save it from being forgotten)
                 int delta = affectedRange.length - _replacementRange.length;
                 _replacementRange.length = 0;
-                _replacementRange.location -= delta;
+                if (_replacementRange.location >= delta)
+                    _replacementRange.location -= delta;
+                else
+                    _replacementRange.location = 0;
 
                 _affectedRange.length += delta;
-                _affectedRange.location -= delta;
-                NSAttributedString *killedString = [string
-                        attributedSubstringFromRange: NSMakeRange(
-                                                              _affectedRange
-                                                                      .location,
-                                                              delta)];
-                [_attributedString insertAttributedString: killedString
-                                                  atIndex: 0];
+                if (_affectedRange.location >= delta)
+                    _affectedRange.location -= delta;
+                else
+                    _affectedRange.location = 0;
+
+                if (_affectedRange.location + delta <= [string length]) {
+                    NSAttributedString *killedString = [string
+                            attributedSubstringFromRange: NSMakeRange(
+                                                                  _affectedRange
+                                                                          .location,
+                                                                  delta)];
+                    [_attributedString insertAttributedString: killedString
+                                                      atIndex: 0];
+                }
             }
             return YES;
         }
@@ -280,7 +297,12 @@
                                layoutManager: layoutManager
                                  undoManager: undoManager])) {
         _replacementRange = replacementRange;
-        _attributedString = [[layoutManager.textStorage
+        NSTextStorage *storage = layoutManager.textStorage;
+        if (affectedRange.location == NSNotFound || affectedRange.location > [storage length])
+            affectedRange = NSMakeRange([storage length], 0);
+        if (affectedRange.location + affectedRange.length > [storage length])
+            affectedRange.length = [storage length] - affectedRange.location;
+        _attributedString = [[storage
                 attributedSubstringFromRange: affectedRange] retain];
     }
     return self;

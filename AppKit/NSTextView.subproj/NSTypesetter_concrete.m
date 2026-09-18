@@ -133,10 +133,7 @@ static void loadGlyphAndCharacterCacheForLocation(NSTypesetter_concrete *self,
         // lineFragmentRectForProposedRect but Cocoa doesn't do that
         _scanRect = NSZeroRect;
     }
-    if (_scanRect.size.height < wantedHeight) {
-#if DEBUG_GETLINEFRAGMENTRECT
-        NSLog(@"height: %f is too small", _scanRect.size.height);
-#endif
+    if (_scanRect.size.height <= 0) {
         // Too small for our text
         _scanRect = NSZeroRect;
     }

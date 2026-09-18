@@ -549,6 +549,7 @@ APPKIT_EXPORT const NSNotificationName NSWindowDidExposeNotification
 @property(readonly) NSWindowOcclusionState occlusionState;
 
 - (BOOL) isVisible;
+- (void) setIsVisible: (BOOL) flag;
 - (BOOL) isKeyWindow;
 - (BOOL) isMainWindow;
 - (BOOL) isMiniaturized;
