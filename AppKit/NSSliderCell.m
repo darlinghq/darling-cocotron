@@ -139,7 +139,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     _isContinuous = YES; // NSCell defaults to NO, NSSliderCell defaults to YES
     _type = NSLinearSlider;
     _minValue = 0;
-    _maxValue = 0;
+    _maxValue = 1.0;
     _altIncrementValue = 0;
     _isVertical = -1;
     _lastRect = NSZeroRect;
@@ -154,7 +154,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     _isContinuous = YES; // NSCell defaults to NO, NSSliderCell defaults to YES
     _type = NSLinearSlider;
     _minValue = 0;
-    _maxValue = 0;
+    _maxValue = 1.0;
     _altIncrementValue = 0;
     _isVertical = -1;
     _lastRect = NSZeroRect;
@@ -338,7 +338,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (NSRect) knobRectFlipped: (BOOL) flipped {
     double value = [self doubleValue];
-    double percent = (value - _minValue) / (_maxValue - _minValue);
+    double range = _maxValue - _minValue;
+    double percent = (range > 0) ? (value - _minValue) / range : 0;
     NSRect sliderRect = [self _sliderRect];
     NSRect knobRect;
     NSSize knobSize = [[_controlView graphicsStyle]
@@ -597,17 +598,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
     percentPixels = position / length;
 
-#if 0
-    NSLog(@"percentPixels is %g; max-min is %g", percentPixels, _maxValue - _minValue);
-    NSLog(@"doubleValue should be %g", (percentPixels*(_maxValue-_minValue))+_minValue);
-#endif
     if (percentPixels > 1.0)
         percentPixels = 1.0;
     if (percentPixels < 0.0)
         percentPixels = 0.0;
 
-    [self setClosestDoubleValue: (percentPixels * (_maxValue - _minValue)) +
-                                 _minValue];
+    double range = _maxValue - _minValue;
+    [self setClosestDoubleValue: (range > 0) ? (percentPixels * range) + _minValue : _minValue];
 }
 
 // circular sliderCell behavior:
