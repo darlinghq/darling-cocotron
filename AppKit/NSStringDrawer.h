@@ -19,6 +19,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/AppKitExport.h>
+#import <AppKit/NSParagraphStyle.h>
 #import <Foundation/Foundation.h>
 
 @class NSTextStorage, NSLayoutManager, NSTextContainer;
@@ -38,20 +39,24 @@ APPKIT_EXPORT const CGFloat NSStringDrawerLargeDimension;
 - (NSSize) sizeOfString: (NSString *) string
          withAttributes: (NSDictionary *) attributes
                  inSize: (NSSize) maxSize;
+
 - (void) drawString: (NSString *) string
-        withAttributes: (NSDictionary *) attributes
-                inRect: (NSRect) rect;
+     withAttributes: (NSDictionary *) attributes
+             inRect: (NSRect) rect;
+
 // Use a size of NSZeroSize for unlimited dimensions.
 - (void) drawString: (NSString *) string
-        withAttributes: (NSDictionary *) attributes
-               atPoint: (NSPoint) point
-                inSize: (NSSize) maxSize;
+     withAttributes: (NSDictionary *) attributes
+            atPoint: (NSPoint) point
+             inSize: (NSSize) maxSize;
 
 // Use a size of NSZeroSize for unlimited dimensions.
 - (NSSize) sizeOfAttributedString: (NSAttributedString *) astring
                            inSize: (NSSize) maxSize;
+
 - (void) drawAttributedString: (NSAttributedString *) astring
                        inRect: (NSRect) rect;
+                       
 // Use a size of NSZeroSize for unlimited dimensions.
 - (void) drawAttributedString: (NSAttributedString *) astring
                       atPoint: (NSPoint) point
@@ -69,11 +74,15 @@ APPKIT_EXPORT const CGFloat NSStringDrawerLargeDimension;
 - (void) _clipAndDrawInRect: (NSRect) rect
              withAttributes: (NSDictionary *) attributes;
 
+- (void) _clipAndDrawInRect:(NSRect)rect 
+              lineBreakMode:(NSLineBreakMode)lineBreakMode;
+
 @end
 
 @interface NSAttributedString (NSStringDrawer_private)
 
-- (void) _clipAndDrawInRect: (NSRect) rect truncatingTail: (BOOL) truncateTail;
+- (void) _clipAndDrawInRect: (NSRect) rect 
+             truncatingTail: (BOOL) truncateTail;
 
 - (void) _clipAndDrawInRect: (NSRect) rect;
 
