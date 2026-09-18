@@ -89,15 +89,51 @@
         withApplication: (NSString *) application
           andDeactivate: (BOOL) deactivate
 {
-    // TODO: call LSOpenFromURLSpec()
-    NSUnimplementedMethod();
-    return NO;
+    // TODO: Implement handling `deactivate` flag
+    // TODO: Implement handling race-condition between inter-application (when target app is terminating)
+
+    // On macOS, a nil path with a valid application simply launches the
+    // application (and returns YES), so the file URL is only added when a
+    // path was given.
+    NSURL *url = nil;
+    NSURL *appURL = nil;
+
+    if (path != nil) {
+        url = [NSURL fileURLWithPath:path];
+    }
+
+    if (application != nil) {
+        appURL = [NSURL fileURLWithPath:application];
+    }
+
+    LSLaunchURLSpec spec;
+    memset(&spec, 0, sizeof(spec));
+
+    NSArray *urlArray = (url != nil) ? [NSArray arrayWithObject:url] : nil;
+    spec.itemURLs = (CFArrayRef)urlArray;
+    spec.appURL = (CFURLRef)appURL;
+    spec.launchFlags = kLSLaunchDefaults;
+
+    OSStatus status = LSOpenFromURLSpec(&spec, NULL);
+
+    return (status == noErr);
 }
 
 - (BOOL) openURL: (NSURL *) url {
-    // TODO: Call LSOpenFromURLSpec()
-    NSUnimplementedMethod();
-    return NO;
+    if (url == nil) {
+        return NO;
+    }
+
+    LSLaunchURLSpec spec;
+    memset(&spec, 0, sizeof(spec));
+
+    NSArray *urlArray = [NSArray arrayWithObject:url];
+    spec.itemURLs = (CFArrayRef)urlArray;
+    spec.launchFlags = kLSLaunchDefaults;
+
+    OSStatus status = LSOpenFromURLSpec(&spec, NULL);
+
+    return (status == noErr);
 }
 
 - (BOOL) selectFile: (NSString *) path
