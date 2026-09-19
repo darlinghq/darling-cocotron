@@ -290,6 +290,14 @@ Boolean CGDisplayIsMain(CGDirectDisplayID display) {
     return display != kCGNullDirectDisplay && display == CGMainDisplayID();
 }
 
+uint32_t CGDisplayUnitNumber(CGDirectDisplayID display) {
+    return (display > 0) ? (display - 1) : 0;
+}
+
+boolean_t CGDisplayUsesOpenGLAcceleration(CGDirectDisplayID display) {
+    return TRUE;
+}
+
 CGDirectDisplayID CGDisplayMirrorsDisplay(CGDirectDisplayID display) {
     // STUB!
     // TODO: Get this from XRandR

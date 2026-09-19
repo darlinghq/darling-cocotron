@@ -57,6 +57,8 @@ COREGRAPHICS_EXPORT size_t CGDisplayPixelsWide(CGDirectDisplayID display);
 
 COREGRAPHICS_EXPORT boolean_t CGDisplayIsInMirrorSet(CGDirectDisplayID display);
 COREGRAPHICS_EXPORT Boolean CGDisplayIsMain(CGDirectDisplayID display);
+COREGRAPHICS_EXPORT uint32_t CGDisplayUnitNumber(CGDirectDisplayID display);
+COREGRAPHICS_EXPORT boolean_t CGDisplayUsesOpenGLAcceleration(CGDirectDisplayID display);
 COREGRAPHICS_EXPORT CGDirectDisplayID
 CGDisplayMirrorsDisplay(CGDirectDisplayID display);
 
