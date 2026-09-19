@@ -222,8 +222,6 @@ static void renderFreeTypeBitmap(O2Context_builtin_FT *self, O2Surface *surface,
             return;
         }
 
-        FT_GlyphSlot slot = face->glyph;
-
         if ((ftError =
                      FT_Set_Char_Size(face, 0, fontSize.height * 64, 72.0, 72.0))) {
             NSLog(@"FT_Set_Char_Size returned %d", ftError);
@@ -232,20 +230,17 @@ static void renderFreeTypeBitmap(O2Context_builtin_FT *self, O2Surface *surface,
         }
 
         for (i = 0; i < count; i++) {
+            O2FreeTypeCachedGlyph *cached =
+                    [font rasterizeGlyph: glyphs[i] pointSize: fontSize.height];
 
-            ftError = FT_Load_Glyph(face, glyphs[i], FT_LOAD_DEFAULT);
-            if (ftError)
+            if (cached == nil)
                 continue;
 
-            ftError = FT_Render_Glyph(face->glyph, FT_RENDER_MODE_NORMAL);
-            if (ftError)
-                continue;
+            renderFreeTypeBitmap(self, _surface, &cached->bitmap,
+                                 point.x + cached->left,
+                                 point.y - cached->top, paint);
 
-            renderFreeTypeBitmap(self, _surface, &slot->bitmap,
-                                 point.x + slot->bitmap_left,
-                                 point.y - slot->bitmap_top, paint);
-
-            point.x += slot->advance.x >> 6;
+            point.x += cached->advance >> 6;
         }
 
         O2PaintRelease(paint);

@@ -275,6 +275,7 @@ static NSString *filenameOfFirstScalableFace(FcFontSet *set) {
 - (instancetype) initWithFace: (FT_Face) face {
     _face = face;
     _platformType = O2FontPlatformTypeFreeType;
+    _glyphCache = [NSMutableDictionary new];
 
     int i, numberOfCharMaps = face->num_charmaps;
     BOOL hasUnicode = FALSE;
@@ -327,6 +328,7 @@ static NSString *filenameOfFirstScalableFace(FcFontSet *set) {
 
 - (void) dealloc {
     FT_Done_Face(_face);
+    [_glyphCache release];
     [_macRomanEncoding release];
     [_macExpertEncoding release];
     [_winAnsiEncoding release];
@@ -572,6 +574,91 @@ FT_Face O2FontFreeTypeFace(O2Font_freetype *self) {
     }
 
     return [self unicode_createEncodingForTextEncoding: encoding];
+}
+
+- (O2FreeTypeCachedGlyph *) rasterizeGlyph: (O2Glyph) glyph
+                                  pointSize: (O2Float) pointSize
+{
+    if (_face == NULL) {
+        return nil;
+    }
+
+    @synchronized(self) {
+        uint64_t keyValue = ((uint64_t)(uint32_t)((long)(pointSize * 64)) << 32) |
+                            glyph;
+        NSNumber *key = [NSNumber numberWithUnsignedLongLong: keyValue];
+
+        O2FreeTypeCachedGlyph *cached = [_glyphCache objectForKey: key];
+        if (cached != nil) {
+            return [[cached retain] autorelease];
+        }
+
+        if (FT_Load_Glyph(_face, glyph, FT_LOAD_DEFAULT) != 0) {
+            return nil;
+        }
+
+        if (FT_Render_Glyph(_face->glyph, FT_RENDER_MODE_NORMAL) != 0) {
+            return nil;
+        }
+
+        FT_GlyphSlot slot = _face->glyph;
+        cached = [[O2FreeTypeCachedGlyph alloc]
+                initWithBitmap: &slot->bitmap
+                          left: slot->bitmap_left
+                           top: slot->bitmap_top
+                       advance: slot->advance.x];
+
+        if ([_glyphCache count] >= O2FONT_GLYPH_CACHE_LIMIT) {
+            [_glyphCache removeAllObjects];
+        }
+
+        [_glyphCache setObject: cached forKey: key];
+        return [cached autorelease];
+    }
+}
+
+@end
+
+@implementation O2FreeTypeCachedGlyph
+
+- (instancetype) initWithBitmap: (const FT_Bitmap *) srcBitmap
+                            left: (NSInteger) left
+                             top: (NSInteger) top
+                         advance: (FT_Pos) advance
+{
+    bitmap.rows = srcBitmap->rows;
+    bitmap.width = srcBitmap->width;
+    bitmap.pitch = srcBitmap->width;
+    bitmap.num_grays = 256;
+    bitmap.pixel_mode = FT_PIXEL_MODE_GRAY;
+    bitmap.palette_mode = 0;
+    bitmap.palette = NULL;
+    bitmap.buffer = NULL;
+
+    self->left = left;
+    self->top = top;
+    self->advance = advance;
+
+    if (bitmap.rows > 0 && bitmap.width > 0) {
+        size_t bytes = bitmap.rows * bitmap.width;
+        unsigned char *data = NSZoneMalloc(NULL, bytes);
+
+        for (FT_Int row = 0; row < bitmap.rows; row++) {
+            memcpy(data + row * bitmap.width,
+                   srcBitmap->buffer + row * srcBitmap->pitch, bitmap.width);
+        }
+
+        bitmap.buffer = data;
+    }
+
+    return self;
+}
+
+- (void) dealloc {
+    if (bitmap.buffer != NULL) {
+        NSZoneFree(NULL, bitmap.buffer);
+    }
+    [super dealloc];
 }
 
 @end
