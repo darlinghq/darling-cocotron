@@ -9,3 +9,8 @@ CGError CGDisplayRemoveReconfigurationCallback(CGDisplayReconfigurationCallBack 
     printf("STUB %s\n", __PRETTY_FUNCTION__);
     return kCGErrorSuccess;
 }
+
+void CGRestorePermanentDisplayConfiguration()
+{
+    printf("STUB %s\n", __PRETTY_FUNCTION__);
+}
