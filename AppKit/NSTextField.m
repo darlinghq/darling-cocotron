@@ -199,6 +199,15 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [self setNeedsDisplay: YES];
 }
 
+- (NSTextFieldBezelStyle) bezelStyle {
+    return [_cell bezelStyle];
+}
+
+- (void) setBezelStyle: (NSTextFieldBezelStyle) style {
+    [_cell setBezelStyle: style];
+    [self setNeedsDisplay: YES];
+}
+
 - (NSString *) placeholderString {
     return [_cell placeholderString];
 }

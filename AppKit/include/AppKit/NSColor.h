@@ -58,6 +58,22 @@ enum {
                             count: (NSInteger) count;
 
 @property(class, strong, readonly) NSColor *labelColor;
+@property(class, strong, readonly) NSColor *secondaryLabelColor;
+@property(class, strong, readonly) NSColor *tertiaryLabelColor;
+@property(class, strong, readonly) NSColor *quaternaryLabelColor;
+@property(class, strong, readonly) NSColor *systemRedColor;
+@property(class, strong, readonly) NSColor *systemGreenColor;
+@property(class, strong, readonly) NSColor *systemBlueColor;
+@property(class, strong, readonly) NSColor *systemOrangeColor;
+@property(class, strong, readonly) NSColor *systemYellowColor;
+@property(class, strong, readonly) NSColor *systemBrownColor;
+@property(class, strong, readonly) NSColor *systemPinkColor;
+@property(class, strong, readonly) NSColor *systemPurpleColor;
+@property(class, strong, readonly) NSColor *systemGrayColor;
+@property(class, strong, readonly) NSColor *systemTealColor;
+@property(class, strong, readonly) NSColor *systemIndigoColor;
+@property(class, strong, readonly) NSColor *systemMintColor;
+@property(class, strong, readonly) NSColor *systemCyanColor;
 
 @property(class, strong, readonly) NSColor *textColor;
 @property(class, strong, readonly) NSColor *selectedTextColor;

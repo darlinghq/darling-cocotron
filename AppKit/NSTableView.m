@@ -361,6 +361,10 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
     return _allowsColumnSelection;
 }
 
+- (BOOL) allowsTypeSelect {
+    return _allowsTypeSelect;
+}
+
 - (BOOL) autosaveTableColumns {
     NSUnimplementedMethod();
     return NO;
@@ -738,6 +742,10 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 
 - (void) setAllowsColumnSelection: (BOOL) flag {
     _allowsColumnSelection = flag;
+}
+
+- (void) setAllowsTypeSelect: (BOOL) flag {
+    _allowsTypeSelect = flag;
 }
 
 - (void) setAutosaveTableColumns: (BOOL) flag {

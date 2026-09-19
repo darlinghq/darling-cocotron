@@ -18,17 +18,37 @@
 */
 
 #import <AppKit/NSVisualEffectView.h>
+#import <AppKit/NSColor.h>
+#import <AppKit/NSGraphics.h>
 
 @implementation NSVisualEffectView
 
-- (NSMethodSignature *)methodSignatureForSelector:(SEL)aSelector
-{
-    return [NSMethodSignature signatureWithObjCTypes: "v@:"];
+@synthesize material = _material;
+@synthesize blendingMode = _blendingMode;
+@synthesize state = _state;
+
+- (instancetype) initWithFrame: (NSRect) frame {
+    self = [super initWithFrame: frame];
+    if (self) {
+        _material = NSVisualEffectMaterialWindowBackground;
+        _blendingMode = NSVisualEffectBlendingModeBehindWindow;
+        _state = NSVisualEffectStateFollowsWindowActiveState;
+    }
+    return self;
 }
 
-- (void)forwardInvocation:(NSInvocation *)anInvocation
+- (BOOL) isOpaque {
+    return YES;
+}
+
+- (void) drawRect: (NSRect) rect {
+    [[NSColor windowBackgroundColor] setFill];
+    NSRectFill(rect);
+}
+
+- (NSMethodSignature *)methodSignatureForSelector:(SEL)aSelector
 {
-    NSLog(@"Stub called: %@ in %@", NSStringFromSelector([anInvocation selector]), [self class]);
+    return [super methodSignatureForSelector: aSelector];
 }
 
 @end

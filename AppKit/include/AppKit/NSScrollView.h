@@ -29,6 +29,12 @@ APPKIT_EXPORT NSString *const NSScrollViewDidEndLiveScrollNotification;
 APPKIT_EXPORT NSString *const NSScrollViewWillStartLiveScrollNotification;
 APPKIT_EXPORT NSString *const NSScrollViewDidLiveScrollNotification;
 
+typedef NS_ENUM(NSInteger, NSScrollElasticity) {
+    NSScrollElasticityAutomatic = 0,
+    NSScrollElasticityNone = 1,
+    NSScrollElasticityAllowed = 2,
+};
+
 @interface NSScrollView : NSView {
     NSClipView *_clipView;
     NSClipView *_headerClipView;
@@ -57,9 +63,13 @@ APPKIT_EXPORT NSString *const NSScrollViewDidLiveScrollNotification;
     CGFloat _minMagnification;
     CGFloat _maxMagnification;
     NSScrollerKnobStyle _scrollerKnobStyle;
+    NSScrollElasticity _horizontalScrollElasticity;
+    NSScrollElasticity _verticalScrollElasticity;
 }
 
 @property NSScrollerKnobStyle scrollerKnobStyle;
+@property NSScrollElasticity horizontalScrollElasticity;
+@property NSScrollElasticity verticalScrollElasticity;
 
 + (NSSize) frameSizeForContentSize: (NSSize) contentSize
              hasHorizontalScroller: (BOOL) hasHorizontalScroller
@@ -113,6 +123,11 @@ APPKIT_EXPORT NSString *const NSScrollViewDidLiveScrollNotification;
 - (CGFloat) pageScroll;
 - (BOOL) scrollsDynamically;
 - (BOOL) autohidesScrollers;
+
+- (NSScrollElasticity) horizontalScrollElasticity;
+- (NSScrollElasticity) verticalScrollElasticity;
+- (void) setHorizontalScrollElasticity: (NSScrollElasticity) elasticity;
+- (void) setVerticalScrollElasticity: (NSScrollElasticity) elasticity;
 
 - (NSCursor *) documentCursor;
 - (CGFloat) magnification;

@@ -18,6 +18,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSControl.h>
+#import <AppKit/NSTextFieldCell.h>
 
 @interface NSTextField : NSControl {
     id _delegate;
@@ -26,6 +27,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 @property CGFloat preferredMaxLayoutWidth;
+@property NSTextFieldBezelStyle bezelStyle;
 
 - delegate;
 - (void) setDelegate: delegate;
@@ -37,6 +39,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (void) setBackgroundColor: (NSColor *) color;
 - (void) setTextColor: (NSColor *) color;
 - (void) setDrawsBackground: (BOOL) flag;
+- (NSTextFieldBezelStyle) bezelStyle;
+- (void) setBezelStyle: (NSTextFieldBezelStyle) style;
 
 - (NSInteger) maximumNumberOfLines;
 - (NSString *) placeholderString;

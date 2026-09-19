@@ -601,6 +601,139 @@ NSNotificationName const NSSystemColorsDidChangeNotification = @"NSSystemColorsD
     return [NSColor colorWithCatalogName: @"System" colorName: @"labelColor"];
 }
 
+// NSDisplay.m
+NSColor *NSColorGetCatalogColor(NSColorListName catalogName,
+                                NSColorName colorName);
+
+// A System catalog color that display backends may not know: the value a
+// backend registered in the catalog, else the given default.
+static NSColor *systemCatalogColor(NSColorName name, NSColor *fallback) {
+    NSColor *color = NSColorGetCatalogColor(@"System", name);
+    return [NSColor_catalog colorWithCatalogName: @"System"
+                                       colorName: name
+                                           color: color ? color : fallback];
+}
+
+// Label text at decreasing emphasis: black with less alpha than labelColor.
++ (NSColor *) secondaryLabelColor {
+    return systemCatalogColor(@"secondaryLabelColor",
+                              [NSColor colorWithCalibratedWhite: 0.0 alpha: 0.5]);
+}
+
++ (NSColor *) tertiaryLabelColor {
+    return systemCatalogColor(@"tertiaryLabelColor",
+                              [NSColor colorWithCalibratedWhite: 0.0 alpha: 0.26]);
+}
+
++ (NSColor *) quaternaryLabelColor {
+    return systemCatalogColor(@"quaternaryLabelColor",
+                              [NSColor colorWithCalibratedWhite: 0.0 alpha: 0.1]);
+}
+
++ (NSColor *) systemRedColor {
+    return systemCatalogColor(@"systemRedColor",
+                              [NSColor colorWithCalibratedRed: 1.0
+                                                        green: 0.23
+                                                         blue: 0.19
+                                                        alpha: 1.0]);
+}
+
++ (NSColor *) systemGreenColor {
+    return systemCatalogColor(@"systemGreenColor",
+                              [NSColor colorWithCalibratedRed: 0.20
+                                                        green: 0.78
+                                                         blue: 0.35
+                                                        alpha: 1.0]);
+}
+
++ (NSColor *) systemBlueColor {
+    return systemCatalogColor(@"systemBlueColor",
+                              [NSColor colorWithCalibratedRed: 0.0
+                                                        green: 0.48
+                                                         blue: 1.0
+                                                        alpha: 1.0]);
+}
+
++ (NSColor *) systemOrangeColor {
+    return systemCatalogColor(@"systemOrangeColor",
+                              [NSColor colorWithCalibratedRed: 1.0
+                                                        green: 0.58
+                                                         blue: 0.0
+                                                        alpha: 1.0]);
+}
+
++ (NSColor *) systemYellowColor {
+    return systemCatalogColor(@"systemYellowColor",
+                              [NSColor colorWithCalibratedRed: 1.0
+                                                        green: 0.80
+                                                         blue: 0.0
+                                                        alpha: 1.0]);
+}
+
++ (NSColor *) systemBrownColor {
+    return systemCatalogColor(@"systemBrownColor",
+                              [NSColor colorWithCalibratedRed: 0.64
+                                                        green: 0.52
+                                                         blue: 0.37
+                                                        alpha: 1.0]);
+}
+
++ (NSColor *) systemPinkColor {
+    return systemCatalogColor(@"systemPinkColor",
+                              [NSColor colorWithCalibratedRed: 1.0
+                                                        green: 0.18
+                                                         blue: 0.57
+                                                        alpha: 1.0]);
+}
+
++ (NSColor *) systemPurpleColor {
+    return systemCatalogColor(@"systemPurpleColor",
+                              [NSColor colorWithCalibratedRed: 0.69
+                                                        green: 0.32
+                                                         blue: 0.87
+                                                        alpha: 1.0]);
+}
+
++ (NSColor *) systemGrayColor {
+    return systemCatalogColor(@"systemGrayColor",
+                              [NSColor colorWithCalibratedRed: 0.56
+                                                        green: 0.56
+                                                         blue: 0.58
+                                                        alpha: 1.0]);
+}
+
++ (NSColor *) systemTealColor {
+    return systemCatalogColor(@"systemTealColor",
+                              [NSColor colorWithCalibratedRed: 0.35
+                                                        green: 0.78
+                                                         blue: 0.98
+                                                        alpha: 1.0]);
+}
+
++ (NSColor *) systemIndigoColor {
+    return systemCatalogColor(@"systemIndigoColor",
+                              [NSColor colorWithCalibratedRed: 0.35
+                                                        green: 0.34
+                                                         blue: 0.84
+                                                        alpha: 1.0]);
+}
+
++ (NSColor *) systemMintColor {
+    return systemCatalogColor(@"systemMintColor",
+                              [NSColor colorWithCalibratedRed: 0.0
+                                                        green: 0.78
+                                                         blue: 0.75
+                                                        alpha: 1.0]);
+}
+
++ (NSColor *) systemCyanColor {
+    return systemCatalogColor(@"systemCyanColor",
+                              [NSColor colorWithCalibratedRed: 0.33
+                                                        green: 0.75
+                                                         blue: 0.95
+                                                        alpha: 1.0]);
+}
+
 + (NSColor *) unemphasizedSelectedTextColor {
     return [NSColor colorWithCatalogName: @"System"
                                colorName: @"unemphasizedSelectedTextColor"];

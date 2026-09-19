@@ -45,6 +45,9 @@ NSString *const NSPreferredScrollerStyleDidChangeNotification =
 
 @implementation NSScrollView
 
+@synthesize horizontalScrollElasticity = _horizontalScrollElasticity;
+@synthesize verticalScrollElasticity = _verticalScrollElasticity;
+
 static Class _rulerViewClass = nil;
 
 + (void) initialize {
