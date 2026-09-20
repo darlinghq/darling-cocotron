@@ -42,6 +42,25 @@ const CGFloat NSStringDrawerLargeDimension = 1000000.;
                        maxSize: (NSSize) size;
 -(instancetype) initWithAttributedString: (NSAttributedString *) string
                                  maxSize: (NSSize) size;
+-(instancetype) initWithCopiedString: (NSString *) string
+                          attributes: (NSDictionary *) attribs
+                             maxSize: (NSSize) size;
+-(instancetype) initWithCopiedAttributedString: (NSAttributedString *) string
+                                       maxSize: (NSSize) size;
+@end
+
+@interface NSStringDrawer_Engine : NSObject {
+    NSTextStorage *_textStorage;
+    NSLayoutManager *_layoutManager;
+    NSTextContainer *_textContainer;
+}
+
+- (instancetype) initWithString: (NSString *) string
+                     attributes: (NSDictionary *) attributes
+                        maxSize: (NSSize) size;
+- (instancetype) initWithAttributedString: (NSAttributedString *) string
+                                  maxSize: (NSSize) size;
+- (void) drawAtPoint: (NSPoint) point;
 @end
 
 @implementation NSStringDrawer
@@ -60,10 +79,79 @@ const CGFloat NSStringDrawerLargeDimension = 1000000.;
         _cache = [NSCache new];
         _cache.countLimit = 250;
 
+        _drawCache = [NSCache new];
+        _drawCache.countLimit = 250;
+
         [_textStorage addLayoutManager: _layoutManager];
         [_layoutManager addTextContainer: _textContainer];
     }
     return self;
+}
+
+- (void) dealloc {
+    [_textStorage release];
+    [_layoutManager release];
+    [_textContainer release];
+    [_cache release];
+    [_drawCache release];
+    [super dealloc];
+}
+
+// The probe key only has to compare equal, so it retains what it was given.
+// The key that stays in the cache copies instead, see initWithCopiedString:.
+- (NSStringDrawer_Engine *) _engineForString: (NSString *) string
+                                  attributes: (NSDictionary *) attributes
+                                     maxSize: (NSSize) maxSize
+{
+    NSStringDrawer_CacheItem* probe = [[NSStringDrawer_CacheItem alloc]
+            initWithString: string
+                attributes: attributes
+                   maxSize: maxSize];
+    NSStringDrawer_Engine* engine = [_drawCache objectForKey: probe];
+    [probe release];
+
+    if (engine != nil)
+        return engine;
+
+    engine = [[[NSStringDrawer_Engine alloc] initWithString: string
+                                                 attributes: attributes
+                                                    maxSize: maxSize]
+            autorelease];
+
+    NSStringDrawer_CacheItem* key = [[NSStringDrawer_CacheItem alloc]
+            initWithCopiedString: string
+                      attributes: attributes
+                         maxSize: maxSize];
+    [_drawCache setObject: engine forKey: key];
+    [key release];
+
+    return engine;
+}
+
+- (NSStringDrawer_Engine *) _engineForAttributedString:
+                                  (NSAttributedString *) string
+                                               maxSize: (NSSize) maxSize
+{
+    NSStringDrawer_CacheItem* probe = [[NSStringDrawer_CacheItem alloc]
+            initWithAttributedString: string
+                             maxSize: maxSize];
+    NSStringDrawer_Engine* engine = [_drawCache objectForKey: probe];
+    [probe release];
+
+    if (engine != nil)
+        return engine;
+
+    engine = [[[NSStringDrawer_Engine alloc] initWithAttributedString: string
+                                                              maxSize: maxSize]
+            autorelease];
+
+    NSStringDrawer_CacheItem* key = [[NSStringDrawer_CacheItem alloc]
+            initWithCopiedAttributedString: string
+                                   maxSize: maxSize];
+    [_drawCache setObject: engine forKey: key];
+    [key release];
+
+    return engine;
 }
 
 - (NSSize) sizeOfString: (NSString *) string
@@ -98,9 +186,10 @@ const CGFloat NSStringDrawerLargeDimension = 1000000.;
     [_textStorage endEditing];
     NSSize result = [_layoutManager usedRectForTextContainer: _textContainer].size;
 
-    NSStringDrawer_CacheItem* cacheKey = [[NSStringDrawer_CacheItem alloc] initWithString: string
-                                                                               attributes: attributes
-                                                                                  maxSize: maxSize];
+    NSStringDrawer_CacheItem* cacheKey = [[NSStringDrawer_CacheItem alloc]
+            initWithCopiedString: string
+                      attributes: attributes
+                         maxSize: maxSize];
     [_cache setObject: [NSValue valueWithSize: result]
               forKey: cacheKey];
 
@@ -112,22 +201,11 @@ const CGFloat NSStringDrawerLargeDimension = 1000000.;
         withAttributes: (NSDictionary *) attributes
                 inRect: (NSRect) rect
 {
-    NSRange glyphRange;
-
-    [_textContainer setContainerSize: rect.size];
-    [_textStorage beginEditing];
-    [_textStorage
-            replaceCharactersInRange: NSMakeRange(0, [_textStorage length])
-                          withString: string];
-    [_textStorage setAttributes: attributes
-                          range: NSMakeRange(0, [_textStorage length])];
-    [_textStorage endEditing];
-
-    glyphRange = [_layoutManager glyphRangeForTextContainer: _textContainer];
-
-    [_layoutManager drawBackgroundForGlyphRange: glyphRange
-                                        atPoint: rect.origin];
-    [_layoutManager drawGlyphsForGlyphRange: glyphRange atPoint: rect.origin];
+    NSStringDrawer_Engine* engine =
+            [self _engineForString: string
+                        attributes: attributes
+                           maxSize: rect.size];
+    [engine drawAtPoint: rect.origin];
 }
 
 - (void) drawString: (NSString *) string
@@ -135,24 +213,15 @@ const CGFloat NSStringDrawerLargeDimension = 1000000.;
                atPoint: (NSPoint) point
                 inSize: (NSSize) maxSize
 {
-    NSRange glyphRange;
-
     if (maxSize.width == NSZeroSize.width &&
         maxSize.height == NSZeroSize.height)
         maxSize = NSMakeSize(NSStringDrawerLargeDimension,
                              NSStringDrawerLargeDimension);
-    [_textContainer setContainerSize: maxSize];
-    [_textStorage beginEditing];
-    [_textStorage
-            replaceCharactersInRange: NSMakeRange(0, [_textStorage length])
-                          withString: string];
-    [_textStorage setAttributes: attributes
-                          range: NSMakeRange(0, [_textStorage length])];
-    [_textStorage endEditing];
-
-    glyphRange = [_layoutManager glyphRangeForTextContainer: _textContainer];
-    [_layoutManager drawBackgroundForGlyphRange: glyphRange atPoint: point];
-    [_layoutManager drawGlyphsForGlyphRange: glyphRange atPoint: point];
+    NSStringDrawer_Engine* engine =
+            [self _engineForString: string
+                        attributes: attributes
+                           maxSize: maxSize];
+    [engine drawAtPoint: point];
 }
 
 - (NSSize) sizeOfAttributedString: (NSAttributedString *) astring
@@ -179,8 +248,9 @@ const CGFloat NSStringDrawerLargeDimension = 1000000.;
     [_textStorage setAttributedString: astring];
     NSSize result = [_layoutManager usedRectForTextContainer: _textContainer].size;
 
-    NSStringDrawer_CacheItem* realCacheKey = [[NSStringDrawer_CacheItem alloc] initWithAttributedString: astring
-                                                                                            maxSize: maxSize];
+    NSStringDrawer_CacheItem* realCacheKey = [[NSStringDrawer_CacheItem alloc]
+            initWithCopiedAttributedString: astring
+                                   maxSize: maxSize];
     [_cache setObject: [NSValue valueWithSize: result]
               forKey: realCacheKey];
 
@@ -191,33 +261,24 @@ const CGFloat NSStringDrawerLargeDimension = 1000000.;
 - (void) drawAttributedString: (NSAttributedString *) astring
                        inRect: (NSRect) rect
 {
-    NSRange glyphRange;
-
-    [_textContainer setContainerSize: rect.size];
-    [_textStorage setAttributedString: astring];
-
-    glyphRange = [_layoutManager glyphRangeForTextContainer: _textContainer];
-    [_layoutManager drawBackgroundForGlyphRange: glyphRange
-                                        atPoint: rect.origin];
-    [_layoutManager drawGlyphsForGlyphRange: glyphRange atPoint: rect.origin];
+    NSStringDrawer_Engine* engine =
+            [self _engineForAttributedString: astring
+                                     maxSize: rect.size];
+    [engine drawAtPoint: rect.origin];
 }
 
 - (void) drawAttributedString: (NSAttributedString *) astring
                       atPoint: (NSPoint) point
                        inSize: (NSSize) maxSize
 {
-    NSRange glyphRange;
-
     if (maxSize.width == NSZeroSize.width &&
         maxSize.height == NSZeroSize.height)
         maxSize = NSMakeSize(NSStringDrawerLargeDimension,
                              NSStringDrawerLargeDimension);
-    [_textContainer setContainerSize: maxSize];
-    [_textStorage setAttributedString: astring];
-
-    glyphRange = [_layoutManager glyphRangeForTextContainer: _textContainer];
-    [_layoutManager drawBackgroundForGlyphRange: glyphRange atPoint: point];
-    [_layoutManager drawGlyphsForGlyphRange: glyphRange atPoint: point];
+    NSStringDrawer_Engine* engine =
+            [self _engineForAttributedString: astring
+                                     maxSize: maxSize];
+    [engine drawAtPoint: point];
 }
 
 @end
@@ -312,6 +373,30 @@ const CGFloat NSStringDrawerLargeDimension = 1000000.;
     return self;
 }
 
+// Keys that stay in a cache have to snapshot what they were given. NSCache
+// retains its keys, so a caller mutating a string it drew with would move a
+// live key out from under its own hash, leaving an entry that can neither be
+// found again nor evicted when the cache trims.
+-(instancetype) initWithCopiedString: (NSString *) string
+                          attributes: (NSDictionary *) attribs
+                             maxSize: (NSSize) size
+{
+    _string = [string copy];
+    _attributes = [attribs copy];
+    _maxSize = size;
+
+    return self;
+}
+
+-(instancetype) initWithCopiedAttributedString: (NSAttributedString *) string
+                                       maxSize: (NSSize) size
+{
+    _attributedString = [string copy];
+    _maxSize = size;
+
+    return self;
+}
+
 - (NSUInteger) hash {
     NSUInteger h;
 
@@ -335,17 +420,19 @@ const CGFloat NSStringDrawerLargeDimension = 1000000.;
     if (!CGSizeEqualToSize(_maxSize, oo->_maxSize))
         return NO;
 
+    if ((_attributedString == nil) != (oo->_attributedString == nil))
+        return NO;
+
     if (_attributedString != nil) {
         if (![_attributedString isEqual: oo->_attributedString])
             return NO;
     } else {
-        if (![_string isEqual: oo->_string])
+        if (_string != oo->_string && ![_string isEqual: oo->_string])
             return NO;
 
-        if (_attributes != nil && oo->_attributes != nil) {
-            if (![_attributes isEqual: oo->_attributes])
-                return NO;
-        }
+        if (_attributes != oo->_attributes &&
+            ![_attributes isEqual: oo->_attributes])
+            return NO;
     }
 
     return YES;
@@ -357,4 +444,63 @@ const CGFloat NSStringDrawerLargeDimension = 1000000.;
     [_attributedString release];
     [super dealloc];
 }
+@end
+
+@implementation NSStringDrawer_Engine
+
+- (void) _setUpWithMaxSize: (NSSize) size {
+    _textStorage = [NSTextStorage new];
+    _layoutManager = [NSLayoutManager new];
+    _textContainer = [[NSTextContainer alloc] init];
+    [_textContainer setLineFragmentPadding: 0];
+
+    [_textStorage addLayoutManager: _layoutManager];
+    [_layoutManager addTextContainer: _textContainer];
+    [_textContainer setContainerSize: size];
+}
+
+- (instancetype) initWithString: (NSString *) string
+                     attributes: (NSDictionary *) attributes
+                        maxSize: (NSSize) size {
+    self = [super init];
+    if (self != nil) {
+        [self _setUpWithMaxSize: size];
+
+        [_textStorage beginEditing];
+        [_textStorage
+                replaceCharactersInRange: NSMakeRange(0, [_textStorage length])
+                              withString: string];
+        [_textStorage setAttributes: attributes
+                              range: NSMakeRange(0, [_textStorage length])];
+        [_textStorage endEditing];
+    }
+    return self;
+}
+
+- (instancetype) initWithAttributedString: (NSAttributedString *) string
+                                  maxSize: (NSSize) size {
+    self = [super init];
+    if (self != nil) {
+        [self _setUpWithMaxSize: size];
+
+        [_textStorage setAttributedString: string];
+    }
+    return self;
+}
+
+- (void) drawAtPoint: (NSPoint) point {
+    NSRange glyphRange =
+            [_layoutManager glyphRangeForTextContainer: _textContainer];
+    [_layoutManager drawBackgroundForGlyphRange: glyphRange
+                                        atPoint: point];
+    [_layoutManager drawGlyphsForGlyphRange: glyphRange atPoint: point];
+}
+
+- (void) dealloc {
+    [_textStorage release];
+    [_layoutManager release];
+    [_textContainer release];
+    [super dealloc];
+}
+
 @end
