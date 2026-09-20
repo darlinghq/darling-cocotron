@@ -22,6 +22,8 @@ typedef double CGRefreshRate;
 
 typedef CFTypeRef CGDisplayModeRef;
 
+COREGRAPHICS_EXPORT const CFStringRef kCGDisplayShowDuplicateLowResolutionModes;
+
 COREGRAPHICS_EXPORT CGError CGCaptureAllDisplays(void);
 COREGRAPHICS_EXPORT CGError CGReleaseAllDisplays(void);
 
@@ -75,6 +77,9 @@ COREGRAPHICS_EXPORT double CGDisplayModeGetRefreshRate(CGDisplayModeRef mode);
 COREGRAPHICS_EXPORT CGError CGDisplaySwitchToMode(CGDirectDisplayID display,
                                                   CFDictionaryRef mode);
 COREGRAPHICS_EXPORT size_t CGDisplayModeGetPixelWidth(CGDisplayModeRef mode);
+COREGRAPHICS_EXPORT size_t CGDisplayModeGetPixelHeight(CGDisplayModeRef mode);
+COREGRAPHICS_EXPORT uint32_t CGDisplayModeGetIOFlags(CGDisplayModeRef mode);
+COREGRAPHICS_EXPORT boolean_t CGDisplayModeIsUsableForDesktopGUI(CGDisplayModeRef mode);
 COREGRAPHICS_EXPORT CGSize CGDisplayScreenSize(CGDirectDisplayID display);
 COREGRAPHICS_EXPORT boolean_t CGDisplayIsBuiltin(CGDirectDisplayID display);
 COREGRAPHICS_EXPORT double CGDisplayRotation(CGDirectDisplayID display);
