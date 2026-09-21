@@ -27,7 +27,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #define kCGBitmapAlphaInfoMask 0x1F
 
-typedef enum {
+typedef CF_ENUM(uint32_t, CGImageAlphaInfo) {
     kCGImageAlphaNone,
     kCGImageAlphaPremultipliedLast,
     kCGImageAlphaPremultipliedFirst,
@@ -35,8 +35,9 @@ typedef enum {
     kCGImageAlphaFirst,
     kCGImageAlphaNoneSkipLast,
     kCGImageAlphaNoneSkipFirst,
-    kCGImageAlphaOnly,
-} CGImageAlphaInfo;
+    // Prefix stripping alone would name this case .only; Apple's Swift spelling is .alphaOnly.
+    kCGImageAlphaOnly CF_SWIFT_NAME(alphaOnly),
+};
 
 enum {
     kCGBitmapFloatComponents = 0x100,

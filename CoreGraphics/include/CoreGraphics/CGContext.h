@@ -44,34 +44,34 @@ typedef enum {
     kCGEncodingMacRoman,
 } CGTextEncoding;
 
-typedef enum {
+typedef CF_ENUM(int32_t, CGLineCap) {
     kCGLineCapButt,
     kCGLineCapRound,
     kCGLineCapSquare,
-} CGLineCap;
+};
 
-typedef enum {
+typedef CF_ENUM(int32_t, CGLineJoin) {
     kCGLineJoinMiter,
     kCGLineJoinRound,
     kCGLineJoinBevel,
-} CGLineJoin;
+};
 
-typedef enum {
+typedef CF_ENUM(int32_t, CGPathDrawingMode) {
     kCGPathFill,
     kCGPathEOFill,
     kCGPathStroke,
     kCGPathFillStroke,
     kCGPathEOFillStroke
-} CGPathDrawingMode;
+};
 
-typedef enum {
+typedef CF_ENUM(int32_t, CGInterpolationQuality) {
     kCGInterpolationDefault,
     kCGInterpolationNone,
     kCGInterpolationLow,
     kCGInterpolationHigh,
-} CGInterpolationQuality;
+};
 
-typedef enum {
+typedef CF_ENUM(int32_t, CGBlendMode) {
     // seperable
     kCGBlendModeNormal,
     kCGBlendModeMultiply,
@@ -103,7 +103,7 @@ typedef enum {
     kCGBlendModeXOR,
     kCGBlendModePlusDarker,
     kCGBlendModePlusLighter,
-} CGBlendMode;
+};
 
 typedef int CGTextDrawingMode;
 
