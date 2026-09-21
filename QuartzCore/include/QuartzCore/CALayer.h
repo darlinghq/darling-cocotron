@@ -75,6 +75,10 @@ typedef NSString *CALayerContentsFilter NS_TYPED_ENUM;
     CGFloat _opacity;
     BOOL _opaque;
     id _contents;
+    CGFloat _contentsScale;
+    CGRect _contentsCenter;
+    NSString *_contentsFormat;
+    BOOL _allowsEdgeAntialiasing;
     CATransform3D _transform;
     CATransform3D _sublayerTransform;
     NSString *_minificationFilter;
@@ -102,8 +106,18 @@ typedef NSString *CALayerContentsFilter NS_TYPED_ENUM;
 @property CGRect bounds;
 @property CGRect frame;
 @property CGFloat opacity;
-@property BOOL opaque;
+@property(getter=isOpaque) BOOL opaque;
 @property(retain) id contents;
+
+// How contents maps onto the layer: contentsScale is the ratio of contents
+// pixels to layer points, contentsCenter the stretchable region of the
+// contents in unit coordinates. Stored and defaulted per the documented
+// behaviour, but CARenderer still draws contents unscaled and unstretched,
+// the way masksToBounds is stored without clipping yet.
+@property CGFloat contentsScale;
+@property CGRect contentsCenter;
+@property(copy) CALayerContentsFormat contentsFormat;
+
 //@property CATransform3D transform;
 @property CATransform3D sublayerTransform;
 
@@ -119,6 +133,9 @@ typedef NSString *CALayerContentsFilter NS_TYPED_ENUM;
 @property CGFloat cornerRadius;
 @property BOOL masksToBounds;
 @property(getter=isHidden) BOOL hidden;
+
+// Stored only; CARenderer does not yet antialias layer edges.
+@property BOOL allowsEdgeAntialiasing;
 
 // When YES, a change of the bounds size marks the layer as needing display.
 @property BOOL needsDisplayOnBoundsChange;

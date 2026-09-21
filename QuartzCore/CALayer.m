@@ -166,7 +166,7 @@ NSString *const kCAContentsFormatGray8Uint = @"Gray8";
     _opacity = value;
 }
 
-- (BOOL) opaque {
+- (BOOL) isOpaque {
     return _opaque;
 }
 
@@ -182,6 +182,40 @@ NSString *const kCAContentsFormatGray8Uint = @"Gray8";
     value = [value retain];
     [_contents release];
     _contents = value;
+}
+
+- (CGFloat) contentsScale {
+    return _contentsScale;
+}
+
+- (void) setContentsScale: (CGFloat) value {
+    _contentsScale = value;
+}
+
+- (CGRect) contentsCenter {
+    return _contentsCenter;
+}
+
+- (void) setContentsCenter: (CGRect) value {
+    _contentsCenter = value;
+}
+
+- (CALayerContentsFormat) contentsFormat {
+    return _contentsFormat;
+}
+
+- (void) setContentsFormat: (CALayerContentsFormat) value {
+    value = [value copy];
+    [_contentsFormat release];
+    _contentsFormat = value;
+}
+
+- (BOOL) allowsEdgeAntialiasing {
+    return _allowsEdgeAntialiasing;
+}
+
+- (void) setAllowsEdgeAntialiasing: (BOOL) value {
+    _allowsEdgeAntialiasing = value;
 }
 
 - (CATransform3D) transform {
@@ -230,6 +264,11 @@ NSString *const kCAContentsFormatGray8Uint = @"Gray8";
     _opacity = 1.0;
     _opaque = YES;
     _contents = nil;
+    _contentsScale = 1.0;
+    // The whole contents image stretches, i.e. no fixed border.
+    _contentsCenter = CGRectMake(0, 0, 1, 1);
+    _contentsFormat = [kCAContentsFormatRGBA8Uint copy];
+    _allowsEdgeAntialiasing = NO;
     _transform = CATransform3DIdentity;
     _sublayerTransform = CATransform3DIdentity;
     _minificationFilter = kCAFilterLinear;
@@ -243,6 +282,7 @@ NSString *const kCAContentsFormatGray8Uint = @"Gray8";
     [_animations release];
     [_minificationFilter release];
     [_magnificationFilter release];
+    [_contentsFormat release];
     if (_backgroundColor)
         CGColorRelease(_backgroundColor);
     if (_borderColor)
