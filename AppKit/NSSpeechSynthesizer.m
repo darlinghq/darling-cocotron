@@ -25,6 +25,7 @@ NSVoiceGenderName const NSVoiceGenderMale = @"VoiceGenderMale";
 
 NSVoiceAttributeKey const NSVoiceName = @"VoiceName";
 NSVoiceAttributeKey const NSVoiceGender = @"VoiceGender";
+NSVoiceAttributeKey const NSVoiceDemoText = @"VoiceDemoText";
 NSVoiceAttributeKey const NSVoiceLocaleIdentifier = @"VoiceLocaleIdentifier";
 
 NSSpeechPropertyKey const NSSpeechRateProperty = @"rate";
