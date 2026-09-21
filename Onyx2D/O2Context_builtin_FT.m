@@ -184,7 +184,8 @@ static void renderFreeTypeBitmap(O2Context_builtin_FT *self, O2Surface *surface,
            advances: (const O2Size *) advances
               count: (NSUInteger) count
 {
-    // FIXME: use advances if not NULL
+    if (count == 0)
+        return;
 
     if (_surface == NULL)
         return;
@@ -229,33 +230,40 @@ static void renderFreeTypeBitmap(O2Context_builtin_FT *self, O2Surface *surface,
             return;
         }
 
+        O2Size defaultAdvances[count];
+
+        if (advances == NULL)
+            O2ContextGetDefaultAdvances(self, glyphs, defaultAdvances, count);
+
+        const O2Size *useAdvances = (advances != NULL) ? advances : defaultAdvances;
+
         for (i = 0; i < count; i++) {
             O2FreeTypeCachedGlyph *cached =
                     [font rasterizeGlyph: glyphs[i] pointSize: fontSize.height];
 
-            if (cached == nil)
-                continue;
+            if (cached != nil)
+                renderFreeTypeBitmap(self, _surface, &cached->bitmap,
+                                     point.x + cached->left,
+                                     point.y - cached->top, paint);
 
-            renderFreeTypeBitmap(self, _surface, &cached->bitmap,
-                                 point.x + cached->left,
-                                 point.y - cached->top, paint);
+            if (advances != NULL) {
+                // Advances are in text space, so only the linear part of Trm
+                // applies; that is also what carries the device y-flip.
+                O2Size step = O2SizeApplyAffineTransform(advances[i], Trm);
 
-            point.x += cached->advance >> 6;
+                point.x += step.width;
+                point.y += step.height;
+            } else if (cached != nil) {
+                // Keep FreeType's hinted advance here; defaultAdvances would
+                // change what this path renders today. Cost: the draw step and
+                // the text-position update below then come from different
+                // sources, so chained runs drift by the hinting delta.
+                point.x += cached->advance >> 6;
+            }
         }
 
         O2PaintRelease(paint);
-
-        int glyphAdvances[count];
-        O2Float unitsPerEm = O2FontGetUnitsPerEm(font);
-
-        O2FontGetGlyphAdvances(font, glyphs, count, glyphAdvances);
-
-        O2Float total = 0;
-
-        for (i = 0; i < count; i++)
-            total += glyphAdvances[i];
-
-        total = (total / O2FontGetUnitsPerEm(font)) * gState->_pointSize;
+        O2ContextConcatAdvancesToTextMatrix(self, useAdvances, count);
 
     } /* font lock */
     O2SurfaceUnlock(_surface);
