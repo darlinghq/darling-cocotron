@@ -140,7 +140,7 @@ typedef NSString *CALayerContentsFilter NS_TYPED_ENUM;
 // When YES, a change of the bounds size marks the layer as needing display.
 @property BOOL needsDisplayOnBoundsChange;
 
-- init;
+- (nonnull instancetype)init;
 
 - (void) addSublayer: (CALayer *) layer;
 - (void) replaceSublayer: (CALayer *) layer with: (CALayer *) other;
