@@ -27,7 +27,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     NSTouchBar *_touchBar;
 }
 
-- (NSResponder *) nextResponder;
+@property (weak) NSResponder *nextResponder;
 
 @property(retain) NSTouchBar *touchBar;
 - (NSTouchBar *) makeTouchBar;
@@ -35,7 +35,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (NSMenu *) menu;
 - (NSUndoManager *) undoManager;
 
-- (void) setNextResponder: (NSResponder *) responder;
 - (void) setMenu: (NSMenu *) menu;
 
 - validRequestorForSendType: (NSString *) sendType

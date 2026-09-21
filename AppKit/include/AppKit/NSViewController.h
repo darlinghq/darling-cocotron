@@ -17,7 +17,7 @@
 - (NSString *) nibName;
 - (NSBundle *) nibBundle;
 
-- (NSView *) view;
+@property (retain) NSView *view;
 - (NSString *) title;
 - representedObject;
 
@@ -25,7 +25,6 @@
 
 - (void) setTitle: (NSString *) value;
 
-- (void) setView: (NSView *) value;
 
 - (void) loadView;
 - (BOOL) isViewLoaded; // 10.10

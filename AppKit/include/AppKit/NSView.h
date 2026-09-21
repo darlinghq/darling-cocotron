@@ -166,10 +166,10 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPre
 
 - (instancetype) initWithFrame: (NSRect) frame;
 
-- (NSRect) frame;
+@property NSRect frame;
 - (CGFloat) frameRotation;
 - (CGFloat) frameCenterRotation;
-- (NSRect) bounds;
+@property NSRect bounds;
 - (CGFloat) boundsRotation;
 - (BOOL) isRotatedFromBase;
 - (BOOL) isRotatedOrScaledFromBase;
@@ -180,21 +180,21 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPre
 
 - (void) scaleUnitSquareToSize: (NSSize) size;
 
-- (NSWindow *) window;
-- (NSView *) superview;
+@property (readonly, weak) NSWindow *window;
+@property (readonly, weak) NSView *superview;
 - (BOOL) isDescendantOf: (NSView *) other;
 - (NSView *) ancestorSharedWithView: (NSView *) view;
 - (NSScrollView *) enclosingScrollView;
 - (NSRect) adjustScroll: (NSRect) toRect;
 
-- (NSArray<__kindof NSView *> *) subviews;
-- (BOOL) autoresizesSubviews;
+@property (copy) NSArray<__kindof NSView *> *subviews;
+@property BOOL autoresizesSubviews;
 - (NSAutoresizingMaskOptions) autoresizingMask;
 - (NSFocusRingType) focusRingType;
 
 - (NSInteger) tag;
-- (BOOL) isFlipped;
-- (BOOL) isOpaque;
+@property (readonly) BOOL isFlipped;
+@property (readonly) BOOL isOpaque;
 - (CGFloat) alphaValue;
 - (void) setAlphaValue: (CGFloat) alpha;
 - (int) gState;
@@ -205,10 +205,9 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPre
 - (void) cacheDisplayInRect: (NSRect) rect
            toBitmapImageRep: (NSBitmapImageRep *) imageRep;
 
-- (BOOL) isHidden;
-- (BOOL) isHiddenOrHasHiddenAncestor;
+@property (getter=isHidden) BOOL hidden;
+@property (readonly) BOOL isHiddenOrHasHiddenAncestor;
 @property(getter=isDrawingFindIndicator, readonly) BOOL drawingFindIndicator;
-- (void) setHidden: (BOOL) flag;
 - (void) viewDidHide;
 - (void) viewDidUnhide;
 
@@ -236,13 +235,11 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPre
 - (NSRect) convertRect: (NSRect) rect toView: (NSView *) viewOrNil;
 - (NSRect) centerScanRect: (NSRect) rect;
 
-- (void) setFrame: (NSRect) frame;
 - (void) setFrameSize: (NSSize) size;
 - (void) setFrameOrigin: (NSPoint) origin;
 - (void) setFrameRotation: (CGFloat) angle;
 - (void) setFrameCenterRotation: (CGFloat) angle;
 
-- (void) setBounds: (NSRect) bounds;
 - (void) setBoundsSize: (NSSize) size;
 - (void) setBoundsOrigin: (NSPoint) origin;
 - (void) setBoundsRotation: (CGFloat) angle;
@@ -262,13 +259,11 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPre
          positioned: (NSWindowOrderingMode) ordering
          relativeTo: (NSView *) relativeTo;
 - (void) replaceSubview: (NSView *) oldView with: (NSView *) newView;
-- (void) setSubviews: (NSArray *) newSubviews;
 - (void) sortSubviewsUsingFunction:
                  (NSComparisonResult (*)(id, id, void *)) compareFunction
                            context: (void *) context;
 - (void) didAddSubview: (NSView *) subview;
 - (void) willRemoveSubview: (NSView *) subview;
-- (void) setAutoresizesSubviews: (BOOL) flag;
 - (void) setAutoresizingMask: (NSAutoresizingMaskOptions) mask;
 - (void) setFocusRingType: (NSFocusRingType) value;
 
@@ -346,15 +341,10 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPre
 - (void) setUpGState;
 - (void) renewGState;
 
-- (CALayer *) layer;
-- (void) setLayer: (CALayer *) newLayer;
-- (BOOL) wantsLayer;
-- (void) setWantsLayer: (BOOL) wantsLayer;
-- (NSViewLayerContentsPlacement) layerContentsPlacement;
-- (void) setLayerContentsPlacement: (NSViewLayerContentsPlacement) newPlacement;
-- (NSViewLayerContentsRedrawPolicy) layerContentsRedrawPolicy;
-- (void) setLayerContentsRedrawPolicy:
-        (NSViewLayerContentsRedrawPolicy) newPolicy;
+@property (retain) CALayer *layer;
+@property BOOL wantsLayer;
+@property NSViewLayerContentsPlacement layerContentsPlacement;
+@property NSViewLayerContentsRedrawPolicy layerContentsRedrawPolicy;
 - (CALayer *) makeBackingLayer;
 
 // A layer-backed view that answers YES is updated with -updateLayer instead
@@ -375,8 +365,7 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPre
 - (NSShadow *) shadow;
 - (void) setShadow: (NSShadow *) shadow;
 
-- (BOOL) needsDisplay;
-- (void) setNeedsDisplay: (BOOL) flag;
+@property BOOL needsDisplay;
 - (void) setNeedsDisplayInRect: (NSRect) rect;
 - (void) setKeyboardFocusRingNeedsDisplayInRect: (NSRect) rect;
 @property (readonly) NSRect focusRingMaskBounds;

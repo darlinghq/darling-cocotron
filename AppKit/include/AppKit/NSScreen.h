@@ -37,18 +37,18 @@ typedef NSString *NSDeviceDescriptionKey;
 @property(readonly) NSWindowDepth depth;
 @property(readonly, copy) NSDictionary<NSDeviceDescriptionKey, id> *deviceDescription;
 
-+ (NSScreen *) mainScreen;
+@property (class, readonly, retain) NSScreen *mainScreen;
 
 + (NSArray *) screens;
 
 - initWithFrame: (NSRect) frame visibleFrame: (NSRect) visibleFrame;
 
-- (NSRect) frame;
+@property (readonly) NSRect frame;
 
 - (NSRect) visibleFrame;
 
 - (CGFloat) userSpaceScaleFactor;
-- (CGFloat) backingScaleFactor;
+@property (readonly) CGFloat backingScaleFactor;
 - (NSColorSpace *) colorSpace;
 - (NSString *) localizedName;
 

@@ -159,19 +159,19 @@ APPKIT_EXPORT NSNotificationName NSControlTintDidChangeNotification;
 
 - (NSView *) controlView;
 - (NSCellType) type;
-- (NSControlStateValue) state;
+@property NSControlStateValue state;
 
 - target;
 - (SEL) action;
 - (NSInteger) tag;
 - (NSInteger) entryType;
 - (id) formatter;
-- (NSFont *) font;
+@property (retain) NSFont *font;
 - (NSImage *) image;
 - (NSTextAlignment) alignment;
-- (NSLineBreakMode) lineBreakMode;
+@property NSLineBreakMode lineBreakMode;
 - (BOOL) usesSingleLineMode;
-- (NSWritingDirection) baseWritingDirection;
+@property NSWritingDirection baseWritingDirection;
 - (BOOL) wraps;
 - (NSString *) title;
 
@@ -191,18 +191,17 @@ APPKIT_EXPORT NSNotificationName NSControlTintDidChangeNotification;
 - (NSString *) stringValue;
 - (int) intValue;
 - (float) floatValue;
-- (double) doubleValue;
+@property double doubleValue;
 - (NSInteger) integerValue;
 - (NSAttributedString *) attributedStringValue;
 - (id) representedObject;
-- (NSControlSize) controlSize;
+@property NSControlSize controlSize;
 - (NSFocusRingType) focusRingType;
 - (NSBackgroundStyle) backgroundStyle;
 
 - (void) setControlView: (NSView *) view;
 - (void) setType: (NSCellType) type;
 
-- (void) setState: (NSControlStateValue) value;
 - (NSControlStateValue) nextState;
 - (void) setNextState;
 - (BOOL) allowsMixedState;
@@ -215,12 +214,9 @@ APPKIT_EXPORT NSNotificationName NSControlTintDidChangeNotification;
 - (void) setTag: (NSInteger) tag;
 - (void) setEntryType: (NSInteger) type;
 - (void) setFormatter: (NSFormatter *) formatter;
-- (void) setFont: (NSFont *) font;
 - (void) setImage: (NSImage *) image;
 - (void) setAlignment: (NSTextAlignment) alignment;
-- (void) setLineBreakMode: (NSLineBreakMode) value;
 - (void) setUsesSingleLineMode: (BOOL) flag;
-- (void) setBaseWritingDirection: (NSWritingDirection) value;
 - (void) setWraps: (BOOL) wraps;
 - (void) setTitle: (NSString *) title;
 
@@ -243,11 +239,9 @@ APPKIT_EXPORT NSNotificationName NSControlTintDidChangeNotification;
 - (void) setStringValue: (NSString *) value;
 - (void) setIntValue: (int) value;
 - (void) setFloatValue: (float) value;
-- (void) setDoubleValue: (double) value;
 - (void) setIntegerValue: (NSInteger) value;
 - (void) setAttributedStringValue: (NSAttributedString *) value;
 - (void) setRepresentedObject: (id) object;
-- (void) setControlSize: (NSControlSize) size;
 - (void) setFocusRingType: (NSFocusRingType) focusRingType;
 - (void) setBackgroundStyle: (NSBackgroundStyle) value;
 

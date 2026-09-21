@@ -155,7 +155,7 @@ typedef NS_OPTIONS(NSUInteger, NSApplicationPresentationOptions) {
 @property(getter=isAutomaticCustomizeTouchBarMenuItemEnabled)
         BOOL automaticCustomizeTouchBarMenuItemEnabled;
 
-+ (NSApplication *) sharedApplication;
+@property (class, readonly, retain) NSApplication *sharedApplication;
 
 + (void) detachDrawingThread: (SEL) selector
                     toTarget: target
@@ -175,7 +175,7 @@ typedef NS_OPTIONS(NSUInteger, NSApplicationPresentationOptions) {
 - (NSWindow *) keyWindow;
 - (NSImage *) applicationIconImage;
 - (BOOL) isActive;
-- (BOOL) isHidden;
+@property (readonly) BOOL isHidden;
 - (BOOL) isRunning;
 - (BOOL) isFullKeyboardAccessEnabled;
 
