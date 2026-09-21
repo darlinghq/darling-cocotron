@@ -153,6 +153,13 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPre
 @property(class, readonly) BOOL requiresConstraintBasedLayout;
 @property BOOL translatesAutoresizingMaskIntoConstraints;
 
+// NSViewNoIntrinsicMetric in both dimensions; subclasses that know their own
+// size override it.
+@property(readonly) NSSize intrinsicContentSize;
+// There is no constraint solver to notify, so nothing recomputes a size
+// from it.
+- (void) invalidateIntrinsicContentSize;
+
 + (NSView *) focusView;
 + (NSMenu *) defaultMenu;
 + (NSFocusRingType) defaultFocusRingType;

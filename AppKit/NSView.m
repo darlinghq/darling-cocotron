@@ -3094,4 +3094,11 @@ static CGFloat backingScaleFactor(NSView *view) {
     }
 }
 
+- (NSSize) intrinsicContentSize {
+    return NSMakeSize(NSViewNoIntrinsicMetric, NSViewNoIntrinsicMetric);
+}
+
+- (void) invalidateIntrinsicContentSize {
+}
+
 @end
