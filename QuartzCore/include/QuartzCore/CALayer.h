@@ -60,6 +60,10 @@ CA_EXPORT NSString *const kCAContentsFormatGray8Uint;
 
 @end
 
+// The types recent macOS SDK headers use for the kCAContentsFormat* and kCAFilter* constants.
+typedef NSString *CALayerContentsFormat NS_TYPED_ENUM;
+typedef NSString *CALayerContentsFilter NS_TYPED_ENUM;
+
 @interface CALayer : NSObject {
     CALayerContext *_context;
     CALayer *_superlayer;
