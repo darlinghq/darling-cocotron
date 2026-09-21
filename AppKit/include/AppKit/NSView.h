@@ -476,12 +476,14 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPre
 - (NSRect) convertRectFromBase: (NSRect) aRect;
 - (NSRect) convertRectToBase: (NSRect) aRect;
 
-- (NSRect) convertRectToBacking: (NSRect) rect;
-- (NSRect) convertRectFromBacking: (NSRect) rect;
-- (NSPoint) convertPointToBacking: (NSPoint) point;
-- (NSPoint) convertPointFromBacking: (NSPoint) point;
-- (NSSize) convertSizeToBacking: (NSSize) size;
-- (NSSize) convertSizeFromBacking: (NSSize) size;
+// macOS names all six convertToBacking(_:)/convertFromBacking(_:) in Swift,
+// overloaded on the argument type; without these Swift sees the ObjC spellings.
+- (NSRect) convertRectToBacking: (NSRect) rect NS_SWIFT_NAME(convertToBacking(_:));
+- (NSRect) convertRectFromBacking: (NSRect) rect NS_SWIFT_NAME(convertFromBacking(_:));
+- (NSPoint) convertPointToBacking: (NSPoint) point NS_SWIFT_NAME(convertToBacking(_:));
+- (NSPoint) convertPointFromBacking: (NSPoint) point NS_SWIFT_NAME(convertFromBacking(_:));
+- (NSSize) convertSizeToBacking: (NSSize) size NS_SWIFT_NAME(convertToBacking(_:));
+- (NSSize) convertSizeFromBacking: (NSSize) size NS_SWIFT_NAME(convertFromBacking(_:));
 
 // Stored and archived; the X11 backend has no high-resolution surfaces.
 @property BOOL wantsBestResolutionOpenGLSurface;
