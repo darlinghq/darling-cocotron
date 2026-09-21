@@ -1,6 +1,8 @@
 
 #import <QuartzCore/CABase.h>
 
+#include <stdbool.h>
+
 typedef struct {
     CGFloat m11, m12, m13, m14;
     CGFloat m21, m22, m23, m24;
@@ -9,3 +11,22 @@ typedef struct {
 } CATransform3D;
 
 CA_EXPORT const CATransform3D CATransform3DIdentity;
+
+// CATransform3D is a row-vector matrix: a point is transformed as v' = v * M,
+// so the translation lives in m41..m43 and CATransform3DConcat(a, b) applies
+// a before b.
+
+CA_EXPORT CATransform3D CATransform3DMakeTranslation(CGFloat tx, CGFloat ty, CGFloat tz);
+
+CA_EXPORT CATransform3D CATransform3DMakeScale(CGFloat sx, CGFloat sy, CGFloat sz);
+
+// Rotates by angle radians about the axis (x, y, z), which need not be a unit
+// vector. A zero-length axis yields the identity.
+CA_EXPORT CATransform3D CATransform3DMakeRotation(CGFloat angle, CGFloat x, CGFloat y, CGFloat z);
+
+CA_EXPORT CATransform3D CATransform3DConcat(CATransform3D a, CATransform3D b);
+
+// Returns the inverse of t, or t unchanged when t has no inverse.
+CA_EXPORT CATransform3D CATransform3DInvert(CATransform3D t);
+
+CA_EXPORT bool CATransform3DIsIdentity(CATransform3D t);
