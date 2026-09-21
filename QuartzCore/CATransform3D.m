@@ -141,16 +141,45 @@ CATransform3D CATransform3DInvert(CATransform3D t) {
     return pack(r);
 }
 
-bool CATransform3DIsIdentity(CATransform3D t) {
-    CGFloat a[4][4], b[4][4];
+bool CATransform3DEqualToTransform(CATransform3D a, CATransform3D b) {
+    CGFloat l[4][4], r[4][4];
 
-    unpack(t, a);
-    unpack(CATransform3DIdentity, b);
+    unpack(a, l);
+    unpack(b, r);
 
     for (int i = 0; i < 4; i++)
         for (int j = 0; j < 4; j++)
-            if (a[i][j] != b[i][j])
+            if (l[i][j] != r[i][j])
                 return false;
 
     return true;
+}
+
+bool CATransform3DIsIdentity(CATransform3D t) {
+    return CATransform3DEqualToTransform(t, CATransform3DIdentity);
+}
+
+CATransform3D CATransform3DTranslate(CATransform3D t, CGFloat tx, CGFloat ty, CGFloat tz) {
+    return CATransform3DConcat(CATransform3DMakeTranslation(tx, ty, tz), t);
+}
+
+CATransform3D CATransform3DScale(CATransform3D t, CGFloat sx, CGFloat sy, CGFloat sz) {
+    return CATransform3DConcat(CATransform3DMakeScale(sx, sy, sz), t);
+}
+
+CATransform3D CATransform3DRotate(CATransform3D t, CGFloat angle, CGFloat x, CGFloat y, CGFloat z) {
+    return CATransform3DConcat(CATransform3DMakeRotation(angle, x, y, z), t);
+}
+
+CATransform3D CATransform3DMakeAffineTransform(CGAffineTransform m) {
+    CATransform3D t = CATransform3DIdentity;
+
+    t.m11 = m.a;
+    t.m12 = m.b;
+    t.m21 = m.c;
+    t.m22 = m.d;
+    t.m41 = m.tx;
+    t.m42 = m.ty;
+
+    return t;
 }

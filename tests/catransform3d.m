@@ -81,6 +81,31 @@ int main(void) {
     eqbool("unit scale is identity",
            CATransform3DIsIdentity(CATransform3DMakeScale(1, 1, 1)), true);
 
+    // The composition helpers apply their operation before t: translating
+    // (0,0,0) by (2,3,4) and then scaling by (2,3,4) lands at (4,9,16), while
+    // scaling first leaves the later translation unscaled.
+    eq("translate composes before t", CATransform3DTranslate(scale, 2, 3, 4),
+       (CATransform3D){2,0,0,0, 0,3,0,0, 0,0,4,0, 4,9,16,1});
+    eq("scale composes before t", CATransform3DScale(translate, 2, 3, 4),
+       (CATransform3D){2,0,0,0, 0,3,0,0, 0,0,4,0, 2,3,4,1});
+    eq("rotate composes before t",
+       CATransform3DRotate(translate, M_PI/2, 0, 0, 1),
+       (CATransform3D){0,1,0,0, -1,0,0,0, 0,0,1,0, 2,3,4,1});
+
+    // Applying an operation to the identity must equal the Make* form.
+    eq("translate on identity", CATransform3DTranslate(identity, 2, 3, 4), wantTranslate);
+    eq("scale on identity", CATransform3DScale(identity, 2, 3, 4), wantScale);
+    eq("rotate on identity", CATransform3DRotate(identity, M_PI/2, 0, 0, 1), wantRotateZ);
+
+    // A 2D affine lifts into the 3D matrix leaving z alone.
+    CGAffineTransform affine = {2, 3, 4, 5, 6, 7};
+    eq("affine lifted into 3D", CATransform3DMakeAffineTransform(affine),
+       (CATransform3D){2,3,0,0, 4,5,0,0, 0,0,1,0, 6,7,0,1});
+
+    eqbool("transform equals itself", CATransform3DEqualToTransform(scale, scale), true);
+    eqbool("different transforms are unequal",
+           CATransform3DEqualToTransform(scale, translate), false);
+
     printf("catransform3d failures=%d\n", failures);
     return failures != 0;
 }
