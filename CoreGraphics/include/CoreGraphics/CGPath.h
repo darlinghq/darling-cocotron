@@ -60,7 +60,8 @@ COREGRAPHICS_EXPORT bool CGPathContainsPoint(CGPathRef self,
                                              const CGAffineTransform *xform,
                                              CGPoint point, bool evenOdd);
 
-COREGRAPHICS_EXPORT CGMutablePathRef CGPathCreateMutable(void);
+COREGRAPHICS_EXPORT CGMutablePathRef CGPathCreateMutable(void)
+    CF_SWIFT_NAME(CGMutablePath.init());
 
 COREGRAPHICS_EXPORT void CGPathMoveToPoint(CGMutablePathRef self,
                                            const CGAffineTransform *xform,
@@ -111,7 +112,8 @@ COREGRAPHICS_EXPORT CGPathRef
 CGPathCreateWithEllipseInRect(CGRect rect, const CGAffineTransform *transform);
 
 COREGRAPHICS_EXPORT CGPathRef
-CGPathCreateWithRect(CGRect rect, const CGAffineTransform *transform);
+CGPathCreateWithRect(CGRect rect, const CGAffineTransform *transform)
+    CF_SWIFT_NAME(CGPath.init(rect:transform:));
 
 COREGRAPHICS_EXPORT CGRect CGPathGetPathBoundingBox(CGPathRef path);
 
