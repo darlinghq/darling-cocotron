@@ -1,7 +1,7 @@
 #define GL_GLEXT_PROTOTYPES 1
 
 #import <CoreGraphics/CGLPixelSurface.h>
-#import <CoreGraphics/CGWindow.h>
+#import <CoreGraphics/CGWindowPrivate.h>
 #import <Onyx2D/O2Image.h>
 
 // this should be fixed upstream

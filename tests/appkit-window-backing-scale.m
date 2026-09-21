@@ -8,7 +8,7 @@
 // base classes report the documented defaults. No window is shown.
 #import <AppKit/AppKit.h>
 #import <CoreGraphics/CGSubWindow.h>
-#import <CoreGraphics/CGWindow.h>
+#import <CoreGraphics/CGWindowPrivate.h>
 #include <math.h>
 #include <objc/runtime.h>
 #include <stdio.h>
