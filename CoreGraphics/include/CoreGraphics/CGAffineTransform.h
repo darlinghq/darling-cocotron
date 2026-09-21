@@ -38,7 +38,7 @@ COREGRAPHICS_EXPORT bool CGAffineTransformIsIdentity(CGAffineTransform xform);
 COREGRAPHICS_EXPORT bool CGAffineTransformEqualToTransform(CGAffineTransform t1,
                                                            CGAffineTransform t2);
 
-static CGAffineTransform __CGAffineTransformMake(CGFloat a, CGFloat b, CGFloat c,
+static inline CGAffineTransform __CGAffineTransformMake(CGFloat a, CGFloat b, CGFloat c,
                                         CGFloat d, CGFloat tx, CGFloat ty)
 {
     CGAffineTransform xform = {a, b, c, d, tx, ty};
@@ -65,7 +65,7 @@ CGAffineTransformScale(CGAffineTransform xform, CGFloat scalex, CGFloat scaley);
 COREGRAPHICS_EXPORT CGAffineTransform
 CGAffineTransformTranslate(CGAffineTransform xform, CGFloat tx, CGFloat ty);
 
-static CGPoint __CGPointApplyAffineTransform(CGPoint point, CGAffineTransform xform) {
+static inline CGPoint __CGPointApplyAffineTransform(CGPoint point, CGAffineTransform xform) {
     CGPoint p;
 
     p.x = xform.a * point.x + xform.c * point.y + xform.tx;
@@ -75,7 +75,7 @@ static CGPoint __CGPointApplyAffineTransform(CGPoint point, CGAffineTransform xf
 }
 #define CGPointApplyAffineTransform __CGPointApplyAffineTransform
 
-static CGSize __CGSizeApplyAffineTransform(CGSize size, CGAffineTransform xform) {
+static inline CGSize __CGSizeApplyAffineTransform(CGSize size, CGAffineTransform xform) {
     CGSize s;
 
     s.width = xform.a * size.width + xform.c * size.height;
