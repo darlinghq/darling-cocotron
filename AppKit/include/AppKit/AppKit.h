@@ -27,6 +27,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSAffineTransform.h>
 #import <AppKit/NSAlert.h>
 #import <AppKit/NSAnimation.h>
+#import <AppKit/NSAnimationContext.h>
 #import <AppKit/NSAppearance.h>
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSArrayController.h>
@@ -87,6 +88,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSGraphics.h>
 #import <AppKit/NSGraphicsContext.h>
 #import <AppKit/NSGroupTouchBarItem.h>
+#import <AppKit/NSHaptics.h>
 #import <AppKit/NSHelpManager.h>
 #import <AppKit/NSImage.h>
 #import <AppKit/NSImageCell.h>
@@ -170,6 +172,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSStepper.h>
 #import <AppKit/NSStepperCell.h>
 #import <AppKit/NSStringDrawing.h>
+#import <AppKit/NSSwitch.h>
 #import <AppKit/NSTabView.h>
 #import <AppKit/NSTabViewItem.h>
 #import <AppKit/NSTableCellView.h>

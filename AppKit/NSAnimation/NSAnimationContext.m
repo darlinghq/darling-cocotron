@@ -18,7 +18,7 @@
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  SOFTWARE. */
 
-#import "NSAnimationContext.h"
+#import <AppKit/NSAnimationContext.h>
 #import <AppKit/NSRaise.h>
 
 @implementation NSAnimationContext
