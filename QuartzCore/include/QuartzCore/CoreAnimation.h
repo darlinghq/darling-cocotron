@@ -16,6 +16,7 @@
 #import <QuartzCore/CAScrollLayer.h>
 #import <QuartzCore/CAShapeLayer.h>
 #import <QuartzCore/CATransformLayer.h>
+#import <QuartzCore/CASpringAnimation.h>
 
 /* Undocumented */
 #import <QuartzCore/CAFilter.h>
