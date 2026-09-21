@@ -40,11 +40,11 @@ typedef enum {
     NSCompositePlusLighter
 } NSCompositingOperation;
 
-typedef enum {
+typedef NS_ENUM(NSInteger, NSWindowOrderingMode) {
     NSWindowBelow = -1,
     NSWindowOut = 0,
     NSWindowAbove = 1
-} NSWindowOrderingMode;
+} NS_SWIFT_NAME(NSWindow.OrderingMode);
 
 typedef enum {
     NSFocusRingOnly,

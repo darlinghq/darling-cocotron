@@ -29,7 +29,7 @@ typedef NS_ENUM(NSInteger, NSLayoutConstraintOrientation) {
 };
 
 APPKIT_EXPORT const CGFloat NSViewNoInstrinsicMetric;
-APPKIT_EXPORT const CGFloat NSViewNoIntrinsicMetric;
+APPKIT_EXPORT const CGFloat NSViewNoIntrinsicMetric NS_SWIFT_NAME(NSView.noIntrinsicMetric);
 
 // Insets named by writing direction rather than by side.
 typedef struct NSDirectionalEdgeInsets {

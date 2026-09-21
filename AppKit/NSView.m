@@ -1645,6 +1645,12 @@ static char inputContextKey;
     // Intentionally empty.
 }
 
+- (void) viewDidChangeBackingProperties {
+}
+
+- (void) viewDidChangeEffectiveAppearance {
+}
+
 - (void) viewWillMoveToWindow: (NSWindow *) window {
     // Intentionally empty.
 }
@@ -3119,6 +3125,14 @@ static CGFloat backingScaleFactor(NSView *view) {
 }
 
 - (void) invalidateIntrinsicContentSize {
+}
+
+- (void) updateConstraints {
+    // An override point: there is no constraint solver to drive.
+}
+
+- (void) layout {
+    // An override point: there is no constraint solver to drive.
 }
 
 @end

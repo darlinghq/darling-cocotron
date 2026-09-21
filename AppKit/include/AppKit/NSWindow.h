@@ -157,34 +157,58 @@ enum {
     NSSelectingPrevious = 2,
 };
 
-APPKIT_EXPORT const NSNotificationName NSWindowDidBecomeKeyNotification;
-APPKIT_EXPORT const NSNotificationName NSWindowDidResignKeyNotification;
-APPKIT_EXPORT const NSNotificationName NSWindowDidBecomeMainNotification;
-APPKIT_EXPORT const NSNotificationName NSWindowDidResignMainNotification;
-APPKIT_EXPORT const NSNotificationName NSWindowWillMiniaturizeNotification;
-APPKIT_EXPORT const NSNotificationName NSWindowDidMiniaturizeNotification;
-APPKIT_EXPORT const NSNotificationName NSWindowDidDeminiaturizeNotification;
-APPKIT_EXPORT const NSNotificationName NSWindowWillMoveNotification;
-APPKIT_EXPORT const NSNotificationName NSWindowDidMoveNotification;
-APPKIT_EXPORT const NSNotificationName NSWindowDidResizeNotification;
-APPKIT_EXPORT const NSNotificationName NSWindowDidUpdateNotification;
-APPKIT_EXPORT const NSNotificationName NSWindowWillCloseNotification;
-APPKIT_EXPORT const NSNotificationName NSWindowWillStartLiveResizeNotification;
-APPKIT_EXPORT const NSNotificationName NSWindowDidEndLiveResizeNotification;
-APPKIT_EXPORT const NSNotificationName NSWindowWillBeginSheetNotification;
+APPKIT_EXPORT const NSNotificationName NSWindowDidBecomeKeyNotification
+        NS_SWIFT_NAME(NSWindow.didBecomeKeyNotification);
+APPKIT_EXPORT const NSNotificationName NSWindowDidResignKeyNotification
+        NS_SWIFT_NAME(NSWindow.didResignKeyNotification);
+APPKIT_EXPORT const NSNotificationName NSWindowDidBecomeMainNotification
+        NS_SWIFT_NAME(NSWindow.didBecomeMainNotification);
+APPKIT_EXPORT const NSNotificationName NSWindowDidResignMainNotification
+        NS_SWIFT_NAME(NSWindow.didResignMainNotification);
+APPKIT_EXPORT const NSNotificationName NSWindowWillMiniaturizeNotification
+        NS_SWIFT_NAME(NSWindow.willMiniaturizeNotification);
+APPKIT_EXPORT const NSNotificationName NSWindowDidMiniaturizeNotification
+        NS_SWIFT_NAME(NSWindow.didMiniaturizeNotification);
+APPKIT_EXPORT const NSNotificationName NSWindowDidDeminiaturizeNotification
+        NS_SWIFT_NAME(NSWindow.didDeminiaturizeNotification);
+APPKIT_EXPORT const NSNotificationName NSWindowWillMoveNotification
+        NS_SWIFT_NAME(NSWindow.willMoveNotification);
+APPKIT_EXPORT const NSNotificationName NSWindowDidMoveNotification
+        NS_SWIFT_NAME(NSWindow.didMoveNotification);
+APPKIT_EXPORT const NSNotificationName NSWindowDidResizeNotification
+        NS_SWIFT_NAME(NSWindow.didResizeNotification);
+APPKIT_EXPORT const NSNotificationName NSWindowDidUpdateNotification
+        NS_SWIFT_NAME(NSWindow.didUpdateNotification);
+APPKIT_EXPORT const NSNotificationName NSWindowWillCloseNotification
+        NS_SWIFT_NAME(NSWindow.willCloseNotification);
+APPKIT_EXPORT const NSNotificationName NSWindowWillStartLiveResizeNotification
+        NS_SWIFT_NAME(NSWindow.willStartLiveResizeNotification);
+APPKIT_EXPORT const NSNotificationName NSWindowDidEndLiveResizeNotification
+        NS_SWIFT_NAME(NSWindow.didEndLiveResizeNotification);
+APPKIT_EXPORT const NSNotificationName NSWindowWillBeginSheetNotification
+        NS_SWIFT_NAME(NSWindow.willBeginSheetNotification);
 
-APPKIT_EXPORT const NSNotificationName NSWindowDidChangeOcclusionStateNotification;
-APPKIT_EXPORT const NSNotificationName NSWindowDidChangeScreenNotification;
-APPKIT_EXPORT const NSNotificationName NSWindowDidChangeScreenProfileNotification;
+APPKIT_EXPORT const NSNotificationName NSWindowDidChangeOcclusionStateNotification
+        NS_SWIFT_NAME(NSWindow.didChangeOcclusionStateNotification);
+APPKIT_EXPORT const NSNotificationName NSWindowDidChangeScreenNotification
+        NS_SWIFT_NAME(NSWindow.didChangeScreenNotification);
+APPKIT_EXPORT const NSNotificationName NSWindowDidChangeScreenProfileNotification
+        NS_SWIFT_NAME(NSWindow.didChangeScreenProfileNotification);
 APPKIT_EXPORT NSString *const NSBackingPropertyOldScaleFactorKey;
-APPKIT_EXPORT const NSNotificationName NSWindowDidEndSheetNotification;
-APPKIT_EXPORT const NSNotificationName NSWindowDidEnterFullScreenNotification;
-APPKIT_EXPORT const NSNotificationName NSWindowDidExitFullScreenNotification;
+APPKIT_EXPORT const NSNotificationName NSWindowDidEndSheetNotification
+        NS_SWIFT_NAME(NSWindow.didEndSheetNotification);
+APPKIT_EXPORT const NSNotificationName NSWindowDidEnterFullScreenNotification
+        NS_SWIFT_NAME(NSWindow.didEnterFullScreenNotification);
+APPKIT_EXPORT const NSNotificationName NSWindowDidExitFullScreenNotification
+        NS_SWIFT_NAME(NSWindow.didExitFullScreenNotification);
 APPKIT_EXPORT const NSNotificationName NSWindowDidOrderOffScreenNotification;
 APPKIT_EXPORT const NSNotificationName NSWindowDidOrderOnScreenNotification;
-APPKIT_EXPORT const NSNotificationName NSWindowWillEnterFullScreenNotification;
-APPKIT_EXPORT const NSNotificationName NSWindowWillExitFullScreenNotification;
-APPKIT_EXPORT const NSNotificationName NSWindowDidExposeNotification;
+APPKIT_EXPORT const NSNotificationName NSWindowWillEnterFullScreenNotification
+        NS_SWIFT_NAME(NSWindow.willEnterFullScreenNotification);
+APPKIT_EXPORT const NSNotificationName NSWindowWillExitFullScreenNotification
+        NS_SWIFT_NAME(NSWindow.willExitFullScreenNotification);
+APPKIT_EXPORT const NSNotificationName NSWindowDidExposeNotification
+        NS_SWIFT_NAME(NSWindow.didExposeNotification);
 
 @interface NSWindow : NSResponder <NSAnimatablePropertyContainer, NSUserInterfaceItemIdentification, NSAccessibility, NSAppearanceCustomization> {
     NSRect _frame;
