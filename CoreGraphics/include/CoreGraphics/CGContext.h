@@ -1,3 +1,6 @@
+#ifndef CGCONTEXT_H
+#define CGCONTEXT_H
+
 /* Copyright (c) 2006-2007 Christopher J. W. Lloyd
 
 Permission is hereby granted,free of charge,to any person obtaining a copy of
@@ -431,3 +434,5 @@ CGContextShowGlyphsAtPositions(CGContextRef c,
                                size_t count);
 
 CF_IMPLICIT_BRIDGING_DISABLED
+
+#endif /* CGCONTEXT_H */

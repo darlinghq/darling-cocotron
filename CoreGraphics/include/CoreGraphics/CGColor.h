@@ -1,3 +1,6 @@
+#ifndef CGCOLOR_H
+#define CGCOLOR_H
+
 /* Copyright (c) 2007 Christopher J. W. Lloyd
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
@@ -68,3 +71,5 @@ COREGRAPHICS_EXPORT const CFStringRef kCGColorBlack;
 COREGRAPHICS_EXPORT const CFStringRef kCGColorClear;
 
 CF_IMPLICIT_BRIDGING_DISABLED
+
+#endif /* CGCOLOR_H */

@@ -1,3 +1,6 @@
+#ifndef CGDISPLAYCONFIGURATION_H
+#define CGDISPLAYCONFIGURATION_H
+
 #import <CoreFoundation/CoreFoundation.h>
 #import <CoreGraphics/CGDirectDisplay.h>
 #import <CoreGraphics/CGGeometry.h>
@@ -20,3 +23,5 @@ typedef void (*CGDisplayReconfigurationCallBack)(CGDirectDisplayID display, CGDi
 
 extern CGError CGDisplayRegisterReconfigurationCallback(CGDisplayReconfigurationCallBack callback, void *userInfo);
 extern CGError CGDisplayRemoveReconfigurationCallback(CGDisplayReconfigurationCallBack callback, void *userInfo);
+
+#endif /* CGDISPLAYCONFIGURATION_H */

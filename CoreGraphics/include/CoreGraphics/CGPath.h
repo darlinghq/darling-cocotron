@@ -1,3 +1,6 @@
+#ifndef CGPATH_H
+#define CGPATH_H
+
 /* Copyright(c) 2007 Christopher J. W. Lloyd
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
@@ -116,3 +119,5 @@ COREGRAPHICS_EXPORT CGPathRef CGPathCreateCopyByTransformingPath(
         CGPathRef path, CGAffineTransform *transform);
 
 CF_IMPLICIT_BRIDGING_DISABLED
+
+#endif /* CGPATH_H */

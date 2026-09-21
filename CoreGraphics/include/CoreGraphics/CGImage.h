@@ -1,3 +1,6 @@
+#ifndef CGIMAGE_H
+#define CGIMAGE_H
+
 /* Copyright(c) 2006 Christopher J. W. Lloyd
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
@@ -115,3 +118,5 @@ COREGRAPHICS_EXPORT bool CGImageIsMask(CGImageRef self);
 COREGRAPHICS_EXPORT CGImageAlphaInfo CGImageGetAlphaInfo(CGImageRef self);
 
 CF_IMPLICIT_BRIDGING_DISABLED
+
+#endif /* CGIMAGE_H */

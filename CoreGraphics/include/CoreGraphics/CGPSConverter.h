@@ -1,3 +1,6 @@
+#ifndef CGPSCONVERTER_H
+#define CGPSCONVERTER_H
+
 #import <CoreFoundation/CoreFoundation.h>
 
 typedef struct CF_BRIDGED_TYPE(id) CGPSConverter* CGPSConverterRef;
@@ -22,3 +25,5 @@ typedef struct CGPSConverterCallbacks {
 } CGPSConverterCallbacks;
 
 extern CGPSConverterRef CGPSConverterCreate(void *info, const CGPSConverterCallbacks *callbacks, CFDictionaryRef options);
+
+#endif /* CGPSCONVERTER_H */

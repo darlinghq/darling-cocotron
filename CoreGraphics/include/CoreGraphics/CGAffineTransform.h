@@ -1,3 +1,6 @@
+#ifndef CGAFFINETRANSFORM_H
+#define CGAFFINETRANSFORM_H
+
 /* Copyright (c) 2006-2007 Christopher J. W. Lloyd
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
@@ -84,3 +87,5 @@ static CGSize __CGSizeApplyAffineTransform(CGSize size, CGAffineTransform xform)
 
 COREGRAPHICS_EXPORT CGRect CGRectApplyAffineTransform(CGRect rect,
                                                       CGAffineTransform t);
+
+#endif /* CGAFFINETRANSFORM_H */
