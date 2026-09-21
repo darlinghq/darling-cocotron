@@ -27,6 +27,12 @@
 
 @implementation NSGestureRecognizer
 
+// Answered directly rather than through forwardInvocation:, whose "v@:"
+// signature would have returned an uninitialised integer to every caller.
+- (NSGestureRecognizerState) state {
+    return NSGestureRecognizerStatePossible;
+}
+
 - (NSMethodSignature *)methodSignatureForSelector:(SEL)aSelector
 {
     return [NSMethodSignature signatureWithObjCTypes: "v@:"];

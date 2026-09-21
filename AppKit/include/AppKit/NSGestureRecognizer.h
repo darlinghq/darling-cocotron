@@ -20,5 +20,20 @@
 #import <AppKit/AppKitExport.h>
 #import <Foundation/Foundation.h>
 
+typedef NS_ENUM(NSInteger, NSGestureRecognizerState) {
+    NSGestureRecognizerStatePossible = 0,
+    NSGestureRecognizerStateBegan,
+    NSGestureRecognizerStateChanged,
+    NSGestureRecognizerStateEnded,
+    NSGestureRecognizerStateCancelled,
+    NSGestureRecognizerStateFailed,
+    NSGestureRecognizerStateRecognized = NSGestureRecognizerStateEnded,
+};
+
 @interface NSGestureRecognizer : NSObject <NSCoding>
+
+// Always NSGestureRecognizerStatePossible. AppKit never sends events to a
+// recognizer, so no recognizer advances past it.
+@property(readonly) NSGestureRecognizerState state;
+
 @end
