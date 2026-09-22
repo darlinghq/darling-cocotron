@@ -1316,11 +1316,16 @@ static NSDictionary *modeInfoToDictionary(const XRRModeInfo *mi, int depth) {
         NSLog(@"ReparentNotify");
         break;
 
-    case ConfigureNotify:
+    case ConfigureNotify:;
+        // -[X11Window realFrame] is used instead of -[X11Window frame] because -[X11Window frame] is
+        // modified by -[X11Window setFrame], so if you resized using -[X11Window setFrame] it would only
+        // register as a window move
+        O2Rect oldFrame = [window realFrame];
         [window frameChanged];
+        O2Rect newFrame = [window realFrame];
         [delegate platformWindow: window
-                    frameChanged: [window frame]
-                         didSize: YES];
+                    frameChanged: newFrame
+                         didSize: !NSEqualSizes(newFrame.size, oldFrame.size)];
         break;
 
     case ConfigureRequest:
