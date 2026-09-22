@@ -5,7 +5,7 @@ CF_IMPLICIT_BRIDGING_ENABLED
 
 typedef struct __CTRun* CTRunRef;
 
-typedef NS_ENUM(uint32_t, CTRunStatus)
+typedef CF_OPTIONS(uint32_t, CTRunStatus)
 {
     kCTRunStatusNoStatus = 0,
     kCTRunStatusRightToLeft = (1 << 0),
