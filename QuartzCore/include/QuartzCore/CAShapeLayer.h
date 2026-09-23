@@ -19,14 +19,18 @@
 
 #import <QuartzCore/CALayer.h>
 
-CA_EXPORT NSString *const kCAFillRuleNonZero;
-CA_EXPORT NSString *const kCAFillRuleEvenOdd;
-CA_EXPORT NSString *const kCALineJoinMiter;
-CA_EXPORT NSString *const kCALineJoinRound;
-CA_EXPORT NSString *const kCALineJoinBevel;
-CA_EXPORT NSString *const kCALineCapButt;
-CA_EXPORT NSString *const kCALineCapRound;
-CA_EXPORT NSString *const kCALineCapSquare;
+typedef NSString *CAShapeLayerFillRule NS_TYPED_ENUM;
+typedef NSString *CAShapeLayerLineJoin NS_TYPED_ENUM;
+typedef NSString *CAShapeLayerLineCap NS_TYPED_ENUM;
+
+CA_EXPORT CAShapeLayerFillRule const kCAFillRuleNonZero NS_SWIFT_NAME(CAShapeLayerFillRule.nonZero);
+CA_EXPORT CAShapeLayerFillRule const kCAFillRuleEvenOdd NS_SWIFT_NAME(CAShapeLayerFillRule.evenOdd);
+CA_EXPORT CAShapeLayerLineJoin const kCALineJoinMiter NS_SWIFT_NAME(CAShapeLayerLineJoin.miter);
+CA_EXPORT CAShapeLayerLineJoin const kCALineJoinRound NS_SWIFT_NAME(CAShapeLayerLineJoin.round);
+CA_EXPORT CAShapeLayerLineJoin const kCALineJoinBevel NS_SWIFT_NAME(CAShapeLayerLineJoin.bevel);
+CA_EXPORT CAShapeLayerLineCap const kCALineCapButt NS_SWIFT_NAME(CAShapeLayerLineCap.butt);
+CA_EXPORT CAShapeLayerLineCap const kCALineCapRound NS_SWIFT_NAME(CAShapeLayerLineCap.round);
+CA_EXPORT CAShapeLayerLineCap const kCALineCapSquare NS_SWIFT_NAME(CAShapeLayerLineCap.square);
 
 // Draws a path with an optional fill and stroke into the layer's contents.
 @interface CAShapeLayer : CALayer {
@@ -46,14 +50,14 @@ CA_EXPORT NSString *const kCALineCapSquare;
 
 @property CGPathRef path;
 @property CGColorRef fillColor;     // default opaque black; NULL for no fill
-@property(copy) NSString *fillRule; // kCAFillRuleNonZero (default) or kCAFillRuleEvenOdd
+@property(copy) CAShapeLayerFillRule fillRule; // kCAFillRuleNonZero (default) or kCAFillRuleEvenOdd
 @property CGColorRef strokeColor;   // default NULL (no stroke)
 @property CGFloat strokeStart;
 @property CGFloat strokeEnd;
 @property CGFloat lineWidth;        // default 1
 @property CGFloat miterLimit;       // default 10
-@property(copy) NSString *lineCap;  // default kCALineCapButt
-@property(copy) NSString *lineJoin; // default kCALineJoinMiter
+@property(copy) CAShapeLayerLineCap lineCap;   // default kCALineCapButt
+@property(copy) CAShapeLayerLineJoin lineJoin; // default kCALineJoinMiter
 @property CGFloat lineDashPhase;
 @property(copy) NSArray *lineDashPattern;
 

@@ -1,11 +1,13 @@
 #import <Foundation/NSObject.h>
 #import <QuartzCore/CABase.h>
 
-CA_EXPORT NSString *const kCAMediaTimingFunctionLinear;
-CA_EXPORT NSString *const kCAMediaTimingFunctionEaseIn;
-CA_EXPORT NSString *const kCAMediaTimingFunctionEaseOut;
-CA_EXPORT NSString *const kCAMediaTimingFunctionEaseInEaseOut;
-CA_EXPORT NSString *const kCAMediaTimingFunctionDefault;
+typedef NSString *CAMediaTimingFunctionName NS_TYPED_ENUM;
+
+CA_EXPORT CAMediaTimingFunctionName const kCAMediaTimingFunctionLinear;
+CA_EXPORT CAMediaTimingFunctionName const kCAMediaTimingFunctionEaseIn;
+CA_EXPORT CAMediaTimingFunctionName const kCAMediaTimingFunctionEaseOut;
+CA_EXPORT CAMediaTimingFunctionName const kCAMediaTimingFunctionEaseInEaseOut;
+CA_EXPORT CAMediaTimingFunctionName const kCAMediaTimingFunctionDefault;
 
 @interface CAMediaTimingFunction : NSObject {
     CGFloat _c1x;
@@ -24,7 +26,7 @@ CA_EXPORT NSString *const kCAMediaTimingFunctionDefault;
                            :(CGFloat) c2x
                            :(CGFloat) c2y;
 
-+ functionWithName: (NSString *) name;
++ (instancetype) functionWithName: (CAMediaTimingFunctionName) name;
 
 - (void) getControlPointAtIndex: (size_t) index values: (CGFloat[2]) ptr;
 

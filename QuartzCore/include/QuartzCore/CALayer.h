@@ -24,28 +24,28 @@ typedef NS_OPTIONS(unsigned int, CAAutoresizingMask) {
     kCALayerMaxYMargin = 0x20,
 };
 
-CA_EXPORT NSString *const kCAFilterLinear;
-CA_EXPORT NSString *const kCAFilterNearest;
-CA_EXPORT NSString *const kCAFilterTrilinear;
-
 typedef NSString *CALayerContentsGravity NS_TYPED_ENUM;
 typedef NSString *CALayerCornerCurve NS_TYPED_ENUM;
 typedef NSString *CALayerContentsFormat NS_TYPED_ENUM;
 typedef NSString *CALayerContentsFilter NS_TYPED_ENUM;
 
-CA_EXPORT CALayerContentsGravity const kCAGravityResizeAspect;
-CA_EXPORT CALayerContentsGravity const kCAGravityResizeAspectFill;
+CA_EXPORT CALayerContentsFilter const kCAFilterLinear NS_SWIFT_NAME(CALayerContentsFilter.linear);
+CA_EXPORT CALayerContentsFilter const kCAFilterNearest NS_SWIFT_NAME(CALayerContentsFilter.nearest);
+CA_EXPORT CALayerContentsFilter const kCAFilterTrilinear NS_SWIFT_NAME(CALayerContentsFilter.trilinear);
 
-CA_EXPORT CALayerContentsGravity const kCAGravityCenter;
-CA_EXPORT CALayerContentsGravity const kCAGravityTop;
-CA_EXPORT CALayerContentsGravity const kCAGravityBottom;
-CA_EXPORT CALayerContentsGravity const kCAGravityLeft;
-CA_EXPORT CALayerContentsGravity const kCAGravityRight;
+CA_EXPORT CALayerContentsGravity const kCAGravityResizeAspect NS_SWIFT_NAME(CALayerContentsGravity.resizeAspect);
+CA_EXPORT CALayerContentsGravity const kCAGravityResizeAspectFill NS_SWIFT_NAME(CALayerContentsGravity.resizeAspectFill);
+
+CA_EXPORT CALayerContentsGravity const kCAGravityCenter NS_SWIFT_NAME(CALayerContentsGravity.center);
+CA_EXPORT CALayerContentsGravity const kCAGravityTop NS_SWIFT_NAME(CALayerContentsGravity.top);
+CA_EXPORT CALayerContentsGravity const kCAGravityBottom NS_SWIFT_NAME(CALayerContentsGravity.bottom);
+CA_EXPORT CALayerContentsGravity const kCAGravityLeft NS_SWIFT_NAME(CALayerContentsGravity.left);
+CA_EXPORT CALayerContentsGravity const kCAGravityRight NS_SWIFT_NAME(CALayerContentsGravity.right);
 CA_EXPORT CALayerContentsGravity const kCAGravityTopLeft NS_SWIFT_NAME(CALayerContentsGravity.topLeft);
-CA_EXPORT CALayerContentsGravity const kCAGravityTopRight;
-CA_EXPORT CALayerContentsGravity const kCAGravityBottomLeft;
-CA_EXPORT CALayerContentsGravity const kCAGravityBottomRight;
-CA_EXPORT CALayerContentsGravity const kCAGravityResize;
+CA_EXPORT CALayerContentsGravity const kCAGravityTopRight NS_SWIFT_NAME(CALayerContentsGravity.topRight);
+CA_EXPORT CALayerContentsGravity const kCAGravityBottomLeft NS_SWIFT_NAME(CALayerContentsGravity.bottomLeft);
+CA_EXPORT CALayerContentsGravity const kCAGravityBottomRight NS_SWIFT_NAME(CALayerContentsGravity.bottomRight);
+CA_EXPORT CALayerContentsGravity const kCAGravityResize NS_SWIFT_NAME(CALayerContentsGravity.resize);
 
 CA_EXPORT CALayerCornerCurve const kCACornerCurveCircular NS_SWIFT_NAME(CALayerCornerCurve.circular);
 CA_EXPORT CALayerCornerCurve const kCACornerCurveContinuous NS_SWIFT_NAME(CALayerCornerCurve.continuous);
@@ -55,8 +55,8 @@ CA_EXPORT NSString *const kCAOnOrderOut;
 CA_EXPORT NSString *const kCATransition;
 
 CA_EXPORT CALayerContentsFormat const kCAContentsFormatRGBA8Uint NS_SWIFT_NAME(CALayerContentsFormat.RGBA8Uint);
-CA_EXPORT NSString *const kCAContentsFormatRGBA16Float;
-CA_EXPORT NSString *const kCAContentsFormatGray8Uint;
+CA_EXPORT CALayerContentsFormat const kCAContentsFormatRGBA16Float NS_SWIFT_NAME(CALayerContentsFormat.RGBA16Float);
+CA_EXPORT CALayerContentsFormat const kCAContentsFormatGray8Uint NS_SWIFT_NAME(CALayerContentsFormat.gray8Uint);
 
 @protocol CALayerDelegate <NSObject>
 
@@ -174,8 +174,8 @@ CA_EXPORT NSString *const kCAContentsFormatGray8Uint;
 - (CGAffineTransform) affineTransform;
 - (void) setAffineTransform: (CGAffineTransform) transform;
 
-@property(copy) NSString *minificationFilter;
-@property(copy) NSString *magnificationFilter;
+@property(copy) CALayerContentsFilter minificationFilter;
+@property(copy) CALayerContentsFilter magnificationFilter;
 @property float minificationFilterBias;
 
 // Appearance. CARenderer draws the background and the border as rounded rects

@@ -2,10 +2,12 @@
 #import <Foundation/Foundation.h>
 #import <QuartzCore/CABase.h>
 
-CA_EXPORT NSString *const kCAFillModeForwards;
-CA_EXPORT NSString *const kCAFillModeBackwards;
-CA_EXPORT NSString *const kCAFillModeBoth;
-CA_EXPORT NSString *const kCAFillModeRemoved;
+typedef NSString *CAMediaTimingFillMode NS_TYPED_ENUM;
+
+CA_EXPORT CAMediaTimingFillMode const kCAFillModeForwards NS_SWIFT_NAME(CAMediaTimingFillMode.forwards);
+CA_EXPORT CAMediaTimingFillMode const kCAFillModeBackwards NS_SWIFT_NAME(CAMediaTimingFillMode.backwards);
+CA_EXPORT CAMediaTimingFillMode const kCAFillModeBoth NS_SWIFT_NAME(CAMediaTimingFillMode.both);
+CA_EXPORT CAMediaTimingFillMode const kCAFillModeRemoved NS_SWIFT_NAME(CAMediaTimingFillMode.removed);
 
 @protocol CAMediaTiming
 
@@ -15,7 +17,7 @@ CA_EXPORT NSString *const kCAFillModeRemoved;
 
 @property CFTimeInterval duration;
 
-@property(copy) NSString *fillMode;
+@property(copy) CAMediaTimingFillMode fillMode;
 
 @property CGFloat repeatCount;
 
