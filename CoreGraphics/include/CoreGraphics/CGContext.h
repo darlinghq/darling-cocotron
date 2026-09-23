@@ -100,7 +100,7 @@ typedef CF_ENUM(int32_t, CGBlendMode) {
     kCGBlendModeDestinationIn,
     kCGBlendModeDestinationOut,
     kCGBlendModeDestinationAtop,
-    kCGBlendModeXOR,
+    kCGBlendModeXOR CF_SWIFT_NAME(xor),
     kCGBlendModePlusDarker,
     kCGBlendModePlusLighter,
 };

@@ -109,7 +109,8 @@ COREGRAPHICS_EXPORT void CGPathAddPath(CGMutablePathRef self,
                                        CGPathRef other);
 
 COREGRAPHICS_EXPORT CGPathRef
-CGPathCreateWithEllipseInRect(CGRect rect, const CGAffineTransform *transform);
+CGPathCreateWithEllipseInRect(CGRect rect, const CGAffineTransform *transform)
+    CF_SWIFT_NAME(CGPath.init(ellipseIn:transform:));
 
 COREGRAPHICS_EXPORT CGPathRef
 CGPathCreateWithRect(CGRect rect, const CGAffineTransform *transform)
