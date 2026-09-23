@@ -20,9 +20,54 @@
 #import <Foundation/Foundation.h>
 #import <QuartzCore/CABase.h>
 
+CA_EXPORT NSString *const kCAFilterAlphaThreshold;
+CA_EXPORT NSString *const kCAFilterAverageColor;
+CA_EXPORT NSString *const kCAFilterColorBrightness;
+CA_EXPORT NSString *const kCAFilterColorContrast;
+CA_EXPORT NSString *const kCAFilterColorHueRotate;
+CA_EXPORT NSString *const kCAFilterColorInvert;
 CA_EXPORT NSString *const kCAFilterColorMatrix;
+CA_EXPORT NSString *const kCAFilterColorMonochrome;
+CA_EXPORT NSString *const kCAFilterColorSaturate;
+CA_EXPORT NSString *const kCAFilterCurves;
+CA_EXPORT NSString *const kCAFilterGaussianBlur;
+CA_EXPORT NSString *const kCAFilterLuminanceCurveMap;
+CA_EXPORT NSString *const kCAFilterLuminanceToAlpha;
+CA_EXPORT NSString *const kCAFilterMultiplyBlendMode;
+CA_EXPORT NSString *const kCAFilterMultiplyColor;
+CA_EXPORT NSString *const kCAFilterVariableBlur;
+CA_EXPORT NSString *const kCAFilterVibrantColorMatrix;
 
-/* Undocumented class, may inherit from something else */
-@interface CAFilter : NSObject
+CA_EXPORT NSString *const kCAFilterInputAlphaValues;
+CA_EXPORT NSString *const kCAFilterInputAmount;
+CA_EXPORT NSString *const kCAFilterInputAngle;
+CA_EXPORT NSString *const kCAFilterInputBias;
+CA_EXPORT NSString *const kCAFilterInputBlueValues;
+CA_EXPORT NSString *const kCAFilterInputColor;
+CA_EXPORT NSString *const kCAFilterInputColorMatrix;
+CA_EXPORT NSString *const kCAFilterInputDither;
+CA_EXPORT NSString *const kCAFilterInputGreenValues;
+CA_EXPORT NSString *const kCAFilterInputHardEdges;
+CA_EXPORT NSString *const kCAFilterInputNormalizeEdges;
+CA_EXPORT NSString *const kCAFilterInputPremultipliedValues;
+CA_EXPORT NSString *const kCAFilterInputRadius;
+CA_EXPORT NSString *const kCAFilterInputRedValues;
+CA_EXPORT NSString *const kCAFilterInputValues;
+
+// Private Core Animation filter. Input values are stored with key-value coding
+// under their input keys; CARenderer does not apply filters yet.
+@interface CAFilter : NSObject <NSCopying> {
+    NSString *_type;
+    NSString *_name;
+    BOOL _enabled;
+    NSMutableDictionary *_inputs;
+}
+
++ (instancetype) filterWithType: (NSString *) type;
+- (instancetype) initWithType: (NSString *) type;
+
+@property(readonly, copy) NSString *type;
+@property(copy) NSString *name;
+@property(getter=isEnabled) BOOL enabled;
 
 @end
