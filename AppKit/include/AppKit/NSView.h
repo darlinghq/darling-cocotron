@@ -165,6 +165,15 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPre
 - (void) layout;
 - (void) updateConstraints;
 
+// Stored for callers and subclasses; with no constraint solver they do not
+// affect layout. Defaults are 250 (hugging) and 750 (compression resistance).
+- (NSLayoutPriority) contentHuggingPriorityForOrientation: (NSLayoutConstraintOrientation) orientation;
+- (void) setContentHuggingPriority: (NSLayoutPriority) priority
+                    forOrientation: (NSLayoutConstraintOrientation) orientation;
+- (NSLayoutPriority) contentCompressionResistancePriorityForOrientation: (NSLayoutConstraintOrientation) orientation;
+- (void) setContentCompressionResistancePriority: (NSLayoutPriority) priority
+                                  forOrientation: (NSLayoutConstraintOrientation) orientation;
+
 + (NSView *) focusView;
 + (NSMenu *) defaultMenu;
 + (NSFocusRingType) defaultFocusRingType;

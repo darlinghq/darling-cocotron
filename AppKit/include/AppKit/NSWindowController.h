@@ -17,6 +17,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#import <AppKit/NSNib.h>
 #import <AppKit/NSResponder.h>
 
 @class NSWindow, NSDocument;
@@ -34,8 +35,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - initWithWindow: (NSWindow *) window;
-- initWithWindowNibName: (NSString *) nibName;
-- initWithWindowNibName: (NSString *) nibName owner: owner;
+- initWithWindowNibName: (NSNibName) nibName;
+- initWithWindowNibName: (NSNibName) nibName owner: owner;
 - initWithWindowNibPath: (NSString *) nibPath owner: owner;
 
 - (NSWindow *) window;
@@ -57,7 +58,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (void) setShouldCloseDocument: (BOOL) flag;
 
 - owner;
-- (NSString *) windowNibName;
+@property (readonly, copy) NSNibName windowNibName;
 - (NSString *) windowNibPath;
 
 - (void) setShouldCascadeWindows: (BOOL) flag;

@@ -78,9 +78,16 @@ typedef enum {
 } NSCellState;
 
 typedef NS_ENUM(NSUInteger, NSControlSize) {
-    NSRegularControlSize,
-    NSSmallControlSize,
-    NSMiniControlSize
+    NSControlSizeRegular = 0,
+    NSControlSizeSmall = 1,
+    NSControlSizeMini = 2,
+    NSControlSizeLarge = 3
+} NS_SWIFT_NAME(NSControl.ControlSize);
+
+enum {
+    NSRegularControlSize = NSControlSizeRegular,
+    NSSmallControlSize = NSControlSizeSmall,
+    NSMiniControlSize = NSControlSizeMini
 };
 
 typedef NSUInteger NSControlTint;

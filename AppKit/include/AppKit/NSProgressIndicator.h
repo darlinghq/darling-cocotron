@@ -22,10 +22,15 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSTimer;
 
-typedef enum {
-    NSProgressIndicatorBarStyle = 0,
-    NSProgressIndicatorSpinningStyle = 1,
-} NSProgressIndicatorStyle;
+typedef NS_ENUM(NSUInteger, NSProgressIndicatorStyle) {
+    NSProgressIndicatorStyleBar = 0,
+    NSProgressIndicatorStyleSpinning = 1
+} NS_SWIFT_NAME(NSProgressIndicator.Style);
+
+enum {
+    NSProgressIndicatorBarStyle = NSProgressIndicatorStyleBar,
+    NSProgressIndicatorSpinningStyle = NSProgressIndicatorStyleSpinning
+};
 
 @interface NSProgressIndicator : NSView {
     double _minValue;
