@@ -143,6 +143,7 @@ typedef NSString *CALayerContentsFilter NS_TYPED_ENUM;
 - (nonnull instancetype)init;
 
 - (void) addSublayer: (CALayer *) layer;
+- (void) insertSublayer: (CALayer *) layer atIndex: (unsigned int) index;
 - (void) replaceSublayer: (CALayer *) layer with: (CALayer *) other;
 - (void) display;
 - (void) displayIfNeeded;

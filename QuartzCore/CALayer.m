@@ -1,4 +1,5 @@
 #import <Foundation/NSDictionary.h>
+#import <Foundation/NSException.h>
 #import <QuartzCore/CAAnimation.h>
 #import <QuartzCore/CALayer.h>
 #import <QuartzCore/CALayerContext.h>
@@ -369,7 +370,40 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
 }
 
 - (void) addSublayer: (CALayer *) layer {
-    [self setSublayers: [_sublayers arrayByAddingObject: layer]];
+    [self insertSublayer: layer atIndex: (unsigned int)[_sublayers count]];
+}
+
+- (void) insertSublayer: (CALayer *) layer atIndex: (unsigned int) index {
+    if (layer == nil) {
+        [NSException raise: NSInvalidArgumentException
+                    format: @"Cannot insert a nil sublayer"];
+    }
+    if (index > [_sublayers count]) {
+        [NSException raise: NSRangeException
+                    format: @"Sublayer index %u exceeds count %lu", index,
+                            (unsigned long)[_sublayers count]];
+    }
+    for (CALayer *ancestor = self; ancestor != nil; ancestor = [ancestor superlayer]) {
+        if (ancestor == layer) {
+            [NSException raise: NSInvalidArgumentException
+                        format: @"Cannot insert a layer into itself or its descendant"];
+        }
+    }
+
+    // Keep the child alive if its old parent is its only owner. Removing it
+    // first also prevents duplicate entries when this is an in-parent move.
+    [layer retain];
+    if ([layer superlayer] != nil)
+        [layer removeFromSuperlayer];
+
+    NSMutableArray *layers = [_sublayers mutableCopy];
+    if (index > [layers count])
+        index = (unsigned int)[layers count];
+    [layers insertObject: layer atIndex: index];
+    [self setSublayers: layers];
+    [layers release];
+    [layer release];
+    [_context startTimerIfNeeded];
 }
 
 - (void) replaceSublayer: (CALayer *) layer with: (CALayer *) other {
