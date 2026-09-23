@@ -18,23 +18,61 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSTextAttachmentCell.h>
+#import <CoreGraphics/CoreGraphics.h>
 #import <Foundation/Foundation.h>
 
-@class NSFileWrapper, NSImage;
+NS_HEADER_AUDIT_BEGIN(nullability, sendability)
+
+@class NSTextContainer;
+@class NSLayoutManager;
+@class NSFileWrapper;
+@class NSTextAttachmentViewProvider;
+@class NSTextLayoutManager;
+@protocol NSTextLocation;
+
+@class NSImage;
+@class NSView;
+@class NSTextAttachmentCell;
+@protocol NSTextAttachmentCell;
 
 enum { NSAttachmentCharacter = 0xFFFC };
 
-@interface NSTextAttachment : NSObject {
-    NSFileWrapper *_fileWrapper;
-    id<NSTextAttachmentCell> _cell;
-}
+// This protocol and the class's primary interface match Apple's declarations
+// member for member: Clang rejects a definition that two modules spell differently.
+@protocol NSTextAttachmentLayout <NSObject>
 
-- initWithFileWrapper: (NSFileWrapper *) fileWrapper;
+- (nullable NSImage *)imageForBounds:(CGRect)bounds attributes:(NSDictionary<NSAttributedStringKey, id> *)attributes location:(id <NSTextLocation>)location textContainer:(nullable NSTextContainer *)textContainer;
 
-- (NSFileWrapper *) fileWrapper;
-- (id<NSTextAttachmentCell>) attachmentCell;
+- (CGRect)attachmentBoundsForAttributes:(NSDictionary<NSAttributedStringKey, id> *)attributes location:(id <NSTextLocation>)location textContainer:(nullable NSTextContainer *)textContainer proposedLineFragment:(CGRect)proposedLineFragment position:(CGPoint)position;
 
-- (void) setFileWrapper: (NSFileWrapper *) fileWrapper;
-- (void) setAttachmentCell: (id<NSTextAttachmentCell>) cell;
+- (nullable NSTextAttachmentViewProvider *)viewProviderForParentView:(nullable NSView *)parentView location:(id <NSTextLocation>)location textContainer:(nullable NSTextContainer *)textContainer;
 
 @end
+
+@interface NSTextAttachment : NSObject <NSTextAttachmentLayout, NSSecureCoding>
+
+- (instancetype)initWithData:(nullable NSData *)contentData ofType:(nullable NSString *)uti NS_DESIGNATED_INITIALIZER;
+
+- (instancetype)initWithFileWrapper:(nullable NSFileWrapper *)fileWrapper;
+
+@property (nullable, copy, NS_NONATOMIC_IOSONLY) NSData *contents;
+@property (nullable, copy, NS_NONATOMIC_IOSONLY) NSString *fileType;
+
+@property (nullable, strong) NSImage *image;
+
+@property (NS_NONATOMIC_IOSONLY) CGRect bounds;
+@property (nullable, strong, NS_NONATOMIC_IOSONLY) NSFileWrapper *fileWrapper;
+
+@property (nullable, strong) id <NSTextAttachmentCell> attachmentCell API_AVAILABLE(macos(10.0));
+
+@property CGFloat lineLayoutPadding;
+
++ (nullable Class)textAttachmentViewProviderClassForFileType:(NSString *)fileType;
++ (void)registerTextAttachmentViewProviderClass:(Class)textAttachmentViewProviderClass forFileType:(NSString *)fileType;
+
+@property BOOL allowsTextAttachmentView;
+@property (readonly) BOOL usesTextAttachmentView;
+
+@end
+
+NS_HEADER_AUDIT_END(nullability, sendability)

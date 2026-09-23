@@ -22,26 +22,151 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSImage.h>
 #import <AppKit/NSTextAttachment.h>
 
-@implementation NSTextAttachment
+// NSTextAttachmentViewProvider's initializer; this AppKit has no provider base
+// class, so registered provider classes supply it themselves.
+@protocol NSTextAttachmentViewProviderInit
+- (instancetype) initWithTextAttachment: (NSTextAttachment *) textAttachment
+                             parentView: (NSView *) parentView
+                      textLayoutManager: (NSTextLayoutManager *) textLayoutManager
+                               location: (id<NSTextLocation>) location;
+@end
 
-- initWithFileWrapper: (NSFileWrapper *) fileWrapper {
-    _fileWrapper = [fileWrapper retain];
-    _cell = [[NSTextAttachmentCell alloc] init];
+static NSMutableDictionary *viewProviderClasses;
+
+@implementation NSTextAttachment {
+    NSData *_contents;
+    NSString *_fileType;
+    NSImage *_image;
+    CGRect _bounds;
+    NSFileWrapper *_fileWrapper;
+    id<NSTextAttachmentCell> _cell;
+    CGFloat _lineLayoutPadding;
+    BOOL _allowsTextAttachmentView;
+}
+
++ (BOOL) supportsSecureCoding {
+    return YES;
+}
+
++ (Class) textAttachmentViewProviderClassForFileType: (NSString *) fileType {
+    @synchronized([NSTextAttachment class]) {
+        return [viewProviderClasses objectForKey: fileType];
+    }
+}
+
++ (void) registerTextAttachmentViewProviderClass: (Class) providerClass
+                                     forFileType: (NSString *) fileType
+{
+    if (![providerClass instancesRespondToSelector: @selector(initWithTextAttachment:parentView:textLayoutManager:location:)])
+        [NSException raise: NSInvalidArgumentException
+                    format: @"%@ does not implement the text attachment view provider initializer", providerClass];
+    @synchronized([NSTextAttachment class]) {
+        if (viewProviderClasses == nil)
+            viewProviderClasses = [[NSMutableDictionary alloc] init];
+        [viewProviderClasses setObject: providerClass forKey: fileType];
+    }
+}
+
+- (instancetype) initWithData: (NSData *) contentData ofType: (NSString *) uti {
+    if ((self = [super init])) {
+        _contents = [contentData copy];
+        _fileType = [uti copy];
+        _bounds = CGRectZero;
+        _allowsTextAttachmentView = YES;
+    }
     return self;
 }
 
+- (instancetype) init {
+    return [self initWithData: nil ofType: nil];
+}
+
+- (instancetype) initWithFileWrapper: (NSFileWrapper *) fileWrapper {
+    if ((self = [self initWithData: nil ofType: nil])) {
+        _fileWrapper = [fileWrapper retain];
+        _cell = [[NSTextAttachmentCell alloc] init];
+    }
+    return self;
+}
+
+- (instancetype) initWithCoder: (NSCoder *) coder {
+    if (![coder allowsKeyedCoding])
+        [NSException raise: NSInvalidArgumentException
+                    format: @"-[%@ %s]: only keyed archiving is supported", [self class], sel_getName(_cmd)];
+    self = [self initWithData: [coder decodeObjectOfClass: [NSData class] forKey: @"Contents"]
+                       ofType: [coder decodeObjectOfClass: [NSString class] forKey: @"FileType"]];
+    if (self) {
+        _bounds = NSRectToCGRect([coder decodeRectForKey: @"Bounds"]);
+        _lineLayoutPadding = [coder decodeDoubleForKey: @"LineLayoutPadding"];
+        if ([coder containsValueForKey: @"AllowsTextAttachmentView"])
+            _allowsTextAttachmentView = [coder decodeBoolForKey: @"AllowsTextAttachmentView"];
+    }
+    return self;
+}
+
+- (void) encodeWithCoder: (NSCoder *) coder {
+    if (![coder allowsKeyedCoding])
+        [NSException raise: NSInvalidArgumentException
+                    format: @"-[%@ %s]: only keyed archiving is supported", [self class], sel_getName(_cmd)];
+    [coder encodeObject: [self contents] forKey: @"Contents"];
+    [coder encodeObject: _fileType forKey: @"FileType"];
+    [coder encodeRect: NSRectFromCGRect(_bounds) forKey: @"Bounds"];
+    [coder encodeDouble: _lineLayoutPadding forKey: @"LineLayoutPadding"];
+    [coder encodeBool: _allowsTextAttachmentView forKey: @"AllowsTextAttachmentView"];
+}
+
 - (void) dealloc {
+    [_contents release];
+    [_fileType release];
+    [_image release];
     [_fileWrapper release];
     [_cell release];
     [super dealloc];
 }
 
-- (NSFileWrapper *) fileWrapper {
-    return _fileWrapper;
+// Without explicit contents, a regular-file wrapper supplies them.
+- (NSData *) contents {
+    if (_contents == nil && [_fileWrapper isRegularFile])
+        return [_fileWrapper regularFileContents];
+    return _contents;
 }
 
-- (id<NSTextAttachmentCell>) attachmentCell {
-    return _cell;
+- (void) setContents: (NSData *) contents {
+    contents = [contents copy];
+    [_contents release];
+    _contents = contents;
+}
+
+- (NSString *) fileType {
+    return _fileType;
+}
+
+- (void) setFileType: (NSString *) fileType {
+    fileType = [fileType copy];
+    [_fileType release];
+    _fileType = fileType;
+}
+
+- (NSImage *) image {
+    return _image;
+}
+
+- (void) setImage: (NSImage *) image {
+    [image retain];
+    [_image release];
+    _image = image;
+}
+
+- (CGRect) bounds {
+    return _bounds;
+}
+
+- (void) setBounds: (CGRect) bounds {
+    _bounds = bounds;
+}
+
+- (NSFileWrapper *) fileWrapper {
+    return _fileWrapper;
 }
 
 - (void) setFileWrapper: (NSFileWrapper *) fileWrapper {
@@ -50,10 +175,78 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     _fileWrapper = fileWrapper;
 }
 
+- (id<NSTextAttachmentCell>) attachmentCell {
+    return _cell;
+}
+
 - (void) setAttachmentCell: (id<NSTextAttachmentCell>) cell {
     cell = [cell retain];
     [_cell release];
     _cell = cell;
+}
+
+- (CGFloat) lineLayoutPadding {
+    return _lineLayoutPadding;
+}
+
+- (void) setLineLayoutPadding: (CGFloat) padding {
+    _lineLayoutPadding = padding;
+}
+
+- (BOOL) allowsTextAttachmentView {
+    return _allowsTextAttachmentView;
+}
+
+- (void) setAllowsTextAttachmentView: (BOOL) allows {
+    _allowsTextAttachmentView = allows;
+}
+
+- (BOOL) usesTextAttachmentView {
+    return _allowsTextAttachmentView && _fileType != nil &&
+           [[self class] textAttachmentViewProviderClassForFileType: _fileType] != Nil;
+}
+
+- (NSImage *) imageForBounds: (CGRect) bounds
+                  attributes: (NSDictionary<NSAttributedStringKey, id> *) attributes
+                    location: (id<NSTextLocation>) location
+               textContainer: (NSTextContainer *) textContainer
+{
+    if (_image != nil)
+        return _image;
+    NSData *contents = [self contents];
+    return contents ? [[[NSImage alloc] initWithData: contents] autorelease] : nil;
+}
+
+- (CGRect) attachmentBoundsForAttributes: (NSDictionary<NSAttributedStringKey, id> *) attributes
+                                location: (id<NSTextLocation>) location
+                           textContainer: (NSTextContainer *) textContainer
+                    proposedLineFragment: (CGRect) proposedLineFragment
+                                position: (CGPoint) position
+{
+    if (!CGRectIsEmpty(_bounds))
+        return _bounds;
+    NSImage *image = [self imageForBounds: _bounds
+                               attributes: attributes
+                                 location: location
+                            textContainer: textContainer];
+    if (image == nil)
+        return _bounds;
+    NSSize size = [image size];
+    return CGRectMake(0, 0, size.width, size.height);
+}
+
+- (NSTextAttachmentViewProvider *) viewProviderForParentView: (NSView *) parentView
+                                                    location: (id<NSTextLocation>) location
+                                               textContainer: (NSTextContainer *) textContainer
+{
+    if (![self usesTextAttachmentView])
+        return nil;
+    Class providerClass = [[self class] textAttachmentViewProviderClassForFileType: _fileType];
+    id provider = [[providerClass alloc] initWithTextAttachment: self
+                                                     parentView: parentView
+                                              textLayoutManager: nil
+                                                       location: location];
+    return [provider autorelease];
 }
 
 @end
