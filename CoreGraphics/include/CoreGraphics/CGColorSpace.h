@@ -46,13 +46,13 @@ COREGRAPHICS_EXPORT const CFStringRef kCGColorSpaceLinearGray;
 COREGRAPHICS_EXPORT const CFStringRef kCGColorSpaceExtendedLinearGray;
 COREGRAPHICS_EXPORT const CFStringRef kCGColorSpaceExtendedLinearITUR_2020;
 
-typedef enum {
-    kCGRenderingIntentDefault,
-    kCGRenderingIntentAbsoluteColorimetric,
-    kCGRenderingIntentRelativeColorimetric,
-    kCGRenderingIntentSaturation,
-    kCGRenderingIntentPerceptual,
-} CGColorRenderingIntent;
+typedef CF_ENUM(int32_t, CGColorRenderingIntent) {
+    kCGRenderingIntentDefault CF_SWIFT_NAME(defaultIntent),
+    kCGRenderingIntentAbsoluteColorimetric CF_SWIFT_NAME(absoluteColorimetric),
+    kCGRenderingIntentRelativeColorimetric CF_SWIFT_NAME(relativeColorimetric),
+    kCGRenderingIntentSaturation CF_SWIFT_NAME(saturation),
+    kCGRenderingIntentPerceptual CF_SWIFT_NAME(perceptual),
+};
 
 typedef enum {
     kCGColorSpaceModelUnknown = -1,

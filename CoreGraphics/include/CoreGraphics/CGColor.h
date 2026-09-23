@@ -50,7 +50,8 @@ CGColorCreateWithPattern(CGColorSpaceRef colorSpace, CGPatternRef pattern,
 COREGRAPHICS_EXPORT CGColorRef CGColorCreateCopy(CGColorRef self);
 COREGRAPHICS_EXPORT CGColorRef CGColorCreateCopyByMatchingToColorSpace(
     CGColorSpaceRef colorSpace, CGColorRenderingIntent intent, CGColorRef color,
-    CFDictionaryRef options);
+    CFDictionaryRef options)
+    CF_SWIFT_NAME(CGColor.converted(to:intent:self:options:));
 COREGRAPHICS_EXPORT CGColorRef CGColorCreateCopyWithAlpha(CGColorRef self,
                                                           CGFloat a);
 
