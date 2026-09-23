@@ -20,25 +20,33 @@ CA_EXPORT NSString *const kCAFilterLinear;
 CA_EXPORT NSString *const kCAFilterNearest;
 CA_EXPORT NSString *const kCAFilterTrilinear;
 
-CA_EXPORT NSString *const kCAGravityResizeAspect;
-CA_EXPORT NSString *const kCAGravityResizeAspectFill;
+typedef NSString *CALayerContentsGravity NS_TYPED_ENUM;
+typedef NSString *CALayerCornerCurve NS_TYPED_ENUM;
+typedef NSString *CALayerContentsFormat NS_TYPED_ENUM;
+typedef NSString *CALayerContentsFilter NS_TYPED_ENUM;
 
-CA_EXPORT NSString *const kCAGravityCenter;
-CA_EXPORT NSString *const kCAGravityTop;
-CA_EXPORT NSString *const kCAGravityBottom;
-CA_EXPORT NSString *const kCAGravityLeft;
-CA_EXPORT NSString *const kCAGravityRight;
-CA_EXPORT NSString *const kCAGravityTopLeft;
-CA_EXPORT NSString *const kCAGravityTopRight;
-CA_EXPORT NSString *const kCAGravityBottomLeft;
-CA_EXPORT NSString *const kCAGravityBottomRight;
-CA_EXPORT NSString *const kCAGravityResize;
+CA_EXPORT CALayerContentsGravity const kCAGravityResizeAspect;
+CA_EXPORT CALayerContentsGravity const kCAGravityResizeAspectFill;
+
+CA_EXPORT CALayerContentsGravity const kCAGravityCenter;
+CA_EXPORT CALayerContentsGravity const kCAGravityTop;
+CA_EXPORT CALayerContentsGravity const kCAGravityBottom;
+CA_EXPORT CALayerContentsGravity const kCAGravityLeft;
+CA_EXPORT CALayerContentsGravity const kCAGravityRight;
+CA_EXPORT CALayerContentsGravity const kCAGravityTopLeft NS_SWIFT_NAME(CALayerContentsGravity.topLeft);
+CA_EXPORT CALayerContentsGravity const kCAGravityTopRight;
+CA_EXPORT CALayerContentsGravity const kCAGravityBottomLeft;
+CA_EXPORT CALayerContentsGravity const kCAGravityBottomRight;
+CA_EXPORT CALayerContentsGravity const kCAGravityResize;
+
+CA_EXPORT CALayerCornerCurve const kCACornerCurveCircular NS_SWIFT_NAME(CALayerCornerCurve.circular);
+CA_EXPORT CALayerCornerCurve const kCACornerCurveContinuous NS_SWIFT_NAME(CALayerCornerCurve.continuous);
 
 CA_EXPORT NSString *const kCAOnOrderIn;
 CA_EXPORT NSString *const kCAOnOrderOut;
 CA_EXPORT NSString *const kCATransition;
 
-CA_EXPORT NSString *const kCAContentsFormatRGBA8Uint;
+CA_EXPORT CALayerContentsFormat const kCAContentsFormatRGBA8Uint NS_SWIFT_NAME(CALayerContentsFormat.RGBA8Uint);
 CA_EXPORT NSString *const kCAContentsFormatRGBA16Float;
 CA_EXPORT NSString *const kCAContentsFormatGray8Uint;
 
@@ -60,10 +68,6 @@ CA_EXPORT NSString *const kCAContentsFormatGray8Uint;
 
 @end
 
-// The types recent macOS SDK headers use for the kCAContentsFormat* and kCAFilter* constants.
-typedef NSString *CALayerContentsFormat NS_TYPED_ENUM;
-typedef NSString *CALayerContentsFilter NS_TYPED_ENUM;
-
 @interface CALayer : NSObject {
     CALayerContext *_context;
     CALayer *_superlayer;
@@ -78,6 +82,11 @@ typedef NSString *CALayerContentsFilter NS_TYPED_ENUM;
     CGFloat _contentsScale;
     CGRect _contentsCenter;
     NSString *_contentsFormat;
+    NSString *_contentsGravity;
+    NSString *_cornerCurve;
+    BOOL _allowsGroupOpacity;
+    CGPathRef _shadowPath;
+    BOOL _needsLayout;
     BOOL _allowsEdgeAntialiasing;
     CATransform3D _transform;
     CATransform3D _sublayerTransform;
@@ -124,6 +133,7 @@ typedef NSString *CALayerContentsFilter NS_TYPED_ENUM;
 @property CGFloat contentsScale;
 @property CGRect contentsCenter;
 @property(copy) CALayerContentsFormat contentsFormat;
+@property(copy) CALayerContentsGravity contentsGravity;
 
 @property CATransform3D transform;
 @property CATransform3D sublayerTransform;
@@ -141,6 +151,7 @@ typedef NSString *CALayerContentsFilter NS_TYPED_ENUM;
 @property CGColorRef borderColor;
 @property CGFloat borderWidth;
 @property CGFloat cornerRadius;
+@property(copy) CALayerCornerCurve cornerCurve;
 @property BOOL masksToBounds;
 // These properties retain the public layer state. CARenderer does not yet
 // apply masks, Core Image filters, or blurred shadows when drawing.
@@ -151,7 +162,9 @@ typedef NSString *CALayerContentsFilter NS_TYPED_ENUM;
 @property float shadowOpacity;
 @property CGFloat shadowRadius;
 @property CGSize shadowOffset;
+@property CGPathRef shadowPath;
 @property(getter=isHidden) BOOL hidden;
+@property BOOL allowsGroupOpacity;
 
 // Stored only; CARenderer does not yet antialias layer edges.
 @property BOOL allowsEdgeAntialiasing;
@@ -166,6 +179,10 @@ typedef NSString *CALayerContentsFilter NS_TYPED_ENUM;
 - (void) replaceSublayer: (CALayer *) layer with: (CALayer *) other;
 - (void) display;
 - (void) displayIfNeeded;
+- (void) layoutSublayers;
+- (void) layoutIfNeeded;
+- (void) setNeedsLayout;
+- (BOOL) needsLayout;
 - (void) drawInContext: (CGContextRef) context;
 - (BOOL) needsDisplay;
 - (void) removeFromSuperlayer;

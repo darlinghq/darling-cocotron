@@ -515,6 +515,7 @@ static void displayLayerTreeIfNeeded(CALayer *layer) {
 }
 
 - (void) render {
+    [_rootLayer layoutIfNeeded];
     displayLayerTreeIfNeeded(_rootLayer);
 
     glMatrixMode(GL_MODELVIEW);

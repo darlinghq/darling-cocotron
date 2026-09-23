@@ -22,6 +22,8 @@ NSString *const kCAGravityTopRight = @"topRight";
 NSString *const kCAGravityBottomLeft = @"bottomLeft";
 NSString *const kCAGravityBottomRight = @"bottomRight";
 NSString *const kCAGravityResize = @"resize";
+CALayerCornerCurve const kCACornerCurveCircular = @"circular";
+CALayerCornerCurve const kCACornerCurveContinuous = @"continuous";
 
 NSString *const kCAOnOrderIn = @"onOrderIn";
 NSString *const kCAOnOrderOut = @"onOrderOut";
@@ -70,6 +72,7 @@ NSString *const kCAContentsFormatGray8Uint = @"Gray8";
                                 withObject: self];
     [_sublayers makeObjectsPerformSelector: @selector(_setContext:)
                                 withObject: _context];
+    [self setNeedsLayout];
 }
 
 - (id<CALayerDelegate>) delegate {
@@ -121,6 +124,8 @@ NSString *const kCAContentsFormatGray8Uint = @"Gray8";
 
     BOOL sizeChanged = !CGSizeEqualToSize(_bounds.size, value.size);
     _bounds = value;
+    if (sizeChanged)
+        [self setNeedsLayout];
     if (sizeChanged && _needsDisplayOnBoundsChange)
         [self setNeedsDisplay];
 }
@@ -212,6 +217,17 @@ NSString *const kCAContentsFormatGray8Uint = @"Gray8";
     _contentsFormat = value;
 }
 
+- (CALayerContentsGravity) contentsGravity {
+    return _contentsGravity;
+}
+
+- (void) setContentsGravity: (CALayerContentsGravity) value {
+    value = [value copy];
+    [_contentsGravity release];
+    _contentsGravity = value;
+    [_context startTimerIfNeeded];
+}
+
 - (BOOL) allowsEdgeAntialiasing {
     return _allowsEdgeAntialiasing;
 }
@@ -281,6 +297,9 @@ NSString *const kCAContentsFormatGray8Uint = @"Gray8";
     // The whole contents image stretches, i.e. no fixed border.
     _contentsCenter = CGRectMake(0, 0, 1, 1);
     _contentsFormat = [kCAContentsFormatRGBA8Uint copy];
+    _contentsGravity = [kCAGravityResize copy];
+    _cornerCurve = [kCACornerCurveCircular copy];
+    _allowsGroupOpacity = YES;
     _shadowColor = CGColorCreateGenericRGB(0, 0, 0, 1);
     _shadowOpacity = 0;
     _shadowRadius = 3;
@@ -300,6 +319,10 @@ NSString *const kCAContentsFormatGray8Uint = @"Gray8";
     [_minificationFilter release];
     [_magnificationFilter release];
     [_contentsFormat release];
+    [_contentsGravity release];
+    [_cornerCurve release];
+    if (_shadowPath)
+        CGPathRelease(_shadowPath);
     [_mask release];
     [_filters release];
     [_compositingFilter release];
@@ -358,6 +381,17 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
 
 - (void) setCornerRadius: (CGFloat) value {
     _cornerRadius = value;
+    [_context startTimerIfNeeded];
+}
+
+- (CALayerCornerCurve) cornerCurve {
+    return _cornerCurve;
+}
+
+- (void) setCornerCurve: (CALayerCornerCurve) value {
+    value = [value copy];
+    [_cornerCurve release];
+    _cornerCurve = value;
     [_context startTimerIfNeeded];
 }
 
@@ -443,6 +477,29 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
 
 - (void) setShadowOffset: (CGSize) value {
     _shadowOffset = value;
+    [_context startTimerIfNeeded];
+}
+
+- (CGPathRef) shadowPath {
+    return _shadowPath;
+}
+
+- (void) setShadowPath: (CGPathRef) value {
+    if (_shadowPath == value)
+        return;
+    CGPathRef copy = value ? CGPathCreateCopy(value) : NULL;
+    if (_shadowPath)
+        CGPathRelease(_shadowPath);
+    _shadowPath = copy;
+    [_context startTimerIfNeeded];
+}
+
+- (BOOL) allowsGroupOpacity {
+    return _allowsGroupOpacity;
+}
+
+- (void) setAllowsGroupOpacity: (BOOL) value {
+    _allowsGroupOpacity = value;
     [_context startTimerIfNeeded];
 }
 
@@ -557,6 +614,31 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
         _needsDisplay = NO;
         [self display];
     }
+}
+
+- (void) layoutSublayers {
+    if ([_delegate respondsToSelector: @selector(layoutSublayersOfLayer:)])
+        [_delegate layoutSublayersOfLayer: self];
+}
+
+- (void) layoutIfNeeded {
+    if (_needsLayout) {
+        _needsLayout = NO;
+        [self layoutSublayers];
+    }
+    NSArray *children = [_sublayers copy];
+    for (CALayer *child in children)
+        [child layoutIfNeeded];
+    [children release];
+}
+
+- (void) setNeedsLayout {
+    _needsLayout = YES;
+    [_context startTimerIfNeeded];
+}
+
+- (BOOL) needsLayout {
+    return _needsLayout;
 }
 
 - (BOOL) needsDisplayOnBoundsChange {
