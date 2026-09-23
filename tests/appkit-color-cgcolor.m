@@ -59,7 +59,30 @@ int main(void)
         CGColorRelease(roundTrip);
         [grayColor release];
 
-        NSLog(@"PASS: NSColor retains CGColor space, components, and alpha");
+        CGColorSpaceRef customSpace = CGColorSpaceCreateWithName(kCGColorSpaceExtendedSRGB);
+        NSColorSpace *appKitSpace = [[NSColorSpace alloc] initWithCGColorSpace:customSpace];
+        CGFloat customComponents[] = {0.1, 0.3, 0.7, 0.4};
+        NSColor *customColor = [NSColor colorWithColorSpace:appKitSpace
+                                               components:customComponents count:4];
+        expect(customColor != nil, @"color-space component construction");
+        roundTrip = customColor.CGColor;
+        actual = CGColorGetComponents(roundTrip);
+        for (unsigned i = 0; i < 4; ++i)
+            expect(closeEnough(actual[i], customComponents[i]), @"custom component or alpha changed");
+        CGColorRelease(roundTrip);
+
+        BOOL rejected = NO;
+        @try { [NSColor colorWithColorSpace:appKitSpace components:customComponents count:3]; }
+        @catch (NSException *exception) { rejected = YES; }
+        expect(rejected, @"invalid component count");
+        rejected = NO;
+        @try { [NSColor colorWithColorSpace:nil components:customComponents count:4]; }
+        @catch (NSException *exception) { rejected = YES; }
+        expect(rejected, @"nil color space");
+        [appKitSpace release];
+        CGColorSpaceRelease(customSpace);
+
+        NSLog(@"PASS: NSColor retains CGColor space, components, and alpha; validates component input");
     }
     return 0;
 }
