@@ -26,6 +26,7 @@ set(CoreText_sources
 	CTFrameSetter.m
 	CTLine.m
 	CTRun.m
+	CTRunDelegate.c
 	KTFont.m
 	KTFont_FT.m
 	constants.c
