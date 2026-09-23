@@ -50,10 +50,16 @@
 }
 
 - (NSView *) view {
-    if (_view == nil)
+    if (_view == nil) {
         [self loadView];
+        if (_view != nil)
+            [self viewDidLoad];
+    }
 
     return _view;
+}
+
+- (void) viewDidLoad {
 }
 
 - (BOOL) isViewLoaded {

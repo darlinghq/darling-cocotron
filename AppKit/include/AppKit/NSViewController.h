@@ -42,6 +42,8 @@
 
 - (void) loadView;
 - (BOOL) isViewLoaded; // 10.10
+// Called once -view has loaded the view with -loadView; does nothing by default.
+- (void) viewDidLoad;
 
 - (void) discardEditing;
 
