@@ -23,6 +23,16 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <CoreText/CoreTextExport.h>
 #import <ATS/ATS.h>
 
+#ifdef __OBJC__
+// A Core Text adaptive image provider supplies an image for a proposed layout size.
+@protocol CTAdaptiveImageProviding
+- (CGImageRef _Nullable)imageForProposedSize:(CGSize)proposedSize
+                               scaleFactor:(CGFloat)scaleFactor
+                               imageOffset:(CGPoint * _Nonnull)outImageOffset
+                                 imageSize:(CGSize * _Nonnull)outImageSize CF_RETURNS_NOT_RETAINED;
+@end
+#endif
+
 typedef struct CF_BRIDGED_TYPE(id) KTFont *CTFontRef;
 
 CORETEXT_EXPORT const CFStringRef kCTFontCopyrightNameKey;
