@@ -386,12 +386,14 @@ static inline id childOfItemAtIndex(NSOutlineView *self, id item,
                     expandChildren: (BOOL) expandChildren
 {
     BOOL noteNumberOfRowsChanged = NO;
-    BOOL expandThisItem = YES;
+    // The nil root is always expanded; only its children can be expanded.
+    BOOL expandThisItem = item != nil;
 
-    if (![self isExpandable: item])
+    if (item != nil && ![self isExpandable: item])
         return YES;
 
-    if ([_delegate respondsToSelector: @selector(outlineView:
+    if (expandThisItem &&
+        [_delegate respondsToSelector: @selector(outlineView:
                                                shouldExpandItem:)])
         if ([_delegate outlineView: self shouldExpandItem: item] == NO)
             expandThisItem = NO;
@@ -499,9 +501,10 @@ static inline id childOfItemAtIndex(NSOutlineView *self, id item,
 }
 
 - (void) collapseItem: (id) item collapseChildren: (BOOL) collapseChildren {
-    BOOL collapseThisItem = YES;
+    BOOL collapseThisItem = item != nil;
 
-    if ([_delegate respondsToSelector: @selector(outlineView:
+    if (collapseThisItem &&
+        [_delegate respondsToSelector: @selector(outlineView:
                                                shouldCollapseItem:)])
         if ([_delegate outlineView: self shouldCollapseItem: item] == NO)
             collapseThisItem = NO;
