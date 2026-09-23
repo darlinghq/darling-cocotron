@@ -228,6 +228,9 @@ CA_EXPORT NSString *const kCAContentsFormatGray8Uint;
 - (BOOL) contentsAreFlipped;
 
 - (nonnull instancetype)init;
+// Copies the layer's properties but not its place in the layer tree or its
+// animations, as for a presentation copy; subclasses copy their own state.
+- (nonnull instancetype)initWithLayer: (nonnull id)layer;
 
 - (void) addSublayer: (CALayer *) layer;
 - (void) insertSublayer: (CALayer *) layer atIndex: (unsigned int) index;

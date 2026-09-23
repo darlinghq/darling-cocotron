@@ -331,7 +331,9 @@ NSString *const kCAContentsFormatGray8Uint = @"Gray8";
     _magnificationFilter = value;
 }
 
-- init {
+// Shared by -init and -initWithLayer:. The latter must not call -init, or a
+// subclass's override of -init would run again on the copy.
+- (void) _setDefaults {
     _superlayer = nil;
     _sublayers = [NSArray new];
     _delegate = nil;
@@ -362,6 +364,62 @@ NSString *const kCAContentsFormatGray8Uint = @"Gray8";
     _minificationFilter = kCAFilterLinear;
     _magnificationFilter = kCAFilterLinear;
     _animations = [[NSMutableDictionary alloc] init];
+}
+
+- init {
+    [self _setDefaults];
+    return self;
+}
+
+- initWithLayer: (id) layer {
+    if (![layer isKindOfClass: [CALayer class]]) {
+        [self release];
+        [NSException raise: NSInvalidArgumentException
+                    format: @"-[CALayer initWithLayer:] needs a CALayer, not %@", layer];
+    }
+    self = [super init];
+    [self _setDefaults];
+    CALayer *other = layer;
+
+    // Scalars are assigned directly: some setters (opacity) would start
+    // implicit animations on the copy.
+    _delegate = other->_delegate;
+    _anchorPoint = other->_anchorPoint;
+    _position = other->_position;
+    _bounds = other->_bounds;
+    _opacity = other->_opacity;
+    _opaque = other->_opaque;
+    _contentsScale = other->_contentsScale;
+    _contentsCenter = other->_contentsCenter;
+    _allowsGroupOpacity = other->_allowsGroupOpacity;
+    _allowsEdgeAntialiasing = other->_allowsEdgeAntialiasing;
+    _transform = other->_transform;
+    _sublayerTransform = other->_sublayerTransform;
+    _borderWidth = other->_borderWidth;
+    _cornerRadius = other->_cornerRadius;
+    _masksToBounds = other->_masksToBounds;
+    _shadowOpacity = other->_shadowOpacity;
+    _shadowRadius = other->_shadowRadius;
+    _shadowOffset = other->_shadowOffset;
+    _hidden = other->_hidden;
+    _needsDisplayOnBoundsChange = other->_needsDisplayOnBoundsChange;
+
+    // The copy has no context yet, so these setters only do the retain/copy.
+    [self setContents: other->_contents];
+    [self setContentsFormat: other->_contentsFormat];
+    [self setContentsGravity: other->_contentsGravity];
+    [self setCornerCurve: other->_cornerCurve];
+    [self setMinificationFilter: other->_minificationFilter];
+    [self setMagnificationFilter: other->_magnificationFilter];
+    [self setBackgroundColor: other->_backgroundColor];
+    [self setBorderColor: other->_borderColor];
+    [self setShadowColor: other->_shadowColor];
+    [self setShadowPath: other->_shadowPath];
+    [self setFilters: other->_filters];
+    [self setCompositingFilter: other->_compositingFilter];
+    // Shared, not re-parented: -setMask: would move the mask to this
+    // context-less copy.
+    _mask = [other->_mask retain];
     return self;
 }
 

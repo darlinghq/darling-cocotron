@@ -41,17 +41,41 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
 
 @implementation CAShapeLayer
 
+- (void) _setShapeDefaults {
+    _fillColor = CGColorCreateGenericRGB(0, 0, 0, 1);
+    _fillRule = [kCAFillRuleNonZero copy];
+    _strokeEnd = 1;
+    _lineWidth = 1;
+    _miterLimit = 10;
+    _lineCap = [kCALineCapButt copy];
+    _lineJoin = [kCALineJoinMiter copy];
+    _needsDisplay = YES;
+}
+
 - init {
     self = [super init];
-    if (self != nil) {
-        _fillColor = CGColorCreateGenericRGB(0, 0, 0, 1);
-        _fillRule = [kCAFillRuleNonZero copy];
-        _strokeEnd = 1;
-        _lineWidth = 1;
-        _miterLimit = 10;
-        _lineCap = [kCALineCapButt copy];
-        _lineJoin = [kCALineJoinMiter copy];
-        _needsDisplay = YES;
+    if (self != nil)
+        [self _setShapeDefaults];
+    return self;
+}
+
+- initWithLayer: (id) layer {
+    self = [super initWithLayer: layer];
+    [self _setShapeDefaults];
+    if ([layer isKindOfClass: [CAShapeLayer class]]) {
+        CAShapeLayer *other = layer;
+        [self setPath: other->_path];
+        [self setFillColor: other->_fillColor];
+        [self setFillRule: other->_fillRule];
+        [self setStrokeColor: other->_strokeColor];
+        [self setStrokeStart: other->_strokeStart];
+        [self setStrokeEnd: other->_strokeEnd];
+        [self setLineWidth: other->_lineWidth];
+        [self setMiterLimit: other->_miterLimit];
+        [self setLineCap: other->_lineCap];
+        [self setLineJoin: other->_lineJoin];
+        [self setLineDashPhase: other->_lineDashPhase];
+        [self setLineDashPattern: other->_lineDashPattern];
     }
     return self;
 }

@@ -59,7 +59,7 @@ CA_EXPORT NSString *const kCAAnimationRotateAutoReverse;
     BOOL _cumulative;
 }
 
-+ animationWithKeyPath: (NSString *) keyPath;
++ (instancetype) animationWithKeyPath: (NSString *) keyPath __attribute__((returns_nonnull));
 @property(copy) NSString *keyPath;
 @property(getter=isAdditive) BOOL additive;
 @property(getter=isCumulative) BOOL cumulative;

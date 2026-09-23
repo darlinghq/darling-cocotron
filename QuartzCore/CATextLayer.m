@@ -115,14 +115,34 @@ static CGFloat layoutLine(CTFontRef font, NSString *line, CGGlyph **outGlyphs,
 
 @implementation CATextLayer
 
+- (void) _setTextDefaults {
+    _fontSize = 36;
+    _foregroundColor = CGColorCreateGenericRGB(1, 1, 1, 1);
+    _alignmentMode = [kCAAlignmentNatural copy];
+    _truncationMode = [kCATruncationNone copy];
+    _needsDisplay = YES;
+}
+
 - init {
     self = [super init];
-    if (self != nil) {
-        _fontSize = 36;
-        _foregroundColor = CGColorCreateGenericRGB(1, 1, 1, 1);
-        _alignmentMode = [kCAAlignmentNatural copy];
-        _truncationMode = [kCATruncationNone copy];
-        _needsDisplay = YES;
+    if (self != nil)
+        [self _setTextDefaults];
+    return self;
+}
+
+- initWithLayer: (id) layer {
+    self = [super initWithLayer: layer];
+    [self _setTextDefaults];
+    if ([layer isKindOfClass: [CATextLayer class]]) {
+        CATextLayer *other = layer;
+        [self setString: other->_string];
+        [self setFont: other->_font];
+        [self setFontSize: other->_fontSize];
+        [self setForegroundColor: other->_foregroundColor];
+        [self setWrapped: other->_wrapped];
+        [self setAlignmentMode: other->_alignmentMode];
+        [self setTruncationMode: other->_truncationMode];
+        [self setAllowsFontSubpixelQuantization: other->_allowsFontSubpixelQuantization];
     }
     return self;
 }
