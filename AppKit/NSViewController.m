@@ -173,20 +173,23 @@
     NSString *name = [self nibName];
     NSBundle *bundle = [self nibBundle];
 
-    if (name == nil) {
-        // should pathForResource assert name for non-nil?
-        [NSException raise: NSInvalidArgumentException
-                    format: @"-[%@ %s] nibName is nil", [self class], _cmd];
-        return;
-    }
+    if (bundle == nil)
+        bundle = [NSBundle mainBundle];
+
+    // Since OS X 10.10 a nil nibName means the nib named after the class.
+    BOOL named = name != nil;
+    if (!named)
+        name = NSStringFromClass([self class]);
 
     // A storyboard scene's view is archived in its own nib inside the storyboard.
     NSString *path = [_storyboard _pathForNibNamed: name];
-
-    if (bundle == nil)
-        bundle = [NSBundle mainBundle];
     if (path == nil)
         path = [bundle pathForResource: name ofType: @"nib"];
+    if (path == nil && !named)
+        [NSException raise: NSInvalidArgumentException
+                    format: @"-[%@ %@] nibName is nil and %@ has no nib named %@",
+                            [self class], NSStringFromSelector(_cmd), bundle, name];
+
     NSDictionary *nameTable = [NSDictionary dictionaryWithObject: self
                                                           forKey: NSNibOwner];
 
