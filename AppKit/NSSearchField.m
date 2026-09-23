@@ -22,6 +22,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @implementation NSSearchField
 
++ (Class) cellClass {
+    return [NSSearchFieldCell class];
+}
+
 - (NSSearchFieldCell *) _searchCell {
     return [self cell];
 }

@@ -146,11 +146,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSSavePanel.h>
 #import <AppKit/NSScreen.h>
 #import <AppKit/NSScrollView.h>
+#import <AppKit/NSScrollEdgeEffectStyle.h>
 #import <AppKit/NSScroller.h>
 #import <AppKit/NSScrubber.h>
 #import <AppKit/NSScrubberItemView.h>
 #import <AppKit/NSSearchField.h>
 #import <AppKit/NSSearchFieldCell.h>
+#import <AppKit/NSSearchToolbarItem.h>
 #import <AppKit/NSSecureTextField.h>
 #import <AppKit/NSSecureTextFieldCell.h>
 #import <AppKit/NSSegmentedCell.h>

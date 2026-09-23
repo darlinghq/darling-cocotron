@@ -288,3 +288,4 @@ APPKIT_EXPORT NSImageName const NSImageNameTouchBarRecordStopTemplate;
 
 APPKIT_EXPORT NSImageHintKey const NSImageHintInterpolation;
 APPKIT_EXPORT NSImageHintKey const NSImageHintCTM;
+APPKIT_EXPORT NSImageHintKey const NSImageHintSymbolScale;
