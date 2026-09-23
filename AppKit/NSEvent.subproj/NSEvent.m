@@ -316,6 +316,14 @@ static BOOL _mouseCoalescingEnabled = YES;
     return 0;
 }
 
+- (CGFloat) magnification {
+    return 0;
+}
+
+- (float) rotation {
+    return 0;
+}
+
 - (NSString *) characters {
     return nil;
 }
