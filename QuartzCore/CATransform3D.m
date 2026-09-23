@@ -183,3 +183,20 @@ CATransform3D CATransform3DMakeAffineTransform(CGAffineTransform m) {
 
     return t;
 }
+
+@implementation NSValue (CATransform3DAdditions)
+
++ (NSValue *) valueWithCATransform3D: (CATransform3D) t {
+    return [self valueWithBytes: &t objCType: @encode(CATransform3D)];
+}
+
+- (CATransform3D) CATransform3DValue {
+    if (strcmp([self objCType], @encode(CATransform3D)) != 0)
+        [NSException raise: NSInvalidArgumentException
+                    format: @"NSValue of type %s does not hold a CATransform3D", [self objCType]];
+    CATransform3D t;
+    [self getValue: &t];
+    return t;
+}
+
+@end

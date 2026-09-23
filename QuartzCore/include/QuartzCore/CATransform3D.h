@@ -44,3 +44,13 @@ CA_EXPORT CATransform3D CATransform3DRotate(CATransform3D t, CGFloat angle, CGFl
 // Lifts a 2D affine transform into the 3D matrix: the 2x2 linear part goes to
 // m11, m12, m21, m22 and the translation to m41, m42, leaving z untouched.
 CA_EXPORT CATransform3D CATransform3DMakeAffineTransform(CGAffineTransform m);
+
+#ifdef __OBJC__
+#import <Foundation/NSValue.h>
+
+@interface NSValue (CATransform3DAdditions)
++ (NSValue *_Nonnull) valueWithCATransform3D: (CATransform3D) t;
+// Raises NSInvalidArgumentException unless the value holds a CATransform3D.
+@property(readonly) CATransform3D CATransform3DValue;
+@end
+#endif
