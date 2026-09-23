@@ -53,6 +53,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSTextInputClient.h>
 #import <objc/runtime.h>
 #include <math.h>
+#import "NSGestureRecognizer-Private.h"
 
 @class IBMetricsTable;
 
@@ -487,6 +488,8 @@ typedef struct __VFlags {
     [_layerContext release];
 
     [_identifier release];
+    for (NSGestureRecognizer *recognizer in _gestureRecognizers)
+        [recognizer _setView: nil];
     [_gestureRecognizers release];
 
     [super dealloc];
@@ -3320,18 +3323,27 @@ static NSMutableArray *installedViewLayoutGuides(NSView *view, BOOL create) {
 }
 
 - (void) setGestureRecognizers: (NSArray *) recognizers {
-    NSMutableArray *copied = [recognizers mutableCopy];
-    [_gestureRecognizers release];
-    _gestureRecognizers = copied;
+    for (NSGestureRecognizer *recognizer in [self gestureRecognizers])
+        [self removeGestureRecognizer: recognizer];
+    for (NSGestureRecognizer *recognizer in recognizers)
+        [self addGestureRecognizer: recognizer];
 }
 
+// A recognizer belongs to one view; adding it here takes it from any other.
 - (void) addGestureRecognizer: (NSGestureRecognizer *) recognizer {
+    if ([recognizer view] == self)
+        return;
+    [[recognizer view] removeGestureRecognizer: recognizer];
     if (_gestureRecognizers == nil)
         _gestureRecognizers = [[NSMutableArray alloc] init];
     [_gestureRecognizers addObject: recognizer];
+    [recognizer _setView: self];
 }
 
 - (void) removeGestureRecognizer: (NSGestureRecognizer *) recognizer {
+    if ([recognizer view] != self)
+        return;
+    [recognizer _setView: nil];
     [_gestureRecognizers removeObjectIdenticalTo: recognizer];
 }
 

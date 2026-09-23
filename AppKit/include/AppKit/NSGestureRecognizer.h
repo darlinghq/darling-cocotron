@@ -20,6 +20,9 @@
 #import <AppKit/AppKitExport.h>
 #import <Foundation/Foundation.h>
 
+@class NSEvent, NSGestureRecognizer, NSView;
+@protocol NSGestureRecognizerDelegate;
+
 typedef NS_ENUM(NSInteger, NSGestureRecognizerState) {
     NSGestureRecognizerStatePossible = 0,
     NSGestureRecognizerStateBegan,
@@ -28,12 +31,52 @@ typedef NS_ENUM(NSInteger, NSGestureRecognizerState) {
     NSGestureRecognizerStateCancelled,
     NSGestureRecognizerStateFailed,
     NSGestureRecognizerStateRecognized = NSGestureRecognizerStateEnded,
-};
+} NS_SWIFT_NAME(NSGestureRecognizer.State);
 
+// NSWindow gives a recognizer the mouse and gesture events aimed at its view or
+// the view's subviews, before the view itself gets them. Recognizers don't
+// delay or cancel the view's events, and failure requirements aren't modelled.
 @interface NSGestureRecognizer : NSObject <NSCoding>
 
-// Always NSGestureRecognizerStatePossible. AppKit never sends events to a
-// recognizer, so no recognizer advances past it.
+- (instancetype) initWithTarget: (id) target action: (SEL) action NS_DESIGNATED_INITIALIZER;
+- (instancetype) initWithCoder: (NSCoder *) coder NS_DESIGNATED_INITIALIZER;
+
+@property(assign) id target;
+@property SEL action;
 @property(readonly) NSGestureRecognizerState state;
+@property(assign) id<NSGestureRecognizerDelegate> delegate;
+@property(getter=isEnabled) BOOL enabled;
+@property(readonly) NSView *view;
+
+- (NSPoint) locationInView: (NSView *) view;
+
+@end
+
+@protocol NSGestureRecognizerDelegate <NSObject>
+@optional
+- (BOOL) gestureRecognizerShouldBegin: (NSGestureRecognizer *) gestureRecognizer;
+- (BOOL) gestureRecognizer: (NSGestureRecognizer *) gestureRecognizer
+        shouldAttemptToRecognizeWithEvent: (NSEvent *) event;
+@end
+
+@interface NSGestureRecognizer (NSSubclassUse)
+
+// Began and Changed send the action; so do Ended (Recognized) and Cancelled,
+// after which NSWindow resets the recognizer once the event is dispatched.
+@property(readwrite) NSGestureRecognizerState state;
+
+- (void) reset;
+
+- (void) mouseDown: (NSEvent *) event NS_SWIFT_NAME(mouseDown(with:));
+- (void) rightMouseDown: (NSEvent *) event NS_SWIFT_NAME(rightMouseDown(with:));
+- (void) otherMouseDown: (NSEvent *) event NS_SWIFT_NAME(otherMouseDown(with:));
+- (void) mouseUp: (NSEvent *) event NS_SWIFT_NAME(mouseUp(with:));
+- (void) rightMouseUp: (NSEvent *) event NS_SWIFT_NAME(rightMouseUp(with:));
+- (void) otherMouseUp: (NSEvent *) event NS_SWIFT_NAME(otherMouseUp(with:));
+- (void) mouseDragged: (NSEvent *) event NS_SWIFT_NAME(mouseDragged(with:));
+- (void) rightMouseDragged: (NSEvent *) event NS_SWIFT_NAME(rightMouseDragged(with:));
+- (void) otherMouseDragged: (NSEvent *) event NS_SWIFT_NAME(otherMouseDragged(with:));
+- (void) magnifyWithEvent: (NSEvent *) event;
+- (void) rotateWithEvent: (NSEvent *) event;
 
 @end

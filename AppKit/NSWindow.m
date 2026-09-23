@@ -48,6 +48,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSWindowAnimationContext.h>
 #import <ApplicationServices/ApplicationServices.h>
 #import <CoreGraphics/CGWindow.h>
+#import "NSGestureRecognizer-Private.h"
 
 const NSNotificationName NSWindowDidBecomeKeyNotification =
         @"NSWindowDidBecomeKeyNotification";
@@ -2781,6 +2782,43 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
     return view;
 }
 
+// The recognizers of the view an event goes to and of that view's ancestors,
+// innermost first. Releases and drags go to the view that received the press
+// of the same button.
+- (NSArray *) _gestureRecognizersForEvent: (NSEvent *) event {
+    NSView *target;
+
+    switch ([event type]) {
+    case NSEventTypeLeftMouseDown:
+    case NSEventTypeRightMouseDown:
+    case NSEventTypeOtherMouseDown:
+    case NSEventTypeMagnify:
+    case NSEventTypeRotate:
+        target = [_backgroundView hitTest: [event locationInWindow]];
+        break;
+    case NSEventTypeLeftMouseUp:
+    case NSEventTypeLeftMouseDragged:
+        target = [self _mouseDownViewForButton: 0];
+        break;
+    case NSEventTypeRightMouseUp:
+    case NSEventTypeRightMouseDragged:
+        target = [self _mouseDownViewForButton: 1];
+        break;
+    case NSEventTypeOtherMouseUp:
+    case NSEventTypeOtherMouseDragged:
+        target = [self _mouseDownViewForButton: [self _otherButtonOfEvent: event]];
+        break;
+    default:
+        return nil;
+    }
+
+    NSMutableArray *recognizers = [NSMutableArray array];
+    for (NSView *view = target; view != nil; view = [view superview]) {
+        [recognizers addObjectsFromArray: [view gestureRecognizers]];
+    }
+    return recognizers;
+}
+
 - (void) sendEvent: (NSEvent *) event {
     // Some events can cause our window to be destroyed
     // So make sure self lives at least through this current run loop...
@@ -2818,6 +2856,10 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
             return;
         }
     }
+
+    NSArray *recognizers = [self _gestureRecognizersForEvent: event];
+    for (NSGestureRecognizer *recognizer in recognizers)
+        [recognizer _receiveEvent: event];
 
     BOOL shouldValidateToolbarItems = YES;
     // OK let's see if anyone else wants it.
@@ -2942,6 +2984,9 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
         NSUnimplementedMethod();
         break;
     }
+    for (NSGestureRecognizer *recognizer in recognizers)
+        [recognizer _resetIfFinished];
+
     if (shouldValidateToolbarItems && [self toolbar]) {
         [NSObject cancelPreviousPerformRequestsWithTarget: [self toolbar]
                                                  selector: @selector

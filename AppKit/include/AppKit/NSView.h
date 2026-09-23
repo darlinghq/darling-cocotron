@@ -531,9 +531,7 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPre
 
 @interface NSView (NSViewGestureRecognizers)
 
-// Stored only: AppKit never routes events to a recognizer, so a recognizer
-// added here stays in NSGestureRecognizerStatePossible and never fires.
-@property(copy) NSArray *gestureRecognizers;
+@property(copy) NSArray<NSGestureRecognizer *> *gestureRecognizers;
 - (void) addGestureRecognizer: (NSGestureRecognizer *) recognizer;
 - (void) removeGestureRecognizer: (NSGestureRecognizer *) recognizer;
 
