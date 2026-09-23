@@ -45,6 +45,8 @@ enum {
     NSImage *_pattern;
 }
 
++ (NSColor *) colorWithCGColor: (CGColorRef) color;
+
 @property(class, strong, readonly) NSColor *labelColor;
 
 @property(class, strong, readonly) NSColor *textColor;
