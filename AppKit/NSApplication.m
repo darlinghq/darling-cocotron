@@ -48,6 +48,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Foundation/NSAppleEventDescriptor.h>
 #import <objc/message.h>
 #import <pthread.h>
+#import <stdatomic.h>
 
 // Runs the +[NSEvent addLocalMonitorForEventsMatchingMask:handler:] handlers.
 extern NSEvent *NSEventApplyLocalMonitors(NSEvent *event);
@@ -1658,6 +1659,24 @@ NSApplication *NSApp = nil;
 
 - (NSDockTile *) dockTile {
     return _dockTile;
+}
+
+// Darling has no login session that relaunches apps, so these only record the setting.
+static _Atomic long relaunchOnLoginDisableCount;
+
+- (void) disableRelaunchOnLogin {
+    atomic_fetch_add(&relaunchOnLoginDisableCount, 1);
+}
+
+- (void) enableRelaunchOnLogin {
+    long count = atomic_load(&relaunchOnLoginDisableCount);
+    while (count > 0 && !atomic_compare_exchange_weak(&relaunchOnLoginDisableCount,
+                                                      &count, count - 1))
+        ;
+}
+
+- (BOOL) _relaunchesOnLogin {
+    return atomic_load(&relaunchOnLoginDisableCount) == 0;
 }
 
 - (void) doCommandBySelector: (SEL) selector {
