@@ -24,32 +24,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #include <CoreGraphics/CGBase.h>
 
-struct CGPoint {
-    CGFloat x;
-    CGFloat y;
-};
-typedef struct CGPoint CGPoint;
-
-struct CGSize {
-    CGFloat width;
-    CGFloat height;
-};
-typedef struct CGSize CGSize;
-
-#define CGVECTOR_DEFINED 1
-
-struct CGVector {
-    CGFloat dx;
-    CGFloat dy;
-};
-typedef struct CGVector CGVector;
-
-struct CGRect {
-    CGPoint origin;
-    CGSize size;
-};
-typedef struct CGRect CGRect;
-
 typedef CF_ENUM(uint32_t, CGRectEdge) {
     CGRectMinXEdge,
     CGRectMinYEdge,
