@@ -34,6 +34,9 @@
 
 - (void) dealloc {
     [_identifier release];
+    for (NSViewController *child in _childViewControllers)
+        child->_parentViewController = nil;
+    [_childViewControllers release];
 
     [super dealloc];
 }
@@ -81,6 +84,68 @@
     value = [value retain];
     [_view release];
     _view = value;
+}
+
+- (NSArray *) childViewControllers {
+    return _childViewControllers ? [[_childViewControllers copy] autorelease]
+                                 : [NSArray array];
+}
+
+- (void) setChildViewControllers: (NSArray *) children {
+    while ([_childViewControllers count] > 0)
+        [self removeChildViewControllerAtIndex:
+                      [_childViewControllers count] - 1];
+    for (NSViewController *child in children)
+        [self addChildViewController: child];
+}
+
+- (NSViewController *) parentViewController {
+    return _parentViewController;
+}
+
+- (void) addChildViewController: (NSViewController *) child {
+    [self insertChildViewController: child
+                            atIndex: [_childViewControllers count]];
+}
+
+- (void) insertChildViewController: (NSViewController *) child
+                           atIndex: (NSInteger) index
+{
+    if (child == nil || index < 0 ||
+        index > (NSInteger) [_childViewControllers count])
+        [NSException raise: NSInvalidArgumentException
+                    format: @"-[%@ %@] invalid child %@ or index %ld",
+                            [self class], NSStringFromSelector(_cmd), child,
+                            (long) index];
+
+    [child retain];
+    if ([child parentViewController] != nil)
+        [child removeFromParentViewController];
+    if (_childViewControllers == nil)
+        _childViewControllers = [[NSMutableArray alloc] init];
+    [_childViewControllers insertObject: child atIndex: index];
+    child->_parentViewController = self;
+    [child release];
+}
+
+- (void) removeChildViewControllerAtIndex: (NSInteger) index {
+    if (index < 0 || index >= (NSInteger) [_childViewControllers count])
+        [NSException raise: NSRangeException
+                    format: @"-[%@ %@] index %ld out of bounds", [self class],
+                            NSStringFromSelector(_cmd), (long) index];
+
+    NSViewController *child = [_childViewControllers objectAtIndex: index];
+    child->_parentViewController = nil;
+    [_childViewControllers removeObjectAtIndex: index];
+}
+
+- (void) removeFromParentViewController {
+    NSViewController *parent = _parentViewController;
+    if (parent == nil)
+        return;
+    NSUInteger index = [parent->_childViewControllers indexOfObjectIdenticalTo: self];
+    if (index != NSNotFound)
+        [parent removeChildViewControllerAtIndex: index];
 }
 
 - (void) loadView {
