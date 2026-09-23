@@ -46,7 +46,32 @@ typedef NS_OPTIONS(NSUInteger, NSLineBreakStrategy) {
 
 // The primary interfaces match Apple's declarations member for member: Clang
 // rejects a class that two modules define differently.
-@interface NSParagraphStyle : NSObject <NSCopying, NSMutableCopying, NSSecureCoding>
+@interface NSParagraphStyle : NSObject <NSCopying, NSMutableCopying, NSSecureCoding> {
+@protected
+    NSWritingDirection _writingDirection;
+    CGFloat _paragraphSpacing;
+    CGFloat _paragraphSpacingBefore;
+    NSArray *_textBlocks;
+    NSArray *_textLists;
+    NSInteger _headerLevel;
+    CGFloat _firstLineHeadIndent;
+    CGFloat _headIndent;
+    CGFloat _tailIndent;
+    NSTextAlignment _alignment;
+    NSLineBreakMode _lineBreakMode;
+    CGFloat _minimumLineHeight;
+    CGFloat _maximumLineHeight;
+    CGFloat _lineHeightMultiple;
+    CGFloat _lineSpacing;
+    CGFloat _defaultTabInterval;
+    NSMutableArray *_tabStops;
+    float _hyphenationFactor;
+    float _tighteningFactorForTruncation;
+    NSInteger _horizontalAlignment;
+    BOOL _usesDefaultHyphenation;
+    BOOL _allowsDefaultTighteningForTruncation;
+    NSLineBreakStrategy _lineBreakStrategy;
+}
 
 @property (class, readonly, copy, NS_NONATOMIC_IOSONLY) NSParagraphStyle *defaultParagraphStyle;
 

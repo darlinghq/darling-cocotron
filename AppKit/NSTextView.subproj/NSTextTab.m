@@ -26,11 +26,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 NSTextTabOptionKey NSTabColumnTerminatorsAttributeName =
         @"NSTabColumnTerminatorsAttributeName";
 
-@implementation NSTextTab {
-    NSTextAlignment _alignment;
-    CGFloat _location;
-    NSDictionary *_options;
-}
+@implementation NSTextTab
 
 + (BOOL) supportsSecureCoding {
     return YES;

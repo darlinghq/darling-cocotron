@@ -33,16 +33,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 static NSMutableDictionary *viewProviderClasses;
 
-@implementation NSTextAttachment {
-    NSData *_contents;
-    NSString *_fileType;
-    NSImage *_image;
-    CGRect _bounds;
-    NSFileWrapper *_fileWrapper;
-    id<NSTextAttachmentCell> _cell;
-    CGFloat _lineLayoutPadding;
-    BOOL _allowsTextAttachmentView;
-}
+@implementation NSTextAttachment
 
 + (BOOL) supportsSecureCoding {
     return YES;

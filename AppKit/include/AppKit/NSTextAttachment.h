@@ -49,7 +49,16 @@ enum { NSAttachmentCharacter = 0xFFFC };
 
 @end
 
-@interface NSTextAttachment : NSObject <NSTextAttachmentLayout, NSSecureCoding>
+@interface NSTextAttachment : NSObject <NSTextAttachmentLayout, NSSecureCoding> {
+    NSData *_contents;
+    NSString *_fileType;
+    NSImage *_image;
+    CGRect _bounds;
+    NSFileWrapper *_fileWrapper;
+    id<NSTextAttachmentCell> _cell;
+    CGFloat _lineLayoutPadding;
+    BOOL _allowsTextAttachmentView;
+}
 
 - (instancetype)initWithData:(nullable NSData *)contentData ofType:(nullable NSString *)uti NS_DESIGNATED_INITIALIZER;
 

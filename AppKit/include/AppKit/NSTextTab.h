@@ -28,7 +28,11 @@ APPKIT_EXPORT NSTextTabOptionKey NSTabColumnTerminatorsAttributeName;
 
 // The primary interface matches Apple's declaration member for member: Clang
 // rejects a class that two modules define differently.
-@interface NSTextTab : NSObject <NSCopying, NSCoding, NSSecureCoding>
+@interface NSTextTab : NSObject <NSCopying, NSCoding, NSSecureCoding> {
+    NSTextAlignment _alignment;
+    CGFloat _location;
+    NSDictionary *_options;
+}
 
 + (NSCharacterSet *)columnTerminatorsForLocale:(nullable NSLocale *)aLocale;
 

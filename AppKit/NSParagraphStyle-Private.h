@@ -19,34 +19,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSParagraphStyle.h>
 
-// Apple's public NSParagraphStyle declares no instance variables; they live
-// here so NSMutableParagraphStyle can still reach them.
-@interface NSParagraphStyle () {
-@protected
-    NSWritingDirection _writingDirection;
-    CGFloat _paragraphSpacing;
-    CGFloat _paragraphSpacingBefore;
-    NSArray *_textBlocks;
-    NSArray *_textLists;
-    NSInteger _headerLevel;
-    CGFloat _firstLineHeadIndent;
-    CGFloat _headIndent;
-    CGFloat _tailIndent;
-    NSTextAlignment _alignment;
-    NSLineBreakMode _lineBreakMode;
-    CGFloat _minimumLineHeight;
-    CGFloat _maximumLineHeight;
-    CGFloat _lineHeightMultiple;
-    CGFloat _lineSpacing;
-    CGFloat _defaultTabInterval;
-    NSMutableArray *_tabStops;
-    float _hyphenationFactor;
-    float _tighteningFactorForTruncation;
-    NSInteger _horizontalAlignment;
-    BOOL _usesDefaultHyphenation;
-    BOOL _allowsDefaultTighteningForTruncation;
-    NSLineBreakStrategy _lineBreakStrategy;
-}
+@interface NSParagraphStyle ()
 + (NSArray *) _defaultTabStops;
 - initWithParagraphStyle: (NSParagraphStyle *) other;
 @end
