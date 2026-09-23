@@ -91,6 +91,13 @@ typedef NSString *CALayerContentsFilter NS_TYPED_ENUM;
     CGFloat _borderWidth;
     CGFloat _cornerRadius;
     BOOL _masksToBounds;
+    CALayer *_mask;
+    NSArray *_filters;
+    id _compositingFilter;
+    CGColorRef _shadowColor;
+    float _shadowOpacity;
+    CGFloat _shadowRadius;
+    CGSize _shadowOffset;
     BOOL _hidden;
     id _textureContents;
     BOOL _needsDisplayOnBoundsChange;
@@ -135,6 +142,15 @@ typedef NSString *CALayerContentsFilter NS_TYPED_ENUM;
 @property CGFloat borderWidth;
 @property CGFloat cornerRadius;
 @property BOOL masksToBounds;
+// These properties retain the public layer state. CARenderer does not yet
+// apply masks, Core Image filters, or blurred shadows when drawing.
+@property(retain) CALayer *mask;
+@property(copy) NSArray *filters;
+@property(retain) id compositingFilter;
+@property CGColorRef shadowColor;
+@property float shadowOpacity;
+@property CGFloat shadowRadius;
+@property CGSize shadowOffset;
 @property(getter=isHidden) BOOL hidden;
 
 // Stored only; CARenderer does not yet antialias layer edges.

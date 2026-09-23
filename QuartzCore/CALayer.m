@@ -51,6 +51,7 @@ NSString *const kCAContentsFormatGray8Uint = @"Gray8";
     _context = context;
     [_sublayers makeObjectsPerformSelector: @selector(_setContext:)
                                 withObject: context];
+    [_mask _setContext: context];
 }
 
 - (CALayer *) superlayer {
@@ -280,6 +281,10 @@ NSString *const kCAContentsFormatGray8Uint = @"Gray8";
     // The whole contents image stretches, i.e. no fixed border.
     _contentsCenter = CGRectMake(0, 0, 1, 1);
     _contentsFormat = [kCAContentsFormatRGBA8Uint copy];
+    _shadowColor = CGColorCreateGenericRGB(0, 0, 0, 1);
+    _shadowOpacity = 0;
+    _shadowRadius = 3;
+    _shadowOffset = CGSizeMake(0, -3);
     _allowsEdgeAntialiasing = NO;
     _transform = CATransform3DIdentity;
     _sublayerTransform = CATransform3DIdentity;
@@ -295,6 +300,11 @@ NSString *const kCAContentsFormatGray8Uint = @"Gray8";
     [_minificationFilter release];
     [_magnificationFilter release];
     [_contentsFormat release];
+    [_mask release];
+    [_filters release];
+    [_compositingFilter release];
+    if (_shadowColor)
+        CGColorRelease(_shadowColor);
     if (_backgroundColor)
         CGColorRelease(_backgroundColor);
     if (_borderColor)
@@ -357,6 +367,82 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
 
 - (void) setMasksToBounds: (BOOL) value {
     _masksToBounds = value;
+    [_context startTimerIfNeeded];
+}
+
+- (CALayer *) mask {
+    return _mask;
+}
+
+- (void) setMask: (CALayer *) value {
+    if (value == _mask)
+        return;
+    if (value == self)
+        [NSException raise: NSInvalidArgumentException
+                    format: @"A layer cannot mask itself"];
+    [value retain];
+    [_mask _setContext: nil];
+    [_mask release];
+    _mask = value;
+    [_mask _setContext: _context];
+    [_context startTimerIfNeeded];
+}
+
+- (NSArray *) filters {
+    return _filters;
+}
+
+- (void) setFilters: (NSArray *) value {
+    value = [value copy];
+    [_filters release];
+    _filters = value;
+    [_context startTimerIfNeeded];
+}
+
+- (id) compositingFilter {
+    return _compositingFilter;
+}
+
+- (void) setCompositingFilter: (id) value {
+    [value retain];
+    [_compositingFilter release];
+    _compositingFilter = value;
+    [_context startTimerIfNeeded];
+}
+
+- (CGColorRef) shadowColor {
+    return _shadowColor;
+}
+
+- (void) setShadowColor: (CGColorRef) value {
+    replaceColor(&_shadowColor, value);
+    [_context startTimerIfNeeded];
+}
+
+- (float) shadowOpacity {
+    return _shadowOpacity;
+}
+
+- (void) setShadowOpacity: (float) value {
+    _shadowOpacity = value;
+    [_context startTimerIfNeeded];
+}
+
+- (CGFloat) shadowRadius {
+    return _shadowRadius;
+}
+
+- (void) setShadowRadius: (CGFloat) value {
+    _shadowRadius = value;
+    [_context startTimerIfNeeded];
+}
+
+- (CGSize) shadowOffset {
+    return _shadowOffset;
+}
+
+- (void) setShadowOffset: (CGSize) value {
+    _shadowOffset = value;
     [_context startTimerIfNeeded];
 }
 
