@@ -607,6 +607,8 @@ static BOOL _allowsAutomaticWindowTabbing;
     [_tabbingIdentifier release];
     [_subtitle release];
     [_childWindows release];
+    [_representedFilename release];
+    [_representedURL release];
     [_title release];
     [_miniwindowTitle release];
     [_miniwindowImage release];
@@ -735,8 +737,7 @@ static BOOL _allowsAutomaticWindowTabbing;
 }
 
 - (NSURL *) representedURL {
-    NSUnimplementedMethod();
-    return nil;
+    return _representedURL;
 }
 
 - (NSWindowLevel) level {
@@ -1507,14 +1508,25 @@ static BOOL _allowsAutomaticWindowTabbing;
     // _preservesContentDuringLiveResize=value;
 }
 
+// The represented filename and URL describe the same file; setting one updates
+// the other. A non-file URL has no filename.
 - (void) setRepresentedFilename: (NSString *) value {
     value = [value copy];
     [_representedFilename release];
     _representedFilename = value;
+
+    [_representedURL release];
+    _representedURL = [value length] > 0
+            ? [[NSURL fileURLWithPath: value] retain] : nil;
 }
 
 - (void) setRepresentedURL: (NSURL *) newURL {
-    NSUnimplementedMethod();
+    newURL = [newURL copy];
+    [_representedURL release];
+    _representedURL = newURL;
+
+    [_representedFilename release];
+    _representedFilename = [newURL isFileURL] ? [[newURL path] copy] : nil;
 }
 
 - (void) setResizeIncrements: (NSSize) value {
