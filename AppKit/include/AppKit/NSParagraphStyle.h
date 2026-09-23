@@ -19,73 +19,80 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSText.h>
 
-typedef enum {
-    NSLineBreakByWordWrapping,
+@class NSTextBlock, NSTextList, NSTextTab;
+
+NS_HEADER_AUDIT_BEGIN(nullability, sendability)
+
+#if !__NSPARAGRAPH_STYLE_SHARED_SECTION__
+#define __NSPARAGRAPH_STYLE_SHARED_SECTION__ 1
+
+typedef NS_ENUM(NSUInteger, NSLineBreakMode) {
+    NSLineBreakByWordWrapping = 0,
     NSLineBreakByCharWrapping,
     NSLineBreakByClipping,
     NSLineBreakByTruncatingHead,
     NSLineBreakByTruncatingTail,
     NSLineBreakByTruncatingMiddle
-} NSLineBreakMode;
+};
 
-@interface NSParagraphStyle : NSObject <NSCopying, NSMutableCopying> {
-    NSWritingDirection _writingDirection;
-    CGFloat _paragraphSpacing;
-    CGFloat _paragraphSpacingBefore;
-    NSArray *_textBlocks;
-    NSArray *_textLists;
-    int _headerLevel;
-    CGFloat _firstLineHeadIndent;
-    CGFloat _headIndent;
-    CGFloat _tailIndent;
-    NSTextAlignment _alignment;
-    NSLineBreakMode _lineBreakMode;
-    CGFloat _minimumLineHeight;
-    CGFloat _maximumLineHeight;
-    CGFloat _lineHeightMultiple;
-    CGFloat _lineSpacing;
-    CGFloat _defaultTabInterval;
-    NSMutableArray *_tabStops;
-    float _hyphenationFactor;
-    float _tighteningFactorForTruncation;
-    NSInteger _horizontalAlignment;
-}
+typedef NS_OPTIONS(NSUInteger, NSLineBreakStrategy) {
+    NSLineBreakStrategyNone = 0,
+    NSLineBreakStrategyPushOut = 1 << 0,
+    NSLineBreakStrategyHangulWordPriority = 1 << 1,
+    NSLineBreakStrategyStandard = 0xFFFF
+};
 
-+ (NSParagraphStyle *) defaultParagraphStyle;
+#endif // !__NSPARAGRAPH_STYLE_SHARED_SECTION__
 
-+ (NSWritingDirection)defaultWritingDirectionForLanguage: (NSString *)languageName;
+// The primary interfaces match Apple's declarations member for member: Clang
+// rejects a class that two modules define differently.
+@interface NSParagraphStyle : NSObject <NSCopying, NSMutableCopying, NSSecureCoding>
 
-@property (readonly) NSWritingDirection baseWritingDirection;
+@property (class, readonly, copy, NS_NONATOMIC_IOSONLY) NSParagraphStyle *defaultParagraphStyle;
 
-- (CGFloat) paragraphSpacing;
-- (CGFloat) paragraphSpacingBefore;
++ (NSWritingDirection)defaultWritingDirectionForLanguage:(nullable NSString *)languageName;
 
-- (NSArray *) textBlocks;
-- (NSArray *) textLists;
+@property (readonly, NS_NONATOMIC_IOSONLY) CGFloat lineSpacing;
+@property (readonly, NS_NONATOMIC_IOSONLY) CGFloat paragraphSpacing;
 
-- (int) headerLevel;
+@property (readonly, NS_NONATOMIC_IOSONLY) CGFloat headIndent;
+@property (readonly, NS_NONATOMIC_IOSONLY) CGFloat tailIndent;
+@property (readonly, NS_NONATOMIC_IOSONLY) CGFloat firstLineHeadIndent;
 
-@property (readonly) CGFloat firstLineHeadIndent;
-- (CGFloat) headIndent;
-- (CGFloat) tailIndent;
+@property (readonly, NS_NONATOMIC_IOSONLY) CGFloat minimumLineHeight;
+@property (readonly, NS_NONATOMIC_IOSONLY) CGFloat maximumLineHeight;
 
-- (NSTextAlignment) alignment;
-@property (readonly) NSLineBreakMode lineBreakMode;
+@property (readonly, NS_NONATOMIC_IOSONLY) NSLineBreakMode lineBreakMode;
 
-@property (readonly) CGFloat minimumLineHeight;
-@property (readonly) CGFloat maximumLineHeight;
-@property (readonly) CGFloat lineHeightMultiple;
-@property (readonly) CGFloat lineSpacing;
+@property (readonly, NS_NONATOMIC_IOSONLY) NSWritingDirection baseWritingDirection;
 
-- (CGFloat) defaultTabInterval;
-- (NSArray *) tabStops;
+@property (readonly, NS_NONATOMIC_IOSONLY) CGFloat lineHeightMultiple;
+@property (readonly, NS_NONATOMIC_IOSONLY) CGFloat paragraphSpacingBefore;
 
-@property (readonly) float hyphenationFactor;
-- (float) tighteningFactorForTruncation;
+@property (readonly, NS_NONATOMIC_IOSONLY) float hyphenationFactor;
 
-// Undocumented (TextEdit on macOS 26 sets 0); stored, not used for layout.
-- (NSInteger) horizontalAlignment;
+@property (readonly, NS_NONATOMIC_IOSONLY) BOOL usesDefaultHyphenation;
+
+@property (readonly,copy, NS_NONATOMIC_IOSONLY) NSArray<NSTextTab *> *tabStops;
+@property (readonly, NS_NONATOMIC_IOSONLY) CGFloat defaultTabInterval;
+
+@property (readonly, copy, NS_NONATOMIC_IOSONLY) NSArray<NSTextList *> *textLists;
+
+@property (readonly, NS_NONATOMIC_IOSONLY) BOOL allowsDefaultTighteningForTruncation;
+
+@property (readonly, NS_NONATOMIC_IOSONLY) NSLineBreakStrategy lineBreakStrategy;
 
 @end
+
+@interface NSParagraphStyle (NSParagraphStyleAppKit)
+@property (readonly, NS_NONATOMIC_IOSONLY) NSTextAlignment alignment;
+@property (readonly, copy, NS_NONATOMIC_IOSONLY) NSArray<__kindof NSTextBlock *> *textBlocks;
+@property (readonly) float tighteningFactorForTruncation;
+@property (readonly) NSInteger headerLevel;
+// Undocumented (TextEdit on macOS 26 sets 0); stored, not used for layout.
+@property (readonly) NSInteger horizontalAlignment;
+@end
+
+NS_HEADER_AUDIT_END(nullability, sendability)
 
 #import <AppKit/NSMutableParagraphStyle.h>

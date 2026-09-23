@@ -20,40 +20,43 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSParagraphStyle.h>
 #import <AppKit/NSTextTab.h>
 
+NS_HEADER_AUDIT_BEGIN(nullability, sendability)
+
 @interface NSMutableParagraphStyle : NSParagraphStyle
 
-- (void) setParagraphStyle: (NSParagraphStyle *) other;
+@property (NS_NONATOMIC_IOSONLY) CGFloat lineSpacing;
+@property (NS_NONATOMIC_IOSONLY) CGFloat paragraphSpacing;
+@property (NS_NONATOMIC_IOSONLY) CGFloat firstLineHeadIndent;
+@property (NS_NONATOMIC_IOSONLY) CGFloat headIndent;
+@property (NS_NONATOMIC_IOSONLY) CGFloat tailIndent;
+@property (NS_NONATOMIC_IOSONLY) NSLineBreakMode lineBreakMode;
+@property (NS_NONATOMIC_IOSONLY) CGFloat minimumLineHeight;
+@property (NS_NONATOMIC_IOSONLY) CGFloat maximumLineHeight;
+@property (NS_NONATOMIC_IOSONLY) NSWritingDirection baseWritingDirection;
+@property (NS_NONATOMIC_IOSONLY) CGFloat lineHeightMultiple;
+@property (NS_NONATOMIC_IOSONLY) CGFloat paragraphSpacingBefore;
+@property (NS_NONATOMIC_IOSONLY) float hyphenationFactor;
+@property (readwrite, NS_NONATOMIC_IOSONLY) BOOL usesDefaultHyphenation;
+@property (null_resettable, copy, NS_NONATOMIC_IOSONLY) NSArray<NSTextTab *> *tabStops;
+@property (NS_NONATOMIC_IOSONLY) CGFloat defaultTabInterval;
+@property (NS_NONATOMIC_IOSONLY) BOOL allowsDefaultTighteningForTruncation;
+@property (NS_NONATOMIC_IOSONLY) NSLineBreakStrategy lineBreakStrategy;
+@property (NS_NONATOMIC_IOSONLY, copy) NSArray<NSTextList *> *textLists;
 
-- (void) setBaseWritingDirection: (NSWritingDirection) direction;
+- (void)addTabStop:(NSTextTab *)anObject;
+- (void)removeTabStop:(NSTextTab *)anObject;
 
-- (void) setParagraphSpacing: (CGFloat) spacing;
-- (void) setParagraphSpacingBefore: (CGFloat) spacing;
+- (void)setParagraphStyle:(NSParagraphStyle *)obj;
 
-- (void) setTextBlocks: (NSArray *) blocks;
-- (void) setTextLists: (NSArray *) lists;
-
-- (void) setHeaderLevel: (int) level;
-
-- (void) setFirstLineHeadIndent: (CGFloat) indent;
-- (void) setHeadIndent: (CGFloat) indent;
-- (void) setTailIndent: (CGFloat) indent;
-
-- (void) setAlignment: (NSTextAlignment) alignment;
-- (void) setLineBreakMode: (NSLineBreakMode) mode;
-
-- (void) setMinimumLineHeight: (CGFloat) height;
-- (void) setMaximumLineHeight: (CGFloat) height;
-- (void) setLineHeightMultiple: (CGFloat) multiple;
-- (void) setLineSpacing: (CGFloat) spacing;
-
-- (void) setDefaultTabInterval: (CGFloat) interval;
-- (void) setTabStops: (NSArray *) tabStops;
-- (void) addTabStop: (NSTextTab *) tabStop;
-- (void) removeTabStop: (NSTextTab *) tabStop;
-
-
-- (void) setHyphenationFactor: (float) factor;
-- (void) setTighteningFactorForTruncation: (float) factor;
-// See -[NSParagraphStyle horizontalAlignment].
-- (void) setHorizontalAlignment: (NSInteger) alignment;
 @end
+
+@interface NSMutableParagraphStyle (NSMutableParagraphStyleAppKit)
+@property (NS_NONATOMIC_IOSONLY) NSTextAlignment alignment;
+@property (copy, NS_NONATOMIC_IOSONLY) NSArray<__kindof NSTextBlock *> *textBlocks;
+@property float tighteningFactorForTruncation;
+@property NSInteger headerLevel;
+// See -[NSParagraphStyle horizontalAlignment].
+@property NSInteger horizontalAlignment;
+@end
+
+NS_HEADER_AUDIT_END(nullability, sendability)

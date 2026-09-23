@@ -21,11 +21,17 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Foundation/NSKeyedArchiver.h>
 #import <Foundation/NSLocale.h>
 
-#import <AppKit/NSParagraphStyle.h>
+#import "NSParagraphStyle-Private.h"
 #import <AppKit/NSRaise.h>
+#import <AppKit/NSTextBlock.h>
+#import <AppKit/NSTextList.h>
 #import <AppKit/NSTextTab.h>
 
 @implementation NSParagraphStyle
+
++ (BOOL) supportsSecureCoding {
+    return YES;
+}
 
 + (NSParagraphStyle *) defaultParagraphStyle {
     static NSParagraphStyle *shared = nil;
@@ -86,6 +92,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     _tabStops = [[[self class] _defaultTabStops] mutableCopy];
     _hyphenationFactor = 0;
     _tighteningFactorForTruncation = 0;
+    _usesDefaultHyphenation = NO;
+    _allowsDefaultTighteningForTruncation = NO;
+    _lineBreakStrategy = NSLineBreakStrategyNone;
 }
 
 - initWithCoder: (NSCoder *) coder {
@@ -94,9 +103,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         _paragraphSpacing = [coder decodeFloatForKey: @"ParagraphSpacing"];
         _paragraphSpacingBefore =
                 [coder decodeFloatForKey: @"ParagraphSpacingBefore"];
-        _textBlocks = [[coder decodeObjectForKey: @"Blocks"] retain];
-        _textLists = [coder decodeObjectForKey: @"Lists"];
-        _headerLevel = [coder decodeIntForKey: @"HeaderLevel"];
+        _textBlocks = [[coder decodeObjectOfClasses: [NSSet setWithObjects: [NSArray class], [NSTextBlock class], nil]
+                                             forKey: @"Blocks"] retain];
+        _textLists = [[coder decodeObjectOfClasses: [NSSet setWithObjects: [NSArray class], [NSTextList class], nil]
+                                            forKey: @"Lists"] retain];
+        _headerLevel = [coder decodeIntegerForKey: @"HeaderLevel"];
         _firstLineHeadIndent =
                 [coder decodeFloatForKey: @"FirstLineHeadIndent"];
         _headIndent = [coder decodeFloatForKey: @"HeadIndent"];
@@ -108,10 +119,16 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         _lineHeightMultiple = [coder decodeFloatForKey: @"LineHeightMultiple"];
         _lineSpacing = [coder decodeFloatForKey: @"LineSpacing"];
         _defaultTabInterval = [coder decodeFloatForKey: @"DefaultTabInterval"];
-        _tabStops = [[coder decodeObjectForKey: @"Tabs"] retain];
+        NSArray *tabStops = [coder decodeObjectOfClasses: [NSSet setWithObjects: [NSArray class], [NSTextTab class], nil]
+                                                  forKey: @"Tabs"];
+        _tabStops = tabStops ? [tabStops mutableCopy] : [[[self class] _defaultTabStops] mutableCopy];
         _hyphenationFactor = [coder decodeFloatForKey: @"HyphenationFactor"];
         _tighteningFactorForTruncation =
                 [coder decodeFloatForKey: @"TighteningFactor"];
+        _usesDefaultHyphenation = [coder decodeBoolForKey: @"UsesDefaultHyphenation"];
+        _allowsDefaultTighteningForTruncation =
+                [coder decodeBoolForKey: @"AllowsDefaultTighteningForTruncation"];
+        _lineBreakStrategy = [coder decodeIntegerForKey: @"LineBreakStrategy"];
     } else {
         // QUIRK: NSArchiver (typedstream) layout of a paragraph style: the
         // type string "CC@S" (alignment in the legacy NSTextAlignment
@@ -198,10 +215,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     _lineHeightMultiple = other->_lineHeightMultiple;
     _lineSpacing = other->_lineSpacing;
     _defaultTabInterval = other->_defaultTabInterval;
-    _tabStops = [other->_tabStops copy];
+    _tabStops = [other->_tabStops mutableCopy];
     _hyphenationFactor = other->_hyphenationFactor;
     _tighteningFactorForTruncation = other->_tighteningFactorForTruncation;
     _horizontalAlignment = other->_horizontalAlignment;
+    _usesDefaultHyphenation = other->_usesDefaultHyphenation;
+    _allowsDefaultTighteningForTruncation = other->_allowsDefaultTighteningForTruncation;
+    _lineBreakStrategy = other->_lineBreakStrategy;
     return self;
 }
 
@@ -213,7 +233,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                     forKey: @"ParagraphSpacingBefore"];
         [coder encodeObject: _textBlocks forKey: @"Blocks"];
         [coder encodeObject: _textLists forKey: @"Lists"];
-        [coder encodeInt: _headerLevel forKey: @"HeaderLevel"];
+        [coder encodeInteger: _headerLevel forKey: @"HeaderLevel"];
         [coder encodeFloat: _firstLineHeadIndent
                     forKey: @"FirstLineHeadIndent"];
         [coder encodeFloat: _headIndent forKey: @"HeadIndent"];
@@ -229,6 +249,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         [coder encodeFloat: _hyphenationFactor forKey: @"HyphenationFactor"];
         [coder encodeFloat: _tighteningFactorForTruncation
                     forKey: @"TighteningFactor"];
+        [coder encodeBool: _usesDefaultHyphenation forKey: @"UsesDefaultHyphenation"];
+        [coder encodeBool: _allowsDefaultTighteningForTruncation
+                   forKey: @"AllowsDefaultTighteningForTruncation"];
+        [coder encodeInteger: _lineBreakStrategy forKey: @"LineBreakStrategy"];
     } else {
         NSUnimplementedMethod();
     }
@@ -239,10 +263,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [_textLists release];
     [_tabStops release];
     [super dealloc];
-}
-
-- copy {
-    return [self retain];
 }
 
 - copyWithZone: (NSZone *) zone {
@@ -286,7 +306,7 @@ static inline id mutableCopyWithZone(NSParagraphStyle *self, NSZone *zone) {
     return _textLists;
 }
 
-- (int) headerLevel {
+- (NSInteger) headerLevel {
     return _headerLevel;
 }
 
@@ -331,7 +351,7 @@ static inline id mutableCopyWithZone(NSParagraphStyle *self, NSZone *zone) {
 }
 
 - (NSArray *) tabStops {
-    return _tabStops;
+    return [[_tabStops copy] autorelease];
 }
 
 - (float) hyphenationFactor {
@@ -340,6 +360,18 @@ static inline id mutableCopyWithZone(NSParagraphStyle *self, NSZone *zone) {
 
 - (float) tighteningFactorForTruncation {
     return _tighteningFactorForTruncation;
+}
+
+- (BOOL) usesDefaultHyphenation {
+    return _usesDefaultHyphenation;
+}
+
+- (BOOL) allowsDefaultTighteningForTruncation {
+    return _allowsDefaultTighteningForTruncation;
+}
+
+- (NSLineBreakStrategy) lineBreakStrategy {
+    return _lineBreakStrategy;
 }
 
 - (BOOL) isEqual: (id) object {
@@ -367,6 +399,10 @@ static inline id mutableCopyWithZone(NSParagraphStyle *self, NSZone *zone) {
             _hyphenationFactor == other->_hyphenationFactor &&
             _tighteningFactorForTruncation ==
                     other->_tighteningFactorForTruncation &&
+            _usesDefaultHyphenation == other->_usesDefaultHyphenation &&
+            _allowsDefaultTighteningForTruncation ==
+                    other->_allowsDefaultTighteningForTruncation &&
+            _lineBreakStrategy == other->_lineBreakStrategy &&
             (_tabStops == other->_tabStops ||
              [_tabStops isEqual: other->_tabStops]) &&
             (_textBlocks == other->_textBlocks ||
@@ -406,24 +442,24 @@ static inline id mutableCopyWithZone(NSParagraphStyle *self, NSZone *zone) {
 
     return [NSString
             stringWithFormat:
-                    @"Alignment %d, LineSpacing %f, ParagraphSpacing %f, "
+                    @"Alignment %ld, LineSpacing %f, ParagraphSpacing %f, "
                     @"ParagraphSpacingBefore %f, HeadIndent %f, TailIndent %f, "
                     @"FirstLineHeadIndent %f, "
                     @"LineHeight %f/%f, LineHeightMultiple %f, LineBreakMode "
-                    @"%d, Tabs "
+                    @"%lu, Tabs "
                     @"%@, "
                     @"DefaultTabInterval %f, Blocks %@, Lists %@, "
                     @"BaseWritingDirection "
-                    @"%d, "
+                    @"%ld, "
                     @"HyphenationFactor %f, TighteningFactor %f, HeaderLevel "
-                    @"%d",
-                    _alignment, _lineSpacing, _paragraphSpacing,
+                    @"%ld",
+                    (long) _alignment, _lineSpacing, _paragraphSpacing,
                     _paragraphSpacingBefore, _headIndent, _tailIndent,
                     _firstLineHeadIndent, _minimumLineHeight,
-                    _maximumLineHeight, _lineHeightMultiple, _lineBreakMode,
+                    _maximumLineHeight, _lineHeightMultiple, (unsigned long) _lineBreakMode,
                     tabsString, _defaultTabInterval, _textBlocks, _textLists,
-                    _writingDirection, _hyphenationFactor,
-                    _tighteningFactorForTruncation, _headerLevel];
+                    (long) _writingDirection, _hyphenationFactor,
+                    _tighteningFactorForTruncation, (long) _headerLevel];
 }
 
 @end
