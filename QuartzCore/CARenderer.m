@@ -228,6 +228,18 @@ static GLint interpolationFromName(NSString *name) {
         return GL_LINEAR;
 }
 
+static void applyLayerTransform(CATransform3D t) {
+    // CATransform3D uses row vectors. OpenGL consumes column-major storage,
+    // so this field order represents the same point transformation there.
+    const GLfloat matrix[16] = {
+        t.m11, t.m12, t.m13, t.m14,
+        t.m21, t.m22, t.m23, t.m24,
+        t.m31, t.m32, t.m33, t.m34,
+        t.m41, t.m42, t.m43, t.m44,
+    };
+    glMultMatrixf(matrix);
+}
+
 void CATexImage2DCGImage(CGImageRef image) {
     size_t imageWidth = CGImageGetWidth(image);
     size_t imageHeight = CGImageGetHeight(image);
@@ -464,8 +476,12 @@ static void roundedRectOutline(CGRect r, CGFloat radius, GLfloat *xy) {
         return;
 
     glPushMatrix();
-    glTranslatef(position.x - (bounds.size.width * anchorPoint.x),
-                 position.y - (bounds.size.height * anchorPoint.y), 0);
+    // Position is the anchor in parent coordinates. Apply the layer transform
+    // around it, then move local geometry so its anchor is at the origin.
+    glTranslatef(position.x, position.y, 0);
+    applyLayerTransform(layer.transform);
+    glTranslatef(-bounds.size.width * anchorPoint.x,
+                 -bounds.size.height * anchorPoint.y, 0);
 
     [self _drawBackgroundOfLayer: layer bounds: bounds opacity: opacity];
     [self _drawContentsOfLayer: layer bounds: bounds opacity: opacity];

@@ -118,8 +118,11 @@ typedef NSString *CALayerContentsFilter NS_TYPED_ENUM;
 @property CGRect contentsCenter;
 @property(copy) CALayerContentsFormat contentsFormat;
 
-//@property CATransform3D transform;
+@property CATransform3D transform;
 @property CATransform3D sublayerTransform;
+
+- (CGAffineTransform) affineTransform;
+- (void) setAffineTransform: (CGAffineTransform) transform;
 
 @property(copy) NSString *minificationFilter;
 @property(copy) NSString *magnificationFilter;
