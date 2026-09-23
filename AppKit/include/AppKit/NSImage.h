@@ -34,6 +34,8 @@ typedef enum {
 @interface NSImage : NSObject <NSCopying, NSCoding> {
     NSString *_name;
     NSSize _size;
+    NSRect _alignmentRect;
+    BOOL _hasCustomAlignmentRect;
     NSColor *_backgroundColor;
     NSMutableArray *_representations;
     id _delegate;
@@ -73,6 +75,7 @@ typedef enum {
 
 - (NSString *) name;
 - (NSSize) size;
+@property NSRect alignmentRect;
 - (NSColor *) backgroundColor;
 - (BOOL) isFlipped;
 - (BOOL) isTemplate;
