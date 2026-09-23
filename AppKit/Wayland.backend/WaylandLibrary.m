@@ -119,6 +119,12 @@ struct OpcodeCheck {
 
 bool WaylandCheckOpcodes(void) {
     static const struct OpcodeCheck checks[] = {
+            {&zwp_pointer_gestures_v1_interface, false, WP_GESTURES_GET_PINCH, "get_pinch_gesture"},
+            {&zwp_pointer_gestures_v1_interface, false, WP_GESTURES_RELEASE, "release"},
+            {&zwp_pointer_gesture_pinch_v1_interface, false, WP_PINCH_DESTROY, "destroy"},
+            {&zwp_pointer_gesture_pinch_v1_interface, true, WP_PINCH_EV_BEGIN, "begin"},
+            {&zwp_pointer_gesture_pinch_v1_interface, true, WP_PINCH_EV_UPDATE, "update"},
+            {&zwp_pointer_gesture_pinch_v1_interface, true, WP_PINCH_EV_END, "end"},
             {&wl_display_interface, false, WP_DISPLAY_SYNC, "sync"},
             {&wl_display_interface, false, WP_DISPLAY_GET_REGISTRY, "get_registry"},
             {&wl_registry_interface, false, WP_REGISTRY_BIND, "bind"},

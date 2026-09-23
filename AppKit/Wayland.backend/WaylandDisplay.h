@@ -66,6 +66,7 @@ typedef enum {
     WaylandObjectBuffer,
     WaylandObjectKeyboardSync,
     WaylandObjectLogicalOutput,
+    WaylandObjectPinchGesture,
 } WaylandObjectKind;
 
 // The dispatcher installed on every proxy (see WaylandLibrary.h for why listeners
@@ -97,6 +98,10 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 @protected
     struct wl_proxy *_seat;
     struct wl_proxy *_pointer;
+    struct wl_proxy *_pointerGestures, *_pinchGesture;
+    uint32_t _pointerGesturesName;
+    WaylandWindow *_pinchWindow;
+    CGFloat _pinchScale;
     struct wl_proxy *_keyboard;
     CFSocketRef _wlSocket;
     CFRunLoopSourceRef _wlSource;
