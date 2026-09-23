@@ -86,6 +86,10 @@ COREGRAPHICS_EXPORT void CGPathAddLines(CGMutablePathRef self,
 COREGRAPHICS_EXPORT void CGPathAddRect(CGMutablePathRef self,
                                        const CGAffineTransform *xform,
                                        CGRect rect);
+COREGRAPHICS_EXPORT void CGPathAddRoundedRect(CGMutablePathRef path,
+                                              const CGAffineTransform *transform,
+                                              CGRect rect, CGFloat cornerWidth,
+                                              CGFloat cornerHeight);
 COREGRAPHICS_EXPORT void CGPathAddRects(CGMutablePathRef self,
                                         const CGAffineTransform *xform,
                                         const CGRect *rects, size_t count);
@@ -116,6 +120,10 @@ CGPathCreateWithEllipseInRect(CGRect rect, const CGAffineTransform *transform)
 COREGRAPHICS_EXPORT CGPathRef
 CGPathCreateWithRect(CGRect rect, const CGAffineTransform *transform)
     CF_SWIFT_NAME(CGPath.init(rect:transform:));
+
+COREGRAPHICS_EXPORT CGPathRef CGPathCreateWithRoundedRect(
+        CGRect rect, CGFloat cornerWidth, CGFloat cornerHeight,
+        const CGAffineTransform *transform);
 
 COREGRAPHICS_EXPORT CGRect CGPathGetPathBoundingBox(CGPathRef path);
 
