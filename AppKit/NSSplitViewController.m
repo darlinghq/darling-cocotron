@@ -23,6 +23,18 @@
 
 @implementation NSSplitViewController
 
+// Key names follow GNUstep's NSSplitViewController (libs-gui, LGPL-2.1+).
+- (instancetype) initWithCoder: (NSCoder *) coder {
+    if ((self = [super initWithCoder: coder]) == nil)
+        return nil;
+
+    if ([coder allowsKeyedCoding]) {
+        [self setSplitView: [coder decodeObjectForKey: @"NSSplitView"]];
+        [self setSplitViewItems: [coder decodeObjectForKey: @"NSSplitViewItems"]];
+    }
+    return self;
+}
+
 - (void) dealloc {
     [_splitView release];
     [_splitViewItems release];

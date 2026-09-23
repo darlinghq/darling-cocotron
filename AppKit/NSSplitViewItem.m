@@ -53,6 +53,23 @@
     return self;
 }
 
+// Key names follow GNUstep's NSSplitViewItem (libs-gui, LGPL-2.1+).
+- (instancetype) initWithCoder: (NSCoder *) coder {
+    if (![coder allowsKeyedCoding])
+        [NSException raise: NSInvalidArgumentException
+                    format: @"-[%@ %@] requires a keyed coder", [self class],
+                            NSStringFromSelector(_cmd)];
+    if ((self = [self init]) == nil)
+        return nil;
+
+    [self setViewController: [coder decodeObjectForKey: @"NSSplitViewItemViewController"]];
+    if ([coder containsValueForKey: @"NSHoldingPriority"])
+        _holdingPriority = [coder decodeFloatForKey: @"NSHoldingPriority"];
+    _collapsed = [coder decodeBoolForKey: @"NSCollapsed"];
+    _behavior = [coder decodeIntegerForKey: @"NSBehavior"];
+    return self;
+}
+
 - (void) dealloc {
     [_viewController release];
     [super dealloc];
