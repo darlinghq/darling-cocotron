@@ -83,6 +83,27 @@ NSString *const kCAContentsFormatGray8Uint = @"Gray8";
     _delegate = value;
 }
 
+- (NSString *) name {
+    return _name;
+}
+
+- (void) setName: (NSString *) value {
+    value = [value copy];
+    [_name release];
+    _name = value;
+}
+
+- (id<CALayoutManager>) layoutManager {
+    return _layoutManager;
+}
+
+- (void) setLayoutManager: (id<CALayoutManager>) value {
+    [value retain];
+    [_layoutManager release];
+    _layoutManager = value;
+    [self setNeedsLayout];
+}
+
 - (CGPoint) anchorPoint {
     return _anchorPoint;
 }
@@ -324,6 +345,9 @@ NSString *const kCAContentsFormatGray8Uint = @"Gray8";
 
 - (void) dealloc {
     [_sublayers release];
+    [_name release];
+    [_layoutManager release];
+    [_constraints release];
     [_animations release];
     [_minificationFilter release];
     [_magnificationFilter release];
@@ -628,6 +652,8 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
 - (void) layoutSublayers {
     if ([_delegate respondsToSelector: @selector(layoutSublayersOfLayer:)])
         [_delegate layoutSublayersOfLayer: self];
+    else if ([_layoutManager respondsToSelector: @selector(layoutSublayersOfLayer:)])
+        [_layoutManager layoutSublayersOfLayer: self];
 }
 
 - (void) layoutIfNeeded {
