@@ -84,6 +84,9 @@ COREGRAPHICS_EXPORT CFDataRef CGColorSpaceCopyICCData(CGColorSpaceRef colorSpace
 COREGRAPHICS_EXPORT CGColorSpaceRef CGColorSpaceCreateICCBased(
     size_t nComponents, const CGFloat *range, CGDataProviderRef profile,
     CGColorSpaceRef alternate);
+COREGRAPHICS_EXPORT CGColorSpaceRef CGColorSpaceCreateExtended(CGColorSpaceRef space);
+COREGRAPHICS_EXPORT CGColorSpaceRef CGColorSpaceCreateExtendedLinearized(CGColorSpaceRef space);
+COREGRAPHICS_EXPORT bool CGColorSpaceUsesExtendedRange(CGColorSpaceRef space);
 
 CF_IMPLICIT_BRIDGING_DISABLED
 
