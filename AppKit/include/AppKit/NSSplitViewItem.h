@@ -23,14 +23,26 @@
 
 @class NSViewController;
 
+typedef NS_ENUM(NSInteger, NSSplitViewItemBehavior) {
+    NSSplitViewItemBehaviorDefault,
+    NSSplitViewItemBehaviorSidebar,
+    NSSplitViewItemBehaviorContentList,
+};
+
 @interface NSSplitViewItem : NSObject <NSCoding> {
     NSViewController *_viewController;
+    NSSplitViewItemBehavior _behavior;
     BOOL _collapsed;
     BOOL _canCollapse;
     NSLayoutPriority _holdingPriority;
 }
 
 + (instancetype) splitViewItemWithViewController: (NSViewController *) viewController;
+// A collapsible item whose holding priority is NSLayoutPriorityDefaultLow + 10.
++ (instancetype) sidebarWithViewController: (NSViewController *) viewController;
++ (instancetype) contentListWithViewController: (NSViewController *) viewController;
+
+@property(readonly) NSSplitViewItemBehavior behavior;
 
 @property(retain) NSViewController *viewController;
 // Stored only: the split view doesn't hide or resize a collapsed item's view.

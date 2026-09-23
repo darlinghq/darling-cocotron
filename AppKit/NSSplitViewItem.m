@@ -25,10 +25,25 @@
 @synthesize collapsed = _collapsed;
 @synthesize canCollapse = _canCollapse;
 @synthesize holdingPriority = _holdingPriority;
+@synthesize behavior = _behavior;
 
 + (instancetype) splitViewItemWithViewController: (NSViewController *) viewController {
     NSSplitViewItem *item = [[[self alloc] init] autorelease];
     [item setViewController: viewController];
+    return item;
+}
+
++ (instancetype) sidebarWithViewController: (NSViewController *) viewController {
+    NSSplitViewItem *item = [self splitViewItemWithViewController: viewController];
+    item->_behavior = NSSplitViewItemBehaviorSidebar;
+    item->_canCollapse = YES;
+    item->_holdingPriority = NSLayoutPriorityDefaultLow + 10;
+    return item;
+}
+
++ (instancetype) contentListWithViewController: (NSViewController *) viewController {
+    NSSplitViewItem *item = [self splitViewItemWithViewController: viewController];
+    item->_behavior = NSSplitViewItemBehaviorContentList;
     return item;
 }
 
