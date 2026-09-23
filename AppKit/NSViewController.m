@@ -44,6 +44,14 @@
     [super dealloc];
 }
 
+- (NSSize) preferredContentSize {
+    return _preferredContentSize;
+}
+
+- (void) setPreferredContentSize: (NSSize) size {
+    _preferredContentSize = size;
+}
+
 - (NSString *) nibName {
     return _nibName;
 }

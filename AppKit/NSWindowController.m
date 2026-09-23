@@ -98,7 +98,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (NSWindow *) window {
-    if (_window == nil && [self windowNibPath] != nil) {
+    if (_window == nil && ([self windowNibName] != nil || _nibPath != nil)) {
         [self windowWillLoad];
         [_document windowControllerWillLoadNib: self];
 

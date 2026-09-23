@@ -13,6 +13,7 @@
     NSMutableArray *_childViewControllers;
     NSViewController *_parentViewController;
     NSStoryboard *_storyboard;
+    NSSize _preferredContentSize;
 }
 
 - initWithNibName: (NSString *) name bundle: (NSBundle *) bundle;
@@ -33,6 +34,8 @@
 - (void) removeFromParentViewController;
 
 @property(readonly, strong) NSStoryboard *storyboard;
+// Stored for the controller's presenter; NSZeroSize until set.
+@property NSSize preferredContentSize;
 - (NSString *) title;
 - representedObject;
 
