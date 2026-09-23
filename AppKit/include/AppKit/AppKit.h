@@ -169,6 +169,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSStatusItem.h>
 #import <AppKit/NSStepper.h>
 #import <AppKit/NSStepperCell.h>
+#import <AppKit/NSStoryboard.h>
 #import <AppKit/NSStringDrawing.h>
 #import <AppKit/NSTabView.h>
 #import <AppKit/NSTabViewItem.h>

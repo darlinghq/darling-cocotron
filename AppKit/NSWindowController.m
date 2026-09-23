@@ -20,6 +20,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSDocument.h>
 #import <AppKit/NSNib.h>
 #import <AppKit/NSNibLoading.h>
+#import <AppKit/NSStoryboard-Private.h>
 #import <AppKit/NSWindow.h>
 #import <AppKit/NSWindowController.h>
 
@@ -72,6 +73,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return [self initWithWindow: nil];
 }
 
+- initWithCoder: (NSCoder *) coder {
+    self = [super initWithCoder: coder];
+    _storyboard = [[NSStoryboard _instantiatingStoryboard] retain];
+    return self;
+}
+
 - (void) dealloc {
     [[NSNotificationCenter defaultCenter] removeObserver: self];
     [_window setWindowController: nil];
@@ -80,9 +87,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [_nibName release];
     [_nibPath release];
     [_windowFrameAutosaveName release];
+    [_storyboard release];
     [_topLevelObjects makeObjectsPerformSelector: @selector(release)];
     [_topLevelObjects release];
     [super dealloc];
+}
+
+- (NSStoryboard *) storyboard {
+    return _storyboard;
 }
 
 - (NSWindow *) window {

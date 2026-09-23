@@ -1,6 +1,7 @@
 #import <AppKit/NSNib.h>
 #import <AppKit/NSNibLoading.h>
 #import <AppKit/NSRaise.h>
+#import <AppKit/NSStoryboard-Private.h>
 #import <AppKit/NSViewController.h>
 
 @implementation NSViewController
@@ -27,6 +28,7 @@
                 [coder decodeObjectForKey: @"NSNibBundleIdentifier"];
         if (bundleIdentifier != nil)
             _nibBundle = [NSBundle bundleWithIdentifier: bundleIdentifier];
+        _storyboard = [[NSStoryboard _instantiatingStoryboard] retain];
     }
 
     return self;
@@ -37,6 +39,7 @@
     for (NSViewController *child in _childViewControllers)
         child->_parentViewController = nil;
     [_childViewControllers release];
+    [_storyboard release];
 
     [super dealloc];
 }
@@ -47,6 +50,10 @@
 
 - (NSBundle *) nibBundle {
     return _nibBundle;
+}
+
+- (NSStoryboard *) storyboard {
+    return _storyboard;
 }
 
 - (NSView *) view {
@@ -165,10 +172,13 @@
         return;
     }
 
+    // A storyboard scene's view is archived in its own nib inside the storyboard.
+    NSString *path = [_storyboard _pathForNibNamed: name];
+
     if (bundle == nil)
         bundle = [NSBundle mainBundle];
-
-    NSString *path = [bundle pathForResource: name ofType: @"nib"];
+    if (path == nil)
+        path = [bundle pathForResource: name ofType: @"nib"];
     NSDictionary *nameTable = [NSDictionary dictionaryWithObject: self
                                                           forKey: NSNibOwner];
 
