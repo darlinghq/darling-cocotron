@@ -83,6 +83,12 @@ const CFStringRef kO2ColorSpaceExtendedLinearGray =
     return self;
 }
 
+- (void)dealloc {
+    if (_name != NULL)
+        CFRelease(_name);
+    [super dealloc];
+}
+
 - copyWithZone: (NSZone *) zone {
     return [self retain];
 }
@@ -133,20 +139,35 @@ O2ColorSpaceRef O2ColorSpaceCreateDeviceN(const char **names,
 }
 
 O2ColorSpaceRef O2ColorSpaceCreateWithName(CFStringRef name) {
-    printf("CALLED: O2ColorSpaceCreateWithName\n");
-    if (CFStringCompare(name, kO2ColorSpaceSRGB, 0) == kCFCompareEqualTo) {
-        O2ColorSpaceRef cs = [[O2ColorSpace alloc] initWithDeviceRGB];
-        cs->_name = kO2ColorSpaceSRGB;
-        return cs;
+    if (name == NULL)
+        return NULL;
+
+    // Onyx2D currently represents these named spaces as RGB. Preserve their
+    // identity for callers; color conversion remains a separate backend gap.
+    const CFStringRef rgbNames[] = {
+        kO2ColorSpaceSRGB,
+        kO2ColorSpaceExtendedSRGB,
+        kO2ColorSpaceLinearSRGB,
+        kO2ColorSpaceExtendedLinearSRGB,
+        kO2ColorSpaceDisplayP3,
+        CFSTR("kCGColorSpaceExtendedDisplayP3"),
+        CFSTR("kCGColorSpaceLinearDisplayP3"),
+        CFSTR("kCGColorSpaceExtendedLinearDisplayP3"),
+        CFSTR("kCGColorSpaceITUR_2100_PQ"),
+    };
+    for (size_t i = 0; i < sizeof(rgbNames) / sizeof(rgbNames[0]); i++) {
+        if (CFEqual(name, rgbNames[i])) {
+            O2ColorSpaceRef cs = [[O2ColorSpace alloc] initWithDeviceRGB];
+            CFRetain(name);
+            cs->_name = name;
+            return cs;
+        }
     }
-    if (CFStringCompare(name, kO2ColorSpaceDisplayP3, 0) == kCFCompareEqualTo) {
-        O2ColorSpaceRef cs = [[O2ColorSpace alloc] init];
-        cs->_type = kO2ColorSpaceModelRGB;
-        return cs;
-    }
-    printf("unknown color space name\n");
-    CFShow(name);
     return NULL;
+}
+
+CFStringRef O2ColorSpaceGetName(O2ColorSpaceRef colorSpace) {
+    return colorSpace ? colorSpace->_name : NULL;
 }
 
 BOOL O2ColorSpaceIsPlatformRGB(O2ColorSpaceRef self) {

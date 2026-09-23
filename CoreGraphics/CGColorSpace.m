@@ -21,6 +21,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Onyx2D/O2ColorSpace.h>
 
 const CFStringRef kCGColorSpaceDisplayP3 = CFSTR("kCGColorSpaceDisplayP3");
+const CFStringRef kCGColorSpaceExtendedDisplayP3 =
+        CFSTR("kCGColorSpaceExtendedDisplayP3");
+const CFStringRef kCGColorSpaceLinearDisplayP3 =
+        CFSTR("kCGColorSpaceLinearDisplayP3");
+const CFStringRef kCGColorSpaceExtendedLinearDisplayP3 =
+        CFSTR("kCGColorSpaceExtendedLinearDisplayP3");
 const CFStringRef kCGColorSpaceGenericGray = CFSTR("kCGColorSpaceGenericGray");
 const CFStringRef kCGColorSpaceGenericRGB = CFSTR("kCGColorSpaceGenericRGB");
 const CFStringRef kCGColorSpaceGenericCMYK = CFSTR("kCGColorSpaceGenericCMYK");
@@ -37,6 +43,7 @@ const CFStringRef kCGColorSpaceACESCGLinear =
         CFSTR("kCGColorSpaceACESCGLinear");
 const CFStringRef kCGColorSpaceITUR_709 = CFSTR("kCGColorSpaceITUR_709");
 const CFStringRef kCGColorSpaceITUR_2020 = CFSTR("kCGColorSpaceITUR_2020");
+const CFStringRef kCGColorSpaceITUR_2100_PQ = CFSTR("kCGColorSpaceITUR_2100_PQ");
 const CFStringRef kCGColorSpaceROMMRGB = CFSTR("kCGColorSpaceROMMRGB");
 const CFStringRef kCGColorSpaceDCIP3 = CFSTR("kCGColorSpaceDCIP3");
 const CFStringRef kCGColorSpaceExtendedSRGB =
@@ -84,4 +91,15 @@ size_t CGColorSpaceGetNumberOfComponents(CGColorSpaceRef self) {
 
 CGColorSpaceRef CGColorSpaceCreateWithName(CFStringRef name) {
     return (CGColorSpaceRef) O2ColorSpaceCreateWithName(name);
+}
+
+CFStringRef CGColorSpaceGetName(CGColorSpaceRef colorSpace) {
+    return O2ColorSpaceGetName((O2ColorSpaceRef)colorSpace);
+}
+
+CFStringRef CGColorSpaceCopyName(CGColorSpaceRef colorSpace) {
+    CFStringRef name = CGColorSpaceGetName(colorSpace);
+    if (name != NULL)
+        CFRetain(name);
+    return name;
 }
