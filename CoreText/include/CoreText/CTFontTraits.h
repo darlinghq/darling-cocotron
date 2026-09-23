@@ -10,7 +10,7 @@ enum {
   kCTFontClassMaskShift = 28,
 };
 
-typedef enum CTFontSymbolicTraits : uint32_t {
+typedef CF_OPTIONS(uint32_t, CTFontSymbolicTraits) {
   kCTFontTraitItalic = (1 << 0),
   kCTFontItalicTrait = (1 << 0), // Deprecated
   kCTFontTraitBold = (1 << 1),
@@ -29,4 +29,29 @@ typedef enum CTFontSymbolicTraits : uint32_t {
   kCTFontTraitComposite = (1 << 14),
   kCTFontTraitClassMask = (15U << kCTFontClassMaskShift),
   kCTFontClassMaskTrait = (15U << 28), // Deprecated
-} CTFontSymbolicTraits;
+};
+
+typedef CF_OPTIONS(uint32_t, CTFontStylisticClass) {
+  kCTFontClassUnknown = (0u << kCTFontClassMaskShift),
+  kCTFontUnknownClass = kCTFontClassUnknown,
+  kCTFontClassOldStyleSerifs = (1u << kCTFontClassMaskShift),
+  kCTFontOldStyleSerifsClass = kCTFontClassOldStyleSerifs,
+  kCTFontClassTransitionalSerifs = (2u << kCTFontClassMaskShift),
+  kCTFontTransitionalSerifsClass = kCTFontClassTransitionalSerifs,
+  kCTFontClassModernSerifs = (3u << kCTFontClassMaskShift),
+  kCTFontModernSerifsClass = kCTFontClassModernSerifs,
+  kCTFontClassClarendonSerifs = (4u << kCTFontClassMaskShift),
+  kCTFontClarendonSerifsClass = kCTFontClassClarendonSerifs,
+  kCTFontClassSlabSerifs = (5u << kCTFontClassMaskShift),
+  kCTFontSlabSerifsClass = kCTFontClassSlabSerifs,
+  kCTFontClassFreeformSerifs = (7u << kCTFontClassMaskShift),
+  kCTFontFreeformSerifsClass = kCTFontClassFreeformSerifs,
+  kCTFontClassSansSerif = (8u << kCTFontClassMaskShift),
+  kCTFontSansSerifClass = kCTFontClassSansSerif,
+  kCTFontClassOrnamentals = (9u << kCTFontClassMaskShift),
+  kCTFontOrnamentalsClass = kCTFontClassOrnamentals,
+  kCTFontClassScripts = (10u << kCTFontClassMaskShift),
+  kCTFontScriptsClass = kCTFontClassScripts,
+  kCTFontClassSymbolic = (12u << kCTFontClassMaskShift),
+  kCTFontSymbolicClass = kCTFontClassSymbolic,
+};

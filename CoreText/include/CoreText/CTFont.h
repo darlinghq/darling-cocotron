@@ -62,63 +62,63 @@ CORETEXT_EXPORT const CFStringRef kCTFontFeatureSelectorSettingKey;
 CORETEXT_EXPORT const CFStringRef kCTFontFeatureSampleTextKey;
 CORETEXT_EXPORT const CFStringRef kCTFontFeatureTooltipTextKey;
 
-typedef enum CTFontUIFontType : uint32_t {
-    kCTFontUIFontNone = (uint32_t)-1,
-    kCTFontUIFontUser = 0,
+typedef CF_ENUM(uint32_t, CTFontUIFontType) {
+    kCTFontUIFontNone CF_SWIFT_NAME(none) = (uint32_t)-1,
+    kCTFontUIFontUser CF_SWIFT_NAME(user) = 0,
     kCTFontUserFontType = 0, // Deprecated
-    kCTFontUIFontUserFixedPitch = 1,
+    kCTFontUIFontUserFixedPitch CF_SWIFT_NAME(userFixedPitch) = 1,
     kCTFontUserFixedPitchFontType = 1,
-    kCTFontUIFontSystem = 2,
+    kCTFontUIFontSystem CF_SWIFT_NAME(system) = 2,
     kCTFontSystemFontType = 2, // Deprecated
-    kCTFontUIFontEmphasizedSystem = 3,
+    kCTFontUIFontEmphasizedSystem CF_SWIFT_NAME(emphasizedSystem) = 3,
     kCTFontEmphasizedSystemFontType = 3, // Deprecated
-    kCTFontUIFontSmallSystem = 4,
+    kCTFontUIFontSmallSystem CF_SWIFT_NAME(smallSystem) = 4,
     kCTFontSmallSystemFontType = 4, // Deprecated
-    kCTFontUIFontSmallEmphasizedSystem = 5,
+    kCTFontUIFontSmallEmphasizedSystem CF_SWIFT_NAME(smallEmphasizedSystem) = 5,
     kCTFontSmallEmphasizedSystemFontType = 5, // Deprecated
-    kCTFontUIFontMiniSystem = 6,
+    kCTFontUIFontMiniSystem CF_SWIFT_NAME(miniSystem) = 6,
     kCTFontMiniSystemFontType = 6, // Deprecated
-    kCTFontUIFontMiniEmphasizedSystem = 7,
+    kCTFontUIFontMiniEmphasizedSystem CF_SWIFT_NAME(miniEmphasizedSystem) = 7,
     kCTFontMiniEmphasizedSystemFontType = 7, // Deprecated
-    kCTFontUIFontViews = 8,
+    kCTFontUIFontViews CF_SWIFT_NAME(views) = 8,
     kCTFontViewsFontType = 8, // Deprecated
-    kCTFontUIFontApplication = 9,
+    kCTFontUIFontApplication CF_SWIFT_NAME(application) = 9,
     kCTFontApplicationFontType = 9, // Deprecated
-    kCTFontUIFontLabel = 10,
+    kCTFontUIFontLabel CF_SWIFT_NAME(label) = 10,
     kCTFontLabelFontType = 10, // Deprecated
-    kCTFontUIFontMenuTitle = 11,
+    kCTFontUIFontMenuTitle CF_SWIFT_NAME(menuTitle) = 11,
     kCTFontMenuTitleFontType = 11, // Deprecated
-    kCTFontUIFontMenuItem = 12,
+    kCTFontUIFontMenuItem CF_SWIFT_NAME(menuItem) = 12,
     kCTFontMenuItemFontType = 12, // Deprecated
-    kCTFontUIFontMenuItemMark = 13,
+    kCTFontUIFontMenuItemMark CF_SWIFT_NAME(menuItemMark) = 13,
     kCTFontMenuItemMarkFontType = 13, // Deprecated
-    kCTFontUIFontMenuItemCmdKey = 14,
+    kCTFontUIFontMenuItemCmdKey CF_SWIFT_NAME(menuItemCmdKey) = 14,
     kCTFontMenuItemCmdKeyFontType = 14, // Deprecated
-    kCTFontUIFontWindowTitle = 15,
+    kCTFontUIFontWindowTitle CF_SWIFT_NAME(windowTitle) = 15,
     kCTFontWindowTitleFontType = 15, // Deprecated
-    kCTFontUIFontPushButton = 16,
+    kCTFontUIFontPushButton CF_SWIFT_NAME(pushButton) = 16,
     kCTFontPushButtonFontType = 16, // Deprecated
-    kCTFontUIFontUtilityWindowTitle = 17,
+    kCTFontUIFontUtilityWindowTitle CF_SWIFT_NAME(utilityWindowTitle) = 17,
     kCTFontUtilityWindowTitleFontType = 17, // Deprecated
-    kCTFontUIFontAlertHeader = 18,
+    kCTFontUIFontAlertHeader CF_SWIFT_NAME(alertHeader) = 18,
     kCTFontAlertHeaderFontType = 18, // Deprecated
-    kCTFontUIFontSystemDetail = 19,
+    kCTFontUIFontSystemDetail CF_SWIFT_NAME(systemDetail) = 19,
     kCTFontSystemDetailFontType = 19, // Deprecated
-    kCTFontUIFontEmphasizedSystemDetail = 20,
+    kCTFontUIFontEmphasizedSystemDetail CF_SWIFT_NAME(emphasizedSystemDetail) = 20,
     kCTFontEmphasizedSystemDetailFontType = 20, // Deprecated
-    kCTFontUIFontToolbar = 21,
+    kCTFontUIFontToolbar CF_SWIFT_NAME(toolbar) = 21,
     kCTFontToolbarFontType = 21, // Deprecated
-    kCTFontUIFontSmallToolbar = 22,
+    kCTFontUIFontSmallToolbar CF_SWIFT_NAME(smallToolbar) = 22,
     kCTFontSmallToolbarFontType = 22, // Deprecated
-    kCTFontUIFontMessage = 23,
+    kCTFontUIFontMessage CF_SWIFT_NAME(message) = 23,
     kCTFontMessageFontType = 23, // Deprecated
-    kCTFontUIFontPalette = 24,
+    kCTFontUIFontPalette CF_SWIFT_NAME(palette) = 24,
     kCTFontPaletteFontType = 24, // Deprecated
-    kCTFontUIFontToolTip = 25,
+    kCTFontUIFontToolTip CF_SWIFT_NAME(toolTip) = 25,
     kCTFontToolTipFontType = 25, // Deprecated
-    kCTFontUIFontControlContent = 26,
+    kCTFontUIFontControlContent CF_SWIFT_NAME(controlContent) = 26,
     kCTFontControlContentFontType = 26 // Deprecated
-} CTFontUIFontType;
+};
 
 typedef CF_OPTIONS(uint32_t, CTFontTableOptions) {
     kCTFontTableOptionNoOptions        = 0,
