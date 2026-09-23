@@ -69,6 +69,7 @@
 - (O2Rect) transformFrame: (O2Rect) frame;
 
 - (Window) windowHandle;
+- (BOOL) isMapped;
 
 - (void) frameChanged;
 - (void) setLastKnownCursorPosition: (CGPoint) point;

@@ -1301,6 +1301,10 @@ static NSDictionary *modeInfoToDictionary(const XRRModeInfo *mi, int depth) {
 
     case FocusIn:
         NSLog(@"FocusIn");
+        // The server can still report FocusIn (detail NotifyPointer) for a
+        // window we have unmapped; an ordered-out window must not become key.
+        if (window != nil && ![window isMapped])
+            break;
         if ([delegate attachedSheet]) {
             [[delegate attachedSheet] makeKeyAndOrderFront: delegate];
             break;
