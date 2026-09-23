@@ -20,7 +20,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/AppKitExport.h>
 #import <Foundation/NSObject.h>
 
-@class NSDictionary, NSAffineTransform, NSArray, NSSet;
+@class NSDictionary, NSAffineTransform, NSArray, NSSet, NSFontDescriptor;
 
 typedef NSString *NSFontDescriptorAttributeName;
 
@@ -88,6 +88,14 @@ APPKIT_EXPORT const NSFontWeight NSFontWeightBold;
 APPKIT_EXPORT const NSFontWeight NSFontWeightMedium;
 APPKIT_EXPORT const NSFontWeight NSFontWeightRegular;
 
+typedef NSString *NSFontDescriptorSystemDesign NS_TYPED_ENUM
+        NS_SWIFT_NAME(NSFontDescriptor.SystemDesign);
+
+APPKIT_EXPORT NSFontDescriptorSystemDesign const NSFontDescriptorSystemDesignDefault;
+APPKIT_EXPORT NSFontDescriptorSystemDesign const NSFontDescriptorSystemDesignSerif;
+APPKIT_EXPORT NSFontDescriptorSystemDesign const NSFontDescriptorSystemDesignMonospaced;
+APPKIT_EXPORT NSFontDescriptorSystemDesign const NSFontDescriptorSystemDesignRounded;
+
 @interface NSFontDescriptor : NSObject <NSCopying> {
     NSDictionary *_attributes;
 }
@@ -115,6 +123,8 @@ APPKIT_EXPORT const NSFontWeight NSFontWeightRegular;
 - (NSFontDescriptor *) fontDescriptorWithSize: (CGFloat) pointSize;
 - (NSFontDescriptor *) fontDescriptorWithSymbolicTraits:
         (NSFontSymbolicTraits) traits;
+- (nullable NSFontDescriptor *) fontDescriptorWithDesign:
+        (NSFontDescriptorSystemDesign) design;
 
 - (NSArray *) matchingFontDescriptorsWithMandatoryKeys: (NSSet *) keys;
 - (NSFontDescriptor *) matchingFontDescriptorWithMandatoryKeys: (NSSet *) keys;
