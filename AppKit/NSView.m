@@ -204,6 +204,7 @@ typedef struct __VFlags {
 
     // TODO: decode this
     _translatesAutoresizingMaskIntoConstraints = YES;
+    _alphaValue = 1.0;
     _allowedTouchTypes = NSTouchTypeMaskDirect;
 
     if ([coder allowsKeyedCoding]) {
@@ -438,6 +439,7 @@ typedef struct __VFlags {
     [_layerContext setFrame: _frame];
 
     _translatesAutoresizingMaskIntoConstraints = YES;
+    _alphaValue = 1.0;
     _allowedTouchTypes = NSTouchTypeMaskDirect;
 
     return self;
@@ -737,12 +739,13 @@ static inline void buildTransformsIfNeeded(NSView *self) {
 }
 
 - (CGFloat) alphaValue {
-    NSUnimplementedMethod();
-    return 0.;
+    return _alphaValue;
 }
 
+// Applied through the backing layer; views drawn without one ignore it.
 - (void) setAlphaValue: (CGFloat) alpha {
-    NSUnimplementedMethod();
+    _alphaValue = alpha;
+    [_layer setOpacity: alpha];
 }
 
 - (int) gState {
@@ -1886,6 +1889,33 @@ static char inputContextKey;
 - (void) updateLayer {
 }
 
+- (void) prepareForReuse {
+    [self setAlphaValue: 1.0];
+    [self setHidden: NO];
+}
+
+- (NSEdgeInsets) alignmentRectInsets {
+    return NSEdgeInsetsMake(0, 0, 0, 0);
+}
+
+// The insets are measured in the view's own coordinates, so which of top and
+// bottom touches the frame's origin depends on whether the view is flipped.
+- (NSRect) frameForAlignmentRect: (NSRect) alignmentRect {
+    NSEdgeInsets insets = [self alignmentRectInsets];
+    CGFloat originInset = [self isFlipped] ? insets.top : insets.bottom;
+    return NSMakeRect(alignmentRect.origin.x - insets.left, alignmentRect.origin.y - originInset,
+                      alignmentRect.size.width + insets.left + insets.right,
+                      alignmentRect.size.height + insets.top + insets.bottom);
+}
+
+- (NSRect) alignmentRectForFrame: (NSRect) frame {
+    NSEdgeInsets insets = [self alignmentRectInsets];
+    CGFloat originInset = [self isFlipped] ? insets.top : insets.bottom;
+    return NSMakeRect(frame.origin.x + insets.left, frame.origin.y + originInset,
+                      frame.size.width - insets.left - insets.right,
+                      frame.size.height - insets.top - insets.bottom);
+}
+
 - (BOOL) canDrawSubviewsIntoLayer {
     return _canDrawSubviewsIntoLayer;
 }
@@ -1964,6 +1994,7 @@ static char inputContextKey;
 
     if (_layer == nil) {
         _layer = [[self makeBackingLayer] retain];
+        [_layer setOpacity: _alphaValue];
         configureLayerGeometry(self);
     }
 
