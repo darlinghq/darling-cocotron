@@ -6,6 +6,13 @@
 
 @class CAAnimation, CALayerContext, CALayer;
 
+typedef NS_OPTIONS(unsigned int, CAEdgeAntialiasingMask) {
+    kCALayerLeftEdge = 1U << 0,
+    kCALayerRightEdge = 1U << 1,
+    kCALayerBottomEdge = 1U << 2,
+    kCALayerTopEdge = 1U << 3,
+};
+
 enum {
     kCALayerNotSizable = 0x00,
     kCALayerMinXMargin = 0x01,
@@ -88,6 +95,7 @@ CA_EXPORT NSString *const kCAContentsFormatGray8Uint;
     CGPathRef _shadowPath;
     BOOL _needsLayout;
     BOOL _allowsEdgeAntialiasing;
+    CAEdgeAntialiasingMask _edgeAntialiasingMask;
     CATransform3D _transform;
     CATransform3D _sublayerTransform;
     NSString *_minificationFilter;
@@ -115,7 +123,7 @@ CA_EXPORT NSString *const kCAContentsFormatGray8Uint;
 + layer;
 
 @property(readonly) CALayer *superlayer;
-@property(copy) NSArray *sublayers;
+@property(copy) NSArray<CALayer *> *sublayers;
 @property(assign) id<CALayerDelegate> delegate;
 @property CGPoint anchorPoint;
 @property CGPoint position;
@@ -168,6 +176,7 @@ CA_EXPORT NSString *const kCAContentsFormatGray8Uint;
 
 // Stored only; CARenderer does not yet antialias layer edges.
 @property BOOL allowsEdgeAntialiasing;
+@property CAEdgeAntialiasingMask edgeAntialiasingMask;
 
 // When YES, a change of the bounds size marks the layer as needing display.
 @property BOOL needsDisplayOnBoundsChange;
