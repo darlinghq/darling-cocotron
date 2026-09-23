@@ -19,8 +19,43 @@
 
 #import <Foundation/Foundation.h>
 
-@interface NSLayoutAnchor : NSObject
+@class NSLayoutConstraint;
+
+// An anchor names one layout attribute (NSLayoutAttribute value) of an item. Constraints made from anchors
+// are NSLayoutConstraint models; Darling does not solve them.
+@interface NSLayoutAnchor : NSObject {
+    id _item;
+    NSInteger _attribute;
+}
+
+- (instancetype) initWithItem: (id) item attribute: (NSInteger) attribute;
+
+@property(readonly, assign) id item;
+@property(readonly) NSInteger attribute;
+@property(readonly, copy) NSString *name;
+
+- (NSLayoutConstraint *) constraintEqualToAnchor: (NSLayoutAnchor *) anchor;
+- (NSLayoutConstraint *) constraintGreaterThanOrEqualToAnchor: (NSLayoutAnchor *) anchor;
+- (NSLayoutConstraint *) constraintLessThanOrEqualToAnchor: (NSLayoutAnchor *) anchor;
+- (NSLayoutConstraint *) constraintEqualToAnchor: (NSLayoutAnchor *) anchor constant: (CGFloat) c;
+- (NSLayoutConstraint *) constraintGreaterThanOrEqualToAnchor: (NSLayoutAnchor *) anchor constant: (CGFloat) c;
+- (NSLayoutConstraint *) constraintLessThanOrEqualToAnchor: (NSLayoutAnchor *) anchor constant: (CGFloat) c;
+@end
+
+@interface NSLayoutXAxisAnchor : NSLayoutAnchor
+@end
+
+@interface NSLayoutYAxisAnchor : NSLayoutAnchor
 @end
 
 @interface NSLayoutDimension : NSLayoutAnchor
+- (NSLayoutConstraint *) constraintEqualToConstant: (CGFloat) c;
+- (NSLayoutConstraint *) constraintGreaterThanOrEqualToConstant: (CGFloat) c;
+- (NSLayoutConstraint *) constraintLessThanOrEqualToConstant: (CGFloat) c;
+- (NSLayoutConstraint *) constraintEqualToAnchor: (NSLayoutDimension *) anchor multiplier: (CGFloat) m;
+- (NSLayoutConstraint *) constraintGreaterThanOrEqualToAnchor: (NSLayoutDimension *) anchor multiplier: (CGFloat) m;
+- (NSLayoutConstraint *) constraintLessThanOrEqualToAnchor: (NSLayoutDimension *) anchor multiplier: (CGFloat) m;
+- (NSLayoutConstraint *) constraintEqualToAnchor: (NSLayoutDimension *) anchor multiplier: (CGFloat) m constant: (CGFloat) c;
+- (NSLayoutConstraint *) constraintGreaterThanOrEqualToAnchor: (NSLayoutDimension *) anchor multiplier: (CGFloat) m constant: (CGFloat) c;
+- (NSLayoutConstraint *) constraintLessThanOrEqualToAnchor: (NSLayoutDimension *) anchor multiplier: (CGFloat) m constant: (CGFloat) c;
 @end
