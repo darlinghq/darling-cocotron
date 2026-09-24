@@ -631,7 +631,12 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
         return;
 
     CGContextClearRect(context, CGRectMake(0, 0, width, height));
-    // Layer coordinates: the bounds origin is the bitmap's bottom-left corner.
+    // Layer coordinates: the bounds origin is the bitmap's bottom-left corner,
+    // or its top-left corner when the layer's content is flipped.
+    if ([self contentsAreFlipped]) {
+        CGContextTranslateCTM(context, 0, height);
+        CGContextScaleCTM(context, 1, -1);
+    }
     CGContextTranslateCTM(context, -_bounds.origin.x, -_bounds.origin.y);
     [self drawInContext: context];
 
@@ -674,6 +679,23 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
 
 - (BOOL) needsLayout {
     return _needsLayout;
+}
+
+- (BOOL) isGeometryFlipped {
+    return _geometryFlipped;
+}
+
+- (void) setGeometryFlipped: (BOOL) value {
+    _geometryFlipped = value;
+    [_context startTimerIfNeeded];
+}
+
+- (BOOL) contentsAreFlipped {
+    BOOL flipped = NO;
+
+    for (CALayer *layer = self; layer != nil; layer = layer->_superlayer)
+        flipped ^= layer->_geometryFlipped;
+    return flipped;
 }
 
 - (BOOL) needsDisplayOnBoundsChange {

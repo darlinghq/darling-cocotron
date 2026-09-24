@@ -122,6 +122,7 @@ CA_EXPORT NSString *const kCAContentsFormatGray8Uint;
     NSString *_name;
     id _layoutManager;
     NSArray *_constraints;
+    BOOL _geometryFlipped;
 }
 
 + layer;
@@ -186,6 +187,12 @@ CA_EXPORT NSString *const kCAContentsFormatGray8Uint;
 
 // When YES, a change of the bounds size marks the layer as needing display.
 @property BOOL needsDisplayOnBoundsChange;
+
+// YES puts the origin at the top of the bounds for sublayers and drawing;
+// images set as contents display the same either way.
+@property(getter=isGeometryFlipped) BOOL geometryFlipped;
+// YES when an odd number of layers from this one up to the root are flipped.
+- (BOOL) contentsAreFlipped;
 
 - (nonnull instancetype)init;
 
