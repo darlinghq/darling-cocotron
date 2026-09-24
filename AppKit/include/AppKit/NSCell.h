@@ -81,7 +81,8 @@ typedef NS_ENUM(NSUInteger, NSControlSize) {
     NSControlSizeRegular = 0,
     NSControlSizeSmall = 1,
     NSControlSizeMini = 2,
-    NSControlSizeLarge = 3
+    NSControlSizeLarge = 3,
+    NSControlSizeExtraLarge = 4
 } NS_SWIFT_NAME(NSControl.ControlSize);
 
 // Macros rather than constants so they still work as case labels.
