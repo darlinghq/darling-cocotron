@@ -24,6 +24,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 @class NSImageRep;
 @class NSImageSymbolConfiguration;
 
+typedef NSString *NSImageHintKey NS_TYPED_ENUM NS_SWIFT_NAME(NSImageRep.HintKey);
+
 typedef enum {
     NSImageCacheDefault,
     NSImageCacheAlways,
@@ -211,7 +213,6 @@ typedef NS_ENUM(NSInteger, NSImageSymbolScale) {
 @end
 
 typedef NSString *NSImageName;
-typedef NSString *NSImageHintKey;
 
 APPKIT_EXPORT NSImageName const NSImageNameActionTemplate;
 APPKIT_EXPORT NSImageName const NSImageNameAddTemplate;
@@ -284,5 +285,5 @@ APPKIT_EXPORT NSImageName const NSImageNameTouchBarPlayTemplate;
 APPKIT_EXPORT NSImageName const NSImageNameTouchBarRecordStopTemplate;
 
 APPKIT_EXPORT NSImageHintKey const NSImageHintInterpolation;
-APPKIT_EXPORT NSImageHintKey const NSImageHintCTM;
+APPKIT_EXPORT NSImageHintKey const NSImageHintCTM NS_SWIFT_NAME(ctm);
 APPKIT_EXPORT NSImageHintKey const NSImageHintSymbolScale;
