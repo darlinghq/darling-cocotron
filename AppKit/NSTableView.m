@@ -715,7 +715,7 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
         _standardRowHeight = 0.;
 
     for (i = 0; i < _rowHeightsCount; i++)
-        _rowHeights[i] = _standardRowHeight;
+        _rowHeights[i] = [self _effectiveRowHeight];
 
     [self tile];
 }
@@ -1245,7 +1245,7 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
         }
     } else {
         while (row != NSNotFound) {
-            _rowHeights[row] = _standardRowHeight;
+            _rowHeights[row] = [self _effectiveRowHeight];
             row = [indexSet indexGreaterThanIndex: row];
         }
     }
