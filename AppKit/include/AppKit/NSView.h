@@ -178,7 +178,8 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPre
 + (NSMenu *) defaultMenu;
 + (NSFocusRingType) defaultFocusRingType;
 
-- (instancetype) initWithFrame: (NSRect) frame;
+- (instancetype) initWithFrame: (NSRect) frame NS_DESIGNATED_INITIALIZER;
+- (nullable instancetype) initWithCoder: (NSCoder *) coder NS_DESIGNATED_INITIALIZER;
 
 @property NSRect frame;
 - (CGFloat) frameRotation;
