@@ -4,32 +4,8 @@
 #import <AppKit/NSWindow.h>
 #import <AppKit/NSEvent.h>
 
-@interface _NSSearchToolbarFieldCell : NSSearchFieldCell {
-    BOOL _resignsFirstResponderWithCancel;
-}
-@property BOOL resignsFirstResponderWithCancel;
-@end
-
-@implementation _NSSearchToolbarFieldCell
-
-@synthesize resignsFirstResponderWithCancel = _resignsFirstResponderWithCancel;
-
-- (BOOL) trackMouse: (NSEvent *) event
-              inRect: (NSRect) frame
-              ofView: (NSView *) view
-        untilMouseUp: (BOOL) untilMouseUp
-{
-    NSPoint point = [view convertPoint: [event locationInWindow] fromView: nil];
-    BOOL clickedCancel = NSPointInRect(point, [self cancelButtonRectForBounds: frame]);
-    BOOL handled = [super trackMouse: event
-                             inRect: frame
-                             ofView: view
-                       untilMouseUp: untilMouseUp];
-    if (handled && clickedCancel && _resignsFirstResponderWithCancel)
-        [[view window] makeFirstResponder: nil];
-    return handled;
-}
-
+@interface NSSearchFieldCell (NSSearchToolbarItem)
+- (void) _setResignsFirstResponderWithCancel: (BOOL) value;
 @end
 
 @implementation NSSearchToolbarItem
@@ -37,14 +13,27 @@
 - (instancetype) initWithItemIdentifier: (NSToolbarItemIdentifier) identifier {
     if ((self = [super initWithItemIdentifier: identifier])) {
         _preferredWidthForSearchField = 180;
-        _resignsFirstResponderWithCancel = YES;
         _searchField = [[NSSearchField alloc]
                 initWithFrame: NSMakeRect(0, 0, _preferredWidthForSearchField, 26)];
-        _NSSearchToolbarFieldCell *cell = [[_NSSearchToolbarFieldCell alloc] init];
-        [cell setResignsFirstResponderWithCancel: YES];
-        [_searchField setCell: cell];
-        [cell release];
         [self setView: _searchField];
+        [self setResignsFirstResponderWithCancel: YES];
+    }
+    return self;
+}
+
+// A nib archives the search field as the item's view.
+- (instancetype) initWithCoder: (NSCoder *) coder {
+    if ((self = [super initWithCoder: coder])) {
+        NSView *view = [self view];
+        if (![view isKindOfClass: [NSSearchField class]]) {
+            [self release];
+            [NSException raise: NSInvalidArgumentException
+                        format: @"NSSearchToolbarItem archived with a %@ view, not an NSSearchField",
+                                [view class]];
+        }
+        _searchField = (NSSearchField *) [view retain];
+        _preferredWidthForSearchField = [_searchField frame].size.width;
+        [self setResignsFirstResponderWithCancel: YES];
     }
     return self;
 }
@@ -93,8 +82,7 @@
 
 - (void) setResignsFirstResponderWithCancel: (BOOL) value {
     _resignsFirstResponderWithCancel = value;
-    [(_NSSearchToolbarFieldCell *) [_searchField cell]
-            setResignsFirstResponderWithCancel: value];
+    [[_searchField cell] _setResignsFirstResponderWithCancel: value];
 }
 
 - (void) beginSearchInteraction {
