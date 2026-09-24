@@ -24,6 +24,7 @@
 #import <AppKit/NSFont.h>
 #import <AppKit/NSFontManager.h>
 #import <AppKit/NSRichTextWriter.h>
+#import <AppKit/NSTextAttachment.h>
 #ifdef WIN32
 #import <malloc.h>
 #endif
@@ -44,15 +45,26 @@
     [_attributedString release];
     [_string release];
     [_data release];
+    [_attachmentDirectory release];
     [super dealloc];
 }
 
 + (NSData *) dataWithAttributedString: (NSAttributedString *) attributedString
                                 range: (NSRange) range
 {
+    return [self dataWithAttributedString: attributedString
+                                    range: range
+                      attachmentDirectory: nil];
+}
+
++ (NSData *) dataWithAttributedString: (NSAttributedString *) attributedString
+                                range: (NSRange) range
+                  attachmentDirectory: (NSFileWrapper *) directory
+{
     NSRichTextWriter *writer =
             [[self alloc] initWithAttributedString: attributedString
                                              range: range];
+    writer->_attachmentDirectory = [directory retain];
     NSData *result = [[[writer generateData] retain] autorelease];
 
     [writer release];
@@ -100,6 +112,43 @@
     }
 
     [_data appendBytes: ansi length: ansiLength];
+}
+
+// The name the attachment's file got in the RTFD directory, or nil when it
+// has no named file wrapper.
+- (NSString *) addAttachmentFile: (NSTextAttachment *) attachment {
+    NSFileWrapper *wrapper = [attachment fileWrapper];
+    if ([[wrapper preferredFilename] length] == 0 && [[wrapper filename] length] > 0)
+        [wrapper setPreferredFilename: [wrapper filename]];
+    if ([[wrapper preferredFilename] length] == 0)
+        return nil;
+    return [_attachmentDirectory addFileWrapper: wrapper];
+}
+
+// RTFD's attachment group, {{\NeXTGraphic name \width w \height h}<0xAC>},
+// sized in twips; the byte after the group is the placeholder the reader skips.
+- (void) appendAttachment: (NSTextAttachment *) attachment range: (NSRange) range {
+    for (NSUInteger i = range.location; i < NSMaxRange(range); i++) {
+        NSString *name = nil;
+        if ([_string characterAtIndex: i] == NSAttachmentCharacter)
+            name = [self addAttachmentFile: attachment];
+        if (name == nil) {
+            [self appendStringFromRange: NSMakeRange(i, 1)];
+            continue;
+        }
+        CGSize size = [attachment attachmentBoundsForAttributes: nil
+                                                       location: nil
+                                                  textContainer: nil
+                                           proposedLineFragment: CGRectZero
+                                                       position: CGPointZero]
+                              .size;
+        NSString *group = [NSString
+                stringWithFormat: @"{{\\NeXTGraphic %@ \\width%ld \\height%ld\n}",
+                                  name, lround(size.width * 20),
+                                  lround(size.height * 20)];
+        [self appendCString: [group UTF8String]];
+        [_data appendBytes: "\xAC}" length: 2];
+    }
 }
 
 - (void) writeRichText {
@@ -312,7 +361,12 @@
             [self appendCString: [fontSize UTF8String]];
         }
 
-        [self appendStringFromRange: effectiveRange];
+        NSTextAttachment *attachment =
+                [attributes objectForKey: NSAttachmentAttributeName];
+        if (_attachmentDirectory != nil && attachment != nil)
+            [self appendAttachment: attachment range: effectiveRange];
+        else
+            [self appendStringFromRange: effectiveRange];
 
         location = NSMaxRange(effectiveRange);
     }

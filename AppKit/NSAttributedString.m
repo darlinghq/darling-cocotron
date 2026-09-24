@@ -579,14 +579,17 @@ NSUInteger NSUnderlineByWordMask = 0x8000;
     return 0;
 }
 
-// RTFD is a directory holding the rich text as TXT.rtf (attachments aren't
-// written); other types are a regular file with dataFromRange:'s contents.
+// RTFD is a directory holding the rich text as TXT.rtf plus the attachments'
+// files; other types are a regular file with dataFromRange:'s contents.
 - (NSFileWrapper *) fileWrapperFromRange: (NSRange) range
                       documentAttributes: (NSDictionary *) attributes
                                    error: (NSError **) error
 {
     if ([[attributes objectForKey: NSDocumentTypeDocumentAttribute] isEqualToString: NSRTFDTextDocumentType]) {
-        NSData *rtf = [self RTFFromRange: range documentAttributes: attributes];
+        NSFileWrapper *directory = [[[NSFileWrapper alloc] initDirectoryWithFileWrappers: @{}] autorelease];
+        NSData *rtf = [NSRichTextWriter dataWithAttributedString: self
+                                                           range: range
+                                             attachmentDirectory: directory];
         if (rtf == nil) {
             if (error)
                 *error = [NSError errorWithDomain: NSCocoaErrorDomain code: NSFileWriteUnknownError userInfo: nil];
@@ -594,8 +597,8 @@ NSUInteger NSUnderlineByWordMask = 0x8000;
         }
         NSFileWrapper *text = [[[NSFileWrapper alloc] initRegularFileWithContents: rtf] autorelease];
         [text setPreferredFilename: @"TXT.rtf"];
-        return [[[NSFileWrapper alloc] initDirectoryWithFileWrappers:
-                        [NSDictionary dictionaryWithObject: text forKey: @"TXT.rtf"]] autorelease];
+        [directory addFileWrapper: text];
+        return directory;
     }
 
     NSData *data = [self dataFromRange: range documentAttributes: attributes error: error];
