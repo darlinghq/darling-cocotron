@@ -343,6 +343,17 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
     return _floatsGroupRows;
 }
 
+- (NSTableViewRowSizeStyle) rowSizeStyle {
+    return _rowSizeStyle;
+}
+
+// Darling has no sidebar size setting; Medium is macOS's out-of-the-box choice.
+- (NSTableViewRowSizeStyle) effectiveRowSizeStyle {
+    if (_rowSizeStyle == NSTableViewRowSizeStyleDefault)
+        return NSTableViewRowSizeStyleMedium;
+    return _rowSizeStyle;
+}
+
 - (BOOL) allowsColumnReordering {
     return _allowsColumnReordering;
 }
@@ -444,11 +455,29 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
     return nil;
 }
 
+// Apple gives no heights for the small, medium and large styles; use the line
+// height of the system font for the matching control size.
+static CGFloat styledRowHeight(NSTableViewRowSizeStyle style) {
+    NSControlSize size = NSControlSizeRegular;
+
+    if (style == NSTableViewRowSizeStyleSmall)
+        size = NSControlSizeSmall;
+    else if (style == NSTableViewRowSizeStyleLarge)
+        size = NSControlSizeLarge;
+    return [[NSFont systemFontOfSize: [NSFont systemFontSizeForControlSize: size]]
+            defaultLineHeightForFont];
+}
+
+- (CGFloat) _effectiveRowHeight {
+    return _rowSizeStyle == NSTableViewRowSizeStyleCustom ? _standardRowHeight
+                                                          : _styledRowHeight;
+}
+
 static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     if (index < self->_rowHeightsCount)
         return self->_rowHeights[index];
 
-    return self->_standardRowHeight;
+    return [self _effectiveRowHeight];
 }
 
 - (NSRect) rectOfRow: (NSInteger) row {
@@ -768,6 +797,13 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 
 - (void) setFloatsGroupRows: (BOOL) flag {
     _floatsGroupRows = flag;
+}
+
+- (void) setRowSizeStyle: (NSTableViewRowSizeStyle) style {
+    _rowSizeStyle = style;
+    if (style != NSTableViewRowSizeStyleCustom)
+        _styledRowHeight = styledRowHeight([self effectiveRowSizeStyle]);
+    [self tile];
 }
 
 // the appkit dox are pretty vague on these two. should they trigger a redraw or
@@ -1321,7 +1357,7 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     [_headerView setFrameSize: rect.size];
 
     [[self enclosingScrollView]
-            setVerticalLineScroll: _standardRowHeight +
+            setVerticalLineScroll: [self _effectiveRowHeight] +
                                    _intercellSpacing.height];
 
     [self setNeedsDisplay: YES];
@@ -1472,9 +1508,9 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
                     rectToFill.size.height; // This is for beyond the loop.
             heightFilled = rectToFill.origin.y;
         }
-        if (_standardRowHeight > 0.) {
+        if ([self _effectiveRowHeight] > 0.) {
             rectToFill.size.height =
-                    _standardRowHeight + _intercellSpacing.height;
+                    [self _effectiveRowHeight] + _intercellSpacing.height;
             while (heightFilled < clipRect.size.height) {
                 [(NSColor *) [rowColors objectAtIndex: i % colorCount] setFill];
                 NSRectFill(rectToFill);
@@ -1523,9 +1559,9 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
             [line lineToPoint: NSMakePoint(x + clipRect.size.width, y)];
         }
 
-        if (_standardRowHeight > 0.0) {
+        if ([self _effectiveRowHeight] > 0.0) {
             while (y < clipRect.size.height) {
-                y += _standardRowHeight + _intercellSpacing.height;
+                y += [self _effectiveRowHeight] + _intercellSpacing.height;
                 [line moveToPoint: NSMakePoint(clipRect.origin.x, y)];
                 [line lineToPoint: NSMakePoint(clipRect.origin.x +
                                                        clipRect.size.width,

@@ -70,6 +70,14 @@ enum {
 };
 typedef NSInteger NSTableViewSelectionHighlightStyle;
 
+typedef NS_ENUM(NSInteger, NSTableViewRowSizeStyle) {
+    NSTableViewRowSizeStyleDefault = -1,
+    NSTableViewRowSizeStyleCustom = 0,
+    NSTableViewRowSizeStyleSmall = 1,
+    NSTableViewRowSizeStyleMedium = 2,
+    NSTableViewRowSizeStyleLarge = 3,
+};
+
 typedef enum {
     NSTableViewDropOn,
     NSTableViewDropAbove
@@ -115,6 +123,8 @@ typedef NS_OPTIONS(NSUInteger, NSTableViewAnimationOptions) {
     NSTableViewSelectionHighlightStyle _selectionHighlightStyle;
     BOOL _usesAutomaticRowHeights;
     BOOL _floatsGroupRows;
+    NSTableViewRowSizeStyle _rowSizeStyle;
+    CGFloat _styledRowHeight;
 
     // temp ivars
     NSMutableArray *_selectedColumns;
@@ -160,6 +170,8 @@ typedef NS_OPTIONS(NSUInteger, NSTableViewAnimationOptions) {
 - (void) setUsesAutomaticRowHeights: (BOOL) value;
 // Floating applies to view-based tables only; Cocotron's tables are cell-based.
 - (BOOL) floatsGroupRows;
+- (NSTableViewRowSizeStyle) rowSizeStyle;
+- (NSTableViewRowSizeStyle) effectiveRowSizeStyle;
 
 - (NSInteger) numberOfRows;
 - (NSUInteger) numberOfColumns;
@@ -202,6 +214,7 @@ typedef NS_OPTIONS(NSUInteger, NSTableViewAnimationOptions) {
 - (void) setGridStyleMask: (unsigned int) gridStyle;
 - (void) setSelectionHighlightStyle: (NSTableViewSelectionHighlightStyle) value;
 - (void) setFloatsGroupRows: (BOOL) flag;
+- (void) setRowSizeStyle: (NSTableViewRowSizeStyle) style;
 
 - (void) addTableColumn: (NSTableColumn *) column;
 - (void) removeTableColumn: (NSTableColumn *) column;
