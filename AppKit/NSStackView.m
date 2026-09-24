@@ -409,8 +409,14 @@ static const CGFloat DefaultSpacing = 8;
         if ([view superview] == self)
             [view removeFromSuperview];
     }
-    for (NSView *view in reattach) {
-        [self _entryForView: view]->detached = NO;
+    for (NSView *view in [[reattach copy] autorelease]) {
+        NSStackViewEntry *entry = [self _entryForView: view];
+
+        if (entry == nil) {
+            [reattach removeObjectIdenticalTo: view];
+            continue;
+        }
+        entry->detached = NO;
         [self addSubview: view];
     }
     _changingViews = NO;
@@ -675,7 +681,7 @@ typedef struct {
                                crossStart + crossOffset, lengths[i], cross);
         }
         [entry->view setFrame: frame];
-        entry->assignedSize = frame.size;
+        entry->assignedSize = [entry->view frame].size;
     }
     [self setNeedsDisplay: YES];
 }
