@@ -15,6 +15,7 @@ include_directories(
 )
 
 set(CoreText_sources
+	CTAdaptiveImageGlyph.m
 	CTFont.m
 	CTParagraphStyle.m
 	CTStringATtributes.m
