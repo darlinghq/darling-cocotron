@@ -32,6 +32,7 @@ typedef enum {
     id _delegate;
     BOOL _isVertical;
     NSSplitViewDividerStyle _dividerStyle;
+    NSString *_autosaveName;
 }
 
 - (id) delegate;
@@ -49,6 +50,9 @@ typedef enum {
 
 - (void) setDividerStyle: (NSSplitViewDividerStyle) style;
 - (NSSplitViewDividerStyle) dividerStyle;
+
+- (NSString *) autosaveName;
+- (void) setAutosaveName: (NSString *) name;
 
 /* Get the minimum or maximum possible position of a divider */
 - (CGFloat) minPossiblePositionOfDividerAtIndex: (int) index;

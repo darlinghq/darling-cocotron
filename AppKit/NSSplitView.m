@@ -29,6 +29,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSWindow.h>
 #import <Foundation/NSKeyedArchiver.h>
 #import <Foundation/NSRaise.h>
+#import <Foundation/NSUserDefaults.h>
 
 NSString *const NSSplitViewDidResizeSubviewsNotification =
         @"NSSplitViewDidResizeSubviewsNotification";
@@ -57,6 +58,11 @@ NSString *const NSSplitViewWillResizeSubviewsNotification =
     }
 
     return self;
+}
+
+- (void) dealloc {
+    [_autosaveName release];
+    [super dealloc];
 }
 
 - (id) delegate {
@@ -140,6 +146,80 @@ NSString *const NSSplitViewWillResizeSubviewsNotification =
 
 - (NSSplitViewDividerStyle) dividerStyle {
     return _dividerStyle;
+}
+
+// Defaults key and layout (each divider's leading subview size as a fraction of
+// the space not taken by dividers) follow GNUstep's NSSplitView (LGPL-2.1+).
+static NSString *autosaveKey(NSString *name) {
+    return [@"NSSplitView Dividers " stringByAppendingString: name];
+}
+
+- (CGFloat) _lengthOfSubview: (NSView *) view {
+    if ([self isSubviewCollapsed: view])
+        return 0;
+    return [self isVertical] ? NSWidth([view frame]) : NSHeight([view frame]);
+}
+
+- (CGFloat) _spaceForSubviews {
+    NSSize size = [self bounds].size;
+    CGFloat length = [self isVertical] ? size.width : size.height;
+
+    return length - [self dividerThickness] * ([_subviews count] - 1);
+}
+
+- (NSString *) autosaveName {
+    return _autosaveName;
+}
+
+- (void) setAutosaveName: (NSString *) name {
+    if ([name length] == 0)
+        name = nil;
+    name = [name copy];
+    [_autosaveName release];
+    _autosaveName = name;
+    [self _restoreDividerPositions];
+}
+
+- (void) _restoreDividerPositions {
+    NSUInteger i, count = [_subviews count];
+    CGFloat space = [self _spaceForSubviews], position = 0;
+    NSDictionary *saved;
+
+    if (_autosaveName == nil || count < 2 || space <= 0)
+        return;
+    // Each setPosition: below saves the layout again, replacing this entry.
+    saved = [[[[NSUserDefaults standardUserDefaults]
+            dictionaryForKey: autosaveKey(_autosaveName)] retain] autorelease];
+    if (saved == nil)
+        return;
+    for (i = 0; i + 1 < count; i++)
+        if (![[saved objectForKey: [NSString stringWithFormat: @"%lu", (unsigned long) i]]
+                    respondsToSelector: @selector(doubleValue)])
+            return;
+
+    for (i = 0; i + 1 < count; i++) {
+        NSString *key = [NSString stringWithFormat: @"%lu", (unsigned long) i];
+
+        position += [[saved objectForKey: key] doubleValue] * space;
+        [self setPosition: position ofDividerAtIndex: i];
+        position += [self dividerThickness];
+    }
+}
+
+- (void) _autosaveSubviewLayoutIfNecessary {
+    NSUInteger i, count = [_subviews count];
+    CGFloat space = [self _spaceForSubviews];
+    NSMutableDictionary *saved;
+
+    if (_autosaveName == nil || count < 2 || space <= 0)
+        return;
+    saved = [NSMutableDictionary dictionary];
+    for (i = 0; i + 1 < count; i++)
+        [saved setObject: [NSNumber numberWithDouble:
+                        [self _lengthOfSubview: [_subviews objectAtIndex: i]] / space]
+                  forKey: [NSString stringWithFormat: @"%lu", (unsigned long) i]];
+    [[NSUserDefaults standardUserDefaults] setObject: saved
+                                              forKey: autosaveKey(_autosaveName)];
 }
 
 /** adjust all the non-collapsed subviews so that they are equally spaced
@@ -650,10 +730,7 @@ static CGFloat constrainTo(CGFloat value, CGFloat min, CGFloat max) {
     }
 
     [self setNeedsDisplay: YES];
-}
-
-- (void) _autosaveSubviewLayoutIfNecessary {
-    NSUnimplementedMethod();
+    [self _autosaveSubviewLayoutIfNecessary];
 }
 
 - (BOOL) isOpaque {
