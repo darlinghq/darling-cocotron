@@ -19,6 +19,7 @@
 
 #import <Foundation/Foundation.h>
 #import <QuartzCore/CAConstraintLayoutManager.h>
+#import "CACoding.h"
 
 static NSString *const CAConstraintSuperlayerName = @"superlayer";
 
@@ -89,6 +90,36 @@ static BOOL isValidAttribute(CAConstraintAttribute attribute) {
         _offset = offset;
     }
     return self;
+}
+
++ (BOOL) supportsSecureCoding {
+    return YES;
+}
+
+- (void) encodeWithCoder: (NSCoder *) coder {
+    CARequireKeyedCoder(coder);
+    [coder encodeInt: _attribute forKey: @"attribute"];
+    [coder encodeObject: _sourceName forKey: @"sourceName"];
+    [coder encodeInt: _sourceAttribute forKey: @"sourceAttribute"];
+    [coder encodeDouble: _scale forKey: @"scale"];
+    [coder encodeDouble: _offset forKey: @"offset"];
+}
+
+- (instancetype) initWithCoder: (NSCoder *) coder {
+    CARequireKeyedCoder(coder);
+    CAConstraintAttribute attribute = [coder decodeIntForKey: @"attribute"];
+    CAConstraintAttribute sourceAttribute = [coder decodeIntForKey: @"sourceAttribute"];
+    NSString *sourceName = [coder decodeObjectOfClass: [NSString class] forKey: @"sourceName"];
+    if (!isValidAttribute(attribute) || !isValidAttribute(sourceAttribute) || sourceName == nil) {
+        [self release];
+        [NSException raise: NSInvalidUnarchiveOperationException
+                    format: @"Archived CAConstraint has an invalid attribute or no source name"];
+    }
+    return [self initWithAttribute: attribute
+                        relativeTo: sourceName
+                         attribute: sourceAttribute
+                             scale: [coder decodeDoubleForKey: @"scale"]
+                            offset: [coder decodeDoubleForKey: @"offset"]];
 }
 
 - (void) dealloc {
@@ -189,6 +220,18 @@ enum { Unvisited, InProgress, Done };
 
 + (instancetype) layoutManager {
     return [[[self alloc] init] autorelease];
+}
+
+// The manager has no state of its own.
++ (BOOL) supportsSecureCoding {
+    return YES;
+}
+
+- (void) encodeWithCoder: (NSCoder *) coder {
+}
+
+- (instancetype) initWithCoder: (NSCoder *) coder {
+    return [self init];
 }
 
 static void layoutSublayer(CALayer *layer, NSArray *sublayers, NSDictionary *byName,

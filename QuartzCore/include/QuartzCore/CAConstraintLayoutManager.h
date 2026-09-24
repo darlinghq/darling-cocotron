@@ -31,7 +31,7 @@ typedef NS_ENUM(int, CAConstraintAttribute) {
     kCAConstraintHeight,
 };
 
-@interface CAConstraint : NSObject {
+@interface CAConstraint : NSObject <NSSecureCoding> {
     CAConstraintAttribute _attribute;
     NSString *_sourceName;
     CAConstraintAttribute _sourceAttribute;
@@ -74,7 +74,7 @@ typedef NS_ENUM(int, CAConstraintAttribute) {
 
 @end
 
-@interface CAConstraintLayoutManager : NSObject <CALayoutManager>
+@interface CAConstraintLayoutManager : NSObject <CALayoutManager, NSSecureCoding>
 
 + (instancetype) layoutManager;
 
