@@ -37,6 +37,11 @@ static int NSColor_ignoresAlpha = -1;
 
 NSNotificationName const NSSystemColorsDidChangeNotification = @"NSSystemColorsDidChangeNotification";
 
+// NSColor_dynamic.m
+@interface NSColor_dynamic : NSColor
+- initWithName: (NSColorName) name provider: (NSColor * (^)(NSAppearance *)) provider;
+@end
+
 @interface NSColor (private)
 - (NSColorListName) catalogName;
 - (NSColorName) colorName;
@@ -759,6 +764,12 @@ NSNotificationName const NSSystemColorsDidChangeNotification = @"NSSystemColorsD
     return [NSColor_CGColor colorWithGray: white
                                     alpha: alpha
                                 spaceName: NSCustomColorSpace];
+}
+
++ (NSColor *) colorWithName: (NSColorName) colorName dynamicProvider: (NSColor * (^)(NSAppearance *)) dynamicProvider {
+    if (dynamicProvider == nil)
+        [NSException raise: NSInvalidArgumentException format: @"+[NSColor colorWithName:dynamicProvider:]: nil provider"];
+    return [[[NSColor_dynamic alloc] initWithName: colorName provider: dynamicProvider] autorelease];
 }
 
 + (NSColor *) colorFromPasteboard: (NSPasteboard *) pasteboard {

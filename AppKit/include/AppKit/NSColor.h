@@ -30,6 +30,7 @@ typedef NSString *NSColorSpaceName;
 @class NSImage;
 @class NSPasteboard;
 @class NSColorSpace;
+@class NSAppearance;
 
 typedef NSUInteger NSControlTint;
 enum {
@@ -240,6 +241,11 @@ enum {
 
 + (NSColor *) colorWithCatalogName: (NSString *) catalogName
                          colorName: (NSString *) colorName;
+
+NS_ASSUME_NONNULL_BEGIN
++ (NSColor *) colorWithName: (nullable NSColorName) colorName
+               dynamicProvider: (NSColor * (^)(NSAppearance *appearance)) dynamicProvider;
+NS_ASSUME_NONNULL_END
 
 + (NSColor *) colorFromPasteboard: (NSPasteboard *) pasteboard;
 
