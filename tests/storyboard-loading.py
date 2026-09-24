@@ -26,6 +26,13 @@ def detail_view(a, owner):
     return [view], [a.outlet(owner, view, "view")]
 
 
+def placeholder_scene(a, owner):
+    controller = a.obj("FixtureViewController", ["NSViewController"] + RESPONDER, NSTitle=a.add("Placeholder"))
+    placeholder = a.obj("NSNibExternalObjectPlaceholder", ["NSObject"],
+                        NSExternalObjectPlaceholderIdentifier=a.add("FixtureSceneObject"))
+    return [controller, placeholder], [a.outlet(controller, placeholder, "representedObject")]
+
+
 def two_controllers(a, owner):
     return [a.obj("NSViewController", RESPONDER), a.obj("NSViewController", RESPONDER)], []
 
@@ -36,9 +43,11 @@ write_nib(os.path.join(out, "Window.nib"), window_scene)
 write_nib(os.path.join(out, "DetailController.nib"), detail_scene)
 write_nib(os.path.join(out, "Detail-view.nib"), detail_view)
 write_nib(os.path.join(out, "Ambiguous.nib"), two_controllers)
+write_nib(os.path.join(out, "PlaceholderController.nib"), placeholder_scene)
 with open(os.path.join(out, "Info.plist"), "wb") as f:
     plistlib.dump({"NSStoryboardDesignatedEntryPointIdentifier": "Window",
                    "NSStoryboardVersion": 1,
                    "NSViewControllerIdentifiersToNibNames": {
                        "Window": "Window", "Detail": "DetailController",
-                       "Ambiguous": "Ambiguous", "Unbuilt": "Unbuilt"}}, f)
+                       "Ambiguous": "Ambiguous", "Unbuilt": "Unbuilt",
+                       "Placeholder": "PlaceholderController"}}, f)

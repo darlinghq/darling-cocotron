@@ -54,6 +54,10 @@ int main(int argc, char **argv) {
         expect([storyboard instantiateControllerWithIdentifier: @"Detail"] != detail,
                "each instantiation creates a new controller");
 
+        FixtureViewController *scene = [storyboard instantiateControllerWithIdentifier: @"Placeholder"];
+        expect([[scene title] isEqual: @"Placeholder"], "the scene with an external placeholder loads");
+        expect([scene representedObject] == storyboard, "the scene's external placeholder is its storyboard");
+
         expect([raisedName(^{ [storyboard instantiateControllerWithIdentifier: @"Nope"]; })
                        isEqual: NSInvalidArgumentException],
                "an unknown identifier raises NSInvalidArgumentException");

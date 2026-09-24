@@ -86,19 +86,25 @@ static __thread NSStoryboard *instantiatingStoryboard;
 - (NSArray *) _instantiateNibNamed: (NSString *) name owner: (id) owner {
     NSString *path = [self _pathForNibNamed: name];
     NSNib *nib = path == nil ? nil : [[[NSNib alloc] initWithContentsOfURL: [NSURL fileURLWithPath: path]] autorelease];
-    NSArray *topLevelObjects = nil;
+    NSMutableArray *topLevelObjects = [NSMutableArray array];
+    NSMutableDictionary *nameTable = [NSMutableDictionary dictionaryWithObjectsAndKeys:
+            topLevelObjects, NSNibTopLevelObjects, self, NSStoryboardSceneExternalObjectKey, nil];
     NSStoryboard *outer = instantiatingStoryboard;
     BOOL loaded;
 
+    if (owner != nil)
+        [nameTable setObject: owner forKey: NSNibOwner];
     instantiatingStoryboard = self;
     @try {
-        loaded = [nib instantiateWithOwner: owner topLevelObjects: &topLevelObjects];
+        loaded = [nib instantiateNibWithExternalNameTable: nameTable];
     } @finally {
         instantiatingStoryboard = outer;
     }
     if (!loaded)
         [NSException raise: NSInternalInconsistencyException
                     format: @"Unable to load nib %@ of storyboard %@", name, _path];
+    // The nib load retains top-level objects for its caller; this array keeps them instead.
+    [topLevelObjects makeObjectsPerformSelector: @selector(autorelease)];
     return topLevelObjects;
 }
 

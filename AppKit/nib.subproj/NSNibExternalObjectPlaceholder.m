@@ -3,13 +3,14 @@
 #import <Foundation/NSException.h>
 #import <Foundation/NSKeyedArchiver.h>
 #import <Foundation/NSString.h>
+#import <AppKit/NSStoryboard-Private.h>
 
 @interface NSNib (private)
 - (NSDictionary *) externalNameTable;
 @end
 
 // Stands in for an object that the code loading the nib supplies in the
-// external name table, under the placeholder's identifier.
+// external name table under the placeholder's identifier, or for a storyboard scene's storyboard.
 @interface NSNibExternalObjectPlaceholder : NSObject {
     NSString *_externalObjectPlaceholderIdentifier;
 }
@@ -38,6 +39,9 @@
                                       ? [nib externalNameTable]
                                       : nil;
     id external = [nameTable objectForKey: _externalObjectPlaceholderIdentifier];
+
+    if (external == nil)
+        external = [nameTable objectForKey: NSStoryboardSceneExternalObjectKey];
 
     if (external == nil)
         [NSException raise: NSInternalInconsistencyException

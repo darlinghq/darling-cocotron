@@ -19,6 +19,10 @@
 
 #import <AppKit/NSStoryboard.h>
 
+// Name-table key for the object a scene's external placeholders stand for. NSStoryboard's API
+// gives callers no way to pass external objects, so the only one a scene can ask for is its storyboard.
+static NSString *const NSStoryboardSceneExternalObjectKey = @"NSStoryboardSceneExternalObject";
+
 @interface NSStoryboard (NSStoryboard_private)
 // The storyboard whose scene is being decoded on this thread, for controllers to record.
 + (NSStoryboard *) _instantiatingStoryboard;
