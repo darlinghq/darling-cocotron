@@ -2518,11 +2518,27 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
         if (![self isKindOfClass: [NSPanel class]]) {
             [NSApp removeWindowsItem: self];
         }
+        if ([self isKeyWindow])
+            [self _passKeyToFrontmostWindow];
         break;
     }
 
     [self _postOcclusionChangeIfVisibleWas: wasVisible];
     [self postNotificationName: NSWindowDidMoveNotification];
+}
+
+// Like macOS, ordering out the key window makes the frontmost remaining
+// window that can become key the key window; without one, none is key.
+- (void) _passKeyToFrontmostWindow {
+    for (NSWindow *window in [NSApp orderedWindows]) {
+        if (window != self && [window isVisible] &&
+            [window canBecomeKeyWindow]) {
+            [window becomeKeyWindow];
+            return;
+        }
+    }
+    [NSApp _setKeyWindow: nil];
+    [self resignKeyWindow];
 }
 
 - (void) orderFrontRegardless {
