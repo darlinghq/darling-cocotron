@@ -20,6 +20,55 @@
 
 #import <CoreText/KTFont_FT.h>
 #import <Onyx2D/O2Font_freetype.h>
+#ifdef DARLING
+#define __linux__
+#endif
+#import <ft2build.h>
+#import FT_OUTLINE_H
+#ifdef DARLING
+#undef __linux__
+#endif
+
+typedef struct {
+    CGMutablePathRef path;
+    const CGAffineTransform *matrix;
+    BOOL contourOpen;
+} GlyphPathBuilder;
+
+static int glyphPathMoveTo(const FT_Vector *to, void *user) {
+    GlyphPathBuilder *builder = user;
+
+    if (builder->contourOpen)
+        CGPathCloseSubpath(builder->path);
+    CGPathMoveToPoint(builder->path, builder->matrix, to->x, to->y);
+    builder->contourOpen = YES;
+    return 0;
+}
+
+static int glyphPathLineTo(const FT_Vector *to, void *user) {
+    GlyphPathBuilder *builder = user;
+
+    CGPathAddLineToPoint(builder->path, builder->matrix, to->x, to->y);
+    return 0;
+}
+
+static int glyphPathConicTo(const FT_Vector *control, const FT_Vector *to, void *user) {
+    GlyphPathBuilder *builder = user;
+
+    CGPathAddQuadCurveToPoint(builder->path, builder->matrix, control->x, control->y,
+                              to->x, to->y);
+    return 0;
+}
+
+static int glyphPathCubicTo(const FT_Vector *control1, const FT_Vector *control2,
+                            const FT_Vector *to, void *user)
+{
+    GlyphPathBuilder *builder = user;
+
+    CGPathAddCurveToPoint(builder->path, builder->matrix, control1->x, control1->y,
+                          control2->x, control2->y, to->x, to->y);
+    return 0;
+}
 
 @implementation KTFont (KTFont_FT)
 + (id) allocWithZone: (NSZone *) zone {
@@ -124,6 +173,38 @@
     if (face == NULL || _unitsPerEm == 0)
         return 0;
     return face->underline_thickness * _size / _unitsPerEm;
+}
+
+- (CGPathRef) createPathForGlyph: (CGGlyph) glyph
+                       transform: (CGAffineTransform *) xform
+{
+    O2Font_freetype *o2Font = (O2Font_freetype *) _font;
+    @synchronized(o2Font) {
+        FT_Face face = [o2Font face];
+
+        // Unscaled outlines are in font units, so the shared face's size is left alone.
+        if (face == NULL || _unitsPerEm == 0 ||
+            FT_Load_Glyph(face, glyph, FT_LOAD_NO_SCALE) != 0 ||
+            face->glyph->format != FT_GLYPH_FORMAT_OUTLINE)
+            return NULL;
+
+        CGFloat unit = _size / _unitsPerEm;
+        CGAffineTransform matrix = CGAffineTransformMakeScale(unit, unit);
+        if (xform != NULL)
+            matrix = CGAffineTransformConcat(matrix, *xform);
+
+        GlyphPathBuilder builder = {CGPathCreateMutable(), &matrix, NO};
+        const FT_Outline_Funcs funcs = {glyphPathMoveTo, glyphPathLineTo, glyphPathConicTo,
+                                        glyphPathCubicTo, 0, 0};
+
+        if (FT_Outline_Decompose(&face->glyph->outline, &funcs, &builder) != 0) {
+            CGPathRelease(builder.path);
+            return NULL;
+        }
+        if (builder.contourOpen)
+            CGPathCloseSubpath(builder.path);
+        return builder.path;
+    }
 }
 
 @end
