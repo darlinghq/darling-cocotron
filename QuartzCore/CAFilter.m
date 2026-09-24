@@ -17,7 +17,7 @@
  along with Darling.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#import <QuartzCore/CAFilter.h>
+#import "CAFilter.h"
 
 NSString *const kCAFilterAlphaThreshold = @"alphaThreshold";
 NSString *const kCAFilterAverageColor = @"averageColor";

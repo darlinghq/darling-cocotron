@@ -1,4 +1,21 @@
 #import <QuartzCore/QuartzCore.h>
+
+// Declared by the client, as OpenSwiftUI and WebKit do: CAFilter is not public.
+@interface CAFilter : NSObject <NSCopying>
++ (instancetype)filterWithType:(NSString *)type;
+@property(readonly, copy) NSString *type;
+@property(copy) NSString *name;
+@property(getter=isEnabled) BOOL enabled;
+@end
+
+extern NSString *const kCAFilterAlphaThreshold, *const kCAFilterAverageColor,
+    *const kCAFilterColorBrightness, *const kCAFilterColorContrast, *const kCAFilterColorHueRotate,
+    *const kCAFilterColorInvert, *const kCAFilterColorMatrix, *const kCAFilterColorMonochrome,
+    *const kCAFilterColorSaturate, *const kCAFilterCurves, *const kCAFilterGaussianBlur,
+    *const kCAFilterLuminanceCurveMap, *const kCAFilterLuminanceToAlpha, *const kCAFilterMultiplyColor,
+    *const kCAFilterVariableBlur, *const kCAFilterVibrantColorMatrix;
+extern NSString *const kCAFilterInputRadius, *const kCAFilterInputNormalizeEdges,
+    *const kCAFilterInputAmount, *const kCAFilterInputPremultipliedValues;
 #include <stdlib.h>
 
 static void expect(BOOL condition, NSString *message)

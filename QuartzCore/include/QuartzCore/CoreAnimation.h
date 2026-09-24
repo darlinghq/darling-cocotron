@@ -18,5 +18,4 @@
 #import <QuartzCore/CATransformLayer.h>
 
 /* Undocumented */
-#import <QuartzCore/CAFilter.h>
 /* End undocumented */

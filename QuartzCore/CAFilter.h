@@ -54,8 +54,9 @@ CA_EXPORT NSString *const kCAFilterInputRadius;
 CA_EXPORT NSString *const kCAFilterInputRedValues;
 CA_EXPORT NSString *const kCAFilterInputValues;
 
-// Private Core Animation filter. Input values are stored with key-value coding
-// under their input keys; CARenderer does not apply filters yet.
+// Private SPI, kept out of the public headers as on macOS: clients declare
+// CAFilter themselves. Inputs are stored with key-value coding under their
+// input keys; CARenderer does not apply filters yet.
 @interface CAFilter : NSObject <NSCopying> {
     NSString *_type;
     NSString *_name;
