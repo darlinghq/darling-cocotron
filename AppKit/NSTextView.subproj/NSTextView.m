@@ -97,6 +97,26 @@ NSString *const NSAllRomanInputSourcesLocaleIdentifier =
 @end
 
 @implementation NSTextView
+
++ (NSScrollView *) scrollableTextView {
+    NSScrollView *scrollView =
+            [[[NSScrollView alloc] initWithFrame: NSMakeRect(0, 0, 200, 100)]
+                    autorelease];
+    NSTextView *textView =
+            [[[self alloc] initWithFrame: [scrollView bounds]] autorelease];
+
+    [scrollView setHasVerticalScroller: YES];
+    [scrollView setBorderType: NSBezelBorder];
+    [scrollView setDocumentView: textView];
+
+    [textView setVerticallyResizable: YES];
+    [textView setHorizontallyResizable: NO];
+    [textView setAutoresizingMask: NSViewWidthSizable];
+    [[textView textContainer] setWidthTracksTextView: YES];
+
+    return scrollView;
+}
+
 - (void) configureMenu {
     static NSMenu *menu = nil;
 

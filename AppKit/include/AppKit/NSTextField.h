@@ -52,6 +52,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (void) setTitleWithMnemonic: (NSString *) value;
 
+// Convenience constructor for a non-editable, borderless label (10.12)
++ (instancetype) labelWithString: (NSString *) stringValue;
+
 @end
 
 @protocol NSTextFieldDelegate <NSObject>

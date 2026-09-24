@@ -28,6 +28,7 @@
 - (void) setView: (NSView *) value;
 
 - (void) loadView;
+- (BOOL) isViewLoaded; // 10.10
 
 - (void) discardEditing;
 
