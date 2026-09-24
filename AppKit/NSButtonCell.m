@@ -901,6 +901,7 @@ static const CGFloat kImageMargin = 2.;
     if ([self isKindOfClass: [NSComboBoxCell class]]) {
         switch (_controlSize) {
         case NSRegularControlSize:
+        case NSControlSizeLarge:
             frame.size.width = 2;
             frame.size.height = 1;
             frame.origin.x = 1;
@@ -923,6 +924,7 @@ static const CGFloat kImageMargin = 2.;
     } else if ([self isKindOfClass: [NSPopUpButtonCell class]]) {
         switch (_controlSize) {
         case NSRegularControlSize:
+        case NSControlSizeLarge:
             frame.size.width = 2;
             frame.size.height = 1;
             frame.origin.x = 1;

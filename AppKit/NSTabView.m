@@ -68,6 +68,7 @@ id _NSTabViewFloatingCell = nil;
             frame.size.width -= 15;
             switch (_controlSize) {
             case NSRegularControlSize:
+            case NSControlSizeLarge:
                 frame.origin.y += 12;
                 frame.size.height -= 16;
                 break;

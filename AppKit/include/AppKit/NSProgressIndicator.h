@@ -27,10 +27,8 @@ typedef NS_ENUM(NSUInteger, NSProgressIndicatorStyle) {
     NSProgressIndicatorStyleSpinning = 1
 } NS_SWIFT_NAME(NSProgressIndicator.Style);
 
-enum {
-    NSProgressIndicatorBarStyle = NSProgressIndicatorStyleBar,
-    NSProgressIndicatorSpinningStyle = NSProgressIndicatorStyleSpinning
-};
+#define NSProgressIndicatorBarStyle NSProgressIndicatorStyleBar
+#define NSProgressIndicatorSpinningStyle NSProgressIndicatorStyleSpinning
 
 @interface NSProgressIndicator : NSView {
     double _minValue;
