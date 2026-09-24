@@ -49,16 +49,24 @@ enum { NSAttachmentCharacter = 0xFFFC };
 
 @end
 
-@interface NSTextAttachment : NSObject <NSTextAttachmentLayout, NSSecureCoding> {
-    NSData *_contents;
-    NSString *_fileType;
-    NSImage *_image;
-    CGRect _bounds;
-    NSFileWrapper *_fileWrapper;
-    id<NSTextAttachmentCell> _cell;
-    CGFloat _lineLayoutPadding;
+// i386's fragile runtime needs these in the @interface; elsewhere the
+// implementation declares them, keeping the interface identical to Apple's.
+#define _NSTEXTATTACHMENT_IVARS \
+    NSData *_contents; \
+    NSString *_fileType; \
+    NSImage *_image; \
+    CGRect _bounds; \
+    NSFileWrapper *_fileWrapper; \
+    id<NSTextAttachmentCell> _cell; \
+    CGFloat _lineLayoutPadding; \
     BOOL _allowsTextAttachmentView;
+
+@interface NSTextAttachment : NSObject <NSTextAttachmentLayout, NSSecureCoding>
+#if !__OBJC2__
+{
+    _NSTEXTATTACHMENT_IVARS
 }
+#endif
 
 - (instancetype)initWithData:(nullable NSData *)contentData ofType:(nullable NSString *)uti NS_DESIGNATED_INITIALIZER;
 

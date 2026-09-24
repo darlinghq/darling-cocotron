@@ -28,11 +28,19 @@ APPKIT_EXPORT NSTextTabOptionKey NSTabColumnTerminatorsAttributeName;
 
 // The primary interface matches Apple's declaration member for member: Clang
 // rejects a class that two modules define differently.
-@interface NSTextTab : NSObject <NSCopying, NSCoding, NSSecureCoding> {
-    NSTextAlignment _alignment;
-    CGFloat _location;
+// i386's fragile runtime needs these in the @interface; elsewhere the
+// implementation declares them, keeping the interface identical to Apple's.
+#define _NSTEXTTAB_IVARS \
+    NSTextAlignment _alignment; \
+    CGFloat _location; \
     NSDictionary *_options;
+
+@interface NSTextTab : NSObject <NSCopying, NSCoding, NSSecureCoding>
+#if !__OBJC2__
+{
+    _NSTEXTTAB_IVARS
 }
+#endif
 
 + (NSCharacterSet *)columnTerminatorsForLocale:(nullable NSLocale *)aLocale;
 

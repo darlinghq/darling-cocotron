@@ -20,6 +20,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSParagraphStyle.h>
 
 @interface NSParagraphStyle ()
+#if __OBJC2__
+{
+@protected
+    _NSPARAGRAPHSTYLE_IVARS
+}
+#endif
 + (NSArray *) _defaultTabStops;
 - initWithParagraphStyle: (NSParagraphStyle *) other;
 @end

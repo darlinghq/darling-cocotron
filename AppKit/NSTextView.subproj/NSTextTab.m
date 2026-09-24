@@ -27,6 +27,11 @@ NSTextTabOptionKey NSTabColumnTerminatorsAttributeName =
         @"NSTabColumnTerminatorsAttributeName";
 
 @implementation NSTextTab
+#if __OBJC2__
+{
+    _NSTEXTTAB_IVARS
+}
+#endif
 
 + (BOOL) supportsSecureCoding {
     return YES;

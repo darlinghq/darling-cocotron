@@ -34,6 +34,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 static NSMutableDictionary *viewProviderClasses;
 
 @implementation NSTextAttachment
+#if __OBJC2__
+{
+    _NSTEXTATTACHMENT_IVARS
+}
+#endif
 
 + (BOOL) supportsSecureCoding {
     return YES;
