@@ -495,6 +495,14 @@ set(AppKit_resources
 
 	NSApplicationIcon.tiff NSSystemInfoPanel/NSApplicationIcon.tiff
 
+	NSComputer.png SystemImages/NSComputer.png
+	NSFolder.png SystemImages/NSFolder.png
+	NSNetwork.png SystemImages/NSNetwork.png
+	NSTrashEmpty.png SystemImages/NSTrashEmpty.png
+	NSTrashFull.png SystemImages/NSTrashFull.png
+	NSUser.png SystemImages/NSUser.png
+	COPYING.Adwaita SystemImages/COPYING.Adwaita
+
 	NSMenuArrow.tiff NSMenu.subproj/NSMenuArrow.tiff
 	NSMenuViewDoubleRightArrowGray.tiff NSMenu.subproj/NSMenuViewDoubleRightArrowGray.tiff
 	NSMenuViewDoubleRightArrow.tiff NSMenu.subproj/NSMenuViewDoubleRightArrow.tiff
