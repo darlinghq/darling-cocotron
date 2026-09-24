@@ -4,6 +4,8 @@
 #import <QuartzCore/CALayer.h>
 #import <QuartzCore/CALayerContext.h>
 #import <QuartzCore/CATransaction.h>
+#import <Onyx2D/O2Image.h>
+#import "CACoding.h"
 
 NSString *const kCAFilterLinear = @"linear";
 NSString *const kCAFilterNearest = @"nearest";
@@ -385,6 +387,121 @@ NSString *const kCAContentsFormatGray8Uint = @"Gray8";
     self = [super init];
     if (self != nil)
         [self _setDefaults];
+    return self;
+}
+
++ (BOOL) supportsSecureCoding {
+    return YES;
+}
+
+// The delegate, the superlayer and the render context are not archived; the
+// superlayer is restored when the parent decodes its sublayers.
+- (void) encodeWithCoder: (NSCoder *) coder {
+    CARequireKeyedCoder(coder);
+    if ([_animations count] > 0)
+        [NSException raise: NSInvalidArchiveOperationException
+                    format: @"Cannot archive %@: its animations do not support archiving", self];
+    if ([_filters count] > 0)
+        [NSException raise: NSInvalidArchiveOperationException
+                    format: @"Cannot archive %@: its filters do not support archiving", self];
+    if (_compositingFilter != nil && ![_compositingFilter isKindOfClass: [NSString class]])
+        [NSException raise: NSInvalidArchiveOperationException
+                    format: @"Cannot archive %@: compositing filter %@ does not support archiving", self,
+                            _compositingFilter];
+    if (_contents != nil && ![_contents isKindOfClass: [O2Image class]])
+        [NSException raise: NSInvalidArchiveOperationException
+                    format: @"Cannot archive %@: contents %@ are not a CGImage", self, _contents];
+
+    [coder encodeObject: _sublayers forKey: @"sublayers"];
+    [coder encodeObject: _mask forKey: @"mask"];
+    CAEncodePoint(coder, _anchorPoint, @"anchorPoint");
+    CAEncodePoint(coder, _position, @"position");
+    CAEncodeRect(coder, _bounds, @"bounds");
+    [coder encodeDouble: _opacity forKey: @"opacity"];
+    [coder encodeBool: _opaque forKey: @"opaque"];
+    CAEncodeImage(coder, (CGImageRef) _contents, @"contents");
+    [coder encodeDouble: _contentsScale forKey: @"contentsScale"];
+    CAEncodeRect(coder, _contentsCenter, @"contentsCenter");
+    [coder encodeObject: _contentsFormat forKey: @"contentsFormat"];
+    [coder encodeObject: _contentsGravity forKey: @"contentsGravity"];
+    [coder encodeObject: _cornerCurve forKey: @"cornerCurve"];
+    [coder encodeBool: _allowsGroupOpacity forKey: @"allowsGroupOpacity"];
+    CAEncodePath(coder, _shadowPath, @"shadowPath");
+    [coder encodeBool: _allowsEdgeAntialiasing forKey: @"allowsEdgeAntialiasing"];
+    [coder encodeInt: _edgeAntialiasingMask forKey: @"edgeAntialiasingMask"];
+    CAEncodeTransform3D(coder, _transform, @"transform");
+    CAEncodeTransform3D(coder, _sublayerTransform, @"sublayerTransform");
+    [coder encodeObject: _minificationFilter forKey: @"minificationFilter"];
+    [coder encodeObject: _magnificationFilter forKey: @"magnificationFilter"];
+    CAEncodeColor(coder, _backgroundColor, @"backgroundColor");
+    CAEncodeColor(coder, _borderColor, @"borderColor");
+    [coder encodeDouble: _borderWidth forKey: @"borderWidth"];
+    [coder encodeDouble: _cornerRadius forKey: @"cornerRadius"];
+    [coder encodeBool: _masksToBounds forKey: @"masksToBounds"];
+    [coder encodeObject: _compositingFilter forKey: @"compositingFilter"];
+    CAEncodeColor(coder, _shadowColor, @"shadowColor");
+    [coder encodeFloat: _shadowOpacity forKey: @"shadowOpacity"];
+    [coder encodeDouble: _shadowRadius forKey: @"shadowRadius"];
+    CAEncodeSize(coder, _shadowOffset, @"shadowOffset");
+    [coder encodeBool: _hidden forKey: @"hidden"];
+    [coder encodeBool: _needsDisplayOnBoundsChange forKey: @"needsDisplayOnBoundsChange"];
+}
+
+- initWithCoder: (NSCoder *) coder {
+    CARequireKeyedCoder(coder);
+    self = [super init];
+    [self _setDefaults];
+
+    NSSet *layers = [NSSet setWithObjects: [NSArray class], [CALayer class], nil];
+    [self setSublayers: [coder decodeObjectOfClasses: layers forKey: @"sublayers"]];
+    [self setMask: [coder decodeObjectOfClass: [CALayer class] forKey: @"mask"]];
+
+    // Scalars are assigned directly, as in -initWithLayer:.
+    _anchorPoint = CADecodePoint(coder, @"anchorPoint");
+    _position = CADecodePoint(coder, @"position");
+    _bounds = CADecodeRect(coder, @"bounds");
+    _opacity = [coder decodeDoubleForKey: @"opacity"];
+    _opaque = [coder decodeBoolForKey: @"opaque"];
+    _contentsScale = [coder decodeDoubleForKey: @"contentsScale"];
+    _contentsCenter = CADecodeRect(coder, @"contentsCenter");
+    _allowsGroupOpacity = [coder decodeBoolForKey: @"allowsGroupOpacity"];
+    _allowsEdgeAntialiasing = [coder decodeBoolForKey: @"allowsEdgeAntialiasing"];
+    _edgeAntialiasingMask = [coder decodeIntForKey: @"edgeAntialiasingMask"];
+    _transform = CADecodeTransform3D(coder, @"transform");
+    _sublayerTransform = CADecodeTransform3D(coder, @"sublayerTransform");
+    _borderWidth = [coder decodeDoubleForKey: @"borderWidth"];
+    _cornerRadius = [coder decodeDoubleForKey: @"cornerRadius"];
+    _masksToBounds = [coder decodeBoolForKey: @"masksToBounds"];
+    _shadowOpacity = [coder decodeFloatForKey: @"shadowOpacity"];
+    _shadowRadius = [coder decodeDoubleForKey: @"shadowRadius"];
+    _shadowOffset = CADecodeSize(coder, @"shadowOffset");
+    _hidden = [coder decodeBoolForKey: @"hidden"];
+    _needsDisplayOnBoundsChange = [coder decodeBoolForKey: @"needsDisplayOnBoundsChange"];
+
+    Class string = [NSString class];
+    [self setContentsFormat: [coder decodeObjectOfClass: string forKey: @"contentsFormat"]];
+    [self setContentsGravity: [coder decodeObjectOfClass: string forKey: @"contentsGravity"]];
+    [self setCornerCurve: [coder decodeObjectOfClass: string forKey: @"cornerCurve"]];
+    [self setMinificationFilter: [coder decodeObjectOfClass: string forKey: @"minificationFilter"]];
+    [self setMagnificationFilter: [coder decodeObjectOfClass: string forKey: @"magnificationFilter"]];
+    [self setCompositingFilter: [coder decodeObjectOfClass: string forKey: @"compositingFilter"]];
+
+    CGImageRef image = CADecodeImage(coder, @"contents");
+    [self setContents: (id) image];
+    CGImageRelease(image);
+    CGPathRef shadowPath = CADecodePath(coder, @"shadowPath");
+    [self setShadowPath: shadowPath];
+    CGPathRelease(shadowPath);
+
+    CGColorRef color = CADecodeColor(coder, @"backgroundColor");
+    [self setBackgroundColor: color];
+    CGColorRelease(color);
+    color = CADecodeColor(coder, @"borderColor");
+    [self setBorderColor: color];
+    CGColorRelease(color);
+    color = CADecodeColor(coder, @"shadowColor");
+    [self setShadowColor: color];
+    CGColorRelease(color);
     return self;
 }
 

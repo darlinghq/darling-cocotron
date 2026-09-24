@@ -76,7 +76,7 @@ CA_EXPORT NSString *const kCAContentsFormatGray8Uint;
 
 @end
 
-@interface CALayer : NSObject {
+@interface CALayer : NSObject <NSSecureCoding> {
     CALayerContext *_context;
     CALayer *_superlayer;
     NSArray *_sublayers;
@@ -232,6 +232,10 @@ CA_EXPORT NSString *const kCAContentsFormatGray8Uint;
 // state from the layer they are given. The properties of that layer are not
 // carried over and the argument is not checked.
 - (nonnull instancetype)initWithLayer: (nonnull id)layer;
+// Archives the layer tree below this layer. Raises NSInvalidArchiveOperationException
+// for state that cannot be archived: animations, filter objects, and contents or
+// colors other than CGImages and colors in named or device color spaces.
+- (nullable instancetype)initWithCoder: (nonnull NSCoder *)coder;
 
 - (void) addSublayer: (CALayer *) layer;
 - (void) insertSublayer: (CALayer *) layer atIndex: (unsigned int) index;

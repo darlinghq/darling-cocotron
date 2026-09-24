@@ -19,6 +19,7 @@
 
 #import <QuartzCore/CAShapeLayer.h>
 #import "CALayerInternal.h"
+#import "CACoding.h"
 
 NSString *const kCAFillRuleNonZero = @"non-zero";
 NSString *const kCAFillRuleEvenOdd = @"even-odd";
@@ -56,6 +57,50 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
     self = [super init];
     if (self != nil)
         [self _setShapeDefaults];
+    return self;
+}
+
+- (void) encodeWithCoder: (NSCoder *) coder {
+    [super encodeWithCoder: coder];
+    CAEncodePath(coder, _path, @"path");
+    CAEncodeColor(coder, _fillColor, @"fillColor");
+    [coder encodeObject: _fillRule forKey: @"fillRule"];
+    CAEncodeColor(coder, _strokeColor, @"strokeColor");
+    [coder encodeDouble: _strokeStart forKey: @"strokeStart"];
+    [coder encodeDouble: _strokeEnd forKey: @"strokeEnd"];
+    [coder encodeDouble: _lineWidth forKey: @"lineWidth"];
+    [coder encodeDouble: _miterLimit forKey: @"miterLimit"];
+    [coder encodeObject: _lineCap forKey: @"lineCap"];
+    [coder encodeObject: _lineJoin forKey: @"lineJoin"];
+    [coder encodeDouble: _lineDashPhase forKey: @"lineDashPhase"];
+    [coder encodeObject: _lineDashPattern forKey: @"lineDashPattern"];
+}
+
+- initWithCoder: (NSCoder *) coder {
+    self = [super initWithCoder: coder];
+    if (self == nil)
+        return nil;
+    [self _setShapeDefaults];
+    CGPathRef path = CADecodePath(coder, @"path");
+    [self setPath: path];
+    CGPathRelease(path);
+    CGColorRef color = CADecodeColor(coder, @"fillColor");
+    [self setFillColor: color];
+    CGColorRelease(color);
+    color = CADecodeColor(coder, @"strokeColor");
+    [self setStrokeColor: color];
+    CGColorRelease(color);
+    Class string = [NSString class];
+    [self setFillRule: [coder decodeObjectOfClass: string forKey: @"fillRule"]];
+    [self setLineCap: [coder decodeObjectOfClass: string forKey: @"lineCap"]];
+    [self setLineJoin: [coder decodeObjectOfClass: string forKey: @"lineJoin"]];
+    [self setStrokeStart: [coder decodeDoubleForKey: @"strokeStart"]];
+    [self setStrokeEnd: [coder decodeDoubleForKey: @"strokeEnd"]];
+    [self setLineWidth: [coder decodeDoubleForKey: @"lineWidth"]];
+    [self setMiterLimit: [coder decodeDoubleForKey: @"miterLimit"]];
+    [self setLineDashPhase: [coder decodeDoubleForKey: @"lineDashPhase"]];
+    NSSet *numbers = [NSSet setWithObjects: [NSArray class], [NSNumber class], nil];
+    [self setLineDashPattern: [coder decodeObjectOfClasses: numbers forKey: @"lineDashPattern"]];
     return self;
 }
 

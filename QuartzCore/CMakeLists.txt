@@ -32,6 +32,7 @@ set(QuartzCore_sources
 	CAEmitterLayer.m
 	CAFrameRateRange.m
 	CALayerContext.m
+	CACoding.m
 	CALayer.m
 	CALayerHost.m
 	CATextLayer.m
