@@ -124,9 +124,10 @@ NSBitmapImageRepPropertyKey NSImageCurrentFrame = @"NSImageCurrentFrame";
 + (BOOL) canInitWithData: (NSData *) data {
     CGImageSourceRef imageSource =
             CGImageSourceCreateWithData((CFDataRef) data, nil);
-    BOOL result = (imageSource != NULL) ? YES : NO;
+    if (imageSource == NULL)
+        return NO;
     CFRelease(imageSource);
-    return result;
+    return YES;
 }
 
 + (NSArray *) imageRepsWithData: (NSData *) data {
