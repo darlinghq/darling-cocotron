@@ -4,6 +4,7 @@
 #import <AppKit/NSRaise.h>
 #include <LaunchServices/LaunchServices.h>
 #include <dispatch/dispatch.h>
+#import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 #include <string.h>
 
 static NSCache *_workspaceIconCache;
@@ -149,10 +150,57 @@ static NSImage *ImageFromIcnsFile(NSString *file) {
     return NULL;
 }
 
+// A file type is a UTI, a filename extension, or an HFS type code in quotes.
+static UTType *TypeForFileType(NSString *type) {
+    if ([type length] == 6 && [type hasPrefix: @"'"] && [type hasSuffix: @"'"])
+        return [UTType typeWithTag: [type substringWithRange: NSMakeRange(1, 4)]
+                          tagClass: @"com.apple.ostype"
+                  conformingToType: nil];
+
+    UTType *uti = [UTType typeWithIdentifier: type];
+    return uti ? uti : [UTType typeWithFilenameExtension: type];
+}
+
+static NSImage *ImageForGenericIcon(NSString *name) {
+    NSString *path = [[NSBundle bundleForClass: [NSWorkspace class]]
+            pathForResource: name ofType: @"png"];
+    return path ? [[[NSImage alloc] initWithContentsOfFile: path] autorelease] : nil;
+}
+
 - (NSImage *) iconForFileType: (NSString *) type {
-    // TODO: call GetIconRefFromTypeInfo()
-    NSUnimplementedMethod();
-    return NULL;
+    if (type == nil)
+        return nil;
+
+    NSString *cacheKey = [@"type:" stringByAppendingString: type];
+    NSImage *icon = [WorkspaceIconCache() objectForKey: cacheKey];
+    if (icon != nil)
+        return icon;
+
+    UTType *uti = TypeForFileType(type);
+    if ([uti conformsToType: UTTypeDirectory])
+        icon = [NSImage imageNamed: NSImageNameFolder];
+    else {
+        NSArray *generic = @[
+            @[ UTTypeApplication, @"application-x-executable" ],
+            @[ UTTypeImage, @"image-x-generic" ],
+            @[ UTTypeAudio, @"audio-x-generic" ],
+            @[ UTTypeMovie, @"video-x-generic" ],
+            @[ UTTypeText, @"text-x-generic" ],
+        ];
+        NSString *name = @"application-x-generic";
+        for (NSArray *entry in generic)
+            if ([uti conformsToType: entry[0]]) {
+                name = entry[1];
+                break;
+            }
+        icon = ImageForGenericIcon(name);
+    }
+
+    if (icon == nil)
+        [NSException raise: NSInternalInconsistencyException
+                    format: @"AppKit's file type icons are not installed"];
+    [WorkspaceIconCache() setObject: icon forKey: cacheKey];
+    return icon;
 }
 
 - (NSString *) localizedDescriptionForType: (NSString *) type {
