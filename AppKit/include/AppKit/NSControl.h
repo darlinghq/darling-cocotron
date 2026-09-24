@@ -44,7 +44,7 @@ APPKIT_EXPORT const NSNotificationName NSControlTextDidEndEditingNotification;
 
 - (id) cell;
 
-- (id) target;
+@property (assign, nullable) id target;
 - (SEL) action;
 - (NSInteger) tag;
 @property (retain) NSFont *font;
@@ -74,7 +74,6 @@ APPKIT_EXPORT const NSNotificationName NSControlTextDidEndEditingNotification;
 - (NSInteger) selectedTag;
 
 - (void) setCell: (NSCell *) cell;
-- (void) setTarget: target;
 - (void) setAction: (SEL) action;
 - (void) setTag: (NSInteger) tag;
 - (void) setImage: (NSImage *) image;

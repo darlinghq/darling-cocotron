@@ -157,8 +157,7 @@ typedef enum {
         respectFlipped: (BOOL) respectFlipped
                  hints: (NSDictionary<NSString *, id> *) hints;
 
-- (NSString *) accessibilityDescription;
-- (void) setAccessibilityDescription: (NSString *) description;
+@property (copy, nullable) NSString *accessibilityDescription;
 
 // SF Symbols. Darling has no symbol artwork: these return a generic template
 // placeholder glyph for any non-empty name (nil for a nil or empty name).

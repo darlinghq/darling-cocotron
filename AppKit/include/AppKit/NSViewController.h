@@ -17,7 +17,7 @@
 - (NSString *) nibName;
 - (NSBundle *) nibBundle;
 
-@property (retain) NSView *view;
+@property (retain, nonnull) NSView *view;
 - (NSString *) title;
 - representedObject;
 
