@@ -114,6 +114,7 @@ typedef NS_OPTIONS(NSUInteger, NSTableViewAnimationOptions) {
     unsigned int _gridStyleMask;
     NSTableViewSelectionHighlightStyle _selectionHighlightStyle;
     BOOL _usesAutomaticRowHeights;
+    BOOL _floatsGroupRows;
 
     // temp ivars
     NSMutableArray *_selectedColumns;
@@ -157,6 +158,8 @@ typedef NS_OPTIONS(NSUInteger, NSTableViewAnimationOptions) {
 - (NSTableViewSelectionHighlightStyle) selectionHighlightStyle;
 - (BOOL) usesAutomaticRowHeights;
 - (void) setUsesAutomaticRowHeights: (BOOL) value;
+// Floating applies to view-based tables only; Cocotron's tables are cell-based.
+- (BOOL) floatsGroupRows;
 
 - (NSInteger) numberOfRows;
 - (NSUInteger) numberOfColumns;
@@ -198,6 +201,7 @@ typedef NS_OPTIONS(NSUInteger, NSTableViewAnimationOptions) {
 - (void) setUsesAlternatingRowBackgroundColors: (BOOL) flag;
 - (void) setGridStyleMask: (unsigned int) gridStyle;
 - (void) setSelectionHighlightStyle: (NSTableViewSelectionHighlightStyle) value;
+- (void) setFloatsGroupRows: (BOOL) flag;
 
 - (void) addTableColumn: (NSTableColumn *) column;
 - (void) removeTableColumn: (NSTableColumn *) column;

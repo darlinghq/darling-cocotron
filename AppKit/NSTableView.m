@@ -135,6 +135,7 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
 
         // row background and grid attributes for OS X >= 10.3
         _alternatingRowBackground = (flags & 0x00800000) ? YES : NO;
+        _floatsGroupRows = YES;
         if ([keyed containsValueForKey: @"NSGridStyleMask"])
             _gridStyleMask = [keyed decodeIntForKey: @"NSGridStyleMask"];
         else
@@ -253,6 +254,7 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
     // row background and grid attributes for OS X >= 10.3
     _alternatingRowBackground = NO;
     _gridStyleMask = NSTableViewGridNone;
+    _floatsGroupRows = YES;
 
     return self;
 }
@@ -335,6 +337,10 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
 
 - (void) setUsesAutomaticRowHeights: (BOOL) value {
     _usesAutomaticRowHeights = value;
+}
+
+- (BOOL) floatsGroupRows {
+    return _floatsGroupRows;
 }
 
 - (BOOL) allowsColumnReordering {
@@ -758,6 +764,10 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 {
     _selectionHighlightStyle = value;
     [self setNeedsDisplay: YES];
+}
+
+- (void) setFloatsGroupRows: (BOOL) flag {
+    _floatsGroupRows = flag;
 }
 
 // the appkit dox are pretty vague on these two. should they trigger a redraw or
