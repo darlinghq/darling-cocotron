@@ -67,6 +67,18 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return NSUserInterfaceLayoutDirectionLeftToRight;
 }
 
+- (void) flashScrollers {
+    // Legacy scrollers remain visible; refresh both painters when an app
+    // requests the transient overlay flash used by Apple's implementation.
+    [_verticalScrollerImp setNeedsDisplay: YES];
+    [_horizontalScrollerImp setNeedsDisplay: YES];
+}
+
+- (void) contentAreaDidResize {
+    [_verticalScrollerImp setNeedsDisplay: YES];
+    [_horizontalScrollerImp setNeedsDisplay: YES];
+}
+
 @end
 
 @implementation NSScroller
@@ -184,6 +196,11 @@ static NSAppleScrollBarVariant appleScrollBarVariant(NSScroller *self) {
 
 - (CGFloat) knobProportion {
     return _knobProportion;
+}
+
+- (void) setKnobProportion: (CGFloat) proportion {
+    _knobProportion = MIN(1.0, MAX(0.0, proportion));
+    [self setNeedsDisplay: YES];
 }
 
 - (NSScrollArrowPosition) arrowsPosition {

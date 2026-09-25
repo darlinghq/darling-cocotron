@@ -5,6 +5,8 @@
 @property NSScrollerStyle scrollerStyle;
 @property (retain) id verticalScrollerImp;
 @property (retain) id horizontalScrollerImp;
+- (void) flashScrollers;
+- (void) contentAreaDidResize;
 @end
 
 int main(void) {
@@ -23,10 +25,16 @@ int main(void) {
         passed &= [vertical knobStyle] == NSScrollerKnobStyleDefault;
         [vertical setKnobStyle: NSScrollerKnobStyleLight];
         passed &= [vertical knobStyle] == NSScrollerKnobStyleLight;
+        [vertical setKnobProportion: 1.5];
+        passed &= [vertical knobProportion] == 1.0;
+        [vertical setKnobProportion: -1.0];
+        passed &= [vertical knobProportion] == 0.0;
         [pair setVerticalScrollerImp: vertical];
         [pair setHorizontalScrollerImp: horizontal];
         passed &= [pair verticalScrollerImp] == vertical
                && [pair horizontalScrollerImp] == horizontal;
+        [pair flashScrollers];
+        [pair contentAreaDidResize];
         [vertical release];
         [horizontal release];
         [pair release];
