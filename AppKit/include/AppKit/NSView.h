@@ -188,10 +188,10 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPre
 // Sent by -layoutSubtreeIfNeeded to each view that needs layout. The base
 // implementation clears needsLayout. Subclasses override and call super.
 - (void) layout;
-// Override to update stored constraints; call super last. This does not solve
-// constraints or recompute frames.
+// Override to update stored constraints; call super last.
 - (void) updateConstraints;
-// Dispatch pending updates in this subtree.
+// Sends -updateConstraints to the views of this subtree that need it,
+// subviews before their superview.
 - (void) updateConstraintsForSubtreeIfNeeded;
 
 // Stored for callers and subclasses; with no constraint solver they do not

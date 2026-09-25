@@ -3383,10 +3383,7 @@ static NSMutableArray *installedViewLayoutGuides(NSView *view, BOOL create) {
 }
 
 - (void) updateConstraintsForSubtreeIfNeeded {
-    if (_needsUpdateConstraints) {
-        _needsUpdateConstraints = NO;
-        [self updateConstraints];
-    }
+    // Constraint updates run from descendants toward their containing view.
     // An update callback can remove or reparent a sibling. Keep the snapshot
     // alive through callbacks, but only visit children still belonging here.
     NSArray *children = [_subviews copy];
@@ -3397,6 +3394,10 @@ static NSMutableArray *installedViewLayoutGuides(NSView *view, BOOL create) {
         }
     } @finally {
         [children release];
+    }
+    if (_needsUpdateConstraints) {
+        _needsUpdateConstraints = NO;
+        [self updateConstraints];
     }
 }
 
