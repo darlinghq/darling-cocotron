@@ -58,6 +58,12 @@ typedef NSUInteger NSWorkspaceIconCreationOptions;
 
 - (NSNotificationCenter *) notificationCenter;
 
+@property(readonly) BOOL accessibilityDisplayShouldDifferentiateWithoutColor;
+@property(readonly) BOOL accessibilityDisplayShouldIncreaseContrast;
+@property(readonly) BOOL accessibilityDisplayShouldReduceTransparency;
+@property(readonly) BOOL accessibilityDisplayShouldInvertColors;
+@property(readonly) BOOL accessibilityDisplayShouldReduceMotion;
+
 - (NSImage *) iconForFile: (NSString *) path;
 - (NSImage *) iconForFiles: (NSArray *) array;
 - (NSImage *) iconForFileType: (NSString *) type;

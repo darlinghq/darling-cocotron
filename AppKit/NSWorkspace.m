@@ -82,6 +82,14 @@ NSNotificationName NSWorkspaceWillUnmountNotification = @"NSWorkspaceWillUnmount
     return _notificationCenter;
 }
 
+// Darling has no bridge to the host's accessibility display preferences yet.
+// Report the standard, unmodified display mode until that bridge exists.
+- (BOOL) accessibilityDisplayShouldDifferentiateWithoutColor { return NO; }
+- (BOOL) accessibilityDisplayShouldIncreaseContrast { return NO; }
+- (BOOL) accessibilityDisplayShouldReduceTransparency { return NO; }
+- (BOOL) accessibilityDisplayShouldInvertColors { return NO; }
+- (BOOL) accessibilityDisplayShouldReduceMotion { return NO; }
+
 - (NSImage *) iconForFile: (NSString *) path {
     NSInvalidAbstractInvocation();
     return 0;
