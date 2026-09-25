@@ -736,6 +736,12 @@ static inline void buildTransformsIfNeeded(NSView *self) {
     return NO;
 }
 
+- (BOOL) isDrawingFindIndicator {
+    // A find indicator is active only while AppKit paints its transient
+    // search highlight. Cocotron has no such painting pass yet.
+    return NO;
+}
+
 - (CGFloat) alphaValue {
     NSUnimplementedMethod();
     return 0.;
