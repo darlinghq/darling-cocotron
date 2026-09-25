@@ -91,6 +91,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [self contentAreaDidResize];
 }
 
+- (void) contentAreaWillDraw {
+    // Legacy scrollers paint with their owning view's display pass.
+}
+
 @end
 
 @implementation NSScroller
