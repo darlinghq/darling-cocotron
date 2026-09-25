@@ -34,15 +34,27 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 @interface NSScrollerImpPair : NSObject {
     id _delegate;
     NSScrollerStyle _scrollerStyle;
+    id _verticalScrollerImp;
+    id _horizontalScrollerImp;
 }
 @property (assign) id delegate;
 @property NSScrollerStyle scrollerStyle;
+@property (retain) id verticalScrollerImp;
+@property (retain) id horizontalScrollerImp;
 @end
 
 @implementation NSScrollerImpPair
 
 @synthesize delegate = _delegate;
 @synthesize scrollerStyle = _scrollerStyle;
+@synthesize verticalScrollerImp = _verticalScrollerImp;
+@synthesize horizontalScrollerImp = _horizontalScrollerImp;
+
+- (void) dealloc {
+    [_verticalScrollerImp release];
+    [_horizontalScrollerImp release];
+    [super dealloc];
+}
 
 - (instancetype) init {
     self = [super init];
