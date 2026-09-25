@@ -1493,6 +1493,12 @@ static BOOL _allowsAutomaticWindowTabbing;
     //   NSUnimplementedMethod();
 }
 
+- (NSArray<NSWindow *> *) tabbedWindows {
+    // Windows without a tab bar have no tab group. Cocotron does not yet
+    // provide native window tabbing.
+    return nil;
+}
+
 - (void) setLevel: (NSInteger) value {
     _level = value;
     [_platformWindow setLevel: _level];
