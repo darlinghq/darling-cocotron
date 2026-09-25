@@ -79,6 +79,18 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [_horizontalScrollerImp setNeedsDisplay: YES];
 }
 
+- (void) movedToNewWindow {
+    // Scroller appearance may change with its window. Both painters should be
+    // redrawn after a scroll view is attached to another window.
+    [self contentAreaDidResize];
+}
+
+- (void) mouseExitedContentArea {
+    // Legacy scrollers do not use hover visibility, but the painters need a
+    // redraw after a tracking transition.
+    [self contentAreaDidResize];
+}
+
 @end
 
 @implementation NSScroller
