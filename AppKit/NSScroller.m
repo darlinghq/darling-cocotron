@@ -198,6 +198,12 @@ static NSAppleScrollBarVariant appleScrollBarVariant(NSScroller *self) {
     return _scrollerStyle;
 }
 
+- (id) scrollerImp {
+    // Cocotron draws the scroller directly; there is no separate painter
+    // object as in AppKit's private NSScrollerImp implementation.
+    return self;
+}
+
 
 - (void) setFloatValue: (float) zeroToOneValue
         knobProportion: (CGFloat) zeroToOneKnob
