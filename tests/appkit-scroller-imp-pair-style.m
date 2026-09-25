@@ -20,6 +20,9 @@ int main(void) {
                 initWithFrame: NSMakeRect(0, 0, 15, 100)];
         NSScroller *horizontal = [[NSScroller alloc]
                 initWithFrame: NSMakeRect(0, 0, 100, 15)];
+        passed &= [vertical knobStyle] == NSScrollerKnobStyleDefault;
+        [vertical setKnobStyle: NSScrollerKnobStyleLight];
+        passed &= [vertical knobStyle] == NSScrollerKnobStyleLight;
         [pair setVerticalScrollerImp: vertical];
         [pair setHorizontalScrollerImp: horizontal];
         passed &= [pair verticalScrollerImp] == vertical
