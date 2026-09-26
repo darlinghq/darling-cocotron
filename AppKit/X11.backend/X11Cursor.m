@@ -2,6 +2,7 @@
 #import "X11Display.h"
 #import <AppKit/NSGraphicsContext.h>
 #import <string.h>
+#include <math.h>
 
 @implementation X11Cursor
 
@@ -32,21 +33,30 @@
     X11Display *d = (X11Display *) [NSDisplay currentDisplay];
     Display *display = [d display];
 
-    const size_t width = image.size.width;
-    const size_t height = image.size.height;
+    // Xcursor wants device pixels. Rasterize at the backing scale rather than
+    // stretching a 1x image, so the cursor stays sharp on a 2x display instead of
+    // being upscaled. The hotspot scales with it.
+    CGFloat scale = [(X11Display *) [NSDisplay currentDisplay] backingScale];
+    const CGFloat logicalWidth = image.size.width, logicalHeight = image.size.height;
+    const size_t width = (size_t) fmax(floor(logicalWidth * scale + 0.5), 1.0);
+    const size_t height = (size_t) fmax(floor(logicalHeight * scale + 0.5), 1.0);
 
     XcursorImage *ximage = XcursorImageCreate(width, height);
     if (!ximage)
         return [self initWithName: "left_ptr"];
 
-    ximage->xhot = hotPoint.x;
-    ximage->yhot = hotPoint.y;
+    ximage->xhot = (int) fmin(floor(hotPoint.x * scale), (CGFloat)width - 1);
+    ximage->yhot = (int) fmin(floor(hotPoint.y * scale), (CGFloat)height - 1);
 
     CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
     CGContextRef context = CGBitmapContextCreate(
             NULL, width, height, 8, 0, colorSpace,
             kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Host);
     CGColorSpaceRelease(colorSpace);
+    if (context == NULL) {
+        XcursorImageDestroy(ximage);
+        return [self initWithName: "left_ptr"];
+    }
 
     @autoreleasepool {
         NSGraphicsContext *graphicsContext =
@@ -55,8 +65,9 @@
 
         [NSGraphicsContext saveGraphicsState];
         [NSGraphicsContext setCurrentContext: graphicsContext];
+        CGContextScaleCTM(context, width / logicalWidth, height / logicalHeight);
 
-        [image drawInRect: NSMakeRect(0, 0, width, height)
+        [image drawInRect: NSMakeRect(0, 0, logicalWidth, logicalHeight)
                  fromRect: NSZeroRect
                 operation: NSCompositeCopy
                  fraction: 1.0];
