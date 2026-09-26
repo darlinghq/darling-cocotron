@@ -1888,9 +1888,15 @@ static NSUInteger modifierDeviceMask(int code) {
 
 #pragma mark - Cursors
 
+// The output scale must be applied exactly once. A cursor surface without a
+// wp_viewport cannot express a logical size, so pre-scaling the raster and then
+// setting wl_surface.set_buffer_scale to the same factor asks the compositor to
+// scale it twice: a 24pt cursor then covers 96 physical px on a 2x output.
+// With a viewporter the client owns the scaling and pins buffer_scale to 1;
+// without one the compositor owns it, so hand over a 1x raster at buffer_scale 1.
 - (uint32_t) cursorRenderScale120 {
     if (_cursorFractionalScale) return _cursorPreferredScale120 ?: (_pointerWindow ? [_pointerWindow renderScale120] : 120);
-    return (uint32_t)MIN((uint64_t)(_pointerWindow ? [_pointerWindow bufferScale] : 1) * 120, UINT32_MAX);
+    return 120;
 }
 - (void) preferredScaleChanged: (uint32_t) scale120 {
     if (!_cursorFractionalScale || !scale120 || scale120 == _cursorPreferredScale120) return;
@@ -2029,6 +2035,10 @@ static NSUInteger modifierDeviceMask(int code) {
             hotSpot = NSMakePoint(MIN(logical.width - 1, floor(image->hotspot_x * logical.width / image->width)),
                 MIN(logical.height - 1, floor(image->hotspot_y * logical.height / image->height)));
         } else {
+            // No wp_viewport: the theme is loaded at the compositor's nominal
+            // size (_cursorThemeScale120 is 120, since cursorRenderScale120
+            // hands scaling to the compositor) and the surface stays at
+            // buffer_scale 1, so the hotspot is used unscaled.
             wireScale = (int32_t)(_cursorThemeScale120 / 120);
             if (wireScale < 1 || image->width % wireScale || image->height % wireScale) wireScale = 1;
             logical = NSMakeSize(image->width / wireScale, image->height / wireScale);
