@@ -531,6 +531,16 @@ static void reportGLErrors(void) {
 	CGLSetCurrentContext(prev);
 }
 
+// Whether a present is queued that -prepareRender has not composited yet. The
+// render timer uses this to keep drawing between consecutive presents.
+- (BOOL)hasQueuedDrawables
+{
+	[_drawableCondition lock];
+	BOOL queued = _queuedDrawableCount > 0;
+	[_drawableCondition unlock];
+	return queued;
+}
+
 - (void)prepareRender
 {
 	std::shared_ptr<CAMetalDrawableActual> drawable = nullptr;
