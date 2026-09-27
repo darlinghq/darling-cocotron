@@ -954,11 +954,17 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
 }
 
 - (void) pointerMotionToX: (CGFloat) x y: (CGFloat) y {
+    // Track the position even when no surface is under the pointer. Opening a
+    // menu maps a new surface under a stationary cursor, so the compositor
+    // sends leave and then motion with no window; dropping that motion left
+    // _pointerSurfacePoint stale and the following button landed wherever the
+    // pointer last was over a known surface.
+    _pointerSurfacePoint = CGPointMake(x, y);
+
     WaylandWindow *window = _pointerWindow;
     if (window == nil)
         return;
 
-    _pointerSurfacePoint = CGPointMake(x, y);
     NSPoint location = [window transformPoint: _pointerSurfacePoint];
     NSPoint last = [window mouseLocationOutsideOfEventStream];
     [window setLastKnownCursorPosition: location];
