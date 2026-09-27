@@ -410,10 +410,28 @@ static void reportGLErrors(void) {
 
 - (void)queuePresent: (NSUInteger)drawableID
 {
+	std::shared_ptr<CAMetalDrawableActual> overflowed;
+
 	[_drawableCondition lock];
-	_queuedDrawables[_queuedDrawableCount] = drawableID;
-	++_queuedDrawableCount;
+	// Every entry names a drawable that is still checked out, since -nextDrawable
+	// cleared its _usableDrawablesBitmap bit and -releaseDrawable: only sets it
+	// back after a -prepareRender already popped the entry. So the queue cannot
+	// outgrow the pool, but that bound lives in -nextDrawable and _queuedDrawables
+	// is a fixed array, so check it here rather than write blind.
+	if (_queuedDrawableCount < _drawables.size()) {
+		_queuedDrawables[_queuedDrawableCount] = drawableID;
+		++_queuedDrawableCount;
+	} else {
+		overflowed = _drawables[drawableID];
+	}
 	[_drawableCondition unlock];
+
+	if (overflowed) {
+		// Report the present as dropped, which fires the drawable's presented
+		// handlers and recycles the slot. Outside the lock, because those handlers
+		// end in -releaseDrawable:, which relocks it.
+		overflowed->didDrop();
+	}
 
 	// we now need to schedule a render
 	//
