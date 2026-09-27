@@ -107,6 +107,27 @@
         [self assignTextureIdsToLayerTree: child];
 }
 
+// A Metal layer is usually installed as some view's layer, and every view below
+// the topmost layer-backed one in a window contributes a sublayer, so the Metal
+// layer is rarely the context's root. Preparing only the root left a nested one
+// with whatever _setContext: allocated, whose contents glTextureStorage2D leaves
+// undefined, which the self-draw hook then composited verbatim.
+//
+// Only a CAMetalLayerInternal needs this, and for one with an empty queue
+// -prepareRender is a lock and an @synchronized, no GL work. The drawable pool
+// and its fd export live in -recreateDrawables, which only the property setters
+// call, so walking the tree cannot repeat that per frame.
+- (void) prepareMetalLayersInLayerTree: (CALayer *) layer {
+
+    if ([[layer class] isSubclassOfClass: [CAMetalLayerInternal class]]) {
+        CAMetalLayerInternal* mtl = (CAMetalLayerInternal*)layer;
+        [mtl prepareRender];
+    }
+
+    for (CALayer *child in layer.sublayers)
+        [self prepareMetalLayersInLayerTree: child];
+}
+
 - (void) renderLayer: (CALayer *) layer {
     CGLContextMakeCurrentAndAttachToWindow(_glContext, _cglWindow);
 
@@ -134,11 +155,7 @@
 
     [self assignTextureIdsToLayerTree: layer];
 
-    // this is where the Metal layer renders to an internal texture for us to use
-    if ([[layer class] isSubclassOfClass: [CAMetalLayerInternal class]]) {
-        CAMetalLayerInternal* mtl = (CAMetalLayerInternal*)layer;
-        [mtl prepareRender];
-    }
+    [self prepareMetalLayersInLayerTree: layer];
 
     [_renderer render];
 }
