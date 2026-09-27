@@ -290,11 +290,15 @@ const NSTimeInterval kMouseMovementThreshold = .001f;
 
         [event release];
 
-        // Let's take a look at what's come in on the event queue
+        // Let's take a look at what's come in on the event queue.
+        // NSLeftMouseDown has to be in the mask: clicking an item in an
+        // already-open menu without moving the pointer produces no motion event,
+        // so without the press the hit test never re-runs at the item's
+        // coordinates. The state machine below already handles a mouse down.
         event = [[self window]
                 nextEventMatchingMask: NSLeftMouseUpMask | NSMouseMovedMask |
                                        NSLeftMouseDraggedMask | NSKeyDownMask |
-                                       NSAppKitDefinedMask];
+                                       NSLeftMouseDownMask | NSAppKitDefinedMask];
         [event retain];
 
         if (keyboardNavigationAction != kNSMenuKeyboardNavigationNone) {
