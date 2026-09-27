@@ -27,15 +27,12 @@
 @interface NSRotationGestureRecognizer : NSGestureRecognizer
 @end
 
-@implementation NSGestureRecognizer {
-    id _target;
-    SEL _action;
-    NSGestureRecognizerState _state;
-    id<NSGestureRecognizerDelegate> _delegate;
-    BOOL _enabled;
-    NSView *_view;
-    NSEvent *_lastEvent;
+@implementation NSGestureRecognizer
+#if __OBJC2__
+{
+    _NSGESTURERECOGNIZER_IVARS
 }
+#endif
 
 - (instancetype) initWithTarget: (id) target action: (SEL) action {
     if ((self = [super init])) {

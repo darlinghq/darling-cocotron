@@ -36,7 +36,21 @@ typedef NS_ENUM(NSInteger, NSGestureRecognizerState) {
 // NSWindow gives a recognizer the mouse and gesture events aimed at its view or
 // the view's subviews, before the view itself gets them. Recognizers don't
 // delay or cancel the view's events, and failure requirements aren't modelled.
+#define _NSGESTURERECOGNIZER_IVARS \
+    id _target; \
+    SEL _action; \
+    NSGestureRecognizerState _state; \
+    id<NSGestureRecognizerDelegate> _delegate; \
+    BOOL _enabled; \
+    NSView *_view; \
+    NSEvent *_lastEvent;
+
 @interface NSGestureRecognizer : NSObject <NSCoding>
+#if !__OBJC2__
+{
+    _NSGESTURERECOGNIZER_IVARS
+}
+#endif
 
 - (instancetype) initWithTarget: (id) target action: (SEL) action NS_DESIGNATED_INITIALIZER;
 - (instancetype) initWithCoder: (NSCoder *) coder NS_DESIGNATED_INITIALIZER;
