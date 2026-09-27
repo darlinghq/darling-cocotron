@@ -99,6 +99,24 @@ extern struct WaylandLibrary WL;
 // Loads the libraries once. Returns false (after logging why) when any required one is missing.
 bool WaylandLibraryLoad(void);
 
+// The one place that decides whether the Wayland backend is wanted.
+//
+// AppKit picks a backend in +[NSDisplay init] and CoreGraphics picks one in CGS.m,
+// each by trying the +isAvailable / -init of every backend in NSPriority order. If the
+// two disagree, AppKit ends up drawing to one display server while CoreGraphics believes
+// in another, and the failure shows up much later as windows that never appear. So both
+// call this, and this file is compiled into both backends (see AppKit/CMakeLists.txt and
+// CoreGraphics/Wayland.backend/CMakeLists.txt), which makes the two agree by
+// construction rather than by two copies of the same rule staying in step.
+//
+// DARLING_APPKIT_BACKEND selects explicitly: "wayland" or "x11". Unset, Wayland is used
+// when a compositor is advertised, so a Wayland session no longer needs the variable set
+// by hand, and X11 remains the fallback for everything else.
+//
+// Deliberately only inspects the environment. It runs before the dlopen() in
+// WaylandLibraryLoad(), so deciding to use Wayland must not require Wayland.
+bool WaylandBackendSelected(void);
+
 // Compares the hand-written opcodes in WaylandProtocol.h with the generated protocol tables.
 bool WaylandCheckOpcodes(void);
 

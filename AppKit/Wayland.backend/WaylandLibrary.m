@@ -25,6 +25,7 @@
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
+#include <strings.h>
 #include <unistd.h>
 
 extern struct elf_calls *_elfcalls;
@@ -46,6 +47,26 @@ static bool resolve(void *handle, const char *name, void **slot) {
     if (*slot == NULL)
         NSLog(@"Wayland backend: missing native function %s", name);
     return *slot != NULL;
+}
+
+bool WaylandBackendSelected(void) {
+    const char *requested = getenv("DARLING_APPKIT_BACKEND");
+
+    if (requested != NULL && *requested != '\0') {
+        if (strcasecmp(requested, "wayland") == 0)
+            return true;
+        if (strcasecmp(requested, "x11") == 0)
+            return false;
+        // An unrecognised value is a configuration error worth surfacing, but
+        // guessing beats refusing to start.
+        NSLog(@"Wayland backend: ignoring unknown DARLING_APPKIT_BACKEND=%s, "
+              @"autodetecting", requested);
+    }
+
+    // Nothing asked for Wayland specifically, so use it when a compositor is
+    // advertised. Whether the connection then succeeds is WaylandDisplay's problem
+    // to report, and it falls back to X11.
+    return getenv("WAYLAND_DISPLAY") != NULL;
 }
 
 bool WaylandLibraryLoad(void) {

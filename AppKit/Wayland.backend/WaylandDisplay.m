@@ -175,8 +175,10 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
 @implementation WaylandDisplay
 
 - (instancetype) init {
-    const char *requested = getenv("DARLING_APPKIT_BACKEND");
-    if (requested == NULL || strcasecmp(requested, "wayland") != 0) {
+    // WaylandBackendSelected() is shared with CoreGraphics' Wayland backend (see
+    // WaylandLibrary.h): the two frameworks pick a display server independently, and
+    // they must not disagree.
+    if (!WaylandBackendSelected()) {
         [self release];
         return nil;
     }
