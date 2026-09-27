@@ -551,6 +551,51 @@ static void reportGLErrors(void) {
 	return [NSNumber numberWithUnsignedInt: _tex];
 }
 
+// -prepareRender copies the queued drawable into _tex, so drawing the layer is
+// just binding that texture and emitting the quad. Its texture parameters were
+// set when it was created, and must be left alone: the contents path binds the
+// same texture (via -_textureId) and reallocates it with -glTexImage2D.
+- (BOOL)_drawLayerContents: (CGRect)bounds opacity: (CGFloat)opacity
+{
+	if (_tex == 0)
+		return NO;
+
+	reportGLErrors();
+
+	glEnable(GL_TEXTURE_2D);
+	glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+	glBindTexture(GL_TEXTURE_2D, _tex);
+
+	// The texture is stored bottom-up like a CGBitmapContext, and the layer's
+	// origin is its bottom-left corner, so the quad is drawn the same way the
+	// contents path draws one.
+	const GLfloat textureVertices[4 * 2] = {0, 1, 1, 1, 0, 0, 1, 0};
+	const GLfloat vertices[4 * 2] = {0, 0, (GLfloat) bounds.size.width, 0,
+									 0, (GLfloat) bounds.size.height,
+									 (GLfloat) bounds.size.width,
+									 (GLfloat) bounds.size.height};
+
+	glTexCoordPointer(2, GL_FLOAT, 0, textureVertices);
+	glVertexPointer(2, GL_FLOAT, 0, vertices);
+	glColor4f(opacity, opacity, opacity, opacity);
+	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+
+	glDisableClientState(GL_TEXTURE_COORD_ARRAY);
+	glDisable(GL_TEXTURE_2D);
+
+	reportGLErrors();
+
+	return YES;
+}
+
+// A Metal layer's content is whatever the app last rendered through -nextDrawable,
+// so -drawInContext: has nothing to draw and rasterising it would only produce
+// a blank bitmap, which the contents path would then upload over _tex.
+- (void)display
+{
+	[_context startTimerIfNeeded];
+}
+
 //
 // overridden methods
 //
