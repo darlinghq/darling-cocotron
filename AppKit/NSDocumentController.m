@@ -325,21 +325,26 @@ static NSDocumentController *shared = nil;
     if (extension == nil)
         return nil;
 
-    NSString *UTI;
+    NSString *UTI = nil;
+    NSError *resourceError = nil;
 
     BOOL success = [url getResourceValue: &UTI
                                   forKey: NSURLTypeIdentifierKey
-                                   error: error];
-    if (!success) {
+                                   error: &resourceError];
+    if (!success && resourceError != nil) {
+        if (error != NULL)
+            *error = resourceError;
         return nil;
     }
 
+    if (error != NULL)
+        *error = nil;
     for(NSDictionary *fileType in _fileTypes) {
-        if ([[fileType objectForKey: @"LSItemContentTypes"] containsObject: UTI]) {
+        if (success && UTI != nil && [[fileType objectForKey: @"LSItemContentTypes"] containsObject: UTI]) {
             return [fileType objectForKey: @"CFBundleTypeName"];
         }
     }
-    return nil;
+    return [self typeFromFileExtension: extension];
 }
 
 - makeDocumentWithContentsOfFile: (NSString *) path ofType: (NSString *) type {
