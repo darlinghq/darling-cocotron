@@ -33,6 +33,10 @@ NSColor *NSColorGetCatalogColor(NSColorListName catalogName,
 
 @implementation NSColor_catalog
 
+- (NSColorType) type {
+    return NSColorTypeCatalog;
+}
+
 - initWithCatalogName: (NSColorListName) catalogName
             colorName: (NSColorName) colorName
                 color: (NSColor *) color

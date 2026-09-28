@@ -29,6 +29,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @implementation NSColor_CGColor
 
+- (NSColorType) type {
+    return [_colorSpaceName isEqualToString: NSPatternColorSpace]
+        ? NSColorTypePattern : NSColorTypeComponentBased;
+}
+
 - initWithColorRef: (CGColorRef) colorRef spaceName: (NSString *) spaceName {
     _catalogName = @"";
     _colorRef = CGColorRetain(colorRef);
