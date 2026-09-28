@@ -25,6 +25,10 @@ static NSMutableDictionary<NSPasteboardName, X11Pasteboard *> *nameToPboard;
 
 static const NSTimeInterval SelectionTimeout = 5;
 
+// The Wayland backend bounds its clipboard transfers the same way, so the two
+// backends accept the same payloads.
+static const NSUInteger TransferLimit = 16 * 1024 * 1024;
+
 + (X11Pasteboard *) pasteboardWithName: (NSPasteboardName) name {
     static dispatch_once_t once;
     dispatch_once(&once, ^{
@@ -188,12 +192,6 @@ static const NSTimeInterval SelectionTimeout = 5;
         return nil;
     }
 
-    if (type == _incrAtom) {
-        NSLog(@"Unimplemented: INCR support");
-        XFree(propValue);
-        return nil;
-    }
-
     if (actualFormat != format) {
         NSLog(@"X11 pasteboard: the selection owner answered with format %d, "
               "expected %d", actualFormat, format);
@@ -210,6 +208,108 @@ static const NSTimeInterval SelectionTimeout = 5;
     NSData *data = [NSData dataWithBytes: propValue
                                   length: num_items * (format / 8)];
     XFree(propValue);
+
+    return data;
+}
+
+// The type of the receiving property, read without taking or deleting it: the
+// reply to a conversion may be an INCR marker instead of the data, and that has
+// to be known before the data is read.
+- (Atom) typeOfReceivingProperty {
+    Atom type = None;
+    int actualFormat;
+    unsigned long numItems, remaining;
+    unsigned char *value = NULL;
+
+    XGetWindowProperty(_display, _window, _receivingProperty, 0, 0, False,
+                       AnyPropertyType, &type, &actualFormat, &numItems,
+                       &remaining, &value);
+    if (value != NULL)
+        XFree(value);
+
+    return type;
+}
+
+// Pumps the run loop until the owner writes the receiving property, or the
+// deadline passes. The deadline is the caller's and covers the whole read, so a
+// stalled owner costs one timeout and not one per chunk, and an event that is
+// none of the transfer's business (our own delete, another window) only costs
+// one pass of the loop.
+- (BOOL) waitForPropertyWriteUntil: (NSTimeInterval) deadline {
+    while (!_propertyWritten) {
+        NSTimeInterval remaining = deadline
+                - [NSDate timeIntervalSinceReferenceDate];
+        if (remaining <= 0)
+            return NO;
+
+        [[NSDisplay currentDisplay]
+                nextEventMatchingMask: NSAnyEventMask
+                            untilDate: [NSDate dateWithTimeIntervalSinceNow: remaining]
+                               inMode: NSDefaultRunLoopMode
+                              dequeue: NO];
+    }
+
+    return YES;
+}
+
+// ICCCM 2.7.2: an owner whose data does not fit in a single property write
+// answers with a zero-length property of type INCR and then appends the data in
+// chunks. The requestor pulls one chunk at a time, and every read also deletes
+// the property - that delete is the acknowledgement the owner waits for, and
+// the only thing that keeps the server from holding the whole transfer at once.
+- (NSData *) receiveIncrementalDataForTarget: (Atom) target
+                                    format: (int) format
+                                  deadline: (NSTimeInterval) deadline
+{
+    NSMutableData *data = [NSMutableData data];
+    NSString *failure = nil;
+
+    // The INCR property is a marker, not data, and it has to be deleted before
+    // anything else: that is what tells the owner to start sending. Its format
+    // says nothing about the chunks that follow, so it is not validated.
+    XDeleteProperty(_display, _window, _receivingProperty);
+    XFlush(_display);
+
+    BOOL complete = NO;
+    while (failure == nil && [self waitForPropertyWriteUntil: deadline]) {
+        // The property has now been looked at, so a notification from before this
+        // read must not be taken for the chunk after it. Not the other way round:
+        // a write that arrived while we were still reading the reply out of the
+        // queue is the chunk this iteration is waiting for.
+        _propertyWritten = NO;
+
+        NSData *chunk = [self readReceivingPropertyForTarget: target format: format];
+        if (chunk == nil) {
+            // The property was already gone, so the notification was one of our
+            // own deletes. That is not a chunk, and it is not the end either.
+            continue;
+        }
+
+        if ([chunk length] == 0) {
+            // A zero-length property of the target's type is the terminator: a
+            // real chunk is never empty, because an empty one is what ends the
+            // transfer.
+            complete = YES;
+            break;
+        }
+
+        if ([data length] + [chunk length] > TransferLimit) {
+            failure = @"it would exceed 16 MiB";
+            break;
+        }
+
+        [data appendData: chunk];
+    }
+
+    if (failure == nil && !complete)
+        failure = @"the owner stopped sending";
+    if (failure != nil) {
+        // A partial buffer is worse than none: the caller cannot tell it apart
+        // from a complete transfer.
+        NSLog(@"X11 pasteboard: discarding an incremental transfer of %@ after %lu "
+              "bytes, %@", _name, (unsigned long) [data length], failure);
+        return nil;
+    }
 
     return data;
 }
@@ -244,6 +344,11 @@ static const NSTimeInterval SelectionTimeout = 5;
     XDeleteProperty(_display, _window, _receivingProperty);
     _awaitingTarget = target;
     _selectionNotifyResult = WAITING;
+    // Start watching before the conversion is even sent: the owner can answer an
+    // INCR request by writing the first chunk before the reply to it has been
+    // read out of the queue, and that write is the chunk we are waiting for.
+    _readingProperty = YES;
+    _propertyWritten = NO;
 
     XConvertSelection(_display, _selectionName, target, _receivingProperty,
                       _window, CurrentTime); // FIXME: don't use CurrentTime
@@ -261,9 +366,14 @@ static const NSTimeInterval SelectionTimeout = 5;
                                inMode: NSDefaultRunLoopMode
                               dequeue: NO];
     }
-    _awaitingTarget = None;
 
+    // _awaitingTarget stays claimed until the data is in hand: an INCR transfer
+    // keeps reading the same receiving property, and a nested read would delete
+    // it out from under this one.
     if (_selectionNotifyResult != SUCCESS) {
+        _readingProperty = NO;
+        _awaitingTarget = None;
+
         if (_selectionNotifyResult == WAITING) {
             char *rawTarget = XGetAtomName(_display, target);
             NSLog(@"X11 pasteboard: the owner of %@ did not answer a request for "
@@ -274,7 +384,18 @@ static const NSTimeInterval SelectionTimeout = 5;
         return nil;
     }
 
-    return [self readReceivingPropertyForTarget: target format: format];
+    NSData *result;
+    if ([self typeOfReceivingProperty] == _incrAtom) {
+        result = [self receiveIncrementalDataForTarget: target
+                                               format: format
+                                             deadline: deadline];
+    } else {
+        result = [self readReceivingPropertyForTarget: target format: format];
+    }
+
+    _readingProperty = NO;
+    _awaitingTarget = None;
+    return result;
 }
 
 - (NSData *) dataForType: (NSPasteboardType) type {
@@ -521,6 +642,13 @@ static const NSTimeInterval SelectionTimeout = 5;
 }
 
 - (void) propertyNotify: (XPropertyEvent *) event {
+    // Only a write by the owner counts. Our own deletes generate notifications
+    // too, and they are the requestor's half of the handshake, not a chunk.
+    if (_readingProperty && event->window == _window
+            && event->atom == _receivingProperty
+            && event->state == PropertyNewValue)
+        _propertyWritten = YES;
+
     // ICCCM paces an incremental transfer with property deletions: the receiver
     // reads a chunk and deletes the property to ask for the next one. The owner
     // learns the receiver is ready from that deletion alone.

@@ -40,6 +40,12 @@ along with Darling.  If not, see <http://www.gnu.org/licenses/>.
     Window _remoteOwner;
     NSMutableDictionary<NSNumber *, id> *_incrTransfers;
     enum { WAITING, SUCCESS, NONE } _selectionNotifyResult;
+
+    // Set while a read is in flight. -propertyNotify: records that the owner
+    // wrote the receiving property, which is the only thing an INCR transfer
+    // waits for between chunks.
+    BOOL _readingProperty;
+    BOOL _propertyWritten;
 }
 
 - (instancetype) initWithName: (NSPasteboardName) name;
