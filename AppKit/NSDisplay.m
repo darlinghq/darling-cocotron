@@ -158,16 +158,25 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
     [[NSRunLoop currentRunLoop] runMode: mode beforeDate: untilDate];
 
+    // Scan for the first event of a wanted type. Events that do not match stay
+    // queued: AppKit's contract is that nextEventMatchingMask: returns only
+    // what was asked for and leaves the rest for the main loop, but removing
+    // them here destroyed every other pending event whenever a caller asked
+    // for a narrow mask - a tracking loop asking for NSLeftMouseUpMask would
+    // silently discard queued key events.
     while (result == nil && [_eventQueue count] > 0) {
-        NSEvent *event = _eventQueue[0];
+        NSUInteger i, count = [_eventQueue count];
 
-        if (!(NSEventMaskFromType([event type]) & mask)) {
-            [_eventQueue removeObjectAtIndex: 0];
-        } else {
-            result = [[event retain] autorelease];
+        for (i = 0; i < count; i++) {
+            NSEvent *event = _eventQueue[i];
 
-            if (dequeue)
-                [_eventQueue removeObjectAtIndex: 0];
+            if (NSEventMaskFromType([event type]) & mask) {
+                result = [[event retain] autorelease];
+
+                if (dequeue)
+                    [_eventQueue removeObjectAtIndex: i];
+                break;
+            }
         }
     }
 
