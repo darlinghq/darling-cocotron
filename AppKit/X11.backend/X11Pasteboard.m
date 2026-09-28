@@ -294,7 +294,10 @@ static NSMutableDictionary<NSPasteboardName, X11Pasteboard *> *nameToPboard;
             NSArray<NSString *> *ts = [X11Pasteboard targetsForType: type];
             count += [ts count];
         }
-        Atom targets[count];
+        // Format 32 properties travel as 4 bytes per element, so an Atom buffer (8 bytes on
+        // LP64) reaches the client interleaved with zeroes: it would read TARGETS as
+        // [atom0, 0, atom1, 0, ...] and fail to match any of its own target names.
+        uint32_t targets[count];
         size_t i = 0;
         for (NSPasteboardType type in types) {
             NSArray<NSString *> *ts = [X11Pasteboard targetsForType: type];
