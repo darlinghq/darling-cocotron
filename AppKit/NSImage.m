@@ -904,24 +904,26 @@ NSImageName const NSImageNameTouchBarVolumeUpTemplate =
 
         if (!_cacheIsValid) {
             [self lockFocusOnRepresentation: cached];
-            NSRect rect;
-            rect.origin.x = 0;
-            rect.origin.y = 0;
-            rect.size = [self size];
-
             BOOL rendered = NO;
             @try {
+                NSRect rect;
+                rect.origin = NSZeroPoint;
+                rect.size = [self size];
                 if ([self scalesWhenResized]) {
                     rendered = [self drawRepresentation: uncached inRect: rect];
                 } else
                     rendered = [uncached drawAtPoint: rect.origin];
             } @finally {
                 [self unlockFocus];
+                // Do not leave a partially rendered cache available to other
+                // representation-selection paths, including after an exception.
+                if (!rendered)
+                    [self removeRepresentation: cached];
             }
             _cacheIsValid = rendered;
         }
 
-        return cached;
+        return _cacheIsValid ? cached : uncached;
     }
 
     return [_representations lastObject];
