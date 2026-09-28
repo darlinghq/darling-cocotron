@@ -149,12 +149,13 @@ NSBitmapImageRepPropertyKey NSImageCurrentFrame = @"NSImageCurrentFrame";
 
         CFDictionaryRef properties =
                 CGImageSourceCopyPropertiesAtIndex(imageSource, i, nil);
-        NSNumber *xres = [[(id) CFDictionaryGetValue(
-                properties, kCGImagePropertyDPIWidth) copy] autorelease];
-        NSNumber *yres = [[(id) CFDictionaryGetValue(
-                properties, kCGImagePropertyDPIHeight) copy] autorelease];
+        NSNumber *xres = properties ? [[(id) CFDictionaryGetValue(
+                properties, kCGImagePropertyDPIWidth) copy] autorelease] : nil;
+        NSNumber *yres = properties ? [[(id) CFDictionaryGetValue(
+                properties, kCGImagePropertyDPIHeight) copy] autorelease] : nil;
 
-        CFRelease(properties);
+        if (properties)
+            CFRelease(properties);
 
         NSBitmapImageRep *imageRep = [[self alloc] initWithCGImage: cgImage];
         NSSize size = {CGImageGetWidth(cgImage), CGImageGetHeight(cgImage)};
@@ -352,14 +353,15 @@ NSBitmapImageRepPropertyKey NSImageCurrentFrame = @"NSImageCurrentFrame";
 
     CFDictionaryRef properties =
             CGImageSourceCopyPropertiesAtIndex(imageSource, 0, nil);
-    NSNumber *xres =
+    NSNumber *xres = properties ?
             [[(id) CFDictionaryGetValue(properties, kCGImagePropertyDPIWidth)
-                    copy] autorelease];
-    NSNumber *yres =
+                    copy] autorelease] : nil;
+    NSNumber *yres = properties ?
             [[(id) CFDictionaryGetValue(properties, kCGImagePropertyDPIHeight)
-                    copy] autorelease];
+                    copy] autorelease] : nil;
 
-    CFRelease(properties);
+    if (properties)
+        CFRelease(properties);
     CFRelease(imageSource);
 
     if (cgImage == nil) {
