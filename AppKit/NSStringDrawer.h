@@ -19,6 +19,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/AppKitExport.h>
+#import <AppKit/NSParagraphStyle.h>
 #import <Foundation/Foundation.h>
 
 @class NSTextStorage, NSLayoutManager, NSTextContainer;
@@ -73,6 +74,9 @@ APPKIT_EXPORT const CGFloat NSStringDrawerLargeDimension;
 @end
 
 @interface NSAttributedString (NSStringDrawer_private)
+
+- (void) _clipAndDrawInRect: (NSRect) rect
+             lineBreakMode: (NSLineBreakMode) lineBreakMode;
 
 - (void) _clipAndDrawInRect: (NSRect) rect truncatingTail: (BOOL) truncateTail;
 
