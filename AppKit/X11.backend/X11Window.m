@@ -644,6 +644,32 @@ static BOOL windowManagerIsRunning(Display *display) {
 - (void) captureEvents {
 }
 
+// -[NSApplication requestUserAttention:] reaches this unconditionally about
+// three seconds later, and without an override CGWindow raises
+// NSInvalidAbstractInvocation, so any app that asks for attention died there.
+// The EWMH request is per-window; XBell would ring the screen bell instead.
+- (void) flashWindow {
+    // -invalidate leaves no X window behind.
+    if (_window == 0)
+        return;
+
+    XEvent event = {0};
+    event.xclient.type = ClientMessage;
+    event.xclient.window = _window;
+    event.xclient.message_type = XInternAtom(_display, "_NET_WM_STATE", False);
+    event.xclient.format = 32;
+    event.xclient.data.l[0] = 1; // add
+    event.xclient.data.l[1] =
+        (long) XInternAtom(_display, "_NET_WM_STATE_DEMANDS_ATTENTION", False);
+    event.xclient.data.l[2] = 1; // source indication: application
+    event.xclient.data.l[3] = CurrentTime;
+    XSendEvent(_display, DefaultRootWindow(_display), False,
+               SubstructureRedirectMask | SubstructureNotifyMask, &event);
+    // Nothing else happens on this path, and an idle run loop may sit on the
+    // request until the next event or the next X call.
+    XFlush(_display);
+}
+
 - (void) miniaturize {
     XIconifyWindow(_display, _window, DefaultScreen(_display));
 }
