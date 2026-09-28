@@ -42,6 +42,7 @@ NSString *const _NSColorCoreUICatalogNamePrefix =
     CGColorSpaceRef srgb = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
     NSColorSpace *colorSpace =
             [[[self alloc] initWithCGColorSpace: srgb] autorelease];
+    CGColorSpaceRelease(srgb);
     return colorSpace;
 }
 
