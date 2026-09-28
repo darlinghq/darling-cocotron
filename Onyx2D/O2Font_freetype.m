@@ -205,6 +205,76 @@ static NSString *filenameOfFirstScalableFace(FcFontSet *set) {
     return fallback;
 }
 
+O2FontRef O2FontCreateWithCodePointCoverage(const uint32_t *codePoints,
+                                           size_t count) {
+    if (codePoints == NULL || count == 0)
+        return nil;
+
+    FcPattern *pattern = FcPatternCreate();
+    FcCharSet *characters = FcCharSetCreate();
+    if (pattern == NULL || characters == NULL) {
+        if (pattern != NULL)
+            FcPatternDestroy(pattern);
+        if (characters != NULL)
+            FcCharSetDestroy(characters);
+        return nil;
+    }
+    for (size_t index = 0; index < count; ++index) {
+        if (codePoints[index] > 0x10FFFF ||
+            (codePoints[index] >= 0xD800 && codePoints[index] <= 0xDFFF) ||
+            !FcCharSetAddChar(characters, codePoints[index])) {
+            FcCharSetDestroy(characters);
+            FcPatternDestroy(pattern);
+            return nil;
+        }
+    }
+    FcBool added = FcPatternAddCharSet(pattern, FC_CHARSET, characters);
+    FcCharSetDestroy(characters);
+    if (!added) {
+        FcPatternDestroy(pattern);
+        return nil;
+    }
+
+    FcConfig *config = O2FontSharedFontConfig();
+    if (config == NULL || !FcConfigSubstitute(config, pattern, FcMatchPattern)) {
+        FcPatternDestroy(pattern);
+        return nil;
+    }
+    FcDefaultSubstitute(pattern);
+    FcResult result;
+    FcPattern *match = FcFontMatch(config, pattern, &result);
+    FcPatternDestroy(pattern);
+    if (match == NULL)
+        return nil;
+
+    FcChar8 *filename = NULL;
+    int faceIndex = 0;
+    FcResult indexResult = FcPatternGetInteger(match, FC_INDEX, 0, &faceIndex);
+    if (FcPatternGetString(match, FC_FILE, 0, &filename) != FcResultMatch ||
+        (indexResult != FcResultMatch && indexResult != FcResultNoMatch) ||
+        faceIndex < 0) {
+        FcPatternDestroy(match);
+        return nil;
+    }
+    FT_Face face = NULL;
+    FT_Error error = FT_New_Face(O2FontSharedFreeTypeLibrary(),
+                                 (const char *)filename, faceIndex, &face);
+    FcPatternDestroy(match);
+    if (error != 0)
+        return nil;
+    if (FT_Select_Charmap(face, FT_ENCODING_UNICODE) != 0) {
+        FT_Done_Face(face);
+        return nil;
+    }
+    for (size_t index = 0; index < count; ++index) {
+        if (FT_Get_Char_Index(face, codePoints[index]) == 0) {
+            FT_Done_Face(face);
+            return nil;
+        }
+    }
+    return [[O2Font_freetype alloc] initWithFace: face];
+}
+
 + (NSString *) filenameForPattern: (NSString *) pattern {
     FcConfig *config = O2FontSharedFontConfig();
 

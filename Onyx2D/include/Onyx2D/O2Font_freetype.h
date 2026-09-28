@@ -44,6 +44,10 @@ FcConfig *O2FontSharedFontConfig();
 NSArray *O2FontCopyInstalledFaces(NSString *family, NSString *postScriptName,
                                   NSString *style, NSString *fullName);
 
+// Returns an owned font covering all supplied Unicode scalar values, or nil.
+O2FontRef O2FontCreateWithCodePointCoverage(const uint32_t *codePoints,
+                                           size_t count);
+
 @end
 
 #endif
