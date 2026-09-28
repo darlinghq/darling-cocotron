@@ -87,6 +87,10 @@ static NSMutableDictionary<NSPasteboardName, X11Pasteboard *> *nameToPboard;
     NSArray *owners = [_typeToOwner allValues];
     [_typeToOwner removeAllObjects];
     [_typeToData removeAllObjects];
+    // Bump here rather than only in ensureSelectionOwner, which fires once per ownership
+    // transition: clearing twice in a row used to leave -changeCount unchanged, so a
+    // poller saw no change even though the contents were replaced.
+    _changeCount++;
 
     for (id owner in owners) {
         [owner pasteboardChangedOwner: self];
@@ -96,8 +100,7 @@ static NSMutableDictionary<NSPasteboardName, X11Pasteboard *> *nameToPboard;
 }
 
 - (void) giveUpSelectionOwner {
-    _changeCount++;
-
+    // -clearContents below accounts for the change, and it runs either way.
     [self clearContents];
 
     [_typeToOwner release];
