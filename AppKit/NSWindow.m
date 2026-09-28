@@ -2330,6 +2330,18 @@ static BOOL _allowsAutomaticWindowTabbing;
         _mouseDownLocationInWindow = NSMakePoint(NAN, NAN);
         break;
 
+    case NSOtherMouseDown:
+        _mouseDownLocationInWindow = [event locationInWindow];
+        [[_backgroundView hitTest: [event locationInWindow]]
+                otherMouseDown: event];
+        break;
+
+    case NSOtherMouseUp:
+        [[_backgroundView hitTest: _mouseDownLocationInWindow]
+                otherMouseUp: event];
+        _mouseDownLocationInWindow = NSMakePoint(NAN, NAN);
+        break;
+
     case NSMouseMoved: {
         NSView *hit = [_backgroundView hitTest: [event locationInWindow]];
 
@@ -2349,6 +2361,11 @@ static BOOL _allowsAutomaticWindowTabbing;
     case NSRightMouseDragged:
         [[_backgroundView hitTest: _mouseDownLocationInWindow]
                 rightMouseDragged: event];
+        break;
+
+    case NSOtherMouseDragged:
+        [[_backgroundView hitTest: _mouseDownLocationInWindow]
+                otherMouseDragged: event];
         break;
 
     case NSMouseEntered:

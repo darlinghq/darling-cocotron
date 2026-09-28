@@ -1561,14 +1561,15 @@ enum {
             }
 
             // X11 numbers the right button 3 (Button3Mask); Button2Mask is
-            // the middle button. This backend does not deliver other-mouse
-            // drags yet, so a middle-button drag is reported as a move.
+            // the middle button, whose drags are other-mouse drags.
             type = NSMouseMoved;
 
             if (ev->xmotion.state & Button1Mask) {
                 type = NSLeftMouseDragged;
             } else if (ev->xmotion.state & Button3Mask) {
                 type = NSRightMouseDragged;
+            } else if (ev->xmotion.state & Button2Mask) {
+                type = NSOtherMouseDragged;
             }
 
             if (type == NSMouseMoved && ![delegate acceptsMouseMovedEvents])
