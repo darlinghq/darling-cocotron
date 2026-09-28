@@ -29,6 +29,7 @@
 #import <Onyx2D/O2ColorSpace.h>
 #import <Onyx2D/O2DataProvider.h>
 #import <Onyx2D/O2Surface.h>
+#include <stdint.h>
 
 @implementation O2Surface
 
@@ -638,9 +639,20 @@ void O2SurfaceUnlock(O2Surface *surface) {
     if (!m_ownsData)
         return;
 
+    // Validate before changing dimensions or releasing the existing backing.
+    // Otherwise a wrapped allocation size leaves a large surface over a small
+    // buffer, and subsequent drawing can write beyond that buffer.
+    if (_bitsPerPixel <= 0 || width > SIZE_MAX / (size_t)_bitsPerPixel)
+        [NSException raise: NSInvalidArgumentException
+                    format: @"O2Surface resize row size overflow"];
+    size_t bytesPerRow = width * (size_t)_bitsPerPixel / 8;
+    if (bytesPerRow != 0 && height > SIZE_MAX / bytesPerRow)
+        [NSException raise: NSInvalidArgumentException
+                    format: @"O2Surface resize allocation size overflow"];
+
     _width = width;
     _height = height;
-    _bytesPerRow = width * _bitsPerPixel / 8;
+    _bytesPerRow = bytesPerRow;
 
     NSUInteger size = _bytesPerRow * height * sizeof(uint8_t);
     NSUInteger allocateSize = [[_provider data] length];
