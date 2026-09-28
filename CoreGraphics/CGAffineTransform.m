@@ -21,6 +21,20 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 const CGAffineTransform CGAffineTransformIdentity = {1, 0, 0, 1, 0, 0};
 
+// Keep the header's inline helpers for source clients, but also provide the
+// canonical symbols imported by prebuilt clients such as SwiftUI and CotEditor.
+#undef CGPointApplyAffineTransform
+#undef CGSizeApplyAffineTransform
+COREGRAPHICS_EXPORT CGPoint CGPointApplyAffineTransform(
+        CGPoint point, CGAffineTransform transform) {
+    return __CGPointApplyAffineTransform(point, transform);
+}
+
+COREGRAPHICS_EXPORT CGSize CGSizeApplyAffineTransform(
+        CGSize size, CGAffineTransform transform) {
+    return __CGSizeApplyAffineTransform(size, transform);
+}
+
 bool CGAffineTransformIsIdentity(CGAffineTransform xform) {
     return xform.a == 1 && xform.b == 0 && xform.c == 0 && xform.d == 1 &&
            xform.tx == 0 && xform.ty == 0;
