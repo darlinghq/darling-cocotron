@@ -50,6 +50,28 @@ along with Darling.  If not, see <http://www.gnu.org/licenses/>.
 
 - (instancetype) initWithName: (NSPasteboardName) name;
 
+// The unmapped window that owns this pasteboard's selection and answers the
+// SelectionRequests for it. A drag publishes it as its XDND source window, so
+// the properties the target reads and the data it converts come from one window.
+- (Window) windowHandle;
+
+// The X selection this pasteboard owns, which for a drag is the XdndSelection
+// the target is told to convert.
+- (Atom) selectionAtom;
+
+// The X selection target names one NSPasteboardType converts to. XDND's type
+// list is this mapping applied to the source's types, and a target asking for
+// one of those names has to land on the type it came from, so the two uses
+// cannot drift apart.
++ (NSArray<NSString *> *) targetsForType: (NSPasteboardType) type;
++ (NSPasteboardType) typeForTarget: (NSString *) target;
+
+// An INCR transfer is paced by the receiver deleting the property, and that property
+// lives on the receiver's window, which belongs to another client and so never reaches
+// the window map. Whichever pasteboard is serving a transfer to that window is the one
+// waiting for the deletion, so the display routes such an event here and this claims it.
+// Returns YES if some pasteboard took the event.
++ (BOOL) dispatchPropertyNotify: (XPropertyEvent *) event;
 // Sent by -[X11Display postXEvent:]
 - (void) selectionNotify: (XSelectionEvent *) event;
 - (void) selectionRequest: (XSelectionRequestEvent *) event;

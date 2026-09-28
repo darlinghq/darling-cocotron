@@ -156,6 +156,22 @@ static const NSUInteger TransferLimit = 16 * 1024 * 1024;
     [self giveUpSelectionOwner];
 }
 
+// An INCR transfer is paced by the receiver deleting the property, and that property
+// lives on the receiver's window, which belongs to another client and so never reaches
+// the window map. Try the drag's own pasteboard first, then every registered one, and
+// return whether anybody took the event.
++ (BOOL) dispatchPropertyNotify: (XPropertyEvent *) event {
+    for (X11Pasteboard *board in [nameToPboard allValues]) {
+        if ([board respondsToSelector: @selector(propertyNotify:)]
+                && board->_incrTransfers[[NSNumber numberWithUnsignedLong: event->window]] != nil
+                && event->state == PropertyDelete) {
+            [board propertyNotify: event];
+            return YES;
+        }
+    }
+    return NO;
+}
+
 + (NSArray<NSString *> *) targetsForType: (NSPasteboardType) type {
     if ([type isEqual: NSStringPboardType]) {
         return @[
