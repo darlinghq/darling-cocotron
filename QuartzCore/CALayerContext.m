@@ -206,6 +206,8 @@ static BOOL layerTreeNeedsAnotherFrame(CALayer *layer) {
 }
 
 - (void) timer: (NSTimer *) timer {
+    // Consume requests for this frame before callbacks can request another.
+    _renderRequested = NO;
     [_renderer beginFrameAtTime: CACurrentMediaTime() timeStamp: NULL];
 
     [self render];
@@ -217,8 +219,9 @@ static BOOL layerTreeNeedsAnotherFrame(CALayer *layer) {
 
     // beginFrameAtTime: drops finished animations. Once none are left, the frame
     // just drawn shows the final values: stop until an animation is added again,
-    // or until a Metal layer has another present waiting to be composited.
-    if (!layerTreeNeedsAnotherFrame(_layer)) {
+    // or until a Metal layer has another present waiting to be composited,
+    // or unless callbacks requested a subsequent frame while rendering or presenting this one.
+    if (!_renderRequested && !layerTreeNeedsAnotherFrame(_layer)) {
         [_timer invalidate];
         [_timer release];
         _timer = nil;
@@ -226,6 +229,7 @@ static BOOL layerTreeNeedsAnotherFrame(CALayer *layer) {
 }
 
 - (void) startTimerIfNeeded {
+    _renderRequested = YES;
     if (_timer == nil)
         _timer = [[NSTimer scheduledTimerWithTimeInterval: 1.0 / 60.0
                                                    target: self
