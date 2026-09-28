@@ -66,6 +66,8 @@ const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPresentationOptio
 - (CGAffineTransform) transformToWindow;
 - (CGAffineTransform) transformToLayer;
 - (void) _trackingAreasChanged;
+- (void) _addLayerToSuperlayer;
+- (void) _removeLayerFromSuperlayer;
 @end
 
 @implementation NSView
@@ -1150,8 +1152,12 @@ static inline void buildTransformsIfNeeded(NSView *self) {
 
         _window = window;
 
-        if (_layerContext) {
+        if (_layerContext && _window == nil) {
+            [self _removeLayerFromSuperlayer];
+        } else if (_layerContext) {
             [_layerContext setSubwindow: [_window _createSubWindowWithFrame: [self frame]]];
+        } else if (_layer != nil && _window != nil) {
+            [self _addLayerToSuperlayer];
         }
 
         [_subviews makeObjectsPerformSelector: _cmd withObject: window];
@@ -1167,7 +1173,13 @@ static inline void buildTransformsIfNeeded(NSView *self) {
 }
 
 - (void) _setSuperview: superview {
+    if (_superview == superview)
+        return;
+    if (_layer != nil)
+        [self _removeLayerFromSuperlayer];
     _superview = superview;
+    if (_layer != nil && _superview != nil)
+        [self _addLayerToSuperlayer];
 
     [_window invalidateCursorRectsForView: self]; // this also invalidates
                                                   // tracking areas
@@ -1818,7 +1830,7 @@ static inline void buildTransformsIfNeeded(NSView *self) {
 }
 
 - (void) _createLayerContextIfNeeded {
-    if ([_superview layer] == nil) {
+    if (_layerContext == nil && [_superview layer] == nil && _window != nil) {
         _layerContext = [[CALayerContext alloc] initWithFrame: [self frame]];
         [_layerContext setLayer: _layer];
         if (_window) {
@@ -1828,8 +1840,15 @@ static inline void buildTransformsIfNeeded(NSView *self) {
 }
 
 - (void) _addLayerToSuperlayer {
-    [[_superview layer] addSublayer: _layer];
-    [self _createLayerContextIfNeeded];
+    CALayer *superlayer = [_superview layer];
+    if (superlayer != nil) {
+        if ([_layer superlayer] != superlayer || _layerContext != nil) {
+            [self _removeLayerFromSuperlayer];
+            [superlayer addSublayer: _layer];
+        }
+    } else {
+        [self _createLayerContextIfNeeded];
+    }
 }
 
 /*
@@ -1837,9 +1856,10 @@ static inline void buildTransformsIfNeeded(NSView *self) {
   a layer Layers which did want a layer are not touched, nor are their children.
  */
 - (void) _removeLayerBackedViewsFromTree {
-    if (_wantsLayer)
+    if (_wantsLayer) {
+        [_layer removeFromSuperlayer];
         [self _createLayerContextIfNeeded];
-    else {
+    } else {
         [self _removeLayerFromSuperlayer];
 
         // A backing layer is removed regardless of whether it was set
