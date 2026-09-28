@@ -94,6 +94,12 @@ NSString *_NSTruncatedStringWithAttributesInRect(NSString *string,
     return _identifier;
 }
 
+- (void) setIdentifier: (id) identifier {
+    identifier = [identifier retain];
+    [_identifier release];
+    _identifier = identifier;
+}
+
 - (NSString *) label {
     return _label;
 }

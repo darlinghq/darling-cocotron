@@ -37,6 +37,7 @@ typedef enum { NSSelectedTab, NSBackgroundTab, NSPressedTab } NSTabState;
 - initWithIdentifier: identifier;
 
 - identifier;
+- (void) setIdentifier: (id) identifier;
 - (NSString *) label;
 - view;
 - (NSColor *) color;
