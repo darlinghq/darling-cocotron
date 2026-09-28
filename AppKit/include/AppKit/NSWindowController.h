@@ -32,6 +32,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     NSString *_windowFrameAutosaveName;
     NSArray *_topLevelObjects;
     NSStoryboard *_storyboard;
+    BOOL _loadingWindowLifecycle;
+    BOOL _loadingWindowNib;
 }
 
 - initWithWindow: (NSWindow *) window;

@@ -98,14 +98,18 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (NSWindow *) window {
-    if (_window == nil && ([self windowNibName] != nil || _nibPath != nil)) {
-        [self windowWillLoad];
-        [_document windowControllerWillLoadNib: self];
-
-        [self loadWindow];
-
-        [self windowDidLoad];
-        [_document windowControllerDidLoadNib: self];
+    if (_window == nil && !_loadingWindowLifecycle && !_loadingWindowNib &&
+            ([self windowNibName] != nil || _nibPath != nil)) {
+        _loadingWindowLifecycle = YES;
+        @try {
+            [self windowWillLoad];
+            [_document windowControllerWillLoadNib: self];
+            [self loadWindow];
+            [self windowDidLoad];
+            [_document windowControllerDidLoadNib: self];
+        } @finally {
+            _loadingWindowLifecycle = NO;
+        }
     }
 
     return _window;
@@ -164,6 +168,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (void) loadWindow {
+    if (_loadingWindowNib)
+        return;
+    _loadingWindowNib = YES;
+    @try {
     if (![self isWindowLoaded]) {
         static NSPoint cascadeTopLeftSavedPoint = {0.0, 0.0};
         NSString *path = [self windowNibPath];
@@ -187,6 +195,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         if (_shouldCascadeWindows)
             cascadeTopLeftSavedPoint =
                     [_window cascadeTopLeftFromPoint: cascadeTopLeftSavedPoint];
+    }
+    } @finally {
+        _loadingWindowNib = NO;
     }
 }
 
