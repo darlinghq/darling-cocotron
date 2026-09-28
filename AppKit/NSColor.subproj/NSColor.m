@@ -54,6 +54,10 @@ NSNotificationName const NSSystemColorsDidChangeNotification = @"NSSystemColorsD
 
 @implementation NSColor
 
+- (NSColorType) type {
+    return NSColorTypeComponentBased;
+}
+
 + (NSColor *) colorWithCGColor: (CGColorRef) color {
     if (color == NULL)
         return nil;
