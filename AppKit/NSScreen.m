@@ -76,7 +76,10 @@ NSNotificationName const NSScreenColorSpaceDidChangeNotification = @"NSScreenCol
 }
 
 - (NSDictionary<NSDeviceDescriptionKey, id> *) deviceDescription {
-    return @{};
+    // AppKit clients use this documented string key to obtain the same display
+    // ID used by CoreGraphics and assigned by the window-system backend.
+    return @{ @"NSScreenNumber":
+            [NSNumber numberWithUnsignedInt: [self cgDirectDisplayID]] };
 }
 
 @end
