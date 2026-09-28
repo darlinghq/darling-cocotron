@@ -3478,8 +3478,34 @@ static NSTextView *s_targetTextView = nil;
 }
 
 - (NSUInteger) characterIndexForPoint: (NSPoint) point {
-    NSUnimplementedMethod();
-    return 0;
+    NSWindow *window = [self window];
+    NSUInteger length = [[self string] length];
+    if (window == nil || length == 0)
+        return NSNotFound;
+
+    point = [self convertPoint: [window convertScreenToBase: point]
+                     fromView: nil];
+    NSPoint origin = [self textContainerOrigin];
+    point.x -= origin.x;
+    point.y -= origin.y;
+
+    NSLayoutManager *manager = [self layoutManager];
+    NSTextContainer *container = [self textContainer];
+    CGFloat fraction = 0;
+    NSUInteger glyph = [manager glyphIndexForPoint: point
+                                  inTextContainer: container
+                   fractionOfDistanceThroughGlyph: &fraction];
+    if (glyph >= [manager numberOfGlyphs])
+        return NSNotFound;
+
+    // Glyph lookup also returns nearby insertion positions for padding. Text
+    // input hit testing requires an actual character under the screen point.
+    NSRect bounds = [manager boundingRectForGlyphRange: NSMakeRange(glyph, 1)
+                                      inTextContainer: container];
+    if (!NSPointInRect(point, bounds))
+        return NSNotFound;
+    NSUInteger character = [manager characterIndexForGlyphAtIndex: glyph];
+    return character < length ? character : NSNotFound;
 }
 
 - (void) _setFieldEditorUndoManager: (NSUndoManager *) undoManager {
