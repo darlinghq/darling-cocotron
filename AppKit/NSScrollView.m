@@ -189,6 +189,11 @@ static Class _rulerViewClass = nil;
             _drawsBackground = [_clipView drawsBackground];
         }
 
+        _allowsMagnification = NO;
+        _magnification = 1.0;
+        _maxMagnification = 4.0;
+        _minMagnification = 0.25;
+
         _verticalLineScroll = 10.0; // the default value in IB is 10
         _verticalPageScroll = 10.0;
         _horizontalLineScroll = 10.0;
@@ -422,6 +427,10 @@ static Class _rulerViewClass = nil;
     _drawsBackground = YES;
     _borderType = NSNoBorder;
     _backgroundColor = [[NSColor controlBackgroundColor] copy];
+    _allowsMagnification = NO;
+    _magnification = 1.0;
+    _maxMagnification = 4.0;
+    _minMagnification = 0.25;
 
     [self setLineScroll: 1.0];
     [self setPageScroll: 10.0]; // entirely arbitrary
@@ -652,7 +661,7 @@ static Class _rulerViewClass = nil;
 
 - (BOOL) allowsMagnification {
     return _allowsMagnification;
-}
+};
 
 - (void) setDocumentView: (NSView *) view {
     [_clipView setDocumentView: view];
@@ -819,36 +828,28 @@ static Class _rulerViewClass = nil;
     // FIXME: tile or hide/show scrollers?
 }
 
-- (void) setMagnification: (CGFloat) value {
-    if (value == _magnification)
-        return;
-
-    _magnification = value;
-
-    if (_magnification < _minMagnification)
-        _magnification = _minMagnification;
-    if (_magnification < _maxMagnification)
-        _magnification = _maxMagnification;
-
-    // TODO: calculate new bounds and call setBounds
-}
-
-- (void) setMinMagnification: (CGFloat) value {
-    _minMagnification = value;
-
-    if (_minMagnification > _magnification)
-        [self setMagnification: value];
+- (void) allowsMagnification: (BOOL) value {
+    _allowsMagnification = value;
 }
 
 - (void) setMaxMagnification: (CGFloat) value {
-    _maxMagnification = value;
-
-    if (_maxMagnification < _magnification)
-        [self setMagnification: value];
+    if (value >= _minMagnification) {
+        _maxMagnification = value;
+    } else {
+        [NSException raise: NSInvalidArgumentException
+                    format: @"maxMagnification (%.3f) must be greater than or equal to minMagnification (%.3f).",
+                            value, _minMagnification];
+    }
 }
 
-- (void) setAllowsMagnification: (BOOL) value {
-    _allowsMagnification = value;
+- (void) setMinMagnification: (CGFloat) value {
+    if (value <= _maxMagnification) {
+        _minMagnification = value;
+    } else {
+        [NSException raise: NSInvalidArgumentException
+                    format: @"minMagnification (%.3f) must be less than or equal to maxMagnification (%.3f).",
+                            value, _maxMagnification];
+    }
 }
 
 - (void) tile {
@@ -1075,6 +1076,38 @@ static Class _rulerViewClass = nil;
         [self _verticalScroll: _verticalScroller];
     if ([self hasHorizontalScroller])
         [self _horizontalScroll: _horizontalScroller];
+}
+
+- (void) setMagnification:(CGFloat) magnification 
+         centeredAtPoint:(NSPoint) point {
+    // scale the content view centered at the given point
+    NSRect frame = [_clipView frame];
+    NSSize scaledSize = NSMakeSize(frame.size.width*magnification, frame.size.height*magnification);
+    NSPoint centeredOrigin = NSMakePoint(point.x - (scaledSize.width/2), point.y - (scaledSize.height/2));
+    [_clipView setFrame:NSMakeRect(centeredOrigin.x, centeredOrigin.y, scaledSize.width, scaledSize.height)];
+
+    // clip the resulting magnification value to min and max magnification
+    magnification = MAX(_minMagnification, magnification);
+    magnification = MIN(_maxMagnification, magnification);
+
+    _magnification = magnification;
+}
+
+- (void) magnifyToFitRect: (NSRect) rect {
+    if (_allowsMagnification) {
+        // find magnification value needed to scale the content view to the given rectangle without morphing
+        CGFloat widthMagnification = NSWidth(_clipView.bounds) / NSWidth(rect);
+        CGFloat heightMagnification = NSHeight(_clipView.bounds) / NSHeight(rect);
+        CGFloat magnification = MIN(widthMagnification, heightMagnification);
+
+        // The resulting magnification value is clipped to the min/max magnification
+        magnification = MAX(_minMagnification, magnification);
+        magnification = MIN(_maxMagnification, magnification);
+
+        (NSPoint) point = NSMakePoint(NSMidX(rect), NSMidY(rect));
+
+        [_clipView setMagnification:magnification centeredAtPoint:point];
+    }
 }
 
 @end
