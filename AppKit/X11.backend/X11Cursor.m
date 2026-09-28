@@ -154,17 +154,21 @@ static int X11CursorScaledSize(int nominalSize, CGFloat scale) {
 
     static const char data[1] = {0};
 
-    Pixmap blank;
-    XColor dummy;
+    // A 1x1 pixmap with a garbage XColor would still draw, but the undefined contents
+    // leak into the server as the cursor's fore/background colours.
+    XColor dummy = {0, 0, 0, 0, 0, 0};
 
-    blank = XCreateBitmapFromData(display, DefaultRootWindow(display), data, 1,
-                                  1);
+    Pixmap blank = XCreateBitmapFromData(display, DefaultRootWindow(display), data, 1,
+                                         1);
     if (blank != None) {
-        _cursor = XCreatePixmapCursor(display, blank, blank, &dummy, &dummy, 0,
-                                      0);
+        _cursor = XCreatePixmapCursor(display, blank, blank, &dummy, &dummy, 0, 0);
         XFreePixmap(display, blank);
-    } else
-        _cursor = None;
+    }
+
+    // None means "inherit the parent's cursor" to XDefineCursor, not "no cursor", so
+    // leaving it None on failure would show an arbitrary cursor instead of hiding one.
+    if (_cursor == None)
+        return [self initWithName: "left_ptr"];
 
     return self;
 }
