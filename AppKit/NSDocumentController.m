@@ -28,6 +28,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSWindowController.h>
 #import <objc/runtime.h>
 
+// UTType, when the application has loaded UniformTypeIdentifiers.
+@interface NSObject (NSDocumentControllerContentTypes)
++ (id) typeWithIdentifier: (NSString *) identifier;
++ (id) typeWithFilenameExtension: (NSString *) extension;
+- (NSString *) identifier;
+- (NSString *) preferredFilenameExtension;
+@end
+
 @interface _NSUnsupportedDocument : NSObject
 
 - (instancetype) initWithType: (NSString *) type error: (NSError **) error;
@@ -216,6 +224,20 @@ static NSDocumentController *shared = nil;
                 return [fileType objectForKey: @"CFBundleTypeName"];
         }
 
+    // Modern bundles may declare only LSItemContentTypes. Keep explicit
+    // extensions (including the legacy wildcard) ahead of registry lookup.
+    if ([extension length] == 0)
+        return nil;
+    Class contentType = NSClassFromString(@"UTType");
+    if (![contentType respondsToSelector: @selector(typeWithFilenameExtension:)])
+        return nil;
+    NSString *identifier = [[contentType typeWithFilenameExtension: extension] identifier];
+    if (identifier != nil) {
+        for (NSDictionary *fileType in _fileTypes) {
+            if ([[fileType objectForKey: @"LSItemContentTypes"] containsObject: identifier])
+                return [fileType objectForKey: @"CFBundleTypeName"];
+        }
+    }
     return nil;
 }
 
