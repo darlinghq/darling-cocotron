@@ -461,7 +461,14 @@ BOOL itemIsEnabled(NSMenuItem *item) {
 
         if ((modifiers & keyModifiers) == itemModifiers) {
 
-            if ([key isEqualToString: characters]) {
+            // Explicit Shift on a lowercase equivalent also accepts its
+            // uppercase event spelling. Keep the exact match for backends
+            // that report an unshifted charactersIgnoringModifiers value.
+            BOOL matches = [key isEqualToString: characters];
+            if (!matches && (itemModifiers & NSShiftKeyMask) &&
+                    [key isEqualToString: [key lowercaseString]])
+                matches = [[key uppercaseString] isEqualToString: characters];
+            if (matches) {
                 /* This *must* accurately reflect menu validation when ignoring
                    or processing key equivalents. Relying on update to keep
                    isEnabled in the proper state is unfortunately too tenuous.
