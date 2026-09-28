@@ -210,11 +210,18 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (void) setSelectedSegment: (NSInteger) segment {
+    // -1 clears selection. Reject other invalid indices before changing either
+    // the item flags or the cached selected segment.
+    if (segment != -1 && (segment < 0 || (NSUInteger) segment >= [_segments count]))
+        [NSException raise: NSRangeException
+                    format: @"Segment index %ld is out of bounds", (long) segment];
+
     for (NSSegmentItem *item in _segments)
         [item setSelected: NO];
 
     _selectedSegment = segment;
-    [[_segments objectAtIndex: segment] setSelected: YES];
+    if (segment != -1)
+        [[_segments objectAtIndex: segment] setSelected: YES];
 }
 
 - (void) makeNextSegmentKey {
