@@ -358,6 +358,7 @@ typedef NS_OPTIONS(NSUInteger, NSEventPhase) {
 - (NSInteger) windowNumber;
 
 @property (readonly) NSInteger clickCount;
+@property (readonly) NSInteger eventNumber;
 - (CGFloat) deltaX;
 - (CGFloat) deltaY;
 - (CGFloat) deltaZ;

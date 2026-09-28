@@ -27,6 +27,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     NSInteger _trackingNumber;
     void *_userData;
     NSInteger _buttonNumber;
+    NSInteger _eventNumber;
 }
 
 - (instancetype) initWithType: (NSEventType) type

@@ -273,6 +273,10 @@ static BOOL _mouseCoalescingEnabled = YES;
     return 0;
 }
 
+- (NSInteger) eventNumber {
+    return 0;
+}
+
 - (CGFloat) deltaX {
     return 0;
 }
