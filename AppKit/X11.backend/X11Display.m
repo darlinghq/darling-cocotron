@@ -1126,6 +1126,13 @@ static NSInteger cocoaButtonNumber(unsigned int xButton) {
     return result;
 }
 
+// Xlib names only the first five buttons. 6 and 7 are conventionally the
+// horizontal wheel, to the left and to the right.
+enum {
+    HorizontalScrollLeftButton = 6,
+    HorizontalScrollRightButton = 7,
+};
+
 - (void) postXEvent: (XEvent *) ev {
     id event = nil;
     NSEventType type;
@@ -1247,7 +1254,19 @@ static NSInteger cocoaButtonNumber(unsigned int xButton) {
         // the button is held) then cannot swallow the scroll, and the press
         // has already been accepted by the server when we get it. A notch is
         // not a click, so it must not touch the click count either.
-        if (ev->xbutton.button >= Button4 && ev->xbutton.button <= Button5) {
+        if (ev->xbutton.button >= Button4 &&
+            ev->xbutton.button <= HorizontalScrollRightButton) {
+            // Buttons 4 and 5 are the vertical wheel, 6 and 7 the horizontal
+            // one. -[NSView scrollWheel:] adds the delta to the document view's
+            // bounds origin, so a positive delta scrolls towards the larger
+            // coordinate on both axes: the up and right buttons are positive.
+            CGFloat deltaX = 0.0, deltaY = 0.0;
+            switch (ev->xbutton.button) {
+            case Button4: deltaY = 1.0; break;
+            case Button5: deltaY = -1.0; break;
+            case HorizontalScrollLeftButton: deltaX = -1.0; break;
+            case HorizontalScrollRightButton: deltaX = 1.0; break;
+            }
             event = [NSEvent
                     mouseEventWithType: NSScrollWheel
                               location: pos
@@ -1255,8 +1274,8 @@ static NSInteger cocoaButtonNumber(unsigned int xButton) {
                                                                              .state]
                                window: delegate
                            clickCount: 0
-                               deltaX: 0.0
-                               deltaY: ev->xbutton.button == Button4 ? 1.0 : -1.0];
+                               deltaX: deltaX
+                               deltaY: deltaY];
             [self postEvent: event atStart: NO];
             break;
         }
@@ -1292,7 +1311,8 @@ static NSInteger cocoaButtonNumber(unsigned int xButton) {
 
     case ButtonRelease:;
         // The wheel's other half of the pair; the press already scrolled.
-        if (ev->xbutton.button >= Button4 && ev->xbutton.button <= Button5)
+        if (ev->xbutton.button >= Button4 &&
+            ev->xbutton.button <= HorizontalScrollRightButton)
             break;
 
         pos = [window
