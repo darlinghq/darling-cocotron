@@ -208,7 +208,7 @@ NSString *const _NSWindowsMenuName = @"Window";
 }
 
 - (NSArray *) itemArray {
-    return _itemArray;
+    return [NSArray arrayWithArray: _itemArray];
 }
 
 - (void) _setItemArray: itemArray {
