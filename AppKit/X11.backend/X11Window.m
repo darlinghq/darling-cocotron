@@ -280,22 +280,29 @@ static NSData *makeWindowIcon() {
     return _styleMask;
 }
 
+// The mask is passed in rather than read from _styleMask because
+// -setStyleMask: hands the new mask here before it stores it. The hinted size is
+// _frame's, so a caller that just resized has to re-issue these.
+- (void) updateSizeHints: (NSUInteger) mask {
+    XSizeHints *sh = XAllocSizeHints();
+    if (mask & NSWindowStyleMaskResizable) {
+        // Make resizable
+        sh->flags = 0;
+    } else {
+        // Make non-resizable
+        sh->flags = PMinSize | PMaxSize;
+        sh->min_width = sh->max_width = _frame.size.width;
+        sh->min_height = sh->max_height = _frame.size.height;
+    }
+
+    XSetWMSizeHints(_display, _window, sh, XA_WM_NORMAL_HINTS);
+    XFree(sh);
+}
+
 - (void) setStyleMaskInternal: (NSUInteger) mask force: (BOOL) force {
     if (force || (mask & NSWindowStyleMaskResizable) !=
                          (_styleMask & NSWindowStyleMaskResizable)) {
-        XSizeHints *sh = XAllocSizeHints();
-        if (mask & NSWindowStyleMaskResizable) {
-            // Make resizable
-            sh->flags = 0;
-        } else {
-            // Make non-resizable
-            sh->flags = PMinSize | PMaxSize;
-            sh->min_width = sh->max_width = _frame.size.width;
-            sh->min_height = sh->max_height = _frame.size.height;
-        }
-
-        XSetWMSizeHints(_display, _window, sh, XA_WM_NORMAL_HINTS);
-        XFree(sh);
+        [self updateSizeHints: mask];
     }
 
     if (!_mapped) {
@@ -476,10 +483,16 @@ static NSData *makeWindowIcon() {
 
 - (void) setFrame: (O2Rect) frame {
     frame = [self transformFrame: frame];
+    NSSize previousSize = _frame.size;
     XMoveResizeWindow(_display, _window, frame.origin.x, frame.origin.y,
                       frame.size.width, frame.size.height);
     [self invalidateContextWithNewSize: frame.size];
     _frame = frame;
+    // A non-resizable window hints PMinSize == PMaxSize, and a window manager
+    // refuses any resize that falls outside the pair, so the hints have to follow
+    // the size. Only on a real change so a drag does not re-issue them per pixel.
+    if (!NSEqualSizes(previousSize, frame.size))
+        [self updateSizeHints: _styleMask];
 }
 
 - (void) setHasShadow: (BOOL) value {
