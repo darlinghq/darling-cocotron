@@ -40,6 +40,26 @@ static int X11CursorScaledSize(int nominalSize, CGFloat scale) {
     return (int) requested;
 }
 
+// Cocoa cursor names have no single X11 spelling. "hand" is the pre-Xcursor name that
+// current themes no longer ship (Adwaita and Breeze call it "pointer" and "grabbing"),
+// so asking for "hand" alone falls through to the arrow. Try the theme's spelling
+// before giving up.
+static const char *X11CursorAliasesFor(const char *name)
+{
+    static const struct { const char *cocoa, *theme; } aliases[] = {
+        { "hand",   "pointer"   },
+        { "hand2",  "grabbing"  },
+        { "hand3",  "grabbing"  },
+        { "xterm",  "text"      },
+        { "fleur",  "grab"      },
+    };
+    for (size_t i = 0; i < sizeof(aliases) / sizeof(*aliases); i++) {
+        if (strcmp(name, aliases[i].cocoa) == 0)
+            return aliases[i].theme;
+    }
+    return NULL;
+}
+
 - (id) initWithName: (const char *) name {
     X11Display *d = (X11Display *) [NSDisplay currentDisplay];
     Display *display = [d display];
@@ -69,6 +89,11 @@ static int X11CursorScaledSize(int nominalSize, CGFloat scale) {
 
     if (_cursor == None)
         _cursor = XcursorLibraryLoadCursor(display, name);
+
+    // The theme may not know the legacy spelling; retry with the name it does ship.
+    const char *alias = _cursor == None ? X11CursorAliasesFor(name) : NULL;
+    if (alias != NULL)
+        _cursor = XcursorLibraryLoadCursor(display, alias);
 
     if (_cursor == None)
         _cursor = XcursorLibraryLoadCursor(display, "left_ptr");
