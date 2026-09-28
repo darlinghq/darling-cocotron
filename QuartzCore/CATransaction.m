@@ -80,7 +80,7 @@ static CATransactionGroup *createImplicitTransactionGroupIfNeeded() {
 }
 
 + (void) setAnimationTimingFunction: (CAMediaTimingFunction *) value {
-    [self setValue: value forKey: kCATransactionAnimationDuration];
+    [self setValue: value forKey: kCATransactionAnimationTimingFunction];
 }
 
 //+(void)setCompletionBlock:(void (^)(void))value;

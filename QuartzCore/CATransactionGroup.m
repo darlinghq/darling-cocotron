@@ -21,7 +21,10 @@
 }
 
 - (void) setValue: value forKey: (NSString *) key {
-    [_values setObject: value forKey: key];
+    if (value == nil)
+        [_values removeObjectForKey: key];
+    else
+        [_values setObject: value forKey: key];
 }
 
 @end
