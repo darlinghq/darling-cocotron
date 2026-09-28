@@ -14,14 +14,14 @@ static CFRange normalizedRange(CTRunRef run, CFRange range)
 
 CFTypeID CTRunGetTypeID(void)
 {
-    return CFDictionaryGetTypeID();
+    return KTCoreTextRunGetTypeID();
 }
 
 CFIndex CTRunGetGlyphCount(CTRunRef run)
 {
     if (run == NULL)
         return 0;
-    return KTCoreTextDictionaryGetIndex((CFDictionaryRef)run,
+    return KTCoreTextDictionaryGetIndex(KTCoreTextObjectDictionary(run),
                                          KTRunGlyphCountKey);
 }
 
@@ -29,7 +29,7 @@ CFDictionaryRef CTRunGetAttributes(CTRunRef run)
 {
     if (run == NULL)
         return NULL;
-    return CFDictionaryGetValue((CFDictionaryRef)run, KTRunAttributesKey);
+    return CFDictionaryGetValue(KTCoreTextObjectDictionary(run), KTRunAttributesKey);
 }
 
 CTRunStatus CTRunGetStatus(CTRunRef run)
@@ -41,7 +41,7 @@ const CGGlyph *CTRunGetGlyphsPtr(CTRunRef run)
 {
     if (run == NULL)
         return NULL;
-    CFDataRef data = CFDictionaryGetValue((CFDictionaryRef)run,
+    CFDataRef data = CFDictionaryGetValue(KTCoreTextObjectDictionary(run),
                                           KTRunGlyphsKey);
     return (const CGGlyph *)CFDataGetBytePtr(data);
 }
@@ -61,7 +61,7 @@ const CGPoint *CTRunGetPositionsPtr(CTRunRef run)
 {
     if (run == NULL)
         return NULL;
-    CFDataRef data = CFDictionaryGetValue((CFDictionaryRef)run,
+    CFDataRef data = CFDictionaryGetValue(KTCoreTextObjectDictionary(run),
                                           KTRunPositionsKey);
     return (const CGPoint *)CFDataGetBytePtr(data);
 }
@@ -81,7 +81,7 @@ const CGSize *CTRunGetAdvancesPtr(CTRunRef run)
 {
     if (run == NULL)
         return NULL;
-    CFDataRef data = CFDictionaryGetValue((CFDictionaryRef)run,
+    CFDataRef data = CFDictionaryGetValue(KTCoreTextObjectDictionary(run),
                                           KTRunAdvancesKey);
     return (const CGSize *)CFDataGetBytePtr(data);
 }
@@ -101,7 +101,7 @@ const CFIndex *CTRunGetStringIndicesPtr(CTRunRef run)
 {
     if (run == NULL)
         return NULL;
-    CFDataRef data = CFDictionaryGetValue((CFDictionaryRef)run,
+    CFDataRef data = CFDictionaryGetValue(KTCoreTextObjectDictionary(run),
                                           KTRunIndicesKey);
     return (const CFIndex *)CFDataGetBytePtr(data);
 }
@@ -121,7 +121,7 @@ CFRange CTRunGetStringRange(CTRunRef run)
 {
     if (run == NULL)
         return CFRangeMake(kCFNotFound, 0);
-    CFDictionaryRef dictionary = (CFDictionaryRef)run;
+    CFDictionaryRef dictionary = KTCoreTextObjectDictionary(run);
     return CFRangeMake(KTCoreTextDictionaryGetIndex(
                                dictionary, KTRunRangeLocationKey),
                        KTCoreTextDictionaryGetIndex(
@@ -133,7 +133,7 @@ double CTRunGetTypographicBounds(CTRunRef run, CFRange range, CGFloat *ascent,
 {
     if (run == NULL)
         return 0;
-    CFDictionaryRef dictionary = (CFDictionaryRef)run;
+    CFDictionaryRef dictionary = KTCoreTextObjectDictionary(run);
     if (ascent != NULL)
         *ascent = KTCoreTextDictionaryGetFloat(dictionary, KTRunAscentKey);
     if (descent != NULL)

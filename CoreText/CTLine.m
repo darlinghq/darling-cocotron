@@ -2,6 +2,52 @@
 #import <CoreText/CTRun.h>
 #import "KTCoreTextInternal.h"
 #include <stdlib.h>
+#include <CoreFoundation/CFRuntime.h>
+#include <pthread.h>
+
+struct KTCoreTextObject {
+    CFRuntimeBase base;
+    CFDictionaryRef storage;
+};
+
+static void finalizeCoreTextObject(CFTypeRef value) {
+    const struct KTCoreTextObject *object = value;
+    if (object->storage != NULL)
+        CFRelease(object->storage);
+}
+
+static const CFRuntimeClass lineClass = {
+    0, "CTLine", NULL, NULL, finalizeCoreTextObject, NULL, NULL, NULL, NULL,
+};
+static const CFRuntimeClass runClass = {
+    0, "CTRun", NULL, NULL, finalizeCoreTextObject, NULL, NULL, NULL, NULL,
+};
+static CFTypeID lineTypeID, runTypeID;
+static pthread_once_t registerObjectsOnce = PTHREAD_ONCE_INIT;
+
+static void registerCoreTextObjects(void) {
+    lineTypeID = _CFRuntimeRegisterClass(&lineClass);
+    runTypeID = _CFRuntimeRegisterClass(&runClass);
+}
+
+CFTypeID KTCoreTextRunGetTypeID(void) {
+    pthread_once(&registerObjectsOnce, registerCoreTextObjects);
+    return runTypeID;
+}
+
+CFDictionaryRef KTCoreTextObjectDictionary(CFTypeRef value) {
+    return value == NULL ? NULL : ((const struct KTCoreTextObject *)value)->storage;
+}
+
+static CFTypeRef createCoreTextObject(CFTypeID type, CFDictionaryRef storage) {
+    struct KTCoreTextObject *object = (struct KTCoreTextObject *)
+            _CFRuntimeCreateInstance(kCFAllocatorDefault, type,
+                    sizeof(*object) - sizeof(CFRuntimeBase), NULL);
+    if (object == NULL)
+        return NULL;
+    object->storage = CFRetain(storage);
+    return object;
+}
 
 const CFStringRef KTLineAttributedStringKey = CFSTR("KTLineAttributedString");
 const CFStringRef KTLineRunsKey = CFSTR("KTLineRuns");
@@ -343,7 +389,13 @@ static void appendRun(CFMutableArrayRef runs, CFDictionaryRef run,
 {
     if (run == NULL)
         return;
-    CFArrayAppendValue(runs, run);
+    CFTypeRef object = createCoreTextObject(KTCoreTextRunGetTypeID(), run);
+    if (object == NULL) {
+        CFRelease(run);
+        return;
+    }
+    CFArrayAppendValue(runs, object);
+    CFRelease(object);
     *ascent = MAX(*ascent, KTCoreTextDictionaryGetFloat(run,
                                                         KTRunAscentKey));
     *descent = MAX(*descent, KTCoreTextDictionaryGetFloat(run,
@@ -355,7 +407,8 @@ static void appendRun(CFMutableArrayRef runs, CFDictionaryRef run,
 
 CFTypeID CTLineGetTypeID(void)
 {
-    return CFDictionaryGetTypeID();
+    pthread_once(&registerObjectsOnce, registerCoreTextObjects);
+    return lineTypeID;
 }
 
 CTLineRef CTLineCreateWithAttributedString(CFAttributedStringRef attrString)
@@ -423,7 +476,9 @@ CTLineRef CTLineCreateWithAttributedString(CFAttributedStringRef attrString)
     KTCoreTextDictionarySetFloat(line, KTLineLeadingKey, leading);
     CFRelease(copy);
     CFRelease(runs);
-    return (CTLineRef)line;
+    CTLineRef result = (CTLineRef)createCoreTextObject(CTLineGetTypeID(), line);
+    CFRelease(line);
+    return result;
 }
 
 CTLineRef CTLineCreateTruncatedLine(CTLineRef line, double width,
@@ -444,7 +499,7 @@ CFIndex CTLineGetGlyphCount(CTLineRef line)
 {
     if (line == NULL)
         return 0;
-    CFArrayRef runs = CFDictionaryGetValue((CFDictionaryRef)line,
+    CFArrayRef runs = CFDictionaryGetValue(KTCoreTextObjectDictionary(line),
                                            KTLineRunsKey);
     CFIndex count = 0;
     for (CFIndex index = 0; index < CFArrayGetCount(runs); ++index)
@@ -457,7 +512,7 @@ CFArrayRef CTLineGetGlyphRuns(CTLineRef line)
 {
     if (line == NULL)
         return NULL;
-    return CFDictionaryGetValue((CFDictionaryRef)line, KTLineRunsKey);
+    return CFDictionaryGetValue(KTCoreTextObjectDictionary(line), KTLineRunsKey);
 }
 
 CFRange CTLineGetStringRange(CTLineRef line)
@@ -465,7 +520,7 @@ CFRange CTLineGetStringRange(CTLineRef line)
     if (line == NULL)
         return CFRangeMake(kCFNotFound, 0);
     CFAttributedStringRef string = CFDictionaryGetValue(
-            (CFDictionaryRef)line, KTLineAttributedStringKey);
+            KTCoreTextObjectDictionary(line), KTLineAttributedStringKey);
     return CFRangeMake(0, CFAttributedStringGetLength(string));
 }
 
@@ -474,7 +529,7 @@ double CTLineGetPenOffsetForFlush(CTLineRef line, CGFloat flushFactor,
 {
     if (line == NULL)
         return 0;
-    CGFloat width = KTCoreTextDictionaryGetFloat((CFDictionaryRef)line,
+    CGFloat width = KTCoreTextDictionaryGetFloat(KTCoreTextObjectDictionary(line),
                                                   KTLineWidthKey);
     return (flushWidth - width) * flushFactor;
 }
@@ -494,7 +549,7 @@ double CTLineGetTypographicBounds(CTLineRef line, CGFloat *ascent,
 {
     if (line == NULL)
         return 0;
-    CFDictionaryRef dictionary = (CFDictionaryRef)line;
+    CFDictionaryRef dictionary = KTCoreTextObjectDictionary(line);
     if (ascent != NULL)
         *ascent = KTCoreTextDictionaryGetFloat(dictionary, KTLineAscentKey);
     if (descent != NULL)
@@ -561,6 +616,6 @@ CGFloat CTLineGetOffsetForStringIndex(CTLineRef line, CFIndex charIndex,
                 return positions[index].x;
         }
     }
-    return KTCoreTextDictionaryGetFloat((CFDictionaryRef)line,
+    return KTCoreTextDictionaryGetFloat(KTCoreTextObjectDictionary(line),
                                          KTLineWidthKey);
 }

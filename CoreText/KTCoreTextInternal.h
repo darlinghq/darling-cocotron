@@ -2,6 +2,9 @@
 #import <CoreText/CTLine.h>
 #import <CoreText/CTRun.h>
 
+CFTypeID KTCoreTextRunGetTypeID(void);
+CFDictionaryRef KTCoreTextObjectDictionary(CFTypeRef object);
+
 extern const CFStringRef kCTFontAttributeName;
 
 extern const CFStringRef KTLineAttributedStringKey;
