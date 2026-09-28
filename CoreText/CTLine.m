@@ -384,15 +384,15 @@ static CFDictionaryRef createClusterRun(
     return run;
 }
 
-static void appendRun(CFMutableArrayRef runs, CFDictionaryRef run,
+static bool appendRun(CFMutableArrayRef runs, CFDictionaryRef run,
                       CGFloat *ascent, CGFloat *descent, CGFloat *leading)
 {
     if (run == NULL)
-        return;
+        return false;
     CFTypeRef object = createCoreTextObject(KTCoreTextRunGetTypeID(), run);
     if (object == NULL) {
         CFRelease(run);
-        return;
+        return false;
     }
     CFArrayAppendValue(runs, object);
     CFRelease(object);
@@ -403,6 +403,7 @@ static void appendRun(CFMutableArrayRef runs, CFDictionaryRef run,
     *leading = MAX(*leading, KTCoreTextDictionaryGetFloat(run,
                                                           KTRunLeadingKey));
     CFRelease(run);
+    return true;
 }
 
 CFTypeID CTLineGetTypeID(void)
@@ -418,8 +419,14 @@ CTLineRef CTLineCreateWithAttributedString(CFAttributedStringRef attrString)
 
     CFAttributedStringRef copy = CFAttributedStringCreateCopy(
             kCFAllocatorDefault, attrString);
+    if (copy == NULL)
+        return NULL;
     CFMutableArrayRef runs = CFArrayCreateMutable(
             kCFAllocatorDefault, 0, &kCFTypeArrayCallBacks);
+    if (runs == NULL) {
+        CFRelease(copy);
+        return NULL;
+    }
     CFIndex length = CFAttributedStringGetLength(copy);
     CFIndex cursor = 0;
     CGFloat width = 0;
@@ -453,14 +460,16 @@ CTLineRef CTLineCreateWithAttributedString(CFAttributedStringRef attrString)
                     cluster.length = rangeEnd - cluster.location;
                 if (cluster.length <= 0)
                     break;
-                appendRun(runs, createClusterRun(copy, attributes, cluster,
+                if (!appendRun(runs, createClusterRun(copy, attributes, cluster,
                                                   font, &width),
-                          &ascent, &descent, &leading);
+                          &ascent, &descent, &leading))
+                    goto failed;
                 clusterCursor = cluster.location + cluster.length;
             }
         } else {
-            appendRun(runs, createRun(copy, range, &width), &ascent,
-                      &descent, &leading);
+            if (!appendRun(runs, createRun(copy, range, &width), &ascent,
+                      &descent, &leading))
+                goto failed;
         }
         cursor = range.location + range.length;
     }
@@ -468,6 +477,8 @@ CTLineRef CTLineCreateWithAttributedString(CFAttributedStringRef attrString)
     CFMutableDictionaryRef line = CFDictionaryCreateMutable(
             kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks,
             &kCFTypeDictionaryValueCallBacks);
+    if (line == NULL)
+        goto failed;
     CFDictionarySetValue(line, KTLineAttributedStringKey, copy);
     CFDictionarySetValue(line, KTLineRunsKey, runs);
     KTCoreTextDictionarySetFloat(line, KTLineWidthKey, width);
@@ -479,6 +490,11 @@ CTLineRef CTLineCreateWithAttributedString(CFAttributedStringRef attrString)
     CTLineRef result = (CTLineRef)createCoreTextObject(CTLineGetTypeID(), line);
     CFRelease(line);
     return result;
+
+failed:
+    CFRelease(copy);
+    CFRelease(runs);
+    return NULL;
 }
 
 CTLineRef CTLineCreateTruncatedLine(CTLineRef line, double width,
