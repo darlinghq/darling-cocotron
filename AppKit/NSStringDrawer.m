@@ -306,6 +306,27 @@ const CGFloat NSStringDrawerLargeDimension = 1000000.;
 
 @end
 
+// Shrink candidate ranges inward rather than cutting a surrogate pair or a
+// composed character at the ellipsis boundary. Preserve the original attributes.
+static NSAttributedString *titleSubstring(NSAttributedString *string,
+                                          NSRange range) {
+    NSString *text = [string string];
+    NSUInteger start = range.location;
+    NSUInteger end = NSMaxRange(range);
+    if (start < [text length]) {
+        NSRange cluster = [text rangeOfComposedCharacterSequenceAtIndex: start];
+        if (cluster.location < start)
+            start = NSMaxRange(cluster);
+    }
+    if (end < [text length]) {
+        NSRange cluster = [text rangeOfComposedCharacterSequenceAtIndex: end];
+        if (cluster.location < end)
+            end = cluster.location;
+    }
+    return [string attributedSubstringFromRange:
+            NSMakeRange(start, end > start ? end - start : 0)];
+}
+
 @implementation NSAttributedString (NSStringDrawer)
 
 // Draw self in the rect, clipped - add ellipsis if needed
@@ -362,8 +383,7 @@ const CGFloat NSStringDrawerLargeDimension = 1000000.;
             case NSLineBreakByTruncatingHead: {
                 while (left + 1 < right) {
                     mid = (left + right) / 2;
-                    NSAttributedString *clippedTitle = [string attributedSubstringFromRange:
-                        NSMakeRange([string length] - mid, mid)];
+                    NSAttributedString *clippedTitle = titleSubstring(string, NSMakeRange([string length] - mid, mid));
                     tmpString = [[[NSMutableAttributedString alloc]
                         initWithAttributedString:ellipsis] autorelease];
                     [tmpString appendAttributedString:clippedTitle];
@@ -378,8 +398,7 @@ const CGFloat NSStringDrawerLargeDimension = 1000000.;
                 }
                 tmpString = [[[NSMutableAttributedString alloc]
                     initWithAttributedString:ellipsis] autorelease];
-                [tmpString appendAttributedString:[string attributedSubstringFromRange:
-                    NSMakeRange([string length] - left, left)]];
+                [tmpString appendAttributedString:titleSubstring(string, NSMakeRange([string length] - left, left))];
                 break;
             }
 
@@ -388,10 +407,8 @@ const CGFloat NSStringDrawerLargeDimension = 1000000.;
                     mid = (left + right) / 2;
                     NSInteger prefixLength = (mid + 1) / 2;
                     NSInteger suffixLength = mid / 2;
-                    NSAttributedString *clippedTitle = [string attributedSubstringFromRange:
-                        NSMakeRange(0, prefixLength)];
-                    NSAttributedString *clippedTail = [string attributedSubstringFromRange:
-                        NSMakeRange([string length] - suffixLength, suffixLength)];
+                    NSAttributedString *clippedTitle = titleSubstring(string, NSMakeRange(0, prefixLength));
+                    NSAttributedString *clippedTail = titleSubstring(string, NSMakeRange([string length] - suffixLength, suffixLength));
 
                     tmpString = [[[NSMutableAttributedString alloc]
                         initWithAttributedString:clippedTitle] autorelease];
@@ -408,10 +425,8 @@ const CGFloat NSStringDrawerLargeDimension = 1000000.;
                 }
                 NSInteger prefixLength = (left + 1) / 2;
                 NSInteger suffixLength = left / 2;
-                NSAttributedString *clippedTitle = [string attributedSubstringFromRange:
-                    NSMakeRange(0, prefixLength)];
-                NSAttributedString *clippedTail = [string attributedSubstringFromRange:
-                    NSMakeRange([string length] - suffixLength, suffixLength)];
+                NSAttributedString *clippedTitle = titleSubstring(string, NSMakeRange(0, prefixLength));
+                NSAttributedString *clippedTail = titleSubstring(string, NSMakeRange([string length] - suffixLength, suffixLength));
 
                 tmpString = [[[NSMutableAttributedString alloc]
                     initWithAttributedString:clippedTitle] autorelease];
@@ -423,8 +438,7 @@ const CGFloat NSStringDrawerLargeDimension = 1000000.;
             case NSLineBreakByTruncatingTail: {
                 while (left + 1 < right) {
                     mid = (left + right) / 2;
-                    NSAttributedString *clippedTitle = [string attributedSubstringFromRange:
-                        NSMakeRange(0, mid)];
+                    NSAttributedString *clippedTitle = titleSubstring(string, NSMakeRange(0, mid));
                     tmpString = [[[NSMutableAttributedString alloc]
                         initWithAttributedString:clippedTitle] autorelease];
                     [tmpString appendAttributedString:ellipsis];
@@ -437,8 +451,7 @@ const CGFloat NSStringDrawerLargeDimension = 1000000.;
                         left = mid;
                     }
                 }
-                NSAttributedString *clippedTitle = [string attributedSubstringFromRange:
-                    NSMakeRange(0, left)];
+                NSAttributedString *clippedTitle = titleSubstring(string, NSMakeRange(0, left));
                 tmpString = [[[NSMutableAttributedString alloc]
                     initWithAttributedString:clippedTitle] autorelease];
                 [tmpString appendAttributedString:ellipsis];
