@@ -336,6 +336,7 @@ set(AppKit_sources
 	NSLevelIndicator.m
 	NSDraggingManager.m
 	NSImage.m
+	NSImageDrawingCache.m
 	NSNextStepFrame.m
 	NSPreviewRepresentingActivityItem.m
 

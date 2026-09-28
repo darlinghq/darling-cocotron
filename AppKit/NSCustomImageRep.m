@@ -19,8 +19,52 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 // Original - Christopher Lloyd <cjwl@objc.net>
 #import <AppKit/NSCustomImageRep.h>
+#import <AppKit/NSGraphicsContext.h>
+#import <AppKit/NSView.h>
+
+@interface NSCustomImageRepFocusView : NSView {
+    BOOL _handlerFlipped;
+}
+- (instancetype) initWithFlipped: (BOOL) flipped;
+@end
+
+@implementation NSCustomImageRepFocusView
+- (instancetype) initWithFlipped: (BOOL) flipped {
+    if ((self = [super initWithFrame: NSZeroRect]))
+        _handlerFlipped = flipped;
+    return self;
+}
+- (BOOL) isFlipped { return _handlerFlipped; }
+@end
 
 @implementation NSCustomImageRep
+
+- (instancetype) initWithSize: (NSSize) size
+                     flipped: (BOOL) flipped
+              drawingHandler: (BOOL (^)(NSRect)) handler {
+    if ((self = [super init])) {
+        [self setSize: size];
+        _drawingHandler = [handler copy];
+        _drawingHandlerFlipped = flipped;
+    }
+    return self;
+}
+
+- (BOOL (^)(NSRect)) drawingHandler {
+    return _drawingHandler;
+}
+
+- (id) copyWithZone: (NSZone *) zone {
+    NSCustomImageRep *result = [super copyWithZone: zone];
+    // NSImageRep uses NSCopyObject; balance this subclass's copied pointer.
+    result->_drawingHandler = [_drawingHandler copy];
+    return result;
+}
+
+- (void) dealloc {
+    [_drawingHandler release];
+    [super dealloc];
+}
 
 - initWithDrawSelector: (SEL) selector delegate: delegate {
     _drawSelector = selector;
@@ -37,6 +81,27 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (BOOL) draw {
+    if (_drawingHandler != nil) {
+        NSGraphicsContext *context = [NSGraphicsContext currentContext];
+        if (context == nil)
+            return NO;
+        NSSize size = [self size];
+        BOOL flip = [context isFlipped] != _drawingHandlerFlipped;
+        NSCustomImageRepFocusView *focus = [[[NSCustomImageRepFocusView alloc]
+                initWithFlipped: _drawingHandlerFlipped] autorelease];
+        [NSGraphicsContext saveGraphicsState];
+        [[context focusStack] addObject: focus];
+        @try {
+            if (flip) {
+                CGContextTranslateCTM([context graphicsPort], 0, size.height);
+                CGContextScaleCTM([context graphicsPort], 1, -1);
+            }
+            return _drawingHandler(NSMakeRect(0, 0, size.width, size.height));
+        } @finally {
+            [[context focusStack] removeLastObject];
+            [NSGraphicsContext restoreGraphicsState];
+        }
+    }
     [_delegate performSelector: _drawSelector withObject: self];
     return YES;
 }
