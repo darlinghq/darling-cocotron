@@ -49,6 +49,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSTextInput.h>
 #import <AppKit/NSTextInputClient.h>
 #import <objc/runtime.h>
+#include <math.h>
 
 @class IBMetricsTable;
 
@@ -666,7 +667,20 @@ static inline void buildTransformsIfNeeded(NSView *self) {
 }
 
 - (void) scaleUnitSquareToSize: (NSSize) size {
-    NSUnimplementedMethod();
+    if (!isfinite(size.width) || !isfinite(size.height) ||
+            size.width <= 0 || size.height <= 0)
+        [NSException raise: NSInvalidArgumentException
+                    format: @"scaleUnitSquareToSize: requires positive, finite dimensions"];
+
+    if (size.width == 1.0 && size.height == 1.0)
+        return;
+
+    NSRect bounds = [self bounds];
+    bounds.origin.x /= size.width;
+    bounds.origin.y /= size.height;
+    bounds.size.width /= size.width;
+    bounds.size.height /= size.height;
+    [self setBounds: bounds];
 }
 
 - (NSWindow *) window {
