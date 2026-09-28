@@ -604,9 +604,29 @@ CFArrayRef CTFontCopyFeatureSettings(CTFontRef font)
 bool CTFontGetGlyphsForCharacters(CTFontRef font, const UniChar *characters,
                                   CGGlyph *glyphs, CFIndex count)
 {
+    if (count < 0)
+        return false;
+    if (count == 0)
+        return true;
+    if (font == NULL || characters == NULL || glyphs == NULL)
+        return false;
+
     [ktFont(font) getGlyphs: glyphs forCharacters: characters length: count];
-    // FIXME: change getGlyphs: to return a BOOL
-    return YES;
+
+    // The result says whether every character has a glyph. The low half of a
+    // surrogate pair is reported with glyph 0 (UTF-16 indexing is kept), so it
+    // is not a missing glyph.
+    bool convertedAll = true;
+    for (CFIndex i = 0; i < count; i++) {
+        bool paired = characters[i] >= 0xD800 && characters[i] <= 0xDBFF &&
+                i + 1 < count && characters[i + 1] >= 0xDC00 &&
+                characters[i + 1] <= 0xDFFF;
+        if (glyphs[i] == 0)
+            convertedAll = false;
+        if (paired)
+            i++;
+    }
+    return convertedAll;
 }
 
 void CTFontDrawGlyphs(CTFontRef font, const CGGlyph *glyphs, const CGPoint *positions,

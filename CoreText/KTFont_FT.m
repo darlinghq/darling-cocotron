@@ -112,9 +112,23 @@ static int glyphPathCubicTo(const FT_Vector *control1, const FT_Vector *control2
     @synchronized(o2Font) {
         FT_Face face = [o2Font face];
 
-        int i;
-        for (i = 0; i < length; i++) {
-            glyphs[i] = FT_Get_Char_Index(face, characters[i]);
+        for (NSUInteger i = 0; i < length; i++) {
+            uint32_t codePoint = characters[i];
+            bool paired = codePoint >= 0xD800 && codePoint <= 0xDBFF &&
+                    i + 1 < length && characters[i + 1] >= 0xDC00 &&
+                    characters[i + 1] <= 0xDFFF;
+            if (paired)
+                codePoint = 0x10000 + ((codePoint - 0xD800) << 10) +
+                        (characters[i + 1] - 0xDC00);
+
+            // Unpaired surrogates are not Unicode scalar values.
+            FT_UInt glyph = face != NULL &&
+                    !(codePoint >= 0xD800 && codePoint <= 0xDFFF)
+                    ? FT_Get_Char_Index(face, codePoint) : 0;
+            glyphs[i] = glyph <= UINT16_MAX ? (CGGlyph) glyph : 0;
+            // Preserve UTF-16 indexing: the low surrogate has no separate glyph.
+            if (paired)
+                glyphs[++i] = 0;
         }
     }
 }
