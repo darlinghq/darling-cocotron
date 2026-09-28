@@ -158,8 +158,11 @@ static NSString *X11PropertyAtomName(Display *xdpy, Atom atom) {
     NSString *name = X11PropertyAtomName(_xdpy, atom);
     if (name == nil)
         return nil;
-    // XDND type names are MIME types, and the pasteboard already knows which of
-    // them are the AppKit string type.
+    // XDND type names are MIME types. File managers publish dragged files as
+    // text/uri-list, which is the X11 spelling of NSFilenamesPboardType; the
+    // pasteboard's own mapping already covers the string types.
+    if ([name isEqualToString: @"text/uri-list"])
+        return NSFilenamesPboardType;
     return [X11Pasteboard typeForTarget: name];
 }
 

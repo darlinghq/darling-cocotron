@@ -19,6 +19,7 @@
  SOFTWARE. */
 
 #import "X11DropSession.h"
+#import "X11FileURLs.h"
 #import "X11Window.h"
 #import "X11Display.h"
 #import <AppKit/NSWindow-Drag.h>
@@ -182,10 +183,25 @@
     // must not be counted as a broken transfer.
     if (_invalidated || ![_types containsObject: type])
         return nil;
-    NSData *data = [super dataForType: type];
-    if (!data)
+    // NSFilenamesPboardType is an AppKit type with no X counterpart; file
+    // managers publish their files as text/uri-list.
+    NSData *data = [super dataForType: [type isEqual: NSFilenamesPboardType]
+                                          ? @"text/uri-list"
+                                          : type];
+    if (!data) {
         _transferFailed = YES;
-    return data;
+        return nil;
+    }
+    if (![type isEqual: NSFilenamesPboardType])
+        return data;
+    NSArray *files = X11FilenamesFromURIList(data);
+    if (!files) {
+        _transferFailed = YES;
+        return nil;
+    }
+    return [NSPropertyListSerialization dataFromPropertyList: files
+                                                     format: NSPropertyListXMLFormat_v1_0
+                                           errorDescription: NULL];
 }
 
 #pragma mark NSDraggingInfo

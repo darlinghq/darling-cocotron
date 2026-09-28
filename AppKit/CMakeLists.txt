@@ -651,6 +651,7 @@ add_backend(X11
 		X11.backend/X11KeySymToUCS.m
 		X11.backend/X11DropSession.m
 		X11.backend/X11DraggingManager.m
+		X11.backend/X11FileURLs.m
 	INFO_PLIST
 		X11.backend/Info.plist
 	DEPENDENCIES
