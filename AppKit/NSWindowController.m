@@ -177,6 +177,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         NSString *path = [self windowNibPath];
         NSDictionary *nameTable;
 
+        // A previous attempt may have decoded objects without installing a
+        // window. Balance both the NIB's ownership and the array's ownership
+        // before replacing the attempt's storage, just as dealloc does.
+        NSArray *previousObjects = _topLevelObjects;
+        _topLevelObjects = nil;
+        [previousObjects makeObjectsPerformSelector: @selector(release)];
+        [previousObjects release];
         _topLevelObjects = [[NSMutableArray alloc] init];
         nameTable = [NSDictionary
                 dictionaryWithObjectsAndKeys: _owner, NSNibOwner,
