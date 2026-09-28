@@ -107,10 +107,16 @@ static NSMutableDictionary<NSPasteboardName, X11Pasteboard *> *nameToPboard;
 }
 
 - (void) dealloc {
+    // Give up the selection first: giveUpSelectionOwner calls clearContents, which calls
+    // ensureSelectionOwner, which would re-arm the selection on _window - already destroyed
+    // by then, so the X request fails with BadWindow.
+    [self giveUpSelectionOwner];
+
     [(X11Display *) [NSDisplay currentDisplay] setWindow: nil forID: _window];
     XDestroyWindow(_display, _window);
 
     [self giveUpSelectionOwner];
+    [_remoteTypes release];
     [_name release];
     [super dealloc];
 }
