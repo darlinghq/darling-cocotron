@@ -506,14 +506,17 @@ CTLineRef CTLineCreateTruncatedLine(CTLineRef line, double width,
                                     CTLineTruncationType truncationType,
                                     CTLineRef truncationToken)
 {
-    return line == NULL ? NULL : (CTLineRef)CFRetain(line);
+    // Preserve the unimplemented result rather than pretending to truncate.
+    printf("STUB %s\n", __PRETTY_FUNCTION__);
+    return NULL;
 }
 
 CTLineRef CTLineCreateJustifiedLine(CTLineRef line,
                                     CGFloat justificationFactor,
                                     double justificationWidth)
 {
-    return line == NULL ? NULL : (CTLineRef)CFRetain(line);
+    printf("STUB %s\n", __PRETTY_FUNCTION__);
+    return NULL;
 }
 
 CFIndex CTLineGetGlyphCount(CTLineRef line)
