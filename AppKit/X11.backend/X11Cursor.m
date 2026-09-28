@@ -117,6 +117,13 @@ static const char *X11CursorAliasesFor(const char *name)
             || !(logicalWidth > 0.0) || !(logicalHeight > 0.0)
             || !isfinite(logicalWidth) || !isfinite(logicalHeight))
         return [self initWithName: "left_ptr"];
+
+    // XcursorImageCreate allocates width*height*4, and nothing else bounds it, so an
+    // image with an enormous size would ask for gigabytes. libXcursor cannot address
+    // more than 0x7FFF either: refuse before the cast and the allocation.
+    if (logicalWidth * scale > 0x7FFF || logicalHeight * scale > 0x7FFF)
+        return [self initWithName: "left_ptr"];
+
     const size_t width = (size_t) fmax(floor(logicalWidth * scale + 0.5), 1.0);
     const size_t height = (size_t) fmax(floor(logicalHeight * scale + 0.5), 1.0);
 
