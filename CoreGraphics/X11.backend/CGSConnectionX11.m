@@ -124,6 +124,13 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type, CFDataRef a
 
 -(void) dealloc
 {
+	// The windows destroy X11 windows on our display, so they have to go first.
+	// -[CGSConnection dealloc] would only release _windows after this body.
+	@synchronized (_windows)
+	{
+		[_windows removeAllObjects];
+	}
+
 	if (_display)
 		XCloseDisplay(_display);
 
@@ -482,6 +489,12 @@ static double windowOpacity(Display* display, Window window)
 	if (children != NULL)
 		XFree(children);
 	return result;
+}
+
+-(void*) nativeDisplay
+{
+	// EGLNativeDisplayType on X11 is the Display itself.
+	return _display;
 }
 
 -(CGPoint) mouseLocation
