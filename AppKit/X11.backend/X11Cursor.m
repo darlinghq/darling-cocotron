@@ -17,11 +17,58 @@
     return self;
 }
 
+// The X cursor convention: a cursor theme is authored against a nominal size, and
+// 24 is what X reports when nothing else has been asked for.
+static const int X11CursorNominalSize = 24;
+
+// Requests a cursor image of `nominalSize` logical points at the display's backing
+// scale, rounded to whole device pixels. X11 rasterises a cursor at its image's native
+// size and never scales it for a HiDPI display, so a themed 24pt arrow on a 2x screen
+// has to be *asked* for as 48px or it renders half size.
+static int X11CursorScaledSize(int nominalSize, CGFloat scale) {
+    if (nominalSize <= 0)
+        nominalSize = X11CursorNominalSize;
+    if (!(scale >= 1.0) || !isfinite(scale))
+        scale = 1.0;
+
+    double requested = round((double) nominalSize * (double) scale);
+    if (requested < 1.0)
+        return 1;
+    // XCURSOR_IMAGE_MAX_SIZE; asking for more is a corrupt scale, not a big cursor.
+    if (requested > XCURSOR_IMAGE_MAX_SIZE)
+        return XCURSOR_IMAGE_MAX_SIZE;
+    return (int) requested;
+}
+
 - (id) initWithName: (const char *) name {
     X11Display *d = (X11Display *) [NSDisplay currentDisplay];
     Display *display = [d display];
 
-    _cursor = XcursorLibraryLoadCursor(display, name);
+    // Ask the theme for an image at the scaled size and let libXcursor scale the hot
+    // spot with it, so the cursor stays sharp rather than being one image stretched.
+    const int nominal = XcursorGetDefaultSize(display);
+    XcursorImages *images =
+            XcursorLibraryLoadImages(NULL, name,
+                                     X11CursorScaledSize(nominal, [d backingScale]));
+    if (images != NULL) {
+        XcursorImagesSetName(images, name);
+        _cursor = XcursorImagesLoadCursor(display, images);
+        XcursorImagesDestroy(images);
+    }
+
+    // No scaled image: a theme may only carry one size, or resolve to nothing at all.
+    // Try the nominal size before giving up on the theme-aware path.
+    if (_cursor == None) {
+        images = XcursorLibraryLoadImages(NULL, name, X11CursorScaledSize(nominal, 1.0));
+        if (images != NULL) {
+            XcursorImagesSetName(images, name);
+            _cursor = XcursorImagesLoadCursor(display, images);
+            XcursorImagesDestroy(images);
+        }
+    }
+
+    if (_cursor == None)
+        _cursor = XcursorLibraryLoadCursor(display, name);
 
     if (_cursor == None)
         _cursor = XcursorLibraryLoadCursor(display, "left_ptr");
