@@ -206,7 +206,8 @@ static NSString *filenameOfFirstScalableFace(FcFontSet *set) {
 }
 
 O2FontRef O2FontCreateWithCodePointCoverage(const uint32_t *codePoints,
-                                           size_t count) {
+                                           size_t count, FT_Face baseFace,
+                                           const char *language) {
     if (codePoints == NULL || count == 0)
         return nil;
 
@@ -230,6 +231,29 @@ O2FontRef O2FontCreateWithCodePointCoverage(const uint32_t *codePoints,
     }
     FcBool added = FcPatternAddCharSet(pattern, FC_CHARSET, characters);
     FcCharSetDestroy(characters);
+    if (!added) {
+        FcPatternDestroy(pattern);
+        return nil;
+    }
+
+    // Coverage is mandatory below; these properties rank suitable substitutes.
+    // Do not add the base file/index: that would pin selection to the old face.
+    if (baseFace != NULL) {
+        if (baseFace->family_name != NULL)
+            added = FcPatternAddString(pattern, FC_FAMILY,
+                    (const FcChar8 *)baseFace->family_name);
+        added = added && FcPatternAddInteger(pattern, FC_WEIGHT,
+                baseFace->style_flags & FT_STYLE_FLAG_BOLD
+                        ? FC_WEIGHT_BOLD : FC_WEIGHT_REGULAR);
+        added = added && FcPatternAddInteger(pattern, FC_SLANT,
+                baseFace->style_flags & FT_STYLE_FLAG_ITALIC
+                        ? FC_SLANT_ITALIC : FC_SLANT_ROMAN);
+        if (FT_IS_FIXED_WIDTH(baseFace))
+            added = added && FcPatternAddInteger(pattern, FC_SPACING, FC_MONO);
+    }
+    if (language != NULL && language[0] != '\0')
+        added = added && FcPatternAddString(pattern, FC_LANG,
+                                            (const FcChar8 *)language);
     if (!added) {
         FcPatternDestroy(pattern);
         return nil;
