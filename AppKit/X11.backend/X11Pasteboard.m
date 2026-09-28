@@ -124,7 +124,9 @@ static NSMutableDictionary<NSPasteboardName, X11Pasteboard *> *nameToPboard;
     XDestroyWindow(_display, _window);
 
     [self giveUpSelectionOwner];
+    [self giveUpSelectionOwner];
     [_remoteTypes release];
+    [_incrTransfers release];
     [_name release];
     [super dealloc];
 }
