@@ -192,8 +192,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         }
     }
 
+    // The mask selects which events to drop, so it has to be tested against
+    // each candidate. Testing it against the stop marker makes the test
+    // constant for the whole scan, so a coalescing call drops every earlier
+    // event whatever its type - and the periodic-event coalescer wipes queued
+    // key and mouse events on every tick.
     while (--count >= 0) {
-        if (NSEventMaskFromType([event type]) & mask) {
+        if (NSEventMaskFromType([_eventQueue[count] type]) & mask) {
             [_eventQueue removeObjectAtIndex: count];
         }
     }
