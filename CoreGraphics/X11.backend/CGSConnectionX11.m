@@ -18,6 +18,7 @@
 */
 #import "CGSConnectionX11.h"
 #import <CoreGraphics/CGSKeyboardLayout.h>
+#import <CoreGraphics/CGSScreen.h>
 #include "CarbonKeys.h"
 #import "X11KeySymToUCS.h"
 #import <Foundation/NSDebug.h>
@@ -118,6 +119,7 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type, CFDataRef a
 		CFRelease(_cfSocket);
 
 	[_keyboardLayout release];
+	[_screens release];
 
 	[super dealloc];
 }
@@ -351,9 +353,38 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type, CFDataRef a
 	}
 }
 
+// One CGSScreen per X11 screen, describing that screen's root window rather than a
+// CRTC: -mouseLocation reports root coordinates, and the one reader of this array,
+// CGEventGetUnflippedLocation(), flips a y against the first screen's height, which
+// of two monitors stacked is the root's, not the shorter one's. The mode list is not
+// rebuilt from RandR, because CGDisplayModeGet* reads AppKit's, which already walks it.
 -(void) _doGetScreenInformation
 {
+	NSMutableArray* screens = [NSMutableArray array];
 
+	for (int i = 0; i < ScreenCount(_display); i++)
+	{
+		Screen* screen = XScreenOfDisplay(_display, i);
+
+		CGSScreen* cgScreen = [CGSScreen new];
+		cgScreen.modes = @[ @{
+			@"Width": @(WidthOfScreen(screen)),
+			@"Height": @(HeightOfScreen(screen)),
+			@"Depth": @(DefaultDepthOfScreen(screen)),
+			// Each X11 screen has a root window of its own, all at the origin of the
+			// coordinate space -mouseLocation works in.
+			@"OriginX": @0,
+			@"OriginY": @0,
+		}];
+		cgScreen.currentMode = 0;
+		[screens addObject: cgScreen];
+		[cgScreen release];
+	}
+
+	// CGEventGetUnflippedLocation() reads screens[0] without checking, so an empty
+	// array is worse than the nil it takes for "no answer".
+	if ([screens count] > 0)
+		_screens = [screens copy];
 }
 
 -(NSArray<CGSScreen*>*) createScreens
