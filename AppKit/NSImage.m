@@ -909,13 +909,15 @@ NSImageName const NSImageNameTouchBarVolumeUpTemplate =
             rect.origin.y = 0;
             rect.size = [self size];
 
-            BOOL rendered;
-            if ([self scalesWhenResized]) {
-                rendered = [self drawRepresentation: uncached inRect: rect];
-            } else
-                rendered = [uncached drawAtPoint: rect.origin];
-
-            [self unlockFocus];
+            BOOL rendered = NO;
+            @try {
+                if ([self scalesWhenResized]) {
+                    rendered = [self drawRepresentation: uncached inRect: rect];
+                } else
+                    rendered = [uncached drawAtPoint: rect.origin];
+            } @finally {
+                [self unlockFocus];
+            }
             _cacheIsValid = rendered;
         }
 
