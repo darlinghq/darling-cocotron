@@ -368,6 +368,7 @@ typedef NS_OPTIONS(NSUInteger, NSEventPhase) {
 - (CGFloat) scrollingDeltaX;
 - (CGFloat) scrollingDeltaY;
 - (BOOL) isDirectionInvertedFromDevice;
++ (BOOL) isSwipeTrackingFromScrollEventsEnabled;
 
 - (CGEventRef) CGEvent;
 

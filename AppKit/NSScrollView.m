@@ -20,6 +20,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSClipView.h>
 #import <AppKit/NSColor.h>
 #import <AppKit/NSCursor.h>
+#import <AppKit/NSEvent.h>
 #import <AppKit/NSGraphics.h>
 #import <AppKit/NSRaise.h>
 #import <AppKit/NSRulerView.h>
@@ -1126,6 +1127,33 @@ static Class _rulerViewClass = nil;
         NSDrawGroove(_bounds, rect);
         break;
     }
+}
+
+- (void) scrollWheel: (NSEvent *) event {
+    NSView *documentView = [self documentView];
+    if (documentView == nil) {
+        [super scrollWheel: event];
+        return;
+    }
+
+    NSRect bounds = [documentView bounds];
+    NSRect visible = [documentView visibleRect];
+    CGFloat direction = [documentView isFlipped] ? -1 : 1;
+
+    visible.origin.x += [event deltaX] * [self horizontalLineScroll] * 3;
+    visible.origin.y +=
+            [event deltaY] * direction * [self verticalLineScroll] * 3;
+
+    if (visible.origin.y < bounds.origin.y)
+        visible.origin.y = bounds.origin.y;
+    if (visible.origin.x < bounds.origin.x)
+        visible.origin.x = bounds.origin.x;
+    if (NSMaxY(visible) > NSMaxY(bounds))
+        visible.origin.y = NSMaxY(bounds) - visible.size.height;
+    if (NSMaxX(visible) > NSMaxX(bounds))
+        visible.origin.x = NSMaxX(bounds) - visible.size.width;
+
+    [documentView scrollRectToVisible: visible];
 }
 
 - (void) _verticalScroll: (NSScroller *) scroller {

@@ -308,6 +308,10 @@ static BOOL _mouseCoalescingEnabled = YES;
     return NO;
 }
 
++ (BOOL) isSwipeTrackingFromScrollEventsEnabled {
+    return NO;
+}
+
 - (CGEventRef) CGEvent {
     return NULL;
 }
