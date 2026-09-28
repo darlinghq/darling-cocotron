@@ -450,12 +450,16 @@ BOOL itemIsEnabled(NSMenuItem *item) {
 
     for (i = 0; i < count; i++) {
         NSMenuItem *item = [_itemArray objectAtIndex: i];
-        unsigned itemModifiers = [item keyEquivalentModifierMask] &
-                                 (NSCommandKeyMask | NSAlternateKeyMask);
+        const unsigned keyModifiers = NSCommandKeyMask | NSAlternateKeyMask |
+                                      NSShiftKeyMask | NSControlKeyMask;
+        unsigned itemModifiers = [item keyEquivalentModifierMask] & keyModifiers;
         NSString *key = [item keyEquivalent];
 
-        if ((modifiers & (NSCommandKeyMask | NSAlternateKeyMask)) ==
-            itemModifiers) {
+        // Uppercase key equivalents carry an implicit Shift modifier.
+        if ([key length] > 0 && ![key isEqualToString: [key lowercaseString]])
+            itemModifiers |= NSShiftKeyMask;
+
+        if ((modifiers & keyModifiers) == itemModifiers) {
 
             if ([key isEqualToString: characters]) {
                 /* This *must* accurately reflect menu validation when ignoring
