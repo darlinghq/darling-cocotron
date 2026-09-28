@@ -138,8 +138,7 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type,
         }
 
         lastFocusedWindow = nil;
-        lastClickTimeStamp = 0.0;
-        clickCount = 0;
+        _buttonClickCounts = [NSMutableDictionary new];
         _modifierFlags = 0;
     }
     return self;
@@ -165,6 +164,7 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type,
 #endif
 
     [_windowsByID release];
+    [_buttonClickCounts release];
     [super dealloc];
 }
 
@@ -1073,6 +1073,34 @@ static unsigned int x11StateAfterKeyEvent(const X11ModifierKey *key,
              atStart: NO];
 }
 
+// Cocoa groups clicks only within its double-click interval and four logical
+// points of the preceding press, and only for the same button in the same
+// window. Without the button and the window, a left click followed by a right
+// click inside the interval was reported as a double click; without the
+// distance, a click on a far side of a window was too. The X server's own
+// timestamp is used rather than the wall clock, which the client cannot
+// compare against a server that may be a different machine, and its unsigned
+// subtraction covers the 32-bit wrap.
+- (NSInteger) countClickForButton: (unsigned int) button
+                                  window: (XID) window
+                                   point: (NSPoint) point
+                                   time: (Time) time {
+    CGFloat dx = point.x - _lastClickPoint.x;
+    CGFloat dy = point.y - _lastClickPoint.y;
+    if (_lastClickWindow == window && _lastClickButton == button &&
+        (uint32_t) (time - _lastClickTime) < [self doubleClickInterval] * 1000 &&
+        dx * dx + dy * dy <= 16 && _clickCount < NSIntegerMax)
+        _clickCount++;
+    else
+        _clickCount = 1;
+    _lastClickTime = time;
+    _lastClickButton = button;
+    _lastClickWindow = window;
+    _lastClickPoint = point;
+    [_buttonClickCounts setObject: @(_clickCount) forKey: @(button)];
+    return _clickCount;
+}
+
 // Cocoa numbers the mouse buttons in press order from 0 (left), 1 (right) and
 // 2 for everything else, so an app reading +[NSEvent buttonNumber] for the
 // right button gets 3 and reads the middle button as the right one. X numbers
@@ -1210,15 +1238,6 @@ static NSInteger cocoaButtonNumber(unsigned int xButton) {
         break;
 
     case ButtonPress:;
-        NSTimeInterval now = [[NSDate date] timeIntervalSinceReferenceDate];
-
-        if (now - lastClickTimeStamp < [self doubleClickInterval]) {
-            clickCount++;
-        } else {
-            clickCount = 1;
-        }
-        lastClickTimeStamp = now;
-
         pos = [window
                 transformPoint: NSMakePoint(ev->xbutton.x, ev->xbutton.y)];
 
@@ -1243,7 +1262,11 @@ static NSInteger cocoaButtonNumber(unsigned int xButton) {
                      modifierFlags: [self modifierFlagsForState: ev->xbutton
                                                                          .state]
                             window: delegate
-                        clickCount: clickCount
+                        clickCount: [self
+                                    countClickForButton: ev->xbutton.button
+                                                   window: ev->xany.window
+                                                    point: pos
+                                                    time: ev->xbutton.time]
                             deltaX: 0.0
                             deltaY: 0.0];
         [(NSEvent_mouse *) event
@@ -1251,11 +1274,17 @@ static NSInteger cocoaButtonNumber(unsigned int xButton) {
         [self postEvent: event atStart: NO];
         break;
 
-    case ButtonRelease:
+    case ButtonRelease:;
         pos = [window
                 transformPoint: NSMakePoint(ev->xbutton.x, ev->xbutton.y)];
 
         CGFloat deltaY = 0.0;
+        // The up of a click reports the count its down was given, so that a
+        // double click's two downs are matched by their own ups. A release
+        // with no press behind it (the app attached mid-drag) is a single
+        // click: Cocoa never reports an up with a count of zero.
+        NSNumber *upCount = [_buttonClickCounts objectForKey: @(ev->xbutton.button)];
+        [_buttonClickCounts removeObjectForKey: @(ev->xbutton.button)];
 
         switch (ev->xbutton.button) {
         case Button1:
@@ -1282,7 +1311,7 @@ static NSInteger cocoaButtonNumber(unsigned int xButton) {
                      modifierFlags: [self modifierFlagsForState: ev->xbutton
                                                                          .state]
                             window: delegate
-                        clickCount: clickCount
+                        clickCount: upCount ? [upCount integerValue] : 1
                             deltaX: 0.0
                             deltaY: deltaY];
         [(NSEvent_mouse *) event

@@ -33,8 +33,14 @@
     NSMutableDictionary *_windowsByID;
 
     id lastFocusedWindow;
-    NSTimeInterval lastClickTimeStamp;
-    int clickCount;
+    // Clicks are grouped per button and per window, so state for the left
+    // button cannot make the next middle-button click look like a double click.
+    NSMutableDictionary *_buttonClickCounts;
+    NSInteger _clickCount;
+    Time _lastClickTime;       // X server milliseconds, wraps modulo 2^32.
+    unsigned int _lastClickButton;
+    XID _lastClickWindow;
+    NSPoint _lastClickPoint;   // Logical points, so the radius is scale-independent.
     X11Cursor *_blankCursor, *_defaultCursor;
     BOOL _cursorGrabbed;
     KeySym _lastKeySym;
