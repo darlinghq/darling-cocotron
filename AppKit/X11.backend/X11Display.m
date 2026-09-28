@@ -1395,11 +1395,21 @@ static NSDictionary *modeInfoToDictionary(const XRRModeInfo *mi, int depth) {
         break;
 
     case GenericEvent:
+        // Everything RandR added in version 1.2 (a CRTC or output reconfiguration, a changed
+        // output property) is delivered as event code base + RRNotify with a sub-code, through
+        // the Generic Extension: Xlib reports the X event type as GenericEvent and the RandR
+        // code in xgeneric.evtype. Testing ev->type against _rrEventBase + RRNotify, as the
+        // default case below did, therefore never matched, so the screen cache was not dropped
+        // when a monitor was re-plugged or its mode changed.
+        if (_rrEventBase != 0 && ev->xgeneric.evtype == _rrEventBase + RRNotify) {
+            [self _invalidateRRCache];
+            break;
+        }
         NSLog(@"GenericEvent");
         break;
 
     default:
-        if (ev->type == _rrEventBase + RRNotify) {
+        if (ev->type == _rrEventBase + RRScreenChangeNotify) {
             [self _invalidateRRCache];
             break;
         }
