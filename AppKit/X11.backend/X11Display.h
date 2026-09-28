@@ -38,6 +38,10 @@
     X11Cursor *_blankCursor, *_defaultCursor;
     BOOL _cursorGrabbed;
     KeySym _lastKeySym;
+    // The aggregate modifier mask as of the last key event, so a change that
+    // no modifier key reported (a modifier released while another app had the
+    // focus) is still noticed and corrected with a keycode-less flagsChanged.
+    NSEventModifierFlags _modifierFlags;
     int _rrEventBase;
     NSArray* _lastScreens;
 
