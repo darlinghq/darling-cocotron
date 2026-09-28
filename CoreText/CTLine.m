@@ -412,6 +412,17 @@ CFTypeID CTLineGetTypeID(void)
     return lineTypeID;
 }
 
+static CFRange clippedStringRange(CFRange range, CFIndex start, CFIndex end)
+{
+    if (start < 0 || end < start || range.location < 0 ||
+        range.length <= 0 || range.location > end)
+        return CFRangeMake(start, 0);
+    CFIndex limit = range.length > end - range.location
+            ? end : range.location + range.length;
+    CFIndex location = MAX(start, range.location);
+    return CFRangeMake(location, limit > location ? limit - location : 0);
+}
+
 CTLineRef CTLineCreateWithAttributedString(CFAttributedStringRef attrString)
 {
     if (attrString == NULL)
@@ -437,12 +448,9 @@ CTLineRef CTLineCreateWithAttributedString(CFAttributedStringRef attrString)
     while (cursor < length) {
         CFRange range;
         CFAttributedStringGetAttributes(copy, cursor, &range);
-        if (range.location < cursor)
-            range.location = cursor;
-        if (range.location + range.length > length)
-            range.length = length - range.location;
+        range = clippedStringRange(range, cursor, length);
         if (range.length <= 0)
-            break;
+            goto failed;
 
         CFDictionaryRef attributes = CFAttributedStringGetAttributes(
                 copy, range.location, NULL);
@@ -454,12 +462,9 @@ CTLineRef CTLineCreateWithAttributedString(CFAttributedStringRef attrString)
             while (clusterCursor < rangeEnd) {
                 CFRange cluster = CFStringGetRangeOfComposedCharactersAtIndex(
                         string, clusterCursor);
-                if (cluster.location < clusterCursor)
-                    cluster.location = clusterCursor;
-                if (cluster.location + cluster.length > rangeEnd)
-                    cluster.length = rangeEnd - cluster.location;
+                cluster = clippedStringRange(cluster, clusterCursor, rangeEnd);
                 if (cluster.length <= 0)
-                    break;
+                    goto failed;
                 if (!appendRun(runs, createClusterRun(copy, attributes, cluster,
                                                   font, &width),
                           &ascent, &descent, &leading))
