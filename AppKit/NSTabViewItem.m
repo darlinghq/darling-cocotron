@@ -26,6 +26,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSTabView.h>
 #import <AppKit/NSTabViewItem.h>
 #import <AppKit/NSView.h>
+#import <AppKit/NSViewController.h>
 #import <Foundation/NSKeyedArchiver.h>
 
 // not perfect; needs real ellipsis character, will fail to produce a small
@@ -49,6 +50,32 @@ NSString *_NSTruncatedStringWithAttributesInRect(NSString *string,
 }
 
 @implementation NSTabViewItem
+
++ (instancetype) tabViewItemWithViewController: (NSViewController *) viewController {
+    NSTabViewItem *item = [[[self alloc] initWithIdentifier: nil] autorelease];
+    [item setViewController: viewController];
+    return item;
+}
+
+- (NSViewController *) viewController {
+    return _viewController;
+}
+
+- (void) setViewController: (NSViewController *) viewController {
+    if (_viewController == viewController)
+        return;
+    [viewController retain];
+    NSViewController *previous = _viewController;
+    _viewController = viewController;
+    // Clear the non-owning responder before releasing the retired view tree.
+    if (_initialFirstResponder == _view ||
+            (_view && [_initialFirstResponder isKindOfClass: [NSView class]] &&
+             [(NSView *)_initialFirstResponder isDescendantOf: _view]))
+        _initialFirstResponder = nil;
+    [_view removeFromSuperview];
+    [self setView: nil];
+    [previous release];
+}
 
 - (void) encodeWithCoder: (NSCoder *) coder {
     NSUnimplementedMethod();
@@ -83,6 +110,7 @@ NSString *_NSTruncatedStringWithAttributesInRect(NSString *string,
 }
 
 - (void) dealloc {
+    [_viewController release];
     [_identifier release];
     [_label release];
     [_view release];
@@ -105,6 +133,23 @@ NSString *_NSTruncatedStringWithAttributesInRect(NSString *string,
 }
 
 - view {
+    while (_view == nil && _viewController != nil && !_loadingControllerView) {
+        NSViewController *controller = [_viewController retain];
+        BOOL controllerChanged = NO;
+        _loadingControllerView = YES;
+        @try {
+            NSView *view = [controller view];
+            controllerChanged = controller != _viewController;
+            // Loading can replace the controller or install an explicit view.
+            if (controller == _viewController && _view == nil && view != nil)
+                [self setView: view];
+        } @finally {
+            _loadingControllerView = NO;
+            [controller release];
+        }
+        if (!controllerChanged)
+            break;
+    }
     return _view;
 }
 
