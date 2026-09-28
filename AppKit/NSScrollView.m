@@ -799,11 +799,13 @@ static Class _rulerViewClass = nil;
     [self addSubview: _clipView];
     [_clipView setAutoresizingMask: NSViewWidthSizable | NSViewHeightSizable];
     [_clipView setAutoresizesSubviews: YES];
+    [_clipView setDrawsBackground: _drawsBackground];
     [self tile];
 }
 
 - (void) setDrawsBackground: (BOOL) value {
     _drawsBackground = value;
+    [_clipView setDrawsBackground: value];
     if (!_drawsBackground)
         [_clipView setCopiesOnScroll: NO];
 }
