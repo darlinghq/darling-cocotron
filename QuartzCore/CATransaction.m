@@ -42,6 +42,7 @@ static CATransactionGroup *createImplicitTransactionGroupIfNeeded() {
         check = [[CATransactionGroup alloc] init];
 
         [transactionStack() addObject: check];
+        [check release]; // The stack owns the active transaction.
         [[NSRunLoop currentRunLoop]
                 performSelector: @selector(commit)
                          target: [CATransaction class]
@@ -99,6 +100,7 @@ static CATransactionGroup *createImplicitTransactionGroupIfNeeded() {
     CATransactionGroup *group = [[CATransactionGroup alloc] init];
 
     [transactionStack() addObject: group];
+    [group release];
 }
 
 + (void) commit {

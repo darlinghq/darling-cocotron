@@ -5,6 +5,11 @@
 
 @implementation CATransactionGroup
 
+- (void) dealloc {
+    [_values release];
+    [super dealloc];
+}
+
 - init {
     _values = [[NSMutableDictionary alloc] init];
     [_values setObject: [NSNumber numberWithFloat: 0.25]
