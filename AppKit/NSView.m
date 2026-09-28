@@ -680,6 +680,10 @@ static inline void buildTransformsIfNeeded(NSView *self) {
     bounds.origin.y /= size.height;
     bounds.size.width /= size.width;
     bounds.size.height /= size.height;
+    if (!isfinite(bounds.origin.x) || !isfinite(bounds.origin.y) ||
+            !isfinite(bounds.size.width) || !isfinite(bounds.size.height))
+        [NSException raise: NSInvalidArgumentException
+                    format: @"scaleUnitSquareToSize: produces non-finite bounds"];
     [self setBounds: bounds];
 }
 

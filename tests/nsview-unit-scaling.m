@@ -2,6 +2,7 @@
 #import <AppKit/AppKit.h>
 #include <assert.h>
 #include <math.h>
+#include <float.h>
 
 @interface BoundsObserver : NSObject {
 @public
@@ -40,6 +41,18 @@ int main(void) {
         }
         assert(caught);
         assert(NSEqualRects([view bounds], NSMakeRect(12, 20, 100, 80)));
+    }
+    CGFloat tiny = sizeof(CGFloat) == sizeof(double) ? DBL_MIN : FLT_MIN;
+    for (NSUInteger axis = 0; axis < 2; axis++) {
+        BOOL caught = NO;
+        @try { [view scaleUnitSquareToSize: axis ? NSMakeSize(1, tiny) : NSMakeSize(tiny, 1)]; }
+        @catch (NSException *exception) {
+            caught = [[exception name] isEqualToString: NSInvalidArgumentException];
+        }
+        assert(caught);
+        assert(NSEqualRects([view bounds], NSMakeRect(12, 20, 100, 80)));
+        assert(NSEqualRects([view frame], NSMakeRect(0, 0, 100, 80)));
+        assert(observer->count == 2);
     }
     [[NSNotificationCenter defaultCenter] removeObserver: observer];
     [observer release];
