@@ -882,7 +882,17 @@ NSApplication *NSApp = nil;
 
 // This method is used by NSWindow
 - (void) _displayAllWindowsIfNeeded {
-    [[NSApp windows] makeObjectsPerformSelector: @selector(displayIfNeeded)];
+    // Constraint/layout callbacks may close windows or open new ones.
+    NSArray *windows = [[NSApp windows] copy];
+    @try {
+        for (NSWindow *window in windows) {
+            if ([window isVisible] && ![window isMiniaturized])
+                [[window _backgroundView] layoutSubtreeIfNeeded];
+            [window displayIfNeeded];
+        }
+    } @finally {
+        [windows release];
+    }
 }
 
 - (NSEvent *) nextEventMatchingMask: (NSEventMask) mask

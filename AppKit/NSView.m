@@ -3297,14 +3297,6 @@ static CGFloat backingScaleFactor(NSView *view) {
         [self removeConstraint: constraint];
 }
 
-- (void) updateConstraints {
-    // An override point: there is no constraint solver to drive.
-}
-
-- (void) layout {
-    // An override point: there is no constraint solver to drive.
-}
-
 static char installedViewLayoutGuidesKey;
 
 static NSMutableArray *installedViewLayoutGuides(NSView *view, BOOL create) {
@@ -3363,6 +3355,10 @@ static NSMutableArray *installedViewLayoutGuides(NSView *view, BOOL create) {
 
 - (void) setNeedsUpdateConstraints: (BOOL) flag {
     _needsUpdateConstraints = flag;
+    if (flag) {
+        _needsLayout = YES;
+        [[self window] setViewsNeedDisplay: YES];
+    }
 }
 
 - (BOOL) clipsToBounds {
@@ -3380,6 +3376,52 @@ static NSMutableArray *installedViewLayoutGuides(NSView *view, BOOL create) {
 - (void) setPreparedContentRect: (NSRect) rect {
     _preparedContentRect = rect;
     _hasPreparedContentRect = YES;
+}
+
+- (void) updateConstraints {
+    _needsUpdateConstraints = NO;
+}
+
+- (void) updateConstraintsForSubtreeIfNeeded {
+    if (_needsUpdateConstraints) {
+        _needsUpdateConstraints = NO;
+        [self updateConstraints];
+    }
+    // An update callback can remove or reparent a sibling. Keep the snapshot
+    // alive through callbacks, but only visit children still belonging here.
+    NSArray *children = [_subviews copy];
+    @try {
+        for (NSView *child in children) {
+            if ([child superview] == self)
+                [child updateConstraintsForSubtreeIfNeeded];
+        }
+    } @finally {
+        [children release];
+    }
+}
+
+- (void) layout {
+    _needsLayout = NO;
+}
+
+- (void) _layoutSubtreeAfterUpdatingConstraints {
+    if (_needsLayout)
+        [self layout];
+    NSArray *children = [_subviews copy];
+    @try {
+        for (NSView *child in children) {
+            if ([child superview] == self)
+                [child _layoutSubtreeAfterUpdatingConstraints];
+        }
+    } @finally {
+        [children release];
+    }
+}
+
+- (void) layoutSubtreeIfNeeded {
+    // Finish the update phase for the whole subtree before laying out any view.
+    [self updateConstraintsForSubtreeIfNeeded];
+    [self _layoutSubtreeAfterUpdatingConstraints];
 }
 
 @end
@@ -3429,11 +3471,6 @@ static id anchorForView(NSView *view, Class anchorClass, NSLayoutAttribute attri
 
 - (NSLayoutYAxisAnchor *) centerYAnchor {
     return anchorForView(self, [NSLayoutYAxisAnchor class], NSLayoutAttributeCenterY);
-}
-
-- (void) layoutSubtreeIfNeeded {
-    _needsLayout = NO;
-    [_subviews makeObjectsPerformSelector: _cmd];
 }
 
 @end

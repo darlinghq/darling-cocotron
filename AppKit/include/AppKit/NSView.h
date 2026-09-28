@@ -185,10 +185,14 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPre
 // from it.
 - (void) invalidateIntrinsicContentSize;
 
-// Override points for subclasses. There is no constraint solver to drive
-// them, so the base implementations do nothing.
+// Sent by -layoutSubtreeIfNeeded to each view that needs layout. The base
+// implementation clears needsLayout. Subclasses override and call super.
 - (void) layout;
+// Override to update stored constraints; call super last. This does not solve
+// constraints or recompute frames.
 - (void) updateConstraints;
+// Dispatch pending updates in this subtree.
+- (void) updateConstraintsForSubtreeIfNeeded;
 
 // Stored for callers and subclasses; with no constraint solver they do not
 // affect layout. Defaults are 250 (hugging) and 750 (compression resistance).
@@ -556,6 +560,9 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPre
 // The visible rect until set.
 @property NSRect preparedContentRect;
 
+// Updates constraints and sends -layout to the views that need it.
+- (void) layoutSubtreeIfNeeded;
+
 @end
 
 @interface NSView (NSViewLayoutAnchors)
@@ -570,9 +577,6 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPre
 @property(readonly, retain) NSLayoutYAxisAnchor *topAnchor;
 @property(readonly, retain) NSLayoutYAxisAnchor *bottomAnchor;
 @property(readonly, retain) NSLayoutYAxisAnchor *centerYAnchor;
-
-// Clears needsLayout in the subtree; frames aren't recomputed.
-- (void) layoutSubtreeIfNeeded;
 
 @end
 
