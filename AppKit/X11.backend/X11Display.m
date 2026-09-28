@@ -21,6 +21,7 @@
 #import "X11Display.h"
 #import "NSEvent_mouse.h"
 #import "X11Cursor.h"
+#import "X11DraggingManager.h"
 #import "X11Pasteboard.h"
 #import "X11Window.h"
 #import "X11AppMenu.h"
@@ -727,8 +728,7 @@ static NSDictionary *modeInfoToDictionary(const XRRModeInfo *mi, int depth) {
 }
 
 - (NSDraggingManager *) draggingManager {
-    //   NSUnimplementedMethod();
-    return nil;
+    return [X11DraggingManager sharedManager];
 }
 
 - (NSColor *) colorWithName: (NSString *) colorName {
@@ -2068,7 +2068,12 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
         break;
 
     case ReparentNotify:
-        NSLog(@"ReparentNotify");
+        // A window manager frame has to point back at our window through XdndProxy
+        // before a drag source can find it under the pointer.
+        if ([window isKindOfClass: [X11Window class]])
+            [(X11DraggingManager *) [self draggingManager]
+                    windowReparented: (X11Window *) window
+                              intoParent: ev->xreparent.parent];
         break;
 
     case ConfigureNotify:
@@ -2138,6 +2143,14 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
         break;
 
     case ClientMessage:
+        // XDND is entirely ClientMessage traffic: XdndEnter, XdndPosition,
+        // XdndStatus, XdndDrop, XdndFinished and XdndLeave.
+        if (ev->xclient.format == 32 &&
+            [window isKindOfClass: [X11Window class]]) {
+            [(X11DraggingManager *) [self draggingManager]
+                    handleXdndMessage: &ev->xclient
+                                 toWindow: (X11Window *) window];
+        }
         if (ev->xclient.format == 32 &&
             ev->xclient.data.l[0] ==
                     XInternAtom(_display, "WM_DELETE_WINDOW", False)) {
