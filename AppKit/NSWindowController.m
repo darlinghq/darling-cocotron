@@ -136,6 +136,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                      object: _window];
 }
 
+- (NSViewController *) contentViewController {
+    return [[self window] contentViewController];
+}
+
+- (void) setContentViewController: (NSViewController *) controller {
+    [[self window] setContentViewController: controller];
+}
+
 - (void) _windowWillClose: (NSNotification *) note {
     [self setWindow: nil];
 

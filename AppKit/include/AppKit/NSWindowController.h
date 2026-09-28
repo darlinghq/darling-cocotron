@@ -19,7 +19,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSResponder.h>
 
-@class NSWindow, NSDocument, NSStoryboard;
+@class NSWindow, NSDocument, NSStoryboard, NSViewController;
 
 @interface NSWindowController : NSResponder {
     NSWindow *_window;
@@ -45,6 +45,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 // subclasses that build the window in -loadWindow rely on.
 - (NSWindow *) window;
 - (void) setWindow: (NSWindow *) window;
+@property (retain) NSViewController *contentViewController;
 
 - (BOOL) isWindowLoaded;
 - (void) loadWindow;
