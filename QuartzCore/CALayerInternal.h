@@ -20,6 +20,7 @@
 #import <QuartzCore/CALayer.h>
 
 @interface CALayer (Internal)
+- (CALayerContext *) _context;
 - (void) _setContext: (CALayerContext *) context;
 - (NSNumber *) _textureId;
 - (void) _setTextureId: (NSNumber *) value;
