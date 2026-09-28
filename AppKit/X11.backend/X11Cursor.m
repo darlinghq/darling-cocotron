@@ -85,8 +85,12 @@ static int X11CursorScaledSize(int nominalSize, CGFloat scale) {
     // being upscaled. The hotspot scales with it.
     CGFloat scale = [(X11Display *) [NSDisplay currentDisplay] backingScale];
     const CGFloat logicalWidth = image.size.width, logicalHeight = image.size.height;
-    if (!(logicalWidth > 0) || !(logicalHeight > 0) || !isfinite(logicalWidth) ||
-        !isfinite(logicalHeight))
+
+    // Converting a non-finite float to an integer is undefined, so a NaN or
+    // infinite hot spot (or image size) is rejected before the cast.
+    if (!isfinite(hotPoint.x) || !isfinite(hotPoint.y)
+            || !(logicalWidth > 0.0) || !(logicalHeight > 0.0)
+            || !isfinite(logicalWidth) || !isfinite(logicalHeight))
         return [self initWithName: "left_ptr"];
     const size_t width = (size_t) fmax(floor(logicalWidth * scale + 0.5), 1.0);
     const size_t height = (size_t) fmax(floor(logicalHeight * scale + 0.5), 1.0);
@@ -95,8 +99,9 @@ static int X11CursorScaledSize(int nominalSize, CGFloat scale) {
     if (!ximage)
         return [self initWithName: "left_ptr"];
 
-    ximage->xhot = (int) fmin(floor(hotPoint.x * scale), (CGFloat)width - 1);
-    ximage->yhot = (int) fmin(floor(hotPoint.y * scale), (CGFloat)height - 1);
+    // libXcursor requires the hot spot to be inside the image.
+    ximage->xhot = (int) fmin(fmax(floor(hotPoint.x * scale), 0.0), (CGFloat) width - 1);
+    ximage->yhot = (int) fmin(fmax(floor(hotPoint.y * scale), 0.0), (CGFloat) height - 1);
 
     CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
     CGContextRef context = CGBitmapContextCreate(
