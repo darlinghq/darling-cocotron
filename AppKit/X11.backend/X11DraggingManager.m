@@ -272,7 +272,12 @@ static X11DraggingManager *X11SharedManager;
                      GrabModeAsync, GrabModeAsync, None, None,
                      CurrentTime) != GrabSuccess) {
         NSLog(@"X11 backend: cannot grab the pointer, the drag never started");
-        [self releaseDragState];
+        // The pasteboard is not published as the drag's state yet, so it is
+        // released here: it owns an X window that has to go back to the server.
+        [board release];
+        free(_dragTypes);
+        _dragTypes = NULL;
+        _dragTypeCount = 0;
         return;
     }
 
