@@ -18,15 +18,18 @@
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  SOFTWARE. */
 
+#import <AppKit/NSDragging.h>
 #import <AppKit/NSDraggingManager.h>
+#import <Foundation/NSGeometry.h>
 #import <X11/Xlib.h>
 
-@class X11DropSession, X11Window;
+@class X11DropSession, X11Pasteboard, X11Window;
 
-// Drop target half of XDND: advertises this backend's windows as drag targets,
-// answers the ClientMessages a source sends them, and owns the one session in
-// flight. Starting a drag (dragImage:at:offset:event:pasteboard:source:slideBack:)
-// is not implemented yet.
+// XDND, both halves. The target half advertises this backend's windows as drag
+// targets and answers the ClientMessages a source sends them. The source half
+// runs the drag -dragImage:... was stubbed for: it owns the drag selection, grabs
+// the pointer and sends XdndEnter, XdndPosition, XdndDrop and XdndLeave until the
+// target it is talking to is done with it.
 @interface X11DraggingManager : NSDraggingManager {
     Display *_xdpy;
     struct {
@@ -35,6 +38,25 @@
     } _atom;
     X11DropSession *_session;
     BOOL _inDrop;
+
+    // One drag at a time. _dragPasteboard owns the drag selection, and its helper
+    // window is the XDND source window, so the properties a target reads and the
+    // data it converts are answered by one window.
+    X11Pasteboard *_dragPasteboard;
+    Window _dragWindow;
+    // The window the last XdndEnter and XdndLeave went to, and the one whose
+    // XdndStatus is the answer the drag is currently decided on.
+    Window _enteredWindow, _targetWindow;
+    // The window the pointer is actually over. Under a reparenting window manager
+    // that is the frame, and a target reached through XdndProxy names it rather
+    // than the proxy in its replies, so it is the other window a reply may name.
+    Window _pointerWindow;
+    Atom *_dragTypes;
+    unsigned long _dragTypeCount;
+    NSDragOperation _offeredOperations, _chosenOperations;
+    NSRect _suppressionRect;
+    Atom _dropAction;
+    BOOL _dragging, _targetAccepts, _suppressionWanted, _awaitingStatus, _dropFinished;
 }
 
 // One per display, like the display's pasteboards: the manager is reached through
@@ -44,5 +66,11 @@
 - (void) windowReparented: (X11Window *) window intoParent: (Window) parent;
 - (void) handleXdndMessage: (XClientMessageEvent *) message
                   toWindow: (X11Window *) window;
+
+// Sent by -[X11Display postXEvent:] for the replies a target addresses to a
+// drag's source window, and for the property deletions that pace a transfer too
+// large for one request, which arrive on the receiving window rather than on ours.
+- (void) handleXdndSourceMessage: (XClientMessageEvent *) message;
+- (void) handlePropertyChange: (XPropertyEvent *) event;
 
 @end
