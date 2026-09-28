@@ -1364,6 +1364,19 @@ NSImageName const NSImageNameTouchBarVolumeUpTemplate =
 
 @implementation NSImageSymbolConfiguration
 
+- (void) dealloc {
+    [_paletteColors release];
+    [super dealloc];
+}
+
++ (instancetype) configurationWithPaletteColors: (NSArray<NSColor *> *) colors {
+    NSImageSymbolConfiguration *result = [[[self alloc] init] autorelease];
+    // Keep immutable configuration state even when the caller passes a mutable
+    // array. The generic template placeholder has no palette layers to color.
+    result->_paletteColors = [colors copy];
+    return result;
+}
+
 + (instancetype) configurationWithPointSize: (CGFloat) pointSize
                                      weight: (NSFontWeight) weight
                                       scale: (NSImageSymbolScale) scale
@@ -1399,6 +1412,9 @@ NSImageName const NSImageNameTouchBarVolumeUpTemplate =
         if (configuration->_scale != 0)
             result->_scale = configuration->_scale;
     }
+    result->_paletteColors = [(configuration != nil &&
+                              configuration->_paletteColors != nil)
+            ? configuration->_paletteColors : _paletteColors copy];
     return result;
 }
 
@@ -1413,11 +1429,14 @@ NSImageName const NSImageNameTouchBarVolumeUpTemplate =
         return NO;
     NSImageSymbolConfiguration *o = other;
     return o->_pointSize == _pointSize && o->_weight == _weight &&
-           o->_scale == _scale;
+           o->_scale == _scale &&
+           (o->_paletteColors == _paletteColors ||
+            [o->_paletteColors isEqual: _paletteColors]);
 }
 
 - (NSUInteger) hash {
-    return (NSUInteger) (_pointSize * 31) ^ (NSUInteger) _scale;
+    return (NSUInteger) (_pointSize * 31) ^ (NSUInteger) _scale ^
+           [_paletteColors hash];
 }
 
 // Side of the square placeholder: the point size (default: the system font

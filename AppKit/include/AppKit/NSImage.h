@@ -183,6 +183,7 @@ typedef NS_ENUM(NSInteger, NSImageSymbolScale) {
     CGFloat _pointSize;
     NSFontWeight _weight;
     NSImageSymbolScale _scale;
+    NSArray<NSColor *> *_paletteColors;
 }
 
 + (instancetype) configurationWithPointSize: (CGFloat) pointSize
@@ -191,6 +192,7 @@ typedef NS_ENUM(NSInteger, NSImageSymbolScale) {
                                      weight: (NSFontWeight) weight
                                       scale: (NSImageSymbolScale) scale;
 + (instancetype) configurationWithScale: (NSImageSymbolScale) scale;
++ (instancetype) configurationWithPaletteColors: (NSArray<NSColor *> *) colors;
 - (NSImageSymbolConfiguration *) configurationByApplyingConfiguration:
         (NSImageSymbolConfiguration *) configuration;
 
