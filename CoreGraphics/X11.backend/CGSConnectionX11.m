@@ -51,6 +51,21 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type, CFDataRef a
     [self processPendingEvents];
 }
 
+// A RandR screen change arrives as a plain event, but everything the extension added in
+// version 1.2 (a CRTC or output reconfiguration, a changed output property) is sent as
+// event code base + RRNotify with a sub-code, and those come through the Generic Extension:
+// Xlib reports their X event type as GenericEvent and the RandR code in xgeneric.evtype.
+// Testing event->type against base + RRNotify therefore never matches one of them, which is
+// why re-plugging a monitor or switching a mode did not drop the screen cache.
+static BOOL isRandREvent(int xrrEventBase, XEvent* event)
+{
+	if (event->type == xrrEventBase + RRScreenChangeNotify)
+		return YES;
+
+	return event->type == GenericEvent &&
+		event->xgeneric.evtype == xrrEventBase + RRNotify;
+}
+
 -(instancetype) initWithConnectionID:(CGSConnectionID)connId
 {
 	_display = XOpenDisplay(NULL);
@@ -327,8 +342,11 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type, CFDataRef a
 
 			break;
 		}
-		else if (event->type == _xrrEventBase + RRScreenChangeNotify || event->type == _xrrEventBase + RRNotify)
+		else if (isRandREvent(_xrrEventBase, event))
 		{
+			// Nothing is posted to the procs CGSRegisterNotifyProc() collected:
+			// they live in g_cgsNotifyProc, which CGS.m keeps hidden, so a backend
+			// bundle cannot reach them.
 			// Invalidate cached information
 			if (_screens)
 			{
