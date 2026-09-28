@@ -1073,6 +1073,19 @@ static unsigned int x11StateAfterKeyEvent(const X11ModifierKey *key,
              atStart: NO];
 }
 
+// Cocoa numbers the mouse buttons in press order from 0 (left), 1 (right) and
+// 2 for everything else, so an app reading +[NSEvent buttonNumber] for the
+// right button gets 3 and reads the middle button as the right one. X numbers
+// them by position instead: 1 left, 3 right, 2 middle.
+static NSInteger cocoaButtonNumber(unsigned int xButton) {
+    switch (xButton) {
+    case Button1: return 0;
+    case Button3: return 1;
+    case Button2: return 2;
+    default: return (NSInteger) xButton - Button1 + 2;
+    }
+}
+
 - (NSArray *) orderedWindowNumbers {
     NSMutableArray *result = [NSMutableArray array];
 
@@ -1233,7 +1246,8 @@ static unsigned int x11StateAfterKeyEvent(const X11ModifierKey *key,
                         clickCount: clickCount
                             deltaX: 0.0
                             deltaY: 0.0];
-        [(NSEvent_mouse *) event _setButtonNumber: ev->xbutton.button];
+        [(NSEvent_mouse *) event
+                _setButtonNumber: cocoaButtonNumber(ev->xbutton.button)];
         [self postEvent: event atStart: NO];
         break;
 
@@ -1271,7 +1285,8 @@ static unsigned int x11StateAfterKeyEvent(const X11ModifierKey *key,
                         clickCount: clickCount
                             deltaX: 0.0
                             deltaY: deltaY];
-        [event _setButtonNumber: ev->xbutton.button];
+        [(NSEvent_mouse *) event
+                _setButtonNumber: cocoaButtonNumber(ev->xbutton.button)];
         [self postEvent: event atStart: NO];
         break;
 
