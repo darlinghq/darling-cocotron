@@ -17,6 +17,7 @@
  along with Darling.  If not, see <http://www.gnu.org/licenses/>.
 */
 #import "CGSConnectionX11.h"
+#import "CGSWindowX11.h"
 #import <CoreGraphics/CGSKeyboardLayout.h>
 #import <CoreGraphics/CGSScreen.h>
 #include "CarbonKeys.h"
@@ -691,7 +692,21 @@ static double windowOpacity(Display* display, Window window)
 
 -(CGSWindow*) newWindow:(CGSRegionRef)region
 {
+	CGSWindowID windowID = _nextWindowId++;
+	CGSWindowX11* window = [[CGSWindowX11 alloc] initWithRegion: region
+		connection: self
+		windowID: windowID];
+	// A window that could not be created is reported by -[CGSWindowX11 init...];
+	// CGSNewWindow() turns the nil into kCGErrorIllegalArgument.
+	if (window == nil)
+		return nil;
 
+	@synchronized (_windows)
+	{
+		[_windows setObject: window forKey: [NSNumber numberWithInt: windowID]];
+	}
+	[window release];
+	return window;
 }
 
 +(BOOL) isAvailable
