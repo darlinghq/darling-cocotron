@@ -231,6 +231,8 @@ static NSString *autosaveKey(NSString *name) {
     int i, count = [_subviews count];
 
     CGFloat totalWidthBefore = 0.;
+    NSUInteger visibleCount = 0;
+    BOOL hasEmptySubview = NO;
 
     // The available width to the subviews
     CGFloat totalWidthAfter =
@@ -239,26 +241,40 @@ static NSString *autosaveKey(NSString *name) {
     for (i = 0; i < count; i++) {
         NSView *subview = [_subviews objectAtIndex: i];
         if ([self isSubviewCollapsed: subview] == NO) {
+            ++visibleCount;
+            if (NSWidth([subview frame]) <= 0)
+                hasEmptySubview = YES;
             totalWidthBefore += NSWidth([subview frame]);
         }
     }
 
-    CGFloat delta = totalWidthAfter / totalWidthBefore;
+    if (visibleCount == 0)
+        return;
+    totalWidthAfter = MAX(0, NSWidth([self bounds]) -
+                            [self dividerThickness] * (visibleCount - 1));
+    BOOL distributeEqually = hasEmptySubview || totalWidthBefore <= 0;
+    CGFloat delta = distributeEqually ? 0 : totalWidthAfter / totalWidthBefore;
+    NSUInteger remaining = visibleCount;
 
     NSRect frame = [self bounds];
     for (i = 0; i < count; i++) {
         NSView *subview = [_subviews objectAtIndex: i];
         if ([self isSubviewCollapsed: subview] == NO) {
-            frame.size.width = NSWidth([subview frame]) * delta;
-            frame.size.width = floor(frame.size.width);
+            --remaining;
+            CGFloat available = MAX(0, NSMaxX([self bounds]) - frame.origin.x);
+            CGFloat proposed = distributeEqually
+                ? floor(totalWidthAfter / visibleCount)
+                : floor(NSWidth([subview frame]) * delta);
+            frame.size.width = remaining == 0 ? available
+                : MIN(available, MAX(0, proposed));
             frame.size.height = height;
 
             NSSize oldSize = [subview frame].size;
 
             [subview setFrame: frame];
 
-            frame.origin.x += NSWidth(frame);
-            frame.origin.x += [self dividerThickness];
+            frame.origin.x = MIN(NSMaxX([self bounds]),
+                NSMaxX(frame) + [self dividerThickness]);
         }
     }
 }
@@ -273,6 +289,8 @@ static NSString *autosaveKey(NSString *name) {
     // heights and multiply all the heights to the new delta to get them to fit
     // (or something like that...) Apple says They resize proportionally
     CGFloat totalHeightBefore = 0.;
+    NSUInteger visibleCount = 0;
+    BOOL hasEmptySubview = NO;
     CGFloat totalHeightAfter =
             [self bounds].size.height - [self dividerThickness] * (count - 1);
 
@@ -280,26 +298,40 @@ static NSString *autosaveKey(NSString *name) {
         NSView *subview = [_subviews objectAtIndex: i];
         if ([self isSubviewCollapsed: subview] == NO) {
             NSRect subviewFrame = [subview frame];
+            ++visibleCount;
+            if (NSHeight(subviewFrame) <= 0)
+                hasEmptySubview = YES;
             totalHeightBefore += NSHeight(subviewFrame);
         }
     }
 
-    CGFloat delta = totalHeightAfter / totalHeightBefore;
+    if (visibleCount == 0)
+        return;
+    totalHeightAfter = MAX(0, NSHeight([self bounds]) -
+                             [self dividerThickness] * (visibleCount - 1));
+    BOOL distributeEqually = hasEmptySubview || totalHeightBefore <= 0;
+    CGFloat delta = distributeEqually ? 0 : totalHeightAfter / totalHeightBefore;
+    NSUInteger remaining = visibleCount;
 
     NSRect frame = [self bounds];
     for (i = 0; i < count; i++) {
         NSView *subview = [_subviews objectAtIndex: i];
         if ([self isSubviewCollapsed: subview] == NO) {
-            frame.size.height = NSHeight([subview frame]) * delta;
-            frame.size.height = floor(frame.size.height);
+            --remaining;
+            CGFloat available = MAX(0, NSMaxY([self bounds]) - frame.origin.y);
+            CGFloat proposed = distributeEqually
+                ? floor(totalHeightAfter / visibleCount)
+                : floor(NSHeight([subview frame]) * delta);
+            frame.size.height = remaining == 0 ? available
+                : MIN(available, MAX(0, proposed));
             frame.size.width = width;
 
             NSSize oldSize = [subview frame].size;
 
             [subview setFrame: frame];
 
-            frame.origin.y += NSHeight(frame);
-            frame.origin.y += [self dividerThickness];
+            frame.origin.y = MIN(NSMaxY([self bounds]),
+                NSMaxY(frame) + [self dividerThickness]);
         }
     }
 }
@@ -315,7 +347,7 @@ static NSString *autosaveKey(NSString *name) {
  */
 - (void) adjustSubviews {
 
-    if ([_subviews count] < 2) {
+    if ([_subviews count] == 0) {
         return;
     }
 
