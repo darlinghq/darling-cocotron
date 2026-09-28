@@ -189,7 +189,6 @@ static size_t MaximumPropertyBytes(Display *display) {
     [(X11Display *) [NSDisplay currentDisplay] setWindow: nil forID: _window];
     XDestroyWindow(_display, _window);
 
-    [self giveUpSelectionOwner];
     [_remoteTypes release];
     [_incrTransfers release];
     [_name release];
