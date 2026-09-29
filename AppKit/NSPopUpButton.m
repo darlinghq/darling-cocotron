@@ -334,6 +334,18 @@ static NSString *const NSPopUpButtonBindingObservationContext =
         values = [NSArray arrayWithObject: values];
     }
 
+    // The cell stores titles, so every member must be a string. A binding whose
+    // collection holds non-strings reaches -[NSMenu itemWithTitle:], which sends
+    // -isEqualToString: to each member and raises on anything else.
+    if (values != nil) {
+        NSMutableArray *titles = [NSMutableArray arrayWithCapacity: values.count];
+        for (id value in values) {
+            [titles addObject: [value isKindOfClass: [NSString class]] ? value :
+                              ([value respondsToSelector: @selector(description)] ? [value description] : @"")];
+        }
+        values = titles;
+    }
+
     [_cell removeAllItems];
     [_cell addItemsWithTitles: values];
 
