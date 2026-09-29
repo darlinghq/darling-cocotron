@@ -19,6 +19,43 @@ along with Darling.  If not, see <http://www.gnu.org/licenses/>.
 
 #import "X11Pasteboard.h"
 
+static const NSUInteger X11IncrChunkSize = 64 * 1024;
+
+@interface X11IncrTransfer : NSObject {
+@public
+    Atom _property;
+    Atom _type;
+    NSData *_data;
+    NSUInteger _offset;
+}
+
+- (id) initWithProperty: (Atom) property
+                  type: (Atom) type
+                  data: (NSData *) data;
+
+@end
+
+@implementation X11IncrTransfer
+
+- (id) initWithProperty: (Atom) property
+                  type: (Atom) type
+                  data: (NSData *) data
+{
+    if ((self = [super init])) {
+        _property = property;
+        _type = type;
+        _data = [data retain];
+    }
+    return self;
+}
+
+- (void) dealloc {
+    [_data release];
+    [super dealloc];
+}
+
+@end
+
 @implementation X11Pasteboard
 
 static NSMutableDictionary<NSPasteboardName, X11Pasteboard *> *nameToPboard;
