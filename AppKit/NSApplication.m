@@ -526,6 +526,14 @@ NSApplication *NSApp = nil;
     _automaticCustomizeTouchBarMenuItemEnabled = enabled;
 }
 
+- (BOOL) isDefaultHelpBookSearchEnabled {
+    return _defaultHelpBookSearchEnabled;
+}
+
+- (void) setDefaultHelpBookSearchEnabled: (BOOL) enabled {
+    _defaultHelpBookSearchEnabled = enabled;
+}
+
 - (void) setMenu: (NSMenu *) menu {
     [self setMainMenu: menu];
 }

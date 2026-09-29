@@ -144,6 +144,7 @@ typedef NS_OPTIONS(NSUInteger, NSApplicationPresentationOptions) {
     BOOL _finishedLaunching;
     BOOL _windowClosedSinceTerminateCheck;
     BOOL _automaticCustomizeTouchBarMenuItemEnabled;
+    BOOL _defaultHelpBookSearchEnabled;
 }
 
 @property(readonly) NSUserInterfaceLayoutDirection userInterfaceLayoutDirection;
@@ -155,6 +156,8 @@ typedef NS_OPTIONS(NSUInteger, NSApplicationPresentationOptions) {
 @property(readonly, strong) NSAppearance *effectiveAppearance;
 @property(getter=isAutomaticCustomizeTouchBarMenuItemEnabled)
         BOOL automaticCustomizeTouchBarMenuItemEnabled;
+// Private AppKit flag for the help-viewer's find bar.
+@property(getter=isDefaultHelpBookSearchEnabled) BOOL defaultHelpBookSearchEnabled;
 
 @property (class, readonly, retain) NSApplication *sharedApplication;
 
