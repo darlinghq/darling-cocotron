@@ -526,6 +526,10 @@ NSApplication *NSApp = nil;
     _automaticCustomizeTouchBarMenuItemEnabled = enabled;
 }
 
+- (NSInteger) contextID {
+    return CGSMainConnectionID();
+}
+
 - (BOOL) isDefaultHelpBookSearchEnabled {
     return _defaultHelpBookSearchEnabled;
 }
