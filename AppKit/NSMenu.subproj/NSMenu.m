@@ -473,7 +473,7 @@ BOOL itemIsEnabled(NSMenuItem *item) {
                    or processing key equivalents. Relying on update to keep
                    isEnabled in the proper state is unfortunately too tenuous.
                  */
-                if (itemIsEnabled(item))
+                if ([item isEnabled] && itemIsEnabled(item))
                     return [NSApp sendAction: [item action]
                                           to: [item target]
                                         from: item];
