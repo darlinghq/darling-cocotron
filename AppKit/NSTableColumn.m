@@ -164,6 +164,16 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     _width = width;
 }
 
+// Terminal's inspector asks each column whether it is shown. Cocotron's
+// table column has no column-hiding state, so the flag is stored and read back.
+- (BOOL) isHidden {
+    return _hidden;
+}
+
+- (void) setHidden: (BOOL) hidden {
+    _hidden = hidden;
+}
+
 - (void) setMinWidth: (CGFloat) width {
     _minWidth = width;
 }
