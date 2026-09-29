@@ -213,6 +213,12 @@ APPKIT_EXPORT NSNotificationName NSControlTintDidChangeNotification;
 - (NSFocusRingType) focusRingType;
 - (NSBackgroundStyle) backgroundStyle;
 
+// Private AppKit spelling used by the settings cells of Terminal's inspector.
+// It is the cell's own background style, distinct from the drawing
+// background the cell paints behind its contents.
+- (NSBackgroundStyle) interiorBackgroundStyle;
+- (void) setInteriorBackgroundStyle: (NSBackgroundStyle) value;
+
 - (void) setControlView: (NSView *) view;
 - (void) setType: (NSCellType) type;
 
