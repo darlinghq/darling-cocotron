@@ -137,6 +137,19 @@ static X11DraggingManager *X11SharedManager;
     return X11SharedManager;
 }
 
+- (void) windowReparented: (X11Window *) window intoParent: (Window) parent {
+    Window handle = [window windowHandle];
+    if (handle == None || parent == None ||
+        parent == DefaultRootWindow(_xdpy))
+        return;
+    // Under a reparenting window manager the pointer sits over the frame, which
+    // belongs to the window manager and carries no XdndAware, so this is the only
+    // way a source can find the window that is listening. The specification also
+    // requires the proxy to point at itself.
+    XChangeProperty(_xdpy, parent, _atom.proxy, XA_ATOM, 32, PropModeReplace,
+                    (unsigned char *) &handle, 1);
+}
+
 - (instancetype) init {
     if ((self = [super init])) {
         _xdpy = [(X11Display *) [NSDisplay currentDisplay] display];
