@@ -95,6 +95,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     // Legacy scrollers paint with their owning view's display pass.
 }
 
+- (void) contentAreaScrolled {
+    // Terminal reports each scroll through this, with no argument, so the
+    // imp pair redraws its painters.
+    [self contentAreaDidResize];
+}
+
 @end
 
 @implementation NSScroller
