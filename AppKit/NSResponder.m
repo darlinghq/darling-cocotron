@@ -30,6 +30,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @implementation NSResponder
 
+- (id) animator {
+    // Cocoa returns a proxy that coalesces animated property changes. Cocotron
+    // applies property changes immediately, so the responder is its own
+    // animator.
+    return self;
+}
+
 - (void) encodeWithCoder: (NSCoder *) coder {
     if (coder.allowsKeyedCoding) {
         [coder encodeObject: _nextResponder forKey: @"NSNextResponder"];
