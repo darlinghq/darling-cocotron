@@ -46,6 +46,7 @@
 
 #import "CarbonKeys.h"
 #import "X11KeySymToUCS.h"
+#import "X11KeyEvent.h"
 #import <X11/XKBlib.h>
 #import <X11/Xutil.h>
 #import <X11/extensions/XKBrules.h>
@@ -1211,6 +1212,12 @@ enum {
 
         uint16_t ucsCode = (uint16_t) X11KeySymToUCS(keySym); // All defined codes in the table fit into 16 bits
         NSString* strIg = [NSString stringWithCharacters: &ucsCode length: 1];
+
+        // The text above retains normal XIM/keyboard modifier behavior.
+        // Shortcut characters ignore modifiers other than Shift.
+        uint16_t shortcutCode = (uint16_t) X11KeySymToUCS(
+                X11KeySymIgnoringModifiers(&ev->xkey));
+        strIg = [NSString stringWithCharacters: &shortcutCode length: 1];
 
         // If there's an app that uses constants from HIToolbox/Events.h (e.g.
         // kVK_ANSI_A), this gives it a chance to work. x11ToCarbon is 256 wide
