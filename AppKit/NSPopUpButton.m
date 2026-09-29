@@ -325,6 +325,14 @@ static NSString *const NSPopUpButtonBindingObservationContext =
 @implementation NSPopUpButton (BindingSupport)
 
 - (void) _setItemValues: (NSArray *) values forKey: (NSString *) key {
+    // A binding whose value is a single string, or the placeholder the binder
+    // substitutes for "no selection", must not be handed to the cell as a
+    // collection: -[NSPopUpButtonCell addItemsWithTitles:] sends -count to it and
+    // raises. Treat a lone scalar as a one-item list.
+    if (values != nil && ![values isKindOfClass: [NSArray class]] &&
+        ![values isKindOfClass: [NSSet class]]) {
+        values = [NSArray arrayWithObject: values];
+    }
 
     [_cell removeAllItems];
     [_cell addItemsWithTitles: values];
