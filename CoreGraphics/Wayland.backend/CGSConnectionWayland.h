@@ -40,6 +40,7 @@
 #import <CoreGraphics/CGSConnection.h>
 #import <CoreFoundation/CFRunLoop.h>
 #import <CoreFoundation/CFSocket.h>
+#import <Foundation/Foundation.h>
 #include <stdint.h>
 #include <wayland-util.h>
 
