@@ -327,10 +327,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     if (_selectedIndex < 0 || _pullsDown) {
         if ([itemArray count] > 0)
             item = [itemArray objectAtIndex: 0];
-    } else {
+    } else if (_selectedIndex < [itemArray count]) {
         item = [itemArray objectAtIndex: _selectedIndex];
     }
-    [super setTitle: [item title]];
+    if (item != nil) {
+        [super setTitle: [item title]];
+    }
     // For a redraw of the control
     [(NSControl *) [self controlView] updateCell: self];
 }

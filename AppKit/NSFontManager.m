@@ -62,12 +62,20 @@ static Class _fontPanelFactory;
     return _delegate;
 }
 
+- target {
+    return _target;
+}
+
 - (SEL) action {
     return _action;
 }
 
 - (void) setDelegate: delegate {
     _delegate = delegate;
+}
+
+- (void) setTarget: target {
+    _target = target;
 }
 
 - (void) setAction: (SEL) value {
@@ -291,7 +299,7 @@ static Class _fontPanelFactory;
 
 - (BOOL) sendAction {
     return [NSApp sendAction: _action
-                          to: nil
+                          to: _target
                         from: [NSFontManager sharedFontManager]];
 }
 

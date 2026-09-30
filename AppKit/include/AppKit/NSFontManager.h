@@ -52,6 +52,7 @@ enum {
 @interface NSFontManager : NSObject {
     NSFontPanel *_panel;
     id _delegate;
+    id _target;
     SEL _action;
 
     NSFont *_selectedFont;
@@ -66,9 +67,11 @@ enum {
 + (void) setFontPanelFactory: (Class) value;
 
 - delegate;
+- target;
 - (SEL) action;
 
 - (void) setDelegate: delegate;
+- (void) setTarget: target;
 - (void) setAction: (SEL) value;
 
 - (NSFontAction) currentFontAction;
