@@ -167,6 +167,8 @@ const NSTimeInterval kMouseMovementThreshold = .001f;
     BOOL cancelled = NO;
     NSTimer* delaySubmenu = nil;
     NSRect lastRect = NSMakeRect(0,0,0,0);
+    // The view whose coordinate space lastRect is expressed in.
+    NSMenuView *lastRectView = nil;
 
     MENUDEBUG(@"entering outer loop");
 
@@ -208,13 +210,22 @@ const NSTimeInterval kMouseMovementThreshold = .001f;
 
                     MENUDEBUG(@"found a menu: %@", checkView);
 
-                    // Performance optimization - break if we're still in the same menu item rect as last time
-                    if (NSMouseInRect(checkPoint, lastRect, [self isFlipped]))
+                    // Performance optimization - break if we're still in the same
+                    // menu item rect as last time. lastRect is expressed in the
+                    // coordinate space of the view that produced it, so it says
+                    // nothing about a view we have not measured: without the
+                    // check, moving from the menu bar into a submenu keeps
+                    // hitting the stale bar rect and breaks out before
+                    // itemIndexAtPoint: runs, leaving the submenu with no
+                    // selected item.
+                    if (checkView == lastRectView &&
+                        NSMouseInRect(checkPoint, lastRect, [self isFlipped]))
                         break;
 
                     // Which item is the cursor on top of?
                     NSUInteger itemIndex =
                             [checkView itemIndexAtPoint: checkPoint rect: &lastRect];
+                    lastRectView = checkView;
 
                     MENUDEBUG(@"found an item index: %u", itemIndex);
 
@@ -269,6 +280,7 @@ const NSTimeInterval kMouseMovementThreshold = .001f;
                     }
 
                     lastRect = NSMakeRect(0,0,0,0);
+                    lastRectView = nil;
                     
                     // We've wandered off the menu so don't show anything
                     // selected if it's the deepest visible view
