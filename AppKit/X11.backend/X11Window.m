@@ -973,16 +973,19 @@ static NSData *makeWindowIcon() {
     // do with it. The bytes used to come from -[NSString cString], which converts
     // to the system encoding and raises when a character does not fit. WM_NAME
     // gets the same bytes for a window manager predating EWMH.
-    if (XChangeProperty(_display, _window,
-                        XInternAtom(_display, "_NET_WM_NAME", False),
-                        XInternAtom(_display, "UTF8_STRING", False), 8,
-                        PropModeReplace, (const unsigned char *) text,
-                        length) != Success)
-        NSLog(@"XChangeProperty(_NET_WM_NAME) failed at %s %d", __FILE__, __LINE__);
+    //
+    // No return check here. XChangeProperty reports through the X error handler, not
+    // its return value: it returns 1 on success, so comparing against Success (0)
+    // logged "failed" on every title, including the ones that demonstrably landed.
+    // -[X11Display handleError:] is what reports a real failure, with request and
+    // error codes.
+    XChangeProperty(_display, _window,
+                    XInternAtom(_display, "_NET_WM_NAME", False),
+                    XInternAtom(_display, "UTF8_STRING", False), 8,
+                    PropModeReplace, (const unsigned char *) text, length);
 
-    if (XChangeProperty(_display, _window, XA_WM_NAME, XA_STRING, 8, PropModeReplace,
-                        (const unsigned char *) text, length) != Success)
-        NSLog(@"XChangeProperty(WM_NAME) failed at %s %d", __FILE__, __LINE__);
+    XChangeProperty(_display, _window, XA_WM_NAME, XA_STRING, 8, PropModeReplace,
+                    (const unsigned char *) text, length);
 }
 
 - (void) setFrame: (O2Rect) frame {
