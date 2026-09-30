@@ -218,6 +218,9 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
     _outputs = [NSMutableArray new];
     _afterDispatch = [NSMutableArray new];
     _windows = CFArrayCreateMutable(NULL, 0, NULL);
+    // Inherited from X11Display, whose -init was skipped above, so nothing else
+    // allocates it. A nil dictionary would make every click the first click.
+    _buttonClickCounts = [NSMutableDictionary new];
     _repeatRate = 25;
     _repeatDelay = 600;
 
@@ -352,7 +355,8 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
     if (_windows != NULL)
         CFRelease(_windows);
 
-    [_buttonClickCounts release];
+    // _buttonClickCounts is inherited, not owned separately: X11Display's -dealloc
+    // releases it, so doing it here too would over-release.
     // X11Display's -dealloc only releases the X resources that exist.
     [super dealloc];
 }
@@ -762,7 +766,7 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         _pendingScrollX = _pendingScrollY = 0;
         _pendingScrollWindow = nil;
         _pendingScrollActive = NO;
-        _lastClickWindow = nil;
+        _wlLastClickWindow = nil;
         [_buttonClickCounts removeAllObjects];
     }
 
@@ -931,18 +935,18 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         // Group clicks only on the same button/window and within four logical
         // pixels of the preceding press. Unsigned subtraction handles timestamp
         // wrap without depending on the wall clock or dispatch latency.
-        CGFloat dx = _pointerSurfacePoint.x - _lastClickPoint.x;
-        CGFloat dy = _pointerSurfacePoint.y - _lastClickPoint.y;
-        if (_lastClickWindow == window && _lastClickButton == button &&
-            (uint32_t) (time - _lastClickTime) < [self doubleClickInterval] * 1000 &&
+        CGFloat dx = _pointerSurfacePoint.x - _wlLastClickPoint.x;
+        CGFloat dy = _pointerSurfacePoint.y - _wlLastClickPoint.y;
+        if (_wlLastClickWindow == window && _wlLastClickButton == button &&
+            (uint32_t) (time - _wlLastClickTime) < [self doubleClickInterval] * 1000 &&
             dx * dx + dy * dy <= 16 && _clickCount < NSIntegerMax)
             _clickCount++;
         else
             _clickCount = 1;
-        _lastClickTime = time;
-        _lastClickButton = button;
-        _lastClickWindow = window;
-        _lastClickPoint = _pointerSurfacePoint;
+        _wlLastClickTime = time;
+        _wlLastClickButton = button;
+        _wlLastClickWindow = window;
+        _wlLastClickPoint = _pointerSurfacePoint;
         if (_buttonClickCounts == nil)
             _buttonClickCounts = [NSMutableDictionary new];
         [_buttonClickCounts setObject: @(_clickCount) forKey: @(button)];
@@ -1743,8 +1747,8 @@ static NSUInteger modifierDeviceMask(int code) {
 }
 
 - (void) windowUnmapped: (WaylandWindow *) window {
-    if (_lastClickWindow == window)
-        _lastClickWindow = nil;
+    if (_wlLastClickWindow == window)
+        _wlLastClickWindow = nil;
     if (_pinchWindow == window)
         [self postPinchPhase: NSEventPhaseCancelled];
     if (_pointerWindow == window) {
