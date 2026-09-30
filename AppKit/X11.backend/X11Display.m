@@ -968,14 +968,29 @@ static NSDictionary *modeInfoToDictionary(const XRRModeInfo *mi, int depth) {
 }
 
 - (void) setCursor: (id) cursor {
-    CGWindow *window = [[NSApp keyWindow] platformWindow];
-    if (window != nil) {
-        Window w = [(X11Window *) window windowHandle];
-        Cursor c = ((X11Cursor *) cursor).cursor;
+    Cursor c = ((X11Cursor *) cursor).cursor;
+    Window root = DefaultRootWindow(_display);
 
-        XDefineCursor(_display, w, c);
-        XSync(_display, False);
+    // Define the cursor on the window the pointer is actually over. Defining it only on the
+    // key window left every other window with its own cursor, so moving between windows
+    // showed two pointers at once - the stale cursor of the window under the mouse plus the
+    // key window's cursor. XQueryPointer reports the child window under the pointer; fall
+    // back to the root (and the key window) when there is none, so the cursor always has a
+    // defined target.
+    Window child = None, returnedRoot = None, target = None;
+    int rx, ry, wx, wy;
+    unsigned int mask;
+    XQueryPointer(_display, root, &returnedRoot, &child, &rx, &ry, &wx, &wy, &mask);
+    target = child;
+
+    if (target == None) {
+        CGWindow *key = [[NSApp keyWindow] platformWindow];
+        if (key != nil)
+            target = [(X11Window *) key windowHandle];
     }
+
+    XDefineCursor(_display, target != None ? target : root, c);
+    XSync(_display, False);
     _cursorHidden = cursor != nil && cursor == _blankCursor;
 }
 
