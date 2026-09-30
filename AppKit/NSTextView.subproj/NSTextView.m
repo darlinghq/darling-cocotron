@@ -3279,6 +3279,41 @@ static NSTextView *s_targetTextView = nil;
         firstRange = [self selectionRangeForProposedRange: firstRange
                                               granularity: granularity];
 
+    // Shift-click extends the existing selection instead of collapsing it to a caret under
+    // the pointer. The anchor is the far edge of the current selection, so growing it past
+    // either end keeps the whole selection (select 2..6, shift-click 9 -> 2..9; select 4..8,
+    // shift-click 1 -> 1..8); with an empty selection the anchor is the caret, so it extends
+    // from where it already is.
+    if ([event modifierFlags] & NSEventModifierFlagShift) {
+        NSRange existing = [self selectedRange];
+        NSUInteger click = firstRange.location;
+        NSUInteger anchor;
+
+        if (existing.length == 0) {
+            anchor = existing.location;
+        } else {
+            NSUInteger start = existing.location;
+            NSUInteger end = NSMaxRange(existing);
+            if (click > end)
+                anchor = start;   // growing right: keep the left edge
+            else if (click < start)
+                anchor = end;     // growing left: keep the right edge
+            else
+                anchor = start;   // inside the selection: anchor at the left edge
+        }
+
+        if (click >= anchor)
+            selection = NSMakeRange(anchor, click - anchor);
+        else
+            selection = NSMakeRange(click, anchor - click);
+        affinity = click >= anchor ? NSSelectionAffinityUpstream
+                                   : NSSelectionAffinityDownstream;
+        [self setSelectedRange: selection affinity: affinity stillSelecting: YES];
+        [self updateInsertionPointStateAndRestartTimer: YES];
+        [self setNeedsDisplay: YES];
+        return;
+    }
+
     _selectionOrigin = firstRange.location;
     lastRange = firstRange;
 
