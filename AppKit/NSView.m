@@ -499,9 +499,12 @@ static CGAffineTransform concatViewTransform(CGAffineTransform result,
                                             frame.origin.y);
 
     // Apply bounds scaling to fit in the frame
+    // Empty bounds have no defined scale on that axis. Preserve translation
+    // and the other axis rather than introducing 0/0 into the view hierarchy.
+    CGFloat scaleX = NSWidth(bounds) == 0 ? 1 : NSWidth(frame) / NSWidth(bounds);
+    CGFloat scaleY = NSHeight(bounds) == 0 ? 1 : NSHeight(frame) / NSHeight(bounds);
     CGAffineTransform scale =
-            CGAffineTransformMakeScale(NSWidth(frame) / NSWidth(bounds),
-                                       NSHeight(frame) / NSHeight(bounds));
+            CGAffineTransformMakeScale(scaleX, scaleY);
     result = CGAffineTransformConcat(scale, result);
 
     if (flip) {
