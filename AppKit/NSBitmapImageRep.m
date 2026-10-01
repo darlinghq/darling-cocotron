@@ -746,8 +746,53 @@ NSBitmapImageRepPropertyKey NSImageCurrentFrame = @"NSImageCurrentFrame";
     if (_cgImage != NULL)
         return CGImageRetain(_cgImage);
 
-    if (_isPlanar)
-        NSUnimplementedMethod();
+    if (_isPlanar) {
+        if (_bitsPerSample == 1 && _samplesPerPixel == 2 && _bitmapPlanes[0] && _bitmapPlanes[1]) {
+            size_t pixelCount = (size_t)_pixelsWide * (size_t)_pixelsHigh;
+            uint32_t *rgba = (uint32_t *)NSZoneMalloc(NULL, pixelCount * sizeof(uint32_t));
+            const uint8_t *dataPlane = _bitmapPlanes[0];
+            const uint8_t *maskPlane = _bitmapPlanes[1];
+
+            for (int y = 0; y < _pixelsHigh; y++) {
+                for (int x = 0; x < _pixelsWide; x++) {
+                    int byteIdx = y * _bytesPerRow + (x / 8);
+                    int bitIdx = 7 - (x % 8);
+                    uint8_t dBit = (dataPlane[byteIdx] >> bitIdx) & 1;
+                    uint8_t mBit = (maskPlane[byteIdx] >> bitIdx) & 1;
+
+                    // In 1-bit Mac cursor:
+                    // mask: 1 = opaque, 0 = transparent
+                    // data: 1 = black (0x00), 0 = white (0xFF)
+                    uint8_t a = mBit ? 0xFF : 0x00;
+                    uint8_t rgb = dBit ? 0x00 : 0xFF;
+                    uint8_t r = (rgb * a) / 255;
+                    uint8_t g = (rgb * a) / 255;
+                    uint8_t b = (rgb * a) / 255;
+
+                    rgba[y * _pixelsWide + x] = (a << 24) | (r << 16) | (g << 8) | b;
+                }
+            }
+
+            NSData *data = [[NSData alloc] initWithBytesNoCopy: rgba
+                                                        length: pixelCount * sizeof(uint32_t)
+                                                  freeWhenDone: YES];
+            CGDataProviderRef provider = CGDataProviderCreateWithCFData((CFDataRef) data);
+            [data release];
+
+            CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
+            CGImageRef image = CGImageCreate(
+                    _pixelsWide, _pixelsHigh, 8, 32, _pixelsWide * 4,
+                    colorSpace,
+                    kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Host,
+                    provider, NULL, NO, kCGRenderingIntentDefault);
+
+            CGColorSpaceRelease(colorSpace);
+            CGDataProviderRelease(provider);
+            return image;
+        } else {
+            NSUnimplementedMethod();
+        }
+    }
 
     CGDataProviderRef provider = CGDataProviderCreateWithData(
             NULL, _bitmapPlanes[0], _bytesPerRow * _pixelsHigh, NULL);
@@ -771,8 +816,12 @@ NSBitmapImageRepPropertyKey NSImageCurrentFrame = @"NSImageCurrentFrame";
 
 - (BOOL) draw {
     CGContextRef context = NSCurrentGraphicsPort();
+    if (context == NULL)
+        return NO;
     NSSize size = [self size];
     CGImageRef image = [self createCGImageIfNeeded];
+    if (image == NULL)
+        return NO;
 
     CGContextDrawImage(context, NSMakeRect(0, 0, size.width, size.height),
                        image);
