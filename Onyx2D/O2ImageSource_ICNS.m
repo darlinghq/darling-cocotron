@@ -503,7 +503,7 @@ static uint32_t nextUnsigned32(O2ImageSource_ICNS *self) {
             int pixelOffset = 0, byteOffset = 0;
             const uint8_t *bytes = _bytes + _position;
 
-            for (byteOffset = 0; byteOffset < length;) {
+            for (byteOffset = 0; byteOffset < length && pixelOffset < pixelCount;) {
                 pixels[pixelOffset].r = bytes[byteOffset++];
                 pixels[pixelOffset].g = bytes[byteOffset++];
                 pixels[pixelOffset].b = bytes[byteOffset++];
@@ -519,18 +519,19 @@ static uint32_t nextUnsigned32(O2ImageSource_ICNS *self) {
             } componentSlot = COMPONENT_R;
 
             // 24 is RLE encoded.
-            if (rleBytes[0] == 0 && rleBytes[1] == 0 && rleBytes[2] == 0 &&
+            if (length >= 4 && rleBytes[0] == 0 && rleBytes[1] == 0 && rleBytes[2] == 0 &&
                 rleBytes[3] == 0)
                 rleOffset += 4;
 
-            for (; rleOffset < length;) {
-                for (pixelOffset = 0; pixelOffset < pixelCount;) {
+            for (; rleOffset < length && componentSlot <= COMPONENT_B; componentSlot++) {
+                for (pixelOffset = 0; pixelOffset < pixelCount && rleOffset < length;) {
                     if (rleBytes[rleOffset] & 0x80) {
                         unsigned rleInfo = rleBytes[rleOffset++];
                         unsigned i, chunkLength = (rleInfo & 0x7F) + 3;
+                        if (rleOffset >= length) break;
                         uint8_t componentValue = rleBytes[rleOffset++];
 
-                        for (i = 0; i < chunkLength; i++) {
+                        for (i = 0; i < chunkLength && pixelOffset < pixelCount; i++) {
                             switch (componentSlot) {
                             case COMPONENT_R:
                                 pixels[pixelOffset++].r = componentValue;
@@ -544,9 +545,10 @@ static uint32_t nextUnsigned32(O2ImageSource_ICNS *self) {
                             }
                         }
                     } else {
+                        if (rleOffset >= length) break;
                         unsigned i, chunkLength = rleBytes[rleOffset++] + 1;
 
-                        for (i = 0; i < chunkLength; i++)
+                        for (i = 0; i < chunkLength && pixelOffset < pixelCount && rleOffset < length; i++) {
                             switch (componentSlot) {
                             case COMPONENT_R:
                                 pixels[pixelOffset++].r = rleBytes[rleOffset++];
@@ -558,9 +560,9 @@ static uint32_t nextUnsigned32(O2ImageSource_ICNS *self) {
                                 pixels[pixelOffset++].b = rleBytes[rleOffset++];
                                 break;
                             }
+                        }
                     }
                 }
-                componentSlot++;
             }
         }
     }
