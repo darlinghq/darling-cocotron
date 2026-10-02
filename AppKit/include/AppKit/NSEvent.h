@@ -22,7 +22,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Foundation/Foundation.h>
 #import <CoreGraphics/CGEventTypes.h>
 
-@class NSWindow, NSGraphicsContext, NSTrackingArea, NSView;
+@class NSEvent, NSWindow, NSGraphicsContext, NSTrackingArea, NSView, NSSet;
 
 typedef NS_ENUM(NSUInteger, NSEventType) {
     NSEventTypeLeftMouseDown = 1,
