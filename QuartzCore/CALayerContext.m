@@ -8,8 +8,9 @@
 #import <OpenGL/CGLInternal.h>
 #include <math.h>
 
-// The methods of CAMetalLayerInternal used here. Its header is Objective-C++.
-@interface CAMetalLayerInternal : CAMetalLayer
+// The methods of CAMetalLayer used here. They are implemented for every
+// CAMetalLayer, including subclasses, in QuartzCore's Objective-C++ code.
+@interface CAMetalLayer (ContextPrivate)
 - (BOOL) hasQueuedDrawables;
 - (void) prepareRender;
 @end
@@ -157,14 +158,14 @@
 // with whatever _setContext: allocated, whose contents glTextureStorage2D leaves
 // undefined, which the self-draw hook then composited verbatim.
 //
-// Only a CAMetalLayerInternal needs this, and for one with an empty queue
+// Only a CAMetalLayer needs this, and for one with an empty queue
 // -prepareRender is a lock and an @synchronized, no GL work. The drawable pool
 // and its fd export live in -recreateDrawables, which only the property setters
 // call, so walking the tree cannot repeat that per frame.
 - (void) prepareMetalLayersInLayerTree: (CALayer *) layer {
 
-    if ([[layer class] isSubclassOfClass: [CAMetalLayerInternal class]]) {
-        CAMetalLayerInternal* mtl = (CAMetalLayerInternal*)layer;
+    if ([layer isKindOfClass: [CAMetalLayer class]]) {
+        CAMetalLayer* mtl = (CAMetalLayer*)layer;
         [mtl prepareRender];
     }
 
@@ -374,8 +375,8 @@ static BOOL layerTreeNeedsAnotherFrame(CALayer *layer) {
     // layer-tree mutations, so the tree stays animation-free between them and the
     // animation check alone stops the timer after every present, costing a fresh
     // timer and its first 1/60s delay each time.
-    if ([[layer class] isSubclassOfClass: [CAMetalLayerInternal class]] &&
-        [(CAMetalLayerInternal*)layer hasQueuedDrawables])
+    if ([layer isKindOfClass: [CAMetalLayer class]] &&
+        [(CAMetalLayer*)layer hasQueuedDrawables])
         return YES;
     for (CALayer *child in layer.sublayers)
         if (layerTreeNeedsAnotherFrame(child))
@@ -446,7 +447,7 @@ static BOOL layerTreeNeedsAnotherFrame(CALayer *layer) {
 // displaySyncEnabled set, 0 if none has, and -1 for a tree without Metal layers.
 static GLint metalLayerSwapInterval(CALayer *layer) {
     GLint interval = -1;
-    if ([[layer class] isSubclassOfClass: [CAMetalLayerInternal class]])
+    if ([layer isKindOfClass: [CAMetalLayer class]])
         interval = [(CAMetalLayer *) layer displaySyncEnabled] ? 1 : 0;
     for (CALayer *child in layer.sublayers) {
         GLint childInterval = metalLayerSwapInterval(child);

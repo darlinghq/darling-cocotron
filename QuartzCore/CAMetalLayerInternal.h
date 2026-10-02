@@ -63,3 +63,8 @@ class CAMetalDrawableActual;
 - (void)prepareRender;
 
 @end
+
+@interface CAMetalLayer (DARLING_INTERNAL)
+- (void)prepareRender;
+- (BOOL)hasQueuedDrawables;
+@end
