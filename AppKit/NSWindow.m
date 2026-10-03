@@ -131,7 +131,11 @@ NSInteger NSBitsPerPixelFromDepth(NSWindowDepth depth) {
 - (void) layoutFrameSizeWithWidth: (CGFloat) width;
 @end
 
-@interface NSWindow ()
+@interface NSWindow () {
+    // Plain window state. Terminal reads and writes collectionBehavior on every
+    // window it creates, so both accessors must work rather than raise.
+    NSWindowCollectionBehavior _collectionBehavior;
+}
 
 - (NSRect) zoomedFrame;
 
@@ -1044,8 +1048,9 @@ static BOOL _allowsAutomaticWindowTabbing;
 }
 
 - (void) setContentMinSize: (NSSize) value {
+    // The value was already being stored; the unimplemented marker made every
+    // caller raise instead.
     _contentMinSize = value;
-    NSUnimplementedMethod();
 }
 
 - (void) setContentMaxSize: (NSSize) value {
@@ -1288,10 +1293,6 @@ static BOOL _allowsAutomaticWindowTabbing;
 
 - (void) setCanBecomeVisibleWithoutLogin: (BOOL) flag {
     //   NSUnimplementedMethod();
-}
-
-- (void) setCollectionBehavior: (NSWindowCollectionBehavior) behavior {
-    NSUnimplementedMethod();
 }
 
 - (void) setLevel: (NSInteger) value {
@@ -1580,8 +1581,14 @@ static BOOL _allowsAutomaticWindowTabbing;
 }
 
 - (NSWindowCollectionBehavior) collectionBehavior {
-    NSUnimplementedMethod();
-    return 0;
+    return _collectionBehavior;
+}
+
+- (void) setCollectionBehavior: (NSWindowCollectionBehavior) behavior {
+    // Terminal sets this on every window it creates, and the previous
+    // unimplemented marker made the setter raise, so ordinary window setup
+    // aborted. The value is plain window state and is kept.
+    _collectionBehavior = behavior;
 }
 
 - (NSWindowTabbingMode) tabbingMode {
