@@ -238,6 +238,8 @@ NSInteger NSBitsPerPixelFromDepth(NSWindowDepth depth) {
 
 @implementation NSWindow
 
+	NSWindowTabbingMode _tabbingMode;
+
 @synthesize appearance = _appearance;
 @synthesize identifier = _identifier;
 @synthesize accessibilityElement = _isAccessible;
@@ -1580,6 +1582,14 @@ static BOOL _allowsAutomaticWindowTabbing;
 - (NSWindowCollectionBehavior) collectionBehavior {
     NSUnimplementedMethod();
     return 0;
+}
+
+- (NSWindowTabbingMode) tabbingMode {
+    return _tabbingMode;
+}
+
+- (void) setTabbingMode: (NSWindowTabbingMode)tabbingMode {
+    _tabbingMode = tabbingMode;
 }
 
 - (NSPoint) convertBaseToScreen: (NSPoint) point {
