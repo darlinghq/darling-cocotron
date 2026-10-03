@@ -589,11 +589,18 @@ static uint32_t texImage2DIOSurface(CGLContextObj context,
         [self _drawBorderOfLayer: layer bounds: bounds opacity: opacity];
     }
 
+    // A child is positioned in this layer's coordinate system, whose origin is
+    // bounds.origin, so it belongs that much further left and down than the matrix above
+    // puts it. Only the recursion is offset: this layer's own contents already have the
+    // origin removed from their image, so translating them too would double-count it.
+    glPushMatrix();
+    glTranslatef(-bounds.origin.x, -bounds.origin.y, 0);
     for (CALayer *child in layer.sublayers)
         [self _renderLayer: child
                 currentTime: currentTime
-              parentOpacity: opacity
+parentOpacity: opacity
               parentFlipped: flipped];
+    glPopMatrix();
 
     glPopMatrix();
 }
