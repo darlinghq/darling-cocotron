@@ -138,13 +138,14 @@ static __thread NSStoryboard *instantiatingStoryboard;
 
     id controller = nil;
     for (id object in [self _instantiateNibNamed: nibName owner: nil]) {
-        if (![object isKindOfClass: [NSViewController class]] &&
-            ![object isKindOfClass: [NSWindowController class]])
-            continue;
-        if (controller != nil)
-            [NSException raise: NSInternalInconsistencyException
-                        format: @"Storyboard scene %@ has more than one top-level controller", nibName];
-        controller = object;
+        if ([object isKindOfClass: [NSWindowController class]]) {
+            // A window controller is what instantiateInitialController's caller is
+            // looking for, so prefer it and stop looking.
+            controller = object;
+            break;
+        }
+        if (controller == nil && [object isKindOfClass: [NSViewController class]])
+            controller = object;
     }
     if (controller == nil)
         [NSException raise: NSInternalInconsistencyException
