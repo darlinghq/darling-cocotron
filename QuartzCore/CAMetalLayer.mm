@@ -53,16 +53,20 @@ static const char kCAMetalLayerInternalKey = 0;
 	}
 	CAMetalLayerInternal *internal = (CAMetalLayerInternal *)objc_getAssociatedObject(self, &kCAMetalLayerInternalKey);
 	if (!internal) {
-		internal = [[CAMetalLayerInternal alloc] init];
-		if (_context) {
-			[internal _setContext:_context];
+		@synchronized(self) {
+			internal = (CAMetalLayerInternal *)objc_getAssociatedObject(self, &kCAMetalLayerInternalKey);
+			if (!internal) {
+				internal = [[CAMetalLayerInternal alloc] init];
+				if (_context) {
+					[internal _setContext:_context];
+				}
+				if (!CGSizeEqualToSize(_bounds.size, CGSizeZero)) {
+					[internal setBounds:_bounds];
+				}
+				objc_setAssociatedObject(self, &kCAMetalLayerInternalKey, internal, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+				[internal release];
+			}
 		}
-		if (!CGSizeEqualToSize(_bounds.size, CGSizeZero)) {
-			[internal setBounds:_bounds];
-			[internal setDrawableSize:_bounds.size];
-		}
-		objc_setAssociatedObject(self, &kCAMetalLayerInternalKey, internal, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-		[internal release];
 	}
 	return internal;
 }
@@ -82,7 +86,6 @@ static const char kCAMetalLayerInternalKey = 0;
 	if ([self class] != [CAMetalLayerInternal class]) {
 		CAMetalLayerInternal *internal = [self _metalInternal];
 		[internal setBounds:bounds];
-		[internal setDrawableSize:bounds.size];
 	}
 }
 
@@ -402,6 +405,10 @@ MTL_UNSUPPORTED_CLASS
 
 - (void)setDrawableSize: (CGSize)drawableSize
 {
+	if (CGSizeEqualToSize(_drawableSize, drawableSize)) {
+		return;
+	}
+	_drawableSizeExplicitlySet = YES;
 	_drawableSize = drawableSize;
 	[self recreateDrawables];
 }
@@ -426,10 +433,16 @@ MTL_UNSUPPORTED_CLASS
 
 - (void)setBounds: (CGRect)value
 {
+	CGSize oldSize = _bounds.size;
 	[super setBounds: value];
 
-	if (CGSizeEqualToSize(_drawableSize, CGSizeZero) || CGSizeEqualToSize(_drawableSize, _bounds.size)) {
-		[self setDrawableSize: value.size];
+	if (!_drawableSizeExplicitlySet) {
+		if (CGSizeEqualToSize(_drawableSize, CGSizeZero) || CGSizeEqualToSize(_drawableSize, oldSize)) {
+			if (!CGSizeEqualToSize(_drawableSize, value.size)) {
+				_drawableSize = value.size;
+				[self recreateDrawables];
+			}
+		}
 	}
 }
 

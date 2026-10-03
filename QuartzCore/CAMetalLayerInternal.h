@@ -33,6 +33,7 @@ class CAMetalDrawableActual;
 	CGColorSpaceRef _colorspace;
 	BOOL _framebufferOnly;
 	CGSize _drawableSize;
+	BOOL _drawableSizeExplicitlySet;
 	BOOL _presentsWithTransaction;
 	BOOL _displaySyncEnabled;
 	BOOL _wantsExtendedDynamicRangeContent;
