@@ -3262,6 +3262,10 @@ static NSTextView *s_targetTextView = nil;
     NSRange firstRange, lastRange, selection;
     NSSelectionAffinity affinity = NSSelectionAffinityUpstream;
     NSSelectionGranularity granularity = [event clickCount] - 1;
+    // Set when the press carries Shift, so the tracking loop keeps extending from the existing
+    // selection's anchor instead of unioning with the press point.
+    BOOL shiftExtend = NO;
+    NSUInteger anchor = 0;
 
     if (![self isSelectable])
         return;
@@ -3284,42 +3288,51 @@ static NSTextView *s_targetTextView = nil;
     // either end keeps the whole selection (select 2..6, shift-click 9 -> 2..9; select 4..8,
     // shift-click 1 -> 1..8); with an empty selection the anchor is the caret, so it extends
     // from where it already is.
+    //
+    // The same arithmetic serves shift-drag, so this does not return: it records the anchor and
+    // falls into the tracking loop below, which keeps extending from that anchor while the
+    // button is held. Returning here made a shift-drag select only up to the press point.
     if ([event modifierFlags] & NSEventModifierFlagShift) {
         NSRange existing = [self selectedRange];
         NSUInteger click = firstRange.location;
-        NSUInteger anchor;
+        NSUInteger shiftAnchor;
 
         if (existing.length == 0) {
-            anchor = existing.location;
+            shiftAnchor = existing.location;
         } else {
             NSUInteger start = existing.location;
             NSUInteger end = NSMaxRange(existing);
             if (click > end)
-                anchor = start;   // growing right: keep the left edge
+                shiftAnchor = start;   // growing right: keep the left edge
             else if (click < start)
-                anchor = end;     // growing left: keep the right edge
+                shiftAnchor = end;     // growing left: keep the right edge
             else
-                anchor = start;   // inside the selection: anchor at the left edge
+                shiftAnchor = start;   // inside the selection: anchor at the left edge
         }
 
-        if (click >= anchor)
-            selection = NSMakeRange(anchor, click - anchor);
+        if (click >= shiftAnchor)
+            selection = NSMakeRange(shiftAnchor, click - shiftAnchor);
         else
-            selection = NSMakeRange(click, anchor - click);
-        affinity = click >= anchor ? NSSelectionAffinityUpstream
-                                   : NSSelectionAffinityDownstream;
+            selection = NSMakeRange(click, shiftAnchor - click);
+        affinity = click >= shiftAnchor ? NSSelectionAffinityUpstream
+                                        : NSSelectionAffinityDownstream;
         [self setSelectedRange: selection affinity: affinity stillSelecting: YES];
         [self updateInsertionPointStateAndRestartTimer: YES];
         [self setNeedsDisplay: YES];
-        return;
+
+        // Fall through into the tracking loop so a shift-drag keeps extending from this anchor
+        // while the button is held. Returning here made a shift-drag stop at the press point.
+        shiftExtend = YES;
+        anchor = shiftAnchor;
+    } else {
+        // Plain drag: the press point is the anchor, same as before.
+        anchor = firstRange.location;
+        selection = NSUnionRange(firstRange, lastRange);
+        [self setSelectedRange: selection affinity: affinity stillSelecting: YES];
     }
 
-    _selectionOrigin = firstRange.location;
+    _selectionOrigin = anchor;
     lastRange = firstRange;
-
-    selection = NSUnionRange(firstRange, lastRange);
-
-    [self setSelectedRange: selection affinity: affinity stillSelecting: YES];
 
     [NSEvent startPeriodicEventsAfterDelay: 0.1 withPeriod: 0.2];
     do {
@@ -3348,11 +3361,23 @@ static NSTextView *s_targetTextView = nil;
             lastRange = [self selectionRangeForProposedRange: lastRange
                                                  granularity: granularity];
 
-        selection = NSUnionRange(firstRange, lastRange);
-        if (firstRange.location <= lastRange.location)
-            affinity = NSSelectionAffinityUpstream;
-        else
-            affinity = NSSelectionAffinityDownstream;
+        if (shiftExtend) {
+            // Keep growing the range between the anchor and the current pointer position, so a
+            // shift-drag behaves like a drag that never loses what was already selected.
+            NSUInteger cur = lastRange.location;
+            if (cur >= anchor)
+                selection = NSMakeRange(anchor, cur - anchor);
+            else
+                selection = NSMakeRange(cur, anchor - cur);
+            affinity = cur >= anchor ? NSSelectionAffinityUpstream
+                                     : NSSelectionAffinityDownstream;
+        } else {
+            selection = NSUnionRange(firstRange, lastRange);
+            if (firstRange.location <= lastRange.location)
+                affinity = NSSelectionAffinityUpstream;
+            else
+                affinity = NSSelectionAffinityDownstream;
+        }
 
         [self setSelectedRange: selection
                       affinity: affinity
