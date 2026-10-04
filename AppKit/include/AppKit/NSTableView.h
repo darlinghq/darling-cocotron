@@ -79,6 +79,13 @@ typedef NS_ENUM(NSInteger, NSTableViewRowSizeStyle) {
 };
 
 typedef enum {
+    NSTableViewStyleAutomatic = 0,
+    NSTableViewStylePlain = 1,
+    NSTableViewStyleOutline = 2,
+    NSTableViewStyleSourceList = 3,
+} NSTableViewStyle;
+
+typedef enum {
     NSTableViewDropOn,
     NSTableViewDropAbove
 } NSTableViewDropOperation;
@@ -125,6 +132,7 @@ typedef NS_OPTIONS(NSUInteger, NSTableViewAnimationOptions) {
     BOOL _floatsGroupRows;
     NSTableViewRowSizeStyle _rowSizeStyle;
     CGFloat _styledRowHeight;
+    NSTableViewStyle _style;
 
     // temp ivars
     NSMutableArray *_selectedColumns;
@@ -174,6 +182,7 @@ typedef NS_OPTIONS(NSUInteger, NSTableViewAnimationOptions) {
 - (BOOL) floatsGroupRows;
 - (NSTableViewRowSizeStyle) rowSizeStyle;
 - (NSTableViewRowSizeStyle) effectiveRowSizeStyle;
+- (NSTableViewStyle) style;
 
 - (NSInteger) numberOfRows;
 - (NSUInteger) numberOfColumns;
@@ -220,6 +229,7 @@ typedef NS_OPTIONS(NSUInteger, NSTableViewAnimationOptions) {
 - (void) setSelectionHighlightStyle: (NSTableViewSelectionHighlightStyle) value;
 - (void) setFloatsGroupRows: (BOOL) flag;
 - (void) setRowSizeStyle: (NSTableViewRowSizeStyle) style;
+- (void) setStyle: (NSTableViewStyle) style;
 
 - (void) addTableColumn: (NSTableColumn *) column;
 - (void) removeTableColumn: (NSTableColumn *) column;

@@ -2272,6 +2272,18 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 
 @implementation NSTableView (NSTableViewStyle)
 
+// Cocotron draws rows in the plain style only, so the style is stored purely so
+// the getter round-trips a value set by a nib or a delegate. Deliberately does
+// not reloadData: that notifies numberOfRows, driving a bound NSArrayController
+// to re-apply a selection against rows it has not rebuilt, which raises.
+- (NSTableViewStyle) style {
+    return _style == NSTableViewStyleAutomatic ? NSTableViewStylePlain : _style;
+}
+
+- (void) setStyle: (NSTableViewStyle) style {
+    _style = style;
+}
+
 // Private AppKit: the insets a table view style adds around its rows. Cocotron
 // has only the plain style.
 - (NSEdgeInsets) _styleContentInsets {
