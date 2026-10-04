@@ -40,7 +40,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         [_attachmentImage release];
         _attachmentImage = nil;
     }
-    [attachment retain];
+    /* Unretained on purpose: the attachment owns the cell, so a strong reference back would be a
+     * retain cycle and -dealloc would never run. The cell only reads the attachment while the
+     * attachment is alive, during layout and drawing. */
     [_attachment release];
     _attachment = attachment;
 }
@@ -121,7 +123,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     NSImage *image = [self attachmentImage];
     if (image == nil || NSIsEmptyRect(frame))
         return;
-    [image drawInRect: frame];
+    /* Draw the representation rather than the NSImage: -[NSImage drawInRect:] is not registered in
+     * this AppKit (the runtime raises "unrecognized selector" for it), while NSImageRep's
+     * drawInRect: is what NSImage's own drawing path calls internally. */
+    NSImageRep *rep = [[image representations] lastObject];
+    if (rep != nil)
+        [rep drawInRect: frame];
+    else
+        [image drawInRect: frame];
 }
 
 - (void) drawWithFrame: (NSRect) frame

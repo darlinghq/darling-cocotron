@@ -69,6 +69,12 @@ static NSMutableDictionary *viewProviderClasses;
         _fileType = [uti copy];
         _bounds = CGRectZero;
         _allowsTextAttachmentView = YES;
+        /* Every other initializer here gives the attachment a cell, and -[NSLayoutManager
+         * _drawAttachment:] only ever reaches the cell through -[NSTextAttachment attachmentCell].
+         * Without this, an attachment created from data had a nil cell, so the layout manager drew
+         * nothing for it at all -- silently, because messaging nil is a no-op. */
+        _cell = [[NSTextAttachmentCell alloc] init];
+        [_cell setAttachment: self];
     }
     return self;
 }
