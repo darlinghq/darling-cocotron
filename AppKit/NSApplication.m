@@ -1842,17 +1842,16 @@ int NSApplicationMain(int argc, const char *argv[]) {
     Class class = [bundle principalClass];
     NSString *nibFile = [bundle infoDictionary][@"NSMainNibFile"];
 
-#ifndef DARLING
-    if (argc > 1) {
+if (argc > 1) {
         NSMutableArray *arguments =
-                [NSMutableArray arrayWithCapacity: arg c - 1];
+                [NSMutableArray arrayWithCapacity: argc - 1];
         for (int i = 1; i < argc; i++)
             if (argv[i][0] != '-')
                 [arguments addObject: [NSString stringWithUTF8String: argv[i]]];
             else if (argv[i][1] == '-' && argv[i][2] == '\0')
                 break;
             else // (argv[i][0] == '-' && argv[i] != "--")
-                    if (*(int64_t *) argv[i] != *(int64_t *) "-NSOpen")
+                    if (strcmp(argv[i], "-NSOpen") != 0)
                 i++;
 
         if ((argc = [arguments count]))
@@ -1862,6 +1861,7 @@ int NSApplicationMain(int argc, const char *argv[]) {
                        forKey: @"NSOpen"];
     }
 
+#ifndef DARLING
     [NSClassFromString(@"Win32RunningCopyPipe")
             performSelector: @selector(startRunningCopyPipe)];
 #endif
