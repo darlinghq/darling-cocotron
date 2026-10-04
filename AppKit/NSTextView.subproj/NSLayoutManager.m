@@ -2246,6 +2246,22 @@ static inline void _appendRectToCache(NSLayoutManager *self, NSRect rect) {
     point.x += origin.x + xOffset;
     point.y += origin.y;
 
+    /* A line containing an attachment taller than the text gets a taller line fragment, but the
+     * baseline stayed where the font put it, so the attachment -- which sits on the baseline and
+     * extends upward -- had nowhere to go and was cut off at the fragment's top edge (measured:
+     * fragment y=0..24 with the baseline at y=11, so a 24pt attachment started at y=-13). Push the
+     * baseline down to the bottom of the taller fragment. For a line with no tall attachment the
+     * fragment is exactly the font's line height and `extra` is zero, so ordinary text is not
+     * moved at all. */
+    NSFont *runFont = NSFontAttributeInDictionary(attributes);
+    if (runFont != nil) {
+        NSRect lineFragment =
+            [self lineFragmentRectForGlyphAtIndex: range.location effectiveRange: NULL];
+        CGFloat extra = lineFragment.size.height - ceilf([runFont defaultLineHeightForFont]);
+        if (extra > 0)
+            point.y += isFlipped ? extra : -extra;
+    }
+
     if (attachment != nil) {
         // Draw the attachment at the calculated point
         [self _drawAttachment: attachment
