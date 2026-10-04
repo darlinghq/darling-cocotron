@@ -43,4 +43,17 @@ NSString *const NSCollectionElementKindSectionFooter =
     return self;
 }
 
+// Without this, any nib containing a flow layout fails to unarchive. The unarchiver sends
+// initWithCoder:, which found no implementation here and fell through to the stub forwarding above:
+// -methodSignatureForSelector: advertises "v@:" for every selector, so the call came back as
+//   NSForwardSignatureError: invoked with 3 args, but 2 expected. Selector initWithCoder:,
+// and that one element aborted the whole nib.
+//
+// The archived properties are not restored; the defaults from -init are, which is all this stub
+// class does anyway.
+- (instancetype) initWithCoder: (NSCoder *) coder {
+    (void) coder;
+    return [self init];
+}
+
 @end
