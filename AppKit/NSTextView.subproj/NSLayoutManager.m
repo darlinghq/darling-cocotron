@@ -2178,8 +2178,13 @@ static inline void _appendRectToCache(NSLayoutManager *self, NSRect rect) {
     id<NSTextAttachmentCell> cell = [attachment attachmentCell];
     NSRect frame;
 
-    frame.origin = point;
+    /* `point` is the baseline origin of the run, not the top-left of the cell: using it directly
+     * painted every attachment one cell-height below its own glyphs (measured: text row y=103..111,
+     * attachment y=112..135, i.e. offset by exactly cellSize.height). Convert from the baseline. */
+    NSPoint baselineOffset = [cell cellBaselineOffset];
     frame.size = [cell cellSize];
+    frame.origin.x = point.x + baselineOffset.x;
+    frame.origin.y = point.y + baselineOffset.y - frame.size.height;
 
     NSTextView *textView = [self textViewForBeginningOfSelection];
 
