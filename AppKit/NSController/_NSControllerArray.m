@@ -97,8 +97,13 @@
             [[_NSObservationProxy alloc] initWithKeyPath: keyPath
                                                 observer: observer
                                                   object: self];
-    int idx = [_observationProxies indexOfObject: proxy];
+    NSUInteger idx = [_observationProxies indexOfObject: proxy];
     [proxy release];
+    // Nothing to remove. The observance may already have been torn down, and
+    // the proxy list is then empty; indexing it with the not-found value
+    // raised rather than doing nothing.
+    if (idx == NSNotFound)
+        return;
     proxy = [[[_observationProxies objectAtIndex: idx] retain] autorelease];
     [_observationProxies removeObjectAtIndex: idx];
 
