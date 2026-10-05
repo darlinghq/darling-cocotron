@@ -43,7 +43,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     /* Unretained on purpose: the attachment owns the cell, so a strong reference back would be a
      * retain cycle and -dealloc would never run. The cell only reads the attachment while the
      * attachment is alive, during layout and drawing. */
-    [_attachment release];
     _attachment = attachment;
 }
 
@@ -146,7 +145,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (void) dealloc {
     [_attachmentImage release];
-    [_attachment release];
     [super dealloc];
 }
 
