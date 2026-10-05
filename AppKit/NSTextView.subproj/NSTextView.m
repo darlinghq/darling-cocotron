@@ -3310,10 +3310,7 @@ static NSTextView *s_targetTextView = nil;
                 shiftAnchor = start;   // inside the selection: anchor at the left edge
         }
 
-        if (click >= shiftAnchor)
-            selection = NSMakeRange(shiftAnchor, click - shiftAnchor);
-        else
-            selection = NSMakeRange(click, shiftAnchor - click);
+        selection = NSUnionRange(NSMakeRange(shiftAnchor, 0), firstRange);
         affinity = click >= shiftAnchor ? NSSelectionAffinityUpstream
                                         : NSSelectionAffinityDownstream;
         [self setSelectedRange: selection affinity: affinity stillSelecting: YES];
@@ -3364,13 +3361,9 @@ static NSTextView *s_targetTextView = nil;
         if (shiftExtend) {
             // Keep growing the range between the anchor and the current pointer position, so a
             // shift-drag behaves like a drag that never loses what was already selected.
-            NSUInteger cur = lastRange.location;
-            if (cur >= anchor)
-                selection = NSMakeRange(anchor, cur - anchor);
-            else
-                selection = NSMakeRange(cur, anchor - cur);
-            affinity = cur >= anchor ? NSSelectionAffinityUpstream
-                                     : NSSelectionAffinityDownstream;
+            selection = NSUnionRange(NSMakeRange(anchor, 0), lastRange);
+            affinity = lastRange.location >= anchor ? NSSelectionAffinityUpstream
+                                                    : NSSelectionAffinityDownstream;
         } else {
             selection = NSUnionRange(firstRange, lastRange);
             if (firstRange.location <= lastRange.location)
