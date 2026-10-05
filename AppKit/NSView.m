@@ -1925,6 +1925,18 @@ static inline void buildTransformsIfNeeded(NSView *self) {
             [[_superview layer] replaceSublayer: _layer with: value];
             [_layer release];
             _layer = value;
+
+            // The CALayerContext is created on the wantsLayer path
+            // (-_addLayerToSuperlayer), so replacing the layer here left the new
+            // layer without one. A CAMetalLayer with no context cannot vend
+            // drawables: -[CAMetalLayer recreateDrawables] returns early without
+            // _context, so -nextDrawable times out to nil and the layer never
+            // renders anything. Re-point an existing context at the new layer, or
+            // create one if this is the first.
+            if (_layerContext != nil)
+                [_layerContext setLayer: _layer];
+            else
+                [self _createLayerContextIfNeeded];
         }
 
         [_subviews
