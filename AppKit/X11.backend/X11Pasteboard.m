@@ -66,6 +66,16 @@ static const NSTimeInterval SelectionTimeout = 5;
 // backends accept the same payloads.
 static const NSUInteger TransferLimit = 16 * 1024 * 1024;
 
+// The largest property write this server will accept. BIG-REQUESTS raises it
+// above the protocol minimum, and the answer differs per server, so ask rather
+// than assume; 65535 is what the protocol guarantees without it.
+static size_t MaximumPropertyBytes(Display *display) {
+    long units = XExtendedMaxRequestSize(display);
+    if (units <= 0)
+        units = 65535;
+    return (size_t) units * 4 / 2;
+}
+
 + (X11Pasteboard *) pasteboardWithName: (NSPasteboardName) name {
     static dispatch_once_t once;
     dispatch_once(&once, ^{
@@ -94,6 +104,7 @@ static const NSUInteger TransferLimit = 16 * 1024 * 1024;
     _receivingProperty = XInternAtom(_display, "RECEIVING_PROPERTY", False);
     _incrAtom = XInternAtom(_display, "INCR", False);
     _targetsAtom = XInternAtom(_display, "TARGETS", False);
+    _incrTransfers = [[NSMutableDictionary alloc] init];
 
     int screen = DefaultScreen(_display);
     _window = XCreateSimpleWindow(_display, RootWindow(_display, screen), -10,
@@ -693,7 +704,15 @@ static const NSUInteger TransferLimit = 16 * 1024 * 1024;
         return;
     }
 
-    // TODO: INCR
+    if ([data length] > MaximumPropertyBytes(_display)) {
+        // ICCCM 2.7.2: more than fits in one property write, so hand it over as
+        // INCR. The marker and the reply go out now; -propertyNotify: paces the
+        // chunks from the requestor's acknowledgements, so nothing here waits on
+        // the peer.
+        [self startIncrementalTransferForRequest: event data: data];
+        reply(YES);
+        return;
+    }
 
     XChangeProperty(_display, event->requestor, event->property, event->target,
                     8, PropModeReplace, [data bytes], [data length]);
@@ -735,6 +754,33 @@ static const NSUInteger TransferLimit = 16 * 1024 * 1024;
     }
     XFlush(_display);
     [transfer release];
+}
+
+// Start handing a selection over as INCR, because it is larger than one property
+// write. The continuation already lives in -propertyNotify:, keyed by the
+// requestor's window; this only has to write the INCR marker the requestor is
+// waiting for and subscribe to the deletions that pace it.
+- (void) startIncrementalTransferForRequest: (XSelectionRequestEvent *) event
+                                       data: (NSData *) data {
+    // ICCCM 2.7.2: the owner writes the property with type INCR and the total
+    // length as its value, and the requestor then deletes the property to say it
+    // is ready for a chunk. The length is what lets the requestor size its read,
+    // so it is the payload here, not the atom.
+    unsigned long length = (unsigned long) [data length];
+    XChangeProperty(_display, event->requestor, event->property, _incrAtom, 32,
+                    PropModeReplace, (unsigned char *) &length, 1);
+
+    // Deletions arrive as PropertyNotify on the requestor's window, which we do
+    // not otherwise select for: it belongs to another client.
+    XSelectInput(_display, event->requestor, PropertyChangeMask);
+
+    NSNumber *requestor = [NSNumber numberWithUnsignedLong: event->requestor];
+    _incrTransfers[requestor] =
+            [[[X11IncrTransfer alloc] initWithProperty: event->property
+                                                   type: event->target
+                                                   data: data] autorelease];
+
+    XFlush(_display);
 }
 
 - (Window) windowHandle {
