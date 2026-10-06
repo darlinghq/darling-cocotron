@@ -300,7 +300,7 @@ static Class _fontPanelFactory;
 - (BOOL) sendAction {
     return [NSApp sendAction: _action
                           to: _target
-                        from: [NSFontManager sharedFontManager]];
+                        from: self];
 }
 
 - (BOOL) isEnabled {
