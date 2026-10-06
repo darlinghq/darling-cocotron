@@ -61,6 +61,7 @@ APPKIT_EXPORT NSString *const NSAppearanceNameControlStrip; // Undocumented
 @protocol NSAppearanceCustomization <NSObject>
 
 @required
-@property (strong) NSAppearance *appearance;
+@property (strong, nullable) NSAppearance *appearance;
+@property (readonly, strong, nonnull) NSAppearance *effectiveAppearance;
 
 @end
