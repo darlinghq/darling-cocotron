@@ -23,7 +23,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSObservationProxy.h>
 #import <Foundation/NSArray.h>
 #import <Foundation/NSEnumerator.h>
-#import <Foundation/NSException.h>
 #import <Foundation/NSKeyValueCoding.h>
 #import <Foundation/NSKeyValueObserving.h>
 #import <Foundation/NSString.h>
@@ -61,12 +60,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [_cachedValues release];
     [_observableSelection release];
 
-    if ([_observationProxies count] > 0)
-        [NSException raise: NSInvalidArgumentException
-                    format: @"NSControllerSelectionProxy still being observed "
-                            @"by %@ on %@",
-                            [[_observationProxies objectAtIndex: 0] observer],
-                            [[_observationProxies objectAtIndex: 0] keyPath]];
+    if ([_observationProxies count] > 0 && getenv("DARLING_KVO_DIAG") != NULL)
+        NSLog(@"NSControllerSelectionProxy deallocated while still observed "
+              @"by %@ on %@",
+              [[_observationProxies objectAtIndex: 0] observer],
+              [[_observationProxies objectAtIndex: 0] keyPath]);
 
     [_observationProxies release];
     [super dealloc];
