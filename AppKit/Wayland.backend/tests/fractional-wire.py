@@ -16,12 +16,13 @@ def endpoint(logical, pixels, extent):
 
 def verify(path):
     viewports, sources, destinations, attachments, buffers, scales = {}, {}, {}, {}, {}, {}
+    pending_sources = {}
     results = []
     for line in Path(path).read_text().splitlines():
         match = re.search(r'get_viewport\(new id wp_viewport#(\d+), wl_surface#(\d+)\)', line)
         if match: viewports[match[1]] = match[2]
         match = re.search(r'wp_viewport#(\d+)\.set_source\(([^)]+)\)', line)
-        if match: sources[match[1]] = tuple(map(D, match[2].split(', ')))
+        if match: pending_sources[match[1]] = tuple(map(D, match[2].split(', ')))
         match = re.search(r'wp_viewport#(\d+)\.set_destination\(([^)]+)\)', line)
         if match: destinations[match[1]] = tuple(map(int, match[2].split(', ')))
         match = re.search(r'create_buffer\(new id wl_buffer#(\d+), \d+, (\d+), (\d+),', line)
@@ -30,6 +31,11 @@ def verify(path):
         if match: attachments[match[1]] = buffers[match[2]]
         match = re.search(r'wl_surface#(\d+)\.set_buffer_scale\((\d+)\)', line)
         if match: scales[match[1]] = int(match[2])
+        match = re.search(r'wl_surface#(\d+)\.commit\(\)', line)
+        if match:
+            for viewport, surface in viewports.items():
+                if surface == match[1] and viewport in pending_sources:
+                    sources[viewport] = pending_sources.pop(viewport)
         match = re.fullmatch(r'CAPTURE (\d+)', line)
         if not match: continue
         stage = int(match[1]); assert stage == len(results) and stage < 3

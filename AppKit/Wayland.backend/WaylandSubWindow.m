@@ -27,6 +27,11 @@ static void request(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags) {
     union wl_argument args[] = {{.o = NULL}};
     WaylandMarshal(proxy, opcode, NULL, flags, args);
 }
+static void unsetViewportSource(struct wl_proxy *viewport) {
+    int32_t unset = wl_fixed_from_int(-1);
+    union wl_argument source[] = {{.f = unset}, {.f = unset}, {.f = unset}, {.f = unset}};
+    WaylandMarshal(viewport, WP_VIEWPORT_SET_SOURCE, NULL, 0, source);
+}
 static BOOL validFrame(CGRect frame) {
     return isfinite(frame.origin.x) && isfinite(frame.origin.y) &&
         fabs(frame.origin.x) <= INT32_MAX / 2 && fabs(frame.origin.y) <= INT32_MAX / 2 &&
@@ -118,29 +123,15 @@ static BOOL validFrame(CGRect frame) {
     if (!_viewport && !CGRectContainsRect(bounds, full)) _clipped = YES;
     if (_clipped || !CGRectContainsRect(bounds, _presentedRect)) [self removeRole];
     if (_clipped) { _scaleRedrawRequested = NO; [[_parent waylandDisplay] flush]; return; }
+    _fullRect = full;
     _pendingRect = crop;
     if (_viewport) {
-        int32_t x, y, w, h;
-        if (_fractionalScale) {
-            if (!WaylandScaleCrop((int32_t)full.size.width, width,
-                    (int32_t)(crop.origin.x - full.origin.x), (int32_t)(CGRectGetMaxX(crop) - full.origin.x), &x, &w) ||
-                !WaylandScaleCrop((int32_t)full.size.height, height,
-                    (int32_t)(crop.origin.y - full.origin.y), (int32_t)(CGRectGetMaxY(crop) - full.origin.y), &y, &h)) {
-                _clipped = YES; _scaleRedrawRequested = NO; [self removeRole]; [[_parent waylandDisplay] flush]; return;
-            }
-        } else {
-            x = wl_fixed_from_int((int)(crop.origin.x - full.origin.x));
-            y = wl_fixed_from_int((int)(crop.origin.y - full.origin.y));
-            w = wl_fixed_from_int((int)crop.size.width); h = wl_fixed_from_int((int)crop.size.height);
-        }
-        union wl_argument source[] = {{.f = x}, {.f = y}, {.f = w}, {.f = h}};
-        WaylandMarshal(_viewport, WP_VIEWPORT_SET_SOURCE, NULL, 0, source);
-        union wl_argument destination[] = {{.i = _fractionalScale ? (int)crop.size.width : -1},
-                                          {.i = _fractionalScale ? (int)crop.size.height : -1}};
-        WaylandMarshal(_viewport, WP_VIEWPORT_SET_DESTINATION, NULL, 0, destination);
+        // EGL can swap a backbuffer allocated before this resize. Clear the old
+        // crop before its implicit commit, then crop the actual buffer in flush.
+        unsetViewportSource(_viewport);
     }
     if ([_parent waylandDisplay]->_compositorVersion >= 3) {
-        union wl_argument scaling[] = {{.i = _fractionalScale ? 1 : scale}};
+        union wl_argument scaling[] = {{.i = _viewport ? 1 : scale}};
         WaylandMarshal(_surface, WP_SURFACE_SET_BUFFER_SCALE, NULL, 0, scaling);
     }
     CGSize pixels = CGSizeMake(width, height);
@@ -177,6 +168,27 @@ static BOOL validFrame(CGRect frame) {
 - (void) flush {
     if (![NSThread isMainThread]) return;
     if (!_visible || _clipped || !_eglWindow || [_parent isInvalidated]) return;
+    if (_viewport) {
+        int width, height;
+        WL.wl_egl_window_get_attached_size(_eglWindow, &width, &height);
+        int32_t x, y, w, h;
+        if (!WaylandScaleCrop((int32_t)_fullRect.size.width, width,
+                (int32_t)(_pendingRect.origin.x - _fullRect.origin.x),
+                (int32_t)(CGRectGetMaxX(_pendingRect) - _fullRect.origin.x), &x, &w) ||
+            !WaylandScaleCrop((int32_t)_fullRect.size.height, height,
+                (int32_t)(_pendingRect.origin.y - _fullRect.origin.y),
+                (int32_t)(CGRectGetMaxY(_pendingRect) - _fullRect.origin.y), &y, &h)) {
+            NSLog(@"Cannot crop Wayland drawable with attached size %dx%d", width, height);
+            [self removeRole];
+            return;
+        }
+        union wl_argument source[] = {{.f = x}, {.f = y}, {.f = w}, {.f = h}};
+        WaylandMarshal(_viewport, WP_VIEWPORT_SET_SOURCE, NULL, 0, source);
+        union wl_argument destination[] = {{.i = (int)_pendingRect.size.width},
+                                          {.i = (int)_pendingRect.size.height}};
+        WaylandMarshal(_viewport, WP_VIEWPORT_SET_DESTINATION, NULL, 0, destination);
+        request(_surface, WP_SURFACE_COMMIT, 0);
+    }
     struct wl_proxy *parentSurface = [_parent ensureSurface];
     if (!parentSurface) return;
     if (!_subsurface) {
@@ -192,6 +204,9 @@ static BOOL validFrame(CGRect frame) {
     [_parent stackSubwindows];
     request(parentSurface, WP_SURFACE_COMMIT, 0);
     _presentedRect = _pendingRect;
+    // A later swap may attach the resized backbuffer without another geometry
+    // update. Leave source unset pending for that implicit child commit.
+    if (_viewport) unsetViewportSource(_viewport);
     // The caller invokes flush only after a successful drawable swap. A queued
     // preference still needs its geometry/redraw pass; don't consume it here.
     if (!_scaleUpdatePending) _needsScaleRedraw = NO;

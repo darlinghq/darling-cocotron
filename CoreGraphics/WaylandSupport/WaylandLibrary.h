@@ -85,7 +85,8 @@
 #define WAYLAND_EGL_FUNCTIONS(X)                                               \
     X(wl_egl_window_create)                                                    \
     X(wl_egl_window_destroy)                                                   \
-    X(wl_egl_window_resize)
+    X(wl_egl_window_resize)                                                    \
+    X(wl_egl_window_get_attached_size)
 
 // Each member has the exact type of the prototype in the host headers.
 struct WaylandLibrary {

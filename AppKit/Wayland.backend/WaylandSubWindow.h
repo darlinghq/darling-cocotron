@@ -30,7 +30,7 @@ struct wl_egl_window;
     BOOL _scaleUpdatePending, _needsScaleRedraw, _scaleRedrawRequested;
     struct wl_egl_window *_eglWindow;
     CGSize _drawablePixelSize;
-    CGRect _frame, _pendingRect, _presentedRect;
+    CGRect _frame, _fullRect, _pendingRect, _presentedRect;
     BOOL _visible, _clipped;
 }
 - (id) initWithParentWindow: (WaylandWindow *) parent frame: (CGRect) frame;
