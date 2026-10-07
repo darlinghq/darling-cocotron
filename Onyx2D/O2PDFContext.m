@@ -45,6 +45,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Onyx2D/O2Shading+PDF.h>
 
 const NSString *kO2PDFContextTitle = @"kO2PDFContextTitle";
+const NSString *kO2PDFContextAuthor = @"kO2PDFContextAuthor";
+const NSString *kO2PDFContextCreator = @"kO2PDFContextCreator";
 
 @implementation O2PDFContext
 
@@ -70,14 +72,16 @@ const NSString *kO2PDFContextTitle = @"kO2PDFContextTitle";
     [self appendCString: "%PDF-1.3\n"];
 
     _info = [[O2PDFDictionary pdfDictionary] retain];
+    NSString *author = [auxiliaryInfo objectForKey: kO2PDFContextAuthor];
+    NSString *creator = [auxiliaryInfo objectForKey: kO2PDFContextCreator];
+    if (author == nil)
+        author = NSFullUserName();
+    if (creator == nil)
+        creator = [[NSProcessInfo processInfo] processName];
     [_info setObjectForKey: "Author"
-                     value: [O2PDFString
-                                    pdfObjectWithString: NSFullUserName()]];
+                     value: [O2PDFString pdfObjectWithString: author]];
     [_info setObjectForKey: "Creator"
-                     value: [O2PDFString
-                                    pdfObjectWithString: [[NSProcessInfo
-                                                                 processInfo]
-                                                                 processName]]];
+                     value: [O2PDFString pdfObjectWithString: creator]];
     [_info setObjectForKey: "Producer"
                      value: [O2PDFString pdfObjectWithCString:
                                                  "THE COCOTRON "

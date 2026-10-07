@@ -27,6 +27,8 @@
 
 COREGRAPHICS_EXPORT const CFStringRef kCGPDFContextKeywords;
 COREGRAPHICS_EXPORT const CFStringRef kCGPDFContextTitle;
+COREGRAPHICS_EXPORT const CFStringRef kCGPDFContextAuthor;
+COREGRAPHICS_EXPORT const CFStringRef kCGPDFContextCreator;
 COREGRAPHICS_EXPORT const CFStringRef kCGPDFContextMediaBox;
 
 typedef struct CF_BRIDGED_TYPE(id) O2PDFContext *CGPDFContextRef;

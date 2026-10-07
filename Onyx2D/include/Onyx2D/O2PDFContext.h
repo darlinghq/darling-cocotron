@@ -24,6 +24,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         NSMutableData, NSMutableDictionary, O2DataConsumer;
 
 extern const NSString *kO2PDFContextTitle;
+extern const NSString *kO2PDFContextAuthor;
+extern const NSString *kO2PDFContextCreator;
 
 @interface O2PDFContext : O2Context {
     O2DataConsumer *_dataConsumer;

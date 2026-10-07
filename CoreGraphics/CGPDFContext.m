@@ -22,6 +22,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #include <CoreFoundation/CFString.h>
 
 const CFStringRef kCGPDFContextTitle = CFSTR("kCGPDFContextTitle");
+const CFStringRef kCGPDFContextAuthor = CFSTR("kCGPDFContextAuthor");
+const CFStringRef kCGPDFContextCreator = CFSTR("kCGPDFContextCreator");
 const CFStringRef kCGPDFContextKeywords = CFSTR("kCGPDFContextKeywords");
 const CFStringRef kCGPDFContextMediaBox = CFSTR("MediaBox");
 
@@ -30,12 +32,19 @@ CGContextRef CGPDFContextCreate(CGDataConsumerRef consumer,
                                 CFDictionaryRef auxiliaryInfo)
 {
     NSDictionary *info = (NSDictionary *)auxiliaryInfo;
-    id title = [info objectForKey:(id)kCGPDFContextTitle];
-    if (title) {
-        NSMutableDictionary *translated = [[info mutableCopy] autorelease];
-        [translated setObject:title forKey:(id)kO2PDFContextTitle];
-        info = translated;
+    const CFStringRef publicKeys[] = {kCGPDFContextTitle, kCGPDFContextAuthor, kCGPDFContextCreator};
+    const NSString *backendKeys[] = {kO2PDFContextTitle, kO2PDFContextAuthor, kO2PDFContextCreator};
+    NSMutableDictionary *translated = nil;
+    for (unsigned i = 0; i < 3; i++) {
+        id value = [info objectForKey:(id)publicKeys[i]];
+        if (value) {
+            if (!translated)
+                translated = [[info mutableCopy] autorelease];
+            [translated setObject:value forKey:(id)backendKeys[i]];
+        }
     }
+    if (translated)
+        info = translated;
     return (CGContextRef)[[O2PDFContext alloc]
             initWithConsumer: (O2DataConsumer*)consumer
                     mediaBox: mediaBox
