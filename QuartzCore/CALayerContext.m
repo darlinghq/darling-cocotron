@@ -119,7 +119,7 @@
     }
 
     _subwindow = [subwindow retain];
-    _cglWindow = CGLGetWindow([_subwindow nativeWindow]);
+    _cglWindow = CGLGetWindowForContext(_glContext, [_subwindow nativeWindow]);
     _ownsCglWindow = _cglWindow != NULL;
     _swapInterval = -1;
 
@@ -201,7 +201,7 @@ static GLint metalLayerSwapInterval(CALayer *layer);
         _cglWindow = shared;
         _ownsCglWindow = NO;
     } else {
-        _cglWindow = CGLGetWindow([_subwindow nativeWindow]);
+        _cglWindow = CGLGetWindowForContext(_glContext, [_subwindow nativeWindow]);
         _ownsCglWindow = _cglWindow != NULL;
     }
     // The swap interval belongs to the drawable.
