@@ -269,8 +269,21 @@ static size_t MaximumPropertyBytes(Display *display) {
               "type of another");
     }
 
-    NSData *data = [NSData dataWithBytes: propValue
-                                  length: num_items * (format / 8)];
+    // Xlib stores a format-32 reply as an array of long, so copying num_items * 4
+    // bytes keeps only the first half of the items, each at an 8-byte stride.
+    NSData *data;
+    if (format == 32) {
+        NSMutableData *packed = [NSMutableData dataWithLength:
+                                        num_items * sizeof(uint32_t)];
+        const long *items = (const long *) propValue;
+        uint32_t *atoms = (uint32_t *) packed.mutableBytes;
+        for (unsigned long n = 0; n < num_items; n++)
+            atoms[n] = (uint32_t) items[n];
+        data = packed;
+    } else {
+        data = [NSData dataWithBytes: propValue
+                              length: num_items * (format / 8)];
+    }
     XFree(propValue);
 
     return data;
@@ -673,10 +686,9 @@ static size_t MaximumPropertyBytes(Display *display) {
             NSArray<NSString *> *ts = [X11Pasteboard targetsForType: type];
             count += [ts count];
         }
-        // Format 32 properties travel as 4 bytes per element, so an Atom buffer (8 bytes on
-        // LP64) reaches the client interleaved with zeroes: it would read TARGETS as
-        // [atom0, 0, atom1, 0, ...] and fail to match any of its own target names.
-        uint32_t targets[count];
+        // Xlib takes format-32 data as one long per element, so a uint32_t buffer is
+        // read at twice its size: every other atom, then half the reply off the stack.
+        unsigned long targets[count];
         size_t i = 0;
         for (NSPasteboardType type in types) {
             NSArray<NSString *> *ts = [X11Pasteboard targetsForType: type];
