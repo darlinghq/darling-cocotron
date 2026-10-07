@@ -229,13 +229,25 @@ static BOOL layerTreeNeedsAnotherFrame(CALayer *layer) {
 }
 
 - (void) startTimerIfNeeded {
+    // Metal layers present from arbitrary app threads. A timer scheduled there
+    // lands on a run loop that never spins, so the frame is never composited.
+    if (![NSThread isMainThread]) {
+        [self performSelectorOnMainThread: @selector(startTimerIfNeeded)
+                               withObject: nil
+                            waitUntilDone: NO
+                                    modes: [NSArray arrayWithObject: NSRunLoopCommonModes]];
+        return;
+    }
     _renderRequested = YES;
-    if (_timer == nil)
-        _timer = [[NSTimer scheduledTimerWithTimeInterval: 1.0 / 60.0
-                                                   target: self
-                                                 selector: @selector(timer:)
-                                                 userInfo: nil
-                                                  repeats: YES] retain];
+    if (_timer == nil) {
+        _timer = [[NSTimer timerWithTimeInterval: 1.0 / 60.0
+                                          target: self
+                                        selector: @selector(timer:)
+                                        userInfo: nil
+                                         repeats: YES] retain];
+        // Common modes keep frames flowing during live resize/drag tracking.
+        [[NSRunLoop mainRunLoop] addTimer: _timer forMode: NSRunLoopCommonModes];
+    }
 }
 
 - (void) deleteTextureId: (NSNumber *) textureId {
