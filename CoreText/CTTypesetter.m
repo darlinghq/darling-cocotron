@@ -1,5 +1,6 @@
 #import <CoreText/CTTypesetter.h>
 #import <CoreText/CTLine.h>
+#import "KTCoreTextInternal.h"
 #import <Foundation/NSAttributedString.h>
 #import <Foundation/NSDictionary.h>
 #import <Foundation/NSException.h>
@@ -40,19 +41,12 @@ CTLineRef CTTypesetterCreateLine(CTTypesetterRef typesetter, CFRange stringRange
         return NULL;
     }
     CFIndex totalLen = CFAttributedStringGetLength(ts->_string);
-    // If an explicit valid subrange is requested, create the line from that range
-    if (stringRange.location >= 0 && stringRange.length > 0 &&
-        stringRange.length <= totalLen - stringRange.location) {
-        CFAttributedStringRef sub = CFAttributedStringCreateWithSubstring(NULL, ts->_string, stringRange);
-        if (sub) {
-            CTLineRef line = CTLineCreateWithAttributedString(sub);
-            CFRelease(sub);
-            return line;
-        }
-    }
-    // TODO: When stringRange.length == 0, Apple typesetter dynamically breaks line according
-    // to layout constraints and available width. Fall back to the whole string for now.
-    return CTLineCreateWithAttributedString(ts->_string);
+    if (stringRange.location < 0 || stringRange.length < 0 ||
+        stringRange.location > totalLen || stringRange.length > totalLen - stringRange.location)
+        return NULL;
+    if (stringRange.length == 0)
+        stringRange.length = totalLen - stringRange.location;
+    return KTCoreTextCreateLineWithRange(ts->_string, stringRange);
 }
 
 CTLineRef CTTypesetterCreateLineWithOffset(CTTypesetterRef typesetter, CFRange stringRange, double offset) {

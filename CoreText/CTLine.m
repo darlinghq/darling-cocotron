@@ -51,6 +51,8 @@ static CFTypeRef createCoreTextObject(CFTypeID type, CFDictionaryRef storage) {
 
 const CFStringRef KTLineAttributedStringKey = CFSTR("KTLineAttributedString");
 const CFStringRef KTLineRunsKey = CFSTR("KTLineRuns");
+const CFStringRef KTLineRangeLocationKey = CFSTR("KTLineRangeLocation");
+const CFStringRef KTLineRangeLengthKey = CFSTR("KTLineRangeLength");
 const CFStringRef KTLineWidthKey = CFSTR("KTLineWidth");
 const CFStringRef KTLineAscentKey = CFSTR("KTLineAscent");
 const CFStringRef KTLineDescentKey = CFSTR("KTLineDescent");
@@ -423,9 +425,12 @@ static CFRange clippedStringRange(CFRange range, CFIndex start, CFIndex end)
     return CFRangeMake(location, limit > location ? limit - location : 0);
 }
 
-CTLineRef CTLineCreateWithAttributedString(CFAttributedStringRef attrString)
+CTLineRef KTCoreTextCreateLineWithRange(CFAttributedStringRef attrString, CFRange stringRange)
 {
-    if (attrString == NULL)
+    if (attrString == NULL || stringRange.location < 0 || stringRange.length < 0)
+        return NULL;
+    CFIndex total = CFAttributedStringGetLength(attrString);
+    if (stringRange.location > total || stringRange.length > total - stringRange.location)
         return NULL;
 
     CFAttributedStringRef copy = CFAttributedStringCreateCopy(
@@ -438,8 +443,8 @@ CTLineRef CTLineCreateWithAttributedString(CFAttributedStringRef attrString)
         CFRelease(copy);
         return NULL;
     }
-    CFIndex length = CFAttributedStringGetLength(copy);
-    CFIndex cursor = 0;
+    CFIndex length = stringRange.location + stringRange.length;
+    CFIndex cursor = stringRange.location;
     CGFloat width = 0;
     CGFloat ascent = 0;
     CGFloat descent = 0;
@@ -486,6 +491,8 @@ CTLineRef CTLineCreateWithAttributedString(CFAttributedStringRef attrString)
         goto failed;
     CFDictionarySetValue(line, KTLineAttributedStringKey, copy);
     CFDictionarySetValue(line, KTLineRunsKey, runs);
+    KTCoreTextDictionarySetIndex(line, KTLineRangeLocationKey, stringRange.location);
+    KTCoreTextDictionarySetIndex(line, KTLineRangeLengthKey, stringRange.length);
     KTCoreTextDictionarySetFloat(line, KTLineWidthKey, width);
     KTCoreTextDictionarySetFloat(line, KTLineAscentKey, ascent);
     KTCoreTextDictionarySetFloat(line, KTLineDescentKey, descent);
@@ -500,6 +507,14 @@ failed:
     CFRelease(copy);
     CFRelease(runs);
     return NULL;
+}
+
+CTLineRef CTLineCreateWithAttributedString(CFAttributedStringRef attrString)
+{
+    if (attrString == NULL)
+        return NULL;
+    return KTCoreTextCreateLineWithRange(attrString,
+            CFRangeMake(0, CFAttributedStringGetLength(attrString)));
 }
 
 CTLineRef CTLineCreateTruncatedLine(CTLineRef line, double width,
@@ -543,9 +558,9 @@ CFRange CTLineGetStringRange(CTLineRef line)
 {
     if (line == NULL)
         return CFRangeMake(kCFNotFound, 0);
-    CFAttributedStringRef string = CFDictionaryGetValue(
-            KTCoreTextObjectDictionary(line), KTLineAttributedStringKey);
-    return CFRangeMake(0, CFAttributedStringGetLength(string));
+    CFDictionaryRef dictionary = KTCoreTextObjectDictionary(line);
+    return CFRangeMake(KTCoreTextDictionaryGetIndex(dictionary, KTLineRangeLocationKey),
+            KTCoreTextDictionaryGetIndex(dictionary, KTLineRangeLengthKey));
 }
 
 double CTLineGetPenOffsetForFlush(CTLineRef line, CGFloat flushFactor,
@@ -619,7 +634,8 @@ CFIndex CTLineGetStringIndexForPosition(CTLineRef line, CGPoint position)
                 return indices[index];
         }
     }
-    return CTLineGetStringRange(line).length;
+    CFRange range = CTLineGetStringRange(line);
+    return range.location + range.length;
 }
 
 CGFloat CTLineGetOffsetForStringIndex(CTLineRef line, CFIndex charIndex,

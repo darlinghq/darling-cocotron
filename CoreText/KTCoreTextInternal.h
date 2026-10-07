@@ -2,6 +2,7 @@
 #import <CoreText/CTLine.h>
 #import <CoreText/CTRun.h>
 
+CTLineRef KTCoreTextCreateLineWithRange(CFAttributedStringRef string, CFRange range);
 CFTypeID KTCoreTextRunGetTypeID(void);
 CFDictionaryRef KTCoreTextObjectDictionary(CFTypeRef object);
 
