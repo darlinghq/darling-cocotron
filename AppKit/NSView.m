@@ -48,6 +48,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <QuartzCore/CALayerContext.h>
 #import <QuartzCore/CATransaction.h>
 #import <AppKit/NSLayoutAnchor.h>
+#import <QuartzCore/CADisplayLink.h>
+#import <Foundation/NSHashTable.h>
+#import <objc/message.h>
 #import <AppKit/NSLayoutConstraint.h>
 #import <AppKit/NSLayoutGuide.h>
 #import "NSLayoutConstraintInternal.h"
@@ -80,6 +83,43 @@ const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPresentationOptio
 - (void) _addLayerToSuperlayer;
 - (void) _updateLayerVisibility;
 - (void) _removeLayerFromSuperlayer;
+@end
+
+@interface _NSViewDisplayLinkTarget : NSObject {
+    NSHashTable *_view;
+    id _target;
+    SEL _selector;
+}
+- (instancetype)initWithView:(NSView *)view target:(id)target selector:(SEL)selector;
+- (void)frame:(CADisplayLink *)link;
+@end
+
+@implementation _NSViewDisplayLinkTarget
+- (instancetype)initWithView:(NSView *)view target:(id)target selector:(SEL)selector {
+    if (!(self = [super init])) return nil;
+    if (!target || !selector || ![target respondsToSelector:selector]) {
+        [self release];
+        [NSException raise:NSInvalidArgumentException format:@"A display link requires a target and selector"];
+        return nil;
+    }
+    _view = [[NSHashTable weakObjectsHashTable] retain];
+    [_view addObject:view];
+    _target = [target retain];
+    _selector = selector;
+    return self;
+}
+- (void)frame:(CADisplayLink *)link {
+    NSView *view = [_view anyObject];
+    NSWindow *window = [view window];
+    if (view && ![view isHiddenOrHasHiddenAncestor] && [window isVisible] &&
+        ![window isMiniaturized] && [window screen])
+        ((void (*)(id, SEL, id))objc_msgSend)(_target, _selector, link);
+}
+- (void)dealloc {
+    [_view release];
+    [_target release];
+    [super dealloc];
+}
 @end
 
 @implementation NSView
@@ -2361,6 +2401,14 @@ static void clearNeedsDisplay(NSView *self) {
     }
     clearInvalidRects(self);
     self->_needsDisplay = NO;
+}
+
+- (CADisplayLink *)displayLinkWithTarget:(id)target selector:(SEL)selector {
+    _NSViewDisplayLinkTarget *proxy = [[_NSViewDisplayLinkTarget alloc]
+        initWithView:self target:target selector:selector];
+    CADisplayLink *link = [CADisplayLink displayLinkWithTarget:proxy selector:@selector(frame:)];
+    [proxy release];
+    return link;
 }
 
 - (void) setNeedsDisplay: (BOOL) flag {

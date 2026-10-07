@@ -36,7 +36,7 @@ typedef NS_OPTIONS(NSUInteger, NSTouchTypeMask) {
     NSTouchTypeMaskIndirect = 1 << 1,
 };
 
-@class NSWindow, NSMenu, NSMenuItem, NSCursor, NSClipView, NSPasteboard,
+@class CADisplayLink, NSWindow, NSMenu, NSMenuItem, NSCursor, NSClipView, NSPasteboard,
         NSTextInputContext, NSImage, NSBitmapImageRep, NSScrollView,
         NSTrackingArea, NSShadow, NSScreen, CALayer, CIFilter, CALayerContext, NSView,
         NSLayoutGuide, NSGestureRecognizer, NSLayoutDimension, NSLayoutXAxisAnchor, NSLayoutYAxisAnchor;
@@ -456,6 +456,7 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPre
 
 - (NSView *) opaqueAncestor;
 - (void) display;
+- (CADisplayLink *)displayLinkWithTarget:(id)target selector:(SEL)selector;
 - (void) displayIfNeeded;
 - (void) displayIfNeededIgnoringOpacity;
 - (void) displayIfNeededInRect: (NSRect) rect;
