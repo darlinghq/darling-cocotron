@@ -38,6 +38,7 @@ set_property(SOURCE
 	CGPath.m
 	CGPattern.m
 	CGPDFContext.m
+	CGPDFDictionary.m
 	CGPDFDocument.m
 	CGPDFPage.m
 	CGPSConverter.m
@@ -90,6 +91,7 @@ set(CoreGraphics_sources
 	CGPath.m
 	CGPattern.m
 	CGPDFContext.m
+	CGPDFDictionary.m
 	CGPDFDocument.m
 	CGPDFPage.m
 	CGShading.m
