@@ -29,10 +29,17 @@ CGContextRef CGPDFContextCreate(CGDataConsumerRef consumer,
                                 const CGRect *mediaBox,
                                 CFDictionaryRef auxiliaryInfo)
 {
+    NSDictionary *info = (NSDictionary *)auxiliaryInfo;
+    id title = [info objectForKey:(id)kCGPDFContextTitle];
+    if (title) {
+        NSMutableDictionary *translated = [[info mutableCopy] autorelease];
+        [translated setObject:title forKey:(id)kO2PDFContextTitle];
+        info = translated;
+    }
     return (CGContextRef)[[O2PDFContext alloc]
             initWithConsumer: (O2DataConsumer*)consumer
                     mediaBox: mediaBox
-               auxiliaryInfo: (NSDictionary *) auxiliaryInfo];
+               auxiliaryInfo: info];
 }
 
 COREGRAPHICS_EXPORT void CGPDFContextClose(CGContextRef self) {
