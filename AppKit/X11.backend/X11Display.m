@@ -1197,6 +1197,8 @@ static NSDictionary *modeInfoToDictionary(const XRRModeInfo *mi, int depth) {
                 type = NSLeftMouseDragged;
             } else if (ev->xmotion.state & Button2Mask) {
                 type = NSRightMouseDragged;
+            } else if (ev->xmotion.state & Button3Mask) {
+                type = NSOtherMouseDragged;
             }
 
             if (type == NSMouseMoved && ![delegate acceptsMouseMovedEvents])

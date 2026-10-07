@@ -73,6 +73,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (void) rightMouseDown: (NSEvent *) event;
 - (void) rightMouseDragged: (NSEvent *) event;
 
+- (void) otherMouseUp: (NSEvent *) event;
+- (void) otherMouseDown: (NSEvent *) event;
+- (void) otherMouseDragged: (NSEvent *) event;
+
 @end
 
 @interface NSResponder (NSResponder_keyBindings)

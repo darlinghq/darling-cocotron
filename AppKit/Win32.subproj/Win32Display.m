@@ -1319,6 +1319,8 @@ static HWND findWindowForScrollWheel(POINT point) {
             type = NSLeftMouseDragged;
         else if (msg.wParam & MK_RBUTTON)
             type = NSRightMouseDragged;
+        else if (msg.wParam & MK_MBUTTON)
+            type = NSOtherMouseDragged;
         else {
             ReleaseCapture();
             if (window != nil && [window acceptsMouseMovedEvents]) {
@@ -1420,6 +1422,7 @@ static HWND findWindowForScrollWheel(POINT point) {
     case NSMouseMoved:
     case NSLeftMouseDragged:
     case NSRightMouseDragged:
+    case NSOtherMouseDragged:
     case NSMouseEntered:
     case NSMouseExited:
         return [self postMouseMSG: msg

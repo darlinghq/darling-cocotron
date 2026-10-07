@@ -84,6 +84,9 @@ typedef NS_ENUM(NSUInteger, NSEventType) {
     NSEventTypeOtherMouseUp = 26,
     NSOtherMouseUp = 26,
 
+    NSEventTypeOtherMouseDragged = 27,
+    NSOtherMouseDragged = 27,
+
     NSAppKitSystem = 100,
 
     NSPlatformSpecific = 29,
@@ -106,6 +109,9 @@ typedef NS_OPTIONS(unsigned long long, NSEventMask) {
     NSPeriodicMask = 1 << NSPeriodic,
     NSCursorUpdateMask = 1 << NSCursorUpdate,
     NSScrollWheelMask = 1 << NSScrollWheel,
+    NSOtherMouseDownMask = 1 << NSOtherMouseDown,
+    NSOtherMouseUpMask = 1 << NSOtherMouseUp,
+    NSOtherMouseDraggedMask = 1 << NSOtherMouseDragged,
     NSApplicationDefinedMask = 1 << NSApplicationDefined,
     NSAppKitDefinedMask = 1 << NSAppKitDefined,
     NSAnyEventMask = 0xffffffff,
