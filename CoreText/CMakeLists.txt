@@ -53,6 +53,7 @@ add_framework(CoreText
 		objc
 		system
 		CoreFoundation
+		icucore
 		Foundation
 		CoreGraphics
 		Onyx2D
