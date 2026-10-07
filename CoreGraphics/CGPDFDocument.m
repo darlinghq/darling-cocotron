@@ -44,6 +44,10 @@ CGPDFPageRef CGPDFDocumentGetPage(CGPDFDocumentRef self, size_t pageNumber) {
     return (CGPDFPageRef)[self pageAtNumber: pageNumber];
 }
 
+CGPDFDictionaryRef CGPDFDocumentGetInfo(CGPDFDocumentRef self) {
+    return (CGPDFDictionaryRef)[(O2PDFDocument *)self infoDictionary];
+}
+
 bool CGPDFDocumentIsEncrypted(CGPDFDocumentRef self) {
     return [(O2PDFDocument *)self encryptDictionary] != nil;
 }
