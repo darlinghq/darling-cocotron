@@ -750,6 +750,8 @@ NSBitmapImageRepPropertyKey NSImageCurrentFrame = @"NSImageCurrentFrame";
         if (_bitsPerSample == 1 && _samplesPerPixel == 2 && _bitmapPlanes[0] && _bitmapPlanes[1]) {
             size_t pixelCount = (size_t)_pixelsWide * (size_t)_pixelsHigh;
             uint32_t *rgba = (uint32_t *)NSZoneMalloc(NULL, pixelCount * sizeof(uint32_t));
+            const BOOL blackSpace = [_colorSpaceName isEqualToString:NSDeviceBlackColorSpace]
+                    || [_colorSpaceName isEqualToString:NSCalibratedBlackColorSpace];
             const uint8_t *dataPlane = _bitmapPlanes[0];
             const uint8_t *maskPlane = _bitmapPlanes[1];
 
@@ -760,11 +762,10 @@ NSBitmapImageRepPropertyKey NSImageCurrentFrame = @"NSImageCurrentFrame";
                     uint8_t dBit = (dataPlane[byteIdx] >> bitIdx) & 1;
                     uint8_t mBit = (maskPlane[byteIdx] >> bitIdx) & 1;
 
-                    // In 1-bit Mac cursor:
-                    // mask: 1 = opaque, 0 = transparent
-                    // data: 1 = black (0x00), 0 = white (0xFF)
+                    // Grayscale samples use the declared color space: 1 is white
+                    // in white spaces and black in black spaces. Alpha 1 is opaque.
                     uint8_t a = mBit ? 0xFF : 0x00;
-                    uint8_t rgb = dBit ? 0x00 : 0xFF;
+                    uint8_t rgb = (dBit != blackSpace) ? 0xFF : 0x00;
                     uint8_t r = (rgb * a) / 255;
                     uint8_t g = (rgb * a) / 255;
                     uint8_t b = (rgb * a) / 255;
