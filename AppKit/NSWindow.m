@@ -4102,6 +4102,39 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
     return rect;
 }
 
+static inline NSRect scaleWindowRect(NSRect rect, CGFloat scale) {
+    return NSMakeRect(rect.origin.x * scale, rect.origin.y * scale,
+                      rect.size.width * scale, rect.size.height * scale);
+}
+
+- (NSRect) convertRectToBacking: (NSRect) rect {
+    CGFloat scale = [self backingScaleFactor];
+    if (scale <= 0) scale = 1.0;
+    return scaleWindowRect(rect, scale);
+}
+
+- (NSRect) convertRectFromBacking: (NSRect) rect {
+    CGFloat scale = [self backingScaleFactor];
+    if (scale <= 0) scale = 1.0;
+    return scaleWindowRect(rect, 1.0 / scale);
+}
+
+- (NSPoint) convertPointToBacking: (NSPoint) point {
+    return [self convertRectToBacking: (NSRect){point, NSZeroSize}].origin;
+}
+
+- (NSPoint) convertPointFromBacking: (NSPoint) point {
+    return [self convertRectFromBacking: (NSRect){point, NSZeroSize}].origin;
+}
+
+- (NSSize) convertSizeToBacking: (NSSize) size {
+    return [self convertRectToBacking: (NSRect){NSZeroPoint, size}].size;
+}
+
+- (NSSize) convertSizeFromBacking: (NSSize) size {
+    return [self convertRectFromBacking: (NSRect){NSZeroPoint, size}].size;
+}
+
 - (void) beginSheet: (NSWindow *) sheet
         completionHandler: (void (^)(NSInteger returnCode)) handler
 {

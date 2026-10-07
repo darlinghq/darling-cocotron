@@ -531,6 +531,12 @@ APPKIT_EXPORT const NSNotificationName NSWindowDidExposeNotification;
 - (NSRect) convertRectToScreen: (NSRect) rect;
 - (NSRect) convertRectFromScreen: (NSRect) rect;
 - (CGFloat) backingScaleFactor;
+- (NSRect) convertRectToBacking: (NSRect) rect;
+- (NSRect) convertRectFromBacking: (NSRect) rect;
+- (NSPoint) convertPointToBacking: (NSPoint) point;
+- (NSPoint) convertPointFromBacking: (NSPoint) point;
+- (NSSize) convertSizeToBacking: (NSSize) size;
+- (NSSize) convertSizeFromBacking: (NSSize) size;
 
 - (void) beginSheet: (NSWindow *) sheet
         completionHandler: (void (^)(NSInteger returnCode)) handler;
