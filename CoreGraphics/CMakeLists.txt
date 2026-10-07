@@ -41,6 +41,7 @@ set_property(SOURCE
 	CGPDFDictionary.m
 	CGPDFDocument.m
 	CGPDFPage.m
+	CGPDFString.m
 	CGPSConverter.m
 	CGRemoteOperation.m
 	CGShading.m
@@ -94,6 +95,7 @@ set(CoreGraphics_sources
 	CGPDFDictionary.m
 	CGPDFDocument.m
 	CGPDFPage.m
+	CGPDFString.m
 	CGShading.m
 	CGWindow.m
 	CGWindowLevel.m
