@@ -46,3 +46,7 @@ CGAffineTransform CGPDFPageGetDrawingTransform(CGPDFPageRef self, CGPDFBox box,
     return CGAffineTransformFromO2(O2PDFPageGetDrawingTransform(
             (O2PDFPageRef)self, box, rect, clockwiseDegrees, preserveAspectRatio));
 }
+
+int CGPDFPageGetRotationAngle(CGPDFPageRef self) {
+    return [(O2PDFPage *)self rotationAngle];
+}
