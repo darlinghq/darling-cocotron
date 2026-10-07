@@ -1738,6 +1738,18 @@ static NSUInteger modifierDeviceMask(int code) {
     return [[_screens retain] autorelease];
 }
 
+- (CGRect) insetRect: (CGRect) frame
+        forNativeWindowBorderWithStyle: (NSUInteger) styleMask
+{
+    return frame;
+}
+
+- (CGRect) outsetRect: (CGRect) frame
+        forNativeWindowBorderWithStyle: (NSUInteger) styleMask
+{
+    return frame;
+}
+
 - (NSArray *) modesForScreen: (int) screenIndex {
     NSArray *outputs = [self outputsWithModes];
     if (screenIndex < 0 || screenIndex >= (int) [outputs count])
