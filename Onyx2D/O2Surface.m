@@ -440,7 +440,6 @@ static BOOL initFunctionsForParameters(O2Surface *self, size_t bitsPerComponent,
                 case kO2ImageAlphaLast:
                 case kO2ImageAlphaPremultipliedLast:
                     switch (bitmapInfo & kO2BitmapByteOrderMask) {
-                    case kO2BitmapByteOrderDefault:
                     case kO2BitmapByteOrder16Little:
                     case kO2BitmapByteOrder32Little:
                         self->_writeargb32f =
@@ -448,6 +447,8 @@ static BOOL initFunctionsForParameters(O2Surface *self, size_t bitsPerComponent,
                         self->_writeargb8u = O2SurfaceWrite_argb8u_to_ABGR8888;
                         return YES;
 
+                    // With the alpha last, the default byte order is R, G, B, A in memory
+                    case kO2BitmapByteOrderDefault:
                     case kO2BitmapByteOrder16Big:
                     case kO2BitmapByteOrder32Big:
                         self->_writeargb32f = O2SurfaceWrite_argb32f_to_argb8u;
