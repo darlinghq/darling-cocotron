@@ -379,6 +379,8 @@ static CFTypeRef createConvertedObject(Converter *c, CFIndex index)
     static const char *const dataClasses[] = { "NSData", "NSMutableData", NULL };
     static const char *const numberClasses[] = { "NSNumber", NULL };
     static const char *const listClasses[] = { "NSArray", "NSMutableArray", "NSSet", "NSMutableSet", "NSOrderedSet", "NSMutableOrderedSet", NULL };
+    // NSIBObjectData is an NSCoding object, not an NSDictionary. Its loader
+    // decodes named fields such as NSRoot and NSConnections directly.
     static const char *const dictionaryClasses[] = { "NSDictionary", "NSMutableDictionary", NULL };
 
     // Strings, data and numbers are stored inline in a keyed archive.
