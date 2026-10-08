@@ -36,8 +36,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
     [result addNumber: rect.origin.x];
     [result addNumber: rect.origin.y];
-    [result addNumber: rect.size.width];
-    [result addNumber: rect.size.height];
+    [result addNumber: rect.origin.x + rect.size.width];
+    [result addNumber: rect.origin.y + rect.size.height];
 
     return result;
 }

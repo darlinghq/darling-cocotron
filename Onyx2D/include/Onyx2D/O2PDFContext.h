@@ -44,11 +44,17 @@ extern const NSString *kO2PDFContextCreator;
     NSMutableArray *_textStateStack;
     NSMutableArray *_contentStreamStack;
     size_t _length;
+    O2Rect _defaultBoxes[5];
+    BOOL _defaultBoxPresent[5];
 }
 
 - initWithConsumer: (O2DataConsumer *) consumer
              mediaBox: (const O2Rect *) mediaBox
         auxiliaryInfo: (NSDictionary *) auxiliaryInfo;
+
+- (void) beginPDFPage: (NSDictionary *) pageInfo;
+- (void) beginPageWithInfo: (NSDictionary *) pageInfo
+                mediaBox: (const O2Rect *) mediaBox;
 
 - (NSUInteger) length;
 
