@@ -40,6 +40,9 @@ COREGRAPHICS_EXPORT CGColorRef CGColorCreateGenericGray(CGFloat gray,
                                                         CGFloat a);
 COREGRAPHICS_EXPORT CGColorRef CGColorCreateGenericRGB(CGFloat r, CGFloat g,
                                                        CGFloat b, CGFloat a);
+COREGRAPHICS_EXPORT CGColorRef CGColorCreateSRGB(CGFloat red, CGFloat green,
+                                                CGFloat blue, CGFloat alpha)
+    CF_SWIFT_NAME(CGColor.init(srgbRed:green:blue:alpha:));
 COREGRAPHICS_EXPORT CGColorRef CGColorCreateGenericCMYK(CGFloat c, CGFloat m,
                                                         CGFloat y, CGFloat k,
                                                         CGFloat a);
