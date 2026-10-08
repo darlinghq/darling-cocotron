@@ -10,17 +10,17 @@ struct KTCoreTextObject {
     CFDictionaryRef storage;
 };
 
-static void finalizeCoreTextObject(CFTypeRef value) {
+void KTCoreTextFinalizeObject(CFTypeRef value) {
     const struct KTCoreTextObject *object = value;
     if (object->storage != NULL)
         CFRelease(object->storage);
 }
 
 static const CFRuntimeClass lineClass = {
-    0, "CTLine", NULL, NULL, finalizeCoreTextObject, NULL, NULL, NULL, NULL,
+    0, "CTLine", NULL, NULL, KTCoreTextFinalizeObject, NULL, NULL, NULL, NULL,
 };
 static const CFRuntimeClass runClass = {
-    0, "CTRun", NULL, NULL, finalizeCoreTextObject, NULL, NULL, NULL, NULL,
+    0, "CTRun", NULL, NULL, KTCoreTextFinalizeObject, NULL, NULL, NULL, NULL,
 };
 static CFTypeID lineTypeID, runTypeID;
 static pthread_once_t registerObjectsOnce = PTHREAD_ONCE_INIT;
@@ -39,7 +39,7 @@ CFDictionaryRef KTCoreTextObjectDictionary(CFTypeRef value) {
     return value == NULL ? NULL : ((const struct KTCoreTextObject *)value)->storage;
 }
 
-static CFTypeRef createCoreTextObject(CFTypeID type, CFDictionaryRef storage) {
+CFTypeRef KTCoreTextCreateObject(CFTypeID type, CFDictionaryRef storage) {
     struct KTCoreTextObject *object = (struct KTCoreTextObject *)
             _CFRuntimeCreateInstance(kCFAllocatorDefault, type,
                     sizeof(*object) - sizeof(CFRuntimeBase), NULL);
@@ -391,7 +391,7 @@ static bool appendRun(CFMutableArrayRef runs, CFDictionaryRef run,
 {
     if (run == NULL)
         return false;
-    CFTypeRef object = createCoreTextObject(KTCoreTextRunGetTypeID(), run);
+    CFTypeRef object = KTCoreTextCreateObject(KTCoreTextRunGetTypeID(), run);
     if (object == NULL) {
         CFRelease(run);
         return false;
@@ -499,7 +499,7 @@ CTLineRef KTCoreTextCreateLineWithRange(CFAttributedStringRef attrString, CFRang
     KTCoreTextDictionarySetFloat(line, KTLineLeadingKey, leading);
     CFRelease(copy);
     CFRelease(runs);
-    CTLineRef result = (CTLineRef)createCoreTextObject(CTLineGetTypeID(), line);
+    CTLineRef result = (CTLineRef)KTCoreTextCreateObject(CTLineGetTypeID(), line);
     CFRelease(line);
     return result;
 

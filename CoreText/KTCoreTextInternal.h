@@ -3,6 +3,8 @@
 #import <CoreText/CTRun.h>
 
 CTLineRef KTCoreTextCreateLineWithRange(CFAttributedStringRef string, CFRange range);
+void KTCoreTextFinalizeObject(CFTypeRef object);
+CFTypeRef KTCoreTextCreateObject(CFTypeID type, CFDictionaryRef storage);
 CFTypeID KTCoreTextRunGetTypeID(void);
 CFDictionaryRef KTCoreTextObjectDictionary(CFTypeRef object);
 
