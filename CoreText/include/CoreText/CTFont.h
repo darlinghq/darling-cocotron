@@ -260,6 +260,7 @@ CORETEXT_EXPORT CGFloat CTFontGetXHeight(CTFontRef self);
 CORETEXT_EXPORT CGPathRef CTFontCreatePathForGlyph(CTFontRef self,
                                                    CGGlyph glyph,
                                                    CGAffineTransform *xform);
+CORETEXT_EXPORT CFStringRef CTFontCopyNameForGlyph(CTFontRef font, CGGlyph glyph);
 CORETEXT_EXPORT CGGlyph CTFontGetGlyphWithName(CTFontRef font, CFStringRef glyphName);
 CORETEXT_EXPORT CGRect CTFontGetBoundingRectsForGlyphs(CTFontRef font, CTFontOrientation orientation, const CGGlyph *glyphs, CGRect *boundingRects, CFIndex count);
 CORETEXT_EXPORT double CTFontGetAdvancesForGlyphs(CTFontRef font, CTFontOrientation orientation,

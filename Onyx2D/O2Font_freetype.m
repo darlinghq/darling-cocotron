@@ -478,11 +478,30 @@ FT_Face O2FontFreeTypeFace(O2Font_freetype *self) {
 }
 
 - (NSString *) copyGlyphNameForGlyph: (O2Glyph) glyph {
-    unsigned char buffer[100];
-    if (FT_Get_Glyph_Name(_face, glyph, buffer, sizeof(buffer)) != 0) {
-        return nil;
+    char initial[100];
+    char *buffer = initial;
+    FT_UInt capacity = sizeof(initial);
+    NSString *result = nil;
+    for (;;) {
+        if (FT_Get_Glyph_Name(_face, glyph, buffer, capacity) != 0)
+            break;
+        char *end = memchr(buffer, 0, capacity);
+        if (!end) break;
+        if ((size_t)(end - buffer) < capacity - 1) {
+            result = [[NSString alloc] initWithUTF8String:buffer];
+            break;
+        }
+        if (capacity > UINT_MAX / 2 || capacity > SIZE_MAX / 2 ||
+            capacity > PTRDIFF_MAX / 2)
+            break;
+        char *grown = malloc((size_t)capacity * 2);
+        if (!grown) break;
+        if (buffer != initial) free(buffer);
+        buffer = grown;
+        capacity *= 2;
     }
-    return [[NSString alloc] initWithUTF8String: (const char *) buffer];
+    if (buffer != initial) free(buffer);
+    return result;
 }
 
 - (void) getGlyphs: (O2Glyph *) glyphs

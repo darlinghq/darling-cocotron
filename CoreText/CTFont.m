@@ -496,6 +496,20 @@ CGPathRef CTFontCreatePathForGlyph(CTFontRef self, CGGlyph glyph,
     return (CGPathRef) [ktFont(self) createPathForGlyph: glyph transform: xform];
 }
 
+CFStringRef CTFontCopyNameForGlyph(CTFontRef font, CGGlyph glyph)
+{
+    if (font == NULL)
+        return NULL;
+    CGFontRef cgFont = [ktFont(font) copyGraphicsFont];
+    if (cgFont == NULL)
+        return NULL;
+    CFStringRef name = glyph < CGFontGetNumberOfGlyphs(cgFont)
+            ? CGFontCopyGlyphNameForGlyph(cgFont, glyph)
+            : NULL;
+    CGFontRelease(cgFont);
+    return name;
+}
+
 CGGlyph CTFontGetGlyphWithName(CTFontRef font, CFStringRef glyphName)
 {
     printf("STUB %s\n", __PRETTY_FUNCTION__);
