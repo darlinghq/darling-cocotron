@@ -1,6 +1,11 @@
 #import <Onyx2D/O2Font_freetype.h>
 #ifdef FREETYPE_PRESENT
 #import <Onyx2D/O2Encoding.h>
+#import <string.h>
+#include <limits.h>
+#include <stdint.h>
+#include <stdlib.h>
+#import FT_TRUETYPE_TABLES_H
 
 @implementation O2Font_freetype
 
@@ -220,6 +225,57 @@ static NSString *filenameOfFirstScalableFace(FcFontSet *set) {
 
 - (FT_Face) face {
     return _face;
+}
+
+- (CFArrayRef) copyTableTags {
+    FT_ULong count = 0;
+    if (!_face || FT_Sfnt_Table_Info(_face, 0, NULL, &count) != 0 ||
+        count > UINT_MAX || count > LONG_MAX || count > SIZE_MAX / sizeof(void *))
+        return NULL;
+    const void **tags = count ? malloc((size_t)count * sizeof(*tags)) : NULL;
+    if (count && !tags) return NULL;
+    CFIndex used = 0;
+    for (FT_UInt index = 0; index < count; ++index) {
+        FT_ULong tag = 0, length = 0;
+        if (FT_Sfnt_Table_Info(_face, index, &tag, &length) != 0 || tag > UINT32_MAX) {
+            free(tags);
+            return NULL;
+        }
+        if (length != 0)
+            tags[used++] = (const void *)(uintptr_t)tag;
+    }
+    CFArrayRef result = CFArrayCreate(kCFAllocatorDefault, tags, used, NULL);
+    free(tags);
+    return result;
+}
+
+- (NSData *) copyTableForTag: (uint32_t) requestedTag {
+    FT_ULong count = 0, length = 0;
+    if (!_face || FT_Sfnt_Table_Info(_face, 0, NULL, &count) != 0 || count > UINT_MAX)
+        return nil;
+    for (FT_UInt index = 0; index < count; ++index) {
+        FT_ULong tag = 0, tableLength = 0;
+        if (FT_Sfnt_Table_Info(_face, index, &tag, &tableLength) != 0)
+            return nil;
+        if (tag == requestedTag) {
+            length = tableLength;
+            break;
+        }
+    }
+    if (!length || length > SIZE_MAX || length > NSUIntegerMax || length > LONG_MAX ||
+        requestedTag == 0 || requestedTag == 1)
+        return nil;
+    void *bytes = malloc((size_t)length);
+    if (!bytes) return nil;
+    FT_ULong loaded = length;
+    if (FT_Load_Sfnt_Table(_face, requestedTag, 0, bytes, &loaded) != 0 || loaded != length) {
+        free(bytes);
+        return nil;
+    }
+    CFDataRef result = CFDataCreateWithBytesNoCopy(kCFAllocatorDefault, bytes,
+            (CFIndex)length, kCFAllocatorMalloc);
+    if (!result) free(bytes);
+    return (NSData *)result;
 }
 
 FT_Face O2FontFreeTypeFace(O2Font_freetype *self) {

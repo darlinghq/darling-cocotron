@@ -104,3 +104,7 @@ CFStringRef const kCGFontVariationAxisName = CFSTR("kCGFontVariationAxisName");
 CFStringRef const kCGFontVariationAxisMinValue = CFSTR("kCGFontVariationAxisMinValue");
 CFStringRef const kCGFontVariationAxisDefaultValue = CFSTR("kCGFontVariationAxisDefaultValue");
 CFStringRef const kCGFontVariationAxisMaxValue = CFSTR("kCGFontVariationAxisMaxValue");
+
+CFArrayRef CGFontCopyTableTags(CGFontRef font) {
+    return font ? O2FontCopyTableTags((O2FontRef)font) : NULL;
+}
