@@ -603,20 +603,39 @@ O2ImageCreateWithPNGDataProvider(O2DataProviderRef pngProvider,
 }
 
 O2ImageRef O2ImageCreateWithImageInRect(O2ImageRef self, O2Rect rect) {
-    rect = O2RectIntegral(rect);
-    size_t x = MAX(0, rect.origin.x);
-    size_t y = MAX(0, rect.origin.y);
+    if (!isfinite(rect.origin.x) || !isfinite(rect.origin.y) ||
+        !isfinite(rect.size.width) || !isfinite(rect.size.height))
+        return NULL;
+
+    O2Rect bounds = O2RectMake(0, 0, self->_width, self->_height);
+    rect = O2RectIntersection(O2RectIntegral(rect), bounds);
+    if (rect.size.width <= 0 || rect.size.height <= 0)
+        return NULL;
+
+    size_t x = rect.origin.x;
+    size_t y = rect.origin.y;
     size_t col, width = rect.size.width;
     size_t row, height = rect.size.height;
+    size_t startBit = x * self->_bitsPerPixel;
+    // Sub-byte pixels that do not start on a byte boundary cannot be copied row-wise.
+    if (startBit % 8 != 0)
+        return NULL;
     size_t childBytesPerRow = (width * self->_bitsPerPixel + 7) / 8;
-    uint8_t *childPixelBytes = malloc(height * childBytesPerRow);
-    size_t childIndex = 0;
     const uint8_t *pixelBytes = directBytes(self);
+    if (pixelBytes == NULL ||
+        (y + height - 1) * self->_bytesPerRow + startBit / 8 +
+                        childBytesPerRow > self->_directLength)
+        return NULL;
+
+    uint8_t *childPixelBytes = malloc(height * childBytesPerRow);
+    if (childPixelBytes == NULL)
+        return NULL;
+    size_t childIndex = 0;
 
     pixelBytes += self->_bytesPerRow * y;
 
     for (row = 0; row < height; row++) {
-        const uint8_t *rowBytes = pixelBytes + (x * self->_bitsPerPixel) / 8;
+        const uint8_t *rowBytes = pixelBytes + startBit / 8;
 
         for (col = 0; col < childBytesPerRow; col++) {
             // Copy all of the needed bytes for the row
