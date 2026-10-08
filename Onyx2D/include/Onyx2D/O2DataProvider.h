@@ -37,6 +37,10 @@ typedef void (*O2DataProviderReleaseDataCallback)(void *info, const void *data,
     BOOL _isDirectAccess;
     const void *_bytes;
     size_t _length;
+    void *_releaseInfo;
+    const void *_releaseData;
+    size_t _releaseSize;
+    O2DataProviderReleaseDataCallback _releaseCallback;
 }
 
 - initWithURL: (NSURL *) url;

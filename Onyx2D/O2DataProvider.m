@@ -38,10 +38,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - initWithBytes: (const void *) bytes length: (size_t) length {
-    NSData *data = [NSData dataWithBytesNoCopy: (void *) bytes
+    NSData *data = [[NSData alloc] initWithBytesNoCopy: (void *) bytes
                                         length: length
                                   freeWhenDone: NO];
-    return [self initWithData: data];
+    id result = [self initWithData: data];
+    [data release];
+    return result;
 }
 
 - initWithFilename: (const char *) pathCString {
@@ -79,7 +81,14 @@ O2DataProviderRef
 O2DataProviderCreateWithData(void *info, const void *data, size_t size,
                              O2DataProviderReleaseDataCallback releaseCallback)
 {
-    return [[O2DataProvider alloc] initWithBytes: data length: size];
+    O2DataProvider *provider = [[O2DataProvider alloc] initWithBytes: data length: size];
+    if (provider != nil) {
+        provider->_releaseInfo = info;
+        provider->_releaseData = data;
+        provider->_releaseSize = size;
+        provider->_releaseCallback = releaseCallback;
+    }
+    return provider;
 }
 
 O2DataProviderRef O2DataProviderCreateWithCFData(CFDataRef data) {
@@ -108,7 +117,8 @@ CFDataRef O2DataProviderCopyData(O2DataProviderRef self) {
     if (self == NULL)
         return NULL;
     if (self->_data != nil)
-        return (CFDataRef)[self->_data copy];
+        return (CFDataRef) [[NSData alloc] initWithBytes: [self->_data bytes]
+                                                length: [self->_data length]];
     else
         return (CFDataRef) [[NSData alloc] initWithContentsOfFile: self->_path];
 }
@@ -118,6 +128,8 @@ CFDataRef O2DataProviderCopyData(O2DataProviderRef self) {
     [_inputStream release];
     [_data release];
     [_path release];
+    if (_releaseCallback != NULL)
+        _releaseCallback(_releaseInfo, _releaseData, _releaseSize);
     [super dealloc];
 }
 
