@@ -175,6 +175,20 @@ static int glyphPathCubicTo(const FT_Vector *control1, const FT_Vector *control2
     return face->underline_thickness * _size / _unitsPerEm;
 }
 
+- (CFCharacterSetRef) copyCharacterSet {
+    O2Font_freetype *o2Font = (O2Font_freetype *) _font;
+    @synchronized(o2Font) {
+        FT_Face face = [o2Font face];
+        if (face == NULL || face->charmap == NULL ||
+            face->charmap->encoding != FT_ENCODING_UNICODE)
+            return NULL;
+    }
+    NSCharacterSet *set = O2FontGetCoveredCharacterSet((O2FontRef) o2Font);
+    return set != nil
+            ? CFCharacterSetCreateCopy(kCFAllocatorDefault, (CFCharacterSetRef) set)
+            : NULL;
+}
+
 - (CGPathRef) createPathForGlyph: (CGGlyph) glyph
                        transform: (CGAffineTransform *) xform
 {

@@ -423,8 +423,9 @@ CFStringRef CTFontCopyLocalizedName(CTFontRef font, CFStringRef nameKey,
 
 CFCharacterSetRef CTFontCopyCharacterSet(CTFontRef font)
 {
-    printf("STUB %s\n", __PRETTY_FUNCTION__);
-    return nil;
+    if (font == NULL)
+        return NULL;
+    return [ktFont(font) copyCharacterSet];
 }
 
 CFStringEncoding CTFontGetStringEncoding(CTFontRef font)
