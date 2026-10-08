@@ -55,6 +55,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSTextInputClient.h>
 #import <objc/runtime.h>
 #include <math.h>
+#import "DarlingLayout.h"
 
 @class IBMetricsTable;
 
@@ -461,6 +462,7 @@ typedef struct __VFlags {
 }
 
 - (void) dealloc {
+    [NSLayoutConstraint deactivateConstraints:[self constraints]];
 
     // Do this first?
     [self _unbindAllBindings];
@@ -1686,6 +1688,15 @@ static char inputContextKey;
     [[self retain] autorelease];
     NSView *removeFrom = [_superview retain];
     NSWindow *window = [[self window] retain];
+
+    for (NSView *ancestor = _superview; ancestor != nil; ancestor = [ancestor superview]) {
+        for (NSLayoutConstraint *constraint in [ancestor constraints]) {
+            NSView *first = [constraint firstItem], *second = [constraint secondItem];
+            if (([first isKindOfClass:[NSView class]] && [first isDescendantOf:self]) ||
+                ([second isKindOfClass:[NSView class]] && [second isDescendantOf:self]))
+                [constraint setActive:NO];
+        }
+    }
 
     [self _deepResignFirstResponder];
     [self _setSuperview: nil];
@@ -3422,6 +3433,7 @@ static NSMutableArray *installedViewLayoutGuides(NSView *view, BOOL create) {
 - (void) layoutSubtreeIfNeeded {
     // Finish the update phase for the whole subtree before laying out any view.
     [self updateConstraintsForSubtreeIfNeeded];
+    DarlingLayoutSubtree(self);
     [self _layoutSubtreeAfterUpdatingConstraints];
 }
 

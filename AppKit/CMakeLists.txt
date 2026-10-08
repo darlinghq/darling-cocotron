@@ -287,6 +287,7 @@ set(AppKit_sources
 	NSWindowController.m
 	NSColorSampler.m
 	NSColorSpace.m
+	DarlingLayout.mm
 	NSView.m
 
 	NSAnimation/NSAnimation.m
@@ -578,6 +579,7 @@ add_framework(AppKit
 	VERSION ${FRAMEWORK_VERSION}
 	DEPENDENCIES
 		objc
+		cxx
 		system
 		CoreFoundation
 		Foundation
@@ -665,3 +667,5 @@ add_backend(X11
 		fontconfig
 		xkbfile
 )
+
+set_source_files_properties(DarlingLayout.mm PROPERTIES LANGUAGE CXX COMPILE_FLAGS "-std=c++14 -fexceptions")
