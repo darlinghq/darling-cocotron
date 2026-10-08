@@ -225,3 +225,11 @@ CGPathRef CGPathCreateCopyByTransformingPath(CGPathRef path,
     O2PathApplyTransform(copy, *(O2AffineTransform *) transform);
     return (CGPathRef)copy;
 }
+
+CGPathRef CGPathCreateCopyByStrokingPath(CGPathRef path,
+    const CGAffineTransform *transform, CGFloat width, CGLineCap cap,
+    CGLineJoin join, CGFloat miterLimit)
+{
+    return (CGPathRef)O2PathCreateCopyByStrokingPath((O2PathRef)path,
+        O2AffineTransformPtrFromCG(transform), width, cap, join, miterLimit);
+}

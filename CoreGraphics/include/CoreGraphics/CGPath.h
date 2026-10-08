@@ -24,6 +24,18 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <CoreGraphics/CGGeometry.h>
 #import <CoreGraphics/CoreGraphicsExport.h>
 
+typedef CF_ENUM(int32_t, CGLineCap) {
+    kCGLineCapButt,
+    kCGLineCapRound,
+    kCGLineCapSquare,
+};
+
+typedef CF_ENUM(int32_t, CGLineJoin) {
+    kCGLineJoinMiter,
+    kCGLineJoinRound,
+    kCGLineJoinBevel,
+};
+
 typedef CF_ENUM(int32_t, CGPathElementType) {
     kCGPathElementMoveToPoint,
     kCGPathElementAddLineToPoint,
@@ -43,6 +55,10 @@ typedef struct CF_BRIDGED_TYPE(id) O2MutablePath *CGPathRef;
 typedef struct CF_BRIDGED_TYPE(id) O2MutablePath *CGMutablePathRef;
 
 CF_IMPLICIT_BRIDGING_ENABLED
+
+COREGRAPHICS_EXPORT CGPathRef CGPathCreateCopyByStrokingPath(CGPathRef path,
+    const CGAffineTransform *transform, CGFloat width, CGLineCap cap,
+    CGLineJoin join, CGFloat miterLimit);
 
 COREGRAPHICS_EXPORT void CGPathRelease(CGPathRef self);
 COREGRAPHICS_EXPORT CGPathRef CGPathRetain(CGPathRef self);
