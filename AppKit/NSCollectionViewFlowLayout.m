@@ -26,6 +26,9 @@ NSString *const NSCollectionElementKindSectionFooter =
 
 @implementation NSCollectionViewFlowLayout
 @synthesize itemSize = _itemSize;
+@synthesize sectionInset = _sectionInset;
+@synthesize minimumLineSpacing = _minimumLineSpacing;
+@synthesize minimumInteritemSpacing = _minimumInteritemSpacing;
 
 - (NSMethodSignature *)methodSignatureForSelector:(SEL)aSelector
 {
@@ -38,8 +41,11 @@ NSString *const NSCollectionElementKindSectionFooter =
 }
 
 - (instancetype) init {
-    if ((self = [super init]) != nil)
+    if ((self = [super init]) != nil) {
         _itemSize = NSMakeSize(50, 50);
+        _minimumLineSpacing = 10;
+        _minimumInteritemSpacing = 10;
+    }
     return self;
 }
 
