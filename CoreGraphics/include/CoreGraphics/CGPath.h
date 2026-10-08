@@ -55,9 +55,10 @@ typedef struct CF_BRIDGED_TYPE(id) O2MutablePath *CGPathRef;
 typedef struct CF_BRIDGED_TYPE(id) O2MutablePath *CGMutablePathRef;
 
 CF_IMPLICIT_BRIDGING_ENABLED
+CF_ASSUME_NONNULL_BEGIN
 
-COREGRAPHICS_EXPORT CGPathRef CGPathCreateCopyByStrokingPath(CGPathRef path,
-    const CGAffineTransform *transform, CGFloat width, CGLineCap cap,
+COREGRAPHICS_EXPORT CGPathRef _Nullable CGPathCreateCopyByStrokingPath(CGPathRef path,
+    const CGAffineTransform * _Nullable transform, CGFloat width, CGLineCap cap,
     CGLineJoin join, CGFloat miterLimit);
 
 COREGRAPHICS_EXPORT void CGPathRelease(CGPathRef self);
@@ -73,73 +74,74 @@ COREGRAPHICS_EXPORT void CGPathApply(CGPathRef self, void *info,
 COREGRAPHICS_EXPORT CGMutablePathRef CGPathCreateMutableCopy(CGPathRef self);
 COREGRAPHICS_EXPORT CGPathRef CGPathCreateCopy(CGPathRef self);
 COREGRAPHICS_EXPORT bool CGPathContainsPoint(CGPathRef self,
-                                             const CGAffineTransform *xform,
+                                             const CGAffineTransform * _Nullable xform,
                                              CGPoint point, bool evenOdd);
 
 COREGRAPHICS_EXPORT CGMutablePathRef CGPathCreateMutable(void)
     CF_SWIFT_NAME(CGMutablePath.init());
 
 COREGRAPHICS_EXPORT void CGPathMoveToPoint(CGMutablePathRef self,
-                                           const CGAffineTransform *xform,
+                                           const CGAffineTransform * _Nullable xform,
                                            CGFloat x, CGFloat y);
 COREGRAPHICS_EXPORT void CGPathAddLineToPoint(CGMutablePathRef self,
-                                              const CGAffineTransform *xform,
+                                              const CGAffineTransform * _Nullable xform,
                                               CGFloat x, CGFloat y);
 COREGRAPHICS_EXPORT void CGPathAddCurveToPoint(CGMutablePathRef self,
-                                               const CGAffineTransform *xform,
+                                               const CGAffineTransform * _Nullable xform,
                                                CGFloat cp1x, CGFloat cp1y,
                                                CGFloat cp2x, CGFloat cp2y,
                                                CGFloat x, CGFloat y);
 COREGRAPHICS_EXPORT void
-CGPathAddQuadCurveToPoint(CGMutablePathRef self, const CGAffineTransform *xform,
+CGPathAddQuadCurveToPoint(CGMutablePathRef self, const CGAffineTransform * _Nullable xform,
                           CGFloat cpx, CGFloat cpy, CGFloat x, CGFloat y);
 COREGRAPHICS_EXPORT void CGPathCloseSubpath(CGMutablePathRef self)
     CF_SWIFT_NAME(CGMutablePath.closeSubpath(self:));
 
 COREGRAPHICS_EXPORT void CGPathAddLines(CGMutablePathRef self,
-                                        const CGAffineTransform *xform,
+                                        const CGAffineTransform * _Nullable xform,
                                         const CGPoint *points, size_t count);
 COREGRAPHICS_EXPORT void CGPathAddRect(CGMutablePathRef self,
-                                       const CGAffineTransform *xform,
+                                       const CGAffineTransform * _Nullable xform,
                                        CGRect rect);
 COREGRAPHICS_EXPORT void CGPathAddRoundedRect(CGMutablePathRef path,
-                                              const CGAffineTransform *transform,
+                                              const CGAffineTransform * _Nullable transform,
                                               CGRect rect, CGFloat cornerWidth,
                                               CGFloat cornerHeight);
 COREGRAPHICS_EXPORT void CGPathAddRects(CGMutablePathRef self,
-                                        const CGAffineTransform *xform,
+                                        const CGAffineTransform * _Nullable xform,
                                         const CGRect *rects, size_t count);
 
 COREGRAPHICS_EXPORT void CGPathAddArc(CGMutablePathRef self,
-                                      const CGAffineTransform *xform, CGFloat x,
+                                      const CGAffineTransform * _Nullable xform, CGFloat x,
                                       CGFloat y, CGFloat radius,
                                       CGFloat startRadian, CGFloat endRadian,
                                       bool clockwise);
 COREGRAPHICS_EXPORT void CGPathAddArcToPoint(CGMutablePathRef self,
-                                             const CGAffineTransform *xform,
+                                             const CGAffineTransform * _Nullable xform,
                                              CGFloat tx1, CGFloat ty1,
                                              CGFloat tx2, CGFloat ty2,
                                              CGFloat radius);
 
 COREGRAPHICS_EXPORT void CGPathAddEllipseInRect(CGMutablePathRef self,
-                                                const CGAffineTransform *xform,
+                                                const CGAffineTransform * _Nullable xform,
                                                 CGRect rect);
 
 COREGRAPHICS_EXPORT void CGPathAddPath(CGMutablePathRef self,
-                                       const CGAffineTransform *xform,
+                                       const CGAffineTransform * _Nullable xform,
                                        CGPathRef other);
 
 COREGRAPHICS_EXPORT CGPathRef
-CGPathCreateWithEllipseInRect(CGRect rect, const CGAffineTransform *transform)
+CGPathCreateWithEllipseInRect(CGRect rect, const CGAffineTransform * _Nullable transform)
     CF_SWIFT_NAME(CGPath.init(ellipseIn:transform:));
 
 COREGRAPHICS_EXPORT CGPathRef
-CGPathCreateWithRect(CGRect rect, const CGAffineTransform *transform)
+CGPathCreateWithRect(CGRect rect, const CGAffineTransform * _Nullable transform)
     CF_SWIFT_NAME(CGPath.init(rect:transform:));
 
 COREGRAPHICS_EXPORT CGPathRef CGPathCreateWithRoundedRect(
         CGRect rect, CGFloat cornerWidth, CGFloat cornerHeight,
-        const CGAffineTransform *transform);
+        const CGAffineTransform * _Nullable transform)
+    CF_SWIFT_NAME(CGPath.init(roundedRect:cornerWidth:cornerHeight:transform:));
 
 COREGRAPHICS_EXPORT CGRect CGPathGetPathBoundingBox(CGPathRef path);
 
@@ -155,6 +157,7 @@ COREGRAPHICS_EXPORT void CGPathApplyWithBlock(CGPathRef path,
     CF_SWIFT_NAME(CGPath.applyWithBlock(self:_:));
 #endif
 
+CF_ASSUME_NONNULL_END
 CF_IMPLICIT_BRIDGING_DISABLED
 
 #endif /* CGPATH_H */
