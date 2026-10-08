@@ -18,6 +18,8 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <Foundation/NSData.h>
+#import <Foundation/NSDictionary.h>
+#import <Foundation/NSValue.h>
 #import <Foundation/NSString.h>
 #import <Onyx2D/O2ColorSpace.h>
 #import <Onyx2D/O2DataProvider.h>
@@ -109,15 +111,31 @@ NSData *O2DCTDecode(NSData *data, size_t *pBytesPerRow) {
 - (CFDictionaryRef) copyPropertiesAtIndex: (NSUInteger) idx
                                   options: (CFDictionaryRef) options
 {
+    if (idx != 0)
+        return NULL;
     if (_jpg == NULL) {
         _jpg = O2DataProviderCopyData(_provider);
     }
+#ifdef LIBJPEG_PRESENT
+    size_t width, height;
+    if (!O2JPEGGetDimensions(_jpg, &width, &height))
+        return NULL;
+#endif
     const unsigned char *data = CFDataGetBytePtr(_jpg);
     unsigned long length = CFDataGetLength(_jpg);
     O2EXIFDecoder *exif =
             [[[O2EXIFDecoder alloc] initWithBytes: data
                                            length: length] autorelease];
+#ifdef LIBJPEG_PRESENT
+    NSMutableDictionary *properties = [[exif tags] mutableCopy];
+    [properties setObject: [NSNumber numberWithUnsignedLongLong: width]
+                   forKey: kO2ImagePropertyPixelWidth];
+    [properties setObject: [NSNumber numberWithUnsignedLongLong: height]
+                   forKey: kO2ImagePropertyPixelHeight];
+    return (CFDictionaryRef) properties;
+#else
     return (CFDictionaryRef)[[exif tags] copy];
+#endif
 }
 
 - (O2ImageRef) createImageAtIndex: (NSUInteger) index

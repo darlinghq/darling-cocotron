@@ -5,6 +5,10 @@
 #ifdef LIBJPEG_PRESENT
 
 #import <jpeglib.h>
+#include <limits.h>
+#include <setjmp.h>
+#include <stdint.h>
+#include <stdlib.h>
 
 @implementation O2ImageDecoder_JPEG_libjpeg
 
@@ -22,6 +26,39 @@ static void o2error_exit(j_common_ptr cinfo) {
 
     // Jump to our error handling code
     longjmp(o2err->jmp, 1);
+}
+
+BOOL O2JPEGGetDimensions(CFDataRef data, size_t *width, size_t *height) {
+    if (data == NULL || width == NULL || height == NULL)
+        return NO;
+    CFIndex length = CFDataGetLength(data);
+    if (length <= 0 || (uintmax_t) length > ULONG_MAX)
+        return NO;
+    struct jpeg_decompress_struct *cinfo = calloc(1, sizeof(*cinfo));
+    if (cinfo == NULL)
+        return NO;
+    o2jpg_error_mgr jerr;
+    cinfo->err = jpeg_std_error(&jerr.err);
+    jerr.err.error_exit = o2error_exit;
+    if (setjmp(jerr.jmp)) {
+        jpeg_destroy_decompress(cinfo);
+        free(cinfo);
+        return NO;
+    }
+    jpeg_create_decompress(cinfo);
+    jpeg_mem_src(cinfo, CFDataGetBytePtr(data), (unsigned long) length);
+    if (jpeg_read_header(cinfo, TRUE) != JPEG_HEADER_OK) {
+        jpeg_destroy_decompress(cinfo);
+        free(cinfo);
+        return NO;
+    }
+    size_t imageWidth = cinfo->image_width;
+    size_t imageHeight = cinfo->image_height;
+    jpeg_destroy_decompress(cinfo);
+    free(cinfo);
+    *width = imageWidth;
+    *height = imageHeight;
+    return YES;
 }
 
 static unsigned char *stbi_jpeg_load_from_memory(const uint8_t const *buffer,
