@@ -644,7 +644,7 @@ const NSTimeInterval kMouseMovementThreshold = .001f;
     [[self window] setAcceptsMouseMovedEvents: oldAcceptsMouseMovedEvents];
     [self setNeedsDisplay: YES];
 
-    return ([item isEnabled]) ? item : (NSMenuItem *) nil;
+    return (!cancelled && [item isEnabled]) ? item : (NSMenuItem *) nil;
 }
 
 - (void) mouseDown: (NSEvent *) event {
