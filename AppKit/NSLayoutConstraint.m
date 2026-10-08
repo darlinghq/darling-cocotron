@@ -21,6 +21,13 @@
 #import <Foundation/NSArray.h>
 #import <Foundation/NSCoder.h>
 #import <Foundation/NSString.h>
+#import <Foundation/NSException.h>
+
+@interface NSObject (NSLayoutConstraintOwner)
+- (id) nsli_superitem;
+- (void) nsli_addConstraint:(NSLayoutConstraint *)constraint;
+- (void) nsli_removeConstraint:(NSLayoutConstraint *)constraint;
+@end
 
 #warning TODO: $ld$hide$os 10.4 through 10.7, also METACLASS
 
@@ -34,7 +41,7 @@ enum {
 static const float _NSLayoutPriorityRequired = 1000;
 
 // A model of a layout constraint: it stores and archives the constraint's description.
-// Darling does not solve constraints; views keep using their frames and autoresizing masks.
+// AppKit owns the installed constraint and applies its layout equations.
 @implementation NSLayoutConstraint
 
 + (instancetype)constraintWithItem:(id)view1
@@ -180,7 +187,32 @@ static const float _NSLayoutPriorityRequired = 1000;
 }
 
 - (BOOL)isActive { return _active; }
-- (void)setActive:(BOOL)active { _active = active; }
+- (void)setActive:(BOOL)active
+{
+    if (_active == active)
+        return;
+    if (!active) {
+        [_owner nsli_removeConstraint:self];
+        _owner = nil;
+        _active = NO;
+        return;
+    }
+    id owner = _firstItem;
+    if (_secondItem != nil) {
+        for (; owner != nil; owner = [owner nsli_superitem]) {
+            id other = _secondItem;
+            for (; other != nil && other != owner; other = [other nsli_superitem]) {}
+            if (other == owner)
+                break;
+        }
+    }
+    if (owner == nil || ![owner respondsToSelector:@selector(nsli_addConstraint:)])
+        [NSException raise:NSInvalidArgumentException
+                    format:@"Constraint items must share an owning view: %@", self];
+    [owner nsli_addConstraint:self];
+    _owner = owner;
+    _active = YES;
+}
 
 - (BOOL)shouldBeArchived { return _shouldBeArchived; }
 - (void)setShouldBeArchived:(BOOL)shouldBeArchived { _shouldBeArchived = shouldBeArchived; }

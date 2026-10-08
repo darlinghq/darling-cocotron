@@ -65,6 +65,7 @@ typedef NS_ENUM(NSInteger, NSLayoutConstraintOrientation) {
     NSString *_symbolicConstant;
     BOOL _active;
     BOOL _shouldBeArchived;
+    id _owner;
 }
 
 @end
