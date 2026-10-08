@@ -786,7 +786,8 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
 // layer's contents, which the renderer uploads as a texture. A delegate that
 // implements -displayLayer: sets the contents itself instead.
 - (void) display {
-    if ([_delegate respondsToSelector: @selector(displayLayer:)]) {
+    if (![self _drawsOwnContent] &&
+        [_delegate respondsToSelector: @selector(displayLayer:)]) {
         [_delegate displayLayer: self];
         return;
     }
@@ -1007,6 +1008,10 @@ static id<CAAction> actionInStyle(NSDictionary *style, NSString *key) {
 
 - (void) _setTextureSeed: (uint32_t) value {
     _textureSeed = value;
+}
+
+- (BOOL) _drawsOwnContent {
+    return NO;
 }
 
 - (BOOL) _drawLayerContents: (CGRect) bounds opacity: (CGFloat) opacity {

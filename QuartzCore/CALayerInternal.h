@@ -43,6 +43,9 @@
 // layer's own coordinates. A CALayerHost draws the hosted context's frame
 // instead, at that frame's size.
 - (id) _contentsForRendering: (CGRect *) rect;
+// YES for a layer whose content is its own state (a path), which a delegate's
+// -displayLayer: must not replace.
+- (BOOL) _drawsOwnContent;
 @end
 
 @interface CALayerContext (Internal)
