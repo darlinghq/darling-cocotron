@@ -1,6 +1,8 @@
 #import <CoreText/CTRun.h>
+#import <Foundation/NSException.h>
 #import "KTCoreTextInternal.h"
 #include <string.h>
+#include <stdlib.h>
 
 static CFRange normalizedRange(CTRunRef run, CFRange range)
 {
@@ -186,7 +188,14 @@ void CTRunDraw(CTRunRef run, CGContextRef context, CFRange range)
                                                      kCTFontAttributeName);
     if (font == NULL)
         return;
+
+    CGPoint origin = CGContextGetTextPosition(context);
+    CGPoint *positions = malloc((size_t)range.length * sizeof(CGPoint));
+    if (!positions) [NSException raise:NSMallocException format:@"Unable to allocate glyph positions"];
+    const CGPoint *stored = CTRunGetPositionsPtr(run) + range.location;
+    for (CFIndex index = 0; index < range.length; ++index)
+        positions[index] = CGPointMake(origin.x + stored[index].x, origin.y + stored[index].y);
     CTFontDrawGlyphs(font, CTRunGetGlyphsPtr(run) + range.location,
-                     CTRunGetPositionsPtr(run) + range.location,
-                     (size_t)range.length, context);
+                     positions, (size_t)range.length, context);
+    free(positions);
 }

@@ -578,9 +578,12 @@ void CTLineDraw(CTLineRef line, CGContextRef context)
     if (line == NULL || context == NULL)
         return;
     CFArrayRef runs = CTLineGetGlyphRuns(line);
-    for (CFIndex index = 0; index < CFArrayGetCount(runs); ++index)
+    CGPoint origin = CGContextGetTextPosition(context);
+    for (CFIndex index = 0; index < CFArrayGetCount(runs); ++index) {
+        CGContextSetTextPosition(context, origin.x, origin.y);
         CTRunDraw((CTRunRef)CFArrayGetValueAtIndex(runs, index), context,
                   CFRangeMake(0, 0));
+    }
 }
 
 double CTLineGetTypographicBounds(CTLineRef line, CGFloat *ascent,
