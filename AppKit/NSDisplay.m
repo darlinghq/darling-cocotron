@@ -164,19 +164,16 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     // them here destroyed every other pending event whenever a caller asked
     // for a narrow mask - a tracking loop asking for NSLeftMouseUpMask would
     // silently discard queued key events.
-    while (result == nil && [_eventQueue count] > 0) {
-        NSUInteger i, count = [_eventQueue count];
+    NSUInteger i, count = [_eventQueue count];
+    for (i = 0; i < count; i++) {
+        NSEvent *event = _eventQueue[i];
 
-        for (i = 0; i < count; i++) {
-            NSEvent *event = _eventQueue[i];
+        if (NSEventMaskFromType([event type]) & mask) {
+            result = [[event retain] autorelease];
 
-            if (NSEventMaskFromType([event type]) & mask) {
-                result = [[event retain] autorelease];
-
-                if (dequeue)
-                    [_eventQueue removeObjectAtIndex: i];
-                break;
-            }
+            if (dequeue)
+                [_eventQueue removeObjectAtIndex: i];
+            break;
         }
     }
 
