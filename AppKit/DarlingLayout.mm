@@ -104,11 +104,11 @@ public:
             NSView *view = entry.first;
             Geometry &g = entry.second;
             NSRect frame = view == root ? [root bounds] : [view convertRect:[view bounds] toView:root];
-            add(g.width >= 0.0); add(g.height >= 0.0);
             if (view == root || [view translatesAutoresizingMaskIntoConstraints]) {
                 add(g.x == frame.origin.x); add(g.y == frame.origin.y);
                 add(g.width == frame.size.width); add(g.height == frame.size.height);
             } else {
+                add(g.width >= 0.0); add(g.height >= 0.0);
                 intrinsic(view, g);
             }
         }
