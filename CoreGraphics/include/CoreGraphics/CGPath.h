@@ -68,9 +68,9 @@ COREGRAPHICS_EXPORT bool CGPathEqualToPath(CGPathRef self, CGPathRef other);
 COREGRAPHICS_EXPORT CGRect CGPathGetBoundingBox(CGPathRef self);
 COREGRAPHICS_EXPORT CGPoint CGPathGetCurrentPoint(CGPathRef self);
 COREGRAPHICS_EXPORT bool CGPathIsEmpty(CGPathRef self);
-COREGRAPHICS_EXPORT bool CGPathIsRect(CGPathRef self, CGRect * _Nullable rect);
-COREGRAPHICS_EXPORT void CGPathApply(CGPathRef self, void * _Nullable info,
-                                     CGPathApplierFunction function);
+COREGRAPHICS_EXPORT bool CGPathIsRect(CGPathRef _Nullable self, CGRect * _Nullable rect);
+COREGRAPHICS_EXPORT void CGPathApply(CGPathRef _Nullable self, void * _Nullable info,
+                                     CGPathApplierFunction _Nullable function);
 COREGRAPHICS_EXPORT CGMutablePathRef CGPathCreateMutableCopy(CGPathRef self);
 COREGRAPHICS_EXPORT CGPathRef CGPathCreateCopy(CGPathRef self);
 COREGRAPHICS_EXPORT bool CGPathContainsPoint(CGPathRef self,

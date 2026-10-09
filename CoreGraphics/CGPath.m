@@ -50,11 +50,16 @@ bool CGPathIsEmpty(CGPathRef self) {
 }
 
 bool CGPathIsRect(CGPathRef self, CGRect *rect) {
-    return O2PathIsRect((O2PathRef)self, rect);
+    if (self == NULL)
+        return false;
+    CGRect dummy;
+    return O2PathIsRect((O2PathRef)self, rect != NULL ? rect : &dummy);
 }
 
 void CGPathApply(CGPathRef self, void *info, CGPathApplierFunction function) {
-    return O2PathApply((O2PathRef)self, info, O2PathApplierFunctionFromCG(function));
+    if (self == NULL || function == NULL)
+        return;
+    O2PathApply((O2PathRef)self, info, O2PathApplierFunctionFromCG(function));
 }
 
 #if __has_feature(blocks)
