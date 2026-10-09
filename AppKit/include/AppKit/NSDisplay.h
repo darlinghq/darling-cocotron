@@ -21,6 +21,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSFont.h>
 #import <AppKit/NSPasteboard.h>
 #import <CarbonCore/UnicodeUtilities.h>
+#import <CoreFoundation/CFRunLoop.h>
 #import <Foundation/Foundation.h>
 
 @class NSColor, NSDraggingManager, NSPrintInfo, NSView, NSSavePanel,
@@ -30,6 +31,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     NSMutableArray *_eventQueue;
     BOOL _cursorHiddenUntilMouseMoves;
     NSInteger _cursorHideCount;
+    CFRunLoopSourceRef _eventSource;
 }
 
 + (NSDisplay *) currentDisplay;

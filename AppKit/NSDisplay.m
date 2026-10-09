@@ -22,6 +22,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSRaise.h>
 #import <AppKit/NSColorList.h>
 
+// Handling this source is what makes -[NSRunLoop runMode:beforeDate:] return
+// for a posted event; timers alone never end it.
+static void eventPosted(void *info) {}
+
 @implementation NSDisplay
 
 + (void) initialize {
@@ -47,6 +51,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     if ([self class] != [NSDisplay class]) {
         // Initializing a concrete subclass.
         _eventQueue = [NSMutableArray new];
+        CFRunLoopSourceContext context = {.version = 0, .perform = eventPosted};
+        _eventSource = CFRunLoopSourceCreate(NULL, 0, &context);
+        CFRunLoopAddSource(CFRunLoopGetMain(), _eventSource,
+                           kCFRunLoopCommonModes);
         return self;
     }
 
@@ -92,6 +100,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
     [backends release];
     return nil;
+}
+
+- (void) dealloc {
+    if (_eventSource != NULL) {
+        CFRunLoopSourceInvalidate(_eventSource);
+        CFRelease(_eventSource);
+    }
+    [super dealloc];
 }
 
 - (NSArray<NSScreen *> *) screens {
@@ -255,6 +271,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     } else {
         [_eventQueue addObject: event];
     }
+    CFRunLoopSourceSignal(_eventSource);
+    CFRunLoopWakeUp(CFRunLoopGetMain());
 }
 
 - (BOOL) containsAndRemovePeriodicEvents {
