@@ -25,7 +25,7 @@ int main(void) {
     SizedView *child = [[[SizedView alloc] initWithFrame:NSZeroRect] autorelease];
     [child setTranslatesAutoresizingMaskIntoConstraints:NO]; [root addSubview:child];
     NSLayoutConstraint *left = [[child leftAnchor] constraintEqualToAnchor:[root leftAnchor] constant:10];
-    NSLayoutConstraint *top = [[child topAnchor] constraintEqualToAnchor:[root topAnchor] constant:-15];
+    NSLayoutConstraint *top = [[child topAnchor] constraintEqualToAnchor:[root topAnchor] constant:15];
     [NSLayoutConstraint activateConstraints:@[left,top]];
     [root layoutSubtreeIfNeeded];
     NSRect r=[child frame];
@@ -57,6 +57,28 @@ int main(void) {
         [[nested leftAnchor] constraintEqualToAnchor:[flipped leftAnchor] constant:7]]];
     [flipped layoutSubtreeIfNeeded];
     layoutAssert(near([nested frame].origin.y,12) && near([nested frame].origin.x,7), "flipped root coordinates");
+    NSView *pane=[[[NSView alloc] initWithFrame:NSMakeRect(0,0,240,372)] autorelease];
+    SizedView *popup=[[[SizedView alloc] initWithFrame:NSZeroRect] autorelease];
+    NSView *list=[[[NSView alloc] initWithFrame:NSZeroRect] autorelease];
+    [popup setTranslatesAutoresizingMaskIntoConstraints:NO]; [list setTranslatesAutoresizingMaskIntoConstraints:NO];
+    [pane addSubview:popup]; [pane addSubview:list];
+    [NSLayoutConstraint activateConstraints:@[
+        [[popup topAnchor] constraintEqualToAnchor:[pane topAnchor] constant:10],
+        [[popup leadingAnchor] constraintEqualToAnchor:[pane leadingAnchor] constant:10],
+        [[list topAnchor] constraintEqualToAnchor:[popup bottomAnchor] constant:8],
+        [[list leadingAnchor] constraintEqualToAnchor:[pane leadingAnchor]],
+        [[list trailingAnchor] constraintEqualToAnchor:[pane trailingAnchor]],
+        [[list bottomAnchor] constraintEqualToAnchor:[pane bottomAnchor]]]];
+    [pane layoutSubtreeIfNeeded];
+    layoutAssert(near(NSMaxY([popup frame]),362) && near(NSMaxY([list frame]),NSMinY([popup frame])-8) &&
+                 near(NSMinY([list frame]),0), "positive vertical constants move down in an unflipped view");
+    SizedView *badge=[[[SizedView alloc] initWithFrame:NSZeroRect] autorelease];
+    [badge setTranslatesAutoresizingMaskIntoConstraints:NO]; [pane addSubview:badge];
+    [NSLayoutConstraint activateConstraints:@[
+        [[badge centerYAnchor] constraintEqualToAnchor:[pane centerYAnchor] constant:30],
+        [[badge leftAnchor] constraintEqualToAnchor:[pane leftAnchor]]]];
+    [pane layoutSubtreeIfNeeded];
+    layoutAssert(near(NSMidY([badge frame]),186-30), "positive centerY constant moves down in an unflipped view");
     NSLayoutConstraint *strong = [[child widthAnchor] constraintEqualToConstant:100];
     [strong setPriority:900]; [strong setActive:YES];
     NSMutableArray *weak = [NSMutableArray array];

@@ -32,15 +32,19 @@ class Layout {
         case NSLayoutAttributeLeading: attr = rtl ? NSLayoutAttributeRight : NSLayoutAttributeLeft; break;
         case NSLayoutAttributeTrailing: attr = rtl ? NSLayoutAttributeLeft : NSLayoutAttributeRight; break;
         }
+        // Auto Layout y values increase downwards in AppKit too, so an unflipped
+        // root's y is measured from its top edge.
+        bool flipped = [root isFlipped];
+        double top = NSMaxY([root bounds]);
         switch (attr) {
         case NSLayoutAttributeLeft: return kiwi::Term(g.x);
         case NSLayoutAttributeRight: return g.x + g.width;
-        case NSLayoutAttributeTop: return [root isFlipped] ? kiwi::Expression(kiwi::Term(g.y)) : g.y + g.height;
-        case NSLayoutAttributeBottom: return [root isFlipped] ? g.y + g.height : kiwi::Expression(kiwi::Term(g.y));
+        case NSLayoutAttributeTop: return flipped ? kiwi::Expression(kiwi::Term(g.y)) : top - (g.y + g.height);
+        case NSLayoutAttributeBottom: return flipped ? g.y + g.height : top - g.y;
         case NSLayoutAttributeWidth: return kiwi::Term(g.width);
         case NSLayoutAttributeHeight: return kiwi::Term(g.height);
         case NSLayoutAttributeCenterX: return g.x + g.width * 0.5;
-        case NSLayoutAttributeCenterY: return g.y + g.height * 0.5;
+        case NSLayoutAttributeCenterY: return flipped ? g.y + g.height * 0.5 : top - (g.y + g.height * 0.5);
         default:
             [NSException raise:NSInvalidArgumentException format:@"Unsupported layout attribute: %ld", (long)attr];
             return kiwi::Expression();
