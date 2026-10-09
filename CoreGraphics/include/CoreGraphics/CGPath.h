@@ -68,8 +68,8 @@ COREGRAPHICS_EXPORT bool CGPathEqualToPath(CGPathRef self, CGPathRef other);
 COREGRAPHICS_EXPORT CGRect CGPathGetBoundingBox(CGPathRef self);
 COREGRAPHICS_EXPORT CGPoint CGPathGetCurrentPoint(CGPathRef self);
 COREGRAPHICS_EXPORT bool CGPathIsEmpty(CGPathRef self);
-COREGRAPHICS_EXPORT bool CGPathIsRect(CGPathRef self, CGRect *rect);
-COREGRAPHICS_EXPORT void CGPathApply(CGPathRef self, void *info,
+COREGRAPHICS_EXPORT bool CGPathIsRect(CGPathRef self, CGRect * _Nullable rect);
+COREGRAPHICS_EXPORT void CGPathApply(CGPathRef self, void * _Nullable info,
                                      CGPathApplierFunction function);
 COREGRAPHICS_EXPORT CGMutablePathRef CGPathCreateMutableCopy(CGPathRef self);
 COREGRAPHICS_EXPORT CGPathRef CGPathCreateCopy(CGPathRef self);
@@ -145,8 +145,8 @@ COREGRAPHICS_EXPORT CGPathRef CGPathCreateWithRoundedRect(
 
 COREGRAPHICS_EXPORT CGRect CGPathGetPathBoundingBox(CGPathRef path);
 
-COREGRAPHICS_EXPORT CGPathRef CGPathCreateCopyByTransformingPath(
-        CGPathRef path, CGAffineTransform *transform)
+COREGRAPHICS_EXPORT CGPathRef _Nullable CGPathCreateCopyByTransformingPath(
+        CGPathRef _Nullable path, const CGAffineTransform * _Nullable transform)
     CF_SWIFT_NAME(CGPath.copy(self:using:));
 
 #if __has_feature(blocks)

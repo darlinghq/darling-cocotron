@@ -229,10 +229,13 @@ CGRect CGPathGetPathBoundingBox(CGPathRef path) {
 }
 
 CGPathRef CGPathCreateCopyByTransformingPath(CGPathRef path,
-                                             CGAffineTransform *transform)
+                                             const CGAffineTransform *transform)
 {
+    if (path == NULL)
+        return NULL;
     O2MutablePathRef copy = O2PathCreateMutableCopy((O2PathRef)path);
-    O2PathApplyTransform(copy, *(O2AffineTransform *) transform);
+    if (transform != NULL)
+        O2PathApplyTransform(copy, *(O2AffineTransform *) transform);
     return (CGPathRef)copy;
 }
 
