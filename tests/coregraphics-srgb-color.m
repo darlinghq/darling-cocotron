@@ -1,7 +1,6 @@
 #import <Foundation/NSAutoreleasePool.h>
 #import <CoreGraphics/CGColor.h>
 #include <dlfcn.h>
-#include <math.h>
 #include <stdio.h>
 
 typedef CGColorRef (*CreateSRGB)(CGFloat, CGFloat, CGFloat, CGFloat);
@@ -60,12 +59,12 @@ int main(void) {
         CGColorRelease(color);
     }
 
-    // Conservative rejection policy; no Apple invalid-input observation.
-    CHECK(create(-0.01, 0.5, 0.5, 1) == NULL, 20);
-    CHECK(create(0.5, 1.01, 0.5, 1) == NULL, 21);
-    CHECK(create(0.5, 0.5, NAN, 1) == NULL, 22);
-    CHECK(create(0.5, 0.5, 0.5, INFINITY) == NULL, 23);
-    CHECK(create(0.5, 0.5, 0.5, -INFINITY) == NULL, 24);
+    // Out-of-range input passes through unchanged, like CGColorCreateGenericRGB;
+    // the Swift initializer is non-failable, so NULL would crash callers.
+    const CGFloat outOfRange[] = { 1.25, -0.5, 0.5, 1 };
+    color = create(outOfRange[0], outOfRange[1], outOfRange[2], outOfRange[3]);
+    CHECK(matches(color, outOfRange), 20);
+    CGColorRelease(color);
     [pool drain];
     puts("sRGB color components, identity and owned lifetime passed");
     return 0;
