@@ -57,6 +57,7 @@ CA_EXPORT NSString *const kCATransition;
 CA_EXPORT CALayerContentsFormat const kCAContentsFormatRGBA8Uint NS_SWIFT_NAME(CALayerContentsFormat.RGBA8Uint);
 CA_EXPORT CALayerContentsFormat const kCAContentsFormatRGBA16Float NS_SWIFT_NAME(CALayerContentsFormat.RGBA16Float);
 CA_EXPORT CALayerContentsFormat const kCAContentsFormatGray8Uint NS_SWIFT_NAME(CALayerContentsFormat.gray8Uint);
+CA_EXPORT CALayerContentsFormat const kCAContentsFormatAutomatic NS_SWIFT_NAME(CALayerContentsFormat.automatic);
 
 @protocol CALayerDelegate <NSObject>
 
