@@ -195,6 +195,40 @@ int main(void)
                @"a delegate may remove views it is told are detaching");
         flipped.delegate = nil;
 
+        // Settings are not decoded, so archived frames laid out as a vertical stack must survive
+        // decoding and resizing until the stack view is changed.
+        NSStackView *source = [[[NSStackView alloc] initWithFrame:NSMakeRect(0, 0, 100, 200)] autorelease];
+        NSView *upper = box(20, 30), *hiddenView = box(15, 15), *lower = box(10, 10);
+        [upper setFrameOrigin:NSMakePoint(40, 170)];
+        [lower setFrameOrigin:NSMakePoint(45, 152)];
+        [hiddenView setHidden:YES];
+        [source addSubview:upper];
+        [source addSubview:hiddenView];
+        [source addSubview:lower];
+        NSStackView *decoded = [NSKeyedUnarchiver unarchiveObjectWithData:
+                [NSKeyedArchiver archivedDataWithRootObject:source]];
+        NSArray *arranged = decoded.arrangedSubviews;
+        expect([arranged count] == 2 && [decoded.views count] == 3 && [decoded.detachedViews count] == 1,
+               @"decoded subviews become views, the hidden one detached");
+        NSView *decodedUpper = [arranged objectAtIndex:0], *decodedLower = [arranged objectAtIndex:1];
+        expect(NSWidth([decodedUpper frame]) == 20 && NSWidth([decodedLower frame]) == 10 &&
+                       NSWidth([[decoded.detachedViews objectAtIndex:0] frame]) == 15 &&
+                       [[decoded.views objectAtIndex:1] isHidden],
+               @"decoded views keep their order");
+        expectRect(decodedUpper, NSMakeRect(40, 170, 20, 30), @"decoded: upper frame kept");
+        expectRect(decodedLower, NSMakeRect(45, 152, 10, 10), @"decoded: lower frame kept");
+        [decoded setFrameSize:NSMakeSize(120, 200)];
+        expectRect(decodedUpper, NSMakeRect(40, 170, 20, 30), @"decoded and resized: upper frame kept");
+        expect(NSEqualSizes([decoded intrinsicContentSize], NSZeroSize),
+               @"an unchanged decoded stack view does not measure with default settings");
+
+        [decoded setVisibilityPriority:NSStackViewVisibilityPriorityDetachOnlyIfNecessary forView:decodedLower];
+        expect([decoded visibilityPriorityForView:decodedLower] == NSStackViewVisibilityPriorityDetachOnlyIfNecessary,
+               @"visibility priority applies to a decoded view");
+        decoded.orientation = NSUserInterfaceLayoutOrientationVertical;
+        expectRect(decodedUpper, NSMakeRect(50, 170, 20, 30), @"changed decoded: upper arranged");
+        expectRect(decodedLower, NSMakeRect(55, 152, 10, 10), @"changed decoded: lower arranged");
+
         NSLog(@"PASS: NSStackView layout");
     }
     return 0;

@@ -71,10 +71,24 @@ static const CGFloat DefaultSpacing = 8;
     return self;
 }
 
-// Nib settings and arranged views are not decoded; decoded subviews stay plain subviews.
+// Stack view settings are not decoded, so the decoded subviews become leading
+// arranged views and keep their archived frames until the stack view changes.
 - (instancetype) initWithCoder: (NSCoder *) coder {
-    if ((self = [super initWithCoder: coder]) != nil)
+    if ((self = [super initWithCoder: coder]) != nil) {
         [self _setUpStackView];
+        _changingViews = YES;
+        for (NSView *view in [[[self subviews] copy] autorelease]) {
+            NSStackViewEntry *entry = [self _newEntryForView: view
+                                                   inGravity: NSStackViewGravityLeading];
+
+            [_entries addObject: entry];
+            [entry release];
+            if (entry->detached)
+                [view removeFromSuperview];
+        }
+        _changingViews = NO;
+        _keepsDecodedFrames = YES;
+    }
     return self;
 }
 
@@ -214,6 +228,19 @@ static const CGFloat DefaultSpacing = 8;
     }];
 }
 
+- (NSStackViewEntry *) _newEntryForView: (NSView *) view inGravity: (NSStackViewGravity) gravity {
+    NSStackViewEntry *entry = [[NSStackViewEntry alloc] init];
+
+    entry->view = [view retain];
+    entry->gravity = gravity;
+    entry->spacingAfter = NSStackViewSpacingUseDefault;
+    entry->visibilityPriority = NSStackViewVisibilityPriorityMustHold;
+    entry->detached = [self _shouldDetach: entry];
+    entry->naturalSize = entry->assignedSize = [view frame].size;
+    [view addObserver: self forKeyPath: @"hidden" options: 0 context: HiddenContext];
+    return entry;
+}
+
 - (void) insertView: (NSView *) view
             atIndex: (NSUInteger) index
           inGravity: (NSStackViewGravity) gravity
@@ -241,16 +268,9 @@ static const CGFloat DefaultSpacing = 8;
 
     [[view retain] autorelease];
     [self _forgetView: view];
-    entry = [[NSStackViewEntry alloc] init];
-    entry->view = [view retain];
-    entry->gravity = gravity;
-    entry->spacingAfter = NSStackViewSpacingUseDefault;
-    entry->visibilityPriority = NSStackViewVisibilityPriorityMustHold;
-    entry->detached = [self _shouldDetach: entry];
-    entry->naturalSize = entry->assignedSize = [view frame].size;
+    entry = [self _newEntryForView: view inGravity: gravity];
     [_entries insertObject: entry atIndex: start + index];
     [entry release];
-    [view addObserver: self forKeyPath: @"hidden" options: 0 context: HiddenContext];
     _changingViews = YES;
     if (!entry->detached && [view superview] != self)
         [self addSubview: view];
@@ -478,7 +498,8 @@ typedef struct {
 }
 
 - (NSSize) intrinsicContentSize {
-    NSArray *attached = [self _attachedEntries];
+    // Measuring decoded views with the undecoded default settings would be wrong.
+    NSArray *attached = _keepsDecodedFrames ? [NSArray array] : [self _attachedEntries];
     NSUInteger i, count = [attached count];
     CGFloat main = 0, cross = 0;
 
@@ -604,10 +625,12 @@ typedef struct {
         offsets[i] = offsets[i - 1] + lengths[i - 1] + spacing[i - 1];
 }
 
+// Every change to the stack view's views or settings ends here.
 - (void) _arrangeViews {
     NSArray *attached = [self _attachedEntries];
     NSUInteger i, count = [attached count];
 
+    _keepsDecodedFrames = NO;
     if (count == 0)
         return;
 
@@ -687,7 +710,12 @@ typedef struct {
 }
 
 // Arranged views are placed by the stack view, not by their autoresizing masks.
+// Decoded views keep their autoresizing until the stack view first changes.
 - (void) resizeSubviewsWithOldSize: (NSSize) oldSize {
+    if (_keepsDecodedFrames) {
+        [super resizeSubviewsWithOldSize: oldSize];
+        return;
+    }
     for (NSView *view in [self subviews])
         if ([self _entryForView: view] == nil)
             [view resizeWithOldSuperviewSize: oldSize];
@@ -695,7 +723,8 @@ typedef struct {
 }
 
 - (void) layout {
-    [self _arrangeViews];
+    if (!_keepsDecodedFrames)
+        [self _arrangeViews];
     [super layout];
 }
 

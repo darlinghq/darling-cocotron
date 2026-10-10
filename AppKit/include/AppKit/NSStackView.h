@@ -65,6 +65,7 @@ static const CGFloat NSStackViewSpacingUseDefault = FLT_MAX;
     NSEdgeInsets _edgeInsets;
     BOOL _detachesHiddenViews;
     BOOL _changingViews;
+    BOOL _keepsDecodedFrames;
     NSMutableArray *_entries;
 }
 
