@@ -93,15 +93,11 @@
     return nil;
 }
 - (NSString *) mimeForType: (NSString *) type {
-    if ([type isEqual: @"DELETE"]) return nil;
+    if (!type || [type isEqual: @"DELETE"]) return nil;
     if (_localSnapshot) return [self hasLocalAccess] && [_localSnapshot objectForKey:type] ? [_mimes objectAtIndex:0] : nil;
-    if ([type isEqual:NSFilenamesPboardType] && [_mimes containsObject:@"text/uri-list"])
-        return @"text/uri-list";
-    if ([type isEqual: NSStringPboardType]) {
-        for (NSString *mime in @[@"text/plain;charset=utf-8", @"text/plain", @"UTF8_STRING"])
-            if ([_mimes containsObject: mime]) return mime;
-    }
-    return [_mimes containsObject: type] ? type : nil;
+    for (NSString *mime in [WaylandPasteboard mimeTypesForType: type])
+        if ([_mimes containsObject: mime]) return mime;
+    return nil;
 }
 - (NSString *) name { return NSDragPboard; }
 - (NSInteger) changeCount { return _sequence; }

@@ -30,6 +30,14 @@ static void dropCheck(BOOL value, const char *what) {
 }
 - (BOOL) performDragOperation: (id<NSDraggingInfo>) info {
     performed++;
+    // IMAGE_DRAG: drop-source.c offers image/png whose bytes are IMAGE_WIRE; both must be set together.
+    if(getenv("IMAGE_DRAG")) {
+        NSPasteboard *pb=[info draggingPasteboard];
+        NSData *wire=[fileEnv("IMAGE_WIRE") dataUsingEncoding:NSUTF8StringEncoding];
+        dropCheck([[pb types] containsObject:NSPasteboardTypePNG],"PNG type advertised");
+        dropCheck([[pb dataForType:NSPasteboardTypePNG] isEqual:wire],"advertised PNG type reads the image/png bytes");
+        return YES;
+    }
     if(getenv("FILE_DRAG")) {
         NSPasteboard *pb=[info draggingPasteboard];
         NSArray *files=[pb propertyListForType:NSFilenamesPboardType];
@@ -88,7 +96,7 @@ int main(void) {
         NSWindow *window = [[NSWindow alloc] initWithContentRect: NSMakeRect(0,0,400,300) styleMask: NSTitledWindowMask backing: NSBackingStoreBuffered defer: NO];
         [window setTitle: @"Wayland drop target"];
         DropView *view = [[DropView alloc] initWithFrame: NSMakeRect(0,0,400,300)];
-        [view registerForDraggedTypes: getenv("FILE_DRAG") ? @[NSFilenamesPboardType] : @[NSStringPboardType]];
+        [view registerForDraggedTypes: getenv("IMAGE_DRAG") ? @[NSPasteboardTypePNG] : getenv("FILE_DRAG") ? @[NSFilenamesPboardType] : @[NSStringPboardType]];
         [window setContentView: view]; [window makeKeyAndOrderFront: nil];
         Driver *driver = [Driver new];
         [NSTimer scheduledTimerWithTimeInterval: 18 target: driver selector: @selector(done:) userInfo: nil repeats: NO];
