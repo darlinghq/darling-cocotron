@@ -20,6 +20,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSCachedImageRep.h>
 #import <AppKit/NSGraphicsContext.h>
 #import <CoreGraphics/CoreGraphicsPrivate.h>
+#import <CoreGraphics/CGSServerSPI.h>
 #import <AppKit/NSRaise.h>
 #import <AppKit/NSWindow-Private.h>
 #import <ApplicationServices/ApplicationServices.h>

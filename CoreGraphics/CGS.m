@@ -31,7 +31,6 @@ static NSMutableDictionary<NSNumber*, CGSConnection*>* g_connections = nil;
 static Boolean g_denyConnections = FALSE;
 
 static CGSConnectionID g_defaultConnection = -1;
-static pthread_mutex_t g_defaultConnectionMutex = PTHREAD_MUTEX_INITIALIZER;
 
 static _Atomic CGSConnectionID g_nextConnectionID = 1;
 static Class g_backendClass = nil;
@@ -188,18 +187,6 @@ CGSConnectionID _CGSDefaultConnection(void)
 	return CGSMainConnectionID();
 }
 
-CGSConnectionID CGSMainConnectionID(void)
-{
-	if (g_defaultConnection == -1)
-	{
-		pthread_mutex_lock(&g_defaultConnectionMutex);
-		if (g_defaultConnection == -1)
-			CGSNewConnection(NULL, &g_defaultConnection);
-		pthread_mutex_unlock(&g_defaultConnectionMutex);
-	}
-	return g_defaultConnection;
-}
-
 static CGError getWindow(CGSConnectionID cid, CGSWindowID wid, CGSWindow** out)
 {
 	CGSConnection* c = _CGSConnectionForID(cid);
@@ -284,21 +271,6 @@ extern CGError CGSSetWindowLevel(CGSConnectionID cid, CGSWindowID wid, CGWindowL
 static CGWindow* platformWindowForID(CGSWindowID wid)
 {
 	return [CGWindow windowWithWindowNumber: wid];
-}
-
-CGError CGSSetWindowAlpha(CGSConnectionID cid, CGSWindowID wid, float alpha)
-{
-	CGWindow* window = platformWindowForID(wid);
-	if (!window)
-		return kCGErrorIllegalArgument;
-
-	if (!(alpha >= 0)) // also catches NaN
-		alpha = 0;
-	if (alpha > 1)
-		alpha = 1;
-
-	[window setAlphaValue: alpha];
-	return kCGSErrorSuccess;
 }
 
 // Transforms are recorded and reported back, but not applied: the X11 backend
