@@ -240,7 +240,8 @@
     @try {
         if ([self hasAcceptedAction] && [_window isMapped] &&
             [_destination _receiverForDragSession: self] == _receiver &&
-            [_receiver prepareForDragOperation: self] && [_window isMapped] &&
+            (![_receiver respondsToSelector: @selector(prepareForDragOperation:)] || [_receiver prepareForDragOperation: self]) &&
+            [_window isMapped] &&
             [_destination _receiverForDragSession: self] == _receiver && [self hasAcceptedAction] &&
             [_receiver performDragOperation: self] && !_transferFailed && [self hasAcceptedAction]) {
             if (_localSnapshot && ![_localManager
