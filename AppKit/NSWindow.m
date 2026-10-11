@@ -2910,7 +2910,9 @@ static BOOL _allowsAutomaticWindowTabbing;
 }
 
 - (BOOL) prepareForDragOperation: (id<NSDraggingInfo>) sender {
-    return NO;
+    // Apple documents prepareForDragOperation: as optional; an absent implementation
+    // is treated as accepting (prepared to receive data). Return YES by default.
+    return YES;
 }
 
 - (BOOL) performDragOperation: (id<NSDraggingInfo>) sender {

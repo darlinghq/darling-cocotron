@@ -85,9 +85,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         [session setReceiver: receiver];
     }
 
-    [receiver prepareForDragOperation: session];
-    [receiver performDragOperation: session];
-    [receiver concludeDragOperation: session];
+    BOOL prepared = ![receiver respondsToSelector: @selector(prepareForDragOperation:)] ||
+                    [receiver prepareForDragOperation: session];
+    if (prepared && [receiver performDragOperation: session]) {
+        [receiver concludeDragOperation: session];
+    }
 }
 
 @end

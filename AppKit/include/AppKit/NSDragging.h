@@ -48,6 +48,7 @@ enum {
 @end
 
 @protocol NSDraggingDestination <NSObject>
+@optional
 - (BOOL) prepareForDragOperation: (id<NSDraggingInfo>) sender;
 - (BOOL) performDragOperation: (id<NSDraggingInfo>) sender;
 - (void) concludeDragOperation: (id<NSDraggingInfo>) sender;
@@ -55,6 +56,7 @@ enum {
 - (NSDragOperation) draggingEntered: (id<NSDraggingInfo>) sender;
 - (void) draggingExited: (id<NSDraggingInfo>) sender;
 - (NSDragOperation) draggingUpdated: (id<NSDraggingInfo>) sender;
+- (void) draggingEnded: (id<NSDraggingInfo>) sender;
 
 - (BOOL) wantsPeriodicDraggingUpdates;
 @end

@@ -2820,7 +2820,10 @@ static NSView *viewBeingPrinted = nil;
 }
 
 - (BOOL) prepareForDragOperation: (id<NSDraggingInfo>) sender {
-    return NO;
+    // Apple documents prepareForDragOperation: as optional; an absent implementation
+    // is treated as accepting (prepared to receive data). Return YES by default so
+    // views implementing draggingEntered: and performDragOperation: accept drops.
+    return YES;
 }
 
 - (BOOL) performDragOperation: (id<NSDraggingInfo>) sender {
