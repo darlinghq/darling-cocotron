@@ -133,7 +133,9 @@
         [_destination _receiverForDragSession: self] == _receiver) {
         // Each step re-checks the receiver: reading the selection pumps the X
         // connection, and a callback can move the drag somewhere else entirely.
-        if ([_receiver prepareForDragOperation: self] && [_targetWindow isMapped] &&
+        BOOL prepared = ![_receiver respondsToSelector: @selector(prepareForDragOperation:)] ||
+                        [_receiver prepareForDragOperation: self];
+        if (prepared && [_targetWindow isMapped] &&
             [_destination _receiverForDragSession: self] == _receiver &&
             [_receiver performDragOperation: self] && !_transferFailed)
             performed = _acceptedOperations;
