@@ -150,6 +150,14 @@ typedef NS_ENUM(NSInteger, NSWindowToolbarStyle) {
 
 typedef NSString *NSWindowTabbingIdentifier;
 
+typedef NS_ENUM(NSInteger, NSWindowAnimationBehavior) {
+    NSWindowAnimationBehaviorDefault = 0,
+    NSWindowAnimationBehaviorNone = 2,
+    NSWindowAnimationBehaviorDocumentWindow = 3,
+    NSWindowAnimationBehaviorUtilityWindow = 4,
+    NSWindowAnimationBehaviorAlertPanel = 5
+};
+
 typedef int NSSelectionDirection;
 enum {
     NSDirectSelection = 0,
@@ -254,6 +262,7 @@ APPKIT_EXPORT const NSNotificationName NSWindowDidExposeNotification;
     BOOL _showsToolbarButton;
     BOOL _ignoresMouseEvents;
     BOOL _isMovableByWindowBackground;
+    NSWindowAnimationBehavior _animationBehavior;
     BOOL _allowsToolTipsWhenApplicationIsInactive;
     BOOL _defaultButtonCellKeyEquivalentDisabled;
     BOOL _autorecalculatesKeyViewLoop;
@@ -492,6 +501,8 @@ APPKIT_EXPORT const NSNotificationName NSWindowDidExposeNotification;
 - (void) setColorSpace: (NSColorSpace *) newColorSpace;
 - (BOOL) isOnActiveSpace;
 - (NSWindowSharingType) sharingType;
+- (NSWindowAnimationBehavior) animationBehavior;
+- (void) setAnimationBehavior: (NSWindowAnimationBehavior) behavior;
 - (void) setSharingType: (NSWindowSharingType) type;
 
 - (BOOL) isDocumentEdited;

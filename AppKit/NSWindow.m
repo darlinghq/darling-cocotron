@@ -1722,6 +1722,14 @@ static BOOL _allowsAutomaticWindowTabbing;
     return YES;
 }
 
+- (NSWindowAnimationBehavior) animationBehavior {
+    return _animationBehavior;
+}
+
+- (void) setAnimationBehavior: (NSWindowAnimationBehavior) behavior {
+    _animationBehavior = behavior;
+}
+
 - (NSWindowSharingType) sharingType {
     NSUnimplementedMethod();
     return 0;
