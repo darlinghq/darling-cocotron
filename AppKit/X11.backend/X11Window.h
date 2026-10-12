@@ -50,6 +50,7 @@
     BOOL _isOpaque;
     BOOL _hasShadow;
     BOOL _wantsInputFocus;
+    BOOL _ignoresMouseEvents; // the input region currently set
 
 @public
     XIC _xic;

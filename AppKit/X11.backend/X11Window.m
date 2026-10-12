@@ -35,6 +35,7 @@
 
 #import "X11Display.h"
 #import "../../CoreGraphics/X11.backend/X11Monitors.h"
+#import "X11InputShape.h"
 #import "X11SubWindow.h"
 #import "X11Window.h"
 #import <X11/Xatom.h>
@@ -393,6 +394,16 @@ static NSData *makeWindowIcon() {
         mask |= PointerMotionMask;
     }
     XSelectInput(_display, _window, mask);
+
+    // Click-through windows (overlays, tooltips) must not take the pointer from
+    // the window below. Only a change needs a request.
+    BOOL ignoresMouseEvents = [_delegate respondsToSelector: @selector(ignoresMouseEvents)] &&
+                              [_delegate ignoresMouseEvents];
+    if (ignoresMouseEvents != _ignoresMouseEvents && _window != 0 &&
+        X11WindowSetIgnoresMouseEvents(_display, _window, ignoresMouseEvents)) {
+        _ignoresMouseEvents = ignoresMouseEvents;
+        XFlush(_display);
+    }
 
     // TODO: background color
 }
