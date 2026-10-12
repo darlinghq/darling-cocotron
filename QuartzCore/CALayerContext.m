@@ -199,20 +199,30 @@ static GLint metalLayerSwapInterval(CALayer *layer);
 }
 
 - (void) renderLayer: (CALayer *) layer {
+    // The application's own context is current on this thread when a view
+    // displays; give it back afterwards, also when nothing was current or the
+    // tree's drawing raises.
+    CGLContextObj previous = CGLGetCurrentContext();
+
     if (CGLContextMakeCurrentAndAttachToWindow(_glContext, _cglWindow) != kCGLNoError)
         return;
 
-    // A context's draw and read buffers start out as NONE when it is first
-    // made current without a window surface, and a Metal layer does that to
-    // create its drawables. Attaching the window later does not change them,
-    // so select the window's back buffer, which the flush swaps.
-    glDrawBuffer(GL_BACK);
-    glReadBuffer(GL_BACK);
+    @try {
+        // A context's draw and read buffers start out as NONE when it is first
+        // made current without a window surface, and a Metal layer does that to
+        // create its drawables. Attaching the window later does not change them,
+        // so select the window's back buffer, which the flush swaps.
+        glDrawBuffer(GL_BACK);
+        glReadBuffer(GL_BACK);
 
-    [self _drawLayerTree: layer
-                   width: _frame.size.width
-                  height: _frame.size.height
-             topRowFirst: NO];
+        [self _drawLayerTree: layer
+                       width: _frame.size.width
+                      height: _frame.size.height
+                 topRowFirst: NO];
+    } @finally {
+        if (previous != _glContext)
+            CGLSetCurrentContext(previous);
+    }
 }
 
 - (void) _drawLayerTree: (CALayer *) layer
