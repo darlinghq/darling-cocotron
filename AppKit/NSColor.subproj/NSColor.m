@@ -381,6 +381,10 @@ NSNotificationName const NSSystemColorsDidChangeNotification = @"NSSystemColorsD
     return [NSColor colorWithCalibratedWhite: 0.85 alpha: 1.0];
 }
 
++ (NSColor *) textInsertionPointColor {
+    return [NSColor blackColor];
+}
+
 + (NSColor *) controlColor {
     return [NSColor colorWithCatalogName: @"System" colorName: @"controlColor"];
 }
