@@ -68,6 +68,7 @@ enum {
 @property(class, strong, readonly) NSColor *selectedMenuItemTextColor;
 
 @property(class, strong, readonly) NSColor *gridColor;
+@property(class, strong, readonly) NSColor *separatorColor;
 @property(class, strong, readonly) NSColor *headerTextColor;
 @property(class, strong, readonly) NSArray<NSColor *> *alternatingContentBackgroundColors;
 
@@ -143,6 +144,7 @@ enum {
 + (NSColor *) highlightColor;
 + (NSColor *) shadowColor;
 + (NSColor *) gridColor;
++ (NSColor *) separatorColor;
 
 + (NSColor *) alternateSelectedControlColor;
 + (NSColor *) alternateSelectedControlTextColor;
