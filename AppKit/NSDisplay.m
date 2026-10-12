@@ -51,6 +51,7 @@ static void eventPosted(void *info) {}
     if ([self class] != [NSDisplay class]) {
         // Initializing a concrete subclass.
         _eventQueue = [NSMutableArray new];
+        _eventQueueLock = [NSRecursiveLock new];
         CFRunLoopSourceContext context = {.version = 0, .perform = eventPosted};
         _eventSource = CFRunLoopSourceCreate(NULL, 0, &context);
         CFRunLoopAddSource(CFRunLoopGetMain(), _eventSource,
@@ -107,6 +108,8 @@ static void eventPosted(void *info) {}
         CFRunLoopSourceInvalidate(_eventSource);
         CFRelease(_eventSource);
     }
+    [_eventQueueLock release];
+    [_eventQueue release];
     [super dealloc];
 }
 
@@ -208,7 +211,19 @@ static void eventPosted(void *info) {}
 {
     NSEvent *result = nil;
 
-    if ([_eventQueue count])
+    // Only an event the caller asked for lets it return at once: waiting for
+    // an event of another type must still block until the date.
+    BOOL queued = NO;
+
+    [_eventQueueLock lock];
+    for (NSEvent *candidate in _eventQueue) {
+        if (NSEventMaskFromType([candidate type]) & mask) {
+            queued = YES;
+            break;
+        }
+    }
+    [_eventQueueLock unlock];
+    if (queued)
         untilDate = [NSDate date];
 
     [[NSRunLoop currentRunLoop] runMode: mode beforeDate: untilDate];
@@ -219,17 +234,22 @@ static void eventPosted(void *info) {}
     // them here destroyed every other pending event whenever a caller asked
     // for a narrow mask - a tracking loop asking for NSLeftMouseUpMask would
     // silently discard queued key events.
-    NSUInteger i, count = [_eventQueue count];
-    for (i = 0; i < count; i++) {
-        NSEvent *event = _eventQueue[i];
+    [_eventQueueLock lock];
+    @try {
+        NSUInteger i, count = [_eventQueue count];
+        for (i = 0; i < count; i++) {
+            NSEvent *event = _eventQueue[i];
 
-        if (NSEventMaskFromType([event type]) & mask) {
-            result = [[event retain] autorelease];
+            if (NSEventMaskFromType([event type]) & mask) {
+                result = [[event retain] autorelease];
 
-            if (dequeue)
-                [_eventQueue removeObjectAtIndex: i];
-            break;
+                if (dequeue)
+                    [_eventQueue removeObjectAtIndex: i];
+                break;
+            }
         }
+    } @finally {
+        [_eventQueueLock unlock];
     }
 
     if (result == nil) {
@@ -245,31 +265,42 @@ static void eventPosted(void *info) {}
 - (void) discardEventsMatchingMask: (NSEventMask) mask
                        beforeEvent: (NSEvent *) event
 {
-    NSInteger count = [_eventQueue count];
+    [_eventQueueLock lock];
+    @try {
+        NSInteger count = [_eventQueue count];
 
-    while (--count >= 0) {
-        if (_eventQueue[count] == event) {
-            break;
+        while (--count >= 0) {
+            if (_eventQueue[count] == event) {
+                break;
+            }
         }
-    }
 
-    // The mask selects which events to drop, so it has to be tested against
-    // each candidate. Testing it against the stop marker makes the test
-    // constant for the whole scan, so a coalescing call drops every earlier
-    // event whatever its type - and the periodic-event coalescer wipes queued
-    // key and mouse events on every tick.
-    while (--count >= 0) {
-        if (NSEventMaskFromType([_eventQueue[count] type]) & mask) {
-            [_eventQueue removeObjectAtIndex: count];
+        // The mask selects which events to drop, so it has to be tested against
+        // each candidate. Testing it against the stop marker makes the test
+        // constant for the whole scan, so a coalescing call drops every earlier
+        // event whatever its type - and the periodic-event coalescer wipes queued
+        // key and mouse events on every tick.
+        while (--count >= 0) {
+            if (NSEventMaskFromType([_eventQueue[count] type]) & mask) {
+                [_eventQueue removeObjectAtIndex: count];
+            }
         }
+    } @finally {
+        [_eventQueueLock unlock];
     }
 }
 
 - (void) postEvent: (NSEvent *) event atStart: (BOOL) atStart {
-    if (atStart) {
-        [_eventQueue insertObject: event atIndex: 0];
-    } else {
-        [_eventQueue addObject: event];
+    // Callable from any thread
+    [_eventQueueLock lock];
+    @try {
+        if (atStart) {
+            [_eventQueue insertObject: event atIndex: 0];
+        } else {
+            [_eventQueue addObject: event];
+        }
+    } @finally {
+        [_eventQueueLock unlock];
     }
     CFRunLoopSourceSignal(_eventSource);
     CFRunLoopWakeUp(CFRunLoopGetMain());
@@ -277,14 +308,20 @@ static void eventPosted(void *info) {}
 
 - (BOOL) containsAndRemovePeriodicEvents {
     BOOL result = NO;
-    NSUInteger count = [_eventQueue count];
+    [_eventQueueLock lock];
+    @try {
+        // signed: with an unsigned index "--count >= 0" never ends
+        NSInteger count = [_eventQueue count];
 
-    while (--count >= 0) {
-        NSEvent *event = _eventQueue[count];
-        if ([event type] == NSPeriodic) {
-            result = YES;
-            [_eventQueue removeObjectAtIndex: count];
+        while (--count >= 0) {
+            NSEvent *event = _eventQueue[count];
+            if ([event type] == NSPeriodic) {
+                result = YES;
+                [_eventQueue removeObjectAtIndex: count];
+            }
         }
+    } @finally {
+        [_eventQueueLock unlock];
     }
 
     return result;
