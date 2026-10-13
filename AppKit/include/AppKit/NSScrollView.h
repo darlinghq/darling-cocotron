@@ -65,9 +65,11 @@ typedef NS_ENUM(NSInteger, NSScrollElasticity) {
     NSScrollerKnobStyle _scrollerKnobStyle;
     NSScrollElasticity _horizontalScrollElasticity;
     NSScrollElasticity _verticalScrollElasticity;
+    NSScrollerStyle _scrollerStyle;
 }
 
 @property NSScrollerKnobStyle scrollerKnobStyle;
+@property NSScrollerStyle scrollerStyle;
 @property NSScrollElasticity horizontalScrollElasticity;
 @property NSScrollElasticity verticalScrollElasticity;
 @property BOOL automaticallyAdjustsContentInsets;
@@ -146,6 +148,8 @@ typedef NS_ENUM(NSInteger, NSScrollElasticity) {
 - (void) setHorizontalScroller: (NSScroller *) scroller;
 - (NSScrollerKnobStyle) scrollerKnobStyle;
 - (void) setScrollerKnobStyle: (NSScrollerKnobStyle) knobStyle;
+- (NSScrollerStyle) scrollerStyle;
+- (void) setScrollerStyle: (NSScrollerStyle) scrollerStyle;
 - (void) setHasVerticalScroller: (BOOL) flag;
 - (void) setHasHorizontalScroller: (BOOL) flag;
 - (void) setHasVerticalRuler: (BOOL) flag;

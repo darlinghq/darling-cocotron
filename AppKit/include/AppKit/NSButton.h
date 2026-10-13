@@ -52,6 +52,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (void) setKeyEquivalentModifierMask: (NSEventModifierFlags) value;
 - (void) setImage: (NSImage *) value;
 - (void) setImagePosition: (NSCellImagePosition) value;
+- (NSImageScaling) imageScaling;
+- (void) setImageScaling: (NSImageScaling) value;
 - (void) setTitle: (NSString *) value;
 - (void) setState: (NSControlStateValue) value;
 - (void) setNextState;

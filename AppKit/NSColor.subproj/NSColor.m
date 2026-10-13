@@ -572,6 +572,10 @@ NSNotificationName const NSSystemColorsDidChangeNotification = @"NSSystemColorsD
                                colorName: @"windowFrameColor"];
 }
 
++ (NSColor *) windowFrameTextColor {
+    return [NSColor textColor];
+}
+
 + (NSColor *) selectedMenuItemColor {
     return [NSColor colorWithCatalogName: @"System"
                                colorName: @"selectedMenuItemColor"];
@@ -968,6 +972,17 @@ static NSColor *systemCatalogColor(NSColorName name, NSColor *fallback) {
                                spaceName: NSCalibratedRGBColorSpace];
 }
 
++ (NSColor *) colorWithHue: (CGFloat) hue
+                saturation: (CGFloat) saturation
+                brightness: (CGFloat) brightness
+                     alpha: (CGFloat) alpha
+{
+    return [self colorWithCalibratedHue: hue
+                             saturation: saturation
+                             brightness: brightness
+                                  alpha: alpha];
+}
+
 + (NSColor *) colorWithCatalogName: (NSColorListName) catalogName
                          colorName: (NSColorName) colorName
 {
@@ -1057,6 +1072,17 @@ static void releasePatternInfo(void *info) {
 - (NSColorSpaceName) colorSpaceName {
     NSInvalidAbstractInvocation();
     return nil;
+}
+
+- (NSColorSpace *) colorSpace {
+    CGColorRef cg = [self CGColor];
+    if (cg != NULL) {
+        CGColorSpaceRef cs = CGColorGetColorSpace(cg);
+        if (cs != NULL) {
+            return [[[NSColorSpace alloc] initWithCGColorSpace: cs] autorelease];
+        }
+    }
+    return [NSColorSpace sRGBColorSpace];
 }
 
 - (NSInteger) numberOfComponents {

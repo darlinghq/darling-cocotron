@@ -21,6 +21,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <ApplicationServices/ApplicationServices.h>
 #import <Foundation/Foundation.h>
 
+@class NSColorSpace;
+
 APPKIT_EXPORT NSNotificationName const NSSystemColorsDidChangeNotification;
 
 typedef NSString *NSColorListName;
@@ -122,6 +124,7 @@ enum {
 @property(class, strong, readonly) NSColor *secondarySelectedControlColor;
 @property(class, strong, readonly) NSColor *selectedMenuItemColor;
 @property(class, strong, readonly) NSColor *windowFrameColor;
+@property(class, strong, readonly) NSColor *windowFrameTextColor;
 
 @property(class, strong, readonly) NSColor *clearColor;
 
@@ -164,6 +167,7 @@ enum {
 
 @property(class) BOOL ignoresAlpha;
 @property(copy, readonly) NSColorSpaceName colorSpaceName;
+- (NSColorSpace *) colorSpace;
 
 + (NSColor *) highlightColor;
 + (NSColor *) shadowColor;
@@ -203,6 +207,7 @@ enum {
 
 + (NSColor *) windowBackgroundColor;
 + (NSColor *) windowFrameColor;
++ (NSColor *) windowFrameTextColor;
 
 + (NSColor *) selectedMenuItemColor;
 + (NSColor *) selectedMenuItemTextColor;
@@ -266,6 +271,10 @@ enum {
                           saturation: (CGFloat) saturation
                           brightness: (CGFloat) brightness
                                alpha: (CGFloat) alpha;
++ (NSColor *) colorWithHue: (CGFloat) hue
+                saturation: (CGFloat) saturation
+                brightness: (CGFloat) brightness
+                     alpha: (CGFloat) alpha;
 
 + (NSColor *) colorWithGenericGamma22White:(CGFloat) white 
                                      alpha:(CGFloat) alpha;

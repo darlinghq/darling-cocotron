@@ -46,7 +46,10 @@ enum {
 
 - (instancetype) initWithIdentifier: (NSUserInterfaceItemIdentifier) identifier;
 
+@property(copy) NSString *title;
+
 - (NSTableView *) tableView;
+- (NSString *) title;
 - (id) headerCell;
 - (id) dataCell;
 - (NSString *) headerToolTip;
@@ -61,6 +64,7 @@ enum {
 - (NSUInteger) resizingMask;
 
 - (void) setTableView: (NSTableView *) tableView;
+- (void) setTitle: (NSString *) title;
 - (void) setHeaderCell: (NSCell *) cell;
 - (void) setDataCell: (NSCell *) cell;
 - (void) setHeaderToolTip: (NSString *) value;

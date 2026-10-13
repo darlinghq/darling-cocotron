@@ -136,6 +136,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return [_cell imagePosition];
 }
 
+- (NSImageScaling) imageScaling {
+    return [_cell imageScaling];
+}
+
+- (void) setImageScaling: (NSImageScaling) value {
+    [_cell setImageScaling: value];
+}
+
 - (NSString *) title {
     return [_cell title];
 }
