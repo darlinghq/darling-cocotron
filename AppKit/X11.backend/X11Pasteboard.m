@@ -20,6 +20,7 @@ along with Darling.  If not, see <http://www.gnu.org/licenses/>.
 #import "X11Pasteboard.h"
 
 static const NSUInteger X11IncrChunkSize = 64 * 1024;
+static const NSTimeInterval kSelectionPollInterval = 0.02;
 
 @interface X11IncrTransfer : NSObject {
 @public
@@ -82,7 +83,7 @@ static size_t MaximumPropertyBytes(Display *display) {
       nameToPboard = [NSMutableDictionary new];
     });
 
-    if ([name isEqual: NSGeneralPboard]) {
+    if ([name isEqual: NSGeneralPboard] || [name isEqual: NSPasteboardNameGeneral] || [name isEqual: @"Apple CFPasteboard general"]) {
         name = @"CLIPBOARD";
     }
 
@@ -437,9 +438,18 @@ static size_t MaximumPropertyBytes(Display *display) {
         if (remaining <= 0)
             break;
 
-        [[NSDisplay currentDisplay]
+        NSDisplay *currentDisplay = [NSDisplay currentDisplay];
+        if ([currentDisplay isKindOfClass: [X11Display class]]) {
+            [(X11Display *)currentDisplay processPendingEvents];
+        }
+
+        if (_selectionNotifyResult != WAITING)
+            break;
+
+        NSTimeInterval slice = MIN(kSelectionPollInterval, remaining);
+        [currentDisplay
                 nextEventMatchingMask: NSAnyEventMask
-                            untilDate: [NSDate dateWithTimeIntervalSinceNow: remaining]
+                            untilDate: [NSDate dateWithTimeIntervalSinceNow: slice]
                                inMode: NSDefaultRunLoopMode
                               dequeue: NO];
     }
@@ -656,7 +666,7 @@ static size_t MaximumPropertyBytes(Display *display) {
       re->requestor = event->requestor;
       re->selection = event->selection;
       re->target = event->target;
-      re->property = success ? event->property : None;
+      re->property = success ? ((event->property == None) ? event->target : event->property) : None;
       re->time = event->time;
       XSendEvent(_display, event->requestor, True, NoEventMask, &replyEvent);
       XFlush(_display);
@@ -726,7 +736,12 @@ static size_t MaximumPropertyBytes(Display *display) {
         return;
     }
 
-    XChangeProperty(_display, event->requestor, event->property, event->target,
+    Atom targetProperty = (event->property == None) ? event->target : event->property;
+    if (targetProperty == None) {
+        reply(NO);
+        return;
+    }
+    XChangeProperty(_display, event->requestor, targetProperty, event->target,
                     8, PropModeReplace, [data bytes], [data length]);
 
     reply(YES);
