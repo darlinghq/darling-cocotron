@@ -378,6 +378,8 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPre
 - (void) setNeedsDisplay: (BOOL) flag;
 - (void) setNeedsDisplayInRect: (NSRect) rect;
 - (void) setKeyboardFocusRingNeedsDisplayInRect: (NSRect) rect;
+@property (readonly) NSRect focusRingMaskBounds;
+- (void) drawFocusRingMask;
 - (void) translateRectsNeedingDisplayInRect: (NSRect) rect by: (NSSize) delta;
 
 - (BOOL) canDraw;
