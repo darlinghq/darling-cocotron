@@ -365,10 +365,7 @@ static NSMutableArray *_cursorStack = nil;
 }
 
 + (void) setHiddenUntilMouseMoves: (BOOL) flag {
-    if (flag)
-        [self hide];
-    else
-        [self unhide];
+    [[NSDisplay currentDisplay] setCursorHiddenUntilMouseMoves: flag];
 }
 
 - initWithImage: (NSImage *) image

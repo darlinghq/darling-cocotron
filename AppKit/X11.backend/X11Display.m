@@ -1252,6 +1252,8 @@ static NSDictionary *modeInfoToDictionary(const XRRModeInfo *mi, int depth) {
                 [window setLastKnownCursorPosition: pos];
             }
 
+            // The pointer moved: a cursor hidden until then comes back.
+            [self pointerMoved];
             type = NSMouseMoved;
 
             if (ev->xmotion.state & Button1Mask) {
