@@ -50,6 +50,7 @@
 #import <X11/Xutil.h>
 #import <X11/extensions/XKBrules.h>
 #import <X11/extensions/Xrandr.h>
+#import "X11Monitors.h"
 #import <X11/keysym.h>
 #import <fcntl.h>
 #import <fontconfig/fontconfig.h>
@@ -192,6 +193,19 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type,
     }
 }
 
+- (NSArray *) rootScreenFallback {
+    int width = DisplayWidth(_display, DefaultScreen(_display));
+    int height = DisplayHeight(_display, DefaultScreen(_display));
+    NSRect frame = NSMakeRect(0, 0, width, height);
+    NSScreen *screen = [[[NSScreen alloc] initWithFrame: frame
+                                           visibleFrame: frame] autorelease];
+    [screen setCgDirectDisplayID: 1];
+    return [NSArray arrayWithObject: screen];
+}
+
+// [NSScreen screens] starts with the main monitor, as on macOS. A display's CGDirectDisplayID
+// stays tied to its RandR output (index + 1), whatever its position in the
+// array, because the mode functions address the output by that index.
 - (NSArray *) screens {
 
     NSArray* last = [_lastScreens retain];
@@ -199,73 +213,63 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type,
         return [last autorelease];
     }
 
-    int eventBase, errorBase;
+    int count = 0, primary = -1;
+    X11Monitor *monitors = X11MonitorsCopy(_display, &count, &primary);
+    if (monitors == NULL)
+        return [self rootScreenFallback];
 
-    if (XRRQueryExtension(_display, &eventBase, &errorBase)) {
-        XRRScreenResources *screen;
-
-        screen = XRRGetScreenResources(_display, DefaultRootWindow(_display));
-        NSMutableArray<NSScreen *> *retval =
-                [NSMutableArray arrayWithCapacity: screen->noutput];
-
-        Atom edidAtom = XInternAtom(_display, "EDID", FALSE);
-
-        for (int i = 0; i < screen->noutput; i++) {
-            XRROutputInfo *oinfo =
-                    XRRGetOutputInfo(_display, screen, screen->outputs[i]);
-            NSScreen *nsscreen;
-
-            if (oinfo->crtc) {
-                XRRCrtcInfo *crtc =
-                        XRRGetCrtcInfo(_display, screen, oinfo->crtc);
-                NSRect frame =
-                        NSMakeRect(crtc->x, crtc->y, crtc->width, crtc->height);
-
-                nsscreen =
-                        [[[NSScreen alloc] initWithFrame: frame
-                                            visibleFrame: frame] autorelease];
-
-                Atom actualType;
-                unsigned long nitems, bytesAfter;
-                int actualFormat;
-                unsigned char *prop;
-
-                if (XRRGetOutputProperty(_display, screen->outputs[i], edidAtom,
-                                         0, 100, FALSE, FALSE, AnyPropertyType,
-                                         &actualType, &actualFormat, &nitems,
-                                         &bytesAfter, &prop) == Success) {
-                    if (prop && nitems > 0)
-                        [nsscreen setEdid: [NSData dataWithBytes: prop
-                                                          length: nitems]];
-                }
-
-                XRRFreeCrtcInfo(crtc);
-            } else {
-                nsscreen = [[[NSScreen alloc] initWithFrame: NSZeroRect
-                                               visibleFrame: NSZeroRect]
-                        autorelease];
-            }
-            [nsscreen setCgDirectDisplayID: (i + 1)];
-
-            [retval addObject: nsscreen];
-
-            XRRFreeOutputInfo(oinfo);
-        }
-
-        XRRFreeScreenResources(screen);
-
-        NSArray* array = [NSArray arrayWithArray: retval];
-        _lastScreens = [array retain];
-        return array;
-    } else {
-        NSRect frame = NSMakeRect(
-                0, 0, DisplayWidth(_display, DefaultScreen(_display)),
-                DisplayHeight(_display, DefaultScreen(_display)));
-        return [NSArray
-                arrayWithObject: [[[NSScreen alloc] initWithFrame: frame
-                                                     visibleFrame: frame]
-                                         autorelease]];
+    int *order = calloc(count > 0 ? (size_t) count : 1, sizeof *order);
+    if (order == NULL) {
+        free(monitors);
+        return [self rootScreenFallback];
     }
+    X11MonitorsOrder(monitors, count, primary, order);
+
+    NSMutableArray<NSScreen *> *retval =
+            [NSMutableArray arrayWithCapacity: count];
+    Atom edidAtom = XInternAtom(_display, "EDID", FALSE);
+
+    for (int n = 0; n < count; n++) {
+        int i = order[n];
+        NSScreen *nsscreen;
+
+        if (monitors[i].active) {
+            NSRect frame = NSMakeRect(monitors[i].x, monitors[i].y,
+                                      monitors[i].width, monitors[i].height);
+
+            nsscreen = [[[NSScreen alloc] initWithFrame: frame
+                                           visibleFrame: frame] autorelease];
+
+            Atom actualType;
+            unsigned long nitems, bytesAfter;
+            int actualFormat;
+            unsigned char *prop = NULL;
+
+            if (XRRGetOutputProperty(_display, monitors[i].output, edidAtom, 0,
+                                     100, FALSE, FALSE, AnyPropertyType,
+                                     &actualType, &actualFormat, &nitems,
+                                     &bytesAfter, &prop) == Success) {
+                if (prop && actualFormat == 8 && nitems > 0)
+                    [nsscreen setEdid: [NSData dataWithBytes: prop
+                                                      length: nitems]];
+            }
+            if (prop)
+                XFree(prop);
+        } else {
+            nsscreen = [[[NSScreen alloc] initWithFrame: NSZeroRect
+                                           visibleFrame: NSZeroRect]
+                    autorelease];
+        }
+        [nsscreen setCgDirectDisplayID: (i + 1)];
+        [retval addObject: nsscreen];
+    }
+
+    free(order);
+    free(monitors);
+
+    NSArray* array = [NSArray arrayWithArray: retval];
+    _lastScreens = [array retain];
+    return array;
 }
 
 static NSDictionary *modeInfoToDictionary(const XRRModeInfo *mi, int depth) {
