@@ -393,8 +393,11 @@ CGSize CGDisplayScreenSize(CGDirectDisplayID display) {
         /* First detailed timing descriptor: image size in mm. */
         double width = bytes[66] | ((bytes[68] & 0xf0) << 4);
         double height = bytes[67] | ((bytes[68] & 0x0f) << 8);
+        /* DTV timings may encode only an aspect ratio in these fields. */
+        bool aspectRatioOnly = (width == 16 && height == 9) ||
+                               (width == 4 && height == 3);
         /* Basic display parameters: maximum image size in cm. */
-        if (width <= 0 || height <= 0) {
+        if (width <= 0 || height <= 0 || aspectRatioOnly) {
             width = bytes[21] * 10.0;
             height = bytes[22] * 10.0;
         }
