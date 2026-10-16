@@ -11,7 +11,10 @@
  *
  * On Xwayland a warp only reaches the compositor while the X cursor is hidden. With a visible cursor the echo
  * still arrives, but the next real motion reports the unmoved physical pointer, so honoured=false keeps the last
- * physical position across echoes and never warps back.
+ * physical position across echoes and never warps back. The cursor the user sees is then the physical pointer,
+ * so the virtual cursor follows it and application warps do not move it: League keeps a visible cursor while
+ * relative on GNOME and gamescope and warps it at its own mouse speed, which otherwise left the virtual cursor
+ * (where clicks land) hundreds of pixels from the visible one and kept it off the screen edges.
  *
  * Plain C without X11 or Objective-C dependencies, so tests/x11-relative-mouse.c can run it on the host. */
 #ifndef X11_RELATIVE_MOUSE_H
@@ -80,11 +83,15 @@ static inline void X11RelativeMouseExpectEcho(X11RelativeMouse *mouse, int x, in
     mouse->echoes[mouse->echoCount++] = (X11RelativeMouseEcho) {x, y, queuedEvents};
 }
 
-/* CGWarpMouseCursorPosition while relative: the virtual cursor moves to the target; the physical position is
- * only updated when the echo arrives (and only if the warp was honoured). */
-static inline void X11RelativeMouseWarp(X11RelativeMouse *mouse, double x, double y, unsigned queuedEvents) {
-    mouse->virtualX = x;
-    mouse->virtualY = y;
+/* CGWarpMouseCursorPosition while relative: where warps are honoured the virtual cursor moves to the target and
+ * the physical position is updated when the echo arrives. Otherwise the pointer stays put, and so does the
+ * virtual cursor that tracks it; the echo is still expected so it is not taken for motion. */
+static inline void X11RelativeMouseWarp(X11RelativeMouse *mouse, double x, double y, unsigned queuedEvents,
+                                        bool warpsHonoured) {
+    if (warpsHonoured) {
+        mouse->virtualX = x;
+        mouse->virtualY = y;
+    }
     X11RelativeMouseExpectEcho(mouse, X11RelativeMouseWarpCoordinate(x), X11RelativeMouseWarpCoordinate(y),
                                queuedEvents);
 }
@@ -123,6 +130,10 @@ static inline X11RelativeMouseMotion X11RelativeMouseHandleMotion(X11RelativeMou
     result.deltaY = rootY - mouse->physicalY;
     mouse->physicalX = rootX;
     mouse->physicalY = rootY;
+    if (!warpsHonoured) {
+        mouse->virtualX = rootX;
+        mouse->virtualY = rootY;
+    }
     result.post = result.deltaX != 0.0 || result.deltaY != 0.0;
     int warpX = X11RelativeMouseWarpCoordinate(mouse->virtualX);
     int warpY = X11RelativeMouseWarpCoordinate(mouse->virtualY);
