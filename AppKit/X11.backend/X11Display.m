@@ -1031,6 +1031,9 @@ static NSDictionary *modeInfoToDictionary(const XRRModeInfo *mi, int depth) {
         // retaining the window causes it to keep popping back up endlessly even after dismissing it
         if (lastFocusedWindow && [[lastFocusedWindow platformWindow] windowHandle] == i)
             lastFocusedWindow = nil;
+        // The server released a grab on a destroyed window.
+        if (_relativeWindow == i)
+            [self suspendRelativeMouse];
     }
 }
 
@@ -1440,6 +1443,9 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
 
     case UnmapNotify:
         NSLog(@"UnmapNotify");
+        // The server released a grab whose window became unviewable.
+        if (ev->xany.window == _relativeWindow)
+            [self suspendRelativeMouse];
         break;
 
     case MapNotify:
@@ -1456,6 +1462,12 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
         break;
 
     case ConfigureNotify:
+        if (_relativeMouse.active && ev->xconfigure.window == _relativeWindow) {
+            // A reconfiguration can move a confined pointer by itself: take a
+            // new snapshot and drop the old geometry's pending motion.
+            [self suspendRelativeMouse];
+            [self beginRelativeMouse];
+        }
         [window frameChanged];
         [delegate platformWindow: window
                     frameChanged: [window frame]
