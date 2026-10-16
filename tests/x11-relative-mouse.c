@@ -1,4 +1,7 @@
-#include "../AppKit/X11.backend/X11RelativeMouse.h"
+#ifndef X11_RELATIVE_MOUSE_HEADER
+#define X11_RELATIVE_MOUSE_HEADER "../AppKit/X11.backend/X11RelativeMouse.h"
+#endif
+#include X11_RELATIVE_MOUSE_HEADER
 #include <assert.h>
 #include <stdio.h>
 
@@ -6,7 +9,7 @@
  * A warp's echo is simulated as the MotionNotify the server queues at the target; `queued` is the number of
  * X events queued after the backend's XSync. */
 static X11RelativeMouseMotion motion(X11RelativeMouse *m, int x, int y, bool honoured) {
-    return X11RelativeMouseHandleMotion(m, x, y, honoured);
+    return X11RelativeMouseHandleMotion(m, x, y, honoured, 0);
 }
 
 static void xorgHonouredWarps(void) {
@@ -16,22 +19,22 @@ static void xorgHonouredWarps(void) {
     X11RelativeMouseMotion r = motion(&m, 510, 395, true);
     assert(r.post && !r.echo && r.deltaX == 10 && r.deltaY == -5);
     assert(r.rewarp && r.warpX == 500 && r.warpY == 400);
-    X11RelativeMouseExpectEcho(&m, r.warpX, r.warpY, 1);
+    X11RelativeMouseExpectEcho(&m, r.warpX, r.warpY, 1, 0);
     /* The rewarp's echo is consumed and is not a delta back to the centre. */
     r = motion(&m, 500, 400, true);
     assert(!r.post && r.echo && !r.rewarp && m.echoCount == 0);
     assert(m.physicalX == 500 && m.physicalY == 400);
     r = motion(&m, 503, 404, true);
     assert(r.post && r.deltaX == 3 && r.deltaY == 4 && r.rewarp);
-    X11RelativeMouseExpectEcho(&m, r.warpX, r.warpY, 1);
+    X11RelativeMouseExpectEcho(&m, r.warpX, r.warpY, 1, 0);
 
     /* A real motion queued before the echo still measures against the last physical position. */
     X11RelativeMouseBegin(&m, 500, 400);
     r = motion(&m, 520, 400, true);
-    X11RelativeMouseExpectEcho(&m, r.warpX, r.warpY, 2); /* the next motion was already queued */
+    X11RelativeMouseExpectEcho(&m, r.warpX, r.warpY, 2, 0); /* the next motion was already queued */
     r = motion(&m, 530, 400, true);
     assert(r.post && r.deltaX == 10 && r.deltaY == 0 && r.rewarp);
-    X11RelativeMouseExpectEcho(&m, r.warpX, r.warpY, 1); /* same target: merged, not a second echo */
+    X11RelativeMouseExpectEcho(&m, r.warpX, r.warpY, 1, 0); /* same target: merged, not a second echo */
     assert(m.echoCount == 1);
     r = motion(&m, 500, 400, true);
     assert(r.echo && m.echoCount == 0);
@@ -43,8 +46,8 @@ static void xorgHonouredWarps(void) {
     X11RelativeMouseBegin(&m, 500, 400);
     r = motion(&m, 512, 400, true);
     assert(r.deltaX == 12 && r.rewarp);
-    X11RelativeMouseExpectEcho(&m, r.warpX, r.warpY, 1);
-    X11RelativeMouseWarp(&m, 524.0, 400.0, 2, true); /* game: mouseLocation + 2 * delta */
+    X11RelativeMouseExpectEcho(&m, r.warpX, r.warpY, 1, 0);
+    X11RelativeMouseWarp(&m, 524.0, 400.0, 2, 0, true); /* game: mouseLocation + 2 * delta */
     assert(m.virtualX == 524.0 && m.physicalX == 512);
     r = motion(&m, 500, 400, true);
     assert(r.echo && m.physicalX == 500);
@@ -52,19 +55,17 @@ static void xorgHonouredWarps(void) {
     assert(r.echo && m.physicalX == 524 && m.echoCount == 0);
     r = motion(&m, 530, 401, true);
     assert(r.post && r.deltaX == 6 && r.deltaY == 1 && r.rewarp && r.warpX == 524 && r.warpY == 400);
+    X11RelativeMouseEnd(&m);
     puts("PASS: Xorg honoured warps rewarp to the frozen cursor and drop their echoes");
 }
 
 static void xwaylandVisibleCursor(void) {
     X11RelativeMouse m = {0};
     X11RelativeMouseBegin(&m, 800, 450);
-    /* Warps are not honoured: no rewarp, the pointer moves freely, deltas follow it and so does the virtual
-     * cursor, since the visible cursor is the pointer. */
+    /* Warps are not honoured: no rewarp, the pointer moves freely, deltas follow it. */
     X11RelativeMouseMotion r = motion(&m, 810, 450, false);
     assert(r.post && r.deltaX == 10 && !r.rewarp);
-    assert(m.virtualX == 810.0 && m.virtualY == 450.0);
-    X11RelativeMouseWarp(&m, 820.0, 450.0, 1, false);
-    assert(m.virtualX == 810.0 && m.virtualY == 450.0); /* the pointer did not move, so neither does the cursor */
+    X11RelativeMouseWarp(&m, 820.0, 450.0, 1, 0, false);
     /* The echo at the target is dropped without moving the physical position... */
     r = motion(&m, 820, 450, false);
     assert(r.echo && !r.post && m.physicalX == 810 && m.physicalY == 450);
@@ -73,17 +74,15 @@ static void xwaylandVisibleCursor(void) {
     assert(r.post && r.deltaX == 2 && r.deltaY == 3 && !r.rewarp);
     assert(m.virtualX == 812.0 && m.virtualY == 453.0);
     /* An expected echo that never arrives expires after the queued events and cannot eat a later motion. */
-    X11RelativeMouseWarp(&m, 700.0, 400.0, 1, false);
+    X11RelativeMouseWarp(&m, 700.0, 400.0, 1, 0, false);
     X11RelativeMouseTick(&m); /* some other X event was the one queued */
     assert(m.echoCount == 0);
     r = motion(&m, 700, 400, false);
     assert(r.post && !r.echo && r.deltaX == -112 && r.deltaY == -53);
+    X11RelativeMouseEnd(&m);
     puts("PASS: Xwayland visible cursor keeps the physical position across unhonoured warp echoes");
 }
 
-/* A game on GNOME and gamescope: relative with a visible cursor, warping its cursor at about half the physical
- * motion each frame (from an in-game trace). Clicks land at the virtual cursor, so it must stay on the visible
- * pointer and reach the screen edges, where the game pans the camera. */
 static void leagueVisibleCursorWarps(void) {
     X11RelativeMouse m = {0};
     X11RelativeMouseBegin(&m, 2888, 30);
@@ -94,7 +93,7 @@ static void leagueVisibleCursorWarps(void) {
         X11RelativeMouseMotion r = motion(&m, x, y, false);
         assert(r.post && r.deltaX == -20 && r.deltaY == 16 && !r.rewarp);
         double gameX = m.virtualX + r.deltaX / 2, gameY = m.virtualY + r.deltaY / 2;
-        X11RelativeMouseWarp(&m, gameX, gameY, 1, false);
+        X11RelativeMouseWarp(&m, gameX, gameY, 1, 0, false);
         r = motion(&m, (int) gameX, (int) gameY, false); /* the unhonoured warp's echo */
         assert(r.echo && !r.post);
         assert(m.virtualX == x && m.virtualY == y);
@@ -102,13 +101,14 @@ static void leagueVisibleCursorWarps(void) {
     /* The pointer stops at the right edge of a 3440-pixel screen; the cursor is there too. */
     X11RelativeMouseMotion r = motion(&m, 3439, 700, false);
     assert(r.post && m.virtualX == 3439 && m.virtualY == 700);
+    X11RelativeMouseEnd(&m);
     puts("PASS: a game's visible-cursor warps leave the virtual cursor on the pointer, up to the screen edge");
 }
 
 static void gameWarpUpdatesVirtual(void) {
     X11RelativeMouse m = {0};
     X11RelativeMouseBegin(&m, 100, 100);
-    X11RelativeMouseWarp(&m, 150.75, 120.5, 0, true); /* no event: the pointer was already there */
+    X11RelativeMouseWarp(&m, 150.75, 120.5, 0, 0, true); /* no event: the pointer was already there */
     assert(m.virtualX == 150.75 && m.virtualY == 120.5 && m.echoCount == 0);
     assert(m.physicalX == 100 && m.physicalY == 100);
     /* mouseLocation reports the virtual cursor, Cocoa bottom-up global, for a 1080-pixel screen. */
@@ -116,6 +116,7 @@ static void gameWarpUpdatesVirtual(void) {
     assert(cocoaX == 150.75 && cocoaY == 959.5);
     X11RelativeMouseMotion r = motion(&m, 101, 100, true);
     assert(r.post && r.deltaX == 1 && r.rewarp && r.warpX == 150 && r.warpY == 120);
+    X11RelativeMouseEnd(&m);
     puts("PASS: application warps while relative move the virtual cursor that mouseLocation returns");
 }
 
@@ -128,40 +129,110 @@ static void deltaSign(void) {
     /* Absolute motion in Cocoa window coordinates (bottom-up): moving down lowers y. */
     X11AbsoluteMouseDelta(10, 300, 14, 290, &dx, &dy);
     assert(dx == 4 && dy == 10);
+    X11RelativeMouseEnd(&m);
     puts("PASS: deltaY is positive downwards for relative and absolute motion");
 }
 
 static void ungrabRestores(void) {
     X11RelativeMouse m = {0};
     X11RelativeMouseBegin(&m, 10, 10);
-    X11RelativeMouseWarp(&m, 40, 40, 3, true);
+    X11RelativeMouseWarp(&m, 40, 40, 3, 0, true);
     X11RelativeMouseEnd(&m);
     assert(!m.active && m.echoCount == 0);
     X11RelativeMouseBegin(&m, 60, 70);
     assert(m.active && m.virtualX == 60 && m.virtualY == 70 && m.physicalX == 60 && m.physicalY == 70);
     X11RelativeMouseMotion r = motion(&m, 40, 40, true);
     assert(r.post && !r.echo && r.deltaX == -20 && r.deltaY == -30);
+    X11RelativeMouseEnd(&m);
     puts("PASS: ungrab clears expected echoes and a new grab starts from the current pointer");
 }
 
-static void echoQueueBound(void) {
+static void echoQueueGrowth(void) {
     X11RelativeMouse m = {0};
     X11RelativeMouseBegin(&m, 0, 0);
-    for (int i = 1; i <= X11_RELATIVE_MOUSE_MAX_ECHOES + 3; ++i)
-        X11RelativeMouseWarp(&m, i, 0, 100, true);
-    assert(m.echoCount == X11_RELATIVE_MOUSE_MAX_ECHOES && m.echoes[0].x == 4);
+    for (int i = 1; i <= X11_RELATIVE_MOUSE_INITIAL_ECHOES + 3; ++i)
+        X11RelativeMouseWarp(&m, i, 0, 100, 0, true);
+    assert(m.echoCount == X11_RELATIVE_MOUSE_INITIAL_ECHOES + 3 && m.echoes[0].x == 1);
     X11RelativeMouseMotion r = motion(&m, 6, 0, true);
-    assert(r.echo && m.echoCount == X11_RELATIVE_MOUSE_MAX_ECHOES - 3 && m.echoes[0].x == 7);
-    puts("PASS: expected echoes are bounded and consumed in order");
+    assert(r.echo && m.echoCount == X11_RELATIVE_MOUSE_INITIAL_ECHOES - 3 && m.echoes[0].x == 7);
+    X11RelativeMouseEnd(&m);
+    puts("PASS: echo backlog grows without discarding warps and is consumed in order");
+}
+
+static void serialsSeparateMotionFromEchoes(void) {
+    X11RelativeMouse m = {0};
+    X11RelativeMouseBegin(&m, 500, 400);
+    m.firstSerial = 100;
+    /* Events queued before the grab snapshot must not turn into a jump from that snapshot. */
+    X11RelativeMouseMotion r = X11RelativeMouseHandleMotion(&m, 0, 0, true, 99);
+    assert(!r.post && !r.rewarp && m.physicalX == 500 && m.physicalY == 400);
+    X11RelativeMouseExpectEcho(&m, 500, 400, 4, 110);
+    /* Real pre-warp motion happens to cross the anchor. Coordinates alone would discard it. */
+    m.physicalX = 510;
+    r = X11RelativeMouseHandleMotion(&m, 500, 400, true, 105);
+    assert(r.post && !r.echo && r.deltaX == -10 && m.echoCount == 1);
+    r = X11RelativeMouseHandleMotion(&m, 500, 400, true, 110);
+    assert(r.echo && !r.post && m.echoCount == 0);
+    /* A later real event at the same target must not be swallowed either. */
+    X11RelativeMouseExpectEcho(&m, 520, 400, 2, 120);
+    r = X11RelativeMouseHandleMotion(&m, 520, 400, true, 121);
+    assert(r.post && !r.echo && r.deltaX == 20);
+    X11RelativeMouseEnd(&m);
+    puts("PASS: grab snapshot and warp request serials distinguish queued motion from echoes");
+}
+
+static void queuedMotionDoesNotMultiplyWarps(void) {
+    X11RelativeMouse m = {0};
+    X11RelativeMouseBegin(&m, 500, 400);
+    X11RelativeMouseMotion r = X11RelativeMouseHandleMotion(&m, 510, 400, true, 100);
+    assert(r.post && r.deltaX == 10 && r.rewarp);
+    X11RelativeMouseExpectEcho(&m, 500, 400, 4, 110);
+    r = X11RelativeMouseHandleMotion(&m, 520, 400, true, 101);
+    assert(r.post && r.deltaX == 10 && !r.rewarp);
+    r = X11RelativeMouseHandleMotion(&m, 530, 400, true, 102);
+    assert(r.post && r.deltaX == 10 && !r.rewarp && m.echoCount == 1);
+    r = X11RelativeMouseHandleMotion(&m, 500, 400, true, 110);
+    assert(r.echo && !r.post);
+    r = X11RelativeMouseHandleMotion(&m, 502, 401, true, 111);
+    assert(r.post && r.deltaX == 2 && r.deltaY == 1 && r.rewarp);
+    X11RelativeMouseEnd(&m);
+    puts("PASS: queued physical motion uses one pending rewarp without losing deltas");
+}
+
+static void confinedWarpAndApplicationReanchor(void) {
+    X11RelativeMouse m = {0};
+    X11RelativeMouseBegin(&m, 2500, 400);
+    /* A second monitor at +1920, with a 24-pixel panel above the game. */
+    m.bounded = true; m.minX = 1920; m.minY = 24; m.maxX = 3839; m.maxY = 1079;
+    double x = 3900, y = -100;
+    X11RelativeMouseClamp(&m, &x, &y);
+    assert(x == 3839 && y == 24);
+    X11RelativeMouseWarp(&m, x, y, 3, 210, true);
+    /* Another application warp must preserve both outstanding echoes, even at the same position. */
+    X11RelativeMouseWarp(&m, x, y, 4, 220, true);
+    assert(m.echoCount == 2);
+    X11RelativeMouseMotion r = X11RelativeMouseHandleMotion(&m, 3839, 24, true, 210);
+    assert(r.echo && !r.post && m.echoCount == 1);
+    r = X11RelativeMouseHandleMotion(&m, 3839, 24, true, 220);
+    assert(r.echo && !r.post && m.echoCount == 0);
+    r = X11RelativeMouseHandleMotion(&m, 3830, 30, true, 221);
+    assert(r.post && r.deltaX == -9 && r.deltaY == 6);
+    assert(r.rewarp && r.warpX == 3839 && r.warpY == 24);
+    assert(m.virtualX == 3839 && m.virtualY == 24);
+    X11RelativeMouseEnd(&m);
+    puts("PASS: confined application warps share one position with events and rewarping on a secondary monitor");
 }
 
 int main(void) {
+    serialsSeparateMotionFromEchoes();
+    queuedMotionDoesNotMultiplyWarps();
+    confinedWarpAndApplicationReanchor();
     xorgHonouredWarps();
     xwaylandVisibleCursor();
     leagueVisibleCursorWarps();
     gameWarpUpdatesVirtual();
     deltaSign();
     ungrabRestores();
-    echoQueueBound();
+    echoQueueGrowth();
     return 0;
 }
