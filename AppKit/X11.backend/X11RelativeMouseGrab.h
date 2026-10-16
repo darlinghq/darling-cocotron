@@ -1,0 +1,132 @@
+/* The Xlib side of macOS-style relative mouse mode: the pointer grab, the pointer warps and the handling of a
+ * MotionNotify, on top of the decision model in X11RelativeMouse.h.
+ *
+ * Only Xlib, no Objective-C, so tests/x11-relative-mouse-x11.c can drive the same code the backend runs against a
+ * real server (Xvfb, with XTest supplying the physical motion). */
+#ifndef X11_RELATIVE_MOUSE_GRAB_H
+#define X11_RELATIVE_MOUSE_GRAB_H
+
+#include "X11RelativeMouse.h"
+#include <X11/Xlib.h>
+
+#define X11_RELATIVE_MOUSE_NOT_FOCUSED (-1)
+#define X11_RELATIVE_MOUSE_QUERY_FAILED (-2)
+
+/* Whether window holds the keyboard focus, directly or through a descendant (an embedded child window). */
+static inline bool X11RelativeMouseWindowHasFocus(Display *display, Window window) {
+    Window focus;
+    int revert;
+    XGetInputFocus(display, &focus, &revert);
+    Window root = DefaultRootWindow(display), ancestor = focus;
+    for (int depth = 0; depth < 64 && ancestor != window && ancestor != None && ancestor != PointerRoot &&
+                        ancestor != root;
+         depth++) {
+        Window queriedRoot, parent, *children = NULL;
+        unsigned int count;
+        if (!XQueryTree(display, ancestor, &queriedRoot, &parent, &children, &count))
+            return false;
+        if (children)
+            XFree(children);
+        ancestor = parent;
+    }
+    return ancestor == window;
+}
+
+/* Caches the rectangle the pointer is confined to (the grab window, in root coordinates). XWarpPointer clips to it,
+ * not to the monitor, so the virtual cursor is clamped against it. */
+static inline bool X11RelativeMouseUpdateBounds(Display *display, X11RelativeMouse *mouse, Window window) {
+    XWindowAttributes attributes;
+    Window child;
+    int x, y;
+    if (!XGetWindowAttributes(display, window, &attributes) ||
+        !XTranslateCoordinates(display, window, DefaultRootWindow(display), 0, 0, &x, &y, &child))
+        return false;
+    int screen = DefaultScreen(display);
+    mouse->minX = x < 0 ? 0 : x;
+    mouse->minY = y < 0 ? 0 : y;
+    mouse->maxX = x + attributes.width - 1;
+    if (mouse->maxX > DisplayWidth(display, screen) - 1)
+        mouse->maxX = DisplayWidth(display, screen) - 1;
+    mouse->maxY = y + attributes.height - 1;
+    if (mouse->maxY > DisplayHeight(display, screen) - 1)
+        mouse->maxY = DisplayHeight(display, screen) - 1;
+    mouse->bounded = mouse->maxX >= mouse->minX && mouse->maxY >= mouse->minY;
+    return mouse->bounded;
+}
+
+/* Takes the pointer grab on window (confined to it) and starts the virtual cursor at the current pointer
+ * position. Returns GrabSuccess, X11_RELATIVE_MOUSE_NOT_FOCUSED when the window does not hold the focus (a grab
+ * would take the pointer from whichever client does), X11_RELATIVE_MOUSE_QUERY_FAILED, or the XGrabPointer error.
+ * Nothing is left grabbed on failure. */
+static inline int X11RelativeMouseGrab(Display *display, X11RelativeMouse *mouse, Window window) {
+    if (!X11RelativeMouseWindowHasFocus(display, window))
+        return X11_RELATIVE_MOUSE_NOT_FOCUSED;
+    /* FocusChangeMask is not a valid pointer-grab event. */
+    const unsigned int events = ButtonPressMask | ButtonReleaseMask | PointerMotionMask;
+    int result = XGrabPointer(display, window, False, events, GrabModeAsync, GrabModeAsync, window, None, CurrentTime);
+    if (result != GrabSuccess)
+        return result;
+    Window root, child;
+    int rootX, rootY, windowX, windowY;
+    unsigned int state;
+    unsigned long snapshotSerial = NextRequest(display);
+    if (!XQueryPointer(display, window, &root, &child, &rootX, &rootY, &windowX, &windowY, &state)) {
+        XUngrabPointer(display, CurrentTime);
+        return X11_RELATIVE_MOUSE_QUERY_FAILED;
+    }
+    X11RelativeMouseBegin(mouse, rootX, rootY);
+    mouse->firstSerial = snapshotSerial;
+    if (!X11RelativeMouseUpdateBounds(display, mouse, window)) {
+        XUngrabPointer(display, CurrentTime);
+        X11RelativeMouseEnd(mouse);
+        return X11_RELATIVE_MOUSE_QUERY_FAILED;
+    }
+    return GrabSuccess;
+}
+
+/* Gives the pointer back. Safe when relative mode is not active. */
+static inline void X11RelativeMouseRelease(Display *display, X11RelativeMouse *mouse) {
+    if (!mouse->active)
+        return;
+    XUngrabPointer(display, CurrentTime);
+    X11RelativeMouseEnd(mouse);
+}
+
+/* Moves the pointer and waits for the server, so the warp's MotionNotify (if any) is already queued on return.
+ * Returns the number of queued events. Callers read NextRequest before this call to identify the echo. */
+static inline unsigned X11RelativeMouseWarpPointer(Display *display, int x, int y) {
+    XWarpPointer(display, None, DefaultRootWindow(display), 0, 0, 0, 0, x, y);
+    XSync(display, False);
+    return (unsigned) XEventsQueued(display, QueuedAlready);
+}
+
+/* A MotionNotify while relative mode is active: the model's decision, and the warp back to the virtual cursor with
+ * its echo registered. *ok is false when the echo could not be recorded (allocation failure); relative mode must then
+ * be released, or the echo would be taken for input. */
+static inline X11RelativeMouseMotion X11RelativeMouseMotionEvent(Display *display, X11RelativeMouse *mouse,
+                                                                 const XMotionEvent *event, bool warpsHonoured,
+                                                                 bool *ok) {
+    X11RelativeMouseMotion motion =
+            X11RelativeMouseHandleMotion(mouse, event->x_root, event->y_root, warpsHonoured, event->serial);
+    *ok = true;
+    if (motion.rewarp) {
+        unsigned long serial = NextRequest(display);
+        unsigned queued = X11RelativeMouseWarpPointer(display, motion.warpX, motion.warpY);
+        *ok = X11RelativeMouseExpectEcho(mouse, motion.warpX, motion.warpY, queued, serial);
+    }
+    return motion;
+}
+
+/* CGWarpMouseCursorPosition while relative: the virtual cursor moves without a delta. Where warps are honoured the
+ * target is clamped to the grab window, as the server does. Returns false when the echo could not be recorded. */
+static inline bool X11RelativeMouseApplicationWarp(Display *display, X11RelativeMouse *mouse, double x, double y,
+                                                   bool warpsHonoured) {
+    if (warpsHonoured)
+        X11RelativeMouseClamp(mouse, &x, &y);
+    unsigned long serial = NextRequest(display);
+    unsigned queued = X11RelativeMouseWarpPointer(display, X11RelativeMouseWarpCoordinate(x),
+                                                  X11RelativeMouseWarpCoordinate(y));
+    return X11RelativeMouseWarp(mouse, x, y, queued, serial, warpsHonoured);
+}
+
+#endif
