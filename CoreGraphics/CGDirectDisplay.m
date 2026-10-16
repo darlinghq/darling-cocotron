@@ -381,17 +381,30 @@ static NSData *edidForDisplay(CGDirectDisplayID displayId) {
 }
 
 CGSize CGDisplayScreenSize(CGDirectDisplayID display) {
-    printf("STUB %s\n", __PRETTY_FUNCTION__);
+    /* Callers divide by this size to get an aspect ratio, so a zero size turns
+     * their projection into NaN. Use the main display for an unknown id (an
+     * off-screen window reports 0). */
+    if (CGDisplayBounds(display).size.width <= 0)
+        display = CGMainDisplayID();
 
     NSData *edid = edidForDisplay(display);
-
-    if (!edid) {
-        CGRect bounds = CGDisplayBounds(display);
-
-        return bounds.size;
+    if (edid && [edid length] >= 128) {
+        const uint8_t *bytes = [edid bytes];
+        /* First detailed timing descriptor: image size in mm. */
+        double width = bytes[66] | ((bytes[68] & 0xf0) << 4);
+        double height = bytes[67] | ((bytes[68] & 0x0f) << 8);
+        /* Basic display parameters: maximum image size in cm. */
+        if (width <= 0 || height <= 0) {
+            width = bytes[21] * 10.0;
+            height = bytes[22] * 10.0;
+        }
+        if (width > 0 && height > 0)
+            return (CGSize){.width = width, .height = height};
     }
 
-    return (CGSize){.width = 0, .height = 0};
+    /* No usable EDID size: assume 96 dpi. */
+    CGSize pixels = CGDisplayBounds(display).size;
+    return (CGSize){.width = pixels.width * 25.4 / 96, .height = pixels.height * 25.4 / 96};
 }
 
 uint32_t CGDisplaySerialNumber(CGDirectDisplayID displayId) {
