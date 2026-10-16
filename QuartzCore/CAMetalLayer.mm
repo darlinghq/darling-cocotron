@@ -371,6 +371,22 @@ static void reportGLErrors(void) {
 	NSDate* endTime = [NSDate dateWithTimeIntervalSinceNow: 1];
 
 	while (_usableDrawablesBitmap == 0) {
+		// A queued present is composited, and its drawable handed back, by a render
+		// pass of the layer context, and that pass runs on the main thread. A caller
+		// on the main thread would be waiting here for its own thread, so it runs the
+		// pass in place. Each pass takes one queued present, so if none was taken
+		// (no window to render into yet, or a pass already running) it falls through
+		// to waiting instead of looping.
+		if (_queuedDrawableCount > 0 && _context != nil) {
+			NSUInteger queuedBefore = _queuedDrawableCount;
+			[_drawableCondition unlock];
+			BOOL rendered = [_context renderPendingPresents];
+			[_drawableCondition lock];
+			if (rendered && _queuedDrawableCount < queuedBefore) {
+				continue;
+			}
+		}
+
 		if (_allowsNextDrawableTimeout) {
 			if (![_drawableCondition waitUntilDate: endTime]) {
 				break;

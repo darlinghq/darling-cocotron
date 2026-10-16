@@ -367,17 +367,36 @@ static BOOL layerTreeNeedsAnotherFrame(CALayer *layer) {
     return NO;
 }
 
+- (BOOL) renderPendingPresents {
+    if (_renderInProgress || ![NSThread isMainThread])
+        return NO;
+
+    _renderInProgress = YES;
+    @try {
+        [self render];
+        [self flush];
+    } @finally {
+        _renderInProgress = NO;
+    }
+    return YES;
+}
+
 - (void) timer: (NSTimer *) timer {
     // Consume requests for this frame before callbacks can request another.
     _renderRequested = NO;
-    [_renderer beginFrameAtTime: CACurrentMediaTime() timeStamp: NULL];
+    _renderInProgress = YES;
+    @try {
+        [_renderer beginFrameAtTime: CACurrentMediaTime() timeStamp: NULL];
 
-    [self render];
+        [self render];
 
-    [_renderer endFrame];
+        [_renderer endFrame];
 
-    // Animation frames aren't part of a view display pass, so present them here.
-    [self flush];
+        // Animation frames aren't part of a view display pass, so present them here.
+        [self flush];
+    } @finally {
+        _renderInProgress = NO;
+    }
 
     // beginFrameAtTime: drops finished animations. Once none are left, the frame
     // just drawn shows the final values: stop until an animation is added again,
