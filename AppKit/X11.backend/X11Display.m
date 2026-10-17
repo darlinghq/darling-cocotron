@@ -264,7 +264,7 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type,
                                            visibleFrame: NSZeroRect]
                     autorelease];
         }
-        [nsscreen setCgDirectDisplayID: (i + 1)];
+        [nsscreen setCgDirectDisplayID: X11MonitorDisplayID(i)];
         [retval addObject: nsscreen];
     }
 

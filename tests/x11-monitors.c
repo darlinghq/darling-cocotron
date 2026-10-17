@@ -70,6 +70,25 @@ static void order(void) {
     CHECK(out[0] == 0 && out[1] == 1, "nothing active keeps server order");
 }
 
+static void displayIDs(void) {
+    /* Output 3 (index 2) is the main monitor; output 2 is off. */
+    X11Monitor layout[] = {active(10, 1920, 0, 2560, 1440), inactive(11), active(12, 0, 0, 1920, 1080)};
+    int primary = X11MonitorsPickPrimary(layout, 3, 12);
+    int out[3];
+    X11MonitorsOrder(layout, 3, primary, out);
+    /* The listing is main, other active, inactive; each entry keeps the ID of its own output. */
+    unsigned int expected[] = {3, 1, 2};
+    for (int n = 0; n < 3; n++)
+        CHECK(X11MonitorDisplayID(out[n]) == expected[n], "listing position %d has display ID %u, expected %u", n,
+              X11MonitorDisplayID(out[n]), expected[n]);
+    /* CGMainDisplayID is the ID of the first listed monitor with a frame. */
+    CHECK(X11MonitorDisplayID(out[0]) == 3 && layout[out[0]].width == 1920, "the main display is ID 3, 1920 wide");
+    /* An ID is the output index plus one, so ID 0 (kCGNullDirectDisplay) never names an output. */
+    CHECK(X11MonitorDisplayID(0) == 1, "output 0 is display 1");
+    for (int i = 0; i < 3; i++)
+        CHECK(X11MonitorDisplayID(i) != 0, "no output has the null display ID");
+}
+
 static void setCrtc(Display *display, int x, int y, unsigned width, unsigned height, bool enable) {
     Window root = DefaultRootWindow(display);
     XRRScreenResources *resources = XRRGetScreenResources(display, root);
@@ -151,6 +170,7 @@ static void randr(Display *display) {
 int main(void) {
     pickPrimary();
     order();
+    displayIDs();
     Display *display = XOpenDisplay(NULL);
     if (!display) {
         printf("no X display: run through tests/x11-monitors.sh\n");
