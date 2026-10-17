@@ -66,6 +66,19 @@ static NSScreen *screenForDisplayID(NSArray<NSScreen *> *screens,
     return nil;
 }
 
+// NSScreen frames are in Cocoa's global space (origin at the main screen's
+// bottom-left corner, y up, like window frames); CoreGraphics' global space has its
+// origin at the main screen's top-left corner and y down, so a display above the main
+// one has a negative y, as on macOS. [NSScreen screens] lists the main screen first.
+static CGRect globalRectForFrame(NSArray<NSScreen *> *screens, NSRect frame) {
+    if (NSIsEmptyRect(frame) || [screens count] == 0)
+        return frame;
+    CGFloat mainHeight = NSHeight([[screens objectAtIndex: 0] frame]);
+    return CGRectMake(frame.origin.x,
+                      mainHeight - frame.origin.y - frame.size.height,
+                      frame.size.width, frame.size.height);
+}
+
 CGDirectDisplayID CGMainDisplayID(void) {
     NSDisplay *display = currentDisplay();
     if (!display)
@@ -184,7 +197,7 @@ CGError CGGetDisplaysWithPoint(CGPoint point, uint32_t maxDisplays,
     *matchingDisplayCount = 0;
 
     for (NSScreen *screen in screens) {
-        NSRect rect = [screen frame];
+        NSRect rect = globalRectForFrame(screens, [screen frame]);
         if (NSPointInRect(point, rect)) {
             if (*matchingDisplayCount < maxDisplays)
                 displays[*matchingDisplayCount] = [screen cgDirectDisplayID];
@@ -207,7 +220,7 @@ CGError CGGetDisplaysWithRect(CGRect rect, uint32_t maxDisplays,
     *matchingDisplayCount = 0;
 
     for (NSScreen *screen in screens) {
-        NSRect screenRect = [screen frame];
+        NSRect screenRect = globalRectForFrame(screens, [screen frame]);
         if (NSIntersectsRect(rect, screenRect)) {
             if (*matchingDisplayCount < maxDisplays)
                 displays[*matchingDisplayCount] = [screen cgDirectDisplayID];
@@ -231,11 +244,12 @@ CGRect CGDisplayBounds(CGDirectDisplayID displayIndex) {
     if (!display)
         return NSZeroRect;
 
-    NSScreen *screen = screenForDisplayID([display screens], displayIndex);
+    NSArray<NSScreen *> *screens = [display screens];
+    NSScreen *screen = screenForDisplayID(screens, displayIndex);
     if (!screen)
         return CGRectZero;
 
-    return [screen frame];
+    return globalRectForFrame(screens, [screen frame]);
 }
 
 CGError CGDisplayHideCursor(CGDirectDisplayID displayIndex) {
