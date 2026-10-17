@@ -2,6 +2,7 @@
 // geometry, and the EWMH fullscreen request as a window manager receives it. Needs an X server; use
 // tests/x11-fullscreen.sh, which runs it on its own Xvfb. Build: cc x11-fullscreen.c -lX11 -lXrandr
 #include "../AppKit/X11.backend/X11Fullscreen.h"
+#include "../CoreGraphics/X11.backend/X11Monitors.h"
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
@@ -177,6 +178,41 @@ static void stateTest(Display *client) {
     XCloseDisplay(wm);
 }
 
+/* X11Window compares the window's frame with the monitors by converting it from Cocoa's global space (y up from the
+ * main monitor's bottom-left, the space NSScreen.frame is in) to root coordinates. That only works when the screens
+ * and the window frame share a space; check the whole path against a real CRTC, including a main monitor that is not at
+ * the root origin or a corner of it. */
+static void conventionTest(Display *display) {
+    struct {
+        int x, y;
+        unsigned width, height;
+    } layouts[] = {{0, 0, 640, 360}, {100, 50, 640, 480}, {0, 360, 1280, 360}, {640, 0, 640, 720}};
+    for (size_t i = 0; i < sizeof layouts / sizeof *layouts; i++) {
+        setCrtc(display, layouts[i].x, layouts[i].y, layouts[i].width, layouts[i].height);
+        int count, primary;
+        X11Monitor *monitors = X11MonitorsCopy(display, &count, &primary);
+        CHECK(monitors != NULL && primary == 0, "layout %zu: one active monitor", i);
+        if (!monitors)
+            continue;
+        X11Frame main = {monitors[0].x, monitors[0].y, monitors[0].width, monitors[0].height};
+        free(monitors);
+        /* NSScreen.frame of that monitor, then the window frame an application sets from it, then X11Window's
+         * conversion to the root rectangle it compares with the CRTC. */
+        X11Frame screenFrame = X11FrameFromRoot(main, main);
+        X11Frame root = X11FrameToRoot(main, screenFrame);
+        X11FullscreenRect rect = {(int) root.x, (int) root.y, (unsigned) root.width, (unsigned) root.height};
+        CHECK(X11FullscreenRectIsMonitor(display, rect),
+              "layout %zu: [window setFrame:[screen frame]] lands on the CRTC %d,%d %ux%u (got %d,%d %ux%u)", i,
+              layouts[i].x, layouts[i].y, layouts[i].width, layouts[i].height, rect.x, rect.y, rect.width, rect.height);
+        CHECK(screenFrame.x == 0 && screenFrame.y == 0, "layout %zu: the main screen's frame starts at 0,0", i);
+        /* A frame inset by a panel's height is not the monitor, in the same space. */
+        X11Frame inset = {screenFrame.x, screenFrame.y, screenFrame.width, screenFrame.height - 28};
+        root = X11FrameToRoot(main, inset);
+        X11FullscreenRect insetRect = {(int) root.x, (int) root.y, (unsigned) root.width, (unsigned) root.height};
+        CHECK(!X11FullscreenRectIsMonitor(display, insetRect), "layout %zu: a work-area frame is not the monitor", i);
+    }
+}
+
 int main(void) {
     Display *display = XOpenDisplay(NULL);
     if (!display) {
@@ -187,6 +223,7 @@ int main(void) {
     requestTest(display);
     stateTest(display);
     monitorTest(display);
+    conventionTest(display);
     XCloseDisplay(display);
     if (failures) {
         printf("%d of %d checks FAILED\n", failures, checks);
