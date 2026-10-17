@@ -467,8 +467,8 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     size_t count = MIN([outputs count], (NSUInteger) 32);
     for (size_t i = 0; i < count; i++) {
         NSSize size = [[outputs objectAtIndex: i] sizeValue];
-        sizes[i][0] = (int32_t) lround(size.width);
-        sizes[i][1] = (int32_t) lround(size.height);
+        sizes[i][0] = WaylandFullscreenRound(size.width);
+        sizes[i][1] = WaylandFullscreenRound(size.height);
     }
     WaylandFullscreenWindow window = {
         .fullScreenStyle = (_styleMask & NSWindowStyleMaskFullScreen) != 0,
@@ -476,8 +476,8 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
         .canBecomeKey = [_delegate canBecomeKeyWindow],
         .popupOrMenu = [_delegate isKindOfClass: NSClassFromString(@"NSMenuWindow")] ||
                        [_delegate isKindOfClass: NSClassFromString(@"NSPopUpWindow")],
-        .width = (int32_t) lround(_frame.size.width),
-        .height = (int32_t) lround(_frame.size.height),
+        .width = WaylandFullscreenRound(_frame.size.width),
+        .height = WaylandFullscreenRound(_frame.size.height),
     };
     return WaylandFullscreenWanted(&window, (const int32_t (*)[2]) sizes, count);
 }
@@ -578,8 +578,9 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     // The application chose a new size: leaving fullscreen returns to it, even
     // when the compositor answers unset_fullscreen with the size it remembered.
     if (sized)
-        WaylandFullscreenApplicationResized(&_fullscreenTracker, (int32_t) frame.size.width,
-                                            (int32_t) frame.size.height);
+        WaylandFullscreenApplicationResized(&_fullscreenTracker,
+                                            WaylandFullscreenRound(frame.size.width),
+                                            WaylandFullscreenRound(frame.size.height));
     if (_popup != NULL && (moved || sized) && WL.wl_proxy_get_version(_popup) >= 3) {
         struct wl_proxy *positioner = [self newPopupPositioner];
         union wl_argument args[2] = {{.o = (struct wl_object *) positioner},
@@ -1038,7 +1039,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     }
     int32_t width, height;
     WaylandFullscreenConfigure(&_fullscreenTracker, _pendingFullscreen,
-            (int32_t) _frame.size.width, (int32_t) _frame.size.height,
+            WaylandFullscreenRound(_frame.size.width), WaylandFullscreenRound(_frame.size.height),
             _pendingWidth - (_clientDecorated ? 2 * WaylandBorder : 0),
             _pendingHeight - (_clientDecorated ? 2 * WaylandBorder + WaylandTitleHeight : 0),
             &width, &height);
@@ -1056,8 +1057,8 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
         _frame.origin = origin;
     }
     if (width > 0 && height > 0 &&
-        (width != (int32_t) _frame.size.width ||
-         height != (int32_t) _frame.size.height))
+        (width != WaylandFullscreenRound(_frame.size.width) ||
+         height != WaylandFullscreenRound(_frame.size.height)))
     {
         // Keep the top edge where it was, as the compositor does on screen.
         O2Rect frame = _frame;
