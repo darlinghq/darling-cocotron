@@ -13,6 +13,10 @@
  * still arrives, but the next real motion reports the unmoved physical pointer, so honoured=false keeps the last
  * physical position across echoes and never warps back.
  *
+ * Threading: the model is not thread-safe. Every call on one X11RelativeMouse must come from a single thread (in
+ * the backend the thread that pumps X events) or be serialized by the caller's lock: ExpectEcho reallocates the
+ * pending-echo array that HandleMotion and Tick walk.
+ *
  * Plain C without X11 or Objective-C dependencies, so tests/x11-relative-mouse.c can run it on the host. */
 #ifndef X11_RELATIVE_MOUSE_H
 #define X11_RELATIVE_MOUSE_H
@@ -28,13 +32,17 @@ typedef struct {
     unsigned remaining; /* X events (of any type) still to be handled before this echo is given up */
 } X11RelativeMouseEcho;
 
+/* The rectangle the pointer can reach (the confine_to window clipped to the screen), inclusive, root coordinates. */
+typedef struct {
+    int minX, minY, maxX, maxY;
+} X11RelativeMouseBounds;
+
 typedef struct {
     bool active;              /* relative motion handling is on (the pointer grab is held) */
     double virtualX, virtualY; /* the frozen macOS cursor, X root coordinates */
     int physicalX, physicalY; /* last physical pointer position, X root coordinates */
     unsigned long firstSerial; /* ignore motion queued before the initial XQueryPointer snapshot */
-    bool bounded;
-    int minX, minY, maxX, maxY; /* inclusive root coordinates of the confine_to window */
+    int minX, minY, maxX, maxY; /* inclusive root coordinates the server can place the pointer in */
     unsigned echoCount;
     unsigned echoCapacity;
     X11RelativeMouseEcho *echoes; /* oldest first; never discard a pending warp echo on overflow */
@@ -58,13 +66,20 @@ static inline bool X11RelativeMouseSerialBefore(unsigned long a, unsigned long b
     return (long)(a - b) < 0;
 }
 
-/* Initialize storage to zero before the first Begin; End releases the pending-echo allocation. */
-static inline void X11RelativeMouseBegin(X11RelativeMouse *mouse, int rootX, int rootY) {
+/* Zero-initialize the storage once before the first Begin; End releases the pending-echo allocation. The pointer
+ * starts at (rootX, rootY) inside bounds; motion with a serial before firstSerial predates that snapshot and is
+ * ignored. The model keeps warp targets inside bounds (see Warp), so neither the virtual cursor nor a recorded
+ * echo can sit where the server never puts the pointer. */
+static inline void X11RelativeMouseBegin(X11RelativeMouse *mouse, int rootX, int rootY, unsigned long firstSerial,
+                                         X11RelativeMouseBounds bounds) {
     free(mouse->echoes);
     mouse->echoes = NULL;
     mouse->echoCapacity = 0;
-    mouse->firstSerial = 0;
-    mouse->bounded = false;
+    mouse->firstSerial = firstSerial;
+    mouse->minX = bounds.minX;
+    mouse->minY = bounds.minY;
+    mouse->maxX = bounds.maxX;
+    mouse->maxY = bounds.maxY;
     mouse->active = true;
     mouse->virtualX = rootX;
     mouse->virtualY = rootY;
@@ -107,7 +122,6 @@ static inline bool X11RelativeMouseExpectEcho(X11RelativeMouse *mouse, int x, in
 
 /* Clamps a target to the confine window, as the server does to the pointer. */
 static inline void X11RelativeMouseClamp(const X11RelativeMouse *mouse, double *x, double *y) {
-    if (!mouse->bounded) return;
     if (*x < mouse->minX) *x = mouse->minX;
     if (*x > mouse->maxX) *x = mouse->maxX;
     if (*y < mouse->minY) *y = mouse->minY;
@@ -115,9 +129,12 @@ static inline void X11RelativeMouseClamp(const X11RelativeMouse *mouse, double *
 }
 
 /* CGWarpMouseCursorPosition while relative: the virtual cursor moves to the target; the physical position is
- * only updated when the echo arrives (and only if the warp was honoured). */
+ * only updated when the echo arrives (and only if the warp was honoured). The target is clamped to the bounds
+ * first, whether or not warps are honoured: the server clamps the pointer there, so that is where the echo
+ * arrives. A caller that sends the warp clamps the same way before (Clamp is idempotent). */
 static inline bool X11RelativeMouseWarp(X11RelativeMouse *mouse, double x, double y, unsigned queuedEvents,
                                        unsigned long serial, bool warpsHonoured) {
+    X11RelativeMouseClamp(mouse, &x, &y);
     if (warpsHonoured) {
         mouse->virtualX = x;
         mouse->virtualY = y;
