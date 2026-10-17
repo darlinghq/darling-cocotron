@@ -116,6 +116,47 @@ static inline X11Frame X11FrameFromRoot(X11Frame primaryRoot, X11Frame root) {
     return frame;
 }
 
+/* The global coordinate conventions, all with the main monitor as the origin (as on macOS):
+ *   - Cocoa (AppKit): origin at the main monitor's bottom-left corner, y up. NSScreen frames, window frames and
+ *     +[NSEvent mouseLocation].
+ *   - CoreGraphics: origin at the main monitor's top-left corner, y down. CGDisplayBounds, CGEventGetLocation,
+ *     CGWarpMouseCursorPosition.
+ *   - Root: origin at the top-left of the X root window, y down. Everything Xlib reports.
+ * primaryRoot is the main monitor's rectangle in root coordinates, in the same unit as the points converted. */
+typedef struct {
+    double x, y;
+} X11Point;
+
+/* Root point to Cocoa point. */
+static inline X11Point X11PointFromRoot(X11Frame primaryRoot, X11Point root) {
+    X11Point point = {root.x - primaryRoot.x, (primaryRoot.y + primaryRoot.height) - root.y};
+    return point;
+}
+
+/* Cocoa point to root point. */
+static inline X11Point X11PointToRoot(X11Frame primaryRoot, X11Point point) {
+    X11Point root = {point.x + primaryRoot.x, (primaryRoot.y + primaryRoot.height) - point.y};
+    return root;
+}
+
+/* Root point to CoreGraphics point. */
+static inline X11Point X11CGPointFromRoot(X11Frame primaryRoot, X11Point root) {
+    X11Point point = {root.x - primaryRoot.x, root.y - primaryRoot.y};
+    return point;
+}
+
+/* CoreGraphics point to root point. */
+static inline X11Point X11CGPointToRoot(X11Frame primaryRoot, X11Point point) {
+    X11Point root = {point.x + primaryRoot.x, point.y + primaryRoot.y};
+    return root;
+}
+
+/* Cocoa point to CoreGraphics point and back: the same flip against the main monitor's height. */
+static inline X11Point X11FlipY(double primaryHeight, X11Point point) {
+    X11Point flipped = {point.x, primaryHeight - point.y};
+    return flipped;
+}
+
 /* A display's CGDirectDisplayID is tied to the RandR output it drives (output index + 1), not to its place in the
  * listing: the mode functions address the output by that index, and the listing starts with the main monitor. */
 static inline unsigned int X11MonitorDisplayID(int outputIndex) {

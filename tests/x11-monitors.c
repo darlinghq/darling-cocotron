@@ -130,6 +130,76 @@ static void displayIDs(void) {
         CHECK(X11MonitorDisplayID(i) != 0, "no output has the null display ID");
 }
 
+/* The three global spaces (Cocoa y up, CoreGraphics y down, root) must agree with each other for every monitor of a
+ * layout: NSScreen.frame, CGDisplayBounds and the pointer are derived from the same root rectangles. */
+static void conventionFor(X11Frame primary, X11Frame monitor, const char *name) {
+    /* NSScreen.frame: Cocoa, y up from the main monitor's bottom-left corner. */
+    X11Frame cocoa = X11FrameFromRoot(primary, monitor);
+    /* CGDisplayBounds: the same frame flipped against the main monitor's height (CGDirectDisplay.m). */
+    X11Point cgOrigin = X11FlipY(primary.height, (X11Point){cocoa.x, cocoa.y + cocoa.height});
+    CHECK(near(cgOrigin.x, monitor.x - primary.x) && near(cgOrigin.y, monitor.y - primary.y),
+          "%s: CG bounds origin %g,%g is not the root corner minus the main monitor's origin", name, cgOrigin.x,
+          cgOrigin.y);
+
+    /* The pointer on the monitor's top-left pixel. */
+    X11Point root = {monitor.x, monitor.y};
+    X11Point cocoaPointer = X11PointFromRoot(primary, root);
+    X11Point cgPointer = X11CGPointFromRoot(primary, root);
+    CHECK(near(cgPointer.x, cgOrigin.x) && near(cgPointer.y, cgOrigin.y),
+          "%s: CGEventGetLocation %g,%g differs from CGDisplayBounds origin %g,%g", name, cgPointer.x, cgPointer.y,
+          cgOrigin.x, cgOrigin.y);
+    CHECK(near(cocoaPointer.x, cocoa.x) && near(cocoaPointer.y, cocoa.y + cocoa.height),
+          "%s: +[NSEvent mouseLocation] %g,%g is not the top-left of NSScreen.frame", name, cocoaPointer.x,
+          cocoaPointer.y);
+    X11Point flipped = X11FlipY(primary.height, cocoaPointer);
+    CHECK(near(flipped.x, cgPointer.x) && near(flipped.y, cgPointer.y), "%s: Cocoa and CG pointers are one flip apart",
+          name);
+
+    /* Round trips: warping to the pointer you read lands on the same root pixel in both spaces. */
+    X11Point back = X11CGPointToRoot(primary, cgPointer);
+    CHECK(near(back.x, root.x) && near(back.y, root.y), "%s: CGWarpMouseCursorPosition(CGEventGetLocation) round trip",
+          name);
+    back = X11PointToRoot(primary, cocoaPointer);
+    CHECK(near(back.x, root.x) && near(back.y, root.y), "%s: Cocoa pointer round trip", name);
+    back = X11CGPointToRoot(primary, X11FlipY(primary.height, cocoaPointer));
+    CHECK(near(back.x, root.x) && near(back.y, root.y), "%s: warp to the Cocoa pointer through the CG flip", name);
+}
+
+static void convention(void) {
+    X11Frame single = {0, 0, 1920, 1080};
+    conventionFor(single, single, "single monitor");
+
+    /* Two side by side, the right one main. */
+    X11Frame left = {0, 0, 1920, 1080}, right = {1920, 0, 2560, 1440};
+    conventionFor(right, right, "side by side, main");
+    conventionFor(right, left, "side by side, other");
+    X11Frame leftFrame = X11FrameFromRoot(right, left);
+    CHECK(near(leftFrame.x, -1920) && near(leftFrame.y, 360), "the left monitor starts at x -1920 and its bottom is 360 above the main's: %g,%g",
+          leftFrame.x, leftFrame.y);
+
+    /* Stacked, the lower one main: a monitor above the main one has a negative CG y and a Cocoa y above its top. */
+    X11Frame top = {0, 0, 1920, 1080}, lower = {0, 1080, 1920, 1080};
+    conventionFor(lower, lower, "stacked, main");
+    conventionFor(lower, top, "stacked, other");
+    X11Frame topFrame = X11FrameFromRoot(lower, top);
+    CHECK(near(topFrame.y, 1080), "the monitor above the main one starts at Cocoa y 1080: %g", topFrame.y);
+    X11Point topCG = X11CGPointFromRoot(lower, (X11Point){0, 0});
+    CHECK(near(topCG.y, -1080), "and at CG y -1080: %g", topCG.y);
+
+    /* The main monitor is not at the root origin. */
+    X11Frame inset = {100, 50, 640, 480};
+    conventionFor(inset, inset, "inset main");
+    X11Point corner = X11CGPointFromRoot(inset, (X11Point){100, 50});
+    CHECK(near(corner.x, 0) && near(corner.y, 0), "the main monitor's top-left pixel is CG 0,0");
+    X11Point cocoaCorner = X11PointFromRoot(inset, (X11Point){100, 50});
+    CHECK(near(cocoaCorner.x, 0) && near(cocoaCorner.y, 480), "and Cocoa 0,height");
+
+    /* HiDPI: the same conversions in points, with the root rectangle and the pointer divided by the scale. */
+    X11Frame hidpi = {0, 0, 1920 / 2.0, 1080 / 2.0};
+    X11Point pointer = X11CGPointFromRoot(hidpi, (X11Point){1000 / 2.0, 400 / 2.0});
+    CHECK(near(pointer.x, 500) && near(pointer.y, 200), "points at 2x");
+}
+
 static void setCrtc(Display *display, int x, int y, unsigned width, unsigned height, bool enable) {
     Window root = DefaultRootWindow(display);
     XRRScreenResources *resources = XRRGetScreenResources(display, root);
@@ -182,6 +252,30 @@ static void randr(Display *display) {
           "moved CRTC is reported at its root position");
     free(monitors);
 
+    /* The conversions against a real pointer: warp to a root pixel inside the moved main monitor and read it back. */
+    {
+        X11Frame main = {100, 50, 640, 480};
+        XWarpPointer(display, None, root, 0, 0, 0, 0, 110, 70);
+        XSync(display, False);
+        Window ignoredRoot, ignoredChild;
+        int rootX, rootY, winX, winY;
+        unsigned int mask;
+        XQueryPointer(display, root, &ignoredRoot, &ignoredChild, &rootX, &rootY, &winX, &winY, &mask);
+        CHECK(rootX == 110 && rootY == 70, "the pointer is at root 110,70: %d,%d", rootX, rootY);
+        X11Point cg = X11CGPointFromRoot(main, (X11Point){rootX, rootY});
+        X11Point cocoa = X11PointFromRoot(main, (X11Point){rootX, rootY});
+        CHECK(near(cg.x, 10) && near(cg.y, 20), "CG pointer is 10,20 from the main monitor's top-left: %g,%g", cg.x,
+              cg.y);
+        CHECK(near(cocoa.x, 10) && near(cocoa.y, 460), "Cocoa pointer is 10,460 above its bottom-left: %g,%g", cocoa.x,
+              cocoa.y);
+        /* CGWarpMouseCursorPosition(CGEventGetLocation()) must not move the pointer. */
+        X11Point target = X11CGPointToRoot(main, cg);
+        XWarpPointer(display, None, root, 0, 0, 0, 0, (int) target.x, (int) target.y);
+        XSync(display, False);
+        XQueryPointer(display, root, &ignoredRoot, &ignoredChild, &rootX, &rootY, &winX, &winY, &mask);
+        CHECK(rootX == 110 && rootY == 70, "warping to the CG pointer leaves it where it was: %d,%d", rootX, rootY);
+    }
+
     /* The desktop chooses a primary; it must still be reported. */
     XRRSetOutputPrimary(display, root, output);
     XSync(display, False);
@@ -213,6 +307,7 @@ int main(void) {
     order();
     frames();
     displayIDs();
+    convention();
     Display *display = XOpenDisplay(NULL);
     if (!display) {
         printf("no X display: run through tests/x11-monitors.sh\n");
