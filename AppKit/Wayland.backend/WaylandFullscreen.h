@@ -27,24 +27,48 @@ static inline int32_t WaylandFullscreenRound(double value) {
     return (int32_t) lround(value);
 }
 
-// Index of the first output whose logical size equals the window's, or -1.
-static inline int WaylandFullscreenOutputIndex(const WaylandFullscreenWindow *window,
-                                               const int32_t (*sizes)[2], size_t count)
-{
-    for (size_t i = 0; window->width > 0 && window->height > 0 && i < count; i++)
-        if (sizes[i][0] == window->width && sizes[i][1] == window->height)
-            return (int) i;
-    return -1;
-}
+// An output as the decision sees it: its logical size and whether the window's
+// surface has entered it (wl_surface.enter).
+typedef struct {
+    int32_t width, height;
+    bool entered;
+} WaylandFullscreenOutput;
 
-static inline bool WaylandFullscreenWanted(const WaylandFullscreenWindow *window,
-                                           const int32_t (*sizes)[2], size_t count)
+// Decides whether the window is fullscreen. *target is the index of the output to
+// name in set_fullscreen, or -1 to let the compositor choose.
+//
+// A window that has entered some outputs may only be fullscreened onto one of
+// them: matching the size of an output it is not on does not make it fullscreen
+// material. A window that has entered none (before its first commit) is matched
+// against all outputs, and an output is named only when exactly one has its size.
+static inline bool WaylandFullscreenDecide(const WaylandFullscreenWindow *window,
+                                           const WaylandFullscreenOutput *outputs, size_t count,
+                                           int *target)
 {
+    *target = -1;
     if (window->fullScreenStyle)
         return true;
-    if (window->titled || !window->canBecomeKey || window->popupOrMenu)
+    if (window->titled || !window->canBecomeKey || window->popupOrMenu ||
+        window->width <= 0 || window->height <= 0)
         return false;
-    return WaylandFullscreenOutputIndex(window, sizes, count) >= 0;
+    bool onOutput = false;
+    for (size_t i = 0; i < count; i++)
+        onOutput = onOutput || outputs[i].entered;
+    size_t matches = 0;
+    int first = -1;
+    for (size_t i = 0; i < count; i++) {
+        if (onOutput && !outputs[i].entered)
+            continue;
+        if (outputs[i].width != window->width || outputs[i].height != window->height)
+            continue;
+        if (matches++ == 0)
+            first = (int) i;
+    }
+    if (matches == 0)
+        return false;
+    if (onOutput || matches == 1)
+        *target = first;
+    return true;
 }
 
 // xdg_toplevel.set_fullscreen takes the wl_output to cover, or NULL to let the

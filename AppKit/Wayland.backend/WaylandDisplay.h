@@ -35,6 +35,7 @@
 #import "X11Display.h"
 #include <stdint.h>
 #include <wayland-util.h>
+#include "WaylandFullscreen.h"
 
 struct wl_display;
 struct wl_proxy;
@@ -187,15 +188,14 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 - (WaylandWindow *) popupParentForWindow: (WaylandWindow *) window;
 - (uint32_t) popupGrabSerialForParent: (WaylandWindow *) parent;
 - (struct wl_proxy *) seat;
-// Logical sizes (NSValue sizes) of the outputs a borderless window may be
-// fullscreened onto, in -screens order: the outputs in `entered` (NSValue
-// pointers, as WaylandWindow keeps its entered outputs), or all of them while it
-// has entered none. Empty until an output has reported a mode.
-- (NSArray *) outputLogicalSizesEntering: (NSSet *) entered;
-// The wl_output among those whose logical size is `size`, else NULL. When
-// `entered` names no known output, only an output that alone has that size
-// qualifies.
-- (struct wl_proxy *) outputWithLogicalSize: (NSSize) size entering: (NSSet *) entered;
+// Fills `result` and `proxies` with up to `max` outputs in -screens order: their
+// logical sizes and whether they are in `entered` (NSValue pointers, as
+// WaylandWindow keeps its entered outputs). Returns 0 until an output has
+// reported a mode.
+- (size_t) fullscreenOutputs: (WaylandFullscreenOutput *) result
+                     proxies: (struct wl_proxy **) proxies
+                         max: (size_t) max
+                     entered: (NSSet *) entered;
 - (void) unmapPopupsForParent: (WaylandWindow *) parent;
 - (void) cancelPopupMenus;
 

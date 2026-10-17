@@ -459,17 +459,16 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 
 #pragma mark - Fullscreen
 
-- (BOOL) shouldBeFullscreen {
+// Whether the window should be fullscreen, and on which output (NULL: the
+// compositor chooses; always NULL for a window that asked through the style mask).
+- (BOOL) wantsFullscreenOn: (struct wl_proxy **) output {
+    *output = NULL;
     if (_popup != NULL || _popupParent != nil)
         return NO;
-    NSArray *outputs = [_display outputLogicalSizesEntering: _surfaceOutputs];
-    int32_t sizes[32][2];
-    size_t count = MIN([outputs count], (NSUInteger) 32);
-    for (size_t i = 0; i < count; i++) {
-        NSSize size = [[outputs objectAtIndex: i] sizeValue];
-        sizes[i][0] = WaylandFullscreenRound(size.width);
-        sizes[i][1] = WaylandFullscreenRound(size.height);
-    }
+    WaylandFullscreenOutput outputs[32];
+    struct wl_proxy *proxies[32];
+    size_t count = [_display fullscreenOutputs: outputs proxies: proxies max: 32
+                                       entered: _surfaceOutputs];
     WaylandFullscreenWindow window = {
         .fullScreenStyle = (_styleMask & NSWindowStyleMaskFullScreen) != 0,
         .titled = (_styleMask & NSWindowStyleMaskTitled) != 0,
@@ -479,26 +478,26 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
         .width = WaylandFullscreenRound(_frame.size.width),
         .height = WaylandFullscreenRound(_frame.size.height),
     };
-    return WaylandFullscreenWanted(&window, (const int32_t (*)[2]) sizes, count);
+    int target;
+    BOOL wanted = WaylandFullscreenDecide(&window, outputs, count, &target);
+    if (target >= 0)
+        *output = proxies[target];
+    return wanted;
 }
 
 // Asks the compositor to enter or leave fullscreen when the answer changed.
-// A window that asks for it through the style mask lets the compositor pick the
-// output; one that is merely as large as an output goes to that output.
 - (void) updateFullscreen {
     if (_toplevel == NULL)
         return;
-    BOOL wanted = [self shouldBeFullscreen];
+    struct wl_proxy *output;
+    BOOL wanted = [self wantsFullscreenOn: &output];
     if (wanted == _fullscreenRequested)
         return;
     _fullscreenRequested = wanted;
-    if (wanted) {
-        struct wl_proxy *output = (_styleMask & NSWindowStyleMaskFullScreen) ? NULL
-                : [_display outputWithLogicalSize: _frame.size entering: _surfaceOutputs];
+    if (wanted)
         WaylandToplevelSetFullscreen(_toplevel, output);
-    } else {
+    else
         WaylandToplevelUnsetFullscreen(_toplevel);
-    }
     [_display flush];
 }
 
