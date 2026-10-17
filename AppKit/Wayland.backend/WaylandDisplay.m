@@ -1033,15 +1033,14 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         type = NSRightMouseDragged;
 
     if (type != NSMouseMoved || [delegate acceptsMouseMovedEvents]) {
+        // deltaY is positive downward, as AppKit and the X11 backend report it;
+        // locations are bottom-left, hence last - location.
         NSEvent *event = [NSEvent mouseEventWithType: type
                                             location: location
                                        modifierFlags: [self currentModifierFlags]
                                               window: delegate
                                           clickCount: 1
                                               deltaX: location.x - last.x
-                                              // Positive downward, as AppKit
-                                              // and the X11 backend report it;
-                                              // locations are bottom-left.
                                               deltaY: last.y - location.y];
         // Not coalesced with -discardEventsMatchingMask:beforeEvent:, which
         // currently removes every older queued event, mouse-downs included.
