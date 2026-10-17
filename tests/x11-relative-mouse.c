@@ -2,6 +2,7 @@
 #define X11_RELATIVE_MOUSE_HEADER "../AppKit/X11.backend/X11RelativeMouse.h"
 #endif
 #include X11_RELATIVE_MOUSE_HEADER
+#undef NDEBUG /* the checks are asserts */
 #include <assert.h>
 #include <stdio.h>
 
@@ -83,7 +84,7 @@ static void xwaylandVisibleCursor(void) {
     puts("PASS: Xwayland visible cursor keeps the physical position across unhonoured warp echoes");
 }
 
-static void leagueVisibleCursorWarps(void) {
+static void visibleCursorWarpsFollowPointer(void) {
     X11RelativeMouse m = {0};
     X11RelativeMouseBegin(&m, 2888, 30);
     int x = 2888, y = 30;
@@ -125,12 +126,8 @@ static void deltaSign(void) {
     X11RelativeMouseBegin(&m, 0, 0);
     X11RelativeMouseMotion r = motion(&m, 0, 7, false);
     assert(r.deltaY == 7); /* X root y grows downwards: positive deltaY means down, as on macOS */
-    double dx, dy;
-    /* Absolute motion in Cocoa window coordinates (bottom-up): moving down lowers y. */
-    X11AbsoluteMouseDelta(10, 300, 14, 290, &dx, &dy);
-    assert(dx == 4 && dy == 10);
     X11RelativeMouseEnd(&m);
-    puts("PASS: deltaY is positive downwards for relative and absolute motion");
+    puts("PASS: relative deltaY is positive downwards");
 }
 
 static void ungrabRestores(void) {
@@ -229,7 +226,7 @@ int main(void) {
     confinedWarpAndApplicationReanchor();
     xorgHonouredWarps();
     xwaylandVisibleCursor();
-    leagueVisibleCursorWarps();
+    visibleCursorWarpsFollowPointer();
     gameWarpUpdatesVirtual();
     deltaSign();
     ungrabRestores();

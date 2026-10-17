@@ -100,8 +100,7 @@ static inline bool X11RelativeMouseExpectEcho(X11RelativeMouse *mouse, int x, in
     return true;
 }
 
-/* CGWarpMouseCursorPosition while relative: the virtual cursor moves to the target; the physical position is
- * only updated when the echo arrives (and only if the warp was honoured). */
+/* Clamps a target to the confine window, as the server does to the pointer. */
 static inline void X11RelativeMouseClamp(const X11RelativeMouse *mouse, double *x, double *y) {
     if (!mouse->bounded) return;
     if (*x < mouse->minX) *x = mouse->minX;
@@ -110,6 +109,8 @@ static inline void X11RelativeMouseClamp(const X11RelativeMouse *mouse, double *
     if (*y > mouse->maxY) *y = mouse->maxY;
 }
 
+/* CGWarpMouseCursorPosition while relative: the virtual cursor moves to the target; the physical position is
+ * only updated when the echo arrives (and only if the warp was honoured). */
 static inline bool X11RelativeMouseWarp(X11RelativeMouse *mouse, double x, double y, unsigned queuedEvents,
                                        unsigned long serial, bool warpsHonoured) {
     if (warpsHonoured) {
@@ -175,15 +176,6 @@ static inline X11RelativeMouseMotion X11RelativeMouseHandleMotion(X11RelativeMou
     }
     X11RelativeMouseTick(mouse);
     return result;
-}
-
-/* NSEvent deltas for absolute (non-relative) motion between two positions in Cocoa window coordinates, which
- * are bottom-up while NSEvent's deltaY is positive downwards. */
-static inline void X11AbsoluteMouseDelta(double lastX, double lastY, double x, double y, double *deltaX,
-                                         double *deltaY)
-{
-    *deltaX = x - lastX;
-    *deltaY = lastY - y;
 }
 
 #endif
