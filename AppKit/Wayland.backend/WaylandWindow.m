@@ -374,8 +374,9 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     _configureUpdatePending = NO;
     _configured = NO;
     _activated = NO;
+    // The tracker survives hiding: _frame keeps the fullscreen size, so the size
+    // from before fullscreen would be lost if the next map saved it again.
     _fullscreenRequested = _pendingFullscreen = NO;
-    memset(&_fullscreenTracker, 0, sizeof(_fullscreenTracker));
     [_display windowUnmapped: self];
     [_display flush];
 }
