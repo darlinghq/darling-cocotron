@@ -214,6 +214,20 @@ static void policy(void) {
     CHECK(WaylandFullscreenDecide(&w, twins, 2, &target) && target == -1);  // ambiguous: compositor chooses
     const WaylandFullscreenOutput twinsOnSecond[2] = {{1920, 1080, false}, {1920, 1080, true}};
     CHECK(WaylandFullscreenDecide(&w, twinsOnSecond, 2, &target) && target == 1);
+    const WaylandFullscreenOutput twinsBoth[2] = {{1920, 1080, true}, {1920, 1080, true}};
+    CHECK(WaylandFullscreenDecide(&w, twinsBoth, 2, &target) && target == 0);   // on both: the first
+
+    // Width and height both have to match: same width, other height is another output.
+    const WaylandFullscreenOutput tall[2] = {{1920, 1080, false}, {1920, 1200, false}};
+    w.width = 1920; w.height = 1200;
+    CHECK(WaylandFullscreenDecide(&w, tall, 2, &target) && target == 1);
+    w.height = 1000;
+    CHECK(!WaylandFullscreenDecide(&w, tall, 2, &target));
+
+    // An empty window is never as large as an output that has not reported a size.
+    const WaylandFullscreenOutput blank[1] = {{0, 0, false}};
+    w.width = 0; w.height = 0;
+    CHECK(!WaylandFullscreenDecide(&w, blank, 1, &target));
 
     // Leaving after 0x0 restores the saved size; a size from the compositor wins ...
     WaylandFullscreenTracker t = {0};
@@ -227,6 +241,10 @@ static void policy(void) {
     WaylandFullscreenConfigure(&t, true, 640, 480, 1280, 720, &ow, &oh);
     WaylandFullscreenConfigure(&t, false, 1280, 720, 700, 500, &ow, &oh);
     CHECK(ow == 700 && oh == 500);
+    // A configure with only one positive dimension is "choose your own size".
+    WaylandFullscreenConfigure(&t, true, 640, 480, 1280, 720, &ow, &oh);
+    WaylandFullscreenConfigure(&t, false, 1280, 720, 0, 500, &ow, &oh);
+    CHECK(ow == 640 && oh == 480);
     // ... unless the application chose a size meanwhile: then that size wins.
     WaylandFullscreenConfigure(&t, true, 640, 480, 1280, 720, &ow, &oh);
     WaylandFullscreenApplicationResized(&t, 800, 600);
