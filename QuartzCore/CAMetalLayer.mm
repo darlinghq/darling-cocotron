@@ -377,13 +377,20 @@ static void reportGLErrors(void) {
 		// pass in place. Each pass takes one queued present, so if none was taken
 		// (no window to render into yet, or a pass already running) it falls through
 		// to waiting instead of looping.
-		if (_queuedDrawableCount > 0 && _context != nil) {
-			NSUInteger queuedBefore = _queuedDrawableCount;
-			[_drawableCondition unlock];
-			BOOL rendered = [_context renderPendingPresents];
-			[_drawableCondition lock];
-			if (rendered && _queuedDrawableCount < queuedBefore) {
-				continue;
+		// _context is not retained by the layer. Only the main thread tears a context
+		// down, so on the main thread it stays valid, and the retain covers the unlocked
+		// window while a presented handler runs. Other threads never read it.
+		if ([NSThread isMainThread] && _queuedDrawableCount > 0) {
+			CALayerContext* context = [_context retain];
+			if (context != nil) {
+				NSUInteger queuedBefore = _queuedDrawableCount;
+				[_drawableCondition unlock];
+				BOOL rendered = [context renderPendingPresents];
+				[_drawableCondition lock];
+				[context release];
+				if (rendered && _queuedDrawableCount < queuedBefore) {
+					continue;
+				}
 			}
 		}
 
