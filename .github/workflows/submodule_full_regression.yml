@@ -1,0 +1,16 @@
+name: Darling CI (Submodule)
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    types: [ synchronize, opened, reopened, ready_for_review ]
+
+jobs:
+  full_regression:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run Shared Action
+        uses: darlinghq/darling-shared_github_actions@submodule_full_regression_v1
+        with:
+          submodule-path: src/external/cocotron
