@@ -7,10 +7,11 @@
  *
  * The input region (ShapeInput) was added in SHAPE 1.1, so the extension's version is checked, not only its presence.
  *
- * Limit: under a reparenting window manager a TITLED window sits inside a frame window the manager owns, and that
- * frame has no empty input region, so it still catches the pointer. Borderless windows are not reparented
- * (override-redirect, or managed but undecorated), so overlays and tooltips, the cases this exists for, are fully
- * click-through; on macOS a titled window would be too.
+ * Limit: a window manager may put a window inside a frame window it owns (the usual case for a titled
+ * window), and that frame has no empty input region, so it still catches the pointer. Override-redirect windows
+ * (menus, popups, tooltips, overlays that cannot become key) are never framed, so they are fully click-through.
+ * Whether a managed borderless window is framed depends on the window manager and is not verified here; on macOS
+ * the whole window would be click-through.
  *
  * Only Xlib and Xext, so tests/x11-input-shape.c can drive it against Xvfb. */
 #ifndef X11_INPUT_SHAPE_H
