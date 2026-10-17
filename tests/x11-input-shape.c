@@ -35,6 +35,12 @@ int main(void) {
         printf("no X display: run through tests/x11-input-shape.sh\n");
         return 2;
     }
+    int major = 0, minor = 0;
+    CHECK(XShapeQueryVersion(display, &major, &minor) && X11ShapeVersionHasInput(major, minor),
+          "the server's SHAPE %d.%d has input regions", major, minor);
+    CHECK(!X11ShapeVersionHasInput(1, 0) && X11ShapeVersionHasInput(1, 1) && X11ShapeVersionHasInput(1, 2) &&
+                  X11ShapeVersionHasInput(2, 0) && !X11ShapeVersionHasInput(0, 9),
+          "input regions need SHAPE 1.1 or later");
     Window root = DefaultRootWindow(display);
     Window below = XCreateSimpleWindow(display, root, 0, 0, 400, 400, 0, 0, 0);
     Window overlay = XCreateSimpleWindow(display, root, 100, 100, 100, 100, 0, 0, 0);
