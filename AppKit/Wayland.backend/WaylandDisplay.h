@@ -187,13 +187,15 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 - (WaylandWindow *) popupParentForWindow: (WaylandWindow *) window;
 - (uint32_t) popupGrabSerialForParent: (WaylandWindow *) parent;
 - (struct wl_proxy *) seat;
-// Logical sizes (NSValue sizes) of the outputs in -screens order; empty until an
-// output has reported a mode.
-- (NSArray *) outputLogicalSizes;
-// The wl_output whose logical size is `size`: one of `preferred` (NSValue
-// pointers, as WaylandWindow keeps its entered outputs) if any matches, else the
-// only output that matches, else NULL.
-- (struct wl_proxy *) outputWithLogicalSize: (NSSize) size preferring: (NSSet *) preferred;
+// Logical sizes (NSValue sizes) of the outputs a borderless window may be
+// fullscreened onto, in -screens order: the outputs in `entered` (NSValue
+// pointers, as WaylandWindow keeps its entered outputs), or all of them while it
+// has entered none. Empty until an output has reported a mode.
+- (NSArray *) outputLogicalSizesEntering: (NSSet *) entered;
+// The wl_output among those whose logical size is `size`, else NULL. When
+// `entered` names no known output, only an output that alone has that size
+// qualifies.
+- (struct wl_proxy *) outputWithLogicalSize: (NSSize) size entering: (NSSet *) entered;
 - (void) unmapPopupsForParent: (WaylandWindow *) parent;
 - (void) cancelPopupMenus;
 

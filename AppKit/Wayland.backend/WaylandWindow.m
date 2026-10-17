@@ -461,7 +461,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 - (BOOL) shouldBeFullscreen {
     if (_popup != NULL || _popupParent != nil)
         return NO;
-    NSArray *outputs = [_display outputLogicalSizes];
+    NSArray *outputs = [_display outputLogicalSizesEntering: _surfaceOutputs];
     int32_t sizes[32][2];
     size_t count = MIN([outputs count], (NSUInteger) 32);
     for (size_t i = 0; i < count; i++) {
@@ -493,7 +493,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     _fullscreenRequested = wanted;
     if (wanted) {
         struct wl_proxy *output = (_styleMask & NSWindowStyleMaskFullScreen) ? NULL
-                : [_display outputWithLogicalSize: _frame.size preferring: _surfaceOutputs];
+                : [_display outputWithLogicalSize: _frame.size entering: _surfaceOutputs];
         WaylandToplevelSetFullscreen(_toplevel, output);
     } else {
         WaylandToplevelUnsetFullscreen(_toplevel);

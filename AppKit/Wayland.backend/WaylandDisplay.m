@@ -1742,36 +1742,59 @@ static NSUInteger modifierDeviceMask(int code) {
     return [[_screens retain] autorelease];
 }
 
-- (NSArray *) outputLogicalSizes {
+// Indexes into -outputsWithModes (and so into -screens) of the outputs a
+// borderless window may be fullscreened onto: those its surface has entered, or
+// every output while it has entered none (before the first commit nothing has
+// been entered). A window that is on an output must match that output: matching
+// another one does not make it fullscreen material.
+- (NSIndexSet *) fullscreenCandidatesEntering: (NSSet *) entered onOutput: (BOOL *) onOutput {
+    NSArray *outputs = [self outputsWithModes];
+    NSMutableIndexSet *on = [NSMutableIndexSet indexSet];
+    for (NSUInteger i = 0; i < [outputs count]; i++)
+        if ([entered containsObject: [NSValue valueWithPointer: ((WaylandOutput *) outputs[i])->_proxy]])
+            [on addIndex: i];
+    if (onOutput != NULL)
+        *onOutput = [on count] > 0;
+    if ([on count] > 0)
+        return on;
+    return [NSIndexSet indexSetWithIndexesInRange: NSMakeRange(0, [outputs count])];
+}
+
+- (NSArray *) outputLogicalSizesEntering: (NSSet *) entered {
     NSMutableArray *sizes = [NSMutableArray array];
     // -screens invents a screen when no output has reported a mode yet.
     if ([[self outputsWithModes] count] == 0)
         return sizes;
-    for (NSScreen *screen in [self screens])
-        [sizes addObject: [NSValue valueWithSize: [screen frame].size]];
+    NSArray *screens = [self screens];
+    [[self fullscreenCandidatesEntering: entered onOutput: NULL] enumerateIndexesUsingBlock:
+        ^(NSUInteger i, BOOL *stop) {
+            if (i < [screens count])
+                [sizes addObject: [NSValue valueWithSize: [(NSScreen *) screens[i] frame].size]];
+        }];
     return sizes;
 }
 
 // -screens is built from -outputsWithModes in order, so the indexes agree.
-- (struct wl_proxy *) outputWithLogicalSize: (NSSize) size
-                                 preferring: (NSSet *) preferred
-{
+// A window that has entered no output yet is only matched to an output of its
+// size when exactly one has it; otherwise the compositor is left to choose.
+- (struct wl_proxy *) outputWithLogicalSize: (NSSize) size entering: (NSSet *) entered {
     NSArray *outputs = [self outputsWithModes];
     NSArray *screens = [self screens];
-    struct wl_proxy *only = NULL;
-    NSUInteger matches = 0;
-    for (NSUInteger i = 0; i < [outputs count] && i < [screens count]; i++) {
+    BOOL onOutput = NO;
+    NSIndexSet *candidates = [self fullscreenCandidatesEntering: entered onOutput: &onOutput];
+    __block struct wl_proxy *found = NULL;
+    __block NSUInteger matches = 0;
+    [candidates enumerateIndexesUsingBlock: ^(NSUInteger i, BOOL *stop) {
+        if (i >= [outputs count] || i >= [screens count])
+            return;
         NSSize candidate = [(NSScreen *) screens[i] frame].size;
-        if (lround(candidate.width) != lround(size.width) ||
-            lround(candidate.height) != lround(size.height))
-            continue;
-        struct wl_proxy *proxy = ((WaylandOutput *) outputs[i])->_proxy;
-        if ([preferred containsObject: [NSValue valueWithPointer: proxy]])
-            return proxy;
-        only = proxy;
-        matches++;
-    }
-    return matches == 1 ? only : NULL;
+        if (WaylandFullscreenRound(candidate.width) != WaylandFullscreenRound(size.width) ||
+            WaylandFullscreenRound(candidate.height) != WaylandFullscreenRound(size.height))
+            return;
+        if (matches++ == 0)
+            found = ((WaylandOutput *) outputs[i])->_proxy;
+    }];
+    return onOutput || matches == 1 ? found : NULL;
 }
 
 - (CGRect) insetRect: (CGRect) frame
