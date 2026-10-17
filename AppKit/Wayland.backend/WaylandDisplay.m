@@ -1039,7 +1039,10 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
                                               window: delegate
                                           clickCount: 1
                                               deltaX: location.x - last.x
-                                              deltaY: location.y - last.y];
+                                              // Positive downward, as AppKit
+                                              // and the X11 backend report it;
+                                              // locations are bottom-left.
+                                              deltaY: last.y - location.y];
         // Not coalesced with -discardEventsMatchingMask:beforeEvent:, which
         // currently removes every older queued event, mouse-downs included.
         [self postEvent: event atStart: NO];
