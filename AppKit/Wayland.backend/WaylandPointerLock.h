@@ -54,6 +54,35 @@ static inline void WaylandUnlockPointer(struct wl_proxy *locked, struct wl_proxy
     WaylandMarshal(relative, WP_RELATIVE_POINTER_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY, none);
 }
 
+// Where a warp of the cursor puts it. The position is in the screen coordinates
+// of the backend (the window frame's origin plus window coordinates, y up) and
+// is clamped to the window content. `window` is the clamped position in window
+// coordinates: the value every other writer of the window's last known cursor
+// position stores (y up, origin at the content's bottom left). `surface` is the
+// same point as wl_pointer.motion would report it: y down, origin at the surface's
+// top left, so offset by the client-side decoration.
+typedef struct {
+    double windowX, windowY;
+    double surfaceX, surfaceY;
+} WaylandWarp;
+
+static inline WaylandWarp WaylandWarpTarget(double positionX, double positionY,
+                                            double frameX, double frameY,
+                                            double frameWidth, double frameHeight,
+                                            double offsetX, double offsetY)
+{
+    WaylandWarp warp;
+    warp.windowX = positionX - frameX;
+    warp.windowY = positionY - frameY;
+    if (warp.windowX < 0) warp.windowX = 0;
+    if (warp.windowX > frameWidth) warp.windowX = frameWidth;
+    if (warp.windowY < 0) warp.windowY = 0;
+    if (warp.windowY > frameHeight) warp.windowY = frameHeight;
+    warp.surfaceX = warp.windowX + offsetX;
+    warp.surfaceY = frameHeight - warp.windowY + offsetY;
+    return warp;
+}
+
 // The delta of a zwp_relative_pointer_v1.relative_motion event, in the logical
 // coordinates of wl_pointer.motion and with the pointer acceleration applied, as
 // the deltas of an unlocked pointer have it. y grows downward.

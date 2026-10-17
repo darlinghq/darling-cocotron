@@ -1281,10 +1281,11 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         return;
     NSRect frame = [window frame];
     NSPoint offset = [window contentOffset];
-    CGFloat x = MIN(MAX(position.x - frame.origin.x, 0), frame.size.width);
-    CGFloat y = MIN(MAX(position.y - frame.origin.y, 0), frame.size.height);
-    _pointerSurfacePoint = CGPointMake(x + offset.x, frame.size.height - y + offset.y);
-    [window setLastKnownCursorPosition: _pointerSurfacePoint];
+    WaylandWarp warp = WaylandWarpTarget(position.x, position.y, frame.origin.x, frame.origin.y,
+                                         frame.size.width, frame.size.height, offset.x, offset.y);
+    _pointerSurfacePoint = CGPointMake(warp.surfaceX, warp.surfaceY);
+    // Window coordinates, like every other writer of the last known position.
+    [window setLastKnownCursorPosition: NSMakePoint(warp.windowX, warp.windowY)];
 }
 
 - (void) grabMouse: (BOOL) doGrab {
