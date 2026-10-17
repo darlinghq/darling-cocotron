@@ -101,7 +101,47 @@ static void motion(struct zwlr_virtual_pointer_v1 *vp, double dx, double dy) {
     settle();
 }
 
+// What WaylandWindow -transformPoint: does with a wl_pointer.motion point.
+static void transformPoint(double sx, double sy, double frameH, double offX, double offY,
+                           double *wx, double *wy) {
+    *wx = sx - offX;
+    *wy = frameH - sy + offY;
+}
+
+static void units(void) {
+    // A warp stores a window point, like every other writer of the cursor position
+    // (enter and motion store transformPoint of the surface point), and the surface
+    // point it reports must map back to that same window point, with and without
+    // the client-side decoration offset (6,34).
+    static const double offsets[2][2] = {{0, 0}, {6, 34}};
+    for (int i = 0; i < 2; i++) {
+        double ox = offsets[i][0], oy = offsets[i][1];
+        WaylandWarp w = WaylandWarpTarget(1100 + 120, 500 + 80, 1100, 500, 400, 300, ox, oy);
+        CHECK(w.windowX == 120 && w.windowY == 80);
+        CHECK(w.surfaceX == 120 + ox && w.surfaceY == 300 - 80 + oy);
+        double wx, wy;
+        transformPoint(w.surfaceX, w.surfaceY, 300, ox, oy, &wx, &wy);
+        CHECK(wx == w.windowX && wy == w.windowY);
+        // Clamped to the content on every side.
+        w = WaylandWarpTarget(-50, 9999, 1100, 500, 400, 300, ox, oy);
+        CHECK(w.windowX == 0 && w.windowY == 300);
+        w = WaylandWarpTarget(9999, -50, 1100, 500, 400, 300, ox, oy);
+        CHECK(w.windowX == 400 && w.windowY == 0);
+    }
+
+    // relative_motion(utime_hi, utime_lo, dx, dy, dx_unaccel, dy_unaccel): the
+    // deltas of an unlocked pointer have the acceleration applied, so these do too.
+    union wl_argument args[6] = {{.u = 0}, {.u = 1}, {.f = wl_fixed_from_double(7)},
+                                 {.f = wl_fixed_from_double(-3)}, {.f = wl_fixed_from_double(70)},
+                                 {.f = wl_fixed_from_double(-30)}};
+    double dx = 0, dy = 0;
+    CHECK(WaylandRelativeMotionDelta(WP_RELATIVE_POINTER_EV_RELATIVE_MOTION, args, &dx, &dy));
+    CHECK(dx == 7 && dy == -3);
+    CHECK(!WaylandRelativeMotionDelta(WP_RELATIVE_POINTER_EV_RELATIVE_MOTION + 1, args, &dx, &dy));
+}
+
 int main(void) {
+    units();
     display = wl_display_connect(NULL);
     if (!display) { fprintf(stderr, "no compositor\n"); return 2; }
     wl_registry_add_listener(wl_display_get_registry(display), &r_listener, NULL);
@@ -163,6 +203,21 @@ int main(void) {
     for (int i = 0; i < 3; i++) motion(vp, 10, -5);
     CHECK(relativeEvents == 3);
     CHECK(fabs(sumDx - 30) < 0.01 && fabs(sumDy + 15) < 0.01);
+    CHECK(motions == motionsBefore);
+
+    // The lock is persistent: when the window leaves the screen (workspace switch) the compositor
+    // deactivates it, and when the pointer comes back it is active again without a
+    // new request. A oneshot lock would be spent by the first leave.
+    sway("workspace number 2");
+    settle();
+    CHECK(unlockedEvents == 1 && lockedEvents == 1);
+    sway("workspace number 1");
+    settle();
+    CHECK(lockedEvents == 2);
+    motionsBefore = motions;
+    sumDx = sumDy = 0; relativeEvents = 0;
+    motion(vp, 4, 2);
+    CHECK(relativeEvents == 1 && fabs(sumDx - 4) < 0.01 && fabs(sumDy - 2) < 0.01);
     CHECK(motions == motionsBefore);
 
     // Unlock with a hint: the pointer reappears there, not where the deltas took it.

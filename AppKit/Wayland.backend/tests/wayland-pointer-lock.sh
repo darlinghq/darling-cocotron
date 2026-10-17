@@ -1,14 +1,20 @@
 #!/bin/sh
 # Builds tests/wayland-pointer-lock.c and runs it against a private headless sway.
 # Needs sway, swaymsg, wayland-scanner, wayland-protocols, wlr-protocols (for the
-# virtual pointer) and a C compiler. Nothing of the running desktop session is
-# used or touched.
+# virtual pointer) and a C compiler. Sway gets its own runtime directory and picks
+# its own socket name; nothing of the running desktop session is used or touched.
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
+# A Wayland socket path is limited to 107 bytes: keep TMPDIR short.
 work=$(mktemp -d)
 sway_pid=
 cleanup() {
-    [ -n "$sway_pid" ] && kill "$sway_pid" 2>/dev/null || true
+    if [ -n "$sway_pid" ]; then
+        kill "$sway_pid" 2>/dev/null || true
+        i=0
+        while kill -0 "$sway_pid" 2>/dev/null && [ $i -lt 30 ]; do i=$((i + 1)); sleep 0.1; done
+        kill -9 "$sway_pid" 2>/dev/null || true
+    fi
     rm -rf "$work"
 }
 trap cleanup EXIT INT TERM
@@ -37,11 +43,14 @@ unset DISPLAY WAYLAND_DISPLAY SWAYSOCK I3SOCK
 export XDG_RUNTIME_DIR="$work/run" WLR_BACKENDS=headless WLR_RENDERER=pixman WLR_LIBINPUT_NO_DEVICES=1
 sway -c "$work/sway.conf" > "$work/sway.log" 2>&1 &
 sway_pid=$!
-export WAYLAND_DISPLAY=wayland-1
 i=0
-while [ ! -S "$XDG_RUNTIME_DIR/wayland-1" ] || [ -z "$(ls "$XDG_RUNTIME_DIR"/sway-ipc.*.sock 2>/dev/null)" ]; do
+socket=
+while :; do
+    socket=$(find "$XDG_RUNTIME_DIR" -maxdepth 1 -type s -name 'wayland-*' | head -n 1)
+    [ -n "$socket" ] && [ -n "$(ls "$XDG_RUNTIME_DIR"/sway-ipc.*.sock 2>/dev/null)" ] && break
     i=$((i + 1)); [ $i -gt 100 ] && { cat "$work/sway.log"; echo "sway did not start" >&2; exit 2; }
     sleep 0.1
 done
+export WAYLAND_DISPLAY=$(basename "$socket")
 export SWAYSOCK=$(ls "$XDG_RUNTIME_DIR"/sway-ipc.*.sock)
 "$work/test"
