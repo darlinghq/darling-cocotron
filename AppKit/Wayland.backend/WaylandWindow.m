@@ -376,7 +376,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     _activated = NO;
     // The tracker survives hiding: _frame keeps the fullscreen size, so the size
     // from before fullscreen would be lost if the next map saved it again.
-    _fullscreenRequested = _pendingFullscreen = NO;
+    _fullscreenRequested = _pendingFullscreen = _fullscreenRecheckPending = NO;
     [_display windowUnmapped: self];
     [_display flush];
 }
@@ -500,6 +500,26 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
         WaylandToplevelUnsetFullscreen(_toplevel);
     }
     [_display flush];
+}
+
+- (void) outputsChanged {
+    if (_toplevel == NULL)
+        return;
+    _fullscreenRecheckPending = YES;
+    NSUInteger generation = _surfaceGeneration;
+    [_display performAfterDispatch: ^{
+        if (self->_surfaceGeneration == generation)
+            [self recheckFullscreen];
+    }];
+}
+
+// A configure that is still queued carries the size the compositor chose for
+// the new output layout; applyConfigure runs this once it has applied it.
+- (void) recheckFullscreen {
+    if (!_fullscreenRecheckPending || _configureUpdatePending)
+        return;
+    _fullscreenRecheckPending = NO;
+    [self updateFullscreen];
 }
 
 - (void) setLevel: (int) value {
@@ -1071,6 +1091,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     }
 
     [self updateSubwindows];
+    [self recheckFullscreen];
 
     BOOL activationChanged = _pendingActivated != _activated;
     BOOL activated = _pendingActivated;

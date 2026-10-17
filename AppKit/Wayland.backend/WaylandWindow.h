@@ -80,7 +80,7 @@ struct WaylandBuffer {
     BOOL _maximized, _pendingMaximized;
     // Whether the current xdg_toplevel was asked for fullscreen, what the last
     // configure said, and the size to go back to.
-    BOOL _fullscreenRequested, _pendingFullscreen;
+    BOOL _fullscreenRequested, _pendingFullscreen, _fullscreenRecheckPending;
     WaylandFullscreenTracker _fullscreenTracker;
     BOOL _configureUpdatePending;
     NSUInteger _surfaceGeneration;
@@ -106,6 +106,9 @@ struct WaylandBuffer {
 - (void) preferredScaleChanged: (uint32_t) scale120;
 - (void) outputRemoved: (struct wl_proxy *) output;
 - (void) scheduleScaleUpdate;
+// An output was added, removed or changed mode: re-decide fullscreen once the
+// events of the batch (including a configure for the new size) are in.
+- (void) outputsChanged;
 - (BOOL) isPopup;
 - (WaylandWindow *) popupParent;
 - (uint32_t) popupGrabSerial;

@@ -676,6 +676,8 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
             WL.wl_proxy_destroy(output->_proxy);
             [_outputs removeObject: output];
             [self invalidateScreens];
+            for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
+                [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) outputsChanged];
             break;
         }
     }
@@ -713,8 +715,11 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
     output->_modes = [output->_pendingModes copy];
     [self invalidateScreens];
     [_draggingManager outputsChanged];
-    for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
-        [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) scheduleScaleUpdate];
+    for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++) {
+        WaylandWindow *window = (WaylandWindow *) CFArrayGetValueAtIndex(_windows, i);
+        [window scheduleScaleUpdate];
+        [window outputsChanged];
+    }
 }
 
 - (void) outputEvent: (uint32_t) opcode
