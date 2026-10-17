@@ -314,6 +314,12 @@ static NSData *makeWindowIcon() {
         sh->min_height = sh->max_height = _frame.size.height;
     }
 
+    // An untitled window that is managed (a borderless game or custom-chrome window)
+    // positions itself: say so, or a window manager may place it as it likes
+    // (ICCCM 4.1.2.3).
+    if (!_overrideRedirect && !(mask & NSWindowStyleMaskTitled))
+        sh->flags |= USPosition | PPosition;
+
     XSetWMSizeHints(_display, _window, sh, XA_WM_NORMAL_HINTS);
     XFree(sh);
 }
