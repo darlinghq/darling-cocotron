@@ -44,6 +44,11 @@
     // held, which losing the focus releases and regaining it retakes.
     BOOL _relativeRequested;
     int _relativeRetriesLeft;
+    // Where the frozen cursor was when the grab was released for a reason other
+    // than the application asking (focus loss, reconfiguration), so the next
+    // grab puts it back instead of restarting it at the pointer.
+    BOOL _relativeResumeValid;
+    double _relativeResumeX, _relativeResumeY;
     Window _relativeWindow;
     X11RelativeMouse _relativeMouse;
     // Xwayland forwards a pointer warp to the compositor only while the X
