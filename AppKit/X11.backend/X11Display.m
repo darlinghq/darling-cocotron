@@ -2323,6 +2323,14 @@ void CGNativeBorderFrameWidthsForStyle(NSUInteger styleMask, CGFloat *top,
 - (void) resnapshotRelativeMouse {
     if (!_relativeMouse.active)
         return;
+    // Most RandR events (a backlight change, an output property) change
+    // nothing the grab depends on: skip the new grab unless the reachable
+    // rectangle moved.
+    X11RelativeMouseBounds bounds;
+    if (X11RelativeMouseWindowBounds(_display, _relativeWindow, &bounds) &&
+        bounds.minX == _relativeMouse.minX && bounds.minY == _relativeMouse.minY &&
+        bounds.maxX == _relativeMouse.maxX && bounds.maxY == _relativeMouse.maxY)
+        return;
     [self suspendRelativeMouse];
     [self beginRelativeMouse];
     if (_relativeRequested && !_relativeMouse.active)
