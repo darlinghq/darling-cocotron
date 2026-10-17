@@ -74,8 +74,12 @@ static inline bool X11RelativeMouseWindowBounds(Display *display, Window window,
 /* Takes the pointer grab on window (confined to it) and starts the virtual cursor at the current pointer
  * position. Returns GrabSuccess, X11_RELATIVE_MOUSE_NOT_FOCUSED when the window does not hold the focus (a grab
  * would take the pointer from whichever client does), X11_RELATIVE_MOUSE_QUERY_FAILED, or the XGrabPointer error.
- * Nothing is left grabbed on failure. */
-static inline int X11RelativeMouseGrab(Display *display, X11RelativeMouse *mouse, Window window) {
+ * Nothing is left grabbed on failure. warpsHonoured is whether the server moves the pointer
+ * for XWarpPointer (see the backend); the pointer is parked away from the confine edge only then. */
+static inline bool X11RelativeMouseApplicationWarp(Display *display, X11RelativeMouse *mouse, double x, double y,
+                                                   bool warpsHonoured);
+
+static inline int X11RelativeMouseGrab(Display *display, X11RelativeMouse *mouse, Window window, bool warpsHonoured) {
     if (!X11RelativeMouseWindowHasFocus(display, window))
         return X11_RELATIVE_MOUSE_NOT_FOCUSED;
     /* FocusChangeMask is not a valid pointer-grab event. */
@@ -97,6 +101,13 @@ static inline int X11RelativeMouseGrab(Display *display, X11RelativeMouse *mouse
         return X11_RELATIVE_MOUSE_QUERY_FAILED;
     }
     X11RelativeMouseBegin(mouse, rootX, rootY, snapshotSerial, bounds);
+    /* Park the pointer at once, so the first motion after a grab at an edge is not clipped either. The cursor
+     * stays where the pointer was. */
+    if (!X11RelativeMouseApplicationWarp(display, mouse, rootX, rootY, warpsHonoured)) {
+        XUngrabPointer(display, CurrentTime);
+        X11RelativeMouseEnd(mouse);
+        return X11_RELATIVE_MOUSE_QUERY_FAILED;
+    }
     return GrabSuccess;
 }
 

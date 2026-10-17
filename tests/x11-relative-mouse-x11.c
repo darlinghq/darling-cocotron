@@ -92,7 +92,7 @@ int main(void) {
 
     /* Not focused: nothing is grabbed (a grab would take the pointer from whoever has the focus). */
     XSetInputFocus(display, root, RevertToPointerRoot, CurrentTime);
-    CHECK(X11RelativeMouseGrab(display, &mouse, window) == X11_RELATIVE_MOUSE_NOT_FOCUSED && !mouse.active,
+    CHECK(X11RelativeMouseGrab(display, &mouse, window, true) == X11_RELATIVE_MOUSE_NOT_FOCUSED && !mouse.active,
           "an unfocused window does not grab");
 
     /* A window manager may focus the frame it put around the client. */
@@ -109,7 +109,7 @@ int main(void) {
     XSetInputFocus(display, window, RevertToNone, CurrentTime);
     XWarpPointer(display, None, root, 0, 0, 0, 0, 300, 250);
     XSync(display, False);
-    CHECK(X11RelativeMouseGrab(display, &mouse, window) == GrabSuccess && mouse.active, "grab on the focused window");
+    CHECK(X11RelativeMouseGrab(display, &mouse, window, true) == GrabSuccess && mouse.active, "grab on the focused window");
     CHECK(mouse.virtualX == 300 && mouse.virtualY == 250, "virtual cursor starts at the pointer");
     CHECK(mouse.minX == 100 && mouse.minY == 100 && mouse.maxX == 499 && mouse.maxY == 399,
           "bounds are the grab window: %d,%d %d,%d", mouse.minX, mouse.minY, mouse.maxX, mouse.maxY);
@@ -232,7 +232,7 @@ int main(void) {
     /* Warps not honoured (Xwayland with a visible cursor): the cursor follows the pointer, nothing is warped back. */
     XWarpPointer(display, None, root, 0, 0, 0, 0, 300, 250);
     XSync(display, False);
-    CHECK(X11RelativeMouseGrab(display, &mouse, window) == GrabSuccess, "second grab");
+    CHECK(X11RelativeMouseGrab(display, &mouse, window, false) == GrabSuccess, "second grab");
     Pumped idle = {0};
     pump(display, &mouse, false, &idle);
     Pumped follow = {0};
@@ -242,6 +242,19 @@ int main(void) {
     CHECK(follow.deltaX == 10 && follow.deltaY == 0, "delta reported: %g,%g", follow.deltaX, follow.deltaY);
     CHECK(px == 310 && py == 250 && mouse.virtualX == 310 && mouse.virtualY == 250,
           "the cursor follows the pointer: virtual %g,%g pointer %d,%d", mouse.virtualX, mouse.virtualY, px, py);
+    X11RelativeMouseRelease(display, &mouse);
+
+    /* A grab with the pointer 1 pixel from the confine edge: the very first motion is not clipped. */
+    XWarpPointer(display, None, root, 0, 0, 0, 0, 101, 250);
+    XSync(display, False);
+    CHECK(X11RelativeMouseGrab(display, &mouse, window, true) == GrabSuccess, "grab at the edge");
+    Pumped atEdge = {0};
+    pump(display, &mouse, true, &atEdge);
+    atEdge = (Pumped){0};
+    move(display, -20, 0);
+    pump(display, &mouse, true, &atEdge);
+    CHECK(atEdge.deltaX == -20 && mouse.virtualX == 101,
+          "first motion after a grab at the edge is whole: %g, cursor %g", atEdge.deltaX, mouse.virtualX);
     X11RelativeMouseRelease(display, &mouse);
 
     X11RelativeMouseEnd(&mouse);
