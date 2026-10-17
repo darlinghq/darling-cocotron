@@ -1742,6 +1742,38 @@ static NSUInteger modifierDeviceMask(int code) {
     return [[_screens retain] autorelease];
 }
 
+- (NSArray *) outputLogicalSizes {
+    NSMutableArray *sizes = [NSMutableArray array];
+    // -screens invents a screen when no output has reported a mode yet.
+    if ([[self outputsWithModes] count] == 0)
+        return sizes;
+    for (NSScreen *screen in [self screens])
+        [sizes addObject: [NSValue valueWithSize: [screen frame].size]];
+    return sizes;
+}
+
+// -screens is built from -outputsWithModes in order, so the indexes agree.
+- (struct wl_proxy *) outputWithLogicalSize: (NSSize) size
+                                 preferring: (NSSet *) preferred
+{
+    NSArray *outputs = [self outputsWithModes];
+    NSArray *screens = [self screens];
+    struct wl_proxy *only = NULL;
+    NSUInteger matches = 0;
+    for (NSUInteger i = 0; i < [outputs count] && i < [screens count]; i++) {
+        NSSize candidate = [(NSScreen *) screens[i] frame].size;
+        if (lround(candidate.width) != lround(size.width) ||
+            lround(candidate.height) != lround(size.height))
+            continue;
+        struct wl_proxy *proxy = ((WaylandOutput *) outputs[i])->_proxy;
+        if ([preferred containsObject: [NSValue valueWithPointer: proxy]])
+            return proxy;
+        only = proxy;
+        matches++;
+    }
+    return matches == 1 ? only : NULL;
+}
+
 - (CGRect) insetRect: (CGRect) frame
         forNativeWindowBorderWithStyle: (NSUInteger) styleMask
 {

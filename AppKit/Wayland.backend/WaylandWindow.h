@@ -21,6 +21,7 @@
 #include <wayland-util.h>
 
 #import "WaylandDisplay.h"
+#import "WaylandFullscreen.h"
 
 @class NSWindow, O2Context, WaylandSubWindow;
 
@@ -77,6 +78,10 @@ struct WaylandBuffer {
     BOOL _scaleUpdatePending, _subwindowRedrawPending, _subwindowRedrawNeeded;
     BOOL _clientDecorated, _pendingClientDecorated;
     BOOL _maximized, _pendingMaximized;
+    // Whether the current xdg_toplevel was asked for fullscreen, what the last
+    // configure said, and the size to go back to.
+    BOOL _fullscreenRequested, _pendingFullscreen;
+    WaylandFullscreenTracker _fullscreenTracker;
     BOOL _configureUpdatePending;
     NSUInteger _surfaceGeneration;
 }

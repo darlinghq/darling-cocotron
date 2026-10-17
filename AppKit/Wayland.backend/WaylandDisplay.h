@@ -187,6 +187,13 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 - (WaylandWindow *) popupParentForWindow: (WaylandWindow *) window;
 - (uint32_t) popupGrabSerialForParent: (WaylandWindow *) parent;
 - (struct wl_proxy *) seat;
+// Logical sizes (NSValue sizes) of the outputs in -screens order; empty until an
+// output has reported a mode.
+- (NSArray *) outputLogicalSizes;
+// The wl_output whose logical size is `size`: one of `preferred` (NSValue
+// pointers, as WaylandWindow keeps its entered outputs) if any matches, else the
+// only output that matches, else NULL.
+- (struct wl_proxy *) outputWithLogicalSize: (NSSize) size preferring: (NSSet *) preferred;
 - (void) unmapPopupsForParent: (WaylandWindow *) parent;
 - (void) cancelPopupMenus;
 

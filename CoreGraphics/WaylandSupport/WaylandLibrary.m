@@ -287,6 +287,8 @@ bool WaylandCheckOpcodes(void) {
             {&xdg_toplevel_interface, false, WP_TOPLEVEL_RESIZE, "resize"},
             {&xdg_toplevel_interface, false, WP_TOPLEVEL_SET_MAXIMIZED, "set_maximized"},
             {&xdg_toplevel_interface, false, WP_TOPLEVEL_UNSET_MAXIMIZED, "unset_maximized"},
+            {&xdg_toplevel_interface, false, WP_TOPLEVEL_SET_FULLSCREEN, "set_fullscreen"},
+            {&xdg_toplevel_interface, false, WP_TOPLEVEL_UNSET_FULLSCREEN, "unset_fullscreen"},
             {&zxdg_toplevel_decoration_v1_interface, true, WP_TOPLEVEL_DECORATION_EV_CONFIGURE, "configure"},
             {&xdg_toplevel_interface, false, WP_TOPLEVEL_SET_TITLE, "set_title"},
             {&xdg_toplevel_interface, false, WP_TOPLEVEL_SET_APP_ID, "set_app_id"},

@@ -243,6 +243,8 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
         args[0].s = [[[NSProcessInfo processInfo] processName] UTF8String];
         if (args[0].s != NULL)
             WaylandMarshal(_toplevel, WP_TOPLEVEL_SET_APP_ID, NULL, 0, args);
+        _fullscreenRequested = NO;
+        [self updateFullscreen];
         [self updateSizeLimits];
 
         if (_display->_decorationManager != NULL && (_styleMask & NSWindowStyleMaskTitled)) {
@@ -261,6 +263,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 
     _pendingWidth = _pendingHeight = 0;
     _pendingActivated = NO;
+    _pendingFullscreen = NO;
     // The initial commit has no buffer; content follows the first configure.
     sendRequest(_surface, WP_SURFACE_COMMIT, 0);
     _mapped = YES;
@@ -371,6 +374,8 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     _configureUpdatePending = NO;
     _configured = NO;
     _activated = NO;
+    _fullscreenRequested = _pendingFullscreen = NO;
+    memset(&_fullscreenTracker, 0, sizeof(_fullscreenTracker));
     [_display windowUnmapped: self];
     [_display flush];
 }
@@ -448,6 +453,52 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 - (void) setStyleMask: (NSUInteger) mask {
     _styleMask = mask;
     [self updateSizeLimits];
+    [self updateFullscreen];
+}
+
+#pragma mark - Fullscreen
+
+- (BOOL) shouldBeFullscreen {
+    if (_popup != NULL || _popupParent != nil)
+        return NO;
+    NSArray *outputs = [_display outputLogicalSizes];
+    int32_t sizes[32][2];
+    size_t count = MIN([outputs count], (NSUInteger) 32);
+    for (size_t i = 0; i < count; i++) {
+        NSSize size = [[outputs objectAtIndex: i] sizeValue];
+        sizes[i][0] = (int32_t) lround(size.width);
+        sizes[i][1] = (int32_t) lround(size.height);
+    }
+    WaylandFullscreenWindow window = {
+        .fullScreenStyle = (_styleMask & NSWindowStyleMaskFullScreen) != 0,
+        .titled = (_styleMask & NSWindowStyleMaskTitled) != 0,
+        .canBecomeKey = [_delegate canBecomeKeyWindow],
+        .popupOrMenu = [_delegate isKindOfClass: NSClassFromString(@"NSMenuWindow")] ||
+                       [_delegate isKindOfClass: NSClassFromString(@"NSPopUpWindow")],
+        .width = (int32_t) lround(_frame.size.width),
+        .height = (int32_t) lround(_frame.size.height),
+    };
+    return WaylandFullscreenWanted(&window, (const int32_t (*)[2]) sizes, count);
+}
+
+// Asks the compositor to enter or leave fullscreen when the answer changed.
+// A window that asks for it through the style mask lets the compositor pick the
+// output; one that is merely as large as an output goes to that output.
+- (void) updateFullscreen {
+    if (_toplevel == NULL)
+        return;
+    BOOL wanted = [self shouldBeFullscreen];
+    if (wanted == _fullscreenRequested)
+        return;
+    _fullscreenRequested = wanted;
+    if (wanted) {
+        struct wl_proxy *output = (_styleMask & NSWindowStyleMaskFullScreen) ? NULL
+                : [_display outputWithLogicalSize: _frame.size preferring: _surfaceOutputs];
+        WaylandToplevelSetFullscreen(_toplevel, output);
+    } else {
+        WaylandToplevelUnsetFullscreen(_toplevel);
+    }
+    [_display flush];
 }
 
 - (void) setLevel: (int) value {
@@ -523,6 +574,11 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     BOOL sized = !NSEqualSizes(frame.size, _frame.size);
     [self invalidateContextWithNewSize: frame.size];
     _frame = frame;
+    if (_fullscreenTracker.active) {
+        // The application chose a new size: leaving fullscreen returns to it.
+        _fullscreenTracker.savedWidth = (int32_t) frame.size.width;
+        _fullscreenTracker.savedHeight = (int32_t) frame.size.height;
+    }
     if (_popup != NULL && (moved || sized) && WL.wl_proxy_get_version(_popup) >= 3) {
         struct wl_proxy *positioner = [self newPopupPositioner];
         union wl_argument args[2] = {{.o = (struct wl_object *) positioner},
@@ -534,6 +590,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     [self updateSubwindows];
     if (sized) {
         [self updateSizeLimits];
+        [self updateFullscreen];
         [_display flush];
     }
 }
@@ -898,16 +955,10 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
         if (opcode == WP_TOPLEVEL_EV_CONFIGURE) {
             _pendingWidth = args[0].i;
             _pendingHeight = args[1].i;
-            _pendingActivated = NO;
-            _pendingMaximized = NO;
             struct wl_array *states = args[2].a;
-            uint32_t *state;
-            wl_array_for_each (state, states) {
-                if (*state == WP_TOPLEVEL_STATE_ACTIVATED)
-                    _pendingActivated = YES;
-                if (*state == WP_TOPLEVEL_STATE_MAXIMIZED)
-                    _pendingMaximized = YES;
-            }
+            _pendingActivated = WaylandStatesContain(states, WP_TOPLEVEL_STATE_ACTIVATED);
+            _pendingMaximized = WaylandStatesContain(states, WP_TOPLEVEL_STATE_MAXIMIZED);
+            _pendingFullscreen = WaylandStatesContain(states, WP_TOPLEVEL_STATE_FULLSCREEN);
         } else if (opcode == WP_TOPLEVEL_EV_CLOSE) {
             [self closeRequested];
         }
@@ -971,7 +1022,9 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 }
 
 - (void) applyConfigure {
-    BOOL clientDecorated = _toplevel != NULL && (_styleMask & NSWindowStyleMaskTitled) && _pendingClientDecorated;
+    // A fullscreen window has no frame of its own to draw.
+    BOOL clientDecorated = _toplevel != NULL && (_styleMask & NSWindowStyleMaskTitled) &&
+            _pendingClientDecorated && !_pendingFullscreen;
     BOOL decorationChanged = clientDecorated != _clientDecorated;
     _clientDecorated = clientDecorated;
     _maximized = _pendingMaximized;
@@ -982,8 +1035,12 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
         [_delegate platformWindowDidInvalidateCGContext: self];
         [self updateSizeLimits];
     }
-    int32_t width = _pendingWidth - (_clientDecorated ? 2 * WaylandBorder : 0);
-    int32_t height = _pendingHeight - (_clientDecorated ? 2 * WaylandBorder + WaylandTitleHeight : 0);
+    int32_t width, height;
+    WaylandFullscreenConfigure(&_fullscreenTracker, _pendingFullscreen,
+            (int32_t) _frame.size.width, (int32_t) _frame.size.height,
+            _pendingWidth - (_clientDecorated ? 2 * WaylandBorder : 0),
+            _pendingHeight - (_clientDecorated ? 2 * WaylandBorder + WaylandTitleHeight : 0),
+            &width, &height);
     BOOL firstConfigure = !_configured;
     _configured = YES;
 
