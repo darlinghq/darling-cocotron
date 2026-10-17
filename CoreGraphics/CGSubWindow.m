@@ -23,6 +23,7 @@
 - (CGSize) drawablePixelSize { return CGSizeZero; }
 - (void) flush {}
 - (BOOL) requiresMainThreadPresentation { return NO; }
+- (uint32_t) refreshMillihertz { return 0; }
 
 - (void) show {
     O2InvalidAbstractInvocation();

@@ -688,6 +688,13 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
     return 1;
 }
 
+- (uint32_t) refreshForOutput: (struct wl_proxy *) proxy {
+    for (WaylandOutput *output in _outputs)
+        if (output->_proxy == proxy)
+            return output->_current.refresh > 0 ? (uint32_t)output->_current.refresh : 0;
+    return 0;
+}
+
 - (void) windowScaleChanged: (WaylandWindow *) window {
     if (window == _pointerWindow)
         [self applyCursor];

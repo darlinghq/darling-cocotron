@@ -602,6 +602,13 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 - (int32_t) bufferScale { return _bufferScale; }
 - (CGFloat) backingScaleFactor { return _renderScale120 / 120.0; }
 - (uint32_t) renderScale120 { return _renderScale120; }
+// The fastest output the surface is on, 0 before it has entered one.
+- (uint32_t) refreshMillihertz {
+    uint32_t refresh = 0;
+    for (NSValue *output in _surfaceOutputs)
+        refresh = MAX(refresh, [_display refreshForOutput: [output pointerValue]]);
+    return refresh;
+}
 - (void) preferredScaleChanged: (uint32_t) scale120 {
     if (!_fractionalScale || scale120 == 0 || scale120 == _preferredScale120) return;
     _preferredScale120 = scale120;

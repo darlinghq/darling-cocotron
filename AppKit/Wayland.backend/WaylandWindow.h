@@ -97,6 +97,7 @@ struct WaylandBuffer {
 - (BOOL) isMapped;
 - (int32_t) bufferScale;
 - (uint32_t) renderScale120;
+- (uint32_t) refreshMillihertz;
 - (void) preferredScaleChanged: (uint32_t) scale120;
 - (void) outputRemoved: (struct wl_proxy *) output;
 - (void) scheduleScaleUpdate;

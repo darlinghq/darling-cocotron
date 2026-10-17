@@ -165,6 +165,7 @@ static BOOL validFrame(CGRect frame) {
     WaylandMarshal(_subsurface, WP_SUBSURFACE_PLACE_ABOVE, NULL, 0, args);
 }
 - (BOOL) requiresMainThreadPresentation { return YES; }
+- (uint32_t) refreshMillihertz { return [_parent refreshMillihertz]; }
 - (void) flush {
     if (![NSThread isMainThread]) return;
     if (!_visible || _clipped || !_eglWindow || [_parent isInvalidated]) return;
