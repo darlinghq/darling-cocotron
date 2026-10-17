@@ -43,6 +43,7 @@
     // _relativeMouse.active only while the pointer grab on _relativeWindow is
     // held, which losing the focus releases and regaining it retakes.
     BOOL _relativeRequested;
+    int _relativeRetriesLeft;
     Window _relativeWindow;
     X11RelativeMouse _relativeMouse;
     // Xwayland forwards a pointer warp to the compositor only while the X

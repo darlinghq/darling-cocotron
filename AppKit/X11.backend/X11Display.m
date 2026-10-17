@@ -203,6 +203,9 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type,
 }
 
 - (void) _invalidateRRCache {
+    // The root may have shrunk or a monitor gone: the pointer's reachable
+    // area, and with it a relative-mode grab's bounds, changed.
+    [self resnapshotRelativeMouse];
     if (_lastScreens) {
         [_lastScreens release];
         _lastScreens = nil;
@@ -1462,12 +1465,8 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
         break;
 
     case ConfigureNotify:
-        if (_relativeMouse.active && ev->xconfigure.window == _relativeWindow) {
-            // A reconfiguration can move a confined pointer by itself: take a
-            // new snapshot and drop the old geometry's pending motion.
-            [self suspendRelativeMouse];
-            [self beginRelativeMouse];
-        }
+        if (_relativeMouse.active && ev->xconfigure.window == _relativeWindow)
+            [self resnapshotRelativeMouse];
         [window frameChanged];
         [delegate platformWindow: window
                     frameChanged: [window frame]
@@ -1722,6 +1721,41 @@ void CGNativeBorderFrameWidthsForStyle(NSUInteger styleMask, CGFloat *top,
                               &child))
         [xwin setLastKnownCursorPosition:
                         [xwin transformPoint: NSMakePoint(windowX, windowY)]];
+}
+
+// A reconfiguration (the grab window moved or resized, the screen layout
+// changed) can move a confined pointer by itself and changes where it can go:
+// take a new snapshot and drop the old geometry's pending motion. The new grab
+// can fail while the window manager is mid-operation (AlreadyGrabbed, or the
+// focus check during a fullscreen transition) and FocusIn may never follow, so
+// a failure is retried for a while.
+- (void) resnapshotRelativeMouse {
+    if (!_relativeMouse.active)
+        return;
+    [self suspendRelativeMouse];
+    [self beginRelativeMouse];
+    if (_relativeRequested && !_relativeMouse.active)
+        [self scheduleRelativeMouseRetry];
+}
+
+- (void) scheduleRelativeMouseRetry {
+    _relativeRetriesLeft = 10;
+    [NSObject cancelPreviousPerformRequestsWithTarget: self
+                                             selector: @selector(retryRelativeMouse)
+                                               object: nil];
+    [self performSelector: @selector(retryRelativeMouse)
+               withObject: nil
+               afterDelay: 0.1];
+}
+
+- (void) retryRelativeMouse {
+    if (!_relativeRequested || _relativeMouse.active)
+        return;
+    [self beginRelativeMouse];
+    if (_relativeRequested && !_relativeMouse.active && --_relativeRetriesLeft > 0)
+        [self performSelector: @selector(retryRelativeMouse)
+                   withObject: nil
+                   afterDelay: 0.1];
 }
 
 // Releases the grab without cancelling the request (focus loss, window gone).
