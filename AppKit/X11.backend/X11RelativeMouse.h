@@ -53,6 +53,11 @@ static inline int X11RelativeMouseWarpCoordinate(double value) {
     return (int) value;
 }
 
+/* Serial a is older than serial b. Serials wrap (32 bits wide on i386), so compare the difference. */
+static inline bool X11RelativeMouseSerialBefore(unsigned long a, unsigned long b) {
+    return (long)(a - b) < 0;
+}
+
 /* Initialize storage to zero before the first Begin; End releases the pending-echo allocation. */
 static inline void X11RelativeMouseBegin(X11RelativeMouse *mouse, int rootX, int rootY) {
     free(mouse->echoes);
@@ -137,7 +142,7 @@ static inline X11RelativeMouseMotion X11RelativeMouseHandleMotion(X11RelativeMou
                                                                   bool warpsHonoured, unsigned long serial)
 {
     X11RelativeMouseMotion result = {false, false, 0.0, 0.0, false, 0, 0};
-    if (serial < mouse->firstSerial) {
+    if (X11RelativeMouseSerialBefore(serial, mouse->firstSerial)) {
         X11RelativeMouseTick(mouse);
         return result;
     }
@@ -169,7 +174,7 @@ static inline X11RelativeMouseMotion X11RelativeMouseHandleMotion(X11RelativeMou
     if (warpsHonoured && (rootX != warpX || rootY != warpY)) {
         /* More physical motion may already be queued before our latest warp. That warp will
          * re-anchor it; issuing another one for each queued event creates an echo backlog. */
-        bool pending = mouse->echoCount && serial < mouse->echoes[mouse->echoCount - 1].serial;
+        bool pending = mouse->echoCount && X11RelativeMouseSerialBefore(serial, mouse->echoes[mouse->echoCount - 1].serial);
         result.rewarp = !pending;
         result.warpX = warpX;
         result.warpY = warpY;

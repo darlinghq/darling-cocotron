@@ -4,6 +4,7 @@
 #include X11_RELATIVE_MOUSE_HEADER
 #undef NDEBUG /* the checks are asserts */
 #include <assert.h>
+#include <limits.h>
 #include <stdio.h>
 
 /* Host model of the X11 backend's relative mouse mode (CGAssociateMouseAndMouseCursorPosition(false)).
@@ -220,7 +221,28 @@ static void confinedWarpAndApplicationReanchor(void) {
     puts("PASS: confined application warps share one position with events and rewarping on a secondary monitor");
 }
 
+static void serialsWrap(void) {
+    X11RelativeMouse m = {0};
+    /* A serial counter that wrapped during the grab (32 bits on i386) is still newer than the snapshot. */
+    unsigned long first = ULONG_MAX - 15;
+    X11RelativeMouseBegin(&m, 500, 400);
+    m.firstSerial = first;
+    assert(X11RelativeMouseSerialBefore(first - 1, first) && !X11RelativeMouseSerialBefore(first, first));
+    assert(!X11RelativeMouseSerialBefore(first + 1, first));
+    unsigned long wrapped = 16; /* first + 32 */
+    assert(!X11RelativeMouseSerialBefore(wrapped, first));
+    X11RelativeMouseMotion r = X11RelativeMouseHandleMotion(&m, 505, 400, true, wrapped);
+    assert(r.post && r.deltaX == 5);
+    /* The pending-rewarp suppression compares serials the same way. */
+    X11RelativeMouseExpectEcho(&m, 500, 400, 4, 40);
+    r = X11RelativeMouseHandleMotion(&m, 510, 400, true, ULONG_MAX - 2); /* before the echo's serial, across the wrap */
+    assert(r.post && !r.rewarp);
+    X11RelativeMouseEnd(&m);
+    puts("PASS: serial comparisons survive wraparound");
+}
+
 int main(void) {
+    serialsWrap();
     serialsSeparateMotionFromEchoes();
     queuedMotionDoesNotMultiplyWarps();
     confinedWarpAndApplicationReanchor();
