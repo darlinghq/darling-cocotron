@@ -3,6 +3,7 @@
 #ifndef WAYLAND_FULLSCREEN_H
 #define WAYLAND_FULLSCREEN_H
 
+#include <math.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -19,6 +20,12 @@ typedef struct {
     bool fullScreenStyle, titled, canBecomeKey, popupOrMenu;
     int32_t width, height; // logical size of the window content
 } WaylandFullscreenWindow;
+
+// Every size comparison and every saved size goes through this one rounding:
+// logical output sizes can be fractional (2560 / 1.5), compositor sizes are not.
+static inline int32_t WaylandFullscreenRound(double value) {
+    return (int32_t) lround(value);
+}
 
 // Index of the first output whose logical size equals the window's, or -1.
 static inline int WaylandFullscreenOutputIndex(const WaylandFullscreenWindow *window,
@@ -63,13 +70,30 @@ static inline bool WaylandStatesContain(const struct wl_array *states, uint32_t 
 }
 
 // What the window size becomes at the end of a configure sequence. The
-// compositor sizes a fullscreen window itself and, after unset_fullscreen,
-// may send 0x0 ("choose your own size") instead of the old size, so the size
-// from before fullscreen is kept to restore. Sizes are the window content.
+// compositor sizes a fullscreen window itself. After unset_fullscreen it sends
+// either 0x0 ("choose your own size") or the size it remembered from before
+// fullscreen (sway). The size to go back to is the one from before fullscreen,
+// unless the application chose another with setFrame: while fullscreen: then
+// the application's size wins over whatever the compositor remembered. A size
+// the compositor sends for a window the application did not resize wins over
+// the saved one. Sizes are the window content.
 typedef struct {
     bool active;
+    bool applicationSized;
     int32_t savedWidth, savedHeight;
 } WaylandFullscreenTracker;
+
+// The application resized the window. While fullscreen, that is the size to
+// return to on leaving; otherwise there is nothing to remember.
+static inline void WaylandFullscreenApplicationResized(WaylandFullscreenTracker *tracker,
+                                                       int32_t width, int32_t height)
+{
+    if (!tracker->active)
+        return;
+    tracker->applicationSized = true;
+    tracker->savedWidth = width;
+    tracker->savedHeight = height;
+}
 
 static inline void WaylandFullscreenConfigure(WaylandFullscreenTracker *tracker,
                                               bool fullscreen,
@@ -82,14 +106,16 @@ static inline void WaylandFullscreenConfigure(WaylandFullscreenTracker *tracker,
     *height = configured ? configuredHeight : 0;
     if (fullscreen && !tracker->active) {
         tracker->active = true;
+        tracker->applicationSized = false;
         tracker->savedWidth = currentWidth;
         tracker->savedHeight = currentHeight;
     } else if (!fullscreen && tracker->active) {
         tracker->active = false;
-        if (!configured) {
+        if (!configured || tracker->applicationSized) {
             *width = tracker->savedWidth;
             *height = tracker->savedHeight;
         }
+        tracker->applicationSized = false;
     }
 }
 

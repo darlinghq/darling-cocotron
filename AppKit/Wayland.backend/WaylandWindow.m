@@ -574,11 +574,11 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     BOOL sized = !NSEqualSizes(frame.size, _frame.size);
     [self invalidateContextWithNewSize: frame.size];
     _frame = frame;
-    if (_fullscreenTracker.active) {
-        // The application chose a new size: leaving fullscreen returns to it.
-        _fullscreenTracker.savedWidth = (int32_t) frame.size.width;
-        _fullscreenTracker.savedHeight = (int32_t) frame.size.height;
-    }
+    // The application chose a new size: leaving fullscreen returns to it, even
+    // when the compositor answers unset_fullscreen with the size it remembered.
+    if (sized)
+        WaylandFullscreenApplicationResized(&_fullscreenTracker, (int32_t) frame.size.width,
+                                            (int32_t) frame.size.height);
     if (_popup != NULL && (moved || sized) && WL.wl_proxy_get_version(_popup) >= 3) {
         struct wl_proxy *positioner = [self newPopupPositioner];
         union wl_argument args[2] = {{.o = (struct wl_object *) positioner},
