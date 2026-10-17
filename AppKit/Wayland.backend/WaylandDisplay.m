@@ -1311,6 +1311,15 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
 - (void) updatePointerLock {
     WaylandWindow *target = _pointerLockRequested ? [self pointerLockTarget] : nil;
     BOOL possible = _pointer != NULL && _pointerConstraints != NULL && _relativePointerManager != NULL;
+    static BOOL loggedMissing;
+    if (_pointerLockRequested && !loggedMissing &&
+        (_pointerConstraints == NULL || _relativePointerManager == NULL)) {
+        loggedMissing = YES;
+        NSLog(@"Wayland backend: relative mouse mode was requested, but the compositor offers no %s: "
+              @"the cursor stays free and no deltas are delivered",
+              _pointerConstraints == NULL ? "zwp_pointer_constraints_v1"
+                                          : "zwp_relative_pointer_manager_v1");
+    }
     if (!possible || target == nil || (_lockWindow != nil && _lockWindow != target)) {
         [self releasePointerLock];
         if (!possible || target == nil)
