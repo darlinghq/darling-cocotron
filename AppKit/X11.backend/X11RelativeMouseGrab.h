@@ -12,7 +12,8 @@
 #define X11_RELATIVE_MOUSE_NOT_FOCUSED (-1)
 #define X11_RELATIVE_MOUSE_QUERY_FAILED (-2)
 
-/* Whether window holds the keyboard focus, directly or through a descendant (an embedded child window). */
+/* Whether window holds the keyboard focus: directly, through a descendant (an embedded child window), or through an
+ * ancestor (a reparenting window manager may focus the frame it put around the window). */
 static inline bool X11RelativeMouseWindowHasFocus(Display *display, Window window) {
     Window focus;
     int revert;
@@ -29,7 +30,24 @@ static inline bool X11RelativeMouseWindowHasFocus(Display *display, Window windo
             XFree(children);
         ancestor = parent;
     }
-    return ancestor == window;
+    if (ancestor == window)
+        return true;
+    /* The focus may be an ancestor of the window. The root and PointerRoot are not a window's own focus. */
+    if (focus == None || focus == PointerRoot || focus == root)
+        return false;
+    ancestor = window;
+    for (int depth = 0; depth < 64 && ancestor != None && ancestor != root; depth++) {
+        Window queriedRoot, parent, *children = NULL;
+        unsigned int count;
+        if (!XQueryTree(display, ancestor, &queriedRoot, &parent, &children, &count))
+            return false;
+        if (children)
+            XFree(children);
+        if (parent == focus)
+            return true;
+        ancestor = parent;
+    }
+    return false;
 }
 
 /* The rectangle the pointer is confined to (the grab window clipped to the screen, in root coordinates). XWarpPointer
@@ -87,11 +105,12 @@ static inline void X11RelativeMouseRelease(Display *display, X11RelativeMouse *m
     if (!mouse->active)
         return;
     XUngrabPointer(display, CurrentTime);
+    XFlush(display);
     X11RelativeMouseEnd(mouse);
 }
 
-/* Moves the pointer and waits for the server, so the warp's MotionNotify (if any) is already queued on return.
- * Returns the number of queued events. Callers read NextRequest before this call to identify the echo. */
+/* Moves the pointer and waits for the server, so the warp's MotionNotify (if any) is already queued on return. That
+ * costs one round trip per motion on the thread that pumps events, which is cheap on a local server. Returns the number of queued events. Callers read NextRequest before this call to identify the echo. */
 static inline unsigned X11RelativeMouseWarpPointer(Display *display, int x, int y) {
     XWarpPointer(display, None, DefaultRootWindow(display), 0, 0, 0, 0, x, y);
     XSync(display, False);

@@ -95,6 +95,17 @@ int main(void) {
     CHECK(X11RelativeMouseGrab(display, &mouse, window) == X11_RELATIVE_MOUSE_NOT_FOCUSED && !mouse.active,
           "an unfocused window does not grab");
 
+    /* A window manager may focus the frame it put around the client. */
+    Window frame = XCreateSimpleWindow(display, root, 50, 50, 500, 400, 0, 0, 0);
+    Window client = XCreateSimpleWindow(display, frame, 10, 10, 300, 200, 0, 0, 0);
+    XMapSubwindows(display, frame);
+    XMapWindow(display, frame);
+    XSync(display, False);
+    XSetInputFocus(display, frame, RevertToNone, CurrentTime);
+    CHECK(X11RelativeMouseWindowHasFocus(display, client), "focus on the frame counts for the client");
+    CHECK(!X11RelativeMouseWindowHasFocus(display, window), "focus on an unrelated frame does not count");
+    XDestroyWindow(display, frame);
+
     XSetInputFocus(display, window, RevertToNone, CurrentTime);
     XWarpPointer(display, None, root, 0, 0, 0, 0, 300, 250);
     XSync(display, False);
