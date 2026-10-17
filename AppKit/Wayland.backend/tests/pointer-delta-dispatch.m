@@ -9,6 +9,14 @@
 // the backend's pointer entry point and records the AppKit events it posts.
 // AppKit reports the delta of a mouse move with y growing downward, whatever
 // the bottom-left origin of locations, and so does the X11 backend.
+//
+// Needs a Darling prefix and an isolated private Wayland compositor (build and
+// run it like scroll-frame-dispatch.m, see SCROLL-FRAME-VALIDATION.md). It prints
+// "SKIP" and exits 77 when the display is not the Wayland backend. The pointer
+// coordinates are inside the content area of a titled window whether the
+// compositor draws the decorations or the backend does (content offset 6,34), so
+// the checks do not depend on xdg-decoration being offered. It has not been run
+// yet: no guest was started when it was written.
 union Argument { int32_t i; uint32_t u; const char *s; void *o; void *a; int h; };
 @interface NSObject (PointerDeltaFixture)
 + (id) currentDisplay;
@@ -44,6 +52,11 @@ static void moveTo(double x, double y) {
 @implementation PointerDeltaApplication
 - (void) test: (id) sender {
     display = [NSClassFromString(@"NSDisplay") currentDisplay];
+    if (![NSStringFromClass(object_getClass(display)) hasPrefix: @"Wayland"]) {
+        printf("SKIP the display is %s, not the Wayland backend\n",
+               [NSStringFromClass(object_getClass(display)) UTF8String]);
+        exit(77);
+    }
     Class original = object_getClass(display);
     Class recorder = objc_allocateClassPair(original, "PointerDeltaRecordingDisplay", 0);
     Method method = class_getInstanceMethod(original, @selector(postEvent:atStart:));
@@ -55,14 +68,14 @@ static void moveTo(double x, double y) {
     object_setClass(display, recorder);
 
     union Argument enter[4] = {{.u = 1},
-        {.o = [[window platformWindow] surface]}, {.i = 20 * 256}, {.i = 30 * 256}};
+        {.o = [[window platformWindow] surface]}, {.i = 100 * 256}, {.i = 100 * 256}};
     [display pointerEvent: 0 arguments: enter];
 
-    moveTo(23, 27); // right and up on screen
+    moveTo(103, 97); // right and up on screen
     NSEvent *event = [events lastObject];
     deltaCheck([events count] == 1 && [event deltaX] == 3.0 && [event deltaY] == -3.0,
                "moving up reports a negative deltaY");
-    moveTo(23, 37); // straight down
+    moveTo(103, 107); // straight down
     event = [events lastObject];
     deltaCheck([events count] == 2 && [event deltaX] == 0.0 && [event deltaY] == 10.0,
                "moving down reports a positive deltaY");
