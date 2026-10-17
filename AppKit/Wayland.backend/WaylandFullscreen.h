@@ -130,7 +130,6 @@ static inline void WaylandFullscreenConfigure(WaylandFullscreenTracker *tracker,
     *height = configured ? configuredHeight : 0;
     if (fullscreen && !tracker->active) {
         tracker->active = true;
-        tracker->applicationSized = false;
         tracker->savedWidth = currentWidth;
         tracker->savedHeight = currentHeight;
     } else if (!fullscreen && tracker->active) {
