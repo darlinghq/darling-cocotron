@@ -32,9 +32,9 @@ static inline bool X11RelativeMouseWindowHasFocus(Display *display, Window windo
     return ancestor == window;
 }
 
-/* Caches the rectangle the pointer is confined to (the grab window, in root coordinates). XWarpPointer clips to it,
- * not to the monitor, so the virtual cursor is clamped against it. */
-static inline bool X11RelativeMouseUpdateBounds(Display *display, X11RelativeMouse *mouse, Window window) {
+/* The rectangle the pointer is confined to (the grab window clipped to the screen, in root coordinates). XWarpPointer
+ * clips to it, not to the monitor. Returns false when the window has no visible area or cannot be queried. */
+static inline bool X11RelativeMouseWindowBounds(Display *display, Window window, X11RelativeMouseBounds *bounds) {
     XWindowAttributes attributes;
     Window child;
     int x, y;
@@ -42,16 +42,15 @@ static inline bool X11RelativeMouseUpdateBounds(Display *display, X11RelativeMou
         !XTranslateCoordinates(display, window, DefaultRootWindow(display), 0, 0, &x, &y, &child))
         return false;
     int screen = DefaultScreen(display);
-    mouse->minX = x < 0 ? 0 : x;
-    mouse->minY = y < 0 ? 0 : y;
-    mouse->maxX = x + attributes.width - 1;
-    if (mouse->maxX > DisplayWidth(display, screen) - 1)
-        mouse->maxX = DisplayWidth(display, screen) - 1;
-    mouse->maxY = y + attributes.height - 1;
-    if (mouse->maxY > DisplayHeight(display, screen) - 1)
-        mouse->maxY = DisplayHeight(display, screen) - 1;
-    mouse->bounded = mouse->maxX >= mouse->minX && mouse->maxY >= mouse->minY;
-    return mouse->bounded;
+    bounds->minX = x < 0 ? 0 : x;
+    bounds->minY = y < 0 ? 0 : y;
+    bounds->maxX = x + attributes.width - 1;
+    if (bounds->maxX > DisplayWidth(display, screen) - 1)
+        bounds->maxX = DisplayWidth(display, screen) - 1;
+    bounds->maxY = y + attributes.height - 1;
+    if (bounds->maxY > DisplayHeight(display, screen) - 1)
+        bounds->maxY = DisplayHeight(display, screen) - 1;
+    return bounds->maxX >= bounds->minX && bounds->maxY >= bounds->minY;
 }
 
 /* Takes the pointer grab on window (confined to it) and starts the virtual cursor at the current pointer
@@ -74,13 +73,12 @@ static inline int X11RelativeMouseGrab(Display *display, X11RelativeMouse *mouse
         XUngrabPointer(display, CurrentTime);
         return X11_RELATIVE_MOUSE_QUERY_FAILED;
     }
-    X11RelativeMouseBegin(mouse, rootX, rootY);
-    mouse->firstSerial = snapshotSerial;
-    if (!X11RelativeMouseUpdateBounds(display, mouse, window)) {
+    X11RelativeMouseBounds bounds;
+    if (!X11RelativeMouseWindowBounds(display, window, &bounds)) {
         XUngrabPointer(display, CurrentTime);
-        X11RelativeMouseEnd(mouse);
         return X11_RELATIVE_MOUSE_QUERY_FAILED;
     }
+    X11RelativeMouseBegin(mouse, rootX, rootY, snapshotSerial, bounds);
     return GrabSuccess;
 }
 
@@ -117,12 +115,11 @@ static inline X11RelativeMouseMotion X11RelativeMouseMotionEvent(Display *displa
     return motion;
 }
 
-/* CGWarpMouseCursorPosition while relative: the virtual cursor moves without a delta. Where warps are honoured the
- * target is clamped to the grab window, as the server does. Returns false when the echo could not be recorded. */
+/* CGWarpMouseCursorPosition while relative: the virtual cursor moves without a delta. The target is clamped to the
+ * grab window, as the server does. Returns false when the echo could not be recorded. */
 static inline bool X11RelativeMouseApplicationWarp(Display *display, X11RelativeMouse *mouse, double x, double y,
                                                    bool warpsHonoured) {
-    if (warpsHonoured)
-        X11RelativeMouseClamp(mouse, &x, &y);
+    X11RelativeMouseClamp(mouse, &x, &y);
     unsigned long serial = NextRequest(display);
     unsigned queued = X11RelativeMouseWarpPointer(display, X11RelativeMouseWarpCoordinate(x),
                                                   X11RelativeMouseWarpCoordinate(y));

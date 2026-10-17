@@ -100,7 +100,7 @@ int main(void) {
     XSync(display, False);
     CHECK(X11RelativeMouseGrab(display, &mouse, window) == GrabSuccess && mouse.active, "grab on the focused window");
     CHECK(mouse.virtualX == 300 && mouse.virtualY == 250, "virtual cursor starts at the pointer");
-    CHECK(mouse.bounded && mouse.minX == 100 && mouse.minY == 100 && mouse.maxX == 499 && mouse.maxY == 399,
+    CHECK(mouse.minX == 100 && mouse.minY == 100 && mouse.maxX == 499 && mouse.maxY == 399,
           "bounds are the grab window: %d,%d %d,%d", mouse.minX, mouse.minY, mouse.maxX, mouse.maxY);
     Pumped warmup = {0};
     pump(display, &mouse, true, &warmup);
