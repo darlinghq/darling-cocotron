@@ -215,8 +215,12 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type,
 
     int count = 0, primary = -1;
     X11Monitor *monitors = X11MonitorsCopy(_display, &count, &primary);
-    if (monitors == NULL)
+    // A server that lists no output at all still has a root window; an empty
+    // screen list would make +[NSScreen mainScreen] throw.
+    if (monitors == NULL || count == 0) {
+        free(monitors);
         return [self rootScreenFallback];
+    }
 
     int *order = calloc(count > 0 ? (size_t) count : 1, sizeof *order);
     if (order == NULL) {
