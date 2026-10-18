@@ -707,7 +707,8 @@ static size_t MaximumPropertyBytes(Display *display) {
       re->target = event->target;
       re->property = success ? ((event->property == None) ? event->target : event->property) : None;
       re->time = event->time;
-      XSendEvent(_display, event->requestor, True, NoEventMask, &replyEvent);
+      // ICCCM 2.2: the SelectionNotify goes to the requestor alone (propagate False).
+      XSendEvent(_display, event->requestor, False, NoEventMask, &replyEvent);
       XFlush(_display);
     };
 
