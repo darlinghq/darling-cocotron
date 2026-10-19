@@ -29,6 +29,14 @@ static void decisionTable(void) {
     CHECK(!X11FullscreenWanted(false, false, true, true), "a maximized titled window is not fullscreen");
     CHECK(!X11FullscreenWanted(true, false, false, true), "unmanaged windows are left alone");
     CHECK(!X11FullscreenWanted(true, true, false, true), "unmanaged windows are left alone, even if asked");
+
+    /* wanted, requested, moved */
+    CHECK(X11FullscreenLeaveBeforeMove(true, true, true), "a fullscreen window moving to another monitor leaves first");
+    CHECK(!X11FullscreenLeaveBeforeMove(true, true, false), "a fullscreen window that stays put sends nothing");
+    CHECK(X11FullscreenLeaveBeforeMove(false, true, false), "leaving fullscreen on a frame that covers no monitor");
+    CHECK(X11FullscreenLeaveBeforeMove(false, true, true), "leaving and moving");
+    CHECK(!X11FullscreenLeaveBeforeMove(true, false, true), "a window that is not fullscreen has nothing to leave");
+    CHECK(!X11FullscreenLeaveBeforeMove(false, false, true), "an ordinary window moving sends nothing");
 }
 
 static void setCrtc(Display *display, int x, int y, unsigned width, unsigned height) {
@@ -79,7 +87,13 @@ static void monitorTest(Display *display) {
     CHECK(!X11FullscreenRectIsMonitor(display, whole), "the root is no longer a monitor");
     X11FullscreenRect nearly = {100, 50, 640, 479};
     CHECK(!X11FullscreenRectIsMonitor(display, nearly), "one pixel short is not a monitor");
+    X11FullscreenRect twice = {100, 50, 1280, 480};
+    CHECK(!X11FullscreenRectIsMonitor(display, twice), "a rectangle spanning two monitors is not one monitor");
+    X11FullscreenRect taller = {100, 50, 640, 481};
+    CHECK(!X11FullscreenRectIsMonitor(display, taller), "one pixel too tall is not a monitor");
 }
+
+static long lastSource;
 
 static bool nextStateMessage(Display *wm, long *action, long *property) {
     while (XPending(wm) > 0) {
@@ -88,6 +102,7 @@ static bool nextStateMessage(Display *wm, long *action, long *property) {
         if (event.type == ClientMessage && event.xclient.message_type == XInternAtom(wm, "_NET_WM_STATE", False)) {
             *action = event.xclient.data.l[0];
             *property = event.xclient.data.l[1];
+            lastSource = event.xclient.data.l[3];
             return true;
         }
     }
@@ -112,6 +127,7 @@ static void requestTest(Display *client) {
     CHECK(nextStateMessage(wm, &action, &property), "the window manager got a _NET_WM_STATE message");
     CHECK(action == 1, "entering fullscreen is _NET_WM_STATE_ADD (1), got %ld", action);
     CHECK(property == (long) fullscreen, "the message names _NET_WM_STATE_FULLSCREEN");
+    CHECK(lastSource == 1, "the source indication is a normal application (1), got %ld", lastSource);
 
     X11FullscreenRequest(client, window, false);
     XSync(client, False);

@@ -32,6 +32,14 @@ static inline bool X11FullscreenWanted(bool overrideRedirect, bool styleFullScre
     return coversMonitor;
 }
 
+/* Whether a window that is already fullscreen has to leave fullscreen before setFrame: moves it. It does when it
+ * should no longer be fullscreen, and also when it moves to another place (another monitor): a window manager
+ * ignores configure requests for a fullscreen window, so a move between two monitors that are each exactly
+ * covered would otherwise leave the window on the first one. The caller asks for fullscreen again after the move. */
+static inline bool X11FullscreenLeaveBeforeMove(bool wanted, bool requested, bool moved) {
+    return requested && (!wanted || moved);
+}
+
 /* Whether rect is exactly the geometry of an active monitor (a RandR CRTC with a mode). Without RandR the
  * root window is the only monitor. */
 static inline bool X11FullscreenRectIsMonitor(Display *display, X11FullscreenRect rect) {
