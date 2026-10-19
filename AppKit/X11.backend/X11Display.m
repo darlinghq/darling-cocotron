@@ -203,6 +203,19 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type,
     return _primaryRootFrame;
 }
 
+// The main monitor in root coordinates, in the unit of window frames.
+- (X11Frame) primaryFrameInPoints {
+    NSRect primary = [self primaryRootFrame];
+    return (X11Frame){NSMinX(primary), NSMinY(primary),
+                      NSWidth(primary), NSHeight(primary)};
+}
+
+- (NSPoint) cgPointFromRoot: (NSPoint) root {
+    X11Point point = X11CGPointFromRoot([self primaryFrameInPoints],
+                                        (X11Point){root.x, root.y});
+    return NSMakePoint(point.x, point.y);
+}
+
 - (NSArray *) rootScreenFallback {
     int width = DisplayWidth(_display, DefaultScreen(_display));
     int height = DisplayHeight(_display, DefaultScreen(_display));
@@ -259,10 +272,14 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type,
         NSScreen *nsscreen;
 
         if (monitors[i].active) {
-            NSRect frame = NSMakeRect(
-                    monitors[i].x - NSMinX(_primaryRootFrame),
-                    monitors[i].y - NSMinY(_primaryRootFrame),
-                    monitors[i].width, monitors[i].height);
+            // The frame is in Cocoa's global space, y up from the main
+            // monitor's bottom-left corner, like window frames.
+            X11Frame global = X11FrameFromRoot(
+                    [self primaryFrameInPoints],
+                    (X11Frame){monitors[i].x, monitors[i].y,
+                               monitors[i].width, monitors[i].height});
+            NSRect frame = NSMakeRect(global.x, global.y, global.width,
+                                      global.height);
 
             nsscreen = [[[NSScreen alloc] initWithFrame: frame
                                            visibleFrame: frame] autorelease];
@@ -959,9 +976,14 @@ static NSDictionary *modeInfoToDictionary(const XRRModeInfo *mi, int depth) {
 
     XQueryPointer(_display, root, &root, &child, &root_x, &root_y, &win_x,
                   &win_y, &mask);
-    // Relative to the main monitor, which is the origin of the global space.
-    NSRect primary = [self primaryRootFrame];
-    return NSMakePoint(root_x - NSMinX(primary), NSMaxY(primary) - root_y);
+    // Cocoa's global space, as +[NSEvent mouseLocation] reports on macOS: points,
+    // origin at the main monitor's bottom-left corner, y up, so the result can be
+    // compared with window and screen frames. CGEventGetLocation() reports the same
+    // point in CoreGraphics' y-down space (see CGSConnectionX11).
+    // -[X11Window mouseLocationOutsideOfEventStream] is window-local.
+    X11Point point = X11PointFromRoot([self primaryFrameInPoints],
+                                      (X11Point){root_x, root_y});
+    return NSMakePoint(point.x, point.y);
 }
 
 - (void) setWindow: (id) window forID: (XID) i {
@@ -1211,7 +1233,7 @@ static NSDictionary *modeInfoToDictionary(const XRRModeInfo *mi, int depth) {
                     globalPos.x += frame.origin.x;
                     globalPos.y += frame.origin.y;
 
-                    [self warpMouse: globalPos];
+                    [self warpMouse: [self cgPointFromRoot: globalPos]];
 
                     pos.x = lastMotionPos.x;
                     pos.y = lastMotionPos.y;
@@ -1518,12 +1540,18 @@ void CGNativeBorderFrameWidthsForStyle(NSUInteger styleMask, CGFloat *top,
     return frame;
 }
 
+// Takes CoreGraphics global points (origin at the main monitor's top-left corner,
+// y down): CGWarpMouseCursorPosition hands its argument straight through, and on
+// macOS that API is documented in that space. Internal callers that hold a root
+// point convert it with -cgPointFromRoot:.
 - (void) warpMouse: (NSPoint) position {
-    NSRect primary = [self primaryRootFrame];
-    int root_x = (int) NSMinX(primary) + (int) round(position.x);
-    int root_y = (int) NSMinY(primary) + (int) round(position.y);
+    X11Point root = X11CGPointToRoot([self primaryFrameInPoints],
+                                     (X11Point){position.x, position.y});
+    int root_x = (int) round(root.x);
+    int root_y = (int) round(root.y);
+
     XWarpPointer(_display, None, DefaultRootWindow(_display), 0, 0, 0, 0,
-                 position.x, position.y);
+                 root_x, root_y);
     XSync(_display, False);
 }
 
@@ -1558,7 +1586,7 @@ void CGNativeBorderFrameWidthsForStyle(NSUInteger styleMask, CGFloat *top,
             // ptLocal.x, ptLocal.y);
 
             [xwin setLastKnownCursorPosition: [xwin transformPoint: ptLocal]];
-            [self warpMouse: ptGlobal];
+            [self warpMouse: [self cgPointFromRoot: ptGlobal]];
         } else {
             NSLog(@"XGrabPointer() failed with error %d for window %lu\n",
                   result, win);

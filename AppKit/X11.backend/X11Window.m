@@ -717,7 +717,7 @@ static int ignoreBadWindow(Display *display, XErrorEvent *errorEvent) {
 // axes are relative to that monitor's rectangle, not to the root window. With one
 // monitor that is the whole root and this is the plain flip against its height.
 - (O2Rect) transformFrame: (O2Rect) frame {
-    X11Frame root = X11FrameToRoot([self primaryFrame],
+    X11Frame root = X11FrameToRoot([self primaryFrameInPoints],
                                    (X11Frame){frame.origin.x, frame.origin.y,
                                               frame.size.width, frame.size.height});
     return NSMakeRect(root.x, root.y, fmax(root.width, 1.0), fmax(root.height, 1.0));
@@ -725,17 +725,15 @@ static int ignoreBadWindow(Display *display, XErrorEvent *errorEvent) {
 
 // The inverse of -transformFrame:, root coordinates to Cocoa's global space.
 - (O2Rect) untransformFrame: (O2Rect) rect {
-    X11Frame frame = X11FrameFromRoot([self primaryFrame],
+    X11Frame frame = X11FrameFromRoot([self primaryFrameInPoints],
                                       (X11Frame){rect.origin.x, rect.origin.y,
                                                  rect.size.width, rect.size.height});
     return NSMakeRect(frame.x, frame.y, frame.width, frame.height);
 }
 
-// The main monitor in root coordinates.
-- (X11Frame) primaryFrame {
-    NSRect primary = [(X11Display *) [NSDisplay currentDisplay] primaryRootFrame];
-    return (X11Frame){NSMinX(primary), NSMinY(primary),
-                      NSWidth(primary), NSHeight(primary)};
+// The main monitor in root coordinates, in the unit of _frame.
+- (X11Frame) primaryFrameInPoints {
+    return [(X11Display *) [NSDisplay currentDisplay] primaryFrameInPoints];
 }
 
 - (NSPoint) transformPoint: (NSPoint) pos; {

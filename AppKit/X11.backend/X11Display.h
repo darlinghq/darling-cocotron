@@ -7,6 +7,7 @@
 //
 
 #import <AppKit/NSDisplay.h>
+#import "X11Monitors.h"
 #import <X11/Xlib.h>
 #import <X11/Xresource.h>
 #import <X11/Xlocale.h>
@@ -53,6 +54,10 @@
 // The main monitor's rectangle in root coordinates. It is the origin of the
 // global coordinate space; see X11Monitors.h.
 - (NSRect) primaryRootFrame;
+// The same rectangle as an X11Frame, in the unit of window frames.
+- (X11Frame) primaryFrameInPoints;
+// Converts a point in root coordinates to CoreGraphics' global space.
+- (NSPoint) cgPointFromRoot: (NSPoint) root;
 - (void) setWindow: (id) window forID: (XID) i;
 
 - (CGFloat) doubleClickInterval;
