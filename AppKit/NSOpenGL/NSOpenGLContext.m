@@ -306,8 +306,9 @@ static inline void _clearCurrentContext() {
         return;
 
     // Pace swaps to the refresh rate of the output the window is on; 0 means unknown.
-    if ([_subwindow respondsToSelector: @selector(refreshMillihertz)])
-        CGLSetDrawableRefreshRate(_glContext, [_subwindow refreshMillihertz]);
+    CGLSetDrawableRefreshRate(_glContext,
+        [_subwindow respondsToSelector: @selector(refreshMillihertz)]
+        ? [_subwindow refreshMillihertz] : 0);
     if (CGLFlushDrawable(_glContext) == kCGLNoError)
         [_subwindow flush];
 }

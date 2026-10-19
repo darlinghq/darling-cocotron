@@ -496,8 +496,9 @@ static GLint metalLayerSwapInterval(CALayer *layer) {
     // The swap and whatever the backend does to present it happen together on
     // the thread the backend requires. First pace it to the refresh rate of the
     // output the window is on; 0 means unknown.
-    if ([_subwindow respondsToSelector: @selector(refreshMillihertz)])
-        CGLSetDrawableRefreshRate(_glContext, [_subwindow refreshMillihertz]);
+    CGLSetDrawableRefreshRate(_glContext,
+        [_subwindow respondsToSelector: @selector(refreshMillihertz)]
+        ? [_subwindow refreshMillihertz] : 0);
     if (CGLFlushDrawable(_glContext) == kCGLNoError)
         [_subwindow flush];
     if (previous != _glContext)
