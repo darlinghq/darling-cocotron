@@ -798,6 +798,14 @@ static NSData *makeWindowIcon() {
                     32, PropModeReplace, (const unsigned char *) strut, 4);
 }
 
+// Restacking a window only maps it while AppKit shows it.
+// -[NSWindow orderWindow:relativeTo:] marks the window visible before it
+// restacks, so ordering a window in still maps it.
+- (void) ensureMappedIfVisible {
+    if (_delegate == nil || [_delegate isVisible])
+        [self ensureMapped];
+}
+
 - (BOOL) isMapped {
     return _mapped;
 }
@@ -1065,7 +1073,7 @@ static NSData *makeWindowIcon() {
 
 - (void) placeAboveWindow: (NSInteger) otherNumber {
     X11Window *other = [X11Window windowWithWindowNumber: otherNumber];
-    [self ensureMapped];
+    [self ensureMappedIfVisible];
 
     if (!other) {
         XRaiseWindow(_display, _window);
@@ -1077,7 +1085,7 @@ static NSData *makeWindowIcon() {
 
 - (void) placeBelowWindow: (NSInteger) otherNumber {
     X11Window *other = [X11Window windowWithWindowNumber: otherNumber];
-    [self ensureMapped];
+    [self ensureMappedIfVisible];
 
     if (!other) {
         XLowerWindow(_display, _window);
