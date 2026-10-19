@@ -316,6 +316,28 @@ int main(void) {
           lagging.posted, lagging.deltaX, lagging.deltaY, lagging.echoes);
     X11RelativeMouseRelease(display, &mouse);
 
+    /* A motion, then its warp's echo and a later motion queued behind it: every one is handled in order and the
+     * deltas add up. X11Display must not coalesce queued motion while relative mode is active (it keeps only the last
+     * queued MotionNotify, which drops the earlier motion and the echo bookkeeping). */
+    XWarpPointer(display, None, root, 0, 0, 0, 0, 300, 250);
+    XSync(display, False);
+    CHECK(X11RelativeMouseGrab(display, &mouse, window, true) == GrabSuccess, "grab for the queued echo");
+    Pumped queuedSettle = {0};
+    pump(display, &mouse, true, &queuedSettle);
+    move(display, 20, 0);
+    XSync(display, False);
+    XEvent first;
+    XNextEvent(display, &first);
+    bool firstRecorded;
+    X11RelativeMouseMotion firstMotion =
+            X11RelativeMouseMotionEvent(display, &mouse, &first.xmotion, true, &firstRecorded);
+    move(display, 6, 0);
+    Pumped queuedEcho = {0};
+    pump(display, &mouse, true, &queuedEcho);
+    CHECK(firstRecorded && firstMotion.post && firstMotion.deltaX + queuedEcho.deltaX == 26,
+          "a motion, its echo and a later motion add up: %g + %g", firstMotion.deltaX, queuedEcho.deltaX);
+    X11RelativeMouseRelease(display, &mouse);
+
     /* The root shrinks: the bounds follow it although Xlib's cached DisplayWidth/Height are still the old size. */
     X11RelativeMouseBounds bounds;
     int screen = DefaultScreen(display);
