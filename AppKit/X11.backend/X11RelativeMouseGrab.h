@@ -59,15 +59,21 @@ static inline bool X11RelativeMouseWindowBounds(Display *display, Window window,
     if (!XGetWindowAttributes(display, window, &attributes) ||
         !XTranslateCoordinates(display, window, DefaultRootWindow(display), 0, 0, &x, &y, &child))
         return false;
-    int screen = DefaultScreen(display);
+    /* The root's size now, not DisplayWidth/DisplayHeight, which Xlib only refreshes on a RandR change. */
+    Window rootWindow;
+    int rootX, rootY;
+    unsigned int rootWidth, rootHeight, border, depth;
+    if (!XGetGeometry(display, DefaultRootWindow(display), &rootWindow, &rootX, &rootY, &rootWidth, &rootHeight,
+                      &border, &depth))
+        return false;
     bounds->minX = x < 0 ? 0 : x;
     bounds->minY = y < 0 ? 0 : y;
     bounds->maxX = x + attributes.width - 1;
-    if (bounds->maxX > DisplayWidth(display, screen) - 1)
-        bounds->maxX = DisplayWidth(display, screen) - 1;
+    if (bounds->maxX > (int) rootWidth - 1)
+        bounds->maxX = (int) rootWidth - 1;
     bounds->maxY = y + attributes.height - 1;
-    if (bounds->maxY > DisplayHeight(display, screen) - 1)
-        bounds->maxY = DisplayHeight(display, screen) - 1;
+    if (bounds->maxY > (int) rootHeight - 1)
+        bounds->maxY = (int) rootHeight - 1;
     return bounds->maxX >= bounds->minX && bounds->maxY >= bounds->minY;
 }
 
@@ -121,8 +127,23 @@ static inline void X11RelativeMouseRelease(Display *display, X11RelativeMouse *m
 }
 
 /* Moves the pointer and waits for the server, so the warp's MotionNotify (if any) is already queued on return. That
- * costs one round trip per motion on the thread that pumps events, which is cheap on a local server. Returns the number of queued events. Callers read NextRequest before this call to identify the echo. */
-static inline unsigned X11RelativeMouseWarpPointer(Display *display, int x, int y) {
+ * costs a round trip or two per motion on the thread that pumps events, which is cheap on a local server. Returns
+ * the number of events queued by the warp and sets *serial to the request serial of the warp, which is what its
+ * echo carries.
+ *
+ * A warp to where the server already has the pointer moves nothing and produces no echo, but the events of real
+ * motion may already be queued: counting those as the warp's echo would swallow a real motion that shares the
+ * warp's serial. So the pointer is queried first and such a warp is skipped (returning 0, *serial unused). */
+static inline unsigned X11RelativeMouseWarpPointer(Display *display, int x, int y, unsigned long *serial) {
+    Window root, child;
+    int rootX, rootY, windowX, windowY;
+    unsigned int state;
+    *serial = 0;
+    if (XQueryPointer(display, DefaultRootWindow(display), &root, &child, &rootX, &rootY, &windowX, &windowY,
+                      &state) &&
+        rootX == x && rootY == y)
+        return 0;
+    *serial = NextRequest(display);
     XWarpPointer(display, None, DefaultRootWindow(display), 0, 0, 0, 0, x, y);
     XSync(display, False);
     return (unsigned) XEventsQueued(display, QueuedAlready);
@@ -138,8 +159,8 @@ static inline X11RelativeMouseMotion X11RelativeMouseMotionEvent(Display *displa
             X11RelativeMouseHandleMotion(mouse, event->x_root, event->y_root, warpsHonoured, event->serial);
     *ok = true;
     if (motion.rewarp) {
-        unsigned long serial = NextRequest(display);
-        unsigned queued = X11RelativeMouseWarpPointer(display, motion.warpX, motion.warpY);
+        unsigned long serial;
+        unsigned queued = X11RelativeMouseWarpPointer(display, motion.warpX, motion.warpY, &serial);
         *ok = X11RelativeMouseExpectEcho(mouse, motion.warpX, motion.warpY, queued, serial);
     }
     return motion;
@@ -152,8 +173,8 @@ static inline bool X11RelativeMouseApplicationWarp(Display *display, X11Relative
                                                    bool warpsHonoured) {
     int targetX, targetY;
     X11RelativeMousePointerTarget(mouse, x, y, warpsHonoured, &targetX, &targetY);
-    unsigned long serial = NextRequest(display);
-    unsigned queued = X11RelativeMouseWarpPointer(display, targetX, targetY);
+    unsigned long serial;
+    unsigned queued = X11RelativeMouseWarpPointer(display, targetX, targetY, &serial);
     return X11RelativeMouseWarp(mouse, x, y, queued, serial, warpsHonoured);
 }
 

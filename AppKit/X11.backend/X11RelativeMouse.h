@@ -6,7 +6,7 @@
  * still moves the real pointer, so deltas are measured against the last physical position, and where the server
  * honours warps the pointer is warped back to the virtual position after each motion. Every warp (ours or the
  * application's) is followed by a MotionNotify at its target; those echoes are recognised by request serial
- * and position and dropped. Warps are synchronous (XSync), so an echo can only be among the events already queued at that moment;
+ * alone (whatever position the server put the pointer at) and dropped. Warps are synchronous (XSync), so an echo can only be among the events already queued at that moment;
  * an expected echo expires once that many events have been handled.
  *
  * On Xwayland a warp only reaches the compositor while the X cursor is hidden. With a visible cursor the echo

@@ -257,6 +257,31 @@ int main(void) {
           "first motion after a grab at the edge is whole: %g, cursor %g", atEdge.deltaX, mouse.virtualX);
     X11RelativeMouseRelease(display, &mouse);
 
+    /* A warp to where the server already has the pointer, while real motion is still queued: the queued motion is
+     * not the warp's echo, so none is expected and the motion is reported whole. */
+    XWarpPointer(display, None, root, 0, 0, 0, 0, 300, 250);
+    XSync(display, False);
+    CHECK(X11RelativeMouseGrab(display, &mouse, window, true) == GrabSuccess, "grab for the no-op warp");
+    Pumped settle = {0};
+    pump(display, &mouse, true, &settle);
+    pointer(display, &px, &py);
+    move(display, 5, 0);
+    move(display, -5, 0);
+    XSync(display, False);
+    pointer(display, &px, &py);
+    unsigned long warpSerial;
+    unsigned queuedByWarp = X11RelativeMouseWarpPointer(display, px, py, &warpSerial);
+    CHECK(queuedByWarp == 0 && warpSerial == 0, "a warp to the pointer's own position is skipped: queued %u", queuedByWarp);
+    unsigned echoesBefore = mouse.echoCount;
+    CHECK(X11RelativeMouseApplicationWarp(display, &mouse, px, py, true), "application warp to the pointer's own position");
+    CHECK(mouse.echoCount == echoesBefore, "no echo is expected for it: %u before, %u after", echoesBefore, mouse.echoCount);
+    Pumped queuedMotion = {0};
+    pump(display, &mouse, true, &queuedMotion);
+    CHECK(queuedMotion.deltaX == 0 && queuedMotion.deltaY == 0 && queuedMotion.events >= 2,
+          "queued out-and-back motion adds up to nothing but is not swallowed: %g,%g over %d events",
+          queuedMotion.deltaX, queuedMotion.deltaY, queuedMotion.events);
+    X11RelativeMouseRelease(display, &mouse);
+
     X11RelativeMouseEnd(&mouse);
     XCloseDisplay(display);
     if (failures) {
