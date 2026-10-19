@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Ancillary test tooling, GPL-3.0; the patched cocotron sources keep their own licence.
 // Host test for AppKit/X11.backend/X11RandR.h against a real X server: RandR layout changes arrive as plain
 // extension events (base + RRScreenChangeNotify, base + RRNotify), not as GenericEvent, and Xlib's cached screen
 // size stays stale until the backend passes the screen-change event to XRRUpdateConfiguration. Use

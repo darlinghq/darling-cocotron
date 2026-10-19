@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Ancillary test tooling, GPL-3.0; the patched cocotron sources keep their own licence.
 // Host test for AppKit/X11.backend/X11Monitors.h: which monitor is the main display, in which order the monitors
 // are listed, and the conversion between Cocoa's global space (origin at the main monitor) and root coordinates.
 // The RandR part runs on a real X server; use tests/x11-monitors.sh, which starts its own Xvfb.
