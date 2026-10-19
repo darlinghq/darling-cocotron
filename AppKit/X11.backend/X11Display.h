@@ -40,6 +40,9 @@
     KeySym _lastKeySym;
     int _rrEventBase;
     NSArray* _lastScreens;
+    // See -primaryRootFrame. Device pixels, root coordinates.
+    NSRect _primaryRootFrame;
+    BOOL _primaryRootFrameValid;
 
 @public
     XIM _xim;
@@ -47,6 +50,9 @@
 
 - (Display *) display;
 
+// The main monitor's rectangle in root coordinates. It is the origin of the
+// global coordinate space; see X11Monitors.h.
+- (NSRect) primaryRootFrame;
 - (void) setWindow: (id) window forID: (XID) i;
 
 - (CGFloat) doubleClickInterval;

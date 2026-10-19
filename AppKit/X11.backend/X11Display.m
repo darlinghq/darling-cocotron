@@ -191,11 +191,23 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type,
         [_lastScreens release];
         _lastScreens = nil;
     }
+    _primaryRootFrameValid = NO;
+}
+
+// The main monitor's rectangle in root coordinates, device pixels: the origin
+// of the global coordinate space, as on macOS. With one monitor, or without
+// RandR, it is the root window.
+- (NSRect) primaryRootFrame {
+    if (!_primaryRootFrameValid)
+        [self screens];
+    return _primaryRootFrame;
 }
 
 - (NSArray *) rootScreenFallback {
     int width = DisplayWidth(_display, DefaultScreen(_display));
     int height = DisplayHeight(_display, DefaultScreen(_display));
+    _primaryRootFrame = NSMakeRect(0, 0, width, height);
+    _primaryRootFrameValid = YES;
     NSRect frame = NSMakeRect(0, 0, width, height);
     NSScreen *screen = [[[NSScreen alloc] initWithFrame: frame
                                            visibleFrame: frame] autorelease];
@@ -203,7 +215,8 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type,
     return [NSArray arrayWithObject: screen];
 }
 
-// [NSScreen screens] starts with the main monitor, as on macOS. A display's CGDirectDisplayID
+// [NSScreen screens] starts with the main monitor, as on macOS, and every
+// frame is relative to that monitor's origin. A display's CGDirectDisplayID
 // stays tied to its RandR output (index + 1), whatever its position in the
 // array, because the mode functions address the output by that index.
 - (NSArray *) screens {
@@ -222,6 +235,14 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type,
         return [self rootScreenFallback];
     }
 
+    // Without any active output the root window stands in, like without RandR.
+    _primaryRootFrame =
+            primary >= 0
+                    ? NSMakeRect(monitors[primary].x, monitors[primary].y,
+                                 monitors[primary].width, monitors[primary].height)
+                    : NSMakeRect(0, 0, DisplayWidth(_display, DefaultScreen(_display)),
+                                 DisplayHeight(_display, DefaultScreen(_display)));
+    _primaryRootFrameValid = YES;
     int *order = calloc(count > 0 ? (size_t) count : 1, sizeof *order);
     if (order == NULL) {
         free(monitors);
@@ -238,8 +259,10 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type,
         NSScreen *nsscreen;
 
         if (monitors[i].active) {
-            NSRect frame = NSMakeRect(monitors[i].x, monitors[i].y,
-                                      monitors[i].width, monitors[i].height);
+            NSRect frame = NSMakeRect(
+                    monitors[i].x - NSMinX(_primaryRootFrame),
+                    monitors[i].y - NSMinY(_primaryRootFrame),
+                    monitors[i].width, monitors[i].height);
 
             nsscreen = [[[NSScreen alloc] initWithFrame: frame
                                            visibleFrame: frame] autorelease];
@@ -936,8 +959,9 @@ static NSDictionary *modeInfoToDictionary(const XRRModeInfo *mi, int depth) {
 
     XQueryPointer(_display, root, &root, &child, &root_x, &root_y, &win_x,
                   &win_y, &mask);
-    int height = DisplayHeight(_display, DefaultScreen(_display));
-    return NSMakePoint(root_x, height - root_y);
+    // Relative to the main monitor, which is the origin of the global space.
+    NSRect primary = [self primaryRootFrame];
+    return NSMakePoint(root_x - NSMinX(primary), NSMaxY(primary) - root_y);
 }
 
 - (void) setWindow: (id) window forID: (XID) i {
@@ -1495,7 +1519,9 @@ void CGNativeBorderFrameWidthsForStyle(NSUInteger styleMask, CGFloat *top,
 }
 
 - (void) warpMouse: (NSPoint) position {
-    NSLog(@"Warp to: x=%f, y=%f\n", position.x, position.y);
+    NSRect primary = [self primaryRootFrame];
+    int root_x = (int) NSMinX(primary) + (int) round(position.x);
+    int root_y = (int) NSMinY(primary) + (int) round(position.y);
     XWarpPointer(_display, None, DefaultRootWindow(_display), 0, 0, 0, 0,
                  position.x, position.y);
     XSync(_display, False);

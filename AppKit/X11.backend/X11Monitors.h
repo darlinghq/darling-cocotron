@@ -1,8 +1,10 @@
 /* Monitor list and primary-monitor selection for the X11 backend.
  *
- * macOS lists the main display first ([NSScreen screens][0], CGMainDisplayID). X11 numbers outputs in server
- * order. This header reads the RandR outputs and decides which one plays the main display: the RandR primary if
- * it is active, otherwise the first active output.
+ * macOS lists the main display first ([NSScreen screens][0], CGMainDisplayID) and puts the global coordinate
+ * origin at it; the other displays sit at offsets from it, possibly negative. X11 numbers outputs in server
+ * order and positions CRTCs relative to the top-left of the root window. This header reads the RandR outputs and
+ * decides which one plays the main display: the RandR primary if it is active, otherwise the first active
+ * output.
  *
  * Only Xlib and RandR, so tests/x11-monitors.c can drive it against Xvfb. */
 #ifndef X11_MONITORS_H
@@ -90,6 +92,28 @@ static inline X11Monitor *X11MonitorsCopy(Display *display, int *count, int *pri
     XRRFreeScreenResources(resources);
     *primary = X11MonitorsPickPrimary(monitors, *count, XRRGetOutputPrimary(display, root));
     return monitors;
+}
+
+/* Rectangles in one unit (device pixels or logical points, as long as the caller is consistent). */
+typedef struct {
+    double x, y, width, height;
+} X11Frame;
+
+/* Converts a frame in Cocoa's global space (origin at the bottom-left corner of the main monitor, y up) to a
+ * rectangle in root coordinates (origin at the top-left of the root window, y down). primaryRoot is the main
+ * monitor's rectangle in root coordinates. With the main monitor covering the whole root this is the plain
+ * flip against the root's height. */
+static inline X11Frame X11FrameToRoot(X11Frame primaryRoot, X11Frame frame) {
+    X11Frame root = {frame.x + primaryRoot.x, (primaryRoot.y + primaryRoot.height) - frame.y - frame.height,
+                     frame.width, frame.height};
+    return root;
+}
+
+/* The inverse of X11FrameToRoot. */
+static inline X11Frame X11FrameFromRoot(X11Frame primaryRoot, X11Frame root) {
+    X11Frame frame = {root.x - primaryRoot.x, (primaryRoot.y + primaryRoot.height) - root.y - root.height,
+                      root.width, root.height};
+    return frame;
 }
 
 /* A display's CGDirectDisplayID is tied to the RandR output it drives (output index + 1), not to its place in the
