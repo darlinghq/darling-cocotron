@@ -357,11 +357,11 @@ static NSMutableArray *_cursorStack = nil;
 }
 
 + (void) hide {
-    [[NSDisplay currentDisplay] hideCursor];
+    [[NSDisplay currentDisplay] hideCursorCounted];
 }
 
 + (void) unhide {
-    [[NSDisplay currentDisplay] unhideCursor];
+    [[NSDisplay currentDisplay] unhideCursorCounted];
 }
 
 + (void) setHiddenUntilMouseMoves: (BOOL) flag {

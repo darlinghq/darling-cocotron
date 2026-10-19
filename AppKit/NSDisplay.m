@@ -136,17 +136,28 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     NSInvalidAbstractInvocation();
 }
 
-// The flag is idempotent, so the hide/unhide pair stays balanced and an explicit
-// +[NSCursor hide] is not undone by it.
+- (void) hideCursorCounted {
+    if (_cursorHideCount++ == 0)
+        [self hideCursor];
+}
+
+// An unhide with nothing hidden does nothing.
+- (void) unhideCursorCounted {
+    if (_cursorHideCount > 0 && --_cursorHideCount == 0)
+        [self unhideCursor];
+}
+
+// The flag is idempotent and counts as one hide, so the hide/unhide pair stays balanced and an
+// explicit +[NSCursor hide] is neither undone by it nor undoes it.
 - (void) setCursorHiddenUntilMouseMoves: (BOOL) flag {
     if (_cursorHiddenUntilMouseMoves == flag)
         return;
 
     _cursorHiddenUntilMouseMoves = flag;
     if (flag)
-        [self hideCursor];
+        [self hideCursorCounted];
     else
-        [self unhideCursor];
+        [self unhideCursorCounted];
 }
 
 // A backend calls this when the pointer genuinely moves. It cancels a pending
@@ -154,7 +165,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (void) pointerMoved {
     if (_cursorHiddenUntilMouseMoves) {
         _cursorHiddenUntilMouseMoves = NO;
-        [self unhideCursor];
+        [self unhideCursorCounted];
     }
 }
 
