@@ -4,6 +4,7 @@
 #include X11_RELATIVE_MOUSE_HEADER
 #undef NDEBUG /* the checks are asserts */
 #include <assert.h>
+#include <math.h>
 #include <limits.h>
 #include <stdio.h>
 
@@ -262,7 +263,21 @@ static void serialsWrap(void) {
     puts("PASS: serial comparisons survive wraparound");
 }
 
+static void nonFiniteWarpsAreRefused(void) {
+    X11RelativeMouse m = {0};
+    X11RelativeMouseBegin(&m, 500, 400, 0, (X11RelativeMouseBounds){0, 0, 1279, 719});
+    double bad[] = {NAN, INFINITY, -INFINITY};
+    for (int i = 0; i < 3; ++i) {
+        assert(!X11RelativeMouseWarp(&m, bad[i], 100, 1, 3, true));
+        assert(!X11RelativeMouseWarp(&m, 100, bad[i], 1, 3, true));
+    }
+    assert(m.virtualX == 500 && m.virtualY == 400 && m.echoCount == 0);
+    X11RelativeMouseEnd(&m);
+    puts("PASS: non-finite warp targets are refused");
+}
+
 int main(void) {
+    nonFiniteWarpsAreRefused();
     warpsAreClampedByTheModel();
     serialsWrap();
     serialsSeparateMotionFromEchoes();

@@ -21,6 +21,7 @@
 #ifndef X11_RELATIVE_MOUSE_H
 #define X11_RELATIVE_MOUSE_H
 
+#include <math.h>
 #include <stdbool.h>
 #include <stdlib.h>
 
@@ -128,12 +129,14 @@ static inline void X11RelativeMouseClamp(const X11RelativeMouse *mouse, double *
     if (*y > mouse->maxY) *y = mouse->maxY;
 }
 
-/* CGWarpMouseCursorPosition while relative: the virtual cursor moves to the target; the physical position is
+/* CGWarpMouseCursorPosition while relative (returns false, doing nothing, for a non-finite target): the virtual cursor moves to the target; the physical position is
  * only updated when the echo arrives (and only if the warp was honoured). The target is clamped to the bounds
  * first, whether or not warps are honoured: the server clamps the pointer there, so that is where the echo
  * arrives. A caller that sends the warp clamps the same way before (Clamp is idempotent). */
 static inline bool X11RelativeMouseWarp(X11RelativeMouse *mouse, double x, double y, unsigned queuedEvents,
                                        unsigned long serial, bool warpsHonoured) {
+    /* (int) of NaN or infinity is undefined, and a non-finite target has no place to clamp to: refuse it. */
+    if (!isfinite(x) || !isfinite(y)) return false;
     X11RelativeMouseClamp(mouse, &x, &y);
     if (warpsHonoured) {
         mouse->virtualX = x;
