@@ -4,5 +4,5 @@ set -euo pipefail
 root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 temp=$(mktemp -d)
 trap 'rm -rf "$temp"' EXIT
-cc -Wall -Wextra "$root/tests/x11-monitors.c" -lX11 -lXrandr -o "$temp/probe"
+cc -Wall -Wextra "$root/tests/x11-monitors.c" -lX11 -lXrandr -lm -o "$temp/probe"
 xvfb-run -a -s '-screen 0 1280x720x24' "$temp/probe"

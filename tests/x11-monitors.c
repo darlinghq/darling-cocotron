@@ -1,8 +1,9 @@
-// Host test for AppKit/X11.backend/X11Monitors.h: which monitor is the main display and in which order the
-// monitors are listed.
+// Host test for AppKit/X11.backend/X11Monitors.h: which monitor is the main display, in which order the monitors
+// are listed, and the conversion between Cocoa's global space (origin at the main monitor) and root coordinates.
 // The RandR part runs on a real X server; use tests/x11-monitors.sh, which starts its own Xvfb.
 // Build: cc x11-monitors.c -lX11 -lXrandr
 #include "../AppKit/X11.backend/X11Monitors.h"
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -68,6 +69,46 @@ static void order(void) {
     X11Monitor off[] = {inactive(10), inactive(11)};
     X11MonitorsOrder(off, 2, -1, out);
     CHECK(out[0] == 0 && out[1] == 1, "nothing active keeps server order");
+}
+
+static bool near(double a, double b) {
+    return fabs(a - b) < 1e-9;
+}
+
+static void frames(void) {
+    /* One monitor covering the root: the plain flip against the root height, as before. */
+    X11Frame single = {0, 0, 1920, 1080};
+    X11Frame r = X11FrameToRoot(single, (X11Frame){10, 20, 100, 50});
+    CHECK(near(r.x, 10) && near(r.y, 1010) && near(r.width, 100) && near(r.height, 50),
+          "single monitor: %g,%g %gx%g", r.x, r.y, r.width, r.height);
+
+    /* The main monitor is the right one of two side by side; the left one starts at root x 0. */
+    X11Frame right = {1920, 0, 2560, 1440};
+    r = X11FrameToRoot(right, (X11Frame){-1820, 1140, 300, 300});
+    CHECK(near(r.x, 100) && near(r.y, 0), "a window at the top of the left monitor lands at root 100,0: %g,%g", r.x, r.y);
+    X11Frame g = X11FrameFromRoot(right, (X11Frame){100, 0, 300, 300});
+    CHECK(near(g.x, -1820) && near(g.y, 1140), "and converts back: %g,%g", g.x, g.y);
+    r = X11FrameToRoot(right, (X11Frame){0, 0, 2560, 1440});
+    CHECK(near(r.x, 1920) && near(r.y, 0), "the main monitor's own frame maps onto its root rectangle");
+
+    /* The main monitor lower than its neighbour: root y does not start at the top. */
+    X11Frame lower = {0, 360, 1920, 1080};
+    r = X11FrameToRoot(lower, (X11Frame){0, 0, 1920, 1080});
+    CHECK(near(r.x, 0) && near(r.y, 360), "bottom-left of the main monitor is its bottom edge: %g,%g", r.x, r.y);
+
+    /* Round trip over a grid of layouts and frames. */
+    X11Frame primaries[] = {single, right, lower, {-100, 50, 640, 480}};
+    int bad = 0;
+    for (int p = 0; p < 4; p++)
+        for (int x = -2000; x <= 2000; x += 250)
+            for (int y = -1500; y <= 1500; y += 250) {
+                X11Frame f = {x, y, 123, 77};
+                X11Frame back = X11FrameFromRoot(primaries[p], X11FrameToRoot(primaries[p], f));
+                if (!near(back.x, f.x) || !near(back.y, f.y) || !near(back.width, f.width) ||
+                    !near(back.height, f.height))
+                    bad++;
+            }
+    CHECK(bad == 0, "round trip failed %d times", bad);
 }
 
 static void displayIDs(void) {
@@ -170,6 +211,7 @@ static void randr(Display *display) {
 int main(void) {
     pickPrimary();
     order();
+    frames();
     displayIDs();
     Display *display = XOpenDisplay(NULL);
     if (!display) {
