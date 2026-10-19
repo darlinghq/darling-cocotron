@@ -347,6 +347,10 @@ static void warpToTheSamePlaceExpectsNoEcho(void) {
     X11RelativeMouseBegin(&m, 500, 400, 0, (X11RelativeMouseBounds){0, 0, 799, 599});
     X11RelativeMouseRestoreCursor(&m, 700.5, 900);
     assert(m.virtualX == 700.5 && m.virtualY == 599 && m.physicalX == 500);
+    /* A non-finite position is ignored, not cast to int. */
+    X11RelativeMouseRestoreCursor(&m, NAN, 100);
+    X11RelativeMouseRestoreCursor(&m, 100, INFINITY);
+    assert(m.virtualX == 700.5 && m.virtualY == 599);
     X11RelativeMouseEnd(&m);
     puts("PASS: a warp's echo is expected exactly when the caller reports queued events");
 }

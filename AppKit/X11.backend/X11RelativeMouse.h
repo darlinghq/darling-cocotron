@@ -183,6 +183,7 @@ static inline void X11RelativeMouseTick(X11RelativeMouse *mouse) {
 
 /* Puts the frozen cursor back where it was before a re-grab, clamped to the new bounds. */
 static inline void X11RelativeMouseRestoreCursor(X11RelativeMouse *mouse, double x, double y) {
+    if (!isfinite(x) || !isfinite(y)) return;
     X11RelativeMouseClamp(mouse, &x, &y);
     mouse->virtualX = x;
     mouse->virtualY = y;
