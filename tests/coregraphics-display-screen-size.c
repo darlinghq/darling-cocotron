@@ -2,6 +2,7 @@
 #include <stdio.h>
 
 // Needs a display (or the 1920 x 1080 default the backend reports without one).
+// The EDID parsing is covered on the host by coregraphics-display-screen-size-edid.sh.
 int main(void) {
     CGDirectDisplayID main_display = CGMainDisplayID();
     CGSize size = CGDisplayScreenSize(main_display);
@@ -15,10 +16,14 @@ int main(void) {
     if (size.width < 100 || size.height < 50)
         return 11;
 
-    // An off-screen window reports display 0; it must answer for the main display.
+    // Apple documents 0 for a display that is not valid, so an off-screen window's
+    // display 0 and an id no screen owns must not borrow the main display's size.
     CGSize unknown = CGDisplayScreenSize(0);
-    if (unknown.width != size.width || unknown.height != size.height)
+    if (unknown.width != 0 || unknown.height != 0)
         return 12;
+    CGSize missing = CGDisplayScreenSize(0x7fff);
+    if (missing.width != 0 || missing.height != 0)
+        return 13;
 
     return 0;
 }

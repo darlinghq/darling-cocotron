@@ -380,34 +380,52 @@ static NSData *edidForDisplay(CGDirectDisplayID displayId) {
     return nil;
 }
 
+// EDID 1.x, first 18-byte descriptor at offset 54. Returns the image size in mm
+// from it when it is a detailed timing descriptor (non-zero pixel clock), else
+// from the basic display parameters (maximum image size in cm). false when
+// neither holds a size. Kept free of Objective-C so tests can compile it alone.
+static bool screenSizeFromEDID(const uint8_t *bytes, size_t length,
+                               double *widthMM, double *heightMM)
+{
+    if (length < 128)
+        return false;
+
+    double width = 0, height = 0;
+    /* A display descriptor (pixel clock 0) holds text or range limits, not a size. */
+    if (bytes[54] != 0 || bytes[55] != 0) {
+        width = bytes[66] | ((bytes[68] & 0xf0) << 4);
+        height = bytes[67] | ((bytes[68] & 0x0f) << 8);
+    }
+    /* DTV timings may encode only an aspect ratio in these fields. */
+    bool aspectRatioOnly = (width == 16 && height == 9) ||
+                           (width == 4 && height == 3);
+    if (width <= 0 || height <= 0 || aspectRatioOnly) {
+        width = bytes[21] * 10.0;
+        height = bytes[22] * 10.0;
+    }
+    if (width <= 0 || height <= 0)
+        return false;
+    *widthMM = width;
+    *heightMM = height;
+    return true;
+}
+
 CGSize CGDisplayScreenSize(CGDirectDisplayID display) {
-    /* Callers divide by this size to get an aspect ratio, so a zero size turns
-     * their projection into NaN. Use the main display for an unknown id (an
-     * off-screen window reports 0). */
-    if (CGDisplayBounds(display).size.width <= 0)
-        display = CGMainDisplayID();
+    /* Zero for an invalid display, as documented. Callers that divide by this
+     * size must handle 0; an unknown id is not silently answered for the main
+     * display. */
+    CGSize pixels = CGDisplayBounds(display).size;
+    if (pixels.width <= 0 || pixels.height <= 0)
+        return CGSizeZero;
 
     NSData *edid = edidForDisplay(display);
-    if (edid && [edid length] >= 128) {
-        const uint8_t *bytes = [edid bytes];
-        /* First detailed timing descriptor: image size in mm. */
-        double width = bytes[66] | ((bytes[68] & 0xf0) << 4);
-        double height = bytes[67] | ((bytes[68] & 0x0f) << 8);
-        /* DTV timings may encode only an aspect ratio in these fields. */
-        bool aspectRatioOnly = (width == 16 && height == 9) ||
-                               (width == 4 && height == 3);
-        /* Basic display parameters: maximum image size in cm. */
-        if (width <= 0 || height <= 0 || aspectRatioOnly) {
-            width = bytes[21] * 10.0;
-            height = bytes[22] * 10.0;
-        }
-        if (width > 0 && height > 0)
-            return (CGSize){.width = width, .height = height};
-    }
+    double width, height;
+    if (edid && screenSizeFromEDID([edid bytes], [edid length], &width, &height))
+        return (CGSize){.width = width, .height = height};
 
-    /* No usable EDID size: assume 96 dpi. */
-    CGSize pixels = CGDisplayBounds(display).size;
-    return (CGSize){.width = pixels.width * 25.4 / 96, .height = pixels.height * 25.4 / 96};
+    /* No usable EDID size: estimate from the bounds at 72 dpi (2.835 pixels/mm),
+     * as documented for CGDisplayScreenSize. */
+    return (CGSize){.width = pixels.width * 25.4 / 72, .height = pixels.height * 25.4 / 72};
 }
 
 uint32_t CGDisplaySerialNumber(CGDirectDisplayID displayId) {
