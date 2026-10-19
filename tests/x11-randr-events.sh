@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-only
+# Ancillary test tooling, GPL-3.0; the patched cocotron sources keep their own licence.
 # Runs tests/x11-randr-events.c on its own Xvfb (never the user's session).
 set -euo pipefail
 root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
