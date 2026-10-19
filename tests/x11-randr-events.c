@@ -37,7 +37,7 @@ int main(void) {
 
     int oldWidth = DisplayWidth(backend, 0), oldHeight = DisplayHeight(backend, 0);
     CHECK(!X11RandRIsLayoutChange(&(XEvent){.type = 0}, eventBase), "an unrelated event");
-    CHECK(!X11RandRIsLayoutChange(&(XEvent){.type = eventBase + RRNotify}, 0), "no RandR, no layout change");
+    CHECK(!X11RandRIsLayoutChange(&(XEvent){.type = RRNotify}, 0), "no RandR, no layout change");
 
     /* Another client resizes the screen and re-creates the monitor, as a display settings tool would. */
     Window otherRoot = DefaultRootWindow(other);
