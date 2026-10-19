@@ -1665,6 +1665,13 @@ void CGNativeBorderFrameWidthsForStyle(NSUInteger styleMask, CGFloat *top,
     XWarpPointer(_display, None, DefaultRootWindow(_display), 0, 0, 0, 0,
                  root_x, root_y);
     XSync(_display, False);
+    if (_relativeRequested) {
+        // Suspended (focus lost, retry pending): the next grab must resume at
+        // the application's target, not at the cursor frozen before.
+        _relativeResumeValid = YES;
+        _relativeResumeX = root_x;
+        _relativeResumeY = root_y;
+    }
 }
 
 - (BOOL) warpsHonoured {
