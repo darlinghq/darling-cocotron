@@ -18,17 +18,33 @@
 */
 
 #import <AppKit/NSTableCellView.h>
+#import <AppKit/NSTextField.h>
+#import <AppKit/NSImageView.h>
 
 @implementation NSTableCellView
 
-- (NSMethodSignature *)methodSignatureForSelector:(SEL)aSelector
-{
-    return [NSMethodSignature signatureWithObjCTypes: "v@:"];
+@synthesize textField = _textField;
+@synthesize secondTextField = _secondTextField;
+@synthesize imageView = _imageView;
+@synthesize objectValue = _objectValue;
+@synthesize backgroundStyle = _backgroundStyle;
+@synthesize rowSizeStyle = _rowSizeStyle;
+
+- (void) dealloc {
+    [_objectValue release];
+    [super dealloc];
 }
 
-- (void)forwardInvocation:(NSInvocation *)anInvocation
-{
-    NSLog(@"Stub called: %@ in %@", NSStringFromSelector([anInvocation selector]), [self class]);
+- (BOOL) isFlipped {
+    return YES;
+}
+
+- (NSView *) hitTest: (NSPoint) aPoint {
+    NSView *hit = [super hitTest: aPoint];
+    if (hit == self || [hit isKindOfClass: [NSTextField class]] || [hit isKindOfClass: [NSImageView class]]) {
+        return nil;
+    }
+    return hit;
 }
 
 @end

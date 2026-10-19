@@ -23,6 +23,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/AppKit.h>
 #import <AppKit/NSRaise.h>
 #import <AppKit/NSTableCornerView.h>
+#import <AppKit/NSTableCellView.h>
+#import <AppKit/NSImageView.h>
 #import <Foundation/NSKeyedArchiver.h>
 
 NSString *const NSTableViewSelectionIsChangingNotification =
@@ -128,6 +130,9 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
         _intercellSpacing = NSMakeSize(3.0, 2.0);
         _selectedRowIndexes = [[NSIndexSet alloc] init];
         _selectedColumns = [[NSMutableArray alloc] init];
+        _prototypeViews = [[NSMutableDictionary alloc] init];
+        _reusableViews = [[NSMutableDictionary alloc] init];
+        _activeRowViews = [[NSMutableArray alloc] init];
         _editedColumn = -1;
         _editedRow = -1;
         _numberOfRows = -1;
@@ -234,6 +239,9 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
     _intercellSpacing = NSMakeSize(3.0, 2.0);
     _selectedRowIndexes = [[NSIndexSet alloc] init];
     _selectedColumns = [[NSMutableArray alloc] init];
+    _prototypeViews = [[NSMutableDictionary alloc] init];
+    _reusableViews = [[NSMutableDictionary alloc] init];
+    _activeRowViews = [[NSMutableArray alloc] init];
     _editedColumn = -1;
     _editedRow = -1;
     _numberOfRows = -1;
@@ -282,6 +290,9 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
     [_selectedRowIndexes release];
     [_selectedColumns release];
     [_sortDescriptors release];
+    [_prototypeViews release];
+    [_reusableViews release];
+    [_activeRowViews release];
     [super dealloc];
 }
 
@@ -853,6 +864,8 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 - (id) dataSourceObjectValueForTableColumn: (NSTableColumn *) tableColumn
                                        row: (NSInteger) row
 {
+    if ([_delegate respondsToSelector: @selector(tableView:viewForTableColumn:row:)])
+        return nil;
 
     if (_dataSource != nil &&
         [_dataSource respondsToSelector: @selector
@@ -1351,6 +1364,10 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 }
 
 - (void) reloadData {
+    for (NSView *view in _activeRowViews) {
+        [view removeFromSuperview];
+    }
+    [_activeRowViews removeAllObjects];
     [self noteNumberOfRowsChanged];
     [self setNeedsDisplay: YES];
     [_headerView setNeedsDisplay: YES];
@@ -1463,6 +1480,31 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 }
 
 - (void) drawRow: (NSInteger) row clipRect: (NSRect) clipRect {
+    if ([_delegate respondsToSelector: @selector(tableView:viewForTableColumn:row:)]) {
+        NSRange visibleColumns = [self columnsInRect: clipRect];
+        NSInteger drawThisColumn = visibleColumns.location;
+
+        if ([self isRowSelected: row]) {
+            [[NSColor selectedControlColor] setFill];
+            NSRectFill([self rectOfRow: row]);
+        }
+
+        for (; drawThisColumn < NSMaxRange(visibleColumns); drawThisColumn++) {
+            NSTableColumn *column = [_tableColumns objectAtIndex: drawThisColumn];
+            NSRect cellRect = [self frameOfCellAtColumn: drawThisColumn row: row];
+            NSView *cellView = [_delegate tableView: self viewForTableColumn: column row: row];
+            if (cellView != nil) {
+                [cellView setFrame: cellRect];
+                if ([cellView superview] != self) {
+                    [self addSubview: cellView];
+                }
+                [cellView setHidden: NO];
+                [cellView displayRectIgnoringOpacity: [cellView bounds]];
+            }
+        }
+        return;
+    }
+
     // draw only visible columns.
     NSRange visibleColumns = [self columnsInRect: clipRect];
     NSInteger drawThisColumn = visibleColumns.location;
@@ -2260,6 +2302,103 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 
 - (void)_writePersistentTableColumns {
     NSUnimplementedMethod();
+}
+
+- (void) registerNib: (NSNib *) nib forIdentifier: (NSString *) identifier {
+    if (nib && identifier) {
+        if (_prototypeViews == nil)
+            _prototypeViews = [[NSMutableDictionary alloc] init];
+        [_prototypeViews setObject: nib forKey: identifier];
+    }
+}
+
+- (NSView *) viewAtColumn: (NSInteger) column row: (NSInteger) row makeIfNecessary: (BOOL) makeIfNecessary {
+    if (column >= 0 && column < [_tableColumns count] &&
+        [_delegate respondsToSelector: @selector(tableView:viewForTableColumn:row:)]) {
+        NSTableColumn *col = [_tableColumns objectAtIndex: column];
+        return [_delegate tableView: self viewForTableColumn: col row: row];
+    }
+    return nil;
+}
+
+- (NSView *) makeViewWithIdentifier: (NSString *) identifier owner: (id) owner {
+    if (identifier == nil)
+        return nil;
+
+    // 1. Check reusable views pool
+    NSMutableArray *reusable = [_reusableViews objectForKey: identifier];
+    if ([reusable count] > 0) {
+        NSView *view = [[[reusable lastObject] retain] autorelease];
+        [reusable removeLastObject];
+        return view;
+    }
+
+    // 2. Look for existing prototype decoded from nib
+    NSView *prototype = [_prototypeViews objectForKey: identifier];
+    if (prototype == nil) {
+        for (NSView *subview in [self subviews]) {
+            if ([[subview identifier] isEqualToString: identifier]) {
+                prototype = subview;
+                if (_prototypeViews == nil)
+                    _prototypeViews = [[NSMutableDictionary alloc] init];
+                [_prototypeViews setObject: prototype forKey: identifier];
+                break;
+            }
+        }
+    }
+
+    if (prototype != nil) {
+        if (_activeRowViews == nil)
+            _activeRowViews = [[NSMutableArray alloc] init];
+
+        if (![_activeRowViews containsObject: prototype]) {
+            [_activeRowViews addObject: prototype];
+            return prototype;
+        }
+    }
+
+    // 3. Fallback: instantiate programmatic cell view
+    Class viewClass = NSClassFromString(identifier);
+    if (viewClass == nil) {
+        viewClass = [NSTableCellView class];
+    }
+
+    CGFloat rowH = [self rowHeight];
+    if (rowH < 36.0) rowH = 40.0;
+
+    NSTableCellView *cellView = [[[viewClass alloc] initWithFrame: NSMakeRect(0, 0, [self bounds].size.width, rowH)] autorelease];
+    [cellView setIdentifier: identifier];
+
+    NSImageView *iv = [[[NSImageView alloc] initWithFrame: NSMakeRect(6, (rowH - 32) / 2.0, 32, 32)] autorelease];
+    [iv setImage: [NSImage imageNamed: @"NSFolder"]];
+    [cellView addSubview: iv];
+    [cellView setImageView: iv];
+
+    NSTextField *tf = [[[NSTextField alloc] initWithFrame: NSMakeRect(46, 3, [self bounds].size.width - 54, 18)] autorelease];
+    [tf setBordered: NO];
+    [tf setDrawsBackground: NO];
+    [tf setEditable: NO];
+    [tf setSelectable: NO];
+    [tf setFont: [NSFont systemFontOfSize: 13.0]];
+    [tf setTextColor: [NSColor controlTextColor]];
+    [cellView addSubview: tf];
+    [cellView setTextField: tf];
+
+    NSTextField *secondTf = [[[NSTextField alloc] initWithFrame: NSMakeRect(46, 21, [self bounds].size.width - 54, 15)] autorelease];
+    [secondTf setBordered: NO];
+    [secondTf setDrawsBackground: NO];
+    [secondTf setEditable: NO];
+    [secondTf setSelectable: NO];
+    [secondTf setFont: [NSFont systemFontOfSize: 11.0]];
+    [secondTf setTextColor: [NSColor darkGrayColor]];
+    [cellView addSubview: secondTf];
+    [cellView setSecondTextField: secondTf];
+
+    if (_activeRowViews == nil)
+        _activeRowViews = [[NSMutableArray alloc] init];
+    [_activeRowViews addObject: cellView];
+
+    return cellView;
 }
 
 - (void)_readPersistentTableColumns {

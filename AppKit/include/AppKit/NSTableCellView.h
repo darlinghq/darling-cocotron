@@ -19,5 +19,24 @@
 
 #import <AppKit/NSView.h>
 
-@interface NSTableCellView : NSView
+@class NSTextField, NSImageView;
+
+@interface NSTableCellView : NSView {
+    NSTextField *_textField;
+    NSTextField *_secondTextField;
+    NSImageView *_imageView;
+    id _objectValue;
+    NSInteger _backgroundStyle;
+    NSInteger _rowSizeStyle;
+}
+
+@property (assign) IBOutlet NSTextField *textField;
+// Darling/Cocotron extension: convenience secondary label outlet used by GrandPerspective
+// and modern two-line subtitle table cell prototypes.
+@property (assign) IBOutlet NSTextField *secondTextField;
+@property (assign) IBOutlet NSImageView *imageView;
+@property (retain) id objectValue;
+@property NSInteger backgroundStyle;
+@property NSInteger rowSizeStyle;
+
 @end
