@@ -19,6 +19,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSColorList.h>
 #import <AppKit/NSRaise.h>
+#import <Foundation/NSKeyedArchiver.h>
 
 NSString *const NSColorListDidChangeNotification =
         @"NSColorListDidChangeNotification";
@@ -291,8 +292,21 @@ static NSMutableDictionary *_namedColorLists = nil;
     _path = [path copy];
 
     if (_path != nil) {
-        // FIX, file loading doesnt work for NSColorList
-        // DYFIX: load list
+        @try {
+            NSData *data = [NSData dataWithContentsOfFile: _path];
+            if (data != nil) {
+                NSKeyedUnarchiver *unarchiver = [[[NSKeyedUnarchiver alloc] initForReadingWithData: data] autorelease];
+                NSArray *keys = [unarchiver decodeObjectForKey: @"NSKeys"];
+                NSArray *colors = [unarchiver decodeObjectForKey: @"NSColors"];
+                [unarchiver finishDecoding];
+                if (keys && colors) {
+                    [_keys addObjectsFromArray: keys];
+                    [_colors addObjectsFromArray: colors];
+                }
+            }
+        } @catch (NSException *ex) {
+            NSLog(@"NSColorList initWithName:fromFile: failed to load %@: %@", _path, ex);
+        }
     }
 
     return self;
