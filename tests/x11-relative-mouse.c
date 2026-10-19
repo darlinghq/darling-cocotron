@@ -231,17 +231,17 @@ static void confinedWarpAndApplicationReanchor(void) {
     X11RelativeMouseClamp(&m, &x, &y);
     assert(x == 3839 && y == 24);
     X11RelativeMouseWarp(&m, 3900, -100, 3, 210, true); /* the model clamps an unclamped caller too */
-    assert(m.virtualX == 3839 && m.virtualY == 24);
+    assert(m.virtualX == 3839 && m.virtualY == 24 && m.echoes[0].x == 3775 && m.echoes[0].y == 88);
     /* Another application warp must preserve both outstanding echoes, even at the same position. */
     X11RelativeMouseWarp(&m, x, y, 4, 220, true);
     assert(m.echoCount == 2);
-    X11RelativeMouseMotion r = X11RelativeMouseHandleMotion(&m, 3839, 24, true, 210);
+    X11RelativeMouseMotion r = X11RelativeMouseHandleMotion(&m, 3775, 88, true, 210);
     assert(r.echo && !r.post && m.echoCount == 1);
-    r = X11RelativeMouseHandleMotion(&m, 3839, 24, true, 220);
+    r = X11RelativeMouseHandleMotion(&m, 3775, 88, true, 220);
     assert(r.echo && !r.post && m.echoCount == 0);
-    r = X11RelativeMouseHandleMotion(&m, 3830, 30, true, 221);
+    r = X11RelativeMouseHandleMotion(&m, 3766, 94, true, 221);
     assert(r.post && r.deltaX == -9 && r.deltaY == 6);
-    assert(r.rewarp && r.warpX == 3839 && r.warpY == 24);
+    assert(r.rewarp && r.warpX == 3775 && r.warpY == 88);
     assert(m.virtualX == 3839 && m.virtualY == 24);
     X11RelativeMouseEnd(&m);
     puts("PASS: confined application warps share one position with events and rewarping on a secondary monitor");
@@ -249,16 +249,17 @@ static void confinedWarpAndApplicationReanchor(void) {
 
 static void warpsAreClampedByTheModel(void) {
     X11RelativeMouse m = {0};
-    /* The pointer can only be at x >= 0; the server clamps a warp to x = -10 to x = 0. */
+    /* The pointer can only be at x >= 0; the cursor goes to x = 0 for a warp to x = -10, and the pointer is
+     * parked 64 pixels inside the edge. */
     X11RelativeMouseBegin(&m, 500, 400, 0, (X11RelativeMouseBounds){0, 0, 1279, 719});
     X11RelativeMouseWarp(&m, -10, 400, 1, 7, true);
-    assert(m.virtualX == 0 && m.echoCount == 1 && m.echoes[0].x == 0);
-    X11RelativeMouseMotion r = X11RelativeMouseHandleMotion(&m, 0, 400, true, 7);
-    assert(r.echo && !r.post && m.physicalX == 0);
+    assert(m.virtualX == 0 && m.echoCount == 1 && m.echoes[0].x == 64 && m.echoes[0].y == 400);
+    X11RelativeMouseMotion r = X11RelativeMouseHandleMotion(&m, 64, 400, true, 7);
+    assert(r.echo && !r.post && m.physicalX == 64 && m.virtualX == 0);
     /* Real motion afterwards is not cancelled by a mismatched echo. */
     int sum = 0;
     for (int i = 1; i <= 5; ++i) {
-        r = X11RelativeMouseHandleMotion(&m, 3 * i, 400, true, 20 + i);
+        r = X11RelativeMouseHandleMotion(&m, 64 + 3 * i, 400, true, 20 + i);
         assert(r.post);
         sum += (int) r.deltaX;
     }
@@ -268,6 +269,36 @@ static void warpsAreClampedByTheModel(void) {
     assert(m.echoes[m.echoCount - 1].x == 1279 && m.echoes[m.echoCount - 1].y == 719);
     X11RelativeMouseEnd(&m);
     puts("PASS: the model clamps warp targets to the reachable bounds");
+}
+
+static void frozenCursorNearAnEdgeKeepsFullDeltas(void) {
+    X11RelativeMouse m = {0};
+    /* The grab window starts at x = 100; the cursor froze 3 pixels from its left edge. */
+    X11RelativeMouseBegin(&m, 103, 250, 0, (X11RelativeMouseBounds){100, 100, 499, 399});
+    X11RelativeMouseMotion r = motion(&m, 103, 251, true);
+    assert(r.post && r.rewarp && r.warpX == 164 && r.warpY == 250); /* parked inside, not on the cursor */
+    unsigned long s = expectEcho(&m, r.warpX, r.warpY, 1);
+    r = echo(&m, s, 164, 250, true);
+    assert(r.echo && m.virtualX == 103 && m.virtualY == 250 && m.physicalX == 164);
+    double sum = 0;
+    for (int i = 0; i < 10; ++i) {
+        r = motion(&m, 164 - 20, 250, true); /* the pointer travels 20 pixels left each time */
+        assert(r.post && r.deltaX == -20 && r.rewarp && r.warpX == 164);
+        s = expectEcho(&m, r.warpX, r.warpY, 1);
+        sum += r.deltaX;
+        r = echo(&m, s, 164, 250, true);
+        assert(r.echo);
+    }
+    assert(sum == -200 && m.virtualX == 103); /* the cursor never moved */
+    /* The window is too small for the full margin: a quarter of it. */
+    X11RelativeMouseBegin(&m, 10, 10, 0, (X11RelativeMouseBounds){0, 0, 39, 39});
+    int tx, ty;
+    X11RelativeMousePointerTarget(&m, 0, 39, true, &tx, &ty);
+    assert(tx == 9 && ty == 30);
+    X11RelativeMousePointerTarget(&m, 0, 39, false, &tx, &ty); /* not honoured: nothing is parked */
+    assert(tx == 0 && ty == 39);
+    X11RelativeMouseEnd(&m);
+    puts("PASS: a cursor frozen near the confine edge still gets full deltas");
 }
 
 static void unreachableWarpTargetIsFollowed(void) {
@@ -330,6 +361,7 @@ static void nonFiniteWarpsAreRefused(void) {
 
 int main(void) {
     nonFiniteWarpsAreRefused();
+    frozenCursorNearAnEdgeKeepsFullDeltas();
     unreachableWarpTargetIsFollowed();
     warpsAreClampedByTheModel();
     serialsWrap();

@@ -115,14 +115,15 @@ static inline X11RelativeMouseMotion X11RelativeMouseMotionEvent(Display *displa
     return motion;
 }
 
-/* CGWarpMouseCursorPosition while relative: the virtual cursor moves without a delta. The target is clamped to the
- * grab window, as the server does. Returns false when the echo could not be recorded. */
+/* CGWarpMouseCursorPosition while relative: the virtual cursor moves without a delta. The pointer goes where the
+ * model says (inside the grab window, and parked away from its edges where warps are honoured). Returns false
+ * when the echo could not be recorded. */
 static inline bool X11RelativeMouseApplicationWarp(Display *display, X11RelativeMouse *mouse, double x, double y,
                                                    bool warpsHonoured) {
-    X11RelativeMouseClamp(mouse, &x, &y);
+    int targetX, targetY;
+    X11RelativeMousePointerTarget(mouse, x, y, warpsHonoured, &targetX, &targetY);
     unsigned long serial = NextRequest(display);
-    unsigned queued = X11RelativeMouseWarpPointer(display, X11RelativeMouseWarpCoordinate(x),
-                                                  X11RelativeMouseWarpCoordinate(y));
+    unsigned queued = X11RelativeMouseWarpPointer(display, targetX, targetY);
     return X11RelativeMouseWarp(mouse, x, y, queued, serial, warpsHonoured);
 }
 

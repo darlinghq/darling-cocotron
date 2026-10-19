@@ -166,12 +166,26 @@ int main(void) {
     CHECK(warp.deltaX == 5 && warp.deltaY == 7 && px == 200 && py == 180, "motion continues from the warp target: %g,%g, pointer %d,%d",
           warp.deltaX, warp.deltaY, px, py);
 
-    /* A warp outside the grab window is clamped, as the server clips it. */
+    /* A warp outside the grab window is clamped, as the server clips it; the pointer is parked inside the edge. */
     X11RelativeMouseApplicationWarp(display, &mouse, 10, 10, true);
     pump(display, &mouse, true, &warp);
     pointer(display, &px, &py);
-    CHECK(mouse.virtualX == 100 && mouse.virtualY == 100 && px == 100 && py == 100,
+    CHECK(mouse.virtualX == 100 && mouse.virtualY == 100 && px == 164 && py == 164,
           "an out-of-window warp is clamped: virtual %g,%g pointer %d,%d", mouse.virtualX, mouse.virtualY, px, py);
+
+    /* A cursor frozen 3 pixels from the left edge: ten moves of -20 are all delivered, not clipped to the 3 left. */
+    X11RelativeMouseApplicationWarp(display, &mouse, 103, 250, true);
+    pump(display, &mouse, true, &warp);
+    Pumped edge = {0};
+    for (int i = 0; i < 10; i++) {
+        move(display, -20, 0);
+        if (!pump(display, &mouse, true, &edge))
+            return 1;
+    }
+    CHECK(edge.deltaX == -200 && edge.deltaY == 0, "deltas near the edge are not clipped: %g,%g", edge.deltaX,
+          edge.deltaY);
+    CHECK(mouse.virtualX == 103 && mouse.virtualY == 250, "the cursor stayed at the edge: %g,%g", mouse.virtualX,
+          mouse.virtualY);
 
     /* The window shrinks under the grab and the cached bounds are stale: a warp the server cannot honour exactly
      * must not start a warp feedback loop, and its clamped echo is not motion. */

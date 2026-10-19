@@ -26,6 +26,11 @@
 #include <stdlib.h>
 
 #define X11_RELATIVE_MOUSE_INITIAL_ECHOES 8
+/* While the cursor is frozen the pointer is parked at least this far (or a quarter of the window, if smaller)
+ * inside the confine rectangle. The confine window clips motion, so a pointer sitting on the cursor at an edge
+ * could only move away from the edge by the distance left to it; macOS deltas do not depend on where the cursor
+ * froze. A single event larger than the distance left to the edge is still clipped. */
+#define X11_RELATIVE_MOUSE_PARK_MARGIN 64
 
 typedef struct {
     int x, y;
@@ -129,21 +134,40 @@ static inline void X11RelativeMouseClamp(const X11RelativeMouse *mouse, double *
     if (*y > mouse->maxY) *y = mouse->maxY;
 }
 
-/* CGWarpMouseCursorPosition while relative (returns false, doing nothing, for a non-finite target): the virtual cursor moves to the target; the physical position is
- * only updated when the echo arrives (and only if the warp was honoured). The target is clamped to the bounds
- * first, whether or not warps are honoured: the server clamps the pointer there, so that is where the echo
- * arrives. A caller that sends the warp clamps the same way before (Clamp is idempotent). */
+/* Where the pointer goes for a cursor frozen at (x, y): inside the bounds, as the server clamps it, and where
+ * warps are honoured also away from the edges (see X11_RELATIVE_MOUSE_PARK_MARGIN). The caller sends exactly
+ * this to XWarpPointer, and Warp and HandleMotion record and compare exactly this. */
+static inline void X11RelativeMousePointerTarget(const X11RelativeMouse *mouse, double x, double y,
+                                                 bool warpsHonoured, int *targetX, int *targetY) {
+    X11RelativeMouseClamp(mouse, &x, &y);
+    if (warpsHonoured) {
+        int insetX = (mouse->maxX - mouse->minX) / 4, insetY = (mouse->maxY - mouse->minY) / 4;
+        if (insetX > X11_RELATIVE_MOUSE_PARK_MARGIN) insetX = X11_RELATIVE_MOUSE_PARK_MARGIN;
+        if (insetY > X11_RELATIVE_MOUSE_PARK_MARGIN) insetY = X11_RELATIVE_MOUSE_PARK_MARGIN;
+        if (x < mouse->minX + insetX) x = mouse->minX + insetX;
+        if (x > mouse->maxX - insetX) x = mouse->maxX - insetX;
+        if (y < mouse->minY + insetY) y = mouse->minY + insetY;
+        if (y > mouse->maxY - insetY) y = mouse->maxY - insetY;
+    }
+    *targetX = X11RelativeMouseWarpCoordinate(x);
+    *targetY = X11RelativeMouseWarpCoordinate(y);
+}
+
+/* CGWarpMouseCursorPosition while relative (false, doing nothing, for a non-finite target): the virtual cursor moves to the target; the physical position is
+ * only updated when the echo arrives (and only if the warp was honoured). The cursor is clamped to the bounds
+ * first, whether or not warps are honoured, and the echo is expected where PointerTarget puts the pointer. */
 static inline bool X11RelativeMouseWarp(X11RelativeMouse *mouse, double x, double y, unsigned queuedEvents,
                                        unsigned long serial, bool warpsHonoured) {
     /* (int) of NaN or infinity is undefined, and a non-finite target has no place to clamp to: refuse it. */
     if (!isfinite(x) || !isfinite(y)) return false;
-    X11RelativeMouseClamp(mouse, &x, &y);
+    int targetX, targetY;
+    X11RelativeMousePointerTarget(mouse, x, y, warpsHonoured, &targetX, &targetY);
     if (warpsHonoured) {
+        X11RelativeMouseClamp(mouse, &x, &y);
         mouse->virtualX = x;
         mouse->virtualY = y;
     }
-    return X11RelativeMouseExpectEcho(mouse, X11RelativeMouseWarpCoordinate(x), X11RelativeMouseWarpCoordinate(y),
-                               queuedEvents, serial);
+    return X11RelativeMouseExpectEcho(mouse, targetX, targetY, queuedEvents, serial);
 }
 
 /* One X event has been handled: age the expected echoes. */
@@ -200,8 +224,8 @@ static inline X11RelativeMouseMotion X11RelativeMouseHandleMotion(X11RelativeMou
         mouse->virtualY = rootY;
     }
     result.post = result.deltaX != 0.0 || result.deltaY != 0.0;
-    int warpX = X11RelativeMouseWarpCoordinate(mouse->virtualX);
-    int warpY = X11RelativeMouseWarpCoordinate(mouse->virtualY);
+    int warpX, warpY;
+    X11RelativeMousePointerTarget(mouse, mouse->virtualX, mouse->virtualY, true, &warpX, &warpY);
     if (warpsHonoured && (rootX != warpX || rootY != warpY)) {
         /* More physical motion may already be queued before our latest warp. That warp will
          * re-anchor it; issuing another one for each queued event creates an echo backlog. */
