@@ -550,6 +550,9 @@ static CGError warpToGlobalPoint(NSDisplay *display, CGPoint point) {
         return kCGErrorCannotComplete;
 
     NSScreen *main = [screens objectAtIndex: 0];
+    // No active output: the point has no desktop to land in.
+    if (NSIsEmptyRect([main frame]))
+        return kCGErrorCannotComplete;
     CGFloat scale = [main backingScaleFactor];
     if (!(scale >= 1))
         scale = 1;
