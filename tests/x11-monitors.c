@@ -96,6 +96,19 @@ static void frames(void) {
     r = X11FrameToRoot(lower, (X11Frame){0, 0, 1920, 1080});
     CHECK(near(r.x, 0) && near(r.y, 360), "bottom-left of the main monitor is its bottom edge: %g,%g", r.x, r.y);
 
+    /* A taller monitor on the left of the main one: its Cocoa frame starts below the main monitor's bottom edge. */
+    X11Frame beside = {1920, 200, 1920, 1080};
+    r = X11FrameToRoot(beside, (X11Frame){-1920, -160, 1920, 1440});
+    CHECK(near(r.x, 0) && near(r.y, 0) && near(r.width, 1920) && near(r.height, 1440),
+          "taller left monitor maps onto root 0,0 1920x1440: %g,%g %gx%g", r.x, r.y, r.width, r.height);
+    g = X11FrameFromRoot(beside, (X11Frame){0, 0, 1920, 1440});
+    CHECK(near(g.x, -1920) && near(g.y, -160), "and converts back: %g,%g", g.x, g.y);
+
+    /* A main monitor with a negative root origin (XRandR allows it) keeps its own rectangle. */
+    X11Frame negative = {-100, 50, 640, 480};
+    r = X11FrameToRoot(negative, (X11Frame){0, 0, 640, 480});
+    CHECK(near(r.x, -100) && near(r.y, 50), "negative-origin main monitor: %g,%g", r.x, r.y);
+
     /* Round trip over a grid of layouts and frames. */
     X11Frame primaries[] = {single, right, lower, {-100, 50, 640, 480}};
     int bad = 0;
