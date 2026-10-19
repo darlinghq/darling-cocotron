@@ -1,9 +1,11 @@
 // Host test for AppKit/X11.backend/X11Fullscreen.h: the decision table, the monitor test against real RandR
 // geometry, and the EWMH fullscreen request as a window manager receives it. Needs an X server; use
-// tests/x11-fullscreen.sh, which runs it on its own Xvfb. Build: cc x11-fullscreen.c -lX11 -lXrandr
+// tests/x11-fullscreen.sh, which runs it on its own Xvfb. Build: cc x11-fullscreen.c -lX11 -lXrandr -ldl
 #include "../AppKit/X11.backend/X11Fullscreen.h"
 #include "../CoreGraphics/X11.backend/X11Monitors.h"
+#include <dlfcn.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -91,6 +93,82 @@ static void monitorTest(Display *display) {
     CHECK(!X11FullscreenRectIsMonitor(display, twice), "a rectangle spanning two monitors is not one monitor");
     X11FullscreenRect taller = {100, 50, 640, 481};
     CHECK(!X11FullscreenRectIsMonitor(display, taller), "one pixel too tall is not a monitor");
+}
+
+/* Xvfb has a single CRTC and RandR, so a second monitor and a server without RandR cannot be set up on it. The
+ * header's calls into RandR are therefore interposed here (this executable's definitions win over libXrandr's):
+ * unless a fake is selected they forward to the real library. */
+static enum { FakeOff, FakeTwoCrtcs, FakeNoRandR } fake;
+static const struct {
+    int x, y;
+    unsigned width, height;
+} fakeCrtcs[] = {{0, 0, 640, 480}, {640, 100, 800, 600}};
+
+Bool XRRQueryExtension(Display *display, int *eventBase, int *errorBase) {
+    if (fake == FakeNoRandR)
+        return False;
+    Bool (*real)(Display *, int *, int *) = (Bool (*)(Display *, int *, int *)) dlsym(RTLD_NEXT, "XRRQueryExtension");
+    return real(display, eventBase, errorBase);
+}
+
+XRRScreenResources *XRRGetScreenResourcesCurrent(Display *display, Window window) {
+    if (fake != FakeTwoCrtcs) {
+        XRRScreenResources *(*real)(Display *, Window) =
+                (XRRScreenResources * (*) (Display *, Window)) dlsym(RTLD_NEXT, "XRRGetScreenResourcesCurrent");
+        return real(display, window);
+    }
+    XRRScreenResources *resources = calloc(1, sizeof *resources);
+    resources->ncrtc = 2;
+    resources->crtcs = malloc(2 * sizeof *resources->crtcs);
+    resources->crtcs[0] = 1;
+    resources->crtcs[1] = 2;
+    return resources;
+}
+
+XRRCrtcInfo *XRRGetCrtcInfo(Display *display, XRRScreenResources *resources, RRCrtc crtc) {
+    if (fake != FakeTwoCrtcs) {
+        XRRCrtcInfo *(*real)(Display *, XRRScreenResources *, RRCrtc) =
+                (XRRCrtcInfo * (*) (Display *, XRRScreenResources *, RRCrtc)) dlsym(RTLD_NEXT, "XRRGetCrtcInfo");
+        return real(display, resources, crtc);
+    }
+    XRRCrtcInfo *info = calloc(1, sizeof *info);
+    info->x = fakeCrtcs[crtc - 1].x;
+    info->y = fakeCrtcs[crtc - 1].y;
+    info->width = fakeCrtcs[crtc - 1].width;
+    info->height = fakeCrtcs[crtc - 1].height;
+    info->mode = 1;
+    return info;
+}
+
+static void multiMonitorTest(Display *display) {
+    fake = FakeTwoCrtcs;
+    X11FullscreenRect first = {0, 0, 640, 480}, second = {640, 100, 800, 600};
+    CHECK(X11FullscreenRectIsMonitor(display, first), "the first of two monitors");
+    CHECK(X11FullscreenRectIsMonitor(display, second), "the second of two monitors, not only the first CRTC counts");
+    X11FullscreenRect secondY = {640, 101, 800, 600}, secondTop = {640, 0, 800, 600};
+    CHECK(!X11FullscreenRectIsMonitor(display, secondY), "the second monitor one pixel lower is not a monitor");
+    CHECK(!X11FullscreenRectIsMonitor(display, secondTop), "the second monitor's size at y 0 is not a monitor");
+    X11FullscreenRect firstY = {0, 1, 640, 480};
+    CHECK(!X11FullscreenRectIsMonitor(display, firstY), "the first monitor one pixel lower is not a monitor");
+    X11FullscreenRect secondX = {641, 100, 800, 600};
+    CHECK(!X11FullscreenRectIsMonitor(display, secondX), "the second monitor one pixel right is not a monitor");
+    fake = FakeOff;
+}
+
+/* Without RandR the root window is the only monitor. */
+static void noRandRTest(Display *display) {
+    fake = FakeNoRandR;
+    int screen = DefaultScreen(display);
+    unsigned width = (unsigned) DisplayWidth(display, screen), height = (unsigned) DisplayHeight(display, screen);
+    X11FullscreenRect whole = {0, 0, width, height};
+    CHECK(X11FullscreenRectIsMonitor(display, whole), "no RandR: the root is the monitor");
+    X11FullscreenRect right = {1, 0, width, height}, lower = {0, 1, width, height};
+    CHECK(!X11FullscreenRectIsMonitor(display, right), "no RandR: shifted in x is not the root");
+    CHECK(!X11FullscreenRectIsMonitor(display, lower), "no RandR: shifted in y is not the root");
+    X11FullscreenRect narrow = {0, 0, width - 1, height}, shorter = {0, 0, width, height - 1};
+    CHECK(!X11FullscreenRectIsMonitor(display, narrow), "no RandR: one pixel narrower is not the root");
+    CHECK(!X11FullscreenRectIsMonitor(display, shorter), "no RandR: one pixel shorter is not the root");
+    fake = FakeOff;
 }
 
 static long lastSource;
@@ -191,6 +269,23 @@ static void stateTest(Display *client) {
     XSync(wm, False);
     CHECK(waitForStateNotify(client, window), "PropertyNotify arrives when the property is removed");
     CHECK(!X11FullscreenIsSet(client, window), "a withdrawn window is not fullscreen");
+
+    /* Only a 32-bit atom list is a state: the same bytes in another format are not read as atoms. */
+    long wide[] = {(long) fullscreen};
+    XChangeProperty(wm, window, stateAtom, XA_ATOM, 32, PropModeReplace, (unsigned char *) wide, 1);
+    XSync(wm, False);
+    CHECK(X11FullscreenIsSet(client, window), "control: the 32-bit list names fullscreen");
+    unsigned char bytes[sizeof wide];
+    memcpy(bytes, wide, sizeof wide);
+    XChangeProperty(wm, window, stateAtom, XA_ATOM, 8, PropModeReplace, bytes, (int) sizeof bytes);
+    XSync(wm, False);
+    CHECK(!X11FullscreenIsSet(client, window), "an 8-bit property is not a state");
+    unsigned short halves[sizeof wide / 2];
+    memcpy(halves, wide, sizeof wide);
+    XChangeProperty(wm, window, stateAtom, XA_ATOM, 16, PropModeReplace, (unsigned char *) halves,
+                    (int) (sizeof halves / sizeof *halves));
+    XSync(wm, False);
+    CHECK(!X11FullscreenIsSet(client, window), "a 16-bit property is not a state");
     XCloseDisplay(wm);
 }
 
@@ -239,6 +334,8 @@ int main(void) {
     requestTest(display);
     stateTest(display);
     monitorTest(display);
+    multiMonitorTest(display);
+    noRandRTest(display);
     conventionTest(display);
     XCloseDisplay(display);
     if (failures) {
