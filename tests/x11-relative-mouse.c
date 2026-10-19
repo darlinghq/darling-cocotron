@@ -327,6 +327,27 @@ static void unreachableWarpTargetIsFollowed(void) {
     puts("PASS: a warp's result at an unreachable target is an echo and the cursor follows the pointer");
 }
 
+static void warpToTheSamePlaceExpectsNoEcho(void) {
+    X11RelativeMouse m = {0};
+    X11RelativeMouseBegin(&m, 500, 400, 0, anywhere);
+    /* No MotionNotify comes back for a warp to where the pointer already is, even with other events queued. */
+    warp(&m, 500, 400, 3, true);
+    assert(m.echoCount == 0);
+    /* So a real motion that carries the warp's serial is motion, not an echo. */
+    X11RelativeMouseMotion r = X11RelativeMouseHandleMotion(&m, 507, 400, true, nextSerial - 1);
+    assert(r.post && !r.echo && r.deltaX == 7);
+    /* A warp elsewhere still expects its echo. */
+    warp(&m, 600, 400, 1, true);
+    assert(m.echoCount == 1);
+    X11RelativeMouseEnd(&m);
+    /* A re-grab puts the frozen cursor back, clamped to the new bounds. */
+    X11RelativeMouseBegin(&m, 500, 400, 0, (X11RelativeMouseBounds){0, 0, 799, 599});
+    X11RelativeMouseRestoreCursor(&m, 700.5, 900);
+    assert(m.virtualX == 700.5 && m.virtualY == 599 && m.physicalX == 500);
+    X11RelativeMouseEnd(&m);
+    puts("PASS: a warp to the pointer's own position expects no echo");
+}
+
 static void serialsWrap(void) {
     X11RelativeMouse m = {0};
     /* A serial counter that wrapped during the grab (32 bits on i386) is still newer than the snapshot. */
@@ -361,6 +382,7 @@ static void nonFiniteWarpsAreRefused(void) {
 
 int main(void) {
     nonFiniteWarpsAreRefused();
+    warpToTheSamePlaceExpectsNoEcho();
     frozenCursorNearAnEdgeKeepsFullDeltas();
     unreachableWarpTargetIsFollowed();
     warpsAreClampedByTheModel();

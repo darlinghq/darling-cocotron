@@ -166,6 +166,10 @@ static inline bool X11RelativeMouseWarp(X11RelativeMouse *mouse, double x, doubl
         X11RelativeMouseClamp(mouse, &x, &y);
         mouse->virtualX = x;
         mouse->virtualY = y;
+        /* A warp to where the pointer already is generates no MotionNotify. Expecting an echo anyway could
+         * swallow a real motion that carries the warp's serial (one delivered between the warp and the sync). */
+        if (targetX == mouse->physicalX && targetY == mouse->physicalY)
+            return true;
     }
     return X11RelativeMouseExpectEcho(mouse, targetX, targetY, queuedEvents, serial);
 }
@@ -179,6 +183,13 @@ static inline void X11RelativeMouseTick(X11RelativeMouse *mouse) {
             mouse->echoes[kept++].remaining--;
         }
     mouse->echoCount = kept;
+}
+
+/* Puts the frozen cursor back where it was before a re-grab, clamped to the new bounds. */
+static inline void X11RelativeMouseRestoreCursor(X11RelativeMouse *mouse, double x, double y) {
+    X11RelativeMouseClamp(mouse, &x, &y);
+    mouse->virtualX = x;
+    mouse->virtualY = y;
 }
 
 /* A MotionNotify at root position (rootX, rootY) while relative. Ages the expected echoes. */
