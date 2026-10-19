@@ -188,6 +188,11 @@ static void model(void) {
     /* The L-shaped dead zone of the offset layout is inside the desktop but on no display: left to the server. */
     CGDisplayGeometryRect deadZone = desktop(&offset);
     CHECK(near(deadZone.width, 3200) && near(deadZone.height, 1080), "desktop of the offset layout is the bounding box");
+    /* No active display: there is nothing to clip against, so the point passes through unchanged. */
+    CGDisplayGeometryPoint through = CGDisplayGeometryClamp((CGDisplayGeometryRect){0, 0, 0, 0}, 1,
+                                                            (CGDisplayGeometryPoint){-5000, 7000});
+    CHECK(near(through.x, -5000) && near(through.y, 7000), "an empty desktop leaves the point alone, got %g,%g",
+          through.x, through.y);
 }
 
 static void live(Display *display) {
