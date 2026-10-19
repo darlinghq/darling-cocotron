@@ -282,6 +282,14 @@ typedef struct __VFlags {
             [self setAnimations:
                             [keyed decodeObjectForKey: @"NSViewAnimations"]];
 
+        if ([keyed containsValueForKey: @"NSUserInterfaceItemIdentifier"]) {
+            _identifier = [[keyed decodeObjectForKey: @"NSUserInterfaceItemIdentifier"] copy];
+        } else if ([keyed containsValueForKey: @"NSReuseIdentifierKey"]) {
+            _identifier = [[keyed decodeObjectForKey: @"NSReuseIdentifierKey"] copy];
+        } else if ([keyed containsValueForKey: @"NSIdentifier"]) {
+            _identifier = [[keyed decodeObjectForKey: @"NSIdentifier"] copy];
+        }
+
         [self setCanDrawConcurrently:
                         [keyed decodeBoolForKey: @"NSViewCanDrawConcurrently"]];
 
