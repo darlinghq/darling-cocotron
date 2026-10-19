@@ -47,6 +47,7 @@
     BOOL _mapped;
     CGPoint _lastMotionPos;
     BOOL _isModal;
+    BOOL _overrideRedirect;
     BOOL _isOpaque;
     BOOL _hasShadow;
     BOOL _wantsInputFocus;
