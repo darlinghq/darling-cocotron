@@ -35,6 +35,24 @@ int main(void) {
     base(e); e[54] = 0; e[55] = 0; e[66] = 'A'; e[67] = 'B'; e[68] = 'C';
     CHECK(screenSizeFromEDID(e, 128, &w, &h) && w == 600 && h == 340, "display descriptor falls back to cm size");
 
+    /* Either clock byte alone makes a detailed timing. */
+    base(e); timing(e, 598, 336); e[54] = 0x00; e[55] = 0x0a;
+    CHECK(screenSizeFromEDID(e, 128, &w, &h) && w == 598 && h == 336, "clock low byte zero is a timing");
+    base(e); timing(e, 598, 336); e[54] = 0x0a; e[55] = 0x00;
+    CHECK(screenSizeFromEDID(e, 128, &w, &h) && w == 598 && h == 336, "clock high byte zero is a timing");
+
+    /* A timing with one zero axis is unusable: use the cm size. */
+    base(e); timing(e, 0, 336);
+    CHECK(screenSizeFromEDID(e, 128, &w, &h) && w == 600 && h == 340, "zero timing width falls back");
+    base(e); timing(e, 598, 0);
+    CHECK(screenSizeFromEDID(e, 128, &w, &h) && w == 600 && h == 340, "zero timing height falls back");
+
+    /* One zero axis in the cm size is not a size. */
+    base(e); e[21] = 0; e[22] = 9;
+    CHECK(!screenSizeFromEDID(e, 128, &w, &h), "zero cm width");
+    base(e); e[21] = 9; e[22] = 0;
+    CHECK(!screenSizeFromEDID(e, 128, &w, &h), "zero cm height");
+
     base(e); timing(e, 16, 9);
     CHECK(screenSizeFromEDID(e, 128, &w, &h) && w == 600 && h == 340, "16:9 aspect-only falls back");
     base(e); timing(e, 4, 3);
