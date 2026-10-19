@@ -55,6 +55,16 @@ static void order(void) {
     CHECK(out[0] == 1 && out[1] == 2 && out[2] == 0 && out[3] == 3,
           "server order is kept among the rest: got %d %d %d %d", out[0], out[1], out[2], out[3]);
 
+    int wide[5];
+    X11Monitor many[] = {active(10, 0, 0, 1, 1), inactive(11), active(12, 1, 0, 1, 1), active(13, 2, 0, 1, 1), active(14, 3, 0, 1, 1)};
+    X11MonitorsOrder(many, 5, 3, wide);
+    CHECK(wide[0] == 3 && wide[1] == 0 && wide[2] == 2 && wide[3] == 4 && wide[4] == 1,
+          "a non-first primary, three other active monitors keep server order, inactive last: got %d %d %d %d %d",
+          wide[0], wide[1], wide[2], wide[3], wide[4]);
+    X11MonitorsOrder(many, 5, 0, wide);
+    CHECK(wide[0] == 0 && wide[1] == 2 && wide[2] == 3 && wide[3] == 4 && wide[4] == 1,
+          "primary already first: got %d %d %d %d %d", wide[0], wide[1], wide[2], wide[3], wide[4]);
+
     X11Monitor off[] = {inactive(10), inactive(11)};
     X11MonitorsOrder(off, 2, -1, out);
     CHECK(out[0] == 0 && out[1] == 1, "nothing active keeps server order");
