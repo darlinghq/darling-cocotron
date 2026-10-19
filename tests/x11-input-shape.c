@@ -54,6 +54,9 @@ int main(void) {
     XSync(display, False);
     CHECK(windowUnder(display, 151, 151) == below, "a click-through overlay lets the pointer reach the window below");
     CHECK(windowUnder(display, 101, 101) == below, "also near its corner");
+    CHECK(windowUnder(display, 100, 100) == below, "also at its first pixel");
+    CHECK(windowUnder(display, 199, 199) == below, "also at its last pixel");
+    CHECK(windowUnder(display, 150, 150) == below, "also at its centre");
 
     /* Only the input region is emptied: the window is still drawn, its bounding region is whole. */
     int rectangleCount = 0, ordering;
@@ -70,6 +73,9 @@ int main(void) {
     X11WindowSetIgnoresMouseEvents(display, overlay, false);
     XSync(display, False);
     CHECK(windowUnder(display, 153, 153) == overlay, "restoring the default region makes it clickable again");
+    CHECK(windowUnder(display, 100, 100) == overlay, "clickable again at its first pixel");
+    CHECK(windowUnder(display, 199, 199) == overlay, "clickable again at its last pixel");
+    CHECK(windowUnder(display, 150, 150) == overlay, "clickable again at its centre");
     CHECK(windowUnder(display, 300, 300) == below, "points outside the overlay still go to the window below");
 
     XCloseDisplay(display);
