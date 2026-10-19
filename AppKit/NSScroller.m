@@ -266,6 +266,15 @@ static NSAppleScrollBarVariant appleScrollBarVariant(NSScroller *self) {
     return _arrowsPosition;
 }
 
+- (NSControlTint) controlTint {
+    return _controlTint;
+}
+
+- (void) setControlTint: (NSControlTint) tint {
+    _controlTint = tint;
+    [self setNeedsDisplay: YES];
+}
+
 - (NSControlSize) controlSize {
     return _controlSize;
 }

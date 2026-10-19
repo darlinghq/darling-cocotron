@@ -79,12 +79,15 @@ typedef NSUInteger NSUsableScrollerParts;
 
     NSScrollerStyle _scrollerStyle;
     NSScrollerKnobStyle _knobStyle;
+    NSControlTint _controlTint;
 }
 
 + (CGFloat) scrollerWidth;
 + (CGFloat) scrollerWidthForControlSize: (NSControlSize) controlSize
                           scrollerStyle: (NSScrollerStyle) scrollerStyle;
 
+- (NSControlTint) controlTint;
+- (void) setControlTint: (NSControlTint) tint;
 - (CGFloat) knobProportion;
 - (void) setKnobProportion: (CGFloat) proportion;
 - (NSScrollArrowPosition) arrowsPosition;
