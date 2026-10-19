@@ -74,4 +74,27 @@ static inline void X11FullscreenRequest(Display *display, Window window, bool fu
                (XEvent *) &event);
 }
 
+/* Whether _NET_WM_STATE currently lists _NET_WM_STATE_FULLSCREEN for the window. Once a window is mapped the window
+ * manager owns that property (EWMH): it adds and removes the state on its own (a keybinding, a panel button) and
+ * clears it when the window is withdrawn, so a window that only remembers its own last request goes stale. */
+static inline bool X11FullscreenIsSet(Display *display, Window window) {
+    Atom state = XInternAtom(display, "_NET_WM_STATE", False);
+    Atom fullscreen = XInternAtom(display, "_NET_WM_STATE_FULLSCREEN", False);
+    Atom type = None;
+    int format = 0;
+    unsigned long count = 0, after = 0;
+    unsigned char *data = NULL;
+    if (XGetWindowProperty(display, window, state, 0, 64, False, XA_ATOM, &type, &format, &count, &after, &data) !=
+        Success)
+        return false;
+    bool set = false;
+    if (type == XA_ATOM && format == 32)
+        for (unsigned long i = 0; i < count; i++)
+            if (((long *) data)[i] == (long) fullscreen)
+                set = true;
+    if (data)
+        XFree(data);
+    return set;
+}
+
 #endif
