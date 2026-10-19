@@ -117,9 +117,10 @@ XRRScreenResources *XRRGetScreenResourcesCurrent(Display *display, Window window
                 (XRRScreenResources * (*) (Display *, Window)) dlsym(RTLD_NEXT, "XRRGetScreenResourcesCurrent");
         return real(display, window);
     }
-    XRRScreenResources *resources = calloc(1, sizeof *resources);
+    /* One block, as libXrandr allocates it: XRRFreeScreenResources frees only the struct. */
+    XRRScreenResources *resources = calloc(1, sizeof *resources + 2 * sizeof *resources->crtcs);
     resources->ncrtc = 2;
-    resources->crtcs = malloc(2 * sizeof *resources->crtcs);
+    resources->crtcs = (RRCrtc *) (resources + 1);
     resources->crtcs[0] = 1;
     resources->crtcs[1] = 2;
     return resources;
