@@ -29,13 +29,31 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                               [_label substringFromIndex: 1]];
     SEL selector = NSSelectorFromString(methodName);
 
-    if (selector != NULL)
+    if (selector != NULL) {
         if ([_source respondsToSelector: selector]) {
             [_source performSelector: selector withObject: _destination];
             return;
         }
+    }
 
-    object_setInstanceVariable(_source, [_label UTF8String], _destination);
+    if (_source != nil && _label != nil) {
+        if (object_setInstanceVariable(_source, [_label UTF8String], _destination) != nil) {
+            return;
+        }
+
+        NSString *ivarName = [@"_" stringByAppendingString: _label];
+        if (object_setInstanceVariable(_source, [ivarName UTF8String], _destination) != nil) {
+            return;
+        }
+
+        @try {
+            [_source setValue: _destination forKey: _label];
+            return;
+        } @catch (NSException *ex) {
+            // Log for debugging outlet resolution failures
+            NSLog(@"[NSNibOutletConnector] setValue:forKey: failed for outlet %@ on %@: %@", _label, [_source class], ex);
+        }
+    }
 }
 
 @end
