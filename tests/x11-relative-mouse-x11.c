@@ -173,6 +173,32 @@ int main(void) {
     CHECK(mouse.virtualX == 100 && mouse.virtualY == 100 && px == 100 && py == 100,
           "an out-of-window warp is clamped: virtual %g,%g pointer %d,%d", mouse.virtualX, mouse.virtualY, px, py);
 
+    /* The window shrinks under the grab and the cached bounds are stale: a warp the server cannot honour exactly
+     * must not start a warp feedback loop, and its clamped echo is not motion. */
+    XResizeWindow(display, window, 100, 100);
+    XSync(display, False);
+    Pumped shrink = {0};
+    if (!pump(display, &mouse, true, &shrink))
+        return 1;
+    shrink = (Pumped){0};
+    CHECK(X11RelativeMouseApplicationWarp(display, &mouse, 450, 350, true), "warp to a point the old bounds allowed");
+    if (!pump(display, &mouse, true, &shrink))
+        return 1;
+    pointer(display, &px, &py);
+    CHECK(shrink.posted == 0 && shrink.deltaX == 0 && shrink.deltaY == 0,
+          "an unreachable warp is no motion: %d posted, %g,%g", shrink.posted, shrink.deltaX, shrink.deltaY);
+    CHECK(shrink.motions <= 3, "no feedback loop: %d motion events", shrink.motions);
+    CHECK((int) mouse.virtualX == px && (int) mouse.virtualY == py,
+          "the cursor settles where the pointer is: virtual %g,%g pointer %d,%d", mouse.virtualX, mouse.virtualY, px, py);
+    shrink = (Pumped){0};
+    move(display, -3, -2);
+    if (!pump(display, &mouse, true, &shrink))
+        return 1;
+    CHECK(shrink.deltaX == -3 && shrink.deltaY == -2, "motion continues after the clamped warp: %g,%g", shrink.deltaX,
+          shrink.deltaY);
+    XResizeWindow(display, window, 400, 300);
+    XSync(display, False);
+
     X11RelativeMouseRelease(display, &mouse);
     CHECK(!mouse.active, "released");
     X11RelativeMouseRelease(display, &mouse);
