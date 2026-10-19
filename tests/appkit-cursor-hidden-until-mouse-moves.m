@@ -78,6 +78,14 @@ int main(void) {
         CHECK(hides == 1 && unhides == 0, "motion leaves the explicitly hidden cursor hidden (%d, %d)", hides, unhides);
         [NSCursor unhide];
         CHECK(unhides == 1, "and the explicit unhide shows it (%d)", unhides);
+
+        // An explicit hide with no hide-until-motion pending is not undone by motion either.
+        hides = unhides = 0;
+        [NSCursor hide];
+        [display pointerMoved];
+        CHECK(hides == 1 && unhides == 0, "motion does not undo a lone explicit hide (%d, %d)", hides, unhides);
+        [NSCursor unhide];
+        CHECK(unhides == 1, "and the explicit unhide restores it (%d)", unhides);
     }
     if (failures) {
         printf("%d check(s) FAILED\n", failures);
