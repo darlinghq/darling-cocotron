@@ -59,7 +59,7 @@ static bool pump(Display *display, X11RelativeMouse *mouse, bool honoured, Pumpe
     return true;
 }
 
-static void pointer(Display *display, int *x, int *y) {
+static void pointerPosition(Display *display, int *x, int *y) {
     Window root, child;
     int wx, wy;
     unsigned int mask;
@@ -135,7 +135,7 @@ int main(void) {
             return 1;
         if (single.events - before > worstEvents)
             worstEvents = single.events - before;
-        pointer(display, &px, &py);
+        pointerPosition(display, &px, &py);
         if (px == 300 && py == 250)
             movedBack++;
     }
@@ -158,7 +158,7 @@ int main(void) {
     }
     XSync(display, False);
     pump(display, &mouse, true, &burst);
-    pointer(display, &px, &py);
+    pointerPosition(display, &px, &py);
     CHECK(burst.deltaX == sentX && burst.deltaY == sentY, "burst deltas add up: got %g,%g, sent %g,%g", burst.deltaX,
           burst.deltaY, sentX, sentY);
     CHECK(px == 300 && py == 250, "after a burst the pointer is under the cursor: %d,%d", px, py);
@@ -167,21 +167,21 @@ int main(void) {
     Pumped warp = {0};
     CHECK(X11RelativeMouseApplicationWarp(display, &mouse, 200, 180, true), "application warp");
     pump(display, &mouse, true, &warp);
-    pointer(display, &px, &py);
+    pointerPosition(display, &px, &py);
     CHECK(mouse.virtualX == 200 && mouse.virtualY == 180 && px == 200 && py == 180,
           "the warp moved the cursor and the pointer: virtual %g,%g pointer %d,%d", mouse.virtualX, mouse.virtualY, px,
           py);
     CHECK(warp.posted == 0 && warp.deltaX == 0 && warp.deltaY == 0, "a warp produces no delta (%d posted)", warp.posted);
     move(display, 5, 7);
     pump(display, &mouse, true, &warp);
-    pointer(display, &px, &py);
+    pointerPosition(display, &px, &py);
     CHECK(warp.deltaX == 5 && warp.deltaY == 7 && px == 200 && py == 180, "motion continues from the warp target: %g,%g, pointer %d,%d",
           warp.deltaX, warp.deltaY, px, py);
 
     /* A warp outside the grab window is clamped, as the server clips it; the pointer is parked inside the edge. */
     X11RelativeMouseApplicationWarp(display, &mouse, 10, 10, true);
     pump(display, &mouse, true, &warp);
-    pointer(display, &px, &py);
+    pointerPosition(display, &px, &py);
     CHECK(mouse.virtualX == 100 && mouse.virtualY == 100 && px == 164 && py == 164,
           "an out-of-window warp is clamped: virtual %g,%g pointer %d,%d", mouse.virtualX, mouse.virtualY, px, py);
 
@@ -210,7 +210,7 @@ int main(void) {
     CHECK(X11RelativeMouseApplicationWarp(display, &mouse, 450, 350, true), "warp to a point the old bounds allowed");
     if (!pump(display, &mouse, true, &shrink))
         return 1;
-    pointer(display, &px, &py);
+    pointerPosition(display, &px, &py);
     CHECK(shrink.posted == 0 && shrink.deltaX == 0 && shrink.deltaY == 0,
           "an unreachable warp is no motion: %d posted, %g,%g", shrink.posted, shrink.deltaX, shrink.deltaY);
     CHECK(shrink.motions <= 3, "no feedback loop: %d motion events", shrink.motions);
@@ -227,6 +227,19 @@ int main(void) {
 
     X11RelativeMouseRelease(display, &mouse);
     CHECK(!mouse.active, "released");
+    /* A grab that outlived the release would freeze every other client's pointer: a second client can take it. */
+    Display *other = XOpenDisplay(NULL);
+    CHECK(other != NULL, "second client for the leaked-grab probe");
+    if (other) {
+        Window otherWindow = XCreateSimpleWindow(other, DefaultRootWindow(other), 0, 0, 50, 50, 0, 0, 0);
+        XMapWindow(other, otherWindow);
+        XSync(other, False);
+        int grab = XGrabPointer(other, otherWindow, False, ButtonPressMask, GrabModeAsync, GrabModeAsync, None, None,
+                                CurrentTime);
+        CHECK(grab == GrabSuccess, "after release another client can grab the pointer (got %d)", grab);
+        XUngrabPointer(other, CurrentTime);
+        XCloseDisplay(other);
+    }
     X11RelativeMouseRelease(display, &mouse);
     CHECK(!mouse.active, "releasing twice is harmless");
 
@@ -239,7 +252,7 @@ int main(void) {
     Pumped follow = {0};
     move(display, 10, 0);
     pump(display, &mouse, false, &follow);
-    pointer(display, &px, &py);
+    pointerPosition(display, &px, &py);
     CHECK(follow.deltaX == 10 && follow.deltaY == 0, "delta reported: %g,%g", follow.deltaX, follow.deltaY);
     CHECK(px == 310 && py == 250 && mouse.virtualX == 310 && mouse.virtualY == 250,
           "the cursor follows the pointer: virtual %g,%g pointer %d,%d", mouse.virtualX, mouse.virtualY, px, py);
@@ -265,11 +278,11 @@ int main(void) {
     CHECK(X11RelativeMouseGrab(display, &mouse, window, true) == GrabSuccess, "grab for the no-op warp");
     Pumped settle = {0};
     pump(display, &mouse, true, &settle);
-    pointer(display, &px, &py);
+    pointerPosition(display, &px, &py);
     move(display, 5, 0);
     move(display, -5, 0);
     XSync(display, False);
-    pointer(display, &px, &py);
+    pointerPosition(display, &px, &py);
     unsigned long warpSerial;
     unsigned queuedByWarp = X11RelativeMouseWarpPointer(display, px, py, &warpSerial);
     CHECK(queuedByWarp == 0 && warpSerial == 0, "a warp to the pointer's own position is skipped: queued %u", queuedByWarp);

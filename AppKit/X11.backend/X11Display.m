@@ -1792,6 +1792,10 @@ void CGNativeBorderFrameWidthsForStyle(NSUInteger styleMask, CGFloat *top,
     if (doGrab) {
         _relativeRequested = YES;
         [self beginRelativeMouse];
+        // A failed first grab (AlreadyGrabbed while a window manager holds the
+        // pointer) is retried for a while, like one after a reconfiguration.
+        if (!_relativeMouse.active)
+            [self scheduleRelativeMouseRetry];
     } else {
         _relativeRequested = NO;
         [self suspendRelativeMouse];
