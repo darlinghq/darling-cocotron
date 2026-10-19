@@ -283,6 +283,26 @@ int main(void) {
           queuedMotion.deltaX, queuedMotion.deltaY, queuedMotion.events);
     X11RelativeMouseRelease(display, &mouse);
 
+    /* Real motion is queued and unread, so the model's last-read position lags the server's: an application warp to its
+     * own cursor position is a target equal to that stale position, but the pointer is somewhere else and the warp
+     * does move it. Its echo must be expected, or it is posted as a motion that undoes the queued one. */
+    XWarpPointer(display, None, root, 0, 0, 0, 0, 300, 250);
+    XSync(display, False);
+    CHECK(X11RelativeMouseGrab(display, &mouse, window, true) == GrabSuccess, "grab for the lagging-position warp");
+    Pumped parked = {0};
+    pump(display, &mouse, true, &parked);
+    move(display, 5, 0);
+    XSync(display, False);
+    CHECK(X11RelativeMouseApplicationWarp(display, &mouse, mouse.virtualX, mouse.virtualY, true),
+          "application warp to its own cursor position while motion is queued");
+    CHECK(mouse.echoCount == 1, "the warp's echo is expected: %u", mouse.echoCount);
+    Pumped lagging = {0};
+    pump(display, &mouse, true, &lagging);
+    CHECK(lagging.posted == 1 && lagging.deltaX == 5 && lagging.deltaY == 0 && lagging.echoes == 1,
+          "the queued motion is delivered whole and the echo is not posted: posted=%d delta=%g,%g echoes=%d",
+          lagging.posted, lagging.deltaX, lagging.deltaY, lagging.echoes);
+    X11RelativeMouseRelease(display, &mouse);
+
     /* The root shrinks: the bounds follow it although Xlib's cached DisplayWidth/Height are still the old size. */
     X11RelativeMouseBounds bounds;
     int screen = DefaultScreen(display);

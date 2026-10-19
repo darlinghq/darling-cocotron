@@ -166,10 +166,6 @@ static inline bool X11RelativeMouseWarp(X11RelativeMouse *mouse, double x, doubl
         X11RelativeMouseClamp(mouse, &x, &y);
         mouse->virtualX = x;
         mouse->virtualY = y;
-        /* A warp to where the pointer already is generates no MotionNotify. Expecting an echo anyway could
-         * swallow a real motion that carries the warp's serial (one delivered between the warp and the sync). */
-        if (targetX == mouse->physicalX && targetY == mouse->physicalY)
-            return true;
     }
     return X11RelativeMouseExpectEcho(mouse, targetX, targetY, queuedEvents, serial);
 }

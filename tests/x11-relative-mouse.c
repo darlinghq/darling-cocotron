@@ -330,12 +330,15 @@ static void unreachableWarpTargetIsFollowed(void) {
 static void warpToTheSamePlaceExpectsNoEcho(void) {
     X11RelativeMouse m = {0};
     X11RelativeMouseBegin(&m, 500, 400, 0, anywhere);
-    /* No MotionNotify comes back for a warp to where the pointer already is, even with other events queued. */
-    warp(&m, 500, 400, 3, true);
+    /* The caller reports queued==0 when the server pointer is already at the target: no echo is expected. */
+    warp(&m, 500, 400, 0, true);
     assert(m.echoCount == 0);
-    /* So a real motion that carries the warp's serial is motion, not an echo. */
-    X11RelativeMouseMotion r = X11RelativeMouseHandleMotion(&m, 507, 400, true, nextSerial - 1);
-    assert(r.post && !r.echo && r.deltaX == 7);
+    /* The model's last-read position lags the server while motion is queued and unread: the target may equal it
+     * while the warp still moves the pointer. The caller reporting queued>0 means an echo is coming. */
+    warp(&m, 500, 400, 3, true);
+    assert(m.echoCount == 1);
+    X11RelativeMouseMotion r = X11RelativeMouseHandleMotion(&m, 500, 400, true, nextSerial - 1);
+    assert(r.echo && !r.post && m.echoCount == 0);
     /* A warp elsewhere still expects its echo. */
     warp(&m, 600, 400, 1, true);
     assert(m.echoCount == 1);
@@ -345,7 +348,7 @@ static void warpToTheSamePlaceExpectsNoEcho(void) {
     X11RelativeMouseRestoreCursor(&m, 700.5, 900);
     assert(m.virtualX == 700.5 && m.virtualY == 599 && m.physicalX == 500);
     X11RelativeMouseEnd(&m);
-    puts("PASS: a warp to the pointer's own position expects no echo");
+    puts("PASS: a warp's echo is expected exactly when the caller reports queued events");
 }
 
 static void serialsWrap(void) {
