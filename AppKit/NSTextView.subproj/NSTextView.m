@@ -484,6 +484,8 @@ static NSTextView *s_targetTextView = nil;
     [_selectedRanges release];
     [_initialRanges release];
     [_selectedTextAttributes release];
+    [_linkTextAttributes release];
+    [_markedTextAttributes release];
     [_fieldEditorUndoManager release];
     [_undoTyping release];
     [super dealloc];
@@ -564,6 +566,14 @@ static NSTextView *s_targetTextView = nil;
     return _selectedTextAttributes;
 }
 
+- (NSDictionary *) linkTextAttributes {
+    return _linkTextAttributes;
+}
+
+- (NSDictionary *) markedTextAttributes {
+    return _markedTextAttributes;
+}
+
 - (NSArray *) selectedRanges {
     return _selectedRanges;
 }
@@ -635,6 +645,16 @@ static NSTextView *s_targetTextView = nil;
 - (void) setSelectedTextAttributes: (NSDictionary *) attributes {
     [_selectedTextAttributes autorelease];
     _selectedTextAttributes = [attributes retain];
+}
+
+- (void) setLinkTextAttributes: (NSDictionary *) attributes {
+    [_linkTextAttributes autorelease];
+    _linkTextAttributes = [attributes copy];
+}
+
+- (void) setMarkedTextAttributes: (NSDictionary *) attributes {
+    [_markedTextAttributes autorelease];
+    _markedTextAttributes = [attributes copy];
 }
 
 - (NSRange) selectionRangeForProposedRange: (NSRange) range
@@ -3162,6 +3182,57 @@ static NSTextView *s_targetTextView = nil;
              allowsTypingCoalescing: YES];
     [self didChangeText];
     [self scrollRangeToVisible: [self selectedRange]];
+}
+
+- (BOOL) hasMarkedText {
+    return NO;
+}
+
+- (NSRange) markedRange {
+    return NSMakeRange(NSNotFound, 0);
+}
+
+- (void) unmarkText {
+}
+
+- (void) setMarkedText: (id) string selectedRange: (NSRange) selRange replacementRange: (NSRange) replRange {
+}
+
+- (NSArray *) validAttributesForMarkedText {
+    return [NSArray array];
+}
+
+- (NSAttributedString *) attributedSubstringForProposedRange: (NSRange) range actualRange: (NSRangePointer) actualRange {
+    NSRange textRange = NSMakeRange(0, [_textStorage length]);
+    NSRange intersection = NSIntersectionRange(range, textRange);
+    if (actualRange != NULL)
+        *actualRange = intersection;
+    if (intersection.length > 0)
+        return [_textStorage attributedSubstringFromRange: intersection];
+    return nil;
+}
+
+- (NSRect) firstRectForCharacterRange: (NSRange) range actualRange: (NSRangePointer) actualRange {
+    if (actualRange != NULL)
+        *actualRange = range;
+    NSLayoutManager *layoutManager = [self layoutManager];
+    if (layoutManager && [_textStorage length] > 0) {
+        NSRange glyphRange = [layoutManager glyphRangeForCharacterRange: range actualCharacterRange: actualRange];
+        if (glyphRange.location != NSNotFound) {
+            NSRect glyphRect = [layoutManager boundingRectForGlyphRange: glyphRange inTextContainer: _textContainer];
+            NSPoint origin = [self textContainerOrigin];
+            glyphRect.origin.x += origin.x;
+            glyphRect.origin.y += origin.y;
+            NSRect viewRect = [self convertRect: glyphRect toView: nil];
+            if ([self window])
+                return [[self window] convertRectToScreen: viewRect];
+            return viewRect;
+        }
+    }
+    NSRect r = [self convertRect: [self bounds] toView: nil];
+    if ([self window])
+        return [[self window] convertRectToScreen: r];
+    return r;
 }
 
 - (void) keyDown: (NSEvent *) event {
