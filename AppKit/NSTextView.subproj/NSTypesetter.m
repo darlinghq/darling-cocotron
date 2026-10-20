@@ -100,6 +100,8 @@
                                   actualCharacterRange: actualCharacterRange];
 }
 
+// STUB: assumes 1:1 glyph-to-character mapping for Latin/ASCII text layout fallback.
+// Complex scripts with combining characters, surrogates or ligatures require CoreText-backed glyph mapping.
 - (NSUInteger) getGlyphsInRange: (NSRange) glyphRange
                          glyphs: (NSGlyph *) glyphs
                characterIndexes: (NSUInteger *) characterIndexes
@@ -107,8 +109,27 @@
                     elasticBits: (BOOL *) elasticBits
                      bidiLevels: (unsigned char *) bidiLevels
 {
-    NSInvalidAbstractInvocation();
-    return 0;
+    if (characterIndexes) {
+        for (NSUInteger i = 0; i < glyphRange.length; ++i) {
+            characterIndexes[i] = glyphRange.location + i;
+        }
+    }
+    if (glyphInscriptions) {
+        for (NSUInteger i = 0; i < glyphRange.length; ++i) {
+            glyphInscriptions[i] = 0;
+        }
+    }
+    if (elasticBits) {
+        for (NSUInteger i = 0; i < glyphRange.length; ++i) {
+            elasticBits[i] = NO;
+        }
+    }
+    if (bidiLevels) {
+        for (NSUInteger i = 0; i < glyphRange.length; ++i) {
+            bidiLevels[i] = 0;
+        }
+    }
+    return glyphRange.length;
 }
 
 - (void) getLineFragmentRect: (NSRect *) fragmentRect
@@ -412,7 +433,12 @@
             maxNumberOfLineFragments: (NSUInteger) maxNumLines
                       nextGlyphIndex: (NSUInteger *) nextGlyph
 {
-    NSInvalidAbstractInvocation();
+    NSTypesetter_concrete *typesetter = [[NSTypesetter_concrete alloc] init];
+    [typesetter layoutGlyphsInLayoutManager: layoutManager
+                       startingAtGlyphIndex: startGlyphIndex
+                   maxNumberOfLineFragments: maxNumLines
+                             nextGlyphIndex: nextGlyph];
+    [typesetter release];
 }
 
 #pragma mark NSGlyphStorage Protocol

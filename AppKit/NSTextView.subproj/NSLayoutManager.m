@@ -104,6 +104,7 @@ static inline NSGlyphFragment *fragmentAtGlyphIndex(NSLayoutManager *self,
         // storage) Retaining it here would create a retain cycle.
         _textStorage = [[[keyed decodeObjectForKey: @"NSTextStorage"] retain]
                 autorelease];
+        [_textStorage addLayoutManager: self];
 
         _rangeToTemporaryAttributes = NSCreateRangeToCopiedObjectEntries(0);
         NSRangeEntryInsert(_rangeToTemporaryAttributes,
@@ -117,6 +118,11 @@ static inline NSGlyphFragment *fragmentAtGlyphIndex(NSLayoutManager *self,
         [_textContainers
                 addObjectsFromArray:
                         [keyed decodeObjectForKey: @"NSTextContainers"]];
+        for (NSTextContainer *container in _textContainers) {
+            if ([container layoutManager] == nil) {
+                [container setLayoutManager: self];
+            }
+        }
         _glyphFragments = NSCreateRangeToOwnedPointerEntries(2);
         _invalidFragments = NSCreateRangeToOwnedPointerEntries(2);
         _layoutInvalid = YES;
@@ -150,6 +156,7 @@ static inline NSGlyphFragment *fragmentAtGlyphIndex(NSLayoutManager *self,
     [_typesetter release];
     [_glyphGenerator release];
     [_textContainers release];
+    [_textFont release];
     NSFreeRangeEntries(_glyphFragments);
     NSFreeRangeEntries(_invalidFragments);
     NSZoneFree(NULL, _rectCache);
@@ -245,6 +252,47 @@ static inline NSGlyphFragment *fragmentAtGlyphIndex(NSLayoutManager *self,
 }
 
 - (void) setUsesScreenFonts: (BOOL) yorn {
+}
+
+- (BOOL) showsControlCharacters {
+    return _showsControlCharacters;
+}
+
+- (void) setShowsControlCharacters: (BOOL) flag {
+    _showsControlCharacters = flag;
+}
+
+- (BOOL) showsInvisibleCharacters {
+    return _showsInvisibleCharacters;
+}
+
+- (void) setShowsInvisibleCharacters: (BOOL) flag {
+    _showsInvisibleCharacters = flag;
+}
+
+- (BOOL) usesFontLeading {
+    return _usesFontLeading;
+}
+
+- (void) setUsesFontLeading: (BOOL) flag {
+    _usesFontLeading = flag;
+}
+
+- (BOOL) backgroundLayoutEnabled {
+    return _backgroundLayoutEnabled;
+}
+
+- (void) setBackgroundLayoutEnabled: (BOOL) flag {
+    _backgroundLayoutEnabled = flag;
+}
+
+- (NSFont *) textFont {
+    return _textFont;
+}
+
+- (void) setTextFont: (NSFont *) font {
+    [_textFont autorelease];
+    _textFont = [font retain];
 }
 
 - (void) addTextContainer: (NSTextContainer *) container {
@@ -933,20 +981,24 @@ static inline NSGlyphFragment *fragmentAtGlyphIndex(NSLayoutManager *self,
 #endif
 
     NSInteger i, count = [_textContainers count];
+    NSUInteger textLength = [_textStorage length];
 
     for (i = 0; i < count; i++) {
         NSTextContainer *container = [_textContainers objectAtIndex: i];
         NSTextView *textView = [container textView];
         if (textView) {
             NSRange selectedRange = [textView selectedRange];
-            NSRange textRange = NSMakeRange(0, [_textStorage length]);
-            NSRange range = NSIntersectionRange(selectedRange, textRange);
-            if (!NSEqualRanges(selectedRange, range)) {
-#if DEBUG_fixupSelectionInRange_changeInLength
-                NSLog(@"textView: %@ setSelectedRange: %@", textView,
-                      NSStringFromRange(range));
-#endif
-                [textView setSelectedRange: range];
+            if (selectedRange.location == NSNotFound)
+                continue;
+            NSRange fixedRange = selectedRange;
+            if (fixedRange.location > textLength) {
+                fixedRange.location = textLength;
+                fixedRange.length = 0;
+            } else if (fixedRange.length > textLength - fixedRange.location) {
+                fixedRange.length = textLength - fixedRange.location;
+            }
+            if (!NSEqualRanges(selectedRange, fixedRange)) {
+                [textView setSelectedRange: fixedRange];
             }
         }
     }
@@ -1023,6 +1075,15 @@ static inline NSGlyphFragment *fragmentAtGlyphIndex(NSLayoutManager *self,
 #endif
 
     [self validateGlyphsAndLayoutForContainer: container];
+}
+
+- (void) ensureLayoutForGlyphRange: (NSRange) glyphRange {
+    [self validateGlyphsAndLayoutForGlyphRange: glyphRange];
+}
+
+- (void) ensureLayoutForCharacterRange: (NSRange) charRange {
+    NSRange glyphRange = [self glyphRangeForCharacterRange: charRange actualCharacterRange: NULL];
+    [self validateGlyphsAndLayoutForGlyphRange: glyphRange];
 }
 
 - (NSUInteger) glyphIndexForPoint: (NSPoint) point
@@ -2630,6 +2691,10 @@ static inline void _appendRectToCache(NSLayoutManager *self, NSRect rect) {
 
 - (CGFloat) defaultLineHeightForFont: (NSFont *) font {
     return [font defaultLineHeightForFont];
+}
+
+- (CGFloat) defaultBaselineOffsetForFont: (NSFont *) font {
+    return [font ascender];
 }
 
 - (NSDictionary *)
