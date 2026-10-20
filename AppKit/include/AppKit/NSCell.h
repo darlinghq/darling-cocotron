@@ -143,6 +143,7 @@ APPKIT_EXPORT NSNotificationName NSControlTintDidChangeNotification;
     BOOL _sendsActionOnEndEditing;
     BOOL _hasValidObjectValue;
     BOOL _usesSingleLineMode;
+    NSInteger _sendActionOnMask;
     BOOL _truncatesLastVisibleLine;
     BOOL _allowsUndo;
     NSUserInterfaceLayoutDirection _userInterfaceLayoutDirection;
@@ -186,6 +187,7 @@ APPKIT_EXPORT NSNotificationName NSControlTintDidChangeNotification;
 @property NSWritingDirection baseWritingDirection;
 - (BOOL) wraps;
 - (NSString *) title;
+- (NSInteger) sendActionOn: (NSInteger) mask;
 
 - (BOOL) isEnabled;
 - (BOOL) isEditable;

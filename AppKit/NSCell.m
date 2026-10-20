@@ -467,6 +467,12 @@ NSNotificationName NSControlTintDidChangeNotification = @"NSControlTintDidChange
     return NULL;
 }
 
+- (NSInteger) sendActionOn: (NSInteger) mask {
+    NSInteger old = _sendActionOnMask;
+    _sendActionOnMask = mask;
+    return old;
+}
+
 - (NSInteger) tag {
     return -1;
 }

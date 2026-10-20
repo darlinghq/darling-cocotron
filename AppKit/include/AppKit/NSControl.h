@@ -119,6 +119,7 @@ APPKIT_EXPORT const NSNotificationName NSControlTextDidEndEditingNotification;
 
 - (void) performClick: sender;
 - (BOOL) sendAction: (SEL) action to: target;
+- (NSInteger) sendActionOn: (NSInteger) mask;
 
 - (NSText *) currentEditor;
 - (void) validateEditing;
