@@ -56,7 +56,10 @@ APPKIT_EXPORT NSString *const NSScrollViewDidLiveScrollNotification;
     CGFloat _magnification;
     CGFloat _minMagnification;
     CGFloat _maxMagnification;
+    NSScrollerKnobStyle _scrollerKnobStyle;
 }
+
+@property NSScrollerKnobStyle scrollerKnobStyle;
 
 + (NSSize) frameSizeForContentSize: (NSSize) contentSize
              hasHorizontalScroller: (BOOL) hasHorizontalScroller
@@ -124,6 +127,8 @@ APPKIT_EXPORT NSString *const NSScrollViewDidLiveScrollNotification;
 - (void) setBorderType: (NSBorderType) borderType;
 - (void) setVerticalScroller: (NSScroller *) scroller;
 - (void) setHorizontalScroller: (NSScroller *) scroller;
+- (NSScrollerKnobStyle) scrollerKnobStyle;
+- (void) setScrollerKnobStyle: (NSScrollerKnobStyle) knobStyle;
 - (void) setHasVerticalScroller: (BOOL) flag;
 - (void) setHasHorizontalScroller: (BOOL) flag;
 - (void) setHasVerticalRuler: (BOOL) flag;
