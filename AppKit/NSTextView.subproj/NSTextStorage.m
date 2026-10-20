@@ -80,6 +80,8 @@ NSString *const NSTextStorageDidProcessEditingNotification =
 }
 
 - (void) addLayoutManager: (NSLayoutManager *) layoutManager {
+    if (layoutManager == nil || [_layoutManagers indexOfObjectIdenticalTo: layoutManager] != NSNotFound)
+        return;
     [_layoutManagers addObject: layoutManager];
     [layoutManager setTextStorage: self];
 }

@@ -270,19 +270,25 @@ static NSTextView *s_targetTextView = nil;
 }
 
 - (void) _setTextStorage: (NSTextStorage *) storage {
+    if (storage == nil)
+        return;
     if (_ownsTextStorage)
         [_textStorage release];
 
     _textStorage = storage;
     _ownsTextStorage = NO;
 
-    NSMutableDictionary *typingAttributes =
-            [[_textStorage attributesAtIndex: 0
-                              effectiveRange: NULL] mutableCopy];
-    if (![typingAttributes objectForKey: NSFontAttributeName]) {
+    NSMutableDictionary *typingAttributes = nil;
+    if ([_textStorage length] > 0) {
+        typingAttributes = [[_textStorage attributesAtIndex: 0
+                                             effectiveRange: NULL] mutableCopy];
+    } else {
+        typingAttributes = [[NSMutableDictionary alloc] init];
+    }
+    if (_font && ![typingAttributes objectForKey: NSFontAttributeName]) {
         [typingAttributes setObject: _font forKey: NSFontAttributeName];
     }
-    if (![typingAttributes objectForKey: NSForegroundColorAttributeName]) {
+    if (_textColor && ![typingAttributes objectForKey: NSForegroundColorAttributeName]) {
         [typingAttributes setObject: _textColor
                              forKey: NSForegroundColorAttributeName];
     }
@@ -311,10 +317,16 @@ static NSTextView *s_targetTextView = nil;
 
         _textContainer =
                 [[keyed decodeObjectForKey: @"NSTextContainer"] retain];
+        [_textContainer setTextView: self];
         _textContainerInset = NSMakeSize(4, 4);
 
-        _textStorage = [[[_textContainer layoutManager] textStorage] retain];
-        [_textStorage addLayoutManager: [_textContainer layoutManager]];
+        NSLayoutManager *lm = [_textContainer layoutManager];
+        if (lm != nil) {
+            _textStorage = [[lm textStorage] retain];
+            if (_textStorage != nil) {
+                [_textStorage addLayoutManager: lm];
+            }
+        }
         _ownsTextStorage = YES;
 
         _delegate = [keyed decodeObjectForKey: @"NSDelegate"];
@@ -392,6 +404,18 @@ static NSTextView *s_targetTextView = nil;
                                                              nil]];
 
     return self;
+}
+
+- (BOOL) acceptsGlyphInfo {
+    return _acceptsGlyphInfo;
+}
+
+- (void) setAcceptsGlyphInfo: (BOOL) flag {
+    _acceptsGlyphInfo = flag;
+}
+
+- (void) setNeedsDisplayInRect: (NSRect) rect avoidAdditionalLayout: (BOOL) avoidLayout {
+    [self setNeedsDisplayInRect: rect];
 }
 
 - initWithFrame: (NSRect) frame textContainer: (NSTextContainer *) container {
