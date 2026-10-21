@@ -230,15 +230,67 @@ static NSSavePanel *_newPanel = nil;
     [self _endWithCode: NSCancelButton];
 }
 
-- (void) _endWithCode: (NSModalResponse) code {
-    if (_runsAsSheet)
-        [NSApp endSheet: self returnCode: code];
-    else
-        [NSApp stopModalWithCode: code];
+- (void) cancelOperation: (id) sender {
+    [self _cancel: sender];
 }
 
+- (void) _endWithCode: (NSModalResponse) code {
+    if (_runsAsSheet) {
+        [NSApp endSheet: self returnCode: code];
+    } else {
+        if ([NSApp modalWindow] == self)
+            [NSApp stopModalWithCode: code];
+        [self orderOut: nil];
+    }
+}
+
+// DARLING NOTE: if a key window is active, presents as an asynchronous sheet.
+// Otherwise, runs modally to satisfy dialog callers awaiting synchronous results.
 - (void) beginWithCompletionHandler: (void (^)(NSModalResponse result)) handler {
-    NSUnimplementedMethod();
+    NSWindow *keyWindow = [NSApp keyWindow];
+    if (keyWindow != nil && keyWindow != self) {
+        [self beginSheetModalForWindow: keyWindow completionHandler: handler];
+    } else {
+        NSModalResponse result = [self runModal];
+        if (handler)
+            handler(result);
+    }
+}
+
+- (void) setNameFieldLabel: (NSString *) label {
+}
+
+- (NSString *) nameFieldLabel {
+    return @"";
+}
+
+- (void) setShowsTagField: (BOOL) flag {
+}
+
+- (BOOL) showsTagField {
+    return NO;
+}
+
+- (void) setTagNames: (NSArray *) names {
+    (void)names;
+}
+
+- (NSArray *) tagNames {
+    return [NSArray array];
+}
+
+- (void) setExtensionHidden: (BOOL) flag {
+}
+
+- (BOOL) isExtensionHidden {
+    return NO;
+}
+
+- (void) setCanSelectHiddenExtension: (BOOL) flag {
+}
+
+- (BOOL) canSelectHiddenExtension {
+    return NO;
 }
 
 - (void) beginSheetModalForWindow: (NSWindow *) window

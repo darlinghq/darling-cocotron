@@ -95,6 +95,20 @@ enum {
 - (void) setPrompt: (NSString *) message;
 - (NSString *) prompt;
 
+- (void) setNameFieldLabel: (NSString *) label;
+- (NSString *) nameFieldLabel;
+- (void) setShowsTagField: (BOOL) flag;
+- (BOOL) showsTagField;
+- (void) setTagNames: (NSArray *) names;
+- (NSArray *) tagNames;
+- (void) setExtensionHidden: (BOOL) flag;
+- (BOOL) isExtensionHidden;
+- (void) setCanSelectHiddenExtension: (BOOL) flag;
+- (BOOL) canSelectHiddenExtension;
+
+- (void) cancelOperation: (id) sender;
+- (void) beginWithCompletionHandler: (void (^)(NSModalResponse result)) handler;
+
 - (void) beginSheetForDirectory: (NSString *) path
                            file: (NSString *) name
                  modalForWindow: (NSWindow *) docWindow
