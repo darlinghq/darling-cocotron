@@ -585,13 +585,27 @@ const NSTimeInterval kMouseMovementThreshold = .001f;
                 item = [activeView itemAtSelectedIndex];
                 if ([event type] == NSLeftMouseUp) {
                     MENUDEBUG(@"mouseUp on item: %@", item);
-                    if (item == nil || ([viewStack count] <= 2) ||
-                        [item isEnabled]) {
-                        MENUDEBUG(@"mouse up - exiting because of many "
-                                  @"possible reasons...");
+                    if (item == nil) {
+                        BOOL insideAnyMenu = NO;
+                        for (NSMenuView *v in viewStack) {
+                            NSPoint p = [[v window] convertScreenToBase: point];
+                            p = [v convertPoint: p fromView: nil];
+                            if (NSMouseInRect(p, [v bounds], [v isFlipped])) {
+                                insideAnyMenu = YES;
+                                break;
+                            }
+                        }
+                        if (!insideAnyMenu) {
+                            state = STATE_EXIT;
+                        } else {
+                            state = STATE_MOUSEUP;
+                        }
+                    } else if ([item hasSubmenu]) {
+                        state = STATE_MOUSEUP;
+                    } else if ([item isEnabled] && ![item isSeparatorItem]) {
                         state = STATE_EXIT;
                     } else {
-                        MENUDEBUG(@"mouse up");
+                        // Clicking a disabled (grayed out) item or separator does not dismiss the menu
                         state = STATE_MOUSEUP;
                     }
                 }
