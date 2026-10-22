@@ -46,6 +46,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <QuartzCore/CALayerContext.h>
 #import <QuartzCore/CATransaction.h>
 #import <AppKit/NSLayoutConstraint.h>
+#import <AppKit/NSLayoutGuide.h>
 #import <AppKit/NSTextInput.h>
 #import <AppKit/NSTextInputClient.h>
 #import <objc/runtime.h>
@@ -3113,6 +3114,46 @@ static CGFloat backingScaleFactor(NSView *view) {
 }
 
 - (void) invalidateIntrinsicContentSize {
+}
+
+static char installedViewLayoutGuidesKey;
+
+static NSMutableArray *installedViewLayoutGuides(NSView *view, BOOL create) {
+    NSMutableArray *guides = objc_getAssociatedObject(view, &installedViewLayoutGuidesKey);
+    if (guides == nil && create) {
+        guides = [NSMutableArray array];
+        objc_setAssociatedObject(view, &installedViewLayoutGuidesKey, guides,
+                                 OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    return guides;
+}
+
+- (NSArray *) layoutGuides {
+    NSArray *guides = installedViewLayoutGuides(self, NO);
+    return guides ? [[guides copy] autorelease] : [NSArray array];
+}
+
+- (void) addLayoutGuide: (NSLayoutGuide *) guide {
+    if (guide == nil) return;
+    NSView *oldOwner = [guide owningView];
+    if (oldOwner != nil && oldOwner != self) {
+        [oldOwner removeLayoutGuide: guide];
+    }
+    NSMutableArray *guides = installedViewLayoutGuides(self, YES);
+    if (![guides containsObject: guide]) {
+        [guides addObject: guide];
+        [guide setOwningView: self];
+    }
+}
+
+- (void) removeLayoutGuide: (NSLayoutGuide *) guide {
+    if (guide == nil) return;
+    NSMutableArray *guides = installedViewLayoutGuides(self, NO);
+    if ([guides containsObject: guide]) {
+        [guides removeObject: guide];
+        if ([guide owningView] == self)
+            [guide setOwningView: nil];
+    }
 }
 
 @end
