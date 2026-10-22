@@ -219,7 +219,7 @@ const NSTimeInterval kMouseMovementThreshold = .001f;
                     // itemIndexAtPoint: runs, leaving the submenu with no
                     // selected item.
                     if (checkView == lastRectView &&
-                        NSMouseInRect(checkPoint, lastRect, [self isFlipped]))
+                        NSMouseInRect(checkPoint, lastRect, [checkView isFlipped]))
                         break;
 
                     // Which item is the cursor on top of?
