@@ -13,28 +13,96 @@ NSSharingServiceName const NSSharingServiceNamePostOnLinkedIn = @"com.apple.shar
 
 @implementation NSSharingService
 
-- (NSMethodSignature *)methodSignatureForSelector:(SEL)aSelector
-{
-    return [NSMethodSignature signatureWithObjCTypes: "v@:"];
++ (NSArray<NSSharingService *> *) sharingServicesForItems: (NSArray *) items {
+    return [NSArray array];
 }
 
-- (void)forwardInvocation:(NSInvocation *)anInvocation
-{
-    NSLog(@"Stub called: %@ in %@", NSStringFromSelector([anInvocation selector]), [self class]);
++ (NSSharingService *) sharingServiceNamed: (NSSharingServiceName) serviceName {
+    return nil;
+}
+
+- (instancetype) initWithTitle: (NSString *) title image: (NSImage *) image alternateImage: (NSImage *) alternateImage handler: (void (^)(void)) block {
+    if ((self = [super init])) {
+        _title = [title copy];
+        _image = [image retain];
+        _alternateImage = [alternateImage retain];
+    }
+    return self;
+}
+
+- (void) dealloc {
+    [_title release];
+    [_image release];
+    [_alternateImage release];
+    [_menuItemTitle release];
+    [super dealloc];
+}
+
+- (NSString *) title {
+    return _title;
+}
+
+- (NSImage *) image {
+    return _image;
+}
+
+- (NSImage *) alternateImage {
+    return _alternateImage;
+}
+
+- (NSString *) menuItemTitle {
+    return _menuItemTitle;
+}
+
+- (void) setMenuItemTitle: (NSString *) title {
+    [_menuItemTitle release];
+    _menuItemTitle = [title copy];
+}
+
+- (id <NSSharingServiceDelegate>) delegate {
+    return _delegate;
+}
+
+- (void) setDelegate: (id <NSSharingServiceDelegate>) delegate {
+    _delegate = delegate;
+}
+
+- (BOOL) canPerformWithItems: (NSArray *) items {
+    return NO;
+}
+
+- (void) performWithItems: (NSArray *) items {
 }
 
 @end
 
 @implementation NSSharingServicePicker
 
-- (NSMethodSignature *)methodSignatureForSelector:(SEL)aSelector
-{
-    return [NSMethodSignature signatureWithObjCTypes: "v@:"];
+- (instancetype) initWithItems: (NSArray *) items {
+    if ((self = [super init])) {
+        _items = [items retain];
+    }
+    return self;
 }
 
-- (void)forwardInvocation:(NSInvocation *)anInvocation
-{
-    NSLog(@"Stub called: %@ in %@", NSStringFromSelector([anInvocation selector]), [self class]);
+- (void) dealloc {
+    [_items release];
+    [super dealloc];
+}
+
+- (id <NSSharingServicePickerDelegate>) delegate {
+    return _delegate;
+}
+
+- (void) setDelegate: (id <NSSharingServicePickerDelegate>) delegate {
+    _delegate = delegate;
+}
+
+- (NSMenu *) menu {
+    return [[[NSMenu alloc] initWithTitle: @"Share"] autorelease];
+}
+
+- (void) showRelativeToRect: (NSRect) rect ofView: (NSView *) view preferredEdge: (NSRectEdge) preferredEdge {
 }
 
 @end

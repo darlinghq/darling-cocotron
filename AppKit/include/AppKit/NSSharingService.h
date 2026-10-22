@@ -34,10 +34,43 @@ APPKIT_EXPORT NSSharingServiceName const NSSharingServiceNamePostOnSinaWeibo;
 APPKIT_EXPORT NSSharingServiceName const NSSharingServiceNamePostOnTencentWeibo;
 APPKIT_EXPORT NSSharingServiceName const NSSharingServiceNamePostOnTwitter;
 
-@interface NSSharingService : NSObject
+@class NSImage, NSArray, NSMenu, NSView;
+@protocol NSSharingServiceDelegate, NSSharingServicePickerDelegate;
+
+@interface NSSharingService : NSObject {
+    NSString *_title;
+    NSImage *_image;
+    NSImage *_alternateImage;
+    NSString *_menuItemTitle;
+    id <NSSharingServiceDelegate> _delegate;
+}
+
+@property (readonly, copy) NSString *title;
+@property (readonly, retain) NSImage *image;
+@property (readonly, retain) NSImage *alternateImage;
+@property (copy) NSString *menuItemTitle;
+@property (assign) id <NSSharingServiceDelegate> delegate;
+
++ (NSArray<NSSharingService *> *) sharingServicesForItems: (NSArray *) items;
++ (NSSharingService *) sharingServiceNamed: (NSSharingServiceName) serviceName;
+
+- (instancetype) initWithTitle: (NSString *) title image: (NSImage *) image alternateImage: (NSImage *) alternateImage handler: (void (^)(void)) block;
+- (BOOL) canPerformWithItems: (NSArray *) items;
+- (void) performWithItems: (NSArray *) items;
+
 @end
 
-@interface NSSharingServicePicker : NSObject
+@interface NSSharingServicePicker : NSObject {
+    NSArray *_items;
+    id <NSSharingServicePickerDelegate> _delegate;
+}
+
+@property (assign) id <NSSharingServicePickerDelegate> delegate;
+
+- (instancetype) initWithItems: (NSArray *) items;
+- (NSMenu *) menu;
+- (void) showRelativeToRect: (NSRect) rect ofView: (NSView *) view preferredEdge: (NSRectEdge) preferredEdge;
+
 @end
 
 @protocol NSSharingServiceDelegate <NSObject>
