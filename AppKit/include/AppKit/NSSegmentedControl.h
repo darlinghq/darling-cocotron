@@ -20,6 +20,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSCell.h>
 #import <AppKit/NSControl.h>
 
+typedef enum {
+    NSSegmentSwitchTrackingSelectOne,
+    NSSegmentSwitchTrackingSelectAny,
+    NSSegmentSwitchTrackingMomentary
+} NSSegmentSwitchTracking;
+
 enum {
     NSSegmentStyleAutomatic = 0,
     NSSegmentStyleRounded = 1,
@@ -35,6 +41,7 @@ typedef NSInteger NSSegmentStyle;
 
 - (NSInteger) segmentCount;
 - (NSSegmentStyle) segmentStyle;
+- (NSSegmentSwitchTracking) trackingMode;
 
 - (NSInteger) tagForSegment: (NSInteger) segment;
 - (NSImage *) imageForSegment: (NSInteger) segment;
@@ -50,6 +57,7 @@ typedef NSInteger NSSegmentStyle;
 
 - (void) setSegmentCount: (NSInteger) count;
 - (void) setSegmentStyle: (NSSegmentStyle) value;
+- (void) setTrackingMode: (NSSegmentSwitchTracking) trackingMode;
 
 - (void) setTag: (NSInteger) tag forSegment: (NSInteger) segment;
 - (void) setImage: (NSImage *) image forSegment: (NSInteger) segment;
