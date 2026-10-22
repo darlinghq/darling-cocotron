@@ -262,6 +262,14 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
     return _selectionHighlightStyle;
 }
 
+- (BOOL) usesAutomaticRowHeights {
+    return _usesAutomaticRowHeights;
+}
+
+- (void) setUsesAutomaticRowHeights: (BOOL) value {
+    _usesAutomaticRowHeights = value;
+}
+
 - (BOOL) allowsColumnReordering {
     return _allowsColumnReordering;
 }
@@ -1130,6 +1138,35 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     }
 }
 
+- (void) beginUpdates {
+    _updatesNestingCount++;
+}
+
+- (void) endUpdates {
+    if (_updatesNestingCount > 0) {
+        _updatesNestingCount--;
+        if (_updatesNestingCount == 0) {
+            [self noteNumberOfRowsChanged];
+            [self setNeedsDisplay: YES];
+        }
+    }
+}
+
+- (void) insertRowsAtIndexes: (NSIndexSet *) indexes withAnimation: (NSTableViewAnimationOptions) animationOptions {
+    [self noteNumberOfRowsChanged];
+    [self setNeedsDisplay: YES];
+}
+
+- (void) removeRowsAtIndexes: (NSIndexSet *) indexes withAnimation: (NSTableViewAnimationOptions) animationOptions {
+    [self noteNumberOfRowsChanged];
+    [self setNeedsDisplay: YES];
+}
+
+- (void) moveRowAtIndex: (NSInteger) oldIndex toIndex: (NSInteger) newIndex {
+    [self noteNumberOfRowsChanged];
+    [self setNeedsDisplay: YES];
+}
+
 - (void) noteNumberOfRowsChanged {
     NSSize size = [self frame].size;
     NSSize headerSize = [_headerView frame].size;
@@ -1189,6 +1226,12 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     [self noteNumberOfRowsChanged];
     [self setNeedsDisplay: YES];
     [_headerView setNeedsDisplay: YES];
+}
+
+- (void) reloadDataForRowIndexes: (NSIndexSet *) rowIndexes
+                   columnIndexes: (NSIndexSet *) columnIndexes
+{
+    [self setNeedsDisplay: YES];
 }
 
 - (void) tile {
