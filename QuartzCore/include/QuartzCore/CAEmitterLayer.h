@@ -20,12 +20,61 @@
 #import <QuartzCore/CALayer.h>
 
 typedef NSString* CAEmitterLayerEmitterShape NS_TYPED_ENUM;
+typedef NSString* CAEmitterLayerEmitterMode NS_TYPED_ENUM;
 typedef NSString* CAEmitterLayerRenderMode NS_TYPED_ENUM;
 
-@interface CAEmitterLayer : CALayer
+@class CAEmitterCell;
+
+@interface CAEmitterLayer : CALayer {
+    NSArray *_emitterCells;
+    float _birthRate;
+    float _lifetime;
+    CGPoint _emitterPosition;
+    CGFloat _emitterZPosition;
+    CGSize _emitterSize;
+    CGFloat _emitterDepth;
+    CAEmitterLayerEmitterShape _emitterShape;
+    CAEmitterLayerEmitterMode _emitterMode;
+    CAEmitterLayerRenderMode _renderMode;
+    BOOL _preservesDepth;
+    float _velocity;
+    float _scale;
+    float _spin;
+    unsigned int _seed;
+}
+
+@property (copy) NSArray<CAEmitterCell *> *emitterCells;
+@property float birthRate;
+@property float lifetime;
+@property CGPoint emitterPosition;
+@property CGFloat emitterZPosition;
+@property CGSize emitterSize;
+@property CGFloat emitterDepth;
+@property (copy) CAEmitterLayerEmitterShape emitterShape;
+@property (copy) CAEmitterLayerEmitterMode emitterMode;
+@property (copy) CAEmitterLayerRenderMode renderMode;
+@property BOOL preservesDepth;
+@property float velocity;
+@property float scale;
+@property float spin;
+@property unsigned int seed;
 
 @end
 
 CA_EXPORT CAEmitterLayerEmitterShape const kCAEmitterLayerPoint;
+CA_EXPORT CAEmitterLayerEmitterShape const kCAEmitterLayerLine;
+CA_EXPORT CAEmitterLayerEmitterShape const kCAEmitterLayerRectangle;
+CA_EXPORT CAEmitterLayerEmitterShape const kCAEmitterLayerCuboid;
+CA_EXPORT CAEmitterLayerEmitterShape const kCAEmitterLayerCircle;
+CA_EXPORT CAEmitterLayerEmitterShape const kCAEmitterLayerSphere;
 
+CA_EXPORT CAEmitterLayerEmitterMode const kCAEmitterLayerPoints;
+CA_EXPORT CAEmitterLayerEmitterMode const kCAEmitterLayerOutline;
+CA_EXPORT CAEmitterLayerEmitterMode const kCAEmitterLayerSurface;
+CA_EXPORT CAEmitterLayerEmitterMode const kCAEmitterLayerVolume;
+
+CA_EXPORT CAEmitterLayerRenderMode const kCAEmitterLayerUnordered;
+CA_EXPORT CAEmitterLayerRenderMode const kCAEmitterLayerOldestFirst;
+CA_EXPORT CAEmitterLayerRenderMode const kCAEmitterLayerOldestLast;
+CA_EXPORT CAEmitterLayerRenderMode const kCAEmitterLayerBackToFront;
 CA_EXPORT CAEmitterLayerRenderMode const kCAEmitterLayerAdditive;
