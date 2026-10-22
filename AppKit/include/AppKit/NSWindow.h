@@ -358,6 +358,8 @@ APPKIT_EXPORT const NSNotificationName NSWindowDidExposeNotification;
 - (NSSize) maxSize;
 - (NSSize) contentMinSize;
 - (NSSize) contentMaxSize;
+@property NSSize minFullScreenContentSize;
+@property NSSize maxFullScreenContentSize;
 
 - (BOOL) isOneShot;
 - (BOOL) isOpaque;

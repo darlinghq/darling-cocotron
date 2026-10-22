@@ -786,6 +786,22 @@ static BOOL _allowsAutomaticWindowTabbing;
     return _contentMaxSize;
 }
 
+- (NSSize) minFullScreenContentSize {
+    return _contentMinSize;
+}
+
+- (void) setMinFullScreenContentSize: (NSSize) value {
+    (void)value;
+}
+
+- (NSSize) maxFullScreenContentSize {
+    return _contentMaxSize;
+}
+
+- (void) setMaxFullScreenContentSize: (NSSize) value {
+    (void)value;
+}
+
 - (BOOL) isOneShot {
     return _isOneShot;
 }
