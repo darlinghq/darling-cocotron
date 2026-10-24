@@ -72,14 +72,16 @@
 }
 
 - (void) display {
-    if (!_pixelFormat) {
-        if ([self respondsToSelector: @selector(copyCGLPixelFormatForDisplayMask:)]) {
-            _pixelFormat = [(id)self copyCGLPixelFormatForDisplayMask: 0];
+    @synchronized(self) {
+        if (!_pixelFormat) {
+            if ([self respondsToSelector: @selector(copyCGLPixelFormatForDisplayMask:)]) {
+                _pixelFormat = [(id)self copyCGLPixelFormatForDisplayMask: 0];
+            }
         }
-    }
-    if (!_cglContext) {
-        if ([self respondsToSelector: @selector(copyCGLContextForPixelFormat:)]) {
-            _cglContext = [self copyCGLContextForPixelFormat: _pixelFormat];
+        if (!_cglContext) {
+            if ([self respondsToSelector: @selector(copyCGLContextForPixelFormat:)]) {
+                _cglContext = [self copyCGLContextForPixelFormat: _pixelFormat];
+            }
         }
     }
 

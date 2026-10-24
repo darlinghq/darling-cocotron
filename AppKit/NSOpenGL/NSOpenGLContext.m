@@ -174,7 +174,7 @@ static inline void _clearCurrentContext() {
         } else {
             [self performSelectorOnMainThread: @selector(updateViewParameters)
                                    withObject: nil
-                                waitUntilDone: NO];
+                                waitUntilDone: YES];
         }
     }
 
