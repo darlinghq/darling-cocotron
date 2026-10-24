@@ -20,4 +20,96 @@
 #import <QuartzCore/CAOpenGLLayer.h>
 
 @implementation CAOpenGLLayer
+
+- (BOOL) isAsynchronous {
+    return _asynchronous;
+}
+
+- (void) setAsynchronous: (BOOL) async {
+    _asynchronous = async;
+}
+
+- (BOOL) wantsExtendedDynamicRangeContent {
+    return _wantsExtendedDynamicRangeContent;
+}
+
+- (void) setWantsExtendedDynamicRangeContent: (BOOL) val {
+    _wantsExtendedDynamicRangeContent = val;
+}
+
+- (BOOL) canDrawInCGLContext: (CGLContextObj) ctx pixelFormat: (CGLPixelFormatObj) pf forLayerTime: (CFTimeInterval) t displayTime: (const CVTimeStamp *) ts {
+    return YES;
+}
+
+- (void) drawInCGLContext: (CGLContextObj) ctx pixelFormat: (CGLPixelFormatObj) pf forLayerTime: (CFTimeInterval) t displayTime: (const CVTimeStamp *) ts {
+    // Subclasses override
+}
+
+- (CGLPixelFormatObj) copyCGLPixelFormatForDisplayMask: (uint32_t) mask {
+    CGLPixelFormatAttribute attribs[] = {
+        kCGLPFAAccelerated,
+        kCGLPFADoubleBuffer,
+        kCGLPFAColorSize, (CGLPixelFormatAttribute)24,
+        kCGLPFAAlphaSize, (CGLPixelFormatAttribute)8,
+        kCGLPFADepthSize, (CGLPixelFormatAttribute)24,
+        (CGLPixelFormatAttribute)0
+    };
+    CGLPixelFormatObj pixelFormat = NULL;
+    GLint numScreens = 0;
+    CGLChoosePixelFormat(attribs, &pixelFormat, &numScreens);
+    return pixelFormat;
+}
+
+- (CGLPixelFormatObj) copyCGLPixelFormatForPixelFormat: (CGLPixelFormatObj) pf {
+    return pf ? CGLRetainPixelFormat(pf) : NULL;
+}
+
+- (CGLContextObj) copyCGLContextForPixelFormat: (CGLPixelFormatObj) pf {
+    if (!pf) return NULL;
+    CGLContextObj ctx = NULL;
+    CGLCreateContext(pf, NULL, &ctx);
+    return ctx;
+}
+
+- (void) display {
+    if (!_pixelFormat) {
+        if ([self respondsToSelector: @selector(copyCGLPixelFormatForDisplayMask:)]) {
+            _pixelFormat = [(id)self copyCGLPixelFormatForDisplayMask: 0];
+        }
+    }
+    if (!_cglContext) {
+        if ([self respondsToSelector: @selector(copyCGLContextForPixelFormat:)]) {
+            _cglContext = [self copyCGLContextForPixelFormat: _pixelFormat];
+        }
+    }
+
+    if (_cglContext) {
+        CGLContextObj prevCtx = CGLGetCurrentContext();
+        CGLSetCurrentContext(_cglContext);
+        CVTimeStamp ts;
+        memset(&ts, 0, sizeof(ts));
+        if ([self canDrawInCGLContext: _cglContext pixelFormat: _pixelFormat forLayerTime: 0.0 displayTime: &ts]) {
+            [self drawInCGLContext: _cglContext pixelFormat: _pixelFormat forLayerTime: 0.0 displayTime: &ts];
+            CGLFlushDrawable(_cglContext);
+        }
+        if (prevCtx != _cglContext) {
+            CGLSetCurrentContext(prevCtx);
+        }
+    }
+}
+
+- (void) releaseCGLPixelFormat: (CGLPixelFormatObj) pf {
+    if (pf) CGLReleasePixelFormat(pf);
+}
+
+- (void) releaseCGLContext: (CGLContextObj) ctx {
+    if (ctx) CGLReleaseContext(ctx);
+}
+
+- (void) dealloc {
+    if (_pixelFormat) [self releaseCGLPixelFormat: _pixelFormat];
+    if (_cglContext) [self releaseCGLContext: _cglContext];
+    [super dealloc];
+}
+
 @end
