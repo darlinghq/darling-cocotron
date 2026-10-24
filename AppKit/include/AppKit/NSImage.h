@@ -34,11 +34,18 @@ typedef enum {
     NSImageCacheNever,
 } NSImageCacheMode;
 
+typedef NS_ENUM(NSInteger, NSImageResizingMode) {
+    NSImageResizingModeTile = 0,
+    NSImageResizingModeStretch = 1,
+};
+
 @interface NSImage : NSObject <NSCopying, NSCoding> {
     NSString *_name;
     NSSize _size;
     NSRect _alignmentRect;
     BOOL _hasCustomAlignmentRect;
+    NSEdgeInsets _capInsets;
+    NSImageResizingMode _resizingMode;
     NSColor *_backgroundColor;
     NSMutableArray *_representations;
     id _delegate;
@@ -89,6 +96,8 @@ typedef enum {
 - (NSString *) name;
 @property NSSize size;
 @property NSRect alignmentRect;
+@property NSEdgeInsets capInsets;
+@property NSImageResizingMode resizingMode;
 - (NSColor *) backgroundColor;
 @property (getter=isFlipped) BOOL flipped;
 @property (setter=setTemplate:) BOOL isTemplate;

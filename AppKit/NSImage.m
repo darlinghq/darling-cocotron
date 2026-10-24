@@ -1839,6 +1839,22 @@ static NSUInteger scaledRepCacheBytes(NSArray *cache) {
     return _symbolConfiguration;
 }
 
+- (NSEdgeInsets) capInsets {
+    return _capInsets;
+}
+
+- (void) setCapInsets: (NSEdgeInsets) capInsets {
+    _capInsets = capInsets;
+}
+
+- (NSImageResizingMode) resizingMode {
+    return _resizingMode;
+}
+
+- (void) setResizingMode: (NSImageResizingMode) resizingMode {
+    _resizingMode = resizingMode;
+}
+
 @end
 
 @implementation NSImageSymbolConfiguration
