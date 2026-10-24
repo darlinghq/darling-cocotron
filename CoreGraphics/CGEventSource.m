@@ -52,6 +52,13 @@ int64_t CGEventSourceGetUserData(CGEventSourceRef source) {
     return src.userData;
 }
 
+bool CGEventSourceKeyState(CGEventSourceStateID stateID, CGKeyCode key)
+{
+    printf("STUB %s\n", __PRETTY_FUNCTION__);
+
+    return true;
+}
+
 void CGEventSourceSetUserData(CGEventSourceRef source, int64_t userData) {
     CGEventSource *src = (CGEventSource *) source;
     src.userData = userData;

@@ -20,3 +20,4 @@ typedef void (*CGDisplayReconfigurationCallBack)(CGDirectDisplayID display, CGDi
 
 extern CGError CGDisplayRegisterReconfigurationCallback(CGDisplayReconfigurationCallBack callback, void *userInfo);
 extern CGError CGDisplayRemoveReconfigurationCallback(CGDisplayReconfigurationCallBack callback, void *userInfo);
+extern void CGRestorePermanentDisplayConfiguration();

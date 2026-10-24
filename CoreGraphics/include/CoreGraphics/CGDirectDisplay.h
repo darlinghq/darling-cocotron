@@ -1,6 +1,7 @@
 
 #import <CoreGraphics/CGError.h>
 #import <CoreGraphics/CGGeometry.h>
+#import <CoreGraphics/CGImage.h>
 #import <CoreGraphics/CoreGraphicsExport.h>
 #import <mach/boolean.h>
 
@@ -64,6 +65,8 @@ CGDisplayBestModeForParametersAndRefreshRate(CGDirectDisplayID display,
                                              boolean_t *exactMatch);
 COREGRAPHICS_EXPORT CGDisplayModeRef
 CGDisplayCopyDisplayMode(CGDirectDisplayID displayId);
+COREGRAPHICS_EXPORT CGImageRef
+CGDisplayCreateImage(CGDirectDisplayID displayID);
 COREGRAPHICS_EXPORT CFDictionaryRef
 CGDisplayCurrentMode(CGDirectDisplayID display);
 COREGRAPHICS_EXPORT void CGDisplayModeRelease(CGDisplayModeRef mode);

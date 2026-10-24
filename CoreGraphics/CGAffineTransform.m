@@ -103,3 +103,10 @@ CGRect CGRectApplyAffineTransform(CGRect rect, CGAffineTransform t) {
     printf("CGRectApplyAffineTransform STUB\n");
     return rect;
 }
+
+bool CGAffineTransformEqualToTransform(CGAffineTransform t1, CGAffineTransform t2)
+{
+    printf("STUB %s\n", __PRETTY_FUNCTION__);
+
+    return true;
+}

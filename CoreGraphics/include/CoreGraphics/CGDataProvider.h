@@ -32,7 +32,7 @@ COREGRAPHICS_EXPORT CGDataProviderRef CGDataProviderRetain(CGDataProviderRef pro
 COREGRAPHICS_EXPORT void CGDataProviderRelease(CGDataProviderRef provider);
 
 COREGRAPHICS_EXPORT CGDataProviderRef CGDataProviderCreateWithCFData(CFDataRef data);
-
+COREGRAPHICS_EXPORT CGDataProviderRef CGDataProviderCreateWithURL(CFURLRef url);
 COREGRAPHICS_EXPORT CGDataProviderRef CGDataProviderCreateWithData(void *info, const void *data, size_t size, CGDataProviderReleaseDataCallback releaseCallback);
 
 COREGRAPHICS_EXPORT CGDataProviderRef __nullable CGDataProviderCreateSequential(void* info, const CGDataProviderSequentialCallbacks* callbacks);
