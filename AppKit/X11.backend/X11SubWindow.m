@@ -26,8 +26,10 @@
     _display = [(X11Display *) [NSDisplay currentDisplay] display];
 
     // _drawableFrame is in points; a child window is positioned in the parent's
-    // device pixels.
+    // device pixels. X rejects a zero-sized window.
     O2Rect device = [parent deviceRect: frame];
+    device.size.width = fmax(device.size.width, 1.0);
+    device.size.height = fmax(device.size.height, 1.0);
     _window = XCreateSimpleWindow(_display, [parent windowHandle],
                                   device.origin.x, device.origin.y,
                                   device.size.width, device.size.height, 0, 0,
@@ -118,6 +120,8 @@
     _drawableFrame = frame;
 
     O2Rect device = [_parent deviceRect: frame];
+    device.size.width = fmax(device.size.width, 1.0);
+    device.size.height = fmax(device.size.height, 1.0);
 
     XMoveResizeWindow(_display, _window, device.origin.x, device.origin.y,
                       device.size.width, device.size.height);
