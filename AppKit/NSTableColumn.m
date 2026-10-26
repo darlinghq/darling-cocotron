@@ -51,9 +51,40 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         _isResizable = [keyed decodeBoolForKey: @"NSIsResizeable"];
         _isEditable = [keyed decodeBoolForKey: @"NSIsEditable"];
     } else {
-        [NSException raise: NSInvalidArgumentException
-                    format: @"-[%@ %s] is not implemented for coder %@",
-                            [self class], sel_getName(_cmd), coder];
+        NSInteger version = [coder versionForClassName: @"NSTableColumn"];
+        if (version >= 2) {
+            _identifier = [[coder decodeObject] retain];
+            float w = 100, minW = 10, maxW = 10000;
+            [coder decodeValueOfObjCType: @encode(float) at: &w];
+            [coder decodeValueOfObjCType: @encode(float) at: &minW];
+            [coder decodeValueOfObjCType: @encode(float) at: &maxW];
+            _width = w;
+            _minWidth = minW;
+            _maxWidth = maxW;
+            BOOL resizable = YES, editable = NO;
+            [coder decodeValueOfObjCType: @encode(BOOL) at: &resizable];
+            [coder decodeValueOfObjCType: @encode(BOOL) at: &editable];
+            _isResizable = resizable;
+            _isEditable = editable;
+            _headerCell = [[coder decodeObject] retain];
+            _dataCell = [[coder decodeObject] retain];
+        } else {
+            _identifier = [[coder decodeObject] retain];
+            _headerCell = [[coder decodeObject] retain];
+            _dataCell = [[coder decodeObject] retain];
+            float w = 100, minW = 10, maxW = 10000;
+            [coder decodeValueOfObjCType: @encode(float) at: &w];
+            [coder decodeValueOfObjCType: @encode(float) at: &minW];
+            [coder decodeValueOfObjCType: @encode(float) at: &maxW];
+            _width = w;
+            _minWidth = minW;
+            _maxWidth = maxW;
+            BOOL resizable = YES, editable = NO;
+            [coder decodeValueOfObjCType: @encode(BOOL) at: &resizable];
+            [coder decodeValueOfObjCType: @encode(BOOL) at: &editable];
+            _isResizable = resizable;
+            _isEditable = editable;
+        }
     }
 
     return self;

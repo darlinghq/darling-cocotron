@@ -166,9 +166,42 @@ static inline id childOfItemAtIndex(NSOutlineView *self, id item,
 
         _outlineTableColumn = [[[self tableColumns] objectAtIndex: 0] retain];
     } else {
-        [NSException raise: NSInvalidArgumentException
-                    format: @"-[%@ %s] is not implemented for coder %@",
-                            [self class], sel_getName(_cmd), coder];
+        _rowToItem = NSCreateMapTable(NSIntegerMapKeyCallBacks,
+                                      NSNonOwnedPointerMapValueCallBacks, 0);
+        _itemToRow = NSCreateMapTable(NSNonOwnedPointerOrNullMapKeyCallBacks,
+                                      NSIntegerMapValueCallBacks, 0);
+        _itemToParent = NSCreateMapTable(NSNonOwnedPointerOrNullMapKeyCallBacks,
+                                         NSNonOwnedPointerMapValueCallBacks, 0);
+        _itemToLevel = NSCreateMapTable(NSNonOwnedPointerOrNullMapKeyCallBacks,
+                                        NSIntegerMapValueCallBacks, 0);
+        _itemToExpansionState =
+                NSCreateMapTable(NSNonOwnedPointerOrNullMapKeyCallBacks,
+                                 NSIntegerMapValueCallBacks, 0);
+        _itemToNumberOfChildren =
+                NSCreateMapTable(NSNonOwnedPointerOrNullMapKeyCallBacks,
+                                 NSIntegerMapValueCallBacks, 0);
+
+        _markerCell = [[NSButtonCell alloc] initImageCell: nil];
+        [_markerCell setBezelStyle: NSDisclosureBezelStyle];
+
+        _editingCellPadding = 10.0;
+        [self invalidateRowCache];
+
+        BOOL autoResizesCol = YES, markerFollowsCell = YES, autosaveExpanded = NO;
+        float indentation = _standardRowHeight > 0 ? _standardRowHeight : 16.0;
+        [coder decodeValueOfObjCType: @encode(BOOL) at: &autoResizesCol];
+        [coder decodeValueOfObjCType: @encode(BOOL) at: &markerFollowsCell];
+        [coder decodeValueOfObjCType: @encode(BOOL) at: &autosaveExpanded];
+        [coder decodeValueOfObjCType: @encode(float) at: &indentation];
+        [self setIndentationPerLevel: indentation];
+        [self setIndentationMarkerFollowsCell: markerFollowsCell];
+        [self setAutoresizesOutlineColumn: autoResizesCol];
+        [self setAutosaveExpandedItems: autosaveExpanded];
+
+        _outlineTableColumn = [[coder decodeObject] retain];
+        if (!_outlineTableColumn && [[self tableColumns] count] > 0) {
+            _outlineTableColumn = [[[self tableColumns] objectAtIndex: 0] retain];
+        }
     }
     return self;
 }
