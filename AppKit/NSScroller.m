@@ -156,9 +156,21 @@ static NSAppleScrollBarVariant appleScrollBarVariant(NSScroller *self) {
         _knobProportion = 0;
         [self checkSpaceForParts];
     } else {
-        [NSException raise: NSInvalidArgumentException
-                    format: @"-[%@ %s] is not implemented for coder %@",
-                            [self class], sel_getName(_cmd), coder];
+        sFlags.isHoriz = (_bounds.size.width < _bounds.size.height) ? NO : YES;
+        _floatValue = 0;
+        _knobProportion = 0;
+
+        NSUInteger arrowsPos = 0;
+        BOOL isEnabled = YES;
+        id target = nil;
+        SEL action = NULL;
+        [coder decodeValueOfObjCType: @encode(NSUInteger) at: &arrowsPos];
+        [coder decodeValueOfObjCType: @encode(BOOL) at: &isEnabled];
+        [coder decodeValueOfObjCType: @encode(id) at: &target];
+        [coder decodeValueOfObjCType: @encode(SEL) at: &action];
+        [self setTarget: target];
+        [self setAction: action];
+        [self checkSpaceForParts];
     }
     return self;
 }

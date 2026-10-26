@@ -55,9 +55,38 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                        name: NSViewBoundsDidChangeNotification
                      object: _docView];
     } else {
-        [NSException raise: NSInvalidArgumentException
-                    format: @"-[%@ %s] is not implemented for coder %@",
-                            [self class], sel_getName(_cmd), coder];
+        NSInteger version = [coder versionForClassName: @"NSClipView"];
+        NSLog(@"[NSClipView initWithCoder] unkeyed version=%ld", (long)version);
+        [self setAutoresizesSubviews: YES];
+
+        _backgroundColor = [[coder decodeObject] retain];
+
+        id docCursor = nil;
+        id docView = nil;
+        uint8_t copyOnScroll = 0, drawsBg = 0, flag3 = 0;
+
+        [coder decodeValuesOfObjCTypes: "@@ccc", &docCursor, &docView,
+                                        &copyOnScroll, &drawsBg, &flag3];
+
+        if ([docCursor isKindOfClass: [NSColor class]]) {
+            _backgroundColor = [docCursor retain];
+        } else if ([docCursor isKindOfClass: [NSCursor class]]) {
+            _documentCursor = [docCursor retain];
+        }
+
+        if ([docView isKindOfClass: [NSView class]]) {
+            [self setDocumentView: docView];
+        } else if ([[self subviews] count] > 0) {
+            NSView *document = [[self subviews] objectAtIndex: 0];
+            if ([document isKindOfClass: [NSView class]]) {
+                [document retain];
+                [document removeFromSuperview];
+                [self setDocumentView: document];
+                [document release];
+            }
+        }
+        _copiesOnScroll = copyOnScroll ? YES : NO;
+        _drawsBackground = drawsBg ? YES : NO;
     }
     return self;
 }

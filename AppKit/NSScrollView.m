@@ -208,9 +208,64 @@ static Class _rulerViewClass = nil;
             _verticalLineScroll = NSSwapBigFloatToHost(amts[3]);
         }
     } else {
-        [NSException raise: NSInvalidArgumentException
-                    format: @"-[%@ %s] is not implemented for coder %@",
-                            [self class], sel_getName(_cmd), coder];
+        NSInteger version = [coder versionForClassName: @"NSScrollView"];
+        _clipView = [[coder decodeObject] retain];
+        [coder decodeValueOfObjCType: @encode(NSInteger) at: &_borderType];
+        BOOL scrollsDynamically = NO, rulersVisible = NO;
+        [coder decodeValueOfObjCType: @encode(BOOL) at: &scrollsDynamically];
+        [coder decodeValueOfObjCType: @encode(BOOL) at: &rulersVisible];
+        float hLine = 10, hPage = 10, vLine = 10, vPage = 10;
+        [coder decodeValueOfObjCType: @encode(float) at: &hLine];
+        [coder decodeValueOfObjCType: @encode(float) at: &hPage];
+        [coder decodeValueOfObjCType: @encode(float) at: &vLine];
+        [coder decodeValueOfObjCType: @encode(float) at: &vPage];
+        _horizontalLineScroll = hLine;
+        _horizontalPageScroll = hPage;
+        _verticalLineScroll = vLine;
+        _verticalPageScroll = vPage;
+
+        [coder decodeValueOfObjCType: @encode(BOOL) at: &_hasHorizontalScroller];
+        if (_hasHorizontalScroller) {
+            [coder decodeValueOfObjCType: @encode(id) at: &_horizontalScroller];
+            [_horizontalScroller retain];
+            [_horizontalScroller setTarget: self];
+            [_horizontalScroller setAction: @selector(_horizontalScroll:)];
+        }
+
+        [coder decodeValueOfObjCType: @encode(BOOL) at: &_hasVerticalScroller];
+        if (_hasVerticalScroller) {
+            [coder decodeValueOfObjCType: @encode(id) at: &_verticalScroller];
+            [_verticalScroller retain];
+            [_verticalScroller setTarget: self];
+            [_verticalScroller setAction: @selector(_verticalScroll:)];
+        }
+
+        BOOL hasHorizRuler = NO, hasVertRuler = NO;
+        id horizRuler = nil, vertRuler = nil;
+        [coder decodeValueOfObjCType: @encode(BOOL) at: &hasHorizRuler];
+        if (hasHorizRuler) {
+            [coder decodeValueOfObjCType: @encode(id) at: &horizRuler];
+        }
+
+        [coder decodeValueOfObjCType: @encode(BOOL) at: &hasVertRuler];
+        if (hasVertRuler) {
+            [coder decodeValueOfObjCType: @encode(id) at: &vertRuler];
+        }
+
+        if (version >= 2) {
+            BOOL hasHeaderView = NO, hasCornerView = NO;
+            [coder decodeValueOfObjCType: @encode(BOOL) at: &hasHeaderView];
+            if (hasHeaderView) {
+                _headerClipView = [[coder decodeObject] retain];
+            }
+            [coder decodeValueOfObjCType: @encode(BOOL) at: &hasCornerView];
+            if (hasCornerView) {
+                _cornerView = [[coder decodeObject] retain];
+            }
+        }
+        _backgroundColor = [[NSColor controlBackgroundColor] copy];
+        _drawsBackground = [_clipView drawsBackground];
+        [self tile];
     }
 
     return self;
