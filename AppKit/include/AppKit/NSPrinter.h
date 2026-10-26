@@ -18,8 +18,32 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <Foundation/NSObject.h>
+#import <Foundation/NSGeometry.h>
+
+@class NSArray, NSDictionary, NSString;
 
 @interface NSPrinter : NSObject {
+    NSString *_name;
+    NSString *_type;
 }
+
++ (NSArray *) printerNames;
++ (NSArray *) printerTypes;
++ (NSPrinter *) printerWithName: (NSString *) name;
++ (NSPrinter *) printerWithType: (NSString *) type;
+
+- (NSString *) name;
+- (NSString *) type;
+- (int) languageLevel;
+
+- (NSSize) pageSizeForPaper: (NSString *) paperName;
+- (NSRect) imageablePageBoundsForPaper: (NSString *) paperName;
+- (NSRect) rectForPaper: (NSString *) paperName;
+
+- (BOOL) isColor;
+- (BOOL) isFontAvailable: (NSString *) fontName;
+- (BOOL) isOutputOrderNormal;
+
+- (NSDictionary *) deviceDescription;
 
 @end
