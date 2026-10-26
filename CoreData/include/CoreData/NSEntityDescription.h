@@ -21,7 +21,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 @class NSManagedObject, NSManagedObjectContext, NSManagedObjectModel,
         NSPropertyDescription, NSAttributeDescription;
 
-@interface NSEntityDescription : NSObject {
+@interface NSEntityDescription : NSObject <NSCoding, NSCopying> {
     NSString *_className;
     NSString *_name;
     NSManagedObjectModel *_model;

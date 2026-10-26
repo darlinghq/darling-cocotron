@@ -181,6 +181,22 @@ static void appendMethodToList(Class class, NSString *selectorName, IMP imp,
     return self;
 }
 
+- copyWithZone: (NSZone *) zone {
+    NSEntityDescription *copy = [[NSEntityDescription allocWithZone: zone] init];
+    copy->_name = [_name copyWithZone: zone];
+    copy->_className = [_className copyWithZone: zone];
+    copy->_isAbstract = _isAbstract;
+    copy->_userInfo = [_userInfo copyWithZone: zone];
+    copy->_versionHashModifier = [_versionHashModifier copyWithZone: zone];
+    copy->_properties = [_properties mutableCopyWithZone: zone];
+    copy->_subentities = [_subentities mutableCopyWithZone: zone];
+    copy->_superentity = _superentity;
+    copy->_model = _model;
+    copy->_selectorPropertyMap = [_selectorPropertyMap mutableCopyWithZone: zone];
+    copy->_hasBeenInstantiated = _hasBeenInstantiated;
+    return copy;
+}
+
 - (NSString *) description {
     return [NSString stringWithFormat: @"<NSEntityDescription %@>", _name];
 }
@@ -292,14 +308,11 @@ static void appendMethodToList(Class class, NSString *selectorName, IMP imp,
     NSEntityDescription *entity = [self entityForName: entityName
                                inManagedObjectContext: context];
     NSString *className = [entity managedObjectClassName];
-    Class class;
+    Class class = Nil;
 
     if (className)
         class = NSClassFromString(className);
-    else {
-        NSLog(@"Unable to find class %@ specified by entity %@ in the runtime",
-              className, [entity name]);
-
+    if (class == Nil) {
         class = [NSManagedObject class];
     }
 
@@ -454,7 +467,7 @@ static void appendMethodToList(Class class, NSString *selectorName, IMP imp,
     NSEntityDescription *check = self;
 
     for (; check != nil; check = check->_superentity)
-        if (check == other)
+        if (check == other || [[check name] isEqualToString: [other name]])
             return YES;
 
     return NO;
