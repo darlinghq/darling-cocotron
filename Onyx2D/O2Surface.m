@@ -658,10 +658,14 @@ static BOOL initFunctionsForParameters(O2Surface *self, size_t bitsPerComponent,
 }
 
 void O2SurfaceLock(O2Surface *surface) {
+    if (surface == NULL)
+        return;
     pthread_mutex_lock(&(surface->_lock));
 }
 
 void O2SurfaceUnlock(O2Surface *surface) {
+    if (surface == NULL)
+        return;
     pthread_mutex_unlock(&(surface->_lock));
 }
 

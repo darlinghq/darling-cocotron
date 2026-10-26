@@ -92,12 +92,19 @@ static void renderFreeTypeBitmap(O2Context_builtin_FT *self, O2Surface *surface,
                                  FT_Bitmap *bitmap, NSInteger x, NSInteger y,
                                  O2Paint *paint)
 {
+    if (bitmap == NULL || bitmap->buffer == NULL || surface == NULL || paint == NULL)
+        return;
+
     // Glyphs are blended with the destination, which needs a span reader.
     if (!surface->_read_argb8u)
         return;
     // Size of the bitmap.
     NSInteger fullWidth = bitmap->width;
     NSInteger fullHeight = bitmap->rows;
+    NSInteger pitch = bitmap->pitch;
+
+    if (fullWidth <= 0 || fullHeight <= 0 || pitch == 0)
+        return;
 
     // What we're going to render, taking clippig into account.
     NSInteger minX = MAX(x, self->_vpx);
@@ -125,8 +132,9 @@ static void renderFreeTypeBitmap(O2Context_builtin_FT *self, O2Surface *surface,
         NSInteger remainingLength = renderWidth;
 
         // We're going to advance these pointers as we move along this row.
-        unsigned char *coverage =
-                bitmap->buffer + (curY - y) * bitmap->pitch + (curX - x);
+        NSInteger rowInBitmap = curY - y;
+        NSInteger rowOffset = (pitch >= 0) ? (rowInBitmap * pitch) : ((fullHeight - 1 - rowInBitmap) * (-pitch));
+        unsigned char *coverage = bitmap->buffer + rowOffset + (curX - x);
         O2argb8u *src = srcBuffer;
         O2argb8u *dst = dstBuffer;
 
@@ -146,7 +154,11 @@ static void renderFreeTypeBitmap(O2Context_builtin_FT *self, O2Surface *surface,
                 chunk = -chunk;
                 // Skip this much pixels.
             } else {
-                self->_blend_argb8u_PRE(src, dst, chunk);
+                if (self->_blend_argb8u_PRE != NULL) {
+                    self->_blend_argb8u_PRE(src, dst, chunk);
+                } else {
+                    O2BlendSpanNormal_8888(src, dst, chunk);
+                }
 
                 applyCoverageToSpan_lRGBA8888_PRE(dst, coverage, src, chunk);
 
@@ -173,6 +185,9 @@ static void renderFreeTypeBitmap(O2Context_builtin_FT *self, O2Surface *surface,
               count: (NSUInteger) count
 {
     // FIXME: use advances if not NULL
+
+    if (_surface == NULL)
+        return;
 
     O2SurfaceLock(_surface);
 
