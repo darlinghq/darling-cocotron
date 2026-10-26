@@ -92,9 +92,20 @@ NSString *_NSTruncatedStringWithAttributesInRect(NSString *string,
         _tabView = [keyed decodeObjectForKey: @"NSTabView"];
         _color = [[keyed decodeObjectForKey: @"NSColor"] retain];
     } else {
-        [NSException raise: NSInvalidArgumentException
-                    format: @"-[%@ %s] is not implemented for coder %@",
-                            [self class], sel_getName(_cmd), coder];
+        [coder decodeValueOfObjCType: @encode(id) at: &_identifier];
+        [_identifier retain];
+        [coder decodeValueOfObjCType: @encode(id) at: &_label];
+        [_label retain];
+        [coder decodeValueOfObjCType: @encode(id) at: &_view];
+        [_view retain];
+        [coder decodeValueOfObjCType: @encode(id) at: &_color];
+        [_color retain];
+        int state = 0;
+        [coder decodeValueOfObjCType: @encode(int) at: &state];
+        _state = state;
+        id first_responder = nil;
+        [coder decodeValueOfObjCType: @encode(id) at: &first_responder];
+        [coder decodeValueOfObjCType: @encode(id) at: &_tabView];
     }
 
     return self;
