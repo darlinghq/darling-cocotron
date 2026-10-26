@@ -20,7 +20,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSFetchRequest;
 
-@interface NSManagedObjectModel : NSObject {
+@interface NSManagedObjectModel : NSObject <NSCoding, NSCopying> {
     NSMutableDictionary *_entities;
     NSMutableDictionary *_fetchRequestTemplates;
     NSSet *_versionIdentifiers;
