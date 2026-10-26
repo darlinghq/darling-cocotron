@@ -557,6 +557,7 @@ static inline id childOfItemAtIndex(NSOutlineView *self, id item,
                             NSStringFromSelector(requiredSelectors[i])];
 
     _dataSource = dataSource;
+    [self reloadData];
 }
 
 - (void) setDelegate: delegate {
