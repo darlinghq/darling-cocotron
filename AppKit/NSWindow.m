@@ -2452,6 +2452,12 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
 }
 
 - (void) close {
+    // A window that is already closed is not closed again, so that
+    // NSWindowWillCloseNotification is posted once per close cycle and the
+    // window is not released twice.
+    if (_isClosed)
+        return;
+    _isClosed = YES;
     /*
       I am not sure if orderOut comes before the notification or not. If we
       order out after the notification, Windows sends the window a bunch of
@@ -2506,6 +2512,7 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
 
     switch (place) {
     case NSWindowAbove:
+        _isClosed = NO;
         [self update];
         _isVisible = YES;
         [[self platformWindow] placeAboveWindow: relativeTo];
@@ -2524,6 +2531,7 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
         break;
 
     case NSWindowBelow:
+        _isClosed = NO;
         [self update];
         _isVisible = YES;
         [[self platformWindow] placeBelowWindow: relativeTo];
@@ -2542,6 +2550,9 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
         break;
 
     case NSWindowOut:
+        // Note: _isClosed is deliberately NOT reset here because -[NSWindow close]
+        // calls -[self orderOut: nil] with _isClosed = YES already set.
+        // Resetting here would immediately defeat double-close protection.
         _isVisible = NO;
         [[self platformWindow] hideWindow];
         if (![self isKindOfClass: [NSPanel class]]) {

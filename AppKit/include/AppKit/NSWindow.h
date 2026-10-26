@@ -239,6 +239,7 @@ APPKIT_EXPORT const NSNotificationName NSWindowDidExposeNotification;
     BOOL _isOneShot;
     BOOL _useOptimizedDrawing;
     BOOL _releaseWhenClosed;
+    BOOL _isClosed;
     BOOL _hidesOnDeactivate;
     BOOL _hiddenForDeactivate;
     BOOL _isActive;
