@@ -658,6 +658,113 @@ unsigned char *stbi_png_load_from_memory(const unsigned char *buffer, int len, i
 
 // clang-format on
 
+static uint32_t O2PNGReadBE32(const unsigned char *p) {
+    return ((uint32_t) p[0] << 24) | ((uint32_t) p[1] << 16) |
+           ((uint32_t) p[2] << 8) | p[3];
+}
+
+/* Apple's iPhone PNGs (Xcode's "pngcrush -iphone") put a CgBI chunk before
+   IHDR, store IDAT as raw deflate with no zlib header, and keep the pixels
+   as premultiplied BGRA. libpng rejects them, and every app built by Xcode
+   has them. Returns premultiplied RGBA, or NULL if the file is not CgBI or
+   uses a layout this does not handle. */
+static unsigned char *O2PNGLoadCgBI(const unsigned char *buffer, NSUInteger length,
+                                    int *outWidth, int *outHeight)
+{
+    if (length < 16 || memcmp(buffer + 12, "CgBI", 4) != 0)
+        return NULL;
+
+    uint32_t width = 0, height = 0;
+    int channels = 0;
+    NSMutableData *deflated = [NSMutableData data];
+    /* The inflater wants a zlib header; it does not check the trailer. */
+    static const unsigned char zlibHeader[2] = {0x78, 0x9c};
+    [deflated appendBytes: zlibHeader length: 2];
+
+    NSUInteger offset = 8;
+    while (offset + 12 <= length) {
+        uint32_t chunkLength = O2PNGReadBE32(buffer + offset);
+        const unsigned char *type = buffer + offset + 4;
+        const unsigned char *data = buffer + offset + 8;
+        if (chunkLength > length - offset - 12)
+            return NULL;
+        if (memcmp(type, "IHDR", 4) == 0 && chunkLength >= 13) {
+            width = O2PNGReadBE32(data);
+            height = O2PNGReadBE32(data + 4);
+            int depth = data[8], colorType = data[9], interlace = data[12];
+            if (depth != 8 || interlace != 0)
+                return NULL;
+            if (colorType == 6)
+                channels = 4;
+            else if (colorType == 2)
+                channels = 3;
+            else
+                return NULL;
+        } else if (memcmp(type, "IDAT", 4) == 0) {
+            [deflated appendBytes: data length: chunkLength];
+        } else if (memcmp(type, "IEND", 4) == 0) {
+            break;
+        }
+        offset += 12 + chunkLength;
+    }
+    if (channels == 0 || width == 0 || height == 0 || width > 16384 || height > 16384)
+        return NULL;
+
+    int rawLength;
+    unsigned char *raw = stbi_zlib_decode_malloc([deflated bytes], [deflated length], &rawLength);
+    size_t stride = (size_t) width * channels;
+    if (raw == NULL || (size_t) rawLength < height * (stride + 1)) {
+        free(raw);
+        return NULL;
+    }
+
+    unsigned char *pixels = malloc((size_t) width * height * 4);
+    unsigned char *previous = calloc(stride, 1);
+    unsigned char *row = malloc(stride);
+    for (uint32_t y = 0; y < height; y++) {
+        const unsigned char *src = raw + y * (stride + 1);
+        int filter = src[0];
+        src++;
+        for (size_t i = 0; i < stride; i++) {
+            int left = i >= channels ? row[i - channels] : 0;
+            int up = previous[i];
+            int upLeft = i >= channels ? previous[i - channels] : 0;
+            int predictor;
+            switch (filter) {
+            case 1: predictor = left; break;
+            case 2: predictor = up; break;
+            case 3: predictor = (left + up) >> 1; break;
+            case 4: {
+                int p = left + up - upLeft;
+                int pa = abs(p - left), pb = abs(p - up), pc = abs(p - upLeft);
+                predictor = (pa <= pb && pa <= pc) ? left : (pb <= pc ? up : upLeft);
+                break;
+            }
+            default: predictor = 0; break;
+            }
+            row[i] = src[i] + predictor;
+        }
+        unsigned char *dest = pixels + (size_t) y * width * 4;
+        for (uint32_t x = 0; x < width; x++) {
+            const unsigned char *p = row + x * channels;
+            dest[x * 4 + 0] = p[2];
+            dest[x * 4 + 1] = p[1];
+            dest[x * 4 + 2] = p[0];
+            dest[x * 4 + 3] = channels == 4 ? p[3] : 0xff;
+        }
+        unsigned char *swap = previous;
+        previous = row;
+        row = swap;
+    }
+    free(previous);
+    free(row);
+    free(raw);
+
+    *outWidth = width;
+    *outHeight = height;
+    return pixels;
+}
+
 @implementation O2ImageSource_PNG
 
 + (BOOL) isPresentInDataProvider: (O2DataProvider *) provider {
@@ -705,8 +812,10 @@ unsigned char *stbi_png_load_from_memory(const unsigned char *buffer, int len, i
     int width, height;
     int comp;
     unsigned char *pixels =
-            stbi_png_load_from_memory([_png bytes], [_png length], &width,
-                                      &height, &comp, STBI_rgb_alpha);
+            O2PNGLoadCgBI([_png bytes], [_png length], &width, &height);
+    if (pixels == NULL)
+        pixels = stbi_png_load_from_memory([_png bytes], [_png length], &width,
+                                           &height, &comp, STBI_rgb_alpha);
     int bitsPerPixel = 32;
     int bytesPerRow = (bitsPerPixel / (sizeof(char) * 8)) * width;
     NSData *bitmap;
