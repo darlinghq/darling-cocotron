@@ -48,6 +48,7 @@
 	int _xkbEventBase;
 	int _xrrEventBase;
 
+@private
 	// The main monitor in root coordinates, cached for -mouseLocation. Guarded by
 	// @synchronized(self); the cache is dropped when XRandR reports a
 	// reconfiguration, like _screens.
