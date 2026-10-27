@@ -105,6 +105,16 @@ FOUNDATION_EXPORT char *NSUnicodeToSymbol(const unichar *characters,
 @end
 #endif
 
+const NSFontWeight NSFontWeightUltraLight = -0.8;
+const NSFontWeight NSFontWeightThin = -0.6;
+const NSFontWeight NSFontWeightLight = -0.4;
+const NSFontWeight NSFontWeightRegular = 0.0;
+const NSFontWeight NSFontWeightMedium = 0.23;
+const NSFontWeight NSFontWeightSemibold = 0.3;
+const NSFontWeight NSFontWeightBold = 0.4;
+const NSFontWeight NSFontWeightHeavy = 0.56;
+const NSFontWeight NSFontWeightBlack = 0.62;
+
 @implementation NSFont
 
 #ifndef DARLING
@@ -286,6 +296,26 @@ static NSLock *_cacheLock = nil;
 
 + (NSFont *) systemFontOfSize: (CGFloat) size {
     return [self messageFontOfSize: size];
+}
+
++ (NSFont *) systemFontOfSize: (CGFloat) size weight: (NSFontWeight) weight {
+    // Cocotron has no weighted system-font family; fold onto the classic
+    // regular/bold pair at the semibold threshold.
+    if (weight >= NSFontWeightSemibold)
+        return [self boldSystemFontOfSize: size];
+    return [self systemFontOfSize: size];
+}
+
++ (NSFont *) monospacedSystemFontOfSize: (CGFloat) size
+                                 weight: (NSFontWeight) weight {
+    return [self userFixedPitchFontOfSize: size];
+}
+
++ (NSFont *) monospacedDigitSystemFontOfSize: (CGFloat) size
+                                      weight: (NSFontWeight) weight {
+    // No tabular-figures variant available; the proportional system font is
+    // the closest faithful stand-in.
+    return [self systemFontOfSize: size weight: weight];
 }
 
 + (NSFont *) titleBarFontOfSize: (CGFloat) size {

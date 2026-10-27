@@ -45,6 +45,17 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return [NSTextFieldCell class];
 }
 
++ (instancetype) labelWithString: (NSString *) stringValue {
+    NSTextField *label = [[[self alloc] initWithFrame: NSZeroRect] autorelease];
+    [label setStringValue: (stringValue != nil) ? stringValue : @""];
+    [label setBezeled: NO];
+    [label setDrawsBackground: NO];
+    [label setEditable: NO];
+    [label setSelectable: NO];
+    [label sizeToFit];
+    return label;
+}
+
 + (Class) _binderClassForBinding: (id) binding {
     if ([binding isEqual: @"value"])
         return [_NSTextFieldBinder class];

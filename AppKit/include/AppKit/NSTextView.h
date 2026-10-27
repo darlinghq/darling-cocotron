@@ -298,6 +298,9 @@ APPKIT_EXPORT NSString *const NSAllRomanInputSourcesLocaleIdentifier;
 - (void) setAutomaticDataDetectionEnabled: (BOOL) value;
 - (void) setAutomaticTextReplacementEnabled: (BOOL) value;
 
+// An NSTextView wrapped in a configured, vertically-scrolling NSScrollView (10.14)
++ (NSScrollView *) scrollableTextView;
+
 @end
 
 @interface NSObject (NSTextView_undoManager)
