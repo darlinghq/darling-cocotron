@@ -262,6 +262,22 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [_nextResponder performSelector: _cmd withObject: event];
 }
 
+- (void) swipeWithEvent: (NSEvent *) event {
+    [_nextResponder performSelector: _cmd withObject: event];
+}
+
+- (void) beginGestureWithEvent: (NSEvent *) event {
+    [_nextResponder performSelector: _cmd withObject: event];
+}
+
+- (void) endGestureWithEvent: (NSEvent *) event {
+    [_nextResponder performSelector: _cmd withObject: event];
+}
+
+- (void) pressureChangeWithEvent: (NSEvent *) event {
+    [_nextResponder performSelector: _cmd withObject: event];
+}
+
 - (void) mouseUp: (NSEvent *) event {
     [_nextResponder performSelector: _cmd withObject: event];
 }

@@ -61,6 +61,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (void) cursorUpdate: (NSEvent *) event NS_SWIFT_NAME(cursorUpdate(with:));
 - (void) scrollWheel: (NSEvent *) event NS_SWIFT_NAME(scrollWheel(with:));
+- (void) swipeWithEvent: (NSEvent *) event NS_SWIFT_NAME(swipe(with:));
+- (void) beginGestureWithEvent: (NSEvent *) event NS_SWIFT_NAME(beginGesture(with:));
+- (void) endGestureWithEvent: (NSEvent *) event NS_SWIFT_NAME(endGesture(with:));
+- (void) pressureChangeWithEvent: (NSEvent *) event NS_SWIFT_NAME(pressureChange(with:));
 
 - (void) mouseUp: (NSEvent *) event NS_SWIFT_NAME(mouseUp(with:));
 - (void) mouseDown: (NSEvent *) event NS_SWIFT_NAME(mouseDown(with:));
