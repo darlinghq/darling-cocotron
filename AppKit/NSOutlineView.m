@@ -127,6 +127,7 @@ static inline id childOfItemAtIndex(NSOutlineView *self, id item,
 }
 
 - (void) invalidateRowCache {
+    _rowCacheValid = NO;
     _numberOfCachedRows = 0;
 }
 
@@ -258,14 +259,24 @@ static inline id childOfItemAtIndex(NSOutlineView *self, id item,
 }
 
 - itemAtRow: (NSInteger) row {
+    if (!_rowCacheValid)
+        [self loadRootItem];
     return (id) NSMapGet(_rowToItem, (void *) row);
 }
 
 - (NSInteger) rowForItem: (id) item {
-    return (NSInteger) NSMapGet(_itemToRow, item);
+    if (!_rowCacheValid)
+        [self loadRootItem];
+
+    void *row = NULL;
+    if (item != nil && NSMapMember(_itemToRow, item, NULL, &row))
+        return (NSInteger) row;
+    return -1;
 }
 
 - parentForItem: item {
+    if (!_rowCacheValid)
+        [self loadRootItem];
     return NSMapGet(_itemToParent, item);
 }
 
@@ -274,6 +285,8 @@ static inline id childOfItemAtIndex(NSOutlineView *self, id item,
 }
 
 - (NSInteger) levelForItem: (id) item {
+    if (!_rowCacheValid)
+        [self loadRootItem];
     NSInteger level = (NSInteger) NSMapGet(_itemToLevel, item);
     return level;
 }
@@ -496,6 +509,11 @@ static inline id childOfItemAtIndex(NSOutlineView *self, id item,
     NSResetMapTable(_itemToNumberOfChildren);
 }
 
+- (void) noteNumberOfRowsChanged {
+    [self invalidateRowCache];
+    [super noteNumberOfRowsChanged];
+}
+
 - (void) reloadData {
     [self _resetMapTables];
     [self invalidateRowCache];
@@ -629,6 +647,15 @@ static void loadItemIntoMapTables(NSOutlineView *self, id item,
 }
 
 - (void) loadRootItem {
+    // The data source may ask for rows or items while the tables are being
+    // filled; answer those from the partial tables instead of recursing.
+    if (_isBuildingCache)
+        return;
+    _isBuildingCache = YES;
+
+    [self _resetMapTables];
+    _numberOfCachedRows = 0;
+
     NSHashTable *removeItems =
             NSCreateHashTable(NSNonOwnedPointerHashCallBacks, 0);
 
@@ -640,17 +667,23 @@ static void loadItemIntoMapTables(NSOutlineView *self, id item,
             NSHashInsert(removeItems, key);
     }
 
-    loadItemIntoMapTables(self, nil, &_numberOfCachedRows, 0, removeItems); {
+    @try {
+        loadItemIntoMapTables(self, nil, &_numberOfCachedRows, 0, removeItems);
+
         NSHashEnumerator state = NSEnumerateHashTable(removeItems);
         void *key;
 
         while ((key = NSNextHashEnumeratorItem(&state)) != NULL)
             NSMapRemove(_itemToExpansionState, key);
+        _rowCacheValid = YES;
+    } @finally {
+        NSFreeHashTable(removeItems);
+        _isBuildingCache = NO;
     }
 }
 
 - (NSInteger) numberOfRows {
-    if (_numberOfCachedRows == 0) {
+    if (!_rowCacheValid) {
         [self loadRootItem];
     }
 
