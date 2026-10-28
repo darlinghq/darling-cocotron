@@ -141,7 +141,8 @@ static NSSavePanel *_newPanel = nil;
 }
 
 - (NSURL *) URL {
-    return [NSURL fileURLWithPath: [self filename]];
+    NSString *fn = [self filename];
+    return (fn != nil && [fn length] > 0) ? [NSURL fileURLWithPath: fn] : nil;
 }
 
 - (NSString *) filename {
@@ -452,7 +453,8 @@ static NSSavePanel *_newPanel = nil;
 }
 
 - (NSURL *) directoryURL {
-    return [NSURL fileURLWithPath: [self directory]];
+    NSString *dir = [self directory];
+    return (dir != nil && [dir length] > 0) ? [NSURL fileURLWithPath: dir] : nil;
 }
 
 - (void) setRequiredFileType: (NSString *) type {
