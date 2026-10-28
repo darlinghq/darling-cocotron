@@ -22,7 +22,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSComboBoxWindow.h>
 #import <AppKit/NSGraphicsStyle.h>
 #import <AppKit/NSRaise.h>
+#import <AppKit/NSTableView.h>
 #import <Foundation/NSKeyedArchiver.h>
+
+@interface NSComboTableView : NSTableView
+@end
+
+@implementation NSComboTableView
+@end
 
 @implementation NSComboBoxCell
 
@@ -70,16 +77,43 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         _buttonEnabled = YES;
         _buttonPressed = NO;
     } else {
-        [NSException raise: NSInvalidArgumentException
-                    format: @"-[%@ %s] is not implemented for coder %@",
-                            [self class], sel_getName(_cmd), coder];
+        int visibleItems = 5;
+        char hasVerticalScroller = 1;
+        char usesDataSource = 0;
+        char completes = 0;
+        @try {
+            [coder decodeValuesOfObjCTypes: "iccc", &visibleItems,
+                                            &hasVerticalScroller,
+                                            &usesDataSource,
+                                            &completes];
+        } @catch (id ex) {
+            NSLog(@"[NSComboBoxCell initWithCoder:] ex decodeValues: %@", ex);
+        }
+
+        id popUpList = [coder decodeObject];
+        id dataSource = [coder decodeObject];
+        // In unkeyed typedstream, popUpList, dataSource, buttonCell and tableView
+        // are sequenced. buttonCell and tableView are decoded to advance the stream.
+        id buttonCell = [coder decodeObject];
+        id tableView = [coder decodeObject];
+        (void)buttonCell;
+        (void)tableView;
+
+        _numberOfVisibleItems = visibleItems;
+        _hasVerticalScroller = hasVerticalScroller ? YES : NO;
+        _usesDataSource = usesDataSource ? YES : NO;
+        _completes = completes ? YES : NO;
+        _objectValues = [popUpList isKindOfClass: [NSArray class]] ? [popUpList mutableCopy] : [[NSMutableArray alloc] init];
+        _dataSource = dataSource;
+        _isButtonBordered = YES;
+        _buttonEnabled = YES;
+        _buttonPressed = NO;
     }
 
     return self;
 }
 
 - (void) dealloc {
-    [_dataSource release];
     [_objectValues release];
     [super dealloc];
 }
