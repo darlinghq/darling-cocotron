@@ -64,6 +64,32 @@ FcConfig *O2FontSharedFontConfig() {
     return fontConfig;
 }
 
+/* fontconfig ranks bitmap faces (the X11 .pcf fonts) above outline fonts for some generic
+ * families, and a bitmap face has units_per_EM == 0, so every metric derived from it divides
+ * by zero. Return the first scalable face of the sorted set, or the first face if none is. */
+static NSString *filenameOfFirstScalableFace(FcFontSet *set) {
+    NSString *fallback = nil;
+    for (int i = 0; i < set->nfont; i++) {
+        FcChar8 *filename = NULL;
+        if (FcPatternGetString(set->fonts[i], FC_FILE, 0, &filename) != FcResultMatch) {
+            continue;
+        }
+        NSString *path = [NSString stringWithUTF8String: (char *) filename];
+        if (path == nil) {
+            continue;
+        }
+        FcBool scalable = FcTrue; /* left untouched when the pattern has no FC_SCALABLE */
+        FcPatternGetBool(set->fonts[i], FC_SCALABLE, 0, &scalable);
+        if (scalable) {
+            return path;
+        }
+        if (fallback == nil) {
+            fallback = path;
+        }
+    }
+    return fallback;
+}
+
 + (NSString *) filenameForPattern: (NSString *) pattern {
     FcConfig *config = O2FontSharedFontConfig();
 
@@ -72,21 +98,14 @@ FcConfig *O2FontSharedFontConfig() {
     FcDefaultSubstitute(pat);
 
     FcResult fcResult;
-    FcPattern *match = FcFontMatch(config, pat, &fcResult);
+    FcFontSet *set = FcFontSort(config, pat, FcTrue, NULL, &fcResult);
     FcPatternDestroy(pat);
-    if (match == NULL) {
+    if (set == NULL) {
         return nil;
     }
 
-    FcChar8 *filename = NULL;
-    FcPatternGetString(match, FC_FILE, 0, &filename);
-
-    NSString *res = nil;
-    if (filename != NULL) {
-        res = [NSString stringWithUTF8String: (char *) filename];
-    }
-
-    FcPatternDestroy(match);
+    NSString *res = filenameOfFirstScalableFace(set);
+    FcFontSetDestroy(set);
     return res;
 }
 
