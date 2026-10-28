@@ -25,6 +25,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSRulerView.h>
 #import <AppKit/NSScrollView.h>
 #import <AppKit/NSScroller.h>
+#import <AppKit/NSTableCornerView.h>
 #import <AppKit/NSWindow.h>
 #import <Foundation/NSKeyedArchiver.h>
 
@@ -208,59 +209,112 @@ static Class _rulerViewClass = nil;
             _verticalLineScroll = NSSwapBigFloatToHost(amts[3]);
         }
     } else {
+        // GUESS (rung 6): macOS NeXT-derived NSScrollView unkeyed typedstream encoding format (version >= 20)
         NSInteger version = [coder versionForClassName: @"NSScrollView"];
-        _clipView = [[coder decodeObject] retain];
-        [coder decodeValueOfObjCType: @encode(NSInteger) at: &_borderType];
-        BOOL scrollsDynamically = NO, rulersVisible = NO;
-        [coder decodeValueOfObjCType: @encode(BOOL) at: &scrollsDynamically];
-        [coder decodeValueOfObjCType: @encode(BOOL) at: &rulersVisible];
-        float hLine = 10, hPage = 10, vLine = 10, vPage = 10;
-        [coder decodeValueOfObjCType: @encode(float) at: &hLine];
-        [coder decodeValueOfObjCType: @encode(float) at: &hPage];
-        [coder decodeValueOfObjCType: @encode(float) at: &vLine];
-        [coder decodeValueOfObjCType: @encode(float) at: &vPage];
-        _horizontalLineScroll = hLine;
-        _horizontalPageScroll = hPage;
-        _verticalLineScroll = vLine;
-        _verticalPageScroll = vPage;
-
-        [coder decodeValueOfObjCType: @encode(BOOL) at: &_hasHorizontalScroller];
-        if (_hasHorizontalScroller) {
-            [coder decodeValueOfObjCType: @encode(id) at: &_horizontalScroller];
-            [_horizontalScroller retain];
-            [_horizontalScroller setTarget: self];
-            [_horizontalScroller setAction: @selector(_horizontalScroll:)];
-        }
-
-        [coder decodeValueOfObjCType: @encode(BOOL) at: &_hasVerticalScroller];
-        if (_hasVerticalScroller) {
-            [coder decodeValueOfObjCType: @encode(id) at: &_verticalScroller];
-            [_verticalScroller retain];
-            [_verticalScroller setTarget: self];
-            [_verticalScroller setAction: @selector(_verticalScroll:)];
-        }
-
-        BOOL hasHorizRuler = NO, hasVertRuler = NO;
-        id horizRuler = nil, vertRuler = nil;
-        [coder decodeValueOfObjCType: @encode(BOOL) at: &hasHorizRuler];
-        if (hasHorizRuler) {
-            [coder decodeValueOfObjCType: @encode(id) at: &horizRuler];
-        }
-
-        [coder decodeValueOfObjCType: @encode(BOOL) at: &hasVertRuler];
-        if (hasVertRuler) {
-            [coder decodeValueOfObjCType: @encode(id) at: &vertRuler];
-        }
-
-        if (version >= 2) {
-            BOOL hasHeaderView = NO, hasCornerView = NO;
-            [coder decodeValueOfObjCType: @encode(BOOL) at: &hasHeaderView];
-            if (hasHeaderView) {
-                _headerClipView = [[coder decodeObject] retain];
+        if (version >= 20) {
+            id objs[5];
+            for (int i = 0; i < 5; i++) {
+                objs[i] = [coder decodeObject];
             }
-            [coder decodeValueOfObjCType: @encode(BOOL) at: &hasCornerView];
-            if (hasCornerView) {
-                _cornerView = [[coder decodeObject] retain];
+            float hLine = 10, hPage = 10, vLine = 10, vPage = 10;
+            int flags = 0;
+            @try {
+                [coder decodeValuesOfObjCTypes: "ffffi", &hLine, &hPage, &vLine, &vPage, &flags];
+            } @catch (id ex) {
+                // Ignore decoding mismatch
+            }
+            for (int i = 0; i < 5; i++) {
+                if ([objs[i] isKindOfClass: [NSClipView class]]) {
+                    if (_clipView == nil) {
+                        _clipView = [objs[i] retain];
+                    } else if (_headerClipView == nil) {
+                        _headerClipView = [objs[i] retain];
+                    }
+                } else if ([objs[i] isKindOfClass: [NSScroller class]]) {
+                    NSScroller *scroller = objs[i];
+                    BOOL isHorizontal = ![scroller isVertical];
+                    if (_verticalScroller != nil && !isHorizontal) {
+                        isHorizontal = YES;
+                    } else if (_horizontalScroller != nil && isHorizontal) {
+                        isHorizontal = NO;
+                    }
+                    if (isHorizontal) {
+                        _horizontalScroller = [scroller retain];
+                        [_horizontalScroller setTarget: self];
+                        [_horizontalScroller setAction: @selector(_horizontalScroll:)];
+                        _hasHorizontalScroller = YES;
+                    } else {
+                        _verticalScroller = [scroller retain];
+                        [_verticalScroller setTarget: self];
+                        [_verticalScroller setAction: @selector(_verticalScroll:)];
+                        _hasVerticalScroller = YES;
+                    }
+                } else if ([objs[i] isKindOfClass: [NSTableCornerView class]]) {
+                    _cornerView = [objs[i] retain];
+                }
+                if ([objs[i] isKindOfClass: [NSView class]] && [objs[i] superview] == nil) {
+                    [self addSubview: objs[i]];
+                }
+            }
+            _horizontalLineScroll = hLine;
+            _horizontalPageScroll = hPage;
+            _verticalLineScroll = vLine;
+            _verticalPageScroll = vPage;
+            _borderType = (flags >> 26) & 0x03;
+        } else {
+            _clipView = [[coder decodeObject] retain];
+            [coder decodeValueOfObjCType: @encode(NSInteger) at: &_borderType];
+            BOOL scrollsDynamically = NO, rulersVisible = NO;
+            [coder decodeValueOfObjCType: @encode(BOOL) at: &scrollsDynamically];
+            [coder decodeValueOfObjCType: @encode(BOOL) at: &rulersVisible];
+            float hLine = 10, hPage = 10, vLine = 10, vPage = 10;
+            [coder decodeValueOfObjCType: @encode(float) at: &hLine];
+            [coder decodeValueOfObjCType: @encode(float) at: &hPage];
+            [coder decodeValueOfObjCType: @encode(float) at: &vLine];
+            [coder decodeValueOfObjCType: @encode(float) at: &vPage];
+            _horizontalLineScroll = hLine;
+            _horizontalPageScroll = hPage;
+            _verticalLineScroll = vLine;
+            _verticalPageScroll = vPage;
+
+            [coder decodeValueOfObjCType: @encode(BOOL) at: &_hasHorizontalScroller];
+            if (_hasHorizontalScroller) {
+                [coder decodeValueOfObjCType: @encode(id) at: &_horizontalScroller];
+                [_horizontalScroller retain];
+                [_horizontalScroller setTarget: self];
+                [_horizontalScroller setAction: @selector(_horizontalScroll:)];
+            }
+
+            [coder decodeValueOfObjCType: @encode(BOOL) at: &_hasVerticalScroller];
+            if (_hasVerticalScroller) {
+                [coder decodeValueOfObjCType: @encode(id) at: &_verticalScroller];
+                [_verticalScroller retain];
+                [_verticalScroller setTarget: self];
+                [_verticalScroller setAction: @selector(_verticalScroll:)];
+            }
+
+            BOOL hasHorizRuler = NO, hasVertRuler = NO;
+            id horizRuler = nil, vertRuler = nil;
+            [coder decodeValueOfObjCType: @encode(BOOL) at: &hasHorizRuler];
+            if (hasHorizRuler) {
+                [coder decodeValueOfObjCType: @encode(id) at: &horizRuler];
+            }
+
+            [coder decodeValueOfObjCType: @encode(BOOL) at: &hasVertRuler];
+            if (hasVertRuler) {
+                [coder decodeValueOfObjCType: @encode(id) at: &vertRuler];
+            }
+
+            if (version >= 2) {
+                BOOL hasHeaderView = NO, hasCornerView = NO;
+                [coder decodeValueOfObjCType: @encode(BOOL) at: &hasHeaderView];
+                if (hasHeaderView) {
+                    _headerClipView = [[coder decodeObject] retain];
+                }
+                [coder decodeValueOfObjCType: @encode(BOOL) at: &hasCornerView];
+                if (hasCornerView) {
+                    _cornerView = [[coder decodeObject] retain];
+                }
             }
         }
         _backgroundColor = [[NSColor controlBackgroundColor] copy];

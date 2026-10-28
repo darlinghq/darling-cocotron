@@ -156,20 +156,31 @@ static NSAppleScrollBarVariant appleScrollBarVariant(NSScroller *self) {
         _knobProportion = 0;
         [self checkSpaceForParts];
     } else {
+        // GUESS (rung 6): NeXT/OpenStep typedstream layout for NSScroller
         sFlags.isHoriz = (_bounds.size.width < _bounds.size.height) ? NO : YES;
         _floatValue = 0;
         _knobProportion = 0;
 
-        NSUInteger arrowsPos = 0;
-        BOOL isEnabled = YES;
         id target = nil;
+        float floatVal = 0, knobProp = 0;
         SEL action = NULL;
-        [coder decodeValueOfObjCType: @encode(NSUInteger) at: &arrowsPos];
-        [coder decodeValueOfObjCType: @encode(BOOL) at: &isEnabled];
-        [coder decodeValueOfObjCType: @encode(id) at: &target];
-        [coder decodeValueOfObjCType: @encode(SEL) at: &action];
-        [self setTarget: target];
-        [self setAction: action];
+        char arrows = 0, size = 0;
+
+        @try {
+            [coder decodeValueOfObjCType: "@" at: &target];
+            [coder decodeValuesOfObjCTypes: "ff:", &floatVal, &knobProp, &action];
+            [coder decodeValueOfObjCType: "c" at: &arrows];
+            [coder decodeValueOfObjCType: "c" at: &size];
+            _floatValue = floatVal;
+            _knobProportion = knobProp;
+            _arrowsPosition = (NSScrollArrowPosition)arrows;
+            _controlSize = (NSControlSize)size;
+            [self setTarget: target];
+            [target release];
+            [self setAction: action];
+        } @catch (id ex) {
+            // Ignore decoding mismatch
+        }
         [self checkSpaceForParts];
     }
     return self;
