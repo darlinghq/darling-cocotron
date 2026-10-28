@@ -154,6 +154,7 @@ O2ColorSpaceRef O2ColorSpaceCreateWithName(CFStringRef name) {
         CFSTR("kCGColorSpaceLinearDisplayP3"),
         CFSTR("kCGColorSpaceExtendedLinearDisplayP3"),
         CFSTR("kCGColorSpaceITUR_2100_PQ"),
+        CFSTR("kCGColorSpaceExtendedLinearITUR_2020"),
     };
     for (size_t i = 0; i < sizeof(rgbNames) / sizeof(rgbNames[0]); i++) {
         if (CFEqual(name, rgbNames[i])) {

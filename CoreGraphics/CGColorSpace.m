@@ -56,6 +56,8 @@ const CFStringRef kCGColorSpaceExtendedGray =
 const CFStringRef kCGColorSpaceLinearGray = CFSTR("kCGColorSpaceLinearGray");
 const CFStringRef kCGColorSpaceExtendedLinearGray =
         CFSTR("kCGColorSpaceExtendedLinearGray");
+const CFStringRef kCGColorSpaceExtendedLinearITUR_2020 =
+        CFSTR("kCGColorSpaceExtendedLinearITUR_2020");
 
 CGColorSpaceRef CGColorSpaceRetain(CGColorSpaceRef colorSpace) {
     return (CGColorSpaceRef)O2ColorSpaceRetain((O2ColorSpaceRef)colorSpace);
