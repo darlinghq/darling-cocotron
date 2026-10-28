@@ -63,6 +63,7 @@ typedef NSUInteger NSWorkspaceIconCreationOptions;
 @property(readonly) BOOL accessibilityDisplayShouldReduceTransparency;
 @property(readonly) BOOL accessibilityDisplayShouldInvertColors;
 @property(readonly) BOOL accessibilityDisplayShouldReduceMotion;
+@property(readonly, getter=isVoiceOverEnabled) BOOL voiceOverEnabled;
 
 - (NSImage *) iconForFile: (NSString *) path;
 - (NSImage *) iconForFiles: (NSArray *) array;
