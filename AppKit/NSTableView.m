@@ -140,7 +140,6 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
         else
             _gridStyleMask = NSTableViewGridNone;
     } else {
-        NSInteger version = [coder versionForClassName: @"NSTableView"];
         _selectedRowIndexes = [[NSIndexSet alloc] init];
         _selectedColumns = [[NSMutableArray alloc] init];
         _editedColumn = -1;
@@ -153,48 +152,53 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
         _allowsColumnResizing = YES;
         _autoresizesAllColumnsToFit = YES;
 
-        _dataSource = [coder decodeObject];
-        id cols = [coder decodeObject];
+        id headerView = nil, cornerView = nil, cols = nil;
+        id bgColor = nil, gridColor = nil;
+        float spacingW = 3.0, spacingH = 2.0, rowH = 16.0;
+        SEL action = NULL, doubleAction = NULL;
+        int flags = 0;
+
+        // GUESS (rung 6): NeXT/OpenStep typedstream layout and flag bitmasks for NSTableView
+        @try {
+            [coder decodeValuesOfObjCTypes: "@@@ff@@f::i",
+                                            &headerView, &cornerView, &cols,
+                                            &spacingW, &spacingH,
+                                            &bgColor, &gridColor,
+                                            &rowH,
+                                            &action, &doubleAction,
+                                            &flags];
+            _dataSource = [coder decodeObject];
+            id aDelegate = [coder decodeObject];
+            _target = [coder decodeObject];
+            [self setDelegate: aDelegate];
+        } @catch (id ex) {
+            // Ignore decoding mismatch
+        }
+
+        _headerView = headerView;
+        [_headerView setTableView: self];
+        _cornerView = cornerView;
         if ([cols isKindOfClass: [NSArray class]]) {
             _tableColumns = [cols mutableCopy];
         } else {
             _tableColumns = [[NSMutableArray alloc] init];
         }
-        _gridColor = [[coder decodeObject] retain];
-        _backgroundColor = [[coder decodeObject] retain];
-        _headerView = [[coder decodeObject] retain];
-        _cornerView = [[coder decodeObject] retain];
-        id aDelegate = [coder decodeObject];
-        _target = [coder decodeObject];
-
-        [self setDelegate: aDelegate];
-        [_headerView setTableView: self];
+        [cols release];
         [_tableColumns makeObjectsPerformSelector: @selector(setTableView:) withObject: self];
 
-        int number = 0;
-        [coder decodeValueOfObjCType: @encode(int) at: &number];
-        _numberOfRows = number;
-        int numCols = 0;
-        [coder decodeValueOfObjCType: @encode(int) at: &numCols];
-        BOOL drawsGrid = NO;
-        [coder decodeValueOfObjCType: @encode(BOOL) at: &drawsGrid];
-        float rowH = 16.0;
-        [coder decodeValueOfObjCType: @encode(float) at: &rowH];
-        _standardRowHeight = rowH;
-        [coder decodeValueOfObjCType: @encode(SEL) at: &_doubleAction];
-        _intercellSpacing = [coder decodeSize];
+        _intercellSpacing = NSMakeSize(spacingW, spacingH);
+        _backgroundColor = bgColor;
+        _gridColor = gridColor;
+        _standardRowHeight = rowH > 0 ? rowH : 16.0;
+        _action = action;
+        _doubleAction = doubleAction;
 
-        [coder decodeValueOfObjCType: @encode(BOOL) at: &_allowsMultipleSelection];
-        [coder decodeValueOfObjCType: @encode(BOOL) at: &_allowsEmptySelection];
-        [coder decodeValueOfObjCType: @encode(BOOL) at: &_allowsColumnSelection];
-        [coder decodeValueOfObjCType: @encode(BOOL) at: &_allowsColumnResizing];
-
-        if (version >= 3) {
-            [coder decodeValueOfObjCType: @encode(BOOL) at: &_allowsColumnReordering];
-        }
-        if (version >= 2) {
-            [coder decodeValueOfObjCType: @encode(BOOL) at: &_autoresizesAllColumnsToFit];
-        }
+        _allowsColumnReordering = (flags & 0x80000000) ? YES : NO;
+        _allowsColumnResizing = (flags & 0x40000000) ? YES : NO;
+        _autoresizesAllColumnsToFit = (flags & 0x00008000) ? YES : NO;
+        _allowsMultipleSelection = (flags & 0x08000000) ? YES : NO;
+        _allowsEmptySelection = (flags & 0x10000000) ? YES : NO;
+        _allowsColumnSelection = (flags & 0x04000000) ? YES : NO;
     }
     return self;
 }

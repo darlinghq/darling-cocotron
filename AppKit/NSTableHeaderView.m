@@ -41,6 +41,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     if ([coder allowsKeyedCoding]) {
         // NSKeyedUnarchiver *keyed=(NSKeyedUnarchiver *)coder;
         // nothing
+    } else {
+        _tableView = [coder decodeObject];
     }
     return self;
 }

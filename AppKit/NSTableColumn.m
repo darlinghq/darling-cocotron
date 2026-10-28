@@ -52,38 +52,51 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         _isEditable = [keyed decodeBoolForKey: @"NSIsEditable"];
     } else {
         NSInteger version = [coder versionForClassName: @"NSTableColumn"];
+        // GUESS (rung 6): NeXT/OpenStep typedstream layout for NSTableColumn (v1 vs v2+)
         if (version >= 2) {
-            _identifier = [[coder decodeObject] retain];
             float w = 100, minW = 10, maxW = 10000;
-            [coder decodeValueOfObjCType: @encode(float) at: &w];
-            [coder decodeValueOfObjCType: @encode(float) at: &minW];
-            [coder decodeValueOfObjCType: @encode(float) at: &maxW];
-            _width = w;
-            _minWidth = minW;
-            _maxWidth = maxW;
-            BOOL resizable = YES, editable = NO;
-            [coder decodeValueOfObjCType: @encode(BOOL) at: &resizable];
-            [coder decodeValueOfObjCType: @encode(BOOL) at: &editable];
-            _isResizable = resizable;
-            _isEditable = editable;
-            _headerCell = [[coder decodeObject] retain];
-            _dataCell = [[coder decodeObject] retain];
+            char resizable = 1, editable = 0;
+            id identifier = nil, headerCell = nil, dataCell = nil;
+            @try {
+                [coder decodeValuesOfObjCTypes: "@fff@@cc",
+                                                &identifier,
+                                                &w, &minW, &maxW,
+                                                &headerCell, &dataCell,
+                                                &resizable, &editable];
+                _identifier = identifier;
+                _width = w;
+                _minWidth = minW;
+                _maxWidth = maxW;
+                _headerCell = headerCell;
+                _dataCell = dataCell;
+                _isResizable = resizable ? YES : NO;
+                _isEditable = editable ? YES : NO;
+                // _tableView is a weak/assign back-reference to the owning table view
+                _tableView = [coder decodeObject];
+            } @catch (id ex) {
+                // Ignore decoding mismatch
+            }
         } else {
-            _identifier = [[coder decodeObject] retain];
-            _headerCell = [[coder decodeObject] retain];
-            _dataCell = [[coder decodeObject] retain];
+            id identifier = nil, headerCell = nil, dataCell = nil;
             float w = 100, minW = 10, maxW = 10000;
-            [coder decodeValueOfObjCType: @encode(float) at: &w];
-            [coder decodeValueOfObjCType: @encode(float) at: &minW];
-            [coder decodeValueOfObjCType: @encode(float) at: &maxW];
-            _width = w;
-            _minWidth = minW;
-            _maxWidth = maxW;
-            BOOL resizable = YES, editable = NO;
-            [coder decodeValueOfObjCType: @encode(BOOL) at: &resizable];
-            [coder decodeValueOfObjCType: @encode(BOOL) at: &editable];
-            _isResizable = resizable;
-            _isEditable = editable;
+            char resizable = 1, editable = 0;
+            @try {
+                [coder decodeValuesOfObjCTypes: "@@@fffcc",
+                                                &identifier,
+                                                &headerCell, &dataCell,
+                                                &w, &minW, &maxW,
+                                                &resizable, &editable];
+                _identifier = identifier;
+                _headerCell = headerCell;
+                _dataCell = dataCell;
+                _width = w;
+                _minWidth = minW;
+                _maxWidth = maxW;
+                _isResizable = resizable ? YES : NO;
+                _isEditable = editable ? YES : NO;
+            } @catch (id ex) {
+                // Ignore decoding mismatch
+            }
         }
     }
 
