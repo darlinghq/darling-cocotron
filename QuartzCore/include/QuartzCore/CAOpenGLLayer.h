@@ -26,9 +26,15 @@
     CGLPixelFormatObj _pixelFormat;
     CGLContextObj _cglContext;
     BOOL _wantsExtendedDynamicRangeContent;
+    GLuint _fbo;
+    GLuint _colorTex;
+    GLuint _depthRb;
+    CGSize _allocatedSize;
+    BOOL _hasNewFrame;
 }
 
 @property(getter=isAsynchronous) BOOL asynchronous;
+- (BOOL) hasNewFrame;
 @property BOOL wantsExtendedDynamicRangeContent;
 
 - (BOOL) canDrawInCGLContext: (CGLContextObj) ctx pixelFormat: (CGLPixelFormatObj) pf forLayerTime: (CFTimeInterval) t displayTime: (const CVTimeStamp *) ts;
