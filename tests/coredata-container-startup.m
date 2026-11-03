@@ -65,6 +65,10 @@ int main(void) {
         NSPersistentStoreDescription *two = [[[NSPersistentStoreDescription alloc] initWithURL:secondURL] autorelease];
         one.type = NSInMemoryStoreType;
         two.type = NSInMemoryStoreType;
+        one.readOnly = YES;
+        CHECK([(NSNumber *)[[one options] objectForKey:NSReadOnlyPersistentStoreOption] boolValue]);
+        [one setOption:@NO forKey:NSReadOnlyPersistentStoreOption];
+        CHECK(!one.isReadOnly);
         [first setPersistentStoreDescriptions:@[one, two]];
         __block NSUInteger calls = 0;
         __block BOOL valid = YES;

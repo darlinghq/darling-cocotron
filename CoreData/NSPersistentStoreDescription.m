@@ -6,7 +6,6 @@
 @synthesize URL = _URL;
 @synthesize type = _type;
 @synthesize configuration = _configuration;
-@synthesize readOnly = _readOnly;
 @synthesize shouldAddStoreAsynchronously = _shouldAddStoreAsynchronously;
 
 - (instancetype)init {
@@ -25,6 +24,14 @@
     if (self)
         self.URL = URL;
     return self;
+}
+
+- (BOOL)isReadOnly {
+    return [[_options objectForKey:NSReadOnlyPersistentStoreOption] boolValue];
+}
+
+- (void)setReadOnly:(BOOL)value {
+    [self setOption:[NSNumber numberWithBool:value] forKey:NSReadOnlyPersistentStoreOption];
 }
 
 - (BOOL)shouldMigrateStoreAutomatically {

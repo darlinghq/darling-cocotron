@@ -16,3 +16,4 @@
 #import <CoreData/NSPropertyMapping.h>
 #import <CoreData/NSRelationshipDescription.h>
 #import <CoreData/NSPersistentStoreDescription.h>
+#import <CoreData/NSPersistentContainer.h>

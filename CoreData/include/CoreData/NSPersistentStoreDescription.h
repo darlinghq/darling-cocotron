@@ -5,7 +5,6 @@
     NSString *_type;
     NSString *_configuration;
     NSMutableDictionary *_options;
-    BOOL _readOnly;
     BOOL _shouldAddStoreAsynchronously;
 }
 
