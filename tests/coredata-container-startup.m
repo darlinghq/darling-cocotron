@@ -2,6 +2,7 @@
 #import <CoreData/CoreData.h>
 #import <dispatch/dispatch.h>
 #include <stdio.h>
+#include <stdint.h>
 
 @protocol ContainerContract <NSObject>
 - (instancetype)initWithName:(NSString *)name;
@@ -54,8 +55,44 @@ static NSManagedObjectModel *model(int *stage) {
     writer.inverseRelationship = documents;
     *stage = 78;
     documents.inverseRelationship = writer;
+    *stage = 83;
+    NSAttributeDescription *label = [[[NSAttributeDescription alloc] init] autorelease];
+    NSMutableString *name = [NSMutableString stringWithString:@"label"];
+    label.name = name;
+    [name appendString:@"-changed"];
+    label.attributeType = NSStringAttributeType;
+    label.optional = YES;
+    label.transient = NO;
+    NSMutableString *taskDefault = [NSMutableString stringWithString:@"seed"];
+    label.defaultValue = taskDefault;
+    [taskDefault appendString:@"-changed"];
+    *stage = 84;
+    NSAttributeDescription *date = [[[NSAttributeDescription alloc] init] autorelease];
+    date.name = @"date";
+    date.attributeType = NSDateAttributeType;
+    date.optional = YES;
+    date.transient = NO;
+    *stage = 85;
+    NSAttributeDescription *flag = [[[NSAttributeDescription alloc] init] autorelease];
+    flag.name = @"enabled";
+    flag.attributeType = NSBooleanAttributeType;
+    flag.optional = YES;
+    flag.transient = NO;
+    *stage = 86;
+    writer.optional = YES;
+    writer.transient = NO;
+    documents.optional = YES;
+    documents.transient = NO;
+    writer.minCount = 0;
+    NSUInteger wide = (NSUInteger)UINT32_MAX + 7;
+    writer.maxCount = wide;
+    if (writer.maxCount != wide)
+        [NSException raise:NSInternalInconsistencyException format:@"Authored cardinality round trip failed"];
+    writer.maxCount = 1;
+    if (writer.isToMany || !documents.isToMany)
+        [NSException raise:NSInternalInconsistencyException format:@"Authored relationship cardinality failed"];
     *stage = 79;
-    document.properties = @[writer];
+    document.properties = @[writer, label, date, flag];
     *stage = 80;
     author.properties = @[documents];
     *stage = 81;
@@ -76,6 +113,18 @@ int main(void) {
         NSManagedObjectModel *firstModel = model(&checkpoint);
         NSManagedObjectModel *secondModel = model(&checkpoint);
         checkpoint = 70;
+        NSEntityDescription *document = [[firstModel entitiesByName] objectForKey:@"Document"];
+        NSAttributeDescription *label = [[document propertiesByName] objectForKey:@"label"];
+        CHECK([[firstModel entities] count] == 2 && [[firstModel entitiesByName] count] == 2);
+        CHECK(document.managedObjectModel == firstModel && label.entity == document);
+        CHECK([label.name isEqual:@"label"] && [label.defaultValue isEqual:@"seed-changed"]);
+        CHECK(label.isOptional && !label.isTransient && [[document attributesByName] count] == 3);
+        label.name = @"caption";
+        document.name = @"Record";
+        CHECK([[document propertiesByName] objectForKey:@"label"] == nil &&
+              [[document propertiesByName] objectForKey:@"caption"] == label);
+        CHECK([[firstModel entitiesByName] objectForKey:@"Document"] == nil &&
+              [[firstModel entitiesByName] objectForKey:@"Record"] == document);
         id<ContainerContract> first = [[containerClass alloc] initWithName:@"First" managedObjectModel:firstModel];
         id<ContainerContract> second = [[containerClass alloc] initWithName:@"Second" managedObjectModel:secondModel];
         CHECK([first managedObjectModel] == firstModel && [second managedObjectModel] == secondModel);
@@ -83,6 +132,10 @@ int main(void) {
         CHECK([[first viewContext] persistentStoreCoordinator] == [first persistentStoreCoordinator]);
         CHECK([first viewContext] == [first viewContext]);
         CHECK([[first viewContext] concurrencyType] == NSMainQueueConcurrencyType);
+        BOOL rejectedMutation = NO;
+        @try { label.name = @"forbidden"; }
+        @catch (NSException *exception) { rejectedMutation = YES; }
+        CHECK(rejectedMutation && [label.name isEqual:@"caption"]);
         NSURL *firstURL = [[[first persistentStoreDescriptions] objectAtIndex:0] URL];
         NSURL *secondURL = [[[second persistentStoreDescriptions] objectAtIndex:0] URL];
         CHECK(firstURL && secondURL && ![firstURL isEqual:secondURL]);
