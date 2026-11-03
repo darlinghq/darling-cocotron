@@ -109,13 +109,17 @@ id keyObjectForSelector(SEL selector) {
     return [NSNumber numberWithInteger: (NSInteger) selector];
 }
 
+static BOOL isGeneratedManagedAccessor(IMP implementation);
+
 static void appendMethodToList(Class class, NSString *selectorName, IMP imp,
                                const char *types, SEL *selectorp)
 {
 
     SEL selector = NSSelectorFromString(selectorName);
 
-    class_addMethod(class, selector, imp, types);
+    Method existing = class_getInstanceMethod(class, selector);
+    if (!existing || isGeneratedManagedAccessor(method_getImplementation(existing)))
+        class_addMethod(class, selector, imp, types);
 
     *selectorp = selector;
 }
@@ -132,6 +136,20 @@ SCALAR_ACCESSORS(LongLong, long long, longLongValue, numberWithLongLong)
 SCALAR_ACCESSORS(Float, float, floatValue, numberWithFloat)
 SCALAR_ACCESSORS(Double, double, doubleValue, numberWithDouble)
 #undef SCALAR_ACCESSORS
+
+static BOOL isGeneratedManagedAccessor(IMP implementation) {
+    const IMP generated[] = {
+        (IMP)getValue, (IMP)setValue, (IMP)addObject, (IMP)removeObject,
+        (IMP)addObjectSet, (IMP)removeObjectSet,
+        (IMP)getChar, (IMP)setChar, (IMP)getBool, (IMP)setBool,
+        (IMP)getShort, (IMP)setShort, (IMP)getInt, (IMP)setInt,
+        (IMP)getLong, (IMP)setLong, (IMP)getLongLong, (IMP)setLongLong,
+        (IMP)getFloat, (IMP)setFloat, (IMP)getDouble, (IMP)setDouble
+    };
+    for (NSUInteger index = 0; index < sizeof(generated) / sizeof(generated[0]); index++)
+        if (implementation == generated[index]) return YES;
+    return NO;
+}
 
 - (void)_prepareAccessors {
     Class managedClass = NSClassFromString([self managedObjectClassName]);
