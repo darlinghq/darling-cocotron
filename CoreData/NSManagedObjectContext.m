@@ -444,8 +444,11 @@ static char ContextQueueKey;
     }
     for (NSSortDescriptor *descriptor in [fetchRequest sortDescriptors]) {
         NSAttributeDescription *attribute = [[requestedEntity attributesByName] objectForKey:[descriptor key]];
-        supported = supported && attribute && ([attribute attributeType] == NSStringAttributeType || [attribute attributeType] == NSDateAttributeType) &&
-            [descriptor selector] == @selector(compare:);
+        NSAttributeType type = [attribute attributeType];
+        BOOL comparable = type == NSStringAttributeType || type == NSDateAttributeType ||
+            type == NSInteger16AttributeType || type == NSInteger32AttributeType || type == NSInteger64AttributeType ||
+            type == NSFloatAttributeType || type == NSDoubleAttributeType || type == NSBooleanAttributeType;
+        supported = supported && attribute && comparable && [descriptor selector] == @selector(compare:);
     }
     if (!supported) {
         if (error) *error = [NSError errorWithDomain:NSCocoaErrorDomain code:NSPersistentStoreOperationError userInfo:nil];
