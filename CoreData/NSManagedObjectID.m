@@ -54,7 +54,7 @@
 
 - (NSURL *) URIRepresentation {
     NSString *path =
-            [[_entity name] stringByAppendingPathComponent: _referenceObject];
+            [[@"/" stringByAppendingPathComponent:[_entity name]] stringByAppendingPathComponent:_referenceObject];
     NSString *host = _isTemporaryID ? @"" : _storeIdentifier;
 
     return [[[NSURL alloc] initWithScheme: @"x-coredata" host: host
