@@ -632,9 +632,10 @@ static char ContextQueueKey;
     if (!_mergingChanges && NSMapGet(_objectIdToObject, [object objectID]) == object && ![_deletedObjects containsObject:object]) {
         if (![_insertedObjects containsObject:object]) {
             [_updatedObjects addObject:object];
-            [_pendingUpdated addObject:object];
             [object _setInserted:NO updated:YES deleted:NO];
         }
+        if (![_pendingInserted containsObject:object])
+            [_pendingUpdated addObject:object];
         _hasChanges = YES;
         [self _requestProcessPendingChanges];
     }
