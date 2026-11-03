@@ -24,7 +24,46 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import "NSEntityDescription-Private.h"
 #import "NSManagedObjectModel-Private.h"
 
+static NSMutableSet *LiveModels;
+
 @implementation NSManagedObjectModel
+
+- (void)_registerLiveModel {
+    @synchronized([NSManagedObjectModel class]) {
+        if (!LiveModels) LiveModels = [NSMutableSet new];
+        [LiveModels addObject:[NSValue valueWithNonretainedObject:self]];
+    }
+}
+
++ (NSEntityDescription *)_entityForManagedClass:(Class)managedClass {
+    @synchronized(self) {
+        NSEntityDescription *match = nil;
+        for (NSValue *reference in LiveModels) {
+            NSManagedObjectModel *model = [reference nonretainedObjectValue];
+            for (NSEntityDescription *entity in [model entities]) {
+                if (NSClassFromString([entity managedObjectClassName]) == managedClass) {
+                    if (match && match != entity)
+                        [NSException raise:NSInvalidArgumentException format:@"Multiple live entities represent this managed class."];
+                    match = entity;
+                }
+            }
+        }
+        if (!match) [NSException raise:NSInvalidArgumentException format:@"No live entity represents this managed class."];
+        return [[match retain] autorelease];
+    }
+}
+
+- (void)dealloc {
+    @synchronized([NSManagedObjectModel class]) {
+        [LiveModels removeObject:[NSValue valueWithNonretainedObject:self]];
+    }
+    [_entities release];
+    [_fetchRequestTemplates release];
+    [_configurations release];
+    [_versionIdentifiers release];
+    [_localizationDictionary release];
+    [super dealloc];
+}
 
 + (NSManagedObjectModel *) modelByMergingModels: (NSArray *) models {
     NSManagedObjectModel *result = [[NSManagedObjectModel alloc] init];
@@ -70,6 +109,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     _entities = [[NSMutableDictionary alloc] init];
     _fetchRequestTemplates = [[NSMutableDictionary alloc] init];
     _configurations = [[NSMutableDictionary alloc] init];
+    [self _registerLiveModel];
     return self;
 }
 
@@ -92,7 +132,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
             [[coder decodeObjectForKey: @"NSFetchRequestTemplates"] retain];
     _versionIdentifiers =
             [[coder decodeObjectForKey: @"NSVersionIdentifiers"] retain];
-
+    [self _registerLiveModel];
     return self;
 }
 

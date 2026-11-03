@@ -120,6 +120,78 @@ static void appendMethodToList(Class class, NSString *selectorName, IMP imp,
     *selectorp = selector;
 }
 
+#define SCALAR_ACCESSORS(SUFFIX, TYPE, GET, BOX) \
+static TYPE get##SUFFIX(id object, SEL selector) { return [[object valueForKey:[[[object entity] _propertyForSelector:selector] name]] GET]; } \
+static void set##SUFFIX(id object, SEL selector, TYPE value) { [object setValue:[NSNumber BOX:value] forKey:[[[object entity] _propertyForSelector:selector] name]]; }
+SCALAR_ACCESSORS(Char, signed char, charValue, numberWithChar)
+SCALAR_ACCESSORS(Bool, _Bool, boolValue, numberWithBool)
+SCALAR_ACCESSORS(Short, short, shortValue, numberWithShort)
+SCALAR_ACCESSORS(Int, int, intValue, numberWithInt)
+SCALAR_ACCESSORS(Long, long, longValue, numberWithLong)
+SCALAR_ACCESSORS(LongLong, long long, longLongValue, numberWithLongLong)
+SCALAR_ACCESSORS(Float, float, floatValue, numberWithFloat)
+SCALAR_ACCESSORS(Double, double, doubleValue, numberWithDouble)
+#undef SCALAR_ACCESSORS
+
+- (void)_prepareAccessors {
+    Class managedClass = NSClassFromString([self managedObjectClassName]);
+    if (!managedClass || ![managedClass isSubclassOfClass:[NSManagedObject class]])
+        [NSException raise:NSInvalidArgumentException format:@"The managed class must exist and inherit NSManagedObject."];
+    @synchronized(managedClass) {
+        for (NSPropertyDescription *property in [self properties]) {
+            NSString *name = [property name];
+            NSString *upper = [[[name substringToIndex:1] uppercaseString] stringByAppendingString:[name substringFromIndex:1]];
+            NSString *getter = name;
+            NSString *setter = [NSString stringWithFormat:@"set%@:", upper];
+            BOOL readonly = NO;
+            char type = '@';
+            objc_property_t declaration = class_getProperty(managedClass, [name UTF8String]);
+            if (declaration) {
+                NSString *attributes = [NSString stringWithUTF8String:property_getAttributes(declaration)];
+                for (NSString *attribute in [attributes componentsSeparatedByString:@","]) {
+                    if ([attribute hasPrefix:@"T"] && [attribute length] > 1) type = [attribute characterAtIndex:1];
+                    else if ([attribute hasPrefix:@"G"]) getter = [attribute substringFromIndex:1];
+                    else if ([attribute hasPrefix:@"S"]) setter = [attribute substringFromIndex:1];
+                    else if ([attribute isEqual:@"R"]) readonly = YES;
+                }
+            }
+            IMP get = NULL, set = NULL;
+            const char *encoding = NULL;
+#define ACCESSOR_CASE(CODE, SUFFIX, TYPE) case CODE: get = (IMP)get##SUFFIX; set = (IMP)set##SUFFIX; encoding = @encode(TYPE); break
+            switch (type) {
+                case '@': get = (IMP)getValue; set = (IMP)setValue; encoding = @encode(id); break;
+                ACCESSOR_CASE('c', Char, signed char);
+                ACCESSOR_CASE('B', Bool, _Bool);
+                ACCESSOR_CASE('s', Short, short);
+                ACCESSOR_CASE('i', Int, int);
+                ACCESSOR_CASE('l', Long, long);
+                ACCESSOR_CASE('q', LongLong, long long);
+                ACCESSOR_CASE('f', Float, float);
+                ACCESSOR_CASE('d', Double, double);
+                default: [NSException raise:NSInvalidArgumentException format:@"Unsupported managed property ABI."];
+            }
+#undef ACCESSOR_CASE
+            NSString *getTypes = [NSString stringWithFormat:@"%s@:", encoding];
+            NSString *setTypes = [NSString stringWithFormat:@"v@:%s", encoding];
+            SEL selector;
+            appendMethodToList(managedClass, getter, get, [getTypes UTF8String], &selector);
+            [_selectorPropertyMap setObject:property forKey:keyObjectForSelector(selector)];
+            if (!readonly) {
+                appendMethodToList(managedClass, setter, set, [setTypes UTF8String], &selector);
+                [_selectorPropertyMap setObject:property forKey:keyObjectForSelector(selector)];
+            }
+            if ([property isKindOfClass:[NSRelationshipDescription class]] && [(NSRelationshipDescription *)property isToMany]) {
+                NSArray *selectors = @[[NSString stringWithFormat:@"add%@Object:", upper], [NSString stringWithFormat:@"remove%@Object:", upper], [NSString stringWithFormat:@"add%@:", upper], [NSString stringWithFormat:@"remove%@:", upper]];
+                IMP implementations[] = {(IMP)addObject, (IMP)removeObject, (IMP)addObjectSet, (IMP)removeObjectSet};
+                for (NSUInteger index = 0; index < [selectors count]; index++) {
+                    appendMethodToList(managedClass, [selectors objectAtIndex:index], implementations[index], "v@:@", &selector);
+                    [_selectorPropertyMap setObject:property forKey:keyObjectForSelector(selector)];
+                }
+            }
+        }
+    }
+}
+
 - initWithCoder: (NSCoder *) coder {
     if (![coder allowsKeyedCoding]) {
         [NSException raise: NSInvalidArgumentException
@@ -142,72 +214,6 @@ static void appendMethodToList(Class class, NSString *selectorName, IMP imp,
 
     _hasBeenInstantiated = NO;
 
-    if (_className) {
-        Class class = NSClassFromString(_className);
-
-        for (NSPropertyDescription *property in [_properties allValues]) {
-            NSString *propertyName = [property name];
-            NSString *upperName = [[[propertyName substringToIndex: 1]
-                    uppercaseString]
-                    stringByAppendingString: [propertyName
-                                                     substringFromIndex: 1]];
-            NSString *selectorName;
-            SEL selector;
-
-            appendMethodToList(class, propertyName, (IMP) getValue,
-                               "@@:", &selector);
-            [_selectorPropertyMap setObject: property
-                                     forKey: keyObjectForSelector(selector)];
-
-            appendMethodToList(
-                    class, [NSString stringWithFormat: @"set%@:", upperName],
-                    (IMP) setValue, "v@:@", &selector);
-            [_selectorPropertyMap setObject: property
-                                     forKey: keyObjectForSelector(selector)];
-
-            if ([property isKindOfClass: [NSRelationshipDescription class]]) {
-                NSRelationshipDescription *relationship =
-                        (NSRelationshipDescription *) property;
-
-                if ([relationship isToMany]) {
-                    appendMethodToList(
-                            class,
-                            [NSString stringWithFormat: @"add%@Object:",
-                                                        upperName],
-                            (IMP) addObject, "v@:@", &selector);
-                    [_selectorPropertyMap
-                            setObject: property
-                               forKey: keyObjectForSelector(selector)];
-
-                    appendMethodToList(
-                            class,
-                            [NSString stringWithFormat: @"remove%@Object:",
-                                                        upperName],
-                            (IMP) removeObject, "v@:@", &selector);
-                    [_selectorPropertyMap
-                            setObject: property
-                               forKey: keyObjectForSelector(selector)];
-
-                    appendMethodToList(
-                            class,
-                            [NSString stringWithFormat: @"add%@:", upperName],
-                            (IMP) addObjectSet, "v@:@", &selector);
-                    [_selectorPropertyMap
-                            setObject: property
-                               forKey: keyObjectForSelector(selector)];
-
-                    appendMethodToList(class,
-                                       [NSString stringWithFormat: @"remove%@:",
-                                                                   upperName],
-                                       (IMP) removeObjectSet, "v@:@",
-                                       &selector);
-                    [_selectorPropertyMap
-                            setObject: property
-                               forKey: keyObjectForSelector(selector)];
-                }
-            }
-        }
-    }
     return self;
 }
 
@@ -249,79 +255,7 @@ static void appendMethodToList(Class class, NSString *selectorName, IMP imp,
     return _hasBeenInstantiated;
 }
 
-/*
-- (BOOL) _computeAttribute: (NSAttributeDescription *) attribute
-                          getter: (IMP *) getter
-                          setter: (IMP *) setter
-{
-    switch([attribute attributeType]) {
-    case NSUndefinedAttributeType:
-        NSLog(@"Undefined-type attributes not implemented for %@.%@",
-              _className, [attribute name]);
-        return NO;
 
-    case NSInteger16AttributeType:
-        NSLog(@"Integer 16 attributes not implemented for %@.%@",
-              _className, [attribute name]);
-        return NO;
-
-    case NSInteger32AttributeType:
-        *getter = (IMP) getInt32;
-        *setter = (IMP) setInt32;
-        return [NSString stringWithUTF8String: @encode(int32_t)];
-
-    case NSInteger64AttributeType:
-        NSLog(@"Integer 64 attributes not implemented for %@.%@",
-              _className, [attribute name]);
-        return NO;
-
-    case NSDecimalAttributeType:
-        NSLog(@"Decimal attributes not implemented for %@.%@",
-              _className, [attribute name]);
-        return NO;
-
-    case NSDoubleAttributeType:
-        NSLog(@"Double attributes not implemented for %@.%@",
-              _className, [attribute name]);
-        return NO;
-
-    case NSFloatAttributeType:
-        NSLog(@"Float attributes not implemented for %@.%@",
-              _className, [attribute name]);
-        return NO;
-
-    case NSStringAttributeType:
-        *getter = (IMP) getString;
-        *setter = (IMP) setString;
-        return [NSString stringWithUTF8String: @encode(NSString *)];
-
-    case NSBooleanAttributeType:
-        *getter = (IMP) getBool;
-        *setter = (IMP) setBool;
-        return [NSString stringWithUTF8String: @encode(BOOL)];
-
-    case NSDateAttributeType:
-        NSLog(@"Date attributes not implemented for %@.%@",
-              _className, [attribute name]);
-        return NO;
-
-    case NSBinaryDataAttributeType:
-        NSLog(@"Binary data attributes not implemented for %@.%@",
-              _className, [attribute name]);
-        return NO;
-
-    case NSTransformableAttributeType:
-        NSLog(@"Transformable attributes not implemented for %@.%@",
-              _className, [attribute name]);
-        return NO;
-
-    default:
-        NSLog(@"Unknown attribute type for %@.%@",
-              _className, [attribute name]);
-        return NO;
-    }
-}
-*/
 
 + (NSEntityDescription *) entityForName: (NSString *) entityName
                  inManagedObjectContext: (NSManagedObjectContext *) context
@@ -346,8 +280,10 @@ static void appendMethodToList(Class class, NSString *selectorName, IMP imp,
         class = [NSManagedObject class];
     }
 
-    return [[class alloc] initWithEntity: entity
-            insertIntoManagedObjectContext: context];
+    if (!entity)
+        [NSException raise:NSInvalidArgumentException format:@"The entity is not in the context model."];
+    return [[[class alloc] initWithEntity: entity
+            insertIntoManagedObjectContext: context] autorelease];
 }
 
 - (NSManagedObjectModel *) managedObjectModel {
