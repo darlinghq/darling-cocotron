@@ -41,6 +41,7 @@ set(CoreData_sources
     NSManagedObjectSetEnumerator.m
     NSManagedObjectSet.m
     NSMappingModel.m
+    NSPersistentStoreDescription.m
     NSPersistentStoreCoordinator.m
     NSPersistentStore.m
     NSPropertyDescription.m
