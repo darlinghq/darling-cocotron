@@ -31,6 +31,7 @@ COREDATA_EXPORT NSString *const NSValidationValueErrorKey;
 
 @interface NSManagedObject : NSObject <NSFetchRequestResult> {
     NSManagedObjectID *_objectID;
+    long long _storeVersion;
     NSManagedObjectContext *_context;
     BOOL _isInserted, _isUpdated, _isDeleted, _isFault;
     NSDictionary *_committedValues;

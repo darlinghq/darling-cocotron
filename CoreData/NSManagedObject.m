@@ -29,6 +29,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <CoreData/NSPersistentStoreCoordinator.h>
 #import <CoreData/NSFetchRequest.h>
 #import "NSManagedObjectModel-Private.h"
+#import "NSSQLitePersistentStore.h"
 #import <CoreData/NSRelationshipDescription.h>
 #import <Foundation/NSRaise.h>
 
@@ -90,6 +91,11 @@ NSString *const NSValidationValueErrorKey = @"NSValidationErrorValue";
     _committedValues = nil;
     _changedValues = [[NSMutableDictionary alloc] init];
     _isFault = YES;
+    if (![objectID isTemporaryID]) {
+        [self _committedValues];
+        if ([[objectID persistentStore] isKindOfClass:[NSSQLitePersistentStore class]])
+            _storeVersion = [(NSSQLitePersistentStore *)[objectID persistentStore] _versionForObjectID:objectID];
+    }
     return self;
 }
 
@@ -261,6 +267,39 @@ NSString *const NSValidationValueErrorKey = @"NSValidationErrorValue";
     }
 }
 
+- (void)_setInserted:(BOOL)inserted updated:(BOOL)updated deleted:(BOOL)deleted {
+    _isInserted = inserted; _isUpdated = updated; _isDeleted = deleted;
+}
+
+- (long long)_storeVersion { return _storeVersion; }
+
+- (void)_mergeCommittedValues {
+    NSArray *keys = [[[self entity] propertiesByName] allKeys];
+    for (NSString *key in keys) [self willChangeValueForKey:key];
+    [_committedValues release]; _committedValues = nil;
+    [self _committedValues];
+    if ([[_objectID persistentStore] isKindOfClass:[NSSQLitePersistentStore class]])
+        _storeVersion = [(NSSQLitePersistentStore *)[_objectID persistentStore] _versionForObjectID:_objectID];
+    for (NSString *key in keys) [self didChangeValueForKey:key];
+}
+
+- (void)_discardPendingValues {
+    [_changedValues removeAllObjects];
+    _isInserted = _isUpdated = _isDeleted = NO;
+}
+
+- (void)_didCommit {
+    [_changedValues removeAllObjects];
+    [_committedValues release];
+    _committedValues = nil;
+    [self _committedValues];
+    if ([[_objectID persistentStore] isKindOfClass:[NSSQLitePersistentStore class]])
+        _storeVersion = [(NSSQLitePersistentStore *)[_objectID persistentStore] _versionForObjectID:_objectID];
+    _isInserted = _isUpdated = NO;
+    _isFault = NO;
+    [self didSave];
+}
+
 - (void) didSave {
 }
 
@@ -299,6 +338,8 @@ NSString *const NSValidationValueErrorKey = @"NSValidationErrorValue";
 
         id result = [self primitiveValueForKey: propertyName];
 
+        if ([relationship isToMany] && !result)
+            result = [NSSet set];
         if (result != nil) {
             if ([relationship isToMany])
                 result = [[[NSManagedObjectSet alloc]
@@ -327,82 +368,49 @@ NSString *const NSValidationValueErrorKey = @"NSValidationErrorValue";
         [self didChangeValueForKey: propertyName];
         return;
     } else if ([property isKindOfClass: [NSRelationshipDescription class]]) {
-        NSRelationshipDescription *relationship =
-                (NSRelationshipDescription *) property;
+        NSRelationshipDescription *relationship = (NSRelationshipDescription *)property;
         NSRelationshipDescription *inverse = [relationship inverseRelationship];
-        NSString *inverseName = [inverse name];
-        id valueByID;
-
-        if ([relationship isToMany]) {
-            NSMutableSet *set = [NSMutableSet set];
-
-            for (NSManagedObject *object in value)
-                [set addObject: [object objectID]];
-
-            valueByID = set;
-        } else {
-            valueByID = [value objectID];
+        NSMutableSet *newIDs = [NSMutableSet set];
+        NSSet *newObjects = [relationship isToMany] ? value : (value ? [NSSet setWithObject:value] : [NSSet set]);
+        for (NSManagedObject *target in newObjects) {
+            if (![target isKindOfClass:[NSManagedObject class]] || [target managedObjectContext] != _context || [target entity] != [relationship destinationEntity])
+                [NSException raise:NSInvalidArgumentException format:@"A relationship requires objects in this context with the declared entity."];
+            [newIDs addObject:[target objectID]];
         }
-
-        if (inverse != nil) {
-            id primitivePrevious = [self primitiveValueForKey: key];
-
-            if (primitivePrevious != nil) {
-                NSSet *allPrevious =
-                        [relationship isToMany]
-                                ? primitivePrevious
-                                : [NSSet setWithObject: primitivePrevious];
-
-                for (NSManagedObjectID *previousID in allPrevious) {
-                    NSManagedObject *previous =
-                            [_context objectWithID: previousID];
-
-                    // FIXME: should be using set mutation notifications for to
-                    // many
-                    [previous willChangeValueForKey: inverseName];
-
-                    if ([inverse isToMany])
-                        [[previous primitiveValueForKey: inverseName]
-                                removeObject: [self objectID]];
-                    else
-                        [previous setPrimitiveValue: nil forKey: inverseName];
-
-                    [previous didChangeValueForKey: inverseName];
+        id previous = [self primitiveValueForKey:propertyName];
+        NSSet *oldIDs = [relationship isToMany] ? (previous ?: [NSSet set]) : (previous ? [NSSet setWithObject:previous] : [NSSet set]);
+        oldIDs = [[oldIDs copy] autorelease];
+        [self willChangeValueForKey:propertyName];
+        [self setPrimitiveValue:([relationship isToMany] ? (id)newIDs : [newIDs anyObject]) forKey:propertyName];
+        [self didChangeValueForKey:propertyName];
+        if (inverse) {
+            NSString *inverseName = [inverse name];
+            NSMutableSet *allIDs = [NSMutableSet setWithSet:oldIDs];
+            [allIDs unionSet:newIDs];
+            for (NSManagedObjectID *targetID in allIDs) {
+                BOOL added = [newIDs containsObject:targetID];
+                NSManagedObject *target = [_context objectWithID:targetID];
+                id oldInverse = [target primitiveValueForKey:inverseName];
+                if (added && ![inverse isToMany] && oldInverse && oldInverse != [self objectID]) {
+                    NSManagedObject *oldOwner = [_context objectWithID:oldInverse];
+                    id oldOwnerValue = [oldOwner primitiveValueForKey:propertyName];
+                    [oldOwner willChangeValueForKey:propertyName];
+                    if ([relationship isToMany]) {
+                        NSMutableSet *remaining = [NSMutableSet setWithSet:oldOwnerValue ?: [NSSet set]];
+                        [remaining removeObject:targetID];
+                        [oldOwner setPrimitiveValue:remaining forKey:propertyName];
+                    } else [oldOwner setPrimitiveValue:nil forKey:propertyName];
+                    [oldOwner didChangeValueForKey:propertyName];
                 }
-            }
-        }
-
-        [self willChangeValueForKey: propertyName];
-        [self setPrimitiveValue: valueByID forKey: propertyName];
-        [self didChangeValueForKey: propertyName];
-
-        if (inverse != nil) {
-            NSSet *allValues = [relationship isToMany]
-                                       ? valueByID
-                                       : [NSSet setWithObject: valueByID];
-
-            for (NSManagedObjectID *valueID in allValues) {
-                NSManagedObject *value = [_context objectWithID: valueID];
-
-                // FIXME: should be using set mutation notifications for to many
-                [value willChangeValueForKey: inverseName];
-
+                [target willChangeValueForKey:inverseName];
                 if ([inverse isToMany]) {
-                    NSMutableSet *set =
-                            [value primitiveValueForKey: inverseName];
-
-                    if (set == nil) {
-                        set = [NSMutableSet set];
-                        [value setPrimitiveValue: set forKey: inverseName];
-                    }
-
-                    [set addObject: [self objectID]];
-                } else {
-                    [value setPrimitiveValue: [self objectID]
-                                      forKey: inverseName];
+                    NSMutableSet *set = [NSMutableSet setWithSet:oldInverse ?: [NSSet set]];
+                    if (added) [set addObject:[self objectID]]; else [set removeObject:[self objectID]];
+                    [target setPrimitiveValue:set forKey:inverseName];
+                } else if (added || oldInverse == [self objectID]) {
+                    [target setPrimitiveValue:(added ? [self objectID] : nil) forKey:inverseName];
                 }
-
-                [value didChangeValueForKey: inverseName];
+                [target didChangeValueForKey:inverseName];
             }
         }
         return;

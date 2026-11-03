@@ -22,12 +22,11 @@
 }
 
 - member: object {
-    return [[_object valueForKey: _key] member: [object objectID]];
+    return [[_object valueForKey:_key] member:object];
 }
 
 - (NSEnumerator *) objectEnumerator {
-    NSUnimplementedMethod();
-    return nil;
+    return [[_object valueForKey:_key] objectEnumerator];
 }
 
 - (void) addObject: object {

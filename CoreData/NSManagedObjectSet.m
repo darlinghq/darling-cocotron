@@ -24,7 +24,8 @@
 }
 
 - member: object {
-    return [_set member: [object objectID]];
+    NSManagedObjectID *objectID = [_set member:[object objectID]];
+    return objectID ? [_context objectWithID:objectID] : nil;
 }
 
 - (NSEnumerator *) objectEnumerator {
