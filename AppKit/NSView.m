@@ -2368,10 +2368,13 @@ static NSView *viewBeingPrinted = nil;
     if (_rectsBeingRedrawn == NULL) {
         NSView *opaqueAncestor = [self opaqueAncestor];
         if (opaqueAncestor != self) {
-            // Ask our opaque ancestor what to draw
-            const NSRect *ancestorRects;
+            // Ask our opaque ancestor what to draw. opaqueAncestor is nil when
+            // nothing up the chain is opaque; a message to nil fills in nothing.
+            const NSRect *ancestorRects = NULL;
+            NSInteger ancestorRectsCount = 0;
             [opaqueAncestor getRectsBeingDrawn: &ancestorRects
-                                         count: &_rectsBeingRedrawnCount];
+                                         count: &ancestorRectsCount];
+            _rectsBeingRedrawnCount = ancestorRects ? ancestorRectsCount : 0;
             if (_rectsBeingRedrawnCount) {
                 _rectsBeingRedrawn = NSZoneCalloc(NULL, _rectsBeingRedrawnCount,
                                                   sizeof(NSRect));
@@ -2393,10 +2396,13 @@ static NSView *viewBeingPrinted = nil;
             NSView *view = [self superview];
             if (view) {
                 NSView *opaqueAncestor = [view opaqueAncestor];
-                const NSRect *ancestorRects;
-                NSInteger ancestorRectsCount;
+                // Stay empty when no ancestor is opaque (opaqueAncestor is nil).
+                const NSRect *ancestorRects = NULL;
+                NSInteger ancestorRectsCount = 0;
                 [opaqueAncestor getRectsBeingDrawn: &ancestorRects
                                              count: &ancestorRectsCount];
+                if (ancestorRects == NULL)
+                    ancestorRectsCount = 0;
                 if (ancestorRectsCount || _invalidRectCount) {
                     _rectsBeingRedrawn = NSZoneCalloc(
                             NULL, _invalidRectCount + ancestorRectsCount,
