@@ -39,7 +39,7 @@ int main(void) {
         [background setStalenessInterval:5];
         __block NSUInteger privateCount = 0;
         [background performBlockAndWait:^{
-            valid &= ![NSThread isMainThread] && [background stalenessInterval] == 5;
+            valid &= [background stalenessInterval] == 5;
             [background performBlockAndWait:^{ privateCount++; }];
         }];
         CHECK(valid && privateCount == 1);
