@@ -21,7 +21,7 @@
 }
 
 - (BOOL) isEqual: other {
-    return [_objectID isEqual: other];
+    return [other isKindOfClass:[NSAtomicStoreCacheNode class]] && [_objectID isEqual:[other objectID]];
 }
 
 - (NSManagedObjectID *) objectID {

@@ -224,7 +224,7 @@ static NSMutableSet *LiveModels;
 }
 
 - (NSArray *) entitiesForConfiguration: (NSString *) configuration {
-    return [_configurations objectForKey: configuration];
+    return configuration ? [_configurations objectForKey:configuration] : [self entities];
 }
 
 - (void) setEntities: (NSArray *) entities

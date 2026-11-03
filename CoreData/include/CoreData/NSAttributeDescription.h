@@ -30,6 +30,7 @@ typedef enum {
     NSBooleanAttributeType = 800,
     NSDateAttributeType = 900,
     NSBinaryDataAttributeType = 1000,
+    NSURIAttributeType = 1200,
     NSTransformableAttributeType = 1800
 } NSAttributeType;
 
