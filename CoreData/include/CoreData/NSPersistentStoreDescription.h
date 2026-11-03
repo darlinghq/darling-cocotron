@@ -8,6 +8,7 @@
     BOOL _shouldAddStoreAsynchronously;
 }
 
++ (instancetype)persistentStoreDescriptionWithURL:(NSURL *)URL;
 - (instancetype)initWithURL:(NSURL *)URL;
 @property(copy) NSURL *URL;
 @property(copy) NSString *type;
