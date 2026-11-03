@@ -17,28 +17,50 @@
 
 #define CHECK(condition) do { checkpoint++; if (!(condition)) return checkpoint; } while (0)
 
-static NSManagedObjectModel *model(void) {
+static NSManagedObjectModel *model(int *stage) {
+    *stage = 61;
     NSEntityDescription *author = [[[NSEntityDescription alloc] init] autorelease];
+    *stage = 62;
     author.name = @"Writer";
+    *stage = 63;
     author.managedObjectClassName = @"NSManagedObject";
+    *stage = 64;
     NSEntityDescription *document = [[[NSEntityDescription alloc] init] autorelease];
+    *stage = 65;
     document.name = @"Document";
+    *stage = 66;
     document.managedObjectClassName = @"NSManagedObject";
+    *stage = 67;
     NSRelationshipDescription *writer = [[[NSRelationshipDescription alloc] init] autorelease];
+    *stage = 68;
     writer.name = @"writer";
+    *stage = 69;
     writer.destinationEntity = author;
+    *stage = 70;
     writer.maxCount = 1;
+    *stage = 71;
     writer.deleteRule = NSNullifyDeleteRule;
+    *stage = 72;
     NSRelationshipDescription *documents = [[[NSRelationshipDescription alloc] init] autorelease];
+    *stage = 73;
     documents.name = @"documents";
+    *stage = 74;
     documents.destinationEntity = document;
+    *stage = 75;
     documents.maxCount = 0;
+    *stage = 76;
     documents.deleteRule = NSNullifyDeleteRule;
+    *stage = 77;
     writer.inverseRelationship = documents;
+    *stage = 78;
     documents.inverseRelationship = writer;
+    *stage = 79;
     document.properties = @[writer];
+    *stage = 80;
     author.properties = @[documents];
+    *stage = 81;
     NSManagedObjectModel *result = [[[NSManagedObjectModel alloc] init] autorelease];
+    *stage = 82;
     result.entities = @[author, document];
     return result;
 }
@@ -51,8 +73,8 @@ int main(void) {
         if (!containerClass)
             return 46;
         checkpoint = 60;
-        NSManagedObjectModel *firstModel = model();
-        NSManagedObjectModel *secondModel = model();
+        NSManagedObjectModel *firstModel = model(&checkpoint);
+        NSManagedObjectModel *secondModel = model(&checkpoint);
         checkpoint = 70;
         id<ContainerContract> first = [[containerClass alloc] initWithName:@"First" managedObjectModel:firstModel];
         id<ContainerContract> second = [[containerClass alloc] initWithName:@"Second" managedObjectModel:secondModel];
