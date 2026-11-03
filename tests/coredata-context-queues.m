@@ -11,9 +11,10 @@
 - (NSTimeInterval)stalenessInterval;
 @end
 
-#define CHECK(condition) do { if (!(condition)) return 1; } while (0)
+#define CHECK(condition) do { checkpoint++; if (!(condition)) return checkpoint; } while (0)
 
 int main(void) {
+    int checkpoint = 50;
     @autoreleasepool {
         Class contextClass = NSClassFromString(@"NSManagedObjectContext");
         if (![contextClass instancesRespondToSelector:@selector(initWithConcurrencyType:)])
