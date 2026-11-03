@@ -76,6 +76,10 @@
             lastObject];
 }
 
+- (BOOL)_readStoreURLOnInitialization {
+    return YES;
+}
+
 - initWithPersistentStoreCoordinator:
           (NSPersistentStoreCoordinator *) coordinator
                    configurationName: (NSString *) configurationName
@@ -88,9 +92,7 @@
                                           options: options] == nil)
         return nil;
 
-    NSData *data = [[NSData alloc] initWithContentsOfURL: [self URL]
-                                                 options: 0
-                                                   error: NULL];
+    NSData *data = [self _readStoreURLOnInitialization] ? [[NSData alloc] initWithContentsOfURL:[self URL] options:0 error:NULL] : nil;
     NSInteger xmlOptions =
             NSXMLNodePreserveCharacterReferences | NSXMLNodePreserveWhitespace;
 

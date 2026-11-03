@@ -9,6 +9,10 @@
     return nil;
 }
 
+- (BOOL)_readStoreURLOnInitialization {
+    return NO;
+}
+
 - (NSString *) type {
     return NSInMemoryStoreType;
 }

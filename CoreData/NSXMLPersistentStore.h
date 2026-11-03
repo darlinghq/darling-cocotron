@@ -9,4 +9,5 @@
     NSMutableSet *_usedReferences;
 }
 
+- (BOOL)_readStoreURLOnInitialization;
 @end
