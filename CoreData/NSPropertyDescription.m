@@ -19,12 +19,31 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <CoreData/NSPropertyDescription.h>
 #import <Foundation/NSCoder.h>
 #import <Foundation/NSRaise.h>
+#import "NSPropertyDescription-Private.h"
+#import "NSEntityDescription-Private.h"
 
 @implementation NSPropertyDescription
 
 - init {
-    NSInvalidAbstractInvocation();
-    return nil;
+    if ([self class] == [NSPropertyDescription class]) {
+        NSInvalidAbstractInvocation();
+        return nil;
+    }
+    return [super init];
+}
+
+- (void)_setEntity:(NSEntityDescription *)entity {
+    _entity = entity;
+}
+
+- (void)_checkMutable {
+    if ([_entity _hasBeenInstantiated])
+        [NSException raise:NSInvalidArgumentException format:@"The managed object model is in use."];
+}
+
+- (void)dealloc {
+    [_propertyName release];
+    [super dealloc];
 }
 
 - initWithCoder: (NSCoder *) coder {
@@ -67,13 +86,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (BOOL) isOptional {
-    NSUnimplementedMethod();
-    return NO;
+    return _optional;
 }
 
 - (BOOL) isTransient {
-    NSUnimplementedMethod();
-    return NO;
+    return _transient;
 }
 
 - (NSDictionary *) userInfo {
@@ -92,15 +109,28 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (void) setName: (NSString *) value {
-    NSUnimplementedMethod();
+    [self _checkMutable];
+    if (![value length])
+        [NSException raise:NSInvalidArgumentException format:@"A property requires a nonempty name."];
+    NSString *name = [value copy];
+    @try {
+        [_entity _renameProperty:self from:_propertyName to:name];
+    } @catch (id exception) {
+        [name release];
+        @throw;
+    }
+    [_propertyName release];
+    _propertyName = name;
 }
 
 - (void) setOptional: (BOOL) value {
-    NSUnimplementedMethod();
+    [self _checkMutable];
+    _optional = value;
 }
 
 - (void) setTransient: (BOOL) value {
-    NSUnimplementedMethod();
+    [self _checkMutable];
+    _transient = value;
 }
 
 - (void) setUserInfo: (NSDictionary *) value {

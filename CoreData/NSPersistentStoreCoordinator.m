@@ -17,6 +17,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import "NSInMemoryPersistentStore.h"
+#import "NSManagedObjectModel-Private.h"
 #import "NSManagedObjectID-Private.h"
 #import "NSXMLPersistentStore.h"
 #import <CoreData/NSManagedObject.h>
@@ -78,6 +79,7 @@ static NSMutableDictionary *_storeTypes = nil;
 - initWithManagedObjectModel: (NSManagedObjectModel *) model {
     _lock = [[NSLock alloc] init];
     _model = [model retain];
+    [_model _setInUse];
     _stores = [[NSMutableArray alloc] init];
     return self;
 }

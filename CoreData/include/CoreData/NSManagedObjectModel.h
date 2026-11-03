@@ -22,6 +22,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @interface NSManagedObjectModel : NSObject <NSCoding, NSCopying> {
     NSMutableDictionary *_entities;
+    BOOL _inUse;
     NSMutableDictionary *_fetchRequestTemplates;
     NSSet *_versionIdentifiers;
     NSDictionary *_localizationDictionary;

@@ -29,7 +29,6 @@ typedef enum {
     NSDeleteRule _deleteRule;
     NSEntityDescription *_destinationEntity;
     NSRelationshipDescription *_inverseRelationship;
-    BOOL _optional;
     NSUInteger _maxCount;
     NSUInteger _minCount;
     NSString *_destinationEntityName;
@@ -37,14 +36,14 @@ typedef enum {
 }
 
 - (BOOL) isToMany;
-- (int) maxCount;
-- (int) minCount;
+- (NSUInteger) maxCount;
+- (NSUInteger) minCount;
 - (NSDeleteRule) deleteRule;
 - (NSEntityDescription *) destinationEntity;
 - (NSRelationshipDescription *) inverseRelationship;
 
-- (void) setMaxCount: (int) value;
-- (void) setMinCount: (int) value;
+- (void) setMaxCount: (NSUInteger) value;
+- (void) setMinCount: (NSUInteger) value;
 - (void) setDeleteRule: (NSDeleteRule) value;
 - (void) setDestinationEntity: (NSEntityDescription *) value;
 - (void) setInverseRelationship: (NSRelationshipDescription *) value;

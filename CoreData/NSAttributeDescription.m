@@ -20,6 +20,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <CoreData/NSEntityDescription.h>
 #import <Foundation/NSKeyedUnarchiver.h>
 
+#import "NSPropertyDescription-Private.h"
+
 @implementation NSAttributeDescription
 
 - initWithCoder: (NSCoder *) coder {
@@ -49,7 +51,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (void) dealloc {
     [_valueClassName release];
     [_defaultValue release];
-    [_propertyName release];
     [_valueTransformerName release];
     [super dealloc];
 }
@@ -72,19 +73,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (void) setAttributeType: (NSAttributeType) value {
-    if ([_entity _hasBeenInstantiated]) {
-        NSLog(@"Attempt to modify entity after instantiating it.");
-        return;
-    }
+    [self _checkMutable];
 
     _attributeType = value;
 }
 
 - (void) setDefaultValue: (id) value {
-    if ([_entity _hasBeenInstantiated]) {
-        NSLog(@"Attempt to modify entity after instantiating it.");
-        return;
-    }
+    [self _checkMutable];
 
     value = [value retain];
     [_defaultValue release];

@@ -125,6 +125,17 @@ int main(void) {
               [[document propertiesByName] objectForKey:@"caption"] == label);
         CHECK([[firstModel entitiesByName] objectForKey:@"Document"] == nil &&
               [[firstModel entitiesByName] objectForKey:@"Record"] == document);
+        NSAttributeDescription *duplicate = [[[NSAttributeDescription alloc] init] autorelease];
+        duplicate.name = @"caption";
+        BOOL rejectedConfiguration = NO;
+        @try { document.properties = @[label, duplicate]; }
+        @catch (NSException *exception) { rejectedConfiguration = YES; }
+        CHECK(rejectedConfiguration && [[document properties] count] == 4);
+        rejectedConfiguration = NO;
+        NSEntityDescription *author = [[firstModel entitiesByName] objectForKey:@"Writer"];
+        @try { author.properties = @[label]; }
+        @catch (NSException *exception) { rejectedConfiguration = YES; }
+        CHECK(rejectedConfiguration && [[author properties] count] == 1);
         id<ContainerContract> first = [[containerClass alloc] initWithName:@"First" managedObjectModel:firstModel];
         id<ContainerContract> second = [[containerClass alloc] initWithName:@"Second" managedObjectModel:secondModel];
         CHECK([first managedObjectModel] == firstModel && [second managedObjectModel] == secondModel);
