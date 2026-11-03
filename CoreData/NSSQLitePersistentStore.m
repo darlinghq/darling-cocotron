@@ -367,8 +367,8 @@ static NSString *newIdentifier(void) {
         }
         for (NSManagedObject *object in deleted) {
             if ([inserted containsObject:object]) continue;
-            statement = success ? [self _prepare:"DELETE FROM darling_objects WHERE identifier=?"] : NULL;
-            if (success) success = statement && bindString(statement, 1, [[object objectID] referenceObject]) == SQLITE_OK && sqlite3_step(statement) == SQLITE_DONE;
+            statement = success ? [self _prepare:"DELETE FROM darling_objects WHERE identifier=? AND revision=?"] : NULL;
+            if (success) success = statement && bindString(statement, 1, [[object objectID] referenceObject]) == SQLITE_OK && sqlite3_bind_int64(statement, 2, [object _storeVersion]) == SQLITE_OK && sqlite3_step(statement) == SQLITE_DONE && sqlite3_changes(_database) == 1;
             sqlite3_finalize(statement);
         }
         NSDictionary *nodes = success ? [self _readNodes:error] : nil;
