@@ -207,6 +207,10 @@ static char ContextQueueKey;
                 if (object && ![_updatedObjects containsObject:object]) {
                     [_pendingDeleted addObject:object];
                     [object _setInserted:NO updated:NO deleted:YES];
+                    for (NSString *key in [[[object entity] propertiesByName] allKeys])
+                        [object removeObserver:self forKeyPath:key];
+                    [_registeredObjects removeObject:object];
+                    NSMapRemove(_objectIdToObject, [object objectID]);
                 }
             }
         } @finally { _mergingChanges = NO; }
