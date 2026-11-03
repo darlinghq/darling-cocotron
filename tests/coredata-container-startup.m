@@ -45,12 +45,15 @@ static NSManagedObjectModel *model(void) {
 
 int main(void) {
     int checkpoint = 70;
+    @try {
     @autoreleasepool {
         Class containerClass = NSClassFromString(@"NSPersistentContainer");
         if (!containerClass)
             return 46;
+        checkpoint = 60;
         NSManagedObjectModel *firstModel = model();
         NSManagedObjectModel *secondModel = model();
+        checkpoint = 70;
         id<ContainerContract> first = [[containerClass alloc] initWithName:@"First" managedObjectModel:firstModel];
         id<ContainerContract> second = [[containerClass alloc] initWithName:@"Second" managedObjectModel:secondModel];
         CHECK([first managedObjectModel] == firstModel && [second managedObjectModel] == secondModel);
@@ -105,6 +108,9 @@ int main(void) {
         [second release];
         [first release];
         puts("PASS_COREDATA_CONTAINER_STARTUP");
+    }
+    } @catch (NSException *exception) {
+        return checkpoint + 100;
     }
     return 0;
 }
