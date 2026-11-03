@@ -47,9 +47,31 @@ NSString *const NSInvalidatedAllObjectsKey = @"NSInvalidatedAllObjectsKey";
 - (void) _uniqueObjectID: (NSManagedObjectID *) objectID;
 @end
 
+static char ContextQueueKey;
+
 @implementation NSManagedObjectContext
 
 - init {
+    return [self initWithConcurrencyType:NSConfinementConcurrencyType];
+}
+
+- (instancetype)initWithConcurrencyType:(NSManagedObjectContextConcurrencyType)type {
+    self = [super init];
+    if (!self)
+        return nil;
+    if (type > NSMainQueueConcurrencyType) {
+        [self release];
+        [NSException raise:NSInvalidArgumentException format:@"Invalid context concurrency type"];
+        return nil;
+    }
+    _concurrencyType = type;
+    if (type == NSPrivateQueueConcurrencyType) {
+        _contextQueue = dispatch_queue_create("org.darling.CoreData.context", DISPATCH_QUEUE_SERIAL);
+        dispatch_queue_set_specific(_contextQueue, &ContextQueueKey, self, NULL);
+    } else if (type == NSMainQueueConcurrencyType) {
+        _contextQueue = dispatch_get_main_queue();
+        dispatch_retain(_contextQueue);
+    }
     _lock = [[NSLock alloc] init];
     _storeCoordinator = nil;
     _undoManager = [[NSUndoManager alloc] init];
@@ -64,7 +86,44 @@ NSString *const NSInvalidatedAllObjectsKey = @"NSInvalidatedAllObjectsKey";
     return self;
 }
 
+- (NSManagedObjectContextConcurrencyType)concurrencyType {
+    return _concurrencyType;
+}
+
+- (BOOL)_isOnContextQueue {
+    return (_concurrencyType == NSMainQueueConcurrencyType && [NSThread isMainThread]) ||
+           dispatch_get_specific(&ContextQueueKey) == self;
+}
+
+- (void)performBlock:(void (^)(void))block {
+    if (!_contextQueue)
+        [NSException raise:NSInvalidArgumentException format:@"A queue-based context is required"];
+    dispatch_async(_contextQueue, ^{
+        @autoreleasepool {
+            block();
+            [self processPendingChanges];
+        }
+    });
+}
+
+- (void)performBlockAndWait:(void (^)(void))block {
+    if (!_contextQueue)
+        [NSException raise:NSInvalidArgumentException format:@"A queue-based context is required"];
+    void (^work)(void) = ^{
+        @autoreleasepool {
+            block();
+            [self processPendingChanges];
+        }
+    };
+    if ([self _isOnContextQueue])
+        work();
+    else
+        dispatch_sync(_contextQueue, work);
+}
+
 - (void) dealloc {
+    if (_contextQueue)
+        dispatch_release(_contextQueue);
     [_storeCoordinator release];
     [_undoManager release];
     [_registeredObjects release];
@@ -126,6 +185,10 @@ NSString *const NSInvalidatedAllObjectsKey = @"NSInvalidatedAllObjectsKey";
 }
 
 - (void) setPersistentStoreCoordinator: (NSPersistentStoreCoordinator *) value {
+    if (_contextQueue && ![self _isOnContextQueue]) {
+        [self performBlockAndWait:^{ [self setPersistentStoreCoordinator:value]; }];
+        return;
+    }
     if (_storeCoordinator != nil) {
         [[NSNotificationCenter defaultCenter]
                 removeObserver: self
@@ -147,26 +210,46 @@ NSString *const NSInvalidatedAllObjectsKey = @"NSInvalidatedAllObjectsKey";
 }
 
 - (void) setUndoManager: (NSUndoManager *) value {
+    if (_contextQueue && ![self _isOnContextQueue]) {
+        [self performBlockAndWait:^{ [self setUndoManager:value]; }];
+        return;
+    }
     value = [value retain];
     [_undoManager release];
     _undoManager = value;
 }
 
 - (void) setRetainsRegisteredObjects: (BOOL) value {
+    if (_contextQueue && ![self _isOnContextQueue]) {
+        [self performBlockAndWait:^{ [self setRetainsRegisteredObjects:value]; }];
+        return;
+    }
     _retainsRegisteredObjects = value;
     // FIXME: actually release/retain if needed
     NSUnimplementedMethod();
 }
 
 - (void) setPropagatesDeletesAtEndOfEvent: (BOOL) value {
+    if (_contextQueue && ![self _isOnContextQueue]) {
+        [self performBlockAndWait:^{ [self setPropagatesDeletesAtEndOfEvent:value]; }];
+        return;
+    }
     _propagatesDeletesAtEndOfEvent = value;
 }
 
 - (void) setStalenessInterval: (NSTimeInterval) value {
+    if (_contextQueue && ![self _isOnContextQueue]) {
+        [self performBlockAndWait:^{ [self setStalenessInterval:value]; }];
+        return;
+    }
     _stalenessInterval = value;
 }
 
 - (void) setMergePolicy: value {
+    if (_contextQueue && ![self _isOnContextQueue]) {
+        [self performBlockAndWait:^{ [self setMergePolicy:value]; }];
+        return;
+    }
     value = [value retain];
     [_mergePolicy release];
     _mergePolicy = value;
@@ -395,7 +478,11 @@ NSString *const NSInvalidatedAllObjectsKey = @"NSInvalidatedAllObjectsKey";
 
 - (void) _requestProcessPendingChanges {
     if (!_requestedProcessPendingChanges) {
-
+        if (_contextQueue) {
+            _requestedProcessPendingChanges = YES;
+            dispatch_async(_contextQueue, ^{ [self _processPendingChangesForRequest]; });
+            return;
+        }
         NSRunLoop *runLoop = [NSRunLoop mainRunLoop];
         [runLoop performSelector: @selector(_processPendingChangesForRequest)
                           target: self
@@ -412,7 +499,7 @@ NSString *const NSInvalidatedAllObjectsKey = @"NSInvalidatedAllObjectsKey";
 }
 
 - (void) processPendingChanges {
-    if (_requestedProcessPendingChanges) {
+    if (_requestedProcessPendingChanges && !_contextQueue) {
         [[NSRunLoop mainRunLoop] cancelPerformSelector: @selector
                                  (_processPendingChangesForRequest)
                                                 target: self
@@ -423,7 +510,8 @@ NSString *const NSInvalidatedAllObjectsKey = @"NSInvalidatedAllObjectsKey";
 }
 
 - (void) _processPendingChangesForRequest {
-    [self _processPendingChanges];
+    if (_requestedProcessPendingChanges)
+        [self _processPendingChanges];
 }
 
 - (void) observeValueForKeyPath: (NSString *) keyPath

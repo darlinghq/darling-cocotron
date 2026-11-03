@@ -21,6 +21,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Foundation/NSLock.h>
 #import <Foundation/NSObject.h>
 #import <Foundation/NSString.h>
+#import <dispatch/dispatch.h>
 
 @class NSSet, NSMutableSet, NSNotification, NSUndoManager, NSMapTable;
 @class NSManagedObject, NSManagedObjectID, NSFetchRequest, NSPersistentStore,
@@ -37,8 +38,16 @@ COREDATA_EXPORT NSString *const NSInvalidatedObjectsKey;
 COREDATA_EXPORT NSString *const NSInvalidatedAllObjectsKey;
 COREDATA_EXPORT NSString *const NSPersistentStoreSaveConflictsErrorKey;
 
+typedef NS_ENUM(NSUInteger, NSManagedObjectContextConcurrencyType) {
+    NSConfinementConcurrencyType = 0,
+    NSPrivateQueueConcurrencyType = 1,
+    NSMainQueueConcurrencyType = 2
+};
+
 @interface NSManagedObjectContext : NSObject <NSLocking> {
     NSLock *_lock;
+    NSManagedObjectContextConcurrencyType _concurrencyType;
+    dispatch_queue_t _contextQueue;
     NSPersistentStoreCoordinator *_storeCoordinator;
     NSUndoManager *_undoManager;
     BOOL _retainsRegisteredObjects;
@@ -59,6 +68,11 @@ COREDATA_EXPORT NSString *const NSPersistentStoreSaveConflictsErrorKey;
     //
     BOOL _requestedProcessPendingChanges;
 }
+
+- (instancetype)initWithConcurrencyType:(NSManagedObjectContextConcurrencyType)type;
+@property(readonly) NSManagedObjectContextConcurrencyType concurrencyType;
+- (void)performBlock:(void (^)(void))block;
+- (void)performBlockAndWait:(void (^)(void))block;
 
 - (NSPersistentStoreCoordinator *) persistentStoreCoordinator;
 - (NSUndoManager *) undoManager;

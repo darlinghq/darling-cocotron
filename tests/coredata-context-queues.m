@@ -7,6 +7,8 @@
 - (NSUInteger)concurrencyType;
 - (void)performBlock:(void (^)(void))block;
 - (void)performBlockAndWait:(void (^)(void))block;
+- (void)setStalenessInterval:(NSTimeInterval)value;
+- (NSTimeInterval)stalenessInterval;
 @end
 
 #define CHECK(condition) do { if (!(condition)) return 1; } while (0)
@@ -33,9 +35,10 @@ int main(void) {
             [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode
                                     beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.01]];
         CHECK(valid && mainCount == 2);
+        [background setStalenessInterval:5];
         __block NSUInteger privateCount = 0;
         [background performBlockAndWait:^{
-            valid &= ![NSThread isMainThread];
+            valid &= ![NSThread isMainThread] && [background stalenessInterval] == 5;
             [background performBlockAndWait:^{ privateCount++; }];
         }];
         CHECK(valid && privateCount == 1);
