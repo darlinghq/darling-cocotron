@@ -692,7 +692,9 @@ static char ContextQueueKey;
             NSMutableSet *storeInserted = [NSMutableSet set], *storeUpdated = [NSMutableSet set], *storeDeleted = [NSMutableSet set];
             for (NSManagedObject *object in inserted) if ([[object objectID] persistentStore] == store) [storeInserted addObject:object];
             for (NSManagedObject *object in _updatedObjects) if ([[object objectID] persistentStore] == store) [storeUpdated addObject:object];
-            for (NSManagedObject *object in _deletedObjects) if ([[object objectID] persistentStore] == store) [storeDeleted addObject:object];
+            for (NSManagedObject *object in _deletedObjects)
+                if ([[object objectID] persistentStore] == store && ![_insertedObjects containsObject:object])
+                    [storeDeleted addObject:object];
             if (![storeInserted count] && ![storeUpdated count] && ![storeDeleted count]) continue;
             if ([store isKindOfClass:[NSSQLitePersistentStore class]]) {
                 success = [(NSSQLitePersistentStore *)store _commitInserted:storeInserted updated:storeUpdated deleted:storeDeleted error:error];
