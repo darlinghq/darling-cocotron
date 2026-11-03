@@ -121,27 +121,26 @@ static NSString *newIdentifier(void) {
     return _modelDescription != nil;
 }
 
-- (BOOL)_readCache:(NSError **)error {
+- (NSDictionary *)_readNodes:(NSError **)error {
     NSMutableDictionary *nodes = [NSMutableDictionary dictionary];
     NSMutableDictionary *caches = [NSMutableDictionary dictionary];
     NSManagedObjectModel *model = [[self persistentStoreCoordinator] managedObjectModel];
     sqlite3_stmt *statement = [self _prepare:"SELECT identifier,entity FROM darling_objects"];
-    if (!statement) return storeError(error, NSPersistentStoreOpenError);
+    if (!statement) { storeError(error, NSPersistentStoreOpenError); return nil; }
     int status;
     while ((status = sqlite3_step(statement)) == SQLITE_ROW) {
         NSString *reference = columnString(statement, 0);
         NSEntityDescription *entity = [[model entitiesByName] objectForKey:columnString(statement, 1)];
         if (![reference length] || ![_selectedEntities containsObject:entity]) { status = SQLITE_CORRUPT; break; }
         NSManagedObjectID *objectID = [self objectIDForEntity:entity referenceObject:reference];
-        NSAtomicStoreCacheNode *node = [self cacheNodeForObjectID:objectID];
-        if (!node) node = [[[NSAtomicStoreCacheNode alloc] initWithObjectID:objectID] autorelease];
+        NSAtomicStoreCacheNode *node = [[[NSAtomicStoreCacheNode alloc] initWithObjectID:objectID] autorelease];
         [nodes setObject:node forKey:reference];
         [caches setObject:[NSMutableDictionary dictionary] forKey:reference];
     }
     sqlite3_finalize(statement);
-    if (status != SQLITE_DONE) return storeError(error, NSPersistentStoreOpenError);
+    if (status != SQLITE_DONE) { storeError(error, NSPersistentStoreOpenError); return nil; }
     statement = [self _prepare:"SELECT object,key,kind,integer_value,real_value,bytes_value FROM darling_values"];
-    if (!statement) return storeError(error, NSPersistentStoreOpenError);
+    if (!statement) { storeError(error, NSPersistentStoreOpenError); return nil; }
     while ((status = sqlite3_step(statement)) == SQLITE_ROW) {
         NSString *reference = columnString(statement, 0), *key = columnString(statement, 1);
         NSAtomicStoreCacheNode *node = [nodes objectForKey:reference];
@@ -165,9 +164,9 @@ static NSString *newIdentifier(void) {
         [[caches objectForKey:reference] setObject:value forKey:key];
     }
     sqlite3_finalize(statement);
-    if (status != SQLITE_DONE) return storeError(error, NSPersistentStoreOpenError);
+    if (status != SQLITE_DONE) { storeError(error, NSPersistentStoreOpenError); return nil; }
     statement = [self _prepare:"SELECT source,key,target FROM darling_edges"];
-    if (!statement) return storeError(error, NSPersistentStoreOpenError);
+    if (!statement) { storeError(error, NSPersistentStoreOpenError); return nil; }
     while ((status = sqlite3_step(statement)) == SQLITE_ROW) {
         NSString *source = columnString(statement, 0), *key = columnString(statement, 1);
         NSAtomicStoreCacheNode *node = [nodes objectForKey:source], *target = [nodes objectForKey:columnString(statement, 2)];
@@ -184,11 +183,21 @@ static NSString *newIdentifier(void) {
         }
     }
     sqlite3_finalize(statement);
-    if (status != SQLITE_DONE) return storeError(error, NSPersistentStoreOpenError);
+    if (status != SQLITE_DONE) { storeError(error, NSPersistentStoreOpenError); return nil; }
     for (NSString *reference in nodes) [[nodes objectForKey:reference] setPropertyCache:[caches objectForKey:reference]];
+    return nodes;
+}
+
+- (void)_installNodes:(NSDictionary *)nodes {
     [_cacheNodes removeAllObjects];
     [_objectIDToCacheNode removeAllObjects];
     [self addCacheNodes:[NSSet setWithArray:[nodes allValues]]];
+}
+
+- (BOOL)_readCache:(NSError **)error {
+    NSDictionary *nodes = [self _readNodes:error];
+    if (!nodes) return NO;
+    [self _installNodes:nodes];
     return YES;
 }
 
@@ -212,7 +221,8 @@ static NSString *newIdentifier(void) {
         BOOL success = statement && bindString(statement, 1, [self identifier]) == SQLITE_OK &&
             sqlite3_bind_blob(statement, 2, [_modelDescription bytes], (int)[_modelDescription length], SQLITE_TRANSIENT) == SQLITE_OK && sqlite3_step(statement) == SQLITE_DONE;
         sqlite3_finalize(statement);
-        if (!success || ![self _execute:"COMMIT"]) { [self _execute:"ROLLBACK"]; return storeError(error, NSPersistentStoreOpenError); }
+        NSDictionary *nodes = success ? [self _readNodes:error] : nil;
+        if (!nodes || ![self _execute:"COMMIT"]) { [self _execute:"ROLLBACK"]; return storeError(error, NSPersistentStoreOpenError); }
     }
     sqlite3_stmt *statement = [self _prepare:"SELECT format,version,uuid,model,revision FROM darling_metadata"];
     if (!statement) return storeError(error, NSPersistentStoreIncompatibleSchemaError);
@@ -361,12 +371,14 @@ static NSString *newIdentifier(void) {
             if (success) success = statement && bindString(statement, 1, [[object objectID] referenceObject]) == SQLITE_OK && sqlite3_step(statement) == SQLITE_DONE;
             sqlite3_finalize(statement);
         }
-        if (!success || ![self _execute:"COMMIT"]) {
+        NSDictionary *nodes = success ? [self _readNodes:error] : nil;
+        if (!nodes || ![self _execute:"COMMIT"]) {
             [self _execute:"ROLLBACK"];
             return storeError(error, NSPersistentStoreSaveError);
         }
         _revision++;
-        return [self _readCache:error];
+        [self _installNodes:nodes];
+        return YES;
     }
 }
 
