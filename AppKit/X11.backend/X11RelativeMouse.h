@@ -72,10 +72,16 @@ static inline bool X11RelativeMouseSerialBefore(unsigned long a, unsigned long b
     return (long)(a - b) < 0;
 }
 
-static inline void X11RelativeMouseClamp(const X11RelativeMouse *mouse, double *x, double *y);
+/* Clamps a target to the confine window, as the server does to the pointer. */
+static inline void X11RelativeMouseClamp(const X11RelativeMouse *mouse, double *x, double *y) {
+    if (*x < mouse->minX) *x = mouse->minX;
+    if (*x > mouse->maxX) *x = mouse->maxX;
+    if (*y < mouse->minY) *y = mouse->minY;
+    if (*y > mouse->maxY) *y = mouse->maxY;
+}
 
 /* Zero-initialize the storage once before the first Begin; End releases the pending-echo allocation. The pointer
- * starts at (rootX, rootY) inside bounds; motion with a serial before firstSerial predates that snapshot and is
+ * starts at (rootX, rootY) clamped into bounds; motion with a serial before firstSerial predates that snapshot and is
  * ignored. The model keeps warp targets inside bounds (see Warp), so neither the virtual cursor nor a recorded
  * echo can sit where the server never puts the pointer. */
 static inline void X11RelativeMouseBegin(X11RelativeMouse *mouse, int rootX, int rootY, unsigned long firstSerial,
@@ -129,14 +135,6 @@ static inline bool X11RelativeMouseExpectEcho(X11RelativeMouse *mouse, int x, in
     }
     mouse->echoes[mouse->echoCount++] = (X11RelativeMouseEcho) {x, y, serial, queuedEvents};
     return true;
-}
-
-/* Clamps a target to the confine window, as the server does to the pointer. */
-static inline void X11RelativeMouseClamp(const X11RelativeMouse *mouse, double *x, double *y) {
-    if (*x < mouse->minX) *x = mouse->minX;
-    if (*x > mouse->maxX) *x = mouse->maxX;
-    if (*y < mouse->minY) *y = mouse->minY;
-    if (*y > mouse->maxY) *y = mouse->maxY;
 }
 
 /* Where the pointer goes for a cursor frozen at (x, y): inside the bounds, as the server clamps it, and where
