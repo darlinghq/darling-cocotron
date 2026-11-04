@@ -52,11 +52,11 @@ typedef enum {
     NSFocusRingAbove
 } NSFocusRingPlacement;
 
-typedef enum {
-    NSFocusRingTypeDefault,
-    NSFocusRingTypeNone,
-    NSFocusRingTypeExterior
-} NSFocusRingType;
+typedef NS_ENUM(NSUInteger, NSFocusRingType) {
+    NSFocusRingTypeDefault = 0,
+    NSFocusRingTypeNone = 1,
+    NSFocusRingTypeExterior = 2
+};
 
 typedef enum NSWindowDepth : int32_t {
     NSWindowDepthOnehundredtwentyeightBitRGB = 0x220,
