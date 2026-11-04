@@ -1852,10 +1852,24 @@ static NSUInteger scaledRepCacheBytes(NSArray *cache) {
                 configurationWithScale: (NSImageSymbolScale) [scale integerValue]];
         image = [self imageWithSymbolConfiguration: configuration];
     }
+    if (!respectFlipped || ![[NSGraphicsContext currentContext] isFlipped]) {
+        [image drawInRect: rect
+                 fromRect: source
+                operation: operation
+                 fraction: fraction];
+        return;
+    }
+    // Upright in a flipped context: flip the rect's own coordinates back
+    // around its vertical centre.
+    CGContextRef context = NSCurrentGraphicsPort();
+    CGContextSaveGState(context);
+    CGContextTranslateCTM(context, 0, NSMinY(rect) + NSMaxY(rect));
+    CGContextScaleCTM(context, 1, -1);
     [image drawInRect: rect
-            fromRect: source
-           operation: operation
-            fraction: fraction];
+             fromRect: source
+            operation: operation
+             fraction: fraction];
+    CGContextRestoreGState(context);
 }
 
 - (NSString *) description {
