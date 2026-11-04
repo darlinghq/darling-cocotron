@@ -206,6 +206,7 @@ CFStringRef CTFontCopyLocalizedName(CTFontRef font, CFStringRef nameKey,
     // Only the canonical name is available and its language is unknown; callers
     // such as Chromium read *actualLanguage whenever it is non-NULL.
     if (actualLanguage) *actualLanguage = NULL;
+    if (!font || !nameKey) return NULL;
     return CTFontCopyName(font, nameKey);
 }
 

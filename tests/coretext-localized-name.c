@@ -16,11 +16,13 @@ typedef const char *CFStringRef;
 static const char kFamilyKey[] = "CTFontFamilyName", kFamily[] = "Helvetica";
 static CTFontRef lastFont;
 static CFStringRef lastKey;
-static int copyNameCalls;
+static int copyNameCalls, nullArgCalls;
 static CFStringRef CTFontCopyName(CTFontRef font, CFStringRef nameKey)
 {
     copyNameCalls++; lastFont = font; lastKey = nameKey;
-    return font ? kFamily : NULL;
+    /* The real CTFontCopyName dereferences a NULL font; flag the call instead of hiding it. */
+    if (!font || !nameKey) { nullArgCalls++; return NULL; }
+    return kFamily;
 }
 
 #include FUNCTION_INC
@@ -41,8 +43,15 @@ int main(void)
     CK(CTFontCopyLocalizedName(font, kFamilyKey, NULL) == kFamily, "accepts a NULL actualLanguage");
 
     language = sentinel;
-    CK(CTFontCopyLocalizedName(NULL, kFamilyKey, &language) == NULL, "no name, NULL result");
-    CK(language == NULL, "writes actualLanguage even when there is no name");
+    copyNameCalls = 0;
+    CK(CTFontCopyLocalizedName(NULL, kFamilyKey, &language) == NULL, "NULL font, NULL result");
+    CK(language == NULL, "NULL font still clears actualLanguage");
+
+    language = sentinel;
+    CK(CTFontCopyLocalizedName(font, NULL, &language) == NULL, "NULL key, NULL result");
+    CK(language == NULL, "NULL key still clears actualLanguage");
+    CK(CTFontCopyLocalizedName(NULL, NULL, NULL) == NULL, "NULL font, key and actualLanguage, NULL result");
+    CK(copyNameCalls == 0 && nullArgCalls == 0, "never calls CTFontCopyName for a NULL font or key (%d calls)", copyNameCalls);
 
     printf("%s: %d checks, %d failed\n", fails ? "FAIL" : "PASS", checks, fails);
     return fails != 0;
