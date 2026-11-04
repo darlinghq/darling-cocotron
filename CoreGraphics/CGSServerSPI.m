@@ -15,15 +15,10 @@
  along with Darling.  If not, see <http://www.gnu.org/licenses/>.
 */
 #import <CoreGraphics/CGSServerSPI.h>
+#import <CoreGraphics/CoreGraphicsPrivate.h>
 #import <CoreGraphics/CGWindow.h>
 #include <math.h>
 #include <pthread.h>
-
-@class CGSConnection;
-
-// Declared here rather than through CoreGraphicsPrivate.h; attribs is a nullable pointer there.
-extern CGError CGSNewConnection(void *_Nullable attribs, CGSConnectionID *connId);
-extern CGSConnection *_CGSConnectionForID(CGSConnectionID connId);
 
 static pthread_mutex_t mainConnectionLock = PTHREAD_MUTEX_INITIALIZER;
 static CGSConnectionID mainConnectionID; // 0 until created
@@ -54,6 +49,17 @@ CGSConnectionID CGSMainConnectionID(void)
     pthread_mutex_unlock(&mainConnectionLock);
 
     return result;
+}
+
+// Called by CGSShutdownServerConnections: the shutdown empties the connection table, so the
+// cached id must not outlive it.
+__attribute__((visibility("hidden")))
+void _CGSResetMainConnection(void)
+{
+    pthread_mutex_lock(&mainConnectionLock);
+    mainConnectionID = 0;
+    mainConnectionFailureLogged = NO;
+    pthread_mutex_unlock(&mainConnectionLock);
 }
 
 CGError CGSSetWindowAlpha(CGSConnectionID connection, CGSWindowID windowID,
