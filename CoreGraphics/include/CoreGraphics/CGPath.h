@@ -147,6 +147,14 @@ COREGRAPHICS_EXPORT CGPathRef CGPathCreateCopyByTransformingPath(
         CGPathRef path, CGAffineTransform *transform)
     CF_SWIFT_NAME(CGPath.copy(self:using:));
 
+#if __has_feature(blocks)
+typedef void (^CGPathApplyBlock)(const CGPathElement *element);
+
+COREGRAPHICS_EXPORT void CGPathApplyWithBlock(CGPathRef path,
+                                              CF_NOESCAPE CGPathApplyBlock block)
+    CF_SWIFT_NAME(CGPath.applyWithBlock(self:_:));
+#endif
+
 CF_IMPLICIT_BRIDGING_DISABLED
 
 #endif /* CGPATH_H */

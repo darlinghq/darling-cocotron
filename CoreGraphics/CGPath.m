@@ -57,6 +57,16 @@ void CGPathApply(CGPathRef self, void *info, CGPathApplierFunction function) {
     return O2PathApply((O2PathRef)self, info, O2PathApplierFunctionFromCG(function));
 }
 
+#if __has_feature(blocks)
+static void CGPathApplyBlockTrampoline(void *info, const CGPathElement *element) {
+    ((__bridge CGPathApplyBlock)info)(element);
+}
+
+void CGPathApplyWithBlock(CGPathRef self, CGPathApplyBlock block) {
+    CGPathApply(self, (__bridge void *)block, CGPathApplyBlockTrampoline);
+}
+#endif
+
 CGMutablePathRef CGPathCreateMutableCopy(CGPathRef self) {
     return (CGMutablePathRef)O2PathCreateMutableCopy((O2PathRef)self);
 }
