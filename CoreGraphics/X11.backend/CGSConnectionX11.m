@@ -31,6 +31,7 @@
 #import <X11/extensions/XKBrules.h>
 // The main-monitor model and conversions shared with AppKit's X11 backend.
 #import "../../AppKit/X11.backend/X11Monitors.h"
+#import "../../AppKit/X11.backend/X11RandR.h"
 
 // TODO: Use XInput2:
 // https://stackoverflow.com/questions/44095001/getting-double-rawkeypress-events-using-xinput2
@@ -57,21 +58,6 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type, CFDataRef a
 {
     CGSConnectionX11* self = (CGSConnectionX11*) info;
     [self processPendingEvents];
-}
-
-// A RandR screen change arrives as a plain event, but everything the extension added in
-// version 1.2 (a CRTC or output reconfiguration, a changed output property) is sent as
-// event code base + RRNotify with a sub-code, and those come through the Generic Extension:
-// Xlib reports their X event type as GenericEvent and the RandR code in xgeneric.evtype.
-// Testing event->type against base + RRNotify therefore never matches one of them, which is
-// why re-plugging a monitor or switching a mode did not drop the screen cache.
-static BOOL isRandREvent(int xrrEventBase, XEvent* event)
-{
-	if (event->type == xrrEventBase + RRScreenChangeNotify)
-		return YES;
-
-	return event->type == GenericEvent &&
-		event->xgeneric.evtype == xrrEventBase + RRNotify;
 }
 
 -(instancetype) initWithConnectionID:(CGSConnectionID)connId
@@ -382,7 +368,7 @@ static BOOL isRandREvent(int xrrEventBase, XEvent* event)
 
 			break;
 		}
-		else if (isRandREvent(_xrrEventBase, event))
+		else if (X11RandRHandleLayoutChange(event, _xrrEventBase))
 		{
 			// Nothing is posted to the procs CGSRegisterNotifyProc() collected:
 			// they live in g_cgsNotifyProc, which CGS.m keeps hidden, so a backend
