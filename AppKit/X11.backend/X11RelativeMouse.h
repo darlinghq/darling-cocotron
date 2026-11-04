@@ -72,6 +72,8 @@ static inline bool X11RelativeMouseSerialBefore(unsigned long a, unsigned long b
     return (long)(a - b) < 0;
 }
 
+static inline void X11RelativeMouseClamp(const X11RelativeMouse *mouse, double *x, double *y);
+
 /* Zero-initialize the storage once before the first Begin; End releases the pending-echo allocation. The pointer
  * starts at (rootX, rootY) inside bounds; motion with a serial before firstSerial predates that snapshot and is
  * ignored. The model keeps warp targets inside bounds (see Warp), so neither the virtual cursor nor a recorded
@@ -87,10 +89,13 @@ static inline void X11RelativeMouseBegin(X11RelativeMouse *mouse, int rootX, int
     mouse->maxX = bounds.maxX;
     mouse->maxY = bounds.maxY;
     mouse->active = true;
-    mouse->virtualX = rootX;
-    mouse->virtualY = rootY;
-    mouse->physicalX = rootX;
-    mouse->physicalY = rootY;
+    /* The grab confines the pointer to the bounds, so a snapshot outside them is clamped like the server does. */
+    double startX = rootX, startY = rootY;
+    X11RelativeMouseClamp(mouse, &startX, &startY);
+    mouse->virtualX = startX;
+    mouse->virtualY = startY;
+    mouse->physicalX = startX;
+    mouse->physicalY = startY;
     mouse->echoCount = 0;
 }
 

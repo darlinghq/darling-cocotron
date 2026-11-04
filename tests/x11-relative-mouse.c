@@ -435,6 +435,19 @@ static void zeroDeltaAndRewarpAxes(void) {
     puts("PASS: zero-delta motion is not posted and a one-axis offset is rewarped");
 }
 
+static void beginClampsTheStartPosition(void) {
+    X11RelativeMouse m = {0};
+    const X11RelativeMouseBounds window = {100, 200, 300, 400};
+    /* The grab confines the pointer to the window, so a snapshot taken outside it is not where the pointer is. */
+    X11RelativeMouseBegin(&m, 50, 500, 0, window);
+    assert(m.virtualX == 100 && m.virtualY == 400 && m.physicalX == 100 && m.physicalY == 400);
+    X11RelativeMouseEnd(&m);
+    X11RelativeMouseBegin(&m, 250, 300, 0, window);
+    assert(m.virtualX == 250 && m.virtualY == 300 && m.physicalX == 250 && m.physicalY == 300);
+    X11RelativeMouseEnd(&m);
+    puts("PASS: Begin clamps the start position to the bounds");
+}
+
 int main(void) {
     echoExpiryAndMotionAging();
     zeroDeltaAndRewarpAxes();
@@ -454,5 +467,6 @@ int main(void) {
     deltaSign();
     ungrabRestores();
     echoQueueGrowth();
+    beginClampsTheStartPosition();
     return 0;
 }
