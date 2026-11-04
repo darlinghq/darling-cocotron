@@ -24,13 +24,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <CoreGraphics/CGGeometry.h>
 #import <CoreGraphics/CoreGraphicsExport.h>
 
-typedef enum {
+typedef CF_ENUM(int32_t, CGPathElementType) {
     kCGPathElementMoveToPoint,
     kCGPathElementAddLineToPoint,
     kCGPathElementAddQuadCurveToPoint,
     kCGPathElementAddCurveToPoint,
     kCGPathElementCloseSubpath,
-} CGPathElementType;
+};
 
 typedef struct {
     CGPathElementType type;
