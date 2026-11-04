@@ -26,6 +26,7 @@ CORETEXT_EXPORT const CFStringRef kCTFontEnabledAttribute;
 CORETEXT_EXPORT const CFStringRef kCTFontFormatAttribute;
 CORETEXT_EXPORT const CFStringRef kCTFontRegistrationScopeAttribute;
 CORETEXT_EXPORT const CFStringRef kCTFontPriorityAttribute;
+CORETEXT_EXPORT const CFStringRef kCTFontDescriptorLanguageAttribute;
 
 CF_IMPLICIT_BRIDGING_ENABLED
 
