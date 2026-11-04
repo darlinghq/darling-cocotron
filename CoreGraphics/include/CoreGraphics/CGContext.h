@@ -158,7 +158,8 @@ COREGRAPHICS_EXPORT void CGContextAddArcToPoint(CGContextRef context,
 COREGRAPHICS_EXPORT void CGContextAddEllipseInRect(CGContextRef context,
                                                    CGRect rect);
 
-COREGRAPHICS_EXPORT void CGContextAddPath(CGContextRef context, CGPathRef path);
+COREGRAPHICS_EXPORT void CGContextAddPath(CGContextRef context, CGPathRef path)
+    CF_SWIFT_NAME(CGContext.addPath(self:_:));
 
 COREGRAPHICS_EXPORT void
 CGContextReplacePathWithStrokedPath(CGContextRef context);
@@ -340,7 +341,8 @@ COREGRAPHICS_EXPORT void CGContextFillEllipseInRect(CGContextRef context,
                                                     CGRect rect);
 
 COREGRAPHICS_EXPORT void CGContextDrawPath(CGContextRef context,
-                                           CGPathDrawingMode pathMode);
+                                           CGPathDrawingMode pathMode)
+    CF_SWIFT_NAME(CGContext.drawPath(self:using:));
 COREGRAPHICS_EXPORT void CGContextStrokePath(CGContextRef context);
 COREGRAPHICS_EXPORT void CGContextFillPath(CGContextRef context);
 COREGRAPHICS_EXPORT void CGContextEOFillPath(CGContextRef context);
