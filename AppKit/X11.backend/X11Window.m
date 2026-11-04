@@ -412,10 +412,12 @@ static NSData *makeWindowIcon() {
 
 - (void) ensureMapped {
     if (!_mapped) {
-        // A withdrawn window loses _NET_WM_STATE (EWMH), so a window that covers a
-        // monitor has to say again, before it is mapped, that it is fullscreen.
-        if ([self wantsFullscreenWithStyleMask: _styleMask frame: [self frame]])
-            [self requestFullscreen: YES force: NO];
+        // A withdrawn window loses _NET_WM_STATE (EWMH), so the window has to say
+        // again, before it is mapped, what it is: fullscreen if it covers a monitor,
+        // and modal, which requestFullscreen: writes as well.
+        [self requestFullscreen: [self wantsFullscreenWithStyleMask: _styleMask
+                                                              frame: [self frame]]
+                          force: NO];
         XMapWindow(_display, _window);
         _mapped = YES;
     }
