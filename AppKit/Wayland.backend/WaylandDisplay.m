@@ -969,6 +969,10 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
     NSPoint last = [window mouseLocationOutsideOfEventStream];
     [window setLastKnownCursorPosition: location];
 
+    // The pointer moved: a cursor hidden until then comes back, even when the
+    // application does not want the mouse-moved event.
+    [self pointerMoved];
+
     if (_pressedButtons == 0 && [window isDecorationPoint: _pointerSurfacePoint]) {
         [self performAfterDispatch: ^{ [self applyCursor]; }];
         return;
