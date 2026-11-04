@@ -44,6 +44,10 @@ int main(void) {
                    kCGColorSpaceExtendedLinearDisplayP3,
                    kCGColorSpaceExtendedLinearDisplayP3, true, 50)))
         return r;
+    if ((r = check(kCGColorSpaceExtendedLinearITUR_2020,
+                   kCGColorSpaceExtendedLinearITUR_2020,
+                   kCGColorSpaceExtendedLinearITUR_2020, true, 70)))
+        return r;
 
     // Spaces without an extended-range form are rejected, not approximated.
     CGColorSpaceRef device = CGColorSpaceCreateDeviceRGB();
