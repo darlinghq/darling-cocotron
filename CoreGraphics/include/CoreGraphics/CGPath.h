@@ -77,7 +77,8 @@ COREGRAPHICS_EXPORT void CGPathAddCurveToPoint(CGMutablePathRef self,
 COREGRAPHICS_EXPORT void
 CGPathAddQuadCurveToPoint(CGMutablePathRef self, const CGAffineTransform *xform,
                           CGFloat cpx, CGFloat cpy, CGFloat x, CGFloat y);
-COREGRAPHICS_EXPORT void CGPathCloseSubpath(CGMutablePathRef self);
+COREGRAPHICS_EXPORT void CGPathCloseSubpath(CGMutablePathRef self)
+    CF_SWIFT_NAME(CGMutablePath.closeSubpath(self:));
 
 COREGRAPHICS_EXPORT void CGPathAddLines(CGMutablePathRef self,
                                         const CGAffineTransform *xform,
@@ -119,7 +120,8 @@ CGPathCreateWithRect(CGRect rect, const CGAffineTransform *transform)
 COREGRAPHICS_EXPORT CGRect CGPathGetPathBoundingBox(CGPathRef path);
 
 COREGRAPHICS_EXPORT CGPathRef CGPathCreateCopyByTransformingPath(
-        CGPathRef path, CGAffineTransform *transform);
+        CGPathRef path, CGAffineTransform *transform)
+    CF_SWIFT_NAME(CGPath.copy(self:using:));
 
 CF_IMPLICIT_BRIDGING_DISABLED
 
