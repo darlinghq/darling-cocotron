@@ -283,6 +283,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [_nextResponder performSelector: _cmd withObject: event];
 }
 
+- (void) magnifyWithEvent: (NSEvent *) event {
+    [_nextResponder performSelector: _cmd withObject: event];
+}
+
+- (void) rotateWithEvent: (NSEvent *) event {
+    [_nextResponder performSelector: _cmd withObject: event];
+}
+
 - (void) swipeWithEvent: (NSEvent *) event {
     [_nextResponder performSelector: _cmd withObject: event];
 }
