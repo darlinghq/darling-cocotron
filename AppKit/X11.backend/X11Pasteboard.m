@@ -162,7 +162,8 @@ static size_t MaximumPropertyBytes(Display *display) {
     _changeCount++;
 
     for (id owner in owners) {
-        [owner pasteboardChangedOwner: self];
+        if ([owner respondsToSelector: @selector(pasteboardChangedOwner:)])
+            [owner pasteboardChangedOwner: self];
     }
 
     return _changeCount;
@@ -584,7 +585,9 @@ static size_t MaximumPropertyBytes(Display *display) {
     // because it might be the owner that is providing us
     // with this data.
     _typeToData[type] = data;
-    [_typeToOwner[type] pasteboardChangedOwner: self];
+    id previousOwner = _typeToOwner[type];
+    if ([previousOwner respondsToSelector: @selector(pasteboardChangedOwner:)])
+        [previousOwner pasteboardChangedOwner: self];
     [_typeToOwner removeObjectForKey: type];
     return YES;
 }
