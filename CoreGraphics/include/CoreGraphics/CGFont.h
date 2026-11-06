@@ -36,6 +36,7 @@ COREGRAPHICS_EXPORT CGFontRef CGFontRetain(CGFontRef self);
 COREGRAPHICS_EXPORT void CGFontRelease(CGFontRef self);
 
 COREGRAPHICS_EXPORT CFStringRef CGFontCopyFullName(CGFontRef self);
+COREGRAPHICS_EXPORT CFStringRef CGFontCopyPostScriptName(CGFontRef self);
 COREGRAPHICS_EXPORT int CGFontGetUnitsPerEm(CGFontRef self);
 COREGRAPHICS_EXPORT int CGFontGetAscent(CGFontRef self);
 COREGRAPHICS_EXPORT int CGFontGetDescent(CGFontRef self);

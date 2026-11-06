@@ -614,8 +614,16 @@ void CGContextDrawTiledImage(CGContextRef c, CGRect rect, CGImageRef image)
 }
 
 void CGContextShowGlyphsAtPositions(CGContextRef c,
-                                    const CGGlyph * glyphs, const CGPoint * Lpositions,
+                                    const CGGlyph *glyphs, const CGPoint *positions,
                                     size_t count)
 {
-    printf("STUB %s\n", __PRETTY_FUNCTION__);
+    if (c == NULL || glyphs == NULL || positions == NULL)
+        return;
+    // Each position is in text space, like the point of
+    // CGContextShowGlyphsAtPoint. The text position is left as it was.
+    CGPoint saved = CGContextGetTextPosition(c);
+    for (size_t i = 0; i < count; i++)
+        CGContextShowGlyphsAtPoint(c, positions[i].x, positions[i].y,
+                                   glyphs + i, 1);
+    CGContextSetTextPosition(c, saved.x, saved.y);
 }
