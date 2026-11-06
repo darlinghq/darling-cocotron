@@ -126,7 +126,7 @@ static size_t MaximumPropertyBytes(Display *display) {
 }
 
 - (void) ensureSelectionOwner {
-    if (_typeToData != nil) {
+    if (_typeToData != nil && XGetSelectionOwner(_display, _selectionName) == _window) {
         // Already an owner.
         return;
     }
@@ -135,8 +135,10 @@ static size_t MaximumPropertyBytes(Display *display) {
                        CurrentTime); // FIXME: don't use CurrentTime
     XFlush(_display);
 
-    _typeToData = [NSMutableDictionary new];
-    _typeToOwner = [NSMutableDictionary new];
+    if (_typeToData == nil)
+        _typeToData = [NSMutableDictionary new];
+    if (_typeToOwner == nil)
+        _typeToOwner = [NSMutableDictionary new];
     [self discardRemoteTypes];
 
     _changeCount++;
@@ -164,9 +166,7 @@ static size_t MaximumPropertyBytes(Display *display) {
 }
 
 - (void) giveUpSelectionOwner {
-    // -clearContents below accounts for the change, and it runs either way.
-    [self clearContents];
-
+    NSArray *owners = [_typeToOwner allValues];
     [_typeToOwner release];
     _typeToOwner = nil;
 
@@ -174,6 +174,12 @@ static size_t MaximumPropertyBytes(Display *display) {
     _typeToData = nil;
 
     [self discardRemoteTypes];
+    _changeCount++;
+
+    for (id owner in owners) {
+        if ([owner respondsToSelector: @selector(pasteboardChangedOwner:)])
+            [owner pasteboardChangedOwner: self];
+    }
 }
 
 - (NSString *) name {
@@ -181,9 +187,8 @@ static size_t MaximumPropertyBytes(Display *display) {
 }
 
 - (void) dealloc {
-    // Give up the selection first: giveUpSelectionOwner calls clearContents, which calls
-    // ensureSelectionOwner, which would re-arm the selection on _window - already destroyed
-    // by then, so the X request fails with BadWindow.
+    // Give up the selection before destroying the window so other clients and
+    // clipboard managers are notified before _window becomes invalid.
     [self giveUpSelectionOwner];
 
     [(X11Display *) [NSDisplay currentDisplay] setWindow: nil forID: _window];
@@ -690,7 +695,7 @@ static size_t MaximumPropertyBytes(Display *display) {
         // Only what we hold can be served; asking the current owner instead
         // would nest one selection request inside another client's.
         NSArray<NSPasteboardType> *types = [self localTypes];
-        size_t count = 1;
+        size_t count = 2; // TARGETS + TIMESTAMP
         for (NSPasteboardType type in types) {
             NSArray<NSString *> *ts = [X11Pasteboard targetsForType: type];
             count += [ts count];
@@ -706,10 +711,29 @@ static size_t MaximumPropertyBytes(Display *display) {
             }
         }
         targets[i++] = event->target; // TARGETS itself
+        targets[i++] = XInternAtom(_display, "TIMESTAMP", False);
 
-        XChangeProperty(_display, event->requestor, event->property,
-                        event->target, 32, PropModeReplace,
+        Atom targetProperty = (event->property == None) ? event->target : event->property;
+        XChangeProperty(_display, event->requestor, targetProperty,
+                        XA_ATOM, 32, PropModeReplace,
                         (unsigned char *) targets, count);
+        reply(YES);
+        return;
+    }
+
+    if ([target isEqual: @"TIMESTAMP"]) {
+        // ICCCM 2.6.2: TIMESTAMP returns the timestamp used to acquire the selection.
+        Time timestamp = _ownershipTime ? _ownershipTime : (event->time ? event->time : CurrentTime);
+        Atom targetProperty = (event->property == None) ? event->target : event->property;
+        XChangeProperty(_display, event->requestor, targetProperty,
+                        XA_INTEGER, 32, PropModeReplace,
+                        (unsigned char *) &timestamp, 1);
+        reply(YES);
+        return;
+    }
+
+    if ([target isEqual: @"SAVE_TARGETS"]) {
+        // TODO: implement clipboard persistence via SAVE_TARGETS for clipboard managers
         reply(YES);
         return;
     }
