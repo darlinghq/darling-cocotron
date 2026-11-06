@@ -97,6 +97,18 @@ void CGEventSetTimestamp(CGEventRef event, CGEventTimestamp timestamp)
 	e.timestamp = timestamp;
 }
 
+CGEventFlags CGEventGetFlags(CGEventRef event)
+{
+	CGEvent* e = (CGEvent*) event;
+	return e.flags;
+}
+
+void CGEventSetFlags(CGEventRef event, CGEventFlags flags)
+{
+	CGEvent* e = (CGEvent*) event;
+	e.flags = flags;
+}
+
 int64_t CGEventGetIntegerValueField(CGEventRef event, CGEventField field)
 {
 	CGEvent* e = (CGEvent*) event;
