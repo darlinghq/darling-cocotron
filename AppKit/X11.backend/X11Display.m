@@ -1299,8 +1299,12 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
                         _relativeMouse.virtualX - (ev->xmotion.x_root - ev->xmotion.x),
                         _relativeMouse.virtualY - (ev->xmotion.y_root - ev->xmotion.y))];
             } else {
+                // Mouse deltas are in screen orientation, y growing downwards
+                // (as CGEvent's kCGMouseEventDeltaY), while pos is window-local
+                // with y growing upwards; relative mode reports root deltas,
+                // which already grow downwards.
                 deltaX = pos.x - lastMotionPos.x;
-                deltaY = pos.y - lastMotionPos.y;
+                deltaY = lastMotionPos.y - pos.y;
             }
             [window setLastKnownCursorPosition: pos];
 
