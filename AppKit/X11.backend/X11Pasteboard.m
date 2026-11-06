@@ -333,9 +333,15 @@ static size_t MaximumPropertyBytes(Display *display) {
         if (remaining <= 0)
             return NO;
 
+        // A PropertyNotify posts no NSEvent, so when the run loop's socket
+        // callback is the one that handles it, -nextEventMatchingMask: has
+        // nothing to return and would sleep until its date. Wait in short
+        // slices, as -receiveDataForTarget: does, so the next chunk is seen
+        // right away instead of after the whole remaining timeout.
+        NSTimeInterval slice = MIN(kSelectionPollInterval, remaining);
         [[NSDisplay currentDisplay]
                 nextEventMatchingMask: NSAnyEventMask
-                            untilDate: [NSDate dateWithTimeIntervalSinceNow: remaining]
+                            untilDate: [NSDate dateWithTimeIntervalSinceNow: slice]
                                inMode: NSDefaultRunLoopMode
                               dequeue: NO];
     }
