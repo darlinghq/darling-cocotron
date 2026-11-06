@@ -60,11 +60,13 @@
                length: (NSUInteger) length
 {
     O2Font_freetype *o2Font = (O2Font_freetype *) _font;
-    FT_Face face = [o2Font face];
+    @synchronized(o2Font) {
+        FT_Face face = [o2Font face];
 
-    int i;
-    for (i = 0; i < length; i++) {
-        glyphs[i] = FT_Get_Char_Index(face, characters[i]);
+        int i;
+        for (i = 0; i < length; i++) {
+            glyphs[i] = FT_Get_Char_Index(face, characters[i]);
+        }
     }
 }
 
@@ -73,15 +75,17 @@
                    count: (NSUInteger) count
 {
     O2Font_freetype *o2Font = (O2Font_freetype *) _font;
-    FT_Face face = [o2Font face];
+    @synchronized(o2Font) {
+        FT_Face face = [o2Font face];
 
-    int i;
-    FT_Set_Pixel_Sizes(face, _size, _size);
+        int i;
+        FT_Set_Pixel_Sizes(face, _size, _size);
 
-    for (i = 0; i < count; i++) {
-        FT_Load_Glyph(face, glyphs[i], FT_LOAD_DEFAULT);
-        advancements[i] = CGSizeMake(face->glyph->advance.x / (O2Float)(2 << 5),
-                       face->glyph->advance.y / (O2Float)(2 << 5));
+        for (i = 0; i < count; i++) {
+            FT_Load_Glyph(face, glyphs[i], FT_LOAD_DEFAULT);
+            advancements[i] = CGSizeMake(face->glyph->advance.x / (O2Float)(2 << 5),
+                           face->glyph->advance.y / (O2Float)(2 << 5));
+        }
     }
 }
 
@@ -90,18 +94,20 @@
                   isNominal: (BOOL *) isNominalp
 {
     O2Font_freetype *o2Font = (O2Font_freetype *) _font;
-    FT_Face face = [o2Font face];
+    @synchronized(o2Font) {
+        FT_Face face = [o2Font face];
 
-    *isNominalp = YES;
+        *isNominalp = YES;
 
-    if (!current)
-        return NSZeroPoint;
+        if (!current)
+            return NSZeroPoint;
 
-    FT_Set_Pixel_Sizes(face, _size, _size);
+        FT_Set_Pixel_Sizes(face, _size, _size);
 
-    FT_Load_Glyph(face, current, FT_LOAD_DEFAULT);
-    return NSMakePoint(face->glyph->advance.x / (O2Float)(2 << 5),
-                       face->glyph->advance.y / (O2Float)(2 << 5));
+        FT_Load_Glyph(face, current, FT_LOAD_DEFAULT);
+        return NSMakePoint(face->glyph->advance.x / (O2Float)(2 << 5),
+                           face->glyph->advance.y / (O2Float)(2 << 5));
+    }
 }
 
 @end

@@ -81,11 +81,14 @@ typedef enum {
 - initWithFontName: (NSString *) name;
 - initWithDataProvider: (O2DataProviderRef) provider;
 
+- (NSString *) copyPostScriptName;
+- (NSString *) copyFamilyName;
 - (CFArrayRef) copyTableTags;
 - (NSData *) copyTableForTag: (uint32_t) tag;
 
 - (O2Glyph) glyphWithGlyphName: (NSString *) name;
 - (NSString *) copyGlyphNameForGlyph: (O2Glyph) glyph;
+- (O2Rect) boundingRectForGlyph: (O2Glyph) glyph;
 
 - (NSCharacterSet *) coveredCharacterSet;
 
@@ -102,6 +105,8 @@ void O2FontRelease(O2FontRef self);
 
 O2FontPlatformType O2FontGetPlatformType(O2Font *self);
 CFStringRef O2FontCopyFullName(O2FontRef self);
+CFStringRef O2FontCopyPostScriptName(O2FontRef self);
+CFStringRef O2FontCopyFamilyName(O2FontRef self);
 int O2FontGetUnitsPerEm(O2FontRef self);
 int O2FontGetAscent(O2FontRef self);
 int O2FontGetDescent(O2FontRef self);

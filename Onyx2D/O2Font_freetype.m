@@ -184,9 +184,6 @@ static NSString *filenameOfFirstScalableFace(FcFontSet *set) {
     } else if (hasMacRoman) {
         _ftEncoding = FT_ENCODING_APPLE_ROMAN;
     } else {
-        NSLog(@"encoding = %c %c %c %c", face->charmaps[0]->encoding >> 24,
-              face->charmaps[0]->encoding >> 16,
-              face->charmaps[0]->encoding >> 8, face->charmaps[0]->encoding);
         _ftEncoding = face->charmaps[0]->encoding;
     }
 
@@ -195,10 +192,13 @@ static NSString *filenameOfFirstScalableFace(FcFontSet *set) {
     }
 
     if (!(face->face_flags & FT_FACE_FLAG_SCALABLE)) {
-        NSLog(@"FreeType font face is not scalable");
+        NSLog(@"FreeType font face %s is not scalable",
+              face->family_name != NULL ? face->family_name : "(unknown)");
     }
 
-    _unitsPerEm = (O2Float) face->units_per_EM;
+    // Bitmap-only faces have no design units; keep derived metrics finite.
+    _unitsPerEm = face->units_per_EM != 0 ? (O2Float) face->units_per_EM
+                                          : 1000.0f;
     _ascent = face->ascender;
     _descent = face->descender;
     _leading = 0;
@@ -225,6 +225,33 @@ static NSString *filenameOfFirstScalableFace(FcFontSet *set) {
 
 - (FT_Face) face {
     return _face;
+}
+
+- (NSString *) copyPostScriptName {
+    const char *name = FT_Get_Postscript_Name(_face);
+    if (name == NULL)
+        return [super copyPostScriptName];
+    return [[NSString alloc] initWithUTF8String: name];
+}
+
+- (NSString *) copyFamilyName {
+    if (_face->family_name == NULL)
+        return [super copyFamilyName];
+    return [[NSString alloc] initWithUTF8String: _face->family_name];
+}
+
+// The face has a single glyph slot, so every FT_Load_Glyph on it is
+// serialized on the font object (see O2Context_builtin_FT and KTFont_FT).
+- (O2Rect) boundingRectForGlyph: (O2Glyph) glyph {
+    @synchronized(self) {
+        if (FT_Load_Glyph(_face, glyph,
+                          FT_LOAD_NO_SCALE | FT_LOAD_IGNORE_TRANSFORM) != 0)
+            return O2RectMake(0, 0, 0, 0);
+        FT_Glyph_Metrics metrics = _face->glyph->metrics;
+        return O2RectMake(metrics.horiBearingX,
+                          metrics.horiBearingY - metrics.height,
+                          metrics.width, metrics.height);
+    }
 }
 
 - (CFArrayRef) copyTableTags {
@@ -283,14 +310,16 @@ FT_Face O2FontFreeTypeFace(O2Font_freetype *self) {
 }
 
 - (void) fetchAdvances {
-    FT_Set_Char_Size(_face, 0, _unitsPerEm * 64, 72, 72);
+    @synchronized(self) {
+        FT_Set_Char_Size(_face, 0, _unitsPerEm * 64, 72, 72);
 
-    _advances = NSZoneMalloc(NULL, sizeof(NSInteger) * _numberOfGlyphs);
+        _advances = NSZoneMalloc(NULL, sizeof(NSInteger) * _numberOfGlyphs);
 
-    for (O2Glyph glyph = 0; glyph < _numberOfGlyphs; glyph++) {
-        FT_Load_Glyph(_face, glyph, FT_LOAD_DEFAULT);
+        for (O2Glyph glyph = 0; glyph < _numberOfGlyphs; glyph++) {
+            FT_Load_Glyph(_face, glyph, FT_LOAD_DEFAULT);
 
-        _advances[glyph] = _face->glyph->advance.x / (O2Float)(2 << 5);
+            _advances[glyph] = _face->glyph->advance.x / (O2Float)(2 << 5);
+        }
     }
 }
 
