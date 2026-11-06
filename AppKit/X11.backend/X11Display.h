@@ -62,6 +62,10 @@
 - (Display *) display;
 
 - (void) setWindow: (id) window forID: (XID) i;
+- (id) windowForID: (XID) i;
+#ifdef DARLING
+- (void) processPendingEvents;
+#endif
 
 - (CGFloat) doubleClickInterval;
 - (int) handleError: (XErrorEvent *) errorEvent;

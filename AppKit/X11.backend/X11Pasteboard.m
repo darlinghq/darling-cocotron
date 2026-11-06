@@ -216,8 +216,10 @@ static size_t MaximumPropertyBytes(Display *display) {
 // return whether anybody took the event.
 + (BOOL) dispatchPropertyNotify: (XPropertyEvent *) event {
     for (X11Pasteboard *board in [nameToPboard allValues]) {
-        if ([board respondsToSelector: @selector(propertyNotify:)]
-                && board->_incrTransfers[[NSNumber numberWithUnsignedLong: event->window]] != nil
+        // The pasteboard whose own window this is has already seen the event.
+        if (board->_window == event->window)
+            continue;
+        if (board->_incrTransfers[[NSNumber numberWithUnsignedLong: event->window]] != nil
                 && event->state == PropertyDelete) {
             [board propertyNotify: event];
             return YES;
@@ -788,7 +790,6 @@ static size_t MaximumPropertyBytes(Display *display) {
         transfer->_property != event->atom)
         return;
 
-    [_incrTransfers removeObjectForKey: requestor];
     NSUInteger left = [transfer->_data length] - transfer->_offset;
     NSUInteger chunk = left > X11IncrChunkSize ? X11IncrChunkSize : left;
     if (chunk == 0) {
@@ -798,13 +799,29 @@ static size_t MaximumPropertyBytes(Display *display) {
         // receiver would wait for data that never comes.
         XChangeProperty(_display, event->window, event->atom, transfer->_type, 8,
                         PropModeReplace, NULL, 0);
+        [self stopWatchingRequestor: event->window];
+        // Releases the transfer; nothing of it is used past this point.
+        [_incrTransfers removeObjectForKey: requestor];
     } else {
         XChangeProperty(_display, event->window, event->atom, transfer->_type, 8,
                         PropModeReplace, [transfer->_data bytes] + transfer->_offset,
                         chunk);
+        // The transfer stays in the table until the terminator has been
+        // written: every chunk is asked for by its own deletion.
+        transfer->_offset += chunk;
     }
     XFlush(_display);
-    [transfer release];
+}
+
+// A requestor that is one of this process's windows already selects what it
+// needs, and XSelectInput() would replace that mask rather than add to it.
+- (BOOL) isForeignWindow: (Window) window {
+    return [(X11Display *) [NSDisplay currentDisplay] windowForID: window] == nil;
+}
+
+- (void) stopWatchingRequestor: (Window) requestor {
+    if ([self isForeignWindow: requestor])
+        XSelectInput(_display, requestor, NoEventMask);
 }
 
 // Start handing a selection over as INCR, because it is larger than one property
@@ -817,17 +834,21 @@ static size_t MaximumPropertyBytes(Display *display) {
     // length as its value, and the requestor then deletes the property to say it
     // is ready for a chunk. The length is what lets the requestor size its read,
     // so it is the payload here, not the atom.
+    // An obsolete requestor names no property; ICCCM 2.2 has the owner use the
+    // target atom as the property name then.
+    Atom property = (event->property == None) ? event->target : event->property;
     unsigned long length = (unsigned long) [data length];
-    XChangeProperty(_display, event->requestor, event->property, _incrAtom, 32,
+    XChangeProperty(_display, event->requestor, property, _incrAtom, 32,
                     PropModeReplace, (unsigned char *) &length, 1);
 
     // Deletions arrive as PropertyNotify on the requestor's window, which we do
     // not otherwise select for: it belongs to another client.
-    XSelectInput(_display, event->requestor, PropertyChangeMask);
+    if ([self isForeignWindow: event->requestor])
+        XSelectInput(_display, event->requestor, PropertyChangeMask);
 
     NSNumber *requestor = [NSNumber numberWithUnsignedLong: event->requestor];
     _incrTransfers[requestor] =
-            [[[X11IncrTransfer alloc] initWithProperty: event->property
+            [[[X11IncrTransfer alloc] initWithProperty: property
                                                    type: event->target
                                                    data: data] autorelease];
 

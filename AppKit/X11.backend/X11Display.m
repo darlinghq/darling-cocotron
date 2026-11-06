@@ -1654,6 +1654,12 @@ enum {
         if ([window respondsToSelector: @selector(propertyNotify:)]) {
             [window propertyNotify: &ev->xproperty];
         }
+        // An INCR transfer a pasteboard serves is paced by the requestor
+        // deleting a property on its own window, usually another client's,
+        // which therefore is not in the window map.
+        if (ev->xproperty.state == PropertyDelete &&
+            (window == nil || [window isKindOfClass: [X11Pasteboard class]]))
+            [X11Pasteboard dispatchPropertyNotify: &ev->xproperty];
         break;
 
     case SelectionClear:
