@@ -203,6 +203,7 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type,
 }
 
 - (void) _invalidateRRCache {
+    _pointerKnown = NO;
     // The root may have shrunk or a monitor gone: the pointer's reachable
     // area, and with it a relative-mode grab's bounds, changed.
     [self resnapshotRelativeMouse];
@@ -994,10 +995,51 @@ static NSDictionary *modeInfoToDictionary(const XRRModeInfo *mi, int depth) {
     return 0;
 }
 
+- (BOOL) queryPointerRootX: (int *) x y: (int *) y state: (unsigned int *) state {
+    if (_pointerKnown) {
+        *x = _pointerRootX;
+        *y = _pointerRootY;
+        *state = _pointerState;
+        return YES;
+    }
+    // Not known from the event stream: ask the server, and again next time.
+    Window root, child;
+    int winX, winY;
+    return XQueryPointer(_display, DefaultRootWindow(_display), &root, &child,
+                         x, y, &winX, &winY, state);
+}
+
+// Tracks the pointer from the event stream, so that asking for the mouse
+// location, as applications do every frame, costs no round trip while the
+// pointer moves over our windows. Motion over other clients' windows is not
+// reported, which is why every event that can precede such motion forgets it.
+- (void) trackPointerForEvent: (XEvent *) ev {
+    switch (ev->type) {
+    case MotionNotify:
+        _pointerKnown = ev->xmotion.same_screen &&
+                ev->xmotion.root == DefaultRootWindow(_display);
+        _pointerRootX = ev->xmotion.x_root;
+        _pointerRootY = ev->xmotion.y_root;
+        _pointerState = ev->xmotion.state;
+        break;
+    case ButtonPress:
+    case ButtonRelease:
+    case KeyPress:
+    case KeyRelease:
+    case EnterNotify:
+    case LeaveNotify:
+    case FocusIn:
+    case FocusOut:
+    case KeymapNotify:
+        _pointerKnown = NO;
+        break;
+    default:
+        break;
+    }
+}
+
 - (NSPoint) mouseLocation {
-    Window child, root = DefaultRootWindow(_display);
-    int root_x, root_y;
-    int win_x, win_y;
+    int root_x = 0, root_y = 0;
     unsigned int mask;
 
     if (_relativeMouse.active) {
@@ -1005,8 +1047,7 @@ static NSDictionary *modeInfoToDictionary(const XRRModeInfo *mi, int depth) {
         root_x = (int) _relativeMouse.virtualX;
         root_y = (int) _relativeMouse.virtualY;
     } else {
-        XQueryPointer(_display, root, &root, &child, &root_x, &root_y, &win_x,
-                      &win_y, &mask);
+        [self queryPointerRootX: &root_x y: &root_y state: &mask];
     }
     // Cocoa's global space, as +[NSEvent mouseLocation] reports on macOS: points,
     // origin at the main monitor's bottom-left corner, y up, so the result can be
@@ -1119,6 +1160,8 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
     X11Window* window = (X11Window*) [self windowForID: ev->xany.window];
 
     id delegate = [window delegate];
+
+    [self trackPointerForEvent: ev];
 
     // Expected warp echoes are among the events queued when the warp was
     // synced; motion ages them itself.
@@ -1652,6 +1695,7 @@ void CGNativeBorderFrameWidthsForStyle(NSUInteger styleMask, CGFloat *top,
 
 - (void) warpMouseOnMainThread: (NSValue *) target {
     NSPoint position = [target pointValue];
+    _pointerKnown = NO;
     X11Point root = X11CGPointToRoot([self primaryFrameInPoints],
                                      (X11Point){position.x, position.y});
     int root_x = (int) round(root.x);
@@ -1711,6 +1755,7 @@ void CGNativeBorderFrameWidthsForStyle(NSUInteger styleMask, CGFloat *top,
     if (_relativeMouse.active && _relativeWindow == win)
         return;
     [self suspendRelativeMouse];
+    _pointerKnown = NO;
 
     int result = X11RelativeMouseGrab(_display, &_relativeMouse, win,
                                       [self warpsHonoured]);
@@ -1779,6 +1824,7 @@ void CGNativeBorderFrameWidthsForStyle(NSUInteger styleMask, CGFloat *top,
 - (void) suspendRelativeMouse {
     if (!_relativeMouse.active)
         return;
+    _pointerKnown = NO;
     _relativeResumeValid = YES;
     _relativeResumeX = _relativeMouse.virtualX;
     _relativeResumeY = _relativeMouse.virtualY;

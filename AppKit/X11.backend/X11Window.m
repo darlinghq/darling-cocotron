@@ -371,7 +371,10 @@ static NSData *makeWindowIcon() {
 // asks again instead of trusting the last request. While the window is unmapped
 // the property is ours.
 - (void) propertyNotify: (XPropertyEvent *) event {
-    if (_mapped && event->atom == XInternAtom(_display, "_NET_WM_STATE", False))
+    if (event->atom != XInternAtom(_display, "_NET_WM_STATE", False))
+        return;
+    _miniaturizedKnown = NO;
+    if (_mapped)
         _fullscreenRequested = X11FullscreenIsSet(_display, _window);
 }
 
@@ -432,6 +435,7 @@ static NSData *makeWindowIcon() {
                           force: NO];
         XMapWindow(_display, _window);
         _mapped = YES;
+        _miniaturizedKnown = NO;
     }
 }
 
@@ -621,6 +625,7 @@ static NSData *makeWindowIcon() {
 - (void) hideWindow {
     XUnmapWindow(_display, _window);
     _mapped = NO;
+    _miniaturizedKnown = NO;
     // The window manager drops the fullscreen state of a withdrawn window.
     _fullscreenRequested = NO;
     // A focus request still waiting for MapNotify is void once the window is
@@ -789,7 +794,18 @@ static BOOL windowManagerIsRunning(Display *display) {
     XRaiseWindow(_display, _window);
 }
 
+// NSWindow asks this of every window on each pass of the event loop, and
+// reading the property is a round trip. The window selects PropertyChangeMask,
+// so a change of _NET_WM_STATE, whoever makes it, arrives as PropertyNotify.
 - (BOOL) isMiniaturized {
+    if (!_miniaturizedKnown) {
+        _miniaturized = [self readMiniaturized];
+        _miniaturizedKnown = YES;
+    }
+    return _miniaturized;
+}
+
+- (BOOL) readMiniaturized {
     Atom wmState = XInternAtom(_display, "_NET_WM_STATE", FALSE);
     Atom hiddenState = XInternAtom(_display, "_NET_WM_STATE_HIDDEN", FALSE);
 
