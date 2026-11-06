@@ -41,6 +41,8 @@ NSTouchBarItemIdentifier const NSTouchBarItemIdentifierCharacterPicker =
 
 @implementation NSTouchBarItem
 
+@synthesize identifier = _identifier;
+
 - (NSMethodSignature *)methodSignatureForSelector:(SEL)aSelector
 {
     return [NSMethodSignature signatureWithObjCTypes: "v@:"];

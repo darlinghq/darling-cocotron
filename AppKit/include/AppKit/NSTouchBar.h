@@ -22,7 +22,13 @@
 
 @protocol NSTouchBarDelegate;
 
-@interface NSTouchBar : NSObject
+@class NSMutableDictionary;
+
+@interface NSTouchBar : NSObject {
+    id<NSTouchBarDelegate> _delegate;
+    NSArray *_defaultItemIdentifiers;
+    NSMutableDictionary *_items;
+}
 
 @property(assign) id<NSTouchBarDelegate> delegate;
 @property(copy) NSArray *defaultItemIdentifiers;

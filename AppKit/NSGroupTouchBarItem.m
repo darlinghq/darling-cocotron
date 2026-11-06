@@ -22,6 +22,8 @@
 
 @implementation NSGroupTouchBarItem
 
+@synthesize groupTouchBar = _groupTouchBar;
+
 - (NSMethodSignature *)methodSignatureForSelector:(SEL)aSelector
 {
     return [NSMethodSignature signatureWithObjCTypes: "v@:"];

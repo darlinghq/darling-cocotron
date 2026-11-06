@@ -21,6 +21,9 @@
 
 @implementation NSCustomTouchBarItem
 
+@synthesize view = _view;
+@synthesize customizationLabel = _customizationLabel;
+
 - (NSMethodSignature *)methodSignatureForSelector:(SEL)aSelector
 {
     return [NSMethodSignature signatureWithObjCTypes: "v@:"];

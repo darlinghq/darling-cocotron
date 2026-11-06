@@ -21,7 +21,9 @@
 
 @class NSTouchBar;
 
-@interface NSGroupTouchBarItem : NSTouchBarItem
+@interface NSGroupTouchBarItem : NSTouchBarItem {
+    NSTouchBar *_groupTouchBar;
+}
 + (instancetype) alertStyleGroupItemWithIdentifier: (NSTouchBarItemIdentifier) identifier;
 @property(retain) NSTouchBar *groupTouchBar;
 @end

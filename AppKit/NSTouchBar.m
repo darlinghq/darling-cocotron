@@ -28,9 +28,10 @@
 @interface NSTouchBarItemContainerView : NSTouchBarView
 @end
 
-@implementation NSTouchBar {
-    NSMutableDictionary *_items;
-}
+@implementation NSTouchBar
+
+@synthesize delegate = _delegate;
+@synthesize defaultItemIdentifiers = _defaultItemIdentifiers;
 
 - (NSMethodSignature *)methodSignatureForSelector:(SEL)aSelector
 {

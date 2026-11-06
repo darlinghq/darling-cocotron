@@ -23,7 +23,10 @@
 
 @class NSView;
 
-@interface NSCustomTouchBarItem : NSTouchBarItem
+@interface NSCustomTouchBarItem : NSTouchBarItem {
+    NSView *_view;
+    NSString *_customizationLabel;
+}
 @property(retain) NSView *view;
 @property(copy) NSString *customizationLabel;
 @end
