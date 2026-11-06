@@ -184,8 +184,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #define REC601_LUMINANCE_B 0.114f
 
 static inline CGFloat calibratedWhiteFromRGB(CGFloat r, CGFloat g, CGFloat b) {
-    return (REC601_LUMINANCE_R * r, REC601_LUMINANCE_G * g,
-            REC601_LUMINANCE_B * b);
+    return REC601_LUMINANCE_R * r + REC601_LUMINANCE_G * g +
+           REC601_LUMINANCE_B * b;
 }
 
 - (NSColor *) colorUsingColorSpaceName: (NSString *) otherSpaceName
