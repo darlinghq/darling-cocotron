@@ -201,10 +201,37 @@ static NSSavePanel *_newPanel = nil;
     return [name stringByAppendingPathExtension: [types objectAtIndex: 0]];
 }
 
+// The paths of the rows selected in the file browser, in row order.
+- (NSArray *) _selectedPaths {
+    NSMutableArray *paths = [NSMutableArray array];
+    NSIndexSet *rows = [_outlineView selectedRowIndexes];
+    for (NSUInteger row = [rows firstIndex]; row != NSNotFound;
+         row = [rows indexGreaterThanIndex: row]) {
+        id item = [_outlineView itemAtRow: row];
+        if ([item isKindOfClass: [NSURL class]] && [[item path] length] > 0)
+            [paths addObject: [item path]];
+    }
+    return paths;
+}
+
+// What a panel without a name field accepts: the selected rows. Empty when
+// there is nothing to accept, and the panel then stays up.
+- (NSArray *) _acceptablePaths {
+    return [self _selectedPaths];
+}
+
+- (void) _setAcceptedPaths: (NSArray *) paths {
+    [self _setFilename: [paths firstObject]];
+}
+
 - (IBAction) _selectFile: (id) sender {
     if (_nameField == nil) {
-        NSURL *url = [_outlineView itemAtRow: [_outlineView selectedRow]];
-        [self _setFilename: [url path]];
+        NSArray *paths = [self _acceptablePaths];
+        if ([paths count] == 0) {
+            NSBeep();
+            return;
+        }
+        [self _setAcceptedPaths: paths];
     } else {
         NSString *name = [self nameFieldStringValue];
         if ([name length] == 0) {
