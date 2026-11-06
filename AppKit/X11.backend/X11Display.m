@@ -50,8 +50,8 @@
 #import <X11/Xutil.h>
 #import <X11/extensions/XKBrules.h>
 #import <X11/extensions/Xrandr.h>
-#import "X11Monitors.h"
-#import "X11RandR.h"
+#import "../../CoreGraphics/X11.backend/X11Monitors.h"
+#import "../../CoreGraphics/X11.backend/X11RandR.h"
 #import <X11/keysym.h>
 #import <fcntl.h>
 #import <fontconfig/fontconfig.h>

@@ -30,8 +30,8 @@
 #import <X11/XKBlib.h>
 #import <X11/extensions/XKBrules.h>
 // The main-monitor model and conversions shared with AppKit's X11 backend.
-#import "../../AppKit/X11.backend/X11Monitors.h"
-#import "../../AppKit/X11.backend/X11RandR.h"
+#import "X11Monitors.h"
+#import "X11RandR.h"
 
 // TODO: Use XInput2:
 // https://stackoverflow.com/questions/44095001/getting-double-rawkeypress-events-using-xinput2

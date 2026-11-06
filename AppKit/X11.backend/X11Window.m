@@ -34,7 +34,7 @@
 #import <QuartzCore/CAWindowOpenGLContext.h>
 
 #import "X11Display.h"
-#import "X11Monitors.h"
+#import "../../CoreGraphics/X11.backend/X11Monitors.h"
 #import "X11SubWindow.h"
 #import "X11Window.h"
 #import <X11/Xatom.h>

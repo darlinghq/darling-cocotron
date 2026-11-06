@@ -7,7 +7,7 @@
 //
 
 #import <AppKit/NSDisplay.h>
-#import "X11Monitors.h"
+#import "../../CoreGraphics/X11.backend/X11Monitors.h"
 #import <X11/Xlib.h>
 #import <X11/Xresource.h>
 #import <X11/Xlocale.h>
