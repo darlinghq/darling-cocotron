@@ -48,6 +48,10 @@
     // no modifier key reported (a modifier released while another app had the
     // focus) is still noticed and corrected with a keycode-less flagsChanged.
     NSEventModifierFlags _modifierFlags;
+    // The modifier keys currently held, one bit per X keycode. Both Shift keys
+    // (or both Control keys) drive the same mask, so releasing one of them only
+    // clears it if the other is up too.
+    unsigned char _heldModifierKeys[32];
     int _rrEventBase;
     NSArray* _lastScreens;
 

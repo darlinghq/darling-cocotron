@@ -1051,6 +1051,34 @@ static unsigned int x11StateAfterKeyEvent(const X11ModifierKey *key,
     return state & ~key->xMask;
 }
 
+static BOOL isModifierKeyHeld(const unsigned char *held, unsigned int keycode) {
+    return keycode < 256 && (held[keycode / 8] & (1 << (keycode % 8)));
+}
+
+static void setModifierKeyHeld(unsigned char *held, unsigned int keycode, BOOL down) {
+    if (keycode >= 256)
+        return;
+    if (down)
+        held[keycode / 8] |= 1 << (keycode % 8);
+    else
+        held[keycode / 8] &= ~(1 << (keycode % 8));
+}
+
+// The X masks still driven by held modifier keys other than `keycode`. A key
+// event only carries the state from before it, so this is what tells whether
+// releasing one Shift key leaves Shift down because the other one is held.
+- (unsigned int) maskOfHeldModifierKeysExcept: (unsigned int) keycode {
+    unsigned int mask = 0;
+    for (unsigned int code = 0; code < 256; code++) {
+        if (code == keycode || !isModifierKeyHeld(_heldModifierKeys, code))
+            continue;
+        X11ModifierKey key = modifierKeyForKeysym(XKeycodeToKeysym(_display, code, 0));
+        if (key.carbonKeyCode >= 0 && !key.toggle)
+            mask |= key.xMask;
+    }
+    return mask;
+}
+
 // Cocoa has no event for "a modifier's aggregate changed without a key": the
 // same flagsChanged carries a sentinel keycode, which is what macOS sends when
 // a modifier is released while another app holds the focus and the next key
@@ -1072,6 +1100,49 @@ static unsigned int x11StateAfterKeyEvent(const X11ModifierKey *key,
             isARepeat: NO
             keyCode: keyCode]
              atStart: NO];
+}
+
+// Every input event carries the modifier state the server holds. A modifier
+// that went up while another client had the keyboard, or whose release a
+// compositor kept for itself, therefore shows up as a difference here, and
+// is reported the way macOS reports it, with a flagsChanged that names no key.
+- (void) resyncModifierFlagsWithState: (unsigned int) state
+                               window: (X11Window *) window {
+    NSEventModifierFlags flags = [self modifierFlagsForState: state];
+    if (flags == _modifierFlags)
+        return;
+
+    for (unsigned int code = 0; code < 256; code++) {
+        if (!isModifierKeyHeld(_heldModifierKeys, code))
+            continue;
+        X11ModifierKey key = modifierKeyForKeysym(XKeycodeToKeysym(_display, code, 0));
+        if (key.carbonKeyCode < 0 || !(state & key.xMask))
+            setModifierKeyHeld(_heldModifierKeys, code, NO);
+    }
+
+    _modifierFlags = flags;
+    [self postFlagsChanged: 0xFFFF flags: flags inWindow: window];
+}
+
+// Keys pressed or released while another client had the focus never reached
+// us, so on getting the focus back the held keys are read from the server.
+- (void) resyncModifierKeysOnFocusIn: (X11Window *) window {
+    char keys[32];
+    Window root, child;
+    int rootX, rootY, winX, winY;
+    unsigned int state;
+
+    XQueryKeymap(_display, keys);
+    for (unsigned int code = 0; code < 256; code++) {
+        BOOL down = (keys[code / 8] & (1 << (code % 8))) != 0;
+        X11ModifierKey key = modifierKeyForKeysym(XKeycodeToKeysym(_display, code, 0));
+        setModifierKeyHeld(_heldModifierKeys, code,
+                           down && key.carbonKeyCode >= 0 && !key.toggle);
+    }
+
+    if (XQueryPointer(_display, DefaultRootWindow(_display), &root, &child,
+                      &rootX, &rootY, &winX, &winY, &state))
+        [self resyncModifierFlagsWithState: state window: window];
 }
 
 // Cocoa groups clicks only within its double-click interval and four logical
@@ -1141,6 +1212,23 @@ enum {
 
     id delegate = [window delegate];
 
+    // Events another client sent carry whatever state it chose.
+    if (!ev->xany.send_event) {
+        switch (ev->type) {
+        case ButtonPress:
+        case ButtonRelease:
+            [self resyncModifierFlagsWithState: ev->xbutton.state window: window];
+            break;
+        case MotionNotify:
+            [self resyncModifierFlagsWithState: ev->xmotion.state window: window];
+            break;
+        case EnterNotify:
+        case LeaveNotify:
+            [self resyncModifierFlagsWithState: ev->xcrossing.state window: window];
+            break;
+        }
+    }
+
     switch (ev->type) {
     case KeyPress:
     case KeyRelease:;
@@ -1157,21 +1245,28 @@ enum {
         // the keycode macOS uses when no single key is responsible.
         {
             BOOL pressed = ev->type == KeyPress;
+            unsigned int keycode = ev->xkey.keycode;
             X11ModifierKey modifier = modifierKeyForKeysym(
-                    XKeycodeToKeysym(_display, ev->xkey.keycode, 0));
-            NSEventModifierFlags after = modifierFlags;
-            unsigned short keyCode = 0xFFFF;
+                    XKeycodeToKeysym(_display, keycode, 0));
             if (modifier.carbonKeyCode >= 0) {
-                after = [self modifierFlagsForState:
-                                 x11StateAfterKeyEvent(&modifier, ev->xkey.state, pressed)];
-                keyCode = (unsigned short) modifier.carbonKeyCode;
+                // A lock key changes the state on its press only.
+                if (modifier.toggle && !pressed)
+                    break;
+                unsigned int after = x11StateAfterKeyEvent(&modifier, ev->xkey.state, pressed);
+                if (!modifier.toggle) {
+                    setModifierKeyHeld(_heldModifierKeys, keycode, pressed);
+                    // The other key of a pair keeps the mask down.
+                    if (!pressed)
+                        after |= [self maskOfHeldModifierKeysExcept: keycode] & modifier.xMask;
+                }
+                _modifierFlags = [self modifierFlagsForState: after];
+                [self postFlagsChanged: (unsigned short) modifier.carbonKeyCode
+                                 flags: _modifierFlags
+                              inWindow: window];
+                break; // Modifiers are neither text nor repeatable keys.
             }
-            if (after != _modifierFlags || modifier.carbonKeyCode >= 0) {
-                _modifierFlags = after;
-                [self postFlagsChanged: keyCode flags: after inWindow: window];
-                if (modifier.carbonKeyCode >= 0)
-                    break; // Modifiers are neither text nor repeatable keys.
-            }
+            if (!ev->xany.send_event)
+                [self resyncModifierFlagsWithState: ev->xkey.state window: window];
         }
 
         if (XFilterEvent(ev, None)) // XIM processing
@@ -1453,6 +1548,7 @@ enum {
         lastFocusedWindow = delegate;
         if (window != nil)
             XSetICFocus(window->_xic);
+        [self resyncModifierKeysOnFocusIn: window];
         break;
 
     case FocusOut:
@@ -1599,6 +1695,12 @@ enum {
 
     case MappingNotify:
         NSLog(@"MappingNotify");
+        // Xlib caches the keyboard and modifier mappings, and the client has
+        // to tell it when they change, or XLookupString() and
+        // XKeycodeToKeysym() keep answering for the old layout.
+        if (ev->xmapping.request == MappingKeyboard ||
+            ev->xmapping.request == MappingModifier)
+            XRefreshKeyboardMapping(&ev->xmapping);
         break;
 
     case GenericEvent:
