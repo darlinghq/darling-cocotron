@@ -76,6 +76,13 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type,
 
 - init {
     if (self = [super init]) {
+        // EGL also uses this Display from compositor threads, so Xlib has
+        // to be made thread-safe before the first Xlib call.
+        if (!XInitThreads()) {
+            NSLog(@"X11Display: XInitThreads() failed");
+            [self release];
+            return nil;
+        }
 
         _display = XOpenDisplay(NULL);
 

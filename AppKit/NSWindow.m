@@ -2716,6 +2716,12 @@ static BOOL _allowsAutomaticWindowTabbing;
         [(NSControl *) [_defaultButtonCell controlView] performClick: nil];
 }
 
+// YES while the window is hidden only because the application was
+// deactivated; it is still open.
+- (BOOL) _isHiddenForDeactivation {
+    return _hiddenForDeactivate;
+}
+
 - (void) _showForActivation {
     if (_hiddenForDeactivate) {
         _hiddenForDeactivate = NO;

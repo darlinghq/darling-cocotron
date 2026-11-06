@@ -47,6 +47,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (NSTimeInterval) textCaretBlinkInterval;
 
+- (BOOL) activateProcessIdentifier: (pid_t) processIdentifier;
+
 - (void) hideCursor;
 - (void) unhideCursor;
 // Counted hide and unhide, as on macOS: -hideCursor runs on the first hide and -unhideCursor
