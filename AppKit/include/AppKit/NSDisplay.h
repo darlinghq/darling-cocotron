@@ -45,6 +45,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (NSTimeInterval) textCaretBlinkInterval;
 
+- (BOOL) activateProcessIdentifier: (pid_t) processIdentifier;
+
 - (void) hideCursor;
 - (void) unhideCursor;
 

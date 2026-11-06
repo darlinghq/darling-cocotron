@@ -128,6 +128,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return 1;
 }
 
+// Brings the windows of the given process to the front. Backends that can
+// do so override this; the default reports that nothing was activated.
+- (BOOL) activateProcessIdentifier: (pid_t) processIdentifier {
+    return NO;
+}
+
 - (void) hideCursor {
     NSInvalidAbstractInvocation();
 }
