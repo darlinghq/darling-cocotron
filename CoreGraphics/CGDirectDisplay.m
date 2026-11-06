@@ -275,6 +275,13 @@ CGDisplayModeRef CGDisplayCopyDisplayMode(CGDirectDisplayID displayId) {
     return (CGDisplayModeRef) dict;
 }
 
+CGImageRef CGDisplayCreateImage(CGDirectDisplayID displayID)
+{
+    printf("STUB %s\n", __PRETTY_FUNCTION__);
+
+    return NULL;
+}
+
 void CGDisplayModeRelease(CGDisplayModeRef mode) {
     if (mode != NULL)
         CFRelease(mode);

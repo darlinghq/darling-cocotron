@@ -57,6 +57,7 @@ extern uint32_t CGEventSourceCounterForEventType(CGEventSourceStateID
 extern void CGEventSourceSetUserData(CGEventSourceRef _Nullable source,
     int64_t userData);
 extern int64_t CGEventSourceGetUserData(CGEventSourceRef _Nullable source);
+extern bool CGEventSourceKeyState(CGEventSourceStateID stateID, CGKeyCode key);
 extern void CGEventSourceSetLocalEventsFilterDuringSuppressionState(
     CGEventSourceRef _Nullable source, CGEventFilterMask filter,
     CGEventSuppressionState state);

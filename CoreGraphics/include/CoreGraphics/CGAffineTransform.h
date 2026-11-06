@@ -82,3 +82,6 @@ static CGSize __CGSizeApplyAffineTransform(CGSize size, CGAffineTransform xform)
 
 COREGRAPHICS_EXPORT CGRect CGRectApplyAffineTransform(CGRect rect,
                                                       CGAffineTransform t);
+
+COREGRAPHICS_EXPORT bool
+CGAffineTransformEqualToTransform(CGAffineTransform t1, CGAffineTransform t2);
