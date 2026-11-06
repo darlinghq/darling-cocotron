@@ -19,7 +19,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 // Original - Christopher Lloyd <cjwl@objc.net>
 #import <AppKit/NSApplication.h>
+#import <AppKit/NSColorSpace.h>
 #import <AppKit/NSDisplay.h>
+#import <AppKit/NSGraphics.h>
 #import <AppKit/NSScreen.h>
 #import <AppKit/NSWindow.h>
 
@@ -68,6 +70,60 @@ NSNotificationName const NSScreenColorSpaceDidChangeNotification = @"NSScreenCol
     return 1.0;
 }
 
+// The backends draw one device pixel per point.
+- (CGFloat) backingScaleFactor {
+    return 1.0;
+}
+
+// No ICC profile is read from the display, so the screen is described as sRGB.
+- (NSColorSpace *) colorSpace {
+    return [NSColorSpace sRGBColorSpace];
+}
+
+- (NSString *) localizedName {
+    return [NSString stringWithFormat: @"Display %u",
+                                       (unsigned) [self cgDirectDisplayID]];
+}
+
+// Screens are driven as standard dynamic range: no component value above 1.0
+// is displayable, and reference rendering is not supported.
+- (CGFloat) maximumExtendedDynamicRangeColorComponentValue {
+    return 1.0;
+}
+
+- (CGFloat) maximumPotentialExtendedDynamicRangeColorComponentValue {
+    return 1.0;
+}
+
+- (CGFloat) maximumReferenceExtendedDynamicRangeColorComponentValue {
+    return 0.0;
+}
+
+// The refresh rate of the screen's current mode, as the backend reports it, or
+// 60 Hz when it reports none. Displays have a fixed rate here, so the minimum
+// and maximum intervals are the same.
+- (NSTimeInterval) _refreshInterval {
+    NSDisplay *display = [NSDisplay currentDisplay];
+    double rate = 0;
+
+    if ([display respondsToSelector: @selector(currentModeForScreen:)]) {
+        NSDictionary *mode = [display
+                currentModeForScreen: (int) [self cgDirectDisplayID] - 1];
+        rate = [[mode objectForKey: @"RefreshRate"] doubleValue];
+    }
+    if (!(rate > 0))
+        rate = 60.0;
+    return 1.0 / rate;
+}
+
+- (NSTimeInterval) minimumRefreshInterval {
+    return [self _refreshInterval];
+}
+
+- (NSTimeInterval) maximumRefreshInterval {
+    return [self _refreshInterval];
+}
+
 - (id) description {
     return [NSString stringWithFormat: @"< %@ - frame %@, visible %@ >",
                                        [super description],
@@ -78,8 +134,18 @@ NSNotificationName const NSScreenColorSpaceDidChangeNotification = @"NSScreenCol
 - (NSDictionary<NSDeviceDescriptionKey, id> *) deviceDescription {
     // AppKit clients use this documented string key to obtain the same display
     // ID used by CoreGraphics and assigned by the window-system backend.
-    return @{ @"NSScreenNumber":
-            [NSNumber numberWithUnsignedInt: [self cgDirectDisplayID]] };
+    // The other keys describe the screen as a drawing device: its size in
+    // points, 72 dpi per backing scale unit, and 8-bit RGB.
+    CGFloat dpi = 72.0 * [self backingScaleFactor];
+    return @{
+        @"NSScreenNumber" :
+                [NSNumber numberWithUnsignedInt: [self cgDirectDisplayID]],
+        NSDeviceSize : [NSValue valueWithSize: _frame.size],
+        NSDeviceResolution : [NSValue valueWithSize: NSMakeSize(dpi, dpi)],
+        NSDeviceIsScreen : @"YES",
+        NSDeviceColorSpaceName : NSCalibratedRGBColorSpace,
+        NSDeviceBitsPerSample : @8,
+    };
 }
 
 @end
