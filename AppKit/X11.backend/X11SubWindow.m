@@ -15,7 +15,9 @@
 }
 
 - (id) initWithParentWindow: (X11Window *) parent frame: (CGRect) frame {
-    _parent = parent;
+    // Owners such as NSOpenGLContext can keep a subwindow after its NSWindow
+    // has gone, and the subwindow still asks its parent for its geometry.
+    _parent = [parent retain];
     frame = [self convertFrame: frame];
 
     _display = [(X11Display *) [NSDisplay currentDisplay] display];
@@ -32,6 +34,7 @@
 
 - (void) dealloc {
     XDestroyWindow(_display, _window);
+    [_parent release];
     [super dealloc];
 }
 

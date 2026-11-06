@@ -157,14 +157,17 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type,
     [_blankCursor release];
     [_defaultCursor release];
 
-    XCloseIM(_xim);
+    // -init releases self when it cannot connect to the X server, so none of these may exist yet.
+    if (_xim)
+        XCloseIM(_xim);
 
     if (_display)
         XCloseDisplay(_display);
 #ifdef DARLING
-    CFRunLoopRemoveSource(CFRunLoopGetMain(), _source, kCFRunLoopCommonModes);
-    if (_source != NULL)
+    if (_source != NULL) {
+        CFRunLoopRemoveSource(CFRunLoopGetMain(), _source, kCFRunLoopCommonModes);
         CFRelease(_source);
+    }
     if (_cfSocket != NULL)
         CFRelease(_cfSocket);
 #endif
@@ -1267,6 +1270,9 @@ static NSDictionary *modeInfoToDictionary(const XRRModeInfo *mi, int depth) {
                 type = NSRightMouseDragged;
             }
 
+            // The pointer moved: a cursor hidden until then comes back, even
+            // when the application does not want the mouse-moved event.
+            [self pointerMoved];
             if (type == NSMouseMoved && ![delegate acceptsMouseMovedEvents])
                 break;
 
@@ -1302,6 +1308,10 @@ static NSDictionary *modeInfoToDictionary(const XRRModeInfo *mi, int depth) {
 
     case FocusIn:
         NSLog(@"FocusIn");
+        // The server can still report FocusIn (detail NotifyPointer) for a
+        // window we have unmapped; an ordered-out window must not become key.
+        if (window != nil && ![window isMapped])
+            break;
         if ([delegate attachedSheet]) {
             [[delegate attachedSheet] makeKeyAndOrderFront: delegate];
             break;
@@ -1311,7 +1321,11 @@ static NSDictionary *modeInfoToDictionary(const XRRModeInfo *mi, int depth) {
                                  checkForAppDeactivation: NO];
             lastFocusedWindow = nil;
         }
+        if (window != nil)
+            window->_receivingFocus = YES;
         [delegate platformWindowActivated: window displayIfNeeded: YES];
+        if (window != nil)
+            window->_receivingFocus = NO;
         lastFocusedWindow = delegate;
         if (window != nil)
             XSetICFocus(window->_xic);
@@ -1374,6 +1388,7 @@ static NSDictionary *modeInfoToDictionary(const XRRModeInfo *mi, int depth) {
 
     case MapNotify:
         NSLog(@"MapNotify");
+        [window mapNotified];
         break;
 
     case MapRequest:
