@@ -23,6 +23,7 @@
 #import <X11/Xlib.h>
 #import <CoreFoundation/CFRunLoop.h>
 #import <CoreFoundation/CFSocket.h>
+#import "X11Monitors.h"
 
 @interface CGSConnectionX11 : CGSConnection {
 	Display *_display;
@@ -42,6 +43,12 @@
 
 	int _xkbEventBase;
 	int _xrrEventBase;
+
+	// The main monitor in root coordinates, cached for -mouseLocation. Guarded by
+	// @synchronized(self); the cache is dropped when XRandR reports a
+	// reconfiguration, like _screens.
+	X11Frame _primaryRoot;
+	BOOL _primaryRootValid;
 }
 
 -(instancetype) initWithConnectionID:(CGSConnectionID)connId;

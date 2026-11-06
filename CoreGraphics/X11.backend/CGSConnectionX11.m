@@ -37,13 +37,7 @@
 // https://stackoverflow.com/questions/44095001/getting-double-rawkeypress-events-using-xinput2
 // https://github.com/openbsd/xenocara/blob/master/app/xinput/src/test_xi2.c
 
-@implementation CGSConnectionX11 {
-	// The main monitor in root coordinates, cached for -mouseLocation. Guarded by
-	// @synchronized(self); the cache is dropped when XRandR reports a
-	// reconfiguration, like _screens.
-	X11Frame _primaryRoot;
-	BOOL _primaryRootValid;
-}
+@implementation CGSConnectionX11
 
 static int errorHandler(Display* display, XErrorEvent* errorEvent)
 {
