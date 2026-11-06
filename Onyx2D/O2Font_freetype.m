@@ -5,6 +5,7 @@
 #include <limits.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <dispatch/dispatch.h>
 #import FT_TRUETYPE_TABLES_H
 
 @implementation O2Font_freetype
@@ -33,6 +34,59 @@ FT_Library O2FontSharedFreeTypeLibrary() {
     return library;
 }
 
+#ifdef DARLING
+// FreeType and fontconfig are host libraries: they take and report host
+// paths, while guest code sees the host file system under the vchroot's exit
+// directory and its own root at the prefix. libsystem_kernel resolves guest
+// paths to host paths; the reverse mapping follows from where the guest root
+// resolves to.
+extern int __darling_vchroot_expand(const char *path, char *out)
+        __attribute__((weak_import));
+
+static const char hostRootInGuest[] = "/Volumes/SystemRoot";
+
+static NSString *hostPathFromGuestPath(NSString *path) {
+    char host[PATH_MAX];
+
+    if (path == nil || __darling_vchroot_expand == NULL)
+        return path;
+    if (__darling_vchroot_expand([path fileSystemRepresentation], host) != 0)
+        return path;
+    return [NSString stringWithUTF8String: host];
+}
+
+static NSString *guestPathFromHostPath(const char *path) {
+    static char prefix[PATH_MAX];
+    static size_t prefixLength;
+    static dispatch_once_t once;
+
+    dispatch_once(&once, ^{
+        if (__darling_vchroot_expand != NULL &&
+            __darling_vchroot_expand("/", prefix) == 0) {
+            prefixLength = strlen(prefix);
+            while (prefixLength > 0 && prefix[prefixLength - 1] == '/')
+                prefix[--prefixLength] = '\0';
+        }
+    });
+
+    if (prefixLength == 0 || path[0] != '/')
+        return [NSString stringWithUTF8String: path];
+    if (strncmp(path, prefix, prefixLength) == 0 &&
+        (path[prefixLength] == '/' || path[prefixLength] == '\0'))
+        return [NSString stringWithUTF8String:
+                path[prefixLength] ? path + prefixLength : "/"];
+    return [NSString stringWithFormat: @"%s%s", hostRootInGuest, path];
+}
+#else
+static NSString *hostPathFromGuestPath(NSString *path) {
+    return path;
+}
+
+static NSString *guestPathFromHostPath(const char *path) {
+    return [NSString stringWithUTF8String: path];
+}
+#endif
+
 static void addAppFont(FcConfig *config, NSString *path) {
     path = [[NSBundle mainBundle] pathForResource: path ofType: nil];
     if (path == nil) {
@@ -42,6 +96,7 @@ static void addAppFont(FcConfig *config, NSString *path) {
     BOOL isDirectory;
     [[NSFileManager defaultManager] fileExistsAtPath: path
                                          isDirectory: &isDirectory];
+    path = hostPathFromGuestPath(path);
     if (isDirectory) {
         FcConfigAppFontAddDir(config, (const FcChar8 *) [path UTF8String]);
     } else {
@@ -101,7 +156,10 @@ NSArray *O2FontCopyInstalledFaces(NSString *family, NSString *postScriptName,
             if (FcPatternGetString(fonts->fonts[i], properties[j], 0, &text) !=
                 FcResultMatch)
                 continue;
-            NSString *value = [NSString stringWithUTF8String: (const char *) text];
+            NSString *value =
+                    (strcmp(properties[j], FC_FILE) == 0)
+                            ? guestPathFromHostPath((const char *) text)
+                            : [NSString stringWithUTF8String: (const char *) text];
             if (value != nil)
                 [face setObject: value forKey: keys[j]];
         }
