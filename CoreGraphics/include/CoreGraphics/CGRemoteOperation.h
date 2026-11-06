@@ -23,6 +23,7 @@
 #import <CoreGraphics/CGGeometry.h>
 
 #include <CoreGraphics/CGError.h>
+#include <mach/boolean.h>
 #include <stdint.h>
 
 typedef CGError CGEventErr;
@@ -68,5 +69,8 @@ void CGUnregisterScreenRefreshCallback(CGScreenRefreshCallback callback, void *u
 CGError CGWaitForScreenRefreshRects(CGRect * _Nullable *rects, uint32_t *count);
 void CGReleaseScreenRefreshRects(CGRect *rects);
 CGError CGWaitForScreenUpdateRects(CGScreenUpdateOperation requestedOperations, CGScreenUpdateOperation *currentOperation, CGRect * _Nullable *rects, size_t *rectCount, CGScreenUpdateMoveDelta *delta);
+
+CGError CGWarpMouseCursorPosition(CGPoint newCursorPosition);
+CGError CGAssociateMouseAndMouseCursorPosition(boolean_t connected);
 
 #endif

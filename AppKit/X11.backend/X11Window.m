@@ -34,6 +34,7 @@
 #import <QuartzCore/CAWindowOpenGLContext.h>
 
 #import "X11Display.h"
+#import "../../CoreGraphics/X11.backend/X11Monitors.h"
 #import "X11SubWindow.h"
 #import "X11Window.h"
 #import <X11/Xatom.h>
@@ -652,8 +653,9 @@ static NSData *makeWindowIcon() {
     return [self transformPoint: _lastMotionPos];
 }
 
+// _frame is kept in root coordinates; -frame is in Cocoa's global space.
 - (O2Rect) frame {
-    return [self transformFrame: _frame];
+    return [self untransformFrame: _frame];
 }
 
 static int ignoreBadWindow(Display *display, XErrorEvent *errorEvent) {
@@ -711,12 +713,27 @@ static int ignoreBadWindow(Display *display, XErrorEvent *errorEvent) {
     [_deviceDictionary addEntriesFromDictionary: entries];
 }
 
+// Cocoa's global origin is the bottom-left corner of the main monitor, so both
+// axes are relative to that monitor's rectangle, not to the root window. With one
+// monitor that is the whole root and this is the plain flip against its height.
 - (O2Rect) transformFrame: (O2Rect) frame {
-    return NSMakeRect(frame.origin.x,
-                      DisplayHeight(_display, DefaultScreen(_display)) -
-                              frame.origin.y - frame.size.height,
-                      fmax(frame.size.width, 1.0),
-                      fmax(frame.size.height, 1.0));
+    X11Frame root = X11FrameToRoot([self primaryFrameInPoints],
+                                   (X11Frame){frame.origin.x, frame.origin.y,
+                                              frame.size.width, frame.size.height});
+    return NSMakeRect(root.x, root.y, fmax(root.width, 1.0), fmax(root.height, 1.0));
+}
+
+// The inverse of -transformFrame:, root coordinates to Cocoa's global space.
+- (O2Rect) untransformFrame: (O2Rect) rect {
+    X11Frame frame = X11FrameFromRoot([self primaryFrameInPoints],
+                                      (X11Frame){rect.origin.x, rect.origin.y,
+                                                 rect.size.width, rect.size.height});
+    return NSMakeRect(frame.x, frame.y, frame.width, frame.height);
+}
+
+// The main monitor in root coordinates, in the unit of _frame.
+- (X11Frame) primaryFrameInPoints {
+    return [(X11Display *) [NSDisplay currentDisplay] primaryFrameInPoints];
 }
 
 - (NSPoint) transformPoint: (NSPoint) pos; {
