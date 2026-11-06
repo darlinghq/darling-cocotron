@@ -1194,7 +1194,9 @@ NSApplication *NSApp = nil;
 }
 
 - (void) cancelUserAttentionRequest: (int) requestNumber {
-    NSUnimplementedMethod();
+    // There is only ever one request, so any number cancels it.
+    [_attentionTimer invalidate];
+    _attentionTimer = nil;
 }
 
 - (void) runPageLayout: sender {
