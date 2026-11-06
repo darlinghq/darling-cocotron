@@ -156,7 +156,21 @@ typedef NSUInteger NSWorkspaceIconCreationOptions;
 
 @end
 
-@interface NSWorkspaceOpenConfiguration : NSObject <NSCopying>
+@interface NSWorkspaceOpenConfiguration : NSObject <NSCopying> {
+    BOOL _requiresUniversalLinks;
+    BOOL _forPrinting;
+    BOOL _activates;
+    BOOL _addsToRecentItems;
+    BOOL _allowsRunningApplicationSubstitution;
+    BOOL _createsNewApplicationInstance;
+    BOOL _hides;
+    BOOL _hidesOthers;
+    BOOL _promptsUserIfNeeded;
+    NSAppleEventDescriptor *_appleEvent;
+    NSArray<NSString *> *_arguments;
+    NSDictionary<NSString *, NSString *> *_environment;
+    cpu_type_t _architecture;
+}
 + (instancetype)configuration;
 
 @property BOOL requiresUniversalLinks;

@@ -330,6 +330,21 @@ NSNotificationName NSWorkspaceWillUnmountNotification = @"NSWorkspaceWillUnmount
 @end
 
 @implementation NSWorkspaceOpenConfiguration
+
+@synthesize requiresUniversalLinks = _requiresUniversalLinks;
+@synthesize forPrinting = _forPrinting;
+@synthesize activates = _activates;
+@synthesize addsToRecentItems = _addsToRecentItems;
+@synthesize allowsRunningApplicationSubstitution = _allowsRunningApplicationSubstitution;
+@synthesize createsNewApplicationInstance = _createsNewApplicationInstance;
+@synthesize hides = _hides;
+@synthesize hidesOthers = _hidesOthers;
+@synthesize promptsUserIfNeeded = _promptsUserIfNeeded;
+@synthesize appleEvent = _appleEvent;
+@synthesize arguments = _arguments;
+@synthesize environment = _environment;
+@synthesize architecture = _architecture;
+
 + (instancetype)configuration {
     return [[[self alloc] init] autorelease];
 }
