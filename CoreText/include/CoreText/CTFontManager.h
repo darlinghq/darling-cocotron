@@ -3,7 +3,7 @@
 
 CF_IMPLICIT_BRIDGING_ENABLED
 
-typedef NS_ENUM(uint32_t, CTFontManagerScope)
+typedef CF_ENUM(uint32_t, CTFontManagerScope)
 {
     kCTFontManagerScopeNone = 0,
     kCTFontManagerScopeProcess = 1,
@@ -18,6 +18,9 @@ CORETEXT_EXPORT bool CTFontManagerRegisterGraphicsFont(CGFontRef font, CFErrorRe
 CORETEXT_EXPORT bool CTFontManagerUnregisterGraphicsFont(CGFontRef font, CFErrorRef *error);
 
 CORETEXT_EXPORT CFArrayRef CTFontManagerCopyAvailableFontFamilyNames(void);
+
+CORETEXT_EXPORT CTFontDescriptorRef CTFontManagerCreateFontDescriptorFromData(CFDataRef data);
+CORETEXT_EXPORT CFArrayRef CTFontManagerCreateFontDescriptorsFromData(CFDataRef data);
 
 CORETEXT_EXPORT bool CTFontManagerRegisterFontsForURL(CFURLRef fontURL, CTFontManagerScope scope, CFErrorRef * error);
 

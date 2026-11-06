@@ -69,6 +69,56 @@ FcConfig *O2FontSharedFontConfig() {
     return fontConfig;
 }
 
+NSArray *O2FontCopyInstalledFaces(NSString *family, NSString *postScriptName,
+                                  NSString *style, NSString *fullName)
+{
+    const char *properties[] = { FC_FAMILY, FC_POSTSCRIPT_NAME, FC_STYLE,
+                                 FC_FULLNAME, FC_FILE };
+    NSString *keys[] = { @"family", @"postScriptName", @"style", @"fullName",
+                         @"path" };
+    NSString *values[] = { family, postScriptName, style, fullName };
+    const int count = sizeof(properties) / sizeof(properties[0]);
+
+    NSMutableArray *result = [[NSMutableArray alloc] init];
+    FcPattern *pattern = FcPatternCreate();
+    FcObjectSet *objects = FcObjectSetBuild(FC_FAMILY, FC_POSTSCRIPT_NAME,
+                                            FC_STYLE, FC_FULLNAME, FC_FILE,
+                                            NULL);
+    if (pattern == NULL || objects == NULL)
+        goto out;
+
+    for (int i = 0; i < count - 1; i++) {
+        if (values[i] != nil)
+            FcPatternAddString(pattern, properties[i],
+                               (const FcChar8 *) [values[i] UTF8String]);
+    }
+
+    FcFontSet *fonts = FcFontList(O2FontSharedFontConfig(), pattern, objects);
+    for (int i = 0; fonts != NULL && i < fonts->nfont; i++) {
+        NSMutableDictionary *face = [[NSMutableDictionary alloc] init];
+        for (int j = 0; j < count; j++) {
+            FcChar8 *text = NULL;
+            if (FcPatternGetString(fonts->fonts[i], properties[j], 0, &text) !=
+                FcResultMatch)
+                continue;
+            NSString *value = [NSString stringWithUTF8String: (const char *) text];
+            if (value != nil)
+                [face setObject: value forKey: keys[j]];
+        }
+        [result addObject: face];
+        [face release];
+    }
+    if (fonts != NULL)
+        FcFontSetDestroy(fonts);
+
+out:
+    if (objects != NULL)
+        FcObjectSetDestroy(objects);
+    if (pattern != NULL)
+        FcPatternDestroy(pattern);
+    return result;
+}
+
 /* fontconfig ranks bitmap faces (the X11 .pcf fonts) above outline fonts for some generic
  * families, and a bitmap face has units_per_EM == 0, so every metric derived from it divides
  * by zero. Return the first scalable face of the sorted set, or the first face if none is. */
