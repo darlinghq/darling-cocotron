@@ -28,6 +28,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (CGWindow *) platformWindow;
 - (CGContextRef) cgContext;
 - (BOOL) _isActive;
+- (BOOL) _isHiddenForDeactivation;
 - (void) _setVisible: (BOOL) visible;
 - (NSArray *) _draggedTypes;
 - (void) _addCursorRect: (NSRect) rect

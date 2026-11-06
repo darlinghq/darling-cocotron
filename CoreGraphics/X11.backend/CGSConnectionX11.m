@@ -52,6 +52,17 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type, CFDataRef a
 
 -(instancetype) initWithConnectionID:(CGSConnectionID)connId
 {
+	// EGL and the run loop may use this Display from other threads, so Xlib
+	// has to be made thread-safe before the first Xlib call. This connection
+	// can be opened before AppKit opens its own.
+	if (!XInitThreads())
+	{
+		NSLog(@"CGSConnectionX11: XInitThreads() failed\n");
+
+		[self release];
+		return nil;
+	}
+
 	_display = XOpenDisplay(NULL);
 	if (!_display)
 		_display = XOpenDisplay(":0");
