@@ -24,6 +24,7 @@
 #import <CoreGraphics/CGSWindow.h>
 #import <CoreGraphics/CGSSurface.h>
 #include <pthread.h>
+#include <math.h>
 
 static NSMutableDictionary<NSNumber*, CGSConnection*>* g_connections = nil;
 static Boolean g_denyConnections = FALSE;
@@ -273,6 +274,50 @@ CGError CGSMoveWindow(CGSConnectionID cid, CGSWindowID wid, const CGPoint *windo
 extern CGError CGSSetWindowOpacity(CGSConnectionID cid, CGSWindowID wid, bool isOpaque);
 extern CGError CGSSetWindowAlpha(CGSConnectionID cid, CGSWindowID wid, float alpha);
 extern CGError CGSSetWindowLevel(CGSConnectionID cid, CGSWindowID wid, CGWindowLevel level);
+
+CGError CGSSetWindowAlpha(CGSConnectionID cid, CGSWindowID wid, float alpha)
+{
+	CGSWindow* window;
+	CGError err = getWindow(cid, wid, &window);
+
+	if (err != kCGSErrorSuccess)
+		return err;
+	if (isnan(alpha))
+		return kCGErrorIllegalArgument;
+
+	return [window setAlpha: fminf(fmaxf(alpha, 0.0f), 1.0f)];
+}
+
+// Windows are not composited, so they cannot be transformed or warped. The
+// identity transform and removing a warp (a NULL mesh) leave a window as it
+// is and succeed; anything else is not implemented.
+CGError CGSSetWindowTransform(CGSConnectionID cid, CGSWindowID wid, CGAffineTransform transform)
+{
+	CGSWindow* window;
+	CGError err = getWindow(cid, wid, &window);
+
+	if (err != kCGSErrorSuccess)
+		return err;
+	return CGAffineTransformIsIdentity(transform) ? kCGSErrorSuccess : kCGErrorNotImplemented;
+}
+
+CGError CGSSetWindowWarp(CGSConnectionID cid, CGSWindowID wid, int w, int h, float *mesh)
+{
+	CGSWindow* window;
+	CGError err = getWindow(cid, wid, &window);
+
+	if (err != kCGSErrorSuccess)
+		return err;
+	return (mesh == NULL) ? kCGSErrorSuccess : kCGErrorNotImplemented;
+}
+
+// Window contents are never captured (see CGDisplayStream), so any shape is
+// already excluded from capture.
+CGError CGSSetWindowCaptureExcludeShape(CGSConnectionID cid, CGSWindowID wid, CGRegionRef shape)
+{
+	CGSWindow* window;
+	return getWindow(cid, wid, &window);
+}
 
 CGError CGSGetWindowProperty(CGSConnectionID cid, CGSWindowID wid, CFStringRef key, CFTypeRef *outValue)
 {

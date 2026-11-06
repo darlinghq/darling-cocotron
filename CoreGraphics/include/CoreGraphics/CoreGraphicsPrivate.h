@@ -53,6 +53,11 @@ extern void CGSRegionRetain(CGSRegionRef reg);
 extern void CGSRegionToRect(CGSRegionRef reg, CGRect* rect); // This is non-standard. We should support non-rectangular regions instead
 extern bool CGSRegionIsRectangular(CGSRegionRef reg);
 
+// CGRegion (the same region objects as CGSRegion)
+typedef CGSRegionRef CGRegionRef;
+extern CGRegionRef CGRegionCreateWithRect(CGRect rect);
+extern void CGRegionRelease(CGRegionRef region);
+
 extern CGError CGSNewWindow(CGSConnectionID conn, CFIndex flags, float, float, const CGSRegionRef region, CGSWindowID* windowID);
 extern CGError CGSReleaseWindow(CGSConnectionID cid, CGSWindowID wid);
 
@@ -62,6 +67,9 @@ extern CGError CGSMoveWindow(CGSConnectionID cid, CGSWindowID wid, const CGPoint
 extern CGError CGSSetWindowOpacity(CGSConnectionID cid, CGSWindowID wid, bool isOpaque);
 extern CGError CGSSetWindowAlpha(CGSConnectionID cid, CGSWindowID wid, float alpha);
 extern CGError CGSSetWindowLevel(CGSConnectionID cid, CGSWindowID wid, CGWindowLevel level);
+extern CGError CGSSetWindowTransform(CGSConnectionID cid, CGSWindowID wid, CGAffineTransform transform);
+extern CGError CGSSetWindowWarp(CGSConnectionID cid, CGSWindowID wid, int w, int h, float *mesh);
+extern CGError CGSSetWindowCaptureExcludeShape(CGSConnectionID cid, CGSWindowID wid, CGRegionRef shape);
 
 // Subwindows (for CGL)
 extern CGError CGSAddSurface(CGSConnectionID cid, CGSWindowID wid, CGSSurfaceID *sid);

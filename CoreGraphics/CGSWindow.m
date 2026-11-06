@@ -77,6 +77,10 @@ const CFStringRef kCGSWindowTitle = CFSTR("WindowTitle");
     NSInvalidAbstractInvocation();
 }
 
+- (CGError) setAlpha: (CGFloat) alpha {
+    return kCGErrorNotImplemented;
+}
+
 - (CGError) setProperty: (CFStringRef) key value: (CFTypeRef) value {
     NSInvalidAbstractInvocation();
 }

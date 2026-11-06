@@ -43,6 +43,9 @@
 -(CGError) moveTo:(const CGPoint*) point;
 -(CGError) setRegion:(CGSRegionRef) region;
 -(CGError) getRect:(CGRect*) outRect;
+// Whole-window opacity, 0 to 1. The default implementation reports
+// kCGErrorNotImplemented.
+-(CGError) setAlpha:(CGFloat) alpha;
 -(CGError) setProperty:(CFStringRef) key value:(CFTypeRef) value;
 -(CGError) getProperty:(CFStringRef) key value:(CFTypeRef*) value;
 -(void) invalidate;
