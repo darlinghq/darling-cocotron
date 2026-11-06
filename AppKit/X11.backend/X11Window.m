@@ -733,12 +733,16 @@ static BOOL windowManagerIsRunning(Display *display) {
 
 - (void) makeKey {
     [self ensureMapped];
-    XRaiseWindow(_display, _window);
     // FocusIn activates the NSWindow, which makes it key again and ends up here.
-    // Requesting focus from that path would answer every (possibly stale) FocusIn
-    // with a new focus change, and two windows would bounce focus forever.
-    if (!_receivingFocus)
-        [self requestInputFocus];
+    // The focus change came from the window manager, which also stacks the
+    // window, so leave both alone. Answering a FocusIn that is already stale
+    // (focus has moved on since) with a raise or a focus request moves focus
+    // back: window managers that focus a window that raises itself, xfwm4 among
+    // them, then bounce focus between two windows forever.
+    if (_receivingFocus)
+        return;
+    XRaiseWindow(_display, _window);
+    [self requestInputFocus];
 }
 
 - (void) makeMain {
