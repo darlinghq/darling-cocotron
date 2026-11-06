@@ -20,6 +20,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/AppKitExport.h>
 #import <Foundation/Foundation.h>
+#import <CoreGraphics/CGEventTypes.h>
 
 @class NSWindow, NSGraphicsContext, NSTrackingArea;
 
@@ -208,6 +209,30 @@ enum : unsigned int {
 
 enum { NSApplicationActivated = 0, NSApplicationDeactivated = 1 };
 
+typedef NS_ENUM(short, NSEventSubtype) {
+    NSEventSubtypeMouseEvent = 0,
+    NSEventSubtypeTabletPoint = 1,
+    NSEventSubtypeTabletProximity = 2,
+    NSEventSubtypeTouch = 3,
+};
+
+enum {
+    NSMouseEventSubtype = NSEventSubtypeMouseEvent,
+    NSTabletPointEventSubtype = NSEventSubtypeTabletPoint,
+    NSTabletProximityEventSubtype = NSEventSubtypeTabletProximity,
+    NSTouchEventSubtype = NSEventSubtypeTouch,
+};
+
+typedef NS_OPTIONS(NSUInteger, NSEventPhase) {
+    NSEventPhaseNone = 0,
+    NSEventPhaseBegan = 0x1 << 0,
+    NSEventPhaseStationary = 0x1 << 1,
+    NSEventPhaseChanged = 0x1 << 2,
+    NSEventPhaseEnded = 0x1 << 3,
+    NSEventPhaseCancelled = 0x1 << 4,
+    NSEventPhaseMayBegin = 0x1 << 5,
+};
+
 @interface NSEvent : NSObject {
     NSEventType _type;
     NSTimeInterval _timestamp;
@@ -297,6 +322,15 @@ enum { NSApplicationActivated = 0, NSApplicationDeactivated = 1 };
 - (CGFloat) deltaX;
 - (CGFloat) deltaY;
 - (CGFloat) deltaZ;
+
+- (NSEventPhase) phase;
+- (NSEventPhase) momentumPhase;
+- (BOOL) hasPreciseScrollingDeltas;
+- (CGFloat) scrollingDeltaX;
+- (CGFloat) scrollingDeltaY;
+- (BOOL) isDirectionInvertedFromDevice;
+
+- (CGEventRef) CGEvent;
 
 - (NSString *) characters;
 - (NSString *) charactersIgnoringModifiers;

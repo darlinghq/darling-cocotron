@@ -267,6 +267,37 @@ NSEvent *NSEventApplyLocalMonitors(NSEvent *event) {
     return 0;
 }
 
+// No backend produces gestures or precise (trackpad) scrolling yet: every
+// scroll event is a wheel notch measured in lines, with no phase, as a
+// mouse wheel reports on macOS.
+- (NSEventPhase) phase {
+    return NSEventPhaseNone;
+}
+
+- (NSEventPhase) momentumPhase {
+    return NSEventPhaseNone;
+}
+
+- (BOOL) hasPreciseScrollingDeltas {
+    return NO;
+}
+
+- (CGFloat) scrollingDeltaX {
+    return [self deltaX];
+}
+
+- (CGFloat) scrollingDeltaY {
+    return [self deltaY];
+}
+
+- (BOOL) isDirectionInvertedFromDevice {
+    return NO;
+}
+
+- (CGEventRef) CGEvent {
+    return NULL;
+}
+
 - (CGFloat) deltaZ {
     return 0;
 }
