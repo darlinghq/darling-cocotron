@@ -9,6 +9,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 #include <CoreFoundation/CoreFoundation.h>
 
 #import <CoreGraphics/CGGeometry.h>
+#import <CoreGraphics/CGDataProvider.h>
 
 typedef struct CF_BRIDGED_TYPE(id) O2ColorSpace *CGColorSpaceRef;
 
@@ -31,6 +32,7 @@ COREGRAPHICS_EXPORT const CFStringRef kCGColorSpaceACESCGLinear;
 COREGRAPHICS_EXPORT const CFStringRef kCGColorSpaceITUR_709;
 COREGRAPHICS_EXPORT const CFStringRef kCGColorSpaceITUR_2020;
 COREGRAPHICS_EXPORT const CFStringRef kCGColorSpaceITUR_2100_PQ;
+COREGRAPHICS_EXPORT const CFStringRef kCGColorSpaceITUR_2100_HLG;
 COREGRAPHICS_EXPORT const CFStringRef kCGColorSpaceROMMRGB;
 COREGRAPHICS_EXPORT const CFStringRef kCGColorSpaceDCIP3;
 COREGRAPHICS_EXPORT const CFStringRef kCGColorSpaceExtendedSRGB;
@@ -74,5 +76,9 @@ COREGRAPHICS_EXPORT size_t CGColorSpaceGetNumberOfComponents(CGColorSpaceRef sel
 COREGRAPHICS_EXPORT CGColorSpaceRef CGColorSpaceCreateWithName(CFStringRef name);
 COREGRAPHICS_EXPORT CFStringRef CGColorSpaceGetName(CGColorSpaceRef colorSpace);
 COREGRAPHICS_EXPORT CFStringRef CGColorSpaceCopyName(CGColorSpaceRef colorSpace);
+COREGRAPHICS_EXPORT CFDataRef CGColorSpaceCopyICCData(CGColorSpaceRef colorSpace);
+COREGRAPHICS_EXPORT CGColorSpaceRef CGColorSpaceCreateICCBased(
+    size_t nComponents, const CGFloat *range, CGDataProviderRef profile,
+    CGColorSpaceRef alternate);
 
 CF_IMPLICIT_BRIDGING_DISABLED

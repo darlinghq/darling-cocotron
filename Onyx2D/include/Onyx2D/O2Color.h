@@ -62,5 +62,7 @@ O2PatternRef O2ColorGetPattern(O2ColorRef self);
 int O2ColorConvertComponentsToDeviceRGB(O2ColorSpaceRef inputSpace,
                                         const O2Float *input, O2Float *output);
 O2ColorRef O2ColorConvertToDeviceRGB(O2ColorRef self);
+O2ColorRef O2ColorCreateCopyByMatchingToColorSpace(O2ColorSpaceRef colorSpace,
+                                                   O2ColorRef color);
 
 @end

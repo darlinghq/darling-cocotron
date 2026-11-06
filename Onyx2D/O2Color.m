@@ -296,6 +296,64 @@ int O2ColorConvertComponentsToDeviceRGB(O2ColorSpaceRef inputSpace,
     return 0;
 }
 
+// Converts through device RGB, which is how Onyx2D treats every color space
+// it can draw with; spaces it cannot convert from or to give NULL.
+O2ColorRef O2ColorCreateCopyByMatchingToColorSpace(O2ColorSpaceRef colorSpace,
+                                                   O2ColorRef color)
+{
+    if (colorSpace == NULL || color == NULL)
+        return NULL;
+    if (O2ColorGetPattern(color) != NULL)
+        return NULL;
+
+    O2ColorSpaceRef source = O2ColorGetColorSpace(color);
+    O2ColorSpaceModel sourceModel = O2ColorSpaceGetModel(source);
+    O2ColorSpaceModel targetModel = O2ColorSpaceGetModel(colorSpace);
+    const O2Float *components = O2ColorGetComponents(color);
+
+    if (sourceModel == targetModel &&
+        (targetModel == kO2ColorSpaceModelMonochrome ||
+         targetModel == kO2ColorSpaceModelRGB ||
+         targetModel == kO2ColorSpaceModelCMYK))
+        return O2ColorCreate(colorSpace, components);
+
+    O2Float rgb[4];
+    if (!O2ColorConvertComponentsToDeviceRGB(source, components, rgb))
+        return NULL;
+
+    O2Float result[5];
+    switch (targetModel) {
+    case kO2ColorSpaceModelMonochrome:
+        // Rec. 709 luma weights.
+        result[0] = 0.2126f * rgb[0] + 0.7152f * rgb[1] + 0.0722f * rgb[2];
+        result[1] = rgb[3];
+        break;
+
+    case kO2ColorSpaceModelRGB:
+        result[0] = rgb[0];
+        result[1] = rgb[1];
+        result[2] = rgb[2];
+        result[3] = rgb[3];
+        break;
+
+    case kO2ColorSpaceModelCMYK: {
+        // The inverse of the CMYK to RGB conversion above, with full black
+        // generation.
+        O2Float maxRGB = MAX(rgb[0], MAX(rgb[1], rgb[2]));
+        O2Float k = 1 - maxRGB;
+        for (int i = 0; i < 3; i++)
+            result[i] = (maxRGB > 0) ? (maxRGB - rgb[i]) / maxRGB : 0;
+        result[3] = k;
+        result[4] = rgb[3];
+        break;
+    }
+
+    default:
+        return NULL;
+    }
+    return O2ColorCreate(colorSpace, result);
+}
+
 O2ColorRef O2ColorConvertToDeviceRGB(O2ColorRef self) {
     O2ColorSpaceRef colorSpace = O2ColorGetColorSpace(self);
     O2ColorSpaceModel model = O2ColorSpaceGetModel(colorSpace);
