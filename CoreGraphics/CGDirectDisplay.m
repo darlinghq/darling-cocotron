@@ -596,7 +596,9 @@ CGError CGAssociateMouseAndMouseCursorPosition(boolean_t connected) {
     if (!display)
         return kCGErrorInvalidConnection;
 
-    [display grabMouse: connected];
+    // Disconnecting the mouse from the cursor is what -grabMouse: YES does:
+    // the cursor stays put and the mouse only produces deltas.
+    [display grabMouse: !connected];
     return kCGErrorSuccess;
 }
 
