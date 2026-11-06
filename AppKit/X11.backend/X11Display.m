@@ -1182,7 +1182,11 @@ static NSInteger cocoaButtonNumber(unsigned int xButton) {
     case Button1: return 0;
     case Button3: return 1;
     case Button2: return 2;
-    default: return (NSInteger) xButton - Button1 + 2;
+    default:
+        // X buttons 4 to 7 are the two wheels and never get here. The extra
+        // buttons start at 8 (back) and 9 (forward), which Cocoa numbers 3
+        // and 4, right after the middle button.
+        return xButton >= 8 ? (NSInteger) xButton - 5 : (NSInteger) xButton;
     }
 }
 
