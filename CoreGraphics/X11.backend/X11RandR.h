@@ -16,13 +16,21 @@
 #include <X11/extensions/Xrandr.h>
 #include <stdbool.h>
 
-#define X11_RANDR_EVENT_MASK                                                                                 \
-    (RRScreenChangeNotifyMask | RRCrtcChangeNotifyMask | RROutputChangeNotifyMask | RROutputPropertyNotifyMask)
+/* Output properties (the EDID among them) are not part of the layout. The X server rewrites them whenever it
+ * polls the outputs, so a client that re-read the layout on every property event could keep the server busy. */
+#define X11_RANDR_EVENT_MASK (RRScreenChangeNotifyMask | RRCrtcChangeNotifyMask | RROutputChangeNotifyMask)
 
-/* Whether event reports a change of the screen or monitor layout that the backend selected with
- * X11_RANDR_EVENT_MASK. eventBase is 0 when the server has no RandR. */
+/* Whether event reports a change of the screen or monitor layout: RRScreenChangeNotify, or an RRNotify for a
+ * CRTC or output change. eventBase is 0 when the server has no RandR. */
 static inline bool X11RandRIsLayoutChange(const XEvent *event, int eventBase) {
-    return eventBase != 0 && (event->type == eventBase + RRScreenChangeNotify || event->type == eventBase + RRNotify);
+    if (eventBase == 0)
+        return false;
+    if (event->type == eventBase + RRScreenChangeNotify)
+        return true;
+    if (event->type != eventBase + RRNotify)
+        return false;
+    int subtype = ((const XRRNotifyEvent *) event)->subtype;
+    return subtype == RRNotify_CrtcChange || subtype == RRNotify_OutputChange;
 }
 
 /* Applies a layout-change event to Xlib's cached screen size. Returns whether event was one. */

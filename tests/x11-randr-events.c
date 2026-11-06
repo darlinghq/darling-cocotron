@@ -40,6 +40,13 @@ int main(void) {
     int oldWidth = DisplayWidth(backend, 0), oldHeight = DisplayHeight(backend, 0);
     CHECK(!X11RandRIsLayoutChange(&(XEvent){.type = 0}, eventBase), "an unrelated event");
     CHECK(!X11RandRIsLayoutChange(&(XEvent){.type = RRNotify}, 0), "no RandR, no layout change");
+    XEvent propertyEvent;
+    memset(&propertyEvent, 0, sizeof propertyEvent);
+    ((XRRNotifyEvent *) &propertyEvent)->type = eventBase + RRNotify;
+    ((XRRNotifyEvent *) &propertyEvent)->subtype = RRNotify_OutputProperty;
+    CHECK(!X11RandRIsLayoutChange(&propertyEvent, eventBase), "an output property change is not a layout change");
+    ((XRRNotifyEvent *) &propertyEvent)->subtype = RRNotify_OutputChange;
+    CHECK(X11RandRIsLayoutChange(&propertyEvent, eventBase), "an output change is a layout change");
 
     /* Another client resizes the screen and re-creates the monitor, as a display settings tool would. */
     Window otherRoot = DefaultRootWindow(other);
