@@ -347,8 +347,10 @@ static NSDictionary *modeInfoToDictionary(const XRRModeInfo *mi, int depth) {
             @"Depth" : @(defaultDepth)
         } ];
     } else {
-        XRRScreenResources *screen =
-                XRRGetScreenResources(_display, DefaultRootWindow(_display));
+        XRRScreenResources *screen = XRRGetScreenResourcesCurrent(
+                _display, DefaultRootWindow(_display));
+        if (screen == NULL)
+            return nil;
 
         if (screenIndex < 0 || screenIndex >= screen->noutput) {
             XRRFreeScreenResources(screen);
@@ -398,8 +400,10 @@ static NSDictionary *modeInfoToDictionary(const XRRModeInfo *mi, int depth) {
     NSDictionary *dict = @{};
 
     if (XRRQueryExtension(_display, &eventBase, &errorBase)) {
-        XRRScreenResources *screen =
-                XRRGetScreenResources(_display, DefaultRootWindow(_display));
+        XRRScreenResources *screen = XRRGetScreenResourcesCurrent(
+                _display, DefaultRootWindow(_display));
+        if (screen == NULL)
+            return dict;
 
         if (screenIndex < 0 || screenIndex >= screen->noutput) {
             XRRFreeScreenResources(screen);

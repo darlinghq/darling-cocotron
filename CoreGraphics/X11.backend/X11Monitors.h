@@ -60,7 +60,11 @@ static inline X11Monitor *X11MonitorsCopy(Display *display, int *count, int *pri
     if (!XRRQueryExtension(display, &eventBase, &errorBase))
         return NULL;
     Window root = DefaultRootWindow(display);
-    XRRScreenResources *resources = XRRGetScreenResources(display, root);
+    /* The configuration the server already knows. XRRGetScreenResources would make the server poll every
+     * output first, which is slow, and on some drivers the poll itself reports output changes, so a client
+     * that re-reads the layout on those events would never stop polling. The server polls on hotplug by
+     * itself and then sends the RandR events that make callers read this again. */
+    XRRScreenResources *resources = XRRGetScreenResourcesCurrent(display, root);
     if (resources == NULL)
         return NULL;
     X11Monitor *monitors = calloc(resources->noutput > 0 ? (size_t) resources->noutput : 1, sizeof *monitors);
