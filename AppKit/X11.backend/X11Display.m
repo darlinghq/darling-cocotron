@@ -270,47 +270,49 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type,
 
     for (int n = 0; n < count; n++) {
         int i = order[n];
-        NSScreen *nsscreen;
 
-        if (monitors[i].active) {
-            // The frame is in Cocoa's global space, y up from the main
-            // monitor's bottom-left corner, like window frames.
-            X11Frame global = X11FrameFromRoot(
-                    [self primaryFrameInPoints],
-                    (X11Frame){monitors[i].x, monitors[i].y,
-                               monitors[i].width, monitors[i].height});
-            NSRect frame = NSMakeRect(global.x, global.y, global.width,
-                                      global.height);
+        // An output without a CRTC and mode (a disconnected or switched-off
+        // connector) shows nothing, so it is not a screen.
+        if (!monitors[i].active)
+            continue;
 
-            nsscreen = [[[NSScreen alloc] initWithFrame: frame
-                                           visibleFrame: frame] autorelease];
+        // The frame is in Cocoa's global space, y up from the main
+        // monitor's bottom-left corner, like window frames.
+        X11Frame global = X11FrameFromRoot(
+                [self primaryFrameInPoints],
+                (X11Frame){monitors[i].x, monitors[i].y,
+                           monitors[i].width, monitors[i].height});
+        NSRect frame = NSMakeRect(global.x, global.y, global.width,
+                                  global.height);
 
-            Atom actualType;
-            unsigned long nitems, bytesAfter;
-            int actualFormat;
-            unsigned char *prop = NULL;
+        NSScreen *nsscreen =
+                [[[NSScreen alloc] initWithFrame: frame
+                                    visibleFrame: frame] autorelease];
 
-            if (XRRGetOutputProperty(_display, monitors[i].output, edidAtom, 0,
-                                     100, FALSE, FALSE, AnyPropertyType,
-                                     &actualType, &actualFormat, &nitems,
-                                     &bytesAfter, &prop) == Success) {
-                if (prop && actualFormat == 8 && nitems > 0)
-                    [nsscreen setEdid: [NSData dataWithBytes: prop
-                                                      length: nitems]];
-            }
-            if (prop)
-                XFree(prop);
-        } else {
-            nsscreen = [[[NSScreen alloc] initWithFrame: NSZeroRect
-                                           visibleFrame: NSZeroRect]
-                    autorelease];
+        Atom actualType;
+        unsigned long nitems, bytesAfter;
+        int actualFormat;
+        unsigned char *prop = NULL;
+
+        if (XRRGetOutputProperty(_display, monitors[i].output, edidAtom, 0,
+                                 100, FALSE, FALSE, AnyPropertyType,
+                                 &actualType, &actualFormat, &nitems,
+                                 &bytesAfter, &prop) == Success) {
+            if (prop && actualFormat == 8 && nitems > 0)
+                [nsscreen setEdid: [NSData dataWithBytes: prop
+                                                  length: nitems]];
         }
+        if (prop)
+            XFree(prop);
         [nsscreen setCgDirectDisplayID: X11MonitorDisplayID(i)];
         [retval addObject: nsscreen];
     }
 
     free(order);
     free(monitors);
+
+    if ([retval count] == 0)
+        return [self rootScreenFallback];
 
     NSArray* array = [NSArray arrayWithArray: retval];
     _lastScreens = [array retain];
