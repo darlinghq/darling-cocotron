@@ -391,6 +391,18 @@ static NSData *makeWindowIcon() {
 
     [self setStyleMaskInternal: mask force: NO];
 
+    // The window manager draws the frame of a titled window and none for a
+    // borderless one, so the decoration hint follows the style.
+    BOOL borderless = mask == NSBorderlessWindowMask;
+    if (borderless != (_styleMask == NSBorderlessWindowMask)) {
+        if (borderless)
+            [[self class] removeDecorationForWindow: _window
+                                          onDisplay: _display];
+        else
+            XDeleteProperty(_display, _window,
+                            XInternAtom(_display, "_MOTIF_WM_HINTS", False));
+    }
+
     _styleMask = mask;
 }
 
