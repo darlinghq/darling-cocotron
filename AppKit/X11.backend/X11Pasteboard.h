@@ -37,6 +37,11 @@ along with Darling.  If not, see <http://www.gnu.org/licenses/>.
     Atom _receivingProperty;
     Atom _incrAtom;
     Atom _targetsAtom;
+    Atom _textAtom;
+    Atom _utf8StringAtom;
+    // The property type of the last reply read, which for TEXT says what
+    // encoding the owner chose.
+    Atom _receivedType;
     Atom _awaitingTarget;
     NSArray<NSPasteboardType> *_remoteTypes;
     Window _remoteOwner;

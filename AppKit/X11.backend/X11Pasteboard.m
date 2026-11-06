@@ -105,6 +105,8 @@ static size_t MaximumPropertyBytes(Display *display) {
     _receivingProperty = XInternAtom(_display, "RECEIVING_PROPERTY", False);
     _incrAtom = XInternAtom(_display, "INCR", False);
     _targetsAtom = XInternAtom(_display, "TARGETS", False);
+    _textAtom = XInternAtom(_display, "TEXT", False);
+    _utf8StringAtom = XInternAtom(_display, "UTF8_STRING", False);
     _incrTransfers = [[NSMutableDictionary alloc] init];
 
     int screen = DefaultScreen(_display);
@@ -271,7 +273,10 @@ static size_t MaximumPropertyBytes(Display *display) {
         return nil;
     }
 
-    if (type != target) {
+    // TEXT lets the owner pick the encoding, and the property type says which.
+    _receivedType = type;
+    if (type != target && !(target == _textAtom &&
+                            (type == XA_STRING || type == _utf8StringAtom))) {
         // The bytes would be read as a flavour nobody asked for.
         NSLog(@"X11 pasteboard: the selection owner answered one target with the "
               "type of another");
@@ -510,8 +515,24 @@ static size_t MaximumPropertyBytes(Display *display) {
             + SelectionTimeout;
     for (NSString *target in [X11Pasteboard targetsForType: type]) {
         Atom targetAtom = XInternAtom(_display, [target UTF8String], False);
+        _receivedType = None;
         NSData *data = [self receiveDataForTarget: targetAtom format: 8
                                          deadline: deadline];
+        if (data == nil)
+            continue;
+        if (![type isEqual: NSStringPboardType])
+            return data;
+        // Text is kept as UTF-8. ICCCM's STRING is ISO Latin-1, and a TEXT
+        // reply is in whichever encoding its type names.
+        if (_receivedType == XA_STRING) {
+            NSString *text = [[[NSString alloc]
+                    initWithData: data
+                        encoding: NSISOLatin1StringEncoding] autorelease];
+            data = [text dataUsingEncoding: NSUTF8StringEncoding];
+        } else if (targetAtom == _textAtom && _receivedType != _utf8StringAtom) {
+            // COMPOUND_TEXT or something else we cannot decode.
+            continue;
+        }
         if (data != nil)
             return data;
     }
@@ -521,6 +542,8 @@ static size_t MaximumPropertyBytes(Display *display) {
 
 - (NSString *) stringForType: (NSPasteboardType) type {
     NSData *data = [self dataForType: type];
+    if (data == nil)
+        return nil;
 
     NSStringEncoding encoding = NSUnicodeStringEncoding;
     if ([type isEqual: NSStringPboardType]) {
@@ -752,12 +775,33 @@ static size_t MaximumPropertyBytes(Display *display) {
         return;
     }
 
+    // Text is held as UTF-8. STRING promises ISO Latin-1, so text that does not
+    // fit is refused and the requestor can ask for UTF8_STRING instead; TEXT
+    // leaves the encoding to the owner, and the reply's type names it.
+    Atom replyType = event->target;
+    if ([type isEqual: NSStringPboardType]) {
+        if (event->target == XA_STRING) {
+            NSString *text = [[[NSString alloc]
+                    initWithData: data
+                        encoding: NSUTF8StringEncoding] autorelease];
+            data = [text dataUsingEncoding: NSISOLatin1StringEncoding];
+            if (data == nil) {
+                reply(NO);
+                return;
+            }
+        } else if (event->target == _textAtom) {
+            replyType = _utf8StringAtom;
+        }
+    }
+
     if ([data length] > MaximumPropertyBytes(_display)) {
         // ICCCM 2.7.2: more than fits in one property write, so hand it over as
         // INCR. The marker and the reply go out now; -propertyNotify: paces the
         // chunks from the requestor's acknowledgements, so nothing here waits on
         // the peer.
-        [self startIncrementalTransferForRequest: event data: data];
+        [self startIncrementalTransferForRequest: event
+                                            type: replyType
+                                            data: data];
         reply(YES);
         return;
     }
@@ -767,7 +811,7 @@ static size_t MaximumPropertyBytes(Display *display) {
         reply(NO);
         return;
     }
-    XChangeProperty(_display, event->requestor, targetProperty, event->target,
+    XChangeProperty(_display, event->requestor, targetProperty, replyType,
                     8, PropModeReplace, [data bytes], [data length]);
 
     reply(YES);
@@ -829,6 +873,7 @@ static size_t MaximumPropertyBytes(Display *display) {
 // requestor's window; this only has to write the INCR marker the requestor is
 // waiting for and subscribe to the deletions that pace it.
 - (void) startIncrementalTransferForRequest: (XSelectionRequestEvent *) event
+                                       type: (Atom) type
                                        data: (NSData *) data {
     // ICCCM 2.7.2: the owner writes the property with type INCR and the total
     // length as its value, and the requestor then deletes the property to say it
@@ -849,7 +894,7 @@ static size_t MaximumPropertyBytes(Display *display) {
     NSNumber *requestor = [NSNumber numberWithUnsignedLong: event->requestor];
     _incrTransfers[requestor] =
             [[[X11IncrTransfer alloc] initWithProperty: property
-                                                   type: event->target
+                                                   type: type
                                                    data: data] autorelease];
 
     XFlush(_display);
