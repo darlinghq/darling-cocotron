@@ -123,6 +123,7 @@ static NSSavePanel *_newPanel = nil;
     [_accessoryView release];
     [_nameField release];
     [_sheetCompletionHandler release];
+    [_modelessCompletionHandler release];
     [super dealloc];
 }
 
@@ -264,6 +265,15 @@ static NSSavePanel *_newPanel = nil;
 - (void) _endWithCode: (NSModalResponse) code {
     if (_runsAsSheet) {
         [NSApp endSheet: self returnCode: code];
+    } else if (_runsModeless) {
+        void (^handler)(NSModalResponse) = _modelessCompletionHandler;
+        _modelessCompletionHandler = nil;
+        _runsModeless = NO;
+        [self orderOut: nil];
+        if (handler != nil) {
+            handler(code);
+            [handler release];
+        }
     } else {
         if ([NSApp modalWindow] == self)
             [NSApp stopModalWithCode: code];
@@ -271,17 +281,27 @@ static NSSavePanel *_newPanel = nil;
     }
 }
 
-// DARLING NOTE: if a key window is active, presents as an asynchronous sheet.
-// Otherwise, runs modally to satisfy dialog callers awaiting synchronous results.
+// Presents the panel as a modeless window and returns at once; the handler
+// gets the button the user pressed once the panel is dismissed. A display
+// with its own panels has no modeless form, so it runs them modally.
 - (void) beginWithCompletionHandler: (void (^)(NSModalResponse result)) handler {
-    NSWindow *keyWindow = [NSApp keyWindow];
-    if (keyWindow != nil && keyWindow != self) {
-        [self beginSheetModalForWindow: keyWindow completionHandler: handler];
-    } else {
+    if (_runsAsSheet || _runsModeless)
+        [NSException raise: NSInternalInconsistencyException
+                    format: @"-[%@ %@]: the panel is already running",
+                            [self class], NSStringFromSelector(_cmd)];
+    if ([[NSDisplay currentDisplay]
+                implementsCustomPanelForClass: [self class]]) {
         NSModalResponse result = [self runModal];
-        if (handler)
+        if (handler != nil)
             handler(result);
+        return;
     }
+
+    _modelessCompletionHandler = [handler copy];
+    _runsModeless = YES;
+    [self center];
+    [_nameField selectText: self];
+    [self makeKeyAndOrderFront: nil];
 }
 
 - (void) setNameFieldLabel: (NSString *) label {
@@ -323,9 +343,9 @@ static NSSavePanel *_newPanel = nil;
 - (void) beginSheetModalForWindow: (NSWindow *) window
                 completionHandler: (void (^)(NSModalResponse result)) handler
 {
-    if (_runsAsSheet)
+    if (_runsAsSheet || _runsModeless)
         [NSException raise: NSInternalInconsistencyException
-                    format: @"-[%@ %@]: the panel is already a sheet",
+                    format: @"-[%@ %@]: the panel is already running",
                             [self class], NSStringFromSelector(_cmd)];
     if (window == nil) {
         NSModalResponse result = [self runModal];

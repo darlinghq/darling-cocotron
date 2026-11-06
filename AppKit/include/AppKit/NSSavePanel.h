@@ -50,6 +50,8 @@ enum {
     BOOL _runsAsSheet;
     NSUInteger _styleMaskBeforeSheet;
     id _sheetCompletionHandler;
+    BOOL _runsModeless;
+    id _modelessCompletionHandler;
 }
 
 @property (copy) NSString *nameFieldStringValue;
