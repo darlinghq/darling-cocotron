@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Host test for tests/coregraphics-window-level-for-key.sh: compares CGWindowLevelForKey with the
-// level constants of CoreGraphics/include/CoreGraphics/CGWindowLevel.h for every CGWindowLevelKey.
+// level values the macOS CGWindowLevel.h documents for every CGWindowLevelKey.
 #include <CoreGraphics/CGWindowLevel.h>
 #include <stdio.h>
 
@@ -19,32 +19,34 @@ static void expect(const char *name, CGWindowLevelKey key, CGWindowLevel level)
 
 int main(void)
 {
-    /* Keys the header has a level constant for. */
-    KEY(kCGNormalWindowLevelKey, kCGNormalWindowLevel);
+    /* The levels the public macOS CGWindowLevel.h documents for each key. */
+    KEY(kCGBaseWindowLevelKey, INT32_MIN);
+    KEY(kCGMinimumWindowLevelKey, INT32_MIN + 5);
+    KEY(kCGDesktopWindowLevelKey, INT32_MIN + 25);
+    KEY(kCGBackstopMenuLevelKey, -20);
+    KEY(kCGNormalWindowLevelKey, 0);
+    KEY(kCGFloatingWindowLevelKey, 3);
+    KEY(kCGTornOffMenuWindowLevelKey, 3);
+    KEY(kCGDockWindowLevelKey, 20);
+    KEY(kCGMainMenuWindowLevelKey, 24);
+    KEY(kCGStatusWindowLevelKey, 25);
+    KEY(kCGModalPanelWindowLevelKey, 8);
+    KEY(kCGPopUpMenuWindowLevelKey, 101);
+    KEY(kCGDraggingWindowLevelKey, 500);
+    KEY(kCGScreenSaverWindowLevelKey, 1000);
+    KEY(kCGMaximumWindowLevelKey, INT32_MAX - 16);
+    KEY(kCGOverlayWindowLevelKey, 102);
+    KEY(kCGHelpWindowLevelKey, 200);
+    KEY(kCGUtilityWindowLevelKey, 19);
+    KEY(kCGDesktopIconWindowLevelKey, INT32_MIN + 45);
+    KEY(kCGCursorWindowLevelKey, INT32_MAX - 17);
+    KEY(kCGAssistiveTechHighWindowLevelKey, 1500);
+
+    /* The header constants AppKit builds its window levels from agree. */
     KEY(kCGFloatingWindowLevelKey, kCGFloatingWindowLevel);
-    KEY(kCGTornOffMenuWindowLevelKey, kCGTornOffMenuWindowLevel);
-    KEY(kCGMainMenuWindowLevelKey, kCGMainMenuWindowLevel);
-    KEY(kCGStatusWindowLevelKey, kCGStatusWindowLevel);
     KEY(kCGModalPanelWindowLevelKey, kCGModalPanelWindowLevel);
-    KEY(kCGPopUpMenuWindowLevelKey, kCGPopUpMenuWindowLevel);
-    KEY(kCGScreenSaverWindowLevelKey, kCGScreenSaverWindowLevel);
 
-    /* Keys without a header constant keep the normal level. */
-    KEY(kCGBaseWindowLevelKey, kCGNormalWindowLevel);
-    KEY(kCGMinimumWindowLevelKey, kCGNormalWindowLevel);
-    KEY(kCGDesktopWindowLevelKey, kCGNormalWindowLevel);
-    KEY(kCGBackstopMenuLevelKey, kCGNormalWindowLevel);
-    KEY(kCGDockWindowLevelKey, kCGNormalWindowLevel);
-    KEY(kCGDraggingWindowLevelKey, kCGNormalWindowLevel);
-    KEY(kCGMaximumWindowLevelKey, kCGNormalWindowLevel);
-    KEY(kCGOverlayWindowLevelKey, kCGNormalWindowLevel);
-    KEY(kCGHelpWindowLevelKey, kCGNormalWindowLevel);
-    KEY(kCGUtilityWindowLevelKey, kCGNormalWindowLevel);
-    KEY(kCGDesktopIconWindowLevelKey, kCGNormalWindowLevel);
-    KEY(kCGCursorWindowLevelKey, kCGNormalWindowLevel);
-    KEY(kCGAssistiveTechHighWindowLevelKey, kCGNormalWindowLevel);
-
-    /* Every key was listed above, and the levels the header defines are distinct. */
+    /* Every key was listed above. */
     if (kCGNumberOfWindowLevelKeys != 21) {
         printf("FAIL: header has %d keys; update tests/coregraphics-window-level-for-key.c\n", (int) kCGNumberOfWindowLevelKeys);
         failures++;
