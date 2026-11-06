@@ -23,6 +23,7 @@
 #import <X11/Xlib.h>
 #import <CoreFoundation/CFRunLoop.h>
 #import <CoreFoundation/CFSocket.h>
+#import "X11Monitors.h"
 
 @interface CGSConnectionX11 : CGSConnection {
 	Display *_display;
@@ -32,8 +33,9 @@
     CFSocketRef _cfSocket;
     CFRunLoopSourceRef _source;
 
-	// NOTE: A CGSScreen refers to a 'crtc' in X11 paralance, and *not* to an X11 screen.
-	// In other words, it refers to a physical monitor.
+	// One entry per X11 screen, each describing the root window of that screen, so
+	// that its size is in the coordinate space -mouseLocation reports. Dropped when
+	// XRandR reports a reconfiguration.
 	NSArray<CGSScreen*>* _screens;
 
 	CGSKeyboardLayout* _keyboardLayout;
@@ -41,6 +43,12 @@
 
 	int _xkbEventBase;
 	int _xrrEventBase;
+
+	// The main monitor in root coordinates, cached for -mouseLocation. Guarded by
+	// @synchronized(self); the cache is dropped when XRandR reports a
+	// reconfiguration, like _screens.
+	X11Frame _primaryRoot;
+	BOOL _primaryRootValid;
 }
 
 -(instancetype) initWithConnectionID:(CGSConnectionID)connId;

@@ -51,6 +51,8 @@
 #import <X11/Xutil.h>
 #import <X11/extensions/XKBrules.h>
 #import <X11/extensions/Xrandr.h>
+#import "../../CoreGraphics/X11.backend/X11Monitors.h"
+#import "../../CoreGraphics/X11.backend/X11RandR.h"
 #import <X11/keysym.h>
 #import <fcntl.h>
 #import <fontconfig/fontconfig.h>
@@ -75,6 +77,13 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type,
 
 - init {
     if (self = [super init]) {
+        // EGL also uses this Display from compositor threads, so Xlib has
+        // to be made thread-safe before the first Xlib call.
+        if (!XInitThreads()) {
+            NSLog(@"X11Display: XInitThreads() failed");
+            [self release];
+            return nil;
+        }
 
         _display = XOpenDisplay(NULL);
 
@@ -135,7 +144,7 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type,
 
         int errorBase;
         if (XRRQueryExtension(_display, &_rrEventBase, &errorBase)) {
-            XRRSelectInput(_display, DefaultRootWindow(_display), RRScreenChangeNotifyMask | RRCrtcChangeNotifyMask | RROutputChangeNotifyMask | RROutputPropertyNotifyMask);
+            XRRSelectInput(_display, DefaultRootWindow(_display), X11_RANDR_EVENT_MASK);
         }
 
         lastFocusedWindow = nil;
@@ -195,8 +204,47 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type,
         [_lastScreens release];
         _lastScreens = nil;
     }
+    _primaryRootFrameValid = NO;
 }
 
+// The main monitor's rectangle in root coordinates, device pixels: the origin
+// of the global coordinate space, as on macOS. With one monitor, or without
+// RandR, it is the root window.
+- (NSRect) primaryRootFrame {
+    if (!_primaryRootFrameValid)
+        [self screens];
+    return _primaryRootFrame;
+}
+
+// The main monitor in root coordinates, in the unit of window frames.
+- (X11Frame) primaryFrameInPoints {
+    NSRect primary = [self primaryRootFrame];
+    return (X11Frame){NSMinX(primary), NSMinY(primary),
+                      NSWidth(primary), NSHeight(primary)};
+}
+
+- (NSPoint) cgPointFromRoot: (NSPoint) root {
+    X11Point point = X11CGPointFromRoot([self primaryFrameInPoints],
+                                        (X11Point){root.x, root.y});
+    return NSMakePoint(point.x, point.y);
+}
+
+- (NSArray *) rootScreenFallback {
+    int width = DisplayWidth(_display, DefaultScreen(_display));
+    int height = DisplayHeight(_display, DefaultScreen(_display));
+    _primaryRootFrame = NSMakeRect(0, 0, width, height);
+    _primaryRootFrameValid = YES;
+    NSRect frame = NSMakeRect(0, 0, width, height);
+    NSScreen *screen = [[[NSScreen alloc] initWithFrame: frame
+                                           visibleFrame: frame] autorelease];
+    [screen setCgDirectDisplayID: 1];
+    return [NSArray arrayWithObject: screen];
+}
+
+// [NSScreen screens] starts with the main monitor, as on macOS, and every
+// frame is relative to that monitor's origin. A display's CGDirectDisplayID
+// stays tied to its RandR output (index + 1), whatever its position in the
+// array, because the mode functions address the output by that index.
 - (NSArray *) screens {
 
     NSArray* last = [_lastScreens retain];
@@ -204,73 +252,83 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type,
         return [last autorelease];
     }
 
-    int eventBase, errorBase;
-
-    if (XRRQueryExtension(_display, &eventBase, &errorBase)) {
-        XRRScreenResources *screen;
-
-        screen = XRRGetScreenResources(_display, DefaultRootWindow(_display));
-        NSMutableArray<NSScreen *> *retval =
-                [NSMutableArray arrayWithCapacity: screen->noutput];
-
-        Atom edidAtom = XInternAtom(_display, "EDID", FALSE);
-
-        for (int i = 0; i < screen->noutput; i++) {
-            XRROutputInfo *oinfo =
-                    XRRGetOutputInfo(_display, screen, screen->outputs[i]);
-            NSScreen *nsscreen;
-
-            if (oinfo->crtc) {
-                XRRCrtcInfo *crtc =
-                        XRRGetCrtcInfo(_display, screen, oinfo->crtc);
-                NSRect frame =
-                        NSMakeRect(crtc->x, crtc->y, crtc->width, crtc->height);
-
-                nsscreen =
-                        [[[NSScreen alloc] initWithFrame: frame
-                                            visibleFrame: frame] autorelease];
-
-                Atom actualType;
-                unsigned long nitems, bytesAfter;
-                int actualFormat;
-                unsigned char *prop;
-
-                if (XRRGetOutputProperty(_display, screen->outputs[i], edidAtom,
-                                         0, 100, FALSE, FALSE, AnyPropertyType,
-                                         &actualType, &actualFormat, &nitems,
-                                         &bytesAfter, &prop) == Success) {
-                    if (prop && nitems > 0)
-                        [nsscreen setEdid: [NSData dataWithBytes: prop
-                                                          length: nitems]];
-                }
-
-                XRRFreeCrtcInfo(crtc);
-            } else {
-                nsscreen = [[[NSScreen alloc] initWithFrame: NSZeroRect
-                                               visibleFrame: NSZeroRect]
-                        autorelease];
-            }
-            [nsscreen setCgDirectDisplayID: (i + 1)];
-
-            [retval addObject: nsscreen];
-
-            XRRFreeOutputInfo(oinfo);
-        }
-
-        XRRFreeScreenResources(screen);
-
-        NSArray* array = [NSArray arrayWithArray: retval];
-        _lastScreens = [array retain];
-        return array;
-    } else {
-        NSRect frame = NSMakeRect(
-                0, 0, DisplayWidth(_display, DefaultScreen(_display)),
-                DisplayHeight(_display, DefaultScreen(_display)));
-        return [NSArray
-                arrayWithObject: [[[NSScreen alloc] initWithFrame: frame
-                                                     visibleFrame: frame]
-                                         autorelease]];
+    int count = 0, primary = -1;
+    X11Monitor *monitors = X11MonitorsCopy(_display, &count, &primary);
+    // A server that lists no output at all still has a root window; an empty
+    // screen list would make +[NSScreen mainScreen] throw.
+    if (monitors == NULL || count == 0) {
+        free(monitors);
+        return [self rootScreenFallback];
     }
+
+    // Without any active output the root window stands in, like without RandR.
+    _primaryRootFrame =
+            primary >= 0
+                    ? NSMakeRect(monitors[primary].x, monitors[primary].y,
+                                 monitors[primary].width, monitors[primary].height)
+                    : NSMakeRect(0, 0, DisplayWidth(_display, DefaultScreen(_display)),
+                                 DisplayHeight(_display, DefaultScreen(_display)));
+    _primaryRootFrameValid = YES;
+    int *order = calloc(count > 0 ? (size_t) count : 1, sizeof *order);
+    if (order == NULL) {
+        free(monitors);
+        return [self rootScreenFallback];
+    }
+    X11MonitorsOrder(monitors, count, primary, order);
+
+    NSMutableArray<NSScreen *> *retval =
+            [NSMutableArray arrayWithCapacity: count];
+    Atom edidAtom = XInternAtom(_display, "EDID", FALSE);
+
+    for (int n = 0; n < count; n++) {
+        int i = order[n];
+
+        // An output without a CRTC and mode (a disconnected or switched-off
+        // connector) shows nothing, so it is not a screen.
+        if (!monitors[i].active)
+            continue;
+
+        // The frame is in Cocoa's global space, y up from the main
+        // monitor's bottom-left corner, like window frames.
+        X11Frame global = X11FrameFromRoot(
+                [self primaryFrameInPoints],
+                (X11Frame){monitors[i].x, monitors[i].y,
+                           monitors[i].width, monitors[i].height});
+        NSRect frame = NSMakeRect(global.x, global.y, global.width,
+                                  global.height);
+
+        NSScreen *nsscreen =
+                [[[NSScreen alloc] initWithFrame: frame
+                                    visibleFrame: frame] autorelease];
+
+        Atom actualType;
+        unsigned long nitems, bytesAfter;
+        int actualFormat;
+        unsigned char *prop = NULL;
+
+        if (XRRGetOutputProperty(_display, monitors[i].output, edidAtom, 0,
+                                 100, FALSE, FALSE, AnyPropertyType,
+                                 &actualType, &actualFormat, &nitems,
+                                 &bytesAfter, &prop) == Success) {
+            if (prop && actualFormat == 8 && nitems > 0)
+                [nsscreen setEdid: [NSData dataWithBytes: prop
+                                                  length: nitems]];
+        }
+        if (prop)
+            XFree(prop);
+        [nsscreen setCgDirectDisplayID: X11MonitorDisplayID(i)];
+        [retval addObject: nsscreen];
+    }
+
+    free(order);
+    free(monitors);
+
+    if ([retval count] == 0)
+        return [self rootScreenFallback];
+
+    NSArray* array = [NSArray arrayWithArray: retval];
+    _lastScreens = [array retain];
+    return array;
 }
 
 static NSDictionary *modeInfoToDictionary(const XRRModeInfo *mi, int depth) {
@@ -301,8 +359,10 @@ static NSDictionary *modeInfoToDictionary(const XRRModeInfo *mi, int depth) {
             @"Depth" : @(defaultDepth)
         } ];
     } else {
-        XRRScreenResources *screen =
-                XRRGetScreenResources(_display, DefaultRootWindow(_display));
+        XRRScreenResources *screen = XRRGetScreenResourcesCurrent(
+                _display, DefaultRootWindow(_display));
+        if (screen == NULL)
+            return nil;
 
         if (screenIndex < 0 || screenIndex >= screen->noutput) {
             XRRFreeScreenResources(screen);
@@ -352,8 +412,10 @@ static NSDictionary *modeInfoToDictionary(const XRRModeInfo *mi, int depth) {
     NSDictionary *dict = @{};
 
     if (XRRQueryExtension(_display, &eventBase, &errorBase)) {
-        XRRScreenResources *screen =
-                XRRGetScreenResources(_display, DefaultRootWindow(_display));
+        XRRScreenResources *screen = XRRGetScreenResourcesCurrent(
+                _display, DefaultRootWindow(_display));
+        if (screen == NULL)
+            return dict;
 
         if (screenIndex < 0 || screenIndex >= screen->noutput) {
             XRRFreeScreenResources(screen);
@@ -933,8 +995,14 @@ static NSDictionary *modeInfoToDictionary(const XRRModeInfo *mi, int depth) {
 
     XQueryPointer(_display, root, &root, &child, &root_x, &root_y, &win_x,
                   &win_y, &mask);
-    int height = DisplayHeight(_display, DefaultScreen(_display));
-    return NSMakePoint(root_x, height - root_y);
+    // Cocoa's global space, as +[NSEvent mouseLocation] reports on macOS: points,
+    // origin at the main monitor's bottom-left corner, y up, so the result can be
+    // compared with window and screen frames. CGEventGetLocation() reports the same
+    // point in CoreGraphics' y-down space (see CGSConnectionX11).
+    // -[X11Window mouseLocationOutsideOfEventStream] is window-local.
+    X11Point point = X11PointFromRoot([self primaryFrameInPoints],
+                                      (X11Point){root_x, root_y});
+    return NSMakePoint(point.x, point.y);
 }
 
 - (void) setWindow: (id) window forID: (XID) i {
@@ -1480,7 +1548,7 @@ enum {
                     globalPos.x += frame.origin.x;
                     globalPos.y += frame.origin.y;
 
-                    [self warpMouse: globalPos];
+                    [self warpMouse: [self cgPointFromRoot: globalPos]];
 
                     pos.x = lastMotionPos.x;
                     pos.y = lastMotionPos.y;
@@ -1718,7 +1786,8 @@ enum {
         break;
 
     default:
-        if (ev->type == _rrEventBase + RRNotify) {
+        // RandR reports layout changes as plain extension events (see X11RandR.h).
+        if (X11RandRHandleLayoutChange(ev, _rrEventBase)) {
             [self _invalidateRRCache];
             break;
         }
@@ -1795,10 +1864,18 @@ void CGNativeBorderFrameWidthsForStyle(NSUInteger styleMask, CGFloat *top,
     return frame;
 }
 
+// Takes CoreGraphics global points (origin at the main monitor's top-left corner,
+// y down): CGWarpMouseCursorPosition hands its argument straight through, and on
+// macOS that API is documented in that space. Internal callers that hold a root
+// point convert it with -cgPointFromRoot:.
 - (void) warpMouse: (NSPoint) position {
-    NSLog(@"Warp to: x=%f, y=%f\n", position.x, position.y);
+    X11Point root = X11CGPointToRoot([self primaryFrameInPoints],
+                                     (X11Point){position.x, position.y});
+    int root_x = (int) round(root.x);
+    int root_y = (int) round(root.y);
+
     XWarpPointer(_display, None, DefaultRootWindow(_display), 0, 0, 0, 0,
-                 position.x, position.y);
+                 root_x, root_y);
     XSync(_display, False);
 }
 
@@ -1833,7 +1910,7 @@ void CGNativeBorderFrameWidthsForStyle(NSUInteger styleMask, CGFloat *top,
             // ptLocal.x, ptLocal.y);
 
             [xwin setLastKnownCursorPosition: [xwin transformPoint: ptLocal]];
-            [self warpMouse: ptGlobal];
+            [self warpMouse: [self cgPointFromRoot: ptGlobal]];
         } else {
             NSLog(@"XGrabPointer() failed with error %d for window %lu\n",
                   result, win);

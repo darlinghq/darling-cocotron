@@ -45,6 +45,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (NSTimeInterval) textCaretBlinkInterval;
 
+- (BOOL) activateProcessIdentifier: (pid_t) processIdentifier;
+
 - (void) hideCursor;
 - (void) unhideCursor;
 
@@ -93,6 +95,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                         file: (NSString *) file
                        types: (NSArray *) types;
 
+// The pointer in Cocoa's global space: points, origin at the main screen's
+// bottom-left corner, y up, like screen and window frames.
 - (NSPoint) mouseLocation;
 - (NSUInteger) currentModifierFlags;
 
@@ -116,6 +120,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (void) keyboardLayoutName: (NSString **) name
                    fullName: (NSString **) fullName;
 
+// position is in CoreGraphics' global space (origin at the main screen's top-left
+// corner, y down), as CGWarpMouseCursorPosition() takes it.
 - (void) warpMouse: (NSPoint) position;
 - (void) grabMouse: (BOOL) doGrab;
 

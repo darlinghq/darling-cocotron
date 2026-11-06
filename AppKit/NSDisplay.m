@@ -128,6 +128,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return 1;
 }
 
+// Brings the windows of the given process to the front. Backends that can
+// do so override this; the default reports that nothing was activated.
+- (BOOL) activateProcessIdentifier: (pid_t) processIdentifier {
+    return NO;
+}
+
 - (void) hideCursor {
     NSInvalidAbstractInvocation();
 }
@@ -158,16 +164,22 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
     [[NSRunLoop currentRunLoop] runMode: mode beforeDate: untilDate];
 
-    while (result == nil && [_eventQueue count] > 0) {
-        NSEvent *event = _eventQueue[0];
+    // Scan for the first event of a wanted type. Events that do not match stay
+    // queued: AppKit's contract is that nextEventMatchingMask: returns only
+    // what was asked for and leaves the rest for the main loop, but removing
+    // them here destroyed every other pending event whenever a caller asked
+    // for a narrow mask - a tracking loop asking for NSLeftMouseUpMask would
+    // silently discard queued key events.
+    NSUInteger i, count = [_eventQueue count];
+    for (i = 0; i < count; i++) {
+        NSEvent *event = _eventQueue[i];
 
-        if (!(NSEventMaskFromType([event type]) & mask)) {
-            [_eventQueue removeObjectAtIndex: 0];
-        } else {
+        if (NSEventMaskFromType([event type]) & mask) {
             result = [[event retain] autorelease];
 
             if (dequeue)
-                [_eventQueue removeObjectAtIndex: 0];
+                [_eventQueue removeObjectAtIndex: i];
+            break;
         }
     }
 
@@ -192,8 +204,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         }
     }
 
+    // The mask selects which events to drop, so it has to be tested against
+    // each candidate. Testing it against the stop marker makes the test
+    // constant for the whole scan, so a coalescing call drops every earlier
+    // event whatever its type - and the periodic-event coalescer wipes queued
+    // key and mouse events on every tick.
     while (--count >= 0) {
-        if (NSEventMaskFromType([event type]) & mask) {
+        if (NSEventMaskFromType([_eventQueue[count] type]) & mask) {
             [_eventQueue removeObjectAtIndex: count];
         }
     }
