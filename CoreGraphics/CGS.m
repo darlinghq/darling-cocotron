@@ -25,7 +25,6 @@
 #import <CoreGraphics/CGWindow.h>
 #import <CoreGraphics/CGSSurface.h>
 #include <pthread.h>
-#include <math.h>
 
 static NSMutableDictionary<NSNumber*, CGSConnection*>* g_connections = nil;
 static Boolean g_denyConnections = FALSE;
@@ -316,26 +315,21 @@ int CGSServerOperationState(int state)
 	return 0;
 }
 
-// Windows are not composited, so they cannot be transformed or warped. The
-// identity transform and removing a warp (a NULL mesh) leave a window as it
-// is and succeed; anything else is not implemented.
+// The same window lookup and transform record as the AtPlacement calls:
+// CGSSetWindowTransform is CGSSetWindowTransformAtPlacement with the default
+// placement.
 CGError CGSSetWindowTransform(CGSConnectionID cid, CGSWindowID wid, CGAffineTransform transform)
 {
-	CGSWindow* window;
-	CGError err = getWindow(cid, wid, &window);
-
-	if (err != kCGSErrorSuccess)
-		return err;
-	return CGAffineTransformIsIdentity(transform) ? kCGSErrorSuccess : kCGErrorNotImplemented;
+	return CGSSetWindowTransformAtPlacement(cid, wid, 0, 0, transform);
 }
 
+// Windows are not composited, so they cannot be warped. Removing a warp (a
+// NULL mesh) leaves a window as it is and succeeds; anything else is not
+// implemented.
 CGError CGSSetWindowWarp(CGSConnectionID cid, CGSWindowID wid, int w, int h, float *mesh)
 {
-	CGSWindow* window;
-	CGError err = getWindow(cid, wid, &window);
-
-	if (err != kCGSErrorSuccess)
-		return err;
+	if (!platformWindowForID(wid))
+		return kCGErrorIllegalArgument;
 	return (mesh == NULL) ? kCGSErrorSuccess : kCGErrorNotImplemented;
 }
 
@@ -343,8 +337,9 @@ CGError CGSSetWindowWarp(CGSConnectionID cid, CGSWindowID wid, int w, int h, flo
 // already excluded from capture.
 CGError CGSSetWindowCaptureExcludeShape(CGSConnectionID cid, CGSWindowID wid, CGRegionRef shape)
 {
-	CGSWindow* window;
-	return getWindow(cid, wid, &window);
+	if (!platformWindowForID(wid))
+		return kCGErrorIllegalArgument;
+	return kCGSErrorSuccess;
 }
 
 CGError CGSGetWindowProperty(CGSConnectionID cid, CGSWindowID wid, CFStringRef key, CFTypeRef *outValue)

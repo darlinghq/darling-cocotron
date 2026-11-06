@@ -15,7 +15,7 @@
  along with Darling.  If not, see <http://www.gnu.org/licenses/>.
 */
 #import <CoreGraphics/CGSServerSPI.h>
-#import <CoreGraphics/CGWindowPrivate.h>
+#import <CoreGraphics/CGWindow.h>
 #include <math.h>
 #include <pthread.h>
 
