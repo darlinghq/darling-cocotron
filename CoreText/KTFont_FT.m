@@ -110,4 +110,20 @@
     }
 }
 
+// FreeType reports the face's post table underline metrics in font units,
+// with negative positions below the baseline, as CoreText does.
+- (CGFloat) underlinePosition {
+    FT_Face face = [(O2Font_freetype *) _font face];
+    if (face == NULL || _unitsPerEm == 0)
+        return 0;
+    return face->underline_position * _size / _unitsPerEm;
+}
+
+- (CGFloat) underlineThickness {
+    FT_Face face = [(O2Font_freetype *) _font face];
+    if (face == NULL || _unitsPerEm == 0)
+        return 0;
+    return face->underline_thickness * _size / _unitsPerEm;
+}
+
 @end

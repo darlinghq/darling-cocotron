@@ -20,6 +20,28 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <CoreText/CTFont.h>
 #import <CoreText/CoreText.h>
 #import <CoreText/KTFont.h>
+#import <CoreGraphics/CGContext.h>
+#import <CoreGraphics/CGDataProvider.h>
+#import <CoreGraphics/CGFont.h>
+#import <Onyx2D/O2Font.h>
+#import "KTFontDescriptor.h"
+
+// CTFontRef and NSFont are toll-free bridged. AppKit's NSFont wraps a
+// KTFont, so an NSFont passed to these functions is unwrapped first.
+static KTFont *ktFont(CTFontRef font) {
+    id object = (id) font;
+    if (object != nil && ![object isKindOfClass: [KTFont class]] &&
+        [object respondsToSelector: @selector(_coreTextFont)])
+        return (KTFont *) [object performSelector: @selector(_coreTextFont)];
+    return (KTFont *) object;
+}
+
+static CTFontRef createFont(CGFontRef graphicsFont, CGFloat size) {
+    // A size of 0 means the default size of 12 points.
+    if (size == 0)
+        size = 12;
+    return (CTFontRef) [[KTFont alloc] initWithFont: graphicsFont size: size];
+}
 
 const CFStringRef kCTFontCopyrightNameKey = CFSTR("CTFontCopyrightName");
 const CFStringRef kCTFontFamilyNameKey = CFSTR("CTFontFamilyName");
@@ -60,31 +82,67 @@ const CFStringRef kCTFontFeatureTooltipTextKey = CFSTR("CTFeatureTooltipText");
 
 CTFontRef CTFontCreateWithName(CFStringRef name, CGFloat size, const CGAffineTransform *matrix)
 {
-    printf("STUB %s\n", __PRETTY_FUNCTION__);
-    return nil;
+    if (name == NULL)
+        return NULL;
+    CGFontRef graphicsFont = CGFontCreateWithFontName(name);
+    if (graphicsFont == NULL)
+        return NULL;
+    CTFontRef result = createFont(graphicsFont, size);
+    CGFontRelease(graphicsFont);
+    return result;
 }
 
 CTFontRef CTFontCreateWithNameAndOptions(CFStringRef name, CGFloat size,
                                          const CGAffineTransform *matrix,
                                          CTFontOptions options)
 {
-    printf("STUB %s\n", __PRETTY_FUNCTION__);
-    return nil;
+    return CTFontCreateWithName(name, size, matrix);
 }
 
 CTFontRef CTFontCreateWithFontDescriptor(CTFontDescriptorRef descriptor, CGFloat size,
                                          const CGAffineTransform *matrix)
 {
-    printf("STUB %s\n", __PRETTY_FUNCTION__);
-    return nil;
+    if (descriptor == NULL)
+        return NULL;
+
+    if (size == 0) {
+        CFTypeRef value = CTFontDescriptorCopyAttribute(descriptor, kCTFontSizeAttribute);
+        if (value != NULL) {
+            if (CFGetTypeID(value) == CFNumberGetTypeID())
+                CFNumberGetValue((CFNumberRef) value, kCFNumberCGFloatType, &size);
+            CFRelease(value);
+        }
+    }
+
+    // A descriptor from CTFontManagerCreateFontDescriptorFromData names a
+    // face that is not installed; make the font from its data.
+    CFDataRef data = KTFontDescriptorGetFontData(descriptor);
+    if (data != NULL) {
+        CGDataProviderRef provider = CGDataProviderCreateWithCFData(data);
+        CGFontRef graphicsFont = CGFontCreateWithDataProvider(provider);
+        CGDataProviderRelease(provider);
+        if (graphicsFont != NULL) {
+            CTFontRef result = createFont(graphicsFont, size);
+            CGFontRelease(graphicsFont);
+            return result;
+        }
+    }
+
+    CFStringRef name = CTFontDescriptorCopyAttribute(descriptor, kCTFontNameAttribute);
+    if (name == NULL)
+        name = CTFontDescriptorCopyAttribute(descriptor, kCTFontFamilyNameAttribute);
+    if (name == NULL)
+        return NULL;
+    CTFontRef result = CTFontCreateWithName(name, size, matrix);
+    CFRelease(name);
+    return result;
 }
 
 CTFontRef CTFontCreateWithFontDescriptorAndOptions(CTFontDescriptorRef descriptor, CGFloat size,
                                                    const CGAffineTransform *matrix,
                                                    CTFontOptions options)
 {
-    printf("STUB %s\n", __PRETTY_FUNCTION__);
-    return nil;
+    return CTFontCreateWithFontDescriptor(descriptor, size, matrix);
 }
 
 CTFontRef CTFontCreateUIFontForLanguage(CTFontUIFontType uiFontType,
@@ -99,8 +157,26 @@ CTFontRef CTFontCreateCopyWithAttributes(CTFontRef font, CGFloat size,
                                          const CGAffineTransform *matrix,
                                          CTFontDescriptorRef attributes)
 {
-    printf("STUB %s\n", __PRETTY_FUNCTION__);
-    return nil;
+    KTFont *object = ktFont(font);
+    if (object == nil)
+        return NULL;
+    if (size == 0)
+        size = [object pointSize];
+
+    if (attributes != NULL) {
+        CFStringRef name = CTFontDescriptorCopyAttribute(attributes, kCTFontNameAttribute);
+        if (name != NULL) {
+            CTFontRef result = CTFontCreateWithName(name, size, matrix);
+            CFRelease(name);
+            if (result != NULL)
+                return result;
+        }
+    }
+
+    CGFontRef graphicsFont = [object copyGraphicsFont];
+    CTFontRef result = createFont(graphicsFont, size);
+    CGFontRelease(graphicsFont);
+    return result;
 }
 
 CTFontRef CTFontCreateCopyWithSymbolicTraits(CTFontRef font, CGFloat size,
@@ -134,18 +210,40 @@ CTFontRef CTFontCreateForStringWithLanguage(CTFontRef currentFont, CFStringRef s
 
 CTFontDescriptorRef CTFontCopyFontDescriptor(CTFontRef font)
 {
-    printf("STUB %s\n", __PRETTY_FUNCTION__);
-    return nil;
+    KTFont *object = ktFont(font);
+    if (object == nil)
+        return NULL;
+
+    NSMutableDictionary *attributes = [NSMutableDictionary dictionary];
+    NSString *name = (NSString *) CTFontCopyPostScriptName(font);
+    NSString *family = (NSString *) CTFontCopyFamilyName(font);
+    NSDictionary *traits = (NSDictionary *) CTFontCopyTraits(font);
+    if (name != nil)
+        [attributes setObject: name forKey: (NSString *) kCTFontNameAttribute];
+    if (family != nil)
+        [attributes setObject: family forKey: (NSString *) kCTFontFamilyNameAttribute];
+    if (traits != nil)
+        [attributes setObject: traits forKey: (NSString *) kCTFontTraitsAttribute];
+    [attributes setObject: [NSNumber numberWithDouble: [object pointSize]]
+                   forKey: (NSString *) kCTFontSizeAttribute];
+    [name release];
+    [family release];
+    [traits release];
+    return CTFontDescriptorCreateWithAttributes((CFDictionaryRef) attributes);
 }
 
 CFTypeRef CTFontCopyAttribute(CTFontRef font, CFStringRef attribute)
 {
-    printf("STUB %s\n", __PRETTY_FUNCTION__);
-    return nil;
+    CTFontDescriptorRef descriptor = CTFontCopyFontDescriptor(font);
+    if (descriptor == NULL)
+        return NULL;
+    CFTypeRef value = CTFontDescriptorCopyAttribute(descriptor, attribute);
+    CFRelease(descriptor);
+    return value;
 }
 
 CGFloat CTFontGetSize(CTFontRef self) {
-    return [self pointSize];
+    return [ktFont(self) pointSize];
 }
 
 CGAffineTransform CTFontGetMatrix(CTFontRef font)
@@ -154,16 +252,102 @@ CGAffineTransform CTFontGetMatrix(CTFontRef font)
     return CGAffineTransformIdentity;
 }
 
+static uint16_t readUInt16(const UInt8 *bytes) {
+    return (uint16_t) ((bytes[0] << 8) | bytes[1]);
+}
+
+// Traits from the OS/2 table (weight and width class, fsSelection) and the
+// post table (italic angle, fixed pitch) of the face, as in the OpenType
+// specification.
+static CTFontSymbolicTraits fontTraits(CTFontRef font, CGFloat *weight,
+                                       CGFloat *width, CGFloat *slant)
+{
+    // The NSFontWeight values of the nine OS/2 weight classes.
+    static const CGFloat weights[] = { -0.8, -0.6, -0.4, 0, 0.23, 0.3, 0.4,
+                                       0.56, 0.62 };
+    unsigned int weightClass = 400, widthClass = 5;
+    CTFontSymbolicTraits traits = 0;
+    double italicAngle = 0;
+
+    CFDataRef table = CTFontCopyTable(font, 'OS/2', kCTFontTableOptionNoOptions);
+    if (table != NULL && CFDataGetLength(table) >= 64) {
+        const UInt8 *bytes = CFDataGetBytePtr(table);
+        weightClass = readUInt16(bytes + 4);
+        widthClass = readUInt16(bytes + 6);
+        uint16_t selection = readUInt16(bytes + 62);
+        if (selection & 0x0001)
+            traits |= kCTFontTraitItalic;
+        if (selection & 0x0020)
+            traits |= kCTFontTraitBold;
+    }
+    if (table != NULL)
+        CFRelease(table);
+
+    table = CTFontCopyTable(font, 'post', kCTFontTableOptionNoOptions);
+    if (table != NULL && CFDataGetLength(table) >= 16) {
+        const UInt8 *bytes = CFDataGetBytePtr(table);
+        int32_t fixed = (int32_t) (((uint32_t) readUInt16(bytes + 4) << 16) |
+                                   readUInt16(bytes + 6));
+        italicAngle = fixed / 65536.0;
+        if (bytes[12] || bytes[13] || bytes[14] || bytes[15])
+            traits |= kCTFontTraitMonoSpace;
+    }
+    if (table != NULL)
+        CFRelease(table);
+
+    if (weightClass < 100)
+        weightClass = 100;
+    if (weightClass > 900)
+        weightClass = 900;
+    unsigned int index = weightClass / 100 - 1;
+    *weight = weights[index];
+    if (index < 8)
+        *weight += (weights[index + 1] - weights[index]) * (weightClass % 100) / 100.0;
+    if (weightClass >= 700)
+        traits |= kCTFontTraitBold;
+
+    if (widthClass < 1 || widthClass > 9)
+        widthClass = 5;
+    *width = ((CGFloat) widthClass - 5) / 4;
+    if (widthClass < 5)
+        traits |= kCTFontTraitCondensed;
+    if (widthClass > 5)
+        traits |= kCTFontTraitExpanded;
+
+    // The slant trait is 1.0 for 30 degrees clockwise; the post table
+    // gives the angle counter-clockwise from vertical.
+    *slant = -italicAngle / 30.0;
+    if (*slant > 1)
+        *slant = 1;
+    if (*slant < -1)
+        *slant = -1;
+    if (italicAngle != 0)
+        traits |= kCTFontTraitItalic;
+
+    return traits;
+}
+
 CTFontSymbolicTraits CTFontGetSymbolicTraits(CTFontRef font)
 {
-    printf("STUB %s\n", __PRETTY_FUNCTION__);
-    return kCTFontTraitItalic;
+    CGFloat weight, width, slant;
+    if (ktFont(font) == nil)
+        return 0;
+    return fontTraits(font, &weight, &width, &slant);
 }
 
 CFDictionaryRef CTFontCopyTraits(CTFontRef font)
 {
-    printf("STUB %s\n", __PRETTY_FUNCTION__);
-    return nil;
+    if (ktFont(font) == nil)
+        return NULL;
+    CGFloat weight, width, slant;
+    CTFontSymbolicTraits symbolic = fontTraits(font, &weight, &width, &slant);
+    NSDictionary *traits = [[NSDictionary alloc] initWithObjectsAndKeys:
+            [NSNumber numberWithUnsignedInt: symbolic], (NSString *) kCTFontSymbolicTrait,
+            [NSNumber numberWithDouble: weight], (NSString *) kCTFontWeightTrait,
+            [NSNumber numberWithDouble: width], (NSString *) kCTFontWidthTrait,
+            [NSNumber numberWithDouble: slant], (NSString *) kCTFontSlantTrait,
+            nil];
+    return (CFDictionaryRef) traits;
 }
 
 CFArrayRef CTFontCopyDefaultCascadeListForLanguages(CTFontRef font, CFArrayRef languagePrefList)
@@ -174,30 +358,45 @@ CFArrayRef CTFontCopyDefaultCascadeListForLanguages(CTFontRef font, CFArrayRef l
 
 CFStringRef CTFontCopyPostScriptName(CTFontRef font)
 {
-    printf("STUB %s\n", __PRETTY_FUNCTION__);
-    return nil;
+    CGFontRef graphicsFont = CTFontCopyGraphicsFont(font, NULL);
+    if (graphicsFont == NULL)
+        return NULL;
+    CFStringRef name = CGFontCopyPostScriptName(graphicsFont);
+    CGFontRelease(graphicsFont);
+    return name;
 }
 
 CFStringRef CTFontCopyFamilyName(CTFontRef font)
 {
-    printf("STUB %s\n", __PRETTY_FUNCTION__);
-    return nil;
+    CGFontRef graphicsFont = CTFontCopyGraphicsFont(font, NULL);
+    if (graphicsFont == NULL)
+        return NULL;
+    CFStringRef name = O2FontCopyFamilyName((O2FontRef) graphicsFont);
+    CGFontRelease(graphicsFont);
+    return name;
 }
 
 CFStringRef CTFontCopyFullName(CTFontRef self) {
-    return [self copyName];
+    KTFont *object = ktFont(self);
+    return object ? [object copyName] : NULL;
 }
 
 CFStringRef CTFontCopyDisplayName(CTFontRef font)
 {
-    printf("STUB %s\n", __PRETTY_FUNCTION__);
-    return nil;
+    return CTFontCopyFullName(font);
 }
 
 CFStringRef _Nullable CTFontCopyName(CTFontRef font, CFStringRef nameKey)
 {
-    printf("STUB %s\n", __PRETTY_FUNCTION__);
-    return nil;
+    if (ktFont(font) == nil || nameKey == NULL)
+        return NULL;
+    if (CFEqual(nameKey, kCTFontPostScriptNameKey))
+        return CTFontCopyPostScriptName(font);
+    if (CFEqual(nameKey, kCTFontFamilyNameKey))
+        return CTFontCopyFamilyName(font);
+    if (CFEqual(nameKey, kCTFontFullNameKey))
+        return CTFontCopyFullName(font);
+    return NULL;
 }
 
 CFStringRef CTFontCopyLocalizedName(CTFontRef font, CFStringRef nameKey,
@@ -229,55 +428,59 @@ CFArrayRef CTFontCopySupportedLanguages(CTFontRef font)
 }
 
 CGFloat CTFontGetAscent(CTFontRef self) {
-    return [self ascender];
+    return [ktFont(self) ascender];
 }
 
 CGFloat CTFontGetDescent(CTFontRef self) {
-    return [self descender];
+    return [ktFont(self) descender];
 }
 
 CGFloat CTFontGetLeading(CTFontRef self) {
-    return [self leading];
+    return [ktFont(self) leading];
 }
 
 unsigned int CTFontGetUnitsPerEm(CTFontRef font)
 {
-    printf("STUB %s\n", __PRETTY_FUNCTION__);
-    return 0;
+    CGFontRef graphicsFont = CTFontCopyGraphicsFont(font, NULL);
+    if (graphicsFont == NULL)
+        return 0;
+    unsigned int units = CGFontGetUnitsPerEm(graphicsFont);
+    CGFontRelease(graphicsFont);
+    return units;
 }
 
 CFIndex CTFontGetGlyphCount(CTFontRef font) {
-    return [font numberOfGlyphs];
+    return [ktFont(font) numberOfGlyphs];
 }
 
 CGRect CTFontGetBoundingBox(CTFontRef self) {
-    return [self boundingRect];
+    return [ktFont(self) boundingRect];
 }
 
 CGFloat CTFontGetUnderlinePosition(CTFontRef self) {
-    return [self underlinePosition];
+    return [ktFont(self) underlinePosition];
 }
 
 CGFloat CTFontGetUnderlineThickness(CTFontRef self) {
-    return [self underlineThickness];
+    return [ktFont(self) underlineThickness];
 }
 
 CGFloat CTFontGetSlantAngle(CTFontRef self) {
-    return [self italicAngle];
+    return [ktFont(self) italicAngle];
 }
 
 CGFloat CTFontGetCapHeight(CTFontRef self) {
-    return [self capHeight];
+    return [ktFont(self) capHeight];
 }
 
 CGFloat CTFontGetXHeight(CTFontRef self) {
-    return [self xHeight];
+    return [ktFont(self) xHeight];
 }
 
 CGPathRef CTFontCreatePathForGlyph(CTFontRef self, CGGlyph glyph,
                                    CGAffineTransform *xform)
 {
-    return (CGPathRef) [self createPathForGlyph: glyph transform: xform];
+    return (CGPathRef) [ktFont(self) createPathForGlyph: glyph transform: xform];
 }
 
 CGGlyph CTFontGetGlyphWithName(CTFontRef font, CFStringRef glyphName)
@@ -290,20 +493,44 @@ CGRect CTFontGetBoundingRectsForGlyphs(CTFontRef font, CTFontOrientation orienta
                                        const CGGlyph *glyphs, CGRect *boundingRects,
                                        CFIndex count)
 {
-    printf("STUB %s\n", __PRETTY_FUNCTION__);
-    return CGRectMake(0, 0, 0, 0);
+    if (glyphs == NULL || count <= 0)
+        return CGRectZero;
+    CGFontRef graphicsFont = CTFontCopyGraphicsFont(font, NULL);
+    if (graphicsFont == NULL)
+        return CGRectZero;
+
+    int units = CGFontGetUnitsPerEm(graphicsFont);
+    CGFloat scale = units > 0 ? CTFontGetSize(font) / units : 0;
+    CGRect total = CGRectNull;
+    for (CFIndex i = 0; i < count; i++) {
+        O2Rect bounds = [(O2Font *) graphicsFont boundingRectForGlyph: glyphs[i]];
+        CGRect rect = CGRectMake(bounds.origin.x * scale, bounds.origin.y * scale,
+                                 bounds.size.width * scale,
+                                 bounds.size.height * scale);
+        if (boundingRects != NULL)
+            boundingRects[i] = rect;
+        total = CGRectUnion(total, rect);
+    }
+    CGFontRelease(graphicsFont);
+    return total;
 }
 
 double CTFontGetAdvancesForGlyphs(CTFontRef font, CTFontOrientation orientation,
                                 const CGGlyph *glyphs, CGSize *advances,
                                 CFIndex count)
 {
-    [font getAdvancements: advances forGlyphs: glyphs count: count];
+    KTFont *object = ktFont(font);
+    if (object == nil || glyphs == NULL || count <= 0)
+        return 0;
 
-    double sum;
-
-    for (int i = 0; i < count; i++) {
-        sum += advances[i].width;
+    // The advances array is optional; the total is returned either way.
+    double sum = 0;
+    for (CFIndex i = 0; i < count; i++) {
+        CGSize advance;
+        [object getAdvancements: &advance forGlyphs: &glyphs[i] count: 1];
+        if (advances != NULL)
+            advances[i] = advance;
+        sum += advance.width;
     }
 
     return sum;
@@ -350,7 +577,7 @@ CFArrayRef CTFontCopyFeatureSettings(CTFontRef font)
 bool CTFontGetGlyphsForCharacters(CTFontRef font, const UniChar *characters,
                                   CGGlyph *glyphs, CFIndex count)
 {
-    [font getGlyphs: glyphs forCharacters: characters length: count];
+    [ktFont(font) getGlyphs: glyphs forCharacters: characters length: count];
     // FIXME: change getGlyphs: to return a BOOL
     return YES;
 }
@@ -358,7 +585,17 @@ bool CTFontGetGlyphsForCharacters(CTFontRef font, const UniChar *characters,
 void CTFontDrawGlyphs(CTFontRef font, const CGGlyph *glyphs, const CGPoint *positions,
                       size_t count, CGContextRef context)
 {
-    printf("STUB %s\n", __PRETTY_FUNCTION__);
+    if (context == NULL || glyphs == NULL || positions == NULL || count == 0)
+        return;
+    CGFontRef graphicsFont = CTFontCopyGraphicsFont(font, NULL);
+    if (graphicsFont == NULL)
+        return;
+    CGContextSaveGState(context);
+    CGContextSetFont(context, graphicsFont);
+    CGContextSetFontSize(context, CTFontGetSize(font));
+    CGContextShowGlyphsAtPositions(context, glyphs, positions, count);
+    CGContextRestoreGState(context);
+    CGFontRelease(graphicsFont);
 }
 
 CFIndex CTFontGetLigatureCaretPositions(CTFontRef font, CGGlyph glyph, CGFloat *positions,
@@ -370,8 +607,12 @@ CFIndex CTFontGetLigatureCaretPositions(CTFontRef font, CGGlyph glyph, CGFloat *
 
 CGFontRef CTFontCopyGraphicsFont(CTFontRef font, CTFontDescriptorRef _Nullable *attributes)
 {
-    printf("STUB %s\n", __PRETTY_FUNCTION__);
-    return nil;
+    if (attributes != NULL)
+        *attributes = NULL;
+    KTFont *object = ktFont(font);
+    if (object == nil)
+        return NULL;
+    return [object copyGraphicsFont];
 }
 
 CTFontRef
@@ -379,7 +620,9 @@ CTFontCreateWithGraphicsFont(CGFontRef cgFont, CGFloat size,
                              CGAffineTransform *xform,
                              CTFontDescriptorRef attributes)
 {
-    return (CTFontRef)[[KTFont alloc] initWithFont: cgFont size: size];
+    if (cgFont == NULL)
+        return NULL;
+    return createFont(cgFont, size);
 }
 
 ATSFontRef CTFontGetPlatformFont(CTFontRef font, CTFontDescriptorRef  _Nullable *attributes)
@@ -405,18 +648,30 @@ CTFontRef CTFontCreateWithQuickdrawInstance(ConstStr255Param name, int16_t ident
 
 CFArrayRef CTFontCopyAvailableTables(CTFontRef font, CTFontTableOptions options)
 {
-    printf("STUB %s\n", __PRETTY_FUNCTION__);
-    return nil;
+    // Only native tables exist, so excluding synthetic ones changes nothing.
+    if (options & ~kCTFontTableOptionExcludeSynthetic)
+        return NULL;
+    CGFontRef graphicsFont = CTFontCopyGraphicsFont(font, NULL);
+    if (graphicsFont == NULL)
+        return NULL;
+    CFArrayRef tags = CGFontCopyTableTags(graphicsFont);
+    CGFontRelease(graphicsFont);
+    return tags;
 }
 
 CFDataRef CTFontCopyTable(CTFontRef font, CTFontTableTag table, CTFontTableOptions options)
 {
-    printf("STUB %s\n", __PRETTY_FUNCTION__);
-    return nil;
+    if (options & ~kCTFontTableOptionExcludeSynthetic)
+        return NULL;
+    CGFontRef graphicsFont = CTFontCopyGraphicsFont(font, NULL);
+    if (graphicsFont == NULL)
+        return NULL;
+    CFDataRef data = CGFontCopyTableForTag(graphicsFont, table);
+    CGFontRelease(graphicsFont);
+    return data;
 }
 
 CFTypeID CTFontGetTypeID(void)
 {
-    printf("STUB %s\n", __PRETTY_FUNCTION__);
-    return 0;
+    return (CFTypeID) [KTFont self];
 }

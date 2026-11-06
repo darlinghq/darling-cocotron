@@ -288,6 +288,14 @@ static NSLock *_cacheLock = nil;
     return [self messageFontOfSize: size];
 }
 
++ (NSFont *) systemFontOfSize: (CGFloat) size weight: (NSFontWeight) weight {
+    // Only the regular and bold system faces are available; semibold and
+    // heavier weights get the bold one.
+    if (weight >= NSFontWeightSemibold)
+        return [self boldSystemFontOfSize: size];
+    return [self systemFontOfSize: size];
+}
+
 + (NSFont *) titleBarFontOfSize: (CGFloat) size {
     return [self boldSystemFontOfSize: size];
 }
@@ -681,8 +689,8 @@ static NSLock *_cacheLock = nil;
 }
 
 - (NSFont *) printerFont {
-    NSUnimplementedMethod();
-    return nil;
+    // Quartz fonts have no separate printer variant.
+    return self;
 }
 
 - (NSFont *) screenFont {
@@ -692,6 +700,11 @@ static NSLock *_cacheLock = nil;
 - (NSFont *) screenFontWithRenderingMode: (NSFontRenderingMode) mode {
     NSUnimplementedMethod();
     return [[self copy] autorelease];
+}
+
+// The CTFont behind this font, for CoreText functions given an NSFont.
+- (CTFontRef) _coreTextFont {
+    return _ctFont;
 }
 
 - (NSRect) boundingRectForFont {

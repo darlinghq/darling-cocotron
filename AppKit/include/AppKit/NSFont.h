@@ -79,6 +79,7 @@ typedef enum {
 + (NSFont *) messageFontOfSize: (CGFloat) size;
 + (NSFont *) paletteFontOfSize: (CGFloat) size;
 + (NSFont *) systemFontOfSize: (CGFloat) size;
++ (NSFont *) systemFontOfSize: (CGFloat) size weight: (CGFloat) weight;
 + (NSFont *) titleBarFontOfSize: (CGFloat) size;
 + (NSFont *) toolTipsFontOfSize: (CGFloat) size;
 + (NSFont *) userFontOfSize: (CGFloat) size;
