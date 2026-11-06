@@ -218,6 +218,11 @@ enum { NSApplicationActivated = 0, NSApplicationDeactivated = 1 };
 
 + (NSPoint) mouseLocation;
 + (NSEventModifierFlags) modifierFlags;
++ (NSUInteger) pressedMouseButtons;
+
++ (id) addLocalMonitorForEventsMatchingMask: (NSEventMask) mask
+                                    handler: (NSEvent * _Nullable (^)(NSEvent *event)) block;
++ (void) removeMonitor: (id) eventMonitor;
 
 - (instancetype) initWithType: (NSEventType) type
                      location: (NSPoint) location

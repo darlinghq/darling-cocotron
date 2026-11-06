@@ -611,6 +611,28 @@ static NSDictionary *modeInfoToDictionary(const XRRModeInfo *mi, int depth) {
     return [self modifierFlagsForState: r.mods];
 }
 
+- (NSUInteger) pressedMouseButtons {
+    Window root, child;
+    int rootX, rootY, winX, winY;
+    unsigned int mask = 0;
+
+    if (!XQueryPointer(_display, DefaultRootWindow(_display), &root, &child,
+                       &rootX, &rootY, &winX, &winY, &mask))
+        return 0;
+
+    // X numbers the buttons by position (1 left, 2 middle, 3 right); Cocoa
+    // numbers them 0 left, 1 right, 2 middle. The core protocol only reports
+    // the state of buttons 1 to 5, and 4 and 5 are the wheel.
+    NSUInteger buttons = 0;
+    if (mask & Button1Mask)
+        buttons |= 1 << 0;
+    if (mask & Button3Mask)
+        buttons |= 1 << 1;
+    if (mask & Button2Mask)
+        buttons |= 1 << 2;
+    return buttons;
+}
+
 - (NSPasteboard *) pasteboardWithName: (NSString *) name {
     return [X11Pasteboard pasteboardWithName: name];
 }
