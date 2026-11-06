@@ -1560,15 +1560,14 @@ enum {
                 [window setLastKnownCursorPosition: pos];
             }
 
-            // Button2Mask is the middle button, not the right one, so reading
-            // it as a right drag made a middle-button drag indistinguishable
-            // from a right-button one. AppKit has no NSOtherMouseDragged, so
-            // the other buttons only move the mouse, as on macOS.
+            // X11 numbers the right button 3 (Button3Mask); Button2Mask is
+            // the middle button. This backend does not deliver other-mouse
+            // drags yet, so a middle-button drag is reported as a move.
             type = NSMouseMoved;
 
             if (ev->xmotion.state & Button1Mask) {
                 type = NSLeftMouseDragged;
-            } else if (ev->xmotion.state & Button2Mask) {
+            } else if (ev->xmotion.state & Button3Mask) {
                 type = NSRightMouseDragged;
             }
 
