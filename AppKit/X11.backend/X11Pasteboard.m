@@ -110,9 +110,10 @@ static size_t MaximumPropertyBytes(Display *display) {
     int screen = DefaultScreen(_display);
     _window = XCreateSimpleWindow(_display, RootWindow(_display, screen), -10,
                                   -10, 1, 1, 0, 0, 0);
-    XSelectInput(_display, _window,
-                 SelectionClear | SelectionRequest | SelectionNotify |
-                         PropertyNotify);
+    // XSelectInput() takes event masks, not event types. The selection events
+    // are always delivered; PropertyNotify is what an INCR transfer into this
+    // window waits for, and it needs PropertyChangeMask.
+    XSelectInput(_display, _window, PropertyChangeMask);
 
     [x11Display setWindow: self forID: _window];
 
