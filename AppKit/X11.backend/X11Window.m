@@ -35,6 +35,8 @@
 
 #import "X11Display.h"
 #import "../../CoreGraphics/X11.backend/X11Monitors.h"
+#import "X11Fullscreen.h"
+#import "X11InputShape.h"
 #import "X11SubWindow.h"
 #import "X11Window.h"
 #import <X11/Xatom.h>
@@ -161,7 +163,8 @@ static NSData *makeWindowIcon() {
 
     _frame = [self transformFrame: [delegate frame]];
     BOOL isPanel = [delegate isKindOfClass: [NSPanel class]];
-    if (isPanel && _styleMask & NSDocModalWindowMask)
+    BOOL isSheetPanel = isPanel && (_styleMask & NSDocModalWindowMask);
+    if (isSheetPanel)
         _styleMask = NSBorderlessWindowMask;
     // TODO: get rid of these glX calls
     GLint att[] = {GLX_RGBA,
@@ -194,8 +197,24 @@ static NSData *makeWindowIcon() {
 
     XSetWindowAttributes xattr;
     unsigned long xattr_mask;
+    // Only windows that must stay out of the window manager's hands are
+    // unmanaged: menus, popups, sheets and anything that cannot become key
+    // (NSWindow answers NO for a borderless window unless its class overrides
+    // -canBecomeKeyWindow, so only such windows change). A borderless
+    // window that can become key (a borderless fullscreen game, a custom-chrome
+    // app window) is a normal application window; left override-redirect it never
+    // receives keyboard focus from a compositor and cannot be made fullscreen.
     xattr.override_redirect =
-            _styleMask == NSBorderlessWindowMask ? True : False;
+            (_styleMask == NSBorderlessWindowMask && !isPanel &&
+             ([delegate isKindOfClass: [NSMenuWindow class]] ||
+              [delegate isKindOfClass: NSClassFromString(@"NSPopUpWindow")] ||
+              ![delegate canBecomeKeyWindow]))
+                    ? True
+                    : False;
+    if (isSheetPanel) {
+        xattr.override_redirect = True;
+    }
+    _overrideRedirect = xattr.override_redirect;
     xattr_mask = CWOverrideRedirect | CWColormap;
     xattr.colormap = cmap;
 
@@ -280,24 +299,52 @@ static NSData *makeWindowIcon() {
     return _styleMask;
 }
 
-- (void) setStyleMaskInternal: (NSUInteger) mask force: (BOOL) force {
-    if (force || (mask & NSWindowStyleMaskResizable) !=
-                         (_styleMask & NSWindowStyleMaskResizable)) {
-        XSizeHints *sh = XAllocSizeHints();
-        if (mask & NSWindowStyleMaskResizable) {
-            // Make resizable
-            sh->flags = 0;
-        } else {
-            // Make non-resizable
-            sh->flags = PMinSize | PMaxSize;
-            sh->min_width = sh->max_width = _frame.size.width;
-            sh->min_height = sh->max_height = _frame.size.height;
-        }
-
-        XSetWMSizeHints(_display, _window, sh, XA_WM_NORMAL_HINTS);
-        XFree(sh);
+// The mask is passed in rather than read from _styleMask because
+// -setStyleMask: hands the new mask here before it stores it. The hinted size is
+// _frame's, so a caller that just resized has to re-issue these.
+- (void) updateSizeHints: (NSUInteger) mask {
+    XSizeHints *sh = XAllocSizeHints();
+    if (mask & NSWindowStyleMaskResizable) {
+        // Make resizable
+        sh->flags = 0;
+    } else {
+        // Make non-resizable
+        sh->flags = PMinSize | PMaxSize;
+        sh->min_width = sh->max_width = _frame.size.width;
+        sh->min_height = sh->max_height = _frame.size.height;
     }
 
+    // An untitled window that is managed (a borderless game or custom-chrome window)
+    // positions itself: say so, or a window manager may place it as it likes
+    // (ICCCM 4.1.2.3).
+    if (!_overrideRedirect && !(mask & NSWindowStyleMaskTitled))
+        sh->flags |= USPosition | PPosition;
+
+    XSetWMSizeHints(_display, _window, sh, XA_WM_NORMAL_HINTS);
+    XFree(sh);
+}
+
+// Whether the window manager should hold this window fullscreen: the
+// application asked for it, or it is a managed borderless window sitting exactly on
+// a monitor (see X11Fullscreen.h). `frame` is in Cocoa's global space, like
+// -frame.
+- (BOOL) wantsFullscreenWithStyleMask: (NSUInteger) mask frame: (O2Rect) frame {
+    BOOL styleFullScreen = (mask & NSWindowStyleMaskFullScreen) != 0;
+    BOOL titled = (mask & NSWindowStyleMaskTitled) != 0;
+    BOOL coversMonitor = NO;
+    // The monitor test is a server round trip; skip it when it cannot change the answer.
+    if (!_overrideRedirect && !styleFullScreen && !titled) {
+        O2Rect device = [self transformFrame: frame];
+        X11FullscreenRect rect = {(int) device.origin.x, (int) device.origin.y,
+                                  (unsigned int) device.size.width,
+                                  (unsigned int) device.size.height};
+        coversMonitor = X11FullscreenRectIsMonitor(_display, rect);
+    }
+    return X11FullscreenWanted(_overrideRedirect, styleFullScreen, titled,
+                               coversMonitor);
+}
+
+- (void) requestFullscreen: (BOOL) fullscreen force: (BOOL) force {
     if (!_mapped) {
         long states[2];
         int states_cnt = 0;
@@ -305,7 +352,7 @@ static NSData *makeWindowIcon() {
             states[states_cnt++] =
                     (long) XInternAtom(_display, "_NET_WM_STATE_MODAL", False);
         }
-        if (mask & NSWindowStyleMaskFullScreen) {
+        if (fullscreen) {
             states[states_cnt++] = (long) XInternAtom(
                     _display, "_NET_WM_STATE_FULLSCREEN", False);
         }
@@ -313,21 +360,33 @@ static NSData *makeWindowIcon() {
                         XInternAtom(_display, "_NET_WM_STATE", False), XA_ATOM,
                         32, PropModeReplace, (const unsigned char *) states,
                         states_cnt);
-    } else if (force || ((mask & NSWindowStyleMaskFullScreen) !=
-                         (_styleMask & NSWindowStyleMaskFullScreen))) {
-        XClientMessageEvent event = {0};
-        event.type = ClientMessage;
-        event.window = _window;
-        event.message_type = XInternAtom(_display, "_NET_WM_STATE", False);
-        event.format = 32;
-        event.data.l[0] = (mask & NSWindowStyleMaskFullScreen) ? 1 : 2;
-        event.data.l[1] =
-                (long) XInternAtom(_display, "_NET_WM_STATE_FULLSCREEN", False);
-        event.data.l[3] = 1;
-        XSendEvent(_display, DefaultRootWindow(_display), False,
-                   SubstructureNotifyMask | SubstructureRedirectMask,
-                   (XEvent *) &event);
+    } else if (force || fullscreen != _fullscreenRequested) {
+        X11FullscreenRequest(_display, _window, fullscreen);
     }
+    _fullscreenRequested = fullscreen;
+}
+
+// The window manager changes _NET_WM_STATE on its own too (it leaves fullscreen
+// on a keybinding), so follow it: a later setFrame: onto the same monitor then
+// asks again instead of trusting the last request. While the window is unmapped
+// the property is ours.
+- (void) propertyNotify: (XPropertyEvent *) event {
+    if (event->atom != XInternAtom(_display, "_NET_WM_STATE", False))
+        return;
+    _miniaturizedKnown = NO;
+    if (_mapped)
+        _fullscreenRequested = X11FullscreenIsSet(_display, _window);
+}
+
+- (void) setStyleMaskInternal: (NSUInteger) mask force: (BOOL) force {
+    if (force || (mask & NSWindowStyleMaskResizable) !=
+                         (_styleMask & NSWindowStyleMaskResizable)) {
+        [self updateSizeHints: mask];
+    }
+
+    [self requestFullscreen: [self wantsFullscreenWithStyleMask: mask
+                                                          frame: [self frame]]
+                      force: force];
 }
 
 - (void) setStyleMask: (NSUInteger) mask {
@@ -335,11 +394,22 @@ static NSData *makeWindowIcon() {
 
     [self setStyleMaskInternal: mask force: NO];
 
+    // The window manager draws the frame of a titled window and none for a
+    // borderless one, so the decoration hint follows the style.
+    BOOL borderless = mask == NSBorderlessWindowMask;
+    if (borderless != (_styleMask == NSBorderlessWindowMask)) {
+        if (borderless)
+            [[self class] removeDecorationForWindow: _window
+                                          onDisplay: _display];
+        else
+            XDeleteProperty(_display, _window,
+                            XInternAtom(_display, "_MOTIF_WM_HINTS", False));
+    }
+
     _styleMask = mask;
 }
 
 + (void) removeDecorationForWindow: (Window) w onDisplay: (Display *) dpy {
-    return;
     struct {
         unsigned long flags;
         unsigned long functions;
@@ -357,9 +427,20 @@ static NSData *makeWindowIcon() {
 
 - (void) ensureMapped {
     if (!_mapped) {
+        // A withdrawn window loses _NET_WM_STATE (EWMH), so the window has to say
+        // again, before it is mapped, what it is: fullscreen if it covers a monitor,
+        // and modal, which requestFullscreen: writes as well.
+        [self requestFullscreen: [self wantsFullscreenWithStyleMask: _styleMask
+                                                              frame: [self frame]]
+                          force: NO];
         XMapWindow(_display, _window);
         _mapped = YES;
+        _miniaturizedKnown = NO;
     }
+}
+
+- (BOOL) isMapped {
+    return _mapped;
 }
 
 - (void) showWindowWithoutActivation {
@@ -379,13 +460,22 @@ static NSData *makeWindowIcon() {
     long mask = KeyPressMask | KeyReleaseMask | ExposureMask |
                 StructureNotifyMask | EnterWindowMask | LeaveWindowMask |
                 ButtonPressMask | ButtonReleaseMask | ButtonMotionMask |
-                VisibilityChangeMask | FocusChangeMask |
+                VisibilityChangeMask | FocusChangeMask | PropertyChangeMask |
                 SubstructureRedirectMask;
 
     if ([_delegate acceptsMouseMovedEvents]) {
         mask |= PointerMotionMask;
     }
     XSelectInput(_display, _window, mask);
+
+    // Click-through windows (overlays, tooltips) must not take the pointer from
+    // the window below. Only a change needs a request.
+    BOOL ignoresMouseEvents = [_delegate ignoresMouseEvents];
+    if (ignoresMouseEvents != _ignoresMouseEvents && _window != 0 &&
+        X11WindowSetIgnoresMouseEvents(_display, _window, ignoresMouseEvents)) {
+        _ignoresMouseEvents = ignoresMouseEvents;
+        XFlush(_display);
+    }
 
     // TODO: background color
 }
@@ -479,11 +569,30 @@ static NSData *makeWindowIcon() {
 }
 
 - (void) setFrame: (O2Rect) frame {
-    frame = [self transformFrame: frame];
+    O2Rect transformed = [self transformFrame: frame];
+    NSSize previousSize = _frame.size;
+    // Leave fullscreen before moving to a frame that does not cover a monitor,
+    // or the manager keeps imposing its fullscreen size, and before moving a
+    // fullscreen window elsewhere, which the manager would ignore; enter it after
+    // moving onto a monitor.
+    BOOL fullscreen = [self wantsFullscreenWithStyleMask: _styleMask
+                                                   frame: frame];
+    BOOL moved = _frame.origin.x != transformed.origin.x ||
+                 _frame.origin.y != transformed.origin.y;
+    if (X11FullscreenLeaveBeforeMove(fullscreen, _fullscreenRequested, moved))
+        [self requestFullscreen: NO force: NO];
+    frame = transformed;
     XMoveResizeWindow(_display, _window, frame.origin.x, frame.origin.y,
                       frame.size.width, frame.size.height);
     [self invalidateContextWithNewSize: frame.size];
     _frame = frame;
+    // A non-resizable window hints PMinSize == PMaxSize, and a window manager
+    // refuses any resize that falls outside the pair, so the hints have to follow
+    // the size. Only on a real change so a drag does not re-issue them per pixel.
+    if (!NSEqualSizes(previousSize, frame.size))
+        [self updateSizeHints: _styleMask];
+    if (fullscreen && !_fullscreenRequested)
+        [self requestFullscreen: YES force: NO];
 }
 
 - (void) setHasShadow: (BOOL) value {
@@ -520,6 +629,12 @@ static NSData *makeWindowIcon() {
 - (void) hideWindow {
     XUnmapWindow(_display, _window);
     _mapped = NO;
+    _miniaturizedKnown = NO;
+    // The window manager drops the fullscreen state of a withdrawn window.
+    _fullscreenRequested = NO;
+    // A focus request still waiting for MapNotify is void once the window is
+    // ordered out; otherwise a later non-key orderFront would take focus.
+    _wantsInputFocus = NO;
 }
 
 - (void) placeAboveWindow: (NSInteger) otherNumber {
@@ -546,15 +661,133 @@ static NSData *makeWindowIcon() {
     }
 }
 
+// Without a window manager nothing moves X input focus: it stays PointerRoot, so
+// key events went to whichever window was under the pointer and no window ever
+// received FocusIn, which left -[NSApplication keyWindow] nil. Ask for focus
+// explicitly: through the EWMH _NET_ACTIVE_WINDOW request when a window manager
+// is running, otherwise with XSetInputFocus once the window is viewable.
+static Window supportingWMCheckWindow(Display *display, Window window,
+                                      Atom check)
+{
+    Atom type;
+    int format;
+    unsigned long count, remaining;
+    unsigned char *data = NULL;
+    Window result = None;
+
+    if (XGetWindowProperty(display, window, check, 0, 1, False, XA_WINDOW,
+                           &type, &format, &count, &remaining, &data) ==
+                Success &&
+        data != NULL && type == XA_WINDOW && format == 32 && count == 1)
+        result = (Window) * (long *) data;
+    if (data != NULL)
+        XFree(data);
+    return result;
+}
+
+static BOOL windowManagerIsRunning(Display *display) {
+    Atom check = XInternAtom(display, "_NET_SUPPORTING_WM_CHECK", True);
+    if (check == None)
+        return NO;
+
+    // A window manager that exited can leave the root property behind. Per
+    // EWMH the child window it names must carry the same property naming
+    // itself; a stale id fails that (the BadWindow is only logged).
+    Window child =
+            supportingWMCheckWindow(display, DefaultRootWindow(display), check);
+    return child != None &&
+           supportingWMCheckWindow(display, child, check) == child;
+}
+
+- (void) requestInputFocus {
+    Window focused;
+    int revert;
+    XGetInputFocus(_display, &focused, &revert);
+    if (focused == _window) {
+        _wantsInputFocus = NO;
+        return;
+    }
+
+    if (windowManagerIsRunning(_display)) {
+        XEvent event;
+        memset(&event, 0, sizeof(event));
+        event.xclient.type = ClientMessage;
+        event.xclient.window = _window;
+        event.xclient.message_type =
+                XInternAtom(_display, "_NET_ACTIVE_WINDOW", False);
+        event.xclient.format = 32;
+        event.xclient.data.l[0] = 1; // source indication: application
+        event.xclient.data.l[1] = CurrentTime;
+        XSendEvent(_display, DefaultRootWindow(_display), False,
+                   SubstructureRedirectMask | SubstructureNotifyMask, &event);
+        XFlush(_display);
+        _wantsInputFocus = NO;
+        return;
+    }
+
+    XWindowAttributes attributes;
+    if (XGetWindowAttributes(_display, _window, &attributes) &&
+        attributes.map_state == IsViewable) {
+        XSetInputFocus(_display, _window, RevertToPointerRoot, CurrentTime);
+        // Send it now: an idle run loop may not flush Xlib's output buffer until the
+        // next event, so key events typed meanwhile would still go to the old window.
+        XFlush(_display);
+        _wantsInputFocus = NO;
+    } else {
+        // Not viewable yet (the map request is still pending): retry on MapNotify.
+        _wantsInputFocus = YES;
+    }
+}
+
+- (void) mapNotified {
+    if (_wantsInputFocus)
+        [self requestInputFocus];
+}
+
 - (void) makeKey {
     [self ensureMapped];
+    // FocusIn activates the NSWindow, which makes it key again and ends up here.
+    // The focus change came from the window manager, which also stacks the
+    // window, so leave both alone. Answering a FocusIn that is already stale
+    // (focus has moved on since) with a raise or a focus request moves focus
+    // back: window managers that focus a window that raises itself, xfwm4 among
+    // them, then bounce focus between two windows forever.
+    if (_receivingFocus)
+        return;
     XRaiseWindow(_display, _window);
+    [self requestInputFocus];
 }
 
 - (void) makeMain {
 }
 
 - (void) captureEvents {
+}
+
+// -[NSApplication requestUserAttention:] reaches this unconditionally about
+// three seconds later, and without an override CGWindow raises
+// NSInvalidAbstractInvocation, so any app that asks for attention died there.
+// The EWMH request is per-window; XBell would ring the screen bell instead.
+- (void) flashWindow {
+    // -invalidate leaves no X window behind.
+    if (_window == 0)
+        return;
+
+    XEvent event = {0};
+    event.xclient.type = ClientMessage;
+    event.xclient.window = _window;
+    event.xclient.message_type = XInternAtom(_display, "_NET_WM_STATE", False);
+    event.xclient.format = 32;
+    event.xclient.data.l[0] = 1; // add
+    event.xclient.data.l[1] =
+        (long) XInternAtom(_display, "_NET_WM_STATE_DEMANDS_ATTENTION", False);
+    event.xclient.data.l[2] = 1; // source indication: application
+    event.xclient.data.l[3] = CurrentTime;
+    XSendEvent(_display, DefaultRootWindow(_display), False,
+               SubstructureRedirectMask | SubstructureNotifyMask, &event);
+    // Nothing else happens on this path, and an idle run loop may sit on the
+    // request until the next event or the next X call.
+    XFlush(_display);
 }
 
 - (void) miniaturize {
@@ -565,7 +798,18 @@ static NSData *makeWindowIcon() {
     XRaiseWindow(_display, _window);
 }
 
+// NSWindow asks this of every window on each pass of the event loop, and
+// reading the property is a round trip. The window selects PropertyChangeMask,
+// so a change of _NET_WM_STATE, whoever makes it, arrives as PropertyNotify.
 - (BOOL) isMiniaturized {
+    if (!_miniaturizedKnown) {
+        _miniaturized = [self readMiniaturized];
+        _miniaturizedKnown = YES;
+    }
+    return _miniaturized;
+}
+
+- (BOOL) readMiniaturized {
     Atom wmState = XInternAtom(_display, "_NET_WM_STATE", FALSE);
     Atom hiddenState = XInternAtom(_display, "_NET_WM_STATE_HIDDEN", FALSE);
 

@@ -43,12 +43,6 @@ CGOpenGLDisplayMask CGDisplayIDToOpenGLDisplayMask(CGDirectDisplayID a) {
     return 0;
 }
 
-CGError CGDisplayMoveCursorToPoint(CGDirectDisplayID a, CGPoint b) {
-    if(verbose)
-        puts("STUB: CGDisplayMoveCursorToPoint called");
-    return (CGError)0;
-}
-
 void CGDisplayRestoreColorSyncSettings(void) {
     if(verbose)
         puts("STUB: CGDisplayRestoreColorSyncSettings called");

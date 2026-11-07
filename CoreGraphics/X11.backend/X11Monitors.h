@@ -155,12 +155,6 @@ static inline X11Point X11CGPointToRoot(X11Frame primaryRoot, X11Point point) {
     return root;
 }
 
-/* Cocoa point to CoreGraphics point and back: the same flip against the main monitor's height. */
-static inline X11Point X11FlipY(double primaryHeight, X11Point point) {
-    X11Point flipped = {point.x, primaryHeight - point.y};
-    return flipped;
-}
-
 /* A display's CGDirectDisplayID is tied to the RandR output it drives (output index + 1), not to its place in the
  * listing: the mode functions address the output by that index, and the listing starts with the main monitor. */
 static inline unsigned int X11MonitorDisplayID(int outputIndex) {

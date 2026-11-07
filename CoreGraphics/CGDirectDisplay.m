@@ -17,6 +17,7 @@
  along with Darling.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#import "CGDisplayGeometry.h"
 #import <AppKit/NSDisplay.h>
 #import <AppKit/NSScreen.h>
 #import <CoreGraphics/CGDirectDisplay.h>
@@ -257,7 +258,7 @@ CGError CGDisplayHideCursor(CGDirectDisplayID displayIndex) {
     if (!display)
         return kCGErrorInvalidConnection;
 
-    [display hideCursor];
+    [display hideCursorCounted];
     return kCGErrorSuccess;
 }
 
@@ -266,7 +267,7 @@ CGError CGDisplayShowCursor(CGDirectDisplayID displayIndex) {
     if (!display)
         return kCGErrorInvalidConnection;
 
-    [display unhideCursor];
+    [display unhideCursorCounted];
     return kCGErrorSuccess;
 }
 
@@ -522,12 +523,72 @@ io_service_t CGDisplayIOServicePort(CGDirectDisplayID displayID) {
     return servicePort;
 }
 
+// The union of the active displays in CoreGraphics' global space.
+static CGDisplayGeometryRect desktopBounds(NSArray<NSScreen *> *screens) {
+    CGDisplayGeometryRect desktop = {0, 0, 0, 0};
+    for (NSScreen *screen in screens) {
+        if (NSIsEmptyRect([screen frame]))
+            continue;
+        CGRect rect = globalRectForFrame(screens, [screen frame]);
+        desktop = CGDisplayGeometryUnion(
+                desktop, (CGDisplayGeometryRect){rect.origin.x, rect.origin.y,
+                                                 rect.size.width, rect.size.height});
+    }
+    return desktop;
+}
+
+// The one place CoreGraphics' global point meets the backend's: clip it to the
+// desktop and hand it to -warpMouse:, which takes CoreGraphics' global space (the
+// space CGEventGetLocation() reports). The rules are written down in
+// CGDisplayGeometry.h.
+static CGError warpToGlobalPoint(NSDisplay *display, CGPoint point) {
+    if (!isfinite(point.x) || !isfinite(point.y))
+        return kCGErrorIllegalArgument;
+
+    NSArray<NSScreen *> *screens = [display screens];
+    if ([screens count] == 0)
+        return kCGErrorCannotComplete;
+
+    NSScreen *main = [screens objectAtIndex: 0];
+    // No active output: the point has no desktop to land in.
+    if (NSIsEmptyRect([main frame]))
+        return kCGErrorCannotComplete;
+    CGFloat scale = [main backingScaleFactor];
+    if (!(scale >= 1))
+        scale = 1;
+
+    CGDisplayGeometryPoint clipped = CGDisplayGeometryClamp(
+            desktopBounds(screens), scale,
+            (CGDisplayGeometryPoint){point.x, point.y});
+
+    [display warpMouse: NSMakePoint(clipped.x, clipped.y)];
+    return kCGErrorSuccess;
+}
+
 CGError CGWarpMouseCursorPosition(CGPoint newCursorPosition) {
     NSDisplay *display = currentDisplay();
     if (!display)
         return kCGErrorInvalidConnection;
-    [display warpMouse: newCursorPosition];
-    return kCGErrorSuccess;
+    return warpToGlobalPoint(display, newCursorPosition);
+}
+
+CGError CGDisplayMoveCursorToPoint(CGDirectDisplayID displayID, CGPoint newCursorPosition) {
+    NSDisplay *display = currentDisplay();
+    if (!display)
+        return kCGErrorInvalidConnection;
+
+    // The point is relative to the upper-left corner of that display.
+    NSArray<NSScreen *> *screens = [display screens];
+    NSScreen *screen = screenForDisplayID(screens, displayID);
+    if (!screen || NSIsEmptyRect([screen frame]))
+        return kCGErrorIllegalArgument;
+
+    CGRect bounds = globalRectForFrame(screens, [screen frame]);
+    CGDisplayGeometryPoint global = CGDisplayGeometryDisplayToGlobal(
+            (CGDisplayGeometryRect){bounds.origin.x, bounds.origin.y,
+                                    bounds.size.width, bounds.size.height},
+            (CGDisplayGeometryPoint){newCursorPosition.x, newCursorPosition.y});
+    return warpToGlobalPoint(display, CGPointMake(global.x, global.y));
 }
 
 CGError CGAssociateMouseAndMouseCursorPosition(boolean_t connected) {
@@ -535,7 +596,9 @@ CGError CGAssociateMouseAndMouseCursorPosition(boolean_t connected) {
     if (!display)
         return kCGErrorInvalidConnection;
 
-    [display grabMouse: connected];
+    // Disconnecting the mouse from the cursor is what -grabMouse: YES does:
+    // the cursor stays put and the mouse only produces deltas.
+    [display grabMouse: !connected];
     return kCGErrorSuccess;
 }
 

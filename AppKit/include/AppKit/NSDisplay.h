@@ -28,6 +28,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @interface NSDisplay : NSObject {
     NSMutableArray *_eventQueue;
+    BOOL _cursorHiddenUntilMouseMoves;
+    NSInteger _cursorHideCount;
 }
 
 + (NSDisplay *) currentDisplay;
@@ -49,6 +51,15 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (void) hideCursor;
 - (void) unhideCursor;
+// Counted hide and unhide, as on macOS: -hideCursor runs on the first hide and -unhideCursor
+// when the last one is undone, so an explicit hide survives a pending hide-until-motion.
+// +[NSCursor hide], CGDisplayHideCursor and -setCursorHiddenUntilMouseMoves: use these.
+- (void) hideCursorCounted;
+- (void) unhideCursorCounted;
+// Hides the cursor until the pointer moves (+[NSCursor setHiddenUntilMouseMoves:]).
+// The state is tracked here, so a backend reports motion with -pointerMoved.
+- (void) setCursorHiddenUntilMouseMoves: (BOOL) flag;
+- (void) pointerMoved;
 
 - (id) cursorWithImage: (NSImage *) image hotSpot: (NSPoint) hotSpot;
 - (id) cursorWithName: (NSString *) name;
@@ -123,6 +134,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 // position is in CoreGraphics' global space (origin at the main screen's top-left
 // corner, y down), as CGWarpMouseCursorPosition() takes it.
 - (void) warpMouse: (NSPoint) position;
+// YES disassociates the mouse from the cursor, as
+// CGAssociateMouseAndMouseCursorPosition(false) does: the cursor stays where it
+// is and mouse motion only produces event deltas. NO restores normal operation.
 - (void) grabMouse: (BOOL) doGrab;
 
 @end

@@ -142,6 +142,39 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     NSInvalidAbstractInvocation();
 }
 
+- (void) hideCursorCounted {
+    if (_cursorHideCount++ == 0)
+        [self hideCursor];
+}
+
+// An unhide with nothing hidden does nothing.
+- (void) unhideCursorCounted {
+    if (_cursorHideCount > 0 && --_cursorHideCount == 0)
+        [self unhideCursor];
+}
+
+// The flag is idempotent and counts as one hide, so the hide/unhide pair stays balanced and an
+// explicit +[NSCursor hide] is neither undone by it nor undoes it.
+- (void) setCursorHiddenUntilMouseMoves: (BOOL) flag {
+    if (_cursorHiddenUntilMouseMoves == flag)
+        return;
+
+    _cursorHiddenUntilMouseMoves = flag;
+    if (flag)
+        [self hideCursorCounted];
+    else
+        [self unhideCursorCounted];
+}
+
+// A backend calls this when the pointer genuinely moves. It cancels a pending
+// -setCursorHiddenUntilMouseMoves:YES, as the cursor reappears on macOS.
+- (void) pointerMoved {
+    if (_cursorHiddenUntilMouseMoves) {
+        _cursorHiddenUntilMouseMoves = NO;
+        [self unhideCursorCounted];
+    }
+}
+
 // Arrow, IBeam, HorizontalResize, VerticalResize
 - (id) cursorWithName: (NSString *) name {
     NSInvalidAbstractInvocation();
