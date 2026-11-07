@@ -807,6 +807,11 @@ static NSLock *_cacheLock = nil;
 }
 
 - (BOOL) isFixedPitch {
+    // A font that declares itself fixed-pitch is, even if it has glyphs,
+    // such as combining marks, with other advances.
+    if (CTFontGetSymbolicTraits(_ctFont) & kCTFontTraitMonoSpace)
+        return YES;
+
     CGSize current;
     NSInteger glyph, glyphCount = CTFontGetGlyphCount(_ctFont);
     CGGlyph glyphs[glyphCount];
