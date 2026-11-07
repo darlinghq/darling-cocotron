@@ -1005,6 +1005,10 @@ static id<CAAction> actionInStyle(NSDictionary *style, NSString *key) {
     _textureSeed = value;
 }
 
+- (BOOL) _drawLayerContents: (CGRect) bounds opacity: (CGFloat) opacity {
+    return NO;
+}
+
 @end
 
 @implementation NSNull (CAActionAdditions)

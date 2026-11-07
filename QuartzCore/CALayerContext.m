@@ -2,11 +2,16 @@
 #import <Foundation/NSString.h>
 #import <QuartzCore/CALayer.h>
 #import <QuartzCore/CALayerContext.h>
+#import <QuartzCore/CAMetalLayer.h>
 #import <QuartzCore/CARenderer.h>
 #import "CALayerInternal.h"
 #import <OpenGL/CGLInternal.h>
 
-@class CAMetalLayerInternal;
+// The methods of CAMetalLayerInternal used here. Its header is Objective-C++.
+@interface CAMetalLayerInternal : CAMetalLayer
+- (BOOL) hasQueuedDrawables;
+- (void) prepareRender;
+@end
 
 @implementation CALayerContext
 
@@ -41,6 +46,7 @@
 
     _frame = rect;
     _deleteTextureIds = [[NSMutableArray alloc] init];
+    _swapInterval = -1;
 
     _renderer = [[CARenderer rendererWithCGLContext: _glContext
                                             options: nil] retain];
@@ -150,7 +156,15 @@
 }
 
 - (void) renderLayer: (CALayer *) layer {
-    CGLContextMakeCurrentAndAttachToWindow(_glContext, _cglWindow);
+    if (CGLContextMakeCurrentAndAttachToWindow(_glContext, _cglWindow) != kCGLNoError)
+        return;
+
+    // A context's draw and read buffers start out as NONE when it is first
+    // made current without a window surface, and a Metal layer does that to
+    // create its drawables. Attaching the window later does not change them,
+    // so select the window's back buffer, which the flush swaps.
+    glDrawBuffer(GL_BACK);
+    glReadBuffer(GL_BACK);
 
     glEnable(GL_DEPTH_TEST);
     glShadeModel(GL_SMOOTH);
@@ -189,16 +203,25 @@
     [self renderLayer: _layer];
 }
 
-static BOOL layerTreeHasAnimations(CALayer *layer) {
+static BOOL layerTreeNeedsAnotherFrame(CALayer *layer) {
     if ([[layer animationKeys] count] > 0)
         return YES;
+    // A Metal layer's frames arrive as presents from the app rather than as
+    // layer-tree mutations, so the tree stays animation-free between them and the
+    // animation check alone stops the timer after every present, costing a fresh
+    // timer and its first 1/60s delay each time.
+    if ([[layer class] isSubclassOfClass: [CAMetalLayerInternal class]] &&
+        [(CAMetalLayerInternal*)layer hasQueuedDrawables])
+        return YES;
     for (CALayer *child in layer.sublayers)
-        if (layerTreeHasAnimations(child))
+        if (layerTreeNeedsAnotherFrame(child))
             return YES;
     return NO;
 }
 
 - (void) timer: (NSTimer *) timer {
+    // Consume requests for this frame before callbacks can request another.
+    _renderRequested = NO;
     [_renderer beginFrameAtTime: CACurrentMediaTime() timeStamp: NULL];
 
     [self render];
@@ -209,8 +232,10 @@ static BOOL layerTreeHasAnimations(CALayer *layer) {
     [self flush];
 
     // beginFrameAtTime: drops finished animations. Once none are left, the frame
-    // just drawn shows the final values: stop until an animation is added again.
-    if (!layerTreeHasAnimations(_layer)) {
+    // just drawn shows the final values: stop until an animation is added again,
+    // or until a Metal layer has another present waiting to be composited,
+    // or unless callbacks requested a subsequent frame while rendering or presenting this one.
+    if (!_renderRequested && !layerTreeNeedsAnotherFrame(_layer)) {
         [_timer invalidate];
         [_timer release];
         _timer = nil;
@@ -218,17 +243,44 @@ static BOOL layerTreeHasAnimations(CALayer *layer) {
 }
 
 - (void) startTimerIfNeeded {
-    if (_timer == nil)
-        _timer = [[NSTimer scheduledTimerWithTimeInterval: 1.0 / 60.0
-                                                   target: self
-                                                 selector: @selector(timer:)
-                                                 userInfo: nil
-                                                  repeats: YES] retain];
+    // Metal layers present from arbitrary app threads. A timer scheduled there
+    // lands on a run loop that never spins, so the frame is never composited.
+    if (![NSThread isMainThread]) {
+        [self performSelectorOnMainThread: @selector(startTimerIfNeeded)
+                               withObject: nil
+                            waitUntilDone: NO
+                                    modes: [NSArray arrayWithObject: NSRunLoopCommonModes]];
+        return;
+    }
+    _renderRequested = YES;
+    if (_timer == nil) {
+        _timer = [[NSTimer timerWithTimeInterval: 1.0 / 60.0
+                                          target: self
+                                        selector: @selector(timer:)
+                                        userInfo: nil
+                                         repeats: YES] retain];
+        // Common modes keep frames flowing during live resize/drag tracking.
+        [[NSRunLoop mainRunLoop] addTimer: _timer forMode: NSRunLoopCommonModes];
+    }
 }
 
 - (void) deleteTextureId: (NSNumber *) textureId {
     if (textureId != nil)
         [_deleteTextureIds addObject: textureId];
+}
+
+// The swap interval the Metal layers in a tree ask for: 1 if any of them has
+// displaySyncEnabled set, 0 if none has, and -1 for a tree without Metal layers.
+static GLint metalLayerSwapInterval(CALayer *layer) {
+    GLint interval = -1;
+    if ([[layer class] isSubclassOfClass: [CAMetalLayerInternal class]])
+        interval = [(CAMetalLayer *) layer displaySyncEnabled] ? 1 : 0;
+    for (CALayer *child in layer.sublayers) {
+        GLint childInterval = metalLayerSwapInterval(child);
+        if (childInterval > interval)
+            interval = childInterval;
+    }
+    return interval;
 }
 
 - (void) flush {
@@ -241,6 +293,15 @@ static BOOL layerTreeHasAnimations(CALayer *layer) {
     CGLContextObj previous = CGLGetCurrentContext();
     if (CGLContextMakeCurrentAndAttachToWindow(_glContext, _cglWindow) != kCGLNoError)
         return;
+
+    // A Metal layer's frames are synchronized with the display refresh unless
+    // its displaySyncEnabled is NO, and they reach the screen through this
+    // swap. Other trees keep the context's own setting.
+    GLint interval = metalLayerSwapInterval(_layer);
+    if (interval >= 0 && interval != _swapInterval &&
+        CGLSetParameter(_glContext, kCGLCPSwapInterval, &interval) == kCGLNoError)
+        _swapInterval = interval;
+
     CGLFlushDrawable(_glContext);
     if (previous != _glContext)
         CGLSetCurrentContext(previous);

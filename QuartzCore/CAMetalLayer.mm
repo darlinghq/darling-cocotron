@@ -225,6 +225,8 @@ static void reportGLErrors(void) {
 	if (self != nil) {
 		_pixelFormat = MTLPixelFormatBGRA8Unorm;
 		_framebufferOnly = YES;
+		// Unlike other layers, Metal layers are opaque by default.
+		_opaque = YES;
 		_drawableSize = _bounds.size; // TODO: multiply by contentsScale, once we add that to CALayer
 		_displaySyncEnabled = YES;
 		_maximumDrawableCount = 3;
@@ -410,10 +412,28 @@ static void reportGLErrors(void) {
 
 - (void)queuePresent: (NSUInteger)drawableID
 {
+	std::shared_ptr<CAMetalDrawableActual> overflowed;
+
 	[_drawableCondition lock];
-	_queuedDrawables[_queuedDrawableCount] = drawableID;
-	++_queuedDrawableCount;
+	// Every entry names a drawable that is still checked out, since -nextDrawable
+	// cleared its _usableDrawablesBitmap bit and -releaseDrawable: only sets it
+	// back after a -prepareRender already popped the entry. So the queue cannot
+	// outgrow the pool, but that bound lives in -nextDrawable and _queuedDrawables
+	// is a fixed array, so check it here rather than write blind.
+	if (_queuedDrawableCount < _drawables.size()) {
+		_queuedDrawables[_queuedDrawableCount] = drawableID;
+		++_queuedDrawableCount;
+	} else {
+		overflowed = _drawables[drawableID];
+	}
 	[_drawableCondition unlock];
+
+	if (overflowed) {
+		// Report the present as dropped, which fires the drawable's presented
+		// handlers and recycles the slot. Outside the lock, because those handlers
+		// end in -releaseDrawable:, which relocks it.
+		overflowed->didDrop();
+	}
 
 	// we now need to schedule a render
 	//
@@ -428,6 +448,22 @@ static void reportGLErrors(void) {
 	_usableDrawablesBitmap |= 1u << drawableID;
 	[_drawableCondition signal];
 	[_drawableCondition unlock];
+}
+
+// Creates the texture the compositor draws the layer from, in the current GL
+// context.
+- (void)createRenderTexture
+{
+	reportGLErrors();
+	glCreateTextures(GL_TEXTURE_2D, 1, &_tex);
+	reportGLErrors();
+	glTextureStorage2D(_tex, 1, GL_RGBA8, _drawableSize.width, _drawableSize.height);
+	reportGLErrors();
+	glTextureParameteri(_tex, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTextureParameteri(_tex, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTextureParameteri(_tex, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTextureParameteri(_tex, GL_TEXTURE_WRAP_T, GL_REPEAT);
+	reportGLErrors();
 }
 
 - (void)recreateDrawables
@@ -455,7 +491,7 @@ static void reportGLErrors(void) {
 	}
 	_usableDrawablesBitmap = 0;
 
-	if (!_device || !_context || _drawableSize.width == 0 || _drawableSize.height == 0) {
+	if (!_device || !_context.glContext || _drawableSize.width == 0 || _drawableSize.height == 0) {
 		// can't create new drawables
 		[_drawableCondition unlock];
 		return;
@@ -479,9 +515,15 @@ static void reportGLErrors(void) {
 	CGLContextObj prev = CGLGetCurrentContext();
 	CGLSetCurrentContext(_context.glContext);
 
+	// ask the context once whether it can wait on the drawables' semaphores
+	if (_semaphoreProbeContext != _context.glContext) {
+		_glImportsSemaphores = CAMetalDrawableGLImportsSemaphores();
+		_semaphoreProbeContext = _context.glContext;
+	}
+
 	// now let's start creating the new drawables
 	for (size_t i = 0; i < _maximumDrawableCount; ++i) {
-		_drawables[i] = std::make_shared<CAMetalDrawableActual>(self, _drawableSize, i, pixelFormat, ((MTLDeviceInternal*)self.device).device, _context.glContext);
+		_drawables[i] = std::make_shared<CAMetalDrawableActual>(self, _drawableSize, i, pixelFormat, ((MTLDeviceInternal*)self.device).device, _context.glContext, _glImportsSemaphores);
 		_usableDrawablesBitmap |= 1u << i;
 	}
 
@@ -497,20 +539,21 @@ static void reportGLErrors(void) {
 		if (_tex != 0) {
 			reportGLErrors();
 			glDeleteTextures(1, &_tex);
-			reportGLErrors();
-			glCreateTextures(GL_TEXTURE_2D, 1, &_tex);
-			reportGLErrors();
-			glTextureStorage2D(_tex, 1, GL_RGBA8, _drawableSize.width, _drawableSize.height);
-			reportGLErrors();
-			glTextureParameteri(_tex, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-			glTextureParameteri(_tex, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-			glTextureParameteri(_tex, GL_TEXTURE_WRAP_S, GL_REPEAT);
-			glTextureParameteri(_tex, GL_TEXTURE_WRAP_T, GL_REPEAT);
-			reportGLErrors();
+			[self createRenderTexture];
 		}
 	}
 
 	CGLSetCurrentContext(prev);
+}
+
+// Whether a present is queued that -prepareRender has not composited yet. The
+// render timer uses this to keep drawing between consecutive presents.
+- (BOOL)hasQueuedDrawables
+{
+	[_drawableCondition lock];
+	BOOL queued = _queuedDrawableCount > 0;
+	[_drawableCondition unlock];
+	return queued;
 }
 
 - (void)prepareRender
@@ -551,6 +594,57 @@ static void reportGLErrors(void) {
 	return [NSNumber numberWithUnsignedInt: _tex];
 }
 
+// -prepareRender copies the queued drawable into _tex, so drawing the layer is
+// just binding that texture and emitting the quad. Its texture parameters were
+// set when it was created, and must be left alone: the contents path binds the
+// same texture (via -_textureId) and reallocates it with -glTexImage2D.
+- (BOOL)_drawLayerContents: (CGRect)bounds opacity: (CGFloat)opacity
+{
+	if (_tex == 0)
+		return NO;
+
+	reportGLErrors();
+
+	glEnable(GL_TEXTURE_2D);
+	glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+	glBindTexture(GL_TEXTURE_2D, _tex);
+
+	// An opaque layer's content has no transparency, whatever alpha the app
+	// rendered into its drawables. Sampling alpha as 1 keeps the compositor's
+	// blending and alpha test from making such pixels see-through or dropping
+	// them.
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_A, [self isOpaque] ? GL_ONE : GL_ALPHA);
+
+	// The texture is stored bottom-up like a CGBitmapContext, and the layer's
+	// origin is its bottom-left corner, so the quad is drawn the same way the
+	// contents path draws one.
+	const GLfloat textureVertices[4 * 2] = {0, 1, 1, 1, 0, 0, 1, 0};
+	const GLfloat vertices[4 * 2] = {0, 0, (GLfloat) bounds.size.width, 0,
+									 0, (GLfloat) bounds.size.height,
+									 (GLfloat) bounds.size.width,
+									 (GLfloat) bounds.size.height};
+
+	glTexCoordPointer(2, GL_FLOAT, 0, textureVertices);
+	glVertexPointer(2, GL_FLOAT, 0, vertices);
+	glColor4f(opacity, opacity, opacity, opacity);
+	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+
+	glDisableClientState(GL_TEXTURE_COORD_ARRAY);
+	glDisable(GL_TEXTURE_2D);
+
+	reportGLErrors();
+
+	return YES;
+}
+
+// A Metal layer's content is whatever the app last rendered through -nextDrawable,
+// so -drawInContext: has nothing to draw and rasterising it would only produce
+// a blank bitmap, which the contents path would then upload over _tex.
+- (void)display
+{
+	[_context startTimerIfNeeded];
+}
+
 //
 // overridden methods
 //
@@ -573,26 +667,43 @@ static void reportGLErrors(void) {
 
 - (void)_setContext: (CALayerContext*)context
 {
+	CALayerContext* previous = _context;
+
 	[super _setContext: context];
 
-	if (_tex == 0) {
-		// create our textures now using the context's CGLContext
-		CGLContextObj prev = CGLGetCurrentContext();
-		CGLSetCurrentContext(context.glContext);
-
-		reportGLErrors();
-		glCreateTextures(GL_TEXTURE_2D, 1, &_tex);
-		reportGLErrors();
-		glTextureStorage2D(_tex, 1, GL_RGBA8, _drawableSize.width, _drawableSize.height);
-		reportGLErrors();
-		glTextureParameteri(_tex, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-		glTextureParameteri(_tex, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-		glTextureParameteri(_tex, GL_TEXTURE_WRAP_S, GL_REPEAT);
-		glTextureParameteri(_tex, GL_TEXTURE_WRAP_T, GL_REPEAT);
-		reportGLErrors();
-
-		CGLSetCurrentContext(prev);
+	// Sublayer changes set the same context again; keep the drawables then.
+	if (context == previous) {
+		return;
 	}
+
+	// The render texture and the drawables' GL objects live in the previous
+	// context, so they cannot be used in the new one. Release them with that
+	// context current.
+	CGLContextObj prev = CGLGetCurrentContext();
+	if (previous.glContext) {
+		CGLSetCurrentContext(previous.glContext);
+		if (_tex != 0) {
+			glDeleteTextures(1, &_tex);
+		}
+	}
+	_tex = 0;
+	_semaphoreProbeContext = NULL;
+
+	// Drop the old drawables and, once there is a GL context, make new ones in
+	// it. A layer is usually configured (device, drawableSize) before it is put
+	// in a window, and then this is the first point where its drawables can
+	// exist.
+	[self recreateDrawables];
+	CGLSetCurrentContext(prev);
+
+	if (!context.glContext) {
+		return;
+	}
+
+	// create our textures now using the context's CGLContext
+	CGLSetCurrentContext(context.glContext);
+	[self createRenderTexture];
+	CGLSetCurrentContext(prev);
 }
 
 #else
