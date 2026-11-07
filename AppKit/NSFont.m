@@ -298,7 +298,14 @@ static NSLock *_cacheLock = nil;
 
 + (NSFont *) monospacedSystemFontOfSize: (CGFloat) size
                                  weight: (NSFontWeight) weight {
-    return [self userFixedPitchFontOfSize: size];
+    NSFont *font = [self userFixedPitchFontOfSize: size];
+
+    // As with the proportional system font, only regular and bold faces are
+    // looked for; semibold and heavier weights get the bold one.
+    if (weight >= NSFontWeightSemibold)
+        font = [[NSFontManager sharedFontManager] convertFont: font
+                                                  toHaveTrait: NSBoldFontMask];
+    return font;
 }
 
 + (NSFont *) monospacedDigitSystemFontOfSize: (CGFloat) size

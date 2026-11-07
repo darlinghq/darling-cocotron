@@ -102,17 +102,28 @@ NSString *const NSAllRomanInputSourcesLocaleIdentifier =
     NSScrollView *scrollView =
             [[[NSScrollView alloc] initWithFrame: NSMakeRect(0, 0, 200, 100)]
                     autorelease];
-    NSTextView *textView =
-            [[[self alloc] initWithFrame: [scrollView bounds]] autorelease];
 
     [scrollView setHasVerticalScroller: YES];
     [scrollView setBorderType: NSBezelBorder];
-    [scrollView setDocumentView: textView];
 
+    // Fill the visible area once the scroller and border are accounted for,
+    // so that autoresizing keeps the text view as wide as the content area.
+    NSSize contentSize = [scrollView contentSize];
+    NSTextView *textView = [[[self alloc]
+            initWithFrame: NSMakeRect(0, 0, contentSize.width,
+                                      contentSize.height)] autorelease];
+
+    // The text view grows downwards without limit as text is added.
+    [textView setMinSize: NSMakeSize(0, contentSize.height)];
+    [textView setMaxSize: NSMakeSize(FLT_MAX, FLT_MAX)];
     [textView setVerticallyResizable: YES];
     [textView setHorizontallyResizable: NO];
     [textView setAutoresizingMask: NSViewWidthSizable];
+    [[textView textContainer]
+            setContainerSize: NSMakeSize(contentSize.width, FLT_MAX)];
     [[textView textContainer] setWidthTracksTextView: YES];
+
+    [scrollView setDocumentView: textView];
 
     return scrollView;
 }

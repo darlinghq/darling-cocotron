@@ -51,6 +51,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                           action: (SEL) action {
     NSButton *button = [[[self alloc] initWithFrame: NSZeroRect] autorelease];
     [button setImage: image];
+    [button setImagePosition: NSImageOnly];
     [button setBezelStyle: NSRoundedBezelStyle];
     [button setButtonType: NSMomentaryPushInButton];
     [button setTarget: target];

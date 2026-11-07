@@ -52,6 +52,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [label setDrawsBackground: NO];
     [label setEditable: NO];
     [label setSelectable: NO];
+    [label setFont: [NSFont systemFontOfSize: [NSFont systemFontSize]]];
+    // A label stays on one line: it clips rather than wraps.
+    [label setLineBreakMode: NSLineBreakByClipping];
     [label sizeToFit];
     return label;
 }
