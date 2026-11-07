@@ -209,16 +209,29 @@ static GLint metalLayerSwapInterval(CALayer *layer);
     glDrawBuffer(GL_BACK);
     glReadBuffer(GL_BACK);
 
+    [self _drawLayerTree: layer
+                   width: _frame.size.width
+                  height: _frame.size.height
+             topRowFirst: NO];
+}
+
+- (void) _drawLayerTree: (CALayer *) layer
+                  width: (GLint) width
+                 height: (GLint) height
+            topRowFirst: (BOOL) topRowFirst
+{
     glEnable(GL_DEPTH_TEST);
     glShadeModel(GL_SMOOTH);
-
-    GLint width = _frame.size.width;
-    GLint height = _frame.size.height;
 
     glViewport(0, 0, width, height);
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
-    glOrtho(0, width, 0, height, -1, 1);
+    // Framebuffer row 0 is the bottom of the picture on a window. Pixels read
+    // back into memory whose first row is the top are drawn upside down.
+    if (topRowFirst)
+        glOrtho(0, width, height, 0, -1, 1);
+    else
+        glOrtho(0, width, 0, height, -1, 1);
 
     GLsizei i = 0;
     GLuint deleteIds[[_deleteTextureIds count]];

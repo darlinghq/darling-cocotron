@@ -22,6 +22,10 @@ NSString *const kCARendererColorSpace = @"kCARendererColorSpace";
 
 @synthesize layer = _rootLayer;
 
+- (void) _setClearsToTransparent: (BOOL) value {
+    _clearsToTransparent = value;
+}
+
 - initWithCGLContext: (void *) cglContext options: (NSDictionary *) options {
     _cglContext = cglContext;
     _bounds = CGRectZero;
@@ -462,7 +466,8 @@ static uint32_t texImage2DIOSurface(CGLContextObj context,
                       opacity: (CGFloat) opacity
                       flipped: (BOOL) flipped
 {
-    id contents = layer.contents;
+    CGRect rect = CGRectMake(0, 0, bounds.size.width, bounds.size.height);
+    id contents = [layer _contentsForRendering: &rect];
 
     if (contents == nil)
         return;
@@ -514,9 +519,10 @@ static uint32_t texImage2DIOSurface(CGLContextObj context,
     const GLfloat uprightTexture[4 * 2] = {0, 1, 1, 1, 0, 0, 1, 0};
     const GLfloat flippedTexture[4 * 2] = {0, 0, 1, 0, 0, 1, 1, 1};
     const GLfloat *textureVertices = flipped ? flippedTexture : uprightTexture;
-    const GLfloat vertices[4 * 2] = {0, 0, bounds.size.width, 0,
-                                     0, bounds.size.height,
-                                     bounds.size.width, bounds.size.height};
+    const GLfloat left = CGRectGetMinX(rect), right = CGRectGetMaxX(rect);
+    const GLfloat bottom = CGRectGetMinY(rect), top = CGRectGetMaxY(rect);
+    const GLfloat vertices[4 * 2] = {left, bottom, right, bottom,
+                                     left, top, right, top};
 
     glTexCoordPointer(2, GL_FLOAT, 0, textureVertices);
     glVertexPointer(2, GL_FLOAT, 0, vertices);
@@ -616,7 +622,7 @@ static void displayLayerTreeIfNeeded(CALayer *layer) {
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
 
-    glClearColor(0, 0, 0, 1);
+    glClearColor(0, 0, 0, _clearsToTransparent ? 0 : 1);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     // Painter's order instead of depth testing: every layer used to get z+1,

@@ -56,6 +56,10 @@ NSString *const kCAContentsFormatGray8Uint = @"Gray8";
     [_mask _setContext: context];
 }
 
+- (id) _contentsForRendering: (CGRect *) rect {
+    return [self contents];
+}
+
 - (CALayer *) superlayer {
     return _superlayer;
 }
