@@ -55,6 +55,14 @@
     BOOL _hasShadow;
     BOOL _wantsInputFocus;
     BOOL _ignoresMouseEvents; // the input region currently set
+    // The subwindow whose layer tree draws into _cglWindow instead of its
+    // own drawable (see -[X11SubWindow sharedCGLWindow]), and whether its
+    // frames wait for the display refresh.
+    id _layerDrawableOwner;
+    BOOL _layerDrawableSyncs;
+    // The presentation hints as last written to the window.
+    BOOL _bypassCompositorHint;
+    BOOL _variableRefreshHint;
 
 @public
     XIC _xic;
@@ -76,6 +84,16 @@
 
 - (Window) windowHandle;
 - (BOOL) isMapped;
+// Whether the window is fullscreen (_NET_WM_STATE_FULLSCREEN), as last asked
+// for or as the window manager last set it.
+- (BOOL) isFullscreen;
+
+// The window's own drawable for a subwindow that covers it, NULL when it
+// cannot be lent (another subwindow has it, or it has an alpha surface).
+- (void *) layerDrawableFor: (id) owner;
+- (void) acquireLayerDrawable: (id) owner syncsToDisplay: (BOOL) syncs;
+- (void) setLayerDrawable: (id) owner syncsToDisplay: (BOOL) syncs;
+- (void) releaseLayerDrawable: (id) owner;
 
 - (void) frameChanged;
 - (void) setLastKnownCursorPosition: (CGPoint) point;

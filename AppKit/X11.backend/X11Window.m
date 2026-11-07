@@ -460,6 +460,7 @@ static NSData *makeWindowIcon() {
         X11FullscreenRequest(_display, _window, fullscreen);
     }
     _fullscreenRequested = fullscreen;
+    [self updateLayerPresentationHints];
 }
 
 // The window manager changes _NET_WM_STATE on its own too (it leaves fullscreen
@@ -470,8 +471,77 @@ static NSData *makeWindowIcon() {
     if (event->atom != XInternAtom(_display, "_NET_WM_STATE", False))
         return;
     _miniaturizedKnown = NO;
-    if (_mapped)
+    if (_mapped) {
         _fullscreenRequested = X11FullscreenIsSet(_display, _window);
+        [self updateLayerPresentationHints];
+    }
+}
+
+// Hints for a compositor about a window that presents a full-size layer tree
+// in its own drawable (see -[X11SubWindow sharedCGLWindow]), such as a game's
+// Metal view: while the window is also fullscreen, it may show the window's
+// frames without compositing them (_NET_WM_BYPASS_COMPOSITOR, EWMH), and while
+// the layers' frames do not wait for the display refresh (CAMetalLayer's
+// displaySyncEnabled is NO), it may refresh the display when a frame arrives
+// (_VARIABLE_REFRESH, read by Mesa and X compositors). Each property is deleted
+// when its condition ends.
+- (void) updateLayerPresentationHints {
+    BOOL presenting = _layerDrawableOwner != nil;
+    [self setCardinalHint: "_NET_WM_BYPASS_COMPOSITOR"
+                       on: presenting && _fullscreenRequested
+                  current: &_bypassCompositorHint];
+    [self setCardinalHint: "_VARIABLE_REFRESH"
+                       on: presenting && !_layerDrawableSyncs
+                  current: &_variableRefreshHint];
+}
+
+- (void) setCardinalHint: (const char *) name
+                      on: (BOOL) on
+                 current: (BOOL *) current
+{
+    if (on == *current || _window == 0)
+        return;
+    Atom atom = XInternAtom(_display, name, False);
+    if (on) {
+        unsigned long value = 1;
+        XChangeProperty(_display, _window, atom, XA_CARDINAL, 32,
+                        PropModeReplace, (const unsigned char *) &value, 1);
+    } else {
+        XDeleteProperty(_display, _window, atom);
+    }
+    *current = on;
+}
+
+- (void *) layerDrawableFor: (id) owner {
+    if (_layerDrawableOwner != nil && _layerDrawableOwner != owner)
+        return NULL;
+    // A layer tree draws opaque frames; an alpha surface's configuration is
+    // not the one the owner's context was created for.
+    if (_hasAlpha)
+        return NULL;
+    return _cglWindow;
+}
+
+- (void) acquireLayerDrawable: (id) owner syncsToDisplay: (BOOL) syncs {
+    if (_layerDrawableOwner != nil && _layerDrawableOwner != owner)
+        return;
+    _layerDrawableOwner = owner;
+    _layerDrawableSyncs = syncs;
+    [self updateLayerPresentationHints];
+}
+
+- (void) setLayerDrawable: (id) owner syncsToDisplay: (BOOL) syncs {
+    if (_layerDrawableOwner != owner)
+        return;
+    _layerDrawableSyncs = syncs;
+    [self updateLayerPresentationHints];
+}
+
+- (void) releaseLayerDrawable: (id) owner {
+    if (_layerDrawableOwner != owner)
+        return;
+    _layerDrawableOwner = nil;
+    [self updateLayerPresentationHints];
 }
 
 - (void) setStyleMaskInternal: (NSUInteger) mask force: (BOOL) force {
@@ -568,8 +638,10 @@ static NSData *makeWindowIcon() {
     [(X11Display *) [NSDisplay currentDisplay] setWindow: nil
                                                    forID: oldWindow];
 
-    // The new window has no input shape yet.
+    // The new window has no input shape or presentation hints yet.
     _ignoresMouseEvents = NO;
+    _bypassCompositorHint = NO;
+    _variableRefreshHint = NO;
     _hasAlpha = alpha;
     if (![self createXWindow]) {
         // No usable visual: keep the old window rather than none.
@@ -605,6 +677,7 @@ static NSData *makeWindowIcon() {
     NSString *title = [_delegate title];
     if (title != nil)
         [self setTitle: title];
+    [self updateLayerPresentationHints];
 }
 
 - (void) ensureMapped {
@@ -625,6 +698,10 @@ static NSData *makeWindowIcon() {
 
 - (BOOL) isMapped {
     return _mapped;
+}
+
+- (BOOL) isFullscreen {
+    return _fullscreenRequested;
 }
 
 - (void) showWindowWithoutActivation {
@@ -1072,6 +1149,11 @@ BOOL X11WindowManagerIsRunning(Display *display) {
 }
 
 - (void) openGLFlushBuffer {
+    // The layer tree covering the window presents into its drawable; drawing
+    // the window's own backing (which it covers) would replace those frames.
+    if (_layerDrawableOwner != nil)
+        return;
+
     CGLError error;
 
     CGLContextObj prevContext = CGLGetCurrentContext();
