@@ -156,7 +156,15 @@
 }
 
 - (void) renderLayer: (CALayer *) layer {
-    CGLContextMakeCurrentAndAttachToWindow(_glContext, _cglWindow);
+    if (CGLContextMakeCurrentAndAttachToWindow(_glContext, _cglWindow) != kCGLNoError)
+        return;
+
+    // A context's draw and read buffers start out as NONE when it is first
+    // made current without a window surface, and a Metal layer does that to
+    // create its drawables. Attaching the window later does not change them,
+    // so select the window's back buffer, which the flush swaps.
+    glDrawBuffer(GL_BACK);
+    glReadBuffer(GL_BACK);
 
     glEnable(GL_DEPTH_TEST);
     glShadeModel(GL_SMOOTH);
