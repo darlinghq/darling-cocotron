@@ -53,6 +53,7 @@
 #import <X11/extensions/Xrandr.h>
 #import "../../CoreGraphics/X11.backend/X11Monitors.h"
 #import "../../CoreGraphics/X11.backend/X11RandR.h"
+#import <CoreGraphics/CGWindow.h>
 #import <X11/keysym.h>
 #import <fcntl.h>
 #import <fontconfig/fontconfig.h>
@@ -810,6 +811,50 @@ static NSDictionary *modeInfoToDictionary(const XRRModeInfo *mi, int depth) {
 
 - (NSTimeInterval) textCaretBlinkInterval {
     return 0.5;
+}
+
+// Activating another process asks the window manager to activate its
+// frontmost window with an EWMH _NET_ACTIVE_WINDOW request. The window
+// manager decides, and may refuse to steal focus; without one, nothing can
+// be activated. The current process is activated through its own windows
+// by NSApplication.
+- (BOOL) activateProcessIdentifier: (pid_t) processIdentifier {
+    if (processIdentifier <= 0 || processIdentifier == getpid() ||
+        !X11WindowManagerIsRunning(_display))
+        return NO;
+
+    CFArrayRef windows = CGWindowListCopyWindowInfo(
+            kCGWindowListOptionOnScreenOnly, kCGNullWindowID);
+    Window target = None;
+
+    // Other processes' windows are numbered with their X11 window IDs.
+    for (NSDictionary *window in (NSArray *) windows) {
+        if ([[window objectForKey: (NSString *) kCGWindowOwnerPID] intValue] ==
+            processIdentifier) {
+            target = (Window) [[window objectForKey: (NSString *)
+                                                            kCGWindowNumber]
+                    unsignedLongValue];
+            break;
+        }
+    }
+    if (windows != NULL)
+        CFRelease(windows);
+    if (target == None)
+        return NO;
+
+    XEvent event;
+    memset(&event, 0, sizeof(event));
+    event.xclient.type = ClientMessage;
+    event.xclient.window = target;
+    event.xclient.message_type =
+            XInternAtom(_display, "_NET_ACTIVE_WINDOW", False);
+    event.xclient.format = 32;
+    event.xclient.data.l[0] = 1; // source indication: application
+    event.xclient.data.l[1] = CurrentTime;
+    XSendEvent(_display, DefaultRootWindow(_display), False,
+               SubstructureRedirectMask | SubstructureNotifyMask, &event);
+    XFlush(_display);
+    return YES;
 }
 
 - (void) hideCursor {
