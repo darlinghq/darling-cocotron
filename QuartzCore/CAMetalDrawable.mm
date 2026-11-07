@@ -31,6 +31,8 @@
 #include <OpenGL/glext.h>
 #include <indium/indium.private.hpp>
 
+#include <atomic>
+
 namespace DynamicVK = Indium::DynamicVK;
 
 static void reportGLErrors(void) {
@@ -129,6 +131,39 @@ public:
 // texture
 //
 
+// Some drivers (e.g. AMD's) don't share Vulkan images with OpenGL correctly
+// when they use optimal tiling (https://gitlab.freedesktop.org/mesa/mesa/-/issues/7657),
+// so the image shared with OpenGL is linear wherever OpenGL can use one. Not
+// every OpenGL implementation can: some reject GL_LINEAR_TILING_EXT as a
+// texture's tiling, and the import into that texture then fails. Find out once
+// with a scratch texture, in the current context, and use optimal tiling on
+// both sides when linear is rejected.
+static bool glAcceptsLinearTiling() {
+	static std::atomic<int> accepts { -1 };
+
+	int known = accepts.load(std::memory_order_relaxed);
+	if (known >= 0) {
+		return known != 0;
+	}
+
+	// clear errors left by earlier calls (bounded, in case nothing is current)
+	for (int i = 0; i < 16 && glGetError() != GL_NO_ERROR; ++i) {
+	}
+
+	GLuint texture = 0;
+	glCreateTextures(GL_TEXTURE_2D, 1, &texture);
+	if (texture == 0) {
+		// no usable context to ask; keep the default without remembering it
+		return true;
+	}
+	glTextureParameteri(texture, GL_TEXTURE_TILING_EXT, GL_LINEAR_TILING_EXT);
+	bool linear = glGetError() == GL_NO_ERROR;
+	glDeleteTextures(1, &texture);
+
+	accepts.store(linear ? 1 : 0, std::memory_order_relaxed);
+	return linear;
+};
+
 static size_t findSharedMemory(const VkMemoryRequirements& reqs, std::shared_ptr<Indium::PrivateDevice> device, bool framebufferOnly) {
 	size_t targetIndex = SIZE_MAX;
 
@@ -192,10 +227,9 @@ CAMetalDrawableTexture::CAMetalDrawableTexture(CGSize size, Indium::PixelFormat 
 	// now create the internal image (with exportable memory)
 	imgInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
 
-	// some drivers (e.g. AMD's drivers) don't play nice when sharing
-	// Vulkan images and OpenGL textures with optimal tiling
-	// (https://gitlab.freedesktop.org/mesa/mesa/-/issues/7657)
-	imgInfo.tiling = VK_IMAGE_TILING_LINEAR;
+	// see glAcceptsLinearTiling(); the GL texture below uses the same tiling
+	const bool linearTiling = glAcceptsLinearTiling();
+	imgInfo.tiling = linearTiling ? VK_IMAGE_TILING_LINEAR : VK_IMAGE_TILING_OPTIMAL;
 
 	VkExternalMemoryImageCreateInfo extMemInfo {};
 
@@ -386,6 +420,13 @@ CAMetalDrawableTexture::CAMetalDrawableTexture(CGSize size, Indium::PixelFormat 
 	glCreateMemoryObjectsEXT(1, &_memoryObject);
 	reportGLErrors();
 
+	// The memory is a dedicated allocation (VkMemoryDedicatedAllocateInfo
+	// above), and EXT_external_objects requires the memory object to say so
+	// before the import. Some drivers ignore this, others reject the import.
+	GLint dedicated = GL_TRUE;
+	glMemoryObjectParameterivEXT(_memoryObject, GL_DEDICATED_MEMORY_OBJECT_EXT, &dedicated);
+	reportGLErrors();
+
 	// this transfers ownership of the FD to OpenGL
 	glImportMemoryFdEXT(_memoryObject, reqs.size, GL_HANDLE_TYPE_OPAQUE_FD_EXT, fd);
 	fd = -1;
@@ -396,7 +437,7 @@ CAMetalDrawableTexture::CAMetalDrawableTexture(CGSize size, Indium::PixelFormat 
 
 	glCreateTextures(GL_TEXTURE_2D, 1, &_textureID);
 	reportGLErrors();
-	glTextureParameteri(_textureID, GL_TEXTURE_TILING_EXT, GL_LINEAR_TILING_EXT /*GL_OPTIMAL_TILING_EXT*/);
+	glTextureParameteri(_textureID, GL_TEXTURE_TILING_EXT, linearTiling ? GL_LINEAR_TILING_EXT : GL_OPTIMAL_TILING_EXT);
 	glTextureParameteri(_textureID, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 	glTextureParameteri(_textureID, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	glTextureParameteri(_textureID, GL_TEXTURE_WRAP_S, GL_REPEAT);
