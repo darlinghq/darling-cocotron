@@ -146,8 +146,8 @@ static NSMutableArray<NSString *> *_nibPaths(void) {
     [NSBundle pushNibLoadingBundle: self];
 
     NSNib *nib = [[NSNib alloc] initWithNibNamed: name bundle: self];
-    BOOL res = [nib instantiateNibWithOwner: owner
-                            topLevelObjects: topLevelObjects];
+    BOOL res = [nib instantiateWithOwner: owner
+                         topLevelObjects: topLevelObjects];
     [nib release];
 
     [NSBundle popNibPath];

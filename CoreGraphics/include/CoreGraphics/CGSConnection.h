@@ -20,6 +20,7 @@
 #define CGSCONNECTION_H
 #import <Foundation/NSObject.h>
 #import <Foundation/NSDictionary.h>
+#include <CoreGraphics/CGSServerSPI.h>
 #include <CoreGraphics/CoreGraphicsPrivate.h>
 #include <stdatomic.h>
 
@@ -40,6 +41,11 @@
 
 // Mouse location in CG coordinates, i.e. relative to the upper left corner
 -(CGPoint) mouseLocation;
+
+// Hardware state of a key (a virtual key code) and of a mouse button. The
+// default implementation reports them as up.
+-(BOOL) isKeyDown:(CGKeyCode)keyCode;
+-(BOOL) isMouseButtonDown:(CGMouseButton)button;
 
 -(BOOL) setMode:(NSDictionary *)mode forScreen:(int)screenIndex;
 // Implementations should cache this information, because it may be accessed frequently

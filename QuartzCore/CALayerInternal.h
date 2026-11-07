@@ -20,7 +20,20 @@
 #import <QuartzCore/CALayer.h>
 
 @interface CALayer (Internal)
+- (CALayerContext *) _context;
 - (void) _setContext: (CALayerContext *) context;
 - (NSNumber *) _textureId;
 - (void) _setTextureId: (NSNumber *) value;
+// The contents object last uploaded to the layer's texture.
+- (id) _textureContents;
+- (void) _setTextureContents: (id) value;
+// The seed of the IOSurface contents at their last upload.
+- (uint32_t) _textureSeed;
+- (void) _setTextureSeed: (uint32_t) value;
+// For a layer whose content is not a CGImage (CAMetalLayer draws a texture the
+// GPU filled in), draws the content into the current GL context. Called before
+// the contents-based path, so a layer with a NULL contents is not skipped.
+// Return YES if this drew the layer's content, which suppresses that path: it
+// uploads into -_textureId, the very texture such a layer draws from.
+- (BOOL) _drawLayerContents: (CGRect) bounds opacity: (CGFloat) opacity;
 @end

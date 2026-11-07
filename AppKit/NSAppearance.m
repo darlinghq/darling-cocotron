@@ -18,6 +18,11 @@
 */
 
 #import <AppKit/NSAppearance.h>
+#import <AppKit/NSApplication.h>
+#import <Foundation/NSArray.h>
+#import <Foundation/NSDictionary.h>
+#import <Foundation/NSException.h>
+#import <Foundation/NSThread.h>
 
 NSString *const NSAppearanceNameAqua = @"NSAppearanceNameAqua";
 NSString *const NSAppearanceNameDarkAqua = @"NSAppearanceNameDarkAqua";
@@ -42,9 +47,109 @@ NSString *const NSAppearanceNameControlStrip =
 
 @implementation NSAppearance
 
+static NSString *const NSAppearanceThreadKey = @"NSAppearanceCurrentDrawingAppearance";
+
 + (NSAppearance *) appearanceNamed: (NSAppearanceName) name {
-    printf("STUB %s\n", __PRETTY_FUNCTION__);
-    return [NSAppearance alloc];
+    static NSMutableDictionary *appearances;
+    @synchronized(self) {
+        if (appearances == nil) {
+            NSAppearanceName names[] = {
+                NSAppearanceNameAqua,
+                NSAppearanceNameDarkAqua,
+                NSAppearanceNameVibrantDark,
+                NSAppearanceNameVibrantLight,
+                NSAppearanceNameAccessibilityHighContrastAqua,
+                NSAppearanceNameAccessibilityHighContrastDarkAqua,
+                NSAppearanceNameAccessibilityHighContrastVibrantLight,
+                NSAppearanceNameAccessibilityHighContrastVibrantDark,
+                NSAppearanceNameLightContent,
+            };
+            appearances = [NSMutableDictionary new];
+            for (size_t i = 0; i < sizeof(names) / sizeof(names[0]); i++) {
+                NSAppearance *appearance = [[NSAppearance alloc] init];
+                appearance->_name = [names[i] copy];
+                [appearances setObject: appearance forKey: names[i]];
+                [appearance release];
+            }
+        }
+        return name == nil ? nil : [appearances objectForKey: name];
+    }
+}
+
+- (void) dealloc {
+    [_name release];
+    [super dealloc];
+}
+
+- (NSAppearanceName) name {
+    return _name;
+}
+
+static BOOL isDarkAppearanceName(NSAppearanceName name) {
+    return [name isEqualToString: NSAppearanceNameDarkAqua] ||
+           [name isEqualToString: NSAppearanceNameVibrantDark] ||
+           [name isEqualToString:
+                         NSAppearanceNameAccessibilityHighContrastDarkAqua] ||
+           [name isEqualToString:
+                         NSAppearanceNameAccessibilityHighContrastVibrantDark];
+}
+
+// The receiver's own name if listed, else the basic appearance of its
+// family (Aqua or Dark Aqua), so that asking with Aqua and Dark Aqua tells
+// light from dark appearances, as Apple's Dark Mode documentation does.
+- (NSAppearanceName) bestMatchFromAppearancesWithNames:
+        (NSArray<NSAppearanceName> *) appearances
+{
+    if (_name == nil)
+        return nil;
+    if ([appearances containsObject: _name])
+        return _name;
+    NSAppearanceName family = isDarkAppearanceName(_name)
+                                      ? NSAppearanceNameDarkAqua
+                                      : NSAppearanceNameAqua;
+    if ([appearances containsObject: family])
+        return family;
+    return nil;
+}
+
++ (NSAppearance *) currentDrawingAppearance {
+    NSAppearance *appearance = [[[NSThread currentThread] threadDictionary]
+            objectForKey: NSAppearanceThreadKey];
+    if (appearance == nil)
+        appearance = [NSApp effectiveAppearance];
+    if (appearance == nil)
+        appearance = [self appearanceNamed: NSAppearanceNameAqua];
+    return appearance;
+}
+
++ (NSAppearance *) currentAppearance {
+    return [self currentDrawingAppearance];
+}
+
++ (void) setCurrentAppearance: (NSAppearance *) appearance {
+    NSMutableDictionary *thread = [[NSThread currentThread] threadDictionary];
+    if (appearance != nil)
+        [thread setObject: appearance forKey: NSAppearanceThreadKey];
+    else
+        [thread removeObjectForKey: NSAppearanceThreadKey];
+}
+
+// Blocks nest, and the previous appearance comes back also when the block
+// raises.
+- (void) performAsCurrentDrawingAppearance: (void (^)(void)) block {
+    NSMutableDictionary *thread = [[NSThread currentThread] threadDictionary];
+    NSAppearance *previous =
+            [[thread objectForKey: NSAppearanceThreadKey] retain];
+    [thread setObject: self forKey: NSAppearanceThreadKey];
+    @try {
+        block();
+    } @finally {
+        if (previous != nil)
+            [thread setObject: previous forKey: NSAppearanceThreadKey];
+        else
+            [thread removeObjectForKey: NSAppearanceThreadKey];
+        [previous release];
+    }
 }
 
 - (void) encodeWithCoder: (NSCoder *) aCoder {

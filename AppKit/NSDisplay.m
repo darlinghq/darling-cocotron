@@ -22,6 +22,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSRaise.h>
 #import <AppKit/NSColorList.h>
 
+// Handling this source is what makes -[NSRunLoop runMode:beforeDate:] return
+// for a posted event; timers alone never end it.
+static void eventPosted(void *info) {}
+
 @implementation NSDisplay
 
 + (void) initialize {
@@ -47,6 +51,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     if ([self class] != [NSDisplay class]) {
         // Initializing a concrete subclass.
         _eventQueue = [NSMutableArray new];
+        CFRunLoopSourceContext context = {.version = 0, .perform = eventPosted};
+        _eventSource = CFRunLoopSourceCreate(NULL, 0, &context);
+        CFRunLoopAddSource(CFRunLoopGetMain(), _eventSource,
+                           kCFRunLoopCommonModes);
         return self;
     }
 
@@ -94,6 +102,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return nil;
 }
 
+- (void) dealloc {
+    if (_eventSource != NULL) {
+        CFRunLoopSourceInvalidate(_eventSource);
+        CFRelease(_eventSource);
+    }
+    [super dealloc];
+}
+
 - (NSArray<NSScreen *> *) screens {
     NSInvalidAbstractInvocation();
     return nil;
@@ -128,12 +144,51 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return 1;
 }
 
+// Brings the windows of the given process to the front. Backends that can
+// do so override this; the default reports that nothing was activated.
+- (BOOL) activateProcessIdentifier: (pid_t) processIdentifier {
+    return NO;
+}
+
 - (void) hideCursor {
     NSInvalidAbstractInvocation();
 }
 
 - (void) unhideCursor {
     NSInvalidAbstractInvocation();
+}
+
+- (void) hideCursorCounted {
+    if (_cursorHideCount++ == 0)
+        [self hideCursor];
+}
+
+// An unhide with nothing hidden does nothing.
+- (void) unhideCursorCounted {
+    if (_cursorHideCount > 0 && --_cursorHideCount == 0)
+        [self unhideCursor];
+}
+
+// The flag is idempotent and counts as one hide, so the hide/unhide pair stays balanced and an
+// explicit +[NSCursor hide] is neither undone by it nor undoes it.
+- (void) setCursorHiddenUntilMouseMoves: (BOOL) flag {
+    if (_cursorHiddenUntilMouseMoves == flag)
+        return;
+
+    _cursorHiddenUntilMouseMoves = flag;
+    if (flag)
+        [self hideCursorCounted];
+    else
+        [self unhideCursorCounted];
+}
+
+// A backend calls this when the pointer genuinely moves. It cancels a pending
+// -setCursorHiddenUntilMouseMoves:YES, as the cursor reappears on macOS.
+- (void) pointerMoved {
+    if (_cursorHiddenUntilMouseMoves) {
+        _cursorHiddenUntilMouseMoves = NO;
+        [self unhideCursorCounted];
+    }
 }
 
 // Arrow, IBeam, HorizontalResize, VerticalResize
@@ -158,16 +213,22 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
     [[NSRunLoop currentRunLoop] runMode: mode beforeDate: untilDate];
 
-    while (result == nil && [_eventQueue count] > 0) {
-        NSEvent *event = _eventQueue[0];
+    // Scan for the first event of a wanted type. Events that do not match stay
+    // queued: AppKit's contract is that nextEventMatchingMask: returns only
+    // what was asked for and leaves the rest for the main loop, but removing
+    // them here destroyed every other pending event whenever a caller asked
+    // for a narrow mask - a tracking loop asking for NSLeftMouseUpMask would
+    // silently discard queued key events.
+    NSUInteger i, count = [_eventQueue count];
+    for (i = 0; i < count; i++) {
+        NSEvent *event = _eventQueue[i];
 
-        if (!(NSEventMaskFromType([event type]) & mask)) {
-            [_eventQueue removeObjectAtIndex: 0];
-        } else {
+        if (NSEventMaskFromType([event type]) & mask) {
             result = [[event retain] autorelease];
 
             if (dequeue)
-                [_eventQueue removeObjectAtIndex: 0];
+                [_eventQueue removeObjectAtIndex: i];
+            break;
         }
     }
 
@@ -192,8 +253,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         }
     }
 
+    // The mask selects which events to drop, so it has to be tested against
+    // each candidate. Testing it against the stop marker makes the test
+    // constant for the whole scan, so a coalescing call drops every earlier
+    // event whatever its type - and the periodic-event coalescer wipes queued
+    // key and mouse events on every tick.
     while (--count >= 0) {
-        if (NSEventMaskFromType([event type]) & mask) {
+        if (NSEventMaskFromType([_eventQueue[count] type]) & mask) {
             [_eventQueue removeObjectAtIndex: count];
         }
     }
@@ -205,6 +271,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     } else {
         [_eventQueue addObject: event];
     }
+    CFRunLoopSourceSignal(_eventSource);
+    CFRunLoopWakeUp(CFRunLoopGetMain());
 }
 
 - (BOOL) containsAndRemovePeriodicEvents {
@@ -307,6 +375,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (NSUInteger) currentModifierFlags {
     NSInvalidAbstractInvocation();
+    return 0;
+}
+
+- (NSUInteger) pressedMouseButtons {
     return 0;
 }
 

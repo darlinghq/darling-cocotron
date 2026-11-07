@@ -30,6 +30,45 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Foundation/NSException.h>
 #import <Foundation/NSRaise.h>
 
+// The object +addLocalMonitorForEventsMatchingMask:handler: returns.
+@interface NSLocalEventMonitor : NSObject {
+@public
+    NSEventMask _mask;
+    NSEvent * (^_handler)(NSEvent *);
+}
+@end
+
+@implementation NSLocalEventMonitor
+
+- (void) dealloc {
+    [_handler release];
+    [super dealloc];
+}
+
+@end
+
+static NSMutableArray *localEventMonitors = nil;
+
+__attribute__((visibility("hidden")))
+NSEvent *NSEventApplyLocalMonitors(NSEvent *event) {
+    if ([localEventMonitors count] == 0)
+        return event;
+
+    // A handler may add or remove monitors. Added ones see the next event;
+    // removed ones are not called again, not even for this one.
+    NSArray *monitors = [[localEventMonitors copy] autorelease];
+
+    for (NSLocalEventMonitor *monitor in monitors) {
+        if (event == nil)
+            break;
+        if ([localEventMonitors indexOfObjectIdenticalTo: monitor] == NSNotFound)
+            continue;
+        if (monitor->_mask & NSEventMaskFromType([event type]))
+            event = monitor->_handler(event);
+    }
+    return event;
+}
+
 @implementation NSEvent
 
 + (NSPoint) mouseLocation {
@@ -38,6 +77,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 + (NSEventModifierFlags) modifierFlags {
     return [[NSDisplay currentDisplay] currentModifierFlags];
+}
+
++ (NSUInteger) pressedMouseButtons {
+    return [[NSDisplay currentDisplay] pressedMouseButtons];
 }
 
 - (instancetype) initWithType: (NSEventType) type
@@ -224,6 +267,37 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return 0;
 }
 
+// No backend produces gestures or precise (trackpad) scrolling yet: every
+// scroll event is a wheel notch measured in lines, with no phase, as a
+// mouse wheel reports on macOS.
+- (NSEventPhase) phase {
+    return NSEventPhaseNone;
+}
+
+- (NSEventPhase) momentumPhase {
+    return NSEventPhaseNone;
+}
+
+- (BOOL) hasPreciseScrollingDeltas {
+    return NO;
+}
+
+- (CGFloat) scrollingDeltaX {
+    return [self deltaX];
+}
+
+- (CGFloat) scrollingDeltaY {
+    return [self deltaY];
+}
+
+- (BOOL) isDirectionInvertedFromDevice {
+    return NO;
+}
+
+- (CGEventRef) CGEvent {
+    return NULL;
+}
+
 - (CGFloat) deltaZ {
     return 0;
 }
@@ -352,12 +426,21 @@ static NSTimer *_periodicTimer = nil;
 + (id) addLocalMonitorForEventsMatchingMask: (NSEventMask) mask
                                     handler: (NSEvent * (^)(NSEvent *event)) block
 {
-    NSUnimplementedMethod();
-    return nil;
+    if (block == nil)
+        return nil;
+
+    if (localEventMonitors == nil)
+        localEventMonitors = [[NSMutableArray alloc] init];
+
+    NSLocalEventMonitor *monitor = [[NSLocalEventMonitor alloc] init];
+    monitor->_mask = mask;
+    monitor->_handler = [block copy];
+    [localEventMonitors addObject: monitor];
+    return [monitor autorelease];
 }
 
 + (void) removeMonitor: (id) eventMonitor {
-    NSUnimplementedMethod();
+    [localEventMonitors removeObjectIdenticalTo: eventMonitor];
 }
 
 @end

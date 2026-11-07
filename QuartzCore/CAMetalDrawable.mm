@@ -31,6 +31,9 @@
 #include <OpenGL/glext.h>
 #include <indium/indium.private.hpp>
 
+#include <atomic>
+#include <cstring>
+
 namespace DynamicVK = Indium::DynamicVK;
 
 static void reportGLErrors(void) {
@@ -129,38 +132,103 @@ public:
 // texture
 //
 
-static size_t findSharedMemory(const VkMemoryRequirements& reqs, std::shared_ptr<Indium::PrivateDevice> device, bool framebufferOnly) {
-	size_t targetIndex = SIZE_MAX;
+// Some drivers (e.g. AMD's) don't share Vulkan images with OpenGL correctly
+// when they use optimal tiling (https://gitlab.freedesktop.org/mesa/mesa/-/issues/7657),
+// so the image shared with OpenGL is linear wherever OpenGL can use one. Not
+// every OpenGL implementation can: some reject GL_LINEAR_TILING_EXT as a
+// texture's tiling, and the import into that texture then fails. Find out once
+// with a scratch texture, in the current context, and use optimal tiling on
+// both sides when linear is rejected.
+static bool glAcceptsLinearTiling() {
+	static std::atomic<int> accepts { -1 };
 
-	for (size_t i = 0; i < device->memoryProperties().memoryTypeCount; ++i) {
-		const auto& type = device->memoryProperties().memoryTypes[i];
-
-		if ((reqs.memoryTypeBits & (1 << i)) == 0) {
-			continue;
-		}
-
-		if (!framebufferOnly && (type.propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) == 0) {
-			continue;
-		}
-
-		if (!framebufferOnly && (type.propertyFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) == 0) {
-			continue;
-		}
-
-		// okay, this is good enough
-		targetIndex = i;
-		break;
+	int known = accepts.load(std::memory_order_relaxed);
+	if (known >= 0) {
+		return known != 0;
 	}
 
-	return targetIndex;
+	// clear errors left by earlier calls (bounded, in case nothing is current)
+	for (int i = 0; i < 16 && glGetError() != GL_NO_ERROR; ++i) {
+	}
+
+	GLuint texture = 0;
+	glCreateTextures(GL_TEXTURE_2D, 1, &texture);
+	if (texture == 0) {
+		// no usable context to ask; keep the default without remembering it
+		return true;
+	}
+	glTextureParameteri(texture, GL_TEXTURE_TILING_EXT, GL_LINEAR_TILING_EXT);
+	bool linear = glGetError() == GL_NO_ERROR;
+	glDeleteTextures(1, &texture);
+
+	accepts.store(linear ? 1 : 0, std::memory_order_relaxed);
+	return linear;
 };
 
-CAMetalDrawableTexture::CAMetalDrawableTexture(CGSize size, Indium::PixelFormat pixelFormat, bool framebufferOnly, std::shared_ptr<Indium::PrivateDevice> privateDevice):
+// The memory type Indium would use for a resource of the given storage mode, so
+// the drawable's images are placed like the textures Metal creates itself:
+// GPU-only images in device memory, and images the CPU may access in host
+// visible, coherent memory.
+static size_t findImageMemory(const VkMemoryRequirements& reqs, std::shared_ptr<Indium::PrivateDevice> device, Indium::StorageMode storageMode) {
+	auto index = device->memoryTypeIndex(reqs.memoryTypeBits, storageMode);
+	return index ? *index : SIZE_MAX;
+};
+
+// The drawable's image is exported from Vulkan and imported into OpenGL, which
+// only works when both run on the same GPU. Say so once if the context that
+// displays the layer reports no device matching the Metal device. Checked in
+// the current context; a GL implementation that cannot report its devices is
+// not reported.
+static void warnIfDisplayedOnAnotherDevice(const std::shared_ptr<Indium::PrivateDevice>& device) {
+	static std::atomic<bool> checked { false };
+
+	if (checked.exchange(true)) {
+		return;
+	}
+
+	for (int i = 0; i < 16 && glGetError() != GL_NO_ERROR; ++i) {
+	}
+
+	GLint count = 0;
+	glGetIntegerv(GL_NUM_DEVICE_UUIDS_EXT, &count);
+	if (glGetError() != GL_NO_ERROR || count <= 0) {
+		return;
+	}
+
+	auto metalUUID = device->deviceUUID();
+	for (GLint i = 0; i < count; ++i) {
+		GLubyte glUUID[GL_UUID_SIZE_EXT] = {};
+		glGetUnsignedBytei_vEXT(GL_DEVICE_UUID_EXT, i, glUUID);
+		if (memcmp(glUUID, metalUUID.data(), GL_UUID_SIZE_EXT) == 0) {
+			return;
+		}
+	}
+
+	NSLog(@"CAMetalLayer: OpenGL, which displays Metal layers, runs on a different GPU than the Metal device \"%s\"; "
+		"Metal layers cannot be displayed. Run OpenGL and Vulkan on the same GPU.", device->name().c_str());
+};
+
+bool CAMetalDrawableGLImportsSemaphores() {
+	GLint count = 0;
+	glGetIntegerv(GL_NUM_EXTENSIONS, &count);
+	for (GLint i = 0; i < count; ++i) {
+		const char* name = reinterpret_cast<const char*>(glGetStringi(GL_EXTENSIONS, i));
+		if (name && strcmp(name, "GL_EXT_semaphore_fd") == 0) {
+			return true;
+		}
+	}
+	return false;
+};
+
+CAMetalDrawableTexture::CAMetalDrawableTexture(CGSize size, Indium::PixelFormat pixelFormat, bool framebufferOnly, bool exportsSemaphore, std::shared_ptr<Indium::PrivateDevice> privateDevice):
 	Indium::PrivateTexture(privateDevice),
 	_size(size),
 	_pixelFormat(pixelFormat),
-	_framebufferOnly(framebufferOnly)
+	_framebufferOnly(framebufferOnly),
+	_exportsSemaphore(exportsSemaphore)
 {
+	warnIfDisplayedOnAnotherDevice(_device);
+
 	//
 	// create the images
 	//
@@ -192,10 +260,9 @@ CAMetalDrawableTexture::CAMetalDrawableTexture(CGSize size, Indium::PixelFormat 
 	// now create the internal image (with exportable memory)
 	imgInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
 
-	// some drivers (e.g. AMD's drivers) don't play nice when sharing
-	// Vulkan images and OpenGL textures with optimal tiling
-	// (https://gitlab.freedesktop.org/mesa/mesa/-/issues/7657)
-	imgInfo.tiling = VK_IMAGE_TILING_LINEAR;
+	// see glAcceptsLinearTiling(); the GL texture below uses the same tiling
+	const bool linearTiling = glAcceptsLinearTiling();
+	imgInfo.tiling = linearTiling ? VK_IMAGE_TILING_LINEAR : VK_IMAGE_TILING_OPTIMAL;
 
 	VkExternalMemoryImageCreateInfo extMemInfo {};
 
@@ -219,7 +286,9 @@ CAMetalDrawableTexture::CAMetalDrawableTexture(CGSize size, Indium::PixelFormat 
 
 	DynamicVK::vkGetImageMemoryRequirements(_device->device(), _image, &reqs);
 
-	size_t targetIndex = findSharedMemory(reqs, _device, _framebufferOnly);
+	// Without framebufferOnly, the texture may be used like any other Metal
+	// texture, so its memory stays CPU-accessible.
+	size_t targetIndex = findImageMemory(reqs, _device, _framebufferOnly ? Indium::StorageMode::Private : Indium::StorageMode::Shared);
 
 	if (targetIndex == SIZE_MAX) {
 		throw std::runtime_error("No suitable memory region found for image");
@@ -242,7 +311,9 @@ CAMetalDrawableTexture::CAMetalDrawableTexture(CGSize size, Indium::PixelFormat 
 
 	DynamicVK::vkGetImageMemoryRequirements(_device->device(), _internalImage, &reqs);
 
-	targetIndex = findSharedMemory(reqs, _device, _framebufferOnly);
+	// Only the GPU touches the internal image: Vulkan copies into it, and
+	// OpenGL samples it.
+	targetIndex = findImageMemory(reqs, _device, Indium::StorageMode::Private);
 
 	if (targetIndex == SIZE_MAX) {
 		throw std::runtime_error("No suitable memory region found for internal image");
@@ -386,6 +457,13 @@ CAMetalDrawableTexture::CAMetalDrawableTexture(CGSize size, Indium::PixelFormat 
 	glCreateMemoryObjectsEXT(1, &_memoryObject);
 	reportGLErrors();
 
+	// The memory is a dedicated allocation (VkMemoryDedicatedAllocateInfo
+	// above), and EXT_external_objects requires the memory object to say so
+	// before the import. Some drivers ignore this, others reject the import.
+	GLint dedicated = GL_TRUE;
+	glMemoryObjectParameterivEXT(_memoryObject, GL_DEDICATED_MEMORY_OBJECT_EXT, &dedicated);
+	reportGLErrors();
+
 	// this transfers ownership of the FD to OpenGL
 	glImportMemoryFdEXT(_memoryObject, reqs.size, GL_HANDLE_TYPE_OPAQUE_FD_EXT, fd);
 	fd = -1;
@@ -396,7 +474,7 @@ CAMetalDrawableTexture::CAMetalDrawableTexture(CGSize size, Indium::PixelFormat 
 
 	glCreateTextures(GL_TEXTURE_2D, 1, &_textureID);
 	reportGLErrors();
-	glTextureParameteri(_textureID, GL_TEXTURE_TILING_EXT, GL_LINEAR_TILING_EXT /*GL_OPTIMAL_TILING_EXT*/);
+	glTextureParameteri(_textureID, GL_TEXTURE_TILING_EXT, linearTiling ? GL_LINEAR_TILING_EXT : GL_OPTIMAL_TILING_EXT);
 	glTextureParameteri(_textureID, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 	glTextureParameteri(_textureID, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	glTextureParameteri(_textureID, GL_TEXTURE_WRAP_S, GL_REPEAT);
@@ -555,23 +633,51 @@ void CAMetalDrawableTexture::precommit(std::shared_ptr<Indium::PrivateCommandBuf
 };
 
 bool CAMetalDrawableTexture::needsExportablePresentationSemaphore() const {
-	return true;
+	// only a semaphore that OpenGL imports has to be exportable
+	return _exportsSemaphore;
+};
+
+bool CAMetalDrawableTexture::waitForRendering() {
+	// Every submission that uses the texture signals the next value of its timeline
+	// semaphore, so the current value marks the end of all work submitted so far.
+	VkSemaphore semaphore;
+	uint64_t value;
+	{
+		std::unique_lock lock(_syncMutex);
+		semaphore = _syncSemaphore->semaphore;
+		value = _syncSemaphore->count;
+	}
+
+	VkSemaphoreWaitInfo info {};
+	info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO;
+	info.semaphoreCount = 1;
+	info.pSemaphores = &semaphore;
+	info.pValues = &value;
+
+	return DynamicVK::vkWaitSemaphores(_device->device(), &info, UINT64_MAX) == VK_SUCCESS;
 };
 
 //
 // drawable
 //
 
-CAMetalDrawableActual::CAMetalDrawableActual(CAMetalLayerInternal* layer, CGSize size, NSUInteger drawableID, Indium::PixelFormat pixelFormat, std::shared_ptr<Indium::Device> device, CGLContextObj glContext):
+CAMetalDrawableActual::CAMetalDrawableActual(CAMetalLayerInternal* layer, CGSize size, NSUInteger drawableID, Indium::PixelFormat pixelFormat, std::shared_ptr<Indium::Device> device, CGLContextObj glContext, bool glImportsSemaphores):
 	_drawableID(drawableID),
-	_glContext(CGLRetainContext(glContext))
+	_glContext(CGLRetainContext(glContext)),
+	_glImportsSemaphores(glImportsSemaphores)
 {
-	_texture = std::make_shared<CAMetalDrawableTexture>(size, pixelFormat, layer.framebufferOnly, std::dynamic_pointer_cast<Indium::PrivateDevice>(device));
+	_texture = std::make_shared<CAMetalDrawableTexture>(size, pixelFormat, layer.framebufferOnly, glImportsSemaphores, std::dynamic_pointer_cast<Indium::PrivateDevice>(device));
 	objc_storeWeak(&_layer, layer);
 };
 
 CAMetalDrawableActual::~CAMetalDrawableActual() {
 	reset();
+	// The GL semaphore belongs to _glContext. Delete it only where that context
+	// is current, since in any other context the name means another object.
+	if (_glSemaphore != 0 && CGLGetCurrentContext() == _glContext) {
+		glDeleteSemaphoresEXT(1, &_glSemaphore);
+	}
+	_glSemaphore = 0;
 	objc_storeWeak(&_layer, nil);
 	CGLReleaseContext(_glContext);
 };
@@ -605,35 +711,17 @@ void CAMetalDrawableActual::present() {
 			return;
 		}
 
-		[layer queuePresent: _drawableID];
-
+		// Take the semaphore that signals the end of the drawable's rendering
+		// before queuing it: once queued, the compositor may wait on it.
+		//
+		// The semaphore is imported into OpenGL by synchronizeRender(), on the
+		// thread that composites the layer and with its GL context current.
+		// This method runs on whichever thread presents (often a command buffer
+		// completion thread), where that context cannot be made current while
+		// the compositor holds it.
 		_semaphore = _texture->synchronizePresentation();
 
-		if (_semaphore) {
-			int fd = -1;
-			VkSemaphoreGetFdInfoKHR info {};
-
-			info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_GET_FD_INFO_KHR;
-			info.semaphore = _semaphore->semaphore;
-			info.handleType = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT;
-
-			if (DynamicVK::vkGetSemaphoreFdKHR(_semaphore->device->device(), &info, &fd) != VK_SUCCESS) {
-				// TODO
-				abort();
-			}
-
-			CGLContextObj prev = CGLGetCurrentContext();
-			CGLSetCurrentContext(_glContext);
-
-			reportGLErrors();
-			glGenSemaphoresEXT(1, &_glSemaphore);
-			reportGLErrors();
-			glImportSemaphoreFdEXT(_glSemaphore, GL_HANDLE_TYPE_OPAQUE_FD_EXT, fd); // this consumes the FD
-			fd = -1;
-			reportGLErrors();
-
-			CGLSetCurrentContext(prev);
-		}
+		[layer queuePresent: _drawableID];
 	}
 }
 
@@ -687,13 +775,9 @@ void CAMetalDrawableActual::release() {
 };
 
 void CAMetalDrawableActual::reset() {
-	if (_glSemaphore != 0) {
-		reportGLErrors();
-		glDeleteSemaphoresEXT(1, &_glSemaphore);
-		_glSemaphore = 0;
-		reportGLErrors();
-	}
-
+	// The GL semaphore of the last present is left alone: this runs on the
+	// thread that asked for the drawable, where the compositor's GL context
+	// is not current. synchronizeRender() replaces it on the next present.
 	_semaphore = nullptr;
 	_wantsToPresentCallback = nullptr;
 	_didPresentCallback = nullptr;
@@ -701,10 +785,62 @@ void CAMetalDrawableActual::reset() {
 	_queued = false;
 };
 
+// Called by the compositor with the layer's GL context current.
 void CAMetalDrawableActual::synchronizeRender() {
+	if (!_semaphore) {
+		// nothing was rendered into the drawable, so there is nothing to wait for
+		return;
+	}
+
+	// The previous present's semaphore was imported in this context, and its
+	// wait was queued before this one, so it can go now.
+	if (_glSemaphore != 0) {
+		glDeleteSemaphoresEXT(1, &_glSemaphore);
+		_glSemaphore = 0;
+	}
+
+	if (!_glImportsSemaphores) {
+		waitForRenderingOnCPU();
+		return;
+	}
+
+	int fd = -1;
+	VkSemaphoreGetFdInfoKHR info {};
+
+	info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_GET_FD_INFO_KHR;
+	info.semaphore = _semaphore->semaphore;
+	info.handleType = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT;
+
+	if (DynamicVK::vkGetSemaphoreFdKHR(_semaphore->device->device(), &info, &fd) != VK_SUCCESS) {
+		waitForRenderingOnCPU();
+		return;
+	}
+
+	reportGLErrors();
+	glGenSemaphoresEXT(1, &_glSemaphore);
+	reportGLErrors();
+	glImportSemaphoreFdEXT(_glSemaphore, GL_HANDLE_TYPE_OPAQUE_FD_EXT, fd); // this consumes the FD
+	fd = -1;
+	reportGLErrors();
+
 	GLuint tex = _texture->glTexture();
 	GLenum layout = GL_LAYOUT_GENERAL_EXT;
 	glWaitSemaphoreEXT(_glSemaphore, 0, NULL, 1, &tex, &layout);
+	reportGLErrors();
+};
+
+// Used when OpenGL cannot wait on the semaphore: the compositor waits until the
+// GPU has finished the drawable's rendering, then composites it.
+void CAMetalDrawableActual::waitForRenderingOnCPU() {
+	if (!_texture->waitForRendering()) {
+		// The device is lost; the semaphore may still have a pending signal,
+		// so keep it alive until the drawable is reused.
+		return;
+	}
+
+	// The submission that signals the semaphore has completed, so nothing uses
+	// it any more and it can be destroyed unwaited.
+	_semaphore = nullptr;
 };
 
 static void glDebugCallback(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar* message, const void* context) {

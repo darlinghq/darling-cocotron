@@ -18,6 +18,7 @@
 */
 #include "CGEventObjC.h"
 #include <CoreGraphics/CGEventSource.h>
+#include <CoreGraphics/CGSConnection.h>
 
 static CGEventFlags g_sourceStates[3];
 
@@ -75,4 +76,37 @@ CGEventFlags CGEventSourceFlagsState(CGEventSourceStateID stateID) {
 
 void CGEventSourceSetLocalEventsSuppressionInterval(CGEventSourceRef source, CFTimeInterval seconds) {
     printf("STUB %s\n", __PRETTY_FUNCTION__);
+}
+
+// The private state of a source is only changed by events posted with it,
+// which this implementation does not track, so keys and buttons are up there.
+// The other states are the hardware state seen by the window server.
+static CGSConnection *hardwareStateConnection(CGEventSourceStateID stateID) {
+    if (stateID != kCGEventSourceStateCombinedSessionState &&
+        stateID != kCGEventSourceStateHIDSystemState)
+        return nil;
+    return _CGSConnectionForID(CGSDefaultConnection);
+}
+
+bool CGEventSourceKeyState(CGEventSourceStateID stateID, CGKeyCode key) {
+    return [hardwareStateConnection(stateID) isKeyDown: key];
+}
+
+bool CGEventSourceButtonState(CGEventSourceStateID stateID, CGMouseButton button) {
+    return [hardwareStateConnection(stateID) isMouseButtonDown: button];
+}
+
+// The window server's event stream is not observed, so there is no event
+// history to count or to measure the time since: every event type is
+// reported as having occurred just now, never as a count.
+CFTimeInterval CGEventSourceSecondsSinceLastEventType(CGEventSourceStateID stateID,
+                                                      CGEventType eventType)
+{
+    return 0;
+}
+
+uint32_t CGEventSourceCounterForEventType(CGEventSourceStateID stateID,
+                                          CGEventType eventType)
+{
+    return 0;
 }

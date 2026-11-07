@@ -51,6 +51,7 @@ set_property(SOURCE
 	CGSWindow.m
 	CGSSurface.m
 	CGSRegion.m
+	CGSServerSPI.m
 
 	APPEND PROPERTY COMPILE_FLAGS "-include Foundation/Foundation.h"
 )
@@ -103,6 +104,7 @@ set(CoreGraphics_sources
 	CGSKeyboardLayout.m
 	CGSRegion.m
 	CGSScreen.m
+	CGSServerSPI.m
 	CGEvent.m
 	CGEventSource.m
 	CGEventTap.m
@@ -138,9 +140,12 @@ add_framework(CoreGraphics
 		IOKit
 )
 
+# NSBundle finds the backends through the framework's Resources link.
+InstallSymlink("Versions/Current/Resources" "${CMAKE_INSTALL_PREFIX}/libexec/darling/System/Library/Frameworks/CoreGraphics.framework/Resources")
+
 function(add_backend name)
 	cmake_parse_arguments(BACKEND "" "INFO_PLIST" "SOURCES;DEPENDENCIES;RESOURCES" ${ARGN})
-	set(path "/System/Library/Frameworks/CoreGraphics.framework/Versions/C/Resources/Backends/${name}.backend/Contents")
+	set(path "/System/Library/Frameworks/CoreGraphics.framework/Versions/${FRAMEWORK_VERSION}/Resources/Backends/${name}.backend/Contents")
 	set(DYLIB_INSTALL_NAME "${path}/MacOS/${name}")
 
 	add_darling_library(${name}_cgbackend SHARED ${BACKEND_SOURCES})

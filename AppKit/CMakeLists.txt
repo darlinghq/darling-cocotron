@@ -275,6 +275,7 @@ set(AppKit_sources
 	NSPrintPanel.m
 	NSGlyphInfo.m
 	NSWindowController.m
+	NSColorSampler.m
 	NSColorSpace.m
 	NSView.m
 
@@ -617,6 +618,7 @@ add_backend(X11
 		QuartzCore
 		# native libraries
                 X11
+		Xext
 		XRandR
 		Xcursor
 		fontconfig

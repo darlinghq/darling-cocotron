@@ -268,26 +268,30 @@ NSString *const NSNibTopLevelObjects = @"NSNibTopLevelObjects";
 
     NIBDEBUG(@"instantiateNibWithOwner: %@ topLevelObjects: ", owner);
 
-    NSMutableArray *topLevelObjects =
-            (objects != NULL ? [[NSMutableArray alloc] init] : nil);
+    NSMutableArray *topLevelObjects = [[NSMutableArray alloc] init];
+    // The owner goes last so a nil owner doesn't drop the array from the table.
     NSDictionary *nameTable = [NSDictionary
-            dictionaryWithObjectsAndKeys: owner, NSNibOwner, topLevelObjects,
-                                          NSNibTopLevelObjects, nil];
+            dictionaryWithObjectsAndKeys: topLevelObjects, NSNibTopLevelObjects,
+                                          owner, NSNibOwner, nil];
     BOOL result = [self instantiateNibWithExternalNameTable: nameTable];
 
-    if (objects != NULL) {
-        if (result)
-            *objects = [NSArray arrayWithArray: topLevelObjects];
-        [topLevelObjects release];
-    }
+    if (objects != NULL && result)
+        *objects = [NSArray arrayWithArray: topLevelObjects];
+    [topLevelObjects release];
 
     return result;
 }
 
-#warning -[NSNib instantiateWithOwner:topLevelObjects:] method makes darling be a zombie process and need to restart device
+- (BOOL) instantiateWithOwner: (id) owner topLevelObjects: (NSArray **) objects {
+    NSArray *topLevelObjects = nil;
+    if (![self instantiateNibWithOwner: owner topLevelObjects: &topLevelObjects])
+        return NO;
 
-/* - (BOOL) instantiateWithOwner: (id) owner topLevelObjects: (NSArray **) objects {
-    return [self instantiateNibWithOwner: owner topLevelObjects: objects];
-} */
+    // Unlike instantiateNibWithOwner:, the caller doesn't own the top-level objects.
+    [topLevelObjects makeObjectsPerformSelector: @selector(autorelease)];
+    if (objects != NULL)
+        *objects = topLevelObjects;
+    return YES;
+}
 
 @end

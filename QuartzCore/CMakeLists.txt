@@ -27,6 +27,7 @@ set(QuartzCore_sources
 	CABase.m
 	CABasicAnimation.m
 	CAContext.m
+	CAEDRMetadata.m
 	CAEmitterCell.m
 	CAEmitterLayer.m
 	CALayerContext.m
@@ -100,6 +101,7 @@ add_framework(QuartzCore
 		Onyx2D
 		OpenGL
 		CoreGraphics
+		IOSurface
 		Metal_private
 		${QUARTZCORE_LINK_INDIUM_PRIVATE}
 		cxx
@@ -116,7 +118,7 @@ set_target_properties(QuartzCore
 		CXX_STANDARD_REQUIRED ON
 )
 
-add_dependencies(QuartzCore CoreImage CoreVideo)
+add_dependencies(QuartzCore CoreImage CoreVideo IOSurface)
 
 target_include_directories(QuartzCore PUBLIC
 	include

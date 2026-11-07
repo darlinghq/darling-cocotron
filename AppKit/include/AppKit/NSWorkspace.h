@@ -20,7 +20,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/AppKitExport.h>
 #import <Foundation/Foundation.h>
 
-@class NSImage, NSView;
+@class NSImage, NSView, NSRunningApplication, NSWorkspaceOpenConfiguration;
 
 APPKIT_EXPORT NSString *const NSWorkspaceApplicationKey;
 
@@ -50,6 +50,19 @@ APPKIT_EXPORT NSNotificationName NSWorkspaceWillUnmountNotification;
 
 typedef NSUInteger NSWorkspaceIconCreationOptions;
 
+typedef NS_OPTIONS(NSUInteger, NSWorkspaceLaunchOptions) {
+    NSWorkspaceLaunchAndPrint = 0x00000002,
+    NSWorkspaceLaunchWithErrorPresentation = 0x00000040,
+    NSWorkspaceLaunchInhibitingBackgroundOnly = 0x00000080,
+    NSWorkspaceLaunchWithoutAddingToRecents = 0x00000100,
+    NSWorkspaceLaunchWithoutActivation = 0x00000200,
+    NSWorkspaceLaunchAsync = 0x00010000,
+    NSWorkspaceLaunchNewInstance = 0x00080000,
+    NSWorkspaceLaunchAndHide = 0x00100000,
+    NSWorkspaceLaunchAndHideOthers = 0x00200000,
+    NSWorkspaceLaunchDefault = NSWorkspaceLaunchAsync,
+};
+
 @interface NSWorkspace : NSObject {
     NSNotificationCenter *_notificationCenter;
 }
@@ -57,6 +70,13 @@ typedef NSUInteger NSWorkspaceIconCreationOptions;
 + (NSWorkspace *) sharedWorkspace;
 
 - (NSNotificationCenter *) notificationCenter;
+
+@property(readonly) BOOL accessibilityDisplayShouldDifferentiateWithoutColor;
+@property(readonly) BOOL accessibilityDisplayShouldIncreaseContrast;
+@property(readonly) BOOL accessibilityDisplayShouldReduceTransparency;
+@property(readonly) BOOL accessibilityDisplayShouldInvertColors;
+@property(readonly) BOOL accessibilityDisplayShouldReduceMotion;
+@property(readonly, getter=isVoiceOverEnabled) BOOL voiceOverEnabled;
 
 - (NSImage *) iconForFile: (NSString *) path;
 - (NSImage *) iconForFiles: (NSArray *) array;
@@ -79,6 +99,14 @@ typedef NSUInteger NSWorkspaceIconCreationOptions;
         withApplication: (NSString *) application
           andDeactivate: (BOOL) deactivate;
 - (BOOL) openURL: (NSURL *) url;
+- (void) openURL: (NSURL *) url
+        configuration: (NSWorkspaceOpenConfiguration *) configuration
+    completionHandler: (void (^)(NSRunningApplication *app, NSError *error)) completionHandler;
+- (BOOL) openURLs: (NSArray<NSURL *> *) urls
+           withAppBundleIdentifier: (NSString *) bundleIdentifier
+                           options: (NSWorkspaceLaunchOptions) options
+    additionalEventParamDescriptor: (NSAppleEventDescriptor *) descriptor
+                 launchIdentifiers: (NSArray **) identifiers;
 
 - (BOOL) selectFile: (NSString *) path
         inFileViewerRootedAtPath: (NSString *) rootedAtPath;
@@ -149,7 +177,21 @@ typedef NSUInteger NSWorkspaceIconCreationOptions;
 
 @end
 
-@interface NSWorkspaceOpenConfiguration : NSObject <NSCopying>
+@interface NSWorkspaceOpenConfiguration : NSObject <NSCopying> {
+    BOOL _requiresUniversalLinks;
+    BOOL _forPrinting;
+    BOOL _activates;
+    BOOL _addsToRecentItems;
+    BOOL _allowsRunningApplicationSubstitution;
+    BOOL _createsNewApplicationInstance;
+    BOOL _hides;
+    BOOL _hidesOthers;
+    BOOL _promptsUserIfNeeded;
+    NSAppleEventDescriptor *_appleEvent;
+    NSArray<NSString *> *_arguments;
+    NSDictionary<NSString *, NSString *> *_environment;
+    cpu_type_t _architecture;
+}
 + (instancetype)configuration;
 
 @property BOOL requiresUniversalLinks;

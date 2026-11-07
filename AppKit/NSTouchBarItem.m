@@ -41,6 +41,8 @@ NSTouchBarItemIdentifier const NSTouchBarItemIdentifierCharacterPicker =
 
 @implementation NSTouchBarItem
 
+@synthesize identifier = _identifier;
+
 - (NSMethodSignature *)methodSignatureForSelector:(SEL)aSelector
 {
     return [NSMethodSignature signatureWithObjCTypes: "v@:"];
@@ -49,6 +51,17 @@ NSTouchBarItemIdentifier const NSTouchBarItemIdentifierCharacterPicker =
 - (void)forwardInvocation:(NSInvocation *)anInvocation
 {
     NSLog(@"Stub called: %@ in %@", NSStringFromSelector([anInvocation selector]), [self class]);
+}
+
+- (instancetype) initWithIdentifier: (NSTouchBarItemIdentifier) identifier {
+    if ((self = [super init]) != nil)
+        _identifier = [identifier copy];
+    return self;
+}
+
+- (void) dealloc {
+    [_identifier release];
+    [super dealloc];
 }
 
 @end

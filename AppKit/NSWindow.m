@@ -1234,6 +1234,7 @@ static BOOL _allowsAutomaticWindowTabbing;
 
 - (void) setIgnoresMouseEvents: (BOOL) value {
     _ignoresMouseEvents = value;
+    [_platformWindow syncDelegateProperties];
 }
 
 - (void) setAspectRatio: (NSSize) value {
@@ -2330,6 +2331,18 @@ static BOOL _allowsAutomaticWindowTabbing;
         _mouseDownLocationInWindow = NSMakePoint(NAN, NAN);
         break;
 
+    case NSOtherMouseDown:
+        _mouseDownLocationInWindow = [event locationInWindow];
+        [[_backgroundView hitTest: [event locationInWindow]]
+                otherMouseDown: event];
+        break;
+
+    case NSOtherMouseUp:
+        [[_backgroundView hitTest: _mouseDownLocationInWindow]
+                otherMouseUp: event];
+        _mouseDownLocationInWindow = NSMakePoint(NAN, NAN);
+        break;
+
     case NSMouseMoved: {
         NSView *hit = [_backgroundView hitTest: [event locationInWindow]];
 
@@ -2349,6 +2362,11 @@ static BOOL _allowsAutomaticWindowTabbing;
     case NSRightMouseDragged:
         [[_backgroundView hitTest: _mouseDownLocationInWindow]
                 rightMouseDragged: event];
+        break;
+
+    case NSOtherMouseDragged:
+        [[_backgroundView hitTest: _mouseDownLocationInWindow]
+                otherMouseDragged: event];
         break;
 
     case NSMouseEntered:
@@ -2715,6 +2733,12 @@ static BOOL _allowsAutomaticWindowTabbing;
         [(NSControl *) [_defaultButtonCell controlView] performClick: nil];
 }
 
+// YES while the window is hidden only because the application was
+// deactivated; it is still open.
+- (BOOL) _isHiddenForDeactivation {
+    return _hiddenForDeactivate;
+}
+
 - (void) _showForActivation {
     if (_hiddenForDeactivate) {
         _hiddenForDeactivate = NO;
@@ -2921,6 +2945,7 @@ static BOOL _allowsAutomaticWindowTabbing;
 
     sheet->_isVisible = NO;
     [[sheet platformWindow] sheetOrderOutToFrame: sheetFrame];
+    [(NSThemeFrame *) [sheet _backgroundView] setWindowBorderType: NSNoBorder];
 
     [_sheetContext release];
     _sheetContext = nil;
@@ -3459,7 +3484,10 @@ static BOOL _allowsAutomaticWindowTabbing;
 }
 
 - (CGSubWindow *) _createSubWindowWithFrame: (CGRect) frame {
-    return [_platformWindow createSubWindowWithFrame: frame];
+    // A view can get a layer or an OpenGL context before the window is first
+    // shown, which is when the platform window is otherwise created. The
+    // subwindow needs its parent, so create the platform window now.
+    return [[self platformWindow] createSubWindowWithFrame: frame];
 }
 
 + (BOOL) allowsAutomaticWindowTabbing {

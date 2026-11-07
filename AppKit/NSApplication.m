@@ -18,6 +18,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSAlert.h>
+#import <AppKit/NSAppearance.h>
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSColorPanel.h>
 #import <AppKit/NSDisplay.h>
@@ -39,9 +40,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSSystemInfoPanel.h>
 #import <AppKit/NSWindow-Private.h>
 #import <AppKit/NSWorkspace.h>
+#import <CoreGraphics/CGSServerSPI.h>
 #import <CoreGraphics/CGWindow.h>
 #import <objc/message.h>
 #import <pthread.h>
+
+// Runs the +[NSEvent addLocalMonitorForEventsMatchingMask:handler:] handlers.
+extern NSEvent *NSEventApplyLocalMonitors(NSEvent *event);
 
 const NSRunLoopMode NSModalPanelRunLoopMode = @"NSModalPanelRunLoopMode";
 const NSRunLoopMode NSEventTrackingRunLoopMode = @"NSEventTrackingRunLoopMode";
@@ -177,6 +182,12 @@ NSApplication *NSApp = nil;
 
     pthread_mutex_init(_lock, NULL);
 
+    [[NSNotificationCenter defaultCenter]
+            addObserver: self
+               selector: @selector(_windowWillClose:)
+                   name: NSWindowWillCloseNotification
+                 object: nil];
+
     [self _showSplashImage];
 
     return NSApp;
@@ -269,6 +280,35 @@ NSApplication *NSApp = nil;
 
 - (BOOL) isRunning {
     return _isRunning;
+}
+
+// There is no system setting for full keyboard access to read.
+- (BOOL) isFullKeyboardAccessEnabled {
+    return NO;
+}
+
+- (NSAppearance *) appearance {
+    return _appearance;
+}
+
+- (void) setAppearance: (NSAppearance *) appearance {
+    appearance = [appearance retain];
+    [_appearance release];
+    _appearance = appearance;
+}
+
+// Without an explicit appearance the application follows the system one,
+// which is always Aqua here.
+- (NSAppearance *) effectiveAppearance {
+    static NSAppearance *systemAppearance;
+
+    if (_appearance != nil)
+        return _appearance;
+
+    if (systemAppearance == nil)
+        systemAppearance =
+                [[NSAppearance appearanceNamed: NSAppearanceNameAqua] retain];
+    return systemAppearance;
 }
 
 - (NSWindow *) makeWindowsPerform: (SEL) selector inOrder: (BOOL) inOrder {
@@ -550,6 +590,12 @@ NSApplication *NSApp = nil;
 }
 
 - (void) finishLaunching {
+    // The launch notifications are delivered once. Applications may call
+    // this themselves before -run, which calls it as well.
+    if (_finishedLaunching)
+        return;
+    _finishedLaunching = YES;
+
     NSAutoreleasePool *pool = [NSAutoreleasePool new];
     BOOL needsUntitled = YES;
 
@@ -641,18 +687,34 @@ NSApplication *NSApp = nil;
     }
 }
 
+- (void) _windowWillClose: (NSNotification *) note {
+    if (![[note object] isKindOfClass: [NSPanel class]])
+        _windowClosedSinceTerminateCheck = YES;
+}
+
+// Terminates the application once its last window has been closed, if the
+// delegate asks for that. Hiding or never opening windows does not count.
 - (void) _checkForTerminate {
+    if (!_windowClosedSinceTerminateCheck)
+        return;
+    _windowClosedSinceTerminateCheck = NO;
+
     int count = [_windows count];
 
     while (--count >= 0) {
         NSWindow *check = [_windows objectAtIndex: count];
 
-        if (![check isKindOfClass: [NSPanel class]] && [check isVisible]) {
+        if ([check isKindOfClass: [NSPanel class]])
+            continue;
+        if ([check isVisible] || [check _isHiddenForDeactivation])
             return;
-        }
     }
 
-    [self terminate: self];
+    if ([_delegate respondsToSelector: @selector
+                   (applicationShouldTerminateAfterLastWindowClosed:)] &&
+        [_delegate applicationShouldTerminateAfterLastWindowClosed: self]) {
+        [self terminate: self];
+    }
 }
 
 - (void) _checkForAppActivation {
@@ -666,17 +728,13 @@ NSApplication *NSApp = nil;
 }
 
 - (void) run {
-    static BOOL didlaunch = NO;
     NSAutoreleasePool *pool;
 
     _isRunning = YES;
 
-    if (!didlaunch) {
-        didlaunch = YES;
-        pool = [NSAutoreleasePool new];
-        [self finishLaunching];
-        [pool release];
-    }
+    pool = [NSAutoreleasePool new];
+    [self finishLaunching];
+    [pool release];
 
     do {
         pool = [NSAutoreleasePool new];
@@ -716,6 +774,12 @@ NSApplication *NSApp = nil;
 }
 
 - (void) sendEvent: (NSEvent *) event {
+    // Local monitors see every event dispatched here, and may replace it or
+    // swallow it by returning nil.
+    event = NSEventApplyLocalMonitors(event);
+    if (event == nil)
+        return;
+
     if ([event type] == NSKeyDown) {
         unsigned modifierFlags = [event modifierFlags];
 
@@ -925,8 +989,38 @@ NSApplication *NSApp = nil;
     [_windows makeObjectsPerformSelector: @selector(update)];
 }
 
+// Unless the display backend activates the process itself, activating means
+// making a window key again, which asks the platform for input focus: the key
+// window, else the main window, else the frontmost window that can become key.
 - (void) activateIgnoringOtherApps: (BOOL) flag {
-    NSUnimplementedMethod();
+    // Without the flag the application may only become active if no other
+    // application is, which cannot be determined here, so leave focus alone.
+    if (!flag)
+        return;
+
+    if ([_display activateProcessIdentifier:
+                      [[NSProcessInfo processInfo] processIdentifier]])
+        return;
+
+    NSWindow *window = _keyWindow;
+
+    if (![window isVisible])
+        window = _mainWindow;
+    if (![window isVisible]) {
+        window = nil;
+        for (NSWindow *check in [self orderedWindows]) {
+            if ([check isVisible] && [check canBecomeKeyWindow]) {
+                window = check;
+                break;
+            }
+        }
+    }
+
+    [window makeKeyAndOrderFront: self];
+}
+
+- (void) activate {
+    [self activateIgnoringOtherApps: NO];
 }
 
 - (void) deactivate {
@@ -1119,7 +1213,7 @@ NSApplication *NSApp = nil;
         IMP function = [[context modalDelegate]
                 methodForSelector: [context didEndSelector]];
         if (function != NULL) {
-            function([context modalDelegate], [context didEndSelector], sheet,
+            ((void(*)(id, SEL, id, NSModalResponse, void *))function)([context modalDelegate], [context didEndSelector], sheet,
                      returnCode, [context contextInfo]);
         }
         [sheet _setSheetContext: nil];
@@ -1139,7 +1233,7 @@ NSApplication *NSApp = nil;
                 function = [[context modalDelegate]
                         methodForSelector: [context didEndSelector]];
                 if (function != NULL)
-                    function([context modalDelegate], [context didEndSelector],
+                    ((void(*)(id, SEL, id, NSModalResponse, void *))function)([context modalDelegate], [context didEndSelector],
                              sheet, returnCode, [context contextInfo]);
 
                 return;
@@ -1173,7 +1267,9 @@ NSApplication *NSApp = nil;
 }
 
 - (void) cancelUserAttentionRequest: (int) requestNumber {
-    NSUnimplementedMethod();
+    // There is only ever one request, so any number cancels it.
+    [_attentionTimer invalidate];
+    _attentionTimer = nil;
 }
 
 - (void) runPageLayout: sender {

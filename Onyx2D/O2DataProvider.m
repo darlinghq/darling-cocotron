@@ -97,6 +97,9 @@ void O2DataProviderRelease(O2DataProviderRef self) {
 }
 
 CFDataRef O2DataProviderCopyData(O2DataProviderRef self) {
+    // CGDataProviderCopyData returns NULL for a NULL provider.
+    if (self == NULL)
+        return NULL;
     if (self->_data != nil)
         return (CFDataRef)[self->_data copy];
     else

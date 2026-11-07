@@ -18,13 +18,12 @@
 */
 
 #import <QuartzCore/CALayer.h>
+#import <QuartzCore/CAEDRMetadata.h>
 #import <Metal/Metal.h>
 #import <CoreGraphics/CoreGraphics.h>
 #import <Foundation/Foundation.h>
 
 @protocol CAMetalDrawable;
-
-@class CAEDRMetadata;
 
 struct _CAMetalLayerPrivate;
 

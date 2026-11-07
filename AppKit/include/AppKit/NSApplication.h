@@ -25,7 +25,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Foundation/NSNotification.h>
 #import <Foundation/NSRunLoop.h>
 
-@class NSWindow, NSImage, NSMenu, NSPasteboard, NSDisplay, NSDockTile;
+@class NSWindow, NSImage, NSMenu, NSPasteboard, NSDisplay, NSDockTile,
+        NSAppearance;
 
 APPKIT_EXPORT const NSRunLoopMode NSModalPanelRunLoopMode;
 APPKIT_EXPORT const NSRunLoopMode NSEventTrackingRunLoopMode;
@@ -140,11 +141,16 @@ typedef NS_OPTIONS(NSUInteger, NSApplicationPresentationOptions) {
     NSMutableArray *_orderedWindows; // get rid of
     NSTimer *_attentionTimer;
     NSApplicationPresentationOptions _presentationOptions;
+    NSAppearance *_appearance;
+    BOOL _finishedLaunching;
+    BOOL _windowClosedSinceTerminateCheck;
 }
 
 @property(strong) NSMenu *helpMenu;
 @property(readonly) NSApplicationPresentationOptions currentSystemPresentationOptions;
 @property NSApplicationPresentationOptions presentationOptions;
+@property(strong) NSAppearance *appearance;
+@property(readonly, strong) NSAppearance *effectiveAppearance;
 
 + (NSApplication *) sharedApplication;
 
@@ -168,6 +174,7 @@ typedef NS_OPTIONS(NSUInteger, NSApplicationPresentationOptions) {
 - (BOOL) isActive;
 - (BOOL) isHidden;
 - (BOOL) isRunning;
+- (BOOL) isFullKeyboardAccessEnabled;
 
 - (NSWindow *) makeWindowsPerform: (SEL) selector inOrder: (BOOL) inOrder;
 - (void) miniaturizeAll: sender;
@@ -216,6 +223,7 @@ typedef NS_OPTIONS(NSUInteger, NSApplicationPresentationOptions) {
 - (void) updateWindows;
 
 - (void) activateIgnoringOtherApps: (BOOL) flag;
+- (void) activate;
 - (void) deactivate;
 
 - (NSWindow *) modalWindow;

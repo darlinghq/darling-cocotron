@@ -192,6 +192,7 @@ void O2DContextClipAndFillEdges(O2Context_builtin *self, int fillRuleMask);
                            O2ContextCurrentGState(self)->_shadowOffset.height,
                            size.width, size.height),
                 shadow);
+        [shadow release];
     }
 
     O2ContextDrawLayerInRect(self, O2RectMake(0, 0, size.width, size.height),

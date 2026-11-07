@@ -29,6 +29,10 @@
 
 @class CAMetalLayerInternal;
 
+// Whether the current GL context can import Vulkan semaphores (GL_EXT_semaphore_fd).
+// Without it, the compositor waits on the CPU for a drawable's rendering to finish.
+bool CAMetalDrawableGLImportsSemaphores();
+
 class CAMetalDrawableTexture: public Indium::PrivateTexture {
 	CGSize _size;
 	VkImage _image = VK_NULL_HANDLE;
@@ -40,12 +44,17 @@ class CAMetalDrawableTexture: public Indium::PrivateTexture {
 	VkImage _internalImage = VK_NULL_HANDLE;
 	VkDeviceMemory _internalMemory = VK_NULL_HANDLE;
 	bool _framebufferOnly = false;
+	bool _exportsSemaphore = true;
 
 public:
-	CAMetalDrawableTexture(CGSize size, Indium::PixelFormat pixelFormat, bool framebufferOnly, std::shared_ptr<Indium::PrivateDevice> privateDevice);
+	CAMetalDrawableTexture(CGSize size, Indium::PixelFormat pixelFormat, bool framebufferOnly, bool exportsSemaphore, std::shared_ptr<Indium::PrivateDevice> privateDevice);
 	virtual ~CAMetalDrawableTexture();
 
 	GLuint glTexture() const;
+
+	// Blocks until all GPU work submitted so far that uses this texture has completed.
+	// Returns false if the wait failed.
+	bool waitForRendering();
 
 	virtual VkImageView imageView() override;
 	virtual VkImage image() override;
@@ -81,9 +90,12 @@ private:
 	CFTimeInterval _presentedTime = 0;
 	bool _queued = false;
 	CGLContextObj _glContext = nullptr;
+	bool _glImportsSemaphores = false;
+
+	void waitForRenderingOnCPU();
 
 public:
-	CAMetalDrawableActual(CAMetalLayerInternal* layer, CGSize size, NSUInteger drawableID, Indium::PixelFormat pixelFormat, std::shared_ptr<Indium::Device> device, CGLContextObj _glContext);
+	CAMetalDrawableActual(CAMetalLayerInternal* layer, CGSize size, NSUInteger drawableID, Indium::PixelFormat pixelFormat, std::shared_ptr<Indium::Device> device, CGLContextObj _glContext, bool glImportsSemaphores);
 	virtual ~CAMetalDrawableActual();
 
 	virtual void present() override;

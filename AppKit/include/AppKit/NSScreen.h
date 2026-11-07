@@ -20,6 +20,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <CoreGraphics/CGDirectDisplay.h>
 #import <Foundation/Foundation.h>
 
+@class NSColorSpace;
+
 extern NSNotificationName const NSScreenColorSpaceDidChangeNotification;
 
 typedef NSString *NSDeviceDescriptionKey;
@@ -46,6 +48,16 @@ typedef NSString *NSDeviceDescriptionKey;
 - (NSRect) visibleFrame;
 
 - (CGFloat) userSpaceScaleFactor;
+- (CGFloat) backingScaleFactor;
+- (NSColorSpace *) colorSpace;
+- (NSString *) localizedName;
+
+- (CGFloat) maximumExtendedDynamicRangeColorComponentValue;
+- (CGFloat) maximumPotentialExtendedDynamicRangeColorComponentValue;
+- (CGFloat) maximumReferenceExtendedDynamicRangeColorComponentValue;
+
+- (NSTimeInterval) minimumRefreshInterval;
+- (NSTimeInterval) maximumRefreshInterval;
 
 @end
 

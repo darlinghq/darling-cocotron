@@ -67,16 +67,16 @@
     const uint8_t *rowBytes = CGBitmapContextGetData(context);
     const size_t bytesPerRow = CGBitmapContextGetBytesPerRow(context);
 
-    for (int row = 0; row < height; row++, rowBytes += bytesPerRow) {
-        for (int column = 0; column < width; column++) {
-            memcpy(ximage->pixels + row * width, &rowBytes[column * 4],
-                   bytesPerRow);
-        }
-    }
+    // The Xcursor image is packed, one XcursorPixel per pixel; the bitmap rows
+    // may be padded. Copy each row once.
+    for (size_t row = 0; row < height; row++, rowBytes += bytesPerRow)
+        memcpy(ximage->pixels + row * width, rowBytes,
+               width * sizeof(XcursorPixel));
 
     CGContextRelease(context);
 
     _cursor = XcursorImageLoadCursor(display, ximage);
+    XcursorImageDestroy(ximage);
     if (_cursor == None)
         _cursor = XcursorLibraryLoadCursor(display, "left_ptr");
     return self;

@@ -17,7 +17,28 @@ FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
 COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
+#import <AppKit/NSApplication.h>
 #import <AppKit/NSEvent_mouse.h>
+#import <AppKit/NSWindow.h>
+#import <AppKit/NSScreen.h>
+#import <CoreGraphics/CGEvent.h>
+
+// The button an event of this type is about, until a backend sets the
+// actual one: 0 is the left button, 1 the right one and 2 the middle one.
+static NSInteger defaultButtonNumber(NSEventType type) {
+    switch (type) {
+    case NSRightMouseDown:
+    case NSRightMouseUp:
+    case NSRightMouseDragged:
+        return 1;
+    case NSOtherMouseDown:
+    case NSOtherMouseUp:
+    case NSOtherMouseDragged:
+        return 2;
+    default:
+        return 0;
+    }
+}
 
 @implementation NSEvent_mouse
 
@@ -34,6 +55,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
             modifierFlags: modifierFlags
                    window: window];
 
+    _buttonNumber = defaultButtonNumber(type);
     _clickCount = clickCount;
     _deltaX = deltaX;
     _deltaY = deltaY;
@@ -43,6 +65,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (NSInteger) clickCount {
     return _clickCount;
+}
+
+- (short) subtype {
+    return NSEventSubtypeMouseEvent;
 }
 
 - (instancetype) initWithType: (NSEventType) type
@@ -74,7 +100,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     self = [super initWithType: type
                       location: location
                  modifierFlags: modifierFlags
-                        window: (id) windowNumber];
+                        window: [NSApp windowWithWindowNumber: windowNumber]];
     if (self != nil) {
         _trackingNumber = tracking;
         _userData = userData;
@@ -95,7 +121,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [super initWithType: type
                  location: location
             modifierFlags: modifierFlags
-                   window: (id) windowNumber];
+                   window: [NSApp windowWithWindowNumber: windowNumber]];
+    _buttonNumber = defaultButtonNumber(type);
     _clickCount = clickCount;
     return self;
 }
@@ -110,6 +137,56 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (CGFloat) deltaZ {
     return 0.0;
+}
+
+- (CGEventRef) CGEvent {
+    CGEventRef event;
+
+    switch (_type) {
+    case NSLeftMouseDown:
+    case NSLeftMouseUp:
+    case NSRightMouseDown:
+    case NSRightMouseUp:
+    case NSMouseMoved:
+    case NSLeftMouseDragged:
+    case NSRightMouseDragged:
+    case NSOtherMouseDown:
+    case NSOtherMouseUp:
+    case NSOtherMouseDragged:
+        // The mouse event types have the same values in both enums.
+        event = CGEventCreateMouseEvent(NULL, (CGEventType) _type, CGPointZero,
+                                        (CGMouseButton) _buttonNumber);
+        CGEventSetIntegerValueField(event, kCGMouseEventButtonNumber,
+                                    _buttonNumber);
+        CGEventSetIntegerValueField(event, kCGMouseEventClickState,
+                                    _clickCount);
+        break;
+    case NSScrollWheel:
+        event = CGEventCreateScrollWheelEvent(NULL, kCGScrollEventUnitLine, 2,
+                                              (int32_t) _deltaY,
+                                              (int32_t) _deltaX);
+        break;
+    default:
+        return NULL;
+    }
+    if (event == NULL)
+        return NULL;
+
+    // CGEvent locations are global, in CoreGraphics' space: origin at the
+    // top-left corner of the main display, y down.
+    NSPoint point = [self locationInWindow];
+    NSWindow *window = [self window];
+    if (window != nil)
+        point = [window convertBaseToScreen: point];
+    NSArray *screens = [NSScreen screens];
+    if ([screens count] > 0)
+        point.y = NSHeight([[screens objectAtIndex: 0] frame]) - point.y;
+    CGEventSetLocation(event, NSPointToCGPoint(point));
+
+    // NSEventModifierFlags and CGEventFlags use the same bits.
+    CGEventSetFlags(event, (CGEventFlags) [self modifierFlags]);
+
+    return (CGEventRef) CFAutorelease(event);
 }
 
 // Apple's documentation is a bit confusing here. NSEvent exposes no API to pass

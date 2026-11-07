@@ -42,5 +42,6 @@ APPKIT_EXPORT NSString *const NSNibTopLevelObjects;
 
 - (BOOL) instantiateNibWithExternalNameTable: (NSDictionary *) nameTable;
 - (BOOL) instantiateNibWithOwner: owner topLevelObjects: (NSArray **) objects;
+- (BOOL) instantiateWithOwner: (id) owner topLevelObjects: (NSArray **) objects;
 
 @end

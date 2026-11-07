@@ -21,6 +21,19 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Onyx2D/O2Color.h>
 #import <Onyx2D/O2ColorSpace.h>
 
+// CGColorRef is an O2Color; give it CGColor's type ID for CFGetTypeID.
+@implementation O2Color (CGColorTypeID)
+
+- (CFTypeID) _cfTypeID {
+    return CGColorGetTypeID();
+}
+
+@end
+
+CFTypeID CGColorGetTypeID(void) {
+    return (CFTypeID) [O2Color self];
+}
+
 CGColorRef CGColorRetain(CGColorRef self) {
     return (CGColorRef)O2ColorRetain((O2ColorRef)self);
 }
@@ -53,6 +66,15 @@ CGColorRef CGColorCreateWithPattern(CGColorSpaceRef colorSpace,
                                     const CGFloat *components)
 {
     return (CGColorRef)O2ColorCreateWithPattern((O2ColorSpaceRef)colorSpace, (O2PatternRef)pattern, components);
+}
+
+CGColorRef CGColorCreateCopyByMatchingToColorSpace(CGColorSpaceRef colorSpace,
+                                                   CGColorRenderingIntent intent,
+                                                   CGColorRef color,
+                                                   CFDictionaryRef options)
+{
+    return (CGColorRef)O2ColorCreateCopyByMatchingToColorSpace(
+            (O2ColorSpaceRef)colorSpace, (O2ColorRef)color);
 }
 
 CGColorRef CGColorCreateCopy(CGColorRef self) {

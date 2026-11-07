@@ -18,6 +18,28 @@
 */
 
 #import <Foundation/NSObject.h>
+#import <AppKit/NSTouchBarItem.h>
 
-@interface NSTouchBar : NSObject
+@protocol NSTouchBarDelegate;
+
+@class NSMutableDictionary;
+
+@interface NSTouchBar : NSObject {
+    id<NSTouchBarDelegate> _delegate;
+    NSArray *_defaultItemIdentifiers;
+    NSMutableDictionary *_items;
+}
+
+@property(assign) id<NSTouchBarDelegate> delegate;
+@property(copy) NSArray *defaultItemIdentifiers;
+@property(readonly, copy) NSArray *itemIdentifiers;
+
+- (NSTouchBarItem *) itemForIdentifier: (NSTouchBarItemIdentifier) identifier;
+
+@end
+
+@protocol NSTouchBarDelegate <NSObject>
+@optional
+- (NSTouchBarItem *) touchBar: (NSTouchBar *) touchBar
+        makeItemForIdentifier: (NSTouchBarItemIdentifier) identifier;
 @end

@@ -105,16 +105,6 @@ FOUNDATION_EXPORT char *NSUnicodeToSymbol(const unichar *characters,
 @end
 #endif
 
-const NSFontWeight NSFontWeightUltraLight = -0.8;
-const NSFontWeight NSFontWeightThin = -0.6;
-const NSFontWeight NSFontWeightLight = -0.4;
-const NSFontWeight NSFontWeightRegular = 0.0;
-const NSFontWeight NSFontWeightMedium = 0.23;
-const NSFontWeight NSFontWeightSemibold = 0.3;
-const NSFontWeight NSFontWeightBold = 0.4;
-const NSFontWeight NSFontWeightHeavy = 0.56;
-const NSFontWeight NSFontWeightBlack = 0.62;
-
 @implementation NSFont
 
 #ifndef DARLING
@@ -299,8 +289,8 @@ static NSLock *_cacheLock = nil;
 }
 
 + (NSFont *) systemFontOfSize: (CGFloat) size weight: (NSFontWeight) weight {
-    // Cocotron has no weighted system-font family; fold onto the classic
-    // regular/bold pair at the semibold threshold.
+    // Only the regular and bold system faces are available; semibold and
+    // heavier weights get the bold one.
     if (weight >= NSFontWeightSemibold)
         return [self boldSystemFontOfSize: size];
     return [self systemFontOfSize: size];
@@ -711,8 +701,8 @@ static NSLock *_cacheLock = nil;
 }
 
 - (NSFont *) printerFont {
-    NSUnimplementedMethod();
-    return nil;
+    // Quartz fonts have no separate printer variant.
+    return self;
 }
 
 - (NSFont *) screenFont {
@@ -722,6 +712,11 @@ static NSLock *_cacheLock = nil;
 - (NSFont *) screenFontWithRenderingMode: (NSFontRenderingMode) mode {
     NSUnimplementedMethod();
     return [[self copy] autorelease];
+}
+
+// The CTFont behind this font, for CoreText functions given an NSFont.
+- (CTFontRef) _coreTextFont {
+    return _ctFont;
 }
 
 - (NSRect) boundingRectForFont {

@@ -47,11 +47,23 @@
     BOOL _mapped;
     CGPoint _lastMotionPos;
     BOOL _isModal;
+    BOOL _overrideRedirect;
+    BOOL _fullscreenRequested;
     BOOL _isOpaque;
+    BOOL _hasAlpha;   // created with the 32-bit visual and an alpha surface
+    BOOL _wasMapped;  // the visual is settled when the window is first mapped
     BOOL _hasShadow;
+    BOOL _wantsInputFocus;
+    BOOL _ignoresMouseEvents; // the input region currently set
 
 @public
     XIC _xic;
+    // YES while X11Display delivers FocusIn for this window (see -makeKey).
+    BOOL _receivingFocus;
+    // -isMiniaturized as last read from _NET_WM_STATE; PropertyNotify on that
+    // property, mapping and unmapping make it read again.
+    BOOL _miniaturizedKnown;
+    BOOL _miniaturized;
 }
 
 + (void) removeDecorationForWindow: (Window) w onDisplay: (Display *) dpy;
@@ -63,11 +75,15 @@
 - (O2Rect) transformFrame: (O2Rect) frame;
 
 - (Window) windowHandle;
+- (BOOL) isMapped;
 
 - (void) frameChanged;
 - (void) setLastKnownCursorPosition: (CGPoint) point;
 
 - (void) setStyleMaskInternal: (NSUInteger) styleMask force: (BOOL) force;
+
+- (void) requestInputFocus;
+- (void) mapNotified;
 
 @end
 

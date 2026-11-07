@@ -1,9 +1,11 @@
 #import <CoreVideo/CoreVideo.h>
+#import <IOSurface/IOSurface.h>
 #import <Onyx2D/O2Surface.h>
 #import <OpenGL/OpenGL.h>
 #import <QuartzCore/CAAnimation.h>
 #import <QuartzCore/CAMediaTimingFunction.h>
 #import <QuartzCore/CARenderer.h>
+#import <QuartzCore/CATransformLayer.h>
 #import "CALayerInternal.h"
 
 NSString *const kCARendererColorSpace = @"kCARendererColorSpace";
@@ -89,8 +91,16 @@ static CGFloat mediaTimingScale(CAAnimation *animation,
 {
     CFTimeInterval begin = [animation beginTime];
     CFTimeInterval duration = [animation duration];
+    // beginTime is set by the first animation frame; a render before that
+    // (e.g. from a view display) shows the start value. Clamp so a late render
+    // can't extrapolate far past the end value.
+    if (begin <= 0)
+        return 0;
+    if (duration <= 0)
+        return 1;
+
     CFTimeInterval delta = currentTime - begin;
-    double zeroToOne = delta / duration;
+    double zeroToOne = MIN(MAX(delta / duration, 0.0), 1.0);
     CAMediaTimingFunction *function = [animation timingFunction];
 
     if (function == nil)
@@ -220,14 +230,42 @@ static GLint interpolationFromName(NSString *name) {
         return GL_LINEAR;
 }
 
-void CATexImage2DCGImage(CGImageRef image) {
-    size_t imageWidth = CGImageGetWidth(image);
-    size_t imageHeight = CGImageGetHeight(image);
-    CGBitmapInfo bitmapInfo = CGImageGetBitmapInfo(image);
+static void applyLayerTransform(CATransform3D t) {
+    // CATransform3D uses row vectors. OpenGL consumes column-major storage,
+    // so this field order represents the same point transformation there.
+    const GLfloat matrix[16] = {
+        t.m11, t.m12, t.m13, t.m14,
+        t.m21, t.m22, t.m23, t.m24,
+        t.m31, t.m32, t.m33, t.m34,
+        t.m41, t.m42, t.m43, t.m44,
+    };
+    glMultMatrixf(matrix);
+}
 
-    CGDataProviderRef provider = CGImageGetDataProvider(image);
-    CFDataRef data = CGDataProviderCopyData(provider);
-    const uint8_t *pixelBytes = CFDataGetBytePtr(data);
+// Specifies the bound texture as a single transparent pixel, for contents
+// that have no pixels to upload, so that nothing stale is drawn.
+static void texImage2DTransparent(void) {
+    static const uint8_t transparent[4] = {0, 0, 0, 0};
+
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 1, 1, 0, GL_RGBA,
+                 GL_UNSIGNED_BYTE, transparent);
+}
+
+void CATexImage2DCGImage(CGImageRef image) {
+    CGDataProviderRef provider = image ? CGImageGetDataProvider(image) : NULL;
+    CFDataRef data = provider ? CGDataProviderCopyData(provider) : NULL;
+    const uint8_t *pixelBytes = data ? CFDataGetBytePtr(data) : NULL;
+    size_t imageWidth = image ? CGImageGetWidth(image) : 0;
+    size_t imageHeight = image ? CGImageGetHeight(image) : 0;
+
+    if (pixelBytes == NULL || imageWidth == 0 || imageHeight == 0) {
+        if (data != NULL)
+            CFRelease(data);
+        texImage2DTransparent();
+        return;
+    }
+
+    CGBitmapInfo bitmapInfo = CGImageGetBitmapInfo(image);
 
     GLenum glFormat = GL_BGRA;
     GLenum glType = GL_UNSIGNED_INT_8_8_8_8_REV;
@@ -272,30 +310,194 @@ void CATexImage2DCGImage(CGImageRef image) {
 
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, imageWidth, imageHeight, 0,
                  glFormat, glType, pixelBytes);
+    CFRelease(data);
 }
 
-- (void) _renderLayer: (CALayer *) layer
-                    z: (CGFloat) z
-          currentTime: (CFTimeInterval) currentTime
-{
-    NSNumber *textureId = [layer _textureId];
-    GLuint texture = [textureId unsignedIntValue];
-    GLboolean loadPixelData = GL_FALSE;
+// Premultiplied colour (the blend function is GL_ONE, GL_ONE_MINUS_SRC_ALPHA).
+static BOOL setPremultipliedColor(CGColorRef color, CGFloat opacity) {
+    if (color == NULL)
+        return NO;
 
-    if (texture == 0)
-        loadPixelData = GL_TRUE;
-    else {
+    size_t count = CGColorGetNumberOfComponents(color);
+    const CGFloat *c = CGColorGetComponents(color);
+    CGColorSpaceModel model =
+            CGColorSpaceGetModel(CGColorGetColorSpace(color));
+    CGFloat r, g, b, a;
 
-        if (glIsTexture(texture) == GL_FALSE) {
-            loadPixelData = GL_TRUE;
-        }
-        glBindTexture(GL_TEXTURE_2D, texture);
+    if (c == NULL)
+        return NO;
+    // Only RGB and grey components can be used as they are; a CMYK colour also
+    // has 4+ components, which must not be read as RGBA.
+    if (model == kCGColorSpaceModelRGB && count >= 4) {
+        r = c[0]; g = c[1]; b = c[2]; a = c[3];
+    } else if (model == kCGColorSpaceModelRGB && count == 3) {
+        r = c[0]; g = c[1]; b = c[2]; a = 1;
+    } else if (model == kCGColorSpaceModelMonochrome && count >= 2) {
+        r = g = b = c[0]; a = c[1];
+    } else {
+        return NO;
     }
 
-    if (loadPixelData) {
-        CGImageRef image = (CGImageRef)layer.contents;
+    a *= opacity;
+    if (a <= 0)
+        return NO;
+    glColor4f(r * a, g * a, b * a, a);
+    return YES;
+}
 
-        CATexImage2DCGImage(image);
+enum { kCornerSegments = 8, kRoundedRectPoints = 4 * (kCornerSegments + 1) };
+
+// Outline of a rounded rect, counter-clockwise from the bottom-right corner.
+// Always kRoundedRectPoints points (a zero radius repeats the corner), so an
+// outer and an inner outline can be zipped into a border triangle strip.
+static void roundedRectOutline(CGRect r, CGFloat radius, GLfloat *xy) {
+    radius = MAX(0, MIN(radius, MIN(r.size.width, r.size.height) / 2));
+
+    const CGFloat cx[4] = {CGRectGetMaxX(r) - radius, CGRectGetMaxX(r) - radius,
+                           CGRectGetMinX(r) + radius, CGRectGetMinX(r) + radius};
+    const CGFloat cy[4] = {CGRectGetMinY(r) + radius, CGRectGetMaxY(r) - radius,
+                           CGRectGetMaxY(r) - radius, CGRectGetMinY(r) + radius};
+    int n = 0;
+
+    for (int corner = 0; corner < 4; corner++) {
+        CGFloat start = (corner - 1) * M_PI_2;
+        for (int i = 0; i <= kCornerSegments; i++) {
+            CGFloat angle = start + M_PI_2 * i / kCornerSegments;
+            xy[n++] = cx[corner] + radius * cos(angle);
+            xy[n++] = cy[corner] + radius * sin(angle);
+        }
+    }
+}
+
+- (void) _drawBackgroundOfLayer: (CALayer *) layer
+                         bounds: (CGRect) bounds
+                        opacity: (CGFloat) opacity
+{
+    if (!setPremultipliedColor(layer.backgroundColor, opacity))
+        return;
+
+    GLfloat fan[2 * (kRoundedRectPoints + 2)];
+    CGRect rect = CGRectMake(0, 0, bounds.size.width, bounds.size.height);
+
+    fan[0] = CGRectGetMidX(rect);
+    fan[1] = CGRectGetMidY(rect);
+    roundedRectOutline(rect, layer.cornerRadius, fan + 2);
+    fan[2 * (kRoundedRectPoints + 1)] = fan[2];
+    fan[2 * (kRoundedRectPoints + 1) + 1] = fan[3];
+
+    glVertexPointer(2, GL_FLOAT, 0, fan);
+    glDrawArrays(GL_TRIANGLE_FAN, 0, kRoundedRectPoints + 2);
+}
+
+- (void) _drawBorderOfLayer: (CALayer *) layer
+                     bounds: (CGRect) bounds
+                    opacity: (CGFloat) opacity
+{
+    CGFloat width = layer.borderWidth;
+
+    if (width <= 0 || !setPremultipliedColor(layer.borderColor, opacity))
+        return;
+
+    CGRect outerRect = CGRectMake(0, 0, bounds.size.width, bounds.size.height);
+    CGRect innerRect = CGRectInset(outerRect, width, width);
+    if (innerRect.size.width < 0 || innerRect.size.height < 0)
+        innerRect = CGRectMake(CGRectGetMidX(outerRect), CGRectGetMidY(outerRect), 0, 0);
+
+    GLfloat outer[2 * kRoundedRectPoints], inner[2 * kRoundedRectPoints];
+    GLfloat strip[2 * 2 * (kRoundedRectPoints + 1)];
+
+    roundedRectOutline(outerRect, layer.cornerRadius, outer);
+    roundedRectOutline(innerRect, MAX(0, layer.cornerRadius - width), inner);
+
+    for (int i = 0; i <= kRoundedRectPoints; i++) {
+        int j = i % kRoundedRectPoints;
+        strip[4 * i] = outer[2 * j];
+        strip[4 * i + 1] = outer[2 * j + 1];
+        strip[4 * i + 2] = inner[2 * j];
+        strip[4 * i + 3] = inner[2 * j + 1];
+    }
+
+    glVertexPointer(2, GL_FLOAT, 0, strip);
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 2 * (kRoundedRectPoints + 1));
+}
+
+// Specifies the bound texture from the surface's pixels. Only the 32-bit
+// formats that map directly onto a GL format are drawn; other surfaces are
+// drawn transparent. Returns the seed the uploaded pixels have.
+static uint32_t texImage2DIOSurface(CGLContextObj context,
+                                    IOSurfaceRef surface)
+{
+    GLenum format, type;
+
+    switch (IOSurfaceGetPixelFormat(surface)) {
+    case 'BGRA':
+        format = GL_BGRA;
+        type = GL_UNSIGNED_INT_8_8_8_8_REV;
+        break;
+    case 'RGBA':
+        format = GL_RGBA;
+        type = GL_UNSIGNED_BYTE;
+        break;
+    default:
+        texImage2DTransparent();
+        return IOSurfaceGetSeed(surface);
+    }
+
+    // Keep writers out while the pixels are copied into the texture.
+    uint32_t seed = 0;
+    IOSurfaceLock(surface, kIOSurfaceLockReadOnly, &seed);
+    CGLError error = CGLTexImageIOSurface2D(
+            context, GL_TEXTURE_2D, GL_RGBA8,
+            (GLsizei) IOSurfaceGetWidth(surface),
+            (GLsizei) IOSurfaceGetHeight(surface), format, type, surface, 0);
+    IOSurfaceUnlock(surface, kIOSurfaceLockReadOnly, NULL);
+
+    if (error != kCGLNoError)
+        texImage2DTransparent();
+    return seed;
+}
+
+- (void) _drawContentsOfLayer: (CALayer *) layer
+                       bounds: (CGRect) bounds
+                      opacity: (CGFloat) opacity
+                      flipped: (BOOL) flipped
+{
+    id contents = layer.contents;
+
+    if (contents == nil)
+        return;
+
+    // Contents can be a CGImage or an IOSurface.
+    IOSurfaceRef surface = NULL;
+    if (CFGetTypeID((CFTypeRef) contents) == IOSurfaceGetTypeID())
+        surface = (IOSurfaceRef) contents;
+
+    NSNumber *textureId = [layer _textureId];
+    GLuint texture = [textureId unsignedIntValue];
+
+    // Upload when the texture object doesn't exist yet (check before binding:
+    // glBindTexture creates it) or when the layer got new contents since the
+    // last upload (a layer-backed NSView sets a new image on every display).
+    // A surface is drawn by CPU or GPU code that keeps the same object, so
+    // its pixels are uploaded again once its seed has moved on.
+    BOOL upload = texture == 0 || glIsTexture(texture) == GL_FALSE ||
+                  [layer _textureContents] != contents ||
+                  (surface != NULL &&
+                   IOSurfaceGetSeed(surface) != [layer _textureSeed]);
+
+    glEnable(GL_TEXTURE_2D);
+    glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+
+    if (texture != 0)
+        glBindTexture(GL_TEXTURE_2D, texture);
+
+    if (upload) {
+        if (surface != NULL) {
+            [layer _setTextureSeed: texImage2DIOSurface(_cglContext, surface)];
+        } else {
+            CATexImage2DCGImage((CGImageRef) contents);
+        }
+        [layer _setTextureContents: contents];
 
         GLint minFilter = interpolationFromName(layer.minificationFilter);
         GLint magFilter = interpolationFromName(layer.magnificationFilter);
@@ -307,76 +509,122 @@ void CATexImage2DCGImage(CGImageRef image) {
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
     }
 
+    // Texture row 0 is the top of the image. It goes at the top of the screen
+    // whether or not the layer's coordinate space is flipped.
+    const GLfloat uprightTexture[4 * 2] = {0, 1, 1, 1, 0, 0, 1, 0};
+    const GLfloat flippedTexture[4 * 2] = {0, 0, 1, 0, 0, 1, 1, 1};
+    const GLfloat *textureVertices = flipped ? flippedTexture : uprightTexture;
+    const GLfloat vertices[4 * 2] = {0, 0, bounds.size.width, 0,
+                                     0, bounds.size.height,
+                                     bounds.size.width, bounds.size.height};
+
+    glTexCoordPointer(2, GL_FLOAT, 0, textureVertices);
+    glVertexPointer(2, GL_FLOAT, 0, vertices);
+    glColor4f(opacity, opacity, opacity, opacity);
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+
+    glDisableClientState(GL_TEXTURE_COORD_ARRAY);
+    glDisable(GL_TEXTURE_2D);
+}
+
+// Layers are composited in painter's order: a layer's background, contents and
+// border, then its sublayers in array order. Opacity multiplies down the tree.
+// parentFlipped says whether the parent's coordinate space is y-flipped on screen.
+- (void) _renderLayer: (CALayer *) layer
+          currentTime: (CFTimeInterval) currentTime
+        parentOpacity: (CGFloat) parentOpacity
+        parentFlipped: (BOOL) parentFlipped
+{
+    if (layer.hidden)
+        return;
+
     CGPoint anchorPoint =
             interpolatePointInLayerKey(layer, @"anchorPoint", currentTime);
     CGPoint position =
             interpolatePointInLayerKey(layer, @"position", currentTime);
     CGRect bounds = interpolateRectInLayerKey(layer, @"bounds", currentTime);
     CGFloat opacity =
-            interpolateFloatInLayerKey(layer, @"opacity", currentTime);
+            interpolateFloatInLayerKey(layer, @"opacity", currentTime) *
+            parentOpacity;
 
-    GLfloat textureVertices[4 * 2];
-    GLfloat vertices[4 * 3];
-
-    textureVertices[0] = 0;
-    textureVertices[1] = 1;
-    textureVertices[2] = 1;
-    textureVertices[3] = 1;
-    textureVertices[4] = 0;
-    textureVertices[5] = 0;
-    textureVertices[6] = 1;
-    textureVertices[7] = 0;
-
-    vertices[0] = 0;
-    vertices[1] = 0;
-    vertices[2] = z;
-
-    vertices[3] = bounds.size.width;
-    vertices[4] = 0;
-    vertices[5] = z;
-
-    vertices[6] = 0;
-    vertices[7] = bounds.size.height;
-    vertices[8] = z;
-
-    vertices[9] = bounds.size.width;
-    vertices[10] = bounds.size.height;
-    vertices[11] = z;
+    if (opacity <= 0)
+        return;
 
     glPushMatrix();
-    //  glTranslatef(width/2,height/2,0);
-    glTexCoordPointer(2, GL_FLOAT, 0, textureVertices);
-    glVertexPointer(3, GL_FLOAT, 0, vertices);
+    // Position is the anchor in parent coordinates. Apply the layer transform
+    // around it, then move local geometry so its anchor is at the origin.
+    glTranslatef(position.x, position.y, 0);
+    applyLayerTransform(layer.transform);
+    glTranslatef(-bounds.size.width * anchorPoint.x,
+                 -bounds.size.height * anchorPoint.y, 0);
 
-    glTranslatef(position.x - (bounds.size.width * anchorPoint.x),
-                 position.y - (bounds.size.height * anchorPoint.y), 0);
-    // glTranslatef(position.x,position.y,0);
-    // glScalef(bounds.size.width,bounds.size.height,1);
+    BOOL flipped = parentFlipped;
+    if (layer.geometryFlipped) {
+        glTranslatef(0, bounds.size.height, 0);
+        glScalef(1, -1, 1);
+        flipped = !flipped;
+    }
 
-    //  glRotatef(1,0,0,1);
-    glColor4f(opacity, opacity, opacity, opacity);
+    // A transform layer renders only its sublayers.
+    if (![layer isKindOfClass: [CATransformLayer class]]) {
+        [self _drawBackgroundOfLayer: layer bounds: bounds opacity: opacity];
 
-    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+        // A layer that draws its own content (CAMetalLayer draws the texture the GPU
+        // filled in) opts out of the contents path, which would otherwise upload
+        // into the same texture it just drew from.
+        if (![layer _drawLayerContents: bounds opacity: opacity])
+            [self _drawContentsOfLayer: layer
+                                bounds: bounds
+                               opacity: opacity
+                               flipped: flipped];
+
+        [self _drawBorderOfLayer: layer bounds: bounds opacity: opacity];
+    }
 
     for (CALayer *child in layer.sublayers)
-        [self _renderLayer: child z: z + 1 currentTime: currentTime];
+        [self _renderLayer: child
+                currentTime: currentTime
+              parentOpacity: opacity
+              parentFlipped: flipped];
 
     glPopMatrix();
 }
 
+// Layers that draw their content (-drawInContext:, CATextLayer, CAShapeLayer,
+// a drawing delegate) produce it when marked as needing display. This runs
+// before any GL drawing: a delegate's -displayLayer: can run arbitrary code (an
+// NSView delegate redisplays the view, which renders this layer tree again), and
+// doing that in the middle of the traversal would clear the frame and reset the
+// matrix stack under it.
+static void displayLayerTreeIfNeeded(CALayer *layer) {
+    if (layer.hidden)
+        return;
+
+    [layer displayIfNeeded];
+
+    // Copied: drawing code may add or remove sublayers.
+    NSArray *sublayers = [layer.sublayers copy];
+    for (CALayer *child in sublayers)
+        displayLayerTreeIfNeeded(child);
+    [sublayers release];
+}
+
 - (void) render {
+    [_rootLayer layoutIfNeeded];
+    displayLayerTreeIfNeeded(_rootLayer);
+
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
 
     glClearColor(0, 0, 0, 1);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    glEnable(GL_DEPTH_TEST);
-    glDepthFunc(GL_LEQUAL);
+    // Painter's order instead of depth testing: every layer used to get z+1,
+    // which put layers nested two or more deep outside the [-1, 1] depth range
+    // of CALayerContext's glOrtho projection, so they were clipped away.
+    glDisable(GL_DEPTH_TEST);
 
-    glEnable(GL_TEXTURE_2D);
     glEnableClientState(GL_VERTEX_ARRAY);
-    glEnableClientState(GL_TEXTURE_COORD_ARRAY);
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
@@ -384,7 +632,10 @@ void CATexImage2DCGImage(CGImageRef image) {
     glAlphaFunc(GL_GREATER, 0);
     glEnable(GL_ALPHA_TEST);
 
-    [self _renderLayer: _rootLayer z: 0 currentTime: CACurrentMediaTime()];
+    [self _renderLayer: _rootLayer
+            currentTime: CACurrentMediaTime()
+          parentOpacity: 1.0
+          parentFlipped: [_rootLayer.superlayer contentsAreFlipped]];
 
     glFlush();
 }

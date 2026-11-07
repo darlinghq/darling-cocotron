@@ -21,6 +21,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSFont.h>
 #import <AppKit/NSPasteboard.h>
 #import <CarbonCore/UnicodeUtilities.h>
+#import <CoreFoundation/CFRunLoop.h>
 #import <Foundation/Foundation.h>
 
 @class NSColor, NSDraggingManager, NSPrintInfo, NSView, NSSavePanel,
@@ -28,6 +29,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @interface NSDisplay : NSObject {
     NSMutableArray *_eventQueue;
+    BOOL _cursorHiddenUntilMouseMoves;
+    NSInteger _cursorHideCount;
+    CFRunLoopSourceRef _eventSource;
 }
 
 + (NSDisplay *) currentDisplay;
@@ -45,8 +49,19 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (NSTimeInterval) textCaretBlinkInterval;
 
+- (BOOL) activateProcessIdentifier: (pid_t) processIdentifier;
+
 - (void) hideCursor;
 - (void) unhideCursor;
+// Counted hide and unhide, as on macOS: -hideCursor runs on the first hide and -unhideCursor
+// when the last one is undone, so an explicit hide survives a pending hide-until-motion.
+// +[NSCursor hide], CGDisplayHideCursor and -setCursorHiddenUntilMouseMoves: use these.
+- (void) hideCursorCounted;
+- (void) unhideCursorCounted;
+// Hides the cursor until the pointer moves (+[NSCursor setHiddenUntilMouseMoves:]).
+// The state is tracked here, so a backend reports motion with -pointerMoved.
+- (void) setCursorHiddenUntilMouseMoves: (BOOL) flag;
+- (void) pointerMoved;
 
 - (id) cursorWithImage: (NSImage *) image hotSpot: (NSPoint) hotSpot;
 - (id) cursorWithName: (NSString *) name;
@@ -93,8 +108,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                         file: (NSString *) file
                        types: (NSArray *) types;
 
+// The pointer in Cocoa's global space: points, origin at the main screen's
+// bottom-left corner, y up, like screen and window frames.
 - (NSPoint) mouseLocation;
 - (NSUInteger) currentModifierFlags;
+// The buttons held down, as +[NSEvent pressedMouseButtons] reports them: bit 0
+// is the left button, bit 1 the right one and bit n the button numbered n.
+- (NSUInteger) pressedMouseButtons;
 
 - (NSArray *) orderedWindowNumbers;
 
@@ -116,7 +136,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (void) keyboardLayoutName: (NSString **) name
                    fullName: (NSString **) fullName;
 
+// position is in CoreGraphics' global space (origin at the main screen's top-left
+// corner, y down), as CGWarpMouseCursorPosition() takes it.
 - (void) warpMouse: (NSPoint) position;
+// YES disassociates the mouse from the cursor, as
+// CGAssociateMouseAndMouseCursorPosition(false) does: the cursor stays where it
+// is and mouse motion only produces event deltas. NO restores normal operation.
 - (void) grabMouse: (BOOL) doGrab;
 
 @end

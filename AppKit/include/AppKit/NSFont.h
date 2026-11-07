@@ -54,19 +54,6 @@ typedef enum {
     NSFontAntialiasedIntegerAdvancementsRenderingMode,
 } NSFontRenderingMode;
 
-// A font weight on a [-1, 1] scale, 0 being regular (10.11).
-typedef CGFloat NSFontWeight;
-
-APPKIT_EXPORT const NSFontWeight NSFontWeightUltraLight;
-APPKIT_EXPORT const NSFontWeight NSFontWeightThin;
-APPKIT_EXPORT const NSFontWeight NSFontWeightLight;
-APPKIT_EXPORT const NSFontWeight NSFontWeightRegular;
-APPKIT_EXPORT const NSFontWeight NSFontWeightMedium;
-APPKIT_EXPORT const NSFontWeight NSFontWeightSemibold;
-APPKIT_EXPORT const NSFontWeight NSFontWeightBold;
-APPKIT_EXPORT const NSFontWeight NSFontWeightHeavy;
-APPKIT_EXPORT const NSFontWeight NSFontWeightBlack;
-
 @interface NSFont : NSObject <NSCopying> {
     NSString *_name;
     CGFloat _pointSize;
@@ -85,13 +72,11 @@ APPKIT_EXPORT const NSFontWeight NSFontWeightBlack;
 + (NSFont *) boldSystemFontOfSize: (CGFloat) size;
 + (NSFont *) controlContentFontOfSize: (CGFloat) size;
 
-// Weighted / monospaced system fonts (10.11 / 10.15). NSFontWeight is a
-// CGFloat in [-1, 1]; the named constants match AppKit's values.
-+ (NSFont *) systemFontOfSize: (CGFloat) size weight: (NSFontWeight) weight;
+// Monospaced system fonts (10.15 / 10.11).
 + (NSFont *) monospacedSystemFontOfSize: (CGFloat) size
-                                  weight: (NSFontWeight) weight;
+                                  weight: (CGFloat) weight;
 + (NSFont *) monospacedDigitSystemFontOfSize: (CGFloat) size
-                                       weight: (NSFontWeight) weight;
+                                       weight: (CGFloat) weight;
 
 + (NSFont *) labelFontOfSize: (CGFloat) size;
 + (NSFont *) menuFontOfSize: (CGFloat) size;
@@ -100,6 +85,7 @@ APPKIT_EXPORT const NSFontWeight NSFontWeightBlack;
 + (NSFont *) messageFontOfSize: (CGFloat) size;
 + (NSFont *) paletteFontOfSize: (CGFloat) size;
 + (NSFont *) systemFontOfSize: (CGFloat) size;
++ (NSFont *) systemFontOfSize: (CGFloat) size weight: (CGFloat) weight;
 + (NSFont *) titleBarFontOfSize: (CGFloat) size;
 + (NSFont *) toolTipsFontOfSize: (CGFloat) size;
 + (NSFont *) userFontOfSize: (CGFloat) size;
