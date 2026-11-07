@@ -19,5 +19,16 @@
 
 #import <Foundation/Foundation.h>
 
+// Cross-process accessibility, by which an element of one process appears
+// in another's accessibility tree. Not public API. It is not supported, so
+// nothing is registered, tokens are empty and no remote element is made.
 @interface NSAccessibilityRemoteUIElement : NSObject
+
++ (void) setRemoteUIApp: (BOOL) remoteUIApp;
++ (BOOL) isRemoteUIApp;
++ (void) registerRemoteUIProcessIdentifier: (pid_t) processIdentifier;
++ (NSData *) remoteTokenForLocalUIElement: (id) element;
+
+- (instancetype) initWithRemoteToken: (NSData *) remoteToken;
+
 @end

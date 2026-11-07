@@ -23,6 +23,25 @@
 
 @implementation NSAccessibilityRemoteUIElement
 
++ (void) setRemoteUIApp: (BOOL) remoteUIApp {
+}
+
++ (BOOL) isRemoteUIApp {
+    return NO;
+}
+
++ (void) registerRemoteUIProcessIdentifier: (pid_t) processIdentifier {
+}
+
++ (NSData *) remoteTokenForLocalUIElement: (id) element {
+    return [NSData data];
+}
+
+- (instancetype) initWithRemoteToken: (NSData *) remoteToken {
+    [self release];
+    return nil;
+}
+
 - (NSMethodSignature *)methodSignatureForSelector:(SEL)aSelector
 {
     return [NSMethodSignature signatureWithObjCTypes: "v@:"];
