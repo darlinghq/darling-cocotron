@@ -241,14 +241,30 @@ static void applyLayerTransform(CATransform3D t) {
     glMultMatrixf(matrix);
 }
 
-void CATexImage2DCGImage(CGImageRef image) {
-    size_t imageWidth = CGImageGetWidth(image);
-    size_t imageHeight = CGImageGetHeight(image);
-    CGBitmapInfo bitmapInfo = CGImageGetBitmapInfo(image);
+// Specifies the bound texture as a single transparent pixel, for contents
+// that have no pixels to upload, so that nothing stale is drawn.
+static void texImage2DTransparent(void) {
+    static const uint8_t transparent[4] = {0, 0, 0, 0};
 
-    CGDataProviderRef provider = CGImageGetDataProvider(image);
-    CFDataRef data = CGDataProviderCopyData(provider);
-    const uint8_t *pixelBytes = CFDataGetBytePtr(data);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 1, 1, 0, GL_RGBA,
+                 GL_UNSIGNED_BYTE, transparent);
+}
+
+void CATexImage2DCGImage(CGImageRef image) {
+    CGDataProviderRef provider = image ? CGImageGetDataProvider(image) : NULL;
+    CFDataRef data = provider ? CGDataProviderCopyData(provider) : NULL;
+    const uint8_t *pixelBytes = data ? CFDataGetBytePtr(data) : NULL;
+    size_t imageWidth = image ? CGImageGetWidth(image) : 0;
+    size_t imageHeight = image ? CGImageGetHeight(image) : 0;
+
+    if (pixelBytes == NULL || imageWidth == 0 || imageHeight == 0) {
+        if (data != NULL)
+            CFRelease(data);
+        texImage2DTransparent();
+        return;
+    }
+
+    CGBitmapInfo bitmapInfo = CGImageGetBitmapInfo(image);
 
     GLenum glFormat = GL_BGRA;
     GLenum glType = GL_UNSIGNED_INT_8_8_8_8_REV;
@@ -293,6 +309,7 @@ void CATexImage2DCGImage(CGImageRef image) {
 
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, imageWidth, imageHeight, 0,
                  glFormat, glType, pixelBytes);
+    CFRelease(data);
 }
 
 // Premultiplied colour (the blend function is GL_ONE, GL_ONE_MINUS_SRC_ALPHA).
