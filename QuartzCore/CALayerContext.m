@@ -65,7 +65,7 @@
     [_deleteTextureIds release];
     CGLReleaseContext(_glContext);
     CGLReleasePixelFormat(_pixelFormat);
-    if (_cglWindow != NULL)
+    if (_cglWindow != NULL && _ownsCglWindow)
         CGLDestroyWindow(_cglWindow);
     [_subwindow release];
     [_layer release];
@@ -101,12 +101,14 @@
 {
     CGSubWindow* oldSubwindow = _subwindow;
 
-    if (_cglWindow) {
+    if (_cglWindow && _ownsCglWindow) {
         CGLDestroyWindow(_cglWindow);
     }
 
     _subwindow = [subwindow retain];
     _cglWindow = CGLGetWindow([_subwindow nativeWindow]);
+    _ownsCglWindow = _cglWindow != NULL;
+    _swapInterval = -1;
 
     [_subwindow show];
 
@@ -155,6 +157,41 @@
         [self prepareMetalLayersInLayerTree: child];
 }
 
+static GLint metalLayerSwapInterval(CALayer *layer);
+
+// A tree with Metal layers that covers a borderless window may present in the
+// window's own drawable (see -[CGSubWindow sharedCGLWindow]); switch to it, or
+// back to the subwindow's, as that changes.
+- (void) updateDrawable {
+    if (_subwindow == nil)
+        return;
+
+    GLint interval = _layer != nil ? metalLayerSwapInterval(_layer) : -1;
+    [_subwindow setAllowsParentDrawable: interval >= 0];
+    [_subwindow setSyncsToDisplay: interval != 0];
+    void *shared = [_subwindow sharedCGLWindow];
+
+    if (shared != NULL ? (_cglWindow == shared && !_ownsCglWindow)
+                       : (_cglWindow != NULL && _ownsCglWindow))
+        return;
+
+    // Detach from the old drawable before it can be destroyed.
+    if (CGLGetCurrentContext() == _glContext)
+        CGLSetCurrentContext(NULL);
+    if (_cglWindow != NULL && _ownsCglWindow)
+        CGLDestroyWindow(_cglWindow);
+
+    if (shared != NULL) {
+        _cglWindow = shared;
+        _ownsCglWindow = NO;
+    } else {
+        _cglWindow = CGLGetWindow([_subwindow nativeWindow]);
+        _ownsCglWindow = _cglWindow != NULL;
+    }
+    // The swap interval belongs to the drawable.
+    _swapInterval = -1;
+}
+
 - (void) renderLayer: (CALayer *) layer {
     if (CGLContextMakeCurrentAndAttachToWindow(_glContext, _cglWindow) != kCGLNoError)
         return;
@@ -196,6 +233,7 @@
 }
 
 - (void) render {
+    [self updateDrawable];
     // Without a window surface, attaching would leave the context without a
     // drawable and the tree would be drawn into nothing.
     if (_layer == nil || _cglWindow == NULL)
