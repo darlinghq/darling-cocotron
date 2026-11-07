@@ -1006,10 +1006,14 @@ static NSDictionary *modeInfoToDictionary(const XRRModeInfo *mi, int depth) {
             FcStrFree(pattern);
 
             NSFontTraitMask traits = 0;
-            int slant, width, weight;
-            FcPatternGetInteger(p, FC_SLANT, FC_SLANT_ROMAN, &slant);
-            FcPatternGetInteger(p, FC_WIDTH, FC_WIDTH_NORMAL, &width);
-            FcPatternGetInteger(p, FC_WEIGHT, FC_WEIGHT_REGULAR, &weight);
+            // Read the first value of each property; a face that doesn't
+            // have one (or has a range, as variable fonts do) is upright,
+            // regular and of normal width.
+            int slant = FC_SLANT_ROMAN, width = FC_WIDTH_NORMAL,
+                weight = FC_WEIGHT_REGULAR;
+            FcPatternGetInteger(p, FC_SLANT, 0, &slant);
+            FcPatternGetInteger(p, FC_WIDTH, 0, &width);
+            FcPatternGetInteger(p, FC_WEIGHT, 0, &weight);
 
             switch (slant) {
             case FC_SLANT_OBLIQUE:

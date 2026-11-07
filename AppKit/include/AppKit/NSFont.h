@@ -72,6 +72,12 @@ typedef enum {
 + (NSFont *) boldSystemFontOfSize: (CGFloat) size;
 + (NSFont *) controlContentFontOfSize: (CGFloat) size;
 
+// Monospaced system fonts (10.15 / 10.11).
++ (NSFont *) monospacedSystemFontOfSize: (CGFloat) size
+                                  weight: (CGFloat) weight;
++ (NSFont *) monospacedDigitSystemFontOfSize: (CGFloat) size
+                                       weight: (CGFloat) weight;
+
 + (NSFont *) labelFontOfSize: (CGFloat) size;
 + (NSFont *) menuFontOfSize: (CGFloat) size;
 + (NSFont *) menuBarFontOfSize: (CGFloat) size;

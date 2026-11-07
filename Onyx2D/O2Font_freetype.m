@@ -348,6 +348,12 @@ static NSString *filenameOfFirstScalableFace(FcFontSet *set) {
     return [[NSString alloc] initWithUTF8String: _face->family_name];
 }
 
+- (NSString *) copyStyleName {
+    if (_face->style_name == NULL)
+        return [super copyStyleName];
+    return [[NSString alloc] initWithUTF8String: _face->style_name];
+}
+
 // The face has a single glyph slot, so every FT_Load_Glyph on it is
 // serialized on the font object (see O2Context_builtin_FT and KTFont_FT).
 - (O2Rect) boundingRectForGlyph: (O2Glyph) glyph {

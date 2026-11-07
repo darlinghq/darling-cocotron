@@ -296,6 +296,25 @@ static NSLock *_cacheLock = nil;
     return [self systemFontOfSize: size];
 }
 
++ (NSFont *) monospacedSystemFontOfSize: (CGFloat) size
+                                 weight: (NSFontWeight) weight {
+    NSFont *font = [self userFixedPitchFontOfSize: size];
+
+    // As with the proportional system font, only regular and bold faces are
+    // looked for; semibold and heavier weights get the bold one.
+    if (weight >= NSFontWeightSemibold)
+        font = [[NSFontManager sharedFontManager] convertFont: font
+                                                  toHaveTrait: NSBoldFontMask];
+    return font;
+}
+
++ (NSFont *) monospacedDigitSystemFontOfSize: (CGFloat) size
+                                      weight: (NSFontWeight) weight {
+    // No tabular-figures variant available; the proportional system font is
+    // the closest faithful stand-in.
+    return [self systemFontOfSize: size weight: weight];
+}
+
 + (NSFont *) titleBarFontOfSize: (CGFloat) size {
     return [self boldSystemFontOfSize: size];
 }
@@ -788,6 +807,11 @@ static NSLock *_cacheLock = nil;
 }
 
 - (BOOL) isFixedPitch {
+    // A font that declares itself fixed-pitch is, even if it has glyphs,
+    // such as combining marks, with other advances.
+    if (CTFontGetSymbolicTraits(_ctFont) & kCTFontTraitMonoSpace)
+        return YES;
+
     CGSize current;
     NSInteger glyph, glyphCount = CTFontGetGlyphCount(_ctFont);
     CGGlyph glyphs[glyphCount];

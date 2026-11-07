@@ -47,6 +47,10 @@
     return _view;
 }
 
+- (BOOL) isViewLoaded {
+    return _view != nil;
+}
+
 - (NSString *) title {
     return _title;
 }

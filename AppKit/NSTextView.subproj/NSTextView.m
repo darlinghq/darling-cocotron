@@ -97,6 +97,40 @@ NSString *const NSAllRomanInputSourcesLocaleIdentifier =
 @end
 
 @implementation NSTextView
+
++ (NSScrollView *) scrollableTextView {
+    NSScrollView *scrollView =
+            [[[NSScrollView alloc] initWithFrame: NSMakeRect(0, 0, 200, 100)]
+                    autorelease];
+
+    [scrollView setHasVerticalScroller: YES];
+    [scrollView setBorderType: NSBezelBorder];
+
+    // Fill the visible area once the scroller and border are accounted for,
+    // so that autoresizing keeps the text view as wide as the content area.
+    NSSize contentSize = [scrollView contentSize];
+    NSTextView *textView = [[[self alloc]
+            initWithFrame: NSMakeRect(0, 0, contentSize.width,
+                                      contentSize.height)] autorelease];
+
+    // The text view grows downwards without limit as text is added.
+    [textView setMinSize: NSMakeSize(0, contentSize.height)];
+    [textView setMaxSize: NSMakeSize(FLT_MAX, FLT_MAX)];
+    [textView setVerticallyResizable: YES];
+    [textView setHorizontallyResizable: NO];
+    [textView setAutoresizingMask: NSViewWidthSizable];
+    // The container follows the view's width but not its height, which
+    // setVerticallyResizable: would otherwise make it track.
+    [[textView textContainer] setWidthTracksTextView: YES];
+    [[textView textContainer] setHeightTracksTextView: NO];
+    [[textView textContainer]
+            setContainerSize: NSMakeSize(contentSize.width, FLT_MAX)];
+
+    [scrollView setDocumentView: textView];
+
+    return scrollView;
+}
+
 - (void) configureMenu {
     static NSMenu *menu = nil;
 

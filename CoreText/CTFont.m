@@ -376,6 +376,16 @@ CFStringRef CTFontCopyFamilyName(CTFontRef font)
     return name;
 }
 
+static CFStringRef copyStyleName(CTFontRef font)
+{
+    CGFontRef graphicsFont = CTFontCopyGraphicsFont(font, NULL);
+    if (graphicsFont == NULL)
+        return NULL;
+    CFStringRef name = O2FontCopyStyleName((O2FontRef) graphicsFont);
+    CGFontRelease(graphicsFont);
+    return name;
+}
+
 CFStringRef CTFontCopyFullName(CTFontRef self) {
     KTFont *object = ktFont(self);
     return object ? [object copyName] : NULL;
@@ -396,6 +406,8 @@ CFStringRef _Nullable CTFontCopyName(CTFontRef font, CFStringRef nameKey)
         return CTFontCopyFamilyName(font);
     if (CFEqual(nameKey, kCTFontFullNameKey))
         return CTFontCopyFullName(font);
+    if (CFEqual(nameKey, kCTFontStyleNameKey))
+        return copyStyleName(font);
     return NULL;
 }
 

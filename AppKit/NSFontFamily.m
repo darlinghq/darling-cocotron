@@ -22,10 +22,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSFontFamily.h>
 #import <AppKit/NSFontTypeface.h>
 #import <AppKit/NSGraphicsContext.h>
+#import <CoreText/CoreText.h>
 
 @interface NSFontFamily ()
 + (NSMutableArray *) fontFamilies;
 + (void) buildFontFamilies;
++ (NSArray *) _familyAndStyleForFontName: (NSString *) name;
+- (NSFontTypeface *) _typefaceWithExactName: (NSString *) name;
 @end
 
 @implementation NSFontFamily
@@ -88,34 +91,75 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return [self addFontFamilyWithName: name];
 }
 
+// A font can be named by something other than one of the typeface names
+// listed for its family, such as a display name or a name that the font
+// system substitutes. Ask the font system which face the name resolves to,
+// and return that face's family and style names, or nil.
++ (NSArray *) _familyAndStyleForFontName: (NSString *) name {
+    static NSMutableDictionary *resolved = nil;
+    NSArray *result;
+
+    if (name == nil)
+        return nil;
+
+    @synchronized(self) {
+        if (resolved == nil)
+            resolved = [NSMutableDictionary new];
+        result = [[[resolved objectForKey: name] retain] autorelease];
+    }
+
+    if (result == nil) {
+        CTFontRef font = CTFontCreateWithName((CFStringRef) name, 12, NULL);
+        NSString *family = nil, *style = nil;
+
+        if (font != NULL) {
+            family = (NSString *) CTFontCopyFamilyName(font);
+            style = (NSString *) CTFontCopyName(font, kCTFontStyleNameKey);
+            CFRelease(font);
+        }
+
+        if (family != nil && style != nil)
+            result = [NSArray arrayWithObjects: family, style, nil];
+        else
+            result = (NSArray *) [NSNull null];
+        [family release];
+        [style release];
+
+        @synchronized(self) {
+            [resolved setObject: result forKey: name];
+        }
+    }
+
+    return (result == (NSArray *) [NSNull null]) ? nil : result;
+}
+
 + (NSFontFamily *) fontFamilyWithTypefaceName: (NSString *) name {
     NSArray *families = [self fontFamilies];
     int i, count = [families count];
 
     for (i = 0; i < count; i++) {
         NSFontFamily *check = [families objectAtIndex: i];
-        NSFontTypeface *typeface = [check typefaceWithName: name];
 
-        if (typeface != nil)
+        if ([check _typefaceWithExactName: name] != nil)
             return check;
     }
-    // TODO: pretend to have this family.
-    return nil;
+
+    NSArray *familyAndStyle = [self _familyAndStyleForFontName: name];
+
+    if (familyAndStyle == nil)
+        return nil;
+
+    NSFontFamily *family =
+            [self fontFamilyWithName: [familyAndStyle objectAtIndex: 0]];
+
+    if ([family typefaceWithName: name] == nil)
+        return nil;
+
+    return family;
 }
 
 + (NSFontTypeface *) fontTypefaceWithName: (NSString *) name {
-    NSArray *families = [self fontFamilies];
-    int i, count = [families count];
-
-    for (i = 0; i < count; i++) {
-        NSFontFamily *check = [families objectAtIndex: i];
-        NSFontTypeface *typeface = [check typefaceWithName: name];
-
-        if (typeface != nil)
-            return typeface;
-    }
-
-    return nil;
+    return [[self fontFamilyWithTypefaceName: name] typefaceWithName: name];
 }
 
 - initWithName: (NSString *) name {
@@ -134,13 +178,38 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return _name;
 }
 
-- (NSFontTypeface *) typefaceWithName: (NSString *) name {
+- (NSFontTypeface *) _typefaceWithExactName: (NSString *) name {
     int i, count = [_typefaces count];
 
     for (i = 0; i < count; i++) {
         NSFontTypeface *typeface = [_typefaces objectAtIndex: i];
 
         if ([[typeface name] isEqualToString: name])
+            return typeface;
+    }
+
+    return nil;
+}
+
+- (NSFontTypeface *) typefaceWithName: (NSString *) name {
+    NSFontTypeface *typeface = [self _typefaceWithExactName: name];
+
+    if (typeface != nil)
+        return typeface;
+
+    // Otherwise, take the face the name resolves to, if it is in this family.
+    NSArray *familyAndStyle = [[self class] _familyAndStyleForFontName: name];
+
+    if (![[familyAndStyle objectAtIndex: 0] isEqualToString: _name])
+        return nil;
+
+    NSString *style = [familyAndStyle objectAtIndex: 1];
+    int i, count = [_typefaces count];
+
+    for (i = 0; i < count; i++) {
+        typeface = [_typefaces objectAtIndex: i];
+
+        if ([[typeface traitName] isEqualToString: style])
             return typeface;
     }
 
