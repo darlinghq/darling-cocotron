@@ -10,6 +10,8 @@ APPKIT_EXPORT void NSAccessibilityPostNotification(id element,
 APPKIT_EXPORT NSString *const NSAccessibilityRoleDescription(NSString *role,
                                                              NSString *subrole);
 
+APPKIT_EXPORT NSString *NSAccessibilityActionDescription(NSString *action);
+
 APPKIT_EXPORT id NSAccessibilityUnignoredAncestor(id element);
 APPKIT_EXPORT id NSAccessibilityUnignoredDescendant(id element);
 APPKIT_EXPORT NSArray *NSAccessibilityUnignoredChildren(NSArray *originalChildren);

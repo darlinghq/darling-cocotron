@@ -13,6 +13,7 @@ NSString *const NSAccessibilityEnabledAttribute =
         @"NSAccessibilityEnabledAttribute";
 NSString *const NSAccessibilityFocusedAttribute =
         @"NSAccessibilityFocusedAttribute";
+NSString *const NSAccessibilityRequiredAttribute = @"AXRequired";
 NSString *const NSAccessibilityHelpAttribute = @"NSAccessibilityHelpAttribute";
 NSString *const NSAccessibilityMaxValueAttribute =
         @"NSAccessibilityMaxValueAttribute";
@@ -617,4 +618,34 @@ void NSAccessibilityPostNotificationWithUserInfo(id element,
                                                  NSDictionary<NSAccessibilityNotificationUserInfoKey, id> *userInfo)
 {
     printf("STUB %s\n", __PRETTY_FUNCTION__);
+}
+
+NSString *NSAccessibilityActionDescription(NSString *action) {
+    if (action == nil)
+        return @"";
+
+    static struct {
+        NSString *const *action;
+        NSString *description;
+    } const descriptions[] = {
+        {&NSAccessibilityCancelAction, @"cancel"},
+        {&NSAccessibilityConfirmAction, @"confirm"},
+        {&NSAccessibilityDecrementAction, @"decrement"},
+        {&NSAccessibilityDeleteAction, @"delete"},
+        {&NSAccessibilityIncrementAction, @"increment"},
+        {&NSAccessibilityPickAction, @"pick"},
+        {&NSAccessibilityPressAction, @"press"},
+        {&NSAccessibilityRaiseAction, @"raise"},
+        {&NSAccessibilityShowAlternateUIAction, @"show alternate items"},
+        {&NSAccessibilityShowDefaultUIAction, @"show default items"},
+        {&NSAccessibilityShowMenuAction, @"show menu"},
+    };
+
+    for (size_t i = 0; i < sizeof(descriptions) / sizeof(descriptions[0]); i++) {
+        if ([action isEqualToString: *descriptions[i].action])
+            return descriptions[i].description;
+    }
+
+    // An action AppKit does not define is described by its own name.
+    return action;
 }

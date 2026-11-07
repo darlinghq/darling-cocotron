@@ -21,6 +21,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSATSTypesetter.h>
 #import <AppKit/NSAccessibility.h>
+#import <AppKit/NSAccessibilityCustomAction.h>
 #import <AppKit/NSAccessibilityElement.h>
 #import <AppKit/NSActionCell.h>
 #import <AppKit/NSAffineTransform.h>

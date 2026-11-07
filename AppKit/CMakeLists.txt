@@ -396,6 +396,7 @@ set(AppKit_sources
 	NSStepper.m
 	NSAccessibility.m
 	NSAppearance.m
+	NSAccessibilityCustomAction.m
 	NSAccessibilityElement.m
 	NSAccessibilityRemoteUIElement.m
 	NSKeyValueBinding.m
