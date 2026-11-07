@@ -32,6 +32,9 @@
 // The main-monitor model and conversions shared with AppKit's X11 backend.
 #import "X11Monitors.h"
 #import "X11RandR.h"
+#import "X11WindowOwner.h"
+#import <CoreGraphics/CGWindow.h>
+#import <CoreGraphics/CGWindowLevel.h>
 
 // TODO: Use XInput2:
 // https://stackoverflow.com/questions/44095001/getting-double-rawkeypress-events-using-xinput2
@@ -304,6 +307,184 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type, CFDataRef a
 // from the top-left of the root window; the main monitor's rectangle, which AppKit's
 // X11 backend also reads, turns that into this space without using AppKit's Xlib
 // connection from another thread.
+// The window of an application inside a top-level window: the window itself
+// unless a window manager has put it into a frame. ICCCM window managers mark
+// application windows with WM_STATE.
+static Window clientWindow(Display* display, Window window, Atom wmState, Atom netWmPid, int depth)
+{
+	Atom type;
+	int format;
+	unsigned long count, remaining;
+	unsigned char* data = NULL;
+
+	for (int i = 0; i < 2; i++)
+	{
+		Atom property = i == 0 ? wmState : netWmPid;
+		if (property == None)
+			continue;
+		if (XGetWindowProperty(display, window, property, 0, 0, False, AnyPropertyType,
+				&type, &format, &count, &remaining, &data) == Success)
+		{
+			if (data != NULL)
+				XFree(data);
+			data = NULL;
+			if (type != None)
+				return window;
+		}
+	}
+
+	if (depth == 0)
+		return None;
+
+	Window root, parent, *children = NULL, result = None;
+	unsigned int childCount = 0;
+	if (!XQueryTree(display, window, &root, &parent, &children, &childCount))
+		return None;
+	for (int i = (int) childCount - 1; i >= 0 && result == None; i--)
+		result = clientWindow(display, children[i], wmState, netWmPid, depth - 1);
+	if (children != NULL)
+		XFree(children);
+	return result;
+}
+
+static NSString* copyWindowTitle(Display* display, Window window)
+{
+	Atom netWmName = XInternAtom(display, "_NET_WM_NAME", True);
+	Atom utf8String = XInternAtom(display, "UTF8_STRING", True);
+	Atom type;
+	int format;
+	unsigned long count, remaining;
+	unsigned char* data = NULL;
+	NSString* title = nil;
+
+	if (netWmName != None && utf8String != None &&
+		XGetWindowProperty(display, window, netWmName, 0, 1024, False, utf8String,
+			&type, &format, &count, &remaining, &data) == Success &&
+		data != NULL && type == utf8String && format == 8)
+	{
+		title = [[NSString alloc] initWithBytes: data length: count encoding: NSUTF8StringEncoding];
+	}
+	if (data != NULL)
+		XFree(data);
+
+	if (title == nil)
+	{
+		char* name = NULL;
+		if (XFetchName(display, window, &name) && name != NULL)
+		{
+			title = [[NSString alloc] initWithUTF8String: name];
+			XFree(name);
+		}
+	}
+	return title;
+}
+
+static double windowOpacity(Display* display, Window window)
+{
+	Atom opacityAtom = XInternAtom(display, "_NET_WM_WINDOW_OPACITY", True);
+	Atom type;
+	int format;
+	unsigned long count, remaining;
+	unsigned char* data = NULL;
+	double opacity = 1.0;
+
+	if (opacityAtom != None &&
+		XGetWindowProperty(display, window, opacityAtom, 0, 1, False, XA_CARDINAL,
+			&type, &format, &count, &remaining, &data) == Success &&
+		data != NULL && type == XA_CARDINAL && format == 32 && count == 1)
+	{
+		opacity = (double) (*(unsigned long*) data & 0xffffffffUL) / 0xffffffffUL;
+	}
+	if (data != NULL)
+		XFree(data);
+	return opacity;
+}
+
+-(NSArray<NSDictionary*>*) copyWindowDescriptions
+{
+	NSMutableArray<NSDictionary*>* result = [[NSMutableArray alloc] init];
+	Window root = DefaultRootWindow(_display), rootReturn, parentReturn, *children = NULL;
+	unsigned int count = 0;
+
+	if (!XQueryTree(_display, root, &rootReturn, &parentReturn, &children, &count))
+		return result;
+
+	Atom wmState = XInternAtom(_display, "WM_STATE", True);
+	Atom netWmPid = XInternAtom(_display, "_NET_WM_PID", True);
+	X11Frame primary = [self _primaryRoot];
+	pid_t self_pid = getpid();
+
+	// XQueryTree lists the children bottom to top; the list is front to back.
+	for (int i = (int) count - 1; i >= 0; i--)
+	{
+		Window client = clientWindow(_display, children[i], wmState, netWmPid, 2);
+		if (client == None)
+			continue;
+
+		pid_t owner = X11WindowOwnerPID(_display, client);
+		if (owner <= 0)
+			continue;
+
+		XWindowAttributes attributes;
+		Window ignored;
+		int x, y;
+		if (!XGetWindowAttributes(_display, client, &attributes) ||
+			!XTranslateCoordinates(_display, client, root, 0, 0, &x, &y, &ignored))
+			continue;
+
+		X11Point origin = X11CGPointFromRoot(primary, (X11Point){x, y});
+		CGRect bounds = CGRectMake(origin.x, origin.y, attributes.width, attributes.height);
+		CFDictionaryRef boundsDictionary = CGRectCreateDictionaryRepresentation(bounds);
+		BOOL own = owner == self_pid;
+
+		NSInteger number = own ? [CGWindow windowNumberForPlatformWindowID: client] : 0;
+		if (number == 0)
+			number = (NSInteger) client;
+
+		NSMutableDictionary* description = [NSMutableDictionary dictionary];
+		description[(NSString*) kCGWindowNumber] = @(number);
+		description[(NSString*) kCGWindowOwnerPID] = @(owner);
+		description[(NSString*) kCGWindowLayer] = @(attributes.override_redirect ? kCGPopUpMenuWindowLevel : kCGNormalWindowLevel);
+		description[(NSString*) kCGWindowAlpha] = @(windowOpacity(_display, client));
+		description[(NSString*) kCGWindowIsOnscreen] = @(attributes.map_state == IsViewable);
+		description[(NSString*) kCGWindowStoreType] = @(kCGBackingStoreBuffered);
+		// Capturing windows is not supported, so no window can be read.
+		description[(NSString*) kCGWindowSharingState] = @(kCGWindowSharingNone);
+		description[(NSString*) kCGWindowMemoryUsage] = @((long long) attributes.width * attributes.height * 4);
+		if (boundsDictionary != NULL)
+		{
+			description[(NSString*) kCGWindowBounds] = (NSDictionary*) boundsDictionary;
+			CFRelease(boundsDictionary);
+		}
+
+		XClassHint classHint = {NULL, NULL};
+		if (XGetClassHint(_display, client, &classHint))
+		{
+			if (classHint.res_class != NULL)
+				description[(NSString*) kCGWindowOwnerName] = [NSString stringWithUTF8String: classHint.res_class];
+			XFree(classHint.res_name);
+			XFree(classHint.res_class);
+		}
+
+		// Since macOS 10.15, the titles of other processes' windows are only
+		// given to applications allowed to record the screen, which no
+		// application is here.
+		if (own)
+		{
+			NSString* title = copyWindowTitle(_display, client);
+			if (title != nil)
+				description[(NSString*) kCGWindowName] = title;
+			[title release];
+		}
+
+		[result addObject: description];
+	}
+
+	if (children != NULL)
+		XFree(children);
+	return result;
+}
+
 -(CGPoint) mouseLocation
 {
 	Window child, root = DefaultRootWindow(_display);

@@ -39,6 +39,11 @@
 -(CGSWindow*) newWindow:(CGSRegionRef)region;
 -(CGError) destroyWindow:(CGSWindowID)winId;
 
+// The windows of Darling processes, front to back, each described with the
+// kCGWindow* keys of CGWindowListCopyWindowInfo(). Only the caller's own
+// windows carry kCGWindowName. The default implementation knows no windows.
+-(NSArray<NSDictionary*>*) copyWindowDescriptions;
+
 // Mouse location in CG coordinates, i.e. relative to the upper left corner
 -(CGPoint) mouseLocation;
 

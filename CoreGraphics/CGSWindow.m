@@ -19,6 +19,10 @@
 #import <CoreGraphics/CGSConnection.h>
 #import <CoreGraphics/CGSWindow.h>
 #import <Foundation/NSRaise.h>
+#import <CoreGraphics/CGWindow.h>
+#import <Foundation/NSArray.h>
+#import <Foundation/NSDictionary.h>
+#import <Foundation/NSValue.h>
 
 const CFStringRef kCGSWindowTitle = CFSTR("WindowTitle");
 
@@ -101,10 +105,121 @@ CGError CGSSetWindowTitle(CGSConnectionID cid, CGSWindowID wid,
     return CGSSetWindowProperty(cid, wid, kCGSWindowTitle, title);
 }
 
+static NSArray<NSDictionary *> *copyAllWindowDescriptions(void) {
+    CGSConnection *connection = _CGSConnectionForID(CGSDefaultConnection);
+
+    return connection ? [connection copyWindowDescriptions]
+                      : [[NSArray alloc] init];
+}
+
+static CGWindowID windowNumberOf(NSDictionary *description) {
+    return [[description objectForKey: (NSString *) kCGWindowNumber]
+            unsignedIntValue];
+}
+
+// The descriptions the option and the reference window select, front to back.
+static NSMutableArray<NSDictionary *> *
+copySelectedWindowDescriptions(CGWindowListOption option,
+                               CGWindowID relativeToWindow)
+{
+    NSArray<NSDictionary *> *all = copyAllWindowDescriptions();
+    NSMutableArray<NSDictionary *> *selected = [[NSMutableArray alloc] init];
+    NSUInteger referenceIndex = NSNotFound;
+    BOOL above = (option & kCGWindowListOptionOnScreenAboveWindow) != 0;
+    BOOL below = (option & kCGWindowListOptionOnScreenBelowWindow) != 0;
+    BOOL including = (option & kCGWindowListOptionIncludingWindow) != 0;
+    BOOL onScreenOnly =
+            (option & kCGWindowListOptionOnScreenOnly) != 0 || above || below;
+
+    if (relativeToWindow != kCGNullWindowID) {
+        for (NSUInteger i = 0; i < [all count]; i++) {
+            if (windowNumberOf([all objectAtIndex: i]) == relativeToWindow) {
+                referenceIndex = i;
+                break;
+            }
+        }
+    }
+
+    // With a reference window that does not exist, the relative options
+    // select nothing.
+    if ((above || below || including) && referenceIndex == NSNotFound) {
+        [all release];
+        return selected;
+    }
+
+    for (NSUInteger i = 0; i < [all count]; i++) {
+        NSDictionary *window = [all objectAtIndex: i];
+        BOOL isReference = i == referenceIndex;
+        BOOL include;
+
+        if (above)
+            include = i < referenceIndex || (including && isReference);
+        else if (below)
+            include = i > referenceIndex || (including && isReference);
+        else if (including)
+            include = isReference;
+        else
+            include = YES;
+
+        if (include && onScreenOnly && !isReference &&
+            ![[window objectForKey: (NSString *) kCGWindowIsOnscreen] boolValue])
+            include = NO;
+
+        if (include)
+            [selected addObject: window];
+    }
+
+    [all release];
+    return selected;
+}
+
+CFArrayRef __nullable CGWindowListCopyWindowInfo(CGWindowListOption option,
+                                                 CGWindowID relativeToWindow)
+{
+    return (CFArrayRef) copySelectedWindowDescriptions(option,
+                                                       relativeToWindow);
+}
+
 CFArrayRef __nullable CGWindowListCreate(CGWindowListOption option, CGWindowID relativeToWindow)
 {
-    printf("STUB %s\n", __PRETTY_FUNCTION__);
-    return nil;
+    NSArray<NSDictionary *> *selected =
+            copySelectedWindowDescriptions(option, relativeToWindow);
+    CFMutableArrayRef numbers =
+            CFArrayCreateMutable(NULL, [selected count], NULL);
+
+    // Like the window server, a plain array of CGWindowID values.
+    for (NSDictionary *window in selected)
+        CFArrayAppendValue(numbers,
+                           (const void *) (uintptr_t) windowNumberOf(window));
+
+    [selected release];
+    return numbers;
+}
+
+CFArrayRef __nullable CGWindowListCreateDescriptionFromArray(CFArrayRef windowArray)
+{
+    if (windowArray == NULL)
+        return NULL;
+
+    NSArray<NSDictionary *> *all = copyAllWindowDescriptions();
+    NSMutableArray<NSDictionary *> *descriptions = [[NSMutableArray alloc] init];
+
+    // The array holds CGWindowID values, as CGWindowListCreate() returns
+    // them. Windows that no longer exist are left out.
+    for (CFIndex i = 0; i < CFArrayGetCount(windowArray); i++) {
+        CGWindowID number =
+                (CGWindowID) (uintptr_t) CFArrayGetValueAtIndex(windowArray, i);
+
+        for (NSDictionary *window in all) {
+            if (windowNumberOf(window) == number) {
+                [descriptions addObject: window];
+                break;
+            }
+        }
+    }
+
+    [all release];
+    return (CFArrayRef) descriptions;
 }
 
 CGImageRef __nullable CGWindowListCreateImage(CGRect screenBounds,
