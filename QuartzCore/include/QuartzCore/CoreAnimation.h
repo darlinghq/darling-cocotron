@@ -6,6 +6,7 @@
 #import <QuartzCore/CATextLayer.h>
 #import <QuartzCore/CATransaction.h>
 
+#import <QuartzCore/CAEDRMetadata.h>
 #import <QuartzCore/CAGradientLayer.h>
 #import <QuartzCore/CAMetalDrawable.h>
 #import <QuartzCore/CAMetalLayer.h>

@@ -27,6 +27,7 @@ set(QuartzCore_sources
 	CABase.m
 	CABasicAnimation.m
 	CAContext.m
+	CAEDRMetadata.m
 	CAEmitterCell.m
 	CAEmitterLayer.m
 	CALayerContext.m
