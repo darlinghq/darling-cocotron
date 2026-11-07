@@ -6,6 +6,7 @@
 #import <QuartzCore/CATextLayer.h>
 #import <QuartzCore/CATransaction.h>
 
+#import <QuartzCore/CAEDRMetadata.h>
 #import <QuartzCore/CAGradientLayer.h>
 #import <QuartzCore/CAMetalDrawable.h>
 #import <QuartzCore/CAMetalLayer.h>
@@ -13,6 +14,7 @@
 #import <QuartzCore/CAReplicatorLayer.h>
 #import <QuartzCore/CAScrollLayer.h>
 #import <QuartzCore/CAShapeLayer.h>
+#import <QuartzCore/CATransformLayer.h>
 
 /* Undocumented */
 #import <QuartzCore/CAFilter.h>
