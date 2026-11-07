@@ -32,6 +32,7 @@
 #include <indium/indium.private.hpp>
 
 #include <atomic>
+#include <cstring>
 
 namespace DynamicVK = Indium::DynamicVK;
 
@@ -164,30 +165,47 @@ static bool glAcceptsLinearTiling() {
 	return linear;
 };
 
-static size_t findSharedMemory(const VkMemoryRequirements& reqs, std::shared_ptr<Indium::PrivateDevice> device, bool framebufferOnly) {
-	size_t targetIndex = SIZE_MAX;
+// The memory type Indium would use for a resource of the given storage mode, so
+// the drawable's images are placed like the textures Metal creates itself:
+// GPU-only images in device memory, and images the CPU may access in host
+// visible, coherent memory.
+static size_t findImageMemory(const VkMemoryRequirements& reqs, std::shared_ptr<Indium::PrivateDevice> device, Indium::StorageMode storageMode) {
+	auto index = device->memoryTypeIndex(reqs.memoryTypeBits, storageMode);
+	return index ? *index : SIZE_MAX;
+};
 
-	for (size_t i = 0; i < device->memoryProperties().memoryTypeCount; ++i) {
-		const auto& type = device->memoryProperties().memoryTypes[i];
+// The drawable's image is exported from Vulkan and imported into OpenGL, which
+// only works when both run on the same GPU. Say so once if the context that
+// displays the layer reports no device matching the Metal device. Checked in
+// the current context; a GL implementation that cannot report its devices is
+// not reported.
+static void warnIfDisplayedOnAnotherDevice(const std::shared_ptr<Indium::PrivateDevice>& device) {
+	static std::atomic<bool> checked { false };
 
-		if ((reqs.memoryTypeBits & (1 << i)) == 0) {
-			continue;
-		}
-
-		if (!framebufferOnly && (type.propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) == 0) {
-			continue;
-		}
-
-		if (!framebufferOnly && (type.propertyFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) == 0) {
-			continue;
-		}
-
-		// okay, this is good enough
-		targetIndex = i;
-		break;
+	if (checked.exchange(true)) {
+		return;
 	}
 
-	return targetIndex;
+	for (int i = 0; i < 16 && glGetError() != GL_NO_ERROR; ++i) {
+	}
+
+	GLint count = 0;
+	glGetIntegerv(GL_NUM_DEVICE_UUIDS_EXT, &count);
+	if (glGetError() != GL_NO_ERROR || count <= 0) {
+		return;
+	}
+
+	auto metalUUID = device->deviceUUID();
+	for (GLint i = 0; i < count; ++i) {
+		GLubyte glUUID[GL_UUID_SIZE_EXT] = {};
+		glGetUnsignedBytei_vEXT(GL_DEVICE_UUID_EXT, i, glUUID);
+		if (memcmp(glUUID, metalUUID.data(), GL_UUID_SIZE_EXT) == 0) {
+			return;
+		}
+	}
+
+	NSLog(@"CAMetalLayer: OpenGL, which displays Metal layers, runs on a different GPU than the Metal device \"%s\"; "
+		"Metal layers cannot be displayed. Run OpenGL and Vulkan on the same GPU.", device->name().c_str());
 };
 
 CAMetalDrawableTexture::CAMetalDrawableTexture(CGSize size, Indium::PixelFormat pixelFormat, bool framebufferOnly, std::shared_ptr<Indium::PrivateDevice> privateDevice):
@@ -196,6 +214,8 @@ CAMetalDrawableTexture::CAMetalDrawableTexture(CGSize size, Indium::PixelFormat 
 	_pixelFormat(pixelFormat),
 	_framebufferOnly(framebufferOnly)
 {
+	warnIfDisplayedOnAnotherDevice(_device);
+
 	//
 	// create the images
 	//
@@ -253,7 +273,9 @@ CAMetalDrawableTexture::CAMetalDrawableTexture(CGSize size, Indium::PixelFormat 
 
 	DynamicVK::vkGetImageMemoryRequirements(_device->device(), _image, &reqs);
 
-	size_t targetIndex = findSharedMemory(reqs, _device, _framebufferOnly);
+	// Without framebufferOnly, the texture may be used like any other Metal
+	// texture, so its memory stays CPU-accessible.
+	size_t targetIndex = findImageMemory(reqs, _device, _framebufferOnly ? Indium::StorageMode::Private : Indium::StorageMode::Shared);
 
 	if (targetIndex == SIZE_MAX) {
 		throw std::runtime_error("No suitable memory region found for image");
@@ -276,7 +298,9 @@ CAMetalDrawableTexture::CAMetalDrawableTexture(CGSize size, Indium::PixelFormat 
 
 	DynamicVK::vkGetImageMemoryRequirements(_device->device(), _internalImage, &reqs);
 
-	targetIndex = findSharedMemory(reqs, _device, _framebufferOnly);
+	// Only the GPU touches the internal image: Vulkan copies into it, and
+	// OpenGL samples it.
+	targetIndex = findImageMemory(reqs, _device, Indium::StorageMode::Private);
 
 	if (targetIndex == SIZE_MAX) {
 		throw std::runtime_error("No suitable memory region found for internal image");
