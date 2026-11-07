@@ -35,8 +35,14 @@
     NSMutableDictionary *_windowsByID;
 
     id lastFocusedWindow;
-    NSTimeInterval lastClickTimeStamp;
-    int clickCount;
+    // Clicks are grouped per button and per window, so state for the left
+    // button cannot make the next middle-button click look like a double click.
+    NSMutableDictionary *_buttonClickCounts;
+    NSInteger _clickCount;
+    Time _lastClickTime;       // X server milliseconds, wraps modulo 2^32.
+    unsigned int _lastClickButton;
+    XID _lastClickWindow;
+    NSPoint _lastClickPoint;   // Logical points, so the radius is scale-independent.
     X11Cursor *_blankCursor, *_defaultCursor;
     // Relative mouse mode (CGAssociateMouseAndMouseCursorPosition(false)).
     // _relativeRequested stays set while the application wants it;
@@ -62,6 +68,14 @@
     int _pointerRootX, _pointerRootY;
     unsigned int _pointerState;
     KeySym _lastKeySym;
+    // The aggregate modifier mask as of the last key event, so a change that
+    // no modifier key reported (a modifier released while another app had the
+    // focus) is still noticed and corrected with a keycode-less flagsChanged.
+    NSEventModifierFlags _modifierFlags;
+    // The modifier keys currently held, one bit per X keycode. Both Shift keys
+    // (or both Control keys) drive the same mask, so releasing one of them only
+    // clears it if the other is up too.
+    unsigned char _heldModifierKeys[32];
     int _rrEventBase;
     NSArray* _lastScreens;
     // See -primaryRootFrame. Device pixels, root coordinates.
@@ -82,6 +96,10 @@
 // Converts a point in root coordinates to CoreGraphics' global space.
 - (NSPoint) cgPointFromRoot: (NSPoint) root;
 - (void) setWindow: (id) window forID: (XID) i;
+- (id) windowForID: (XID) i;
+#ifdef DARLING
+- (void) processPendingEvents;
+#endif
 // The pointer's position on the default root window and the button and
 // modifier state, from the event stream when it is known, else from the
 // server. Returns NO when the pointer is on another screen (the position is

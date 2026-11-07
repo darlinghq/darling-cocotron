@@ -46,6 +46,7 @@
 
 #import "CarbonKeys.h"
 #import "X11KeySymToUCS.h"
+#import "X11KeyEvent.h"
 #import <X11/XKBlib.h>
 #import <X11/Xutil.h>
 #import <X11/extensions/XKBrules.h>
@@ -151,8 +152,8 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type,
                                       &xwaylandEvent, &xwaylandError);
 
         lastFocusedWindow = nil;
-        lastClickTimeStamp = 0.0;
-        clickCount = 0;
+        _buttonClickCounts = [NSMutableDictionary new];
+        _modifierFlags = 0;
     }
     return self;
 }
@@ -178,6 +179,7 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type,
 #endif
 
     [_windowsByID release];
+    [_buttonClickCounts release];
     [super dealloc];
 }
 
@@ -1128,6 +1130,193 @@ static NSDictionary *modeInfoToDictionary(const XRRModeInfo *mi, int depth) {
     return ret;
 }
 
+// A modifier key reaches AppKit as an NSFlagsChanged and never as a key down or
+// up, so each modifier keysym is mapped to the virtual keycode the event must
+// carry and the X mask bit it drives. `toggle` marks the lock keys, whose press
+// flips the bit and whose release changes nothing. A carbon keycode of -1 means
+// the keysym is not a modifier at all.
+typedef struct {
+    int carbonKeyCode;
+    unsigned int xMask;
+    BOOL toggle;
+} X11ModifierKey;
+
+static X11ModifierKey modifierKeyForKeysym(KeySym keySym) {
+    X11ModifierKey notAModifier = {-1, 0, NO};
+    switch (keySym) {
+    case XK_Shift_L: return (X11ModifierKey){kVK_Shift, ShiftMask, NO};
+    case XK_Shift_R: return (X11ModifierKey){kVK_RightShift, ShiftMask, NO};
+    case XK_Control_L: return (X11ModifierKey){kVK_Control, ControlMask, NO};
+    case XK_Control_R: return (X11ModifierKey){kVK_RightControl, ControlMask, NO};
+    case XK_Alt_L: return (X11ModifierKey){kVK_Option, Mod1Mask, NO};
+    case XK_Alt_R: return (X11ModifierKey){kVK_RightOption, Mod1Mask, NO};
+    case XK_Super_L: case XK_Meta_L:
+        return (X11ModifierKey){kVK_Command, Mod4Mask, NO};
+    case XK_Super_R: case XK_Meta_R:
+        return (X11ModifierKey){0x36, Mod4Mask, NO};
+    case XK_ISO_Level3_Shift: case XK_Mode_switch:
+        return (X11ModifierKey){kVK_Function, Mod5Mask, NO};
+    case XK_Caps_Lock:
+        return (X11ModifierKey){kVK_CapsLock, LockMask, YES};
+    case XK_Num_Lock:
+        return (X11ModifierKey){kVK_ANSI_KeypadClear, Mod2Mask, NO};
+    default: return notAModifier;
+    }
+}
+
+// The X server fills `state` with the modifier and button state as it was
+// *before* the event, so the key's own contribution has to be applied to reach
+// the state the event leaves behind. Verified against an Xvfb server: a
+// Shift_L press carries state 0 and its release carries ShiftMask.
+static unsigned int x11StateAfterKeyEvent(const X11ModifierKey *key,
+                                          unsigned int state,
+                                          BOOL pressed) {
+    if (pressed)
+        return key->toggle ? (state ^ key->xMask) : (state | key->xMask);
+    if (key->toggle)
+        return state;
+    return state & ~key->xMask;
+}
+
+static BOOL isModifierKeyHeld(const unsigned char *held, unsigned int keycode) {
+    return keycode < 256 && (held[keycode / 8] & (1 << (keycode % 8)));
+}
+
+static void setModifierKeyHeld(unsigned char *held, unsigned int keycode, BOOL down) {
+    if (keycode >= 256)
+        return;
+    if (down)
+        held[keycode / 8] |= 1 << (keycode % 8);
+    else
+        held[keycode / 8] &= ~(1 << (keycode % 8));
+}
+
+// The X masks still driven by held modifier keys other than `keycode`. A key
+// event only carries the state from before it, so this is what tells whether
+// releasing one Shift key leaves Shift down because the other one is held.
+- (unsigned int) maskOfHeldModifierKeysExcept: (unsigned int) keycode {
+    unsigned int mask = 0;
+    for (unsigned int code = 0; code < 256; code++) {
+        if (code == keycode || !isModifierKeyHeld(_heldModifierKeys, code))
+            continue;
+        X11ModifierKey key = modifierKeyForKeysym(XKeycodeToKeysym(_display, code, 0));
+        if (key.carbonKeyCode >= 0 && !key.toggle)
+            mask |= key.xMask;
+    }
+    return mask;
+}
+
+// Cocoa has no event for "a modifier's aggregate changed without a key": the
+// same flagsChanged carries a sentinel keycode, which is what macOS sends when
+// a modifier is released while another app holds the focus and the next key
+// event is the first this process sees of the new mask.
+- (void) postFlagsChanged: (unsigned short) keyCode
+                    flags: (NSEventModifierFlags) flags
+                 inWindow: (X11Window *) window {
+    NSWindow *delegate = [window delegate];
+    if (delegate == nil)
+        return;
+    [self postEvent: [NSEvent keyEventWithType: NSFlagsChanged
+            location: [window mouseLocationOutsideOfEventStream]
+            modifierFlags: flags
+            timestamp: 0.0
+            windowNumber: [delegate windowNumber]
+            context: nil
+            characters: @""
+            charactersIgnoringModifiers: @""
+            isARepeat: NO
+            keyCode: keyCode]
+             atStart: NO];
+}
+
+// Every input event carries the modifier state the server holds. A modifier
+// that went up while another client had the keyboard, or whose release a
+// compositor kept for itself, therefore shows up as a difference here, and
+// is reported the way macOS reports it, with a flagsChanged that names no key.
+- (void) resyncModifierFlagsWithState: (unsigned int) state
+                               window: (X11Window *) window {
+    NSEventModifierFlags flags = [self modifierFlagsForState: state];
+    if (flags == _modifierFlags)
+        return;
+
+    for (unsigned int code = 0; code < 256; code++) {
+        if (!isModifierKeyHeld(_heldModifierKeys, code))
+            continue;
+        X11ModifierKey key = modifierKeyForKeysym(XKeycodeToKeysym(_display, code, 0));
+        if (key.carbonKeyCode < 0 || !(state & key.xMask))
+            setModifierKeyHeld(_heldModifierKeys, code, NO);
+    }
+
+    _modifierFlags = flags;
+    [self postFlagsChanged: 0xFFFF flags: flags inWindow: window];
+}
+
+// Keys pressed or released while another client had the focus never reached
+// us, so on getting the focus back the held keys are read from the server.
+- (void) resyncModifierKeysOnFocusIn: (X11Window *) window {
+    char keys[32];
+    Window root, child;
+    int rootX, rootY, winX, winY;
+    unsigned int state;
+
+    XQueryKeymap(_display, keys);
+    for (unsigned int code = 0; code < 256; code++) {
+        BOOL down = (keys[code / 8] & (1 << (code % 8))) != 0;
+        X11ModifierKey key = modifierKeyForKeysym(XKeycodeToKeysym(_display, code, 0));
+        setModifierKeyHeld(_heldModifierKeys, code,
+                           down && key.carbonKeyCode >= 0 && !key.toggle);
+    }
+
+    if (XQueryPointer(_display, DefaultRootWindow(_display), &root, &child,
+                      &rootX, &rootY, &winX, &winY, &state))
+        [self resyncModifierFlagsWithState: state window: window];
+}
+
+// Cocoa groups clicks only within its double-click interval and four logical
+// points of the preceding press, and only for the same button in the same
+// window. Without the button and the window, a left click followed by a right
+// click inside the interval was reported as a double click; without the
+// distance, a click on a far side of a window was too. The X server's own
+// timestamp is used rather than the wall clock, which the client cannot
+// compare against a server that may be a different machine, and its unsigned
+// subtraction covers the 32-bit wrap.
+- (NSInteger) countClickForButton: (unsigned int) button
+                                  window: (XID) window
+                                   point: (NSPoint) point
+                                   time: (Time) time {
+    CGFloat dx = point.x - _lastClickPoint.x;
+    CGFloat dy = point.y - _lastClickPoint.y;
+    if (_lastClickWindow == window && _lastClickButton == button &&
+        (uint32_t) (time - _lastClickTime) < [self doubleClickInterval] * 1000 &&
+        dx * dx + dy * dy <= 16 && _clickCount < NSIntegerMax)
+        _clickCount++;
+    else
+        _clickCount = 1;
+    _lastClickTime = time;
+    _lastClickButton = button;
+    _lastClickWindow = window;
+    _lastClickPoint = point;
+    [_buttonClickCounts setObject: @(_clickCount) forKey: @(button)];
+    return _clickCount;
+}
+
+// Cocoa numbers the mouse buttons in press order from 0 (left), 1 (right) and
+// 2 for everything else, so an app reading +[NSEvent buttonNumber] for the
+// right button gets 3 and reads the middle button as the right one. X numbers
+// them by position instead: 1 left, 3 right, 2 middle.
+static NSInteger cocoaButtonNumber(unsigned int xButton) {
+    switch (xButton) {
+    case Button1: return 0;
+    case Button3: return 1;
+    case Button2: return 2;
+    default:
+        // X buttons 4 to 7 are the two wheels and never get here. The extra
+        // buttons start at 8 (back) and 9 (forward), which Cocoa numbers 3
+        // and 4, right after the middle button.
+        return xButton >= 8 ? (NSInteger) xButton - 5 : (NSInteger) xButton;
+    }
+}
+
 - (NSArray *) orderedWindowNumbers {
     NSMutableArray *result = [NSMutableArray array];
 
@@ -1140,6 +1329,12 @@ static NSDictionary *modeInfoToDictionary(const XRRModeInfo *mi, int depth) {
     return result;
 }
 
+// Xlib names only the first five buttons. 6 and 7 are conventionally the
+// horizontal wheel, to the left and to the right.
+enum {
+    HorizontalScrollLeftButton = 6,
+    HorizontalScrollRightButton = 7,
+};
 // While relative mode is active the cursor is the virtual one, not wherever the
 // pointer physically is (it is put back under the cursor after each motion, but a
 // click can arrive in between). Returns NO when the server cannot translate.
@@ -1161,6 +1356,22 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
 
     id delegate = [window delegate];
 
+    // Events another client sent carry whatever state it chose.
+    if (!ev->xany.send_event) {
+        switch (ev->type) {
+        case ButtonPress:
+        case ButtonRelease:
+            [self resyncModifierFlagsWithState: ev->xbutton.state window: window];
+            break;
+        case MotionNotify:
+            [self resyncModifierFlagsWithState: ev->xmotion.state window: window];
+            break;
+        case EnterNotify:
+        case LeaveNotify:
+            [self resyncModifierFlagsWithState: ev->xcrossing.state window: window];
+            break;
+        }
+    }
     [self trackPointerForEvent: ev];
 
     // Expected warp echoes are among the events queued when the warp was
@@ -1174,32 +1385,90 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
 
         NSEventModifierFlags modifierFlags = [self modifierFlagsForState: ev->xkey.state];
         char buf[20] = {0};
-        KeySym keySym;
+        char *text = buf;
+        KeySym keySym = NoSymbol;
         int strLen;
+
+        // Ahead of the input method: a modifier is not text, and an IM filter
+        // that swallows it would leave the reported flags permanently stale.
+        // The aggregate mask is also corrected here for the same reason, with
+        // the keycode macOS uses when no single key is responsible.
+        {
+            BOOL pressed = ev->type == KeyPress;
+            unsigned int keycode = ev->xkey.keycode;
+            X11ModifierKey modifier = modifierKeyForKeysym(
+                    XKeycodeToKeysym(_display, keycode, 0));
+            if (modifier.carbonKeyCode >= 0) {
+                // A lock key changes the state on its press only.
+                if (modifier.toggle && !pressed)
+                    break;
+                unsigned int after = x11StateAfterKeyEvent(&modifier, ev->xkey.state, pressed);
+                if (!modifier.toggle) {
+                    setModifierKeyHeld(_heldModifierKeys, keycode, pressed);
+                    // The other key of a pair keeps the mask down.
+                    if (!pressed)
+                        after |= [self maskOfHeldModifierKeysExcept: keycode] & modifier.xMask;
+                }
+                _modifierFlags = [self modifierFlagsForState: after];
+                [self postFlagsChanged: (unsigned short) modifier.carbonKeyCode
+                                 flags: _modifierFlags
+                              inWindow: window];
+                break; // Modifiers are neither text nor repeatable keys.
+            }
+            if (!ev->xany.send_event)
+                [self resyncModifierFlagsWithState: ev->xkey.state window: window];
+        }
 
         if (XFilterEvent(ev, None)) // XIM processing
             break;
 
-        if (ev->type == KeyPress) {
-            strLen = Xutf8LookupString(window->_xic, (XKeyPressedEvent *) ev, buf, sizeof(buf) - 1, &keySym, NULL);
-            buf[strLen] = 0;
+        // A window has no input context when the display couldn't open an input method or
+        // XCreateIC() failed, and Xutf8LookupString() dereferences its XIC unconditionally.
+        if (ev->type == KeyPress && window != nil && window->_xic != NULL) {
+            Status status;
+            strLen = Xutf8LookupString(window->_xic, (XKeyPressedEvent *) ev, buf, sizeof(buf) - 1, &keySym, &status);
+            if (status == XBufferOverflow) {
+                // Composed and input method text can be longer than buf. Nothing was copied and
+                // strLen is the size needed; Xlib says to repeat the lookup with a large enough buffer.
+                char *larger = malloc(strLen + 1);
+                if (larger != NULL) {
+                    text = larger;
+                    strLen = Xutf8LookupString(window->_xic, (XKeyPressedEvent *) ev, text, strLen, &keySym, &status);
+                }
+            }
+            // The text and keySym are only valid for the statuses that report them.
+            if (status != XLookupChars && status != XLookupBoth)
+                strLen = 0;
+            if (status != XLookupKeySym && status != XLookupBoth)
+                keySym = NoSymbol;
+            text[strLen] = 0;
         } else {
             // Xutf8LookupString() may not be used with KeyRelease
             strLen = XLookupString((XKeyEvent*) ev, buf, sizeof(buf) - 1, &keySym, NULL);
             buf[strLen] = 0;
         }
 
-        id str = [[NSString alloc] initWithCString: buf
+        id str = [[NSString alloc] initWithCString: text
                                           encoding: NSUTF8StringEncoding];
+        if (text != buf)
+            free(text);
         NSPoint pos =
                 [window transformPoint: NSMakePoint(ev->xkey.x, ev->xkey.y)];
 
         uint16_t ucsCode = (uint16_t) X11KeySymToUCS(keySym); // All defined codes in the table fit into 16 bits
         NSString* strIg = [NSString stringWithCharacters: &ucsCode length: 1];
 
+        // The text above retains normal XIM/keyboard modifier behavior.
+        // Shortcut characters ignore modifiers other than Shift.
+        uint16_t shortcutCode = (uint16_t) X11KeySymToUCS(
+                X11KeySymIgnoringModifiers(&ev->xkey));
+        strIg = [NSString stringWithCharacters: &shortcutCode length: 1];
+
         // If there's an app that uses constants from HIToolbox/Events.h (e.g.
-        // kVK_ANSI_A), this gives it a chance to work.
-        const int carbonKeyCode = x11ToCarbon[ev->xkey.keycode];
+        // kVK_ANSI_A), this gives it a chance to work. x11ToCarbon is 256 wide
+        // and the protocol's keycode is 8 bits, but the field is a full word.
+        const int carbonKeyCode = ev->xkey.keycode < 256
+                ? x11ToCarbon[ev->xkey.keycode] : 0;
 
         BOOL isARepeat = NO;
 
@@ -1228,19 +1497,42 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
         break;
 
     case ButtonPress:;
-        NSTimeInterval now = [[NSDate date] timeIntervalSinceReferenceDate];
-
-        if (now - lastClickTimeStamp < [self doubleClickInterval]) {
-            clickCount++;
-        } else {
-            clickCount = 1;
-        }
-        lastClickTimeStamp = now;
-
         pos = [window
                 transformPoint: NSMakePoint(ev->xbutton.x, ev->xbutton.y)];
         if (_relativeMouse.active)
             relativeEventPoint(_display, window, &_relativeMouse, &pos);
+
+        // A wheel notch arrives as a press/release pair and belongs to exactly
+        // one of them, or the notch scrolls twice. The press carries it: a
+        // release the client never sees (a grab, an unmap, focus lost while
+        // the button is held) then cannot swallow the scroll, and the press
+        // has already been accepted by the server when we get it. A notch is
+        // not a click, so it must not touch the click count either.
+        if (ev->xbutton.button >= Button4 &&
+            ev->xbutton.button <= HorizontalScrollRightButton) {
+            // Buttons 4 and 5 are the vertical wheel, 6 and 7 the horizontal
+            // one. -[NSView scrollWheel:] adds the delta to the document view's
+            // bounds origin, so a positive delta scrolls towards the larger
+            // coordinate on both axes: the up and right buttons are positive.
+            CGFloat deltaX = 0.0, deltaY = 0.0;
+            switch (ev->xbutton.button) {
+            case Button4: deltaY = 1.0; break;
+            case Button5: deltaY = -1.0; break;
+            case HorizontalScrollLeftButton: deltaX = -1.0; break;
+            case HorizontalScrollRightButton: deltaX = 1.0; break;
+            }
+            event = [NSEvent
+                    mouseEventWithType: NSScrollWheel
+                              location: pos
+                         modifierFlags: [self modifierFlagsForState: ev->xbutton
+                                                                             .state]
+                               window: delegate
+                           clickCount: 0
+                               deltaX: deltaX
+                               deltaY: deltaY];
+            [self postEvent: event atStart: NO];
+            break;
+        }
 
         switch (ev->xbutton.button) {
         case Button1:
@@ -1249,10 +1541,6 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
         case Button3:
             type = NSRightMouseDown;
             break;
-        case Button4:
-        case Button5:
-            // Skip these, we'll send NSScrollWheel on release.
-            return;
         default:
             type = NSOtherMouseDown;
         }
@@ -1263,20 +1551,35 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
                      modifierFlags: [self modifierFlagsForState: ev->xbutton
                                                                          .state]
                             window: delegate
-                        clickCount: clickCount
+                        clickCount: [self
+                                    countClickForButton: ev->xbutton.button
+                                                   window: ev->xany.window
+                                                    point: pos
+                                                    time: ev->xbutton.time]
                             deltaX: 0.0
                             deltaY: 0.0];
-        [(NSEvent_mouse *) event _setButtonNumber: ev->xbutton.button];
+        [(NSEvent_mouse *) event
+                _setButtonNumber: cocoaButtonNumber(ev->xbutton.button)];
         [self postEvent: event atStart: NO];
         break;
 
-    case ButtonRelease:
+    case ButtonRelease:;
+        // The wheel's other half of the pair; the press already scrolled.
+        if (ev->xbutton.button >= Button4 &&
+            ev->xbutton.button <= HorizontalScrollRightButton)
+            break;
+
         pos = [window
                 transformPoint: NSMakePoint(ev->xbutton.x, ev->xbutton.y)];
         if (_relativeMouse.active)
             relativeEventPoint(_display, window, &_relativeMouse, &pos);
 
-        CGFloat deltaY = 0.0;
+        // The up of a click reports the count its down was given, so that a
+        // double click's two downs are matched by their own ups. A release
+        // with no press behind it (the app attached mid-drag) is a single
+        // click: Cocoa never reports an up with a count of zero.
+        NSNumber *upCount = [_buttonClickCounts objectForKey: @(ev->xbutton.button)];
+        [_buttonClickCounts removeObjectForKey: @(ev->xbutton.button)];
 
         switch (ev->xbutton.button) {
         case Button1:
@@ -1284,14 +1587,6 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
             break;
         case Button3:
             type = NSRightMouseUp;
-            break;
-        case Button4:
-            type = NSScrollWheel;
-            deltaY = 1.0;
-            break;
-        case Button5:
-            type = NSScrollWheel;
-            deltaY = -1.0;
             break;
         default:
             type = NSOtherMouseUp;
@@ -1303,10 +1598,11 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
                      modifierFlags: [self modifierFlagsForState: ev->xbutton
                                                                          .state]
                             window: delegate
-                        clickCount: clickCount
+                        clickCount: upCount ? [upCount integerValue] : 1
                             deltaX: 0.0
-                            deltaY: deltaY];
-        [event _setButtonNumber: ev->xbutton.button];
+                            deltaY: 0.0];
+        [(NSEvent_mouse *) event
+                _setButtonNumber: cocoaButtonNumber(ev->xbutton.button)];
         [self postEvent: event atStart: NO];
         break;
 
@@ -1351,11 +1647,14 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
             }
             [window setLastKnownCursorPosition: pos];
 
+            // X11 numbers the right button 3 (Button3Mask); Button2Mask is
+            // the middle button. This backend does not deliver other-mouse
+            // drags yet, so a middle-button drag is reported as a move.
             type = NSMouseMoved;
 
             if (ev->xmotion.state & Button1Mask) {
                 type = NSLeftMouseDragged;
-            } else if (ev->xmotion.state & Button2Mask) {
+            } else if (ev->xmotion.state & Button3Mask) {
                 type = NSRightMouseDragged;
             }
 
@@ -1429,6 +1728,7 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
         lastFocusedWindow = delegate;
         if (window != nil)
             XSetICFocus(window->_xic);
+        [self resyncModifierKeysOnFocusIn: window];
         // Losing the focus released the pointer grab; the application still
         // wants relative mode.
         if (_relativeRequested && !_relativeMouse.active)
@@ -1447,7 +1747,8 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
             ev->xfocus.detail != NotifyPointer &&
             ev->xfocus.detail != NotifyInferior)
             [self suspendRelativeMouse];
-        if (window != nil)
+        // Unlike XSetICFocus(), XUnsetICFocus() doesn't accept a NULL XIC.
+        if (window != nil && window->_xic != NULL)
             XUnsetICFocus(window->_xic);
         break;
 
@@ -1544,6 +1845,12 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
         if ([window respondsToSelector: @selector(propertyNotify:)]) {
             [window propertyNotify: &ev->xproperty];
         }
+        // An INCR transfer a pasteboard serves is paced by the requestor
+        // deleting a property on its own window, usually another client's,
+        // which therefore is not in the window map.
+        if (ev->xproperty.state == PropertyDelete &&
+            (window == nil || [window isKindOfClass: [X11Pasteboard class]]))
+            [X11Pasteboard dispatchPropertyNotify: &ev->xproperty];
         break;
 
     case SelectionClear:
@@ -1589,6 +1896,12 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
 
     case MappingNotify:
         NSLog(@"MappingNotify");
+        // Xlib caches the keyboard and modifier mappings, and the client has
+        // to tell it when they change, or XLookupString() and
+        // XKeycodeToKeysym() keep answering for the old layout.
+        if (ev->xmapping.request == MappingKeyboard ||
+            ev->xmapping.request == MappingModifier)
+            XRefreshKeyboardMapping(&ev->xmapping);
         break;
 
     case GenericEvent:

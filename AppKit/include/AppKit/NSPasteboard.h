@@ -85,6 +85,7 @@ APPKIT_EXPORT const NSPasteboardReadingOptionKey
 @protocol NSPasteboardTypeOwner
 - (void) pasteboard: (NSPasteboard *) sender
         provideDataForType: (NSPasteboardType) type;
+@optional
 - (void) pasteboardChangedOwner: (NSPasteboard *) sender;
 @end
 
