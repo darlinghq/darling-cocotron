@@ -6,7 +6,11 @@
 #import "CALayerInternal.h"
 #import <OpenGL/CGLInternal.h>
 
-@class CAMetalLayerInternal;
+// The methods of CAMetalLayerInternal used here. Its header is Objective-C++.
+@interface CAMetalLayerInternal : CAMetalLayer
+- (BOOL) hasQueuedDrawables;
+- (void) prepareRender;
+@end
 
 @implementation CALayerContext
 
