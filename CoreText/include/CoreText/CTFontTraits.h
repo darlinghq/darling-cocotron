@@ -1,3 +1,11 @@
+#import <CoreFoundation/CFString.h>
+#import <CoreText/CoreTextExport.h>
+
+CORETEXT_EXPORT const CFStringRef kCTFontSymbolicTrait;
+CORETEXT_EXPORT const CFStringRef kCTFontWeightTrait;
+CORETEXT_EXPORT const CFStringRef kCTFontWidthTrait;
+CORETEXT_EXPORT const CFStringRef kCTFontSlantTrait;
+
 enum {
   kCTFontClassMaskShift = 28,
 };

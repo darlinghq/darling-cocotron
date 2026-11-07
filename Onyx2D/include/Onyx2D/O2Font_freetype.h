@@ -35,6 +35,15 @@ FT_Face O2FontFreeTypeFace(O2Font_freetype *self);
 FT_Library O2FontSharedFreeTypeLibrary();
 FcConfig *O2FontSharedFontConfig();
 
+/* Lists the installed faces whose properties equal all of the non-nil
+ * arguments; no substitution takes place. Each element is a dictionary
+ * with the NSString keys @"family", @"postScriptName", @"style",
+ * @"fullName" and @"path" (any of them may be missing). The path is the
+ * font file as guest code sees it, not fontconfig's host path. The caller
+ * owns the returned array. */
+NSArray *O2FontCopyInstalledFaces(NSString *family, NSString *postScriptName,
+                                  NSString *style, NSString *fullName);
+
 @end
 
 #endif

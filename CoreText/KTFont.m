@@ -42,8 +42,34 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [super dealloc];
 }
 
+- (CFTypeID) _cfTypeID {
+    return CTFontGetTypeID();
+}
+
 - (CFStringRef) copyName {
     return CGFontCopyFullName(_font);
+}
+
+- (CGFontRef) copyGraphicsFont {
+    return CGFontRetain(_font);
+}
+
+// A CTFont can be used where an NSFont is expected (the two are toll-free
+// bridged), so answer NSFont's identity methods too.
+- (NSString *) fontName {
+    return [(NSString *) CTFontCopyPostScriptName((CTFontRef) self) autorelease];
+}
+
+- (NSString *) familyName {
+    return [(NSString *) CTFontCopyFamilyName((CTFontRef) self) autorelease];
+}
+
+- (id) printerFont {
+    return self;
+}
+
+- (id) screenFont {
+    return self;
 }
 
 - (CGFloat) pointSize {
@@ -55,8 +81,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (CGRect) boundingRect {
-    O2InvalidAbstractInvocation();
-    return CGRectZero;
+    if (_unitsPerEm == 0)
+        return CGRectZero;
+    CGRect box = CGFontGetFontBBox(_font);
+    CGFloat scale = _size / _unitsPerEm;
+    return CGRectMake(box.origin.x * scale, box.origin.y * scale,
+                      box.size.width * scale, box.size.height * scale);
 }
 
 - (CGFloat) ascender {
@@ -157,8 +187,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (CGPathRef) createPathForGlyph: (CGGlyph) glyph
                        transform: (CGAffineTransform *) xform
 {
-    O2InvalidAbstractInvocation();
-    return nil;
+    // Glyph outlines are not available; CTFontCreatePathForGlyph reports
+    // that as NULL.
+    return NULL;
 }
 
 @end

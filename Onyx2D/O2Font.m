@@ -60,6 +60,22 @@ static NSArray *_preferredFontNames = nil;
     [super dealloc];
 }
 
+- (NSString *) copyPostScriptName {
+    return [_name copy];
+}
+
+- (NSString *) copyFamilyName {
+    return [_name copy];
+}
+
+- (O2Rect) boundingRectForGlyph: (O2Glyph) glyph {
+    return _bbox;
+}
+
+- (CFArrayRef) copyTableTags {
+    return NULL;
+}
+
 - (NSData *) copyTableForTag: (uint32_t) tag {
     O2InvalidAbstractInvocation();
     return nil;
@@ -435,6 +451,14 @@ CFStringRef O2FontCopyFullName(O2FontRef self) {
     return (CFStringRef)[self->_name copy];
 }
 
+CFStringRef O2FontCopyPostScriptName(O2FontRef self) {
+    return (CFStringRef)[self copyPostScriptName];
+}
+
+CFStringRef O2FontCopyFamilyName(O2FontRef self) {
+    return (CFStringRef)[self copyFamilyName];
+}
+
 int O2FontGetUnitsPerEm(O2FontRef self) {
     return self->_unitsPerEm;
 }
@@ -506,6 +530,10 @@ O2Glyph O2FontGetGlyphWithGlyphName(O2FontRef self, CFStringRef name) {
 
 NSString *O2FontCopyGlyphNameForGlyph(O2FontRef self, O2Glyph glyph) {
     return [self copyGlyphNameForGlyph: glyph];
+}
+
+CFArrayRef O2FontCopyTableTags(O2FontRef self) {
+    return [self copyTableTags];
 }
 
 NSData *O2FontCopyTableForTag(O2FontRef self, uint32_t tag) {

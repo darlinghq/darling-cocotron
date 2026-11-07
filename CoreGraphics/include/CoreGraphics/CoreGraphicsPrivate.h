@@ -121,6 +121,9 @@ typedef void(*CGSNotifyProcPtr)(CGSNotificationType type, void* data, unsigned l
 extern CGError CGSRegisterNotifyProc(CGSNotifyProcPtr proc, CGSNotificationType notificationType, void* client);
 extern CGError CGSRemoveNotifyProc(CGSNotifyProcPtr proc, CGSNotificationType notificationType);
 
+/* Whether font smoothing is disabled for the current user. */
+extern bool CGFontRenderingGetFontSmoothingDisabled(void);
+
 // Darling extras, e.g. for CGL
 void* _CGSNativeDisplay(CGSConnectionID connId);
 void* _CGSNativeWindowForID(CGSConnectionID connId, CGSWindowID winId);
