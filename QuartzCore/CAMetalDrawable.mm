@@ -572,6 +572,12 @@ CAMetalDrawableActual::CAMetalDrawableActual(CAMetalLayerInternal* layer, CGSize
 
 CAMetalDrawableActual::~CAMetalDrawableActual() {
 	reset();
+	// The GL semaphore belongs to _glContext. Delete it only where that context
+	// is current, since in any other context the name means another object.
+	if (_glSemaphore != 0 && CGLGetCurrentContext() == _glContext) {
+		glDeleteSemaphoresEXT(1, &_glSemaphore);
+	}
+	_glSemaphore = 0;
 	objc_storeWeak(&_layer, nil);
 	CGLReleaseContext(_glContext);
 };
@@ -605,35 +611,17 @@ void CAMetalDrawableActual::present() {
 			return;
 		}
 
-		[layer queuePresent: _drawableID];
-
+		// Take the semaphore that signals the end of the drawable's rendering
+		// before queuing it: once queued, the compositor may wait on it.
+		//
+		// The semaphore is imported into OpenGL by synchronizeRender(), on the
+		// thread that composites the layer and with its GL context current.
+		// This method runs on whichever thread presents (often a command buffer
+		// completion thread), where that context cannot be made current while
+		// the compositor holds it.
 		_semaphore = _texture->synchronizePresentation();
 
-		if (_semaphore) {
-			int fd = -1;
-			VkSemaphoreGetFdInfoKHR info {};
-
-			info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_GET_FD_INFO_KHR;
-			info.semaphore = _semaphore->semaphore;
-			info.handleType = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT;
-
-			if (DynamicVK::vkGetSemaphoreFdKHR(_semaphore->device->device(), &info, &fd) != VK_SUCCESS) {
-				// TODO
-				abort();
-			}
-
-			CGLContextObj prev = CGLGetCurrentContext();
-			CGLSetCurrentContext(_glContext);
-
-			reportGLErrors();
-			glGenSemaphoresEXT(1, &_glSemaphore);
-			reportGLErrors();
-			glImportSemaphoreFdEXT(_glSemaphore, GL_HANDLE_TYPE_OPAQUE_FD_EXT, fd); // this consumes the FD
-			fd = -1;
-			reportGLErrors();
-
-			CGLSetCurrentContext(prev);
-		}
+		[layer queuePresent: _drawableID];
 	}
 }
 
@@ -687,13 +675,9 @@ void CAMetalDrawableActual::release() {
 };
 
 void CAMetalDrawableActual::reset() {
-	if (_glSemaphore != 0) {
-		reportGLErrors();
-		glDeleteSemaphoresEXT(1, &_glSemaphore);
-		_glSemaphore = 0;
-		reportGLErrors();
-	}
-
+	// The GL semaphore of the last present is left alone: this runs on the
+	// thread that asked for the drawable, where the compositor's GL context
+	// is not current. synchronizeRender() replaces it on the next present.
 	_semaphore = nullptr;
 	_wantsToPresentCallback = nullptr;
 	_didPresentCallback = nullptr;
@@ -701,10 +685,43 @@ void CAMetalDrawableActual::reset() {
 	_queued = false;
 };
 
+// Called by the compositor with the layer's GL context current.
 void CAMetalDrawableActual::synchronizeRender() {
+	if (!_semaphore) {
+		// nothing was rendered into the drawable, so there is nothing to wait for
+		return;
+	}
+
+	// The previous present's semaphore was imported in this context, and its
+	// wait was queued before this one, so it can go now.
+	if (_glSemaphore != 0) {
+		glDeleteSemaphoresEXT(1, &_glSemaphore);
+		_glSemaphore = 0;
+	}
+
+	int fd = -1;
+	VkSemaphoreGetFdInfoKHR info {};
+
+	info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_GET_FD_INFO_KHR;
+	info.semaphore = _semaphore->semaphore;
+	info.handleType = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT;
+
+	if (DynamicVK::vkGetSemaphoreFdKHR(_semaphore->device->device(), &info, &fd) != VK_SUCCESS) {
+		// TODO
+		abort();
+	}
+
+	reportGLErrors();
+	glGenSemaphoresEXT(1, &_glSemaphore);
+	reportGLErrors();
+	glImportSemaphoreFdEXT(_glSemaphore, GL_HANDLE_TYPE_OPAQUE_FD_EXT, fd); // this consumes the FD
+	fd = -1;
+	reportGLErrors();
+
 	GLuint tex = _texture->glTexture();
 	GLenum layout = GL_LAYOUT_GENERAL_EXT;
 	glWaitSemaphoreEXT(_glSemaphore, 0, NULL, 1, &tex, &layout);
+	reportGLErrors();
 };
 
 static void glDebugCallback(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar* message, const void* context) {
