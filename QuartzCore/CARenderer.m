@@ -4,6 +4,7 @@
 #import <QuartzCore/CAAnimation.h>
 #import <QuartzCore/CAMediaTimingFunction.h>
 #import <QuartzCore/CARenderer.h>
+#import <QuartzCore/CATransformLayer.h>
 #import "CALayerInternal.h"
 
 NSString *const kCARendererColorSpace = @"kCARendererColorSpace";
@@ -497,12 +498,15 @@ static void roundedRectOutline(CGRect r, CGFloat radius, GLfloat *xy) {
         flipped = !flipped;
     }
 
-    [self _drawBackgroundOfLayer: layer bounds: bounds opacity: opacity];
-    [self _drawContentsOfLayer: layer
-                        bounds: bounds
-                       opacity: opacity
-                       flipped: flipped];
-    [self _drawBorderOfLayer: layer bounds: bounds opacity: opacity];
+    // A transform layer renders only its sublayers.
+    if (![layer isKindOfClass: [CATransformLayer class]]) {
+        [self _drawBackgroundOfLayer: layer bounds: bounds opacity: opacity];
+        [self _drawContentsOfLayer: layer
+                            bounds: bounds
+                           opacity: opacity
+                           flipped: flipped];
+        [self _drawBorderOfLayer: layer bounds: bounds opacity: opacity];
+    }
 
     for (CALayer *child in layer.sublayers)
         [self _renderLayer: child

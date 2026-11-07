@@ -13,6 +13,7 @@
 #import <QuartzCore/CAReplicatorLayer.h>
 #import <QuartzCore/CAScrollLayer.h>
 #import <QuartzCore/CAShapeLayer.h>
+#import <QuartzCore/CATransformLayer.h>
 
 /* Undocumented */
 #import <QuartzCore/CAFilter.h>
