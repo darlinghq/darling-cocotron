@@ -66,6 +66,23 @@ NSString *const kCAContentsFormatGray8Uint = @"Gray8";
 
 - (void) setSublayers: (NSArray *) sublayers {
     sublayers = [sublayers copy];
+
+    // A layer has a single superlayer, so the new sublayers leave the layers
+    // they are in now.
+    for (CALayer *layer in sublayers) {
+        if (layer->_superlayer != nil && layer->_superlayer != self)
+            [layer removeFromSuperlayer];
+    }
+
+    // Sublayers that are not kept stop pointing at this layer and its context
+    // before the array that may own them goes away.
+    for (CALayer *layer in _sublayers) {
+        if ([sublayers indexOfObjectIdenticalTo: layer] == NSNotFound) {
+            layer->_superlayer = nil;
+            [layer _setContext: nil];
+        }
+    }
+
     [_sublayers release];
     _sublayers = sublayers;
     [_sublayers makeObjectsPerformSelector: @selector(_setSuperLayer:)
@@ -347,6 +364,8 @@ NSString *const kCAContentsFormatGray8Uint = @"Gray8";
 }
 
 - (void) dealloc {
+    for (CALayer *layer in _sublayers)
+        layer->_superlayer = nil;
     [_sublayers release];
     [_name release];
     [_layoutManager release];
@@ -704,16 +723,60 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
     [_context startTimerIfNeeded];
 }
 
+- (void) insertSublayer: (CALayer *) layer below: (CALayer *) sibling {
+    [self _insertSublayer: layer nextTo: sibling above: NO];
+}
+
+- (void) insertSublayer: (CALayer *) layer above: (CALayer *) sibling {
+    [self _insertSublayer: layer nextTo: sibling above: YES];
+}
+
+- (void) _insertSublayer: (CALayer *) layer
+                  nextTo: (CALayer *) sibling
+                   above: (BOOL) above
+{
+    if (layer == sibling)
+        return;
+
+    // Take the layer out first, so that the sibling's index is the one it
+    // has once the layer is no longer in the array.
+    [layer retain];
+    if (layer != nil && [layer superlayer] == self)
+        [layer removeFromSuperlayer];
+
+    NSUInteger index = [_sublayers indexOfObjectIdenticalTo: sibling];
+    if (index == NSNotFound) {
+        [layer autorelease];
+        [NSException raise: NSInvalidArgumentException
+                    format: @"The sibling layer is not a sublayer of this layer"];
+    }
+
+    [self insertSublayer: layer atIndex: (unsigned int) (above ? index + 1 : index)];
+    [layer release];
+}
+
 - (void) replaceSublayer: (CALayer *) layer with: (CALayer *) other {
+    if (layer == other)
+        return;
+    if ([_sublayers indexOfObjectIdenticalTo: layer] == NSNotFound)
+        return;
+    if (other == nil) {
+        [layer removeFromSuperlayer];
+        return;
+    }
+
+    [other retain];
+    if ([other superlayer] != nil)
+        [other removeFromSuperlayer];
+
     NSMutableArray *layers = [_sublayers mutableCopy];
-    NSUInteger index = [_sublayers indexOfObjectIdenticalTo: layer];
-
-    [layers replaceObjectAtIndex: index withObject: other];
-
+    [layers replaceObjectAtIndex: [layers indexOfObjectIdenticalTo: layer]
+                      withObject: other];
+    // Clears the replaced layer's superlayer and context.
     [self setSublayers: layers];
     [layers release];
-
-    layer->_superlayer = nil;
+    [other release];
+    [_context startTimerIfNeeded];
 }
 
 // Draws the layer's content with -drawInContext: (or the delegate's
