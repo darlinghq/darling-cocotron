@@ -5,7 +5,17 @@
 
 @implementation CATransactionGroup
 
+- (void) dealloc {
+    [_values release];
+    [super dealloc];
+}
+
 - init {
+    return [self initImplicit: NO];
+}
+
+- initImplicit: (BOOL) implicit {
+    _implicit = implicit;
     _values = [[NSMutableDictionary alloc] init];
     [_values setObject: [NSNumber numberWithFloat: 0.25]
                 forKey: kCATransactionAnimationDuration];
@@ -16,12 +26,27 @@
     return self;
 }
 
+- (BOOL) isImplicit {
+    return _implicit;
+}
+
+- (BOOL) commitWhenUnnested {
+    return _commitWhenUnnested;
+}
+
+- (void) setCommitWhenUnnested: (BOOL) value {
+    _commitWhenUnnested = value;
+}
+
 - valueForKey: (NSString *) key {
     return [_values objectForKey: key];
 }
 
 - (void) setValue: value forKey: (NSString *) key {
-    [_values setObject: value forKey: key];
+    if (value == nil)
+        [_values removeObjectForKey: key];
+    else
+        [_values setObject: value forKey: key];
 }
 
 @end
