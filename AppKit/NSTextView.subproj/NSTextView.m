@@ -119,9 +119,12 @@ NSString *const NSAllRomanInputSourcesLocaleIdentifier =
     [textView setVerticallyResizable: YES];
     [textView setHorizontallyResizable: NO];
     [textView setAutoresizingMask: NSViewWidthSizable];
+    // The container follows the view's width but not its height, which
+    // setVerticallyResizable: would otherwise make it track.
+    [[textView textContainer] setWidthTracksTextView: YES];
+    [[textView textContainer] setHeightTracksTextView: NO];
     [[textView textContainer]
             setContainerSize: NSMakeSize(contentSize.width, FLT_MAX)];
-    [[textView textContainer] setWidthTracksTextView: YES];
 
     [scrollView setDocumentView: textView];
 
