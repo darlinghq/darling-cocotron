@@ -22,7 +22,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Foundation/NSObject.h>
 #import <AppKit/NSUserInterfaceItemIdentification.h>
 
-@class NSMenu, NSImage, NSAttributedString;
+@class NSMenu, NSImage, NSAttributedString, NSView, NSMenuItemBadge;
 
 @interface NSMenuItem : NSObject <NSCopying, NSValidatedUserInterfaceItem, NSUserInterfaceItemIdentification> {
     NSMenu *_menu;
@@ -48,13 +48,17 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     BOOL _alternate;
     BOOL _allowsKeyEquivalentWhenHidden;
     NSUserInterfaceItemIdentifier _identifier;
+    NSView *_view;
     NSString *_toolTip;
+    NSMenuItemBadge *_badge;
 }
 
 @property(copy) NSString *toolTip;
 
 @property(getter=isAlternate) BOOL alternate;
 @property BOOL allowsKeyEquivalentWhenHidden;
+@property(retain) NSView *view;
+@property(retain) NSMenuItemBadge *badge;
 
 + (NSMenuItem *) separatorItem;
 

@@ -234,6 +234,7 @@ set(AppKit_sources
 	NSMenu.subproj/NSMenuWindow.m
 	NSMenu.subproj/NSMenu.m
 	NSMenu.subproj/NSMenuItem.m
+	NSMenuItemBadge.m
 	NSMenu.subproj/NSCarbonMenuImpl.m
 
 	NSPathControl.m

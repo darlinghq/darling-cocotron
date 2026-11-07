@@ -33,6 +33,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 @synthesize alternate = _alternate;
 @synthesize allowsKeyEquivalentWhenHidden = _allowsKeyEquivalentWhenHidden;
 @synthesize identifier = _identifier;
+@synthesize view = _view;
+@synthesize badge = _badge;
 
 + (NSMenuItem *) separatorItem {
     return [[[self alloc] initWithTitle: nil action: NULL
@@ -148,7 +150,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [_offStateImage release];
     [_representedObject release];
     [_identifier release];
+    [_view release];
     [_toolTip release];
+    [_badge release];
     [super dealloc];
 }
 
@@ -165,7 +169,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     copy->_mixedStateImage = [_mixedStateImage retain];
     copy->_offStateImage = [_offStateImage retain];
     copy->_representedObject = [_representedObject retain];
+    copy->_identifier = [_identifier copyWithZone: zone];
+    copy->_view = [_view retain];
     copy->_toolTip = [_toolTip copyWithZone: zone];
+    copy->_badge = [_badge retain];
     return copy;
 }
 
