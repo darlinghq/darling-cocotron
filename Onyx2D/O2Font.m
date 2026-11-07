@@ -68,6 +68,10 @@ static NSArray *_preferredFontNames = nil;
     return [_name copy];
 }
 
+- (NSString *) copyStyleName {
+    return nil;
+}
+
 - (O2Rect) boundingRectForGlyph: (O2Glyph) glyph {
     return _bbox;
 }
@@ -457,6 +461,10 @@ CFStringRef O2FontCopyPostScriptName(O2FontRef self) {
 
 CFStringRef O2FontCopyFamilyName(O2FontRef self) {
     return (CFStringRef)[self copyFamilyName];
+}
+
+CFStringRef O2FontCopyStyleName(O2FontRef self) {
+    return (CFStringRef)[self copyStyleName];
 }
 
 int O2FontGetUnitsPerEm(O2FontRef self) {
