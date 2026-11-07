@@ -3,6 +3,7 @@
 #include <CoreGraphics/CoreGraphics.h>
 #include <IOKit/hidsystem/IOLLEvent.h>
 #include <CoreFoundation/CoreFoundation.h>
+#include <CoreGraphics/CGSServerSPI.h>
 
 __BEGIN_DECLS
 
@@ -10,8 +11,6 @@ __BEGIN_DECLS
 // https://github.com/koekeishiya/cglwindow/blob/master/src/cgl_window.c
 // https://sourceforge.net/p/xnntp/SVN_Xnntp/1/tree/CGSPrivate.h
 
-typedef int CGSConnectionID;
-typedef int CGSWindowID;
 typedef int CGSSurfaceID;
 typedef unsigned long CGSNotificationType;
 typedef CFMutableDictionaryRef CGSDictionaryObj;
@@ -42,7 +41,6 @@ extern void CGSInitialize(void);
 extern CGError CGSNewConnection(_Nullable CGSDictionaryObj attribs, CGSConnectionID* connId);
 extern CGError CGSReleaseConnection(CGSConnectionID connId);
 extern CGSConnectionID _CGSDefaultConnection(void);
-extern CGSConnectionID CGSMainConnectionID(void);
 extern CGError CGSSetDenyWindowServerConnections(Boolean deny);
 extern void CGSShutdownServerConnections(void);
 
@@ -53,6 +51,11 @@ extern void CGSRegionRetain(CGSRegionRef reg);
 extern void CGSRegionToRect(CGSRegionRef reg, CGRect* rect); // This is non-standard. We should support non-rectangular regions instead
 extern bool CGSRegionIsRectangular(CGSRegionRef reg);
 
+// CGRegion (the same region objects as CGSRegion)
+typedef CGSRegionRef CGRegionRef;
+extern CGRegionRef CGRegionCreateWithRect(CGRect rect);
+extern void CGRegionRelease(CGRegionRef region);
+
 extern CGError CGSNewWindow(CGSConnectionID conn, CFIndex flags, float, float, const CGSRegionRef region, CGSWindowID* windowID);
 extern CGError CGSReleaseWindow(CGSConnectionID cid, CGSWindowID wid);
 
@@ -60,8 +63,19 @@ extern CGError CGSSetWindowShape(CGSConnectionID cid, CGSWindowID wid, float x_o
 extern OSStatus CGSOrderWindow(CGSConnectionID cid, CGSWindowID wid, CGSWindowOrderingMode place, CGSWindowID relativeToWindow);
 extern CGError CGSMoveWindow(CGSConnectionID cid, CGSWindowID wid, const CGPoint *window_pos);
 extern CGError CGSSetWindowOpacity(CGSConnectionID cid, CGSWindowID wid, bool isOpaque);
-extern CGError CGSSetWindowAlpha(CGSConnectionID cid, CGSWindowID wid, float alpha);
 extern CGError CGSSetWindowLevel(CGSConnectionID cid, CGSWindowID wid, CGWindowLevel level);
+extern CGError CGSSetWindowTransform(CGSConnectionID cid, CGSWindowID wid, CGAffineTransform transform);
+extern CGError CGSSetWindowWarp(CGSConnectionID cid, CGSWindowID wid, int w, int h, float *mesh);
+extern CGError CGSSetWindowCaptureExcludeShape(CGSConnectionID cid, CGSWindowID wid, CGRegionRef shape);
+
+// Window transforms. Argument layout as applications call these functions:
+// two 32-bit values (a placement selector and a reserved value; both 0 in
+// practice) come before the transform, which is passed by value.
+extern CGError CGSSetWindowTransformAtPlacement(CGSConnectionID cid, CGSWindowID wid, int32_t placement, int32_t reserved, CGAffineTransform transform);
+extern CGError CGSGetWindowTransformAtPlacement(CGSConnectionID cid, CGSWindowID wid, int32_t placement, void *reserved, CGAffineTransform *outTransform);
+
+// Queried window server state; 0 means the server is running normally.
+extern int CGSServerOperationState(int state);
 
 // Subwindows (for CGL)
 extern CGError CGSAddSurface(CGSConnectionID cid, CGSWindowID wid, CGSSurfaceID *sid);

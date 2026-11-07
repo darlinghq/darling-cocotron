@@ -24,6 +24,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Onyx2D/O2PDFOperatorTable.h>
 #import <Onyx2D/O2PDFPage.h>
 #import <Onyx2D/O2PDFScanner.h>
+#include <limits.h>
 
 @implementation O2PDFPage
 
@@ -144,7 +145,13 @@ BOOL O2PDFGetPageArrayForKey(O2PDFPage *page, const char *key,
 }
 
 - (int) rotationAngle {
-    return 0;
+    O2PDFObject *object;
+    if (!O2PDFGetPageObjectForKey(self, "Rotate", &object)) return 0;
+    O2PDFInteger rotation;
+    if (![object checkForType:kO2PDFObjectTypeInteger value:&rotation] ||
+        rotation < INT_MIN || rotation > INT_MAX || rotation % 90 != 0)
+        [NSException raise:NSInvalidArgumentException format:@"Invalid PDF page rotation"];
+    return (int)rotation;
 }
 
 O2AffineTransform O2PDFPageGetDrawingTransform(O2PDFPageRef self, O2PDFBox box,

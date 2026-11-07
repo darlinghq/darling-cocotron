@@ -74,6 +74,7 @@ O2ColorSpaceModel O2ColorSpaceGetModel(O2ColorSpaceRef self);
 - (BOOL) isEqualToColorSpace: (O2ColorSpaceRef) other;
 
 O2ColorSpaceRef O2ColorSpaceCreateWithName(CFStringRef name);
+CFStringRef O2ColorSpaceGetName(O2ColorSpaceRef colorSpace);
 
 @end
 

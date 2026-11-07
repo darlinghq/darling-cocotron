@@ -318,6 +318,48 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type, CFDataRef a
 	return CGPointMake(point.x, point.y);
 }
 
+-(BOOL) isKeyDown:(CGKeyCode)keyCode
+{
+	if (keyCode >= sizeof(carbonToX11) / sizeof(carbonToX11[0]))
+		return NO;
+	// Unmapped virtual key codes have no X key code (X key codes start at 8).
+	const int x11KeyCode = carbonToX11[keyCode];
+	if (x11KeyCode == 0)
+		return NO;
+
+	char keys[32];
+	XQueryKeymap(_display, keys);
+	return (keys[x11KeyCode / 8] & (1 << (x11KeyCode % 8))) != 0;
+}
+
+-(BOOL) isMouseButtonDown:(CGMouseButton)button
+{
+	unsigned int buttonMask;
+	switch (button)
+	{
+		case kCGMouseButtonLeft:
+			buttonMask = Button1Mask;
+			break;
+		case kCGMouseButtonCenter:
+			buttonMask = Button2Mask;
+			break;
+		case kCGMouseButtonRight:
+			buttonMask = Button3Mask;
+			break;
+		default:
+			// X11 reports the state of the first five buttons only, and
+			// buttons 4 and 5 are the scroll wheel.
+			return NO;
+	}
+
+	Window child, root = DefaultRootWindow(_display);
+	int root_x, root_y, win_x, win_y;
+	unsigned int mask = 0;
+	if (!XQueryPointer(_display, root, &root, &child, &root_x, &root_y, &win_x, &win_y, &mask))
+		return NO;
+	return (mask & buttonMask) != 0;
+}
+
 -(void) processXEvent:(XEvent*) event
 {
 	switch (event->type)

@@ -17,6 +17,7 @@ FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
 COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
+#import <AppKit/NSApplication.h>
 #import <AppKit/NSEvent_mouse.h>
 
 @implementation NSEvent_mouse
@@ -74,7 +75,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     self = [super initWithType: type
                       location: location
                  modifierFlags: modifierFlags
-                        window: (id) windowNumber];
+                        window: [NSApp windowWithWindowNumber: windowNumber]];
     if (self != nil) {
         _trackingNumber = tracking;
         _userData = userData;
@@ -95,7 +96,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [super initWithType: type
                  location: location
             modifierFlags: modifierFlags
-                   window: (id) windowNumber];
+                   window: [NSApp windowWithWindowNumber: windowNumber]];
     _clickCount = clickCount;
     return self;
 }

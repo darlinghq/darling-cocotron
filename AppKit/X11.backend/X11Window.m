@@ -480,6 +480,22 @@ static NSData *makeWindowIcon() {
     // TODO: background color
 }
 
+// Window opacity through the EWMH _NET_WM_WINDOW_OPACITY property (a CARDINAL
+// where 0xffffffff is fully opaque), honoured by compositing window managers.
+- (void) setAlphaValue: (CGFloat) value {
+    Atom opacity = XInternAtom(_display, "_NET_WM_WINDOW_OPACITY", False);
+
+    if (value >= 1.0) {
+        XDeleteProperty(_display, _window, opacity);
+    } else {
+        unsigned long cardinal =
+                (unsigned long) (MAX(value, 0.0) * (double) 0xffffffffUL);
+        XChangeProperty(_display, _window, opacity, XA_CARDINAL, 32,
+                        PropModeReplace, (unsigned char *) &cardinal, 1);
+    }
+    XFlush(_display);
+}
+
 - (void) invalidate {
     // This is essentially dealloc; we release our contexts
     // and windows, but unlike dealloc, this method can be called
