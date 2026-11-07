@@ -62,6 +62,9 @@
     // pointer inside the focused fullscreen window, through a pointer grab on
     // _confinedWindow while one is held.
     BOOL _confinesPointer;
+    // ControlKeyActsAsCommand (org.darlinghq.AppKit): Control+C, V and X
+    // arrive as their Command shortcuts.
+    BOOL _controlActsAsCommand;
     Window _confinedWindow;
     // Xwayland forwards a pointer warp to the compositor only while the X
     // cursor is hidden, so warps are not honoured with a visible cursor there.

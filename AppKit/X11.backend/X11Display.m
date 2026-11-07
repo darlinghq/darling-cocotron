@@ -184,6 +184,7 @@ static void beforeWaitingCallback(CFRunLoopObserverRef observer,
         lastFocusedWindow = nil;
         _buttonClickCounts = [NSMutableDictionary new];
         _confinesPointer = appKitPreference(CFSTR("ConfinePointerToFullscreenWindows"));
+        _controlActsAsCommand = appKitPreference(CFSTR("ControlKeyActsAsCommand"));
         _modifierFlags = 0;
     }
     return self;
@@ -1559,6 +1560,29 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
             buf[strLen] = 0;
         }
 
+        // Shortcut characters ignore modifiers other than Shift.
+        KeySym shortcutKeySym = X11KeySymIgnoringModifiers(&ev->xkey);
+
+        // With ControlKeyActsAsCommand set, the copy, paste and cut shortcuts
+        // of other systems work as macOS's: Control+C, V and X, without
+        // Command or Option, arrive as Command+C, V and X, whose characters
+        // are the letters rather than control codes. Other Control
+        // combinations are left alone.
+        if (_controlActsAsCommand && (modifierFlags & NSControlKeyMask) &&
+            !(modifierFlags & (NSCommandKeyMask | NSAlternateKeyMask))) {
+            KeySym lower = shortcutKeySym;
+            if (lower >= XK_A && lower <= XK_Z)
+                lower += XK_a - XK_A;
+            if (lower == XK_c || lower == XK_v || lower == XK_x) {
+                modifierFlags = (modifierFlags & ~NSControlKeyMask) | NSCommandKeyMask;
+                if (text != buf)
+                    free(text);
+                text = buf;
+                buf[0] = (char) shortcutKeySym;
+                buf[1] = 0;
+            }
+        }
+
         id str = [[NSString alloc] initWithCString: text
                                           encoding: NSUTF8StringEncoding];
         if (text != buf)
@@ -1566,14 +1590,9 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
         NSPoint pos =
                 [window transformPoint: NSMakePoint(ev->xkey.x, ev->xkey.y)];
 
-        uint16_t ucsCode = (uint16_t) X11KeySymToUCS(keySym); // All defined codes in the table fit into 16 bits
-        NSString* strIg = [NSString stringWithCharacters: &ucsCode length: 1];
-
         // The text above retains normal XIM/keyboard modifier behavior.
-        // Shortcut characters ignore modifiers other than Shift.
-        uint16_t shortcutCode = (uint16_t) X11KeySymToUCS(
-                X11KeySymIgnoringModifiers(&ev->xkey));
-        strIg = [NSString stringWithCharacters: &shortcutCode length: 1];
+        uint16_t shortcutCode = (uint16_t) X11KeySymToUCS(shortcutKeySym);
+        NSString* strIg = [NSString stringWithCharacters: &shortcutCode length: 1];
 
         // If there's an app that uses constants from HIToolbox/Events.h (e.g.
         // kVK_ANSI_A), this gives it a chance to work. x11ToCarbon is 256 wide
