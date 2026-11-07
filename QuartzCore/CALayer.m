@@ -224,6 +224,7 @@ NSString *const kCAContentsFormatGray8Uint = @"Gray8";
     value = [value retain];
     [_contents release];
     _contents = value;
+    [_context startTimerIfNeeded];
 }
 
 - (CGFloat) contentsScale {

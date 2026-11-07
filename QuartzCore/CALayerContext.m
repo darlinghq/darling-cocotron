@@ -1,3 +1,4 @@
+#import <Foundation/NSArray.h>
 #import <Foundation/NSString.h>
 #import <QuartzCore/CALayer.h>
 #import <QuartzCore/CALayerContext.h>
@@ -39,6 +40,7 @@
     }
 
     _frame = rect;
+    _deleteTextureIds = [[NSMutableArray alloc] init];
 
     _renderer = [[CARenderer rendererWithCGLContext: _glContext
                                             options: nil] retain];
@@ -54,6 +56,7 @@
     if ([_layer _context] == self)
         [_layer _setContext: nil];
     [_renderer release];
+    [_deleteTextureIds release];
     CGLReleaseContext(_glContext);
     CGLReleasePixelFormat(_pixelFormat);
     if (_cglWindow != NULL)
@@ -66,6 +69,10 @@
 - (void) setFrame: (CGRect) rect {
     _frame = rect;
     [_subwindow setFrame: _frame];
+
+    // The tree may have been set up before there was anything to draw it on.
+    if (_layer != nil && _cglWindow != NULL)
+        [self startTimerIfNeeded];
 }
 
 - (void) setLayer: (CALayer *) layer {
@@ -79,6 +86,9 @@
 
     [_layer _setContext: self];
     [_renderer setLayer: layer];
+    // Show the new tree even if nothing in it changes afterwards.
+    if (_layer != nil)
+        [self startTimerIfNeeded];
 }
 
 - (void) setSubwindow: (CGSubWindow*) subwindow
@@ -172,6 +182,10 @@
 }
 
 - (void) render {
+    // Without a window surface, attaching would leave the context without a
+    // drawable and the tree would be drawn into nothing.
+    if (_layer == nil || _cglWindow == NULL)
+        return;
     [self renderLayer: _layer];
 }
 
@@ -213,11 +227,23 @@ static BOOL layerTreeHasAnimations(CALayer *layer) {
 }
 
 - (void) deleteTextureId: (NSNumber *) textureId {
-    [_deleteTextureIds addObject: textureId];
+    if (textureId != nil)
+        [_deleteTextureIds addObject: textureId];
 }
 
 - (void) flush {
+    if (_cglWindow == NULL)
+        return;
+
+    // The swap applies to the current context's surface. Code run during the
+    // frame, such as a Metal layer's present, may have made another context
+    // current, so make this one current on its window first.
+    CGLContextObj previous = CGLGetCurrentContext();
+    if (CGLContextMakeCurrentAndAttachToWindow(_glContext, _cglWindow) != kCGLNoError)
+        return;
     CGLFlushDrawable(_glContext);
+    if (previous != _glContext)
+        CGLSetCurrentContext(previous);
 }
 
 @end
