@@ -2928,6 +2928,7 @@ static BOOL _allowsAutomaticWindowTabbing;
 
     sheet->_isVisible = NO;
     [[sheet platformWindow] sheetOrderOutToFrame: sheetFrame];
+    [(NSThemeFrame *) [sheet _backgroundView] setWindowBorderType: NSNoBorder];
 
     [_sheetContext release];
     _sheetContext = nil;

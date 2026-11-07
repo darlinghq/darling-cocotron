@@ -128,9 +128,10 @@ NSColor *NSColorGetCatalogColor(NSColorListName catalogName,
     if ([colorSpace isEqualToString: [self colorSpaceName]])
         return self;
 
-    _color = [_color colorUsingColorSpaceName: colorSpace device: device];
-
-    return _color;
+    // Return the converted color without replacing _color: the result is
+    // autoreleased, so storing it would leave this color with a dangling
+    // backing color once the pool drains.
+    return [_color colorUsingColorSpaceName: colorSpace device: device];
 }
 
 - (CGColorRef) CGColorRef {

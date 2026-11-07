@@ -184,8 +184,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #define REC601_LUMINANCE_B 0.114f
 
 static inline CGFloat calibratedWhiteFromRGB(CGFloat r, CGFloat g, CGFloat b) {
-    return (REC601_LUMINANCE_R * r, REC601_LUMINANCE_G * g,
-            REC601_LUMINANCE_B * b);
+    return REC601_LUMINANCE_R * r + REC601_LUMINANCE_G * g +
+           REC601_LUMINANCE_B * b;
 }
 
 - (NSColor *) colorUsingColorSpaceName: (NSString *) otherSpaceName
@@ -389,6 +389,30 @@ static inline CGFloat calibratedWhiteFromRGB(CGFloat r, CGFloat g, CGFloat b) {
                                          green: green
                                           blue: blue
                                          alpha: alpha];
+
+        // +colorWithSRGBRed:green:blue:alpha: colours are RGB too.
+        if ([otherSpaceName isEqualToString: NSCalibratedRGBColorSpace])
+            return [NSColor colorWithCalibratedRed: red
+                                             green: green
+                                              blue: blue
+                                             alpha: alpha];
+
+        if ([otherSpaceName isEqualToString: NSDeviceWhiteColorSpace])
+            return [NSColor colorWithDeviceWhite: calibratedWhiteFromRGB(
+                                                          red, green, blue)
+                                           alpha: alpha];
+
+        if ([otherSpaceName isEqualToString: NSCalibratedWhiteColorSpace])
+            return [NSColor colorWithCalibratedWhite: calibratedWhiteFromRGB(
+                                                              red, green, blue)
+                                               alpha: alpha];
+
+        if ([otherSpaceName isEqualToString: NSDeviceCMYKColorSpace])
+            return [NSColor colorWithDeviceCyan: 1.0 - red
+                                        magenta: 1.0 - green
+                                         yellow: 1.0 - blue
+                                          black: 0.0
+                                          alpha: alpha];
     } else if ([_colorSpaceName isEqualToString: NSCustomColorSpace]) {
         CGFloat white = components[0], alpha = components[1];
 

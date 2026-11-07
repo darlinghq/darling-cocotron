@@ -21,7 +21,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSPanel.h>
 #import <Foundation/NSURL.h>
 
-@class NSView, NSOutlineView;
+@class NSView, NSOutlineView, NSTextField;
 
 enum {
     NSFileHandlingPanelCancelButton = NSCancelButton,
@@ -45,6 +45,13 @@ enum {
     NSView *_accessoryView;
 
     IBOutlet NSOutlineView *_outlineView;
+    NSTextField *_nameField;
+    BOOL _allowsOtherFileTypes;
+    BOOL _runsAsSheet;
+    NSUInteger _styleMaskBeforeSheet;
+    id _sheetCompletionHandler;
+    BOOL _runsModeless;
+    id _modelessCompletionHandler;
 }
 
 @property (copy) NSString *nameFieldStringValue;
@@ -56,6 +63,8 @@ enum {
 - (NSString *) filename;
 
 - (void) beginWithCompletionHandler: (void (^)(NSModalResponse result)) handler;
+- (void) beginSheetModalForWindow: (NSWindow *) window
+                completionHandler: (void (^)(NSModalResponse result)) handler;
 
 - (NSInteger) runModalForDirectory: (NSString *) directory
                               file: (NSString *) file;
@@ -87,6 +96,20 @@ enum {
 
 - (void) setPrompt: (NSString *) message;
 - (NSString *) prompt;
+
+- (void) setNameFieldLabel: (NSString *) label;
+- (NSString *) nameFieldLabel;
+- (void) setShowsTagField: (BOOL) flag;
+- (BOOL) showsTagField;
+- (void) setTagNames: (NSArray *) names;
+- (NSArray *) tagNames;
+- (void) setExtensionHidden: (BOOL) flag;
+- (BOOL) isExtensionHidden;
+- (void) setCanSelectHiddenExtension: (BOOL) flag;
+- (BOOL) canSelectHiddenExtension;
+
+- (void) cancelOperation: (id) sender;
+- (void) beginWithCompletionHandler: (void (^)(NSModalResponse result)) handler;
 
 - (void) beginSheetForDirectory: (NSString *) path
                            file: (NSString *) name

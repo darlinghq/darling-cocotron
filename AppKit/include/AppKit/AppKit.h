@@ -49,6 +49,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSColor.h>
 #import <AppKit/NSColorList.h>
 #import <AppKit/NSColorPanel.h>
+#import <AppKit/NSColorSampler.h>
 #import <AppKit/NSColorPicker.h>
 #import <AppKit/NSColorSpace.h>
 #import <AppKit/NSColorWell.h>

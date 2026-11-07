@@ -275,6 +275,7 @@ set(AppKit_sources
 	NSPrintPanel.m
 	NSGlyphInfo.m
 	NSWindowController.m
+	NSColorSampler.m
 	NSColorSpace.m
 	NSView.m
 

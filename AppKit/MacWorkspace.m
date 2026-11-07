@@ -2,6 +2,7 @@
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSRaise.h>
 #include <LaunchServices/LaunchServices.h>
+#include <dispatch/dispatch.h>
 
 @implementation NSWorkspace (macos)
 
@@ -134,6 +135,94 @@
     OSStatus status = LSOpenFromURLSpec(&spec, NULL);
 
     return (status == noErr);
+}
+
+// Opens urls with LaunchServices; appURL nil means each URL's default
+// application.
+static OSStatus openURLsWithFlags(NSArray *urls, NSURL *appURL,
+                                  LSLaunchFlags flags) {
+    LSLaunchURLSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.appURL = (CFURLRef) appURL;
+    spec.itemURLs = (CFArrayRef) urls;
+    spec.launchFlags = flags;
+    return LSOpenFromURLSpec(&spec, NULL);
+}
+
+static LSLaunchFlags launchFlagsForConfiguration(
+        NSWorkspaceOpenConfiguration *configuration) {
+    LSLaunchFlags flags = kLSLaunchDefaults;
+    if (configuration == nil)
+        return flags;
+    if (![configuration activates])
+        flags |= kLSLaunchDontSwitch;
+    if ([configuration hides])
+        flags |= kLSLaunchAndHide;
+    if ([configuration hidesOthers])
+        flags |= kLSLaunchAndHideOthers;
+    if ([configuration createsNewApplicationInstance])
+        flags |= kLSLaunchNewInstance;
+    if (![configuration addsToRecentItems])
+        flags |= kLSLaunchDontAddToRecents;
+    if ([configuration isForPrinting])
+        flags |= kLSLaunchAndPrint;
+    return flags;
+}
+
+// The handler runs asynchronously, on a concurrent queue, as documented.
+// Which application took the URL is not known here, so it gets nil.
+- (void) openURL: (NSURL *) url
+        configuration: (NSWorkspaceOpenConfiguration *) configuration
+    completionHandler: (void (^)(NSRunningApplication *app, NSError *error)) completionHandler
+{
+    LSLaunchFlags flags = launchFlagsForConfiguration(configuration);
+    [url retain];
+    void (^handler)(NSRunningApplication *, NSError *) = [completionHandler copy];
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        OSStatus status = url == nil
+                ? paramErr
+                : openURLsWithFlags([NSArray arrayWithObject: url], nil, flags);
+        if (handler != nil) {
+            NSError *error = nil;
+            if (status != noErr)
+                error = [NSError errorWithDomain: NSOSStatusErrorDomain
+                                            code: status
+                                        userInfo: nil];
+            handler(nil, error);
+        }
+        [handler release];
+        [url release];
+    });
+}
+
+- (BOOL) openURLs: (NSArray<NSURL *> *) urls
+           withAppBundleIdentifier: (NSString *) bundleIdentifier
+                           options: (NSWorkspaceLaunchOptions) options
+    additionalEventParamDescriptor: (NSAppleEventDescriptor *) descriptor
+                 launchIdentifiers: (NSArray **) identifiers
+{
+    if (identifiers != NULL)
+        *identifiers = nil;
+    if ([urls count] == 0)
+        return NO;
+
+    NSURL *appURL = nil;
+    if (bundleIdentifier != nil) {
+        appURL = [self URLForApplicationWithBundleIdentifier: bundleIdentifier];
+        if (appURL == nil)
+            return NO;
+    }
+
+    // The launch options share their values with LaunchServices' launch flags.
+    LSLaunchFlags flags = kLSLaunchDefaults |
+            (options & (NSWorkspaceLaunchAndPrint |
+                        NSWorkspaceLaunchWithoutAddingToRecents |
+                        NSWorkspaceLaunchWithoutActivation |
+                        NSWorkspaceLaunchAsync |
+                        NSWorkspaceLaunchNewInstance |
+                        NSWorkspaceLaunchAndHide |
+                        NSWorkspaceLaunchAndHideOthers));
+    return openURLsWithFlags(urls, appURL, flags) == noErr;
 }
 
 - (BOOL) selectFile: (NSString *) path

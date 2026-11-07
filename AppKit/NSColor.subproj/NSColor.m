@@ -21,6 +21,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSColor.h>
 #import <AppKit/NSColor_CGColor.h>
 #import <AppKit/NSColor_catalog.h>
+#import <AppKit/NSColorSpace.h>
 #import <AppKit/NSImage.h>
 #import <AppKit/NSRaise.h>
 
@@ -317,6 +318,20 @@ NSNotificationName const NSSystemColorsDidChangeNotification = @"NSSystemColorsD
 
 + (NSColor *) controlColor {
     return [NSColor colorWithCatalogName: @"System" colorName: @"controlColor"];
+}
+
+// The user's accent colour. There is no accent setting to follow here, so it
+// is the default one, the system blue (sRGB 0, 122, 255).
++ (NSColor *) controlAccentColor {
+    return [NSColor colorWithSRGBRed: 0.0
+                               green: 122.0 / 255.0
+                                blue: 1.0
+                               alpha: 1.0];
+}
+
+// The blue tint is the default appearance.
++ (NSControlTint) currentControlTint {
+    return NSBlueControlTint;
 }
 
 + (NSColor *) selectedControlColor {
@@ -904,9 +919,9 @@ static void releasePatternInfo(void *info) {
     return nil;
 }
 
+// The same as passing a nil device description.
 - (NSColor *) colorUsingColorSpaceName: (NSColorSpaceName) colorSpace {
-    NSInvalidAbstractInvocation();
-    return nil;
+    return [self colorUsingColorSpaceName: colorSpace device: nil];
 }
 
 - (NSColor *) colorUsingColorSpaceName: (NSColorSpaceName) colorSpace
@@ -914,6 +929,26 @@ static void releasePatternInfo(void *info) {
 {
     NSInvalidAbstractInvocation();
     return nil;
+}
+
+// NSColorSpace wraps a CGColorSpace; the conversion goes to the device space
+// of the same colour model, the closest the named-space conversions offer.
+// nil when the colour cannot be converted.
+- (NSColor *) colorUsingColorSpace: (NSColorSpace *) space {
+    CGColorSpaceRef cgSpace = [space CGColorSpace];
+    if (cgSpace == NULL)
+        return nil;
+
+    switch (CGColorSpaceGetModel(cgSpace)) {
+    case kCGColorSpaceModelRGB:
+        return [self colorUsingColorSpaceName: NSDeviceRGBColorSpace];
+    case kCGColorSpaceModelMonochrome:
+        return [self colorUsingColorSpaceName: NSDeviceWhiteColorSpace];
+    case kCGColorSpaceModelCMYK:
+        return [self colorUsingColorSpaceName: NSDeviceCMYKColorSpace];
+    default:
+        return nil;
+    }
 }
 
 - (NSColor *) blendedColorWithFraction: (CGFloat) fraction

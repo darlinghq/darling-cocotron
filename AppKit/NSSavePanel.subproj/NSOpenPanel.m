@@ -23,6 +23,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @interface NSSavePanel (Private)
 - (void) _setFilename: (NSString *) filename;
+- (NSArray *) _selectedPaths;
+- (void) _setAcceptedPaths: (NSArray *) paths;
 @end
 
 @implementation NSOpenPanel
@@ -91,8 +93,37 @@ static NSOpenPanel *_newPanel = nil;
 }
 
 - (void) _setFilename: (NSString *) filename {
-    [super _setFilename: filename];
-    _filenames = [@[ filename ] retain];
+    [self _setAcceptedPaths: [filename length] > 0 ? @[ filename ] : @[]];
+}
+
+- (void) _setAcceptedPaths: (NSArray *) paths {
+    if (!_allowsMultipleSelection && [paths count] > 1)
+        paths = @[ [paths firstObject] ];
+    @synchronized(self) {
+        NSArray *copy = [paths copy];
+        [_filenames release];
+        _filenames = copy;
+    }
+    [super _setFilename: [paths firstObject]];
+}
+
+// Open accepts only what the panel may choose. With nothing selected, a
+// panel that may choose directories accepts the directory it shows.
+- (NSArray *) _acceptablePaths {
+    NSFileManager *manager = [NSFileManager defaultManager];
+    NSArray *selected = [self _selectedPaths];
+    NSMutableArray *result = [NSMutableArray array];
+    for (NSString *path in selected) {
+        BOOL isDirectory = NO;
+        if (![manager fileExistsAtPath: path isDirectory: &isDirectory])
+            continue;
+        if (isDirectory ? _canChooseDirectories : _canChooseFiles)
+            [result addObject: path];
+    }
+    if ([selected count] == 0 && _canChooseDirectories &&
+        [[self directory] length] > 0)
+        [result addObject: [self directory]];
+    return result;
 }
 
 - (NSInteger) runModalForDirectory: (NSString *) directory
@@ -127,6 +158,8 @@ static NSOpenPanel *_newPanel = nil;
                                                file: [self filename]
                                               types: [self allowedFileTypes]];
     } else {
+        // Like macOS, show the panel centered rather than at the (screen-clamped) origin saved in its nib.
+        [self center];
         res = [NSApp runModalForWindow: self];
         [self close];
     }
