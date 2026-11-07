@@ -60,3 +60,7 @@
 }
 
 @end
+
+// Like the other item views, a stub.
+@implementation NSScrubberImageItemView
+@end

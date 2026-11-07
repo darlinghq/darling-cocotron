@@ -27,3 +27,6 @@
 
 @interface NSScrubberTextItemView : NSScrubberItemView
 @end
+
+@interface NSScrubberImageItemView : NSScrubberItemView
+@end

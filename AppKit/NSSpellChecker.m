@@ -28,6 +28,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Foundation/NSNumber.h>
 #import <Foundation/NSOrthography.h>
 #import <Foundation/NSSpellEngine.h>
+#import <dispatch/dispatch.h>
 
 NSString *const NSSpellCheckerDidChangeAutomaticTextReplacementNotification =
         @"NSSpellCheckerDidChangeAutomaticTextReplacementNotification";
@@ -345,7 +346,7 @@ static NSSpellChecker *shared = nil;
     return results;
 }
 
-#ifdef NS_BLOCKS
+#if defined(NS_BLOCKS) || defined(__BLOCKS__)
 - (NSInteger) requestCheckingOfString: (NSString *) stringToCheck
                                 range: (NSRange) range
                                 types: (NSTextCheckingTypes) checkingTypes
@@ -357,8 +358,32 @@ static NSSpellChecker *shared = nil;
                                       NSOrthography *orthography,
                                       NSInteger wordCount)) completionHandler
 {
-    NSUnimplementedMethod();
-    return 0;
+    static NSInteger lastSequenceNumber = 0;
+    NSInteger sequenceNumber =
+            __atomic_add_fetch(&lastSequenceNumber, 1, __ATOMIC_RELAXED);
+    NSString *string = [[stringToCheck copy] autorelease];
+    NSDictionary *checkingOptions = [[options copy] autorelease];
+
+    // The check runs later, on the main queue, so that the spell engine and
+    // the document state are only ever used from one thread.
+    dispatch_async(dispatch_get_main_queue(), ^{
+        NSOrthography *orthography = nil;
+        NSInteger wordCount = 0;
+        NSArray *results = [self checkString: string
+                                       range: range
+                                       types: checkingTypes
+                                     options: checkingOptions
+                      inSpellDocumentWithTag: tag
+                                 orthography: &orthography
+                                   wordCount: &wordCount];
+
+        if (completionHandler != nil)
+            completionHandler(sequenceNumber,
+                              results ? results : [NSArray array],
+                              orthography, wordCount);
+    });
+
+    return sequenceNumber;
 }
 #endif
 
@@ -515,7 +540,7 @@ static NSSpellChecker *shared = nil;
     return 0;
 }
 
-#ifdef NS_BLOCKS
+#if defined(NS_BLOCKS) || defined(__BLOCKS__)
 - (void) showCorrectionIndicatorOfType: (NSCorrectionIndicatorType) type
                          primaryString: (NSString *) primaryString
                     alternativeStrings: (NSArray *) alternativeStrings
@@ -547,7 +572,7 @@ static NSSpellChecker *shared = nil;
 }
 
 - (void) dismissCorrectionIndicatorForView: (NSView *) view {
-    NSUnimplementedMethod();
+    // No correction indicator is ever shown, so there is none to dismiss.
 }
 
 #pragma mark -

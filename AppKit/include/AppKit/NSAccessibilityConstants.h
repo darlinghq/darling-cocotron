@@ -9,6 +9,7 @@ APPKIT_EXPORT NSString *const NSAccessibilityContentsAttribute;
 APPKIT_EXPORT NSString *const NSAccessibilityDescriptionAttribute;
 APPKIT_EXPORT NSString *const NSAccessibilityEnabledAttribute;
 APPKIT_EXPORT NSString *const NSAccessibilityFocusedAttribute;
+APPKIT_EXPORT NSString *const NSAccessibilityRequiredAttribute;
 APPKIT_EXPORT NSString *const NSAccessibilityHelpAttribute;
 APPKIT_EXPORT NSString *const NSAccessibilityMaxValueAttribute;
 APPKIT_EXPORT NSString *const NSAccessibilityMinValueAttribute;

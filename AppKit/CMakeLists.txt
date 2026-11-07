@@ -234,6 +234,7 @@ set(AppKit_sources
 	NSMenu.subproj/NSMenuWindow.m
 	NSMenu.subproj/NSMenu.m
 	NSMenu.subproj/NSMenuItem.m
+	NSMenuItemBadge.m
 	NSMenu.subproj/NSCarbonMenuImpl.m
 
 	NSPathControl.m
@@ -335,6 +336,8 @@ set(AppKit_sources
 	NSLevelIndicator.m
 	NSDraggingManager.m
 	NSImage.m
+	NSNextStepFrame.m
+	NSPreviewRepresentingActivityItem.m
 
 	NSKeyValueBinding/NSObject+BindingSupport.m
 	NSKeyValueBinding/NSBinder.m
@@ -396,6 +399,7 @@ set(AppKit_sources
 	NSStepper.m
 	NSAccessibility.m
 	NSAppearance.m
+	NSAccessibilityCustomAction.m
 	NSAccessibilityElement.m
 	NSAccessibilityRemoteUIElement.m
 	NSKeyValueBinding.m

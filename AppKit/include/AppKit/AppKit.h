@@ -21,6 +21,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSATSTypesetter.h>
 #import <AppKit/NSAccessibility.h>
+#import <AppKit/NSAccessibilityCustomAction.h>
 #import <AppKit/NSAccessibilityElement.h>
 #import <AppKit/NSActionCell.h>
 #import <AppKit/NSAffineTransform.h>
@@ -102,6 +103,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSMatrix.h>
 #import <AppKit/NSMenu.h>
 #import <AppKit/NSMenuItem.h>
+#import <AppKit/NSMenuItemBadge.h>
 #import <AppKit/NSMovie.h>
 #import <AppKit/NSMovieView.h>
 #import <AppKit/NSMutableParagraphStyle.h>
@@ -153,6 +155,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSSegmentedControl.h>
 #import <AppKit/NSShadow.h>
 #import <AppKit/NSSharingService.h>
+#import <AppKit/NSPreviewRepresentingActivityItem.h>
 #import <AppKit/NSSlider.h>
 #import <AppKit/NSSliderCell.h>
 #import <AppKit/NSSound.h>

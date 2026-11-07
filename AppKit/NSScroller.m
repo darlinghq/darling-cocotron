@@ -27,6 +27,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSScroller.h>
 #import <AppKit/NSWindow.h>
 #import <Foundation/NSKeyedArchiver.h>
+#import <Foundation/NSUserDefaults.h>
 
 @implementation NSScroller
 
@@ -35,7 +36,15 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 + (NSScrollerStyle) preferredScrollerStyle {
-    NSUnimplementedMethod();
+    // The "Show scroll bars" setting. Its automatic choice depends on
+    // whether a trackpad is in use, which is not known here, so it gives
+    // the scrollers a mouse gets.
+    NSString *setting = [[NSUserDefaults standardUserDefaults]
+            stringForKey: @"AppleShowScrollBars"];
+
+    if ([setting isEqualToString: @"WhenScrolling"])
+        return NSScrollerStyleOverlay;
+    return NSScrollerStyleLegacy;
 }
 /* OS X has a global default "AppleScrollBarVariant" with the values: Single,
  DoubleMin, DoubleMax, and DoubleBoth This controls the default position of the

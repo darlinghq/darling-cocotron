@@ -20,6 +20,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSEvent.h>
 #import <AppKit/NSMenu.h>
+#import <AppKit/NSMenu+Private.h>
 #import <AppKit/NSMenuItem.h>
 #import <AppKit/NSMenuView.h>
 #import <AppKit/NSMenuWindow.h>
@@ -491,6 +492,9 @@ BOOL itemIsEnabled(NSMenuItem *item) {
     NSString* copied = [name copy];
     [_name release];
     _name = copied;
+}
+
+- (void) _setHasPadding: (BOOL) hasPadding onEdge: (NSInteger) edge {
 }
 
 - (NSMenu *) _menuWithName: (NSString *) name {
