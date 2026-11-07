@@ -214,6 +214,8 @@ CA_EXPORT NSString *const kCAContentsFormatGray8Uint;
 @property CGFloat rasterizationScale;
 @property BOOL drawsAsynchronously;
 
+// Actions keyed by property or event name; -actionForKey: looks here after
+// the delegate. An NSNull value means no action.
 @property(copy) NSDictionary *actions;
 // Stored; property defaults are not looked up in it yet.
 @property(copy) NSDictionary *style;
@@ -249,8 +251,16 @@ CA_EXPORT NSString *const kCAContentsFormatGray8Uint;
 - (void) removeAnimationForKey: (NSString *) key;
 - (NSArray *) animationKeys;
 
+// The action for key: the first one that the delegate, actions, the style's
+// actions or +defaultActionForKey: provides, else the implicit animation of
+// the property. NSNull from any of these means no action.
 - (id<CAAction>) actionForKey: (NSString *) key;
++ (id<CAAction>) defaultActionForKey: (NSString *) key;
 
+@end
+
+// NSNull in an actions dictionary disables the action for its key.
+@interface NSNull (CAActionAdditions) <CAAction>
 @end
 
 @protocol CALayoutManager <NSObject>

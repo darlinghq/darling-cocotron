@@ -137,10 +137,9 @@ NSString *const kCAContentsFormatGray8Uint = @"Gray8";
     CAAnimation *animation = [self animationForKey: @"position"];
 
     if (animation == nil && ![CATransaction disableActions]) {
-        id action = [self actionForKey: @"position"];
+        id<CAAction> action = [self actionForKey: @"position"];
 
-        if (action != nil)
-            [self addAnimation: action forKey: @"position"];
+        [action runActionForKey: @"position" object: self arguments: nil];
     }
 
     _position = value;
@@ -154,10 +153,9 @@ NSString *const kCAContentsFormatGray8Uint = @"Gray8";
     CAAnimation *animation = [self animationForKey: @"bounds"];
 
     if (animation == nil && ![CATransaction disableActions]) {
-        id action = [self actionForKey: @"bounds"];
+        id<CAAction> action = [self actionForKey: @"bounds"];
 
-        if (action != nil)
-            [self addAnimation: action forKey: @"bounds"];
+        [action runActionForKey: @"bounds" object: self arguments: nil];
     }
 
     BOOL sizeChanged = !CGSizeEqualToSize(_bounds.size, value.size);
@@ -202,10 +200,9 @@ NSString *const kCAContentsFormatGray8Uint = @"Gray8";
     CAAnimation *animation = [self animationForKey: @"opacity"];
 
     if (animation == nil && ![CATransaction disableActions]) {
-        id action = [self actionForKey: @"opacity"];
+        id<CAAction> action = [self actionForKey: @"opacity"];
 
-        if (action != nil)
-            [self addAnimation: action forKey: @"opacity"];
+        [action runActionForKey: @"opacity" object: self arguments: nil];
     }
 
     _opacity = value;
@@ -941,7 +938,37 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
     return [super valueForKey: key];
 }
 
+static id<CAAction> actionInStyle(NSDictionary *style, NSString *key) {
+    for (; style != nil; style = [style objectForKey: @"style"]) {
+        if (![style isKindOfClass: [NSDictionary class]])
+            return nil;
+        id actions = [style objectForKey: @"actions"];
+        id action = [actions isKindOfClass: [NSDictionary class]]
+                        ? [actions objectForKey: key] : nil;
+        if (action != nil)
+            return action;
+    }
+    return nil;
+}
+
++ (id<CAAction>) defaultActionForKey: (NSString *) key {
+    return nil;
+}
+
 - (id<CAAction>) actionForKey: (NSString *) key {
+    id<CAAction> action = nil;
+
+    if ([_delegate respondsToSelector: @selector(actionForLayer:forKey:)])
+        action = [_delegate actionForLayer: self forKey: key];
+    if (action == nil)
+        action = [_actions objectForKey: key];
+    if (action == nil)
+        action = actionInStyle(_style, key);
+    if (action == nil)
+        action = [[self class] defaultActionForKey: key];
+    if (action != nil)
+        return [(id) action isKindOfClass: [NSNull class]] ? nil : action;
+
     CABasicAnimation *basic = [CABasicAnimation animationWithKeyPath: key];
 
     [basic setFromValue: [self valueForKey: key]];
@@ -967,6 +994,16 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
     value = [value retain];
     [_textureContents release];
     _textureContents = value;
+}
+
+@end
+
+@implementation NSNull (CAActionAdditions)
+
+- (void) runActionForKey: (NSString *) event
+                  object: (id) anObject
+               arguments: (NSDictionary *) dict
+{
 }
 
 @end

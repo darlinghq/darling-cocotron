@@ -19,6 +19,7 @@
 
 #import <AppKit/NSRaise.h>
 #import <QuartzCore/CAAnimation.h>
+#import <QuartzCore/CALayer.h>
 #import <QuartzCore/CATransaction.h>
 
 NSString *const kCATransitionFade = @"fade";
@@ -44,6 +45,15 @@ NSString *const kCAAnimationRotateAutoReverse = @"autoReverse";
 
 + animation {
     return [[[self alloc] init] autorelease];
+}
+
+// An animation used as a layer action animates the property it was found for.
+- (void) runActionForKey: (NSString *) event
+                  object: (id) anObject
+               arguments: (NSDictionary *) dict
+{
+    if ([anObject isKindOfClass: [CALayer class]])
+        [(CALayer *) anObject addAnimation: self forKey: event];
 }
 
 - init {
