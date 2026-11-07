@@ -11,6 +11,11 @@
 }
 
 - init {
+    return [self initImplicit: NO];
+}
+
+- initImplicit: (BOOL) implicit {
+    _implicit = implicit;
     _values = [[NSMutableDictionary alloc] init];
     [_values setObject: [NSNumber numberWithFloat: 0.25]
                 forKey: kCATransactionAnimationDuration];
@@ -19,6 +24,18 @@
     // kCATransactionAnimationTimingFunction default is nil
     // kCATransactionCompletionBlock default is nil
     return self;
+}
+
+- (BOOL) isImplicit {
+    return _implicit;
+}
+
+- (BOOL) commitWhenUnnested {
+    return _commitWhenUnnested;
+}
+
+- (void) setCommitWhenUnnested: (BOOL) value {
+    _commitWhenUnnested = value;
 }
 
 - valueForKey: (NSString *) key {
