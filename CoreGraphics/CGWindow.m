@@ -19,6 +19,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <CoreGraphics/CGWindow.h>
 #import <Onyx2D/O2Exceptions.h>
 #include <pthread.h>
+#include <stdlib.h>
 
 const CFStringRef kCGWindowAlpha = CFSTR("kCGWindowAlpha");
 const CFStringRef kCGWindowBounds = CFSTR("kCGWindowBounds");
@@ -28,6 +29,9 @@ const CFStringRef kCGWindowOwnerPID = CFSTR("kCGWindowOwnerPID");
 const CFStringRef kCGWindowNumber = CFSTR("kCGWindowNumber");
 const CFStringRef kCGWindowName = CFSTR("kCGWindowName");
 const CFStringRef kCGWindowIsOnscreen = CFSTR("kCGWindowIsOnscreen");
+const CFStringRef kCGWindowStoreType = CFSTR("kCGWindowStoreType");
+const CFStringRef kCGWindowSharingState = CFSTR("kCGWindowSharingState");
+const CFStringRef kCGWindowMemoryUsage = CFSTR("kCGWindowMemoryUsage");
 
 @implementation CGWindow
 
@@ -138,6 +142,40 @@ static NSInteger nextWindowNumber = 1;
     pthread_mutex_unlock(&windowNumberLock);
 
     return result;
+}
+
++ (NSInteger) windowNumberForPlatformWindowID: (unsigned long) platformWindowID {
+    NSInteger result = 0;
+
+    if (platformWindowID == 0)
+        return 0;
+
+    pthread_mutex_lock(&windowNumberLock);
+    if (windowsByNumber != NULL) {
+        CFIndex count = CFDictionaryGetCount(windowsByNumber);
+        const void **numbers = malloc(count * sizeof(void *));
+        const void **windows = malloc(count * sizeof(void *));
+
+        if (numbers != NULL && windows != NULL) {
+            CFDictionaryGetKeysAndValues(windowsByNumber, numbers, windows);
+            for (CFIndex i = 0; i < count; i++) {
+                if ([(CGWindow *) windows[i] platformWindowID] ==
+                    platformWindowID) {
+                    result = (NSInteger) numbers[i];
+                    break;
+                }
+            }
+        }
+        free(numbers);
+        free(windows);
+    }
+    pthread_mutex_unlock(&windowNumberLock);
+
+    return result;
+}
+
+- (unsigned long) platformWindowID {
+    return 0;
 }
 
 - (NSInteger) windowNumber {

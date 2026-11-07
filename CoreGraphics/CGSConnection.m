@@ -104,6 +104,11 @@
 	NSInvalidAbstractInvocation();
 }
 
+-(NSArray<NSDictionary*>*) copyWindowDescriptions
+{
+	return [[NSArray alloc] init];
+}
+
 -(CGError) destroyWindow:(CGSWindowID)winId
 {
 	CGSWindow* win = [self windowForId: winId];

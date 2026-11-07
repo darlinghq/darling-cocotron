@@ -33,6 +33,22 @@ extern const CFStringRef kCGWindowName;
 extern const CFStringRef kCGWindowIsOnscreen;
 extern const CFStringRef kCGWindowOwnerName;
 extern const CFStringRef kCGWindowOwnerPID;
+extern const CFStringRef kCGWindowNumber;
+extern const CFStringRef kCGWindowStoreType;
+extern const CFStringRef kCGWindowSharingState;
+extern const CFStringRef kCGWindowMemoryUsage;
+
+typedef CF_ENUM(uint32_t, CGWindowSharingType) {
+    kCGWindowSharingNone      = 0,
+    kCGWindowSharingReadOnly  = 1,
+    kCGWindowSharingReadWrite = 2,
+};
+
+typedef CF_ENUM(uint32_t, CGWindowBackingType) {
+    kCGBackingStoreRetained    = 0,
+    kCGBackingStoreNonretained = 1,
+    kCGBackingStoreBuffered    = 2,
+};
 
 #ifdef __OBJC__
 @class CGEvent;
@@ -63,6 +79,7 @@ typedef CF_OPTIONS(uint32_t, CGWindowImageOption) {
 };
 
 typedef uint32_t CGWindowID;
+#define kCGNullWindowID ((CGWindowID) 0)
 
 #ifdef __OBJC__
 @interface CGWindow : NSObject
@@ -98,8 +115,14 @@ typedef uint32_t CGWindowID;
 - (void) showWindowWithoutActivation;
 
 + windowWithWindowNumber: (NSInteger) windowNumber;
+// The number of this process's window whose platform window is the given
+// one, or 0.
++ (NSInteger) windowNumberForPlatformWindowID: (unsigned long) platformWindowID;
 
 - (NSInteger) windowNumber;
+// The window system's identifier of the window (an X11 Window, for example),
+// or 0 if it has none.
+- (unsigned long) platformWindowID;
 
 - (void) placeAboveWindow: (NSInteger) otherNumber;
 - (void) placeBelowWindow: (NSInteger) otherNumber;
@@ -171,6 +194,7 @@ typedef uint32_t CGWindowID;
 
 CF_IMPLICIT_BRIDGING_ENABLED
 
+COREGRAPHICS_EXPORT CFArrayRef CGWindowListCopyWindowInfo(CGWindowListOption option, CGWindowID relativeToWindow);
 COREGRAPHICS_EXPORT CFArrayRef CGWindowListCreate(CGWindowListOption option, CGWindowID relativeToWindow);
 COREGRAPHICS_EXPORT CFArrayRef CGWindowListCreateDescriptionFromArray(CFArrayRef windowArray);
 COREGRAPHICS_EXPORT CGImageRef CGWindowListCreateImageFromArray(CGRect screenBounds, CFArrayRef  windowArray, CGWindowImageOption imageOption);

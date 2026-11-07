@@ -37,6 +37,7 @@
 
 #import "X11Display.h"
 #import "../../CoreGraphics/X11.backend/X11Monitors.h"
+#import "../../CoreGraphics/X11.backend/X11WindowOwner.h"
 #import "X11Fullscreen.h"
 #import "X11InputShape.h"
 #import "X11SubWindow.h"
@@ -324,6 +325,10 @@ static NSData *makeWindowIcon() {
     XClassHint classHint = {.res_name = (char *) name,
                             .res_class = (char *) name};
     XSetClassHint(_display, _window, &classHint);
+
+    // _NET_WM_PID and WM_CLIENT_MACHINE, so that other clients, and other
+    // Darling processes listing windows, know whose window this is.
+    X11WindowOwnerPublish(_display, _window);
 
     // Until the first frame, a translucent window shows its background:
     // make that transparent rather than black.
@@ -715,6 +720,10 @@ static NSData *makeWindowIcon() {
     return _window;
 }
 
+- (unsigned long) platformWindowID {
+    return _window;
+}
+
 - (O2Context *) createCGContextIfNeeded {
     if (_context == nil) {
         O2ColorSpaceRef colorSpace = O2ColorSpaceCreateDeviceRGB();
@@ -880,7 +889,7 @@ static Window supportingWMCheckWindow(Display *display, Window window,
     return result;
 }
 
-static BOOL windowManagerIsRunning(Display *display) {
+BOOL X11WindowManagerIsRunning(Display *display) {
     Atom check = XInternAtom(display, "_NET_SUPPORTING_WM_CHECK", True);
     if (check == None)
         return NO;
@@ -903,7 +912,7 @@ static BOOL windowManagerIsRunning(Display *display) {
         return;
     }
 
-    if (windowManagerIsRunning(_display)) {
+    if (X11WindowManagerIsRunning(_display)) {
         XEvent event;
         memset(&event, 0, sizeof(event));
         event.xclient.type = ClientMessage;

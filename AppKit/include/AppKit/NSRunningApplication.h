@@ -18,6 +18,9 @@
 */
 
 #import <Foundation/NSObject.h>
+#include <sys/types.h>
+
+@class NSString;
 
 typedef enum {
     NSApplicationActivationPolicyRegular,
@@ -25,8 +28,24 @@ typedef enum {
     NSApplicationActivationPolicyProhibited
 } NSApplicationActivationPolicy;
 
-@interface NSRunningApplication : NSObject
+typedef NS_OPTIONS(NSUInteger, NSApplicationActivationOptions) {
+    NSApplicationActivateAllWindows = 1 << 0,
+    NSApplicationActivateIgnoringOtherApps = 1 << 1,
+};
+
+@interface NSRunningApplication : NSObject {
+    pid_t _processIdentifier;
+}
 
 + (NSArray<NSRunningApplication *> *) runningApplicationsWithBundleIdentifier: (NSString *) bundleIdentifier;
++ (instancetype) runningApplicationWithProcessIdentifier: (pid_t) pid;
++ (NSRunningApplication *) currentApplication;
+
+@property(readonly) pid_t processIdentifier;
+@property(readonly, copy) NSString *bundleIdentifier;
+@property(readonly, copy) NSString *localizedName;
+@property(readonly, getter=isTerminated) BOOL terminated;
+
+- (BOOL) activateWithOptions: (NSApplicationActivationOptions) options;
 
 @end

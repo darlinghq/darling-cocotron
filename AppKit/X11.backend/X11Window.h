@@ -87,6 +87,10 @@
 
 @end
 
+// Whether an EWMH window manager is running on the display.
+__attribute__((visibility("hidden"))) BOOL
+X11WindowManagerIsRunning(Display *display);
+
 void CGNativeBorderFrameWidthsForStyle(NSUInteger styleMask, CGFloat *top,
                                        CGFloat *left, CGFloat *bottom,
                                        CGFloat *right);

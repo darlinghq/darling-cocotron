@@ -56,6 +56,7 @@
 -(CGSWindow*) newWindow:(CGSRegionRef)region;
 
 -(void) processPendingEvents;
+-(NSArray<NSDictionary*>*) copyWindowDescriptions;
 
 +(BOOL) isAvailable;
 
