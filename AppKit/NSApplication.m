@@ -988,14 +988,38 @@ NSApplication *NSApp = nil;
     [_windows makeObjectsPerformSelector: @selector(update)];
 }
 
+// Unless the display backend activates the process itself, activating means
+// making a window key again, which asks the platform for input focus: the key
+// window, else the main window, else the frontmost window that can become key.
 - (void) activateIgnoringOtherApps: (BOOL) flag {
     // Without the flag the application may only become active if no other
     // application is, which cannot be determined here, so leave focus alone.
     if (!flag)
         return;
 
-    [_display activateProcessIdentifier:
-                      [[NSProcessInfo processInfo] processIdentifier]];
+    if ([_display activateProcessIdentifier:
+                      [[NSProcessInfo processInfo] processIdentifier]])
+        return;
+
+    NSWindow *window = _keyWindow;
+
+    if (![window isVisible])
+        window = _mainWindow;
+    if (![window isVisible]) {
+        window = nil;
+        for (NSWindow *check in [self orderedWindows]) {
+            if ([check isVisible] && [check canBecomeKeyWindow]) {
+                window = check;
+                break;
+            }
+        }
+    }
+
+    [window makeKeyAndOrderFront: self];
+}
+
+- (void) activate {
+    [self activateIgnoringOtherApps: NO];
 }
 
 - (void) deactivate {
@@ -1242,7 +1266,9 @@ NSApplication *NSApp = nil;
 }
 
 - (void) cancelUserAttentionRequest: (int) requestNumber {
-    NSUnimplementedMethod();
+    // There is only ever one request, so any number cancels it.
+    [_attentionTimer invalidate];
+    _attentionTimer = nil;
 }
 
 - (void) runPageLayout: sender {

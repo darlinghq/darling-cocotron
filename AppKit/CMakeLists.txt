@@ -617,6 +617,7 @@ add_backend(X11
 		QuartzCore
 		# native libraries
                 X11
+		Xext
 		XRandR
 		Xcursor
 		fontconfig

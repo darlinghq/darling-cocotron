@@ -223,6 +223,7 @@ typedef NS_OPTIONS(NSUInteger, NSApplicationPresentationOptions) {
 - (void) updateWindows;
 
 - (void) activateIgnoringOtherApps: (BOOL) flag;
+- (void) activate;
 - (void) deactivate;
 
 - (NSWindow *) modalWindow;

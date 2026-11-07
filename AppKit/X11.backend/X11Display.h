@@ -8,6 +8,7 @@
 
 #import <AppKit/NSDisplay.h>
 #import "../../CoreGraphics/X11.backend/X11Monitors.h"
+#import "X11RelativeMouseGrab.h"
 #import <X11/Xlib.h>
 #import <X11/Xresource.h>
 #import <X11/Xlocale.h>
@@ -43,7 +44,29 @@
     XID _lastClickWindow;
     NSPoint _lastClickPoint;   // Logical points, so the radius is scale-independent.
     X11Cursor *_blankCursor, *_defaultCursor;
-    BOOL _cursorGrabbed;
+    // Relative mouse mode (CGAssociateMouseAndMouseCursorPosition(false)).
+    // _relativeRequested stays set while the application wants it;
+    // _relativeMouse.active only while the pointer grab on _relativeWindow is
+    // held, which losing the focus releases and regaining it retakes.
+    BOOL _relativeRequested;
+    int _relativeRetriesLeft;
+    // Where the frozen cursor was when the grab was released for a reason other
+    // than the application asking (focus loss, reconfiguration), so the next
+    // grab puts it back instead of restarting it at the pointer.
+    BOOL _relativeResumeValid;
+    double _relativeResumeX, _relativeResumeY;
+    Window _relativeWindow;
+    X11RelativeMouse _relativeMouse;
+    // Xwayland forwards a pointer warp to the compositor only while the X
+    // cursor is hidden, so warps are not honoured with a visible cursor there.
+    BOOL _isXwayland;
+    BOOL _cursorHidden;
+    // The pointer as the last MotionNotify reported it, root coordinates.
+    // Valid until an event that may have moved the pointer without one
+    // (crossing, button, key or focus events, a warp, a screen change).
+    BOOL _pointerKnown;
+    int _pointerRootX, _pointerRootY;
+    unsigned int _pointerState;
     KeySym _lastKeySym;
     // The aggregate modifier mask as of the last key event, so a change that
     // no modifier key reported (a modifier released while another app had the
@@ -77,6 +100,11 @@
 #ifdef DARLING
 - (void) processPendingEvents;
 #endif
+// The pointer's position on the default root window and the button and
+// modifier state, from the event stream when it is known, else from the
+// server. Returns NO when the pointer is on another screen (the position is
+// then on that screen's root window).
+- (BOOL) queryPointerRootX: (int *) x y: (int *) y state: (unsigned int *) state;
 
 - (CGFloat) doubleClickInterval;
 - (int) handleError: (XErrorEvent *) errorEvent;
