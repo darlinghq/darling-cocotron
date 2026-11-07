@@ -469,20 +469,17 @@ NSString *const NSAccessibilityContentListSubrole =
 NSString *const NSAccessibilityDefinitionListSubrole =
         @"NSAccessibilityDefinitionListSubrole";
 
-NSString *const NSAccessibilityCancelAction = @"NSAccessibilityCancelAction";
-NSString *const NSAccessibilityConfirmAction = @"NSAccessibilityConfirmAction";
-NSString *const NSAccessibilityDecrementAction =
-        @"NSAccessibilityDecrementAction";
-NSString *const NSAccessibilityDeleteAction = @"NSAccessibilityDeleteAction";
-NSString *const NSAccessibilityIncrementAction =
-        @"NSAccessibilityIncrementAction";
-NSString *const NSAccessibilityPickAction = @"NSAccessibilityPickAction";
-NSString *const NSAccessibilityPressAction = @"NSAccessibilityPressAction";
-NSString *const NSAccessibilityRaiseAction = @"NSAccessibilityRaiseAction";
+NSString *const NSAccessibilityCancelAction = @"AXCancel";
+NSString *const NSAccessibilityConfirmAction = @"AXConfirm";
+NSString *const NSAccessibilityDecrementAction = @"AXDecrement";
+NSString *const NSAccessibilityDeleteAction = @"AXDelete";
+NSString *const NSAccessibilityIncrementAction = @"AXIncrement";
+NSString *const NSAccessibilityPickAction = @"AXPick";
+NSString *const NSAccessibilityPressAction = @"AXPress";
+NSString *const NSAccessibilityRaiseAction = @"AXRaise";
 NSAccessibilityActionName const NSAccessibilityShowAlternateUIAction = @"AXShowAlternateUI";
 NSAccessibilityActionName const NSAccessibilityShowDefaultUIAction = @"AXShowDefaultUI";
-NSString *const NSAccessibilityShowMenuAction =
-        @"NSAccessibilityShowMenuAction";
+NSString *const NSAccessibilityShowMenuAction = @"AXShowMenu";
 
 NSString *const NSAccessibilityMainWindowChangedNotification =
         @"NSAccessibilityMainWindowChangedNotification";
