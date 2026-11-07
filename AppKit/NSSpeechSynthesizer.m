@@ -18,6 +18,7 @@
 */
 
 #import <AppKit/NSSpeechSynthesizer.h>
+#import <Foundation/NSArray.h>
 
 NSVoiceGenderName const NSVoiceGenderFemale = @"VoiceGenderFemale";
 NSVoiceGenderName const NSVoiceGenderMale = @"VoiceGenderMale";
@@ -31,6 +32,20 @@ NSSpeechPropertyKey const NSSpeechPitchBaseProperty = @"pbas";
 NSSpeechPropertyKey const NSSpeechVolumeProperty = @"volm";
 
 @implementation NSSpeechSynthesizer
+
+// There is no speech synthesizer, so there are no voices.
+
++ (NSArray<NSString *> *) availableVoices {
+    return [NSArray array];
+}
+
++ (NSString *) defaultVoice {
+    return nil;
+}
+
++ (NSDictionary<NSVoiceAttributeKey, id> *) attributesForVoice: (NSString *) voice {
+    return nil;
+}
 
 - (NSMethodSignature *)methodSignatureForSelector:(SEL)aSelector
 {

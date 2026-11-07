@@ -38,7 +38,12 @@ APPKIT_EXPORT NSSpeechPropertyKey const NSSpeechRateProperty;
 APPKIT_EXPORT NSSpeechPropertyKey const NSSpeechPitchBaseProperty;
 APPKIT_EXPORT NSSpeechPropertyKey const NSSpeechVolumeProperty;
 
+@class NSArray, NSDictionary;
+
 @interface NSSpeechSynthesizer : NSObject
++ (NSArray<NSString *> *) availableVoices;
++ (NSString *) defaultVoice;
++ (NSDictionary<NSVoiceAttributeKey, id> *) attributesForVoice: (NSString *) voice;
 @end
 
 @protocol NSSpeechSynthesizerDelegate <NSObject>

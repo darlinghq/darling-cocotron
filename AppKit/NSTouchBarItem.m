@@ -27,6 +27,8 @@ NSTouchBarItemIdentifier const NSTouchBarItemIdentifierFlexibleSpace =
         @"NSTouchBarItemIdentifierFlexibleSpace";
 NSTouchBarItemIdentifier const NSTouchBarItemIdentifierOtherItemsProxy =
         @"NSTouchBarItemIdentifierOtherItemsProxy";
+NSTouchBarItemIdentifier const NSTouchBarItemIdentifierCandidateList =
+        @"NSTouchBarItemIdentifierCandidateList";
 NSTouchBarItemIdentifier const NSTouchBarItemIdentifierCharacterPicker =
         @"NSTouchBarItemIdentifierCharacterPicker";
 

@@ -124,7 +124,7 @@ typedef NSInteger NSCorrectionResponse;
                    orthography: (NSOrthography **) orthography
                      wordCount: (NSInteger *) wordCount;
 
-#ifdef NS_BLOCKS
+#if defined(NS_BLOCKS) || defined(__BLOCKS__)
 - (NSInteger) requestCheckingOfString: (NSString *) stringToCheck
                                 range: (NSRange) range
                                 types: (NSTextCheckingTypes) checkingTypes
@@ -181,7 +181,7 @@ typedef NSInteger NSCorrectionResponse;
                inSpellDocumentWithTag: (NSInteger) tag;
 + (BOOL) isAutomaticSpellingCorrectionEnabled;
 
-#ifdef NS_BLOCKS
+#if defined(NS_BLOCKS) || defined(__BLOCKS__)
 - (void) showCorrectionIndicatorOfType: (NSCorrectionIndicatorType) type
                          primaryString: (NSString *) primaryString
                     alternativeStrings: (NSArray *) alternativeStrings
