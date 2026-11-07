@@ -225,6 +225,8 @@ static void reportGLErrors(void) {
 	if (self != nil) {
 		_pixelFormat = MTLPixelFormatBGRA8Unorm;
 		_framebufferOnly = YES;
+		// Unlike other layers, Metal layers are opaque by default.
+		_opaque = YES;
 		_drawableSize = _bounds.size; // TODO: multiply by contentsScale, once we add that to CALayer
 		_displaySyncEnabled = YES;
 		_maximumDrawableCount = 3;
@@ -600,6 +602,12 @@ static void reportGLErrors(void) {
 	glEnable(GL_TEXTURE_2D);
 	glEnableClientState(GL_TEXTURE_COORD_ARRAY);
 	glBindTexture(GL_TEXTURE_2D, _tex);
+
+	// An opaque layer's content has no transparency, whatever alpha the app
+	// rendered into its drawables. Sampling alpha as 1 keeps the compositor's
+	// blending and alpha test from making such pixels see-through or dropping
+	// them.
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_A, [self isOpaque] ? GL_ONE : GL_ALPHA);
 
 	// The texture is stored bottom-up like a CGBitmapContext, and the layer's
 	// origin is its bottom-left corner, so the quad is drawn the same way the
