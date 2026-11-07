@@ -118,6 +118,7 @@ CA_EXPORT NSString *const kCAContentsFormatGray8Uint;
     CGSize _shadowOffset;
     BOOL _hidden;
     id _textureContents;
+    uint32_t _textureSeed;
     BOOL _needsDisplayOnBoundsChange;
     NSString *_name;
     id _layoutManager;

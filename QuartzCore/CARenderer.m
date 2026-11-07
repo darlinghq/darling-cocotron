@@ -1,4 +1,5 @@
 #import <CoreVideo/CoreVideo.h>
+#import <IOSurface/IOSurface.h>
 #import <Onyx2D/O2Surface.h>
 #import <OpenGL/OpenGL.h>
 #import <QuartzCore/CAAnimation.h>
@@ -420,15 +421,56 @@ static void roundedRectOutline(CGRect r, CGFloat radius, GLfloat *xy) {
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 2 * (kRoundedRectPoints + 1));
 }
 
+// Specifies the bound texture from the surface's pixels. Only the 32-bit
+// formats that map directly onto a GL format are drawn; other surfaces are
+// drawn transparent. Returns the seed the uploaded pixels have.
+static uint32_t texImage2DIOSurface(CGLContextObj context,
+                                    IOSurfaceRef surface)
+{
+    GLenum format, type;
+
+    switch (IOSurfaceGetPixelFormat(surface)) {
+    case 'BGRA':
+        format = GL_BGRA;
+        type = GL_UNSIGNED_INT_8_8_8_8_REV;
+        break;
+    case 'RGBA':
+        format = GL_RGBA;
+        type = GL_UNSIGNED_BYTE;
+        break;
+    default:
+        texImage2DTransparent();
+        return IOSurfaceGetSeed(surface);
+    }
+
+    // Keep writers out while the pixels are copied into the texture.
+    uint32_t seed = 0;
+    IOSurfaceLock(surface, kIOSurfaceLockReadOnly, &seed);
+    CGLError error = CGLTexImageIOSurface2D(
+            context, GL_TEXTURE_2D, GL_RGBA8,
+            (GLsizei) IOSurfaceGetWidth(surface),
+            (GLsizei) IOSurfaceGetHeight(surface), format, type, surface, 0);
+    IOSurfaceUnlock(surface, kIOSurfaceLockReadOnly, NULL);
+
+    if (error != kCGLNoError)
+        texImage2DTransparent();
+    return seed;
+}
+
 - (void) _drawContentsOfLayer: (CALayer *) layer
                        bounds: (CGRect) bounds
                       opacity: (CGFloat) opacity
                       flipped: (BOOL) flipped
 {
-    CGImageRef image = (CGImageRef) layer.contents;
+    id contents = layer.contents;
 
-    if (image == NULL)
+    if (contents == nil)
         return;
+
+    // Contents can be a CGImage or an IOSurface.
+    IOSurfaceRef surface = NULL;
+    if (CFGetTypeID((CFTypeRef) contents) == IOSurfaceGetTypeID())
+        surface = (IOSurfaceRef) contents;
 
     NSNumber *textureId = [layer _textureId];
     GLuint texture = [textureId unsignedIntValue];
@@ -436,8 +478,12 @@ static void roundedRectOutline(CGRect r, CGFloat radius, GLfloat *xy) {
     // Upload when the texture object doesn't exist yet (check before binding:
     // glBindTexture creates it) or when the layer got new contents since the
     // last upload (a layer-backed NSView sets a new image on every display).
+    // A surface is drawn by CPU or GPU code that keeps the same object, so
+    // its pixels are uploaded again once its seed has moved on.
     BOOL upload = texture == 0 || glIsTexture(texture) == GL_FALSE ||
-                  [layer _textureContents] != layer.contents;
+                  [layer _textureContents] != contents ||
+                  (surface != NULL &&
+                   IOSurfaceGetSeed(surface) != [layer _textureSeed]);
 
     glEnable(GL_TEXTURE_2D);
     glEnableClientState(GL_TEXTURE_COORD_ARRAY);
@@ -446,8 +492,12 @@ static void roundedRectOutline(CGRect r, CGFloat radius, GLfloat *xy) {
         glBindTexture(GL_TEXTURE_2D, texture);
 
     if (upload) {
-        CATexImage2DCGImage(image);
-        [layer _setTextureContents: layer.contents];
+        if (surface != NULL) {
+            [layer _setTextureSeed: texImage2DIOSurface(_cglContext, surface)];
+        } else {
+            CATexImage2DCGImage((CGImageRef) contents);
+        }
+        [layer _setTextureContents: contents];
 
         GLint minFilter = interpolationFromName(layer.minificationFilter);
         GLint magFilter = interpolationFromName(layer.magnificationFilter);

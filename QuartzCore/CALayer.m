@@ -996,6 +996,14 @@ static id<CAAction> actionInStyle(NSDictionary *style, NSString *key) {
     _textureContents = value;
 }
 
+- (uint32_t) _textureSeed {
+    return _textureSeed;
+}
+
+- (void) _setTextureSeed: (uint32_t) value {
+    _textureSeed = value;
+}
+
 @end
 
 @implementation NSNull (CAActionAdditions)

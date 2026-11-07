@@ -27,4 +27,7 @@
 // The contents object last uploaded to the layer's texture.
 - (id) _textureContents;
 - (void) _setTextureContents: (id) value;
+// The seed of the IOSurface contents at their last upload.
+- (uint32_t) _textureSeed;
+- (void) _setTextureSeed: (uint32_t) value;
 @end
