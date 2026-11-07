@@ -18,6 +18,8 @@
  */
 
 #import <QuartzCore/CALayer.h>
+#import <QuartzCore/CALayerContext.h>
+#import <QuartzCore/CARenderer.h>
 
 @interface CALayer (Internal)
 - (CALayerContext *) _context;
@@ -36,4 +38,25 @@
 // Return YES if this drew the layer's content, which suppresses that path: it
 // uploads into -_textureId, the very texture such a layer draws from.
 - (BOOL) _drawLayerContents: (CGRect) bounds opacity: (CGFloat) opacity;
+// What CARenderer draws as the layer's contents, and where. The default is
+// -contents across the bounds; *rect comes in as (0, 0, bounds size), in the
+// layer's own coordinates. A CALayerHost draws the hosted context's frame
+// instead, at that frame's size.
+- (id) _contentsForRendering: (CGRect *) rect;
+@end
+
+@interface CALayerContext (Internal)
+// Draws the tree into the framebuffer bound to the current context, which is
+// width x height pixels. With topRowFirst, the picture is drawn upside down,
+// so that reading the framebuffer back from row 0 gives its top row first.
+- (void) _drawLayerTree: (CALayer *) layer
+                  width: (GLint) width
+                 height: (GLint) height
+            topRowFirst: (BOOL) topRowFirst;
+@end
+
+@interface CARenderer (Internal)
+// Clear to transparent rather than opaque black before drawing, for frames
+// that are composited again elsewhere.
+- (void) _setClearsToTransparent: (BOOL) value;
 @end
