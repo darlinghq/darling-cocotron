@@ -76,14 +76,6 @@ static NSMutableArray *commitHandlers(CATransactionPhase phase) {
     return [phases objectAtIndex: phase];
 }
 
-static BOOL haveCommitHandlers(void) {
-    for (int i = 0; i < COMMIT_PHASE_COUNT; i++) {
-        if ([commitHandlers(i) count] != 0)
-            return YES;
-    }
-    return NO;
-}
-
 // Runs the handlers of one phase. They are taken out first, so a handler
 // that adds another one for the same phase defers it to the next commit.
 static void runCommitHandlers(CATransactionPhase phase) {
@@ -101,14 +93,61 @@ static void runCommitHandlers(CATransactionPhase phase) {
     [batch release];
 }
 
+// The completion blocks of the transactions committed so far in the current
+// outermost transaction, in commit order.
+static NSMutableArray *pendingCompletionBlocks(void) {
+    NSMutableDictionary *shared = [NSCurrentThread() sharedDictionary];
+    NSMutableArray *blocks =
+            [shared objectForKey: @"CATransactionCompletionBlocks"];
+
+    if (blocks == nil) {
+        blocks = [NSMutableArray array];
+        [shared setObject: blocks forKey: @"CATransactionCompletionBlocks"];
+    }
+    return blocks;
+}
+
+// QUIRK: completion blocks run after +commit has returned, on the main run
+// loop's next pass, after every PostCommit handler of that commit. The
+// public documentation only says the block is called on the main thread
+// once the transaction's animations are done; when it runs relative to
+// +commit and the commit handler SPI is undocumented. Evidence: macOS
+// 27.0.1 black-box, tier 2: a commit with completion C and a PostCommit
+// handler B logs "B" when +commit returns and "BC" after one run loop turn.
+// Nothing here tracks animations, so this is the whole delay.
+// Test: quartzcore_commit_handlers (impl/P114-tests), "completion block
+// runs after +commit returns".
+static void scheduleCompletionBlocks(void) {
+    NSMutableArray *blocks = pendingCompletionBlocks();
+
+    if ([blocks count] == 0)
+        return;
+
+    NSArray *batch = [blocks copy];
+    [blocks removeAllObjects];
+
+    CFRunLoopRef mainLoop = CFRunLoopGetMain();
+    CFRunLoopPerformBlock(mainLoop, kCFRunLoopCommonModes, ^{
+        for (void (^block)(void) in batch)
+            block();
+        [batch release];
+    });
+    CFRunLoopWakeUp(mainLoop);
+}
+
 + (void) addCommitHandler: (void (^)(void)) handler
                  forPhase: (CATransactionPhase) phase
 {
     if (handler == nil || phase > kCATransactionPhasePostCommit)
         return;
 
-    createImplicitTransactionGroupIfNeeded();
-
+    // QUIRK: adding a handler does not start an implicit transaction; with
+    // no transaction open it waits for the next commit. The SPI is
+    // undocumented. Evidence: macOS 27.0.1 black-box, tier 2: a PostCommit
+    // handler added outside any transaction had not run after the following
+    // run loop turn.
+    // Test: quartzcore_commit_handlers (impl/P114-tests), "a handler added
+    // outside a transaction waits for the next commit".
     void (^copy)(void) = Block_copy(handler);
     [commitHandlers(phase) addObject: copy];
     Block_release(copy);
@@ -196,11 +235,10 @@ static void runCommitHandlers(CATransactionPhase phase) {
     void (^completion)(void) =
             [group valueForKey: kCATransactionCompletionBlock];
 
-    // Nothing here tracks when the group's animations end, so the completion
-    // block runs once the outermost transaction has been committed.
+    // A nested transaction's completion block waits for the outermost
+    // commit too.
     if (completion != nil)
-        [self addCommitHandler: completion
-                      forPhase: kCATransactionPhasePostCommit];
+        [pendingCompletionBlocks() addObject: completion];
 
     if ([stack count] > 1) {
         [stack removeLastObject];
@@ -223,11 +261,15 @@ static void runCommitHandlers(CATransactionPhase phase) {
     [group release];
 
     runCommitHandlers(kCATransactionPhasePostCommit);
+    scheduleCompletionBlocks();
 
-    // Handlers added for phases this commit had already passed run in the
-    // next one.
-    if (haveCommitHandlers())
-        createImplicitTransactionGroupIfNeeded();
+    // QUIRK: a handler added for a phase this commit had already passed
+    // stays pending until some later commit; no implicit transaction is
+    // started for it. The SPI is undocumented. Evidence: macOS 27.0.1
+    // black-box, tier 2: a PreLayout handler added from a PreCommit handler
+    // had not run after the following run loop turn.
+    // Test: quartzcore_commit_handlers (impl/P114-tests), "a handler added
+    // for a passed phase waits for the next commit".
 }
 
 + (void) flush {
