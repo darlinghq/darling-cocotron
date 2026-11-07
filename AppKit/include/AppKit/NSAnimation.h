@@ -46,7 +46,7 @@ APPKIT_EXPORT NSString *NSAnimationTriggerOrderOut;
 
 + defaultAnimationForKey: (NSString *) key;
 
-- animator;
+- (instancetype) animator;
 - (NSDictionary *) animations;
 
 - animationForKey: (NSString *) key;

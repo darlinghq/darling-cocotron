@@ -110,6 +110,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 // bottom-left corner, y up, like screen and window frames.
 - (NSPoint) mouseLocation;
 - (NSUInteger) currentModifierFlags;
+// The buttons held down, as +[NSEvent pressedMouseButtons] reports them: bit 0
+// is the left button, bit 1 the right one and bit n the button numbered n.
+- (NSUInteger) pressedMouseButtons;
 
 - (NSArray *) orderedWindowNumbers;
 

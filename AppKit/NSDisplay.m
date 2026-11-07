@@ -360,6 +360,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return 0;
 }
 
+- (NSUInteger) pressedMouseButtons {
+    return 0;
+}
+
 - (NSArray *) orderedWindowNumbers {
     NSInvalidAbstractInvocation();
     return nil;

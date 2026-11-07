@@ -30,6 +30,9 @@
 
 @implementation NSTouchBar
 
+@synthesize delegate = _delegate;
+@synthesize defaultItemIdentifiers = _defaultItemIdentifiers;
+
 - (NSMethodSignature *)methodSignatureForSelector:(SEL)aSelector
 {
     return [NSMethodSignature signatureWithObjCTypes: "v@:"];
@@ -38,6 +41,32 @@
 - (void)forwardInvocation:(NSInvocation *)anInvocation
 {
     NSLog(@"Stub called: %@ in %@", NSStringFromSelector([anInvocation selector]), [self class]);
+}
+
+- (void) dealloc {
+    [_defaultItemIdentifiers release];
+    [_items release];
+    [super dealloc];
+}
+
+// Without Touch Bar hardware nothing customizes the bar, so it shows the defaults.
+- (NSArray *) itemIdentifiers {
+    return _defaultItemIdentifiers ? _defaultItemIdentifiers : [NSArray array];
+}
+
+- (NSTouchBarItem *) itemForIdentifier: (NSTouchBarItemIdentifier) identifier {
+    NSTouchBarItem *item = [_items objectForKey: identifier];
+    if (item == nil &&
+        [_delegate respondsToSelector: @selector(touchBar:makeItemForIdentifier:)])
+    {
+        item = [_delegate touchBar: self makeItemForIdentifier: identifier];
+        if (item != nil) {
+            if (_items == nil)
+                _items = [[NSMutableDictionary alloc] init];
+            [_items setObject: item forKey: identifier];
+        }
+    }
+    return item;
 }
 
 @end

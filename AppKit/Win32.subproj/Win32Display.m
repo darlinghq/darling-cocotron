@@ -1281,7 +1281,8 @@ static HWND findWindowForScrollWheel(POINT point) {
     if (window == nil) // not one of our events
         return NO;
 
-    if (msg.message == WM_LBUTTONDBLCLK || msg.message == WM_RBUTTONDBLCLK) {
+    if (msg.message == WM_LBUTTONDBLCLK || msg.message == WM_RBUTTONDBLCLK ||
+        msg.message == WM_MBUTTONDBLCLK) {
         if (msg.lParam == _lastPosition &&
             _lastTickCount + GetDoubleClickTime() >= tickCount)
             _clickCount = lastClickCount + 1;
@@ -1289,7 +1290,8 @@ static HWND findWindowForScrollWheel(POINT point) {
             _clickCount = 2;
         _lastTickCount = tickCount;
         _lastPosition = msg.lParam;
-    } else if (msg.message == WM_LBUTTONDOWN || msg.message == WM_RBUTTONDOWN) {
+    } else if (msg.message == WM_LBUTTONDOWN || msg.message == WM_RBUTTONDOWN ||
+               msg.message == WM_MBUTTONDOWN) {
         if (msg.lParam == _lastPosition &&
             _lastTickCount + GetDoubleClickTime() >= tickCount)
             _clickCount = lastClickCount + 1;
@@ -1319,6 +1321,8 @@ static HWND findWindowForScrollWheel(POINT point) {
             type = NSLeftMouseDragged;
         else if (msg.wParam & MK_RBUTTON)
             type = NSRightMouseDragged;
+        else if (msg.wParam & MK_MBUTTON)
+            type = NSOtherMouseDragged;
         else {
             ReleaseCapture();
             if (window != nil && [window acceptsMouseMovedEvents]) {
@@ -1347,6 +1351,17 @@ static HWND findWindowForScrollWheel(POINT point) {
 
     case WM_RBUTTONUP:
         type = NSRightMouseUp;
+        break;
+
+    case WM_MBUTTONDOWN:
+    case WM_MBUTTONDBLCLK:
+        type = NSOtherMouseDown;
+        SetCapture([platformWindow windowHandle]);
+        break;
+
+    case WM_MBUTTONUP:
+        type = NSOtherMouseUp;
+        ReleaseCapture();
         break;
 
     case WM_MOUSEWHEEL:
@@ -1417,9 +1432,12 @@ static HWND findWindowForScrollWheel(POINT point) {
     case NSLeftMouseUp:
     case NSRightMouseDown:
     case NSRightMouseUp:
+    case NSOtherMouseDown:
+    case NSOtherMouseUp:
     case NSMouseMoved:
     case NSLeftMouseDragged:
     case NSRightMouseDragged:
+    case NSOtherMouseDragged:
     case NSMouseEntered:
     case NSMouseExited:
         return [self postMouseMSG: msg

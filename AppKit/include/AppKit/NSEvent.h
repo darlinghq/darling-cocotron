@@ -20,6 +20,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/AppKitExport.h>
 #import <Foundation/Foundation.h>
+#import <CoreGraphics/CGEventTypes.h>
 
 @class NSWindow, NSGraphicsContext, NSTrackingArea;
 
@@ -84,6 +85,9 @@ typedef NS_ENUM(NSUInteger, NSEventType) {
     NSEventTypeOtherMouseUp = 26,
     NSOtherMouseUp = 26,
 
+    NSEventTypeOtherMouseDragged = 27,
+    NSOtherMouseDragged = 27,
+
     NSAppKitSystem = 100,
 
     NSPlatformSpecific = 29,
@@ -108,6 +112,9 @@ typedef NS_OPTIONS(unsigned long long, NSEventMask) {
     NSScrollWheelMask = 1 << NSScrollWheel,
     NSApplicationDefinedMask = 1 << NSApplicationDefined,
     NSAppKitDefinedMask = 1 << NSAppKitDefined,
+    NSOtherMouseDownMask = 1 << NSOtherMouseDown,
+    NSOtherMouseUpMask = 1 << NSOtherMouseUp,
+    NSOtherMouseDraggedMask = 1 << NSOtherMouseDragged,
     NSAnyEventMask = 0xffffffff,
 
     NSPlatformSpecificDisplayMask = 1 << NSPlatformSpecificDisplayEvent,
@@ -202,6 +209,30 @@ enum : unsigned int {
 
 enum { NSApplicationActivated = 0, NSApplicationDeactivated = 1 };
 
+typedef NS_ENUM(short, NSEventSubtype) {
+    NSEventSubtypeMouseEvent = 0,
+    NSEventSubtypeTabletPoint = 1,
+    NSEventSubtypeTabletProximity = 2,
+    NSEventSubtypeTouch = 3,
+};
+
+enum {
+    NSMouseEventSubtype = NSEventSubtypeMouseEvent,
+    NSTabletPointEventSubtype = NSEventSubtypeTabletPoint,
+    NSTabletProximityEventSubtype = NSEventSubtypeTabletProximity,
+    NSTouchEventSubtype = NSEventSubtypeTouch,
+};
+
+typedef NS_OPTIONS(NSUInteger, NSEventPhase) {
+    NSEventPhaseNone = 0,
+    NSEventPhaseBegan = 0x1 << 0,
+    NSEventPhaseStationary = 0x1 << 1,
+    NSEventPhaseChanged = 0x1 << 2,
+    NSEventPhaseEnded = 0x1 << 3,
+    NSEventPhaseCancelled = 0x1 << 4,
+    NSEventPhaseMayBegin = 0x1 << 5,
+};
+
 @interface NSEvent : NSObject {
     NSEventType _type;
     NSTimeInterval _timestamp;
@@ -212,6 +243,11 @@ enum { NSApplicationActivated = 0, NSApplicationDeactivated = 1 };
 
 + (NSPoint) mouseLocation;
 + (NSEventModifierFlags) modifierFlags;
++ (NSUInteger) pressedMouseButtons;
+
++ (id) addLocalMonitorForEventsMatchingMask: (NSEventMask) mask
+                                    handler: (NSEvent * _Nullable (^)(NSEvent *event)) block;
++ (void) removeMonitor: (id) eventMonitor;
 
 - (instancetype) initWithType: (NSEventType) type
                      location: (NSPoint) location
@@ -286,6 +322,15 @@ enum { NSApplicationActivated = 0, NSApplicationDeactivated = 1 };
 - (CGFloat) deltaX;
 - (CGFloat) deltaY;
 - (CGFloat) deltaZ;
+
+- (NSEventPhase) phase;
+- (NSEventPhase) momentumPhase;
+- (BOOL) hasPreciseScrollingDeltas;
+- (CGFloat) scrollingDeltaX;
+- (CGFloat) scrollingDeltaY;
+- (BOOL) isDirectionInvertedFromDevice;
+
+- (CGEventRef) CGEvent;
 
 - (NSString *) characters;
 - (NSString *) charactersIgnoringModifiers;

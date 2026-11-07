@@ -21,7 +21,14 @@
 #import <AppKit/NSTouchBarItem.h>
 #import <Foundation/Foundation.h>
 
-@interface NSCustomTouchBarItem : NSTouchBarItem
+@class NSView;
+
+@interface NSCustomTouchBarItem : NSTouchBarItem {
+    NSView *_view;
+    NSString *_customizationLabel;
+}
+@property(retain) NSView *view;
+@property(copy) NSString *customizationLabel;
 @end
 
 // Undocumented, used by Xcode

@@ -45,6 +45,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <objc/message.h>
 #import <pthread.h>
 
+// Runs the +[NSEvent addLocalMonitorForEventsMatchingMask:handler:] handlers.
+extern NSEvent *NSEventApplyLocalMonitors(NSEvent *event);
+
 const NSRunLoopMode NSModalPanelRunLoopMode = @"NSModalPanelRunLoopMode";
 const NSRunLoopMode NSEventTrackingRunLoopMode = @"NSEventTrackingRunLoopMode";
 
@@ -771,6 +774,12 @@ NSApplication *NSApp = nil;
 }
 
 - (void) sendEvent: (NSEvent *) event {
+    // Local monitors see every event dispatched here, and may replace it or
+    // swallow it by returning nil.
+    event = NSEventApplyLocalMonitors(event);
+    if (event == nil)
+        return;
+
     if ([event type] == NSKeyDown) {
         unsigned modifierFlags = [event modifierFlags];
 
