@@ -5,6 +5,7 @@
 // The RandR part runs on a real X server; use tests/x11-monitors.sh, which starts its own Xvfb.
 // Build: cc x11-monitors.c -lX11 -lXrandr
 #include "../CoreGraphics/X11.backend/X11Monitors.h"
+#include "../CoreGraphics/CGDisplayGeometry.h"
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -151,7 +152,9 @@ static void conventionFor(X11Frame primary, X11Frame monitor, const char *name) 
     /* NSScreen.frame: Cocoa, y up from the main monitor's bottom-left corner. */
     X11Frame cocoa = X11FrameFromRoot(primary, monitor);
     /* CGDisplayBounds: the same frame flipped against the main monitor's height (CGDirectDisplay.m). */
-    X11Point cgOrigin = X11FlipY(primary.height, (X11Point){cocoa.x, cocoa.y + cocoa.height});
+    CGDisplayGeometryPoint flippedOrigin =
+            CGDisplayGeometryFlip(primary.height, (CGDisplayGeometryPoint){cocoa.x, cocoa.y + cocoa.height});
+    X11Point cgOrigin = {flippedOrigin.x, flippedOrigin.y};
     CHECK(near(cgOrigin.x, monitor.x - primary.x) && near(cgOrigin.y, monitor.y - primary.y),
           "%s: CG bounds origin %g,%g is not the root corner minus the main monitor's origin", name, cgOrigin.x,
           cgOrigin.y);
@@ -166,7 +169,7 @@ static void conventionFor(X11Frame primary, X11Frame monitor, const char *name) 
     CHECK(near(cocoaPointer.x, cocoa.x) && near(cocoaPointer.y, cocoa.y + cocoa.height),
           "%s: +[NSEvent mouseLocation] %g,%g is not the top-left of NSScreen.frame", name, cocoaPointer.x,
           cocoaPointer.y);
-    X11Point flipped = X11FlipY(primary.height, cocoaPointer);
+    CGDisplayGeometryPoint flipped = CGDisplayGeometryFlip(primary.height, (CGDisplayGeometryPoint){cocoaPointer.x, cocoaPointer.y});
     CHECK(near(flipped.x, cgPointer.x) && near(flipped.y, cgPointer.y), "%s: Cocoa and CG pointers are one flip apart",
           name);
 
@@ -176,7 +179,8 @@ static void conventionFor(X11Frame primary, X11Frame monitor, const char *name) 
           name);
     back = X11PointToRoot(primary, cocoaPointer);
     CHECK(near(back.x, root.x) && near(back.y, root.y), "%s: Cocoa pointer round trip", name);
-    back = X11CGPointToRoot(primary, X11FlipY(primary.height, cocoaPointer));
+    CGDisplayGeometryPoint viaCG = CGDisplayGeometryFlip(primary.height, (CGDisplayGeometryPoint){cocoaPointer.x, cocoaPointer.y});
+    back = X11CGPointToRoot(primary, (X11Point){viaCG.x, viaCG.y});
     CHECK(near(back.x, root.x) && near(back.y, root.y), "%s: warp to the Cocoa pointer through the CG flip", name);
 }
 

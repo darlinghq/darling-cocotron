@@ -58,6 +58,10 @@
     XIC _xic;
     // YES while X11Display delivers FocusIn for this window (see -makeKey).
     BOOL _receivingFocus;
+    // -isMiniaturized as last read from _NET_WM_STATE; PropertyNotify on that
+    // property, mapping and unmapping make it read again.
+    BOOL _miniaturizedKnown;
+    BOOL _miniaturized;
 }
 
 + (void) removeDecorationForWindow: (Window) w onDisplay: (Display *) dpy;
