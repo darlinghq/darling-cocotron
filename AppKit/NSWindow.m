@@ -3484,7 +3484,10 @@ static BOOL _allowsAutomaticWindowTabbing;
 }
 
 - (CGSubWindow *) _createSubWindowWithFrame: (CGRect) frame {
-    return [_platformWindow createSubWindowWithFrame: frame];
+    // A view can get a layer or an OpenGL context before the window is first
+    // shown, which is when the platform window is otherwise created. The
+    // subwindow needs its parent, so create the platform window now.
+    return [[self platformWindow] createSubWindowWithFrame: frame];
 }
 
 + (BOOL) allowsAutomaticWindowTabbing {
