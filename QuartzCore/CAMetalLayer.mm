@@ -448,6 +448,22 @@ static void reportGLErrors(void) {
 	[_drawableCondition unlock];
 }
 
+// Creates the texture the compositor draws the layer from, in the current GL
+// context.
+- (void)createRenderTexture
+{
+	reportGLErrors();
+	glCreateTextures(GL_TEXTURE_2D, 1, &_tex);
+	reportGLErrors();
+	glTextureStorage2D(_tex, 1, GL_RGBA8, _drawableSize.width, _drawableSize.height);
+	reportGLErrors();
+	glTextureParameteri(_tex, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTextureParameteri(_tex, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTextureParameteri(_tex, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTextureParameteri(_tex, GL_TEXTURE_WRAP_T, GL_REPEAT);
+	reportGLErrors();
+}
+
 - (void)recreateDrawables
 {
 	[_drawableCondition lock];
@@ -473,7 +489,7 @@ static void reportGLErrors(void) {
 	}
 	_usableDrawablesBitmap = 0;
 
-	if (!_device || !_context || _drawableSize.width == 0 || _drawableSize.height == 0) {
+	if (!_device || !_context.glContext || _drawableSize.width == 0 || _drawableSize.height == 0) {
 		// can't create new drawables
 		[_drawableCondition unlock];
 		return;
@@ -515,16 +531,7 @@ static void reportGLErrors(void) {
 		if (_tex != 0) {
 			reportGLErrors();
 			glDeleteTextures(1, &_tex);
-			reportGLErrors();
-			glCreateTextures(GL_TEXTURE_2D, 1, &_tex);
-			reportGLErrors();
-			glTextureStorage2D(_tex, 1, GL_RGBA8, _drawableSize.width, _drawableSize.height);
-			reportGLErrors();
-			glTextureParameteri(_tex, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-			glTextureParameteri(_tex, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-			glTextureParameteri(_tex, GL_TEXTURE_WRAP_S, GL_REPEAT);
-			glTextureParameteri(_tex, GL_TEXTURE_WRAP_T, GL_REPEAT);
-			reportGLErrors();
+			[self createRenderTexture];
 		}
 	}
 
@@ -646,26 +653,42 @@ static void reportGLErrors(void) {
 
 - (void)_setContext: (CALayerContext*)context
 {
+	CALayerContext* previous = _context;
+
 	[super _setContext: context];
 
-	if (_tex == 0) {
-		// create our textures now using the context's CGLContext
-		CGLContextObj prev = CGLGetCurrentContext();
-		CGLSetCurrentContext(context.glContext);
-
-		reportGLErrors();
-		glCreateTextures(GL_TEXTURE_2D, 1, &_tex);
-		reportGLErrors();
-		glTextureStorage2D(_tex, 1, GL_RGBA8, _drawableSize.width, _drawableSize.height);
-		reportGLErrors();
-		glTextureParameteri(_tex, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-		glTextureParameteri(_tex, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-		glTextureParameteri(_tex, GL_TEXTURE_WRAP_S, GL_REPEAT);
-		glTextureParameteri(_tex, GL_TEXTURE_WRAP_T, GL_REPEAT);
-		reportGLErrors();
-
-		CGLSetCurrentContext(prev);
+	// Sublayer changes set the same context again; keep the drawables then.
+	if (context == previous) {
+		return;
 	}
+
+	// The render texture and the drawables' GL objects live in the previous
+	// context, so they cannot be used in the new one. Release them with that
+	// context current.
+	CGLContextObj prev = CGLGetCurrentContext();
+	if (previous.glContext) {
+		CGLSetCurrentContext(previous.glContext);
+		if (_tex != 0) {
+			glDeleteTextures(1, &_tex);
+		}
+	}
+	_tex = 0;
+
+	// Drop the old drawables and, once there is a GL context, make new ones in
+	// it. A layer is usually configured (device, drawableSize) before it is put
+	// in a window, and then this is the first point where its drawables can
+	// exist.
+	[self recreateDrawables];
+	CGLSetCurrentContext(prev);
+
+	if (!context.glContext) {
+		return;
+	}
+
+	// create our textures now using the context's CGLContext
+	CGLSetCurrentContext(context.glContext);
+	[self createRenderTexture];
+	CGLSetCurrentContext(prev);
 }
 
 #else
