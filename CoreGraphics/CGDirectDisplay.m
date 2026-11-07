@@ -25,6 +25,7 @@
 #import <IOKit/graphics/IOGraphicsLib.h>
 #import <IOKit/graphics/IOGraphicsTypes.h>
 #include <dlfcn.h>
+#include <dispatch/dispatch.h>
 
 // not sure what type or value this has
 unsigned int kCGDisplayPixelHeight = kCGDisplayHeight;
@@ -623,4 +624,85 @@ CFDictionaryRef CGDisplayCurrentMode(CGDirectDisplayID display) {
 
 size_t CGDisplayModeGetPixelWidth(CGDisplayModeRef mode) {
     return 0;
+}
+
+// BuiltinDisplay (org.darlinghq.platform): whether the main display is reported as the built-in
+// panel. X11 has no reliable notion of a built-in display, so by default none is, as on a Mac
+// laptop running closed with external displays. Read once per process.
+static bool mainDisplayIsBuiltin(void) {
+    static dispatch_once_t once;
+    static bool builtin = false;
+
+    dispatch_once(&once, ^{
+        CFPropertyListRef value = CFPreferencesCopyValue(
+            CFSTR("BuiltinDisplay"), CFSTR("org.darlinghq.platform"),
+            kCFPreferencesAnyUser, kCFPreferencesCurrentHost);
+        if (!value)
+            return;
+        if (CFGetTypeID(value) == CFBooleanGetTypeID()) {
+            builtin = CFBooleanGetValue((CFBooleanRef) value);
+        } else if (CFGetTypeID(value) == CFNumberGetTypeID()) {
+            int number = 0;
+            builtin = CFNumberGetValue((CFNumberRef) value, kCFNumberIntType,
+                                       &number) &&
+                      number != 0;
+        }
+        CFRelease(value);
+    });
+
+    return builtin;
+}
+
+boolean_t CGDisplayIsBuiltin(CGDirectDisplayID display) {
+    // A Mac has at most one built-in display.
+    return display != kCGNullDirectDisplay && display == CGMainDisplayID() &&
+           mainDisplayIsBuiltin();
+}
+
+double CGDisplayRotation(CGDirectDisplayID display) {
+    // The backends present every display unrotated.
+    return 0.0;
+}
+
+CGColorSpaceRef CGDisplayCopyColorSpace(CGDirectDisplayID display) {
+    return CGColorSpaceCreateDeviceRGB();
+}
+
+CGImageRef CGDisplayCreateImage(CGDirectDisplayID displayID) {
+    // Screen capture is not implemented; the function may return NULL.
+    return NULL;
+}
+
+bool CGDisplayUsesForceToGray(void) {
+    // Displays are never forced to grayscale.
+    return false;
+}
+
+bool CGPreflightScreenCaptureAccess(void) {
+    // Without screen capture, access is never granted.
+    return false;
+}
+
+bool CGRequestScreenCaptureAccess(void) {
+    return false;
+}
+
+id CGDirectDisplayCopyCurrentMetalDevice(CGDirectDisplayID displayID) {
+    NSDisplay *display = currentDisplay();
+    if (!display || !screenForDisplayID([display screens], displayID))
+        return nil;
+
+    // Every display is driven by the system default Metal device. CoreGraphics
+    // does not link Metal, so look it up at run time.
+    typedef id (*CreateDeviceFunction)(void);
+    CreateDeviceFunction create = (CreateDeviceFunction) dlsym(
+        RTLD_DEFAULT, "MTLCreateSystemDefaultDevice");
+    if (!create) {
+        void *metal = dlopen("/System/Library/Frameworks/Metal.framework/Metal",
+                             RTLD_LAZY | RTLD_GLOBAL);
+        if (metal)
+            create = (CreateDeviceFunction) dlsym(
+                metal, "MTLCreateSystemDefaultDevice");
+    }
+    return create ? create() : nil;
 }

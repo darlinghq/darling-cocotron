@@ -2,6 +2,8 @@
 #import <CoreGraphics/CGError.h>
 #import <CoreGraphics/CGGeometry.h>
 #import <CoreGraphics/CoreGraphicsExport.h>
+#import <CoreGraphics/CGColorSpace.h>
+#import <CoreGraphics/CGImage.h>
 #import <mach/boolean.h>
 
 typedef uint32_t CGDirectDisplayID;
@@ -74,6 +76,17 @@ COREGRAPHICS_EXPORT CGError CGDisplaySwitchToMode(CGDirectDisplayID display,
                                                   CFDictionaryRef mode);
 COREGRAPHICS_EXPORT size_t CGDisplayModeGetPixelWidth(CGDisplayModeRef mode);
 COREGRAPHICS_EXPORT CGSize CGDisplayScreenSize(CGDirectDisplayID display);
+COREGRAPHICS_EXPORT boolean_t CGDisplayIsBuiltin(CGDirectDisplayID display);
+COREGRAPHICS_EXPORT double CGDisplayRotation(CGDirectDisplayID display);
+COREGRAPHICS_EXPORT CGColorSpaceRef CGDisplayCopyColorSpace(CGDirectDisplayID display);
+COREGRAPHICS_EXPORT CGImageRef CGDisplayCreateImage(CGDirectDisplayID displayID);
+COREGRAPHICS_EXPORT bool CGDisplayUsesForceToGray(void);
+COREGRAPHICS_EXPORT bool CGPreflightScreenCaptureAccess(void);
+COREGRAPHICS_EXPORT bool CGRequestScreenCaptureAccess(void);
+#ifdef __OBJC__
+// Returns a retained id<MTLDevice>.
+COREGRAPHICS_EXPORT id CGDirectDisplayCopyCurrentMetalDevice(CGDirectDisplayID display);
+#endif
 COREGRAPHICS_EXPORT CGRect CGDisplayBounds(CGDirectDisplayID display);
 COREGRAPHICS_EXPORT CGError CGDisplayCapture(CGDirectDisplayID display);
 COREGRAPHICS_EXPORT CGError CGDisplayRelease(CGDirectDisplayID display);
