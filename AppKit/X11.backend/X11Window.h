@@ -50,6 +50,8 @@
     BOOL _overrideRedirect;
     BOOL _fullscreenRequested;
     BOOL _isOpaque;
+    BOOL _hasAlpha;   // created with the 32-bit visual and an alpha surface
+    BOOL _wasMapped;  // the visual is settled when the window is first mapped
     BOOL _hasShadow;
     BOOL _wantsInputFocus;
     BOOL _ignoresMouseEvents; // the input region currently set

@@ -18,6 +18,8 @@
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  SOFTWARE. */
 
+#import <AppKit/NSColor.h>
+#import <AppKit/NSGraphics.h>
 #import <AppKit/NSMenuWindow.h>
 #import <AppKit/NSPanel.h>
 #import <AppKit/NSPopUpWindow.h>
@@ -41,6 +43,75 @@
 #import "X11Window.h"
 #import <X11/Xatom.h>
 #import <X11/Xutil.h>
+
+// The visual of opaque windows. Rendering goes through EGL, and a visual that
+// glXChooseVisual picks can be one that only GLX can draw to (NVIDIA's EGL
+// rejects such visuals with EGL_BAD_CONFIG), so the default visual comes first
+// when it is TrueColor with at least 24 bits.
+static XVisualInfo *X11OpaqueVisualInfo(Display *display) {
+    static XVisualInfo *visualInfo;
+
+    if (visualInfo != NULL)
+        return visualInfo;
+
+    int screen = DefaultScreen(display);
+    XVisualInfo visualTemplate = {
+        .visualid = XVisualIDFromVisual(DefaultVisual(display, screen)),
+        .screen = screen,
+    };
+    int count = 0;
+    visualInfo = XGetVisualInfo(display, VisualIDMask | VisualScreenMask,
+                                &visualTemplate, &count);
+    if (visualInfo != NULL &&
+        (visualInfo->class != TrueColor || visualInfo->depth < 24)) {
+        XFree(visualInfo);
+        visualInfo = NULL;
+    }
+
+    if (visualInfo == NULL) {
+        int attributes[] = {GLX_RGBA,       GLX_DOUBLEBUFFER, GLX_RED_SIZE,
+                            4,              GLX_GREEN_SIZE,   4,
+                            GLX_BLUE_SIZE,  4,                GLX_DEPTH_SIZE,
+                            4,              None};
+        visualInfo = glXChooseVisual(display, screen, attributes);
+        if (visualInfo == NULL)
+            NSLog(@"glXChooseVisual failed at %s %d", __FILE__, __LINE__);
+    }
+    return visualInfo;
+}
+
+// A 32-bit TrueColor visual with an alpha channel, for windows that let what
+// is behind them show through, or NULL if the screen has none.
+static XVisualInfo *X11AlphaVisualInfo(Display *display) {
+    static XVisualInfo visualInfo;
+    static BOOL looked;
+
+    if (!looked) {
+        looked = YES;
+        XVisualInfo visualTemplate = {
+            .screen = DefaultScreen(display),
+            .depth = 32,
+            .class = TrueColor,
+        };
+        int count = 0;
+        XVisualInfo *visuals = XGetVisualInfo(
+                display, VisualScreenMask | VisualDepthMask | VisualClassMask,
+                &visualTemplate, &count);
+        for (int i = 0; i < count && visualInfo.visual == NULL; i++) {
+            if (visuals[i].red_mask == 0xff0000 &&
+                visuals[i].green_mask == 0x00ff00 &&
+                visuals[i].blue_mask == 0x0000ff)
+                visualInfo = visuals[i];
+        }
+        if (visuals != NULL)
+            XFree(visuals);
+    }
+    return visualInfo.visual != NULL ? &visualInfo : NULL;
+}
+
+// Set once EGL could not create an alpha surface for the alpha visual; later
+// windows are then created opaque straight away.
+static BOOL alphaSurfaceFailed;
 
 @implementation X11Window
 
@@ -166,34 +237,24 @@ static NSData *makeWindowIcon() {
     BOOL isSheetPanel = isPanel && (_styleMask & NSDocModalWindowMask);
     if (isSheetPanel)
         _styleMask = NSBorderlessWindowMask;
-    // TODO: get rid of these glX calls
-    GLint att[] = {GLX_RGBA,
-                   GLX_DOUBLEBUFFER,
-                   GLX_RED_SIZE,
-                   4,
-                   GLX_GREEN_SIZE,
-                   4,
-                   GLX_BLUE_SIZE,
-                   4,
-                   GLX_DEPTH_SIZE,
-                   4,
-                   None};
-
-    int screen = DefaultScreen(_display);
-
-    if ((_visualInfo = glXChooseVisual(_display, screen, att)) == NULL) {
-        NSLog(@"glXChooseVisual failed at %s %d", __FILE__, __LINE__);
-    }
-
-    Colormap cmap =
-            XCreateColormap(_display, RootWindow(_display, _visualInfo->screen),
-                            _visualInfo->visual, AllocNone);
-
-    if (cmap < 0) {
-        NSLog(@"XCreateColormap failed");
+    _hasAlpha = [self wantsAlphaVisual];
+    if (![self createXWindow]) {
         [self release];
         return nil;
     }
+
+    return self;
+}
+
+// Creates the X window for the current _frame, _styleMask and _hasAlpha, and
+// everything attached to it. Without an alpha surface for the alpha visual
+// the window is created opaque instead.
+- (BOOL) createXWindow {
+    NSWindow *delegate = _delegate;
+    X11Display *x11disp = (X11Display *) [NSDisplay currentDisplay];
+    BOOL isPanel = [delegate isKindOfClass: [NSPanel class]];
+    BOOL isSheetPanel =
+            isPanel && ([delegate styleMask] & NSDocModalWindowMask);
 
     XSetWindowAttributes xattr;
     unsigned long xattr_mask;
@@ -215,16 +276,43 @@ static NSData *makeWindowIcon() {
         xattr.override_redirect = True;
     }
     _overrideRedirect = xattr.override_redirect;
-    xattr_mask = CWOverrideRedirect | CWColormap;
-    xattr.colormap = cmap;
+    xattr.border_pixel = 0;
 
-    _window = XCreateWindow(
-            _display, DefaultRootWindow(_display), _frame.origin.x,
-            _frame.origin.y, _frame.size.width, _frame.size.height, 0,
-            (_visualInfo == NULL) ? CopyFromParent : _visualInfo->depth,
-            InputOutput,
-            (_visualInfo == NULL) ? CopyFromParent : _visualInfo->visual,
-            xattr_mask, &xattr);
+    for (;;) {
+        _visualInfo = _hasAlpha ? X11AlphaVisualInfo(_display)
+                                : X11OpaqueVisualInfo(_display);
+        if (_visualInfo == NULL)
+            return NO;
+
+        xattr.colormap = XCreateColormap(
+                _display, RootWindow(_display, _visualInfo->screen),
+                _visualInfo->visual, AllocNone);
+        // A window of another depth than its parent needs a border pixel of
+        // its own, or creating it fails with BadMatch.
+        xattr_mask = CWOverrideRedirect | CWColormap |
+                     (_hasAlpha ? CWBorderPixel : 0);
+
+        _window = XCreateWindow(
+                _display, DefaultRootWindow(_display), _frame.origin.x,
+                _frame.origin.y, _frame.size.width, _frame.size.height, 0,
+                _visualInfo->depth, InputOutput, _visualInfo->visual,
+                xattr_mask, &xattr);
+        if (!_hasAlpha) {
+            _cglWindow = CGLGetWindow((void *) _window);
+            break;
+        }
+
+        // EGL needs a configuration with alpha for this visual; without one,
+        // draw the window opaque rather than not at all.
+        _cglWindow = CGLGetWindowWithAlpha((void *) _window,
+                                           _visualInfo->visualid);
+        if (_cglWindow != NULL)
+            break;
+        XDestroyWindow(_display, _window);
+        XFreeColormap(_display, xattr.colormap);
+        _hasAlpha = NO;
+        alphaSurfaceFailed = YES;
+    }
 
     [self syncDelegateProperties];
 
@@ -237,7 +325,12 @@ static NSData *makeWindowIcon() {
                             .res_class = (char *) name};
     XSetClassHint(_display, _window, &classHint);
 
-    XSetWindowBackgroundPixmap(_display, _window, None);
+    // Until the first frame, a translucent window shows its background:
+    // make that transparent rather than black.
+    if (_hasAlpha)
+        XSetWindowBackground(_display, _window, 0);
+    else
+        XSetWindowBackgroundPixmap(_display, _window, None);
 
     _isModal = [delegate isSheet] || [NSApp modalWindow] == delegate;
     // FIXME: There should be no need for this.
@@ -274,8 +367,6 @@ static NSData *makeWindowIcon() {
         XNFocusWindow, _window,
         NULL);
 
-    _cglWindow = CGLGetWindow((void *) _window);
-
     [(X11Display *) [NSDisplay currentDisplay] setWindow: self forID: _window];
 
     // FIXME: Move this call into setStyleMaskInternal below!
@@ -286,7 +377,7 @@ static NSData *makeWindowIcon() {
 
     [self setWindowIcon];
 
-    return self;
+    return YES;
 }
 
 - (void) dealloc {
@@ -425,6 +516,92 @@ static NSData *makeWindowIcon() {
                     sizeof(hints) / sizeof(long));
 }
 
+// Whether what is behind the window can show through it: a window that is not
+// opaque and whose background has alpha (a pattern image may have).
+- (BOOL) isTranslucent {
+    if (_delegate == nil || [_delegate isOpaque])
+        return NO;
+    NSColor *background = [_delegate backgroundColor];
+    return background == nil || [background alphaComponent] < 1.0 ||
+           [[background colorSpaceName] isEqualToString: NSPatternColorSpace];
+}
+
+- (BOOL) wantsAlphaVisual {
+    return !alphaSurfaceFailed && X11AlphaVisualInfo(_display) != NULL &&
+           [self isTranslucent];
+}
+
+// The visual of an X window is fixed when it is created, which is usually
+// before the application makes the window non-opaque. Until the window is
+// first mapped, replace it with one of the right visual, keeping its children.
+- (void) settleVisual {
+    if (_wasMapped || _window == 0 || _delegate == nil)
+        return;
+    BOOL alpha = [self wantsAlphaVisual];
+    if (alpha != _hasAlpha)
+        [self recreateXWindowWithAlpha: alpha];
+}
+
+- (void) recreateXWindowWithAlpha: (BOOL) alpha {
+    Window oldWindow = _window;
+    XVisualInfo *oldVisualInfo = _visualInfo;
+
+    [_caContext release];
+    _caContext = nil;
+    if (_cglContext != NULL) {
+        CGLReleaseContext(_cglContext);
+        _cglContext = NULL;
+    }
+    if (_cglWindow != NULL) {
+        CGLDestroyWindow(_cglWindow);
+        _cglWindow = NULL;
+    }
+    if (_xic != NULL) {
+        XDestroyIC(_xic);
+        _xic = NULL;
+    }
+    [(X11Display *) [NSDisplay currentDisplay] setWindow: nil
+                                                   forID: oldWindow];
+
+    // The new window has no input shape yet.
+    _ignoresMouseEvents = NO;
+    _hasAlpha = alpha;
+    if (![self createXWindow]) {
+        // No usable visual: keep the old window rather than none.
+        _window = oldWindow;
+        _visualInfo = oldVisualInfo;
+        _hasAlpha = !alpha;
+        _cglWindow = _hasAlpha ? CGLGetWindowWithAlpha((void *) _window,
+                                                       _visualInfo->visualid)
+                               : CGLGetWindow((void *) _window);
+        _xic = XCreateIC(((X11Display *) [NSDisplay currentDisplay])->_xim,
+                         XNInputStyle, XIMPreeditNothing | XIMStatusNothing,
+                         XNClientWindow, _window, XNFocusWindow, _window,
+                         NULL);
+        [(X11Display *) [NSDisplay currentDisplay] setWindow: self
+                                                       forID: _window];
+        return;
+    }
+
+    Window root, parent, *children = NULL;
+    unsigned int count = 0;
+    if (XQueryTree(_display, oldWindow, &root, &parent, &children, &count)) {
+        for (unsigned int i = 0; i < count; i++) {
+            XWindowAttributes attributes;
+            if (XGetWindowAttributes(_display, children[i], &attributes))
+                XReparentWindow(_display, children[i], _window, attributes.x,
+                                attributes.y);
+        }
+        if (children != NULL)
+            XFree(children);
+    }
+    XDestroyWindow(_display, oldWindow);
+
+    NSString *title = [_delegate title];
+    if (title != nil)
+        [self setTitle: title];
+}
+
 - (void) ensureMapped {
     if (!_mapped) {
         // A withdrawn window loses _NET_WM_STATE (EWMH), so the window has to say
@@ -433,8 +610,10 @@ static NSData *makeWindowIcon() {
         [self requestFullscreen: [self wantsFullscreenWithStyleMask: _styleMask
                                                               frame: [self frame]]
                           force: NO];
+        [self settleVisual];
         XMapWindow(_display, _window);
         _mapped = YES;
+        _wasMapped = YES;
         _miniaturizedKnown = NO;
     }
 }
@@ -859,8 +1038,11 @@ static BOOL windowManagerIsRunning(Display *display) {
     if (_cglContext == NULL) {
         CGLError error;
 
-        if ((error = CGLCreateContext(NULL, NULL, &_cglContext)) !=
-            kCGLNoError) {
+        // A context for an alpha surface has to use the surface's
+        // configuration.
+        error = _hasAlpha ? CGLCreateContextForWindow(_cglWindow, &_cglContext)
+                          : CGLCreateContext(NULL, NULL, &_cglContext);
+        if (error != kCGLNoError) {
             NSLog(@"CGLCreateContext failed at %s %d with error %d", __FILE__,
                   __LINE__, error);
 
@@ -966,7 +1148,8 @@ static int ignoreBadWindow(Display *display, XErrorEvent *errorEvent) {
 }
 
 - (Visual *) visual {
-    return DefaultVisual(_display, DefaultScreen(_display));
+    return _visualInfo != NULL ? _visualInfo->visual
+                               : DefaultVisual(_display, DefaultScreen(_display));
 }
 
 - (Drawable) drawable {
@@ -1005,6 +1188,8 @@ static int ignoreBadWindow(Display *display, XErrorEvent *errorEvent) {
 }
 
 - (X11SubWindow *) createSubWindowWithFrame: (CGRect) frame {
+    // Subwindows take this window's visual, so settle it before they exist.
+    [self settleVisual];
     return [[[X11SubWindow alloc] initWithParentWindow: self
                                                  frame: frame] autorelease];
 }
