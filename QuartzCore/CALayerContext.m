@@ -67,6 +67,9 @@
     CGLReleasePixelFormat(_pixelFormat);
     if (_cglWindow != NULL && _ownsCglWindow)
         CGLDestroyWindow(_cglWindow);
+    // The subwindow can outlive the context (it may still be in an
+    // autorelease pool); it must not keep covering the window meanwhile.
+    [_subwindow hide];
     [_subwindow release];
     [_layer release];
     [super dealloc];
@@ -112,6 +115,9 @@
 
     [_subwindow show];
 
+    // As in -dealloc: a replaced subwindow is no longer drawn into.
+    if (oldSubwindow != _subwindow)
+        [oldSubwindow hide];
     [oldSubwindow release];
 
     [_subwindow setFrame: _frame];
