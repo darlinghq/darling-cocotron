@@ -2,6 +2,7 @@
 #import <Foundation/NSString.h>
 #import <QuartzCore/CALayer.h>
 #import <QuartzCore/CALayerContext.h>
+#import <QuartzCore/CAMetalLayer.h>
 #import <QuartzCore/CARenderer.h>
 #import "CALayerInternal.h"
 #import <OpenGL/CGLInternal.h>
@@ -45,6 +46,7 @@
 
     _frame = rect;
     _deleteTextureIds = [[NSMutableArray alloc] init];
+    _swapInterval = -1;
 
     _renderer = [[CARenderer rendererWithCGLContext: _glContext
                                             options: nil] retain];
@@ -259,6 +261,20 @@ static BOOL layerTreeNeedsAnotherFrame(CALayer *layer) {
         [_deleteTextureIds addObject: textureId];
 }
 
+// The swap interval the Metal layers in a tree ask for: 1 if any of them has
+// displaySyncEnabled set, 0 if none has, and -1 for a tree without Metal layers.
+static GLint metalLayerSwapInterval(CALayer *layer) {
+    GLint interval = -1;
+    if ([[layer class] isSubclassOfClass: [CAMetalLayerInternal class]])
+        interval = [(CAMetalLayer *) layer displaySyncEnabled] ? 1 : 0;
+    for (CALayer *child in layer.sublayers) {
+        GLint childInterval = metalLayerSwapInterval(child);
+        if (childInterval > interval)
+            interval = childInterval;
+    }
+    return interval;
+}
+
 - (void) flush {
     if (_cglWindow == NULL)
         return;
@@ -269,6 +285,15 @@ static BOOL layerTreeNeedsAnotherFrame(CALayer *layer) {
     CGLContextObj previous = CGLGetCurrentContext();
     if (CGLContextMakeCurrentAndAttachToWindow(_glContext, _cglWindow) != kCGLNoError)
         return;
+
+    // A Metal layer's frames are synchronized with the display refresh unless
+    // its displaySyncEnabled is NO, and they reach the screen through this
+    // swap. Other trees keep the context's own setting.
+    GLint interval = metalLayerSwapInterval(_layer);
+    if (interval >= 0 && interval != _swapInterval &&
+        CGLSetParameter(_glContext, kCGLCPSwapInterval, &interval) == kCGLNoError)
+        _swapInterval = interval;
+
     CGLFlushDrawable(_glContext);
     if (previous != _glContext)
         CGLSetCurrentContext(previous);

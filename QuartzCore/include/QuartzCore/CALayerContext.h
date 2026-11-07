@@ -18,6 +18,8 @@
     CGSubWindow* _subwindow;
     void* _cglWindow;
     BOOL _renderRequested;
+    // The swap interval last set for the Metal layers in the tree, or -1.
+    GLint _swapInterval;
 }
 
 @property(readonly) CGLContextObj glContext;
