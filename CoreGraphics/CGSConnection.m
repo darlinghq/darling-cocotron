@@ -69,6 +69,16 @@
 	NSInvalidAbstractInvocation();
 }
 
+-(BOOL) isKeyDown:(CGKeyCode)keyCode
+{
+	return NO;
+}
+
+-(BOOL) isMouseButtonDown:(CGMouseButton)button
+{
+	return NO;
+}
+
 -(NSArray *) modesForScreen:(int)screenIndex
 {
 	NSInvalidAbstractInvocation();

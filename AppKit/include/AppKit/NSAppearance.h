@@ -37,9 +37,24 @@ APPKIT_EXPORT NSString
 
 APPKIT_EXPORT NSString *const NSAppearanceNameControlStrip; // Undocumented
 
-@interface NSAppearance : NSObject <NSSecureCoding>
+@interface NSAppearance : NSObject <NSSecureCoding> {
+    NSAppearanceName _name;
+}
 
+// One shared appearance per known name; nil for any other name.
 + (NSAppearance *) appearanceNamed: (NSAppearanceName) name;
+
+@property(readonly, copy) NSAppearanceName name;
+- (NSAppearanceName) bestMatchFromAppearancesWithNames:
+        (NSArray<NSAppearanceName> *) appearances;
+
+// The appearance AppKit draws with on the calling thread: the one
+// -performAsCurrentDrawingAppearance: or +setCurrentAppearance: installed,
+// else the application's effective appearance.
++ (NSAppearance *) currentDrawingAppearance;
+- (void) performAsCurrentDrawingAppearance: (void (^)(void)) block;
++ (NSAppearance *) currentAppearance;
++ (void) setCurrentAppearance: (NSAppearance *) appearance;
 
 @end
 

@@ -294,6 +294,18 @@ static void O2SurfaceWrite_argb8u_to_BGRA8888(O2Surface *self, int x, int y,
     }
 }
 
+static void O2SurfaceWrite_argb8u_to_XRGB8888(O2Surface *self, int x, int y,
+                                              O2argb8u *span, int length)
+{
+    uint8_t *scanline = self->_pixelBytes + y * self->_bytesPerRow + x * 4;
+    for (int i = 0; i < length; ++i) {
+        *scanline++ = 255;
+        *scanline++ = span[i].r;
+        *scanline++ = span[i].g;
+        *scanline++ = span[i].b;
+    }
+}
+
 static void O2SurfaceWrite_argb32f_to_RGBA4444(O2Surface *self, int x, int y,
                                                O2argb32f *span, int length)
 {
@@ -424,10 +436,10 @@ static BOOL initFunctionsForParameters(O2Surface *self, size_t bitsPerComponent,
                 case kO2ImageAlphaNone:
                     break;
 
+                case kO2ImageAlphaNoneSkipLast:
                 case kO2ImageAlphaLast:
                 case kO2ImageAlphaPremultipliedLast:
                     switch (bitmapInfo & kO2BitmapByteOrderMask) {
-                    case kO2BitmapByteOrderDefault:
                     case kO2BitmapByteOrder16Little:
                     case kO2BitmapByteOrder32Little:
                         self->_writeargb32f =
@@ -435,6 +447,8 @@ static BOOL initFunctionsForParameters(O2Surface *self, size_t bitsPerComponent,
                         self->_writeargb8u = O2SurfaceWrite_argb8u_to_ABGR8888;
                         return YES;
 
+                    // With the alpha last, the default byte order is R, G, B, A in memory
+                    case kO2BitmapByteOrderDefault:
                     case kO2BitmapByteOrder16Big:
                     case kO2BitmapByteOrder32Big:
                         self->_writeargb32f = O2SurfaceWrite_argb32f_to_argb8u;
@@ -457,10 +471,18 @@ static BOOL initFunctionsForParameters(O2Surface *self, size_t bitsPerComponent,
                 case kO2ImageAlphaFirst:
                     break;
 
-                case kO2ImageAlphaNoneSkipLast:
-                    break;
-
                 case kO2ImageAlphaNoneSkipFirst:
+                    switch (bitmapInfo & kO2BitmapByteOrderMask) {
+                    case kO2BitmapByteOrderDefault:
+                    case kO2BitmapByteOrder16Little:
+                    case kO2BitmapByteOrder32Little:
+                        self->_writeargb8u = O2SurfaceWrite_argb8u_to_BGRA8888;
+                        return YES;
+                    case kO2BitmapByteOrder16Big:
+                    case kO2BitmapByteOrder32Big:
+                        self->_writeargb8u = O2SurfaceWrite_argb8u_to_XRGB8888;
+                        return YES;
+                    }
                     break;
                 }
             } else if ([colorSpace type] == kO2ColorSpaceModelCMYK) {

@@ -55,3 +55,13 @@ void CGSRegionToRect(CGSRegionRef reg, CGRect *rect) {
 bool CGSRegionIsRectangular(CGSRegionRef reg) {
     return TRUE;
 }
+
+CGRegionRef CGRegionCreateWithRect(CGRect rect) {
+    CGSRegionRef region;
+    CGSNewRegionWithRect(&rect, &region);
+    return region;
+}
+
+void CGRegionRelease(CGRegionRef region) {
+    CGSRegionRelease(region);
+}

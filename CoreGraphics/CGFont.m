@@ -18,6 +18,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <CoreGraphics/CGFont.h>
+#import <CoreGraphics/CoreGraphicsPrivate.h>
 #import <Onyx2D/O2Font.h>
 
 CGFontRef CGFontCreateWithFontName(CFStringRef name) {
@@ -34,6 +35,12 @@ void CGFontRelease(CGFontRef self) {
 
 CFStringRef CGFontCopyFullName(CGFontRef self) {
     return (CFStringRef) O2FontCopyFullName((O2FontRef)self);
+}
+
+CFStringRef CGFontCopyPostScriptName(CGFontRef self) {
+    if (self == NULL)
+        return NULL;
+    return O2FontCopyPostScriptName((O2FontRef) self);
 }
 
 int CGFontGetUnitsPerEm(CGFontRef self) {
@@ -96,11 +103,27 @@ CFDataRef CGFontCopyTableForTag(CGFontRef self, uint32_t tag) {
 
 CGFontRef _Nullable CGFontCreateWithDataProvider(CGDataProviderRef _Nullable provider)
 {
-    printf("STUB %s\n", __PRETTY_FUNCTION__);
-    return nil;
+    if (provider == NULL)
+        return NULL;
+    return (CGFontRef) O2FontCreateWithDataProvider((O2DataProviderRef) provider);
 }
 
 CFStringRef const kCGFontVariationAxisName = CFSTR("kCGFontVariationAxisName");
 CFStringRef const kCGFontVariationAxisMinValue = CFSTR("kCGFontVariationAxisMinValue");
 CFStringRef const kCGFontVariationAxisDefaultValue = CFSTR("kCGFontVariationAxisDefaultValue");
 CFStringRef const kCGFontVariationAxisMaxValue = CFSTR("kCGFontVariationAxisMaxValue");
+
+CFArrayRef CGFontCopyTableTags(CGFontRef font) {
+    return font ? O2FontCopyTableTags((O2FontRef)font) : NULL;
+}
+
+/* Whether the user turned off font smoothing: the AppleFontSmoothing global default, where 0
+ * means smoothing is disabled. `defaults write -g AppleFontSmoothing 0` stores a string and
+ * `-int 0` a number; both are read. An absent or unparsable value leaves smoothing enabled.
+ * Specification: client usage (WebKit declares this SPI) and the user-default convention. */
+bool CGFontRenderingGetFontSmoothingDisabled(void) {
+    Boolean valid = false;
+    CFIndex smoothing = CFPreferencesGetAppIntegerValue(CFSTR("AppleFontSmoothing"),
+                                                        kCFPreferencesAnyApplication, &valid);
+    return valid && smoothing == 0;
+}

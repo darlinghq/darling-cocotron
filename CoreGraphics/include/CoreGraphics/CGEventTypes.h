@@ -107,6 +107,10 @@ enum {
   kCGEventTapDisabledByUserInput = 0xFFFFFFFF
 };
 
+// Any input event, for CGEventSourceSecondsSinceLastEventType and
+// CGEventSourceCounterForEventType.
+#define kCGAnyInputEventType ((CGEventType) (~0))
+
 typedef uint64_t CGEventTimestamp;
 typedef uint32_t CGEventField;
 enum {

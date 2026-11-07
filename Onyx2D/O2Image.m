@@ -293,11 +293,21 @@ ONYX2D_STATIC BOOL initFunctionsForParameters(O2Image *self,
     self->_read_argb32f = O2ImageRead_ANY_to_argb8u_to_argb32f;
 
     if ((bitmapInfo & kO2BitmapByteOrderMask) == kO2BitmapByteOrderDefault) {
+        switch (bitmapInfo & kO2BitmapAlphaInfoMask) {
+        case kO2ImageAlphaLast:
+        case kO2ImageAlphaPremultipliedLast:
+        case kO2ImageAlphaNoneSkipLast:
+            // R, G, B, A in memory, as for a bitmap context with the same flags
+            bitmapInfo |= kO2BitmapByteOrder32Big;
+            break;
+
+        default:
 #ifdef __LITTLE_ENDIAN__
-        bitmapInfo |= kO2BitmapByteOrder32Little;
+            bitmapInfo |= kO2BitmapByteOrder32Little;
 #else
-        bitmapInfo |= kO2BitmapByteOrder32Big;
+            bitmapInfo |= kO2BitmapByteOrder32Big;
 #endif
+        }
     }
 
     switch ([colorSpace type]) {

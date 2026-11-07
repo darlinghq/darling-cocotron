@@ -81,10 +81,14 @@ typedef enum {
 - initWithFontName: (NSString *) name;
 - initWithDataProvider: (O2DataProviderRef) provider;
 
+- (NSString *) copyPostScriptName;
+- (NSString *) copyFamilyName;
+- (CFArrayRef) copyTableTags;
 - (NSData *) copyTableForTag: (uint32_t) tag;
 
 - (O2Glyph) glyphWithGlyphName: (NSString *) name;
 - (NSString *) copyGlyphNameForGlyph: (O2Glyph) glyph;
+- (O2Rect) boundingRectForGlyph: (O2Glyph) glyph;
 
 - (NSCharacterSet *) coveredCharacterSet;
 
@@ -101,6 +105,8 @@ void O2FontRelease(O2FontRef self);
 
 O2FontPlatformType O2FontGetPlatformType(O2Font *self);
 CFStringRef O2FontCopyFullName(O2FontRef self);
+CFStringRef O2FontCopyPostScriptName(O2FontRef self);
+CFStringRef O2FontCopyFamilyName(O2FontRef self);
 int O2FontGetUnitsPerEm(O2FontRef self);
 int O2FontGetAscent(O2FontRef self);
 int O2FontGetDescent(O2FontRef self);
@@ -120,6 +126,7 @@ BOOL O2FontGetGlyphAdvances(O2FontRef self, const O2Glyph *glyphs, size_t count,
 O2Glyph O2FontGetGlyphWithGlyphName(O2FontRef self, CFStringRef name);
 NSString *O2FontCopyGlyphNameForGlyph(O2FontRef self, O2Glyph glyph);
 
+CFArrayRef O2FontCopyTableTags(O2FontRef self);
 NSData *O2FontCopyTableForTag(O2FontRef self, uint32_t tag);
 
 uint16_t O2FontUnicodeForGlyphName(CFStringRef name);

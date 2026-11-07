@@ -18,6 +18,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <CoreGraphics/CGWindow.h>
 #import <Onyx2D/O2Exceptions.h>
+#include <pthread.h>
 
 const CFStringRef kCGWindowAlpha = CFSTR("kCGWindowAlpha");
 const CFStringRef kCGWindowBounds = CFSTR("kCGWindowBounds");
@@ -116,13 +117,61 @@ const CFStringRef kCGWindowIsOnscreen = CFSTR("kCGWindowIsOnscreen");
     O2InvalidAbstractInvocation();
 }
 
-// these suck
+// Window numbers. On macOS they are small positive integers, and applications
+// pass them around as 32-bit CGWindowID/CGSWindowID values (for example to
+// window server calls). The number used to be the CGWindow's address, which
+// doesn't survive truncation to 32 bits on 64-bit systems, so each window gets a
+// small number on first use, and a registry maps numbers back to live windows.
+// Numbers are never reused within a process.
+static pthread_mutex_t windowNumberLock = PTHREAD_MUTEX_INITIALIZER;
+static CFMutableDictionaryRef windowsByNumber; // number -> CGWindow (not retained)
+static CFMutableDictionaryRef numbersByWindow; // CGWindow -> number
+static NSInteger nextWindowNumber = 1;
+
 + windowWithWindowNumber: (NSInteger) windowNumber {
-    return (id) windowNumber;
+    CGWindow *result = nil;
+
+    pthread_mutex_lock(&windowNumberLock);
+    if (windowsByNumber != NULL && windowNumber > 0)
+        result = (CGWindow *) CFDictionaryGetValue(windowsByNumber,
+                                                   (void *) windowNumber);
+    pthread_mutex_unlock(&windowNumberLock);
+
+    return result;
 }
 
 - (NSInteger) windowNumber {
-    return (NSInteger) self;
+    NSInteger number;
+
+    pthread_mutex_lock(&windowNumberLock);
+    if (windowsByNumber == NULL) {
+        windowsByNumber = CFDictionaryCreateMutable(NULL, 0, NULL, NULL);
+        numbersByWindow = CFDictionaryCreateMutable(NULL, 0, NULL, NULL);
+    }
+    number = (NSInteger) CFDictionaryGetValue(numbersByWindow, self);
+    if (number == 0) {
+        number = nextWindowNumber++;
+        CFDictionarySetValue(numbersByWindow, self, (void *) number);
+        CFDictionarySetValue(windowsByNumber, (void *) number, self);
+    }
+    pthread_mutex_unlock(&windowNumberLock);
+
+    return number;
+}
+
+- (void) dealloc {
+    pthread_mutex_lock(&windowNumberLock);
+    if (numbersByWindow != NULL) {
+        NSInteger number =
+                (NSInteger) CFDictionaryGetValue(numbersByWindow, self);
+        if (number != 0) {
+            CFDictionaryRemoveValue(numbersByWindow, self);
+            CFDictionaryRemoveValue(windowsByNumber, (void *) number);
+        }
+    }
+    pthread_mutex_unlock(&windowNumberLock);
+
+    [super dealloc];
 }
 
 - (void) placeAboveWindow: (NSInteger) other {

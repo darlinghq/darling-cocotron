@@ -92,6 +92,9 @@ static void renderFreeTypeBitmap(O2Context_builtin_FT *self, O2Surface *surface,
                                  FT_Bitmap *bitmap, NSInteger x, NSInteger y,
                                  O2Paint *paint)
 {
+    // Glyphs are blended with the destination, which needs a span reader.
+    if (!surface->_read_argb8u)
+        return;
     // Size of the bitmap.
     NSInteger fullWidth = bitmap->width;
     NSInteger fullHeight = bitmap->rows;
@@ -123,7 +126,7 @@ static void renderFreeTypeBitmap(O2Context_builtin_FT *self, O2Surface *surface,
 
         // We're going to advance these pointers as we move along this row.
         unsigned char *coverage =
-                bitmap->buffer + (curY - y) * fullWidth + (curX - x);
+                bitmap->buffer + (curY - y) * bitmap->pitch + (curX - x);
         O2argb8u *src = srcBuffer;
         O2argb8u *dst = dstBuffer;
 
@@ -190,57 +193,61 @@ static void renderFreeTypeBitmap(O2Context_builtin_FT *self, O2Surface *surface,
     [self establishFontStateInDeviceIfDirty];
 
     O2Font_freetype *font = (O2Font_freetype *) gState->_font;
-    FT_Face face = [font face];
+    /* FT_Load_Glyph replaces the shared face glyph slot and bitmap.
+     * Hold the same font lock used by metric queries through rasterization. */
+    @synchronized(font) {
+        FT_Face face = [font face];
 
-    int i;
-    FT_Error ftError;
+        int i;
+        FT_Error ftError;
 
-    if (face == NULL) {
-        NSLog(@"face is NULL");
-        O2SurfaceUnlock(_surface);
-        return;
-    }
+        if (face == NULL) {
+            NSLog(@"face is NULL");
+            O2SurfaceUnlock(_surface);
+            return;
+        }
 
-    FT_GlyphSlot slot = face->glyph;
+        FT_GlyphSlot slot = face->glyph;
 
-    if ((ftError =
-                 FT_Set_Char_Size(face, 0, fontSize.height * 64, 72.0, 72.0))) {
-        NSLog(@"FT_Set_Char_Size returned %d", ftError);
-        O2SurfaceUnlock(_surface);
-        return;
-    }
+        if ((ftError =
+                     FT_Set_Char_Size(face, 0, fontSize.height * 64, 72.0, 72.0))) {
+            NSLog(@"FT_Set_Char_Size returned %d", ftError);
+            O2SurfaceUnlock(_surface);
+            return;
+        }
 
-    for (i = 0; i < count; i++) {
+        for (i = 0; i < count; i++) {
 
-        ftError = FT_Load_Glyph(face, glyphs[i], FT_LOAD_DEFAULT);
-        if (ftError)
-            continue;
+            ftError = FT_Load_Glyph(face, glyphs[i], FT_LOAD_DEFAULT);
+            if (ftError)
+                continue;
 
-        ftError = FT_Render_Glyph(face->glyph, FT_RENDER_MODE_NORMAL);
-        if (ftError)
-            continue;
+            ftError = FT_Render_Glyph(face->glyph, FT_RENDER_MODE_NORMAL);
+            if (ftError)
+                continue;
 
-        renderFreeTypeBitmap(self, _surface, &slot->bitmap,
-                             point.x + slot->bitmap_left,
-                             point.y - slot->bitmap_top, paint);
+            renderFreeTypeBitmap(self, _surface, &slot->bitmap,
+                                 point.x + slot->bitmap_left,
+                                 point.y - slot->bitmap_top, paint);
 
-        point.x += slot->advance.x >> 6;
-    }
+            point.x += slot->advance.x >> 6;
+        }
 
-    O2PaintRelease(paint);
+        O2PaintRelease(paint);
 
-    int glyphAdvances[count];
-    O2Float unitsPerEm = O2FontGetUnitsPerEm(font);
+        int glyphAdvances[count];
+        O2Float unitsPerEm = O2FontGetUnitsPerEm(font);
 
-    O2FontGetGlyphAdvances(font, glyphs, count, glyphAdvances);
+        O2FontGetGlyphAdvances(font, glyphs, count, glyphAdvances);
 
-    O2Float total = 0;
+        O2Float total = 0;
 
-    for (i = 0; i < count; i++)
-        total += glyphAdvances[i];
+        for (i = 0; i < count; i++)
+            total += glyphAdvances[i];
 
-    total = (total / O2FontGetUnitsPerEm(font)) * gState->_pointSize;
+        total = (total / O2FontGetUnitsPerEm(font)) * gState->_pointSize;
 
+    } /* font lock */
     O2SurfaceUnlock(_surface);
 }
 
