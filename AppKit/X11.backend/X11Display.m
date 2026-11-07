@@ -73,6 +73,18 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type,
     X11Display *self = info;
     [self processPendingEvents];
 }
+
+// Xlib reads events into its own queue whenever it waits for a reply, so
+// events can be pending in Xlib while the connection has nothing left to read
+// and the socket source never fires. Requests may also still sit in Xlib's
+// output buffer. Flush and drain both before the main run loop goes to sleep;
+// posting an event wakes the run loop again.
+static void beforeWaitingCallback(CFRunLoopObserverRef observer,
+                                  CFRunLoopActivity activity, void *info)
+{
+    X11Display *self = info;
+    [self processPendingEvents];
+}
 #endif
 
 - init {
@@ -126,6 +138,14 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type,
                 CFSocketCreateRunLoopSource(kCFAllocatorDefault, _cfSocket, 0);
         CFRunLoopAddSource(CFRunLoopGetMain(), _source, kCFRunLoopCommonModes);
 
+        CFRunLoopObserverContext observerContext = {.version = 0,
+                                                    .info = self};
+        _beforeWaitingObserver = CFRunLoopObserverCreate(
+                kCFAllocatorDefault, kCFRunLoopBeforeWaiting, true, 0,
+                beforeWaitingCallback, &observerContext);
+        CFRunLoopAddObserver(CFRunLoopGetMain(), _beforeWaitingObserver,
+                             kCFRunLoopCommonModes);
+
         CGLRegisterNativeDisplay(_display);
 #endif
 
@@ -159,6 +179,13 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type,
 }
 
 - (void) dealloc {
+#ifdef DARLING
+    // The observer uses the connection, so it goes before XCloseDisplay().
+    if (_beforeWaitingObserver != NULL) {
+        CFRunLoopObserverInvalidate(_beforeWaitingObserver);
+        CFRelease(_beforeWaitingObserver);
+    }
+#endif
     X11RelativeMouseEnd(&_relativeMouse);
     [_blankCursor release];
     [_defaultCursor release];
