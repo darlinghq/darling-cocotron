@@ -76,6 +76,9 @@
 
 - (Window) windowHandle;
 - (BOOL) isMapped;
+// Whether the window is fullscreen (_NET_WM_STATE_FULLSCREEN), as last asked
+// for or as the window manager last set it.
+- (BOOL) isFullscreen;
 
 - (void) frameChanged;
 - (void) setLastKnownCursorPosition: (CGPoint) point;

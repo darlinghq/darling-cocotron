@@ -58,6 +58,11 @@
     double _relativeResumeX, _relativeResumeY;
     Window _relativeWindow;
     X11RelativeMouse _relativeMouse;
+    // ConfinePointerToFullscreenWindows (org.darlinghq.AppKit): keep the
+    // pointer inside the focused fullscreen window, through a pointer grab on
+    // _confinedWindow while one is held.
+    BOOL _confinesPointer;
+    Window _confinedWindow;
     // Xwayland forwards a pointer warp to the compositor only while the X
     // cursor is hidden, so warps are not honoured with a visible cursor there.
     BOOL _isXwayland;

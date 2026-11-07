@@ -61,6 +61,15 @@
 
 void NSColorSetCatalogColor(NSColorListName catalogName, NSColorName colorName, NSColor *color);
 
+// A boolean preference of the user's org.darlinghq.AppKit domain, NO when unset.
+// These are Darling's own settings for behaviour macOS does not have.
+static BOOL appKitPreference(CFStringRef key) {
+    Boolean valid = false;
+    Boolean value = CFPreferencesGetAppBooleanValue(
+            key, CFSTR("org.darlinghq.AppKit"), &valid);
+    return valid && value;
+}
+
 @implementation X11Display
 
 static int errorHandler(Display *display, XErrorEvent *errorEvent) {
@@ -174,6 +183,7 @@ static void beforeWaitingCallback(CFRunLoopObserverRef observer,
 
         lastFocusedWindow = nil;
         _buttonClickCounts = [NSMutableDictionary new];
+        _confinesPointer = appKitPreference(CFSTR("ConfinePointerToFullscreenWindows"));
         _modifierFlags = 0;
     }
     return self;
@@ -1175,6 +1185,9 @@ static NSDictionary *modeInfoToDictionary(const XRRModeInfo *mi, int depth) {
         // retaining the window causes it to keep popping back up endlessly even after dismissing it
         if (lastFocusedWindow && [[lastFocusedWindow platformWindow] windowHandle] == i)
             lastFocusedWindow = nil;
+        // The server released a grab on a window that became unviewable.
+        if (_confinedWindow == i)
+            _confinedWindow = None;
         // The server released a grab on a destroyed window.
         if (_relativeWindow == i)
             [self suspendRelativeMouse];
@@ -1832,6 +1845,7 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
         // wants relative mode.
         if (_relativeRequested && !_relativeMouse.active)
             [self beginRelativeMouse];
+        [self updatePointerConfinement];
         break;
 
     case FocusOut:
@@ -1844,8 +1858,10 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
         // child leaves the focus where it was.
         if (ev->xfocus.mode != NotifyGrab && ev->xfocus.mode != NotifyUngrab &&
             ev->xfocus.detail != NotifyPointer &&
-            ev->xfocus.detail != NotifyInferior)
+            ev->xfocus.detail != NotifyInferior) {
             [self suspendRelativeMouse];
+            [self updatePointerConfinement];
+        }
         // Unlike XSetICFocus(), XUnsetICFocus() doesn't accept a NULL XIC.
         if (window != nil && window->_xic != NULL)
             XUnsetICFocus(window->_xic);
@@ -1896,11 +1912,14 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
         // The server released a grab whose window became unviewable.
         if (ev->xany.window == _relativeWindow)
             [self suspendRelativeMouse];
+        if (ev->xany.window == _confinedWindow)
+            _confinedWindow = None;
         break;
 
     case MapNotify:
         NSLog(@"MapNotify");
         [window mapNotified];
+        [self updatePointerConfinement];
         break;
 
     case MapRequest:
@@ -1918,6 +1937,7 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
         [delegate platformWindow: window
                     frameChanged: [window frame]
                          didSize: YES];
+        [self updatePointerConfinement];
         break;
 
     case ConfigureRequest:
@@ -1943,6 +1963,8 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
     case PropertyNotify:
         if ([window respondsToSelector: @selector(propertyNotify:)]) {
             [window propertyNotify: &ev->xproperty];
+            // The window may have entered or left fullscreen.
+            [self updatePointerConfinement];
         }
         // An INCR transfer a pasteboard serves is paced by the requestor
         // deleting a property on its own window, usually another client's,
@@ -2179,6 +2201,8 @@ void CGNativeBorderFrameWidthsForStyle(NSUInteger styleMask, CGFloat *top,
     }
     NSLog(@"XGrabPointer() succeeded for window %lu\n", win);
     _relativeWindow = win;
+    // The relative-mode grab replaced a confinement grab, if there was one.
+    _confinedWindow = None;
     if (_relativeResumeValid) {
         // The cursor stays where it froze, not where the pointer is now.
         X11RelativeMouseRestoreCursor(&_relativeMouse, _relativeResumeX,
@@ -2244,6 +2268,46 @@ void CGNativeBorderFrameWidthsForStyle(NSUInteger styleMask, CGFloat *top,
     _relativeWindow = None;
 }
 
+// With ConfinePointerToFullscreenWindows set, the pointer cannot leave the
+// window that has the keyboard focus while that window is fullscreen, so that
+// on a setup with several monitors it stays on the fullscreen window's one, as
+// applications that scroll when the pointer reaches a screen edge expect.
+// macOS does not confine the pointer, so this is off by default. The grab is
+// taken and released as the focus, the fullscreen state and the mapping
+// change; relative mouse mode has its own grab, which takes precedence.
+- (void) updatePointerConfinement {
+    if (!_confinesPointer || _relativeMouse.active)
+        return;
+
+    Window target = None;
+    if (!_relativeRequested && lastFocusedWindow != nil) {
+        X11Window *window = (X11Window *) [lastFocusedWindow platformWindow];
+        if ([window isKindOfClass: [X11Window class]] && [window isMapped] &&
+            [window isFullscreen])
+            target = [window windowHandle];
+    }
+
+    if (target == _confinedWindow)
+        return;
+    if (_confinedWindow != None) {
+        XUngrabPointer(_display, CurrentTime);
+        _confinedWindow = None;
+    }
+    if (target != None) {
+        // owner_events keeps delivering events to the window they happen in,
+        // including subwindows; confine_to keeps the pointer inside.
+        int result = XGrabPointer(_display, target, True,
+                                  ButtonPressMask | ButtonReleaseMask |
+                                          PointerMotionMask,
+                                  GrabModeAsync, GrabModeAsync, target, None,
+                                  CurrentTime);
+        // AlreadyGrabbed (the window manager is mid-operation) or
+        // NotViewable: the next focus, configure or state change retries.
+        if (result == GrabSuccess)
+            _confinedWindow = target;
+    }
+}
+
 // CGAssociateMouseAndMouseCursorPosition(!doGrab).
 - (void) grabMouse: (BOOL) doGrab {
     // Main thread only, like -warpMouse:.
@@ -2269,6 +2333,7 @@ void CGNativeBorderFrameWidthsForStyle(NSUInteger styleMask, CGFloat *top,
         _relativeRequested = NO;
         [self suspendRelativeMouse];
         _relativeResumeValid = NO;
+        [self updatePointerConfinement];
     }
     XSync(_display, False);
 }

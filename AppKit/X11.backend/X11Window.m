@@ -627,6 +627,10 @@ static NSData *makeWindowIcon() {
     return _mapped;
 }
 
+- (BOOL) isFullscreen {
+    return _fullscreenRequested;
+}
+
 - (void) showWindowWithoutActivation {
     [self ensureMapped];
 }
