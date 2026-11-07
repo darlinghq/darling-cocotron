@@ -208,11 +208,24 @@ static void warnIfDisplayedOnAnotherDevice(const std::shared_ptr<Indium::Private
 		"Metal layers cannot be displayed. Run OpenGL and Vulkan on the same GPU.", device->name().c_str());
 };
 
-CAMetalDrawableTexture::CAMetalDrawableTexture(CGSize size, Indium::PixelFormat pixelFormat, bool framebufferOnly, std::shared_ptr<Indium::PrivateDevice> privateDevice):
+bool CAMetalDrawableGLImportsSemaphores() {
+	GLint count = 0;
+	glGetIntegerv(GL_NUM_EXTENSIONS, &count);
+	for (GLint i = 0; i < count; ++i) {
+		const char* name = reinterpret_cast<const char*>(glGetStringi(GL_EXTENSIONS, i));
+		if (name && strcmp(name, "GL_EXT_semaphore_fd") == 0) {
+			return true;
+		}
+	}
+	return false;
+};
+
+CAMetalDrawableTexture::CAMetalDrawableTexture(CGSize size, Indium::PixelFormat pixelFormat, bool framebufferOnly, bool exportsSemaphore, std::shared_ptr<Indium::PrivateDevice> privateDevice):
 	Indium::PrivateTexture(privateDevice),
 	_size(size),
 	_pixelFormat(pixelFormat),
-	_framebufferOnly(framebufferOnly)
+	_framebufferOnly(framebufferOnly),
+	_exportsSemaphore(exportsSemaphore)
 {
 	warnIfDisplayedOnAnotherDevice(_device);
 
@@ -620,18 +633,40 @@ void CAMetalDrawableTexture::precommit(std::shared_ptr<Indium::PrivateCommandBuf
 };
 
 bool CAMetalDrawableTexture::needsExportablePresentationSemaphore() const {
-	return true;
+	// only a semaphore that OpenGL imports has to be exportable
+	return _exportsSemaphore;
+};
+
+bool CAMetalDrawableTexture::waitForRendering() {
+	// Every submission that uses the texture signals the next value of its timeline
+	// semaphore, so the current value marks the end of all work submitted so far.
+	VkSemaphore semaphore;
+	uint64_t value;
+	{
+		std::unique_lock lock(_syncMutex);
+		semaphore = _syncSemaphore->semaphore;
+		value = _syncSemaphore->count;
+	}
+
+	VkSemaphoreWaitInfo info {};
+	info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO;
+	info.semaphoreCount = 1;
+	info.pSemaphores = &semaphore;
+	info.pValues = &value;
+
+	return DynamicVK::vkWaitSemaphores(_device->device(), &info, UINT64_MAX) == VK_SUCCESS;
 };
 
 //
 // drawable
 //
 
-CAMetalDrawableActual::CAMetalDrawableActual(CAMetalLayerInternal* layer, CGSize size, NSUInteger drawableID, Indium::PixelFormat pixelFormat, std::shared_ptr<Indium::Device> device, CGLContextObj glContext):
+CAMetalDrawableActual::CAMetalDrawableActual(CAMetalLayerInternal* layer, CGSize size, NSUInteger drawableID, Indium::PixelFormat pixelFormat, std::shared_ptr<Indium::Device> device, CGLContextObj glContext, bool glImportsSemaphores):
 	_drawableID(drawableID),
-	_glContext(CGLRetainContext(glContext))
+	_glContext(CGLRetainContext(glContext)),
+	_glImportsSemaphores(glImportsSemaphores)
 {
-	_texture = std::make_shared<CAMetalDrawableTexture>(size, pixelFormat, layer.framebufferOnly, std::dynamic_pointer_cast<Indium::PrivateDevice>(device));
+	_texture = std::make_shared<CAMetalDrawableTexture>(size, pixelFormat, layer.framebufferOnly, glImportsSemaphores, std::dynamic_pointer_cast<Indium::PrivateDevice>(device));
 	objc_storeWeak(&_layer, layer);
 };
 
@@ -764,6 +799,11 @@ void CAMetalDrawableActual::synchronizeRender() {
 		_glSemaphore = 0;
 	}
 
+	if (!_glImportsSemaphores) {
+		waitForRenderingOnCPU();
+		return;
+	}
+
 	int fd = -1;
 	VkSemaphoreGetFdInfoKHR info {};
 
@@ -772,8 +812,8 @@ void CAMetalDrawableActual::synchronizeRender() {
 	info.handleType = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT;
 
 	if (DynamicVK::vkGetSemaphoreFdKHR(_semaphore->device->device(), &info, &fd) != VK_SUCCESS) {
-		// TODO
-		abort();
+		waitForRenderingOnCPU();
+		return;
 	}
 
 	reportGLErrors();
@@ -787,6 +827,20 @@ void CAMetalDrawableActual::synchronizeRender() {
 	GLenum layout = GL_LAYOUT_GENERAL_EXT;
 	glWaitSemaphoreEXT(_glSemaphore, 0, NULL, 1, &tex, &layout);
 	reportGLErrors();
+};
+
+// Used when OpenGL cannot wait on the semaphore: the compositor waits until the
+// GPU has finished the drawable's rendering, then composites it.
+void CAMetalDrawableActual::waitForRenderingOnCPU() {
+	if (!_texture->waitForRendering()) {
+		// The device is lost; the semaphore may still have a pending signal,
+		// so keep it alive until the drawable is reused.
+		return;
+	}
+
+	// The submission that signals the semaphore has completed, so nothing uses
+	// it any more and it can be destroyed unwaited.
+	_semaphore = nullptr;
 };
 
 static void glDebugCallback(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar* message, const void* context) {

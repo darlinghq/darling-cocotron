@@ -515,9 +515,15 @@ static void reportGLErrors(void) {
 	CGLContextObj prev = CGLGetCurrentContext();
 	CGLSetCurrentContext(_context.glContext);
 
+	// ask the context once whether it can wait on the drawables' semaphores
+	if (_semaphoreProbeContext != _context.glContext) {
+		_glImportsSemaphores = CAMetalDrawableGLImportsSemaphores();
+		_semaphoreProbeContext = _context.glContext;
+	}
+
 	// now let's start creating the new drawables
 	for (size_t i = 0; i < _maximumDrawableCount; ++i) {
-		_drawables[i] = std::make_shared<CAMetalDrawableActual>(self, _drawableSize, i, pixelFormat, ((MTLDeviceInternal*)self.device).device, _context.glContext);
+		_drawables[i] = std::make_shared<CAMetalDrawableActual>(self, _drawableSize, i, pixelFormat, ((MTLDeviceInternal*)self.device).device, _context.glContext, _glImportsSemaphores);
 		_usableDrawablesBitmap |= 1u << i;
 	}
 
@@ -681,6 +687,7 @@ static void reportGLErrors(void) {
 		}
 	}
 	_tex = 0;
+	_semaphoreProbeContext = NULL;
 
 	// Drop the old drawables and, once there is a GL context, make new ones in
 	// it. A layer is usually configured (device, drawableSize) before it is put

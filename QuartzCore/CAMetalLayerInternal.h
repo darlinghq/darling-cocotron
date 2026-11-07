@@ -48,6 +48,10 @@ class CAMetalDrawableActual;
 	std::shared_ptr<CAMetalDrawableActual> _lastPresentedDrawable;
 
 	GLuint _tex;
+
+	// the GL context _glImportsSemaphores was found for
+	CGLContextObj _semaphoreProbeContext;
+	BOOL _glImportsSemaphores;
 }
 
 - (void)queuePresent: (NSUInteger)drawableID;
