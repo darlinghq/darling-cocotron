@@ -13,7 +13,20 @@
 - (void) dealloc {
     [_cachedPaths release];
     [_fileManager release];
+    [_rootURL release];
     [super dealloc];
+}
+
+- (void) setRootURL: (NSURL *) url {
+    url = [url retain];
+    [_rootURL release];
+    _rootURL = url;
+}
+
+- (NSURL *) rootURL {
+    if (_rootURL != nil)
+        return _rootURL;
+    return [NSURL fileURLWithPath: @"/" isDirectory: YES];
 }
 
 - (NSInteger) outlineView: (NSOutlineView *) outlineView
@@ -21,7 +34,7 @@
 {
 
     if (url == nil) {
-        url = [NSURL URLWithString: @"/"];
+        url = [self rootURL];
     }
     return [[_fileManager contentsOfDirectoryAtURL: url
                         includingPropertiesForKeys: nil
@@ -48,7 +61,7 @@
 {
 
     if (url == nil) {
-        url = [NSURL URLWithString: @"/"];
+        url = [self rootURL];
     }
     NSArray *items = [_fileManager contentsOfDirectoryAtURL: url
                                  includingPropertiesForKeys: nil

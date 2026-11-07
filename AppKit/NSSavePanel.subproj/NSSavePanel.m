@@ -26,6 +26,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSScrollView.h>
 #import <AppKit/NSTextField.h>
 #import <AppKit/NSView.h>
+#import "_NSFileSystemDataSource.h"
 
 @implementation NSSavePanel
 
@@ -425,10 +426,25 @@ static NSSavePanel *_newPanel = nil;
     _dialogTitle = title;
 }
 
+// The file browser lists the panel's directory, as documented for
+// directoryURL; without one it lists "/".
+- (void) _showDirectory {
+    id dataSource = [_outlineView dataSource];
+    if (![dataSource respondsToSelector: @selector(setRootURL:)])
+        return;
+    NSURL *root = nil;
+    if ([_directory length] > 0)
+        root = [NSURL fileURLWithPath: _directory isDirectory: YES];
+    [dataSource setRootURL: root];
+    [_outlineView deselectAll: nil];
+    [_outlineView reloadData];
+}
+
 - (void) setDirectory: (NSString *) directory {
     directory = [directory copy];
     [_directory release];
     _directory = directory;
+    [self _showDirectory];
 }
 
 - (void) setDirectoryURL: (NSURL *) url {
