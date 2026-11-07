@@ -325,6 +325,9 @@ NSString *const kCAContentsFormatGray8Uint = @"Gray8";
     _contentsScale = 1.0;
     // The whole contents image stretches, i.e. no fixed border.
     _contentsCenter = CGRectMake(0, 0, 1, 1);
+    _contentsRect = CGRectMake(0, 0, 1, 1);
+    _doubleSided = YES;
+    _rasterizationScale = 1.0;
     _contentsFormat = [kCAContentsFormatRGBA8Uint copy];
     _contentsGravity = [kCAGravityResize copy];
     _cornerCurve = [kCACornerCurveCircular copy];
@@ -359,6 +362,9 @@ NSString *const kCAContentsFormatGray8Uint = @"Gray8";
     [_mask release];
     [_filters release];
     [_compositingFilter release];
+    [_backgroundFilters release];
+    [_actions release];
+    [_style release];
     if (_shadowColor)
         CGColorRelease(_shadowColor);
     if (_backgroundColor)
@@ -543,6 +549,111 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
 - (void) setHidden: (BOOL) value {
     _hidden = value;
     [_context startTimerIfNeeded];
+}
+
+- (CAAutoresizingMask) autoresizingMask {
+    return _autoresizingMask;
+}
+
+- (void) setAutoresizingMask: (CAAutoresizingMask) value {
+    _autoresizingMask = value;
+}
+
+- (CGFloat) zPosition {
+    return _zPosition;
+}
+
+- (void) setZPosition: (CGFloat) value {
+    _zPosition = value;
+    [_context startTimerIfNeeded];
+}
+
+- (CGFloat) anchorPointZ {
+    return _anchorPointZ;
+}
+
+- (void) setAnchorPointZ: (CGFloat) value {
+    _anchorPointZ = value;
+    [_context startTimerIfNeeded];
+}
+
+- (CGRect) contentsRect {
+    return _contentsRect;
+}
+
+- (void) setContentsRect: (CGRect) value {
+    _contentsRect = value;
+    [_context startTimerIfNeeded];
+}
+
+- (float) minificationFilterBias {
+    return _minificationFilterBias;
+}
+
+- (void) setMinificationFilterBias: (float) value {
+    _minificationFilterBias = value;
+}
+
+- (NSArray *) backgroundFilters {
+    return _backgroundFilters;
+}
+
+- (void) setBackgroundFilters: (NSArray *) value {
+    value = [value copy];
+    [_backgroundFilters release];
+    _backgroundFilters = value;
+}
+
+- (BOOL) isDoubleSided {
+    return _doubleSided;
+}
+
+- (void) setDoubleSided: (BOOL) value {
+    _doubleSided = value;
+}
+
+- (BOOL) shouldRasterize {
+    return _shouldRasterize;
+}
+
+- (void) setShouldRasterize: (BOOL) value {
+    _shouldRasterize = value;
+}
+
+- (CGFloat) rasterizationScale {
+    return _rasterizationScale;
+}
+
+- (void) setRasterizationScale: (CGFloat) value {
+    _rasterizationScale = value;
+}
+
+- (BOOL) drawsAsynchronously {
+    return _drawsAsynchronously;
+}
+
+- (void) setDrawsAsynchronously: (BOOL) value {
+    _drawsAsynchronously = value;
+}
+
+- (NSDictionary *) actions {
+    return _actions;
+}
+
+- (void) setActions: (NSDictionary *) value {
+    value = [value copy];
+    [_actions release];
+    _actions = value;
+}
+
+- (NSDictionary *) style {
+    return _style;
+}
+
+- (void) setStyle: (NSDictionary *) value {
+    value = [value copy];
+    [_style release];
+    _style = value;
 }
 
 - (void) _setSuperLayer: (CALayer *) parent {

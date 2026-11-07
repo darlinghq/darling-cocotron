@@ -14,7 +14,7 @@ typedef NS_OPTIONS(unsigned int, CAEdgeAntialiasingMask) {
     kCALayerTopEdge = 1U << 3,
 };
 
-enum {
+typedef NS_OPTIONS(unsigned int, CAAutoresizingMask) {
     kCALayerNotSizable = 0x00,
     kCALayerMinXMargin = 0x01,
     kCALayerWidthSizable = 0x02,
@@ -123,6 +123,18 @@ CA_EXPORT NSString *const kCAContentsFormatGray8Uint;
     id _layoutManager;
     NSArray *_constraints;
     BOOL _geometryFlipped;
+    CAAutoresizingMask _autoresizingMask;
+    CGFloat _zPosition;
+    CGFloat _anchorPointZ;
+    BOOL _doubleSided;
+    CGRect _contentsRect;
+    float _minificationFilterBias;
+    BOOL _shouldRasterize;
+    CGFloat _rasterizationScale;
+    BOOL _drawsAsynchronously;
+    NSArray *_backgroundFilters;
+    NSDictionary *_actions;
+    NSDictionary *_style;
 }
 
 + layer;
@@ -132,8 +144,11 @@ CA_EXPORT NSString *const kCAContentsFormatGray8Uint;
 @property(copy) NSArray<CALayer *> *sublayers;
 @property(assign) id<CALayerDelegate> delegate;
 @property(retain) id<CALayoutManager> layoutManager;
+@property CAAutoresizingMask autoresizingMask;
 @property CGPoint anchorPoint;
 @property CGPoint position;
+@property CGFloat zPosition;
+@property CGFloat anchorPointZ;
 @property CGRect bounds;
 @property CGRect frame;
 @property CGFloat opacity;
@@ -149,6 +164,8 @@ CA_EXPORT NSString *const kCAContentsFormatGray8Uint;
 @property CGRect contentsCenter;
 @property(copy) CALayerContentsFormat contentsFormat;
 @property(copy) CALayerContentsGravity contentsGravity;
+// The part of the contents to draw, in unit coordinates.
+@property CGRect contentsRect;
 
 @property CATransform3D transform;
 @property CATransform3D sublayerTransform;
@@ -158,6 +175,7 @@ CA_EXPORT NSString *const kCAContentsFormatGray8Uint;
 
 @property(copy) NSString *minificationFilter;
 @property(copy) NSString *magnificationFilter;
+@property float minificationFilterBias;
 
 // Appearance. CARenderer draws the background and the border as rounded rects
 // with cornerRadius, and the contents between them (not clipped to the corners).
@@ -173,6 +191,7 @@ CA_EXPORT NSString *const kCAContentsFormatGray8Uint;
 @property(retain) CALayer *mask;
 @property(copy) NSArray *filters;
 @property(retain) id compositingFilter;
+@property(copy) NSArray *backgroundFilters;
 @property CGColorRef shadowColor;
 @property float shadowOpacity;
 @property CGFloat shadowRadius;
@@ -187,6 +206,17 @@ CA_EXPORT NSString *const kCAContentsFormatGray8Uint;
 
 // When YES, a change of the bounds size marks the layer as needing display.
 @property BOOL needsDisplayOnBoundsChange;
+
+// Rendering hints. They are stored, but CARenderer draws every layer flat,
+// front-facing and unrasterized, on the calling thread.
+@property(getter=isDoubleSided) BOOL doubleSided;
+@property BOOL shouldRasterize;
+@property CGFloat rasterizationScale;
+@property BOOL drawsAsynchronously;
+
+@property(copy) NSDictionary *actions;
+// Stored; property defaults are not looked up in it yet.
+@property(copy) NSDictionary *style;
 
 // YES puts the origin at the top of the bounds for sublayers and drawing;
 // images set as contents display the same either way.
