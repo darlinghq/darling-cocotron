@@ -988,7 +988,7 @@ NSImageName const NSImageNameTouchBarVolumeUpTemplate =
 
         [self lockFocusOnRepresentation: representation];
         NSRect rect;
-        id uncached = [self _bestUncachedRepresentationForDevice: nil];
+        NSImageRep *uncached = [self _bestUncachedRepresentationForDevice: nil];
         rect.origin.x = 0;
         rect.origin.y = 0;
         rect.size = [self size];
@@ -1377,7 +1377,21 @@ NSImageName const NSImageNameTouchBarVolumeUpTemplate =
 
 - (void) dealloc {
     [_paletteColors release];
+    [_hierarchicalColor release];
     [super dealloc];
+}
+
++ (instancetype) configurationWithHierarchicalColor: (NSColor *) color {
+    NSImageSymbolConfiguration *result = [[[self alloc] init] autorelease];
+    // Like the palette, kept but not drawn: the placeholder has one layer.
+    result->_hierarchicalColor = [color retain];
+    return result;
+}
+
++ (instancetype) configurationPreferringMulticolor {
+    NSImageSymbolConfiguration *result = [[[self alloc] init] autorelease];
+    result->_prefersMulticolor = YES;
+    return result;
 }
 
 + (instancetype) configurationWithPaletteColors: (NSArray<NSColor *> *) colors {
@@ -1414,7 +1428,18 @@ NSImageName const NSImageNameTouchBarVolumeUpTemplate =
 - (NSImageSymbolConfiguration *) configurationByApplyingConfiguration:
         (NSImageSymbolConfiguration *) configuration
 {
-    NSImageSymbolConfiguration *result = [[self copy] autorelease];
+    // A copy is the receiver itself, so the result is a new object:
+    // configurations are immutable.
+    NSImageSymbolConfiguration *result =
+            [[[[self class] alloc] init] autorelease];
+    NSArray<NSColor *> *paletteColors = _paletteColors;
+    NSColor *hierarchicalColor = _hierarchicalColor;
+
+    result->_pointSize = _pointSize;
+    result->_weight = _weight;
+    result->_scale = _scale;
+    result->_prefersMulticolor = _prefersMulticolor;
+
     if (configuration != nil) {
         if (configuration->_pointSize > 0) {
             result->_pointSize = configuration->_pointSize;
@@ -1422,10 +1447,16 @@ NSImageName const NSImageNameTouchBarVolumeUpTemplate =
         }
         if (configuration->_scale != 0)
             result->_scale = configuration->_scale;
+        if (configuration->_paletteColors != nil)
+            paletteColors = configuration->_paletteColors;
+        if (configuration->_hierarchicalColor != nil)
+            hierarchicalColor = configuration->_hierarchicalColor;
+        if (configuration->_prefersMulticolor)
+            result->_prefersMulticolor = YES;
     }
-    result->_paletteColors = [(configuration != nil &&
-                              configuration->_paletteColors != nil)
-            ? configuration->_paletteColors : _paletteColors copy];
+
+    result->_paletteColors = [paletteColors copy];
+    result->_hierarchicalColor = [hierarchicalColor retain];
     return result;
 }
 
@@ -1441,8 +1472,11 @@ NSImageName const NSImageNameTouchBarVolumeUpTemplate =
     NSImageSymbolConfiguration *o = other;
     return o->_pointSize == _pointSize && o->_weight == _weight &&
            o->_scale == _scale &&
+           o->_prefersMulticolor == _prefersMulticolor &&
            (o->_paletteColors == _paletteColors ||
-            [o->_paletteColors isEqual: _paletteColors]);
+            [o->_paletteColors isEqual: _paletteColors]) &&
+           (o->_hierarchicalColor == _hierarchicalColor ||
+            [o->_hierarchicalColor isEqual: _hierarchicalColor]);
 }
 
 - (NSUInteger) hash {

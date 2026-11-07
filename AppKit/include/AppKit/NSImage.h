@@ -146,6 +146,7 @@ typedef enum {
             fromRect: (NSRect) source
            operation: (NSCompositingOperation) operation
             fraction: (CGFloat) fraction;
+- (void) drawInRect: (NSRect) rect;
 - (void) drawInRect: (NSRect) rect
            fromRect: (NSRect) source
           operation: (NSCompositingOperation) operation
@@ -184,6 +185,8 @@ typedef NS_ENUM(NSInteger, NSImageSymbolScale) {
     NSFontWeight _weight;
     NSImageSymbolScale _scale;
     NSArray<NSColor *> *_paletteColors;
+    NSColor *_hierarchicalColor;
+    BOOL _prefersMulticolor;
 }
 
 + (instancetype) configurationWithPointSize: (CGFloat) pointSize
@@ -193,6 +196,8 @@ typedef NS_ENUM(NSInteger, NSImageSymbolScale) {
                                       scale: (NSImageSymbolScale) scale;
 + (instancetype) configurationWithScale: (NSImageSymbolScale) scale;
 + (instancetype) configurationWithPaletteColors: (NSArray<NSColor *> *) colors;
++ (instancetype) configurationWithHierarchicalColor: (NSColor *) color;
++ (instancetype) configurationPreferringMulticolor;
 - (NSImageSymbolConfiguration *) configurationByApplyingConfiguration:
         (NSImageSymbolConfiguration *) configuration;
 
