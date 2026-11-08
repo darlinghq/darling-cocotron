@@ -2724,6 +2724,17 @@ static NSView *viewBeingPrinted = nil;
          slideBack: (BOOL) slideBack
 {
     location = [self convertPoint: location toView: nil];
+    if ([NSDraggingManager draggingManager] == nil) {
+        // The window runs the drag in-process.
+        [[self window] dragImage: image
+                              at: location
+                          offset: offset
+                           event: event
+                      pasteboard: pasteboard
+                          source: source
+                       slideBack: slideBack];
+        return;
+    }
     [[NSDraggingManager draggingManager] dragImage: image
                                                 at: location
                                             offset: offset

@@ -27,10 +27,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSEvent_CoreGraphics.h>
 #import <AppKit/NSGraphics.h>
 #import <AppKit/NSImage.h>
+#import <AppKit/NSImageView.h>
 #import <AppKit/NSMainMenuView.h>
 #import <AppKit/NSMenu.h>
 #import <AppKit/NSMenuItem.h>
 #import <AppKit/NSPanel.h>
+#import <AppKit/NSPasteboard.h>
 #import <AppKit/NSRaise.h>
 #import <AppKit/NSScreen.h>
 #import <AppKit/NSSheetContext.h>
@@ -236,6 +238,99 @@ NSInteger NSBitsPerPixelFromDepth(NSWindowDepth depth) {
 }
 
 @end
+
+// The dragging information handed to destinations by an in-process drag
+// (see -_dragImageInProcess:...).
+@interface NSWindowLocalDraggingInfo : NSObject <NSDraggingInfo> {
+  @public
+    NSPasteboard *_pasteboard;
+    NSImage *_image;
+    id _source;
+    NSWindow *_destinationWindow;
+    NSPoint _screenPoint;
+    NSDragOperation _sourceMask;
+}
+@end
+
+@implementation NSWindowLocalDraggingInfo
+
+- (void) dealloc {
+    [_destinationWindow release];
+    [super dealloc];
+}
+
+- (NSPasteboard *) draggingPasteboard {
+    return _pasteboard;
+}
+
+- (NSDragOperation) draggingSourceOperationMask {
+    return _sourceMask;
+}
+
+- (NSPoint) draggingLocation {
+    if (_destinationWindow == nil)
+        return _screenPoint;
+    return [_destinationWindow convertScreenToBase: _screenPoint];
+}
+
+- (NSImage *) draggedImage {
+    return _image;
+}
+
+- (NSPoint) draggedImageLocation {
+    return [self draggingLocation];
+}
+
+- (NSWindow *) draggingDestinationWindow {
+    return _destinationWindow;
+}
+
+- (id) draggingSource {
+    return _source;
+}
+
+- (void) slideDraggedImageTo: (NSPoint) point {
+}
+
+- (int) draggingSequenceNumber {
+    return 0;
+}
+
+- (NSArray *) namesOfPromisedFilesDroppedAtDestination: (NSURL *) destination {
+    return nil;
+}
+
+@end
+
+// Shows the dragged image under the pointer. It never becomes key, so the
+// window system leaves it alone.
+@interface NSWindowDragImageWindow : NSWindow
+@end
+
+@implementation NSWindowDragImageWindow
+
+- (BOOL) canBecomeKeyWindow {
+    return NO;
+}
+
+- (BOOL) canBecomeMainWindow {
+    return NO;
+}
+
+@end
+
+// Lets run loop sources (timers, other threads' replies) run while a drag
+// holds the main thread, until none is pending or the time is up.
+static void runPendingSourcesDuringDrag(NSTimeInterval budget) {
+    CFAbsoluteTime deadline = CFAbsoluteTimeGetCurrent() + budget;
+
+    while (CFAbsoluteTimeGetCurrent() < deadline) {
+        SInt32 result = CFRunLoopRunInMode(
+                (CFStringRef) NSEventTrackingRunLoopMode, 0, true);
+        if (result != kCFRunLoopRunHandledSource)
+            break;
+    }
+}
 
 @implementation NSWindow
 
@@ -2689,6 +2784,183 @@ static BOOL _allowsAutomaticWindowTabbing;
     _draggedTypes = nil;
 }
 
+// The registered drag destination under screenPoint in this window, if any.
+- (NSView *) _inProcessDragDestinationAt: (NSPoint) screenPoint
+                                   types: (NSArray *) types
+{
+    NSView *view = [_backgroundView
+            hitTest: [self convertScreenToBase: screenPoint]];
+
+    while (view != nil &&
+           [[view registeredDraggedTypes] firstObjectCommonWithArray: types] ==
+                   nil)
+        view = [view superview];
+    return view;
+}
+
+// The visible window under screenPoint, preferring this one.
+- (NSWindow *) _inProcessDragWindowAt: (NSPoint) screenPoint
+                            excluding: (NSWindow *) excluded
+{
+    if (NSPointInRect(screenPoint, [self frame]))
+        return self;
+
+    for (NSWindow *window in [NSApp orderedWindows]) {
+        if (window != excluded && [window isVisible] &&
+            NSPointInRect(screenPoint, [window frame]))
+            return window;
+    }
+    return nil;
+}
+
+// A drag for displays without a dragging manager. It covers drags between
+// this application's own windows; nothing reaches other applications. As
+// with a system drag, it returns once the drag is over, and the source is
+// always told how it ended.
+- (void) _dragImageInProcess: (NSImage *) image
+                          at: (NSPoint) imageLocation
+                       event: (NSEvent *) event
+                  pasteboard: (NSPasteboard *) pasteboard
+                      source: (id) source
+{
+    NSWindowLocalDraggingInfo *info = [[NSWindowLocalDraggingInfo alloc] init];
+    info->_pasteboard = pasteboard;
+    info->_image = image;
+    info->_source = source;
+    info->_sourceMask = NSDragOperationEvery;
+    if ([source respondsToSelector: @selector(draggingSourceOperationMaskForLocal:)])
+        info->_sourceMask = [source draggingSourceOperationMaskForLocal: YES];
+
+    NSPoint screenPoint;
+    if ([event window] != nil)
+        screenPoint = [[event window] convertBaseToScreen: [event locationInWindow]];
+    else
+        screenPoint = [self convertBaseToScreen: [self mouseLocationOutsideOfEventStream]];
+
+    // The image keeps its offset from the pointer.
+    NSWindowDragImageWindow *imageWindow = nil;
+    NSPoint imageOffset = NSZeroPoint;
+    NSSize imageSize = [image size];
+    NSPoint imageOrigin = [self convertBaseToScreen: imageLocation];
+    if (imageSize.width >= 1 && imageSize.height >= 1) {
+        imageOffset = NSMakePoint(screenPoint.x - imageOrigin.x,
+                                  screenPoint.y - imageOrigin.y);
+        imageWindow = [[NSWindowDragImageWindow alloc]
+                initWithContentRect: NSMakeRect(imageOrigin.x, imageOrigin.y,
+                                                imageSize.width, imageSize.height)
+                          styleMask: NSBorderlessWindowMask
+                            backing: NSBackingStoreBuffered
+                              defer: NO];
+        [imageWindow setReleasedWhenClosed: NO];
+        [imageWindow setIgnoresMouseEvents: YES];
+        [imageWindow setLevel: NSPopUpMenuWindowLevel];
+        [imageWindow setHasShadow: NO];
+        NSImageView *imageView = [[NSImageView alloc]
+                initWithFrame: NSMakeRect(0, 0, imageSize.width, imageSize.height)];
+        [imageView setImage: image];
+        [imageView setImageScaling: NSImageScaleNone];
+        [imageWindow setContentView: imageView];
+        [imageView release];
+        [imageWindow orderFront: nil];
+    }
+
+    if ([source respondsToSelector: @selector(draggedImage:beganAt:)])
+        [source draggedImage: image beganAt: imageOrigin];
+
+    NSArray *types = [pasteboard types];
+    id destination = nil;
+    NSDragOperation operation = NSDragOperationNone;
+    BOOL dropped = NO;
+    BOOL moved = YES;
+
+    for (;;) {
+        if (moved) {
+            NSWindow *window = [self _inProcessDragWindowAt: screenPoint
+                                                  excluding: imageWindow];
+            info->_screenPoint = screenPoint;
+            if (info->_destinationWindow != window) {
+                [info->_destinationWindow release];
+                info->_destinationWindow = [window retain];
+            }
+            NSView *view = [window _inProcessDragDestinationAt: screenPoint
+                                                         types: types];
+
+            if (view != destination) {
+                if ([destination respondsToSelector: @selector(draggingExited:)])
+                    [destination draggingExited: info];
+                [destination release];
+                destination = [view retain];
+                operation = NSDragOperationNone;
+                if ([destination respondsToSelector: @selector(draggingEntered:)])
+                    operation = [destination draggingEntered: info];
+            } else if ([destination respondsToSelector: @selector(draggingUpdated:)]) {
+                operation = [destination draggingUpdated: info];
+            }
+            [imageWindow setFrameOrigin: NSMakePoint(screenPoint.x - imageOffset.x,
+                                                     screenPoint.y - imageOffset.y)];
+            if ([source respondsToSelector: @selector(draggedImage:movedTo:)])
+                [source draggedImage: image movedTo: screenPoint];
+            runPendingSourcesDuringDrag(0.008);
+        }
+        if (dropped)
+            break;
+
+        // A short timeout: a button released before the loop started never
+        // arrives as an event, so the button state is checked as well.
+        NSEvent *next = [NSApp
+                nextEventMatchingMask: NSLeftMouseUpMask | NSLeftMouseDraggedMask |
+                                       NSMouseMovedMask | NSKeyDownMask
+                            untilDate: [NSDate dateWithTimeIntervalSinceNow: 0.05]
+                               inMode: NSEventTrackingRunLoopMode
+                              dequeue: YES];
+        moved = NO;
+        if (next == nil) {
+            if (([NSEvent pressedMouseButtons] & 1) == 0)
+                dropped = moved = YES;
+            continue;
+        }
+        if ([next type] == NSKeyDown) {
+            // Escape cancels the drag.
+            if ([[next characters] isEqual: @"\033"])
+                break;
+            continue;
+        }
+        if ([next window] != nil)
+            screenPoint = [[next window] convertBaseToScreen: [next locationInWindow]];
+        else
+            screenPoint = [next locationInWindow];
+        moved = YES;
+        if ([next type] == NSLeftMouseUp)
+            dropped = YES;
+    }
+
+    [imageWindow orderOut: nil];
+    [imageWindow release];
+
+    BOOL performed = NO;
+    if (dropped && destination != nil && operation != NSDragOperationNone) {
+        performed = YES;
+        if ([destination respondsToSelector: @selector(prepareForDragOperation:)])
+            performed = [destination prepareForDragOperation: info];
+        if (performed)
+            performed = [destination respondsToSelector: @selector(performDragOperation:)] &&
+                        [destination performDragOperation: info];
+        if (performed && [destination respondsToSelector: @selector(concludeDragOperation:)])
+            [destination concludeDragOperation: info];
+    } else if ([destination respondsToSelector: @selector(draggingExited:)]) {
+        [destination draggingExited: info];
+    }
+    if (!performed)
+        operation = NSDragOperationNone;
+    if ([destination respondsToSelector: @selector(draggingEnded:)])
+        [destination draggingEnded: info];
+
+    if ([source respondsToSelector: @selector(draggedImage:endedAt:operation:)])
+        [source draggedImage: image endedAt: screenPoint operation: operation];
+    [destination release];
+    [info release];
+}
+
 - (void) dragImage: (NSImage *) image
                 at: (NSPoint) location
             offset: (NSSize) offset
@@ -2697,6 +2969,14 @@ static BOOL _allowsAutomaticWindowTabbing;
             source: (id) source
          slideBack: (BOOL) slideBack
 {
+    if ([NSDraggingManager draggingManager] == nil) {
+        [self _dragImageInProcess: image
+                               at: location
+                            event: event
+                       pasteboard: pasteboard
+                           source: source];
+        return;
+    }
     [[NSDraggingManager draggingManager] dragImage: image
                                                 at: location
                                             offset: offset
