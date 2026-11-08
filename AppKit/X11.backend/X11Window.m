@@ -114,6 +114,27 @@ static XVisualInfo *X11AlphaVisualInfo(Display *display) {
 // windows are then created opaque straight away.
 static BOOL alphaSurfaceFailed;
 
+// An input context for the window, without preedit or status display.
+static XIC createInputContext(XIM xim, Window window) {
+#if defined(DARLING) && defined(__arm64__)
+    // XCreateIC() is variadic and lives in the native (Linux) libX11. Darwin arm64 passes
+    // variadic arguments on the stack, Linux arm64 in registers, so call it through a
+    // non-variadic prototype: all 8 arguments then go in x0-x7, where libX11 reads them.
+    return ((XIC (*)(XIM, const char *, long, const char *, Window, const char *, Window, void *)) XCreateIC)(
+        xim,
+        XNInputStyle, XIMPreeditNothing | XIMStatusNothing,
+        XNClientWindow, window,
+        XNFocusWindow, window,
+        NULL);
+#else
+    return XCreateIC(xim,
+        XNInputStyle, XIMPreeditNothing | XIMStatusNothing,
+        XNClientWindow, window,
+        XNFocusWindow, window,
+        NULL);
+#endif
+}
+
 @implementation X11Window
 
 + (Visual *) visual {
@@ -366,23 +387,7 @@ static NSData *makeWindowIcon() {
         XSetTransientForHint(_display, _window, [mainWindow windowHandle]);
     }
 
-#if defined(DARLING) && defined(__arm64__)
-    // XCreateIC() is variadic and lives in the native (Linux) libX11. Darwin arm64 passes
-    // variadic arguments on the stack, Linux arm64 in registers, so call it through a
-    // non-variadic prototype: all 8 arguments then go in x0-x7, where libX11 reads them.
-    _xic = ((XIC (*)(XIM, const char *, long, const char *, Window, const char *, Window, void *)) XCreateIC)(
-        x11disp->_xim,
-        XNInputStyle, XIMPreeditNothing | XIMStatusNothing,
-        XNClientWindow, _window,
-        XNFocusWindow, _window,
-        NULL);
-#else
-    _xic = XCreateIC(x11disp->_xim,
-        XNInputStyle, XIMPreeditNothing | XIMStatusNothing,
-        XNClientWindow, _window,
-        XNFocusWindow, _window,
-        NULL);
-#endif
+    _xic = createInputContext(x11disp->_xim, _window);
 
     [(X11Display *) [NSDisplay currentDisplay] setWindow: self forID: _window];
 
@@ -663,10 +668,8 @@ static NSData *makeWindowIcon() {
         _cglWindow = _hasAlpha ? CGLGetWindowWithAlpha((void *) _window,
                                                        _visualInfo->visualid)
                                : CGLGetWindow((void *) _window);
-        _xic = XCreateIC(((X11Display *) [NSDisplay currentDisplay])->_xim,
-                         XNInputStyle, XIMPreeditNothing | XIMStatusNothing,
-                         XNClientWindow, _window, XNFocusWindow, _window,
-                         NULL);
+        _xic = createInputContext(
+                ((X11Display *) [NSDisplay currentDisplay])->_xim, _window);
         [(X11Display *) [NSDisplay currentDisplay] setWindow: self
                                                        forID: _window];
         return;

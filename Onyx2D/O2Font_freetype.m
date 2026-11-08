@@ -136,11 +136,13 @@ NSArray *O2FontCopyInstalledFaces(NSString *family, NSString *postScriptName,
 
     NSMutableArray *result = [[NSMutableArray alloc] init];
     FcPattern *pattern = FcPatternCreate();
-    FcObjectSet *objects = FcObjectSetBuild(FC_FAMILY, FC_POSTSCRIPT_NAME,
-                                            FC_STYLE, FC_FULLNAME, FC_FILE,
-                                            NULL);
+    // Not the variadic FcObjectSetBuild(): fontconfig is a native library,
+    // and Darwin and Linux pass variadic arguments differently on arm64.
+    FcObjectSet *objects = FcObjectSetCreate();
     if (pattern == NULL || objects == NULL)
         goto out;
+    for (int i = 0; i < count; i++)
+        FcObjectSetAdd(objects, properties[i]);
 
     for (int i = 0; i < count - 1; i++) {
         if (values[i] != nil)
