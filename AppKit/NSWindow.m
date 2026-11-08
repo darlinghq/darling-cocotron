@@ -334,6 +334,8 @@ static void runPendingSourcesDuringDrag(NSTimeInterval budget) {
 
 @implementation NSWindow
 
+static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen);
+
 // -contentRectForFrameRect:, without sending it to a subclass.
 static NSRect contentRectInFrame(NSWindow *window, NSRect frameRect) {
     NSRect result = [[NSDisplay currentDisplay] insetRect: frameRect
@@ -499,14 +501,18 @@ static BOOL _allowsAutomaticWindowTabbing;
     // view with -setContentView:, but sends neither -frameRectForContentRect:
     // nor -contentRectForFrameRect: to the instance. A subclass override of
     // those two methods therefore does not run before the subclass's own
-    // initializer has. Not documented. Evidence: black-box observation on
-    // macOS 27.0.1 arm64 (tier 2) of an NSWindow subclass that records the
-    // overrides called during -initWithContentRect:styleMask:backing:defer:,
-    // for titled and borderless windows, deferred or not.
+    // initializer has. The frame is moved onto the screen here, without
+    // sending -constrainFrameRect:toScreen: either; ordering the window in
+    // later does not move it again. Not documented. Evidence: black-box
+    // observation on macOS 27.0.1 arm64 (tier 2) of an NSWindow subclass
+    // that records the overrides called during
+    // -initWithContentRect:styleMask:backing:defer:, for titled and
+    // borderless windows, deferred or not, and of the frame of a window
+    // created partly off screen, after init and after -orderFront:.
     // Test: appkit_window_init_overrides.m (window init QUIRK).
     _frame = [[self class] frameRectForContentRect: contentRect
                                          styleMask: styleMask];
-    _frame = [self constrainFrameRect: _frame toScreen: [NSScreen mainScreen]];
+    _frame = constrainRectToScreen(_frame, [NSScreen mainScreen]);
     _savedFrame = _frame;
 
     _level = NSNormalWindowLevel;
@@ -1886,6 +1892,11 @@ static BOOL _allowsAutomaticWindowTabbing;
 }
 
 - (NSRect) constrainFrameRect: (NSRect) rect toScreen: (NSScreen *) screen {
+    return constrainRectToScreen(rect, screen);
+}
+
+// -constrainFrameRect:toScreen:, without sending it to a subclass.
+static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
     if (!screen) {
         return rect;
     }
