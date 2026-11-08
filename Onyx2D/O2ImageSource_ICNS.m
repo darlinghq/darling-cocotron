@@ -234,7 +234,17 @@ static uint32_t nextUnsigned32(O2ImageSource_ICNS *self) {
 
 - (void) parseIcon {
     uint32_t type = nextUnsigned32(self);
-    uint32_t length = nextUnsigned32(self) - 8;
+    uint32_t elementLength = nextUnsigned32(self);
+
+    // The element length counts its 8-byte header. An element shorter than
+    // its header, or one that runs past the end of the data, is malformed:
+    // stop parsing there and keep the elements decoded so far.
+    if (elementLength < 8 || elementLength - 8 > _length - _position) {
+        _position = _length;
+        return;
+    }
+
+    uint32_t length = elementLength - 8;
     uint32_t width = 0;
     uint32_t height = 0;
     uint32_t bitsPerPixel = 0;
@@ -588,10 +598,15 @@ static uint32_t nextUnsigned32(O2ImageSource_ICNS *self) {
 }
 
 - (void) parseImages {
+    // The file header and each element header are 8 bytes; data too short
+    // for a header holds no further icons.
+    if (_length < 8)
+        return;
+
     uint32_t magic = nextUnsigned32(self);
     uint32_t length = nextUnsigned32(self);
 
-    while (_position < _length)
+    while (_length - _position >= 8)
         [self parseIcon];
 
     O2ICNSNode *iconNode;
