@@ -429,23 +429,27 @@ static BOOL _allowsAutomaticWindowTabbing;
 + (NSButton *) standardWindowButton: (NSWindowButton) button
                        forStyleMask: (NSWindowStyleMask) styleMask
 {
-    if (button > NSWindowZoomButton || !(styleMask & NSWindowStyleMaskTitled))
+    // A window has only the buttons its style asks for.
+    NSWindowStyleMask needed;
+    switch (button) {
+    case NSWindowCloseButton:
+        needed = NSWindowStyleMaskClosable;
+        break;
+    case NSWindowMiniaturizeButton:
+        needed = NSWindowStyleMaskMiniaturizable;
+        break;
+    case NSWindowZoomButton:
+        needed = NSWindowStyleMaskResizable;
+        break;
+    default:
+        return nil;
+    }
+    if (!(styleMask & NSWindowStyleMaskTitled) || !(styleMask & needed))
         return nil;
 
     NSButton *result =
             [[NSButton alloc] initWithFrame: NSMakeRect(0, 0, 14, 14)];
     [result setBordered: NO];
-    switch (button) {
-    case NSWindowCloseButton:
-        [result setEnabled: (styleMask & NSWindowStyleMaskClosable) != 0];
-        break;
-    case NSWindowMiniaturizeButton:
-        [result setEnabled: (styleMask & NSWindowStyleMaskMiniaturizable) != 0];
-        break;
-    default:
-        [result setEnabled: (styleMask & NSWindowStyleMaskResizable) != 0];
-        break;
-    }
     return [result autorelease];
 }
 
@@ -516,7 +520,8 @@ static BOOL _allowsAutomaticWindowTabbing;
     _makeSureIsOnAScreen = YES;
     _releaseWhenClosed = YES;
     _viewsNeedDisplay = YES;
-    _restorable = YES;
+    // Titled windows are restorable by default, borderless ones are not.
+    _restorable = (styleMask & NSWindowStyleMaskTitled) != 0;
     _flushNeeded = YES;
     _resizeIncrements = NSMakeSize(1, 1);
     _contentResizeIncrements = NSMakeSize(1, 1);

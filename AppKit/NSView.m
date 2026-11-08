@@ -204,6 +204,7 @@ typedef struct __VFlags {
 
     // TODO: decode this
     _translatesAutoresizingMaskIntoConstraints = YES;
+    _allowedTouchTypes = NSTouchTypeMaskDirect;
 
     if ([coder allowsKeyedCoding]) {
         NSKeyedUnarchiver *keyed = (NSKeyedUnarchiver *) coder;
@@ -437,6 +438,7 @@ typedef struct __VFlags {
     [_layerContext setFrame: _frame];
 
     _translatesAutoresizingMaskIntoConstraints = YES;
+    _allowedTouchTypes = NSTouchTypeMaskDirect;
 
     return self;
 }
