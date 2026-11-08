@@ -30,6 +30,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSLayoutConstraint.h>
 #import <AppKit/NSAppearance.h>
 
+typedef NS_OPTIONS(NSUInteger, NSTouchTypeMask) {
+    NSTouchTypeMaskDirect = 1 << 0,
+    NSTouchTypeMaskIndirect = 1 << 1,
+};
+
 @class NSWindow, NSMenu, NSMenuItem, NSCursor, NSClipView, NSPasteboard,
         NSTextInputContext, NSImage, NSBitmapImageRep, NSScrollView,
         NSTrackingArea, NSShadow, NSScreen, CALayer, CIFilter, CALayerContext;
@@ -140,6 +145,8 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPre
     NSLayoutPriority _verticalContentCompressionResistancePriority;
 
     NSAppearance *_appearance;
+    NSTouchTypeMask _allowedTouchTypes;
+    BOOL _canDrawSubviewsIntoLayer;
 }
 
 @property(class, readonly) BOOL requiresConstraintBasedLayout;
@@ -340,6 +347,15 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPre
 - (void) setLayerContentsRedrawPolicy:
         (NSViewLayerContentsRedrawPolicy) newPolicy;
 - (CALayer *) makeBackingLayer;
+
+// A layer-backed view that answers YES is updated with -updateLayer instead
+// of being drawn with -drawRect:. The default -updateLayer does nothing.
+@property(readonly) BOOL wantsUpdateLayer;
+- (void) updateLayer;
+// Stored; subviews are drawn into their own layers either way.
+@property BOOL canDrawSubviewsIntoLayer;
+// Stored; there are no touch devices to send touches.
+@property NSTouchTypeMask allowedTouchTypes;
 
 - (NSArray *) backgroundFilters;
 - (void) setBackgroundFilters: (NSArray *) filters;

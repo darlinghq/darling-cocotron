@@ -46,6 +46,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <QuartzCore/CALayerContext.h>
 #import <QuartzCore/CATransaction.h>
 #import <AppKit/NSLayoutConstraint.h>
+#import <AppKit/NSTextInput.h>
+#import <AppKit/NSTextInputClient.h>
+#import <objc/runtime.h>
 
 @class IBMetricsTable;
 
@@ -1278,7 +1281,11 @@ static inline void buildTransformsIfNeeded(NSView *self) {
                  (NSComparisonResult (*)(id, id, void *)) compareFunction
                            context: (void *) context
 {
-    NSUnimplementedMethod();
+    if (compareFunction == NULL || [_subviews count] < 2)
+        return;
+
+    [_subviews sortUsingFunction: compareFunction context: context];
+    [self setNeedsDisplay: YES];
 }
 
 - (void) didAddSubview: (NSView *) subview {
@@ -1534,9 +1541,23 @@ static inline void buildTransformsIfNeeded(NSView *self) {
     [self removeTrackingArea: tag];
 }
 
+static char inputContextKey;
+
+// Created on first use for a view that is a text input client.
 - (NSTextInputContext *) inputContext {
-    NSUnimplementedMethod();
-    return nil;
+    if (![self conformsToProtocol: @protocol(NSTextInputClient)])
+        return nil;
+
+    NSTextInputContext *context =
+            objc_getAssociatedObject(self, &inputContextKey);
+    if (context == nil) {
+        context = [[NSTextInputContext alloc]
+                initWithClient: (id<NSTextInputClient>) self];
+        objc_setAssociatedObject(self, &inputContextKey, context,
+                                 OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        [context release];
+    }
+    return context;
 }
 
 - (void) registerForDraggedTypes: (NSArray *) types {
@@ -1828,6 +1849,29 @@ static inline void buildTransformsIfNeeded(NSView *self) {
 
 - (CALayer *) layer {
     return _layer;
+}
+
+- (BOOL) wantsUpdateLayer {
+    return NO;
+}
+
+- (void) updateLayer {
+}
+
+- (BOOL) canDrawSubviewsIntoLayer {
+    return _canDrawSubviewsIntoLayer;
+}
+
+- (void) setCanDrawSubviewsIntoLayer: (BOOL) value {
+    _canDrawSubviewsIntoLayer = value;
+}
+
+- (NSTouchTypeMask) allowedTouchTypes {
+    return _allowedTouchTypes;
+}
+
+- (void) setAllowedTouchTypes: (NSTouchTypeMask) value {
+    _allowedTouchTypes = value;
 }
 
 - (CALayer *) makeBackingLayer {
@@ -2497,7 +2541,10 @@ static NSView *viewBeingPrinted = nil;
             [[NSColor yellowColor] set];
             NSRectFill(rect);
         } else {
-            [self drawRect: rect];
+            if (_layer != nil && [self wantsUpdateLayer])
+                [self updateLayer];
+            else
+                [self drawRect: rect];
             if (NSShowAllViews) {
                 [[self _borderColorForNSShowAllViews] set];
                 NSFrameRect(rect);
