@@ -334,6 +334,8 @@ static void runPendingSourcesDuringDrag(NSTimeInterval budget) {
 
 @implementation NSWindow
 
+static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen);
+
 // -contentRectForFrameRect:, without sending it to a subclass.
 static NSRect contentRectInFrame(NSWindow *window, NSRect frameRect) {
     NSRect result = [[NSDisplay currentDisplay] insetRect: frameRect
@@ -429,23 +431,35 @@ static BOOL _allowsAutomaticWindowTabbing;
 + (NSButton *) standardWindowButton: (NSWindowButton) button
                        forStyleMask: (NSWindowStyleMask) styleMask
 {
-    if (button > NSWindowZoomButton || !(styleMask & NSWindowStyleMaskTitled))
+    // QUIRK: a titled window has either none of the close, miniaturize and zoom
+    // buttons (when its style is none of closable, miniaturizable and resizable) or all
+    // three, each enabled only if the style asks for it. Not documented. Evidence:
+    // black-box observation on macOS 27.0.1 (tier 2), for Titled, Titled|Closable,
+    // Titled|Miniaturizable, Titled|Resizable and untitled styles.
+    // Test: appkit_view_window_macos_defaults ("window buttons").
+    const NSWindowStyleMask buttonStyles = NSWindowStyleMaskClosable
+            | NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable;
+    NSWindowStyleMask enabling;
+    switch (button) {
+    case NSWindowCloseButton:
+        enabling = NSWindowStyleMaskClosable;
+        break;
+    case NSWindowMiniaturizeButton:
+        enabling = NSWindowStyleMaskMiniaturizable;
+        break;
+    case NSWindowZoomButton:
+        enabling = NSWindowStyleMaskResizable;
+        break;
+    default:
+        return nil;
+    }
+    if (!(styleMask & NSWindowStyleMaskTitled) || !(styleMask & buttonStyles))
         return nil;
 
     NSButton *result =
             [[NSButton alloc] initWithFrame: NSMakeRect(0, 0, 14, 14)];
     [result setBordered: NO];
-    switch (button) {
-    case NSWindowCloseButton:
-        [result setEnabled: (styleMask & NSWindowStyleMaskClosable) != 0];
-        break;
-    case NSWindowMiniaturizeButton:
-        [result setEnabled: (styleMask & NSWindowStyleMaskMiniaturizable) != 0];
-        break;
-    default:
-        [result setEnabled: (styleMask & NSWindowStyleMaskResizable) != 0];
-        break;
-    }
+    [result setEnabled: (styleMask & enabling) != 0];
     return [result autorelease];
 }
 
@@ -495,14 +509,18 @@ static BOOL _allowsAutomaticWindowTabbing;
     // view with -setContentView:, but sends neither -frameRectForContentRect:
     // nor -contentRectForFrameRect: to the instance. A subclass override of
     // those two methods therefore does not run before the subclass's own
-    // initializer has. Not documented. Evidence: black-box observation on
-    // macOS 27.0.1 arm64 (tier 2) of an NSWindow subclass that records the
-    // overrides called during -initWithContentRect:styleMask:backing:defer:,
-    // for titled and borderless windows, deferred or not.
+    // initializer has. The frame is moved onto the screen here, without
+    // sending -constrainFrameRect:toScreen: either; ordering the window in
+    // later does not move it again. Not documented. Evidence: black-box
+    // observation on macOS 27.0.1 arm64 (tier 2) of an NSWindow subclass
+    // that records the overrides called during
+    // -initWithContentRect:styleMask:backing:defer:, for titled and
+    // borderless windows, deferred or not, and of the frame of a window
+    // created partly off screen, after init and after -orderFront:.
     // Test: appkit_window_init_overrides.m (window init QUIRK).
     _frame = [[self class] frameRectForContentRect: contentRect
                                          styleMask: styleMask];
-    _frame = [self constrainFrameRect: _frame toScreen: [NSScreen mainScreen]];
+    _frame = constrainRectToScreen(_frame, [NSScreen mainScreen]);
     _savedFrame = _frame;
 
     _level = NSNormalWindowLevel;
@@ -516,7 +534,8 @@ static BOOL _allowsAutomaticWindowTabbing;
     _makeSureIsOnAScreen = YES;
     _releaseWhenClosed = YES;
     _viewsNeedDisplay = YES;
-    _restorable = YES;
+    // Titled windows are restorable by default, borderless ones are not.
+    _restorable = (styleMask & NSWindowStyleMaskTitled) != 0;
     _flushNeeded = YES;
     _resizeIncrements = NSMakeSize(1, 1);
     _contentResizeIncrements = NSMakeSize(1, 1);
@@ -1881,6 +1900,11 @@ static BOOL _allowsAutomaticWindowTabbing;
 }
 
 - (NSRect) constrainFrameRect: (NSRect) rect toScreen: (NSScreen *) screen {
+    return constrainRectToScreen(rect, screen);
+}
+
+// -constrainFrameRect:toScreen:, without sending it to a subclass.
+static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
     if (!screen) {
         return rect;
     }

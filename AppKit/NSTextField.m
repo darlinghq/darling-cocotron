@@ -131,6 +131,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return [_cell drawsBackground] || [_cell isBezeled];
 }
 
+// See the QUIRK in NSControl: a text field follows the view rule, so a
+// label lets clicks through and a bezeled, editable field does not.
+- (BOOL) mouseDownCanMoveWindow {
+    return ![self isOpaque];
+}
+
 - (void) resetCursorRects {
     [_cell resetCursorRect: [self bounds] inView: self];
 }
