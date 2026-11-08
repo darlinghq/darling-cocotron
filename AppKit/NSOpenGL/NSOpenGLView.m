@@ -160,8 +160,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     _context = nil;
 }
 
-- (void) setFrame: (NSRect) frame {
-    [super setFrame: frame];
+// -setFrame: goes through both of these.
+- (void) setFrameOrigin: (NSPoint) origin {
+    [super setFrameOrigin: origin];
+    [self update];
+}
+
+- (void) setFrameSize: (NSSize) size {
+    [super setFrameSize: size];
     _needsReshape = YES;
     [self update];
 }

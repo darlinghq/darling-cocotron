@@ -369,13 +369,14 @@ id _NSTabViewFloatingCell = nil;
     return _selectedItem;
 }
 
-- (void) setFrame: (NSRect) frame {
+- (void) setFrameSize: (NSSize) size {
     /* A tab view will autoresize the selected view regardless of whether
        autoresizesSubviews is enabled We do it here because
        resizeSubviewsWithOldSize: won't be called if autoresizesSubviews is off.
+       -setFrame: goes through -setFrameSize: as well.
      */
 
-    [super setFrame: frame];
+    [super setFrameSize: size];
     if (_selectedItem != nil)
         [[_selectedItem view] setFrame: [self contentRect]];
 }

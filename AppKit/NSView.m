@@ -1038,18 +1038,17 @@ static inline void buildTransformsIfNeeded(NSView *self) {
     return NSMakeRect(minx, miny, maxx - minx, maxy - miny);
 }
 
-- (void) setFrame: (NSRect) frame {
-    // Cocoa does not post the notification if the frames are equal
-    // Possible that resizeSubviewsWithOldSize is not called if the sizes are
-    // equal
-    if (NSEqualRects(_frame, frame))
-        return;
+// Stores a new frame and lays out the subviews, without posting
+// NSViewFrameDidChangeNotification. Returns whether the frame changed.
+static BOOL applyFrame(NSView *self, NSRect frame) {
+    if (NSEqualRects(self->_frame, frame))
+        return NO;
 
-    NSSize oldSize = _bounds.size;
+    NSSize oldSize = self->_bounds.size;
 
-    if (_bounds.size.width == 0 || _bounds.size.height == 0) {
+    if (self->_bounds.size.width == 0 || self->_bounds.size.height == 0) {
         // No valid current bounds value - just update it to use the frame size
-        _bounds.size = frame.size;
+        self->_bounds.size = frame.size;
     } else {
         // Get the bounds->frame transform
         CGAffineTransform transform = concatViewTransform(
@@ -1058,9 +1057,10 @@ static inline void buildTransformsIfNeeded(NSView *self) {
         // frame size
         transform = CGAffineTransformInvert(transform);
 
-        _bounds.size = CGSizeApplyAffineTransform(frame.size, transform);
+        self->_bounds.size =
+                CGSizeApplyAffineTransform(frame.size, transform);
     }
-    _frame = frame;
+    self->_frame = frame;
 
     // Subviews resized below may convert their frames to window coordinates,
     // so they must see this view's new transform, and its layer the new
@@ -1068,40 +1068,66 @@ static inline void buildTransformsIfNeeded(NSView *self) {
     invalidateTransform(self);
     configureLayerGeometry(self);
 
-    [_window invalidateCursorRectsForView: self]; // this also invalidates
-                                                  // tracking areas
+    [self->_window invalidateCursorRectsForView: self]; // this also
+                                                        // invalidates
+                                                        // tracking areas
 
-    if (_autoresizesSubviews) {
+    if (self->_autoresizesSubviews) {
         [self resizeSubviewsWithOldSize: oldSize];
     }
 
-    NSRect layerFrame = _frame;
+    NSRect layerFrame = self->_frame;
 
-    if (_superview != nil)
-        layerFrame = [_superview convertRect: layerFrame toView: nil];
+    if (self->_superview != nil)
+        layerFrame = [self->_superview convertRect: layerFrame toView: nil];
 
-    [_layerContext setFrame: layerFrame];
+    [self->_layerContext setFrame: layerFrame];
 
     invalidateTransform(self);
+    return YES;
+}
 
-    if (_postsNotificationOnFrameChange)
+static void postFrameChange(NSView *self) {
+    if (self->_postsNotificationOnFrameChange && self->_frameChangeDepth == 0)
         [[NSNotificationCenter defaultCenter]
                 postNotificationName: NSViewFrameDidChangeNotification
                               object: self];
+}
+
+- (void) setFrame: (NSRect) frame {
+    // QUIRK: -setFrame: sends -setFrameOrigin: and then -setFrameSize: with
+    // the new values, also when the frame does not change, so a subclass
+    // overriding either sees every frame change. One
+    // NSViewFrameDidChangeNotification is posted, and only when the frame
+    // changed. Not documented. Evidence: black-box observation on macOS
+    // 27.0.1 arm64 (tier 2) of an NSView subclass overriding both setters,
+    // with the origin, the size, both or neither changed.
+    // Test: appkit_view_window_macos_defaults.m (setFrame: QUIRK).
+    NSRect oldFrame = _frame;
+
+    _frameChangeDepth++;
+    [self setFrameOrigin: frame.origin];
+    [self setFrameSize: frame.size];
+    _frameChangeDepth--;
+
+    if (!NSEqualRects(oldFrame, _frame))
+        postFrameChange(self);
 }
 
 - (void) setFrameSize: (NSSize) size {
     NSRect frame = _frame;
 
     frame.size = size;
-    [self setFrame: frame];
+    if (applyFrame(self, frame))
+        postFrameChange(self);
 }
 
 - (void) setFrameOrigin: (NSPoint) origin {
-    NSRect frame = [self frame];
+    NSRect frame = _frame;
 
     frame.origin = origin;
-    [self setFrame: frame];
+    if (applyFrame(self, frame))
+        postFrameChange(self);
 }
 
 - (void) setFrameRotation: (CGFloat) angle {
