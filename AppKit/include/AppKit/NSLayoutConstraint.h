@@ -39,6 +39,8 @@ typedef struct NSDirectionalEdgeInsets {
 	CGFloat trailing;
 } NSDirectionalEdgeInsets;
 
+APPKIT_EXPORT const NSDirectionalEdgeInsets NSDirectionalEdgeInsetsZero;
+
 NS_INLINE NSDirectionalEdgeInsets NSDirectionalEdgeInsetsMake(CGFloat top, CGFloat leading,
                                                               CGFloat bottom, CGFloat trailing) {
 	NSDirectionalEdgeInsets insets = {top, leading, bottom, trailing};
