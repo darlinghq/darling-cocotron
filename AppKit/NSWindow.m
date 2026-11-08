@@ -239,6 +239,23 @@ NSInteger NSBitsPerPixelFromDepth(NSWindowDepth depth) {
 
 @implementation NSWindow
 
+// -contentRectForFrameRect:, without sending it to a subclass.
+static NSRect contentRectInFrame(NSWindow *window, NSRect frameRect) {
+    NSRect result = [[NSDisplay currentDisplay] insetRect: frameRect
+                           forNativeWindowBorderWithStyle: window->_styleMask];
+
+    if ([window hasMainMenu]) {
+        result.size.height -= [NSMainMenuView menuHeight];
+    }
+
+    NSToolbar *toolbar = window->_toolbar;
+    if ([toolbar _view] != nil && ![[toolbar _view] isHidden]) {
+        result.size.height -= [[toolbar _view] frame].size.height;
+    }
+
+    return result;
+}
+
 @synthesize appearance = _appearance;
 @synthesize identifier = _identifier;
 @synthesize accessibilityElement = _isAccessible;
@@ -378,7 +395,18 @@ static BOOL _allowsAutomaticWindowTabbing;
     _backingType = backing;
     _isDeferred = defer;
 
-    _frame = [self frameRectForContentRect: contentRect];
+    // QUIRK: the initializer computes the frame with the class method
+    // +frameRectForContentRect:styleMask: and installs the default content
+    // view with -setContentView:, but sends neither -frameRectForContentRect:
+    // nor -contentRectForFrameRect: to the instance. A subclass override of
+    // those two methods therefore does not run before the subclass's own
+    // initializer has. Not documented. Evidence: black-box observation on
+    // macOS 27.0.1 arm64 (tier 2) of an NSWindow subclass that records the
+    // overrides called during -initWithContentRect:styleMask:backing:defer:,
+    // for titled and borderless windows, deferred or not.
+    // Test: appkit_window_init_overrides.m (window init QUIRK).
+    _frame = [[self class] frameRectForContentRect: contentRect
+                                         styleMask: styleMask];
     _frame = [self constrainFrameRect: _frame toScreen: [NSScreen mainScreen]];
     _savedFrame = _frame;
 
@@ -409,10 +437,11 @@ static BOOL _allowsAutomaticWindowTabbing;
     [_backgroundView _setWindow: self];
     [_backgroundView setNextResponder: self];
 
-    NSRect contentViewFrame = [self contentRectForFrameRect: backgroundFrame];
-    _contentView = [[NSView alloc] initWithFrame: contentViewFrame];
-    [_contentView setAutoresizesSubviews: YES];
-    [_contentView
+    // See the QUIRK above: not -contentRectForFrameRect:.
+    NSRect contentViewFrame = contentRectInFrame(self, backgroundFrame);
+    NSView *contentView = [[NSView alloc] initWithFrame: contentViewFrame];
+    [contentView setAutoresizesSubviews: YES];
+    [contentView
             setAutoresizingMask: NSViewWidthSizable | NSViewHeightSizable];
 
     if ([self hasMainMenu]) {
@@ -429,7 +458,8 @@ static BOOL _allowsAutomaticWindowTabbing;
         [_backgroundView addSubview: _menuView];
     }
 
-    [_backgroundView addSubview: _contentView];
+    [self setContentView: contentView];
+    [contentView release];
     [_backgroundView setNeedsDisplay: YES];
 
     if (!(_styleMask & NSAppKitPrivateWindow)) {
@@ -1168,7 +1198,9 @@ static BOOL _allowsAutomaticWindowTabbing;
 
 - (void) setContentView: (NSView *) view {
     view = [view retain];
-    [view setFrame: [_contentView frame]];
+    // The initializer installs the first content view with its frame set.
+    if (_contentView != nil)
+        [view setFrame: [_contentView frame]];
 
     [_contentView removeFromSuperview];
     [_contentView release];
@@ -1728,18 +1760,7 @@ static BOOL _allowsAutomaticWindowTabbing;
 }
 
 - (NSRect) contentRectForFrameRect: (NSRect) frameRect {
-    NSRect result = [[NSDisplay currentDisplay] insetRect: frameRect
-                           forNativeWindowBorderWithStyle: [self styleMask]];
-
-    if ([self hasMainMenu]) {
-        result.size.height -= [NSMainMenuView menuHeight];
-    }
-
-    if ([_toolbar _view] != nil && ![[_toolbar _view] isHidden]) {
-        result.size.height -= [[_toolbar _view] frame].size.height;
-    }
-
-    return result;
+    return contentRectInFrame(self, frameRect);
 }
 
 - (NSRect) constrainFrameRect: (NSRect) rect toScreen: (NSScreen *) screen {
