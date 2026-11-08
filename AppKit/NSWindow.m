@@ -134,6 +134,7 @@ NSInteger NSBitsPerPixelFromDepth(NSWindowDepth depth) {
 @interface NSWindow ()
 
 - (NSRect) zoomedFrame;
+- (void) _postOcclusionChangeIfVisibleWas: (BOOL) wasVisible;
 
 @end
 
@@ -821,6 +822,8 @@ static BOOL _allowsAutomaticWindowTabbing;
             {NSWindowDidMiniaturizeNotification,
              @selector(windowDidMiniaturize:)},
             {NSWindowDidMoveNotification, @selector(windowDidMove:)},
+            {NSWindowDidChangeOcclusionStateNotification,
+             @selector(windowDidChangeOcclusionState:)},
             {NSWindowDidResignKeyNotification, @selector(windowDidResignKey:)},
             {NSWindowDidResignMainNotification,
              @selector(windowDidResignMain:)},
@@ -2300,6 +2303,8 @@ static BOOL _allowsAutomaticWindowTabbing;
 - (void) orderWindow: (NSWindowOrderingMode) place
           relativeTo: (NSInteger) relativeTo
 {
+    BOOL wasVisible = _isVisible;
+
     // The move notifications are sent under unknown conditions around
     // orderFront: in the Apple AppKit, we do them all the time here until it's
     // figured out. I suspect it is a side effect of off-screen windows being at
@@ -2353,6 +2358,7 @@ static BOOL _allowsAutomaticWindowTabbing;
         break;
     }
 
+    [self _postOcclusionChangeIfVisibleWas: wasVisible];
     [self postNotificationName: NSWindowDidMoveNotification];
 }
 
@@ -2698,6 +2704,7 @@ static BOOL _allowsAutomaticWindowTabbing;
     } else {
         [[self platformWindow] hideWindow];
     }
+    [self _postOcclusionChangeIfVisibleWas: !visible];
 }
 
 - (void) orderFront: (id) sender {
@@ -2983,7 +2990,17 @@ static BOOL _allowsAutomaticWindowTabbing;
 }
 
 - (void) _setVisible: (BOOL) visible {
+    BOOL wasVisible = _isVisible;
+
     _isVisible = visible;
+    [self _postOcclusionChangeIfVisibleWas: wasVisible];
+}
+
+// The occlusion state follows visibility (see -occlusionState), so it
+// changes whenever the window is shown or hidden.
+- (void) _postOcclusionChangeIfVisibleWas: (BOOL) wasVisible {
+    if (wasVisible != _isVisible)
+        [self postNotificationName: NSWindowDidChangeOcclusionStateNotification];
 }
 
 // default NSDraggingDestination
@@ -3066,7 +3083,9 @@ static BOOL _allowsAutomaticWindowTabbing;
     [self _setSheetOrigin];
     NSRect sheetFrame = [sheet frame];
 
+    BOOL sheetWasVisible = sheet->_isVisible;
     sheet->_isVisible = YES;
+    [sheet _postOcclusionChangeIfVisibleWas: sheetWasVisible];
     [sheet display];
     [[sheet platformWindow] sheetOrderFrontFromFrame: sheetFrame
                                          aboveWindow: [self platformWindow]];
@@ -3089,8 +3108,10 @@ static BOOL _allowsAutomaticWindowTabbing;
     sheetFrame.origin.y = NSMaxY(sheetFrame);
     sheetFrame.size.height = 0;
 
+    BOOL sheetWasVisible = sheet->_isVisible;
     sheet->_isVisible = NO;
     [[sheet platformWindow] sheetOrderOutToFrame: sheetFrame];
+    [sheet _postOcclusionChangeIfVisibleWas: sheetWasVisible];
     [(NSThemeFrame *) [sheet _backgroundView] setWindowBorderType: NSNoBorder];
 
     [_sheetContext release];

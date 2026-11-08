@@ -690,6 +690,7 @@ APPKIT_EXPORT const NSNotificationName NSWindowDidExposeNotification;
 - (void) windowDidDeminiaturize: (NSNotification *) note;
 - (void) windowWillMove: (NSNotification *) note;
 - (void) windowDidMove: (NSNotification *) note;
+- (void) windowDidChangeOcclusionState: (NSNotification *) note;
 - (NSSize) windowWillResize: (NSWindow *) sender toSize: (NSSize) size;
 - (void) windowDidResize: (NSNotification *) note;
 - (void) windowDidUpdate: (NSNotification *) note;
