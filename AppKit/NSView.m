@@ -2641,9 +2641,10 @@ static NSView *viewBeingPrinted = nil;
     }
 }
 
+// A view that draws its whole frame is taken to handle the clicks in it; a
+// transparent one lets them through to the window background.
 - (BOOL) mouseDownCanMoveWindow {
-    NSUnimplementedMethod();
-    return NO;
+    return ![self isOpaque];
 }
 
 - (void) print: sender {

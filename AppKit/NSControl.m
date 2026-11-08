@@ -42,6 +42,16 @@ NSString *const NSControlTextDidEndEditingNotification =
 
 @implementation NSControl
 
+// QUIRK: controls answer NO, whatever their opacity; NSTextField goes back
+// to the view rule. Not documented. Evidence: black-box observation on
+// macOS 27.0.1 arm64 (tier 2): NSButton and NSImageView answer NO, a label
+// text field YES and an editable one NO, while a plain non-opaque NSView
+// answers YES. Test: appkit_view_window_macos_defaults.m
+// (mouseDownCanMoveWindow QUIRK).
+- (BOOL) mouseDownCanMoveWindow {
+    return NO;
+}
+
 @synthesize allowsExpansionToolTips = _allowsExpansionToolTips;
 @synthesize allowsLogicalLayoutDirection = _allowsLogicalLayoutDirection;
 
