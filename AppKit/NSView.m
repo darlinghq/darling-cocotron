@@ -1059,6 +1059,12 @@ static inline void buildTransformsIfNeeded(NSView *self) {
     }
     _frame = frame;
 
+    // Subviews resized below may convert their frames to window coordinates,
+    // so they must see this view's new transform, and its layer the new
+    // geometry.
+    invalidateTransform(self);
+    configureLayerGeometry(self);
+
     [_window invalidateCursorRectsForView: self]; // this also invalidates
                                                   // tracking areas
 
@@ -1107,6 +1113,7 @@ static inline void buildTransformsIfNeeded(NSView *self) {
     if (!NSEqualRects(bounds, _bounds)) {
         _bounds = bounds;
         invalidateTransform(self);
+        configureLayerGeometry(self);
 
         [_window invalidateCursorRectsForView: self]; // this also invalidates
                                                       // tracking areas
