@@ -122,6 +122,12 @@ typedef NS_OPTIONS(NSUInteger, NSWindowOcclusionState) {
     NSWindowOcclusionStateVisible = 1 << 1
 };
 
+typedef NS_ENUM(NSInteger, NSWindowTabbingMode) {
+    NSWindowTabbingModeAutomatic = 0,
+    NSWindowTabbingModePreferred,
+    NSWindowTabbingModeDisallowed,
+};
+
 typedef int NSSelectionDirection;
 
 APPKIT_EXPORT const NSNotificationName NSWindowDidBecomeKeyNotification;
@@ -253,6 +259,8 @@ APPKIT_EXPORT const NSNotificationName NSWindowDidExposeNotification;
 
     BOOL _isAccessible;
     BOOL _restorable;
+    NSWindowTabbingMode _tabbingMode;
+    NSWindowCollectionBehavior _collectionBehavior;
 }
 
 @property(class) BOOL allowsAutomaticWindowTabbing;
@@ -465,15 +473,7 @@ APPKIT_EXPORT const NSNotificationName NSWindowDidExposeNotification;
 - (BOOL) canBecomeVisibleWithoutLogin;
 - (NSWindowCollectionBehavior) collectionBehavior;
 
-/* Window tabbing. Declared because games set it while configuring a window, and an
- * unrecognised selector on NSWindow takes the process down at launch. Window tabbing is
- * not implemented, so the value is stored and ignored. */
-typedef NS_ENUM(NSUInteger, NSWindowTabbingMode) {
-	NSWindowTabbingModeAutomatic = 0,
-	NSWindowTabbingModePreferred,
-	NSWindowTabbingModeDisallowed,
-};
-
+/* Window tabbing is not implemented, so the value is stored and ignored. */
 - (NSWindowTabbingMode) tabbingMode;
 - (void) setTabbingMode: (NSWindowTabbingMode)tabbingMode;
 
