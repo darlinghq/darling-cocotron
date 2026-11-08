@@ -85,7 +85,15 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (void) resizeSubviewsWithOldSize: (NSSize) oldSize {
     NSView *menuView = nil;
     NSToolbarView *toolbarView = nil;
-    NSView *contentView = nil;
+    // The subview that holds the window's content view, which may be the
+    // content view itself or a view wrapping it. Other subviews added to the
+    // frame view are not the content, even when they come last.
+    NSView *contentView = [[self window] contentView];
+    while (contentView != nil && [contentView superview] != nil &&
+           [contentView superview] != self)
+        contentView = [contentView superview];
+    if ([contentView superview] != self)
+        contentView = nil;
 
     // tile the subviews, when/if we add titlebars and such do it here
     for (NSView *view in _subviews) {
@@ -93,9 +101,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
             menuView = view;
         else if ([view isKindOfClass: [NSToolbarView class]])
             toolbarView = (NSToolbarView *) view;
-        else
-            contentView = view;
     }
+
+    // Any other subview follows its own autoresizing mask.
+    for (NSView *view in [[_subviews copy] autorelease])
+        if (view != contentView && view != menuView && view != toolbarView)
+            [view resizeWithOldSuperviewSize: oldSize];
 
     // subtracts menu height but not toolbar height
     NSRect contentFrame = [[[self window] class]
@@ -133,26 +144,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (void) mouseDown: (NSEvent *) event {
-    if (![[self window] isMovableByWindowBackground])
+    // A click that reaches the background either moves the window or goes
+    // on up the responder chain.
+    if (![[self window] isMovableByWindowBackground]) {
+        [super mouseDown: event];
         return;
+    }
 
-    NSPoint origin = [[self window] frame].origin;
-    NSPoint firstLocation =
-            [[self window] convertBaseToScreen: [event locationInWindow]];
-    do {
-        event = [[self window] nextEventMatchingMask: NSLeftMouseUpMask |
-                                                      NSLeftMouseDraggedMask];
-
-        NSPoint delta =
-                [[self window] convertBaseToScreen: [event locationInWindow]];
-
-        delta.x -= firstLocation.x;
-        delta.y -= firstLocation.y;
-
-        [[self window] setFrameOrigin: NSMakePoint(origin.x + delta.x,
-                                                   origin.y + delta.y)];
-
-    } while ([event type] != NSLeftMouseUp);
+    [[self window] performWindowDragWithEvent: event];
 }
 
 @end

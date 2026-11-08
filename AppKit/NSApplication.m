@@ -1218,7 +1218,7 @@ NSApplication *NSApp = nil;
         }
         [sheet _setSheetContext: nil];
     } else {
-        NSUInteger count = [_windows count];
+        NSInteger count = [_windows count];
 
         while (--count >= 0) {
             NSWindow *check = _windows[count];
@@ -1243,7 +1243,7 @@ NSApplication *NSApp = nil;
 }
 
 - (void) endSheet: (NSWindow *) sheet {
-    [self endSheet: sheet returnCode: 0];
+    [self endSheet: sheet returnCode: NSRunStoppedResponse];
 }
 
 - (void) reportException: (NSException *) exception {

@@ -30,6 +30,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSLayoutConstraint.h>
 #import <AppKit/NSAppearance.h>
 
+typedef NS_OPTIONS(NSUInteger, NSTouchTypeMask) {
+    NSTouchTypeMaskDirect = 1 << 0,
+    NSTouchTypeMaskIndirect = 1 << 1,
+};
+
 @class NSWindow, NSMenu, NSMenuItem, NSCursor, NSClipView, NSPasteboard,
         NSTextInputContext, NSImage, NSBitmapImageRep, NSScrollView,
         NSTrackingArea, NSShadow, NSScreen, CALayer, CIFilter, CALayerContext;
@@ -134,11 +139,14 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPre
     id __remove;
     NSUserInterfaceItemIdentifier _identifier;
     NSLayoutPriority _horizontalContentHuggingPriority;
+    BOOL _wantsBestResolutionOpenGLSurface;
     NSLayoutPriority _verticalContentHuggingPriority;
     NSLayoutPriority _horizontalContentCompressionResistancePriority;
     NSLayoutPriority _verticalContentCompressionResistancePriority;
 
     NSAppearance *_appearance;
+    NSTouchTypeMask _allowedTouchTypes;
+    BOOL _canDrawSubviewsIntoLayer;
 }
 
 @property(class, readonly) BOOL requiresConstraintBasedLayout;
@@ -340,6 +348,15 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPre
         (NSViewLayerContentsRedrawPolicy) newPolicy;
 - (CALayer *) makeBackingLayer;
 
+// A layer-backed view that answers YES is updated with -updateLayer instead
+// of being drawn with -drawRect:. The default -updateLayer does nothing.
+@property(readonly) BOOL wantsUpdateLayer;
+- (void) updateLayer;
+// Stored; subviews are drawn into their own layers either way.
+@property BOOL canDrawSubviewsIntoLayer;
+// Stored; there are no touch devices to send touches.
+@property NSTouchTypeMask allowedTouchTypes;
+
 - (NSArray *) backgroundFilters;
 - (void) setBackgroundFilters: (NSArray *) filters;
 - (NSArray *) contentFilters;
@@ -447,6 +464,16 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPre
 - (NSSize) convertSizeToBase: (NSSize) aSize;
 - (NSRect) convertRectFromBase: (NSRect) aRect;
 - (NSRect) convertRectToBase: (NSRect) aRect;
+
+- (NSRect) convertRectToBacking: (NSRect) rect;
+- (NSRect) convertRectFromBacking: (NSRect) rect;
+- (NSPoint) convertPointToBacking: (NSPoint) point;
+- (NSPoint) convertPointFromBacking: (NSPoint) point;
+- (NSSize) convertSizeToBacking: (NSSize) size;
+- (NSSize) convertSizeFromBacking: (NSSize) size;
+
+// Stored and archived; the X11 backend has no high-resolution surfaces.
+@property BOOL wantsBestResolutionOpenGLSurface;
 
 - (void) showDefinitionForAttributedString: (NSAttributedString *) string
                                    atPoint: (NSPoint) origin;

@@ -23,7 +23,23 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 APPKIT_EXPORT NSString *const NSTextInputContextKeyboardSelectionDidChangeNotification;
 
-@interface NSTextInputContext : NSObject
+@class NSEvent;
+@protocol NSTextInputClient;
+
+// There is no input method, so a context turns key events into text and
+// commands for its client through the key bindings.
+@interface NSTextInputContext : NSObject {
+    id _client;
+}
+
+- (instancetype) initWithClient: (id<NSTextInputClient>) client;
+@property(readonly) id<NSTextInputClient> client;
+
+- (BOOL) handleEvent: (NSEvent *) event;
+- (void) activate;
+- (void) deactivate;
+- (void) discardMarkedText;
+- (void) invalidateCharacterCoordinates;
 
 @end
 

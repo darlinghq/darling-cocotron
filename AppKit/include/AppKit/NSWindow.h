@@ -118,7 +118,44 @@ typedef NS_ENUM(NSUInteger, NSWindowSharingType) {
     NSWindowSharingReadWrite = 0x02
 };
 
+typedef NS_OPTIONS(NSUInteger, NSWindowOcclusionState) {
+    NSWindowOcclusionStateVisible = 1 << 1
+};
+
+typedef NS_ENUM(NSInteger, NSWindowTabbingMode) {
+    NSWindowTabbingModeAutomatic = 0,
+    NSWindowTabbingModePreferred,
+    NSWindowTabbingModeDisallowed,
+};
+
+typedef NS_ENUM(NSInteger, NSWindowTitleVisibility) {
+    NSWindowTitleVisible = 0,
+    NSWindowTitleHidden = 1,
+};
+
+typedef NS_ENUM(NSInteger, NSTitlebarSeparatorStyle) {
+    NSTitlebarSeparatorStyleAutomatic = 0,
+    NSTitlebarSeparatorStyleNone = 1,
+    NSTitlebarSeparatorStyleLine = 2,
+    NSTitlebarSeparatorStyleShadow = 3,
+};
+
+typedef NS_ENUM(NSInteger, NSWindowToolbarStyle) {
+    NSWindowToolbarStyleAutomatic = 0,
+    NSWindowToolbarStyleExpanded = 1,
+    NSWindowToolbarStylePreference = 2,
+    NSWindowToolbarStyleUnified = 3,
+    NSWindowToolbarStyleUnifiedCompact = 4,
+};
+
+typedef NSString *NSWindowTabbingIdentifier;
+
 typedef int NSSelectionDirection;
+enum {
+    NSDirectSelection = 0,
+    NSSelectingNext = 1,
+    NSSelectingPrevious = 2,
+};
 
 APPKIT_EXPORT const NSNotificationName NSWindowDidBecomeKeyNotification;
 APPKIT_EXPORT const NSNotificationName NSWindowDidResignKeyNotification;
@@ -147,7 +184,7 @@ APPKIT_EXPORT const NSNotificationName NSWindowWillEnterFullScreenNotification;
 APPKIT_EXPORT const NSNotificationName NSWindowWillExitFullScreenNotification;
 APPKIT_EXPORT const NSNotificationName NSWindowDidExposeNotification;
 
-@interface NSWindow : NSResponder <NSUserInterfaceItemIdentification, NSAccessibility> {
+@interface NSWindow : NSResponder <NSUserInterfaceItemIdentification, NSAccessibility, NSAppearanceCustomization> {
     NSRect _frame;
     NSWindowStyleMask _styleMask;
     NSBackingStoreType _backingType;
@@ -244,12 +281,25 @@ APPKIT_EXPORT const NSNotificationName NSWindowDidExposeNotification;
     NSRect _savedFrame;
     NSPoint _mouseDownLocationInWindow;
 
+    NSAppearance *_appearance;
     NSUserInterfaceItemIdentifier _identifier;
 
     BOOL _isAccessible;
+    BOOL _restorable;
+    NSWindowTabbingMode _tabbingMode;
+    NSWindowCollectionBehavior _collectionBehavior;
+    NSWindowTabbingIdentifier _tabbingIdentifier;
+    NSString *_subtitle;
+    NSWindowTitleVisibility _titleVisibility;
+    NSTitlebarSeparatorStyle _titlebarSeparatorStyle;
+    NSWindowToolbarStyle _toolbarStyle;
+    BOOL _titlebarAppearsTransparent;
+    BOOL _isMovable;
+    NSButton *_standardWindowButtons[3];
 }
 
 @property(class) BOOL allowsAutomaticWindowTabbing;
+@property(getter=isRestorable) BOOL restorable;
 
 + (NSWindowDepth) defaultDepthLimit;
 
@@ -425,6 +475,7 @@ APPKIT_EXPORT const NSNotificationName NSWindowDidExposeNotification;
 - (NSButton *) standardWindowButton: (NSWindowButton) value;
 - (NSButtonCell *) defaultButtonCell;
 - (NSWindow *) attachedSheet;
+- (NSWindow *) sheetParent;
 
 - (id) windowController;
 - (NSArray *) drawers;
@@ -445,19 +496,47 @@ APPKIT_EXPORT const NSNotificationName NSWindowDidExposeNotification;
 
 - (BOOL) isDocumentEdited;
 - (BOOL) isZoomed;
+@property(readonly) NSWindowOcclusionState occlusionState;
+
 - (BOOL) isVisible;
 - (BOOL) isKeyWindow;
 - (BOOL) isMainWindow;
 - (BOOL) isMiniaturized;
 - (BOOL) isMovable;
+- (void) performWindowDragWithEvent: (NSEvent *) event;
 - (BOOL) inLiveResize;
 - (BOOL) canBecomeKeyWindow;
 - (BOOL) canBecomeMainWindow;
 - (BOOL) canBecomeVisibleWithoutLogin;
 - (NSWindowCollectionBehavior) collectionBehavior;
 
+/* Window tabbing is not implemented, so the value is stored and ignored. */
+- (NSWindowTabbingMode) tabbingMode;
+- (void) setTabbingMode: (NSWindowTabbingMode)tabbingMode;
+@property(copy) NSWindowTabbingIdentifier tabbingIdentifier;
+
+/* Title bar and toolbar appearance. The window manager draws the title bar,
+ * so these are stored for callers to read back. */
+@property(copy) NSString *subtitle;
+@property NSWindowTitleVisibility titleVisibility;
+@property BOOL titlebarAppearsTransparent;
+@property NSTitlebarSeparatorStyle titlebarSeparatorStyle;
+@property NSWindowToolbarStyle toolbarStyle;
+
 - (NSPoint) convertBaseToScreen: (NSPoint) point;
 - (NSPoint) convertScreenToBase: (NSPoint) point;
+- (NSPoint) convertPointToScreen: (NSPoint) point;
+- (NSPoint) convertPointFromScreen: (NSPoint) point;
+- (NSRect) convertRectToScreen: (NSRect) rect;
+- (NSRect) convertRectFromScreen: (NSRect) rect;
+- (CGFloat) backingScaleFactor;
+
+- (void) beginSheet: (NSWindow *) sheet
+        completionHandler: (void (^)(NSInteger returnCode)) handler;
+- (void) endSheet: (NSWindow *) sheet;
+- (void) endSheet: (NSWindow *) sheet returnCode: (NSInteger) returnCode;
+
+@property(readonly, strong) NSAppearance *effectiveAppearance;
 
 - (NSRect) frameRectForContentRect: (NSRect) rect;
 - (NSRect) contentRectForFrameRect: (NSRect) rect;
@@ -612,6 +691,7 @@ APPKIT_EXPORT const NSNotificationName NSWindowDidExposeNotification;
 - (void) windowDidDeminiaturize: (NSNotification *) note;
 - (void) windowWillMove: (NSNotification *) note;
 - (void) windowDidMove: (NSNotification *) note;
+- (void) windowDidChangeOcclusionState: (NSNotification *) note;
 - (NSSize) windowWillResize: (NSWindow *) sender toSize: (NSSize) size;
 - (void) windowDidResize: (NSNotification *) note;
 - (void) windowDidUpdate: (NSNotification *) note;

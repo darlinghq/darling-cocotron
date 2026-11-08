@@ -358,4 +358,24 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (void) noop: sender {
 }
 
++ (NSArray *) restorableStateKeyPaths {
+    return [NSArray array];
+}
+
+- (void) encodeRestorableStateWithCoder: (NSCoder *) coder {
+}
+
+- (void) encodeRestorableStateWithCoder: (NSCoder *) coder backgroundQueue: (NSOperationQueue *) queue {
+    [self encodeRestorableStateWithCoder: coder];
+}
+
+- (void) restoreStateWithCoder: (NSCoder *) coder {
+}
+
+- (void) updateUserActivityState: (NSUserActivity *) userActivity {
+}
+
+- (void) restoreUserActivityState: (NSUserActivity *) userActivity {
+}
+
 @end

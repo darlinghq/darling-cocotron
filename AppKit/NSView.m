@@ -46,6 +46,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <QuartzCore/CALayerContext.h>
 #import <QuartzCore/CATransaction.h>
 #import <AppKit/NSLayoutConstraint.h>
+#import <AppKit/NSTextInput.h>
+#import <AppKit/NSTextInputClient.h>
+#import <objc/runtime.h>
 
 @class IBMetricsTable;
 
@@ -75,6 +78,7 @@ const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPresentationOptio
 @synthesize identifier = _identifier;
 @synthesize translatesAutoresizingMaskIntoConstraints = _translatesAutoresizingMaskIntoConstraints;
 @synthesize appearance = _appearance;
+@synthesize wantsBestResolutionOpenGLSurface = _wantsBestResolutionOpenGLSurface;
 
 static BOOL NSViewLayersEnabled = YES;
 static BOOL NSShowAllViews = NO;
@@ -187,6 +191,8 @@ typedef struct __VFlags {
         [coder encodeInteger: _layerContentsRedrawPolicy
                       forKey: @"NSViewLayerContentsRedrawPolicy"];
         [coder encodeObject: _contentFilters forKey: @"NSViewContentFilters"];
+        [coder encodeBool: _wantsBestResolutionOpenGLSurface
+                   forKey: @"NSViewWantsBestResolutionOpenGLSurface"];
     } else {
         [NSException raise: NSInvalidArchiveOperationException
                     format: @"TODO: support unkeyed encoding in NSView"];
@@ -229,6 +235,8 @@ typedef struct __VFlags {
         // alternative for enabling it when it should be.
         _autoresizesSubviews = YES;
         _isHidden = (vFlags & 0x80000000) ? YES : NO;
+        _wantsBestResolutionOpenGLSurface = [keyed
+                decodeBoolForKey: @"NSViewWantsBestResolutionOpenGLSurface"];
         _tag = 0; // IB assigns a default tag id of 0 - which is different from
                   // the default in the docs.
         if ([keyed containsValueForKey: @"NSTag"])
@@ -1054,6 +1062,12 @@ static inline void buildTransformsIfNeeded(NSView *self) {
     }
     _frame = frame;
 
+    // Subviews resized below may convert their frames to window coordinates,
+    // so they must see this view's new transform, and its layer the new
+    // geometry.
+    invalidateTransform(self);
+    configureLayerGeometry(self);
+
     [_window invalidateCursorRectsForView: self]; // this also invalidates
                                                   // tracking areas
 
@@ -1102,6 +1116,7 @@ static inline void buildTransformsIfNeeded(NSView *self) {
     if (!NSEqualRects(bounds, _bounds)) {
         _bounds = bounds;
         invalidateTransform(self);
+        configureLayerGeometry(self);
 
         [_window invalidateCursorRectsForView: self]; // this also invalidates
                                                       // tracking areas
@@ -1266,7 +1281,11 @@ static inline void buildTransformsIfNeeded(NSView *self) {
                  (NSComparisonResult (*)(id, id, void *)) compareFunction
                            context: (void *) context
 {
-    NSUnimplementedMethod();
+    if (compareFunction == NULL || [_subviews count] < 2)
+        return;
+
+    [_subviews sortUsingFunction: compareFunction context: context];
+    [self setNeedsDisplay: YES];
 }
 
 - (void) didAddSubview: (NSView *) subview {
@@ -1522,9 +1541,23 @@ static inline void buildTransformsIfNeeded(NSView *self) {
     [self removeTrackingArea: tag];
 }
 
+static char inputContextKey;
+
+// Created on first use for a view that is a text input client.
 - (NSTextInputContext *) inputContext {
-    NSUnimplementedMethod();
-    return nil;
+    if (![self conformsToProtocol: @protocol(NSTextInputClient)])
+        return nil;
+
+    NSTextInputContext *context =
+            objc_getAssociatedObject(self, &inputContextKey);
+    if (context == nil) {
+        context = [[NSTextInputContext alloc]
+                initWithClient: (id<NSTextInputClient>) self];
+        objc_setAssociatedObject(self, &inputContextKey, context,
+                                 OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        [context release];
+    }
+    return context;
 }
 
 - (void) registerForDraggedTypes: (NSArray *) types {
@@ -1816,6 +1849,29 @@ static inline void buildTransformsIfNeeded(NSView *self) {
 
 - (CALayer *) layer {
     return _layer;
+}
+
+- (BOOL) wantsUpdateLayer {
+    return NO;
+}
+
+- (void) updateLayer {
+}
+
+- (BOOL) canDrawSubviewsIntoLayer {
+    return _canDrawSubviewsIntoLayer;
+}
+
+- (void) setCanDrawSubviewsIntoLayer: (BOOL) value {
+    _canDrawSubviewsIntoLayer = value;
+}
+
+- (NSTouchTypeMask) allowedTouchTypes {
+    return _allowedTouchTypes;
+}
+
+- (void) setAllowedTouchTypes: (NSTouchTypeMask) value {
+    _allowedTouchTypes = value;
 }
 
 - (CALayer *) makeBackingLayer {
@@ -2485,7 +2541,10 @@ static NSView *viewBeingPrinted = nil;
             [[NSColor yellowColor] set];
             NSRectFill(rect);
         } else {
-            [self drawRect: rect];
+            if (_layer != nil && [self wantsUpdateLayer])
+                [self updateLayer];
+            else
+                [self drawRect: rect];
             if (NSShowAllViews) {
                 [[self _borderColorForNSShowAllViews] set];
                 NSFrameRect(rect);
@@ -2719,6 +2778,17 @@ static NSView *viewBeingPrinted = nil;
          slideBack: (BOOL) slideBack
 {
     location = [self convertPoint: location toView: nil];
+    if ([NSDraggingManager draggingManager] == nil) {
+        // The window runs the drag in-process.
+        [[self window] dragImage: image
+                              at: location
+                          offset: offset
+                           event: event
+                      pasteboard: pasteboard
+                          source: source
+                       slideBack: slideBack];
+        return;
+    }
     [[NSDraggingManager draggingManager] dragImage: image
                                                 at: location
                                             offset: offset
@@ -2815,7 +2885,10 @@ static NSView *viewBeingPrinted = nil;
 }
 
 - (BOOL) prepareForDragOperation: (id<NSDraggingInfo>) sender {
-    return NO;
+    // Apple documents prepareForDragOperation: as optional; an absent implementation
+    // is treated as accepting (prepared to receive data). Return YES by default so
+    // views implementing draggingEntered: and performDragOperation: accept drops.
+    return YES;
 }
 
 - (BOOL) performDragOperation: (id<NSDraggingInfo>) sender {
@@ -2862,6 +2935,40 @@ static NSView *viewBeingPrinted = nil;
 
 - (NSRect) convertRectToBase: (NSRect) aRect {
     return aRect;
+}
+
+static NSRect scaleRect(NSRect rect, CGFloat scale) {
+    return NSMakeRect(rect.origin.x * scale, rect.origin.y * scale,
+                      rect.size.width * scale, rect.size.height * scale);
+}
+
+static CGFloat backingScaleFactor(NSView *view) {
+    NSWindow *window = [view window];
+    return window != nil ? [window backingScaleFactor] : 1.0;
+}
+
+- (NSRect) convertRectToBacking: (NSRect) rect {
+    return scaleRect(rect, backingScaleFactor(self));
+}
+
+- (NSRect) convertRectFromBacking: (NSRect) rect {
+    return scaleRect(rect, 1.0 / backingScaleFactor(self));
+}
+
+- (NSPoint) convertPointToBacking: (NSPoint) point {
+    return [self convertRectToBacking: (NSRect){point, NSZeroSize}].origin;
+}
+
+- (NSPoint) convertPointFromBacking: (NSPoint) point {
+    return [self convertRectFromBacking: (NSRect){point, NSZeroSize}].origin;
+}
+
+- (NSSize) convertSizeToBacking: (NSSize) size {
+    return [self convertRectToBacking: (NSRect){NSZeroPoint, size}].size;
+}
+
+- (NSSize) convertSizeFromBacking: (NSSize) size {
+    return [self convertRectFromBacking: (NSRect){NSZeroPoint, size}].size;
 }
 
 - (void) showDefinitionForAttributedString: (NSAttributedString *) string

@@ -27,10 +27,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSEvent_CoreGraphics.h>
 #import <AppKit/NSGraphics.h>
 #import <AppKit/NSImage.h>
+#import <AppKit/NSImageView.h>
 #import <AppKit/NSMainMenuView.h>
 #import <AppKit/NSMenu.h>
 #import <AppKit/NSMenuItem.h>
 #import <AppKit/NSPanel.h>
+#import <AppKit/NSPasteboard.h>
 #import <AppKit/NSRaise.h>
 #import <AppKit/NSScreen.h>
 #import <AppKit/NSSheetContext.h>
@@ -134,6 +136,7 @@ NSInteger NSBitsPerPixelFromDepth(NSWindowDepth depth) {
 @interface NSWindow ()
 
 - (NSRect) zoomedFrame;
+- (void) _postOcclusionChangeIfVisibleWas: (BOOL) wasVisible;
 
 @end
 
@@ -204,10 +207,154 @@ NSInteger NSBitsPerPixelFromDepth(NSWindowDepth depth) {
 
 @end
 
+// Modal delegate that hands the return code of a sheet to a completion handler.
+@interface NSWindowSheetCompletion : NSObject {
+    void (^_handler)(NSInteger returnCode);
+}
+@end
+
+@implementation NSWindowSheetCompletion
+
+- initWithHandler: (void (^)(NSInteger returnCode)) handler {
+    if ((self = [super init]))
+        _handler = [handler copy];
+    return self;
+}
+
+- (void) dealloc {
+    [_handler release];
+    [super dealloc];
+}
+
+- (void) sheetDidEnd: (NSWindow *) sheet
+          returnCode: (NSInteger) returnCode
+         contextInfo: (void *) contextInfo
+{
+    if (_handler != nil)
+        _handler(returnCode);
+    // NSSheetContext doesn't retain its delegate, so this balances the alloc
+    // in -beginSheet:completionHandler:.
+    [self release];
+}
+
+@end
+
+// The dragging information handed to destinations by an in-process drag
+// (see -_dragImageInProcess:...).
+@interface NSWindowLocalDraggingInfo : NSObject <NSDraggingInfo> {
+  @public
+    NSPasteboard *_pasteboard;
+    NSImage *_image;
+    id _source;
+    NSWindow *_destinationWindow;
+    NSPoint _screenPoint;
+    NSDragOperation _sourceMask;
+}
+@end
+
+@implementation NSWindowLocalDraggingInfo
+
+- (void) dealloc {
+    [_destinationWindow release];
+    [super dealloc];
+}
+
+- (NSPasteboard *) draggingPasteboard {
+    return _pasteboard;
+}
+
+- (NSDragOperation) draggingSourceOperationMask {
+    return _sourceMask;
+}
+
+- (NSPoint) draggingLocation {
+    if (_destinationWindow == nil)
+        return _screenPoint;
+    return [_destinationWindow convertScreenToBase: _screenPoint];
+}
+
+- (NSImage *) draggedImage {
+    return _image;
+}
+
+- (NSPoint) draggedImageLocation {
+    return [self draggingLocation];
+}
+
+- (NSWindow *) draggingDestinationWindow {
+    return _destinationWindow;
+}
+
+- (id) draggingSource {
+    return _source;
+}
+
+- (void) slideDraggedImageTo: (NSPoint) point {
+}
+
+- (int) draggingSequenceNumber {
+    return 0;
+}
+
+- (NSArray *) namesOfPromisedFilesDroppedAtDestination: (NSURL *) destination {
+    return nil;
+}
+
+@end
+
+// Shows the dragged image under the pointer. It never becomes key, so the
+// window system leaves it alone.
+@interface NSWindowDragImageWindow : NSWindow
+@end
+
+@implementation NSWindowDragImageWindow
+
+- (BOOL) canBecomeKeyWindow {
+    return NO;
+}
+
+- (BOOL) canBecomeMainWindow {
+    return NO;
+}
+
+@end
+
+// Lets run loop sources (timers, other threads' replies) run while a drag
+// holds the main thread, until none is pending or the time is up.
+static void runPendingSourcesDuringDrag(NSTimeInterval budget) {
+    CFAbsoluteTime deadline = CFAbsoluteTimeGetCurrent() + budget;
+
+    while (CFAbsoluteTimeGetCurrent() < deadline) {
+        SInt32 result = CFRunLoopRunInMode(
+                (CFStringRef) NSEventTrackingRunLoopMode, 0, true);
+        if (result != kCFRunLoopRunHandledSource)
+            break;
+    }
+}
+
 @implementation NSWindow
 
+// -contentRectForFrameRect:, without sending it to a subclass.
+static NSRect contentRectInFrame(NSWindow *window, NSRect frameRect) {
+    NSRect result = [[NSDisplay currentDisplay] insetRect: frameRect
+                           forNativeWindowBorderWithStyle: window->_styleMask];
+
+    if ([window hasMainMenu]) {
+        result.size.height -= [NSMainMenuView menuHeight];
+    }
+
+    NSToolbar *toolbar = window->_toolbar;
+    if ([toolbar _view] != nil && ![[toolbar _view] isHidden]) {
+        result.size.height -= [[toolbar _view] frame].size.height;
+    }
+
+    return result;
+}
+
+@synthesize appearance = _appearance;
 @synthesize identifier = _identifier;
 @synthesize accessibilityElement = _isAccessible;
+@synthesize restorable = _restorable;
 
 static BOOL _allowsAutomaticWindowTabbing;
 
@@ -218,7 +365,10 @@ static BOOL _allowsAutomaticWindowTabbing;
 /* This method is Cococtron specific and can be override by subclasses, do not
  * change method name */
 + (BOOL) hasMainMenuForStyleMask: (NSWindowStyleMask) styleMask {
-    return styleMask & NSTitledWindowMask;
+    // A full-size content view covers the whole frame, leaving no room for
+    // the menu.
+    return (styleMask & NSTitledWindowMask) &&
+           !(styleMask & NSWindowStyleMaskFullSizeContentView);
 }
 
 /* This method is Cococtron specific and can be override by subclasses, do not
@@ -274,11 +424,29 @@ static BOOL _allowsAutomaticWindowTabbing;
     NSUnimplementedMethod();
 }
 
+// The title bar is drawn by the window manager, so these buttons are not
+// shown; they let callers query and configure the buttons a window has.
 + (NSButton *) standardWindowButton: (NSWindowButton) button
                        forStyleMask: (NSWindowStyleMask) styleMask
 {
-    NSUnimplementedMethod();
-    return nil;
+    if (button > NSWindowZoomButton || !(styleMask & NSWindowStyleMaskTitled))
+        return nil;
+
+    NSButton *result =
+            [[NSButton alloc] initWithFrame: NSMakeRect(0, 0, 14, 14)];
+    [result setBordered: NO];
+    switch (button) {
+    case NSWindowCloseButton:
+        [result setEnabled: (styleMask & NSWindowStyleMaskClosable) != 0];
+        break;
+    case NSWindowMiniaturizeButton:
+        [result setEnabled: (styleMask & NSWindowStyleMaskMiniaturizable) != 0];
+        break;
+    default:
+        [result setEnabled: (styleMask & NSWindowStyleMaskResizable) != 0];
+        break;
+    }
+    return [result autorelease];
 }
 
 + (void) menuChanged: (NSMenu *) menu {
@@ -318,10 +486,22 @@ static BOOL _allowsAutomaticWindowTabbing;
         [NSApplication sharedApplication];
     }
     _styleMask = styleMask;
+    _isMovable = YES;
     _backingType = backing;
     _isDeferred = defer;
 
-    _frame = [self frameRectForContentRect: contentRect];
+    // QUIRK: the initializer computes the frame with the class method
+    // +frameRectForContentRect:styleMask: and installs the default content
+    // view with -setContentView:, but sends neither -frameRectForContentRect:
+    // nor -contentRectForFrameRect: to the instance. A subclass override of
+    // those two methods therefore does not run before the subclass's own
+    // initializer has. Not documented. Evidence: black-box observation on
+    // macOS 27.0.1 arm64 (tier 2) of an NSWindow subclass that records the
+    // overrides called during -initWithContentRect:styleMask:backing:defer:,
+    // for titled and borderless windows, deferred or not.
+    // Test: appkit_window_init_overrides.m (window init QUIRK).
+    _frame = [[self class] frameRectForContentRect: contentRect
+                                         styleMask: styleMask];
     _frame = [self constrainFrameRect: _frame toScreen: [NSScreen mainScreen]];
     _savedFrame = _frame;
 
@@ -336,6 +516,7 @@ static BOOL _allowsAutomaticWindowTabbing;
     _makeSureIsOnAScreen = YES;
     _releaseWhenClosed = YES;
     _viewsNeedDisplay = YES;
+    _restorable = YES;
     _flushNeeded = YES;
     _resizeIncrements = NSMakeSize(1, 1);
     _contentResizeIncrements = NSMakeSize(1, 1);
@@ -351,10 +532,11 @@ static BOOL _allowsAutomaticWindowTabbing;
     [_backgroundView _setWindow: self];
     [_backgroundView setNextResponder: self];
 
-    NSRect contentViewFrame = [self contentRectForFrameRect: backgroundFrame];
-    _contentView = [[NSView alloc] initWithFrame: contentViewFrame];
-    [_contentView setAutoresizesSubviews: YES];
-    [_contentView
+    // See the QUIRK above: not -contentRectForFrameRect:.
+    NSRect contentViewFrame = contentRectInFrame(self, backgroundFrame);
+    NSView *contentView = [[NSView alloc] initWithFrame: contentViewFrame];
+    [contentView setAutoresizesSubviews: YES];
+    [contentView
             setAutoresizingMask: NSViewWidthSizable | NSViewHeightSizable];
 
     if ([self hasMainMenu]) {
@@ -371,7 +553,8 @@ static BOOL _allowsAutomaticWindowTabbing;
         [_backgroundView addSubview: _menuView];
     }
 
-    [_backgroundView addSubview: _contentView];
+    [self setContentView: contentView];
+    [contentView release];
     [_backgroundView setNeedsDisplay: YES];
 
     if (!(_styleMask & NSAppKitPrivateWindow)) {
@@ -400,10 +583,15 @@ static BOOL _allowsAutomaticWindowTabbing;
 
 - (void) dealloc {
     [[NSNotificationCenter defaultCenter] removeObserver: self];
+    for (NSUInteger i = 0; i < 3; i++)
+        [_standardWindowButtons[i] release];
+    [_tabbingIdentifier release];
+    [_subtitle release];
     [_childWindows release];
     [_title release];
     [_miniwindowTitle release];
     [_miniwindowImage release];
+    [_appearance release];
     [_backgroundView _setWindow: nil];
     [_backgroundView release];
     [_menu release];
@@ -759,6 +947,8 @@ static BOOL _allowsAutomaticWindowTabbing;
             {NSWindowDidMiniaturizeNotification,
              @selector(windowDidMiniaturize:)},
             {NSWindowDidMoveNotification, @selector(windowDidMove:)},
+            {NSWindowDidChangeOcclusionStateNotification,
+             @selector(windowDidChangeOcclusionState:)},
             {NSWindowDidResignKeyNotification, @selector(windowDidResignKey:)},
             {NSWindowDidResignMainNotification,
              @selector(windowDidResignMain:)},
@@ -1008,8 +1198,9 @@ static BOOL _allowsAutomaticWindowTabbing;
 }
 
 - (void) setContentMinSize: (NSSize) value {
+    // The value was already being stored; the unimplemented marker made every
+    // caller raise instead.
     _contentMinSize = value;
-    NSUnimplementedMethod();
 }
 
 - (void) setContentMaxSize: (NSSize) value {
@@ -1025,7 +1216,29 @@ static BOOL _allowsAutomaticWindowTabbing;
 }
 
 - (void) setMovable: (BOOL) movable {
-    NSUnimplementedMethod();
+    _isMovable = movable;
+}
+
+- (void) performWindowDragWithEvent: (NSEvent *) event {
+    if (!_isMovable || [event type] != NSLeftMouseDown)
+        return;
+
+    // Follow the pointer in screen coordinates. An event's location in the
+    // window is measured against where the window really is, which lags
+    // behind -setFrameOrigin: while the window system catches up, so
+    // converting it with the new frame would feed that lag back in.
+    NSPoint origin = [self frame].origin;
+    NSPoint first = [NSEvent mouseLocation];
+    for (;;) {
+        NSEvent *next = [self nextEventMatchingMask: NSLeftMouseUpMask |
+                                                     NSLeftMouseDraggedMask];
+        if (next == nil || [next type] == NSLeftMouseUp)
+            break;
+
+        NSPoint point = [NSEvent mouseLocation];
+        [self setFrameOrigin: NSMakePoint(origin.x + point.x - first.x,
+                                          origin.y + point.y - first.y)];
+    }
 }
 
 - (void) setBackingType: (NSBackingStoreType) value {
@@ -1102,7 +1315,9 @@ static BOOL _allowsAutomaticWindowTabbing;
 
 - (void) setContentView: (NSView *) view {
     view = [view retain];
-    [view setFrame: [_contentView frame]];
+    // The initializer installs the first content view with its frame set.
+    if (_contentView != nil)
+        [view setFrame: [_contentView frame]];
 
     [_contentView removeFromSuperview];
     [_contentView release];
@@ -1254,10 +1469,6 @@ static BOOL _allowsAutomaticWindowTabbing;
     //   NSUnimplementedMethod();
 }
 
-- (void) setCollectionBehavior: (NSWindowCollectionBehavior) behavior {
-    NSUnimplementedMethod();
-}
-
 - (void) setLevel: (NSInteger) value {
     _level = value;
     [_platformWindow setLevel: _level];
@@ -1292,7 +1503,6 @@ static BOOL _allowsAutomaticWindowTabbing;
 
 - (void) setShowsResizeIndicator: (BOOL) value {
     _showsResizeIndicator = value;
-    NSUnimplementedMethod();
 }
 
 - (void) setShowsToolbarButton: (BOOL) value {
@@ -1414,8 +1624,13 @@ static BOOL _allowsAutomaticWindowTabbing;
 }
 
 - (NSButton *) standardWindowButton: (NSWindowButton) value {
-    NSUnimplementedMethod();
-    return nil;
+    if (value > NSWindowZoomButton)
+        return nil;
+    if (_standardWindowButtons[value] == nil)
+        _standardWindowButtons[value] = [[[self class]
+                standardWindowButton: value
+                        forStyleMask: _styleMask] retain];
+    return _standardWindowButtons[value];
 }
 
 - (NSButtonCell *) defaultButtonCell {
@@ -1424,6 +1639,15 @@ static BOOL _allowsAutomaticWindowTabbing;
 
 - (NSWindow *) attachedSheet {
     return [_sheetContext sheet];
+}
+
+- (NSWindow *) sheetParent {
+    // The sheet is recorded on the window it is attached to.
+    for (NSWindow *window in [NSApp windows]) {
+        if (window != self && [window attachedSheet] == self)
+            return window;
+    }
+    return nil;
 }
 
 - (id) windowController {
@@ -1473,8 +1697,8 @@ static BOOL _allowsAutomaticWindowTabbing;
     NSUnimplementedMethod();
 }
 
+// There is a single space, so every window is on the active one.
 - (BOOL) isOnActiveSpace {
-    NSUnimplementedMethod();
     return YES;
 }
 
@@ -1500,6 +1724,10 @@ static BOOL _allowsAutomaticWindowTabbing;
     return _isVisible;
 }
 
+- (NSWindowOcclusionState) occlusionState {
+    return [self isVisible] ? NSWindowOcclusionStateVisible : 0;
+}
+
 - (BOOL) isKeyWindow {
     return ([NSApp keyWindow] == self) ? YES : NO;
 }
@@ -1513,8 +1741,7 @@ static BOOL _allowsAutomaticWindowTabbing;
 }
 
 - (BOOL) isMovable {
-    NSUnimplementedMethod();
-    return NO;
+    return _isMovable;
 }
 
 - (BOOL) inLiveResize {
@@ -1540,8 +1767,77 @@ static BOOL _allowsAutomaticWindowTabbing;
 }
 
 - (NSWindowCollectionBehavior) collectionBehavior {
-    NSUnimplementedMethod();
-    return 0;
+    return _collectionBehavior;
+}
+
+- (void) setCollectionBehavior: (NSWindowCollectionBehavior) behavior {
+    // Terminal sets this on every window it creates, and the previous
+    // unimplemented marker made the setter raise, so ordinary window setup
+    // aborted. The value is plain window state and is kept.
+    _collectionBehavior = behavior;
+}
+
+- (NSWindowTabbingMode) tabbingMode {
+    return _tabbingMode;
+}
+
+- (void) setTabbingMode: (NSWindowTabbingMode)tabbingMode {
+    _tabbingMode = tabbingMode;
+}
+
+// Until one is set, windows of the same class share an identifier.
+- (NSWindowTabbingIdentifier) tabbingIdentifier {
+    if (_tabbingIdentifier == nil)
+        return NSStringFromClass([self class]);
+    return _tabbingIdentifier;
+}
+
+- (void) setTabbingIdentifier: (NSWindowTabbingIdentifier) value {
+    value = [value copy];
+    [_tabbingIdentifier release];
+    _tabbingIdentifier = value;
+}
+
+- (NSString *) subtitle {
+    return _subtitle != nil ? _subtitle : @"";
+}
+
+- (void) setSubtitle: (NSString *) value {
+    value = [value copy];
+    [_subtitle release];
+    _subtitle = value;
+}
+
+- (NSWindowTitleVisibility) titleVisibility {
+    return _titleVisibility;
+}
+
+- (void) setTitleVisibility: (NSWindowTitleVisibility) value {
+    _titleVisibility = value;
+}
+
+- (BOOL) titlebarAppearsTransparent {
+    return _titlebarAppearsTransparent;
+}
+
+- (void) setTitlebarAppearsTransparent: (BOOL) value {
+    _titlebarAppearsTransparent = value;
+}
+
+- (NSTitlebarSeparatorStyle) titlebarSeparatorStyle {
+    return _titlebarSeparatorStyle;
+}
+
+- (void) setTitlebarSeparatorStyle: (NSTitlebarSeparatorStyle) value {
+    _titlebarSeparatorStyle = value;
+}
+
+- (NSWindowToolbarStyle) toolbarStyle {
+    return _toolbarStyle;
+}
+
+- (void) setToolbarStyle: (NSWindowToolbarStyle) value {
+    _toolbarStyle = value;
 }
 
 - (NSPoint) convertBaseToScreen: (NSPoint) point {
@@ -1581,18 +1877,7 @@ static BOOL _allowsAutomaticWindowTabbing;
 }
 
 - (NSRect) contentRectForFrameRect: (NSRect) frameRect {
-    NSRect result = [[NSDisplay currentDisplay] insetRect: frameRect
-                           forNativeWindowBorderWithStyle: [self styleMask]];
-
-    if ([self hasMainMenu]) {
-        result.size.height -= [NSMainMenuView menuHeight];
-    }
-
-    if ([_toolbar _view] != nil && ![[_toolbar _view] isHidden]) {
-        result.size.height -= [[_toolbar _view] frame].size.height;
-    }
-
-    return result;
+    return contentRectInFrame(self, frameRect);
 }
 
 - (NSRect) constrainFrameRect: (NSRect) rect toScreen: (NSScreen *) screen {
@@ -1818,9 +2103,9 @@ static BOOL _allowsAutomaticWindowTabbing;
     [self recalculateKeyViewLoopIfNeeded];
 }
 
+// Key view selection is not tracked, so it is always direct.
 - (NSSelectionDirection) keyViewSelectionDirection {
-    NSUnimplementedMethod();
-    return 0;
+    return NSDirectSelection;
 }
 
 - (void) disableKeyEquivalentForDefaultButtonCell {
@@ -2156,6 +2441,8 @@ static BOOL _allowsAutomaticWindowTabbing;
 - (void) orderWindow: (NSWindowOrderingMode) place
           relativeTo: (NSInteger) relativeTo
 {
+    BOOL wasVisible = _isVisible;
+
     // The move notifications are sent under unknown conditions around
     // orderFront: in the Apple AppKit, we do them all the time here until it's
     // figured out. I suspect it is a side effect of off-screen windows being at
@@ -2209,6 +2496,7 @@ static BOOL _allowsAutomaticWindowTabbing;
         break;
     }
 
+    [self _postOcclusionChangeIfVisibleWas: wasVisible];
     [self postNotificationName: NSWindowDidMoveNotification];
 }
 
@@ -2496,6 +2784,183 @@ static BOOL _allowsAutomaticWindowTabbing;
     _draggedTypes = nil;
 }
 
+// The registered drag destination under screenPoint in this window, if any.
+- (NSView *) _inProcessDragDestinationAt: (NSPoint) screenPoint
+                                   types: (NSArray *) types
+{
+    NSView *view = [_backgroundView
+            hitTest: [self convertScreenToBase: screenPoint]];
+
+    while (view != nil &&
+           [[view registeredDraggedTypes] firstObjectCommonWithArray: types] ==
+                   nil)
+        view = [view superview];
+    return view;
+}
+
+// The visible window under screenPoint, preferring this one.
+- (NSWindow *) _inProcessDragWindowAt: (NSPoint) screenPoint
+                            excluding: (NSWindow *) excluded
+{
+    if (NSPointInRect(screenPoint, [self frame]))
+        return self;
+
+    for (NSWindow *window in [NSApp orderedWindows]) {
+        if (window != excluded && [window isVisible] &&
+            NSPointInRect(screenPoint, [window frame]))
+            return window;
+    }
+    return nil;
+}
+
+// A drag for displays without a dragging manager. It covers drags between
+// this application's own windows; nothing reaches other applications. As
+// with a system drag, it returns once the drag is over, and the source is
+// always told how it ended.
+- (void) _dragImageInProcess: (NSImage *) image
+                          at: (NSPoint) imageLocation
+                       event: (NSEvent *) event
+                  pasteboard: (NSPasteboard *) pasteboard
+                      source: (id) source
+{
+    NSWindowLocalDraggingInfo *info = [[NSWindowLocalDraggingInfo alloc] init];
+    info->_pasteboard = pasteboard;
+    info->_image = image;
+    info->_source = source;
+    info->_sourceMask = NSDragOperationEvery;
+    if ([source respondsToSelector: @selector(draggingSourceOperationMaskForLocal:)])
+        info->_sourceMask = [source draggingSourceOperationMaskForLocal: YES];
+
+    NSPoint screenPoint;
+    if ([event window] != nil)
+        screenPoint = [[event window] convertBaseToScreen: [event locationInWindow]];
+    else
+        screenPoint = [self convertBaseToScreen: [self mouseLocationOutsideOfEventStream]];
+
+    // The image keeps its offset from the pointer.
+    NSWindowDragImageWindow *imageWindow = nil;
+    NSPoint imageOffset = NSZeroPoint;
+    NSSize imageSize = [image size];
+    NSPoint imageOrigin = [self convertBaseToScreen: imageLocation];
+    if (imageSize.width >= 1 && imageSize.height >= 1) {
+        imageOffset = NSMakePoint(screenPoint.x - imageOrigin.x,
+                                  screenPoint.y - imageOrigin.y);
+        imageWindow = [[NSWindowDragImageWindow alloc]
+                initWithContentRect: NSMakeRect(imageOrigin.x, imageOrigin.y,
+                                                imageSize.width, imageSize.height)
+                          styleMask: NSBorderlessWindowMask
+                            backing: NSBackingStoreBuffered
+                              defer: NO];
+        [imageWindow setReleasedWhenClosed: NO];
+        [imageWindow setIgnoresMouseEvents: YES];
+        [imageWindow setLevel: NSPopUpMenuWindowLevel];
+        [imageWindow setHasShadow: NO];
+        NSImageView *imageView = [[NSImageView alloc]
+                initWithFrame: NSMakeRect(0, 0, imageSize.width, imageSize.height)];
+        [imageView setImage: image];
+        [imageView setImageScaling: NSImageScaleNone];
+        [imageWindow setContentView: imageView];
+        [imageView release];
+        [imageWindow orderFront: nil];
+    }
+
+    if ([source respondsToSelector: @selector(draggedImage:beganAt:)])
+        [source draggedImage: image beganAt: imageOrigin];
+
+    NSArray *types = [pasteboard types];
+    id destination = nil;
+    NSDragOperation operation = NSDragOperationNone;
+    BOOL dropped = NO;
+    BOOL moved = YES;
+
+    for (;;) {
+        if (moved) {
+            NSWindow *window = [self _inProcessDragWindowAt: screenPoint
+                                                  excluding: imageWindow];
+            info->_screenPoint = screenPoint;
+            if (info->_destinationWindow != window) {
+                [info->_destinationWindow release];
+                info->_destinationWindow = [window retain];
+            }
+            NSView *view = [window _inProcessDragDestinationAt: screenPoint
+                                                         types: types];
+
+            if (view != destination) {
+                if ([destination respondsToSelector: @selector(draggingExited:)])
+                    [destination draggingExited: info];
+                [destination release];
+                destination = [view retain];
+                operation = NSDragOperationNone;
+                if ([destination respondsToSelector: @selector(draggingEntered:)])
+                    operation = [destination draggingEntered: info];
+            } else if ([destination respondsToSelector: @selector(draggingUpdated:)]) {
+                operation = [destination draggingUpdated: info];
+            }
+            [imageWindow setFrameOrigin: NSMakePoint(screenPoint.x - imageOffset.x,
+                                                     screenPoint.y - imageOffset.y)];
+            if ([source respondsToSelector: @selector(draggedImage:movedTo:)])
+                [source draggedImage: image movedTo: screenPoint];
+            runPendingSourcesDuringDrag(0.008);
+        }
+        if (dropped)
+            break;
+
+        // A short timeout: a button released before the loop started never
+        // arrives as an event, so the button state is checked as well.
+        NSEvent *next = [NSApp
+                nextEventMatchingMask: NSLeftMouseUpMask | NSLeftMouseDraggedMask |
+                                       NSMouseMovedMask | NSKeyDownMask
+                            untilDate: [NSDate dateWithTimeIntervalSinceNow: 0.05]
+                               inMode: NSEventTrackingRunLoopMode
+                              dequeue: YES];
+        moved = NO;
+        if (next == nil) {
+            if (([NSEvent pressedMouseButtons] & 1) == 0)
+                dropped = moved = YES;
+            continue;
+        }
+        if ([next type] == NSKeyDown) {
+            // Escape cancels the drag.
+            if ([[next characters] isEqual: @"\033"])
+                break;
+            continue;
+        }
+        if ([next window] != nil)
+            screenPoint = [[next window] convertBaseToScreen: [next locationInWindow]];
+        else
+            screenPoint = [next locationInWindow];
+        moved = YES;
+        if ([next type] == NSLeftMouseUp)
+            dropped = YES;
+    }
+
+    [imageWindow orderOut: nil];
+    [imageWindow release];
+
+    BOOL performed = NO;
+    if (dropped && destination != nil && operation != NSDragOperationNone) {
+        performed = YES;
+        if ([destination respondsToSelector: @selector(prepareForDragOperation:)])
+            performed = [destination prepareForDragOperation: info];
+        if (performed)
+            performed = [destination respondsToSelector: @selector(performDragOperation:)] &&
+                        [destination performDragOperation: info];
+        if (performed && [destination respondsToSelector: @selector(concludeDragOperation:)])
+            [destination concludeDragOperation: info];
+    } else if ([destination respondsToSelector: @selector(draggingExited:)]) {
+        [destination draggingExited: info];
+    }
+    if (!performed)
+        operation = NSDragOperationNone;
+    if ([destination respondsToSelector: @selector(draggingEnded:)])
+        [destination draggingEnded: info];
+
+    if ([source respondsToSelector: @selector(draggedImage:endedAt:operation:)])
+        [source draggedImage: image endedAt: screenPoint operation: operation];
+    [destination release];
+    [info release];
+}
+
 - (void) dragImage: (NSImage *) image
                 at: (NSPoint) location
             offset: (NSSize) offset
@@ -2504,6 +2969,14 @@ static BOOL _allowsAutomaticWindowTabbing;
             source: (id) source
          slideBack: (BOOL) slideBack
 {
+    if ([NSDraggingManager draggingManager] == nil) {
+        [self _dragImageInProcess: image
+                               at: location
+                            event: event
+                       pasteboard: pasteboard
+                           source: source];
+        return;
+    }
     [[NSDraggingManager draggingManager] dragImage: image
                                                 at: location
                                             offset: offset
@@ -2554,6 +3027,7 @@ static BOOL _allowsAutomaticWindowTabbing;
     } else {
         [[self platformWindow] hideWindow];
     }
+    [self _postOcclusionChangeIfVisibleWas: !visible];
 }
 
 - (void) orderFront: (id) sender {
@@ -2839,7 +3313,17 @@ static BOOL _allowsAutomaticWindowTabbing;
 }
 
 - (void) _setVisible: (BOOL) visible {
+    BOOL wasVisible = _isVisible;
+
     _isVisible = visible;
+    [self _postOcclusionChangeIfVisibleWas: wasVisible];
+}
+
+// The occlusion state follows visibility (see -occlusionState), so it
+// changes whenever the window is shown or hidden.
+- (void) _postOcclusionChangeIfVisibleWas: (BOOL) wasVisible {
+    if (wasVisible != _isVisible)
+        [self postNotificationName: NSWindowDidChangeOcclusionStateNotification];
 }
 
 // default NSDraggingDestination
@@ -2856,7 +3340,9 @@ static BOOL _allowsAutomaticWindowTabbing;
 }
 
 - (BOOL) prepareForDragOperation: (id<NSDraggingInfo>) sender {
-    return NO;
+    // Apple documents prepareForDragOperation: as optional; an absent implementation
+    // is treated as accepting (prepared to receive data). Return YES by default.
+    return YES;
 }
 
 - (BOOL) performDragOperation: (id<NSDraggingInfo>) sender {
@@ -2920,7 +3406,9 @@ static BOOL _allowsAutomaticWindowTabbing;
     [self _setSheetOrigin];
     NSRect sheetFrame = [sheet frame];
 
+    BOOL sheetWasVisible = sheet->_isVisible;
     sheet->_isVisible = YES;
+    [sheet _postOcclusionChangeIfVisibleWas: sheetWasVisible];
     [sheet display];
     [[sheet platformWindow] sheetOrderFrontFromFrame: sheetFrame
                                          aboveWindow: [self platformWindow]];
@@ -2943,8 +3431,10 @@ static BOOL _allowsAutomaticWindowTabbing;
     sheetFrame.origin.y = NSMaxY(sheetFrame);
     sheetFrame.size.height = 0;
 
+    BOOL sheetWasVisible = sheet->_isVisible;
     sheet->_isVisible = NO;
     [[sheet platformWindow] sheetOrderOutToFrame: sheetFrame];
+    [sheet _postOcclusionChangeIfVisibleWas: sheetWasVisible];
     [(NSThemeFrame *) [sheet _backgroundView] setWindowBorderType: NSNoBorder];
 
     [_sheetContext release];
@@ -3496,6 +3986,58 @@ static BOOL _allowsAutomaticWindowTabbing;
 
 + (void) setAllowsAutomaticWindowTabbing: (BOOL) allowsAutomaticWindowTabbing {
     _allowsAutomaticWindowTabbing = allowsAutomaticWindowTabbing;
+}
+
+- (NSAppearance *) effectiveAppearance {
+    return _appearance != nil ? _appearance : [NSApp effectiveAppearance];
+}
+
+- (CGFloat) backingScaleFactor {
+    NSScreen *screen = [self screen];
+    return screen != nil ? [screen backingScaleFactor] : 1.0;
+}
+
+- (NSPoint) convertPointToScreen: (NSPoint) point {
+    return [self convertBaseToScreen: point];
+}
+
+- (NSPoint) convertPointFromScreen: (NSPoint) point {
+    return [self convertScreenToBase: point];
+}
+
+- (NSRect) convertRectToScreen: (NSRect) rect {
+    rect.origin = [self convertBaseToScreen: rect.origin];
+    return rect;
+}
+
+- (NSRect) convertRectFromScreen: (NSRect) rect {
+    rect.origin = [self convertScreenToBase: rect.origin];
+    return rect;
+}
+
+- (void) beginSheet: (NSWindow *) sheet
+        completionHandler: (void (^)(NSInteger returnCode)) handler
+{
+    // Sheets aren't queued: attaching would drop the current sheet's context
+    // without ending it, so a second sheet is refused and its handler never runs.
+    if ([self attachedSheet] != nil) {
+        NSLog(@"-[NSWindow beginSheet:completionHandler:] %@ already has a sheet", self);
+        return;
+    }
+    [NSApp beginSheet: sheet
+            modalForWindow: self
+             modalDelegate: [[NSWindowSheetCompletion alloc]
+                                    initWithHandler: handler]
+            didEndSelector: @selector(sheetDidEnd:returnCode:contextInfo:)
+               contextInfo: NULL];
+}
+
+- (void) endSheet: (NSWindow *) sheet {
+    [NSApp endSheet: sheet];
+}
+
+- (void) endSheet: (NSWindow *) sheet returnCode: (NSInteger) returnCode {
+    [NSApp endSheet: sheet returnCode: returnCode];
 }
 
 @end
