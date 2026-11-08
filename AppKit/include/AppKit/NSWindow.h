@@ -503,6 +503,7 @@ APPKIT_EXPORT const NSNotificationName NSWindowDidExposeNotification;
 - (BOOL) isMainWindow;
 - (BOOL) isMiniaturized;
 - (BOOL) isMovable;
+- (void) performWindowDragWithEvent: (NSEvent *) event;
 - (BOOL) inLiveResize;
 - (BOOL) canBecomeKeyWindow;
 - (BOOL) canBecomeMainWindow;

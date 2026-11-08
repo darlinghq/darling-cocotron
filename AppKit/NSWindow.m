@@ -1124,6 +1124,28 @@ static BOOL _allowsAutomaticWindowTabbing;
     _isMovable = movable;
 }
 
+- (void) performWindowDragWithEvent: (NSEvent *) event {
+    if (!_isMovable || [event type] != NSLeftMouseDown)
+        return;
+
+    // Follow the pointer in screen coordinates. An event's location in the
+    // window is measured against where the window really is, which lags
+    // behind -setFrameOrigin: while the window system catches up, so
+    // converting it with the new frame would feed that lag back in.
+    NSPoint origin = [self frame].origin;
+    NSPoint first = [NSEvent mouseLocation];
+    for (;;) {
+        NSEvent *next = [self nextEventMatchingMask: NSLeftMouseUpMask |
+                                                     NSLeftMouseDraggedMask];
+        if (next == nil || [next type] == NSLeftMouseUp)
+            break;
+
+        NSPoint point = [NSEvent mouseLocation];
+        [self setFrameOrigin: NSMakePoint(origin.x + point.x - first.x,
+                                          origin.y + point.y - first.y)];
+    }
+}
+
 - (void) setBackingType: (NSBackingStoreType) value {
     _backingType = value;
     NSUnimplementedMethod();

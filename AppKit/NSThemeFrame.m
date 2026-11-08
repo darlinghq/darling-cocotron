@@ -133,26 +133,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (void) mouseDown: (NSEvent *) event {
-    if (![[self window] isMovableByWindowBackground])
+    // A click that reaches the background either moves the window or goes
+    // on up the responder chain.
+    if (![[self window] isMovableByWindowBackground]) {
+        [super mouseDown: event];
         return;
+    }
 
-    NSPoint origin = [[self window] frame].origin;
-    NSPoint firstLocation =
-            [[self window] convertBaseToScreen: [event locationInWindow]];
-    do {
-        event = [[self window] nextEventMatchingMask: NSLeftMouseUpMask |
-                                                      NSLeftMouseDraggedMask];
-
-        NSPoint delta =
-                [[self window] convertBaseToScreen: [event locationInWindow]];
-
-        delta.x -= firstLocation.x;
-        delta.y -= firstLocation.y;
-
-        [[self window] setFrameOrigin: NSMakePoint(origin.x + delta.x,
-                                                   origin.y + delta.y)];
-
-    } while ([event type] != NSLeftMouseUp);
+    [[self window] performWindowDragWithEvent: event];
 }
 
 @end
