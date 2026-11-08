@@ -431,27 +431,35 @@ static BOOL _allowsAutomaticWindowTabbing;
 + (NSButton *) standardWindowButton: (NSWindowButton) button
                        forStyleMask: (NSWindowStyleMask) styleMask
 {
-    // A window has only the buttons its style asks for.
-    NSWindowStyleMask needed;
+    // QUIRK: a titled window has either none of the close, miniaturize and zoom
+    // buttons (when its style is none of closable, miniaturizable and resizable) or all
+    // three, each enabled only if the style asks for it. Not documented. Evidence:
+    // black-box observation on macOS 27.0.1 (tier 2), for Titled, Titled|Closable,
+    // Titled|Miniaturizable, Titled|Resizable and untitled styles.
+    // Test: appkit_view_window_macos_defaults ("window buttons").
+    const NSWindowStyleMask buttonStyles = NSWindowStyleMaskClosable
+            | NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable;
+    NSWindowStyleMask enabling;
     switch (button) {
     case NSWindowCloseButton:
-        needed = NSWindowStyleMaskClosable;
+        enabling = NSWindowStyleMaskClosable;
         break;
     case NSWindowMiniaturizeButton:
-        needed = NSWindowStyleMaskMiniaturizable;
+        enabling = NSWindowStyleMaskMiniaturizable;
         break;
     case NSWindowZoomButton:
-        needed = NSWindowStyleMaskResizable;
+        enabling = NSWindowStyleMaskResizable;
         break;
     default:
         return nil;
     }
-    if (!(styleMask & NSWindowStyleMaskTitled) || !(styleMask & needed))
+    if (!(styleMask & NSWindowStyleMaskTitled) || !(styleMask & buttonStyles))
         return nil;
 
     NSButton *result =
             [[NSButton alloc] initWithFrame: NSMakeRect(0, 0, 14, 14)];
     [result setBordered: NO];
+    [result setEnabled: (styleMask & enabling) != 0];
     return [result autorelease];
 }
 
