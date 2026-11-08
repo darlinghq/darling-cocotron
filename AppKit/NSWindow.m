@@ -252,7 +252,10 @@ static BOOL _allowsAutomaticWindowTabbing;
 /* This method is Cococtron specific and can be override by subclasses, do not
  * change method name */
 + (BOOL) hasMainMenuForStyleMask: (NSWindowStyleMask) styleMask {
-    return styleMask & NSTitledWindowMask;
+    // A full-size content view covers the whole frame, leaving no room for
+    // the menu.
+    return (styleMask & NSTitledWindowMask) &&
+           !(styleMask & NSWindowStyleMaskFullSizeContentView);
 }
 
 /* This method is Cococtron specific and can be override by subclasses, do not
@@ -308,11 +311,29 @@ static BOOL _allowsAutomaticWindowTabbing;
     NSUnimplementedMethod();
 }
 
+// The title bar is drawn by the window manager, so these buttons are not
+// shown; they let callers query and configure the buttons a window has.
 + (NSButton *) standardWindowButton: (NSWindowButton) button
                        forStyleMask: (NSWindowStyleMask) styleMask
 {
-    NSUnimplementedMethod();
-    return nil;
+    if (button > NSWindowZoomButton || !(styleMask & NSWindowStyleMaskTitled))
+        return nil;
+
+    NSButton *result =
+            [[NSButton alloc] initWithFrame: NSMakeRect(0, 0, 14, 14)];
+    [result setBordered: NO];
+    switch (button) {
+    case NSWindowCloseButton:
+        [result setEnabled: (styleMask & NSWindowStyleMaskClosable) != 0];
+        break;
+    case NSWindowMiniaturizeButton:
+        [result setEnabled: (styleMask & NSWindowStyleMaskMiniaturizable) != 0];
+        break;
+    default:
+        [result setEnabled: (styleMask & NSWindowStyleMaskResizable) != 0];
+        break;
+    }
+    return [result autorelease];
 }
 
 + (void) menuChanged: (NSMenu *) menu {
@@ -352,6 +373,7 @@ static BOOL _allowsAutomaticWindowTabbing;
         [NSApplication sharedApplication];
     }
     _styleMask = styleMask;
+    _isMovable = YES;
     _backingType = backing;
     _isDeferred = defer;
 
@@ -435,6 +457,10 @@ static BOOL _allowsAutomaticWindowTabbing;
 
 - (void) dealloc {
     [[NSNotificationCenter defaultCenter] removeObserver: self];
+    for (NSUInteger i = 0; i < 3; i++)
+        [_standardWindowButtons[i] release];
+    [_tabbingIdentifier release];
+    [_subtitle release];
     [_childWindows release];
     [_title release];
     [_miniwindowTitle release];
@@ -1062,7 +1088,7 @@ static BOOL _allowsAutomaticWindowTabbing;
 }
 
 - (void) setMovable: (BOOL) movable {
-    NSUnimplementedMethod();
+    _isMovable = movable;
 }
 
 - (void) setBackingType: (NSBackingStoreType) value {
@@ -1325,7 +1351,6 @@ static BOOL _allowsAutomaticWindowTabbing;
 
 - (void) setShowsResizeIndicator: (BOOL) value {
     _showsResizeIndicator = value;
-    NSUnimplementedMethod();
 }
 
 - (void) setShowsToolbarButton: (BOOL) value {
@@ -1447,8 +1472,13 @@ static BOOL _allowsAutomaticWindowTabbing;
 }
 
 - (NSButton *) standardWindowButton: (NSWindowButton) value {
-    NSUnimplementedMethod();
-    return nil;
+    if (value > NSWindowZoomButton)
+        return nil;
+    if (_standardWindowButtons[value] == nil)
+        _standardWindowButtons[value] = [[[self class]
+                standardWindowButton: value
+                        forStyleMask: _styleMask] retain];
+    return _standardWindowButtons[value];
 }
 
 - (NSButtonCell *) defaultButtonCell {
@@ -1457,6 +1487,15 @@ static BOOL _allowsAutomaticWindowTabbing;
 
 - (NSWindow *) attachedSheet {
     return [_sheetContext sheet];
+}
+
+- (NSWindow *) sheetParent {
+    // The sheet is recorded on the window it is attached to.
+    for (NSWindow *window in [NSApp windows]) {
+        if (window != self && [window attachedSheet] == self)
+            return window;
+    }
+    return nil;
 }
 
 - (id) windowController {
@@ -1506,8 +1545,8 @@ static BOOL _allowsAutomaticWindowTabbing;
     NSUnimplementedMethod();
 }
 
+// There is a single space, so every window is on the active one.
 - (BOOL) isOnActiveSpace {
-    NSUnimplementedMethod();
     return YES;
 }
 
@@ -1550,8 +1589,7 @@ static BOOL _allowsAutomaticWindowTabbing;
 }
 
 - (BOOL) isMovable {
-    NSUnimplementedMethod();
-    return NO;
+    return _isMovable;
 }
 
 - (BOOL) inLiveResize {
@@ -1593,6 +1631,61 @@ static BOOL _allowsAutomaticWindowTabbing;
 
 - (void) setTabbingMode: (NSWindowTabbingMode)tabbingMode {
     _tabbingMode = tabbingMode;
+}
+
+// Until one is set, windows of the same class share an identifier.
+- (NSWindowTabbingIdentifier) tabbingIdentifier {
+    if (_tabbingIdentifier == nil)
+        return NSStringFromClass([self class]);
+    return _tabbingIdentifier;
+}
+
+- (void) setTabbingIdentifier: (NSWindowTabbingIdentifier) value {
+    value = [value copy];
+    [_tabbingIdentifier release];
+    _tabbingIdentifier = value;
+}
+
+- (NSString *) subtitle {
+    return _subtitle != nil ? _subtitle : @"";
+}
+
+- (void) setSubtitle: (NSString *) value {
+    value = [value copy];
+    [_subtitle release];
+    _subtitle = value;
+}
+
+- (NSWindowTitleVisibility) titleVisibility {
+    return _titleVisibility;
+}
+
+- (void) setTitleVisibility: (NSWindowTitleVisibility) value {
+    _titleVisibility = value;
+}
+
+- (BOOL) titlebarAppearsTransparent {
+    return _titlebarAppearsTransparent;
+}
+
+- (void) setTitlebarAppearsTransparent: (BOOL) value {
+    _titlebarAppearsTransparent = value;
+}
+
+- (NSTitlebarSeparatorStyle) titlebarSeparatorStyle {
+    return _titlebarSeparatorStyle;
+}
+
+- (void) setTitlebarSeparatorStyle: (NSTitlebarSeparatorStyle) value {
+    _titlebarSeparatorStyle = value;
+}
+
+- (NSWindowToolbarStyle) toolbarStyle {
+    return _toolbarStyle;
+}
+
+- (void) setToolbarStyle: (NSWindowToolbarStyle) value {
+    _toolbarStyle = value;
 }
 
 - (NSPoint) convertBaseToScreen: (NSPoint) point {
@@ -1869,9 +1962,9 @@ static BOOL _allowsAutomaticWindowTabbing;
     [self recalculateKeyViewLoopIfNeeded];
 }
 
+// Key view selection is not tracked, so it is always direct.
 - (NSSelectionDirection) keyViewSelectionDirection {
-    NSUnimplementedMethod();
-    return 0;
+    return NSDirectSelection;
 }
 
 - (void) disableKeyEquivalentForDefaultButtonCell {

@@ -128,7 +128,34 @@ typedef NS_ENUM(NSInteger, NSWindowTabbingMode) {
     NSWindowTabbingModeDisallowed,
 };
 
+typedef NS_ENUM(NSInteger, NSWindowTitleVisibility) {
+    NSWindowTitleVisible = 0,
+    NSWindowTitleHidden = 1,
+};
+
+typedef NS_ENUM(NSInteger, NSTitlebarSeparatorStyle) {
+    NSTitlebarSeparatorStyleAutomatic = 0,
+    NSTitlebarSeparatorStyleNone = 1,
+    NSTitlebarSeparatorStyleLine = 2,
+    NSTitlebarSeparatorStyleShadow = 3,
+};
+
+typedef NS_ENUM(NSInteger, NSWindowToolbarStyle) {
+    NSWindowToolbarStyleAutomatic = 0,
+    NSWindowToolbarStyleExpanded = 1,
+    NSWindowToolbarStylePreference = 2,
+    NSWindowToolbarStyleUnified = 3,
+    NSWindowToolbarStyleUnifiedCompact = 4,
+};
+
+typedef NSString *NSWindowTabbingIdentifier;
+
 typedef int NSSelectionDirection;
+enum {
+    NSDirectSelection = 0,
+    NSSelectingNext = 1,
+    NSSelectingPrevious = 2,
+};
 
 APPKIT_EXPORT const NSNotificationName NSWindowDidBecomeKeyNotification;
 APPKIT_EXPORT const NSNotificationName NSWindowDidResignKeyNotification;
@@ -261,6 +288,14 @@ APPKIT_EXPORT const NSNotificationName NSWindowDidExposeNotification;
     BOOL _restorable;
     NSWindowTabbingMode _tabbingMode;
     NSWindowCollectionBehavior _collectionBehavior;
+    NSWindowTabbingIdentifier _tabbingIdentifier;
+    NSString *_subtitle;
+    NSWindowTitleVisibility _titleVisibility;
+    NSTitlebarSeparatorStyle _titlebarSeparatorStyle;
+    NSWindowToolbarStyle _toolbarStyle;
+    BOOL _titlebarAppearsTransparent;
+    BOOL _isMovable;
+    NSButton *_standardWindowButtons[3];
 }
 
 @property(class) BOOL allowsAutomaticWindowTabbing;
@@ -440,6 +475,7 @@ APPKIT_EXPORT const NSNotificationName NSWindowDidExposeNotification;
 - (NSButton *) standardWindowButton: (NSWindowButton) value;
 - (NSButtonCell *) defaultButtonCell;
 - (NSWindow *) attachedSheet;
+- (NSWindow *) sheetParent;
 
 - (id) windowController;
 - (NSArray *) drawers;
@@ -476,6 +512,15 @@ APPKIT_EXPORT const NSNotificationName NSWindowDidExposeNotification;
 /* Window tabbing is not implemented, so the value is stored and ignored. */
 - (NSWindowTabbingMode) tabbingMode;
 - (void) setTabbingMode: (NSWindowTabbingMode)tabbingMode;
+@property(copy) NSWindowTabbingIdentifier tabbingIdentifier;
+
+/* Title bar and toolbar appearance. The window manager draws the title bar,
+ * so these are stored for callers to read back. */
+@property(copy) NSString *subtitle;
+@property NSWindowTitleVisibility titleVisibility;
+@property BOOL titlebarAppearsTransparent;
+@property NSTitlebarSeparatorStyle titlebarSeparatorStyle;
+@property NSWindowToolbarStyle toolbarStyle;
 
 - (NSPoint) convertBaseToScreen: (NSPoint) point;
 - (NSPoint) convertScreenToBase: (NSPoint) point;
