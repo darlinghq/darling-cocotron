@@ -40,6 +40,15 @@ bool CGAffineTransformIsIdentity(CGAffineTransform xform) {
            xform.tx == 0 && xform.ty == 0;
 }
 
+// Compares the six components with ==, so a transform containing NaN is not
+// equal to itself and 0 equals -0.
+bool CGAffineTransformEqualToTransform(CGAffineTransform t1,
+                                       CGAffineTransform t2)
+{
+    return t1.a == t2.a && t1.b == t2.b && t1.c == t2.c && t1.d == t2.d &&
+           t1.tx == t2.tx && t1.ty == t2.ty;
+}
+
 CGAffineTransform CGAffineTransformMakeRotation(CGFloat radians) {
     CGAffineTransform xform = {
             cos(radians), sin(radians), -sin(radians), cos(radians), 0, 0};
