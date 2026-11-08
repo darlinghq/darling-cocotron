@@ -121,6 +121,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         for (i = 0; i < count; i++)
             if ([[_segments objectAtIndex: i] isSelected])
                 return i;
+        return -1;
     }
 
     return _selectedSegment;
