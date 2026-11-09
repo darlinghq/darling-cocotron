@@ -23,6 +23,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSPasteboard.h>
 #import <AppKit/NSRaise.h>
 #import <AppKit/NSView.h>
+#include <limits.h>
+#include <stdint.h>
 
 NSBitmapImageRepPropertyKey NSImageCompressionFactor =
         @"NSImageCompressionFactor";
@@ -194,6 +196,15 @@ NSBitmapImageRepPropertyKey NSImageCurrentFrame = @"NSImageCurrentFrame";
 {
     int i, numberOfPlanes = isPlanar ? samplesPerPixel : 1;
 
+    // The documented failure result is nil; negative geometry and sizes
+    // that do not fit the int accessors cannot describe a bitmap.
+    if (width < 0 || height < 0 || bitsPerSample < 0 || samplesPerPixel < 0 ||
+        bytesPerRow < 0 || bitsPerPixel < 0)
+    {
+        [self release];
+        return nil;
+    }
+
     _size = NSMakeSize(width, height);
     _colorSpaceName = [colorSpaceName copy];
     _bitsPerSample = bitsPerSample;
@@ -205,15 +216,42 @@ NSBitmapImageRepPropertyKey NSImageCurrentFrame = @"NSImageCurrentFrame";
     _isPlanar = isPlanar;
     _bitmapFormat = bitmapFormat;
 
-    if (bitsPerPixel != 0)
-        _bitsPerPixel = bitsPerPixel;
-    else
-        _bitsPerPixel = _bitsPerSample * _samplesPerPixel;
+    int64_t pixelBits = (bitsPerPixel != 0)
+                                ? bitsPerPixel
+                                : (int64_t) bitsPerSample * samplesPerPixel;
+    if (pixelBits > INT_MAX) {
+        [self release];
+        return nil;
+    }
+    _bitsPerPixel = (int) pixelBits;
 
-    if (bytesPerRow != 0)
+    // A row of a planar image holds one sample per pixel: bytesPerRow is
+    // the length of a scan line within one plane.
+    int64_t rowBits = (int64_t)(_isPlanar ? _bitsPerSample : _bitsPerPixel) *
+                      _pixelsWide;
+    int64_t minimumRowBytes = (rowBits + 7) / 8;
+
+    if (bytesPerRow != 0) {
+        if (bytesPerRow < minimumRowBytes) {
+            [self release];
+            return nil;
+        }
         _bytesPerRow = bytesPerRow;
-    else
-        _bytesPerRow = (_bitsPerPixel * _pixelsWide + 7) / 8;
+    } else {
+        // QUIRK: with bytesPerRow 0, rows are padded to a multiple of 32
+        // bytes (16 pixels of 1-bit planar data or 1 RGBA8 pixel give 32,
+        // 17 RGBA8 pixels give 96). The documentation only says rows may be
+        // padded. Evidence: black-box observation on macOS 27.0.1, arm64
+        // and x86_64 (tier 2).
+        // Test: appkit_image_decoding_malformed, "bytesPerRow 0" checks.
+        int64_t rowBytes = (minimumRowBytes + 31) & ~(int64_t) 31;
+
+        if (rowBytes > INT_MAX) {
+            [self release];
+            return nil;
+        }
+        _bytesPerRow = (int) rowBytes;
+    }
 
     _freeWhenDone = NO;
     if (planes == NULL)
@@ -230,12 +268,22 @@ NSBitmapImageRepPropertyKey NSImageCurrentFrame = @"NSImageCurrentFrame";
     }
 
     _bitmapPlanes = NSZoneCalloc(NULL, numberOfPlanes, sizeof(unsigned char *));
-    for (i = 0; i < numberOfPlanes; i++) {
-        if (!_freeWhenDone)
+    if (_bitmapPlanes == NULL && numberOfPlanes > 0) {
+        [self release];
+        return nil;
+    }
+    if (!_freeWhenDone) {
+        for (i = 0; i < numberOfPlanes; i++)
             _bitmapPlanes[i] = planes[i];
-        else
-            _bitmapPlanes[i] =
-                    NSZoneCalloc(NULL, _bytesPerRow * _pixelsHigh, 1);
+    } else {
+        // A request too large to allocate still creates the rep; using its
+        // pixels raises NSMallocException (see -_allocateOwnedPlanes).
+        @try {
+            [self _allocateOwnedPlanes];
+        } @catch (NSException *exception) {
+            if (![[exception name] isEqualToString: NSMallocException])
+                @throw;
+        }
     }
 
     return self;
@@ -363,7 +411,43 @@ NSBitmapImageRepPropertyKey NSImageCurrentFrame = @"NSImageCurrentFrame";
     }
 }
 
+// Allocates the zero-filled planes of a rep that owns its pixel data.
+// When the planes cannot be allocated this raises NSMallocException, as the
+// pixel accessors do on macOS for a rep too large to back.
+- (void) _allocateOwnedPlanes {
+    if (!_freeWhenDone || _bitmapPlanes == NULL)
+        return;
+
+    int i, numberOfPlanes = [self numberOfPlanes];
+    size_t planeLength = 0;
+    BOOL overflow = _pixelsHigh != 0 &&
+                    (size_t) _bytesPerRow > SIZE_MAX / (size_t) _pixelsHigh;
+
+    if (!overflow)
+        planeLength = (size_t) _bytesPerRow * (size_t) _pixelsHigh;
+    if (planeLength == 0 && !overflow)
+        return;
+
+    for (i = 0; i < numberOfPlanes; i++) {
+        if (_bitmapPlanes[i] != NULL)
+            continue;
+        if (!overflow)
+            _bitmapPlanes[i] = NSZoneCalloc(NULL, planeLength, 1);
+        if (_bitmapPlanes[i] == NULL) {
+            unsigned long long total =
+                    overflow ? ULLONG_MAX
+                             : (unsigned long long) planeLength * numberOfPlanes;
+            [NSException raise: NSMallocException
+                        format: @"NSBitmapImageRep: cannot allocate %llu bytes "
+                                @"of pixel data",
+                                total];
+        }
+    }
+}
+
 - (void) createBitmapIfNeeded {
+    [self _allocateOwnedPlanes];
+
     if (_bitmapPlanes == NULL) {
         _freeWhenDone = YES;
         _bitmapPlanes = NSZoneCalloc(NULL, 1, sizeof(unsigned char *));
@@ -742,12 +826,89 @@ NSBitmapImageRepPropertyKey NSImageCurrentFrame = @"NSImageCurrentFrame";
                                           factor: factor];
 }
 
+// Converts a planar 1-bit gray image with a 1-bit alpha plane (the layout
+// of classic cursor and icon masks) to premultiplied 32-bit RGBA. Returns
+// NULL when the planes are missing, the row length cannot hold a row, or
+// the converted image cannot be allocated.
+- (CGImageRef) _createCGImageFromOneBitPlanes {
+    if (_pixelsWide <= 0 || _pixelsHigh <= 0)
+        return NULL;
+    // A caller can supply some planes and leave others NULL. macOS 27.0.1
+    // then returns an image that faults when drawn; we return no image
+    // instead, since reading a missing plane is never safe.
+    if (_bitmapPlanes == NULL || _bitmapPlanes[0] == NULL ||
+        _bitmapPlanes[1] == NULL)
+        return NULL;
+
+    const size_t width = (size_t) _pixelsWide;
+    const size_t height = (size_t) _pixelsHigh;
+    const size_t rowBytes = (size_t) _bytesPerRow;
+
+    if (rowBytes < (width + 7) / 8)
+        return NULL;
+    if (width > SIZE_MAX / sizeof(uint32_t) / height)
+        return NULL;
+
+    const size_t length = width * height * sizeof(uint32_t);
+    uint32_t *rgba = (uint32_t *) NSZoneMalloc(NULL, length);
+    if (rgba == NULL)
+        return NULL;
+
+    const BOOL alphaFirst = (_bitmapFormat & NSAlphaFirstBitmapFormat) != 0;
+    const uint8_t *grayPlane = _bitmapPlanes[alphaFirst ? 1 : 0];
+    const uint8_t *alphaPlane = _bitmapPlanes[alphaFirst ? 0 : 1];
+
+    // A set gray sample is white in the white color spaces and black in
+    // the black ones. A set alpha sample is opaque.
+    const BOOL blackSpace =
+            [_colorSpaceName isEqualToString: NSDeviceBlackColorSpace] ||
+            [_colorSpaceName isEqualToString: NSCalibratedBlackColorSpace];
+
+    for (size_t y = 0; y < height; y++) {
+        const uint8_t *grayRow = grayPlane + y * rowBytes;
+        const uint8_t *alphaRow = alphaPlane + y * rowBytes;
+
+        for (size_t x = 0; x < width; x++) {
+            unsigned shift = 7 - (unsigned) (x % 8);
+            BOOL graySet = (grayRow[x / 8] >> shift) & 1;
+            BOOL opaque = (alphaRow[x / 8] >> shift) & 1;
+            uint32_t value = (opaque && graySet != blackSpace) ? 0xFF : 0x00;
+
+            rgba[y * width + x] = (opaque ? 0xFF000000u : 0) | (value << 16) |
+                                  (value << 8) | value;
+        }
+    }
+
+    NSData *data = [[NSData alloc] initWithBytesNoCopy: rgba
+                                                length: length
+                                          freeWhenDone: YES];
+    CGDataProviderRef provider =
+            CGDataProviderCreateWithCFData((CFDataRef) data);
+    [data release];
+
+    CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
+    CGImageRef image = CGImageCreate(
+            width, height, 8, 32, width * sizeof(uint32_t), colorSpace,
+            kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Host,
+            provider, NULL, NO, kCGRenderingIntentDefault);
+
+    CGColorSpaceRelease(colorSpace);
+    CGDataProviderRelease(provider);
+    return image;
+}
+
 - (CGImageRef) createCGImageIfNeeded {
     if (_cgImage != NULL)
         return CGImageRetain(_cgImage);
 
-    if (_isPlanar)
+    [self _allocateOwnedPlanes];
+
+    if (_isPlanar) {
+        if (_bitsPerSample == 1 && _samplesPerPixel == 2 && _hasAlpha)
+            return [self _createCGImageFromOneBitPlanes];
         NSUnimplementedMethod();
+        return NULL;
+    }
 
     CGDataProviderRef provider = CGDataProviderCreateWithData(
             NULL, _bitmapPlanes[0], _bytesPerRow * _pixelsHigh, NULL);
@@ -771,8 +932,12 @@ NSBitmapImageRepPropertyKey NSImageCurrentFrame = @"NSImageCurrentFrame";
 
 - (BOOL) draw {
     CGContextRef context = NSCurrentGraphicsPort();
+    if (context == NULL)
+        return NO;
     NSSize size = [self size];
     CGImageRef image = [self createCGImageIfNeeded];
+    if (image == NULL)
+        return NO;
 
     CGContextDrawImage(context, NSMakeRect(0, 0, size.width, size.height),
                        image);

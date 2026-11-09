@@ -1294,7 +1294,7 @@ void O2ContextDrawShading(O2ContextRef self, O2ShadingRef shading) {
 }
 
 void O2ContextDrawImage(O2ContextRef self, O2Rect rect, O2ImageRef image) {
-    if (self == nil)
+    if (self == nil || image == nil)
         return;
 
     [self drawImage: image inRect: rect];

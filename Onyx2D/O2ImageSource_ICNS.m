@@ -234,7 +234,17 @@ static uint32_t nextUnsigned32(O2ImageSource_ICNS *self) {
 
 - (void) parseIcon {
     uint32_t type = nextUnsigned32(self);
-    uint32_t length = nextUnsigned32(self) - 8;
+    uint32_t elementLength = nextUnsigned32(self);
+
+    // The element length counts its 8-byte header. An element shorter than
+    // its header, or one that runs past the end of the data, is malformed:
+    // stop parsing there and keep the elements decoded so far.
+    if (elementLength < 8 || elementLength - 8 > _length - _position) {
+        _position = _length;
+        return;
+    }
+
+    uint32_t length = elementLength - 8;
     uint32_t width = 0;
     uint32_t height = 0;
     uint32_t bitsPerPixel = 0;
@@ -503,7 +513,7 @@ static uint32_t nextUnsigned32(O2ImageSource_ICNS *self) {
             int pixelOffset = 0, byteOffset = 0;
             const uint8_t *bytes = _bytes + _position;
 
-            for (byteOffset = 0; byteOffset < length;) {
+            for (byteOffset = 0; byteOffset < length && pixelOffset < pixelCount;) {
                 pixels[pixelOffset].r = bytes[byteOffset++];
                 pixels[pixelOffset].g = bytes[byteOffset++];
                 pixels[pixelOffset].b = bytes[byteOffset++];
@@ -519,18 +529,19 @@ static uint32_t nextUnsigned32(O2ImageSource_ICNS *self) {
             } componentSlot = COMPONENT_R;
 
             // 24 is RLE encoded.
-            if (rleBytes[0] == 0 && rleBytes[1] == 0 && rleBytes[2] == 0 &&
+            if (length >= 4 && rleBytes[0] == 0 && rleBytes[1] == 0 && rleBytes[2] == 0 &&
                 rleBytes[3] == 0)
                 rleOffset += 4;
 
-            for (; rleOffset < length;) {
-                for (pixelOffset = 0; pixelOffset < pixelCount;) {
+            for (; rleOffset < length && componentSlot <= COMPONENT_B; componentSlot++) {
+                for (pixelOffset = 0; pixelOffset < pixelCount && rleOffset < length;) {
                     if (rleBytes[rleOffset] & 0x80) {
                         unsigned rleInfo = rleBytes[rleOffset++];
                         unsigned i, chunkLength = (rleInfo & 0x7F) + 3;
+                        if (rleOffset >= length) break;
                         uint8_t componentValue = rleBytes[rleOffset++];
 
-                        for (i = 0; i < chunkLength; i++) {
+                        for (i = 0; i < chunkLength && pixelOffset < pixelCount; i++) {
                             switch (componentSlot) {
                             case COMPONENT_R:
                                 pixels[pixelOffset++].r = componentValue;
@@ -544,9 +555,10 @@ static uint32_t nextUnsigned32(O2ImageSource_ICNS *self) {
                             }
                         }
                     } else {
+                        if (rleOffset >= length) break;
                         unsigned i, chunkLength = rleBytes[rleOffset++] + 1;
 
-                        for (i = 0; i < chunkLength; i++)
+                        for (i = 0; i < chunkLength && pixelOffset < pixelCount && rleOffset < length; i++) {
                             switch (componentSlot) {
                             case COMPONENT_R:
                                 pixels[pixelOffset++].r = rleBytes[rleOffset++];
@@ -558,9 +570,9 @@ static uint32_t nextUnsigned32(O2ImageSource_ICNS *self) {
                                 pixels[pixelOffset++].b = rleBytes[rleOffset++];
                                 break;
                             }
+                        }
                     }
                 }
-                componentSlot++;
             }
         }
     }
@@ -586,10 +598,15 @@ static uint32_t nextUnsigned32(O2ImageSource_ICNS *self) {
 }
 
 - (void) parseImages {
+    // The file header and each element header are 8 bytes; data too short
+    // for a header holds no further icons.
+    if (_length < 8)
+        return;
+
     uint32_t magic = nextUnsigned32(self);
     uint32_t length = nextUnsigned32(self);
 
-    while (_position < _length)
+    while (_length - _position >= 8)
         [self parseIcon];
 
     O2ICNSNode *iconNode;

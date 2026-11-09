@@ -22,7 +22,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Foundation/Foundation.h>
 #import <CoreGraphics/CGEventTypes.h>
 
-@class NSWindow, NSGraphicsContext, NSTrackingArea;
+@class NSWindow, NSGraphicsContext, NSTrackingArea, NSView;
 
 typedef NS_ENUM(NSUInteger, NSEventType) {
     NSEventTypeLeftMouseDown = 1,
@@ -248,6 +248,9 @@ typedef NS_OPTIONS(NSUInteger, NSEventPhase) {
 + (id) addLocalMonitorForEventsMatchingMask: (NSEventMask) mask
                                     handler: (NSEvent * _Nullable (^)(NSEvent *event)) block;
 + (void) removeMonitor: (id) eventMonitor;
++ (void) setMouseCoalescingEnabled: (BOOL) flag;
++ (BOOL) isMouseCoalescingEnabled;
+- (NSSet *) touchesMatchingPhase: (NSUInteger) phase inView: (NSView *) view;
 
 - (instancetype) initWithType: (NSEventType) type
                      location: (NSPoint) location
