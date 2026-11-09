@@ -32,6 +32,13 @@ static inline bool X11FullscreenWanted(bool overrideRedirect, bool styleFullScre
     return coversMonitor;
 }
 
+/* Whether a style change takes the window out of fullscreen whatever its frame: the application cleared the
+ * fullscreen style bit (-toggleFullScreen:). The window still covers its monitor then, but only because it was
+ * fullscreen, so the monitor test must not hold it there; the window manager restores the frame it had before. */
+static inline bool X11FullscreenStyleLeft(bool wasStyleFullScreen, bool styleFullScreen) {
+    return wasStyleFullScreen && !styleFullScreen;
+}
+
 /* Whether a window that is already fullscreen has to leave fullscreen before setFrame: moves it. It does when it
  * should no longer be fullscreen, and also when it moves to another place (another monitor): a window manager
  * ignores configure requests for a fullscreen window, so a move between two monitors that are each exactly

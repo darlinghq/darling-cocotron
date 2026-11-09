@@ -550,9 +550,12 @@ static NSData *makeWindowIcon() {
         [self updateSizeHints: mask];
     }
 
-    [self requestFullscreen: [self wantsFullscreenWithStyleMask: mask
-                                                          frame: [self frame]]
-                      force: force];
+    BOOL fullscreen =
+            !X11FullscreenStyleLeft(
+                    (_styleMask & NSWindowStyleMaskFullScreen) != 0,
+                    (mask & NSWindowStyleMaskFullScreen) != 0) &&
+            [self wantsFullscreenWithStyleMask: mask frame: [self frame]];
+    [self requestFullscreen: fullscreen force: force];
 }
 
 - (void) setStyleMask: (NSUInteger) mask {
