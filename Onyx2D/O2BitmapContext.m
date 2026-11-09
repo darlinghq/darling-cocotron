@@ -63,6 +63,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                                             colorSpace: colorSpace
                                             bitmapInfo: bitmapInfo];
 
+    // The surface rejects sizes whose backing store cannot be represented
+    // or a caller buffer whose rows are too short; creating the context
+    // fails in that case.
+    if (surface == nil) {
+        [self release];
+        return nil;
+    }
+
     [self initWithSurface: surface flipped: NO];
     [surface release];
     return self;

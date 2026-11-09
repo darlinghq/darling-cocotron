@@ -314,3 +314,62 @@ bool CGRectContainsRect(CGRect a, CGRect b) {
             CGRectGetMinY(b) >= CGRectGetMinY(a) &&
             CGRectGetMaxY(b) <= CGRectGetMaxY(a));
 }
+
+// The rectangle is standardized first and the amount is clamped to the
+// rectangle's extent along the edge's axis, so the slice never reaches past
+// the rectangle and the remainder is never negative. A null rectangle divides
+// into two null rectangles.
+void CGRectDivide(CGRect rect, CGRect *slice, CGRect *remainder,
+                  CGFloat amount, CGRectEdge edge)
+{
+    if (CGRectIsNull(rect)) {
+        *slice = CGRectNull;
+        *remainder = CGRectNull;
+        return;
+    }
+
+    if (rect.size.width < 0) {
+        rect.origin.x += rect.size.width;
+        rect.size.width = -rect.size.width;
+    }
+    if (rect.size.height < 0) {
+        rect.origin.y += rect.size.height;
+        rect.size.height = -rect.size.height;
+    }
+
+    CGFloat extent = (edge == CGRectMinXEdge || edge == CGRectMaxXEdge)
+                             ? rect.size.width
+                             : rect.size.height;
+    // Written as comparisons rather than MIN/MAX so that a NaN amount
+    // propagates into the results instead of being replaced.
+    if (amount < 0)
+        amount = 0;
+    if (amount > extent)
+        amount = extent;
+
+    *slice = rect;
+    *remainder = rect;
+
+    switch (edge) {
+    case CGRectMinXEdge:
+        slice->size.width = amount;
+        remainder->origin.x += amount;
+        remainder->size.width -= amount;
+        break;
+    case CGRectMaxXEdge:
+        slice->origin.x += rect.size.width - amount;
+        slice->size.width = amount;
+        remainder->size.width -= amount;
+        break;
+    case CGRectMinYEdge:
+        slice->size.height = amount;
+        remainder->origin.y += amount;
+        remainder->size.height -= amount;
+        break;
+    case CGRectMaxYEdge:
+        slice->origin.y += rect.size.height - amount;
+        slice->size.height = amount;
+        remainder->size.height -= amount;
+        break;
+    }
+}

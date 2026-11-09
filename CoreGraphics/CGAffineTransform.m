@@ -21,9 +21,32 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 const CGAffineTransform CGAffineTransformIdentity = {1, 0, 0, 1, 0, 0};
 
+// Keep the header's inline helpers for source clients, but also provide the
+// canonical symbols imported by prebuilt clients such as SwiftUI and CotEditor.
+#undef CGPointApplyAffineTransform
+#undef CGSizeApplyAffineTransform
+COREGRAPHICS_EXPORT CGPoint CGPointApplyAffineTransform(
+        CGPoint point, CGAffineTransform transform) {
+    return __CGPointApplyAffineTransform(point, transform);
+}
+
+COREGRAPHICS_EXPORT CGSize CGSizeApplyAffineTransform(
+        CGSize size, CGAffineTransform transform) {
+    return __CGSizeApplyAffineTransform(size, transform);
+}
+
 bool CGAffineTransformIsIdentity(CGAffineTransform xform) {
     return xform.a == 1 && xform.b == 0 && xform.c == 0 && xform.d == 1 &&
            xform.tx == 0 && xform.ty == 0;
+}
+
+// Compares the six components with ==, so a transform containing NaN is not
+// equal to itself and 0 equals -0.
+bool CGAffineTransformEqualToTransform(CGAffineTransform t1,
+                                       CGAffineTransform t2)
+{
+    return t1.a == t2.a && t1.b == t2.b && t1.c == t2.c && t1.d == t2.d &&
+           t1.tx == t2.tx && t1.ty == t2.ty;
 }
 
 CGAffineTransform CGAffineTransformMakeRotation(CGFloat radians) {

@@ -29,6 +29,7 @@
 #import <Onyx2D/O2ColorSpace.h>
 #import <Onyx2D/O2DataProvider.h>
 #import <Onyx2D/O2Surface.h>
+#include <stdint.h>
 
 @implementation O2Surface
 
@@ -561,6 +562,23 @@ static BOOL initFunctionsForParameters(O2Surface *self, size_t bitsPerComponent,
     O2DataProvider *provider;
     int bitsPerPixel = 32;
 
+    // Both local rejection and superclass initialization failure call dealloc.
+    // Establish the mutex before either path can destroy it.
+    pthread_mutex_init(&_lock, NULL);
+    if (width > SIZE_MAX / (size_t)bitsPerPixel) {
+        [self release];
+        return nil;
+    }
+    size_t minimumRowBytes = width * (size_t)bitsPerPixel / 8;
+    size_t effectiveRowBytes = bytesPerRow;
+    if (bytes == NULL && effectiveRowBytes < minimumRowBytes)
+        effectiveRowBytes = minimumRowBytes;
+    if ((bytes != NULL && bytesPerRow < minimumRowBytes) ||
+        (effectiveRowBytes != 0 && height > SIZE_MAX / effectiveRowBytes)) {
+        [self release];
+        return nil;
+    }
+
     if (bytes != NULL) {
         provider = [[[O2DataProvider alloc] initWithBytes: bytes
                                                    length: bytesPerRow * height]
@@ -606,7 +624,6 @@ static BOOL initFunctionsForParameters(O2Surface *self, size_t bitsPerComponent,
         NSLog(@"O2Surface -init error, return");
 
     _clampExternalPixels = NO; // only set to yes if premultiplied
-    pthread_mutex_init(&_lock, NULL);
     return self;
 }
 
@@ -638,9 +655,20 @@ void O2SurfaceUnlock(O2Surface *surface) {
     if (!m_ownsData)
         return;
 
+    // Validate before changing dimensions or releasing the existing backing.
+    // Otherwise a wrapped allocation size leaves a large surface over a small
+    // buffer, and subsequent drawing can write beyond that buffer.
+    if (_bitsPerPixel <= 0 || width > SIZE_MAX / (size_t)_bitsPerPixel)
+        [NSException raise: NSInvalidArgumentException
+                    format: @"O2Surface resize row size overflow"];
+    size_t bytesPerRow = width * (size_t)_bitsPerPixel / 8;
+    if (bytesPerRow != 0 && height > SIZE_MAX / bytesPerRow)
+        [NSException raise: NSInvalidArgumentException
+                    format: @"O2Surface resize allocation size overflow"];
+
     _width = width;
     _height = height;
-    _bytesPerRow = width * _bitsPerPixel / 8;
+    _bytesPerRow = bytesPerRow;
 
     NSUInteger size = _bytesPerRow * height * sizeof(uint8_t);
     NSUInteger allocateSize = [[_provider data] length];
