@@ -30,3 +30,19 @@ typedef NS_ENUM(NSInteger, NSLayoutConstraintOrientation) {
 
 APPKIT_EXPORT const CGFloat NSViewNoInstrinsicMetric;
 APPKIT_EXPORT const CGFloat NSViewNoIntrinsicMetric;
+
+// Insets named by writing direction rather than by side.
+typedef struct NSDirectionalEdgeInsets {
+	CGFloat top;
+	CGFloat leading;
+	CGFloat bottom;
+	CGFloat trailing;
+} NSDirectionalEdgeInsets;
+
+APPKIT_EXPORT const NSDirectionalEdgeInsets NSDirectionalEdgeInsetsZero;
+
+NS_INLINE NSDirectionalEdgeInsets NSDirectionalEdgeInsetsMake(CGFloat top, CGFloat leading,
+                                                              CGFloat bottom, CGFloat trailing) {
+	NSDirectionalEdgeInsets insets = {top, leading, bottom, trailing};
+	return insets;
+}

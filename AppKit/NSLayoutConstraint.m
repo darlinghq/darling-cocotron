@@ -19,5 +19,9 @@
 
 #import <AppKit/NSLayoutConstraint.h>
 
-const CGFloat NSViewNoInstrinsicMetric = 0xbff0000000000000;
-const CGFloat NSViewNoIntrinsicMetric = 0xbff0000000000000;
+// 0xbff0000000000000 is the bit pattern of -1.0, not the value; as a CGFloat
+// initialiser it yielded 1.38e19, so every "no intrinsic metric" test failed.
+const CGFloat NSViewNoInstrinsicMetric = -1.0;
+const CGFloat NSViewNoIntrinsicMetric = -1.0;
+
+const NSDirectionalEdgeInsets NSDirectionalEdgeInsetsZero = {0, 0, 0, 0};
