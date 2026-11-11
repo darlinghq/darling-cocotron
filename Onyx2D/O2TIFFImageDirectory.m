@@ -166,12 +166,18 @@ static void sTIFFUnmapFileProc(thandle_t userData, tdata_t data, toff_t size) {
     TIFFSetDirectory(tif, directory);
     if (TIFFGetField(tif, TIFFTAG_IMAGEWIDTH, &width) != 0 &&
         TIFFGetField(tif, TIFFTAG_IMAGELENGTH, &height) != 0) {
-        // We want top-left orientation - libtiff default is bottom-left, which
-        // is giving flipped bitmaps libtiff is giving us pixels in the same
-        // order we need - so we can just fill the pixels using libtiff and no
-        // post-processing is needed
+        // The pixels as stored, row 0 at the top: asking libtiff for the file's
+        // own orientation makes it convert nothing (its default, bottom-left,
+        // would flip them). Like CGImageSourceCreateImageAtIndex on macOS, the
+        // image is not rotated: the orientation is reported in the properties
+        // (kCGImagePropertyOrientation) and applied by whoever asks for it, e.g.
+        // CGImageSourceCreateThumbnailAtIndex with ...WithTransform.
+        uint16_t storedOrientation = ORIENTATION_TOPLEFT;
+        TIFFGetFieldDefaulted(tif, TIFFTAG_ORIENTATION, &storedOrientation);
+        if (storedOrientation < ORIENTATION_TOPLEFT || storedOrientation > ORIENTATION_LEFTBOT)
+            storedOrientation = ORIENTATION_TOPLEFT;
         if (TIFFReadRGBAImageOriented(tif, width, height, pixelBytes,
-                                      ORIENTATION_TOPLEFT, 1) == 0) {
+                                      storedOrientation, 1) == 0) {
             NSLog(@"Couldn't not decode TIFF Image at index %d", directory);
         }
     } else {
@@ -703,6 +709,11 @@ void depredict_R8G8B8A8(uint8_t *pixelBytes, unsigned bytesPerRow,
                forKey: kO2ImagePropertyDPIWidth];
     [result setObject: [NSNumber numberWithDouble: _yResolution]
                forKey: kO2ImagePropertyDPIHeight];
+    // TIFF tag 274, same values as EXIF (1-8): the top-level kCGImagePropertyOrientation.
+    if (_orientation >= 1 && _orientation <= 8) {
+        [result setObject: [NSNumber numberWithUnsignedInt: _orientation]
+                   forKey: kO2ImagePropertyOrientation];
+    }
 
     return result;
 }
