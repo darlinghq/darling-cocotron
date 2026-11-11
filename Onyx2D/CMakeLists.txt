@@ -58,6 +58,7 @@ set(Onyx2D_sources
 	O2DataProvider.m
 	O2Decoder_TIFF.m
 	O2Encoder_BMP.m
+	O2Encoder_GIF.m
 	O2Encoder_JPG.m
 	O2EncoderPixels.m
 	O2Encoder_PNG.m
