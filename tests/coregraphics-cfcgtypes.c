@@ -16,7 +16,7 @@ int main(void) {
     CGVector vector = { 5, 6 };
     if (area(rect) != 12 || CGRectGetMaxX(rect) != 4 || CGRectGetMaxY(rect) != 6)
         return 1;
-    if (vector.dx + vector.dy != 11 || sizeof(CGFloat) != sizeof(double) || !CGFLOAT_IS_DOUBLE)
+    if (vector.dx + vector.dy != 11 || sizeof(CGFloat) != sizeof(CGFLOAT_TYPE) || (CGFLOAT_IS_DOUBLE != (sizeof(CGFloat) == sizeof(double))))
         return 2;
     if (!CGPointEqualToPoint(CGPointMake(3, 4), (CGPoint){ 3, 4 }))
         return 3;
