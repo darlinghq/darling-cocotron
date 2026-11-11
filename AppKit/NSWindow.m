@@ -620,6 +620,7 @@ static BOOL _allowsAutomaticWindowTabbing;
     [_sharedFieldEditor release];
     [_draggedTypes release];
     [_trackingAreas release];
+    [_mouseDownViews release];
     [_autosaveFrameName release];
     [_platformWindow invalidate];
     [_platformWindow release];
@@ -2569,6 +2570,42 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
     NSUnimplementedMethod();
 }
 
+// Each mouse button remembers the view that received its mouse-down; drags and
+// the mouse-up of that button go to that view whatever the other buttons do in
+// between. A view that has left the window by then receives nothing more.
+- (NSInteger) _otherButtonOfEvent: (NSEvent *) event {
+    NSInteger button = [event buttonNumber];
+
+    return (button < 2) ? 2 : button;
+}
+
+- (void) _setMouseDownView: (NSView *) view forButton: (NSInteger) button {
+    NSNumber *key = @(button);
+
+    if (view == nil) {
+        [_mouseDownViews removeObjectForKey: key];
+        return;
+    }
+    if (_mouseDownViews == nil) {
+        _mouseDownViews = [[NSMutableDictionary alloc] init];
+    }
+    _mouseDownViews[key] = view;
+}
+
+- (NSView *) _mouseDownViewForButton: (NSInteger) button {
+    // Keep the view alive for the caller even if the entry is removed next.
+    NSView *view = [[_mouseDownViews[@(button)] retain] autorelease];
+
+    return ([view window] == self) ? view : nil;
+}
+
+- (NSView *) _takeMouseDownViewForButton: (NSInteger) button {
+    NSView *view = [self _mouseDownViewForButton: button];
+
+    [_mouseDownViews removeObjectForKey: @(button)];
+    return view;
+}
+
 - (void) sendEvent: (NSEvent *) event {
     // Some events can cause our window to be destroyed
     // So make sure self lives at least through this current run loop...
@@ -2621,38 +2658,38 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
         }
 
         // Event goes to view, not first responder.
+        [self _setMouseDownView: view forButton: 0];
         [view mouseDown: event];
-        _mouseDownLocationInWindow = [event locationInWindow];
         break;
     }
 
     case NSLeftMouseUp:
-        [[_backgroundView hitTest: _mouseDownLocationInWindow] mouseUp: event];
-        _mouseDownLocationInWindow = NSMakePoint(NAN, NAN);
+        [[self _takeMouseDownViewForButton: 0] mouseUp: event];
         break;
 
-    case NSRightMouseDown:
-        _mouseDownLocationInWindow = [event locationInWindow];
-        [[_backgroundView hitTest: [event locationInWindow]]
-                rightMouseDown: event];
+    case NSRightMouseDown: {
+        NSView *view = [_backgroundView hitTest: [event locationInWindow]];
+
+        [self _setMouseDownView: view forButton: 1];
+        [view rightMouseDown: event];
         break;
+    }
 
     case NSRightMouseUp:
-        [[_backgroundView hitTest: _mouseDownLocationInWindow]
-                rightMouseUp: event];
-        _mouseDownLocationInWindow = NSMakePoint(NAN, NAN);
+        [[self _takeMouseDownViewForButton: 1] rightMouseUp: event];
         break;
 
-    case NSOtherMouseDown:
-        _mouseDownLocationInWindow = [event locationInWindow];
-        [[_backgroundView hitTest: [event locationInWindow]]
-                otherMouseDown: event];
+    case NSOtherMouseDown: {
+        NSView *view = [_backgroundView hitTest: [event locationInWindow]];
+
+        [self _setMouseDownView: view forButton: [self _otherButtonOfEvent: event]];
+        [view otherMouseDown: event];
         break;
+    }
 
     case NSOtherMouseUp:
-        [[_backgroundView hitTest: _mouseDownLocationInWindow]
+        [[self _takeMouseDownViewForButton: [self _otherButtonOfEvent: event]]
                 otherMouseUp: event];
-        _mouseDownLocationInWindow = NSMakePoint(NAN, NAN);
         break;
 
     case NSMouseMoved: {
@@ -2667,17 +2704,15 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
     }
 
     case NSLeftMouseDragged:
-        [[_backgroundView hitTest: _mouseDownLocationInWindow]
-                mouseDragged: event];
+        [[self _mouseDownViewForButton: 0] mouseDragged: event];
         break;
 
     case NSRightMouseDragged:
-        [[_backgroundView hitTest: _mouseDownLocationInWindow]
-                rightMouseDragged: event];
+        [[self _mouseDownViewForButton: 1] rightMouseDragged: event];
         break;
 
     case NSOtherMouseDragged:
-        [[_backgroundView hitTest: _mouseDownLocationInWindow]
+        [[self _mouseDownViewForButton: [self _otherButtonOfEvent: event]]
                 otherMouseDragged: event];
         break;
 
