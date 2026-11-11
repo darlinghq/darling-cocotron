@@ -23,6 +23,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSPasteboard.h>
 #import <AppKit/NSRaise.h>
 #import <AppKit/NSView.h>
+#import <Onyx2D/O2ImageDestination.h>
 #include <limits.h>
 #include <stdint.h>
 
@@ -788,7 +789,7 @@ NSBitmapImageRepPropertyKey NSImageCurrentFrame = @"NSImageCurrentFrame";
     NSDictionary *CGProperties = [NSMutableDictionary dictionary];
 
     [CGProperties setValue: [NSNumber numberWithInt: dpi]
-                    forKey: (id) kCGImageDestinationDPI];
+                    forKey: (id) kO2ImageDestinationDPI];
 
     if ([properties count]) {
         id compressionFactor =
