@@ -1324,6 +1324,20 @@ void O2ContextDrawPDFPage(O2ContextRef self, O2PDFPageRef page) {
     if (self == nil)
         return;
 
+    // The page draws from the PDF initial graphics state (PDF 32000-1 8.4.1, Table 52),
+    // not from whatever the context was last set to, and leaves the context as it was.
+    NSUInteger depth = [self->_stateStack count];
+    O2ContextSaveGState(self);
+    O2ContextSetGrayFillColor(self, 0, 1);
+    O2ContextSetGrayStrokeColor(self, 0, 1);
+    O2ContextSetLineWidth(self, 1);
+    O2ContextSetLineCap(self, kO2LineCapButt);
+    O2ContextSetLineJoin(self, kO2LineJoinMiter);
+    O2ContextSetMiterLimit(self, 10);
+    O2ContextSetLineDash(self, 0, NULL, 0);
+    O2ContextSetAlpha(self, 1);
+    O2ContextSetBlendMode(self, kO2BlendModeNormal);
+
     // Per doc.s, these are initialized at the beginning of each page only
 
     O2ContextSetCharacterSpacing(self, 0);
@@ -1337,6 +1351,9 @@ void O2ContextDrawPDFPage(O2ContextRef self, O2PDFPageRef page) {
 
     O2ContextSetTextLineMatrix(self, O2AffineTransformIdentity);
     O2ContextSetTextMatrix(self, O2AffineTransformIdentity);
+    // Also pops what a page saved (q) and never restored (Q).
+    while ([self->_stateStack count] > depth)
+        O2ContextRestoreGState(self);
 }
 
 void O2ContextFlush(O2ContextRef self) {

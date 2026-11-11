@@ -25,6 +25,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Onyx2D/O2PDFPage.h>
 #import <Onyx2D/O2PDFScanner.h>
 #include <limits.h>
+#include <math.h>
 
 @implementation O2PDFPage
 
@@ -122,7 +123,12 @@ BOOL O2PDFGetPageArrayForKey(O2PDFPage *page, const char *key,
         return NO;
     }
     if (!O2PDFGetPageArrayForKey(self, string, &array)) {
-        return NO;
+        // PDF 32000-1 14.11.2: a missing CropBox defaults to the MediaBox, and a
+        // missing BleedBox, TrimBox or ArtBox to the CropBox.
+        if (box == kO2PDFMediaBox)
+            return NO;
+        return [self getRect: rect
+                      forBox: (box == kO2PDFCropBox) ? kO2PDFMediaBox : kO2PDFCropBox];
     }
 
     if (![array getNumbers: &numbers count: &count]) {
@@ -134,12 +140,18 @@ BOOL O2PDFGetPageArrayForKey(O2PDFPage *page, const char *key,
         return NO;
     }
 
-    rect->origin.x = numbers[0];
-    rect->origin.y = numbers[1];
-    rect->size.width = numbers[2] - numbers[0];
-    rect->size.height = numbers[3] - numbers[1];
+    // A rectangle is any two opposite corners, in either order.
+    rect->origin.x = MIN(numbers[0], numbers[2]);
+    rect->origin.y = MIN(numbers[1], numbers[3]);
+    rect->size.width = fabs(numbers[2] - numbers[0]);
+    rect->size.height = fabs(numbers[3] - numbers[1]);
 
     NSZoneFree(NULL, numbers);
+
+    // Every other box is clipped to the MediaBox.
+    O2Rect mediaBox;
+    if (box != kO2PDFMediaBox && [self getRect: &mediaBox forBox: kO2PDFMediaBox])
+        *rect = O2RectIntersection(*rect, mediaBox);
 
     return YES;
 }
