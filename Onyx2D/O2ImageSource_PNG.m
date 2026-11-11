@@ -64,10 +64,6 @@ typedef struct png_data_t {
 	int len;
 } png_data_t;
 
-static void O2ImageSource_PNGError(png_structp png_ptr, png_const_charp error_message) {
-    [NSException raise: @"PNG exception" format: @"%s", error_message];
-}
-
 static void png_read_data(png_structp pngPtr, png_bytep data, png_size_t length) {
     //Here we get our IO pointer back from the read struct.
     //This is the parameter we passed to the png_set_read_fn() function.
@@ -96,7 +92,7 @@ bool load_png_image(const unsigned char *buffer, int length, int *outWidth, int 
      * was compiled with a compatible version
      * of the library.  REQUIRED
      */
-    png_ptr = png_create_read_struct(PNG_LIBPNG_VER_STRING, NULL, O2ImageSource_PNGError, NULL);
+    png_ptr = png_create_read_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
 
     if (png_ptr == NULL) {
         return false;
@@ -107,6 +103,15 @@ bool load_png_image(const unsigned char *buffer, int length, int *outWidth, int 
     info_ptr = png_create_info_struct(png_ptr);
     if (info_ptr == NULL) {
         png_destroy_read_struct(&png_ptr, NULL, NULL);
+        return false;
+    }
+
+    /* libpng reports errors (a truncated or corrupt file) by longjmp-ing here: an
+       Objective-C exception raised from its error callback cannot unwind through
+       libpng's C frames and aborted the process. Nothing is allocated by us before
+       png_read_png, the only call that can fail. */
+    if (setjmp(png_jmpbuf(png_ptr))) {
+        png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
         return false;
     }
 
