@@ -306,6 +306,25 @@ const char *O2ImageNameWithIntent(O2ColorRenderingIntent intent) {
     int bytesPerRow = ([stream bytesPerRow] != 0)
                               ? [stream bytesPerRow]
                               : ((width * bitsPerPixel) + 7) / 8;
+
+    // The DCT (JPEG) decoder always returns 8-bit RGBA (4 bytes per pixel), while the
+    // image samples are what /ColorSpace says: 3 bytes for DeviceRGB, 1 for DeviceGray.
+    // Repack them, otherwise every row is read with the wrong pixel stride.
+    if (bitsPerComponent == 8 && (componentsPerPixel == 1 || componentsPerPixel == 3) &&
+        bytesPerRow == width * 4 && [data length] >= (NSUInteger)(height * bytesPerRow)) {
+        int packedRow = width * componentsPerPixel;
+        NSMutableData *packed = [NSMutableData dataWithLength: height * packedRow];
+        const unsigned char *src = [data bytes];
+        unsigned char *dst = [packed mutableBytes];
+
+        for (int y = 0; y < height; y++)
+            for (int x = 0; x < width; x++)
+                for (int c = 0; c < componentsPerPixel; c++)
+                    dst[y * packedRow + x * componentsPerPixel + c] =
+                            src[y * bytesPerRow + x * 4 + c];
+        data = packed;
+        bytesPerRow = packedRow;
+    }
     O2DataProvider *provider;
     O2Image *image = NULL;
 
