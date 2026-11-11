@@ -170,8 +170,8 @@ static BOOL debugError(const char *bytes, unsigned length,
 
     va_start(arguments, format);
     debugTracev(bytes, length, position, format, arguments);
-    [NSException raise: @"" format: @""];
-    ;
+    // A malformed document is a parse failure the callers report by returning NO
+    // (CGPDFDocumentCreate* then return NULL), not an exception.
     return NO;
 }
 
@@ -331,6 +331,20 @@ BOOL O2PDFScanVersion(const char *bytes, unsigned length,
         return debugError(bytes, length, position, @"Does not end with %%EOF");
 
     return YES;
+}
+
+static O2PDFObject *identifierObject(const char *name, unsigned length) {
+    O2PDFIdentifier identifier = O2PDFClassifyIdentifier(name, length);
+
+    if (identifier == O2PDFIdentifier_true)
+        return [O2PDFObject_Boolean pdfObjectWithTrue];
+    if (identifier == O2PDFIdentifier_false)
+        return [O2PDFObject_Boolean pdfObjectWithFalse];
+    if (identifier == O2PDFIdentifier_null)
+        return [O2PDFObject_const pdfObjectWithNull];
+    return [O2PDFObject_identifier pdfObjectWithIdentifier: identifier
+                                                      name: name
+                                                    length: length];
 }
 
 // Returns YES and *objectp==NULL on end of stream
@@ -659,23 +673,8 @@ BOOL O2PDFScanObject(const char *bytes, unsigned length, O2PDFInteger position,
                 code == '\t' || code == '\0' || code == '%' || code == '(' ||
                 code == ')' || code == '<' || code == '>' || code == ']' ||
                 code == '[' || code == '{' || code == '}' || code == '/') {
-                const char *name = bytes + inlineLocation;
-                unsigned length = position - inlineLocation;
-                O2PDFIdentifier identifier =
-                        O2PDFClassifyIdentifier(name, length);
-
-                if (identifier == O2PDFIdentifier_true)
-                    *objectp = [O2PDFObject_Boolean pdfObjectWithTrue];
-                else if (identifier == O2PDFIdentifier_false)
-                    *objectp = [O2PDFObject_Boolean pdfObjectWithFalse];
-                else if (identifier == O2PDFIdentifier_null)
-                    *objectp = [O2PDFObject_const pdfObjectWithNull];
-                else
-                    *objectp = [O2PDFObject_identifier
-                            pdfObjectWithIdentifier: identifier
-                                               name: name
-                                             length: length];
-
+                *objectp = identifierObject(bytes + inlineLocation,
+                                            position - inlineLocation);
                 *lastPosition = position;
                 return YES;
             }
@@ -687,6 +686,28 @@ BOOL O2PDFScanObject(const char *bytes, unsigned length, O2PDFInteger position,
         O2PDFByteBufferFree(byteBuffer);
 
     *lastPosition = position;
+
+    // The end of the data delimits a token too: a content stream usually ends with
+    // its last operator (`... re f`) and nothing after it.
+    switch (state) {
+    case STATE_INTEGER:
+        *objectp = [O2PDFObject_Integer pdfObjectWithInteger: currentSign * currentInt];
+        return YES;
+    case STATE_REAL:
+        *objectp = [O2PDFObject_Real pdfObjectWithReal: currentSign * currentReal];
+        return YES;
+    case STATE_IDENTIFIER:
+        *objectp = identifierObject(bytes + inlineLocation, position - inlineLocation);
+        return YES;
+    case STATE_NAME:
+        if (position == inlineLocation)
+            break;
+        *objectp = [O2PDFObject_Name pdfObjectWithBytes: bytes + inlineLocation
+                                                 length: position - inlineLocation];
+        return YES;
+    default:
+        break;
+    }
 
     return (state == STATE_SCANNING) ? YES : NO;
 }
@@ -1300,8 +1321,10 @@ NSData *O2PDFScannerCreateDataWithLength(O2PDFScanner *self, size_t length) {
             if (callback != NULL) {
                 callback(self, _info);
             } else {
+                // PDF 32000-1 7.8.2: a consumer ignores operators it does not
+                // recognize, together with their operands.
                 NSLog(@"unhandled identifier %@", object);
-                [NSException raise: @"" format: @""];
+                [_stack removeAllObjects];
             }
         }
     }
