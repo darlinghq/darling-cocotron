@@ -96,17 +96,11 @@ ONYX2D_STATIC BOOL initFunctionsForRGBColorSpace(O2Image *self,
         case 24:
             switch (bitmapInfo & kO2BitmapAlphaInfoMask) {
             case kO2ImageAlphaNone:
-                switch (bitmapInfo & kO2BitmapByteOrderMask) {
-                case kO2BitmapByteOrder16Little:
-                case kO2BitmapByteOrder32Little:
-                    self->_read_argb8u = O2ImageRead_ABGR8888_to_argb8u;
-                    return YES;
-
-                case kO2BitmapByteOrder16Big:
-                case kO2BitmapByteOrder32Big:
-                    self->_read_argb8u = O2ImageRead_RGBA8888_to_argb8u;
-                    return YES;
-                }
+                // Three bytes per pixel are R, G, B in memory whatever the byte
+                // order flag says (it describes 16- and 32-bit words): reading
+                // them as 4-byte pixels skewed every image with 24-bit samples,
+                // like DeviceRGB images in PDFs.
+                self->_read_argb8u = O2ImageRead_RGB888_to_argb8u;
                 return YES;
             }
             break;
