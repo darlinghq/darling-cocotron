@@ -24,6 +24,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSGraphics.h>
 #import <AppKit/NSScreen.h>
 #import <AppKit/NSWindow.h>
+#include <math.h>
 
 NSNotificationName const NSScreenColorSpaceDidChangeNotification = @"NSScreenColorSpaceDidChangeNotification";
 
@@ -122,6 +123,18 @@ NSNotificationName const NSScreenColorSpaceDidChangeNotification = @"NSScreenCol
 
 - (NSTimeInterval) maximumRefreshInterval {
     return [self _refreshInterval];
+}
+
+// The highest frame rate the screen supports, rounded to a whole number of
+// frames; it is the reciprocal of the shortest refresh interval.
+- (NSInteger) maximumFramesPerSecond {
+    return (NSInteger) lround(1.0 / [self minimumRefreshInterval]);
+}
+
+// Screens here refresh at a fixed rate, so an update can only take effect on a
+// frame boundary and the granularity is one refresh interval.
+- (NSTimeInterval) displayUpdateGranularity {
+    return [self minimumRefreshInterval];
 }
 
 - (id) description {
