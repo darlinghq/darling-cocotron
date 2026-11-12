@@ -164,6 +164,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSSpeechSynthesizer.h>
 #import <AppKit/NSSpellChecker.h>
 #import <AppKit/NSSplitView.h>
+#import <AppKit/NSSplitViewController.h>
+#import <AppKit/NSSplitViewItem.h>
 #import <AppKit/NSStackView.h>
 #import <AppKit/NSStatusBar.h>
 #import <AppKit/NSStatusItem.h>
