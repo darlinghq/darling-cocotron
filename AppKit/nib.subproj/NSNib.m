@@ -182,10 +182,18 @@ NSString *const NSNibTopLevelObjects = @"NSNibTopLevelObjects";
 
     NIBDEBUG(@"instantiateNibWithExternalNameTable: %@", nameTable);
 
+    _nameTable = [nameTable retain];
+    @try {
+        return [self _instantiateWithNameTable];
+    } @finally {
+        [_nameTable release];
+        _nameTable = nil;
+    }
+}
+
+- (BOOL) _instantiateWithNameTable {
     NSIBObjectData *objectData;
     @autoreleasepool {
-        _nameTable = [nameTable retain];
-
         NSCoder *unarchiver;
         int i, count;
         NSMenu *menu;
@@ -235,6 +243,14 @@ NSString *const NSNibTopLevelObjects = @"NSNibTopLevelObjects";
         }
 
         topLevelObjects = [objectData topLevelObjects];
+        // Objects the caller passed in stand for nib placeholders; like File's Owner they
+        // aren't top-level objects of the nib.
+        NSArray *externalObjects = [_nameTable allValues];
+        NSMutableArray *nibTopLevelObjects = [NSMutableArray array];
+        for (id object in topLevelObjects)
+            if ([externalObjects indexOfObjectIdenticalTo: object] == NSNotFound)
+                [nibTopLevelObjects addObject: object];
+        topLevelObjects = nibTopLevelObjects;
 
         // Top-level objects are always retained - this echoes observed Cocoa
         // behaviour
@@ -271,9 +287,6 @@ NSString *const NSNibTopLevelObjects = @"NSNibTopLevelObjects";
         [[objectData visibleWindows]
                 makeObjectsPerformSelector: @selector(makeKeyAndOrderFront:)
                                 withObject: nil];
-
-        [_nameTable release];
-        _nameTable = nil;
     }
 
     return (objectData != nil);

@@ -20,6 +20,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSDocument.h>
 #import <AppKit/NSNib.h>
 #import <AppKit/NSNibLoading.h>
+#import <AppKit/NSStoryboard-Private.h>
 #import <AppKit/NSWindow.h>
 #import <AppKit/NSWindowController.h>
 
@@ -72,6 +73,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return [self initWithWindow: nil];
 }
 
+- initWithCoder: (NSCoder *) coder {
+    self = [super initWithCoder: coder];
+    _storyboard = [[NSStoryboard _instantiatingStoryboard] retain];
+    return self;
+}
+
 - (void) dealloc {
     [[NSNotificationCenter defaultCenter] removeObserver: self];
     [_window setWindowController: nil];
@@ -80,20 +87,29 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [_nibName release];
     [_nibPath release];
     [_windowFrameAutosaveName release];
+    [_storyboard release];
     [_topLevelObjects makeObjectsPerformSelector: @selector(release)];
     [_topLevelObjects release];
     [super dealloc];
 }
 
+- (NSStoryboard *) storyboard {
+    return _storyboard;
+}
+
 - (NSWindow *) window {
-    if (_window == nil && [self windowNibPath] != nil) {
-        [self windowWillLoad];
-        [_document windowControllerWillLoadNib: self];
-
-        [self loadWindow];
-
-        [self windowDidLoad];
-        [_document windowControllerDidLoadNib: self];
+    if (_window == nil && !_loadingWindowLifecycle && !_loadingWindowNib &&
+            ([self windowNibName] != nil || _nibPath != nil)) {
+        _loadingWindowLifecycle = YES;
+        @try {
+            [self windowWillLoad];
+            [_document windowControllerWillLoadNib: self];
+            [self loadWindow];
+            [self windowDidLoad];
+            [_document windowControllerDidLoadNib: self];
+        } @finally {
+            _loadingWindowLifecycle = NO;
+        }
     }
 
     return _window;
@@ -124,6 +140,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                      object: _window];
 }
 
+- (NSViewController *) contentViewController {
+    return [[self window] contentViewController];
+}
+
+- (void) setContentViewController: (NSViewController *) controller {
+    [[self window] setContentViewController: controller];
+}
+
 - (void) _windowWillClose: (NSNotification *) note {
     [self setWindow: nil];
 
@@ -144,11 +168,22 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (void) loadWindow {
+    if (_loadingWindowNib)
+        return;
+    _loadingWindowNib = YES;
+    @try {
     if (![self isWindowLoaded]) {
         static NSPoint cascadeTopLeftSavedPoint = {0.0, 0.0};
         NSString *path = [self windowNibPath];
         NSDictionary *nameTable;
 
+        // A previous attempt may have decoded objects without installing a
+        // window. Balance both the NIB's ownership and the array's ownership
+        // before replacing the attempt's storage, just as dealloc does.
+        NSArray *previousObjects = _topLevelObjects;
+        _topLevelObjects = nil;
+        [previousObjects makeObjectsPerformSelector: @selector(release)];
+        [previousObjects release];
         _topLevelObjects = [[NSMutableArray alloc] init];
         nameTable = [NSDictionary
                 dictionaryWithObjectsAndKeys: _owner, NSNibOwner,
@@ -167,6 +202,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         if (_shouldCascadeWindows)
             cascadeTopLeftSavedPoint =
                     [_window cascadeTopLeftFromPoint: cascadeTopLeftSavedPoint];
+    }
+    } @finally {
+        _loadingWindowNib = NO;
     }
 }
 
