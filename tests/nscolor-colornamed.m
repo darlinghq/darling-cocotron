@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Lubos Dolezel
 //
 // +[NSColor colorNamed:bundle:] against an asset catalog compiled with actool
-// from our own input (vd-upstream/mac-fixtures/assets/Assets.car: named colors
+// from our own input (tests/fixtures/colornamed-Assets.car: named colors
 // FixtureRed, FixtureHalfBlue, FixtureP3Green, FixtureGray, FixtureAppearance
 // with a dark variant, FixtureSystemRef).
 //
