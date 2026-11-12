@@ -118,7 +118,7 @@ NSAttributedStringKey NSCharacterShapeAttributeName = @"NSCharacterShape";
 NSAttributedStringKey NSUsesScreenFontsDocumentAttribute = @"UsesScreenFonts";
 
 const NSAttributedStringKey NSTextEffectAttributeName = @"NSTextEffect";
-NSAttributedStringKey NSWritingDirectionAttributeName = @"NSWritingDirectionAttribute";
+NSAttributedStringKey NSWritingDirectionAttributeName = @"NSWritingDirection";
 
 NSUInteger NSUnderlineStrikethroughMask = 0x4000;
 NSUInteger NSUnderlineByWordMask = 0x8000;
