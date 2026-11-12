@@ -1,5 +1,4 @@
 #import <AppKit/AppKit.h>
-#import <Foundation/NSLayoutAnchor.h>
 #include <stdio.h>
 static int failures;
 static void expect(BOOL value, const char *label) {
