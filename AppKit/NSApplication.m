@@ -48,7 +48,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Foundation/NSAppleEventDescriptor.h>
 #import <objc/message.h>
 #import <pthread.h>
-#import <stdatomic.h>
 
 // Runs the +[NSEvent addLocalMonitorForEventsMatchingMask:handler:] handlers.
 extern NSEvent *NSEventApplyLocalMonitors(NSEvent *event);
@@ -1661,22 +1660,12 @@ NSApplication *NSApp = nil;
     return _dockTile;
 }
 
-// Darling has no login session that relaunches apps, so these only record the setting.
-static _Atomic long relaunchOnLoginDisableCount;
-
+// Darling has no login session that relaunches applications, and the setting cannot be read
+// back through the public API, so these have nothing to record.
 - (void) disableRelaunchOnLogin {
-    atomic_fetch_add(&relaunchOnLoginDisableCount, 1);
 }
 
 - (void) enableRelaunchOnLogin {
-    long count = atomic_load(&relaunchOnLoginDisableCount);
-    while (count > 0 && !atomic_compare_exchange_weak(&relaunchOnLoginDisableCount,
-                                                      &count, count - 1))
-        ;
-}
-
-- (BOOL) _relaunchesOnLogin {
-    return atomic_load(&relaunchOnLoginDisableCount) == 0;
 }
 
 - (void) doCommandBySelector: (SEL) selector {
@@ -1842,12 +1831,17 @@ int NSApplicationMain(int argc, const char *argv[]) {
     Class class = [bundle principalClass];
     NSString *nibFile = [bundle infoDictionary][@"NSMainNibFile"];
 
-if (argc > 1) {
+    if (argc > 1) {
+        // Arguments that are not "-key value" pairs (and not after "--") name documents to open.
         NSMutableArray *arguments =
                 [NSMutableArray arrayWithCapacity: argc - 1];
         for (int i = 1; i < argc; i++)
-            if (argv[i][0] != '-')
-                [arguments addObject: [NSString stringWithUTF8String: argv[i]]];
+            if (argv[i][0] != '-') {
+                // nil for an argument that is not valid UTF-8; -addObject: would raise.
+                NSString *argument = [NSString stringWithUTF8String: argv[i]];
+                if (argument != nil)
+                    [arguments addObject: argument];
+            }
             else if (argv[i][1] == '-' && argv[i][2] == '\0')
                 break;
             else // (argv[i][0] == '-' && argv[i] != "--")
