@@ -37,12 +37,65 @@ static int NSColor_ignoresAlpha = -1;
 
 NSNotificationName const NSSystemColorsDidChangeNotification = @"NSSystemColorsDidChangeNotification";
 
+// NSColor_dynamic.m
+@interface NSColor_dynamic : NSColor
+- initWithName: (NSColorName) name provider: (NSColor * (^)(NSAppearance *)) provider;
+@end
+
 @interface NSColor (private)
 - (NSColorListName) catalogName;
 - (NSColorName) colorName;
 @end
 
 @implementation NSColor
+
++ (NSColor *) colorWithCGColor: (CGColorRef) color {
+    if (color == NULL)
+        return nil;
+
+    CGColorSpaceRef colorSpace = CGColorGetColorSpace(color);
+    NSColorSpaceName spaceName;
+    switch (CGColorSpaceGetModel(colorSpace)) {
+        case kCGColorSpaceModelMonochrome:
+            spaceName = NSDeviceWhiteColorSpace;
+            break;
+        case kCGColorSpaceModelRGB:
+            spaceName = NSCalibratedRGBColorSpace;
+            break;
+        case kCGColorSpaceModelCMYK:
+            spaceName = NSDeviceCMYKColorSpace;
+            break;
+        case kCGColorSpaceModelPattern:
+            spaceName = NSPatternColorSpace;
+            break;
+        default:
+            spaceName = NSCustomColorSpace;
+            break;
+    }
+    return [NSColor_CGColor colorWithColorRef: color spaceName: spaceName];
+}
+
++ (NSColor *) colorWithColorSpace: (NSColorSpace *) space
+                       components: (const CGFloat *) components
+                            count: (NSInteger) count
+{
+    CGColorSpaceRef cgSpace = [space CGColorSpace];
+    if (cgSpace == NULL || components == NULL) {
+        [NSException raise: NSInvalidArgumentException
+                    format: @"A component-based color space and components are required"];
+    }
+    CGColorSpaceModel model = CGColorSpaceGetModel(cgSpace);
+    if (model == kCGColorSpaceModelPattern || model == kCGColorSpaceModelIndexed ||
+        count != (NSInteger)CGColorSpaceGetNumberOfComponents(cgSpace) + 1) {
+        [NSException raise: NSInvalidArgumentException
+                    format: @"Color component count does not match its color space"];
+    }
+
+    CGColorRef cgColor = CGColorCreate(cgSpace, components);
+    NSColor *result = [self colorWithCGColor: cgColor];
+    CGColorRelease(cgColor);
+    return result;
+}
 
 - (void) encodeWithCoder: (NSCoder *) coder {
 
@@ -112,9 +165,64 @@ NSNotificationName const NSSystemColorsDidChangeNotification = @"NSSystemColorsD
         }
 
     } else {
-        [NSException raise: NSInvalidArgumentException
-                    format: @"%@ can not encodeWithCoder:%@", [self class],
-                            [coder class]];
+        // The layout -initWithCoder: reads: a color space byte followed by
+        // the components as floats (or the names, for a catalog color).
+        NSColorSpaceName spaceName = [self colorSpaceName];
+
+        if ([spaceName isEqualToString: NSCalibratedRGBColorSpace] ||
+            [spaceName isEqualToString: NSDeviceRGBColorSpace]) {
+            uint8_t space =
+                    [spaceName isEqualToString: NSCalibratedRGBColorSpace] ? 1
+                                                                           : 2;
+            CGFloat r, g, b, a;
+
+            [self getRed: &r green: &g blue: &b alpha: &a];
+            float values[4] = {r, g, b, a};
+            [coder encodeValueOfObjCType: "c" at: &space];
+            [coder encodeValuesOfObjCTypes: "ffff", &values[0], &values[1],
+                                            &values[2], &values[3]];
+        } else if ([spaceName isEqualToString: NSCalibratedWhiteColorSpace] ||
+                   [spaceName isEqualToString: NSDeviceWhiteColorSpace]) {
+            uint8_t space =
+                    [spaceName isEqualToString: NSCalibratedWhiteColorSpace] ? 3
+                                                                             : 4;
+            CGFloat w, a;
+
+            [self getWhite: &w alpha: &a];
+            float values[2] = {w, a};
+            [coder encodeValueOfObjCType: "c" at: &space];
+            [coder encodeValuesOfObjCTypes: "ff", &values[0], &values[1]];
+        } else if ([spaceName isEqualToString: NSDeviceCMYKColorSpace]) {
+            uint8_t space = 5;
+            CGFloat c, m, y, k, a;
+
+            [self getCyan: &c magenta: &m yellow: &y black: &k alpha: &a];
+            float values[5] = {c, m, y, k, a};
+            [coder encodeValueOfObjCType: "c" at: &space];
+            [coder encodeValuesOfObjCTypes: "fffff", &values[0], &values[1],
+                                            &values[2], &values[3],
+                                            &values[4]];
+        } else if ([spaceName isEqualToString: NSNamedColorSpace]) {
+            uint8_t space = 6;
+            NSColorListName catalogName = [self catalogNameComponent];
+            NSColorName colorName = [self colorNameComponent];
+            NSColor *color =
+                    [self colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
+
+            [coder encodeValueOfObjCType: "c" at: &space];
+            [coder encodeValuesOfObjCTypes: "@@@", &catalogName, &colorName,
+                                            &color];
+        } else {
+            // Other kinds of colors are archived as the RGB color they stand for.
+            NSColor *rgb =
+                    [self colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
+
+            if (rgb == nil || [[rgb colorSpaceName] isEqualToString: spaceName])
+                [NSException raise: NSInvalidArgumentException
+                            format: @"%@ can not encodeWithCoder:%@",
+                                    [self class], [coder class]];
+            [rgb encodeWithCoder: coder];
+        }
     }
 }
 
@@ -314,6 +422,15 @@ NSNotificationName const NSSystemColorsDidChangeNotification = @"NSSystemColorsD
 
 + (NSColor *) gridColor {
     return [NSColor colorWithCatalogName: @"System" colorName: @"gridColor"];
+}
+
+// macOS 10.14+; approximation: opaque gray instead of semitransparent
++ (NSColor *) separatorColor {
+    return [NSColor colorWithCalibratedWhite: 0.85 alpha: 1.0];
+}
+
++ (NSColor *) textInsertionPointColor {
+    return [NSColor blackColor];
 }
 
 + (NSColor *) controlColor {
@@ -642,6 +759,17 @@ NSNotificationName const NSSystemColorsDidChangeNotification = @"NSSystemColorsD
                                spaceName: NSNamedColorSpace];
 }
 
++ (NSColor *) colorWithDisplayP3Red: (CGFloat) red
+                              green: (CGFloat) green
+                               blue: (CGFloat) blue
+                              alpha: (CGFloat) alpha
+{
+    CGFloat components[] = {red, green, blue, alpha};
+    return [NSColor colorWithColorSpace: [NSColorSpace displayP3ColorSpace]
+                             components: components
+                                  count: 4];
+}
+
 + (NSColor *) colorWithDeviceHue: (CGFloat) hue
                       saturation: (CGFloat) saturation
                       brightness: (CGFloat) brightness
@@ -711,6 +839,12 @@ NSNotificationName const NSSystemColorsDidChangeNotification = @"NSSystemColorsD
     return [NSColor_CGColor colorWithGray: white
                                     alpha: alpha
                                 spaceName: NSCustomColorSpace];
+}
+
++ (NSColor *) colorWithName: (NSColorName) colorName dynamicProvider: (NSColor * (^)(NSAppearance *)) dynamicProvider {
+    if (dynamicProvider == nil)
+        [NSException raise: NSInvalidArgumentException format: @"+[NSColor colorWithName:dynamicProvider:]: nil provider"];
+    return [[[NSColor_dynamic alloc] initWithName: colorName provider: dynamicProvider] autorelease];
 }
 
 + (NSColor *) colorFromPasteboard: (NSPasteboard *) pasteboard {

@@ -127,7 +127,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     _target = nil;
     _action = action;
     _keyEquivalent = [keyEquivalent copy];
-    _keyEquivalentModifierMask = 0;
+    _keyEquivalentModifierMask = NSCommandKeyMask;
     _mnemonic = @"";
     _mnemonicLocation = 0;
     _submenu = nil;

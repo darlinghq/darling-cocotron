@@ -34,6 +34,10 @@ NSString *const NSComboBoxWillPopUpNotification =
 
 @implementation NSComboBox
 
++ (Class) cellClass {
+    return [NSComboBoxCell class];
+}
+
 - dataSource {
     return [[self cell] dataSource];
 }

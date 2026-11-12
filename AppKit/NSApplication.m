@@ -42,6 +42,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSWorkspace.h>
 #import <CoreGraphics/CGSServerSPI.h>
 #import <CoreGraphics/CGWindow.h>
+#import <Foundation/NSAppleEventManager.h>
+#import <Foundation/NSAppleEventDescriptor.h>
 #import <objc/message.h>
 #import <pthread.h>
 
@@ -202,7 +204,38 @@ NSApplication *NSApp = nil;
 
     [self _showSplashImage];
 
+    // URLs opened for the application's schemes arrive as kAEGetURL events. An application that
+    // installs its own handler for the event replaces this one.
+    [[NSAppleEventManager sharedAppleEventManager]
+            setEventHandler: self
+                andSelector: @selector(_handleGetURLEvent:withReplyEvent:)
+              forEventClass: kInternetEventClass
+                 andEventID: kAEGetURL];
+
     return NSApp;
+}
+
+- (void) _handleGetURLEvent: (NSAppleEventDescriptor *) event
+             withReplyEvent: (NSAppleEventDescriptor *) reply
+{
+    NSAppleEventDescriptor *object = [event paramDescriptorForKeyword: keyDirectObject];
+    NSMutableArray *urls = [NSMutableArray array];
+
+    // The direct object is the URL's text, or a list of them.
+    NSInteger count = [object descriptorType] == typeAEList ? [object numberOfItems] : 1;
+    for (NSInteger i = 1; i <= count; i++) {
+        NSAppleEventDescriptor *item =
+                [object descriptorType] == typeAEList ? [object descriptorAtIndex: i] : object;
+        NSString *string = [item stringValue];
+        NSURL *url = string != nil ? [NSURL URLWithString: string] : nil;
+
+        if (url != nil)
+            [urls addObject: url];
+    }
+
+    if ([urls count] > 0 &&
+        [_delegate respondsToSelector: @selector(application:openURLs:)])
+        [_delegate application: self openURLs: urls];
 }
 
 - (NSGraphicsContext *) context {
@@ -218,13 +251,16 @@ NSApplication *NSApp = nil;
     return _windows;
 }
 
+// Window numbers come from CGWindow's registry, so look the number up there.
+// Asking every window for its number instead would create a platform window
+// for each window that doesn't have one yet, now on every mouse event too.
 - (NSWindow *) windowWithWindowNumber: (NSInteger) number {
-    for (NSWindow *window in _windows) {
-        if ([window windowNumber] == number) {
-            return window;
-        }
-    }
-    return nil;
+    NSWindow *window = [[CGWindow windowWithWindowNumber: number] delegate];
+
+    if (window == nil ||
+        [_windows indexOfObjectIdenticalTo: window] == NSNotFound)
+        return nil;
+    return window;
 }
 
 - (NSMenu *) mainMenu {

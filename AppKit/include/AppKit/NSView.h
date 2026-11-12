@@ -38,7 +38,8 @@ typedef NS_OPTIONS(NSUInteger, NSTouchTypeMask) {
 
 @class NSWindow, NSMenu, NSMenuItem, NSCursor, NSClipView, NSPasteboard,
         NSTextInputContext, NSImage, NSBitmapImageRep, NSScrollView,
-        NSTrackingArea, NSShadow, NSScreen, CALayer, CIFilter, CALayerContext;
+        NSTrackingArea, NSShadow, NSScreen, CALayer, CIFilter, CALayerContext,
+        NSLayoutGuide;
 
 // See Cocoa Event Handling Guide : Using Tracking-Area Objects : Compatibility
 // Issues
@@ -102,6 +103,7 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPre
     NSView *_nextKeyView;
     NSView *_previousKeyView;
     BOOL _isHidden;
+    CGFloat _alphaValue;
     BOOL _postsNotificationOnFrameChange;
     BOOL _postsNotificationOnBoundsChange;
     BOOL _autoresizesSubviews;
@@ -164,6 +166,10 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPre
 // from it.
 - (void) invalidateIntrinsicContentSize;
 
+@property(readonly, copy) NSArray *layoutGuides;
+- (void) addLayoutGuide: (NSLayoutGuide *) guide;
+- (void) removeLayoutGuide: (NSLayoutGuide *) guide;
+
 + (NSView *) focusView;
 + (NSMenu *) defaultMenu;
 + (NSFocusRingType) defaultFocusRingType;
@@ -199,8 +205,10 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPre
 - (NSInteger) tag;
 - (BOOL) isFlipped;
 - (BOOL) isOpaque;
-- (CGFloat) alphaValue;
-- (void) setAlphaValue: (CGFloat) alpha;
+@property CGFloat alphaValue;
+
+// Makes the view visible and opaque again before it is reused.
+- (void) prepareForReuse;
 - (int) gState;
 - (NSRect) visibleRect;
 - (BOOL) wantsDefaultClipping;
@@ -364,6 +372,12 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPre
 // of being drawn with -drawRect:. The default -updateLayer does nothing.
 @property(readonly) BOOL wantsUpdateLayer;
 - (void) updateLayer;
+
+// NSEdgeInsetsZero here; subclasses whose content sits inside their frame
+// override it, and the two conversions below follow.
+@property(readonly) NSEdgeInsets alignmentRectInsets;
+- (NSRect) alignmentRectForFrame: (NSRect) frame;
+- (NSRect) frameForAlignmentRect: (NSRect) alignmentRect;
 // Stored; subviews are drawn into their own layers either way.
 @property BOOL canDrawSubviewsIntoLayer;
 // Stored; there are no touch devices to send touches.

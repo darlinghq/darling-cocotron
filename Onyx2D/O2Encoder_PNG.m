@@ -1,4 +1,5 @@
 #import <Onyx2D/O2Encoder_PNG.h>
+#import <Onyx2D/O2EncoderPixels.h>
 
 #if !defined(__APPLE__) || defined(DARLING)
 #import <Onyx2D/O2Defines_libpng.h>
@@ -36,20 +37,36 @@ static void O2PNGEncoderError(png_structp png_ptr,
 void O2PNGEncoderWriteImage(O2PNGEncoderRef self, O2ImageRef image,
                             CFDictionaryRef props)
 {
-    // Note: only encoding 32 bits RGBA images have been tested
-    NSDictionary *properties = (NSDictionary *) props;
-
-    unsigned long length = 0;
     size_t width = O2ImageGetWidth(image);
     size_t height = O2ImageGetHeight(image);
+    bool hasAlpha = false;
 
-    int bpr = O2ImageGetBytesPerRow(image);
+    // PNG stores straight alpha in R, G, B (, A) byte order; the helper
+    // converts from whatever layout the image has.
+    uint8_t *rgba = O2ImageCreateStraightRGBA8(image, &hasAlpha);
+    if (rgba == NULL)
+        return;
+
+    size_t channels = hasAlpha ? 4 : 3;
+    uint8_t *packed = NULL;
     png_bytep *row_pointers = calloc(sizeof(void *), height);
-    const uint8_t *bytes = [image directBytes];
-    for (int i = 0; i < height; ++i) {
-        row_pointers[i] = (uint8_t *) (bytes + i * bpr);
+    if (!hasAlpha) {
+        packed = NSZoneMalloc(NULL, width * height * channels);
+        if (packed == NULL) {
+            free(row_pointers);
+            NSZoneFree(NULL, rgba);
+            return;
+        }
+        for (size_t i = 0; i < width * height; i++) {
+            packed[i * 3 + 0] = rgba[i * 4 + 0];
+            packed[i * 3 + 1] = rgba[i * 4 + 1];
+            packed[i * 3 + 2] = rgba[i * 4 + 2];
+        }
     }
-    png_byte bit_depth = 8;
+    const uint8_t *bytes = hasAlpha ? rgba : packed;
+    for (size_t i = 0; i < height; ++i) {
+        row_pointers[i] = (uint8_t *) (bytes + i * width * channels);
+    }
 
     png_structp png_ptr =
             png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
@@ -67,25 +84,8 @@ void O2PNGEncoderWriteImage(O2PNGEncoderRef self, O2ImageRef image,
     @try {
         png_set_write_fn(png_ptr, self, o2png_write_data, NULL);
 
-        png_byte color_type;
-        switch (O2ImageGetBitmapInfo(image) & kO2BitmapAlphaInfoMask) {
-        case kO2ImageAlphaNone:
-            color_type = PNG_COLOR_TYPE_RGB;
-            break;
-        case kO2ImageAlphaNoneSkipLast:
-            png_set_filler(png_ptr, 0, PNG_FILLER_AFTER);
-            color_type = PNG_COLOR_TYPE_RGB;
-            break;
-        case kO2ImageAlphaNoneSkipFirst:
-            png_set_filler(png_ptr, 0, PNG_FILLER_BEFORE);
-            color_type = PNG_COLOR_TYPE_RGB;
-            break;
-        default:
-            color_type = PNG_COLOR_TYPE_RGB_ALPHA;
-            break;
-        }
-
-        png_set_IHDR(png_ptr, info_ptr, width, height, bit_depth, color_type,
+        png_set_IHDR(png_ptr, info_ptr, width, height, 8,
+                     hasAlpha ? PNG_COLOR_TYPE_RGB_ALPHA : PNG_COLOR_TYPE_RGB,
                      PNG_INTERLACE_NONE, PNG_COMPRESSION_TYPE_BASE,
                      PNG_FILTER_TYPE_BASE);
 
@@ -94,33 +94,11 @@ void O2PNGEncoderWriteImage(O2PNGEncoderRef self, O2ImageRef image,
         goto out;
     }
 
-    @
-    try {
+    @try {
         png_write_info(png_ptr, info_ptr);
     } @catch (NSException *ex) {
         NSLog(@"Error writing PNG header: %@", ex);
         goto out;
-    }
-
-    switch (O2ImageGetBitmapInfo(image) & kO2BitmapByteOrderMask) {
-    case kO2BitmapByteOrder16Little:
-        bit_depth = 4;
-        png_set_bgr(png_ptr);
-        break;
-    case kO2BitmapByteOrder32Little:
-        png_set_bgr(png_ptr);
-        break;
-    case kO2BitmapByteOrder16Big:
-        bit_depth = 4;
-        break;
-    case kO2BitmapByteOrder32Big:
-        break;
-    case kO2BitmapByteOrderDefault:
-    default:
-#ifdef __LITTLE_ENDIAN__
-        png_set_bgr(png_ptr);
-#endif
-        break;
     }
 
     @try {
@@ -130,8 +108,7 @@ void O2PNGEncoderWriteImage(O2PNGEncoderRef self, O2ImageRef image,
         goto out;
     }
 
-    @
-    try {
+    @try {
         png_write_end(png_ptr, NULL);
     } @catch (NSException *ex) {
         NSLog(@"Error finishing PNG image data: %@", ex);
@@ -141,6 +118,8 @@ void O2PNGEncoderWriteImage(O2PNGEncoderRef self, O2ImageRef image,
 out:
     png_destroy_write_struct(&png_ptr, &info_ptr);
     free(row_pointers);
+    NSZoneFree(NULL, packed);
+    NSZoneFree(NULL, rgba);
 }
 #else
 /* stbiw-0.92 - public domain - http://nothings.org/stb/stb_image_write.h
