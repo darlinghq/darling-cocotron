@@ -208,7 +208,7 @@ NSString *const _NSWindowsMenuName = @"Window";
 }
 
 - (NSArray *) itemArray {
-    return _itemArray;
+    return [NSArray arrayWithArray: _itemArray];
 }
 
 - (void) _setItemArray: itemArray {
@@ -450,22 +450,43 @@ BOOL itemIsEnabled(NSMenuItem *item) {
 
     for (i = 0; i < count; i++) {
         NSMenuItem *item = [_itemArray objectAtIndex: i];
-        unsigned itemModifiers = [item keyEquivalentModifierMask] &
-                                 (NSCommandKeyMask | NSAlternateKeyMask);
+        const unsigned keyModifiers = NSCommandKeyMask | NSAlternateKeyMask |
+                                      NSShiftKeyMask | NSControlKeyMask;
+        unsigned itemModifiers = [item keyEquivalentModifierMask] & keyModifiers;
         NSString *key = [item keyEquivalent];
 
-        if ((modifiers & (NSCommandKeyMask | NSAlternateKeyMask)) ==
-            itemModifiers) {
+        // Uppercase key equivalents carry an implicit Shift modifier.
+        if ([key length] > 0 && ![key isEqualToString: [key lowercaseString]])
+            itemModifiers |= NSShiftKeyMask;
 
-            if ([key isEqualToString: characters]) {
-                /* This *must* accurately reflect menu validation when ignoring
-                   or processing key equivalents. Relying on update to keep
-                   isEnabled in the proper state is unfortunately too tenuous.
-                 */
-                if (itemIsEnabled(item))
-                    return [NSApp sendAction: [item action]
-                                          to: [item target]
-                                        from: item];
+        if ((modifiers & keyModifiers) == itemModifiers) {
+
+            // Explicit Shift on a lowercase equivalent also accepts its
+            // uppercase event spelling. Keep the exact match for backends
+            // that report an unshifted charactersIgnoringModifiers value.
+            BOOL matches = [key isEqualToString: characters];
+            if (!matches && (itemModifiers & NSShiftKeyMask))
+                matches = [[key lowercaseString]
+                        isEqualToString: [characters lowercaseString]];
+            if (matches) {
+                // With automatic enabling, -update above brought isEnabled in
+                // line with validation. Without it only isEnabled counts and
+                // validation is not consulted.
+                BOOL enabled = [item isEnabled];
+                if (enabled && _autoenablesItems)
+                    enabled = itemIsEnabled(item);
+                if (enabled)
+                    [NSApp sendAction: [item action]
+                                   to: [item target]
+                                 from: item];
+                // QUIRK: a matching item consumes the key equivalent even when it
+                // is disabled or has no target to perform the action; the
+                // result is YES in every case. Not documented. Evidence:
+                // black-box observation on macOS 27 (tier 2), recorded as
+                // MC11.12 and MC11.13 of the upstreaming evidence notes.
+                // Test: appkit-menu-key-equivalents.m
+                // (disabled_matching_item_consumes_the_key)
+                return YES;
             }
         }
 

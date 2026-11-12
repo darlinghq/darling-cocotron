@@ -712,19 +712,14 @@ unsigned char *stbi_png_load_from_memory(const unsigned char *buffer, int len, i
     if (pixels == NULL)
         return nil;
 
-    // clamp premultiplied data, this should probably be moved into the O2Image
-    // init
+    // PNG stores straight alpha; the image below is declared premultiplied.
     int i;
     for (i = 0; i < bytesPerRow * height; i += 4) {
-        unsigned char a = pixels[i + 3];
+        unsigned a = pixels[i + 3];
         if (a != 0xff) {
-            unsigned char r = pixels[i + 0];
-            unsigned char g = pixels[i + 1];
-            unsigned char b = pixels[i + 2];
-
-            pixels[i + 0] = MIN(r, a);
-            pixels[i + 1] = MIN(g, a);
-            pixels[i + 2] = MIN(b, a);
+            pixels[i + 0] = (unsigned char) ((pixels[i + 0] * a + 127) / 255);
+            pixels[i + 1] = (unsigned char) ((pixels[i + 1] * a + 127) / 255);
+            pixels[i + 2] = (unsigned char) ((pixels[i + 2] * a + 127) / 255);
         }
     }
 

@@ -55,7 +55,9 @@ void O2JPGEncoderWriteImage(O2JPGEncoderRef self, O2ImageRef image,
             [properties objectForKey: (NSString *) kO2ImageDestinationDPI];
     if (dpi) {
         int dpiValue = [dpi intValue];
-        cinfo.density_unit = 1;     /* DPI */
+        // Density units 0 (aspect ratio only), as macOS writes them next to
+        // the dots per inch values.
+        cinfo.density_unit = 0;
         cinfo.X_density = dpiValue; /* Horizontal pixel density */
         cinfo.Y_density = dpiValue; /* Vertical pixel density */
     }
@@ -63,10 +65,21 @@ void O2JPGEncoderWriteImage(O2JPGEncoderRef self, O2ImageRef image,
     NSNumber *compression = [properties
             objectForKey: (NSString *)
                                   kO2ImageDestinationLossyCompressionQuality];
+    BOOL maximumQuality = NO;
     if (compression) {
-        jpeg_set_quality(&cinfo, 100 * [compression floatValue], TRUE);
+        float factor = [compression floatValue];
+        jpeg_set_quality(&cinfo, 100 * factor, TRUE);
+        maximumQuality = factor >= 1.0f;
     }
-    cinfo.dct_method = JDCT_FASTEST;
+    if (maximumQuality) {
+        // Quality 1.0 keeps full-resolution chroma (4:4:4) and uses the
+        // accurate DCT, so that the result stays close to the source.
+        cinfo.comp_info[0].h_samp_factor = 1;
+        cinfo.comp_info[0].v_samp_factor = 1;
+        cinfo.dct_method = JDCT_ISLOW;
+    } else {
+        cinfo.dct_method = JDCT_FASTEST;
+    }
 
     jpeg_start_compress(&cinfo, TRUE);
 

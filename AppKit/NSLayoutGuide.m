@@ -18,17 +18,72 @@
 */
 
 #import <AppKit/NSLayoutGuide.h>
+#import <AppKit/NSView.h>
 
 @implementation NSLayoutGuide
 
-- (NSMethodSignature *)methodSignatureForSelector:(SEL)aSelector
-{
-    return [NSMethodSignature signatureWithObjCTypes: "v@:"];
+- (instancetype) init {
+    self = [super init];
+    if (self) {
+        _frame = NSZeroRect;
+        _owningView = nil;
+        _identifier = nil;
+    }
+    return self;
 }
 
-- (void)forwardInvocation:(NSInvocation *)anInvocation
-{
-    NSLog(@"Stub called: %@ in %@", NSStringFromSelector([anInvocation selector]), [self class]);
+- (void) dealloc {
+    [_identifier release];
+    [super dealloc];
+}
+
+- (instancetype) initWithCoder: (NSCoder *) coder {
+    self = [super init];
+    if (self) {
+        if ([coder allowsKeyedCoding]) {
+            _frame = [coder decodeRectForKey: @"NSFrame"];
+            _identifier = [[coder decodeObjectForKey: @"NSUserInterfaceItemIdentifier"] copy];
+        } else {
+            _frame = NSZeroRect;
+            _identifier = nil;
+        }
+        _owningView = nil;
+    }
+    return self;
+}
+
+- (void) encodeWithCoder: (NSCoder *) coder {
+    if ([coder allowsKeyedCoding]) {
+        [coder encodeRect: _frame forKey: @"NSFrame"];
+        [coder encodeObject: _identifier forKey: @"NSUserInterfaceItemIdentifier"];
+    }
+}
+
+- (NSView *) owningView {
+    return _owningView;
+}
+
+- (void) setOwningView: (NSView *) view {
+    _owningView = view;
+}
+
+- (NSString *) identifier {
+    return _identifier;
+}
+
+- (void) setIdentifier: (NSString *) identifier {
+    if (_identifier != identifier) {
+        [_identifier release];
+        _identifier = [identifier copy];
+    }
+}
+
+- (NSRect) frame {
+    return _frame;
+}
+
+- (void) setFrame: (NSRect) frame {
+    _frame = frame;
 }
 
 @end
