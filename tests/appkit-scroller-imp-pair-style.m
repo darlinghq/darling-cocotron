@@ -7,6 +7,7 @@
 @property (retain) id horizontalScrollerImp;
 - (void) flashScrollers;
 - (void) contentAreaDidResize;
+- (void) contentAreaScrolled;
 @end
 
 int main(void) {
@@ -35,6 +36,8 @@ int main(void) {
                && [pair horizontalScrollerImp] == horizontal;
         [pair flashScrollers];
         [pair contentAreaDidResize];
+        passed &= [pair respondsToSelector: @selector(contentAreaScrolled)];
+        [pair contentAreaScrolled];
         [vertical release];
         [horizontal release];
         [pair release];
