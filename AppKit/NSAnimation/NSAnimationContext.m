@@ -19,32 +19,58 @@
  SOFTWARE. */
 
 #import "NSAnimationContext.h"
-#import <AppKit/NSRaise.h>
+#import <Foundation/NSThread.h>
+
+// The documented default duration of an animation group.
+static const NSTimeInterval NSAnimationContextDefaultDuration = 0.25;
 
 @implementation NSAnimationContext
 
-- (id) copyWithZone: (NSZone *) zone {
+- (id) init {
+    if ((self = [super init]))
+        _duration = NSAnimationContextDefaultDuration;
     return self;
 }
 
-+ (void) beginGrouping {
-    NSUnimplementedMethod();
+- (id) copyWithZone: (NSZone *) zone {
+    return [self retain];
 }
+
++ (void) runAnimationGroup: (void (^)(NSAnimationContext *context)) changes
+         completionHandler: (void (^)(void)) completionHandler
+{
+    NSAnimationContext *context = [self currentContext];
+    NSTimeInterval outerDuration = [context duration];
+    [context setDuration: NSAnimationContextDefaultDuration];
+    if (changes)
+        changes(context);
+    [context setDuration: outerDuration];
+    if (completionHandler)
+        completionHandler();
+}
+
++ (void) beginGrouping {
+}
+
 + (void) endGrouping {
-    NSUnimplementedMethod();
 }
 
 + (NSAnimationContext *) currentContext {
-    NSUnimplementedMethod();
-    return nil;
+    NSMutableDictionary *threadDictionary = [[NSThread currentThread] threadDictionary];
+    NSAnimationContext *context = [threadDictionary objectForKey: @"NSAnimationContext"];
+    if (context == nil) {
+        context = [[[NSAnimationContext alloc] init] autorelease];
+        [threadDictionary setObject: context forKey: @"NSAnimationContext"];
+    }
+    return context;
 }
 
 - (void) setDuration: (NSTimeInterval) duration {
-    NSUnimplementedMethod();
+    _duration = duration;
 }
+
 - (NSTimeInterval) duration {
-    NSUnimplementedMethod();
-    return 0;
+    return _duration;
 }
 
 @end

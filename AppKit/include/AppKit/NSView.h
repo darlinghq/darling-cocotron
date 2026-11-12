@@ -153,6 +153,7 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPre
     BOOL _hasExplicitUserInterfaceLayoutDirection;
     NSUserInterfaceLayoutDirection _userInterfaceLayoutDirection;
     int _frameChangeDepth;
+    BOOL _canDrawConcurrently;
 }
 
 @property(class, readonly) BOOL requiresConstraintBasedLayout;
