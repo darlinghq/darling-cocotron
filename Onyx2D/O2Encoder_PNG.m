@@ -114,6 +114,16 @@ void O2PNGEncoderWriteImage(O2PNGEncoderRef self, O2ImageRef image,
         bit_depth = 4;
         break;
     case kO2BitmapByteOrder32Big:
+        // Big-endian pixels with the alpha byte first are A, R, G, B in
+        // memory; PNG stores the alpha last.
+        switch (O2ImageGetBitmapInfo(image) & kO2BitmapAlphaInfoMask) {
+        case kO2ImageAlphaPremultipliedFirst:
+        case kO2ImageAlphaFirst:
+            png_set_swap_alpha(png_ptr);
+            break;
+        default:
+            break;
+        }
         break;
     case kO2BitmapByteOrderDefault:
     default:
