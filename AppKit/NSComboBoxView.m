@@ -215,14 +215,19 @@ enum { KEYBOARD_INACTIVE, KEYBOARD_ACTIVE, KEYBOARD_OK, KEYBOARD_CANCEL };
         STATE_MOUSEUP,
         STATE_EXIT
     } state = STATE_FIRSTMOUSEDOWN;
-    NSPoint firstLocation, point = [event locationInWindow];
+    NSPoint firstLocation = [NSEvent mouseLocation];
+    NSTimeInterval firstTimestamp = [event timestamp];
+    BOOL mouseMoved = NO;
     NSInteger initialSelectedIndex = _selectedIndex;
 
+    BOOL oldAcceptsMouseMovedEvents = [[self window] acceptsMouseMovedEvents];
+    [[self window] setAcceptsMouseMovedEvents: YES];
+
     // point comes in on controls window
+    NSPoint point = [event locationInWindow];
     point = [[event window] convertBaseToScreen: point];
     point = [[self window] convertScreenToBase: point];
     point = [self convertPoint: point fromView: nil];
-    firstLocation = point;
 
     [self lockFocus];
     [self drawRect: [self bounds]];
@@ -251,7 +256,8 @@ enum { KEYBOARD_INACTIVE, KEYBOARD_ACTIVE, KEYBOARD_OK, KEYBOARD_CANCEL };
 
         event = [[self window]
                 nextEventMatchingMask: NSLeftMouseDownMask | NSLeftMouseUpMask |
-                                       NSLeftMouseDraggedMask | NSKeyDownMask];
+                                       NSLeftMouseDraggedMask |
+                                       NSMouseMovedMask | NSKeyDownMask];
         if ([event type] == NSKeyDown) {
             [self interpretKeyEvents: [NSArray arrayWithObject: event]];
             switch (_keyboardUIState) {
@@ -276,6 +282,13 @@ enum { KEYBOARD_INACTIVE, KEYBOARD_ACTIVE, KEYBOARD_OK, KEYBOARD_CANCEL };
                 cancelled = YES;
             }
         }
+
+        NSPoint mouseLoc = [NSEvent mouseLocation];
+        if (!mouseMoved) {
+            mouseMoved = ABS(mouseLoc.x - firstLocation.x) > 2.0 ||
+                         ABS(mouseLoc.y - firstLocation.y) > 2.0;
+        }
+
         point = [event locationInWindow];
         point = [[event window] convertBaseToScreen: point];
         screenVisible =
@@ -299,26 +312,41 @@ enum { KEYBOARD_INACTIVE, KEYBOARD_ACTIVE, KEYBOARD_OK, KEYBOARD_CANCEL };
                 [[self window] setFrameOrigin: origin];
         }
 
-        point = [self convertPoint: [event locationInWindow] fromView: nil];
+        point = [event locationInWindow];
+        point = [[event window] convertBaseToScreen: point];
+        point = [[self window] convertScreenToBase: point];
+        point = [self convertPoint: point fromView: nil];
 
         switch (state) {
         case STATE_FIRSTMOUSEDOWN:
-            if (NSEqualPoints(firstLocation, point)) {
-                if ([event type] == NSLeftMouseUp)
+            if ([event type] == NSLeftMouseUp) {
+                if (mouseMoved && ([event timestamp] - firstTimestamp > 0.3)) {
+                    state = STATE_EXIT;
+                } else {
                     state = STATE_MOUSEUP;
-            } else
+                }
+            } else if (mouseMoved) {
                 state = STATE_MOUSEDOWN;
+            }
             break;
 
         default:
-            if ([event type] == NSLeftMouseUp)
+            if ([event type] == NSLeftMouseUp) {
+                NSPoint winPoint = [event locationInWindow];
+                winPoint = [[event window] convertBaseToScreen: winPoint];
+                if (!NSPointInRect(winPoint, [[self window] frame])) {
+                    _selectedIndex = initialSelectedIndex;
+                }
                 state = STATE_EXIT;
+            }
             break;
         }
 
     } while (cancelled == NO && state != STATE_EXIT);
 
     [self unlockFocus];
+
+    [[self window] setAcceptsMouseMovedEvents: oldAcceptsMouseMovedEvents];
 
     _keyboardUIState = KEYBOARD_INACTIVE;
 

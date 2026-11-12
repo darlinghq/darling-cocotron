@@ -26,6 +26,28 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @implementation NSComboBoxCell
 
+- (instancetype) initTextCell: (NSString *) string {
+    if ((self = [super initTextCell: string])) {
+        _objectValues = [NSMutableArray new];
+        _numberOfVisibleItems = 5;
+        _isButtonBordered = YES;
+        _buttonEnabled = YES;
+        _buttonPressed = NO;
+    }
+    return self;
+}
+
+- (instancetype) initImageCell: (NSImage *) image {
+    if ((self = [super initImageCell: image])) {
+        _objectValues = [NSMutableArray new];
+        _numberOfVisibleItems = 5;
+        _isButtonBordered = YES;
+        _buttonEnabled = YES;
+        _buttonPressed = NO;
+    }
+    return self;
+}
+
 - (void) encodeWithCoder: (NSCoder *) coder {
     NSUnimplementedMethod();
 }
@@ -286,8 +308,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     if ([_objectValues count] == 0)
         return NO;
 
-    if (!NSMouseInRect(check, [self buttonRectForBounds: cellFrame],
-                       [controlView isFlipped]))
+    if ([self isEditable] && !NSMouseInRect(check, [self buttonRectForBounds: cellFrame],
+                                            [controlView isFlipped]))
         return NO;
 
     origin.y += size.height;
@@ -308,50 +330,55 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [window close]; // release when closed=YES
     _buttonPressed = NO;
 
-    if (selectedIndex != NSNotFound) {
-        NSTextView *editor = nil;
-        if ([[controlView currentEditor] isKindOfClass:[NSTextView class]]) {
-            editor = (NSTextView*)[controlView currentEditor];
+    if (selectedIndex != NSNotFound && selectedIndex < [_objectValues count]) {
+        id object = [_objectValues objectAtIndex: selectedIndex];
+        [self setObjectValue: object];
+
+        NSString *string = nil;
+        NSAttributedString *attstr = nil;
+
+        if (_formatter)
+            string = [_formatter stringForObjectValue: object];
+
+        if (!string) {
+            if ([object isKindOfClass: [NSString class]])
+                string = (NSString *) object;
+            else if ([object isKindOfClass: [NSAttributedString class]]) {
+                attstr = (NSAttributedString *) object;
+                string = [attstr string];
+            } else if ([object respondsToSelector: @selector(descriptionWithLocale:)])
+                string = [object descriptionWithLocale: [NSLocale currentLocale]];
+            else if ([object respondsToSelector: @selector(description)])
+                string = [object description];
+            else
+                string = @"";
         }
-        
-        NSObject *object = [_objectValues objectAtIndex: selectedIndex];
-        if (editor && object) {
-            NSString *string = nil;
-            NSAttributedString *attstr = nil;
 
-            if (_formatter)
-                string = [_formatter stringForObjectValue: object];
+        NSTextView *editor = nil;
+        if ([controlView respondsToSelector: @selector(currentEditor)]) {
+            id currentEd = [(NSControl *) controlView currentEditor];
+            if ([currentEd isKindOfClass: [NSTextView class]])
+                editor = (NSTextView *) currentEd;
+        }
 
-            if (!string)
-                if ([object isKindOfClass: [NSString class]])
-                    string = (NSString*)object;
-                else if ([object isKindOfClass: [NSAttributedString class]])
-                    if ([editor isRichText])
-                        attstr = (NSAttributedString*)object;
-                    else
-                        string = [object string];
-                else if ([object respondsToSelector: @selector
-                                 (descriptionWithLocale:)])
-                    string = [object
-                            descriptionWithLocale: [NSLocale currentLocale]];
-                else if ([object respondsToSelector: @selector(description)])
-                    string = [object description];
-                else
-                    string = @"";
-
-            if (attstr)
-                [[(NSTextView *) editor textStorage]
-                        setAttributedString: attstr];
+        if (editor) {
+            if (attstr && [editor isRichText])
+                [[editor textStorage] setAttributedString: attstr];
             else
                 [editor setString: string];
 
             [editor setSelectedRange: NSMakeRange(0, [[editor string] length])];
             [self endEditing: editor];
-            if (_sendsActionOnEndEditing)
-                [(NSControl *) controlView
-                        sendAction: [(NSControl *) controlView action]
-                                to: [(NSControl *) controlView target]];
+        } else {
+            [self setStringValue: string];
         }
+
+        [controlView setNeedsDisplay: YES];
+
+        if (_sendsActionOnEndEditing || [(NSControl *) controlView action] != NULL)
+            [(NSControl *) controlView
+                    sendAction: [(NSControl *) controlView action]
+                            to: [(NSControl *) controlView target]];
     }
 
     return YES;
