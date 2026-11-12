@@ -199,6 +199,7 @@ APPKIT_EXPORT const NSNotificationName NSWindowDidExposeNotification;
     NSMutableArray<NSWindow *> *_childWindows;
 
     NSString *_representedFilename;
+    NSURL *_representedURL;
     NSString *_title;
     NSString *_miniwindowTitle;
     NSImage *_miniwindowImage;
@@ -238,6 +239,7 @@ APPKIT_EXPORT const NSNotificationName NSWindowDidExposeNotification;
     BOOL _isOneShot;
     BOOL _useOptimizedDrawing;
     BOOL _releaseWhenClosed;
+    BOOL _isClosed;
     BOOL _hidesOnDeactivate;
     BOOL _hiddenForDeactivate;
     BOOL _isActive;
@@ -291,6 +293,8 @@ APPKIT_EXPORT const NSNotificationName NSWindowDidExposeNotification;
     NSWindowTabbingIdentifier _tabbingIdentifier;
     NSString *_subtitle;
     NSWindowTitleVisibility _titleVisibility;
+    NSSize _minFullScreenContentSize;
+    NSSize _maxFullScreenContentSize;
     NSTitlebarSeparatorStyle _titlebarSeparatorStyle;
     NSWindowToolbarStyle _toolbarStyle;
     BOOL _titlebarAppearsTransparent;
@@ -357,6 +361,8 @@ APPKIT_EXPORT const NSNotificationName NSWindowDidExposeNotification;
 - (NSSize) maxSize;
 - (NSSize) contentMinSize;
 - (NSSize) contentMaxSize;
+@property NSSize minFullScreenContentSize;
+@property NSSize maxFullScreenContentSize;
 
 - (BOOL) isOneShot;
 - (BOOL) isOpaque;
@@ -530,6 +536,12 @@ APPKIT_EXPORT const NSNotificationName NSWindowDidExposeNotification;
 - (NSRect) convertRectToScreen: (NSRect) rect;
 - (NSRect) convertRectFromScreen: (NSRect) rect;
 - (CGFloat) backingScaleFactor;
+- (NSRect) convertRectToBacking: (NSRect) rect;
+- (NSRect) convertRectFromBacking: (NSRect) rect;
+- (NSPoint) convertPointToBacking: (NSPoint) point;
+- (NSPoint) convertPointFromBacking: (NSPoint) point;
+- (NSSize) convertSizeToBacking: (NSSize) size;
+- (NSSize) convertSizeFromBacking: (NSSize) size;
 
 - (void) beginSheet: (NSWindow *) sheet
         completionHandler: (void (^)(NSInteger returnCode)) handler;
