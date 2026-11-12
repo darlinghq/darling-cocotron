@@ -111,6 +111,18 @@ NSApplication *NSApp = nil;
 
 @implementation NSApplication
 
+- (NSUserInterfaceLayoutDirection) userInterfaceLayoutDirection {
+    // Use the app's selected localization, not the user's regional locale:
+    // an app without an RTL localization still presents its LTR interface.
+    NSString *language = [[[NSBundle mainBundle] preferredLocalizations] firstObject];
+    if (language != nil &&
+        [NSLocale characterDirectionForLanguage: language] ==
+                NSLocaleLanguageDirectionRightToLeft) {
+        return NSUserInterfaceLayoutDirectionRightToLeft;
+    }
+    return NSUserInterfaceLayoutDirectionLeftToRight;
+}
+
 + (NSApplication *) sharedApplication {
     if (NSApp == nil) {
         [[self alloc] init]; // NSApp must be nil inside init

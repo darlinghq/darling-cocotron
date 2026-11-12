@@ -22,6 +22,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSResponder.h>
 #import <AppKit/NSRunningApplication.h>
 #import <AppKit/NSAlert.h>
+#import <AppKit/NSUserInterfaceLayoutDirection.h>
 #import <Foundation/NSNotification.h>
 #import <Foundation/NSRunLoop.h>
 
@@ -95,11 +96,6 @@ typedef enum {
     NSPrintingFailure,
 } NSApplicationPrintReply;
 
-typedef NS_ENUM(NSInteger, NSUserInterfaceLayoutDirection) {
-    NSUserInterfaceLayoutDirectionLeftToRight = 0,
-    NSUserInterfaceLayoutDirectionRightToLeft = 1,
-};
-
 typedef NS_OPTIONS(NSUInteger, NSApplicationPresentationOptions) {
     NSApplicationPresentationDefault = 0,
     NSApplicationPresentationAutoHideDock = 1 << 0,
@@ -147,6 +143,8 @@ typedef NS_OPTIONS(NSUInteger, NSApplicationPresentationOptions) {
     BOOL _windowClosedSinceTerminateCheck;
     BOOL _automaticCustomizeTouchBarMenuItemEnabled;
 }
+
+@property(readonly) NSUserInterfaceLayoutDirection userInterfaceLayoutDirection;
 
 @property(strong) NSMenu *helpMenu;
 @property(readonly) NSApplicationPresentationOptions currentSystemPresentationOptions;

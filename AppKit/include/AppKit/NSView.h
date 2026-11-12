@@ -29,6 +29,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSUserInterfaceItemIdentification.h>
 #import <AppKit/NSLayoutConstraint.h>
 #import <AppKit/NSAppearance.h>
+#import <AppKit/NSUserInterfaceLayoutDirection.h>
 
 typedef NS_OPTIONS(NSUInteger, NSTouchTypeMask) {
     NSTouchTypeMaskDirect = 1 << 0,
@@ -149,12 +150,15 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPre
     NSAppearance *_appearance;
     NSTouchTypeMask _allowedTouchTypes;
     BOOL _canDrawSubviewsIntoLayer;
+    BOOL _hasExplicitUserInterfaceLayoutDirection;
+    NSUserInterfaceLayoutDirection _userInterfaceLayoutDirection;
     int _frameChangeDepth;
     BOOL _canDrawConcurrently;
 }
 
 @property(class, readonly) BOOL requiresConstraintBasedLayout;
 @property BOOL translatesAutoresizingMaskIntoConstraints;
+@property NSUserInterfaceLayoutDirection userInterfaceLayoutDirection;
 
 // NSViewNoIntrinsicMetric in both dimensions; subclasses that know their own
 // size override it.

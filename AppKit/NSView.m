@@ -3216,6 +3216,28 @@ static CGFloat backingScaleFactor(NSView *view) {
     return NSMakeSize(NSViewNoIntrinsicMetric, NSViewNoIntrinsicMetric);
 }
 
+- (NSUserInterfaceLayoutDirection) userInterfaceLayoutDirection {
+    return _hasExplicitUserInterfaceLayoutDirection
+                   ? _userInterfaceLayoutDirection
+                   : [NSApp userInterfaceLayoutDirection];
+}
+
+- (void) setUserInterfaceLayoutDirection:
+        (NSUserInterfaceLayoutDirection) direction
+{
+    // QUIRK: any non-zero direction is stored as right-to-left (1), and out-of-range values do not
+    // raise. Not documented. Evidence: black-box observation on macOS 26.7.3 (tier 2, MAC-EVIDENCE
+    // MC26.3, setting 2, 99 and -1 each read back 1).
+    // Test: tests/appkit-view-layout-direction.m (out-of-range directions read back as 1)
+    direction = direction != 0 ? NSUserInterfaceLayoutDirectionRightToLeft
+                               : NSUserInterfaceLayoutDirectionLeftToRight;
+    _hasExplicitUserInterfaceLayoutDirection = YES;
+    if (_userInterfaceLayoutDirection == direction)
+        return;
+    _userInterfaceLayoutDirection = direction;
+    [self setNeedsDisplay: YES];
+}
+
 - (void) invalidateIntrinsicContentSize {
 }
 
