@@ -196,7 +196,7 @@ static BOOL _NSLayoutItemIsWithin(id item, id container)
 
 // Activation installs the constraint on the closest common ancestor of its two
 // items (the first item itself for a one-item constraint) and raises if the
-// items are not in one hierarchy. The view's -addConstraint: links the
+// items are not in one hierarchy (NSGenericException). The view's -addConstraint: links the
 // constraint back through -_attachToOwner:.
 - (void)setActive:(BOOL)active
 {
@@ -215,8 +215,12 @@ static BOOL _NSLayoutItemIsWithin(id item, id container)
         while (owner != nil && !_NSLayoutItemIsWithin(_secondItem, owner))
             owner = _NSLayoutItemParent(owner);
     }
+    // QUIRK: the exception is NSGenericException, not NSInvalidArgumentException,
+    // and the constraint stays inactive. Not documented. Evidence: black-box
+    // observation on macOS 26.7.3 (tier 2), MAC-EVIDENCE MC26.3.
+    // Test: appkit-layout-constraint-model.m (no common ancestor raises NSGenericException)
     if (![owner isKindOfClass:[NSView class]])
-        [NSException raise:NSInvalidArgumentException
+        [NSException raise:NSGenericException
                     format:@"The items of a layout constraint must share a common ancestor view: %@", self];
     [owner addConstraint:self];
 }

@@ -85,8 +85,15 @@ int main(void) {
         NSView *other = child(nil);
         NSLayoutConstraint *bad = [[a leftAnchor] constraintEqualToAnchor:[other leftAnchor]];
         BOOL raised = NO;
-        @try { [bad setActive:YES]; } @catch (NSException *e) { raised = [[e name] isEqualToString:NSInvalidArgumentException]; }
+        @try { [bad setActive:YES]; } @catch (NSException *e) { raised = [[e name] isEqualToString:NSGenericException]; }
         CHECK(raised && ![bad isActive]);
+
+        // QUIRK test (macOS 26.7.3): -addConstraint: does not validate the items;
+        // a constraint between views outside the receiver is added and active.
+        NSView *outsideHost = child(nil);
+        NSLayoutConstraint *outside = [[a leftAnchor] constraintEqualToAnchor:[other leftAnchor]];
+        [outsideHost addConstraint:outside];
+        CHECK([[outsideHost constraints] containsObject:outside] && [outside isActive]);
 
         NSDictionary *bound = NSDictionaryOfVariableBindings(a, b);
         CHECK([bound count] == 2 && [bound objectForKey:@"a"] == a && [bound objectForKey:@"b"] == b);
