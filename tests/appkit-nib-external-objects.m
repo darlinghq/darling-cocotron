@@ -14,20 +14,27 @@ static void expect(BOOL condition, NSString *message)
     }
 }
 
-@interface TestPlaceholder : NSObject <NSCoding>
+@interface TestPlaceholder : NSObject <NSCoding> {
+    NSString *_identifier;
+}
 @property (copy) NSString *identifier;
 @end
 @implementation TestPlaceholder
+@synthesize identifier = _identifier;
 - (void)encodeWithCoder:(NSCoder *)coder { [coder encodeObject:self.identifier forKey:@"NSExternalObjectPlaceholderIdentifier"]; }
 - (id)initWithCoder:(NSCoder *)coder { return [self init]; }
 @end
 
 // Encodes the NSIBObjectData keys the loader needs for top-level objects.
-@interface TestObjectData : NSObject <NSCoding>
+@interface TestObjectData : NSObject <NSCoding> {
+    id _root;
+    NSArray *_objects;
+}
 @property (retain) id root;
 @property (retain) NSArray *objects;
 @end
 @implementation TestObjectData
+@synthesize root = _root, objects = _objects;
 - (void)encodeWithCoder:(NSCoder *)coder
 {
     NSMutableArray *parents = [NSMutableArray array];

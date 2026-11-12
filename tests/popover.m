@@ -3,11 +3,15 @@
 #import <AppKit/AppKit.h>
 #include <stdio.h>
 
-@interface PopoverDelegate : NSObject <NSPopoverDelegate>
+@interface PopoverDelegate : NSObject <NSPopoverDelegate> {
+    BOOL _allowClose;
+    NSMutableArray *_events;
+}
 @property BOOL allowClose;
 @property(retain) NSMutableArray *events;
 @end
 @implementation PopoverDelegate
+@synthesize allowClose = _allowClose, events = _events;
 - (BOOL) popoverShouldClose: (NSPopover *) popover { return self.allowClose; }
 - (void) popoverWillShow: (NSNotification *) note { [self.events addObject: @"willShow"]; }
 - (void) popoverDidShow: (NSNotification *) note { [self.events addObject: @"didShow"]; }

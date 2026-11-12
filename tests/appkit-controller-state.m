@@ -10,11 +10,15 @@ static void expect(BOOL condition, NSString *message)
     }
 }
 
-@interface ProgrammaticController : NSWindowController
+@interface ProgrammaticController : NSWindowController {
+    BOOL _loaded;
+    BOOL _didLoad;
+}
 @property BOOL loaded, didLoad;
 @end
 
 @implementation ProgrammaticController
+@synthesize loaded = _loaded, didLoad = _didLoad;
 - (NSString *)windowNibName { return @""; }
 - (void)loadWindow
 {
@@ -39,7 +43,7 @@ int main(void)
         controller.identifier = @"main";
         expect([controller.identifier isEqual:@"main"], @"identifier is stored");
 
-        NSUserActivity *activity = [NSUserActivity new];
+        NSUserActivity *activity = [[NSUserActivity alloc] initWithActivityType: @"org.example.state-test"];
         controller.userActivity = activity;
         expect(controller.userActivity == activity, @"responders keep their user activity");
         controller.userActivity = nil;

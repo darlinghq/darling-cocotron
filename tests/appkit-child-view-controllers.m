@@ -10,12 +10,16 @@ static void expect(BOOL condition, NSString *message)
     }
 }
 
-@interface TrackingController : NSViewController
+@interface TrackingController : NSViewController {
+    NSInteger _inserts;
+    NSInteger _removals;
+}
 @property NSInteger inserts;
 @property NSInteger removals;
 @end
 
 @implementation TrackingController
+@synthesize inserts = _inserts, removals = _removals;
 - (void)insertChildViewController:(NSViewController *)child atIndex:(NSInteger)index
 {
     self.inserts++;

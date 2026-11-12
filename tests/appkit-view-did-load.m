@@ -10,13 +10,18 @@ static void expect(BOOL condition, NSString *message)
     }
 }
 
-@interface LoadingController : NSViewController
+@interface LoadingController : NSViewController {
+    NSInteger _loads;
+    NSInteger _didLoads;
+    BOOL _viewSetWhenDidLoad;
+}
 @property NSInteger loads;
 @property NSInteger didLoads;
 @property BOOL viewSetWhenDidLoad;
 @end
 
 @implementation LoadingController
+@synthesize loads = _loads, didLoads = _didLoads, viewSetWhenDidLoad = _viewSetWhenDidLoad;
 - (void)loadView
 {
     self.loads++;
