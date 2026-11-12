@@ -20,6 +20,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSAlert.h>
 #import <AppKit/NSAppearance.h>
 #import <AppKit/NSApplication.h>
+#import <AppKit/NSUserInterfaceItemSearching.h>
 #import <AppKit/NSColorPanel.h>
 #import <AppKit/NSDisplay.h>
 #import <AppKit/NSGlobalMenu+Private.h>
@@ -1891,3 +1892,15 @@ BOOL NSPerformService(NSString *itemName, NSPasteboard *pasteboard) {
     NSUnimplementedFunction();
     return NO;
 }
+
+@implementation NSApplication (NSUserInterfaceItemSearching)
+
+// There is no system search service to forward the handler's results to, so
+// registration is accepted and has no effect.
+- (void) registerUserInterfaceItemSearchHandler: (id<NSUserInterfaceItemSearching>) handler {
+}
+
+- (void) unregisterUserInterfaceItemSearchHandler: (id<NSUserInterfaceItemSearching>) handler {
+}
+
+@end
