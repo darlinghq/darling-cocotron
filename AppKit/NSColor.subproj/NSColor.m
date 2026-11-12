@@ -42,6 +42,11 @@ NSNotificationName const NSSystemColorsDidChangeNotification = @"NSSystemColorsD
 - initWithName: (NSColorName) name provider: (NSColor * (^)(NSAppearance *)) provider;
 @end
 
+// NSColor_assetCatalog.m
+@interface NSColor (NSAssetCatalog)
++ (NSColor *) _colorNamedInAssetCatalog: (NSString *) name bundle: (NSBundle *) bundle;
+@end
+
 @interface NSColor (private)
 - (NSColorListName) catalogName;
 - (NSColorName) colorName;
@@ -835,6 +840,16 @@ NSNotificationName const NSSystemColorsDidChangeNotification = @"NSSystemColorsD
 {
     return [NSColor_catalog colorWithCatalogName: catalogName
                                        colorName: colorName];
+}
+
++ (NSColor *) colorNamed: (NSColorName) name {
+    return [self colorNamed: name bundle: nil];
+}
+
+// Looks a color up by name in the bundle's asset catalog (the main bundle if nil). A name that is
+// not in the catalog gives nil, including the names of NSColor's own class methods such as labelColor.
++ (NSColor *) colorNamed: (NSColorName) name bundle: (NSBundle *) bundle {
+    return [self _colorNamedInAssetCatalog: name bundle: bundle];
 }
 
 + (NSColor *) colorWithGenericGamma22White: (CGFloat) white

@@ -28,6 +28,11 @@
 
 @implementation NSColor_dynamic
 
+- (NSColorType) type {
+    // Classify the dynamic object without resolving its current representation.
+    return NSColorTypeCatalog;
+}
+
 - initWithName: (NSColorName) name provider: (NSColor * (^)(NSAppearance *)) provider {
     _colorName = [name copy];
     _provider = [provider copy];
