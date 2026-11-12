@@ -459,11 +459,9 @@ static int untitled_document_number = 0;
 
 - (void) _autosaveAfterDelay {
     _autosaveScheduled = NO;
-    [self autosaveWithImplicitCancellability: YES
-                           completionHandler: ^(NSError *error) {
-                               if (error)
-                                   NSLog(@"Autosaving %@ failed: %@", [self displayName], error);
-                           }];
+    // Autosave is implicit: a failure leaves the document edited, so the user is told
+    // when they save or close it, and nothing is presented here.
+    [self autosaveWithImplicitCancellability: YES completionHandler: nil];
 }
 
 - (BOOL) readFromData: (NSData *) data
