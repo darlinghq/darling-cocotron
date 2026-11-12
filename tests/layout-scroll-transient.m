@@ -1,5 +1,4 @@
 #import <AppKit/AppKit.h>
-#import <Foundation/NSLayoutAnchor.h>
 #include <stdio.h>
 int main(void) {
  NSAutoreleasePool *pool=[NSAutoreleasePool new]; BOOL ok=NO;

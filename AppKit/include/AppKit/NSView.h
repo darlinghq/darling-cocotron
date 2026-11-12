@@ -181,8 +181,8 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPre
 // NSViewNoIntrinsicMetric in both dimensions; subclasses that know their own
 // size override it.
 @property(readonly) NSSize intrinsicContentSize;
-// There is no constraint solver to notify, so nothing recomputes a size
-// from it.
+// The intrinsic size is read when the layout is solved, so a change to it
+// shows at the next -layoutSubtreeIfNeeded.
 - (void) invalidateIntrinsicContentSize;
 
 // Sent by -layoutSubtreeIfNeeded to each view that needs layout. The base
@@ -194,8 +194,9 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPre
 // subviews before their superview.
 - (void) updateConstraintsForSubtreeIfNeeded;
 
-// Stored for callers and subclasses; with no constraint solver they do not
-// affect layout. Defaults are 250 (hugging) and 750 (compression resistance).
+// How strongly the view resists growing beyond, and shrinking below, its
+// intrinsic size when constraints are solved. Defaults are 250 (hugging) and
+// 750 (compression resistance).
 - (NSLayoutPriority) contentHuggingPriorityForOrientation: (NSLayoutConstraintOrientation) orientation;
 - (void) setContentHuggingPriority: (NSLayoutPriority) priority
                     forOrientation: (NSLayoutConstraintOrientation) orientation;
@@ -552,7 +553,8 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPre
 
 @interface NSView (NSViewLayoutState)
 
-// Stored only: Cocotron has no constraint solver or deferred layout pass.
+// Marking a view as needing layout or constraint updates makes the next
+// layout pass (-layoutSubtreeIfNeeded, or before a window displays) handle it.
 @property BOOL needsLayout;
 @property BOOL needsUpdateConstraints;
 // Stored only; drawing isn't clipped differently.
