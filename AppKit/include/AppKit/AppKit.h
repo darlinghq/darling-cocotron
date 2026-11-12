@@ -164,11 +164,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSSpeechSynthesizer.h>
 #import <AppKit/NSSpellChecker.h>
 #import <AppKit/NSSplitView.h>
+#import <AppKit/NSSplitViewController.h>
+#import <AppKit/NSSplitViewItem.h>
 #import <AppKit/NSStackView.h>
 #import <AppKit/NSStatusBar.h>
 #import <AppKit/NSStatusItem.h>
 #import <AppKit/NSStepper.h>
 #import <AppKit/NSStepperCell.h>
+#import <AppKit/NSStoryboard.h>
 #import <AppKit/NSStringDrawing.h>
 #import <AppKit/NSTabView.h>
 #import <AppKit/NSTabViewItem.h>

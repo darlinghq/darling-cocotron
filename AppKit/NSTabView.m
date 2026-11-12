@@ -311,9 +311,9 @@ id _NSTabViewFloatingCell = nil;
 
 - (void) addTabViewItem: (NSTabViewItem *) item {
     [_items addObject: item];
+    [item setTabView: self];
     if (_selectedItem == nil)
         [self selectTabViewItem: item];
-    [item setTabView: self];
 
     if ([_delegate respondsToSelector: @selector
                    (tabViewDidChangeNumberOfTabViewItems:)])
@@ -354,9 +354,9 @@ id _NSTabViewFloatingCell = nil;
 
 - (void) insertTabViewItem: (NSTabViewItem *) item atIndex: (NSInteger) index {
     [_items insertObject: item atIndex: index];
+    [item setTabView: self];
     if (_selectedItem == nil)
         [self selectTabViewItem: item];
-    [item setTabView: self];
 
     if ([_delegate respondsToSelector: @selector
                    (tabViewDidChangeNumberOfTabViewItems:)])
