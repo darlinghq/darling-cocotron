@@ -58,6 +58,14 @@ APPKIT_EXPORT NSString *const NSAppearanceNameControlStrip; // Undocumented
 
 @end
 
+@class NSColor;
+
+@interface NSAppearance (NSAppearanceColorAdjustment)
+// Private AppKit: the color blended a fixed fraction towards black (darker)
+// or white.
++ (NSColor *) colorByAdjustingLightnessOfColor: (NSColor *) color darker: (BOOL) darker;
+@end
+
 @protocol NSAppearanceCustomization <NSObject>
 
 @required

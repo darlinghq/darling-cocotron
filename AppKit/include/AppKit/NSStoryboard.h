@@ -20,6 +20,20 @@
 #import <AppKit/AppKitExport.h>
 #import <Foundation/Foundation.h>
 
-@interface NSStoryboard : NSObject
+typedef NSString *NSStoryboardName;
+typedef NSString *NSStoryboardSceneIdentifier;
+
+@interface NSStoryboard : NSObject {
+    NSString *_path;
+    NSDictionary *_info;
+}
+
+@property(class, readonly, strong) NSStoryboard *mainStoryboard;
+
++ (instancetype) storyboardWithName: (NSStoryboardName) name
+                             bundle: (NSBundle *) storyboardBundleOrNil;
+
+- (id) instantiateInitialController;
+- (id) instantiateControllerWithIdentifier: (NSStoryboardSceneIdentifier) identifier;
 
 @end

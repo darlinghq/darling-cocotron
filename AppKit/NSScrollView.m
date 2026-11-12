@@ -93,10 +93,11 @@ static Class _rulerViewClass = nil;
                        controlSize: (NSControlSize) controlSize
                      scrollerStyle: (NSScrollerStyle) scrollerStyle
 {
-    NSUnimplementedMethod();
+    // Only legacy scrollers take up space; the control size isn't used.
+    BOOL legacy = scrollerStyle == NSScrollerStyleLegacy;
     return [self frameSizeForContentSize: cSize
-                   hasHorizontalScroller: YES
-                     hasVerticalScroller: YES
+                   hasHorizontalScroller: legacy && horizontalScrollerClass != Nil
+                     hasVerticalScroller: legacy && verticalScrollerClass != Nil
                               borderType: type];
 }
 
@@ -141,7 +142,11 @@ static Class _rulerViewClass = nil;
                        controlSize: (NSControlSize) controlSize
                      scrollerStyle: (NSScrollerStyle) scrollerStyle
 {
-    NSUnimplementedMethod();
+    BOOL legacy = scrollerStyle == NSScrollerStyleLegacy;
+    return [self contentSizeForFrameSize: fSize
+                   hasHorizontalScroller: legacy && horizontalScrollerClass != Nil
+                     hasVerticalScroller: legacy && verticalScrollerClass != Nil
+                              borderType: type];
 }
 
 + (void) setRulerViewClass: (Class) class {
