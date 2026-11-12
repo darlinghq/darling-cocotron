@@ -137,8 +137,8 @@ int main(void) {
             if (image == NULL)
                 continue;
             CGBitmapInfo info = CGImageGetBitmapInfo(image);
-            CHECK((info & kCGBitmapByteOrderMask) == kCGBitmapByteOrder32Big,
-                  "%s: CGBitmapInfo byte order is 32 big (0x%x)", layout, (unsigned) info);
+            // The byte order bits are not checked: macOS reports no byte order bits for the image
+            // of an 8-bit rep (only the alpha info), and the pixel round trips below pin the layout.
             CGBitmapInfo alpha = info & kCGBitmapAlphaInfoMask;
             CHECK(alpha == (alphaFirst ? kCGImageAlphaPremultipliedFirst : kCGImageAlphaPremultipliedLast),
                   "%s: CGBitmapInfo alpha info (0x%x)", layout, (unsigned) alpha);
