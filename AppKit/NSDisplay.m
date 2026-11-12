@@ -43,8 +43,19 @@ static void eventPosted(void *info) {}
     }
 }
 
+// There is one window-server connection per process, shared by every thread.
+// The instance is published only after the backend has initialized, so a
+// backend that fails to start (or raises) leaves nothing behind and a later
+// call tries again.
+static NSDisplay *processDisplay = nil;
+
 + (NSDisplay *) currentDisplay {
-    return NSThreadSharedInstance(@"NSDisplay");
+    @synchronized([NSDisplay class]) {
+        if (processDisplay == nil) {
+            processDisplay = [[NSDisplay alloc] init];
+        }
+        return processDisplay;
+    }
 }
 
 - (instancetype) init {
@@ -94,12 +105,12 @@ static void eventPosted(void *info) {}
     }
 
     // None of the backends can be used.
+    NSArray *available = [[backends copy] autorelease];
+    [backends release];
     [NSException raise: NSWindowServerCommunicationException
                 format: @"Failed to connect to a window server. Available "
                         @"backends are: %@",
-                        backends];
-
-    [backends release];
+                        available];
     return nil;
 }
 
