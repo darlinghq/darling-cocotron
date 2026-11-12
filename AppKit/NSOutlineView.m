@@ -188,6 +188,15 @@ static inline id childOfItemAtIndex(NSOutlineView *self, id item,
         _editingCellPadding = 10.0;
         [self invalidateRowCache];
 
+        // QUIRK: NSOutlineView layout after the NSTableView layout: auto-
+        // resizes-outline-column, marker-follows-cell and autosaves-expanded-
+        // items flags, the indentation per level and the outline table
+        // column. Not documented; unkeyed (typedstream) archives come from
+        // old nibs. Evidence: tier 3, the layout reported by the contributor
+        // of this decoder from archives of old nibs; unconfirmed against
+        // macOS (a macOS check is pending). Test:
+        // test_quirk_typedstream_outline_view in tests/appkit-typedstream-
+        // controls.m
         BOOL autoResizesCol = YES, markerFollowsCell = YES, autosaveExpanded = NO;
         float indentation = _standardRowHeight > 0 ? _standardRowHeight : 16.0;
         [coder decodeValueOfObjCType: @encode(BOOL) at: &autoResizesCol];

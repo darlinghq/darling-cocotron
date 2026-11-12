@@ -158,6 +158,18 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
         SEL action = NULL, doubleAction = NULL;
         int flags = 0;
 
+        // QUIRK: NSTableView layout: header view, corner view, columns, cell
+        // spacing, colours, row height, action, double action and a flags
+        // word (bit 31 column reordering, 30 column resizing, 28 empty
+        // selection, 27 multiple selection, 26 column selection, 15
+        // autoresize columns), then data source, delegate and target. Not
+        // documented; unkeyed (typedstream) archives come from old nibs.
+        // Evidence: tier 3, the layout reported by the contributor of this
+        // decoder from archives of old nibs; unconfirmed against macOS (a
+        // macOS check is pending). Archives with a different layout are
+        // tolerated where the code catches the mismatch. Test:
+        // test_quirk_typedstream_table_view in tests/appkit-typedstream-
+        // controls.m
         @try {
             [coder decodeValuesOfObjCTypes: "@@@ff@@f::i",
                                             &headerView, &cornerView, &cols,

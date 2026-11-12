@@ -91,6 +91,15 @@ id _NSTabViewFloatingCell = nil;
             break;
         }
     } else {
+        // QUIRK: NSTabView layout: items, font, tab type, draws-background
+        // and allows-truncated flags, delegate, then the selected index (an
+        // int before class version 3, an NSUInteger after). Not documented;
+        // unkeyed (typedstream) archives come from old nibs. Evidence: tier
+        // 3, the layout reported by the contributor of this decoder from
+        // archives of old nibs; unconfirmed against macOS (a macOS check is
+        // pending). Archives with a different layout are tolerated where the
+        // code catches the mismatch. Test: test_quirk_typedstream_tab_view in
+        // tests/appkit-typedstream-controls.m
         NSInteger version = [coder versionForClassName: @"NSTabView"];
         id items = nil;
         [coder decodeValueOfObjCType: @encode(id) at: &items];

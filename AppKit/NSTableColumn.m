@@ -52,6 +52,17 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         _isEditable = [keyed decodeBoolForKey: @"NSIsEditable"];
     } else {
         NSInteger version = [coder versionForClassName: @"NSTableColumn"];
+        // QUIRK: NSTableColumn layout: version 1 stores identifier, header
+        // cell, data cell, three widths and the resizable and editable flags;
+        // version 2 and later store identifier, widths, flags, then header
+        // cell, data cell and the table view back-reference. Not documented;
+        // unkeyed (typedstream) archives come from old nibs. Evidence: tier
+        // 3, the layout reported by the contributor of this decoder from
+        // archives of old nibs; unconfirmed against macOS (a macOS check is
+        // pending). Archives with a different layout are tolerated where the
+        // code catches the mismatch. Test:
+        // test_quirk_typedstream_table_column in tests/appkit-typedstream-
+        // controls.m
         if (version >= 2) {
             float w = 100, minW = 10, maxW = 10000;
             char resizable = 1, editable = 0;

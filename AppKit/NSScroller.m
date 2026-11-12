@@ -156,6 +156,14 @@ static NSAppleScrollBarVariant appleScrollBarVariant(NSScroller *self) {
         _knobProportion = 0;
         [self checkSpaceForParts];
     } else {
+        // QUIRK: NSScroller layout: target, float value, knob proportion,
+        // action, arrow position and control size. Not documented; unkeyed
+        // (typedstream) archives come from old nibs. Evidence: tier 3, the
+        // layout reported by the contributor of this decoder from archives of
+        // old nibs; unconfirmed against macOS (a macOS check is pending).
+        // Archives with a different layout are tolerated where the code
+        // catches the mismatch. Test: test_quirk_typedstream_scroller in
+        // tests/appkit-typedstream-controls.m
         sFlags.isHoriz = (_bounds.size.width < _bounds.size.height) ? NO : YES;
         _floatValue = 0;
         _knobProportion = 0;

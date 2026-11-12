@@ -77,6 +77,16 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         _buttonEnabled = YES;
         _buttonPressed = NO;
     } else {
+        // QUIRK: NSComboBoxCell layout: visible item count, vertical-
+        // scroller, uses-data-source and completes flags, then the pop-up
+        // list, data source, button cell and table view objects. Not
+        // documented; unkeyed (typedstream) archives come from old nibs.
+        // Evidence: tier 3, the layout reported by the contributor of this
+        // decoder from archives of old nibs; unconfirmed against macOS (a
+        // macOS check is pending). Archives with a different layout are
+        // tolerated where the code catches the mismatch. Test:
+        // test_quirk_typedstream_combo_box_cell in tests/appkit-typedstream-
+        // controls.m
         int visibleItems = 5;
         char hasVerticalScroller = 1;
         char usesDataSource = 0;

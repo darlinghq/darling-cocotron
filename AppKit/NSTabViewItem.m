@@ -92,6 +92,15 @@ NSString *_NSTruncatedStringWithAttributesInRect(NSString *string,
         _tabView = [keyed decodeObjectForKey: @"NSTabView"];
         _color = [[keyed decodeObjectForKey: @"NSColor"] retain];
     } else {
+        // QUIRK: NSTabViewItem layout: identifier, label, view, colour,
+        // state, first responder, tab view. Not documented; unkeyed
+        // (typedstream) archives come from old nibs. Evidence: tier 3, the
+        // layout reported by the contributor of this decoder from archives of
+        // old nibs; unconfirmed against macOS (a macOS check is pending).
+        // Archives with a different layout are tolerated where the code
+        // catches the mismatch. Test: test_quirk_typedstream_tab_view_item in
+        // tests/appkit-typedstream-controls.m
+        // Values decoded with decodeValueOfObjCType: are owned by us.
         [coder decodeValueOfObjCType: @encode(id) at: &_identifier];
         [coder decodeValueOfObjCType: @encode(id) at: &_label];
         [coder decodeValueOfObjCType: @encode(id) at: &_view];

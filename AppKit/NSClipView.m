@@ -55,6 +55,15 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                        name: NSViewBoundsDidChangeNotification
                      object: _docView];
     } else {
+        // QUIRK: NSClipView layout: an object (background colour), then the
+        // document cursor, document view, copies-on-scroll, draws-background
+        // and one more flag byte. Not documented; unkeyed (typedstream)
+        // archives come from old nibs. Evidence: tier 3, the layout reported
+        // by the contributor of this decoder from archives of old nibs;
+        // unconfirmed against macOS (a macOS check is pending). Archives with
+        // a different layout are tolerated where the code catches the
+        // mismatch. Test: test_quirk_typedstream_clip_view in tests/appkit-
+        // typedstream-controls.m
         [self setAutoresizesSubviews: YES];
 
         id background = [coder decodeObject];

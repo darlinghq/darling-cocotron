@@ -209,6 +209,18 @@ static Class _rulerViewClass = nil;
             _verticalLineScroll = NSSwapBigFloatToHost(amts[3]);
         }
     } else {
+        // QUIRK: NSScrollView layout from class version 20: five objects
+        // (clip view, scrollers, corner and header views; a scroller is
+        // horizontal or vertical by its orientation), four scroll amounts and
+        // a flags word whose bits 26-27 hold the border type. Older versions:
+        // clip view, border, scroll flags, amounts, then per-part presence
+        // flags. Not documented; unkeyed (typedstream) archives come from old
+        // nibs. Evidence: tier 3, the layout reported by the contributor of
+        // this decoder from archives of old nibs; unconfirmed against macOS
+        // (a macOS check is pending). Archives with a different layout are
+        // tolerated where the code catches the mismatch. Test:
+        // test_quirk_typedstream_scroll_view in tests/appkit-typedstream-
+        // controls.m
         NSInteger version = [coder versionForClassName: @"NSScrollView"];
         if (version >= 20) {
             id objs[5];
