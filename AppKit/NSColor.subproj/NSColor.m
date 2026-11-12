@@ -165,16 +165,61 @@ NSNotificationName const NSSystemColorsDidChangeNotification = @"NSSystemColorsD
         }
 
     } else {
-        uint8_t space = 1;
-        CGFloat r = 0, g = 0, b = 0, a = 1;
-        @try {
+        // The layout -initWithCoder: reads: a color space byte followed by
+        // the components as floats (or the names, for a catalog color).
+        NSColorSpaceName spaceName = [self colorSpaceName];
+
+        if ([spaceName isEqualToString: NSCalibratedRGBColorSpace] ||
+            [spaceName isEqualToString: NSDeviceRGBColorSpace]) {
+            uint8_t space =
+                    [spaceName isEqualToString: NSCalibratedRGBColorSpace] ? 1
+                                                                           : 2;
+            CGFloat r, g, b, a;
+
             [self getRed: &r green: &g blue: &b alpha: &a];
-        } @catch (id ex) {
-            NSLog(@"NSColor encodeWithCoder: getRed:green:blue:alpha: failed for %@: %@", self, ex);
+            float values[4] = {r, g, b, a};
+            [coder encodeValuesOfObjCTypes: "cffff", &space, &values[0],
+                                            &values[1], &values[2], &values[3]];
+        } else if ([spaceName isEqualToString: NSCalibratedWhiteColorSpace] ||
+                   [spaceName isEqualToString: NSDeviceWhiteColorSpace]) {
+            uint8_t space =
+                    [spaceName isEqualToString: NSCalibratedWhiteColorSpace] ? 3
+                                                                             : 4;
+            CGFloat w, a;
+
+            [self getWhite: &w alpha: &a];
+            float values[2] = {w, a};
+            [coder encodeValuesOfObjCTypes: "cff", &space, &values[0],
+                                            &values[1]];
+        } else if ([spaceName isEqualToString: NSDeviceCMYKColorSpace]) {
+            uint8_t space = 5;
+            CGFloat c, m, y, k, a;
+
+            [self getCyan: &c magenta: &m yellow: &y black: &k alpha: &a];
+            float values[5] = {c, m, y, k, a};
+            [coder encodeValuesOfObjCTypes: "cfffff", &space, &values[0],
+                                            &values[1], &values[2], &values[3],
+                                            &values[4]];
+        } else if ([spaceName isEqualToString: NSNamedColorSpace]) {
+            uint8_t space = 6;
+            NSColorListName catalogName = [self catalogNameComponent];
+            NSColorName colorName = [self colorNameComponent];
+            NSColor *color =
+                    [self colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
+
+            [coder encodeValuesOfObjCTypes: "c@@@", &space, &catalogName,
+                                            &colorName, &color];
+        } else {
+            // Other kinds of colors are archived as the RGB color they stand for.
+            NSColor *rgb =
+                    [self colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
+
+            if (rgb == nil || [[rgb colorSpaceName] isEqualToString: spaceName])
+                [NSException raise: NSInvalidArgumentException
+                            format: @"%@ can not encodeWithCoder:%@",
+                                    [self class], [coder class]];
+            [rgb encodeWithCoder: coder];
         }
-        float fvalues[4] = {(float)r, (float)g, (float)b, (float)a};
-        [coder encodeValuesOfObjCTypes: "cffff", &space, &fvalues[0], &fvalues[1],
-                                        &fvalues[2], &fvalues[3]];
     }
 }
 
