@@ -67,7 +67,7 @@ typedef NS_OPTIONS(NSUInteger, NSWorkspaceLaunchOptions) {
     NSNotificationCenter *_notificationCenter;
 }
 
-+ (NSWorkspace *) sharedWorkspace;
+@property (class, readonly, retain) NSWorkspace *sharedWorkspace;
 
 - (NSNotificationCenter *) notificationCenter;
 

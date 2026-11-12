@@ -52,9 +52,9 @@
 }
 
 - (BOOL) type: (NSString *) type conformsToType: (NSString *) conformsToType {
-    // TODO: call UTTypeConformsTo()
-    NSUnimplementedMethod();
-    return NO;
+    if (type == nil || conformsToType == nil)
+        return NO;
+    return UTTypeConformsTo((CFStringRef) type, (CFStringRef) conformsToType);
 }
 
 - (NSString *) typeOfFile: (NSString *) path error: (NSError **) error {
