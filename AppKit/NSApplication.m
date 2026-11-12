@@ -354,7 +354,7 @@ NSApplication *NSApp = nil;
 }
 
 - (BOOL) isRunning {
-    return _isRunning;
+    return _running;
 }
 
 // There is no system setting for full keyboard access to read.
@@ -833,7 +833,7 @@ NSApplication *NSApp = nil;
 - (void) run {
     NSAutoreleasePool *pool;
 
-    _isRunning = YES;
+    _running = YES;
 
     pool = [NSAutoreleasePool new];
     [self finishLaunching];
@@ -857,7 +857,7 @@ NSApplication *NSApp = nil;
         [self _checkForTerminate];
 
         [pool release];
-    } while (_isRunning);
+    } while (_running);
 }
 
 - (BOOL) _performKeyEquivalent: (NSEvent *) event {
@@ -1453,7 +1453,7 @@ NSApplication *NSApp = nil;
         return;
     }
 
-    _isRunning = NO;
+    _running = NO;
 }
 
 - (void) terminate: sender {

@@ -128,7 +128,14 @@ typedef NS_OPTIONS(NSUInteger, NSApplicationPresentationOptions) {
 
     NSImage *_applicationIconImage;
 
-    BOOL _isRunning;
+    // QUIRK: the instance variable is named _running so that
+    // valueForKey:@"_running" and setValue:forKey:@"_running" work through
+    // direct instance variable access, without accessor methods. Not
+    // documented. Evidence: black-box observation on macOS 27 (tier 2): the
+    // key reads as NSNumber 0 before -run, NSApplication has no _running or
+    // set_running: methods, and accessInstanceVariablesDirectly is YES.
+    // Test: appkit-application-running-key.m (quirk test).
+    BOOL _running;
     BOOL _isActive;
     BOOL _isHidden;
     BOOL _windowsNeedUpdate;
