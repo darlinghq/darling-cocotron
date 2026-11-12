@@ -15,6 +15,10 @@ int main(void) {
                 NSUserInterfaceLayoutDirectionLeftToRight];
         passed &= [view userInterfaceLayoutDirection] ==
                 NSUserInterfaceLayoutDirectionLeftToRight;
+        BOOL raised = NO;
+        @try { [view setUserInterfaceLayoutDirection: (NSUserInterfaceLayoutDirection) 5]; }
+        @catch (NSException *e) { raised = [[e name] isEqual: NSInvalidArgumentException]; }
+        passed &= raised;
         [view release];
         printf("view layout direction: %s\n", passed ? "PASS" : "FAIL");
         return passed ? 0 : 1;

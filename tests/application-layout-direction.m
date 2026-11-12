@@ -1,4 +1,9 @@
-// Standalone AppKit regression. No display connection or application init needed.
+// Standalone AppKit test; needs no display connection.
+// Substitutes -[NSBundle preferredLocalizations], then asks an NSApplication
+// subclass for its layout direction for English, Arabic, Hebrew, Persian,
+// Romanian, mixed lists in both orders and an empty list; the original method
+// is restored before exit. Expected: "layout direction checks=8 failures=0".
+// It checks the application API and localization selection only, not view mirroring.
 #import <AppKit/AppKit.h>
 #import <objc/runtime.h>
 #include <stdio.h>
