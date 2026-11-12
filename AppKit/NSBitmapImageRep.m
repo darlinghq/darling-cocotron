@@ -124,9 +124,10 @@ NSBitmapImageRepPropertyKey NSImageCurrentFrame = @"NSImageCurrentFrame";
 + (BOOL) canInitWithData: (NSData *) data {
     CGImageSourceRef imageSource =
             CGImageSourceCreateWithData((CFDataRef) data, nil);
-    BOOL result = (imageSource != NULL) ? YES : NO;
+    if (imageSource == NULL)
+        return NO;
     CFRelease(imageSource);
-    return result;
+    return YES;
 }
 
 + (NSArray *) imageRepsWithData: (NSData *) data {
@@ -148,12 +149,13 @@ NSBitmapImageRepPropertyKey NSImageCurrentFrame = @"NSImageCurrentFrame";
 
         CFDictionaryRef properties =
                 CGImageSourceCopyPropertiesAtIndex(imageSource, i, nil);
-        NSNumber *xres = [[(id) CFDictionaryGetValue(
-                properties, kCGImagePropertyDPIWidth) copy] autorelease];
-        NSNumber *yres = [[(id) CFDictionaryGetValue(
-                properties, kCGImagePropertyDPIHeight) copy] autorelease];
+        NSNumber *xres = properties ? [[(id) CFDictionaryGetValue(
+                properties, kCGImagePropertyDPIWidth) copy] autorelease] : nil;
+        NSNumber *yres = properties ? [[(id) CFDictionaryGetValue(
+                properties, kCGImagePropertyDPIHeight) copy] autorelease] : nil;
 
-        CFRelease(properties);
+        if (properties)
+            CFRelease(properties);
 
         NSBitmapImageRep *imageRep = [[self alloc] initWithCGImage: cgImage];
         NSSize size = {CGImageGetWidth(cgImage), CGImageGetHeight(cgImage)};
@@ -351,14 +353,15 @@ NSBitmapImageRepPropertyKey NSImageCurrentFrame = @"NSImageCurrentFrame";
 
     CFDictionaryRef properties =
             CGImageSourceCopyPropertiesAtIndex(imageSource, 0, nil);
-    NSNumber *xres =
+    NSNumber *xres = properties ?
             [[(id) CFDictionaryGetValue(properties, kCGImagePropertyDPIWidth)
-                    copy] autorelease];
-    NSNumber *yres =
+                    copy] autorelease] : nil;
+    NSNumber *yres = properties ?
             [[(id) CFDictionaryGetValue(properties, kCGImagePropertyDPIHeight)
-                    copy] autorelease];
+                    copy] autorelease] : nil;
 
-    CFRelease(properties);
+    if (properties)
+        CFRelease(properties);
     CFRelease(imageSource);
 
     if (cgImage == nil) {
@@ -463,8 +466,15 @@ NSBitmapImageRepPropertyKey NSImageCurrentFrame = @"NSImageCurrentFrame";
             const unsigned char *bytes = CFDataGetBytePtr(bitmapData);
             int i, length = _bytesPerRow * _pixelsHigh;
 
+            // The planes use component order, with alpha first when
+            // _bitmapFormat says so (see -CGBitmapInfo). Big-endian
+            // premultiplied sources are already in that order.
+            BOOL alphaFirst = (_bitmapFormat & NSAlphaFirstBitmapFormat) != 0;
+
             if (bitmapInfo ==
-                (kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big)) {
+                        (kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big) ||
+                bitmapInfo ==
+                        (kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Big)) {
                 for (i = 0; i < length; i++)
                     _bitmapPlanes[0][i] = bytes[i];
             } else {
@@ -474,10 +484,17 @@ NSBitmapImageRepPropertyKey NSImageCurrentFrame = @"NSImageCurrentFrame";
                     unsigned char r = bytes[i + 2];
                     unsigned char a = bytes[i + 3];
 
-                    _bitmapPlanes[0][i + 0] = r;
-                    _bitmapPlanes[0][i + 1] = g;
-                    _bitmapPlanes[0][i + 2] = b;
-                    _bitmapPlanes[0][i + 3] = a;
+                    if (alphaFirst) {
+                        _bitmapPlanes[0][i + 0] = a;
+                        _bitmapPlanes[0][i + 1] = r;
+                        _bitmapPlanes[0][i + 2] = g;
+                        _bitmapPlanes[0][i + 3] = b;
+                    } else {
+                        _bitmapPlanes[0][i + 0] = r;
+                        _bitmapPlanes[0][i + 1] = g;
+                        _bitmapPlanes[0][i + 2] = b;
+                        _bitmapPlanes[0][i + 3] = a;
+                    }
                 }
             }
             CFRelease(bitmapData);
@@ -960,7 +977,10 @@ NSBitmapImageRepPropertyKey NSImageCurrentFrame = @"NSImageCurrentFrame";
 }
 
 - (CGBitmapInfo) CGBitmapInfo {
-    CGBitmapInfo result = kCGBitmapByteOrderDefault;
+    // The bitmap planes store samples in component order (RGBA, ARGB with NSAlphaFirstBitmapFormat), i.e. big-endian
+    // for 8-bit samples; createBitmapIfNeeded copies CGImage data in that layout. Say so explicitly: Onyx2D treats
+    // kCGBitmapByteOrderDefault as host (little) endian and would read and encode the channels reversed.
+    CGBitmapInfo result = (_bitsPerSample == 8) ? kCGBitmapByteOrder32Big : kCGBitmapByteOrderDefault;
 
     if (![self hasAlpha])
         result |= kCGImageAlphaNone;
