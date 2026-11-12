@@ -282,14 +282,16 @@ static NSMutableDictionary *sharedByName = nil;
 
 - (void) addTypeface: (NSFontTypeface *) typeface {
     if (typeface != nil) {
-        _typefacesLoaded = YES;
+        // Typefaces added by the caller go after the ones the font system
+        // lists, as when those were looked up when the family was created.
+        [self _ensureTypefacesLoaded];
         [_typefaces addObject: typeface];
     }
 }
 
 - (void) addTypefaces: (NSArray *) typefaces {
     if (typefaces != nil) {
-        _typefacesLoaded = YES;
+        [self _ensureTypefacesLoaded];
         [_typefaces addObjectsFromArray: typefaces];
     }
 }
