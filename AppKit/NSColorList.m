@@ -292,20 +292,22 @@ static NSMutableDictionary *_namedColorLists = nil;
     _path = [path copy];
 
     if (_path != nil) {
-        @try {
-            NSData *data = [NSData dataWithContentsOfFile: _path];
-            if (data != nil) {
-                NSKeyedUnarchiver *unarchiver = [[[NSKeyedUnarchiver alloc] initForReadingWithData: data] autorelease];
+        NSData *data = [NSData dataWithContentsOfFile: _path];
+        if (data != nil) {
+            // A file that is not a keyed archive of keys and colors leaves the
+            // list empty.
+            @try {
+                NSKeyedUnarchiver *unarchiver =
+                        [[[NSKeyedUnarchiver alloc] initForReadingWithData: data] autorelease];
                 NSArray *keys = [unarchiver decodeObjectForKey: @"NSKeys"];
                 NSArray *colors = [unarchiver decodeObjectForKey: @"NSColors"];
                 [unarchiver finishDecoding];
-                if (keys && colors) {
+                if (keys && colors && [keys count] == [colors count]) {
                     [_keys addObjectsFromArray: keys];
                     [_colors addObjectsFromArray: colors];
                 }
+            } @catch (NSException *ex) {
             }
-        } @catch (NSException *ex) {
-            NSLog(@"NSColorList initWithName:fromFile: failed to load %@: %@", _path, ex);
         }
     }
 
