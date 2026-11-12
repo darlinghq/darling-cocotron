@@ -30,9 +30,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSView, NSEvent, NSColor, NSColorSpace, NSCursor, NSImage, NSScreen,
         NSText, NSTextView, CGWindow, NSPasteboard, NSSheetContext,
+        NSTitlebarAccessoryViewController,
         NSUndoManager, NSButton, NSButtonCell, NSDrawer, NSDockTile, NSToolbar,
         NSWindowAnimationContext, NSTrackingArea, NSThemeFrame,
-        NSWindowController, NSMenuItem, CARenderer;
+        NSWindowController, NSMenuItem, CARenderer, NSViewController;
 @protocol NSWindowDelegate;
 
 // Old NSWindowStyleMask constants
@@ -216,6 +217,7 @@ APPKIT_EXPORT const NSNotificationName NSWindowDidExposeNotification;
     NSMenu *_menu;
     NSView *_menuView;
     NSView *_contentView;
+    NSViewController *_contentViewController;
     NSColor *_backgroundColor;
 
     id<NSWindowDelegate> _delegate;
@@ -309,6 +311,8 @@ APPKIT_EXPORT const NSNotificationName NSWindowDidExposeNotification;
     BOOL _titlebarAppearsTransparent;
     BOOL _isMovable;
     NSButton *_standardWindowButtons[3];
+
+    NSMutableArray *_titlebarAccessoryViewControllers;
 }
 
 @property(class) BOOL allowsAutomaticWindowTabbing;
@@ -351,6 +355,11 @@ APPKIT_EXPORT const NSNotificationName NSWindowDidExposeNotification;
 - (void) setAllowsConcurrentViewDrawing: (BOOL) allows;
 
 - (NSView *) contentView;
+// Setting it makes the controller's view the content view.
+@property (retain) NSViewController *contentViewController;
+// A titled, closable, miniaturizable, resizable window sized to the
+// controller's preferredContentSize, or else its view, and titled after it.
++ (instancetype) windowWithContentViewController: (NSViewController *) contentViewController;
 - (id<NSWindowDelegate>) delegate;
 
 - (NSString *) title;
@@ -723,6 +732,13 @@ APPKIT_EXPORT const NSNotificationName NSWindowDidExposeNotification;
 
 - (CGSubWindow *) _createSubWindowWithFrame: (CGRect) frame;
 
+@end
+
+@interface NSWindow (NSWindowTitlebarAccessories)
+// Stored only: accessories aren't shown.
+@property(readonly, copy) NSArray *titlebarAccessoryViewControllers;
+- (void) addTitlebarAccessoryViewController:
+        (NSTitlebarAccessoryViewController *) controller;
 @end
 
 @interface NSWindow (Darling)

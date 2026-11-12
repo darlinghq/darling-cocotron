@@ -120,6 +120,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         return NSScrollerStyleOverlay;
     return NSScrollerStyleLegacy;
 }
+
+// Cocotron draws one scroller size for every control size and style.
++ (CGFloat) scrollerWidthForControlSize: (NSControlSize) controlSize
+                          scrollerStyle: (NSScrollerStyle) scrollerStyle
+{
+    return [self scrollerWidth];
+}
 /* OS X has a global default "AppleScrollBarVariant" with the values: Single,
  DoubleMin, DoubleMax, and DoubleBoth This controls the default position of the
  scroller. This should be controlling the positioning.

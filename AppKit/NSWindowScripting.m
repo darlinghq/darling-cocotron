@@ -16,4 +16,8 @@
     return result;
 }
 
+- (BOOL) hasCloseBox {
+    return ([self styleMask] & NSWindowStyleMaskClosable) != 0;
+}
+
 @end

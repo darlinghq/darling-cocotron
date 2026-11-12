@@ -29,6 +29,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSWindow.h>
 #import <Foundation/NSKeyedArchiver.h>
 #import <Foundation/NSRaise.h>
+#import <Foundation/NSUserDefaults.h>
 
 NSString *const NSSplitViewDidResizeSubviewsNotification =
         @"NSSplitViewDidResizeSubviewsNotification";
@@ -57,6 +58,11 @@ NSString *const NSSplitViewWillResizeSubviewsNotification =
     }
 
     return self;
+}
+
+- (void) dealloc {
+    [_autosaveName release];
+    [super dealloc];
 }
 
 - (id) delegate {
@@ -142,6 +148,78 @@ NSString *const NSSplitViewWillResizeSubviewsNotification =
     return _dividerStyle;
 }
 
+// The autosaved layout is this implementation's own format; Apple does not
+// document its format and applications only name the layout. A defaults array
+// holds, for every divider, the leading subview's length as a fraction of the
+// space not taken by dividers.
+static NSString *autosaveKey(NSString *name) {
+    return [@"NSSplitView Divider Fractions " stringByAppendingString: name];
+}
+
+- (CGFloat) _lengthOfSubview: (NSView *) view {
+    if ([self isSubviewCollapsed: view])
+        return 0;
+    return [self isVertical] ? NSWidth([view frame]) : NSHeight([view frame]);
+}
+
+- (CGFloat) _spaceForSubviews {
+    NSSize size = [self bounds].size;
+    CGFloat length = [self isVertical] ? size.width : size.height;
+
+    return length - [self dividerThickness] * ([_subviews count] - 1);
+}
+
+- (NSString *) autosaveName {
+    return _autosaveName;
+}
+
+- (void) setAutosaveName: (NSString *) name {
+    if ([name length] == 0)
+        name = nil;
+    name = [name copy];
+    [_autosaveName release];
+    _autosaveName = name;
+    [self _restoreDividerPositions];
+}
+
+- (void) _restoreDividerPositions {
+    NSUInteger i, count = [_subviews count];
+    CGFloat space = [self _spaceForSubviews], position = 0;
+    NSArray *saved;
+
+    if (_autosaveName == nil || count < 2 || space <= 0)
+        return;
+    // Each setPosition: below saves the layout again, replacing this entry.
+    saved = [[[[NSUserDefaults standardUserDefaults]
+            arrayForKey: autosaveKey(_autosaveName)] retain] autorelease];
+    if ([saved count] != count - 1)
+        return;
+    for (id fraction in saved)
+        if (![fraction isKindOfClass: [NSNumber class]])
+            return;
+
+    for (i = 0; i + 1 < count; i++) {
+        position += [[saved objectAtIndex: i] doubleValue] * space;
+        [self setPosition: position ofDividerAtIndex: i];
+        position += [self dividerThickness];
+    }
+}
+
+- (void) _autosaveSubviewLayoutIfNecessary {
+    NSUInteger i, count = [_subviews count];
+    CGFloat space = [self _spaceForSubviews];
+    NSMutableArray *saved;
+
+    if (_autosaveName == nil || count < 2 || space <= 0)
+        return;
+    saved = [NSMutableArray array];
+    for (i = 0; i + 1 < count; i++)
+        [saved addObject: [NSNumber numberWithDouble:
+                        [self _lengthOfSubview: [_subviews objectAtIndex: i]] / space]];
+    [[NSUserDefaults standardUserDefaults] setObject: saved
+                                              forKey: autosaveKey(_autosaveName)];
+}
+
 /** adjust all the non-collapsed subviews so that they are equally spaced
  * horizontally within the splitview */
 - (void) _adjustSubviewWidths {
@@ -151,6 +229,8 @@ NSString *const NSSplitViewWillResizeSubviewsNotification =
     int i, count = [_subviews count];
 
     CGFloat totalWidthBefore = 0.;
+    NSUInteger visibleCount = 0;
+    BOOL hasEmptySubview = NO;
 
     // The available width to the subviews
     CGFloat totalWidthAfter =
@@ -159,26 +239,40 @@ NSString *const NSSplitViewWillResizeSubviewsNotification =
     for (i = 0; i < count; i++) {
         NSView *subview = [_subviews objectAtIndex: i];
         if ([self isSubviewCollapsed: subview] == NO) {
+            ++visibleCount;
+            if (NSWidth([subview frame]) <= 0)
+                hasEmptySubview = YES;
             totalWidthBefore += NSWidth([subview frame]);
         }
     }
 
-    CGFloat delta = totalWidthAfter / totalWidthBefore;
+    if (visibleCount == 0)
+        return;
+    totalWidthAfter = MAX(0, NSWidth([self bounds]) -
+                            [self dividerThickness] * (visibleCount - 1));
+    BOOL distributeEqually = hasEmptySubview || totalWidthBefore <= 0;
+    CGFloat delta = distributeEqually ? 0 : totalWidthAfter / totalWidthBefore;
+    NSUInteger remaining = visibleCount;
 
     NSRect frame = [self bounds];
     for (i = 0; i < count; i++) {
         NSView *subview = [_subviews objectAtIndex: i];
         if ([self isSubviewCollapsed: subview] == NO) {
-            frame.size.width = NSWidth([subview frame]) * delta;
-            frame.size.width = floor(frame.size.width);
+            --remaining;
+            CGFloat available = MAX(0, NSMaxX([self bounds]) - frame.origin.x);
+            CGFloat proposed = distributeEqually
+                ? floor(totalWidthAfter / visibleCount)
+                : floor(NSWidth([subview frame]) * delta);
+            frame.size.width = remaining == 0 ? available
+                : MIN(available, MAX(0, proposed));
             frame.size.height = height;
 
             NSSize oldSize = [subview frame].size;
 
             [subview setFrame: frame];
 
-            frame.origin.x += NSWidth(frame);
-            frame.origin.x += [self dividerThickness];
+            frame.origin.x = MIN(NSMaxX([self bounds]),
+                NSMaxX(frame) + [self dividerThickness]);
         }
     }
 }
@@ -193,6 +287,8 @@ NSString *const NSSplitViewWillResizeSubviewsNotification =
     // heights and multiply all the heights to the new delta to get them to fit
     // (or something like that...) Apple says They resize proportionally
     CGFloat totalHeightBefore = 0.;
+    NSUInteger visibleCount = 0;
+    BOOL hasEmptySubview = NO;
     CGFloat totalHeightAfter =
             [self bounds].size.height - [self dividerThickness] * (count - 1);
 
@@ -200,26 +296,40 @@ NSString *const NSSplitViewWillResizeSubviewsNotification =
         NSView *subview = [_subviews objectAtIndex: i];
         if ([self isSubviewCollapsed: subview] == NO) {
             NSRect subviewFrame = [subview frame];
+            ++visibleCount;
+            if (NSHeight(subviewFrame) <= 0)
+                hasEmptySubview = YES;
             totalHeightBefore += NSHeight(subviewFrame);
         }
     }
 
-    CGFloat delta = totalHeightAfter / totalHeightBefore;
+    if (visibleCount == 0)
+        return;
+    totalHeightAfter = MAX(0, NSHeight([self bounds]) -
+                             [self dividerThickness] * (visibleCount - 1));
+    BOOL distributeEqually = hasEmptySubview || totalHeightBefore <= 0;
+    CGFloat delta = distributeEqually ? 0 : totalHeightAfter / totalHeightBefore;
+    NSUInteger remaining = visibleCount;
 
     NSRect frame = [self bounds];
     for (i = 0; i < count; i++) {
         NSView *subview = [_subviews objectAtIndex: i];
         if ([self isSubviewCollapsed: subview] == NO) {
-            frame.size.height = NSHeight([subview frame]) * delta;
-            frame.size.height = floor(frame.size.height);
+            --remaining;
+            CGFloat available = MAX(0, NSMaxY([self bounds]) - frame.origin.y);
+            CGFloat proposed = distributeEqually
+                ? floor(totalHeightAfter / visibleCount)
+                : floor(NSHeight([subview frame]) * delta);
+            frame.size.height = remaining == 0 ? available
+                : MIN(available, MAX(0, proposed));
             frame.size.width = width;
 
             NSSize oldSize = [subview frame].size;
 
             [subview setFrame: frame];
 
-            frame.origin.y += NSHeight(frame);
-            frame.origin.y += [self dividerThickness];
+            frame.origin.y = MIN(NSMaxY([self bounds]),
+                NSMaxY(frame) + [self dividerThickness]);
         }
     }
 }
@@ -235,7 +345,7 @@ NSString *const NSSplitViewWillResizeSubviewsNotification =
  */
 - (void) adjustSubviews {
 
-    if ([_subviews count] < 2) {
+    if ([_subviews count] == 0) {
         return;
     }
 
@@ -650,10 +760,7 @@ static CGFloat constrainTo(CGFloat value, CGFloat min, CGFloat max) {
     }
 
     [self setNeedsDisplay: YES];
-}
-
-- (void) _autosaveSubviewLayoutIfNecessary {
-    NSUnimplementedMethod();
+    [self _autosaveSubviewLayoutIfNecessary];
 }
 
 - (BOOL) isOpaque {
