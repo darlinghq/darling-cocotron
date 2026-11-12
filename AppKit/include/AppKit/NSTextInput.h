@@ -23,6 +23,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 APPKIT_EXPORT NSString *const NSTextInputContextKeyboardSelectionDidChangeNotification;
 
+typedef NSString *NSTextInputSourceIdentifier;
+
 @class NSEvent;
 @protocol NSTextInputClient;
 
@@ -32,6 +34,9 @@ APPKIT_EXPORT NSString *const NSTextInputContextKeyboardSelectionDidChangeNotifi
     id _client;
 }
 
+// The context of the key window's first responder, or nil.
++ (NSTextInputContext *) currentInputContext;
++ (NSString *) localizedNameForInputSource: (NSTextInputSourceIdentifier) inputSourceIdentifier;
 - (instancetype) initWithClient: (id<NSTextInputClient>) client;
 @property(readonly) id<NSTextInputClient> client;
 
@@ -40,6 +45,9 @@ APPKIT_EXPORT NSString *const NSTextInputContextKeyboardSelectionDidChangeNotifi
 - (void) deactivate;
 - (void) discardMarkedText;
 - (void) invalidateCharacterCoordinates;
+- (NSTextInputSourceIdentifier) selectedKeyboardInputSource;
+- (void) setSelectedKeyboardInputSource: (NSTextInputSourceIdentifier) inputSourceIdentifier;
+- (NSArray *) keyboardInputSources;
 
 @end
 
