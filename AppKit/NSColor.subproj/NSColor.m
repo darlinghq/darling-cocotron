@@ -846,31 +846,10 @@ NSNotificationName const NSSystemColorsDidChangeNotification = @"NSSystemColorsD
     return [self colorNamed: name bundle: nil];
 }
 
-// Looks a color up by name: first in the bundle's asset catalog (the main bundle if nil), then among
-// NSColor's own colors, i.e. names of an argument-less NSColor class method such as +textColor,
-// +labelColor or +redColor. The method is called rather than looking the name up in the display's color
-// table, which only knows system colors and logs "missing color" and returns red for anything else (for
-// example redColor or clearColor). Like macOS, an unknown name returns nil.
+// Looks a color up by name in the bundle's asset catalog (the main bundle if nil). A name that is
+// not in the catalog gives nil, including the names of NSColor's own class methods such as labelColor.
 + (NSColor *) colorNamed: (NSColorName) name bundle: (NSBundle *) bundle {
-    NSColor *catalogColor = [self _colorNamedInAssetCatalog: name bundle: bundle];
-    if (catalogColor != nil)
-        return catalogColor;
-
-    if (name == nil || ![name hasSuffix: @"Color"] || [name hasPrefix: @"_"] ||
-        [name rangeOfString: @":"].location != NSNotFound)
-        return nil;
-
-    SEL selector = NSSelectorFromString(name);
-    if (![NSColor respondsToSelector: selector])
-        return nil;
-
-    NSMethodSignature *signature = [NSColor methodSignatureForSelector: selector];
-    if (signature == nil || [signature numberOfArguments] != 2 ||
-        [signature methodReturnType][0] != '@')
-        return nil;
-
-    id color = [NSColor performSelector: selector];
-    return [color isKindOfClass: [NSColor class]] ? color : nil;
+    return [self _colorNamedInAssetCatalog: name bundle: bundle];
 }
 
 + (NSColor *) colorWithGenericGamma22White: (CGFloat) white
