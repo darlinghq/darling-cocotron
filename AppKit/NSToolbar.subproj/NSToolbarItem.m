@@ -237,6 +237,9 @@ extern NSSize _NSToolbarIconSizeSmall;
 - (void) dealloc {
     [_itemIdentifier release];
     _toolbar = nil;
+    [_enclosingView setToolbarItem: nil];
+    [_enclosingView release];
+    [_toolTip release];
     [_image release];
     [_label release];
     [_paletteLabel release];
@@ -245,17 +248,32 @@ extern NSSize _NSToolbarIconSizeSmall;
     [super dealloc];
 }
 
+// NSView does not adopt NSCopying, so a view is duplicated through keyed
+// archiving, which is what its coding support is for.
+static NSView *copyToolbarItemView(NSView *view) {
+    if (view == nil)
+        return nil;
+    if ([view conformsToProtocol: @protocol(NSCopying)])
+        return [view copy];
+    NSData *data = [NSKeyedArchiver archivedDataWithRootObject: view];
+    return [[NSKeyedUnarchiver unarchiveObjectWithData: data] retain];
+}
+
 - copyWithZone: (NSZone *) zone {
-    // FIXME: copying views, ugh
     NSToolbarItem *copy = NSCopyObject(self, 0, zone);
 
     copy->_itemIdentifier = [_itemIdentifier copy];
     copy->_toolbar = nil;
+    copy->_toolTip = [_toolTip copy];
     copy->_image = [_image copy];
     copy->_label = [_label copy];
     copy->_paletteLabel = [_paletteLabel copy];
     copy->_menuFormRepresentation = [_menuFormRepresentation copy];
-    copy->_view = [_view copy];
+    copy->_view = copyToolbarItemView(_view);
+    copy->_enclosingView = [[NSToolbarItemView alloc]
+            initWithFrame: [_enclosingView frame]];
+    [copy->_enclosingView setToolbarItem: copy];
+    [copy->_enclosingView setSubview: copy->_view];
 
     return copy;
 }

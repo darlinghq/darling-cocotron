@@ -30,6 +30,7 @@ typedef NSString *NSVoiceAttributeKey;
 
 APPKIT_EXPORT NSVoiceAttributeKey const NSVoiceName;
 APPKIT_EXPORT NSVoiceAttributeKey const NSVoiceGender;
+APPKIT_EXPORT NSVoiceAttributeKey const NSVoiceDemoText;
 APPKIT_EXPORT NSVoiceAttributeKey const NSVoiceLocaleIdentifier;
 
 typedef NSString *NSSpeechPropertyKey;

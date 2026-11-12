@@ -61,6 +61,22 @@ APPKIT_EXPORT NSInteger NSRunCriticalAlertPanel(NSString *title,
                                                 NSString *defaultButton,
                                                 NSString *alternateButton,
                                                 NSString *otherButton, ...);
+// Return an alert panel without running it; release it with NSReleaseAlertPanel().
+APPKIT_EXPORT id NSGetAlertPanel(NSString *title, NSString *msgFormat,
+                                 NSString *defaultButton,
+                                 NSString *alternateButton,
+                                 NSString *otherButton, ...);
+APPKIT_EXPORT id NSGetInformationalAlertPanel(NSString *title,
+                                              NSString *msgFormat,
+                                              NSString *defaultButton,
+                                              NSString *alternateButton,
+                                              NSString *otherButton, ...);
+APPKIT_EXPORT id NSGetCriticalAlertPanel(NSString *title, NSString *msgFormat,
+                                         NSString *defaultButton,
+                                         NSString *alternateButton,
+                                         NSString *otherButton, ...);
+APPKIT_EXPORT void NSReleaseAlertPanel(id panel);
+APPKIT_EXPORT void NSShowSystemInfoPanel(NSDictionary *options);
 APPKIT_EXPORT void NSBeginAlertSheet(NSString *title, NSString *defaultButton,
                                      NSString *alternateButton,
                                      NSString *otherButton,

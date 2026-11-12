@@ -29,6 +29,16 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return [NSImageCell class];
 }
 
+- (instancetype) initWithImage: (NSImage *) image {
+    if ((self = [super initWithFrame: NSMakeRect(0, 0, 0, 0)]) != nil)
+        [self setImage: image];
+    return self;
+}
+
++ (NSImageView *) imageViewWithImage: (NSImage *) image {
+    return [[[self alloc] initWithImage: image] autorelease];
+}
+
 - target {
     return _target;
 }

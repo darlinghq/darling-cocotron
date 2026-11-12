@@ -22,16 +22,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @interface NSLevelIndicator : NSControl
 
-- (double) minValue;
-- (double) maxValue;
+@property double minValue;
+@property double maxValue;
 - (double) warningValue;
 - (double) criticalValue;
 - (int) numberOfTickMarks;
 - (int) numberOfMajorTickMarks;
 - (NSTickMarkPosition) tickMarkPosition;
 
-- (void) setMinValue: (double) value;
-- (void) setMaxValue: (double) value;
 - (void) setWarningValue: (double) value;
 - (void) setCriticalValue: (double) value;
 - (void) setNumberOfTickMarks: (int) count;

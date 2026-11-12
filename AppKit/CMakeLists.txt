@@ -189,6 +189,8 @@ set(AppKit_sources
 	NSBrowser.m
 	NSToolTipWindow.m
 	NSTitlebarAccessoryViewController.m
+	NSScrollEdgeEffectStyle.m
+	NSImageHintSymbolScale.m
 	NSPasteboard.m
 	NSSearchFieldCell.m
 	NSOutlineView.m
@@ -359,6 +361,7 @@ set(AppKit_sources
 	NSToolbar.subproj/NSToolbarView.m
 	NSToolbar.subproj/NSToolbar.m
 	NSToolbar.subproj/NSToolbarItem.m
+	NSToolbar.subproj/NSSearchToolbarItem.m
 	NSToolbar.subproj/NSToolbarCustomizationPalette.m
 	NSToolbar.subproj/NSToolbarItemView.m
 

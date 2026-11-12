@@ -280,7 +280,7 @@ NSNotificationName NSControlTintDidChangeNotification = @"NSControlTintDidChange
         [self setFormatter: [keyed decodeObjectForKey: @"NSFormatter"]];
 
         if (_font == nil)
-            _font = [[NSFont userFontOfSize: 13 - _controlSize * 2] retain];
+            _font = [[NSFont userFontOfSize: [NSFont systemFontSizeForControlSize: _controlSize]] retain];
     } else {
         NSInteger version = [coder versionForClassName: @"NSCell"];
         if (version < 54)
@@ -335,7 +335,7 @@ NSNotificationName NSControlTintDidChangeNotification = @"NSControlTintDidChange
         [self setRepresentedObject: o3];
 
         // Is this correct?
-        _font = [[NSFont userFontOfSize: 13 - _controlSize * 2] retain];
+        _font = [[NSFont userFontOfSize: [NSFont systemFontSizeForControlSize: _controlSize]] retain];
     }
     return self;
 }
@@ -983,7 +983,7 @@ NSNotificationName NSControlTintDidChangeNotification = @"NSControlTintDidChange
 - (void) setControlSize: (NSControlSize) size {
     _controlSize = size;
     [_font release];
-    _font = [[NSFont userFontOfSize: 13 - _controlSize * 2] retain];
+    _font = [[NSFont userFontOfSize: [NSFont systemFontSizeForControlSize: _controlSize]] retain];
     if ([[self controlView] respondsToSelector: @selector(updateCell:)]) {
         [[self controlView] performSelector: @selector(updateCell:)
                                  withObject: self];

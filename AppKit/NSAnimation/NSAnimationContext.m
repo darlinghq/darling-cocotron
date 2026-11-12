@@ -18,7 +18,7 @@
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  SOFTWARE. */
 
-#import "NSAnimationContext.h"
+#import <AppKit/NSAnimationContext.h>
 #import <Foundation/NSThread.h>
 
 // The documented default duration of an animation group.

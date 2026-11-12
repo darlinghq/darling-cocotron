@@ -1,15 +1,24 @@
 #import <AppKit/NSHaptics.h>
 
-@implementation NSHapticFeedbackManager
+@interface NSNullHapticFeedbackPerformer : NSObject <NSHapticFeedbackPerformer>
+@end
 
-- (NSMethodSignature *)methodSignatureForSelector:(SEL)aSelector
+@implementation NSNullHapticFeedbackPerformer
+
+- (void) performFeedbackPattern: (NSHapticFeedbackPattern) pattern
+                performanceTime: (NSHapticFeedbackPerformanceTime) performanceTime
 {
-    return [NSMethodSignature signatureWithObjCTypes: "v@:"];
 }
 
-- (void)forwardInvocation:(NSInvocation *)anInvocation
-{
-    NSLog(@"Stub called: %@ in %@", NSStringFromSelector([anInvocation selector]), [self class]);
+@end
+
+@implementation NSHapticFeedbackManager
+
++ (id<NSHapticFeedbackPerformer>) defaultPerformer {
+    static NSNullHapticFeedbackPerformer *performer = nil;
+    if (performer == nil)
+        performer = [[NSNullHapticFeedbackPerformer alloc] init];
+    return performer;
 }
 
 @end

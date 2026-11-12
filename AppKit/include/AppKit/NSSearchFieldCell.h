@@ -37,6 +37,7 @@ enum {
     NSButtonCell *_searchButtonCell;
     NSButtonCell *_cancelButtonCell;
     NSMenu *_searchMenuTemplate;
+    BOOL _resignsFirstResponderWithCancel;
 }
 
 - (NSArray *) recentSearches;

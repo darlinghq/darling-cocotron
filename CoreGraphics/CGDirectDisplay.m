@@ -32,6 +32,7 @@ unsigned int kCGDisplayPixelHeight = kCGDisplayHeight;
 unsigned int kCGDisplayPixelWidth = kCGDisplayWidth;
 
 const CFStringRef kCGDisplayProductNameKey = CFSTR("kCGDisplayProductNameKey");
+const CFStringRef kCGDisplayShowDuplicateLowResolutionModes = CFSTR("kCGDisplayShowDuplicateLowResolutionModes");
 
 CGError CGCaptureAllDisplays(void) {
     return kCGErrorSuccess;
@@ -287,6 +288,14 @@ boolean_t CGDisplayIsInMirrorSet(CGDirectDisplayID display) {
 
 Boolean CGDisplayIsMain(CGDirectDisplayID display) {
     return display != kCGNullDirectDisplay && display == CGMainDisplayID();
+}
+
+uint32_t CGDisplayUnitNumber(CGDirectDisplayID display) {
+    return (display > 0) ? (display - 1) : 0;
+}
+
+boolean_t CGDisplayUsesOpenGLAcceleration(CGDirectDisplayID display) {
+    return TRUE;
 }
 
 CGDirectDisplayID CGDisplayMirrorsDisplay(CGDirectDisplayID display) {
@@ -624,6 +633,27 @@ CFDictionaryRef CGDisplayCurrentMode(CGDirectDisplayID display) {
 
 size_t CGDisplayModeGetPixelWidth(CGDisplayModeRef mode) {
     return 0;
+}
+
+size_t CGDisplayModeGetPixelHeight(CGDisplayModeRef mode) {
+    NSDictionary *dict = (NSDictionary *) mode;
+    NSNumber *pixelHeight = [dict valueForKey: @"PixelHeight"];
+    if (pixelHeight)
+        return [pixelHeight unsignedIntValue];
+    return CGDisplayModeGetHeight(mode);
+}
+
+uint32_t CGDisplayModeGetIOFlags(CGDisplayModeRef mode) {
+    NSDictionary *dict = (NSDictionary *) mode;
+    return [[dict valueForKey: @"IOFlags"] unsignedIntValue];
+}
+
+boolean_t CGDisplayModeIsUsableForDesktopGUI(CGDisplayModeRef mode) {
+    NSDictionary *dict = (NSDictionary *) mode;
+    NSNumber *usable = [dict valueForKey: @"UsableForDesktopGUI"];
+    if (usable)
+        return [usable boolValue];
+    return TRUE;
 }
 
 // BuiltinDisplay (org.darlinghq.platform): whether the main display is reported as the built-in

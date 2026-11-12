@@ -1593,9 +1593,14 @@ static NSUInteger scaledRepCacheBytes(NSArray *cache) {
      respectFlipped: (BOOL) respectFlipped
                  hints: (NSDictionary<NSString *, id> *) hints
 {
-    printf("STUB %s\n", __PRETTY_FUNCTION__);
-
-    [self drawInRect: rect
+    NSImage *image = self;
+    NSNumber *scale = [hints objectForKey: NSImageHintSymbolScale];
+    if (_symbolConfiguration != nil && [scale respondsToSelector: @selector(integerValue)]) {
+        NSImageSymbolConfiguration *configuration = [NSImageSymbolConfiguration
+                configurationWithScale: (NSImageSymbolScale) [scale integerValue]];
+        image = [self imageWithSymbolConfiguration: configuration];
+    }
+    [image drawInRect: rect
             fromRect: source
            operation: operation
             fraction: fraction];

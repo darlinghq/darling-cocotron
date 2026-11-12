@@ -209,6 +209,7 @@ typedef struct __VFlags {
     _translatesAutoresizingMaskIntoConstraints = YES;
     _alphaValue = 1.0;
     _allowedTouchTypes = NSTouchTypeMaskDirect;
+    [self _setDefaultLayoutPriorities];
 
     if ([coder allowsKeyedCoding]) {
         NSKeyedUnarchiver *keyed = (NSKeyedUnarchiver *) coder;
@@ -444,6 +445,7 @@ typedef struct __VFlags {
     _translatesAutoresizingMaskIntoConstraints = YES;
     _alphaValue = 1.0;
     _allowedTouchTypes = NSTouchTypeMaskDirect;
+    [self _setDefaultLayoutPriorities];
 
     return self;
 }
@@ -771,6 +773,12 @@ static inline void buildTransformsIfNeeded(NSView *self) {
 }
 
 - (BOOL) isOpaque {
+    return NO;
+}
+
+- (BOOL) isDrawingFindIndicator {
+    // A find indicator is active only while AppKit paints its transient
+    // search highlight. Cocotron has no such painting pass yet.
     return NO;
 }
 
@@ -1679,6 +1687,12 @@ static char inputContextKey;
 
 - (void) viewDidMoveToSuperview {
     // Intentionally empty.
+}
+
+- (void) viewDidChangeBackingProperties {
+}
+
+- (void) viewDidChangeEffectiveAppearance {
 }
 
 - (void) viewWillMoveToWindow: (NSWindow *) window {
@@ -3159,6 +3173,13 @@ static CGFloat backingScaleFactor(NSView *view) {
     NSUnimplementedMethod();
 }
 
+- (void) _setDefaultLayoutPriorities {
+    _horizontalContentHuggingPriority = NSLayoutPriorityDefaultLow;
+    _verticalContentHuggingPriority = NSLayoutPriorityDefaultLow;
+    _horizontalContentCompressionResistancePriority = NSLayoutPriorityDefaultHigh;
+    _verticalContentCompressionResistancePriority = NSLayoutPriorityDefaultHigh;
+}
+
 - (NSLayoutPriority) contentHuggingPriorityForOrientation: (NSLayoutConstraintOrientation) orientation {
     if (orientation == NSLayoutConstraintOrientationHorizontal) {
         return _horizontalContentHuggingPriority;
@@ -3196,6 +3217,14 @@ static CGFloat backingScaleFactor(NSView *view) {
 }
 
 - (void) invalidateIntrinsicContentSize {
+}
+
+- (void) updateConstraints {
+    // An override point: there is no constraint solver to drive.
+}
+
+- (void) layout {
+    // An override point: there is no constraint solver to drive.
 }
 
 static char installedViewLayoutGuidesKey;

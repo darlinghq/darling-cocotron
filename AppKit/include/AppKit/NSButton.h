@@ -24,6 +24,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     NSColor *_contentTintColor;
 }
 
++ (instancetype) buttonWithTitle: (NSString *) title image: (NSImage *) image target: (id) target action: (SEL) action;
++ (instancetype) checkboxWithTitle: (NSString *) title target: (id) target action: (SEL) action;
++ (instancetype) radioButtonWithTitle: (NSString *) title target: (id) target action: (SEL) action;
+
 - (BOOL) isTransparent;
 - (NSString *) keyEquivalent;
 - (NSEventModifierFlags) keyEquivalentModifierMask;

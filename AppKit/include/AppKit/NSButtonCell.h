@@ -59,6 +59,22 @@ typedef enum {
     NSRoundRectBezelStyle = 12,
     NSRecessedBezelStyle = 13,
     NSRoundedDisclosureBezelStyle = 14,
+    NSInlineBezelStyle = 15,
+
+    // Names used by the macOS 10.14+ SDK.
+    NSBezelStyleRounded = NSRoundedBezelStyle,
+    NSBezelStyleRegularSquare = NSRegularSquareBezelStyle,
+    NSBezelStyleDisclosure = NSDisclosureBezelStyle,
+    NSBezelStyleShadowlessSquare = NSShadowlessSquareBezelStyle,
+    NSBezelStyleCircular = NSCircularBezelStyle,
+    NSBezelStyleTexturedSquare = NSTexturedSquareBezelStyle,
+    NSBezelStyleHelpButton = NSHelpButtonBezelStyle,
+    NSBezelStyleSmallSquare = NSSmallSquareBezelStyle,
+    NSBezelStyleTexturedRounded = NSTexturedRoundedBezelStyle,
+    NSBezelStyleRoundRect = NSRoundRectBezelStyle,
+    NSBezelStyleRecessed = NSRecessedBezelStyle,
+    NSBezelStyleRoundedDisclosure = NSRoundedDisclosureBezelStyle,
+    NSBezelStyleInline = NSInlineBezelStyle,
 } NSBezelStyle;
 
 typedef enum {
