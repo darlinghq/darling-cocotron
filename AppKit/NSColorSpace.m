@@ -28,10 +28,21 @@ NSString *const _NSColorCoreUICatalogNamePrefix =
 
 @implementation NSColorSpace
 
++ (NSColorSpace *) displayP3ColorSpace {
+    CGColorSpaceRef space = CGColorSpaceCreateWithName(kCGColorSpaceDisplayP3);
+    if (space == NULL)
+        return nil;
+    NSColorSpace *result =
+            [[[self alloc] initWithCGColorSpace: space] autorelease];
+    CGColorSpaceRelease(space);
+    return result;
+}
+
 + (NSColorSpace *) sRGBColorSpace {
     CGColorSpaceRef srgb = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
     NSColorSpace *colorSpace =
             [[[self alloc] initWithCGColorSpace: srgb] autorelease];
+    CGColorSpaceRelease(srgb);
     return colorSpace;
 }
 
