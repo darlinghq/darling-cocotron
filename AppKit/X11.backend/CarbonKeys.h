@@ -10,15 +10,15 @@
 // but those are _after_ the keyboard layout is applied, so definitely
 // not something we could easily map to Carbon constants.
 
-// Missing:
-// kVK_ANSI_KeypadEquals
-// kVK_Function
-// kVK_F16
-// kVK_F17
-// kVK_F18
-// kVK_F19
-// kVK_F20
-// kVK_Help
+// X11 keycodes here are the evdev ones (kernel key code + 8), which is what
+// Xorg and Xwayland hand out for PC keyboards. A key is mapped to the
+// kVK_* code of the Mac key in the same physical position or with the same
+// function: Insert is where Apple keyboards have Help.
+//
+// Not mapped:
+// kVK_Function (no PC key)
+// Menu (X keycode 135): Events.h has no constant for it. Keys without an
+// entry report key code 0.
 
 static const uint8_t x11ToCarbon[256] = {
     [38] = kVK_ANSI_A,
@@ -114,6 +114,14 @@ static const uint8_t x11ToCarbon[256] = {
     [76] = kVK_F10,
     [96] = kVK_F12,
     [127] = kVK_F15,
+    [194] = kVK_F16,
+    [195] = kVK_F17,
+    [196] = kVK_F18,
+    [197] = kVK_F19,
+    [198] = kVK_F20,
+    [118] = kVK_Help,
+    [94] = 0x0A, // kVK_ISO_Section
+    [125] = kVK_ANSI_KeypadEquals,
     [110] = kVK_Home,
     [112] = kVK_PageUp,
     [119] = kVK_ForwardDelete,
@@ -222,6 +230,14 @@ static const uint8_t carbonToX11[256] = {
     [kVK_F10] = 76,
     [kVK_F12] = 96,
     [kVK_F15] = 127,
+    [kVK_F16] = 194,
+    [kVK_F17] = 195,
+    [kVK_F18] = 196,
+    [kVK_F19] = 197,
+    [kVK_F20] = 198,
+    [kVK_Help] = 118,
+    [0x0A] = 94, // kVK_ISO_Section
+    [kVK_ANSI_KeypadEquals] = 125,
     [kVK_Home] = 110,
     [kVK_PageUp] = 112,
     [kVK_ForwardDelete] = 119,
