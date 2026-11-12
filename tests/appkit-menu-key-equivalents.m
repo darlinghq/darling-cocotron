@@ -70,8 +70,13 @@ int main(void) {
                "the plain key does not match a Command item");
         expect(![menu performKeyEquivalent: keyEvent(@"a", NSCommandKeyMask | NSControlKeyMask)] &&
                target->hits == 0, "an extra Control modifier does not match");
-        expect(![menu performKeyEquivalent: keyEvent(@"a", NSCommandKeyMask | NSShiftKeyMask)] &&
-               target->hits == 0, "an extra Shift modifier does not match a lowercase item");
+        // test_quirk_extra_shift_does_not_block_lowercase_equivalent (MC26.4, macOS 26.7.3):
+        // Shift is not compared for a lowercase equivalent.
+        expect([menu performKeyEquivalent: keyEvent(@"a", NSCommandKeyMask | NSShiftKeyMask)] &&
+               target->hits == 1, "an extra Shift modifier still matches a lowercase item");
+        expect([menu performKeyEquivalent: keyEvent(@"A", NSCommandKeyMask | NSShiftKeyMask)] &&
+               target->hits == 2, "Command+Shift with the shifted spelling matches a lowercase item");
+        target->hits = 0;
 
         // Control as an explicit modifier.
         [item setKeyEquivalentModifierMask: NSControlKeyMask];
@@ -81,8 +86,12 @@ int main(void) {
         expect(![menu performKeyEquivalent: keyEvent(@"a", NSCommandKeyMask)] && target->hits == 0,
                "Command does not stand in for Control");
 
-        // Explicit Shift accepts both spellings of the letter.
+        // An item whose mask has Shift also matches an event without it (MC26.4).
         [item setKeyEquivalentModifierMask: NSCommandKeyMask | NSShiftKeyMask];
+        expect([menu performKeyEquivalent: keyEvent(@"a", NSCommandKeyMask)] &&
+               target->hits == 1, "Command+Shift item matches Command+a");
+        target->hits = 0;
+        // Explicit Shift accepts both spellings of the letter.
         expect([menu performKeyEquivalent: keyEvent(@"a", NSCommandKeyMask | NSShiftKeyMask)] &&
                target->hits == 1, "Command+Shift+a matches");
         expect([menu performKeyEquivalent: keyEvent(@"A", NSCommandKeyMask | NSShiftKeyMask)] &&
@@ -95,6 +104,8 @@ int main(void) {
         expect([menu performKeyEquivalent: keyEvent(@"A", NSCommandKeyMask | NSShiftKeyMask)] &&
                target->hits == 1, "an uppercase equivalent implies Shift");
         target->hits = 0;
+        expect(![menu performKeyEquivalent: keyEvent(@"A", NSCommandKeyMask)] && target->hits == 0,
+               "an uppercase equivalent needs Shift on the event");
         [item setKeyEquivalent: @"a"];
         [item setKeyEquivalentModifierMask: NSCommandKeyMask];
 
@@ -133,7 +144,8 @@ int main(void) {
         [button setKeyEquivalentModifierMask: NSCommandKeyMask];
         target->hits = 0;
         [button performKeyEquivalent: keyEvent(@"b", NSCommandKeyMask | NSShiftKeyMask)];
-        expect(target->hits == 0, "a button ignores the key with an extra Shift modifier");
+        expect(target->hits == 1, "a button matches with an extra Shift modifier (MC26.4)");
+        target->hits = 0;
         [button performKeyEquivalent: keyEvent(@"b", NSCommandKeyMask | NSControlKeyMask)];
         expect(target->hits == 0, "a button ignores the key with an extra Control modifier");
         [button performKeyEquivalent: keyEvent(@"b", NSCommandKeyMask)];

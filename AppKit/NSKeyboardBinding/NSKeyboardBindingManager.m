@@ -176,6 +176,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     // not a different key binding. Wayland includes them on ordinary keys.
     flags &= NSDeviceIndependentModifierFlagsMask;
     flags &= ~NSNumericPadKeyMask;
+    // Arrow and other function keys also carry the function flag, which no binding names.
+    flags &= ~NSFunctionKeyMask;
     flags &= ~NSAlphaShiftKeyMask;
 
     for (i = 0; i < count; ++i) {

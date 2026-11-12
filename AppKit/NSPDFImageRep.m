@@ -49,27 +49,28 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return result;
 }
 
+// QUIRK: -initWithData: never returns nil: nil data, empty data and data that is not a PDF
+// document all give a representation, which then has no pages (zero page count, empty size,
+// nothing to draw). Not documented. Evidence: black-box observation on macOS 26.7.3 (tier 2),
+// MC26.8 (probe v271-defaults.m). Test: appkit-pdf-image-rep.m
+// (test_quirk_unreadable_data_gives_a_page_less_rep)
 - initWithData: (NSData *) data {
     self = [super init];
     if (self) {
         _pdf = [data retain];
         _currentPage = 0;
-        CGDataProviderRef provider =
-                CGDataProviderCreateWithCFData((CFDataRef) _pdf);
-        @try {
-            _document = CGPDFDocumentCreateWithProvider(provider);
-        }
-        @catch (id ex) {
-            _document = NULL;
-        }
-        @finally {
-            CGDataProviderRelease(provider);
-        }
-        if (_document == NULL) {
-            [_pdf release];
-            _pdf = nil;
-            [self release];
-            return nil;
+        if ([_pdf length] > 0) {
+            CGDataProviderRef provider =
+                    CGDataProviderCreateWithCFData((CFDataRef) _pdf);
+            @try {
+                _document = CGPDFDocumentCreateWithProvider(provider);
+            }
+            @catch (id ex) {
+                _document = NULL;
+            }
+            @finally {
+                CGDataProviderRelease(provider);
+            }
         }
     }
     return self;
@@ -77,7 +78,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (void) dealloc {
     [_pdf release];
-    CGPDFDocumentRelease(_document);
+    if (_document)
+        CGPDFDocumentRelease(_document);
     [super dealloc];
 }
 
@@ -85,7 +87,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     NSPDFImageRep *result = [super copyWithZone: zone];
 
     result->_pdf = [_pdf copy];
-    result->_document = CGPDFDocumentRetain(_document);
+    result->_document = _document ? CGPDFDocumentRetain(_document) : NULL;
 
     return result;
 }
@@ -108,7 +110,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (int) pageCount {
-    return CGPDFDocumentGetNumberOfPages(_document);
+    return _document ? CGPDFDocumentGetNumberOfPages(_document) : 0;
 }
 
 - (int) currentPage {
@@ -120,7 +122,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (NSSize) size {
+    if (_document == NULL)
+        return NSZeroSize;
+
     CGPDFPageRef page = CGPDFDocumentGetPage(_document, _currentPage + 1);
+    if (page == NULL)
+        return NSZeroSize;
     NSRect mediaBox = CGPDFPageGetBoxRect(page, kCGPDFMediaBox);
 
     return mediaBox.size;
@@ -128,7 +135,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (BOOL) draw {
     CGContextRef context = [[NSGraphicsContext currentContext] graphicsPort];
-    CGPDFPageRef page = CGPDFDocumentGetPage(_document, _currentPage + 1);
+    CGPDFPageRef page = _document ? CGPDFDocumentGetPage(_document, _currentPage + 1) : NULL;
 
     if (page == nil)
         return NO;
@@ -141,7 +148,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (BOOL) drawInRect: (NSRect) rect {
     CGContextRef context = [[NSGraphicsContext currentContext] graphicsPort];
-    CGPDFPageRef page = CGPDFDocumentGetPage(_document, _currentPage + 1);
+    CGPDFPageRef page = _document ? CGPDFDocumentGetPage(_document, _currentPage + 1) : NULL;
 
     if (page == nil)
         return NO;
