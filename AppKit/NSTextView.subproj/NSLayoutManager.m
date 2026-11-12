@@ -2290,15 +2290,6 @@ static inline void _appendRectToCache(NSLayoutManager *self, NSRect rect) {
                     showGlyphs = YES;
                 }
 
-                BOOL ignore = NO;
-
-                // Make sure we keep track of how many points we've used with
-                // each one
-                partWidth += [font positionOfGlyph: glyph
-                                     precededByGlyph: previousGlyph
-                                           isNominal: &ignore]
-                                     .x;
-
                 if (showGlyphs) {
                     // Show the range of glyphs specifed by offset and length
                     NSRange subRange =
@@ -2317,6 +2308,13 @@ static inline void _appendRectToCache(NSLayoutManager *self, NSRect rect) {
                     partWidth = 0;
                 }
 
+                // A boundary draws the preceding run. Advance past its glyphs
+                // before accounting for the glyph at this boundary.
+                BOOL ignore = NO;
+                partWidth += [font positionOfGlyph: glyph
+                                     precededByGlyph: previousGlyph
+                                           isNominal: &ignore]
+                                     .x;
                 previousGlyph = glyph;
             }
         } else {
@@ -2578,14 +2576,19 @@ static inline void _appendRectToCache(NSLayoutManager *self, NSRect rect) {
 
 // dwy
 - (NSRange) _softLineRangeForCharacterAtIndex: (NSUInteger) location {
-    NSRange result = NSMakeRange(location, 0);
+    NSRange result;
     NSInteger i, j;
     CGFloat origin;
     NSGlyphFragment *fragment;
 
-    if (location >= [[_textStorage string] length])
-        location = [[_textStorage string] length] - 1;
+    NSUInteger length = [[_textStorage string] length];
+    if (length == 0)
+        return NSMakeRange(0, 0);
+    if (location >= length)
+        location = length - 1;
 
+    // The insertion point at EOF belongs to the last glyph's line.
+    result = NSMakeRange(location, 0);
     result = [self glyphRangeForCharacterRange: result
                           actualCharacterRange: NULL];
 
