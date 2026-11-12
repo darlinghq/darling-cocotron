@@ -96,8 +96,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (void) contentAreaScrolled {
-    // Terminal reports each scroll through this, with no argument, so the
-    // imp pair redraws its painters.
+    // Clients report each scroll through this, with no argument, so the imp
+    // pair redraws its painters.
     [self contentAreaDidResize];
 }
 
