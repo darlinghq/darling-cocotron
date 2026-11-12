@@ -20,9 +20,58 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSColorList.h>
 #import <AppKit/NSRaise.h>
 #import <Foundation/NSKeyedArchiver.h>
+#import <Foundation/NSArchiver.h>
+#import <AppKit/NSColor.h>
+#include <string.h>
 
 NSString *const NSColorListDidChangeNotification =
         @"NSColorListDidChangeNotification";
+
+// The .clr file layout is a typedstream: a format version int (1), an object and a count of
+// entries, then a color and its key for each entry.
+// QUIRK: macOS writes a typedstream, not a keyed archive, for a color list file. Not documented.
+// Evidence: black-box observation on macOS 26.7.3 (tier 2, MAC-EVIDENCE MC26.11,
+// mac-fixtures/typedstream/mac26-colorlist.clr). Test: tests/appkit-colorlist-typedstream.m
+static BOOL NSColorListLoadTypedstream(NSData *data, NSMutableArray *keys, NSMutableArray *colors) {
+    static const char magic[] = "\x04\x0bstreamtyped";
+    if ([data length] < sizeof(magic) - 1 || memcmp([data bytes], magic, sizeof(magic) - 1) != 0)
+        return NO;
+
+    NSUnarchiver *unarchiver = [[[NSUnarchiver alloc] initForReadingWithData: data] autorelease];
+    int version = 0, count = 0;
+    id header = nil;
+    [unarchiver decodeValueOfObjCType: "i" at: &version];
+    [unarchiver decodeValuesOfObjCTypes: "@i", &header, &count];
+    if (version != 1 || count < 0)
+        return YES;
+
+    NSMutableArray *newKeys = [NSMutableArray array];
+    NSMutableArray *newColors = [NSMutableArray array];
+    for (int i = 0; i < count; i++) {
+        id color = nil, key = nil;
+        [unarchiver decodeValuesOfObjCTypes: "@@", &color, &key];
+        if (![color isKindOfClass: [NSColor class]] || ![key isKindOfClass: [NSString class]])
+            return YES;
+        [newColors addObject: color];
+        [newKeys addObject: key];
+    }
+    [keys addObjectsFromArray: newKeys];
+    [colors addObjectsFromArray: newColors];
+    return YES;
+}
+
+// Files written by earlier versions of this implementation are keyed archives.
+static void NSColorListLoadKeyedArchive(NSData *data, NSMutableArray *keys, NSMutableArray *colors) {
+    NSKeyedUnarchiver *unarchiver = [[[NSKeyedUnarchiver alloc] initForReadingWithData: data] autorelease];
+    NSArray *k = [unarchiver decodeObjectForKey: @"NSKeys"];
+    NSArray *c = [unarchiver decodeObjectForKey: @"NSColors"];
+    [unarchiver finishDecoding];
+    if (k && c && [k count] == [c count]) {
+        [keys addObjectsFromArray: k];
+        [colors addObjectsFromArray: c];
+    }
+}
+
 
 @implementation NSColorList
 
@@ -294,19 +343,14 @@ static NSMutableDictionary *_namedColorLists = nil;
     if (_path != nil) {
         NSData *data = [NSData dataWithContentsOfFile: _path];
         if (data != nil) {
-            // A file that is not a keyed archive of keys and colors leaves the
-            // list empty.
+            // A file that is neither a typedstream nor a keyed archive of keys and
+            // colors leaves the list empty.
             @try {
-                NSKeyedUnarchiver *unarchiver =
-                        [[[NSKeyedUnarchiver alloc] initForReadingWithData: data] autorelease];
-                NSArray *keys = [unarchiver decodeObjectForKey: @"NSKeys"];
-                NSArray *colors = [unarchiver decodeObjectForKey: @"NSColors"];
-                [unarchiver finishDecoding];
-                if (keys && colors && [keys count] == [colors count]) {
-                    [_keys addObjectsFromArray: keys];
-                    [_colors addObjectsFromArray: colors];
-                }
+                if (!NSColorListLoadTypedstream(data, _keys, _colors))
+                    NSColorListLoadKeyedArchive(data, _keys, _colors);
             } @catch (NSException *ex) {
+                [_keys removeAllObjects];
+                [_colors removeAllObjects];
             }
         }
     }
@@ -410,8 +454,41 @@ static NSMutableDictionary *_namedColorLists = nil;
                           object: self];
 }
 
-- (void) writeToFile: (NSString *) path {
-    NSUnimplementedMethod();
+- (BOOL) writeToFile: (NSString *) path {
+    NSFileManager *fileManager = [NSFileManager defaultManager];
+    NSString *fileName = [_name stringByAppendingPathExtension: @"clr"];
+
+    if (path == nil) {
+        NSArray *libraries = NSSearchPathForDirectoriesInDomains(NSLibraryDirectory, NSUserDomainMask, YES);
+        if ([libraries count] == 0)
+            return NO;
+        NSString *directory = [[libraries objectAtIndex: 0] stringByAppendingPathComponent: @"Colors"];
+        [fileManager createDirectoryAtPath: directory withIntermediateDirectories: YES attributes: nil error: NULL];
+        path = [directory stringByAppendingPathComponent: fileName];
+    } else {
+        BOOL isDirectory = NO;
+        if ([fileManager fileExistsAtPath: path isDirectory: &isDirectory] && isDirectory)
+            path = [path stringByAppendingPathComponent: fileName];
+    }
+
+    int version = 1;
+    int count = (int) [_keys count];
+    id header = nil;
+    NSMutableData *data = [NSMutableData data];
+    NSArchiver *archiver = [[[NSArchiver alloc] initForWritingWithMutableData: data] autorelease];
+    [archiver encodeValueOfObjCType: "i" at: &version];
+    [archiver encodeValuesOfObjCTypes: "@i", &header, &count];
+    for (int i = 0; i < count; i++) {
+        id color = [_colors objectAtIndex: i];
+        id key = [_keys objectAtIndex: i];
+        [archiver encodeValuesOfObjCTypes: "@@", &color, &key];
+    }
+
+    if (![data writeToFile: path atomically: YES])
+        return NO;
+    [_path release];
+    _path = [path copy];
+    return YES;
 }
 
 - (void) removeFile {
