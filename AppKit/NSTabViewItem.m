@@ -67,11 +67,11 @@ NSString *_NSTruncatedStringWithAttributesInRect(NSString *string,
     [viewController retain];
     NSViewController *previous = _viewController;
     _viewController = viewController;
-    // Clear the non-owning responder before releasing the retired view tree.
+    // Drop the responder that lies in the retired view tree.
     if (_initialFirstResponder == _view ||
             (_view && [_initialFirstResponder isKindOfClass: [NSView class]] &&
              [(NSView *)_initialFirstResponder isDescendantOf: _view]))
-        _initialFirstResponder = nil;
+        [self setInitialFirstResponder: nil];
     [_view removeFromSuperview];
     [self setView: nil];
     [previous release];
@@ -114,6 +114,7 @@ NSString *_NSTruncatedStringWithAttributesInRect(NSString *string,
     [_identifier release];
     [_label release];
     [_view release];
+    [_initialFirstResponder release];
     [_color release];
     [super dealloc];
 }
@@ -181,7 +182,7 @@ NSString *_NSTruncatedStringWithAttributesInRect(NSString *string,
     _view = view;
 
     if (_initialFirstResponder == nil)
-        _initialFirstResponder = view;
+        [self setInitialFirstResponder: view];
     [view removeFromSuperview];
     [_tabView _itemViewDidChange: self];
 }
