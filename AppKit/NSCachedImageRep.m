@@ -64,8 +64,15 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return self;
 }
 
-// Typedstream archives keep a cached image as TIFF data followed by a char and three ints. The window it was cached in
-// doesn't exist when unarchiving, so the image comes back as the bitmap rep of that TIFF data.
+// QUIRK: a cached image rep in an NSArchiver (typedstream) archive is TIFF data
+// followed by a char and three ints; the window it was cached in does not exist
+// when unarchiving, so the rep comes back as the NSBitmapImageRep of the TIFF
+// data. Not documented.
+// Evidence: layout reported by the fork author from archives macOS
+// applications wrote (tier 3 report, not reproduced: macOS 27 cannot archive
+// this class, MC13.8). The TIFF payload reads like the bitmap rep fixture.
+// Test: test_quirk_typedstream_cached_image_rep in
+// tests/appkit-typedstream-text.m (uses an archive written by hand)
 - (instancetype) initWithCoder: (NSCoder *) coder {
     if ([coder allowsKeyedCoding])
         return [super initWithCoder: coder];

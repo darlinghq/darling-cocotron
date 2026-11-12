@@ -52,8 +52,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     // more complete parser
     NSMutableArray *_states;
 
-    // Offset of the placeholder byte after the last attachment group
-    NSUInteger _attachmentPlaceholder;
+    // Bytes after the last attachment group, up to the enclosing group's end,
+    // which are not document text
+    NSRange _attachmentTail;
 }
 
 - initWithData: (NSData *) data;

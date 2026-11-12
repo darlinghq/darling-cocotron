@@ -24,6 +24,8 @@
 #import <AppKit/NSFont.h>
 #import <AppKit/NSFontManager.h>
 #import <AppKit/NSRichTextWriter.h>
+#import <AppKit/NSFileWrapper.h>
+#import <AppKit/NSImage.h>
 #import <AppKit/NSTextAttachment.h>
 #ifdef WIN32
 #import <malloc.h>
@@ -125,8 +127,28 @@
     return [_attachmentDirectory addFileWrapper: wrapper];
 }
 
-// RTFD's attachment group, {{\NeXTGraphic name \width w \height h}<0xAC>},
-// sized in twips; the byte after the group is the placeholder the reader skips.
+// QUIRK: the size written for an attachment is its image's size in points when
+// the file is an image, otherwise a 32 point square (the size of a file icon).
+// Not documented.
+// Evidence: black-box observation on macOS 27 (tier 2, MC13.9 in the project's
+// evidence notes: a 2x2 pixel PNG is written as 40x40 twips, a text file as
+// 640x640).
+// Test: test_quirk_rtfd_attachment_size in tests/appkit-rtfd-attachments.m
+- (NSSize) sizeOfAttachment: (NSTextAttachment *) attachment {
+    NSFileWrapper *wrapper = [attachment fileWrapper];
+    NSData *contents = [wrapper isRegularFile] ? [wrapper regularFileContents] : nil;
+    NSImage *image = contents != nil ? [[[NSImage alloc] initWithData: contents] autorelease] : nil;
+    if (image != nil && [image size].width > 0 && [image size].height > 0)
+        return [image size];
+    return NSMakeSize(32, 32);
+}
+
+// QUIRK: an RTFD attachment is written as {{\NeXTGraphic name \width w
+// \height h <newline>}<0xAC>}: sizes in twips and one raw 0xAC byte between the
+// inner and the outer closing brace. Not documented.
+// Evidence: black-box observation on macOS 27 of a TXT.rtf written by
+// NSAttributedString (tier 2, MC13.9 and fixture rtfd/Attachment.rtfd).
+// Test: test_quirk_rtfd_attachment_layout in tests/appkit-rtfd-attachments.m
 - (void) appendAttachment: (NSTextAttachment *) attachment range: (NSRange) range {
     for (NSUInteger i = range.location; i < NSMaxRange(range); i++) {
         NSString *name = nil;
@@ -136,12 +158,7 @@
             [self appendStringFromRange: NSMakeRange(i, 1)];
             continue;
         }
-        CGSize size = [attachment attachmentBoundsForAttributes: nil
-                                                       location: nil
-                                                  textContainer: nil
-                                           proposedLineFragment: CGRectZero
-                                                       position: CGPointZero]
-                              .size;
+        NSSize size = [self sizeOfAttachment: attachment];
         NSString *group = [NSString
                 stringWithFormat: @"{{\\NeXTGraphic %@ \\width%ld \\height%ld\n}",
                                   name, lround(size.width * 20),

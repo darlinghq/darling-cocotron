@@ -70,7 +70,12 @@ NSString *NSTabColumnTerminatorsAttributeName =
             _type = [aDecoder decodeIntForKey: @"Type"];
             _location = [aDecoder decodeFloatForKey: @"Location"];
         } else {
-            // Typedstream: the tab type as a char and the location as a float.
+            // QUIRK: NSArchiver (typedstream) layout of a tab stop: the tab
+            // type as a char and the location as a float. Not documented.
+            // Evidence: archive written by NSArchiver on macOS 27 (tier 2,
+            // MC13.7, fixture texttab.typedstream).
+            // Test: test_quirk_typedstream_text_tab in
+            // tests/appkit-typedstream-text.m
             unsigned char type;
             float location;
             [aDecoder decodeValuesOfObjCTypes: "Cf", &type, &location];

@@ -104,24 +104,46 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         _tighteningFactorForTruncation =
                 [coder decodeFloatForKey: @"TighteningFactor"];
     } else {
-        // Typedstream: the alignment (NSLeftTextAlignment..NSNaturalTextAlignment), a char, the tab stops (nil for the
-        // default ones) and a short of flags. Flag 0x10 appends one float as "[1f]" whose meaning isn't established, so
-        // it is read but not applied; any other flag or a nonzero char is refused.
+        // QUIRK: NSArchiver (typedstream) layout of a paragraph style: the
+        // type string "CC@S" (alignment in the legacy NSTextAlignment
+        // numbering, a char that is always 0, the tab stops or nil, a short of
+        // flags), then, when the flags are 0x1f, a "[5f]" array holding line
+        // spacing, paragraph spacing, head indent, tail indent and first-line
+        // head indent in that order. Flag 0x10 alone appends a "[1f]" array
+        // whose meaning is not established: it is read and not applied. Any
+        // other combination is refused rather than guessed. Not documented.
+        // Evidence: archive written by NSArchiver on macOS 27 for a style with
+        // all five values set (tier 2, MC13.7 and its fixture
+        // paragraphstyle.typedstream); the 0x10-only form is the fork author's
+        // report from an archive that macOS applications wrote (not
+        // reproduced). Test: test_quirk_typedstream_paragraph_style in
+        // tests/appkit-typedstream-text.m
         unsigned char alignment, unknownChar;
         NSArray *tabStops;
         unsigned short flags;
         [coder decodeValuesOfObjCTypes: "CC@S", &alignment, &unknownChar, &tabStops, &flags];
         [tabStops autorelease];
-        if (alignment > NSNaturalTextAlignment || unknownChar != 0 || (flags & ~0x10) != 0)
+        if (alignment > NSNaturalTextAlignment || unknownChar != 0 ||
+            (flags != 0 && flags != 0x10 && flags != 0x1f))
             [NSException raise: NSInvalidArgumentException
                         format: @"-[%@ %s]: unsupported archived values %u %u %u", [self class], sel_getName(_cmd),
                                 alignment, unknownChar, flags];
-        if (flags & 0x10) {
+        float spacings[5] = {0, 0, 0, 0, 0};
+        if (flags == 0x1f) {
+            [coder decodeValueOfObjCType: "[5f]" at: spacings];
+        } else if (flags == 0x10) {
             float unknownFloat[1];
             [coder decodeValueOfObjCType: "[1f]" at: unknownFloat];
         }
         [self _initWithDefaults];
         _alignment = alignment;
+        if (flags == 0x1f) {
+            _lineSpacing = spacings[0];
+            _paragraphSpacing = spacings[1];
+            _headIndent = spacings[2];
+            _tailIndent = spacings[3];
+            _firstLineHeadIndent = spacings[4];
+        }
         if (tabStops != nil) {
             [_tabStops release];
             _tabStops = [tabStops mutableCopy];
