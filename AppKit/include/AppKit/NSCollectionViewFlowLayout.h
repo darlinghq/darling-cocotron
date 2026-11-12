@@ -25,5 +25,16 @@ APPKIT_EXPORT NSString *const NSCollectionElementKindSectionHeader;
 APPKIT_EXPORT NSString *const NSCollectionElementKindSectionFooter;
 
 @interface NSCollectionViewFlowLayout : NSCollectionViewLayout
+{
+    NSSize _itemSize;
+    NSEdgeInsets _sectionInset;
+    CGFloat _minimumLineSpacing;
+    CGFloat _minimumInteritemSpacing;
+}
+
+@property NSSize itemSize;
+@property NSEdgeInsets sectionInset;
+@property CGFloat minimumLineSpacing;
+@property CGFloat minimumInteritemSpacing;
 
 @end
