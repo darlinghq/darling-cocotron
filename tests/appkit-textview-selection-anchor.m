@@ -71,13 +71,17 @@ int main(void)
         [view insertText: @"there" replacementRange: NSMakeRange(6, 5)];
         expect([[view string] isEqualToString: @"hello there"],
               "insertText:replacementRange: replaces the given range");
+        // QUIRK (MC26.10): an out-of-range replacement range does not raise; the text replaces the selection.
+        [view setSelectedRange: NSMakeRange(0, 5)];
         BOOL raised = NO;
         @try {
             [view insertText: @"x" replacementRange: NSMakeRange(50, 1)];
         } @catch (NSException *e) {
-            raised = [[e name] isEqualToString: NSRangeException];
+            raised = YES;
         }
-        expect(raised, "insertText:replacementRange: raises for an out-of-range replacement");
+        expect(!raised, "insertText:replacementRange: does not raise for an out-of-range replacement");
+        expect([[view string] isEqualToString: @"x there"],
+               "an out-of-range replacement range replaces the selection (quirk)");
     }
     if (failures)
         return 1;
