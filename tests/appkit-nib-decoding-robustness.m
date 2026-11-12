@@ -17,15 +17,27 @@ static int failures;
 
 // Stands in for NSCustomView in an archive: the archive records the class name
 // NSCustomView, so decoding runs the real NSCustomView -initWithCoder:.
-@interface CustomViewStandIn : NSObject <NSCoding>
+@interface CustomViewStandIn : NSObject <NSCoding> {
+    NSString *_viewClassName;
+}
 @property(copy) NSString *viewClassName;
 @end
 @implementation CustomViewStandIn
+@synthesize viewClassName = _viewClassName;
 - (void)encodeWithCoder:(NSCoder *)coder {
     [coder encodeObject:self.viewClassName forKey:@"NSClassName"];
     [coder encodeRect:NSMakeRect(1, 2, 30, 40) forKey:@"NSFrame"];
     [coder encodeInt:0x12 forKey:@"NSvFlags"];
 }
+- (id)initWithCoder:(NSCoder *)coder { return [super init]; }
+@end
+
+// Stands in for NSTextStorage the same way, carrying the string key a nib or
+// archive stores it under.
+@interface TextStorageStandIn : NSObject <NSCoding>
+@end
+@implementation TextStorageStandIn
+- (void)encodeWithCoder:(NSCoder *)coder { [coder encodeObject:@"abc" forKey:@"NSString"]; }
 - (id)initWithCoder:(NSCoder *)coder { return [super init]; }
 @end
 
@@ -78,9 +90,13 @@ int main(void) {
         CHECK(roundTrip != nil && error == nil);
         CHECK(roundTrip != nil && [[roundTrip fontName] isEqualToString:[font fontName]]);
 
-        NSTextStorage *storage = [[NSTextStorage alloc] initWithString:@"abc"];
-        NSData *storageData = [NSKeyedArchiver archivedDataWithRootObject:storage];
-        NSTextStorage *storageBack = [NSKeyedUnarchiver unarchiveObjectWithData:storageData];
+        NSMutableData *storageData = [NSMutableData data];
+        NSKeyedArchiver *storageArchiver = [[NSKeyedArchiver alloc] initForWritingWithMutableData:storageData];
+        [storageArchiver setClassName:@"NSTextStorage" forClass:[TextStorageStandIn class]];
+        [storageArchiver encodeObject:[TextStorageStandIn new] forKey:@"root"];
+        [storageArchiver finishEncoding];
+        NSKeyedUnarchiver *storageUnarchiver = [[NSKeyedUnarchiver alloc] initForReadingWithData:storageData];
+        NSTextStorage *storageBack = [storageUnarchiver decodeObjectForKey:@"root"];
         CHECK([[storageBack string] isEqualToString:@"abc"]);
         @try {
             [storageBack replaceCharactersInRange:NSMakeRange(1, 1) withString:@"XY"];
