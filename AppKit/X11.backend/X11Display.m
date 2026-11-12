@@ -107,11 +107,8 @@ static void beforeWaitingCallback(CFRunLoopObserverRef observer,
             return nil;
         }
 
+        // The server named by DISPLAY; with DISPLAY unset there is none.
         _display = XOpenDisplay(NULL);
-
-        if (_display == NULL) {
-            _display = XOpenDisplay(":0");
-        }
 
         if (_display == NULL) {
             // Failed to connect.

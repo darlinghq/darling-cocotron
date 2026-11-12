@@ -27,29 +27,31 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSStringDrawer.h>
 #import <AppKit/NSTextAttachment.h>
 
-NSAttributedStringKey NSFontAttributeName = @"NSFontAttributeName";
-NSAttributedStringKey NSParagraphStyleAttributeName = @"NSParagraphStyleAttributeName";
-NSAttributedStringKey NSForegroundColorAttributeName = @"NSForegroundColorAttributeName";
-NSAttributedStringKey NSBackgroundColorAttributeName = @"NSBackgroundColorAttributeName";
-NSAttributedStringKey NSUnderlineStyleAttributeName = @"NSUnderlineStyleAttributeName";
-NSAttributedStringKey NSUnderlineColorAttributeName = @"NSUnderlineColorAttributeName";
-NSAttributedStringKey NSAttachmentAttributeName = @"NSAttachmentAttributeName";
-NSAttributedStringKey NSKernAttributeName = @"NSKernAttributeName";
-NSAttributedStringKey NSLigatureAttributeName = @"NSLigatureAttributeName";
-NSAttributedStringKey NSStrikethroughStyleAttributeName = @"NSStrikethroughStyleAttributeName";
-NSAttributedStringKey NSStrikethroughColorAttributeName = @"NSStrikethroughColorAttributeName";
-NSAttributedStringKey NSObliquenessAttributeName = @"NSObliquenessAttributeName";
-NSAttributedStringKey NSStrokeWidthAttributeName = @"NSStrokeWidthAttributeName";
-NSAttributedStringKey NSStrokeColorAttributeName = @"NSStrokeColorAttributeName";
-NSAttributedStringKey NSBaselineOffsetAttributeName = @"NSBaselineOffsetAttributeName";
-NSAttributedStringKey NSSuperscriptAttributeName = @"NSSuperscriptAttributeName";
-NSAttributedStringKey NSLinkAttributeName = @"NSLinkAttributeName";
-NSAttributedStringKey NSShadowAttributeName = @"NSShadowAttributeName";
-NSAttributedStringKey NSExpansionAttributeName = @"NSExpansionAttributeName";
-NSAttributedStringKey NSCursorAttributeName = @"NSCursorAttributeName";
+// The attribute keys carry the string values macOS gives them, which is also what archived attributed strings
+// and CoreText's kCTFontAttributeName and kCTParagraphStyleAttributeName use.
+NSAttributedStringKey NSFontAttributeName = @"NSFont";
+NSAttributedStringKey NSParagraphStyleAttributeName = @"NSParagraphStyle";
+NSAttributedStringKey NSForegroundColorAttributeName = @"NSColor";
+NSAttributedStringKey NSBackgroundColorAttributeName = @"NSBackgroundColor";
+NSAttributedStringKey NSUnderlineStyleAttributeName = @"NSUnderline";
+NSAttributedStringKey NSUnderlineColorAttributeName = @"NSUnderlineColor";
+NSAttributedStringKey NSAttachmentAttributeName = @"NSAttachment";
+NSAttributedStringKey NSKernAttributeName = @"NSKern";
+NSAttributedStringKey NSLigatureAttributeName = @"NSLigature";
+NSAttributedStringKey NSStrikethroughStyleAttributeName = @"NSStrikethrough";
+NSAttributedStringKey NSStrikethroughColorAttributeName = @"NSStrikethroughColor";
+NSAttributedStringKey NSObliquenessAttributeName = @"NSObliqueness";
+NSAttributedStringKey NSStrokeWidthAttributeName = @"NSStrokeWidth";
+NSAttributedStringKey NSStrokeColorAttributeName = @"NSStrokeColor";
+NSAttributedStringKey NSBaselineOffsetAttributeName = @"NSBaselineOffset";
+NSAttributedStringKey NSSuperscriptAttributeName = @"NSSuperScript";
+NSAttributedStringKey NSLinkAttributeName = @"NSLink";
+NSAttributedStringKey NSShadowAttributeName = @"NSShadow";
+NSAttributedStringKey NSExpansionAttributeName = @"NSExpansion";
+NSAttributedStringKey NSCursorAttributeName = @"NSCursor";
 NSAttributedStringKey NSMarkedClauseSegmentAttributeName = @"NSMarkedClauseSegment";
-NSAttributedStringKey NSToolTipAttributeName = @"NSToolTipAttributeName";
-NSAttributedStringKey NSSpellingStateAttributeName = @"NSSpellingStateAttributeName"; // temporary attribute
+NSAttributedStringKey NSToolTipAttributeName = @"NSToolTip";
+NSAttributedStringKey NSSpellingStateAttributeName = @"NSSpellingState"; // temporary attribute
 
 NSAttributedStringDocumentAttributeKey NSDocumentTypeDocumentAttribute = @"DocumentType";
 NSAttributedStringDocumentAttributeKey NSConvertedDocumentAttribute = @"Converted";
@@ -85,7 +87,7 @@ NSAttributedStringDocumentAttributeKey NSTextLayoutSectionsAttribute = @"NSTextL
 NSAttributedStringDocumentAttributeKey NSExcludedElementsDocumentAttribute = @"ExcludedElements";
 NSAttributedStringDocumentAttributeKey NSTextEncodingNameDocumentAttribute = @"TextEncodingName";
 NSAttributedStringDocumentAttributeKey NSPrefixSpacesDocumentAttribute = @"PrefixSpaces";
-NSAttributedStringDocumentAttributeKey NSCocoaVersionDocumentAttribute = @"NSCocoaVersionDocumentAttribute";
+NSAttributedStringDocumentAttributeKey NSCocoaVersionDocumentAttribute = @"CocoaRTFVersion";
 
 NSAttributedStringDocumentReadingOptionKey NSDocumentTypeDocumentOption = @"DocumentType";
 NSAttributedStringDocumentReadingOptionKey NSDefaultAttributesDocumentOption = @"DefaultAttributes";
@@ -116,7 +118,7 @@ NSAttributedStringKey NSCharacterShapeAttributeName = @"NSCharacterShape";
 NSAttributedStringKey NSUsesScreenFontsDocumentAttribute = @"UsesScreenFonts";
 
 const NSAttributedStringKey NSTextEffectAttributeName = @"NSTextEffect";
-NSAttributedStringKey NSWritingDirectionAttributeName = @"NSWritingDirectionAttribute";
+NSAttributedStringKey NSWritingDirectionAttributeName = @"NSWritingDirection";
 
 NSUInteger NSUnderlineStrikethroughMask = 0x4000;
 NSUInteger NSUnderlineByWordMask = 0x8000;
