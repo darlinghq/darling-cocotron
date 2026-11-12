@@ -80,7 +80,7 @@ static int readCallback(GifFileType *ft, GifByteType *buf, int count) {
                                   options: (CFDictionaryRef) options
 {
     return (CFDictionaryRef)[@{
-        kO2ImagePropertyDPIHeight : @(72),
+        kO2ImagePropertyDPIWidth : @(72),
         kO2ImagePropertyDPIHeight : @(72)
     } retain];
 }
@@ -96,7 +96,6 @@ static int readCallback(GifFileType *ft, GifByteType *buf, int count) {
     ColorMapObject *colorMap = _gif->SColorMap;
     if (colorMap == NULL)
         colorMap = gifImage->ImageDesc.ColorMap;
-    int bgColorIndex = (_gif->SColorMap == NULL) ? -1 : _gif->SBackGroundColor;
     int colorCount = colorMap->ColorCount;
     GifColorType *colorLUT = colorMap->Colors;
     unsigned char *gifRaster = gifImage->RasterBits;
@@ -125,12 +124,10 @@ static int readCallback(GifFileType *ft, GifByteType *buf, int count) {
         for (c = 0; c < width; c++) {
             unsigned char colorIndex = *gifRaster;
 
-            if (colorIndex == bgColorIndex) {
-                scanline->a = 0;
-                scanline->r = 0;
-                scanline->g = 0;
-                scanline->b = 0;
-            } else if (colorIndex < colorCount) {
+            // The logical screen's background color index is only a hint for
+            // compositing; pixels of that index keep their color and are
+            // transparent only through the transparency index.
+            if (colorIndex < colorCount) {
                 GifColorType *gifColor = colorLUT + colorIndex;
 
                 scanline->a = 255;

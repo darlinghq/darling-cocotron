@@ -243,7 +243,7 @@ static stbi_uc *bmp_load(int *x, int *y, int *comp, int req_comp) {
     get16le(); // discard reserved
     offset = get32le();
     hsz = get32le();
-    if (hsz != 12 && hsz != 40 && hsz != 56 && hsz != 108)
+    if (hsz != 12 && hsz != 40 && hsz != 56 && hsz != 108 && hsz != 124)
         return ep("unknown BMP", "BMP type not supported: unknown");
     failure_reason = "bad BMP";
     if (hsz == 12) {
@@ -306,7 +306,7 @@ static stbi_uc *bmp_load(int *x, int *y, int *comp, int req_comp) {
                     return NULL;
             }
         } else {
-            assert(hsz == 108);
+            assert(hsz == 108 || hsz == 124);
             mr = get32le();
             mg = get32le();
             mb = get32le();
@@ -314,6 +314,10 @@ static stbi_uc *bmp_load(int *x, int *y, int *comp, int req_comp) {
             get32le(); // discard color space
             for (i = 0; i < 12; ++i)
                 get32le(); // discard color space parameters
+            if (hsz == 124) {
+                for (i = 0; i < 4; ++i)
+                    get32le(); // discard rendering intent and profile data
+            }
         }
         if (bpp < 16)
             psize = (offset - 14 - hsz) >> 2;
@@ -385,7 +389,7 @@ static stbi_uc *bmp_load(int *x, int *y, int *comp, int req_comp) {
         if (bpp == 24) {
             easy = 1;
         } else if (bpp == 32) {
-            if (mb == 0xff && mg == 0xff00 && mr == 0xff000000 &&
+            if (mb == 0xff && mg == 0xff00 && mr == 0xff0000 &&
                 ma == 0xff000000)
                 easy = 2;
         }
@@ -396,11 +400,11 @@ static stbi_uc *bmp_load(int *x, int *y, int *comp, int req_comp) {
             rshift = high_bit(mr) - 7;
             rcount = bitcount(mr);
             gshift = high_bit(mg) - 7;
-            gcount = bitcount(mr);
+            gcount = bitcount(mg);
             bshift = high_bit(mb) - 7;
-            bcount = bitcount(mr);
+            bcount = bitcount(mb);
             ashift = high_bit(ma) - 7;
-            acount = bitcount(mr);
+            acount = bitcount(ma);
         }
         for (j = 0; j < (int) img_y; ++j) {
             if (easy) {
@@ -514,6 +518,16 @@ stbi_uc *stbi_bmp_load_from_memory(const stbi_uc *buffer, int len, int *x,
 
     if (pixels == NULL)
         return nil;
+
+    // BMP files hold straight alpha; the image below is declared premultiplied.
+    for (int i = 0; i < bytesPerRow * height; i += 4) {
+        unsigned a = pixels[i + 3];
+        if (a != 0xff) {
+            pixels[i + 0] = (unsigned char) ((pixels[i + 0] * a + 127) / 255);
+            pixels[i + 1] = (unsigned char) ((pixels[i + 1] * a + 127) / 255);
+            pixels[i + 2] = (unsigned char) ((pixels[i + 2] * a + 127) / 255);
+        }
+    }
 
     bitmap = [[NSData alloc] initWithBytesNoCopy: pixels
                                           length: bytesPerRow * height];

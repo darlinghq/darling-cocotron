@@ -1,3 +1,5 @@
+#import <Onyx2D/O2Encoder_BMP.h>
+#import <Onyx2D/O2Encoder_GIF.h>
 #import <Onyx2D/O2Encoder_JPG.h>
 #import <Onyx2D/O2Encoder_PNG.h>
 #import <Onyx2D/O2Encoder_TIFF.h>
@@ -99,9 +101,11 @@ O2ImageDestinationCreateWithDataConsumer(O2DataConsumerRef dataConsumer,
             break;
 
         case O2ImageFileBMP:
+            self->_encoder = O2BMPEncoderCreate(self->_consumer);
             break;
 
         case O2ImageFileGIF:
+            self->_encoder = O2GIFEncoderCreate(self->_consumer);
             break;
 
         case O2ImageFileJPEG:
@@ -155,9 +159,11 @@ void O2ImageDestinationAddImage(O2ImageDestinationRef self, O2ImageRef image,
         break;
 
     case O2ImageFileBMP:
+        O2BMPEncoderWriteImage(self->_encoder, image, properties);
         break;
 
     case O2ImageFileGIF:
+        O2GIFEncoderWriteImage(self->_encoder, image, properties);
         break;
 
     case O2ImageFileJPEG:
@@ -199,9 +205,13 @@ bool O2ImageDestinationFinalize(O2ImageDestinationRef self) {
         break;
 
     case O2ImageFileBMP:
+        O2BMPEncoderDealloc(self->_encoder);
+        self->_encoder = NULL;
         break;
 
     case O2ImageFileGIF:
+        O2GIFEncoderDealloc(self->_encoder);
+        self->_encoder = NULL;
         break;
 
     case O2ImageFileJPEG:

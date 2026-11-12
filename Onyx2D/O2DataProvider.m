@@ -60,7 +60,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - initWithURL: (NSURL *) url {
-    NSData *data = [[NSData alloc] initWithContentsOfURL: url];
+    NSData *data = (url != nil) ? [[NSData alloc] initWithContentsOfURL: url] : nil;
+
+    if (data == nil) {
+        // Unreadable or missing file: CGDataProviderCreateWithURL returns NULL.
+        [self release];
+        return nil;
+    }
+
     id result = [self initWithData: data];
 
     [data release];
