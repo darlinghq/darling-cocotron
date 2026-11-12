@@ -45,8 +45,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     NSMenuItem *item = [[[self alloc] initWithTitle: title ?: @""
                                              action: NULL
                                       keyEquivalent: @""] autorelease];
+    // A section header is an enabled item on macOS (not disabled), see MC26.8.
     item->_isSectionHeader = YES;
-    [item setEnabled: NO];
     return item;
 }
 
