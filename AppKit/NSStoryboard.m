@@ -29,7 +29,23 @@ static NSString *const NSStoryboardInitialIdentifierKey = @"NSStoryboardDesignat
 static NSString *const NSStoryboardNibNamesKey = @"NSViewControllerIdentifiersToNibNames";
 static NSString *const NSStoryboardMainMenuKey = @"NSStoryboardMainMenu";
 
-static __thread NSStoryboard *instantiatingStoryboard;
+// The storyboard whose nib is being instantiated on this thread. Kept in the
+// thread dictionary: thread-local variables are not available to 32-bit
+// Mach-O objects.
+static NSString *const NSStoryboardInstantiatingKey = @"_NSStoryboardInstantiating";
+
+static NSStoryboard *currentInstantiatingStoryboard(void) {
+    return [[[NSThread currentThread] threadDictionary] objectForKey: NSStoryboardInstantiatingKey];
+}
+
+static void setCurrentInstantiatingStoryboard(NSStoryboard *storyboard) {
+    NSMutableDictionary *dictionary = [[NSThread currentThread] threadDictionary];
+
+    if (storyboard != nil)
+        [dictionary setObject: storyboard forKey: NSStoryboardInstantiatingKey];
+    else
+        [dictionary removeObjectForKey: NSStoryboardInstantiatingKey];
+}
 
 @interface NSStoryboardControllerPlaceholder : NSObject
 @end
@@ -69,7 +85,7 @@ static __thread NSStoryboard *instantiatingStoryboard;
 }
 
 + (NSStoryboard *) _instantiatingStoryboard {
-    return instantiatingStoryboard;
+    return currentInstantiatingStoryboard();
 }
 
 - (void) dealloc {
@@ -89,16 +105,16 @@ static __thread NSStoryboard *instantiatingStoryboard;
     NSMutableArray *topLevelObjects = [NSMutableArray array];
     NSMutableDictionary *nameTable = [NSMutableDictionary dictionaryWithObjectsAndKeys:
             topLevelObjects, NSNibTopLevelObjects, self, NSStoryboardSceneExternalObjectKey, nil];
-    NSStoryboard *outer = instantiatingStoryboard;
+    NSStoryboard *outer = [[currentInstantiatingStoryboard() retain] autorelease];
     BOOL loaded;
 
     if (owner != nil)
         [nameTable setObject: owner forKey: NSNibOwner];
-    instantiatingStoryboard = self;
+    setCurrentInstantiatingStoryboard(self);
     @try {
         loaded = [nib instantiateNibWithExternalNameTable: nameTable];
     } @finally {
-        instantiatingStoryboard = outer;
+        setCurrentInstantiatingStoryboard(outer);
     }
     if (!loaded)
         [NSException raise: NSInternalInconsistencyException
