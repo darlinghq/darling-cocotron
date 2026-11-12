@@ -296,6 +296,14 @@ NSMutableArray *NSCurrentFocusStack() {
         CGContextSetBlendMode(_graphicsPort, kCGBlendModeDifference); break;
     case NSCompositingOperationExclusion:
         CGContextSetBlendMode(_graphicsPort, kCGBlendModeExclusion); break;
+    case NSCompositingOperationHue:
+        CGContextSetBlendMode(_graphicsPort, kCGBlendModeHue); break;
+    case NSCompositingOperationSaturation:
+        CGContextSetBlendMode(_graphicsPort, kCGBlendModeSaturation); break;
+    case NSCompositingOperationColor:
+        CGContextSetBlendMode(_graphicsPort, kCGBlendModeColor); break;
+    case NSCompositingOperationLuminosity:
+        CGContextSetBlendMode(_graphicsPort, kCGBlendModeLuminosity); break;
     default:
         return;
     }
