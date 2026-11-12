@@ -279,6 +279,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 // has no effects controls yet, so it behaves like a plain NSBox: NSBox's
 // initWithCoder: decodes the box keys (NSBoxType, NSTitleCell, NSOffsets, ...)
 // and the subviews.
+//
+// The class is private: nibs and the run time find it by name, but its class
+// symbol is not exported.
+__attribute__((visibility("hidden")))
 @interface NSFontEffectsBox : NSBox
 @end
 
