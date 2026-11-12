@@ -10,11 +10,14 @@ static void expect(BOOL condition, NSString *message)
     }
 }
 
-@interface Target : NSObject
+@interface Target : NSObject {
+    NSInteger _clicks;
+}
 @property NSInteger clicks;
 - (void)click:(id)sender;
 @end
 @implementation Target
+@synthesize clicks = _clicks;
 - (void)click:(id)sender
 {
     self.clicks++;
