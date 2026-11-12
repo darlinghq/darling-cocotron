@@ -168,7 +168,8 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPre
 // -[NSLayoutConstraint setActive:].
 @property(readonly, copy) NSArray<NSLayoutConstraint *> *constraints;
 // Adding a constraint activates it with this view as its owner; removing it
-// deactivates it. Adding one that is already installed here does nothing.
+// deactivates it, and either marks the view as needing a constraint update.
+// Adding one that is already installed here does nothing.
 - (void) addConstraint: (NSLayoutConstraint *) constraint;
 - (void) addConstraints: (NSArray<NSLayoutConstraint *> *) constraints;
 - (void) removeConstraint: (NSLayoutConstraint *) constraint;

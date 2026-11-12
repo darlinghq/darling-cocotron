@@ -3287,6 +3287,7 @@ static CGFloat backingScaleFactor(NSView *view) {
         _constraints = [[NSMutableArray alloc] init];
     [_constraints addObject: constraint];
     [constraint _attachToOwner: self];
+    [self setNeedsUpdateConstraints: YES];
 }
 
 - (void) addConstraints: (NSArray *) constraints {
@@ -3301,6 +3302,7 @@ static CGFloat backingScaleFactor(NSView *view) {
     [[constraint retain] autorelease];
     [_constraints removeObject: constraint];
     [constraint _detachFromOwner: self];
+    [self setNeedsUpdateConstraints: YES];
 }
 
 - (void) removeConstraints: (NSArray *) constraints {
