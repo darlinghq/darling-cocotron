@@ -1,6 +1,8 @@
 #include <AppKit/NSTextInput.h>
 #include <AppKit/NSTextInput_Internal.h>
+#import <AppKit/NSApplication.h>
 #import <AppKit/NSEvent.h>
+#import <AppKit/NSWindow.h>
 #import <AppKit/NSKeyboardBinding.h>
 #import <AppKit/NSKeyboardBindingManager.h>
 #import <AppKit/NSTextInputClient.h>
@@ -17,6 +19,14 @@ NSString *const NSTextInputContextKeyboardSelectionDidChangeNotification = @"NST
 NSString *const NSTextInputReplacementRangeAttributeName = @"NSTextInputReplacementRangeAttributeName";
 
 @implementation NSTextInputContext
+
++ (NSTextInputContext *) currentInputContext {
+    NSResponder *responder = [[NSApp keyWindow] firstResponder];
+
+    if ([responder respondsToSelector: @selector(inputContext)])
+        return [(id) responder inputContext];
+    return nil;
+}
 
 // The client is not retained: it owns its context.
 - (instancetype) initWithClient: (id<NSTextInputClient>) client {

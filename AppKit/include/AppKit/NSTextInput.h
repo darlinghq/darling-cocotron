@@ -34,6 +34,8 @@ typedef NSString *NSTextInputSourceIdentifier;
     id _client;
 }
 
+// The context of the key window's first responder, or nil.
++ (NSTextInputContext *) currentInputContext;
 + (NSString *) localizedNameForInputSource: (NSTextInputSourceIdentifier) inputSourceIdentifier;
 - (instancetype) initWithClient: (id<NSTextInputClient>) client;
 @property(readonly) id<NSTextInputClient> client;
