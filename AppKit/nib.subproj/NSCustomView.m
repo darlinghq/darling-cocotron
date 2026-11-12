@@ -37,7 +37,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
             else if ([coder containsValueForKey: @"NSFrameSize"])
                 frame.size = [coder decodeSizeForKey: @"NSFrameSize"];
 
-            NSView *newView = [[class alloc] initWithFrame: frame];
+            NSView *newView = nil;
+            if ([class isSubclassOfClass: [NSView class]])
+                newView = [[class alloc] initWithFrame: frame];
+            // Decoding nil would drop the whole subviews array this view is in.
+            if (newView == nil) {
+                newView = [[NSView alloc] initWithFrame: frame];
+            }
             if ([coder containsValueForKey: @"NSvFlags"]) {
                 unsigned vFlags = [coder decodeIntForKey: @"NSvFlags"];
 

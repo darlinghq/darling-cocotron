@@ -412,6 +412,7 @@ NSNotificationName NSControlTintDidChangeNotification = @"NSControlTintDidChange
     [_formatter release];
     [_representedObject release];
     [_identifier release];
+    [_cellMenu release];
     [super dealloc];
 }
 
@@ -423,8 +424,19 @@ NSNotificationName NSControlTintDidChangeNotification = @"NSControlTintDidChange
     copy->_image = [_image retain];
     copy->_formatter = [_formatter retain];
     copy->_representedObject = [_representedObject retain];
+    copy->_cellMenu = [_cellMenu retain];
 
     return copy;
+}
+
+- (NSMenu *) menu {
+    return _cellMenu;
+}
+
+- (void) setMenu: (NSMenu *) menu {
+    menu = [menu retain];
+    [_cellMenu release];
+    _cellMenu = menu;
 }
 
 - (NSView *) controlView {
@@ -1313,6 +1325,13 @@ static NSString *NSStringFromCellType(NSCellType type) {
 - (void) _validateEditing: (id)unknown
 {
     // required by ibtool
+}
+
+- (NSMenu *) menuForEvent: (NSEvent *) event
+                   inRect: (NSRect) rect
+                   ofView: (NSView *) view
+{
+    return [self menu];
 }
 
 @end

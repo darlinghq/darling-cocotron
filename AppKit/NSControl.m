@@ -70,6 +70,15 @@ static NSMutableDictionary *cellClassDictionary = nil;
     [cellClassDictionary setObject: aClass forKey: [[self class] description]];
 }
 
+- (NSControlSize) controlSize {
+    return [_cell controlSize];
+}
+
+- (void) setControlSize: (NSControlSize) size {
+    [_cell setControlSize: size];
+    [self setNeedsDisplay: YES];
+}
+
 - (void) encodeWithCoder: (NSCoder *) coder {
     [super encodeWithCoder: coder];
 
