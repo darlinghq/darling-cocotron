@@ -22,9 +22,17 @@
 #import <objc/runtime.h>
 
 // NSSubTextStorage is an undocumented AppKit class: a text storage that shows
-// one range of another (parent) text storage. Script Editor creates one with
-// -initWithTextStorage:range:, asks it for -range and reads its _range ivar by
-// name through the runtime, so that ivar has to exist with this name and type.
+// one range of another (parent) text storage, created with
+// -initWithTextStorage:range: and queried with -range.
+//
+// QUIRK: the range is kept in an instance variable named `_range` of type
+// NSRange, because code that inspects the class through the Objective-C runtime
+// reads it by name rather than through -range. Not documented.
+// Evidence: report from the fork author that a shipping application reads the
+// ivar by name (tier 3: how it was learned is not stated). Mac check pending
+// (class_getInstanceVariable on the platform's class, MC check queued for this
+// row), so this quirk stays unconfirmed until that result is in.
+// Test: test_quirk_range_ivar in tests/appkit-subtextstorage.m
 //
 // Reads and edits go to the parent: an edit through this storage changes the
 // parent and grows or shrinks the range. Edits made directly to the parent
