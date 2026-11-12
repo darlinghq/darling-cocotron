@@ -599,6 +599,30 @@ static BOOL _allowsAutomaticWindowTabbing;
                                defer: defer];
 }
 
++ defaultAnimationForKey: (NSString *) key {
+    return nil;
+}
+
+- (instancetype) animator {
+    // Property changes are applied immediately, so the window is its own
+    // animator rather than a proxy that animates them.
+    return self;
+}
+
+- (NSDictionary *) animations {
+    return _animations;
+}
+
+- animationForKey: (NSString *) key {
+    return [_animations objectForKey: key];
+}
+
+- (void) setAnimations: (NSDictionary *) dictionary {
+    dictionary = [dictionary copy];
+    [_animations release];
+    _animations = dictionary;
+}
+
 - (NSWindow *) initWithWindowRef: (void *) carbonRef {
     NSUnimplementedMethod();
     return nil;
@@ -608,6 +632,7 @@ static BOOL _allowsAutomaticWindowTabbing;
     [[NSNotificationCenter defaultCenter] removeObserver: self];
     for (NSUInteger i = 0; i < 3; i++)
         [_standardWindowButtons[i] release];
+    [_animations release];
     [_tabbingIdentifier release];
     [_subtitle release];
     [_childWindows release];

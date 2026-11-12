@@ -186,7 +186,7 @@ APPKIT_EXPORT const NSNotificationName NSWindowWillEnterFullScreenNotification;
 APPKIT_EXPORT const NSNotificationName NSWindowWillExitFullScreenNotification;
 APPKIT_EXPORT const NSNotificationName NSWindowDidExposeNotification;
 
-@interface NSWindow : NSResponder <NSUserInterfaceItemIdentification, NSAccessibility, NSAppearanceCustomization> {
+@interface NSWindow : NSResponder <NSAnimatablePropertyContainer, NSUserInterfaceItemIdentification, NSAccessibility, NSAppearanceCustomization> {
     NSRect _frame;
     NSWindowStyleMask _styleMask;
     NSBackingStoreType _backingType;
@@ -199,6 +199,8 @@ APPKIT_EXPORT const NSNotificationName NSWindowDidExposeNotification;
 
     NSWindow *_parentWindow;
     NSMutableArray<NSWindow *> *_childWindows;
+
+    NSDictionary *_animations;
 
     NSString *_representedFilename;
     NSString *_title;
