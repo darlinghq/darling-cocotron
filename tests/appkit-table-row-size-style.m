@@ -44,13 +44,13 @@ int main(void)
         expect(rowHeight(table) == 40, @"Custom rows use rowHeight");
 
         table.rowSizeStyle = NSTableViewRowSizeStyleSmall;
-        expect(rowHeight(table) == lineHeight(NSControlSizeSmall), @"Small rows fit the small system font");
+        expect(rowHeight(table) == lineHeight(NSSmallControlSize), @"Small rows fit the small system font");
         expect([table rectOfRow:2].origin.y == 2 * [table rectOfRow:0].size.height, @"Small rows are stacked");
 
         table.rowSizeStyle = NSTableViewRowSizeStyleDefault;
         expect(table.rowSizeStyle == NSTableViewRowSizeStyleDefault, @"Default is kept");
         expect(table.effectiveRowSizeStyle == NSTableViewRowSizeStyleMedium, @"Default resolves to Medium");
-        expect(rowHeight(table) == lineHeight(NSControlSizeRegular), @"Medium rows fit the regular system font");
+        expect(rowHeight(table) == lineHeight(NSRegularControlSize), @"Medium rows fit the regular system font");
 
         table.rowSizeStyle = NSTableViewRowSizeStyleCustom;
         expect(rowHeight(table) == 40, @"back to rowHeight for Custom");
