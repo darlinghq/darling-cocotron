@@ -37,12 +37,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (int) languageLevel;
 
 - (NSSize) pageSizeForPaper: (NSString *) paperName;
-- (NSRect) imageablePageBoundsForPaper: (NSString *) paperName;
-- (NSRect) rectForPaper: (NSString *) paperName;
-
-- (BOOL) isColor;
-- (BOOL) isFontAvailable: (NSString *) fontName;
-- (BOOL) isOutputOrderNormal;
 
 - (NSDictionary *) deviceDescription;
 

@@ -66,7 +66,7 @@ NSString *const NSPrintSavePath = @"NSPrintSavePath";
 }
 
 + (NSPrinter *) defaultPrinter {
-    return [NSPrinter printerWithName: @"Generic PostScript Printer"];
+    return [NSPrinter printerWithName: [[NSPrinter printerNames] firstObject]];
 }
 
 + (void) setSharedPrintInfo: (NSPrintInfo *) printInfo {
@@ -120,7 +120,7 @@ NSString *const NSPrintSavePath = @"NSPrintSavePath";
 - (NSPrinter *) printer {
     NSPrinter *printer = [_attributes objectForKey: NSPrintPrinter];
     if (printer == nil) {
-        printer = [NSPrinter printerWithName: @"Generic PostScript Printer"];
+        printer = [NSPrintInfo defaultPrinter];
         if (printer != nil) {
             [_attributes setObject: printer forKey: NSPrintPrinter];
         }
@@ -266,19 +266,18 @@ NSString *const NSPrintSavePath = @"NSPrintSavePath";
                     forKey: NSPrintVerticallyCentered];
 }
 
+// PrintCore is not implemented (its session, page format and settings creators return NULL),
+// so there are no PrintCore objects behind a print info.
 - (void *) PMPrintSession {
-    static int s_dummySession = 1;
-    return &s_dummySession;
+    return NULL;
 }
 
 - (void *) PMPageFormat {
-    static int s_dummyFormat = 1;
-    return &s_dummyFormat;
+    return NULL;
 }
 
 - (void *) PMPrintSettings {
-    static int s_dummySettings = 1;
-    return &s_dummySettings;
+    return NULL;
 }
 
 - (void) updateFromPMPageFormat {
