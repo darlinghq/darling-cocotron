@@ -86,7 +86,6 @@ static NSMutableDictionary *viewProviderClasses;
 - (instancetype) initWithFileWrapper: (NSFileWrapper *) fileWrapper {
     if ((self = [self initWithData: nil ofType: nil])) {
         _fileWrapper = [fileWrapper retain];
-        _cell = [[NSTextAttachmentCell alloc] init];
     }
     return self;
 }
