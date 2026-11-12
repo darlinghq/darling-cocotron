@@ -25,14 +25,8 @@
 }
 
 - (void) dealloc {
-    // Observers outliving their object is a bug, but raising here crashes the
-    // app during ordinary controller-binding teardown: AppKit only reports it
-    // under a diagnostic flag. Report and let the object go.
-    if ([_observationProxies count] > 0 && getenv("DARLING_KVO_DIAG") != NULL)
-        NSLog(@"_NSControllerArray deallocated while still observed by %@ on %@",
-              [[_observationProxies objectAtIndex: 0] observer],
-              [[_observationProxies objectAtIndex: 0] keyPath]);
-
+    // Observers that outlive the array are released with it rather than
+    // raising, which would crash ordinary controller-binding teardown.
     [_observationProxies release];
     [_array release];
     [_roi release];
