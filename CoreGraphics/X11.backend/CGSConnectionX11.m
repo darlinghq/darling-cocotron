@@ -70,9 +70,8 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type, CFDataRef a
 		return nil;
 	}
 
+	// The server named by DISPLAY; with DISPLAY unset there is none.
 	_display = XOpenDisplay(NULL);
-	if (!_display)
-		_display = XOpenDisplay(":0");
 	
 	if (!_display)
 	{
