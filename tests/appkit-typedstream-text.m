@@ -141,9 +141,11 @@ static void test_quirk_typedstream_text_storage(NSString *dir)
            "the underline run covers 0..5");
     expect([storage attribute: NSUnderlineStyleAttributeName atIndex: 6 effectiveRange: NULL] == nil,
            "no underline after the run");
+    // -attribute:atIndex:effectiveRange: need not give the longest range; ask for it.
     NSParagraphStyle *style = [storage attribute: NSParagraphStyleAttributeName
                                          atIndex: 0
-                                  effectiveRange: &effective];
+                           longestEffectiveRange: &effective
+                                         inRange: NSMakeRange(0, [storage length])];
     expect(style != nil && [style alignment] == NSCenterTextAlignment &&
                    NSEqualRanges(effective, NSMakeRange(0, 16)),
            "the paragraph style run covers 0..16");
@@ -171,9 +173,7 @@ static void test_quirk_typedstream_text_storage(NSString *dir)
     int zero = 0;
     [coder encodeDataObject: tiff];
     [coder encodeValueOfObjCType: "c" at: &flag];
-    [coder encodeValueOfObjCType: "i" at: &zero];
-    [coder encodeValueOfObjCType: "i" at: &zero];
-    [coder encodeValueOfObjCType: "i" at: &zero];
+    [coder encodeValuesOfObjCTypes: "iii", &zero, &zero, &zero];
 }
 - (id) initWithCoder: (NSCoder *) coder
 {
