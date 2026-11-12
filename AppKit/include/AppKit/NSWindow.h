@@ -279,7 +279,7 @@ APPKIT_EXPORT const NSNotificationName NSWindowDidExposeNotification;
     NSWindowAnimationContext *_animationContext;
 
     NSRect _savedFrame;
-    NSPoint _mouseDownLocationInWindow;
+    NSMutableDictionary *_mouseDownViews;
 
     NSAppearance *_appearance;
     NSUserInterfaceItemIdentifier _identifier;
