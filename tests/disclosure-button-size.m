@@ -13,7 +13,7 @@ int main(void) {
         [button setButtonType:NSOnOffButton];
         [button setBezelStyle:NSDisclosureBezelStyle];
         [button setImagePosition:NSImageOnly];
-        [button setControlSize:NSSmallControlSize];
+        [[button cell] setControlSize:NSSmallControlSize];
         assert([button image] == nil);
         [button sizeToFit];
         NSSize closed = [button frame].size;
