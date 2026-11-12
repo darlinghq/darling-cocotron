@@ -160,8 +160,6 @@ static NSTextView *s_targetTextView = nil;
     [s_findPanel makeKeyAndOrderFront: nil];
     [s_findPanel makeFirstResponder: s_findField];
     [s_findField selectText: nil];
-    [s_findPanel displayIfNeeded];
-    [s_findPanel flushWindow];
 }
 
 + (void) findNext: (id) sender {
@@ -172,7 +170,7 @@ static NSTextView *s_targetTextView = nil;
         [findPboard setString: text forType: NSStringPboardType];
     }
     NSMenuItem *dummy = [[[NSMenuItem alloc] initWithTitle: @"" action: NULL keyEquivalent: @""] autorelease];
-    [dummy setTag: 2];
+    [dummy setTag: NSFindPanelActionNext];
     [s_targetTextView performFindPanelAction: dummy];
 }
 
@@ -184,7 +182,7 @@ static NSTextView *s_targetTextView = nil;
         [findPboard setString: text forType: NSStringPboardType];
     }
     NSMenuItem *dummy = [[[NSMenuItem alloc] initWithTitle: @"" action: NULL keyEquivalent: @""] autorelease];
-    [dummy setTag: 3];
+    [dummy setTag: NSFindPanelActionPrevious];
     [s_targetTextView performFindPanelAction: dummy];
 }
 
@@ -3331,7 +3329,7 @@ static NSTextView *s_targetTextView = nil;
         return YES;
     else if ([item action] == @selector(performFindPanelAction:)) {
         NSInteger tag = [item tag];
-        if (tag == 7)
+        if (tag == NSFindPanelActionSetFindString)
             return [self selectedRange].length > 0;
         return YES;
     }
@@ -3346,10 +3344,10 @@ static NSTextView *s_targetTextView = nil;
 }
 
 - (void) performFindPanelAction: (id) sender {
-    NSInteger action = [sender respondsToSelector: @selector(tag)] ? [sender tag] : 1;
+    NSInteger action = [sender respondsToSelector: @selector(tag)] ? [sender tag] : NSFindPanelActionShowFindPanel;
     NSPasteboard *findPboard = [NSPasteboard pasteboardWithName: NSFindPboard];
 
-    if (action == 7) { // NSFindPanelActionSetFindString (Use Selection for Find)
+    if (action == NSFindPanelActionSetFindString) { // Use Selection for Find
         if ([self selectedRange].length > 0) {
             NSString *str = [[self string] substringWithRange: [self selectedRange]];
             [findPboard declareTypes: [NSArray arrayWithObject: NSStringPboardType] owner: nil];
@@ -3358,12 +3356,12 @@ static NSTextView *s_targetTextView = nil;
         return;
     }
 
-    if (action == 1) { // NSFindPanelActionShowFindPanel (Find...)
+    if (action == NSFindPanelActionShowFindPanel) {
         [_NSFindPanelController showFindPanelForTextView: self];
         return;
     }
 
-    if (action == 2 || action == 3) { // NSFindPanelActionNext / NSFindPanelActionPrevious
+    if (action == NSFindPanelActionNext || action == NSFindPanelActionPrevious) {
         NSString *findString = [findPboard stringForType: NSStringPboardType];
         if ([findString length] == 0) {
             NSBeep();
@@ -3378,7 +3376,7 @@ static NSTextView *s_targetTextView = nil;
         NSRange searchRange;
         NSStringCompareOptions options = NSCaseInsensitiveSearch;
 
-        if (action == 2) { // Next
+        if (action == NSFindPanelActionNext) {
             NSUInteger start = NSMaxRange(currentRange);
             if (start < totalLen) {
                 searchRange = NSMakeRange(start, totalLen - start);
