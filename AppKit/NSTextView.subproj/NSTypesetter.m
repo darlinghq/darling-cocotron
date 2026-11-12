@@ -100,8 +100,9 @@
                                   actualCharacterRange: actualCharacterRange];
 }
 
-// STUB: assumes 1:1 glyph-to-character mapping for Latin/ASCII text layout fallback.
-// Complex scripts with combining characters, surrogates or ligatures require CoreText-backed glyph mapping.
+// Limitation: glyphs map 1:1 to characters here, which is right for simple
+// scripts; combining characters, surrogate pairs and ligatures are not mapped
+// through the font.
 - (NSUInteger) getGlyphsInRange: (NSRange) glyphRange
                          glyphs: (NSGlyph *) glyphs
                characterIndexes: (NSUInteger *) characterIndexes
