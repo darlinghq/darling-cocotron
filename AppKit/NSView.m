@@ -671,10 +671,13 @@ static inline void buildTransformsIfNeeded(NSView *self) {
 }
 
 - (void) scaleUnitSquareToSize: (NSSize) size {
-    if (!isfinite(size.width) || !isfinite(size.height) ||
-            size.width <= 0 || size.height <= 0)
+    // Negative and infinite factors are accepted, as on macOS. A zero or NaN
+    // factor cannot produce usable bounds; macOS aborts the process there, so
+    // raising an exception is the conservative replacement for a crash.
+    if (isnan(size.width) || isnan(size.height) ||
+            size.width == 0 || size.height == 0)
         [NSException raise: NSInvalidArgumentException
-                    format: @"scaleUnitSquareToSize: requires positive, finite dimensions"];
+                    format: @"scaleUnitSquareToSize: requires non-zero, non-NaN dimensions"];
 
     if (size.width == 1.0 && size.height == 1.0)
         return;
@@ -688,6 +691,16 @@ static inline void buildTransformsIfNeeded(NSView *self) {
             !isfinite(bounds.size.width) || !isfinite(bounds.size.height))
         [NSException raise: NSInvalidArgumentException
                     format: @"scaleUnitSquareToSize: produces non-finite bounds"];
+    // A negative factor mirrors the axis; the bounds keep a positive size and
+    // the origin moves to the other edge.
+    if (bounds.size.width < 0) {
+        bounds.origin.x += bounds.size.width;
+        bounds.size.width = -bounds.size.width;
+    }
+    if (bounds.size.height < 0) {
+        bounds.origin.y += bounds.size.height;
+        bounds.size.height = -bounds.size.height;
+    }
     [self setBounds: bounds];
 }
 

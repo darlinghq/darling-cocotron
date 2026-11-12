@@ -32,7 +32,8 @@ int main(void) {
     [view scaleUnitSquareToSize: NSMakeSize(0.5, 0.25)];
     assert(NSEqualRects([view bounds], NSMakeRect(12, 20, 100, 80)));
     assert(observer->count == 2);
-    CGFloat invalid[] = {0, -1, INFINITY, NAN};
+    // Zero and NaN are refused (macOS aborts there); see -scaleUnitSquareToSize:.
+    CGFloat invalid[] = {0, NAN};
     for (NSUInteger i = 0; i < sizeof(invalid) / sizeof(invalid[0]); i++) {
         BOOL caught = NO;
         @try { [view scaleUnitSquareToSize: NSMakeSize(invalid[i], 1)]; }
@@ -42,6 +43,15 @@ int main(void) {
         assert(caught);
         assert(NSEqualRects([view bounds], NSMakeRect(12, 20, 100, 80)));
     }
+    // A negative factor mirrors the axis and keeps a positive bounds size.
+    [view scaleUnitSquareToSize: NSMakeSize(-1, 1)];
+    assert(NSEqualRects([view bounds], NSMakeRect(-112, 20, 100, 80)));
+    [view setBounds: NSMakeRect(12, 20, 100, 80)];
+    // An infinite factor is accepted.
+    [view scaleUnitSquareToSize: NSMakeSize(INFINITY, 1)];
+    assert(isfinite(NSWidth([view bounds])));
+    [view setBounds: NSMakeRect(12, 20, 100, 80)];
+    NSUInteger before = observer->count;
     CGFloat tiny = sizeof(CGFloat) == sizeof(double) ? DBL_MIN : FLT_MIN;
     for (NSUInteger axis = 0; axis < 2; axis++) {
         BOOL caught = NO;
@@ -52,7 +62,7 @@ int main(void) {
         assert(caught);
         assert(NSEqualRects([view bounds], NSMakeRect(12, 20, 100, 80)));
         assert(NSEqualRects([view frame], NSMakeRect(0, 0, 100, 80)));
-        assert(observer->count == 2);
+        assert(observer->count == before);
     }
     [[NSNotificationCenter defaultCenter] removeObserver: observer];
     [observer release];
