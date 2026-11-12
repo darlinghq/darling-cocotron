@@ -11,11 +11,14 @@ static void expect(BOOL condition, NSString *message)
 }
 
 // Implements one optional method only.
-@interface Delegate : NSObject <NSApplicationDelegate>
+@interface Delegate : NSObject <NSApplicationDelegate> {
+    BOOL _finished;
+}
 @property BOOL finished;
 @end
 
 @implementation Delegate
+@synthesize finished = _finished;
 - (void)applicationWillFinishLaunching:(NSNotification *)note { self.finished = YES; }
 @end
 
