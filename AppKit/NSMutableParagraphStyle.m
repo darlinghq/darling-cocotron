@@ -57,10 +57,15 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [self setTabStops: [other tabStops]];
     _hyphenationFactor = other->_hyphenationFactor;
     _tighteningFactorForTruncation = other->_tighteningFactorForTruncation;
+    _horizontalAlignment = other->_horizontalAlignment;
 }
 
 - (void) setBaseWritingDirection: (NSWritingDirection) direction {
     _writingDirection = direction;
+}
+
+- (void) setHorizontalAlignment: (NSInteger) alignment {
+    _horizontalAlignment = alignment;
 }
 
 - (void) setParagraphSpacing: (CGFloat) spacing {

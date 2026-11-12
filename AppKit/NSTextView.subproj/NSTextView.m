@@ -272,11 +272,12 @@ static NSTextView *s_targetTextView = nil;
 - (void) _setTextStorage: (NSTextStorage *) storage {
     if (storage == nil)
         return;
-    if (_ownsTextStorage)
+    // A view that owns its text network keeps owning it when the storage changes.
+    if (_ownsTextStorage) {
+        [storage retain];
         [_textStorage release];
-
+    }
     _textStorage = storage;
-    _ownsTextStorage = NO;
 
     NSMutableDictionary *typingAttributes = nil;
     if ([_textStorage length] > 0) {
@@ -304,6 +305,14 @@ static NSTextView *s_targetTextView = nil;
         _defaultParagraphStyle =
                 [[NSParagraphStyle defaultParagraphStyle] copy];
     }
+}
+
+- (void) replaceTextStorage: (NSTextStorage *) textStorage {
+    NSLayoutManager *layoutManager = [self layoutManager];
+    if (layoutManager)
+        [layoutManager replaceTextStorage: textStorage];
+    else
+        [self _setTextStorage: textStorage];
 }
 
 - initWithCoder: (NSCoder *) coder {
@@ -714,6 +723,14 @@ static NSTextView *s_targetTextView = nil;
                   affinity: (NSSelectionAffinity) affinity
             stillSelecting: (BOOL) stillSelecting
 {
+    // QUIRK: a nil array is ignored and leaves the selection unchanged, while
+    // an empty non-nil array raises NSInvalidArgumentException. Not documented.
+    // Evidence: black-box observation on macOS 27 (tier 2, MC11.4 in the
+    // project's evidence notes).
+    // Test: test_quirk_nil_selected_ranges_is_ignored in
+    // tests/appkit-text-system-settings.m
+    if (ranges == nil)
+        return;
     if ([ranges count] == 0)
         [NSException raise: NSInvalidArgumentException
                     format: @"-[%@ %s] ranges should not be empty",
@@ -3915,7 +3932,6 @@ static NSTextView *s_targetTextView = nil;
 
 - (void) setAutomaticSpellingCorrectionEnabled: (BOOL) value {
     _isAutomaticSpellingCorrectionEnabled = value;
-    NSUnimplementedMethod();
 }
 
 - (void) toggleAutomaticSpellingCorrection: sender {
@@ -4276,108 +4292,160 @@ static NSTextView *s_targetTextView = nil;
     return self;
 }
 - (NSTextLayoutOrientation) layoutOrientation {
-    NSUnimplementedMethod();
     return _layoutOrientation;
 }
 
 - (void) setLayoutOrientation: (NSTextLayoutOrientation) orientation {
     _layoutOrientation = orientation;
-    NSUnimplementedMethod();
 }
 
 - (BOOL) isIncrementalSearchingEnabled {
-    NSUnimplementedMethod();
     return _incrementalSearchingEnabled;
 }
 
 - (BOOL) usesFindBar {
-    NSUnimplementedMethod();
     return _usesFindBar;
 }
 
 - (BOOL) usesInspectorBar {
-    NSUnimplementedMethod();
     return _usesInspectorBar;
 }
 
 - (void) setIncrementalSearchingEnabled: (BOOL) value {
-    NSUnimplementedMethod();
     _incrementalSearchingEnabled = value;
 }
 
 - (void) setUsesFindBar: (BOOL) value {
-    NSUnimplementedMethod();
     _usesFindBar = value;
 }
 
 - (void) setUsesInspectorBar: (BOOL) value {
-    NSUnimplementedMethod();
     _usesInspectorBar = value;
 }
 
 - (BOOL) isGrammarCheckingEnabled {
-    NSUnimplementedMethod();
     return _grammarCheckingEnabled;
 }
 
 - (BOOL) isAutomaticQuoteSubstitutionEnabled {
-    NSUnimplementedMethod();
     return _automaticQuoteSubstitutionEnabled;
 }
 
 - (BOOL) isAutomaticDashSubstitutionEnabled {
-    NSUnimplementedMethod();
     return _automaticDashSubstitutionEnabled;
 }
 
 - (BOOL) isAutomaticLinkDetectionEnabled {
-    NSUnimplementedMethod();
     return _automaticLinkDetectionEnabled;
 }
 
 - (BOOL) isAutomaticDataDetectionEnabled {
-    NSUnimplementedMethod();
     return _automaticDataDetectionEnabled;
 }
 
 - (BOOL) isAutomaticTextReplacementEnabled {
-    NSUnimplementedMethod();
     return _automaticTextReplacementEnabled;
 }
 
 - (void) setGrammarCheckingEnabled: (BOOL) value {
-    NSUnimplementedMethod();
     _grammarCheckingEnabled = value;
 }
 
 - (void) setAutomaticQuoteSubstitutionEnabled: (BOOL) value {
-    NSUnimplementedMethod();
     _automaticQuoteSubstitutionEnabled = value;
 }
 
 - (void) setAutomaticDashSubstitutionEnabled: (BOOL) value {
-    NSUnimplementedMethod();
     _automaticDashSubstitutionEnabled = value;
 }
 
 - (void) setAutomaticLinkDetectionEnabled: (BOOL) value {
-    NSUnimplementedMethod();
     _automaticLinkDetectionEnabled = value;
 }
 
 - (void) setAutomaticDataDetectionEnabled: (BOOL) value {
-    NSUnimplementedMethod();
     _automaticDataDetectionEnabled = value;
 }
 
 - (void) setAutomaticTextReplacementEnabled: (BOOL) value {
-    NSUnimplementedMethod();
     _automaticTextReplacementEnabled = value;
 }
 
-// Is defined in NSText but throws an NSInvalidAbstractInvocation Exception
+// Stored only: dropped or pasted graphics aren't handled differently.
+- (BOOL) importsGraphics {
+    return _importsGraphics;
+}
+
 - (void) setImportsGraphics: (BOOL) value {
-    NSUnimplementedMethod();
+    _importsGraphics = value;
+}
+
+@end
+
+@implementation NSTextView (NSTextViewLayoutOrientationAndHighlights)
+
++ (NSArray *) _textHighlightMenuItems {
+    return [NSArray array];
+}
+
+- (BOOL) usesAdaptiveColorMappingForDarkAppearance {
+    return _usesAdaptiveColorMappingForDarkAppearance;
+}
+
+- (void) setUsesAdaptiveColorMappingForDarkAppearance: (BOOL) flag {
+    _usesAdaptiveColorMappingForDarkAppearance = flag;
+}
+
+- (void) changeLayoutOrientation: (id) sender {
+    [self setLayoutOrientation: [self layoutOrientation] ==
+                                                NSTextLayoutOrientationVertical
+                                        ? NSTextLayoutOrientationHorizontal
+                                        : NSTextLayoutOrientationVertical];
+}
+
+// Sets the paragraph styles' writing direction over the range, with undo, and
+// in the typing attributes when the insertion point is in the range.
+- (void) setBaseWritingDirection: (NSWritingDirection) direction
+                           range: (NSRange) range
+{
+    NSTextStorage *storage = [self textStorage];
+    if (NSMaxRange(range) > [storage length])
+        [NSException raise: NSRangeException
+                    format: @"%@: range %@ beyond length %lu",
+                            NSStringFromSelector(_cmd),
+                            NSStringFromRange(range),
+                            (unsigned long) [storage length]];
+
+    if (range.length > 0) {
+        if (![self shouldChangeTextInRange: range replacementString: nil])
+            return;
+        if (_allowsUndo && self.undoManager) {
+            [self breakUndoCoalescing];
+            NSUndoSetAttributes *undoSetAttributes = [[[NSUndoSetAttributes alloc]
+                    initWithAffectedRange: range
+                            layoutManager: self.layoutManager
+                              undoManager: self.undoManager] autorelease];
+            [[self.undoManager prepareWithInvocationTarget: undoSetAttributes]
+                    undoRedo: storage];
+        }
+        [storage setBaseWritingDirection: direction range: range];
+        [self didChangeText];
+    }
+
+    NSRange selection = [self selectedRange];
+    if (selection.location >= range.location &&
+        selection.location <= NSMaxRange(range)) {
+        NSMutableDictionary *attributes =
+                [[[self typingAttributes] mutableCopy] autorelease];
+        NSParagraphStyle *style =
+                [attributes objectForKey: NSParagraphStyleAttributeName];
+        NSMutableParagraphStyle *changed =
+                [[(style ? style : [NSParagraphStyle defaultParagraphStyle])
+                        mutableCopy] autorelease];
+        [changed setBaseWritingDirection: direction];
+        [attributes setObject: changed forKey: NSParagraphStyleAttributeName];
+        [self setTypingAttributes: attributes];
+    }
 }
 
 @end

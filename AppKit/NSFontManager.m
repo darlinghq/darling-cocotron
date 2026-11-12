@@ -18,6 +18,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSApplication.h>
+#import <AppKit/NSAttributedString.h>
 #import <AppKit/NSFont.h>
 #import <AppKit/NSFontFamily.h>
 #import <AppKit/NSFontManager.h>
@@ -387,6 +388,12 @@ static Class _fontPanelFactory;
 
     [[self fontPanel: NO] setPanelFont: font isMultiple: flag];
     [self _configureMenu: [NSApp mainMenu] forFont: font];
+}
+
+- (void) setSelectedAttributes: (NSDictionary *) attributes isMultiple: (BOOL) flag {
+    NSFont *font = [attributes objectForKey: NSFontAttributeName];
+    if (font != nil)
+        [self setSelectedFont: font isMultiple: flag];
 }
 
 - (void) _udpdateSelectedFont {

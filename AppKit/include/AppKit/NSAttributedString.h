@@ -22,7 +22,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Foundation/Foundation.h>
 
 @class NSFont, NSColor, NSParagraphStyle, NSTextAttachment, NSFileWrapper,
-        NSTextList, NSTextBlock, NSTextTable;
+        NSTextList, NSTextBlock, NSTextTable, NSPasteboard;
 
 typedef NSString *NSAttributedStringDocumentReadingOptionKey;
 typedef NSString *NSAttributedStringDocumentAttributeKey;
@@ -281,6 +281,12 @@ enum {
 
 + (NSArray *) textUnfilteredFileTypes;
 + (NSArray *) textUnfilteredPasteboardTypes;
+
+#pragma mark -
+#pragma mark NSPasteboardReading
+
+// RTFD, RTF and plain string types.
++ (NSArray *) readableTypesForPasteboard: (NSPasteboard *) pasteboard;
 
 @end
 
