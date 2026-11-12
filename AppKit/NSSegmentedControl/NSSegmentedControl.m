@@ -37,6 +37,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return [_cell segmentStyle];
 }
 
+- (NSSegmentSwitchTracking) trackingMode {
+    return [_cell trackingMode];
+}
+
 - (NSInteger) tagForSegment: (NSInteger) segment {
     return [_cell tagForSegment: segment];
 }
@@ -84,6 +88,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (void) setSegmentStyle: (NSSegmentStyle) value {
     [_cell setSegmentStyle: value];
     [self setNeedsDisplay: YES];
+}
+
+- (void) setTrackingMode: (NSSegmentSwitchTracking) trackingMode {
+    [_cell setTrackingMode: trackingMode];
 }
 
 - (void) setTag: (NSInteger) tag forSegment: (NSInteger) segment {

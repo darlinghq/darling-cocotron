@@ -607,6 +607,8 @@ static BOOL _allowsAutomaticWindowTabbing;
     [_tabbingIdentifier release];
     [_subtitle release];
     [_childWindows release];
+    [_representedFilename release];
+    [_representedURL release];
     [_title release];
     [_miniwindowTitle release];
     [_miniwindowImage release];
@@ -735,8 +737,7 @@ static BOOL _allowsAutomaticWindowTabbing;
 }
 
 - (NSURL *) representedURL {
-    NSUnimplementedMethod();
-    return nil;
+    return _representedURL;
 }
 
 - (NSWindowLevel) level {
@@ -783,6 +784,23 @@ static BOOL _allowsAutomaticWindowTabbing;
 
 - (NSSize) contentMaxSize {
     return _contentMaxSize;
+}
+
+// Stored only: Cocotron has no full screen mode that applies them.
+- (NSSize) minFullScreenContentSize {
+    return _minFullScreenContentSize;
+}
+
+- (void) setMinFullScreenContentSize: (NSSize) value {
+    _minFullScreenContentSize = value;
+}
+
+- (NSSize) maxFullScreenContentSize {
+    return _maxFullScreenContentSize;
+}
+
+- (void) setMaxFullScreenContentSize: (NSSize) value {
+    _maxFullScreenContentSize = value;
 }
 
 - (BOOL) isOneShot {
@@ -1507,14 +1525,25 @@ static BOOL _allowsAutomaticWindowTabbing;
     // _preservesContentDuringLiveResize=value;
 }
 
+// The represented filename and URL describe the same file; setting one updates
+// the other. A non-file URL has no filename.
 - (void) setRepresentedFilename: (NSString *) value {
     value = [value copy];
     [_representedFilename release];
     _representedFilename = value;
+
+    [_representedURL release];
+    _representedURL = [value length] > 0
+            ? [[NSURL fileURLWithPath: value] retain] : nil;
 }
 
 - (void) setRepresentedURL: (NSURL *) newURL {
-    NSUnimplementedMethod();
+    newURL = [newURL copy];
+    [_representedURL release];
+    _representedURL = newURL;
+
+    [_representedFilename release];
+    _representedFilename = [newURL isFileURL] ? [[newURL path] copy] : nil;
 }
 
 - (void) setResizeIncrements: (NSSize) value {
@@ -1720,6 +1749,14 @@ static BOOL _allowsAutomaticWindowTabbing;
 // There is a single space, so every window is on the active one.
 - (BOOL) isOnActiveSpace {
     return YES;
+}
+
+- (NSWindowAnimationBehavior) animationBehavior {
+    return _animationBehavior;
+}
+
+- (void) setAnimationBehavior: (NSWindowAnimationBehavior) behavior {
+    _animationBehavior = behavior;
 }
 
 - (NSWindowSharingType) sharingType {
@@ -2423,6 +2460,12 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
 }
 
 - (void) close {
+    // A window that is already closed is not closed again, so that
+    // NSWindowWillCloseNotification is posted once per close cycle and the
+    // window is not released twice.
+    if (_isClosed)
+        return;
+    _isClosed = YES;
     /*
       I am not sure if orderOut comes before the notification or not. If we
       order out after the notification, Windows sends the window a bunch of
@@ -2477,6 +2520,7 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
 
     switch (place) {
     case NSWindowAbove:
+        _isClosed = NO;
         [self update];
         _isVisible = YES;
         [[self platformWindow] placeAboveWindow: relativeTo];
@@ -2495,6 +2539,7 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
         break;
 
     case NSWindowBelow:
+        _isClosed = NO;
         [self update];
         _isVisible = YES;
         [[self platformWindow] placeBelowWindow: relativeTo];
@@ -2513,16 +2558,35 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
         break;
 
     case NSWindowOut:
+        // Note: _isClosed is deliberately NOT reset here because -[NSWindow close]
+        // calls -[self orderOut: nil] with _isClosed = YES already set.
+        // Resetting here would immediately defeat double-close protection.
         _isVisible = NO;
         [[self platformWindow] hideWindow];
         if (![self isKindOfClass: [NSPanel class]]) {
             [NSApp removeWindowsItem: self];
         }
+        if ([self isKeyWindow])
+            [self _passKeyToFrontmostWindow];
         break;
     }
 
     [self _postOcclusionChangeIfVisibleWas: wasVisible];
     [self postNotificationName: NSWindowDidMoveNotification];
+}
+
+// Like macOS, ordering out the key window makes the frontmost remaining
+// window that can become key the key window; without one, none is key.
+- (void) _passKeyToFrontmostWindow {
+    for (NSWindow *window in [NSApp orderedWindows]) {
+        if (window != self && [window isVisible] &&
+            [window canBecomeKeyWindow]) {
+            [window becomeKeyWindow];
+            return;
+        }
+    }
+    [NSApp _setKeyWindow: nil];
+    [self resignKeyWindow];
 }
 
 - (void) orderFrontRegardless {
@@ -4072,6 +4136,39 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
 - (NSRect) convertRectFromScreen: (NSRect) rect {
     rect.origin = [self convertScreenToBase: rect.origin];
     return rect;
+}
+
+static inline NSRect scaleWindowRect(NSRect rect, CGFloat scale) {
+    return NSMakeRect(rect.origin.x * scale, rect.origin.y * scale,
+                      rect.size.width * scale, rect.size.height * scale);
+}
+
+- (NSRect) convertRectToBacking: (NSRect) rect {
+    CGFloat scale = [self backingScaleFactor];
+    if (scale <= 0) scale = 1.0;
+    return scaleWindowRect(rect, scale);
+}
+
+- (NSRect) convertRectFromBacking: (NSRect) rect {
+    CGFloat scale = [self backingScaleFactor];
+    if (scale <= 0) scale = 1.0;
+    return scaleWindowRect(rect, 1.0 / scale);
+}
+
+- (NSPoint) convertPointToBacking: (NSPoint) point {
+    return [self convertRectToBacking: (NSRect){point, NSZeroSize}].origin;
+}
+
+- (NSPoint) convertPointFromBacking: (NSPoint) point {
+    return [self convertRectFromBacking: (NSRect){point, NSZeroSize}].origin;
+}
+
+- (NSSize) convertSizeToBacking: (NSSize) size {
+    return [self convertRectToBacking: (NSRect){NSZeroPoint, size}].size;
+}
+
+- (NSSize) convertSizeFromBacking: (NSSize) size {
+    return [self convertRectFromBacking: (NSRect){NSZeroPoint, size}].size;
 }
 
 - (void) beginSheet: (NSWindow *) sheet

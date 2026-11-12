@@ -172,6 +172,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 {
     int i, count = [_keyBindings count];
 
+    // Physical left/right modifier bits describe the key that was pressed,
+    // not a different key binding. Wayland includes them on ordinary keys.
+    flags &= NSDeviceIndependentModifierFlagsMask;
     flags &= ~NSNumericPadKeyMask;
     flags &= ~NSAlphaShiftKeyMask;
 
