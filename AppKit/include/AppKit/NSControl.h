@@ -44,10 +44,10 @@ APPKIT_EXPORT const NSNotificationName NSControlTextDidEndEditingNotification;
 
 - (id) cell;
 
-- (id) target;
+@property (assign, nullable) id target;
 - (SEL) action;
 - (NSInteger) tag;
-- (NSFont *) font;
+@property (retain) NSFont *font;
 - (NSImage *) image;
 - (NSTextAlignment) alignment;
 - (BOOL) isEnabled;
@@ -59,7 +59,7 @@ APPKIT_EXPORT const NSNotificationName NSControlTextDidEndEditingNotification;
 - (BOOL) isContinuous;
 - (BOOL) refusesFirstResponder;
 - (id) formatter;
-- (NSLineBreakMode) lineBreakMode;
+@property NSLineBreakMode lineBreakMode;
 - (BOOL) usesSingleLineMode;
 // The cell's control size.
 - (NSControlSize) controlSize;
@@ -70,17 +70,15 @@ APPKIT_EXPORT const NSNotificationName NSControlTextDidEndEditingNotification;
 - (NSAttributedString *) attributedStringValue;
 - (int) intValue;
 - (float) floatValue;
-- (double) doubleValue;
+@property double doubleValue;
 - (NSInteger) integerValue;
 
 - (id) selectedCell;
 - (NSInteger) selectedTag;
 
 - (void) setCell: (NSCell *) cell;
-- (void) setTarget: target;
 - (void) setAction: (SEL) action;
 - (void) setTag: (NSInteger) tag;
-- (void) setFont: (NSFont *) font;
 - (void) setImage: (NSImage *) image;
 - (void) setAlignment: (NSTextAlignment) alignment;
 - (void) setFloatingPointFormat: (BOOL) fpp
@@ -95,7 +93,6 @@ APPKIT_EXPORT const NSNotificationName NSControlTextDidEndEditingNotification;
 - (void) setContinuous: (BOOL) flag;
 - (void) setRefusesFirstResponder: (BOOL) flag;
 - (void) setFormatter: (NSFormatter *) formatter;
-- (void) setLineBreakMode: (NSLineBreakMode) value;
 - (void) setUsesSingleLineMode: (BOOL) flag;
 
 - (void) setObjectValue: (id<NSCopying>) value;
@@ -103,7 +100,6 @@ APPKIT_EXPORT const NSNotificationName NSControlTextDidEndEditingNotification;
 - (void) setIntValue: (int) value;
 - (void) setIntegerValue: (NSInteger) value;
 - (void) setFloatValue: (float) value;
-- (void) setDoubleValue: (double) value;
 - (void) setIntegerValue: (NSInteger) anInteger;
 - (void) setAttributedStringValue: (NSAttributedString *) value;
 

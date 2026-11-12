@@ -3835,7 +3835,6 @@ static NSTextView *s_targetTextView = nil;
 
 - (void) setEnabledTextCheckingTypes: (NSTextCheckingTypes) checkingTypes {
     _enabledTextCheckingTypes = checkingTypes;
-    NSUnimplementedMethod();
 }
 
 - (BOOL) smartInsertDeleteEnabled {

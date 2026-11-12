@@ -40,6 +40,7 @@ enum {
     BOOL _isResizable;
     BOOL _isEditable;
     NSUInteger _resizingMask;
+    BOOL _hidden;
     NSSortDescriptor *_sortDescriptorPrototype;
 }
 
@@ -50,6 +51,8 @@ enum {
 - (id) dataCell;
 - (NSString *) headerToolTip;
 
+- (BOOL) isHidden;
+- (void) setHidden: (BOOL) hidden;
 - (CGFloat) width;
 - (CGFloat) minWidth;
 - (CGFloat) maxWidth;

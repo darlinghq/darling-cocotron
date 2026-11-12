@@ -22,7 +22,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Foundation/Foundation.h>
 #import <CoreGraphics/CGEventTypes.h>
 
-@class NSWindow, NSGraphicsContext, NSTrackingArea, NSView;
+@class NSEvent, NSWindow, NSGraphicsContext, NSTrackingArea, NSView, NSSet;
 
 typedef NS_ENUM(NSUInteger, NSEventType) {
     NSEventTypeLeftMouseDown = 1,
@@ -95,42 +95,78 @@ typedef NS_ENUM(NSUInteger, NSEventType) {
 };
 
 typedef NS_OPTIONS(unsigned long long, NSEventMask) {
-    NSLeftMouseDownMask = 1 << NSLeftMouseDown,
-    NSLeftMouseUpMask = 1 << NSLeftMouseUp,
-    NSRightMouseDownMask = 1 << NSRightMouseDown,
-    NSRightMouseUpMask = 1 << NSRightMouseUp,
-    NSMouseMovedMask = 1 << NSMouseMoved,
-    NSLeftMouseDraggedMask = 1 << NSLeftMouseDragged,
-    NSRightMouseDraggedMask = 1 << NSRightMouseDragged,
-    NSMouseEnteredMask = 1 << NSMouseEntered,
-    NSMouseExitedMask = 1 << NSMouseExited,
-    NSKeyDownMask = 1 << NSKeyDown,
-    NSKeyUpMask = 1 << NSKeyUp,
-    NSFlagsChangedMask = 1 << NSFlagsChanged,
-    NSPeriodicMask = 1 << NSPeriodic,
-    NSCursorUpdateMask = 1 << NSCursorUpdate,
-    NSScrollWheelMask = 1 << NSScrollWheel,
-    NSApplicationDefinedMask = 1 << NSApplicationDefined,
-    NSAppKitDefinedMask = 1 << NSAppKitDefined,
-    NSOtherMouseDownMask = 1 << NSOtherMouseDown,
-    NSOtherMouseUpMask = 1 << NSOtherMouseUp,
-    NSOtherMouseDraggedMask = 1 << NSOtherMouseDragged,
-    NSAnyEventMask = 0xffffffff,
-
-    NSPlatformSpecificDisplayMask = 1 << NSPlatformSpecificDisplayEvent,
+    NSEventMaskLeftMouseDown = 1ULL << NSEventTypeLeftMouseDown,
+    NSEventMaskLeftMouseUp = 1ULL << NSEventTypeLeftMouseUp,
+    NSEventMaskRightMouseDown = 1ULL << NSEventTypeRightMouseDown,
+    NSEventMaskRightMouseUp = 1ULL << NSEventTypeRightMouseUp,
+    NSEventMaskMouseMoved = 1ULL << NSEventTypeMouseMoved,
+    NSEventMaskLeftMouseDragged = 1ULL << NSEventTypeLeftMouseDragged,
+    NSEventMaskRightMouseDragged = 1ULL << NSEventTypeRightMouseDragged,
+    NSEventMaskMouseEntered = 1ULL << NSEventTypeMouseEntered,
+    NSEventMaskMouseExited = 1ULL << NSEventTypeMouseExited,
+    NSEventMaskKeyDown = 1ULL << NSEventTypeKeyDown,
+    NSEventMaskKeyUp = 1ULL << NSEventTypeKeyUp,
+    NSEventMaskFlagsChanged = 1ULL << NSEventTypeFlagsChanged,
+    NSEventMaskPeriodic = 1ULL << NSEventTypePeriodic,
+    NSEventMaskCursorUpdate = 1ULL << NSEventTypeCursorUpdate,
+    NSEventMaskScrollWheel = 1ULL << NSEventTypeScrollWheel,
+    NSEventMaskApplicationDefined = 1ULL << NSEventTypeApplicationDefined,
+    NSEventMaskAppKitDefined = 1ULL << NSEventTypeAppKitDefined,
+    NSEventMaskOtherMouseDown = 1ULL << NSEventTypeOtherMouseDown,
+    NSEventMaskOtherMouseUp = 1ULL << NSEventTypeOtherMouseUp,
+    NSEventMaskOtherMouseDragged = 1ULL << NSEventTypeOtherMouseDragged,
 };
+
+// Pre-10.12 spellings.  NSAnyEventMask keeps Cocotron's 32-bit value rather
+// than AppKit's NSEventMaskAny (NSUIntegerMax); widening it is a behaviour
+// change and is left alone here.
+static const NSEventMask NSLeftMouseDownMask = NSEventMaskLeftMouseDown;
+static const NSEventMask NSLeftMouseUpMask = NSEventMaskLeftMouseUp;
+static const NSEventMask NSRightMouseDownMask = NSEventMaskRightMouseDown;
+static const NSEventMask NSRightMouseUpMask = NSEventMaskRightMouseUp;
+static const NSEventMask NSMouseMovedMask = NSEventMaskMouseMoved;
+static const NSEventMask NSLeftMouseDraggedMask = NSEventMaskLeftMouseDragged;
+static const NSEventMask NSRightMouseDraggedMask = NSEventMaskRightMouseDragged;
+static const NSEventMask NSMouseEnteredMask = NSEventMaskMouseEntered;
+static const NSEventMask NSMouseExitedMask = NSEventMaskMouseExited;
+static const NSEventMask NSKeyDownMask = NSEventMaskKeyDown;
+static const NSEventMask NSKeyUpMask = NSEventMaskKeyUp;
+static const NSEventMask NSFlagsChangedMask = NSEventMaskFlagsChanged;
+static const NSEventMask NSPeriodicMask = NSEventMaskPeriodic;
+static const NSEventMask NSCursorUpdateMask = NSEventMaskCursorUpdate;
+static const NSEventMask NSScrollWheelMask = NSEventMaskScrollWheel;
+static const NSEventMask NSApplicationDefinedMask = NSEventMaskApplicationDefined;
+static const NSEventMask NSAppKitDefinedMask = NSEventMaskAppKitDefined;
+static const NSEventMask NSOtherMouseDownMask = NSEventMaskOtherMouseDown;
+static const NSEventMask NSOtherMouseUpMask = NSEventMaskOtherMouseUp;
+static const NSEventMask NSOtherMouseDraggedMask = NSEventMaskOtherMouseDragged;
+static const NSEventMask NSAnyEventMask = 0xffffffff;
+static const NSEventMask NSPlatformSpecificDisplayMask =
+        1ULL << NSPlatformSpecificDisplayEvent;
 
 typedef NS_OPTIONS(NSUInteger, NSEventModifierFlags) {
-    NSAlphaShiftKeyMask = 1 << 16,
-    NSShiftKeyMask = 1 << 17,
-    NSControlKeyMask = 1 << 18,
-    NSAlternateKeyMask = 1 << 19,
-    NSCommandKeyMask = 1 << 20,
-    NSNumericPadKeyMask = 1 << 21,
-    NSHelpKeyMask = 1 << 22,
-    NSFunctionKeyMask = 1 << 23,
-    NSDeviceIndependentModifierFlagsMask = 0xffff0000UL
+    NSEventModifierFlagCapsLock = 1 << 16,
+    NSEventModifierFlagShift = 1 << 17,
+    NSEventModifierFlagControl = 1 << 18,
+    NSEventModifierFlagOption = 1 << 19,
+    NSEventModifierFlagCommand = 1 << 20,
+    NSEventModifierFlagNumericPad = 1 << 21,
+    NSEventModifierFlagHelp = 1 << 22,
+    NSEventModifierFlagFunction = 1 << 23,
+    NSEventModifierFlagDeviceIndependentFlagsMask = 0xffff0000UL
 };
+
+// Pre-10.12 spellings.
+static const NSEventModifierFlags NSAlphaShiftKeyMask = NSEventModifierFlagCapsLock;
+static const NSEventModifierFlags NSShiftKeyMask = NSEventModifierFlagShift;
+static const NSEventModifierFlags NSControlKeyMask = NSEventModifierFlagControl;
+static const NSEventModifierFlags NSAlternateKeyMask = NSEventModifierFlagOption;
+static const NSEventModifierFlags NSCommandKeyMask = NSEventModifierFlagCommand;
+static const NSEventModifierFlags NSNumericPadKeyMask = NSEventModifierFlagNumericPad;
+static const NSEventModifierFlags NSHelpKeyMask = NSEventModifierFlagHelp;
+static const NSEventModifierFlags NSFunctionKeyMask = NSEventModifierFlagFunction;
+static const NSEventModifierFlags NSDeviceIndependentModifierFlagsMask =
+        NSEventModifierFlagDeviceIndependentFlagsMask;
 
 enum : unsigned int {
     NSUpArrowFunctionKey = 0xF700,
@@ -242,11 +278,11 @@ typedef NS_OPTIONS(NSUInteger, NSEventPhase) {
 }
 
 + (NSPoint) mouseLocation;
-+ (NSEventModifierFlags) modifierFlags;
+@property (class, readonly) NSEventModifierFlags modifierFlags;
 + (NSUInteger) pressedMouseButtons;
 
 + (id) addLocalMonitorForEventsMatchingMask: (NSEventMask) mask
-                                    handler: (NSEvent * _Nullable (^)(NSEvent *event)) block;
+                                    handler: (NSEvent *_Nullable (^)(NSEvent *_Nonnull event)) block;
 + (void) removeMonitor: (id) eventMonitor;
 + (void) setMouseCoalescingEnabled: (BOOL) flag;
 + (BOOL) isMouseCoalescingEnabled;
@@ -315,13 +351,13 @@ typedef NS_OPTIONS(NSUInteger, NSEventPhase) {
                            data2: (NSInteger) data2;
 
 - (NSEventType) type;
-- (NSTimeInterval) timestamp;
-- (NSPoint) locationInWindow;
-- (NSEventModifierFlags) modifierFlags;
-- (NSWindow *) window;
+@property (readonly) NSTimeInterval timestamp;
+@property (readonly) NSPoint locationInWindow;
+@property (readonly) NSEventModifierFlags modifierFlags;
+@property (readonly, weak) NSWindow *window;
 - (NSInteger) windowNumber;
 
-- (NSInteger) clickCount;
+@property (readonly) NSInteger clickCount;
 - (CGFloat) deltaX;
 - (CGFloat) deltaY;
 - (CGFloat) deltaZ;

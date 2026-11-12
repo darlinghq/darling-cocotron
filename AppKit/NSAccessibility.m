@@ -593,23 +593,21 @@ NSString *NSAccessibilityRoleDescription(NSString *role, NSString *subrole) {
     return nil;
 }
 
+// Cocotron never treats an element as ignored, so each of these returns what it was given.
 id NSAccessibilityUnignoredAncestor(id element) {
-    return nil;
+    return element;
 }
 
 id NSAccessibilityUnignoredDescendant(id element) {
-    printf("STUB %s\n", __PRETTY_FUNCTION__);
-    return nil;
+    return element;
 }
 
 NSArray *NSAccessibilityUnignoredChildren(NSArray *originalChildren) {
-    printf("STUB %s\n", __PRETTY_FUNCTION__);
-    return nil;
+    return originalChildren;
 }
 
 NSArray *NSAccessibilityUnignoredChildrenForOnlyChild(id originalChild) {
-    printf("STUB %s\n", __PRETTY_FUNCTION__);
-    return nil;
+    return originalChild ? [NSArray arrayWithObject: originalChild] : [NSArray array];
 }
 
 @implementation NSObject (NSAccessibility)

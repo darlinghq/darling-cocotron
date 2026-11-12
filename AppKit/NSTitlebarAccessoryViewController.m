@@ -1,11 +1,18 @@
 #import <AppKit/NSTitlebarAccessoryViewController.h>
+#import <AppKit/NSScrollEdgeEffectStyle.h>
 
 @implementation NSTitlebarAccessoryViewController
 
+@synthesize preferredScrollEdgeEffectStyle = _preferredScrollEdgeEffectStyle;
 @synthesize automaticallyAdjustsSize = _automaticallyAdjustsSize;
 @synthesize hidden = _hidden;
 @synthesize fullScreenMinHeight = _fullScreenMinHeight;
 @synthesize layoutAttribute = _layoutAttribute;
+
+- (void) dealloc {
+    [_preferredScrollEdgeEffectStyle release];
+    [super dealloc];
+}
 
 - (instancetype) initWithNibName: (NSString *) name bundle: (NSBundle *) bundle {
     if ((self = [super initWithNibName: name bundle: bundle])) {

@@ -763,9 +763,4 @@ static CGFloat constrainTo(CGFloat value, CGFloat min, CGFloat max) {
     [self _autosaveSubviewLayoutIfNecessary];
 }
 
-- (BOOL) isOpaque {
-    NSUnimplementedMethod();
-    return YES;
-}
-
 @end

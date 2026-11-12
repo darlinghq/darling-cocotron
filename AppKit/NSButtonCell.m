@@ -901,6 +901,7 @@ static const CGFloat kImageMargin = 2.;
     if ([self isKindOfClass: [NSComboBoxCell class]]) {
         switch (_controlSize) {
         case NSRegularControlSize:
+        case NSControlSizeLarge:
             frame.size.width = 2;
             frame.size.height = 1;
             frame.origin.x = 1;
@@ -923,6 +924,7 @@ static const CGFloat kImageMargin = 2.;
     } else if ([self isKindOfClass: [NSPopUpButtonCell class]]) {
         switch (_controlSize) {
         case NSRegularControlSize:
+        case NSControlSizeLarge:
             frame.size.width = 2;
             frame.size.height = 1;
             frame.origin.x = 1;
@@ -944,13 +946,15 @@ static const CGFloat kImageMargin = 2.;
                (_highlightsBy & NSChangeGrayCellMask) &&
                (_showsStateBy == NSNoCellMask)) {
         switch (_controlSize) {
-        default:
-            frame.size.width = 10 - _controlSize * 2;
-            frame.size.height = 10 - _controlSize * 2;
-            frame.origin.x = 5 - _controlSize;
-            frame.origin.y =
-                    flipped ? _controlSize * 2 - 3 : 7 - _controlSize * 2;
+        default: {
+            // Signed, so the flipped offset doesn't wrap; the large sizes keep the regular inset.
+            CGFloat step = (_controlSize == NSSmallControlSize) ? 1 : 0;
+            frame.size.width = 10 - step * 2;
+            frame.size.height = 10 - step * 2;
+            frame.origin.x = 5 - step;
+            frame.origin.y = flipped ? step * 2 - 3 : 7 - step * 2;
             break;
+        }
 
         case NSMiniControlSize:
             break;
