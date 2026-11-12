@@ -207,6 +207,7 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPre
 
 - (BOOL) isHidden;
 - (BOOL) isHiddenOrHasHiddenAncestor;
+@property(getter=isDrawingFindIndicator, readonly) BOOL drawingFindIndicator;
 - (void) setHidden: (BOOL) flag;
 - (void) viewDidHide;
 - (void) viewDidUnhide;
