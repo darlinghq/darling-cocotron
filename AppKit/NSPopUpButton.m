@@ -201,13 +201,14 @@ static NSString *const NSPopUpButtonBindingObservationContext =
     if ([self pullsDown]) {
         // The title gets stored in the zero index item in the menu - it made
         // sense to Apple at some point...
-        // A title may be assigned before the caller has populated the menu.
-        // Create its title item before indexing the otherwise empty menu.
-        if ([_cell numberOfItems] == 0) {
-            [_cell addItemWithTitle: (title != nil) ? title : @""];
-        } else {
-            [[_cell itemAtIndex: 0] setTitle: title];
-        }
+        // QUIRK: assigning a title to a pull-down button whose menu has no
+        // items neither raises nor creates the title item: the item count
+        // stays 0 and the title stays empty. Not documented. Evidence:
+        // black-box observation on macOS 27 (tier 2).
+        // Test: tests/empty-pulldown-runtime.m
+        if ([_cell numberOfItems] == 0)
+            return;
+        [[_cell itemAtIndex: 0] setTitle: title];
         [self synchronizeTitleAndSelectedItem];
     } else {
         [super setTitle: title];

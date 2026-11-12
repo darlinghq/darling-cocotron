@@ -12,12 +12,17 @@ int main(void) {
             initWithFrame:NSMakeRect(0,0,120,30) pullsDown:YES];
         [button removeAllItems];
         assert([button numberOfItems]==0);
+        // QUIRK: setting the title of an empty pull-down does not raise and
+        // does not create an item (macOS behaviour).
         [button setTitle:@"Actions"];
-        assert([button numberOfItems]==1);
-        assert([[button title] isEqualToString:@"Actions"]);
-        assert([[[button itemAtIndex:0] title] isEqualToString:@"Actions"]);
+        assert([button numberOfItems]==0);
+        assert([[button title] isEqualToString:@""]);
+        [button addItemWithTitle:@"Actions"];
         [button setTitle:@"More"];
         assert([button numberOfItems]==1);
+        assert([[button title] isEqualToString:@"More"]);
+        [button removeAllItems];
+        [button addItemWithTitle:@"Actions"];
         [button addItemWithTitle:@"Command"];
         [button selectItemAtIndex:1];
         [button setTitle:@"Operations"];
@@ -27,7 +32,7 @@ int main(void) {
         assert([[[button itemAtIndex:1] title] isEqualToString:@"Command"]);
         [button removeAllItems];
         [button setTitle:@""];
-        assert([button numberOfItems]==1 && [[button title] isEqualToString:@""]);
+        assert([button numberOfItems]==0 && [[button title] isEqualToString:@""]);
         [button release];
         NSPopUpButton *popup=[[NSPopUpButton alloc]
             initWithFrame:NSMakeRect(0,0,120,30) pullsDown:NO];
