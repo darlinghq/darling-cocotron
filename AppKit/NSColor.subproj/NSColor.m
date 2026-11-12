@@ -178,8 +178,9 @@ NSNotificationName const NSSystemColorsDidChangeNotification = @"NSSystemColorsD
 
             [self getRed: &r green: &g blue: &b alpha: &a];
             float values[4] = {r, g, b, a};
-            [coder encodeValuesOfObjCTypes: "cffff", &space, &values[0],
-                                            &values[1], &values[2], &values[3]];
+            [coder encodeValueOfObjCType: "c" at: &space];
+            [coder encodeValuesOfObjCTypes: "ffff", &values[0], &values[1],
+                                            &values[2], &values[3]];
         } else if ([spaceName isEqualToString: NSCalibratedWhiteColorSpace] ||
                    [spaceName isEqualToString: NSDeviceWhiteColorSpace]) {
             uint8_t space =
@@ -189,16 +190,17 @@ NSNotificationName const NSSystemColorsDidChangeNotification = @"NSSystemColorsD
 
             [self getWhite: &w alpha: &a];
             float values[2] = {w, a};
-            [coder encodeValuesOfObjCTypes: "cff", &space, &values[0],
-                                            &values[1]];
+            [coder encodeValueOfObjCType: "c" at: &space];
+            [coder encodeValuesOfObjCTypes: "ff", &values[0], &values[1]];
         } else if ([spaceName isEqualToString: NSDeviceCMYKColorSpace]) {
             uint8_t space = 5;
             CGFloat c, m, y, k, a;
 
             [self getCyan: &c magenta: &m yellow: &y black: &k alpha: &a];
             float values[5] = {c, m, y, k, a};
-            [coder encodeValuesOfObjCTypes: "cfffff", &space, &values[0],
-                                            &values[1], &values[2], &values[3],
+            [coder encodeValueOfObjCType: "c" at: &space];
+            [coder encodeValuesOfObjCTypes: "fffff", &values[0], &values[1],
+                                            &values[2], &values[3],
                                             &values[4]];
         } else if ([spaceName isEqualToString: NSNamedColorSpace]) {
             uint8_t space = 6;
@@ -207,8 +209,9 @@ NSNotificationName const NSSystemColorsDidChangeNotification = @"NSSystemColorsD
             NSColor *color =
                     [self colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
 
-            [coder encodeValuesOfObjCTypes: "c@@@", &space, &catalogName,
-                                            &colorName, &color];
+            [coder encodeValueOfObjCType: "c" at: &space];
+            [coder encodeValuesOfObjCTypes: "@@@", &catalogName, &colorName,
+                                            &color];
         } else {
             // Other kinds of colors are archived as the RGB color they stand for.
             NSColor *rgb =
