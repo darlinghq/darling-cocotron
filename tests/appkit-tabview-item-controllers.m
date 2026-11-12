@@ -17,7 +17,16 @@
 static int failures;
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "FAIL line %d: %s\n", __LINE__, #c); failures++; } } while (0)
 
-@interface LoadController : NSViewController
+@interface LoadController : NSViewController {
+    NSView *_content;
+    NSTabViewItem *_item;
+    NSViewController *_replacement;
+    BOOL _replaceDuringLoad;
+    BOOL _reenter;
+    BOOL _throwOnce;
+    int _loads;
+    BOOL _reentrantViewWasNil;
+}
 @property(assign) NSView *content;
 @property(assign) NSTabViewItem *item;
 @property(assign) NSViewController *replacement;
@@ -26,6 +35,7 @@ static int failures;
 @property(assign) BOOL reentrantViewWasNil;
 @end
 @implementation LoadController
+@synthesize content = _content, item = _item, replacement = _replacement, replaceDuringLoad = _replaceDuringLoad, reenter = _reenter, throwOnce = _throwOnce, loads = _loads, reentrantViewWasNil = _reentrantViewWasNil;
 - (NSView *)view {
     self.loads++;
     if (self.reenter) {
@@ -44,10 +54,13 @@ static int failures;
 }
 @end
 
-@interface OwnershipDelegate : NSObject <NSTabViewDelegate>
+@interface OwnershipDelegate : NSObject <NSTabViewDelegate> {
+    BOOL _sawTabViewOnSelect;
+}
 @property(assign) BOOL sawTabViewOnSelect;
 @end
 @implementation OwnershipDelegate
+@synthesize sawTabViewOnSelect = _sawTabViewOnSelect;
 - (void)tabView:(NSTabView *)tabView willSelectTabViewItem:(NSTabViewItem *)item {
     self.sawTabViewOnSelect = [item tabView] == tabView;
 }
