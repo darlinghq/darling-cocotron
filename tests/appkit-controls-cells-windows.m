@@ -71,8 +71,8 @@ int main(void) {
         NSColor *darker = [NSAppearance colorByAdjustingLightnessOfColor:gray darker:YES];
         NSColor *lighter = [NSAppearance colorByAdjustingLightnessOfColor:gray darker:NO];
         CGFloat dw = 0.5, lw = 0.5;
-        [[darker colorUsingColorSpace:[NSColorSpace genericGrayColorSpace]] getWhite:&dw alpha:NULL];
-        [[lighter colorUsingColorSpace:[NSColorSpace genericGrayColorSpace]] getWhite:&lw alpha:NULL];
+        [[darker colorUsingColorSpace:[NSColorSpace sRGBColorSpace]] getRed:&dw green:NULL blue:NULL alpha:NULL];
+        [[lighter colorUsingColorSpace:[NSColorSpace sRGBColorSpace]] getRed:&lw green:NULL blue:NULL alpha:NULL];
         CHECK(dw < 0.5 && lw > 0.5);
 
         if (!failures) puts("PASS");
