@@ -41,8 +41,12 @@ int main(void) {
                     [split addSubview:v];
                     [views addObject:v];
                 }
+                // -addSubview: lays the panes out as it goes, so start the adjustment under test from
+                // equal panes and count only its notifications.
+                for (NSView *v in views) [v setFrame:NSMakeRect(0, 0, 20, 20)];
                 if (mode == 2) [views[1] setHidden:YES];
                 if (mode == 3) for (NSView *v in views) [v setHidden:YES];
+                will = did = 0;
                 [split adjustSubviews];
                 CHECK(will == (panes ? 1 : 0) && did == will);
                 unsigned visible = 0;
@@ -50,7 +54,8 @@ int main(void) {
                     NSRect f = [v frame];
                     CGFloat origin = vertical ? f.origin.x : f.origin.y;
                     CGFloat size = vertical ? f.size.width : f.size.height;
-                    if ([v isHidden]) { CHECK(NSEqualRects(f, NSZeroRect)); continue; }
+                    // Hidden panes take no part in the layout and keep their frame.
+                    if ([v isHidden]) { CHECK(NSEqualRects(f, NSMakeRect(0, 0, 20, 20))); continue; }
                     CHECK(isfinite(origin) && isfinite(size) && size >= 0);
                     CHECK(origin >= 0 && origin + size <= extent);
                     if (mode == 0) CHECK(size == (visible == 2 ? 31 : 30));

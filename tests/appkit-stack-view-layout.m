@@ -26,11 +26,15 @@ static NSView *box(CGFloat width, CGFloat height)
     return [[[NSView alloc] initWithFrame:NSMakeRect(0, 0, width, height)] autorelease];
 }
 
-@interface Watcher : NSObject <NSStackViewDelegate>
+@interface Watcher : NSObject <NSStackViewDelegate> {
+    NSArray *_detached;
+    NSArray *_reattached;
+}
 @property (retain) NSArray *detached;
 @property (retain) NSArray *reattached;
 @end
 @implementation Watcher
+@synthesize detached = _detached, reattached = _reattached;
 - (void)stackView:(NSStackView *)stackView willDetachViews:(NSArray *)views { self.detached = views; }
 - (void)stackView:(NSStackView *)stackView didReattachViews:(NSArray *)views { self.reattached = views; }
 @end

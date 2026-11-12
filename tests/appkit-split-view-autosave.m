@@ -19,6 +19,9 @@ static NSSplitView *makeSplitView(void)
     [split setVertical:YES];
     [split addSubview:[[[NSView alloc] initWithFrame:NSMakeRect(0, 0, 150, 100)] autorelease]];
     [split addSubview:[[[NSView alloc] initWithFrame:NSMakeRect(155, 0, 150, 100)] autorelease]];
+    // -addSubview: lays the panes out as it goes; put them back where the test wants them.
+    [[[split subviews] objectAtIndex:0] setFrame:NSMakeRect(0, 0, 150, 100)];
+    [[[split subviews] objectAtIndex:1] setFrame:NSMakeRect(155, 0, 150, 100)];
     return split;
 }
 

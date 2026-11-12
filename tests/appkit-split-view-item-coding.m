@@ -11,10 +11,13 @@ static void expect(BOOL condition, NSString *message)
 }
 
 // Stand-ins that archive under the AppKit class names, the way a nib stores them.
-@interface ArchivedController : NSObject <NSCoding>
+@interface ArchivedController : NSObject <NSCoding> {
+    NSString *_title;
+}
 @property(copy) NSString *title;
 @end
 @implementation ArchivedController
+@synthesize title = _title;
 - (Class)classForKeyedArchiver
 {
     return [NSViewController class];
@@ -29,12 +32,17 @@ static void expect(BOOL condition, NSString *message)
 }
 @end
 
-@interface ArchivedItem : NSObject <NSCoding>
+@interface ArchivedItem : NSObject <NSCoding> {
+    ArchivedController *_controller;
+    NSInteger _behavior;
+    BOOL _collapsed;
+}
 @property(retain) ArchivedController *controller;
 @property NSInteger behavior;
 @property BOOL collapsed;
 @end
 @implementation ArchivedItem
+@synthesize controller = _controller, behavior = _behavior, collapsed = _collapsed;
 - (Class)classForKeyedArchiver
 {
     return [NSSplitViewItem class];
@@ -52,10 +60,13 @@ static void expect(BOOL condition, NSString *message)
 }
 @end
 
-@interface ArchivedSplitController : NSObject <NSCoding>
+@interface ArchivedSplitController : NSObject <NSCoding> {
+    NSArray *_items;
+}
 @property(retain) NSArray *items;
 @end
 @implementation ArchivedSplitController
+@synthesize items = _items;
 - (Class)classForKeyedArchiver
 {
     return [NSSplitViewController class];
