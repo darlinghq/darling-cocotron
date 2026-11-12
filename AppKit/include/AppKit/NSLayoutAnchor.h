@@ -17,12 +17,12 @@
  along with Darling.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#import <Foundation/Foundation.h>
-
-@class NSLayoutConstraint;
+#import <AppKit/NSLayoutConstraint.h>
+#import <Foundation/NSObject.h>
+#import <Foundation/NSString.h>
 
 // An anchor names one layout attribute (NSLayoutAttribute value) of an item. Constraints made from anchors
-// are NSLayoutConstraint models; Darling does not solve them.
+// are NSLayoutConstraint objects.
 @interface NSLayoutAnchor : NSObject {
     id _item;
     NSInteger _attribute;

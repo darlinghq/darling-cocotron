@@ -20,27 +20,6 @@
 #import <AppKit/NSLayoutAnchor.h>
 #import <AppKit/NSLayoutConstraint.h>
 
-// Implemented in NSLayoutConstraint.m; AppKit declares it publicly.
-@interface NSLayoutConstraint (NSLayoutAnchorConstruction)
-+ (instancetype) constraintWithItem: (id) view1
-                          attribute: (NSInteger) attr1
-                          relatedBy: (NSInteger) relation
-                             toItem: (id) view2
-                          attribute: (NSInteger) attr2
-                         multiplier: (double) multiplier
-                           constant: (double) c;
-@end
-
-// NSLayoutRelation and NSLayoutAttribute values (AppKit/NSLayoutConstraint.h)
-enum {
-    AnchorRelationLessThanOrEqual = -1,
-    AnchorRelationEqual = 0,
-    AnchorRelationGreaterThanOrEqual = 1,
-};
-enum {
-    AnchorAttributeNotAnAttribute = 0,
-};
-
 @implementation NSLayoutAnchor
 
 @synthesize item = _item;
@@ -63,7 +42,7 @@ enum {
     return [NSString stringWithFormat: @"<%@ %p %@>", [self class], self, [self name]];
 }
 
-- (NSLayoutConstraint *) _constraintWithRelation: (NSInteger) relation
+- (NSLayoutConstraint *) _constraintWithRelation: (NSLayoutRelation) relation
                                           anchor: (NSLayoutAnchor *) anchor
                                       multiplier: (CGFloat) multiplier
                                         constant: (CGFloat) c
@@ -81,27 +60,27 @@ enum {
 }
 
 - (NSLayoutConstraint *) constraintEqualToAnchor: (NSLayoutAnchor *) anchor {
-    return [self _constraintWithRelation: AnchorRelationEqual anchor: anchor multiplier: 1 constant: 0];
+    return [self _constraintWithRelation: NSLayoutRelationEqual anchor: anchor multiplier: 1 constant: 0];
 }
 
 - (NSLayoutConstraint *) constraintGreaterThanOrEqualToAnchor: (NSLayoutAnchor *) anchor {
-    return [self _constraintWithRelation: AnchorRelationGreaterThanOrEqual anchor: anchor multiplier: 1 constant: 0];
+    return [self _constraintWithRelation: NSLayoutRelationGreaterThanOrEqual anchor: anchor multiplier: 1 constant: 0];
 }
 
 - (NSLayoutConstraint *) constraintLessThanOrEqualToAnchor: (NSLayoutAnchor *) anchor {
-    return [self _constraintWithRelation: AnchorRelationLessThanOrEqual anchor: anchor multiplier: 1 constant: 0];
+    return [self _constraintWithRelation: NSLayoutRelationLessThanOrEqual anchor: anchor multiplier: 1 constant: 0];
 }
 
 - (NSLayoutConstraint *) constraintEqualToAnchor: (NSLayoutAnchor *) anchor constant: (CGFloat) c {
-    return [self _constraintWithRelation: AnchorRelationEqual anchor: anchor multiplier: 1 constant: c];
+    return [self _constraintWithRelation: NSLayoutRelationEqual anchor: anchor multiplier: 1 constant: c];
 }
 
 - (NSLayoutConstraint *) constraintGreaterThanOrEqualToAnchor: (NSLayoutAnchor *) anchor constant: (CGFloat) c {
-    return [self _constraintWithRelation: AnchorRelationGreaterThanOrEqual anchor: anchor multiplier: 1 constant: c];
+    return [self _constraintWithRelation: NSLayoutRelationGreaterThanOrEqual anchor: anchor multiplier: 1 constant: c];
 }
 
 - (NSLayoutConstraint *) constraintLessThanOrEqualToAnchor: (NSLayoutAnchor *) anchor constant: (CGFloat) c {
-    return [self _constraintWithRelation: AnchorRelationLessThanOrEqual anchor: anchor multiplier: 1 constant: c];
+    return [self _constraintWithRelation: NSLayoutRelationLessThanOrEqual anchor: anchor multiplier: 1 constant: c];
 }
 
 @end
@@ -114,50 +93,50 @@ enum {
 
 @implementation NSLayoutDimension
 
-- (NSLayoutConstraint *) _constraintWithRelation: (NSInteger) relation constant: (CGFloat) c {
+- (NSLayoutConstraint *) _constraintWithRelation: (NSLayoutRelation) relation constant: (CGFloat) c {
     return [NSLayoutConstraint constraintWithItem: _item
                                         attribute: _attribute
                                         relatedBy: relation
                                            toItem: nil
-                                        attribute: AnchorAttributeNotAnAttribute
+                                        attribute: NSLayoutAttributeNotAnAttribute
                                        multiplier: 1
                                          constant: c];
 }
 
 - (NSLayoutConstraint *) constraintEqualToConstant: (CGFloat) c {
-    return [self _constraintWithRelation: AnchorRelationEqual constant: c];
+    return [self _constraintWithRelation: NSLayoutRelationEqual constant: c];
 }
 
 - (NSLayoutConstraint *) constraintGreaterThanOrEqualToConstant: (CGFloat) c {
-    return [self _constraintWithRelation: AnchorRelationGreaterThanOrEqual constant: c];
+    return [self _constraintWithRelation: NSLayoutRelationGreaterThanOrEqual constant: c];
 }
 
 - (NSLayoutConstraint *) constraintLessThanOrEqualToConstant: (CGFloat) c {
-    return [self _constraintWithRelation: AnchorRelationLessThanOrEqual constant: c];
+    return [self _constraintWithRelation: NSLayoutRelationLessThanOrEqual constant: c];
 }
 
 - (NSLayoutConstraint *) constraintEqualToAnchor: (NSLayoutDimension *) anchor multiplier: (CGFloat) m {
-    return [self _constraintWithRelation: AnchorRelationEqual anchor: anchor multiplier: m constant: 0];
+    return [self _constraintWithRelation: NSLayoutRelationEqual anchor: anchor multiplier: m constant: 0];
 }
 
 - (NSLayoutConstraint *) constraintGreaterThanOrEqualToAnchor: (NSLayoutDimension *) anchor multiplier: (CGFloat) m {
-    return [self _constraintWithRelation: AnchorRelationGreaterThanOrEqual anchor: anchor multiplier: m constant: 0];
+    return [self _constraintWithRelation: NSLayoutRelationGreaterThanOrEqual anchor: anchor multiplier: m constant: 0];
 }
 
 - (NSLayoutConstraint *) constraintLessThanOrEqualToAnchor: (NSLayoutDimension *) anchor multiplier: (CGFloat) m {
-    return [self _constraintWithRelation: AnchorRelationLessThanOrEqual anchor: anchor multiplier: m constant: 0];
+    return [self _constraintWithRelation: NSLayoutRelationLessThanOrEqual anchor: anchor multiplier: m constant: 0];
 }
 
 - (NSLayoutConstraint *) constraintEqualToAnchor: (NSLayoutDimension *) anchor multiplier: (CGFloat) m constant: (CGFloat) c {
-    return [self _constraintWithRelation: AnchorRelationEqual anchor: anchor multiplier: m constant: c];
+    return [self _constraintWithRelation: NSLayoutRelationEqual anchor: anchor multiplier: m constant: c];
 }
 
 - (NSLayoutConstraint *) constraintGreaterThanOrEqualToAnchor: (NSLayoutDimension *) anchor multiplier: (CGFloat) m constant: (CGFloat) c {
-    return [self _constraintWithRelation: AnchorRelationGreaterThanOrEqual anchor: anchor multiplier: m constant: c];
+    return [self _constraintWithRelation: NSLayoutRelationGreaterThanOrEqual anchor: anchor multiplier: m constant: c];
 }
 
 - (NSLayoutConstraint *) constraintLessThanOrEqualToAnchor: (NSLayoutDimension *) anchor multiplier: (CGFloat) m constant: (CGFloat) c {
-    return [self _constraintWithRelation: AnchorRelationLessThanOrEqual anchor: anchor multiplier: m constant: c];
+    return [self _constraintWithRelation: NSLayoutRelationLessThanOrEqual anchor: anchor multiplier: m constant: c];
 }
 
 @end
