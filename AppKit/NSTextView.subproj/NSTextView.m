@@ -3296,7 +3296,7 @@ static NSTextView *s_targetTextView = nil;
     // The same arithmetic serves shift-drag, so this does not return: it records the anchor and
     // falls into the tracking loop below, which keeps extending from that anchor while the
     // button is held. Returning here made a shift-drag select only up to the press point.
-    if ([event modifierFlags] & NSEventModifierFlagShift) {
+    if ([event modifierFlags] & NSShiftKeyMask) {
         NSRange existing = [self selectedRange];
         NSUInteger click = firstRange.location;
         NSUInteger shiftAnchor;
