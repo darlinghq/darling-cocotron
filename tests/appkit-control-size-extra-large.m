@@ -36,7 +36,7 @@ int main(void)
                @"mini cell font size");
 
         NSButton *push = [[NSButton alloc] initWithFrame:NSMakeRect(0, 0, 80, 30)];
-        [push setButtonType:NSButtonTypeMomentaryPushIn];
+        [push setButtonType:NSMomentaryPushInButton];
         [push setBezelStyle:NSBezelStyleRounded];
         NSButtonCell *pushCell = [push cell];
         NSRect regularInset = [pushCell getControlSizeAdjustment:NO];
