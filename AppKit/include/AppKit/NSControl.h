@@ -48,6 +48,7 @@ APPKIT_EXPORT const NSNotificationName NSControlTextDidEndEditingNotification;
 - (SEL) action;
 - (NSInteger) tag;
 @property (retain) NSFont *font;
+@property NSControlSize controlSize;
 - (NSImage *) image;
 - (NSTextAlignment) alignment;
 - (BOOL) isEnabled;
