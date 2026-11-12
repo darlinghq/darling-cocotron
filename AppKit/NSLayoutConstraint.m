@@ -19,6 +19,23 @@
 
 #import <AppKit/NSLayoutConstraint.h>
 
+@implementation NSLayoutConstraint
+
+- (NSMethodSignature *)methodSignatureForSelector:(SEL)aSelector {
+    return [NSMethodSignature signatureWithObjCTypes: "v@:"];
+}
+
+- (id)initWithCoder:(NSCoder *)coder {
+    NSLog(@"Stub called: initWithCoder in NSLayoutConstraint");
+    return self;
+}
+
+- (void)forwardInvocation:(NSInvocation *)anInvocation {
+    NSLog(@"Stub called: %@ in %@", NSStringFromSelector([anInvocation selector]), [self class]);
+}
+
+@end
+
 // 0xbff0000000000000 is the bit pattern of -1.0, not the value; as a CGFloat
 // initialiser it yielded 1.38e19, so every "no intrinsic metric" test failed.
 const CGFloat NSViewNoInstrinsicMetric = -1.0;
