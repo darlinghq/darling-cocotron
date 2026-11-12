@@ -78,12 +78,13 @@ typedef NS_ENUM(NSInteger, NSTableViewRowSizeStyle) {
     NSTableViewRowSizeStyleLarge = 3,
 };
 
-typedef enum {
+typedef NS_ENUM(NSInteger, NSTableViewStyle) {
     NSTableViewStyleAutomatic = 0,
-    NSTableViewStylePlain = 1,
-    NSTableViewStyleOutline = 2,
+    NSTableViewStyleFullWidth = 1,
+    NSTableViewStyleInset = 2,
     NSTableViewStyleSourceList = 3,
-} NSTableViewStyle;
+    NSTableViewStylePlain = 4,
+};
 
 typedef enum {
     NSTableViewDropOn,

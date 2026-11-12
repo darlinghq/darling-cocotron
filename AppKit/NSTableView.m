@@ -469,7 +469,9 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
 }
 
 // Apple gives no heights for the small, medium and large styles; use the line
-// height of the system font for the matching control size.
+// height of the system font for the matching control size. Only the laid-out
+// rows follow the style: -rowHeight is not tied to it (a table keeps reporting
+// the height that was set, as on macOS).
 static CGFloat styledRowHeight(NSTableViewRowSizeStyle style) {
     NSControlSize size = NSControlSizeRegular;
 
