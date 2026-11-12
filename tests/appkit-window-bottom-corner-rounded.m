@@ -1,15 +1,15 @@
 #import <AppKit/AppKit.h>
 #include <stdio.h>
 
-@interface TerminalWindowProbe : NSWindow
+@interface WindowSubclassProbe : NSWindow
 @end
-@implementation TerminalWindowProbe
+@implementation WindowSubclassProbe
 @end
 
 int main(void) {
     @autoreleasepool {
         [NSApplication sharedApplication];
-        TerminalWindowProbe *window = [[TerminalWindowProbe alloc]
+        WindowSubclassProbe *window = [[WindowSubclassProbe alloc]
                 initWithContentRect: NSMakeRect(0, 0, 100, 100)
                          styleMask: NSWindowStyleMaskTitled
                            backing: NSBackingStoreBuffered defer: NO];
