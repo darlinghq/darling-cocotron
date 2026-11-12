@@ -21,7 +21,7 @@
 - (NSString *) nibName;
 - (NSBundle *) nibBundle;
 
-- (NSView *) view;
+@property (retain, nonnull) NSView *view;
 @property(copy) NSArray<__kindof NSViewController *> *childViewControllers;
 @property(readonly) NSViewController *parentViewController;
 
@@ -43,7 +43,6 @@
 
 - (void) setTitle: (NSString *) value;
 
-- (void) setView: (NSView *) value;
 
 - (void) loadView;
 @property(readonly, getter=isViewLoaded) BOOL viewLoaded; // 10.10

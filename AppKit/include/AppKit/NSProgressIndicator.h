@@ -22,10 +22,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSTimer;
 
-typedef enum {
-    NSProgressIndicatorBarStyle = 0,
-    NSProgressIndicatorSpinningStyle = 1,
-} NSProgressIndicatorStyle;
+typedef NS_ENUM(NSUInteger, NSProgressIndicatorStyle) {
+    NSProgressIndicatorStyleBar = 0,
+    NSProgressIndicatorStyleSpinning = 1
+} NS_SWIFT_NAME(NSProgressIndicator.Style);
+
+#define NSProgressIndicatorBarStyle NSProgressIndicatorStyleBar
+#define NSProgressIndicatorSpinningStyle NSProgressIndicatorStyleSpinning
 
 @interface NSProgressIndicator : NSView {
     double _minValue;
@@ -44,31 +47,25 @@ typedef enum {
     BOOL _endThreadedAnimation;
 }
 
-- (NSProgressIndicatorStyle) style;
-- (NSControlSize) controlSize;
+@property NSProgressIndicatorStyle style;
+@property NSControlSize controlSize;
 - (NSControlTint) controlTint;
 - (BOOL) isDisplayedWhenStopped;
 - (BOOL) usesThreadedAnimation;
 
-- (double) minValue;
-- (double) maxValue;
-- (double) doubleValue;
+@property double minValue;
+@property double maxValue;
+@property double doubleValue;
 
 - (NSTimeInterval) animationDelay;
-- (BOOL) isIndeterminate;
+@property (getter=isIndeterminate) BOOL indeterminate;
 - (BOOL) isBezeled;
 
-- (void) setStyle: (NSProgressIndicatorStyle) value;
-- (void) setControlSize: (NSControlSize) value;
 - (void) setControlTint: (NSControlTint) value;
 - (void) setDisplayedWhenStopped: (BOOL) value;
 - (void) setUsesThreadedAnimation: (BOOL) value;
 
-- (void) setMinValue: (double) value;
-- (void) setMaxValue: (double) value;
-- (void) setDoubleValue: (double) value;
 - (void) setAnimationDelay: (double) value;
-- (void) setIndeterminate: (BOOL) value;
 - (void) setBezeled: (BOOL) value;
 
 - (void) incrementBy: (double) value;

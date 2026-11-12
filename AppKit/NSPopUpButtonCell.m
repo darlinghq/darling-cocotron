@@ -364,6 +364,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
             switch ([self controlSize]) {
             case NSRegularControlSize:
+            case NSControlSizeLarge:
                 sizeFactor = 0;
                 break;
             case NSSmallControlSize:
@@ -423,6 +424,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     switch ([self controlSize]) {
 
     case NSRegularControlSize:
+    case NSControlSizeLarge:
         result.height = 22;
         break;
 

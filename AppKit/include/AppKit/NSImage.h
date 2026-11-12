@@ -24,6 +24,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 @class NSImageRep;
 @class NSImageSymbolConfiguration;
 
+typedef NSString *NSImageHintKey NS_TYPED_ENUM NS_SWIFT_NAME(NSImageRep.HintKey);
+
 typedef enum {
     NSImageCacheDefault,
     NSImageCacheAlways,
@@ -59,7 +61,7 @@ typedef enum {
 
 + (BOOL) canInitWithPasteboard: (NSPasteboard *) pasteboard;
 
-+ imageNamed: (NSString *) name;
++ (nullable instancetype) imageNamed: (NSString *) name;
 
 - initWithSize: (NSSize) size;
 - initWithData: (NSData *) data;
@@ -72,10 +74,10 @@ typedef enum {
 - initByReferencingURL: (NSURL *) url;
 
 - (NSString *) name;
-- (NSSize) size;
+@property NSSize size;
 - (NSColor *) backgroundColor;
-- (BOOL) isFlipped;
-- (BOOL) isTemplate;
+@property (getter=isFlipped) BOOL flipped;
+@property (setter=setTemplate:) BOOL isTemplate;
 - (BOOL) scalesWhenResized;
 - (BOOL) matchesOnMultipleResolution;
 - (BOOL) usesEPSOnResolutionMismatch;
@@ -87,10 +89,7 @@ typedef enum {
 - delegate;
 
 - (BOOL) setName: (NSString *) value;
-- (void) setSize: (NSSize) value;
 - (void) setBackgroundColor: (NSColor *) value;
-- (void) setFlipped: (BOOL) value;
-- (void) setTemplate: (BOOL) value;
 - (void) setScalesWhenResized: (BOOL) value;
 - (void) setMatchesOnMultipleResolution: (BOOL) value;
 - (void) setUsesEPSOnResolutionMismatch: (BOOL) value;
@@ -158,8 +157,7 @@ typedef enum {
         respectFlipped: (BOOL) respectFlipped
                  hints: (NSDictionary<NSString *, id> *) hints;
 
-- (NSString *) accessibilityDescription;
-- (void) setAccessibilityDescription: (NSString *) description;
+@property (copy, nullable) NSString *accessibilityDescription;
 
 // SF Symbols. Darling has no symbol artwork: these return a generic template
 // placeholder glyph for any non-empty name (nil for a nil or empty name).
@@ -218,7 +216,6 @@ typedef NS_ENUM(NSInteger, NSImageSymbolScale) {
 @end
 
 typedef NSString *NSImageName;
-typedef NSString *NSImageHintKey;
 
 APPKIT_EXPORT NSImageName const NSImageNameActionTemplate;
 APPKIT_EXPORT NSImageName const NSImageNameAddTemplate;
@@ -289,5 +286,5 @@ APPKIT_EXPORT NSImageName const NSImageNameTouchBarPlayTemplate;
 APPKIT_EXPORT NSImageName const NSImageNameTouchBarRecordStopTemplate;
 
 APPKIT_EXPORT NSImageHintKey const NSImageHintInterpolation;
-APPKIT_EXPORT NSImageHintKey const NSImageHintCTM;
+APPKIT_EXPORT NSImageHintKey const NSImageHintCTM NS_SWIFT_NAME(ctm);
 APPKIT_EXPORT NSImageHintKey const NSImageHintSymbolScale;

@@ -20,7 +20,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/AppKitExport.h>
 #import <Foundation/NSObject.h>
 
-@class NSURL, NSBundle, NSDictionary, NSArray, NSData, NSMutableArray;
+@class NSURL, NSBundle, NSDictionary, NSArray, NSData, NSMutableArray, NSNib;
+
+#ifndef NS_SWIFT_BRIDGED_TYPEDEF
+#define NS_SWIFT_BRIDGED_TYPEDEF __attribute__((swift_bridged_typedef))
+#endif
+
+typedef NSString *NSNibName NS_SWIFT_BRIDGED_TYPEDEF NS_SWIFT_NAME(NSNib.Name);
 
 APPKIT_EXPORT NSString *const NSNibOwner;
 APPKIT_EXPORT NSString *const NSNibTopLevelObjects;
@@ -38,7 +44,7 @@ APPKIT_EXPORT NSString *const NSNibTopLevelObjects;
 
 - initWithCoder: (NSCoder *) coder;
 - initWithContentsOfURL: (NSURL *) url;
-- initWithNibNamed: (NSString *) name bundle: (NSBundle *) bundle;
+- initWithNibNamed: (NSNibName) name bundle: (NSBundle *) bundle;
 
 - (BOOL) instantiateNibWithExternalNameTable: (NSDictionary *) nameTable;
 - (BOOL) instantiateNibWithOwner: owner topLevelObjects: (NSArray **) objects;
