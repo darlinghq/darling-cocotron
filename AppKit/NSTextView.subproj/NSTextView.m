@@ -3177,10 +3177,15 @@ static NSTextView *s_targetTextView = nil;
     }
 
     NSUInteger length = [_textStorage length];
+    // QUIRK: an out-of-range replacement range does not raise; the text replaces
+    // the current selection as for NSNotFound. Not documented. Evidence:
+    // black-box observation on macOS 26.7.3 (tier 2), MAC-EVIDENCE MC26.10.
+    // Test: appkit-textview-selection-anchor.m (out-of-range replacement range).
     if (replacementRange.location > length ||
-        replacementRange.length > length - replacementRange.location)
-        [NSException raise: NSRangeException
-                    format: @"Text replacement range is outside the text storage"];
+        replacementRange.length > length - replacementRange.location) {
+        [self insertText: object];
+        return;
+    }
 
     NSString *replacementString = [object isKindOfClass: [NSAttributedString class]]
             ? [object string] : object;
