@@ -184,6 +184,8 @@ APPKIT_EXPORT const NSNotificationName NSWindowWillBeginSheetNotification;
 
 APPKIT_EXPORT const NSNotificationName NSWindowDidChangeOcclusionStateNotification;
 APPKIT_EXPORT const NSNotificationName NSWindowDidChangeScreenNotification;
+APPKIT_EXPORT const NSNotificationName NSWindowDidChangeScreenProfileNotification;
+APPKIT_EXPORT NSString *const NSBackingPropertyOldScaleFactorKey;
 APPKIT_EXPORT const NSNotificationName NSWindowDidEndSheetNotification;
 APPKIT_EXPORT const NSNotificationName NSWindowDidEnterFullScreenNotification;
 APPKIT_EXPORT const NSNotificationName NSWindowDidExitFullScreenNotification;
@@ -193,7 +195,7 @@ APPKIT_EXPORT const NSNotificationName NSWindowWillEnterFullScreenNotification;
 APPKIT_EXPORT const NSNotificationName NSWindowWillExitFullScreenNotification;
 APPKIT_EXPORT const NSNotificationName NSWindowDidExposeNotification;
 
-@interface NSWindow : NSResponder <NSUserInterfaceItemIdentification, NSAccessibility, NSAppearanceCustomization> {
+@interface NSWindow : NSResponder <NSAnimatablePropertyContainer, NSUserInterfaceItemIdentification, NSAccessibility, NSAppearanceCustomization> {
     NSRect _frame;
     NSWindowStyleMask _styleMask;
     NSBackingStoreType _backingType;
@@ -206,6 +208,8 @@ APPKIT_EXPORT const NSNotificationName NSWindowDidExposeNotification;
 
     NSWindow *_parentWindow;
     NSMutableArray<NSWindow *> *_childWindows;
+
+    NSDictionary *_animations;
 
     NSString *_representedFilename;
     NSURL *_representedURL;
@@ -500,6 +504,7 @@ APPKIT_EXPORT const NSNotificationName NSWindowDidExposeNotification;
 - (NSButtonCell *) defaultButtonCell;
 - (NSWindow *) attachedSheet;
 - (NSWindow *) sheetParent;
+- (NSArray<NSWindow *> *) tabbedWindows;
 
 - (id) windowController;
 - (NSArray *) drawers;

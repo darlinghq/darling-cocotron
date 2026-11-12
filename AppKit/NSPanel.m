@@ -137,6 +137,72 @@ NSInteger NSRunCriticalAlertPanel(NSString *title, NSString *format,
                            otherButton, message);
 }
 
+static id newAlertPanel(NSString *title, NSString *format,
+                        NSString *defaultButton, NSString *alternateButton,
+                        NSString *otherButton, va_list arguments)
+{
+    NSString *message =
+            [[[NSString alloc] initWithFormat: format
+                                    arguments: arguments] autorelease];
+
+    return [[NSAlertPanel alloc] initWithTitle: title
+                                       message: message
+                                 defaultButton: defaultButton
+                               alternateButton: alternateButton
+                                   otherButton: otherButton
+                                         sheet: NO];
+}
+
+id NSGetAlertPanel(NSString *title, NSString *format, NSString *defaultButton,
+                   NSString *alternateButton, NSString *otherButton, ...)
+{
+    va_list arguments;
+    va_start(arguments, otherButton);
+    id panel = newAlertPanel(title, format, defaultButton, alternateButton,
+                             otherButton, arguments);
+    va_end(arguments);
+    return panel;
+}
+
+id NSGetInformationalAlertPanel(NSString *title, NSString *format,
+                                NSString *defaultButton,
+                                NSString *alternateButton,
+                                NSString *otherButton, ...)
+{
+    va_list arguments;
+    va_start(arguments, otherButton);
+    // Same panel as NSGetAlertPanel: alert panels here have no per-style icon.
+    id panel = newAlertPanel(title, format, defaultButton, alternateButton,
+                             otherButton, arguments);
+    va_end(arguments);
+    return panel;
+}
+
+id NSGetCriticalAlertPanel(NSString *title, NSString *format,
+                           NSString *defaultButton, NSString *alternateButton,
+                           NSString *otherButton, ...)
+{
+    va_list arguments;
+    va_start(arguments, otherButton);
+    // Same panel as NSGetAlertPanel: alert panels here have no per-style icon.
+    id panel = newAlertPanel(title, format, defaultButton, alternateButton,
+                             otherButton, arguments);
+    va_end(arguments);
+    return panel;
+}
+
+void NSReleaseAlertPanel(id panel)
+{
+    [panel release];
+}
+
+void NSShowSystemInfoPanel(NSDictionary *options)
+{
+    // This implementation has no separate system information panel, so the
+    // standard About panel stands in for it.
+    [NSApp orderFrontStandardAboutPanelWithOptions: options];
+}
+
 void NSBeginAlertSheet(NSString *title, NSString *defaultButton,
                        NSString *alternateButton, NSString *otherButton,
                        NSWindow *window, id modalDelegate, SEL didEndSelector,

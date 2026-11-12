@@ -28,6 +28,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (BOOL) allowsCutCopyPaste;
 - (BOOL) animates;
++ (NSImageView *) imageViewWithImage: (NSImage *) image;
+- (instancetype) initWithImage: (NSImage *) image;
 - (NSImage *) image;
 - (NSImageAlignment) imageAlignment;
 - (NSImageFrameStyle) imageFrameStyle;

@@ -24,6 +24,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSRaise.h>
 #import <AppKit/NSSearchFieldCell.h>
 #import <AppKit/NSTextField.h>
+#import <AppKit/NSWindow.h>
 
 @implementation NSSearchFieldCell
 
@@ -155,6 +156,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return result;
 }
 
+- (void) _setResignsFirstResponderWithCancel: (BOOL) value {
+    _resignsFirstResponderWithCancel = value;
+}
+
 - (void) resetCancelButtonCell {
     NSUnimplementedMethod();
 }
@@ -183,7 +188,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                          untilMouseUp: YES]) {
         [(NSControl *) view setStringValue: @""];
 
-        if ([view respondsToSelector: @selector(selectText:)])
+        if (_resignsFirstResponderWithCancel)
+            [[view window] makeFirstResponder: nil];
+        else if ([view respondsToSelector: @selector(selectText:)])
             [(NSTextField *) view selectText: nil];
         return YES;
     }

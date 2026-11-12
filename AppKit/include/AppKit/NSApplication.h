@@ -144,6 +144,7 @@ typedef NS_OPTIONS(NSUInteger, NSApplicationPresentationOptions) {
     NSAppearance *_appearance;
     BOOL _finishedLaunching;
     BOOL _windowClosedSinceTerminateCheck;
+    BOOL _automaticCustomizeTouchBarMenuItemEnabled;
 }
 
 @property(strong) NSMenu *helpMenu;
@@ -151,6 +152,8 @@ typedef NS_OPTIONS(NSUInteger, NSApplicationPresentationOptions) {
 @property NSApplicationPresentationOptions presentationOptions;
 @property(strong) NSAppearance *appearance;
 @property(readonly, strong) NSAppearance *effectiveAppearance;
+@property(getter=isAutomaticCustomizeTouchBarMenuItemEnabled)
+        BOOL automaticCustomizeTouchBarMenuItemEnabled;
 
 + (NSApplication *) sharedApplication;
 

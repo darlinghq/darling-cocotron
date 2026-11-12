@@ -33,31 +33,51 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return [NSButtonCell class];
 }
 
-+ (instancetype) buttonWithTitle: (NSString *) title
++ (instancetype) _buttonWithType: (NSButtonType) type
+                           title: (NSString *) title
+                           image: (NSImage *) image
+                   imagePosition: (NSCellImagePosition) position
                           target: (id) target
-                          action: (SEL) action {
+                          action: (SEL) action
+{
     NSButton *button = [[[self alloc] initWithFrame: NSZeroRect] autorelease];
-    [button setTitle: title];
-    [button setBezelStyle: NSRoundedBezelStyle];
-    [button setButtonType: NSMomentaryPushInButton];
+    [button setButtonType: type];
+    if (type == NSMomentaryPushInButton)
+        [button setBezelStyle: NSRoundedBezelStyle];
+    [button setTitle: title ? title : @""];
+    if (image != nil) {
+        [button setImage: image];
+        [button setImagePosition: position];
+    }
     [button setTarget: target];
     [button setAction: action];
     [button sizeToFit];
     return button;
 }
 
-+ (instancetype) buttonWithImage: (NSImage *) image
-                          target: (id) target
-                          action: (SEL) action {
-    NSButton *button = [[[self alloc] initWithFrame: NSZeroRect] autorelease];
-    [button setImage: image];
-    [button setImagePosition: NSImageOnly];
-    [button setBezelStyle: NSRoundedBezelStyle];
-    [button setButtonType: NSMomentaryPushInButton];
-    [button setTarget: target];
-    [button setAction: action];
-    [button sizeToFit];
-    return button;
++ (instancetype) buttonWithImage: (NSImage *) image target: (id) target action: (SEL) action {
+    return [self _buttonWithType: NSMomentaryPushInButton title: nil image: image
+                   imagePosition: NSImageOnly target: target action: action];
+}
+
++ (instancetype) buttonWithTitle: (NSString *) title target: (id) target action: (SEL) action {
+    return [self _buttonWithType: NSMomentaryPushInButton title: title image: nil
+                   imagePosition: NSNoImage target: target action: action];
+}
+
++ (instancetype) buttonWithTitle: (NSString *) title image: (NSImage *) image target: (id) target action: (SEL) action {
+    return [self _buttonWithType: NSMomentaryPushInButton title: title image: image
+                   imagePosition: NSImageLeft target: target action: action];
+}
+
++ (instancetype) checkboxWithTitle: (NSString *) title target: (id) target action: (SEL) action {
+    return [self _buttonWithType: NSSwitchButton title: title image: nil
+                   imagePosition: NSNoImage target: target action: action];
+}
+
++ (instancetype) radioButtonWithTitle: (NSString *) title target: (id) target action: (SEL) action {
+    return [self _buttonWithType: NSRadioButton title: title image: nil
+                   imagePosition: NSNoImage target: target action: action];
 }
 
 - initWithCoder: (NSCoder *) coder {
