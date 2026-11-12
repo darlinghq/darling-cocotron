@@ -3121,11 +3121,6 @@ static CGFloat backingScaleFactor(NSView *view) {
 - (void) setUserInterfaceLayoutDirection:
         (NSUserInterfaceLayoutDirection) direction
 {
-    if (direction != NSUserInterfaceLayoutDirectionLeftToRight &&
-        direction != NSUserInterfaceLayoutDirectionRightToLeft)
-        [NSException raise: NSInvalidArgumentException
-                    format: @"Invalid user interface layout direction: %ld",
-                            (long) direction];
     _hasExplicitUserInterfaceLayoutDirection = YES;
     if (_userInterfaceLayoutDirection == direction)
         return;
