@@ -1806,12 +1806,14 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
             // Posting a drag discards the queued drags before it, and in
             // relative mode their deltas are all the application gets.
             if (_relativeMouse.active && type == NSLeftMouseDragged) {
+                [_eventQueueLock lock];
                 for (NSEvent *queued in _eventQueue) {
                     if ([queued type] == type) {
                         deltaX += [queued deltaX];
                         deltaY += [queued deltaY];
                     }
                 }
+                [_eventQueueLock unlock];
             }
 
             event = [NSEvent

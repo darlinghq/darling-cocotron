@@ -29,6 +29,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @interface NSDisplay : NSObject {
     NSMutableArray *_eventQueue;
+    NSRecursiveLock *_eventQueueLock;
     BOOL _cursorHiddenUntilMouseMoves;
     NSInteger _cursorHideCount;
     CFRunLoopSourceRef _eventSource;
