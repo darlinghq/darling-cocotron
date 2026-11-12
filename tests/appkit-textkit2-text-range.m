@@ -8,12 +8,15 @@
 #import <AppKit/AppKit.h>
 #include <stdio.h>
 
-@interface TestLocation : NSObject <NSTextLocation>
+@interface TestLocation : NSObject <NSTextLocation> {
+    NSInteger _value; // the legacy 32-bit runtime does not synthesize properties
+}
 @property NSInteger value;
 + (instancetype) at: (NSInteger) value;
 @end
 
 @implementation TestLocation
+@synthesize value = _value;
 + (instancetype) at: (NSInteger) value
 {
     TestLocation *location = [[TestLocation alloc] init];
