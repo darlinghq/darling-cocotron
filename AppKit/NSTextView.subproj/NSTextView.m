@@ -96,6 +96,98 @@ NSString *const NSAllRomanInputSourcesLocaleIdentifier =
 - (void) _continuousSpellCheck;
 @end
 
+@interface _NSFindPanelController : NSObject
++ (void) showFindPanelForTextView: (NSTextView *) textView;
++ (void) findNext: (id) sender;
++ (void) findPrevious: (id) sender;
+@end
+
+static NSPanel *s_findPanel = nil;
+static NSTextField *s_findField = nil;
+static NSTextView *s_targetTextView = nil;
+
+@implementation _NSFindPanelController
+
++ (void) showFindPanelForTextView: (NSTextView *) textView {
+    s_targetTextView = textView;
+    NSPasteboard *findPboard = [NSPasteboard pasteboardWithName: NSFindPboard];
+
+    if (s_findPanel == nil) {
+        NSRect frame = NSMakeRect(200, 200, 360, 110);
+        s_findPanel = [[NSPanel alloc] initWithContentRect: frame
+                                                 styleMask: NSTitledWindowMask | NSClosableWindowMask | NSUtilityWindowMask
+                                                   backing: NSBackingStoreBuffered
+                                                     defer: NO];
+        [s_findPanel setTitle: @"Find"];
+
+        NSView *content = [s_findPanel contentView];
+
+        NSTextField *label = [[[NSTextField alloc] initWithFrame: NSMakeRect(15, 65, 50, 20)] autorelease];
+        [label setStringValue: @"Find:"];
+        [label setEditable: NO];
+        [label setSelectable: NO];
+        [label setBezeled: NO];
+        [label setDrawsBackground: NO];
+        [content addSubview: label];
+
+        s_findField = [[NSTextField alloc] initWithFrame: NSMakeRect(70, 65, 270, 24)];
+        [s_findField setTarget: self];
+        [s_findField setAction: @selector(findNext:)];
+        [content addSubview: s_findField];
+
+        NSButton *prevBtn = [[[NSButton alloc] initWithFrame: NSMakeRect(140, 15, 90, 30)] autorelease];
+        [prevBtn setTitle: @"Previous"];
+        [prevBtn setTarget: self];
+        [prevBtn setAction: @selector(findPrevious:)];
+        [content addSubview: prevBtn];
+
+        NSButton *nextBtn = [[[NSButton alloc] initWithFrame: NSMakeRect(240, 15, 90, 30)] autorelease];
+        [nextBtn setTitle: @"Next"];
+        [nextBtn setTarget: self];
+        [nextBtn setAction: @selector(findNext:)];
+        [nextBtn setKeyEquivalent: @"\r"];
+        [content addSubview: nextBtn];
+    }
+
+    NSString *initialText = @"";
+    if ([textView selectedRange].length > 0) {
+        initialText = [[textView string] substringWithRange: [textView selectedRange]];
+    } else {
+        initialText = [findPboard stringForType: NSStringPboardType] ?: @"";
+    }
+    [s_findField setStringValue: initialText];
+    [s_findPanel center];
+    [s_findPanel makeKeyAndOrderFront: nil];
+    [s_findPanel makeFirstResponder: s_findField];
+    [s_findField selectText: nil];
+}
+
++ (void) findNext: (id) sender {
+    NSString *text = [s_findField stringValue];
+    if ([text length] > 0) {
+        NSPasteboard *findPboard = [NSPasteboard pasteboardWithName: NSFindPboard];
+        [findPboard declareTypes: [NSArray arrayWithObject: NSStringPboardType] owner: nil];
+        [findPboard setString: text forType: NSStringPboardType];
+    }
+    NSMenuItem *dummy = [[[NSMenuItem alloc] initWithTitle: @"" action: NULL keyEquivalent: @""] autorelease];
+    [dummy setTag: NSFindPanelActionNext];
+    [s_targetTextView performFindPanelAction: dummy];
+}
+
++ (void) findPrevious: (id) sender {
+    NSString *text = [s_findField stringValue];
+    if ([text length] > 0) {
+        NSPasteboard *findPboard = [NSPasteboard pasteboardWithName: NSFindPboard];
+        [findPboard declareTypes: [NSArray arrayWithObject: NSStringPboardType] owner: nil];
+        [findPboard setString: text forType: NSStringPboardType];
+    }
+    NSMenuItem *dummy = [[[NSMenuItem alloc] initWithTitle: @"" action: NULL keyEquivalent: @""] autorelease];
+    [dummy setTag: NSFindPanelActionPrevious];
+    [s_targetTextView performFindPanelAction: dummy];
+}
+
+@end
+
 @implementation NSTextView
 
 + (NSScrollView *) scrollableTextView {
@@ -3230,10 +3322,87 @@ NSString *const NSAllRomanInputSourcesLocaleIdentifier =
         return _allowsUndo ? [[self undoManager] canUndo] : NO;
     else if ([item action] == @selector(redo:))
         return _allowsUndo ? [[self undoManager] canRedo] : NO;
+    else if ([item action] == @selector(orderFrontFindPanel:))
+        return YES;
+    else if ([item action] == @selector(performFindPanelAction:)) {
+        NSInteger tag = [item tag];
+        if (tag == NSFindPanelActionSetFindString)
+            return [self selectedRange].length > 0;
+        return YES;
+    }
     else if ([item action] == @selector(toggleContinuousSpellChecking:)) {
         [item setState: [self isContinuousSpellCheckingEnabled]];
     }
     return YES;
+}
+
+- (void) orderFrontFindPanel: (id) sender {
+    [self performFindPanelAction: sender];
+}
+
+- (void) performFindPanelAction: (id) sender {
+    NSInteger action = [sender respondsToSelector: @selector(tag)] ? [sender tag] : NSFindPanelActionShowFindPanel;
+    NSPasteboard *findPboard = [NSPasteboard pasteboardWithName: NSFindPboard];
+
+    if (action == NSFindPanelActionSetFindString) { // Use Selection for Find
+        if ([self selectedRange].length > 0) {
+            NSString *str = [[self string] substringWithRange: [self selectedRange]];
+            [findPboard declareTypes: [NSArray arrayWithObject: NSStringPboardType] owner: nil];
+            [findPboard setString: str forType: NSStringPboardType];
+        }
+        return;
+    }
+
+    if (action == NSFindPanelActionShowFindPanel) {
+        [_NSFindPanelController showFindPanelForTextView: self];
+        return;
+    }
+
+    if (action == NSFindPanelActionNext || action == NSFindPanelActionPrevious) {
+        NSString *findString = [findPboard stringForType: NSStringPboardType];
+        if ([findString length] == 0) {
+            NSBeep();
+            return;
+        }
+
+        NSString *fullText = [self string];
+        NSUInteger totalLen = [fullText length];
+        if (totalLen == 0) return;
+
+        NSRange currentRange = [self selectedRange];
+        NSRange searchRange;
+        NSStringCompareOptions options = NSCaseInsensitiveSearch;
+
+        if (action == NSFindPanelActionNext) {
+            NSUInteger start = NSMaxRange(currentRange);
+            if (start < totalLen) {
+                searchRange = NSMakeRange(start, totalLen - start);
+            } else {
+                searchRange = NSMakeRange(0, totalLen);
+            }
+        } else { // Previous
+            options |= NSBackwardsSearch;
+            NSUInteger end = currentRange.location;
+            if (end > 0) {
+                searchRange = NSMakeRange(0, end);
+            } else {
+                searchRange = NSMakeRange(0, totalLen);
+            }
+        }
+
+        NSRange found = [fullText rangeOfString: findString options: options range: searchRange];
+        if (found.location == NSNotFound) {
+            searchRange = NSMakeRange(0, totalLen);
+            found = [fullText rangeOfString: findString options: options range: searchRange];
+        }
+
+        if (found.location != NSNotFound) {
+            [self setSelectedRange: found];
+            [self scrollRangeToVisible: found];
+        } else {
+            NSBeep();
+        }
+    }
 }
 
 - (NSDragOperation) draggingUpdated: (id<NSDraggingInfo>) sender {

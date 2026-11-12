@@ -404,6 +404,14 @@ static int untitled_document_number = 0;
     return _changeCount != 0 || [_activeEditors count] > 0;
 }
 
+- (BOOL) isDraft {
+    return _draft;
+}
+
+- (void) setDraft: (BOOL) value {
+    _draft = value;
+}
+
 - (void) updateChangeCount: (NSDocumentChangeType) changeType {
     int count = [_windowControllers count];
 

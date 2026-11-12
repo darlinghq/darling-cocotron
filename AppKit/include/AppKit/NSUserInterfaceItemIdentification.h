@@ -1,6 +1,6 @@
 #import <Foundation/NSString.h>
 
-typedef NSString* NSUserInterfaceItemIdentifier;
+typedef NSString *NSUserInterfaceItemIdentifier NS_TYPED_EXTENSIBLE_ENUM;
 
 @protocol NSUserInterfaceItemIdentification
 

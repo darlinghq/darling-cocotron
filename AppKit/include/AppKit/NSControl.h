@@ -61,6 +61,9 @@ APPKIT_EXPORT const NSNotificationName NSControlTextDidEndEditingNotification;
 - (id) formatter;
 - (NSLineBreakMode) lineBreakMode;
 - (BOOL) usesSingleLineMode;
+// The cell's control size.
+- (NSControlSize) controlSize;
+- (void) setControlSize: (NSControlSize) size;
 
 - (id) objectValue;
 - (NSString *) stringValue;

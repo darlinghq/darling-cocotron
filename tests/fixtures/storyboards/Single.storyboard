@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Copyright (C) 2026 Lubos Dolezel. Hand-written test input for ibtool (MC13).
+     Two scenes, one top-level controller each: a window controller whose
+     content is the view controller of the second scene. -->
+<document type="com.apple.InterfaceBuilder3.Cocoa.Storyboard.XIB" version="3.0" toolsVersion="25408" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES" initialViewController="wc1">
+    <dependencies>
+        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="25408"/>
+    </dependencies>
+    <scenes>
+        <scene sceneID="s1">
+            <objects>
+                <windowController storyboardIdentifier="MainWindow" id="wc1" sceneMemberID="viewController">
+                    <window key="window" title="Single" allowsToolTipsWhenApplicationIsInactive="NO" autorecalculatesKeyViewLoop="NO" releasedWhenClosed="NO" animationBehavior="default" id="w1">
+                        <windowStyleMask key="styleMask" titled="YES" closable="YES" miniaturizable="YES" resizable="YES"/>
+                        <windowPositionMask key="initialPositionMask" leftStrut="YES" rightStrut="YES" topStrut="YES" bottomStrut="YES"/>
+                        <rect key="contentRect" x="200" y="200" width="320" height="160"/>
+                        <rect key="screenRect" x="0.0" y="0.0" width="1440" height="900"/>
+                        <connections>
+                            <outlet property="delegate" destination="wc1" id="c1"/>
+                        </connections>
+                    </window>
+                    <connections>
+                        <segue destination="vc1" kind="relationship" relationship="window.shadowedContentViewController" id="seg1"/>
+                    </connections>
+                </windowController>
+                <customObject id="fr1" userLabel="First Responder" customClass="NSResponder" sceneMemberID="firstResponder"/>
+            </objects>
+            <point key="canvasLocation" x="0.0" y="0.0"/>
+        </scene>
+        <scene sceneID="s2">
+            <objects>
+                <viewController storyboardIdentifier="Content" id="vc1" sceneMemberID="viewController">
+                    <view key="view" id="v1">
+                        <rect key="frame" x="0.0" y="0.0" width="320" height="160"/>
+                        <autoresizingMask key="autoresizingMask"/>
+                        <subviews>
+                            <textField focusRingType="none" horizontalHuggingPriority="251" verticalHuggingPriority="750" fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="t1">
+                                <rect key="frame" x="18" y="112" width="284" height="16"/>
+                                <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
+                                <textFieldCell key="cell" lineBreakMode="clipping" title="Content scene" id="tc1">
+                                    <font key="font" metaFont="system"/>
+                                    <color key="textColor" name="labelColor" catalog="System" colorSpace="catalog"/>
+                                    <color key="backgroundColor" name="textBackgroundColor" catalog="System" colorSpace="catalog"/>
+                                </textFieldCell>
+                            </textField>
+                        </subviews>
+                    </view>
+                </viewController>
+                <customObject id="fr2" userLabel="First Responder" customClass="NSResponder" sceneMemberID="firstResponder"/>
+            </objects>
+            <point key="canvasLocation" x="0.0" y="300"/>
+        </scene>
+    </scenes>
+</document>

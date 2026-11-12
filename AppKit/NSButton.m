@@ -76,6 +76,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return self;
 }
 
+- (void) dealloc {
+    [_contentTintColor release];
+    [super dealloc];
+}
+
 - (BOOL) resignFirstResponder {
     [self setNeedsDisplay: YES];
     return [super resignFirstResponder];
@@ -311,6 +316,20 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     if (newFont != nil) {
         [self setFont: newFont];
     }
+}
+
+@end
+
+@implementation NSButton (NSButtonContentTint)
+
+- (NSColor *) contentTintColor {
+    return _contentTintColor;
+}
+
+- (void) setContentTintColor: (NSColor *) color {
+    color = [color copy];
+    [_contentTintColor release];
+    _contentTintColor = color;
 }
 
 @end

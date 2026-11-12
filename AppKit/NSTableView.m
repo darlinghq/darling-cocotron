@@ -2134,3 +2134,13 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 @implementation NSTableView (Bindings)
 
 @end
+
+@implementation NSTableView (NSTableViewStyle)
+
+// Private AppKit: the insets a table view style adds around its rows. Cocotron
+// has only the plain style.
+- (NSEdgeInsets) _styleContentInsets {
+    return NSEdgeInsetsMake(0, 0, 0, 0);
+}
+
+@end
