@@ -1437,7 +1437,11 @@ static NSSize scaledImageSizeInFrameSize(NSSize imageSize, NSSize frameSize,
 - (NSSize) cellSize {
     NSSize result = NSMakeSize(0, 0);
     NSAttributedString *title = [self attributedTitle];
-    NSImage *image = [self image];
+    // Disclosure buttons draw a built-in glyph even when image is nil.
+    // Measure that glyph, keeping the size independent of the current state.
+    NSImage *image = _bezelStyle == NSDisclosureBezelStyle
+            ? [NSImage imageNamed: @"NSButtonCell_disclosure_normal"]
+            : [self image];
     BOOL enabled = [self isEnabled] ? YES : ![self imageDimsWhenDisabled];
     BOOL mixed = ([self state] == NSMixedState) ? YES : NO;
     NSSize imageSize, titleSize;
@@ -1456,7 +1460,7 @@ static NSSize scaledImageSizeInFrameSize(NSSize imageSize, NSSize frameSize,
     } else {
         titleSize = [title size];
     }
-    switch ([self imagePosition]) {
+    switch (_bezelStyle == NSDisclosureBezelStyle ? NSImageOnly : [self imagePosition]) {
 
     case NSNoImage:
         result = titleSize;

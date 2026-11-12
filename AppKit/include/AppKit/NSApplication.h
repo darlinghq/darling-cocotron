@@ -309,6 +309,8 @@ APPKIT_EXPORT __kindof NSApplication *NSApp;
 - (BOOL) application: (NSApplication *) theApplication
             openFile: (NSString *) filename;
 - (void) application: (NSApplication *) sender openFiles: (NSArray *) filenames;
+- (void) application: (NSApplication *) application
+            openURLs: (NSArray<NSURL *> *) urls;
 - (BOOL) application: (id) sender openFileWithoutUI: (NSString *) filename;
 - (BOOL) application: (NSApplication *) theApplication
         openTempFile: (NSString *) filename;

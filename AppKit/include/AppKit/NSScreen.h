@@ -58,6 +58,8 @@ typedef NSString *NSDeviceDescriptionKey;
 
 - (NSTimeInterval) minimumRefreshInterval;
 - (NSTimeInterval) maximumRefreshInterval;
+- (NSInteger) maximumFramesPerSecond;
+- (NSTimeInterval) displayUpdateGranularity;
 
 @end
 

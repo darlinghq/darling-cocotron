@@ -30,6 +30,7 @@ set(QuartzCore_sources
 	CAEDRMetadata.m
 	CAEmitterCell.m
 	CAEmitterLayer.m
+	CAFrameRateRange.m
 	CALayerContext.m
 	CALayer.m
 	CALayerHost.m

@@ -278,9 +278,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     if (![self isEnabled])
         return NO;
 
-    if ((modifiers & (NSCommandKeyMask | NSAlternateKeyMask)) ==
-        ([self keyEquivalentModifierMask] &
-         (NSCommandKeyMask | NSAlternateKeyMask))) {
+    const unsigned keyModifiers = NSCommandKeyMask | NSAlternateKeyMask |
+                                  NSShiftKeyMask | NSControlKeyMask;
+    if ((modifiers & keyModifiers) ==
+        ([self keyEquivalentModifierMask] & keyModifiers)) {
         NSString *key = [self keyEquivalent];
 
         if ([key isEqualToString: characters]) {

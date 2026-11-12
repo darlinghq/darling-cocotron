@@ -4,20 +4,32 @@
 @implementation NSTitlebarAccessoryViewController
 
 @synthesize preferredScrollEdgeEffectStyle = _preferredScrollEdgeEffectStyle;
+@synthesize automaticallyAdjustsSize = _automaticallyAdjustsSize;
+@synthesize hidden = _hidden;
+@synthesize fullScreenMinHeight = _fullScreenMinHeight;
 
 - (void) dealloc {
     [_preferredScrollEdgeEffectStyle release];
     [super dealloc];
 }
 
-- (NSMethodSignature *)methodSignatureForSelector:(SEL)aSelector
-{
-    return [NSMethodSignature signatureWithObjCTypes: "v@:"];
+- (instancetype) initWithNibName: (NSString *) name bundle: (NSBundle *) bundle {
+    if ((self = [super initWithNibName: name bundle: bundle])) {
+        _automaticallyAdjustsSize = YES;
+        _hidden = NO;
+        _fullScreenMinHeight = 0;
+    }
+    return self;
 }
 
-- (void)forwardInvocation:(NSInvocation *)anInvocation
-{
-    NSLog(@"Stub called: %@ in %@", NSStringFromSelector([anInvocation selector]), [self class]);
+// The archived properties aren't decoded: the defaults apply.
+- (instancetype) initWithCoder: (NSCoder *) coder {
+    if ((self = [super initWithCoder: coder])) {
+        _automaticallyAdjustsSize = YES;
+        _hidden = NO;
+        _fullScreenMinHeight = 0;
+    }
+    return self;
 }
 
 @end

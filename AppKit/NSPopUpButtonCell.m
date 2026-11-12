@@ -330,7 +330,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     } else {
         item = [itemArray objectAtIndex: _selectedIndex];
     }
-    [super setTitle: [item title]];
+    // With no items the title is the empty string rather than nil.
+    [super setTitle: item != nil ? [item title] : @""];
     // For a redraw of the control
     [(NSControl *) [self controlView] updateCell: self];
 }

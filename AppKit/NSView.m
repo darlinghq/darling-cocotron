@@ -46,9 +46,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <QuartzCore/CALayerContext.h>
 #import <QuartzCore/CATransaction.h>
 #import <AppKit/NSLayoutConstraint.h>
+#import <AppKit/NSLayoutGuide.h>
 #import <AppKit/NSTextInput.h>
 #import <AppKit/NSTextInputClient.h>
 #import <objc/runtime.h>
+#include <math.h>
 
 @class IBMetricsTable;
 
@@ -70,6 +72,7 @@ const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPresentationOptio
 - (CGAffineTransform) transformToLayer;
 - (void) _trackingAreasChanged;
 - (void) _addLayerToSuperlayer;
+- (void) _updateLayerVisibility;
 - (void) _removeLayerFromSuperlayer;
 @end
 
@@ -204,6 +207,7 @@ typedef struct __VFlags {
 
     // TODO: decode this
     _translatesAutoresizingMaskIntoConstraints = YES;
+    _alphaValue = 1.0;
     _allowedTouchTypes = NSTouchTypeMaskDirect;
     [self _setDefaultLayoutPriorities];
 
@@ -439,6 +443,7 @@ typedef struct __VFlags {
     [_layerContext setFrame: _frame];
 
     _translatesAutoresizingMaskIntoConstraints = YES;
+    _alphaValue = 1.0;
     _allowedTouchTypes = NSTouchTypeMaskDirect;
     [self _setDefaultLayoutPriorities];
 
@@ -498,9 +503,12 @@ static CGAffineTransform concatViewTransform(CGAffineTransform result,
                                             frame.origin.y);
 
     // Apply bounds scaling to fit in the frame
+    // Empty bounds have no defined scale on that axis. Preserve translation
+    // and the other axis rather than introducing 0/0 into the view hierarchy.
+    CGFloat scaleX = NSWidth(bounds) == 0 ? 1 : NSWidth(frame) / NSWidth(bounds);
+    CGFloat scaleY = NSHeight(bounds) == 0 ? 1 : NSHeight(frame) / NSHeight(bounds);
     CGAffineTransform scale =
-            CGAffineTransformMakeScale(NSWidth(frame) / NSWidth(bounds),
-                                       NSHeight(frame) / NSHeight(bounds));
+            CGAffineTransformMakeScale(scaleX, scaleY);
     result = CGAffineTransformConcat(scale, result);
 
     if (flip) {
@@ -666,7 +674,37 @@ static inline void buildTransformsIfNeeded(NSView *self) {
 }
 
 - (void) scaleUnitSquareToSize: (NSSize) size {
-    NSUnimplementedMethod();
+    // Negative and infinite factors are accepted, as on macOS. A zero or NaN
+    // factor cannot produce usable bounds; macOS aborts the process there, so
+    // raising an exception is the conservative replacement for a crash.
+    if (isnan(size.width) || isnan(size.height) ||
+            size.width == 0 || size.height == 0)
+        [NSException raise: NSInvalidArgumentException
+                    format: @"scaleUnitSquareToSize: requires non-zero, non-NaN dimensions"];
+
+    if (size.width == 1.0 && size.height == 1.0)
+        return;
+
+    NSRect bounds = [self bounds];
+    bounds.origin.x /= size.width;
+    bounds.origin.y /= size.height;
+    bounds.size.width /= size.width;
+    bounds.size.height /= size.height;
+    if (!isfinite(bounds.origin.x) || !isfinite(bounds.origin.y) ||
+            !isfinite(bounds.size.width) || !isfinite(bounds.size.height))
+        [NSException raise: NSInvalidArgumentException
+                    format: @"scaleUnitSquareToSize: produces non-finite bounds"];
+    // A negative factor mirrors the axis; the bounds keep a positive size and
+    // the origin moves to the other edge.
+    if (bounds.size.width < 0) {
+        bounds.origin.x += bounds.size.width;
+        bounds.size.width = -bounds.size.width;
+    }
+    if (bounds.size.height < 0) {
+        bounds.origin.y += bounds.size.height;
+        bounds.size.height = -bounds.size.height;
+    }
+    [self setBounds: bounds];
 }
 
 - (NSWindow *) window {
@@ -745,12 +783,13 @@ static inline void buildTransformsIfNeeded(NSView *self) {
 }
 
 - (CGFloat) alphaValue {
-    NSUnimplementedMethod();
-    return 0.;
+    return _alphaValue;
 }
 
+// Applied through the backing layer; views drawn without one ignore it.
 - (void) setAlphaValue: (CGFloat) alpha {
-    NSUnimplementedMethod();
+    _alphaValue = alpha;
+    [_layer setOpacity: alpha];
 }
 
 - (int) gState {
@@ -804,6 +843,7 @@ static inline void buildTransformsIfNeeded(NSView *self) {
                 }
         }
 
+        [self _updateLayerVisibility];
         [[self superview] setNeedsDisplay: YES];
 
         if (_isHidden)
@@ -1207,6 +1247,7 @@ static void postFrameChange(NSView *self) {
             [self _removeLayerFromSuperlayer];
         } else if (_layerContext) {
             [_layerContext setSubwindow: [_window _createSubWindowWithFrame: [self frame]]];
+            [self _updateLayerVisibility];
         } else if (_layer != nil && _window != nil) {
             [self _addLayerToSuperlayer];
         }
@@ -1229,6 +1270,7 @@ static void postFrameChange(NSView *self) {
     if (_layer != nil)
         [self _removeLayerFromSuperlayer];
     _superview = superview;
+    [self _updateLayerVisibility];
     if (_layer != nil && _superview != nil)
         [self _addLayerToSuperlayer];
 
@@ -1900,6 +1942,33 @@ static char inputContextKey;
 - (void) updateLayer {
 }
 
+- (void) prepareForReuse {
+    [self setAlphaValue: 1.0];
+    [self setHidden: NO];
+}
+
+- (NSEdgeInsets) alignmentRectInsets {
+    return NSEdgeInsetsMake(0, 0, 0, 0);
+}
+
+// The insets are measured in the view's own coordinates, so which of top and
+// bottom touches the frame's origin depends on whether the view is flipped.
+- (NSRect) frameForAlignmentRect: (NSRect) alignmentRect {
+    NSEdgeInsets insets = [self alignmentRectInsets];
+    CGFloat originInset = [self isFlipped] ? insets.top : insets.bottom;
+    return NSMakeRect(alignmentRect.origin.x - insets.left, alignmentRect.origin.y - originInset,
+                      alignmentRect.size.width + insets.left + insets.right,
+                      alignmentRect.size.height + insets.top + insets.bottom);
+}
+
+- (NSRect) alignmentRectForFrame: (NSRect) frame {
+    NSEdgeInsets insets = [self alignmentRectInsets];
+    CGFloat originInset = [self isFlipped] ? insets.top : insets.bottom;
+    return NSMakeRect(frame.origin.x + insets.left, frame.origin.y + originInset,
+                      frame.size.width - insets.left - insets.right,
+                      frame.size.height - insets.top - insets.bottom);
+}
+
 - (BOOL) canDrawSubviewsIntoLayer {
     return _canDrawSubviewsIntoLayer;
 }
@@ -1927,12 +1996,22 @@ static char inputContextKey;
     _layerContext = nil;
 }
 
+// Native root-layer windows must follow the view tree as well as CALayer.
+- (void) _updateLayerVisibility {
+    BOOL hidden = [self isHiddenOrHasHiddenAncestor];
+    [_layer setHidden: hidden];
+    [_layerContext setHidden: hidden];
+    for (NSView *child in _subviews)
+        [child _updateLayerVisibility];
+}
+
 - (void) _createLayerContextIfNeeded {
     if (_layerContext == nil && [_superview layer] == nil && _window != nil) {
         _layerContext = [[CALayerContext alloc] initWithFrame: [self frame]];
         [_layerContext setLayer: _layer];
         if (_window) {
             [_layerContext setSubwindow: [_window _createSubWindowWithFrame: [self frame]]];
+            [self _updateLayerVisibility];
         }
     }
 }
@@ -1978,10 +2057,12 @@ static char inputContextKey;
 
     if (_layer == nil) {
         _layer = [[self makeBackingLayer] retain];
+        [_layer setOpacity: _alphaValue];
         configureLayerGeometry(self);
     }
 
     [self _addLayerToSuperlayer];
+    [self _updateLayerVisibility];
 
     [_subviews makeObjectsPerformSelector: _cmd];
 }
@@ -2039,6 +2120,7 @@ static char inputContextKey;
 
         [_subviews
                 makeObjectsPerformSelector: @selector(_addLayerToSuperlayer)];
+        [self _updateLayerVisibility];
     }
 }
 
@@ -3142,6 +3224,46 @@ static CGFloat backingScaleFactor(NSView *view) {
 
 - (void) layout {
     // An override point: there is no constraint solver to drive.
+}
+
+static char installedViewLayoutGuidesKey;
+
+static NSMutableArray *installedViewLayoutGuides(NSView *view, BOOL create) {
+    NSMutableArray *guides = objc_getAssociatedObject(view, &installedViewLayoutGuidesKey);
+    if (guides == nil && create) {
+        guides = [NSMutableArray array];
+        objc_setAssociatedObject(view, &installedViewLayoutGuidesKey, guides,
+                                 OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    return guides;
+}
+
+- (NSArray *) layoutGuides {
+    NSArray *guides = installedViewLayoutGuides(self, NO);
+    return guides ? [[guides copy] autorelease] : [NSArray array];
+}
+
+- (void) addLayoutGuide: (NSLayoutGuide *) guide {
+    if (guide == nil) return;
+    NSView *oldOwner = [guide owningView];
+    if (oldOwner != nil && oldOwner != self) {
+        [oldOwner removeLayoutGuide: guide];
+    }
+    NSMutableArray *guides = installedViewLayoutGuides(self, YES);
+    if (![guides containsObject: guide]) {
+        [guides addObject: guide];
+        [guide setOwningView: self];
+    }
+}
+
+- (void) removeLayoutGuide: (NSLayoutGuide *) guide {
+    if (guide == nil) return;
+    NSMutableArray *guides = installedViewLayoutGuides(self, NO);
+    if ([guides containsObject: guide]) {
+        [guides removeObject: guide];
+        if ([guide owningView] == self)
+            [guide setOwningView: nil];
+    }
 }
 
 @end
