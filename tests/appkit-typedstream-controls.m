@@ -345,8 +345,7 @@ static void test_quirk_typedstream_tab_view(void)
     [coder encodeValueOfObjCType: @encode(BOOL) at: &no];
     [coder encodeValueOfObjCType: @encode(BOOL) at: &yes];
     putObject(coder, vertical);
-    [coder encodeValueOfObjCType: @encode(BOOL) at: &no];
-    [coder encodeValueOfObjCType: @encode(BOOL) at: &no];
+    // Version 1 ends with the two ruler flags; header and corner view flags start at version 2.
     [coder encodeValueOfObjCType: @encode(BOOL) at: &no];
     [coder encodeValueOfObjCType: @encode(BOOL) at: &no];
 }
