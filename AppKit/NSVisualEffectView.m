@@ -46,9 +46,4 @@
     NSRectFill(rect);
 }
 
-- (NSMethodSignature *)methodSignatureForSelector:(SEL)aSelector
-{
-    return [super methodSignatureForSelector: aSelector];
-}
-
 @end

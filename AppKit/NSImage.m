@@ -480,7 +480,7 @@ NSImageName const NSImageNameTouchBarVolumeUpTemplate =
     return [self initWithSize: NSMakeSize(0, 0)];
 }
 
-// Not in the public headers; Grapher sends it to a new NSImage.
+// Not in the public headers: wraps a single representation in a new image.
 - initWithImageRep: (NSImageRep *) rep {
     if (rep == nil) {
         [self release];
