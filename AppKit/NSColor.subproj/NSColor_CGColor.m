@@ -43,7 +43,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     if (_colorRef != nil &&
         [_colorSpaceName isEqualToString: NSPatternColorSpace]) {
         CGPatternRef pattern = CGColorGetPattern(_colorRef);
-        _pattern = (NSImage *) CGPatternGetImage(pattern);
+        _pattern = [(NSImage *) CGPatternGetImage(pattern) retain];
     }
 
     return self;
