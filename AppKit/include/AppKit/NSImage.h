@@ -254,8 +254,6 @@ APPKIT_EXPORT NSImageName const NSImageNameMobileMe;
 APPKIT_EXPORT NSImageName const NSImageNameMultipleDocuments;
 APPKIT_EXPORT NSImageName const NSImageNameNetwork;
 APPKIT_EXPORT NSImageName const NSImageNamePathTemplate;
-APPKIT_EXPORT NSImageName const NSImageNamePauseTemplate;
-APPKIT_EXPORT NSImageName const NSImageNamePlayTemplate;
 APPKIT_EXPORT NSImageName const NSImageNamePreferencesGeneral;
 APPKIT_EXPORT NSImageName const NSImageNameQuickLookTemplate;
 APPKIT_EXPORT NSImageName const NSImageNameRefreshFreestandingTemplate;
