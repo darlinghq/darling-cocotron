@@ -64,9 +64,8 @@ int main(int argc, char **argv) {
         expect([raisedName(^{ [storyboard instantiateControllerWithIdentifier: @"Unbuilt"]; })
                        isEqual: NSInternalInconsistencyException],
                "a scene whose nib is missing raises");
-        expect([raisedName(^{ [storyboard instantiateControllerWithIdentifier: @"Ambiguous"]; })
-                       isEqual: NSInternalInconsistencyException],
-               "a scene with two top-level controllers raises");
+        expect([[storyboard instantiateControllerWithIdentifier: @"Ambiguous"] isKindOfClass: [NSViewController class]],
+               "a scene with two top-level controllers and no sceneController outlet gives its first controller");
 
         printf("storyboard loading checks=%d failures=%d\n", checks, failures);
         return failures != 0;

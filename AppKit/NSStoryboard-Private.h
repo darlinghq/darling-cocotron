@@ -29,3 +29,11 @@ static NSString *const NSStoryboardSceneExternalObjectKey = @"NSStoryboardSceneE
 - (NSString *) _pathForNibNamed: (NSString *) name;
 - (void) _instantiateAsMainStoryboard;
 @end
+
+// File's Owner of a scene nib; compiled scenes connect its sceneController outlet to the scene's own controller.
+@interface NSStoryboardSceneOwner : NSObject {
+@public
+    id _sceneController;
+}
+- (void) setSceneController: (id) controller;
+@end

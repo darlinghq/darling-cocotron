@@ -136,21 +136,43 @@ static __thread NSStoryboard *instantiatingStoryboard;
         [NSException raise: NSInvalidArgumentException
                     format: @"Storyboard %@ doesn't contain a controller with identifier '%@'", _path, identifier];
 
+    // A scene nib may hold several controllers. The scene's own one is the object
+    // its File's Owner reaches through the sceneController outlet; the rest are
+    // reachable only through connections of that controller.
+    NSStoryboardSceneOwner *owner = [[[NSStoryboardSceneOwner alloc] init] autorelease];
     id controller = nil;
-    for (id object in [self _instantiateNibNamed: nibName owner: nil]) {
+    for (id object in [self _instantiateNibNamed: nibName owner: owner]) {
+        // Scenes without the outlet: take the first window controller, else the
+        // first view controller.
         if ([object isKindOfClass: [NSWindowController class]]) {
-            // A window controller is what instantiateInitialController's caller is
-            // looking for, so prefer it and stop looking.
-            controller = object;
-            break;
-        }
-        if (controller == nil && [object isKindOfClass: [NSViewController class]])
+            if (controller == nil || ![controller isKindOfClass: [NSWindowController class]])
+                controller = object;
+        } else if (controller == nil && [object isKindOfClass: [NSViewController class]])
             controller = object;
     }
+    if (owner->_sceneController != nil)
+        controller = owner->_sceneController;
     if (controller == nil)
         [NSException raise: NSInternalInconsistencyException
                     format: @"Storyboard scene %@ has no top-level controller", nibName];
     return controller;
+}
+
+@end
+
+// File's Owner of a scene nib. Compiled scenes connect its sceneController outlet to the controller
+// the scene stands for.
+@implementation NSStoryboardSceneOwner
+
+- (void) setSceneController: (id) controller {
+    controller = [controller retain];
+    [_sceneController release];
+    _sceneController = controller;
+}
+
+- (void) dealloc {
+    [_sceneController release];
+    [super dealloc];
 }
 
 @end
