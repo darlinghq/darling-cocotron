@@ -679,9 +679,12 @@ static NSTextView *s_targetTextView = nil;
                   affinity: (NSSelectionAffinity) affinity
             stillSelecting: (BOOL) stillSelecting
 {
-    // A nil array leaves the selection alone: TextEdit copies the selection of
-    // a text view that doesn't exist yet into its first one. Only a non-nil
-    // empty array raises.
+    // QUIRK: a nil array is ignored and leaves the selection unchanged, while
+    // an empty non-nil array raises NSInvalidArgumentException. Not documented.
+    // Evidence: black-box observation on macOS 27 (tier 2, MC11.4 in the
+    // project's evidence notes).
+    // Test: test_quirk_nil_selected_ranges_is_ignored in
+    // tests/appkit-text-system-settings.m
     if (ranges == nil)
         return;
     if ([ranges count] == 0)

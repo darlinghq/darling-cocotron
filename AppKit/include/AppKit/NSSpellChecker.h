@@ -207,7 +207,7 @@ typedef NSInteger NSCorrectionResponse;
 #pragma mark Automatic Substitution Settings
 
 // The user's settings (NSGlobalDomain keys such as
-// NSAutomaticQuoteSubstitutionEnabled); YES when unset.
+// NSAutomaticQuoteSubstitutionEnabled); NO when unset.
 + (BOOL) isAutomaticQuoteSubstitutionEnabled;
 + (BOOL) isAutomaticDashSubstitutionEnabled;
 + (BOOL) isAutomaticCapitalizationEnabled;

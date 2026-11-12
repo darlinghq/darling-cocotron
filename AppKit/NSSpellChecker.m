@@ -52,10 +52,11 @@ NSString *const NSTextCheckingDocumentAuthorKey =
 
 #define SPELLCHECK_DEBUG 0
 
-// macOS enables every automatic text substitution until the user turns it off.
+// The automatic substitution settings are the user's global preferences; a
+// setting nobody has written reads as disabled.
 static BOOL automaticSettingEnabled(NSString *key) {
     id value = [[NSUserDefaults standardUserDefaults] objectForKey: key];
-    return value ? [value boolValue] : YES;
+    return value ? [value boolValue] : NO;
 }
 
 @implementation NSSpellChecker
