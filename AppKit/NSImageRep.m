@@ -326,9 +326,12 @@ static NSMutableArray *_registeredClasses = nil;
     BOOL result;
 
     CGContextSaveGState(context);
-    CGContextTranslateCTM(context, point.x, point.y);
-    result = [self draw];
-    CGContextRestoreGState(context);
+    @try {
+        CGContextTranslateCTM(context, point.x, point.y);
+        result = [self draw];
+    } @finally {
+        CGContextRestoreGState(context);
+    }
 
     return result;
 }
@@ -339,11 +342,14 @@ static NSMutableArray *_registeredClasses = nil;
     BOOL result;
 
     CGContextSaveGState(context);
-    CGContextTranslateCTM(context, rect.origin.x, rect.origin.y);
-    CGContextScaleCTM(context, rect.size.width / size.width,
-                      rect.size.height / size.height);
-    result = [self draw];
-    CGContextRestoreGState(context);
+    @try {
+        CGContextTranslateCTM(context, rect.origin.x, rect.origin.y);
+        CGContextScaleCTM(context, rect.size.width / size.width,
+                          rect.size.height / size.height);
+        result = [self draw];
+    } @finally {
+        CGContextRestoreGState(context);
+    }
 
     return result;
 }
