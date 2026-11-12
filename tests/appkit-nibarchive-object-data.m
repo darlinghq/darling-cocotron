@@ -1,7 +1,8 @@
 // Authored from the archive layout in NSNibArchive.m and the fields consumed by
 // NSIBObjectData.m. No imported application archive is used by this test.
 #import <AppKit/AppKit.h>
-#import "../AppKit/nib.subproj/NSNibArchive.h"
+// The converter is private to AppKit, so the test compiles it in.
+#include "../AppKit/nib.subproj/NSNibArchive.m"
 #include <stdint.h>
 #include <stdio.h>
 
