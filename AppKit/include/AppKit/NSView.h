@@ -154,7 +154,19 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPre
     NSUserInterfaceLayoutDirection _userInterfaceLayoutDirection;
     int _frameChangeDepth;
     BOOL _canDrawConcurrently;
+    NSMutableArray *_constraints;
 }
+
+// Constraints installed on this view, in the order they were added. A
+// constraint is installed on the closest common ancestor of its items, see
+// -[NSLayoutConstraint setActive:].
+@property(readonly, copy) NSArray<NSLayoutConstraint *> *constraints;
+// Adding a constraint activates it with this view as its owner; removing it
+// deactivates it. Adding one that is already installed here does nothing.
+- (void) addConstraint: (NSLayoutConstraint *) constraint;
+- (void) addConstraints: (NSArray<NSLayoutConstraint *> *) constraints;
+- (void) removeConstraint: (NSLayoutConstraint *) constraint;
+- (void) removeConstraints: (NSArray<NSLayoutConstraint *> *) constraints;
 
 @property(class, readonly) BOOL requiresConstraintBasedLayout;
 @property BOOL translatesAutoresizingMaskIntoConstraints;

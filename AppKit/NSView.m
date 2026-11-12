@@ -49,6 +49,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <QuartzCore/CATransaction.h>
 #import <AppKit/NSLayoutConstraint.h>
 #import <AppKit/NSLayoutGuide.h>
+#import "NSLayoutConstraintInternal.h"
 #import <AppKit/NSTextInput.h>
 #import <AppKit/NSTextInputClient.h>
 #import <objc/runtime.h>
@@ -474,6 +475,8 @@ typedef struct __VFlags {
     [_draggedTypes release];
     [_trackingAreas release];
     [_contentFilters release];
+    [_constraints makeObjectsPerformSelector: @selector(_detachFromOwner:) withObject: self];
+    [_constraints release];
 
     if (_invalidRects != NULL)
         NSZoneFree(NULL, _invalidRects);
@@ -3259,6 +3262,38 @@ static CGFloat backingScaleFactor(NSView *view) {
 }
 
 - (void) invalidateIntrinsicContentSize {
+}
+
+- (NSArray *) constraints {
+    return _constraints ? [[_constraints copy] autorelease] : [NSArray array];
+}
+
+- (void) addConstraint: (NSLayoutConstraint *) constraint {
+    if ([_constraints containsObject: constraint])
+        return;
+    if (_constraints == nil)
+        _constraints = [[NSMutableArray alloc] init];
+    [_constraints addObject: constraint];
+    [constraint _attachToOwner: self];
+}
+
+- (void) addConstraints: (NSArray *) constraints {
+    for (NSLayoutConstraint *constraint in constraints)
+        [self addConstraint: constraint];
+}
+
+- (void) removeConstraint: (NSLayoutConstraint *) constraint {
+    if (![_constraints containsObject: constraint])
+        return;
+    // Keep it alive until the owner link is cleared.
+    [[constraint retain] autorelease];
+    [_constraints removeObject: constraint];
+    [constraint _detachFromOwner: self];
+}
+
+- (void) removeConstraints: (NSArray *) constraints {
+    for (NSLayoutConstraint *constraint in constraints)
+        [self removeConstraint: constraint];
 }
 
 - (void) updateConstraints {

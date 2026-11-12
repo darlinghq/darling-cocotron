@@ -18,39 +18,45 @@
 */
 
 #import <AppKit/NSLayoutConstraint.h>
+#import <AppKit/NSLayoutGuide.h>
+#import <AppKit/NSView.h>
+#import "NSLayoutConstraintInternal.h"
 #import <Foundation/NSArray.h>
 #import <Foundation/NSCoder.h>
 #import <Foundation/NSString.h>
 #import <Foundation/NSException.h>
 
-@interface NSObject (NSLayoutConstraintOwner)
-- (id) nsli_superitem;
-- (void) nsli_addConstraint:(NSLayoutConstraint *)constraint;
-- (void) nsli_removeConstraint:(NSLayoutConstraint *)constraint;
-@end
+// The container that holds an item: a view's superview, or a layout guide's
+// owning view.
+static id _NSLayoutItemParent(id item)
+{
+    if ([item isKindOfClass:[NSView class]])
+        return [item superview];
+    if ([item respondsToSelector:@selector(owningView)])
+        return [item owningView];
+    return nil;
+}
 
-#warning TODO: $ld$hide$os 10.4 through 10.7, also METACLASS
-
-// Values match AppKit's NSLayoutAttribute/NSLayoutRelation (declared in AppKit/NSLayoutConstraint.h).
-enum {
-    _NSLayoutAttributeNotAnAttribute = 0,
-};
-enum {
-    _NSLayoutRelationEqual = 0,
-};
-static const float _NSLayoutPriorityRequired = 1000;
+static BOOL _NSLayoutItemIsWithin(id item, id container)
+{
+    for (; item != nil; item = _NSLayoutItemParent(item)) {
+        if (item == container)
+            return YES;
+    }
+    return NO;
+}
 
 // A model of a layout constraint: it stores and archives the constraint's description.
 // AppKit owns the installed constraint and applies its layout equations.
 @implementation NSLayoutConstraint
 
 + (instancetype)constraintWithItem:(id)view1
-                         attribute:(NSInteger)attr1
-                         relatedBy:(NSInteger)relation
+                         attribute:(NSLayoutAttribute)attr1
+                         relatedBy:(NSLayoutRelation)relation
                             toItem:(id)view2
-                         attribute:(NSInteger)attr2
-                        multiplier:(double)multiplier
-                          constant:(double)c
+                         attribute:(NSLayoutAttribute)attr2
+                        multiplier:(CGFloat)multiplier
+                          constant:(CGFloat)c
 {
     NSLayoutConstraint *constraint = [[self alloc] init];
     constraint->_firstItem = view1;
@@ -79,7 +85,7 @@ static const float _NSLayoutPriorityRequired = 1000;
 {
     if ((self = [super init])) {
         _multiplier = 1;
-        _priority = _NSLayoutPriorityRequired;
+        _priority = NSLayoutPriorityRequired;
     }
     return self;
 }
@@ -103,11 +109,11 @@ static const float _NSLayoutPriorityRequired = 1000;
             ? [coder decodeIntegerForKey:@"NSSecondAttributeV2"]
             : [coder decodeIntegerForKey:@"NSSecondAttribute"];
         if (_secondItem == nil)
-            _secondAttribute = _NSLayoutAttributeNotAnAttribute;
+            _secondAttribute = NSLayoutAttributeNotAnAttribute;
 
         _relation = [coder containsValueForKey:@"NSRelation"]
             ? [coder decodeIntegerForKey:@"NSRelation"]
-            : _NSLayoutRelationEqual;
+            : NSLayoutRelationEqual;
 
         if ([coder containsValueForKey:@"NSMultiplier"])
             _multiplier = [coder decodeDoubleForKey:@"NSMultiplier"];
@@ -136,7 +142,7 @@ static const float _NSLayoutPriorityRequired = 1000;
     [coder encodeConditionalObject:_firstItem forKey:@"NSFirstItem"];
     [coder encodeInteger:_firstAttribute forKey:@"NSFirstAttribute"];
     [coder encodeInteger:_firstAttribute forKey:@"NSFirstAttributeV2"];
-    if (_relation != _NSLayoutRelationEqual)
+    if (_relation != NSLayoutRelationEqual)
         [coder encodeInteger:_relation forKey:@"NSRelation"];
     if (_secondItem != nil) {
         [coder encodeConditionalObject:_secondItem forKey:@"NSSecondItem"];
@@ -149,7 +155,7 @@ static const float _NSLayoutPriorityRequired = 1000;
         [coder encodeDouble:_constant forKey:@"NSConstant"];
         [coder encodeDouble:_constant forKey:@"NSConstantV2"];
     }
-    if (_priority != _NSLayoutPriorityRequired)
+    if (_priority != NSLayoutPriorityRequired)
         [coder encodeFloat:_priority forKey:@"NSPriority"];
     if (_symbolicConstant)
         [coder encodeObject:_symbolicConstant forKey:@"NSSymbolicConstant"];
@@ -167,16 +173,16 @@ static const float _NSLayoutPriorityRequired = 1000;
 
 - (id)firstItem { return _firstItem; }
 - (id)secondItem { return _secondItem; }
-- (NSInteger)firstAttribute { return _firstAttribute; }
-- (NSInteger)secondAttribute { return _secondAttribute; }
-- (NSInteger)relation { return _relation; }
-- (double)multiplier { return _multiplier; }
+- (NSLayoutAttribute)firstAttribute { return _firstAttribute; }
+- (NSLayoutAttribute)secondAttribute { return _secondAttribute; }
+- (NSLayoutRelation)relation { return _relation; }
+- (CGFloat)multiplier { return _multiplier; }
 
-- (double)constant { return _constant; }
-- (void)setConstant:(double)constant { _constant = constant; }
+- (CGFloat)constant { return _constant; }
+- (void)setConstant:(CGFloat)constant { _constant = constant; }
 
-- (float)priority { return _priority; }
-- (void)setPriority:(float)priority { _priority = priority; }
+- (NSLayoutPriority)priority { return _priority; }
+- (void)setPriority:(NSLayoutPriority)priority { _priority = priority; }
 
 - (NSString *)identifier { return _identifier; }
 - (void)setIdentifier:(NSString *)identifier
@@ -187,31 +193,48 @@ static const float _NSLayoutPriorityRequired = 1000;
 }
 
 - (BOOL)isActive { return _active; }
+
+// Activation installs the constraint on the closest common ancestor of its two
+// items (the first item itself for a one-item constraint) and raises if the
+// items are not in one hierarchy. The view's -addConstraint: links the
+// constraint back through -_attachToOwner:.
 - (void)setActive:(BOOL)active
 {
-    if (_active == active)
-        return;
     if (!active) {
-        [_owner nsli_removeConstraint:self];
-        _owner = nil;
+        id owner = _owner;
+        if (owner != nil)
+            [owner removeConstraint:self];
         _active = NO;
         return;
     }
+    if (_active && _owner != nil)
+        return;
+
     id owner = _firstItem;
     if (_secondItem != nil) {
-        for (; owner != nil; owner = [owner nsli_superitem]) {
-            id other = _secondItem;
-            for (; other != nil && other != owner; other = [other nsli_superitem]) {}
-            if (other == owner)
-                break;
-        }
+        while (owner != nil && !_NSLayoutItemIsWithin(_secondItem, owner))
+            owner = _NSLayoutItemParent(owner);
     }
-    if (owner == nil || ![owner respondsToSelector:@selector(nsli_addConstraint:)])
+    if (![owner isKindOfClass:[NSView class]])
         [NSException raise:NSInvalidArgumentException
-                    format:@"Constraint items must share an owning view: %@", self];
-    [owner nsli_addConstraint:self];
+                    format:@"The items of a layout constraint must share a common ancestor view: %@", self];
+    [owner addConstraint:self];
+}
+
+- (void)_attachToOwner:(id)owner
+{
+    if (_owner != nil && _owner != owner)
+        [_owner removeConstraint:self];
     _owner = owner;
     _active = YES;
+}
+
+- (void)_detachFromOwner:(id)owner
+{
+    if (_owner == owner) {
+        _owner = nil;
+        _active = NO;
+    }
 }
 
 - (BOOL)shouldBeArchived { return _shouldBeArchived; }
