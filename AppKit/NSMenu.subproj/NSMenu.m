@@ -24,6 +24,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSMenuItem.h>
 #import <AppKit/NSMenuView.h>
 #import <AppKit/NSMenuWindow.h>
+#import <AppKit/NSKeyEquivalentMatching.h>
 #import <AppKit/NSWindow.h>
 #import <Foundation/NSKeyedArchiver.h>
 
@@ -442,52 +443,33 @@ BOOL itemIsEnabled(NSMenuItem *item) {
 
 - (BOOL) performKeyEquivalent: (NSEvent *) event {
     NSInteger i, count = [_itemArray count];
-    NSString *characters = [event charactersIgnoringModifiers];
-    unsigned modifiers = [event modifierFlags];
 
     if (_autoenablesItems)
         [self update];
 
     for (i = 0; i < count; i++) {
         NSMenuItem *item = [_itemArray objectAtIndex: i];
-        const unsigned keyModifiers = NSCommandKeyMask | NSAlternateKeyMask |
-                                      NSShiftKeyMask | NSControlKeyMask;
-        unsigned itemModifiers = [item keyEquivalentModifierMask] & keyModifiers;
-        NSString *key = [item keyEquivalent];
 
-        // Uppercase key equivalents carry an implicit Shift modifier.
-        if ([key length] > 0 && ![key isEqualToString: [key lowercaseString]])
-            itemModifiers |= NSShiftKeyMask;
-
-        if ((modifiers & keyModifiers) == itemModifiers) {
-
-            // Explicit Shift on a lowercase equivalent also accepts its
-            // uppercase event spelling. Keep the exact match for backends
-            // that report an unshifted charactersIgnoringModifiers value.
-            BOOL matches = [key isEqualToString: characters];
-            if (!matches && (itemModifiers & NSShiftKeyMask))
-                matches = [[key lowercaseString]
-                        isEqualToString: [characters lowercaseString]];
-            if (matches) {
-                // With automatic enabling, -update above brought isEnabled in
-                // line with validation. Without it only isEnabled counts and
-                // validation is not consulted.
-                BOOL enabled = [item isEnabled];
-                if (enabled && _autoenablesItems)
-                    enabled = itemIsEnabled(item);
-                if (enabled)
-                    [NSApp sendAction: [item action]
-                                   to: [item target]
-                                 from: item];
-                // QUIRK: a matching item consumes the key equivalent even when it
-                // is disabled or has no target to perform the action; the
-                // result is YES in every case. Not documented. Evidence:
-                // black-box observation on macOS 27 (tier 2), recorded as
-                // MC11.12 and MC11.13 of the upstreaming evidence notes.
-                // Test: appkit-menu-key-equivalents.m
-                // (disabled_matching_item_consumes_the_key)
-                return YES;
-            }
+        if (NSKeyEquivalentMatchesEvent([item keyEquivalent],
+                                        [item keyEquivalentModifierMask], event)) {
+            // With automatic enabling, -update above brought isEnabled in
+            // line with validation. Without it only isEnabled counts and
+            // validation is not consulted.
+            BOOL enabled = [item isEnabled];
+            if (enabled && _autoenablesItems)
+                enabled = itemIsEnabled(item);
+            if (enabled)
+                [NSApp sendAction: [item action]
+                               to: [item target]
+                             from: item];
+            // QUIRK: a matching item consumes the key equivalent even when it
+            // is disabled or has no target to perform the action; the
+            // result is YES in every case. Not documented. Evidence:
+            // black-box observation on macOS 27 (tier 2), recorded as
+            // MC11.12 and MC11.13 of the upstreaming evidence notes.
+            // Test: appkit-menu-key-equivalents.m
+            // (disabled_matching_item_consumes_the_key)
+            return YES;
         }
 
         if ([[item submenu] performKeyEquivalent: event])

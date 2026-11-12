@@ -25,6 +25,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSFont.h>
 #import <AppKit/NSFontManager.h>
 #import <AppKit/NSRaise.h>
+#import <AppKit/NSKeyEquivalentMatching.h>
 #import <AppKit/NSWindow.h>
 
 @implementation NSButton
@@ -252,22 +253,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (BOOL) performKeyEquivalent: (NSEvent *) event {
-    NSString *characters = [event charactersIgnoringModifiers];
-    unsigned modifiers = [event modifierFlags];
-
     if (![self isEnabled])
         return NO;
 
-    const unsigned keyModifiers = NSCommandKeyMask | NSAlternateKeyMask |
-                                  NSShiftKeyMask | NSControlKeyMask;
-    if ((modifiers & keyModifiers) ==
-        ([self keyEquivalentModifierMask] & keyModifiers)) {
-        NSString *key = [self keyEquivalent];
-
-        if ([key isEqualToString: characters]) {
-            [self performClick: nil];
-            return YES;
-        }
+    if (NSKeyEquivalentMatchesEvent([self keyEquivalent],
+                                    [self keyEquivalentModifierMask], event)) {
+        [self performClick: nil];
+        return YES;
     }
 
     return NO;
