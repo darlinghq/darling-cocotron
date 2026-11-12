@@ -46,13 +46,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
             return;
         }
 
-        @try {
-            [_source setValue: _destination forKey: _label];
-            return;
-        } @catch (NSException *ex) {
-            // Log for debugging outlet resolution failures
-            NSLog(@"[NSNibOutletConnector] setValue:forKey: failed for outlet %@ on %@: %@", _label, [_source class], ex);
-        }
+        // Key-value coding raises for an outlet the source cannot accept, as it
+        // does for any other key; the exception is not swallowed here.
+        [_source setValue: _destination forKey: _label];
     }
 }
 
