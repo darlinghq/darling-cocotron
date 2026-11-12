@@ -526,7 +526,7 @@ NSApplication *NSApp = nil;
     _automaticCustomizeTouchBarMenuItemEnabled = enabled;
 }
 
-- (NSInteger) contextID {
+- (unsigned int) contextID {
     return CGSMainConnectionID();
 }
 

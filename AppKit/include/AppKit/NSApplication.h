@@ -151,7 +151,7 @@ typedef NS_OPTIONS(NSUInteger, NSApplicationPresentationOptions) {
 
 // The window server connection id, as passed to CGS* calls. Terminal's menu
 // tracking asks the application for it.
-- (NSInteger) contextID;
+- (unsigned int) contextID;
 
 @property(strong) NSMenu *helpMenu;
 @property(readonly) NSApplicationPresentationOptions currentSystemPresentationOptions;
