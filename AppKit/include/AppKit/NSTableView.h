@@ -150,8 +150,7 @@ typedef NS_OPTIONS(NSUInteger, NSTableViewAnimationOptions) {
     NSDragOperation _draggingSourceMaskLocal;
     NSDragOperation _draggingSourceMaskNonLocal;
 
-    NSMutableDictionary *_prototypeViews;
-    NSMutableDictionary *_reusableViews;
+    NSMutableDictionary *_registeredNibs;
     NSMutableArray *_activeRowViews;
 }
 

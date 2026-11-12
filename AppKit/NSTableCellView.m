@@ -24,7 +24,6 @@
 @implementation NSTableCellView
 
 @synthesize textField = _textField;
-@synthesize secondTextField = _secondTextField;
 @synthesize imageView = _imageView;
 @synthesize objectValue = _objectValue;
 @synthesize backgroundStyle = _backgroundStyle;

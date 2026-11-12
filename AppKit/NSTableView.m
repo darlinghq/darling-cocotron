@@ -130,8 +130,7 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
         _intercellSpacing = NSMakeSize(3.0, 2.0);
         _selectedRowIndexes = [[NSIndexSet alloc] init];
         _selectedColumns = [[NSMutableArray alloc] init];
-        _prototypeViews = [[NSMutableDictionary alloc] init];
-        _reusableViews = [[NSMutableDictionary alloc] init];
+        _registeredNibs = [[NSMutableDictionary alloc] init];
         _activeRowViews = [[NSMutableArray alloc] init];
         _editedColumn = -1;
         _editedRow = -1;
@@ -239,8 +238,7 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
     _intercellSpacing = NSMakeSize(3.0, 2.0);
     _selectedRowIndexes = [[NSIndexSet alloc] init];
     _selectedColumns = [[NSMutableArray alloc] init];
-    _prototypeViews = [[NSMutableDictionary alloc] init];
-    _reusableViews = [[NSMutableDictionary alloc] init];
+    _registeredNibs = [[NSMutableDictionary alloc] init];
     _activeRowViews = [[NSMutableArray alloc] init];
     _editedColumn = -1;
     _editedRow = -1;
@@ -290,8 +288,7 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
     [_selectedRowIndexes release];
     [_selectedColumns release];
     [_sortDescriptors release];
-    [_prototypeViews release];
-    [_reusableViews release];
+    [_registeredNibs release];
     [_activeRowViews release];
     [super dealloc];
 }
@@ -2305,11 +2302,12 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 }
 
 - (void) registerNib: (NSNib *) nib forIdentifier: (NSString *) identifier {
-    if (nib && identifier) {
-        if (_prototypeViews == nil)
-            _prototypeViews = [[NSMutableDictionary alloc] init];
-        [_prototypeViews setObject: nib forKey: identifier];
-    }
+    if (identifier == nil)
+        return;
+    if (nib != nil)
+        [_registeredNibs setObject: nib forKey: identifier];
+    else
+        [_registeredNibs removeObjectForKey: identifier];
 }
 
 - (NSView *) viewAtColumn: (NSInteger) column row: (NSInteger) row makeIfNecessary: (BOOL) makeIfNecessary {
@@ -2321,84 +2319,24 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     return nil;
 }
 
+// Creates the view from the nib registered for the identifier, owned by the
+// given object. Returns nil when no nib is registered for it.
 - (NSView *) makeViewWithIdentifier: (NSString *) identifier owner: (id) owner {
-    if (identifier == nil)
+    NSNib *nib = identifier != nil ? [_registeredNibs objectForKey: identifier] : nil;
+    NSArray *topLevelObjects = nil;
+
+    if (nib == nil || ![nib instantiateWithOwner: owner topLevelObjects: &topLevelObjects])
         return nil;
 
-    // 1. Check reusable views pool
-    NSMutableArray *reusable = [_reusableViews objectForKey: identifier];
-    if ([reusable count] > 0) {
-        NSView *view = [[[reusable lastObject] retain] autorelease];
-        [reusable removeLastObject];
-        return view;
-    }
-
-    // 2. Look for existing prototype decoded from nib
-    NSView *prototype = [_prototypeViews objectForKey: identifier];
-    if (prototype == nil) {
-        for (NSView *subview in [self subviews]) {
-            if ([[subview identifier] isEqualToString: identifier]) {
-                prototype = subview;
-                if (_prototypeViews == nil)
-                    _prototypeViews = [[NSMutableDictionary alloc] init];
-                [_prototypeViews setObject: prototype forKey: identifier];
-                break;
-            }
+    for (id object in topLevelObjects) {
+        if ([object isKindOfClass: [NSView class]]) {
+            if ([object identifier] == nil)
+                [object setIdentifier: identifier];
+            [_activeRowViews addObject: object];
+            return object;
         }
     }
-
-    if (prototype != nil) {
-        if (_activeRowViews == nil)
-            _activeRowViews = [[NSMutableArray alloc] init];
-
-        if (![_activeRowViews containsObject: prototype]) {
-            [_activeRowViews addObject: prototype];
-            return prototype;
-        }
-    }
-
-    // 3. Fallback: instantiate programmatic cell view
-    Class viewClass = NSClassFromString(identifier);
-    if (viewClass == nil) {
-        viewClass = [NSTableCellView class];
-    }
-
-    CGFloat rowH = [self rowHeight];
-    if (rowH < 36.0) rowH = 40.0;
-
-    NSTableCellView *cellView = [[[viewClass alloc] initWithFrame: NSMakeRect(0, 0, [self bounds].size.width, rowH)] autorelease];
-    [cellView setIdentifier: identifier];
-
-    NSImageView *iv = [[[NSImageView alloc] initWithFrame: NSMakeRect(6, (rowH - 32) / 2.0, 32, 32)] autorelease];
-    [iv setImage: [NSImage imageNamed: @"NSFolder"]];
-    [cellView addSubview: iv];
-    [cellView setImageView: iv];
-
-    NSTextField *tf = [[[NSTextField alloc] initWithFrame: NSMakeRect(46, 3, [self bounds].size.width - 54, 18)] autorelease];
-    [tf setBordered: NO];
-    [tf setDrawsBackground: NO];
-    [tf setEditable: NO];
-    [tf setSelectable: NO];
-    [tf setFont: [NSFont systemFontOfSize: 13.0]];
-    [tf setTextColor: [NSColor controlTextColor]];
-    [cellView addSubview: tf];
-    [cellView setTextField: tf];
-
-    NSTextField *secondTf = [[[NSTextField alloc] initWithFrame: NSMakeRect(46, 21, [self bounds].size.width - 54, 15)] autorelease];
-    [secondTf setBordered: NO];
-    [secondTf setDrawsBackground: NO];
-    [secondTf setEditable: NO];
-    [secondTf setSelectable: NO];
-    [secondTf setFont: [NSFont systemFontOfSize: 11.0]];
-    [secondTf setTextColor: [NSColor darkGrayColor]];
-    [cellView addSubview: secondTf];
-    [cellView setSecondTextField: secondTf];
-
-    if (_activeRowViews == nil)
-        _activeRowViews = [[NSMutableArray alloc] init];
-    [_activeRowViews addObject: cellView];
-
-    return cellView;
+    return nil;
 }
 
 - (void)_readPersistentTableColumns {
