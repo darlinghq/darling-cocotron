@@ -493,11 +493,6 @@ static void vflAddSpacing(NSMutableArray *result, NSData *predicates, BOOL rever
             vflPredicates(&p, YES, sizes);
         vflExpect(&p, ']');
 
-        const VFLPredicate *preds = [sizes bytes];
-        for (NSUInteger i = 0; i < [sizes length] / sizeof(VFLPredicate); i++)
-            vflAdd(result, view, size, &preds[i], preds[i].view,
-                   preds[i].view ? size : NSLayoutAttributeNotAnAttribute);
-
         id previous = [orderedViews lastObject];
         if (previous != nil) {
             vflAddSpacing(result, connection, reversed, view, leading, previous, trailing);
@@ -508,6 +503,17 @@ static void vflAddSpacing(NSMutableArray *result, NSData *predicates, BOOL rever
             vflAddSpacing(result, connection, reversed, view, leading, superview, leading);
         }
         [orderedViews addObject: view];
+
+        // QUIRK: a view's spacing constraint precedes its size constraints in the
+        // result (a.leading, a.width, b.leading, super.trailing for
+        // "H:|-10-[a(50)]-8-[b]-12-|"). The order is not documented. Evidence:
+        // black-box observation on macOS 26.7.3 (tier 2), MAC-EVIDENCE MC26.9,
+        // probe mac-probes/v264-vfl-selection.m. Test: appkit-visual-format.m
+        // (visual format constraint order).
+        const VFLPredicate *preds = [sizes bytes];
+        for (NSUInteger i = 0; i < [sizes length] / sizeof(VFLPredicate); i++)
+            vflAdd(result, view, size, &preds[i], preds[i].view,
+                   preds[i].view ? size : NSLayoutAttributeNotAnAttribute);
 
         BOOL spaced = vflConnection(&p, NO, connection);
         unichar c = vflPeek(&p);
