@@ -1676,6 +1676,10 @@ static NSUInteger scaledRepCacheBytes(NSArray *cache) {
                   accessibilityDescription: description];
 }
 
++ (instancetype) _imageWithSystemSymbolName: (NSString *) name {
+    return [self imageWithSystemSymbolName: name accessibilityDescription: nil];
+}
+
 - (NSImage *) imageWithSymbolConfiguration:
         (NSImageSymbolConfiguration *) configuration
 {
@@ -1855,6 +1859,13 @@ static NSUInteger scaledRepCacheBytes(NSArray *cache) {
 
     return [self pathForResource: [name stringByDeletingPathExtension]
                           ofType: [name pathExtension]];
+}
+
+- (NSImage *) imageForResource: (NSString *) name {
+    NSString *path = [self pathForImageResource: name];
+    if (path == nil)
+        return nil;
+    return [[[NSImage alloc] initWithContentsOfFile: path] autorelease];
 }
 
 @end

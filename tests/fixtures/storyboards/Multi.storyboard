@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Copyright (C) 2026 Lubos Dolezel. Hand-written test input for ibtool (MC13).
+     Scenes with more than one top-level controller:
+     - "MainWindow": the scene member is a window controller; the scene also
+       holds an extra view controller, which becomes the window's content
+       through an outlet.
+     - "Panel": the scene member is a view controller; the scene also holds an
+       extra window controller. -->
+<document type="com.apple.InterfaceBuilder3.Cocoa.Storyboard.XIB" version="3.0" toolsVersion="25408" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES" initialViewController="wc1">
+    <dependencies>
+        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="25408"/>
+    </dependencies>
+    <scenes>
+        <scene sceneID="s1">
+            <objects>
+                <windowController storyboardIdentifier="MainWindow" id="wc1" sceneMemberID="viewController">
+                    <window key="window" title="Multi" allowsToolTipsWhenApplicationIsInactive="NO" autorecalculatesKeyViewLoop="NO" releasedWhenClosed="NO" animationBehavior="default" id="w1">
+                        <windowStyleMask key="styleMask" titled="YES" closable="YES"/>
+                        <windowPositionMask key="initialPositionMask" leftStrut="YES" rightStrut="YES" topStrut="YES" bottomStrut="YES"/>
+                        <rect key="contentRect" x="200" y="200" width="320" height="160"/>
+                        <rect key="screenRect" x="0.0" y="0.0" width="1440" height="900"/>
+                    </window>
+                    <connections>
+                        <outlet property="contentViewController" destination="vcExtra" id="c1"/>
+                    </connections>
+                </windowController>
+                <viewController title="Extra" id="vcExtra" userLabel="Extra View Controller">
+                    <view key="view" id="v1">
+                        <rect key="frame" x="0.0" y="0.0" width="320" height="160"/>
+                        <autoresizingMask key="autoresizingMask"/>
+                    </view>
+                </viewController>
+                <customObject id="fr1" userLabel="First Responder" customClass="NSResponder" sceneMemberID="firstResponder"/>
+            </objects>
+            <point key="canvasLocation" x="0.0" y="0.0"/>
+        </scene>
+        <scene sceneID="s2">
+            <objects>
+                <viewController title="Panel" storyboardIdentifier="Panel" id="vc2" sceneMemberID="viewController">
+                    <view key="view" id="v2">
+                        <rect key="frame" x="0.0" y="0.0" width="200" height="100"/>
+                        <autoresizingMask key="autoresizingMask"/>
+                    </view>
+                </viewController>
+                <windowController id="wcExtra" userLabel="Extra Window Controller">
+                    <window key="window" title="Extra" allowsToolTipsWhenApplicationIsInactive="NO" autorecalculatesKeyViewLoop="NO" releasedWhenClosed="NO" animationBehavior="default" id="w2">
+                        <windowStyleMask key="styleMask" titled="YES"/>
+                        <rect key="contentRect" x="100" y="100" width="200" height="100"/>
+                        <rect key="screenRect" x="0.0" y="0.0" width="1440" height="900"/>
+                    </window>
+                </windowController>
+                <customObject id="fr2" userLabel="First Responder" customClass="NSResponder" sceneMemberID="firstResponder"/>
+            </objects>
+            <point key="canvasLocation" x="0.0" y="300"/>
+        </scene>
+    </scenes>
+</document>

@@ -618,6 +618,7 @@ static BOOL _allowsAutomaticWindowTabbing;
     [_menu release];
     [_menuView release];
     [_contentView release];
+    [_contentViewController release];
     [_backgroundColor release];
     [_sharedFieldEditor release];
     [_draggedTypes release];
@@ -630,6 +631,7 @@ static BOOL _allowsAutomaticWindowTabbing;
     [_threadToContext release];
     [_undoManager release];
     [_identifier release];
+    [_titlebarAccessoryViewControllers release];
     [super dealloc];
 }
 
@@ -1349,6 +1351,34 @@ static BOOL _allowsAutomaticWindowTabbing;
 
     if ([self _isApplicationWindow])
         [NSApp changeWindowsItem: self title: filename filename: YES];
+}
+
++ (instancetype) windowWithContentViewController: (NSViewController *) controller {
+    NSSize size = [controller preferredContentSize];
+    if (NSEqualSizes(size, NSZeroSize))
+        size = [[controller view] frame].size;
+    NSWindow *window = [[[self alloc]
+            initWithContentRect: NSMakeRect(0, 0, size.width, size.height)
+                      styleMask: NSTitledWindowMask | NSClosableWindowMask |
+                                 NSMiniaturizableWindowMask | NSResizableWindowMask
+                        backing: NSBackingStoreBuffered
+                          defer: YES] autorelease];
+    [window setContentViewController: controller];
+    if ([controller title] != nil)
+        [window setTitle: [controller title]];
+    return window;
+}
+
+- (NSViewController *) contentViewController {
+    return _contentViewController;
+}
+
+- (void) setContentViewController: (NSViewController *) controller {
+    [controller retain];
+    [_contentViewController release];
+    _contentViewController = controller;
+    if (controller != nil)
+        [self setContentView: [controller view]];
 }
 
 - (void) setContentView: (NSView *) view {
@@ -4210,6 +4240,26 @@ static inline NSRect scaleWindowRect(NSRect rect, CGFloat scale) {
     }
 
     return _platformWindow;
+}
+
+@end
+
+@implementation NSWindow (NSWindowTitlebarAccessories)
+
+- (NSArray *) titlebarAccessoryViewControllers {
+    return _titlebarAccessoryViewControllers
+            ? [NSArray arrayWithArray: _titlebarAccessoryViewControllers]
+            : [NSArray array];
+}
+
+- (void) addTitlebarAccessoryViewController:
+        (NSTitlebarAccessoryViewController *) controller
+{
+    if (controller == nil)
+        return;
+    if (_titlebarAccessoryViewControllers == nil)
+        _titlebarAccessoryViewControllers = [[NSMutableArray alloc] init];
+    [_titlebarAccessoryViewControllers addObject: controller];
 }
 
 @end

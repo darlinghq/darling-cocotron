@@ -54,7 +54,7 @@ typedef enum {
     NSFontAntialiasedIntegerAdvancementsRenderingMode,
 } NSFontRenderingMode;
 
-@interface NSFont : NSObject <NSCopying> {
+@interface NSFont : NSObject <NSCopying, NSSecureCoding> {
     NSString *_name;
     CGFloat _pointSize;
     CGFloat _matrix[6];

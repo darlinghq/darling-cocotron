@@ -179,6 +179,8 @@ typedef enum {
 - (NSImage *) imageWithSymbolConfiguration:
         (NSImageSymbolConfiguration *) configuration;
 - (NSImageSymbolConfiguration *) symbolConfiguration;
+// Private AppKit spelling of imageWithSystemSymbolName:accessibilityDescription:.
++ (instancetype) _imageWithSystemSymbolName: (NSString *) name;
 
 @end
 
@@ -213,6 +215,8 @@ typedef NS_ENUM(NSInteger, NSImageSymbolScale) {
 
 @interface NSBundle (NSImage)
 - (NSString *) pathForImageResource: (NSString *) name;
+// A new image from pathForImageResource:, or nil.
+- (NSImage *) imageForResource: (NSString *) name;
 @end
 
 @protocol NSImageDelegate <NSObject>
