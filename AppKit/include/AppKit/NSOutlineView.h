@@ -89,6 +89,10 @@ APPKIT_EXPORT NSString *const NSOutlineViewDisclosureButtonKey;
 - (void) reloadItem: item reloadChildren: (BOOL) reloadChildren;
 - (void) reloadItem: item;
 
+- (void) insertItemsAtIndexes: (NSIndexSet *) indexes inParent: (id) parent withAnimation: (NSTableViewAnimationOptions) animationOptions;
+- (void) removeItemsAtIndexes: (NSIndexSet *) indexes inParent: (id) parent withAnimation: (NSTableViewAnimationOptions) animationOptions;
+- (void) moveItemAtIndex: (NSInteger) fromIndex inParent: (id) oldParent toIndex: (NSInteger) toIndex inParent: (id) newParent;
+
 - (void) setDropItem: item dropChildIndex: (NSInteger) index;
 - (BOOL) shouldCollapseAutoExpandedItemsForDeposited: (BOOL) collapse;
 

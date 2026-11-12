@@ -79,6 +79,8 @@ NSString *kO2ImagePropertyTIFFOrientation = @"Orientation";
                                    options: (CFDictionaryRef) options
 {
     O2DataProviderRef provider = [[O2DataProvider alloc] initWithURL: url];
+    if (provider == nil)
+        return nil;
     O2ImageSourceRef result = [self newImageSourceWithDataProvider: provider
                                                            options: options];
     O2DataProviderRelease(provider);

@@ -27,6 +27,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return [NSArray arrayWithObjects: @"pdf", nil];
 }
 
++ (BOOL) canInitWithData: (NSData *) data {
+    if ([data length] >= 4 && strncmp([data bytes], "%PDF", 4) == 0) {
+        return YES;
+    }
+    return NO;
+}
+
 + (NSArray *) imageRepsWithContentsOfFile: (NSString *) path {
     NSMutableArray *result = [NSMutableArray array];
     NSData *data = [NSData dataWithContentsOfFile: path];
@@ -43,12 +50,28 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - initWithData: (NSData *) data {
-    _pdf = [data retain];
-    _currentPage = 0;
-    CGDataProviderRef provider =
-            CGDataProviderCreateWithCFData((CFDataRef) _pdf);
-    _document = CGPDFDocumentCreateWithProvider(provider);
-    CGDataProviderRelease(provider);
+    self = [super init];
+    if (self) {
+        _pdf = [data retain];
+        _currentPage = 0;
+        CGDataProviderRef provider =
+                CGDataProviderCreateWithCFData((CFDataRef) _pdf);
+        @try {
+            _document = CGPDFDocumentCreateWithProvider(provider);
+        }
+        @catch (id ex) {
+            _document = NULL;
+        }
+        @finally {
+            CGDataProviderRelease(provider);
+        }
+        if (_document == NULL) {
+            [_pdf release];
+            _pdf = nil;
+            [self release];
+            return nil;
+        }
+    }
     return self;
 }
 
