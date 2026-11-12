@@ -32,7 +32,7 @@ int main(void)
     @autoreleasepool
     {
         NSString *name = @"DarlingSplitAutosaveTest";
-        NSString *key = @"NSSplitView Dividers DarlingSplitAutosaveTest";
+        NSString *key = @"NSSplitView Divider Fractions DarlingSplitAutosaveTest";
         NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
         [defaults removeObjectForKey:key];
 
@@ -48,7 +48,7 @@ int main(void)
         expect(fabs(firstWidth(split) - 100) < 0.5, @"no saved layout leaves the dividers alone");
         [split setPosition:60 ofDividerAtIndex:0];
         expect(fabs(firstWidth(split) - 60) < 0.5, @"divider moved");
-        expect([defaults dictionaryForKey:key] != nil, @"divider layout saved under the name");
+        expect([[defaults arrayForKey:key] count] == 1, @"divider layout saved under the name");
 
         NSSplitView *other = makeSplitView();
         expect(fabs(firstWidth(other) - 150) < 0.5, @"a fresh split view starts evenly");

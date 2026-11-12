@@ -148,10 +148,12 @@ NSString *const NSSplitViewWillResizeSubviewsNotification =
     return _dividerStyle;
 }
 
-// Defaults key and layout (each divider's leading subview size as a fraction of
-// the space not taken by dividers) follow GNUstep's NSSplitView (LGPL-2.1+).
+// The autosaved layout is this implementation's own format; Apple does not
+// document its format and applications only name the layout. A defaults array
+// holds, for every divider, the leading subview's length as a fraction of the
+// space not taken by dividers.
 static NSString *autosaveKey(NSString *name) {
-    return [@"NSSplitView Dividers " stringByAppendingString: name];
+    return [@"NSSplitView Divider Fractions " stringByAppendingString: name];
 }
 
 - (CGFloat) _lengthOfSubview: (NSView *) view {
@@ -183,24 +185,21 @@ static NSString *autosaveKey(NSString *name) {
 - (void) _restoreDividerPositions {
     NSUInteger i, count = [_subviews count];
     CGFloat space = [self _spaceForSubviews], position = 0;
-    NSDictionary *saved;
+    NSArray *saved;
 
     if (_autosaveName == nil || count < 2 || space <= 0)
         return;
     // Each setPosition: below saves the layout again, replacing this entry.
     saved = [[[[NSUserDefaults standardUserDefaults]
-            dictionaryForKey: autosaveKey(_autosaveName)] retain] autorelease];
-    if (saved == nil)
+            arrayForKey: autosaveKey(_autosaveName)] retain] autorelease];
+    if ([saved count] != count - 1)
         return;
-    for (i = 0; i + 1 < count; i++)
-        if (![[saved objectForKey: [NSString stringWithFormat: @"%lu", (unsigned long) i]]
-                    respondsToSelector: @selector(doubleValue)])
+    for (id fraction in saved)
+        if (![fraction isKindOfClass: [NSNumber class]])
             return;
 
     for (i = 0; i + 1 < count; i++) {
-        NSString *key = [NSString stringWithFormat: @"%lu", (unsigned long) i];
-
-        position += [[saved objectForKey: key] doubleValue] * space;
+        position += [[saved objectAtIndex: i] doubleValue] * space;
         [self setPosition: position ofDividerAtIndex: i];
         position += [self dividerThickness];
     }
@@ -209,15 +208,14 @@ static NSString *autosaveKey(NSString *name) {
 - (void) _autosaveSubviewLayoutIfNecessary {
     NSUInteger i, count = [_subviews count];
     CGFloat space = [self _spaceForSubviews];
-    NSMutableDictionary *saved;
+    NSMutableArray *saved;
 
     if (_autosaveName == nil || count < 2 || space <= 0)
         return;
-    saved = [NSMutableDictionary dictionary];
+    saved = [NSMutableArray array];
     for (i = 0; i + 1 < count; i++)
-        [saved setObject: [NSNumber numberWithDouble:
-                        [self _lengthOfSubview: [_subviews objectAtIndex: i]] / space]
-                  forKey: [NSString stringWithFormat: @"%lu", (unsigned long) i]];
+        [saved addObject: [NSNumber numberWithDouble:
+                        [self _lengthOfSubview: [_subviews objectAtIndex: i]] / space]];
     [[NSUserDefaults standardUserDefaults] setObject: saved
                                               forKey: autosaveKey(_autosaveName)];
 }
