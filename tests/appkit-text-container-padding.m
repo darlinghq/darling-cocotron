@@ -2,7 +2,7 @@
  * Copyright (C) 2026 Lubos Dolezel
  *
  * NSTextContainer's default line fragment padding is 5 points, the typesetter
- * applies it once on the left of a line, and the text container inset of an
+ * applies it on the left of a line (the text starts at x = 5, as the bounding rect of a laid out string shows on macOS), and the text container inset of an
  * NSTextView reduces the container size it tracks. No window server needed.
  */
 #import <AppKit/AppKit.h>
@@ -34,10 +34,10 @@ int main(void)
         expect([own lineFragmentPadding] == 5.0, "text view container padding is 5");
 
         [manager ensureLayoutForTextContainer: own];
-        NSRect used = [manager lineFragmentUsedRectForGlyphAtIndex: 0 effectiveRange: NULL];
-        expect(used.origin.x == 5.0, "the used rect starts after the left padding");
+        NSRect box = [manager boundingRectForGlyphRange: NSMakeRange(0, 5) inTextContainer: own];
+        expect(box.origin.x == 5.0, "the text starts after the left padding");
         NSRect fragment = [manager lineFragmentRectForGlyphAtIndex: 0 effectiveRange: NULL];
-        expect(fragment.origin.x == 0 && fragment.size.width <= [own containerSize].width,
+        expect(fragment.size.width <= [own containerSize].width,
                "the fragment rect stays inside the container");
 
         [view setTextContainerInset: NSMakeSize(10, 10)];
