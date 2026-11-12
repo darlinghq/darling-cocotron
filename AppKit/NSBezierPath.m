@@ -121,8 +121,9 @@ static void CGPathConverter(void *info, const CGPathElement *element) {
 // point 1, control point 2, end point. Not documented.
 // Evidence: archive written by NSArchiver on macOS 27 for a path with a curve,
 // a close, two subpaths and a dash pattern (tier 2, MC13.7 and its fixture
-// bezierpath.typedstream); the phase-before-lengths order is read off that one
-// archive.
+// bezierpath.typedstream); the phase-before-lengths order is confirmed by
+// archives written on macOS 26.7.3 (tier 2, MC26.12; phases 0, 1.5 and -1, the
+// negative phase is kept).
 // Test: test_quirk_typedstream_bezier_path in tests/appkit-typedstream-text.m
 - initWithCoder: (NSCoder *) coder {
     if ([coder allowsKeyedCoding] ||
