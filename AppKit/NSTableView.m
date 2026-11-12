@@ -158,7 +158,6 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
         SEL action = NULL, doubleAction = NULL;
         int flags = 0;
 
-        // GUESS (rung 6): NeXT/OpenStep typedstream layout and flag bitmasks for NSTableView
         @try {
             [coder decodeValuesOfObjCTypes: "@@@ff@@f::i",
                                             &headerView, &cornerView, &cols,

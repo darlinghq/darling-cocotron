@@ -93,19 +93,20 @@ NSString *_NSTruncatedStringWithAttributesInRect(NSString *string,
         _color = [[keyed decodeObjectForKey: @"NSColor"] retain];
     } else {
         [coder decodeValueOfObjCType: @encode(id) at: &_identifier];
-        [_identifier retain];
         [coder decodeValueOfObjCType: @encode(id) at: &_label];
-        [_label retain];
         [coder decodeValueOfObjCType: @encode(id) at: &_view];
-        [_view retain];
         [coder decodeValueOfObjCType: @encode(id) at: &_color];
-        [_color retain];
         int state = 0;
         [coder decodeValueOfObjCType: @encode(int) at: &state];
         _state = state;
         id first_responder = nil;
         [coder decodeValueOfObjCType: @encode(id) at: &first_responder];
-        [coder decodeValueOfObjCType: @encode(id) at: &_tabView];
+        [first_responder release];
+        // The tab view is a back-reference and is not retained.
+        id tabView = nil;
+        [coder decodeValueOfObjCType: @encode(id) at: &tabView];
+        _tabView = tabView;
+        [tabView release];
     }
 
     return self;

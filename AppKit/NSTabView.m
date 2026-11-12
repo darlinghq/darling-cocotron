@@ -95,10 +95,10 @@ id _NSTabViewFloatingCell = nil;
         id items = nil;
         [coder decodeValueOfObjCType: @encode(id) at: &items];
         _items = [items mutableCopy];
+        [items release];
         if (!_items)
             _items = [[NSMutableArray alloc] init];
         [coder decodeValueOfObjCType: @encode(id) at: &_font];
-        [_font retain];
         int type = 0;
         [coder decodeValueOfObjCType: @encode(int) at: &type];
         _type = (NSTabViewType)type;

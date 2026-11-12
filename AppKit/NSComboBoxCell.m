@@ -87,7 +87,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                                             &usesDataSource,
                                             &completes];
         } @catch (id ex) {
-            NSLog(@"[NSComboBoxCell initWithCoder:] ex decodeValues: %@", ex);
+            // Keep the defaults when the archive has a different layout.
         }
 
         id popUpList = [coder decodeObject];

@@ -55,11 +55,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                        name: NSViewBoundsDidChangeNotification
                      object: _docView];
     } else {
-        NSInteger version = [coder versionForClassName: @"NSClipView"];
-        NSLog(@"[NSClipView initWithCoder] unkeyed version=%ld", (long)version);
         [self setAutoresizesSubviews: YES];
 
-        _backgroundColor = [[coder decodeObject] retain];
+        id background = [coder decodeObject];
 
         id docCursor = nil;
         id docView = nil;
@@ -68,11 +66,15 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         [coder decodeValuesOfObjCTypes: "@@ccc", &docCursor, &docView,
                                         &copyOnScroll, &drawsBg, &flag3];
 
+        // The values decoded with decodeValuesOfObjCTypes: are owned by us.
         if ([docCursor isKindOfClass: [NSColor class]]) {
-            _backgroundColor = [docCursor retain];
+            background = docCursor;
         } else if ([docCursor isKindOfClass: [NSCursor class]]) {
-            _documentCursor = [docCursor retain];
+            _documentCursor = docCursor;
+            docCursor = nil;
         }
+        _backgroundColor = [background retain];
+        [docCursor release];
 
         if ([docView isKindOfClass: [NSView class]]) {
             [self setDocumentView: docView];
@@ -85,6 +87,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                 [document release];
             }
         }
+        [docView release];
         _copiesOnScroll = copyOnScroll ? YES : NO;
         _drawsBackground = drawsBg ? YES : NO;
     }

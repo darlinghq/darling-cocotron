@@ -52,7 +52,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         _isEditable = [keyed decodeBoolForKey: @"NSIsEditable"];
     } else {
         NSInteger version = [coder versionForClassName: @"NSTableColumn"];
-        // GUESS (rung 6): NeXT/OpenStep typedstream layout for NSTableColumn (v1 vs v2+)
         if (version >= 2) {
             float w = 100, minW = 10, maxW = 10000;
             char resizable = 1, editable = 0;

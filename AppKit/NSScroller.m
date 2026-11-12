@@ -156,7 +156,6 @@ static NSAppleScrollBarVariant appleScrollBarVariant(NSScroller *self) {
         _knobProportion = 0;
         [self checkSpaceForParts];
     } else {
-        // GUESS (rung 6): NeXT/OpenStep typedstream layout for NSScroller
         sFlags.isHoriz = (_bounds.size.width < _bounds.size.height) ? NO : YES;
         _floatValue = 0;
         _knobProportion = 0;

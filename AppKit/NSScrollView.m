@@ -209,7 +209,6 @@ static Class _rulerViewClass = nil;
             _verticalLineScroll = NSSwapBigFloatToHost(amts[3]);
         }
     } else {
-        // GUESS (rung 6): macOS NeXT-derived NSScrollView unkeyed typedstream encoding format (version >= 20)
         NSInteger version = [coder versionForClassName: @"NSScrollView"];
         if (version >= 20) {
             id objs[5];
@@ -280,7 +279,6 @@ static Class _rulerViewClass = nil;
             [coder decodeValueOfObjCType: @encode(BOOL) at: &_hasHorizontalScroller];
             if (_hasHorizontalScroller) {
                 [coder decodeValueOfObjCType: @encode(id) at: &_horizontalScroller];
-                [_horizontalScroller retain];
                 [_horizontalScroller setTarget: self];
                 [_horizontalScroller setAction: @selector(_horizontalScroll:)];
             }
@@ -288,7 +286,6 @@ static Class _rulerViewClass = nil;
             [coder decodeValueOfObjCType: @encode(BOOL) at: &_hasVerticalScroller];
             if (_hasVerticalScroller) {
                 [coder decodeValueOfObjCType: @encode(id) at: &_verticalScroller];
-                [_verticalScroller retain];
                 [_verticalScroller setTarget: self];
                 [_verticalScroller setAction: @selector(_verticalScroll:)];
             }
@@ -298,11 +295,13 @@ static Class _rulerViewClass = nil;
             [coder decodeValueOfObjCType: @encode(BOOL) at: &hasHorizRuler];
             if (hasHorizRuler) {
                 [coder decodeValueOfObjCType: @encode(id) at: &horizRuler];
+                [horizRuler release];
             }
 
             [coder decodeValueOfObjCType: @encode(BOOL) at: &hasVertRuler];
             if (hasVertRuler) {
                 [coder decodeValueOfObjCType: @encode(id) at: &vertRuler];
+                [vertRuler release];
             }
 
             if (version >= 2) {
