@@ -58,7 +58,10 @@ int main(void)
         [cell drawWithFrame: NSMakeRect(0, 0, 40, 60) inView: nil];
         [NSGraphicsContext restoreGraphicsState];
         const unsigned char *pixels = [target bitmapData];
-        expect(pixels[3] != 0, "the top left pixel inside the frame was painted");
+        // The bitmap's first row is the top, so the frame at the origin (60 high, bottom left) covers rows 20 to 79.
+        NSUInteger inside = 50 * [target bytesPerRow] + 10 * 4;
+        expect(pixels[inside + 3] != 0, "a pixel inside the frame was painted");
+        expect(pixels[3] == 0, "a pixel outside the frame was not painted");
 
         // Layout: "a", the attachment, "b".
         NSMutableAttributedString *text = [[NSMutableAttributedString alloc] initWithString: @"a"];

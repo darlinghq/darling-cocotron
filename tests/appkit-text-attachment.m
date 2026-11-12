@@ -20,11 +20,14 @@ static id roundTrip(id object, Class cls)
     return decoded;
 }
 
-@interface ProviderProbe : NSObject
+@interface ProviderProbe : NSObject {
+    NSTextAttachment *_attachment; // the legacy 32-bit runtime does not synthesize properties
+}
 @property(retain) NSTextAttachment *attachment;
 @end
 
 @implementation ProviderProbe
+@synthesize attachment = _attachment;
 - (instancetype)initWithTextAttachment:(NSTextAttachment *)attachment
                             parentView:(NSView *)parentView
                      textLayoutManager:(id)textLayoutManager
