@@ -171,7 +171,7 @@ id NSGetInformationalAlertPanel(NSString *title, NSString *format,
 {
     va_list arguments;
     va_start(arguments, otherButton);
-    // FIXME: Should have a different icon.
+    // Same panel as NSGetAlertPanel: alert panels here have no per-style icon.
     id panel = newAlertPanel(title, format, defaultButton, alternateButton,
                              otherButton, arguments);
     va_end(arguments);
@@ -184,7 +184,7 @@ id NSGetCriticalAlertPanel(NSString *title, NSString *format,
 {
     va_list arguments;
     va_start(arguments, otherButton);
-    // FIXME: Should have a different icon.
+    // Same panel as NSGetAlertPanel: alert panels here have no per-style icon.
     id panel = newAlertPanel(title, format, defaultButton, alternateButton,
                              otherButton, arguments);
     va_end(arguments);
@@ -198,7 +198,8 @@ void NSReleaseAlertPanel(id panel)
 
 void NSShowSystemInfoPanel(NSDictionary *options)
 {
-    // There is no system information panel; show the application's About panel instead.
+    // This implementation has no separate system information panel, so the
+    // standard About panel stands in for it.
     [NSApp orderFrontStandardAboutPanelWithOptions: options];
 }
 
