@@ -469,14 +469,24 @@ BOOL itemIsEnabled(NSMenuItem *item) {
                 matches = [[key lowercaseString]
                         isEqualToString: [characters lowercaseString]];
             if (matches) {
-                /* This *must* accurately reflect menu validation when ignoring
-                   or processing key equivalents. Relying on update to keep
-                   isEnabled in the proper state is unfortunately too tenuous.
-                 */
-                if ([item isEnabled] && itemIsEnabled(item))
-                    return [NSApp sendAction: [item action]
-                                          to: [item target]
-                                        from: item];
+                // With automatic enabling, -update above brought isEnabled in
+                // line with validation. Without it only isEnabled counts and
+                // validation is not consulted.
+                BOOL enabled = [item isEnabled];
+                if (enabled && _autoenablesItems)
+                    enabled = itemIsEnabled(item);
+                if (enabled)
+                    [NSApp sendAction: [item action]
+                                   to: [item target]
+                                 from: item];
+                // QUIRK: a matching item consumes the key equivalent even when it
+                // is disabled or has no target to perform the action; the
+                // result is YES in every case. Not documented. Evidence:
+                // black-box observation on macOS 27 (tier 2), recorded as
+                // MC11.12 and MC11.13 of the upstreaming evidence notes.
+                // Test: appkit-menu-key-equivalents.m
+                // (disabled_matching_item_consumes_the_key)
+                return YES;
             }
         }
 
