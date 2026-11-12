@@ -28,7 +28,11 @@ int main(int argc, char **argv) {
         [NSApplication sharedApplication];
         NSData *data = [NSData dataWithContentsOfFile:[NSString stringWithUTF8String:argv[1]]];
         CHECK([data length] > 10 && memcmp([data bytes], "NIBArchive", 10) == 0);
-        NSNib *nib = [[NSNib alloc] initWithContentsOfURL:[NSURL fileURLWithPath:[NSString stringWithUTF8String:argv[1]]]];
+        // -[NSNib initWithContentsOfURL:] is deprecated and raises on current macOS, so load
+        // the nib by name from a directory bundle holding it.
+        NSString *nibDir = [[NSString stringWithUTF8String:argv[1]] stringByDeletingLastPathComponent];
+        NSString *nibName = [[[NSString stringWithUTF8String:argv[1]] lastPathComponent] stringByDeletingPathExtension];
+        NSNib *nib = [[NSNib alloc] initWithNibNamed:nibName bundle:[NSBundle bundleWithPath:nibDir]];
         CHECK(nib != nil);
         FixtureOwner *owner = [FixtureOwner new];
         NSArray *top = nil;

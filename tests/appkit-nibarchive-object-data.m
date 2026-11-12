@@ -87,11 +87,15 @@ int main(void) {
             return 1;
         }
         [NSApplication sharedApplication];
-        NSString *path = [NSTemporaryDirectory() stringByAppendingPathComponent:
-                [NSString stringWithFormat:@"authored-object-data-%d.nib", getpid()]];
-        if (![input writeToFile:path atomically:NO]) return 1;
-        NSNib *nib = [[NSNib alloc] initWithContentsOfURL:[NSURL fileURLWithPath:path]];
-        [[NSFileManager defaultManager] removeItemAtPath:path error:NULL];
+        // -[NSNib initWithContentsOfURL:] is deprecated and raises on current macOS, so load
+        // the nib by name from a directory bundle holding it.
+        NSString *dir = [NSTemporaryDirectory() stringByAppendingPathComponent:
+                [NSString stringWithFormat:@"authored-object-data-%d", getpid()]];
+        [[NSFileManager defaultManager] createDirectoryAtPath:dir withIntermediateDirectories:YES
+                attributes:nil error:NULL];
+        if (![input writeToFile:[dir stringByAppendingPathComponent:@"Authored.nib"] atomically:NO]) return 1;
+        NSNib *nib = [[NSNib alloc] initWithNibNamed:@"Authored" bundle:[NSBundle bundleWithPath:dir]];
+        [[NSFileManager defaultManager] removeItemAtPath:dir error:NULL];
         NSArray *top = nil;
         BOOL loaded = [nib instantiateNibWithOwner:nil topLevelObjects:&top];
         if (!loaded || [top count] != 1 || [top[0] class] != [AuthoredNibObject class]) {
