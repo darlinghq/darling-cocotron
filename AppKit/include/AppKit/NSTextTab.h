@@ -21,7 +21,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSText.h>
 
-NS_HEADER_AUDIT_BEGIN(nullability, sendability)
+NS_ASSUME_NONNULL_BEGIN
 
 typedef NSString *NSTextTabOptionKey NS_TYPED_ENUM;
 APPKIT_EXPORT NSTextTabOptionKey NSTabColumnTerminatorsAttributeName;
@@ -66,4 +66,4 @@ typedef NS_ENUM(NSUInteger, NSTextTabType) {
 @property (readonly) NSTextTabType tabStopType;
 @end
 
-NS_HEADER_AUDIT_END(nullability, sendability)
+NS_ASSUME_NONNULL_END

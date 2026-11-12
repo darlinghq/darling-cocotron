@@ -21,7 +21,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <CoreGraphics/CoreGraphics.h>
 #import <Foundation/Foundation.h>
 
-NS_HEADER_AUDIT_BEGIN(nullability, sendability)
+NS_ASSUME_NONNULL_BEGIN
 
 @class NSTextContainer;
 @class NSLayoutManager;
@@ -92,4 +92,4 @@ enum { NSAttachmentCharacter = 0xFFFC };
 
 @end
 
-NS_HEADER_AUDIT_END(nullability, sendability)
+NS_ASSUME_NONNULL_END

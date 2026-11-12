@@ -21,7 +21,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSTextBlock, NSTextList, NSTextTab;
 
-NS_HEADER_AUDIT_BEGIN(nullability, sendability)
+NS_ASSUME_NONNULL_BEGIN
 
 #if !__NSPARAGRAPH_STYLE_SHARED_SECTION__
 #define __NSPARAGRAPH_STYLE_SHARED_SECTION__ 1
@@ -125,6 +125,6 @@ typedef NS_OPTIONS(NSUInteger, NSLineBreakStrategy) {
 @property (readonly) NSInteger horizontalAlignment;
 @end
 
-NS_HEADER_AUDIT_END(nullability, sendability)
+NS_ASSUME_NONNULL_END
 
 #import <AppKit/NSMutableParagraphStyle.h>

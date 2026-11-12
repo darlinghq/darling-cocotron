@@ -20,7 +20,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSParagraphStyle.h>
 #import <AppKit/NSTextTab.h>
 
-NS_HEADER_AUDIT_BEGIN(nullability, sendability)
+NS_ASSUME_NONNULL_BEGIN
 
 @interface NSMutableParagraphStyle : NSParagraphStyle
 
@@ -59,4 +59,4 @@ NS_HEADER_AUDIT_BEGIN(nullability, sendability)
 @property NSInteger horizontalAlignment;
 @end
 
-NS_HEADER_AUDIT_END(nullability, sendability)
+NS_ASSUME_NONNULL_END
