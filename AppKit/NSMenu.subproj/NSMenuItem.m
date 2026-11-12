@@ -71,6 +71,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                         [keyed decodeIntForKey: @"NSKeyEquivModMask"]];
         [self setSubmenu: [keyed decodeObjectForKey: @"NSSubmenu"]];
         _tag = [keyed decodeIntForKey: @"NSTag"];
+        if ([keyed containsValueForKey: @"NSState"])
+            _state = [keyed decodeIntForKey: @"NSState"];
         _hidden = [keyed decodeBoolForKey: @"NSIsHidden"];
         _image = [[coder decodeObjectForKey: @"NSImage"] retain];
         if ([keyed decodeBoolForKey: @"NSIsSeparator"]) {

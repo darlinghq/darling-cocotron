@@ -33,6 +33,23 @@ static const NSLayoutPriority NSLayoutPriorityDefaultLow NS_SWIFT_NAME(defaultLo
 static const NSLayoutPriority NSLayoutPriorityFittingSizeCompression NS_SWIFT_NAME(fittingSizeCompression) = 50;
 #endif
 
+typedef NS_ENUM(NSInteger, NSLayoutAttribute) {
+	NSLayoutAttributeNotAnAttribute = 0,
+	NSLayoutAttributeLeft = 1,
+	NSLayoutAttributeRight,
+	NSLayoutAttributeTop,
+	NSLayoutAttributeBottom,
+	NSLayoutAttributeLeading,
+	NSLayoutAttributeTrailing,
+	NSLayoutAttributeWidth,
+	NSLayoutAttributeHeight,
+	NSLayoutAttributeCenterX,
+	NSLayoutAttributeCenterY,
+	NSLayoutAttributeLastBaseline,
+	NSLayoutAttributeBaseline = NSLayoutAttributeLastBaseline,
+	NSLayoutAttributeFirstBaseline,
+};
+
 #if !__NSLAYOUT_ORIENTATION_SHARED_SECTION__
 #define __NSLAYOUT_ORIENTATION_SHARED_SECTION__ 1
 typedef NS_ENUM(NSInteger, NSLayoutConstraintOrientation) {

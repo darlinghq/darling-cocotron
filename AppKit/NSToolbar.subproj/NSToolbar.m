@@ -140,6 +140,11 @@ const NSNotificationName NSToolbarChangeAppearanceNotification =
     return _view;
 }
 
+// Private AppKit name for the view that draws the toolbar.
+- (NSToolbarView *) _toolbarView {
+    return _view;
+}
+
 - (CGFloat) visibleHeight {
     if (!_visible)
         return 0;

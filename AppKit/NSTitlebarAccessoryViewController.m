@@ -7,6 +7,7 @@
 @synthesize automaticallyAdjustsSize = _automaticallyAdjustsSize;
 @synthesize hidden = _hidden;
 @synthesize fullScreenMinHeight = _fullScreenMinHeight;
+@synthesize layoutAttribute = _layoutAttribute;
 
 - (void) dealloc {
     [_preferredScrollEdgeEffectStyle release];
@@ -18,6 +19,7 @@
         _automaticallyAdjustsSize = YES;
         _hidden = NO;
         _fullScreenMinHeight = 0;
+        _layoutAttribute = NSLayoutAttributeBottom;
     }
     return self;
 }
@@ -28,6 +30,7 @@
         _automaticallyAdjustsSize = YES;
         _hidden = NO;
         _fullScreenMinHeight = 0;
+        _layoutAttribute = NSLayoutAttributeBottom;
     }
     return self;
 }

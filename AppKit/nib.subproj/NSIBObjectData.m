@@ -147,9 +147,10 @@ NSString *const IBCocoaFramework = @"IBCocoaFramework";
         // A nil owner keeps the placeholder, which top-level objects still have as their parent.
         if (owner != nil && [_fileOwner isKindOfClass: [NSCustomObject class]]) {
             if (_fileOwner != owner) {
-                id formerFileOwner = [_fileOwner autorelease];
-                _fileOwner = [owner retain];
-                [keyed replaceObject: formerFileOwner withObject: _fileOwner];
+                // Already-decoded arrays and connectors can still reference
+                // the placeholder after the decoder accepts replacement.
+                // Preserve it until buildConnectionsWithNameTable: repairs them.
+                [keyed replaceObject: _fileOwner withObject: owner];
             }
         }
 
@@ -181,7 +182,7 @@ NSString *const IBCocoaFramework = @"IBCocoaFramework";
             id aValue = objectValues[i];
             id replacement = nil;
 
-            if (aValue == (owner != nil ? owner : _fileOwner) &&
+            if ((aValue == _fileOwner || (owner != nil && aValue == owner)) &&
                 [aKey isKindOfClass: [NSCustomObject class]]) {
                 replacement = [aKey createCustomInstance];
             }

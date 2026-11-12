@@ -20,7 +20,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSButtonCell.h>
 #import <AppKit/NSControl.h>
 
-@interface NSButton : NSControl
+@interface NSButton : NSControl {
+    NSColor *_contentTintColor;
+}
 
 + (instancetype) buttonWithTitle: (NSString *) title image: (NSImage *) image target: (id) target action: (SEL) action;
 + (instancetype) checkboxWithTitle: (NSString *) title target: (id) target action: (SEL) action;
@@ -78,4 +80,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                           target: (id) target
                           action: (SEL) action;
 
+@end
+
+@interface NSButton (NSButtonContentTint)
+// Stored only: the image and title aren't tinted.
+@property(copy) NSColor *contentTintColor;
 @end

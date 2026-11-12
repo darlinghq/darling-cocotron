@@ -1,7 +1,7 @@
 #import <AppKit/NSResponder.h>
 #import <AppKit/NSUserInterfaceItemIdentification.h>
 
-@class NSView;
+@class NSView, NSStoryboard;
 
 @interface NSViewController : NSResponder <NSUserInterfaceItemIdentification> {
     NSString *_nibName;
@@ -10,6 +10,10 @@
     NSString *_title;
     NSView *_view;
     NSUserInterfaceItemIdentifier _identifier;
+    NSMutableArray *_childViewControllers;
+    NSViewController *_parentViewController;
+    NSStoryboard *_storyboard;
+    NSSize _preferredContentSize;
 }
 
 - initWithNibName: (NSString *) name bundle: (NSBundle *) bundle;
@@ -18,6 +22,20 @@
 - (NSBundle *) nibBundle;
 
 @property (retain, nonnull) NSView *view;
+@property(copy) NSArray<__kindof NSViewController *> *childViewControllers;
+@property(readonly) NSViewController *parentViewController;
+
+- (void) addChildViewController: (NSViewController *) childViewController;
+// Subclasses that track their children override these two; the other child
+// methods go through them.
+- (void) insertChildViewController: (NSViewController *) childViewController
+                           atIndex: (NSInteger) index;
+- (void) removeChildViewControllerAtIndex: (NSInteger) index;
+- (void) removeFromParentViewController;
+
+@property(readonly, strong) NSStoryboard *storyboard;
+// Stored for the controller's presenter; NSZeroSize until set.
+@property NSSize preferredContentSize;
 - (NSString *) title;
 - representedObject;
 
@@ -27,7 +45,10 @@
 
 
 - (void) loadView;
-- (BOOL) isViewLoaded; // 10.10
+@property(readonly, getter=isViewLoaded) BOOL viewLoaded; // 10.10
+- (void) loadViewIfNeeded;
+// Called once -view has loaded the view with -loadView; does nothing by default.
+- (void) viewDidLoad;
 
 - (void) discardEditing;
 

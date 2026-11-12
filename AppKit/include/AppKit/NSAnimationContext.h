@@ -20,8 +20,13 @@
 #import <Foundation/NSDate.h>
 #import <Foundation/NSObject.h>
 
+// Animations aren't run: changes made in a group take effect immediately.
 @interface NSAnimationContext : NSObject <NSCopying> {
+    NSTimeInterval _duration;
 }
+
++ (void) runAnimationGroup: (void (^)(NSAnimationContext *context)) changes
+         completionHandler: (void (^)(void)) completionHandler;
 
 + (void) beginGrouping;
 + (void) endGrouping;

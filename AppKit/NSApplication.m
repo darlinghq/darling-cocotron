@@ -37,6 +37,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSScreen.h>
 #import <AppKit/NSSheetContext.h>
 #import <AppKit/NSSpellChecker.h>
+#import <AppKit/NSStoryboard-Private.h>
 #import <AppKit/NSSystemInfoPanel.h>
 #import <AppKit/NSWindow-Private.h>
 #import <AppKit/NSWorkspace.h>
@@ -1802,10 +1803,15 @@ int NSApplicationMain(int argc, const char *argv[]) {
 
     [class sharedApplication];
 
-    nibFile = [nibFile stringByDeletingPathExtension];
+    NSStoryboard *storyboard = [NSStoryboard mainStoryboard];
+    if (storyboard != nil)
+        [storyboard _instantiateAsMainStoryboard];
+    else {
+        nibFile = [nibFile stringByDeletingPathExtension];
 
-    if (![NSBundle loadNibNamed: nibFile owner: NSApp])
-        NSLog(@"Unable to load main nib file %@", nibFile);
+        if (![NSBundle loadNibNamed: nibFile owner: NSApp])
+            NSLog(@"Unable to load main nib file %@", nibFile);
+    }
 
     [pool release];
 

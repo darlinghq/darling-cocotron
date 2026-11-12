@@ -150,6 +150,7 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPre
     NSTouchTypeMask _allowedTouchTypes;
     BOOL _canDrawSubviewsIntoLayer;
     int _frameChangeDepth;
+    BOOL _canDrawConcurrently;
 }
 
 @property(class, readonly) BOOL requiresConstraintBasedLayout;

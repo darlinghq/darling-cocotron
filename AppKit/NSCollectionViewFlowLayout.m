@@ -25,6 +25,10 @@ NSString *const NSCollectionElementKindSectionFooter =
         @"UICollectionElementKindSectionFooter";
 
 @implementation NSCollectionViewFlowLayout
+@synthesize itemSize = _itemSize;
+@synthesize sectionInset = _sectionInset;
+@synthesize minimumLineSpacing = _minimumLineSpacing;
+@synthesize minimumInteritemSpacing = _minimumInteritemSpacing;
 
 - (NSMethodSignature *)methodSignatureForSelector:(SEL)aSelector
 {
@@ -34,6 +38,28 @@ NSString *const NSCollectionElementKindSectionFooter =
 - (void)forwardInvocation:(NSInvocation *)anInvocation
 {
     NSLog(@"Stub called: %@ in %@", NSStringFromSelector([anInvocation selector]), [self class]);
+}
+
+- (instancetype) init {
+    if ((self = [super init]) != nil) {
+        _itemSize = NSMakeSize(50, 50);
+        _minimumLineSpacing = 10;
+        _minimumInteritemSpacing = 10;
+    }
+    return self;
+}
+
+// Without this, any nib containing a flow layout fails to unarchive. The unarchiver sends
+// initWithCoder:, which found no implementation here and fell through to the stub forwarding above:
+// -methodSignatureForSelector: advertises "v@:" for every selector, so the call came back as
+//   NSForwardSignatureError: invoked with 3 args, but 2 expected. Selector initWithCoder:,
+// and that one element aborted the whole nib.
+//
+// The archived properties are not restored; the defaults from -init are, which is all this stub
+// class does anyway.
+- (instancetype) initWithCoder: (NSCoder *) coder {
+    (void) coder;
+    return [self init];
 }
 
 @end

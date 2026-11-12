@@ -25,6 +25,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 @interface NSResponder : NSObject <NSCoding> {
     id _nextResponder;
     NSTouchBar *_touchBar;
+    NSUserActivity *_userActivity;
 }
 
 @property (weak) NSResponder *nextResponder;
@@ -90,6 +91,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (void) encodeRestorableStateWithCoder: (NSCoder *) coder;
 - (void) encodeRestorableStateWithCoder: (NSCoder *) coder backgroundQueue: (NSOperationQueue *) queue;
 - (void) restoreStateWithCoder: (NSCoder *) coder;
+// Stored only: this AppKit does not make it current or update it.
+@property(retain) NSUserActivity *userActivity;
 - (void) updateUserActivityState: (NSUserActivity *) userActivity;
 - (void) restoreUserActivityState: (NSUserActivity *) userActivity;
 

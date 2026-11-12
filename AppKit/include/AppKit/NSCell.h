@@ -146,11 +146,16 @@ APPKIT_EXPORT NSNotificationName NSControlTintDidChangeNotification;
     BOOL _truncatesLastVisibleLine;
     BOOL _allowsUndo;
     NSUserInterfaceLayoutDirection _userInterfaceLayoutDirection;
+    NSMenu *_cellMenu;
 }
 
 @property BOOL truncatesLastVisibleLine;
 @property BOOL allowsUndo;
 @property NSUserInterfaceLayoutDirection userInterfaceLayoutDirection;
+
+// The cell's contextual menu.
+- (NSMenu *) menu;
+- (void) setMenu: (NSMenu *) menu;
 
 #pragma mark -
 #pragma mark Class Methods
@@ -305,6 +310,11 @@ APPKIT_EXPORT NSNotificationName NSControlTintDidChangeNotification;
 
 - (void) setSendsActionOnEndEditing: (BOOL) flag;
 - (BOOL) sendsActionOnEndEditing;
+
+// The cell's menu, whatever the event and position.
+- (NSMenu *) menuForEvent: (NSEvent *) event
+                   inRect: (NSRect) rect
+                   ofView: (NSView *) view;
 
 @end
 

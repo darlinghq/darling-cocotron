@@ -29,7 +29,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         NSKeyedUnarchiver *keyed = (NSKeyedUnarchiver *) coder;
 
         _delegate = [keyed decodeObjectForKey: @"NSDelegate"];
-        _string = [[keyed decodeObjectForKey: @"NSString"] retain];
+        // A mutable copy, as -initWithString: keeps: the decoded string is immutable, and edits change it in place.
+        NSString *decoded = [keyed decodeObjectForKey: @"NSString"];
+        _string = decoded ? [decoded mutableCopy] : [NSMutableString new];
         _rangeToAttributes = NSCreateRangeToCopiedObjectEntries(0);
         NSRangeEntryInsert(_rangeToAttributes, NSMakeRange(0, [_string length]),
                            [NSDictionary dictionary]);

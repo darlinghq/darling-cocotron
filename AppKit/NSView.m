@@ -188,8 +188,8 @@ typedef struct __VFlags {
         //[coder encodeObject: _backgroundFilters
         //             forKey: @"NSViewBackgroundFilters"];
         [coder encodeObject: _animations forKey: @"NSViewAnimations"];
-        //[coder encodeBool: _canDrawConcurrently
-        //           forKey: @"NSViewCanDrawConcurrently"];
+        [coder encodeBool: _canDrawConcurrently
+                   forKey: @"NSViewCanDrawConcurrently"];
         [coder encodeBool: _wantsLayer forKey: @"NSViewIsLayerTreeHost"];
         [coder encodeInteger: _layerContentsRedrawPolicy
                       forKey: @"NSViewLayerContentsRedrawPolicy"];
@@ -2334,9 +2334,10 @@ static NSView *viewBeingPrinted = nil;
            (_window != nil && ![self isHiddenOrHasHiddenAncestor]);
 }
 
+// Cocotron always draws views serially on the main thread, so this is only a
+// hint that is stored (and archived) for callers that read it back.
 - (BOOL) canDrawConcurrently {
-    NSUnimplementedMethod();
-    return NO;
+    return _canDrawConcurrently;
 }
 
 - (void) viewWillDraw {
@@ -2344,7 +2345,7 @@ static NSView *viewBeingPrinted = nil;
 }
 
 - (void) setCanDrawConcurrently: (BOOL) canDraw {
-    NSUnimplementedMethod();
+    _canDrawConcurrently = canDraw;
 }
 
 - (void) _lockFocusInContext: (NSGraphicsContext *) context {
