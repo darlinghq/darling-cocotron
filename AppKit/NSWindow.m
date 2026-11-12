@@ -90,7 +90,7 @@ const NSNotificationName NSWindowDidChangeBackingPropertiesNotification =
         @"NSWindowDidChangeBackingPropertiesNotification";
 const NSNotificationName NSWindowDidChangeScreenProfileNotification =
         @"NSWindowDidChangeScreenProfileNotification";
-const NSString *NSBackingPropertyOldScaleFactorKey =
+NSString *const NSBackingPropertyOldScaleFactorKey =
         @"NSBackingPropertyOldScaleFactorKey";
 const NSNotificationName NSWindowDidChangeOcclusionStateNotification =
         @"NSWindowDidChangeOcclusionStateNotification";
