@@ -337,15 +337,6 @@ static NSMutableDictionary *cellClassDictionary = nil;
     [self setNeedsDisplay: YES];
 }
 
-- (NSControlSize) controlSize {
-    return [[self cell] controlSize];
-}
-
-- (void) setControlSize: (NSControlSize) size {
-    [[self cell] setControlSize: size];
-    [self setNeedsDisplay: YES];
-}
-
 - (void) setImage: (NSImage *) image {
     [[self cell] setImage: image];
     [self setNeedsDisplay: YES];
