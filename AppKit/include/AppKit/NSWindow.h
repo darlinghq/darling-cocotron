@@ -292,6 +292,8 @@ APPKIT_EXPORT const NSNotificationName NSWindowDidExposeNotification;
     NSWindowTabbingIdentifier _tabbingIdentifier;
     NSString *_subtitle;
     NSWindowTitleVisibility _titleVisibility;
+    NSSize _minFullScreenContentSize;
+    NSSize _maxFullScreenContentSize;
     NSTitlebarSeparatorStyle _titlebarSeparatorStyle;
     NSWindowToolbarStyle _toolbarStyle;
     BOOL _titlebarAppearsTransparent;

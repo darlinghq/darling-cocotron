@@ -786,20 +786,21 @@ static BOOL _allowsAutomaticWindowTabbing;
     return _contentMaxSize;
 }
 
+// Stored only: Cocotron has no full screen mode that applies them.
 - (NSSize) minFullScreenContentSize {
-    return _contentMinSize;
+    return _minFullScreenContentSize;
 }
 
 - (void) setMinFullScreenContentSize: (NSSize) value {
-    (void)value;
+    _minFullScreenContentSize = value;
 }
 
 - (NSSize) maxFullScreenContentSize {
-    return _contentMaxSize;
+    return _maxFullScreenContentSize;
 }
 
 - (void) setMaxFullScreenContentSize: (NSSize) value {
-    (void)value;
+    _maxFullScreenContentSize = value;
 }
 
 - (BOOL) isOneShot {
