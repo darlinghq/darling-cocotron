@@ -64,14 +64,14 @@ int main(void)
 
         NSEvent *magnify = [[NSEvent_gesture alloc] initWithType:NSEventTypeMagnify
                                                         location:NSMakePoint(120, 20)
-                                                   modifierFlags:NSEventModifierFlagShift
+                                                   modifierFlags:NSShiftKeyMask
                                                           window:window
                                                            phase:NSEventPhaseChanged
                                                    magnification:0.25
                                                         rotation:0];
         expect(magnify.type == NSEventTypeMagnify && magnify.phase == NSEventPhaseChanged &&
                    magnify.magnification == 0.25 && magnify.momentumPhase == NSEventPhaseNone &&
-                   magnify.modifierFlags == NSEventModifierFlagShift && magnify.window == window,
+                   magnify.modifierFlags == NSShiftKeyMask && magnify.window == window,
                @"magnify event values");
         NSEvent *rotate = [[NSEvent_gesture alloc] initWithType:NSEventTypeRotate
                                                        location:NSMakePoint(120, 20)
