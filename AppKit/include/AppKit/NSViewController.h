@@ -46,7 +46,7 @@
 - (void) setView: (NSView *) value;
 
 - (void) loadView;
-- (BOOL) isViewLoaded; // 10.10
+@property(readonly, getter=isViewLoaded) BOOL viewLoaded; // 10.10
 - (void) loadViewIfNeeded;
 // Called once -view has loaded the view with -loadView; does nothing by default.
 - (void) viewDidLoad;
