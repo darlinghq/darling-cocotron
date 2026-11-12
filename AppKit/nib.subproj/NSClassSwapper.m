@@ -41,6 +41,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
             [[coder decodeObjectForKey: @"NSOriginalClassName"] retain];
 
     Class class = NSClassFromString(_className);
+    Class original = NSClassFromString(_originalClassName);
+
+    if (original != Nil &&
+        (class == Nil || ![class isSubclassOfClass: original])) {
+        NSLog(@"NSClassSwapper: %@ is not a known %@ subclass, using %@",
+              _className, _originalClassName, _originalClassName);
+        class = original;
+    }
 
     if (class == Nil) {
         [NSException raise: NSInvalidArgumentException

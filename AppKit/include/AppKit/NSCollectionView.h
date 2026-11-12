@@ -19,6 +19,15 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSCollectionViewItem.h>
 #import <AppKit/NSView.h>
 
+@class NSCollectionViewLayout, NSCollectionView;
+@protocol NSCollectionViewDelegate;
+@protocol NSCollectionViewDataSource <NSObject>
+- (NSInteger)collectionView:(NSCollectionView *)view numberOfItemsInSection:(NSInteger)section;
+- (NSCollectionViewItem *)collectionView:(NSCollectionView *)view itemForRepresentedObjectAtIndexPath:(NSIndexPath *)path;
+@optional
+- (NSInteger)numberOfSectionsInCollectionView:(NSCollectionView *)view;
+@end
+
 typedef NSString *NSCollectionViewSupplementaryElementKind;
 
 @interface NSCollectionView : NSView {
@@ -32,6 +41,13 @@ typedef NSString *NSCollectionViewSupplementaryElementKind;
     NSArray *_backgroundColors;
     BOOL _allowsMultipleSelection;
     NSIndexSet *_selectionIndexes;
+    NSCollectionViewLayout *_collectionViewLayout;
+    NSMutableDictionary *_itemClasses;
+    NSSet *_selectionIndexPaths;
+    id<NSCollectionViewDataSource> _dataSource;
+    id<NSCollectionViewDelegate> _delegate;
+    NSMutableDictionary *_loadedItems;
+    NSArray *_loadedPaths;
 }
 
 - (NSArray *) content;
@@ -65,6 +81,25 @@ typedef NSString *NSCollectionViewSupplementaryElementKind;
 - (BOOL) isFirstResponder;
 - (NSCollectionViewItem *) newItemForRepresentedObject: object;
 
+@property(assign) id<NSCollectionViewDataSource> dataSource;
+@property(assign) id<NSCollectionViewDelegate> delegate;
+- (void)reloadData;
+- (NSInteger)numberOfSections;
+- (NSInteger)numberOfItemsInSection:(NSInteger)section;
+- (NSCollectionViewItem *)itemAtIndexPath:(NSIndexPath *)path;
+@property(retain) NSCollectionViewLayout *collectionViewLayout;
+@property(copy) NSSet *selectionIndexPaths;
+
+- (void) registerClass: (Class) itemClass forItemWithIdentifier: (NSString *) identifier;
+- (NSCollectionViewItem *) makeItemWithIdentifier: (NSString *) identifier
+                                     forIndexPath: (NSIndexPath *) indexPath;
+
+@end
+
+@interface NSIndexPath (NSCollectionViewAdditions)
++ (NSIndexPath *) indexPathForItem: (NSInteger) item inSection: (NSInteger) section;
+@property(readonly) NSInteger item;
+@property(readonly) NSInteger section;
 @end
 
 @protocol NSCollectionViewDelegate <NSObject>

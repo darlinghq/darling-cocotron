@@ -5,5 +5,9 @@
 
 @end
 
-@interface NSNibAXAttributeConnector : NSObject <NSCoding>
+@interface NSNibAXAttributeConnector : NSObject <NSCoding> {
+    id _destination;
+    NSString *_attributeType;
+    id _attributeValue;
+}
 @end

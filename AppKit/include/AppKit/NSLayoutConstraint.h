@@ -23,6 +23,28 @@
 
 typedef float NSLayoutPriority;
 
+static const NSLayoutPriority NSLayoutPriorityRequired = 1000;
+static const NSLayoutPriority NSLayoutPriorityDefaultHigh = 750;
+static const NSLayoutPriority NSLayoutPriorityDefaultLow = 250;
+static const NSLayoutPriority NSLayoutPriorityFittingSizeCompression = 50;
+
+typedef NS_ENUM(NSInteger, NSLayoutAttribute) {
+	NSLayoutAttributeNotAnAttribute = 0,
+	NSLayoutAttributeLeft = 1,
+	NSLayoutAttributeRight,
+	NSLayoutAttributeTop,
+	NSLayoutAttributeBottom,
+	NSLayoutAttributeLeading,
+	NSLayoutAttributeTrailing,
+	NSLayoutAttributeWidth,
+	NSLayoutAttributeHeight,
+	NSLayoutAttributeCenterX,
+	NSLayoutAttributeCenterY,
+	NSLayoutAttributeLastBaseline,
+	NSLayoutAttributeBaseline = NSLayoutAttributeLastBaseline,
+	NSLayoutAttributeFirstBaseline,
+};
+
 typedef NS_ENUM(NSInteger, NSLayoutConstraintOrientation) {
 	NSLayoutConstraintOrientationHorizontal = 0,
 	NSLayoutConstraintOrientationVertical = 1,
