@@ -126,6 +126,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         return NSZeroSize;
 
     CGPDFPageRef page = CGPDFDocumentGetPage(_document, _currentPage + 1);
+    if (page == NULL)
+        return NSZeroSize;
     NSRect mediaBox = CGPDFPageGetBoxRect(page, kCGPDFMediaBox);
 
     return mediaBox.size;
