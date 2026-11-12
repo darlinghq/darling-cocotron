@@ -43,6 +43,7 @@ APPKIT_EXPORT NSSharingServiceName const NSSharingServiceNamePostOnTwitter;
     NSImage *_alternateImage;
     NSString *_menuItemTitle;
     id <NSSharingServiceDelegate> _delegate;
+    void (^_handler)(void);
 }
 
 @property (readonly, copy) NSString *title;

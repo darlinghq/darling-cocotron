@@ -1,4 +1,5 @@
 #import <AppKit/NSSharingService.h>
+#import <AppKit/NSMenu.h>
 
 NSSharingServiceName const NSSharingServiceNameAddToIPhoto = @"com.apple.share.System.add-to-iphoto";
 NSSharingServiceName const NSSharingServiceNameAddToSafariReadingList = @"com.apple.share.System.add-to-safari-reading-list";
@@ -26,6 +27,7 @@ NSSharingServiceName const NSSharingServiceNamePostOnLinkedIn = @"com.apple.shar
         _title = [title copy];
         _image = [image retain];
         _alternateImage = [alternateImage retain];
+        _handler = [block copy];
     }
     return self;
 }
@@ -35,6 +37,7 @@ NSSharingServiceName const NSSharingServiceNamePostOnLinkedIn = @"com.apple.shar
     [_image release];
     [_alternateImage release];
     [_menuItemTitle release];
+    [_handler release];
     [super dealloc];
 }
 
@@ -67,11 +70,15 @@ NSSharingServiceName const NSSharingServiceNamePostOnLinkedIn = @"com.apple.shar
     _delegate = delegate;
 }
 
+// Only a service created with a handler can perform; the built-in services
+// are not available.
 - (BOOL) canPerformWithItems: (NSArray *) items {
-    return NO;
+    return _handler != nil;
 }
 
 - (void) performWithItems: (NSArray *) items {
+    if (_handler != nil)
+        _handler();
 }
 
 @end
