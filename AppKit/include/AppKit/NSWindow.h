@@ -150,6 +150,14 @@ typedef NS_ENUM(NSInteger, NSWindowToolbarStyle) {
 
 typedef NSString *NSWindowTabbingIdentifier;
 
+typedef NS_ENUM(NSInteger, NSWindowAnimationBehavior) {
+    NSWindowAnimationBehaviorDefault = 0,
+    NSWindowAnimationBehaviorNone = 2,
+    NSWindowAnimationBehaviorDocumentWindow = 3,
+    NSWindowAnimationBehaviorUtilityWindow = 4,
+    NSWindowAnimationBehaviorAlertPanel = 5
+};
+
 typedef int NSSelectionDirection;
 enum {
     NSDirectSelection = 0,
@@ -203,6 +211,7 @@ APPKIT_EXPORT const NSNotificationName NSWindowDidExposeNotification;
     NSDictionary *_animations;
 
     NSString *_representedFilename;
+    NSURL *_representedURL;
     NSString *_title;
     NSString *_miniwindowTitle;
     NSImage *_miniwindowImage;
@@ -242,6 +251,7 @@ APPKIT_EXPORT const NSNotificationName NSWindowDidExposeNotification;
     BOOL _isOneShot;
     BOOL _useOptimizedDrawing;
     BOOL _releaseWhenClosed;
+    BOOL _isClosed;
     BOOL _hidesOnDeactivate;
     BOOL _hiddenForDeactivate;
     BOOL _isActive;
@@ -258,6 +268,7 @@ APPKIT_EXPORT const NSNotificationName NSWindowDidExposeNotification;
     BOOL _showsToolbarButton;
     BOOL _ignoresMouseEvents;
     BOOL _isMovableByWindowBackground;
+    NSWindowAnimationBehavior _animationBehavior;
     BOOL _allowsToolTipsWhenApplicationIsInactive;
     BOOL _defaultButtonCellKeyEquivalentDisabled;
     BOOL _autorecalculatesKeyViewLoop;
@@ -295,6 +306,8 @@ APPKIT_EXPORT const NSNotificationName NSWindowDidExposeNotification;
     NSWindowTabbingIdentifier _tabbingIdentifier;
     NSString *_subtitle;
     NSWindowTitleVisibility _titleVisibility;
+    NSSize _minFullScreenContentSize;
+    NSSize _maxFullScreenContentSize;
     NSTitlebarSeparatorStyle _titlebarSeparatorStyle;
     NSWindowToolbarStyle _toolbarStyle;
     BOOL _titlebarAppearsTransparent;
@@ -361,6 +374,8 @@ APPKIT_EXPORT const NSNotificationName NSWindowDidExposeNotification;
 - (NSSize) maxSize;
 - (NSSize) contentMinSize;
 - (NSSize) contentMaxSize;
+@property NSSize minFullScreenContentSize;
+@property NSSize maxFullScreenContentSize;
 
 - (BOOL) isOneShot;
 - (BOOL) isOpaque;
@@ -497,6 +512,8 @@ APPKIT_EXPORT const NSNotificationName NSWindowDidExposeNotification;
 - (void) setColorSpace: (NSColorSpace *) newColorSpace;
 - (BOOL) isOnActiveSpace;
 - (NSWindowSharingType) sharingType;
+- (NSWindowAnimationBehavior) animationBehavior;
+- (void) setAnimationBehavior: (NSWindowAnimationBehavior) behavior;
 - (void) setSharingType: (NSWindowSharingType) type;
 
 - (BOOL) isDocumentEdited;
@@ -535,6 +552,12 @@ APPKIT_EXPORT const NSNotificationName NSWindowDidExposeNotification;
 - (NSRect) convertRectToScreen: (NSRect) rect;
 - (NSRect) convertRectFromScreen: (NSRect) rect;
 - (CGFloat) backingScaleFactor;
+- (NSRect) convertRectToBacking: (NSRect) rect;
+- (NSRect) convertRectFromBacking: (NSRect) rect;
+- (NSPoint) convertPointToBacking: (NSPoint) point;
+- (NSPoint) convertPointFromBacking: (NSPoint) point;
+- (NSSize) convertSizeToBacking: (NSSize) size;
+- (NSSize) convertSizeFromBacking: (NSSize) size;
 
 - (void) beginSheet: (NSWindow *) sheet
         completionHandler: (void (^)(NSInteger returnCode)) handler;

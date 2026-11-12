@@ -75,6 +75,16 @@ typedef enum {
     NSTableViewDropAbove
 } NSTableViewDropOperation;
 
+typedef NS_OPTIONS(NSUInteger, NSTableViewAnimationOptions) {
+    NSTableViewAnimationEffectNone = 0x0,
+    NSTableViewAnimationEffectFade = 0x1,
+    NSTableViewAnimationEffectGap = 0x2,
+    NSTableViewAnimationSlideUp = 0x10,
+    NSTableViewAnimationSlideDown = 0x20,
+    NSTableViewAnimationSlideLeft = 0x30,
+    NSTableViewAnimationSlideRight = 0x40,
+};
+
 @interface NSTableView : NSControl {
     id _target;
     SEL _action;
@@ -103,6 +113,7 @@ typedef enum {
     BOOL _alternatingRowBackground;
     unsigned int _gridStyleMask;
     NSTableViewSelectionHighlightStyle _selectionHighlightStyle;
+    BOOL _usesAutomaticRowHeights;
 
     // temp ivars
     NSMutableArray *_selectedColumns;
@@ -110,6 +121,7 @@ typedef enum {
     NSInteger _clickedColumn, _clickedRow;
     NSInteger _editedColumn, _editedRow;
     NSInteger _numberOfRows;
+    NSInteger _updatesNestingCount;
     id _editingCell;
     NSRect _editingFrame, _editingBorder;
     NSArray *_sortDescriptors;
@@ -143,6 +155,8 @@ typedef enum {
 - (BOOL) usesAlternatingRowBackgroundColors;
 - (unsigned int) gridStyleMask;
 - (NSTableViewSelectionHighlightStyle) selectionHighlightStyle;
+- (BOOL) usesAutomaticRowHeights;
+- (void) setUsesAutomaticRowHeights: (BOOL) value;
 
 - (NSInteger) numberOfRows;
 - (NSUInteger) numberOfColumns;
@@ -219,9 +233,17 @@ typedef enum {
 - (void) scrollRowToVisible: (NSInteger) index;
 - (void) scrollColumnToVisible: (NSInteger) index;
 
+- (void) beginUpdates;
+- (void) endUpdates;
+- (void) insertRowsAtIndexes: (NSIndexSet *) indexes withAnimation: (NSTableViewAnimationOptions) animationOptions;
+- (void) removeRowsAtIndexes: (NSIndexSet *) indexes withAnimation: (NSTableViewAnimationOptions) animationOptions;
+- (void) moveRowAtIndex: (NSInteger) oldIndex toIndex: (NSInteger) newIndex;
+
 - (void) noteNumberOfRowsChanged;
 - (void) noteHeightOfRowsWithIndexesChanged: (NSIndexSet *) indexSet;
 - (void) reloadData;
+- (void) reloadDataForRowIndexes: (NSIndexSet *) rowIndexes
+                   columnIndexes: (NSIndexSet *) columnIndexes;
 - (void) tile;
 
 - (void) sizeLastColumnToFit;

@@ -170,6 +170,7 @@ static BOOL debugError(const char *bytes, unsigned length,
 
     va_start(arguments, format);
     debugTracev(bytes, length, position, format, arguments);
+    va_end(arguments);
     // A malformed document is a parse failure the callers report by returning NO
     // (CGPDFDocumentCreate* then return NULL), not an exception.
     return NO;

@@ -36,6 +36,7 @@ typedef NS_ENUM(NSInteger, NSColorType) {
 @class NSImage;
 @class NSPasteboard;
 @class NSColorSpace;
+@class NSAppearance;
 
 typedef NSUInteger NSControlTint;
 enum {
@@ -50,6 +51,11 @@ enum {
     NSColorName _colorName;
     NSImage *_pattern;
 }
+
++ (NSColor *) colorWithCGColor: (CGColorRef) color;
++ (NSColor *) colorWithColorSpace: (NSColorSpace *) space
+                       components: (const CGFloat *) components
+                            count: (NSInteger) count;
 
 @property(class, strong, readonly) NSColor *labelColor;
 
@@ -68,6 +74,8 @@ enum {
 @property(class, strong, readonly) NSColor *selectedMenuItemTextColor;
 
 @property(class, strong, readonly) NSColor *gridColor;
+@property(class, strong, readonly) NSColor *separatorColor;
+@property(class, strong, readonly) NSColor *textInsertionPointColor;
 @property(class, strong, readonly) NSColor *headerTextColor;
 @property(class, strong, readonly) NSArray<NSColor *> *alternatingContentBackgroundColors;
 
@@ -144,6 +152,8 @@ enum {
 + (NSColor *) highlightColor;
 + (NSColor *) shadowColor;
 + (NSColor *) gridColor;
++ (NSColor *) separatorColor;
++ (NSColor *) textInsertionPointColor;
 
 + (NSColor *) alternateSelectedControlColor;
 + (NSColor *) alternateSelectedControlTextColor;
@@ -217,6 +227,10 @@ enum {
                          green: (CGFloat) green
                           blue: (CGFloat) blue
                          alpha: (CGFloat) alpha;
++ (NSColor *) colorWithDisplayP3Red: (CGFloat) red
+                              green: (CGFloat) green
+                               blue: (CGFloat) blue
+                              alpha: (CGFloat) alpha;
 + (NSColor *) colorWithDeviceHue: (CGFloat) hue
                       saturation: (CGFloat) saturation
                       brightness: (CGFloat) brightness
@@ -242,6 +256,11 @@ enum {
 
 + (NSColor *) colorWithCatalogName: (NSString *) catalogName
                          colorName: (NSString *) colorName;
+
+NS_ASSUME_NONNULL_BEGIN
++ (NSColor *) colorWithName: (nullable NSColorName) colorName
+               dynamicProvider: (NSColor * (^)(NSAppearance *appearance)) dynamicProvider;
+NS_ASSUME_NONNULL_END
 
 + (NSColor *) colorFromPasteboard: (NSPasteboard *) pasteboard;
 

@@ -480,6 +480,18 @@ static inline id childOfItemAtIndex(NSOutlineView *self, id item,
     [self reloadItem: item reloadChildren: NO];
 }
 
+- (void) insertItemsAtIndexes: (NSIndexSet *) indexes inParent: (id) parent withAnimation: (NSTableViewAnimationOptions) animationOptions {
+    [self reloadData];
+}
+
+- (void) removeItemsAtIndexes: (NSIndexSet *) indexes inParent: (id) parent withAnimation: (NSTableViewAnimationOptions) animationOptions {
+    [self reloadData];
+}
+
+- (void) moveItemAtIndex: (NSInteger) fromIndex inParent: (id) oldParent toIndex: (NSInteger) toIndex inParent: (id) newParent {
+    [self reloadData];
+}
+
 - (void) setDropItem: (id) item dropChildIndex: (NSInteger) index {
     NSUnimplementedMethod();
 }

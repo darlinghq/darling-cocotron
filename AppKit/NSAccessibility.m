@@ -375,6 +375,7 @@ NSAccessibilityRole const NSAccessibilityLevelIndicatorRole = @"AXLevelIndicator
 NSString *const NSAccessibilityLinkRole = @"NSAccessibilityLinkRole";
 NSString *const NSAccessibilityListRole = @"NSAccessibilityListRole";
 NSString *const NSAccessibilityMatteRole = @"NSAccessibilityMatteRole";
+NSAccessibilityRole const NSAccessibilityMenuBarItemRole = @"AXMenuBarItem";
 NSString *const NSAccessibilityMenuBarRole = @"NSAccessibilityMenuBarRole";
 NSString *const NSAccessibilityMenuButtonRole =
         @"NSAccessibilityMenuButtonRole";
@@ -446,6 +447,7 @@ NSString *const NSAccessibilitySystemDialogSubrole =
         @"NSAccessibilitySystemDialogSubrole";
 NSString *const NSAccessibilitySystemFloatingWindowSubrole =
         @"NSAccessibilitySystemFloatingWindowSubrole";
+NSString *const NSAccessibilityTabButtonSubrole = @"AXTabButton";
 NSString *const NSAccessibilityTableRowSubrole =
         @"NSAccessibilityTableRowSubrole";
 NSString *const NSAccessibilityTextAttachmentSubrole =

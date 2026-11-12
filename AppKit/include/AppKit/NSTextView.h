@@ -282,6 +282,7 @@ APPKIT_EXPORT NSString *const NSAllRomanInputSourcesLocaleIdentifier;
 - (void) setIncrementalSearchingEnabled: (BOOL) value;
 - (void) setUsesFindBar: (BOOL) value;
 - (void) setUsesInspectorBar: (BOOL) value;
+- (void) performFindPanelAction: (id) sender;
 
 - (void) setLayoutOrientation:(NSTextLayoutOrientation)orientation;
 
