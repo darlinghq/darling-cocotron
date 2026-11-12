@@ -612,14 +612,6 @@ NSArray *NSAccessibilityUnignoredChildrenForOnlyChild(id originalChild) {
 
 @implementation NSObject (NSAccessibility)
 
-- (NSArray *) accessibilityAttributeNames {
-    return [NSArray array];
-}
-
-- accessibilityAttributeValue: (NSString *) attribute {
-    return nil;
-}
-
 - (BOOL) accessibilitySetOverrideValue: (id) value forAttribute: (NSString *) attribute {
     return NO;
 }
