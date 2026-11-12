@@ -147,6 +147,8 @@ APPKIT_EXPORT NSString *const NSAllRomanInputSourcesLocaleIdentifier;
     BOOL _automaticTextReplacementEnabled;
 
     BOOL _usesInspectorBar;
+    BOOL _usesAdaptiveColorMappingForDarkAppearance;
+    BOOL _importsGraphics;
 }
 
 - initWithFrame: (NSRect) frame textContainer: (NSTextContainer *) container;
@@ -154,6 +156,7 @@ APPKIT_EXPORT NSString *const NSAllRomanInputSourcesLocaleIdentifier;
 - initWithFrame: (NSRect) frame;
 
 - (void) _setTextStorage: (NSTextStorage *) storage;
+- (void) replaceTextStorage: (NSTextStorage *) textStorage;
 
 - (NSTextContainer *) textContainer;
 
@@ -337,3 +340,12 @@ APPKIT_EXPORT NSString *const NSAllRomanInputSourcesLocaleIdentifier;
 @end
 
 NS_ASSUME_NONNULL_END
+
+@interface NSTextView (NSTextViewLayoutOrientationAndHighlights)
+// Private AppKit: the Highlight menu items AppKit adds to text menus. None here.
++ (NSArray *) _textHighlightMenuItems;
+// Stored only: there's no dark appearance.
+@property BOOL usesAdaptiveColorMappingForDarkAppearance;
+// Switches between horizontal and vertical layout.
+- (void) changeLayoutOrientation: (id) sender;
+@end

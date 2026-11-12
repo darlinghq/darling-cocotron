@@ -54,4 +54,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (void) setHyphenationFactor: (float) factor;
 - (void) setTighteningFactorForTruncation: (float) factor;
+// See -[NSParagraphStyle horizontalAlignment].
+- (void) setHorizontalAlignment: (NSInteger) alignment;
 @end
