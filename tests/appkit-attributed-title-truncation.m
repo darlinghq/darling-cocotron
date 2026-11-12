@@ -52,7 +52,7 @@ static NSData *render(NSAttributedString *s, CGFloat width, NSLineBreakMode mode
     return data;
 }
 
-static void check(NSString *name, NSString *text, NSLineBreakMode mode, const char *modeName)
+static void checkTruncation(NSString *name, NSString *text, NSLineBreakMode mode, const char *modeName)
 {
     NSDictionary *attrs = @{NSFontAttributeName: [NSFont systemFontOfSize: 13]};
     NSAttributedString *full = [[[NSAttributedString alloc] initWithString: text attributes: attrs] autorelease];
@@ -77,8 +77,10 @@ static void check(NSString *name, NSString *text, NSLineBreakMode mode, const ch
     }
     NSData *whole = render(full, 1000, NSLineBreakByClipping);
 
+    // Below the width of the ellipsis itself the drawing is clipped, which no candidate string reproduces.
+    NSAttributedString *dots = [[[NSAttributedString alloc] initWithString: @"\u2026" attributes: attrs] autorelease];
     int truncated = 0;
-    for (CGFloat w = 8; w < fullWidth; w += 3) {
+    for (CGFloat w = ceil([dots size].width) + 1; w < fullWidth; w += 3) {
         NSData *got = render(full, w, mode);
         char what[200];
         snprintf(what, sizeof what, "%s %s at width %.0f is a head/ellipsis/tail rendering on composed boundaries",
@@ -102,9 +104,9 @@ int main(void)
             @[@"joined emoji", @"AB\U0001F468‍\U0001F469‍\U0001F467CD"],
         ];
         for (NSArray *s in strings) {
-            check(s[0], s[1], NSLineBreakByTruncatingTail, "tail");
-            check(s[0], s[1], NSLineBreakByTruncatingHead, "head");
-            check(s[0], s[1], NSLineBreakByTruncatingMiddle, "middle");
+            checkTruncation(s[0], s[1], NSLineBreakByTruncatingTail, "tail");
+            checkTruncation(s[0], s[1], NSLineBreakByTruncatingHead, "head");
+            checkTruncation(s[0], s[1], NSLineBreakByTruncatingMiddle, "middle");
         }
 
         // Degenerate rectangles and strings do not raise a range exception.
