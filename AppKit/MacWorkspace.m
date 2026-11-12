@@ -1,8 +1,90 @@
 #import "MacWorkspace.h"
 #import <AppKit/NSApplication.h>
+#import <AppKit/NSImage.h>
 #import <AppKit/NSRaise.h>
 #include <LaunchServices/LaunchServices.h>
 #include <dispatch/dispatch.h>
+#import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
+#include <string.h>
+
+static NSCache *_workspaceIconCache;
+
+static NSCache *WorkspaceIconCache(void) {
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        _workspaceIconCache = [[NSCache alloc] init];
+    });
+    return _workspaceIconCache;
+}
+
+static NSImage *ImageFromIconFile(NSString *file) {
+    NSImage *icon = nil;
+    @try {
+        icon = [[[NSImage alloc] initWithContentsOfFile: file] autorelease];
+    } @catch (NSException *exception) {
+        icon = nil;
+    }
+    if (icon != nil && (icon.size.width <= 0.0 || icon.size.height <= 0.0))
+        icon = nil;
+    return icon;
+}
+
+static NSImage *ImageFromIcnsFile(NSString *file) {
+    NSData *data = [NSData dataWithContentsOfFile: file];
+    if (data == nil)
+        return nil;
+
+    const unsigned char *bytes = (const unsigned char *)[data bytes];
+    NSUInteger length = [data length];
+    uint32_t declaredLength = (length >= 8)
+            ? (((uint32_t)bytes[4] << 24) | ((uint32_t)bytes[5] << 16) |
+               ((uint32_t)bytes[6] << 8) | bytes[7])
+            : 0;
+
+    if (length < 8 || memcmp(bytes, "icns", 4) != 0 ||
+        declaredLength < 8 || declaredLength > length)
+        return nil;
+
+    NSImage *best = nil;
+    CGFloat bestArea = 0.0;
+    NSUInteger offset = 8;
+    while (offset + 8 <= declaredLength) {
+        uint32_t chunkLength = ((uint32_t)bytes[offset + 4] << 24) |
+                ((uint32_t)bytes[offset + 5] << 16) |
+                ((uint32_t)bytes[offset + 6] << 8) | bytes[offset + 7];
+        if (chunkLength < 8 || chunkLength > declaredLength - offset)
+            break;
+
+        BOOL pngChunk = (memcmp(bytes + offset, "ic13", 4) == 0 ||
+                         memcmp(bytes + offset, "ic12", 4) == 0 ||
+                         memcmp(bytes + offset, "ic11", 4) == 0 ||
+                         memcmp(bytes + offset, "ic10", 4) == 0 ||
+                         memcmp(bytes + offset, "ic09", 4) == 0 ||
+                         memcmp(bytes + offset, "ic08", 4) == 0 ||
+                         memcmp(bytes + offset, "ic07", 4) == 0);
+        if (pngChunk && chunkLength > 8) {
+            NSData *payload =
+                    [data subdataWithRange: NSMakeRange(offset + 8, chunkLength - 8)];
+            if (payload.length >= 8 &&
+                memcmp([payload bytes], "\x89PNG\r\n\x1a\n", 8) == 0) {
+                NSImage *candidate = nil;
+                @try {
+                    candidate = [[[NSImage alloc] initWithData: payload] autorelease];
+                } @catch (NSException *exception) {
+                    candidate = nil;
+                }
+                CGFloat area = (candidate != nil)
+                        ? candidate.size.width * candidate.size.height : 0.0;
+                if (candidate != nil && area > bestArea) {
+                    best = candidate;
+                    bestArea = area;
+                }
+            }
+        }
+        offset += chunkLength;
+    }
+    return best;
+}
 
 @implementation NSWorkspace (macos)
 
@@ -15,9 +97,52 @@
 @implementation MacWorkspace
 
 - (NSImage *) iconForFile: (NSString *) path {
-    // TODO: call GetIconRefFromFileInfo()
-    NSUnimplementedMethod();
-    return NULL;
+    if (path == nil || [path length] == 0)
+        return nil;
+
+    NSImage *cached = [WorkspaceIconCache() objectForKey: path];
+    if (cached != nil)
+        return cached;
+
+    BOOL isDirectory = NO;
+    if (![[NSFileManager defaultManager] fileExistsAtPath: path isDirectory: &isDirectory] ||
+        !isDirectory)
+        return nil;
+
+    NSDictionary *info = [NSDictionary dictionaryWithContentsOfFile:
+            [path stringByAppendingPathComponent: @"Contents/Info.plist"]];
+    if (info == nil)
+        return nil;
+
+    NSMutableArray *names = [NSMutableArray array];
+    id value = [info objectForKey: @"CFBundleIconName"];
+    if ([value isKindOfClass: [NSString class]])
+        [names addObject: value];
+    value = [info objectForKey: @"CFBundleIconFile"];
+    if ([value isKindOfClass: [NSString class]] && ![names containsObject: value])
+        [names addObject: value];
+    value = [info objectForKey: @"CFBundleIconFiles"];
+    if ([value isKindOfClass: [NSArray class]])
+        for (id item in value)
+            if ([item isKindOfClass: [NSString class]])
+                [names addObject: item];
+
+    NSString *resources =
+            [path stringByAppendingPathComponent: @"Contents/Resources"];
+    for (NSString *name in names) {
+        NSString *candidate = ([name pathExtension].length > 0)
+                ? name : [name stringByAppendingPathExtension: @"icns"];
+        NSString *file = [resources stringByAppendingPathComponent: candidate];
+        NSImage *icon = ImageFromIconFile(file);
+        if (icon == nil)
+            icon = ImageFromIcnsFile(file);
+        if (icon != nil) {
+            [WorkspaceIconCache() setObject: icon forKey: path];
+            return icon;
+        }
+    }
+
+    return nil;
 }
 
 - (NSImage *) iconForFiles: (NSArray *) array {
@@ -25,10 +150,57 @@
     return NULL;
 }
 
+// A file type is a UTI, a filename extension, or an HFS type code in quotes.
+static UTType *TypeForFileType(NSString *type) {
+    if ([type length] == 6 && [type hasPrefix: @"'"] && [type hasSuffix: @"'"])
+        return [UTType typeWithTag: [type substringWithRange: NSMakeRange(1, 4)]
+                          tagClass: @"com.apple.ostype"
+                  conformingToType: nil];
+
+    UTType *uti = [UTType typeWithIdentifier: type];
+    return uti ? uti : [UTType typeWithFilenameExtension: type];
+}
+
+static NSImage *ImageForGenericIcon(NSString *name) {
+    NSString *path = [[NSBundle bundleForClass: [NSWorkspace class]]
+            pathForResource: name ofType: @"png"];
+    return path ? [[[NSImage alloc] initWithContentsOfFile: path] autorelease] : nil;
+}
+
 - (NSImage *) iconForFileType: (NSString *) type {
-    // TODO: call GetIconRefFromTypeInfo()
-    NSUnimplementedMethod();
-    return NULL;
+    if (type == nil)
+        return nil;
+
+    NSString *cacheKey = [@"type:" stringByAppendingString: type];
+    NSImage *icon = [WorkspaceIconCache() objectForKey: cacheKey];
+    if (icon != nil)
+        return icon;
+
+    UTType *uti = TypeForFileType(type);
+    if ([uti conformsToType: UTTypeDirectory])
+        icon = [NSImage imageNamed: NSImageNameFolder];
+    else {
+        NSArray *generic = @[
+            @[ UTTypeApplication, @"application-x-executable" ],
+            @[ UTTypeImage, @"image-x-generic" ],
+            @[ UTTypeAudio, @"audio-x-generic" ],
+            @[ UTTypeMovie, @"video-x-generic" ],
+            @[ UTTypeText, @"text-x-generic" ],
+        ];
+        NSString *name = @"application-x-generic";
+        for (NSArray *entry in generic)
+            if ([uti conformsToType: entry[0]]) {
+                name = entry[1];
+                break;
+            }
+        icon = ImageForGenericIcon(name);
+    }
+
+    if (icon == nil)
+        [NSException raise: NSInternalInconsistencyException
+                    format: @"AppKit's file type icons are not installed"];
+    [WorkspaceIconCache() setObject: icon forKey: cacheKey];
+    return icon;
 }
 
 - (NSString *) localizedDescriptionForType: (NSString *) type {
