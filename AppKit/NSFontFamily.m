@@ -33,15 +33,19 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @implementation NSFontFamily
 
+static NSMutableArray *sharedList = nil;
+static NSMutableDictionary *sharedByName = nil;
+
 + (NSMutableArray *) fontFamilies {
-    static NSMutableArray *shared = nil;
+    @synchronized([NSFontFamily class]) {
+        if (sharedList == nil) {
+            sharedList = [NSMutableArray new];
+            sharedByName = [NSMutableDictionary new];
+            [self buildFontFamilies];
+        }
 
-    if (shared == nil) {
-        shared = [NSMutableArray new];
-        [self buildFontFamilies];
+        return sharedList;
     }
-
-    return shared;
 }
 
 + (NSArray *) allFontFamilyNames {
@@ -58,15 +62,24 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 + (void) addFontFamily: (NSFontFamily *) family {
-    [[self fontFamilies] addObject: family];
+    if (family == nil)
+        return;
+    @synchronized([NSFontFamily class]) {
+        [[self fontFamilies] addObject: family];
+        NSString *name = [family name];
+        if (name != nil)
+            [sharedByName setObject: family forKey: name];
+    }
 }
 
 + (NSFontFamily *) addFontFamilyWithName: (NSString *) familyName {
+    if (familyName == nil)
+        return nil;
+    // The typefaces are looked up when they are first needed (see
+    // -_ensureTypefacesLoaded): asking the font system about every installed
+    // family up front takes seconds on a system with many fonts.
     NSFontFamily *family = [[self alloc] initWithName: familyName];
     [self addFontFamily: family];
-    NSArray *typefaces =
-            [[NSDisplay currentDisplay] fontTypefacesForFamilyName: familyName];
-    [family addTypefaces: typefaces];
     return [family autorelease];
 }
 
@@ -78,17 +91,17 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 + (NSFontFamily *) fontFamilyWithName: (NSString *) name {
-    NSArray *families = [self fontFamilies];
-    int i, count = [families count];
+    if (name == nil)
+        return nil;
+    @synchronized([NSFontFamily class]) {
+        [self fontFamilies]; // Ensure buildFontFamilies has run
+        NSFontFamily *family = [sharedByName objectForKey: name];
+        if (family != nil)
+            return family;
 
-    for (i = 0; i < count; i++) {
-        NSFontFamily *check = [families objectAtIndex: i];
-
-        if ([[check name] isEqualToString: name])
-            return check;
+        // Pretend to have this family.
+        return [self addFontFamilyWithName: name];
     }
-    // Pretend to have this family.
-    return [self addFontFamilyWithName: name];
 }
 
 // A font can be named by something other than one of the typeface names
@@ -134,6 +147,26 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 + (NSFontFamily *) fontFamilyWithTypefaceName: (NSString *) name {
+    if (name == nil)
+        return nil;
+
+    NSArray *familyAndStyle = [self _familyAndStyleForFontName: name];
+
+    // The family the font system resolves the name to is almost always the
+    // answer; looking there first avoids loading the typefaces of every
+    // family just to find a name.
+    if (familyAndStyle != nil) {
+        NSFontFamily *resolvedFamily;
+
+        @synchronized([NSFontFamily class]) {
+            [self fontFamilies];
+            resolvedFamily = [[[sharedByName objectForKey:
+                    [familyAndStyle objectAtIndex: 0]] retain] autorelease];
+        }
+        if ([resolvedFamily _typefaceWithExactName: name] != nil)
+            return resolvedFamily;
+    }
+
     NSArray *families = [self fontFamilies];
     int i, count = [families count];
 
@@ -143,8 +176,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         if ([check _typefaceWithExactName: name] != nil)
             return check;
     }
-
-    NSArray *familyAndStyle = [self _familyAndStyleForFontName: name];
 
     if (familyAndStyle == nil)
         return nil;
@@ -165,6 +196,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - initWithName: (NSString *) name {
     _name = [name copy];
     _typefaces = [NSMutableArray new];
+    _typefacesLoaded = NO;
     return self;
 }
 
@@ -178,7 +210,24 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return _name;
 }
 
+// Asks the font system for the family's typefaces the first time they are
+// needed.
+- (void) _ensureTypefacesLoaded {
+    if (!_typefacesLoaded) {
+        @synchronized(self) {
+            if (!_typefacesLoaded) {
+                NSArray *typefaces = [[NSDisplay currentDisplay]
+                        fontTypefacesForFamilyName: _name];
+                if (typefaces != nil)
+                    [_typefaces addObjectsFromArray: typefaces];
+                _typefacesLoaded = YES;
+            }
+        }
+    }
+}
+
 - (NSFontTypeface *) _typefaceWithExactName: (NSString *) name {
+    [self _ensureTypefacesLoaded];
     int i, count = [_typefaces count];
 
     for (i = 0; i < count; i++) {
@@ -204,6 +253,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         return nil;
 
     NSString *style = [familyAndStyle objectAtIndex: 1];
+    [self _ensureTypefacesLoaded];
     int i, count = [_typefaces count];
 
     for (i = 0; i < count; i++) {
@@ -217,6 +267,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (NSFontTypeface *) typefaceWithTraits: (NSFontTraitMask) traits {
+    [self _ensureTypefacesLoaded];
     int i, count = [_typefaces count];
 
     for (i = 0; i < count; i++) {
@@ -230,14 +281,23 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (void) addTypeface: (NSFontTypeface *) typeface {
-    [_typefaces addObject: typeface];
+    if (typeface != nil) {
+        // Typefaces added by the caller go after the ones the font system
+        // lists, as when those were looked up when the family was created.
+        [self _ensureTypefacesLoaded];
+        [_typefaces addObject: typeface];
+    }
 }
 
 - (void) addTypefaces: (NSArray *) typefaces {
-    [_typefaces addObjectsFromArray: typefaces];
+    if (typefaces != nil) {
+        [self _ensureTypefacesLoaded];
+        [_typefaces addObjectsFromArray: typefaces];
+    }
 }
 
 - (NSArray *) typefaces {
+    [self _ensureTypefacesLoaded];
     return _typefaces;
 }
 

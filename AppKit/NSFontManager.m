@@ -62,12 +62,20 @@ static Class _fontPanelFactory;
     return _delegate;
 }
 
+- target {
+    return _target;
+}
+
 - (SEL) action {
     return _action;
 }
 
 - (void) setDelegate: delegate {
     _delegate = delegate;
+}
+
+- (void) setTarget: target {
+    _target = target;
 }
 
 - (void) setAction: (SEL) value {
@@ -160,6 +168,12 @@ static Class _fontPanelFactory;
 
 - (NSArray *) availableMembersOfFontFamily: (NSString *) familyName {
     NSMutableArray *result = [NSMutableArray array];
+    if (familyName == nil)
+        return result;
+    // -fontFamilyWithName: pretends to have any family, which would list the
+    // fallback font's faces for a name that is not installed.
+    if (![[NSFontFamily allFontFamilyNames] containsObject: familyName])
+        return result;
     NSFontFamily *family = [NSFontFamily fontFamilyWithName: familyName];
     NSArray *typefaces = [family typefaces];
     int i, count = [typefaces count];
@@ -168,13 +182,22 @@ static Class _fontPanelFactory;
         NSFontTypeface *typeface = [typefaces objectAtIndex: i];
         NSString *name = [typeface name];
         NSString *traitName = [typeface traitName];
+        NSFontTraitMask traits = [typeface traits];
+        // The weight scale runs from 0 to 15, 5 being the normal weight and 9
+        // bold.
+        int weight = (traits & NSBoldFontMask) ? 9 : 5;
+
+        if (name == nil)
+            name = familyName;
+        if (traitName == nil)
+            traitName = @"Regular";
 
         // Callers expect an array of four objects
         [result addObject: [NSArray arrayWithObjects: name, traitName,
                                                       [NSNumber
-                                                              numberWithInt: 0],
+                                                              numberWithInt: weight],
                                                       [NSNumber
-                                                              numberWithInt: 0],
+                                                              numberWithUnsignedInteger: traits],
                                                       nil]];
     }
 
@@ -284,8 +307,8 @@ static Class _fontPanelFactory;
 
 - (BOOL) sendAction {
     return [NSApp sendAction: _action
-                          to: nil
-                        from: [NSFontManager sharedFontManager]];
+                          to: _target
+                        from: self];
 }
 
 - (BOOL) isEnabled {

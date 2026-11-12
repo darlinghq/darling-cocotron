@@ -27,6 +27,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 @interface NSFontFamily : NSObject {
     NSString *_name;
     NSMutableArray *_typefaces;
+    BOOL _typefacesLoaded;
 }
 
 + (NSArray *) allFontFamilyNames;

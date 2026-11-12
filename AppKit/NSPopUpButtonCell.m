@@ -327,7 +327,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     if (_selectedIndex < 0 || _pullsDown) {
         if ([itemArray count] > 0)
             item = [itemArray objectAtIndex: 0];
-    } else {
+    } else if (_selectedIndex < [itemArray count]) {
         item = [itemArray objectAtIndex: _selectedIndex];
     }
     // With no items the title is the empty string rather than nil.

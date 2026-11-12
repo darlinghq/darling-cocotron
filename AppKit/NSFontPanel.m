@@ -40,13 +40,21 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (NSArray *) availableTraitsInFamily: (NSString *) familyName {
     NSMutableArray *result = [NSMutableArray array];
+    if (familyName == nil)
+        return result;
     NSArray *members = [[NSFontManager sharedFontManager]
             availableMembersOfFontFamily: familyName];
     int i, count = [members count];
 
     // (fullName,traitName,size,traits)
-    for (i = 0; i < count; i++)
-        [result addObject: [[members objectAtIndex: i] objectAtIndex: 1]];
+    for (i = 0; i < count; i++) {
+        NSArray *item = [members objectAtIndex: i];
+        if ([item count] > 1) {
+            id trait = [item objectAtIndex: 1];
+            if (trait != nil)
+                [result addObject: trait];
+        }
+    }
 
     return result;
 }
@@ -202,25 +210,40 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (void) setPanelFont: (NSFont *) font isMultiple: (BOOL) isMultiple {
+    if (font == nil)
+        return;
     NSFontFamily *family =
             [NSFontFamily fontFamilyWithTypefaceName: [font fontName]];
+    if (family == nil)
+        family = [NSFontFamily fontFamilyWithName: [font familyName]];
     NSFontTypeface *typeface = [family typefaceWithName: [font fontName]]; {
         NSArray *families = [self availableFontFamilies];
         NSString *familyName = [family name];
-        unsigned familyIndex = [families indexOfObject: familyName];
+        NSUInteger familyIndex = [families indexOfObject: familyName];
+        if (familyIndex == NSNotFound)
+            familyIndex = 0;
+
         NSArray *traits = [self availableTraitsInFamily: familyName];
-        unsigned traitIndex = [traits indexOfObject: [typeface traitName]];
+        NSUInteger traitIndex = [traits indexOfObject: [typeface traitName]];
+        if (traitIndex == NSNotFound)
+            traitIndex = 0;
+
         NSArray *sizes = [self availablePointSizes];
-        unsigned sizeIndex = [sizes
+        NSUInteger sizeIndex = [sizes
                 indexOfObject: [NSString stringWithFormat: @"%g",
                                                            [font pointSize]]];
+        if (sizeIndex == NSNotFound)
+            sizeIndex = 0;
 
         [self buildFamilyMatrix];
-        [_familyMatrix selectCellAtRow: familyIndex column: 0];
+        if ([_familyMatrix numberOfRows] > familyIndex)
+            [_familyMatrix selectCellAtRow: familyIndex column: 0];
         [self buildTypefaceMatrix];
-        [_typefaceMatrix selectCellAtRow: traitIndex column: 0];
+        if ([_typefaceMatrix numberOfRows] > traitIndex)
+            [_typefaceMatrix selectCellAtRow: traitIndex column: 0];
         [self buildSizeMatrix];
-        [_sizeMatrix selectCellAtRow: sizeIndex column: 0];
+        if ([_sizeMatrix numberOfRows] > sizeIndex)
+            [_sizeMatrix selectCellAtRow: sizeIndex column: 0];
         [_sizeTextField setFloatValue: [font pointSize]];
         [self buildSampleTextField];
     }
