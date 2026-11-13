@@ -188,28 +188,13 @@ static inline id childOfItemAtIndex(NSOutlineView *self, id item,
         _editingCellPadding = 10.0;
         [self invalidateRowCache];
 
-        // QUIRK: NSOutlineView layout after the NSTableView layout: auto-
-        // resizes-outline-column, marker-follows-cell and autosaves-expanded-
-        // items flags, the indentation per level and the outline table
-        // column. Not documented; unkeyed (typedstream) archives come from
-        // old nibs. Evidence: tier 3, the layout reported by the contributor
-        // of this decoder from archives of old nibs; unconfirmed against
-        // macOS (a macOS check is pending). Test:
-        // test_quirk_typedstream_outline_view in tests/appkit-typedstream-
-        // controls.m
-        BOOL autoResizesCol = YES, markerFollowsCell = YES, autosaveExpanded = NO;
-        float indentation = _standardRowHeight > 0 ? _standardRowHeight : 16.0;
-        [coder decodeValueOfObjCType: @encode(BOOL) at: &autoResizesCol];
-        [coder decodeValueOfObjCType: @encode(BOOL) at: &markerFollowsCell];
-        [coder decodeValueOfObjCType: @encode(BOOL) at: &autosaveExpanded];
-        [coder decodeValueOfObjCType: @encode(float) at: &indentation];
-        [self setIndentationPerLevel: indentation];
-        [self setIndentationMarkerFollowsCell: markerFollowsCell];
-        [self setAutoresizesOutlineColumn: autoResizesCol];
-        [self setAutosaveExpandedItems: autosaveExpanded];
-
-        _outlineTableColumn = [[coder decodeObject] retain];
-        if (!_outlineTableColumn && [[self tableColumns] count] > 0) {
+        // Nothing follows the table view layout in Mac archives: the indentation and
+        // marker settings keep their defaults and the outline column is the first one.
+        [self setIndentationPerLevel: _standardRowHeight > 0 ? _standardRowHeight : 16.0];
+        [self setIndentationMarkerFollowsCell: YES];
+        [self setAutoresizesOutlineColumn: YES];
+        [self setAutosaveExpandedItems: NO];
+        if ([[self tableColumns] count] > 0) {
             _outlineTableColumn = [[[self tableColumns] objectAtIndex: 0] retain];
         }
     }

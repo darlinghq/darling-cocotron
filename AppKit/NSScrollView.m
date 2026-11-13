@@ -209,125 +209,107 @@ static Class _rulerViewClass = nil;
             _verticalLineScroll = NSSwapBigFloatToHost(amts[3]);
         }
     } else {
-        // QUIRK: NSScrollView layout from class version 20: five objects
-        // (clip view, scrollers, corner and header views; a scroller is
-        // horizontal or vertical by its orientation), four scroll amounts and
-        // a flags word whose bits 26-27 hold the border type. Older versions:
-        // clip view, border, scroll flags, amounts, then per-part presence
-        // flags. Not documented; unkeyed (typedstream) archives come from old
-        // nibs. Evidence: tier 3, the layout reported by the contributor of
-        // this decoder from archives of old nibs; unconfirmed against macOS
-        // (a macOS check is pending). Archives with a different layout are
-        // tolerated where the code catches the mismatch. Test:
-        // test_quirk_typedstream_scroll_view in tests/appkit-typedstream-
-        // controls.m
+        // Layouts per class version as recorded from Mac archives, with the same grouping
+        // of the decode calls. The objects are the vertical scroller, the horizontal
+        // scroller and the content clip view (all versions), then, from 42, the header
+        // clip view and the corner view. The scroll amounts are two floats (page and line,
+        // used for both directions) up to version 225 and four floats from 226 (horizontal
+        // page, vertical page, horizontal line, vertical line). The flag word holds the
+        // vertical scroller in bit 31, the horizontal scroller in bit 30, a not-dynamic
+        // scrolling bit in 27, the border type in 25-26 and the auto-hide bit in 15; the
+        // other bits (rulers, find bar position, bits 28-29) are not used here.
         NSInteger version = [coder versionForClassName: @"NSScrollView"];
-        if (version >= 20) {
-            id objs[5];
-            for (int i = 0; i < 5; i++) {
-                objs[i] = [coder decodeObject];
+        id vScroller = nil, hScroller = nil, content = nil, headerClip = nil, corner = nil;
+        float hPage = 10, vPage = 10, hLine = 10, vLine = 10;
+        unsigned flags = 0;
+
+        if (version >= 42) {
+            vScroller = [[coder decodeObject] retain];
+            hScroller = [[coder decodeObject] retain];
+            content = [[coder decodeObject] retain];
+            headerClip = [[coder decodeObject] retain];
+            corner = [[coder decodeObject] retain];
+            if (version >= 226) {
+                [coder decodeValuesOfObjCTypes: "ffffi", &hPage, &vPage, &hLine, &vLine, &flags];
+            } else {
+                [coder decodeValuesOfObjCTypes: "ffi", &hPage, &hLine, &flags];
+                vPage = hPage;
+                vLine = hLine;
             }
-            float hLine = 10, hPage = 10, vLine = 10, vPage = 10;
-            int flags = 0;
-            @try {
-                [coder decodeValuesOfObjCTypes: "ffffi", &hLine, &hPage, &vLine, &vPage, &flags];
-            } @catch (id ex) {
-                // Ignore decoding mismatch
+        } else if (version == 41) {
+            vScroller = [[coder decodeObject] retain];
+            hScroller = [[coder decodeObject] retain];
+            content = [[coder decodeObject] retain];
+            [coder decodeValuesOfObjCTypes: "ffi", &hPage, &hLine, &flags];
+            vPage = hPage;
+            vLine = hLine;
+        } else if (version >= 17) {
+            vScroller = [[coder decodeObject] retain];
+            hScroller = [[coder decodeObject] retain];
+            content = [[coder decodeObject] retain];
+            [coder decodeValuesOfObjCTypes: "ff", &hPage, &hLine];
+            vPage = hPage;
+            vLine = hLine;
+            // Seven separate bytes: vertical scroller, horizontal scroller, two of unknown
+            // meaning, not-dynamic scrolling, border type, one of unknown meaning.
+            char bytes[7];
+            for (int i = 0; i < 7; i++) {
+                bytes[i] = 0;
+                [coder decodeValuesOfObjCTypes: "c", &bytes[i]];
             }
-            for (int i = 0; i < 5; i++) {
-                if ([objs[i] isKindOfClass: [NSClipView class]]) {
-                    if (_clipView == nil) {
-                        _clipView = [objs[i] retain];
-                    } else if (_headerClipView == nil) {
-                        _headerClipView = [objs[i] retain];
-                    }
-                } else if ([objs[i] isKindOfClass: [NSScroller class]]) {
-                    NSScroller *scroller = objs[i];
-                    BOOL isHorizontal = ![scroller isVertical];
-                    if (_verticalScroller != nil && !isHorizontal) {
-                        isHorizontal = YES;
-                    } else if (_horizontalScroller != nil && isHorizontal) {
-                        isHorizontal = NO;
-                    }
-                    if (isHorizontal) {
-                        _horizontalScroller = [scroller retain];
-                        [_horizontalScroller setTarget: self];
-                        [_horizontalScroller setAction: @selector(_horizontalScroll:)];
-                        _hasHorizontalScroller = YES;
-                    } else {
-                        _verticalScroller = [scroller retain];
-                        [_verticalScroller setTarget: self];
-                        [_verticalScroller setAction: @selector(_verticalScroll:)];
-                        _hasVerticalScroller = YES;
-                    }
-                } else if ([objs[i] isKindOfClass: [NSTableCornerView class]]) {
-                    _cornerView = [objs[i] retain];
-                }
-                if ([objs[i] isKindOfClass: [NSView class]] && [objs[i] superview] == nil) {
-                    [self addSubview: objs[i]];
-                }
-            }
-            _horizontalLineScroll = hLine;
-            _horizontalPageScroll = hPage;
-            _verticalLineScroll = vLine;
-            _verticalPageScroll = vPage;
-            _borderType = (flags >> 26) & 0x03;
+            flags = (bytes[0] ? 0x80000000u : 0) | (bytes[1] ? 0x40000000u : 0) | (bytes[4] ? 0x08000000u : 0) |
+                    (((unsigned) bytes[5] & 3) << 25);
         } else {
-            _clipView = [[coder decodeObject] retain];
-            [coder decodeValueOfObjCType: @encode(NSInteger) at: &_borderType];
-            BOOL scrollsDynamically = NO, rulersVisible = NO;
-            [coder decodeValueOfObjCType: @encode(BOOL) at: &scrollsDynamically];
-            [coder decodeValueOfObjCType: @encode(BOOL) at: &rulersVisible];
-            float hLine = 10, hPage = 10, vLine = 10, vPage = 10;
-            [coder decodeValueOfObjCType: @encode(float) at: &hLine];
-            [coder decodeValueOfObjCType: @encode(float) at: &hPage];
-            [coder decodeValueOfObjCType: @encode(float) at: &vLine];
-            [coder decodeValueOfObjCType: @encode(float) at: &vPage];
-            _horizontalLineScroll = hLine;
-            _horizontalPageScroll = hPage;
-            _verticalLineScroll = vLine;
-            _verticalPageScroll = vPage;
+            short flagsHigh = 0;
+            id unknownObject = nil;
+            float unknownFloats[4];
 
-            [coder decodeValueOfObjCType: @encode(BOOL) at: &_hasHorizontalScroller];
-            if (_hasHorizontalScroller) {
-                [coder decodeValueOfObjCType: @encode(id) at: &_horizontalScroller];
-                [_horizontalScroller setTarget: self];
-                [_horizontalScroller setAction: @selector(_horizontalScroll:)];
+            if (version == 0) {
+                // A fourth object, of unknown meaning, and after the flags four more floats.
+                [coder decodeValuesOfObjCTypes: "@@@@ffs", &vScroller, &hScroller, &content, &unknownObject, &hPage,
+                                                &hLine, &flagsHigh];
+                [coder decodeValuesOfObjCTypes: "ffff", &unknownFloats[0], &unknownFloats[1], &unknownFloats[2],
+                                                &unknownFloats[3]];
+                [unknownObject release];
+            } else {
+                [coder decodeValuesOfObjCTypes: "@@@ffs", &vScroller, &hScroller, &content, &hPage, &hLine, &flagsHigh];
             }
-
-            [coder decodeValueOfObjCType: @encode(BOOL) at: &_hasVerticalScroller];
-            if (_hasVerticalScroller) {
-                [coder decodeValueOfObjCType: @encode(id) at: &_verticalScroller];
-                [_verticalScroller setTarget: self];
-                [_verticalScroller setAction: @selector(_verticalScroll:)];
-            }
-
-            BOOL hasHorizRuler = NO, hasVertRuler = NO;
-            id horizRuler = nil, vertRuler = nil;
-            [coder decodeValueOfObjCType: @encode(BOOL) at: &hasHorizRuler];
-            if (hasHorizRuler) {
-                [coder decodeValueOfObjCType: @encode(id) at: &horizRuler];
-                [horizRuler release];
-            }
-
-            [coder decodeValueOfObjCType: @encode(BOOL) at: &hasVertRuler];
-            if (hasVertRuler) {
-                [coder decodeValueOfObjCType: @encode(id) at: &vertRuler];
-                [vertRuler release];
-            }
-
-            if (version >= 2) {
-                BOOL hasHeaderView = NO, hasCornerView = NO;
-                [coder decodeValueOfObjCType: @encode(BOOL) at: &hasHeaderView];
-                if (hasHeaderView) {
-                    _headerClipView = [[coder decodeObject] retain];
-                }
-                [coder decodeValueOfObjCType: @encode(BOOL) at: &hasCornerView];
-                if (hasCornerView) {
-                    _cornerView = [[coder decodeObject] retain];
-                }
-            }
+            vPage = hPage;
+            vLine = hLine;
+            // The short holds the upper half of the flag word.
+            flags = ((unsigned) (unsigned short) flagsHigh) << 16;
         }
+
+        _clipView = [content isKindOfClass: [NSClipView class]] ? content : nil;
+        if (_clipView == nil)
+            [content release];
+        _verticalScroller = [vScroller isKindOfClass: [NSScroller class]] ? vScroller : nil;
+        if (_verticalScroller == nil)
+            [vScroller release];
+        _horizontalScroller = [hScroller isKindOfClass: [NSScroller class]] ? hScroller : nil;
+        if (_horizontalScroller == nil)
+            [hScroller release];
+        _headerClipView = [headerClip isKindOfClass: [NSClipView class]] ? headerClip : nil;
+        if (_headerClipView == nil)
+            [headerClip release];
+        _cornerView = [corner isKindOfClass: [NSView class]] ? corner : nil;
+        if (_cornerView == nil)
+            [corner release];
+
+        [_verticalScroller setTarget: self];
+        [_verticalScroller setAction: @selector(_verticalScroll:)];
+        [_horizontalScroller setTarget: self];
+        [_horizontalScroller setAction: @selector(_horizontalScroll:)];
+
+        _hasVerticalScroller = (flags & 0x80000000) ? YES : NO;
+        _hasHorizontalScroller = (flags & 0x40000000) ? YES : NO;
+        _scrollsDynamically = (flags & 0x08000000) ? NO : YES;
+        _borderType = (flags >> 25) & 3;
+        _autohidesScrollers = (flags & 0x8000) ? YES : NO;
+        _horizontalPageScroll = hPage;
+        _verticalPageScroll = vPage;
+        _horizontalLineScroll = hLine;
+        _verticalLineScroll = vLine;
         _backgroundColor = [[NSColor controlBackgroundColor] copy];
         _drawsBackground = [_clipView drawsBackground];
         [self tile];
