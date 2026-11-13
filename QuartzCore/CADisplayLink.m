@@ -1,4 +1,6 @@
 #import <QuartzCore/CADisplayLink.h>
+#import <QuartzCore/CAFrameRateRange.h>
+#include <math.h>
 #import <Foundation/Foundation.h>
 #import <objc/message.h>
 
@@ -31,6 +33,8 @@
 
 @interface CADisplayLink ()
 - (instancetype)_initWithDisplay:(id)display target:(id)target selector:(SEL)selector;
+- (NSInteger)_effectiveFramesPerSecond;
+- (void)_rescheduleTimers;
 - (void)_tick:(NSTimer *)timer;
 - (void)_scheduleTimer:(_CADisplayLinkSchedule *)schedule;
 @end
@@ -72,8 +76,31 @@
 - (void)setPaused:(BOOL)paused { _paused = paused; }
 
 - (NSInteger)frameInterval {
-    NSInteger rate = _preferredFramesPerSecond > 0 ? _preferredFramesPerSecond : 60;
-    return MAX(1, 60 / rate);
+    return MAX(1, 60 / [self _effectiveFramesPerSecond]);
+}
+
+// The rate the timers run at. A frame rate range with a maximum takes
+// precedence: its preferred rate if that lies in the range, else its maximum.
+// Otherwise preferredFramesPerSecond applies, 0 meaning the display's 60 Hz.
+- (NSInteger)_effectiveFramesPerSecond {
+    if (_preferredFrameRateRange.maximum > 0) {
+        float preferred = _preferredFrameRateRange.preferred;
+        if (preferred >= _preferredFrameRateRange.minimum && preferred <= _preferredFrameRateRange.maximum &&
+            preferred > 0)
+            return MAX(1, (NSInteger) lroundf(preferred));
+        return MAX(1, (NSInteger) lroundf(_preferredFrameRateRange.maximum));
+    }
+    return _preferredFramesPerSecond > 0 ? _preferredFramesPerSecond : 60;
+}
+
+- (CAFrameRateRange)preferredFrameRateRange {
+    return _preferredFrameRateRange;
+}
+
+- (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
+    if (CAFrameRateRangeIsEqualToRange(_preferredFrameRateRange, range)) return;
+    _preferredFrameRateRange = range;
+    [self _rescheduleTimers];
 }
 
 - (void)setFrameInterval:(NSInteger)frameInterval {
@@ -91,6 +118,10 @@
     }
     if (_preferredFramesPerSecond == rate) return;
     _preferredFramesPerSecond = rate;
+    [self _rescheduleTimers];
+}
+
+- (void)_rescheduleTimers {
     NSArray *schedules = [[_schedules copy] autorelease];
     for (_CADisplayLinkSchedule *schedule in schedules) {
         [schedule->timer invalidate];
@@ -101,7 +132,7 @@
 }
 
 - (void)_scheduleTimer:(_CADisplayLinkSchedule *)schedule {
-    NSInteger rate = _preferredFramesPerSecond > 0 ? _preferredFramesPerSecond : 60;
+    NSInteger rate = [self _effectiveFramesPerSecond];
     schedule->timer = [[NSTimer timerWithTimeInterval:1.0 / rate
                                              target:self
                                            selector:@selector(_tick:)
@@ -135,7 +166,7 @@
     (void)timer;
     if (_paused || _invalidated) return;
     _timestamp = CACurrentMediaTime();
-    NSInteger rate = _preferredFramesPerSecond > 0 ? _preferredFramesPerSecond : 60;
+    NSInteger rate = [self _effectiveFramesPerSecond];
     _targetTimestamp = _timestamp + 1.0 / rate;
     ((void (*)(id, SEL, id))objc_msgSend)(_target, _selector, self);
 }

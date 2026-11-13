@@ -1,6 +1,7 @@
 #import <Foundation/NSObject.h>
 #import <Foundation/NSRunLoop.h>
 #import <QuartzCore/CABase.h>
+#import <QuartzCore/CAFrameRateRange.h>
 
 @class NSMutableArray;
 
@@ -14,6 +15,7 @@
     CFTimeInterval _targetTimestamp;
     CFTimeInterval _duration;
     NSInteger _preferredFramesPerSecond;
+    CAFrameRateRange _preferredFrameRateRange;
     BOOL _paused;
     BOOL _invalidated;
 }
@@ -25,6 +27,8 @@
 @property (nonatomic, readonly) CFTimeInterval duration;
 @property (nonatomic) NSInteger preferredFramesPerSecond;
 @property (nonatomic) NSInteger frameInterval;
+// A range with a nonzero maximum overrides preferredFramesPerSecond.
+@property (nonatomic) CAFrameRateRange preferredFrameRateRange;
 @property (nonatomic, getter=isPaused) BOOL paused;
 
 - (void)addToRunLoop:(NSRunLoop *)runLoop forMode:(NSRunLoopMode)mode;
