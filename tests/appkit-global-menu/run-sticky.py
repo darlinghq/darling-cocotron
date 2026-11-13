@@ -147,6 +147,13 @@ def run_mode_body(mode):
             time.sleep(1.0)
             check(bool(set(windows()) - before), "%s: the menu stays open after the click is released" % mode)
             mx, my, mw, mh = menu
+            ids = [k for k, v in windows().items() if v == menu]
+            kind = x("xprop", "-id", ids[0], "_NET_WM_WINDOW_TYPE") if ids else ""
+            check("DROPDOWN_MENU" in kind or "POPUP_MENU" in kind,
+                  "%s: the menu window has a menu type of its own" % mode)
+            attrs = x("xwininfo", "-id", ids[0], "-all") if ids else ""
+            check("Override Redirect State: yes" in attrs,
+                  "%s: the menu window is not managed by the window manager" % mode)
             click(mx + mw // 2, my + mh // 2)
             check(wait_for(log, "chose Beta", 6), "%s: the second click chooses the item under it" % mode)
             gone = wait_until(lambda: not (set(windows()) - before), 5)
