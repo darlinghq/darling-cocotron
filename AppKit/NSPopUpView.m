@@ -517,7 +517,6 @@ static NSRect boundsToTitleAreaRect(NSRect rect) {
     } state = STATE_FIRSTMOUSEDOWN;
     NSPoint firstLocation, point = [event locationInWindow];
     NSInteger initialSelectedIndex = _selectedIndex;
-    firstLocation = point;
 
     // Make sure we get mouse moved events, too, so we can respond apporpiately
     // to click-click actions as well as of click-and-drag
@@ -526,6 +525,9 @@ static NSRect boundsToTitleAreaRect(NSRect rect) {
 
     // point comes in on controls window
     point = [[event window] convertBaseToScreen: point];
+    // Movement is measured against the pointer's screen position, which is
+    // what -[NSEvent mouseLocation] gives below.
+    firstLocation = point;
     point = [[self window] convertScreenToBase: point];
     point = [self convertPoint: point fromView: nil];
 
