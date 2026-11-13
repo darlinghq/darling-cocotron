@@ -336,6 +336,18 @@ ONYX2D_STATIC BOOL initFunctionsForParameters(O2Image *self,
             bitmapInfo |= kO2BitmapByteOrder32Big;
             break;
 
+        case kO2ImageAlphaFirst:
+        case kO2ImageAlphaPremultipliedFirst:
+        case kO2ImageAlphaNoneSkipFirst:
+            // 8-bit components with the alpha first: A, R, G, B in memory, as
+            // for a bitmap context with the same flags. Callers that hold
+            // BGRA data say so with the little-endian byte order.
+            if (bitsPerComponent == 8 && bitsPerPixel == 32) {
+                bitmapInfo |= kO2BitmapByteOrder32Big;
+                break;
+            }
+            // fall through
+
         default:
 #ifdef __LITTLE_ENDIAN__
             bitmapInfo |= kO2BitmapByteOrder32Little;
