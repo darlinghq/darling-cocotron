@@ -32,6 +32,16 @@ NSString *const kCATransition = @"transition";
 NSString *const kCAContentsFormatRGBA8Uint = @"RGBA8";
 NSString *const kCAContentsFormatRGBA16Float = @"RGBAh";
 NSString *const kCAContentsFormatGray8Uint = @"Gray8";
+NSString *const kCAContentsFormatAutomatic = @"Automatic";
+
+NSString *const CADynamicRangeAutomatic = @"automatic";
+NSString *const CADynamicRangeStandard = @"standard";
+NSString *const CADynamicRangeConstrainedHigh = @"constrainedHigh";
+NSString *const CADynamicRangeHigh = @"high";
+
+NSString *const CAToneMapModeAutomatic = @"automatic";
+NSString *const CAToneMapModeNever = @"never";
+NSString *const CAToneMapModeIfSupported = @"ifSupported";
 
 @implementation CALayer
 
@@ -268,6 +278,26 @@ NSString *const kCAContentsFormatGray8Uint = @"Gray8";
     [_context startTimerIfNeeded];
 }
 
+- (CADynamicRange) preferredDynamicRange {
+    return _preferredDynamicRange;
+}
+
+- (void) setPreferredDynamicRange: (CADynamicRange) value {
+    value = [value copy];
+    [_preferredDynamicRange release];
+    _preferredDynamicRange = value;
+}
+
+- (CAToneMapMode) toneMapMode {
+    return _toneMapMode;
+}
+
+- (void) setToneMapMode: (CAToneMapMode) value {
+    value = [value copy];
+    [_toneMapMode release];
+    _toneMapMode = value;
+}
+
 - (BOOL) allowsEdgeAntialiasing {
     return _allowsEdgeAntialiasing;
 }
@@ -357,6 +387,8 @@ NSString *const kCAContentsFormatGray8Uint = @"Gray8";
     _shadowOpacity = 0;
     _shadowRadius = 3;
     _shadowOffset = CGSizeMake(0, -3);
+    _preferredDynamicRange = [CADynamicRangeStandard copy];
+    _toneMapMode = [CAToneMapModeAutomatic copy];
     _allowsEdgeAntialiasing = NO;
     _edgeAntialiasingMask = kCALayerLeftEdge | kCALayerRightEdge | kCALayerBottomEdge | kCALayerTopEdge;
     _transform = CATransform3DIdentity;
@@ -411,6 +443,8 @@ NSString *const kCAContentsFormatGray8Uint = @"Gray8";
     [_style release];
     if (_shadowColor)
         CGColorRelease(_shadowColor);
+    [_preferredDynamicRange release];
+    [_toneMapMode release];
     if (_backgroundColor)
         CGColorRelease(_backgroundColor);
     if (_borderColor)

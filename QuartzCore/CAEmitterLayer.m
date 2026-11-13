@@ -23,18 +23,72 @@
 #import <Foundation/NSInvocation.h>
 
 CAEmitterLayerEmitterShape const kCAEmitterLayerPoint = @"point";
+CAEmitterLayerEmitterShape const kCAEmitterLayerLine = @"line";
+CAEmitterLayerEmitterShape const kCAEmitterLayerRectangle = @"rectangle";
+CAEmitterLayerEmitterShape const kCAEmitterLayerCuboid = @"cuboid";
+CAEmitterLayerEmitterShape const kCAEmitterLayerCircle = @"circle";
+CAEmitterLayerEmitterShape const kCAEmitterLayerSphere = @"sphere";
+
+CAEmitterLayerEmitterMode const kCAEmitterLayerPoints = @"points";
+CAEmitterLayerEmitterMode const kCAEmitterLayerOutline = @"outline";
+CAEmitterLayerEmitterMode const kCAEmitterLayerSurface = @"surface";
+CAEmitterLayerEmitterMode const kCAEmitterLayerVolume = @"volume";
+
+CAEmitterLayerRenderMode const kCAEmitterLayerUnordered = @"unordered";
+CAEmitterLayerRenderMode const kCAEmitterLayerOldestFirst = @"oldestFirst";
+CAEmitterLayerRenderMode const kCAEmitterLayerOldestLast = @"oldestLast";
+CAEmitterLayerRenderMode const kCAEmitterLayerBackToFront = @"backToFront";
 CAEmitterLayerRenderMode const kCAEmitterLayerAdditive = @"additive";
 
 @implementation CAEmitterLayer
 
-- (NSMethodSignature *)methodSignatureForSelector:(SEL)aSelector
-{
-    return [NSMethodSignature signatureWithObjCTypes: "v@:"];
+@synthesize emitterCells = _emitterCells;
+@synthesize birthRate = _birthRate;
+@synthesize lifetime = _lifetime;
+@synthesize emitterPosition = _emitterPosition;
+@synthesize emitterZPosition = _emitterZPosition;
+@synthesize emitterSize = _emitterSize;
+@synthesize emitterDepth = _emitterDepth;
+@synthesize emitterShape = _emitterShape;
+@synthesize emitterMode = _emitterMode;
+@synthesize renderMode = _renderMode;
+@synthesize preservesDepth = _preservesDepth;
+@synthesize velocity = _velocity;
+@synthesize scale = _scale;
+@synthesize spin = _spin;
+@synthesize seed = _seed;
+
+- (void) _setEmitterDefaults {
+    _birthRate = 1;
+    _lifetime = 1;
+    _velocity = 1;
+    _scale = 1;
+    _spin = 1;
+    _emitterShape = [kCAEmitterLayerPoint copy];
+    _emitterMode = [kCAEmitterLayerVolume copy];
+    _renderMode = [kCAEmitterLayerUnordered copy];
 }
 
-- (void)forwardInvocation:(NSInvocation *)anInvocation
-{
-    NSLog(@"Stub called: %@ in %@", NSStringFromSelector([anInvocation selector]), [self class]);
+- init {
+    self = [super init];
+    if (self != nil)
+        [self _setEmitterDefaults];
+    return self;
+}
+
+- initWithLayer: (id) layer {
+    self = [super initWithLayer: layer];
+    if (self != nil)
+        [self _setEmitterDefaults];
+    return self;
+}
+
+- (void) dealloc {
+    [_emitterCells release];
+    [_emitterShape release];
+    [_emitterMode release];
+    [_renderMode release];
+    [super dealloc];
 }
 
 @end
