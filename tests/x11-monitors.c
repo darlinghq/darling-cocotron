@@ -321,12 +321,37 @@ static void randr(Display *display) {
     free(monitors);
 }
 
+static double scaleWith(double preferred, const char *gdk, const char **source) {
+    if (gdk)
+        setenv("GDK_SCALE", gdk, 1);
+    else
+        unsetenv("GDK_SCALE");
+    return X11ScaleChoose(preferred, source);
+}
+
+static void scale(void) {
+    const char *source;
+    CHECK(scaleWith(0, NULL, &source) == 1 && source == NULL, "nothing set: 1x");
+    CHECK(scaleWith(2, NULL, &source) == 2 && source && !strcmp(source, "preference"), "preference 2");
+    CHECK(scaleWith(0, "1.5", &source) == 1.5 && source && !strcmp(source, "GDK_SCALE"), "fractional GDK_SCALE");
+    CHECK(scaleWith(3, "2", &source) == 3, "the preference wins over GDK_SCALE");
+    CHECK(scaleWith(0.5, NULL, &source) == 1 && source == NULL, "a preference under 1 is ignored");
+    CHECK(scaleWith(NAN, "2", &source) == 2 && source && !strcmp(source, "GDK_SCALE"),
+          "a non-finite preference falls through to GDK_SCALE");
+    CHECK(scaleWith(0, "0.5", &source) == 1 && source == NULL, "GDK_SCALE under 1 is ignored");
+    CHECK(scaleWith(0, "2x", &source) == 1 && source == NULL, "trailing junk is ignored");
+    CHECK(scaleWith(0, "nan", &source) == 1 && source == NULL, "a non-finite GDK_SCALE is ignored");
+    CHECK(scaleWith(0, "", &source) == 1 && source == NULL, "an empty GDK_SCALE is ignored");
+    unsetenv("GDK_SCALE");
+}
+
 int main(void) {
     pickPrimary();
     order();
     frames();
     displayIDs();
     convention();
+    scale();
     Display *display = XOpenDisplay(NULL);
     if (!display) {
         printf("no X display: run through tests/x11-monitors.sh\n");

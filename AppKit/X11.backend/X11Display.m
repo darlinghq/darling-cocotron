@@ -72,6 +72,20 @@ static BOOL appKitPreference(CFStringRef key) {
     return valid && value;
 }
 
+// NSScreen.frame is in points while X reports device pixels, so the screen
+// carries the scale instead of NSScreen assuming one device pixel per point.
+@interface X11Screen : NSScreen {
+@public
+    CGFloat _x11Scale;
+}
+@end
+
+@implementation X11Screen
+- (CGFloat) backingScaleFactor {
+    return _x11Scale;
+}
+@end
+
 @implementation X11Display
 
 static int errorHandler(Display *display, XErrorEvent *errorEvent) {
@@ -230,6 +244,24 @@ static void beforeWaitingCallback(CFRunLoopObserverRef observer,
     return _display;
 }
 
+// X11 has no scale protocol; see X11ScaleChoose() for what is read.
+- (CGFloat) backingScale {
+    if (_backingScale > 0)
+        return _backingScale;
+
+    double preferred = 0;
+    CFPropertyListRef value = CFPreferencesCopyAppValue(
+            CFSTR("X11BackingScale"), CFSTR("org.darlinghq.AppKit"));
+    if (value != NULL) {
+        if (CFGetTypeID(value) == CFNumberGetTypeID())
+            CFNumberGetValue(value, kCFNumberDoubleType, &preferred);
+        CFRelease(value);
+    }
+    const char *source = NULL;
+    _backingScale = (CGFloat) X11ScaleChoose(preferred, &source);
+    return _backingScale;
+}
+
 - (void) _enableDetectableAutoRepeat {
     int major = XkbMajorVersion, minor = XkbMinorVersion;
     XkbStateRec state;
@@ -264,16 +296,20 @@ static void beforeWaitingCallback(CFRunLoopObserverRef observer,
     return _primaryRootFrame;
 }
 
-// The main monitor in root coordinates, in the unit of window frames.
+// The main monitor in root coordinates, in the unit of window frames: points.
 - (X11Frame) primaryFrameInPoints {
     NSRect primary = [self primaryRootFrame];
-    return (X11Frame){NSMinX(primary), NSMinY(primary),
-                      NSWidth(primary), NSHeight(primary)};
+    CGFloat scale = [self backingScale];
+    return (X11Frame){NSMinX(primary) / scale, NSMinY(primary) / scale,
+                      NSWidth(primary) / scale, NSHeight(primary) / scale};
 }
 
+// Converts a point in root coordinates (device pixels) to CoreGraphics' global
+// space (points).
 - (NSPoint) cgPointFromRoot: (NSPoint) root {
+    CGFloat scale = [self backingScale];
     X11Point point = X11CGPointFromRoot([self primaryFrameInPoints],
-                                        (X11Point){root.x, root.y});
+                                        (X11Point){root.x / scale, root.y / scale});
     return NSMakePoint(point.x, point.y);
 }
 
@@ -282,9 +318,11 @@ static void beforeWaitingCallback(CFRunLoopObserverRef observer,
     int height = DisplayHeight(_display, DefaultScreen(_display));
     _primaryRootFrame = NSMakeRect(0, 0, width, height);
     _primaryRootFrameValid = YES;
-    NSRect frame = NSMakeRect(0, 0, width, height);
-    NSScreen *screen = [[[NSScreen alloc] initWithFrame: frame
-                                           visibleFrame: frame] autorelease];
+    CGFloat scale = [self backingScale];
+    NSRect frame = NSMakeRect(0, 0, width / scale, height / scale);
+    X11Screen *screen = [[[X11Screen alloc] initWithFrame: frame
+                                             visibleFrame: frame] autorelease];
+    screen->_x11Scale = scale;
     [screen setCgDirectDisplayID: 1];
     return [NSArray arrayWithObject: screen];
 }
@@ -338,16 +376,19 @@ static void beforeWaitingCallback(CFRunLoopObserverRef observer,
 
         // The frame is in Cocoa's global space, y up from the main
         // monitor's bottom-left corner, like window frames.
+        CGFloat scale = [self backingScale];
         X11Frame global = X11FrameFromRoot(
                 [self primaryFrameInPoints],
-                (X11Frame){monitors[i].x, monitors[i].y,
-                           monitors[i].width, monitors[i].height});
+                (X11Frame){monitors[i].x / scale, monitors[i].y / scale,
+                           monitors[i].width / scale,
+                           monitors[i].height / scale});
         NSRect frame = NSMakeRect(global.x, global.y, global.width,
                                   global.height);
 
-        NSScreen *nsscreen =
-                [[[NSScreen alloc] initWithFrame: frame
-                                    visibleFrame: frame] autorelease];
+        X11Screen *nsscreen =
+                [[[X11Screen alloc] initWithFrame: frame
+                                     visibleFrame: frame] autorelease];
+        nsscreen->_x11Scale = scale;
 
         Atom actualType;
         unsigned long nitems, bytesAfter;
@@ -1207,8 +1248,9 @@ static int compareFontPatterns(const void *a, const void *b) {
     // compared with window and screen frames. CGEventGetLocation() reports the same
     // point in CoreGraphics' y-down space (see CGSConnectionX11).
     // -[X11Window mouseLocationOutsideOfEventStream] is window-local.
+    CGFloat scale = [self backingScale];
     X11Point point = X11PointFromRoot([self primaryFrameInPoints],
-                                      (X11Point){root_x, root_y});
+                                      (X11Point){root_x / scale, root_y / scale});
     return NSMakePoint(point.x, point.y);
 }
 
@@ -1511,7 +1553,7 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
         !XTranslateCoordinates(dpy, DefaultRootWindow(dpy), [window windowHandle], (int) mouse->virtualX,
                                (int) mouse->virtualY, &winX, &winY, &child))
         return NO;
-    *point = [window transformPoint: NSMakePoint(winX, winY)];
+    *point = [window logicalPoint: NSMakePoint(winX, winY)];
     return YES;
 }
 
@@ -1642,7 +1684,7 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
         if (text != buf)
             free(text);
         NSPoint pos =
-                [window transformPoint: NSMakePoint(ev->xkey.x, ev->xkey.y)];
+                [window logicalPoint: NSMakePoint(ev->xkey.x, ev->xkey.y)];
 
         // The text above retains normal XIM/keyboard modifier behavior.
         uint16_t shortcutCode = (uint16_t) X11KeySymToUCS(shortcutKeySym);
@@ -1682,7 +1724,7 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
 
     case ButtonPress:;
         pos = [window
-                transformPoint: NSMakePoint(ev->xbutton.x, ev->xbutton.y)];
+                logicalPoint: NSMakePoint(ev->xbutton.x, ev->xbutton.y)];
         if (_relativeMouse.active)
             relativeEventPoint(_display, window, &_relativeMouse, &pos);
 
@@ -1754,7 +1796,7 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
             break;
 
         pos = [window
-                transformPoint: NSMakePoint(ev->xbutton.x, ev->xbutton.y)];
+                logicalPoint: NSMakePoint(ev->xbutton.x, ev->xbutton.y)];
         if (_relativeMouse.active)
             relativeEventPoint(_display, window, &_relativeMouse, &pos);
 
@@ -1797,7 +1839,7 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
 
             CGPoint lastMotionPos = [window mouseLocationOutsideOfEventStream];
             pos = [window
-                    transformPoint: NSMakePoint(ev->xmotion.x, ev->xmotion.y)];
+                    logicalPoint: NSMakePoint(ev->xmotion.x, ev->xmotion.y)];
 
             CGFloat deltaX, deltaY;
 
@@ -1815,10 +1857,11 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
                     [self suspendRelativeMouse];
                 if (!relative.post)
                     break;
-                deltaX = relative.deltaX;
-                deltaY = relative.deltaY;
+                // Deltas are in points, like the absolute ones.
+                deltaX = relative.deltaX / [window backingScaleFactor];
+                deltaY = relative.deltaY / [window backingScaleFactor];
                 // The window's origin in root coordinates is (x_root - x, y_root - y).
-                pos = [window transformPoint: NSMakePoint(
+                pos = [window logicalPoint: NSMakePoint(
                         _relativeMouse.virtualX - (ev->xmotion.x_root - ev->xmotion.x),
                         _relativeMouse.virtualY - (ev->xmotion.y_root - ev->xmotion.y))];
             } else {
@@ -1892,9 +1935,9 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
         NSLog(@"EnterNotify");
         if (!_relativeMouse.active)
             [window setLastKnownCursorPosition:
-                            [window transformPoint: NSMakePoint(
-                                                            ev->xcrossing.x,
-                                                            ev->xcrossing.y)]];
+                            [window logicalPoint: NSMakePoint(
+                                                          ev->xcrossing.x,
+                                                          ev->xcrossing.y)]];
         break;
 
     case LeaveNotify:
@@ -1965,8 +2008,13 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
         break;
 
     case Expose:;
-        O2Rect rect = NSMakeRect(ev->xexpose.x, ev->xexpose.y,
-                                 ev->xexpose.width, ev->xexpose.height);
+        // The exposed area is in device pixels from the top-left corner; the
+        // delegate takes points with y up.
+        CGFloat exposeScale = [window backingScaleFactor];
+        O2Rect rect = NSMakeRect(ev->xexpose.x / exposeScale,
+                                 ev->xexpose.y / exposeScale,
+                                 ev->xexpose.width / exposeScale,
+                                 ev->xexpose.height / exposeScale);
 
         rect.origin.y =
                 [window frame].size.height - rect.origin.y - rect.size.height;
@@ -2223,10 +2271,12 @@ void CGNativeBorderFrameWidthsForStyle(NSUInteger styleMask, CGFloat *top,
 - (void) warpMouseOnMainThread: (NSValue *) target {
     NSPoint position = [target pointValue];
     _pointerKnown = NO;
+    // The position is in points; X takes device pixels.
     X11Point root = X11CGPointToRoot([self primaryFrameInPoints],
                                      (X11Point){position.x, position.y});
-    int root_x = (int) round(root.x);
-    int root_y = (int) round(root.y);
+    CGFloat scale = [self backingScale];
+    int root_x = (int) round(root.x * scale);
+    int root_y = (int) round(root.y * scale);
 
     if (_relativeMouse.active) {
         // CGWarpMouseCursorPosition moves the disassociated cursor without
@@ -2311,7 +2361,7 @@ void CGNativeBorderFrameWidthsForStyle(NSUInteger styleMask, CGFloat *top,
                               (int) _relativeMouse.virtualY, &windowX, &windowY,
                               &child))
         [xwin setLastKnownCursorPosition:
-                        [xwin transformPoint: NSMakePoint(windowX, windowY)]];
+                        [xwin logicalPoint: NSMakePoint(windowX, windowY)]];
 }
 
 // A reconfiguration (the grab window moved or resized, the screen layout

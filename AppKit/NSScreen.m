@@ -71,7 +71,8 @@ NSNotificationName const NSScreenColorSpaceDidChangeNotification = @"NSScreenCol
     return 1.0;
 }
 
-// The backends draw one device pixel per point.
+// Backends whose displays have more than one device pixel per point (the X11
+// backend, with a configured scale) override this.
 - (CGFloat) backingScaleFactor {
     return 1.0;
 }

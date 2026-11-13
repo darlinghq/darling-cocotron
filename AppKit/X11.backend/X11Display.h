@@ -96,6 +96,7 @@
     // See -primaryRootFrame. Device pixels, root coordinates.
     NSRect _primaryRootFrame;
     BOOL _primaryRootFrameValid;
+    CGFloat _backingScale;
 
 @public
     XIM _xim;
@@ -106,8 +107,11 @@
 // The main monitor's rectangle in root coordinates. It is the origin of the
 // global coordinate space; see X11Monitors.h.
 - (NSRect) primaryRootFrame;
-// The same rectangle as an X11Frame, in the unit of window frames.
+// The same rectangle as an X11Frame, in the unit of window frames (points).
 - (X11Frame) primaryFrameInPoints;
+// Device pixels per point: the Darling preference X11BackingScale of the
+// org.darlinghq.AppKit domain, else GDK_SCALE, else 1.
+- (CGFloat) backingScale;
 // Converts a point in root coordinates to CoreGraphics' global space.
 - (NSPoint) cgPointFromRoot: (NSPoint) root;
 - (void) setWindow: (id) window forID: (XID) i;

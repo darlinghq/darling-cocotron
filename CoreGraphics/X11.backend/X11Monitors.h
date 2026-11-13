@@ -12,6 +12,7 @@
 
 #include <X11/Xlib.h>
 #include <X11/extensions/Xrandr.h>
+#include <math.h>
 #include <stdbool.h>
 #include <stdlib.h>
 
@@ -153,6 +154,31 @@ static inline X11Point X11CGPointFromRoot(X11Frame primaryRoot, X11Point root) {
 static inline X11Point X11CGPointToRoot(X11Frame primaryRoot, X11Point point) {
     X11Point root = {point.x + primaryRoot.x, point.y + primaryRoot.y};
     return root;
+}
+
+/* The backing scale factor (device pixels per point) for the X11 backends. X11 has no scale protocol, so the value
+ * is taken from the user's setting, `preferred` (a positive number; pass 0 when none is set), else from the GDK_SCALE
+ * environment variable that desktop sessions export for the same purpose, else it is 1. The panel's physical size is
+ * not used: a 4K panel reports about 140 DPI and a 13" 1x panel about 190, so DPI says nothing about whether the
+ * display is scaled. An unparsable, non-finite or sub-1 value is ignored rather than trusted. Fractional scales are
+ * honoured; window geometry is integral, so points are rounded to whole device pixels where X is called. *source
+ * is set to "preference" or "GDK_SCALE" for the value used, or NULL for the default. */
+static inline double X11ScaleChoose(double preferred, const char **source) {
+    *source = NULL;
+    if (isfinite(preferred) && preferred >= 1) {
+        *source = "preference";
+        return preferred;
+    }
+    const char *value = getenv("GDK_SCALE");
+    if (value != NULL) {
+        char *end = NULL;
+        double parsed = strtod(value, &end);
+        if (end != value && *end == '\0' && isfinite(parsed) && parsed >= 1) {
+            *source = "GDK_SCALE";
+            return parsed;
+        }
+    }
+    return 1;
 }
 
 /* A display's CGDirectDisplayID is tied to the RandR output it drives (output index + 1), not to its place in the
