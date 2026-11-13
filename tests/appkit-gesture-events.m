@@ -23,12 +23,19 @@ static void expect(BOOL condition, NSString *message)
 }
 
 @interface GestureView : NSView
+{
+    NSInteger _magnifications, _rotations;
+    CGFloat _lastMagnification;
+    float _lastRotation;
+}
 @property NSInteger magnifications, rotations;
 @property CGFloat lastMagnification;
 @property float lastRotation;
 @end
 
 @implementation GestureView
+@synthesize magnifications = _magnifications, rotations = _rotations;
+@synthesize lastMagnification = _lastMagnification, lastRotation = _lastRotation;
 - (void)magnifyWithEvent:(NSEvent *)event
 {
     self.magnifications++;
