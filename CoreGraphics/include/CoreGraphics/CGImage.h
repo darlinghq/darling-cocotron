@@ -90,6 +90,21 @@ CGImageCreateCopyWithColorSpace(CGImageRef self, CGColorSpaceRef colorSpace);
 COREGRAPHICS_EXPORT CGImageRef CGImageCreateWithImageInRect(CGImageRef self,
                                                             CGRect rect);
 
+// Content headroom is the peak brightness of the image content as a multiple
+// of SDR white. It must be zero (unknown) or at least one, and can only be
+// set on images in an extended range, PQ or HLG colour space.
+COREGRAPHICS_EXPORT float kCGDefaultHDRImageContentHeadroom;
+COREGRAPHICS_EXPORT CGImageRef CGImageCreateWithContentHeadroom(
+        float headroom, size_t width, size_t height, size_t bitsPerComponent,
+        size_t bitsPerPixel, size_t bytesPerRow, CGColorSpaceRef colorSpace,
+        CGBitmapInfo bitmapInfo, CGDataProviderRef dataProvider,
+        const CGFloat *decode, bool interpolate,
+        CGColorRenderingIntent renderingIntent);
+COREGRAPHICS_EXPORT CGImageRef
+CGImageCreateCopyWithContentHeadroom(float headroom, CGImageRef image);
+COREGRAPHICS_EXPORT float CGImageGetContentHeadroom(CGImageRef image);
+COREGRAPHICS_EXPORT float CGImageCalculateContentHeadroom(CGImageRef image);
+
 COREGRAPHICS_EXPORT CGImageRef CGImageCreateWithJPEGDataProvider(
         CGDataProviderRef jpegProvider, const CGFloat *decode, bool interpolate,
         CGColorRenderingIntent renderingIntent);
