@@ -41,34 +41,32 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
     *slot = value;
 }
 
-// Name accessors of the font objects createGraphicsFont accepts (KTFont's
-// -copyName, NSFont's -fontName), declared here to avoid importing their
-// headers.
+// -fontName of an NSFont, declared here to avoid importing AppKit.
 @interface NSObject (CATextLayerFontNames)
-- (CFStringRef) copyName;
 - (NSString *) fontName;
 @end
 
-// A graphics font for the layer's font property: a CGFont, a font name, or a
-// font object with a name (NSFont, CTFont). Falls back to Helvetica and other
-// common families when the name can't be resolved.
+// A graphics font for the layer's font property: a CGFont, a CTFont, a font
+// name, or a font object with a name (NSFont). Falls back to Helvetica and
+// other common families when the name can't be resolved.
 static CGFontRef createGraphicsFont(CFTypeRef font) {
     NSString *name = nil;
     id object = (id) font;
 
-    // CGFontRef and CTFontRef are the O2Font and KTFont classes here. Neither
-    // answers -fontName, and CoreText's CTFontCopyGraphicsFont and
-    // CTFontCopyPostScriptName are stubs.
+    // CGFontRef and CTFontRef are the O2Font and KTFont classes here, so the
+    // type of a CF object can't be told from its CF type ID.
     if ([object isKindOfClass: NSClassFromString(@"O2Font")])
         return CGFontRetain((CGFontRef) font);
 
-    if ([object isKindOfClass: [NSString class]])
+    if ([object isKindOfClass: NSClassFromString(@"KTFont")]) {
+        CGFontRef graphicsFont = CTFontCopyGraphicsFont((CTFontRef) font, NULL);
+        if (graphicsFont != NULL)
+            return graphicsFont;
+    } else if ([object isKindOfClass: [NSString class]]) {
         name = object;
-    else if ([object isKindOfClass: NSClassFromString(@"KTFont")] &&
-             [object respondsToSelector: @selector(copyName)])
-        name = [(NSString *) [object copyName] autorelease];
-    else if ([object respondsToSelector: @selector(fontName)])
+    } else if ([object respondsToSelector: @selector(fontName)]) {
         name = [object fontName];
+    }
 
     NSMutableArray *candidates = [NSMutableArray array];
     if (name != nil)
