@@ -301,6 +301,18 @@ static NSPrintOperation *_currentOperation = nil;
     [printProgressPanelController hidePanel];
 }
 
+// The PDF document info: the job title, else the view's window title. A view
+// outside any window has neither, and then there is no info dictionary.
+- (NSDictionary *) _documentInfo {
+    NSString *title = [self jobTitle];
+    if (title == nil)
+        title = [[_view window] title];
+    if (title == nil)
+        return nil;
+    return [NSDictionary dictionaryWithObject: title
+                                       forKey: (NSString *) kCGPDFContextTitle];
+}
+
 - (NSGraphicsContext *) createContext {
     CGContextRef context;
 
@@ -334,9 +346,7 @@ static NSPrintOperation *_currentOperation = nil;
             nil)
             return nil;
     } else if (_type == NSPrintOperationPDFInRect) {
-        NSDictionary *auxiliaryInfo = [NSDictionary
-                dictionaryWithObject: [[_view window] title]
-                              forKey: (NSString *) kCGPDFContextTitle];
+        NSDictionary *auxiliaryInfo = [self _documentInfo];
 
         CGDataConsumerRef consumer =
                 CGDataConsumerCreateWithCFData((CFMutableDataRef) _mutableData);
@@ -347,9 +357,7 @@ static NSPrintOperation *_currentOperation = nil;
 
         CGDataConsumerRelease(consumer);
     } else if (_type == NSPrintOperationFile) {
-        NSDictionary *auxiliaryInfo = [NSDictionary
-                dictionaryWithObject: [[_view window] title]
-                              forKey: (NSString *) kCGPDFContextTitle];
+        NSDictionary *auxiliaryInfo = [self _documentInfo];
 
         NSString *filePath =
                 [_printInfo.dictionary objectForKey: NSPrintSavePath];
