@@ -68,3 +68,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (BOOL) validateMenuItem: (NSMenuItem *) item;
 - (void) dirtyRect: (NSRect) rect;
 @end
+
+// Defined in NSView.m.
+extern NSRect _NSAlignRectToPixelGrid(NSRect rect,
+                                    NSAlignmentOptions options);
