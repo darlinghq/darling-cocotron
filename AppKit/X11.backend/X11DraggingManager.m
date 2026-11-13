@@ -610,6 +610,10 @@ static X11DraggingManager *X11SharedManager;
 #pragma mark Source properties
 
 static NSString *X11PropertyAtomName(Display *xdpy, Atom atom) {
+    // XdndEnter leaves the unused type slots at None; asking the server for the
+    // name of None is a BadAtom error.
+    if (atom == None)
+        return nil;
     char *name = XGetAtomName(xdpy, atom);
     if (name == NULL)
         return nil;
