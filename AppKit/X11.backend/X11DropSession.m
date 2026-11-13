@@ -76,7 +76,7 @@
                                [_targetWindow windowHandle], rootX, rootY, &windowX,
                                &windowY, &child))
         return NSDragOperationNone;
-    _point = [_targetWindow transformPoint: NSMakePoint(windowX, windowY)];
+    _point = [_targetWindow logicalPoint: NSMakePoint(windowX, windowY)];
 
     // A drop already being performed owns the outcome; the source keeps sending
     // positions while the receiver reads the selection, and those must not
