@@ -18,7 +18,7 @@
 #import <CoreFoundation/CFSocket.h>
 #endif
 
-@class X11Cursor;
+@class X11Cursor, X11AppMenu;
 
 @interface X11Display : NSDisplay {
     Display *_display;
@@ -34,6 +34,9 @@
     CFRunLoopObserverRef _beforeWaitingObserver;
 #endif
     NSMutableDictionary *_windowsByID;
+    // Shows the main menu outside the windows (see X11AppMenu), nil until the
+    // application has one or when the menu is drawn inside the windows.
+    X11AppMenu *_appMenu;
 
     id lastFocusedWindow;
     // Clicks are grouped per button and per window, so state for the left
@@ -106,6 +109,10 @@
 - (NSPoint) cgPointFromRoot: (NSPoint) root;
 - (void) setWindow: (id) window forID: (XID) i;
 - (id) windowForID: (XID) i;
+
+// The object that shows the main menu outside the windows, created on first
+// use; nil if the menu is drawn inside the windows (DarlingInWindowMenuBar).
+- (X11AppMenu *) appMenu;
 #ifdef DARLING
 - (void) processPendingEvents;
 #endif

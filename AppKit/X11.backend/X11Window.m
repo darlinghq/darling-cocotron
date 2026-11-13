@@ -42,6 +42,7 @@
 #import "X11InputShape.h"
 #import "X11SubWindow.h"
 #import "X11Window.h"
+#import "X11AppMenu.h"
 #import <X11/Xatom.h>
 #import <X11/Xutil.h>
 
@@ -287,8 +288,11 @@ static NSData *makeWindowIcon() {
     // window that can become key (a borderless fullscreen game, a custom-chrome
     // app window) is a normal application window; left override-redirect it never
     // receives keyboard focus from a compositor and cannot be made fullscreen.
+    // The menu bar window is a dock window: the window manager has to manage
+    // it for its strut to count.
+    _dock = [delegate isKindOfClass: [X11MenuBarWindow class]];
     xattr.override_redirect =
-            (_styleMask == NSBorderlessWindowMask && !isPanel &&
+            (_styleMask == NSBorderlessWindowMask && !isPanel && !_dock &&
              ([delegate isKindOfClass: [NSMenuWindow class]] ||
               [delegate isKindOfClass: NSClassFromString(@"NSPopUpWindow")] ||
               ![delegate canBecomeKeyWindow]))
@@ -366,6 +370,9 @@ static NSData *makeWindowIcon() {
     BOOL isTransient = YES;
     if (_isModal) {
         windowType = "_NET_WM_WINDOW_TYPE_DIALOG";
+    } else if (_dock) {
+        windowType = "_NET_WM_WINDOW_TYPE_DOCK";
+        isTransient = NO;
     } else if ([delegate isKindOfClass: [NSMenuWindow class]] ||
                [delegate isKindOfClass: [NSPopUpWindow class]]) {
         windowType = "_NET_WM_WINDOW_TYPE_MENU";
@@ -390,6 +397,13 @@ static NSData *makeWindowIcon() {
     _xic = createInputContext(x11disp->_xim, _window);
 
     [(X11Display *) [NSDisplay currentDisplay] setWindow: self forID: _window];
+
+    // A window of the application's own, not a popup or its menu bar, shows
+    // the application's menu in the desktop's global menu.
+    if (!_dock && !_overrideRedirect &&
+        ![delegate isKindOfClass: [NSMenuWindow class]] &&
+        ![delegate isKindOfClass: [NSPopUpWindow class]])
+        [[x11disp appMenu] windowCreated: _window];
 
     // FIXME: Move this call into setStyleMaskInternal below!
     if (_styleMask == NSBorderlessWindowMask) {
@@ -707,11 +721,45 @@ static NSData *makeWindowIcon() {
                                                               frame: [self frame]]
                           force: NO];
         [self settleVisual];
+        if (_dock)
+            [self publishDockHints];
         XMapWindow(_display, _window);
         _mapped = YES;
         _wasMapped = YES;
         _miniaturizedKnown = NO;
     }
+}
+
+// What a dock window tells the window manager before it is mapped: it is on
+// every desktop, outside the taskbar and pager, above other windows, and
+// reserves the strip it covers along the top edge of the screen (EWMH
+// _NET_WM_STRUT_PARTIAL, and _NET_WM_STRUT for older managers).
+- (void) publishDockHints {
+    long state[4] = {
+        (long) XInternAtom(_display, "_NET_WM_STATE_STICKY", False),
+        (long) XInternAtom(_display, "_NET_WM_STATE_ABOVE", False),
+        (long) XInternAtom(_display, "_NET_WM_STATE_SKIP_TASKBAR", False),
+        (long) XInternAtom(_display, "_NET_WM_STATE_SKIP_PAGER", False)};
+    long desktop = (long) 0xFFFFFFFFul;
+    long top = (long) (_frame.origin.y + _frame.size.height);
+    long left = (long) _frame.origin.x;
+    long right = (long) (_frame.origin.x + _frame.size.width) - 1;
+    long partial[12] = {0, 0, top, 0, 0, 0, 0, 0, left, right, 0, 0};
+    long strut[4] = {0, 0, top, 0};
+
+    XChangeProperty(_display, _window,
+                    XInternAtom(_display, "_NET_WM_STATE", False), XA_ATOM, 32,
+                    PropModeReplace, (const unsigned char *) state, 4);
+    XChangeProperty(_display, _window,
+                    XInternAtom(_display, "_NET_WM_DESKTOP", False), XA_CARDINAL,
+                    32, PropModeReplace, (const unsigned char *) &desktop, 1);
+    XChangeProperty(_display, _window,
+                    XInternAtom(_display, "_NET_WM_STRUT_PARTIAL", False),
+                    XA_CARDINAL, 32, PropModeReplace,
+                    (const unsigned char *) partial, 12);
+    XChangeProperty(_display, _window,
+                    XInternAtom(_display, "_NET_WM_STRUT", False), XA_CARDINAL,
+                    32, PropModeReplace, (const unsigned char *) strut, 4);
 }
 
 - (BOOL) isMapped {

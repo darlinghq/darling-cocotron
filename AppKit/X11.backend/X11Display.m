@@ -23,6 +23,8 @@
 #import "X11Cursor.h"
 #import "X11Pasteboard.h"
 #import "X11Window.h"
+#import "X11AppMenu.h"
+#import "../private-include/AppKit/NSGlobalMenu+Private.h"
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSScreen.h>
 #import <Foundation/NSDebug.h>
@@ -214,6 +216,7 @@ static void beforeWaitingCallback(CFRunLoopObserverRef observer,
         CFRelease(_cfSocket);
 #endif
 
+    [_appMenu release];
     [_windowsByID release];
     [_buttonClickCounts release];
     [super dealloc];
@@ -1219,6 +1222,8 @@ static int compareFontPatterns(const void *a, const void *b) {
         [_windowsByID removeObjectForKey: [NSNumber numberWithUnsignedLong:
                                                             (unsigned long) i]];
 
+        [_appMenu windowDestroyed: i];
+
         // if "lastFocusedWindow" is dying, drop it
         //
         // this is an ugly hack because we miss FocusOut events sometimes and
@@ -1232,6 +1237,16 @@ static int compareFontPatterns(const void *a, const void *b) {
         if (_relativeWindow == i)
             [self suspendRelativeMouse];
     }
+}
+
+- (X11AppMenu *) appMenu {
+    if (_appMenu == nil && ![NSWindow _usesInWindowMenuBar])
+        _appMenu = [[X11AppMenu alloc] initWithDisplay: _display];
+    return _appMenu;
+}
+
+- (void) _mainMenuDidChange: (NSMenu *) menu {
+    [[self appMenu] setMainMenu: menu];
 }
 
 - (id) windowForID: (XID) i {
