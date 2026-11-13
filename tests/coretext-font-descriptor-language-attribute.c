@@ -9,6 +9,8 @@ int main(void) {
     CHECK(kCTFontDescriptorLanguageAttribute != NULL);
     CHECK(CFGetTypeID(kCTFontDescriptorLanguageAttribute) == CFStringGetTypeID());
     CHECK(!CFEqual(kCTFontDescriptorLanguageAttribute, kCTFontLanguagesAttribute));
+    // The key string is the one macOS uses (observed on macOS 26).
+    CHECK(CFEqual(kCTFontDescriptorLanguageAttribute, CFSTR("CTFontDescriptorLanguageAttribute")));
 
     CFStringRef keys[1] = { kCTFontDescriptorLanguageAttribute };
     CFStringRef values[1] = { CFSTR("ja") };
