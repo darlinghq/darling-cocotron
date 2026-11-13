@@ -39,6 +39,15 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @implementation NSCustomImageRep
 
+// After the image rep part an NSArchiver archive holds the delegate and the draw selector.
+- (instancetype) initWithCoder: (NSCoder *) coder {
+    if ((self = [super initWithCoder: coder]) == nil)
+        return nil;
+    _delegate = [coder decodeObject];
+    [coder decodeValuesOfObjCTypes: ":", &_drawSelector];
+    return self;
+}
+
 - (instancetype) initWithSize: (NSSize) size
                      flipped: (BOOL) flipped
               drawingHandler: (BOOL (^)(NSRect)) handler {
