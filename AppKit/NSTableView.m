@@ -170,33 +170,19 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
         SEL action = NULL, doubleAction = NULL;
         int flags = 0;
 
-        // QUIRK: NSTableView layout: header view, corner view, columns, cell
-        // spacing, colours, row height, action, double action and a flags
-        // word (bit 31 column reordering, 30 column resizing, 28 empty
-        // selection, 27 multiple selection, 26 column selection, 15
-        // autoresize columns), then data source, delegate and target. Not
-        // documented; unkeyed (typedstream) archives come from old nibs.
-        // Evidence: tier 3, the layout reported by the contributor of this
-        // decoder from archives of old nibs; unconfirmed against macOS (a
-        // macOS check is pending). Archives with a different layout are
-        // tolerated where the code catches the mismatch. Test:
-        // test_quirk_typedstream_table_view in tests/appkit-typedstream-
-        // controls.m
-        @try {
-            [coder decodeValuesOfObjCTypes: "@@@ff@@f::i",
-                                            &headerView, &cornerView, &cols,
-                                            &spacingW, &spacingH,
-                                            &bgColor, &gridColor,
-                                            &rowH,
-                                            &action, &doubleAction,
-                                            &flags];
-            _dataSource = [coder decodeObject];
-            id aDelegate = [coder decodeObject];
-            _target = [coder decodeObject];
-            [self setDelegate: aDelegate];
-        } @catch (id ex) {
-            // Ignore decoding mismatch
-        }
+        // Layout as recorded from Mac archives (one for every class version): header
+        // view, corner view, table columns, cell spacing, background and grid colours, row
+        // height, action, double action and a flag word, then the delegate, the data
+        // source and the target. The flag word holds column reordering in bit 31, column
+        // resizing in 30, empty selection in 28, multiple selection in 27, column
+        // selection in 26, alternating row backgrounds in 23 and uniform column
+        // autoresizing in 15. The grid style and autosave name are not archived.
+        [coder decodeValuesOfObjCTypes: "@@@ff@@f::i", &headerView, &cornerView, &cols, &spacingW, &spacingH, &bgColor,
+                                        &gridColor, &rowH, &action, &doubleAction, &flags];
+        id aDelegate = [coder decodeObject];
+        _dataSource = [coder decodeObject];
+        _target = [coder decodeObject];
+        [self setDelegate: aDelegate];
 
         _headerView = headerView;
         [_headerView setTableView: self];
@@ -222,6 +208,8 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
         _allowsMultipleSelection = (flags & 0x08000000) ? YES : NO;
         _allowsEmptySelection = (flags & 0x10000000) ? YES : NO;
         _allowsColumnSelection = (flags & 0x04000000) ? YES : NO;
+        _alternatingRowBackground = (flags & 0x00800000) ? YES : NO;
+        _gridStyleMask = NSTableViewGridNone;
     }
     return self;
 }

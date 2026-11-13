@@ -36,14 +36,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - initWithContent: (id) content;
 
-//-(Class)objectClass;
+- (Class) objectClass;
 //-(NSString *)entityName;
 //-(NSPredicate *)fetchPredicate;
 //-(NSManagedObjectContext *)managedObjectContext;
 - (BOOL) isEditable;
 - (BOOL) automaticallyPreparesContent;
 
-//-(void)setObjectClass:(Class)class;
+- (void) setObjectClass: (Class) objectClass;
 //-(void)setEntityName:(NSString *)name;
 //-(void)setFetchPredicate:(NSPredicate *)predicate;
 //-(void)setManagedObjectContext:(NSManagedObjectContext *)context;

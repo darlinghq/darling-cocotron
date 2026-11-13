@@ -47,12 +47,15 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Onyx2D/O2Context.h>
 #import <QuartzCore/CALayerContext.h>
 #import <QuartzCore/CATransaction.h>
+#import <AppKit/NSLayoutAnchor.h>
 #import <AppKit/NSLayoutConstraint.h>
 #import <AppKit/NSLayoutGuide.h>
+#import "NSLayoutConstraintInternal.h"
 #import <AppKit/NSTextInput.h>
 #import <AppKit/NSTextInputClient.h>
 #import <objc/runtime.h>
 #include <math.h>
+#import "DarlingLayout.h"
 
 @class IBMetricsTable;
 
@@ -459,6 +462,7 @@ typedef struct __VFlags {
 }
 
 - (void) dealloc {
+    [NSLayoutConstraint deactivateConstraints:[self constraints]];
 
     // Do this first?
     [self _unbindAllBindings];
@@ -474,6 +478,8 @@ typedef struct __VFlags {
     [_draggedTypes release];
     [_trackingAreas release];
     [_contentFilters release];
+    [_constraints makeObjectsPerformSelector: @selector(_detachFromOwner:) withObject: self];
+    [_constraints release];
 
     if (_invalidRects != NULL)
         NSZoneFree(NULL, _invalidRects);
@@ -1682,6 +1688,15 @@ static char inputContextKey;
     [[self retain] autorelease];
     NSView *removeFrom = [_superview retain];
     NSWindow *window = [[self window] retain];
+
+    for (NSView *ancestor = _superview; ancestor != nil; ancestor = [ancestor superview]) {
+        for (NSLayoutConstraint *constraint in [ancestor constraints]) {
+            NSView *first = [constraint firstItem], *second = [constraint secondItem];
+            if (([first isKindOfClass:[NSView class]] && [first isDescendantOf:self]) ||
+                ([second isKindOfClass:[NSView class]] && [second isDescendantOf:self]))
+                [constraint setActive:NO];
+        }
+    }
 
     [self _deepResignFirstResponder];
     [self _setSuperview: nil];
@@ -3261,12 +3276,38 @@ static CGFloat backingScaleFactor(NSView *view) {
 - (void) invalidateIntrinsicContentSize {
 }
 
-- (void) updateConstraints {
-    // An override point: there is no constraint solver to drive.
+- (NSArray *) constraints {
+    return _constraints ? [[_constraints copy] autorelease] : [NSArray array];
 }
 
-- (void) layout {
-    // An override point: there is no constraint solver to drive.
+- (void) addConstraint: (NSLayoutConstraint *) constraint {
+    if ([_constraints containsObject: constraint])
+        return;
+    if (_constraints == nil)
+        _constraints = [[NSMutableArray alloc] init];
+    [_constraints addObject: constraint];
+    [constraint _attachToOwner: self];
+    [self setNeedsUpdateConstraints: YES];
+}
+
+- (void) addConstraints: (NSArray *) constraints {
+    for (NSLayoutConstraint *constraint in constraints)
+        [self addConstraint: constraint];
+}
+
+- (void) removeConstraint: (NSLayoutConstraint *) constraint {
+    if (![_constraints containsObject: constraint])
+        return;
+    // Keep it alive until the owner link is cleared.
+    [[constraint retain] autorelease];
+    [_constraints removeObject: constraint];
+    [constraint _detachFromOwner: self];
+    [self setNeedsUpdateConstraints: YES];
+}
+
+- (void) removeConstraints: (NSArray *) constraints {
+    for (NSLayoutConstraint *constraint in constraints)
+        [self removeConstraint: constraint];
 }
 
 static char installedViewLayoutGuidesKey;
@@ -3307,6 +3348,156 @@ static NSMutableArray *installedViewLayoutGuides(NSView *view, BOOL create) {
         if ([guide owningView] == self)
             [guide setOwningView: nil];
     }
+}
+
+@end
+
+@implementation NSView (NSViewLayoutState)
+
+- (BOOL) needsLayout {
+    return _needsLayout;
+}
+
+- (void) setNeedsLayout: (BOOL) flag {
+    _needsLayout = flag;
+}
+
+- (BOOL) needsUpdateConstraints {
+    return _needsUpdateConstraints;
+}
+
+- (void) setNeedsUpdateConstraints: (BOOL) flag {
+    _needsUpdateConstraints = flag;
+    if (flag) {
+        _needsLayout = YES;
+        [[self window] setViewsNeedDisplay: YES];
+    }
+}
+
+- (BOOL) clipsToBounds {
+    return _clipsToBounds;
+}
+
+- (void) setClipsToBounds: (BOOL) flag {
+    _clipsToBounds = flag;
+}
+
+- (NSRect) preparedContentRect {
+    return _hasPreparedContentRect ? _preparedContentRect : [self visibleRect];
+}
+
+- (void) setPreparedContentRect: (NSRect) rect {
+    _preparedContentRect = rect;
+    _hasPreparedContentRect = YES;
+}
+
+- (void) updateConstraints {
+    _needsUpdateConstraints = NO;
+}
+
+- (void) updateConstraintsForSubtreeIfNeeded {
+    // Constraint updates run from descendants toward their containing view.
+    // An update callback can remove or reparent a sibling. Keep the snapshot
+    // alive through callbacks, but only visit children still belonging here.
+    NSArray *children = [_subviews copy];
+    @try {
+        for (NSView *child in children) {
+            if ([child superview] == self)
+                [child updateConstraintsForSubtreeIfNeeded];
+        }
+    } @finally {
+        [children release];
+    }
+    if (_needsUpdateConstraints) {
+        _needsUpdateConstraints = NO;
+        [self updateConstraints];
+    }
+}
+
+- (void) layout {
+    _needsLayout = NO;
+}
+
+- (void) _layoutSubtreeAfterUpdatingConstraints {
+    if (_needsLayout)
+        [self layout];
+    NSArray *children = [_subviews copy];
+    @try {
+        for (NSView *child in children) {
+            if ([child superview] == self)
+                [child _layoutSubtreeAfterUpdatingConstraints];
+        }
+    } @finally {
+        [children release];
+    }
+}
+
+- (void) layoutSubtreeIfNeeded {
+    // Finish the update phase for the whole subtree before laying out any view.
+    [self updateConstraintsForSubtreeIfNeeded];
+    DarlingLayoutSubtree(self);
+    [self _layoutSubtreeAfterUpdatingConstraints];
+}
+
+@end
+
+@implementation NSView (NSViewLayoutAnchors)
+
+static id anchorForView(NSView *view, Class anchorClass, NSLayoutAttribute attribute)
+{
+    return [[[anchorClass alloc] initWithItem: view attribute: attribute] autorelease];
+}
+
+- (NSLayoutDimension *) widthAnchor {
+    return anchorForView(self, [NSLayoutDimension class], NSLayoutAttributeWidth);
+}
+
+- (NSLayoutDimension *) heightAnchor {
+    return anchorForView(self, [NSLayoutDimension class], NSLayoutAttributeHeight);
+}
+
+- (NSLayoutXAxisAnchor *) leadingAnchor {
+    return anchorForView(self, [NSLayoutXAxisAnchor class], NSLayoutAttributeLeading);
+}
+
+- (NSLayoutXAxisAnchor *) trailingAnchor {
+    return anchorForView(self, [NSLayoutXAxisAnchor class], NSLayoutAttributeTrailing);
+}
+
+- (NSLayoutXAxisAnchor *) leftAnchor {
+    return anchorForView(self, [NSLayoutXAxisAnchor class], NSLayoutAttributeLeft);
+}
+
+- (NSLayoutXAxisAnchor *) rightAnchor {
+    return anchorForView(self, [NSLayoutXAxisAnchor class], NSLayoutAttributeRight);
+}
+
+- (NSLayoutXAxisAnchor *) centerXAnchor {
+    return anchorForView(self, [NSLayoutXAxisAnchor class], NSLayoutAttributeCenterX);
+}
+
+- (NSLayoutYAxisAnchor *) topAnchor {
+    return anchorForView(self, [NSLayoutYAxisAnchor class], NSLayoutAttributeTop);
+}
+
+- (NSLayoutYAxisAnchor *) bottomAnchor {
+    return anchorForView(self, [NSLayoutYAxisAnchor class], NSLayoutAttributeBottom);
+}
+
+- (NSLayoutYAxisAnchor *) centerYAnchor {
+    return anchorForView(self, [NSLayoutYAxisAnchor class], NSLayoutAttributeCenterY);
+}
+
+@end
+
+@implementation NSView (NSViewEffectiveAppearance)
+
+- (NSAppearance *) effectiveAppearance {
+    if (_appearance != nil)
+        return _appearance;
+    if (_superview != nil)
+        return [_superview effectiveAppearance];
+    return [NSAppearance currentAppearance];
 }
 
 @end

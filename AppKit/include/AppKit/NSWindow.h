@@ -648,6 +648,8 @@ APPKIT_EXPORT const NSNotificationName NSWindowDidExitVersionBrowserNotification
 - (void) flushWindowIfNeeded;
 - (void) displayIfNeeded;
 - (void) display;
+- (void) updateConstraintsIfNeeded;
+- (void) layoutIfNeeded;
 
 - (void) invalidateShadow;
 

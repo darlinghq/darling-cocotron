@@ -52,9 +52,24 @@ NSString *const NSSplitViewWillResizeSubviewsNotification =
         // The divider thickness in the nib may not be the same as ours
         [self resizeSubviewsWithOldSize: [self bounds].size];
     } else {
-        [NSException raise: NSInvalidArgumentException
-                    format: @"-[%@ %s] is not implemented for coder %@",
-                            [self class], sel_getName(_cmd), coder];
+        // The delegate (a one-object group up to version 16), and from version 348 a
+        // byte whose bit 0 is the vertical flag (its other bits do not change the
+        // divider style: that is not archived).
+        NSInteger version = [coder versionForClassName: @"NSSplitView"];
+        id delegate = nil;
+        char flags = 0;
+
+        if (version <= 16) {
+            [coder decodeValuesOfObjCTypes: "@", &delegate];
+            [delegate autorelease];
+        } else {
+            delegate = [coder decodeObject];
+        }
+        if (version >= 348) {
+            [coder decodeValueOfObjCType: @encode(char) at: &flags];
+        }
+        _isVertical = (flags & 1) ? YES : NO;
+        [self setDelegate: delegate];
     }
 
     return self;

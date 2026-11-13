@@ -108,6 +108,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (id) initWithCoder: (NSCoder *) coder {
+    if (![coder allowsKeyedCoding]) {
+        // Nothing follows the object controller part in NSArchiver data.
+        if ((self = [super initWithCoder: coder]))
+            _selectionIndexPaths = [[NSArray alloc] init];
+        return self;
+    }
     if ((self = [super initWithCoder: coder])) {
         _childrenKeyPath =
                 [[coder decodeObjectForKey: @"NSTreeContentChildrenKey"] copy];
