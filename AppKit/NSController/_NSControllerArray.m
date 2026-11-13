@@ -1,6 +1,5 @@
 #import "_NSControllerArray.h"
 #import "NSObservationProxy.h"
-#import <Foundation/NSException.h>
 #import <Foundation/NSIndexSet.h>
 #import <Foundation/NSKeyValueObserving.h>
 #import <Foundation/NSString.h>
@@ -26,13 +25,8 @@
 }
 
 - (void) dealloc {
-    if ([_observationProxies count] > 0)
-        [NSException
-                 raise: NSInvalidArgumentException
-                format: @"_NSControllerArray still being observed by %@ on %@",
-                        [[_observationProxies objectAtIndex: 0] observer],
-                        [[_observationProxies objectAtIndex: 0] keyPath]];
-
+    // Observers that outlive the array are released with it rather than
+    // raising, which would crash ordinary controller-binding teardown.
     [_observationProxies release];
     [_array release];
     [_roi release];
@@ -97,8 +91,13 @@
             [[_NSObservationProxy alloc] initWithKeyPath: keyPath
                                                 observer: observer
                                                   object: self];
-    int idx = [_observationProxies indexOfObject: proxy];
+    NSUInteger idx = [_observationProxies indexOfObject: proxy];
     [proxy release];
+    // Nothing to remove. The observance may already have been torn down, and
+    // the proxy list is then empty; indexing it with the not-found value
+    // raised rather than doing nothing.
+    if (idx == NSNotFound)
+        return;
     proxy = [[[_observationProxies objectAtIndex: idx] retain] autorelease];
     [_observationProxies removeObjectAtIndex: idx];
 

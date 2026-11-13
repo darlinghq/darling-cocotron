@@ -52,6 +52,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     NSString *_toolTip;
     NSMenuItemBadge *_badge;
     BOOL _isSectionHeader;
+    NSImage *_actionImage;
 }
 
 @property(copy) NSString *toolTip;

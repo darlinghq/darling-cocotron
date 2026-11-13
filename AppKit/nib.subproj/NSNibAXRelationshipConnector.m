@@ -14,9 +14,14 @@
 
 - (id) initWithCoder: (NSCoder *) coder {
     if ((self = [super init])) {
-        _destination = [[coder decodeObjectForKey: @"AXDestinationArchiveKey"] retain];
-        _attributeType = [[coder decodeObjectForKey: @"AXAttributeTypeArchiveKey"] retain];
-        _attributeValue = [[coder decodeObjectForKey: @"AXAttributeValueArchiveKey"] retain];
+        if ([coder allowsKeyedCoding]) {
+            _destination = [[coder decodeObjectForKey: @"AXDestinationArchiveKey"] retain];
+            _attributeType = [[coder decodeObjectForKey: @"AXAttributeTypeArchiveKey"] retain];
+            _attributeValue = [[coder decodeObjectForKey: @"AXAttributeValueArchiveKey"] retain];
+        } else {
+            // Destination, attribute type and attribute value in one group.
+            [coder decodeValuesOfObjCTypes: "@@@", &_destination, &_attributeType, &_attributeValue];
+        }
     }
     return self;
 }

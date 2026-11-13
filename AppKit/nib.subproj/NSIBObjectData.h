@@ -54,6 +54,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (NSSet *) visibleWindows;
 
+- (NSArray *) allObjects;
 - (NSMenu *) mainMenu;
 - (NSArray *) topLevelObjects;
 

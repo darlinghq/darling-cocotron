@@ -95,7 +95,7 @@ NSString *const _NSWindowsMenuName = @"Window";
 }
 
 - initWithCoder: (NSCoder *) coder {
-    _showsStateColumn = YES; // TODO: figure out the right coding for this
+    _showsStateColumn = YES;
 
     if ([coder allowsKeyedCoding]) {
         NSKeyedUnarchiver *keyed = (NSKeyedUnarchiver *) coder;
@@ -108,65 +108,20 @@ NSString *const _NSWindowsMenuName = @"Window";
                 initWithArray: [keyed decodeObjectForKey: @"NSMenuItems"]];
         _autoenablesItems = ![keyed decodeBoolForKey: @"NSNoAutoenable"];
     } else {
-        NSInteger version;
-        version = [coder versionForClassName: @"NSMenu"];
+        // One layout for every class version, as recorded from Mac archives: a flag word
+        // (bit 31: no automatic enabling of items, bit 29: no state column), the title,
+        // the item array and the name.
+        int flags;
 
-        if (version == NSNotFound)
-            version = [coder versionForClassName: @"NSMenuPanel"];
+        [coder decodeValuesOfObjCTypes: "i@@@", &flags, &_title, &_itemArray, &_name];
 
-        if (version <= 203) {
-            NSString *title, *name;
-            id matrix;
-            if (version <= 16) {
-                BOOL noAutoEnable;
+        _autoenablesItems = !(flags & 0x80000000);
+        _showsStateColumn = !(flags & 0x20000000);
 
-                [coder decodePoint];
-                [coder decodeValuesOfObjCTypes: "@@@s", &title, &matrix, &name,
-                                                &noAutoEnable];
-
-                _autoenablesItems = !noAutoEnable;
-            } else if (version <= 40) {
-                char bytes[6];
-
-                [coder decodePoint];
-                [coder decodeArrayOfObjCType: @encode(char) count: 6 at: bytes];
-                _autoenablesItems = !bytes[0];
-
-                [coder decodeValuesOfObjCTypes: "@@@", &title, &matrix, &name];
-            } else {
-                int flag;
-
-                [coder decodePoint];
-                [coder decodeValueOfObjCType: @encode(int) at: &flag];
-                _autoenablesItems = !(flag & 0x40000000);
-                [self setMenuChangedMessagesEnabled: flag & 0x200000];
-
-                [coder decodeValuesOfObjCTypes: "@@@", &title, &matrix, &name];
-            }
-
-            if ([matrix isKindOfClass: [NSMatrix class]]) {
-                NSInteger numRows, numColumns;
-                [matrix getNumberOfRows: &numRows columns: &numColumns];
-
-                if (numRows != 0) {
-                    NSMenuItem *item = [matrix cellAtRow: 0 column: 0];
-                    [self addItem: item];
-                }
-            }
-
-            _title = title;
-            _name = name;
-        } else {
-            int flags;
-
-            [coder decodeValuesOfObjCTypes: "i@@@", &flags, &_title, &_itemArray,
-                                            &_name];
-
-            _autoenablesItems = !(flags & 0x80000000);
-            // _excludeMarkColumn = flags & 0x80000;
-            // _cmPluginMode = (flags >> 21) & 3;
-            // _invertedCMPluginTypes = (flags >> 23) & 3;
-        }
+        NSMutableArray *items = [_itemArray isKindOfClass: [NSArray class]] ? [_itemArray mutableCopy]
+                                                                           : [[NSMutableArray alloc] init];
+        [_itemArray release];
+        _itemArray = items;
     }
     return self;
 }

@@ -288,6 +288,9 @@ typedef NS_OPTIONS(NSInteger, NSWindowListOptions) {
 
 - (NSDockTile *) dockTile;
 
+- (void) disableRelaunchOnLogin;
+- (void) enableRelaunchOnLogin;
+
 // private
 - (void) _addWindow: (NSWindow *) window;
 
@@ -360,4 +363,11 @@ APPKIT_EXPORT BOOL NSPerformService(NSString *itemName,
 @interface NSApplication (NSWindowEnumeration)
 - (void) enumerateWindowsWithOptions: (NSWindowListOptions) options
                                 usingBlock: (void (^)(NSWindow *window, BOOL *stop)) block;
+@end
+
+// Performance-test hooks; they do nothing here.
+@interface NSApplication (NSApplicationPerformanceTesting)
+- (void) startedTest: (NSString *) name;
+- (void) finishedTest: (NSString *) name;
+- (void) failedTest: (NSString *) name withFailure: (NSString *) failureReason;
 @end

@@ -163,6 +163,7 @@ typedef NS_OPTIONS(NSUInteger, NSWorkspaceLaunchOptions) {
          forFile: (NSString *) fullPath
          options: (NSWorkspaceIconCreationOptions) options;
 - (void) activateFileViewerSelectingURLs: (NSArray<NSURL *> *) fileURLs;
+- (NSURL *) URLForApplicationToOpenURL: (NSURL *) url;
 - (NSURL *) URLForApplicationWithBundleIdentifier:
         (NSString *) bundleIdentifier;
 - (NSString *) fullPathForApplication: (NSString *) appName;

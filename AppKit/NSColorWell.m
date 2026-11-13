@@ -21,6 +21,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSColor.h>
 #import <AppKit/NSColorPanel.h>
 #import <AppKit/NSColorWell.h>
+#import "NSCoder+AppKit.h"
 #import <AppKit/NSController.h>
 #import <AppKit/NSDragging.h>
 #import <AppKit/NSEvent.h>
@@ -66,9 +67,28 @@ NSNotificationName _NSColorWellDidBecomeExclusiveNotification =
         _isBordered = [keyed decodeBoolForKey: @"NSIsBordered"];
         _color = [[keyed decodeObjectForKey: @"NSColor"] retain];
     } else {
-        [NSException raise: NSInvalidArgumentException
-                    format: @"-[%@ %s] is not implemented for coder %@",
-                            [self class], sel_getName(_cmd), coder];
+        NSInteger version = [coder versionForClassName: @"NSColorWell"];
+        char bordered = 0, notContinuous = 0, unknown = 0;
+        id color = nil;
+
+        // Layouts per class version as recorded from Mac archives. Bytes whose meaning is
+        // unknown are read and dropped; enabled state is not archived here.
+        if (version >= 17) {
+            [coder decodeValuesOfObjCTypes: "c", &unknown];
+            [coder decodeValuesOfObjCTypes: "c", &bordered];
+            [coder decodeValuesOfObjCTypes: "c", &notContinuous];
+            color = [[coder decodeObject] retain];
+        } else if (version >= 1) {
+            [coder decodeValuesOfObjCTypes: "@cc", &color, &bordered, &unknown];
+        } else {
+            color = [[coder decodeNXColor] retain];
+            [coder decodeValuesOfObjCTypes: "cc", &bordered, &unknown];
+        }
+
+        _isEnabled = YES;
+        _isContinuous = !notContinuous;
+        _isBordered = bordered != 0;
+        _color = color != nil ? color : [[NSColor whiteColor] copy];
     }
     return self;
 }
@@ -125,6 +145,14 @@ NSNotificationName _NSColorWellDidBecomeExclusiveNotification =
 - (void) colorPanelWillClose: (NSNotification *) note {
     if ([self isActive])
         [self deactivate];
+}
+
+- (BOOL) isContinuous {
+    return _isContinuous;
+}
+
+- (void) setContinuous: (BOOL) flag {
+    _isContinuous = flag;
 }
 
 - (id) target {

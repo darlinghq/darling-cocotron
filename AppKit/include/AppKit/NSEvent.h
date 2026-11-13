@@ -76,6 +76,8 @@ typedef NS_ENUM(NSUInteger, NSEventType) {
     NSEventTypeCursorUpdate = 17,
     NSCursorUpdate = 17,
 
+    NSEventTypeRotate = 18,
+
     NSEventTypeScrollWheel = 22,
     NSScrollWheel = 22,
 
@@ -88,10 +90,13 @@ typedef NS_ENUM(NSUInteger, NSEventType) {
     NSEventTypeOtherMouseDragged = 27,
     NSOtherMouseDragged = 27,
 
+    NSEventTypeMagnify = 30,
+
     NSAppKitSystem = 100,
 
-    NSPlatformSpecific = 29,
-    NSPlatformSpecificDisplayEvent = 30
+    // Cocotron-private; numbered where AppKit defines no event type.
+    NSPlatformSpecific = 21,
+    NSPlatformSpecificDisplayEvent = 28
 };
 
 typedef NS_OPTIONS(unsigned long long, NSEventMask) {
@@ -115,6 +120,8 @@ typedef NS_OPTIONS(unsigned long long, NSEventMask) {
     NSEventMaskOtherMouseDown = 1ULL << NSEventTypeOtherMouseDown,
     NSEventMaskOtherMouseUp = 1ULL << NSEventTypeOtherMouseUp,
     NSEventMaskOtherMouseDragged = 1ULL << NSEventTypeOtherMouseDragged,
+    NSEventMaskRotate = 1ULL << NSEventTypeRotate,
+    NSEventMaskMagnify = 1ULL << NSEventTypeMagnify,
 };
 
 // Pre-10.12 spellings.  NSAnyEventMask keeps Cocotron's 32-bit value rather
@@ -154,7 +161,7 @@ typedef NS_OPTIONS(NSUInteger, NSEventModifierFlags) {
     NSEventModifierFlagHelp = 1 << 22,
     NSEventModifierFlagFunction = 1 << 23,
     NSEventModifierFlagDeviceIndependentFlagsMask = 0xffff0000UL
-};
+} NS_SWIFT_NAME(NSEvent.ModifierFlags);
 
 // Pre-10.12 spellings.
 static const NSEventModifierFlags NSAlphaShiftKeyMask = NSEventModifierFlagCapsLock;
@@ -267,7 +274,7 @@ typedef NS_OPTIONS(NSUInteger, NSEventPhase) {
     NSEventPhaseEnded = 0x1 << 3,
     NSEventPhaseCancelled = 0x1 << 4,
     NSEventPhaseMayBegin = 0x1 << 5,
-};
+} NS_SWIFT_NAME(NSEvent.Phase);
 
 @interface NSEvent : NSObject {
     NSEventType _type;
@@ -362,8 +369,11 @@ typedef NS_OPTIONS(NSUInteger, NSEventPhase) {
 - (CGFloat) deltaY;
 - (CGFloat) deltaZ;
 
+// Set on magnify and rotate events; NSEventPhaseNone, 0 and 0 on every other event.
 - (NSEventPhase) phase;
 - (NSEventPhase) momentumPhase;
+- (CGFloat) magnification;
+- (float) rotation;
 - (BOOL) hasPreciseScrollingDeltas;
 - (CGFloat) scrollingDeltaX;
 - (CGFloat) scrollingDeltaY;
