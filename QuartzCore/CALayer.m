@@ -974,6 +974,20 @@ static id<CAAction> actionInStyle(NSDictionary *style, NSString *key) {
     if (action != nil)
         return [(id) action isKindOfClass: [NSNull class]] ? nil : action;
 
+    // QUIRK: the implicit action for a property change exists only while the
+    // layer belongs to a layer tree hosted by a window (it has a layer
+    // context). A layer outside such a tree returns nil, with or without an
+    // explicitly begun transaction, so its property changes never animate.
+    // The documentation does not say when implicit actions apply. Evidence:
+    // black-box observation on macOS 26.7.3 (tier 2): a standalone layer, a
+    // sublayer of a standalone root and an off-window view's backing layer
+    // return nil from -actionForKey: and gain no animation keys, while a
+    // sublayer in a window-hosted tree gets an implicit action. macOS 10.14.4
+    // behaves the same.
+    // Test: quartzcore-implicit-actions (standalone and window-hosted cases).
+    if (_context == nil)
+        return nil;
+
     CABasicAnimation *basic = [CABasicAnimation animationWithKeyPath: key];
 
     [basic setFromValue: [self valueForKey: key]];
