@@ -22,6 +22,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSColorPanel.h>
 #import <AppKit/NSDisplay.h>
+#import <AppKit/NSGlobalMenu+Private.h>
 #import <AppKit/NSDockTile.h>
 #import <AppKit/NSDocumentController.h>
 #import <AppKit/NSEvent.h>
@@ -507,6 +508,8 @@ NSApplication *NSApp = nil;
         if (![window isKindOfClass: [NSPanel class]])
             [window setMenu: _mainMenu];
     }
+
+    [_display _mainMenuDidChange: _mainMenu];
 }
 
 - (BOOL) isAutomaticCustomizeTouchBarMenuItemEnabled {

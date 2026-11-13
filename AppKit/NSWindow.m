@@ -29,6 +29,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSImage.h>
 #import <AppKit/NSImageView.h>
 #import <AppKit/NSMainMenuView.h>
+#import <AppKit/NSGlobalMenu+Private.h>
 #import <AppKit/NSMenu.h>
 #import <AppKit/NSMenuItem.h>
 #import <AppKit/NSPanel.h>
@@ -376,9 +377,38 @@ static BOOL _allowsAutomaticWindowTabbing;
     return 0;
 }
 
+// Darling setting DarlingInWindowMenuBar (boolean, off by default): draw the
+// main menu as a strip inside each titled window instead of in the desktop's
+// global menu or the application's own menu bar. It is read from the
+// application's preferences, falling back to NSGlobalDomain, and from the
+// org.darlinghq.AppKit domain. The answer is fixed at first use, because the
+// frame of every window depends on it.
++ (BOOL) _usesInWindowMenuBar {
+    static BOOL value;
+    static dispatch_once_t once;
+
+    dispatch_once(&once, ^{
+      CFStringRef key = CFSTR("DarlingInWindowMenuBar");
+      Boolean valid = false;
+      Boolean flag = CFPreferencesGetAppBooleanValue(
+              key, kCFPreferencesCurrentApplication, &valid);
+
+      if (!valid)
+          flag = CFPreferencesGetAppBooleanValue(
+                  key, CFSTR("org.darlinghq.AppKit"), &valid);
+      value = valid && flag;
+    });
+    return value;
+}
+
 /* This method is Cococtron specific and can be override by subclasses, do not
  * change method name */
 + (BOOL) hasMainMenuForStyleMask: (NSWindowStyleMask) styleMask {
+    // The main menu is shown by the desktop or by the application's menu bar
+    // window unless the in-window strip is asked for.
+    if (![NSWindow _usesInWindowMenuBar])
+        return NO;
+
     // A full-size content view covers the whole frame, leaving no room for
     // the menu.
     return (styleMask & NSTitledWindowMask) &&
