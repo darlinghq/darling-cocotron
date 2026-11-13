@@ -7,7 +7,7 @@
     X11Window *_parent;
     Display *_display;
     Window _window;
-    CGRect _drawableFrame; // in the parent's X coordinates
+    CGRect _drawableFrame; // in the parent's coordinate space, points
     BOOL _visible;
     BOOL _mapped;
     BOOL _allowsParentDrawable;
@@ -16,5 +16,11 @@
 }
 
 - initWithParentWindow: (X11Window *) parent frame: (CGRect) frame;
+
+// What the layer context sizes its GL viewport from: without these, the
+// CGSubWindow defaults (1.0 and CGSizeZero) would give a scaled subwindow a
+// viewport that shows a fraction of it.
+- (CGFloat) backingScaleFactor;
+- (CGSize) drawablePixelSize;
 
 @end
