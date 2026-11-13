@@ -41,6 +41,19 @@ static void reportGLErrors(void) {
 
 @implementation CAMetalLayer
 
+// The device, drawables and the rest of the Metal state have no archived form.
+- (void)encodeWithCoder:(NSCoder *)coder
+{
+	[NSException raise: NSInvalidArchiveOperationException format: @"Cannot archive %@: Metal layers cannot be archived", self];
+}
+
+- (instancetype)initWithCoder:(NSCoder *)coder
+{
+	[self release];
+	[NSException raise: NSInvalidUnarchiveOperationException format: @"Metal layers cannot be unarchived"];
+	return nil;
+}
+
 #if DARLING_METAL_ENABLED
 // FIXME: this breaks inheritance from CAMetalLayer.
 //        the problem is that we need some C++ ivars, but we can't put those in the public header

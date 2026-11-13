@@ -19,6 +19,7 @@
 
 #import <Foundation/Foundation.h>
 #import <QuartzCore/CAConstraintLayoutManager.h>
+#import "CAKeyedCoding.h"
 
 static NSString *const CAConstraintSuperlayerName = @"superlayer";
 
@@ -89,6 +90,41 @@ static BOOL isValidAttribute(CAConstraintAttribute attribute) {
         _offset = offset;
     }
     return self;
+}
+
++ (BOOL) supportsSecureCoding {
+    return YES;
+}
+
+// Keys as on macOS; the source name, scale and offset are written only when
+// they differ from the defaults (no source, 1 and 0).
+- (void) encodeWithCoder: (NSCoder *) coder {
+    CAArchiveRequireKeyedCoder(coder);
+    [coder encodeInt: _attribute forKey: @"CAAttr"];
+    if (_sourceName != nil)
+        [coder encodeObject: _sourceName forKey: @"CASrcId"];
+    [coder encodeInt: _sourceAttribute forKey: @"CASrcAttr"];
+    if (_scale != 1)
+        [coder encodeDouble: _scale forKey: @"CAScale"];
+    if (_offset != 0)
+        [coder encodeDouble: _offset forKey: @"CAOffset"];
+}
+
+- (instancetype) initWithCoder: (NSCoder *) coder {
+    CAArchiveRequireKeyedCoder(coder);
+    CAConstraintAttribute attribute = [coder decodeIntForKey: @"CAAttr"];
+    CAConstraintAttribute sourceAttribute = [coder decodeIntForKey: @"CASrcAttr"];
+    NSString *sourceName = [coder decodeObjectOfClass: [NSString class] forKey: @"CASrcId"];
+    if (!isValidAttribute(attribute) || !isValidAttribute(sourceAttribute) || sourceName == nil) {
+        [self release];
+        [NSException raise: NSInvalidUnarchiveOperationException
+                    format: @"Archived CAConstraint has an invalid attribute or no source name"];
+    }
+    return [self initWithAttribute: attribute
+                        relativeTo: sourceName
+                         attribute: sourceAttribute
+                             scale: [coder containsValueForKey: @"CAScale"] ? [coder decodeDoubleForKey: @"CAScale"] : 1
+                            offset: [coder decodeDoubleForKey: @"CAOffset"]];
 }
 
 - (void) dealloc {
@@ -189,6 +225,20 @@ enum { Unvisited, InProgress, Done };
 
 + (instancetype) layoutManager {
     return [[[self alloc] init] autorelease];
+}
+
+// The manager has no state of its own.
++ (BOOL) supportsSecureCoding {
+    return YES;
+}
+
+- (void) encodeWithCoder: (NSCoder *) coder {
+    CAArchiveRequireKeyedCoder(coder);
+}
+
+- (instancetype) initWithCoder: (NSCoder *) coder {
+    CAArchiveRequireKeyedCoder(coder);
+    return [self init];
 }
 
 static void layoutSublayer(CALayer *layer, NSArray *sublayers, NSDictionary *byName,

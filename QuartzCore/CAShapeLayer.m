@@ -18,6 +18,7 @@
 */
 
 #import <QuartzCore/CAShapeLayer.h>
+#import "CAKeyedCoding.h"
 #import "CALayerInternal.h"
 
 NSString *const kCAFillRuleNonZero = @"non-zero";
@@ -57,6 +58,82 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
     if (self != nil)
         [self _setShapeDefaults];
     return self;
+}
+
+// Keys are written only when they differ from the defaults.
+- (void) _encodeAttributes: (CAArchiveWriter *) w {
+    [super _encodeAttributes: w];
+    if (_path != NULL)
+        [w encodePath: _path forKey: @"path"];
+    if (_fillColor != NULL && !(CGColorGetNumberOfComponents(_fillColor) == 4 &&
+                                CGColorGetComponents(_fillColor)[0] == 0 &&
+                                CGColorGetComponents(_fillColor)[1] == 0 &&
+                                CGColorGetComponents(_fillColor)[2] == 0 &&
+                                CGColorGetComponents(_fillColor)[3] == 1))
+        [w encodeColor: _fillColor forKey: @"fillColor"];
+    if (![_fillRule isEqualToString: kCAFillRuleNonZero])
+        [w encodeObject: _fillRule forKey: @"fillRule"];
+    if (_strokeColor != NULL)
+        [w encodeColor: _strokeColor forKey: @"strokeColor"];
+    if (_strokeStart != 0)
+        [w encodeDouble: _strokeStart forKey: @"strokeStart"];
+    if (_strokeEnd != 1)
+        [w encodeDouble: _strokeEnd forKey: @"strokeEnd"];
+    if (_lineWidth != 1)
+        [w encodeDouble: _lineWidth forKey: @"lineWidth"];
+    if (_miterLimit != 10)
+        [w encodeDouble: _miterLimit forKey: @"miterLimit"];
+    if (![_lineCap isEqualToString: kCALineCapButt])
+        [w encodeObject: _lineCap forKey: @"lineCap"];
+    if (![_lineJoin isEqualToString: kCALineJoinMiter])
+        [w encodeObject: _lineJoin forKey: @"lineJoin"];
+    if (_lineDashPhase != 0)
+        [w encodeDouble: _lineDashPhase forKey: @"lineDashPhase"];
+    if (_lineDashPattern != nil)
+        [w encodeArray: _lineDashPattern forKey: @"lineDashPattern"];
+}
+
+- (void) _decodeAttributes: (CAArchiveReader *) r {
+    [self _setShapeDefaults];
+    [super _decodeAttributes: r];
+    CGPathRef path = [r copyPathForKey: @"path"];
+    if (path != NULL) {
+        [self setPath: path];
+        CGPathRelease(path);
+    }
+    CGColorRef color = [r copyColorForKey: @"fillColor"];
+    if (color != NULL) {
+        [self setFillColor: color];
+        CGColorRelease(color);
+    }
+    color = [r copyColorForKey: @"strokeColor"];
+    if (color != NULL) {
+        [self setStrokeColor: color];
+        CGColorRelease(color);
+    }
+    NSString *string = [r decodeStringForKey: @"fillRule"];
+    if (string != nil)
+        [self setFillRule: string];
+    string = [r decodeStringForKey: @"lineCap"];
+    if (string != nil)
+        [self setLineCap: string];
+    string = [r decodeStringForKey: @"lineJoin"];
+    if (string != nil)
+        [self setLineJoin: string];
+    double real;
+    if ([r decodeDouble: &real forKey: @"strokeStart"])
+        _strokeStart = real;
+    if ([r decodeDouble: &real forKey: @"strokeEnd"])
+        _strokeEnd = real;
+    if ([r decodeDouble: &real forKey: @"lineWidth"])
+        _lineWidth = real;
+    if ([r decodeDouble: &real forKey: @"miterLimit"])
+        _miterLimit = real;
+    if ([r decodeDouble: &real forKey: @"lineDashPhase"])
+        _lineDashPhase = real;
+    NSArray *pattern = [r decodeArrayForKey: @"lineDashPattern"];
+    if (pattern != nil)
+        [self setLineDashPattern: pattern];
 }
 
 - initWithLayer: (id) layer {

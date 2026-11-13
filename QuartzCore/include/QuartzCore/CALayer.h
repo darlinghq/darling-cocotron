@@ -89,7 +89,7 @@ CA_EXPORT CAToneMapMode const CAToneMapModeAutomatic;
 CA_EXPORT CAToneMapMode const CAToneMapModeNever;
 CA_EXPORT CAToneMapMode const CAToneMapModeIfSupported;
 
-@interface CALayer : NSObject {
+@interface CALayer : NSObject <NSSecureCoding> {
     CALayerContext *_context;
     CALayer *_superlayer;
     NSArray *_sublayers;
@@ -251,6 +251,8 @@ CA_EXPORT CAToneMapMode const CAToneMapModeIfSupported;
 // state from the layer they are given. The properties of that layer are not
 // carried over and the argument is not checked.
 - (nonnull instancetype)initWithLayer: (nonnull id)layer;
+// Keyed archiving of the layer and the layers below it, in the layout macOS uses.
+- (nullable instancetype)initWithCoder: (nonnull NSCoder *)coder;
 
 - (void) addSublayer: (CALayer *) layer;
 - (void) insertSublayer: (CALayer *) layer atIndex: (unsigned int) index;
