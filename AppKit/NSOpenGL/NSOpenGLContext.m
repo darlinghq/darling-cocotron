@@ -257,7 +257,12 @@ static inline void _clearCurrentContext() {
 }
 
 - (void) flushBuffer {
-    CGLFlushDrawable(_glContext);
+    // A backend that presents on its own thread cannot be swapped from another.
+    if ([_subwindow requiresMainThreadPresentation] && ![NSThread isMainThread])
+        return;
+
+    if (CGLFlushDrawable(_glContext) == kCGLNoError)
+        [_subwindow flush];
 }
 
 @end
