@@ -259,8 +259,12 @@ NSApplication *NSApp = nil;
 - (NSWindow *) windowWithWindowNumber: (NSInteger) number {
     NSWindow *window = [[CGWindow windowWithWindowNumber: number] delegate];
 
-    if (window == nil ||
-        [_windows indexOfObjectIdenticalTo: window] == NSNotFound)
+    if (window == nil)
+        return nil;
+    // Windows of the framework's own (not listed in -windows) still get the
+    // events that land on them.
+    if ([_windows indexOfObjectIdenticalTo: window] == NSNotFound &&
+        !([window styleMask] & NSAppKitPrivateWindow))
         return nil;
     return window;
 }
