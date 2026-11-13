@@ -296,8 +296,9 @@ int O2ColorConvertComponentsToDeviceRGB(O2ColorSpaceRef inputSpace,
     return 0;
 }
 
-// Converts through device RGB, which is how Onyx2D treats every color space
-// it can draw with; spaces it cannot convert from or to give NULL.
+// Spaces with colorimetric profiles (the named sRGB, Display P3, generic and
+// gray spaces) convert through CIE XYZ. Any other conversion goes through device
+// RGB; spaces it cannot convert from or to give NULL.
 O2ColorRef O2ColorCreateCopyByMatchingToColorSpace(O2ColorSpaceRef colorSpace,
                                                    O2ColorRef color)
 {
@@ -310,6 +311,25 @@ O2ColorRef O2ColorCreateCopyByMatchingToColorSpace(O2ColorSpaceRef colorSpace,
     O2ColorSpaceModel sourceModel = O2ColorSpaceGetModel(source);
     O2ColorSpaceModel targetModel = O2ColorSpaceGetModel(colorSpace);
     const O2Float *components = O2ColorGetComponents(color);
+
+    // Two spaces with colorimetric profiles convert through CIE XYZ.
+    O2ColorProfile sourceProfile, targetProfile;
+    if (O2ColorSpaceGetColorProfile(source, &sourceProfile) &&
+        O2ColorSpaceGetColorProfile(colorSpace, &targetProfile)) {
+        size_t sourceCount = O2ColorSpaceGetNumberOfComponents(source);
+        size_t targetCount = O2ColorSpaceGetNumberOfComponents(colorSpace);
+        double in[3] = {components[0], 0, 0};
+        for (size_t i = 1; i < sourceCount; i++)
+            in[i] = components[i];
+        double out[3];
+        O2ColorProfileConvert(&sourceProfile, &targetProfile, in, out);
+
+        O2Float result[4];
+        for (size_t i = 0; i < targetCount; i++)
+            result[i] = out[i];
+        result[targetCount] = components[sourceCount];
+        return O2ColorCreate(colorSpace, result);
+    }
 
     if (sourceModel == targetModel &&
         (targetModel == kO2ColorSpaceModelMonochrome ||

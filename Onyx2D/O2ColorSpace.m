@@ -142,8 +142,9 @@ O2ColorSpaceRef O2ColorSpaceCreateWithName(CFStringRef name) {
     if (name == NULL)
         return NULL;
 
-    // Onyx2D currently represents these named spaces as RGB. Preserve their
-    // identity for callers; color conversion remains a separate backend gap.
+    // Named spaces carry their name; the ones with a colorimetric profile
+    // (O2ColorConversion.h) convert properly, the rest are still represented as
+    // device RGB with the name kept for callers.
     const CFStringRef rgbNames[] = {
         kO2ColorSpaceSRGB,
         kO2ColorSpaceExtendedSRGB,
@@ -157,10 +158,31 @@ O2ColorSpaceRef O2ColorSpaceCreateWithName(CFStringRef name) {
         CFSTR("kCGColorSpaceITUR_2100_PQ"),
         CFSTR("kCGColorSpaceITUR_2100_HLG"),
         CFSTR("kCGColorSpaceExtendedLinearITUR_2020"),
+        kO2ColorSpaceGenericRGB,
+        kO2ColorSpaceGenericRGBLinear,
+        kO2ColorSpaceAdobeRGB1998,
+        kO2ColorSpaceITUR_709,
+        kO2ColorSpaceITUR_2020,
     };
     for (size_t i = 0; i < sizeof(rgbNames) / sizeof(rgbNames[0]); i++) {
         if (CFEqual(name, rgbNames[i])) {
             O2ColorSpaceRef cs = [[O2ColorSpace alloc] initWithDeviceRGB];
+            CFRetain(name);
+            cs->_name = name;
+            return cs;
+        }
+    }
+
+    const CFStringRef grayNames[] = {
+        kO2ColorSpaceGenericGray,
+        kO2ColorSpaceGenericGrayGamma2_2,
+        kO2ColorSpaceExtendedGray,
+        kO2ColorSpaceLinearGray,
+        kO2ColorSpaceExtendedLinearGray,
+    };
+    for (size_t i = 0; i < sizeof(grayNames) / sizeof(grayNames[0]); i++) {
+        if (CFEqual(name, grayNames[i])) {
+            O2ColorSpaceRef cs = [[O2ColorSpace alloc] initWithDeviceGray];
             CFRetain(name);
             cs->_name = name;
             return cs;
@@ -171,6 +193,19 @@ O2ColorSpaceRef O2ColorSpaceCreateWithName(CFStringRef name) {
 
 CFStringRef O2ColorSpaceGetName(O2ColorSpaceRef colorSpace) {
     return colorSpace ? colorSpace->_name : NULL;
+}
+
+BOOL O2ColorSpaceGetColorProfile(O2ColorSpaceRef self, O2ColorProfile *profile) {
+    if (self == NULL || self->_name == NULL)
+        return NO;
+    char name[64];
+    if (!CFStringGetCString(self->_name, name, sizeof(name),
+                            kCFStringEncodingASCII))
+        return NO;
+    if (!O2ColorProfileForName(name, profile))
+        return NO;
+    // The profile and the model must agree (a gray profile for a gray space).
+    return profile->isGray == (self->_type == kO2ColorSpaceModelMonochrome);
 }
 
 BOOL O2ColorSpaceIsPlatformRGB(O2ColorSpaceRef self) {
