@@ -425,6 +425,28 @@ static CFRange clippedStringRange(CFRange range, CFIndex start, CFIndex end)
     return CFRangeMake(location, limit > location ? limit - location : 0);
 }
 
+// Wraps already built runs into a line object. The string range is the range of `string` the line stands for.
+static CTLineRef createLineObject(CFAttributedStringRef string, CFRange range, CFArrayRef runs,
+                                  CGFloat width, CGFloat ascent, CGFloat descent, CGFloat leading)
+{
+    CFMutableDictionaryRef line = CFDictionaryCreateMutable(
+            kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks,
+            &kCFTypeDictionaryValueCallBacks);
+    if (line == NULL)
+        return NULL;
+    CFDictionarySetValue(line, KTLineAttributedStringKey, string);
+    CFDictionarySetValue(line, KTLineRunsKey, runs);
+    KTCoreTextDictionarySetIndex(line, KTLineRangeLocationKey, range.location);
+    KTCoreTextDictionarySetIndex(line, KTLineRangeLengthKey, range.length);
+    KTCoreTextDictionarySetFloat(line, KTLineWidthKey, width);
+    KTCoreTextDictionarySetFloat(line, KTLineAscentKey, ascent);
+    KTCoreTextDictionarySetFloat(line, KTLineDescentKey, descent);
+    KTCoreTextDictionarySetFloat(line, KTLineLeadingKey, leading);
+    CTLineRef result = (CTLineRef)KTCoreTextCreateObject(CTLineGetTypeID(), line);
+    CFRelease(line);
+    return result;
+}
+
 CTLineRef KTCoreTextCreateLineWithRange(CFAttributedStringRef attrString, CFRange stringRange)
 {
     if (attrString == NULL || stringRange.location < 0 || stringRange.length < 0)
@@ -484,23 +506,10 @@ CTLineRef KTCoreTextCreateLineWithRange(CFAttributedStringRef attrString, CFRang
         cursor = range.location + range.length;
     }
 
-    CFMutableDictionaryRef line = CFDictionaryCreateMutable(
-            kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks,
-            &kCFTypeDictionaryValueCallBacks);
-    if (line == NULL)
-        goto failed;
-    CFDictionarySetValue(line, KTLineAttributedStringKey, copy);
-    CFDictionarySetValue(line, KTLineRunsKey, runs);
-    KTCoreTextDictionarySetIndex(line, KTLineRangeLocationKey, stringRange.location);
-    KTCoreTextDictionarySetIndex(line, KTLineRangeLengthKey, stringRange.length);
-    KTCoreTextDictionarySetFloat(line, KTLineWidthKey, width);
-    KTCoreTextDictionarySetFloat(line, KTLineAscentKey, ascent);
-    KTCoreTextDictionarySetFloat(line, KTLineDescentKey, descent);
-    KTCoreTextDictionarySetFloat(line, KTLineLeadingKey, leading);
+    CTLineRef result = createLineObject(copy, stringRange, runs, width, ascent,
+                                        descent, leading);
     CFRelease(copy);
     CFRelease(runs);
-    CTLineRef result = (CTLineRef)KTCoreTextCreateObject(CTLineGetTypeID(), line);
-    CFRelease(line);
     return result;
 
 failed:
@@ -613,7 +622,28 @@ CGRect CTLineGetBoundsWithOptions(CTLineRef line, CTLineBoundsOptions options)
 
 double CTLineGetTrailingWhitespaceWidth(CTLineRef line)
 {
-    return 0;
+    if (line == NULL)
+        return 0;
+    CFDictionaryRef dictionary = KTCoreTextObjectDictionary(line);
+    CFStringRef string = CFAttributedStringGetString(
+            (CFAttributedStringRef)CFDictionaryGetValue(dictionary, KTLineAttributedStringKey));
+    CFRange range = CTLineGetStringRange(line);
+    CFCharacterSetRef space = CFCharacterSetGetPredefined(kCFCharacterSetWhitespaceAndNewline);
+    CFIndex start = range.location + range.length;
+    while (start > range.location &&
+           CFCharacterSetIsCharacterMember(space, CFStringGetCharacterAtIndex(string, start - 1)))
+        --start;
+    double width = 0;
+    CFArrayRef runs = CTLineGetGlyphRuns(line);
+    for (CFIndex runIndex = 0; runIndex < CFArrayGetCount(runs); ++runIndex) {
+        CTRunRef run = (CTRunRef)CFArrayGetValueAtIndex(runs, runIndex);
+        const CFIndex *indices = CTRunGetStringIndicesPtr(run);
+        const CGSize *advances = CTRunGetAdvancesPtr(run);
+        for (CFIndex index = 0; index < CTRunGetGlyphCount(run); ++index)
+            if (indices[index] >= start)
+                width += advances[index].width;
+    }
+    return width;
 }
 
 CGRect CTLineGetImageBounds(CTLineRef line, CGContextRef context)
