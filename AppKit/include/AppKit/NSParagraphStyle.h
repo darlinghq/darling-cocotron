@@ -48,6 +48,7 @@ typedef enum {
     NSMutableArray *_tabStops;
     float _hyphenationFactor;
     float _tighteningFactorForTruncation;
+    NSInteger _horizontalAlignment;
 }
 
 + (NSParagraphStyle *) defaultParagraphStyle;
@@ -81,6 +82,9 @@ typedef enum {
 
 @property (readonly) float hyphenationFactor;
 - (float) tighteningFactorForTruncation;
+
+// Undocumented (TextEdit on macOS 26 sets 0); stored, not used for layout.
+- (NSInteger) horizontalAlignment;
 
 @end
 

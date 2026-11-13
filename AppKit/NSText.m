@@ -221,6 +221,12 @@ NSString *const NSTextDidChangeNotification = @"NSTextDidChangeNotification";
     NSInvalidAbstractInvocation();
 }
 
+- (void) setBaseWritingDirection: (NSWritingDirection) direction
+                           range: (NSRange) range
+{
+    NSInvalidAbstractInvocation();
+}
+
 - (void) setTextColor: (NSColor *) color {
     NSInvalidAbstractInvocation();
 }

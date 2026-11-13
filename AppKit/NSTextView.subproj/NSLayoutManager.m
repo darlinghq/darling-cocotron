@@ -120,6 +120,7 @@ static inline NSGlyphFragment *fragmentAtGlyphIndex(NSLayoutManager *self,
         _glyphFragments = NSCreateRangeToOwnedPointerEntries(2);
         _invalidFragments = NSCreateRangeToOwnedPointerEntries(2);
         _layoutInvalid = YES;
+        _defaultAttachmentScaling = NSImageScaleNone;
         _rectCacheCapacity = 16;
         _rectCacheCount = 0;
         _rectCache = NSZoneMalloc(NULL, sizeof(NSRect) * _rectCacheCapacity);
@@ -132,6 +133,7 @@ static inline NSGlyphFragment *fragmentAtGlyphIndex(NSLayoutManager *self,
 }
 
 - init {
+    _defaultAttachmentScaling = NSImageScaleNone;
     _typesetter = [NSTypesetter new];
     _glyphGenerator = [[NSGlyphGenerator sharedGlyphGenerator] retain];
     _textContainers = [NSMutableArray new];
@@ -174,6 +176,22 @@ static inline NSGlyphFragment *fragmentAtGlyphIndex(NSLayoutManager *self,
 
 - (NSArray *) textContainers {
     return [[_textContainers retain] autorelease];
+}
+
+- (NSImageScaling) defaultAttachmentScaling {
+    return _defaultAttachmentScaling;
+}
+
+- (void) setDefaultAttachmentScaling: (NSImageScaling) scaling {
+    _defaultAttachmentScaling = scaling;
+}
+
+- (BOOL) usesDefaultHyphenation {
+    return _usesDefaultHyphenation;
+}
+
+- (void) setUsesDefaultHyphenation: (BOOL) flag {
+    _usesDefaultHyphenation = flag;
 }
 
 - (NSTextView *) firstTextView {
@@ -220,8 +238,38 @@ static inline NSGlyphFragment *fragmentAtGlyphIndex(NSLayoutManager *self,
     _layoutInvalid = YES;
 }
 
+// Moves every layout manager of the current text storage, and their text views, to textStorage.
 - (void) replaceTextStorage: (NSTextStorage *) textStorage {
-    [self setTextStorage: textStorage];
+    if (textStorage == nil)
+        [NSException raise: NSInvalidArgumentException
+                    format: @"-[NSLayoutManager replaceTextStorage:] nil text storage"];
+    if (textStorage == _textStorage)
+        return;
+
+    NSTextStorage *oldStorage = [_textStorage retain];
+    // Nib-loaded text views add their shared layout manager once each, so the old list can repeat it.
+    NSMutableArray *layoutManagers = [NSMutableArray array];
+    for (NSLayoutManager *layoutManager in [oldStorage layoutManagers]) {
+        if ([layoutManagers indexOfObjectIdenticalTo: layoutManager] == NSNotFound)
+            [layoutManagers addObject: layoutManager];
+    }
+    if ([layoutManagers indexOfObjectIdenticalTo: self] == NSNotFound)
+        [layoutManagers addObject: self];
+
+    NSUInteger length = [textStorage length];
+    for (NSLayoutManager *layoutManager in layoutManagers) {
+        [textStorage addLayoutManager: layoutManager];
+        [oldStorage removeLayoutManager: layoutManager];
+        for (NSTextContainer *container in [layoutManager textContainers]) {
+            NSTextView *textView = [container textView];
+            [textView _setTextStorage: textStorage];
+            NSRange selection = [textView selectedRange];
+            if (textView && NSMaxRange(selection) > length)
+                [textView setSelectedRange: NSMakeRange(MIN(selection.location, length), 0)];
+        }
+        [layoutManager invalidateDisplayForCharacterRange: NSMakeRange(0, length)];
+    }
+    [oldStorage release];
 }
 
 - (void) setGlyphGenerator: (NSGlyphGenerator *) generator {
@@ -2924,8 +2972,8 @@ static inline void _appendRectToCache(NSLayoutManager *self, NSRect rect) {
     return nil;
 }
 
+// Stored only: layout is always contiguous.
 - (void) setAllowsNonContiguousLayout: (BOOL) value {
     _allowsNonContiguousLayout = value;
-    NSUnimplementedMethod();
 }
 @end

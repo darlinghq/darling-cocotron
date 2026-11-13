@@ -19,6 +19,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #include <stdio.h>
 #import <Foundation/NSKeyedArchiver.h>
+#import <Foundation/NSLocale.h>
 
 #import <AppKit/NSParagraphStyle.h>
 #import <AppKit/NSRaise.h>
@@ -35,9 +36,16 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return shared;
 }
 
+// Right to left for languages written that way (Arabic, Hebrew, ...), left to
+// right otherwise; nil means the user's preferred language.
 + (NSWritingDirection) defaultWritingDirectionForLanguage: (NSString *) languageName {
-    NSUnimplementedMethod();
-    return NSWritingDirectionNatural;
+    NSString *language = languageName ? languageName : [[NSLocale preferredLanguages] firstObject];
+    if (language == nil)
+        return NSWritingDirectionLeftToRight;
+    return [NSLocale characterDirectionForLanguage: language] ==
+                           NSLocaleLanguageDirectionRightToLeft
+                   ? NSWritingDirectionRightToLeft
+                   : NSWritingDirectionLeftToRight;
 }
 
 + (NSArray *) _defaultTabStops {
@@ -193,6 +201,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     _tabStops = [other->_tabStops copy];
     _hyphenationFactor = other->_hyphenationFactor;
     _tighteningFactorForTruncation = other->_tighteningFactorForTruncation;
+    _horizontalAlignment = other->_horizontalAlignment;
     return self;
 }
 
@@ -251,6 +260,10 @@ static inline id mutableCopyWithZone(NSParagraphStyle *self, NSZone *zone) {
 
 - mutableCopyWithZone: (NSZone *) zone {
     return mutableCopyWithZone(self, zone);
+}
+
+- (NSInteger) horizontalAlignment {
+    return _horizontalAlignment;
 }
 
 - (NSWritingDirection) baseWritingDirection {
