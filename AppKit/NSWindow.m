@@ -4306,6 +4306,62 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
     return _appearance != nil ? _appearance : [NSApp effectiveAppearance];
 }
 
+// Private AppKit method that applications call on a mouse down to find out
+// whether the pointer is on a resize edge or corner of the window. The answer
+// is -1 when the window cannot be resized there, otherwise a direction: 0
+// right, 1 top right, 2 top, 3 top left, 4 left, 5 bottom left, 6 bottom, 7
+// bottom right. The location is in window coordinates.
+//
+// The region geometry is approximate: it was observed on macOS at one pixel
+// per point for a window of 300 by 200 points. An edge band is about 4 points
+// wide inside the frame (titled windows also react up to 3 points outside it)
+// and corners are squares of about 10 points (the observed arm lengths were between 6 and 11 points, depending on the window part). Resizing itself is done by the
+// window manager, so these regions only drive the answer of this method.
+- (NSInteger) _resizeDirectionForMouseLocation: (NSPoint) location {
+    if (!(_styleMask & NSWindowStyleMaskResizable))
+        return -1;
+
+    NSSize size = [self frame].size;
+    CGFloat outside = (_styleMask & NSWindowStyleMaskTitled) ? 3.0 : 0.0;
+    const CGFloat band = 4.0, corner = 10.0;
+
+    if (location.x < -outside || location.y < -outside ||
+        location.x >= size.width + outside || location.y >= size.height + outside)
+        return -1;
+
+    BOOL left = location.x < band;
+    BOOL right = location.x >= size.width - band;
+    BOOL bottom = location.y < band;
+    BOOL top = location.y >= size.height - band;
+
+    if (!left && !right && !bottom && !top) {
+        // Inside the frame, away from every edge, except for the corner
+        // squares.
+        left = location.x < corner;
+        right = location.x >= size.width - corner;
+        bottom = location.y < corner;
+        top = location.y >= size.height - corner;
+        if (!((left || right) && (bottom || top)))
+            return -1;
+    } else {
+        // On an edge band: near a corner it is the corner.
+        if (left || right) {
+            bottom = bottom || location.y < corner;
+            top = top || location.y >= size.height - corner;
+        }
+        if (top || bottom) {
+            left = left || location.x < corner;
+            right = right || location.x >= size.width - corner;
+        }
+    }
+
+    if (top)
+        return left ? 3 : right ? 1 : 2;
+    if (bottom)
+        return left ? 5 : right ? 7 : 6;
+    return left ? 4 : 0;
+}
+
 - (CGFloat) backingScaleFactor {
     // Query only an existing native window: asking for a scale must not map it.
     if ([_platformWindow respondsToSelector: @selector(backingScaleFactor)]) {
