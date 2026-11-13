@@ -495,12 +495,23 @@ MTL_UNSUPPORTED_CLASS
 			}
 		}
 
+		// While this wait lasts, -queuePresent: wakes it, so that a present queued by another thread
+		// after the check above is rendered here too: the main thread cannot run the block that would do it.
+		BOOL isMainThread = [NSThread isMainThread];
+		BOOL timedOut = NO;
+		if (isMainThread) {
+			_mainThreadWaitingForDrawable = YES;
+		}
 		if (_allowsNextDrawableTimeout) {
-			if (![_drawableCondition waitUntilDate: endTime]) {
-				break;
-			}
+			timedOut = ![_drawableCondition waitUntilDate: endTime];
 		} else {
 			[_drawableCondition wait];
+		}
+		if (isMainThread) {
+			_mainThreadWaitingForDrawable = NO;
+		}
+		if (timedOut) {
+			break;
 		}
 	}
 
@@ -547,6 +558,10 @@ MTL_UNSUPPORTED_CLASS
 	if (_queuedDrawableCount < _drawables.size()) {
 		_queuedDrawables[_queuedDrawableCount] = drawableID;
 		++_queuedDrawableCount;
+		if (_mainThreadWaitingForDrawable) {
+			// Broadcast, because other threads may wait on the same condition.
+			[_drawableCondition broadcast];
+		}
 	} else {
 		overflowed = _drawables[drawableID];
 	}

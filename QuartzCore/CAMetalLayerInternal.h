@@ -47,6 +47,8 @@ class CAMetalDrawableActual;
 	NSUInteger _queuedDrawableCount;
 	uint8_t _usableDrawablesBitmap;
 	NSCondition* _drawableCondition;
+	// YES while the main thread waits for a drawable in -nextDrawable; guarded by _drawableCondition.
+	BOOL _mainThreadWaitingForDrawable;
 	std::shared_ptr<CAMetalDrawableActual> _lastPresentedDrawable;
 
 	GLuint _tex;
