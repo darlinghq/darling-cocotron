@@ -57,7 +57,14 @@ enum {
     NSOpenGLPFARemotePixelBuffer = 91,
     NSOpenGLPFAAllowOfflineRenderers = 96,
     NSOpenGLPFAAcceleratedCompute = 97,
+    NSOpenGLPFAOpenGLProfile = 99,
     NSOpenGLPFAVirtualScreenCount = 128,
+};
+
+enum {
+    NSOpenGLProfileVersionLegacy = 0x1000,
+    NSOpenGLProfileVersion3_2Core = 0x3200,
+    NSOpenGLProfileVersion4_1Core = 0x4100
 };
 
 typedef uint32_t NSOpenGLPixelFormatAttribute;

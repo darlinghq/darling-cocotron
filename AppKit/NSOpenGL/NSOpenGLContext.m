@@ -168,14 +168,33 @@ static inline void _clearCurrentContext() {
 - (void) makeCurrentContext {
     CGLError error;
 
-    [self performSelectorOnMainThread: @selector(updateViewParameters)
-                           withObject: nil
-                        waitUntilDone: YES];
+    // Viewless contexts have no window geometry to update. In particular,
+    // background resource uploads must not wait for a main-thread run loop.
+    if (_subwindow == nil && _view != nil) {
+        if ([NSThread isMainThread]) {
+            [self updateViewParameters];
+        } else {
+            [self performSelectorOnMainThread: @selector(updateViewParameters)
+                                   withObject: nil
+                                waitUntilDone: YES];
+        }
+    }
 
-    if ((error = CGLContextMakeCurrentAndAttachToWindow(
-                 _glContext, _cglWindow)) != kCGLNoError)
-        NSLog(@"CGLSetCurrentContext failed with %d in %s %d", error, __FILE__,
-              __LINE__);
+    if (_cglWindow != NULL) {
+        if ((error = CGLContextMakeCurrentAndAttachToWindow(
+                     _glContext, _cglWindow)) != kCGLNoError) {
+            NSLog(@"CGLSetCurrentContext failed with %d in %s %d", error, __FILE__,
+                  __LINE__);
+            // A swap-interval error may occur after EGL successfully switched.
+            if (CGLGetCurrentContext() == _glContext) _setCurrentContext(self);
+            return;
+        }
+    } else {
+        if ((error = CGLSetCurrentContext(_glContext)) != kCGLNoError) {
+            NSLog(@"CGLSetCurrentContext without window failed with %d in %s %d", error, __FILE__, __LINE__);
+            return;
+        }
+    }
 
     _setCurrentContext(self);
 

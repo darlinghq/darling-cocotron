@@ -18,6 +18,28 @@
 */
 
 #import <QuartzCore/CALayer.h>
+#import <OpenGL/OpenGL.h>
+#import <CoreVideo/CVBase.h>
 
-@interface CAOpenGLLayer : CALayer
+@interface CAOpenGLLayer : CALayer {
+    BOOL _asynchronous;
+    CGLPixelFormatObj _pixelFormat;
+    CGLContextObj _cglContext;
+    BOOL _wantsExtendedDynamicRangeContent;
+    GLuint _fbo;
+    GLuint _colorTex;
+    GLuint _depthRb;
+    CGSize _allocatedSize;
+}
+
+@property(getter=isAsynchronous) BOOL asynchronous;
+@property BOOL wantsExtendedDynamicRangeContent;
+
+- (BOOL) canDrawInCGLContext: (CGLContextObj) ctx pixelFormat: (CGLPixelFormatObj) pf forLayerTime: (CFTimeInterval) t displayTime: (const CVTimeStamp *) ts;
+- (void) drawInCGLContext: (CGLContextObj) ctx pixelFormat: (CGLPixelFormatObj) pf forLayerTime: (CFTimeInterval) t displayTime: (const CVTimeStamp *) ts;
+- (CGLPixelFormatObj) copyCGLPixelFormatForDisplayMask: (uint32_t) mask;
+- (CGLContextObj) copyCGLContextForPixelFormat: (CGLPixelFormatObj) pf;
+- (void) releaseCGLPixelFormat: (CGLPixelFormatObj) pf;
+- (void) releaseCGLContext: (CGLContextObj) ctx;
+
 @end
