@@ -1,3 +1,6 @@
+#ifndef CGFONT_H
+#define CGFONT_H
+
 /* Copyright (c) 2006-2007 Christopher J. W. Lloyd
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
@@ -25,7 +28,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 typedef struct CF_BRIDGED_TYPE(id) O2Font *CGFontRef;
 
-typedef uint16_t CGGlyph;
+typedef uint16_t CGFontIndex;
+typedef CGFontIndex CGGlyph;
 
 CF_IMPLICIT_BRIDGING_ENABLED
 
@@ -68,3 +72,5 @@ COREGRAPHICS_EXPORT CFStringRef const kCGFontVariationAxisDefaultValue;
 COREGRAPHICS_EXPORT CFStringRef const kCGFontVariationAxisMaxValue;
 
 CF_IMPLICIT_BRIDGING_DISABLED
+
+#endif /* CGFONT_H */

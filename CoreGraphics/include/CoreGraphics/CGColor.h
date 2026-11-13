@@ -1,3 +1,6 @@
+#ifndef CGCOLOR_H
+#define CGCOLOR_H
+
 /* Copyright (c) 2007 Christopher J. W. Lloyd
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
@@ -31,7 +34,8 @@ COREGRAPHICS_EXPORT CGColorRef CGColorRetain(CGColorRef self);
 COREGRAPHICS_EXPORT void CGColorRelease(CGColorRef self);
 
 COREGRAPHICS_EXPORT CGColorRef CGColorCreate(CGColorSpaceRef colorSpace,
-                                             const CGFloat *components);
+                                             const CGFloat *components)
+    CF_SWIFT_NAME(CGColor.init(colorSpace:components:));
 COREGRAPHICS_EXPORT CGColorRef CGColorCreateGenericGray(CGFloat gray,
                                                         CGFloat a);
 COREGRAPHICS_EXPORT CGColorRef CGColorCreateGenericRGB(CGFloat r, CGFloat g,
@@ -68,3 +72,5 @@ COREGRAPHICS_EXPORT const CFStringRef kCGColorBlack;
 COREGRAPHICS_EXPORT const CFStringRef kCGColorClear;
 
 CF_IMPLICIT_BRIDGING_DISABLED
+
+#endif /* CGCOLOR_H */

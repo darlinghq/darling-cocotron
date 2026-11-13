@@ -1,3 +1,6 @@
+#ifndef CGPATH_H
+#define CGPATH_H
+
 /* Copyright(c) 2007 Christopher J. W. Lloyd
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
@@ -21,13 +24,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <CoreGraphics/CGGeometry.h>
 #import <CoreGraphics/CoreGraphicsExport.h>
 
-typedef enum {
+typedef CF_ENUM(int32_t, CGPathElementType) {
     kCGPathElementMoveToPoint,
     kCGPathElementAddLineToPoint,
     kCGPathElementAddQuadCurveToPoint,
     kCGPathElementAddCurveToPoint,
     kCGPathElementCloseSubpath,
-} CGPathElementType;
+};
 
 typedef struct {
     CGPathElementType type;
@@ -57,7 +60,8 @@ COREGRAPHICS_EXPORT bool CGPathContainsPoint(CGPathRef self,
                                              const CGAffineTransform *xform,
                                              CGPoint point, bool evenOdd);
 
-COREGRAPHICS_EXPORT CGMutablePathRef CGPathCreateMutable(void);
+COREGRAPHICS_EXPORT CGMutablePathRef CGPathCreateMutable(void)
+    CF_SWIFT_NAME(CGMutablePath.init());
 
 COREGRAPHICS_EXPORT void CGPathMoveToPoint(CGMutablePathRef self,
                                            const CGAffineTransform *xform,
@@ -73,7 +77,8 @@ COREGRAPHICS_EXPORT void CGPathAddCurveToPoint(CGMutablePathRef self,
 COREGRAPHICS_EXPORT void
 CGPathAddQuadCurveToPoint(CGMutablePathRef self, const CGAffineTransform *xform,
                           CGFloat cpx, CGFloat cpy, CGFloat x, CGFloat y);
-COREGRAPHICS_EXPORT void CGPathCloseSubpath(CGMutablePathRef self);
+COREGRAPHICS_EXPORT void CGPathCloseSubpath(CGMutablePathRef self)
+    CF_SWIFT_NAME(CGMutablePath.closeSubpath(self:));
 
 COREGRAPHICS_EXPORT void CGPathAddLines(CGMutablePathRef self,
                                         const CGAffineTransform *xform,
@@ -105,14 +110,19 @@ COREGRAPHICS_EXPORT void CGPathAddPath(CGMutablePathRef self,
                                        CGPathRef other);
 
 COREGRAPHICS_EXPORT CGPathRef
-CGPathCreateWithEllipseInRect(CGRect rect, const CGAffineTransform *transform);
+CGPathCreateWithEllipseInRect(CGRect rect, const CGAffineTransform *transform)
+    CF_SWIFT_NAME(CGPath.init(ellipseIn:transform:));
 
 COREGRAPHICS_EXPORT CGPathRef
-CGPathCreateWithRect(CGRect rect, const CGAffineTransform *transform);
+CGPathCreateWithRect(CGRect rect, const CGAffineTransform *transform)
+    CF_SWIFT_NAME(CGPath.init(rect:transform:));
 
 COREGRAPHICS_EXPORT CGRect CGPathGetPathBoundingBox(CGPathRef path);
 
 COREGRAPHICS_EXPORT CGPathRef CGPathCreateCopyByTransformingPath(
-        CGPathRef path, CGAffineTransform *transform);
+        CGPathRef path, CGAffineTransform *transform)
+    CF_SWIFT_NAME(CGPath.copy(self:using:));
 
 CF_IMPLICIT_BRIDGING_DISABLED
+
+#endif /* CGPATH_H */

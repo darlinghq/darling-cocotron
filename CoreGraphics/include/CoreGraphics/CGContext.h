@@ -1,3 +1,6 @@
+#ifndef CGCONTEXT_H
+#define CGCONTEXT_H
+
 /* Copyright (c) 2006-2007 Christopher J. W. Lloyd
 
 Permission is hereby granted,free of charge,to any person obtaining a copy of
@@ -41,34 +44,35 @@ typedef enum {
     kCGEncodingMacRoman,
 } CGTextEncoding;
 
-typedef enum {
+typedef CF_ENUM(int32_t, CGLineCap) {
     kCGLineCapButt,
     kCGLineCapRound,
     kCGLineCapSquare,
-} CGLineCap;
+};
 
-typedef enum {
+typedef CF_ENUM(int32_t, CGLineJoin) {
     kCGLineJoinMiter,
     kCGLineJoinRound,
     kCGLineJoinBevel,
-} CGLineJoin;
+};
 
-typedef enum {
+typedef CF_ENUM(int32_t, CGPathDrawingMode) {
     kCGPathFill,
     kCGPathEOFill,
     kCGPathStroke,
     kCGPathFillStroke,
     kCGPathEOFillStroke
-} CGPathDrawingMode;
+};
 
-typedef enum {
+typedef CF_ENUM(int32_t, CGInterpolationQuality) {
     kCGInterpolationDefault,
     kCGInterpolationNone,
     kCGInterpolationLow,
     kCGInterpolationHigh,
-} CGInterpolationQuality;
+    kCGInterpolationMedium = 4,
+};
 
-typedef enum {
+typedef CF_ENUM(int32_t, CGBlendMode) {
     // seperable
     kCGBlendModeNormal,
     kCGBlendModeMultiply,
@@ -97,10 +101,10 @@ typedef enum {
     kCGBlendModeDestinationIn,
     kCGBlendModeDestinationOut,
     kCGBlendModeDestinationAtop,
-    kCGBlendModeXOR,
+    kCGBlendModeXOR CF_SWIFT_NAME(xor),
     kCGBlendModePlusDarker,
     kCGBlendModePlusLighter,
-} CGBlendMode;
+};
 
 typedef int CGTextDrawingMode;
 
@@ -155,7 +159,8 @@ COREGRAPHICS_EXPORT void CGContextAddArcToPoint(CGContextRef context,
 COREGRAPHICS_EXPORT void CGContextAddEllipseInRect(CGContextRef context,
                                                    CGRect rect);
 
-COREGRAPHICS_EXPORT void CGContextAddPath(CGContextRef context, CGPathRef path);
+COREGRAPHICS_EXPORT void CGContextAddPath(CGContextRef context, CGPathRef path)
+    CF_SWIFT_NAME(CGContext.addPath(self:_:));
 
 COREGRAPHICS_EXPORT void
 CGContextReplacePathWithStrokedPath(CGContextRef context);
@@ -337,7 +342,8 @@ COREGRAPHICS_EXPORT void CGContextFillEllipseInRect(CGContextRef context,
                                                     CGRect rect);
 
 COREGRAPHICS_EXPORT void CGContextDrawPath(CGContextRef context,
-                                           CGPathDrawingMode pathMode);
+                                           CGPathDrawingMode pathMode)
+    CF_SWIFT_NAME(CGContext.drawPath(self:using:));
 COREGRAPHICS_EXPORT void CGContextStrokePath(CGContextRef context);
 COREGRAPHICS_EXPORT void CGContextFillPath(CGContextRef context);
 COREGRAPHICS_EXPORT void CGContextEOFillPath(CGContextRef context);
@@ -431,3 +437,5 @@ CGContextShowGlyphsAtPositions(CGContextRef c,
                                size_t count);
 
 CF_IMPLICIT_BRIDGING_DISABLED
+
+#endif /* CGCONTEXT_H */
