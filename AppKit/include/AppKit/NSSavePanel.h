@@ -42,6 +42,8 @@ enum {
     BOOL _showsHiddenFiles;
 
     BOOL _treatsFilePackagesAsDirectories;
+    BOOL _canSelectHiddenExtension;
+    BOOL _extensionHidden;
     NSView *_accessoryView;
 
     IBOutlet NSOutlineView *_outlineView;
@@ -57,6 +59,9 @@ enum {
 
 @property (copy) NSString *nameFieldStringValue;
 @property BOOL showsHiddenFiles;
+// Stored only: the panel has no hide-extension checkbox.
+@property BOOL canSelectHiddenExtension;
+@property (getter=isExtensionHidden) BOOL extensionHidden;
 
 + (NSSavePanel *) savePanel;
 

@@ -113,6 +113,10 @@ typedef NS_OPTIONS(NSUInteger, NSApplicationPresentationOptions) {
     NSApplicationPresentationDisableCursorLocationAssistance = 1 << 12,
 };
 
+typedef NS_OPTIONS(NSInteger, NSWindowListOptions) {
+    NSWindowListOrderedFrontToBack = (1 << 0),
+};
+
 @interface NSApplication : NSResponder {
     NSDisplay *_display;
     id _delegate;
@@ -355,6 +359,11 @@ APPKIT_EXPORT int NSApplicationMain(int argc, const char *argv[]);
 APPKIT_EXPORT void NSUpdateDynamicServices(void);
 APPKIT_EXPORT BOOL NSPerformService(NSString *itemName,
                                     NSPasteboard *pasteboard);
+
+@interface NSApplication (NSWindowEnumeration)
+- (void) enumerateWindowsWithOptions: (NSWindowListOptions) options
+                                usingBlock: (void (^)(NSWindow *window, BOOL *stop)) block;
+@end
 
 // Performance-test hooks; they do nothing here.
 @interface NSApplication (NSApplicationPerformanceTesting)

@@ -148,6 +148,11 @@ typedef NS_ENUM(NSInteger, NSTextLayoutOrientation) {
 - (NSRect) lineFragmentUsedRectForGlyphAtIndex: (NSUInteger) glyphIndex
                                 effectiveRange:
                                         (NSRangePointer) effectiveGlyphRange;
+- (void) enumerateLineFragmentsForGlyphRange: (NSRange) glyphRange
+                                  usingBlock: (void (^)(NSRect lineRect, NSRect usedRect,
+                                                        NSTextContainer *textContainer,
+                                                        NSRange lineGlyphRange,
+                                                        BOOL *stop)) block;
 - (NSRect) usedRectForTextContainer: (NSTextContainer *) container;
 - (NSRect) extraLineFragmentRect;
 - (NSRect) extraLineFragmentUsedRect;

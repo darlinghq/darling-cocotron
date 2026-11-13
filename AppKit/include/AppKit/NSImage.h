@@ -23,6 +23,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSImageRep;
 @class NSImageSymbolConfiguration;
+@class NSGraphicsContext;
 
 typedef NSString *NSImageHintKey NS_TYPED_ENUM NS_SWIFT_NAME(NSImageRep.HintKey);
 
@@ -60,6 +61,8 @@ typedef enum {
 
 + (NSArray *) imageFileTypes;
 + (NSArray *) imageUnfilteredFileTypes;
++ (NSArray *) imageTypes;
++ (NSArray *) imageUnfilteredTypes;
 + (NSArray *) imagePasteboardTypes;
 + (NSArray *) imageUnfilteredPasteboardTypes;
 
@@ -75,6 +78,9 @@ typedef enum {
 - initWithContentsOfFile: (NSString *) path;
 - initWithContentsOfURL: (NSURL *) url;
 - initWithCGImage: (CGImageRef) cgImage size: (NSSize) size;
+- (CGImageRef) CGImageForProposedRect: (NSRect *) proposedDestRect
+                              context: (NSGraphicsContext *) context
+                                hints: (NSDictionary *) hints;
 
 - initWithPasteboard: (NSPasteboard *) pasteboard;
 - initByReferencingFile: (NSString *) path;

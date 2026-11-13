@@ -58,6 +58,7 @@ typedef enum {
 - (NSRect) contentRect;
 
 - (NSFont *) font;
+- (NSControlSize) controlSize;
 - (NSTabViewType) tabViewType;
 - (NSTabPosition) tabPosition;
 - (BOOL) drawsBackground;
@@ -65,6 +66,7 @@ typedef enum {
 
 - (void) setDelegate: delegate;
 - (void) setFont: (NSFont *) font;
+- (void) setControlSize: (NSControlSize) controlSize;
 - (void) setTabViewType: (NSTabViewType) type;
 - (void) setTabPosition: (NSTabPosition) position;
 - (void) setDrawsBackground: (BOOL) flag;

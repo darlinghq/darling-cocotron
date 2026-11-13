@@ -387,6 +387,10 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
     return _allowsColumnSelection;
 }
 
+- (BOOL) allowsTypeSelect {
+    return _allowsTypeSelect;
+}
+
 - (BOOL) autosaveTableColumns {
     NSUnimplementedMethod();
     return NO;
@@ -786,6 +790,10 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     _allowsColumnSelection = flag;
 }
 
+- (void) setAllowsTypeSelect: (BOOL) flag {
+    _allowsTypeSelect = flag;
+}
+
 - (void) setAutosaveTableColumns: (BOOL) flag {
     NSUnimplementedMethod();
 }
@@ -1177,22 +1185,45 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 }
 
 - (void) selectColumn: (NSInteger) column byExtendingSelection: (BOOL) extend {
-    NSTableColumn *tableColumn = [_tableColumns objectAtIndex: column];
+    [self selectColumnIndexes: [NSIndexSet indexSetWithIndex: column]
+         byExtendingSelection: extend];
+}
 
-    // selecting a column deselects all rows
-    [self selectRowIndexes: [NSIndexSet indexSet] byExtendingSelection: NO];
+- (void) selectColumnIndexes: (NSIndexSet *) indexes
+        byExtendingSelection: (BOOL) extend
+{
+    // Like selectRowIndexes:, out-of-range indexes leave the selection untouched.
+    if ([indexes count] > 0 && [indexes lastIndex] >= [_tableColumns count])
+        return;
+
+    // Selecting a column deselects all rows. Not through selectRowIndexes:, which
+    // also clears the columns and, without allowsEmptySelection, re-selects row 0.
+    if ([_selectedRowIndexes count] > 0) {
+        [self willChangeValueForKey: @"selectedRowIndexes"];
+        [_selectedRowIndexes release];
+        _selectedRowIndexes = [[NSIndexSet alloc] init];
+        [self didChangeValueForKey: @"selectedRowIndexes"];
+    }
 
     if (extend == NO)
         [_selectedColumns removeAllObjects];
 
-    if ([_selectedColumns containsObject: tableColumn] == NO) {
-        if ([self delegateShouldSelectTableColumn: tableColumn] == YES)
+    for (NSUInteger i = [indexes firstIndex]; i != NSNotFound;
+         i = [indexes indexGreaterThanIndex: i]) {
+        NSTableColumn *tableColumn = [_tableColumns objectAtIndex: i];
+
+        if (![_selectedColumns containsObject: tableColumn] &&
+            [self delegateShouldSelectTableColumn: tableColumn])
             [_selectedColumns addObject: tableColumn];
     }
 
     [self noteSelectionDidChange];
     [self setNeedsDisplay: YES];
     [_headerView setNeedsDisplay: YES];
+}
+
+- (NSIndexSet *) columnIndexesInRect: (NSRect) rect {
+    return [NSIndexSet indexSetWithIndexesInRange: [self columnsInRect: rect]];
 }
 
 - (void) deselectRow: (NSInteger) row {

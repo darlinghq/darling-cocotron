@@ -4605,3 +4605,51 @@ static NSTextView *s_targetTextView = nil;
 }
 
 @end
+
+@implementation NSTextView (NSFindIndicatorAndPasteboard)
+
+// There's no find indicator animation; make the range visible instead.
+- (void) showFindIndicatorForRange: (NSRange) range {
+    [self scrollRangeToVisible: range];
+}
+
+// No link panel in Cocotron.
+- (void) orderFrontLinkPanel: (id) sender {
+}
+
+// Replaces the selection with the pasteboard's contents of the given type:
+// RTF/RTFD as attributed text, anything string-like as plain text.
+- (BOOL) readSelectionFromPasteboard: (NSPasteboard *) pasteboard
+                                type: (NSString *) type
+{
+    NSData *data = nil;
+    NSAttributedString *attributed = nil;
+
+    if ([type isEqualToString: NSPasteboardTypeRTFD] || [type isEqualToString: NSRTFDPboardType]) {
+        data = [pasteboard dataForType: type];
+        if (data != nil)
+            attributed = [[[NSAttributedString alloc] initWithRTFD: data documentAttributes: NULL] autorelease];
+    } else if ([type isEqualToString: NSPasteboardTypeRTF] || [type isEqualToString: NSRTFPboardType]) {
+        data = [pasteboard dataForType: type];
+        if (data != nil)
+            attributed = [[[NSAttributedString alloc] initWithRTF: data documentAttributes: NULL] autorelease];
+    }
+
+    if (attributed != nil) {
+        NSRange selection = [self selectedRange];
+        if (![self shouldChangeTextInRange: selection replacementString: [attributed string]])
+            return NO;
+        [[self textStorage] replaceCharactersInRange: selection withAttributedString: attributed];
+        [self setSelectedRange: NSMakeRange(selection.location + [attributed length], 0)];
+        [self didChangeText];
+        return YES;
+    }
+
+    NSString *string = [pasteboard stringForType: type];
+    if (string == nil)
+        return NO;
+    [self insertText: string];
+    return YES;
+}
+
+@end

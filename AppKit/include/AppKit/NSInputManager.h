@@ -2,4 +2,7 @@
 
 @interface NSInputManager : NSObject
 
++ (NSInputManager *) currentInputManager;
+- (void) markedTextAbandoned: (id) client;
+
 @end

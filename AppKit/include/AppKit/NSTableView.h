@@ -124,6 +124,7 @@ typedef NS_OPTIONS(NSUInteger, NSTableViewAnimationOptions) {
     BOOL _allowsMultipleSelection;
     BOOL _allowsEmptySelection;
     BOOL _allowsColumnSelection;
+    BOOL _allowsTypeSelect;
     NSSize _intercellSpacing;
 
     BOOL _alternatingRowBackground;
@@ -179,6 +180,7 @@ typedef NS_OPTIONS(NSUInteger, NSTableViewAnimationOptions) {
 - (BOOL) allowsMultipleSelection;
 - (BOOL) allowsEmptySelection;
 - (BOOL) allowsColumnSelection;
+- (BOOL) allowsTypeSelect;
 - (BOOL) autosaveTableColumns;
 
 - (BOOL) usesAlternatingRowBackgroundColors;
@@ -227,6 +229,7 @@ typedef NS_OPTIONS(NSUInteger, NSTableViewAnimationOptions) {
 - (void) setAllowsMultipleSelection: (BOOL) flag;
 - (void) setAllowsEmptySelection: (BOOL) flag;
 - (void) setAllowsColumnSelection: (BOOL) flag;
+- (void) setAllowsTypeSelect: (BOOL) flag;
 - (void) setDraggingSourceOperationMask: (NSDragOperation) mask
                                forLocal: (BOOL) isLocal;
 - (NSDragOperation) draggingSourceOperationMaskForLocal: (BOOL) isLocal;
@@ -266,6 +269,9 @@ typedef NS_OPTIONS(NSUInteger, NSTableViewAnimationOptions) {
 - (void) selectColumn: (NSInteger) column byExtendingSelection: (BOOL) extend;
 - (void) deselectRow: (NSInteger) row;
 - (void) deselectColumn: (NSInteger) column;
+- (void) selectColumnIndexes: (NSIndexSet *) indexes
+        byExtendingSelection: (BOOL) extend;
+- (NSIndexSet *) columnIndexesInRect: (NSRect) rect;
 
 - (void) selectAll: sender;
 - (void) deselectAll: sender;
