@@ -21,9 +21,13 @@ static int failures;
 @end
 
 @interface AutosavingDocument : NSDocument
+{
+    int _writes;
+}
 @property(assign) int writes;
 @end
 @implementation AutosavingDocument
+@synthesize writes = _writes;
 + (BOOL)autosavesInPlace {
     return YES;
 }
