@@ -909,9 +909,8 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
 }
 
 - (void) addAnimation: (CAAnimation *) animation forKey: (NSString *) key {
-    if (_context == nil)
-        return;
-
+    // The animation is recorded for any layer, also one that is not part of a
+    // hosted layer tree; the context, if there is one, starts driving it.
     [_animations setObject: animation forKey: key];
     [_context startTimerIfNeeded];
 }
