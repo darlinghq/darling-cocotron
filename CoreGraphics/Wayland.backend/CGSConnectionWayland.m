@@ -100,13 +100,13 @@ static void socketCallback(CFSocketRef socket, CFSocketCallBackType type,
 @implementation CGSConnectionWayland
 
 + (BOOL) isAvailable {
-    // CGS.m selects by NSPriority alone, with no variable of its own; gating on
-    // AppKit's keeps both frameworks on the same display server.
-    const char *requested = getenv("DARLING_APPKIT_BACKEND");
-    if (requested == NULL || strcasecmp(requested, "wayland") != 0)
+    // WaylandBackendSelected() is the decision AppKit's Wayland backend makes too (see
+    // WaylandLibrary.h); CGS.m selects by NSPriority alone, so asking the same question keeps
+    // both frameworks on the same display server.
+    if (!WaylandBackendSelected())
         return NO;
     if (getenv("WAYLAND_DISPLAY") == NULL) {
-        NSLog(@"CoreGraphics Wayland backend: DARLING_APPKIT_BACKEND=wayland "
+        NSLog(@"CoreGraphics Wayland backend: the Wayland backend was selected "
               @"but WAYLAND_DISPLAY is unset");
         return NO;
     }
@@ -186,8 +186,6 @@ static void socketCallback(CFSocketRef socket, CFSocketCallBackType type,
     CFRunLoopAddSource(CFRunLoopGetMain(), _source, kCFRunLoopCommonModes);
 
     [self flush];
-    NSLog(@"CoreGraphics Wayland backend: connected, %lu output(s)",
-          (unsigned long) [_outputs count]);
     return self;
 }
 

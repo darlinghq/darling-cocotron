@@ -20,19 +20,19 @@
 
 // The CoreGraphics counterpart of AppKit's Wayland backend. CGS.m picks a
 // backend by sorting the bundles in Resources/Backends by NSPriority and taking
-// the first whose principal class answers +isAvailable; there is no environment
-// variable in that path. This bundle's NSPriority is above X11's, and
-// +isAvailable requires DARLING_APPKIT_BACKEND=wayland, so a process that did
-// not opt in keeps getting the X11 backend exactly as before.
+// the first whose principal class answers +isAvailable. This bundle's NSPriority is
+// above X11's, and +isAvailable asks WaylandBackendSelected(): the environment variable
+// DARLING_APPKIT_BACKEND, then the DisplayBackend preference, then whether a compositor
+// is advertised, the same decision AppKit's Wayland backend makes.
 //
 // This connection is independent of the one AppKit's Wayland backend opens,
 // the same way the CoreGraphics X11 backend calls XOpenDisplay() independently
 // of AppKit's X11Display. Windows created here are not AppKit windows.
 //
-// Native libwayland is reached through AppKit/Wayland.backend/WaylandLibrary.m,
-// which is compiled into this bundle as well: it is plain C over Foundation and
-// elfcalls with no AppKit dependency, and duplicating its dlopen shim and
-// opcode table would be worse than sharing the file.
+// Native libwayland is reached through WaylandSupport/WaylandLibrary.m, which is
+// compiled into this bundle and into AppKit's Wayland backend: it is plain C over
+// Foundation and elfcalls, and duplicating its dlopen shim and opcode table would be
+// worse than sharing the file.
 
 #ifndef CGSCONNECTIONWAYLAND_H
 #define CGSCONNECTIONWAYLAND_H
