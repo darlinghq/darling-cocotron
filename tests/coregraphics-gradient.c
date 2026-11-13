@@ -156,7 +156,9 @@ int main(void)
     drawLinear(unordered, 0, W, 0, &pixels);
     checkPixel(pixels, 15, 128, 0, 128, 255, "unordered locations: red to blue below .3");
     checkPixel(pixels, 70, 0, 207, 48, 255, "unordered locations: blue to green between .3 and .8");
-    checkPixel(pixels, 88, 123, 255, 123, 255, "unordered locations: green to white past .8");
+    // 40% of the way from green to white is 102 in the red and blue channels with straight sRGB
+    // arithmetic; macOS 26 gives 111 there (colour matching), so the expectation is between them.
+    checkPixel(pixels, 88, 107, 255, 107, 255, "unordered locations: green to white past .8");
     free(pixels);
     CGGradientRelease(unordered);
 
