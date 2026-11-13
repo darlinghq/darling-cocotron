@@ -950,7 +950,11 @@ static int untitled_document_number = 0;
                  didRunSelector: (SEL) selector
                     contextInfo: (void *) info
 {
-    NSUnimplementedMethod();
+    NSWindow *docWindow = [self windowForSheet];
+    [printOperation runOperationModalForWindow: docWindow
+                                      delegate: delegate
+                                didRunSelector: selector
+                                   contextInfo: info];
 }
 
 - (NSPrintOperation *) printOperationWithSettings: (NSDictionary *) settings
@@ -969,18 +973,30 @@ static int untitled_document_number = 0;
 {
     if ([self _isSelectorOverridden: @selector(printShowingPrintPanel:)]) {
         [self printShowingPrintPanel: showPrintPanel];
+        if (delegate != nil && selector != NULL) {
+            void (*cb)(id, SEL, NSDocument *, BOOL, void *) =
+                    (void (*)(id, SEL, NSDocument *, BOOL, void *)) objc_msgSend;
+            cb(delegate, selector, self, YES, contextInfo);
+        }
     } else {
         NSError *error = nil;
         NSPrintOperation *operation = [self printOperationWithSettings: settings
                                                                  error: &error];
 
         if (operation == nil) {
+            if (delegate != nil && selector != NULL) {
+                void (*cb)(id, SEL, NSDocument *, BOOL, void *) =
+                        (void (*)(id, SEL, NSDocument *, BOOL, void *)) objc_msgSend;
+                cb(delegate, selector, self, NO, contextInfo);
+            }
             return;
         }
         [operation setShowsPrintPanel: showPrintPanel];
-        [operation runOperation];
+        [self runModalPrintOperation: operation
+                            delegate: delegate
+                      didRunSelector: selector
+                         contextInfo: contextInfo];
     }
-    // FIX, message delegate
 }
 
 - (void) close {

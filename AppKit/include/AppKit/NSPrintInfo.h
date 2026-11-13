@@ -86,6 +86,7 @@ APPKIT_EXPORT NSString *const NSPrintSavePath;
 + (NSPrintInfo *) sharedPrintInfo;
 // Like +sharedPrintInfo, per thread; nil goes back to a default print info.
 + (void) setSharedPrintInfo: (NSPrintInfo *) printInfo;
++ (NSPrinter *) defaultPrinter;
 
 - initWithDictionary: (NSDictionary *) dictionary;
 
@@ -129,6 +130,13 @@ APPKIT_EXPORT NSString *const NSPrintSavePath;
 
 - (void) setHorizontallyCentered: (BOOL) value;
 - (void) setVerticallyCentered: (BOOL) value;
+
+- (void *) PMPrintSession;
+- (void *) PMPageFormat;
+- (void *) PMPrintSettings;
+
+- (void) updateFromPMPageFormat;
+- (void) updateFromPMPrintSettings;
 
 - (void) setUpPrintOperationDefaultValues;
 

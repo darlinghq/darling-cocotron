@@ -18,6 +18,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSPrintInfo.h>
+#import <AppKit/NSPrinter.h>
 #import <ApplicationServices/ApplicationServices.h>
 #import <Foundation/NSDictionary.h>
 #import <Foundation/NSString.h>
@@ -62,6 +63,10 @@ NSString *const NSPrintSavePath = @"NSPrintSavePath";
 
 + (NSPrintInfo *) sharedPrintInfo {
     return NSThreadSharedInstance(@"NSPrintInfo");
+}
+
++ (NSPrinter *) defaultPrinter {
+    return [NSPrinter printerWithName: [[NSPrinter printerNames] firstObject]];
 }
 
 + (void) setSharedPrintInfo: (NSPrintInfo *) printInfo {
@@ -113,7 +118,14 @@ NSString *const NSPrintSavePath = @"NSPrintSavePath";
 }
 
 - (NSPrinter *) printer {
-    return [_attributes objectForKey: NSPrintPrinter];
+    NSPrinter *printer = [_attributes objectForKey: NSPrintPrinter];
+    if (printer == nil) {
+        printer = [NSPrintInfo defaultPrinter];
+        if (printer != nil) {
+            [_attributes setObject: printer forKey: NSPrintPrinter];
+        }
+    }
+    return printer;
 }
 
 - (NSString *) jobDisposition {
@@ -252,6 +264,26 @@ NSString *const NSPrintSavePath = @"NSPrintSavePath";
 - (void) setVerticallyCentered: (BOOL) value {
     [_attributes setObject: [NSNumber numberWithBool: value]
                     forKey: NSPrintVerticallyCentered];
+}
+
+// PrintCore is not implemented (its session, page format and settings creators return NULL),
+// so there are no PrintCore objects behind a print info.
+- (void *) PMPrintSession {
+    return NULL;
+}
+
+- (void *) PMPageFormat {
+    return NULL;
+}
+
+- (void *) PMPrintSettings {
+    return NULL;
+}
+
+- (void) updateFromPMPageFormat {
+}
+
+- (void) updateFromPMPrintSettings {
 }
 
 - (void) setUpPrintOperationDefaultValues {
