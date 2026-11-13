@@ -30,7 +30,7 @@ backend draw the window frame itself even when the compositor offers server-side
   keymap and key repeat, aggregate and left/right modifier changes, touchpad pinch as magnify and rotate
   events.
 - Cursors: themed cursors and `NSImage` cursors with their hotspot.
-- Clipboard and drag-and-drop, OpenGL and scale: see below.
+- Clipboard and drag-and-drop, OpenGL and scale, fullscreen and pointer lock: see below.
 - Outputs: output batches are applied atomically, rotation and the xdg-output logical layout feed `NSScreen`,
   integer buffer scale follows the outputs a window is on.
 
@@ -64,6 +64,22 @@ Scale follows the output a surface is on: the integer `wl_surface.set_buffer_sca
 together with viewporter, the preferred scale in 120ths with the buffer cropped and scaled through a viewport. Cursors
 and drag icons use the same scale; a compositor without viewporter gets an integer scale only. Swaps are paced to the
 refresh rate of the window's output (`refreshMillihertz`).
+
+## Fullscreen and pointer lock
+
+A window is fullscreen when it has the fullscreen style bit, or is an untitled window that can become key and has
+the size of one output (`DarlingFullscreenPolicy.h`, the rule the X11 backend uses too); it then sends
+`xdg_toplevel.set_fullscreen`, naming the output it is on when that is unambiguous. The size to return to is kept
+across leaving fullscreen, hiding and showing, and a `setFrame:` made while fullscreen wins over what the compositor
+remembers. The decision is re-made when the outputs change.
+
+`CGAssociateMouseAndMouseCursorPosition(false)` (relative mouse mode) locks the pointer with
+[pointer-constraints](https://gitlab.freedesktop.org/wayland/wayland-protocols/-/blob/main/unstable/pointer-constraints/pointer-constraints-unstable-v1.xml)
+and reads motion from
+[relative-pointer](https://gitlab.freedesktop.org/wayland/wayland-protocols/-/blob/main/unstable/relative-pointer/relative-pointer-unstable-v1.xml),
+with `deltaY` growing downward. While locked, `CGWarpMouseCursorPosition` moves only the cursor position the application
+sees (it takes CoreGraphics global coordinates) and the pointer reappears there on unlock; without a lock a warp does
+nothing, because a Wayland client cannot move the pointer. A compositor without the protocols logs that once.
 
 Native libraries (libwayland-client, libwayland-cursor, libxkbcommon) are loaded with `dlopen` through the
 loader's native-call table only when the backend is selected, so the bundle has no link-time dependency on
