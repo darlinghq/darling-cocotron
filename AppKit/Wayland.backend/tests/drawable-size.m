@@ -1,3 +1,8 @@
+/*
+ Copyright (C) 2026 Darling Developers
+
+ Licensed under the MIT license, the same as the rest of this project.
+*/
 // Compile the production layer implementation under a distinct class name and
 // replace only GL calls, so this tests viewport/rejection behavior without EGL.
 #define CALayerContext TestedLayerContext

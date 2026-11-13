@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Darling Developers
+#
+# Licensed under the MIT license, the same as the rest of this project.
 """Check untouched compositor captures from fractional-live.m (ImageMagick required)."""
 import json
 import math

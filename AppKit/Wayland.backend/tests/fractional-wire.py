@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Darling Developers
+#
+# Licensed under the MIT license, the same as the rest of this project.
 """Independently check exact crop endpoints in fractional-crop's client trace."""
 from decimal import Decimal as D, ROUND_HALF_UP
 from pathlib import Path

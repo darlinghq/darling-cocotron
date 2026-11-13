@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Darling Developers
+#
+# Licensed under the MIT license, the same as the rest of this project.
 from pathlib import Path
 import subprocess,json,sys
 p=Path(sys.argv[1]);scale=int(sys.argv[2]);results=[];errors=[]

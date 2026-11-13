@@ -1,3 +1,8 @@
+/*
+ Copyright (C) 2026 Darling Developers
+
+ Licensed under the MIT license, the same as the rest of this project.
+*/
 // Deterministic cursor pixels and hotspots for the private compositor fixture.
 #include <X11/Xcursor/Xcursor.h>
 #include <assert.h>

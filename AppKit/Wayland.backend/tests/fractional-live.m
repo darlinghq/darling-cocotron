@@ -1,3 +1,8 @@
+/*
+ Copyright (C) 2026 Darling Developers
+
+ Licensed under the MIT license, the same as the rest of this project.
+*/
 #import <AppKit/AppKit.h>
 #import <OpenGL/gl.h>
 #include <math.h>
