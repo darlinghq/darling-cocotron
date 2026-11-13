@@ -54,8 +54,8 @@ int main(void)
             [glyph imageForProposedSize:CGSizeMake(20, 20) scaleFactor:2 imageOffset:&offset imageSize:&size];
         });
         expect([image.name isEqualToString:NSInternalInconsistencyException] &&
-                   [image.reason rangeOfString:@"VibeDarling/darling#845"].location != NSNotFound,
-               @"image lookup raises and names the issue");
+                   image.reason != nil,
+               @"image lookup raises");
 
         [glyph release];
         [same release];

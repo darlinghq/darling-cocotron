@@ -20,6 +20,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <CoreText/CTFont.h>
 #import <CoreText/CoreText.h>
 #import <CoreText/KTFont.h>
+#import "CTFontSPI.h"
 #import <CoreGraphics/CGContext.h>
 #import <CoreGraphics/CGDataProvider.h>
 #import <CoreGraphics/CGFont.h>
@@ -608,6 +609,29 @@ void CTFontDrawGlyphs(CTFontRef font, const CGGlyph *glyphs, const CGPoint *posi
     CGContextShowGlyphsAtPositions(context, glyphs, positions, count);
     CGContextRestoreGState(context);
     CGFontRelease(graphicsFont);
+}
+
+void CTFontDrawGlyphsWithAdvances(CTFontRef font, const CGGlyph *glyphs,
+                                  const CGSize *advances, size_t count,
+                                  CGContextRef context)
+{
+    if (font == NULL || glyphs == NULL || advances == NULL || count == 0 || context == NULL)
+        return;
+    CGFontRef graphicsFont = CTFontCopyGraphicsFont(font, NULL);
+    if (graphicsFont == NULL)
+        return;
+    CGContextSetFont(context, graphicsFont);
+    CGContextSetFontSize(context, CTFontGetSize(font));
+    CGContextShowGlyphsWithAdvances(context, glyphs, advances, count);
+    CGFontRelease(graphicsFont);
+}
+
+bool CTFontShouldAntiAlias(CTFontRef font)
+{
+    // macOS answers per font (observed on macOS 26.7.3: true for Menlo up to
+    // 200 pt, false for Helvetica); Onyx2D antialiases every outline, so this
+    // reports true for any font.
+    return true;
 }
 
 CFIndex CTFontGetLigatureCaretPositions(CTFontRef font, CGGlyph glyph, CGFloat *positions,

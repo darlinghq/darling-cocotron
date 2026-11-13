@@ -54,7 +54,7 @@
 {
     [NSException raise:NSInternalInconsistencyException
                 format:@"-[CTAdaptiveImageGlyph %@]: Darling cannot read adaptive image glyph content, "
-                       @"whose format Apple does not document (VibeDarling/darling#845)",
+                       @"whose format Apple does not document",
                        NSStringFromSelector(_cmd)];
     return NULL;
 }

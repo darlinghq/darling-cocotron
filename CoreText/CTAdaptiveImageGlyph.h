@@ -4,7 +4,7 @@
 @class NSData;
 
 // Private on macOS, so not in the SDK headers (clients such as OpenSwiftUI declare it themselves).
-// Carries the adaptive image payload; its metadata format is undocumented (VibeDarling/darling#845).
+// Carries the adaptive image payload; its metadata format is undocumented.
 @interface CTAdaptiveImageGlyph : NSObject <CTAdaptiveImageProviding> {
     NSData *_imageContent;
 }
