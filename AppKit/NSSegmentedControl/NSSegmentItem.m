@@ -32,6 +32,17 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (id) initWithCoder: (NSCoder *) decoder {
+    if (![decoder allowsKeyedCoding]) {
+        // The width, the image, label, menu and tool tip, the tag, a flag word (bit 31
+        // selected, bit 30 disabled) and two unused ints.
+        int flags, unused[2];
+
+        [decoder decodeValuesOfObjCTypes: "f@@@@iiii", &_width, &_image, &_label, &_menu, &_toolTip, &_tag,
+                                          &flags, &unused[0], &unused[1]];
+        _isEnabled = ((unsigned) flags & 0x40000000u) == 0;
+        _isSelected = ((unsigned) flags & 0x80000000u) != 0;
+        return self;
+    }
     _label = [[decoder decodeObjectForKey: @"NSSegmentItemLabel"] retain];
     _image = [[decoder decodeObjectForKey: @"NSSegmentItemImage"] retain];
     _isEnabled = ![decoder decodeBoolForKey: @"NSSegmentItemDisabled"];

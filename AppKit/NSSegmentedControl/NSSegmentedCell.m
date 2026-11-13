@@ -47,6 +47,28 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (id) initWithCoder: (NSCoder *) coder {
     [super initWithCoder: coder];
 
+    if (![coder allowsKeyedCoding]) {
+        // The segment items, the selected segment (-1 for none), a flag word whose bit 30
+        // means momentary and bit 29 select-any tracking, and four unused ints.
+        id items = nil;
+        int selected, flags, unused[4];
+
+        [coder decodeValuesOfObjCTypes: "@iiiiii", &items, &selected, &flags, &unused[0], &unused[1], &unused[2],
+                                        &unused[3]];
+        _segments = [items isKindOfClass: [NSArray class]] ? [items mutableCopy] : [[NSMutableArray alloc] init];
+        [items release];
+        _selectedSegment = selected < 0 ? NSNotFound : selected;
+        if ((unsigned) flags & 0x40000000u)
+            _trackingMode = NSSegmentSwitchTrackingMomentary;
+        else if ((unsigned) flags & 0x20000000u)
+            _trackingMode = NSSegmentSwitchTrackingSelectAny;
+        else
+            _trackingMode = NSSegmentSwitchTrackingSelectOne;
+
+        [self _recomputeSegmentWidths];
+        return self;
+    }
+
     _segments = [[coder decodeObjectForKey: @"NSSegmentImages"] retain];
     if (!_segments)
         _segments = [[NSMutableArray arrayWithCapacity: 5] retain];
