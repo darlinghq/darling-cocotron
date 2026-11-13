@@ -17,6 +17,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#include <stdio.h>
 #import <Foundation/NSKeyedArchiver.h>
 
 #import <AppKit/NSParagraphStyle.h>
@@ -104,9 +105,64 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         _tighteningFactorForTruncation =
                 [coder decodeFloatForKey: @"TighteningFactor"];
     } else {
-        [NSException raise: NSInvalidArgumentException
-                    format: @"-[%@ %s] is not implemented for coder %@",
-                            [self class], sel_getName(_cmd), coder];
+        // QUIRK: NSArchiver (typedstream) layout of a paragraph style: the
+        // type string "CC@S" (alignment in the legacy NSTextAlignment
+        // numbering, the line break mode, the tab stops or nil, a short of
+        // flags), then, when any flag is set, an array "[Nf]" with one float per
+        // set flag in ascending bit order: 0x01 line spacing, 0x02 paragraph
+        // spacing, 0x04 head indent, 0x08 tail indent, 0x10 first-line head
+        // indent, 0x20 minimum line height, 0x40 maximum line height, 0x80 line
+        // height multiple, 0x100 paragraph spacing before, 0x200 default tab
+        // interval, 0x400 hyphenation factor. The base writing direction is not
+        // archived. Flags outside that set are refused rather than guessed. Not
+        // documented. Evidence: archives written by NSArchiver on macOS 26.7.3
+        // (tier 2, MC26.12, MAC-EVIDENCE.md and mac-probes/v246-paragraphstyle-archive.m),
+        // earlier an archive written on macOS 27 (MC13.7, fixture
+        // paragraphstyle.typedstream). Test: test_quirk_typedstream_paragraph_style
+        // and test_quirk_typedstream_paragraph_style_flags in
+        // tests/appkit-typedstream-text.m
+        unsigned char alignment, lineBreakMode;
+        NSArray *tabStops;
+        unsigned short flags;
+        [coder decodeValuesOfObjCTypes: "CC@S", &alignment, &lineBreakMode, &tabStops, &flags];
+        [tabStops autorelease];
+        if (alignment > NSNaturalTextAlignment || lineBreakMode > NSLineBreakByTruncatingMiddle ||
+            (flags & ~0x7ffu) != 0)
+            [NSException raise: NSInvalidArgumentException
+                        format: @"-[%@ %s]: unsupported archived values %u %u %u", [self class], sel_getName(_cmd),
+                                alignment, lineBreakMode, flags];
+        float values[11];
+        unsigned valueCount = 0;
+        for (unsigned bit = 0; bit < 11; bit++)
+            if (flags & (1u << bit))
+                valueCount++;
+        if (valueCount > 0) {
+            char type[16];
+            snprintf(type, sizeof(type), "[%uf]", valueCount);
+            [coder decodeValueOfObjCType: type at: values];
+        }
+        float fields[11] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+        for (unsigned bit = 0, next = 0; bit < 11; bit++)
+            if (flags & (1u << bit))
+                fields[bit] = values[next++];
+        [self _initWithDefaults];
+        _alignment = alignment;
+        _lineBreakMode = lineBreakMode;
+        _lineSpacing = fields[0];
+        _paragraphSpacing = fields[1];
+        _headIndent = fields[2];
+        _tailIndent = fields[3];
+        _firstLineHeadIndent = fields[4];
+        _minimumLineHeight = fields[5];
+        _maximumLineHeight = fields[6];
+        _lineHeightMultiple = fields[7];
+        _paragraphSpacingBefore = fields[8];
+        _defaultTabInterval = fields[9];
+        _hyphenationFactor = fields[10];
+        if (tabStops != nil) {
+            [_tabStops release];
+            _tabStops = [tabStops mutableCopy];
+        }
     }
 
     return self;

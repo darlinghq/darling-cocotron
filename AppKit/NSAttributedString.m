@@ -146,7 +146,6 @@ NSUInteger NSUnderlineByWordMask = 0x8000;
         documentAttributes: (NSDictionary **) attributes
                      error: (NSError **) error
 {
-    NSUnimplementedMethod();
     NSString *docType = [options objectForKey:NSDocumentTypeDocumentAttribute];
    
     //Infer the document format if not provided
@@ -209,8 +208,27 @@ NSUInteger NSUnderlineByWordMask = 0x8000;
         return nil;
     }
     else if([docType isEqual: NSPlainTextDocumentType]){
-        NSLog(@"NSAttributedString initFromData - dont know how to parse %@", docType);
-        return nil;
+        // The given encoding, else UTF-8 falling back to Latin-1.
+        NSNumber *encodingOption = [options objectForKey: NSCharacterEncodingDocumentOption];
+        NSStringEncoding encoding = encodingOption ? [encodingOption unsignedIntegerValue] : NSUTF8StringEncoding;
+        NSString *string = [[[NSString alloc] initWithData: data encoding: encoding] autorelease];
+        if (string == nil && encodingOption == nil) {
+            encoding = NSISOLatin1StringEncoding;
+            string = [[[NSString alloc] initWithData: data encoding: encoding] autorelease];
+        }
+        if (string == nil) {
+            if (error)
+                *error = [NSError errorWithDomain: NSCocoaErrorDomain
+                                             code: NSFileReadInapplicableStringEncodingError
+                                         userInfo: nil];
+            [self release];
+            return nil;
+        }
+        if (attributes)
+            *attributes = [NSDictionary dictionaryWithObjectsAndKeys:
+                    NSPlainTextDocumentType, NSDocumentTypeDocumentAttribute,
+                    [NSNumber numberWithUnsignedInteger: encoding], NSCharacterEncodingDocumentAttribute, nil];
+        return [self initWithString: string];
     }
     else if([docType isEqual: NSRTFTextDocumentType]){
         return [self initWithRTF: data documentAttributes: attributes];
@@ -275,8 +293,9 @@ NSUInteger NSUnderlineByWordMask = 0x8000;
 }
 
 - initWithRTF: (NSData *) rtf documentAttributes: (NSDictionary **) attributes {
-    *attributes = [NSDictionary dictionaryWithObject: NSRTFTextDocumentType 
-                                              forKey: NSDocumentTypeDocumentAttribute];
+    if (attributes)
+        *attributes = [NSDictionary dictionaryWithObject: NSRTFTextDocumentType
+                                                  forKey: NSDocumentTypeDocumentAttribute];
     NSAttributedString *string =
             [NSRichTextReader attributedStringWithData: rtf];
     if (string == nil) {
@@ -318,7 +337,15 @@ NSUInteger NSUnderlineByWordMask = 0x8000;
 #pragma mark Retrieving Font Attribute Information
 
 - (BOOL) containsAttachments {
-    NSUnimplementedMethod();
+    NSUInteger length = [self length], location = 0;
+    while (location < length) {
+        NSRange effectiveRange;
+        if ([self attribute: NSAttachmentAttributeName
+                    atIndex: location
+             effectiveRange: &effectiveRange] != nil)
+            return YES;
+        location = NSMaxRange(effectiveRange);
+    }
     return NO;
 }
 
@@ -501,8 +528,9 @@ NSUInteger NSUnderlineByWordMask = 0x8000;
 - (NSFileWrapper *) RTFDFileWrapperFromRange: (NSRange) range
                           documentAttributes: (NSDictionary *) attributes
 {
-    NSUnimplementedMethod();
-    return nil;
+    NSMutableDictionary *rtfd = [NSMutableDictionary dictionaryWithDictionary: attributes];
+    [rtfd setObject: NSRTFDTextDocumentType forKey: NSDocumentTypeDocumentAttribute];
+    return [self fileWrapperFromRange: range documentAttributes: rtfd error: NULL];
 }
 
 - (NSData *) RTFDFromRange: (NSRange) range
@@ -517,12 +545,31 @@ NSUInteger NSUnderlineByWordMask = 0x8000;
     return [NSRichTextWriter dataWithAttributedString: self range: range];
 }
 
+// RTF, RTFD (the RTF data, without attachments) and plain text, by the
+// NSDocumentTypeDocumentAttribute; plain text uses NSCharacterEncodingDocumentAttribute
+// or UTF-8. Other types fail with an error.
 - (NSData *) dataFromRange: (NSRange) range
         documentAttributes: (NSDictionary *) attributes
                      error: (NSError **) error
 {
-    NSUnimplementedMethod();
-    return 0;
+    NSString *type = [attributes objectForKey: NSDocumentTypeDocumentAttribute];
+    NSData *data = nil;
+    NSInteger code = NSFileWriteUnknownError;
+
+    if ([type isEqualToString: NSRTFTextDocumentType])
+        data = [self RTFFromRange: range documentAttributes: attributes];
+    else if ([type isEqualToString: NSRTFDTextDocumentType])
+        data = [self RTFDFromRange: range documentAttributes: attributes];
+    else if ([type isEqualToString: NSPlainTextDocumentType]) {
+        NSNumber *encoding = [attributes objectForKey: NSCharacterEncodingDocumentAttribute];
+        data = [[[self string] substringWithRange: range]
+                dataUsingEncoding: encoding ? [encoding unsignedIntegerValue] : NSUTF8StringEncoding];
+        code = NSFileWriteInapplicableStringEncodingError;
+    }
+
+    if (data == nil && error)
+        *error = [NSError errorWithDomain: NSCocoaErrorDomain code: code userInfo: nil];
+    return data;
 }
 
 - (NSData *) docFormatFromRange: (NSRange) range
@@ -532,12 +579,30 @@ NSUInteger NSUnderlineByWordMask = 0x8000;
     return 0;
 }
 
+// RTFD is a directory holding the rich text as TXT.rtf plus the attachments'
+// files; other types are a regular file with dataFromRange:'s contents.
 - (NSFileWrapper *) fileWrapperFromRange: (NSRange) range
                       documentAttributes: (NSDictionary *) attributes
                                    error: (NSError **) error
 {
-    NSUnimplementedMethod();
-    return nil;
+    if ([[attributes objectForKey: NSDocumentTypeDocumentAttribute] isEqualToString: NSRTFDTextDocumentType]) {
+        NSFileWrapper *directory = [[[NSFileWrapper alloc] initDirectoryWithFileWrappers: @{}] autorelease];
+        NSData *rtf = [NSRichTextWriter dataWithAttributedString: self
+                                                           range: range
+                                             attachmentDirectory: directory];
+        if (rtf == nil) {
+            if (error)
+                *error = [NSError errorWithDomain: NSCocoaErrorDomain code: NSFileWriteUnknownError userInfo: nil];
+            return nil;
+        }
+        NSFileWrapper *text = [[[NSFileWrapper alloc] initRegularFileWithContents: rtf] autorelease];
+        [text setPreferredFilename: @"TXT.rtf"];
+        [directory addFileWrapper: text];
+        return directory;
+    }
+
+    NSData *data = [self dataFromRange: range documentAttributes: attributes error: error];
+    return data ? [[[NSFileWrapper alloc] initRegularFileWithContents: data] autorelease] : nil;
 }
 
 #pragma mark -

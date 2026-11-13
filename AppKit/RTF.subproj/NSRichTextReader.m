@@ -61,6 +61,7 @@ static const NSString *kStateCharacterBytesCountKey = @"characterBytesCount";
     _bytes = [_data bytes];
     _length = [_data length];
     _range = NSMakeRange(0, 0);
+    _attachmentTail = NSMakeRange(NSNotFound, 0);
     _state = STATE_SCANNING;
     _fontTable = [NSMutableDictionary new];
     _colorTable = [NSMutableDictionary new];
@@ -89,10 +90,10 @@ static const NSString *kStateCharacterBytesCountKey = @"characterBytesCount";
                 stringByAppendingPathExtension: @"rtf"];
         NSData *data = [NSData dataWithContentsOfFile: txt];
 
-        if (data != nil)
-            return [self initWithData: data];
-
-        _imageDirectory = [path copy];
+        if (data != nil && (self = [self initWithData: data]) != nil) {
+            _imageDirectory = [path copy];
+            return self;
+        }
     }
 
     [self dealloc];
@@ -342,6 +343,20 @@ static inline void flushPreviousString(NSRichTextReader *self) {
     return c;
 }
 
+// An RTFD attachment is a file in the .rtfd bundle.
+- (NSTextAttachment *) _attachmentWithFileName: (NSString *) name {
+    if (_imageDirectory == nil)
+        return nil;
+    NSURL *url = [NSURL
+            fileURLWithPath: [_imageDirectory stringByAppendingPathComponent: name]];
+    NSFileWrapper *wrapper = [[[NSFileWrapper alloc] initWithURL: url
+                                                         options: 0
+                                                           error: NULL] autorelease];
+    if (wrapper == nil)
+        return nil;
+    return [[[NSTextAttachment alloc] initWithFileWrapper: wrapper] autorelease];
+}
+
 - (void) processControlWithArgValue: (int) argument {
     NSRange save = _range;
     flushPreviousString(self);
@@ -541,10 +556,8 @@ static inline void flushPreviousString(NSRichTextReader *self) {
             _range.length++;
         }
         _range.length--; {
-            NSString *path =
-                    [_imageDirectory stringByAppendingPathComponent: self];
-            NSTextAttachment *attachment = [[[NSTextAttachment alloc]
-                    initWithContentsOfFile: path] autorelease];
+            NSTextAttachment *attachment =
+                    [self _attachmentWithFileName: self];
             unichar attachChar = NSAttachmentCharacter;
 
             if (attachment != nil) {
@@ -558,6 +571,24 @@ static inline void flushPreviousString(NSRichTextReader *self) {
                 [_currentAttributes
                         removeObjectForKey: NSAttachmentAttributeName];
             }
+            // QUIRK: the RTFD writer on macOS follows the attachment group with
+            // one raw 0xAC byte inside the enclosing group:
+            // {{\NeXTGraphic name ...}<0xAC>}. The reader ignores whatever
+            // sits between the attachment group's end and the enclosing
+            // group's end (a missing byte, another letter, a repeated byte or
+            // the \'ac escape all read back as the same text). Not documented.
+            // Evidence: black-box observation on macOS 27 of RTFD files written
+            // by NSAttributedString and variants of them (tier 2, MC13.9 and
+            // MC13.10 in the project's evidence notes).
+            // Test: test_quirk_rtfd_attachment_placeholder_ignored in
+            // tests/appkit-rtfd-attachments.m
+            NSUInteger close = NSMaxRange(_range);
+            while (close < _length && _bytes[close] != '}')
+                close++;
+            NSUInteger outer = close + 1;
+            while (outer < _length && _bytes[outer] != '}' && _bytes[outer] != '{')
+                outer++;
+            _attachmentTail = NSMakeRange(close + 1, outer - (close + 1));
         }
         _range.length++;
         save = _range;
@@ -619,7 +650,8 @@ static inline void flushPreviousString(NSRichTextReader *self) {
                 if (_bufferIn == nil) {
                     _bufferIn = [[NSMutableData alloc] init];
                 }
-                [_bufferIn appendBytes: _bytes + _range.location length: 1];
+                if (!NSLocationInRange(position, _attachmentTail))
+                    [_bufferIn appendBytes: _bytes + _range.location length: 1];
                 _range.location++;
                 _range.length = 0;
             }
@@ -770,7 +802,8 @@ static inline void flushPreviousString(NSRichTextReader *self) {
                 _state = STATE_SKIPLAST;
             }
             if (_state == STATE_CHAR8_XX) {
-                if ([self currentDestination] == DESTINATION_STRING) {
+                if ([self currentDestination] == DESTINATION_STRING &&
+                    !NSLocationInRange(position, _attachmentTail)) {
                     if (_bufferIn == nil) {
                         _bufferIn = [[NSMutableData alloc] init];
                     }

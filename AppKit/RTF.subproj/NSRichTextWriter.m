@@ -24,6 +24,9 @@
 #import <AppKit/NSFont.h>
 #import <AppKit/NSFontManager.h>
 #import <AppKit/NSRichTextWriter.h>
+#import <AppKit/NSFileWrapper.h>
+#import <AppKit/NSImage.h>
+#import <AppKit/NSTextAttachment.h>
 #ifdef WIN32
 #import <malloc.h>
 #endif
@@ -44,15 +47,26 @@
     [_attributedString release];
     [_string release];
     [_data release];
+    [_attachmentDirectory release];
     [super dealloc];
 }
 
 + (NSData *) dataWithAttributedString: (NSAttributedString *) attributedString
                                 range: (NSRange) range
 {
+    return [self dataWithAttributedString: attributedString
+                                    range: range
+                      attachmentDirectory: nil];
+}
+
++ (NSData *) dataWithAttributedString: (NSAttributedString *) attributedString
+                                range: (NSRange) range
+                  attachmentDirectory: (NSFileWrapper *) directory
+{
     NSRichTextWriter *writer =
             [[self alloc] initWithAttributedString: attributedString
                                              range: range];
+    writer->_attachmentDirectory = [directory retain];
     NSData *result = [[[writer generateData] retain] autorelease];
 
     [writer release];
@@ -100,6 +114,58 @@
     }
 
     [_data appendBytes: ansi length: ansiLength];
+}
+
+// The name the attachment's file got in the RTFD directory, or nil when it
+// has no named file wrapper.
+- (NSString *) addAttachmentFile: (NSTextAttachment *) attachment {
+    NSFileWrapper *wrapper = [attachment fileWrapper];
+    if ([[wrapper preferredFilename] length] == 0 && [[wrapper filename] length] > 0)
+        [wrapper setPreferredFilename: [wrapper filename]];
+    if ([[wrapper preferredFilename] length] == 0)
+        return nil;
+    return [_attachmentDirectory addFileWrapper: wrapper];
+}
+
+// QUIRK: the size written for an attachment is its image's size in points when
+// the file is an image, otherwise a 32 point square (the size of a file icon).
+// Not documented.
+// Evidence: black-box observation on macOS 27 (tier 2, MC13.9 in the project's
+// evidence notes: a 2x2 pixel PNG is written as 40x40 twips, a text file as
+// 640x640).
+// Test: test_quirk_rtfd_attachment_size in tests/appkit-rtfd-attachments.m
+- (NSSize) sizeOfAttachment: (NSTextAttachment *) attachment {
+    NSFileWrapper *wrapper = [attachment fileWrapper];
+    NSData *contents = [wrapper isRegularFile] ? [wrapper regularFileContents] : nil;
+    NSImage *image = contents != nil ? [[[NSImage alloc] initWithData: contents] autorelease] : nil;
+    if (image != nil && [image size].width > 0 && [image size].height > 0)
+        return [image size];
+    return NSMakeSize(32, 32);
+}
+
+// QUIRK: an RTFD attachment is written as {{\NeXTGraphic name \width w
+// \height h <newline>}<0xAC>}: sizes in twips and one raw 0xAC byte between the
+// inner and the outer closing brace. Not documented.
+// Evidence: black-box observation on macOS 27 of a TXT.rtf written by
+// NSAttributedString (tier 2, MC13.9 and fixture rtfd/Attachment.rtfd).
+// Test: test_quirk_rtfd_attachment_layout in tests/appkit-rtfd-attachments.m
+- (void) appendAttachment: (NSTextAttachment *) attachment range: (NSRange) range {
+    for (NSUInteger i = range.location; i < NSMaxRange(range); i++) {
+        NSString *name = nil;
+        if ([_string characterAtIndex: i] == NSAttachmentCharacter)
+            name = [self addAttachmentFile: attachment];
+        if (name == nil) {
+            [self appendStringFromRange: NSMakeRange(i, 1)];
+            continue;
+        }
+        NSSize size = [self sizeOfAttachment: attachment];
+        NSString *group = [NSString
+                stringWithFormat: @"{{\\NeXTGraphic %@ \\width%ld \\height%ld\n}",
+                                  name, lround(size.width * 20),
+                                  lround(size.height * 20)];
+        [self appendCString: [group UTF8String]];
+        [_data appendBytes: "\xAC}" length: 2];
+    }
 }
 
 - (void) writeRichText {
@@ -312,7 +378,12 @@
             [self appendCString: [fontSize UTF8String]];
         }
 
-        [self appendStringFromRange: effectiveRange];
+        NSTextAttachment *attachment =
+                [attributes objectForKey: NSAttachmentAttributeName];
+        if (_attachmentDirectory != nil && attachment != nil)
+            [self appendAttachment: attachment range: effectiveRange];
+        else
+            [self appendStringFromRange: effectiveRange];
 
         location = NSMaxRange(effectiveRange);
     }

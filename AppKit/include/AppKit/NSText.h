@@ -107,6 +107,7 @@ APPKIT_EXPORT NSString *const NSTextDidChangeNotification;
                        withString: (NSString *) string;
 
 - (BOOL) readRTFDFromFile: (NSString *) path;
+- (BOOL) writeRTFDToFile: (NSString *) path atomically: (BOOL) atomically;
 - (void) replaceCharactersInRange: (NSRange) range withRTF: (NSData *) rtf;
 - (void) replaceCharactersInRange: (NSRange) range withRTFD: (NSData *) rtfd;
 

@@ -25,6 +25,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     NSRange _range;
 
     NSMutableData *_data;
+    NSFileWrapper *_attachmentDirectory;
 }
 
 - initWithAttributedString: (NSAttributedString *) attributedString
@@ -32,6 +33,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 + (NSData *) dataWithAttributedString: (NSAttributedString *) attributedString
                                 range: (NSRange) range;
+
+// RTFD: attachment files are added to directory and referenced from the text.
++ (NSData *) dataWithAttributedString: (NSAttributedString *) attributedString
+                                range: (NSRange) range
+                  attachmentDirectory: (NSFileWrapper *) directory;
 
 - (NSData *) generateData;
 

@@ -16,6 +16,7 @@ FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
 COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
+#import <AppKit/NSBitmapImageRep.h>
 #import <AppKit/NSCachedImageRep.h>
 #import <AppKit/NSGraphicsContext.h>
 #import <AppKit/NSGraphicsContextFunctions.h>
@@ -61,6 +62,34 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [self initWithWindow: window rect: rect];
     [window release];
     return self;
+}
+
+// QUIRK: a cached image rep in an NSArchiver (typedstream) archive is TIFF data
+// followed by a char and three ints; the window it was cached in does not exist
+// when unarchiving, so the rep comes back as the NSBitmapImageRep of the TIFF
+// data. Not documented.
+// Evidence: layout reported by the fork author from archives macOS
+// applications wrote (tier 3 report, not reproduced: macOS 27 cannot archive
+// this class, MC13.8). The TIFF payload reads like the bitmap rep fixture.
+// Test: test_quirk_typedstream_cached_image_rep in
+// tests/appkit-typedstream-text.m (uses an archive written by hand)
+- (instancetype) initWithCoder: (NSCoder *) coder {
+    if ([coder allowsKeyedCoding])
+        return [super initWithCoder: coder];
+
+    NSData *tiff = [coder decodeDataObject];
+    char unknownChar;
+    int unknownInts[3];
+    [coder decodeValuesOfObjCTypes: "c", &unknownChar];
+    [coder decodeValuesOfObjCTypes: "iii", &unknownInts[0], &unknownInts[1], &unknownInts[2]];
+
+    NSBitmapImageRep *bitmap = [[NSBitmapImageRep alloc] initWithData: tiff];
+    if (bitmap == nil)
+        [NSException raise: NSInvalidArgumentException
+                    format: @"-[%@ %s]: unreadable TIFF data (%lu bytes)", [self class], sel_getName(_cmd),
+                            (unsigned long) [tiff length]];
+    [self release];
+    return bitmap;
 }
 
 - (void) dealloc {
