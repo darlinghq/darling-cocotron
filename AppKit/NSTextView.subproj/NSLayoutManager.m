@@ -1225,7 +1225,9 @@ static inline NSGlyphFragment *fragmentAtGlyphIndex(NSLayoutManager *self,
 
         if (point.y < NSMaxY(fragment->rect) &&
             point.y >= NSMinY(fragment->rect)) {
-            if (point.x >= NSMinX(fragment->rect) &&
+            // The fragment rect and the used rect also cover the line
+            // fragment padding, the glyphs start at the fragment location
+            if (point.x >= fragment->location.x &&
                 point.x < NSMaxX(fragment->usedRect)) {
 
 #if DEBUG_glyphIndexForPoint_inTextContainer_fractionOfDistanceThroughGlyph
@@ -1234,6 +1236,7 @@ static inline NSGlyphFragment *fragmentAtGlyphIndex(NSLayoutManager *self,
 #endif
 
                 NSRect glyphRect = fragment->usedRect;
+                glyphRect.origin.x = fragment->location.x;
                 NSGlyph glyphs[range.length];
                 NSUInteger order[range.length];
                 NSFont *font = [self _fontForGlyphRange: range];
@@ -1277,14 +1280,14 @@ static inline NSGlyphFragment *fragmentAtGlyphIndex(NSLayoutManager *self,
             // still a candidate
 
             // For the cases we hit a line at the left or right of all fragments
-            if (point.x < NSMinX(fragment->rect)) {
+            if (point.x < fragment->location.x) {
                 if (fragment->leftToRight) {
                     result = range.location;
                 } else {
                     result = NSMaxRange(range);
                 }
-                if (NSMinX(fragment->rect) < lineMinX) {
-                    lineMinX = NSMinX(fragment->rect);
+                if (fragment->location.x < lineMinX) {
+                    lineMinX = fragment->location.x;
                     lineStart = result;
                 }
             } else {
@@ -1489,6 +1492,29 @@ static inline NSGlyphFragment *fragmentAtGlyphIndex(NSLayoutManager *self,
     }
 }
 
+// The width of the glyphs of a line fragment. The used rect of a fragment
+// also covers the container's line fragment padding, so the extent of the
+// glyphs themselves is derived from the fragment's location instead.
+static CGFloat _glyphRunWidth(NSFont *font, const NSGlyph *glyphs,
+                              NSInteger length) {
+    CGFloat total = 0;
+    NSGlyph previousGlyph = NSNullGlyph;
+    BOOL ignore;
+
+    for (NSInteger i = 0; i < length; i++) {
+        NSGlyph glyph = glyphs[i];
+
+        if (glyph == NSControlGlyph)
+            glyph = NSNullGlyph;
+        total += [font positionOfGlyph: glyph
+                         precededByGlyph: previousGlyph
+                               isNominal: &ignore]
+                         .x;
+        previousGlyph = glyph;
+    }
+    return total;
+}
+
 static inline void _appendRectToCache(NSLayoutManager *self, NSRect rect) {
     if (self->_rectCacheCount >= self->_rectCacheCapacity) {
         self->_rectCacheCapacity *= 2;
@@ -1560,9 +1586,11 @@ static inline void _appendRectToCache(NSLayoutManager *self, NSRect rect) {
                 // We only want part of that fragment - so check the part we
                 // want by getting the interesting glyphs locations
 
-                // Use the usedRect - we're not interested in any potential
-                // white space lead
+                // Start from the glyphs themselves - we're not interested in
+                // any potential white space lead (the used rect also covers
+                // the line fragment padding)
                 fill = fragment->usedRect;
+                fill.origin.x = fragment->location.x;
 
                 NSGlyph glyphs[range.length], previousGlyph = NSNullGlyph;
                 NSUInteger order[range.length];
@@ -1579,6 +1607,16 @@ static inline void _appendRectToCache(NSLayoutManager *self, NSRect rect) {
                 // Starts with a 0 width - we'll grow it with the width of the
                 // glyphs from our intersect range
                 fill.size.width = 0;
+
+                CGFloat glyphsRight =
+                        fragment->location.x +
+                        _glyphRunWidth(font, glyphs, length);
+                // The last line of the text has nothing after its glyphs to
+                // select, other lines are selected up to the end of the
+                // fragment
+                CGFloat fragmentRight = NSMaxRange(range) >= [self numberOfGlyphs]
+                                                ? glyphsRight
+                                                : NSMaxX(fragment->rect);
 
                 if (ltor) {
                     for (i = 0; i < length; i++) {
@@ -1605,12 +1643,11 @@ static inline void _appendRectToCache(NSLayoutManager *self, NSRect rect) {
                     if (NSMaxRange(range) <= NSMaxRange(remainder)) {
                         // We want the full end of fragment, so grow the width
                         // to the end of the fragment rect
-                        fill.size.width =
-                                NSMaxX(fragment->rect) - fill.origin.x;
+                        fill.size.width = fragmentRight - fill.origin.x;
                     }
                 } else {
                     // Start from the right
-                    fill.origin.x = NSMaxX(fragment->usedRect);
+                    fill.origin.x = glyphsRight;
                     for (i = 0; i < length; i++) {
                         NSGlyph glyph = glyphs[order[i]];
 
@@ -1637,7 +1674,7 @@ static inline void _appendRectToCache(NSLayoutManager *self, NSRect rect) {
                         // We want the full start of fragment, so grow the width
                         // to the start of the fragment rect
                         CGFloat max = NSMaxX(fill);
-                        fill.origin.x = fragment->rect.origin.x;
+                        fill.origin.x = fragment->location.x;
                         fill.size.width = max - fill.origin.x;
                     }
                 }
