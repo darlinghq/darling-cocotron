@@ -319,8 +319,27 @@ NSApplication *NSApp = nil;
     return NO;
 }
 
+// The application is active from the end of launching, and while one of its
+// windows has the input focus. Having a visible window is not required.
 - (BOOL) isActive {
-    return [self isActiveExcludingWindow: nil];
+    return _isActive || [self isActiveExcludingWindow: nil];
+}
+
+// Becomes the active application, posting the notifications, unless it is
+// already active.
+- (void) _becomeActive {
+    if ([self isActive])
+        return;
+
+    [[NSNotificationCenter defaultCenter]
+            postNotificationName: NSApplicationWillBecomeActiveNotification
+                          object: self];
+    _isActive = YES;
+    [[NSNotificationCenter defaultCenter]
+            postNotificationName: NSApplicationDidBecomeActiveNotification
+                          object: self];
+    [_windows makeObjectsPerformSelector: @selector(_invalidateTrackingAreas)];
+    [self _checkForAppActivation];
 }
 
 - (BOOL) isHidden {
@@ -718,6 +737,12 @@ NSApplication *NSApp = nil;
     NS_HANDLER [self reportException: localException];
     NS_ENDHANDLER
 
+    // A launched application becomes active once it has finished launching,
+    // whether or not it has a visible window.
+    NS_DURING [self _becomeActive];
+    NS_HANDLER [self reportException: localException];
+    NS_ENDHANDLER
+
             [pool release];
 }
 
@@ -1073,7 +1098,10 @@ NSApplication *NSApp = nil;
         }
     }
 
-    [window makeKeyAndOrderFront: self];
+    if (window != nil)
+        [window makeKeyAndOrderFront: self];
+    else
+        [self _becomeActive];
 }
 
 - (void) activate {
@@ -1648,7 +1676,8 @@ NSApplication *NSApp = nil;
 }
 
 - (void) _windowDidBecomeActive: (NSWindow *) window {
-    if (![self isActiveExcludingWindow: window]) {
+    if (!_isActive) {
+        _isActive = YES;
         [[NSNotificationCenter defaultCenter]
                 postNotificationName: NSApplicationDidBecomeActiveNotification
                               object: self];
@@ -1660,6 +1689,7 @@ NSApplication *NSApp = nil;
         [[NSNotificationCenter defaultCenter]
                 postNotificationName: NSApplicationWillResignActiveNotification
                               object: self];
+        _isActive = NO;
     }
 }
 
