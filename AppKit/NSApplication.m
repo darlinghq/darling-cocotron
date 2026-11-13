@@ -20,6 +20,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSAlert.h>
 #import <AppKit/NSAppearance.h>
 #import <AppKit/NSApplication.h>
+#import <AppKit/NSUserInterfaceItemSearching.h>
 #import <AppKit/NSColorPanel.h>
 #import <AppKit/NSDisplay.h>
 #import <AppKit/NSGlobalMenu+Private.h>
@@ -61,6 +62,8 @@ const NSNotificationName NSApplicationWillFinishLaunchingNotification =
         @"NSApplicationWillFinishLaunchingNotification";
 const NSNotificationName NSApplicationDidFinishLaunchingNotification =
         @"NSApplicationDidFinishLaunchingNotification";
+const NSNotificationName NSApplicationDidFinishRestoringWindowsNotification =
+        @"NSApplicationDidFinishRestoringWindowsNotification";
 
 const NSNotificationName NSApplicationWillBecomeActiveNotification =
         @"NSApplicationWillBecomeActiveNotification";
@@ -354,7 +357,7 @@ NSApplication *NSApp = nil;
 }
 
 - (BOOL) isRunning {
-    return _isRunning;
+    return _running;
 }
 
 // There is no system setting for full keyboard access to read.
@@ -524,6 +527,18 @@ NSApplication *NSApp = nil;
 
 - (void) setAutomaticCustomizeTouchBarMenuItemEnabled: (BOOL) enabled {
     _automaticCustomizeTouchBarMenuItemEnabled = enabled;
+}
+
+- (unsigned int) contextID {
+    return CGSMainConnectionID();
+}
+
+- (BOOL) isDefaultHelpBookSearchEnabled {
+    return _defaultHelpBookSearchEnabled;
+}
+
+- (void) setDefaultHelpBookSearchEnabled: (BOOL) enabled {
+    _defaultHelpBookSearchEnabled = enabled;
 }
 
 - (void) setMenu: (NSMenu *) menu {
@@ -821,7 +836,7 @@ NSApplication *NSApp = nil;
 - (void) run {
     NSAutoreleasePool *pool;
 
-    _isRunning = YES;
+    _running = YES;
 
     pool = [NSAutoreleasePool new];
     [self finishLaunching];
@@ -845,7 +860,7 @@ NSApplication *NSApp = nil;
         [self _checkForTerminate];
 
         [pool release];
-    } while (_isRunning);
+    } while (_running);
 }
 
 - (BOOL) _performKeyEquivalent: (NSEvent *) event {
@@ -1459,7 +1474,7 @@ NSApplication *NSApp = nil;
         return;
     }
 
-    _isRunning = NO;
+    _running = NO;
 }
 
 - (void) terminate: sender {
@@ -1910,6 +1925,18 @@ BOOL NSPerformService(NSString *itemName, NSPasteboard *pasteboard) {
     NSUnimplementedFunction();
     return NO;
 }
+
+@implementation NSApplication (NSUserInterfaceItemSearching)
+
+// There is no system search service to forward the handler's results to, so
+// registration is accepted and has no effect.
+- (void) registerUserInterfaceItemSearchHandler: (id<NSUserInterfaceItemSearching>) handler {
+}
+
+- (void) unregisterUserInterfaceItemSearchHandler: (id<NSUserInterfaceItemSearching>) handler {
+}
+
+@end
 
 @implementation NSApplication (NSWindowEnumeration)
 

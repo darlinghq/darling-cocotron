@@ -1,6 +1,8 @@
 #import <AppKit/AppKitExport.h>
 #import <Foundation/NSString.h>
+#import <AppKit/NSAccessibility.h>
 #import <AppKit/NSAccessibilityConstants.h>
+#import <AppKit/NSErrors.h>
 #import <AppKit/NSView.h>
 
 NSString *const NSAccessibilityChildrenAttribute =
@@ -591,6 +593,18 @@ void NSAccessibilityPostNotification(id element, NSString *notification) {
 
 NSString *NSAccessibilityRoleDescription(NSString *role, NSString *subrole) {
     return nil;
+}
+
+NSString *NSAccessibilityRoleDescriptionForUIElement(id element) {
+    return nil;
+}
+
+void NSAccessibilityRaiseBadArgumentException(id element, NSString *attribute,
+                                              id value)
+{
+    [NSException raise: NSAccessibilityException
+                format: @"Bad argument %@ for attribute %@ of %@", value,
+                        attribute, element];
 }
 
 // Cocotron never treats an element as ignored, so each of these returns what it was given.

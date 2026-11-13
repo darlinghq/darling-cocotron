@@ -37,6 +37,9 @@ APPKIT_EXPORT NSString
 
 APPKIT_EXPORT NSString *const NSAppearanceNameControlStrip; // Undocumented
 
+// Undocumented: whether the macOS 26 system design is in use.
+APPKIT_EXPORT BOOL NSSolariumEnabled(void);
+
 @interface NSAppearance : NSObject <NSSecureCoding> {
     NSAppearanceName _name;
 }

@@ -580,6 +580,7 @@ static BOOL _allowsAutomaticWindowTabbing;
     _viewsNeedDisplay = YES;
     // Titled windows are restorable by default, borderless ones are not.
     _restorable = (styleMask & NSWindowStyleMaskTitled) != 0;
+    _bottomCornerRounded = YES;
     _flushNeeded = YES;
     _resizeIncrements = NSMakeSize(1, 1);
     _contentResizeIncrements = NSMakeSize(1, 1);
@@ -1611,6 +1612,19 @@ static BOOL _allowsAutomaticWindowTabbing;
     // Windows without a tab bar have no tab group. Cocotron does not yet
     // provide native window tabbing.
     return nil;
+}
+
+- (BOOL) bottomCornerRounded {
+    return _bottomCornerRounded;
+}
+
+- (id) tab {
+    // A window without a tab group has no tab object.
+    return nil;
+}
+
+- (void) setBottomCornerRounded: (BOOL) rounded {
+    _bottomCornerRounded = rounded;
 }
 
 - (void) setLevel: (NSInteger) value {

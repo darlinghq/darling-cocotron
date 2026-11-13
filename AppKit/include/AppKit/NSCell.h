@@ -213,6 +213,9 @@ APPKIT_EXPORT NSNotificationName NSControlTintDidChangeNotification;
 - (NSFocusRingType) focusRingType;
 - (NSBackgroundStyle) backgroundStyle;
 
+// The background style the cell draws its interior for (read-only).
+- (NSBackgroundStyle) interiorBackgroundStyle;
+
 - (void) setControlView: (NSView *) view;
 - (void) setType: (NSCellType) type;
 

@@ -725,6 +725,10 @@ NSNotificationName NSControlTintDidChangeNotification = @"NSControlTintDidChange
     return _backgroundStyle;
 }
 
+- (NSBackgroundStyle) interiorBackgroundStyle {
+    return _backgroundStyle;
+}
+
 - (void) setControlView: (NSView *) view {
     // Do nothing or raise?
 }

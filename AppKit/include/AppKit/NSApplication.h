@@ -37,6 +37,8 @@ APPKIT_EXPORT const NSNotificationName
         NSApplicationWillFinishLaunchingNotification;
 APPKIT_EXPORT const NSNotificationName
         NSApplicationDidFinishLaunchingNotification;
+APPKIT_EXPORT const NSNotificationName
+        NSApplicationDidFinishRestoringWindowsNotification;
 
 APPKIT_EXPORT const NSNotificationName
         NSApplicationWillBecomeActiveNotification;
@@ -130,7 +132,14 @@ typedef NS_OPTIONS(NSInteger, NSWindowListOptions) {
 
     NSImage *_applicationIconImage;
 
-    BOOL _isRunning;
+    // QUIRK: the instance variable is named _running so that
+    // valueForKey:@"_running" and setValue:forKey:@"_running" work through
+    // direct instance variable access, without accessor methods. Not
+    // documented. Evidence: black-box observation on macOS 27 (tier 2): the
+    // key reads as NSNumber 0 before -run, NSApplication has no _running or
+    // set_running: methods, and accessInstanceVariablesDirectly is YES.
+    // Test: appkit-application-running-key.m (quirk test).
+    BOOL _running;
     BOOL _isActive;
     BOOL _isHidden;
     BOOL _windowsNeedUpdate;
@@ -146,9 +155,13 @@ typedef NS_OPTIONS(NSInteger, NSWindowListOptions) {
     BOOL _finishedLaunching;
     BOOL _windowClosedSinceTerminateCheck;
     BOOL _automaticCustomizeTouchBarMenuItemEnabled;
+    BOOL _defaultHelpBookSearchEnabled;
 }
 
 @property(readonly) NSUserInterfaceLayoutDirection userInterfaceLayoutDirection;
+
+// The window server connection id, as passed to CGS* calls.
+- (unsigned int) contextID;
 
 @property(strong) NSMenu *helpMenu;
 @property(readonly) NSApplicationPresentationOptions currentSystemPresentationOptions;
@@ -157,6 +170,8 @@ typedef NS_OPTIONS(NSInteger, NSWindowListOptions) {
 @property(readonly, strong) NSAppearance *effectiveAppearance;
 @property(getter=isAutomaticCustomizeTouchBarMenuItemEnabled)
         BOOL automaticCustomizeTouchBarMenuItemEnabled;
+// Private AppKit flag for the help-viewer's find bar.
+@property(getter=isDefaultHelpBookSearchEnabled) BOOL defaultHelpBookSearchEnabled;
 
 @property (class, readonly, retain) NSApplication *sharedApplication;
 
