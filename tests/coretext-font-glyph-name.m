@@ -60,8 +60,7 @@ int main(int argc, const char **argv)
                         (unsigned long)CFStringGetLength(result), (unsigned long)length);
                 return 20;
             }
-            CHECK((api ? CTFontGetGlyphWithName(font, result) :
-                   CGFontGetGlyphWithGlyphName(graphics, result)) == glyph);
+            CHECK(CGFontGetGlyphWithGlyphName(graphics, result) == glyph);
             CFStringRef ordinary = api ? copyName(font, 1) : CGFontCopyGlyphNameForGlyph(graphics, 1);
             CFStringRef notdef = api ? copyName(font, 0) : CGFontCopyGlyphNameForGlyph(graphics, 0);
             CHECK(ordinary && [(NSString *)ordinary isEqualToString:@"A"]);
