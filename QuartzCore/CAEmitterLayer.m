@@ -58,6 +58,31 @@ CAEmitterLayerRenderMode const kCAEmitterLayerAdditive = @"additive";
 @synthesize spin = _spin;
 @synthesize seed = _seed;
 
+- (void) _setEmitterDefaults {
+    _birthRate = 1;
+    _lifetime = 1;
+    _velocity = 1;
+    _scale = 1;
+    _spin = 1;
+    _emitterShape = [kCAEmitterLayerPoint copy];
+    _emitterMode = [kCAEmitterLayerVolume copy];
+    _renderMode = [kCAEmitterLayerUnordered copy];
+}
+
+- init {
+    self = [super init];
+    if (self != nil)
+        [self _setEmitterDefaults];
+    return self;
+}
+
+- initWithLayer: (id) layer {
+    self = [super initWithLayer: layer];
+    if (self != nil)
+        [self _setEmitterDefaults];
+    return self;
+}
+
 - (void) dealloc {
     [_emitterCells release];
     [_emitterShape release];
