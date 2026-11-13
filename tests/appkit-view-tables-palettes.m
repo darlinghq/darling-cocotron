@@ -19,9 +19,13 @@ static void expect(int ok, const char *what) {
 }
 
 @interface Delegate : NSObject <NSTableViewDataSource, NSTableViewDelegate>
+{
+    NSTableCellView *_cell;
+}
 @property(strong) NSTableCellView *cell;
 @end
 @implementation Delegate
+@synthesize cell = _cell;
 - (NSInteger) numberOfRowsInTableView: (NSTableView *) tableView {
     return 2;
 }
