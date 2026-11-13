@@ -47,8 +47,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Onyx2D/O2Context.h>
 #import <QuartzCore/CALayerContext.h>
 #import <QuartzCore/CATransaction.h>
+#import <AppKit/NSLayoutAnchor.h>
 #import <AppKit/NSLayoutConstraint.h>
 #import <AppKit/NSLayoutGuide.h>
+#import "NSLayoutConstraintInternal.h"
 #import <AppKit/NSTextInput.h>
 #import <AppKit/NSTextInputClient.h>
 #import <objc/runtime.h>
@@ -474,6 +476,8 @@ typedef struct __VFlags {
     [_draggedTypes release];
     [_trackingAreas release];
     [_contentFilters release];
+    [_constraints makeObjectsPerformSelector: @selector(_detachFromOwner:) withObject: self];
+    [_constraints release];
 
     if (_invalidRects != NULL)
         NSZoneFree(NULL, _invalidRects);
@@ -3261,6 +3265,38 @@ static CGFloat backingScaleFactor(NSView *view) {
 - (void) invalidateIntrinsicContentSize {
 }
 
+- (NSArray *) constraints {
+    return _constraints ? [[_constraints copy] autorelease] : [NSArray array];
+}
+
+- (void) addConstraint: (NSLayoutConstraint *) constraint {
+    if ([_constraints containsObject: constraint])
+        return;
+    if (_constraints == nil)
+        _constraints = [[NSMutableArray alloc] init];
+    [_constraints addObject: constraint];
+    [constraint _attachToOwner: self];
+}
+
+- (void) addConstraints: (NSArray *) constraints {
+    for (NSLayoutConstraint *constraint in constraints)
+        [self addConstraint: constraint];
+}
+
+- (void) removeConstraint: (NSLayoutConstraint *) constraint {
+    if (![_constraints containsObject: constraint])
+        return;
+    // Keep it alive until the owner link is cleared.
+    [[constraint retain] autorelease];
+    [_constraints removeObject: constraint];
+    [constraint _detachFromOwner: self];
+}
+
+- (void) removeConstraints: (NSArray *) constraints {
+    for (NSLayoutConstraint *constraint in constraints)
+        [self removeConstraint: constraint];
+}
+
 - (void) updateConstraints {
     // An override point: there is no constraint solver to drive.
 }
@@ -3307,6 +3343,55 @@ static NSMutableArray *installedViewLayoutGuides(NSView *view, BOOL create) {
         if ([guide owningView] == self)
             [guide setOwningView: nil];
     }
+}
+
+@end
+
+@implementation NSView (NSViewLayoutAnchors)
+
+static id anchorForView(NSView *view, Class anchorClass, NSLayoutAttribute attribute)
+{
+    return [[[anchorClass alloc] initWithItem: view attribute: attribute] autorelease];
+}
+
+- (NSLayoutDimension *) widthAnchor {
+    return anchorForView(self, [NSLayoutDimension class], NSLayoutAttributeWidth);
+}
+
+- (NSLayoutDimension *) heightAnchor {
+    return anchorForView(self, [NSLayoutDimension class], NSLayoutAttributeHeight);
+}
+
+- (NSLayoutXAxisAnchor *) leadingAnchor {
+    return anchorForView(self, [NSLayoutXAxisAnchor class], NSLayoutAttributeLeading);
+}
+
+- (NSLayoutXAxisAnchor *) trailingAnchor {
+    return anchorForView(self, [NSLayoutXAxisAnchor class], NSLayoutAttributeTrailing);
+}
+
+- (NSLayoutXAxisAnchor *) leftAnchor {
+    return anchorForView(self, [NSLayoutXAxisAnchor class], NSLayoutAttributeLeft);
+}
+
+- (NSLayoutXAxisAnchor *) rightAnchor {
+    return anchorForView(self, [NSLayoutXAxisAnchor class], NSLayoutAttributeRight);
+}
+
+- (NSLayoutXAxisAnchor *) centerXAnchor {
+    return anchorForView(self, [NSLayoutXAxisAnchor class], NSLayoutAttributeCenterX);
+}
+
+- (NSLayoutYAxisAnchor *) topAnchor {
+    return anchorForView(self, [NSLayoutYAxisAnchor class], NSLayoutAttributeTop);
+}
+
+- (NSLayoutYAxisAnchor *) bottomAnchor {
+    return anchorForView(self, [NSLayoutYAxisAnchor class], NSLayoutAttributeBottom);
+}
+
+- (NSLayoutYAxisAnchor *) centerYAnchor {
+    return anchorForView(self, [NSLayoutYAxisAnchor class], NSLayoutAttributeCenterY);
 }
 
 @end

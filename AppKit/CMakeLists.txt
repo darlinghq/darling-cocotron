@@ -422,6 +422,11 @@ set(AppKit_sources
 	NSCollectionViewFlowLayout.m
 	NSTouchBarItem.m
 	NSLayoutConstraint.m
+	NSLayoutAnchor.m
+	NSAutoresizingMaskLayoutConstraint.m
+	NSContentSizeLayoutConstraint.m
+	NSIBPrototypingLayoutConstraint.m
+	NSDictionaryOfVariableBindings.m
 	NSSpeechSynthesizer.m
 	NSCustomTouchBarItem.m
 	NSGestureRecognizer.m
