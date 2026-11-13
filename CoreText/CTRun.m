@@ -189,12 +189,14 @@ void CTRunDraw(CTRunRef run, CGContextRef context, CFRange range)
     if (font == NULL)
         return;
 
-    CGPoint origin = CGContextGetTextPosition(context);
+    // The glyph positions are in text space and CTFontDrawGlyphs places them
+    // through the context's text matrix, which already carries the text
+    // position the run is drawn at.
     CGPoint *positions = malloc((size_t)range.length * sizeof(CGPoint));
     if (!positions) [NSException raise:NSMallocException format:@"Unable to allocate glyph positions"];
     const CGPoint *stored = CTRunGetPositionsPtr(run) + range.location;
     for (CFIndex index = 0; index < range.length; ++index)
-        positions[index] = CGPointMake(origin.x + stored[index].x, origin.y + stored[index].y);
+        positions[index] = stored[index];
     CTFontDrawGlyphs(font, CTRunGetGlyphsPtr(run) + range.location,
                      positions, (size_t)range.length, context);
     free(positions);
