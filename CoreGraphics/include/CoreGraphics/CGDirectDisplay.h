@@ -87,6 +87,7 @@ COREGRAPHICS_EXPORT uint32_t CGDisplayModeGetIOFlags(CGDisplayModeRef mode);
 COREGRAPHICS_EXPORT boolean_t CGDisplayModeIsUsableForDesktopGUI(CGDisplayModeRef mode);
 COREGRAPHICS_EXPORT CGSize CGDisplayScreenSize(CGDirectDisplayID display);
 COREGRAPHICS_EXPORT boolean_t CGDisplayIsBuiltin(CGDirectDisplayID display);
+COREGRAPHICS_EXPORT boolean_t CGDisplayIsAsleep(CGDirectDisplayID display);
 COREGRAPHICS_EXPORT double CGDisplayRotation(CGDirectDisplayID display);
 COREGRAPHICS_EXPORT CGColorSpaceRef CGDisplayCopyColorSpace(CGDirectDisplayID display);
 COREGRAPHICS_EXPORT CGImageRef CGDisplayCreateImage(CGDirectDisplayID displayID);
@@ -100,6 +101,7 @@ COREGRAPHICS_EXPORT id CGDirectDisplayCopyCurrentMetalDevice(CGDirectDisplayID d
 COREGRAPHICS_EXPORT CGRect CGDisplayBounds(CGDirectDisplayID display);
 COREGRAPHICS_EXPORT CGError CGDisplayCapture(CGDirectDisplayID display);
 COREGRAPHICS_EXPORT CGError CGDisplayRelease(CGDirectDisplayID display);
+COREGRAPHICS_EXPORT CGError CGDisplayMoveCursorToPoint(CGDirectDisplayID display, CGPoint point);
 COREGRAPHICS_EXPORT CGError CGDisplayHideCursor(CGDirectDisplayID display);
 COREGRAPHICS_EXPORT CGError CGDisplayShowCursor(CGDirectDisplayID display);
 COREGRAPHICS_EXPORT CFArrayRef CGDisplayAvailableModes(CGDirectDisplayID display);

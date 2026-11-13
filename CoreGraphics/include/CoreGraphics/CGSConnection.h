@@ -20,7 +20,6 @@
 #define CGSCONNECTION_H
 #import <Foundation/NSObject.h>
 #import <Foundation/NSDictionary.h>
-#include <CoreGraphics/CGSServerSPI.h>
 #include <CoreGraphics/CoreGraphicsPrivate.h>
 #include <stdatomic.h>
 

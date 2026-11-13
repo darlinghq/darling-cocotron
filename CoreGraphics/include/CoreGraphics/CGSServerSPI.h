@@ -23,12 +23,15 @@
 
 #include <stdint.h>
 #include <CoreGraphics/CGError.h>
+#include <CoreGraphics/CGGeometry.h>
 #include <CoreGraphics/CoreGraphicsExport.h>
 
 typedef uint32_t CGSConnectionID;
 typedef uint32_t CGSWindowID;
 
 COREGRAPHICS_EXPORT CGSConnectionID CGSMainConnectionID(void);
+// Pointer location in global display coordinates, origin at the top left.
+COREGRAPHICS_EXPORT CGPoint CGSCurrentInputPointerPosition(void);
 COREGRAPHICS_EXPORT CGError CGSSetWindowAlpha(CGSConnectionID, CGSWindowID, float alpha);
 
 #endif
