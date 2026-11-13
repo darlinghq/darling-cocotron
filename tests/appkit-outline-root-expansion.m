@@ -12,11 +12,17 @@ static void expect(BOOL condition, NSString *message)
 
 // Two groups with two leaves each, the shape of a sidebar source list.
 @interface TreeSource : NSObject
+{
+    NSDictionary *_tree;
+    NSInteger _shouldExpandCalls;
+}
 @property(retain) NSDictionary *tree;
 @property NSInteger shouldExpandCalls;
 @end
 
 @implementation TreeSource
+@synthesize tree = _tree;
+@synthesize shouldExpandCalls = _shouldExpandCalls;
 - (NSArray *)childrenOf:(id)item
 {
     return item == nil ? [[self.tree allKeys] sortedArrayUsingSelector:@selector(compare:)] : self.tree[item];

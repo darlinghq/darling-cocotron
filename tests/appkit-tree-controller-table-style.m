@@ -20,11 +20,17 @@ static void expect(int ok, const char *what) {
 }
 
 @interface Item : NSObject
+{
+    NSString *_name;
+    NSMutableArray *_children;
+}
 @property(copy) NSString *name;
 @property(strong) NSMutableArray *children;
 + (Item *) itemNamed: (NSString *) name children: (NSArray *) children;
 @end
 @implementation Item
+@synthesize name = _name;
+@synthesize children = _children;
 + (Item *) itemNamed: (NSString *) name children: (NSArray *) children {
     Item *item = [Item new];
     item.name = name;
