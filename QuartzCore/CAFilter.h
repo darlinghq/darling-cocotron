@@ -57,7 +57,7 @@ CA_EXPORT NSString *const kCAFilterInputValues;
 // Private SPI, kept out of the public headers as on macOS: clients declare
 // CAFilter themselves. Inputs are stored with key-value coding under their
 // input keys; CARenderer does not apply filters yet.
-@interface CAFilter : NSObject <NSCopying> {
+@interface CAFilter : NSObject <NSCopying, NSSecureCoding> {
     NSString *_type;
     NSString *_name;
     BOOL _enabled;
@@ -65,7 +65,9 @@ CA_EXPORT NSString *const kCAFilterInputValues;
 }
 
 + (instancetype) filterWithType: (NSString *) type;
++ (instancetype) filterWithName: (NSString *) name;
 - (instancetype) initWithType: (NSString *) type;
+- (instancetype) initWithName: (NSString *) name;
 
 @property(readonly, copy) NSString *type;
 @property(copy) NSString *name;

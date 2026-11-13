@@ -16,6 +16,3 @@
 #import <QuartzCore/CAScrollLayer.h>
 #import <QuartzCore/CAShapeLayer.h>
 #import <QuartzCore/CATransformLayer.h>
-
-/* Undocumented */
-/* End undocumented */

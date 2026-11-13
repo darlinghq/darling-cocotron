@@ -53,9 +53,41 @@ NSString *const kCAFilterInputRadius = @"inputRadius";
 NSString *const kCAFilterInputRedValues = @"inputRedValues";
 NSString *const kCAFilterInputValues = @"inputValues";
 
+// The inputs are archived inside this wrapper, as on macOS.
+@interface LKNSDictionaryCodingProxy : NSObject <NSSecureCoding> {
+@public
+    NSDictionary *dict;
+}
+@end
+
+@implementation LKNSDictionaryCodingProxy
++ (BOOL) supportsSecureCoding {
+    return YES;
+}
+
+- (void) encodeWithCoder: (NSCoder *) coder {
+    [coder encodeObject: dict forKey: @"dict"];
+}
+
+- (instancetype) initWithCoder: (NSCoder *) coder {
+    self = [super init];
+    if (self != nil) {
+        NSSet *classes = [NSSet setWithObjects: [NSDictionary class], [NSMutableDictionary class], [NSString class],
+                                                [NSNumber class], [NSValue class], [NSData class], [NSArray class],
+                                                [NSNull class], nil];
+        dict = [[coder decodeObjectOfClasses: classes forKey: @"dict"] retain];
+    }
+    return self;
+}
+
+- (void) dealloc {
+    [dict release];
+    [super dealloc];
+}
+@end
+
 @implementation CAFilter
 
-@synthesize type = _type;
 @synthesize name = _name;
 @synthesize enabled = _enabled;
 
@@ -63,21 +95,37 @@ NSString *const kCAFilterInputValues = @"inputValues";
     return [[[self alloc] initWithType: type] autorelease];
 }
 
++ (instancetype) filterWithName: (NSString *) name {
+    return [[[self alloc] initWithName: name] autorelease];
+}
+
+// QUIRK: a filter made with a nil type is still an object and enabled; its type
+// reads as the string "<nil>", and so does its name when made with
+// -initWithType:nil. Plain -init gives a disabled filter whose type reads
+// "<nil>" and whose name is nil. Not documented (the class is private SPI).
+// Evidence: black-box observation on macOS 26.7.3 (tier 2), vd-upstream
+// mac-probes/v317-cafilter-more.m and v317-cafilter-nil-type.m.
+// Test: tests/quartzcore-cafilter.m (quirk_nil_type_makes_an_object)
 - (instancetype) init {
-    return [self initWithType: nil];
+    self = [super init];
+    if (self != nil)
+        _inputs = [[NSMutableDictionary alloc] init];
+    return self;
 }
 
 - (instancetype) initWithType: (NSString *) type {
-    if (type == nil) {
-        [self release];
-        return nil;
+    self = [self init];
+    if (self != nil) {
+        _type = [type copy];
+        _name = [(type != nil ? type : @"<nil>") copy];
+        _enabled = YES;
     }
-    self = [super init];
-    _type = [type copy];
-    _name = [type copy];
-    _enabled = YES;
-    _inputs = [[NSMutableDictionary alloc] init];
     return self;
+}
+
+// The older, name-based initialiser: the name is the type.
+- (instancetype) initWithName: (NSString *) name {
+    return [self initWithType: name];
 }
 
 - (void) dealloc {
@@ -85,6 +133,46 @@ NSString *const kCAFilterInputValues = @"inputValues";
     [_name release];
     [_inputs release];
     [super dealloc];
+}
+
+- (NSString *) type {
+    return _type != nil ? _type : @"<nil>";
+}
+
++ (BOOL) supportsSecureCoding {
+    return YES;
+}
+
+// Keys as on macOS; the inputs are written only when there are any.
+- (void) encodeWithCoder: (NSCoder *) coder {
+    if (![coder allowsKeyedCoding])
+        [NSException raise: NSInvalidArgumentException format: @"CAFilter needs a keyed coder"];
+    [coder encodeObject: _type forKey: @"CAFilterType"];
+    [coder encodeObject: _name forKey: @"CAFilterName"];
+    [coder encodeBool: _enabled forKey: @"CAFilterEnabled"];
+    if ([_inputs count] > 0) {
+        LKNSDictionaryCodingProxy *proxy = [[LKNSDictionaryCodingProxy alloc] init];
+        proxy->dict = [[NSMutableDictionary alloc] initWithDictionary: _inputs];
+        [coder encodeObject: proxy forKey: @"CAFilterInputs"];
+        [proxy release];
+    }
+}
+
+- (instancetype) initWithCoder: (NSCoder *) coder {
+    if (![coder allowsKeyedCoding]) {
+        [self release];
+        [NSException raise: NSInvalidArgumentException format: @"CAFilter needs a keyed coder"];
+    }
+    self = [self init];
+    if (self == nil)
+        return nil;
+    _type = [[coder decodeObjectOfClass: [NSString class] forKey: @"CAFilterType"] copy];
+    _name = [[coder decodeObjectOfClass: [NSString class] forKey: @"CAFilterName"] copy];
+    _enabled = [coder decodeBoolForKey: @"CAFilterEnabled"];
+    LKNSDictionaryCodingProxy *proxy = [coder decodeObjectOfClass: [LKNSDictionaryCodingProxy class] forKey: @"CAFilterInputs"];
+    if (proxy != nil && proxy->dict != nil)
+        [_inputs setDictionary: proxy->dict];
+    return self;
 }
 
 - (id) copyWithZone: (NSZone *) zone {
