@@ -342,6 +342,9 @@ static inline id childOfItemAtIndex(NSOutlineView *self, id item,
 }
 
 - (BOOL) isItemExpanded: (id) item {
+    // The root (nil) is always expanded, as on macOS.
+    if (item == nil)
+        return YES;
     return isItemExpanded(self, item);
 }
 
