@@ -29,7 +29,6 @@ COREGRAPHICS_EXPORT bool CGPDFDocumentAllowsCopying(CGPDFDocumentRef self);
 COREGRAPHICS_EXPORT size_t CGPDFDocumentGetNumberOfPages(CGPDFDocumentRef self);
 COREGRAPHICS_EXPORT CGPDFPageRef CGPDFDocumentGetPage(CGPDFDocumentRef self, size_t pageNumber);
 COREGRAPHICS_EXPORT CGPDFDictionaryRef CGPDFDocumentGetInfo(CGPDFDocumentRef self);
-COREGRAPHICS_EXPORT bool CGPDFDocumentIsEncrypted(CGPDFDocumentRef self);
 
 COREGRAPHICS_EXPORT bool CGPDFDocumentIsEncrypted(CGPDFDocumentRef self);
 COREGRAPHICS_EXPORT bool CGPDFDocumentIsUnlocked(CGPDFDocumentRef self);
