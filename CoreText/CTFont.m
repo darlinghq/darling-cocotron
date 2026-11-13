@@ -43,6 +43,11 @@ static CTFontRef createFont(CGFontRef graphicsFont, CGFloat size) {
     return (CTFontRef) [[KTFont alloc] initWithFont: graphicsFont size: size];
 }
 
+uint32_t CTGetCoreTextVersion(void)
+{
+    return 0x000B0000;
+}
+
 const CFStringRef kCTFontCopyrightNameKey = CFSTR("CTFontCopyrightName");
 const CFStringRef kCTFontFamilyNameKey = CFSTR("CTFontFamilyName");
 const CFStringRef kCTFontSubFamilyNameKey = CFSTR("CTFontSubFamilyName");
