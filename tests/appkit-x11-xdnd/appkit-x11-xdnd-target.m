@@ -3,7 +3,8 @@
 // text/uri-list drops as NSFilenamesPboardType. Run it on the shared Xvfb, then
 // run xdnd-source-driver (host side) against the same display.
 // Prints "READY" once the window is mapped, "DROPPED <path>" for the dropped
-// file and "OK" when the drop was delivered exactly once.
+// file (a host path reaches the guest below /Volumes/SystemRoot) and "OK" when
+// the drop was delivered exactly once.
 #import <AppKit/AppKit.h>
 #include <stdio.h>
 #include <string.h>
@@ -24,7 +25,7 @@
 }
 - (BOOL) performDragOperation: (id<NSDraggingInfo>) sender {
     NSArray *files = [[sender draggingPasteboard] propertyListForType: NSFilenamesPboardType];
-    if ([files count] != 1 || ![[files objectAtIndex: 0] isEqual: @"/tmp/xdnd test file.txt"]) {
+    if ([files count] != 1 || ![[files objectAtIndex: 0] isEqual: @"/Volumes/SystemRoot/tmp/xdnd test file.txt"]) {
         printf("FAIL: unexpected filenames %s\n", [[files description] UTF8String]);
         bad++;
         return NO;
