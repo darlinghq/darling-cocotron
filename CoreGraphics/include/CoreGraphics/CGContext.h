@@ -44,18 +44,6 @@ typedef enum {
     kCGEncodingMacRoman,
 } CGTextEncoding;
 
-typedef CF_ENUM(int32_t, CGLineCap) {
-    kCGLineCapButt,
-    kCGLineCapRound,
-    kCGLineCapSquare,
-};
-
-typedef CF_ENUM(int32_t, CGLineJoin) {
-    kCGLineJoinMiter,
-    kCGLineJoinRound,
-    kCGLineJoinBevel,
-};
-
 typedef CF_ENUM(int32_t, CGPathDrawingMode) {
     kCGPathFill,
     kCGPathEOFill,
