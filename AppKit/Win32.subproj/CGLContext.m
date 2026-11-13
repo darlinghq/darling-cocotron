@@ -1,7 +1,7 @@
 #import "Win32EventInputSource.h"
 #import "Win32Window.h"
 #import <CoreGraphics/CGLPixelSurface.h>
-#import <CoreGraphics/CGWindow.h>
+#import <CoreGraphics/CGWindowPrivate.h>
 #import <CoreGraphics/CoreGraphics.h>
 #import <Foundation/NSRaise.h>
 #import <Foundation/NSString.h>

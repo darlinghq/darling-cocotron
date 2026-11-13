@@ -18,7 +18,7 @@
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  SOFTWARE. */
 
-#import <CoreGraphics/CGWindow.h>
+#import <CoreGraphics/CGWindowPrivate.h>
 #import <GL/glx.h>
 #import <Onyx2D/O2Geometry.h>
 #import <OpenGL/CGLInternal.h>

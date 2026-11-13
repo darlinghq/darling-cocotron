@@ -55,6 +55,17 @@ CGColorRef CGColorCreateGenericRGB(CGFloat r, CGFloat g, CGFloat b, CGFloat a) {
     return (CGColorRef)O2ColorCreateGenericRGB(r, g, b, a);
 }
 
+CGColorRef CGColorCreateSRGB(CGFloat red, CGFloat green, CGFloat blue,
+                            CGFloat alpha) {
+    const CGFloat components[] = { red, green, blue, alpha };
+    CGColorSpaceRef space = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+    if (space == NULL)
+        return NULL;
+    CGColorRef color = CGColorCreate(space, components);
+    CGColorSpaceRelease(space);
+    return color;
+}
+
 CGColorRef CGColorCreateGenericCMYK(CGFloat c, CGFloat m, CGFloat y, CGFloat k,
                                     CGFloat a)
 {

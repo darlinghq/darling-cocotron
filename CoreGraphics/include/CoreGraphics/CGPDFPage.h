@@ -1,3 +1,6 @@
+#ifndef CGPDFPAGE_H
+#define CGPDFPAGE_H
+
 /* Copyright (c) 2007 Christopher J. W. Lloyd
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
@@ -40,3 +43,5 @@ CGPDFPageGetDrawingTransform(CGPDFPageRef self, CGPDFBox box, CGRect rect,
                              int clockwiseDegrees, bool preserveAspectRatio);
 
 CF_IMPLICIT_BRIDGING_DISABLED
+
+#endif /* CGPDFPAGE_H */

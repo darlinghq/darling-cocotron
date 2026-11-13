@@ -29,8 +29,8 @@ typedef enum {
     kO2RenderingIntentDefault,
     kO2RenderingIntentAbsoluteColorimetric,
     kO2RenderingIntentRelativeColorimetric,
-    kO2RenderingIntentSaturation,
     kO2RenderingIntentPerceptual,
+    kO2RenderingIntentSaturation,
 } O2ColorRenderingIntent;
 
 typedef enum {

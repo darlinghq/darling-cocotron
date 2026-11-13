@@ -33,7 +33,7 @@
 #import "X11Monitors.h"
 #import "X11RandR.h"
 #import "X11WindowOwner.h"
-#import <CoreGraphics/CGWindow.h>
+#import <CoreGraphics/CGWindowPrivate.h>
 #import <CoreGraphics/CGWindowLevel.h>
 
 // TODO: Use XInput2:

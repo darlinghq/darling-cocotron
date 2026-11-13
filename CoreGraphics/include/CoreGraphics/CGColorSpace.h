@@ -1,3 +1,6 @@
+#ifndef CGCOLORSPACE_H
+#define CGCOLORSPACE_H
+
 /* Copyright (c) 2007 Christopher J. W. Lloyd
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
@@ -43,13 +46,13 @@ COREGRAPHICS_EXPORT const CFStringRef kCGColorSpaceLinearGray;
 COREGRAPHICS_EXPORT const CFStringRef kCGColorSpaceExtendedLinearGray;
 COREGRAPHICS_EXPORT const CFStringRef kCGColorSpaceExtendedLinearITUR_2020;
 
-typedef enum {
-    kCGRenderingIntentDefault,
-    kCGRenderingIntentAbsoluteColorimetric,
-    kCGRenderingIntentRelativeColorimetric,
-    kCGRenderingIntentSaturation,
-    kCGRenderingIntentPerceptual,
-} CGColorRenderingIntent;
+typedef CF_ENUM(int32_t, CGColorRenderingIntent) {
+    kCGRenderingIntentDefault CF_SWIFT_NAME(defaultIntent),
+    kCGRenderingIntentAbsoluteColorimetric CF_SWIFT_NAME(absoluteColorimetric),
+    kCGRenderingIntentRelativeColorimetric CF_SWIFT_NAME(relativeColorimetric),
+    kCGRenderingIntentPerceptual CF_SWIFT_NAME(perceptual),
+    kCGRenderingIntentSaturation CF_SWIFT_NAME(saturation),
+};
 
 typedef enum {
     kCGColorSpaceModelUnknown = -1,
@@ -73,12 +76,22 @@ COREGRAPHICS_EXPORT CGColorSpaceRef CGColorSpaceCreatePattern(CGColorSpaceRef ba
 COREGRAPHICS_EXPORT CGColorSpaceModel CGColorSpaceGetModel(CGColorSpaceRef self);
 COREGRAPHICS_EXPORT size_t CGColorSpaceGetNumberOfComponents(CGColorSpaceRef self);
 
-COREGRAPHICS_EXPORT CGColorSpaceRef CGColorSpaceCreateWithName(CFStringRef name);
+COREGRAPHICS_EXPORT CGColorSpaceRef CGColorSpaceCreateWithName(CFStringRef name)
+    CF_SWIFT_NAME(CGColorSpace.init(name:));
 COREGRAPHICS_EXPORT CFStringRef CGColorSpaceGetName(CGColorSpaceRef colorSpace);
 COREGRAPHICS_EXPORT CFStringRef CGColorSpaceCopyName(CGColorSpaceRef colorSpace);
 COREGRAPHICS_EXPORT CFDataRef CGColorSpaceCopyICCData(CGColorSpaceRef colorSpace);
 COREGRAPHICS_EXPORT CGColorSpaceRef CGColorSpaceCreateICCBased(
     size_t nComponents, const CGFloat *range, CGDataProviderRef profile,
     CGColorSpaceRef alternate);
+COREGRAPHICS_EXPORT CGColorSpaceRef CGColorSpaceCreateExtended(CGColorSpaceRef space);
+COREGRAPHICS_EXPORT CGColorSpaceRef CGColorSpaceCreateExtendedLinearized(CGColorSpaceRef space);
+COREGRAPHICS_EXPORT bool CGColorSpaceUsesExtendedRange(CGColorSpaceRef space);
+
+// True if the space uses a transfer function defined in ITU-R BT.2100 (PQ or HLG).
+COREGRAPHICS_EXPORT bool CGColorSpaceUsesITUR_2100TF(CGColorSpaceRef space);
+COREGRAPHICS_EXPORT bool CGColorSpaceIsHLGBased(CGColorSpaceRef space);
 
 CF_IMPLICIT_BRIDGING_DISABLED
+
+#endif /* CGCOLORSPACE_H */

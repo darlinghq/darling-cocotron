@@ -1,3 +1,6 @@
+#ifndef KTFONT_PDF_H
+#define KTFONT_PDF_H
+
 #import "KTFont.h"
 
 @class KGPDFObject, KGPDFContext;
@@ -8,3 +11,5 @@
            length: (unsigned) length;
 - (KGPDFObject *) encodeReferenceWithContext: (KGPDFContext *) context;
 @end
+
+#endif /* KTFONT_PDF_H */

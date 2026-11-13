@@ -50,12 +50,27 @@ bool CGPathIsEmpty(CGPathRef self) {
 }
 
 bool CGPathIsRect(CGPathRef self, CGRect *rect) {
-    return O2PathIsRect((O2PathRef)self, rect);
+    if (self == NULL)
+        return false;
+    CGRect dummy;
+    return O2PathIsRect((O2PathRef)self, rect != NULL ? rect : &dummy);
 }
 
 void CGPathApply(CGPathRef self, void *info, CGPathApplierFunction function) {
-    return O2PathApply((O2PathRef)self, info, O2PathApplierFunctionFromCG(function));
+    if (self == NULL || function == NULL)
+        return;
+    O2PathApply((O2PathRef)self, info, O2PathApplierFunctionFromCG(function));
 }
+
+#if __has_feature(blocks)
+static void CGPathApplyBlockTrampoline(void *info, const CGPathElement *element) {
+    ((__bridge CGPathApplyBlock)info)(element);
+}
+
+void CGPathApplyWithBlock(CGPathRef self, CGPathApplyBlock block) {
+    CGPathApply(self, (__bridge void *)block, CGPathApplyBlockTrampoline);
+}
+#endif
 
 CGMutablePathRef CGPathCreateMutableCopy(CGPathRef self) {
     return (CGMutablePathRef)O2PathCreateMutableCopy((O2PathRef)self);
@@ -121,6 +136,46 @@ void CGPathAddRect(CGMutablePathRef self, const CGAffineTransform *xform,
     O2PathAddRect((O2MutablePathRef)self, O2AffineTransformPtrFromCG(xform), rect);
 }
 
+void CGPathAddRoundedRect(CGMutablePathRef path,
+                          const CGAffineTransform *transform, CGRect rect,
+                          CGFloat cornerWidth, CGFloat cornerHeight)
+{
+    if (!(cornerWidth > 0 && cornerHeight > 0) || CGRectIsEmpty(rect)) {
+        CGPathAddRect(path, transform, rect);
+        return;
+    }
+
+    CGFloat x0 = CGRectGetMinX(rect), x1 = CGRectGetMaxX(rect);
+    CGFloat y0 = CGRectGetMinY(rect), y1 = CGRectGetMaxY(rect);
+    CGFloat rx = MIN(cornerWidth, (x1 - x0) / 2);
+    CGFloat ry = MIN(cornerHeight, (y1 - y0) / 2);
+    // Control point distance for a quarter-circle, scaled independently on
+    // each axis to make a quarter-ellipse.
+    const CGFloat k = 0.5522847498307936;
+
+    // The subpath starts at the middle of the right edge and runs towards
+    // increasing y, along the top edge, the left edge and the bottom edge (the
+    // order macOS emits), with a close at the end.
+    CGPathMoveToPoint(path, transform, x1, (y0 + y1) / 2);
+    CGPathAddLineToPoint(path, transform, x1, y1 - ry);
+    CGPathAddCurveToPoint(path, transform,
+                          x1, y1 - ry + k * ry, x1 - rx + k * rx, y1,
+                          x1 - rx, y1);
+    CGPathAddLineToPoint(path, transform, x0 + rx, y1);
+    CGPathAddCurveToPoint(path, transform,
+                          x0 + rx - k * rx, y1, x0, y1 - ry + k * ry,
+                          x0, y1 - ry);
+    CGPathAddLineToPoint(path, transform, x0, y0 + ry);
+    CGPathAddCurveToPoint(path, transform,
+                          x0, y0 + ry - k * ry, x0 + rx - k * rx, y0,
+                          x0 + rx, y0);
+    CGPathAddLineToPoint(path, transform, x1 - rx, y0);
+    CGPathAddCurveToPoint(path, transform,
+                          x1 - rx + k * rx, y0, x1, y0 + ry - k * ry,
+                          x1, y0 + ry);
+    CGPathCloseSubpath(path);
+}
+
 void CGPathAddRects(CGMutablePathRef self, const CGAffineTransform *xform,
                     const CGRect *rects, size_t count)
 {
@@ -168,14 +223,34 @@ CGPathRef CGPathCreateWithRect(CGRect rect, const CGAffineTransform *transform)
                                             (O2AffineTransform *) transform);
 }
 
+CGPathRef CGPathCreateWithRoundedRect(CGRect rect, CGFloat cornerWidth,
+                                      CGFloat cornerHeight,
+                                      const CGAffineTransform *transform)
+{
+    CGMutablePathRef path = CGPathCreateMutable();
+    CGPathAddRoundedRect(path, transform, rect, cornerWidth, cornerHeight);
+    return path;
+}
+
 CGRect CGPathGetPathBoundingBox(CGPathRef path) {
     return O2PathGetBoundingBox((O2PathRef)path);
 }
 
 CGPathRef CGPathCreateCopyByTransformingPath(CGPathRef path,
-                                             CGAffineTransform *transform)
+                                             const CGAffineTransform *transform)
 {
+    if (path == NULL)
+        return NULL;
     O2MutablePathRef copy = O2PathCreateMutableCopy((O2PathRef)path);
-    O2PathApplyTransform(copy, *(O2AffineTransform *) transform);
+    if (transform != NULL)
+        O2PathApplyTransform(copy, *(O2AffineTransform *) transform);
     return (CGPathRef)copy;
+}
+
+CGPathRef CGPathCreateCopyByStrokingPath(CGPathRef path,
+    const CGAffineTransform *transform, CGFloat width, CGLineCap cap,
+    CGLineJoin join, CGFloat miterLimit)
+{
+    return (CGPathRef)O2PathCreateCopyByStrokingPath((O2PathRef)path,
+        O2AffineTransformPtrFromCG(transform), width, cap, join, miterLimit);
 }

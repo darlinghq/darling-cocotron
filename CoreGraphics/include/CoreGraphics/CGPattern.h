@@ -1,3 +1,6 @@
+#ifndef CGPATTERN_H
+#define CGPATTERN_H
+
 /* Copyright (c) 2007 Christopher J. W. Lloyd
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
@@ -55,3 +58,5 @@ COREGRAPHICS_EXPORT CGPatternTiling CGPatternGetTiling(CGPatternRef self);
 COREGRAPHICS_EXPORT bool CGPatternIsColored(CGPatternRef self);
 
 CF_IMPLICIT_BRIDGING_DISABLED
+
+#endif /* CGPATTERN_H */

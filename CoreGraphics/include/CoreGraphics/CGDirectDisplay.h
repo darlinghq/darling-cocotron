@@ -1,3 +1,6 @@
+#ifndef CGDIRECTDISPLAY_H
+#define CGDIRECTDISPLAY_H
+
 
 #import <CoreGraphics/CGError.h>
 #import <CoreGraphics/CGGeometry.h>
@@ -109,3 +112,5 @@ COREGRAPHICS_EXPORT size_t CGDisplayModeGetWidth(CGDisplayModeRef mode);
 COREGRAPHICS_EXPORT size_t CGDisplayModeGetHeight(CGDisplayModeRef mode);
 COREGRAPHICS_EXPORT CFStringRef
 CGDisplayModeCopyPixelEncoding(CGDisplayModeRef mode);
+
+#endif /* CGDIRECTDISPLAY_H */
