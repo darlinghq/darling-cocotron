@@ -36,8 +36,11 @@
 
 @implementation O2Image
 
+ONYX2D_STATIC_INLINE const void *scanlineAtY(O2Image *self, int y);
+
 ONYX2D_STATIC O2argb8u *O2ImageRead_G1_to_argb8u(O2Image *self, NSInteger x, NSInteger y, O2argb8u *span) {
-    const uint8_t *src = (const uint8_t *)self->_directBytes + (y * self->_bytesPerRow) + (x / 8);
+    // scanlineAtY loads the pixel bytes on first use
+    const uint8_t *src = (const uint8_t *)scanlineAtY(self, (int)y) + (x / 8);
     for (NSInteger i = 0; i < (NSInteger)self->_width - x; ++i) {
         NSInteger bitIndex = (x + i) % 8;
         uint8_t byte = src[(x + i) / 8 - (x / 8)];
@@ -51,7 +54,8 @@ ONYX2D_STATIC O2argb8u *O2ImageRead_G1_to_argb8u(O2Image *self, NSInteger x, NSI
 }
 
 ONYX2D_STATIC uint8_t *O2ImageRead_G1_to_A8(O2Image *self, NSInteger x, NSInteger y, uint8_t *alpha) {
-    const uint8_t *src = (const uint8_t *)self->_directBytes + (y * self->_bytesPerRow) + (x / 8);
+    // scanlineAtY loads the pixel bytes on first use
+    const uint8_t *src = (const uint8_t *)scanlineAtY(self, (int)y) + (x / 8);
     for (NSInteger i = 0; i < (NSInteger)self->_width - x; ++i) {
         NSInteger bitIndex = (x + i) % 8;
         uint8_t byte = src[(x + i) / 8 - (x / 8)];
