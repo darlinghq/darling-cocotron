@@ -30,7 +30,7 @@ backend draw the window frame itself even when the compositor offers server-side
   keymap and key repeat, aggregate and left/right modifier changes, touchpad pinch as magnify and rotate
   events.
 - Cursors: themed cursors and `NSImage` cursors with their hotspot.
-- Clipboard and drag-and-drop: see below.
+- Clipboard and drag-and-drop, OpenGL and scale: see below.
 - Outputs: output batches are applied atomically, rotation and the xdg-output logical layout feed `NSScreen`,
   integer buffer scale follows the outputs a window is on.
 
@@ -49,6 +49,21 @@ callbacks run after native dispatch. Outgoing drags start from a mouse press and
 output scale. A drag whose source and target are the same process stays in the process and keeps the
 original Cocoa data. File lists are converted by `AppKit/DarlingFileURIList.m`, shared with the X11 backend:
 only paths below `/Volumes/SystemRoot` (host paths) are offered to other processes.
+
+## OpenGL, layers and scale
+
+OpenGL views and layer-backed content are EGL child surfaces (`wl_subsurface`, `wl_egl_window`,
+[viewporter](https://gitlab.freedesktop.org/wayland/wayland-protocols/-/blob/main/stable/viewporter/viewporter.xml))
+of the window surface, clipped and committed together with it. The EGL display is handed to OpenGL through
+`CGLRegisterNativeDisplayForPlatform`. Rendering and presentation happen on the main thread only
+(`requiresMainThreadPresentation`); the drawable size in pixels and the scale are reported by the subwindow
+(`drawablePixelSize`, `backingScaleFactor`), and `NSOpenGLView` reshapes when the allocation changes.
+
+Scale follows the output a surface is on: the integer `wl_surface.set_buffer_scale`, or, when the compositor offers
+[wp-fractional-scale-v1](https://gitlab.freedesktop.org/wayland/wayland-protocols/-/blob/main/staging/fractional-scale/fractional-scale-v1.xml)
+together with viewporter, the preferred scale in 120ths with the buffer cropped and scaled through a viewport. Cursors
+and drag icons use the same scale; a compositor without viewporter gets an integer scale only. Swaps are paced to the
+refresh rate of the window's output (`refreshMillihertz`).
 
 Native libraries (libwayland-client, libwayland-cursor, libxkbcommon) are loaded with `dlopen` through the
 loader's native-call table only when the backend is selected, so the bundle has no link-time dependency on
