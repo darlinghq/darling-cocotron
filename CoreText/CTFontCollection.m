@@ -10,10 +10,14 @@ const CFStringRef kCTFontCollectionRemoveDuplicatesOption =
 @interface KTFontCollection : NSObject <NSCopying> {
     NSArray *_queries;
     NSDictionary *_options;
+    NSArray *_exclusions;
 }
 - initWithQueries: (NSArray *) queries options: (NSDictionary *) options;
 - (NSArray *) queries;
 - (NSDictionary *) options;
+- (NSArray *) exclusions;
+- (void) setQueries: (NSArray *) queries;
+- (void) setExclusions: (NSArray *) exclusions;
 @end
 
 @implementation KTFontCollection
@@ -30,6 +34,7 @@ const CFStringRef kCTFontCollectionRemoveDuplicatesOption =
 - (void) dealloc {
     [_queries release];
     [_options release];
+    [_exclusions release];
     [super dealloc];
 }
 
@@ -47,6 +52,22 @@ const CFStringRef kCTFontCollectionRemoveDuplicatesOption =
 
 - (NSDictionary *) options {
     return _options;
+}
+
+- (NSArray *) exclusions {
+    return _exclusions;
+}
+
+- (void) setQueries: (NSArray *) queries {
+    NSArray *copy = [queries copy];
+    [_queries release];
+    _queries = copy;
+}
+
+- (void) setExclusions: (NSArray *) exclusions {
+    NSArray *copy = [exclusions copy];
+    [_exclusions release];
+    _exclusions = copy;
 }
 
 @end
@@ -137,6 +158,16 @@ CFArrayRef _Nullable CTFontCollectionCreateMatchingFontDescriptors(CTFontCollect
         CFRelease(found);
     }
 
+    // Faces matched by an exclusion descriptor are left out.
+    for (id exclusion in [object exclusions]) {
+        CFArrayRef excluded = CTFontDescriptorCreateMatchingFontDescriptors(
+                (CTFontDescriptorRef) exclusion, NULL);
+        if (excluded == NULL)
+            continue;
+        [matches removeObjectsInArray: (NSArray *) excluded];
+        CFRelease(excluded);
+    }
+
     if ([matches count] == 0)
         return NULL;
     return (CFArrayRef) [matches copy];
@@ -166,4 +197,64 @@ CFArrayRef CTFontCollectionCreateMatchingFontDescriptorsForFamily(CTFontCollecti
     if ([matches count] == 0)
         return NULL;
     return (CFArrayRef) [matches copy];
+}
+
+CTMutableFontCollectionRef CTFontCollectionCreateMutableCopy(CTFontCollectionRef original)
+{
+    if (original == NULL)
+        return NULL;
+    KTFontCollection *source = (KTFontCollection *) original;
+    KTFontCollection *copy = [[KTFontCollection alloc] initWithQueries: [source queries]
+                                                               options: [source options]];
+    [copy setExclusions: [source exclusions]];
+    return (CTMutableFontCollectionRef) copy;
+}
+
+CFArrayRef CTFontCollectionCopyQueryDescriptors(CTFontCollectionRef collection)
+{
+    if (collection == NULL)
+        return NULL;
+    NSArray *queries = [(KTFontCollection *) collection queries];
+    return queries != nil ? (CFArrayRef) [queries copy] : NULL;
+}
+
+void CTFontCollectionSetQueryDescriptors(CTMutableFontCollectionRef collection,
+                                         CFArrayRef descriptors)
+{
+    if (collection == NULL)
+        return;
+    // No descriptors means the collection lists every installed face.
+    [(KTFontCollection *) collection setQueries: (NSArray *) descriptors];
+}
+
+CFArrayRef CTFontCollectionCopyExclusionDescriptors(CTFontCollectionRef collection)
+{
+    if (collection == NULL)
+        return NULL;
+    NSArray *exclusions = [(KTFontCollection *) collection exclusions];
+    return exclusions != nil ? (CFArrayRef) [exclusions copy] : NULL;
+}
+
+void CTFontCollectionSetExclusionDescriptors(CTMutableFontCollectionRef collection,
+                                             CFArrayRef descriptors)
+{
+    if (collection == NULL)
+        return;
+    [(KTFontCollection *) collection setExclusions: (NSArray *) descriptors];
+}
+
+CFArrayRef CTFontCollectionCreateMatchingFontDescriptorsSortedWithCallback(
+        CTFontCollectionRef collection, CTFontCollectionSortDescriptorsCallback sortCallback,
+        void *refCon)
+{
+    CFArrayRef matches = CTFontCollectionCreateMatchingFontDescriptors(collection);
+    if (matches == NULL || sortCallback == NULL)
+        return matches;
+    NSArray *sorted = [(NSArray *) matches
+            sortedArrayUsingComparator: ^NSComparisonResult(id first, id second) {
+                return (NSComparisonResult) sortCallback((CTFontDescriptorRef) first,
+                                                         (CTFontDescriptorRef) second, refCon);
+            }];
+    CFRelease(matches);
+    return (CFArrayRef) [sorted copy];
 }

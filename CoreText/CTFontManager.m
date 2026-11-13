@@ -77,3 +77,25 @@ CFArrayRef CTFontManagerCreateFontDescriptorsFromData(CFDataRef data)
     CFRelease(descriptor);
     return result;
 }
+
+CFArrayRef CTFontManagerCreateFontDescriptorsFromURL(CFURLRef fileURL)
+{
+    if (fileURL == NULL)
+        return NULL;
+    NSData *data = [NSData dataWithContentsOfURL: (NSURL *) fileURL];
+    if (data == nil)
+        return NULL;
+    CTFontDescriptorRef descriptor = CTFontManagerCreateFontDescriptorFromData((CFDataRef) data);
+    if (descriptor == NULL)
+        return NULL;
+
+    // Report the file the descriptor came from.
+    NSDictionary *url = [NSDictionary dictionaryWithObject: (NSURL *) fileURL
+                                                    forKey: (NSString *) kCTFontURLAttribute];
+    CTFontDescriptorRef withURL =
+            CTFontDescriptorCreateCopyWithAttributes(descriptor, (CFDictionaryRef) url);
+    CFRelease(descriptor);
+    CFArrayRef result = CFArrayCreate(NULL, (const void **) &withURL, 1, &kCFTypeArrayCallBacks);
+    CFRelease(withURL);
+    return result;
+}
