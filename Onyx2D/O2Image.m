@@ -355,6 +355,7 @@ ONYX2D_STATIC BOOL initFunctionsForParameters(O2Image *self,
     _isMask = NO;
     _renderingIntent = renderingIntent;
     _mask = nil;
+    _contentHeadroom = 0;
 
     _directBytes = NULL;
     _directLength = 0;
@@ -606,6 +607,36 @@ O2ImageRef O2ImageCreateWithImageInRect(O2ImageRef self, O2Rect rect) {
             self->_decode, self->_interpolate, self->_renderingIntent);
 
     O2DataProviderRelease(provider);
+
+    if (result != NULL)
+        result->_contentHeadroom = self->_contentHeadroom;
+
+    return result;
+}
+
+float O2ImageGetContentHeadroom(O2ImageRef self) {
+    if (self == NULL)
+        return 0;
+
+    return self->_contentHeadroom;
+}
+
+O2ImageRef O2ImageCreateCopyWithContentHeadroom(O2ImageRef self,
+                                                float headroom)
+{
+    if (self == NULL)
+        return NULL;
+
+    O2ImageRef result = O2ImageCreate(
+            self->_width, self->_height, self->_bitsPerComponent,
+            self->_bitsPerPixel, self->_bytesPerRow, self->_colorSpace,
+            self->_bitmapInfo, self->_provider, self->_decode,
+            self->_interpolate, self->_renderingIntent);
+
+    if (result != NULL) {
+        result->_contentHeadroom = headroom;
+        [result setMask: self->_mask];
+    }
 
     return result;
 }
