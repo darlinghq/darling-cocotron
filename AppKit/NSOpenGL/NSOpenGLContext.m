@@ -136,7 +136,7 @@ static inline void _clearCurrentContext() {
         rect = [_view convertRect: rect toView: nil];
     if (_subwindow == nil) {
         _subwindow = [[[_view window] _createSubWindowWithFrame: rect] retain];
-        _cglWindow = CGLGetWindow([_subwindow nativeWindow]);
+        _cglWindow = CGLGetWindowForContext(_glContext, [_subwindow nativeWindow]);
     } else {
         [_subwindow setFrame: rect];
     }

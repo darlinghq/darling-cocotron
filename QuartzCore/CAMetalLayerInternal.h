@@ -33,6 +33,7 @@ class CAMetalDrawableActual;
 	CGColorSpaceRef _colorspace;
 	BOOL _framebufferOnly;
 	CGSize _drawableSize;
+	BOOL _drawableSizeExplicitlySet;
 	BOOL _presentsWithTransaction;
 	BOOL _displaySyncEnabled;
 	BOOL _wantsExtendedDynamicRangeContent;
@@ -62,4 +63,9 @@ class CAMetalDrawableActual;
 
 - (void)prepareRender;
 
+@end
+
+@interface CAMetalLayer (DARLING_INTERNAL)
+- (void)prepareRender;
+- (BOOL)hasQueuedDrawables;
 @end

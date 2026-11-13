@@ -2827,8 +2827,12 @@ static NSView *viewBeingPrinted = nil;
             [[NSColor yellowColor] set];
             NSRectFill(rect);
         } else {
-            if (_layer != nil && [self wantsUpdateLayer])
+            if (_layer != nil && [self wantsUpdateLayer]) {
                 [self updateLayer];
+                // A custom backing layer may implement -display (e.g. a Metal
+                // blit layer). View invalidation must also invalidate that layer.
+                [_layer setNeedsDisplay];
+            }
             else
                 [self drawRect: rect];
             if (NSShowAllViews) {

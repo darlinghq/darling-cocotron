@@ -576,6 +576,23 @@ void CAMetalDrawableTexture::replaceRegion(Indium::Region region, size_t mipmapL
 	abort();
 };
 
+// Reading a drawable's texture back is not a thing an app can ask Metal for: the
+// drawable's texture is the layer's colour attachment, and -[MTLTexture getBytes:]
+// on it would hand back whatever the compositor has not consumed yet. Indium
+// declares these pure virtual, so a drawable texture has to answer; refuse
+// explicitly rather than return whatever happens to be in the image. Indium's own
+// failures travel as std::runtime_error, which -[MTLTexture getBytes:] turns into
+// an NSException, so throwing here surfaces as a normal Cocoa error to the caller.
+void CAMetalDrawableTexture::getBytes(Indium::Region region, size_t mipmapLevel, void* bytes, size_t bytesPerRow) {
+	throw std::runtime_error("Cannot read back a CAMetalDrawable's texture; "
+	                         "read back a texture you created instead");
+}
+
+void CAMetalDrawableTexture::getBytes(Indium::Region region, size_t mipmapLevel, size_t slice, void* bytes, size_t bytesPerRow, size_t bytesPerImage) {
+	throw std::runtime_error("Cannot read back a CAMetalDrawable's texture; "
+	                         "read back a texture you created instead");
+}
+
 void CAMetalDrawableTexture::precommit(std::shared_ptr<Indium::PrivateCommandBuffer> cmdbuf) {
 	// TODO: check if we need a barrier for the internal image as well; we probably do.
 	//       we might even need a separate semaphore for it.
@@ -942,16 +959,37 @@ static void glDebugCallback(GLenum source, GLenum type, GLuint id, GLenum severi
 	_drawable->present();
 }
 
+// Metal offers three ways to ask for a present, differing only in when the system
+// is asked to show the frame. This implementation has one clock: -queuePresent: hands
+// the drawable to the render timer, which composites it on the next display tick.
+// There is no timed queue, so a duration or a target time cannot be scheduled. Rather
+// than refuse a call the API treats as an ordinary present, present on that tick and
+// say once that the hint was dropped -- an app that paces itself should know its hint
+// is not being honoured instead of silently getting frames early.
+static void warnUnschedulablePresent(NSString* what, CFTimeInterval value) {
+	static int warned;
+	if (!__sync_lock_test_and_set(&warned, 1)) {
+		NSLog(@"CAMetalDrawable: %@ %.6f cannot be scheduled; presents go out on the next display tick",
+		      what, value);
+	}
+}
+
 - (void)presentAfterMinimumDuration: (CFTimeInterval)duration
 {
-	// TODO
-	abort();
+	if (duration > 0) {
+		warnUnschedulablePresent(@"presentAfterMinimumDuration:", duration);
+	}
+	[self present];
 }
 
 - (void)presentAtTime: (CFTimeInterval)presentationTime
 {
-	// TODO
-	abort();
+	// A time already in the past means "as soon as possible", which is exactly what
+	// the next tick delivers, so only a future time is a dropped hint.
+	if (presentationTime > CACurrentMediaTime()) {
+		warnUnschedulablePresent(@"presentAtTime:", presentationTime);
+	}
+	[self present];
 }
 
 - (void)addPresentedHandler: (MTLDrawablePresentedHandler)block

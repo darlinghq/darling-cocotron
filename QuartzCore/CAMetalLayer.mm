@@ -20,6 +20,7 @@
 #define GL_GLEXT_PROTOTYPES 1
 #import "CAMetalLayerInternal.h"
 #import "CAMetalDrawableInternal.h"
+#import <objc/runtime.h>
 #import <Foundation/NSRaise.h>
 #import <Metal/MTLDeviceInternal.h>
 #import <QuartzCore/CALayerContext.h>
@@ -55,13 +56,34 @@ static void reportGLErrors(void) {
 }
 
 #if DARLING_METAL_ENABLED
-// FIXME: this breaks inheritance from CAMetalLayer.
-//        the problem is that we need some C++ ivars, but we can't put those in the public header
-//        and this code needs to compile on 32-bit (so it can't use non-fragile ivars).
-//        maybe we could keep the troublesome ivars in an associated object...
-//
-//        then again, maybe we could get away with stubbing the entire class when compiling for 32-bit
-//        since Metal is unavailable for 32-bit code.
+
+static const char kCAMetalLayerInternalKey = 0;
+
+- (CAMetalLayerInternal *)_metalInternal
+{
+	if ([self isMemberOfClass:[CAMetalLayerInternal class]]) {
+		return (CAMetalLayerInternal *)self;
+	}
+	CAMetalLayerInternal *internal = (CAMetalLayerInternal *)objc_getAssociatedObject(self, &kCAMetalLayerInternalKey);
+	if (!internal) {
+		@synchronized(self) {
+			internal = (CAMetalLayerInternal *)objc_getAssociatedObject(self, &kCAMetalLayerInternalKey);
+			if (!internal) {
+				internal = [[CAMetalLayerInternal alloc] init];
+				if (_context) {
+					[internal _setContext:_context];
+				}
+				if (!CGSizeEqualToSize(_bounds.size, CGSizeZero)) {
+					[internal setBounds:_bounds];
+				}
+				objc_setAssociatedObject(self, &kCAMetalLayerInternalKey, internal, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+				[internal release];
+			}
+		}
+	}
+	return internal;
+}
+
 + (instancetype)allocWithZone: (NSZone*)zone
 {
 	if (self == [CAMetalLayer class]) {
@@ -70,151 +92,211 @@ static void reportGLErrors(void) {
 		return [super allocWithZone: zone];
 	}
 }
-#endif
+
+- (void)setBounds:(CGRect)bounds
+{
+	[super setBounds:bounds];
+	if ([self class] != [CAMetalLayerInternal class]) {
+		CAMetalLayerInternal *internal = [self _metalInternal];
+		[internal setBounds:bounds];
+	}
+}
+
+- (void)_setContext:(CALayerContext *)context
+{
+	[super _setContext:context];
+	if ([self class] != [CAMetalLayerInternal class]) {
+		CAMetalLayerInternal *internal = [self _metalInternal];
+		if (CGSizeEqualToSize([internal drawableSize], CGSizeZero) && !CGSizeEqualToSize(_bounds.size, CGSizeZero)) {
+			[internal setDrawableSize:_bounds.size];
+		}
+		[internal _setContext:context];
+	}
+}
+
+- (void)removeFromSuperlayer
+{
+	if ([self class] != [CAMetalLayerInternal class]) {
+		[[self _metalInternal] removeFromSuperlayer];
+	}
+	[super removeFromSuperlayer];
+}
+
+- (void)prepareRender
+{
+	if ([self class] != [CAMetalLayerInternal class]) {
+		[[self _metalInternal] prepareRender];
+	}
+}
+
+- (BOOL)hasQueuedDrawables
+{
+	if ([self class] != [CAMetalLayerInternal class]) {
+		return [[self _metalInternal] hasQueuedDrawables];
+	}
+	return NO;
+}
+
+- (BOOL)_drawLayerContents:(CGRect)bounds opacity:(CGFloat)opacity
+{
+	if ([self class] != [CAMetalLayerInternal class]) {
+		return [[self _metalInternal] _drawLayerContents:bounds opacity:opacity];
+	}
+	return NO;
+}
+
+- (NSNumber *)_textureId
+{
+	if ([self class] != [CAMetalLayerInternal class]) {
+		return [[self _metalInternal] _textureId];
+	}
+	return nil;
+}
+
+- (void)display
+{
+	if ([self class] != [CAMetalLayerInternal class]) {
+		[[self _metalInternal] display];
+	} else {
+		[super display];
+	}
+}
 
 - (id<MTLDevice>)device
 {
-	NSInvalidAbstractInvocation();
-	return nil;
+	return [[self _metalInternal] device];
 }
 
 - (void)setDevice: (id<MTLDevice>)device
 {
-	NSInvalidAbstractInvocation();
+	[[self _metalInternal] setDevice:device];
 }
 
 - (id<MTLDevice>)preferredDevice
 {
-	NSInvalidAbstractInvocation();
-	return nil;
+	return [[self _metalInternal] preferredDevice];
 }
 
 - (MTLPixelFormat)pixelFormat
 {
-	NSInvalidAbstractInvocation();
-	return MTLPixelFormatInvalid;
+	return [[self _metalInternal] pixelFormat];
 }
 
 - (void)setPixelFormat: (MTLPixelFormat)pixelFormat
 {
-	NSInvalidAbstractInvocation();
+	[[self _metalInternal] setPixelFormat:pixelFormat];
 }
 
 - (CGColorSpaceRef)colorspace
 {
-	NSInvalidAbstractInvocation();
-	return NULL;
+	return [[self _metalInternal] colorspace];
 }
 
 - (void)setColorspace: (CGColorSpaceRef)colorspace
 {
-	NSInvalidAbstractInvocation();
+	[[self _metalInternal] setColorspace:colorspace];
 }
 
 - (BOOL)framebufferOnly
 {
-	NSInvalidAbstractInvocation();
-	return YES;
+	return [[self _metalInternal] framebufferOnly];
 }
 
 - (void)setFramebufferOnly: (BOOL)framebufferOnly
 {
-	NSInvalidAbstractInvocation();
+	[[self _metalInternal] setFramebufferOnly:framebufferOnly];
 }
 
 - (CGSize)drawableSize
 {
-	NSInvalidAbstractInvocation();
-	return CGSizeZero;
+	return [[self _metalInternal] drawableSize];
 }
 
 - (void)setDrawableSize: (CGSize)drawableSize
 {
-	NSInvalidAbstractInvocation();
+	[[self _metalInternal] setDrawableSize:drawableSize];
 }
 
 - (BOOL)presentsWithTransaction
 {
-	NSInvalidAbstractInvocation();
-	return NO;
+	return [[self _metalInternal] presentsWithTransaction];
 }
 
 - (void)setPresentsWithTransaction: (BOOL)presentsWithTransaction
 {
-	NSInvalidAbstractInvocation();
+	[[self _metalInternal] setPresentsWithTransaction:presentsWithTransaction];
 }
 
 - (BOOL)displaySyncEnabled
 {
-	NSInvalidAbstractInvocation();
-	return NO;
+	return [[self _metalInternal] displaySyncEnabled];
 }
 
 - (void)setDisplaySyncEnabled: (BOOL)displaySyncEnabled
 {
-	NSInvalidAbstractInvocation();
+	[[self _metalInternal] setDisplaySyncEnabled:displaySyncEnabled];
 }
 
 - (BOOL)wantsExtendedDynamicRangeContent
 {
-	NSInvalidAbstractInvocation();
-	return NO;
+	return [[self _metalInternal] wantsExtendedDynamicRangeContent];
 }
 
 - (void)setWantsExtendedDynamicRangeContent: (BOOL)wantsExtendedDynamicRangeContent
 {
-	NSInvalidAbstractInvocation();
+	[[self _metalInternal] setWantsExtendedDynamicRangeContent:wantsExtendedDynamicRangeContent];
 }
 
 - (CAEDRMetadata*)EDRMetadata
 {
-	NSInvalidAbstractInvocation();
-	return nil;
+	return [[self _metalInternal] EDRMetadata];
 }
 
 - (void)setEDRMetadata: (CAEDRMetadata*)EDRMetadata
 {
-	NSInvalidAbstractInvocation();
+	[[self _metalInternal] setEDRMetadata:EDRMetadata];
 }
 
 - (NSUInteger)maximumDrawableCount
 {
-	NSInvalidAbstractInvocation();
-	return 0;
+	return [[self _metalInternal] maximumDrawableCount];
 }
 
 - (void)setMaximumDrawableCount: (NSUInteger)maximumDrawableCount
 {
-	NSInvalidAbstractInvocation();
+	[[self _metalInternal] setMaximumDrawableCount:maximumDrawableCount];
 }
 
 - (BOOL)allowsNextDrawableTimeout
 {
-	NSInvalidAbstractInvocation();
-	return NO;
+	return [[self _metalInternal] allowsNextDrawableTimeout];
 }
 
 - (void)setAllowsNextDrawableTimeout: (BOOL)allowsNextDrawableTimeout
 {
-	NSInvalidAbstractInvocation();
+	[[self _metalInternal] setAllowsNextDrawableTimeout:allowsNextDrawableTimeout];
 }
 
 - (NSDictionary*)developerHUDProperties
 {
-	NSInvalidAbstractInvocation();
-	return nil;
+	return [[self _metalInternal] developerHUDProperties];
 }
 
 - (void)setDeveloperHUDProperties: (NSDictionary*)developerHUDProperties
 {
-	NSInvalidAbstractInvocation();
+	[[self _metalInternal] setDeveloperHUDProperties:developerHUDProperties];
 }
 
 - (id<CAMetalDrawable>)nextDrawable
 {
-	NSInvalidAbstractInvocation();
-	return nil;
+	return [[self _metalInternal] nextDrawable];
 }
+
+#else
+
+MTL_UNSUPPORTED_CLASS
+
+#endif
 
 @end
 
@@ -336,6 +418,10 @@ static void reportGLErrors(void) {
 
 - (void)setDrawableSize: (CGSize)drawableSize
 {
+	if (CGSizeEqualToSize(_drawableSize, drawableSize)) {
+		return;
+	}
+	_drawableSizeExplicitlySet = YES;
 	_drawableSize = drawableSize;
 	[self recreateDrawables];
 }
@@ -358,18 +444,20 @@ static void reportGLErrors(void) {
 // overridden properties
 //
 
-// it appears that the drawable size does NOT change after initially being set
-#if 0
 - (void)setBounds: (CGRect)value
 {
+	CGSize oldSize = _bounds.size;
 	[super setBounds: value];
 
-	CGSize drawableSize = value.size;
-	// TODO: multiply by contentsScale (CALayer doesn't currently have that property)
-
-	[self setDrawableSize: drawableSize];
+	if (!_drawableSizeExplicitlySet) {
+		if (CGSizeEqualToSize(_drawableSize, CGSizeZero) || CGSizeEqualToSize(_drawableSize, oldSize)) {
+			if (!CGSizeEqualToSize(_drawableSize, value.size)) {
+				_drawableSize = value.size;
+				[self recreateDrawables];
+			}
+		}
+	}
 }
-#endif
 
 //
 // methods
@@ -384,6 +472,29 @@ static void reportGLErrors(void) {
 	NSDate* endTime = [NSDate dateWithTimeIntervalSinceNow: 1];
 
 	while (_usableDrawablesBitmap == 0) {
+		// A queued present is composited, and its drawable handed back, by a render
+		// pass of the layer context, and that pass runs on the main thread. A caller
+		// on the main thread would be waiting here for its own thread, so it runs the
+		// pass in place. Each pass takes one queued present, so if none was taken
+		// (no window to render into yet, or a pass already running) it falls through
+		// to waiting instead of looping.
+		// _context is not retained by the layer. Only the main thread tears a context
+		// down, so on the main thread it stays valid, and the retain covers the unlocked
+		// window while a presented handler runs. Other threads never read it.
+		if ([NSThread isMainThread] && _queuedDrawableCount > 0) {
+			CALayerContext* context = [_context retain];
+			if (context != nil) {
+				NSUInteger queuedBefore = _queuedDrawableCount;
+				[_drawableCondition unlock];
+				BOOL rendered = [context renderPendingPresents];
+				[_drawableCondition lock];
+				[context release];
+				if (rendered && _queuedDrawableCount < queuedBefore) {
+					continue;
+				}
+			}
+		}
+
 		if (_allowsNextDrawableTimeout) {
 			if (![_drawableCondition waitUntilDate: endTime]) {
 				break;
