@@ -195,6 +195,9 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 }
 
 - (BOOL) isPopup { return _popup != NULL; }
+- (BOOL) isTooltip {
+    return [_delegate isKindOfClass: NSClassFromString(@"NSToolTipWindow")];
+}
 - (WaylandWindow *) popupParent { return _popupParent; }
 - (uint32_t) popupGrabSerial { return _popupGrabSerial; }
 - (struct wl_proxy *) xdgSurface { return _xdgSurface; }
@@ -203,6 +206,12 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 
 - (void) ensureMapped {
     if (_mapped || _invalidated)
+        return;
+    // A client cannot position a toplevel, so a tool tip without a mapped
+    // parent stays unmapped rather than being centred by the compositor.
+    BOOL tooltip = [self isTooltip];
+    WaylandWindow *tooltipParent = tooltip ? [_display popupParentForWindow: self] : nil;
+    if (tooltip && (tooltipParent == nil || !tooltipParent->_configured))
         return;
     _surfaceGeneration++;
     _configureUpdatePending = NO;
@@ -230,7 +239,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 
     BOOL menu = [_delegate isKindOfClass: NSClassFromString(@"NSMenuWindow")] ||
                 [_delegate isKindOfClass: NSClassFromString(@"NSPopUpWindow")];
-    WaylandWindow *parent = menu ? [_display popupParentForWindow: self] : nil;
+    WaylandWindow *parent = tooltip ? tooltipParent : menu ? [_display popupParentForWindow: self] : nil;
     if (parent != nil && parent->_configured) {
         _popupParent = [parent retain];
         [self createPopupRole];
@@ -308,6 +317,17 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     _popup = WaylandCreateObject(_xdgSurface, WP_XDG_SURFACE_GET_POPUP,
             &xdg_popup_interface, args, WaylandObjectPopup, self);
     sendRequest(positioner, WP_POSITIONER_DESTROY, WL_MARSHAL_FLAG_DESTROY);
+    if ([self isTooltip]) {
+        // No grab, and an empty input region: the pointer keeps its focus on the
+        // parent while a tool tip is shown beside it.
+        args[0].o = NULL;
+        struct wl_proxy *region = WaylandCreateObject(_display->_compositor,
+                WP_COMPOSITOR_CREATE_REGION, &wl_region_interface, args, 0, nil);
+        args[0].o = (struct wl_object *) region;
+        WaylandMarshal(_surface, WP_SURFACE_SET_INPUT_REGION, NULL, 0, args);
+        sendRequest(region, WP_REGION_DESTROY, WL_MARSHAL_FLAG_DESTROY);
+        return;
+    }
     _popupGrabSerial = [_display popupGrabSerialForParent: _popupParent];
     if (_popupGrabSerial != 0 && [_display seat] != NULL) {
         args[0].o = (struct wl_object *) [_display seat];
@@ -1087,8 +1107,14 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
             _pendingHeight = args[3].i;
         } else if (opcode == WP_POPUP_EV_DONE) {
             NSUInteger generation = _surfaceGeneration;
+            BOOL tooltip = [self isTooltip];
             [_display performAfterDispatch: ^{
-                if (self->_mapped && self->_surfaceGeneration == generation)
+                if (!self->_mapped || self->_surfaceGeneration != generation)
+                    return;
+                // Dismissing a tool tip must not cancel menu tracking.
+                if (tooltip)
+                    [self unmap];
+                else
                     [self->_display cancelPopupMenus];
             }];
         }

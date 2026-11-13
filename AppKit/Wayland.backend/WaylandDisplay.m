@@ -2094,11 +2094,16 @@ static uint32_t WaylandKeyLayoutCodepoint(void *context, uint32_t keysym) {
 - (struct wl_proxy *) seat { return _seat; }
 
 - (WaylandWindow *) popupParentForWindow: (WaylandWindow *) window {
+    // A tool tip belongs to the window the pointer is over, whatever was clicked last. Its
+    // position comes from the pointer in that window: without one it is not shown.
+    if ([window isTooltip])
+        return _pointerWindow != window && [_pointerWindow isMapped] ? _pointerWindow : nil;
     // Menu tracking can open nested menus with keyboard or timer events. The
     // newest mapped popup is the parent even if pointer focus has not moved.
     for (CFIndex i = CFArrayGetCount(_windows); i > 0; i--) {
         WaylandWindow *candidate = (WaylandWindow *) CFArrayGetValueAtIndex(_windows, i - 1);
-        if (candidate != window && [candidate isMapped] && [candidate isPopup])
+        if (candidate != window && [candidate isMapped] && [candidate isPopup] &&
+            ![candidate isTooltip])
             return candidate;
     }
     if (_inputWindow != window && [_inputWindow isMapped])
@@ -2142,11 +2147,14 @@ static uint32_t WaylandKeyLayoutCodepoint(void *context, uint32_t keysym) {
 - (void) unmapPopupsForParent: (WaylandWindow *) parent {
     // Retain a snapshot: unmapping releases each child's parent reference.
     NSMutableArray *children = [NSMutableArray array];
+    NSMutableArray *tooltips = [NSMutableArray array];
     for (CFIndex i = CFArrayGetCount(_windows); i > 0; i--) {
         WaylandWindow *window = (WaylandWindow *) CFArrayGetValueAtIndex(_windows, i - 1);
         if ([window popupParent] == parent)
-            [children addObject: window];
+            [([window isTooltip] ? tooltips : children) addObject: window];
     }
+    for (WaylandWindow *window in tooltips)
+        [window unmap];
     if ([children count] != 0 && ![parent isPopup]) {
         [self cancelPopupMenus];
         return;
@@ -2161,7 +2169,7 @@ static uint32_t WaylandKeyLayoutCodepoint(void *context, uint32_t keysym) {
     NSMutableArray *popups = [NSMutableArray array];
     for (CFIndex i = CFArrayGetCount(_windows); i > 0; i--) {
         WaylandWindow *window = (WaylandWindow *) CFArrayGetValueAtIndex(_windows, i - 1);
-        if ([window isPopup])
+        if ([window isPopup] && ![window isTooltip])
             [popups addObject: window];
     }
     if ([popups count] == 0)
