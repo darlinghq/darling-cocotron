@@ -319,22 +319,22 @@ static void appendElement(void *info, const CGPathElement *element) {
 }
 
 - (void) encodeBool: (BOOL) value forKey: (NSString *) key {
-    [_coder encodeBool: value forKey: key];
+    [_coder encodeObject: [NSNumber numberWithInt: value ? 1 : 0] forKey: key];
     [_keys addObject: key];
 }
 
 - (void) encodeInt: (int) value forKey: (NSString *) key {
-    [_coder encodeInt: value forKey: key];
+    [_coder encodeObject: [NSNumber numberWithInt: value] forKey: key];
     [_keys addObject: key];
 }
 
 - (void) encodeFloat: (float) value forKey: (NSString *) key {
-    [_coder encodeFloat: value forKey: key];
+    [_coder encodeObject: [NSNumber numberWithFloat: value] forKey: key];
     [_keys addObject: key];
 }
 
 - (void) encodeDouble: (double) value forKey: (NSString *) key {
-    [_coder encodeDouble: value forKey: key];
+    [_coder encodeObject: [NSNumber numberWithDouble: value] forKey: key];
     [_keys addObject: key];
 }
 
@@ -470,31 +470,50 @@ static void appendElement(void *info, const CGPathElement *element) {
     return [_coder containsValueForKey: key];
 }
 
+// Scalar properties are archived as NSNumber objects, as macOS does, not as
+// the coder's inline scalar values; the plain decode methods do not follow an
+// object reference.
+- (NSNumber *) decodeNumberForKey: (NSString *) key {
+    return [_coder decodeObjectOfClass: [NSNumber class] forKey: key];
+}
+
 - (BOOL) decodeBool: (BOOL *) value forKey: (NSString *) key {
     if (![self containsKey: key])
         return NO;
-    *value = [_coder decodeBoolForKey: key];
+    NSNumber *number = [self decodeNumberForKey: key];
+    if (number == nil)
+        return NO;
+    *value = [number boolValue];
     return YES;
 }
 
 - (BOOL) decodeInt: (int *) value forKey: (NSString *) key {
     if (![self containsKey: key])
         return NO;
-    *value = [_coder decodeIntForKey: key];
+    NSNumber *number = [self decodeNumberForKey: key];
+    if (number == nil)
+        return NO;
+    *value = [number intValue];
     return YES;
 }
 
 - (BOOL) decodeFloat: (float *) value forKey: (NSString *) key {
     if (![self containsKey: key])
         return NO;
-    *value = [_coder decodeFloatForKey: key];
+    NSNumber *number = [self decodeNumberForKey: key];
+    if (number == nil)
+        return NO;
+    *value = [number floatValue];
     return YES;
 }
 
 - (BOOL) decodeDouble: (double *) value forKey: (NSString *) key {
     if (![self containsKey: key])
         return NO;
-    *value = [_coder decodeDoubleForKey: key];
+    NSNumber *number = [self decodeNumberForKey: key];
+    if (number == nil)
+        return NO;
+    *value = [number doubleValue];
     return YES;
 }
 
