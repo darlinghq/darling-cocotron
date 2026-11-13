@@ -25,7 +25,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 typedef struct CF_BRIDGED_TYPE(id) O2Font *CGFontRef;
 
-typedef uint16_t CGGlyph;
+typedef uint16_t CGFontIndex;
+typedef CGFontIndex CGGlyph;
 
 CF_IMPLICIT_BRIDGING_ENABLED
 
