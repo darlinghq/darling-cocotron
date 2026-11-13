@@ -99,6 +99,18 @@ NSColor *NSColorGetCatalogColor(NSColorListName catalogName,
                                         color: color] autorelease];
 }
 
++ (NSColor *) colorWithArchivedCatalogName: (NSColorListName) catalogName
+                                 colorName: (NSColorName) colorName
+                             fallbackColor: (NSColor *) fallback
+{
+    NSColor *named = NSColorGetCatalogColor(catalogName, colorName);
+
+    return [[[self alloc] initWithCatalogName: catalogName
+                                    colorName: colorName
+                                        color: named ? named : fallback]
+            autorelease];
+}
+
 - (NSColorSpaceName) colorSpaceName {
     return NSNamedColorSpace;
 }
