@@ -5,10 +5,10 @@ exits 1.
 
 It reads one row of an 8-bit RGBA bitmap and allows 8 units per channel, because Onyx2D samples the
 stops about once per axis pixel. Cases: 2 and 5 stops, a hard stop, alpha, extend flags, radial,
-`CGGradientCreateWithColors`, invalid input, a first stop above 0, unordered locations, out-of-range
-locations, and the later-colour-wins rule at coincident stops (the 101-wide axis puts a sample exactly
-on the stops).
+`CGGradientCreateWithColors`, invalid input, a first stop above 0, unordered locations (sorted with their colours),
+out-of-range locations (the gradient is not created), and the earlier-colour-shows rule at coincident
+stops (pixel 50 of an axis from 0.5 to 100.5 sits exactly on the stops).
 
-Status: syntax-checked against the SDK headers only. It has not been run in a guest. The expected
-values were computed with a host model of the stop evaluator and the Onyx2D axial sampling, and each
-new case fails when its rule in `CGGradient.m` is removed in a scratch copy of that model.
+The stop rules (first and last stop, ordering, range of locations, coincident stops) follow
+observations of CGGradient on macOS 10.14.4 and macOS 26.7.3 with the same pixel probe; both versions
+agreed. The test itself has not been run in a Darling guest yet.

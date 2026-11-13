@@ -128,10 +128,12 @@ int main(void)
     checkPixel(pixels, 75, 0, 0, 255, 255, "hard stop: blue after the edge");
     free(pixels);
 
-    // The axis is 101 wide so one colour sample lands exactly on the coincident stops at .5
-    // (x = 51); the later stop's colour must win there. Probes at 25 and 75 never reach the tie.
-    drawLinear(hard, 0, W + 1, 0, &pixels);
-    checkPixel(pixels, 51, 0, 0, 255, 255, "hard stop: the later colour wins at the coincident location");
+    // At a location shared by two stops the earlier segment's end colour shows (observed on macOS
+    // 10.14 and 26): a 100-unit axis from x = 0.5 gives pixel i the position i/100, so pixel 50 sits
+    // on the tie and shows red, and pixel 51 is already blue.
+    drawLinear(hard, 0.5, W + 0.5, 0, &pixels);
+    checkPixel(pixels, 50, 255, 0, 0, 255, "hard stop: the earlier colour shows at the coincident location");
+    checkPixel(pixels, 51, 0, 0, 255, 255, "hard stop: blue just past the coincident location");
     free(pixels);
     CGGradientRelease(hard);
 
@@ -145,25 +147,26 @@ int main(void)
     free(pixels);
     CGGradientRelease(late);
 
-    // Locations {0, .8, .3, 1} never decrease: .3 becomes .8, so past .8 the ramp runs blue to white.
+    // Locations {0, .8, .3, 1} are sorted together with their colours (observed on macOS 10.14 and
+    // 26), so this is the same gradient as {0, .3, .8, 1} with red, blue, green, white.
     const CGFloat unorderedColors[] = { 1, 0, 0, 1, 0, 1, 0, 1, 0, 0, 1, 1, 1, 1, 1, 1 };
     const CGFloat unorderedLocations[] = { 0, 0.8, 0.3, 1 };
     CGGradientRef unordered = makeGradient(unorderedColors, unorderedLocations, 4);
     check(unordered != NULL, "unordered-location gradient is created");
     drawLinear(unordered, 0, W, 0, &pixels);
-    checkPixel(pixels, 70, 33, 222, 0, 255, "unordered locations: red to green below .8");
-    checkPixel(pixels, 90, 126, 126, 255, 255, "unordered locations: blue to white past .8");
+    checkPixel(pixels, 15, 128, 0, 128, 255, "unordered locations: red to blue below .3");
+    checkPixel(pixels, 70, 0, 207, 48, 255, "unordered locations: blue to green between .3 and .8");
+    checkPixel(pixels, 88, 123, 255, 123, 255, "unordered locations: green to white past .8");
     free(pixels);
     CGGradientRelease(unordered);
 
-    // Locations outside 0...1 are clamped, so {-1, 2} behaves like the default {0, 1}.
+    // Locations outside 0...1 make the gradient invalid (observed on macOS 10.14 and 26).
     const CGFloat outsideLocations[] = { -1, 2 };
-    CGGradientRef outside = makeGradient(redBlue, outsideLocations, 2);
-    check(outside != NULL, "out-of-range-location gradient is created");
-    drawLinear(outside, 0, W, 0, &pixels);
-    checkPixel(pixels, W / 2, 128, 0, 128, 255, "out-of-range locations are clamped to 0...1");
-    free(pixels);
-    CGGradientRelease(outside);
+    check(makeGradient(redBlue, outsideLocations, 2) == NULL, "locations {-1, 2} are refused");
+    const CGFloat belowLocations[] = { -0.5, 0.5 };
+    check(makeGradient(redBlue, belowLocations, 2) == NULL, "locations {-0.5, 0.5} are refused");
+    const CGFloat aboveLocations[] = { 0, 1.5 };
+    check(makeGradient(redBlue, aboveLocations, 2) == NULL, "locations {0, 1.5} are refused");
 
     // Alpha is interpolated and the result is premultiplied.
     const CGFloat fadeColors[] = { 1, 1, 1, 1, 1, 1, 1, 0 };

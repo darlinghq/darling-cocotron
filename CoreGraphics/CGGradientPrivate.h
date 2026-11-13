@@ -33,7 +33,7 @@ struct CGGradient {
     CGColorSpaceRef colorSpace;
     size_t count;              /* number of stops */
     size_t numberOfComponents; /* components per stop, alpha included */
-    CGFloat *locations;        /* count entries, non-decreasing, within 0...1 */
+    CGFloat *locations;        /* count entries, sorted ascending, within 0...1 */
     CGFloat *components;       /* count * numberOfComponents entries */
 };
 

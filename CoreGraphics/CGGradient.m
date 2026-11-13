@@ -37,15 +37,23 @@ static void CGGradientFinalize(CFTypeRef cf) {
     free(gradient->components);
 }
 
-/* Locations are clamped to 0...1 and never decrease, so the stops stay ordered. */
-static CGFloat CGGradientClampLocation(CGFloat location, CGFloat previous) {
-    if (!(location >= 0.0))
-        location = 0.0;
-    if (location > 1.0)
-        location = 1.0;
-    if (location < previous)
-        location = previous;
-    return location;
+typedef struct {
+    CGFloat location;
+    size_t index;
+} CGGradientStopOrder;
+
+/* Orders stops by location; stops with equal locations keep their given order. */
+static int CGGradientCompareStops(const void *left, const void *right) {
+    const CGGradientStopOrder *l = (const CGGradientStopOrder *)left;
+    const CGGradientStopOrder *r = (const CGGradientStopOrder *)right;
+
+    if (l->location < r->location)
+        return -1;
+    if (l->location > r->location)
+        return 1;
+    if (l->index < r->index)
+        return -1;
+    return l->index > r->index;
 }
 
 static CFTypeRef CGGradientCreate(CGColorSpaceRef colorSpace,
@@ -54,7 +62,7 @@ static CFTypeRef CGGradientCreate(CGColorSpaceRef colorSpace,
                                   size_t numberOfComponents) {
     CGGradientRef gradient;
     size_t i, j;
-    CGFloat previousLocation = 0.0;
+    CGGradientStopOrder *order = NULL;
     CGColorSpaceModel model;
 
     if (count == 0)
@@ -63,6 +71,14 @@ static CFTypeRef CGGradientCreate(CGColorSpaceRef colorSpace,
         return NULL;
     if (count > SIZE_MAX / numberOfComponents)
         return NULL;
+
+    /* Locations outside 0...1 (and NaN) make the gradient invalid. */
+    if (locations != NULL) {
+        for (i = 0; i < count; i++) {
+            if (!(locations[i] >= 0.0 && locations[i] <= 1.0))
+                return NULL;
+        }
+    }
 
     /* O2Paint_ramp can only turn monochrome, RGB and CMYK output into colours. */
     model = CGColorSpaceGetModel(colorSpace);
@@ -91,19 +107,34 @@ static CFTypeRef CGGradientCreate(CGColorSpaceRef colorSpace,
         return NULL;
     }
 
+    if (locations != NULL) {
+        /* The stops are stored sorted by location, each colour moving with its
+         * location. */
+        order = (CGGradientStopOrder *)calloc(count, sizeof(CGGradientStopOrder));
+        if (order == NULL) {
+            CGGradientRelease(gradient);
+            return NULL;
+        }
+        for (i = 0; i < count; i++) {
+            order[i].location = locations[i];
+            order[i].index = i;
+        }
+        qsort(order, count, sizeof(CGGradientStopOrder), CGGradientCompareStops);
+    }
+
     for (i = 0; i < count; i++) {
+        size_t source = order != NULL ? order[i].index : i;
+
         for (j = 0; j < numberOfComponents; j++) {
             gradient->components[i * numberOfComponents + j] =
-                    components[i * numberOfComponents + j];
+                    components[source * numberOfComponents + j];
         }
     }
 
-    if (locations != NULL) {
-        for (i = 0; i < count; i++) {
-            previousLocation = CGGradientClampLocation(locations[i],
-                                                      previousLocation);
-            gradient->locations[i] = previousLocation;
-        }
+    if (order != NULL) {
+        for (i = 0; i < count; i++)
+            gradient->locations[i] = order[i].location;
+        free(order);
     } else if (count == 1) {
         gradient->locations[0] = 0.0;
     } else {
@@ -203,39 +234,41 @@ CGGradientRef CGGradientCreateWithColors(CGColorSpaceRef colorSpace,
 
 void CGGradientColorAtLocation(CGGradientRef gradient, CGFloat t,
                                CGFloat *components) {
-    size_t i, j, n = gradient->numberOfComponents;
-    size_t stop;
+    size_t j, n = gradient->numberOfComponents;
+    size_t segment;
     CGFloat start, end, fraction;
 
-    /* Last stop at or before t; coincident stops resolve to the later colour. */
-    if (t < gradient->locations[0]) {
+    /* The first colour fills everything before the first location and the last
+     * colour everything after the last one. */
+    if (t <= gradient->locations[0] || gradient->count == 1) {
         memcpy(components, gradient->components, n * sizeof(CGFloat));
         return;
     }
-
-    stop = 0;
-    for (i = 1; i < gradient->count; i++) {
-        if (gradient->locations[i] > t)
-            break;
-        stop = i;
-    }
-
-    if (stop + 1 >= gradient->count) {
-        memcpy(components, gradient->components + stop * n, n * sizeof(CGFloat));
+    if (t > gradient->locations[gradient->count - 1]) {
+        memcpy(components, gradient->components + (gradient->count - 1) * n,
+               n * sizeof(CGFloat));
         return;
     }
 
-    start = gradient->locations[stop];
-    end = gradient->locations[stop + 1];
+    /* The first segment that reaches t: at a location shared by several stops
+     * the segment that ends there is used, so the colour at the tie is the
+     * earlier stop's colour. */
+    segment = 0;
+    while (gradient->locations[segment + 1] < t)
+        segment++;
 
-    /* t >= start and t < end here, so end > start; the clamp only guards rounding. */
+    start = gradient->locations[segment];
+    end = gradient->locations[segment + 1];
+
+    /* start < t <= end here: t is above the first location and every earlier
+     * segment ended below t. */
     fraction = (t - start) / (end - start);
     if (fraction > 1.0)
         fraction = 1.0;
 
     for (j = 0; j < n; j++) {
-        CGFloat from = gradient->components[stop * n + j];
-        CGFloat to = gradient->components[(stop + 1) * n + j];
+        CGFloat from = gradient->components[segment * n + j];
+        CGFloat to = gradient->components[(segment + 1) * n + j];
         components[j] = from + (to - from) * fraction;
     }
 }
