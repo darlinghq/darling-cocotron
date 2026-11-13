@@ -34,7 +34,7 @@
     Display *_xdpy;
     struct {
         Atom aware, proxy, enter, position, status, leave, drop, finished;
-        Atom selection, typeList, actionCopy, actionMove, actionLink;
+        Atom selection, typeList, actionCopy, actionMove, actionLink, actionList;
     } _atom;
     X11DropSession *_session;
     BOOL _inDrop;

@@ -73,14 +73,6 @@ static BOOL X11HasProperty(Display *xdpy, Window w, Atom prop, Atom type) {
     return present;
 }
 
-// An action is advertised by a property of its own name holding that action. The
-// protocol's XdndActionList belongs to the XdndActionAsk dialog, which this
-// source does not offer.
-static void X11AdvertiseAction(Display *xdpy, Window w, Atom action) {
-    XChangeProperty(xdpy, w, action, XA_ATOM, 32, PropModeReplace,
-                    (unsigned char *) &action, 1);
-}
-
 // The selection a drag publishes is served from the pasteboard the application
 // handed to -dragImage:..., read when a target asks for it. Nothing is copied up
 // front, so a payload that does not fit in memory twice still drags.
@@ -164,6 +156,7 @@ static X11DraggingManager *X11SharedManager;
         _atom.actionCopy = XInternAtom(_xdpy, "XdndActionCopy", False);
         _atom.actionMove = XInternAtom(_xdpy, "XdndActionMove", False);
         _atom.actionLink = XInternAtom(_xdpy, "XdndActionLink", False);
+        _atom.actionList = XInternAtom(_xdpy, "XdndActionList", False);
     }
     return self;
 }
@@ -252,12 +245,17 @@ static X11DraggingManager *X11SharedManager;
     unsigned long version = X11XdndVersion;
     XChangeProperty(_xdpy, sourceWindow, _atom.aware, XA_ATOM, 32, PropModeReplace,
                     (unsigned char *) &version, 1);
+    // XdndActionList names the actions this source can perform.
+    Atom actions[3];
+    int actionCount = 0;
     if (operations & NSDragOperationCopy)
-        X11AdvertiseAction(_xdpy, sourceWindow, _atom.actionCopy);
+        actions[actionCount++] = _atom.actionCopy;
     if (operations & NSDragOperationMove)
-        X11AdvertiseAction(_xdpy, sourceWindow, _atom.actionMove);
+        actions[actionCount++] = _atom.actionMove;
     if (operations & NSDragOperationLink)
-        X11AdvertiseAction(_xdpy, sourceWindow, _atom.actionLink);
+        actions[actionCount++] = _atom.actionLink;
+    XChangeProperty(_xdpy, sourceWindow, _atom.actionList, XA_ATOM, 32, PropModeReplace,
+                    (unsigned char *) actions, actionCount);
     _dragTypeCount = [names count];
     _dragTypes = malloc(sizeof(Atom) * _dragTypeCount);
     for (unsigned long i = 0; i < _dragTypeCount; i++)
@@ -664,32 +662,37 @@ static NSString *X11PropertyAtomName(Display *xdpy, Atom atom) {
     return types;
 }
 
-- (BOOL) source: (Window) source advertises: (Atom) action {
+// The actions a source lists in XdndActionList, as drag operations.
+- (NSDragOperation) actionListOfSource: (Window) source {
+    NSDragOperation operations = NSDragOperationNone;
     Atom type;
     int format;
     unsigned long count, remaining;
     unsigned char *data = NULL;
-    BOOL present =
-            XGetWindowProperty(_xdpy, source, action, 0, 1, False, XA_ATOM, &type,
-                               &format, &count, &remaining, &data) == Success &&
-            type != None;
+    if (XGetWindowProperty(_xdpy, source, _atom.actionList, 0, 32, False, XA_ATOM, &type,
+                           &format, &count, &remaining, &data) == Success &&
+        type == XA_ATOM && format == 32) {
+        for (unsigned long i = 0; i < count; i++) {
+            Atom action = ((Atom *) data)[i];
+            if (action == _atom.actionCopy)
+                operations |= NSDragOperationCopy;
+            else if (action == _atom.actionMove)
+                operations |= NSDragOperationMove;
+            else if (action == _atom.actionLink)
+                operations |= NSDragOperationLink;
+        }
+    }
     if (data)
         XFree(data);
-    return present;
+    return operations;
 }
 
 - (NSDragOperation) operationsFromSource: (Window) source version: (unsigned) version {
     // Versions 0 and 1 predate action negotiation, and their action is always copy.
     if (version < 2)
         return NSDragOperationCopy;
-    NSDragOperation operations = NSDragOperationNone;
-    if ([self source: source advertises: _atom.actionCopy])
-        operations |= NSDragOperationCopy;
-    if ([self source: source advertises: _atom.actionMove])
-        operations |= NSDragOperationMove;
-    if ([self source: source advertises: _atom.actionLink])
-        operations |= NSDragOperationLink;
-    // The specified default for a source that advertises no action at all.
+    // The specified default for a source that lists no action at all.
+    NSDragOperation operations = [self actionListOfSource: source];
     return operations != NSDragOperationNone ? operations : NSDragOperationCopy;
 }
 
@@ -718,11 +721,15 @@ static NSString *X11PropertyAtomName(Display *xdpy, Atom atom) {
 
 - (void) handleEnter: (XClientMessageEvent *) message toWindow: (X11Window *) window {
     Window source = (Window) message->data.l[0];
-    unsigned version = (unsigned) (message->data.l[1] & 0xFF);
-    // A version this target does not speak cannot be negotiated. A new offer is
-    // also refused while a drop is being performed, because the receiver's own
-    // callbacks can pump the X connection and the running session must survive.
-    if (source == None || version > X11XdndVersion || _inDrop)
+    // The protocol version is in the top byte of the word; a source newer than this
+    // target is spoken to in the target's own version.
+    unsigned version = (unsigned) ((message->data.l[1] >> 24) & 0xFF);
+    if (version > X11XdndVersion)
+        version = X11XdndVersion;
+    // A new offer is refused while a drop is being performed, because the
+    // receiver's own callbacks can pump the X connection and the running session
+    // must survive.
+    if (source == None || _inDrop)
         return;
 
     // The drag is always served on the XdndSelection selection.
