@@ -757,7 +757,12 @@ static NSDocumentController *shared = nil;
 }
 
 - (void) _updateRecentDocumentsMenu {
-    NSMenu *menu = [[NSApp mainMenu] _menuWithName: @"_NSRecentDocumentsMenu"];
+    NSMenu *mainMenu = [NSApp mainMenu];
+    if (mainMenu == nil)
+        return;
+    NSMenu *menu = [mainMenu _menuWithName: @"_NSRecentDocumentsMenu"];
+    if (menu == nil)
+        return;
     NSArray *array = [self _recentDocumentPaths];
     int i, j, count = [array count];
     NSMutableArray *lastPathArray = [[NSMutableArray alloc] init];
