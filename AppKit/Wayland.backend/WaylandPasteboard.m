@@ -17,7 +17,7 @@
  SOFTWARE. */
 
 #import "WaylandPasteboard.h"
-#import "WaylandFileURLs.h"
+#import "DarlingFileURIList.h"
 #import "WaylandDropSession.h"
 #import "WaylandLibrary.h"
 #import "WaylandProtocol.h"
@@ -128,12 +128,12 @@ void WaylandSendData(WaylandDisplay *display, NSData *data, int fd) {
     if (![type isEqual:NSFilenamesPboardType]) return data;
     id files = [NSPropertyListSerialization propertyListFromData:data
             mutabilityOption:NSPropertyListImmutable format:NULL errorDescription:NULL];
-    return WaylandURIListFromFilenames(files);
+    return DarlingURIListFromFilenames(files);
 }
 + (NSData *) decodeData: (NSData *) data forType: (NSString *) type mime: (NSString *) mime {
     if (!data || [data length] > TransferLimit) return nil;
     if (![type isEqual:NSFilenamesPboardType] || ![mime isEqual:@"text/uri-list"]) return data;
-    NSArray *files = WaylandFilenamesFromURIList(data);
+    NSArray *files = DarlingFilenamesFromURIList(data);
     if (!files) return nil;
     NSData *plist = [NSPropertyListSerialization dataFromPropertyList:files
             format:NSPropertyListXMLFormat_v1_0 errorDescription:NULL];
