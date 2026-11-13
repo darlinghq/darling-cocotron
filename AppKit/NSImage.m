@@ -25,6 +25,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSEPSImageRep.h>
 #import <AppKit/NSGraphicsContextFunctions.h>
 #import <AppKit/NSImage.h>
+#import "NSCoder+AppKit.h"
 #import <AppKit/NSAppearance.h>
 #import "NSImageDrawingCache.h"
 #import <AppKit/NSImageRep.h>
@@ -410,39 +411,93 @@ NSImageName const NSImageNameTouchBarVolumeUpTemplate =
     } else {
         NSInteger version = [coder versionForClassName: @"NSImage"];
 
+        _representations = [NSMutableArray new];
+
         if (version >= 17) {
+            // Layouts as recorded from Mac archives: the name, a byte per flag (12 bytes up to
+            // version 44, 13 at 45, 14 at 46, 15 at 47 and 14 from 48 on), an explicit size when
+            // flag byte 2 is set, a short, then for each of that many representations a byte and
+            // the representation, then the background colour and the delegate.
             _name = [[coder decodeObject] retain];
 
-            NSUnarchiver *unarchiver = (NSUnarchiver *)coder;
-
-            uint8_t byteOne = [unarchiver decodeByte];
-            uint8_t byteTwo = [unarchiver decodeByte];
-
-            // TODO: There's some logic involving these decoded
-            // bytes and the internal _flags of NSImage to determine
-            // decoding the rest of these.
-
-            for (int i = 0; i < 12; ++i) {
-                uint8_t btye = [unarchiver decodeByte];
+            int count = version <= 44 ? 12 : version == 45 ? 13 : version == 46 ? 14 : version == 47 ? 15 : 14;
+            char flags[16] = { 0 };
+            for (int i = 0; i < count; i++) {
+                [coder decodeValuesOfObjCTypes: "c", &flags[i]];
             }
 
-            _size = [coder decodeSize];
+            if (flags[2]) {
+                float width, height;
+                [coder decodeValuesOfObjCTypes: "ff", &width, &height];
+                _size = NSMakeSize(width, height);
+            }
 
-            short shortValue;
-            [coder decodeValueOfObjCType:"s" at: &shortValue];
+            if (flags[3]) {
+                // A shorter layout follows the first four bytes: a rectangle-like pair of
+                // floats and one object, of unknown meaning, read and dropped.
+                float unknownFloats[2];
+                [coder decodeValuesOfObjCTypes: "ff", &unknownFloats[0], &unknownFloats[1]];
+                [coder decodeObject];
+                return self;
+            }
 
-            uint8_t anotherBtye = [unarchiver decodeByte];
+            // The bytes are the image's flag word, one byte per bit: scales when resized (4),
+            // data retained (5), cached separately (6), uses EPS on resolution mismatch (7),
+            // prefers colour match (8), matches on multiple resolution (9) and flipped (12, from
+            // version 45). Bytes 0, 1, 10, 11, 13 and 14 have unknown meaning.
+            _scalesWhenResized = flags[4] != 0;
+            _isDataRetained = flags[5] != 0;
+            _isCachedSeparately = flags[6] != 0;
+            _usesEPSOnResolutionMismatch = flags[7] != 0;
+            _prefersColorMatch = flags[8] != 0;
+            _matchesOnMultipleResolution = flags[9] != 0;
+            _isFlipped = count > 12 && flags[12] != 0;
 
-            NSBitmapImageRep *rep = [coder decodeObject];
-            _representations = [NSMutableArray new];
-            [_representations addObject: rep];
+            short repCount;
+            [coder decodeValueOfObjCType: @encode(short) at: &repCount];
+            for (int i = 0; i < repCount; i++) {
+                char unknownByte;
+                [coder decodeValueOfObjCType: @encode(char) at: &unknownByte];
+                id rep = [coder decodeObject];
+                if ([rep isKindOfClass: [NSImageRep class]]) {
+                    [_representations addObject: rep];
+                }
+            }
 
             _backgroundColor = [[coder decodeObject] retain];
             _delegate = [coder decodeObject];
         } else {
-            [NSException raise: NSInvalidArgumentException
-                    format: @"-[%@ %s] is not implemented for coder %@",
-                            [self class], sel_getName(_cmd), coder];
+            // Up to version 16: a short and the name as one call, a short, and from version 3
+            // two objects (version 2: a NeXT colour and one object). What the shorts and the
+            // objects mean is unknown beyond the name; objects that are representations are kept.
+            short unknownShort1, unknownShort2;
+            char *name = NULL;
+
+            [coder decodeValuesOfObjCTypes: "s*", &unknownShort1, &name];
+            if (name != NULL) {
+                _name = [[NSString alloc] initWithBytesNoCopy: name
+                                                       length: strlen(name)
+                                                     encoding: NSNEXTSTEPStringEncoding
+                                                 freeWhenDone: YES];
+            }
+            [coder decodeValueOfObjCType: @encode(short) at: &unknownShort2];
+
+            if (version == 2) {
+                [coder decodeNXColor];
+                id rep = [coder decodeObject];
+                if ([rep isKindOfClass: [NSImageRep class]]) {
+                    [_representations addObject: rep];
+                }
+            } else if (version >= 3) {
+                id first = [coder decodeObject];
+                id second = [coder decodeObject];
+                if ([first isKindOfClass: [NSImageRep class]]) {
+                    [_representations addObject: first];
+                }
+                if ([second isKindOfClass: [NSImageRep class]]) {
+                    [_representations addObject: second];
+                }
+            }
         }
     }
     return self;
