@@ -24,6 +24,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         NSMutableData, NSMutableDictionary, O2DataConsumer;
 
 extern const NSString *kO2PDFContextTitle;
+extern const NSString *kO2PDFContextAuthor;
+extern const NSString *kO2PDFContextCreator;
 
 @interface O2PDFContext : O2Context {
     O2DataConsumer *_dataConsumer;
@@ -42,11 +44,17 @@ extern const NSString *kO2PDFContextTitle;
     NSMutableArray *_textStateStack;
     NSMutableArray *_contentStreamStack;
     size_t _length;
+    O2Rect _defaultBoxes[5];
+    BOOL _defaultBoxPresent[5];
 }
 
 - initWithConsumer: (O2DataConsumer *) consumer
              mediaBox: (const O2Rect *) mediaBox
         auxiliaryInfo: (NSDictionary *) auxiliaryInfo;
+
+- (void) beginPDFPage: (NSDictionary *) pageInfo;
+- (void) beginPageWithInfo: (NSDictionary *) pageInfo
+                mediaBox: (const O2Rect *) mediaBox;
 
 - (NSUInteger) length;
 

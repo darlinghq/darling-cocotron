@@ -17,6 +17,7 @@ typedef struct CF_BRIDGED_TYPE(id) O2PDFDoument *CGPDFDocumentRef;
 
 #import <CoreGraphics/CGDataProvider.h>
 #import <CoreGraphics/CGPDFPage.h>
+#import <CoreGraphics/CGPDFDictionary.h>
 
 CF_IMPLICIT_BRIDGING_ENABLED
 
@@ -26,8 +27,11 @@ COREGRAPHICS_EXPORT void CGPDFDocumentRelease(CGPDFDocumentRef self);
 COREGRAPHICS_EXPORT CGPDFDocumentRef CGPDFDocumentCreateWithURL(CFURLRef url);
 COREGRAPHICS_EXPORT CGPDFDocumentRef CGPDFDocumentCreateWithProvider(CGDataProviderRef provider);
 
+COREGRAPHICS_EXPORT bool CGPDFDocumentAllowsCopying(CGPDFDocumentRef self);
+
 COREGRAPHICS_EXPORT size_t CGPDFDocumentGetNumberOfPages(CGPDFDocumentRef self);
 COREGRAPHICS_EXPORT CGPDFPageRef CGPDFDocumentGetPage(CGPDFDocumentRef self, size_t pageNumber);
+COREGRAPHICS_EXPORT CGPDFDictionaryRef CGPDFDocumentGetInfo(CGPDFDocumentRef self);
 
 COREGRAPHICS_EXPORT bool CGPDFDocumentIsEncrypted(CGPDFDocumentRef self);
 COREGRAPHICS_EXPORT bool CGPDFDocumentIsUnlocked(CGPDFDocumentRef self);

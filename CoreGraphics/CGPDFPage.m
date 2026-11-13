@@ -29,6 +29,10 @@ void CGPDFPageRelease(CGPDFPageRef self) {
     [self release];
 }
 
+size_t CGPDFPageGetPageNumber(CGPDFPageRef self) {
+    return self ? (size_t)[self pageNumber] + 1 : 0;
+}
+
 CGRect CGPDFPageGetBoxRect(CGPDFPageRef self, CGPDFBox box) {
     CGRect result;
 

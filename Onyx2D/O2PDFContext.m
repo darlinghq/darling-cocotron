@@ -20,6 +20,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Foundation/NSArray.h>
 #import <Foundation/NSData.h>
 #import <Foundation/NSDictionary.h>
+#import <Foundation/NSException.h>
+#include <math.h>
 #import <Foundation/NSPathUtilities.h>
 #import <Foundation/NSProcessInfo.h>
 #import <Onyx2D/O2ClipPhase.h>
@@ -45,6 +47,32 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Onyx2D/O2Shading+PDF.h>
 
 const NSString *kO2PDFContextTitle = @"kO2PDFContextTitle";
+const NSString *kO2PDFContextAuthor = @"kO2PDFContextAuthor";
+const NSString *kO2PDFContextCreator = @"kO2PDFContextCreator";
+
+static const char *O2PDFBoxNames[] = {
+    "MediaBox", "CropBox", "BleedBox", "TrimBox", "ArtBox"};
+
+static BOOL O2PDFReadBoxes(NSDictionary *info, O2Rect *boxes, BOOL *present) {
+    for (NSUInteger i = 0; i < 5; i++) {
+        id value = [info objectForKey:
+            [NSString stringWithUTF8String:O2PDFBoxNames[i]]];
+        if (value == nil)
+            continue;
+        if (![value isKindOfClass:[NSData class]] ||
+            [value length] != sizeof(O2Rect))
+            return NO;
+        [value getBytes:&boxes[i] length:sizeof(O2Rect)];
+        O2Rect box = boxes[i];
+        if (!isfinite(box.origin.x) || !isfinite(box.origin.y) ||
+            !isfinite(box.size.width) || !isfinite(box.size.height) ||
+            !isfinite(box.origin.x + box.size.width) ||
+            !isfinite(box.origin.y + box.size.height))
+            return NO;
+        present[i] = YES;
+    }
+    return YES;
+}
 
 @implementation O2PDFContext
 
@@ -56,6 +84,13 @@ const NSString *kO2PDFContextTitle = @"kO2PDFContextTitle";
         auxiliaryInfo: (NSDictionary *) auxiliaryInfo
 {
     [super init];
+
+    _defaultBoxes[0] = mediaBox ? *mediaBox : O2RectMake(0, 0, 612, 792);
+    _defaultBoxPresent[0] = YES;
+    if (!O2PDFReadBoxes(auxiliaryInfo, _defaultBoxes, _defaultBoxPresent)) {
+        [self release];
+        return nil;
+    }
 
     _dataConsumer = [consumer retain];
     _fontCache = [NSMutableDictionary new];
@@ -70,14 +105,16 @@ const NSString *kO2PDFContextTitle = @"kO2PDFContextTitle";
     [self appendCString: "%PDF-1.3\n"];
 
     _info = [[O2PDFDictionary pdfDictionary] retain];
+    NSString *author = [auxiliaryInfo objectForKey: kO2PDFContextAuthor];
+    NSString *creator = [auxiliaryInfo objectForKey: kO2PDFContextCreator];
+    if (author == nil)
+        author = NSFullUserName();
+    if (creator == nil)
+        creator = [[NSProcessInfo processInfo] processName];
     [_info setObjectForKey: "Author"
-                     value: [O2PDFString
-                                    pdfObjectWithString: NSFullUserName()]];
+                     value: [O2PDFString pdfObjectWithString: author]];
     [_info setObjectForKey: "Creator"
-                     value: [O2PDFString
-                                    pdfObjectWithString: [[NSProcessInfo
-                                                                 processInfo]
-                                                                 processName]]];
+                     value: [O2PDFString pdfObjectWithString: creator]];
     [_info setObjectForKey: "Producer"
                      value: [O2PDFString pdfObjectWithCString:
                                                  "THE COCOTRON "
@@ -118,7 +155,8 @@ const NSString *kO2PDFContextTitle = @"kO2PDFContextTitle";
 - (void) dealloc {
     [_dataConsumer release];
     [_fontCache release];
-    NSFreeMapTable(_objectToRef);
+    if (_objectToRef != NULL)
+        NSFreeMapTable(_objectToRef);
     [_indirectObjects release];
     [_indirectEntries release];
     [_xref release];
@@ -639,14 +677,41 @@ const NSString *kO2PDFContextTitle = @"kO2PDFContextTitle";
 - (void) drawLayer: (O2LayerRef) layer inRect: (O2Rect) rect {
 }
 
+- (void) beginPDFPage: (NSDictionary *) pageInfo {
+    [self beginPageWithInfo:pageInfo mediaBox:NULL];
+}
+
 - (void) beginPage: (const O2Rect *) mediaBox {
+    [self beginPageWithInfo:nil mediaBox:mediaBox];
+}
+
+- (void) beginPageWithInfo: (NSDictionary *) pageInfo
+                mediaBox: (const O2Rect *) mediaBox
+{
+    O2Rect boxes[5];
+    BOOL present[5];
+    for (NSUInteger i = 0; i < 5; i++) {
+        boxes[i] = _defaultBoxes[i];
+        present[i] = _defaultBoxPresent[i];
+    }
+    if (mediaBox != NULL)
+        boxes[0] = *mediaBox;
+    if (!O2PDFReadBoxes(pageInfo, boxes, present))
+        [NSException raise:NSInvalidArgumentException
+                    format:@"PDF page boxes must contain finite CGRect data"];
+    if (!present[1])
+        boxes[1] = boxes[0];
+    for (NSUInteger i = 2; i < 5; i++)
+        if (!present[i])
+            boxes[i] = boxes[1];
     O2PDFObject *stream;
 
     _page = [[O2PDFDictionary pdfDictionary] retain];
 
     [_page setNameForKey: "Type" value: "Page"];
-    [_page setObjectForKey: "MediaBox"
-                     value: [O2PDFArray pdfArrayWithRect: *mediaBox]];
+    for (NSUInteger i = 0; i < 5; i++)
+        [_page setObjectForKey:O2PDFBoxNames[i]
+                        value:[O2PDFArray pdfArrayWithRect:boxes[i]]];
 
     stream = [O2PDFStream pdfStream];
     [_page setObjectForKey: "Contents" value: stream];

@@ -30,6 +30,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 #import <CoreGraphics/CGPDFDocument.h>
 #import <CoreGraphics/CGPDFObject.h>
 #import <CoreGraphics/CGPDFPage.h>
+#import <CoreGraphics/CGPDFString.h>
 #import <CoreGraphics/CGPath.h>
 #import <CoreGraphics/CGPattern.h>
 #import <CoreGraphics/CGPSConverter.h>
