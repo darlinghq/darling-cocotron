@@ -155,7 +155,8 @@ static BOOL O2PDFReadBoxes(NSDictionary *info, O2Rect *boxes, BOOL *present) {
 - (void) dealloc {
     [_dataConsumer release];
     [_fontCache release];
-    NSFreeMapTable(_objectToRef);
+    if (_objectToRef != NULL)
+        NSFreeMapTable(_objectToRef);
     [_indirectObjects release];
     [_indirectEntries release];
     [_xref release];
