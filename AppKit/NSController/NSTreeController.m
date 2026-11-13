@@ -22,6 +22,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 @implementation NSTreeController
 
 - initWithCoder: (NSCoder *) coder {
+    if (![coder allowsKeyedCoding]) {
+        // Nothing follows the object controller part in NSArchiver data.
+        return [super initWithCoder: coder];
+    }
     NSUnimplementedMethod();
     return self;
 }
