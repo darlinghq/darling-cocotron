@@ -153,11 +153,10 @@ void CGPathAddRoundedRect(CGMutablePathRef path,
     // each axis to make a quarter-ellipse.
     const CGFloat k = 0.5522847498307936;
 
-    CGPathMoveToPoint(path, transform, x0 + rx, y0);
-    CGPathAddLineToPoint(path, transform, x1 - rx, y0);
-    CGPathAddCurveToPoint(path, transform,
-                          x1 - rx + k * rx, y0, x1, y0 + ry - k * ry,
-                          x1, y0 + ry);
+    // The subpath starts at the middle of the right edge and runs towards
+    // increasing y, along the top edge, the left edge and the bottom edge (the
+    // order macOS emits), with a close at the end.
+    CGPathMoveToPoint(path, transform, x1, (y0 + y1) / 2);
     CGPathAddLineToPoint(path, transform, x1, y1 - ry);
     CGPathAddCurveToPoint(path, transform,
                           x1, y1 - ry + k * ry, x1 - rx + k * rx, y1,
@@ -170,6 +169,10 @@ void CGPathAddRoundedRect(CGMutablePathRef path,
     CGPathAddCurveToPoint(path, transform,
                           x0, y0 + ry - k * ry, x0 + rx - k * rx, y0,
                           x0 + rx, y0);
+    CGPathAddLineToPoint(path, transform, x1 - rx, y0);
+    CGPathAddCurveToPoint(path, transform,
+                          x1 - rx + k * rx, y0, x1, y0 + ry - k * ry,
+                          x1, y0 + ry);
     CGPathCloseSubpath(path);
 }
 

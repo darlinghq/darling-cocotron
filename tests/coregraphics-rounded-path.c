@@ -47,10 +47,12 @@ int main(void)
     CGPathApply(path, &state, inspect);
     expect(state.count == 10 && state.curves == 4 && state.closes == 1,
            "four elliptical corners and a closed subpath");
-    expect(near(state.first.x, 12) && near(state.first.y, 3),
-           "first point respects the horizontal corner radius");
-    expect(near(state.firstCurveEnd.x, 102) && near(state.firstCurveEnd.y, 8),
-           "first curve ends at the next edge");
+    // Observed on macOS 10.14: the subpath starts in the middle of the right edge
+    // and the first corner curve ends on the top edge.
+    expect(near(state.first.x, 102) && near(state.first.y, 33),
+           "first point is the middle of the right edge");
+    expect(near(state.firstCurveEnd.x, 92) && near(state.firstCurveEnd.y, 63),
+           "first curve ends on the top edge, one horizontal radius from the corner");
     CGRect bounds = CGPathGetBoundingBox(path);
     expect(near(bounds.origin.x, 2) && near(bounds.origin.y, 3) &&
            near(bounds.size.width, 100) && near(bounds.size.height, 60),
@@ -61,7 +63,7 @@ int main(void)
     path = CGPathCreateWithRoundedRect(rect, 500, 500, &translated);
     state = (PathElements){0};
     CGPathApply(path, &state, inspect);
-    expect(near(state.first.x, 59) && near(state.first.y, 14),
+    expect(near(state.first.x, 109) && near(state.first.y, 44),
            "oversized radii clamp and transform applies");
     bounds = CGPathGetBoundingBox(path);
     expect(near(bounds.origin.x, 9) && near(bounds.origin.y, 14) &&
