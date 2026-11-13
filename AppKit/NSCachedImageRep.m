@@ -72,10 +72,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     if ([coder allowsKeyedCoding])
         return [super initWithCoder: coder];
 
+    // A class the archive does not record gives NSNotFound, which passes the gate.
     NSInteger version = [coder versionForClassName: @"NSCachedImageRep"];
-    // (NSUnarchiver of this system reports 0 for a class that the archive does not record at
-    // all, where macOS reports NSNotFound; a recorded version 0 is not told apart here.)
-    if (version != 0 && version < 17)
+    if (version < 17)
         [NSException raise: NSInternalInconsistencyException
                     format: @"Cannot decode very old archived cached image reps.  Cached image rep is version %ld.",
                             (long) version];
