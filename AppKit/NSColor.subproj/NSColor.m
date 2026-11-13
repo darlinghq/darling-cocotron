@@ -52,6 +52,31 @@ NSNotificationName const NSSystemColorsDidChangeNotification = @"NSSystemColorsD
 - (NSColorName) colorName;
 @end
 
+// The constant colors (+redColor, +grayColor, the system colors' fallbacks ...) are sRGB (and Generic Gray
+// Gamma 2.2) colors on macOS, not the Generic RGB / Generic Gray of +colorWithCalibratedRed:... They keep
+// the calibrated family name here but their CGColor is in the device space, which Onyx2D treats as sRGB.
+static NSColor *constantRGB(CGFloat red, CGFloat green, CGFloat blue, CGFloat alpha) {
+    CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB();
+    NSColor *result = [NSColor_CGColor colorWithRed: red
+                                              green: green
+                                               blue: blue
+                                              alpha: alpha
+                                          spaceName: NSCalibratedRGBColorSpace
+                                         colorSpace: space];
+    CGColorSpaceRelease(space);
+    return result;
+}
+
+static NSColor *constantWhite(CGFloat white, CGFloat alpha) {
+    CGColorSpaceRef space = CGColorSpaceCreateDeviceGray();
+    NSColor *result = [NSColor_CGColor colorWithGray: white
+                                               alpha: alpha
+                                           spaceName: NSCalibratedWhiteColorSpace
+                                          colorSpace: space];
+    CGColorSpaceRelease(space);
+    return result;
+}
+
 @implementation NSColor
 
 - (NSColorType) type {
@@ -435,7 +460,7 @@ NSNotificationName const NSSystemColorsDidChangeNotification = @"NSSystemColorsD
 
 // macOS 10.14+; approximation: opaque gray instead of semitransparent
 + (NSColor *) separatorColor {
-    return [NSColor colorWithCalibratedWhite: 0.85 alpha: 1.0];
+    return constantWhite(0.85, 1.0);
 }
 
 + (NSColor *) textInsertionPointColor {
@@ -514,10 +539,7 @@ NSNotificationName const NSSystemColorsDidChangeNotification = @"NSSystemColorsD
 // NOTE: the list may contain more then two colors
 + (NSArray *) controlAlternatingRowBackgroundColors {
     return [NSArray arrayWithObjects: [NSColor whiteColor],
-                                      [NSColor colorWithCalibratedRed: 0.90
-                                                                green: 0.95
-                                                                 blue: 1.0
-                                                                alpha: 1.0],
+                                      constantRGB(0.90, 0.95, 1.0, 1.0),
                                       nil];
 }
 
@@ -621,121 +643,82 @@ static NSColor *systemCatalogColor(NSColorName name, NSColor *fallback) {
 // Label text at decreasing emphasis: black with less alpha than labelColor.
 + (NSColor *) secondaryLabelColor {
     return systemCatalogColor(@"secondaryLabelColor",
-                              [NSColor colorWithCalibratedWhite: 0.0 alpha: 0.5]);
+                              constantWhite(0.0, 0.5));
 }
 
 + (NSColor *) tertiaryLabelColor {
     return systemCatalogColor(@"tertiaryLabelColor",
-                              [NSColor colorWithCalibratedWhite: 0.0 alpha: 0.26]);
+                              constantWhite(0.0, 0.26));
 }
 
 + (NSColor *) quaternaryLabelColor {
     return systemCatalogColor(@"quaternaryLabelColor",
-                              [NSColor colorWithCalibratedWhite: 0.0 alpha: 0.1]);
+                              constantWhite(0.0, 0.1));
 }
 
 + (NSColor *) systemRedColor {
     return systemCatalogColor(@"systemRedColor",
-                              [NSColor colorWithCalibratedRed: 1.0
-                                                        green: 0.23
-                                                         blue: 0.19
-                                                        alpha: 1.0]);
+                              constantRGB(1.0, 0.23, 0.19, 1.0));
 }
 
 + (NSColor *) systemGreenColor {
     return systemCatalogColor(@"systemGreenColor",
-                              [NSColor colorWithCalibratedRed: 0.20
-                                                        green: 0.78
-                                                         blue: 0.35
-                                                        alpha: 1.0]);
+                              constantRGB(0.20, 0.78, 0.35, 1.0));
 }
 
 + (NSColor *) systemBlueColor {
     return systemCatalogColor(@"systemBlueColor",
-                              [NSColor colorWithCalibratedRed: 0.0
-                                                        green: 0.48
-                                                         blue: 1.0
-                                                        alpha: 1.0]);
+                              constantRGB(0.0, 0.48, 1.0, 1.0));
 }
 
 + (NSColor *) systemOrangeColor {
     return systemCatalogColor(@"systemOrangeColor",
-                              [NSColor colorWithCalibratedRed: 1.0
-                                                        green: 0.58
-                                                         blue: 0.0
-                                                        alpha: 1.0]);
+                              constantRGB(1.0, 0.58, 0.0, 1.0));
 }
 
 + (NSColor *) systemYellowColor {
     return systemCatalogColor(@"systemYellowColor",
-                              [NSColor colorWithCalibratedRed: 1.0
-                                                        green: 0.80
-                                                         blue: 0.0
-                                                        alpha: 1.0]);
+                              constantRGB(1.0, 0.80, 0.0, 1.0));
 }
 
 + (NSColor *) systemBrownColor {
     return systemCatalogColor(@"systemBrownColor",
-                              [NSColor colorWithCalibratedRed: 0.64
-                                                        green: 0.52
-                                                         blue: 0.37
-                                                        alpha: 1.0]);
+                              constantRGB(0.64, 0.52, 0.37, 1.0));
 }
 
 + (NSColor *) systemPinkColor {
     return systemCatalogColor(@"systemPinkColor",
-                              [NSColor colorWithCalibratedRed: 1.0
-                                                        green: 0.18
-                                                         blue: 0.57
-                                                        alpha: 1.0]);
+                              constantRGB(1.0, 0.18, 0.57, 1.0));
 }
 
 + (NSColor *) systemPurpleColor {
     return systemCatalogColor(@"systemPurpleColor",
-                              [NSColor colorWithCalibratedRed: 0.69
-                                                        green: 0.32
-                                                         blue: 0.87
-                                                        alpha: 1.0]);
+                              constantRGB(0.69, 0.32, 0.87, 1.0));
 }
 
 + (NSColor *) systemGrayColor {
     return systemCatalogColor(@"systemGrayColor",
-                              [NSColor colorWithCalibratedRed: 0.56
-                                                        green: 0.56
-                                                         blue: 0.58
-                                                        alpha: 1.0]);
+                              constantRGB(0.56, 0.56, 0.58, 1.0));
 }
 
 + (NSColor *) systemTealColor {
     return systemCatalogColor(@"systemTealColor",
-                              [NSColor colorWithCalibratedRed: 0.35
-                                                        green: 0.78
-                                                         blue: 0.98
-                                                        alpha: 1.0]);
+                              constantRGB(0.35, 0.78, 0.98, 1.0));
 }
 
 + (NSColor *) systemIndigoColor {
     return systemCatalogColor(@"systemIndigoColor",
-                              [NSColor colorWithCalibratedRed: 0.35
-                                                        green: 0.34
-                                                         blue: 0.84
-                                                        alpha: 1.0]);
+                              constantRGB(0.35, 0.34, 0.84, 1.0));
 }
 
 + (NSColor *) systemMintColor {
     return systemCatalogColor(@"systemMintColor",
-                              [NSColor colorWithCalibratedRed: 0.0
-                                                        green: 0.78
-                                                         blue: 0.75
-                                                        alpha: 1.0]);
+                              constantRGB(0.0, 0.78, 0.75, 1.0));
 }
 
 + (NSColor *) systemCyanColor {
     return systemCatalogColor(@"systemCyanColor",
-                              [NSColor colorWithCalibratedRed: 0.33
-                                                        green: 0.75
-                                                         blue: 0.95
-                                                        alpha: 1.0]);
+                              constantRGB(0.33, 0.75, 0.95, 1.0));
 }
 
 + (NSColor *) unemphasizedSelectedTextColor {
@@ -774,90 +757,63 @@ static NSColor *systemCatalogColor(NSColorName name, NSColor *fallback) {
 }
 
 + (NSColor *) clearColor {
-    return [NSColor colorWithCalibratedRed: 0 green: 0 blue: 0 alpha: 0];
+    return constantRGB(0, 0, 0, 0);
 }
 
 + (NSColor *) blackColor {
-    return [NSColor colorWithCalibratedWhite: 0 alpha: 1.0];
+    return constantWhite(0, 1.0);
 }
 
 + (NSColor *) blueColor {
-    return [NSColor colorWithCalibratedRed: 0.0
-                                     green: 0.0
-                                      blue: 1.0
-                                     alpha: 1.0];
+    return constantRGB(0.0, 0.0, 1.0, 1.0);
 }
 
 + (NSColor *) brownColor {
-    return [NSColor colorWithCalibratedRed: 0.6
-                                     green: 0.4
-                                      blue: 0.2
-                                     alpha: 1.0];
+    return constantRGB(0.6, 0.4, 0.2, 1.0);
 }
 
 + (NSColor *) cyanColor {
-    return [NSColor colorWithCalibratedRed: 0.0
-                                     green: 1.0
-                                      blue: 1.0
-                                     alpha: 1.0];
+    return constantRGB(0.0, 1.0, 1.0, 1.0);
 }
 
 + (NSColor *) darkGrayColor {
-    return [NSColor colorWithCalibratedWhite: 1.0 / 3.0 alpha: 1.0];
+    return constantWhite(1.0 / 3.0, 1.0);
 }
 
 + (NSColor *) grayColor {
-    return [NSColor colorWithCalibratedWhite: 0.5 alpha: 1.0];
+    return constantWhite(0.5, 1.0);
 }
 
 + (NSColor *) greenColor {
-    return [NSColor colorWithCalibratedRed: 0.0
-                                     green: 1.0
-                                      blue: 0.0
-                                     alpha: 1.0];
+    return constantRGB(0.0, 1.0, 0.0, 1.0);
 }
 
 + (NSColor *) lightGrayColor {
-    return [NSColor colorWithCalibratedWhite: 2.0 / 3.0 alpha: 1.0];
+    return constantWhite(2.0 / 3.0, 1.0);
 }
 
 + (NSColor *) magentaColor {
-    return [NSColor colorWithCalibratedRed: 1.0
-                                     green: 0.0
-                                      blue: 1.0
-                                     alpha: 1.0];
+    return constantRGB(1.0, 0.0, 1.0, 1.0);
 }
 
 + (NSColor *) orangeColor {
-    return [NSColor colorWithCalibratedRed: 1.0
-                                     green: 0.5
-                                      blue: 0.0
-                                     alpha: 1.0];
+    return constantRGB(1.0, 0.5, 0.0, 1.0);
 }
 
 + (NSColor *) purpleColor {
-    return [NSColor colorWithCalibratedRed: 0.5
-                                     green: 0.0
-                                      blue: 0.5
-                                     alpha: 1.0];
+    return constantRGB(0.5, 0.0, 0.5, 1.0);
 }
 
 + (NSColor *) redColor {
-    return [NSColor colorWithCalibratedRed: 1.0
-                                     green: 0.0
-                                      blue: 0.0
-                                     alpha: 1.0];
+    return constantRGB(1.0, 0.0, 0.0, 1.0);
 }
 
 + (NSColor *) whiteColor {
-    return [NSColor colorWithCalibratedWhite: 1 alpha: 1.0];
+    return constantWhite(1, 1.0);
 }
 
 + (NSColor *) yellowColor {
-    return [NSColor colorWithCalibratedRed: 1.0
-                                     green: 1.0
-                                      blue: 0.0
-                                     alpha: 1.0];
+    return constantRGB(1.0, 1.0, 0.0, 1.0);
 }
 
 + (NSColor *) colorWithDeviceWhite: (CGFloat) white alpha: (CGFloat) alpha {
@@ -977,10 +933,16 @@ static NSColor *systemCatalogColor(NSColorName name, NSColor *fallback) {
                 brightness: (CGFloat) brightness
                      alpha: (CGFloat) alpha
 {
-    return [self colorWithCalibratedHue: hue
-                             saturation: saturation
-                             brightness: brightness
-                                  alpha: alpha];
+    // Not a calibrated color: macOS gives sRGB numbers here (see constantRGB).
+    CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB();
+    NSColor *result = [NSColor_CGColor colorWithHue: hue
+                                         saturation: saturation
+                                         brightness: brightness
+                                              alpha: alpha
+                                          spaceName: NSCalibratedRGBColorSpace
+                                         colorSpace: space];
+    CGColorSpaceRelease(space);
+    return result;
 }
 
 + (NSColor *) colorWithCatalogName: (NSColorListName) catalogName
@@ -1286,10 +1248,8 @@ static void releasePatternInfo(void *info) {
         rb = pb * fraction + sb * (1 - fraction);
         ra = pa * fraction + sa * (1 - fraction);
 
-        return [NSColor colorWithCalibratedRed: rr
-                                         green: rg
-                                          blue: rb
-                                         alpha: ra];
+        // The components are the colors' own numbers, kept as they were (see constantRGB).
+        return constantRGB(rr, rg, rb, ra);
     }
 }
 

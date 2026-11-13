@@ -95,12 +95,32 @@ O2ColorRef O2ColorCreate(O2ColorSpaceRef colorSpace, const O2Float *components)
     return O2ColorInitWithColorSpace([O2Color alloc], colorSpace, components);
 }
 
+// The generic colors are in the named generic spaces (CGColorCreateGenericRGB
+// is the Generic RGB space, which is not device RGB: a generic red filled into
+// an sRGB context gives different numbers). A space that cannot be created
+// falls back to the device one.
 O2ColorRef O2ColorCreateGenericGray(O2Float gray, O2Float a) {
-    return [[O2Color alloc] initWithDeviceGray: gray alpha: a];
+    O2ColorSpaceRef colorSpace =
+            O2ColorSpaceCreateWithName(CFSTR("kCGColorSpaceGenericGray"));
+    if (colorSpace == NULL)
+        return [[O2Color alloc] initWithDeviceGray: gray alpha: a];
+
+    O2Float components[2] = {gray, a};
+    O2ColorRef result = O2ColorCreate(colorSpace, components);
+    O2ColorSpaceRelease(colorSpace);
+    return result;
 }
 
 O2ColorRef O2ColorCreateGenericRGB(O2Float r, O2Float g, O2Float b, O2Float a) {
-    return [[O2Color alloc] initWithDeviceRed: r green: g blue: b alpha: a];
+    O2ColorSpaceRef colorSpace =
+            O2ColorSpaceCreateWithName(CFSTR("kCGColorSpaceGenericRGB"));
+    if (colorSpace == NULL)
+        return [[O2Color alloc] initWithDeviceRed: r green: g blue: b alpha: a];
+
+    O2Float components[4] = {r, g, b, a};
+    O2ColorRef result = O2ColorCreate(colorSpace, components);
+    O2ColorSpaceRelease(colorSpace);
+    return result;
 }
 
 O2ColorRef O2ColorCreateGenericCMYK(O2Float c, O2Float m, O2Float y, O2Float k,
