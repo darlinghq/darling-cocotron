@@ -20,7 +20,7 @@
 
 #import <AppKit/NSArrayController.h>
 
-@class NSDictionary;
+@class NSDictionary, NSArray;
 
 @interface NSDictionaryController : NSArrayController {
     NSDictionary *_contentDictionary;
@@ -32,6 +32,10 @@
 
 - (NSString *) initialKey;
 - (id) initialValue;
+- (NSArray *) includedKeys;
+- (void) setIncludedKeys: (NSArray *) keys;
+- (NSArray *) excludedKeys;
+- (void) setExcludedKeys: (NSArray *) keys;
 - (void) setInitialKey: (NSString *) key;
 - (void) setInitialValue: value;
 

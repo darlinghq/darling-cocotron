@@ -156,38 +156,35 @@ static NSAppleScrollBarVariant appleScrollBarVariant(NSScroller *self) {
         _knobProportion = 0;
         [self checkSpaceForParts];
     } else {
-        // QUIRK: NSScroller layout: target, float value, knob proportion,
-        // action, arrow position and control size. Not documented; unkeyed
-        // (typedstream) archives come from old nibs. Evidence: tier 3, the
-        // layout reported by the contributor of this decoder from archives of
-        // old nibs; unconfirmed against macOS (a macOS check is pending).
-        // Archives with a different layout are tolerated where the code
-        // catches the mismatch. Test: test_quirk_typedstream_scroller in
-        // tests/appkit-typedstream-controls.m
+        // Layout per class version as recorded from Mac archives: the target, the value,
+        // the knob proportion and the action, then up to version 16 a short and from 17
+        // two separate bytes. The first byte and the short have an unknown meaning. In
+        // the second byte, bits 5-6 hold the control size and the low two bits the arrows
+        // position (only the values for the default and for none were observed).
+        NSInteger version = [coder versionForClassName: @"NSScroller"];
         sFlags.isHoriz = (_bounds.size.width < _bounds.size.height) ? NO : YES;
         _floatValue = 0;
         _knobProportion = 0;
 
-        id target = nil;
+        id target = [coder decodeObject];
         float floatVal = 0, knobProp = 0;
         SEL action = NULL;
-        char arrows = 0, size = 0;
+        char unknownByte = 0, flagsByte = 0;
 
-        @try {
-            [coder decodeValueOfObjCType: "@" at: &target];
+        if (version >= 17) {
             [coder decodeValuesOfObjCTypes: "ff:", &floatVal, &knobProp, &action];
-            [coder decodeValueOfObjCType: "c" at: &arrows];
-            [coder decodeValueOfObjCType: "c" at: &size];
-            _floatValue = floatVal;
-            _knobProportion = knobProp;
-            _arrowsPosition = (NSScrollArrowPosition)arrows;
-            _controlSize = (NSControlSize)size;
-            [self setTarget: target];
-            [target release];
-            [self setAction: action];
-        } @catch (id ex) {
-            // Ignore decoding mismatch
+            [coder decodeValuesOfObjCTypes: "c", &unknownByte];
+            [coder decodeValuesOfObjCTypes: "c", &flagsByte];
+        } else {
+            short unknownShort = 0;
+            [coder decodeValuesOfObjCTypes: "ff:s", &floatVal, &knobProp, &action, &unknownShort];
         }
+        _floatValue = floatVal;
+        _knobProportion = knobProp;
+        _controlSize = (NSControlSize) ((flagsByte >> 5) & 3);
+        _arrowsPosition = (flagsByte & 3) == 2 ? NSScrollerArrowsNone : NSScrollerArrowsMaxEnd;
+        [self setTarget: target];
+        [self setAction: action];
         [self checkSpaceForParts];
     }
     return self;
@@ -264,6 +261,15 @@ static NSAppleScrollBarVariant appleScrollBarVariant(NSScroller *self) {
 
 - (NSScrollArrowPosition) arrowsPosition {
     return _arrowsPosition;
+}
+
+- (NSControlTint) controlTint {
+    return _controlTint;
+}
+
+- (void) setControlTint: (NSControlTint) tint {
+    _controlTint = tint;
+    [self setNeedsDisplay: YES];
 }
 
 - (NSControlSize) controlSize {

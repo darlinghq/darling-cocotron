@@ -51,10 +51,18 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         _observers = [[NSMutableArray alloc] init];
         return self;
     } else {
-        [NSException raise: NSInvalidArgumentException
-                    format: @"%@ can not initWithCoder:%@", [self class],
-                            [coder class]];
-        return nil;
+        // Three objects in every class version: an entity name, a fetch predicate and a third
+        // of unknown meaning, read and dropped.
+        id name = [coder decodeObject];
+        id predicate = [coder decodeObject];
+        [coder decodeObject];
+
+        _entityName = [name isKindOfClass: [NSString class]] ? [name copy] : nil;
+        _fetchRequest = [[NSFetchRequest alloc] init];
+        if ([predicate isKindOfClass: [NSPredicate class]])
+            [_fetchRequest setPredicate: predicate];
+        _observers = [[NSMutableArray alloc] init];
+        return self;
     }
 }
 

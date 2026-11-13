@@ -34,7 +34,10 @@
     O2Paint *_paint;
     O2InterpolationQuality _interpolationQuality;
     O2AffineTransform _surfaceToMask;
+    O2Float _alpha;
 }
+
+- (void) setAlpha: (O2Float) alpha;
 
 - initWithImage: (O2Image *) image
                         mask: (O2ImageRef) mask

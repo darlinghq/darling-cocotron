@@ -18,17 +18,69 @@
 */
 
 #import <AppKit/NSTreeNode.h>
+#import <Foundation/NSArray.h>
+#import <Foundation/NSIndexPath.h>
 
 @implementation NSTreeNode
 
-- (NSMethodSignature *)methodSignatureForSelector:(SEL)aSelector
-{
-    return [NSMethodSignature signatureWithObjCTypes: "v@:"];
++ (instancetype) treeNodeWithRepresentedObject: (id) modelObject {
+    return [[[self alloc] initWithRepresentedObject: modelObject] autorelease];
 }
 
-- (void)forwardInvocation:(NSInvocation *)anInvocation
-{
-    NSLog(@"Stub called: %@ in %@", NSStringFromSelector([anInvocation selector]), [self class]);
+- (instancetype) initWithRepresentedObject: (id) modelObject {
+    if ((self = [super init]))
+        _representedObject = [modelObject retain];
+    return self;
+}
+
+- (void) dealloc {
+    // Children can outlive their parent; don't leave them pointing at it.
+    for (NSTreeNode *child in _childNodes)
+        child->_parentNode = nil;
+    [_childNodes release];
+    [_representedObject release];
+    [super dealloc];
+}
+
+- (id) representedObject {
+    return _representedObject;
+}
+
+- (NSTreeNode *) parentNode {
+    return _parentNode;
+}
+
+- (NSArray *) childNodes {
+    return _childNodes ? (NSArray *) _childNodes : [NSArray array];
+}
+
+- (BOOL) isLeaf {
+    return [[self childNodes] count] == 0;
+}
+
+- (NSIndexPath *) indexPath {
+    NSUInteger depth = 0;
+    for (NSTreeNode *node = self; node->_parentNode; node = node->_parentNode)
+        depth++;
+
+    NSUInteger indexes[depth > 0 ? depth : 1];
+    NSUInteger position = depth;
+    for (NSTreeNode *node = self; node->_parentNode; node = node->_parentNode)
+        indexes[--position] =
+                [node->_parentNode->_childNodes indexOfObjectIdenticalTo: node];
+    return [NSIndexPath indexPathWithIndexes: indexes length: depth];
+}
+
+- (NSTreeNode *) descendantNodeAtIndexPath: (NSIndexPath *) indexPath {
+    NSTreeNode *node = self;
+    NSUInteger i, length = [indexPath length];
+
+    for (i = 0; i < length && node != nil; i++) {
+        NSArray *children = [node childNodes];
+        NSUInteger index = [indexPath indexAtPosition: i];
+        node = index < [children count] ? [children objectAtIndex: index] : nil;
+    }
+    return node;
 }
 
 @end

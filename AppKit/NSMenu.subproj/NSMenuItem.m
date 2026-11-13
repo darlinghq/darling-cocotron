@@ -22,6 +22,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSImage.h>
 #import <AppKit/NSMenu.h>
 #import <AppKit/NSMenuItem.h>
+#import <AppKit/NSObject+BindingSupport.h>
 #import <Foundation/NSKeyedArchiver.h>
 #import <AppKit/NSButtonCell.h>
 
@@ -90,11 +91,17 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
         int flags;
 
-        // TODO: Figure this out, encodeWithCoder is writing this as 0xffffffffffffffff
+        // The fifth value (all bits set in Mac archives) is of unknown meaning.
         unsigned int unused;
 
         [coder decodeValuesOfObjCTypes:"i@@IIi@@@@:i@", &flags, &_title, &_keyEquivalent, &_keyEquivalentModifierMask, &unused, &_state, &_image, &_onStateImage, &_mixedStateImage, &_offStateImage, &_action, &_tag, &_representedObject];
 
+        // The flag word, in Mac archives: bit 31 disabled, bit 30 separator (the title is empty
+        // then), bit 29 hidden, bit 28 alternate and bits 24-27 the indentation level.
+        _enabled = !(flags & 0x80000000);
+        _hidden = (flags & 0x20000000) != 0;
+        _alternate = (flags & 0x10000000) != 0;
+        _indentationLevel = (flags >> 24) & 0xf;
 
         // If we have an empty title, it is for a separator, discard it, see isSeparatorItem
         if (_title && [_title length] == 0) {
@@ -112,10 +119,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
             _target = [coder decodeObject];
             _submenu = [[coder decodeObject] retain];
         }
+        [_submenu setSupermenu: _menu];
 
         // Set other default values from [initWithTitle: action: keyEquivalent:]
         _mnemonic = @"";
-        _enabled = YES;
     }
 
     return self;
@@ -155,6 +162,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [_view release];
     [_toolTip release];
     [_badge release];
+    [_actionImage release];
     [super dealloc];
 }
 
@@ -175,6 +183,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     copy->_view = [_view retain];
     copy->_toolTip = [_toolTip copyWithZone: zone];
     copy->_badge = [_badge retain];
+    copy->_actionImage = [_actionImage retain];
     return copy;
 }
 
@@ -188,6 +197,22 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         [_toolTip release];
         _toolTip = [toolTip copy];
     }
+}
+
+// A menu item's value binding drives its state (checkmark), not an objectValue.
+- (id) _replacementKeyPathForBinding: (id) binding {
+    if ([binding isEqual: @"value"]) {
+        return @"state";
+    }
+    return [super _replacementKeyPathForBinding: binding];
+}
+
+// A bound value that is nil (an unset default with no transformer) unchecks the item.
+- (void) setNilValueForKey: (NSString *) key {
+    if ([key isEqualToString: @"state"])
+        [self setState: NSOffState];
+    else
+        [super setNilValueForKey: key];
 }
 
 - (NSMenu *) menu {
@@ -484,6 +509,19 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         }
     }
     return _title;
+}
+
+// Private AppKit API (macOS 26): an image describing the item's action, which
+// apps set from a system symbol image. Stored and returned; Cocotron's menus
+// don't draw it.
+- (NSImage *) _actionImage {
+    return _actionImage;
+}
+
+- (void) _setActionImage: (NSImage *) image {
+    image = [image retain];
+    [_actionImage release];
+    _actionImage = image;
 }
 
 @end

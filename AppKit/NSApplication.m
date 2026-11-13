@@ -30,6 +30,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSImageView.h>
 #import <AppKit/NSMenu.h>
 #import <AppKit/NSMenuItem.h>
+#import <AppKit/NSKeyValueBinding.h>
+#import <AppKit/NSObject+BindingSupport.h>
 #import <AppKit/NSModalSessionX.h>
 #import <AppKit/NSNibLoading.h>
 #import <AppKit/NSPageLayout.h>
@@ -882,7 +884,17 @@ NSApplication *NSApp = nil;
 
 // This method is used by NSWindow
 - (void) _displayAllWindowsIfNeeded {
-    [[NSApp windows] makeObjectsPerformSelector: @selector(displayIfNeeded)];
+    // Constraint/layout callbacks may close windows or open new ones.
+    NSArray *windows = [[NSApp windows] copy];
+    @try {
+        for (NSWindow *window in windows) {
+            if ([window isVisible] && ![window isMiniaturized])
+                [[window _backgroundView] layoutSubtreeIfNeeded];
+            [window displayIfNeeded];
+        }
+    } @finally {
+        [windows release];
+    }
 }
 
 - (NSEvent *) nextEventMatchingMask: (NSEventMask) mask
@@ -1041,6 +1053,14 @@ NSApplication *NSApp = nil;
 }
 
 - (BOOL) sendAction: (SEL) action to: target from: sender {
+    // Choosing a menu item whose value is bound and that has no action toggles
+    // its state; the binding writes the new value to the bound object.
+    if (action == NULL && [sender isKindOfClass: [NSMenuItem class]] &&
+        [sender _binderForBinding: NSValueBinding] != nil) {
+        [sender setState: [sender state] == NSOnState ? NSOffState : NSOnState];
+        return YES;
+    }
+
     if ([target respondsToSelector: action]) {
         [target performSelector: action withObject: sender];
         return YES;
@@ -1660,6 +1680,14 @@ NSApplication *NSApp = nil;
     return _dockTile;
 }
 
+// Darling has no login session that relaunches applications, and the setting cannot be read
+// back through the public API, so these have nothing to record.
+- (void) disableRelaunchOnLogin {
+}
+
+- (void) enableRelaunchOnLogin {
+}
+
 - (void) doCommandBySelector: (SEL) selector {
     if ([_delegate respondsToSelector: selector])
         [_delegate performSelector: selector withObject: nil];
@@ -1823,17 +1851,21 @@ int NSApplicationMain(int argc, const char *argv[]) {
     Class class = [bundle principalClass];
     NSString *nibFile = [bundle infoDictionary][@"NSMainNibFile"];
 
-#ifndef DARLING
     if (argc > 1) {
+        // Arguments that are not "-key value" pairs (and not after "--") name documents to open.
         NSMutableArray *arguments =
-                [NSMutableArray arrayWithCapacity: arg c - 1];
+                [NSMutableArray arrayWithCapacity: argc - 1];
         for (int i = 1; i < argc; i++)
-            if (argv[i][0] != '-')
-                [arguments addObject: [NSString stringWithUTF8String: argv[i]]];
+            if (argv[i][0] != '-') {
+                // nil for an argument that is not valid UTF-8; -addObject: would raise.
+                NSString *argument = [NSString stringWithUTF8String: argv[i]];
+                if (argument != nil)
+                    [arguments addObject: argument];
+            }
             else if (argv[i][1] == '-' && argv[i][2] == '\0')
                 break;
             else // (argv[i][0] == '-' && argv[i] != "--")
-                    if (*(int64_t *) argv[i] != *(int64_t *) "-NSOpen")
+                    if (strcmp(argv[i], "-NSOpen") != 0)
                 i++;
 
         if ((argc = [arguments count]))
@@ -1843,6 +1875,7 @@ int NSApplicationMain(int argc, const char *argv[]) {
                        forKey: @"NSOpen"];
     }
 
+#ifndef DARLING
     [NSClassFromString(@"Win32RunningCopyPipe")
             performSelector: @selector(startRunningCopyPipe)];
 #endif
@@ -1877,3 +1910,16 @@ BOOL NSPerformService(NSString *itemName, NSPasteboard *pasteboard) {
     NSUnimplementedFunction();
     return NO;
 }
+
+@implementation NSApplication (NSApplicationPerformanceTesting)
+
+- (void) startedTest: (NSString *) name {
+}
+
+- (void) finishedTest: (NSString *) name {
+}
+
+- (void) failedTest: (NSString *) name withFailure: (NSString *) failureReason {
+}
+
+@end

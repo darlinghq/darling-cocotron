@@ -38,6 +38,27 @@ ONYX2D_STATIC int O2PaintReadResampledHighSpan_largb32f_PRE(O2Paint *selfX,int x
 }
 #endif
 
+static inline void O2PaintApplyGlobalAlpha8u(O2argb8u *span, int length, float alpha) {
+    if (alpha >= 0.999f) return;
+    uint8_t a = (uint8_t)(alpha * 255.0f);
+    for (int i = 0; i < length; i++) {
+        span[i].r = O2Image_8u_mul_8u_div_255(span[i].r, a);
+        span[i].g = O2Image_8u_mul_8u_div_255(span[i].g, a);
+        span[i].b = O2Image_8u_mul_8u_div_255(span[i].b, a);
+        span[i].a = O2Image_8u_mul_8u_div_255(span[i].a, a);
+    }
+}
+
+static inline void O2PaintApplyGlobalAlpha32f(O2argb32f *span, int length, float alpha) {
+    if (alpha >= 0.999f) return;
+    for (int i = 0; i < length; i++) {
+        span[i].r *= alpha;
+        span[i].g *= alpha;
+        span[i].b *= alpha;
+        span[i].a *= alpha;
+    }
+}
+
 ONYX2D_STATIC int O2PaintReadResampledLowSpan_largb32f_PRE(O2Paint *selfX,
                                                            int x, int y,
                                                            O2argb32f *span,
@@ -47,6 +68,7 @@ ONYX2D_STATIC int O2PaintReadResampledLowSpan_largb32f_PRE(O2Paint *selfX,
 
     O2ImageBilinear_largb32f_PRE(self->_image, x, y, span, length,
                                  self->m_surfaceToPaintMatrix);
+    O2PaintApplyGlobalAlpha32f(span, length, self->_alpha);
     return length;
 }
 
@@ -59,6 +81,7 @@ ONYX2D_STATIC int O2PaintReadResampledNoneSpan_largb32f_PRE(O2Paint *selfX,
 
     O2ImagePointSampling_largb32f_PRE(self->_image, x, y, span, length,
                                       self->m_surfaceToPaintMatrix);
+    O2PaintApplyGlobalAlpha32f(span, length, self->_alpha);
     return length;
 }
 
@@ -112,6 +135,7 @@ ONYX2D_STATIC int O2PaintReadResampledLowSpan_largb8u_PRE(O2Paint *selfX, int x,
         O2PaintApplyMaskSpan(span, maskSpan, length);
     }
 
+    O2PaintApplyGlobalAlpha8u(span, length, self->_alpha);
     return length;
 }
 
@@ -130,6 +154,7 @@ ONYX2D_STATIC int O2PaintReadResampledLowSpanFloatTranslate_largb8u_PRE(
                                     self->_surfaceToMask);
         O2PaintApplyMaskSpan(span, maskSpan, length);
     }
+    O2PaintApplyGlobalAlpha8u(span, length, self->_alpha);
     return length;
 }
 
@@ -150,6 +175,7 @@ ONYX2D_STATIC int O2PaintReadResampledNoneSpan_largb8u_PRE(O2Paint *selfX,
         O2PaintApplyMaskSpan(span, maskSpan, length);
     }
 
+    O2PaintApplyGlobalAlpha8u(span, length, self->_alpha);
     return length;
 }
 
@@ -171,6 +197,7 @@ ONYX2D_STATIC int O2PaintReadIntegerTranslateSpan_largb8u_PRE(O2Paint *selfX,
         O2PaintApplyMaskSpan(span, maskSpan, length);
     }
 
+    O2PaintApplyGlobalAlpha8u(span, length, self->_alpha);
     return length;
 }
 
@@ -266,6 +293,10 @@ ONYX2D_STATIC int stencil(O2Paint *selfX, int x, int y, O2argb32f *span,
     return length;
 }
 
+- (void) setAlpha: (O2Float) alpha {
+    _alpha = alpha;
+}
+
 - initWithImage: (O2Image *) image
                         mask: (O2ImageRef) mask
                         mode: (O2SurfaceMode) mode
@@ -274,6 +305,7 @@ ONYX2D_STATIC int stencil(O2Paint *selfX, int x, int y, O2argb32f *span,
               surfaceToImage: (O2AffineTransform) surfaceToImage
                surfaceToMask: (O2AffineTransform) surfaceToMask
 {
+    _alpha = 1.0f;
     bool integerTranslate = FALSE;
     bool floatTranslate = FALSE;
 
