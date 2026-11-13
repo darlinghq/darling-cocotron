@@ -2117,7 +2117,11 @@ static NSUInteger scaledRepCacheBytes(NSArray *cache) {
     NSString *extension = [name pathExtension];
     if (extension && extension.length) {
         NSString *baseName = [name stringByDeletingPathExtension];
-        return [self pathForResource: baseName ofType: extension];
+        NSString *path = [self pathForResource: baseName ofType: extension];
+        // "com.example.icon" has a path extension that is not an image type:
+        // fall through and try the image types on the whole name.
+        if (path != nil)
+            return path;
     }
     NSArray *types = [NSImage imageFileTypes];
     int i, count = [types count];
@@ -2132,6 +2136,13 @@ static NSUInteger scaledRepCacheBytes(NSArray *cache) {
 
     return [self pathForResource: [name stringByDeletingPathExtension]
                           ofType: [name pathExtension]];
+}
+
+- (NSURL *) URLForImageResource: (NSString *) name {
+    NSString *path = [self pathForImageResource: name];
+    if (path == nil)
+        return nil;
+    return [NSURL fileURLWithPath: path];
 }
 
 - (NSImage *) imageForResource: (NSString *) name {
