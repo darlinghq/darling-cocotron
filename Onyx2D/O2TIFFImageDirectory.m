@@ -39,9 +39,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (id) initWithData: (NSData *) data;
 
 // Data access methods for libtiff
-- (int) write: (tdata_t) data size: (tsize_t) size;
-- (int) read: (tdata_t) data size: (tsize_t) size;
-- (toff_t) seek: (tsize_t) offset whence: (int) whence;
+- (intptr_t) write: (tdata_t) data size: (intptr_t) size;
+- (intptr_t) read: (tdata_t) data size: (intptr_t) size;
+- (toff_t) seek: (toff_t) offset whence: (int) whence;
 - (int) map: (tdata_t *) data size: (toff_t *) size;
 - (void) unmap: (tdata_t) data size: (toff_t) size;
 - (toff_t) size;
@@ -71,12 +71,19 @@ static int O2TIFFGetDefaultedUInt16Field(TIFF *tif, uint32 tag, uint16_t *value)
 #define O2TIFFGetDefaultedUInt16Field(tif, tag, value) TIFFGetFieldDefaulted(tif, tag, value)
 #endif
 
-static tsize_t sTIFFWriteProc(thandle_t userData, tdata_t data, tsize_t size) {
+// The callbacks below use intptr_t for libtiff's tmsize_t. The tiffconf.h that
+// the build finds is the one generated for the 64-bit host and fixes tmsize_t
+// (and so tsize_t) at 64 bits, while the libtiff the 32-bit slice links against
+// uses a 32-bit tmsize_t; declaring the callbacks with tsize_t made them read
+// their size argument from the wrong stack slot. intptr_t has the width of
+// tmsize_t in both. They are cast to libtiff's callback types at the call.
+static intptr_t sTIFFWriteProc(thandle_t userData, tdata_t data,
+                               intptr_t size) {
     O2TIFFReader *reader = (O2TIFFReader *) userData;
     return [reader write: data size: size];
 }
 
-static tsize_t sTIFFReadProc(thandle_t userData, tdata_t data, tsize_t size) {
+static intptr_t sTIFFReadProc(thandle_t userData, tdata_t data, intptr_t size) {
     O2TIFFReader *reader = (O2TIFFReader *) userData;
     return [reader read: data size: size];
 }
@@ -119,18 +126,21 @@ static void sTIFFUnmapFileProc(thandle_t userData, tdata_t data, toff_t size) {
     [super dealloc];
 }
 
-- (int) write: (tdata_t) data size: (tsize_t) size {
+- (intptr_t) write: (tdata_t) data size: (intptr_t) size {
     return 0;
 }
 
-- (int) read: (tdata_t) data size: (tsize_t) size {
-    int bytesCount = MIN(size, [_data length] - _currentOffset);
+- (intptr_t) read: (tdata_t) data size: (intptr_t) size {
+    if (size <= 0 || _currentOffset >= [_data length])
+        return 0;
+    intptr_t bytesCount = (intptr_t) MIN((toff_t) size,
+                                         (toff_t) [_data length] - _currentOffset);
     memcpy(data, [_data bytes] + _currentOffset, bytesCount);
     _currentOffset += bytesCount;
     return bytesCount;
 }
 
-- (toff_t) seek: (tsize_t) offset whence: (int) whence {
+- (toff_t) seek: (toff_t) offset whence: (int) whence {
     /*
     If whence is SEEK_SET, the offset is set to offset bytes.
     If whence is SEEK_CUR, the offset is set to its current location plus offset
@@ -145,7 +155,7 @@ static void sTIFFUnmapFileProc(thandle_t userData, tdata_t data, toff_t size) {
         _currentOffset += offset;
         break;
     case SEEK_END:
-        _currentOffset = [_data length] + offset - 1;
+        _currentOffset = [_data length] + offset;
         break;
     }
     if (_currentOffset > [_data length]) {
@@ -179,7 +189,8 @@ static void sTIFFUnmapFileProc(thandle_t userData, tdata_t data, toff_t size) {
     // and with a lot of tiff files
     TIFFErrorHandler prevHandler = TIFFSetWarningHandler(NULL);
     TIFF *tif = TIFFClientOpen([NSStringFromClass([self class]) UTF8String],
-                               "r", self, sTIFFReadProc, sTIFFWriteProc,
+                               "r", self, (TIFFReadWriteProc) sTIFFReadProc,
+                               (TIFFReadWriteProc) sTIFFWriteProc,
                                sTIFFSeekProc, sTIFFCloseProc, sTIFFSizeProc,
                                sTIFFMapFileProc, sTIFFUnmapFileProc);
 
