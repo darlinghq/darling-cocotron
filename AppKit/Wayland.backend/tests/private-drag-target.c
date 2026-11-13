@@ -1,3 +1,8 @@
+/*
+ Copyright (C) 2026 Darling Developers
+
+ Licensed under the MIT license, the same as the rest of this project.
+*/
 // Adversarial native receiver: request the private marker and finish MOVE even
 // with an empty payload. Run only in the fixture's isolated compositor.
 #define _GNU_SOURCE

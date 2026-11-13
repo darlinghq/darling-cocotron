@@ -1,3 +1,8 @@
+/*
+ Copyright (C) 2026 Darling Developers
+
+ Licensed under the MIT license, the same as the rest of this project.
+*/
 /* Native GTK3 drag source for the isolated Wayland integration fixture.
  * DROP_MODE: accept, leave, prepare-reject, unsupported, move-only, oversize.
  * IMAGE_DRAG offers image/png carrying IMAGE_WIRE (opaque bytes; the backend
