@@ -99,8 +99,6 @@ static NSAttributedString *attributedStringFromTemplateContents(id contents) {
         text = [[[NSAttributedString alloc] initWithRTF: contents documentAttributes: NULL] autorelease];
     if (text == nil)
         text = [[[NSAttributedString alloc] initWithRTFD: contents documentAttributes: NULL] autorelease];
-    if (text == nil)
-        text = [[[NSAttributedString alloc] initWithRTF: contents documentAttributes: NULL] autorelease];
     return text;
 }
 
