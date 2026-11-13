@@ -1,14 +1,13 @@
 #import <CoreText/CTFont.h>
 #import <CoreText/CTLine.h>
 #import <CoreText/CTRun.h>
+#import <CoreText/CTStringAttributes.h>
 
 CTLineRef KTCoreTextCreateLineWithRange(CFAttributedStringRef string, CFRange range);
 void KTCoreTextFinalizeObject(CFTypeRef object);
 CFTypeRef KTCoreTextCreateObject(CFTypeID type, CFDictionaryRef storage);
 CFTypeID KTCoreTextRunGetTypeID(void);
 CFDictionaryRef KTCoreTextObjectDictionary(CFTypeRef object);
-
-extern const CFStringRef kCTFontAttributeName;
 
 extern const CFStringRef KTLineAttributedStringKey;
 extern const CFStringRef KTLineRunsKey;
