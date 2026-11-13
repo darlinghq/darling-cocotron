@@ -495,6 +495,22 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                              ([self hasSubmenu] ? @"YES" : @"NO")];
 }
 
+// This is used by NSMainMenuView To Display The Correct Title
+- (NSString *) _mainMenuTitle {
+    // On MacOS, main menu items display the title of their sub-menu rather than their own title
+    if ([[self menu] supermenu] == nil) {
+        // Check if sub-menu exists
+        if ([self hasSubmenu]) {
+            // Check if sub-menu title exists
+            NSString *submenuTitle = [[self submenu] title];
+            if (submenuTitle != nil) {
+                return submenuTitle;
+            }
+        }
+    }
+    return _title;
+}
+
 // Private AppKit API (macOS 26): an image describing the item's action, which
 // apps set from a system symbol image. Stored and returned; Cocotron's menus
 // don't draw it.
