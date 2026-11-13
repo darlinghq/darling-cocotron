@@ -43,4 +43,22 @@ static inline int WaylandScaleCrop(int32_t logical, int32_t pixels,
     *extent256 = (int32_t)(right - left);
     return 1;
 }
+
+// A cursor surface carries its scale only in wl_surface.buffer_scale, which is
+// an integer: round the preferred scale up to a whole one (scale units 1/120).
+static inline uint32_t WaylandCursorBufferScale120(uint32_t scale120) {
+    if (!scale120) return 120;
+    uint64_t whole = ((uint64_t)scale120 + 119) / 120;
+    return whole > UINT32_MAX / 120 ? 120 : (uint32_t)(whole * 120);
+}
+// The scale to tag a cursor image of width x height with, at most `scale`: the largest
+// whole one that divides both sizes. A buffer that is not a multiple of buffer_scale is an
+// invalid_size protocol error, which some compositors answer by disconnecting the client
+// (a theme with no image of the requested size returns its nearest one, e.g. 64 for 72).
+static inline int32_t WaylandCursorWireScale(int32_t width, int32_t height, int32_t scale) {
+    if (width < 1 || height < 1) return 1;
+    for (int32_t k = scale; k > 1; k--)
+        if (width % k == 0 && height % k == 0) return k;
+    return 1;
+}
 #endif

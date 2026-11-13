@@ -186,7 +186,7 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 
     struct wl_cursor_theme *_cursorTheme;
     uint32_t _cursorThemeScale120;
-    struct wl_proxy *_cursorSurface, *_cursorFractionalScale, *_cursorViewport;
+    struct wl_proxy *_cursorSurface, *_cursorFractionalScale;
     uint32_t _cursorPreferredScale120;
     struct wl_proxy *_imageCursorBuffer;
     uint32_t _imageCursorBufferScale120;
