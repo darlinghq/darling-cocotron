@@ -1,82 +1,53 @@
 # Wayland AppKit backend
 
-Select with `DARLING_APPKIT_BACKEND=wayland`. Without it, AppKit uses X11. If the
-compositor or required native libraries cannot be reached, the backend logs the
-reason and falls back to X11. `WAYLAND_DISPLAY` must be a **host filesystem path**
-when passed through Darling; native libwayland resolves it outside the container.
+AppKit windows are xdg-shell toplevels drawn into wl_shm buffers. The protocols used are the
+core protocol, [xdg-shell](https://gitlab.freedesktop.org/wayland/wayland-protocols/-/blob/main/stable/xdg-shell/xdg-shell.xml),
+xdg-decoration, xdg-output and pointer-gestures from
+[wayland-protocols](https://gitlab.freedesktop.org/wayland/wayland-protocols); the core protocol is described at
+<https://wayland.freedesktop.org/docs/html/>.
 
-Supported: xdg-shell toplevels, CPU drawing via wl_shm, pointer and keyboard input,
-compositor keymaps, repeat, resize, hide/re-show, compositor close, themed cursors
-and NSImage cursors. Images use immutable premultiplied ARGB storage and retain
-their hotspot. Invalid image dimensions or nonfinite hotspots fall back to the arrow; finite
-hotspots are clamped to the image bounds.
-Native cursor buffers belong to the display, so an AppKit cursor can outlive its
-Wayland connection. Image cursors do not require libwayland-cursor or a theme.
+## Selecting it
 
-## Manual regression application
+The backend is used when a compositor is advertised (`WAYLAND_DISPLAY`) and X11 otherwise. Two settings
+override that, the environment variable first:
 
-Build `tests/waylandtest.m` as a plain arm64 executable linked against AppKit with
-your Darling SDK/toolchain. It does not need pointer authentication disabled.
-Run it in a dedicated test prefix and compositor; set `DARLING_APPKIT_BACKEND` to
-`wayland` and `WAYLAND_DISPLAY` to the compositor's host socket path.
+- `DARLING_APPKIT_BACKEND` set to `wayland` or `x11`;
+- the `DisplayBackend` string preference of the `org.darlinghq.AppKit` domain, with the same two values.
 
-The application draws red/green/blue views, a text view, and a second yellow window.
-It logs input events, text, geometry, activation, and close delivery. Right-click
-the red view to hide/re-show the second window. `EXIT_AFTER` controls its exit
-timer (seconds); keep the second window visible while testing close on the first.
+If the compositor or a required native library cannot be reached, the backend logs the reason and AppKit
+continues with X11. `WAYLAND_DISPLAY` must be a **host filesystem path** when it is passed into Darling,
+because the native libwayland resolves it outside the container. The choice is made by
+`WaylandBackendSelected()` in `WaylandLibrary.m`.
 
-Set `IMAGE_CURSOR=1` to register a 32x24 image cursor over the red view, with
-hotspot (5,7). With the pointer held over that view, capture using `grim -c`:
+`WaylandDecorations` (`org.darlinghq.AppKit`) or `DARLING_WAYLAND_DECORATIONS`, set to `client`, makes the
+backend draw the window frame itself even when the compositor offers server-side decorations.
 
-- Left 16 columns: magenta upper half, cyan lower half.
-- Next 8 columns: transparent, preserving the red background.
-- Right 8 columns: half-alpha magenta/cyan, blending over red.
-- The image starts five pixels left and seven pixels above the pointer.
+## What it provides
 
-Move into the text view to restore the themed I-beam. Leave/re-enter the window,
-resize it, and hide/re-show the second window. Test Romanian text `Hello ăîșț`,
-key repeat and modifiers, then compositor close (`windowWillClose` in the log).
+- Windows: xdg toplevels, resize, hide and show, compositor close, nested popup menus, client or
+  server-side decorations.
+- Input: pointer with click grouping and scroll frames, keyboard through xkbcommon with the compositor's
+  keymap and key repeat, aggregate and left/right modifier changes, touchpad pinch as magnify and rotate
+  events.
+- Cursors: themed cursors and `NSImage` cursors with their hotspot.
+- Outputs: output batches are applied atomically, rotation and the xdg-output logical layout feed `NSScreen`,
+  integer buffer scale follows the outputs a window is on.
 
-Also run without the selector variable on an isolated X server to verify
-`backend X11Display` and typing, then with Wayland selected and an invalid socket:
-one fallback message and an X11 window should result.
+Native libraries (libwayland-client, libwayland-cursor, libxkbcommon) are loaded with `dlopen` through the
+loader's native-call table only when the backend is selected, so the bundle has no link-time dependency on
+them. Every native call takes a fixed number of arguments: requests go through
+`wl_proxy_marshal_array_flags` and events through `wl_proxy_add_dispatcher`, which avoids the variadic and
+listener-struct differences between the Darwin and Linux calling conventions. The hand-written opcodes in
+`WaylandProtocol.h` are checked against the generated protocol tables at startup.
 
-`UNPREMULT_CURSOR=1` selects an additional shared-renderer diagnostic: it uses
-an unpremultiplied NSBitmapImageRep. Onyx2D's current 8-bit image reader does not
-correctly premultiply this input, so transparent/partial-alpha pixels can render
-incorrectly. The normal fixture supplies premultiplied data to test the backend
-independently of that shared drawing issue.
+## Building
 
-## HiDPI, menus and decorations
+Needs wayland-client 1.20 or newer (for `wl_proxy_marshal_array_flags`), wayland-cursor, xkbcommon, the
+wayland-protocols XML and `wayland-scanner`; the backend is skipped when any of them is missing.
 
-Surface output membership controls integer HiDPI rendering and cursor scale.
-Set `HIDPI_TEST=1` and change the test output between scale 1 and 2: the half-point
-white stripe in the red view should become one physical pixel wide at scale 2.
-Input coordinates and AppKit window dimensions remain logical.
+## Tests
 
-Menus use `xdg_popup` with parent-relative placement and nested grabs.
-`POPUP_TEST=1` opens a context menu from the green view. Open its Branch submenu,
-then click outside; cancellation must log `popup returned actions=0`.
-Repositioning requires xdg-shell version 3.
-
-Titled windows negotiate decorations and draw a client frame when requested by
-the compositor or when the decoration protocol is absent. Set
-`DARLING_WAYLAND_DECORATIONS=client` to request this path explicitly. Test close,
-minimize, maximize, title-bar move and border resize. Compositor policy determines
-final placement and supported actions.
-
-Headless Sway validation covers 1x/2x/1x transitions, nested menu grabs and
-outside-click cancellation, typing, resize, hide/show and client close delivery.
-Client title dragging and border resizing change compositor geometry; maximize
-and minimize requests are delivered, with final behavior governed by policy.
-The half-point stripe is exactly one physical pixel at 2x. Image-cursor colors
-at 2x currently differ by up to two channel values from the 1x reference.
-Multiple physical outputs and fractional scales have not been validated.
-
-## Remaining milestones
-
-M3: clipboard and drag/drop. M4: EGL/OpenGL subwindows.
-
-All native calls use fixed-arity functions; requests use
-`wl_proxy_marshal_array_flags`, and events use a dispatcher to avoid the
-Darwin/Linux arm64 variadic and listener ABI differences.
+`../../tests/appkit-wayland-backend-selection.m` needs no compositor. `../../tests/appkit-wayland-window-state.m`
+needs a compositor and checks screens, scale and window frames through the API. The programs in `tests/` here
+are manual fixtures that exercise one feature each against a real or private test compositor; their file
+names say what they cover.
