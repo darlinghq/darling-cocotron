@@ -49,7 +49,7 @@ int main(void)
         expect(NSEventTypeMagnify == 30 && NSEventTypeRotate == 18 && NSEventPhaseBegan == 1 &&
                    NSEventPhaseChanged == 4 && NSEventPhaseEnded == 8 && NSEventPhaseCancelled == 16,
                @"event type and phase values");
-        expect(NSEventMaskMagnify & NSAnyEventMask, @"magnify events match NSAnyEventMask");
+        expect((NSEventMaskMagnify & NSAnyEventMask) != 0, @"magnify events match NSAnyEventMask");
 
         NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 200, 100)
                                                        styleMask:NSTitledWindowMask
