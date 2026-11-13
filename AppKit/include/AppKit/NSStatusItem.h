@@ -39,25 +39,17 @@ typedef NS_OPTIONS(NSUInteger, NSStatusItemBehavior) {
 @end
 
 @interface NSStatusItem : NSObject {
-    SEL _action;
     SEL _doubleAction;
-    id _target;
-    // Image-Based Item Vars
-    NSImage *_image;
-    NSImage *_alternateImage;
-    // Text-Based Item Vars
-    NSString *_title;
-    NSAttributedString *_atrTitle;
     // View-Based Item Vars
     NSView *_view;
     // Modern status item vars
     NSStatusItemBehavior _behavior;
     NSStatusBarButton *_button;
     NSString *_autosaveName;
+    NSString *_defaultAutosaveName;
     BOOL _visible;
     // Other Vars
     BOOL _highlightMode;
-    BOOL _enabled;
     CGFloat _length;
     NSMenu *_menu;
     NSInteger _actionMask;

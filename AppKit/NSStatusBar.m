@@ -75,10 +75,29 @@ static NSStatusBar *_statusBar = nil;
     return NO;
 }
 - (void) removeStatusItem: (NSStatusItem *) item {
+    // The default name of a removed item is free for the next item to take.
+    [_statusItems removeObjectIdenticalTo: item];
+}
+
+// Default autosave names are "Item-N" with the lowest N no other item holds.
+- (NSString *) _unusedDefaultAutosaveName {
+    for (NSUInteger index = 0;; index++) {
+        NSString *name = [NSString stringWithFormat: @"Item-%lu", (unsigned long) index];
+        BOOL taken = NO;
+        for (NSStatusItem *other in _statusItems) {
+            if ([name isEqualToString: [other _defaultAutosaveName]]) {
+                taken = YES;
+                break;
+            }
+        }
+        if (!taken)
+            return name;
+    }
 }
 - (NSStatusItem *) statusItemWithLength: (CGFloat) length {
     NSStatusItem *item = [[NSStatusItem alloc] init];
     [item setLength: length];
+    [item _setDefaultAutosaveName: [self _unusedDefaultAutosaveName]];
     [_statusItems addObject: item];
     return [item autorelease];
 }
