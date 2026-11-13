@@ -98,6 +98,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSInterfaceStyle.h>
 #import <AppKit/NSKeyBindingManager.h>
 #import <AppKit/NSKeyValueBinding.h>
+#import <AppKit/NSAutoresizingMaskLayoutConstraint.h>
+#import <AppKit/NSContentSizeLayoutConstraint.h>
+#import <AppKit/NSIBPrototypingLayoutConstraint.h>
+#import <AppKit/NSLayoutAnchor.h>
 #import <AppKit/NSLayoutConstraint.h>
 #import <AppKit/NSLayoutManager.h>
 #import <AppKit/NSLevelIndicator.h>

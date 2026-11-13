@@ -3,12 +3,37 @@
 #import <AppKit/NSPrintInfo.h>
 #import <AppKit/NSPrintOperation.h>
 #import <AppKit/NSPrintPanel.h>
+#import <Foundation/NSArray.h>
 #import <Foundation/NSDictionary.h>
 
 @implementation NSPrintPanel
 
 + (NSPrintPanel *) printPanel {
     return [[[self alloc] init] autorelease];
+}
+
+- (void) dealloc {
+    [_attributes release];
+    [_accessoryControllers release];
+    [super dealloc];
+}
+
+- (NSArray *) accessoryControllers {
+    return _accessoryControllers ? [[_accessoryControllers copy] autorelease]
+                                 : [NSArray array];
+}
+
+- (void) addAccessoryController: (NSViewController *) controller {
+    if (controller == nil)
+        return;
+    if (_accessoryControllers == nil)
+        _accessoryControllers = [[NSMutableArray alloc] init];
+    if ([_accessoryControllers indexOfObjectIdenticalTo: controller] == NSNotFound)
+        [_accessoryControllers addObject: controller];
+}
+
+- (void) removeAccessoryController: (NSViewController *) controller {
+    [_accessoryControllers removeObjectIdenticalTo: controller];
 }
 
 - (void) setOptions: (NSPrintPanelOptions) options {

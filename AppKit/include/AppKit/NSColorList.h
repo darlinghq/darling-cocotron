@@ -48,7 +48,7 @@ APPKIT_EXPORT NSString *const NSColorListDidChangeNotification;
                  key: (NSString *) key
              atIndex: (unsigned) index;
 
-- (void) writeToFile: (NSString *) path;
+- (BOOL) writeToFile: (NSString *) path;
 - (void) removeFile;
 
 @end

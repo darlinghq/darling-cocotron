@@ -23,7 +23,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSObservationProxy.h>
 #import <Foundation/NSArray.h>
 #import <Foundation/NSEnumerator.h>
-#import <Foundation/NSException.h>
 #import <Foundation/NSKeyValueCoding.h>
 #import <Foundation/NSKeyValueObserving.h>
 #import <Foundation/NSString.h>
@@ -61,13 +60,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [_cachedValues release];
     [_observableSelection release];
 
-    if ([_observationProxies count] > 0)
-        [NSException raise: NSInvalidArgumentException
-                    format: @"NSControllerSelectionProxy still being observed "
-                            @"by %@ on %@",
-                            [[_observationProxies objectAtIndex: 0] observer],
-                            [[_observationProxies objectAtIndex: 0] keyPath]];
-
+    // Observers that outlive the proxy are released with it rather than
+    // raising, which would crash ordinary controller-binding teardown.
     [_observationProxies release];
     [super dealloc];
 }

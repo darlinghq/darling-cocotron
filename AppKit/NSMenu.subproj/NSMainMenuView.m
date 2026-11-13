@@ -108,7 +108,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (NSString *) displayTitleForItem: (NSMenuItem *) item {
-    return [self isApplicationMenuItem: item] ? _applicationName : [item title];
+    return [self isApplicationMenuItem: item] ? _applicationName : [item _mainMenuTitle];
 }
 
 - (NSDictionary *) boldTitleAttributesSelected: (BOOL) selected {
@@ -177,7 +177,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
     for (i = 0; i < count; i++) {
         NSMenuItem *item = [items objectAtIndex: i];
-        NSString *title = [item title];
+        NSString *title = [item _mainMenuTitle];
         NSSize size = [title sizeWithAttributes: [self titleAttributes]];
 
         height = MAX(height, size.height);

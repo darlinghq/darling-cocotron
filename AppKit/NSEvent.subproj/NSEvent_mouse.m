@@ -71,6 +71,10 @@ static NSInteger defaultButtonNumber(NSEventType type) {
     return NSEventSubtypeMouseEvent;
 }
 
+- (NSInteger) eventNumber {
+    return _eventNumber;
+}
+
 - (instancetype) initWithType: (NSEventType) type
                      location: (NSPoint) location
                 modifierFlags: (NSEventModifierFlags) modifierFlags
@@ -102,6 +106,7 @@ static NSInteger defaultButtonNumber(NSEventType type) {
                  modifierFlags: modifierFlags
                         window: [NSApp windowWithWindowNumber: windowNumber]];
     if (self != nil) {
+        _eventNumber = eventNumber;
         _trackingNumber = tracking;
         _userData = userData;
     }
@@ -124,6 +129,7 @@ static NSInteger defaultButtonNumber(NSEventType type) {
                    window: [NSApp windowWithWindowNumber: windowNumber]];
     _buttonNumber = defaultButtonNumber(type);
     _clickCount = clickCount;
+    _eventNumber = eventNumber;
     return self;
 }
 

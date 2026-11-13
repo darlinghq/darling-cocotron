@@ -29,19 +29,24 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (id) initWithCoder: (NSCoder *) coder {
     if ((self = [super initWithCoder: coder])) {
-        int version = [coder decodeIntForKey: @"NSNibBindingConnectorVersion"];
-        if (version != 2)
-            [NSException raise: NSInvalidArgumentException
-                        format: @"-[%@ %s] unknown connector version %i",
-                                [self class], sel_getName(_cmd), version];
+        if ([coder allowsKeyedCoding]) {
+            int version = [coder decodeIntForKey: @"NSNibBindingConnectorVersion"];
+            if (version != 2)
+                [NSException raise: NSInvalidArgumentException
+                            format: @"-[%@ %s] unknown connector version %i",
+                                    [self class], sel_getName(_cmd), version];
 
-        _binding = [[coder decodeObjectForKey: @"NSBinding"] retain];
-        _keyPath = [[coder decodeObjectForKey: @"NSKeyPath"] retain];
-        _options = [[coder decodeObjectForKey: @"NSOptions"] retain];
-    } else {
-        [NSException raise: NSInvalidArgumentException
-                    format: @"-[%@ %s] is not implemented for coder %@",
-                            [self class], sel_getName(_cmd), coder];
+            _binding = [[coder decodeObjectForKey: @"NSBinding"] retain];
+            _keyPath = [[coder decodeObjectForKey: @"NSKeyPath"] retain];
+            _options = [[coder decodeObjectForKey: @"NSOptions"] retain];
+        } else {
+            // After the connector part: binding, key path, options and, last, the
+            // previous connector (kept by macOS for its own bookkeeping, not used here).
+            _binding = [[coder decodeObject] retain];
+            _keyPath = [[coder decodeObject] retain];
+            _options = [[coder decodeObject] retain];
+            [coder decodeObject];
+        }
     }
     return self;
 }

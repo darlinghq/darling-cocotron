@@ -19,5 +19,22 @@
 
 #import <Foundation/NSObject.h>
 
-@interface NSTreeNode : NSObject
+@class NSArray, NSMutableArray, NSIndexPath;
+
+@interface NSTreeNode : NSObject {
+    id _representedObject;
+    NSTreeNode *_parentNode;
+    NSMutableArray *_childNodes;
+}
+
++ (instancetype) treeNodeWithRepresentedObject: (id) modelObject;
+- (instancetype) initWithRepresentedObject: (id) modelObject;
+
+- (id) representedObject;
+- (NSTreeNode *) parentNode;
+- (NSArray *) childNodes;
+- (BOOL) isLeaf;
+- (NSIndexPath *) indexPath;
+- (NSTreeNode *) descendantNodeAtIndexPath: (NSIndexPath *) indexPath;
+
 @end

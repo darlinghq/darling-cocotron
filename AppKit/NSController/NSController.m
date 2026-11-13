@@ -58,7 +58,29 @@ BOOL NSIsControllerMarker(id object) {
 }
 
 - initWithCoder: (NSCoder *) coder {
-    NSUnimplementedMethod();
+    // (not -init: subclasses override it and decode their own state)
+    if ((self = [super init]) == nil)
+        return nil;
+    _editors = [[NSMutableArray alloc] init];
+
+    if (![coder allowsKeyedCoding]) {
+        NSInteger version = [coder versionForClassName: @"NSController"];
+
+        // A double, two objects and, from version 1, two bytes: all of unknown meaning
+        // (the objects are dictionary-like tables of the bindings machinery). They are
+        // read to stay in step with the archive and dropped.
+        double unknownDouble;
+        id unknown1 = nil, unknown2 = nil;
+        char unknownBytes[2];
+
+        [coder decodeValuesOfObjCTypes: "d", &unknownDouble];
+        unknown1 = [[coder decodeObject] retain];
+        unknown2 = [[coder decodeObject] retain];
+        [unknown1 release];
+        [unknown2 release];
+        if (version >= 1)
+            [coder decodeValuesOfObjCTypes: "cc", &unknownBytes[0], &unknownBytes[1]];
+    }
     return self;
 }
 

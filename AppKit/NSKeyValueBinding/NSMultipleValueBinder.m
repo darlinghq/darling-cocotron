@@ -21,6 +21,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSObject+BindingSupport.h>
 #import <AppKit/NSTableColumn.h>
 #import <AppKit/NSTableView.h>
+#import <AppKit/NSOutlineView.h>
+#import <AppKit/NSTreeNode.h>
 #import <Foundation/NSArray.h>
 #import <Foundation/NSDictionary.h>
 #import <Foundation/NSException.h>
@@ -39,6 +41,19 @@ static void *NSMultipleValueBinderWholeArrayChangeContext;
 
 @implementation _NSMultipleValueBinder
 
+// An outline view bound to a tree controller has NSTreeNode rows, not arranged array elements.
+- (id) _objectForRow: (NSInteger) row {
+    if ([_source respondsToSelector: @selector(tableView)]) {
+        id table = [_source tableView];
+        if ([table isKindOfClass: [NSOutlineView class]]) {
+            id item = [table itemAtRow: row];
+            if ([item isKindOfClass: [NSTreeNode class]])
+                return [item representedObject];
+        }
+    }
+    return [_rowValues objectAtIndex: row];
+}
+
 - (NSArray *) rowValues {
     return _rowValues;
 }
@@ -52,7 +67,7 @@ static void *NSMultipleValueBinderWholeArrayChangeContext;
 
 - (void) applyToObject: (id) object inRow: (NSInteger) row keyPath: (id) path {
     @try {
-        [object setValue: [[_rowValues objectAtIndex: row]
+        [object setValue: [[self _objectForRow: row]
                                   valueForKeyPath: _valueKeyPath]
                   forKey: path];
     } @catch (id e) {
@@ -77,7 +92,7 @@ static void *NSMultipleValueBinderWholeArrayChangeContext;
                    inRow: (NSInteger) row
                  keyPath: (id) keypath
 {
-    [[_rowValues objectAtIndex: row] setValue: [object valueForKeyPath: keypath]
+    [[self _objectForRow: row] setValue: [object valueForKeyPath: keypath]
                                    forKeyPath: _valueKeyPath];
 }
 
@@ -98,7 +113,7 @@ static void *NSMultipleValueBinderWholeArrayChangeContext;
 }
 
 - (id) objectAtIndex: (NSUInteger) row {
-    return [[_rowValues objectAtIndex: row] valueForKeyPath: _valueKeyPath];
+    return [[self _objectForRow: row] valueForKeyPath: _valueKeyPath];
 }
 
 - (void) cacheArrayKeyPath {
@@ -129,7 +144,7 @@ static void *NSMultipleValueBinderWholeArrayChangeContext;
 }
 
 - (BOOL) allowsEditingForRow: (NSInteger) row {
-    if ([[_rowValues objectAtIndex: row] classForCoder] == [NSDictionary class])
+    if ([[self _objectForRow: row] classForCoder] == [NSDictionary class])
         return NO;
     return YES;
 }

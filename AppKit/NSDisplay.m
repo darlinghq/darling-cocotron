@@ -309,7 +309,28 @@ static NSDisplay *processDisplay = nil;
     // Callable from any thread
     [_eventQueueLock lock];
     @try {
-        if (atStart) {
+        BOOL coalesced = NO;
+
+        // A moved or dragged event replaces the one still queued last for the
+        // same window and type.
+        if (!atStart && [NSEvent isMouseCoalescingEnabled]) {
+            NSEventType type = [event type];
+            if (type == NSMouseMoved || type == NSLeftMouseDragged ||
+                type == NSRightMouseDragged || type == NSOtherMouseDragged) {
+                NSInteger count = [_eventQueue count];
+                if (count > 0) {
+                    NSEvent *last = [_eventQueue objectAtIndex: count - 1];
+                    if ([last type] == type && [last window] == [event window]) {
+                        [_eventQueue replaceObjectAtIndex: count - 1 withObject: event];
+                        coalesced = YES;
+                    }
+                }
+            }
+        }
+
+        if (coalesced) {
+            // nothing more to queue
+        } else if (atStart) {
             [_eventQueue insertObject: event atIndex: 0];
         } else {
             [_eventQueue addObject: event];

@@ -56,6 +56,7 @@ enum {
     if (_selectedItemIndex != itemIndex) {
         _selectedItemIndex = itemIndex;
         [self setNeedsDisplay: YES];
+        [self displayIfNeeded];
     }
 }
 

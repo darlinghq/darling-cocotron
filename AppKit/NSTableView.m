@@ -23,6 +23,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/AppKit.h>
 #import <AppKit/NSRaise.h>
 #import <AppKit/NSTableCornerView.h>
+#import <AppKit/NSTableCellView.h>
+#import <AppKit/NSImageView.h>
 #import <Foundation/NSKeyedArchiver.h>
 
 NSString *const NSTableViewSelectionIsChangingNotification =
@@ -128,13 +130,27 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
         _intercellSpacing = NSMakeSize(3.0, 2.0);
         _selectedRowIndexes = [[NSIndexSet alloc] init];
         _selectedColumns = [[NSMutableArray alloc] init];
+        _registeredNibs = [[NSMutableDictionary alloc] init];
+        _activeRowViews = [[NSMutableArray alloc] init];
         _editedColumn = -1;
         _editedRow = -1;
         _numberOfRows = -1;
         _draggingRow = -1;
+        _draggingSourceMaskLocal = NSDragOperationEvery;
+        _draggingSourceMaskNonLocal = NSDragOperationNone;
+        // Nibs archive "every operation" as -1; NSDragOperationEvery is 32 bits wide here.
+        if ([keyed containsValueForKey: @"NSDraggingSourceMaskForLocal"])
+            _draggingSourceMaskLocal = (NSDragOperation) [keyed
+                    decodeIntegerForKey: @"NSDraggingSourceMaskForLocal"] &
+                    NSDragOperationEvery;
+        if ([keyed containsValueForKey: @"NSDraggingSourceMaskForNonLocal"])
+            _draggingSourceMaskNonLocal = (NSDragOperation) [keyed
+                    decodeIntegerForKey: @"NSDraggingSourceMaskForNonLocal"] &
+                    NSDragOperationEvery;
 
         // row background and grid attributes for OS X >= 10.3
         _alternatingRowBackground = (flags & 0x00800000) ? YES : NO;
+        _floatsGroupRows = YES;
         if ([keyed containsValueForKey: @"NSGridStyleMask"])
             _gridStyleMask = [keyed decodeIntForKey: @"NSGridStyleMask"];
         else
@@ -158,33 +174,19 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
         SEL action = NULL, doubleAction = NULL;
         int flags = 0;
 
-        // QUIRK: NSTableView layout: header view, corner view, columns, cell
-        // spacing, colours, row height, action, double action and a flags
-        // word (bit 31 column reordering, 30 column resizing, 28 empty
-        // selection, 27 multiple selection, 26 column selection, 15
-        // autoresize columns), then data source, delegate and target. Not
-        // documented; unkeyed (typedstream) archives come from old nibs.
-        // Evidence: tier 3, the layout reported by the contributor of this
-        // decoder from archives of old nibs; unconfirmed against macOS (a
-        // macOS check is pending). Archives with a different layout are
-        // tolerated where the code catches the mismatch. Test:
-        // test_quirk_typedstream_table_view in tests/appkit-typedstream-
-        // controls.m
-        @try {
-            [coder decodeValuesOfObjCTypes: "@@@ff@@f::i",
-                                            &headerView, &cornerView, &cols,
-                                            &spacingW, &spacingH,
-                                            &bgColor, &gridColor,
-                                            &rowH,
-                                            &action, &doubleAction,
-                                            &flags];
-            _dataSource = [coder decodeObject];
-            id aDelegate = [coder decodeObject];
-            _target = [coder decodeObject];
-            [self setDelegate: aDelegate];
-        } @catch (id ex) {
-            // Ignore decoding mismatch
-        }
+        // Layout as recorded from Mac archives (one for every class version): header
+        // view, corner view, table columns, cell spacing, background and grid colours, row
+        // height, action, double action and a flag word, then the delegate, the data
+        // source and the target. The flag word holds column reordering in bit 31, column
+        // resizing in 30, empty selection in 28, multiple selection in 27, column
+        // selection in 26, alternating row backgrounds in 23 and uniform column
+        // autoresizing in 15. The grid style and autosave name are not archived.
+        [coder decodeValuesOfObjCTypes: "@@@ff@@f::i", &headerView, &cornerView, &cols, &spacingW, &spacingH, &bgColor,
+                                        &gridColor, &rowH, &action, &doubleAction, &flags];
+        id aDelegate = [coder decodeObject];
+        _dataSource = [coder decodeObject];
+        _target = [coder decodeObject];
+        [self setDelegate: aDelegate];
 
         _headerView = headerView;
         [_headerView setTableView: self];
@@ -210,6 +212,8 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
         _allowsMultipleSelection = (flags & 0x08000000) ? YES : NO;
         _allowsEmptySelection = (flags & 0x10000000) ? YES : NO;
         _allowsColumnSelection = (flags & 0x04000000) ? YES : NO;
+        _alternatingRowBackground = (flags & 0x00800000) ? YES : NO;
+        _gridStyleMask = NSTableViewGridNone;
     }
     return self;
 }
@@ -222,10 +226,14 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
     _intercellSpacing = NSMakeSize(3.0, 2.0);
     _selectedRowIndexes = [[NSIndexSet alloc] init];
     _selectedColumns = [[NSMutableArray alloc] init];
+    _registeredNibs = [[NSMutableDictionary alloc] init];
+    _activeRowViews = [[NSMutableArray alloc] init];
     _editedColumn = -1;
     _editedRow = -1;
     _numberOfRows = -1;
     _draggingRow = -1;
+    _draggingSourceMaskLocal = NSDragOperationEvery;
+    _draggingSourceMaskNonLocal = NSDragOperationNone;
 
     _allowsColumnReordering = YES;
     _allowsColumnResizing = YES;
@@ -253,6 +261,7 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
     // row background and grid attributes for OS X >= 10.3
     _alternatingRowBackground = NO;
     _gridStyleMask = NSTableViewGridNone;
+    _floatsGroupRows = YES;
 
     return self;
 }
@@ -267,6 +276,8 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
     [_selectedRowIndexes release];
     [_selectedColumns release];
     [_sortDescriptors release];
+    [_registeredNibs release];
+    [_activeRowViews release];
     [super dealloc];
 }
 
@@ -335,6 +346,21 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
 
 - (void) setUsesAutomaticRowHeights: (BOOL) value {
     _usesAutomaticRowHeights = value;
+}
+
+- (BOOL) floatsGroupRows {
+    return _floatsGroupRows;
+}
+
+- (NSTableViewRowSizeStyle) rowSizeStyle {
+    return _rowSizeStyle;
+}
+
+// Darling has no sidebar size setting; Medium is macOS's out-of-the-box choice.
+- (NSTableViewRowSizeStyle) effectiveRowSizeStyle {
+    if (_rowSizeStyle == NSTableViewRowSizeStyleDefault)
+        return NSTableViewRowSizeStyleMedium;
+    return _rowSizeStyle;
 }
 
 - (BOOL) allowsColumnReordering {
@@ -438,11 +464,31 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
     return nil;
 }
 
+// Apple gives no heights for the small, medium and large styles; use the line
+// height of the system font for the matching control size. Only the laid-out
+// rows follow the style: -rowHeight is not tied to it (a table keeps reporting
+// the height that was set, as on macOS).
+static CGFloat styledRowHeight(NSTableViewRowSizeStyle style) {
+    // NSFont has no larger control size to offer, so the large style uses the
+    // regular system font like the medium one.
+    NSControlSize size = style == NSTableViewRowSizeStyleSmall
+                                 ? NSSmallControlSize
+                                 : NSRegularControlSize;
+
+    return [[NSFont systemFontOfSize: [NSFont systemFontSizeForControlSize: size]]
+            defaultLineHeightForFont];
+}
+
+- (CGFloat) _effectiveRowHeight {
+    return _rowSizeStyle == NSTableViewRowSizeStyleCustom ? _standardRowHeight
+                                                          : _styledRowHeight;
+}
+
 static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     if (index < self->_rowHeightsCount)
         return self->_rowHeights[index];
 
-    return self->_standardRowHeight;
+    return [self _effectiveRowHeight];
 }
 
 - (NSRect) rectOfRow: (NSInteger) row {
@@ -680,7 +726,7 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
         _standardRowHeight = 0.;
 
     for (i = 0; i < _rowHeightsCount; i++)
-        _rowHeights[i] = _standardRowHeight;
+        _rowHeights[i] = [self _effectiveRowHeight];
 
     [self tile];
 }
@@ -760,6 +806,17 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     [self setNeedsDisplay: YES];
 }
 
+- (void) setFloatsGroupRows: (BOOL) flag {
+    _floatsGroupRows = flag;
+}
+
+- (void) setRowSizeStyle: (NSTableViewRowSizeStyle) style {
+    _rowSizeStyle = style;
+    if (style != NSTableViewRowSizeStyleCustom)
+        _styledRowHeight = styledRowHeight([self effectiveRowSizeStyle]);
+    [self tile];
+}
+
 // the appkit dox are pretty vague on these two. should they trigger a redraw or
 // reloadData? also.. i wonder if remove should use an isEqual method in
 // NSTableColumn, or removeObjectIdenticalTo...
@@ -792,6 +849,8 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 - (id) dataSourceObjectValueForTableColumn: (NSTableColumn *) tableColumn
                                        row: (NSInteger) row
 {
+    if ([_delegate respondsToSelector: @selector(tableView:viewForTableColumn:row:)])
+        return nil;
 
     if (_dataSource != nil &&
         [_dataSource respondsToSelector: @selector
@@ -1199,7 +1258,7 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
         }
     } else {
         while (row != NSNotFound) {
-            _rowHeights[row] = _standardRowHeight;
+            _rowHeights[row] = [self _effectiveRowHeight];
             row = [indexSet indexGreaterThanIndex: row];
         }
     }
@@ -1290,6 +1349,10 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 }
 
 - (void) reloadData {
+    for (NSView *view in _activeRowViews) {
+        [view removeFromSuperview];
+    }
+    [_activeRowViews removeAllObjects];
     [self noteNumberOfRowsChanged];
     [self setNeedsDisplay: YES];
     [_headerView setNeedsDisplay: YES];
@@ -1311,7 +1374,7 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     [_headerView setFrameSize: rect.size];
 
     [[self enclosingScrollView]
-            setVerticalLineScroll: _standardRowHeight +
+            setVerticalLineScroll: [self _effectiveRowHeight] +
                                    _intercellSpacing.height];
 
     [self setNeedsDisplay: YES];
@@ -1402,6 +1465,31 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 }
 
 - (void) drawRow: (NSInteger) row clipRect: (NSRect) clipRect {
+    if ([_delegate respondsToSelector: @selector(tableView:viewForTableColumn:row:)]) {
+        NSRange visibleColumns = [self columnsInRect: clipRect];
+        NSInteger drawThisColumn = visibleColumns.location;
+
+        if ([self isRowSelected: row]) {
+            [[NSColor selectedControlColor] setFill];
+            NSRectFill([self rectOfRow: row]);
+        }
+
+        for (; drawThisColumn < NSMaxRange(visibleColumns); drawThisColumn++) {
+            NSTableColumn *column = [_tableColumns objectAtIndex: drawThisColumn];
+            NSRect cellRect = [self frameOfCellAtColumn: drawThisColumn row: row];
+            NSView *cellView = [_delegate tableView: self viewForTableColumn: column row: row];
+            if (cellView != nil) {
+                [cellView setFrame: cellRect];
+                if ([cellView superview] != self) {
+                    [self addSubview: cellView];
+                }
+                [cellView setHidden: NO];
+                [cellView displayRectIgnoringOpacity: [cellView bounds]];
+            }
+        }
+        return;
+    }
+
     // draw only visible columns.
     NSRange visibleColumns = [self columnsInRect: clipRect];
     NSInteger drawThisColumn = visibleColumns.location;
@@ -1462,9 +1550,9 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
                     rectToFill.size.height; // This is for beyond the loop.
             heightFilled = rectToFill.origin.y;
         }
-        if (_standardRowHeight > 0.) {
+        if ([self _effectiveRowHeight] > 0.) {
             rectToFill.size.height =
-                    _standardRowHeight + _intercellSpacing.height;
+                    [self _effectiveRowHeight] + _intercellSpacing.height;
             while (heightFilled < clipRect.size.height) {
                 [(NSColor *) [rowColors objectAtIndex: i % colorCount] setFill];
                 NSRectFill(rectToFill);
@@ -1513,9 +1601,9 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
             [line lineToPoint: NSMakePoint(x + clipRect.size.width, y)];
         }
 
-        if (_standardRowHeight > 0.0) {
+        if ([self _effectiveRowHeight] > 0.0) {
             while (y < clipRect.size.height) {
-                y += _standardRowHeight + _intercellSpacing.height;
+                y += [self _effectiveRowHeight] + _intercellSpacing.height;
                 [line moveToPoint: NSMakePoint(clipRect.origin.x, y)];
                 [line lineToPoint: NSMakePoint(clipRect.origin.x +
                                                        clipRect.size.width,
@@ -2068,8 +2156,17 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     [self tile];
 }
 
+- (void) setDraggingSourceOperationMask: (NSDragOperation) mask
+                               forLocal: (BOOL) isLocal
+{
+    if (isLocal)
+        _draggingSourceMaskLocal = mask;
+    else
+        _draggingSourceMaskNonLocal = mask;
+}
+
 - (NSDragOperation) draggingSourceOperationMaskForLocal: (BOOL) isLocal {
-    return NSDragOperationCopy;
+    return isLocal ? _draggingSourceMaskLocal : _draggingSourceMaskNonLocal;
 }
 
 - (NSInteger) _getDraggedRow: (id<NSDraggingInfo>) info {
@@ -2192,6 +2289,44 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     NSUnimplementedMethod();
 }
 
+- (void) registerNib: (NSNib *) nib forIdentifier: (NSString *) identifier {
+    if (identifier == nil)
+        return;
+    if (nib != nil)
+        [_registeredNibs setObject: nib forKey: identifier];
+    else
+        [_registeredNibs removeObjectForKey: identifier];
+}
+
+- (NSView *) viewAtColumn: (NSInteger) column row: (NSInteger) row makeIfNecessary: (BOOL) makeIfNecessary {
+    if (column >= 0 && column < [_tableColumns count] &&
+        [_delegate respondsToSelector: @selector(tableView:viewForTableColumn:row:)]) {
+        NSTableColumn *col = [_tableColumns objectAtIndex: column];
+        return [_delegate tableView: self viewForTableColumn: col row: row];
+    }
+    return nil;
+}
+
+// Creates the view from the nib registered for the identifier, owned by the
+// given object. Returns nil when no nib is registered for it.
+- (NSView *) makeViewWithIdentifier: (NSString *) identifier owner: (id) owner {
+    NSNib *nib = identifier != nil ? [_registeredNibs objectForKey: identifier] : nil;
+    NSArray *topLevelObjects = nil;
+
+    if (nib == nil || ![nib instantiateWithOwner: owner topLevelObjects: &topLevelObjects])
+        return nil;
+
+    for (id object in topLevelObjects) {
+        if ([object isKindOfClass: [NSView class]]) {
+            if ([object identifier] == nil)
+                [object setIdentifier: identifier];
+            [_activeRowViews addObject: object];
+            return object;
+        }
+    }
+    return nil;
+}
+
 - (void)_readPersistentTableColumns {
     NSUnimplementedMethod();
 }
@@ -2203,6 +2338,18 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 @end
 
 @implementation NSTableView (NSTableViewStyle)
+
+// Cocotron draws rows in the plain style only, so the style is stored purely so
+// the getter round-trips a value set by a nib or a delegate. Deliberately does
+// not reloadData: that notifies numberOfRows, driving a bound NSArrayController
+// to re-apply a selection against rows it has not rebuilt, which raises.
+- (NSTableViewStyle) style {
+    return _style == NSTableViewStyleAutomatic ? NSTableViewStylePlain : _style;
+}
+
+- (void) setStyle: (NSTableViewStyle) style {
+    _style = style;
+}
 
 // Private AppKit: the insets a table view style adds around its rows. Cocotron
 // has only the plain style.

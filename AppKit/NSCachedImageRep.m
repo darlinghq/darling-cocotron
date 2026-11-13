@@ -64,24 +64,31 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return self;
 }
 
-// QUIRK: a cached image rep in an NSArchiver (typedstream) archive is TIFF data
-// followed by a char and three ints; the window it was cached in does not exist
-// when unarchiving, so the rep comes back as the NSBitmapImageRep of the TIFF
-// data. Not documented.
-// Evidence: layout reported by the fork author from archives macOS
-// applications wrote (tier 3 report, not reproduced: macOS 27 cannot archive
-// this class, MC13.8). The TIFF payload reads like the bitmap rep fixture.
-// Test: test_quirk_typedstream_cached_image_rep in
-// tests/appkit-typedstream-text.m (uses an archive written by hand)
+// A cached image rep in an NSArchiver (typedstream) archive is TIFF data followed by a char
+// and three ints (of unknown meaning). The window it was cached in does not exist when
+// unarchiving, so the rep comes back as the NSBitmapImageRep of the TIFF data; without data
+// no rep comes back, as on macOS. Versions up to 16 are refused.
 - (instancetype) initWithCoder: (NSCoder *) coder {
     if ([coder allowsKeyedCoding])
         return [super initWithCoder: coder];
+
+    // A class the archive does not record gives NSNotFound, which passes the gate.
+    NSInteger version = [coder versionForClassName: @"NSCachedImageRep"];
+    if (version < 17)
+        [NSException raise: NSInternalInconsistencyException
+                    format: @"Cannot decode very old archived cached image reps.  Cached image rep is version %ld.",
+                            (long) version];
 
     NSData *tiff = [coder decodeDataObject];
     char unknownChar;
     int unknownInts[3];
     [coder decodeValuesOfObjCTypes: "c", &unknownChar];
     [coder decodeValuesOfObjCTypes: "iii", &unknownInts[0], &unknownInts[1], &unknownInts[2]];
+
+    if (tiff == nil) {
+        [self release];
+        return nil;
+    }
 
     NSBitmapImageRep *bitmap = [[NSBitmapImageRep alloc] initWithData: tiff];
     if (bitmap == nil)
