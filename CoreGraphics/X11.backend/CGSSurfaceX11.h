@@ -20,9 +20,24 @@
 #define CGSSURFACEX11_H
 
 #import <CoreGraphics/CGSSurface.h>
+#import <X11/Xlib.h>
 
-@interface CGSSurfaceX11 : CGSSurface
+@class CGSWindowX11;
+
+// A CGS surface is a child X11 window of its CGS window, which is the drawable a
+// caller renders into. Unlike the Wayland backend, which can only ever give a toplevel
+// one surface because that would need a wl_subsurface, a window on X11 can hold as many
+// as the caller asks for, since each one is an independent X11 window.
+
+@interface CGSSurfaceX11 : CGSSurface {
+@public
+	// The X11 window this surface draws on. -[_window] is the CGS window that owns us.
+	Display* _display; // Borrowed from -[_window].
+	Window _xWindow;
+}
+
+-(instancetype) initWithWindow:(CGSWindow*) window surfaceID:(CGSSurfaceID) surfaceID;
+
 @end
 
 #endif
-

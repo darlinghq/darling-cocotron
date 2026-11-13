@@ -51,6 +51,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     _interpolationQuality = kO2InterpolationDefault;
     _shouldAntialias = YES;
     _antialiasingQuality = 64;
+    // A new context reports font smoothing on, with style 0x30 (as observed
+    // on macOS 26.7.3 for a bitmap context).
+    _shouldSmoothFonts = YES;
+    _fontSmoothingStyle = 0x30;
     _alpha = 1.;
     return self;
 }
@@ -376,6 +380,18 @@ void O2GStateSetTextHorizontalScaling(O2GState *self, O2Float value) {
 - (void) setShouldSmoothFonts: (BOOL) yesOrNo {
     _shouldSmoothFonts = yesOrNo;
     _fontIsDirty = YES;
+}
+
+- (BOOL) shouldSmoothFonts {
+    return _shouldSmoothFonts;
+}
+
+- (uint32_t) fontSmoothingStyle {
+    return _fontSmoothingStyle;
+}
+
+- (void) setFontSmoothingStyle: (uint32_t) style {
+    _fontSmoothingStyle = style;
 }
 
 void O2GStateSetLineWidth(O2GState *self, O2Float width) {

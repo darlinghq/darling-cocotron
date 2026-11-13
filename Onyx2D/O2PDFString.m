@@ -28,7 +28,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     _length = length;
     _noCopyNoFree = NO;
     _bytes = NSZoneMalloc(NULL, length);
-    strncpy((char *) _bytes, (const char *) bytes, length);
+    if (length)
+        memcpy(_bytes, bytes, length);
     return self;
 }
 

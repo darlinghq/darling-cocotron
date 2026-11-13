@@ -26,7 +26,11 @@
 #import "X11Monitors.h"
 
 @interface CGSConnectionX11 : CGSConnection {
+@public
+	// The X11 display, which the CGS windows and surfaces of this connection draw on.
 	Display *_display;
+
+@protected
 	// We use CFRunLoop directly, without going through any Foundation wrapper,
     // because Apple's Cocoa has none. Unlike Apple's Cocoa, we need to watch
     // over a Unix domain socket, not a Mach port.
@@ -44,6 +48,7 @@
 	int _xkbEventBase;
 	int _xrrEventBase;
 
+@private
 	// The main monitor in root coordinates, cached for -mouseLocation. Guarded by
 	// @synchronized(self); the cache is dropped when XRandR reports a
 	// reconfiguration, like _screens.

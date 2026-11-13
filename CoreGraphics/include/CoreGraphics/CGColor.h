@@ -1,3 +1,6 @@
+#ifndef CGCOLOR_H
+#define CGCOLOR_H
+
 /* Copyright (c) 2007 Christopher J. W. Lloyd
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
@@ -31,11 +34,15 @@ COREGRAPHICS_EXPORT CGColorRef CGColorRetain(CGColorRef self);
 COREGRAPHICS_EXPORT void CGColorRelease(CGColorRef self);
 
 COREGRAPHICS_EXPORT CGColorRef CGColorCreate(CGColorSpaceRef colorSpace,
-                                             const CGFloat *components);
+                                             const CGFloat *components)
+    CF_SWIFT_NAME(CGColor.init(colorSpace:components:));
 COREGRAPHICS_EXPORT CGColorRef CGColorCreateGenericGray(CGFloat gray,
                                                         CGFloat a);
 COREGRAPHICS_EXPORT CGColorRef CGColorCreateGenericRGB(CGFloat r, CGFloat g,
                                                        CGFloat b, CGFloat a);
+COREGRAPHICS_EXPORT CGColorRef CGColorCreateSRGB(CGFloat red, CGFloat green,
+                                                CGFloat blue, CGFloat alpha)
+    CF_SWIFT_NAME(CGColor.init(srgbRed:green:blue:alpha:));
 COREGRAPHICS_EXPORT CGColorRef CGColorCreateGenericCMYK(CGFloat c, CGFloat m,
                                                         CGFloat y, CGFloat k,
                                                         CGFloat a);
@@ -46,7 +53,8 @@ CGColorCreateWithPattern(CGColorSpaceRef colorSpace, CGPatternRef pattern,
 COREGRAPHICS_EXPORT CGColorRef CGColorCreateCopy(CGColorRef self);
 COREGRAPHICS_EXPORT CGColorRef CGColorCreateCopyByMatchingToColorSpace(
     CGColorSpaceRef colorSpace, CGColorRenderingIntent intent, CGColorRef color,
-    CFDictionaryRef options);
+    CFDictionaryRef options)
+    CF_SWIFT_NAME(CGColor.converted(to:intent:self:options:));
 COREGRAPHICS_EXPORT CGColorRef CGColorCreateCopyWithAlpha(CGColorRef self,
                                                           CGFloat a);
 
@@ -68,3 +76,5 @@ COREGRAPHICS_EXPORT const CFStringRef kCGColorBlack;
 COREGRAPHICS_EXPORT const CFStringRef kCGColorClear;
 
 CF_IMPLICIT_BRIDGING_DISABLED
+
+#endif /* CGCOLOR_H */

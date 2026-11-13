@@ -78,6 +78,9 @@ BOOL O2PathIsRect(O2PathRef self, O2Rect *rect);
 void O2PathApply(O2PathRef self, void *info, O2PathApplierFunction function);
 O2MutablePathRef O2PathCreateMutableCopy(O2PathRef self);
 O2PathRef O2PathCreateCopy(O2PathRef self);
+O2PathRef O2PathCreateCopyByStrokingPath(O2PathRef self,
+    const O2AffineTransform *transform, O2Float width, int cap, int join,
+    O2Float miterLimit);
 BOOL O2PathContainsPoint(O2PathRef self, const O2AffineTransform *xform,
                          O2Point point, BOOL evenOdd);
 

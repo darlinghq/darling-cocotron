@@ -138,3 +138,60 @@ CGColorSpaceRef CGColorSpaceCreateICCBased(size_t nComponents, const CGFloat *ra
         return CGColorSpaceCreateDeviceCMYK();
     }
 }
+
+typedef struct {
+    const CFStringRef *name;
+    const CFStringRef *extended;
+    const CFStringRef *extendedLinear;
+} CGColorSpaceRangeForms;
+
+static const CGColorSpaceRangeForms rangeForms[] = {
+    {&kCGColorSpaceSRGB, &kCGColorSpaceExtendedSRGB, &kCGColorSpaceExtendedLinearSRGB},
+    {&kCGColorSpaceExtendedSRGB, &kCGColorSpaceExtendedSRGB, &kCGColorSpaceExtendedLinearSRGB},
+    {&kCGColorSpaceLinearSRGB, &kCGColorSpaceExtendedLinearSRGB, &kCGColorSpaceExtendedLinearSRGB},
+    {&kCGColorSpaceExtendedLinearSRGB, &kCGColorSpaceExtendedLinearSRGB, &kCGColorSpaceExtendedLinearSRGB},
+    {&kCGColorSpaceDisplayP3, &kCGColorSpaceExtendedDisplayP3, &kCGColorSpaceExtendedLinearDisplayP3},
+    {&kCGColorSpaceExtendedDisplayP3, &kCGColorSpaceExtendedDisplayP3, &kCGColorSpaceExtendedLinearDisplayP3},
+    {&kCGColorSpaceLinearDisplayP3, &kCGColorSpaceExtendedLinearDisplayP3, &kCGColorSpaceExtendedLinearDisplayP3},
+    {&kCGColorSpaceExtendedLinearDisplayP3, &kCGColorSpaceExtendedLinearDisplayP3, &kCGColorSpaceExtendedLinearDisplayP3},
+    {&kCGColorSpaceExtendedLinearITUR_2020, &kCGColorSpaceExtendedLinearITUR_2020, &kCGColorSpaceExtendedLinearITUR_2020},
+};
+
+static const CGColorSpaceRangeForms *rangeFormsForSpace(CGColorSpaceRef space) {
+    CFStringRef name = CGColorSpaceGetName(space);
+    if (name == NULL)
+        return NULL;
+    for (size_t i = 0; i < sizeof(rangeForms) / sizeof(rangeForms[0]); i++) {
+        if (CFEqual(name, *rangeForms[i].name))
+            return &rangeForms[i];
+    }
+    return NULL;
+}
+
+CGColorSpaceRef CGColorSpaceCreateExtended(CGColorSpaceRef space) {
+    const CGColorSpaceRangeForms *forms = rangeFormsForSpace(space);
+    return forms ? CGColorSpaceCreateWithName(*forms->extended) : NULL;
+}
+
+CGColorSpaceRef CGColorSpaceCreateExtendedLinearized(CGColorSpaceRef space) {
+    const CGColorSpaceRangeForms *forms = rangeFormsForSpace(space);
+    return forms ? CGColorSpaceCreateWithName(*forms->extendedLinear) : NULL;
+}
+
+bool CGColorSpaceUsesExtendedRange(CGColorSpaceRef space) {
+    const CGColorSpaceRangeForms *forms = rangeFormsForSpace(space);
+    return forms != NULL && forms->name == forms->extended;
+}
+
+bool CGColorSpaceUsesITUR_2100TF(CGColorSpaceRef space) {
+    CFStringRef name = space != NULL ? CGColorSpaceGetName(space) : NULL;
+    if (name == NULL)
+        return false;
+    return CFEqual(name, kCGColorSpaceITUR_2100_PQ) ||
+           CFEqual(name, kCGColorSpaceITUR_2100_HLG);
+}
+
+bool CGColorSpaceIsHLGBased(CGColorSpaceRef space) {
+    CFStringRef name = space != NULL ? CGColorSpaceGetName(space) : NULL;
+    return name != NULL && CFEqual(name, kCGColorSpaceITUR_2100_HLG);
+}

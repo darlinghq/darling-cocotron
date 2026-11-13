@@ -1,3 +1,6 @@
+#ifndef CGIMAGE_H
+#define CGIMAGE_H
+
 /* Copyright(c) 2006 Christopher J. W. Lloyd
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
@@ -24,7 +27,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #define kCGBitmapAlphaInfoMask 0x1F
 
-typedef enum {
+typedef CF_ENUM(uint32_t, CGImageAlphaInfo) {
     kCGImageAlphaNone,
     kCGImageAlphaPremultipliedLast,
     kCGImageAlphaPremultipliedFirst,
@@ -32,8 +35,9 @@ typedef enum {
     kCGImageAlphaFirst,
     kCGImageAlphaNoneSkipLast,
     kCGImageAlphaNoneSkipFirst,
-    kCGImageAlphaOnly,
-} CGImageAlphaInfo;
+    // Prefix stripping alone would name this case .only; Apple's Swift spelling is .alphaOnly.
+    kCGImageAlphaOnly CF_SWIFT_NAME(alphaOnly),
+};
 
 enum {
     kCGBitmapFloatComponents = 0x100,
@@ -86,6 +90,21 @@ CGImageCreateCopyWithColorSpace(CGImageRef self, CGColorSpaceRef colorSpace);
 COREGRAPHICS_EXPORT CGImageRef CGImageCreateWithImageInRect(CGImageRef self,
                                                             CGRect rect);
 
+// Content headroom is the peak brightness of the image content as a multiple
+// of SDR white. It must be zero (unknown) or at least one, and can only be
+// set on images in an extended range, PQ or HLG colour space.
+COREGRAPHICS_EXPORT float kCGDefaultHDRImageContentHeadroom;
+COREGRAPHICS_EXPORT CGImageRef CGImageCreateWithContentHeadroom(
+        float headroom, size_t width, size_t height, size_t bitsPerComponent,
+        size_t bitsPerPixel, size_t bytesPerRow, CGColorSpaceRef colorSpace,
+        CGBitmapInfo bitmapInfo, CGDataProviderRef dataProvider,
+        const CGFloat *decode, bool interpolate,
+        CGColorRenderingIntent renderingIntent);
+COREGRAPHICS_EXPORT CGImageRef
+CGImageCreateCopyWithContentHeadroom(float headroom, CGImageRef image);
+COREGRAPHICS_EXPORT float CGImageGetContentHeadroom(CGImageRef image);
+COREGRAPHICS_EXPORT float CGImageCalculateContentHeadroom(CGImageRef image);
+
 COREGRAPHICS_EXPORT CGImageRef CGImageCreateWithJPEGDataProvider(
         CGDataProviderRef jpegProvider, const CGFloat *decode, bool interpolate,
         CGColorRenderingIntent renderingIntent);
@@ -115,3 +134,5 @@ COREGRAPHICS_EXPORT bool CGImageIsMask(CGImageRef self);
 COREGRAPHICS_EXPORT CGImageAlphaInfo CGImageGetAlphaInfo(CGImageRef self);
 
 CF_IMPLICIT_BRIDGING_DISABLED
+
+#endif /* CGIMAGE_H */

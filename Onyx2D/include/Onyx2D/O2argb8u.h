@@ -97,38 +97,32 @@ static inline O2argb8u O2argb8uMultiplyByCoverage(O2argb8u result,
     return result;
 }
 
+// Weighted sum of two pixels. The coverages are in 0...COVERAGE_MULTIPLIER
+// and must add up to COVERAGE_MULTIPLIER, so the result of two equal
+// components is that component. The products are added before the shift:
+// shifting each product down first would lose up to one step per term and
+// turn a uniform 255 into 253 after two blends.
 static inline O2argb8u O2argb8uMultiplyByCoverageAdd(O2argb8u left,
                                                      uint32_t leftCoverage,
                                                      O2argb8u right,
                                                      uint32_t rightCoverage)
 {
-    uint32_t srb = *(uint32_t *) &left;
-    uint32_t sag = srb >> 8;
+    uint32_t l = *(uint32_t *) &left;
+    uint32_t r = *(uint32_t *) &right;
 
-    sag &= 0x00FF00FF;
-    srb &= 0x00FF00FF;
-    sag = ((sag * leftCoverage) >> 8) & 0x00FF00FF;
-    srb = ((srb * leftCoverage) >> 8) & 0x00FF00FF;
+    // Two 8-bit channels per word, each in a 16-bit lane. A lane holds at
+    // most 255 * COVERAGE_MULTIPLIER after the sum, so it does not overflow.
+    uint32_t sag = (l >> 8) & 0x00FF00FF;
+    uint32_t srb = l & 0x00FF00FF;
+    uint32_t dag = (r >> 8) & 0x00FF00FF;
+    uint32_t drb = r & 0x00FF00FF;
 
-    uint32_t drb = *(uint32_t *) &right;
-    uint32_t dag = drb >> 8;
+    sag = ((sag * leftCoverage + dag * rightCoverage) >> 8) & 0x00FF00FF;
+    srb = ((srb * leftCoverage + drb * rightCoverage) >> 8) & 0x00FF00FF;
 
-    dag &= 0x00FF00FF;
-    drb &= 0x00FF00FF;
+    uint32_t result = (sag << 8) | srb;
 
-    dag = ((dag * rightCoverage) >> 8) & 0x00FF00FF;
-    drb = ((drb * rightCoverage) >> 8) & 0x00FF00FF;
-
-    uint32_t r;
-
-    sag += dag;
-    r = RI_INT_MIN(sag, 0x00FF0000) << 8;
-    r |= RI_INT_MIN(sag & 0xFFFF, 255) << 8;
-    srb += drb;
-    r |= RI_INT_MIN(srb, 0x00FF0000);
-    r |= RI_INT_MIN(srb & 0xFFFF, 255);
-
-    return *(O2argb8u *) &r;
+    return *(O2argb8u *) &result;
 }
 
 static inline O2argb8u O2argb8uAdd(O2argb8u result, O2argb8u other) {

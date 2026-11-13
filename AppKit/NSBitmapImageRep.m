@@ -471,10 +471,15 @@ NSBitmapImageRepPropertyKey NSImageCurrentFrame = @"NSImageCurrentFrame";
             // premultiplied sources are already in that order.
             BOOL alphaFirst = (_bitmapFormat & NSAlphaFirstBitmapFormat) != 0;
 
-            if (bitmapInfo ==
-                        (kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big) ||
-                bitmapInfo ==
-                        (kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Big)) {
+            CGBitmapInfo alphaInfo = bitmapInfo & kCGBitmapAlphaInfoMask;
+            CGBitmapInfo byteOrder = bitmapInfo & kCGBitmapByteOrderMask;
+
+            // The default byte order and the 32-bit big-endian one both mean
+            // component order for 8-bit samples.
+            if ((alphaInfo == kCGImageAlphaPremultipliedLast ||
+                 alphaInfo == kCGImageAlphaPremultipliedFirst) &&
+                (byteOrder == kCGBitmapByteOrderDefault ||
+                 byteOrder == kCGBitmapByteOrder32Big)) {
                 for (i = 0; i < length; i++)
                     _bitmapPlanes[0][i] = bytes[i];
             } else {
@@ -979,10 +984,10 @@ NSBitmapImageRepPropertyKey NSImageCurrentFrame = @"NSImageCurrentFrame";
 }
 
 - (CGBitmapInfo) CGBitmapInfo {
-    // The bitmap planes store samples in component order (RGBA, ARGB with NSAlphaFirstBitmapFormat), i.e. big-endian
-    // for 8-bit samples; createBitmapIfNeeded copies CGImage data in that layout. Say so explicitly: Onyx2D treats
-    // kCGBitmapByteOrderDefault as host (little) endian and would read and encode the channels reversed.
-    CGBitmapInfo result = (_bitsPerSample == 8) ? kCGBitmapByteOrder32Big : kCGBitmapByteOrderDefault;
+    // The bitmap planes store samples in component order (RGBA, ARGB with NSAlphaFirstBitmapFormat), which is what
+    // the default byte order means for 8-bit samples; createBitmapIfNeeded copies CGImage data in that layout. As on
+    // macOS, no byte order is reported for the image of such a rep.
+    CGBitmapInfo result = kCGBitmapByteOrderDefault;
 
     if (![self hasAlpha]) {
         if (_bitsPerPixel == 32 && _samplesPerPixel == 3) {

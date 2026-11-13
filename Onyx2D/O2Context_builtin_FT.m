@@ -2,6 +2,8 @@
 #import <Onyx2D/O2Font_freetype.h>
 #import <Onyx2D/O2GraphicsState.h>
 #import <Onyx2D/O2Paint_color.h>
+#include <stdint.h>
+#include <stdlib.h>
 
 @implementation O2Context (O2BitmapContext)
 
@@ -184,10 +186,20 @@ static void renderFreeTypeBitmap(O2Context_builtin_FT *self, O2Surface *surface,
            advances: (const O2Size *) advances
               count: (NSUInteger) count
 {
-    // FIXME: use advances if not NULL
+    if (count == 0 || glyphs == NULL)
+        return;
 
     if (_surface == NULL)
         return;
+
+    O2Size *defaultAdvances = NULL;
+    if (advances == NULL) {
+        if (count > SIZE_MAX / sizeof(*defaultAdvances))
+            return;
+        defaultAdvances = malloc(count * sizeof(*defaultAdvances));
+        if (defaultAdvances == NULL)
+            return;
+    }
 
     O2SurfaceLock(_surface);
 
@@ -213,54 +225,59 @@ static void renderFreeTypeBitmap(O2Context_builtin_FT *self, O2Surface *surface,
     @synchronized(font) {
         FT_Face face = [font face];
 
-        int i;
+        NSUInteger i;
         FT_Error ftError;
 
         if (face == NULL) {
             NSLog(@"face is NULL");
+            O2PaintRelease(paint);
             O2SurfaceUnlock(_surface);
+            free(defaultAdvances);
             return;
         }
-
-        FT_GlyphSlot slot = face->glyph;
 
         if ((ftError =
                      FT_Set_Char_Size(face, 0, fontSize.height * 64, 72.0, 72.0))) {
             NSLog(@"FT_Set_Char_Size returned %d", ftError);
+            O2PaintRelease(paint);
             O2SurfaceUnlock(_surface);
+            free(defaultAdvances);
             return;
         }
 
+        if (advances == NULL)
+            O2ContextGetDefaultAdvances(self, glyphs, defaultAdvances, count);
+
+        const O2Size *useAdvances = (advances != NULL) ? advances : defaultAdvances;
+
         for (i = 0; i < count; i++) {
+            O2FreeTypeCachedGlyph *cached =
+                    [font rasterizeGlyph: glyphs[i] pointSize: fontSize.height];
 
-            ftError = FT_Load_Glyph(face, glyphs[i], FT_LOAD_DEFAULT);
-            if (ftError)
-                continue;
+            if (cached != nil)
+                renderFreeTypeBitmap(self, _surface, &cached->bitmap,
+                                     point.x + cached->left,
+                                     point.y - cached->top, paint);
 
-            ftError = FT_Render_Glyph(face->glyph, FT_RENDER_MODE_NORMAL);
-            if (ftError)
-                continue;
+            if (advances != NULL) {
+                // Advances are in text space, so only the linear part of Trm
+                // applies; that is also what carries the device y-flip.
+                O2Size step = O2SizeApplyAffineTransform(advances[i], Trm);
 
-            renderFreeTypeBitmap(self, _surface, &slot->bitmap,
-                                 point.x + slot->bitmap_left,
-                                 point.y - slot->bitmap_top, paint);
-
-            point.x += slot->advance.x >> 6;
+                point.x += step.width;
+                point.y += step.height;
+            } else if (cached != nil) {
+                // Keep FreeType's hinted advance here; defaultAdvances would
+                // change what this path renders today. Cost: the draw step and
+                // the text-position update below then come from different
+                // sources, so chained runs drift by the hinting delta.
+                point.x += cached->advance >> 6;
+            }
         }
 
         O2PaintRelease(paint);
-
-        int glyphAdvances[count];
-        O2Float unitsPerEm = O2FontGetUnitsPerEm(font);
-
-        O2FontGetGlyphAdvances(font, glyphs, count, glyphAdvances);
-
-        O2Float total = 0;
-
-        for (i = 0; i < count; i++)
-            total += glyphAdvances[i];
-
-        total = (total / O2FontGetUnitsPerEm(font)) * gState->_pointSize;
+        O2ContextConcatAdvancesToTextMatrix(self, useAdvances, count);
+        free(defaultAdvances);
 
     } /* font lock */
     O2SurfaceUnlock(_surface);

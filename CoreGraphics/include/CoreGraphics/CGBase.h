@@ -11,4 +11,13 @@
 #endif
 
 
+// Headers written against a recent macOS SDK annotate CoreGraphics pointer parameters with
+// cg_nullable. Without it they do not parse. The qualifier goes after the '*'
+// (float * cg_nullable p); before it, clang rejects it as applying to the pointee.
+#if __has_feature(nullability)
+#define cg_nullable __nullable
+#else
+#define cg_nullable
+#endif
+
 #endif

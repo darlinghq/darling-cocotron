@@ -1,3 +1,6 @@
+#ifndef CGDISPLAYSTREAM_H
+#define CGDISPLAYSTREAM_H
+
 /*
  This file is part of Darling.
 
@@ -80,3 +83,5 @@ COREGRAPHICS_EXPORT CGDisplayStreamUpdateRef CGDisplayStreamUpdateCreateMergedUp
 COREGRAPHICS_EXPORT void CGDisplayStreamUpdateGetMovedRectsDelta(
     CGDisplayStreamUpdateRef updateRef, CGFloat *dx, CGFloat *dy);
 COREGRAPHICS_EXPORT size_t CGDisplayStreamUpdateGetDropCount(CGDisplayStreamUpdateRef updateRef);
+
+#endif /* CGDISPLAYSTREAM_H */

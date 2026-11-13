@@ -17,6 +17,7 @@
  along with Darling.  If not, see <http://www.gnu.org/licenses/>.
 */
 #import "CGSConnectionX11.h"
+#import "CGSWindowX11.h"
 #import <CoreGraphics/CGSKeyboardLayout.h>
 #import <CoreGraphics/CGSScreen.h>
 #include "CarbonKeys.h"
@@ -33,7 +34,7 @@
 #import "X11Monitors.h"
 #import "X11RandR.h"
 #import "X11WindowOwner.h"
-#import <CoreGraphics/CGWindow.h>
+#import <CoreGraphics/CGWindowPrivate.h>
 #import <CoreGraphics/CGWindowLevel.h>
 
 // TODO: Use XInput2:
@@ -124,6 +125,13 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type, CFDataRef a
 
 -(void) dealloc
 {
+	// The windows destroy X11 windows on our display, so they have to go first.
+	// -[CGSConnection dealloc] would only release _windows after this body.
+	@synchronized (_windows)
+	{
+		[_windows removeAllObjects];
+	}
+
 	if (_display)
 		XCloseDisplay(_display);
 
@@ -484,6 +492,12 @@ static double windowOpacity(Display* display, Window window)
 	return result;
 }
 
+-(void*) nativeDisplay
+{
+	// EGLNativeDisplayType on X11 is the Display itself.
+	return _display;
+}
+
 -(CGPoint) mouseLocation
 {
 	Window child, root = DefaultRootWindow(_display);
@@ -678,7 +692,21 @@ static double windowOpacity(Display* display, Window window)
 
 -(CGSWindow*) newWindow:(CGSRegionRef)region
 {
+	CGSWindowID windowID = _nextWindowId++;
+	CGSWindowX11* window = [[CGSWindowX11 alloc] initWithRegion: region
+		connection: self
+		windowID: windowID];
+	// A window that could not be created is reported by -[CGSWindowX11 init...];
+	// CGSNewWindow() turns the nil into kCGErrorIllegalArgument.
+	if (window == nil)
+		return nil;
 
+	@synchronized (_windows)
+	{
+		[_windows setObject: window forKey: [NSNumber numberWithInt: windowID]];
+	}
+	[window release];
+	return window;
 }
 
 +(BOOL) isAvailable

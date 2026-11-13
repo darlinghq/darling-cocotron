@@ -632,7 +632,11 @@ CFDictionaryRef CGDisplayCurrentMode(CGDirectDisplayID display) {
 }
 
 size_t CGDisplayModeGetPixelWidth(CGDisplayModeRef mode) {
-    return 0;
+    NSDictionary *dict = (NSDictionary *) mode;
+    NSNumber *pixelWidth = [dict valueForKey: @"PixelWidth"];
+    if (pixelWidth)
+        return [pixelWidth unsignedIntValue];
+    return CGDisplayModeGetWidth(mode);
 }
 
 size_t CGDisplayModeGetPixelHeight(CGDisplayModeRef mode) {
@@ -681,6 +685,12 @@ static bool mainDisplayIsBuiltin(void) {
     });
 
     return builtin;
+}
+
+// The display backends report no display power state, and a display
+// they list stays drawable, so no display is ever reported asleep.
+boolean_t CGDisplayIsAsleep(CGDirectDisplayID display) {
+    return false;
 }
 
 boolean_t CGDisplayIsBuiltin(CGDirectDisplayID display) {

@@ -218,6 +218,7 @@ void O2ContextRelease(O2ContextRef self);
 
 // context state
 void O2ContextSetAllowsAntialiasing(O2ContextRef self, BOOL yesOrNo);
+BOOL O2ContextGetAllowsAntialiasing(O2ContextRef self);
 
 // layers
 void O2ContextBeginTransparencyLayer(O2ContextRef self, NSDictionary *unused);
@@ -334,8 +335,12 @@ void O2ContextSetFontSize(O2ContextRef self, O2Float size);
 void O2ContextSelectFont(O2ContextRef self, const char *name, O2Float size,
                          O2TextEncoding encoding);
 void O2ContextSetShouldSmoothFonts(O2ContextRef self, BOOL yesOrNo);
+BOOL O2ContextGetShouldSmoothFonts(O2ContextRef self);
 void O2ContextSetAllowsFontSmoothing(O2ContextRef self,
                                      BOOL allowsFontSmoothing);
+BOOL O2ContextGetAllowsFontSmoothing(O2ContextRef self);
+void O2ContextSetFontSmoothingStyle(O2ContextRef self, uint32_t style);
+uint32_t O2ContextGetFontSmoothingStyle(O2ContextRef self);
 void O2ContextSetAllowsFontSubpixelQuantization(
         O2ContextRef self, BOOL allowsFontSubpixelQuantization);
 void O2ContextSetShouldSubpixelQuantizeFonts(O2ContextRef self,

@@ -22,7 +22,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSGraphicsContextFunctions.h>
 #import <AppKit/NSWindow-Private.h>
 #import <AppKit/NSWindow.h>
-#import <CoreGraphics/CGWindow.h>
+#import <CoreGraphics/CGWindowPrivate.h>
 
 @implementation NSCachedImageRep
 

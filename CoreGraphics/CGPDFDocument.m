@@ -19,6 +19,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <CoreGraphics/CoreGraphics.h>
 #import <Onyx2D/O2PDFDocument.h>
+#import <Onyx2D/O2PDFDictionary.h>
+#import <Onyx2D/O2PDFxref.h>
 
 CGPDFDocumentRef CGPDFDocumentRetain(CGPDFDocumentRef self) {
     return (CGPDFDocumentRef)[self retain];
@@ -44,6 +46,10 @@ CGPDFPageRef CGPDFDocumentGetPage(CGPDFDocumentRef self, size_t pageNumber) {
     return (CGPDFPageRef)[self pageAtNumber: pageNumber];
 }
 
+CGPDFDictionaryRef CGPDFDocumentGetInfo(CGPDFDocumentRef self) {
+    return (CGPDFDictionaryRef)[(O2PDFDocument *)self infoDictionary];
+}
+
 bool CGPDFDocumentIsEncrypted(CGPDFDocumentRef self) {
     return [(O2PDFDocument *)self encryptDictionary] != nil;
 }
@@ -52,4 +58,14 @@ bool CGPDFDocumentIsEncrypted(CGPDFDocumentRef self) {
 // so an encrypted document can never be unlocked here: only an unencrypted one is.
 bool CGPDFDocumentIsUnlocked(CGPDFDocumentRef self) {
     return !CGPDFDocumentIsEncrypted(self);
+}
+
+bool CGPDFDocumentAllowsCopying(CGPDFDocumentRef self) {
+    O2PDFDictionary *trailer = [[(O2PDFDocument *)self xref] trailer];
+    if (!trailer)
+        return false;
+    O2PDFObject *encryption = nil;
+    if (![trailer getObjectForKey:"Encrypt" value:&encryption])
+        return true;
+    return [encryption objectType] == kO2PDFObjectTypeNull;
 }

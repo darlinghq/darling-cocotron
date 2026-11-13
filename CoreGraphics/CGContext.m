@@ -18,7 +18,12 @@ AN ACTION OF CONTRACT,TORT OR OTHERWISE,ARISING FROM,OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import "CGConversions.h"
+#import "CGGradientPrivate.h"
 #import <CoreGraphics/CGContext.h>
+#import <CoreGraphics/CGFunction.h>
+#import <CoreGraphics/CGGradient.h>
+#import <CoreGraphics/CGShading.h>
+#import <CoreGraphics/CoreGraphicsPrivate.h>
 #import <Onyx2D/O2Context.h>
 #import <Onyx2D/O2MutablePath.h>
 
@@ -32,6 +37,10 @@ void CGContextRelease(CGContextRef context) {
 
 void CGContextSetAllowsAntialiasing(CGContextRef context, bool yesOrNo) {
     O2ContextSetAllowsAntialiasing((O2ContextRef)context, yesOrNo);
+}
+
+bool CGContextGetAllowsAntialiasing(CGContextRef context) {
+    return O2ContextGetAllowsAntialiasing((O2ContextRef)context);
 }
 
 void CGContextBeginTransparencyLayer(CGContextRef context,
@@ -364,6 +373,10 @@ void CGContextSetShouldSmoothFonts(CGContextRef context, bool yesOrNo) {
     O2ContextSetShouldSmoothFonts((O2ContextRef)context, yesOrNo);
 }
 
+bool CGContextGetShouldSmoothFonts(CGContextRef context) {
+    return O2ContextGetShouldSmoothFonts((O2ContextRef)context);
+}
+
 void CGContextSetLineWidth(CGContextRef context, CGFloat width) {
     O2ContextSetLineWidth((O2ContextRef)context, width);
 }
@@ -566,6 +579,18 @@ void CGContextSetAllowsFontSmoothing(CGContextRef context,
                                     allowsFontSmoothing);
 }
 
+bool CGContextGetAllowsFontSmoothing(CGContextRef context) {
+    return O2ContextGetAllowsFontSmoothing((O2ContextRef) context);
+}
+
+void CGContextSetFontSmoothingStyle(CGContextRef context, uint32_t style) {
+    O2ContextSetFontSmoothingStyle((O2ContextRef) context, style);
+}
+
+uint32_t CGContextGetFontSmoothingStyle(CGContextRef context) {
+    return O2ContextGetFontSmoothingStyle((O2ContextRef) context);
+}
+
 void CGContextSetAllowsFontSubpixelQuantization(
         CGContextRef context, bool allowsFontSubpixelQuantization)
 {
@@ -594,18 +619,94 @@ void CGContextSetShouldSubpixelPositionFonts(CGContextRef context,
                                             shouldSubpixelPositionFonts);
 }
 
+/* The shading samples the stops through a CGFunction of position. */
+static void CGGradientEvaluate(void *info, const CGFloat *in, CGFloat *out) {
+    CGGradientColorAtLocation((CGGradientRef)info, in[0], out);
+}
+
+static CGShadingRef CGGradientCreateShading(CGGradientRef gradient,
+                                             CGPoint startPoint,
+                                             CGFloat startRadius,
+                                             CGPoint endPoint,
+                                             CGFloat endRadius,
+                                             bool isRadial,
+                                             CGGradientDrawingOptions options) {
+    CGFloat domain[] = { 0.0, 1.0 };
+    CGFloat range[2 * CGGradientMaximumComponents];
+    CGFunctionCallbacks callbacks;
+    CGFunctionRef function;
+    CGShadingRef shading;
+    size_t i, numberOfComponents = gradient->numberOfComponents;
+
+    /* One 0...1 range pair per output component, as CGFunctionCreate expects. */
+    for (i = 0; i < numberOfComponents; i++) {
+        range[2 * i] = 0.0;
+        range[2 * i + 1] = 1.0;
+    }
+
+    memset(&callbacks, 0, sizeof(callbacks));
+    callbacks.evaluate = CGGradientEvaluate;
+
+    function = CGFunctionCreate((void *)gradient, 1, domain, numberOfComponents,
+                               range, &callbacks);
+    if (function == NULL) {
+        NSLog(@"CGContextDraw%sGradient, could not create the colour function",
+              isRadial ? "Radial" : "Linear");
+        return NULL;
+    }
+
+    if (isRadial)
+        shading = CGShadingCreateRadial(
+                gradient->colorSpace, startPoint, startRadius, endPoint,
+                endRadius, function,
+                (options & kCGGradientDrawsBeforeStartLocation) != 0,
+                (options & kCGGradientDrawsAfterEndLocation) != 0);
+    else
+        shading = CGShadingCreateAxial(
+                gradient->colorSpace, startPoint, endPoint, function,
+                (options & kCGGradientDrawsBeforeStartLocation) != 0,
+                (options & kCGGradientDrawsAfterEndLocation) != 0);
+
+    /* The function keeps the gradient pointer unretained (O2FunctionInit), so a
+     * deferred shading must not outlive the gradient; both callers release it before returning. */
+    CGFunctionRelease(function);
+    return shading;
+}
+
 void CGContextDrawLinearGradient(CGContextRef c,
                                  CGGradientRef gradient, CGPoint startPoint, CGPoint endPoint,
                                  CGGradientDrawingOptions options)
 {
-    printf("STUB %s\n", __PRETTY_FUNCTION__);
+    CGShadingRef shading;
+
+    if (c == NULL || gradient == NULL)
+        return;
+
+    shading = CGGradientCreateShading(gradient, startPoint, 0.0, endPoint, 0.0,
+                                      false, options);
+    if (shading == NULL)
+        return;
+
+    CGContextDrawShading(c, shading);
+    CGShadingRelease(shading);
 }
 
 void CGContextDrawRadialGradient(CGContextRef c,
                                  CGGradientRef gradient, CGPoint startCenter, CGFloat startRadius,
                                  CGPoint endCenter, CGFloat endRadius, CGGradientDrawingOptions options)
 {
-    printf("STUB %s\n", __PRETTY_FUNCTION__);
+    CGShadingRef shading;
+
+    if (c == NULL || gradient == NULL)
+        return;
+
+    shading = CGGradientCreateShading(gradient, startCenter, startRadius,
+                                      endCenter, endRadius, true, options);
+    if (shading == NULL)
+        return;
+
+    CGContextDrawShading(c, shading);
+    CGShadingRelease(shading);
 }
 
 void CGContextDrawTiledImage(CGContextRef c, CGRect rect, CGImageRef image)
@@ -619,11 +720,16 @@ void CGContextShowGlyphsAtPositions(CGContextRef c,
 {
     if (c == NULL || glyphs == NULL || positions == NULL)
         return;
-    // Each position is in text space, like the point of
-    // CGContextShowGlyphsAtPoint. The text position is left as it was.
+    // Each position is in text space: the text matrix is applied to it to
+    // find where the glyph origin lands (a shear or translation in the text
+    // matrix moves the glyph). The text matrix and text position are left as
+    // they were.
+    CGAffineTransform matrix = CGContextGetTextMatrix(c);
     CGPoint saved = CGContextGetTextPosition(c);
-    for (size_t i = 0; i < count; i++)
-        CGContextShowGlyphsAtPoint(c, positions[i].x, positions[i].y,
-                                   glyphs + i, 1);
+    for (size_t i = 0; i < count; i++) {
+        CGPoint origin = CGPointApplyAffineTransform(positions[i], matrix);
+        CGContextShowGlyphsAtPoint(c, origin.x, origin.y, glyphs + i, 1);
+    }
+    CGContextSetTextMatrix(c, matrix);
     CGContextSetTextPosition(c, saved.x, saved.y);
 }

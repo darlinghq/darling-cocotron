@@ -150,6 +150,7 @@ O2ColorSpaceRef O2ColorSpaceCreateWithName(CFStringRef name) {
         kO2ColorSpaceLinearSRGB,
         kO2ColorSpaceExtendedLinearSRGB,
         kO2ColorSpaceDisplayP3,
+        kO2ColorSpaceITUR_2020,
         CFSTR("kCGColorSpaceExtendedDisplayP3"),
         CFSTR("kCGColorSpaceLinearDisplayP3"),
         CFSTR("kCGColorSpaceExtendedLinearDisplayP3"),

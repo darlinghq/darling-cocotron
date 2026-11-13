@@ -28,6 +28,7 @@ set(CoreText_sources
 	CTLine.m
 	CTRun.m
 	CTRunDelegate.c
+	CTTypesetter.m
 	KTFont.m
 	KTFont_FT.m
 	constants.c
@@ -55,6 +56,7 @@ add_framework(CoreText
 		objc
 		system
 		CoreFoundation
+		icucore
 		Foundation
 		CoreGraphics
 		Onyx2D

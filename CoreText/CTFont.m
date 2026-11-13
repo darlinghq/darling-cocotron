@@ -24,6 +24,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <CoreGraphics/CGDataProvider.h>
 #import <CoreGraphics/CGFont.h>
 #import <Onyx2D/O2Font.h>
+#import <Onyx2D/O2Font_freetype.h>
+#import <objc/runtime.h>
 #import "KTFontDescriptor.h"
 
 // CTFontRef and NSFont are toll-free bridged. AppKit's NSFont wraps a
@@ -36,11 +38,38 @@ static KTFont *ktFont(CTFontRef font) {
     return (KTFont *) object;
 }
 
+// The explicit cascade list (kCTFontCascadeListAttribute) a font was created
+// with: an array of font descriptors, kept with the font object.
+static char fontCascadeKey;
+
+static NSArray *fontCascade(CTFontRef font) {
+    return objc_getAssociatedObject(ktFont(font), &fontCascadeKey);
+}
+
+static CTFontRef fontWithCascade(CTFontRef font, id cascade) {
+    if (font != NULL && [cascade isKindOfClass: [NSArray class]] && [cascade count] > 0)
+        objc_setAssociatedObject(ktFont(font), &fontCascadeKey, cascade,
+                                 OBJC_ASSOCIATION_COPY);
+    return font;
+}
+
+static id cascadeOfAttributes(CTFontDescriptorRef attributes) {
+    if (attributes == NULL)
+        return nil;
+    return [(id) CTFontDescriptorCopyAttribute(attributes, kCTFontCascadeListAttribute)
+            autorelease];
+}
+
 static CTFontRef createFont(CGFontRef graphicsFont, CGFloat size) {
     // A size of 0 means the default size of 12 points.
     if (size == 0)
         size = 12;
     return (CTFontRef) [[KTFont alloc] initWithFont: graphicsFont size: size];
+}
+
+uint32_t CTGetCoreTextVersion(void)
+{
+    return 0x000B0000;
 }
 
 const CFStringRef kCTFontCopyrightNameKey = CFSTR("CTFontCopyrightName");
@@ -124,7 +153,7 @@ CTFontRef CTFontCreateWithFontDescriptor(CTFontDescriptorRef descriptor, CGFloat
         if (graphicsFont != NULL) {
             CTFontRef result = createFont(graphicsFont, size);
             CGFontRelease(graphicsFont);
-            return result;
+            return fontWithCascade(result, cascadeOfAttributes(descriptor));
         }
     }
 
@@ -135,7 +164,7 @@ CTFontRef CTFontCreateWithFontDescriptor(CTFontDescriptorRef descriptor, CGFloat
         return NULL;
     CTFontRef result = CTFontCreateWithName(name, size, matrix);
     CFRelease(name);
-    return result;
+    return fontWithCascade(result, cascadeOfAttributes(descriptor));
 }
 
 CTFontRef CTFontCreateWithFontDescriptorAndOptions(CTFontDescriptorRef descriptor, CGFloat size,
@@ -163,20 +192,23 @@ CTFontRef CTFontCreateCopyWithAttributes(CTFontRef font, CGFloat size,
     if (size == 0)
         size = [object pointSize];
 
+    // The copy keeps the cascade list unless the attributes supply another.
+    id cascade = cascadeOfAttributes(attributes) ?: fontCascade(font);
+
     if (attributes != NULL) {
         CFStringRef name = CTFontDescriptorCopyAttribute(attributes, kCTFontNameAttribute);
         if (name != NULL) {
             CTFontRef result = CTFontCreateWithName(name, size, matrix);
             CFRelease(name);
             if (result != NULL)
-                return result;
+                return fontWithCascade(result, cascade);
         }
     }
 
     CGFontRef graphicsFont = [object copyGraphicsFont];
     CTFontRef result = createFont(graphicsFont, size);
     CGFontRelease(graphicsFont);
-    return result;
+    return fontWithCascade(result, cascade);
 }
 
 CTFontRef CTFontCreateCopyWithSymbolicTraits(CTFontRef font, CGFloat size,
@@ -197,15 +229,97 @@ CTFontRef CTFontCreateCopyWithFamily(CTFontRef font, CGFloat size,
 
 CTFontRef CTFontCreateForString(CTFontRef currentFont, CFStringRef string, CFRange range)
 {
-    printf("STUB %s\n", __PRETTY_FUNCTION__);
-    return nil;
+    return CTFontCreateForStringWithLanguage(currentFont, string, range, NULL);
+}
+
+// Whether the font has a glyph for every character of the UTF-16 text.
+static bool fontCoversText(CTFontRef font, const UniChar *characters, CFIndex count) {
+    CGGlyph *glyphs = calloc((size_t) count, sizeof(*glyphs));
+    if (glyphs == NULL)
+        return false;
+    bool covers = CTFontGetGlyphsForCharacters(font, characters, glyphs, count);
+    free(glyphs);
+    return covers;
 }
 
 CTFontRef CTFontCreateForStringWithLanguage(CTFontRef currentFont, CFStringRef string,
                                             CFRange range, CFStringRef language)
 {
-    printf("STUB %s\n", __PRETTY_FUNCTION__);
-    return nil;
+    CFIndex length = string != NULL ? CFStringGetLength(string) : 0;
+    if (ktFont(currentFont) == nil || string == NULL || range.location < 0 ||
+        range.length < 0 || range.location > length ||
+        range.length > length - range.location)
+        return NULL;
+    if (range.length == 0)
+        return (CTFontRef) CFRetain(currentFont);
+    if ((size_t) range.length > SIZE_MAX / sizeof(uint32_t))
+        return NULL;
+
+    UniChar *characters = calloc((size_t) range.length, sizeof(*characters));
+    uint32_t *codePoints = calloc((size_t) range.length, sizeof(*codePoints));
+    if (characters == NULL || codePoints == NULL) {
+        free(characters);
+        free(codePoints);
+        return NULL;
+    }
+    CFStringGetCharacters(string, range, characters);
+
+    // The code points to cover; text with an unpaired surrogate has none.
+    size_t count = 0;
+    for (CFIndex i = 0; i < range.length; i++) {
+        uint32_t scalar = characters[i];
+        if (scalar >= 0xD800 && scalar <= 0xDBFF && i + 1 < range.length &&
+            characters[i + 1] >= 0xDC00 && characters[i + 1] <= 0xDFFF) {
+            scalar = 0x10000 + ((scalar - 0xD800) << 10) + (characters[++i] - 0xDC00);
+        } else if (scalar >= 0xD800 && scalar <= 0xDFFF) {
+            free(characters);
+            free(codePoints);
+            return NULL;
+        }
+        codePoints[count++] = scalar;
+    }
+
+    CTFontRef result = NULL;
+    if (fontCoversText(currentFont, characters, range.length)) {
+        result = (CTFontRef) CFRetain(currentFont);
+        goto done;
+    }
+
+    // Explicit cascade descriptors are tried in the order given. A candidate
+    // must cover the text itself; its own cascade list is not followed.
+    for (id descriptor in fontCascade(currentFont)) {
+        CTFontRef candidate = CTFontCreateWithFontDescriptor(
+                (CTFontDescriptorRef) descriptor, CTFontGetSize(currentFont), NULL);
+        if (candidate == NULL)
+            continue;
+        if (fontCoversText(candidate, characters, range.length)) {
+            result = candidate;
+            goto done;
+        }
+        CFRelease(candidate);
+    }
+
+    // Otherwise ask the font system for any face covering the text, ranked by
+    // the style of the current font and the language, if one is given.
+    CGFontRef graphicsFont = [ktFont(currentFont) copyGraphicsFont];
+    FT_Face baseFace = NULL;
+    if ([(id) graphicsFont isKindOfClass: [O2Font_freetype class]])
+        baseFace = [(O2Font_freetype *) graphicsFont face];
+    const char *languageName = NULL;
+    if (language != NULL && CFGetTypeID(language) == CFStringGetTypeID())
+        languageName = [(NSString *) language UTF8String];
+    O2FontRef substitute = O2FontCreateWithCodePointCoverage(codePoints, count, baseFace,
+                                                              languageName);
+    CGFontRelease(graphicsFont);
+    if (substitute != nil) {
+        result = createFont((CGFontRef) substitute, CTFontGetSize(currentFont));
+        O2FontRelease(substitute);
+    }
+
+done:
+    free(characters);
+    free(codePoints);
+    return result;
 }
 
 CTFontDescriptorRef CTFontCopyFontDescriptor(CTFontRef font)
@@ -226,6 +340,9 @@ CTFontDescriptorRef CTFontCopyFontDescriptor(CTFontRef font)
         [attributes setObject: traits forKey: (NSString *) kCTFontTraitsAttribute];
     [attributes setObject: [NSNumber numberWithDouble: [object pointSize]]
                    forKey: (NSString *) kCTFontSizeAttribute];
+    NSArray *cascade = fontCascade(font);
+    if (cascade != nil)
+        [attributes setObject: cascade forKey: (NSString *) kCTFontCascadeListAttribute];
     [name release];
     [family release];
     [traits release];
@@ -648,6 +765,14 @@ void CTFontDrawGlyphs(CTFontRef font, const CGGlyph *glyphs, const CGPoint *posi
     CGContextSetFontSize(context, CTFontGetSize(font));
     CGContextShowGlyphsAtPositions(context, glyphs, positions, count);
     CGContextRestoreGState(context);
+    // QUIRK: the font and size used for drawing stay set in the context
+    // afterwards; the text matrix and text position are left as they were.
+    // Not documented. Evidence: black-box observation on macOS 26.7.3
+    // (tier 2, MC12: a plain CGContextShowGlyphsAtPositions after
+    // CTFontDrawGlyphs draws with the CTFont's font and size).
+    // Test: coretext-draw-glyphs-state.m (test_quirk_font_and_size_stay_set)
+    CGContextSetFont(context, graphicsFont);
+    CGContextSetFontSize(context, CTFontGetSize(font));
     CGFontRelease(graphicsFont);
 }
 
@@ -675,7 +800,7 @@ CTFontCreateWithGraphicsFont(CGFontRef cgFont, CGFloat size,
 {
     if (cgFont == NULL)
         return NULL;
-    return createFont(cgFont, size);
+    return fontWithCascade(createFont(cgFont, size), cascadeOfAttributes(attributes));
 }
 
 ATSFontRef CTFontGetPlatformFont(CTFontRef font, CTFontDescriptorRef  _Nullable *attributes)
