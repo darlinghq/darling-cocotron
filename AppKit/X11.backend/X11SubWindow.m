@@ -33,6 +33,9 @@
                                   device.size.width, device.size.height, 0, 0,
                                   0 /* border_width, border, background */
     );
+    // The application paints every pixel of a subwindow, so the server must not
+    // clear it to a background first.
+    XSetWindowBackgroundPixmap(_display, _window, None);
 
     [self show];
     return self;

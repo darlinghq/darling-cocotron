@@ -4002,7 +4002,8 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
             NSToolTipWindow *toolTipWindow =
                     [NSToolTipWindow sharedToolTipWindow];
 
-            if (![self isKeyWindow] || [self _sheetContext] != nil) {
+            if ((![NSApp isActive] && ![self allowsToolTipsWhenApplicationIsInactive]) ||
+                [self _sheetContext] != nil) {
                 mouseIsInside = NO;
             }
 

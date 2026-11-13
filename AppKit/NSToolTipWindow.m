@@ -59,18 +59,22 @@ NSString *const NSToolTipHelpKey = @"NSToolTipHelp";
                              backing: (NSBackingStoreType) backing
                                defer: (BOOL) defer
 {
-    [super initWithContentRect: contentRect
-                     styleMask: styleMask
-                       backing: backing
-                         defer: defer];
+    self = [super initWithContentRect: contentRect
+                            styleMask: styleMask
+                              backing: backing
+                                defer: defer];
+    if (self == nil)
+        return nil;
 
     _textField = [[NSTextField alloc]
             initWithFrame: contentRect]; // Will be adjusted later.
     [_textField setFrameOrigin: NSMakePoint(2., -3.)]; // Should be (0., 0.).
     [_textField setFont: [NSFont toolTipsFontOfSize: 0.]];
     [_textField setEditable: NO];
+    [_textField setSelectable: NO];
     [_textField setBordered: NO];
     [_textField setBezeled: NO];
+    [self setIgnoresMouseEvents: YES];
     [self setBackgroundColor: [NSColor colorWithDeviceRed: 1.
                                                     green: 1.
                                                      blue: .88
