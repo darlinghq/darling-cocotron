@@ -66,6 +66,10 @@ NSString *const NSAllRomanInputSourcesLocaleIdentifier =
 - (NSRange) _softLineRangeForCharacterAtIndex: (NSUInteger) location;
 @end
 
+@interface NSTextContainer (NSTextContainer_textViewTracking)
+- (void) _resizeToTextView;
+@end
+
 @interface NSTextView (NSTextView_textCompletion)
 - (void) endUserCompletion;
 @end
@@ -593,6 +597,9 @@ static NSTextView *s_targetTextView = nil;
 
 - (void) setTextContainerInset: (NSSize) size {
     _textContainerInset = size;
+    [_textContainer _resizeToTextView];
+    [self sizeToFit];
+    [self setNeedsDisplay: YES];
 }
 
 - (void) setUsesRuler: (BOOL) flag {
@@ -970,7 +977,8 @@ static NSTextView *s_targetTextView = nil;
 
     if (range.length == 0) {
         if (range.location >= [_textStorage length]) {
-            result = [[self layoutManager] extraLineFragmentRect];
+            [[self layoutManager] ensureLayoutForTextContainer: _textContainer];
+            result = [[self layoutManager] extraLineFragmentUsedRect];
             if (NSIsEmptyRect(result) && [_textStorage length]) {
                 NSUInteger rectCount = 0;
                 // Get the last used fragment rect
@@ -1686,6 +1694,8 @@ static NSTextView *s_targetTextView = nil;
 
 - (void) deleteBackward: sender {
     NSRange range = [self selectedRange];
+    if (range.location == NSNotFound || range.location > [_textStorage length])
+        range = NSMakeRange([_textStorage length], 0);
 
     if (range.length > 0) {
 
@@ -2576,6 +2586,11 @@ static NSTextView *s_targetTextView = nil;
                useTypingAttributes: (BOOL) useTypingAttributes
             allowsTypingCoalescing: (BOOL) allowsTypingCoalescing
 {
+    if (range.location == NSNotFound || range.location > [_textStorage length])
+        range = NSMakeRange([_textStorage length], 0);
+    if (range.location + range.length > [_textStorage length])
+        range.length = [_textStorage length] - range.location;
+
     NSUndoManager *undoManager = [self undoManager];
 
     if (_firstResponderButNotEditingYet) {
@@ -2870,17 +2885,21 @@ static NSTextView *s_targetTextView = nil;
             stillSelecting: NO];
 }
 
+- (NSSize) _textContainerSizeForViewSize: (NSSize) size {
+    return NSMakeSize(size.width - _textContainerInset.width * 2,
+                      size.height - _textContainerInset.height * 2);
+}
+
 // This should be done in NSTextContainer with notifications
 - (void) _configureTextContainerSize {
     NSSize containerSize = [[self textContainer] containerSize];
+    NSSize insetSize = [self _textContainerSizeForViewSize: [self bounds].size];
 
     if ([self isHorizontallyResizable] == NO)
-        containerSize.width =
-                [self bounds].size.width - _textContainerInset.width * 2;
+        containerSize.width = insetSize.width;
 
     if ([self isVerticallyResizable] == NO)
-        containerSize.height =
-                [self bounds].size.height - _textContainerInset.height * 2;
+        containerSize.height = insetSize.height;
 
     [[self textContainer] setContainerSize: containerSize];
 }
@@ -2898,9 +2917,10 @@ static NSTextView *s_targetTextView = nil;
         extraRect.size.width = NSMaxX(usedRect) - NSMinX(extraRect);
         usedRect = NSUnionRect(usedRect, extraRect);
     }
-    size = usedRect.size;
-    size.width += _textContainerInset.width * 2;
-    size.height += _textContainerInset.height * 2;
+    // Used rects start after the left padding; add the right one too.
+    size.width = NSMaxX(usedRect) + [[self textContainer] lineFragmentPadding] +
+                 _textContainerInset.width * 2;
+    size.height = usedRect.size.height + _textContainerInset.height * 2;
 
     if (![self isHorizontallyResizable])
         size.width = [self frame].size.width;
@@ -3177,11 +3197,15 @@ static NSTextView *s_targetTextView = nil;
         replacementString = [object string];
     }
 
-    if ([self shouldChangeTextInRange: [self selectedRange]
+    NSRange range = [self selectedRange];
+    if (range.location == NSNotFound || range.location > [_textStorage length])
+        range = NSMakeRange([_textStorage length], 0);
+
+    if ([self shouldChangeTextInRange: range
                     replacementString: replacementString] == NO) {
         return;
     }
-    [self _replaceCharactersInRange: [self selectedRange]
+    [self _replaceCharactersInRange: range
                          withString: object
              allowsTypingCoalescing: YES];
     [self didChangeText];
@@ -3266,9 +3290,10 @@ static NSTextView *s_targetTextView = nil;
     NSRect glyphRect = rect;
     glyphRect.origin.x -= _textContainerInset.width;
     glyphRect.origin.y -= _textContainerInset.height;
-    NSRange gRange = gRange =
-            [layoutManager glyphRangeForBoundingRect: glyphRect
+    NSRange gRange = [layoutManager glyphRangeForBoundingRect: glyphRect
                                      inTextContainer: [self textContainer]];
+    if (gRange.location == NSNotFound)
+        gRange = [layoutManager glyphRangeForTextContainer: [self textContainer]];
 
     if ([self drawsBackground]) {
         [_backgroundColor setFill];

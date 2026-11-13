@@ -56,6 +56,7 @@ const CGFloat NSStringDrawerLargeDimension = 1000000.;
         _textStorage = [NSTextStorage new];
         _layoutManager = [NSLayoutManager new];
         _textContainer = [[NSTextContainer alloc] init];
+        [_textContainer setLineFragmentPadding: 0];
 
         _cache = [NSCache new];
         _cache.countLimit = 250;

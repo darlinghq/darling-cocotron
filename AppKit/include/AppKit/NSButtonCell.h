@@ -31,15 +31,26 @@ enum {
 };
 
 typedef enum {
-    NSMomentaryLightButton = 0,
-    NSPushOnPushOffButton = 1,
-    NSToggleButton = 2,
-    NSSwitchButton = 3,
-    NSRadioButton = 4,
-    NSMomentaryChangeButton = 5,
-    NSOnOffButton = 6,
-    NSMomentaryPushInButton = 7,
-    // deprecated values
+    NSButtonTypeMomentaryLight = 0,
+    NSButtonTypePushOnPushOff = 1,
+    NSButtonTypeToggle = 2,
+    NSButtonTypeSwitch = 3,
+    NSButtonTypeRadio = 4,
+    NSButtonTypeMomentaryChange = 5,
+    NSButtonTypeOnOff = 6,
+    NSButtonTypeMomentaryPushIn = 7,
+    NSButtonTypeAccelerator = 8,
+    NSButtonTypeMultiLevelAccelerator = 9,
+
+    // Deprecated / legacy names:
+    NSMomentaryLightButton = NSButtonTypeMomentaryLight,
+    NSPushOnPushOffButton = NSButtonTypePushOnPushOff,
+    NSToggleButton = NSButtonTypeToggle,
+    NSSwitchButton = NSButtonTypeSwitch,
+    NSRadioButton = NSButtonTypeRadio,
+    NSMomentaryChangeButton = NSButtonTypeMomentaryChange,
+    NSOnOffButton = NSButtonTypeOnOff,
+    NSMomentaryPushInButton = NSButtonTypeMomentaryPushIn,
     NSMomentaryPushButton = 0,
     NSMomentaryLight = 7
 } NSButtonType;

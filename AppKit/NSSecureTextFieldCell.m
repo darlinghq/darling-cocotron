@@ -19,6 +19,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSSecureTextFieldCell.h>
 #import <AppKit/NSSecureTextView.h>
 #import <AppKit/NSStringDrawer.h>
+#import <AppKit/NSTextContainer.h>
 
 @implementation NSSecureTextFieldCell
 
@@ -50,6 +51,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (NSText *) setUpFieldEditorAttributes: (NSText *) editor {
     editor = [[[NSSecureTextView alloc] init] autorelease];
+    [[(NSTextView *) editor textContainer] setLineFragmentPadding: 0];
     [editor setHorizontallyResizable: NO];
     [editor setVerticallyResizable: NO];
     [editor setFieldEditor: YES];
