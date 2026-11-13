@@ -127,6 +127,7 @@ static inline id childOfItemAtIndex(NSOutlineView *self, id item,
 }
 
 - (void) invalidateRowCache {
+    _rowCacheValid = NO;
     _numberOfCachedRows = 0;
 }
 
@@ -166,9 +167,51 @@ static inline id childOfItemAtIndex(NSOutlineView *self, id item,
 
         _outlineTableColumn = [[[self tableColumns] objectAtIndex: 0] retain];
     } else {
-        [NSException raise: NSInvalidArgumentException
-                    format: @"-[%@ %s] is not implemented for coder %@",
-                            [self class], sel_getName(_cmd), coder];
+        _rowToItem = NSCreateMapTable(NSIntegerMapKeyCallBacks,
+                                      NSNonOwnedPointerMapValueCallBacks, 0);
+        _itemToRow = NSCreateMapTable(NSNonOwnedPointerOrNullMapKeyCallBacks,
+                                      NSIntegerMapValueCallBacks, 0);
+        _itemToParent = NSCreateMapTable(NSNonOwnedPointerOrNullMapKeyCallBacks,
+                                         NSNonOwnedPointerMapValueCallBacks, 0);
+        _itemToLevel = NSCreateMapTable(NSNonOwnedPointerOrNullMapKeyCallBacks,
+                                        NSIntegerMapValueCallBacks, 0);
+        _itemToExpansionState =
+                NSCreateMapTable(NSNonOwnedPointerOrNullMapKeyCallBacks,
+                                 NSIntegerMapValueCallBacks, 0);
+        _itemToNumberOfChildren =
+                NSCreateMapTable(NSNonOwnedPointerOrNullMapKeyCallBacks,
+                                 NSIntegerMapValueCallBacks, 0);
+
+        _markerCell = [[NSButtonCell alloc] initImageCell: nil];
+        [_markerCell setBezelStyle: NSDisclosureBezelStyle];
+
+        _editingCellPadding = 10.0;
+        [self invalidateRowCache];
+
+        // QUIRK: NSOutlineView layout after the NSTableView layout: auto-
+        // resizes-outline-column, marker-follows-cell and autosaves-expanded-
+        // items flags, the indentation per level and the outline table
+        // column. Not documented; unkeyed (typedstream) archives come from
+        // old nibs. Evidence: tier 3, the layout reported by the contributor
+        // of this decoder from archives of old nibs; unconfirmed against
+        // macOS (a macOS check is pending). Test:
+        // test_quirk_typedstream_outline_view in tests/appkit-typedstream-
+        // controls.m
+        BOOL autoResizesCol = YES, markerFollowsCell = YES, autosaveExpanded = NO;
+        float indentation = _standardRowHeight > 0 ? _standardRowHeight : 16.0;
+        [coder decodeValueOfObjCType: @encode(BOOL) at: &autoResizesCol];
+        [coder decodeValueOfObjCType: @encode(BOOL) at: &markerFollowsCell];
+        [coder decodeValueOfObjCType: @encode(BOOL) at: &autosaveExpanded];
+        [coder decodeValueOfObjCType: @encode(float) at: &indentation];
+        [self setIndentationPerLevel: indentation];
+        [self setIndentationMarkerFollowsCell: markerFollowsCell];
+        [self setAutoresizesOutlineColumn: autoResizesCol];
+        [self setAutosaveExpandedItems: autosaveExpanded];
+
+        _outlineTableColumn = [[coder decodeObject] retain];
+        if (!_outlineTableColumn && [[self tableColumns] count] > 0) {
+            _outlineTableColumn = [[[self tableColumns] objectAtIndex: 0] retain];
+        }
     }
     return self;
 }
@@ -225,14 +268,24 @@ static inline id childOfItemAtIndex(NSOutlineView *self, id item,
 }
 
 - itemAtRow: (NSInteger) row {
+    if (!_rowCacheValid)
+        [self loadRootItem];
     return (id) NSMapGet(_rowToItem, (void *) row);
 }
 
 - (NSInteger) rowForItem: (id) item {
-    return (NSInteger) NSMapGet(_itemToRow, item);
+    if (!_rowCacheValid)
+        [self loadRootItem];
+
+    void *row = NULL;
+    if (item != nil && NSMapMember(_itemToRow, item, NULL, &row))
+        return (NSInteger) row;
+    return -1;
 }
 
 - parentForItem: item {
+    if (!_rowCacheValid)
+        [self loadRootItem];
     return NSMapGet(_itemToParent, item);
 }
 
@@ -241,6 +294,8 @@ static inline id childOfItemAtIndex(NSOutlineView *self, id item,
 }
 
 - (NSInteger) levelForItem: (id) item {
+    if (!_rowCacheValid)
+        [self loadRootItem];
     NSInteger level = (NSInteger) NSMapGet(_itemToLevel, item);
     return level;
 }
@@ -463,6 +518,11 @@ static inline id childOfItemAtIndex(NSOutlineView *self, id item,
     NSResetMapTable(_itemToNumberOfChildren);
 }
 
+- (void) noteNumberOfRowsChanged {
+    [self invalidateRowCache];
+    [super noteNumberOfRowsChanged];
+}
+
 - (void) reloadData {
     [self _resetMapTables];
     [self invalidateRowCache];
@@ -524,6 +584,7 @@ static inline id childOfItemAtIndex(NSOutlineView *self, id item,
                             NSStringFromSelector(requiredSelectors[i])];
 
     _dataSource = dataSource;
+    [self reloadData];
 }
 
 - (void) setDelegate: delegate {
@@ -595,6 +656,15 @@ static void loadItemIntoMapTables(NSOutlineView *self, id item,
 }
 
 - (void) loadRootItem {
+    // The data source may ask for rows or items while the tables are being
+    // filled; answer those from the partial tables instead of recursing.
+    if (_isBuildingCache)
+        return;
+    _isBuildingCache = YES;
+
+    [self _resetMapTables];
+    _numberOfCachedRows = 0;
+
     NSHashTable *removeItems =
             NSCreateHashTable(NSNonOwnedPointerHashCallBacks, 0);
 
@@ -606,17 +676,23 @@ static void loadItemIntoMapTables(NSOutlineView *self, id item,
             NSHashInsert(removeItems, key);
     }
 
-    loadItemIntoMapTables(self, nil, &_numberOfCachedRows, 0, removeItems); {
+    @try {
+        loadItemIntoMapTables(self, nil, &_numberOfCachedRows, 0, removeItems);
+
         NSHashEnumerator state = NSEnumerateHashTable(removeItems);
         void *key;
 
         while ((key = NSNextHashEnumeratorItem(&state)) != NULL)
             NSMapRemove(_itemToExpansionState, key);
+        _rowCacheValid = YES;
+    } @finally {
+        NSFreeHashTable(removeItems);
+        _isBuildingCache = NO;
     }
 }
 
 - (NSInteger) numberOfRows {
-    if (_numberOfCachedRows == 0) {
+    if (!_rowCacheValid) {
         [self loadRootItem];
     }
 

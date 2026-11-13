@@ -140,9 +140,76 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
         else
             _gridStyleMask = NSTableViewGridNone;
     } else {
-        [NSException raise: NSInvalidArgumentException
-                    format: @"-[%@ %s] is not implemented for coder %@",
-                            [self class], sel_getName(_cmd), coder];
+        _selectedRowIndexes = [[NSIndexSet alloc] init];
+        _selectedColumns = [[NSMutableArray alloc] init];
+        _editedColumn = -1;
+        _editedRow = -1;
+        _numberOfRows = -1;
+        _draggingRow = -1;
+        _intercellSpacing = NSMakeSize(3.0, 2.0);
+        _standardRowHeight = 16.0;
+        _allowsColumnReordering = YES;
+        _allowsColumnResizing = YES;
+        _autoresizesAllColumnsToFit = YES;
+
+        id headerView = nil, cornerView = nil, cols = nil;
+        id bgColor = nil, gridColor = nil;
+        float spacingW = 3.0, spacingH = 2.0, rowH = 16.0;
+        SEL action = NULL, doubleAction = NULL;
+        int flags = 0;
+
+        // QUIRK: NSTableView layout: header view, corner view, columns, cell
+        // spacing, colours, row height, action, double action and a flags
+        // word (bit 31 column reordering, 30 column resizing, 28 empty
+        // selection, 27 multiple selection, 26 column selection, 15
+        // autoresize columns), then data source, delegate and target. Not
+        // documented; unkeyed (typedstream) archives come from old nibs.
+        // Evidence: tier 3, the layout reported by the contributor of this
+        // decoder from archives of old nibs; unconfirmed against macOS (a
+        // macOS check is pending). Archives with a different layout are
+        // tolerated where the code catches the mismatch. Test:
+        // test_quirk_typedstream_table_view in tests/appkit-typedstream-
+        // controls.m
+        @try {
+            [coder decodeValuesOfObjCTypes: "@@@ff@@f::i",
+                                            &headerView, &cornerView, &cols,
+                                            &spacingW, &spacingH,
+                                            &bgColor, &gridColor,
+                                            &rowH,
+                                            &action, &doubleAction,
+                                            &flags];
+            _dataSource = [coder decodeObject];
+            id aDelegate = [coder decodeObject];
+            _target = [coder decodeObject];
+            [self setDelegate: aDelegate];
+        } @catch (id ex) {
+            // Ignore decoding mismatch
+        }
+
+        _headerView = headerView;
+        [_headerView setTableView: self];
+        _cornerView = cornerView;
+        if ([cols isKindOfClass: [NSArray class]]) {
+            _tableColumns = [cols mutableCopy];
+        } else {
+            _tableColumns = [[NSMutableArray alloc] init];
+        }
+        [cols release];
+        [_tableColumns makeObjectsPerformSelector: @selector(setTableView:) withObject: self];
+
+        _intercellSpacing = NSMakeSize(spacingW, spacingH);
+        _backgroundColor = bgColor;
+        _gridColor = gridColor;
+        _standardRowHeight = rowH > 0 ? rowH : 16.0;
+        _action = action;
+        _doubleAction = doubleAction;
+
+        _allowsColumnReordering = (flags & 0x80000000) ? YES : NO;
+        _allowsColumnResizing = (flags & 0x40000000) ? YES : NO;
+        _autoresizesAllColumnsToFit = (flags & 0x00008000) ? YES : NO;
+        _allowsMultipleSelection = (flags & 0x08000000) ? YES : NO;
+        _allowsEmptySelection = (flags & 0x10000000) ? YES : NO;
+        _allowsColumnSelection = (flags & 0x04000000) ? YES : NO;
     }
     return self;
 }

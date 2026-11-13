@@ -156,9 +156,39 @@ static NSAppleScrollBarVariant appleScrollBarVariant(NSScroller *self) {
         _knobProportion = 0;
         [self checkSpaceForParts];
     } else {
-        [NSException raise: NSInvalidArgumentException
-                    format: @"-[%@ %s] is not implemented for coder %@",
-                            [self class], sel_getName(_cmd), coder];
+        // QUIRK: NSScroller layout: target, float value, knob proportion,
+        // action, arrow position and control size. Not documented; unkeyed
+        // (typedstream) archives come from old nibs. Evidence: tier 3, the
+        // layout reported by the contributor of this decoder from archives of
+        // old nibs; unconfirmed against macOS (a macOS check is pending).
+        // Archives with a different layout are tolerated where the code
+        // catches the mismatch. Test: test_quirk_typedstream_scroller in
+        // tests/appkit-typedstream-controls.m
+        sFlags.isHoriz = (_bounds.size.width < _bounds.size.height) ? NO : YES;
+        _floatValue = 0;
+        _knobProportion = 0;
+
+        id target = nil;
+        float floatVal = 0, knobProp = 0;
+        SEL action = NULL;
+        char arrows = 0, size = 0;
+
+        @try {
+            [coder decodeValueOfObjCType: "@" at: &target];
+            [coder decodeValuesOfObjCTypes: "ff:", &floatVal, &knobProp, &action];
+            [coder decodeValueOfObjCType: "c" at: &arrows];
+            [coder decodeValueOfObjCType: "c" at: &size];
+            _floatValue = floatVal;
+            _knobProportion = knobProp;
+            _arrowsPosition = (NSScrollArrowPosition)arrows;
+            _controlSize = (NSControlSize)size;
+            [self setTarget: target];
+            [target release];
+            [self setAction: action];
+        } @catch (id ex) {
+            // Ignore decoding mismatch
+        }
+        [self checkSpaceForParts];
     }
     return self;
 }

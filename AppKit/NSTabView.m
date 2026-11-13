@@ -91,9 +91,44 @@ id _NSTabViewFloatingCell = nil;
             break;
         }
     } else {
-        [NSException raise: NSInvalidArgumentException
-                    format: @"-[%@ %s] is not implemented for coder %@",
-                            [self class], sel_getName(_cmd), coder];
+        // QUIRK: NSTabView layout: items, font, tab type, draws-background
+        // and allows-truncated flags, delegate, then the selected index (an
+        // int before class version 3, an NSUInteger after). Not documented;
+        // unkeyed (typedstream) archives come from old nibs. Evidence: tier
+        // 3, the layout reported by the contributor of this decoder from
+        // archives of old nibs; unconfirmed against macOS (a macOS check is
+        // pending). Archives with a different layout are tolerated where the
+        // code catches the mismatch. Test: test_quirk_typedstream_tab_view in
+        // tests/appkit-typedstream-controls.m
+        NSInteger version = [coder versionForClassName: @"NSTabView"];
+        id items = nil;
+        [coder decodeValueOfObjCType: @encode(id) at: &items];
+        _items = [items mutableCopy];
+        [items release];
+        if (!_items)
+            _items = [[NSMutableArray alloc] init];
+        [coder decodeValueOfObjCType: @encode(id) at: &_font];
+        int type = 0;
+        [coder decodeValueOfObjCType: @encode(int) at: &type];
+        _type = (NSTabViewType)type;
+        [coder decodeValueOfObjCType: @encode(BOOL) at: &_drawsBackground];
+        [coder decodeValueOfObjCType: @encode(BOOL) at: &_allowsTruncatedLabels];
+        _delegate = [coder decodeObject];
+
+        NSUInteger selected_item = NSNotFound;
+        if (version < 3) {
+            int tmp = 0;
+            [coder decodeValueOfObjCType: @encode(int) at: &tmp];
+            selected_item = tmp;
+        } else {
+            [coder decodeValueOfObjCType: @encode(NSUInteger) at: &selected_item];
+        }
+
+        if (selected_item != NSNotFound && selected_item < [_items count]) {
+            [self selectTabViewItemAtIndex: selected_item];
+        } else if ([_items count] > 0) {
+            [self selectTabViewItemAtIndex: 0];
+        }
     }
 
     return self;

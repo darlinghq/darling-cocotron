@@ -139,14 +139,13 @@ static NSMutableDictionary *cellClassDictionary = nil;
 
             // TODO: flags
         } else {
-            NSInteger tag;
-            uint8_t flags1, flags2;
+            int tag = 0;
+            uint8_t flags1 = 0, flags2 = 0;
 
             [coder decodeValuesOfObjCTypes: "icc@", &tag, &flags1, &flags2,
                                             &self->_cell];
 
             [_aux setTag: tag];
-
             // TODO: flags
         }
     }

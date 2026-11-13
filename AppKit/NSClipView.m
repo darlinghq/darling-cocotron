@@ -55,9 +55,50 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                        name: NSViewBoundsDidChangeNotification
                      object: _docView];
     } else {
-        [NSException raise: NSInvalidArgumentException
-                    format: @"-[%@ %s] is not implemented for coder %@",
-                            [self class], sel_getName(_cmd), coder];
+        // QUIRK: NSClipView layout: an object (background colour), then the
+        // document cursor, document view, copies-on-scroll, draws-background
+        // and one more flag byte. Not documented; unkeyed (typedstream)
+        // archives come from old nibs. Evidence: tier 3, the layout reported
+        // by the contributor of this decoder from archives of old nibs;
+        // unconfirmed against macOS (a macOS check is pending). Archives with
+        // a different layout are tolerated where the code catches the
+        // mismatch. Test: test_quirk_typedstream_clip_view in tests/appkit-
+        // typedstream-controls.m
+        [self setAutoresizesSubviews: YES];
+
+        id background = [coder decodeObject];
+
+        id docCursor = nil;
+        id docView = nil;
+        uint8_t copyOnScroll = 0, drawsBg = 0, flag3 = 0;
+
+        [coder decodeValuesOfObjCTypes: "@@ccc", &docCursor, &docView,
+                                        &copyOnScroll, &drawsBg, &flag3];
+
+        // The values decoded with decodeValuesOfObjCTypes: are owned by us.
+        if ([docCursor isKindOfClass: [NSColor class]]) {
+            background = docCursor;
+        } else if ([docCursor isKindOfClass: [NSCursor class]]) {
+            _documentCursor = docCursor;
+            docCursor = nil;
+        }
+        _backgroundColor = [background retain];
+        [docCursor release];
+
+        if ([docView isKindOfClass: [NSView class]]) {
+            [self setDocumentView: docView];
+        } else if ([[self subviews] count] > 0) {
+            NSView *document = [[self subviews] objectAtIndex: 0];
+            if ([document isKindOfClass: [NSView class]]) {
+                [document retain];
+                [document removeFromSuperview];
+                [self setDocumentView: document];
+                [document release];
+            }
+        }
+        [docView release];
+        _copiesOnScroll = copyOnScroll ? YES : NO;
+        _drawsBackground = drawsBg ? YES : NO;
     }
     return self;
 }

@@ -51,9 +51,63 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         _isResizable = [keyed decodeBoolForKey: @"NSIsResizeable"];
         _isEditable = [keyed decodeBoolForKey: @"NSIsEditable"];
     } else {
-        [NSException raise: NSInvalidArgumentException
-                    format: @"-[%@ %s] is not implemented for coder %@",
-                            [self class], sel_getName(_cmd), coder];
+        NSInteger version = [coder versionForClassName: @"NSTableColumn"];
+        // QUIRK: NSTableColumn layout: version 1 stores identifier, header
+        // cell, data cell, three widths and the resizable and editable flags;
+        // version 2 and later store identifier, widths, flags, then header
+        // cell, data cell and the table view back-reference. Not documented;
+        // unkeyed (typedstream) archives come from old nibs. Evidence: tier
+        // 3, the layout reported by the contributor of this decoder from
+        // archives of old nibs; unconfirmed against macOS (a macOS check is
+        // pending). Archives with a different layout are tolerated where the
+        // code catches the mismatch. Test:
+        // test_quirk_typedstream_table_column in tests/appkit-typedstream-
+        // controls.m
+        if (version >= 2) {
+            float w = 100, minW = 10, maxW = 10000;
+            char resizable = 1, editable = 0;
+            id identifier = nil, headerCell = nil, dataCell = nil;
+            @try {
+                [coder decodeValuesOfObjCTypes: "@fff@@cc",
+                                                &identifier,
+                                                &w, &minW, &maxW,
+                                                &headerCell, &dataCell,
+                                                &resizable, &editable];
+                _identifier = identifier;
+                _width = w;
+                _minWidth = minW;
+                _maxWidth = maxW;
+                _headerCell = headerCell;
+                _dataCell = dataCell;
+                _isResizable = resizable ? YES : NO;
+                _isEditable = editable ? YES : NO;
+                // _tableView is a weak/assign back-reference to the owning table view
+                _tableView = [coder decodeObject];
+            } @catch (id ex) {
+                // Ignore decoding mismatch
+            }
+        } else {
+            id identifier = nil, headerCell = nil, dataCell = nil;
+            float w = 100, minW = 10, maxW = 10000;
+            char resizable = 1, editable = 0;
+            @try {
+                [coder decodeValuesOfObjCTypes: "@@@fffcc",
+                                                &identifier,
+                                                &headerCell, &dataCell,
+                                                &w, &minW, &maxW,
+                                                &resizable, &editable];
+                _identifier = identifier;
+                _headerCell = headerCell;
+                _dataCell = dataCell;
+                _width = w;
+                _minWidth = minW;
+                _maxWidth = maxW;
+                _isResizable = resizable ? YES : NO;
+                _isEditable = editable ? YES : NO;
+            } @catch (id ex) {
+                // Ignore decoding mismatch
+            }
+        }
     }
 
     return self;

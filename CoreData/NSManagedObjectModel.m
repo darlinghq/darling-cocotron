@@ -77,9 +77,15 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                     format: @"%@ can not initWithCoder:%@", [self class],
                             [coder class]];
 
-    _entities = [[coder decodeObjectForKey: @"NSEntities"] retain];
-    for (NSEntityDescription *entity in [_entities allValues])
-        [_entities setObject: entity forKey: [[entity name] uppercaseString]];
+    NSDictionary *decoded = [coder decodeObjectForKey: @"NSEntities"];
+    _entities = [decoded mutableCopy];
+    for (NSEntityDescription *entity in [decoded allValues]) {
+        NSString *name = [entity name];
+        if (name != nil) {
+            [_entities setObject: entity forKey: name];
+            [_entities setObject: entity forKey: [name uppercaseString]];
+        }
+    }
 
     _fetchRequestTemplates =
             [[coder decodeObjectForKey: @"NSFetchRequestTemplates"] retain];
@@ -94,12 +100,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
     NSData *data = [[NSData alloc] initWithContentsOfURL: url];
 
-    if (data == nil)
+    if (data == nil) {
         return nil;
+    }
 
     NSKeyedUnarchiver *unarchiver =
             [[NSKeyedUnarchiver alloc] initForReadingWithData: data];
-    NSManagedObjectModel *result = [unarchiver decodeObjectForKey: @"root"];
+    NSManagedObjectModel *result =
+            [[unarchiver decodeObjectForKey: @"root"] retain];
 
     [unarchiver release];
     [data release];
@@ -109,6 +117,16 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (NSArray *) entities {
     return [_entities allValues];
+}
+
+- copyWithZone: (NSZone *) zone {
+    NSManagedObjectModel *copy = [[NSManagedObjectModel allocWithZone: zone] init];
+    copy->_entities = [_entities mutableCopyWithZone: zone];
+    copy->_fetchRequestTemplates = [_fetchRequestTemplates mutableCopyWithZone: zone];
+    copy->_configurations = [_configurations mutableCopyWithZone: zone];
+    copy->_localizationDictionary = [_localizationDictionary copyWithZone: zone];
+    copy->_versionIdentifiers = [_versionIdentifiers copyWithZone: zone];
+    return copy;
 }
 
 - (NSDictionary *) entitiesByName {

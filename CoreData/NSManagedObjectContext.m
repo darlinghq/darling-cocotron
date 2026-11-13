@@ -127,22 +127,24 @@ NSString *const NSAffectedObjectsErrorKey = @"NSAffectedObjectsErrorKey";
 }
 
 - (void) setPersistentStoreCoordinator: (NSPersistentStoreCoordinator *) value {
-    if (_storeCoordinator != nil)
+    if (_storeCoordinator != nil) {
         [[NSNotificationCenter defaultCenter]
                 removeObserver: self
                           name: NSPersistentStoreCoordinatorStoresDidChangeNotification
                         object: _storeCoordinator];
+    }
 
     value = [value retain];
     [_storeCoordinator release];
     _storeCoordinator = value;
 
-    if (_storeCoordinator != nil)
+    if (_storeCoordinator != nil) {
         [[NSNotificationCenter defaultCenter]
                 addObserver: self
                    selector: @selector(persistentStoresDidChange:)
                        name: NSPersistentStoreCoordinatorStoresDidChangeNotification
                      object: _storeCoordinator];
+    }
 }
 
 - (void) setUndoManager: (NSUndoManager *) value {
@@ -241,7 +243,8 @@ NSString *const NSAffectedObjectsErrorKey = @"NSAffectedObjectsErrorKey";
     NSMapInsert(_objectIdToObject, [object objectID], object);
 
     NSEntityDescription *entity = [object entity];
-    NSArray *properties = [[entity propertiesByName] allKeys];
+    NSDictionary *propsByName = [entity propertiesByName];
+    NSArray *properties = [propsByName allKeys];
 
     for (NSString *key in properties) {
         [object addObserver: self
@@ -256,10 +259,9 @@ NSString *const NSAffectedObjectsErrorKey = @"NSAffectedObjectsErrorKey";
     NSManagedObject *result = NSMapGet(_objectIdToObject, objectID);
 
     if (result == nil) {
-        result = [[NSManagedObject alloc] initWithObjectID: objectID
-                                      managedObjectContext: self];
+        result = [[[NSManagedObject alloc] initWithObjectID: objectID
+                                       managedObjectContext: self] autorelease];
         NSMapInsert(_objectIdToObject, objectID, result);
-        [result release];
         [self _registerObject: result];
     }
 
@@ -276,12 +278,29 @@ NSString *const NSAffectedObjectsErrorKey = @"NSAffectedObjectsErrorKey";
 
     NSMutableSet *resultSet = [NSMutableSet set];
 
+    for (NSManagedObject *check in _registeredObjects) {
+        NSEntityDescription *entity = [check entity];
+
+        if ([entity _isKindOfEntity: [fetchRequest entity]]) {
+            if (![_deletedObjects containsObject: check]) {
+                if ([affectedStores count] == 0 ||
+                    [[check objectID] persistentStore] == nil ||
+                    [affectedStores containsObject: [[check objectID]
+                                                            persistentStore]]) {
+                    [resultSet addObject: check];
+                }
+            }
+        }
+    }
+
     for (NSManagedObject *check in _insertedObjects) {
         NSEntityDescription *entity = [check entity];
 
         if ([entity _isKindOfEntity: [fetchRequest entity]]) {
             if (![_deletedObjects containsObject: check]) {
-                if ([affectedStores containsObject: [[check objectID]
+                if ([affectedStores count] == 0 ||
+                    [[check objectID] persistentStore] == nil ||
+                    [affectedStores containsObject: [[check objectID]
                                                             persistentStore]]) {
                     [resultSet addObject: check];
                 }
@@ -311,10 +330,16 @@ NSString *const NSAffectedObjectsErrorKey = @"NSAffectedObjectsErrorKey";
 
     NSPredicate *p = [fetchRequest predicate];
 
-    if (p != nil)
+    if (p != nil) {
         [result filterUsingPredicate: p];
+    }
 
     [result sortUsingDescriptors: [fetchRequest sortDescriptors]];
+
+    NSUInteger fetchLimit = [fetchRequest fetchLimit];
+    if (fetchLimit > 0 && [result count] > fetchLimit) {
+        [result removeObjectsInRange: NSMakeRange(fetchLimit, [result count] - fetchLimit)];
+    }
 
     return result;
 }

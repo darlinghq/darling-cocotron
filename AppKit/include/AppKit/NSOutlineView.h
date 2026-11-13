@@ -47,6 +47,8 @@ APPKIT_EXPORT NSString *const NSOutlineViewDisclosureButtonKey;
     NSMapTable *_itemToNumberOfChildren;
 
     NSUInteger _numberOfCachedRows;
+    BOOL _rowCacheValid;
+    BOOL _isBuildingCache;
     NSButtonCell *_markerCell;
     NSSize _markerSize;
     id _clickedItem;

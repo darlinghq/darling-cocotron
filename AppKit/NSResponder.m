@@ -46,7 +46,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         _nextResponder = [keyed decodeObjectForKey: @"NSNextResponder"];
     } else {
         _nextResponder = [coder decodeObject];
-        NSLog(@"nextResponder <- %p\n", _nextResponder);
     }
     return self;
 }
