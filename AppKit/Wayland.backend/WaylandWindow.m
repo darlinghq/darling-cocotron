@@ -142,8 +142,15 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
         return;
     _surfaceGeneration++;
     _configureUpdatePending = NO;
-    BOOL forceClient = getenv("DARLING_WAYLAND_DECORATIONS") != NULL &&
-            strcmp(getenv("DARLING_WAYLAND_DECORATIONS"), "client") == 0;
+    // WaylandDecorations (org.darlinghq.AppKit) or DARLING_WAYLAND_DECORATIONS set to
+    // "client" draw the frame in the client even when the compositor offers to do it.
+    char decorations[16] = "";
+    const char *fromEnvironment = getenv("DARLING_WAYLAND_DECORATIONS");
+    if (fromEnvironment != NULL)
+        strlcpy(decorations, fromEnvironment, sizeof(decorations));
+    else
+        WaylandCopyPreference("WaylandDecorations", decorations, sizeof(decorations));
+    BOOL forceClient = strcmp(decorations, "client") == 0;
     _pendingClientDecorated = _display->_decorationManager == NULL || forceClient;
 
     union wl_argument args[4];

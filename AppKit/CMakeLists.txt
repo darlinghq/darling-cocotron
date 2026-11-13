@@ -676,7 +676,8 @@ add_backend(X11
 
 set_source_files_properties(DarlingLayout.mm PROPERTIES LANGUAGE CXX COMPILE_FLAGS "-std=c++14 -fexceptions")
 
-# Wayland backend, selected at run time with DARLING_APPKIT_BACKEND=wayland.
+# Wayland backend. It is used when a compositor is advertised unless the backend is chosen
+# explicitly (see WaylandBackendSelected()); otherwise AppKit falls through to X11.
 # libwayland-client and libxkbcommon are loaded with dlopen() only when it is
 # selected, so building it needs just their headers, wayland-scanner and the
 # protocol files. It is skipped when any of them is missing.

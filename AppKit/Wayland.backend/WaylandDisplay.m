@@ -303,9 +303,6 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
     [self runAfterDispatchBlocks];
     [self flush];
 
-    NSLog(@"Wayland backend: connected, %lu output(s), seat %s, decorations %s",
-          (unsigned long) [_outputs count], _seat ? "present" : "missing",
-          _decorationManager ? "server-side" : "unavailable");
     return self;
 }
 

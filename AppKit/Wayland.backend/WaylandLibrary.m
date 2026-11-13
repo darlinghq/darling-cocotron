@@ -49,23 +49,53 @@ static bool resolve(void *handle, const char *name, void **slot) {
     return *slot != NULL;
 }
 
-bool WaylandBackendSelected(void) {
-    const char *requested = getenv("DARLING_APPKIT_BACKEND");
+// A string preference of the user's org.darlinghq.AppKit domain, copied into buf. These
+// are Darling's own settings for behaviour macOS does not have.
+bool WaylandCopyPreference(const char *key, char *buf, size_t size) {
+    CFStringRef name = CFStringCreateWithCString(NULL, key, kCFStringEncodingUTF8);
+    CFPropertyListRef value = name ? CFPreferencesCopyAppValue(name, CFSTR("org.darlinghq.AppKit"))
+                                   : NULL;
+    bool found = value != NULL && CFGetTypeID(value) == CFStringGetTypeID() &&
+                 CFStringGetCString(value, buf, size, kCFStringEncodingUTF8) && buf[0] != '\0';
+    if (value)
+        CFRelease(value);
+    if (name)
+        CFRelease(name);
+    return found;
+}
 
+// Interprets a backend name: 1 for "wayland", 0 for "x11", -1 for anything else.
+static int backendFromName(const char *name) {
+    if (strcasecmp(name, "wayland") == 0)
+        return 1;
+    if (strcasecmp(name, "x11") == 0)
+        return 0;
+    return -1;
+}
+
+bool WaylandBackendSelected(void) {
+    // Precedence, strongest first: the environment, the DisplayBackend preference, then
+    // detection. An unrecognised value is a configuration error worth surfacing, but
+    // guessing beats refusing to start.
+    const char *requested = getenv("DARLING_APPKIT_BACKEND");
     if (requested != NULL && *requested != '\0') {
-        if (strcasecmp(requested, "wayland") == 0)
-            return true;
-        if (strcasecmp(requested, "x11") == 0)
-            return false;
-        // An unrecognised value is a configuration error worth surfacing, but
-        // guessing beats refusing to start.
-        NSLog(@"Wayland backend: ignoring unknown DARLING_APPKIT_BACKEND=%s, "
-              @"autodetecting", requested);
+        int choice = backendFromName(requested);
+        if (choice >= 0)
+            return choice == 1;
+        NSLog(@"Wayland backend: ignoring unknown DARLING_APPKIT_BACKEND=%s", requested);
     }
 
-    // Nothing asked for Wayland specifically, so use it when a compositor is
-    // advertised. Whether the connection then succeeds is WaylandDisplay's problem
-    // to report, and it falls back to X11.
+    char preference[32];
+    if (WaylandCopyPreference("DisplayBackend", preference, sizeof(preference))) {
+        int choice = backendFromName(preference);
+        if (choice >= 0)
+            return choice == 1;
+        NSLog(@"Wayland backend: ignoring unknown DisplayBackend preference %s", preference);
+    }
+
+    // Nothing asked for either backend, so use Wayland when a compositor is advertised.
+    // Whether the connection then succeeds is WaylandDisplay's problem to report, and it
+    // falls back to X11.
     return getenv("WAYLAND_DISPLAY") != NULL;
 }
 

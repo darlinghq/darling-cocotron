@@ -109,13 +109,18 @@ bool WaylandLibraryLoad(void);
 // CoreGraphics/Wayland.backend/CMakeLists.txt), which makes the two agree by
 // construction rather than by two copies of the same rule staying in step.
 //
-// DARLING_APPKIT_BACKEND selects explicitly: "wayland" or "x11". Unset, Wayland is used
-// when a compositor is advertised, so a Wayland session no longer needs the variable set
-// by hand, and X11 remains the fallback for everything else.
+// The environment variable DARLING_APPKIT_BACKEND selects explicitly ("wayland" or "x11"),
+// then the DisplayBackend string preference of the org.darlinghq.AppKit domain with the
+// same two values. With neither, Wayland is used when a compositor is advertised
+// (WAYLAND_DISPLAY) and X11 for everything else.
 //
-// Deliberately only inspects the environment. It runs before the dlopen() in
+// Deliberately reads only settings and the environment. It runs before the dlopen() in
 // WaylandLibraryLoad(), so deciding to use Wayland must not require Wayland.
 bool WaylandBackendSelected(void);
+
+// Copies a string preference of the org.darlinghq.AppKit domain into buf. Returns false
+// when it is unset, empty, not a string or does not fit.
+bool WaylandCopyPreference(const char *key, char *buf, size_t size);
 
 // Compares the hand-written opcodes in WaylandProtocol.h with the generated protocol tables.
 bool WaylandCheckOpcodes(void);
