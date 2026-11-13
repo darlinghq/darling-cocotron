@@ -205,6 +205,102 @@ static NSString *filenameOfFirstScalableFace(FcFontSet *set) {
     return fallback;
 }
 
+O2FontRef O2FontCreateWithCodePointCoverage(const uint32_t *codePoints,
+                                           size_t count, FT_Face baseFace,
+                                           const char *language) {
+    if (codePoints == NULL || count == 0)
+        return nil;
+
+    FcPattern *pattern = FcPatternCreate();
+    FcCharSet *characters = FcCharSetCreate();
+    if (pattern == NULL || characters == NULL) {
+        if (pattern != NULL)
+            FcPatternDestroy(pattern);
+        if (characters != NULL)
+            FcCharSetDestroy(characters);
+        return nil;
+    }
+    for (size_t index = 0; index < count; ++index) {
+        if (codePoints[index] > 0x10FFFF ||
+            (codePoints[index] >= 0xD800 && codePoints[index] <= 0xDFFF) ||
+            !FcCharSetAddChar(characters, codePoints[index])) {
+            FcCharSetDestroy(characters);
+            FcPatternDestroy(pattern);
+            return nil;
+        }
+    }
+    FcBool added = FcPatternAddCharSet(pattern, FC_CHARSET, characters);
+    FcCharSetDestroy(characters);
+    if (!added) {
+        FcPatternDestroy(pattern);
+        return nil;
+    }
+
+    // Coverage is mandatory below; these properties rank suitable substitutes.
+    // Do not add the base file/index: that would pin selection to the old face.
+    if (baseFace != NULL) {
+        if (baseFace->family_name != NULL)
+            added = FcPatternAddString(pattern, FC_FAMILY,
+                    (const FcChar8 *)baseFace->family_name);
+        added = added && FcPatternAddInteger(pattern, FC_WEIGHT,
+                baseFace->style_flags & FT_STYLE_FLAG_BOLD
+                        ? FC_WEIGHT_BOLD : FC_WEIGHT_REGULAR);
+        added = added && FcPatternAddInteger(pattern, FC_SLANT,
+                baseFace->style_flags & FT_STYLE_FLAG_ITALIC
+                        ? FC_SLANT_ITALIC : FC_SLANT_ROMAN);
+        if (FT_IS_FIXED_WIDTH(baseFace))
+            added = added && FcPatternAddInteger(pattern, FC_SPACING, FC_MONO);
+    }
+    if (language != NULL && language[0] != '\0')
+        added = added && FcPatternAddString(pattern, FC_LANG,
+                                            (const FcChar8 *)language);
+    if (!added) {
+        FcPatternDestroy(pattern);
+        return nil;
+    }
+
+    FcConfig *config = O2FontSharedFontConfig();
+    if (config == NULL || !FcConfigSubstitute(config, pattern, FcMatchPattern)) {
+        FcPatternDestroy(pattern);
+        return nil;
+    }
+    FcDefaultSubstitute(pattern);
+    FcResult result;
+    FcPattern *match = FcFontMatch(config, pattern, &result);
+    FcPatternDestroy(pattern);
+    if (match == NULL)
+        return nil;
+
+    FcChar8 *filename = NULL;
+    int faceIndex = 0;
+    FcResult indexResult = FcPatternGetInteger(match, FC_INDEX, 0, &faceIndex);
+    if (FcPatternGetString(match, FC_FILE, 0, &filename) != FcResultMatch ||
+        (indexResult != FcResultMatch && indexResult != FcResultNoMatch) ||
+        faceIndex < 0) {
+        FcPatternDestroy(match);
+        return nil;
+    }
+    // FC_FILE is a host path and FreeType is a host library: no guest-to-host
+    // path mapping applies here (that is for paths guest code supplies).
+    FT_Face face = NULL;
+    FT_Error error = FT_New_Face(O2FontSharedFreeTypeLibrary(),
+                                 (const char *)filename, faceIndex, &face);
+    FcPatternDestroy(match);
+    if (error != 0)
+        return nil;
+    if (FT_Select_Charmap(face, FT_ENCODING_UNICODE) != 0) {
+        FT_Done_Face(face);
+        return nil;
+    }
+    for (size_t index = 0; index < count; ++index) {
+        if (FT_Get_Char_Index(face, codePoints[index]) == 0) {
+            FT_Done_Face(face);
+            return nil;
+        }
+    }
+    return [[O2Font_freetype alloc] initWithFace: face];
+}
+
 + (NSString *) filenameForPattern: (NSString *) pattern {
     FcConfig *config = O2FontSharedFontConfig();
 
