@@ -1,0 +1,18 @@
+Small NSArchiver (typedstream) archives of AppKit nib object classes, written by
+mkfix.m (next to this file; build for x86_64 against the system frameworks and
+run as `mkfix <output dir>`) running on the Mac OS X 10.14.4 and macOS 26.7.3 systems named by the
+directories. Objects were built with public setters or by decoding a scripted
+coder, then archived with +[NSArchiver archivedDataWithRootObject:]. On
+macOS 26 NSNibOutletConnector and NSIBObjectData refuse non-keyed archiving, so
+those two files exist for 10.14.4 only.
+Content (expected by tests/appkit-nonkeyed-nib-objects.m):
+  customobject    NSCustomObject, class name "FixtureOwner", extension "ext"
+  windowtemplate  NSWindowTemplate, style 15, backing 2, rect 10,20,300,200,
+                  hides-on-deactivate/not-released/deferred/one-shot, title
+                  "Fixture Window", class NSWindow, screen rect present
+                  (0,0,1440,900), minimum size 120x80, autosave
+                  "FixtureAutosave", maximum size 640x480
+  outletconnector NSNibOutletConnector from a custom object to another, "someOutlet"
+  controlconnector NSNibControlConnector from FixtureTarget to FixtureOwner, "doIt:"
+  customview      NSCustomView with class name "NSTextView", extension "cvext"
+  ibobjectdata    NSIBObjectData with root FixtureOwner and one connector
