@@ -30,10 +30,10 @@
     CGFloat _initialVelocity;
 }
 
-@property CGFloat mass;            // default 1; must be > 0
-@property CGFloat stiffness;       // default 100; must be > 0
-@property CGFloat damping;         // default 10; must be >= 0
+@property CGFloat mass;            // default 1; a value <= 0 resets it to 1
+@property CGFloat stiffness;       // default 100; a value <= 0 resets it to 100
+@property CGFloat damping;         // default 10; a negative value resets it to 10
 @property CGFloat initialVelocity; // default 0, in fromValue-to-toValue distances per second
-@property(readonly) CFTimeInterval settlingDuration;
+@property(readonly) CFTimeInterval settlingDuration; // FLT_MAX for an undamped spring
 
 @end

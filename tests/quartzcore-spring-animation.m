@@ -1,5 +1,6 @@
 #import <QuartzCore/QuartzCore.h>
 #import <QuartzCore/CASpringAnimation.h>
+#include <float.h>
 #include <math.h>
 
 @interface CASpringAnimation (Private)
@@ -41,16 +42,27 @@ int main(void) {
         if (!near([spring _springProgressAtTime: 0], 0) || fabs(slope - 3) > 1e-2 || !isfinite(spring.settlingDuration))
             return 7;
 
+        // quirk_undamped_settling_duration: an undamped spring reports FLT_MAX.
         spring.damping = 0;
-        if (!isinf(spring.settlingDuration))
+        if (spring.settlingDuration != FLT_MAX)
             return 8;
-        @try {
-            spring.mass = 0;
+
+        // quirk_invalid_values_reset_to_defaults: no exception; the default returns.
+        spring.mass = 2;
+        spring.mass = 0;
+        if (spring.mass != 1)
             return 9;
-        } @catch (NSException *e) {
-            if (![[e name] isEqualToString: NSInvalidArgumentException])
-                return 10;
-        }
+        spring.stiffness = 300;
+        spring.stiffness = -5;
+        if (spring.stiffness != 100)
+            return 10;
+        spring.damping = 4;
+        spring.damping = -1;
+        if (spring.damping != 10)
+            return 11;
+        spring.damping = 0;
+        if (spring.damping != 0)
+            return 12;
     }
     return 0;
 }

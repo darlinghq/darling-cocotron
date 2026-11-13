@@ -18,12 +18,17 @@
 */
 
 #import <QuartzCore/CASpringAnimation.h>
+#include <float.h>
 #include <math.h>
 
 // Displacements below this fraction of the fromValue-to-toValue distance
 // count as at rest for settlingDuration.
 static const double kRestThreshold = 0.001;
 static const double kSettlingStep = 1.0 / 240;
+
+static const CGFloat kDefaultMass = 1;
+static const CGFloat kDefaultStiffness = 100;
+static const CGFloat kDefaultDamping = 10;
 
 @interface CAPropertyAnimation (Private)
 - initWithKeyPath: (NSString *) keyPath;
@@ -32,9 +37,9 @@ static const double kSettlingStep = 1.0 / 240;
 @implementation CASpringAnimation
 
 - (void) _setSpringDefaults {
-    _mass = 1;
-    _stiffness = 100;
-    _damping = 10;
+    _mass = kDefaultMass;
+    _stiffness = kDefaultStiffness;
+    _damping = kDefaultDamping;
     _initialVelocity = 0;
 }
 
@@ -56,10 +61,14 @@ static const double kSettlingStep = 1.0 / 240;
     return _mass;
 }
 
+// QUIRK: assigning a mass that is not positive, a stiffness that is not
+// positive or a negative damping does not raise; the property returns to its
+// default (1, 100 and 10). A damping of 0 is accepted. Not documented.
+// Evidence: black-box observation on macOS 26.7.3 (tier 2), vd-upstream
+// mac-probes/v315-caspring-validation.m.
+// Test: tests/quartzcore-spring-animation.m (quirk_invalid_values_reset_to_defaults)
 - (void) setMass: (CGFloat) value {
-    if (!(value > 0))
-        [NSException raise: NSInvalidArgumentException format: @"CASpringAnimation mass must be positive"];
-    _mass = value;
+    _mass = value > 0 ? value : kDefaultMass;
 }
 
 - (CGFloat) stiffness {
@@ -67,9 +76,7 @@ static const double kSettlingStep = 1.0 / 240;
 }
 
 - (void) setStiffness: (CGFloat) value {
-    if (!(value > 0))
-        [NSException raise: NSInvalidArgumentException format: @"CASpringAnimation stiffness must be positive"];
-    _stiffness = value;
+    _stiffness = value > 0 ? value : kDefaultStiffness;
 }
 
 - (CGFloat) damping {
@@ -77,9 +84,7 @@ static const double kSettlingStep = 1.0 / 240;
 }
 
 - (void) setDamping: (CGFloat) value {
-    if (!(value >= 0))
-        [NSException raise: NSInvalidArgumentException format: @"CASpringAnimation damping must not be negative"];
-    _damping = value;
+    _damping = value >= 0 ? value : kDefaultDamping;
 }
 
 - (CGFloat) initialVelocity {
@@ -144,10 +149,14 @@ static double restBound(const Spring *s) {
     return 1 + displacement(&s, t);
 }
 
-// Infinite for an undamped spring, which never comes to rest.
+// An undamped spring never comes to rest; it reports the largest float.
+// QUIRK: macOS reports FLT_MAX rather than infinity for it. Not documented.
+// Evidence: black-box observation on macOS 26.7.3 (tier 2), vd-upstream
+// mac-probes/v315-caspring-validation.m.
+// Test: tests/quartzcore-spring-animation.m (quirk_undamped_settling_duration)
 - (CFTimeInterval) settlingDuration {
     if (_damping == 0)
-        return INFINITY;
+        return FLT_MAX;
     Spring s = makeSpring(_mass, _stiffness, _damping, _initialVelocity);
     double bound = restBound(&s), lastMoving = 0;
     for (double t = 0; t <= bound; t += kSettlingStep) {
