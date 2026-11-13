@@ -21,6 +21,7 @@
 #import "X11Display.h"
 #import "NSEvent_mouse.h"
 #import "X11Cursor.h"
+#import "X11DraggingManager.h"
 #import "X11Pasteboard.h"
 #import "X11Window.h"
 #import "X11AppMenu.h"
@@ -727,8 +728,7 @@ static NSDictionary *modeInfoToDictionary(const XRRModeInfo *mi, int depth) {
 }
 
 - (NSDraggingManager *) draggingManager {
-    //   NSUnimplementedMethod();
-    return nil;
+    return [X11DraggingManager sharedManager];
 }
 
 - (NSColor *) colorWithName: (NSString *) colorName {
@@ -2135,7 +2135,12 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
         break;
 
     case ReparentNotify:
-        NSLog(@"ReparentNotify");
+        // A window manager frame has to point back at our window through XdndProxy
+        // before a drag source can find it under the pointer.
+        if ([window isKindOfClass: [X11Window class]])
+            [(X11DraggingManager *) [self draggingManager]
+                    windowReparented: (X11Window *) window
+                              intoParent: ev->xreparent.parent];
         break;
 
     case ConfigureNotify:; {
@@ -2181,6 +2186,13 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
             [window propertyNotify: &ev->xproperty];
             // The window may have entered or left fullscreen.
             [self updatePointerConfinement];
+        } else if (window == nil) {
+            // An incremental transfer is paced by the receiver deleting the
+            // property, and that property lives on the receiver's window, which
+            // belongs to another client and so is not in the window map. The
+            // pasteboard that wrote it is the one waiting for the deletion.
+            [(X11DraggingManager *) [self draggingManager]
+                    handlePropertyChange: &ev->xproperty];
         }
         // An INCR transfer a pasteboard serves is paced by the requestor
         // deleting a property on its own window, usually another client's,
@@ -2213,6 +2225,21 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
         break;
 
     case ClientMessage:
+        // XDND is entirely ClientMessage traffic: XdndEnter, XdndPosition,
+        // XdndStatus, XdndDrop, XdndFinished and XdndLeave.
+        if (ev->xclient.format == 32) {
+            if ([window isKindOfClass: [X11Window class]]) {
+                [(X11DraggingManager *) [self draggingManager]
+                        handleXdndMessage: &ev->xclient
+                                     toWindow: (X11Window *) window];
+            } else if ([window isKindOfClass: [X11Pasteboard class]]) {
+                // A drag's source window is the helper window of the pasteboard
+                // that owns its selection, so the replies a target sends to the
+                // source arrive there rather than on one of our windows.
+                [(X11DraggingManager *) [self draggingManager]
+                        handleXdndSourceMessage: &ev->xclient];
+            }
+        }
         if (ev->xclient.format == 32 &&
             ev->xclient.data.l[0] ==
                     XInternAtom(_display, "WM_DELETE_WINDOW", False)) {
