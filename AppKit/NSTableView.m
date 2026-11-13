@@ -132,9 +132,21 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
         _editedRow = -1;
         _numberOfRows = -1;
         _draggingRow = -1;
+        _draggingSourceMaskLocal = NSDragOperationEvery;
+        _draggingSourceMaskNonLocal = NSDragOperationNone;
+        // Nibs archive "every operation" as -1; NSDragOperationEvery is 32 bits wide here.
+        if ([keyed containsValueForKey: @"NSDraggingSourceMaskForLocal"])
+            _draggingSourceMaskLocal = (NSDragOperation) [keyed
+                    decodeIntegerForKey: @"NSDraggingSourceMaskForLocal"] &
+                    NSDragOperationEvery;
+        if ([keyed containsValueForKey: @"NSDraggingSourceMaskForNonLocal"])
+            _draggingSourceMaskNonLocal = (NSDragOperation) [keyed
+                    decodeIntegerForKey: @"NSDraggingSourceMaskForNonLocal"] &
+                    NSDragOperationEvery;
 
         // row background and grid attributes for OS X >= 10.3
         _alternatingRowBackground = (flags & 0x00800000) ? YES : NO;
+        _floatsGroupRows = YES;
         if ([keyed containsValueForKey: @"NSGridStyleMask"])
             _gridStyleMask = [keyed decodeIntForKey: @"NSGridStyleMask"];
         else
@@ -214,6 +226,8 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
     _editedRow = -1;
     _numberOfRows = -1;
     _draggingRow = -1;
+    _draggingSourceMaskLocal = NSDragOperationEvery;
+    _draggingSourceMaskNonLocal = NSDragOperationNone;
 
     _allowsColumnReordering = YES;
     _allowsColumnResizing = YES;
@@ -241,6 +255,7 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
     // row background and grid attributes for OS X >= 10.3
     _alternatingRowBackground = NO;
     _gridStyleMask = NSTableViewGridNone;
+    _floatsGroupRows = YES;
 
     return self;
 }
@@ -323,6 +338,21 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
 
 - (void) setUsesAutomaticRowHeights: (BOOL) value {
     _usesAutomaticRowHeights = value;
+}
+
+- (BOOL) floatsGroupRows {
+    return _floatsGroupRows;
+}
+
+- (NSTableViewRowSizeStyle) rowSizeStyle {
+    return _rowSizeStyle;
+}
+
+// Darling has no sidebar size setting; Medium is macOS's out-of-the-box choice.
+- (NSTableViewRowSizeStyle) effectiveRowSizeStyle {
+    if (_rowSizeStyle == NSTableViewRowSizeStyleDefault)
+        return NSTableViewRowSizeStyleMedium;
+    return _rowSizeStyle;
 }
 
 - (BOOL) allowsColumnReordering {
@@ -426,11 +456,31 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
     return nil;
 }
 
+// Apple gives no heights for the small, medium and large styles; use the line
+// height of the system font for the matching control size. Only the laid-out
+// rows follow the style: -rowHeight is not tied to it (a table keeps reporting
+// the height that was set, as on macOS).
+static CGFloat styledRowHeight(NSTableViewRowSizeStyle style) {
+    // NSFont has no larger control size to offer, so the large style uses the
+    // regular system font like the medium one.
+    NSControlSize size = style == NSTableViewRowSizeStyleSmall
+                                 ? NSSmallControlSize
+                                 : NSRegularControlSize;
+
+    return [[NSFont systemFontOfSize: [NSFont systemFontSizeForControlSize: size]]
+            defaultLineHeightForFont];
+}
+
+- (CGFloat) _effectiveRowHeight {
+    return _rowSizeStyle == NSTableViewRowSizeStyleCustom ? _standardRowHeight
+                                                          : _styledRowHeight;
+}
+
 static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     if (index < self->_rowHeightsCount)
         return self->_rowHeights[index];
 
-    return self->_standardRowHeight;
+    return [self _effectiveRowHeight];
 }
 
 - (NSRect) rectOfRow: (NSInteger) row {
@@ -668,7 +718,7 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
         _standardRowHeight = 0.;
 
     for (i = 0; i < _rowHeightsCount; i++)
-        _rowHeights[i] = _standardRowHeight;
+        _rowHeights[i] = [self _effectiveRowHeight];
 
     [self tile];
 }
@@ -746,6 +796,17 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 {
     _selectionHighlightStyle = value;
     [self setNeedsDisplay: YES];
+}
+
+- (void) setFloatsGroupRows: (BOOL) flag {
+    _floatsGroupRows = flag;
+}
+
+- (void) setRowSizeStyle: (NSTableViewRowSizeStyle) style {
+    _rowSizeStyle = style;
+    if (style != NSTableViewRowSizeStyleCustom)
+        _styledRowHeight = styledRowHeight([self effectiveRowSizeStyle]);
+    [self tile];
 }
 
 // the appkit dox are pretty vague on these two. should they trigger a redraw or
@@ -1187,7 +1248,7 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
         }
     } else {
         while (row != NSNotFound) {
-            _rowHeights[row] = _standardRowHeight;
+            _rowHeights[row] = [self _effectiveRowHeight];
             row = [indexSet indexGreaterThanIndex: row];
         }
     }
@@ -1299,7 +1360,7 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     [_headerView setFrameSize: rect.size];
 
     [[self enclosingScrollView]
-            setVerticalLineScroll: _standardRowHeight +
+            setVerticalLineScroll: [self _effectiveRowHeight] +
                                    _intercellSpacing.height];
 
     [self setNeedsDisplay: YES];
@@ -1450,9 +1511,9 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
                     rectToFill.size.height; // This is for beyond the loop.
             heightFilled = rectToFill.origin.y;
         }
-        if (_standardRowHeight > 0.) {
+        if ([self _effectiveRowHeight] > 0.) {
             rectToFill.size.height =
-                    _standardRowHeight + _intercellSpacing.height;
+                    [self _effectiveRowHeight] + _intercellSpacing.height;
             while (heightFilled < clipRect.size.height) {
                 [(NSColor *) [rowColors objectAtIndex: i % colorCount] setFill];
                 NSRectFill(rectToFill);
@@ -1501,9 +1562,9 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
             [line lineToPoint: NSMakePoint(x + clipRect.size.width, y)];
         }
 
-        if (_standardRowHeight > 0.0) {
+        if ([self _effectiveRowHeight] > 0.0) {
             while (y < clipRect.size.height) {
-                y += _standardRowHeight + _intercellSpacing.height;
+                y += [self _effectiveRowHeight] + _intercellSpacing.height;
                 [line moveToPoint: NSMakePoint(clipRect.origin.x, y)];
                 [line lineToPoint: NSMakePoint(clipRect.origin.x +
                                                        clipRect.size.width,
@@ -2056,8 +2117,17 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     [self tile];
 }
 
+- (void) setDraggingSourceOperationMask: (NSDragOperation) mask
+                               forLocal: (BOOL) isLocal
+{
+    if (isLocal)
+        _draggingSourceMaskLocal = mask;
+    else
+        _draggingSourceMaskNonLocal = mask;
+}
+
 - (NSDragOperation) draggingSourceOperationMaskForLocal: (BOOL) isLocal {
-    return NSDragOperationCopy;
+    return isLocal ? _draggingSourceMaskLocal : _draggingSourceMaskNonLocal;
 }
 
 - (NSInteger) _getDraggedRow: (id<NSDraggingInfo>) info {
@@ -2191,6 +2261,18 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 @end
 
 @implementation NSTableView (NSTableViewStyle)
+
+// Cocotron draws rows in the plain style only, so the style is stored purely so
+// the getter round-trips a value set by a nib or a delegate. Deliberately does
+// not reloadData: that notifies numberOfRows, driving a bound NSArrayController
+// to re-apply a selection against rows it has not rebuilt, which raises.
+- (NSTableViewStyle) style {
+    return _style == NSTableViewStyleAutomatic ? NSTableViewStylePlain : _style;
+}
+
+- (void) setStyle: (NSTableViewStyle) style {
+    _style = style;
+}
 
 // Private AppKit: the insets a table view style adds around its rows. Cocotron
 // has only the plain style.
