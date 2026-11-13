@@ -21,4 +21,5 @@
 #import <AppKit/NSTypesetter.h>
 
 @interface NSATSTypesetter : NSTypesetter
++ (NSATSTypesetter *) sharedSystemTypesetter;
 @end

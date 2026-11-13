@@ -518,6 +518,10 @@ static NSMutableDictionary *cellClassDictionary = nil;
     return [NSApp sendAction: action to: target from: self];
 }
 
+- (NSInteger) sendActionOn: (NSInteger) mask {
+    return [_cell sendActionOn: mask];
+}
+
 - (NSText *) currentEditor {
     return _currentEditor;
 }

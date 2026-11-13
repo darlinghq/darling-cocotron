@@ -112,6 +112,14 @@ const NSNotificationName NSWindowWillExitFullScreenNotification =
         @"NSWindowWillExitFullScreenNotification";
 const NSNotificationName NSWindowDidExposeNotification =
         @"NSWindowDidExposeNotification";
+const NSNotificationName NSWindowWillEnterVersionBrowserNotification =
+        @"NSWindowWillEnterVersionBrowserNotification";
+const NSNotificationName NSWindowDidEnterVersionBrowserNotification =
+        @"NSWindowDidEnterVersionBrowserNotification";
+const NSNotificationName NSWindowWillExitVersionBrowserNotification =
+        @"NSWindowWillExitVersionBrowserNotification";
+const NSNotificationName NSWindowDidExitVersionBrowserNotification =
+        @"NSWindowDidExitVersionBrowserNotification";
 
 NSInteger NSBitsPerPixelFromDepth(NSWindowDepth depth) {
     switch (depth) {

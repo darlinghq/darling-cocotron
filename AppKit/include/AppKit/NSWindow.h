@@ -218,6 +218,14 @@ APPKIT_EXPORT const NSNotificationName NSWindowWillExitFullScreenNotification
         NS_SWIFT_NAME(NSWindow.willExitFullScreenNotification);
 APPKIT_EXPORT const NSNotificationName NSWindowDidExposeNotification
         NS_SWIFT_NAME(NSWindow.didExposeNotification);
+APPKIT_EXPORT const NSNotificationName NSWindowWillEnterVersionBrowserNotification
+        NS_SWIFT_NAME(NSWindow.willEnterVersionBrowserNotification);
+APPKIT_EXPORT const NSNotificationName NSWindowDidEnterVersionBrowserNotification
+        NS_SWIFT_NAME(NSWindow.didEnterVersionBrowserNotification);
+APPKIT_EXPORT const NSNotificationName NSWindowWillExitVersionBrowserNotification
+        NS_SWIFT_NAME(NSWindow.willExitVersionBrowserNotification);
+APPKIT_EXPORT const NSNotificationName NSWindowDidExitVersionBrowserNotification
+        NS_SWIFT_NAME(NSWindow.didExitVersionBrowserNotification);
 
 @interface NSWindow : NSResponder <NSAnimatablePropertyContainer, NSUserInterfaceItemIdentification, NSAccessibility, NSAppearanceCustomization> {
     NSRect _frame;

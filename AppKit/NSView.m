@@ -1663,6 +1663,7 @@ static char inputContextKey;
 }
 
 - (void) removeFromSuperview {
+    [[self retain] autorelease];
     [_superview setNeedsDisplayInRect: [self frame]];
     [self removeFromSuperviewWithoutNeedingDisplay];
 }
@@ -1672,8 +1673,9 @@ static char inputContextKey;
 }
 
 - (void) removeFromSuperviewWithoutNeedingDisplay {
-    NSView *removeFrom = _superview;
-    NSWindow *window = [self window];
+    [[self retain] autorelease];
+    NSView *removeFrom = [_superview retain];
+    NSWindow *window = [[self window] retain];
 
     [self _deepResignFirstResponder];
     [self _setSuperview: nil];
@@ -1681,6 +1683,8 @@ static char inputContextKey;
 
     [removeFrom _removeViewWithoutDisplay: self];
     [window _invalidateTrackingAreas];
+    [window release];
+    [removeFrom release];
 }
 
 - (void) viewWillMoveToSuperview: (NSView *) view {
@@ -2019,6 +2023,9 @@ static char inputContextKey;
 }
 
 - (void) _addLayerToSuperlayer {
+    if (_layer == nil) {
+        return;
+    }
     CALayer *superlayer = [_superview layer];
     if (superlayer != nil) {
         if ([_layer superlayer] != superlayer || _layerContext != nil) {

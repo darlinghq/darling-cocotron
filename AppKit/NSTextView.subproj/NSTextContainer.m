@@ -215,27 +215,39 @@ static const CGFloat NSTextContainerDefaultLineFragmentPadding = 5.0;
     [_textView _setTextStorage: [_layoutManager textStorage]];
 }
 
-- (void) replaceLayoutManager: (NSLayoutManager *) layoutManager {
-    if (layoutManager != _layoutManager) {
-        NSLayoutManager *currentLayoutManager = _layoutManager;
-        NSArray *textContainers = [currentLayoutManager textContainers];
+- (void) replaceLayoutManager: (NSLayoutManager *) newLayoutManager {
+    if (newLayoutManager != _layoutManager) {
+        NSLayoutManager *oldLayoutManager = _layoutManager;
 
-        // Move ourself from the old layout manager to the new one
-        int count = [textContainers count];
-        for (int i = 0; i < count; ++i) {
-            NSTextContainer *container = [textContainers objectAtIndex: i];
-            if (container == self) {
-                [layoutManager addTextContainer: container];
-                [currentLayoutManager removeTextContainerAtIndex: i];
-                break;
+        NSTextStorage *textStorage = [[oldLayoutManager textStorage] retain];
+        if (textStorage == nil && newLayoutManager != nil) {
+            textStorage = [[newLayoutManager textStorage] retain];
+        }
+
+        if (oldLayoutManager != nil) {
+            NSArray *textContainers = [oldLayoutManager textContainers];
+            NSUInteger idx = [textContainers indexOfObjectIdenticalTo: self];
+            if (idx != NSNotFound) {
+                [oldLayoutManager removeTextContainerAtIndex: idx];
             }
         }
 
-        // Update our textStorage to use the new layout manager instead of the
-        // old one
-        NSTextStorage *textStorage = [currentLayoutManager textStorage];
-        [textStorage addLayoutManager: layoutManager];
-        [textStorage removeLayoutManager: currentLayoutManager];
+        _layoutManager = newLayoutManager;
+
+        if (_layoutManager != nil) {
+            if ([[_layoutManager textContainers] indexOfObjectIdenticalTo: self] == NSNotFound) {
+                [_layoutManager addTextContainer: self];
+            }
+            if (textStorage != nil) {
+                if (oldLayoutManager != nil) {
+                    [textStorage removeLayoutManager: oldLayoutManager];
+                }
+                [textStorage addLayoutManager: _layoutManager];
+                [_textView _setTextStorage: textStorage];
+            }
+        }
+
+        [textStorage release];
     }
 }
 

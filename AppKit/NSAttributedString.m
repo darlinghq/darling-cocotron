@@ -52,6 +52,9 @@ NSAttributedStringKey NSExpansionAttributeName = @"NSExpansion";
 NSAttributedStringKey NSCursorAttributeName = @"NSCursor";
 NSAttributedStringKey NSMarkedClauseSegmentAttributeName = @"NSMarkedClauseSegment";
 NSAttributedStringKey NSToolTipAttributeName = @"NSToolTip";
+NSAttributedStringKey NSGlyphInfoAttributeName = @"NSGlyphInfo";
+NSAttributedStringKey NSVerticalGlyphFormAttributeName = @"NSVerticalGlyphForm";
+NSAttributedStringKey NSTextAlternativesAttributeName = @"NSTextAlternatives";
 NSAttributedStringKey NSSpellingStateAttributeName = @"NSSpellingState"; // temporary attribute
 
 NSAttributedStringDocumentAttributeKey NSDocumentTypeDocumentAttribute = @"DocumentType";

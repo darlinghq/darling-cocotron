@@ -62,11 +62,28 @@ typedef NS_ENUM(NSInteger, NSTextLayoutOrientation) {
     NSUInteger _rectCacheCapacity, _rectCacheCount;
     NSRect *_rectCache;
 
+    BOOL _showsControlCharacters;
+    BOOL _showsInvisibleCharacters;
+    BOOL _usesFontLeading;
+    BOOL _backgroundLayoutEnabled;
+    NSFont *_textFont;
     NSImageScaling _defaultAttachmentScaling;
     BOOL _usesDefaultHyphenation;
 }
 
 - init;
+
+- (NSFont *) textFont;
+- (void) setTextFont: (NSFont *) font;
+
+- (BOOL) showsControlCharacters;
+- (void) setShowsControlCharacters: (BOOL) flag;
+- (BOOL) showsInvisibleCharacters;
+- (void) setShowsInvisibleCharacters: (BOOL) flag;
+- (BOOL) usesFontLeading;
+- (void) setUsesFontLeading: (BOOL) flag;
+- (BOOL) backgroundLayoutEnabled;
+- (void) setBackgroundLayoutEnabled: (BOOL) flag;
 
 - (NSTextStorage *) textStorage;
 - (NSGlyphGenerator *) glyphGenerator;
@@ -167,6 +184,8 @@ typedef NS_ENUM(NSInteger, NSTextLayoutOrientation) {
 
 - (void) textContainerChangedGeometry: (NSTextContainer *) container;
 - (void) ensureLayoutForTextContainer: (NSTextContainer *) container;
+- (void) ensureLayoutForGlyphRange: (NSRange) glyphRange;
+- (void) ensureLayoutForCharacterRange: (NSRange) charRange;
 
 - (NSUInteger) glyphIndexForPoint: (NSPoint) point
                        inTextContainer: (NSTextContainer *) container
@@ -247,6 +266,7 @@ typedef NS_ENUM(NSInteger, NSTextLayoutOrientation) {
                  containerOrigin: (NSPoint) containerOrigin;
 
 - (CGFloat) defaultLineHeightForFont: (NSFont *) font;
+- (CGFloat) defaultBaselineOffsetForFont: (NSFont *) font;
 
 - (NSDictionary *) temporaryAttributesAtCharacterIndex: (NSUInteger) charIndex
                                         effectiveRange:

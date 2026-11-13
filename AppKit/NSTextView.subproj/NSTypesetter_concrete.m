@@ -998,6 +998,8 @@ static void loadGlyphAndCharacterCacheForLocation(NSTypesetter_concrete *self,
     [_layoutManager release];
     _layoutManager = layoutManager;
     _textContainers = [layoutManager textContainers];
+    if ([_textContainers count] == 0)
+        return;
 
     [self setAttributedString: [layoutManager textStorage]];
 
