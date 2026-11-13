@@ -66,9 +66,9 @@ int main(void) {
         }
         expect(unknownRejected, "an unrelated unknown key is still rejected");
 
-        // contextID is an unsigned 32-bit value (type encoding I16@0:8).
+        // contextID is an unsigned 32-bit value (the type encoding starts with I; the offsets differ per architecture).
         Method contextID = class_getInstanceMethod([NSApplication class], @selector(contextID));
-        expect(contextID != NULL && strcmp(method_getTypeEncoding(contextID), "I16@0:8") == 0,
+        expect(contextID != NULL && method_getTypeEncoding(contextID)[0] == 'I',
                "-[NSApplication contextID] returns an unsigned int");
 
         // The search handler registration is accepted.
