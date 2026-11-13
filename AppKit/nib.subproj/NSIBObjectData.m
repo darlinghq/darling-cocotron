@@ -400,6 +400,8 @@ NSString *const IBCocoaFramework = @"IBCocoaFramework";
             }
         }
 
+        [self _instantiateCustomObjects];
+
         if (_fileOwner != nil && !NSMapMember(_oidTable, _fileOwner, NULL, NULL)) {
             NSMapInsertKnownAbsent(_oidTable, _fileOwner, (const void *)(_nextOid++));
         }
@@ -419,6 +421,69 @@ NSString *const IBCocoaFramework = @"IBCocoaFramework";
     }
 
     return self;
+}
+
+// NSArchiver data holds the custom objects as placeholders in the tables and connectors
+// (there is no decoder delegate to substitute them while decoding). Like the keyed form,
+// loading creates the object of the named class and puts it in the placeholder's place in
+// the tables and in the connectors; File's Owner stays a placeholder until the owner is
+// known (see buildConnectionsWithNameTable:), and a class that is not known gives a plain
+// NSObject (as observed on the Mac).
+- (void) _instantiateCustomObjects {
+    NSMutableArray *placeholders = [NSMutableArray array];
+
+    for (id key in NSAllMapTableKeys(_nameTable)) {
+        if ([key isKindOfClass: [NSCustomObject class]] && key != _fileOwner)
+            [placeholders addObject: key];
+    }
+    for (id key in NSAllMapTableKeys(_objectTable)) {
+        if ([key isKindOfClass: [NSCustomObject class]] && key != _fileOwner &&
+            [placeholders indexOfObjectIdenticalTo: key] == NSNotFound)
+            [placeholders addObject: key];
+    }
+
+    for (NSCustomObject *placeholder in placeholders) {
+        id replacement = [placeholder createCustomInstance];
+
+        // A class that is not known gives a plain NSObject (First Responder is no object).
+        if (replacement == nil && ![[placeholder className] isEqualToString: @"FirstResponder"])
+            replacement = [[NSObject alloc] init];
+        if (replacement == nil)
+            continue;
+
+        [self replaceObject: placeholder withObject: replacement];
+
+        id name = [_nameTable objectForKey: placeholder];
+        if (name != nil) {
+            [name retain];
+            [_nameTable removeObjectForKey: placeholder];
+            [_nameTable setObject: name forKey: replacement];
+            [name release];
+        }
+
+        for (id key in NSAllMapTableKeys(_objectTable)) {
+            id value = [_objectTable objectForKey: key];
+
+            if (key == placeholder) {
+                [_objectTable removeObjectForKey: key];
+                [_objectTable setObject: (value == placeholder ? replacement : value) forKey: replacement];
+            } else if (value == placeholder) {
+                [_objectTable setObject: replacement forKey: key];
+            }
+        }
+
+        if ([_visibleWindows containsObject: placeholder]) {
+            [_visibleWindows removeObject: placeholder];
+            [_visibleWindows addObject: replacement];
+        }
+        [replacement release];
+    }
+}
+
+// All objects of the object table in the order of their object ids (the order the nib
+// loader sends awakeFromNib in when the archive has no decoding order to offer).
+- (NSArray *) allObjects {
+    return [self _sortedAndFilteredMapTableKeys: _objectTable];
 }
 
 - (NSArray *) _sortedAndFilteredMapTableKeys: (NSMapTable *) mapTable {

@@ -229,7 +229,25 @@ NSString *const NSNibTopLevelObjects = @"NSNibTopLevelObjects";
             objectData = [unkeyed decodeObject];
         }
 
+        // NSArchiver data has no decoding delegate to collect the objects as they are decoded;
+        // the objects of the object table stand in for them, with the owner taking the place
+        // of its placeholder.
+        NSArray *unkeyedObjects = nil;
+        id formerOwner = nil;
+        if (!_flags._isKeyed) {
+            unkeyedObjects = [[objectData allObjects] retain];
+            formerOwner = [[objectData rootObject] retain];
+        }
+
         [objectData buildConnectionsWithNameTable: _nameTable];
+
+        if (unkeyedObjects != nil) {
+            id owner = [objectData rootObject];
+            for (id object in unkeyedObjects)
+                [_allObjects addObject: (object == formerOwner && owner != nil) ? owner : object];
+            [unkeyedObjects release];
+            [formerOwner release];
+        }
         if ((menu = [objectData mainMenu]) != nil) {
             // Rename the first item to have the application name.
             if ([menu numberOfItems] > 0) {
