@@ -961,10 +961,31 @@ static NSData *makeWindowIcon() {
 }
 
 - (void) setTitle: (NSString *) title {
-    XTextProperty prop;
-    const char *text = [title cString];
-    XStringListToTextProperty((char **) &text, 1, &prop);
-    XSetWMName(_display, _window, &prop);
+    const char *text = [title UTF8String];
+    // -setTitle: nil is undefined, but it used to reach here without a crash and
+    // strlen(NULL) would not survive it.
+    if (text == NULL)
+        text = "";
+    int length = (int) strlen(text);
+
+    // EWMH says the title is _NET_WM_NAME as UTF8_STRING, and nothing set it, so
+    // a title outside Latin-1 arrived as whatever XStringListToTextProperty could
+    // do with it. The bytes used to come from -[NSString cString], which converts
+    // to the system encoding and raises when a character does not fit. WM_NAME
+    // gets the same bytes for a window manager predating EWMH.
+    //
+    // No return check here. XChangeProperty reports through the X error handler, not
+    // its return value: it returns 1 on success, so comparing against Success (0)
+    // logged "failed" on every title, including the ones that demonstrably landed.
+    // -[X11Display handleError:] is what reports a real failure, with request and
+    // error codes.
+    XChangeProperty(_display, _window,
+                    XInternAtom(_display, "_NET_WM_NAME", False),
+                    XInternAtom(_display, "UTF8_STRING", False), 8,
+                    PropModeReplace, (const unsigned char *) text, length);
+
+    XChangeProperty(_display, _window, XA_WM_NAME, XA_STRING, 8, PropModeReplace,
+                    (const unsigned char *) text, length);
 }
 
 - (void) setFrame: (O2Rect) frame {

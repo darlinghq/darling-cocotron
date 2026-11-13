@@ -1525,14 +1525,66 @@ static NSInteger cocoaButtonNumber(unsigned int xButton) {
     }
 }
 
+// Returns the window numbers of this app's windows, frontmost first, using the X server's stacking
+// order: XQueryTree lists the root's children bottom to top. Under a reparenting window manager our
+// top-level windows are children of frame windows, so each root child is matched against our windows
+// and their ancestors.
+static XErrorHandler previousOrderingErrorHandler;
+
+// Windows (for example a window manager's frame, when a window closes) can be destroyed while
+// -orderedWindowNumbers walks the tree. XQueryTree then fails with BadWindow, which isn't an error
+// there; any other error goes to the handler that was installed before.
+// The handler is swapped through the process-wide XSetErrorHandler and a file-scope variable, which
+// is safe only because the X connection and this method are used from the main thread alone.
+static int ignoreBadWindowWhileOrdering(Display *display, XErrorEvent *errorEvent) {
+    if (errorEvent->error_code == BadWindow)
+        return 0;
+    return previousOrderingErrorHandler ? previousOrderingErrorHandler(display, errorEvent) : 0;
+}
+
 - (NSArray *) orderedWindowNumbers {
     NSMutableArray *result = [NSMutableArray array];
+    NSMutableDictionary *byTopLevel = [NSMutableDictionary dictionary];
+    Window root = DefaultRootWindow(_display);
 
-    for (NSWindow *win in [NSApp windows]) {
-        [result addObject: @([win windowNumber])];
+    XErrorHandler previousHandler = XSetErrorHandler(ignoreBadWindowWhileOrdering);
+    previousOrderingErrorHandler = previousHandler;
+    @try {
+        for (NSNumber *xid in _windowsByID) {
+            // X11Pasteboard registers its helper X window in the same map; it has no window number.
+            if (![_windowsByID[xid] isKindOfClass: [X11Window class]])
+                continue;
+            Window w = (Window) [xid unsignedLongValue];
+            Window rootRet, parent, *children = NULL;
+            unsigned int count;
+
+            // Walk up to the root's direct child that contains this window.
+            while (XQueryTree(_display, w, &rootRet, &parent, &children, &count)) {
+                if (children)
+                    XFree(children);
+                children = NULL;
+                if (parent == root || parent == None)
+                    break;
+                w = parent;
+            }
+            byTopLevel[@((unsigned long) w)] = _windowsByID[xid];
+        }
+
+        Window rootRet, parent, *children = NULL;
+        unsigned int count = 0;
+        if (XQueryTree(_display, root, &rootRet, &parent, &children, &count)) {
+            for (unsigned int i = count; i > 0; i--) {
+                id window = byTopLevel[@((unsigned long) children[i - 1])];
+                if (window != nil)
+                    [result addObject: @([window windowNumber])];
+            }
+            if (children)
+                XFree(children);
+        }
+    } @finally {
+        XSetErrorHandler(previousHandler);
+        previousOrderingErrorHandler = NULL;
     }
-
-    NSUnimplementedFunction(); // (Window numbers not even remotely ordered)
 
     return result;
 }
@@ -2071,15 +2123,23 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
         NSLog(@"ReparentNotify");
         break;
 
-    case ConfigureNotify:
-        if (_relativeMouse.active && ev->xconfigure.window == _relativeWindow)
-            [self resnapshotRelativeMouse];
-        [window frameChanged];
-        [delegate platformWindow: window
-                    frameChanged: [window frame]
-                         didSize: YES];
-        [self updatePointerConfinement];
-        break;
+    case ConfigureNotify:; {
+            // The server also sends a ConfigureNotify for a pure move, and for
+            // every pixel of a drag, so reporting a resize unconditionally
+            // posted NSWindowDidResizeNotification for all of them. NSWindow
+            // resizes its background view, resets the cursor rects and saves
+            // the frame on each of those, once per pixel of a drag.
+            if (_relativeMouse.active && ev->xconfigure.window == _relativeWindow)
+                [self resnapshotRelativeMouse];
+            O2Rect oldFrame = [window frame];
+            [window frameChanged];
+            O2Rect newFrame = [window frame];
+            [delegate platformWindow: window
+                        frameChanged: newFrame
+                             didSize: !NSEqualSizes(oldFrame.size, newFrame.size)];
+            [self updatePointerConfinement];
+            break;
+        }
 
     case ConfigureRequest:
         NSLog(@"ConfigureRequest");
