@@ -1,6 +1,9 @@
 #import <CoreFoundation/CFBase.h>
+#import <CoreText/CoreTextExport.h>
 
 #include <stdint.h>
+
+CF_IMPLICIT_BRIDGING_ENABLED
 
 typedef const struct __CTParagraphStyle* CTParagraphStyleRef;
 
@@ -62,5 +65,10 @@ typedef struct CTParagraphStyleSetting {
 	const void* value;
 } CTParagraphStyleSetting;
 
-extern CTParagraphStyleRef CTParagraphStyleCreate(const CTParagraphStyleSetting *settings, size_t settingCount);
-extern bool CTParagraphStyleGetValueForSpecifier(CTParagraphStyleRef paragraphStyle, CTParagraphStyleSpecifier spec, size_t valueBufferSize, void *valueBuffer);
+CORETEXT_EXPORT CTParagraphStyleRef CTParagraphStyleCreate(const CTParagraphStyleSetting *settings, size_t settingCount);
+CORETEXT_EXPORT bool CTParagraphStyleGetValueForSpecifier(CTParagraphStyleRef paragraphStyle, CTParagraphStyleSpecifier spec, size_t valueBufferSize, void *valueBuffer);
+
+CORETEXT_EXPORT CTParagraphStyleRef CTParagraphStyleCreateCopy(CTParagraphStyleRef paragraphStyle);
+CORETEXT_EXPORT CFTypeID CTParagraphStyleGetTypeID(void);
+
+CF_IMPLICIT_BRIDGING_DISABLED

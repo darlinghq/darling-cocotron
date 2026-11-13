@@ -629,8 +629,14 @@ CFStringRef CTFontCopyNameForGlyph(CTFontRef font, CGGlyph glyph)
 
 CGGlyph CTFontGetGlyphWithName(CTFontRef font, CFStringRef glyphName)
 {
-    printf("STUB %s\n", __PRETTY_FUNCTION__);
-    return CGNullGlyph;
+    if (font == NULL || glyphName == NULL)
+        return CGNullGlyph;
+    CGFontRef cgFont = [ktFont(font) copyGraphicsFont];
+    if (cgFont == NULL)
+        return CGNullGlyph;
+    CGGlyph glyph = CGFontGetGlyphWithGlyphName(cgFont, glyphName);
+    CGFontRelease(cgFont);
+    return glyph;
 }
 
 CGRect CTFontGetBoundingRectsForGlyphs(CTFontRef font, CTFontOrientation orientation,
