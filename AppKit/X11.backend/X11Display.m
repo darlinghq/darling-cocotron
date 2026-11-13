@@ -421,7 +421,11 @@ static void beforeWaitingCallback(CFRunLoopObserverRef observer,
     return array;
 }
 
-static NSDictionary *modeInfoToDictionary(const XRRModeInfo *mi, int depth) {
+// Width and Height are in points, like CGDisplayModeGetWidth/Height; the
+// PixelWidth/PixelHeight keys carry the mode's size in device pixels (the
+// RandR mode size), which the points are derived from with the backing scale.
+static NSDictionary *modeInfoToDictionary(const XRRModeInfo *mi, int depth,
+                                          CGFloat scale) {
     double rate = 0;
 
     if (mi->hTotal && mi->vTotal)
@@ -429,12 +433,10 @@ static NSDictionary *modeInfoToDictionary(const XRRModeInfo *mi, int depth) {
                ((double) mi->hTotal * (double) mi->vTotal);
 
     return @{
-        @"Width" : @(mi->width),
-        @"Height" : @(mi->height),
+        @"Width" : @((unsigned) lround(mi->width / scale)),
+        @"Height" : @((unsigned) lround(mi->height / scale)),
         @"Depth" : @(depth),
         @"RefreshRate" : @(rate),
-        // The size of the mode's framebuffer. Width and Height above are the
-        // same number here because the mode is addressed in device pixels.
         @"PixelWidth" : @(mi->width),
         @"PixelHeight" : @(mi->height)
     };
@@ -447,10 +449,13 @@ static NSDictionary *modeInfoToDictionary(const XRRModeInfo *mi, int depth) {
 
     if (!XRRQueryExtension(_display, &eventBase, &errorBase)) {
         Screen *defaultScreen = XDefaultScreenOfDisplay(_display);
+        CGFloat scale = [self backingScale];
         return @[ @{
-            @"Width" : @(WidthOfScreen(defaultScreen)),
-            @"Height" : @(HeightOfScreen(defaultScreen)),
-            @"Depth" : @(defaultDepth)
+            @"Width" : @((unsigned) lround(WidthOfScreen(defaultScreen) / scale)),
+            @"Height" : @((unsigned) lround(HeightOfScreen(defaultScreen) / scale)),
+            @"Depth" : @(defaultDepth),
+            @"PixelWidth" : @(WidthOfScreen(defaultScreen)),
+            @"PixelHeight" : @(HeightOfScreen(defaultScreen))
         } ];
     } else {
         XRRScreenResources *screen = XRRGetScreenResourcesCurrent(
@@ -479,7 +484,7 @@ static NSDictionary *modeInfoToDictionary(const XRRModeInfo *mi, int depth) {
             }
 
             if (mode != NULL) {
-                NSDictionary *dict = modeInfoToDictionary(mode, defaultDepth);
+                NSDictionary *dict = modeInfoToDictionary(mode, defaultDepth, [self backingScale]);
                 [retval addObject: dict];
             }
         }
@@ -527,7 +532,8 @@ static NSDictionary *modeInfoToDictionary(const XRRModeInfo *mi, int depth) {
                     const int defaultDepth = XDefaultDepthOfScreen(
                             XDefaultScreenOfDisplay(_display));
                     dict = modeInfoToDictionary(&screen->modes[i],
-                                                defaultDepth);
+                                                defaultDepth,
+                                                [self backingScale]);
 
                     break;
                 }
