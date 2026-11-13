@@ -1354,13 +1354,10 @@ static int ignoreBadWindow(Display *display, XErrorEvent *errorEvent) {
         unsigned int w, h, d, b, nchild;
         Window *children;
         O2Rect rect = NSZeroRect;
-        // Walk up the parents to get the absolute position. QueryTree reports the root
-        // window as its own parent, so this loop is only bounded by noticing that.
-        // Ending it instead on QueryTree(root) raising BadWindow, which is what
-        // -ignoreBadWindow below swallows, makes termination depend on the server
-        // rather than on this code, and a reparenting window manager makes the chain
-        // deeper. Bound the depth as well so a server that answers QueryTree(root)
-        // successfully cannot spin here, in the ConfigureNotify path.
+        // Walk up the parents to get the absolute position. The root window has
+        // no parent (QueryTree reports None), which ends the walk; the depth is
+        // bounded as well so that a parent cycle cannot hold the ConfigureNotify
+        // path. A reparenting window manager makes the chain deeper.
         for (int depth = 0; window && depth < 64; depth++) {
             XGetGeometry(_display, window, &root, &x, &y, &w, &h, &b, &d);
 
@@ -1375,7 +1372,7 @@ static int ignoreBadWindow(Display *display, XErrorEvent *errorEvent) {
             if (children)
                 XFree(children);
             if (parent == window)
-                break; // reached the root, which is its own parent
+                break;
             window = parent;
         }
 
