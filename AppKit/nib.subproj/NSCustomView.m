@@ -88,11 +88,80 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
             return (NSCustomView*)newView;
         }
     } else {
-        [NSException raise: NSInvalidArgumentException
-                    format: @"-[%@ %s] does not handle %@", [self class],
-                            sel_getName(_cmd), [coder class]];
-        return self;
+        // The NSView part comes first, then the class name and an extension
+        // object; the class name is a C string in the oldest layout.
+        NSInteger version = [coder versionForClassName: @"NSCustomView"];
+        NSString *className = nil;
+        id viewExtension = nil;
+
+        self = [super initWithCoder: coder];
+        if (self == nil) {
+            return nil;
+        }
+
+        if (version == 0) {
+            char *cName = NULL;
+
+            [coder decodeValuesOfObjCTypes: "*@", &cName, &viewExtension];
+            if (cName != NULL) {
+                className = [[[NSString alloc]
+                        initWithBytesNoCopy: cName
+                                     length: strlen(cName)
+                                   encoding: NSNEXTSTEPStringEncoding
+                               freeWhenDone: YES] autorelease];
+            }
+        } else if (version <= 16 || version > 40) {
+            [coder decodeValuesOfObjCTypes: "@@", &className, &viewExtension];
+            [className autorelease];
+        } else {
+            className = [coder decodeObject];
+            viewExtension = [[coder decodeObject] retain];
+        }
+        [viewExtension release];
+
+        if (className != nil) {
+            NSString *mapped = [NSUnarchiver classNameDecodedForArchiveClassName: className];
+            if (mapped != nil) {
+                className = mapped;
+            }
+        }
+
+        Class class = NSClassFromString(className);
+        if (class == nil || ![class isSubclassOfClass: [NSView class]]) {
+            NSLog(@"NSCustomView: %@ is not a known NSView subclass, using NSView",
+                  className);
+            object_setClass(self, [NSView class]);
+            return self;
+        }
+
+        NSView *newView = [[class alloc] initWithFrame: _frame];
+        if (newView == nil) {
+            NSLog(@"NSCustomView: -[%@ initWithFrame:] returned nil, using NSView",
+                  className);
+            object_setClass(self, [NSView class]);
+            return self;
+        }
+        // References decoded after this point (and by the unarchiver's table)
+        // must resolve to the real view.
+        if ([coder isKindOfClass: [NSUnarchiver class]]) {
+            [(NSUnarchiver *) coder replaceObject: self withObject: newView];
+        }
+
+        newView->_autoresizingMask = _autoresizingMask;
+        newView->_autoresizesSubviews = YES;
+        newView->_draggedTypes = [_draggedTypes retain];
+
+        [newView->_subviews addObjectsFromArray: _subviews];
+        [newView->_subviews
+                makeObjectsPerformSelector: @selector(_setSuperview:)
+                                withObject: newView];
+        [_subviews removeAllObjects];
+
+        [self release];
+        return (NSCustomView *) newView;
     }
+
+    return self;
 }
 
 @end

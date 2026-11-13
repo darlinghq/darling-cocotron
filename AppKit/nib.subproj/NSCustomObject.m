@@ -61,7 +61,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
             [coder decodeValuesOfObjCTypes: "@@", &_className,
                                             &self->extension];
         } else {
+            // Versions 17 to 40 store the same two objects (class name, then
+            // extension) as separate plain objects.
             _className = [[coder decodeObject] retain];
+            self->extension = [[coder decodeObject] retain];
         }
     }
 

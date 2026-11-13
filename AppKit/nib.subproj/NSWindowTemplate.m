@@ -49,25 +49,33 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 @synthesize maxSize = _maxSize;
 @synthesize className = _windowClass;
 
+// Reads a flags byte followed by the sizes it announces: bit 0 selects a
+// minimum size, bit 1 a maximum size. A size is only stored in the archive when
+// its bit is set, and only the bits this call asks for (a non-NULL pointer) are
+// acted on; the other bit is ignored without consuming a size.
 - (int) _NXReadWindowSizeLimits:(NSCoder *) coder sizeOne: (CGSize *) sizeOne sizeTwo: (CGSize *) sizeTwo {
-    uint8_t byte;
-    [coder decodeValuesOfObjCTypes:"c", &byte];
+    uint8_t byte = 0;
+    [coder decodeValueOfObjCType:"c" at:&byte];
 
     if (sizeOne) {
-        if ((byte & 0x1) == 0x0) {
-            sizeOne->width = 0;
-            sizeOne->height = 0;
-        } else {
-            *sizeOne = [coder decodeSize];
+        sizeOne->width = 0;
+        sizeOne->height = 0;
+        if ((byte & 0x1) != 0x0) {
+            float width = 0, height = 0;
+            [coder decodeValuesOfObjCTypes:"ff", &width, &height];
+            sizeOne->width = width;
+            sizeOne->height = height;
         }
     }
 
     if (sizeTwo) {
-        if ((byte & 0x2) == 0x0) {
-            sizeTwo->width = FLT_MAX;
-            sizeTwo->height = FLT_MAX;
-        } else {
-            *sizeTwo = [coder decodeSize];
+        sizeTwo->width = FLT_MAX;
+        sizeTwo->height = FLT_MAX;
+        if ((byte & 0x2) != 0x0) {
+            float width = 0, height = 0;
+            [coder decodeValuesOfObjCTypes:"ff", &width, &height];
+            sizeTwo->width = width;
+            sizeTwo->height = height;
         }
     }
 
@@ -147,16 +155,59 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     } else {
         NSInteger version = [coder versionForClassName: @"NSWindowTemplate"];
 
-        if (version > 40) {
+        if (version >= 17 && version <= 40) {
+            // Older layout: the window flags are stored one byte each, and
+            // there are no screen rectangle or size limits.
+            float windowRectX = 0, windowRectY = 0, windowRectWidth = 0, windowRectHeight = 0;
+            uint8_t flagBytes[11] = {0};
+
+            [coder decodeValuesOfObjCTypes:"ii", &_windowStyleMask, &_windowBacking];
+            [coder decodeValuesOfObjCTypes:"ffff", &windowRectX, &windowRectY, &windowRectWidth, &windowRectHeight];
+            windowRect = CGRectMake(windowRectX, windowRectY, windowRectWidth, windowRectHeight);
+
+            for (int i = 0; i < 10; i++) {
+                [coder decodeValuesOfObjCTypes:"c", &flagBytes[i]];
+            }
+            [coder decodeValueOfObjCType:"c" at:&flagBytes[10]];
+
+            // Byte meanings were established by setting one byte at a time
+            // and reading the template's flag word back (MC-NSCODER-3). The
+            // last two bytes have no effect on the flag word and are ignored.
+            // Archives in this layout also set the flag that lets the window
+            // set its miniaturizable style automatically.
+            _wtFlags = NSWindowTemplateFlagAutoSetMiniaturizableMask;
+            if (flagBytes[0] != 0) _wtFlags |= NSWindowTemplateFlagHidesOnDeactivate;
+            if (flagBytes[1] != 0) _wtFlags |= NSWindowTemplateFlagNotReleasedWhenClosed;
+            if (flagBytes[2] != 0) _wtFlags |= NSWindowTemplateFlagDeferred;
+            if (flagBytes[3] != 0) _wtFlags |= NSWindowTemplateFlagOneShot;
+            if (flagBytes[4] != 0) _wtFlags |= NSWindowTemplateFlagVisibleAtLaunch;
+            if (flagBytes[5] != 0) _wtFlags |= NSWindowTemplateFlagWantsToBeColor;
+            if (flagBytes[6] != 0) _wtFlags |= NSWindowTemplateFlagHasDynamicDepthLimit;
+            _wtFlags |= ((uint32_t) (flagBytes[7] & 0x3f)) << NSWindowTemplateFlagAutoPositionShift;
+            if (flagBytes[8] != 0) _wtFlags |= NSWindowTemplateFlagSavePosition;
+
+            _windowTitle = [[coder decodeObject] retain];
+            _windowClass = [[coder decodeObject] retain];
+            _viewClass = [[coder decodeObject] retain];
+            windowView = [[coder decodeObject] retain];
+            _extension = [[coder decodeObject] retain];
+        } else if (version > 40) {
 
             float windowRectX, windowRectY, windowRectWidth, windowRectHeight;
-            uint8 isEqualToDefaultScreenRect;   // 0x1 or 0x0 if screen rect is equal to _NXDefaultScreenRecet
+            uint8_t hasScreenRect = 0;   // nonzero when a screen rectangle follows
 
-            [coder decodeValuesOfObjCTypes:"iiffffi@@@@@c", &_windowStyleMask, &_windowBacking, &windowRectX, &windowRectY, &windowRectWidth, &windowRectHeight, &_wtFlags, &_windowTitle, &_windowClass, &_viewClass, &windowView, &_extension, &isEqualToDefaultScreenRect];
-
+            [coder decodeValuesOfObjCTypes:"iiffffi@@@@@c", &_windowStyleMask, &_windowBacking, &windowRectX, &windowRectY, &windowRectWidth, &windowRectHeight, &_wtFlags, &_windowTitle, &_windowClass, &_viewClass, &windowView, &_extension, &hasScreenRect];
 
             windowRect = CGRectMake(windowRectX, windowRectY, windowRectWidth, windowRectHeight);
-            screenRect = [coder decodeRect];
+
+            if (hasScreenRect != 0) {
+                float screenX = 0, screenY = 0, screenWidth = 0, screenHeight = 0;
+                [coder decodeValuesOfObjCTypes:"ffff", &screenX, &screenY, &screenWidth, &screenHeight];
+                screenRect = CGRectMake(screenX, screenY, screenWidth, screenHeight);
+            } else if ([NSScreen mainScreen] != nil) {
+                // No rectangle is stored: the window was laid out on the default screen.
+                screenRect = [[NSScreen mainScreen] frame];
+            }
 
             [self _NXReadWindowSizeLimits: coder sizeOne: &_minSize sizeTwo: nil];
 

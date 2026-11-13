@@ -83,6 +83,10 @@ NSString *const IBCocoaFramework = @"IBCocoaFramework";
                                            valueOptions: NSPointerFunctionsObjectPersonality | NSPointerFunctionsStrongMemory
                                                capacity: 0];
 
+    _instantiatedObjectTable = [[NSMapTable alloc] initWithKeyOptions: NSPointerFunctionsObjectPointerPersonality | NSPointerFunctionsStrongMemory
+                                                         valueOptions: NSPointerFunctionsObjectPointerPersonality | NSPointerFunctionsStrongMemory
+                                                             capacity: 0];
+
     _classTable = [[NSMapTable alloc] initWithKeyOptions: NSPointerFunctionsObjectPointerPersonality | NSPointerFunctionsStrongMemory
                                             valueOptions: NSPointerFunctionsObjectPersonality | NSPointerFunctionsStrongMemory
                                                 capacity: 0];
@@ -227,7 +231,7 @@ NSString *const IBCocoaFramework = @"IBCocoaFramework";
         // Decode objectTable key/value pairs
         [coder decodeValueOfObjCType: @encode(int) at: &count];
 
-        if (version < 16) {
+        if (version <= 16) {
             // Super legacy support
             // read version 0
 
@@ -345,9 +349,13 @@ NSString *const IBCocoaFramework = @"IBCocoaFramework";
             [coder decodeValueOfObjCType: @encode(id) at: &connections];
             [coder decodeValueOfObjCType: @encode(id) at: &_fontManager];
 
-            [_visibleWindows setSet: visibleWindows];
+            if (visibleWindows != nil) {
+                [_visibleWindows setSet: visibleWindows];
+            }
             [visibleWindows release];
-            [_connections setArray: connections];
+            if (connections != nil) {
+                [_connections setArray: connections];
+            }
             [connections release];
 
             // Oid table since version 19
@@ -359,7 +367,9 @@ NSString *const IBCocoaFramework = @"IBCocoaFramework";
                     int value;
 
                     [coder decodeValuesOfObjCTypes: "@i", &key, &value];
-                    NSMapInsert(_oidTable, key, (const void *)(NSInteger)value);
+                    if (key != nil) {
+                        NSMapInsert(_oidTable, key, (const void *)(NSInteger)value);
+                    }
                     [key release];
                 }
 
@@ -375,18 +385,22 @@ NSString *const IBCocoaFramework = @"IBCocoaFramework";
                     NSObject *key, *value;
 
                     [coder decodeValuesOfObjCTypes: "@@", &key, &value];
-                    NSMapInsert(_instantiatedObjectTable, key, value);
+                    if (key != nil) {
+                        NSMapInsert(_instantiatedObjectTable, key, value);
+                    }
+                    [key release];
+                    [value release];
                 }
             }
 
-            if (version <= 223) {
-                _framework = [IBCocoaFramework copy];
-            } else {
-                _framework = [[coder decodeObject] retain];
+            if (version > 223) {
+                [_framework release];
+                _framework = nil;
+                [coder decodeValuesOfObjCTypes: "@", &_framework];
             }
         }
 
-        if (!NSMapMember(_oidTable, _fileOwner, NULL, NULL)) {
+        if (_fileOwner != nil && !NSMapMember(_oidTable, _fileOwner, NULL, NULL)) {
             NSMapInsertKnownAbsent(_oidTable, _fileOwner, (const void *)(_nextOid++));
         }
 
@@ -508,6 +522,7 @@ NSString *const IBCocoaFramework = @"IBCocoaFramework";
     [_fontManager release];
     [_framework release];
     [_nameTable release];
+    [_instantiatedObjectTable release];
     [_objectTable release];
     [_oidTable release];
     [_fileOwner release];

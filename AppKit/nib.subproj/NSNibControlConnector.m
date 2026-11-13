@@ -22,6 +22,26 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @implementation NSNibControlConnector
 
+- (instancetype) initWithCoder: (NSCoder *) coder {
+    self = [super initWithCoder: coder];
+
+    if (self != nil && ![coder allowsKeyedCoding]) {
+        // Reading an archive made by NSArchiver leaves the action name in
+        // selector form (with its trailing colon), as seen on macOS when
+        // decoding a name without one (MC-NSCODER-3).
+        NSUInteger length = [_label length];
+
+        if (length > 0 && [_label characterAtIndex: length - 1] != ':') {
+            NSString *selectorName = [_label stringByAppendingString: @":"];
+
+            [_label release];
+            _label = [selectorName retain];
+        }
+    }
+
+    return self;
+}
+
 - (void) establishConnection {
     NSString *selectorName = _label;
     NSUInteger length = [selectorName length];
