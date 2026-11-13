@@ -15,7 +15,7 @@ extern void CGSRegionRelease(RegionRef region);
 extern CGError CGSNewWindow(CGSConnectionID cid, CFIndex flags, float x, float y, const RegionRef region,
                             CGSWindowID *windowID);
 extern CGError CGSReleaseWindow(CGSConnectionID cid, CGSWindowID wid);
-extern int CGSOrderWindow(CGSConnectionID cid, CGSWindowID wid, int place, CGSWindowID relativeTo);
+extern OSStatus CGSOrderWindow(CGSConnectionID cid, CGSWindowID wid, int place, CGSWindowID relativeTo);
 extern CGError CGSMoveWindow(CGSConnectionID cid, CGSWindowID wid, const CGPoint *position);
 extern CGError CGSSetWindowTitle(CGSConnectionID cid, CGSWindowID wid, CFStringRef title);
 extern CGError CGSGetWindowProperty(CGSConnectionID cid, CGSWindowID wid, CFStringRef key, CFTypeRef *value);
@@ -23,7 +23,7 @@ extern CGError CGSAddSurface(CGSConnectionID cid, CGSWindowID wid, CGSSurfaceID 
 extern CGError CGSRemoveSurface(CGSConnectionID cid, CGSWindowID wid, CGSSurfaceID sid);
 extern CGError CGSSetSurfaceBounds(CGSConnectionID cid, CGSWindowID wid, CGSSurfaceID sid, CGRect rect);
 extern void *_CGSNativeWindowForID(CGSConnectionID cid, CGSWindowID wid);
-extern void *_CGSNativeWindowForCGSSurfaceID(CGSConnectionID cid, CGSWindowID wid, CGSSurfaceID sid);
+extern void *_CGSNativeWindowForSurfaceID(CGSConnectionID cid, CGSWindowID wid, CGSSurfaceID sid);
 extern void *_CGSNativeDisplay(CGSConnectionID cid);
 extern const CFStringRef kCGSWindowTitle;
 
@@ -86,7 +86,7 @@ int main(void) {
     CGSSurfaceID sid = 0;
     if (CGSAddSurface(cid, wid, &sid) != kCGErrorSuccess || sid == 0)
         return 50;
-    void *surfaceNative = _CGSNativeWindowForCGSSurfaceID(cid, wid, sid);
+    void *surfaceNative = _CGSNativeWindowForSurfaceID(cid, wid, sid);
     if (surfaceNative == NULL || surfaceNative == _CGSNativeWindowForID(cid, wid))
         return 51;
     if (CGSSetSurfaceBounds(cid, wid, sid, CGRectMake(10, 10, 100, 80)) != kCGErrorSuccess)
