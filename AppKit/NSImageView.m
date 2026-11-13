@@ -29,6 +29,18 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return [NSImageCell class];
 }
 
+- initWithCoder: (NSCoder *) coder {
+    self = [super initWithCoder: coder];
+
+    if (![coder allowsKeyedCoding]) {
+        // A single byte follows the control; its meaning is unknown (no accessor of the
+        // view changes with it).
+        char unknown;
+        [coder decodeValuesOfObjCTypes: "c", &unknown];
+    }
+    return self;
+}
+
 - (instancetype) initWithImage: (NSImage *) image {
     if ((self = [super initWithFrame: NSMakeRect(0, 0, 0, 0)]) != nil)
         [self setImage: image];

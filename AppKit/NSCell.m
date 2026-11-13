@@ -205,6 +205,23 @@ NSNotificationName NSControlTintDidChangeNotification = @"NSControlTintDidChange
     _controlSize = (flags2 & NSCellAppleFlag2ControlSizeMask) >> NSCellAppleFlag2ControlSizeShift;
 }
 
+// The fields of the second flag word that NSArchiver data (non-keyed decoding) lays out
+// differently from what _applyAppleFlags:flags2: reads, as seen in archives written
+// on Mac OS X 10.14 and macOS 26: text alignment in bits 26-28, the mixed state in
+// bit 23 (the on-state bit of the first word is set too), focus ring type in bits 15-16,
+// base writing direction right-to-left in bit 14, truncation of the last visible line
+// in bit 8 and right-to-left layout direction in bit 7.
+- (void) _applyNonKeyedFlags2: (unsigned int) flags2 {
+    _textAlignment = (flags2 >> 26) & 7;
+    if (flags2 & (1u << 23))
+        _state = NSControlStateValueMixed;
+    _focusRingType = (flags2 >> 15) & 3;
+    if (flags2 & (1u << 14))
+        _writingDirection = NSWritingDirectionRightToLeft;
+    _truncatesLastVisibleLine = (flags2 & (1u << 8)) ? YES : NO;
+    _userInterfaceLayoutDirection = (flags2 & (1u << 7)) ? NSUserInterfaceLayoutDirectionRightToLeft : NSUserInterfaceLayoutDirectionLeftToRight;
+}
+
 - (void) _generateAppleFlags: (unsigned int *) flags flags2: (unsigned int *) flags2 {
     *flags = 0;
     *flags2 = 0;
@@ -318,6 +335,7 @@ NSNotificationName NSControlTintDidChangeNotification = @"NSControlTintDidChange
         */
 
         [self _applyAppleFlags: flags flags2: flags2];
+        [self _applyNonKeyedFlags2: flags2];
 
         id o1, o2, o3;
         [coder decodeValuesOfObjCTypes: "@@@@", &_objectValue, &o1, &o2, &o3];

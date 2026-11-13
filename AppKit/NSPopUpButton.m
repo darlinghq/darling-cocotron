@@ -34,6 +34,28 @@ static NSString *const NSPopUpButtonBindingObservationContext =
     return [NSPopUpButtonCell class];
 }
 
+- initWithCoder: (NSCoder *) coder {
+    self = [super initWithCoder: coder];
+
+    if (![coder allowsKeyedCoding]) {
+        NSInteger version = [coder versionForClassName: @"NSPopUpButton"];
+
+        // Versions up to 24 archive a selector and an object, and 24 one byte more;
+        // from 25 on nothing follows the control. Their meaning is unknown (nothing
+        // observable changes with them).
+        if (version <= 24) {
+            SEL unknownSelector;
+            [coder decodeValuesOfObjCTypes: ":", &unknownSelector];
+            [coder decodeObject];
+        }
+        if (version == 24) {
+            char unknownByte;
+            [coder decodeValuesOfObjCTypes: "c", &unknownByte];
+        }
+    }
+    return self;
+}
+
 - initWithFrame: (NSRect) frame pullsDown: (BOOL) pullsDown {
     [super initWithFrame: frame];
     [self setPullsDown: pullsDown];

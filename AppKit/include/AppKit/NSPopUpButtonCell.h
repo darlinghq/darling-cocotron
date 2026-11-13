@@ -45,6 +45,7 @@ typedef enum {
 - (NSMenu *) menu;
 - (BOOL) autoenablesItems;
 - (NSRectEdge) preferredEdge;
+- (BOOL) usesItemFromMenu;
 
 - (NSArray *) itemArray;
 - (NSInteger) numberOfItems;
@@ -68,6 +69,7 @@ typedef enum {
 - (void) setMenu: (NSMenu *) menu;
 - (void) setAutoenablesItems: (BOOL) value;
 - (void) setPreferredEdge: (NSRectEdge) edge;
+- (void) setUsesItemFromMenu: (BOOL) flag;
 
 - (void) addItemWithTitle: (NSString *) title;
 - (void) addItemsWithTitles: (NSArray *) titles;

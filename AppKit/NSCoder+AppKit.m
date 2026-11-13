@@ -19,7 +19,9 @@ enum {
 - (NSColor *) decodeNXColor {
     uint8_t type;
 
-    [self decodeValuesOfObjCTypes: "c", &type];
+    // The type byte and the single shorts are separate decode calls; the three
+    // components are one call, as the archiver wrote them.
+    [self decodeValueOfObjCType: @encode(char) at: &type];
     if ((type & kColorTypeFlags) == 2 || (type & 0x10)) {
         return nil;
     }
@@ -27,7 +29,7 @@ enum {
     // RGB or CMY components
     uint16_t component1, component2, component3;
     if ((type & kColorTypeFlags) == kColorSingleChannel) {
-        [self decodeValuesOfObjCTypes: "s", &component1];
+        [self decodeValueOfObjCType: @encode(short) at: &component1];
         component3 = component2 = component1;
     } else {
         [self decodeValuesOfObjCTypes: "sss", &component1, &component2,
@@ -36,10 +38,10 @@ enum {
 
     uint16_t componentK = 0, componentAlpha;
     if (!(type & kColorIsRGB))
-        [self decodeValuesOfObjCTypes: "s", &componentK];
+        [self decodeValueOfObjCType: @encode(short) at: &componentK];
 
     if (!(type & kColorOpaque))
-        [self decodeValuesOfObjCTypes: "s", &componentAlpha];
+        [self decodeValueOfObjCType: @encode(short) at: &componentAlpha];
     else
         componentAlpha = 65534; // opaque
 
@@ -47,7 +49,7 @@ enum {
         NSString *colorName = nil;
 
         const char *atom;
-        [self decodeValuesOfObjCTypes: "%", &atom];
+        [self decodeValueOfObjCType: "%" at: &atom];
 
         const char *name = atom;
         while (*name) {

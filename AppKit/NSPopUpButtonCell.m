@@ -55,8 +55,17 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
         [self synchronizeTitleAndSelectedItem];
     } else {
-        int flags; // TODO: Handle flags
-        [coder decodeValuesOfObjCTypes:"i@i", &flags, &_menu, &_selectedIndex];
+        int flags, selectedIndex;
+        [coder decodeValuesOfObjCTypes: "i@i", &flags, &_menu, &selectedIndex];
+        _selectedIndex = selectedIndex;
+
+        // The flag word, in Mac archives: bit 31 pulls down, bits 28-29 the preferred edge,
+        // bit 27 uses the item from the menu, bit 26 alters the state of the selected
+        // item (not supported here) and bits 24-25 the arrow position.
+        _pullsDown = (flags >> 31) & 1;
+        _preferredEdge = (flags >> 28) & 3;
+        _usesItemFromMenu = (flags >> 27) & 1;
+        _arrowPosition = (flags >> 24) & 3;
 
         // We can't call synchronizeTitleAndSelectedItem, as the _menu may not be finished decoding and we can't access the items
         _syncTitleNeeded = YES;
@@ -97,6 +106,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (NSMenu *) menu {
     return _menu;
+}
+
+- (BOOL) usesItemFromMenu {
+    return _usesItemFromMenu;
+}
+
+- (void) setUsesItemFromMenu: (BOOL) flag {
+    _usesItemFromMenu = flag;
 }
 
 - (BOOL) autoenablesItems {

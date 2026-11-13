@@ -54,9 +54,33 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         _isIndeterminate = (flags & 0x02) ? YES : NO;
         _usesThreadedAnimation = NO;
     } else {
-        [NSException raise: NSInvalidArgumentException
-                    format: @"-[%@ %s] is not implemented for coder %@",
-                            [self class], sel_getName(_cmd), coder];
+        NSInteger version = [coder versionForClassName: @"NSProgressIndicator"];
+        char bezeled = 0, indeterminate = 0, sizeByte = 0;
+
+        // The two flag bytes, the range (floats up to version 211, doubles after) and, from
+        // version 219, a byte with the control size in bits 2-3 (its other bits have an
+        // unknown meaning). The style, the displayed-when-stopped and threaded-animation
+        // settings and the value are not archived: the value reads as the minimum.
+        if (version <= 211) {
+            float minValue, maxValue;
+            [coder decodeValuesOfObjCTypes: "ccff", &bezeled, &indeterminate, &minValue, &maxValue];
+            _minValue = minValue;
+            _maxValue = maxValue;
+        } else if (version <= 218) {
+            [coder decodeValuesOfObjCTypes: "ccdd", &bezeled, &indeterminate, &_minValue, &_maxValue];
+        } else {
+            [coder decodeValuesOfObjCTypes: "ccddc", &bezeled, &indeterminate, &_minValue, &_maxValue, &sizeByte];
+        }
+        _isBezeled = bezeled != 0;
+        _isIndeterminate = indeterminate != 0;
+        _size = (sizeByte >> 2) & 3;
+        _value = _minValue;
+        _animationDelay = 5.0 / 60.0;
+        _animationTimer = nil;
+        _animationValue = 0;
+        _style = NSProgressIndicatorBarStyle;
+        _displayWhenStopped = YES;
+        _usesThreadedAnimation = NO;
     }
     return self;
 }

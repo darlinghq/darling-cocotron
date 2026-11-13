@@ -32,39 +32,43 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         _imageName = [[keyed decodeObjectForKey: @"NSImageName"] retain];
     } else {
         NSInteger version = [coder versionForClassName: @"NSButtonImageSource"];
-        NSLog(@"NSButtonImageSource version is %ld\n", (long) version);
 
         if (version == 1) {
             _imageName = [[coder decodeObject] retain];
         } else if (version == 2) {
-            char c;
-            float f1, f2, f3, f4;
-            int reserved1, reserved2, reserved3;
+            // A flag selects between the image name and a dictionary of images with sizes.
+            char hasImages;
+            [coder decodeValuesOfObjCTypes: "c", &hasImages];
 
-            [coder decodeValuesOfObjCTypes: "c", &c];
-            [coder decodeValuesOfObjCTypes: "@ffffciii", &_buttonImages, &f1,
-                                            &f2, &f3, &f4, &c, &reserved1,
-                                            &reserved2, &reserved3];
+            if (hasImages == 0) {
+                _imageName = [[coder decodeObject] retain];
+            } else {
+                char reserved1;
+                int reserved2, reserved3, reserved4;
+                float f1, f2, f3, f4;
 
-            _imageSize = NSMakeSize(f1, f2);
-            _focusRingImageSize = NSMakeSize(f3, f4);
+                [coder decodeValuesOfObjCTypes: "@ffffciii", &_buttonImages, &f1, &f2, &f3, &f4, &reserved1, &reserved2,
+                                                &reserved3, &reserved4];
+
+                _imageSize = NSMakeSize(f1, f2);
+                _focusRingImageSize = NSMakeSize(f3, f4);
+            }
         } else {
             id obj = [coder decodeObject];
             if ([obj isKindOfClass: [NSString class]]) {
                 _imageName = [obj retain];
-                NSLog(@"*** decoded image name %@\n", _imageName);
             } else {
                 _buttonImages = (NSDictionary *) [obj retain];
-                NSLog(@"buttonImages: %@\n", _buttonImages);
 
-                int reserved1, reserved2, reserved3;
+                // Four sizes, four bytes and three ints follow; the bytes and ints are
+                // reserved or of unknown meaning.
+                char reservedBytes[4];
+                int reservedInts[3];
                 float f1, f2, f3, f4;
 
-                [coder decodeValuesOfObjCTypes: "ffffcccciii", &f1, &f2, &f3,
-                                                &f4, &reserved1, &reserved1,
-                                                &reserved1, &reserved1,
-                                                &reserved1, &reserved2,
-                                                &reserved3];
+                [coder decodeValuesOfObjCTypes: "ffffcccciii", &f1, &f2, &f3, &f4, &reservedBytes[0], &reservedBytes[1],
+                                                &reservedBytes[2], &reservedBytes[3], &reservedInts[0], &reservedInts[1],
+                                                &reservedInts[2]];
 
                 _imageSize = NSMakeSize(f1, f2);
                 _focusRingImageSize = NSMakeSize(f3, f4);
@@ -92,7 +96,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (NSImage *) imageForState: (NSButtonState) state {
-    NSLog(@"imageForState: TODO, lookup in _buttonImages\n");
+    // The dictionary of per-state images is not consulted: every state gets the normal image.
     return [self normalImage];
 }
 
