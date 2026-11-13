@@ -1491,17 +1491,19 @@ void O2ContextGetDefaultAdvances(O2ContextRef self, const O2Glyph *glyphs,
 {
     O2GState *gState = O2ContextCurrentGState(self);
     O2Font *font = O2GStateFont(gState);
-    int intAdvances[count];
+    int intAdvances[256];
     O2Float unitsPerEm = O2FontGetUnitsPerEm(font);
     O2Float pointSize = O2GStatePointSize(gState);
-    size_t i;
-
-    O2FontGetGlyphAdvances(font, glyphs, count, intAdvances);
-
     O2Float scale = [font nativeSizeForSize: pointSize] / unitsPerEm;
-    for (i = 0; i < count; i++) {
-        advances[i].width = intAdvances[i] * scale;
-        advances[i].height = 0;
+    for (size_t offset = 0; offset < count;) {
+        size_t chunk = MIN(count - offset,
+                           sizeof(intAdvances) / sizeof(intAdvances[0]));
+        O2FontGetGlyphAdvances(font, glyphs + offset, chunk, intAdvances);
+        for (size_t i = 0; i < chunk; i++) {
+            advances[offset + i].width = intAdvances[i] * scale;
+            advances[offset + i].height = 0;
+        }
+        offset += chunk;
     }
 }
 

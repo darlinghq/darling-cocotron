@@ -607,6 +607,14 @@ void CTFontDrawGlyphs(CTFontRef font, const CGGlyph *glyphs, const CGPoint *posi
     CGContextSetFontSize(context, CTFontGetSize(font));
     CGContextShowGlyphsAtPositions(context, glyphs, positions, count);
     CGContextRestoreGState(context);
+    // QUIRK: the font and size used for drawing stay set in the context
+    // afterwards; the text matrix and text position are left as they were.
+    // Not documented. Evidence: black-box observation on macOS 26.7.3
+    // (tier 2, MC12: a plain CGContextShowGlyphsAtPositions after
+    // CTFontDrawGlyphs draws with the CTFont's font and size).
+    // Test: coretext-draw-glyphs-state.m (test_quirk_font_and_size_stay_set)
+    CGContextSetFont(context, graphicsFont);
+    CGContextSetFontSize(context, CTFontGetSize(font));
     CGFontRelease(graphicsFont);
 }
 

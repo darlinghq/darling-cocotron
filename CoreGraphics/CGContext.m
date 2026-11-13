@@ -720,11 +720,16 @@ void CGContextShowGlyphsAtPositions(CGContextRef c,
 {
     if (c == NULL || glyphs == NULL || positions == NULL)
         return;
-    // Each position is in text space, like the point of
-    // CGContextShowGlyphsAtPoint. The text position is left as it was.
+    // Each position is in text space: the text matrix is applied to it to
+    // find where the glyph origin lands (a shear or translation in the text
+    // matrix moves the glyph). The text matrix and text position are left as
+    // they were.
+    CGAffineTransform matrix = CGContextGetTextMatrix(c);
     CGPoint saved = CGContextGetTextPosition(c);
-    for (size_t i = 0; i < count; i++)
-        CGContextShowGlyphsAtPoint(c, positions[i].x, positions[i].y,
-                                   glyphs + i, 1);
+    for (size_t i = 0; i < count; i++) {
+        CGPoint origin = CGPointApplyAffineTransform(positions[i], matrix);
+        CGContextShowGlyphsAtPoint(c, origin.x, origin.y, glyphs + i, 1);
+    }
+    CGContextSetTextMatrix(c, matrix);
     CGContextSetTextPosition(c, saved.x, saved.y);
 }
