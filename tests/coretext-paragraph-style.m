@@ -36,6 +36,12 @@ int main(void) {
     }
     CFArrayRef tabs = NULL;
     CHECK(CTParagraphStyleGetValueForSpecifier(style, 4, sizeof(tabs), &tabs) && CFArrayGetCount(tabs) == 12);
+    {   // Get rule: querying the tab stops must not retain the returned array.
+        CFIndex before = CFGetRetainCount(tabs);
+        CFArrayRef again = NULL;
+        CHECK(CTParagraphStyleGetValueForSpecifier(style, 4, sizeof(again), &again) && again == tabs);
+        CHECK(CFGetRetainCount(tabs) == before);
+    }
     for (CFIndex i = 0; i < 12; ++i) {
         CTTextTabRef tab = CFArrayGetValueAtIndex(tabs, i);
         CHECK(CFGetTypeID(tab) == tabType() && tabAlignment(tab) == kCTTextAlignmentLeft);

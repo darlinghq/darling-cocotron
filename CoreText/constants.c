@@ -26,6 +26,7 @@ const CFStringRef kCTForegroundColorFromContextAttributeName = CFSTR("CTForegrou
 const CFStringRef kCTStrokeWidthAttributeName = CFSTR("NSStrokeWidth");
 const CFStringRef kCTForegroundColorAttributeName = CFSTR("CTForegroundColor");
 const CFStringRef kCTParagraphStyleAttributeName = CFSTR("NSParagraphStyle");
+const CFStringRef kCTGlyphInfoAttributeName = CFSTR("NSGlyphInfo");
 const CFStringRef kCTKernAttributeName = CFSTR("CTKernAttributeName");
 const CFStringRef kCTLanguageAttributeName = CFSTR("CTLanguageAttributeName");
 const CFStringRef kCTTypesetterOptionForcedEmbeddingLevel = CFSTR("CTTypesetterOptionForcedEmbeddingLevel");
