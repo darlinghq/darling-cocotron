@@ -735,15 +735,10 @@ static inline NSGlyphFragment *fragmentAtGlyphIndex(NSLayoutManager *self,
             // if empty, use the extra rect
             if (container == _extraLineFragmentTextContainer) {
                 NSRect extra = _extraLineFragmentUsedRect;
-                /* Currently extra rect has a very large width  due to the
-                   behavior of the layout mechanism, so we set it to 1 here for
-                   proper sizing The insertion point code does the same thing to
-                   draw the point at the end of text.
-
-                   If the extra rect should not be large, need to reflect that
-                   change here and everywhere else it is used.
-                 */
-                extra.size.width = 1;
+                // The used rect of empty text is as wide as the padding on
+                // both sides of the line, so nothing at all without padding.
+                extra.origin.x = 0;
+                extra.size.width = 2 * [container lineFragmentPadding];
 
                 result = extra;
 

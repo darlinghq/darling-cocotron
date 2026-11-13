@@ -369,7 +369,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         }
     }
     [drawValue _clipAndDrawInRect: titleRect
-                   truncatingTail: _lineBreakMode > NSLineBreakByClipping];
+                   lineBreakMode: _lineBreakMode];
 }
 
 static void drawRoundedBezel(CGContextRef context, CGRect frame) {

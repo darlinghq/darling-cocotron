@@ -22,7 +22,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Foundation/Foundation.h>
 
 @class NSFont, NSColor, NSParagraphStyle, NSTextAttachment, NSFileWrapper,
-        NSTextList, NSTextBlock, NSTextTable, NSPasteboard;
+        NSTextList, NSTextBlock, NSTextTable, NSStringDrawingContext, NSPasteboard;
 
 typedef NSString *NSAttributedStringDocumentReadingOptionKey;
 typedef NSString *NSAttributedStringDocumentAttributeKey;
@@ -252,6 +252,9 @@ enum {
 - (void) drawAtPoint: (NSPoint) point;
 - (void) drawInRect: (NSRect) rect;
 - (void) drawWithRect: (NSRect) rect options: (NSStringDrawingOptions) options;
+- (void) drawWithRect: (NSRect) rect
+              options: (NSStringDrawingOptions) options
+              context: (NSStringDrawingContext * _Nullable) context;
 - (NSSize) size;
 
 #pragma mark -

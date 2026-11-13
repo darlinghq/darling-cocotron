@@ -19,6 +19,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/AppKit.h>
 #import <AppKit/NSGraphicsStyle.h>
 #import <AppKit/NSRaise.h>
+#import "NSStringDrawer.h"
 
 @implementation NSTableHeaderCell
 
@@ -49,7 +50,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                           highlighted: [self isHighlighted]];
     [[self attributedStringValue]
             _clipAndDrawInRect: [self titleRectForBounds: cellFrame]
-                truncatingTail: (_lineBreakMode > NSLineBreakByClipping)];
+                lineBreakMode: _lineBreakMode];
 }
 
 @end
