@@ -1,5 +1,8 @@
 #import <QuartzCore/CAAnimation.h>
+#import <QuartzCore/CADisplayLink.h>
 #import <QuartzCore/CAConstraintLayoutManager.h>
+#import <QuartzCore/CAEmitterCell.h>
+#import <QuartzCore/CAEmitterLayer.h>
 #import <QuartzCore/CAFrameRateRange.h>
 #import <QuartzCore/CALayer.h>
 #import <QuartzCore/CAMediaTimingFunction.h>
@@ -16,6 +19,7 @@
 #import <QuartzCore/CAScrollLayer.h>
 #import <QuartzCore/CAShapeLayer.h>
 #import <QuartzCore/CATransformLayer.h>
+#import <QuartzCore/CASpringAnimation.h>
 
 /* Undocumented */
 #import <QuartzCore/CAFilter.h>

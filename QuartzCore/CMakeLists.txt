@@ -24,6 +24,7 @@ include_directories(
 set(QuartzCore_sources
 	CAAnimationGroup.m
 	CAAnimation.m
+	CADisplayLink.m
 	CABase.m
 	CABasicAnimation.m
 	CAContext.m

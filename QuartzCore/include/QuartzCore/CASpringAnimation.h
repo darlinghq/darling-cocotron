@@ -19,6 +19,21 @@
 
 #import <QuartzCore/CAAnimation.h>
 
-@interface CASpringAnimation : CABasicAnimation
+// Animates along a damped spring (mass on a spring with a damper) from
+// fromValue to toValue instead of a timing function. Time is in seconds
+// since the animation began; set duration to settlingDuration to let the
+// spring come to rest.
+@interface CASpringAnimation : CABasicAnimation {
+    CGFloat _mass;
+    CGFloat _stiffness;
+    CGFloat _damping;
+    CGFloat _initialVelocity;
+}
+
+@property CGFloat mass;            // default 1; a value <= 0 resets it to 1
+@property CGFloat stiffness;       // default 100; a value <= 0 resets it to 100
+@property CGFloat damping;         // default 10; a negative value resets it to 10
+@property CGFloat initialVelocity; // default 0, in fromValue-to-toValue distances per second
+@property(readonly) CFTimeInterval settlingDuration; // FLT_MAX for an undamped spring
 
 @end
