@@ -16,11 +16,7 @@ FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
 COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
-#import <AppKit/NSMutableParagraphStyle.h>
-
-@interface NSParagraphStyle (NSParagraphStyle_private)
-- initWithParagraphStyle: (NSParagraphStyle *) other;
-@end
+#import "NSParagraphStyle-Private.h"
 
 @implementation NSMutableParagraphStyle
 
@@ -58,6 +54,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     _hyphenationFactor = other->_hyphenationFactor;
     _tighteningFactorForTruncation = other->_tighteningFactorForTruncation;
     _horizontalAlignment = other->_horizontalAlignment;
+    _usesDefaultHyphenation = other->_usesDefaultHyphenation;
+    _allowsDefaultTighteningForTruncation = other->_allowsDefaultTighteningForTruncation;
+    _lineBreakStrategy = other->_lineBreakStrategy;
 }
 
 - (void) setBaseWritingDirection: (NSWritingDirection) direction {
@@ -88,7 +87,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     _textLists = lists;
 }
 
-- (void) setHeaderLevel: (int) level {
+- (void) setHeaderLevel: (NSInteger) level {
     _headerLevel = level;
 }
 
@@ -133,6 +132,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (void) setTabStops: (NSArray *) tabStops {
+    if (tabStops == nil)
+        tabStops = [[self class] _defaultTabStops];
     if (tabStops != _tabStops) {
         [_tabStops removeAllObjects];
         [_tabStops addObjectsFromArray: tabStops];
@@ -144,11 +145,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     NSUInteger index = [_tabStops
             indexOfObjectPassingTest: ^BOOL(NSTextTab *other, NSUInteger id,
                                             BOOL *stop) {
-              return [other compare: tabStop] == NSOrderedAscending;
+              return [other compare: tabStop] == NSOrderedDescending;
             }];
 
     if (index == NSNotFound) {
-        [_tabStops insertObject: tabStop atIndex: 0];
+        [_tabStops addObject: tabStop];
     } else {
         [_tabStops insertObject: tabStop atIndex: index];
     }
@@ -164,6 +165,18 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (void) setTighteningFactorForTruncation: (float) factor {
     _tighteningFactorForTruncation = factor;
+}
+
+- (void) setUsesDefaultHyphenation: (BOOL) value {
+    _usesDefaultHyphenation = value;
+}
+
+- (void) setAllowsDefaultTighteningForTruncation: (BOOL) value {
+    _allowsDefaultTighteningForTruncation = value;
+}
+
+- (void) setLineBreakStrategy: (NSLineBreakStrategy) strategy {
+    _lineBreakStrategy = strategy;
 }
 
 @end

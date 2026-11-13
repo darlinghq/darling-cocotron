@@ -80,6 +80,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return self;
 }
 
+- initWithAttributedString: (NSAttributedString *) attributedString {
+    if ((self = [self initWithString: @""]) != nil)
+        [self setAttributedString: attributedString];
+    return self;
+}
+
 - init {
     return [self initWithString: @""];
 }

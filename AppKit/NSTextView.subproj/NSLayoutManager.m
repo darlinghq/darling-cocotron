@@ -2190,10 +2190,18 @@ static inline void _appendRectToCache(NSLayoutManager *self, NSRect rect) {
     id<NSTextAttachmentCell> cell = [attachment attachmentCell];
     NSRect frame;
 
-    frame.origin = point;
+    /* `point` is the baseline origin of the run, not the top-left of the cell: using it directly
+     * painted every attachment one cell-height below its own glyphs (measured: text row y=103..111,
+     * attachment y=112..135, i.e. offset by exactly cellSize.height). Convert from the baseline. */
+    NSPoint baselineOffset = [cell cellBaselineOffset];
     frame.size = [cell cellSize];
+    frame.origin.x = point.x + baselineOffset.x;
 
     NSTextView *textView = [self textViewForBeginningOfSelection];
+    if ([textView isFlipped])
+        frame.origin.y = point.y + baselineOffset.y - frame.size.height;
+    else
+        frame.origin.y = point.y + baselineOffset.y;
 
     [cell drawWithFrame: frame
                     inView: textView
@@ -2252,6 +2260,22 @@ static inline void _appendRectToCache(NSLayoutManager *self, NSRect rect) {
     // offset - we break fragments up because of the temp attributes...
     point.x += origin.x + xOffset;
     point.y += origin.y;
+
+    /* A line containing an attachment taller than the text gets a taller line fragment, but the
+     * baseline stayed where the font put it, so the attachment -- which sits on the baseline and
+     * extends upward -- had nowhere to go and was cut off at the fragment's top edge (measured:
+     * fragment y=0..24 with the baseline at y=11, so a 24pt attachment started at y=-13). Push the
+     * baseline down to the bottom of the taller fragment. For a line with no tall attachment the
+     * fragment is exactly the font's line height and `extra` is zero, so ordinary text is not
+     * moved at all. */
+    NSFont *runFont = NSFontAttributeInDictionary(attributes);
+    if (runFont != nil) {
+        NSRect lineFragment =
+            [self lineFragmentRectForGlyphAtIndex: range.location effectiveRange: NULL];
+        CGFloat extra = lineFragment.size.height - ceilf([runFont defaultLineHeightForFont]);
+        if (extra > 0)
+            point.y += isFlipped ? extra : -extra;
+    }
 
     if (attachment != nil) {
         // Draw the attachment at the calculated point

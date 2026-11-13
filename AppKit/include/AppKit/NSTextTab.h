@@ -21,33 +21,49 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSText.h>
 
-typedef enum {
+NS_ASSUME_NONNULL_BEGIN
+
+typedef NSString *NSTextTabOptionKey NS_TYPED_ENUM;
+APPKIT_EXPORT NSTextTabOptionKey NSTabColumnTerminatorsAttributeName;
+
+// The primary interface matches Apple's declaration member for member: Clang
+// rejects a class that two modules define differently.
+// i386's fragile runtime needs these in the @interface; elsewhere the
+// implementation declares them, keeping the interface identical to Apple's.
+#define _NSTEXTTAB_IVARS \
+    NSTextAlignment _alignment; \
+    CGFloat _location; \
+    NSDictionary *_options;
+
+@interface NSTextTab : NSObject <NSCopying, NSCoding, NSSecureCoding>
+#if !__OBJC2__
+{
+    _NSTEXTTAB_IVARS
+}
+#endif
+
++ (NSCharacterSet *)columnTerminatorsForLocale:(nullable NSLocale *)aLocale;
+
+@property (readonly, NS_NONATOMIC_IOSONLY) CGFloat location;
+@property (readonly, NS_NONATOMIC_IOSONLY) NSDictionary<NSTextTabOptionKey, id> *options;
+@end
+
+@interface NSTextTab (NSTextTabAlignment)
+- (instancetype)initWithTextAlignment:(NSTextAlignment)alignment location:(CGFloat)loc options:(NSDictionary<NSTextTabOptionKey, id> *)options;
+@property (readonly, NS_NONATOMIC_IOSONLY) NSTextAlignment alignment;
+- (NSComparisonResult)compare:(NSTextTab *)other;
+@end
+
+typedef NS_ENUM(NSUInteger, NSTextTabType) {
     NSLeftTabStopType = 0,
     NSRightTabStopType,
     NSCenterTabStopType,
     NSDecimalTabStopType
-} NSTextTabType;
+};
 
-APPKIT_EXPORT NSString *NSTabColumnTerminatorsAttributeName;
-
-@interface NSTextTab : NSObject <NSCoding, NSCopying> {
-    NSTextTabType _type;
-    CGFloat _location;
-}
-
-- (id) initWithTextAlignment: (NSTextAlignment) alignment
-                    location: (CGFloat) location
-                     options: (NSDictionary *) options;
-
-- initWithType: (NSTextTabType) type location: (CGFloat) location;
-
-- (NSTextAlignment) alignment;
-
-- (NSDictionary *) options;
-
-- (NSTextTabType) tabStopType;
-
-- (CGFloat) location;
-
-- (NSComparisonResult) compare: (id) anObject;
+@interface NSTextTab (NSTextTabDeprecated)
+- (instancetype)initWithType:(NSTextTabType)type location:(CGFloat)loc;
+@property (readonly) NSTextTabType tabStopType;
 @end
+
+NS_ASSUME_NONNULL_END

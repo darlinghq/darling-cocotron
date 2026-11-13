@@ -262,9 +262,12 @@ static void loadGlyphAndCharacterCacheForLocation(NSTypesetter_concrete *self,
             NSSize size = [cell cellSize];
 
             fragmentHeight = size.height;
-            glyphAdvance = _positionOfGlyph(_font, NULL, NSNullGlyph,
-                                            _previousGlyph, &isNominal)
-                                   .x;
+            /* An attachment has no glyph, so it must reserve its own width. Taking the font's
+             * null-glyph advance here left the run a few points wide while the attachment cell
+             * painted its full width over whatever followed (measured: a 24pt attachment reserved
+             * ~8pt and overprinted the next glyph). glyphMaxWidth already carried size.width for
+             * the wrapping tests, but only glyphAdvance moves the pen. */
+            glyphAdvance = size.width;
             glyphMaxWidth = size.width;
             _previousGlyph = NSNullGlyph;
         } else {

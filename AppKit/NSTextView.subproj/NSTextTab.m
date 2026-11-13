@@ -21,78 +21,102 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Foundation/NSKeyedArchiver.h>
 
 #import <AppKit/NSParagraphStyle.h>
-#import <AppKit/NSRaise.h>
 #import <AppKit/NSTextTab.h>
 
-NSString *NSTabColumnTerminatorsAttributeName =
+NSTextTabOptionKey NSTabColumnTerminatorsAttributeName =
         @"NSTabColumnTerminatorsAttributeName";
 
 @implementation NSTextTab
-
-- (id) initWithTextAlignment: (NSTextAlignment) alignment
-                    location: (CGFloat) location
-                     options: (NSDictionary *) options
+#if __OBJC2__
 {
-    NSTextTabType type = NSLeftTabStopType;
-    switch (alignment) {
-    case NSLeftTextAlignment:
-    case NSJustifiedTextAlignment:
-        type = NSLeftTabStopType;
-        break;
+    _NSTEXTTAB_IVARS
+}
+#endif
 
-    case NSRightTextAlignment:
-        type = NSRightTabStopType;
-        break;
-
-    case NSCenterTextAlignment:
-        type = NSCenterTabStopType;
-        break;
-
-    case NSNaturalTextAlignment:
-        if ([[NSParagraphStyle defaultParagraphStyle] baseWritingDirection] ==
-            NSWritingDirectionRightToLeft) {
-            type = NSRightTabStopType;
-        }
-        break;
-    }
-    return [self initWithType: type location: location];
++ (BOOL) supportsSecureCoding {
+    return YES;
 }
 
-- initWithType: (NSTextTabType) type location: (CGFloat) location {
-    _type = type;
-    _location = location;
++ (NSCharacterSet *) columnTerminatorsForLocale: (NSLocale *) locale {
+    if (locale == nil)
+        locale = [NSLocale systemLocale];
+    return [NSCharacterSet characterSetWithCharactersInString: [locale objectForKey: NSLocaleDecimalSeparator]];
+}
+
+- (instancetype) initWithTextAlignment: (NSTextAlignment) alignment
+                              location: (CGFloat) location
+                               options: (NSDictionary *) options
+{
+    if ((self = [super init])) {
+        _alignment = alignment;
+        _location = location;
+        _options = options ? [options copy] : [[NSDictionary alloc] init];
+    }
     return self;
+}
+
+// Apple documents NSDecimalTabStopType as right alignment with the current
+// locale's column terminators.
+- (instancetype) initWithType: (NSTextTabType) type location: (CGFloat) location {
+    NSTextAlignment alignment = NSTextAlignmentLeft;
+    NSDictionary *options = nil;
+
+    switch (type) {
+    case NSLeftTabStopType:
+        alignment = NSTextAlignmentLeft;
+        break;
+    case NSRightTabStopType:
+        alignment = NSTextAlignmentRight;
+        break;
+    case NSCenterTabStopType:
+        alignment = NSTextAlignmentCenter;
+        break;
+    case NSDecimalTabStopType:
+        alignment = NSTextAlignmentRight;
+        options = @{
+            NSTabColumnTerminatorsAttributeName :
+                    [NSTextTab columnTerminatorsForLocale: [NSLocale currentLocale]]
+        };
+        break;
+    }
+    return [self initWithTextAlignment: alignment location: location options: options];
 }
 
 - (id) initWithCoder: (NSCoder *) aDecoder {
-    if ((self = [super init])) {
-        if ([aDecoder isKindOfClass: [NSKeyedUnarchiver class]]) {
-            _type = [aDecoder decodeIntForKey: @"Type"];
-            _location = [aDecoder decodeFloatForKey: @"Location"];
-        } else {
-            // QUIRK: NSArchiver (typedstream) layout of a tab stop: the tab
-            // type as a char and the location as a float. Not documented.
-            // Evidence: archive written by NSArchiver on macOS 27 (tier 2,
-            // MC13.7, fixture texttab.typedstream).
-            // Test: test_quirk_typedstream_text_tab in
-            // tests/appkit-typedstream-text.m
-            unsigned char type;
-            float location;
-            [aDecoder decodeValuesOfObjCTypes: "Cf", &type, &location];
-            _type = type;
-            _location = location;
-        }
+    if ([aDecoder allowsKeyedCoding]) {
+        CGFloat location = [aDecoder decodeFloatForKey: @"Location"];
+        if (![aDecoder containsValueForKey: @"Alignment"])
+            return [self initWithType: [aDecoder decodeIntForKey: @"Type"] location: location];
+        NSSet *classes = [NSSet setWithObjects: [NSDictionary class], [NSString class],
+                                                [NSCharacterSet class], nil];
+        return [self initWithTextAlignment: [aDecoder decodeIntegerForKey: @"Alignment"]
+                                  location: location
+                                   options: [aDecoder decodeObjectOfClasses: classes forKey: @"Options"]];
     }
-    return self;
+    // QUIRK: NSArchiver (typedstream) layout of a tab stop: the tab type as a
+    // char and the location as a float. Not documented.
+    // Evidence: archive written by NSArchiver on macOS 27 (tier 2, MC13.7,
+    // fixture texttab.typedstream).
+    // Test: test_quirk_typedstream_text_tab in tests/appkit-typedstream-text.m
+    unsigned char type;
+    float location;
+    [aDecoder decodeValuesOfObjCTypes: "Cf", &type, &location];
+    return [self initWithType: type location: location];
 }
 
 - (void) encodeWithCoder: (NSCoder *) aCoder {
-    if ([aCoder isKindOfClass: [NSKeyedArchiver class]]) {
-        [aCoder encodeInt: _type forKey: @"Type"];
-        [aCoder encodeFloat: _location forKey: @"Location"];
-    } else {
-        NSUnimplementedMethod();
-    }
+    if (![aCoder allowsKeyedCoding])
+        [NSException raise: NSInvalidArgumentException
+                    format: @"-[%@ %s]: only keyed archiving is supported", [self class], sel_getName(_cmd)];
+    [aCoder encodeInt: [self tabStopType] forKey: @"Type"];
+    [aCoder encodeInteger: _alignment forKey: @"Alignment"];
+    [aCoder encodeFloat: _location forKey: @"Location"];
+    [aCoder encodeObject: _options forKey: @"Options"];
+}
+
+- (void) dealloc {
+    [_options release];
+    [super dealloc];
 }
 
 - copyWithZone: (NSZone *) zone {
@@ -100,37 +124,36 @@ NSString *NSTabColumnTerminatorsAttributeName =
 }
 
 - (NSTextAlignment) alignment {
-
-    NSTextAlignment alignment = NSLeftTextAlignment;
-
-    switch (_type) {
-    case NSLeftTabStopType:
-        alignment = NSLeftTextAlignment;
-        break;
-    case NSRightTabStopType:
-        alignment = NSRightTextAlignment;
-        break;
-    case NSCenterTabStopType:
-        alignment = NSCenterTextAlignment;
-        break;
-    case NSDecimalTabStopType:
-        alignment = NSRightTextAlignment;
-        break;
-    }
-
-    return alignment;
+    return _alignment;
 }
 
 - (NSDictionary *) options {
-    return [NSDictionary dictionary];
+    return _options;
 }
 
 - (NSTextTabType) tabStopType {
-    return _type;
+    switch (_alignment) {
+    case NSTextAlignmentRight:
+        return [_options objectForKey: NSTabColumnTerminatorsAttributeName] ? NSDecimalTabStopType
+                                                                            : NSRightTabStopType;
+    case NSTextAlignmentCenter:
+        return NSCenterTabStopType;
+    case NSTextAlignmentNatural:
+        return [[NSParagraphStyle defaultParagraphStyle] baseWritingDirection] ==
+                               NSWritingDirectionRightToLeft
+                       ? NSRightTabStopType
+                       : NSLeftTabStopType;
+    default:
+        return NSLeftTabStopType;
+    }
 }
 
 - (CGFloat) location {
     return _location;
+}
+
+- (NSUInteger) hash {
+    return (NSUInteger) (NSInteger) _location ^ (NSUInteger) _alignment;
 }
 
 - (BOOL) isEqual: (id) object {
@@ -141,23 +164,21 @@ NSString *NSTabColumnTerminatorsAttributeName =
         return NO;
     }
     NSTextTab *other = (NSTextTab *) object;
-    return self.location == other.location &&
-           self.tabStopType == other.tabStopType;
+    return _location == other->_location && _alignment == other->_alignment &&
+           [_options isEqual: other->_options];
 }
 
-- (NSComparisonResult) compare: (id) anObject {
-    CGFloat loc;
-
-    if (anObject == self)
+- (NSComparisonResult) compare: (NSTextTab *) other {
+    if (other == self)
         return NSOrderedSame;
-    if (anObject == nil || ![anObject isKindOfClass: [self class]])
+    if (other == nil || ![other isKindOfClass: [NSTextTab class]])
         return NSOrderedAscending;
-    loc = ((NSTextTab *) anObject)->_location;
-    if (_location < loc)
+    if (_location < other->_location)
         return NSOrderedAscending;
-    else if (_location > loc)
+    else if (_location > other->_location)
         return NSOrderedDescending;
     else
         return NSOrderedSame;
 }
+
 @end
