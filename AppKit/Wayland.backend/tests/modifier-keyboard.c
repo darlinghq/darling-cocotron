@@ -1,3 +1,8 @@
+/*
+ Copyright (C) 2026 Darling Developers
+
+ Licensed under the MIT license, the same as the rest of this project.
+*/
 // Native Linux fixture: inject physical evdev transitions, with authoritative
 // XKB modifier updates only when the state changes. Run in a private compositor.
 #define _GNU_SOURCE

@@ -1,3 +1,8 @@
+/*
+ Copyright (C) 2026 Darling Developers
+
+ Licensed under the MIT license, the same as the rest of this project.
+*/
 // Minimal private protocol server: validates negotiated child versions on wire.
 // It renders nothing and is only for the no-window logical-probe executable.
 #include <wayland-server.h>
