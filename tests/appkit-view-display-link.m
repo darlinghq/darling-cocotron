@@ -64,7 +64,20 @@ int main(void) { @autoreleasepool {
     expectResult(target->frames > previous, "reparenting to visible window resumes callbacks");
     [view removeFromSuperview]; [second setContentView:nil]; previous = target->frames; runFor(.08);
     expectResult(target->frames == previous, "detaching again suppresses callbacks");
-    [view release]; expectResult(viewDeallocated, "link does not retain the view");
+    [view release];
+    // The link itself must not keep its view alive. Checked on a view that is
+    // never put in a window, so that nothing else holds it.
+    viewDeallocated = NO;
+    @autoreleasepool {
+        LinkView *plain = [[LinkView alloc] initWithFrame:NSMakeRect(0,0,10,10)];
+        LinkTarget *plainTarget = [LinkTarget new];
+        CADisplayLink *plainLink = [plain displayLinkWithTarget:plainTarget selector:@selector(frame:)];
+        [plainLink addToRunLoop:[NSRunLoop currentRunLoop] forMode:NSDefaultRunLoopMode];
+        [plain release];
+        expectResult(viewDeallocated, "link does not retain the view");
+        [plainLink invalidate];
+        [plainTarget release];
+    }
     runFor(.08); expectResult(target->frames == previous, "deallocated view suppresses callbacks");
     [link invalidate]; [target release];
     expectResult(targetDeallocated, "invalidation releases the callback target");
