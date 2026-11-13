@@ -245,6 +245,10 @@ NSString *const NSNibTopLevelObjects = @"NSNibTopLevelObjects";
             id owner = [objectData rootObject];
             for (id object in unkeyedObjects)
                 [_allObjects addObject: (object == formerOwner && owner != nil) ? owner : object];
+            // The owner is among the objects that are awakened even when the object table does
+            // not list its placeholder.
+            if (owner != nil && [_allObjects indexOfObjectIdenticalTo: owner] == NSNotFound)
+                [_allObjects addObject: owner];
             [unkeyedObjects release];
             [formerOwner release];
         }
