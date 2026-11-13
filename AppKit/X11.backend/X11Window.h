@@ -83,6 +83,21 @@
 - (Drawable) drawable;
 - (NSPoint) transformPoint: (NSPoint) pos;
 - (O2Rect) transformFrame: (O2Rect) frame;
+// Device pixels from the window's top-left corner (as X delivers them) to
+// window coordinates in points, y up (as AppKit reports them).
+- (NSPoint) logicalPoint: (NSPoint) devicePoint;
+
+// Device pixels per point, read from the display so that this window and its
+// NSScreen always report the same value (-[NSWindow backingScaleFactor] prefers
+// the platform window's answer, so a window that disagreed with its screen
+// would win).
+- (CGFloat) backingScaleFactor;
+
+// Points to the device pixels libX11 takes. AppKit-level geometry is in points;
+// every value handed to X is in device pixels. One rounding serves the X window
+// and the backing surface, which the GL viewport follows.
+- (NSSize) deviceSize: (NSSize) size;
+- (O2Rect) deviceRect: (O2Rect) rect;
 
 - (Window) windowHandle;
 - (BOOL) isMapped;

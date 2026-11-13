@@ -25,9 +25,12 @@
 
     _display = [(X11Display *) [NSDisplay currentDisplay] display];
 
+    // _drawableFrame is in points; a child window is positioned in the parent's
+    // device pixels.
+    O2Rect device = [parent deviceRect: frame];
     _window = XCreateSimpleWindow(_display, [parent windowHandle],
-                                  frame.origin.x, frame.origin.y,
-                                  frame.size.width, frame.size.height, 0, 0,
+                                  device.origin.x, device.origin.y,
+                                  device.size.width, device.size.height, 0, 0,
                                   0 /* border_width, border, background */
     );
 
@@ -111,8 +114,22 @@
     frame = [self convertFrame: frame];
     _drawableFrame = frame;
 
-    XMoveResizeWindow(_display, _window, frame.origin.x, frame.origin.y,
-                      frame.size.width, frame.size.height);
+    O2Rect device = [_parent deviceRect: frame];
+
+    XMoveResizeWindow(_display, _window, device.origin.x, device.origin.y,
+                      device.size.width, device.size.height);
+}
+
+// A subwindow draws at the display's scale, like the window that holds it.
+- (CGFloat) backingScaleFactor {
+    return [_parent backingScaleFactor];
+}
+
+// The pixel size of this window's own drawable (not its parent's), whole pixels
+// as the OpenGL view requires.
+- (CGSize) drawablePixelSize {
+    NSSize device = [_parent deviceSize: _drawableFrame.size];
+    return CGSizeMake(device.width, device.height);
 }
 
 @end
