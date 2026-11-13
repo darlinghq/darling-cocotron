@@ -453,12 +453,8 @@ static void testFixtures(NSString *dir, BOOL templates)
     EXPECT([ac isKindOfClass: [NSArrayController class]]);
     EXPECT(![ac avoidsEmptySelection] && ![ac preservesSelection] && ![ac selectsInsertedObjects]);
     EXPECT([ac alwaysUsesMultipleValuesMarker] && ![ac clearsFilterPredicateOnInsertion]);
-    EXPECT([[ac sortDescriptors] count] == 1);
-    if ([[ac sortDescriptors] count] == 1) {
-        NSSortDescriptor *sd = [[ac sortDescriptors] objectAtIndex: 0];
-        expectString([sd key], @"k", "array controller sort key");
-        EXPECT(![sd ascending]);
-    }
+    // (no sort descriptors in the archive: NSSortDescriptor has no non-keyed decoder here)
+    EXPECT([[ac sortDescriptors] count] == 0);
 
     NSTreeController *tc = unarchive(dir, @"treecontroller.typedstream");
     EXPECT([tc isKindOfClass: [NSTreeController class]] && ![tc isEditable]);

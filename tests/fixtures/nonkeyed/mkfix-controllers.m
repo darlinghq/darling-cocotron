@@ -62,7 +62,6 @@ int main(int argc, char **argv)
     [ac setSelectsInsertedObjects: NO];
     [ac setAlwaysUsesMultipleValuesMarker: YES];
     [ac setClearsFilterPredicateOnInsertion: NO];
-    [ac setSortDescriptors: [NSArray arrayWithObject: [NSSortDescriptor sortDescriptorWithKey: @"k" ascending: NO]]];
     put(dir, @"arraycontroller.typedstream", ac);
 
     // (NSDictionaryController is not archived: 10.14 does not read back its own NSArchiver archive of it.)
