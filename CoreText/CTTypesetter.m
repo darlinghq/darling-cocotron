@@ -17,6 +17,10 @@
 @end
 
 @implementation _CTTypesetter
+- (CFTypeID)_cfTypeID {
+    return CTTypesetterGetTypeID();
+}
+
 - (void)dealloc {
     if (_string) CFRelease(_string);
     if (_options) CFRelease(_options);
