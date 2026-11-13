@@ -32,7 +32,7 @@ NSString *const kCATransition = @"transition";
 NSString *const kCAContentsFormatRGBA8Uint = @"RGBA8";
 NSString *const kCAContentsFormatRGBA16Float = @"RGBAh";
 NSString *const kCAContentsFormatGray8Uint = @"Gray8";
-NSString *const kCAContentsFormatAutomatic = @"CocotronContentsFormatAutomatic";
+NSString *const kCAContentsFormatAutomatic = @"Automatic";
 
 NSString *const CADynamicRangeAutomatic = @"automatic";
 NSString *const CADynamicRangeStandard = @"standard";

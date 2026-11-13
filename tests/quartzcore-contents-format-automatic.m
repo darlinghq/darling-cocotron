@@ -19,6 +19,8 @@ int main(void)
         NSArray *formats = @[kCAContentsFormatRGBA8Uint, kCAContentsFormatRGBA16Float,
                              kCAContentsFormatGray8Uint, kCAContentsFormatAutomatic];
         expect(kCAContentsFormatAutomatic != nil, "automatic format is defined");
+        // The value a keyed archive written by macOS carries.
+        expect([kCAContentsFormatAutomatic isEqualToString: @"Automatic"], "automatic format value");
         expect([NSSet setWithArray: formats].count == formats.count, "contents formats are distinct");
 
         CALayer *layer = [CALayer layer];
