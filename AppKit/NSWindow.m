@@ -2061,8 +2061,29 @@ static BOOL _allowsAutomaticWindowTabbing;
     return contentRectInFrame(self, frameRect);
 }
 
+// Borderless windows are left where they are; titled ones are kept inside
+// the visible frame of the screen. A window taller than the visible frame
+// keeps its top edge (and with it the title bar) on the screen.
 - (NSRect) constrainFrameRect: (NSRect) rect toScreen: (NSScreen *) screen {
+    if (!(_styleMask & NSWindowStyleMaskTitled)) {
+        return rect;
+    }
     return constrainRectToScreen(rect, screen);
+}
+
+// Run when a window that was not on screen is ordered in: the frame may have
+// been set to an off-screen position since the window was created, and the
+// subclass-overridable -constrainFrameRect:toScreen: decides what to do.
+// Windows that are already visible are not moved again.
+- (void) _constrainFrameBeforeOrderingIn {
+    NSScreen *screen = [self screen];
+    if (screen == nil) {
+        screen = [NSScreen mainScreen];
+    }
+    NSRect constrained = [self constrainFrameRect: _frame toScreen: screen];
+    if (!NSEqualRects(constrained, _frame)) {
+        [self setFrame: constrained display: NO];
+    }
 }
 
 // -constrainFrameRect:toScreen:, without sending it to a subclass.
@@ -2075,14 +2096,15 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
     if (NSMaxX(rect) > NSMaxX(visRect)) {
         rect.origin.x = NSMaxX(visRect) - rect.size.width;
     }
-    if (NSMaxY(rect) > NSMaxY(visRect)) {
-        rect.origin.y = NSMaxY(visRect) - rect.size.height;
-    }
     if (NSMinX(rect) < NSMinX(visRect)) {
         rect.origin.x = NSMinX(visRect);
     }
     if (NSMinY(rect) < NSMinY(visRect)) {
         rect.origin.y = NSMinY(visRect);
+    }
+    // Last, so that the top edge wins for a window taller than the screen.
+    if (NSMaxY(rect) > NSMaxY(visRect)) {
+        rect.origin.y = NSMaxY(visRect) - rect.size.height;
     }
     return rect;
 }
@@ -2657,6 +2679,9 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
     switch (place) {
     case NSWindowAbove:
         _isClosed = NO;
+        if (!wasVisible && ![self isMiniaturized]) {
+            [self _constrainFrameBeforeOrderingIn];
+        }
         [self update];
         _isVisible = YES;
         [[self platformWindow] placeAboveWindow: relativeTo];
@@ -2676,6 +2701,9 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
 
     case NSWindowBelow:
         _isClosed = NO;
+        if (!wasVisible && ![self isMiniaturized]) {
+            [self _constrainFrameBeforeOrderingIn];
+        }
         [self update];
         _isVisible = YES;
         [[self platformWindow] placeBelowWindow: relativeTo];
@@ -4362,6 +4390,54 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
     if (bottom)
         return left ? 5 : right ? 7 : 6;
     return left ? 4 : 0;
+}
+
+// The part of the content area that is not under the title bar or the
+// toolbar, in window coordinates. A window whose content view is not
+// full-size has the content rect itself; a full-size content view extends
+// under the title bar, which is then still excluded here.
+- (NSRect) contentLayoutRect {
+    NSRect frame = [self frame];
+    NSRect result;
+
+    if (_styleMask & NSWindowStyleMaskFullSizeContentView) {
+        result = [[NSDisplay currentDisplay]
+                         insetRect: frame
+                forNativeWindowBorderWithStyle: _styleMask & ~NSWindowStyleMaskFullSizeContentView];
+        NSToolbar *toolbar = _toolbar;
+        if ([toolbar _view] != nil && ![[toolbar _view] isHidden])
+            result.size.height -= [[toolbar _view] frame].size.height;
+    } else {
+        result = [self contentRectForFrameRect: frame];
+    }
+    result.origin.x -= frame.origin.x;
+    result.origin.y -= frame.origin.y;
+    return result;
+}
+
+// The rect, in screen coordinates, with its edges moved onto whole backing
+// pixels of the window.
+- (NSRect) backingAlignedRect: (NSRect) rect options: (NSAlignmentOptions) options {
+    CGFloat scale = [self backingScaleFactor];
+
+    if (!(scale > 0))
+        scale = 1.0;
+    rect = NSMakeRect(rect.origin.x * scale, rect.origin.y * scale,
+                      rect.size.width * scale, rect.size.height * scale);
+    rect = _NSAlignRectToPixelGrid(rect, options);
+    return NSMakeRect(rect.origin.x / scale, rect.origin.y / scale,
+                      rect.size.width / scale, rect.size.height / scale);
+}
+
+// The window's frame in screen coordinates.
+- (NSRect) accessibilityFrame {
+    return [self frame];
+}
+
+// effectiveAppearance follows the window's own appearance, and the
+// application's through -[NSApplication setAppearance:].
++ (NSSet *) keyPathsForValuesAffectingEffectiveAppearance {
+    return [NSSet setWithObject: @"appearance"];
 }
 
 - (CGFloat) backingScaleFactor {

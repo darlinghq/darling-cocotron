@@ -606,6 +606,9 @@ APPKIT_EXPORT const NSNotificationName NSWindowDidExitVersionBrowserNotification
 
 - (NSRect) frameRectForContentRect: (NSRect) rect;
 - (NSRect) contentRectForFrameRect: (NSRect) rect;
+@property(readonly) NSRect contentLayoutRect;
+- (NSRect) backingAlignedRect: (NSRect) rect options: (NSAlignmentOptions) options;
+- (NSRect) accessibilityFrame;
 - (NSRect) constrainFrameRect: (NSRect) rect toScreen: (NSScreen *) screen;
 
 - (NSWindow *) parentWindow;

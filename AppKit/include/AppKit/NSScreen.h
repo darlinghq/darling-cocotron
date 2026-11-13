@@ -59,6 +59,10 @@ typedef NSString *NSDeviceDescriptionKey;
 - (NSTimeInterval) minimumRefreshInterval;
 - (NSTimeInterval) maximumRefreshInterval;
 - (NSInteger) maximumFramesPerSecond;
+
+@property(readonly) NSEdgeInsets safeAreaInsets;
+@property(readonly) NSRect auxiliaryTopLeftArea;
+@property(readonly) NSRect auxiliaryTopRightArea;
 - (NSTimeInterval) displayUpdateGranularity;
 
 @end

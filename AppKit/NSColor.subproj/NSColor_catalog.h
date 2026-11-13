@@ -28,6 +28,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 + (NSColor *) colorWithCatalogName: (NSColorListName) catalogName
                          colorName: (NSColorName) colorName
                              color: (NSColor *) color;
+// A catalog color read from an archive: it stands for the named color as the
+// running system defines it; the archived color is used only when the name is
+// not known. The catalog is left unchanged.
++ (NSColor *) colorWithArchivedCatalogName: (NSColorListName) catalogName
+                                 colorName: (NSColorName) colorName
+                             fallbackColor: (NSColor *) fallback;
 - (NSColor *) highlightWithLevel: (CGFloat) level;
 
 @end
