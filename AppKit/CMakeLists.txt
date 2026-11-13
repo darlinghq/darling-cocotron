@@ -726,7 +726,8 @@ if (WAYLAND_CLIENT_FOUND AND WAYLAND_CURSOR_FOUND AND XKBCOMMON_FOUND
 		SOURCES
 			Wayland.backend/WaylandCursor.m
 			Wayland.backend/WaylandDisplay.m
-			Wayland.backend/WaylandLibrary.m
+			# Client glue shared with the CoreGraphics Wayland backend, which sits below AppKit.
+			../CoreGraphics/WaylandSupport/WaylandLibrary.m
 			Wayland.backend/WaylandWindow.m
 			${WAYLAND_PROTOCOL_SOURCES}
 		INFO_PLIST
@@ -744,6 +745,7 @@ if (WAYLAND_CLIENT_FOUND AND WAYLAND_CURSOR_FOUND AND XKBCOMMON_FOUND
 	)
 	target_include_directories(Wayland_backend PRIVATE
 		Wayland.backend
+		../CoreGraphics/WaylandSupport
 		${CMAKE_SOURCE_DIR}/src/startup/mldr/elfcalls
 		${WAYLAND_CLIENT_INCLUDE_DIRS}
 		${WAYLAND_CURSOR_INCLUDE_DIRS}

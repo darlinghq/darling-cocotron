@@ -17,7 +17,7 @@ override that, the environment variable first:
 If the compositor or a required native library cannot be reached, the backend logs the reason and AppKit
 continues with X11. `WAYLAND_DISPLAY` must be a **host filesystem path** when it is passed into Darling,
 because the native libwayland resolves it outside the container. The choice is made by
-`WaylandBackendSelected()` in `WaylandLibrary.m`.
+`WaylandBackendSelected()` in `CoreGraphics/WaylandSupport/WaylandLibrary.m`, which CoreGraphics shares.
 
 `WaylandDecorations` (`org.darlinghq.AppKit`) or `DARLING_WAYLAND_DECORATIONS`, set to `client`, makes the
 backend draw the window frame itself even when the compositor offers server-side decorations.
@@ -38,7 +38,7 @@ loader's native-call table only when the backend is selected, so the bundle has 
 them. Every native call takes a fixed number of arguments: requests go through
 `wl_proxy_marshal_array_flags` and events through `wl_proxy_add_dispatcher`, which avoids the variadic and
 listener-struct differences between the Darwin and Linux calling conventions. The hand-written opcodes in
-`WaylandProtocol.h` are checked against the generated protocol tables at startup.
+`CoreGraphics/WaylandSupport/WaylandProtocol.h` are checked against the generated protocol tables at startup.
 
 ## Building
 
