@@ -66,12 +66,16 @@
     return pixelFormat;
 }
 
-// The documented default is a context with no share context. The layer's
-// frame is drawn into a texture in this context and composited by the
-// context of the window the layer tree is hosted in, which can only sample a
-// texture it shares with the drawing context, so the default context shares
-// with the hosting one when there is one. A subclass that returns its own
-// context has to share with it too for its output to reach the screen.
+// QUIRK: the default context shares objects with the context of the window
+// the layer tree is hosted in, although the documented default is a context
+// without a share context. The layer's frame is drawn into a texture in this
+// context and composited by the hosting context, which can only sample a
+// texture it shares with the drawing context. Evidence: a requirement of this
+// compositor, not an observation of macOS (no tier; maintainer-approved).
+// A subclass that returns its own context has to share with the hosting one
+// too for its output to reach the screen.
+// Test: quartzcore-opengl-layer, "default contexts share objects" (with an
+// unshared context as the control).
 - (CGLContextObj) copyCGLContextForPixelFormat: (CGLPixelFormatObj) pf {
     if (!pf) return NULL;
     CGLContextObj ctx = NULL;
