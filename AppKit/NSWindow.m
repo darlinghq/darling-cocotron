@@ -4315,8 +4315,10 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
 // The region geometry is approximate: it was observed on macOS at one pixel
 // per point for a window of 300 by 200 points. An edge band is about 4 points
 // wide inside the frame (titled windows also react up to 3 points outside it)
-// and corners are squares of about 10 points (the observed arm lengths were between 6 and 11 points, depending on the window part). Resizing itself is done by the
-// window manager, so these regions only drive the answer of this method.
+// and corners are squares of about 10 points (the observed arm lengths were
+// between 6 and 11 points, depending on the window part). Resizing itself is
+// done by the window manager, so these regions only drive the answer of this
+// method.
 - (NSInteger) _resizeDirectionForMouseLocation: (NSPoint) location {
     if (!(_styleMask & NSWindowStyleMaskResizable))
         return -1;
