@@ -48,6 +48,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (void) interpretKeyEvents: (NSArray *) events;
 - (BOOL) performKeyEquivalent: (NSEvent *) event;
 - (BOOL) tryToPerform: (SEL) action with: object;
+- (id) supplementalTargetForAction: (SEL) action sender: (id) sender;
 - (void) noResponderFor: (SEL) action;
 
 - (BOOL) acceptsFirstResponder;
