@@ -46,4 +46,52 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [[self _searchCell] setRecentsAutosaveName: name];
 }
 
+- (int) maximumRecents {
+    return [[self _searchCell] maximumRecents];
+}
+
+- (void) setMaximumRecents: (int) maxRecents {
+    [[self _searchCell] setMaximumRecents: maxRecents];
+}
+
+- (BOOL) sendsWholeSearchString {
+    return [[self _searchCell] sendsWholeSearchString];
+}
+
+- (void) setSendsWholeSearchString: (BOOL) flag {
+    [[self _searchCell] setSendsWholeSearchString: flag];
+}
+
+- (BOOL) sendsSearchStringImmediately {
+    return [[self _searchCell] sendsSearchStringImmediately];
+}
+
+- (void) setSendsSearchStringImmediately: (BOOL) flag {
+    [[self _searchCell] setSendsSearchStringImmediately: flag];
+}
+
+- (NSButtonCell *) searchButtonCell {
+    return [[self _searchCell] searchButtonCell];
+}
+
+- (void) setSearchButtonCell: (NSButtonCell *) cell {
+    [[self _searchCell] setSearchButtonCell: cell];
+}
+
+- (NSButtonCell *) cancelButtonCell {
+    return [[self _searchCell] cancelButtonCell];
+}
+
+- (void) setCancelButtonCell: (NSButtonCell *) cell {
+    [[self _searchCell] setCancelButtonCell: cell];
+}
+
+- (NSMenu *) searchMenuTemplate {
+    return [[self _searchCell] searchMenuTemplate];
+}
+
+- (void) setSearchMenuTemplate: (NSMenu *) menu {
+    [[self _searchCell] setSearchMenuTemplate: menu];
+}
+
 @end

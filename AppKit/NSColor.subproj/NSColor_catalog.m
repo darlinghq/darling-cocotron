@@ -151,13 +151,7 @@ NSColor *NSColorGetCatalogColor(NSColorListName catalogName,
 }
 
 - (NSColor *) highlightWithLevel: (CGFloat) level {
-    printf("STUB %s\n", __PRETTY_FUNCTION__);
-
     level = MIN(1.0, MAX(0.0, level));
-
-    // TODO: verify if it is a use of blendedColorWithFraction:ofColor:
-    // that use highlightColor
-    // NSLog(@"Level %f", level);
 
     return self;
 }

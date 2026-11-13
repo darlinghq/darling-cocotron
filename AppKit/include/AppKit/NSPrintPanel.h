@@ -1,7 +1,7 @@
 #import <AppKit/AppKitExport.h>
 #import <Foundation/NSObject.h>
 
-@class NSMutableDictionary;
+@class NSArray, NSMutableArray, NSMutableDictionary, NSViewController;
 
 enum {
 
@@ -20,6 +20,7 @@ typedef NSInteger NSPrintPanelOptions;
 @interface NSPrintPanel : NSObject {
     NSMutableDictionary *_attributes;
     NSInteger _options;
+    NSMutableArray *_accessoryControllers;
 }
 
 + (NSPrintPanel *) printPanel;
@@ -31,6 +32,11 @@ typedef NSInteger NSPrintPanelOptions;
 
 - (void) updateFromPrintInfo;
 - (void) finalWritePrintInfo;
+
+// Stored only: the print panel doesn't show accessory views.
+- (NSArray *) accessoryControllers;
+- (void) addAccessoryController: (NSViewController *) controller;
+- (void) removeAccessoryController: (NSViewController *) controller;
 
 @end
 

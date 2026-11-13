@@ -2433,6 +2433,15 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
     }
 }
 
+- (void) updateConstraintsIfNeeded {
+    [_contentView updateConstraintsForSubtreeIfNeeded];
+}
+
+- (void) layoutIfNeeded {
+    [self updateConstraintsIfNeeded];
+    [_contentView layoutSubtreeIfNeeded];
+}
+
 - (void) display {
     // FIXME: See Issue #405, display when the window is not visible causes
     // layout problems (maybe the underlying Win32 window doesn't exist and
@@ -3701,7 +3710,7 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
     [sheet display];
     [[sheet platformWindow] sheetOrderFrontFromFrame: sheetFrame
                                          aboveWindow: [self platformWindow]];
-    [self makeKeyWindow];
+    [sheet makeKeyWindow];
 }
 
 - (void) _setSheetContext: (NSSheetContext *) sheetContext {

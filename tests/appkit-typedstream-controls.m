@@ -16,7 +16,9 @@
  * the contributor of the decoders (archives found in old nibs). These tests pin
  * the layouts the decoders accept; they cannot confirm them against macOS. The
  * layouts of NSTabView and NSTabViewItem are the ones recorded on Mac OS X
- * 10.14.4 (see appkit-nonkeyed-controls).
+ * 10.14.4 (see appkit-nonkeyed-controls), and so are those of NSTableColumn,
+ * NSScroller, NSClipView, NSScrollView, NSTableView, NSOutlineView and
+ * NSComboBoxCell (see appkit-nonkeyed-containers).
  */
 #import <AppKit/AppKit.h>
 #import <objc/runtime.h>
@@ -92,6 +94,7 @@ static void putTableViewLayer(NSCoder *coder)
                                     &columns, &spacingW, &spacingH,
                                     &background, &grid, &rowHeight, &action,
                                     &doubleAction, &flags];
+    // The delegate, the data source and the target.
     [coder encodeObject: [[[TTarget alloc] init] autorelease]];
     [coder encodeObject: nil];
     [coder encodeObject: nil];
@@ -128,24 +131,11 @@ static void test_quirk_typedstream_tab_view_item(void)
 
 // --- NSTableColumn -----------------------------------------------------------
 
-@interface TColumnV1 : NSTableColumn
-@end
-@interface TColumnV2 : NSTableColumn
+@interface TColumn : NSTableColumn
 @end
 
-@implementation TColumnV1
-- (void) encodeWithCoder: (NSCoder *) coder
-{
-    id identifier = @"name", header = @"Header", data = @"Data";
-    float w = 120, minW = 20, maxW = 300;
-    char resizable = 0, editable = 1;
-
-    [coder encodeValuesOfObjCTypes: "@@@fffcc", &identifier, &header, &data, &w,
-                                    &minW, &maxW, &resizable, &editable];
-}
-@end
-
-@implementation TColumnV2
+// One layout in every class version: identifier, widths, cells, flags, then the table view.
+@implementation TColumn
 - (void) encodeWithCoder: (NSCoder *) coder
 {
     id identifier = @"size", header = @"Header2", data = @"Data2", tableView = nil;
@@ -160,19 +150,11 @@ static void test_quirk_typedstream_tab_view_item(void)
 
 static void test_quirk_typedstream_table_column(void)
 {
-    class_setVersion([NSTableColumn class], 1);
-    NSTableColumn *v1 = roundTrip([[[TColumnV1 alloc] init] autorelease]);
-    expect([[v1 identifier] isEqual: @"name"], "v1 column identifier");
-    expect([v1 width] == 120 && [v1 minWidth] == 20 && [v1 maxWidth] == 300, "v1 column widths");
-    expect(![v1 isResizable] && [v1 isEditable], "v1 column flags");
-    expect([[v1 headerCell] isEqual: @"Header"] && [[v1 dataCell] isEqual: @"Data"], "v1 column cells");
-
-    class_setVersion([NSTableColumn class], 2);
-    NSTableColumn *v2 = roundTrip([[[TColumnV2 alloc] init] autorelease]);
-    expect([[v2 identifier] isEqual: @"size"], "v2 column identifier");
-    expect([v2 width] == 90 && [v2 minWidth] == 15 && [v2 maxWidth] == 250, "v2 column widths");
-    expect([v2 isResizable] && ![v2 isEditable], "v2 column flags");
-    expect([[v2 headerCell] isEqual: @"Header2"] && [[v2 dataCell] isEqual: @"Data2"], "v2 column cells");
+    NSTableColumn *col = roundTrip([[[TColumn alloc] init] autorelease]);
+    expect([[col identifier] isEqual: @"size"], "column identifier");
+    expect([col width] == 90 && [col minWidth] == 15 && [col maxWidth] == 250, "column widths");
+    expect([col isResizable] && ![col isEditable], "column flags");
+    expect([[col headerCell] isEqual: @"Header2"] && [[col dataCell] isEqual: @"Data2"], "column cells");
 }
 
 // --- NSScroller --------------------------------------------------------------
@@ -186,20 +168,21 @@ static void test_quirk_typedstream_table_column(void)
     id target = [[[TTarget alloc] init] autorelease];
     float value = 0.25, proportion = 0.5;
     SEL action = @selector(description);
-    char arrows = 1, size = 1;
+    char unknown = 0, flags = 0x20; // control size small in bits 5-6
 
     putViewLayers(coder, NSMakeRect(0, 0, 15, 100));
     putControlLayer(coder);
     putObject(coder, target);
     [coder encodeValuesOfObjCTypes: "ff:", &value, &proportion, &action];
-    [coder encodeValueOfObjCType: "c" at: &arrows];
-    [coder encodeValueOfObjCType: "c" at: &size];
+    [coder encodeValueOfObjCType: "c" at: &unknown];
+    [coder encodeValueOfObjCType: "c" at: &flags];
 }
 @end
 
 static void test_quirk_typedstream_scroller(void)
 {
     class_setVersion([NSView class], 16);
+    class_setVersion([NSScroller class], 211);
     NSScroller *scroller = roundTrip([[[TScroller alloc] initWithFrame: NSMakeRect(0, 0, 15, 100)] autorelease]);
     expect([scroller isKindOfClass: [NSScroller class]], "scroller decodes");
     expect([scroller floatValue] == 0.25f, "scroller value");
@@ -218,18 +201,19 @@ static void test_quirk_typedstream_scroller(void)
 - (void) encodeWithCoder: (NSCoder *) coder
 {
     id background = nil, cursor = nil, docView = nil;
-    char copyOnScroll = 1, drawsBackground = 0, other = 0;
+    char other = 0, doesNotCopy = 0, drawsBackground = 0;
 
+    // Version 58: the document view, then background, cursor and three bytes.
     putViewLayers(coder, NSMakeRect(0, 0, 200, 100));
-    [coder encodeObject: background];
-    [coder encodeValuesOfObjCTypes: "@@ccc", &cursor, &docView, &copyOnScroll,
-                                    &drawsBackground, &other];
+    [coder encodeObject: docView];
+    [coder encodeValuesOfObjCTypes: "@@ccc", &background, &cursor, &other, &doesNotCopy, &drawsBackground];
 }
 @end
 
 static void test_quirk_typedstream_clip_view(void)
 {
     class_setVersion([NSView class], 16);
+    class_setVersion([NSClipView class], 58);
     NSClipView *clip = roundTrip([[[TClipView alloc] initWithFrame: NSMakeRect(0, 0, 200, 100)] autorelease]);
     expect([clip isKindOfClass: [NSClipView class]], "clip view decodes");
     expect([clip copiesOnScroll], "clip view copies on scroll");
@@ -303,16 +287,18 @@ static void test_quirk_typedstream_tab_view(void)
     id clip = [[[TClipView alloc] initWithFrame: NSMakeRect(0, 0, 200, 100)] autorelease];
     id vertical = [[[TScroller alloc] initWithFrame: NSMakeRect(0, 0, 15, 100)] autorelease];
     id horizontal = nil, corner = nil, header = nil;
-    float hLine = 11, hPage = 12, vLine = 13, vPage = 14;
-    int flags = 0;
+    float hPage = 12, vPage = 14, hLine = 11, vLine = 13;
+    int flags = (int) 0x80000000u; // vertical scroller
 
+    // Version 226: vertical scroller, horizontal scroller, content view, header clip view and
+    // corner view, then the four scroll amounts and the flag word.
     putViewLayers(coder, NSMakeRect(0, 0, 215, 100));
-    [coder encodeObject: clip];
     [coder encodeObject: vertical];
     [coder encodeObject: horizontal];
-    [coder encodeObject: corner];
+    [coder encodeObject: clip];
     [coder encodeObject: header];
-    [coder encodeValuesOfObjCTypes: "ffffi", &hLine, &hPage, &vLine, &vPage, &flags];
+    [coder encodeObject: corner];
+    [coder encodeValuesOfObjCTypes: "ffffi", &hPage, &vPage, &hLine, &vLine, &flags];
 }
 @end
 
@@ -321,43 +307,34 @@ static void test_quirk_typedstream_tab_view(void)
 {
     id clip = [[[TClipView alloc] initWithFrame: NSMakeRect(0, 0, 200, 100)] autorelease];
     id vertical = [[[TScroller alloc] initWithFrame: NSMakeRect(0, 0, 15, 100)] autorelease];
-    NSInteger border = NSBezelBorder;
-    BOOL dynamically = YES, rulers = NO, yes = YES, no = NO;
-    float hLine = 5, hPage = 6, vLine = 7, vPage = 8;
+    id horizontal = nil;
+    float page = 6, line = 5;
+    short flagsHigh = (short) 0x8400; // vertical scroller, border type 2
 
+    // Versions 1-16: vertical scroller, horizontal scroller and content view, the amounts and
+    // the upper half of the flag word as a short, in one group.
     putViewLayers(coder, NSMakeRect(0, 0, 215, 100));
-    [coder encodeObject: clip];
-    [coder encodeValueOfObjCType: @encode(NSInteger) at: &border];
-    [coder encodeValueOfObjCType: @encode(BOOL) at: &dynamically];
-    [coder encodeValueOfObjCType: @encode(BOOL) at: &rulers];
-    [coder encodeValueOfObjCType: "f" at: &hLine];
-    [coder encodeValueOfObjCType: "f" at: &hPage];
-    [coder encodeValueOfObjCType: "f" at: &vLine];
-    [coder encodeValueOfObjCType: "f" at: &vPage];
-    [coder encodeValueOfObjCType: @encode(BOOL) at: &no];
-    [coder encodeValueOfObjCType: @encode(BOOL) at: &yes];
-    putObject(coder, vertical);
-    // Version 1 ends with the two ruler flags; header and corner view flags start at version 2.
-    [coder encodeValueOfObjCType: @encode(BOOL) at: &no];
-    [coder encodeValueOfObjCType: @encode(BOOL) at: &no];
+    [coder encodeValuesOfObjCTypes: "@@@ffs", &vertical, &horizontal, &clip, &page, &line, &flagsHigh];
 }
 @end
 
 static void test_quirk_typedstream_scroll_view(void)
 {
     class_setVersion([NSView class], 16);
-    class_setVersion([NSScrollView class], 20);
+    class_setVersion([NSScroller class], 211);
+    class_setVersion([NSClipView class], 58);
+    class_setVersion([NSScrollView class], 226);
     NSScrollView *newer = roundTrip([[[TScrollViewNew alloc] initWithFrame: NSMakeRect(0, 0, 215, 100)] autorelease]);
-    expect([[newer contentView] isKindOfClass: [NSClipView class]], "version 20 scroll view content view");
-    expect([newer hasVerticalScroller] && ![newer hasHorizontalScroller], "version 20 scroll view scrollers");
-    expect([newer horizontalLineScroll] == 11 && [newer verticalPageScroll] == 14, "version 20 scroll amounts");
+    expect([[newer contentView] isKindOfClass: [NSClipView class]], "version 226 scroll view content view");
+    expect([newer hasVerticalScroller] && ![newer hasHorizontalScroller], "version 226 scroll view scrollers");
+    expect([newer horizontalLineScroll] == 11 && [newer verticalPageScroll] == 14, "version 226 scroll amounts");
 
-    class_setVersion([NSScrollView class], 1);
+    class_setVersion([NSScrollView class], 10);
     NSScrollView *older = roundTrip([[[TScrollViewOld alloc] initWithFrame: NSMakeRect(0, 0, 215, 100)] autorelease]);
-    expect([[older contentView] isKindOfClass: [NSClipView class]], "version 1 scroll view content view");
-    expect([older borderType] == NSBezelBorder, "version 1 scroll view border");
-    expect([older hasVerticalScroller] && ![older hasHorizontalScroller], "version 1 scroll view scrollers");
-    expect([older horizontalLineScroll] == 5 && [older verticalPageScroll] == 8, "version 1 scroll amounts");
+    expect([[older contentView] isKindOfClass: [NSClipView class]], "version 10 scroll view content view");
+    expect([older borderType] == NSBezelBorder, "version 10 scroll view border");
+    expect([older hasVerticalScroller] && ![older hasHorizontalScroller], "version 10 scroll view scrollers");
+    expect([older horizontalLineScroll] == 5 && [older verticalPageScroll] == 6, "version 10 scroll amounts");
 }
 
 // --- NSTableView and NSOutlineView ---------------------------------------------
@@ -379,18 +356,10 @@ static void test_quirk_typedstream_scroll_view(void)
 @implementation TOutlineView
 - (void) encodeWithCoder: (NSCoder *) coder
 {
-    BOOL autoResizes = NO, follows = NO, autosave = YES;
-    float indentation = 12;
-    id column = nil;
-
+    // Nothing follows the table view layout.
     putViewLayers(coder, NSMakeRect(0, 0, 300, 200));
     putControlLayer(coder);
     putTableViewLayer(coder);
-    [coder encodeValueOfObjCType: @encode(BOOL) at: &autoResizes];
-    [coder encodeValueOfObjCType: @encode(BOOL) at: &follows];
-    [coder encodeValueOfObjCType: @encode(BOOL) at: &autosave];
-    [coder encodeValueOfObjCType: "f" at: &indentation];
-    [coder encodeObject: column];
 }
 @end
 
@@ -402,6 +371,7 @@ static void test_quirk_typedstream_table_view(void)
     expect([table rowHeight] == 20, "table view row height");
     expect([table intercellSpacing].width == 4 && [table intercellSpacing].height == 5, "table view spacing");
     expect([table doubleAction] == @selector(hash), "table view double action");
+    expect([[table delegate] isKindOfClass: [TTarget class]], "table view delegate comes first");
     expect([table allowsColumnReordering] && [table allowsMultipleSelection], "table view flag bits");
     expect(![table allowsColumnResizing] && ![table allowsEmptySelection], "table view clear flag bits");
     expect([[table tableColumns] count] == 0, "table view columns");
@@ -412,10 +382,10 @@ static void test_quirk_typedstream_outline_view(void)
     class_setVersion([NSView class], 16);
     NSOutlineView *outline = roundTrip([[[TOutlineView alloc] initWithFrame: NSMakeRect(0, 0, 300, 200)] autorelease]);
     expect([outline isKindOfClass: [NSOutlineView class]], "outline view decodes");
-    expect([outline indentationPerLevel] == 12, "outline view indentation");
-    expect(![outline indentationMarkerFollowsCell], "outline view marker follows cell");
-    expect(![outline autoresizesOutlineColumn], "outline view autoresizes outline column");
-    expect([outline autosaveExpandedItems], "outline view autosaves expanded items");
+    expect([outline indentationPerLevel] == 20, "outline view indentation follows the row height");
+    expect([outline indentationMarkerFollowsCell], "outline view marker follows cell");
+    expect([outline autoresizesOutlineColumn], "outline view autoresizes outline column");
+    expect(![outline autosaveExpandedItems], "outline view does not autosave expanded items");
     expect([outline rowHeight] == 20, "outline view inherits the table layout");
 }
 
@@ -449,8 +419,10 @@ static void test_quirk_typedstream_outline_view(void)
     [coder encodeObject: nil];
     [coder encodeValuesOfObjCTypes: "c@@", &textFlags, &background, &textColor];
     [coder encodeValuesOfObjCTypes: "iccc", &visible, &scroller, &usesDataSource, &completes];
+    // Pop-up list, data source (the cell uses one), delegate, button cell and table view.
     [coder encodeObject: list];
     [coder encodeObject: dataSource];
+    [coder encodeObject: nil];
     [coder encodeObject: nil];
     [coder encodeObject: nil];
 }
@@ -461,6 +433,7 @@ static void test_quirk_typedstream_combo_box_cell(void)
     class_setVersion([NSCell class], 55);
     class_setVersion([NSActionCell class], 17);
     class_setVersion([NSTextFieldCell class], 61);
+    class_setVersion([NSComboBoxCell class], 2);
     NSComboBoxCell *cell = roundTrip([[[TComboCell alloc] initTextCell: @""] autorelease]);
     expect([cell isKindOfClass: [NSComboBoxCell class]], "combo box cell decodes");
     expect([cell numberOfVisibleItems] == 8, "combo box visible items");

@@ -527,6 +527,10 @@ createImageToSurfaceTransform(O2ImageRef image, O2Rect rect,
                   surfaceToImage: O2AffineTransformInvert(imageToSurface)
                    surfaceToMask: O2AffineTransformInvert(maskToSurface)];
 
+    if ([imagePaint isKindOfClass: [O2Paint_image class]]) {
+        [(O2Paint_image *)imagePaint setAlpha: gState->_alpha];
+    }
+
     O2ContextSetupPaintAndBlendMode(self, imagePaint, gState->_blendMode);
 
     O2PaintRelease(paint);

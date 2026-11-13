@@ -77,44 +77,33 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         _buttonEnabled = YES;
         _buttonPressed = NO;
     } else {
-        // QUIRK: NSComboBoxCell layout: visible item count, vertical-
-        // scroller, uses-data-source and completes flags, then the pop-up
-        // list, data source, button cell and table view objects. Not
-        // documented; unkeyed (typedstream) archives come from old nibs.
-        // Evidence: tier 3, the layout reported by the contributor of this
-        // decoder from archives of old nibs; unconfirmed against macOS (a
-        // macOS check is pending). Archives with a different layout are
-        // tolerated where the code catches the mismatch. Test:
-        // test_quirk_typedstream_combo_box_cell in tests/appkit-typedstream-
-        // controls.m
-        int visibleItems = 5;
-        char hasVerticalScroller = 1;
-        char usesDataSource = 0;
-        char completes = 0;
-        @try {
-            [coder decodeValuesOfObjCTypes: "iccc", &visibleItems,
-                                            &hasVerticalScroller,
-                                            &usesDataSource,
-                                            &completes];
-        } @catch (id ex) {
-            // Keep the defaults when the archive has a different layout.
+        // Layout per class version as recorded from Mac archives (the text field cell's part
+        // comes first): the visible item count and the vertical scroller, uses-data-source
+        // and (from version 2) completes bytes in one group, then the pop-up list, the data
+        // source (only when the cell uses one), the delegate, the button cell and the table
+        // view. The delegate, button cell and table view are not kept.
+        NSInteger version = [coder versionForClassName: @"NSComboBoxCell"];
+        int visibleItems = 0;
+        char hasVerticalScroller = 0, usesDataSource = 0, completes = 0;
+
+        if (version >= 2) {
+            [coder decodeValuesOfObjCTypes: "iccc", &visibleItems, &hasVerticalScroller, &usesDataSource, &completes];
+        } else {
+            [coder decodeValuesOfObjCTypes: "icc", &visibleItems, &hasVerticalScroller, &usesDataSource];
         }
 
         id popUpList = [coder decodeObject];
-        id dataSource = [coder decodeObject];
-        // In unkeyed typedstream, popUpList, dataSource, buttonCell and tableView
-        // are sequenced. buttonCell and tableView are decoded to advance the stream.
-        id buttonCell = [coder decodeObject];
-        id tableView = [coder decodeObject];
-        (void)buttonCell;
-        (void)tableView;
+        id dataSource = usesDataSource ? [coder decodeObject] : nil;
+        [coder decodeObject]; // delegate
+        [coder decodeObject]; // button cell
+        [coder decodeObject]; // table view
 
         _numberOfVisibleItems = visibleItems;
         _hasVerticalScroller = hasVerticalScroller ? YES : NO;
         _usesDataSource = usesDataSource ? YES : NO;
         _completes = completes ? YES : NO;
         _objectValues = [popUpList isKindOfClass: [NSArray class]] ? [popUpList mutableCopy] : [[NSMutableArray alloc] init];
-        _dataSource = dataSource;
+        _dataSource = usesDataSource ? dataSource : nil;
         _isButtonBordered = YES;
         _buttonEnabled = YES;
         _buttonPressed = NO;

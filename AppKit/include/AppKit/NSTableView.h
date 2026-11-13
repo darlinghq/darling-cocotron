@@ -48,7 +48,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSControl.h>
 #import <AppKit/NSDragging.h>
 
-@class NSTableHeaderView, NSTableColumn;
+@class NSTableHeaderView, NSTableColumn, NSNib, NSTableRowView;
 
 APPKIT_EXPORT NSString *const NSTableViewSelectionIsChangingNotification;
 APPKIT_EXPORT NSString *const NSTableViewSelectionDidChangeNotification;
@@ -69,6 +69,22 @@ enum {
     NSTableViewSelectionHighlightStyleSourceList = 1,
 };
 typedef NSInteger NSTableViewSelectionHighlightStyle;
+
+typedef NS_ENUM(NSInteger, NSTableViewRowSizeStyle) {
+    NSTableViewRowSizeStyleDefault = -1,
+    NSTableViewRowSizeStyleCustom = 0,
+    NSTableViewRowSizeStyleSmall = 1,
+    NSTableViewRowSizeStyleMedium = 2,
+    NSTableViewRowSizeStyleLarge = 3,
+};
+
+typedef NS_ENUM(NSInteger, NSTableViewStyle) {
+    NSTableViewStyleAutomatic = 0,
+    NSTableViewStyleFullWidth = 1,
+    NSTableViewStyleInset = 2,
+    NSTableViewStyleSourceList = 3,
+    NSTableViewStylePlain = 4,
+};
 
 typedef enum {
     NSTableViewDropOn,
@@ -114,6 +130,10 @@ typedef NS_OPTIONS(NSUInteger, NSTableViewAnimationOptions) {
     unsigned int _gridStyleMask;
     NSTableViewSelectionHighlightStyle _selectionHighlightStyle;
     BOOL _usesAutomaticRowHeights;
+    BOOL _floatsGroupRows;
+    NSTableViewRowSizeStyle _rowSizeStyle;
+    CGFloat _styledRowHeight;
+    NSTableViewStyle _style;
 
     // temp ivars
     NSMutableArray *_selectedColumns;
@@ -127,7 +147,16 @@ typedef NS_OPTIONS(NSUInteger, NSTableViewAnimationOptions) {
     NSArray *_sortDescriptors;
 
     NSInteger _draggingRow;
+    NSDragOperation _draggingSourceMaskLocal;
+    NSDragOperation _draggingSourceMaskNonLocal;
+
+    NSMutableDictionary *_registeredNibs;
+    NSMutableArray *_activeRowViews;
 }
+
+- (NSView *) makeViewWithIdentifier: (NSString *) identifier owner: (id) owner;
+- (void) registerNib: (NSNib *) nib forIdentifier: (NSString *) identifier;
+- (NSView *) viewAtColumn: (NSInteger) column row: (NSInteger) row makeIfNecessary: (BOOL) makeIfNecessary;
 
 - (SEL) doubleAction;
 
@@ -157,6 +186,11 @@ typedef NS_OPTIONS(NSUInteger, NSTableViewAnimationOptions) {
 - (NSTableViewSelectionHighlightStyle) selectionHighlightStyle;
 - (BOOL) usesAutomaticRowHeights;
 - (void) setUsesAutomaticRowHeights: (BOOL) value;
+// Floating applies to view-based tables only; Cocotron's tables are cell-based.
+- (BOOL) floatsGroupRows;
+- (NSTableViewRowSizeStyle) rowSizeStyle;
+- (NSTableViewRowSizeStyle) effectiveRowSizeStyle;
+- (NSTableViewStyle) style;
 
 - (NSInteger) numberOfRows;
 - (NSUInteger) numberOfColumns;
@@ -193,11 +227,17 @@ typedef NS_OPTIONS(NSUInteger, NSTableViewAnimationOptions) {
 - (void) setAllowsMultipleSelection: (BOOL) flag;
 - (void) setAllowsEmptySelection: (BOOL) flag;
 - (void) setAllowsColumnSelection: (BOOL) flag;
+- (void) setDraggingSourceOperationMask: (NSDragOperation) mask
+                               forLocal: (BOOL) isLocal;
+- (NSDragOperation) draggingSourceOperationMaskForLocal: (BOOL) isLocal;
 - (void) setAutosaveTableColumns: (BOOL) flag;
 
 - (void) setUsesAlternatingRowBackgroundColors: (BOOL) flag;
 - (void) setGridStyleMask: (unsigned int) gridStyle;
 - (void) setSelectionHighlightStyle: (NSTableViewSelectionHighlightStyle) value;
+- (void) setFloatsGroupRows: (BOOL) flag;
+- (void) setRowSizeStyle: (NSTableViewRowSizeStyle) style;
+- (void) setStyle: (NSTableViewStyle) style;
 
 - (void) addTableColumn: (NSTableColumn *) column;
 - (void) removeTableColumn: (NSTableColumn *) column;
@@ -301,6 +341,9 @@ typedef NS_OPTIONS(NSUInteger, NSTableViewAnimationOptions) {
         willDisplayCell: cell
          forTableColumn: (NSTableColumn *) tableColumn
                     row: (NSInteger) row;
+- (NSView *) tableView: (NSTableView *) tableView
+    viewForTableColumn: (NSTableColumn *) tableColumn
+                   row: (NSInteger) row;
 @end
 
 @interface NSObject (NSTableView_notifications)

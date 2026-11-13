@@ -39,7 +39,7 @@ typedef NS_OPTIONS(NSUInteger, NSTouchTypeMask) {
 @class NSWindow, NSMenu, NSMenuItem, NSCursor, NSClipView, NSPasteboard,
         NSTextInputContext, NSImage, NSBitmapImageRep, NSScrollView,
         NSTrackingArea, NSShadow, NSScreen, CALayer, CIFilter, CALayerContext, NSView,
-        NSLayoutGuide, NSGestureRecognizer;
+        NSLayoutGuide, NSGestureRecognizer, NSLayoutDimension, NSLayoutXAxisAnchor, NSLayoutYAxisAnchor;
 
 // See Cocoa Event Handling Guide : Using Tracking-Area Objects : Compatibility
 // Issues
@@ -155,7 +155,27 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPre
     int _frameChangeDepth;
     BOOL _canDrawConcurrently;
     NSMutableArray *_gestureRecognizers;
+
+    NSMutableArray *_constraints;
+
+    BOOL _needsLayout;
+    BOOL _needsUpdateConstraints;
+    BOOL _clipsToBounds;
+    BOOL _hasPreparedContentRect;
+    NSRect _preparedContentRect;
 }
+
+// Constraints installed on this view, in the order they were added. A
+// constraint is installed on the closest common ancestor of its items, see
+// -[NSLayoutConstraint setActive:].
+@property(readonly, copy) NSArray<NSLayoutConstraint *> *constraints;
+// Adding a constraint activates it with this view as its owner; removing it
+// deactivates it, and either marks the view as needing a constraint update.
+// Adding one that is already installed here does nothing.
+- (void) addConstraint: (NSLayoutConstraint *) constraint;
+- (void) addConstraints: (NSArray<NSLayoutConstraint *> *) constraints;
+- (void) removeConstraint: (NSLayoutConstraint *) constraint;
+- (void) removeConstraints: (NSArray<NSLayoutConstraint *> *) constraints;
 
 @property(class, readonly) BOOL requiresConstraintBasedLayout;
 @property BOOL translatesAutoresizingMaskIntoConstraints;
@@ -164,17 +184,22 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPre
 // NSViewNoIntrinsicMetric in both dimensions; subclasses that know their own
 // size override it.
 @property(readonly) NSSize intrinsicContentSize;
-// There is no constraint solver to notify, so nothing recomputes a size
-// from it.
+// The intrinsic size is read when the layout is solved, so a change to it
+// shows at the next -layoutSubtreeIfNeeded.
 - (void) invalidateIntrinsicContentSize;
 
-// Override points for subclasses. There is no constraint solver to drive
-// them, so the base implementations do nothing.
+// Sent by -layoutSubtreeIfNeeded to each view that needs layout. The base
+// implementation clears needsLayout. Subclasses override and call super.
 - (void) layout;
+// Override to update stored constraints; call super last.
 - (void) updateConstraints;
+// Sends -updateConstraints to the views of this subtree that need it,
+// subviews before their superview.
+- (void) updateConstraintsForSubtreeIfNeeded;
 
-// Stored for callers and subclasses; with no constraint solver they do not
-// affect layout. Defaults are 250 (hugging) and 750 (compression resistance).
+// How strongly the view resists growing beyond, and shrinking below, its
+// intrinsic size when constraints are solved. Defaults are 250 (hugging) and
+// 750 (compression resistance).
 - (NSLayoutPriority) contentHuggingPriorityForOrientation: (NSLayoutConstraintOrientation) orientation;
 - (void) setContentHuggingPriority: (NSLayoutPriority) priority
                     forOrientation: (NSLayoutConstraintOrientation) orientation;
@@ -534,6 +559,44 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPre
 @property(copy) NSArray<NSGestureRecognizer *> *gestureRecognizers;
 - (void) addGestureRecognizer: (NSGestureRecognizer *) recognizer;
 - (void) removeGestureRecognizer: (NSGestureRecognizer *) recognizer;
+
+@end
+
+@interface NSView (NSViewLayoutState)
+
+// Marking a view as needing layout or constraint updates makes the next
+// layout pass (-layoutSubtreeIfNeeded, or before a window displays) handle it.
+@property BOOL needsLayout;
+@property BOOL needsUpdateConstraints;
+// Stored only; drawing isn't clipped differently.
+@property BOOL clipsToBounds;
+// The visible rect until set.
+@property NSRect preparedContentRect;
+
+// Updates constraints and sends -layout to the views that need it.
+- (void) layoutSubtreeIfNeeded;
+
+@end
+
+@interface NSView (NSViewLayoutAnchors)
+
+@property(readonly, retain) NSLayoutDimension *widthAnchor;
+@property(readonly, retain) NSLayoutDimension *heightAnchor;
+@property(readonly, retain) NSLayoutXAxisAnchor *leadingAnchor;
+@property(readonly, retain) NSLayoutXAxisAnchor *trailingAnchor;
+@property(readonly, retain) NSLayoutXAxisAnchor *leftAnchor;
+@property(readonly, retain) NSLayoutXAxisAnchor *rightAnchor;
+@property(readonly, retain) NSLayoutXAxisAnchor *centerXAnchor;
+@property(readonly, retain) NSLayoutYAxisAnchor *topAnchor;
+@property(readonly, retain) NSLayoutYAxisAnchor *bottomAnchor;
+@property(readonly, retain) NSLayoutYAxisAnchor *centerYAnchor;
+
+@end
+
+@interface NSView (NSViewEffectiveAppearance)
+
+// The view's own appearance, else its superview's, else the current appearance.
+@property(readonly) NSAppearance *effectiveAppearance;
 
 @end
 

@@ -1011,7 +1011,7 @@ static NSData *makeWindowIcon() {
         XRaiseWindow(_display, _window);
     } else {
         Window w[2] = {_window, other->_window};
-        XRestackWindows(_display, w, 1);
+        XRestackWindows(_display, w, 2);
     }
 }
 

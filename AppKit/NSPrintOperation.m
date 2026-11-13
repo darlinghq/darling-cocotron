@@ -26,6 +26,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSView.h>
 
 #import "NSPrintProgressPanelController.h"
+#import <objc/message.h>
 
 enum {
     NSPrintOperationPDFInRect,
@@ -438,6 +439,30 @@ static NSPrintOperation *_currentOperation = nil;
     _currentOperation = nil;
 
     return YES;
+}
+
+@end
+
+@implementation NSPrintOperation (NSPrintOperationModal)
+
+- (void) setShowPanels: (BOOL) flag {
+    [self setShowsPrintPanel: flag];
+    [self setShowsProgressPanel: flag];
+}
+
+- (BOOL) showPanels {
+    return [self showsPrintPanel];
+}
+
+- (void) runOperationModalForWindow: (NSWindow *) docWindow
+                           delegate: (id) delegate
+                     didRunSelector: (SEL) didRunSelector
+                        contextInfo: (void *) contextInfo
+{
+    BOOL success = [self runOperation];
+    if (delegate != nil && didRunSelector != NULL)
+        ((void (*)(id, SEL, NSPrintOperation *, BOOL, void *)) objc_msgSend)(
+                delegate, didRunSelector, self, success, contextInfo);
 }
 
 @end
