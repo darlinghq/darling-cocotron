@@ -75,8 +75,7 @@ typedef NS_OPTIONS(unsigned int, NSCellAppleFlags2) {
     NSCellAppleFlag2WasSelectable         = 1u << 31,
     NSCellAppleFlag2RichText              = 1u << 30,
     NSCellAppleFlag2Reserved1             = 1u << 29,
-    //NSCellAppleFlag2ImportsGraph          = 1u << 28, // clearly wrong, since this would overlap with TextAlignmentMask
-    NSCellAppleFlag2TextAlignmentShift    = 16,
+    NSCellAppleFlag2TextAlignmentShift    = 26,
     NSCellAppleFlag2TextAlignmentMask     = 0x07u << NSCellAppleFlag2TextAlignmentShift,
     NSCellAppleFlag2RefusesFirstResponder = 1u << 25,
     NSCellAppleFlag2AllowsMixedState      = 1u << 24,
@@ -207,12 +206,11 @@ NSNotificationName NSControlTintDidChangeNotification = @"NSControlTintDidChange
 
 // The fields of the second flag word that NSArchiver data (non-keyed decoding) lays out
 // differently from what _applyAppleFlags:flags2: reads, as seen in archives written
-// on Mac OS X 10.14 and macOS 26: text alignment in bits 26-28, the mixed state in
-// bit 23 (the on-state bit of the first word is set too), focus ring type in bits 15-16,
-// base writing direction right-to-left in bit 14, truncation of the last visible line
-// in bit 8 and right-to-left layout direction in bit 7.
+// on Mac OS X 10.14 and macOS 26: the mixed state in bit 23 (the on-state bit of
+// the first word is set too), focus ring type in bits 15-16, base writing
+// direction right-to-left in bit 14, truncation of the last visible line in
+// bit 8 and right-to-left layout direction in bit 7.
 - (void) _applyNonKeyedFlags2: (unsigned int) flags2 {
-    _textAlignment = (flags2 >> 26) & 7;
     if (flags2 & (1u << 23))
         _state = NSControlStateValueMixed;
     _focusRingType = (flags2 >> 15) & 3;
