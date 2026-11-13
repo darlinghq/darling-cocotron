@@ -160,7 +160,17 @@ static Scripted *scripted(NSString *cls, NSInteger version, NSDictionary *spec)
 
 static NSString *seq(Scripted *s)
 {
-    return [s->log componentsJoinedByString: @" "];
+    // Joined by hand: some NSArray implementations skip the separator before an element that is
+    // pointer-identical to the last one, and the log holds repeated constant strings.
+    NSMutableString *joined = [NSMutableString string];
+    NSUInteger i, n = [s->log count];
+
+    for (i = 0; i < n; i++) {
+        if (i > 0)
+            [joined appendString: @" "];
+        [joined appendString: [s->log objectAtIndex: i]];
+    }
+    return joined;
 }
 
 #define N(x) [NSNumber numberWithInt: (x)]
