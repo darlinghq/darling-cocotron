@@ -1725,7 +1725,15 @@ NSApplication *NSApp = nil;
     }
 }
 
+// The display backend reports the input focus moving between two windows of
+// the application as the focus leaving one window and then arriving in the
+// other. The application must not resign in between, as on macOS, so the
+// decision to resign is taken once the current run-loop pass has finished,
+// and is dropped when a window has taken the focus by then.
+static BOOL resignPending;
+
 - (void) _windowDidBecomeActive: (NSWindow *) window {
+    resignPending = NO;
     if (!_isActive) {
         _isActive = YES;
         [[NSNotificationCenter defaultCenter]
@@ -1735,40 +1743,52 @@ NSApplication *NSApp = nil;
 }
 
 - (void) _windowWillBecomeDeactive: (NSWindow *) window {
-    if (![self isActiveExcludingWindow: window]) {
-        [[NSNotificationCenter defaultCenter]
-                postNotificationName: NSApplicationWillResignActiveNotification
-                              object: self];
-        _isActive = NO;
+    if (![self isActiveExcludingWindow: window] && !resignPending) {
+        resignPending = YES;
+        CFRunLoopPerformBlock(CFRunLoopGetMain(), kCFRunLoopCommonModes, ^{
+            [self _resignIfNoWindowIsActive];
+        });
+        CFRunLoopWakeUp(CFRunLoopGetMain());
     }
 }
 
 - (void) _windowDidBecomeDeactive: (NSWindow *) window {
-    if (![self isActive]) {
+    // Resigning, if it happens, is decided by -_resignIfNoWindowIsActive.
+}
 
-        // Exposed menus are running tight event tracking loops and would remain
-        // visible when the app deactivates (making the UI less than community
-        // minded) - unfortunately because they're in these tracking loops
-        // they're waiting on events and even though they could receive the
-        // notification sent here they can't deal with it until an event is
-        // received to let them proceed. This special event type was added to
-        // help them get unstuck and remove the menu on deactivation
-        NSEvent *appKitEvent =
-                [NSEvent otherEventWithType: NSAppKitDefined
-                                   location: NSZeroPoint
-                              modifierFlags: 0
-                                  timestamp: 0
-                               windowNumber: 0
-                                    context: nil
-                                    subtype: NSApplicationDeactivated
-                                      data1: 0
-                                      data2: 0];
-        [self postEvent: appKitEvent atStart: YES];
+- (void) _resignIfNoWindowIsActive {
+    if (!resignPending)
+        return;
+    resignPending = NO;
+    if ([self isActiveExcludingWindow: nil])
+        return;
 
-        [[NSNotificationCenter defaultCenter]
-                postNotificationName: NSApplicationDidResignActiveNotification
-                              object: self];
-    }
+    [[NSNotificationCenter defaultCenter]
+            postNotificationName: NSApplicationWillResignActiveNotification
+                          object: self];
+    _isActive = NO;
+
+    // Exposed menus are running tight event tracking loops and would remain
+    // visible when the app deactivates (making the UI less than community
+    // minded) - unfortunately because they're in these tracking loops
+    // they're waiting on events and even though they could receive the
+    // notification sent here they can't deal with it until an event is
+    // received to let them proceed. This special event type was added to
+    // help them get unstuck and remove the menu on deactivation
+    NSEvent *appKitEvent = [NSEvent otherEventWithType: NSAppKitDefined
+                                              location: NSZeroPoint
+                                         modifierFlags: 0
+                                             timestamp: 0
+                                           windowNumber: 0
+                                                 context: nil
+                                                 subtype: NSApplicationDeactivated
+                                                   data1: 0
+                                                   data2: 0];
+    [self postEvent: appKitEvent atStart: YES];
+
+    [[NSNotificationCenter defaultCenter]
+            postNotificationName: NSApplicationDidResignActiveNotification
+                          object: self];
 }
 
 // private method called when the application is reopened
