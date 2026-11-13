@@ -15,10 +15,10 @@
  along with Darling.  If not, see <http://www.gnu.org/licenses/>.
 */
 #import <CoreGraphics/CGSServerSPI.h>
-#import <CoreGraphics/CoreGraphicsPrivate.h>
 #import <CoreGraphics/CGWindow.h>
 #include <math.h>
 #include <pthread.h>
+#import <CoreGraphics/CoreGraphicsPrivate.h>
 
 static pthread_mutex_t mainConnectionLock = PTHREAD_MUTEX_INITIALIZER;
 static CGSConnectionID mainConnectionID; // 0 until created
