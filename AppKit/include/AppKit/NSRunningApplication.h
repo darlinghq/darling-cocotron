@@ -47,5 +47,7 @@ typedef NS_OPTIONS(NSUInteger, NSApplicationActivationOptions) {
 @property(readonly, getter=isTerminated) BOOL terminated;
 
 - (BOOL) activateWithOptions: (NSApplicationActivationOptions) options;
+- (BOOL) activateFromApplication: (NSRunningApplication *) application
+                         options: (NSApplicationActivationOptions) options;
 
 @end

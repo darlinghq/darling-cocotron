@@ -1154,6 +1154,16 @@ NSApplication *NSApp = nil;
     NSUnimplementedMethod();
 }
 
+// Cooperative activation: an application tells the system that another one
+// may take over activation. The display backends activate a window on request
+// without checking who asked, so there is no activation to hand over and
+// nothing to record. The calls accept any argument and return at once.
+- (void) yieldActivationToApplication: (NSRunningApplication *) application {
+}
+
+- (void) yieldActivationToApplicationWithBundleIdentifier: (NSString *) bundleIdentifier {
+}
+
 - (NSWindow *) modalWindow {
     return [[_modalStack lastObject] modalWindow];
 }
