@@ -70,6 +70,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [super initWithCoder: coder];
     [self registerForDraggedTypes:
                     [NSArray arrayWithObject: NSStringPboardType]];
+    _automaticTextCompletionEnabled = YES;
 
     if ([coder allowsKeyedCoding]) {
         NSKeyedUnarchiver *keyed = (NSKeyedUnarchiver *) coder;
@@ -117,6 +118,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [_cell setEditable: YES];
     [_cell setSelectable: YES];
     [_cell setBezeled: YES];
+    _automaticTextCompletionEnabled = YES;
     [self registerForDraggedTypes:
                     [NSArray arrayWithObject: NSStringPboardType]];
     return self;
@@ -124,6 +126,15 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (BOOL) isFlipped {
     return YES;
+}
+
+// Stored only: field editing offers no completions yet.
+- (BOOL) isAutomaticTextCompletionEnabled {
+    return _automaticTextCompletionEnabled;
+}
+
+- (void) setAutomaticTextCompletionEnabled: (BOOL) value {
+    _automaticTextCompletionEnabled = value;
 }
 
 - (BOOL) isOpaque {
@@ -196,6 +207,15 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (void) setDrawsBackground: (BOOL) flag {
     [_cell setDrawsBackground: flag];
+    [self setNeedsDisplay: YES];
+}
+
+- (NSTextFieldBezelStyle) bezelStyle {
+    return [_cell bezelStyle];
+}
+
+- (void) setBezelStyle: (NSTextFieldBezelStyle) style {
+    [_cell setBezelStyle: style];
     [self setNeedsDisplay: YES];
 }
 

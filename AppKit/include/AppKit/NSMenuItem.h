@@ -51,6 +51,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     NSView *_view;
     NSString *_toolTip;
     NSMenuItemBadge *_badge;
+    BOOL _isSectionHeader;
     NSImage *_actionImage;
 }
 
@@ -62,6 +63,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 @property(retain) NSMenuItemBadge *badge;
 
 + (NSMenuItem *) separatorItem;
+// macOS 14: a non-selectable item that titles the items after it.
++ (NSMenuItem *) sectionHeaderWithTitle: (NSString *) title;
 
 - (instancetype) initWithTitle: (NSString *) title
                         action: (SEL) action
@@ -90,6 +93,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (NSMenu *) submenu;
 
 - (BOOL) isSeparatorItem;
+- (BOOL) isSectionHeader;
 - (BOOL) isEnabled;
 - (BOOL) isHidden;
 

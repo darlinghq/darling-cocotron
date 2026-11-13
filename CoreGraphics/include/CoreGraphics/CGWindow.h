@@ -94,6 +94,9 @@ typedef uint32_t CGWindowID;
 //- (O2Context *)cgContext;
 - (CGLContextObj) cglContext;
 
+// Per-window rendering scale, or zero to use the screen scale.
+- (CGFloat) backingScaleFactor;
+
 - (NSUInteger) styleMask;
 
 - (void) setLevel: (int) value;

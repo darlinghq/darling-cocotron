@@ -22,6 +22,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @interface NSButton : NSControl {
     NSColor *_contentTintColor;
+    BOOL _hasDestructiveAction;
 }
 
 + (instancetype) buttonWithTitle: (NSString *) title image: (NSImage *) image target: (id) target action: (SEL) action;
@@ -51,6 +52,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (void) setKeyEquivalentModifierMask: (NSEventModifierFlags) value;
 - (void) setImage: (NSImage *) value;
 - (void) setImagePosition: (NSCellImagePosition) value;
+- (NSImageScaling) imageScaling;
+- (void) setImageScaling: (NSImageScaling) value;
 - (void) setTitle: (NSString *) value;
 - (void) setState: (NSControlStateValue) value;
 - (void) setNextState;
@@ -85,4 +88,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 @interface NSButton (NSButtonContentTint)
 // Stored only: the image and title aren't tinted.
 @property(copy) NSColor *contentTintColor;
+@end
+
+@interface NSButton (NSDestructiveAction)
+// macOS 11: marks a button whose action is destructive (stored; not drawn differently).
+- (BOOL) hasDestructiveAction;
+- (void) setHasDestructiveAction: (BOOL) value;
 @end

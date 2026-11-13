@@ -30,7 +30,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
     BOOL _drawsBackground;
     BOOL _copiesOnScroll;
+    BOOL _automaticallyAdjustsContentInsets;
+    NSEdgeInsets _contentInsets;
 }
+
+@property BOOL automaticallyAdjustsContentInsets;
+@property NSEdgeInsets contentInsets;
 
 - (BOOL) drawsBackground;
 - (BOOL) copiesOnScroll;

@@ -19,6 +19,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSRaise.h>
 #import <AppKit/NSWorkspace.h>
+#import <AppKit/NSRunningApplication.h>
 #import <Foundation/Foundation.h>
 
 NSString *const NSWorkspaceApplicationKey = @"NSWorkspaceApplicationKey";
@@ -404,6 +405,41 @@ NSNotificationName NSWorkspaceWillUnmountNotification = @"NSWorkspaceWillUnmount
     [_arguments release];
     [_environment release];
     [super dealloc];
+}
+
+@end
+
+@implementation NSWorkspace (NSOpenURLsWithApplication)
+
+// Opens file URLs with the application (by path) and other URLs with
+// -openURL:. Returns nil with an error if anything couldn't be opened. Launched
+// applications aren't tracked, so success returns an NSRunningApplication that
+// doesn't describe the opened application.
+- (NSRunningApplication *) openURLs: (NSArray<NSURL *> *) urls
+               withApplicationAtURL: (NSURL *) applicationURL
+                            options: (NSUInteger) options
+                      configuration: (NSDictionary *) configuration
+                              error: (NSError **) error
+{
+    BOOL ok = YES;
+    for (NSURL *url in urls) {
+        @try {
+            if ([url isFileURL])
+                ok = [self openFile: [url path] withApplication: [applicationURL path]] && ok;
+            else
+                ok = [self openURL: url] && ok;
+        } @catch (NSException *exception) {
+            ok = NO;
+        }
+    }
+    if (!ok) {
+        if (error)
+            *error = [NSError errorWithDomain: NSCocoaErrorDomain code: NSFileReadUnknownError userInfo: nil];
+        return nil;
+    }
+    if (error)
+        *error = nil;
+    return [[[NSRunningApplication alloc] init] autorelease];
 }
 
 @end

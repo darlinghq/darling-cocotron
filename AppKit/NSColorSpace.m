@@ -46,6 +46,22 @@ NSString *const _NSColorCoreUICatalogNamePrefix =
     return colorSpace;
 }
 
++ (NSColorSpace *) genericRGBColorSpace {
+    return [self sRGBColorSpace];
+}
+
++ (NSColorSpace *) genericGrayColorSpace {
+    CGColorSpaceRef gray = CGColorSpaceCreateDeviceGray();
+    NSColorSpace *result =
+            [[[self alloc] initWithCGColorSpace: gray] autorelease];
+    CGColorSpaceRelease(gray);
+    return result;
+}
+
++ (NSColorSpace *) genericGamma22GrayColorSpace {
+    return [self genericGrayColorSpace];
+}
+
 + (NSColorSpace *) deviceRGBColorSpace {
     CGColorSpaceRef device = CGColorSpaceCreateDeviceRGB();
     NSColorSpace *result =

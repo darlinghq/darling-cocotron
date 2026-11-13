@@ -154,6 +154,15 @@ id _NSTabViewFloatingCell = nil;
     return _delegate;
 }
 
+- (NSControlSize) controlSize {
+    return _controlSize;
+}
+
+- (void) setControlSize: (NSControlSize) controlSize {
+    _controlSize = controlSize;
+    [self setNeedsDisplay: YES];
+}
+
 - (NSSize) minimumSize {
     switch (_type) {
     case NSTopTabsBezelBorder:

@@ -46,6 +46,9 @@ NSString *const NSPreferredScrollerStyleDidChangeNotification =
 
 @implementation NSScrollView
 
+@synthesize horizontalScrollElasticity = _horizontalScrollElasticity;
+@synthesize verticalScrollElasticity = _verticalScrollElasticity;
+
 static Class _rulerViewClass = nil;
 
 + (void) initialize {
@@ -827,6 +830,17 @@ static Class _rulerViewClass = nil;
     [_horizontalScroller setKnobStyle: knobStyle];
 }
 
+- (NSScrollerStyle) scrollerStyle {
+    return _scrollerStyle;
+}
+
+- (void) setScrollerStyle: (NSScrollerStyle) newScrollerStyle {
+    _scrollerStyle = newScrollerStyle;
+    [_verticalScroller setScrollerStyle: newScrollerStyle];
+    [_horizontalScroller setScrollerStyle: newScrollerStyle];
+    [self tile];
+}
+
 - (void) setHorizontalScroller: (NSScroller *) scroller {
     scroller = [scroller retain];
     [_horizontalScroller removeFromSuperview];
@@ -971,6 +985,23 @@ static Class _rulerViewClass = nil;
 
     if (_maxMagnification < _magnification)
         [self setMagnification: value];
+}
+
+// The content insets live on the clip view, where nibs archive them.
+- (BOOL) automaticallyAdjustsContentInsets {
+    return [_clipView automaticallyAdjustsContentInsets];
+}
+
+- (void) setAutomaticallyAdjustsContentInsets: (BOOL) value {
+    [_clipView setAutomaticallyAdjustsContentInsets: value];
+}
+
+- (NSEdgeInsets) contentInsets {
+    return [_clipView contentInsets];
+}
+
+- (void) setContentInsets: (NSEdgeInsets) insets {
+    [_clipView setContentInsets: insets];
 }
 
 - (void) setAllowsMagnification: (BOOL) value {

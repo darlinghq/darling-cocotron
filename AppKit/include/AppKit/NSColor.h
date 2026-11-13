@@ -21,6 +21,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <ApplicationServices/ApplicationServices.h>
 #import <Foundation/Foundation.h>
 
+@class NSColorSpace;
+
 APPKIT_EXPORT NSNotificationName const NSSystemColorsDidChangeNotification;
 
 typedef NSString *NSColorListName;
@@ -58,6 +60,22 @@ enum {
                             count: (NSInteger) count;
 
 @property(class, strong, readonly) NSColor *labelColor;
+@property(class, strong, readonly) NSColor *secondaryLabelColor;
+@property(class, strong, readonly) NSColor *tertiaryLabelColor;
+@property(class, strong, readonly) NSColor *quaternaryLabelColor;
+@property(class, strong, readonly) NSColor *systemRedColor;
+@property(class, strong, readonly) NSColor *systemGreenColor;
+@property(class, strong, readonly) NSColor *systemBlueColor;
+@property(class, strong, readonly) NSColor *systemOrangeColor;
+@property(class, strong, readonly) NSColor *systemYellowColor;
+@property(class, strong, readonly) NSColor *systemBrownColor;
+@property(class, strong, readonly) NSColor *systemPinkColor;
+@property(class, strong, readonly) NSColor *systemPurpleColor;
+@property(class, strong, readonly) NSColor *systemGrayColor;
+@property(class, strong, readonly) NSColor *systemTealColor;
+@property(class, strong, readonly) NSColor *systemIndigoColor;
+@property(class, strong, readonly) NSColor *systemMintColor;
+@property(class, strong, readonly) NSColor *systemCyanColor;
 
 @property(class, strong, readonly) NSColor *textColor;
 @property(class, strong, readonly) NSColor *selectedTextColor;
@@ -106,6 +124,7 @@ enum {
 @property(class, strong, readonly) NSColor *secondarySelectedControlColor;
 @property(class, strong, readonly) NSColor *selectedMenuItemColor;
 @property(class, strong, readonly) NSColor *windowFrameColor;
+@property(class, strong, readonly) NSColor *windowFrameTextColor;
 
 @property(class, strong, readonly) NSColor *clearColor;
 
@@ -148,6 +167,7 @@ enum {
 
 @property(class) BOOL ignoresAlpha;
 @property(copy, readonly) NSColorSpaceName colorSpaceName;
+- (NSColorSpace *) colorSpace;
 
 + (NSColor *) highlightColor;
 + (NSColor *) shadowColor;
@@ -187,6 +207,7 @@ enum {
 
 + (NSColor *) windowBackgroundColor;
 + (NSColor *) windowFrameColor;
++ (NSColor *) windowFrameTextColor;
 
 + (NSColor *) selectedMenuItemColor;
 + (NSColor *) selectedMenuItemTextColor;
@@ -250,6 +271,10 @@ enum {
                           saturation: (CGFloat) saturation
                           brightness: (CGFloat) brightness
                                alpha: (CGFloat) alpha;
++ (NSColor *) colorWithHue: (CGFloat) hue
+                saturation: (CGFloat) saturation
+                brightness: (CGFloat) brightness
+                     alpha: (CGFloat) alpha;
 
 + (NSColor *) colorWithGenericGamma22White:(CGFloat) white 
                                      alpha:(CGFloat) alpha;

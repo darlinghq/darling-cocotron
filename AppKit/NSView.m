@@ -478,6 +478,7 @@ typedef struct __VFlags {
 
     _window = nil;
     [_menu release];
+    [_accessibilityTitle release];
 
     _superview = nil;
     [_subviews makeObjectsPerformSelector: @selector(_setSuperview:)
@@ -1112,6 +1113,62 @@ static inline void buildTransformsIfNeeded(NSView *self) {
     CGFloat maxy = floor(NSMaxY(rect) + 0.5);
 
     return NSMakeRect(minx, miny, maxx - minx, maxy - miny);
+}
+
+// inwardBit is the axis option's NSAlign...Inward bit; Outward and Nearest are 8 and 16 bits higher.
+static CGFloat alignValue(CGFloat value, NSAlignmentOptions options,
+                          NSAlignmentOptions inwardBit, BOOL isMinEdge)
+{
+    if (options & (inwardBit << 16))
+        return round(value);
+    if (options & inwardBit)
+        return isMinEdge ? ceil(value) : floor(value);
+    if (options & (inwardBit << 8))
+        return isMinEdge ? floor(value) : ceil(value);
+    return value;
+}
+
+static void alignAxis(CGFloat *origin, CGFloat *length, NSAlignmentOptions options,
+                      NSAlignmentOptions minBit, NSAlignmentOptions maxBit,
+                      NSAlignmentOptions sizeBit)
+{
+    const NSAlignmentOptions anyForm = 1 | (1 << 8) | (1 << 16);
+    CGFloat min = alignValue(*origin, options, minBit, YES);
+    CGFloat max = alignValue(*origin + *length, options, maxBit, NO);
+    if (options & (sizeBit * anyForm)) {
+        CGFloat size = alignValue(*length, options, sizeBit, NO);
+        if ((options & (maxBit * anyForm)) && !(options & (minBit * anyForm)))
+            min = max - size;
+        else
+            max = min + size;
+    }
+    *origin = min;
+    *length = max - min;
+}
+
+// Cocotron's backing store has one pixel per point in window coordinates. Without a window
+// there is no backing store, so align in view coordinates.
+- (NSRect) backingAlignedRect: (NSRect) rect options: (NSAlignmentOptions) options {
+    BOOL inWindow = ([self window] != nil);
+    NSRect base = inWindow ? [self convertRect: rect toView: nil] : rect;
+    // A flipped view's min-Y edge is the max-Y edge in window coordinates.
+    BOOL swapY = inWindow && [self isFlipped];
+    alignAxis(&base.origin.x, &base.size.width, options, NSAlignMinXInward,
+              NSAlignMaxXInward, NSAlignWidthInward);
+    alignAxis(&base.origin.y, &base.size.height, options,
+              swapY ? NSAlignMaxYInward : NSAlignMinYInward,
+              swapY ? NSAlignMinYInward : NSAlignMaxYInward, NSAlignHeightInward);
+    return inWindow ? [self convertRect: base fromView: nil] : base;
+}
+
+- (NSString *) accessibilityTitle {
+    return _accessibilityTitle;
+}
+
+- (void) setAccessibilityTitle: (NSString *) title {
+    title = [title copy];
+    [_accessibilityTitle release];
+    _accessibilityTitle = title;
 }
 
 // Stores a new frame and lays out the subviews, without posting

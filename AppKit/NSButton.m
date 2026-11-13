@@ -136,6 +136,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return [_cell imagePosition];
 }
 
+- (NSImageScaling) imageScaling {
+    return [_cell imageScaling];
+}
+
+- (void) setImageScaling: (NSImageScaling) value {
+    [_cell setImageScaling: value];
+}
+
 - (NSString *) title {
     return [_cell title];
 }
@@ -350,6 +358,18 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     color = [color copy];
     [_contentTintColor release];
     _contentTintColor = color;
+}
+
+@end
+
+@implementation NSButton (NSDestructiveAction)
+
+- (BOOL) hasDestructiveAction {
+    return _hasDestructiveAction;
+}
+
+- (void) setHasDestructiveAction: (BOOL) value {
+    _hasDestructiveAction = value;
 }
 
 @end

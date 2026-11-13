@@ -103,6 +103,17 @@ NSColor *NSColorGetCatalogColor(NSColorListName catalogName,
     return NSNamedColorSpace;
 }
 
+- (NSColorSpace *) colorSpace {
+    // QUIRK: a catalog color has no color space of its own; asking for it raises
+    // NSInvalidArgumentException (convert the color to a color space first). Not documented.
+    // Evidence: black-box observation on macOS 26.7.3 (tier 2, MAC-EVIDENCE MC26.5).
+    // Test: tests/appkit-api-batch.m (catalog color colorSpace raises)
+    [NSException raise: NSInvalidArgumentException
+                format: @"-[%@ colorSpace]: catalog colors have no color space; convert the color first",
+                        NSStringFromClass([self class])];
+    return nil;
+}
+
 - (NSColorListName) catalogNameComponent {
     return _catalogName;
 }

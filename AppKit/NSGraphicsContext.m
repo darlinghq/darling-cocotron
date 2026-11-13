@@ -213,6 +213,10 @@ NSMutableArray *NSCurrentFocusStack() {
     return _graphicsPort;
 }
 
+- (CGContextRef) CGContext {
+    return [self graphicsPort];
+}
+
 - (NSMutableArray *) focusStack {
     return _focusStack;
 }

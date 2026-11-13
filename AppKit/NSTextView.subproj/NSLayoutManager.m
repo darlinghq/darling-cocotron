@@ -665,6 +665,44 @@ static inline NSGlyphFragment *fragmentAtGlyphIndex(NSLayoutManager *self,
     return fragment->usedRect;
 }
 
+- (void) enumerateLineFragmentsForGlyphRange: (NSRange) glyphRange
+                                  usingBlock: (void (^)(NSRect lineRect, NSRect usedRect,
+                                                        NSTextContainer *textContainer,
+                                                        NSRange lineGlyphRange,
+                                                        BOOL *stop)) block
+{
+    [self validateGlyphsAndLayoutForGlyphRange: glyphRange];
+
+    // Glyph fragments are runs sorted by glyph index; consecutive runs sharing a
+    // line fragment rect form one line.
+    NSRangeEnumerator state = NSRangeEntryEnumerator(_glyphFragments);
+    NSRange range, lineRange = NSMakeRange(0, 0);
+    NSGlyphFragment *fragment, *line = NULL;
+    NSRect usedRect = NSZeroRect;
+    BOOL more, stop = NO;
+
+    do {
+        more = NSNextRangeEnumeratorEntry(&state, &range, (void **) &fragment);
+        if (line != NULL && (!more || !NSEqualRects(fragment->rect, line->rect) ||
+                             fragment->container != line->container))
+        {
+            if (NSIntersectionRange(lineRange, glyphRange).length > 0)
+                block(line->rect, usedRect, line->container, lineRange, &stop);
+            if (NSMaxRange(lineRange) >= NSMaxRange(glyphRange))
+                break;
+            line = NULL;
+        }
+        if (more && line == NULL) {
+            line = fragment;
+            lineRange = range;
+            usedRect = fragment->usedRect;
+        } else if (more) {
+            lineRange = NSUnionRange(lineRange, range);
+            usedRect = NSUnionRect(usedRect, fragment->usedRect);
+        }
+    } while (more && !stop);
+}
+
 - (NSRange) validateGlyphsAndLayoutForGlyphRange: (NSRange) glyphRange {
 
 #if DEBUG_LM_LAYOUT

@@ -455,6 +455,16 @@ static inline CGFloat calibratedWhiteFromRGB(CGFloat r, CGFloat g, CGFloat b) {
     return _colorSpaceName;
 }
 
+- (NSColorSpace *) colorSpace {
+    if (_colorRef != NULL) {
+        CGColorSpaceRef cs = CGColorGetColorSpace(_colorRef);
+        if (cs != NULL) {
+            return [[[NSColorSpace alloc] initWithCGColorSpace: cs] autorelease];
+        }
+    }
+    return [NSColorSpace sRGBColorSpace];
+}
+
 - (void) getWhite: (CGFloat *) white alpha: (CGFloat *) alpha {
     CGColorSpaceRef colorSpace = CGColorGetColorSpace(_colorRef);
     CGColorSpaceModel model = CGColorSpaceGetModel(colorSpace);
