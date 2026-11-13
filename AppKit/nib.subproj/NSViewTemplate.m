@@ -10,6 +10,15 @@
 #import <AppKit/NSTextView.h>
 #import <Foundation/NSKeyedArchiver.h>
 
+// A size archived as two floats (the size members are doubles here).
+static void decodeSize(NSCoder *coder, NSSize *size)
+{
+    float width = 0, height = 0;
+
+    [coder decodeValuesOfObjCTypes: "ff", &width, &height];
+    *size = NSMakeSize(width, height);
+}
+
 @implementation NSViewTemplate
 
 - (NSString *) className {
@@ -84,7 +93,12 @@ static NSAttributedString *attributedStringFromTemplateContents(id contents) {
     if (![contents isKindOfClass: [NSData class]])
         return nil;
 
-    NSAttributedString *text = [[[NSAttributedString alloc] initWithRTFD: contents documentAttributes: NULL] autorelease];
+    // Plain RTF text starts with a brace; anything else is taken as RTFD data.
+    NSAttributedString *text = nil;
+    if ([contents length] >= 5 && memcmp([contents bytes], "{\\rtf", 5) == 0)
+        text = [[[NSAttributedString alloc] initWithRTF: contents documentAttributes: NULL] autorelease];
+    if (text == nil)
+        text = [[[NSAttributedString alloc] initWithRTFD: contents documentAttributes: NULL] autorelease];
     if (text == nil)
         text = [[[NSAttributedString alloc] initWithRTF: contents documentAttributes: NULL] autorelease];
     return text;
@@ -107,9 +121,9 @@ static NSAttributedString *attributedStringFromTemplateContents(id contents) {
     _backgroundColor = [[coder decodeObject] retain];
     _selectedTextAttributes = [[coder decodeObject] retain];
     _insertionPointColor = [[coder decodeObject] retain];
-    [coder decodeValuesOfObjCTypes: "ff", &_containerSize.width, &_containerSize.height];
-    [coder decodeValuesOfObjCTypes: "ff", &_minSize.width, &_minSize.height];
-    [coder decodeValuesOfObjCTypes: "ff", &_maxSize.width, &_maxSize.height];
+    decodeSize(coder, &_containerSize);
+    decodeSize(coder, &_minSize);
+    decodeSize(coder, &_maxSize);
     _delegate = [coder decodeObject];
 
     char flags[14] = { 0 };
@@ -215,8 +229,8 @@ static NSAttributedString *attributedStringFromTemplateContents(id contents) {
     [coder decodeValueOfObjCType: "i" at: &alignment];
     _alignment = alignment;
     _backgroundColor = [[coder decodeObject] retain];
-    [coder decodeValuesOfObjCTypes: "ff", &_minSize.width, &_minSize.height];
-    [coder decodeValuesOfObjCTypes: "ff", &_maxSize.width, &_maxSize.height];
+    decodeSize(coder, &_minSize);
+    decodeSize(coder, &_maxSize);
     _delegate = [coder decodeObject];
 
     char flags[11] = { 0 };
