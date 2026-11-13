@@ -66,14 +66,16 @@
     return pixelFormat;
 }
 
-- (CGLPixelFormatObj) copyCGLPixelFormatForPixelFormat: (CGLPixelFormatObj) pf {
-    return pf ? CGLRetainPixelFormat(pf) : NULL;
-}
-
+// The documented default is a context with no share context. The layer's
+// frame is drawn into a texture in this context and composited by the
+// context of the window the layer tree is hosted in, which can only sample a
+// texture it shares with the drawing context, so the default context shares
+// with the hosting one when there is one. A subclass that returns its own
+// context has to share with it too for its output to reach the screen.
 - (CGLContextObj) copyCGLContextForPixelFormat: (CGLPixelFormatObj) pf {
     if (!pf) return NULL;
     CGLContextObj ctx = NULL;
-    CGLCreateContext(pf, NULL, &ctx);
+    CGLCreateContext(pf, [_context glContext], &ctx);
     return ctx;
 }
 
@@ -176,20 +178,24 @@
             CGLUnlockContext(_cglContext);
         }
 
-        _hasNewFrame = YES;
         [_context startTimerIfNeeded];
     }
 }
 
-- (BOOL) hasNewFrame {
-    return _hasNewFrame;
+// An asynchronous layer redraws with every frame, a synchronous one only
+// after -setNeedsDisplay.
+- (void) displayIfNeeded {
+    if (_asynchronous) {
+        _needsDisplay = NO;
+        [self display];
+    } else {
+        [super displayIfNeeded];
+    }
 }
 
 - (BOOL) _drawLayerContents: (CGRect) bounds opacity: (CGFloat) opacity {
     if (_colorTex == 0)
         return NO;
-
-    _hasNewFrame = NO;
 
     GLint prevPrgm = 0;
     glGetIntegerv(GL_CURRENT_PROGRAM, &prevPrgm);

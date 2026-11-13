@@ -30,17 +30,14 @@
     GLuint _colorTex;
     GLuint _depthRb;
     CGSize _allocatedSize;
-    BOOL _hasNewFrame;
 }
 
 @property(getter=isAsynchronous) BOOL asynchronous;
-- (BOOL) hasNewFrame;
 @property BOOL wantsExtendedDynamicRangeContent;
 
 - (BOOL) canDrawInCGLContext: (CGLContextObj) ctx pixelFormat: (CGLPixelFormatObj) pf forLayerTime: (CFTimeInterval) t displayTime: (const CVTimeStamp *) ts;
 - (void) drawInCGLContext: (CGLContextObj) ctx pixelFormat: (CGLPixelFormatObj) pf forLayerTime: (CFTimeInterval) t displayTime: (const CVTimeStamp *) ts;
 - (CGLPixelFormatObj) copyCGLPixelFormatForDisplayMask: (uint32_t) mask;
-- (CGLPixelFormatObj) copyCGLPixelFormatForPixelFormat: (CGLPixelFormatObj) pf;
 - (CGLContextObj) copyCGLContextForPixelFormat: (CGLPixelFormatObj) pf;
 - (void) releaseCGLPixelFormat: (CGLPixelFormatObj) pf;
 - (void) releaseCGLContext: (CGLContextObj) ctx;

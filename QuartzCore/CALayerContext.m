@@ -362,7 +362,10 @@ static BOOL layerTreeNeedsAnotherFrame(CALayer *layer) {
     if ([[layer class] isSubclassOfClass: [CAMetalLayerInternal class]] &&
         [(CAMetalLayerInternal*)layer hasQueuedDrawables])
         return YES;
-    if ([layer isKindOfClass: [CAOpenGLLayer class]])
+    // An asynchronous OpenGL layer is asked for a new frame every tick; a
+    // synchronous one only draws after -setNeedsDisplay, which starts the timer.
+    if ([layer isKindOfClass: [CAOpenGLLayer class]] &&
+        [(CAOpenGLLayer *) layer isAsynchronous])
         return YES;
     for (CALayer *child in layer.sublayers)
         if (layerTreeNeedsAnotherFrame(child))
@@ -400,7 +403,8 @@ static BOOL layerTreeNeedsAnotherFrame(CALayer *layer) {
         [self performSelectorOnMainThread: @selector(startTimerIfNeeded)
                                withObject: nil
                             waitUntilDone: NO
-                                    modes: [NSArray arrayWithObjects: NSDefaultRunLoopMode, NSRunLoopCommonModes, @"NSModalPanelRunLoopMode", nil]];
+                                    modes: [NSArray arrayWithObjects: NSDefaultRunLoopMode, NSRunLoopCommonModes,
+                                             @"NSModalPanelRunLoopMode", nil]];
         return;
     }
     _renderRequested = YES;
@@ -414,6 +418,9 @@ static BOOL layerTreeNeedsAnotherFrame(CALayer *layer) {
         // and default mode keeps frames flowing during normal event processing.
         [[NSRunLoop mainRunLoop] addTimer: _timer forMode: NSDefaultRunLoopMode];
         [[NSRunLoop mainRunLoop] addTimer: _timer forMode: NSRunLoopCommonModes];
+        // The AppKit constant NSModalPanelRunLoopMode is not available to
+        // QuartzCore, which sits below AppKit, so its value is spelled out.
+        // Frames keep flowing while a modal panel runs its own loop.
         [[NSRunLoop mainRunLoop] addTimer: _timer forMode: @"NSModalPanelRunLoopMode"];
     }
 }
