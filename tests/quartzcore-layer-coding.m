@@ -211,7 +211,7 @@ int main(void) {
         CHECK(CGPathEqualToPath(shapeCopy.path, path), 26);
         CHECK(sameColorInSRGB(shapeCopy.strokeColor, shape.strokeColor), 27);
         CHECK(shapeCopy.lineWidth == 3 && [shapeCopy.lineCap isEqualToString: kCALineCapRound], 28);
-        CHECK(shapeCopy.strokeStart == 0.1 && shapeCopy.strokeEnd == 0.9, 29);
+        CHECK(shapeCopy.strokeStart == (CGFloat) 0.1 && shapeCopy.strokeEnd == (CGFloat) 0.9, 29);
         CHECK([shapeCopy.lineDashPattern isEqual: (@[ @2, @3 ])], 30);
         CHECK([textCopy isKindOfClass: [CATextLayer class]] && [textCopy.string isEqual: @"hello"], 31);
         CHECK([(id) textCopy.font isEqual: @"Courier"] && textCopy.fontSize == 11, 32);
