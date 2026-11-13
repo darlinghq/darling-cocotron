@@ -179,6 +179,7 @@ enum {
 + (NSColor *) alternateSelectedControlTextColor;
 + (NSColor *) controlColor;
 + (NSControlTint) currentControlTint;
++ (NSColor *) colorForControlTint: (NSControlTint) controlTint;
 + (NSColor *) secondarySelectedControlColor;
 + (NSColor *) selectedControlColor;
 + (NSColor *) controlTextColor;

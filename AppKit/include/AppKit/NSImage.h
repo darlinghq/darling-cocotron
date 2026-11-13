@@ -35,8 +35,8 @@ typedef enum {
 } NSImageCacheMode;
 
 typedef NS_ENUM(NSInteger, NSImageResizingMode) {
-    NSImageResizingModeTile = 0,
-    NSImageResizingModeStretch = 1,
+    NSImageResizingModeStretch = 0,
+    NSImageResizingModeTile = 1,
 };
 
 @interface NSImage : NSObject <NSCopying, NSCoding> {

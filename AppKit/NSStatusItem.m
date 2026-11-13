@@ -281,6 +281,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         _trayIconID = -1;
         _win32Menu = NULL;
 #endif
+        // Items are visible until the application hides them.
+        _visible = YES;
     }
     return self;
 }
@@ -294,6 +296,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 - (void) setAction: (SEL) action {
     _action = action;
+    [_button setAction: action];
 }
 - (SEL) doubleAction {
     return _doubleAction;
@@ -306,6 +309,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 - (void) setTarget: (id) target {
     _target = target;
+    [_button setTarget: target];
 }
 
 - (NSImage *) image {
