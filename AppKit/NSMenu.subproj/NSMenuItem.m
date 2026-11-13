@@ -287,6 +287,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     title = [title copy];
     [_title release];
     _title = title;
+    [_menu itemChanged: self];
 }
 
 - (void) setAttributedTitle: (NSAttributedString *) title {
@@ -324,22 +325,26 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (void) setState: (NSControlStateValue) state {
     _state = state;
+    [_menu itemChanged: self];
 }
 
 - (void) setKeyEquivalent: (NSString *) keyEquivalent {
     keyEquivalent = [keyEquivalent copy];
     [_keyEquivalent release];
     _keyEquivalent = keyEquivalent;
+    [_menu itemChanged: self];
 }
 
 - (void) setKeyEquivalentModifierMask: (unsigned) mask {
     _keyEquivalentModifierMask = mask;
+    [_menu itemChanged: self];
 }
 
 - (void) setImage: (NSImage *) image {
     image = [image retain];
     [_image release];
     _image = image;
+    [_menu itemChanged: self];
 }
 
 - (void) setOnStateImage: (NSImage *) image {
@@ -367,14 +372,17 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [_submenu release];
     _submenu = submenu;
     [submenu setSupermenu: _menu];
+    [_menu itemChanged: self];
 }
 
 - (void) setEnabled: (BOOL) flag {
     _enabled = flag;
+    [_menu itemChanged: self];
 }
 
 - (void) setHidden: (BOOL) flag {
     _hidden = flag;
+    [_menu itemChanged: self];
 }
 
 + (NSDictionary *) keyNames {

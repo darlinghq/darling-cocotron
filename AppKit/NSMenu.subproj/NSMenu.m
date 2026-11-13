@@ -32,6 +32,9 @@ const NSNotificationName NSMenuWillSendActionNotification = @"NSMenuWillSendActi
 const NSNotificationName NSMenuDidSendActionNotification = @"NSMenuDidSendActionNotification";
 const NSNotificationName NSMenuDidBeginTrackingNotification = @"NSMenuDidBeginTrackingNotification";
 const NSNotificationName NSMenuDidEndTrackingNotification = @"NSMenuDidEndTrackingNotification";
+const NSNotificationName NSMenuDidAddItemNotification = @"NSMenuDidAddItemNotification";
+const NSNotificationName NSMenuDidRemoveItemNotification = @"NSMenuDidRemoveItemNotification";
+const NSNotificationName NSMenuDidChangeItemNotification = @"NSMenuDidChangeItemNotification";
 NSString *const _NSFontMenuName = @"Font";
 NSString *const _NSHelpMenuName = @"Help";
 NSString *const _NSMainMenuName = @"Application";
@@ -64,8 +67,15 @@ NSString *const _NSWindowsMenuName = @"Window";
 
         [menuWindow close];
 
-        if (item != nil)
-            [NSApp sendAction: [item action] to: [item target] from: item];
+        if (item != nil) {
+            NSMenu *owner = [item menu] != nil ? [item menu] : menu;
+            NSInteger index = [owner indexOfItem: item];
+
+            if (index != NSNotFound)
+                [owner performActionForItemAtIndex: index];
+            else
+                [NSApp sendAction: [item action] to: [item target] from: item];
+        }
     }
 }
 
@@ -330,9 +340,24 @@ NSString *const _NSWindowsMenuName = @"Window";
     _autoenablesItems = flag;
 }
 
+// Tells observers that the structure of the menu changed. The index is
+// the position of the item concerned, as documented for the notifications.
+- (void) _postItemNotification: (NSNotificationName) name
+                       atIndex: (NSInteger) index
+{
+    [[NSNotificationCenter defaultCenter]
+            postNotificationName: name
+                          object: self
+                        userInfo: @{
+                            @"NSMenuItemIndex" : [NSNumber numberWithInteger: index]
+                        }];
+}
+
 - (void) addItem: (NSMenuItem *) item {
     [item performSelector: @selector(_setMenu:) withObject: self];
     [_itemArray addObject: item];
+    [self _postItemNotification: NSMenuDidAddItemNotification
+                        atIndex: [_itemArray count] - 1];
 }
 
 - (NSMenuItem *) addItemWithTitle: (NSString *) title
@@ -355,8 +380,13 @@ NSString *const _NSWindowsMenuName = @"Window";
 }
 
 - (void) removeItem: (NSMenuItem *) item {
+    NSInteger index = [_itemArray indexOfObjectIdenticalTo: item];
+
     [item performSelector: @selector(_setMenu:) withObject: nil];
     [_itemArray removeObjectIdenticalTo: item];
+    if (index != NSNotFound)
+        [self _postItemNotification: NSMenuDidRemoveItemNotification
+                            atIndex: index];
 }
 
 - (void) removeItemAtIndex: (NSInteger) index {
@@ -366,6 +396,7 @@ NSString *const _NSWindowsMenuName = @"Window";
 - (void) insertItem: (NSMenuItem *) item atIndex: (NSInteger) index {
     [item performSelector: @selector(_setMenu:) withObject: self];
     [_itemArray insertObject: item atIndex: index];
+    [self _postItemNotification: NSMenuDidAddItemNotification atIndex: index];
 }
 
 - (NSMenuItem *) insertItemWithTitle: (NSString *) title
@@ -439,6 +470,31 @@ BOOL itemIsEnabled(NSMenuItem *item) {
 }
 
 - (void) itemChanged: (NSMenuItem *) item {
+    NSInteger index = [_itemArray indexOfObjectIdenticalTo: item];
+
+    if (index != NSNotFound)
+        [self _postItemNotification: NSMenuDidChangeItemNotification
+                            atIndex: index];
+}
+
+// Sends the action of an enabled item the way a choice made in the menu does,
+// without updating or validating the menu first. A disabled item does nothing.
+- (void) performActionForItemAtIndex: (NSInteger) index {
+    NSMenuItem *item = [self itemAtIndex: index];
+
+    if (![item isEnabled])
+        return;
+
+    NSDictionary *userInfo = @{@"MenuItem" : item};
+    NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
+
+    [center postNotificationName: NSMenuWillSendActionNotification
+                          object: self
+                        userInfo: userInfo];
+    [NSApp sendAction: [item action] to: [item target] from: item];
+    [center postNotificationName: NSMenuDidSendActionNotification
+                          object: self
+                        userInfo: userInfo];
 }
 
 - (BOOL) performKeyEquivalent: (NSEvent *) event {
