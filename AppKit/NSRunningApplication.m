@@ -118,6 +118,20 @@ static BOOL processExists(pid_t pid) {
             activateProcessIdentifier: _processIdentifier];
 }
 
+// Activation requested on behalf of another application, which has yielded
+// activation to this one. The display backends do not arbitrate activation
+// between applications, so the request is honoured as an activation that
+// overrides other applications; only a missing source application is
+// refused.
+- (BOOL) activateFromApplication: (NSRunningApplication *) application
+                         options: (NSApplicationActivationOptions) options
+{
+    if (application == nil)
+        return NO;
+    return [self activateWithOptions:
+                         options | NSApplicationActivateIgnoringOtherApps];
+}
+
 + (NSArray<NSRunningApplication *> *) runningApplicationsWithBundleIdentifier: (NSString *) bundleIdentifier {
     printf("STUB %s\n", __PRETTY_FUNCTION__);
     return [NSArray array];

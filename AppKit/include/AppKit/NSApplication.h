@@ -245,6 +245,8 @@ typedef NS_OPTIONS(NSInteger, NSWindowListOptions) {
 - (void) activateIgnoringOtherApps: (BOOL) flag;
 - (void) activate;
 - (void) deactivate;
+- (void) yieldActivationToApplication: (NSRunningApplication *) application;
+- (void) yieldActivationToApplicationWithBundleIdentifier: (NSString *) bundleIdentifier;
 
 - (NSWindow *) modalWindow;
 - (NSModalSession) beginModalSessionForWindow: (NSWindow *) window;
