@@ -85,6 +85,9 @@ static int X11CursorScaledSize(int nominalSize, CGFloat scale) {
     // being upscaled. The hotspot scales with it.
     CGFloat scale = [(X11Display *) [NSDisplay currentDisplay] backingScale];
     const CGFloat logicalWidth = image.size.width, logicalHeight = image.size.height;
+    if (!(logicalWidth > 0) || !(logicalHeight > 0) || !isfinite(logicalWidth) ||
+        !isfinite(logicalHeight))
+        return [self initWithName: "left_ptr"];
     const size_t width = (size_t) fmax(floor(logicalWidth * scale + 0.5), 1.0);
     const size_t height = (size_t) fmax(floor(logicalHeight * scale + 0.5), 1.0);
 
