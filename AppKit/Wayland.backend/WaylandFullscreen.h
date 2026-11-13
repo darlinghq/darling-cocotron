@@ -9,6 +9,7 @@
 #include <stdint.h>
 #include "WaylandLibrary.h"
 #include "WaylandProtocol.h"
+#include "../DarlingFullscreenPolicy.h"
 
 // Whether a toplevel should be fullscreen. NSWindowStyleMaskFullScreen asks for
 // it outright. A borderless, untitled window that can become key and is as
@@ -46,11 +47,12 @@ static inline bool WaylandFullscreenDecide(const WaylandFullscreenWindow *window
                                            int *target)
 {
     *target = -1;
-    if (window->fullScreenStyle)
-        return true;
-    if (window->titled || !window->canBecomeKey || window->popupOrMenu ||
-        window->width <= 0 || window->height <= 0)
-        return false;
+    // A window that cannot be a fullscreen candidate by its own properties; the rest
+    // of the rule is shared with the other backends.
+    bool notPromotable = window->titled || !window->canBecomeKey || window->popupOrMenu ||
+                         window->width <= 0 || window->height <= 0;
+    if (window->fullScreenStyle || notPromotable)
+        return DarlingFullscreenWanted(window->fullScreenStyle, notPromotable, false);
     bool onOutput = false;
     for (size_t i = 0; i < count; i++)
         onOutput = onOutput || outputs[i].entered;
@@ -64,11 +66,9 @@ static inline bool WaylandFullscreenDecide(const WaylandFullscreenWindow *window
         if (matches++ == 0)
             first = (int) i;
     }
-    if (matches == 0)
-        return false;
-    if (onOutput || matches == 1)
+    if (matches > 0 && (onOutput || matches == 1))
         *target = first;
-    return true;
+    return DarlingFullscreenWanted(false, false, matches > 0);
 }
 
 // xdg_toplevel.set_fullscreen takes the wl_output to cover, or NULL to let the
