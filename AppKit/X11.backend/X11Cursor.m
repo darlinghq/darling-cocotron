@@ -60,40 +60,50 @@ static const char *X11CursorAliasesFor(const char *name)
     return NULL;
 }
 
-- (id) initWithName: (const char *) name {
-    X11Display *d = (X11Display *) [NSDisplay currentDisplay];
-    Display *display = [d display];
+// Loads a themed cursor at the backing scale, falling back to the nominal size and
+// then to libXcursor's own lookup. Returns None when the theme has no such cursor.
+static Cursor X11LoadThemedCursor(Display *display, const char *name, CGFloat scale) {
+    Cursor cursor = None;
 
     // Ask the theme for an image at the scaled size and let libXcursor scale the hot
     // spot with it, so the cursor stays sharp rather than being one image stretched.
     const int nominal = XcursorGetDefaultSize(display);
     XcursorImages *images =
-            XcursorLibraryLoadImages(NULL, name,
-                                     X11CursorScaledSize(nominal, [d backingScale]));
+            XcursorLibraryLoadImages(NULL, name, X11CursorScaledSize(nominal, scale));
     if (images != NULL) {
         XcursorImagesSetName(images, name);
-        _cursor = XcursorImagesLoadCursor(display, images);
+        cursor = XcursorImagesLoadCursor(display, images);
         XcursorImagesDestroy(images);
     }
 
     // No scaled image: a theme may only carry one size, or resolve to nothing at all.
     // Try the nominal size before giving up on the theme-aware path.
-    if (_cursor == None) {
+    if (cursor == None) {
         images = XcursorLibraryLoadImages(NULL, name, X11CursorScaledSize(nominal, 1.0));
         if (images != NULL) {
             XcursorImagesSetName(images, name);
-            _cursor = XcursorImagesLoadCursor(display, images);
+            cursor = XcursorImagesLoadCursor(display, images);
             XcursorImagesDestroy(images);
         }
     }
 
-    if (_cursor == None)
-        _cursor = XcursorLibraryLoadCursor(display, name);
+    if (cursor == None)
+        cursor = XcursorLibraryLoadCursor(display, name);
+
+    return cursor;
+}
+
+- (id) initWithName: (const char *) name {
+    X11Display *d = (X11Display *) [NSDisplay currentDisplay];
+    Display *display = [d display];
+    const CGFloat scale = [d backingScale];
+
+    _cursor = X11LoadThemedCursor(display, name, scale);
 
     // The theme may not know the legacy spelling; retry with the name it does ship.
     const char *alias = _cursor == None ? X11CursorAliasesFor(name) : NULL;
     if (alias != NULL)
-        _cursor = XcursorLibraryLoadCursor(display, alias);
+        _cursor = X11LoadThemedCursor(display, alias, scale);
 
     if (_cursor == None)
         _cursor = XcursorLibraryLoadCursor(display, "left_ptr");
