@@ -1534,6 +1534,8 @@ static XErrorHandler previousOrderingErrorHandler;
 // Windows (for example a window manager's frame, when a window closes) can be destroyed while
 // -orderedWindowNumbers walks the tree. XQueryTree then fails with BadWindow, which isn't an error
 // there; any other error goes to the handler that was installed before.
+// The handler is swapped through the process-wide XSetErrorHandler and a file-scope variable, which
+// is safe only because the X connection and this method are used from the main thread alone.
 static int ignoreBadWindowWhileOrdering(Display *display, XErrorEvent *errorEvent) {
     if (errorEvent->error_code == BadWindow)
         return 0;
