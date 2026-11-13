@@ -16,3 +16,7 @@ Content (expected by tests/appkit-nonkeyed-nib-objects.m):
   controlconnector NSNibControlConnector from FixtureTarget to FixtureOwner, "doIt:"
   customview      NSCustomView with class name "NSTextView", extension "cvext"
   ibobjectdata    NSIBObjectData with root FixtureOwner and one connector
+  view            NSView, frame 1,2,30,40, width-sizable and max-X margin, subviews
+                  not autoresizing, one subview, dragged type "public.text"
+  control         NSControl, tag 7, same frame, with an NSActionCell (text "cell",
+                  tag 5, action doIt:), tests/appkit-nonkeyed-view-control-cell.m

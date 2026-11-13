@@ -41,12 +41,23 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         NSInteger version = [coder versionForClassName: @"NSActionCell"];
 
         if (version <= 16) {
+            int tag = 0;
+
             [self setTarget: [coder decodeObject]];
-            [coder decodeValuesOfObjCTypes: "i:", &_tag, &_action];
+            [coder decodeValuesOfObjCTypes: "i:", &tag, &_action];
+            _tag = tag;
         } else {
-            [coder decodeValuesOfObjCTypes: "i:", &_tag, &_action];
+            int tag = 0;
+            id other = nil;
+
+            [coder decodeValuesOfObjCTypes: "i:", &tag, &_action];
+            _tag = tag;
             [self setTarget: [coder decodeObject]];
-            [self setControlView: [coder decodeObject]];
+            // A second object follows the target. It does not come back as
+            // the cell's control view on macOS (that stays nil), so it is read
+            // and dropped.
+            other = [coder decodeObject];
+            (void) other;
         }
     }
     return self;
