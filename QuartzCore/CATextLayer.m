@@ -19,7 +19,8 @@
 
 #import <QuartzCore/CATextLayer.h>
 #import <CoreText/CTFont.h>
-#import "CACoding.h"
+#import "CAKeyedCoding.h"
+#import "CALayerInternal.h"
 
 NSString *const kCAAlignmentNatural = @"natural";
 NSString *const kCAAlignmentLeft = @"left";
@@ -129,44 +130,64 @@ static CGFloat layoutLine(CTFontRef font, NSString *line, CGGlyph **outGlyphs,
     return self;
 }
 
-// Only a font name is archived; font objects (NSFont, CTFont, CGFont) are not.
-- (void) encodeWithCoder: (NSCoder *) coder {
-    if (_font != NULL && ![(id) _font isKindOfClass: [NSString class]])
-        [NSException raise: NSInvalidArchiveOperationException
-                    format: @"Cannot archive %@: only a font name, not %@, can be archived", self, _font];
-    if (_string != nil && ![_string isKindOfClass: [NSString class]] &&
-        ![_string isKindOfClass: [NSAttributedString class]])
-        [NSException raise: NSInvalidArchiveOperationException
-                    format: @"Cannot archive %@: string %@ is not a string", self, _string];
-    [super encodeWithCoder: coder];
-    [coder encodeObject: _string forKey: @"string"];
-    [coder encodeObject: (id) _font forKey: @"font"];
-    [coder encodeDouble: _fontSize forKey: @"fontSize"];
-    CAEncodeColor(coder, _foregroundColor, @"foregroundColor");
-    [coder encodeBool: _wrapped forKey: @"wrapped"];
-    [coder encodeObject: _alignmentMode forKey: @"alignmentMode"];
-    [coder encodeObject: _truncationMode forKey: @"truncationMode"];
-    [coder encodeBool: _allowsFontSubpixelQuantization forKey: @"allowsFontSubpixelQuantization"];
+// Keys are written only when they differ from the defaults. A font that is
+// not a name (NSFont, CTFont, CGFont) is archived as NSNull, so the layer
+// comes back without a font.
+- (void) _encodeAttributes: (CAArchiveWriter *) w {
+    [super _encodeAttributes: w];
+    if (_string != nil)
+        [w encodeObject: _string forKey: @"string"];
+    if (_font != NULL)
+        [w encodeObject: [(id) _font isKindOfClass: [NSString class]] ? (id) _font : (id) [NSNull null]
+                 forKey: @"font"];
+    if (_fontSize != 36)
+        [w encodeDouble: _fontSize forKey: @"fontSize"];
+    if (_foregroundColor != NULL) {
+        const CGFloat *c = CGColorGetComponents(_foregroundColor);
+        BOOL white = CGColorGetNumberOfComponents(_foregroundColor) == 4 && c[0] == 1 && c[1] == 1 &&
+                     c[2] == 1 && c[3] == 1;
+        if (!white)
+            [w encodeColor: _foregroundColor forKey: @"foregroundColor"];
+    }
+    if (_wrapped)
+        [w encodeBool: YES forKey: @"wrapped"];
+    if (![_alignmentMode isEqualToString: kCAAlignmentNatural])
+        [w encodeObject: _alignmentMode forKey: @"alignmentMode"];
+    if (![_truncationMode isEqualToString: kCATruncationNone])
+        [w encodeObject: _truncationMode forKey: @"truncationMode"];
+    if (_allowsFontSubpixelQuantization)
+        [w encodeBool: YES forKey: @"allowsFontSubpixelQuantization"];
 }
 
-- initWithCoder: (NSCoder *) coder {
-    self = [super initWithCoder: coder];
-    if (self == nil)
-        return nil;
+- (void) _decodeAttributes: (CAArchiveReader *) r {
     [self _setTextDefaults];
-    Class string = [NSString class];
-    NSSet *strings = [NSSet setWithObjects: string, [NSAttributedString class], nil];
-    [self setString: [coder decodeObjectOfClasses: strings forKey: @"string"]];
-    [self setFont: (CFTypeRef)[coder decodeObjectOfClass: string forKey: @"font"]];
-    [self setFontSize: [coder decodeDoubleForKey: @"fontSize"]];
-    CGColorRef color = CADecodeColor(coder, @"foregroundColor");
-    [self setForegroundColor: color];
-    CGColorRelease(color);
-    [self setWrapped: [coder decodeBoolForKey: @"wrapped"]];
-    [self setAlignmentMode: [coder decodeObjectOfClass: string forKey: @"alignmentMode"]];
-    [self setTruncationMode: [coder decodeObjectOfClass: string forKey: @"truncationMode"]];
-    [self setAllowsFontSubpixelQuantization: [coder decodeBoolForKey: @"allowsFontSubpixelQuantization"]];
-    return self;
+    [super _decodeAttributes: r];
+    id string = [r decodeObjectOfClasses: [NSSet setWithObjects: [NSString class], [NSAttributedString class], nil]
+                                  forKey: @"string"];
+    if (string != nil)
+        [self setString: string];
+    id font = [r decodeObjectOfClasses: [NSSet setWithObjects: [NSString class], [NSNull class], nil] forKey: @"font"];
+    if ([font isKindOfClass: [NSString class]])
+        [self setFont: (CFTypeRef) font];
+    double real;
+    BOOL flag;
+    if ([r decodeDouble: &real forKey: @"fontSize"])
+        _fontSize = real;
+    CGColorRef color = [r copyColorForKey: @"foregroundColor"];
+    if (color != NULL) {
+        [self setForegroundColor: color];
+        CGColorRelease(color);
+    }
+    if ([r decodeBool: &flag forKey: @"wrapped"])
+        _wrapped = flag;
+    NSString *mode = [r decodeStringForKey: @"alignmentMode"];
+    if (mode != nil)
+        [self setAlignmentMode: mode];
+    mode = [r decodeStringForKey: @"truncationMode"];
+    if (mode != nil)
+        [self setTruncationMode: mode];
+    if ([r decodeBool: &flag forKey: @"allowsFontSubpixelQuantization"])
+        _allowsFontSubpixelQuantization = flag;
 }
 
 - initWithLayer: (id) layer {

@@ -32,7 +32,7 @@ set(QuartzCore_sources
 	CAEmitterLayer.m
 	CAFrameRateRange.m
 	CALayerContext.m
-	CACoding.m
+	CAKeyedCoding.m
 	CALayer.m
 	CALayerHost.m
 	CATextLayer.m
@@ -105,6 +105,7 @@ add_framework(QuartzCore
 		CoreGraphics
 		IOSurface
 		CoreText
+		ImageIO
 		Metal_private
 		${QUARTZCORE_LINK_INDIUM_PRIVATE}
 		cxx
