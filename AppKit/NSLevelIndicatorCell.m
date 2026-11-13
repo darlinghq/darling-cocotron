@@ -22,6 +22,28 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @implementation NSLevelIndicatorCell
 
+// An NSArchiver archive holds the value, minimum, maximum, warning and critical values, the
+// numbers of tick marks and major tick marks, a flag word (bits 28-29 the style, bit 27 the
+// tick marks above) and four more ints (two of unknown meaning, two unused). Keyed archives
+// are read by NSCell and NSActionCell only.
+- initWithCoder: (NSCoder *) coder {
+    [super initWithCoder: coder];
+
+    if (![coder allowsKeyedCoding]) {
+        double value;
+        int flags, unused[4];
+
+        [coder decodeValuesOfObjCTypes: "dddddiiiiiii", &value, &_minValue, &_maxValue, &_warningValue,
+                                        &_criticalValue, &_numberOfTickMarks, &_numberOfMajorTickMarks, &flags,
+                                        &unused[0], &unused[1], &unused[2], &unused[3]];
+        [_objectValue release];
+        _objectValue = [[NSNumber numberWithDouble: value] retain];
+        _style = ((unsigned) flags >> 28) & 3;
+        _tickMarkPosition = ((unsigned) flags >> 27) & 1 ? NSTickMarkAbove : NSTickMarkBelow;
+    }
+    return self;
+}
+
 - initWithLevelIndicatorStyle: (NSLevelIndicatorStyle) style {
     [super init];
     _style = style;
