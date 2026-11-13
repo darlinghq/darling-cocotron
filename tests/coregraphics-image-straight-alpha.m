@@ -1,3 +1,8 @@
+// Images with straight (non-premultiplied) alpha and 8-bit RGBA samples, in
+// both byte orders, drawn into a premultiplied bitmap context at alpha 0, 1,
+// 128, 254 and 255, with already premultiplied images as controls. The drawn
+// pixel must be the premultiplied colour and the source bytes must stay
+// untouched. Needs no window or display server. Exits 1 on any failure.
 #import <AppKit/AppKit.h>
 #include <stdio.h>
 #include <string.h>
