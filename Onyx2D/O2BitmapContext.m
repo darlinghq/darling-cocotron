@@ -67,16 +67,32 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     // or a caller buffer whose rows are too short; creating the context
     // fails in that case.
     if (surface == nil) {
+        // QUIRK: the release callback is also called when the context cannot
+        // be created, with the caller's data, so the caller's cleanup of the
+        // data runs on every path. Not documented. Evidence: black-box
+        // observation on macOS 26.7.3 (tier 2): a too short bytesPerRow returns
+        // NULL and calls the callback once (unsupported pixel formats behave
+        // the same there). Test: bitmap-context-release-callback.c, "quirk"
+        // cases.
+        if (releaseCallback != NULL && bytes != NULL)
+            releaseCallback(releaseInfo, bytes);
         [self release];
         return nil;
     }
 
     [self initWithSurface: surface flipped: NO];
     [surface release];
+    _releaseCallback = releaseCallback;
+    _releaseInfo = releaseInfo;
     return self;
 }
 
 - (void) dealloc {
+    // The callback gets the pixel buffer, whether it is the caller's or the
+    // context's own (data was NULL at creation), while that buffer is still
+    // valid; the surface is released afterwards.
+    if (_releaseCallback != NULL)
+        _releaseCallback(_releaseInfo, [_surface pixelBytes]);
     [_surface release];
     [super dealloc];
 }
