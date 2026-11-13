@@ -13,10 +13,14 @@ static int gArgc;
 static const char **gArgv;
 
 @interface Delegate : NSObject <NSApplicationDelegate>
+{
+    NSMutableArray *_opened;
+}
 @property(retain) NSMutableArray *opened;
 @end
 
 @implementation Delegate
+@synthesize opened = _opened;
 - (BOOL)application:(NSApplication *)app openFile:(NSString *)path {
     [self.opened addObject:path];
     return YES;
