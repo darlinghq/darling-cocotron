@@ -283,12 +283,11 @@ NSNotificationName NSControlTintDidChangeNotification = @"NSControlTintDidChange
             _font = [[NSFont userFontOfSize: [NSFont systemFontSizeForControlSize: _controlSize]] retain];
     } else {
         NSInteger version = [coder versionForClassName: @"NSCell"];
-        if (version < 54)
-            [NSException raise: NSInvalidArgumentException
-                        format: @"%@ can not initWithCoder:%@ for version %ld",
-                                [self class], [coder class], (long) version];
+        if (version < 55)
+            [NSException raise: NSInternalInconsistencyException
+                        format: @"Cannot decode very old archived cells.  Archived cell is version %ld.",
+                                (long) version];
 
-        NSLog(@"NSCell version is %ld\n", (long) version);
         [coder decodeValuesOfObjCTypes: "ii", &flags, &flags2];
 
         /*
@@ -322,8 +321,6 @@ NSNotificationName NSControlTintDidChangeNotification = @"NSControlTintDidChange
 
         id o1, o2, o3;
         [coder decodeValuesOfObjCTypes: "@@@@", &_objectValue, &o1, &o2, &o3];
-        NSLog(@"out: %p %p %p %p\n", _objectValue, o1, o2, o3);
-        NSLog(@"out &: %p %p %p %p\n", &_objectValue, &o1, &o2, &o3);
         if (o1) {
             if ([o1 isKindOfClass: [NSImage class]])
                 _image = o1;

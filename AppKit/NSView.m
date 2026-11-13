@@ -301,12 +301,6 @@ typedef struct __VFlags {
                 [[keyed decodeObjectForKey: @"NSViewContentFilters"] retain];
     } else {
         NSInteger version = [coder versionForClassName: @"NSView"];
-        if (version == 0)
-            [NSException raise: NSInvalidArgumentException
-                        format: @"%@ can not initWithCoder:%@", [self class],
-                                [coder class]];
-
-        NSLog(@"NSView version is %ld\n", (long) version);
 
         union {
             _VFlags vf;
@@ -314,7 +308,6 @@ typedef struct __VFlags {
         } vflags;
 
         vflags.value = 0;
-        NSLog(@"NSView version is %ld\n", (long) version);
 
         if (version <= 16) {
             float dummy;
@@ -330,6 +323,7 @@ typedef struct __VFlags {
 
             [coder decodeValuesOfObjCTypes: "@ss@", &_subviews, &flags1,
                                             &flags2, &obj];
+            [obj release];
 
             vflags.vf.rotatedFromBase = (flags1 & 0x400) != 0;
             vflags.vf.rotatedOrScaledFromBase = vflags.vf.validGState =
@@ -337,8 +331,14 @@ typedef struct __VFlags {
             vflags.vf.autosizing = (flags2 & 0xFC00) >> 10;
             vflags.vf.autoresizeSubviews = (flags2 & 0x200) != 0;
             vflags.vf.wantsGState = (flags2 & 0x10) != 0;
+
+            if (version < 1) {
+                // macOS reads the version 1 layout before refusing it.
+                [NSException raise: @"NSObjectInaccessibleException"
+                            format: @"-[NSView initWithCoder:]: found NSView object version %ld; cannot unarchive NSView versions less than 1.",
+                                    (long) version];
+            }
         } else if (version <= 40) {
-            NSUnarchiver *una = (NSUnarchiver *) coder;
             _frame = [coder decodeRect];
             _bounds = [coder decodeRect];
 
@@ -348,33 +348,30 @@ typedef struct __VFlags {
             id dummy, frameMatrix;
             [coder decodeValuesOfObjCTypes: "@@@@", &_subviews, &dummy,
                                             &frameMatrix, &_draggedTypes];
+            [dummy release];
+            [frameMatrix release];
 
-            uint8_t flags1, flags2;
-            flags1 = [una decodeByte];
-            flags2 = [una decodeByte];
+            // Four flag bytes (five from version 25): rotated, rotated or
+            // scaled, the autoresizing mask, whether subviews autoresize.
+            // The fifth byte is read and kept out of the way: no property
+            // that is observable on macOS changes with it.
+            uint8_t flags1 = 0, flags2 = 0, flags3 = 0, flags4 = 0, flags5 = 0;
+            [coder decodeValuesOfObjCTypes: "c", &flags1];
+            [coder decodeValuesOfObjCTypes: "c", &flags2];
+            [coder decodeValuesOfObjCTypes: "c", &flags3];
+            [coder decodeValuesOfObjCTypes: "c", &flags4];
 
-            union {
-                _VFlags vf;
-                uint32_t value;
-            } vflags;
-
-            vflags.value = 0;
             vflags.vf.rotatedFromBase = flags1 & 1;
             vflags.vf.rotatedOrScaledFromBase = flags2 & 1;
-
-            uint8_t flags3, flags4, flags5;
-            flags3 = [una decodeByte];
-            flags4 = [una decodeByte];
-            flags5 = [una decodeByte];
-            [una decodeByte];
-
             vflags.vf.autosizing = flags3 & 0x3F;
             vflags.vf.autoresizeSubviews = flags4 & 1;
-            vflags.vf.wantsGState = flags5 & 1;
 
             if (version >= 25) {
+                [coder decodeValuesOfObjCTypes: "c", &flags5];
                 [self setNextKeyView: [coder decodeObject]];
-                [una decodeByte];
+                // A second object follows the next key view; macOS keeps it
+                // in a place that is not visible through the public API.
+                [coder decodeObject];
             }
         } else {
             int flags;
@@ -401,7 +398,16 @@ typedef struct __VFlags {
             _superview = [coder decodeObject];
             _window = [coder decodeObject];
             [self setNextKeyView: [coder decodeObject]];
-            id dummy = [coder decodeObject];
+            [coder decodeObject];
+        }
+
+        // Archives hold the subviews in an immutable or mutable array; the
+        // view mutates its own.
+        {
+            NSMutableArray *subviews = [[NSMutableArray alloc] initWithArray: _subviews];
+
+            [_subviews release];
+            _subviews = subviews;
         }
 
         _autoresizingMask = vflags.vf.autosizing;

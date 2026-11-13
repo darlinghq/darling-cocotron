@@ -114,39 +114,45 @@ static NSMutableDictionary *cellClassDictionary = nil;
         [_aux setTarget: [keyed decodeObjectForKey: @"NSControlTarget"]];
     } else {
         NSInteger version = [coder versionForClassName: @"NSControl"];
-        NSLog(@"NSControl version is %ld\n", (long) version);
 
+        // The flag bytes (and the flag short of the oldest layout) are read
+        // but not interpreted: setting them one at a time changes nothing that
+        // the control reports through public accessors on macOS, so what they
+        // stand for is unknown.
         if (version <= 16) {
-            NSInteger tag;
+            int tag;
             id cell;
             unsigned short flags;
 
             [coder decodeValuesOfObjCTypes: "i@s", &tag, &cell, &flags];
             [_aux setTag: tag];
+            _tag = tag;
             [self setCell: cell];
-
-            // TODO: flags
+            [cell release];
         } else if (version <= 40) {
-            NSInteger tag;
-            uint8_t flags1, flags2;
+            int tag = 0;
+            uint8_t flags1 = 0, flags2 = 0, flags3 = 0;
 
             [coder decodeValuesOfObjCTypes: "i", &tag];
-            flags1 = [coder decodeByte];
-            flags2 = [coder decodeByte];
+            [coder decodeValuesOfObjCTypes: "c", &flags1];
+            [coder decodeValuesOfObjCTypes: "c", &flags2];
+            [coder decodeValuesOfObjCTypes: "c", &flags3];
 
             [_aux setTag: tag];
+            _tag = tag;
             [self setCell: [coder decodeObject]];
-
-            // TODO: flags
         } else {
             int tag = 0;
             uint8_t flags1 = 0, flags2 = 0;
+            id cell = nil;
 
             [coder decodeValuesOfObjCTypes: "icc@", &tag, &flags1, &flags2,
-                                            &self->_cell];
+                                            &cell];
 
             [_aux setTag: tag];
-            // TODO: flags
+            _tag = tag;
+            [self setCell: cell];
+            [cell release];
         }
     }
 
