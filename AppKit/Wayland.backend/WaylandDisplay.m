@@ -2042,6 +2042,17 @@ static NSUInteger modifierDeviceMask(int code) {
 - (void) beep {
 }
 
+// X11Display answers these from the X server, and this display never connected to one, so
+// the inherited versions would call Xlib with no connection.
+- (NSUInteger) pressedMouseButtons {
+    return _pressedButtons;
+}
+
+// Wayland has no protocol to activate another client's window.
+- (BOOL) activateProcessIdentifier: (pid_t) processIdentifier {
+    return NO;
+}
+
 - (Display *) display {
     return NULL;
 }

@@ -86,6 +86,11 @@ int main(void) {
         expect(fabs(NSWidth([window frame]) - 400) < 1 && fabs(NSHeight([window frame]) - 260) < 1,
                "setFrame: size round trips");
 
+        // Inherited X11 implementations of these would call Xlib with no X connection.
+        expect([NSEvent pressedMouseButtons] == 0, "no mouse button is reported held");
+        expect(![[NSRunningApplication runningApplicationWithProcessIdentifier: 1] activateWithOptions: 0],
+               "another process cannot be activated");
+
         [window orderOut: nil];
         spin(0.1);
         expect(![window isVisible], "orderOut hides the window");
