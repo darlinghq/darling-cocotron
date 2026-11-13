@@ -36,6 +36,9 @@ CF_IMPLICIT_BRIDGING_ENABLED
 COREGRAPHICS_EXPORT CGContextRef
 CGPDFContextCreate(CGDataConsumerRef consumer, const CGRect *mediaBox,
                    CFDictionaryRef auxiliaryInfo);
+
+COREGRAPHICS_EXPORT void CGPDFContextBeginPage(CGContextRef context, CFDictionaryRef pageInfo);
+COREGRAPHICS_EXPORT void CGPDFContextEndPage(CGContextRef context);
 COREGRAPHICS_EXPORT void CGPDFContextClose(CGContextRef self);
 
 CF_IMPLICIT_BRIDGING_DISABLED

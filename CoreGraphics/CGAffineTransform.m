@@ -147,3 +147,10 @@ CGRect CGRectApplyAffineTransform(CGRect rect, CGAffineTransform t) {
 
     return CGRectMake(minX, minY, maxX - minX, maxY - minY);
 }
+
+bool CGAffineTransformEqualToTransform(CGAffineTransform t1, CGAffineTransform t2)
+{
+    printf("STUB %s\n", __PRETTY_FUNCTION__);
+
+    return true;
+}

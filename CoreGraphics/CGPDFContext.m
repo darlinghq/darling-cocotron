@@ -35,6 +35,16 @@ CGContextRef CGPDFContextCreate(CGDataConsumerRef consumer,
                auxiliaryInfo: (NSDictionary *) auxiliaryInfo];
 }
 
+void CGPDFContextBeginPage(CGContextRef context, CFDictionaryRef pageInfo)
+{
+    printf("STUB %s\n", __PRETTY_FUNCTION__);
+}
+
+void CGPDFContextEndPage(CGContextRef context)
+{
+    printf("STUB %s\n", __PRETTY_FUNCTION__);
+}
+
 COREGRAPHICS_EXPORT void CGPDFContextClose(CGContextRef self) {
     [self close];
 }
