@@ -10,6 +10,7 @@
 #include "../CoreGraphics/CGDisplayGeometry.h"
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 static int failures, checks;
@@ -34,8 +35,9 @@ static X11Monitor inactive(RROutput output) {
 }
 
 /* On nested X servers (such as Xephyr) RandR allows mode creation but refuses to move CRTC coordinates
- * outside (0, 0) or update output associations when disabled. Interpose RandR getters to reflect what
- * setCrtc requested so the unit test can verify X11MonitorsCopy on any X server. */
+ * outside (0, 0) or update output associations when disabled. When X11_MONITORS_NESTED is set (by
+ * x11-monitors.sh for Xephyr), the RandR getters are interposed to reflect what setCrtc requested, so the
+ * unit test can verify X11MonitorsCopy there too. */
 static struct {
     bool active;
     int x, y;
@@ -263,7 +265,8 @@ static void convention(void) {
 }
 
 static void setCrtc(Display *display, int x, int y, unsigned width, unsigned height, bool enable) {
-    crtcOverride.active = true;
+    /* Only a nested server needs the interposed getters; elsewhere the test reads what RandR really reports. */
+    crtcOverride.active = getenv("X11_MONITORS_NESTED") != NULL;
     crtcOverride.x = x;
     crtcOverride.y = y;
     crtcOverride.width = width;

@@ -50,7 +50,7 @@ elif command -v Xephyr >/dev/null 2>&1; then
         exit 1
     fi
 
-    DISPLAY="$disp" "$temp/probe"
+    DISPLAY="$disp" X11_MONITORS_NESTED=1 "$temp/probe"
 else
     echo "FAIL: neither xvfb-run nor Xephyr found to run test" >&2
     exit 1
