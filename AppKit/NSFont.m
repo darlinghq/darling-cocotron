@@ -411,30 +411,38 @@ static NSLock *_cacheLock = nil;
         bool f2;
         unsigned int fx;
         if (version >= 21) {
-            NSUnarchiver *una = (NSUnarchiver *) coder;
+            // The name is a property list; four separate byte reads follow the size.
             name = [coder decodePropertyList];
 
             float flt;
+            char byteFx = 0, byteFlags = 0, byteF2 = 0, byteF3 = 0;
             [coder decodeValuesOfObjCTypes: "f", &flt];
-            fx = [una decodeByte] != 0;
+            [coder decodeValuesOfObjCTypes: "c", &byteFx];
+            fx = byteFx != 0;
 
-            fFlags = [una decodeByte];
+            [coder decodeValuesOfObjCTypes: "c", &byteFlags];
+            fFlags = (unsigned char) byteFlags;
             fFlags <<= 13;
 
-            f2 = [una decodeByte] != 0;
-            uint8_t f3 = [una decodeByte];
+            [coder decodeValuesOfObjCTypes: "c", &byteF2];
+            f2 = byteF2 != 0;
+            [coder decodeValuesOfObjCTypes: "c", &byteF3];
 
-            fFlags |= f3 << 1;
+            fFlags |= ((unsigned char) byteF3) << 1;
 
             size = flt;
+            if (![name isKindOfClass: [NSString class]])
+                [NSException raise: NSInvalidArgumentException format: @"NSFont: the archived font has no name"];
         } else {
-            char *nameStr;
+            char *nameStr = NULL;
             float flt;
             unsigned short flags1, flags2;
 
             [coder decodeValuesOfObjCTypes: (version == 2) ? "%fss" : "*fss",
                                             &nameStr, &flt, &flags1, &flags2];
 
+            if (nameStr == NULL)
+                [NSException raise: NSInvalidArgumentException format: @"NSFont: the archived font has no name"];
             name = [NSString stringWithCString: nameStr
                                       encoding: NSASCIIStringEncoding];
             free(nameStr);

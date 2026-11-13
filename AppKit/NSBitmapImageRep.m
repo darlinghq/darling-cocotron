@@ -931,8 +931,10 @@ NSBitmapImageRepPropertyKey NSImageCurrentFrame = @"NSImageCurrentFrame";
     CGDataProviderRef provider = CGDataProviderCreateWithData(
             NULL, _bitmapPlanes[0], _bytesPerRow * _pixelsHigh, NULL);
 
+    size_t bpc = _bitsPerSample ? _bitsPerSample : (_bitsPerPixel / _samplesPerPixel);
+
     CGImageRef image = CGImageCreate(
-            _pixelsWide, _pixelsHigh, _bitsPerPixel / _samplesPerPixel,
+            _pixelsWide, _pixelsHigh, bpc,
             _bitsPerPixel, _bytesPerRow, [self CGColorSpace],
             [self CGBitmapInfo], provider, NULL, NO, kCGRenderingIntentDefault);
 
@@ -982,9 +984,13 @@ NSBitmapImageRepPropertyKey NSImageCurrentFrame = @"NSImageCurrentFrame";
     // kCGBitmapByteOrderDefault as host (little) endian and would read and encode the channels reversed.
     CGBitmapInfo result = (_bitsPerSample == 8) ? kCGBitmapByteOrder32Big : kCGBitmapByteOrderDefault;
 
-    if (![self hasAlpha])
-        result |= kCGImageAlphaNone;
-    else {
+    if (![self hasAlpha]) {
+        if (_bitsPerPixel == 32 && _samplesPerPixel == 3) {
+            result |= (_bitmapFormat & NSAlphaFirstBitmapFormat) ? kCGImageAlphaNoneSkipFirst : kCGImageAlphaNoneSkipLast;
+        } else {
+            result |= kCGImageAlphaNone;
+        }
+    } else {
         if (_bitmapFormat & NSAlphaFirstBitmapFormat) {
             if (_bitmapFormat & NSAlphaNonpremultipliedBitmapFormat)
                 result |= kCGImageAlphaFirst;

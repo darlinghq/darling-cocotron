@@ -57,6 +57,7 @@ typedef enum {
     BOOL _hasUndoManager;
     NSMutableArray *_activeEditors; // registered via NSEditorRegistration
     BOOL _draft;
+    BOOL _autosaveScheduled;
 }
 
 + (NSArray *) readableTypes;
@@ -275,4 +276,40 @@ completionHandler: (void (^)(NSError *errorOrNil)) completionHandler;
 - (void)autosaveWithImplicitCancellability: (BOOL) autosavingIsImplicitlyCancellable 
                          completionHandler: (void (^)(NSError *errorOrNil)) completionHandler;
 
+// Cocotron has no document activity queue: each block runs at once on the
+// calling thread, and completion handlers passed to it do nothing.
+- (void) continueActivityUsingBlock: (void (^)(void)) block;
+- (void) performActivityWithSynchronousWaiting: (BOOL) waitSynchronously
+                                    usingBlock: (void (^)(void (^activityCompletionHandler)(void))) block;
+- (void) performAsynchronousFileAccessUsingBlock: (void (^)(void (^fileAccessCompletionHandler)(void))) block;
+
+// Saving is synchronous, so there is currently no blocked interaction to resume.
+- (void) unblockUserInteraction;
+// Enqueues work on the main queue; this does not implement document activity
+// serialization or interruption of a blocked activity.
+- (void) continueAsynchronousWorkOnMainThreadUsingBlock: (void (^)(void)) block;
+
+// Does nothing: there are no document versions to browse.
+- (void) browseDocumentVersions: (id) sender;
+// Does nothing: Cocotron doesn't restore state.
+- (void) invalidateRestorableState;
+
+// State restoration: nothing is saved, so the encode/restore hooks do nothing.
+@property(class, readonly, copy) NSArray *restorableStateKeyPaths;
+- (void) encodeRestorableStateWithCoder: (NSCoder *) coder;
+- (void) encodeRestorableStateWithCoder: (NSCoder *) coder backgroundQueue: (NSOperationQueue *) queue;
+- (void) restoreStateWithCoder: (NSCoder *) coder;
+// Calls the handler with the document window whose identifier matches, or nil and an error.
+- (void) restoreDocumentWindowWithIdentifier: (NSString *) identifier
+                                       state: (NSCoder *) state
+                           completionHandler: (void (^)(NSWindow *window, NSError *error)) completionHandler;
+
+@end
+
+@interface NSDocument (NSDocumentViewingAndSaveType)
+// Always NO: there are no document versions to view.
+- (BOOL) isInViewingMode;
+// Private AppKit action of the save panel's file format pop-up. Does nothing:
+// Cocotron's save panel has no such pop-up.
+- (void) changeSaveType: (id) sender;
 @end

@@ -153,6 +153,7 @@ set(AppKit_sources
 	nib.subproj/NSNib.m
 	nib.subproj/NSNibArchive.m
 	nib.subproj/NSWindowTemplate.m
+	nib.subproj/NSViewTemplate.m
 	nib.subproj/NSMenuTemplate.m
 	nib.subproj/NSIBObjectData.m
 	nib.subproj/NSNibLoading.m
@@ -280,6 +281,7 @@ set(AppKit_sources
 	NSEvent.subproj/NSEvent_CoreGraphics.m
 	NSEvent.subproj/NSEvent_other.m
 	NSEvent.subproj/NSEvent_keyboard.m
+	NSEvent.subproj/NSEvent_gesture.m
 	NSEvent.subproj/NSEvent.m
 
 	NSButton.m
@@ -288,6 +290,7 @@ set(AppKit_sources
 	NSWindowController.m
 	NSColorSampler.m
 	NSColorSpace.m
+	DarlingLayout.mm
 	NSView.m
 
 	NSAnimation/NSAnimation.m
@@ -422,6 +425,11 @@ set(AppKit_sources
 	NSCollectionViewFlowLayout.m
 	NSTouchBarItem.m
 	NSLayoutConstraint.m
+	NSLayoutAnchor.m
+	NSAutoresizingMaskLayoutConstraint.m
+	NSContentSizeLayoutConstraint.m
+	NSIBPrototypingLayoutConstraint.m
+	NSDictionaryOfVariableBindings.m
 	NSSpeechSynthesizer.m
 	NSCustomTouchBarItem.m
 	NSGestureRecognizer.m
@@ -574,6 +582,7 @@ add_framework(AppKit
 	VERSION ${FRAMEWORK_VERSION}
 	DEPENDENCIES
 		objc
+		cxx
 		system
 		CoreFoundation
 		Foundation
@@ -661,3 +670,5 @@ add_backend(X11
 		fontconfig
 		xkbfile
 )
+
+set_source_files_properties(DarlingLayout.mm PROPERTIES LANGUAGE CXX COMPILE_FLAGS "-std=c++14 -fexceptions")

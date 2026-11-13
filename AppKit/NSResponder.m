@@ -26,6 +26,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSRaise.h>
 #import <AppKit/NSResponder.h>
 #import <Foundation/NSKeyedArchiver.h>
+#import <objc/message.h>
 #import <objc/runtime.h>
 
 @implementation NSResponder
@@ -260,7 +261,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         didPresentSelector: (SEL) selector
                contextInfo: (void *) info
 {
-    NSUnimplementedMethod();
+    // No document-modal sheets: the error is presented application-modally,
+    // then the delegate gets -didPresentErrorWithRecovery:contextInfo:.
+    BOOL recovered = [self presentError: error];
+    if (delegate != nil && selector != NULL)
+        ((void (*)(id, SEL, BOOL, void *)) objc_msgSend)(delegate, selector, recovered, info);
 }
 
 - (void) flagsChanged: (NSEvent *) event {

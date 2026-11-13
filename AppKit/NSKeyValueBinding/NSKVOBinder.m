@@ -25,8 +25,28 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Foundation/NSKeyValueCoding.h>
 #import <Foundation/NSKeyValueObserving.h>
 #import <Foundation/NSString.h>
+#import <objc/runtime.h>
+#include <string.h>
 
 static void *NSKVOBinderChangeContext;
+
+// Whether the object's setter for a single key takes a number, like hidden or
+// enabled (a BOOL), rather than an object.
+static BOOL NSKVOBinderKeyIsScalar(id object, NSString *key) {
+    if ([key length] == 0 || [key rangeOfString: @"."].location != NSNotFound)
+        return NO;
+    NSString *setter = [NSString
+            stringWithFormat: @"set%@%@:",
+                              [[key substringToIndex: 1] uppercaseString],
+                              [key substringFromIndex: 1]];
+    Method method = class_getInstanceMethod(object_getClass(object),
+                                            NSSelectorFromString(setter));
+    if (method == NULL)
+        return NO;
+    char type[16];
+    method_getArgumentType(method, 2, type, sizeof(type));
+    return type[0] != '\0' && strchr("cCsSiIlLqQfdB", type[0]) != NULL;
+}
 
 @implementation _NSKVOBinder
 - (void) startObservingChanges {
@@ -251,6 +271,11 @@ NSString *NSFormatDisplayPattern(NSString *pattern, id *values,
     id bindingPath =
             [allBinders[0] bindingPath]; // We want the real one - not "xxxx2"
                                          // fake path from non-main peers
+    // Like Cocoa, nil bound to a scalar property such as hidden or enabled
+    // means NO (0); -setNilValueForKey: would raise.
+    if (value == nil && NSKVOBinderKeyIsScalar(_source, bindingPath))
+        value = [NSNumber numberWithBool: NO];
+
     @try {
         currentValue = [_source valueForKeyPath: bindingPath];
     } @catch (id ex) {
@@ -269,26 +294,7 @@ NSString *NSFormatDisplayPattern(NSString *pattern, id *values,
             [allBinders[i] stopObservingChanges];
         }
         @try {
-            // Not sure it's the right place to do that  - it's probably not -
-            // but on Cocoa, BOOL values bound to a nil value are set to NO,
-            // even if setting the same property by code to nil using
-            // setValue:forKey: is throwing an exception That's certainly the
-            // case for properties like "enabled"
-            if (value == nil) {
-                @try {
-                    [_source setValue: nil forKeyPath: bindingPath];
-                } @catch (id ex) {
-                    if (isValidKeyPath == NO ||
-                        [currentValue
-                                isEqualTo: [NSNumber numberWithBool: NO]] ==
-                                NO) {
-                        [_source setValue: [NSNumber numberWithBool: NO]
-                                forKeyPath: bindingPath];
-                    }
-                }
-            } else {
-                [_source setValue: value forKeyPath: bindingPath];
-            }
+            [_source setValue: value forKeyPath: bindingPath];
         } @catch (id ex) {
             if ([self raisesForNotApplicableKeys]) {
                 for (int i = 0; i < count; ++i) {

@@ -43,3 +43,17 @@ tests/appkit-nonkeyed-controls.m):
   matrix          NSMatrix of 2x3 radio button cells (tags 100-105, last selected)
   progress, spinner NSProgressIndicator determinate small unbezeled 10..60 and
                   indeterminate default
+mkfix-controllers.m (same run procedure) writes the controller, connector and view template
+archives expected by tests/appkit-nonkeyed-controllers.m:
+  objectcontroller, arraycontroller, treecontroller   controllers with non-default settings
+  bindingconnector, axattributeconnector             nib connectors
+  viewtemplate-button, viewtemplate-unknown, textviewtemplate, texttemplate
+                                                      view templates (10.14.4 only: macOS 26
+                                                      archives them as an empty object)
+  custom.nib/objects.nib                              old-style nib (10.14.4 only) with an owner,
+                                                      a custom object of a known class and one of an
+                                                      unknown class, and outlet connectors
+NSDictionaryController is not archived: 10.14.4 does not read back its own archive of it.
+
+mkfix-enabled.m (same run procedure) writes archives of an NSButton, NSScroller, NSTextField and
+NSSlider, each enabled (-on) and disabled (-off), expected by tests/appkit-nonkeyed-control-enabled.m.

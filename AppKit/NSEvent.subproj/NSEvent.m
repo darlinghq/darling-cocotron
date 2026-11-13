@@ -273,6 +273,10 @@ static BOOL _mouseCoalescingEnabled = YES;
     return 0;
 }
 
+- (NSInteger) eventNumber {
+    return 0;
+}
+
 - (CGFloat) deltaX {
     return 0;
 }
@@ -281,9 +285,9 @@ static BOOL _mouseCoalescingEnabled = YES;
     return 0;
 }
 
-// No backend produces gestures or precise (trackpad) scrolling yet: every
-// scroll event is a wheel notch measured in lines, with no phase, as a
-// mouse wheel reports on macOS.
+// Only magnify and rotate events (NSEvent_gesture) carry a phase. No backend
+// produces precise (trackpad) scrolling yet: every scroll event is a wheel
+// notch measured in lines, with no phase, as a mouse wheel reports on macOS.
 - (NSEventPhase) phase {
     return NSEventPhaseNone;
 }
@@ -308,11 +312,23 @@ static BOOL _mouseCoalescingEnabled = YES;
     return NO;
 }
 
++ (BOOL) isSwipeTrackingFromScrollEventsEnabled {
+    return NO;
+}
+
 - (CGEventRef) CGEvent {
     return NULL;
 }
 
 - (CGFloat) deltaZ {
+    return 0;
+}
+
+- (CGFloat) magnification {
+    return 0;
+}
+
+- (float) rotation {
     return 0;
 }
 

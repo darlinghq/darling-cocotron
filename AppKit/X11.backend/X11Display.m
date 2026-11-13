@@ -1849,12 +1849,21 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
             if (type == NSMouseMoved && ![delegate acceptsMouseMovedEvents])
                 break;
 
-            // Posting a drag discards the queued drags before it, and in
-            // relative mode their deltas are all the application gets.
-            if (_relativeMouse.active && type == NSLeftMouseDragged) {
+            // Events the queue is about to drop in favour of this one carry
+            // deltas that are all the application gets in relative mode.
+            // Posting any motion discards every queued left drag (below), so
+            // those deltas move to this event whatever its type, and any
+            // moved or dragged event also replaces a directly preceding one
+            // of its type for the same window (-[NSDisplay postEvent:atStart:]).
+            if (_relativeMouse.active) {
                 [_eventQueueLock lock];
                 for (NSEvent *queued in _eventQueue) {
-                    if ([queued type] == type) {
+                    BOOL dropped = [queued type] == NSLeftMouseDragged ||
+                            (queued == [_eventQueue lastObject] &&
+                             [NSEvent isMouseCoalescingEnabled] &&
+                             [queued type] == type &&
+                             [queued window] == delegate);
+                    if (dropped) {
                         deltaX += [queued deltaX];
                         deltaY += [queued deltaY];
                     }
@@ -2313,6 +2322,14 @@ void CGNativeBorderFrameWidthsForStyle(NSUInteger styleMask, CGFloat *top,
 // a failure is retried for a while.
 - (void) resnapshotRelativeMouse {
     if (!_relativeMouse.active)
+        return;
+    // Most RandR events (a backlight change, an output property) change
+    // nothing the grab depends on: skip the new grab unless the reachable
+    // rectangle moved.
+    X11RelativeMouseBounds bounds;
+    if (X11RelativeMouseWindowBounds(_display, _relativeWindow, &bounds) &&
+        bounds.minX == _relativeMouse.minX && bounds.minY == _relativeMouse.minY &&
+        bounds.maxX == _relativeMouse.maxX && bounds.maxY == _relativeMouse.maxY)
         return;
     [self suspendRelativeMouse];
     [self beginRelativeMouse];

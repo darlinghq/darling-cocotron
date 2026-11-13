@@ -84,6 +84,30 @@
     if ([super initWithCoder: coder] == nil)
         return nil;
 
+    if (![coder allowsKeyedCoding]) {
+        // Initial key and value, a byte (it sets the deep-copies-values flag, which is not
+        // supported here), then the included keys, the excluded keys, the name of the
+        // strings file for localized keys and the localized key dictionary. The last two
+        // are not kept.
+        char deepCopiesValues;
+        id initialKey = [[coder decodeObject] retain];
+        id initialValue = [[coder decodeObject] retain];
+        [coder decodeValuesOfObjCTypes: "c", &deepCopiesValues];
+        _includedKeys = [[coder decodeObject] retain];
+        _excludedKeys = [[coder decodeObject] retain];
+        [coder decodeObject];
+        [coder decodeObject];
+
+        [self setSortDescriptors:
+                        [NSArray arrayWithObject:
+                                         [NSSortDescriptor
+                                                 sortDescriptorWithKey: @"key"
+                                                             ascending: YES]]];
+        _initialKey = [initialKey isKindOfClass: [NSString class]] ? initialKey : (id) [@"key" retain];
+        _initialValue = initialValue != nil ? initialValue : [@"value" retain];
+        return self;
+    }
+
     _includedKeys = [[coder decodeObjectForKey: @"NSIncludedKeys"] retain];
     _excludedKeys = [[coder decodeObjectForKey: @"NSExcludedKeys"] retain];
     [self setSortDescriptors:
@@ -157,6 +181,26 @@
     result.dictionary = _contentDictionary;
 
     return result;
+}
+
+- (NSArray *) includedKeys {
+    return _includedKeys;
+}
+
+- (void) setIncludedKeys: (NSArray *) keys {
+    keys = [keys copy];
+    [_includedKeys release];
+    _includedKeys = keys;
+}
+
+- (NSArray *) excludedKeys {
+    return _excludedKeys;
+}
+
+- (void) setExcludedKeys: (NSArray *) keys {
+    keys = [keys copy];
+    [_excludedKeys release];
+    _excludedKeys = keys;
 }
 
 - (NSString *) initialKey {
