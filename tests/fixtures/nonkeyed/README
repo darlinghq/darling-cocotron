@@ -20,3 +20,26 @@ Content (expected by tests/appkit-nonkeyed-nib-objects.m):
                   not autoresizing, one subview, dragged type "public.text"
   control         NSControl, tag 7, same frame, with an NSActionCell (text "cell",
                   tag 5, action doIt:), tests/appkit-nonkeyed-view-control-cell.m
+
+Archives of controls (written by mkfix-controls.m, same two systems; expected by
+tests/appkit-nonkeyed-controls.m):
+  button-push     NSButton: title Push, alternate title Pushed, key equivalent k with
+                  command+option, tag 3, disabled, image above, left aligned, continuous,
+                  periodic delay 0.5 and interval 0.25
+  button-checkbox check box with mixed state allowed and set
+  button-radio    radio button, on, small
+  button-toggle   recessed push-on-push-off button showing its border on mouse over
+  textfield       NSTextField "Hello field", editable, selectable, bezeled, draws red
+                  background, blue text, right aligned, tag 11
+  textfield-rounded NSTextField with a rounded bezel
+  textlabel       label: not editable or selectable, no bezel or background, centered
+  imageview       NSImageView: top-left alignment, axes independently scaling, gray bezel
+                  frame, editable
+  slider          NSSlider 5..95, value 35, 7 tick marks above, snapping, alt increment 2.5
+  box, box-secondary NSBox primary (title Group, at bottom, line border, margins 7x9,
+                  one subview) and secondary (bezel border, above bottom, margins 3x5)
+  tabview         NSTabView with two items (second selected, with a colour), bottom
+                  tabs, no background, truncated labels allowed
+  matrix          NSMatrix of 2x3 radio button cells (tags 100-105, last selected)
+  progress, spinner NSProgressIndicator determinate small unbezeled 10..60 and
+                  indeterminate default

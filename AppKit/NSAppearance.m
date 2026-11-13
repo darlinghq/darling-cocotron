@@ -164,11 +164,9 @@ static const CGFloat NSAppearanceLightnessAdjustment = 0.1;
 }
 
 - (void) encodeWithCoder: (NSCoder *) aCoder {
-    printf("STUB %s\n", __PRETTY_FUNCTION__);
 }
 
 - (id) initWithCoder: (NSCoder *) aDecoder {
-    printf("STUB %s\n", __PRETTY_FUNCTION__);
     return self;
 }
 

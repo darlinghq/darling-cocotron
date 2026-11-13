@@ -88,29 +88,47 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         }
     } else {
         NSInteger version = [coder versionForClassName: @"NSBox"];
+        float width = 0, height = 0;
+        NSView *contentView = nil;
+        char flags = 0, titlePosition = 0, unknownFlag = 0;
 
-        if (version > 40) {
-            NSView *contentView;
-            float width, height;
-            uint8_t borderType, titlePosition, boxType;
+        // Layouts per class version as recorded; the groups of the decode calls have to
+        // be the same as the archiver wrote.
+        if (version <= 16) {
+            short unknownShort = 0;
 
-            [coder decodeValuesOfObjCTypes:"ff@@ccc", &width, &height, &_titleCell, &contentView, &borderType, &titlePosition, &boxType];
-
-             // This is already added as a subview in NSView decoding
-            [contentView release];
-
-            _borderType = borderType;
-            _titlePosition = titlePosition;
-            _boxType = boxType;
-
-            _contentViewMargins = CGSizeMake(width, height);
-
-            id object = [coder decodeObject];
+            [coder decodeValuesOfObjCTypes: "ff", &width, &height];
+            [coder decodeValuesOfObjCTypes: "@@s", &_titleCell, &contentView, &unknownShort];
+            // The short is of unknown meaning; changing it alters no accessor of the box.
+        } else if (version <= 40) {
+            [coder decodeValuesOfObjCTypes: "ff", &width, &height];
+            _titleCell = [[coder decodeObject] retain];
+            contentView = [[coder decodeObject] retain];
+            [coder decodeValuesOfObjCTypes: "c", &flags];
+            [coder decodeValuesOfObjCTypes: "c", &titlePosition];
+            [coder decodeValuesOfObjCTypes: "c", &unknownFlag];
+            if (version >= 25) {
+                // One more object of unknown meaning.
+                [coder decodeObject];
+            }
         } else {
-            [NSException raise: NSInvalidArgumentException
-                        format: @"%@ can not initWithCoder:%@", [self class],
-                                [coder class]];
+            [coder decodeValuesOfObjCTypes: "ff@@ccc", &width, &height, &_titleCell, &contentView, &flags, &titlePosition,
+                                            &unknownFlag];
+            // One more object of unknown meaning.
+            [coder decodeObject];
         }
+
+        // The content view is already a subview from NSView decoding.
+        [contentView release];
+
+        // The first flag byte holds the border type in its low two bits and, from version
+        // 42, the box type in the two above them (earlier versions have no box type).
+        _borderType = flags & 3;
+        _boxType = version >= 42 ? (flags >> 2) & 3 : NSBoxPrimary;
+        _titlePosition = titlePosition;
+        _contentViewMargins = CGSizeMake(width, height);
+        // The third byte is of unknown meaning (it sets a transparent-background bit that
+        // no public accessor of the box reports).
     }
     return self;
 }

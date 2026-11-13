@@ -42,6 +42,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - initWithCoder: (NSCoder *) coder {
+    // The class version is asked before the superclass part is decoded.
+    NSInteger version = [coder allowsKeyedCoding] ? 0 : [coder versionForClassName: @"NSSliderCell"];
+
     [super initWithCoder: coder];
 
     if ([coder allowsKeyedCoding]) {
@@ -60,72 +63,65 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         _allowsTickMarkValuesOnly =
                 [keyed decodeBoolForKey: @"NSAllowsTickMarkValuesOnly"];
     } else {
-        NSInteger version = [coder versionForClassName: @"NSSliderCell"];
-        double value;
+        double value = 0;
+        int numberOfTickMarks = 0, tickMarkPositionWord = 0, flags = 0;
+        id unknown1 = nil, unknown2 = nil;
+        float unknownFloat1 = 0, unknownFloat2 = 0;
 
         _altIncrementValue = 0;
-        if (version > 225) {
-            int flags1, flags2;
-            [coder decodeValuesOfObjCTypes: "ddddiii", &_maxValue, &_minValue,
-                                            &value, &_altIncrementValue,
-                                            &_numberOfTickMarks, &flags1,
-                                            &flags2];
-            // TODO: flags
-        } else if (version > 41) {
-            int flags1, flags2;
-            float f1;
-            id obj1, obj2;
-            [coder decodeValuesOfObjCTypes: "dddfd@@iii", &_maxValue,
-                                            &_minValue, &value, &f1,
-                                            &_altIncrementValue, &obj1, &obj2,
-                                            &_numberOfTickMarks, &flags1,
-                                            &flags2];
-            // TODO: flags
-        } else if (version > 40) {
-            id obj1, obj2;
-            [coder decodeValuesOfObjCTypes: "dddfd@@", &_maxValue, &_minValue,
-                                            &value, &_altIncrementValue, &obj1,
-                                            &obj2];
-        } else if (version > 16) {
-            float f1;
-            [coder decodeValuesOfObjCTypes: "dddfd", &_maxValue, &_minValue,
-                                            &value, &f1, &_altIncrementValue];
-            [self setImage: [coder decodeObject]];
-            /*[self setTitleCell:*/ [coder decodeObject] /*]*/;
-        } else if (version > 5) {
-            float f1;
-            id obj1, obj2;
-            [coder decodeValuesOfObjCTypes: "dddf@d@", &_maxValue, &_minValue,
-                                            &value, &f1, &obj1,
-                                            &_altIncrementValue, &obj2];
+        _numberOfTickMarks = 0;
+        _tickMarkPosition = NSTickMarkBelow;
+        _allowsTickMarkValuesOnly = NO;
+
+        // Layouts per class version as recorded from Mac archives. Floats, objects and
+        // the colours of the older layouts are read and dropped (their meaning is not
+        // known). Maximum comes before minimum in every layout.
+        if (version >= 226) {
+            [coder decodeValuesOfObjCTypes: "ddddiii", &_maxValue, &_minValue, &value, &_altIncrementValue,
+                                            &numberOfTickMarks, &tickMarkPositionWord, &flags];
+        } else if (version >= 42) {
+            [coder decodeValuesOfObjCTypes: "dddfd@@iii", &_maxValue, &_minValue, &value, &unknownFloat1,
+                                            &_altIncrementValue, &unknown1, &unknown2, &numberOfTickMarks,
+                                            &tickMarkPositionWord, &flags];
+        } else if (version == 41) {
+            [coder decodeValuesOfObjCTypes: "dddfd@@", &_maxValue, &_minValue, &value, &unknownFloat1,
+                                            &_altIncrementValue, &unknown1, &unknown2];
+        } else if (version >= 17) {
+            [coder decodeValuesOfObjCTypes: "dddfd", &_maxValue, &_minValue, &value, &unknownFloat1, &_altIncrementValue];
+            unknown1 = [[coder decodeObject] retain];
+            unknown2 = [[coder decodeObject] retain];
+        } else if (version >= 6) {
+            [coder decodeValuesOfObjCTypes: "dddf@d@", &_maxValue, &_minValue, &value, &unknownFloat1, &unknown1,
+                                            &_altIncrementValue, &unknown2];
         } else if (version == 5) {
-            float f1, f2;
-            id obj;
-
-            [coder decodeValuesOfObjCTypes: "dddf@fd", &_maxValue, _minValue,
-                                            &value, &f1, &obj, &f2,
-                                            &_altIncrementValue];
-
+            [coder decodeValuesOfObjCTypes: "dddf@fd", &_maxValue, &_minValue, &value, &unknownFloat1, &unknown1,
+                                            &unknownFloat2, &_altIncrementValue];
             [coder decodeNXColor];
-        } else if (version == 4 || version == 3) {
-            float f1, f2;
-            id obj;
-
-            [coder decodeValuesOfObjCTypes: "dddf@f", &_maxValue, _minValue,
-                                            &value, &f1, &obj, &f2];
-
+        } else if (version >= 3) {
+            [coder decodeValuesOfObjCTypes: "dddf@f", &_maxValue, &_minValue, &value, &unknownFloat1, &unknown1,
+                                            &unknownFloat2];
             [coder decodeNXColor];
         } else if (version == 2) {
-            float f1;
-            id obj;
-
-            [coder decodeValuesOfObjCTypes: "dddf@", &_maxValue, _minValue,
-                                            &value, &f1, &obj];
+            [coder decodeValuesOfObjCTypes: "dddf@", &_maxValue, &_minValue, &value, &unknownFloat1, &unknown1];
         } else {
-            [coder decodeValuesOfObjCTypes: "ddd", &_maxValue, _minValue,
-                                            &value];
+            [coder decodeValuesOfObjCTypes: "ddd", &_maxValue, &_minValue, &value];
             [self setTitle: @""];
-            _altIncrementValue = 0;
+        }
+        [unknown1 release];
+        [unknown2 release];
+
+        if (version >= 42) {
+            _numberOfTickMarks = numberOfTickMarks;
+            // The second word is the position of the marks (1 above or right).
+            _tickMarkPosition = tickMarkPositionWord;
+            if (version >= 226 && (flags & 0x20000001) == 0x20000001) {
+                // A circular slider archives bit 0 and bit 29 of the flag word; its
+                // snapping to marks is the top bit.
+                _type = NSCircularSlider;
+                _allowsTickMarkValuesOnly = (flags & 0x80000000) != 0;
+            } else {
+                _allowsTickMarkValuesOnly = (flags & 1) != 0;
+            }
         }
 
         [self setDoubleValue: value];

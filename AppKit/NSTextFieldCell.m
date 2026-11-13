@@ -67,7 +67,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                 [[keyed decodeObjectForKey: @"NSPlaceholderString"] retain];
     } else {
         NSInteger version = [coder versionForClassName: @"NSTextFieldCell"];
-        NSLog(@"NSTextFieldCell version is %ld\n", (long) version);
         if (version > 40) {
             uint8_t flags;
             [coder decodeValuesOfObjCTypes: "c@@", &flags, &_backgroundColor,
@@ -81,15 +80,19 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                     [self setTextColor: [NSColor controlTextColor]];
             }
         } else if (version > 16) {
-            _drawsBackground = [coder decodeByte] != 0;
+            char drawsBackground = 0;
+            [coder decodeValuesOfObjCTypes: "c", &drawsBackground];
+            _drawsBackground = drawsBackground != 0;
             [self setBackgroundColor: [coder decodeObject]];
             [self setTextColor: [coder decodeObject]];
         } else if (version > 1) {
+            char drawsBackground = 0;
             [coder decodeValuesOfObjCTypes: "@@c", &_backgroundColor,
-                                            &_textColor, &_drawsBackground];
+                                            &_textColor, &drawsBackground];
+            _drawsBackground = drawsBackground != 0;
         } else {
             float bgcolor, fgcolor;
-            [coder decodeValuesOfObjCTypes: "ff", &bgcolor, fgcolor];
+            [coder decodeValuesOfObjCTypes: "ff", &bgcolor, &fgcolor];
 
             if (bgcolor <= 0.0f) {
                 _drawsBackground = FALSE;

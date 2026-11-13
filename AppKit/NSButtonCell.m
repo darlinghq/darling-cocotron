@@ -197,176 +197,177 @@ static const CGFloat kImageMargin = 2.;
                                     // in synch with the bare _state of NSCell
     } else {
         NSInteger version = [coder versionForClassName: @"NSButtonCell"];
-        NSLog(@"NSButtonCell version is %ld\n", (long) version);
-        unichar keyEquivModMask;
-        if (version <= 16) {
-            if ([(NSUnarchiver *) coder systemVersion] > 82) {
-                short periodicDelay, periodicInterval;
-                [coder decodeValuesOfObjCTypes: "ss", &periodicDelay,
-                                                &periodicInterval];
+        unsigned int keyEquivModMask = 0;
+        id altContents = nil, keyEquivalent = nil, keyEquivalentFont = nil, normalImage = nil;
+        id alternateImageOrFont = nil, sound = nil;
 
-                [self setPeriodicDelay: periodicDelay / 1000.0f
-                              interval: periodicInterval / 1000.0f];
+        // Read layout per class version: only the sequence of public decode calls is
+        // dictated by the archive; what the unknown values mean is not known.
+        if (version <= 16) {
+            if ([coder systemVersion] > 82) {
+                short periodicDelay, periodicInterval;
+                [coder decodeValuesOfObjCTypes: "ss", &periodicDelay, &periodicInterval];
+
+                [self setPeriodicDelay: periodicDelay / 1000.0f interval: periodicInterval / 1000.0f];
             }
 
-            char *altContents;
+            char *altContentsString = NULL;
             unsigned short inFlags1, inFlags2;
-            [coder decodeValuesOfObjCTypes: "*@ss", &altContents, &_sound,
-                                            &inFlags1, &inFlags2];
+            [coder decodeValuesOfObjCTypes: "*@ss", &altContentsString, &sound, &inFlags1, &inFlags2];
 
             flags = (((unsigned) inFlags1) << 16) & 0xFEF80000;
             flags |= (((unsigned) inFlags1) & 0x3) << 17;
             flags |= (((unsigned) inFlags2) << 8) & 0x8000;
             flags |= (((unsigned) inFlags2) & 0x6) << 12;
 
-            unichar keyEquivalent = inFlags2 >> 8;
-            if (keyEquivalent != 0) {
-                _keyEquivalent =
-                        [[NSString alloc] initWithCharacters: &keyEquivalent
-                                                      length: 1];
+            unichar keyEquivalentChar = inFlags2 >> 8;
+            if (keyEquivalentChar != 0) {
+                keyEquivalent = [[NSString alloc] initWithCharacters: &keyEquivalentChar length: 1];
             }
 
-            if (altContents) {
-                _alternateTitle = [[NSString alloc]
-                        initWithBytesNoCopy: altContents
-                                     length: strlen(altContents)
-                                   encoding: NSUTF8StringEncoding
-                               freeWhenDone: TRUE];
+            if (altContentsString) {
+                altContents = [[NSString alloc] initWithBytesNoCopy: altContentsString
+                                                             length: strlen(altContentsString)
+                                                           encoding: NSUTF8StringEncoding
+                                                       freeWhenDone: YES];
             }
 
+            // Two objects follow whatever the flags say. The first is the normal image
+            // when bit 17 is set, else the alternate image; the second is only kept
+            // as the alternate image when bit 17 is set.
+            id first = nil, second = nil;
+            [coder decodeValuesOfObjCTypes: "@@", &first, &second];
             if (flags & 0x20000) {
-                [coder decodeValuesOfObjCTypes: "@@", &_normalImage,
-                                                &_alternateImage];
+                normalImage = first;
+                alternateImageOrFont = second;
             } else {
-                float dummy;
-                [coder decodeValuesOfObjCTypes: "@f", &_alternateImage, &dummy];
+                alternateImageOrFont = first;
+                [second release];
             }
 
             if (version >= 2)
                 [coder decodeValuesOfObjCTypes: "I", &keyEquivModMask];
-            else
-                keyEquivModMask = 0;
         } else if (version <= 40) {
             short periodicDelay, periodicInterval;
-            NSUnarchiver *una = (NSUnarchiver *) coder;
-            [coder decodeValuesOfObjCTypes: "ss", &periodicDelay,
-                                            &periodicInterval];
+            [coder decodeValuesOfObjCTypes: "ss", &periodicDelay, &periodicInterval];
 
-            [self setPeriodicDelay: periodicDelay / 1000.0f
-                          interval: periodicInterval / 1000.0f];
+            [self setPeriodicDelay: periodicDelay / 1000.0f interval: periodicInterval / 1000.0f];
 
             [coder decodeValuesOfObjCTypes: "I", &keyEquivModMask];
 
-            unsigned int inFlags = [una decodeByte];
-            flags = inFlags << 31;
+            // Eighteen separate flag bytes. Seventeen are mapped to the flag word; the
+            // eighth (index 7) is read and ignored (its meaning is unknown).
+            static const struct {
+                int shift;
+                unsigned mask;
+            } bytes[18] = {
+                { 31, 1 }, { 30, 1 }, { 29, 1 }, { 28, 1 }, { 27, 1 }, { 26, 1 },
+                { 25, 1 },    { 0, 0 },  { 23, 1 }, { 22, 1 }, { 21, 1 }, { 20, 1 },
+                { 19, 1 },    { 18, 1 }, { 17, 1 }, { 15, 1 }, { 13, 3 }, { 12, 1 },
+            };
+            int i;
+            for (i = 0; i < 18; i++) {
+                char c = 0;
+                [coder decodeValuesOfObjCTypes: "c", &c];
+                if (bytes[i].mask != 0) {
+                    flags |= (((unsigned) (unsigned char) c) & bytes[i].mask) << bytes[i].shift;
+                }
+            }
 
-            inFlags = [una decodeByte];
-            flags |= (inFlags & 1) << 30;
+            altContents = [[coder decodeObject] retain];
+            keyEquivalent = [[coder decodeObject] retain];
+            keyEquivalentFont = [[coder decodeObject] retain];
+            normalImage = [[coder decodeObject] retain];
+            alternateImageOrFont = [[coder decodeObject] retain];
+            sound = [[coder decodeObject] retain];
 
-            inFlags = [una decodeByte];
-            flags |= (inFlags & 1) << 29;
-
-            inFlags = [una decodeByte];
-            flags |= (inFlags & 1) << 28;
-
-            inFlags = [una decodeByte];
-            flags |= (inFlags & 1) << 27;
-
-            inFlags = [una decodeByte];
-            flags |= (inFlags & 1) << 26;
-
-            inFlags = [una decodeByte];
-            flags |= (inFlags & 1) << 25;
-
-            [una decodeByte];
-            inFlags = [una decodeByte];
-            flags |= (inFlags & 1) << 23;
-
-            inFlags = [una decodeByte];
-            flags |= (inFlags & 1) << 22;
-
-            inFlags = [una decodeByte];
-            flags |= (inFlags & 1) << 21;
-
-            inFlags = [una decodeByte];
-            flags |= (inFlags & 1) << 20;
-
-            inFlags = [una decodeByte];
-            flags |= (inFlags & 1) << 19;
-
-            inFlags = [una decodeByte];
-            flags |= (inFlags & 1) << 18;
-
-            inFlags = [una decodeByte];
-            flags |= (inFlags & 1) << 17;
-
-            inFlags = [una decodeByte];
-            flags |= (inFlags & 1) << 15;
-
-            inFlags = [una decodeByte];
-            flags |= (inFlags & 3) << 13;
-
-            inFlags = [una decodeByte];
-            flags |= (inFlags & 1) << 12;
-
-            id altContents = [coder decodeObject];
-            // TODO: _setAltContents
-
-            [self setKeyEquivalent: [coder decodeObject]];
-            [self setKeyEquivalentFont: [coder decodeObject]];
-            [self setImage: [coder decodeObject]];
-            [self setAlternateImage: [coder decodeObject]];
-            [self setSound: [coder decodeObject]];
-
-            unsigned int var50;
-            if (version >= 19)
-                [coder decodeValuesOfObjCTypes: "I", &var50];
-            if (version > 20)
-                [coder decodeValuesOfObjCTypes: "I", &var50];
-            if (version > 26)
-                [una decodeByte];
+            // Values of unknown meaning, kept in the archive layout and dropped:
+            // two words from version 19 (the second from 21) up to 26, a byte at 26 and
+            // a further byte from 26 on; versions 27 and later have two bytes only.
+            unsigned int unknownWord;
+            char unknownByte;
+            if (version >= 19 && version <= 26)
+                [coder decodeValuesOfObjCTypes: "I", &unknownWord];
+            if (version >= 21 && version <= 26)
+                [coder decodeValuesOfObjCTypes: "I", &unknownWord];
             if (version >= 26)
-                [una decodeByte];
+                [coder decodeValuesOfObjCTypes: "c", &unknownByte];
+            if (version >= 27)
+                [coder decodeValuesOfObjCTypes: "c", &unknownByte];
         } else if (version <= 57) {
             short periodicDelay, periodicInterval;
-            [coder decodeValuesOfObjCTypes: "ssIi@@@@@", &periodicDelay,
-                                            &periodicInterval, &flags,
-                                            &keyEquivModMask, &_alternateTitle,
-                                            &_keyEquivalent, &_normalImage,
-                                            &_alternateImage, &_sound];
+            [coder decodeValuesOfObjCTypes: "ssIi@@@@@", &periodicDelay, &periodicInterval, &keyEquivModMask, &flags,
+                                            &altContents, &keyEquivalent, &normalImage, &alternateImageOrFont, &sound];
 
-            [self setPeriodicDelay: periodicDelay / 1000.0f
-                          interval: periodicInterval / 1000.0f];
+            [self setPeriodicDelay: periodicDelay / 1000.0f interval: periodicInterval / 1000.0f];
 
             flags &= 0xfeffffff;
             flags2 &= 0xFFFFFFD8;
         } else {
             short periodicDelay, periodicInterval;
-            id alternateImageOrFont;
-            [coder decodeValuesOfObjCTypes: "ssii@@@@@", &periodicDelay,
-                                            &periodicInterval, &flags2, &flags,
-                                            &_alternateTitle, &_keyEquivalent,
-                                            &_normalImage, &alternateImageOrFont,
-                                            &_sound];
+            [coder decodeValuesOfObjCTypes: "ssii@@@@@", &periodicDelay, &periodicInterval, &flags2, &flags, &altContents,
+                                            &keyEquivalent, &normalImage, &alternateImageOrFont, &sound];
 
-            if ([alternateImageOrFont isKindOfClass:[NSButtonImageSource class]]) {
-                _alternateImage = alternateImageOrFont;
-            } else if ([alternateImageOrFont isKindOfClass:[NSFont class]]) {
-                _keyEquivalentFont = alternateImageOrFont;
-            } else {
-                [alternateImageOrFont release];
-            }
+            [self setPeriodicDelay: periodicDelay / 1000.0f interval: periodicInterval / 1000.0f];
 
-            // Title is in the _objectValue decoded in NSCell
-            NSString* stringValue = [self stringValue];
-            if ([stringValue length] > 0) {
-                [self setTitle: stringValue];
-            }
-
-            [self setPeriodicDelay: periodicDelay / 1000.0f
-                          interval: periodicInterval / 1000.0f];
-
+            // As in the keyed form, the key equivalent's modifier mask sits above the
+            // low byte of the second flag word.
+            keyEquivModMask = flags2 >> 8;
             flags &= 0xfeffffff;
+        }
+
+        [_alternateTitle release];
+        _alternateTitle = [altContents isKindOfClass: [NSString class]] ? altContents : nil;
+        if (_alternateTitle == nil)
+            [altContents release];
+
+        [_keyEquivalent release];
+        _keyEquivalent = [keyEquivalent isKindOfClass: [NSString class]] ? keyEquivalent : nil;
+        if (_keyEquivalent == nil) {
+            [keyEquivalent release];
+            _keyEquivalent = [@"" retain];
+        }
+
+        [_keyEquivalentFont release];
+        _keyEquivalentFont = [keyEquivalentFont isKindOfClass: [NSFont class]] ? keyEquivalentFont : nil;
+        if (_keyEquivalentFont == nil)
+            [keyEquivalentFont release];
+
+        [_sound release];
+        _sound = sound;
+
+        // The normal image is also the cell's own image, as in the keyed form.
+        if (normalImage != nil) {
+            if ([normalImage isKindOfClass: [NSImage class]]) {
+                [_image release];
+                _image = normalImage;
+            } else {
+                [normalImage release];
+            }
+        }
+        _normalImage = [_image retain];
+
+        // The slot after the key equivalent and image holds the alternate image, a
+        // button image source standing for both images, or the key equivalent font.
+        [_alternateImage release];
+        _alternateImage = nil;
+        if ([alternateImageOrFont isKindOfClass: [NSButtonImageSource class]]) {
+            [_image release];
+            _image = [[alternateImageOrFont normalImage] retain];
+            [_normalImage release];
+            _normalImage = [_image retain];
+            _alternateImage = [[alternateImageOrFont alternateImage] retain];
+        } else if ([alternateImageOrFont isKindOfClass: [NSImage class]]) {
+            _alternateImage = [alternateImageOrFont retain];
+        } else if ([alternateImageOrFont isKindOfClass: [NSFont class]] && _keyEquivalentFont == nil) {
+            _keyEquivalentFont = [alternateImageOrFont retain];
+        }
+        [alternateImageOrFont release];
+
+        // The title is the object value decoded by NSCell.
+        NSString *stringValue = [self stringValue];
+        if ([stringValue length] > 0) {
+            [self setTitle: stringValue];
         }
 
         if (version <= 36) {
@@ -406,18 +407,14 @@ static const CGFloat kImageMargin = 2.;
                     flags &= 0xB70000;
                 }
             }
-
-            [self _applyButtonCellAppleFlags: flags flags2: flags2];
-
-            [self setKeyEquivalentModifierMask: keyEquivModMask];
-        } else {
-            [self _applyButtonCellAppleFlags: flags flags2: flags2];
         }
 
-        if (version < 58) {
-            [self setKeyEquivalentModifierMask: keyEquivModMask];
-        }
-        // TODO: set alternate image based on buttonType
+        [self _applyButtonCellAppleFlags: flags flags2: flags2];
+        [self setKeyEquivalentModifierMask: keyEquivModMask];
+
+        // The object value holds the state (NSCell decoded the title there), as after
+        // keyed decoding.
+        [self setIntValue: _state];
     }
     return self;
 }

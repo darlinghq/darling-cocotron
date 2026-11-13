@@ -407,8 +407,6 @@ static NSLock *_cacheLock = nil;
     } else {
         NSInteger version = [coder versionForClassName: @"NSFont"];
 
-        NSLog(@"NSFont version is %ld\n", (long) version);
-
         unsigned int fFlags = 0;
         bool f2;
         unsigned int fx;
@@ -450,7 +448,6 @@ static NSLock *_cacheLock = nil;
             size = flt;
         }
 
-        NSLog(@"fFlags = 0x%x, fx = %d\n", fFlags, fx);
         if (!(fFlags & 0x2000)) {
             if (f2) {
                 // TODO: Do some transform of flt
@@ -466,8 +463,6 @@ static NSLock *_cacheLock = nil;
         if (fx != 0)
             [coder decodeValuesOfObjCTypes: "i", &fx];
     }
-
-    NSLog(@"NSFont decoding done\n");
 
     [self release];
     NSFont *realFont = [[NSFont fontWithName: name size: size] retain];

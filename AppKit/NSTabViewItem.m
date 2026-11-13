@@ -92,28 +92,13 @@ NSString *_NSTruncatedStringWithAttributesInRect(NSString *string,
         _tabView = [keyed decodeObjectForKey: @"NSTabView"];
         _color = [[keyed decodeObjectForKey: @"NSColor"] retain];
     } else {
-        // QUIRK: NSTabViewItem layout: identifier, label, view, colour,
-        // state, first responder, tab view. Not documented; unkeyed
-        // (typedstream) archives come from old nibs. Evidence: tier 3, the
-        // layout reported by the contributor of this decoder from archives of
-        // old nibs; unconfirmed against macOS (a macOS check is pending).
-        // Archives with a different layout are tolerated where the code
-        // catches the mismatch. Test: test_quirk_typedstream_tab_view_item in
-        // tests/appkit-typedstream-controls.m
-        // Values decoded with decodeValueOfObjCType: are owned by us.
-        [coder decodeValueOfObjCType: @encode(id) at: &_identifier];
-        [coder decodeValueOfObjCType: @encode(id) at: &_label];
-        [coder decodeValueOfObjCType: @encode(id) at: &_view];
-        [coder decodeValueOfObjCType: @encode(id) at: &_color];
-        int state = 0;
-        [coder decodeValueOfObjCType: @encode(int) at: &state];
-        _state = state;
-        id first_responder = nil;
-        [coder decodeValueOfObjCType: @encode(id) at: &first_responder];
-        [first_responder release];
-        // The tab view is a back-reference and is not retained.
-        id tabView = nil;
-        [coder decodeValueOfObjCType: @encode(id) at: &tabView];
+        // Seven objects in one group: identifier, view, label, colour, initial first
+        // responder, last key view and the tab view (a back-reference, not retained). The
+        // last key view has no accessor and is not kept.
+        id lastKeyView = nil, tabView = nil;
+        [coder decodeValuesOfObjCTypes: "@@@@@@@", &_identifier, &_view, &_label, &_color, &_initialFirstResponder,
+                                        &lastKeyView, &tabView];
+        [lastKeyView release];
         _tabView = tabView;
         [tabView release];
     }

@@ -67,7 +67,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - initWithCoder: (NSCoder *) coder {
-    NSLog(@"NSTextField initWithCoder");
     [super initWithCoder: coder];
     [self registerForDraggedTypes:
                     [NSArray arrayWithObject: NSStringPboardType]];

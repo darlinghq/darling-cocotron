@@ -36,6 +36,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (id) initWithCoder: (NSCoder *) coder {
+    // The class version is asked before the superclass part is decoded.
+    NSInteger version = [coder allowsKeyedCoding] ? 0 : [coder versionForClassName: @"NSImageCell"];
+
     [super initWithCoder: coder];
     if ([coder allowsKeyedCoding]) {
         NSKeyedUnarchiver *keyed = (NSKeyedUnarchiver *) coder;
@@ -43,10 +46,26 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         _imageAlignment = [keyed decodeIntForKey: @"NSAlign"];
         _imageScaling = [keyed decodeIntForKey: @"NSScale"];
         _frameStyle = [keyed decodeIntForKey: @"NSStyle"];
-    } else
-        [NSException raise: NSInvalidArgumentException
-                    format: @"%@ can not initWithCoder:%@", [self class],
-                            [coder class]];
+    } else {
+        if (version >= 41) {
+            // Alignment in the low four bits of the first word; the higher bits have
+            // an unknown meaning.
+            int alignmentWord, scaling, frameStyle;
+            [coder decodeValuesOfObjCTypes: "iii", &alignmentWord, &scaling, &frameStyle];
+            _imageAlignment = alignmentWord & 0xf;
+            _imageScaling = scaling;
+            _frameStyle = frameStyle;
+        } else {
+            // Alignment, scaling and frame style as three separate bytes.
+            char alignment = 0, scaling = 0, frameStyle = 0;
+            [coder decodeValuesOfObjCTypes: "c", &alignment];
+            [coder decodeValuesOfObjCTypes: "c", &scaling];
+            [coder decodeValuesOfObjCTypes: "c", &frameStyle];
+            _imageAlignment = alignment;
+            _imageScaling = scaling;
+            _frameStyle = frameStyle;
+        }
+    }
     return self;
 }
 
