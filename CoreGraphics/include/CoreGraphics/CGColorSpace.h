@@ -88,6 +88,10 @@ COREGRAPHICS_EXPORT CGColorSpaceRef CGColorSpaceCreateExtended(CGColorSpaceRef s
 COREGRAPHICS_EXPORT CGColorSpaceRef CGColorSpaceCreateExtendedLinearized(CGColorSpaceRef space);
 COREGRAPHICS_EXPORT bool CGColorSpaceUsesExtendedRange(CGColorSpaceRef space);
 
+// True if the space uses a transfer function defined in ITU-R BT.2100 (PQ or HLG).
+COREGRAPHICS_EXPORT bool CGColorSpaceUsesITUR_2100TF(CGColorSpaceRef space);
+COREGRAPHICS_EXPORT bool CGColorSpaceIsHLGBased(CGColorSpaceRef space);
+
 CF_IMPLICIT_BRIDGING_DISABLED
 
 #endif /* CGCOLORSPACE_H */

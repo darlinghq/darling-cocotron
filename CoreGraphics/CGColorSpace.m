@@ -182,3 +182,16 @@ bool CGColorSpaceUsesExtendedRange(CGColorSpaceRef space) {
     const CGColorSpaceRangeForms *forms = rangeFormsForSpace(space);
     return forms != NULL && forms->name == forms->extended;
 }
+
+bool CGColorSpaceUsesITUR_2100TF(CGColorSpaceRef space) {
+    CFStringRef name = space != NULL ? CGColorSpaceGetName(space) : NULL;
+    if (name == NULL)
+        return false;
+    return CFEqual(name, kCGColorSpaceITUR_2100_PQ) ||
+           CFEqual(name, kCGColorSpaceITUR_2100_HLG);
+}
+
+bool CGColorSpaceIsHLGBased(CGColorSpaceRef space) {
+    CFStringRef name = space != NULL ? CGColorSpaceGetName(space) : NULL;
+    return name != NULL && CFEqual(name, kCGColorSpaceITUR_2100_HLG);
+}
