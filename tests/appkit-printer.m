@@ -9,10 +9,16 @@ static int failures;
 #define CHECK(cond, msg) do { if (!(cond)) { printf("FAIL: %s\n", msg); failures++; } } while (0)
 
 @interface PrintDelegate : NSObject
+{
+    int _calls;
+    BOOL _success;
+}
 @property(assign) int calls;
 @property(assign) BOOL success;
 @end
 @implementation PrintDelegate
+@synthesize calls = _calls;
+@synthesize success = _success;
 - (void)document:(NSDocument *)doc didPrint:(BOOL)success contextInfo:(void *)info {
     self.calls++;
     self.success = success;
