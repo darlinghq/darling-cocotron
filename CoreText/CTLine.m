@@ -526,13 +526,147 @@ CTLineRef CTLineCreateWithAttributedString(CFAttributedStringRef attrString)
             CFRangeMake(0, CFAttributedStringGetLength(attrString)));
 }
 
+// A copy of a run moved right by dx, with every glyph attributed to forcedIndex unless that is kCFNotFound.
+static CFDictionaryRef createShiftedRun(CTRunRef run, CGFloat dx, CFIndex forcedIndex, CFRange forcedRange)
+{
+    CFDictionaryRef source = KTCoreTextObjectDictionary(run);
+    CFMutableDictionaryRef copy = CFDictionaryCreateMutableCopy(kCFAllocatorDefault, 0, source);
+    CFIndex count = CTRunGetGlyphCount(run);
+    CGPoint *positions = malloc((size_t)count * sizeof(*positions) + 1);
+    CFIndex *indices = malloc((size_t)count * sizeof(*indices) + 1);
+    if (copy == NULL || positions == NULL || indices == NULL) {
+        free(positions);
+        free(indices);
+        if (copy != NULL)
+            CFRelease(copy);
+        return NULL;
+    }
+    CTRunGetPositions(run, CFRangeMake(0, 0), positions);
+    CTRunGetStringIndices(run, CFRangeMake(0, 0), indices);
+    for (CFIndex index = 0; index < count; ++index) {
+        positions[index].x += dx;
+        if (forcedIndex != kCFNotFound)
+            indices[index] = forcedIndex;
+    }
+    CFDataRef data = CFDataCreate(kCFAllocatorDefault, (const UInt8 *)positions, count * sizeof(*positions));
+    CFDictionarySetValue(copy, KTRunPositionsKey, data);
+    CFRelease(data);
+    data = CFDataCreate(kCFAllocatorDefault, (const UInt8 *)indices, count * sizeof(*indices));
+    CFDictionarySetValue(copy, KTRunIndicesKey, data);
+    CFRelease(data);
+    if (forcedIndex != kCFNotFound) {
+        KTCoreTextDictionarySetIndex(copy, KTRunRangeLocationKey, forcedRange.location);
+        KTCoreTextDictionarySetIndex(copy, KTRunRangeLengthKey, forcedRange.length);
+    }
+    free(positions);
+    free(indices);
+    return copy;
+}
+
+// Appends the runs of `piece` to `runs`, moved right by dx. Accumulates the line metrics.
+static bool appendShiftedRuns(CFMutableArrayRef runs, CTLineRef piece, CGFloat dx, CFIndex forcedIndex,
+                              CFRange forcedRange, CGFloat *ascent, CGFloat *descent, CGFloat *leading)
+{
+    CFArrayRef source = CTLineGetGlyphRuns(piece);
+    for (CFIndex index = 0; index < CFArrayGetCount(source); ++index) {
+        CFDictionaryRef run = createShiftedRun((CTRunRef)CFArrayGetValueAtIndex(source, index), dx,
+                                               forcedIndex, forcedRange);
+        if (!appendRun(runs, run, ascent, descent, leading))
+            return false;
+    }
+    return true;
+}
+
+static CTLineRef createPiece(CFAttributedStringRef string, CFIndex from, CFIndex to)
+{
+    return from < to ? KTCoreTextCreateLineWithRange(string, CFRangeMake(from, to - from)) : NULL;
+}
+
 CTLineRef CTLineCreateTruncatedLine(CTLineRef line, double width,
                                     CTLineTruncationType truncationType,
                                     CTLineRef truncationToken)
 {
-    // Preserve the unimplemented result rather than pretending to truncate.
-    printf("STUB %s\n", __PRETTY_FUNCTION__);
-    return NULL;
+    if (line == NULL || width < 0)
+        return NULL;
+    double lineWidth = CTLineGetTypographicBounds(line, NULL, NULL, NULL);
+    if (lineWidth <= width)
+        return CFRetain(line);
+
+    CFAttributedStringRef string = (CFAttributedStringRef)CFDictionaryGetValue(
+            KTCoreTextObjectDictionary(line), KTLineAttributedStringKey);
+    CFStringRef characters = CFAttributedStringGetString(string);
+    CFRange range = CTLineGetStringRange(line);
+    CFIndex end = range.location + range.length;
+
+    // A NULL token means no token: the text is simply cut off.
+    CTLineRef token = truncationToken != NULL ? CFRetain(truncationToken) : NULL;
+    double tokenWidth = token != NULL ? CTLineGetTypographicBounds(token, NULL, NULL, NULL) : 0;
+    if (tokenWidth > width) {
+        CFRelease(token);
+        return NULL;
+    }
+
+    // Keep [range.location, keepEnd) and [resume, end). The cut points are cluster boundaries.
+    CFIndex keepEnd = range.location, resume = end;
+    CFIndex prefixNext = range.location, suffixNext = end;
+    double available = width - tokenWidth;
+    bool prefixOpen = truncationType != kCTLineTruncationStart;
+    bool suffixOpen = truncationType != kCTLineTruncationEnd;
+    while (prefixOpen || suffixOpen) {
+        if (prefixNext >= resume)
+            prefixOpen = false;
+        if (suffixNext <= keepEnd)
+            suffixOpen = false;
+        if (prefixOpen) {
+            CFRange cluster = CFStringGetRangeOfComposedCharactersAtIndex(characters, prefixNext);
+            CFIndex next = cluster.location + cluster.length;
+            double used = CTLineGetOffsetForStringIndex(line, next, NULL) +
+                    (lineWidth - CTLineGetOffsetForStringIndex(line, resume, NULL));
+            if (next < resume && used <= available) {
+                keepEnd = prefixNext = next;
+            } else {
+                prefixOpen = false;
+            }
+        }
+        if (suffixOpen) {
+            CFRange cluster = CFStringGetRangeOfComposedCharactersAtIndex(characters, suffixNext - 1);
+            double used = CTLineGetOffsetForStringIndex(line, keepEnd, NULL) +
+                    (lineWidth - CTLineGetOffsetForStringIndex(line, cluster.location, NULL));
+            if (cluster.location > keepEnd && used <= available) {
+                resume = suffixNext = cluster.location;
+            } else {
+                suffixOpen = false;
+            }
+        }
+    }
+
+    CTLineRef head = createPiece(string, range.location, keepEnd);
+    CTLineRef tail = createPiece(string, resume, end);
+    CFMutableArrayRef runs = CFArrayCreateMutable(kCFAllocatorDefault, 0, &kCFTypeArrayCallBacks);
+    CGFloat ascent = 0, descent = 0, leading = 0, x = 0;
+    bool ok = runs != NULL;
+    if (ok && head != NULL) {
+        ok = appendShiftedRuns(runs, head, 0, kCFNotFound, CFRangeMake(0, 0), &ascent, &descent, &leading);
+        x = CTLineGetTypographicBounds(head, NULL, NULL, NULL);
+    }
+    if (ok && token != NULL)
+        ok = appendShiftedRuns(runs, token, x, keepEnd, CFRangeMake(keepEnd, resume - keepEnd),
+                               &ascent, &descent, &leading);
+    x += tokenWidth;
+    if (ok && tail != NULL)
+        ok = appendShiftedRuns(runs, tail, x, kCFNotFound, CFRangeMake(0, 0), &ascent, &descent, &leading);
+    if (tail != NULL)
+        x += CTLineGetTypographicBounds(tail, NULL, NULL, NULL);
+    CTLineRef result = ok ? createLineObject(string, range, runs, x, ascent, descent, leading) : NULL;
+    if (runs != NULL)
+        CFRelease(runs);
+    if (head != NULL)
+        CFRelease(head);
+    if (tail != NULL)
+        CFRelease(tail);
+    if (token != NULL)
+        CFRelease(token);
+    return result;
 }
 
 CTLineRef CTLineCreateJustifiedLine(CTLineRef line,
