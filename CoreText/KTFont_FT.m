@@ -20,6 +20,55 @@
 
 #import <CoreText/KTFont_FT.h>
 #import <Onyx2D/O2Font_freetype.h>
+#ifdef DARLING
+#define __linux__
+#endif
+#import <ft2build.h>
+#import FT_OUTLINE_H
+#ifdef DARLING
+#undef __linux__
+#endif
+
+typedef struct {
+    CGMutablePathRef path;
+    const CGAffineTransform *matrix;
+    BOOL contourOpen;
+} GlyphPathBuilder;
+
+static int glyphPathMoveTo(const FT_Vector *to, void *user) {
+    GlyphPathBuilder *builder = user;
+
+    if (builder->contourOpen)
+        CGPathCloseSubpath(builder->path);
+    CGPathMoveToPoint(builder->path, builder->matrix, to->x, to->y);
+    builder->contourOpen = YES;
+    return 0;
+}
+
+static int glyphPathLineTo(const FT_Vector *to, void *user) {
+    GlyphPathBuilder *builder = user;
+
+    CGPathAddLineToPoint(builder->path, builder->matrix, to->x, to->y);
+    return 0;
+}
+
+static int glyphPathConicTo(const FT_Vector *control, const FT_Vector *to, void *user) {
+    GlyphPathBuilder *builder = user;
+
+    CGPathAddQuadCurveToPoint(builder->path, builder->matrix, control->x, control->y,
+                              to->x, to->y);
+    return 0;
+}
+
+static int glyphPathCubicTo(const FT_Vector *control1, const FT_Vector *control2,
+                            const FT_Vector *to, void *user)
+{
+    GlyphPathBuilder *builder = user;
+
+    CGPathAddCurveToPoint(builder->path, builder->matrix, control1->x, control1->y,
+                          control2->x, control2->y, to->x, to->y);
+    return 0;
+}
 
 @implementation KTFont (KTFont_FT)
 + (id) allocWithZone: (NSZone *) zone {
@@ -63,9 +112,23 @@
     @synchronized(o2Font) {
         FT_Face face = [o2Font face];
 
-        int i;
-        for (i = 0; i < length; i++) {
-            glyphs[i] = FT_Get_Char_Index(face, characters[i]);
+        for (NSUInteger i = 0; i < length; i++) {
+            uint32_t codePoint = characters[i];
+            bool paired = codePoint >= 0xD800 && codePoint <= 0xDBFF &&
+                    i + 1 < length && characters[i + 1] >= 0xDC00 &&
+                    characters[i + 1] <= 0xDFFF;
+            if (paired)
+                codePoint = 0x10000 + ((codePoint - 0xD800) << 10) +
+                        (characters[i + 1] - 0xDC00);
+
+            // Unpaired surrogates are not Unicode scalar values.
+            FT_UInt glyph = face != NULL &&
+                    !(codePoint >= 0xD800 && codePoint <= 0xDFFF)
+                    ? FT_Get_Char_Index(face, codePoint) : 0;
+            glyphs[i] = glyph <= UINT16_MAX ? (CGGlyph) glyph : 0;
+            // Preserve UTF-16 indexing: the low surrogate has no separate glyph.
+            if (paired)
+                glyphs[++i] = 0;
         }
     }
 }
@@ -124,6 +187,52 @@
     if (face == NULL || _unitsPerEm == 0)
         return 0;
     return face->underline_thickness * _size / _unitsPerEm;
+}
+
+- (CFCharacterSetRef) copyCharacterSet {
+    O2Font_freetype *o2Font = (O2Font_freetype *) _font;
+    @synchronized(o2Font) {
+        FT_Face face = [o2Font face];
+        if (face == NULL || face->charmap == NULL ||
+            face->charmap->encoding != FT_ENCODING_UNICODE)
+            return NULL;
+    }
+    NSCharacterSet *set = O2FontGetCoveredCharacterSet((O2FontRef) o2Font);
+    return set != nil
+            ? CFCharacterSetCreateCopy(kCFAllocatorDefault, (CFCharacterSetRef) set)
+            : NULL;
+}
+
+- (CGPathRef) createPathForGlyph: (CGGlyph) glyph
+                       transform: (CGAffineTransform *) xform
+{
+    O2Font_freetype *o2Font = (O2Font_freetype *) _font;
+    @synchronized(o2Font) {
+        FT_Face face = [o2Font face];
+
+        // Unscaled outlines are in font units, so the shared face's size is left alone.
+        if (face == NULL || _unitsPerEm == 0 ||
+            FT_Load_Glyph(face, glyph, FT_LOAD_NO_SCALE) != 0 ||
+            face->glyph->format != FT_GLYPH_FORMAT_OUTLINE)
+            return NULL;
+
+        CGFloat unit = _size / _unitsPerEm;
+        CGAffineTransform matrix = CGAffineTransformMakeScale(unit, unit);
+        if (xform != NULL)
+            matrix = CGAffineTransformConcat(matrix, *xform);
+
+        GlyphPathBuilder builder = {CGPathCreateMutable(), &matrix, NO};
+        const FT_Outline_Funcs funcs = {glyphPathMoveTo, glyphPathLineTo, glyphPathConicTo,
+                                        glyphPathCubicTo, 0, 0};
+
+        if (FT_Outline_Decompose(&face->glyph->outline, &funcs, &builder) != 0) {
+            CGPathRelease(builder.path);
+            return NULL;
+        }
+        if (builder.contourOpen)
+            CGPathCloseSubpath(builder.path);
+        return builder.path;
+    }
 }
 
 @end

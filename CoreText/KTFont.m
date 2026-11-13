@@ -184,6 +184,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     }
 }
 
+- (CFCharacterSetRef) copyCharacterSet {
+    return NULL;
+}
+
 - (CGPathRef) createPathForGlyph: (CGGlyph) glyph
                        transform: (CGAffineTransform *) xform
 {
