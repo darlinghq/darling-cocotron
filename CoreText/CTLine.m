@@ -2,6 +2,7 @@
 #import <CoreText/CTRun.h>
 #import "KTCoreTextInternal.h"
 #include <stdlib.h>
+#include <math.h>
 #include <CoreFoundation/CFRuntime.h>
 #include <pthread.h>
 
@@ -669,12 +670,129 @@ CTLineRef CTLineCreateTruncatedLine(CTLineRef line, double width,
     return result;
 }
 
+static bool isJustificationSpace(UniChar c)
+{
+    return c == 0x0020 || c == 0x00A0 || c == 0x3000;
+}
+
+// A copy of a run with extra[i] added to the advance of glyph i, and every glyph moved right by the extras of the
+// glyphs before it. A glyph at the same x as its predecessor (a combining mark) is not moved by that predecessor's extra.
+static CFDictionaryRef createWidenedRun(CTRunRef run, const CGFloat *extra, CGFloat *carried, CGFloat *pending,
+                                        CGFloat *pendingX)
+{
+    CFDictionaryRef source = KTCoreTextObjectDictionary(run);
+    CFMutableDictionaryRef copy = CFDictionaryCreateMutableCopy(kCFAllocatorDefault, 0, source);
+    CFIndex count = CTRunGetGlyphCount(run);
+    CGPoint *positions = malloc((size_t)count * sizeof(*positions) + 1);
+    CGSize *advances = malloc((size_t)count * sizeof(*advances) + 1);
+    if (copy == NULL || positions == NULL || advances == NULL) {
+        free(positions);
+        free(advances);
+        if (copy != NULL)
+            CFRelease(copy);
+        return NULL;
+    }
+    CTRunGetPositions(run, CFRangeMake(0, 0), positions);
+    CTRunGetAdvances(run, CFRangeMake(0, 0), advances);
+    CGFloat width = 0;
+    for (CFIndex index = 0; index < count; ++index) {
+        if (positions[index].x > *pendingX) {
+            *carried += *pending;
+            *pending = 0;
+        }
+        positions[index].x += *carried;
+        if (extra[index] != 0) {
+            advances[index].width += extra[index];
+            *pending = extra[index];
+            *pendingX = positions[index].x - *carried;
+        }
+        width += advances[index].width;
+    }
+    CFDataRef data = CFDataCreate(kCFAllocatorDefault, (const UInt8 *)positions, count * sizeof(*positions));
+    CFDictionarySetValue(copy, KTRunPositionsKey, data);
+    CFRelease(data);
+    data = CFDataCreate(kCFAllocatorDefault, (const UInt8 *)advances, count * sizeof(*advances));
+    CFDictionarySetValue(copy, KTRunAdvancesKey, data);
+    CFRelease(data);
+    KTCoreTextDictionarySetFloat(copy, KTRunWidthKey, width);
+    free(positions);
+    free(advances);
+    return copy;
+}
+
 CTLineRef CTLineCreateJustifiedLine(CTLineRef line,
                                     CGFloat justificationFactor,
                                     double justificationWidth)
 {
-    printf("STUB %s\n", __PRETTY_FUNCTION__);
-    return NULL;
+    if (line == NULL)
+        return NULL;
+    CFDictionaryRef dictionary = KTCoreTextObjectDictionary(line);
+    CFAttributedStringRef string = (CFAttributedStringRef)CFDictionaryGetValue(dictionary, KTLineAttributedStringKey);
+    CFStringRef characters = CFAttributedStringGetString(string);
+    CFArrayRef source = CTLineGetGlyphRuns(line);
+    CFRange range = CTLineGetStringRange(line);
+    double lineWidth = CTLineGetTypographicBounds(line, NULL, NULL, NULL);
+    double trailing = CTLineGetTrailingWhitespaceWidth(line);
+
+    // Spaces are the places that stretch. A line without any stretches between its glyphs instead. The whitespace at
+    // the end of the line neither stretches nor counts towards the width that is justified.
+    CFIndex trailingStart = range.location + range.length;
+    CFCharacterSetRef whitespace = CFCharacterSetGetPredefined(kCFCharacterSetWhitespaceAndNewline);
+    while (trailingStart > range.location &&
+           CFCharacterSetIsCharacterMember(whitespace, CFStringGetCharacterAtIndex(characters, trailingStart - 1)))
+        --trailingStart;
+    CFIndex runCount = CFArrayGetCount(source), spaces = 0, gaps = 0, lastAdvancing = kCFNotFound, glyphTotal = 0;
+    for (CFIndex r = 0; r < runCount; ++r) {
+        CTRunRef run = (CTRunRef)CFArrayGetValueAtIndex(source, r);
+        const CFIndex *indices = CTRunGetStringIndicesPtr(run);
+        const CGSize *advances = CTRunGetAdvancesPtr(run);
+        for (CFIndex i = 0; i < CTRunGetGlyphCount(run); ++i, ++glyphTotal) {
+            if (indices[i] >= trailingStart || advances[i].width <= 0)
+                continue;
+            if (isJustificationSpace(CFStringGetCharacterAtIndex(characters, indices[i])))
+                ++spaces;
+            ++gaps;
+            lastAdvancing = glyphTotal;
+        }
+    }
+    CFIndex opportunities = spaces > 0 ? spaces : gaps - 1;
+    // 1.0 and above is full justification, 0 and below none.
+    justificationFactor = justificationFactor > 1 ? 1 : justificationFactor < 0 ? 0 : justificationFactor;
+    double delta = (justificationWidth - (lineWidth - trailing)) * justificationFactor;
+    if (opportunities <= 0 || delta == 0)
+        return CFRetain(line);
+    CGFloat each = (CGFloat)(delta / opportunities);
+
+    CFMutableArrayRef runs = CFArrayCreateMutable(kCFAllocatorDefault, 0, &kCFTypeArrayCallBacks);
+    CGFloat ascent = 0, descent = 0, leading = 0, carried = 0, pending = 0, pendingX = -INFINITY, width = 0;
+    bool ok = runs != NULL;
+    glyphTotal = 0;
+    for (CFIndex r = 0; ok && r < runCount; ++r) {
+        CTRunRef run = (CTRunRef)CFArrayGetValueAtIndex(source, r);
+        CFIndex count = CTRunGetGlyphCount(run);
+        const CFIndex *indices = CTRunGetStringIndicesPtr(run);
+        const CGSize *advances = CTRunGetAdvancesPtr(run);
+        CGFloat *extra = calloc((size_t)count + 1, sizeof(*extra));
+        if (extra == NULL) {
+            ok = false;
+            break;
+        }
+        for (CFIndex i = 0; i < count; ++i, ++glyphTotal) {
+            if (indices[i] >= trailingStart || advances[i].width <= 0)
+                continue;
+            bool space = isJustificationSpace(CFStringGetCharacterAtIndex(characters, indices[i]));
+            if (spaces > 0 ? space : glyphTotal != lastAdvancing)
+                extra[i] = each;
+        }
+        ok = appendRun(runs, createWidenedRun(run, extra, &carried, &pending, &pendingX), &ascent, &descent, &leading);
+        free(extra);
+    }
+    if (ok)
+        width = (CGFloat)(lineWidth + delta);
+    CTLineRef result = ok ? createLineObject(string, range, runs, width, ascent, descent, leading) : NULL;
+    if (runs != NULL)
+        CFRelease(runs);
+    return result;
 }
 
 CFIndex CTLineGetGlyphCount(CTLineRef line)
