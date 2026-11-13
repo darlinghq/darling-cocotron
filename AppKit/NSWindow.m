@@ -2061,8 +2061,29 @@ static BOOL _allowsAutomaticWindowTabbing;
     return contentRectInFrame(self, frameRect);
 }
 
+// Borderless windows are left where they are; titled ones are kept inside
+// the visible frame of the screen. A window taller than the visible frame
+// keeps its top edge (and with it the title bar) on the screen.
 - (NSRect) constrainFrameRect: (NSRect) rect toScreen: (NSScreen *) screen {
+    if (!(_styleMask & NSWindowStyleMaskTitled)) {
+        return rect;
+    }
     return constrainRectToScreen(rect, screen);
+}
+
+// Run when a window that was not on screen is ordered in: the frame may have
+// been set to an off-screen position since the window was created, and the
+// subclass-overridable -constrainFrameRect:toScreen: decides what to do.
+// Windows that are already visible are not moved again.
+- (void) _constrainFrameBeforeOrderingIn {
+    NSScreen *screen = [self screen];
+    if (screen == nil) {
+        screen = [NSScreen mainScreen];
+    }
+    NSRect constrained = [self constrainFrameRect: _frame toScreen: screen];
+    if (!NSEqualRects(constrained, _frame)) {
+        [self setFrame: constrained display: NO];
+    }
 }
 
 // -constrainFrameRect:toScreen:, without sending it to a subclass.
@@ -2075,14 +2096,15 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
     if (NSMaxX(rect) > NSMaxX(visRect)) {
         rect.origin.x = NSMaxX(visRect) - rect.size.width;
     }
-    if (NSMaxY(rect) > NSMaxY(visRect)) {
-        rect.origin.y = NSMaxY(visRect) - rect.size.height;
-    }
     if (NSMinX(rect) < NSMinX(visRect)) {
         rect.origin.x = NSMinX(visRect);
     }
     if (NSMinY(rect) < NSMinY(visRect)) {
         rect.origin.y = NSMinY(visRect);
+    }
+    // Last, so that the top edge wins for a window taller than the screen.
+    if (NSMaxY(rect) > NSMaxY(visRect)) {
+        rect.origin.y = NSMaxY(visRect) - rect.size.height;
     }
     return rect;
 }
@@ -2657,6 +2679,9 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
     switch (place) {
     case NSWindowAbove:
         _isClosed = NO;
+        if (!wasVisible && ![self isMiniaturized]) {
+            [self _constrainFrameBeforeOrderingIn];
+        }
         [self update];
         _isVisible = YES;
         [[self platformWindow] placeAboveWindow: relativeTo];
@@ -2676,6 +2701,9 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
 
     case NSWindowBelow:
         _isClosed = NO;
+        if (!wasVisible && ![self isMiniaturized]) {
+            [self _constrainFrameBeforeOrderingIn];
+        }
         [self update];
         _isVisible = YES;
         [[self platformWindow] placeBelowWindow: relativeTo];
