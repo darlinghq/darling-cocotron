@@ -62,6 +62,7 @@ void O2ContextDefaultShowText(O2ContextRef self, const char *text,
     _currentState = state;
     _path = [[O2MutablePath alloc] init];
     _allowsAntialiasing = YES;
+    _allowsFontSmoothing = YES;
     _textMatrix = O2AffineTransformIdentity;
     _showTextFunction = O2ContextDefaultShowText;
     _showGlyphsFunction = (O2ContextShowGlyphsFunction)
@@ -277,6 +278,13 @@ void O2ContextSetAllowsAntialiasing(O2ContextRef self, BOOL yesOrNo) {
         return;
 
     self->_allowsAntialiasing = yesOrNo;
+}
+
+BOOL O2ContextGetAllowsAntialiasing(O2ContextRef self) {
+    if (self == nil)
+        return NO;
+
+    return self->_allowsAntialiasing;
 }
 
 // layers
@@ -979,6 +987,27 @@ void O2ContextSetShouldSmoothFonts(O2ContextRef self, BOOL yesOrNo) {
     [O2ContextCurrentGState(self) setShouldSmoothFonts: yesOrNo];
 }
 
+BOOL O2ContextGetShouldSmoothFonts(O2ContextRef self) {
+    if (self == nil)
+        return NO;
+
+    return [O2ContextCurrentGState(self) shouldSmoothFonts];
+}
+
+void O2ContextSetFontSmoothingStyle(O2ContextRef self, uint32_t style) {
+    if (self == nil)
+        return;
+
+    [O2ContextCurrentGState(self) setFontSmoothingStyle: style];
+}
+
+uint32_t O2ContextGetFontSmoothingStyle(O2ContextRef self) {
+    if (self == nil)
+        return 0;
+
+    return [O2ContextCurrentGState(self) fontSmoothingStyle];
+}
+
 void O2ContextSetLineWidth(O2ContextRef self, O2Float width) {
     if (self == nil)
         return;
@@ -1525,6 +1554,13 @@ void O2ContextSetAllowsFontSmoothing(O2ContextRef self,
                                      BOOL allowsFontSmoothing)
 {
     self->_allowsFontSmoothing = allowsFontSmoothing;
+}
+
+BOOL O2ContextGetAllowsFontSmoothing(O2ContextRef self) {
+    if (self == nil)
+        return NO;
+
+    return self->_allowsFontSmoothing;
 }
 
 void O2ContextSetAllowsFontSubpixelQuantization(
