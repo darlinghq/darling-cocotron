@@ -43,9 +43,15 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         _titleWidth = [keyed decodeFloatForKey: @"NSTitleWidth"];
         _titleCell = [[keyed decodeObjectForKey: @"NSTitleCell"] retain];
     } else {
-        [NSException raise: NSInvalidArgumentException
-                    format: @"-[%@ %s] is not implemented for coder %@",
-                            [self class], sel_getName(_cmd), coder];
+        // The title width and the title cell; versions 17 to 40 read the cell separately.
+        NSInteger version = [coder versionForClassName: @"NSFormCell"];
+
+        if (version >= 17 && version < 41) {
+            [coder decodeValuesOfObjCTypes: "f", &_titleWidth];
+            _titleCell = [[coder decodeObject] retain];
+        } else {
+            [coder decodeValuesOfObjCTypes: "f@", &_titleWidth, &_titleCell];
+        }
     }
     return self;
 }
