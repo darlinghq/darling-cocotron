@@ -109,6 +109,12 @@ static NSString *joined(void) {
         // The backend reports the focus moving to another client.
         [events removeAllObjects];
         [window platformWindowDeactivated: nil checkForAppDeactivation: NO];
+        // The decision to resign is taken when the run-loop pass ends, so
+        // that the focus moving to another window of the application does
+        // not resign it.
+        expect([joined() length] == 0 && [NSApp isActive],
+              [NSString stringWithFormat: @"resigned before the run-loop pass ended: '%@'", joined()]);
+        [self spin: 0.05];
         expect([joined() isEqualToString: @"willResignActive=1 didResignActive=0"],
               [NSString stringWithFormat: @"deactivation sequence is '%@'", joined()]);
         expect(![NSApp isActive], @"application is inactive after the focus left");
