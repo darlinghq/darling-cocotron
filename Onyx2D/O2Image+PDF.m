@@ -141,8 +141,12 @@ const char *O2ImageNameWithIntent(O2ColorRenderingIntent intent) {
                           alphaInfo == kO2ImageAlphaFirst ||
                           alphaInfo == kO2ImageAlphaNoneSkipFirst;
         BOOL alphaLast = hasAlpha && (alphaFirst == NO);
-        BOOL bigEndian = _bitmapInfo & kO2BitmapByteOrder32Big;
-        BOOL littleEndian = bigEndian == NO;
+        // The default byte order is component order (R before B), like the
+        // 32-bit big-endian one.
+        O2BitmapInfo byteOrder = _bitmapInfo & kO2BitmapByteOrderMask;
+        BOOL littleEndian = byteOrder == kO2BitmapByteOrder16Little ||
+                            byteOrder == kO2BitmapByteOrder32Little;
+        BOOL bigEndian = littleEndian == NO;
         int bytesPerPixel = _bitsPerPixel / 8;
         for (int i = 0; i < _height; i++, ptr += _bytesPerRow) {
             const uint8_t *linePtr = ptr;

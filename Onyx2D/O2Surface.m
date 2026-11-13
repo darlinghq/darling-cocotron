@@ -478,12 +478,13 @@ static BOOL initFunctionsForParameters(O2Surface *self, size_t bitsPerComponent,
 
                 case kO2ImageAlphaPremultipliedFirst:
                     switch (bitmapInfo & kO2BitmapByteOrderMask) {
-                    case kO2BitmapByteOrderDefault:
                     case kO2BitmapByteOrder16Little:
                     case kO2BitmapByteOrder32Little:
                         self->_writeargb8u = O2SurfaceWrite_argb8u_to_BGRA8888;
                         return YES;
 
+                    // With the alpha first, the default byte order is A, R, G, B in memory
+                    case kO2BitmapByteOrderDefault:
                     case kO2BitmapByteOrder16Big:
                     case kO2BitmapByteOrder32Big:
                         self->_writeargb8u = O2SurfaceWrite_argb8u_to_ARGB8888;
@@ -496,11 +497,11 @@ static BOOL initFunctionsForParameters(O2Surface *self, size_t bitsPerComponent,
 
                 case kO2ImageAlphaNoneSkipFirst:
                     switch (bitmapInfo & kO2BitmapByteOrderMask) {
-                    case kO2BitmapByteOrderDefault:
                     case kO2BitmapByteOrder16Little:
                     case kO2BitmapByteOrder32Little:
                         self->_writeargb8u = O2SurfaceWrite_argb8u_to_BGRA8888;
                         return YES;
+                    case kO2BitmapByteOrderDefault:
                     case kO2BitmapByteOrder16Big:
                     case kO2BitmapByteOrder32Big:
                         self->_writeargb8u = O2SurfaceWrite_argb8u_to_XRGB8888;
