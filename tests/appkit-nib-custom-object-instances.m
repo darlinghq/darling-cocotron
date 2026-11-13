@@ -10,15 +10,16 @@
 // subclass; the second instance is refused by NSApplication's singleton check ("NSApplication is a
 // singleton"). The test makes File's Owner that placeholder.
 //
-// Run with no argument (the platform's unarchiver) and with "silent-replace" (the unarchiver sends no
-// delegate message from replaceObject:withObject:, as the system one). The nib is built with
-// NSKeyedArchiver from stand-in classes whose class names are then rewritten to the nib classes.
+// Run with no argument (the platform's unarchiver), with "silent-replace" (the unarchiver sends no
+// delegate message from replaceObject:withObject:, as the system one) and with "no-remap" (it does
+// nothing at all: later decodes of a replaced placeholder still return the placeholder). The system
+// NSKeyedUnarchiver behaves as "no-remap" (measured on the arm64e stage, Apple's Foundation): the loop
+// over NSObjectsKeys meets a placeholder the loop over NSNamesKeys already replaced, and
+// instantiates it again. The nib is built with NSKeyedArchiver from stand-in classes whose class
+// names are then rewritten to the nib classes.
 //
 // "silent-replace" keeps the platform unarchiver's remapping: after replaceObject:withObject: every
-// later decode of the placeholder yields the replacement. The fix assumes the system unarchiver
-// remaps too (a named custom object is decoded again from NSObjectsKeys after the name table loop;
-// without the remap that loop would make a second instance). That was checked on the arm64e stage
-// by counting instances created for TextEdit's nib, not by this test.
+// later decode of the placeholder yields the replacement.
 #import <AppKit/AppKit.h>
 #import <objc/runtime.h>
 #include <stdlib.h>
@@ -180,14 +181,17 @@ static NSNib *makeNib(NSUInteger placeholders, NSString *ownerClass, NSArray *na
     return nib;
 }
 
-// Makes -[NSKeyedUnarchiver replaceObject:withObject:] leave the delegate out, as the system one does.
-static void silenceReplaceObjectDelegateMessage(void)
+// Replaces -[NSKeyedUnarchiver replaceObject:withObject:]: with remap NO it does nothing (as the system
+// one); with remap YES it only leaves the delegate out.
+static void changeReplaceObject(BOOL remap)
 {
     Method method = class_getInstanceMethod([NSKeyedUnarchiver class], @selector(replaceObject:withObject:));
     expect(method != NULL, @"NSKeyedUnarchiver implements replaceObject:withObject:");
     IMP original = method_getImplementation(method);
     SEL selector = @selector(replaceObject:withObject:);
     method_setImplementation(method, imp_implementationWithBlock(^(NSKeyedUnarchiver *self_, id object, id replacement) {
+        if (!remap)
+            return;
         id delegate = [self_ delegate];
         [self_ setDelegate:nil];
         ((void (*)(id, SEL, id, id))original)(self_, selector, object, replacement);
@@ -197,10 +201,10 @@ static void silenceReplaceObjectDelegateMessage(void)
 
 int main(int argc, char **argv)
 {
-    BOOL silent = argc > 1 && strcmp(argv[1], "silent-replace") == 0;
-    expect(argc == 1 || silent, @"usage: [silent-replace]");
-    if (silent)
-        silenceReplaceObjectDelegateMessage();
+    const char *mode = argc > 1 ? argv[1] : NULL;
+    expect(mode == NULL || strcmp(mode, "silent-replace") == 0 || strcmp(mode, "no-remap") == 0, @"usage: [silent-replace|no-remap]");
+    if (mode != NULL)
+        changeReplaceObject(strcmp(mode, "silent-replace") == 0);
 
     @autoreleasepool
     {
@@ -251,7 +255,7 @@ int main(int argc, char **argv)
         }
         expect(applicationsAllocated == 0, [NSString stringWithFormat:@"File's Owner is not instantiated, %d allocated", applicationsAllocated]);
 
-        NSLog(@"PASS: NSNib custom object instances%@", silent ? @" (silent replaceObject:withObject:)" : @"");
+        NSLog(@"PASS: NSNib custom object instances%s%s", mode ? " " : "", mode ? mode : "");
     }
     return 0;
 }
