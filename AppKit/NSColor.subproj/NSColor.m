@@ -377,9 +377,9 @@ NSNotificationName const NSSystemColorsDidChangeNotification = @"NSSystemColorsD
                                             &color];
         }
 
-        result = [NSColor_catalog colorWithCatalogName: catalogName
-                                             colorName: colorName
-                                                 color: color];
+        result = [NSColor_catalog colorWithArchivedCatalogName: catalogName
+                                                     colorName: colorName
+                                                 fallbackColor: color];
     } break;
     case 9: // oldSystemColor
     {
