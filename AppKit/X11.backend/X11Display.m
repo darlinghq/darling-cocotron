@@ -432,7 +432,11 @@ static NSDictionary *modeInfoToDictionary(const XRRModeInfo *mi, int depth) {
         @"Width" : @(mi->width),
         @"Height" : @(mi->height),
         @"Depth" : @(depth),
-        @"RefreshRate" : @(rate)
+        @"RefreshRate" : @(rate),
+        // The size of the mode's framebuffer. Width and Height above are the
+        // same number here because the mode is addressed in device pixels.
+        @"PixelWidth" : @(mi->width),
+        @"PixelHeight" : @(mi->height)
     };
 }
 

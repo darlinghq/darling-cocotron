@@ -632,7 +632,11 @@ CFDictionaryRef CGDisplayCurrentMode(CGDirectDisplayID display) {
 }
 
 size_t CGDisplayModeGetPixelWidth(CGDisplayModeRef mode) {
-    return 0;
+    NSDictionary *dict = (NSDictionary *) mode;
+    NSNumber *pixelWidth = [dict valueForKey: @"PixelWidth"];
+    if (pixelWidth)
+        return [pixelWidth unsignedIntValue];
+    return CGDisplayModeGetWidth(mode);
 }
 
 size_t CGDisplayModeGetPixelHeight(CGDisplayModeRef mode) {
