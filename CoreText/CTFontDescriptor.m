@@ -26,6 +26,7 @@ const CFStringRef kCTFontEnabledAttribute = CFSTR("NSCTFontEnabledAttribute");
 const CFStringRef kCTFontFormatAttribute = CFSTR("NSCTFontFormatAttribute");
 const CFStringRef kCTFontRegistrationScopeAttribute = CFSTR("NSCTFontRegistrationScopeAttribute");
 const CFStringRef kCTFontPriorityAttribute = CFSTR("NSCTFontPriorityAttribute");
+const CFStringRef kCTFontDescriptorLanguageAttribute = CFSTR("CTFontDescriptorLanguageAttribute");
 
 @implementation KTFontDescriptor
 
