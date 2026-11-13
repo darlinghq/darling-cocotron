@@ -20,10 +20,16 @@ static void expect(int ok, const char *what) {
 }
 
 @interface Model : NSObject
+{
+    id _obj;
+    NSNumber *_flag;
+}
 @property(strong) id obj;
 @property(strong) NSNumber *flag;
 @end
 @implementation Model
+@synthesize obj = _obj;
+@synthesize flag = _flag;
 @end
 
 static void testNilToScalar(void) {
