@@ -22,10 +22,14 @@ static void expect(BOOL condition, NSString *message)
 
 // Begins on press, changes on drag, ends on release; ends on a magnify end.
 @interface DragRecognizer : NSGestureRecognizer
+{
+    NSInteger _resets;
+}
 @property NSInteger resets;
 @end
 
 @implementation DragRecognizer
+@synthesize resets = _resets;
 - (void)mouseDown:(NSEvent *)event { self.state = NSGestureRecognizerStateBegan; }
 - (void)mouseDragged:(NSEvent *)event { self.state = NSGestureRecognizerStateChanged; }
 - (void)mouseUp:(NSEvent *)event { self.state = NSGestureRecognizerStateEnded; }
@@ -37,20 +41,30 @@ static void expect(BOOL condition, NSString *message)
 @end
 
 @interface Target : NSObject <NSGestureRecognizerDelegate>
+{
+    NSMutableArray *_states;
+    BOOL _allowBegin;
+}
 @property(retain) NSMutableArray *states;
 @property BOOL allowBegin;
 @end
 
 @implementation Target
+@synthesize states = _states;
+@synthesize allowBegin = _allowBegin;
 - (void)handle:(NSGestureRecognizer *)recognizer { [self.states addObject:@(recognizer.state)]; }
 - (BOOL)gestureRecognizerShouldBegin:(NSGestureRecognizer *)recognizer { return self.allowBegin; }
 @end
 
 @interface CountingView : NSView
+{
+    NSInteger _downs;
+}
 @property NSInteger downs;
 @end
 
 @implementation CountingView
+@synthesize downs = _downs;
 - (void)mouseDown:(NSEvent *)event { self.downs++; }
 @end
 
