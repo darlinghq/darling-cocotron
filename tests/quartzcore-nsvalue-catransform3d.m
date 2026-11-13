@@ -11,13 +11,13 @@ int main(void) {
             return 2;
 
         NSValue *point = [NSValue valueWithBytes: &(CGPoint){1, 2} objCType: @encode(CGPoint)];
-        @try {
-            [point CATransform3DValue];
+        // quirk_other_type_reads_identity: a value of another type reads back as
+        // the identity transform (see the QUIRK in CATransform3D.m).
+        if (!CATransform3DEqualToTransform([point CATransform3DValue], CATransform3DIdentity))
             return 3;
-        } @catch (NSException *e) {
-            if (![[e name] isEqualToString: NSInvalidArgumentException])
-                return 4;
-        }
+        if (!CATransform3DEqualToTransform([(NSValue *) [NSNumber numberWithInt: 3] CATransform3DValue],
+                                           CATransform3DIdentity))
+            return 4;
     }
     return 0;
 }

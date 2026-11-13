@@ -50,7 +50,7 @@ CA_EXPORT CATransform3D CATransform3DMakeAffineTransform(CGAffineTransform m);
 
 @interface NSValue (CATransform3DAdditions)
 + (NSValue *_Nonnull) valueWithCATransform3D: (CATransform3D) t;
-// Raises NSInvalidArgumentException unless the value holds a CATransform3D.
+// The identity transform unless the value holds a CATransform3D.
 @property(readonly) CATransform3D CATransform3DValue;
 @end
 #endif
