@@ -19,7 +19,6 @@
  SOFTWARE. */
 
 #import "X11DraggingManager.h"
-#import "X11DragOperations.h"
 #import "X11DropSession.h"
 #import "X11Display.h"
 #import "X11Window.h"
@@ -490,7 +489,7 @@ static X11DraggingManager *X11SharedManager;
     // a time could not tell this drag from the next one either.
     long fields[5] = { (long) _dragWindow, 0,
                        ((long) (rootX & 0xFFFF) << 16) | (rootY & 0xFFFF), 0,
-                       (long) X11ActionsFromOperations(_offeredOperations) };
+                       (long) [self atomForOperations: _offeredOperations] };
     [self sendXdndMessage: _atom.position destination: target fields: fields];
     _awaitingStatus = YES;
 }
@@ -759,8 +758,8 @@ static NSString *X11PropertyAtomName(Display *xdpy, Atom atom) {
         long packed = message->data.l[2];
         accepted = [_session updateAtRootX: (int) ((packed >> 16) & 0xFFFF)
                                      rootY: (int) (packed & 0xFFFF)
-                           requestedActions: X11OperationsFromActions(
-                                   (uint32_t) message->data.l[4])];
+                           requestedActions: [self operationForAction:
+                                                     (Atom) message->data.l[4]]];
     }
     [self sendStatusTo: window source: source operations: accepted];
 }
@@ -802,7 +801,7 @@ static NSString *X11PropertyAtomName(Display *xdpy, Atom atom) {
     // in step with the pointer to draw its drop feedback.
     event.xclient.data.l[2] = 0;
     event.xclient.data.l[3] = 0;
-    event.xclient.data.l[4] = (long) X11ActionsFromOperations(operations);
+    event.xclient.data.l[4] = (long) [self atomForOperations: operations];
     XSendEvent(_xdpy, source, False, NoEventMask, &event);
     XFlush(_xdpy);
 }
