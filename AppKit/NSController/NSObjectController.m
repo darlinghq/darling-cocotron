@@ -156,6 +156,17 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return [[NSClassFromString(_objectClassName) alloc] init];
 }
 
+- (Class) objectClass {
+    return NSClassFromString(_objectClassName);
+}
+
+- (void) setObjectClass: (Class) objectClass {
+    NSString *name = objectClass != Nil ? [NSStringFromClass(objectClass) copy] : nil;
+
+    [_objectClassName release];
+    _objectClassName = name;
+}
+
 - (id) newObject {
     return [self _defaultNewObject];
 }

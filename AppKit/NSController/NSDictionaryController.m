@@ -183,6 +183,26 @@
     return result;
 }
 
+- (NSArray *) includedKeys {
+    return _includedKeys;
+}
+
+- (void) setIncludedKeys: (NSArray *) keys {
+    keys = [keys copy];
+    [_includedKeys release];
+    _includedKeys = keys;
+}
+
+- (NSArray *) excludedKeys {
+    return _excludedKeys;
+}
+
+- (void) setExcludedKeys: (NSArray *) keys {
+    keys = [keys copy];
+    [_excludedKeys release];
+    _excludedKeys = keys;
+}
+
 - (NSString *) initialKey {
     return _initialKey;
 }
