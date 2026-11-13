@@ -1097,7 +1097,12 @@ BOOL X11WindowManagerIsRunning(Display *display) {
 }
 
 - (void) makeKey {
-    [self ensureMapped];
+    // Making a window key does not put it on the screen: one that has not been
+    // ordered in has no mapped X window, and cannot take the input focus
+    // before it has. Ordering a window in (which maps it) comes first when
+    // an application asks for both.
+    if (!_mapped)
+        return;
     // FocusIn activates the NSWindow, which makes it key again and ends up here.
     // The focus change came from the window manager, which also stacks the
     // window, so leave both alone. Answering a FocusIn that is already stale

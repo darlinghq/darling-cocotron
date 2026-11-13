@@ -1258,7 +1258,8 @@ static BOOL _allowsAutomaticWindowTabbing;
     // redisplay the views. So, doing a hard display right here is not the right
     // thing to do, delay it.
     if (display) {
-        [self platformWindow];
+        if (!_isDeferred || _platformWindow != nil)
+            [self platformWindow];
         [_backgroundView setNeedsDisplay: YES];
     }
 
@@ -1811,6 +1812,10 @@ static BOOL _allowsAutomaticWindowTabbing;
 }
 
 - (NSInteger) windowNumber {
+    // A deferred window has no window device, and so no number, until it is
+    // first ordered in; asking for the number must not create the device.
+    if (_isDeferred && _platformWindow == nil)
+        return -1;
     return [[self platformWindow] windowNumber];
 }
 
