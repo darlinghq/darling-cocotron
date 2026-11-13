@@ -596,6 +596,10 @@ static NSMutableDictionary *cellClassDictionary = nil;
     // do nothing
 }
 
+- (NSSize) intrinsicContentSize {
+    return [[self cell] cellSize];
+}
+
 - (void) sizeToFit {
     NSSize cellSize = [[self cell] cellSize];
 

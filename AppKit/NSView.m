@@ -55,6 +55,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSTextInputClient.h>
 #import <objc/runtime.h>
 #include <math.h>
+#import "DarlingLayout.h"
 
 @class IBMetricsTable;
 
@@ -461,6 +462,7 @@ typedef struct __VFlags {
 }
 
 - (void) dealloc {
+    [NSLayoutConstraint deactivateConstraints:[self constraints]];
 
     // Do this first?
     [self _unbindAllBindings];
@@ -1686,6 +1688,15 @@ static char inputContextKey;
     [[self retain] autorelease];
     NSView *removeFrom = [_superview retain];
     NSWindow *window = [[self window] retain];
+
+    for (NSView *ancestor = _superview; ancestor != nil; ancestor = [ancestor superview]) {
+        for (NSLayoutConstraint *constraint in [ancestor constraints]) {
+            NSView *first = [constraint firstItem], *second = [constraint secondItem];
+            if (([first isKindOfClass:[NSView class]] && [first isDescendantOf:self]) ||
+                ([second isKindOfClass:[NSView class]] && [second isDescendantOf:self]))
+                [constraint setActive:NO];
+        }
+    }
 
     [self _deepResignFirstResponder];
     [self _setSuperview: nil];
@@ -3276,6 +3287,7 @@ static CGFloat backingScaleFactor(NSView *view) {
         _constraints = [[NSMutableArray alloc] init];
     [_constraints addObject: constraint];
     [constraint _attachToOwner: self];
+    [self setNeedsUpdateConstraints: YES];
 }
 
 - (void) addConstraints: (NSArray *) constraints {
@@ -3290,19 +3302,12 @@ static CGFloat backingScaleFactor(NSView *view) {
     [[constraint retain] autorelease];
     [_constraints removeObject: constraint];
     [constraint _detachFromOwner: self];
+    [self setNeedsUpdateConstraints: YES];
 }
 
 - (void) removeConstraints: (NSArray *) constraints {
     for (NSLayoutConstraint *constraint in constraints)
         [self removeConstraint: constraint];
-}
-
-- (void) updateConstraints {
-    // An override point: there is no constraint solver to drive.
-}
-
-- (void) layout {
-    // An override point: there is no constraint solver to drive.
 }
 
 static char installedViewLayoutGuidesKey;
@@ -3343,6 +3348,95 @@ static NSMutableArray *installedViewLayoutGuides(NSView *view, BOOL create) {
         if ([guide owningView] == self)
             [guide setOwningView: nil];
     }
+}
+
+@end
+
+@implementation NSView (NSViewLayoutState)
+
+- (BOOL) needsLayout {
+    return _needsLayout;
+}
+
+- (void) setNeedsLayout: (BOOL) flag {
+    _needsLayout = flag;
+}
+
+- (BOOL) needsUpdateConstraints {
+    return _needsUpdateConstraints;
+}
+
+- (void) setNeedsUpdateConstraints: (BOOL) flag {
+    _needsUpdateConstraints = flag;
+    if (flag) {
+        _needsLayout = YES;
+        [[self window] setViewsNeedDisplay: YES];
+    }
+}
+
+- (BOOL) clipsToBounds {
+    return _clipsToBounds;
+}
+
+- (void) setClipsToBounds: (BOOL) flag {
+    _clipsToBounds = flag;
+}
+
+- (NSRect) preparedContentRect {
+    return _hasPreparedContentRect ? _preparedContentRect : [self visibleRect];
+}
+
+- (void) setPreparedContentRect: (NSRect) rect {
+    _preparedContentRect = rect;
+    _hasPreparedContentRect = YES;
+}
+
+- (void) updateConstraints {
+    _needsUpdateConstraints = NO;
+}
+
+- (void) updateConstraintsForSubtreeIfNeeded {
+    // Constraint updates run from descendants toward their containing view.
+    // An update callback can remove or reparent a sibling. Keep the snapshot
+    // alive through callbacks, but only visit children still belonging here.
+    NSArray *children = [_subviews copy];
+    @try {
+        for (NSView *child in children) {
+            if ([child superview] == self)
+                [child updateConstraintsForSubtreeIfNeeded];
+        }
+    } @finally {
+        [children release];
+    }
+    if (_needsUpdateConstraints) {
+        _needsUpdateConstraints = NO;
+        [self updateConstraints];
+    }
+}
+
+- (void) layout {
+    _needsLayout = NO;
+}
+
+- (void) _layoutSubtreeAfterUpdatingConstraints {
+    if (_needsLayout)
+        [self layout];
+    NSArray *children = [_subviews copy];
+    @try {
+        for (NSView *child in children) {
+            if ([child superview] == self)
+                [child _layoutSubtreeAfterUpdatingConstraints];
+        }
+    } @finally {
+        [children release];
+    }
+}
+
+- (void) layoutSubtreeIfNeeded {
+    // Finish the update phase for the whole subtree before laying out any view.
+    [self updateConstraintsForSubtreeIfNeeded];
+    DarlingLayoutSubtree(self);
+    [self _layoutSubtreeAfterUpdatingConstraints];
 }
 
 @end
@@ -3392,6 +3486,18 @@ static id anchorForView(NSView *view, Class anchorClass, NSLayoutAttribute attri
 
 - (NSLayoutYAxisAnchor *) centerYAnchor {
     return anchorForView(self, [NSLayoutYAxisAnchor class], NSLayoutAttributeCenterY);
+}
+
+@end
+
+@implementation NSView (NSViewEffectiveAppearance)
+
+- (NSAppearance *) effectiveAppearance {
+    if (_appearance != nil)
+        return _appearance;
+    if (_superview != nil)
+        return [_superview effectiveAppearance];
+    return [NSAppearance currentAppearance];
 }
 
 @end
