@@ -39,7 +39,7 @@ typedef NS_OPTIONS(NSUInteger, NSTouchTypeMask) {
 @class NSWindow, NSMenu, NSMenuItem, NSCursor, NSClipView, NSPasteboard,
         NSTextInputContext, NSImage, NSBitmapImageRep, NSScrollView,
         NSTrackingArea, NSShadow, NSScreen, CALayer, CIFilter, CALayerContext, NSView,
-        NSLayoutGuide, NSLayoutDimension, NSLayoutXAxisAnchor, NSLayoutYAxisAnchor;
+        NSLayoutGuide, NSGestureRecognizer, NSLayoutDimension, NSLayoutXAxisAnchor, NSLayoutYAxisAnchor;
 
 // See Cocoa Event Handling Guide : Using Tracking-Area Objects : Compatibility
 // Issues
@@ -154,6 +154,8 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPre
     NSUserInterfaceLayoutDirection _userInterfaceLayoutDirection;
     int _frameChangeDepth;
     BOOL _canDrawConcurrently;
+    NSMutableArray *_gestureRecognizers;
+
     NSMutableArray *_constraints;
 
     BOOL _needsLayout;
@@ -549,6 +551,14 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPre
 - (NSArray *) _draggedTypes;
 - (void) _setWindow: (NSWindow *) window;
 - (void) _collectTrackingAreasForWindowInto: (NSMutableArray *) collector;
+
+@end
+
+@interface NSView (NSViewGestureRecognizers)
+
+@property(copy) NSArray<NSGestureRecognizer *> *gestureRecognizers;
+- (void) addGestureRecognizer: (NSGestureRecognizer *) recognizer;
+- (void) removeGestureRecognizer: (NSGestureRecognizer *) recognizer;
 
 @end
 

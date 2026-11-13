@@ -280,6 +280,7 @@ set(AppKit_sources
 	NSEvent.subproj/NSEvent_CoreGraphics.m
 	NSEvent.subproj/NSEvent_other.m
 	NSEvent.subproj/NSEvent_keyboard.m
+	NSEvent.subproj/NSEvent_gesture.m
 	NSEvent.subproj/NSEvent.m
 
 	NSButton.m
