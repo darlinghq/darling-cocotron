@@ -12,9 +12,11 @@
  * before archiving because the archive records them and the decoders select the
  * layout from them. No window server is needed.
  *
- * The layouts of the controls are not documented; they come from the reports of
+ * The layouts of the controls are not documented; most come from the reports of
  * the contributor of the decoders (archives found in old nibs). These tests pin
- * the layouts the decoders accept; they cannot confirm them against macOS.
+ * the layouts the decoders accept; they cannot confirm them against macOS. The
+ * layouts of NSTabView and NSTabViewItem are the ones recorded on Mac OS X
+ * 10.14.4 (see appkit-nonkeyed-controls).
  */
 #import <AppKit/AppKit.h>
 #import <objc/runtime.h>
@@ -110,16 +112,9 @@ static id roundTrip(id object)
 - (void) encodeWithCoder: (NSCoder *) coder
 {
     id identifier = @"first", label = @"First", view = nil, color = nil;
-    int state = 0;
-    id responder = nil, tabView = nil;
+    id responder = nil, lastKeyView = nil, tabView = nil;
 
-    putObject(coder, identifier);
-    putObject(coder, label);
-    putObject(coder, view);
-    putObject(coder, color);
-    [coder encodeValueOfObjCType: "i" at: &state];
-    putObject(coder, responder);
-    putObject(coder, tabView);
+    [coder encodeValuesOfObjCTypes: "@@@@@@@", &identifier, &view, &label, &color, &responder, &lastKeyView, &tabView];
 }
 @end
 
@@ -246,41 +241,35 @@ static void test_quirk_typedstream_clip_view(void)
 
 @interface TTabViewV2 : NSTabView
 @end
-@interface TTabViewV3 : NSTabView
+@interface TTabViewV1 : NSTabView
 @end
 
-static void putTabViewLayer(NSCoder *coder)
+static void putTabViewLayer(NSCoder *coder, BOOL withDrawsBackground)
 {
-    id items = [NSMutableArray array], font = nil;
+    id items = [NSMutableArray array], selected = nil, font = nil;
     int type = NSBottomTabsBezelBorder;
-    BOOL draws = YES, truncated = YES;
+    char truncated = 1, draws = 1;
 
     putViewLayers(coder, NSMakeRect(0, 0, 300, 200));
-    putObject(coder, items);
-    putObject(coder, font);
-    [coder encodeValueOfObjCType: "i" at: &type];
-    [coder encodeValueOfObjCType: @encode(BOOL) at: &draws];
-    [coder encodeValueOfObjCType: @encode(BOOL) at: &truncated];
+    if (withDrawsBackground) {
+        [coder encodeValuesOfObjCTypes: "@@@icc", &items, &selected, &font, &type, &truncated, &draws];
+    } else {
+        [coder encodeValuesOfObjCTypes: "@@@ic", &items, &selected, &font, &type, &truncated];
+    }
     [coder encodeObject: nil];
 }
 
 @implementation TTabViewV2
 - (void) encodeWithCoder: (NSCoder *) coder
 {
-    int selected = -1;
-
-    putTabViewLayer(coder);
-    [coder encodeValueOfObjCType: "i" at: &selected];
+    putTabViewLayer(coder, YES);
 }
 @end
 
-@implementation TTabViewV3
+@implementation TTabViewV1
 - (void) encodeWithCoder: (NSCoder *) coder
 {
-    NSUInteger selected = NSNotFound;
-
-    putTabViewLayer(coder);
-    [coder encodeValueOfObjCType: @encode(NSUInteger) at: &selected];
+    putTabViewLayer(coder, NO);
 }
 @end
 
@@ -291,11 +280,14 @@ static void test_quirk_typedstream_tab_view(void)
     NSTabView *v2 = roundTrip([[[TTabViewV2 alloc] initWithFrame: NSMakeRect(0, 0, 300, 200)] autorelease]);
     expect([v2 tabViewType] == NSBottomTabsBezelBorder, "v2 tab view type");
     expect([v2 drawsBackground] && [[v2 tabViewItems] count] == 0, "v2 tab view state");
+    expect([v2 allowsTruncatedLabels], "v2 tab view truncated labels");
 
-    class_setVersion([NSTabView class], 3);
-    NSTabView *v3 = roundTrip([[[TTabViewV3 alloc] initWithFrame: NSMakeRect(0, 0, 300, 200)] autorelease]);
-    expect([v3 tabViewType] == NSBottomTabsBezelBorder, "v3 tab view type");
-    expect([v3 drawsBackground] && [[v3 tabViewItems] count] == 0, "v3 tab view state");
+    // Before version 2 there is no draws-background byte: the background is drawn.
+    class_setVersion([NSTabView class], 1);
+    NSTabView *v1 = roundTrip([[[TTabViewV1 alloc] initWithFrame: NSMakeRect(0, 0, 300, 200)] autorelease]);
+    expect([v1 tabViewType] == NSBottomTabsBezelBorder, "v1 tab view type");
+    expect([v1 drawsBackground] && [[v1 tabViewItems] count] == 0, "v1 tab view state");
+    expect([v1 allowsTruncatedLabels], "v1 tab view truncated labels");
 }
 
 // --- NSScrollView ------------------------------------------------------------
