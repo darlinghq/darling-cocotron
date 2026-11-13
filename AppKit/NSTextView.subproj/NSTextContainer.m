@@ -84,6 +84,11 @@ static const CGFloat NSTextContainerDefaultLineFragmentPadding = 5.0;
     return _textView;
 }
 
+- (NSTextLayoutOrientation) layoutOrientation {
+    return _textView ? [_textView layoutOrientation]
+                     : NSTextLayoutOrientationHorizontal;
+}
+
 - (BOOL) widthTracksTextView {
     return _widthTracksTextView;
 }

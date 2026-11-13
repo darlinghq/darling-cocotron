@@ -57,6 +57,9 @@ APPKIT_EXPORT NSAttributedStringKey NSToolTipAttributeName;
 // The following constant is *not* declared as `const` in Apple's AppKit (they are located in __data)
 APPKIT_EXPORT NSAttributedStringKey NSSpellingStateAttributeName;
 
+// TextKit 2 era reading option (macOS 13): list marker format compatible with TextKit 1.
+APPKIT_EXPORT NSAttributedStringDocumentReadingOptionKey const NSTextKit1ListMarkerFormatDocumentOption;
+
 // The following constants are *not* declared as `const` in Apple's AppKit (they are located in __data)
 APPKIT_EXPORT NSAttributedStringDocumentAttributeKey NSDocumentTypeDocumentAttribute;
 APPKIT_EXPORT NSAttributedStringDocumentAttributeKey NSConvertedDocumentAttribute;
