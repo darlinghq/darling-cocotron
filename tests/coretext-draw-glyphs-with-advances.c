@@ -15,10 +15,10 @@ static int failures;
 int main(void) {
     CTFontRef font = CTFontCreateWithName(CFSTR("Helvetica"), 40, NULL);
     CHECK(font != NULL);
-    CGColorSpaceRef gray = CGColorSpaceCreateDeviceGray();
-    unsigned char pixels[200 * 100];
+    CGColorSpaceRef gray = CGColorSpaceCreateDeviceRGB();
+    unsigned char pixels[200 * 100 * 4];
     memset(pixels, 0, sizeof pixels);
-    CGContextRef ctx = CGBitmapContextCreate(pixels, 200, 100, 8, 200, gray, kCGImageAlphaNone);
+    CGContextRef ctx = CGBitmapContextCreate(pixels, 200, 100, 8, 800, gray, kCGImageAlphaPremultipliedLast);
     CHECK(ctx != NULL);
     CGContextSetGrayFillColor(ctx, 1, 1);
 
