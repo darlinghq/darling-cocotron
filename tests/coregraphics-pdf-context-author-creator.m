@@ -52,6 +52,18 @@ int main(void) {
             if (![info isEqual:original]) return 50 + i;
             CGPDFDocumentRelease(document);
         }
+        // Encryption is not implemented: a request for it is refused.
+        const CFStringRef encKeys[] = {kCGPDFContextUserPassword, kCGPDFContextOwnerPassword, kCGPDFContextEncryptionKeyLength};
+        for (unsigned i = 0; i < 3; i++) {
+            NSMutableData *data = [NSMutableData data];
+            CGDataConsumerRef consumer = CGDataConsumerCreateWithCFData((CFMutableDataRef)data);
+            CGRect box = CGRectMake(0, 0, 100, 200);
+            id value = i == 2 ? (id)[NSNumber numberWithInt:128] : (id)@"secret";
+            NSDictionary *info = [NSDictionary dictionaryWithObject:value forKey:(id)encKeys[i]];
+            CGContextRef context = CGPDFContextCreate(consumer, &box, (CFDictionaryRef)info);
+            CGDataConsumerRelease(consumer);
+            if (context) return 60 + i;
+        }
         puts("generated PDF author/creator metadata passed");
     }
     return 0;

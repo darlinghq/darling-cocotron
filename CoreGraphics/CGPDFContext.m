@@ -39,6 +39,12 @@ CGContextRef CGPDFContextCreate(CGDataConsumerRef consumer,
                                 CFDictionaryRef auxiliaryInfo)
 {
     NSDictionary *info = (NSDictionary *)auxiliaryInfo;
+    // The PDF writer cannot encrypt yet. Refuse a request for encryption
+    // instead of writing an unprotected file the caller believes is protected.
+    if ([info objectForKey:(id)kCGPDFContextUserPassword] ||
+        [info objectForKey:(id)kCGPDFContextOwnerPassword] ||
+        [info objectForKey:(id)kCGPDFContextEncryptionKeyLength])
+        return NULL;
     const CFStringRef publicKeys[] = {kCGPDFContextTitle, kCGPDFContextAuthor, kCGPDFContextCreator};
     const NSString *backendKeys[] = {kO2PDFContextTitle, kO2PDFContextAuthor, kO2PDFContextCreator};
     NSMutableDictionary *translated = nil;
