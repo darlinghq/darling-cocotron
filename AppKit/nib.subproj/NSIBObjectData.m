@@ -43,7 +43,18 @@ NSString *const IBCocoaFramework = @"IBCocoaFramework";
 
 @interface NSNib (private)
 - (NSDictionary *) externalNameTable;
+- (void) _replaceDecodedObject: (id) object withObject: (id) replacement;
 @end
+
+// -replaceObject:withObject: does not always tell the delegate (the system
+// NSKeyedUnarchiver does not), so tell the nib directly. It ignores an object
+// it was already told about.
+static void replaceDecodedObject(NSKeyedUnarchiver *keyed, id object, id replacement) {
+    [keyed replaceObject: object withObject: replacement];
+    id nib = [keyed delegate];
+    if ([nib respondsToSelector: @selector(_replaceDecodedObject:withObject:)])
+        [nib _replaceDecodedObject: object withObject: replacement];
+}
 
 @interface NSMenu (private)
 - (NSString *) _name;
@@ -130,7 +141,7 @@ NSString *const IBCocoaFramework = @"IBCocoaFramework";
             id nibObject = [namedObjects objectAtIndex: i];
 
             if (external != nil) {
-                [keyed replaceObject: nibObject withObject: external];
+                replaceDecodedObject(keyed, nibObject, external);
                 [_nameTable setObject: check forKey: external];
             } else if ([nibObject isKindOfClass: [NSCustomObject class]]) {
                 id replacement = [nibObject createCustomInstance];
@@ -138,7 +149,7 @@ NSString *const IBCocoaFramework = @"IBCocoaFramework";
                 if (replacement == nil) {
                     [_nameTable setObject: check forKey: nibObject];
                 } else {
-                    [keyed replaceObject: nibObject withObject: replacement];
+                    replaceDecodedObject(keyed, nibObject, replacement);
                     [_nameTable setObject: check forKey: replacement];
                     [replacement release];
                 }
@@ -154,7 +165,7 @@ NSString *const IBCocoaFramework = @"IBCocoaFramework";
                 // Already-decoded arrays and connectors can still reference
                 // the placeholder after the decoder accepts replacement.
                 // Preserve it until buildConnectionsWithNameTable: repairs them.
-                [keyed replaceObject: _fileOwner withObject: owner];
+                replaceDecodedObject(keyed, _fileOwner, owner);
             }
         }
 
@@ -194,7 +205,7 @@ NSString *const IBCocoaFramework = @"IBCocoaFramework";
             if (replacement != nil) {
                 // Tell the decoder we are now using that - that will notify
                 // the Nib object
-                [keyed replaceObject: aKey withObject: replacement];
+                replaceDecodedObject(keyed, aKey, replacement);
                 // Update the connections
                 [self replaceObject: aKey withObject: replacement];
 

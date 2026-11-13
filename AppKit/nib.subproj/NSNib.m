@@ -163,15 +163,19 @@ NSString *const NSNibTopLevelObjects = @"NSNibTopLevelObjects";
     return object;
 }
 
-- (void) unarchiver: (NSKeyedUnarchiver *) unarchiver
-        willReplaceObject: object
-               withObject: replacement
-{
+- (void) _replaceDecodedObject: object withObject: replacement {
     if (object != nil && replacement != nil) {
         NSUInteger index = [_allObjects indexOfObjectIdenticalTo: object];
         if (index != NSNotFound)
             [_allObjects replaceObjectAtIndex: index withObject: replacement];
     }
+}
+
+- (void) unarchiver: (NSKeyedUnarchiver *) unarchiver
+        willReplaceObject: object
+               withObject: replacement
+{
+    [self _replaceDecodedObject: object withObject: replacement];
 }
 
 - (NSDictionary *) externalNameTable {
