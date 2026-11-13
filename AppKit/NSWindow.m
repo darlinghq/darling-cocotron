@@ -4306,6 +4306,54 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
     return _appearance != nil ? _appearance : [NSApp effectiveAppearance];
 }
 
+// The part of the content area that is not under the title bar or the
+// toolbar, in window coordinates. A window whose content view is not
+// full-size has the content rect itself; a full-size content view extends
+// under the title bar, which is then still excluded here.
+- (NSRect) contentLayoutRect {
+    NSRect frame = [self frame];
+    NSRect result;
+
+    if (_styleMask & NSWindowStyleMaskFullSizeContentView) {
+        result = [[NSDisplay currentDisplay]
+                         insetRect: frame
+                forNativeWindowBorderWithStyle: _styleMask & ~NSWindowStyleMaskFullSizeContentView];
+        NSToolbar *toolbar = _toolbar;
+        if ([toolbar _view] != nil && ![[toolbar _view] isHidden])
+            result.size.height -= [[toolbar _view] frame].size.height;
+    } else {
+        result = [self contentRectForFrameRect: frame];
+    }
+    result.origin.x -= frame.origin.x;
+    result.origin.y -= frame.origin.y;
+    return result;
+}
+
+// The rect, in screen coordinates, with its edges moved onto whole backing
+// pixels of the window.
+- (NSRect) backingAlignedRect: (NSRect) rect options: (NSAlignmentOptions) options {
+    CGFloat scale = [self backingScaleFactor];
+
+    if (!(scale > 0))
+        scale = 1.0;
+    rect = NSMakeRect(rect.origin.x * scale, rect.origin.y * scale,
+                      rect.size.width * scale, rect.size.height * scale);
+    rect = _NSAlignRectToPixelGrid(rect, options);
+    return NSMakeRect(rect.origin.x / scale, rect.origin.y / scale,
+                      rect.size.width / scale, rect.size.height / scale);
+}
+
+// The window's frame in screen coordinates.
+- (NSRect) accessibilityFrame {
+    return [self frame];
+}
+
+// effectiveAppearance follows the window's own appearance, and the
+// application's through -[NSApplication setAppearance:].
++ (NSSet *) keyPathsForValuesAffectingEffectiveAppearance {
+    return [NSSet setWithObject: @"appearance"];
+}
+
 - (CGFloat) backingScaleFactor {
     // Query only an existing native window: asking for a scale must not map it.
     if ([_platformWindow respondsToSelector: @selector(backingScaleFactor)]) {

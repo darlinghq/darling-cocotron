@@ -1186,6 +1186,16 @@ static void alignAxis(CGFloat *origin, CGFloat *length, NSAlignmentOptions optio
     *length = max - min;
 }
 
+// Aligns each edge of a rect, given in a space whose unit is one backing
+// pixel, as the alignment options ask. Shared with NSWindow.
+NSRect _NSAlignRectToPixelGrid(NSRect rect, NSAlignmentOptions options) {
+    alignAxis(&rect.origin.x, &rect.size.width, options, NSAlignMinXInward,
+              NSAlignMaxXInward, NSAlignWidthInward);
+    alignAxis(&rect.origin.y, &rect.size.height, options, NSAlignMinYInward,
+              NSAlignMaxYInward, NSAlignHeightInward);
+    return rect;
+}
+
 // Cocotron's backing store has one pixel per point in window coordinates. Without a window
 // there is no backing store, so align in view coordinates.
 - (NSRect) backingAlignedRect: (NSRect) rect options: (NSAlignmentOptions) options {
@@ -3625,6 +3635,10 @@ static id anchorForView(NSView *view, Class anchorClass, NSLayoutAttribute attri
 @end
 
 @implementation NSView (NSViewEffectiveAppearance)
+
++ (NSSet *) keyPathsForValuesAffectingEffectiveAppearance {
+    return [NSSet setWithObject: @"appearance"];
+}
 
 - (NSAppearance *) effectiveAppearance {
     if (_appearance != nil)

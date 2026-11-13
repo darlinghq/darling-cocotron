@@ -101,6 +101,21 @@ NSNotificationName const NSScreenColorSpaceDidChangeNotification = @"NSScreenCol
     return 0.0;
 }
 
+// No screen here has a camera housing or any other region the system reserves
+// along an edge, so no part of the frame is unsafe and there are no usable
+// areas beside a cut-out.
+- (NSEdgeInsets) safeAreaInsets {
+    return NSEdgeInsetsMake(0, 0, 0, 0);
+}
+
+- (NSRect) auxiliaryTopLeftArea {
+    return NSZeroRect;
+}
+
+- (NSRect) auxiliaryTopRightArea {
+    return NSZeroRect;
+}
+
 // The refresh rate of the screen's current mode, as the backend reports it, or
 // 60 Hz when it reports none. Displays have a fixed rate here, so the minimum
 // and maximum intervals are the same.

@@ -369,10 +369,24 @@ NSApplication *NSApp = nil;
     return _appearance;
 }
 
++ (NSSet *) keyPathsForValuesAffectingEffectiveAppearance {
+    return [NSSet setWithObject: @"appearance"];
+}
+
+// Observers of a window's effectiveAppearance are told when the application's
+// appearance changes, because a window without an appearance of its own
+// follows the application's.
 - (void) setAppearance: (NSAppearance *) appearance {
+    NSArray *windows = [[self windows] copy];
+
+    for (NSWindow *window in windows)
+        [window willChangeValueForKey: @"effectiveAppearance"];
     appearance = [appearance retain];
     [_appearance release];
     _appearance = appearance;
+    for (NSWindow *window in windows)
+        [window didChangeValueForKey: @"effectiveAppearance"];
+    [windows release];
 }
 
 // Without an explicit appearance the application follows the system one,
