@@ -54,3 +54,6 @@ archives expected by tests/appkit-nonkeyed-controllers.m:
                                                       a custom object of a known class and one of an
                                                       unknown class, and outlet connectors
 NSDictionaryController is not archived: 10.14.4 does not read back its own archive of it.
+
+mkfix-enabled.m (same run procedure) writes archives of an NSButton, NSScroller, NSTextField and
+NSSlider, each enabled (-on) and disabled (-off), expected by tests/appkit-nonkeyed-control-enabled.m.

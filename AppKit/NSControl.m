@@ -115,10 +115,13 @@ static NSMutableDictionary *cellClassDictionary = nil;
     } else {
         NSInteger version = [coder versionForClassName: @"NSControl"];
 
-        // The flag bytes (and the flag short of the oldest layout) are read
-        // but not interpreted: setting them one at a time changes nothing that
-        // the control reports through public accessors on macOS, so what they
-        // stand for is unknown.
+        // Layouts 17 and later start with a flag byte whose lowest bit is the
+        // control's own enabled state; it is what a control without a cell
+        // (a scroller, a colour well) reports, a control with a cell reports
+        // the cell's state and ignores it. The other flag bytes (and the flag
+        // short of the oldest layout) are read but not interpreted: setting
+        // them one at a time changes nothing that the control reports through
+        // public accessors on macOS, so what they stand for is unknown.
         if (version <= 16) {
             int tag;
             id cell;
@@ -141,6 +144,8 @@ static NSMutableDictionary *cellClassDictionary = nil;
             [_aux setTag: tag];
             _tag = tag;
             [self setCell: [coder decodeObject]];
+            if (_cell == nil)
+                [self setEnabled: (flags1 & 1) != 0];
         } else {
             int tag = 0;
             uint8_t flags1 = 0, flags2 = 0;
@@ -153,6 +158,8 @@ static NSMutableDictionary *cellClassDictionary = nil;
             _tag = tag;
             [self setCell: cell];
             [cell release];
+            if (_cell == nil)
+                [self setEnabled: (flags1 & 1) != 0];
         }
     }
 
