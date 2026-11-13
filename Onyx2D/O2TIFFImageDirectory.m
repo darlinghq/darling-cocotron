@@ -49,6 +49,28 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @end
 
+// libtiff is a native (Linux) library: Onyx2D reaches it through the stubs
+// generated for the ELF boundary (libelfloader / elfcalls), which pass the
+// arguments of a call on unchanged and do not translate variadic calls: the
+// calling convention of the caller is what libtiff sees. TIFFGetField() and
+// TIFFGetFieldDefaulted() are variadic. On x86 the Darwin and Linux variadic conventions agree, but on
+// arm64 Darwin passes variadic arguments on the stack while Linux reads them
+// from registers, so libtiff would dereference whatever was in x2. Calling
+// through a prototype with fixed arguments puts the pointer in x2 on arm64.
+// The X11 backend does the same for XCreateIC().
+#if defined(DARLING) && defined(__arm64__)
+static int O2TIFFGetUInt32Field(TIFF *tif, uint32 tag, uint32 *value) {
+    return ((int (*)(TIFF *, uint32, uint32 *)) TIFFGetField)(tif, tag, value);
+}
+
+static int O2TIFFGetDefaultedUInt16Field(TIFF *tif, uint32 tag, uint16_t *value) {
+    return ((int (*)(TIFF *, uint32, uint16_t *)) TIFFGetFieldDefaulted)(tif, tag, value);
+}
+#else
+#define O2TIFFGetUInt32Field(tif, tag, value) TIFFGetField(tif, tag, value)
+#define O2TIFFGetDefaultedUInt16Field(tif, tag, value) TIFFGetFieldDefaulted(tif, tag, value)
+#endif
+
 static tsize_t sTIFFWriteProc(thandle_t userData, tdata_t data, tsize_t size) {
     O2TIFFReader *reader = (O2TIFFReader *) userData;
     return [reader write: data size: size];
@@ -164,17 +186,8 @@ static void sTIFFUnmapFileProc(thandle_t userData, tdata_t data, toff_t size) {
     uint32 width = 0;
     uint32 height = 0;
     TIFFSetDirectory(tif, directory);
-#if defined(DARLING) && defined(__arm64__)
-    // TIFFGetField() is variadic and lives in the native (Linux) libtiff. Darwin arm64 passes
-    // variadic arguments on the stack, Linux arm64 in registers, so call it through a
-    // non-variadic prototype: the pointer then goes in x2, where libtiff's va_arg reads it.
-    int (*getUInt32Field)(TIFF *, uint32, uint32 *) =
-            (int (*)(TIFF *, uint32, uint32 *)) TIFFGetField;
-#else
-#define getUInt32Field TIFFGetField
-#endif
-    if (getUInt32Field(tif, TIFFTAG_IMAGEWIDTH, &width) != 0 &&
-        getUInt32Field(tif, TIFFTAG_IMAGELENGTH, &height) != 0) {
+    if (O2TIFFGetUInt32Field(tif, TIFFTAG_IMAGEWIDTH, &width) != 0 &&
+        O2TIFFGetUInt32Field(tif, TIFFTAG_IMAGELENGTH, &height) != 0) {
         // The pixels as stored, row 0 at the top: asking libtiff for the file's
         // own orientation makes it convert nothing (its default, bottom-left,
         // would flip them). Like CGImageSourceCreateImageAtIndex on macOS, the
@@ -182,7 +195,7 @@ static void sTIFFUnmapFileProc(thandle_t userData, tdata_t data, toff_t size) {
         // (kCGImagePropertyOrientation) and applied by whoever asks for it, e.g.
         // CGImageSourceCreateThumbnailAtIndex with ...WithTransform.
         uint16_t storedOrientation = ORIENTATION_TOPLEFT;
-        TIFFGetFieldDefaulted(tif, TIFFTAG_ORIENTATION, &storedOrientation);
+        O2TIFFGetDefaultedUInt16Field(tif, TIFFTAG_ORIENTATION, &storedOrientation);
         if (storedOrientation < ORIENTATION_TOPLEFT || storedOrientation > ORIENTATION_LEFTBOT)
             storedOrientation = ORIENTATION_TOPLEFT;
         if (TIFFReadRGBAImageOriented(tif, width, height, pixelBytes,
