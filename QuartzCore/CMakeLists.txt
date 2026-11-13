@@ -103,6 +103,7 @@ add_framework(QuartzCore
 		OpenGL
 		CoreGraphics
 		IOSurface
+		CoreText
 		Metal_private
 		${QUARTZCORE_LINK_INDIUM_PRIVATE}
 		cxx

@@ -228,6 +228,10 @@ CA_EXPORT NSString *const kCAContentsFormatGray8Uint;
 - (BOOL) contentsAreFlipped;
 
 - (nonnull instancetype)init;
+// Makes a layer in the default state; subclasses override it to copy their own
+// state from the layer they are given. The properties of that layer are not
+// carried over and the argument is not checked.
+- (nonnull instancetype)initWithLayer: (nonnull id)layer;
 
 - (void) addSublayer: (CALayer *) layer;
 - (void) insertSublayer: (CALayer *) layer atIndex: (unsigned int) index;

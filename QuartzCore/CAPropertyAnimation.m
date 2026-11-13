@@ -10,7 +10,7 @@
     return self;
 }
 
-+ animationWithKeyPath: (NSString *) keyPath {
++ (instancetype) animationWithKeyPath: (NSString *) keyPath {
     return [[[self alloc] initWithKeyPath: keyPath] autorelease];
 }
 

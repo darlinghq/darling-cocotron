@@ -331,7 +331,9 @@ NSString *const kCAContentsFormatGray8Uint = @"Gray8";
     _magnificationFilter = value;
 }
 
-- init {
+// Shared by -init and -initWithLayer:. The latter must not call -init, or a
+// subclass's override of -init would run again on the copy.
+- (void) _setDefaults {
     _superlayer = nil;
     _sublayers = [NSArray new];
     _delegate = nil;
@@ -362,6 +364,27 @@ NSString *const kCAContentsFormatGray8Uint = @"Gray8";
     _minificationFilter = kCAFilterLinear;
     _magnificationFilter = kCAFilterLinear;
     _animations = [[NSMutableDictionary alloc] init];
+}
+
+- init {
+    [self _setDefaults];
+    return self;
+}
+
+// A copy of a layer starts with the default state; the properties of the layer
+// it is made from are not carried over, and the argument is not examined.
+// Subclasses copy their own state in their overrides. The defaults are set
+// without calling -init, so that a subclass's -init does not run again.
+// QUIRK: macOS leaves the new layer in its default state, accepts any object
+// (or nil) as the argument and does not raise. Not documented (the
+// presentation layer copy is filled in by the system, not by this method).
+// Evidence: black-box observation on macOS 26.7.3 (tier 2),
+// vd-upstream mac-probes/v314-initwithlayer.m.
+// Test: tests/quartzcore-layer-init-with-layer.swift
+- initWithLayer: (id) layer {
+    self = [super init];
+    if (self != nil)
+        [self _setDefaults];
     return self;
 }
 
@@ -786,7 +809,8 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
 // layer's contents, which the renderer uploads as a texture. A delegate that
 // implements -displayLayer: sets the contents itself instead.
 - (void) display {
-    if ([_delegate respondsToSelector: @selector(displayLayer:)]) {
+    if (![self _drawsOwnContent] &&
+        [_delegate respondsToSelector: @selector(displayLayer:)]) {
         [_delegate displayLayer: self];
         return;
     }
@@ -1007,6 +1031,10 @@ static id<CAAction> actionInStyle(NSDictionary *style, NSString *key) {
 
 - (void) _setTextureSeed: (uint32_t) value {
     _textureSeed = value;
+}
+
+- (BOOL) _drawsOwnContent {
+    return NO;
 }
 
 - (BOOL) _drawLayerContents: (CGRect) bounds opacity: (CGFloat) opacity {
