@@ -280,6 +280,8 @@ O2FontRef O2FontCreateWithCodePointCoverage(const uint32_t *codePoints,
         FcPatternDestroy(match);
         return nil;
     }
+    // FC_FILE is a host path and FreeType is a host library: no guest-to-host
+    // path mapping applies here (that is for paths guest code supplies).
     FT_Face face = NULL;
     FT_Error error = FT_New_Face(O2FontSharedFreeTypeLibrary(),
                                  (const char *)filename, faceIndex, &face);
