@@ -87,9 +87,66 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
         [self tile];
     } else {
-        [NSException raise: NSInvalidArgumentException
-                    format: @"-[%@ %s] is not implemented for coder %@",
-                            [self class], sel_getName(_cmd), coder];
+        NSInteger version = [coder versionForClassName: @"NSBrowser"];
+
+        if (version < 60)
+            [NSException raise: NSInvalidArgumentException
+                        format: @"NSBrowser cannot decode class version %ld", (long) version];
+
+        // Two objects (not mapped), then the cell prototype, the path separator, one more
+        // object (not mapped), the action and double action, the matrix class, three
+        // shorts (the last is the maximum number of visible columns; the others change when
+        // the minimum column width is set, meaning not mapped) and the flag word: bit 29
+        // reuses columns, 28 titled, 27 takes the title from the previous column, 17 does not
+        // allow an empty selection, the others as in a keyed archive.
+        id prototype = nil, separator = nil, unknownObject = nil;
+        SEL action = NULL, doubleAction = NULL;
+        Class matrixClass = Nil;
+        short unknownShorts[2], maxVisibleColumns;
+        int flags;
+
+        [coder decodeObject];
+        [coder decodeObject];
+        [coder decodeValuesOfObjCTypes: "@@@::#sssi", &prototype, &separator, &unknownObject, &action,
+                                        &doubleAction, &matrixClass, &unknownShorts[0], &unknownShorts[1],
+                                        &maxVisibleColumns, &flags];
+        [separator release];
+        [unknownObject release];
+
+        _explicitTitles = [NSMutableArray new];
+        [_explicitTitles addObject: @"Browser"];
+        _titles = [NSMutableArray new];
+        _matrices = [NSMutableArray new];
+        _scrollViews = [NSMutableArray new];
+        _backgroundColor = [[NSColor whiteColor] copy];
+
+        _matrixClass = matrixClass != Nil ? matrixClass : [NSMatrix class];
+        if ([prototype isKindOfClass: [NSCell class]]) {
+            _cellPrototype = prototype;
+            _cellClass = [prototype class];
+        } else {
+            [prototype release];
+            _cellClass = [[self class] cellClass];
+        }
+        [self setAction: action];
+        [self setDoubleAction: doubleAction];
+        _maxVisibleColumns = maxVisibleColumns;
+        _numberOfVisibleColumns = 1;
+        _selectedColumn = -1;
+
+        _allowsMultipleSelection = (flags & 0x80000000) ? YES : NO;
+        _allowsBranchSelection = (flags & 0x40000000) ? YES : NO;
+        _reusesColumns = (flags & 0x20000000) ? YES : NO;
+        _isTitled = (flags & 0x10000000) ? YES : NO;
+        _takesTitleFromPreviousColumn = (flags & 0x08000000) ? YES : NO;
+        _separatesColumns = (flags & 0x04000000) ? YES : NO;
+        _acceptsArrowKeys = (flags & 0x00100000) ? YES : NO;
+        _sendsActionOnArrowKeys = (flags & 0x00040000) ? YES : NO;
+        _allowsEmptySelection = (flags & 0x00020000) ? NO : YES;
+        _hasHorizontalScroller = (flags & 0x00010000) ? YES : NO;
+        [self setHasHorizontalScroller: _hasHorizontalScroller];
+
+        [self tile];
     }
     return self;
 }
