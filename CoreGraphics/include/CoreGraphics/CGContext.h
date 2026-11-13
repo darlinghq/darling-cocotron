@@ -69,6 +69,7 @@ typedef CF_ENUM(int32_t, CGInterpolationQuality) {
     kCGInterpolationNone,
     kCGInterpolationLow,
     kCGInterpolationHigh,
+    kCGInterpolationMedium = 4,
 };
 
 typedef CF_ENUM(int32_t, CGBlendMode) {
