@@ -232,12 +232,20 @@ static CGFloat layoutLine(CTFontRef font, NSString *line, CGGlyph **outGlyphs,
                        font: (CTFontRef) font
                       width: (CGFloat) width
 {
-    // Line enumeration treats CRLF as one break; splitting at every newline
+    // The line extent treats CRLF as one break; splitting at every newline
     // character would add an empty line for each CRLF.
     NSMutableArray *paragraphs = [NSMutableArray array];
-    [text enumerateLinesUsingBlock: ^(NSString *line, BOOL *stop) {
-        [paragraphs addObject: line];
-    }];
+    NSUInteger length = [text length];
+    for (NSUInteger index = 0; index < length;) {
+        NSUInteger start, end, contentsEnd;
+        [text getLineStart: &start
+                       end: &end
+               contentsEnd: &contentsEnd
+                  forRange: NSMakeRange(index, 0)];
+        [paragraphs addObject:
+                [text substringWithRange: NSMakeRange(start, contentsEnd - start)]];
+        index = end;
+    }
     if (!_wrapped || width <= 0)
         return paragraphs;
 
