@@ -30,6 +30,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSImageView.h>
 #import <AppKit/NSMenu.h>
 #import <AppKit/NSMenuItem.h>
+#import <AppKit/NSKeyValueBinding.h>
+#import <AppKit/NSObject+BindingSupport.h>
 #import <AppKit/NSModalSessionX.h>
 #import <AppKit/NSNibLoading.h>
 #import <AppKit/NSPageLayout.h>
@@ -1051,6 +1053,14 @@ NSApplication *NSApp = nil;
 }
 
 - (BOOL) sendAction: (SEL) action to: target from: sender {
+    // Choosing a menu item whose value is bound and that has no action toggles
+    // its state; the binding writes the new value to the bound object.
+    if (action == NULL && [sender isKindOfClass: [NSMenuItem class]] &&
+        [sender _binderForBinding: NSValueBinding] != nil) {
+        [sender setState: [sender state] == NSOnState ? NSOffState : NSOnState];
+        return YES;
+    }
+
     if ([target respondsToSelector: action]) {
         [target performSelector: action withObject: sender];
         return YES;

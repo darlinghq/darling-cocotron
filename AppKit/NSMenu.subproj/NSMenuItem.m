@@ -22,6 +22,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSImage.h>
 #import <AppKit/NSMenu.h>
 #import <AppKit/NSMenuItem.h>
+#import <AppKit/NSObject+BindingSupport.h>
 #import <Foundation/NSKeyedArchiver.h>
 #import <AppKit/NSButtonCell.h>
 
@@ -161,6 +162,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [_view release];
     [_toolTip release];
     [_badge release];
+    [_actionImage release];
     [super dealloc];
 }
 
@@ -181,6 +183,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     copy->_view = [_view retain];
     copy->_toolTip = [_toolTip copyWithZone: zone];
     copy->_badge = [_badge retain];
+    copy->_actionImage = [_actionImage retain];
     return copy;
 }
 
@@ -194,6 +197,22 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         [_toolTip release];
         _toolTip = [toolTip copy];
     }
+}
+
+// A menu item's value binding drives its state (checkmark), not an objectValue.
+- (id) _replacementKeyPathForBinding: (id) binding {
+    if ([binding isEqual: @"value"]) {
+        return @"state";
+    }
+    return [super _replacementKeyPathForBinding: binding];
+}
+
+// A bound value that is nil (an unset default with no transformer) unchecks the item.
+- (void) setNilValueForKey: (NSString *) key {
+    if ([key isEqualToString: @"state"])
+        [self setState: NSOffState];
+    else
+        [super setNilValueForKey: key];
 }
 
 - (NSMenu *) menu {
@@ -474,6 +493,19 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                              [self class], self, [self title],
                              NSStringFromSelector(_action),
                              ([self hasSubmenu] ? @"YES" : @"NO")];
+}
+
+// Private AppKit API (macOS 26): an image describing the item's action, which
+// apps set from a system symbol image. Stored and returned; Cocotron's menus
+// don't draw it.
+- (NSImage *) _actionImage {
+    return _actionImage;
+}
+
+- (void) _setActionImage: (NSImage *) image {
+    image = [image retain];
+    [_actionImage release];
+    _actionImage = image;
 }
 
 @end
