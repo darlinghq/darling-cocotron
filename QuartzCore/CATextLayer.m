@@ -130,18 +130,8 @@ static CGFloat layoutLine(CTFontRef font, NSString *line, CGGlyph **outGlyphs,
 
 - initWithLayer: (id) layer {
     self = [super initWithLayer: layer];
-    [self _setTextDefaults];
-    if ([layer isKindOfClass: [CATextLayer class]]) {
-        CATextLayer *other = layer;
-        [self setString: other->_string];
-        [self setFont: other->_font];
-        [self setFontSize: other->_fontSize];
-        [self setForegroundColor: other->_foregroundColor];
-        [self setWrapped: other->_wrapped];
-        [self setAlignmentMode: other->_alignmentMode];
-        [self setTruncationMode: other->_truncationMode];
-        [self setAllowsFontSubpixelQuantization: other->_allowsFontSubpixelQuantization];
-    }
+    if (self != nil)
+        [self _setTextDefaults];
     return self;
 }
 

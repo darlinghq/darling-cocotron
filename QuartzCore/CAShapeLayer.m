@@ -61,22 +61,8 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
 
 - initWithLayer: (id) layer {
     self = [super initWithLayer: layer];
-    [self _setShapeDefaults];
-    if ([layer isKindOfClass: [CAShapeLayer class]]) {
-        CAShapeLayer *other = layer;
-        [self setPath: other->_path];
-        [self setFillColor: other->_fillColor];
-        [self setFillRule: other->_fillRule];
-        [self setStrokeColor: other->_strokeColor];
-        [self setStrokeStart: other->_strokeStart];
-        [self setStrokeEnd: other->_strokeEnd];
-        [self setLineWidth: other->_lineWidth];
-        [self setMiterLimit: other->_miterLimit];
-        [self setLineCap: other->_lineCap];
-        [self setLineJoin: other->_lineJoin];
-        [self setLineDashPhase: other->_lineDashPhase];
-        [self setLineDashPattern: other->_lineDashPattern];
-    }
+    if (self != nil)
+        [self _setShapeDefaults];
     return self;
 }
 

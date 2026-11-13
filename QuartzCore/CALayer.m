@@ -371,55 +371,20 @@ NSString *const kCAContentsFormatGray8Uint = @"Gray8";
     return self;
 }
 
+// A copy of a layer starts with the default state; the properties of the layer
+// it is made from are not carried over, and the argument is not examined.
+// Subclasses copy their own state in their overrides. The defaults are set
+// without calling -init, so that a subclass's -init does not run again.
+// QUIRK: macOS leaves the new layer in its default state, accepts any object
+// (or nil) as the argument and does not raise. Not documented (the
+// presentation layer copy is filled in by the system, not by this method).
+// Evidence: black-box observation on macOS 26.7.3 (tier 2),
+// vd-upstream mac-probes/v314-initwithlayer.m.
+// Test: tests/quartzcore-layer-init-with-layer.swift
 - initWithLayer: (id) layer {
-    if (![layer isKindOfClass: [CALayer class]]) {
-        [self release];
-        [NSException raise: NSInvalidArgumentException
-                    format: @"-[CALayer initWithLayer:] needs a CALayer, not %@", layer];
-    }
     self = [super init];
-    [self _setDefaults];
-    CALayer *other = layer;
-
-    // Scalars are assigned directly: some setters (opacity) would start
-    // implicit animations on the copy.
-    _delegate = other->_delegate;
-    _anchorPoint = other->_anchorPoint;
-    _position = other->_position;
-    _bounds = other->_bounds;
-    _opacity = other->_opacity;
-    _opaque = other->_opaque;
-    _contentsScale = other->_contentsScale;
-    _contentsCenter = other->_contentsCenter;
-    _allowsGroupOpacity = other->_allowsGroupOpacity;
-    _allowsEdgeAntialiasing = other->_allowsEdgeAntialiasing;
-    _transform = other->_transform;
-    _sublayerTransform = other->_sublayerTransform;
-    _borderWidth = other->_borderWidth;
-    _cornerRadius = other->_cornerRadius;
-    _masksToBounds = other->_masksToBounds;
-    _shadowOpacity = other->_shadowOpacity;
-    _shadowRadius = other->_shadowRadius;
-    _shadowOffset = other->_shadowOffset;
-    _hidden = other->_hidden;
-    _needsDisplayOnBoundsChange = other->_needsDisplayOnBoundsChange;
-
-    // The copy has no context yet, so these setters only do the retain/copy.
-    [self setContents: other->_contents];
-    [self setContentsFormat: other->_contentsFormat];
-    [self setContentsGravity: other->_contentsGravity];
-    [self setCornerCurve: other->_cornerCurve];
-    [self setMinificationFilter: other->_minificationFilter];
-    [self setMagnificationFilter: other->_magnificationFilter];
-    [self setBackgroundColor: other->_backgroundColor];
-    [self setBorderColor: other->_borderColor];
-    [self setShadowColor: other->_shadowColor];
-    [self setShadowPath: other->_shadowPath];
-    [self setFilters: other->_filters];
-    [self setCompositingFilter: other->_compositingFilter];
-    // Shared, not re-parented: -setMask: would move the mask to this
-    // context-less copy.
-    _mask = [other->_mask retain];
+    if (self != nil)
+        [self _setDefaults];
     return self;
 }
 
