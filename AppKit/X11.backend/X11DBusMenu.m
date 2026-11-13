@@ -93,6 +93,43 @@ static const char *introspectionXML =
         " </interface>\n"
         "</node>\n";
 
+#pragma mark - Message arguments
+
+// libdbus is a host library reached through the wrapper library, which
+// forwards calls without translating the calling convention. The variadic
+// dbus_message_append_args() and dbus_message_get_args() read their
+// arguments the way the host's C ABI passes them, which differs from the way
+// code built for this platform passes variadic arguments on arm64. The
+// message iterators have fixed signatures, so every argument goes through
+// them instead.
+static BOOL appendArgument(DBusMessage *message, int type, const void *value) {
+    DBusMessageIter iterator;
+
+    dbus_message_iter_init_append(message, &iterator);
+    return dbus_message_iter_append_basic(&iterator, type, value) ? YES : NO;
+}
+
+// Reads the leading arguments of a message, which must have exactly the given
+// basic types; value i receives the address of a variable of the matching C
+// type. Returns NO if the message has fewer arguments or other types.
+// Strings point into the message, as with dbus_message_get_args().
+static BOOL readArguments(DBusMessage *message, const int *types,
+                          unsigned count, void **values) {
+    DBusMessageIter iterator;
+
+    if (!dbus_message_iter_init(message, &iterator))
+        return count == 0;
+
+    for (unsigned i = 0; i < count; i++) {
+        if (dbus_message_iter_get_arg_type(&iterator) != types[i])
+            return NO;
+        dbus_message_iter_get_basic(&iterator, values[i]);
+        if (i + 1 < count && !dbus_message_iter_next(&iterator))
+            return NO;
+    }
+    return YES;
+}
+
 #pragma mark - Session bus address
 
 // D-Bus separates alternative addresses with ';' and accepts "unixexec:",
@@ -364,7 +401,7 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type,
         return NO;
 
     const char *name = REGISTRAR_NAME;
-    dbus_message_append_args(call, DBUS_TYPE_STRING, &name, DBUS_TYPE_INVALID);
+    appendArgument(call, DBUS_TYPE_STRING, &name);
 
     DBusError error;
     dbus_error_init(&error);
@@ -375,8 +412,10 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type,
 
     dbus_bool_t owned = FALSE;
     if (reply != NULL) {
-        dbus_message_get_args(reply, NULL, DBUS_TYPE_BOOLEAN, &owned,
-                              DBUS_TYPE_INVALID);
+        int types[] = { DBUS_TYPE_BOOLEAN };
+        void *values[] = { &owned };
+
+        readArguments(reply, types, 1, values);
         dbus_message_unref(reply);
     }
     return owned ? YES : NO;
@@ -442,13 +481,9 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type,
 
     dbus_uint32_t identifier = (dbus_uint32_t) window;
     const char *path = MENU_PATH;
+    appendArgument(message, DBUS_TYPE_UINT32, &identifier);
     if ([method isEqualToString: @"RegisterWindow"])
-        dbus_message_append_args(message, DBUS_TYPE_UINT32, &identifier,
-                                 DBUS_TYPE_OBJECT_PATH, &path,
-                                 DBUS_TYPE_INVALID);
-    else
-        dbus_message_append_args(message, DBUS_TYPE_UINT32, &identifier,
-                                 DBUS_TYPE_INVALID);
+        appendArgument(message, DBUS_TYPE_OBJECT_PATH, &path);
     dbus_message_set_no_reply(message, TRUE);
     [self send: message];
     dbus_message_unref(message);
@@ -626,8 +661,8 @@ static void refreshCallback(CFRunLoopTimerRef timer, void *info) {
         return;
     dbus_uint32_t revision = _revision;
     dbus_int32_t parent = 0;
-    dbus_message_append_args(signal, DBUS_TYPE_UINT32, &revision,
-                             DBUS_TYPE_INT32, &parent, DBUS_TYPE_INVALID);
+    appendArgument(signal, DBUS_TYPE_UINT32, &revision);
+    appendArgument(signal, DBUS_TYPE_INT32, &parent);
     [self send: signal];
     dbus_message_unref(signal);
 }
@@ -864,8 +899,10 @@ static NSArray *integerArray(DBusMessageIter *iter) {
     dbus_int32_t identifier = 0;
     const char *name = NULL;
 
-    if (!dbus_message_get_args(call, NULL, DBUS_TYPE_INT32, &identifier,
-                               DBUS_TYPE_STRING, &name, DBUS_TYPE_INVALID)) {
+    int types[] = { DBUS_TYPE_INT32, DBUS_TYPE_STRING };
+    void *values[] = { &identifier, &name };
+
+    if (!readArguments(call, types, 2, values)) {
         [self replyError: DBUS_ERROR_INVALID_ARGS message: "Bad arguments" to: call];
         return;
     }
@@ -924,8 +961,10 @@ static NSArray *integerArray(DBusMessageIter *iter) {
     dbus_int32_t identifier = 0;
     const char *event = NULL;
 
-    if (!dbus_message_get_args(call, NULL, DBUS_TYPE_INT32, &identifier,
-                               DBUS_TYPE_STRING, &event, DBUS_TYPE_INVALID)) {
+    int types[] = { DBUS_TYPE_INT32, DBUS_TYPE_STRING };
+    void *values[] = { &identifier, &event };
+
+    if (!readArguments(call, types, 2, values)) {
         [self replyError: DBUS_ERROR_INVALID_ARGS message: "Bad arguments" to: call];
         return;
     }
@@ -984,8 +1023,10 @@ static NSArray *integerArray(DBusMessageIter *iter) {
 - (void) handleAboutToShow: (DBusMessage *) call {
     dbus_int32_t identifier = 0;
 
-    if (!dbus_message_get_args(call, NULL, DBUS_TYPE_INT32, &identifier,
-                               DBUS_TYPE_INVALID)) {
+    int types[] = { DBUS_TYPE_INT32 };
+    void *values[] = { &identifier };
+
+    if (!readArguments(call, types, 1, values)) {
         [self replyError: DBUS_ERROR_INVALID_ARGS message: "Bad arguments" to: call];
         return;
     }
@@ -993,8 +1034,7 @@ static NSArray *integerArray(DBusMessageIter *iter) {
     dbus_bool_t needUpdate = [self aboutToShow: identifier];
     DBusMessage *reply = [self newReplyTo: call];
 
-    dbus_message_append_args(reply, DBUS_TYPE_BOOLEAN, &needUpdate,
-                             DBUS_TYPE_INVALID);
+    appendArgument(reply, DBUS_TYPE_BOOLEAN, &needUpdate);
     [self sendReply: reply];
 }
 
@@ -1129,8 +1169,7 @@ static NSArray *integerArray(DBusMessageIter *iter) {
     if (interface != NULL && strcmp(interface, INTROSPECTABLE_INTERFACE) == 0) {
         DBusMessage *reply = [self newReplyTo: call];
 
-        dbus_message_append_args(reply, DBUS_TYPE_STRING, &introspectionXML,
-                                 DBUS_TYPE_INVALID);
+        appendArgument(reply, DBUS_TYPE_STRING, &introspectionXML);
         [self sendReply: reply];
     } else if (interface != NULL && strcmp(interface, PROPERTIES_INTERFACE) == 0) {
         [self handleProperties: call];
@@ -1168,10 +1207,11 @@ static NSArray *integerArray(DBusMessageIter *iter) {
                                    "NameOwnerChanged")) {
             const char *name = NULL, *oldOwner = NULL, *newOwner = NULL;
 
-            if (dbus_message_get_args(message, NULL, DBUS_TYPE_STRING, &name,
-                                      DBUS_TYPE_STRING, &oldOwner,
-                                      DBUS_TYPE_STRING, &newOwner,
-                                      DBUS_TYPE_INVALID) &&
+            int types[] = { DBUS_TYPE_STRING, DBUS_TYPE_STRING,
+                            DBUS_TYPE_STRING };
+            void *values[] = { &name, &oldOwner, &newOwner };
+
+            if (readArguments(message, types, 3, values) &&
                 strcmp(name, REGISTRAR_NAME) == 0)
                 [self registrarOwnerChanged: newOwner[0] != '\0'];
         }
