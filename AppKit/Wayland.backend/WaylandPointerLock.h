@@ -66,6 +66,18 @@ typedef struct {
     double surfaceX, surfaceY;
 } WaylandWarp;
 
+// CoreGraphics' global space (the argument of CGWarpMouseCursorPosition and of
+// -[NSDisplay warpMouse:]) has its origin at the top-left of the primary display and y
+// growing downward. The backend's screen coordinates have their origin at the
+// bottom-left of the primary screen (the first output) and y growing upward; x is the
+// same in both. primaryHeight is the height of the primary screen in points.
+static inline void WaylandScreenPointFromCG(double cgX, double cgY, double primaryHeight,
+                                            double *screenX, double *screenY)
+{
+    *screenX = cgX;
+    *screenY = primaryHeight - cgY;
+}
+
 static inline WaylandWarp WaylandWarpTarget(double positionX, double positionY,
                                             double frameX, double frameY,
                                             double frameWidth, double frameHeight,

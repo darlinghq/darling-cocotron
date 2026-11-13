@@ -1279,13 +1279,18 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
 // the application's own and a warp only moves where it is. That position is
 // where mouseLocation reports it and where the pointer reappears on unlock.
 // Without a lock the call does nothing, and nothing pretends otherwise.
+// position is in CoreGraphics' global space, as -[NSDisplay warpMouse:] documents.
 - (void) warpMouse: (NSPoint) position {
     WaylandWindow *window = _lockWindow;
     if (!_pointerLocked || window == nil)
         return;
+    NSArray *screens = [self screens];
+    double primaryHeight = [screens count] > 0 ? NSHeight([[screens objectAtIndex: 0] frame]) : 0;
+    double screenX, screenY;
+    WaylandScreenPointFromCG(position.x, position.y, primaryHeight, &screenX, &screenY);
     NSRect frame = [window frame];
     NSPoint offset = [window contentOffset];
-    WaylandWarp warp = WaylandWarpTarget(position.x, position.y, frame.origin.x, frame.origin.y,
+    WaylandWarp warp = WaylandWarpTarget(screenX, screenY, frame.origin.x, frame.origin.y,
                                          frame.size.width, frame.size.height, offset.x, offset.y);
     _pointerSurfacePoint = CGPointMake(warp.surfaceX, warp.surfaceY);
     // Window coordinates, like every other writer of the last known position.
