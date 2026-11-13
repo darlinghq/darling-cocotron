@@ -576,44 +576,89 @@ FT_Face O2FontFreeTypeFace(O2Font_freetype *self) {
     return [self unicode_createEncodingForTextEncoding: encoding];
 }
 
+/* Cache entries are keyed by everything that determines the rendered bitmap:
+ * the glyph, the 26.6 pixel size handed to FT_Set_Char_Size and the FreeType
+ * load flags and render mode. The text rendering matrix only reaches this
+ * point as its scale (folded into the pixel size by the caller; shear and
+ * rotation are not applied to FreeType bitmaps), and the context's
+ * antialiasing flag is not consulted by the FreeType backend (coverage is
+ * always the 8-bit gray bitmap). If the backend starts honouring either, the
+ * extra input has to become part of this key. */
+#define O2FONT_GLYPH_LOAD_FLAGS FT_LOAD_DEFAULT
+#define O2FONT_GLYPH_RENDER_MODE FT_RENDER_MODE_NORMAL
+#define O2FONT_GLYPH_SIZE_KEY_BITS 24
+
 - (O2FreeTypeCachedGlyph *) rasterizeGlyph: (O2Glyph) glyph
                                   pointSize: (O2Float) pointSize
 {
-    if (_face == NULL) {
+    if (_face == NULL || !(pointSize > 0)) {
         return nil;
     }
 
-    @synchronized(self) {
-        uint64_t keyValue = ((uint64_t)(uint32_t)((long)(pointSize * 64)) << 32) |
-                            glyph;
-        NSNumber *key = [NSNumber numberWithUnsignedLongLong: keyValue];
+    /* The size is set here, under the font lock, so a hit or a miss never
+     * depends on what size the face was left at by metric queries. */
+    O2Float size64 = pointSize * 64;
+    BOOL cacheable = size64 < (O2Float)(1 << O2FONT_GLYPH_SIZE_KEY_BITS);
 
-        O2FreeTypeCachedGlyph *cached = [_glyphCache objectForKey: key];
-        if (cached != nil) {
-            return [[cached retain] autorelease];
+    @synchronized(self) {
+        NSNumber *key = nil;
+
+        if (cacheable) {
+            uint64_t keyValue =
+                    ((uint64_t)(uint32_t)(long) size64
+                     << (64 - O2FONT_GLYPH_SIZE_KEY_BITS)) |
+                    ((uint64_t)O2FONT_GLYPH_RENDER_MODE << 32) | glyph;
+            key = [NSNumber numberWithUnsignedLongLong: keyValue];
+
+            O2FreeTypeCachedGlyph *hit = [_glyphCache objectForKey: key];
+            if (hit != nil) {
+                return [[hit retain] autorelease];
+            }
         }
 
-        if (FT_Load_Glyph(_face, glyph, FT_LOAD_DEFAULT) != 0) {
+        if (FT_Set_Char_Size(_face, 0, (long) size64, 72.0, 72.0) != 0) {
             return nil;
         }
 
-        if (FT_Render_Glyph(_face->glyph, FT_RENDER_MODE_NORMAL) != 0) {
+        if (FT_Load_Glyph(_face, glyph, O2FONT_GLYPH_LOAD_FLAGS) != 0) {
+            return nil;
+        }
+
+        if (FT_Render_Glyph(_face->glyph, O2FONT_GLYPH_RENDER_MODE) != 0) {
             return nil;
         }
 
         FT_GlyphSlot slot = _face->glyph;
-        cached = [[O2FreeTypeCachedGlyph alloc]
+        O2FreeTypeCachedGlyph *cached = [[O2FreeTypeCachedGlyph alloc]
                 initWithBitmap: &slot->bitmap
                           left: slot->bitmap_left
                            top: slot->bitmap_top
                        advance: slot->advance.x];
+        [cached autorelease];
 
-        if ([_glyphCache count] >= O2FONT_GLYPH_CACHE_LIMIT) {
+        if (!cacheable) {
+            return cached;
+        }
+
+        NSUInteger bytes = (NSUInteger) cached->bitmap.rows *
+                           (NSUInteger) cached->bitmap.width;
+
+        if (bytes > O2FONT_GLYPH_CACHE_BYTES_LIMIT) {
+            return cached; /* too large to be worth keeping */
+        }
+
+        /* Bounded by entry count and by bytes; the whole cache is dropped
+         * when either limit would be exceeded. Entries handed out earlier
+         * stay valid because they are retained by their callers. */
+        if ([_glyphCache count] >= O2FONT_GLYPH_CACHE_LIMIT ||
+            _glyphCacheBytes + bytes > O2FONT_GLYPH_CACHE_BYTES_LIMIT) {
             [_glyphCache removeAllObjects];
+            _glyphCacheBytes = 0;
         }
 
         [_glyphCache setObject: cached forKey: key];
-        return [cached autorelease];
+        _glyphCacheBytes += bytes;
+        return cached;
     }
 }
 

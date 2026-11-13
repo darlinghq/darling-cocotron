@@ -19,6 +19,7 @@
 #endif
 
 #define O2FONT_GLYPH_CACHE_LIMIT 512
+#define O2FONT_GLYPH_CACHE_BYTES_LIMIT (4 * 1024 * 1024)
 
 @class O2FreeTypeCachedGlyph;
 
@@ -29,6 +30,7 @@
     O2Encoding *_macExpertEncoding;
     O2Encoding *_winAnsiEncoding;
     NSMutableDictionary *_glyphCache;
+    NSUInteger _glyphCacheBytes;
 }
 
 - (instancetype) initWithFace: (FT_Face) face;
