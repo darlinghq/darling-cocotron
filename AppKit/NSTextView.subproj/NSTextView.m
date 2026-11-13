@@ -2378,8 +2378,7 @@ static NSTextView *s_targetTextView = nil;
 }
 
 - (NSData *) RTFDFromRange: (NSRange) range {
-    return [NSRichTextWriter dataWithAttributedString: _textStorage
-                                                range: range];
+    return [_textStorage RTFDFromRange: range documentAttributes: nil];
 }
 
 - (BOOL) isEditable {
@@ -2783,8 +2782,10 @@ static NSTextView *s_targetTextView = nil;
 
 - (void) replaceCharactersInRange: (NSRange) range withRTFD: (NSData *) rtfd {
     NSAttributedString *astring =
-            [NSRichTextReader attributedStringWithData: rtfd];
+            [[[NSAttributedString alloc] initWithRTFD: rtfd documentAttributes: NULL] autorelease];
 
+    if (astring == nil)
+        return;
     if (![self _delegateChangeTextInRange: range
                         replacementString: [astring string]])
         return;
