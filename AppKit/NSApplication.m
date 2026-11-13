@@ -283,6 +283,7 @@ static NSArray *initialEventPaths = nil;
 static BOOL waitingForInitialEvent = NO;
 static BOOL initialEventHandled = NO;
 static BOOL launchComplete = NO;
+static BOOL finishLaunchingDeferred = NO;
 static BOOL argumentDocumentsOpened = NO;
 // Documents that arrive during launch after the initial event; opened when launching is done.
 static NSMutableArray *pendingOpenFiles = nil;
@@ -893,6 +894,10 @@ static NSMutableArray *pendingOpenFiles = nil;
                 [self _handleInitialEvent: InitialEventOpenApplication paths: nil];
         }
     }
+    if (finishLaunchingDeferred) {
+        finishLaunchingDeferred = NO;
+        [self _finishLaunchingIsDefault: NO];
+    }
 
     [pool release];
 }
@@ -944,13 +949,22 @@ static NSMutableArray *pendingOpenFiles = nil;
         [self _printFileNames: paths];
     }
 
+    // The did-finish notification follows the open-application event within its handling, but a
+    // documents event once its handling is over.
+    if (kind == InitialEventOpenApplication)
+        [self _finishLaunchingIsDefault: YES];
+    else
+        finishLaunchingDeferred = YES;
+}
+
+// Posts the did-finish notification and completes launching.
+- (void) _finishLaunchingIsDefault: (BOOL) isDefault {
     NS_DURING [[NSNotificationCenter defaultCenter]
             postNotificationName: NSApplicationDidFinishLaunchingNotification
                           object: self
                         userInfo: [NSDictionary
                                           dictionaryWithObject: [NSNumber
-                                                                        numberWithBool:
-                                                                                kind == InitialEventOpenApplication]
+                                                                        numberWithBool: isDefault]
                                                         forKey: NSApplicationLaunchIsDefaultLaunchKey]];
     NS_HANDLER [self reportException: localException];
     NS_ENDHANDLER
