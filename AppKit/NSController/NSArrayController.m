@@ -90,6 +90,50 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (id) initWithCoder: (NSCoder *) coder {
+    if (![coder allowsKeyedCoding]) {
+        if ((self = [super initWithCoder: coder])) {
+            NSInteger version = [coder versionForClassName: @"NSArrayController"];
+            char avoidsEmptySelection = 1, preservesSelection = 1, selectsInsertedObjects = 1, filterRestrictsInsertion = 1;
+            char alwaysUsesMultipleValuesMarker = 0, clearsFilterPredicateOnInsertion = 1;
+            id sortDescriptors = nil, filterPredicate = nil;
+
+            // Four flag bytes, the sort descriptors and, from version 1, the filter predicate
+            // and two more flag bytes; from version 2 a final byte of unknown meaning. Without
+            // the later fields the multiple-values marker is off and filters clear on insertion.
+            [coder decodeValuesOfObjCTypes: "cccc", &avoidsEmptySelection, &preservesSelection, &selectsInsertedObjects,
+                                            &filterRestrictsInsertion];
+            sortDescriptors = [[coder decodeObject] retain];
+            if (version >= 1) {
+                filterPredicate = [[coder decodeObject] retain];
+                [coder decodeValuesOfObjCTypes: "cc", &alwaysUsesMultipleValuesMarker, &clearsFilterPredicateOnInsertion];
+            }
+            if (version >= 2) {
+                char unknownByte;
+                [coder decodeValuesOfObjCTypes: "c", &unknownByte];
+            }
+
+            _flags.avoidsEmptySelection = avoidsEmptySelection != 0;
+            _flags.preservesSelection = preservesSelection != 0;
+            _flags.selectsInsertedObjects = selectsInsertedObjects != 0;
+            _flags.filterRestrictsInsertion = filterRestrictsInsertion != 0;
+            _flags.alwaysUsesMultipleValuesMarker = alwaysUsesMultipleValuesMarker != 0;
+            _flags.clearsFilterPredicateOnInsertion = clearsFilterPredicateOnInsertion != 0;
+            if ([sortDescriptors isKindOfClass: [NSArray class]])
+                _sortDescriptors = [sortDescriptors copy];
+            if ([filterPredicate isKindOfClass: [NSPredicate class]])
+                _filterPredicate = [filterPredicate retain];
+            [sortDescriptors release];
+            [filterPredicate release];
+
+            if ([self automaticallyPreparesContent]) {
+                [self prepareContent];
+            } else {
+                [self _setContentArray: [NSMutableArray array]];
+            }
+        }
+        return self;
+    }
+
     if ((self = [super initWithCoder: coder])) {
         _flags.avoidsEmptySelection =
                 [coder decodeBoolForKey: @"NSAvoidsEmptySelection"];

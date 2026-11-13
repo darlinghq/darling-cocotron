@@ -66,6 +66,34 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - initWithCoder: (NSCoder *) coder {
+    if (![coder allowsKeyedCoding]) {
+        if ((self = [super initWithCoder: coder])) {
+            NSInteger version = [coder versionForClassName: @"NSObjectController"];
+
+            // Class name, the editable and automatically-prepares-content bytes; from
+            // version 1 an object (a Core Data proxy holder, not used here) and a byte of
+            // unknown meaning.
+            char editable = 1, automaticallyPreparesContent = 0;
+            id className = [[coder decodeObject] retain];
+            [coder decodeValuesOfObjCTypes: "cc", &editable, &automaticallyPreparesContent];
+            if (version >= 1) {
+                char unknownByte;
+                [coder decodeObject];
+                [coder decodeValuesOfObjCTypes: "c", &unknownByte];
+            }
+
+            _objectClassName = [className isKindOfClass: [NSString class]] ? [className copy] : nil;
+            [className release];
+            if (_objectClassName == nil)
+                _objectClassName = @"NSMutableDictionary";
+            _editable = editable != 0;
+            _automaticallyPreparesContent = automaticallyPreparesContent != 0;
+            _observedKeys = [[NSCountedSet alloc] init];
+            _selection = [[NSControllerSelectionProxy alloc] initWithController: self];
+        }
+        return self;
+    }
+
     if ((self = [super init])) {
 
         _objectClassName =
