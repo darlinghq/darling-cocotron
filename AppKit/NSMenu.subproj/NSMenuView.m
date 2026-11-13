@@ -669,8 +669,15 @@ const NSTimeInterval kMouseMovementThreshold = .001f;
     item = [self trackForEvent: event];
     [[self window] setAcceptsMouseMovedEvents: didAccept];
 
-    if (item != nil)
-        [NSApp sendAction: [item action] to: [item target] from: item];
+    if (item != nil) {
+        NSMenu *menu = [item menu];
+        NSInteger index = [menu indexOfItem: item];
+
+        if (menu != nil && index != NSNotFound)
+            [menu performActionForItemAtIndex: index];
+        else
+            [NSApp sendAction: [item action] to: [item target] from: item];
+    }
 }
 
 @end

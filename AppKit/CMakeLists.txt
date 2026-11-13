@@ -47,6 +47,9 @@ find_package(OpenGL REQUIRED)
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(PC_CAIRO cairo)
+# The X11 backend exports the main menu on the host's D-Bus session bus, through
+# the dbus wrapper library of the native libdbus-1.
+pkg_check_modules(PC_DBUS REQUIRED dbus-1)
 pkg_check_modules(PC_FONTCONFIG fontconfig)
 
 include_directories(
@@ -73,6 +76,7 @@ include_directories(
 	${X11_Xrandr_INCLUDE_PATH}
 	${X11_Xkb_INCLUDE_PATH}
 	${X11_Xkbfile_INCLUDE_PATH}
+	${PC_DBUS_INCLUDE_DIRS}
 	${FREETYPE_INCLUDE_DIRS}
 	${OPENGL_INCLUDE_DIRS}
 	${PC_CAIRO_INCLUDE_DIRS}
@@ -627,6 +631,8 @@ endfunction(add_backend)
 add_backend(X11
 	SOURCES
 		X11.backend/X11Display.m
+		X11.backend/X11AppMenu.m
+		X11.backend/X11DBusMenu.m
 		X11.backend/X11Window.m
 		X11.backend/X11SubWindow.m
 		X11.backend/X11Event.m
@@ -647,6 +653,7 @@ add_backend(X11
 		QuartzCore
 		# native libraries
                 X11
+		dbus
 		Xext
 		XRandR
 		Xcursor

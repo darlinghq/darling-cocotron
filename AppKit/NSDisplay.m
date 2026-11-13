@@ -18,6 +18,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSDisplay.h>
+#import <AppKit/NSGlobalMenu+Private.h>
 #import <AppKit/NSErrors.h>
 #import <AppKit/NSRaise.h>
 #import <AppKit/NSColorList.h>
@@ -122,6 +123,9 @@ static NSDisplay *processDisplay = nil;
     [_eventQueueLock release];
     [_eventQueue release];
     [super dealloc];
+}
+
+- (void) _mainMenuDidChange: (NSMenu *) menu {
 }
 
 - (NSArray<NSScreen *> *) screens {

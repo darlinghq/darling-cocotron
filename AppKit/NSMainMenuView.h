@@ -21,6 +21,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @interface NSMainMenuView : NSMenuView {
     NSFont *_font;
+    NSString *_applicationName;
 }
 
 + (CGFloat) menuHeight;
@@ -28,5 +29,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - initWithFrame: (NSRect) frame menu: (NSMenu *) menu;
 
 - (void) sizeToFit;
+
+// When set, the first visible item is shown with this name, in bold.
+- (NSString *) applicationName;
+- (void) setApplicationName: (NSString *) name;
 
 @end

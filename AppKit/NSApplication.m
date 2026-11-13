@@ -22,6 +22,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSColorPanel.h>
 #import <AppKit/NSDisplay.h>
+#import <AppKit/NSGlobalMenu+Private.h>
 #import <AppKit/NSDockTile.h>
 #import <AppKit/NSDocumentController.h>
 #import <AppKit/NSEvent.h>
@@ -258,8 +259,12 @@ NSApplication *NSApp = nil;
 - (NSWindow *) windowWithWindowNumber: (NSInteger) number {
     NSWindow *window = [[CGWindow windowWithWindowNumber: number] delegate];
 
-    if (window == nil ||
-        [_windows indexOfObjectIdenticalTo: window] == NSNotFound)
+    if (window == nil)
+        return nil;
+    // Windows of the framework's own (not listed in -windows) still get the
+    // events that land on them.
+    if ([_windows indexOfObjectIdenticalTo: window] == NSNotFound &&
+        !([window styleMask] & NSAppKitPrivateWindow))
         return nil;
     return window;
 }
@@ -507,6 +512,8 @@ NSApplication *NSApp = nil;
         if (![window isKindOfClass: [NSPanel class]])
             [window setMenu: _mainMenu];
     }
+
+    [_display _mainMenuDidChange: _mainMenu];
 }
 
 - (BOOL) isAutomaticCustomizeTouchBarMenuItemEnabled {
