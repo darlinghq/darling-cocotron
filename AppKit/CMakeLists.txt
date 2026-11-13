@@ -254,8 +254,10 @@ set(AppKit_sources
 	NSTextView.subproj/NSLayoutManager.m
 	NSTextView.subproj/NSTextViewSharedData.m
 	NSTextView.subproj/NSTextStorage.m
+	NSTextView.subproj/NSTextKit2.m
 	NSTextView.subproj/NSTypesetter_concrete.m
 	NSTextView.subproj/NSTextStorage_concrete.m
+	NSTextView.subproj/NSSubTextStorage.m
 	NSTextView.subproj/NSTypesetter.m
 	NSTextView.subproj/NSRulerMarker+NSTextExtensions.m
 	NSTextView.subproj/NSRangeArray.m

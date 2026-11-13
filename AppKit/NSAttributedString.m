@@ -624,6 +624,28 @@ NSUInteger NSUnderlineByWordMask = 0x8000;
     [drawer drawAttributedString: self inRect: rect];
 }
 
+// The modern entry point. Only the deprecated two-argument form existed here, so SwiftUI's
+// -[NSAttributedString drawWithRect:options:context:] did not recognise the selector and AppZapper
+// died in text drawing with an uncaught NSException.
+//
+// The context parameter is typed NSStringDrawingContext *, not CGContextRef, because that is what
+// callers on this platform actually pass and what the neighbouring
+// -boundingRectWithSize:options:context: already declares. SwiftUI hands over an
+// NSStringDrawingContext; treating that pointer as a CGContextRef and handing it to
+// +[NSGraphicsContext graphicsContextWithCGContext:flipped:] crashes inside
+// CGContextIsBitmapContext, because cocotron's graphics context expects its own O2Context object.
+// So the context is accepted for signature compatibility and drawing goes through the shared string
+// drawer, which is what the rest of this class does.
+- (void) drawWithRect: (NSRect) rect
+              options: (NSStringDrawingOptions) options
+              context: (NSStringDrawingContext *) context
+{
+    (void) options;
+    (void) context;
+    NSStringDrawer *drawer = [NSStringDrawer sharedStringDrawer];
+    [drawer drawAttributedString: self inRect: rect];
+}
+
 - (NSSize) size {
     NSStringDrawer *drawer = [NSStringDrawer sharedStringDrawer];
     NSSize size = [drawer sizeOfAttributedString: self inSize: NSZeroSize];

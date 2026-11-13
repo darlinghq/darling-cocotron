@@ -17,9 +17,10 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#import <AppKit/NSLayoutManager.h>
 #import <Foundation/Foundation.h>
 
-@class NSLayoutManager, NSTextView;
+@class NSTextView;
 
 typedef enum {
     NSLineSweepUp,
@@ -51,6 +52,7 @@ typedef enum {
 - (NSSize) containerSize;
 
 - (NSTextView *) textView;
+@property(readonly) NSTextLayoutOrientation layoutOrientation;
 - (BOOL) widthTracksTextView;
 - (BOOL) heightTracksTextView;
 

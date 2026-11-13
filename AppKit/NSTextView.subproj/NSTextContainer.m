@@ -24,6 +24,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSTextView.h>
 #import <Foundation/NSKeyedArchiver.h>
 
+static const CGFloat NSTextContainerDefaultLineFragmentPadding = 5.0;
+
+@interface NSTextView (NSTextView_textContainerTracking)
+- (NSSize) _textContainerSizeForViewSize: (NSSize) size;
+@end
+
 @implementation NSTextContainer
 
 - initWithCoder: (NSCoder *) coder {
@@ -34,7 +40,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         _size.height = 1e7;
         _textView = [keyed decodeObjectForKey: @"NSTextView"];
         _layoutManager = [keyed decodeObjectForKey: @"NSLayoutManager"];
-        _lineFragmentPadding = 0;
+        _lineFragmentPadding = NSTextContainerDefaultLineFragmentPadding;
 
         int flags = [coder decodeIntForKey: @"NSTCFlags"];
         _widthTracksTextView = (flags & 1) != 0;
@@ -52,10 +58,17 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     _size = size;
     _textView = nil;
     _layoutManager = nil;
-    _lineFragmentPadding = 0;
+    _lineFragmentPadding = NSTextContainerDefaultLineFragmentPadding;
     _maximumNumberOfLines = 0;
     _widthTracksTextView = YES;
     _heightTracksTextView = YES;
+    return self;
+}
+
+- init {
+    self = [self initWithContainerSize: NSZeroSize];
+    _widthTracksTextView = NO;
+    _heightTracksTextView = NO;
     return self;
 }
 
@@ -69,6 +82,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (NSTextView *) textView {
     return _textView;
+}
+
+- (NSTextLayoutOrientation) layoutOrientation {
+    return _textView ? [_textView layoutOrientation]
+                     : NSTextLayoutOrientationHorizontal;
 }
 
 - (BOOL) widthTracksTextView {
@@ -123,16 +141,21 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (void) _textViewFrameDidChange: (NSNotification *) notification {
     if ([notification object] == _textView) {
-        NSSize newSize = _size;
-        NSSize textViewSize = [_textView frame].size;
-        if (_widthTracksTextView) {
-            newSize.width = textViewSize.width;
-        }
-        if (_heightTracksTextView) {
-            newSize.height = textViewSize.height;
-        }
-        [self setContainerSize: newSize];
+        [self _resizeToTextView];
     }
+}
+
+- (void) _resizeToTextView {
+    NSSize newSize = _size;
+    NSSize tracked =
+            [_textView _textContainerSizeForViewSize: [_textView frame].size];
+    if (_widthTracksTextView) {
+        newSize.width = tracked.width;
+    }
+    if (_heightTracksTextView) {
+        newSize.height = tracked.height;
+    }
+    [self setContainerSize: newSize];
 }
 
 - (void) setWidthTracksTextView: (BOOL) flag {
@@ -217,7 +240,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (void) setLineFragmentPadding: (CGFloat) padding {
-    _lineFragmentPadding = padding;
+    if (_lineFragmentPadding != padding) {
+        _lineFragmentPadding = padding;
+        [_layoutManager textContainerChangedGeometry: self];
+    }
 }
 
 - (void) setMaximumNumberOfLines: (NSUInteger) maximumNumberOfLines {
@@ -232,18 +258,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return NSPointInRect(point, NSMakeRect(0, 0, _size.width, _size.height));
 }
 
+// The padding is applied by the typesetter, not here.
 - (NSRect) lineFragmentRectForProposedRect: (NSRect) proposed
                             sweepDirection: (NSLineSweepDirection) sweep
                          movementDirection: (NSLineMovementDirection) movement
                              remainingRect: (NSRectPointer) remaining
 {
     NSRect r = {.origin = NSZeroPoint, .size = _size};
-    NSRect result = proposed;
-
-    // We don't want to render outside of our rect
-    r.origin.x += _lineFragmentPadding;
-    r.size.width -= _lineFragmentPadding;
-    result = NSIntersectionRect(r, result);
+    NSRect result = NSIntersectionRect(r, proposed);
 
     if (sweep != NSLineSweepRight || movement != NSLineMovesDown)
         NSUnimplementedMethod();

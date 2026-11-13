@@ -167,6 +167,7 @@ APPKIT_EXPORT NSString *const NSAllRomanInputSourcesLocaleIdentifier;
 - (NSTextStorage *) textStorage;
 
 - (void) insertText: (id) string;
+- (void) insertText: (id) string replacementRange: (NSRange) replacementRange;
 
 - (BOOL) usesRuler;
 - (BOOL) isRulerVisible;

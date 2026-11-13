@@ -66,6 +66,10 @@ NSString *const NSAllRomanInputSourcesLocaleIdentifier =
 - (NSRange) _softLineRangeForCharacterAtIndex: (NSUInteger) location;
 @end
 
+@interface NSTextContainer (NSTextContainer_textViewTracking)
+- (void) _resizeToTextView;
+@end
+
 @interface NSTextView (NSTextView_textCompletion)
 - (void) endUserCompletion;
 @end
@@ -593,6 +597,9 @@ static NSTextView *s_targetTextView = nil;
 
 - (void) setTextContainerInset: (NSSize) size {
     _textContainerInset = size;
+    [_textContainer _resizeToTextView];
+    [self sizeToFit];
+    [self setNeedsDisplay: YES];
 }
 
 - (void) setUsesRuler: (BOOL) flag {
@@ -970,7 +977,8 @@ static NSTextView *s_targetTextView = nil;
 
     if (range.length == 0) {
         if (range.location >= [_textStorage length]) {
-            result = [[self layoutManager] extraLineFragmentRect];
+            [[self layoutManager] ensureLayoutForTextContainer: _textContainer];
+            result = [[self layoutManager] extraLineFragmentUsedRect];
             if (NSIsEmptyRect(result) && [_textStorage length]) {
                 NSUInteger rectCount = 0;
                 // Get the last used fragment rect
@@ -1627,7 +1635,9 @@ static NSTextView *s_targetTextView = nil;
 }
 
 - (void) moveToBeginningOfDocumentAndModifySelection: sender {
-    [self setSelectedRange: NSMakeRange(0, _selectionOrigin)
+    NSUInteger origin = MIN(_selectionOrigin, [_textStorage length]);
+    _selectionOrigin = origin;
+    [self setSelectedRange: NSMakeRange(0, origin)
                   affinity: NSSelectionAffinityUpstream
             stillSelecting: NO];
     [self scrollRangeToVisible: NSMakeRange(0, 0)];
@@ -1635,7 +1645,9 @@ static NSTextView *s_targetTextView = nil;
 
 - (void) moveToEndOfDocumentAndModifySelection: sender {
     NSUInteger length = [[_textStorage string] length];
-    [self setSelectedRange: NSMakeRange(_selectionOrigin, length - _selectionOrigin)
+    // The storage can shrink under a selection without resetting the anchor.
+    NSUInteger origin = MIN(_selectionOrigin, length);
+    [self setSelectedRange: NSMakeRange(origin, length - origin)
                   affinity: NSSelectionAffinityDownstream
             stillSelecting: NO];
     [self scrollRangeToVisible: NSMakeRange(length, 0)];
@@ -1682,6 +1694,8 @@ static NSTextView *s_targetTextView = nil;
 
 - (void) deleteBackward: sender {
     NSRange range = [self selectedRange];
+    if (range.location == NSNotFound || range.location > [_textStorage length])
+        range = NSMakeRange([_textStorage length], 0);
 
     if (range.length > 0) {
 
@@ -2572,6 +2586,11 @@ static NSTextView *s_targetTextView = nil;
                useTypingAttributes: (BOOL) useTypingAttributes
             allowsTypingCoalescing: (BOOL) allowsTypingCoalescing
 {
+    if (range.location == NSNotFound || range.location > [_textStorage length])
+        range = NSMakeRange([_textStorage length], 0);
+    if (range.location + range.length > [_textStorage length])
+        range.length = [_textStorage length] - range.location;
+
     NSUndoManager *undoManager = [self undoManager];
 
     if (_firstResponderButNotEditingYet) {
@@ -2866,17 +2885,21 @@ static NSTextView *s_targetTextView = nil;
             stillSelecting: NO];
 }
 
+- (NSSize) _textContainerSizeForViewSize: (NSSize) size {
+    return NSMakeSize(size.width - _textContainerInset.width * 2,
+                      size.height - _textContainerInset.height * 2);
+}
+
 // This should be done in NSTextContainer with notifications
 - (void) _configureTextContainerSize {
     NSSize containerSize = [[self textContainer] containerSize];
+    NSSize insetSize = [self _textContainerSizeForViewSize: [self bounds].size];
 
     if ([self isHorizontallyResizable] == NO)
-        containerSize.width =
-                [self bounds].size.width - _textContainerInset.width * 2;
+        containerSize.width = insetSize.width;
 
     if ([self isVerticallyResizable] == NO)
-        containerSize.height =
-                [self bounds].size.height - _textContainerInset.height * 2;
+        containerSize.height = insetSize.height;
 
     [[self textContainer] setContainerSize: containerSize];
 }
@@ -2894,9 +2917,10 @@ static NSTextView *s_targetTextView = nil;
         extraRect.size.width = NSMaxX(usedRect) - NSMinX(extraRect);
         usedRect = NSUnionRect(usedRect, extraRect);
     }
-    size = usedRect.size;
-    size.width += _textContainerInset.width * 2;
-    size.height += _textContainerInset.height * 2;
+    // Used rects start after the left padding; add the right one too.
+    size.width = NSMaxX(usedRect) + [[self textContainer] lineFragmentPadding] +
+                 _textContainerInset.width * 2;
+    size.height = usedRect.size.height + _textContainerInset.height * 2;
 
     if (![self isHorizontallyResizable])
         size.width = [self frame].size.width;
@@ -3173,11 +3197,51 @@ static NSTextView *s_targetTextView = nil;
         replacementString = [object string];
     }
 
-    if ([self shouldChangeTextInRange: [self selectedRange]
+    NSRange range = [self selectedRange];
+    if (range.location == NSNotFound || range.location > [_textStorage length])
+        range = NSMakeRange([_textStorage length], 0);
+
+    if ([self shouldChangeTextInRange: range
                     replacementString: replacementString] == NO) {
         return;
     }
-    [self _replaceCharactersInRange: [self selectedRange]
+    [self _replaceCharactersInRange: range
+                         withString: object
+             allowsTypingCoalescing: YES];
+    [self didChangeText];
+    [self scrollRangeToVisible: [self selectedRange]];
+}
+
+- (void) insertText: (id) object replacementRange: (NSRange) replacementRange {
+    if (![self isEditable])
+        return;
+    if (replacementRange.location == NSNotFound) {
+        [self insertText: object];
+        return;
+    }
+
+    NSUInteger length = [_textStorage length];
+    // QUIRK: an out-of-range replacement range does not raise; the text replaces
+    // the current selection as for NSNotFound. Not documented. Evidence:
+    // black-box observation on macOS 26.7.3 (tier 2), MAC-EVIDENCE MC26.10.
+    // Test: appkit-textview-selection-anchor.m (out-of-range replacement range).
+    if (replacementRange.location > length ||
+        replacementRange.length > length - replacementRange.location) {
+        [self insertText: object];
+        return;
+    }
+
+    NSString *replacementString = [object isKindOfClass: [NSAttributedString class]]
+            ? [object string] : object;
+    if (![self shouldChangeTextInRange: replacementRange
+                    replacementString: replacementString])
+        return;
+
+    if (_rangeForUserCompletion.location != NSNotFound)
+        [self endUserCompletion];
+    // Do not set the selection to the replacement range: selection delegates
+    // may rewrite it. The existing replacement helper updates the caret later.
+    [self _replaceCharactersInRange: replacementRange
                          withString: object
              allowsTypingCoalescing: YES];
     [self didChangeText];
@@ -3226,9 +3290,10 @@ static NSTextView *s_targetTextView = nil;
     NSRect glyphRect = rect;
     glyphRect.origin.x -= _textContainerInset.width;
     glyphRect.origin.y -= _textContainerInset.height;
-    NSRange gRange = gRange =
-            [layoutManager glyphRangeForBoundingRect: glyphRect
+    NSRange gRange = [layoutManager glyphRangeForBoundingRect: glyphRect
                                      inTextContainer: [self textContainer]];
+    if (gRange.location == NSNotFound)
+        gRange = [layoutManager glyphRangeForTextContainer: [self textContainer]];
 
     if ([self drawsBackground]) {
         [_backgroundColor setFill];
@@ -3251,6 +3316,10 @@ static NSTextView *s_targetTextView = nil;
     NSRange firstRange, lastRange, selection;
     NSSelectionAffinity affinity = NSSelectionAffinityUpstream;
     NSSelectionGranularity granularity = [event clickCount] - 1;
+    // Set when the press carries Shift, so the tracking loop keeps extending from the existing
+    // selection's anchor instead of unioning with the press point.
+    BOOL shiftExtend = NO;
+    NSUInteger anchor = 0;
 
     if (![self isSelectable])
         return;
@@ -3268,12 +3337,53 @@ static NSTextView *s_targetTextView = nil;
         firstRange = [self selectionRangeForProposedRange: firstRange
                                               granularity: granularity];
 
-    _selectionOrigin = firstRange.location;
+    // Shift-click extends the existing selection instead of collapsing it to a caret under
+    // the pointer. The anchor is the far edge of the current selection, so growing it past
+    // either end keeps the whole selection (select 2..6, shift-click 9 -> 2..9; select 4..8,
+    // shift-click 1 -> 1..8); with an empty selection the anchor is the caret, so it extends
+    // from where it already is.
+    //
+    // The same arithmetic serves shift-drag, so this does not return: it records the anchor and
+    // falls into the tracking loop below, which keeps extending from that anchor while the
+    // button is held. Returning here made a shift-drag select only up to the press point.
+    if ([event modifierFlags] & NSShiftKeyMask) {
+        NSRange existing = [self selectedRange];
+        NSUInteger click = firstRange.location;
+        NSUInteger shiftAnchor;
+
+        if (existing.length == 0) {
+            shiftAnchor = existing.location;
+        } else {
+            NSUInteger start = existing.location;
+            NSUInteger end = NSMaxRange(existing);
+            if (click > end)
+                shiftAnchor = start;   // growing right: keep the left edge
+            else if (click < start)
+                shiftAnchor = end;     // growing left: keep the right edge
+            else
+                shiftAnchor = start;   // inside the selection: anchor at the left edge
+        }
+
+        selection = NSUnionRange(NSMakeRange(shiftAnchor, 0), firstRange);
+        affinity = click >= shiftAnchor ? NSSelectionAffinityUpstream
+                                        : NSSelectionAffinityDownstream;
+        [self setSelectedRange: selection affinity: affinity stillSelecting: YES];
+        [self updateInsertionPointStateAndRestartTimer: YES];
+        [self setNeedsDisplay: YES];
+
+        // Fall through into the tracking loop so a shift-drag keeps extending from this anchor
+        // while the button is held. Returning here made a shift-drag stop at the press point.
+        shiftExtend = YES;
+        anchor = shiftAnchor;
+    } else {
+        // Plain drag: the press point is the anchor, same as before.
+        anchor = firstRange.location;
+        selection = NSUnionRange(firstRange, lastRange);
+        [self setSelectedRange: selection affinity: affinity stillSelecting: YES];
+    }
+
+    _selectionOrigin = anchor;
     lastRange = firstRange;
-
-    selection = NSUnionRange(firstRange, lastRange);
-
-    [self setSelectedRange: selection affinity: affinity stillSelecting: YES];
 
     [NSEvent startPeriodicEventsAfterDelay: 0.1 withPeriod: 0.2];
     do {
@@ -3302,11 +3412,19 @@ static NSTextView *s_targetTextView = nil;
             lastRange = [self selectionRangeForProposedRange: lastRange
                                                  granularity: granularity];
 
-        selection = NSUnionRange(firstRange, lastRange);
-        if (firstRange.location <= lastRange.location)
-            affinity = NSSelectionAffinityUpstream;
-        else
-            affinity = NSSelectionAffinityDownstream;
+        if (shiftExtend) {
+            // Keep growing the range between the anchor and the current pointer position, so a
+            // shift-drag behaves like a drag that never loses what was already selected.
+            selection = NSUnionRange(NSMakeRange(anchor, 0), lastRange);
+            affinity = lastRange.location >= anchor ? NSSelectionAffinityUpstream
+                                                    : NSSelectionAffinityDownstream;
+        } else {
+            selection = NSUnionRange(firstRange, lastRange);
+            if (firstRange.location <= lastRange.location)
+                affinity = NSSelectionAffinityUpstream;
+            else
+                affinity = NSSelectionAffinityDownstream;
+        }
 
         [self setSelectedRange: selection
                       affinity: affinity
@@ -3498,8 +3616,34 @@ static NSTextView *s_targetTextView = nil;
 }
 
 - (NSUInteger) characterIndexForPoint: (NSPoint) point {
-    NSUnimplementedMethod();
-    return 0;
+    NSWindow *window = [self window];
+    NSUInteger length = [[self string] length];
+    if (window == nil || length == 0)
+        return NSNotFound;
+
+    point = [self convertPoint: [window convertScreenToBase: point]
+                     fromView: nil];
+    NSPoint origin = [self textContainerOrigin];
+    point.x -= origin.x;
+    point.y -= origin.y;
+
+    NSLayoutManager *manager = [self layoutManager];
+    NSTextContainer *container = [self textContainer];
+    CGFloat fraction = 0;
+    NSUInteger glyph = [manager glyphIndexForPoint: point
+                                  inTextContainer: container
+                   fractionOfDistanceThroughGlyph: &fraction];
+    if (glyph >= [manager numberOfGlyphs])
+        return NSNotFound;
+
+    // Glyph lookup also returns nearby insertion positions for padding. Text
+    // input hit testing requires an actual character under the screen point.
+    NSRect bounds = [manager boundingRectForGlyphRange: NSMakeRange(glyph, 1)
+                                      inTextContainer: container];
+    if (!NSPointInRect(point, bounds))
+        return NSNotFound;
+    NSUInteger character = [manager characterIndexForGlyphAtIndex: glyph];
+    return character < length ? character : NSNotFound;
 }
 
 - (void) _setFieldEditorUndoManager: (NSUndoManager *) undoManager {
@@ -3720,23 +3864,31 @@ static NSTextView *s_targetTextView = nil;
     NSMenu *menu = [[[NSMenu alloc] initWithTitle: @""] autorelease];
 
     @try {
-        NSRange range = [_textStorage
-                doubleClickAtIndex:
-                        [self glyphIndexForPoint: point
-                                fractionOfDistanceThroughGlyph: &fraction]];
+        NSUInteger clickedIndex = [self glyphIndexForPoint: point
+                                fractionOfDistanceThroughGlyph: &fraction];
+        NSRange range = [_textStorage doubleClickAtIndex: clickedIndex];
 
-        [self setSelectedRange: range];
+        // A contextual click inside an existing selection should operate on
+        // that selection (as on macOS). Only move the selection to the word
+        // under the pointer when the click is outside it or there is no
+        // selection yet.
+        NSRange selection = [self selectedRange];
+        BOOL clickInSelection = selection.length != 0 &&
+                clickedIndex >= selection.location &&
+                clickedIndex < NSMaxRange(selection);
+        if (!clickInSelection) {
+            [self setSelectedRange: range];
 
-        NSSpellChecker *checker = [NSSpellChecker sharedSpellChecker];
-        NSArray *guesses =
+            NSSpellChecker *checker = [NSSpellChecker sharedSpellChecker];
+            NSArray *guesses =
                 [checker guessesForWordRange: range
                                       inString: [self string]
                                       language: [[NSLocale currentLocale]
                                                         localeIdentifier]
                         inSpellDocumentWithTag: [self spellCheckerDocumentTag]];
 
-        if ([guesses count] == 0) {
-            NSMenuItem *item = [menu
+            if ([guesses count] == 0) {
+                NSMenuItem *item = [menu
                     addItemWithTitle:
                             NSLocalizedStringFromTableInBundle(
                                     @"No Guesses Found", nil,
@@ -3745,12 +3897,13 @@ static NSTextView *s_targetTextView = nil;
                                     @"Spell checker guesses")
                               action: @selector(cut:)
                        keyEquivalent: @""];
-            [item setEnabled: NO];
-        } else {
-            for (NSString *guess in guesses) {
-                [menu addItemWithTitle: guess
+                [item setEnabled: NO];
+            } else {
+                for (NSString *guess in guesses) {
+                    [menu addItemWithTitle: guess
                                 action: @selector(_changeSpellingFromMenuItem:)
                          keyEquivalent: @""];
+                }
             }
         }
         [menu addItem: [NSMenuItem separatorItem]];

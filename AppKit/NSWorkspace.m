@@ -27,6 +27,7 @@ NSString *const NSWorkspaceWillPowerOffNotification =
         @"NSWorkspaceWillPowerOffNotification";
 
 NSString *const NSWorkspaceRecycleOperation = @"NSWorkspaceRecycleOperation";
+NSString *const NSWorkspaceDuplicateOperation = @"NSWorkspaceDuplicateOperation";
 
 NSString *const NSWorkspaceLaunchConfigurationAppleEvent =
         @"NSWorkspaceLaunchConfigurationAppleEvent";
