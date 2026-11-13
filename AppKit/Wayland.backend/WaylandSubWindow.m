@@ -32,12 +32,18 @@ static void unsetViewportSource(struct wl_proxy *viewport) {
     union wl_argument source[] = {{.f = unset}, {.f = unset}, {.f = unset}, {.f = unset}};
     WaylandMarshal(viewport, WP_VIEWPORT_SET_SOURCE, NULL, 0, source);
 }
+// The largest subwindow dimension, in points and in allocated pixels, that is accepted. It
+// matches the layer context's drawable bound (MAX_DRAWABLE_DIMENSION in QuartzCore) so a
+// bogus frame is refused instead of reaching wl_egl_window_resize.
+static const int32_t WaylandMaxSubWindowDimension = 16384;
+
 static BOOL validFrame(CGRect frame) {
     return isfinite(frame.origin.x) && isfinite(frame.origin.y) &&
         fabs(frame.origin.x) <= INT32_MAX / 2 && fabs(frame.origin.y) <= INT32_MAX / 2 &&
         isfinite(frame.size.width) && isfinite(frame.size.height) &&
         frame.size.width > 0 && frame.size.height > 0 &&
-        frame.size.width <= 16384 && frame.size.height <= 16384;
+        frame.size.width <= WaylandMaxSubWindowDimension &&
+        frame.size.height <= WaylandMaxSubWindowDimension;
 }
 
 @implementation WaylandSubWindow
@@ -115,8 +121,8 @@ static BOOL validFrame(CGRect frame) {
     CGRect crop = CGRectIntersection(full, bounds);
     int scale = [_parent bufferScale];
     int32_t width, height;
-    BOOL allocatedSizeValid = WaylandScaleExtent((int32_t)full.size.width, [self renderScale120], 16384, &width) &&
-        WaylandScaleExtent((int32_t)full.size.height, [self renderScale120], 16384, &height);
+    BOOL allocatedSizeValid = WaylandScaleExtent((int32_t)full.size.width, [self renderScale120], WaylandMaxSubWindowDimension, &width) &&
+        WaylandScaleExtent((int32_t)full.size.height, [self renderScale120], WaylandMaxSubWindowDimension, &height);
     _clipped = CGRectIsEmpty(crop) || !allocatedSizeValid;
     // Without viewporter, suppress partial children instead of drawing beyond
     // the parent's content/decorations. Fully contained children still work.
