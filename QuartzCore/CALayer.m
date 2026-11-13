@@ -345,7 +345,7 @@ NSString *const kCAContentsFormatGray8Uint = @"Gray8";
     _position = CGPointZero;
     _bounds = CGRectZero;
     _opacity = 1.0;
-    _opaque = YES;
+    _opaque = NO;
     _contents = nil;
     _contentsScale = 1.0;
     // The whole contents image stretches, i.e. no fixed border.
