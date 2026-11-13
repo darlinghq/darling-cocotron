@@ -328,6 +328,10 @@ static void testScriptedImages(void)
     [withRep setObject: [[[NSCustomImageRep alloc] initWithDrawSelector: @selector(description) delegate: @"d"] autorelease] forKey: @"o1"];
     decodeSeq(@"NSImage", 46, withRep, [[head stringByAppendingString: rep(@"multi:c, ", 14)] stringByAppendingString: @"multi:f,f, s c obj obj obj"],
               "NSImage with a representation sequence");
+    // An image archived by name has only these two bytes after the name.
+    decodeSeq(@"NSImage", 46, [NSDictionary dictionaryWithObjectsAndKeys: @"NonKeyedTestImageName", @"o0", N(1), @"c0", nil],
+                               [head stringByAppendingString: @"multi:c, multi:c,"], "NSImage by name sequence");
+
     // Byte 3 selects a shorter layout.
     [withRep removeObjectForKey: @"c2"];
     [withRep setObject: N(1) forKey: @"c3"];

@@ -422,8 +422,23 @@ NSImageName const NSImageNameTouchBarVolumeUpTemplate =
 
             int count = version <= 44 ? 12 : version == 45 ? 13 : version == 46 ? 14 : version == 47 ? 15 : 14;
             char flags[16] = { 0 };
+            // An image that is archived by name (one of the first two bytes set) has nothing
+            // else but those two bytes; it stands for the named image.
+            for (int i = 0; i < 2; i++) {
+                [coder decodeValuesOfObjCTypes: "c", &flags[i]];
+            }
+            if (flags[0] || flags[1]) {
+                NSImage *named = [NSImage imageNamed: _name];
+
+                if (named != nil && named != self) {
+                    [self release];
+                    return [named retain];
+                }
+                return self;
+            }
+
             // Only the first four bytes are read when the fourth selects the shorter layout.
-            for (int i = 0; i < 4; i++) {
+            for (int i = 2; i < 4; i++) {
                 [coder decodeValuesOfObjCTypes: "c", &flags[i]];
             }
 
