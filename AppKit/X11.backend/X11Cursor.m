@@ -40,35 +40,70 @@ static int X11CursorScaledSize(int nominalSize, CGFloat scale) {
     return (int) requested;
 }
 
-- (id) initWithName: (const char *) name {
-    X11Display *d = (X11Display *) [NSDisplay currentDisplay];
-    Display *display = [d display];
+// Cocoa cursor names have no single X11 spelling. "hand" is the pre-Xcursor name that
+// current themes no longer ship (Adwaita and Breeze call it "pointer" and "grabbing"),
+// so asking for "hand" alone falls through to the arrow. Try the theme's spelling
+// before giving up.
+static const char *X11CursorAliasesFor(const char *name)
+{
+    static const struct { const char *cocoa, *theme; } aliases[] = {
+        { "hand",   "pointer"   },
+        { "hand2",  "pointer"   },
+        { "hand3",  "pointer"   },
+        { "xterm",  "text"      },
+        { "fleur",  "move"      },
+    };
+    for (size_t i = 0; i < sizeof(aliases) / sizeof(*aliases); i++) {
+        if (strcmp(name, aliases[i].cocoa) == 0)
+            return aliases[i].theme;
+    }
+    return NULL;
+}
+
+// Loads a themed cursor at the backing scale, falling back to the nominal size and
+// then to libXcursor's own lookup. Returns None when the theme has no such cursor.
+static Cursor X11LoadThemedCursor(Display *display, const char *name, CGFloat scale) {
+    Cursor cursor = None;
 
     // Ask the theme for an image at the scaled size and let libXcursor scale the hot
     // spot with it, so the cursor stays sharp rather than being one image stretched.
     const int nominal = XcursorGetDefaultSize(display);
     XcursorImages *images =
-            XcursorLibraryLoadImages(NULL, name,
-                                     X11CursorScaledSize(nominal, [d backingScale]));
+            XcursorLibraryLoadImages(NULL, name, X11CursorScaledSize(nominal, scale));
     if (images != NULL) {
         XcursorImagesSetName(images, name);
-        _cursor = XcursorImagesLoadCursor(display, images);
+        cursor = XcursorImagesLoadCursor(display, images);
         XcursorImagesDestroy(images);
     }
 
     // No scaled image: a theme may only carry one size, or resolve to nothing at all.
     // Try the nominal size before giving up on the theme-aware path.
-    if (_cursor == None) {
+    if (cursor == None) {
         images = XcursorLibraryLoadImages(NULL, name, X11CursorScaledSize(nominal, 1.0));
         if (images != NULL) {
             XcursorImagesSetName(images, name);
-            _cursor = XcursorImagesLoadCursor(display, images);
+            cursor = XcursorImagesLoadCursor(display, images);
             XcursorImagesDestroy(images);
         }
     }
 
-    if (_cursor == None)
-        _cursor = XcursorLibraryLoadCursor(display, name);
+    if (cursor == None)
+        cursor = XcursorLibraryLoadCursor(display, name);
+
+    return cursor;
+}
+
+- (id) initWithName: (const char *) name {
+    X11Display *d = (X11Display *) [NSDisplay currentDisplay];
+    Display *display = [d display];
+    const CGFloat scale = [d backingScale];
+
+    _cursor = X11LoadThemedCursor(display, name, scale);
+
+    // The theme may not know the legacy spelling; retry with the name it does ship.
+    const char *alias = _cursor == None ? X11CursorAliasesFor(name) : NULL;
+    if (alias != NULL)
+        _cursor = X11LoadThemedCursor(display, alias, scale);
 
     if (_cursor == None)
         _cursor = XcursorLibraryLoadCursor(display, "left_ptr");
@@ -85,18 +120,34 @@ static int X11CursorScaledSize(int nominalSize, CGFloat scale) {
     // being upscaled. The hotspot scales with it.
     CGFloat scale = [(X11Display *) [NSDisplay currentDisplay] backingScale];
     const CGFloat logicalWidth = image.size.width, logicalHeight = image.size.height;
-    if (!(logicalWidth > 0) || !(logicalHeight > 0) || !isfinite(logicalWidth) ||
-        !isfinite(logicalHeight))
+
+    // libXcursor requires the hot spot to be inside the image, and converting a
+    // non-finite float to int is undefined, so a NaN or infinite hot spot (or a
+    // non-finite/non-positive image size) has to be rejected before the cast.
+    if (!isfinite(hotPoint.x) || !isfinite(hotPoint.y)
+            || !(logicalWidth > 0.0) || !(logicalHeight > 0.0)
+            || !isfinite(logicalWidth) || !isfinite(logicalHeight))
         return [self initWithName: "left_ptr"];
-    const size_t width = (size_t) fmax(floor(logicalWidth * scale + 0.5), 1.0);
-    const size_t height = (size_t) fmax(floor(logicalHeight * scale + 0.5), 1.0);
+
+    const double scaledWidth = floor(logicalWidth * scale + 0.5);
+    const double scaledHeight = floor(logicalHeight * scale + 0.5);
+
+    // XcursorImageCreate allocates width*height*4, and nothing else bounds it, so an
+    // image with an enormous size would ask for gigabytes. Bound on floating-point
+    // values before converting to size_t.
+    if (scaledWidth < 1.0 || scaledHeight < 1.0 || scaledWidth > 0x7FFF || scaledHeight > 0x7FFF)
+        return [self initWithName: "left_ptr"];
+
+    const size_t width = (size_t) scaledWidth;
+    const size_t height = (size_t) scaledHeight;
 
     XcursorImage *ximage = XcursorImageCreate(width, height);
     if (!ximage)
         return [self initWithName: "left_ptr"];
 
-    ximage->xhot = (int) fmin(floor(hotPoint.x * scale), (CGFloat)width - 1);
-    ximage->yhot = (int) fmin(floor(hotPoint.y * scale), (CGFloat)height - 1);
+    // libXcursor requires the hot spot to be inside the image.
+    ximage->xhot = (int) fmin(fmax(floor(hotPoint.x * scale), 0.0), (CGFloat) width - 1);
+    ximage->yhot = (int) fmin(fmax(floor(hotPoint.y * scale), 0.0), (CGFloat) height - 1);
 
     CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
     CGContextRef context = CGBitmapContextCreate(
@@ -149,17 +200,21 @@ static int X11CursorScaledSize(int nominalSize, CGFloat scale) {
 
     static const char data[1] = {0};
 
-    Pixmap blank;
-    XColor dummy;
+    // A 1x1 pixmap with a garbage XColor would still draw, but the undefined contents
+    // leak into the server as the cursor's fore/background colours.
+    XColor dummy = {0, 0, 0, 0, 0, 0};
 
-    blank = XCreateBitmapFromData(display, DefaultRootWindow(display), data, 1,
-                                  1);
+    Pixmap blank = XCreateBitmapFromData(display, DefaultRootWindow(display), data, 1,
+                                         1);
     if (blank != None) {
-        _cursor = XCreatePixmapCursor(display, blank, blank, &dummy, &dummy, 0,
-                                      0);
+        _cursor = XCreatePixmapCursor(display, blank, blank, &dummy, &dummy, 0, 0);
         XFreePixmap(display, blank);
-    } else
-        _cursor = None;
+    }
+
+    // None means "inherit the parent's cursor" to XDefineCursor, not "no cursor", so
+    // leaving it None on failure would show an arbitrary cursor instead of hiding one.
+    if (_cursor == None)
+        return [self initWithName: "left_ptr"];
 
     return self;
 }
