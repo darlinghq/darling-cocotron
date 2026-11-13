@@ -32,6 +32,16 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return [NSStepperCell class];
 }
 
+// An NSArchiver archive of a stepper has four more ints after the control part (unused).
+- initWithCoder: (NSCoder *) coder {
+    if ((self = [super initWithCoder: coder]) != nil && ![coder allowsKeyedCoding]) {
+        int unused[4];
+
+        [coder decodeValuesOfObjCTypes: "iiii", &unused[0], &unused[1], &unused[2], &unused[3]];
+    }
+    return self;
+}
+
 - (double) minValue {
     return [_cell minValue];
 }
