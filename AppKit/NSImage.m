@@ -422,7 +422,27 @@ NSImageName const NSImageNameTouchBarVolumeUpTemplate =
 
             int count = version <= 44 ? 12 : version == 45 ? 13 : version == 46 ? 14 : version == 47 ? 15 : 14;
             char flags[16] = { 0 };
-            for (int i = 0; i < count; i++) {
+            // Only the first four bytes are read when the fourth selects the shorter layout.
+            for (int i = 0; i < 4; i++) {
+                [coder decodeValuesOfObjCTypes: "c", &flags[i]];
+            }
+
+            if (flags[3]) {
+                // A shorter layout follows the first four bytes: the explicit size when byte 2
+                // is set, a rectangle-like pair of floats and one object (of unknown meaning,
+                // read and dropped).
+                float unknownFloats[2];
+                if (flags[2]) {
+                    float width, height;
+                    [coder decodeValuesOfObjCTypes: "ff", &width, &height];
+                    _size = NSMakeSize(width, height);
+                }
+                [coder decodeValuesOfObjCTypes: "ff", &unknownFloats[0], &unknownFloats[1]];
+                [coder decodeObject];
+                return self;
+            }
+
+            for (int i = 4; i < count; i++) {
                 [coder decodeValuesOfObjCTypes: "c", &flags[i]];
             }
 
@@ -430,15 +450,6 @@ NSImageName const NSImageNameTouchBarVolumeUpTemplate =
                 float width, height;
                 [coder decodeValuesOfObjCTypes: "ff", &width, &height];
                 _size = NSMakeSize(width, height);
-            }
-
-            if (flags[3]) {
-                // A shorter layout follows the first four bytes: a rectangle-like pair of
-                // floats and one object, of unknown meaning, read and dropped.
-                float unknownFloats[2];
-                [coder decodeValuesOfObjCTypes: "ff", &unknownFloats[0], &unknownFloats[1]];
-                [coder decodeObject];
-                return self;
             }
 
             // The bytes are the image's flag word, one byte per bit: scales when resized (4),

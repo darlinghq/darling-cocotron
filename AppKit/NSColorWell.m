@@ -147,6 +147,14 @@ NSNotificationName _NSColorWellDidBecomeExclusiveNotification =
         [self deactivate];
 }
 
+- (BOOL) isContinuous {
+    return _isContinuous;
+}
+
+- (void) setContinuous: (BOOL) flag {
+    _isContinuous = flag;
+}
+
 - (id) target {
     return _target;
 }
