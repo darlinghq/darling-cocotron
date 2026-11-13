@@ -44,12 +44,6 @@ static const unsigned X11XdndVersion = 5;
 static const NSEventMask X11XdndDragEventMask =
         NSLeftMouseUpMask | NSLeftMouseDraggedMask | NSMouseMovedMask;
 
-// A drag's selection is a selection of its own, so a second drag started before
-// the first target finished reading cannot be served the first one's data. That
-// is the hole version 0 of the protocol leaves open, and a fresh selection for
-// every drag closes it.
-static unsigned X11DragCount;
-
 // How long the source waits for the answer to the position it is dropping on, and
 // for the target to finish with the data it asked for. Both are bounded: a target
 // that never answers must not hang the drag, and a target that never says it is
@@ -245,10 +239,11 @@ static X11DraggingManager *X11SharedManager;
     }
 
     // The selection's helper window is the drag's source window: the target reads
-    // the properties below from it and converts the selection it names, so one
-    // window answers both and there is nothing to keep in step.
-    X11Pasteboard *board = [[X11Pasteboard alloc] initWithName:
-            [NSString stringWithFormat: @"COCOTRON_DRAG_SELECTION_%u", ++X11DragCount]];
+    // the properties below from it and converts the selection, so one window
+    // answers both and there is nothing to keep in step. XDND fixes the selection a
+    // drag is served on: a target converts XdndSelection and nothing else, so the
+    // helper pasteboard owns exactly that selection (one drag runs at a time).
+    X11Pasteboard *board = [[X11Pasteboard alloc] initWithName: @"XdndSelection"];
     X11DragProvider *provider = [[X11DragProvider alloc] initWithPasteboard: pasteboard];
     [board addTypes: [pasteboard types] owner: provider];
     [provider release];
@@ -257,13 +252,6 @@ static X11DraggingManager *X11SharedManager;
     unsigned long version = X11XdndVersion;
     XChangeProperty(_xdpy, sourceWindow, _atom.aware, XA_ATOM, 32, PropModeReplace,
                     (unsigned char *) &version, 1);
-    // XdndSelection names the selection to convert, and may carry a second atom
-    // naming the property to receive it on. The conversion lands on the property
-    // the target names in XConvertSelection whatever this says, so the second
-    // atom is left out rather than guessed at by whatever reads it.
-    Atom selection = [board selectionAtom];
-    XChangeProperty(_xdpy, sourceWindow, _atom.selection, XA_ATOM, 32, PropModeReplace,
-                    (unsigned char *) &selection, 1);
     if (operations & NSDragOperationCopy)
         X11AdvertiseAction(_xdpy, sourceWindow, _atom.actionCopy);
     if (operations & NSDragOperationMove)
@@ -630,30 +618,6 @@ static NSString *X11PropertyAtomName(Display *xdpy, Atom atom) {
     return result;
 }
 
-- (NSString *) selectionNameFromSource: (Window) source {
-    Atom type;
-    int format;
-    unsigned long count, remaining;
-    unsigned char *data = NULL;
-    // XdndSelection is a pair: the selection to convert, and the property the
-    // target is asked to receive it on. X11Pasteboard always receives on its own
-    // RECEIVING_PROPERTY, which every source honours because the X protocol has
-    // the conversion write to whatever property the requestor named, so only the
-    // selection half is needed here.
-    if (XGetWindowProperty(_xdpy, source, _atom.selection, 0, 2, False, XA_ATOM,
-                           &type, &format, &count, &remaining,
-                           &data) == Success &&
-        type == XA_ATOM && format == 32 && count >= 1) {
-        NSString *name = X11PropertyAtomName(_xdpy, (Atom) ((long *) data)[0]);
-        if (data)
-            XFree(data);
-        return name;
-    }
-    if (data)
-        XFree(data);
-    return nil;
-}
-
 - (NSString *) pasteboardTypeForAtom: (Atom) atom {
     NSString *name = X11PropertyAtomName(_xdpy, atom);
     if (name == nil)
@@ -757,9 +721,10 @@ static NSString *X11PropertyAtomName(Display *xdpy, Atom atom) {
     if (source == None || version > X11XdndVersion || _inDrop)
         return;
 
-    NSString *selection = [self selectionNameFromSource: source];
-    NSArray *types = selection ? [self typesFromEnter: message source: source] : nil;
-    if (selection == nil || [types count] == 0)
+    // The drag is always served on the XdndSelection selection.
+    NSString *selection = @"XdndSelection";
+    NSArray *types = [self typesFromEnter: message source: source];
+    if ([types count] == 0)
         return;
 
     // A source that re-enters without leaving first would otherwise strand the
