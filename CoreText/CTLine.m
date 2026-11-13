@@ -944,3 +944,26 @@ CGFloat CTLineGetOffsetForStringIndex(CTLineRef line, CFIndex charIndex,
     return KTCoreTextDictionaryGetFloat(KTCoreTextObjectDictionary(line),
                                          KTLineWidthKey);
 }
+
+void CTLineEnumerateCaretOffsets(CTLineRef line, void (^block)(double offset, CFIndex charIndex, bool leadingEdge, bool *stop))
+{
+    if (line == NULL || block == NULL)
+        return;
+    bool stop = false;
+    CFArrayRef runs = CTLineGetGlyphRuns(line);
+    for (CFIndex runIndex = 0; !stop && runIndex < CFArrayGetCount(runs); ++runIndex) {
+        CTRunRef run = (CTRunRef)CFArrayGetValueAtIndex(runs, runIndex);
+        const CGPoint *positions = CTRunGetPositionsPtr(run);
+        const CGSize *advances = CTRunGetAdvancesPtr(run);
+        const CFIndex *indices = CTRunGetStringIndicesPtr(run);
+        CFIndex count = CTRunGetGlyphCount(run);
+        for (CFIndex index = 0; !stop && index < count; ++index) {
+            // A glyph without advance is a mark of the cluster before it and has no caret of its own.
+            if (advances[index].width <= 0)
+                continue;
+            block(positions[index].x, indices[index], true, &stop);
+            if (!stop)
+                block(positions[index].x + advances[index].width, indices[index], false, &stop);
+        }
+    }
+}
