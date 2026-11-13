@@ -93,7 +93,7 @@ typedef NS_OPTIONS(unsigned int, NSCellAppleFlags2) {
     NSCellAppleFlag2Reserved9             = 1u << 12,
     NSCellAppleFlag2Reserved10            = 1u << 11,
     NSCellAppleFlag2LineBreakModeShift    = 9,
-    NSCellAppleFlag2LineBreakModeMask     = 0x03u << NSCellAppleFlag2LineBreakModeShift,
+    NSCellAppleFlag2LineBreakModeMask     = 0x07u << NSCellAppleFlag2LineBreakModeShift,
     NSCellAppleFlag2Reserved11            = 1u << 8,
     NSCellAppleFlag2Reserved12            = 1u << 7,
     NSCellAppleFlag2Reserved13            = 1u << 6,
