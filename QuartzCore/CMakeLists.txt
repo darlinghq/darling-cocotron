@@ -24,6 +24,7 @@ include_directories(
 set(QuartzCore_sources
 	CAAnimationGroup.m
 	CAAnimation.m
+	CADisplayLink.m
 	CABase.m
 	CABasicAnimation.m
 	CAContext.m
@@ -32,6 +33,7 @@ set(QuartzCore_sources
 	CAEmitterLayer.m
 	CAFrameRateRange.m
 	CALayerContext.m
+	CAKeyedCoding.m
 	CALayer.m
 	CALayerHost.m
 	CATextLayer.m
@@ -103,6 +105,8 @@ add_framework(QuartzCore
 		OpenGL
 		CoreGraphics
 		IOSurface
+		CoreText
+		ImageIO
 		Metal_private
 		${QUARTZCORE_LINK_INDIUM_PRIVATE}
 		cxx

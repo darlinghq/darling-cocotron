@@ -1,12 +1,18 @@
 #import <CoreVideo/CoreVideo.h>
 #import <IOSurface/IOSurface.h>
+#import <Onyx2D/O2Color.h>
 #import <Onyx2D/O2Surface.h>
 #import <OpenGL/OpenGL.h>
 #import <QuartzCore/CAAnimation.h>
 #import <QuartzCore/CAMediaTimingFunction.h>
 #import <QuartzCore/CARenderer.h>
 #import <QuartzCore/CATransformLayer.h>
+#import <QuartzCore/CASpringAnimation.h>
 #import "CALayerInternal.h"
+
+@interface CASpringAnimation (Private)
+- (CGFloat) _springProgressAtTime: (CFTimeInterval) t;
+@end
 
 NSString *const kCARendererColorSpace = @"kCARendererColorSpace";
 
@@ -104,6 +110,10 @@ static CGFloat mediaTimingScale(CAAnimation *animation,
         return 1;
 
     CFTimeInterval delta = currentTime - begin;
+    if ([animation isKindOfClass: [CASpringAnimation class]])
+        return [(CASpringAnimation *) animation
+                _springProgressAtTime: MIN(MAX(delta, 0.0), duration)];
+
     double zeroToOne = MIN(MAX(delta / duration, 0.0), 1.0);
     CAMediaTimingFunction *function = [animation timingFunction];
 
@@ -340,6 +350,13 @@ static BOOL setPremultipliedColor(CGColorRef color, CGFloat opacity) {
         r = c[0]; g = c[1]; b = c[2]; a = 1;
     } else if (model == kCGColorSpaceModelMonochrome && count >= 2) {
         r = g = b = c[0]; a = c[1];
+    } else if (model == kCGColorSpaceModelCMYK && count >= 5) {
+        // Match Onyx2D's device-CMYK approximation; this is not ICC matching.
+        O2Float rgb[4];
+        if (!O2ColorConvertComponentsToDeviceRGB(
+                (O2ColorSpaceRef)CGColorGetColorSpace(color), c, rgb))
+            return NO;
+        r = rgb[0]; g = rgb[1]; b = rgb[2]; a = rgb[3];
     } else {
         return NO;
     }
@@ -589,11 +606,18 @@ static uint32_t texImage2DIOSurface(CGLContextObj context,
         [self _drawBorderOfLayer: layer bounds: bounds opacity: opacity];
     }
 
+    // A child is positioned in this layer's coordinate system, whose origin is
+    // bounds.origin, so it belongs that much further left and down than the matrix above
+    // puts it. Only the recursion is offset: this layer's own contents already have the
+    // origin removed from their image, so translating them too would double-count it.
+    glPushMatrix();
+    glTranslatef(-bounds.origin.x, -bounds.origin.y, 0);
     for (CALayer *child in layer.sublayers)
         [self _renderLayer: child
                 currentTime: currentTime
-              parentOpacity: opacity
+parentOpacity: opacity
               parentFlipped: flipped];
+    glPopMatrix();
 
     glPopMatrix();
 }

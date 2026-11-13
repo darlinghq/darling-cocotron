@@ -21,6 +21,8 @@
 #import <QuartzCore/CALayerContext.h>
 #import <QuartzCore/CARenderer.h>
 
+@class CAArchiveWriter, CAArchiveReader;
+
 @interface CALayer (Internal)
 - (CALayerContext *) _context;
 - (void) _setContext: (CALayerContext *) context;
@@ -43,6 +45,12 @@
 // layer's own coordinates. A CALayerHost draws the hosted context's frame
 // instead, at that frame's size.
 - (id) _contentsForRendering: (CGRect *) rect;
+// YES for a layer whose content is its own state (a path), which a delegate's
+// -displayLayer: must not replace.
+- (BOOL) _drawsOwnContent;
+// Keyed archiving: subclasses call super, then write or read their own keys.
+- (void) _encodeAttributes: (CAArchiveWriter *) writer;
+- (void) _decodeAttributes: (CAArchiveReader *) reader;
 @end
 
 @interface CALayerContext (Internal)

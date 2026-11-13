@@ -183,3 +183,25 @@ CATransform3D CATransform3DMakeAffineTransform(CGAffineTransform m) {
 
     return t;
 }
+
+@implementation NSValue (CATransform3DAdditions)
+
++ (NSValue *) valueWithCATransform3D: (CATransform3D) t {
+    return [self valueWithBytes: &t objCType: @encode(CATransform3D)];
+}
+
+- (CATransform3D) CATransform3DValue {
+    // QUIRK: a value that does not hold a CATransform3D reads back as the
+    // identity transform; no exception is raised and no bytes are reinterpreted.
+    // Not documented. Evidence: black-box observation on macOS 26.7.3 (tier 2),
+    // vd-upstream mac-probes/v315-caspring-validation.m (NSValue holding a point
+    // and an NSNumber both gave the identity).
+    // Test: tests/quartzcore-nsvalue-catransform3d.m (quirk_other_type_reads_identity)
+    if (strcmp([self objCType], @encode(CATransform3D)) != 0)
+        return CATransform3DIdentity;
+    CATransform3D t;
+    [self getValue: &t];
+    return t;
+}
+
+@end

@@ -18,6 +18,8 @@
 */
 
 #import <QuartzCore/CAShapeLayer.h>
+#import "CAKeyedCoding.h"
+#import "CALayerInternal.h"
 
 NSString *const kCAFillRuleNonZero = @"non-zero";
 NSString *const kCAFillRuleEvenOdd = @"even-odd";
@@ -28,5 +30,309 @@ NSString *const kCALineCapButt = @"butt";
 NSString *const kCALineCapRound = @"round";
 NSString *const kCALineCapSquare = @"square";
 
+static void replaceColor(CGColorRef *slot, CGColorRef value) {
+    if (*slot == value)
+        return;
+    if (value)
+        CGColorRetain(value);
+    if (*slot)
+        CGColorRelease(*slot);
+    *slot = value;
+}
+
 @implementation CAShapeLayer
+
+- (void) _setShapeDefaults {
+    _fillColor = CGColorCreateGenericRGB(0, 0, 0, 1);
+    _fillRule = [kCAFillRuleNonZero copy];
+    _strokeEnd = 1;
+    _lineWidth = 1;
+    _miterLimit = 10;
+    _lineCap = [kCALineCapButt copy];
+    _lineJoin = [kCALineJoinMiter copy];
+    _needsDisplay = YES;
+}
+
+- init {
+    self = [super init];
+    if (self != nil)
+        [self _setShapeDefaults];
+    return self;
+}
+
+// Keys are written only when they differ from the defaults.
+- (void) _encodeAttributes: (CAArchiveWriter *) w {
+    [super _encodeAttributes: w];
+    if (_path != NULL)
+        [w encodePath: _path forKey: @"path"];
+    if (_fillColor != NULL && !(CGColorGetNumberOfComponents(_fillColor) == 4 &&
+                                CGColorGetComponents(_fillColor)[0] == 0 &&
+                                CGColorGetComponents(_fillColor)[1] == 0 &&
+                                CGColorGetComponents(_fillColor)[2] == 0 &&
+                                CGColorGetComponents(_fillColor)[3] == 1))
+        [w encodeColor: _fillColor forKey: @"fillColor"];
+    if (![_fillRule isEqualToString: kCAFillRuleNonZero])
+        [w encodeObject: _fillRule forKey: @"fillRule"];
+    if (_strokeColor != NULL)
+        [w encodeColor: _strokeColor forKey: @"strokeColor"];
+    if (_strokeStart != 0)
+        [w encodeDouble: _strokeStart forKey: @"strokeStart"];
+    if (_strokeEnd != 1)
+        [w encodeDouble: _strokeEnd forKey: @"strokeEnd"];
+    if (_lineWidth != 1)
+        [w encodeDouble: _lineWidth forKey: @"lineWidth"];
+    if (_miterLimit != 10)
+        [w encodeDouble: _miterLimit forKey: @"miterLimit"];
+    if (![_lineCap isEqualToString: kCALineCapButt])
+        [w encodeObject: _lineCap forKey: @"lineCap"];
+    if (![_lineJoin isEqualToString: kCALineJoinMiter])
+        [w encodeObject: _lineJoin forKey: @"lineJoin"];
+    if (_lineDashPhase != 0)
+        [w encodeDouble: _lineDashPhase forKey: @"lineDashPhase"];
+    if (_lineDashPattern != nil)
+        [w encodeArray: _lineDashPattern forKey: @"lineDashPattern"];
+}
+
+- (void) _decodeAttributes: (CAArchiveReader *) r {
+    [self _setShapeDefaults];
+    [super _decodeAttributes: r];
+    CGPathRef path = [r copyPathForKey: @"path"];
+    if (path != NULL) {
+        [self setPath: path];
+        CGPathRelease(path);
+    }
+    CGColorRef color = [r copyColorForKey: @"fillColor"];
+    if (color != NULL) {
+        [self setFillColor: color];
+        CGColorRelease(color);
+    }
+    color = [r copyColorForKey: @"strokeColor"];
+    if (color != NULL) {
+        [self setStrokeColor: color];
+        CGColorRelease(color);
+    }
+    NSString *string = [r decodeStringForKey: @"fillRule"];
+    if (string != nil)
+        [self setFillRule: string];
+    string = [r decodeStringForKey: @"lineCap"];
+    if (string != nil)
+        [self setLineCap: string];
+    string = [r decodeStringForKey: @"lineJoin"];
+    if (string != nil)
+        [self setLineJoin: string];
+    double real;
+    if ([r decodeDouble: &real forKey: @"strokeStart"])
+        _strokeStart = real;
+    if ([r decodeDouble: &real forKey: @"strokeEnd"])
+        _strokeEnd = real;
+    if ([r decodeDouble: &real forKey: @"lineWidth"])
+        _lineWidth = real;
+    if ([r decodeDouble: &real forKey: @"miterLimit"])
+        _miterLimit = real;
+    if ([r decodeDouble: &real forKey: @"lineDashPhase"])
+        _lineDashPhase = real;
+    NSArray *pattern = [r decodeArrayForKey: @"lineDashPattern"];
+    if (pattern != nil)
+        [self setLineDashPattern: pattern];
+}
+
+- initWithLayer: (id) layer {
+    self = [super initWithLayer: layer];
+    if (self != nil)
+        [self _setShapeDefaults];
+    return self;
+}
+
+- (void) dealloc {
+    if (_path)
+        CGPathRelease(_path);
+    if (_fillColor)
+        CGColorRelease(_fillColor);
+    if (_strokeColor)
+        CGColorRelease(_strokeColor);
+    [_fillRule release];
+    [_lineCap release];
+    [_lineJoin release];
+    [_lineDashPattern release];
+    [super dealloc];
+}
+
+- (CGPathRef) path {
+    return _path;
+}
+
+- (void) setPath: (CGPathRef) path {
+    CGPathRef copy = path ? CGPathCreateCopy(path) : NULL;
+    if (_path)
+        CGPathRelease(_path);
+    _path = copy;
+    [self setNeedsDisplay];
+}
+
+- (CGColorRef) fillColor {
+    return _fillColor;
+}
+
+- (void) setFillColor: (CGColorRef) color {
+    replaceColor(&_fillColor, color);
+    [self setNeedsDisplay];
+}
+
+- (NSString *) fillRule {
+    return _fillRule;
+}
+
+- (void) setFillRule: (NSString *) rule {
+    rule = [rule copy];
+    [_fillRule release];
+    _fillRule = rule;
+    [self setNeedsDisplay];
+}
+
+- (CGColorRef) strokeColor {
+    return _strokeColor;
+}
+
+- (void) setStrokeColor: (CGColorRef) color {
+    replaceColor(&_strokeColor, color);
+    [self setNeedsDisplay];
+}
+
+- (CGFloat) strokeStart {
+    return _strokeStart;
+}
+
+- (void) setStrokeStart: (CGFloat) value {
+    _strokeStart = value;
+    [self setNeedsDisplay];
+}
+
+- (CGFloat) strokeEnd {
+    return _strokeEnd;
+}
+
+- (void) setStrokeEnd: (CGFloat) value {
+    _strokeEnd = value;
+    [self setNeedsDisplay];
+}
+
+- (CGFloat) lineWidth {
+    return _lineWidth;
+}
+
+- (void) setLineWidth: (CGFloat) value {
+    _lineWidth = value;
+    [self setNeedsDisplay];
+}
+
+- (CGFloat) miterLimit {
+    return _miterLimit;
+}
+
+- (void) setMiterLimit: (CGFloat) value {
+    _miterLimit = value;
+    [self setNeedsDisplay];
+}
+
+- (NSString *) lineCap {
+    return _lineCap;
+}
+
+- (void) setLineCap: (NSString *) cap {
+    cap = [cap copy];
+    [_lineCap release];
+    _lineCap = cap;
+    [self setNeedsDisplay];
+}
+
+- (NSString *) lineJoin {
+    return _lineJoin;
+}
+
+- (void) setLineJoin: (NSString *) join {
+    join = [join copy];
+    [_lineJoin release];
+    _lineJoin = join;
+    [self setNeedsDisplay];
+}
+
+- (CGFloat) lineDashPhase {
+    return _lineDashPhase;
+}
+
+- (void) setLineDashPhase: (CGFloat) value {
+    _lineDashPhase = value;
+    [self setNeedsDisplay];
+}
+
+- (NSArray *) lineDashPattern {
+    return _lineDashPattern;
+}
+
+- (void) setLineDashPattern: (NSArray *) pattern {
+    pattern = [pattern copy];
+    [_lineDashPattern release];
+    _lineDashPattern = pattern;
+    [self setNeedsDisplay];
+}
+
+- (BOOL) _drawsOwnContent {
+    return YES;
+}
+
+// The path is in layer coordinates. Fill first, then stroke on top.
+- (void) drawInContext: (CGContextRef) context {
+    [super drawInContext: context];
+
+    if (_path == NULL)
+        return;
+
+    CGContextSaveGState(context);
+
+    if (_fillColor != NULL) {
+        CGContextAddPath(context, _path);
+        CGContextSetFillColorWithColor(context, _fillColor);
+        if ([_fillRule isEqualToString: kCAFillRuleEvenOdd])
+            CGContextEOFillPath(context);
+        else
+            CGContextFillPath(context);
+    }
+
+    // Trimming to strokeStart/strokeEnd isn't implemented, but an empty range
+    // (e.g. the 0/0 start of a "draw the outline" animation) strokes nothing.
+    if (_strokeColor != NULL && _lineWidth > 0 &&
+        MIN(_strokeEnd, 1) > MAX(_strokeStart, 0)) {
+        CGLineCap cap = kCGLineCapButt;
+        if ([_lineCap isEqualToString: kCALineCapRound])
+            cap = kCGLineCapRound;
+        else if ([_lineCap isEqualToString: kCALineCapSquare])
+            cap = kCGLineCapSquare;
+
+        CGLineJoin join = kCGLineJoinMiter;
+        if ([_lineJoin isEqualToString: kCALineJoinRound])
+            join = kCGLineJoinRound;
+        else if ([_lineJoin isEqualToString: kCALineJoinBevel])
+            join = kCGLineJoinBevel;
+
+        CGContextAddPath(context, _path);
+        CGContextSetStrokeColorWithColor(context, _strokeColor);
+        CGContextSetLineWidth(context, _lineWidth);
+        CGContextSetMiterLimit(context, _miterLimit);
+        CGContextSetLineCap(context, cap);
+        CGContextSetLineJoin(context, join);
+
+        NSUInteger count = [_lineDashPattern count];
+        if (count > 0) {
+            CGFloat lengths[count];
+            for (NSUInteger i = 0; i < count; i++)
+                lengths[i] = [[_lineDashPattern objectAtIndex: i] doubleValue];
+            CGContextSetLineDash(context, _lineDashPhase, lengths, count);
+        }
+
+        CGContextStrokePath(context);
+    }
+
+    CGContextRestoreGState(context);
+}
+
 @end
