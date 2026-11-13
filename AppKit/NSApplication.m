@@ -1680,6 +1680,14 @@ NSApplication *NSApp = nil;
     return _dockTile;
 }
 
+// Darling has no login session that relaunches applications, and the setting cannot be read
+// back through the public API, so these have nothing to record.
+- (void) disableRelaunchOnLogin {
+}
+
+- (void) enableRelaunchOnLogin {
+}
+
 - (void) doCommandBySelector: (SEL) selector {
     if ([_delegate respondsToSelector: selector])
         [_delegate performSelector: selector withObject: nil];
@@ -1843,17 +1851,21 @@ int NSApplicationMain(int argc, const char *argv[]) {
     Class class = [bundle principalClass];
     NSString *nibFile = [bundle infoDictionary][@"NSMainNibFile"];
 
-#ifndef DARLING
     if (argc > 1) {
+        // Arguments that are not "-key value" pairs (and not after "--") name documents to open.
         NSMutableArray *arguments =
-                [NSMutableArray arrayWithCapacity: arg c - 1];
+                [NSMutableArray arrayWithCapacity: argc - 1];
         for (int i = 1; i < argc; i++)
-            if (argv[i][0] != '-')
-                [arguments addObject: [NSString stringWithUTF8String: argv[i]]];
+            if (argv[i][0] != '-') {
+                // nil for an argument that is not valid UTF-8; -addObject: would raise.
+                NSString *argument = [NSString stringWithUTF8String: argv[i]];
+                if (argument != nil)
+                    [arguments addObject: argument];
+            }
             else if (argv[i][1] == '-' && argv[i][2] == '\0')
                 break;
             else // (argv[i][0] == '-' && argv[i] != "--")
-                    if (*(int64_t *) argv[i] != *(int64_t *) "-NSOpen")
+                    if (strcmp(argv[i], "-NSOpen") != 0)
                 i++;
 
         if ((argc = [arguments count]))
@@ -1863,6 +1875,7 @@ int NSApplicationMain(int argc, const char *argv[]) {
                        forKey: @"NSOpen"];
     }
 
+#ifndef DARLING
     [NSClassFromString(@"Win32RunningCopyPipe")
             performSelector: @selector(startRunningCopyPipe)];
 #endif

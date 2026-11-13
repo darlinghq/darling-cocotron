@@ -29,6 +29,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSRaise.h>
 #import <AppKit/NSSavePanel.h>
 #import <AppKit/NSWindowController.h>
+#import <dispatch/dispatch.h>
 #import <objc/runtime.h>
 
 // Declared by NSDocument subclasses that autosave in place (macOS 10.7).
@@ -1578,6 +1579,16 @@ static int untitled_document_number = 0;
 - (void) continueActivityUsingBlock: (void (^)(void)) block {
     if (block)
         block();
+}
+
+- (void) unblockUserInteraction {
+    // Saving is synchronous here: no asynchronous writer is holding the main
+    // thread while a subclass creates its document snapshot.
+}
+
+- (void) continueAsynchronousWorkOnMainThreadUsingBlock: (void (^)(void)) block {
+    if (block)
+        dispatch_async(dispatch_get_main_queue(), block);
 }
 
 - (void) performActivityWithSynchronousWaiting: (BOOL) waitSynchronously

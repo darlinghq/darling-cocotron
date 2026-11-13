@@ -283,6 +283,12 @@ completionHandler: (void (^)(NSError *errorOrNil)) completionHandler;
                                     usingBlock: (void (^)(void (^activityCompletionHandler)(void))) block;
 - (void) performAsynchronousFileAccessUsingBlock: (void (^)(void (^fileAccessCompletionHandler)(void))) block;
 
+// Saving is synchronous, so there is currently no blocked interaction to resume.
+- (void) unblockUserInteraction;
+// Enqueues work on the main queue; this does not implement document activity
+// serialization or interruption of a blocked activity.
+- (void) continueAsynchronousWorkOnMainThreadUsingBlock: (void (^)(void)) block;
+
 // Does nothing: there are no document versions to browse.
 - (void) browseDocumentVersions: (id) sender;
 // Does nothing: Cocotron doesn't restore state.
