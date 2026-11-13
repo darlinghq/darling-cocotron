@@ -2392,6 +2392,44 @@ void CGNativeBorderFrameWidthsForStyle(NSUInteger styleMask, CGFloat *top,
     }
 }
 
+// Holds the pointer for the application while a menu is open, on the newest
+// menu window. Relative mouse mode holds the pointer already; it is not
+// disturbed, an open menu then only sees the pointer inside its windows.
+- (void) grabPointerForMenus {
+    if ([_openMenuWindows count] == 0 || _relativeMouse.active)
+        return;
+    Window target = [(X11Window *) [_openMenuWindows lastObject] windowHandle];
+    if (target == None)
+        return;
+    // The grab replaces the confinement grab, if there was one.
+    _confinedWindow = None;
+    XGrabPointer(_display, target, True,
+                 ButtonPressMask | ButtonReleaseMask | PointerMotionMask,
+                 GrabModeAsync, GrabModeAsync, None, None, CurrentTime);
+}
+
+- (void) menuWindowMapped: (X11Window *) window {
+    if (_openMenuWindows == nil)
+        _openMenuWindows = [NSMutableArray new];
+    [_openMenuWindows removeObjectIdenticalTo: window];
+    [_openMenuWindows addObject: window];
+    [self grabPointerForMenus];
+}
+
+- (void) menuWindowUnmapped: (X11Window *) window {
+    if ([_openMenuWindows indexOfObjectIdenticalTo: window] == NSNotFound)
+        return;
+    [_openMenuWindows removeObjectIdenticalTo: window];
+    _pointerKnown = NO;
+    if ([_openMenuWindows count] > 0) {
+        [self grabPointerForMenus];
+        return;
+    }
+    if (!_relativeMouse.active)
+        XUngrabPointer(_display, CurrentTime);
+    [self updatePointerConfinement];
+}
+
 // CGAssociateMouseAndMouseCursorPosition(!doGrab).
 - (void) grabMouse: (BOOL) doGrab {
     // Main thread only, like -warpMouse:.

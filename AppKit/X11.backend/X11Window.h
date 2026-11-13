@@ -49,6 +49,7 @@
     BOOL _isModal;
     BOOL _overrideRedirect;
     BOOL _dock; // the menu bar window (see X11MenuBarWindow)
+    BOOL _menuWindow; // a menu or pop-up window
     BOOL _fullscreenRequested;
     BOOL _isOpaque;
     BOOL _hasAlpha;   // created with the 32-bit visual and an alpha surface

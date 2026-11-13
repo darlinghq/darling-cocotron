@@ -291,11 +291,18 @@ static NSData *makeWindowIcon() {
     // The menu bar window is a dock window: the window manager has to manage
     // it for its strut to count.
     _dock = [delegate isKindOfClass: [X11MenuBarWindow class]];
+    // Menu and pop-up windows are panels, but they are the first kind named
+    // above: a managed window would take the input focus from the window the
+    // menu belongs to when it is clicked, and the application would see
+    // itself deactivated while its own menu is open. Being unmanaged, they
+    // leave the focus where it is, and the keys typed while a menu is open
+    // still go to the window that has it.
+    BOOL isMenuWindow = [delegate isKindOfClass: [NSMenuWindow class]] ||
+                        [delegate isKindOfClass: [NSPopUpWindow class]];
+    _menuWindow = isMenuWindow;
     xattr.override_redirect =
-            (_styleMask == NSBorderlessWindowMask && !isPanel && !_dock &&
-             ([delegate isKindOfClass: [NSMenuWindow class]] ||
-              [delegate isKindOfClass: NSClassFromString(@"NSPopUpWindow")] ||
-              ![delegate canBecomeKeyWindow]))
+            (_styleMask == NSBorderlessWindowMask && !_dock &&
+             (isMenuWindow || (!isPanel && ![delegate canBecomeKeyWindow])))
                     ? True
                     : False;
     if (isSheetPanel) {
@@ -373,8 +380,7 @@ static NSData *makeWindowIcon() {
     } else if (_dock) {
         windowType = "_NET_WM_WINDOW_TYPE_DOCK";
         isTransient = NO;
-    } else if ([delegate isKindOfClass: [NSMenuWindow class]] ||
-               [delegate isKindOfClass: [NSPopUpWindow class]]) {
+    } else if (isMenuWindow) {
         windowType = "_NET_WM_WINDOW_TYPE_MENU";
     } else if (isPanel) {
         windowType = "_NET_WM_WINDOW_TYPE_UTILITY";
@@ -400,9 +406,7 @@ static NSData *makeWindowIcon() {
 
     // A window of the application's own, not a popup or its menu bar, shows
     // the application's menu in the desktop's global menu.
-    if (!_dock && !_overrideRedirect &&
-        ![delegate isKindOfClass: [NSMenuWindow class]] &&
-        ![delegate isKindOfClass: [NSPopUpWindow class]])
+    if (!_dock && !_overrideRedirect && !isMenuWindow)
         [[x11disp appMenu] windowCreated: _window];
 
     // FIXME: Move this call into setStyleMaskInternal below!
@@ -727,6 +731,8 @@ static NSData *makeWindowIcon() {
         _mapped = YES;
         _wasMapped = YES;
         _miniaturizedKnown = NO;
+        if (_menuWindow)
+            [(X11Display *) [NSDisplay currentDisplay] menuWindowMapped: self];
     }
 }
 
@@ -857,6 +863,8 @@ static NSData *makeWindowIcon() {
             _xic = NULL;
         }
 
+        if (_menuWindow)
+            [(X11Display *) [NSDisplay currentDisplay] menuWindowUnmapped: self];
         [(X11Display *) [NSDisplay currentDisplay] setWindow: nil
                                                        forID: _window];
         XDestroyWindow(_display, _window);
@@ -982,6 +990,8 @@ static NSData *makeWindowIcon() {
     XUnmapWindow(_display, _window);
     _mapped = NO;
     _miniaturizedKnown = NO;
+    if (_menuWindow)
+        [(X11Display *) [NSDisplay currentDisplay] menuWindowUnmapped: self];
     // The window manager drops the fullscreen state of a withdrawn window.
     _fullscreenRequested = NO;
     // A focus request still waiting for MapNotify is void once the window is
