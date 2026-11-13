@@ -1,5 +1,4 @@
 #import <QuartzCore/QuartzCore.h>
-#import <QuartzCore/CASpringAnimation.h>
 #include <float.h>
 #include <math.h>
 
