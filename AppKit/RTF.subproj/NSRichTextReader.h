@@ -51,6 +51,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     // for now but should be extended to contains the whole current state for a
     // more complete parser
     NSMutableArray *_states;
+
+    // Bytes after the last attachment group, up to the enclosing group's end,
+    // which are not document text
+    NSRange _attachmentTail;
 }
 
 - initWithData: (NSData *) data;

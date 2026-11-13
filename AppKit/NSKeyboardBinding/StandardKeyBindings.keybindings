@@ -5,11 +5,13 @@
 	"control,0x0063" = "copy:";				/* command-c */
 	"control,0x0076" = "paste:";				/* command-v */
 	"control,0x0061" = "selectAll:";				/* command-a */
+	"control,0x007a" = "undo:";				/* command-z */
 
 	"command,0x0078" = "cut:";				/* command-x */
 	"command,0x0063" = "copy:";				/* command-c */
 	"command,0x0076" = "paste:";				/* command-v */
 	"command,0x0061" = "selectAll:";				/* command-a */
+	"command,0x007a" = "undo:";				/* command-z */
 
 	"0x0008" = "deleteBackward:";			/* (backspace? heh) */
 	"0x001B" = "cancel:";				/* Escape */

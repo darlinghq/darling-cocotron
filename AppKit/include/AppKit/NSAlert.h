@@ -22,9 +22,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 @class NSButton, NSImage, NSArray, NSWindow, NSError, NSView, NSMutableArray;
 
 typedef enum {
-    NSWarningAlertStyle,
-    NSInformationalAlertStyle,
-    NSCriticalAlertStyle,
+    NSAlertStyleWarning = 0,
+    NSAlertStyleInformational = 1,
+    NSAlertStyleCritical = 2,
+
+    NSWarningAlertStyle = NSAlertStyleWarning,
+    NSInformationalAlertStyle = NSAlertStyleInformational,
+    NSCriticalAlertStyle = NSAlertStyleCritical,
 } NSAlertStyle;
 
 enum {

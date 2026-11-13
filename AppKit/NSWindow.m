@@ -2250,8 +2250,11 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
         newFieldEditor = [_delegate windowWillReturnFieldEditor: self
                                                        toObject: object];
 
-    if (create && newFieldEditor == nil && _sharedFieldEditor == nil)
+    if (create && newFieldEditor == nil && _sharedFieldEditor == nil) {
         newFieldEditor = _sharedFieldEditor = [[NSTextView alloc] init];
+        // Cells draw their titles without padding; keep editing aligned.
+        [[_sharedFieldEditor textContainer] setLineFragmentPadding: 0];
+    }
 
     if (newFieldEditor)
         _currentFieldEditor = newFieldEditor;

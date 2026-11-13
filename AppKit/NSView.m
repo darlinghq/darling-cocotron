@@ -40,6 +40,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSView.h>
 #import <AppKit/NSViewBackingLayer.h>
 #import <AppKit/NSWindow-Private.h>
+#import <AppKit/NSDocument.h>
+#import <AppKit/NSWindowController.h>
 #import <CoreGraphics/CGWindow.h>
 #import <Foundation/NSKeyedArchiver.h>
 #import <Onyx2D/O2Context.h>
@@ -2816,9 +2818,14 @@ static NSView *viewBeingPrinted = nil;
     return nil;
 }
 
+// The window's document's display name, else the window's title.
 - (NSString *) printJobTitle {
-    NSUnimplementedMethod();
-    return nil;
+    NSWindow *window = [self window];
+    NSDocument *document = [[window windowController] document];
+    if (document != nil)
+        return [document displayName];
+    NSString *title = [window title];
+    return [title length] > 0 ? title : nil;
 }
 
 - (void) drawSheetBorderWithSize: (NSSize) size {

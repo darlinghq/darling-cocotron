@@ -107,6 +107,7 @@ APPKIT_EXPORT NSString *const NSTextDidChangeNotification;
                        withString: (NSString *) string;
 
 - (BOOL) readRTFDFromFile: (NSString *) path;
+- (BOOL) writeRTFDToFile: (NSString *) path atomically: (BOOL) atomically;
 - (void) replaceCharactersInRange: (NSRange) range withRTF: (NSData *) rtf;
 - (void) replaceCharactersInRange: (NSRange) range withRTFD: (NSData *) rtfd;
 
@@ -120,6 +121,8 @@ APPKIT_EXPORT NSString *const NSTextDidChangeNotification;
 - (void) setFont: (NSFont *) font;
 - (void) setFont: (NSFont *) font range: (NSRange) range;
 - (void) setAlignment: (NSTextAlignment) alignment;
+- (void) setBaseWritingDirection: (NSWritingDirection) direction
+                           range: (NSRange) range;
 
 - (void) setTextColor: (NSColor *) color;
 - (void) setTextColor: (NSColor *) color range: (NSRange) range;

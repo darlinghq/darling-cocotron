@@ -22,7 +22,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Foundation/Foundation.h>
 
 @class NSFont, NSColor, NSParagraphStyle, NSTextAttachment, NSFileWrapper,
-        NSTextList, NSTextBlock, NSTextTable, NSStringDrawingContext;
+        NSTextList, NSTextBlock, NSTextTable, NSStringDrawingContext, NSPasteboard;
 
 typedef NSString *NSAttributedStringDocumentReadingOptionKey;
 typedef NSString *NSAttributedStringDocumentAttributeKey;
@@ -56,6 +56,9 @@ APPKIT_EXPORT NSAttributedStringKey NSToolTipAttributeName;
 
 // The following constant is *not* declared as `const` in Apple's AppKit (they are located in __data)
 APPKIT_EXPORT NSAttributedStringKey NSSpellingStateAttributeName;
+
+// TextKit 2 era reading option (macOS 13): list marker format compatible with TextKit 1.
+APPKIT_EXPORT NSAttributedStringDocumentReadingOptionKey const NSTextKit1ListMarkerFormatDocumentOption;
 
 // The following constants are *not* declared as `const` in Apple's AppKit (they are located in __data)
 APPKIT_EXPORT NSAttributedStringDocumentAttributeKey NSDocumentTypeDocumentAttribute;
@@ -281,6 +284,12 @@ enum {
 
 + (NSArray *) textUnfilteredFileTypes;
 + (NSArray *) textUnfilteredPasteboardTypes;
+
+#pragma mark -
+#pragma mark NSPasteboardReading
+
+// RTFD, RTF and plain string types.
++ (NSArray *) readableTypesForPasteboard: (NSPasteboard *) pasteboard;
 
 @end
 

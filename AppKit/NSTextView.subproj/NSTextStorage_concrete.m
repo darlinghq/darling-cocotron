@@ -36,9 +36,37 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         NSRangeEntryInsert(_rangeToAttributes, NSMakeRange(0, [_string length]),
                            [NSDictionary dictionary]);
     } else {
-        [NSException raise: NSInvalidArgumentException
-                    format: @"-[%@ %s] is not implemented for coder %@",
-                            [self class], sel_getName(_cmd), coder];
+        // QUIRK: NSArchiver (typedstream) layout of a text storage: the string,
+        // then "iI" runs of (1-based attribute dictionary number, length)
+        // covering it; a dictionary is archived right after the first run that
+        // uses it. Not documented.
+        // Evidence: archives written by NSArchiver on macOS 27 (tier 2, MC13.7,
+        // fixtures textstorage.typedstream and attributedstring.typedstream).
+        // Test: test_quirk_typedstream_text_storage in
+        // tests/appkit-typedstream-text.m
+        NSString *decoded = [coder decodeObject];
+        _string = decoded ? [decoded mutableCopy] : [NSMutableString new];
+        _rangeToAttributes = NSCreateRangeToCopiedObjectEntries(0);
+        NSUInteger length = [_string length], location = 0;
+        if (length == 0)
+            NSRangeEntryInsert(_rangeToAttributes, NSMakeRange(0, 0), [NSDictionary dictionary]);
+        NSMutableArray *dictionaries = [NSMutableArray array];
+        while (location < length) {
+            int number;
+            unsigned int runLength;
+            [coder decodeValuesOfObjCTypes: "iI", &number, &runLength];
+            if (number == (int) [dictionaries count] + 1) {
+                NSDictionary *attributes = [coder decodeObject];
+                if (attributes != nil)
+                    [dictionaries addObject: attributes];
+            }
+            if (number < 1 || number > (int) [dictionaries count] || runLength == 0 || runLength > length - location)
+                [NSException raise: NSInvalidArgumentException
+                            format: @"-[%@ %s]: bad attribute run %d length %u at %lu of %lu", [self class],
+                                    sel_getName(_cmd), number, runLength, (unsigned long) location, (unsigned long) length];
+            NSRangeEntryInsert(_rangeToAttributes, NSMakeRange(location, runLength), dictionaries[number - 1]);
+            location += runLength;
+        }
     }
     return self;
 }

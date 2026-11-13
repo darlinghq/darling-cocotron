@@ -120,6 +120,7 @@ static inline NSGlyphFragment *fragmentAtGlyphIndex(NSLayoutManager *self,
         _glyphFragments = NSCreateRangeToOwnedPointerEntries(2);
         _invalidFragments = NSCreateRangeToOwnedPointerEntries(2);
         _layoutInvalid = YES;
+        _defaultAttachmentScaling = NSImageScaleNone;
         _rectCacheCapacity = 16;
         _rectCacheCount = 0;
         _rectCache = NSZoneMalloc(NULL, sizeof(NSRect) * _rectCacheCapacity);
@@ -132,6 +133,7 @@ static inline NSGlyphFragment *fragmentAtGlyphIndex(NSLayoutManager *self,
 }
 
 - init {
+    _defaultAttachmentScaling = NSImageScaleNone;
     _typesetter = [NSTypesetter new];
     _glyphGenerator = [[NSGlyphGenerator sharedGlyphGenerator] retain];
     _textContainers = [NSMutableArray new];
@@ -174,6 +176,22 @@ static inline NSGlyphFragment *fragmentAtGlyphIndex(NSLayoutManager *self,
 
 - (NSArray *) textContainers {
     return [[_textContainers retain] autorelease];
+}
+
+- (NSImageScaling) defaultAttachmentScaling {
+    return _defaultAttachmentScaling;
+}
+
+- (void) setDefaultAttachmentScaling: (NSImageScaling) scaling {
+    _defaultAttachmentScaling = scaling;
+}
+
+- (BOOL) usesDefaultHyphenation {
+    return _usesDefaultHyphenation;
+}
+
+- (void) setUsesDefaultHyphenation: (BOOL) flag {
+    _usesDefaultHyphenation = flag;
 }
 
 - (NSTextView *) firstTextView {
@@ -220,8 +238,38 @@ static inline NSGlyphFragment *fragmentAtGlyphIndex(NSLayoutManager *self,
     _layoutInvalid = YES;
 }
 
+// Moves every layout manager of the current text storage, and their text views, to textStorage.
 - (void) replaceTextStorage: (NSTextStorage *) textStorage {
-    [self setTextStorage: textStorage];
+    if (textStorage == nil)
+        [NSException raise: NSInvalidArgumentException
+                    format: @"-[NSLayoutManager replaceTextStorage:] nil text storage"];
+    if (textStorage == _textStorage)
+        return;
+
+    NSTextStorage *oldStorage = [_textStorage retain];
+    // Nib-loaded text views add their shared layout manager once each, so the old list can repeat it.
+    NSMutableArray *layoutManagers = [NSMutableArray array];
+    for (NSLayoutManager *layoutManager in [oldStorage layoutManagers]) {
+        if ([layoutManagers indexOfObjectIdenticalTo: layoutManager] == NSNotFound)
+            [layoutManagers addObject: layoutManager];
+    }
+    if ([layoutManagers indexOfObjectIdenticalTo: self] == NSNotFound)
+        [layoutManagers addObject: self];
+
+    NSUInteger length = [textStorage length];
+    for (NSLayoutManager *layoutManager in layoutManagers) {
+        [textStorage addLayoutManager: layoutManager];
+        [oldStorage removeLayoutManager: layoutManager];
+        for (NSTextContainer *container in [layoutManager textContainers]) {
+            NSTextView *textView = [container textView];
+            [textView _setTextStorage: textStorage];
+            NSRange selection = [textView selectedRange];
+            if (textView && NSMaxRange(selection) > length)
+                [textView setSelectedRange: NSMakeRange(MIN(selection.location, length), 0)];
+        }
+        [layoutManager invalidateDisplayForCharacterRange: NSMakeRange(0, length)];
+    }
+    [oldStorage release];
 }
 
 - (void) setGlyphGenerator: (NSGlyphGenerator *) generator {
@@ -1039,6 +1087,11 @@ static inline NSGlyphFragment *fragmentAtGlyphIndex(NSLayoutManager *self,
     NSRange range;
     NSGlyphFragment *fragment;
     NSRangeEnumerator state;
+    // Fragments are in glyph order, but bidi lines are reordered visually:
+    // the point is left of its line only if it is left of every fragment.
+    BOOL leftOfLine = YES;
+    CGFloat lineMinX = CGFLOAT_MAX;
+    NSUInteger lineStart = NSNotFound;
 
     [self validateGlyphsAndLayoutForContainer: container];
 
@@ -1048,6 +1101,11 @@ static inline NSGlyphFragment *fragmentAtGlyphIndex(NSLayoutManager *self,
 
     while (NSNextRangeEnumeratorEntry(&state, &range, (void **) &fragment)) {
         if (point.y < NSMinY(fragment->rect)) {
+            // Otherwise a click in the line's left padding would return
+            // the end of the line.
+            if (leftOfLine && lineStart != NSNotFound) {
+                return lineStart;
+            }
             if (endOfFragment > 0) {
                 // if we're at the end of a line we want to back up before the
                 // newline This is a very ugly way to do it
@@ -1126,11 +1184,18 @@ static inline NSGlyphFragment *fragmentAtGlyphIndex(NSLayoutManager *self,
                 } else {
                     result = NSMaxRange(range);
                 }
-            } else if (point.x > NSMaxX(fragment->rect)) {
-                if (fragment->leftToRight) {
-                    result = NSMaxRange(range);
-                } else {
-                    result = range.location;
+                if (NSMinX(fragment->rect) < lineMinX) {
+                    lineMinX = NSMinX(fragment->rect);
+                    lineStart = result;
+                }
+            } else {
+                leftOfLine = NO;
+                if (point.x > NSMaxX(fragment->rect)) {
+                    if (fragment->leftToRight) {
+                        result = NSMaxRange(range);
+                    } else {
+                        result = range.location;
+                    }
                 }
             }
             endOfFragment = NSMaxRange(range);
@@ -1141,6 +1206,9 @@ static inline NSGlyphFragment *fragmentAtGlyphIndex(NSLayoutManager *self,
     NSLog(@"returning: %u", result);
 #endif
 
+    if (leftOfLine && lineStart != NSNotFound) {
+        return lineStart;
+    }
     return result;
 }
 
@@ -1347,6 +1415,8 @@ static inline void _appendRectToCache(NSLayoutManager *self, NSRect rect) {
 #define DEBUG_rectArrayForGlyphRange_withinSelectedGlyphRange_inTextContainer_rectCount \
     0
 #endif
+
+    [self validateGlyphsAndLayoutForContainer: container];
 
     NSRange remainder =
             (selGlyphRange.location == NSNotFound) ? glyphRange : selGlyphRange;
@@ -1561,17 +1631,12 @@ static inline void _appendRectToCache(NSLayoutManager *self, NSRect rect) {
                      color: (NSColor *) color
         printingAdjustment: (NSSize) printingAdjustment
 {
-
-#if DEBUG_LM_DRAWING
-    NSLog(@"showPackedGlyphs: %p length: %d glyphRange: %@ atPoint: %@ font: "
-          @"%@ color: %@ printingAdjustment: %@",
-          glyphs, length, NSStringFromRange(glyphRange),
-          NSStringFromPoint(point), font, color,
-          NSStringFromSize(printingAdjustment));
-#define DEBUG_LM_SHOWPACKEDGLYPHS 0
-#endif
-
     CGContextRef context = NSCurrentGraphicsPort();
+    [font setInContext: [NSGraphicsContext currentContext]];
+    if (color)
+        [color setFill];
+    else
+        [[NSColor controlTextColor] setFill];
     CGGlyph *cgGlyphs = (CGGlyph *) glyphs;
     NSInteger cgGlyphsLength = length / 2;
     CGSize advances[cgGlyphsLength];
@@ -2354,13 +2419,6 @@ static inline void _appendRectToCache(NSLayoutManager *self, NSRect rect) {
 - (void) drawGlyphsForGlyphRange: (NSRange) glyphRange
                          atPoint: (NSPoint) origin
 {
-
-#if DEBUG_LM_DRAWING
-    NSLog(@"drawGlyphsForGlyphRange: %@ atPoint: %@",
-          NSStringFromRange(glyphRange), NSStringFromPoint(origin));
-#define DEBUG_LM_DRAWGLYPHSFORGLYPHRANGE 0
-#endif
-
     NSTextView *textView = [self textViewForBeginningOfSelection];
     NSRange selectedRange =
             (textView == nil) ? NSMakeRange(0, 0) : [textView selectedRange];
@@ -2919,8 +2977,8 @@ static inline void _appendRectToCache(NSLayoutManager *self, NSRect rect) {
     return nil;
 }
 
+// Stored only: layout is always contiguous.
 - (void) setAllowsNonContiguousLayout: (BOOL) value {
     _allowsNonContiguousLayout = value;
-    NSUnimplementedMethod();
 }
 @end
