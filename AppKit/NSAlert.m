@@ -57,7 +57,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
           returnCode: (NSModalResponse) returnCode
          contextInfo: (void *) contextInfo
 {
-    completionHandler(returnCode);
+    if (completionHandler != nil) {
+        completionHandler(returnCode);
+    }
     [self release];
 }
 
@@ -554,12 +556,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
          contextInfo: (void *) contextInfo
 {
     typedef void (*alertDidEnd)(id, SEL, NSAlert *, NSModalResponse, void *);
-    if (_sheetDidEnd) {
+    if (_sheetDelegate != nil && _sheetDidEnd != NULL) {
         alertDidEnd endFunction =
                 (alertDidEnd) [_sheetDelegate methodForSelector: _sheetDidEnd];
 
-        endFunction(_sheetDelegate, _sheetDidEnd, self, returnCode,
-                    contextInfo);
+        if (endFunction != NULL) {
+            endFunction(_sheetDelegate, _sheetDidEnd, self, returnCode,
+                        contextInfo);
+        }
     }
     [self release];
 }

@@ -23,6 +23,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/AppKit.h>
 #import <AppKit/NSRaise.h>
 #import <AppKit/NSTableCornerView.h>
+#import <AppKit/NSTableCellView.h>
+#import <AppKit/NSImageView.h>
 #import <Foundation/NSKeyedArchiver.h>
 
 NSString *const NSTableViewSelectionIsChangingNotification =
@@ -128,6 +130,8 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
         _intercellSpacing = NSMakeSize(3.0, 2.0);
         _selectedRowIndexes = [[NSIndexSet alloc] init];
         _selectedColumns = [[NSMutableArray alloc] init];
+        _registeredNibs = [[NSMutableDictionary alloc] init];
+        _activeRowViews = [[NSMutableArray alloc] init];
         _editedColumn = -1;
         _editedRow = -1;
         _numberOfRows = -1;
@@ -222,6 +226,8 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
     _intercellSpacing = NSMakeSize(3.0, 2.0);
     _selectedRowIndexes = [[NSIndexSet alloc] init];
     _selectedColumns = [[NSMutableArray alloc] init];
+    _registeredNibs = [[NSMutableDictionary alloc] init];
+    _activeRowViews = [[NSMutableArray alloc] init];
     _editedColumn = -1;
     _editedRow = -1;
     _numberOfRows = -1;
@@ -270,6 +276,8 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
     [_selectedRowIndexes release];
     [_selectedColumns release];
     [_sortDescriptors release];
+    [_registeredNibs release];
+    [_activeRowViews release];
     [super dealloc];
 }
 
@@ -841,6 +849,8 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 - (id) dataSourceObjectValueForTableColumn: (NSTableColumn *) tableColumn
                                        row: (NSInteger) row
 {
+    if ([_delegate respondsToSelector: @selector(tableView:viewForTableColumn:row:)])
+        return nil;
 
     if (_dataSource != nil &&
         [_dataSource respondsToSelector: @selector
@@ -1339,6 +1349,10 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 }
 
 - (void) reloadData {
+    for (NSView *view in _activeRowViews) {
+        [view removeFromSuperview];
+    }
+    [_activeRowViews removeAllObjects];
     [self noteNumberOfRowsChanged];
     [self setNeedsDisplay: YES];
     [_headerView setNeedsDisplay: YES];
@@ -1451,6 +1465,31 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 }
 
 - (void) drawRow: (NSInteger) row clipRect: (NSRect) clipRect {
+    if ([_delegate respondsToSelector: @selector(tableView:viewForTableColumn:row:)]) {
+        NSRange visibleColumns = [self columnsInRect: clipRect];
+        NSInteger drawThisColumn = visibleColumns.location;
+
+        if ([self isRowSelected: row]) {
+            [[NSColor selectedControlColor] setFill];
+            NSRectFill([self rectOfRow: row]);
+        }
+
+        for (; drawThisColumn < NSMaxRange(visibleColumns); drawThisColumn++) {
+            NSTableColumn *column = [_tableColumns objectAtIndex: drawThisColumn];
+            NSRect cellRect = [self frameOfCellAtColumn: drawThisColumn row: row];
+            NSView *cellView = [_delegate tableView: self viewForTableColumn: column row: row];
+            if (cellView != nil) {
+                [cellView setFrame: cellRect];
+                if ([cellView superview] != self) {
+                    [self addSubview: cellView];
+                }
+                [cellView setHidden: NO];
+                [cellView displayRectIgnoringOpacity: [cellView bounds]];
+            }
+        }
+        return;
+    }
+
     // draw only visible columns.
     NSRange visibleColumns = [self columnsInRect: clipRect];
     NSInteger drawThisColumn = visibleColumns.location;
@@ -2248,6 +2287,44 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 
 - (void)_writePersistentTableColumns {
     NSUnimplementedMethod();
+}
+
+- (void) registerNib: (NSNib *) nib forIdentifier: (NSString *) identifier {
+    if (identifier == nil)
+        return;
+    if (nib != nil)
+        [_registeredNibs setObject: nib forKey: identifier];
+    else
+        [_registeredNibs removeObjectForKey: identifier];
+}
+
+- (NSView *) viewAtColumn: (NSInteger) column row: (NSInteger) row makeIfNecessary: (BOOL) makeIfNecessary {
+    if (column >= 0 && column < [_tableColumns count] &&
+        [_delegate respondsToSelector: @selector(tableView:viewForTableColumn:row:)]) {
+        NSTableColumn *col = [_tableColumns objectAtIndex: column];
+        return [_delegate tableView: self viewForTableColumn: col row: row];
+    }
+    return nil;
+}
+
+// Creates the view from the nib registered for the identifier, owned by the
+// given object. Returns nil when no nib is registered for it.
+- (NSView *) makeViewWithIdentifier: (NSString *) identifier owner: (id) owner {
+    NSNib *nib = identifier != nil ? [_registeredNibs objectForKey: identifier] : nil;
+    NSArray *topLevelObjects = nil;
+
+    if (nib == nil || ![nib instantiateWithOwner: owner topLevelObjects: &topLevelObjects])
+        return nil;
+
+    for (id object in topLevelObjects) {
+        if ([object isKindOfClass: [NSView class]]) {
+            if ([object identifier] == nil)
+                [object setIdentifier: identifier];
+            [_activeRowViews addObject: object];
+            return object;
+        }
+    }
+    return nil;
 }
 
 - (void)_readPersistentTableColumns {

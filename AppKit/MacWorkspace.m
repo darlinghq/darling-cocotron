@@ -567,6 +567,18 @@ static LSLaunchFlags launchFlagsForConfiguration(
     NSUnimplementedMethod();
 }
 
+- (NSURL *) URLForApplicationToOpenURL: (NSURL *) url {
+    if (url == nil)
+        return nil;
+    CFErrorRef error = NULL;
+    CFURLRef appURL = LSCopyDefaultApplicationURLForURL((CFURLRef) url, kLSRolesAll, &error);
+    if (error != NULL)
+        CFRelease(error);
+    if (appURL != NULL)
+        return [(NSURL *) appURL autorelease];
+    return nil;
+}
+
 - (NSURL *) URLForApplicationWithBundleIdentifier: (NSString *) bundleIdentifier
 {
     CFURLRef url;

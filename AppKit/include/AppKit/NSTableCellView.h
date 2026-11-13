@@ -18,6 +18,23 @@
 */
 
 #import <AppKit/NSView.h>
+#import <AppKit/NSCell.h>
+#import <AppKit/NSTableView.h>
 
-@interface NSTableCellView : NSView
+@class NSTextField, NSImageView;
+
+@interface NSTableCellView : NSView {
+    NSTextField *_textField;
+    NSImageView *_imageView;
+    id _objectValue;
+    NSBackgroundStyle _backgroundStyle;
+    NSTableViewRowSizeStyle _rowSizeStyle;
+}
+
+@property (assign) IBOutlet NSTextField *textField;
+@property (assign) IBOutlet NSImageView *imageView;
+@property (retain) id objectValue;
+@property NSBackgroundStyle backgroundStyle;
+@property NSTableViewRowSizeStyle rowSizeStyle;
+
 @end

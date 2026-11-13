@@ -48,7 +48,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSControl.h>
 #import <AppKit/NSDragging.h>
 
-@class NSTableHeaderView, NSTableColumn;
+@class NSTableHeaderView, NSTableColumn, NSNib, NSTableRowView;
 
 APPKIT_EXPORT NSString *const NSTableViewSelectionIsChangingNotification;
 APPKIT_EXPORT NSString *const NSTableViewSelectionDidChangeNotification;
@@ -149,7 +149,14 @@ typedef NS_OPTIONS(NSUInteger, NSTableViewAnimationOptions) {
     NSInteger _draggingRow;
     NSDragOperation _draggingSourceMaskLocal;
     NSDragOperation _draggingSourceMaskNonLocal;
+
+    NSMutableDictionary *_registeredNibs;
+    NSMutableArray *_activeRowViews;
 }
+
+- (NSView *) makeViewWithIdentifier: (NSString *) identifier owner: (id) owner;
+- (void) registerNib: (NSNib *) nib forIdentifier: (NSString *) identifier;
+- (NSView *) viewAtColumn: (NSInteger) column row: (NSInteger) row makeIfNecessary: (BOOL) makeIfNecessary;
 
 - (SEL) doubleAction;
 
@@ -334,6 +341,9 @@ typedef NS_OPTIONS(NSUInteger, NSTableViewAnimationOptions) {
         willDisplayCell: cell
          forTableColumn: (NSTableColumn *) tableColumn
                     row: (NSInteger) row;
+- (NSView *) tableView: (NSTableView *) tableView
+    viewForTableColumn: (NSTableColumn *) tableColumn
+                   row: (NSInteger) row;
 @end
 
 @interface NSObject (NSTableView_notifications)

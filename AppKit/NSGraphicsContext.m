@@ -245,26 +245,68 @@ NSMutableArray *NSCurrentFocusStack() {
 }
 
 - (void) setCompositingOperation: (NSCompositingOperation) value {
-    CGBlendMode blendMode[] = {
-            kCGBlendModeClear,
-            kCGBlendModeCopy,
-            kCGBlendModeNormal,
-            kCGBlendModeSourceIn,
-            kCGBlendModeSourceOut,
-            kCGBlendModeSourceAtop,
-            kCGBlendModeDestinationOver,
-            kCGBlendModeDestinationIn,
-            kCGBlendModeDestinationOut,
-            kCGBlendModeDestinationAtop,
-            kCGBlendModeXOR,
-            kCGBlendModePlusDarker,
-            kCGBlendModeNormal,
-            kCGBlendModePlusLighter,
-    };
-    if (value < NSCompositeClear || value > NSCompositePlusLighter)
+    switch ((int)value) {
+    case NSCompositeClear:
+        CGContextSetBlendMode(_graphicsPort, kCGBlendModeClear); break;
+    case NSCompositeCopy:
+        CGContextSetBlendMode(_graphicsPort, kCGBlendModeCopy); break;
+    case NSCompositeSourceOver:
+        CGContextSetBlendMode(_graphicsPort, kCGBlendModeNormal); break;
+    case NSCompositeSourceIn:
+        CGContextSetBlendMode(_graphicsPort, kCGBlendModeSourceIn); break;
+    case NSCompositeSourceOut:
+        CGContextSetBlendMode(_graphicsPort, kCGBlendModeSourceOut); break;
+    case NSCompositeSourceAtop:
+        CGContextSetBlendMode(_graphicsPort, kCGBlendModeSourceAtop); break;
+    case NSCompositeDestinationOver:
+        CGContextSetBlendMode(_graphicsPort, kCGBlendModeDestinationOver); break;
+    case NSCompositeDestinationIn:
+        CGContextSetBlendMode(_graphicsPort, kCGBlendModeDestinationIn); break;
+    case NSCompositeDestinationOut:
+        CGContextSetBlendMode(_graphicsPort, kCGBlendModeDestinationOut); break;
+    case NSCompositeDestinationAtop:
+        CGContextSetBlendMode(_graphicsPort, kCGBlendModeDestinationAtop); break;
+    case NSCompositeXOR:
+        CGContextSetBlendMode(_graphicsPort, kCGBlendModeXOR); break;
+    case NSCompositePlusDarker:
+        CGContextSetBlendMode(_graphicsPort, kCGBlendModePlusDarker); break;
+    case NSCompositeHighlight:
+        CGContextSetBlendMode(_graphicsPort, kCGBlendModeNormal); break;
+    case NSCompositePlusLighter:
+        CGContextSetBlendMode(_graphicsPort, kCGBlendModePlusLighter); break;
+    case NSCompositingOperationMultiply:
+        CGContextSetBlendMode(_graphicsPort, kCGBlendModeMultiply); break;
+    case NSCompositingOperationScreen:
+        CGContextSetBlendMode(_graphicsPort, kCGBlendModeScreen); break;
+    case NSCompositingOperationOverlay:
+        CGContextSetBlendMode(_graphicsPort, kCGBlendModeOverlay); break;
+    case NSCompositingOperationDarken:
+        CGContextSetBlendMode(_graphicsPort, kCGBlendModeDarken); break;
+    case NSCompositingOperationLighten:
+        CGContextSetBlendMode(_graphicsPort, kCGBlendModeLighten); break;
+    case NSCompositingOperationColorDodge:
+        CGContextSetBlendMode(_graphicsPort, kCGBlendModeColorDodge); break;
+    case NSCompositingOperationColorBurn:
+        CGContextSetBlendMode(_graphicsPort, kCGBlendModeColorBurn); break;
+    case NSCompositingOperationSoftLight:
+        CGContextSetBlendMode(_graphicsPort, kCGBlendModeSoftLight); break;
+    case NSCompositingOperationHardLight:
+        CGContextSetBlendMode(_graphicsPort, kCGBlendModeHardLight); break;
+    case NSCompositingOperationDifference:
+        CGContextSetBlendMode(_graphicsPort, kCGBlendModeDifference); break;
+    case NSCompositingOperationExclusion:
+        CGContextSetBlendMode(_graphicsPort, kCGBlendModeExclusion); break;
+    case NSCompositingOperationHue:
+        CGContextSetBlendMode(_graphicsPort, kCGBlendModeHue); break;
+    case NSCompositingOperationSaturation:
+        CGContextSetBlendMode(_graphicsPort, kCGBlendModeSaturation); break;
+    case NSCompositingOperationColor:
+        CGContextSetBlendMode(_graphicsPort, kCGBlendModeColor); break;
+    case NSCompositingOperationLuminosity:
+        CGContextSetBlendMode(_graphicsPort, kCGBlendModeLuminosity); break;
+    default:
         return;
-
-    CGContextSetBlendMode(_graphicsPort, blendMode[value]);
+    }
     _compOperation = value;
 }
 

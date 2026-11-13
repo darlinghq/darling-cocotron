@@ -19,12 +19,26 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSTextField.h>
 
+@class NSButtonCell, NSMenu;
+
 @interface NSSearchField : NSTextField
 
 - (NSArray *) recentSearches;
 - (NSString *) recentsAutosaveName;
+- (int) maximumRecents;
+- (BOOL) sendsWholeSearchString;
+- (BOOL) sendsSearchStringImmediately;
+- (NSButtonCell *) searchButtonCell;
+- (NSButtonCell *) cancelButtonCell;
+- (NSMenu *) searchMenuTemplate;
 
 - (void) setRecentSearches: (NSArray *) searches;
 - (void) setRecentsAutosaveName: (NSString *) name;
+- (void) setMaximumRecents: (int) maxRecents;
+- (void) setSendsWholeSearchString: (BOOL) flag;
+- (void) setSendsSearchStringImmediately: (BOOL) flag;
+- (void) setSearchButtonCell: (NSButtonCell *) cell;
+- (void) setCancelButtonCell: (NSButtonCell *) cell;
+- (void) setSearchMenuTemplate: (NSMenu *) menu;
 
 @end
