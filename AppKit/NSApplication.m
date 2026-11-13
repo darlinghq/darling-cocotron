@@ -219,7 +219,81 @@ NSApplication *NSApp = nil;
               forEventClass: kInternetEventClass
                  andEventID: kAEGetURL];
 
+    // Documents opened or printed through Launch Services arrive as kAEOpenDocuments and
+    // kAEPrintDocuments events.
+    [[NSAppleEventManager sharedAppleEventManager]
+            setEventHandler: self
+                andSelector: @selector(_handleOpenDocumentsEvent:withReplyEvent:)
+              forEventClass: kCoreEventClass
+                 andEventID: kAEOpenDocuments];
+    [[NSAppleEventManager sharedAppleEventManager]
+            setEventHandler: self
+                andSelector: @selector(_handlePrintDocumentsEvent:withReplyEvent:)
+              forEventClass: kCoreEventClass
+                 andEventID: kAEPrintDocuments];
+
     return NSApp;
+}
+
+// Paths named by the direct object of an open or print documents event: a file URL or a list of them.
+static NSArray *pathsOfDocumentsEvent(NSAppleEventDescriptor *event) {
+    NSAppleEventDescriptor *object = [event paramDescriptorForKeyword: keyDirectObject];
+    NSMutableArray *paths = [NSMutableArray array];
+    NSInteger count = [object descriptorType] == typeAEList ? [object numberOfItems] : 1;
+
+    if (object == nil)
+        return paths;
+    for (NSInteger i = 1; i <= count; i++) {
+        NSAppleEventDescriptor *item =
+                [object descriptorType] == typeAEList ? [object descriptorAtIndex: i] : object;
+        NSData *data = [item data];
+        NSString *string = nil;
+
+        if ([item descriptorType] == typeFileURL || [item descriptorType] == typeUTF8Text)
+            string = [[[NSString alloc] initWithData: data encoding: NSUTF8StringEncoding] autorelease];
+
+        NSURL *url = string != nil ? [NSURL URLWithString: string] : nil;
+        if ([url isFileURL] && [[url path] length] > 0)
+            [paths addObject: [url path]];
+    }
+    return paths;
+}
+
+// Documents that arrived before the application finished launching; they are opened as part of finishing.
+static NSMutableArray *pendingOpenFiles = nil;
+
+- (void) _handleOpenDocumentsEvent: (NSAppleEventDescriptor *) event
+                    withReplyEvent: (NSAppleEventDescriptor *) reply {
+    NSArray *paths = pathsOfDocumentsEvent(event);
+
+    if ([paths count] == 0)
+        return;
+    if (!_finishedLaunching) {
+        if (pendingOpenFiles == nil)
+            pendingOpenFiles = [[NSMutableArray alloc] init];
+        [pendingOpenFiles addObjectsFromArray: paths];
+        return;
+    }
+    [self _openFileNames: paths];
+}
+
+- (void) _handlePrintDocumentsEvent: (NSAppleEventDescriptor *) event
+                     withReplyEvent: (NSAppleEventDescriptor *) reply {
+    NSArray *paths = pathsOfDocumentsEvent(event);
+
+    if ([paths count] == 0)
+        return;
+    if ([_delegate respondsToSelector: @selector(application:
+                                                  printFiles:withSettings:
+                                              showPrintPanels:)]) {
+        [_delegate application: self
+                    printFiles: paths
+                  withSettings: nil
+               showPrintPanels: YES];
+    } else if ([_delegate respondsToSelector: @selector(application:printFile:)]) {
+        for (NSString *path in paths)
+            [_delegate application: self printFile: path];
+    }
 }
 
 - (void) _handleGetURLEvent: (NSAppleEventDescriptor *) event
@@ -678,6 +752,23 @@ NSApplication *NSApp = nil;
         openFiles = nsOpen;
     }
 
+    [defaults removeObjectForKey: @"NSOpen"];
+
+    if ([pendingOpenFiles count] > 0) {
+        openFiles = openFiles != nil
+                ? [openFiles arrayByAddingObjectsFromArray: pendingOpenFiles]
+                : [NSArray arrayWithArray: pendingOpenFiles];
+        [pendingOpenFiles release];
+        pendingOpenFiles = nil;
+    }
+
+    return [self _openFileNames: openFiles];
+}
+
+// Hands documents to the delegate (or the document controller) the way a request to open files is.
+- (BOOL) _openFileNames: (NSArray *) openFiles {
+    BOOL opened = NO;
+
     if ([openFiles count] == 0) {
         return NO;
     }
@@ -698,7 +789,6 @@ NSApplication *NSApp = nil;
             opened |= [target application: self openFile: aFile];
         }
     }
-    [defaults removeObjectForKey: @"NSOpen"];
 
     return opened;
 }
