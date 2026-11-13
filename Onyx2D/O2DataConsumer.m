@@ -62,11 +62,18 @@ static void O2DataConsumerFileReleaseInfoCallback(void *info) {
     if ([url isFileURL]) {
         NSString *path = [url path];
         // Create the file and get an handle on it
-        [[NSFileManager defaultManager] createFileAtPath: path
-                                                contents: nil
-                                              attributes: nil];
+        if (![[NSFileManager defaultManager] createFileAtPath: path
+                                                 contents: nil
+                                               attributes: nil]) {
+            [self release];
+            return nil;
+        }
         NSFileHandle *fileHandle =
                 [NSFileHandle fileHandleForWritingAtPath: path];
+        if (fileHandle == nil) {
+            [self release];
+            return nil;
+        }
 
         O2DataConsumerCallbacks callbacks = {
                 O2DataConsumerFilePutBytesCallback,

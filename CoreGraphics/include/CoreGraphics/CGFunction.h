@@ -1,3 +1,6 @@
+#ifndef CGFUNCTION_H
+#define CGFUNCTION_H
+
 /* Copyright (c) 2007 Christopher J. W. Lloyd
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
@@ -38,3 +41,5 @@ CGFunctionCreate(void *info, size_t domainDimension, const CGFloat *domain,
                  const CGFunctionCallbacks *callbacks);
 
 CF_IMPLICIT_BRIDGING_DISABLED
+
+#endif /* CGFUNCTION_H */

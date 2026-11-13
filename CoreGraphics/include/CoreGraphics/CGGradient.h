@@ -1,3 +1,6 @@
+#ifndef CGGRADIENT_H
+#define CGGRADIENT_H
+
 #import <CoreGraphics/CGColorSpace.h>
 #import <CoreGraphics/CGGeometry.h>
 #import <CoreGraphics/CoreGraphicsExport.h>
@@ -20,3 +23,7 @@ CGGradientRef CGGradientCreateWithColors(CGColorSpaceRef colorSpace,
 
 void CGGradientRelease(CGGradientRef self);
 CGGradientRef CGGradientRetain(CGGradientRef self);
+
+COREGRAPHICS_EXPORT CFTypeID CGGradientGetTypeID(void);
+
+#endif /* CGGRADIENT_H */

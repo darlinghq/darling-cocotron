@@ -20,6 +20,7 @@
 #import <QuartzCore/CAMetalLayer.h>
 
 #import <OpenGL/gl.h>
+#import <OpenGL/CGLTypes.h>
 
 #include <memory>
 #include <array>

@@ -4,10 +4,13 @@
 // are listed, and the conversion between Cocoa's global space (origin at the main monitor) and root coordinates.
 // The RandR part runs on a real X server; use tests/x11-monitors.sh, which starts its own Xvfb.
 // Build: cc x11-monitors.c -lX11 -lXrandr
+#define _GNU_SOURCE
+#include <dlfcn.h>
 #include "../CoreGraphics/X11.backend/X11Monitors.h"
 #include "../CoreGraphics/CGDisplayGeometry.h"
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 static int failures, checks;
@@ -29,6 +32,48 @@ static X11Monitor active(RROutput output, int x, int y, unsigned w, unsigned h) 
 
 static X11Monitor inactive(RROutput output) {
     return (X11Monitor){output, false, 0, 0, 0, 0};
+}
+
+/* On nested X servers (such as Xephyr) RandR allows mode creation but refuses to move CRTC coordinates
+ * outside (0, 0) or update output associations when disabled. When X11_MONITORS_NESTED is set (by
+ * x11-monitors.sh for Xephyr), the RandR getters are interposed to reflect what setCrtc requested, so the
+ * unit test can verify X11MonitorsCopy there too. */
+static struct {
+    bool active;
+    int x, y;
+    unsigned width, height;
+    bool enabled;
+} crtcOverride;
+
+XRRCrtcInfo *XRRGetCrtcInfo(Display *display, XRRScreenResources *resources, RRCrtc crtc) {
+    XRRCrtcInfo *(*real)(Display *, XRRScreenResources *, RRCrtc) =
+            (XRRCrtcInfo * (*) (Display *, XRRScreenResources *, RRCrtc)) dlsym(RTLD_NEXT, "XRRGetCrtcInfo");
+    XRRCrtcInfo *info = real(display, resources, crtc);
+    if (crtcOverride.active && info) {
+        if (!crtcOverride.enabled) {
+            info->mode = None;
+            info->noutput = 0;
+            info->width = 0;
+            info->height = 0;
+        } else {
+            info->x = crtcOverride.x;
+            info->y = crtcOverride.y;
+            info->width = crtcOverride.width;
+            info->height = crtcOverride.height;
+            info->mode = 1;
+        }
+    }
+    return info;
+}
+
+XRROutputInfo *XRRGetOutputInfo(Display *display, XRRScreenResources *resources, RROutput output) {
+    XRROutputInfo *(*real)(Display *, XRRScreenResources *, RROutput) =
+            (XRROutputInfo * (*) (Display *, XRRScreenResources *, RROutput)) dlsym(RTLD_NEXT, "XRRGetOutputInfo");
+    XRROutputInfo *info = real(display, resources, output);
+    if (crtcOverride.active && info && !crtcOverride.enabled) {
+        info->crtc = None;
+    }
+    return info;
 }
 
 static void pickPrimary(void) {
@@ -220,8 +265,24 @@ static void convention(void) {
 }
 
 static void setCrtc(Display *display, int x, int y, unsigned width, unsigned height, bool enable) {
+    /* Only a nested server needs the interposed getters; elsewhere the test reads what RandR really reports. */
+    crtcOverride.active = getenv("X11_MONITORS_NESTED") != NULL;
+    crtcOverride.x = x;
+    crtcOverride.y = y;
+    crtcOverride.width = width;
+    crtcOverride.height = height;
+    crtcOverride.enabled = enable;
     Window root = DefaultRootWindow(display);
     XRRScreenResources *resources = XRRGetScreenResources(display, root);
+    CHECK(resources != NULL, "XRRGetScreenResources returned NULL in setCrtc");
+    if (!resources)
+        return;
+    CHECK(resources->noutput > 0 && resources->ncrtc > 0, "resources missing outputs or crtcs: noutput=%d, ncrtc=%d",
+          resources->noutput, resources->ncrtc);
+    if (resources->noutput <= 0 || resources->ncrtc <= 0) {
+        XRRFreeScreenResources(resources);
+        return;
+    }
     RRMode mode = None;
     if (enable) {
         XRRModeInfo info;
@@ -240,6 +301,11 @@ static void setCrtc(Display *display, int x, int y, unsigned width, unsigned hei
         info.name = name;
         info.nameLength = (unsigned) strlen(name);
         mode = XRRCreateMode(display, root, &info);
+        CHECK(mode != None, "XRRCreateMode failed in setCrtc");
+        if (mode == None) {
+            XRRFreeScreenResources(resources);
+            return;
+        }
         XRRAddOutputMode(display, resources->outputs[0], mode);
     }
     Status status = XRRSetCrtcConfig(display, resources, resources->crtcs[0], CurrentTime, x, y, mode, RR_Rotate_0,

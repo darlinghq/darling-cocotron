@@ -283,7 +283,9 @@ void CATexImage2DCGImage(CGImageRef image) {
         break;
 
     case kCGImageAlphaPremultipliedLast:
-        if (byteOrder == kO2BitmapByteOrder32Big) {
+        // Without an explicit byte order the samples are R, G, B, A in memory
+        if (byteOrder == kCGBitmapByteOrderDefault ||
+            byteOrder == kO2BitmapByteOrder32Big) {
             glFormat = GL_RGBA;
             glType = GL_UNSIGNED_INT_8_8_8_8_REV;
         }

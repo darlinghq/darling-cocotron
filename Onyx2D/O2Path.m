@@ -20,6 +20,16 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Onyx2D/O2Exceptions.h>
 #import <Onyx2D/O2MutablePath.h>
 #import <Onyx2D/O2Path.h>
+#import <Onyx2D/O2Defines_FreeType.h>
+#include <math.h>
+#include <limits.h>
+#include <stdint.h>
+#ifdef FREETYPE_PRESENT
+#include <ft2build.h>
+#include FT_FREETYPE_H
+#include FT_STROKER_H
+#include FT_OUTLINE_H
+#endif
 
 @implementation O2Path
 
@@ -477,6 +487,230 @@ O2PathRef O2PathCreateWithRect(O2Rect rect, const O2AffineTransform *transform)
     O2MutablePathRef path = O2PathCreateMutable();
     O2PathAddRect(path, transform, rect);
     return path;
+}
+
+#ifdef FREETYPE_PRESENT
+typedef struct {
+    O2MutablePathRef path;
+    O2Point origin;
+    O2Float scale;
+    const O2AffineTransform *transform;
+    BOOL contour;
+} O2StrokeOutput;
+
+static BOOL O2StrokePoint(O2StrokeOutput *output, const FT_Vector *vector,
+                          O2Point *point) {
+    *point = O2PointMake(output->origin.x + vector->x / output->scale,
+                        output->origin.y + vector->y / output->scale);
+    if (output->transform != NULL)
+        *point = O2PointApplyAffineTransform(*point, *output->transform);
+    return isfinite(point->x) && isfinite(point->y);
+}
+
+static int O2StrokeMove(const FT_Vector *to, void *info) {
+    O2StrokeOutput *output = info;
+    O2Point point;
+    if (!O2StrokePoint(output, to, &point))
+        return 1;
+    if (output->contour)
+        O2PathCloseSubpath(output->path);
+    O2PathMoveToPoint(output->path, NULL, point.x, point.y);
+    output->contour = YES;
+    return 0;
+}
+
+static int O2StrokeLine(const FT_Vector *to, void *info) {
+    O2StrokeOutput *output = info;
+    O2Point point;
+    if (!O2StrokePoint(output, to, &point))
+        return 1;
+    O2PathAddLineToPoint(output->path, NULL, point.x, point.y);
+    return 0;
+}
+
+static int O2StrokeQuad(const FT_Vector *control, const FT_Vector *to, void *info) {
+    O2StrokeOutput *output = info;
+    O2Point c, point;
+    if (!O2StrokePoint(output, control, &c) || !O2StrokePoint(output, to, &point))
+        return 1;
+    O2PathAddQuadCurveToPoint(output->path, NULL, c.x, c.y, point.x, point.y);
+    return 0;
+}
+
+static int O2StrokeCubic(const FT_Vector *c1, const FT_Vector *c2,
+                        const FT_Vector *to, void *info) {
+    O2StrokeOutput *output = info;
+    O2Point a, b, point;
+    if (!O2StrokePoint(output, c1, &a) || !O2StrokePoint(output, c2, &b) ||
+        !O2StrokePoint(output, to, &point))
+        return 1;
+    O2PathAddCurveToPoint(output->path, NULL, a.x, a.y, b.x, b.y, point.x, point.y);
+    return 0;
+}
+#endif
+
+O2PathRef O2PathCreateCopyByStrokingPath(O2PathRef self,
+    const O2AffineTransform *transform, O2Float width, int cap, int join,
+    O2Float miterLimit)
+{
+#ifdef FREETYPE_PRESENT
+    if (self == nil || !isfinite(width) || width <= 0 ||
+        !isfinite(miterLimit) || miterLimit < 1 || miterLimit >= 32768 ||
+        cap < 0 || cap > 2 || join < 0 || join > 2)
+        return nil;
+    if (transform != NULL &&
+        (!isfinite(transform->a) || !isfinite(transform->b) ||
+         !isfinite(transform->c) || !isfinite(transform->d) ||
+         !isfinite(transform->tx) || !isfinite(transform->ty)))
+        return nil;
+    const O2Point *points = O2PathPoints(self);
+    const unsigned char *elements = O2PathElements(self);
+    size_t pointCount = O2PathNumberOfPoints(self);
+    size_t elementCount = O2PathNumberOfElements(self);
+    O2Point origin = pointCount ? points[0] : O2PointMake(0, 0);
+    O2Float extent = 0, scale = 65536, radius = width / 2;
+    for (size_t i = 0; i < pointCount; i++) {
+        O2Float x = points[i].x - origin.x, y = points[i].y - origin.y;
+        if (!isfinite(x) || !isfinite(y))
+            return nil;
+        extent = fmax(extent, fmax(fabs(x), fabs(y)));
+    }
+    extent += radius * miterLimit;
+    if (!isfinite(extent))
+        return nil;
+    // FreeType arithmetic assumes signed32 bits, even when FT_Long is wider.
+    while (scale > 64 && extent * scale > 0x4000000)
+        scale /= 2;
+    if (extent * scale > 0x4000000 || radius * scale < 1)
+        return nil;
+    long long miter = llround(miterLimit * 65536);
+    if (miter > INT32_MAX)
+        return nil;
+    FT_Library library = NULL;
+    FT_Stroker stroker = NULL;
+    FT_Outline outline = {0};
+    BOOL allocated = NO;
+    O2MutablePathRef path = nil;
+    O2PathRef result = nil;
+    @try {
+        if (FT_Init_FreeType(&library) || FT_Stroker_New(library, &stroker))
+            return nil;
+        FT_Stroker_LineJoin joins[] = {FT_STROKER_LINEJOIN_MITER_FIXED,
+            FT_STROKER_LINEJOIN_ROUND, FT_STROKER_LINEJOIN_BEVEL};
+        FT_Stroker_Set(stroker, llround(radius * scale),
+            (FT_Stroker_LineCap)cap, joins[join], (FT_Fixed)miter);
+        path = O2PathCreateMutable();
+        size_t index = 0, pointIndex = 0;
+        O2Point current = origin;
+        BOOL hasCurrent = NO, closedPreviously = NO;
+        const size_t sizes[] = {1, 1, 2, 3, 0};
+        while (index < elementCount) {
+            if (elements[index] == kO2PathElementMoveToPoint) {
+                current = points[pointIndex++];
+                index++;
+                hasCurrent = YES;
+                closedPreviously = NO;
+            }
+            if (closedPreviously && elements[index] == kO2PathElementCloseSubpath) {
+                index++;
+                continue;
+            }
+            if (!hasCurrent)
+                return nil;
+            size_t end = index, endPoint = pointIndex;
+            BOOL degenerate = YES;
+            while (end < elementCount && elements[end] != kO2PathElementMoveToPoint &&
+                   elements[end] != kO2PathElementCloseSubpath) {
+                if (elements[end] > kO2PathElementCloseSubpath)
+                    return nil;
+                size_t count = sizes[elements[end++]];
+                for (size_t i = 0; i < count; i++) {
+                    if (points[endPoint].x != current.x || points[endPoint].y != current.y)
+                        degenerate = NO;
+                    endPoint++;
+                }
+            }
+            BOOL closed = end < elementCount && elements[end] == kO2PathElementCloseSubpath;
+            if (degenerate) {
+                // Match FreeType outer-contour winding for nonzero fills.
+                if (cap == 1 && (closed || endPoint > pointIndex))
+                    O2PathAddEllipseInRect(path, transform,
+                        O2RectMake(current.x - radius, current.y + radius, width, -width));
+                pointIndex = endPoint;
+            } else {
+                FT_Vector start = {llround((current.x - origin.x) * scale),
+                                   llround((current.y - origin.y) * scale)};
+                BOOL collapsed = YES;
+                for (size_t i = pointIndex; i < endPoint; i++)
+                    if (llround((points[i].x - origin.x) * scale) != start.x ||
+                        llround((points[i].y - origin.y) * scale) != start.y)
+                        collapsed = NO;
+                if (collapsed)
+                    return nil;
+                if (FT_Stroker_BeginSubPath(stroker, &start, !closed))
+                    return nil;
+                for (size_t i = index; i < end; i++) {
+                    FT_Vector vectors[3];
+                    size_t count = sizes[elements[i]];
+                    for (size_t j = 0; j < count; j++) {
+                        O2Point point = points[pointIndex++];
+                        vectors[j].x = llround((point.x - origin.x) * scale);
+                        vectors[j].y = llround((point.y - origin.y) * scale);
+                    }
+                    FT_Error error;
+                    if (elements[i] == kO2PathElementAddLineToPoint)
+                        error = FT_Stroker_LineTo(stroker, vectors);
+                    else if (elements[i] == kO2PathElementAddQuadCurveToPoint)
+                        error = FT_Stroker_ConicTo(stroker, vectors, vectors + 1);
+                    else
+                        error = FT_Stroker_CubicTo(stroker, vectors, vectors + 1, vectors + 2);
+                    if (error)
+                        return nil;
+                }
+                if (FT_Stroker_EndSubPath(stroker))
+                    return nil;
+                if (!closed)
+                    current = points[endPoint - 1];
+            }
+            index = end + (closed ? 1 : 0);
+            closedPreviously = closed;
+        }
+        FT_UInt count, contours;
+        if (FT_Stroker_GetCounts(stroker, &count, &contours) ||
+            count > SHRT_MAX || contours > SHRT_MAX)
+            return nil;
+        if (count != 0) {
+            if (FT_Outline_New(library, count, contours, &outline))
+                return nil;
+            allocated = YES;
+            outline.n_points = outline.n_contours = 0;
+            FT_Stroker_Export(stroker, &outline);
+            O2StrokeOutput output = {path, origin, scale, transform, NO};
+            FT_Outline_Funcs functions = {O2StrokeMove, O2StrokeLine,
+                O2StrokeQuad, O2StrokeCubic, 0, 0};
+            if (FT_Outline_Decompose(&outline, &functions, &output))
+                return nil;
+            if (output.contour)
+                O2PathCloseSubpath(path);
+        }
+        const O2Point *outputPoints = O2PathPoints(path);
+        for (size_t i = 0; i < O2PathNumberOfPoints(path); i++)
+            if (!isfinite(outputPoints[i].x) || !isfinite(outputPoints[i].y))
+                return nil;
+        result = O2PathCreateCopy(path);
+    } @finally {
+        O2PathRelease(path);
+        if (library != NULL) {
+            if (allocated)
+                FT_Outline_Done(library, &outline);
+            FT_Stroker_Done(stroker);
+            FT_Done_FreeType(library);
+        }
+    }
+    return result;
+#else
+    return nil;
+#endif
 }
 
 @end

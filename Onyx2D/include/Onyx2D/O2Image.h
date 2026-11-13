@@ -114,6 +114,7 @@ typedef O2Float *(*O2ImageFunction_read_a32f)(O2Image *self, int x, int y,
     BOOL _clampExternalPixels;
     O2ColorRenderingIntent _renderingIntent;
     O2Image *_mask;
+    float _contentHeadroom;
 
     NSData *_directData;
     const unsigned char *_directBytes;
@@ -185,6 +186,13 @@ O2ImageCreateWithPNGDataProvider(O2DataProviderRef pngProvider,
                                  O2ColorRenderingIntent renderingIntent);
 
 O2ImageRef O2ImageCreateWithImageInRect(O2ImageRef self, O2Rect rect);
+
+// An image carries an optional HDR content headroom (peak content brightness
+// as a multiple of SDR white). Zero means unknown. The image is immutable, so
+// changing the headroom creates a copy that shares the pixel data.
+float O2ImageGetContentHeadroom(O2ImageRef self);
+O2ImageRef O2ImageCreateCopyWithContentHeadroom(O2ImageRef self,
+                                                float headroom);
 O2ImageRef O2ImageCreateWithMask(O2ImageRef self, O2ImageRef mask);
 O2ImageRef O2ImageCreateWithMaskingColors(O2ImageRef self,
                                           const O2Float *components);

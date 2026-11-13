@@ -1,3 +1,6 @@
+#ifndef CGSHADING_H
+#define CGSHADING_H
+
 /* Copyright (c) 2007 Christopher J. W. Lloyd
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
@@ -38,3 +41,5 @@ CGShadingCreateRadial(CGColorSpaceRef colorSpace, CGPoint startPoint,
                       CGFunctionRef function, bool extendStart, bool extendEnd);
 
 CF_IMPLICIT_BRIDGING_DISABLED
+
+#endif /* CGSHADING_H */

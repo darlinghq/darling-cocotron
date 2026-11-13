@@ -1,3 +1,6 @@
+#ifndef CGLPIXELSURFACE_H
+#define CGLPIXELSURFACE_H
+
 #import <Foundation/NSObject.h>
 #import <Onyx2D/O2Geometry.h>
 #import <OpenGL/OpenGL.h>
@@ -26,3 +29,5 @@
 - (O2Surface *) validSurface;
 
 @end
+
+#endif /* CGLPIXELSURFACE_H */

@@ -22,19 +22,56 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #include <CoreFoundation/CFString.h>
 
 const CFStringRef kCGPDFContextTitle = CFSTR("kCGPDFContextTitle");
+const CFStringRef kCGPDFContextAuthor = CFSTR("kCGPDFContextAuthor");
+const CFStringRef kCGPDFContextCreator = CFSTR("kCGPDFContextCreator");
 const CFStringRef kCGPDFContextKeywords = CFSTR("kCGPDFContextKeywords");
 const CFStringRef kCGPDFContextMediaBox = CFSTR("MediaBox");
+const CFStringRef kCGPDFContextOwnerPassword = CFSTR("kCGPDFContextOwnerPassword");
+const CFStringRef kCGPDFContextUserPassword = CFSTR("kCGPDFContextUserPassword");
+const CFStringRef kCGPDFContextEncryptionKeyLength = CFSTR("kCGPDFContextEncryptionKeyLength");
+const CFStringRef kCGPDFContextCropBox = CFSTR("CropBox");
+const CFStringRef kCGPDFContextBleedBox = CFSTR("BleedBox");
+const CFStringRef kCGPDFContextTrimBox = CFSTR("TrimBox");
+const CFStringRef kCGPDFContextArtBox = CFSTR("ArtBox");
 
 CGContextRef CGPDFContextCreate(CGDataConsumerRef consumer,
                                 const CGRect *mediaBox,
                                 CFDictionaryRef auxiliaryInfo)
 {
+    NSDictionary *info = (NSDictionary *)auxiliaryInfo;
+    // The PDF writer cannot encrypt yet. Refuse a request for encryption
+    // instead of writing an unprotected file the caller believes is protected.
+    if ([info objectForKey:(id)kCGPDFContextUserPassword] ||
+        [info objectForKey:(id)kCGPDFContextOwnerPassword] ||
+        [info objectForKey:(id)kCGPDFContextEncryptionKeyLength])
+        return NULL;
+    const CFStringRef publicKeys[] = {kCGPDFContextTitle, kCGPDFContextAuthor, kCGPDFContextCreator};
+    const NSString *backendKeys[] = {kO2PDFContextTitle, kO2PDFContextAuthor, kO2PDFContextCreator};
+    NSMutableDictionary *translated = nil;
+    for (unsigned i = 0; i < 3; i++) {
+        id value = [info objectForKey:(id)publicKeys[i]];
+        if (value) {
+            if (!translated)
+                translated = [[info mutableCopy] autorelease];
+            [translated setObject:value forKey:(id)backendKeys[i]];
+        }
+    }
+    if (translated)
+        info = translated;
     return (CGContextRef)[[O2PDFContext alloc]
             initWithConsumer: (O2DataConsumer*)consumer
                     mediaBox: mediaBox
-               auxiliaryInfo: (NSDictionary *) auxiliaryInfo];
+               auxiliaryInfo: info];
 }
 
 COREGRAPHICS_EXPORT void CGPDFContextClose(CGContextRef self) {
     [self close];
+}
+
+void CGPDFContextBeginPage(CGContextRef self, CFDictionaryRef pageInfo) {
+    [(O2PDFContext *)self beginPDFPage:(NSDictionary *)pageInfo];
+}
+
+void CGPDFContextEndPage(CGContextRef self) {
+    O2ContextEndPage((O2ContextRef)self);
 }

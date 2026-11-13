@@ -64,6 +64,80 @@ CGImageRef CGImageCreateWithImageInRect(CGImageRef self, CGRect rect) {
     return (CGImageRef)O2ImageCreateWithImageInRect((O2ImageRef)self, rect);
 }
 
+// A typical headroom for PQ and HLG content: 1000 nits of peak brightness over
+// the 203 nit reference white of ITU-R BT.2408.
+float kCGDefaultHDRImageContentHeadroom = 1000.0f / 203.0f;
+
+static bool contentHeadroomIsAllowed(float headroom) {
+    // Zero means unknown; anything else must be at least one (this also
+    // rejects NaN).
+    return headroom == 0 || headroom >= 1;
+}
+
+static bool colorSpaceAllowsContentHeadroom(CGColorSpaceRef space) {
+    return space != NULL &&
+           (CGColorSpaceUsesExtendedRange(space) ||
+            CGColorSpaceUsesITUR_2100TF(space));
+}
+
+CGImageRef CGImageCreateCopyWithContentHeadroom(float headroom,
+                                                CGImageRef image)
+{
+    if (image == NULL || !contentHeadroomIsAllowed(headroom) ||
+        !colorSpaceAllowsContentHeadroom(CGImageGetColorSpace(image)))
+        return NULL;
+
+    return (CGImageRef)O2ImageCreateCopyWithContentHeadroom((O2ImageRef)image,
+                                                            headroom);
+}
+
+CGImageRef CGImageCreateWithContentHeadroom(
+        float headroom, size_t width, size_t height, size_t bitsPerComponent,
+        size_t bitsPerPixel, size_t bytesPerRow, CGColorSpaceRef colorSpace,
+        CGBitmapInfo bitmapInfo, CGDataProviderRef dataProvider,
+        const CGFloat *decode, bool interpolate,
+        CGColorRenderingIntent renderingIntent)
+{
+    if (!contentHeadroomIsAllowed(headroom) ||
+        !colorSpaceAllowsContentHeadroom(colorSpace))
+        return NULL;
+
+    CGImageRef image = CGImageCreate(width, height, bitsPerComponent,
+                                     bitsPerPixel, bytesPerRow, colorSpace,
+                                     bitmapInfo, dataProvider, decode,
+                                     interpolate, renderingIntent);
+    if (image == NULL)
+        return NULL;
+
+    CGImageRef result = CGImageCreateCopyWithContentHeadroom(headroom, image);
+    CGImageRelease(image);
+    return result;
+}
+
+float CGImageGetContentHeadroom(CGImageRef image) {
+    if (image == NULL)
+        return 0;
+
+    CGColorSpaceRef space = CGImageGetColorSpace(image);
+    float headroom = O2ImageGetContentHeadroom((O2ImageRef)image);
+
+    if (headroom > 0)
+        return headroom;
+    // Unknown headroom: PQ and HLG content gets the typical value, an
+    // extended range image stays unknown and any other image is SDR.
+    if (CGColorSpaceUsesITUR_2100TF(space))
+        return kCGDefaultHDRImageContentHeadroom;
+    if (space != NULL && CGColorSpaceUsesExtendedRange(space))
+        return 0;
+    return 1;
+}
+
+// The headroom is not derived from pixel values: only a headroom the image
+// carries (or the default of its colour space) is reported, 0 if unknown.
+float CGImageCalculateContentHeadroom(CGImageRef image) {
+    return CGImageGetContentHeadroom(image);
+}
+
 CGImageRef
 CGImageCreateWithJPEGDataProvider(CGDataProviderRef jpegProvider,
                                   const CGFloat *decode, bool interpolate,

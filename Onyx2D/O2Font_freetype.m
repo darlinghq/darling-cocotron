@@ -371,6 +371,7 @@ O2FontRef O2FontCreateWithCodePointCoverage(const uint32_t *codePoints,
 - (instancetype) initWithFace: (FT_Face) face {
     _face = face;
     _platformType = O2FontPlatformTypeFreeType;
+    _glyphCache = [NSMutableDictionary new];
 
     int i, numberOfCharMaps = face->num_charmaps;
     BOOL hasUnicode = FALSE;
@@ -423,6 +424,7 @@ O2FontRef O2FontCreateWithCodePointCoverage(const uint32_t *codePoints,
 
 - (void) dealloc {
     FT_Done_Face(_face);
+    [_glyphCache release];
     [_macRomanEncoding release];
     [_macExpertEncoding release];
     [_winAnsiEncoding release];
@@ -687,6 +689,136 @@ FT_Face O2FontFreeTypeFace(O2Font_freetype *self) {
     }
 
     return [self unicode_createEncodingForTextEncoding: encoding];
+}
+
+/* Cache entries are keyed by everything that determines the rendered bitmap:
+ * the glyph, the 26.6 pixel size handed to FT_Set_Char_Size and the FreeType
+ * load flags and render mode. The text rendering matrix only reaches this
+ * point as its scale (folded into the pixel size by the caller; shear and
+ * rotation are not applied to FreeType bitmaps), and the context's
+ * antialiasing flag is not consulted by the FreeType backend (coverage is
+ * always the 8-bit gray bitmap). If the backend starts honouring either, the
+ * extra input has to become part of this key. */
+#define O2FONT_GLYPH_LOAD_FLAGS FT_LOAD_DEFAULT
+#define O2FONT_GLYPH_RENDER_MODE FT_RENDER_MODE_NORMAL
+#define O2FONT_GLYPH_SIZE_KEY_BITS 24
+
+- (O2FreeTypeCachedGlyph *) rasterizeGlyph: (O2Glyph) glyph
+                                  pointSize: (O2Float) pointSize
+{
+    if (_face == NULL || !(pointSize > 0)) {
+        return nil;
+    }
+
+    /* The size is set here, under the font lock, so a hit or a miss never
+     * depends on what size the face was left at by metric queries. */
+    O2Float size64 = pointSize * 64;
+    BOOL cacheable = size64 < (O2Float)(1 << O2FONT_GLYPH_SIZE_KEY_BITS);
+
+    @synchronized(self) {
+        NSNumber *key = nil;
+
+        if (cacheable) {
+            uint64_t keyValue =
+                    ((uint64_t)(uint32_t)(long) size64
+                     << (64 - O2FONT_GLYPH_SIZE_KEY_BITS)) |
+                    ((uint64_t)O2FONT_GLYPH_RENDER_MODE << 32) | glyph;
+            key = [NSNumber numberWithUnsignedLongLong: keyValue];
+
+            O2FreeTypeCachedGlyph *hit = [_glyphCache objectForKey: key];
+            if (hit != nil) {
+                return [[hit retain] autorelease];
+            }
+        }
+
+        if (FT_Set_Char_Size(_face, 0, (long) size64, 72.0, 72.0) != 0) {
+            return nil;
+        }
+
+        if (FT_Load_Glyph(_face, glyph, O2FONT_GLYPH_LOAD_FLAGS) != 0) {
+            return nil;
+        }
+
+        if (FT_Render_Glyph(_face->glyph, O2FONT_GLYPH_RENDER_MODE) != 0) {
+            return nil;
+        }
+
+        FT_GlyphSlot slot = _face->glyph;
+        O2FreeTypeCachedGlyph *cached = [[O2FreeTypeCachedGlyph alloc]
+                initWithBitmap: &slot->bitmap
+                          left: slot->bitmap_left
+                           top: slot->bitmap_top
+                       advance: slot->advance.x];
+        [cached autorelease];
+
+        if (!cacheable) {
+            return cached;
+        }
+
+        NSUInteger bytes = (NSUInteger) cached->bitmap.rows *
+                           (NSUInteger) cached->bitmap.width;
+
+        if (bytes > O2FONT_GLYPH_CACHE_BYTES_LIMIT) {
+            return cached; /* too large to be worth keeping */
+        }
+
+        /* Bounded by entry count and by bytes; the whole cache is dropped
+         * when either limit would be exceeded. Entries handed out earlier
+         * stay valid because they are retained by their callers. */
+        if ([_glyphCache count] >= O2FONT_GLYPH_CACHE_LIMIT ||
+            _glyphCacheBytes + bytes > O2FONT_GLYPH_CACHE_BYTES_LIMIT) {
+            [_glyphCache removeAllObjects];
+            _glyphCacheBytes = 0;
+        }
+
+        [_glyphCache setObject: cached forKey: key];
+        _glyphCacheBytes += bytes;
+        return cached;
+    }
+}
+
+@end
+
+@implementation O2FreeTypeCachedGlyph
+
+- (instancetype) initWithBitmap: (const FT_Bitmap *) srcBitmap
+                            left: (NSInteger) left
+                             top: (NSInteger) top
+                         advance: (FT_Pos) advance
+{
+    bitmap.rows = srcBitmap->rows;
+    bitmap.width = srcBitmap->width;
+    bitmap.pitch = srcBitmap->width;
+    bitmap.num_grays = 256;
+    bitmap.pixel_mode = FT_PIXEL_MODE_GRAY;
+    bitmap.palette_mode = 0;
+    bitmap.palette = NULL;
+    bitmap.buffer = NULL;
+
+    self->left = left;
+    self->top = top;
+    self->advance = advance;
+
+    if (bitmap.rows > 0 && bitmap.width > 0) {
+        size_t bytes = bitmap.rows * bitmap.width;
+        unsigned char *data = NSZoneMalloc(NULL, bytes);
+
+        for (FT_Int row = 0; row < bitmap.rows; row++) {
+            memcpy(data + row * bitmap.width,
+                   srcBitmap->buffer + row * srcBitmap->pitch, bitmap.width);
+        }
+
+        bitmap.buffer = data;
+    }
+
+    return self;
+}
+
+- (void) dealloc {
+    if (bitmap.buffer != NULL) {
+        NSZoneFree(NULL, bitmap.buffer);
+    }
+    [super dealloc];
 }
 
 @end

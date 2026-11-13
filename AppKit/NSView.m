@@ -42,7 +42,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSWindow-Private.h>
 #import <AppKit/NSDocument.h>
 #import <AppKit/NSWindowController.h>
-#import <CoreGraphics/CGWindow.h>
+#import <CoreGraphics/CGWindowPrivate.h>
 #import <Foundation/NSKeyedArchiver.h>
 #import <Onyx2D/O2Context.h>
 #import <QuartzCore/CALayerContext.h>

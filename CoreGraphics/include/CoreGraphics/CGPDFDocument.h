@@ -1,3 +1,6 @@
+#ifndef CGPDFDOCUMENT_H
+#define CGPDFDOCUMENT_H
+
 /* Copyright(c) 2008 Christopher J. W. Lloyd
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files(the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
@@ -14,6 +17,7 @@ typedef struct CF_BRIDGED_TYPE(id) O2PDFDoument *CGPDFDocumentRef;
 
 #import <CoreGraphics/CGDataProvider.h>
 #import <CoreGraphics/CGPDFPage.h>
+#import <CoreGraphics/CGPDFDictionary.h>
 
 CF_IMPLICIT_BRIDGING_ENABLED
 
@@ -23,10 +27,15 @@ COREGRAPHICS_EXPORT void CGPDFDocumentRelease(CGPDFDocumentRef self);
 COREGRAPHICS_EXPORT CGPDFDocumentRef CGPDFDocumentCreateWithURL(CFURLRef url);
 COREGRAPHICS_EXPORT CGPDFDocumentRef CGPDFDocumentCreateWithProvider(CGDataProviderRef provider);
 
+COREGRAPHICS_EXPORT bool CGPDFDocumentAllowsCopying(CGPDFDocumentRef self);
+
 COREGRAPHICS_EXPORT size_t CGPDFDocumentGetNumberOfPages(CGPDFDocumentRef self);
 COREGRAPHICS_EXPORT CGPDFPageRef CGPDFDocumentGetPage(CGPDFDocumentRef self, size_t pageNumber);
+COREGRAPHICS_EXPORT CGPDFDictionaryRef CGPDFDocumentGetInfo(CGPDFDocumentRef self);
 
 COREGRAPHICS_EXPORT bool CGPDFDocumentIsEncrypted(CGPDFDocumentRef self);
 COREGRAPHICS_EXPORT bool CGPDFDocumentIsUnlocked(CGPDFDocumentRef self);
 
 CF_IMPLICIT_BRIDGING_DISABLED
+
+#endif /* CGPDFDOCUMENT_H */

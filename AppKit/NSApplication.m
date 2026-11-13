@@ -46,7 +46,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSWindow-Private.h>
 #import <AppKit/NSWorkspace.h>
 #import <CoreGraphics/CGSServerSPI.h>
-#import <CoreGraphics/CGWindow.h>
+#import <CoreGraphics/CGWindowPrivate.h>
 #import <Foundation/NSAppleEventManager.h>
 #import <Foundation/NSAppleEventDescriptor.h>
 #import <objc/message.h>

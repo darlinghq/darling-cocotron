@@ -1,3 +1,6 @@
+#ifndef CGPDFPAGE_H
+#define CGPDFPAGE_H
+
 /* Copyright (c) 2007 Christopher J. W. Lloyd
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
@@ -34,9 +37,12 @@ CF_IMPLICIT_BRIDGING_ENABLED
 COREGRAPHICS_EXPORT CGPDFPageRef CGPDFPageRetain(CGPDFPageRef self);
 COREGRAPHICS_EXPORT void CGPDFPageRelease(CGPDFPageRef self);
 COREGRAPHICS_EXPORT int CGPDFPageGetRotationAngle(CGPDFPageRef self);
+COREGRAPHICS_EXPORT size_t CGPDFPageGetPageNumber(CGPDFPageRef self);
 COREGRAPHICS_EXPORT CGRect CGPDFPageGetBoxRect(CGPDFPageRef self, CGPDFBox box);
 COREGRAPHICS_EXPORT CGAffineTransform
 CGPDFPageGetDrawingTransform(CGPDFPageRef self, CGPDFBox box, CGRect rect,
                              int clockwiseDegrees, bool preserveAspectRatio);
 
 CF_IMPLICIT_BRIDGING_DISABLED
+
+#endif /* CGPDFPAGE_H */

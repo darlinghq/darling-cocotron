@@ -1,3 +1,6 @@
+#ifndef CGLAYER_H
+#define CGLAYER_H
+
 /* Copyright (c) 2007 Christopher J. W. Lloyd
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
@@ -36,3 +39,5 @@ COREGRAPHICS_EXPORT CGSize CGLayerGetSize(CGLayerRef self);
 COREGRAPHICS_EXPORT CGContextRef CGLayerGetContext(CGLayerRef self);
 
 CF_IMPLICIT_BRIDGING_DISABLED
+
+#endif /* CGLAYER_H */
