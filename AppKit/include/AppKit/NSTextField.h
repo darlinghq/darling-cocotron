@@ -44,6 +44,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (NSTextFieldBezelStyle) bezelStyle;
 - (void) setBezelStyle: (NSTextFieldBezelStyle) style;
 
+- (BOOL) allowsEditingTextAttributes;
+- (void) setAllowsEditingTextAttributes: (BOOL) flag;
+
 - (NSInteger) maximumNumberOfLines;
 - (NSString *) placeholderString;
 - (NSAttributedString *) placeholderAttributedString;
