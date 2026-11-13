@@ -352,3 +352,10 @@ APPKIT_EXPORT int NSApplicationMain(int argc, const char *argv[]);
 APPKIT_EXPORT void NSUpdateDynamicServices(void);
 APPKIT_EXPORT BOOL NSPerformService(NSString *itemName,
                                     NSPasteboard *pasteboard);
+
+// Performance-test hooks; they do nothing here.
+@interface NSApplication (NSApplicationPerformanceTesting)
+- (void) startedTest: (NSString *) name;
+- (void) finishedTest: (NSString *) name;
+- (void) failedTest: (NSString *) name withFailure: (NSString *) failureReason;
+@end

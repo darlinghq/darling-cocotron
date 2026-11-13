@@ -77,3 +77,17 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (BOOL) runOperation;
 
 @end
+
+@class NSWindow;
+
+@interface NSPrintOperation (NSPrintOperationModal)
+// Deprecated: sets both showsPrintPanel and showsProgressPanel.
+- (void) setShowPanels: (BOOL) flag;
+- (BOOL) showPanels;
+// Runs the operation modally (not as a sheet), then sends didRunSelector
+// (printOperationDidRun:success:contextInfo:) to the delegate.
+- (void) runOperationModalForWindow: (NSWindow *) docWindow
+                           delegate: (id) delegate
+                     didRunSelector: (SEL) didRunSelector
+                        contextInfo: (void *) contextInfo;
+@end

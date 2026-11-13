@@ -19,7 +19,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <Foundation/Foundation.h>
 
-@class NSPrintInfo;
+@class NSPrintInfo, NSWindow;
 
 @interface NSPageLayout : NSObject {
 }
@@ -28,5 +28,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (int) runModalWithPrintInfo: (NSPrintInfo *) printInfo;
 - (int) runModal;
+// Runs the panel modally (not as a sheet), then sends didEndSelector
+// (pageLayoutDidEnd:returnCode:contextInfo:) to the delegate.
+- (void) beginSheetWithPrintInfo: (NSPrintInfo *) printInfo
+                  modalForWindow: (NSWindow *) docWindow
+                        delegate: (id) delegate
+                  didEndSelector: (SEL) didEndSelector
+                     contextInfo: (void *) contextInfo;
 
 @end

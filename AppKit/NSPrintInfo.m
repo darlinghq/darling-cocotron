@@ -64,6 +64,14 @@ NSString *const NSPrintSavePath = @"NSPrintSavePath";
     return NSThreadSharedInstance(@"NSPrintInfo");
 }
 
++ (void) setSharedPrintInfo: (NSPrintInfo *) printInfo {
+    NSMutableDictionary *shared = [[NSThread currentThread] sharedDictionary];
+    if (printInfo != nil)
+        [shared setObject: printInfo forKey: @"NSPrintInfo"];
+    else
+        [shared removeObjectForKey: @"NSPrintInfo"];
+}
+
 - initWithDictionary: (NSDictionary *) dictionary {
     _attributes = [[NSMutableDictionary alloc] initWithDictionary: dictionary];
     return self;

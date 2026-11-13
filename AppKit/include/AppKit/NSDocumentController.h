@@ -73,6 +73,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - openDocumentWithContentsOfURL: (NSURL *) url
                         display: (BOOL) display
                           error: (NSError **) error;
+// Opens synchronously, then calls the handler.
+- (void) openDocumentWithContentsOfURL: (NSURL *) url
+                               display: (BOOL) display
+                     completionHandler: (void (^)(NSDocument *document, BOOL documentWasAlreadyOpen, NSError *error)) completionHandler;
 
 - (BOOL) reopenDocumentForURL: (NSURL *) url
             withContentsOfURL: (NSURL *) contentsUL
@@ -122,4 +126,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (BOOL) reviewUnsavedDocumentsWithAlertTitle: (NSString *) title
                                   cancellable: (BOOL) cancellable;
 
+@end
+
+@interface NSDocumentController (NSDocumentDuplication)
+// Opens the contents as a new untitled document (added and shown), or returns
+// nil with an error. The contents are read into memory, so copying makes no
+// difference, and the display name isn't used.
+- (id) duplicateDocumentWithContentsOfURL: (NSURL *) url
+                                  copying: (BOOL) duplicateByCopying
+                              displayName: (NSString *) displayNameOrNil
+                                    error: (NSError **) error;
 @end

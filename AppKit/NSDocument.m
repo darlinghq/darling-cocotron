@@ -31,6 +31,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSWindowController.h>
 #import <objc/runtime.h>
 
+// Declared by NSDocument subclasses that autosave in place (macOS 10.7).
+@interface NSObject (NSDocumentAutosavesInPlace)
++ (BOOL) autosavesInPlace;
+@end
+
 @implementation NSDocument
 
 static int untitled_document_number = 0;
@@ -310,9 +315,9 @@ static int untitled_document_number = 0;
     return nil;
 }
 
+// There's no separate autosave state: unsaved edits are unautosaved.
 - (BOOL) hasUnautosavedChanges {
-    NSUnimplementedMethod();
-    return 0;
+    return [self isDocumentEdited];
 }
 
 - (NSString *) autosavingFileType {
@@ -443,6 +448,20 @@ static int untitled_document_number = 0;
     BOOL edited = [self isDocumentEdited];
     while (--count >= 0)
         [[_windowControllers objectAtIndex: count] setDocumentEdited: edited];
+
+    NSTimeInterval delay = [[NSDocumentController sharedDocumentController] autosavingDelay];
+    // _changeCount, not -hasUnautosavedChanges: an active editor would reschedule after every save.
+    if (delay > 0 && !_autosaveScheduled && _changeCount != 0) {
+        _autosaveScheduled = YES;
+        [self performSelector: @selector(_autosaveAfterDelay) withObject: nil afterDelay: delay];
+    }
+}
+
+- (void) _autosaveAfterDelay {
+    _autosaveScheduled = NO;
+    // Autosave is implicit: a failure leaves the document edited, so the user is told
+    // when they save or close it, and nothing is presented here.
+    [self autosaveWithImplicitCancellability: YES completionHandler: nil];
 }
 
 - (BOOL) readFromData: (NSData *) data
@@ -701,10 +720,18 @@ static int untitled_document_number = 0;
     NSString *extension = [path pathExtension];
     if ([extension length] == 0) {
         extension = [[[NSDocumentController sharedDocumentController]
-                fileExtensionsFromType: [self fileType]] objectAtIndex: 0];
+                fileExtensionsFromType: [self fileType]] firstObject];
     }
     NSSavePanel *savePanel = [NSSavePanel savePanel];
     [savePanel setRequiredFileType: extension];
+    // Suggest a name before prepareSavePanel:, which may replace it.
+    if (_fileURL) {
+        // Suggest saving alongside the original file
+        [savePanel setDirectory: [path stringByDeletingLastPathComponent]];
+        [savePanel setNameFieldStringValue: [path lastPathComponent]];
+    } else {
+        [savePanel setNameFieldStringValue: [self displayName]];
+    }
 
 #if 0
     // setAllowedFileTypes: is unimplemented - so don't call it.
@@ -718,27 +745,16 @@ static int untitled_document_number = 0;
         return;
     }
 
-    int saveResult;
-    if (_fileURL) {
-        // Suggest saving alongside the original file
-        saveResult = [savePanel
-                runModalForDirectory: [path stringByDeletingLastPathComponent]
-                                file: [path lastPathComponent]];
-    } else {
-        NSString *directory = [savePanel directory];
-        if (directory == nil) {
-            // Suggest saving in some reasonable directory
-            directory = [[NSDocumentController sharedDocumentController]
-                    currentDirectory];
-        }
-        saveResult = [savePanel runModalForDirectory: directory
-                                                file: [self displayName]];
-    }
+    NSInteger saveResult = [savePanel runModal];
     if (saveResult) {
         NSString *savePath = [savePanel filename];
         NSString *extension = [savePath pathExtension];
         NSString *fileType = [[NSDocumentController sharedDocumentController]
                 typeFromFileExtension: extension];
+        // Types named only by content type identifiers list no extensions to match; like macOS, which takes the
+        // type from the panel rather than the extension, keep the document's type.
+        if (fileType == nil)
+            fileType = [self fileType];
 
         [[NSUserDefaults standardUserDefaults]
                 setObject: [savePath stringByDeletingLastPathComponent]
@@ -967,6 +983,10 @@ static int untitled_document_number = 0;
 }
 
 - (void) close {
+    if (_autosaveScheduled) {
+        _autosaveScheduled = NO;
+        [NSObject cancelPreviousPerformRequestsWithTarget: self selector: @selector(_autosaveAfterDelay) object: nil];
+    }
 
     // Make sure the controllers don't call -close on self again.
 
@@ -1525,13 +1545,101 @@ static int untitled_document_number = 0;
   forSaveOperation: (NSSaveOperationType) saveOperation
  completionHandler: (void (^)(NSError *errorOrNil)) completionHandler
  {
-    NSUnimplementedMethod();
+    // Saves synchronously, then calls the handler.
+    NSError *error = nil;
+    BOOL saved = [self saveToURL: url
+                          ofType: typeName
+                forSaveOperation: saveOperation
+                           error: &error];
+    if (!saved && error == nil)
+        error = [NSError errorWithDomain: NSCocoaErrorDomain code: NSFileWriteUnknownError userInfo: nil];
+    if (completionHandler)
+        completionHandler(saved ? nil : error);
 }
 
 - (void) autosaveWithImplicitCancellability: (BOOL) autosavingIsImplicitlyCancellable
                           completionHandler: (void (^)(NSError *errorOrNil)) completionHandler
 {
-    NSUnimplementedMethod();
+    // Documents that autosave in place are saved to their file; otherwise, and
+    // with nothing to save, there is no autosave location and nothing is written.
+    if ([self hasUnautosavedChanges] && [self fileURL] != nil &&
+        [[self class] respondsToSelector: @selector(autosavesInPlace)] &&
+        [[self class] autosavesInPlace]) {
+        [self saveToURL: [self fileURL]
+                          ofType: [self autosavingFileType]
+                forSaveOperation: NSAutosaveInPlaceOperation
+               completionHandler: completionHandler];
+        return;
+    }
+    if (completionHandler)
+        completionHandler(nil);
+}
+
+- (void) continueActivityUsingBlock: (void (^)(void)) block {
+    if (block)
+        block();
+}
+
+- (void) performActivityWithSynchronousWaiting: (BOOL) waitSynchronously
+                                    usingBlock: (void (^)(void (^activityCompletionHandler)(void))) block
+{
+    if (block)
+        block(^{
+        });
+}
+
+- (void) performAsynchronousFileAccessUsingBlock: (void (^)(void (^fileAccessCompletionHandler)(void))) block {
+    if (block)
+        block(^{
+        });
+}
+
+- (void) browseDocumentVersions: (id) sender {
+}
+
+- (void) invalidateRestorableState {
+}
+
++ (NSArray *) restorableStateKeyPaths {
+    return [NSArray array];
+}
+
+- (void) encodeRestorableStateWithCoder: (NSCoder *) coder {
+}
+
+- (void) encodeRestorableStateWithCoder: (NSCoder *) coder backgroundQueue: (NSOperationQueue *) queue {
+    [self encodeRestorableStateWithCoder: coder];
+}
+
+- (void) restoreStateWithCoder: (NSCoder *) coder {
+}
+
+- (void) restoreDocumentWindowWithIdentifier: (NSString *) identifier
+                                       state: (NSCoder *) state
+                           completionHandler: (void (^)(NSWindow *window, NSError *error)) completionHandler
+{
+    if ([[self windowControllers] count] == 0) {
+        [self makeWindowControllers];
+    }
+    for (NSWindowController *controller in [self windowControllers]) {
+        NSWindow *window = [controller window];
+        if ([[window identifier] isEqualToString: identifier]) {
+            completionHandler(window, nil);
+            return;
+        }
+    }
+    completionHandler(nil, [NSError errorWithDomain: NSCocoaErrorDomain code: NSFeatureUnsupportedError userInfo: nil]);
+}
+
+@end
+
+@implementation NSDocument (NSDocumentViewingAndSaveType)
+
+- (BOOL) isInViewingMode {
+    return NO;
+}
+
+- (void) changeSaveType: (id) sender {
 }
 
 @end
