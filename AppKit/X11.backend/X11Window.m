@@ -380,8 +380,12 @@ static NSData *makeWindowIcon() {
     } else if (_dock) {
         windowType = "_NET_WM_WINDOW_TYPE_DOCK";
         isTransient = NO;
+    } else if ([delegate isKindOfClass: [NSMenuWindow class]]) {
+        // EWMH: _MENU is for torn-off managed windows; the menus of a menu bar
+        // are dropdown menus, which are typically unmanaged.
+        windowType = "_NET_WM_WINDOW_TYPE_DROPDOWN_MENU";
     } else if (isMenuWindow) {
-        windowType = "_NET_WM_WINDOW_TYPE_MENU";
+        windowType = "_NET_WM_WINDOW_TYPE_POPUP_MENU";
     } else if (isPanel) {
         windowType = "_NET_WM_WINDOW_TYPE_UTILITY";
     } else {
