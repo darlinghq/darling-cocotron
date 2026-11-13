@@ -36,12 +36,47 @@
 
 @implementation O2Image
 
+ONYX2D_STATIC_INLINE const void *scanlineAtY(O2Image *self, int y);
+
+ONYX2D_STATIC O2argb8u *O2ImageRead_G1_to_argb8u(O2Image *self, NSInteger x, NSInteger y, O2argb8u *span) {
+    // scanlineAtY loads the pixel bytes on first use
+    const uint8_t *src = (const uint8_t *)scanlineAtY(self, (int)y) + (x / 8);
+    for (NSInteger i = 0; i < (NSInteger)self->_width - x; ++i) {
+        NSInteger bitIndex = (x + i) % 8;
+        uint8_t byte = src[(x + i) / 8 - (x / 8)];
+        uint8_t val = (byte & (0x80 >> bitIndex)) ? 255 : 0;
+        span[i].r = val;
+        span[i].g = val;
+        span[i].b = val;
+        span[i].a = 255;
+    }
+    return span;
+}
+
+ONYX2D_STATIC uint8_t *O2ImageRead_G1_to_A8(O2Image *self, NSInteger x, NSInteger y, uint8_t *alpha) {
+    // scanlineAtY loads the pixel bytes on first use
+    const uint8_t *src = (const uint8_t *)scanlineAtY(self, (int)y) + (x / 8);
+    for (NSInteger i = 0; i < (NSInteger)self->_width - x; ++i) {
+        NSInteger bitIndex = (x + i) % 8;
+        uint8_t byte = src[(x + i) / 8 - (x / 8)];
+        alpha[i] = (byte & (0x80 >> bitIndex)) ? 255 : 0;
+    }
+    return alpha;
+}
+
 ONYX2D_STATIC BOOL initFunctionsForMonochrome(O2Image *self,
                                               size_t bitsPerComponent,
                                               size_t bitsPerPixel,
                                               O2BitmapInfo bitmapInfo)
 {
     switch (bitsPerComponent) {
+    case 1:
+        if (bitsPerPixel == 1) {
+            self->_read_a8u = O2ImageRead_G1_to_A8;
+            self->_read_argb8u = O2ImageRead_G1_to_argb8u;
+            return YES;
+        }
+        break;
     case 8:
         switch (bitsPerPixel) {
         case 8:
@@ -350,7 +385,7 @@ ONYX2D_STATIC BOOL initFunctionsForParameters(O2Image *self,
     _bitmapInfo = bitmapInfo;
     _decoder = [decoder retain];
     _provider = [provider retain];
-    // _decode=NULL;
+    _decode = NULL;
     _interpolate = interpolate;
     _isMask = NO;
     _renderingIntent = renderingIntent;
@@ -366,7 +401,7 @@ ONYX2D_STATIC BOOL initFunctionsForParameters(O2Image *self,
         NSLog(@"O2Image failed to init with bpc=%zu, "
               @"bpp=%zu,colorSpace=%@,bitmapInfo=0x%0X",
               bitsPerComponent, bitsPerPixel, colorSpace, bitmapInfo);
-        [self dealloc];
+        [self release];
         return nil;
     }
 
@@ -573,20 +608,39 @@ O2ImageCreateWithPNGDataProvider(O2DataProviderRef pngProvider,
 }
 
 O2ImageRef O2ImageCreateWithImageInRect(O2ImageRef self, O2Rect rect) {
-    rect = O2RectIntegral(rect);
-    size_t x = MAX(0, rect.origin.x);
-    size_t y = MAX(0, rect.origin.y);
+    if (!isfinite(rect.origin.x) || !isfinite(rect.origin.y) ||
+        !isfinite(rect.size.width) || !isfinite(rect.size.height))
+        return NULL;
+
+    O2Rect bounds = O2RectMake(0, 0, self->_width, self->_height);
+    rect = O2RectIntersection(O2RectIntegral(rect), bounds);
+    if (rect.size.width <= 0 || rect.size.height <= 0)
+        return NULL;
+
+    size_t x = rect.origin.x;
+    size_t y = rect.origin.y;
     size_t col, width = rect.size.width;
     size_t row, height = rect.size.height;
+    size_t startBit = x * self->_bitsPerPixel;
+    // Sub-byte pixels that do not start on a byte boundary cannot be copied row-wise.
+    if (startBit % 8 != 0)
+        return NULL;
     size_t childBytesPerRow = (width * self->_bitsPerPixel + 7) / 8;
-    uint8_t *childPixelBytes = malloc(height * childBytesPerRow);
-    size_t childIndex = 0;
     const uint8_t *pixelBytes = directBytes(self);
+    if (pixelBytes == NULL ||
+        (y + height - 1) * self->_bytesPerRow + startBit / 8 +
+                        childBytesPerRow > self->_directLength)
+        return NULL;
+
+    uint8_t *childPixelBytes = malloc(height * childBytesPerRow);
+    if (childPixelBytes == NULL)
+        return NULL;
+    size_t childIndex = 0;
 
     pixelBytes += self->_bytesPerRow * y;
 
     for (row = 0; row < height; row++) {
-        const uint8_t *rowBytes = pixelBytes + (x * self->_bitsPerPixel) / 8;
+        const uint8_t *rowBytes = pixelBytes + startBit / 8;
 
         for (col = 0; col < childBytesPerRow; col++) {
             // Copy all of the needed bytes for the row
@@ -990,6 +1044,11 @@ O2argb8u *O2ImageRead_RGBA8888_to_argb8u(O2Image *self, int x, int y,
         result.g = scanline[1];
         result.b = scanline[2];
         result.a = scanline[3];
+        if ((self->_bitmapInfo & kO2BitmapAlphaInfoMask) == kO2ImageAlphaLast) {
+            result.r = (result.r * result.a + 127) / 255;
+            result.g = (result.g * result.a + 127) / 255;
+            result.b = (result.b * result.a + 127) / 255;
+        }
         *span++ = result;
         scanline += 4;
     }
@@ -1013,6 +1072,11 @@ O2argb8u *O2ImageRead_ABGR8888_to_argb8u(O2Image *self, int x, int y,
         result.b = *scanline++;
         result.g = *scanline++;
         result.r = *scanline++;
+        if ((self->_bitmapInfo & kO2BitmapAlphaInfoMask) == kO2ImageAlphaLast) {
+            result.r = (result.r * result.a + 127) / 255;
+            result.g = (result.g * result.a + 127) / 255;
+            result.b = (result.b * result.a + 127) / 255;
+        }
         *span++ = result;
     }
     return NULL;
