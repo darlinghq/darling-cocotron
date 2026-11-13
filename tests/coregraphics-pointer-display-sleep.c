@@ -1,9 +1,6 @@
 #include <CoreGraphics/CoreGraphics.h>
+#include <CoreGraphics/CGSServerSPI.h>
 #include <stdio.h>
-
-// Window server SPI, declared the way applications declare it.
-extern int CGSMainConnectionID(void);
-extern CGPoint CGSCurrentInputPointerPosition(void);
 
 int main(void) {
     if (CGDisplayIsAsleep(CGMainDisplayID()))

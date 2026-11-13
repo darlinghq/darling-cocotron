@@ -98,6 +98,7 @@ COREGRAPHICS_EXPORT id CGDirectDisplayCopyCurrentMetalDevice(CGDirectDisplayID d
 COREGRAPHICS_EXPORT CGRect CGDisplayBounds(CGDirectDisplayID display);
 COREGRAPHICS_EXPORT CGError CGDisplayCapture(CGDirectDisplayID display);
 COREGRAPHICS_EXPORT CGError CGDisplayRelease(CGDirectDisplayID display);
+COREGRAPHICS_EXPORT CGError CGDisplayMoveCursorToPoint(CGDirectDisplayID display, CGPoint point);
 COREGRAPHICS_EXPORT CGError CGDisplayHideCursor(CGDirectDisplayID display);
 COREGRAPHICS_EXPORT CGError CGDisplayShowCursor(CGDirectDisplayID display);
 COREGRAPHICS_EXPORT CFArrayRef CGDisplayAvailableModes(CGDirectDisplayID display);
