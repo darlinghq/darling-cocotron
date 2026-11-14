@@ -1402,6 +1402,11 @@ static NSUInteger scaledRepCacheBytes(NSArray *cache) {
     if (![[NSGraphicsContext currentContext] isDrawingToScreen])
         return nil;
 
+    // The pre-scaled copy is made with the default resampling, so with interpolation
+    // turned off the source has to be sampled by the draw itself.
+    if ([[NSGraphicsContext currentContext] imageInterpolation] == NSImageInterpolationNone)
+        return nil;
+
     CGAffineTransform toDevice = CGContextGetUserSpaceToDeviceSpaceTransform(
             NSCurrentGraphicsPort());
 
