@@ -46,12 +46,22 @@ NSString *const _NSColorCoreUICatalogNamePrefix =
     return colorSpace;
 }
 
+// The generic spaces fall back to sRGB / device gray if the named space cannot be created.
 + (NSColorSpace *) genericRGBColorSpace {
-    return [self sRGBColorSpace];
+    CGColorSpaceRef rgb = CGColorSpaceCreateWithName(kCGColorSpaceGenericRGB);
+    if (rgb == NULL)
+        return [self sRGBColorSpace];
+
+    NSColorSpace *result =
+            [[[self alloc] initWithCGColorSpace: rgb] autorelease];
+    CGColorSpaceRelease(rgb);
+    return result;
 }
 
 + (NSColorSpace *) genericGrayColorSpace {
-    CGColorSpaceRef gray = CGColorSpaceCreateDeviceGray();
+    CGColorSpaceRef gray = CGColorSpaceCreateWithName(kCGColorSpaceGenericGray);
+    if (gray == NULL)
+        gray = CGColorSpaceCreateDeviceGray();
     NSColorSpace *result =
             [[[self alloc] initWithCGColorSpace: gray] autorelease];
     CGColorSpaceRelease(gray);
@@ -59,7 +69,15 @@ NSString *const _NSColorCoreUICatalogNamePrefix =
 }
 
 + (NSColorSpace *) genericGamma22GrayColorSpace {
-    return [self genericGrayColorSpace];
+    CGColorSpaceRef gray =
+            CGColorSpaceCreateWithName(kCGColorSpaceGenericGrayGamma2_2);
+    if (gray == NULL)
+        return [self genericGrayColorSpace];
+
+    NSColorSpace *result =
+            [[[self alloc] initWithCGColorSpace: gray] autorelease];
+    CGColorSpaceRelease(gray);
+    return result;
 }
 
 + (NSColorSpace *) deviceRGBColorSpace {
