@@ -600,6 +600,7 @@ add_framework(AppKit
 		jpeg png tiff
 		CoreServices
 		UniformTypeIdentifiers
+		HIToolbox
 )
 
 reexport(AppKit Foundation ${CMAKE_BINARY_DIR}/src/external/foundation/Foundation)

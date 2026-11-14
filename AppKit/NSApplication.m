@@ -46,6 +46,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSWindow-Private.h>
 #import <AppKit/NSWorkspace.h>
 #import <CoreGraphics/CGSServerSPI.h>
+#import <CoreGraphics/CoreGraphicsPrivate.h>
+#import <HIToolbox/CarbonEvents.h>
+#import <HIToolbox/CarbonEventsCore.h>
 #import <CoreGraphics/CGWindowPrivate.h>
 #import <Foundation/NSAppleEventManager.h>
 #import <Foundation/NSAppleEventDescriptor.h>
@@ -114,6 +117,33 @@ NSApplication *NSApp = nil;
 @interface NSDockTile (private)
 - initWithOwner: owner;
 @end
+
+// The window system reports a hot key press or release as a system-defined event record; it is
+// queued for the application like any event, and -[NSApplication sendEvent:] passes it on.
+static void hotKeyEventNotification(CGSNotificationType type, void *data, unsigned long length, void *client) {
+    const CGSEventRecord *record = data;
+
+    if (length < sizeof(*record) || record->type != NX_SYSDEFINED)
+        return;
+
+    int subtype = record->data.compound.subType;
+    if (subtype != kCGSHotKeyPressedSubtype && subtype != kCGSHotKeyReleasedSubtype)
+        return;
+
+    // CG global coordinates have y down from the main display's top; NSEvent's have y up
+    NSRect main = [[[NSScreen screens] firstObject] frame];
+    NSPoint location = NSMakePoint(record->location.x, NSMaxY(main) - record->location.y);
+    NSEvent *event = [NSEvent otherEventWithType: NSSystemDefined
+                                        location: location
+                                   modifierFlags: (NSUInteger) record->flags & NSDeviceIndependentModifierFlagsMask
+                                       timestamp: (NSTimeInterval) record->time / 1e9
+                                    windowNumber: 0
+                                         context: nil
+                                         subtype: subtype
+                                           data1: record->data.compound.misc.L[0]
+                                           data2: 0];
+    [NSApp postEvent: event atStart: NO];
+}
 
 @implementation NSApplication
 
@@ -193,6 +223,8 @@ NSApplication *NSApp = nil;
 
     _dockTile = [[NSDockTile alloc] initWithOwner: self];
     _modalStack = [NSMutableArray new];
+
+    CGSRegisterNotifyProc(hotKeyEventNotification, CGSNotificationSingleEventType(NX_SYSDEFINED), NULL);
 
     _lock = NSZoneMalloc(NULL, sizeof(pthread_mutex_t));
 
@@ -899,6 +931,31 @@ NSApplication *NSApp = nil;
     event = NSEventApplyLocalMonitors(event);
     if (event == nil)
         return;
+
+    // QUIRK: a system-defined event of subtype 6 is a hot key press and one of subtype 9 a
+    // release; data1 names the hot key. HIToolbox turns it into the Carbon hot key event (AppKit
+    // passes it on with CreateEventWithCGEvent and SendEventToEventTarget), so an
+    // application that overrides -sendEvent: without calling super gets no Carbon callback, as on
+    // macOS. Not documented. Evidence: public write-ups (The Register, 2009,
+    // https://www.theregister.co.uk/2009/02/24/hotkeys_framework2/; cocoa-dev 2011-10,
+    // https://lists.apple.com/archives/cocoa-dev/2011/Oct/msg00526.html; cocoa-dev 2009-09,
+    // https://lists.apple.com/archives/cocoa-dev/2009/Sep/msg01824.html), tier 4. That data1 is
+    // the uid that HIToolbox gave the window system is inference: its value on 64-bit macOS is
+    // not verified.
+    // Test: tests/src/carbon_hotkeys_appkit.m
+    if ([event type] == NSSystemDefined &&
+        ([event subtype] == kCGSHotKeyPressedSubtype || [event subtype] == kCGSHotKeyReleasedSubtype)) {
+        // Through the public Carbon Event Manager: a raw event made from the event's CGEvent goes to
+        // the event dispatcher target, whose standard handler (in HIToolbox) sends the hot key event.
+        CGEventRef cgEvent = [event CGEvent];
+        EventRef carbonEvent = NULL;
+
+        if (cgEvent != NULL && CreateEventWithCGEvent(NULL, cgEvent, kEventAttributeNone, &carbonEvent) == noErr) {
+            SendEventToEventTarget(carbonEvent, GetEventDispatcherTarget());
+            ReleaseEvent(carbonEvent);
+        }
+        return;
+    }
 
     if ([event type] == NSKeyDown) {
         unsigned modifierFlags = [event modifierFlags];

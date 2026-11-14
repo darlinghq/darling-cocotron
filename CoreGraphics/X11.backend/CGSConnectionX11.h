@@ -22,6 +22,8 @@
 #import <CoreGraphics/CGSConnection.h>
 #import <X11/Xlib.h>
 #import <CoreFoundation/CFRunLoop.h>
+#import <Foundation/NSArray.h>
+#import <Foundation/NSSet.h>
 #import <CoreFoundation/CFSocket.h>
 #import "X11Monitors.h"
 
@@ -47,6 +49,14 @@
 
 	int _xkbEventBase;
 	int _xrrEventBase;
+
+	// Registered global hot keys (X11HotKeyEntry), the combinations grabbed on the X server
+	// (as NSNumbers) and the uids whose press was reported and release is still due.
+	// Guarded by @synchronized(self).
+	NSMutableArray* _hotKeys;
+	NSMutableSet<NSNumber*>* _grabbedHotKeys;
+	NSMutableSet<NSNumber*>* _pressedHotKeys;
+	BOOL _detectableAutoRepeat;
 
 @private
 	// The main monitor in root coordinates, cached for -mouseLocation. Guarded by

@@ -169,6 +169,61 @@ void* _CGSNativeWindowForSurfaceID(CGSConnectionID connId, CGSWindowID winId, CG
 	return [[[conn windowForId: winId] surfaceForId: surfaceId] nativeWindow];
 }
 
+void CGSSetHotKeyWithExclusion(CGSConnectionID connId, int uid, uint16_t options, uint16_t key, CGSModifierFlags modifierFlags, int exclusion)
+{
+	[_CGSConnectionForID(connId) setHotKeyWithUID: uid keyCode: key flags: modifierFlags exclusion: exclusion];
+}
+
+void CGSSetHotKey(CGSConnectionID connId, int uid, uint16_t options, uint16_t key, CGSModifierFlags modifierFlags)
+{
+	CGSSetHotKeyWithExclusion(connId, uid, options, key, modifierFlags, 0);
+}
+
+bool CGSGetHotKey(CGSConnectionID connId, int uid, uint16_t* options, uint16_t* key, CGSModifierFlags* modifierFlags)
+{
+	CGKeyCode code = 0;
+	CGEventFlags flags = 0;
+
+	if (![_CGSConnectionForID(connId) getHotKeyWithUID: uid keyCode: &code flags: &flags])
+		return false;
+	if (options)
+		*options = 0;
+	if (key)
+		*key = code;
+	if (modifierFlags)
+		*modifierFlags = (CGSModifierFlags) flags;
+	return true;
+}
+
+void CGSRemoveHotKey(CGSConnectionID connId, int uid)
+{
+	[_CGSConnectionForID(connId) removeHotKeyWithUID: uid];
+}
+
+bool CGSIsHotKeyEnabled(CGSConnectionID connId, int uid)
+{
+	return [_CGSConnectionForID(connId) isHotKeyEnabledWithUID: uid];
+}
+
+void CGSSetHotKeyEnabled(CGSConnectionID connId, int uid, bool enabled)
+{
+	[_CGSConnectionForID(connId) setHotKeyWithUID: uid enabled: enabled];
+}
+
+CGError CGSGetGlobalHotKeyOperatingMode(CGSConnectionID connId, int* mode)
+{
+	CGSConnection* conn = _CGSConnectionForID(connId);
+
+	return conn ? [conn getGlobalHotKeyOperatingMode: mode] : kCGErrorInvalidConnection;
+}
+
+CGError CGSSetGlobalHotKeyOperatingMode(CGSConnectionID connId, int mode)
+{
+	CGSConnection* conn = _CGSConnectionForID(connId);
+
+	return conn ? [conn setGlobalHotKeyOperatingMode: mode] : kCGErrorInvalidConnection;
+}
+
 CGError CGSReleaseConnection(CGSConnectionID connId)
 {
 	NSNumber* num = [NSNumber numberWithInt:connId];
@@ -478,4 +533,41 @@ CGError CGSRemoveNotifyProc(CGSNotifyProcPtr proc, CGSNotificationType notificat
 	pthread_mutex_unlock(&g_cgsNotifyProcMutex);
 
 	return kCGSErrorSuccess;
+}
+
+// Hands a hot key press or release, as a system-defined event, to the procs registered for
+// such events. Called by the backends (through -postHotKeyEventForUID:...) on the main run loop.
+__attribute__((visibility("hidden")))
+void _CGSPostHotKeyEvent(CGSConnectionID connection, int uid, BOOL pressed, CGEventFlags flags, CGPoint location, uint64_t time)
+{
+	CGSEventRecord record;
+	NSMutableArray* procs = [NSMutableArray array];
+
+	memset(&record, 0, sizeof(record));
+	record.length = sizeof(record);
+	record.type = NX_SYSDEFINED;
+	record.location = location;
+	record.windowLocation = location;
+	record.time = time;
+	record.flags = flags;
+	record.window = 0;
+	record.connection = connection;
+	record.data.compound.subType = pressed ? kCGSHotKeyPressedSubtype : kCGSHotKeyReleasedSubtype;
+	record.data.compound.misc.L[0] = uid;
+
+	// The procs are called outside the lock: one may register or remove procs
+	pthread_mutex_lock(&g_cgsNotifyProcMutex);
+	for (CFIndex i = 0; g_cgsNotifyProc && i < CFArrayGetCount(g_cgsNotifyProc); i++)
+	{
+		NotifyProcEntry* e = (NotifyProcEntry*) CFArrayGetValueAtIndex(g_cgsNotifyProc, i);
+		if (e->notificationType == CGSNotificationSingleEventType(NX_SYSDEFINED) || e->notificationType == kCGSNotificationAllEvents)
+			[procs addObject: [NSData dataWithBytes: e length: sizeof(*e)]];
+	}
+	pthread_mutex_unlock(&g_cgsNotifyProcMutex);
+
+	for (NSData* entry in procs)
+	{
+		const NotifyProcEntry* e = [entry bytes];
+		e->proc(e->notificationType, &record, sizeof(record), e->private);
+	}
 }

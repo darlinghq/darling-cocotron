@@ -56,6 +56,45 @@ typedef CGSRegionRef CGRegionRef;
 extern CGRegionRef CGRegionCreateWithRect(CGRect rect);
 extern void CGRegionRelease(CGRegionRef region);
 
+// Global hot keys. Prototypes as in the CGSHotKeys.h of CGSInternal
+// (https://github.com/NUIKit/CGSInternal, MIT license), declared here independently.
+// The meaning of the arguments is not documented; what is implemented is inferred:
+// uid is chosen by the caller and names the hot key, key is the virtual key code,
+// options is ignored (the character the key produces, perhaps), modifierFlags are
+// CGEventFlags modifier bits, exclusion is ignored. The setters return nothing, so a hot key
+// that could not be set up (another client holds the combination) shows as
+// CGSGetHotKey() returning false.
+// A hot key's presses and releases are delivered as the window server does it: as events of
+// type NX_SYSDEFINED, here to the procs registered with CGSRegisterNotifyProc() for
+// CGSNotificationSingleEventType(NX_SYSDEFINED) (or kCGSNotificationAllEvents); the data is a
+// CGSEventRecord whose data.compound.subType is kCGSHotKeyPressedSubtype or
+// kCGSHotKeyReleasedSubtype, whose data.compound.misc.L[0] is the uid, and whose flags,
+// location and time are those of the key event. AppKit turns it into an NSEvent of type
+// NSSystemDefined, which NSApplication hands to HIToolbox.
+// QUIRK: system-defined subtype 6 is a hot key press, 9 a release, and the event's data1 names
+// the hot key (the uid given when it was set). Not documented. Evidence: public write-ups of
+// the observed event (The Register, 2009, https://www.theregister.co.uk/2009/02/24/hotkeys_framework2/;
+// cocoa-dev 2011-10, https://lists.apple.com/archives/cocoa-dev/2011/Oct/msg00526.html, data1 is the
+// hot key; cocoa-dev 2009-09, https://lists.apple.com/archives/cocoa-dev/2009/Sep/msg01824.html, on
+// 64-bit data1 is not the EventHotKeyRef), tier 4. What data1 holds on 64-bit macOS is not verified;
+// the uid is inference.
+// Test: tests/src/carbon_hotkeys_appkit.m (subtype and data1 seen in -sendEvent:).
+enum
+{
+	kCGSHotKeyPressedSubtype = 6,
+	kCGSHotKeyReleasedSubtype = 9,
+};
+typedef uint32_t CGSModifierFlags;
+extern void CGSSetHotKeyWithExclusion(CGSConnectionID cid, int uid, uint16_t options, uint16_t key, CGSModifierFlags modifierFlags, int exclusion);
+extern void CGSSetHotKey(CGSConnectionID cid, int uid, uint16_t options, uint16_t key, CGSModifierFlags modifierFlags);
+extern bool CGSGetHotKey(CGSConnectionID cid, int uid, uint16_t* options, uint16_t* key, CGSModifierFlags* modifierFlags);
+extern void CGSRemoveHotKey(CGSConnectionID cid, int uid);
+extern bool CGSIsHotKeyEnabled(CGSConnectionID cid, int uid);
+extern void CGSSetHotKeyEnabled(CGSConnectionID cid, int uid, bool enabled);
+extern CGError CGSGetGlobalHotKeyOperatingMode(CGSConnectionID cid, int* mode);
+extern CGError CGSSetGlobalHotKeyOperatingMode(CGSConnectionID cid, int mode);
+
+
 extern CGError CGSNewWindow(CGSConnectionID conn, CFIndex flags, float, float, const CGSRegionRef region, CGSWindowID* windowID);
 extern CGError CGSReleaseWindow(CGSConnectionID cid, CGSWindowID wid);
 
