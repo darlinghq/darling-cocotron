@@ -39,6 +39,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Onyx2D/O2Color.h>
 #import <Onyx2D/O2ColorSpace+PDF.h>
 #import <Onyx2D/O2Context.h>
+#import <Onyx2D/O2GraphicsState.h>
 #import <Onyx2D/O2Function+PDF.h>
 #import <Onyx2D/O2Image+PDF.h>
 #import <Onyx2D/O2Shading+PDF.h>
@@ -1211,11 +1212,12 @@ void O2PDF_render_TJ(O2PDFScanner *scanner, void *info) {
             return;
 
         if ([object checkForType: kO2PDFObjectTypeReal value: &real]) {
-            // The amount is expressed in thousands of a text space unit and
-            // subtracted
+            // The amount is in thousandths of a text space unit, scaled by
+            // the font size like a glyph width (PDF 9.4.4), and subtracted
             O2AffineTransform Tm = O2ContextGetTextMatrix(context);
+            O2Float size = O2GStatePointSize(O2ContextCurrentGState(context));
             O2Size advance = O2SizeApplyAffineTransform(
-                    O2SizeMake(real / 1000.0, 0), Tm);
+                    O2SizeMake(real / 1000.0 * size, 0), Tm);
 
             Tm.tx -= advance.width;
             Tm.ty -= advance.height;

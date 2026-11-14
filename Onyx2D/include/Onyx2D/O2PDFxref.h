@@ -32,6 +32,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     NSMapTable *_entryToObject;
     NSMutableArray *_entriesInOrder;
     O2PDFDictionary *_trailer;
+    // Decoded data of the object streams read so far, by object number. The
+    // objects parsed from one may point into its bytes, so it stays alive.
+    NSMapTable *_objectStreams;
 }
 
 - initWithData: (NSData *) data;

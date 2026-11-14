@@ -25,6 +25,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Onyx2D/O2PDFDictionary.h>
 #import <Onyx2D/O2PDFObject_const.h>
 #import <Onyx2D/O2PDFScanner.h>
+#import <Onyx2D/O2PDFStream.h>
 #import <Onyx2D/O2PDFxref.h>
 #import <Onyx2D/O2PDFxrefEntry.h>
 
@@ -39,6 +40,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                                       NSObjectMapValueCallBacks, 0);
     _entriesInOrder = [NSMutableArray new];
     _trailer = nil;
+    _objectStreams = NSCreateMapTable(NSIntegerMapKeyCallBacks,
+                                      NSObjectMapValueCallBacks, 0);
     return self;
 }
 
@@ -49,6 +52,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     NSFreeMapTable(_entryToObject);
     [_entriesInOrder release];
     [_trailer release];
+    NSFreeMapTable(_objectStreams);
     [super dealloc];
 }
 
@@ -116,8 +120,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         O2PDFObject *result = NSMapGet(_entryToObject, lookup);
 
         if (result == nil) {
-            if (!O2PDFParseIndirectObject(_data, [lookup position], &result,
-                                          number, generation, self))
+            if ([lookup objectStream] >= 0)
+                result = [self objectNumber: number
+                             inObjectStream: [lookup objectStream]];
+            else if (!O2PDFParseIndirectObject(_data, [lookup position], &result,
+                                               number, generation, self))
+                result = nil;
+            if (result == nil)
                 result = [O2PDFObject_const pdfObjectWithNull];
 
             NSMapInsert(_entryToObject, lookup, result);
@@ -125,6 +134,52 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
         return result;
     }
+}
+
+// Object `number` stored in the object stream `streamNumber` (PDF 7.5.7): the
+// stream's data begins with N pairs "number offset", offsets counted from
+// First. Returns nil if it is not there.
+- (O2PDFObject *) objectNumber: (O2PDFInteger) number
+                inObjectStream: (O2PDFInteger) streamNumber
+{
+    O2PDFStream *stream;
+    O2PDFInteger count, first, i, position = 0;
+
+    if (![[self objectAtNumber: streamNumber generation: 0]
+                checkForType: kO2PDFObjectTypeStream
+                       value: &stream])
+        return nil;
+    if (![[stream dictionary] getIntegerForKey: "N" value: &count] ||
+        ![[stream dictionary] getIntegerForKey: "First" value: &first])
+        return nil;
+
+    NSData *decoded = NSMapGet(_objectStreams, (void *) streamNumber);
+
+    if (decoded == nil) {
+        if ((decoded = [stream data]) == nil)
+            return nil;
+        NSMapInsert(_objectStreams, (void *) streamNumber, decoded);
+    }
+
+    const char *bytes = [decoded bytes];
+    unsigned length = [decoded length];
+
+    for (i = 0; i < count; i++) {
+        O2PDFInteger objectNumber, offset;
+        O2PDFObject *object;
+        O2PDFInteger end;
+
+        if (!O2PDFScanInteger(bytes, length, position, &position, &objectNumber) ||
+            !O2PDFScanInteger(bytes, length, position, &position, &offset))
+            return nil;
+        if (objectNumber != number)
+            continue;
+        if (first + offset >= length ||
+            !O2PDFParseObject(bytes, length, first + offset, &end, &object, self))
+            return nil;
+        return object;
+    }
+    return nil;
 }
 
 - (O2PDFDictionary *) trailer {

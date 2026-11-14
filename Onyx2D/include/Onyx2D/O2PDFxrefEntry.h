@@ -23,13 +23,23 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     O2PDFInteger _position;
     O2PDFInteger _number;
     O2PDFInteger _generation;
+    // An object compressed in an object stream (PDF 1.5): the number of that
+    // stream and the object's index in it; _objectStream is -1 otherwise.
+    O2PDFInteger _objectStream;
+    O2PDFInteger _indexInObjectStream;
 }
 
 + (O2PDFxrefEntry *) xrefEntryWithPosition: (O2PDFInteger) position
                                     number: (O2PDFInteger) number
                                 generation: (O2PDFInteger) generation;
 
++ (O2PDFxrefEntry *) xrefEntryInObjectStream: (O2PDFInteger) objectStream
+                                        index: (O2PDFInteger) index
+                                       number: (O2PDFInteger) number;
+
 - (O2PDFInteger) position;
+- (O2PDFInteger) objectStream;
+- (O2PDFInteger) indexInObjectStream;
 - (O2PDFInteger) number;
 - (O2PDFInteger) generation;
 

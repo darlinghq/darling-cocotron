@@ -12,6 +12,17 @@
     return self;
 }
 
+- initWithCIDToGIDMap: (NSData *) cidToGIDMap {
+    _isCID = YES;
+    _cidToGID = [cidToGIDMap copy];
+    return self;
+}
+
+- (void) dealloc {
+    [_cidToGID release];
+    [super dealloc];
+}
+
 - copyWithZone: (NSZone *) zone {
     return [self retain];
 }
@@ -35,11 +46,34 @@
         unicode[i] = _unicode[i];
 }
 
+unsigned O2EncodingGetGlyphCountForBytes(O2Encoding *self, unsigned length) {
+    if (self != nil && self->_isCID)
+        return length / 2;
+    return length;
+}
+
+static O2Glyph glyphForCID(O2Encoding *self, unsigned cid) {
+    if (self->_cidToGID == nil)
+        return cid;
+
+    const uint8_t *map = [self->_cidToGID bytes];
+
+    // A CID past the end of the map has no glyph: glyph 0, .notdef.
+    if ((cid + 1) * 2 > [self->_cidToGID length])
+        return 0;
+    return (map[cid * 2] << 8) | map[cid * 2 + 1];
+}
+
 void O2EncodingGetGlyphsForBytes(O2Encoding *self, O2Glyph *glyphs,
                                  const uint8_t *bytes, unsigned length)
 {
     int i;
 
+    if (self->_isCID) {
+        for (i = 0; i < length / 2; i++)
+            glyphs[i] = glyphForCID(self, (bytes[i * 2] << 8) | bytes[i * 2 + 1]);
+        return;
+    }
     for (i = 0; i < length; i++)
         glyphs[i] = self->_glyphs[bytes[i]];
 }
@@ -49,6 +83,12 @@ void O2EncodingGetUnicodeForBytes(O2Encoding *self, uint16_t *unicode,
 {
     int i;
 
+    // The Unicode of a CID needs the font's ToUnicode CMap, which is not read.
+    if (self->_isCID) {
+        for (i = 0; i < length / 2; i++)
+            unicode[i] = 0;
+        return;
+    }
     for (i = 0; i < length; i++)
         unicode[i] = self->_unicode[bytes[i]];
 }
