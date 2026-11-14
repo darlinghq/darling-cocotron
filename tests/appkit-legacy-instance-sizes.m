@@ -58,6 +58,8 @@ static const struct {
     {"NSClipView", 0x84},
     {"NSTextView", 0x54},
     {"NSBox", 0x88},
+    {"NSTextStorage", 0x1c},
+    {"NSTextContainer", 0x1c},
     {"NSOpenGLView", 0x64},
     {"NSCell", 0x14},
     {"NSActionCell", 0x24},
@@ -656,6 +658,65 @@ static void checkCopies(void) {
     [image release];
 }
 
+// NSTextStorage and NSTextContainer are 0x1c bytes; their state beyond the
+// words that fit is kept in the extras block
+@interface NSObject (LegacyLayoutTextAPI)
+- (id) initWithString: (NSString *) string;
+- (NSRange) editedRange;
+- (NSUInteger) editedMask;
+- (NSInteger) changeInLength;
+- (void) beginEditing;
+- (void) endEditing;
+- (void) replaceCharactersInRange: (NSRange) range withString: (NSString *) string;
+- (void) addLayoutManager: (id) manager;
+- (id) initWithContainerSize: (NSSize) size;
+- (void) setLineFragmentPadding: (CGFloat) padding;
+- (CGFloat) lineFragmentPadding;
+- (void) setMaximumNumberOfLines: (NSUInteger) lines;
+- (NSUInteger) maximumNumberOfLines;
+- (void) setWidthTracksTextView: (BOOL) flag;
+- (BOOL) widthTracksTextView;
+- (void) setHeightTracksTextView: (BOOL) flag;
+- (BOOL) heightTracksTextView;
+- (NSSize) containerSize;
+- (void) setContainerSize: (NSSize) size;
+- (void) setTextContainer: (id) container;
+@end
+
+static void checkTextStorageAndContainer(void) {
+    id storage = [[appKitClass("NSTextStorage") alloc] initWithString: @"hello"];
+    [storage beginEditing];
+    [storage replaceCharactersInRange: NSMakeRange(1, 2) withString: @"EYYY"];
+    [storage endEditing];
+    expect([[storage string] isEqual: @"hEYYYlo"], "NSTextStorage edit");
+    id copy = [[appKitClass("NSTextStorage") alloc] initWithString: @"x"];
+    [copy beginEditing];
+    [copy replaceCharactersInRange: NSMakeRange(0, 1) withString: @"yz"];
+    // inside an edit the range being changed is tracked in the extras
+    expect([copy editedRange].location == 0 && [copy editedRange].length == 2, "NSTextStorage editedRange");
+    expect([copy changeInLength] == 1, "NSTextStorage changeInLength");
+    [copy endEditing];
+    [copy release];
+    [storage release];
+
+    id container = [[appKitClass("NSTextContainer") alloc] initWithContainerSize: NSMakeSize(100, 50)];
+    expect([container containerSize].width == 100 && [container containerSize].height == 50,
+           "NSTextContainer size");
+    [container setLineFragmentPadding: 3];
+    [container setMaximumNumberOfLines: 7];
+    [container setWidthTracksTextView: YES];
+    [container setHeightTracksTextView: YES];
+    expect([container lineFragmentPadding] == 3, "NSTextContainer lineFragmentPadding");
+    expect([container maximumNumberOfLines] == 7, "NSTextContainer maximumNumberOfLines");
+    expect([container widthTracksTextView] && [container heightTracksTextView],
+           "NSTextContainer tracking flags");
+    [container setWidthTracksTextView: NO];
+    expect(![container widthTracksTextView] && [container heightTracksTextView],
+           "NSTextContainer tracking flags independent");
+    expect([container containerSize].width == 100, "NSTextContainer size unchanged");
+    [container release];
+}
+
 int main(void) {
     setvbuf(stdout, NULL, _IONBF, 0);
     @autoreleasepool {
@@ -668,6 +729,7 @@ int main(void) {
         checkControlSubclasses();
         checkControllerSubclasses();
         checkCopies();
+        checkTextStorageAndContainer();
     }
     if (failures == 0)
         printf("PASS\n");
