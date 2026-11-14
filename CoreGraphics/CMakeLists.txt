@@ -130,7 +130,7 @@ generate_sdk_framework(CoreGraphics
     HEADER "include/CoreGraphics"
 )
 
-add_framework(CoreGraphics
+add_separated_framework(CoreGraphics
 	FAT
 	CURRENT_VERSION
 	SOURCES
@@ -148,6 +148,34 @@ add_framework(CoreGraphics
 
 # NSBundle finds the backends through the framework's Resources link.
 InstallSymlink("Versions/Current/Resources" "${CMAKE_INSTALL_PREFIX}/libexec/darling/System/Library/Frameworks/CoreGraphics.framework/Resources")
+
+# Since macOS 14 the CoreGraphics Swift overlay is part of CoreGraphics.framework, so applications bind symbols such
+# as $sSo12CGContextRefa12CoreGraphicsE7addLine2toySo7CGPointV_tF to CoreGraphics. CoreGraphics therefore re-exports
+# the overlay, /usr/lib/swift/libswiftCoreGraphics.dylib, which darling-swift builds from source (target
+# swiftCoreGraphics) when a Swift toolchain is available (cmake/swift_toolchain.cmake).
+#
+# The overlay links against CoreGraphics, so CoreGraphics cannot link against the finished overlay. It re-exports an
+# empty placeholder dylib with the overlay's install name instead, which is all the re-export load command needs; the
+# overlay is installed at that install name and dyld loads it from there. ld64 follows the re-export by install name
+# when a client links CoreGraphics, so the Swift dylib install-name map in cmake/swift_dylib_map.cmake (-dylib_file)
+# is applied to the framework's link.
+#
+# Without a Swift toolchain there is no overlay to re-export, so CoreGraphics is built without the re-export.
+if (SWIFT_TOOLCHAIN_FOUND AND BUILD_TARGET_64BIT)
+	set(DYLIB_INSTALL_NAME "/usr/lib/swift/libswiftCoreGraphics.dylib")
+	set(DARLING_LIB_64BIT_ONLY TRUE)
+	add_darling_library(swiftCoreGraphics_placeholder SHARED swift_overlay_placeholder.c)
+	set(DARLING_LIB_64BIT_ONLY FALSE)
+	unset(DYLIB_INSTALL_NAME)
+	target_link_libraries(swiftCoreGraphics_placeholder system)
+	set_target_properties(swiftCoreGraphics_placeholder PROPERTIES
+		LINKER_LANGUAGE C
+		OUTPUT_NAME "swiftCoreGraphics_placeholder")
+	reexport(CoreGraphics_${APPLE_ARCH_64BIT} swiftCoreGraphics_placeholder
+		"${CMAKE_CURRENT_BINARY_DIR}/libswiftCoreGraphics_placeholder.dylib")
+elseif (NOT SWIFT_TOOLCHAIN_FOUND)
+	message(STATUS "CoreGraphics: no Swift toolchain, so no Swift overlay to re-export")
+endif ()
 
 function(add_backend name)
 	cmake_parse_arguments(BACKEND "" "INFO_PLIST" "SOURCES;DEPENDENCIES;RESOURCES" ${ARGN})
