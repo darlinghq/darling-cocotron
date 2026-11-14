@@ -637,7 +637,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
             for (NSValue *output in self->_surfaceOutputs)
                 scale = MAX(scale, [self->_display scaleForOutput: [output pointerValue]]);
         uint32_t render = self->_fractionalScale && self->_preferredScale120
-            ? self->_preferredScale120 : (uint32_t)MIN((uint64_t)scale * 120, UINT32_MAX);
+            ? WaylandIntegralScale120(self->_preferredScale120) : (uint32_t)MIN((uint64_t)scale * 120, UINT32_MAX);
         if (scale == self->_bufferScale && render == self->_renderScale120) return;
         self->_bufferScale = scale;
         self->_renderScale120 = render;

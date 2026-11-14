@@ -94,7 +94,7 @@ static BOOL validFrame(CGRect frame) {
 }
 - (void *) nativeWindow { return _eglWindow; }
 - (uint32_t) renderScale120 {
-    return _fractionalScale ? (_preferredScale120 ?: [_parent renderScale120])
+    return _fractionalScale ? (_preferredScale120 ? WaylandIntegralScale120(_preferredScale120) : [_parent renderScale120])
         : (uint32_t)MIN((uint64_t)[_parent bufferScale] * 120, UINT32_MAX);
 }
 - (CGFloat) backingScaleFactor { return [self renderScale120] / 120.0; }
