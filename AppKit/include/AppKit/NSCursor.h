@@ -22,6 +22,26 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSImage, NSColor, NSEvent;
 
+// macOS 15: the edge or corner of a rectangular frame a resize cursor is for, and the directions the frame can
+// resize in. The documentation names the cases and gives no raw values (GUESS, not observed: the order top, left,
+// bottom, right, topLeft, topRight, bottomLeft, bottomRight, and the bits inward 1, outward 2).
+typedef NS_ENUM(NSUInteger, NSCursorFrameResizePosition) {
+    NSCursorFrameResizePositionTop,
+    NSCursorFrameResizePositionLeft,
+    NSCursorFrameResizePositionBottom,
+    NSCursorFrameResizePositionRight,
+    NSCursorFrameResizePositionTopLeft,
+    NSCursorFrameResizePositionTopRight,
+    NSCursorFrameResizePositionBottomLeft,
+    NSCursorFrameResizePositionBottomRight,
+};
+
+typedef NS_OPTIONS(NSUInteger, NSCursorFrameResizeDirections) {
+    NSCursorFrameResizeDirectionsInward = 1 << 0,
+    NSCursorFrameResizeDirectionsOutward = 1 << 1,
+    NSCursorFrameResizeDirectionsAll = NSCursorFrameResizeDirectionsInward | NSCursorFrameResizeDirectionsOutward,
+};
+
 @interface NSCursor : NSObject <NSCoding> {
     NSImage *_image;
     NSPoint _hotSpot;
@@ -47,6 +67,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 @property(class, readonly, retain, nonnull) NSCursor *resizeRightCursor;
 @property(class, readonly, retain, nonnull) NSCursor *resizeUpCursor;
 @property(class, readonly, retain, nonnull) NSCursor *resizeUpDownCursor;
+
+// The cursor for resizing a frame from an edge or corner; directions must not be empty.
++ (NSCursor *) frameResizeCursorFromPosition: (NSCursorFrameResizePosition) position
+                                 inDirections: (NSCursorFrameResizeDirections) directions;
 
 @property(class, readonly, retain, nonnull) NSCursor *dragCopyCursor;
 @property(class, readonly, retain, nonnull) NSCursor *dragLinkCursor;

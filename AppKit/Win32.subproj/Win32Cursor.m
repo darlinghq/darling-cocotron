@@ -55,6 +55,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         idc = IDC_SIZENS;
     else if ([name isEqualToString: @"resizeUpDownCursor"])
         idc = IDC_SIZENS;
+    else if ([name hasPrefix: @"frameResizeNorthWest"] || [name hasPrefix: @"frameResizeSouthEast"])
+        idc = IDC_SIZENWSE;
+    else if ([name hasPrefix: @"frameResizeNorthEast"] || [name hasPrefix: @"frameResizeSouthWest"])
+        idc = IDC_SIZENESW;
 
     _handle = LoadCursor(NULL, idc);
     return self;
