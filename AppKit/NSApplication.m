@@ -2227,6 +2227,11 @@ BOOL NSPerformService(NSString *itemName, NSPasteboard *pasteboard) {
     return NO;
 }
 
+BOOL NSApplicationLoad(void) {
+    [NSApplication sharedApplication];
+    return YES;
+}
+
 @implementation NSApplication (NSUserInterfaceItemSearching)
 
 // There is no system search service to forward the handler's results to, so

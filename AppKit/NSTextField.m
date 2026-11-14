@@ -219,6 +219,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [self setNeedsDisplay: YES];
 }
 
+- (BOOL) allowsEditingTextAttributes {
+    return [_cell allowsEditingTextAttributes];
+}
+
+- (void) setAllowsEditingTextAttributes: (BOOL) flag {
+    [_cell setAllowsEditingTextAttributes: flag];
+}
+
 - (NSString *) placeholderString {
     return [_cell placeholderString];
 }

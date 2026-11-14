@@ -460,6 +460,26 @@ NSNotificationName const NSSystemColorsDidChangeNotification = @"NSSystemColorsD
     return NSBlueControlTint;
 }
 
+// The colours are the ones macOS returns for the tints; they are not the
+// current selection colours. Any other tint value gets the clear tint's grey.
++ (NSColor *) colorForControlTint: (NSControlTint) controlTint {
+    switch (controlTint) {
+    case NSDefaultControlTint:
+    case NSBlueControlTint:
+        return [NSColor colorWithSRGBRed: 0.608
+                                   green: 0.757
+                                    blue: 0.910
+                                   alpha: 1.0];
+    case NSGraphiteControlTint:
+        return [NSColor colorWithSRGBRed: 0.729
+                                   green: 0.757
+                                    blue: 0.800
+                                   alpha: 1.0];
+    default:
+        return [NSColor colorWithSRGBRed: 0.82 green: 0.82 blue: 0.82 alpha: 1.0];
+    }
+}
+
 + (NSColor *) selectedControlColor {
     return [NSColor colorWithCatalogName: @"System"
                                colorName: @"selectedControlColor"];

@@ -32,6 +32,19 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Foundation/NSPlatform_win32.h>
 #endif
 
+@implementation NSStatusBarButton
+
+- (BOOL) appearsDisabled {
+    return _appearsDisabled;
+}
+
+- (void) setAppearsDisabled: (BOOL) flag {
+    _appearsDisabled = flag;
+    [self setNeedsDisplay: YES];
+}
+
+@end
+
 @implementation NSStatusItem
 
 #pragma mark Private Methods
@@ -268,6 +281,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         _trayIconID = -1;
         _win32Menu = NULL;
 #endif
+        // Items are visible until the application hides them.
+        _visible = YES;
     }
     return self;
 }
@@ -281,6 +296,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 - (void) setAction: (SEL) action {
     _action = action;
+    [_button setAction: action];
 }
 - (SEL) doubleAction {
     return _doubleAction;
@@ -293,6 +309,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 - (void) setTarget: (id) target {
     _target = target;
+    [_button setTarget: target];
 }
 
 - (NSImage *) image {
@@ -439,6 +456,54 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                          withHighlight: (BOOL) highlight
 {
     NSUnimplementedMethod();
+}
+
+- (NSStatusItemBehavior) behavior {
+    return _behavior;
+}
+
+- (void) setBehavior: (NSStatusItemBehavior) behavior {
+    _behavior = behavior;
+}
+
+- (NSStatusBarButton *) button {
+    if (_button == nil) {
+        _button = [[NSStatusBarButton alloc] initWithFrame: NSMakeRect(0, 0, _length > 0 ? _length : 24, 22)];
+        [_button setTarget: [self target]];
+        [_button setAction: [self action]];
+    }
+    return _button;
+}
+
+- (NSString *) autosaveName {
+    return _autosaveName;
+}
+
+- (void) setAutosaveName: (NSString *) name {
+    if (_autosaveName != name) {
+        [_autosaveName release];
+        _autosaveName = [name copy];
+    }
+}
+
+- (BOOL) isVisible {
+    return _visible;
+}
+
+- (void) setVisible: (BOOL) visible {
+    _visible = visible;
+}
+
+- (void) dealloc {
+    [_image release];
+    [_alternateImage release];
+    [_title release];
+    [_atrTitle release];
+    [_view release];
+    [_menu release];
+    [_button release];
+    [_autosaveName release];
+    [super dealloc];
 }
 
 @end

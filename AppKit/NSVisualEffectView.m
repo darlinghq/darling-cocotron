@@ -26,6 +26,13 @@
 @synthesize material = _material;
 @synthesize blendingMode = _blendingMode;
 @synthesize state = _state;
+@synthesize maskImage = _maskImage;
+@synthesize emphasized = _emphasized;
+
+- (void) dealloc {
+    [_maskImage release];
+    [super dealloc];
+}
 
 - (instancetype) initWithFrame: (NSRect) frame {
     self = [super initWithFrame: frame];
