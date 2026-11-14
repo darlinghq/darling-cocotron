@@ -29,7 +29,29 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     _position = position;
     _number = number;
     _generation = generation;
+    _objectStream = -1;
     return self;
+}
+
++ (O2PDFxrefEntry *) xrefEntryInObjectStream: (O2PDFInteger) objectStream
+                                        index: (O2PDFInteger) index
+                                       number: (O2PDFInteger) number
+{
+    O2PDFxrefEntry *entry = [self xrefEntryWithPosition: 0
+                                                 number: number
+                                             generation: 0];
+
+    entry->_objectStream = objectStream;
+    entry->_indexInObjectStream = index;
+    return entry;
+}
+
+- (O2PDFInteger) objectStream {
+    return _objectStream;
+}
+
+- (O2PDFInteger) indexInObjectStream {
+    return _indexInObjectStream;
 }
 
 + (O2PDFxrefEntry *) xrefEntryWithPosition: (O2PDFInteger) position
