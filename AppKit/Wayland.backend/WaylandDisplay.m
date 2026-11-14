@@ -120,6 +120,7 @@ int WaylandDispatch(const void *kind, void *proxy, uint32_t opcode,
             case WaylandObjectLogicalOutput:
                 [((WaylandOutput *) object)->_display logicalOutputEvent: opcode
                                                                   output: object arguments: args];
+                break;
             case WaylandObjectDataDevice:
             case WaylandObjectDataOffer:
             case WaylandObjectDataSource:
