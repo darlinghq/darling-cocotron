@@ -17,6 +17,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/AppKitExport.h>
 #import <AppKit/NSGraphics.h>
 #import <AppKit/NSResponder.h>
@@ -119,43 +120,53 @@ typedef NS_OPTIONS(NSInteger, NSWindowListOptions) {
     NSWindowListOrderedFrontToBack = (1 << 0),
 };
 
+// Legacy ObjC ABI (i386): instance size must stay 0x4c, Apple's; the ivars
+// before the extras sit at Apple's offsets. Add new state to the extra
+// struct, never as an ivar.
 @interface NSApplication : NSResponder {
-    NSDisplay *_display;
-    id _delegate;
+    NSEvent *_currentEvent;
     NSMutableArray *_windows;
     NSWindow *_keyWindow;
     NSWindow *_mainWindow;
-    NSMenu *_mainMenu;
-    NSMenu *_windowsMenu;
-    NSMenu *_servicesMenu;
-    NSMenu *_helpMenu;
-
-    NSImage *_applicationIconImage;
-
+    id _delegate;
+    NS_LEGACY_IVAR_PAD(_NSApplicationReserved1, 22)
     // QUIRK: the instance variable is named _running so that
     // valueForKey:@"_running" and setValue:forKey:@"_running" work through
     // direct instance variable access, without accessor methods. Not
     // documented. Evidence: black-box observation on macOS 27 (tier 2): the
     // key reads as NSNumber 0 before -run, NSApplication has no _running or
     // set_running: methods, and accessInstanceVariablesDirectly is YES.
-    // Test: appkit-application-running-key.m (quirk test).
+    // Test: appkit-application-running-key.m (quirk test). It stays a real
+    // ivar (at Apple's offset) on the legacy ABI for the same reason.
     BOOL _running;
-    BOOL _isActive;
-    BOOL _isHidden;
-    BOOL _windowsNeedUpdate;
-    NSEvent *_currentEvent;
-    NSDockTile *_dockTile;
-
-    NSMutableArray *_modalStack;
-    void *_lock;
-    NSMutableArray *_orderedWindows; // get rid of
-    NSTimer *_attentionTimer;
-    NSApplicationPresentationOptions _presentationOptions;
+    NS_LEGACY_IVAR_PAD(_NSApplicationReserved2, 5)
+    NSMenu *_mainMenu;
+    NS_LEGACY_IVAR_PAD(_NSApplicationReserved3, 4)
     NSAppearance *_appearance;
-    BOOL _finishedLaunching;
-    BOOL _windowClosedSinceTerminateCheck;
-    BOOL _automaticCustomizeTouchBarMenuItemEnabled;
-    BOOL _defaultHelpBookSearchEnabled;
+    NS_LEGACY_IVAR_PAD(_NSApplicationReserved4, 4)
+    NS_EXTRA_IVARS_BEGIN(NSApplication)
+        NSDisplay *_display;
+        NSMenu *_windowsMenu;
+        NSMenu *_servicesMenu;
+        NSMenu *_helpMenu;
+
+        NSImage *_applicationIconImage;
+
+        BOOL _isActive;
+        BOOL _isHidden;
+        BOOL _windowsNeedUpdate;
+        NSDockTile *_dockTile;
+
+        NSMutableArray *_modalStack;
+        void *_lock;
+        NSMutableArray *_orderedWindows; // get rid of
+        NSTimer *_attentionTimer;
+        NSApplicationPresentationOptions _presentationOptions;
+        BOOL _finishedLaunching;
+        BOOL _windowClosedSinceTerminateCheck;
+        BOOL _automaticCustomizeTouchBarMenuItemEnabled;
+        BOOL _defaultHelpBookSearchEnabled;
+    NS_EXTRA_IVARS_END(NSApplication)
 }
 
 @property(readonly) NSUserInterfaceLayoutDirection userInterfaceLayoutDirection;

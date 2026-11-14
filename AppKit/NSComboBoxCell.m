@@ -370,8 +370,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         NSString *string = nil;
         NSAttributedString *attstr = nil;
 
-        if (_formatter)
-            string = [_formatter stringForObjectValue: object];
+        if (NS_EXTRA(NSCell, self)->_formatter)
+            string = [NS_EXTRA(NSCell, self)->_formatter stringForObjectValue: object];
 
         if (!string) {
             if ([object isKindOfClass: [NSString class]])
@@ -408,7 +408,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
         [controlView setNeedsDisplay: YES];
 
-        if (_sendsActionOnEndEditing || [(NSControl *) controlView action] != NULL)
+        if (NS_EXTRA(NSCell, self)->_sendsActionOnEndEditing || [(NSControl *) controlView action] != NULL)
             [(NSControl *) controlView
                     sendAction: [(NSControl *) controlView action]
                             to: [(NSControl *) controlView target]];

@@ -45,6 +45,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
  *    i.e. replace everything using the cache.
  */
 
+#import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/NSControl.h>
 #import <AppKit/NSDragging.h>
 
@@ -101,58 +102,68 @@ typedef NS_OPTIONS(NSUInteger, NSTableViewAnimationOptions) {
     NSTableViewAnimationSlideRight = 0x40,
 };
 
+// Legacy ObjC ABI (i386): instance size must stay 0xe4, Apple's; the ivars
+// before the extras sit at Apple's offsets. Add new state to the extra
+// struct, never as an ivar.
 @interface NSTableView : NSControl {
-    id _target;
-    SEL _action;
-    SEL _doubleAction;
-
-    id _delegate;
-    id _dataSource;
-
     NSTableHeaderView *_headerView;
     NSView *_cornerView;
     NSMutableArray *_tableColumns;
-
-    NSInteger _rowHeightsCount;
-    CGFloat *_rowHeights;
+    id _editingCell;
+    id _delegate;
+    id _dataSource;
+    NSSize _intercellSpacing;
     CGFloat _standardRowHeight;
+    NS_LEGACY_IVAR_PAD(_NSTableViewReserved1, 8)
+    NSInteger _editedRow;
+    NSInteger _editedColumn;
+    NS_LEGACY_IVAR_PAD(_NSTableViewReserved2, 12)
     NSColor *_backgroundColor;
     NSColor *_gridColor;
-    BOOL _allowsColumnReordering;
-    BOOL _allowsColumnResizing;
-    BOOL _autoresizesAllColumnsToFit;
-    BOOL _allowsMultipleSelection;
-    BOOL _allowsEmptySelection;
-    BOOL _allowsColumnSelection;
-    BOOL _allowsTypeSelect;
-    NSSize _intercellSpacing;
+    NS_LEGACY_IVAR_PAD(_NSTableViewReserved3, 12)
+    SEL _doubleAction;
+    NS_LEGACY_IVAR_PAD(_NSTableViewReserved4, 44)
+    NS_EXTRA_IVARS_BEGIN(NSTableView)
+        id _target;
+        SEL _action;
 
-    BOOL _alternatingRowBackground;
-    unsigned int _gridStyleMask;
-    NSTableViewSelectionHighlightStyle _selectionHighlightStyle;
-    BOOL _usesAutomaticRowHeights;
-    BOOL _floatsGroupRows;
-    NSTableViewRowSizeStyle _rowSizeStyle;
-    CGFloat _styledRowHeight;
-    NSTableViewStyle _style;
 
-    // temp ivars
-    NSMutableArray *_selectedColumns;
-    NSIndexSet *_selectedRowIndexes;
-    NSInteger _clickedColumn, _clickedRow;
-    NSInteger _editedColumn, _editedRow;
-    NSInteger _numberOfRows;
-    NSInteger _updatesNestingCount;
-    id _editingCell;
-    NSRect _editingFrame, _editingBorder;
-    NSArray *_sortDescriptors;
 
-    NSInteger _draggingRow;
-    NSDragOperation _draggingSourceMaskLocal;
-    NSDragOperation _draggingSourceMaskNonLocal;
+        NSInteger _rowHeightsCount;
+        CGFloat *_rowHeights;
+        BOOL _allowsColumnReordering;
+        BOOL _allowsColumnResizing;
+        BOOL _autoresizesAllColumnsToFit;
+        BOOL _allowsMultipleSelection;
+        BOOL _allowsEmptySelection;
+        BOOL _allowsColumnSelection;
+        BOOL _allowsTypeSelect;
 
-    NSMutableDictionary *_registeredNibs;
-    NSMutableArray *_activeRowViews;
+        BOOL _alternatingRowBackground;
+        unsigned int _gridStyleMask;
+        NSTableViewSelectionHighlightStyle _selectionHighlightStyle;
+        BOOL _usesAutomaticRowHeights;
+        BOOL _floatsGroupRows;
+        NSTableViewRowSizeStyle _rowSizeStyle;
+        CGFloat _styledRowHeight;
+        NSTableViewStyle _style;
+
+        // temp ivars
+        NSMutableArray *_selectedColumns;
+        NSIndexSet *_selectedRowIndexes;
+        NSInteger _clickedColumn, _clickedRow;
+        NSInteger _numberOfRows;
+        NSInteger _updatesNestingCount;
+        NSRect _editingFrame, _editingBorder;
+        NSArray *_sortDescriptors;
+
+        NSInteger _draggingRow;
+        NSDragOperation _draggingSourceMaskLocal;
+        NSDragOperation _draggingSourceMaskNonLocal;
+
+        NSMutableDictionary *_registeredNibs;
+        NSMutableArray *_activeRowViews;
+    NS_EXTRA_IVARS_END(NSTableView)
 }
 
 - (NSView *) makeViewWithIdentifier: (NSString *) identifier owner: (id) owner;

@@ -17,6 +17,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/NSView.h>
 
 @class NSFont;
@@ -39,14 +40,21 @@ typedef enum {
     NSBoxCustom
 } NSBoxType;
 
+// Legacy ObjC ABI (i386): instance size must stay 0x88, Apple's; the ivars
+// before the extras sit at Apple's offsets. Add new state to the extra
+// struct, never as an ivar.
 @interface NSBox : NSView {
-    NSBoxType _boxType;
-    NSBorderType _borderType;
-    NSTitlePosition _titlePosition;
     id _titleCell;
+    NS_LEGACY_IVAR_PAD(_NSBoxReserved1, 4)
     NSSize _contentViewMargins;
-    BOOL _isTransparent;
-    id _customData;
+    NS_LEGACY_IVAR_PAD(_NSBoxReserved2, 36)
+    NS_EXTRA_IVARS_BEGIN(NSBox)
+        NSBoxType _boxType;
+        NSBorderType _borderType;
+        NSTitlePosition _titlePosition;
+        BOOL _isTransparent;
+        id _customData;
+    NS_EXTRA_IVARS_END(NSBox)
 }
 
 - (NSBoxType) boxType;

@@ -17,14 +17,20 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/NSControl.h>
 #import <AppKit/NSTextFieldCell.h>
 
+// Legacy ObjC ABI (i386): instance size must stay 0x64, Apple's; the ivars
+// before the extras sit at Apple's offsets. Add new state to the extra
+// struct, never as an ivar.
 @interface NSTextField : NSControl {
     id _delegate;
-    SEL _errorAction;
-    CGFloat _preferredMaxLayoutWidth;
-    BOOL _automaticTextCompletionEnabled;
+    NS_EXTRA_IVARS_BEGIN(NSTextField)
+        SEL _errorAction;
+        CGFloat _preferredMaxLayoutWidth;
+        BOOL _automaticTextCompletionEnabled;
+    NS_EXTRA_IVARS_END(NSTextField)
 }
 
 @property CGFloat preferredMaxLayoutWidth;

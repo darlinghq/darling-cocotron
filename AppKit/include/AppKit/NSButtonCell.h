@@ -17,6 +17,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/NSActionCell.h>
 #import <AppKit/NSImageCell.h>
 
@@ -96,27 +97,33 @@ typedef enum {
     NSGradientConvexStrong = 4,
 } NSGradientType;
 
+// Legacy ObjC ABI (i386): instance size must stay 0x44, Apple's; the ivars
+// before the extras sit at Apple's offsets. Add new state to the extra
+// struct, never as an ivar.
 @interface NSButtonCell : NSActionCell {
-    NSImage *_normalImage;
     NSString *_alternateTitle;
-    NSImage *_alternateImage;
-    int _imagePosition;
-    unsigned _highlightsBy : 4;
-    unsigned _showsStateBy : 4;
-    NSBezelStyle _bezelStyle;
-    BOOL _isTransparent;
-    BOOL _imageDimsWhenDisabled;
-    NSString *_keyEquivalent;
-    unsigned _keyEquivalentModifierMask;
-    BOOL _showsBorderOnlyWhileMouseInside;
     NSSound *_sound;
-    NSGradientType _gradientType;
-    NSImageScaling _imageScaling;
-    NSFont *_keyEquivalentFont;
-    NSColor *_backgroundColor;
-    float _periodicDelay, _periodicInterval;
-    NSImage *_alternateImageOrKeyEquivalentFont;
-    NSUInteger _bcFlags;
+    NSString *_keyEquivalent;
+    NS_LEGACY_IVAR_PAD(_NSButtonCellReserved1, 12)
+    NSImage *_normalImage;
+    NS_EXTRA_IVARS_BEGIN(NSButtonCell)
+        NSImage *_alternateImage;
+        int _imagePosition;
+        unsigned _highlightsBy : 4;
+        unsigned _showsStateBy : 4;
+        NSBezelStyle _bezelStyle;
+        BOOL _isTransparent;
+        BOOL _imageDimsWhenDisabled;
+        unsigned _keyEquivalentModifierMask;
+        BOOL _showsBorderOnlyWhileMouseInside;
+        NSGradientType _gradientType;
+        NSImageScaling _imageScaling;
+        NSFont *_keyEquivalentFont;
+        NSColor *_backgroundColor;
+        float _periodicDelay, _periodicInterval;
+        NSImage *_alternateImageOrKeyEquivalentFont;
+        NSUInteger _bcFlags;
+    NS_EXTRA_IVARS_END(NSButtonCell)
 }
 
 - (BOOL) isTransparent;

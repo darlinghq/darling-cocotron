@@ -25,6 +25,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
  *other undo operations. *
  *****************************************************************************************/
 
+#import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/NSDragging.h>
 #import <AppKit/NSParagraphStyle.h>
 #import <AppKit/NSText.h>
@@ -69,89 +70,94 @@ APPKIT_EXPORT NSString *const NSAllRomanInputSourcesLocaleIdentifier;
 
 @class NSUndoTyping;
 
+// Legacy ObjC ABI (i386): instance size must stay 0x54, Apple's; the ivars
+// before the extras sit at Apple's offsets. Add new state to the extra
+// struct, never as an ivar.
 @interface NSTextView : NSText <NSTextInput, NSTextInputClient, NSTextLayoutOrientationProvider> {
-    NSTextStorage *_textStorage;
-    NSTextContainer *_textContainer;
-    NSSize _textContainerInset;
-    BOOL _ownsTextStorage;
-    NSDictionary *_typingAttributes;
+    NS_EXTRA_IVARS_BEGIN(NSTextView)
+        NSTextStorage *_textStorage;
+        NSTextContainer *_textContainer;
+        NSSize _textContainerInset;
+        BOOL _ownsTextStorage;
+        NSDictionary *_typingAttributes;
 
-    id _delegate;
-    BOOL _isEditable;
-    BOOL _isSelectable;
-    BOOL _isRichText;
-    NSColor *_backgroundColor;
-    BOOL _drawsBackground;
-    NSFont *_font;
-    NSColor *_textColor;
-    NSTextAlignment _textAlignment;
+        id _delegate;
+        BOOL _isEditable;
+        BOOL _isSelectable;
+        BOOL _isRichText;
+        NSColor *_backgroundColor;
+        BOOL _drawsBackground;
+        NSFont *_font;
+        NSColor *_textColor;
+        NSTextAlignment _textAlignment;
 
-    NSColor *_insertionPointColor;
-    NSRect _insertionPointRect;
-    BOOL _insertionPointOn;
-    NSTimer *_insertionPointTimer;
+        NSColor *_insertionPointColor;
+        NSRect _insertionPointRect;
+        BOOL _insertionPointOn;
+        NSTimer *_insertionPointTimer;
 
-    BOOL _isFieldEditor;
-    NSSize _maxSize;
-    NSSize _minSize;
-    BOOL _isHorizontallyResizable;
-    BOOL _isVerticallyResizable;
-    BOOL _usesRuler;
-    BOOL _rulerVisible;
-    BOOL _usesFontPanel;
-    BOOL _usesFindBar;
-    BOOL _allowsUndo;
+        BOOL _isFieldEditor;
+        NSSize _maxSize;
+        NSSize _minSize;
+        BOOL _isHorizontallyResizable;
+        BOOL _isVerticallyResizable;
+        BOOL _usesRuler;
+        BOOL _rulerVisible;
+        BOOL _usesFontPanel;
+        BOOL _usesFindBar;
+        BOOL _allowsUndo;
 
-    NSMutableArray *_selectedRanges;
-    NSArray *_initialRanges; // selected ranges at the start of a selection
-                             // change
-    NSSelectionAffinity _selectionAffinity;
-    NSSelectionGranularity _selectionGranularity;
-    NSDictionary *_selectedTextAttributes;
-    NSDictionary *_linkTextAttributes;
-    NSDictionary *_markedTextAttributes;
-    NSParagraphStyle *_defaultParagraphStyle;
+        NSMutableArray *_selectedRanges;
+        NSArray *_initialRanges; // selected ranges at the start of a selection
+                                 // change
+        NSSelectionAffinity _selectionAffinity;
+        NSSelectionGranularity _selectionGranularity;
+        NSDictionary *_selectedTextAttributes;
+        NSDictionary *_linkTextAttributes;
+        NSDictionary *_markedTextAttributes;
+        NSParagraphStyle *_defaultParagraphStyle;
 
-    BOOL _didSendTextDidEndNotification;
-    NSUInteger _selectionOrigin; // for keyboard selection sanity.
-    id _killBuffer; // NSString for Emacs-style, NSMutableString for additive
-    BOOL _killBufferIsAdditive; // .. additive == pine/pico style, but possible
-                                // memory hog
+        BOOL _didSendTextDidEndNotification;
+        NSUInteger _selectionOrigin; // for keyboard selection sanity.
+        id _killBuffer; // NSString for Emacs-style, NSMutableString for additive
+        BOOL _killBufferIsAdditive; // .. additive == pine/pico style, but possible
+                                    // memory hog
 
-    NSRange _rangeForUserCompletion; // range of original user completion text.
-    NSString *_userCompletionHint;   // original "hint" text which started
-                                     // completion
-    NSArray *_userCompletions; // current list of completions. shouldn't change
-                               // while modal
-    NSInteger _userCompletionSelectedItem; // index within completion array
+        NSRange _rangeForUserCompletion; // range of original user completion text.
+        NSString *_userCompletionHint;   // original "hint" text which started
+                                         // completion
+        NSArray *_userCompletions; // current list of completions. shouldn't change
+                                   // while modal
+        NSInteger _userCompletionSelectedItem; // index within completion array
 
-    NSUndoManager *_fieldEditorUndoManager;
-    BOOL _processingKeyEvent;
-    BOOL _firstResponderButNotEditingYet;
+        NSUndoManager *_fieldEditorUndoManager;
+        BOOL _processingKeyEvent;
+        BOOL _firstResponderButNotEditingYet;
 
-    NSInteger _spellCheckerDocumentTag;
-    BOOL _isContinuousSpellCheckingEnabled;
-    BOOL _isAutomaticSpellingCorrectionEnabled;
-    NSTextCheckingTypes _enabledTextCheckingTypes;
-    BOOL _smartInsertDeleteEnabled;
+        NSInteger _spellCheckerDocumentTag;
+        BOOL _isContinuousSpellCheckingEnabled;
+        BOOL _isAutomaticSpellingCorrectionEnabled;
+        NSTextCheckingTypes _enabledTextCheckingTypes;
+        BOOL _smartInsertDeleteEnabled;
 
-    BOOL _allowsDocumentBackgroundColorChange;
+        BOOL _allowsDocumentBackgroundColorChange;
 
-    NSUndoTyping *_undoTyping;
-    NSTextLayoutOrientation _layoutOrientation;
+        NSUndoTyping *_undoTyping;
+        NSTextLayoutOrientation _layoutOrientation;
 
-    BOOL _incrementalSearchingEnabled;
-    BOOL _grammarCheckingEnabled;
-    BOOL _automaticQuoteSubstitutionEnabled;
-    BOOL _automaticDashSubstitutionEnabled;
-    BOOL _automaticLinkDetectionEnabled;
-    BOOL _automaticDataDetectionEnabled;
-    BOOL _automaticTextReplacementEnabled;
+        BOOL _incrementalSearchingEnabled;
+        BOOL _grammarCheckingEnabled;
+        BOOL _automaticQuoteSubstitutionEnabled;
+        BOOL _automaticDashSubstitutionEnabled;
+        BOOL _automaticLinkDetectionEnabled;
+        BOOL _automaticDataDetectionEnabled;
+        BOOL _automaticTextReplacementEnabled;
 
-    BOOL _usesInspectorBar;
-    BOOL _acceptsGlyphInfo;
-    BOOL _usesAdaptiveColorMappingForDarkAppearance;
-    BOOL _importsGraphics;
+        BOOL _usesInspectorBar;
+        BOOL _acceptsGlyphInfo;
+        BOOL _usesAdaptiveColorMappingForDarkAppearance;
+        BOOL _importsGraphics;
+    NS_EXTRA_IVARS_END(NSTextView)
 }
 
 - initWithFrame: (NSRect) frame textContainer: (NSTextContainer *) container;

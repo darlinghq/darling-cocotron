@@ -52,8 +52,8 @@ NSString *const NSControlTextDidEndEditingNotification =
     return NO;
 }
 
-@synthesize allowsExpansionToolTips = _allowsExpansionToolTips;
-@synthesize allowsLogicalLayoutDirection = _allowsLogicalLayoutDirection;
+NS_EXTRA_SYNTHESIZE_ASSIGN(NSControl, allowsExpansionToolTips, _allowsExpansionToolTips, BOOL, allowsExpansionToolTips, setAllowsExpansionToolTips:)
+NS_EXTRA_SYNTHESIZE_ASSIGN(NSControl, allowsLogicalLayoutDirection, _allowsLogicalLayoutDirection, BOOL, allowsLogicalLayoutDirection, setAllowsLogicalLayoutDirection:)
 
 static NSMutableDictionary *cellClassDictionary = nil;
 
@@ -129,7 +129,7 @@ static NSMutableDictionary *cellClassDictionary = nil;
 
             [coder decodeValuesOfObjCTypes: "i@s", &tag, &cell, &flags];
             [_aux setTag: tag];
-            _tag = tag;
+            NS_EXTRA(NSView, self)->_tag = tag;
             [self setCell: cell];
             [cell release];
         } else if (version <= 40) {
@@ -142,7 +142,7 @@ static NSMutableDictionary *cellClassDictionary = nil;
             [coder decodeValuesOfObjCTypes: "c", &flags3];
 
             [_aux setTag: tag];
-            _tag = tag;
+            NS_EXTRA(NSView, self)->_tag = tag;
             [self setCell: [coder decodeObject]];
             if (_cell == nil)
                 [self setEnabled: (flags1 & 1) != 0];
@@ -155,7 +155,7 @@ static NSMutableDictionary *cellClassDictionary = nil;
                                             &cell];
 
             [_aux setTag: tag];
-            _tag = tag;
+            NS_EXTRA(NSView, self)->_tag = tag;
             [self setCell: cell];
             [cell release];
             if (_cell == nil)
@@ -184,6 +184,7 @@ static NSMutableDictionary *cellClassDictionary = nil;
     [self _unbindAllBindings];
     [_aux release];
     [_cell release];
+    NS_EXTRA_FREE(NSControl, self);
     [super dealloc];
 }
 
@@ -218,7 +219,7 @@ static NSMutableDictionary *cellClassDictionary = nil;
 }
 
 - (NSInteger) tag {
-    return _tag;
+    return NS_EXTRA(NSView, self)->_tag;
 }
 
 - (NSFont *) font {
@@ -341,7 +342,7 @@ static NSMutableDictionary *cellClassDictionary = nil;
 }
 
 - (void) setTag: (NSInteger) tag {
-    _tag = tag;
+    NS_EXTRA(NSView, self)->_tag = tag;
 }
 
 - (void) setFont: (NSFont *) font {
@@ -536,12 +537,12 @@ static NSMutableDictionary *cellClassDictionary = nil;
 }
 
 - (NSText *) currentEditor {
-    return _currentEditor;
+    return NS_EXTRA(NSControl, self)->_currentEditor;
 }
 
 - (void) validateEditing {
-    if (_currentEditor) {
-        NSString *string = [_currentEditor string];
+    if (NS_EXTRA(NSControl, self)->_currentEditor) {
+        NSString *string = [NS_EXTRA(NSControl, self)->_currentEditor string];
         BOOL acceptsString = YES;
         NSFormatter *formatter = [self formatter];
         if (formatter) {
@@ -556,9 +557,9 @@ static NSMutableDictionary *cellClassDictionary = nil;
             }
         }
         if (acceptsString) {
-            if ([_currentEditor isRichText]) {
-                if ([_currentEditor isKindOfClass: [NSTextView class]]) {
-                    NSTextView *textview = (NSTextView *) _currentEditor;
+            if ([NS_EXTRA(NSControl, self)->_currentEditor isRichText]) {
+                if ([NS_EXTRA(NSControl, self)->_currentEditor isKindOfClass: [NSTextView class]]) {
+                    NSTextView *textview = (NSTextView *) NS_EXTRA(NSControl, self)->_currentEditor;
                     NSAttributedString *text = [textview textStorage];
                     NSAttributedString *string = [[[NSAttributedString alloc]
                             initWithAttributedString: text] autorelease];
@@ -574,20 +575,20 @@ static NSMutableDictionary *cellClassDictionary = nil;
 }
 
 - (BOOL) abortEditing {
-    if (_currentEditor != nil) {
+    if (NS_EXTRA(NSControl, self)->_currentEditor != nil) {
         // this may be invalid after endEditingFor: if we dont retain it
-        NSView *superview = [[[_currentEditor superview] retain] autorelease];
+        NSView *superview = [[[NS_EXTRA(NSControl, self)->_currentEditor superview] retain] autorelease];
 
         // we don't want delegate messages when aborting
-        [_currentEditor setDelegate: nil];
+        [NS_EXTRA(NSControl, self)->_currentEditor setDelegate: nil];
 
         [[self window] endEditingFor: self];
 
         if ([superview isKindOfClass: [NSClipView class]])
             [superview removeFromSuperview];
 
-        [_currentEditor release];
-        _currentEditor = nil;
+        [NS_EXTRA(NSControl, self)->_currentEditor release];
+        NS_EXTRA(NSControl, self)->_currentEditor = nil;
     }
     return NO;
 }
@@ -615,7 +616,7 @@ static NSMutableDictionary *cellClassDictionary = nil;
 }
 
 - (BOOL) resignFirstResponder {
-    if (_currentEditor) {
+    if (NS_EXTRA(NSControl, self)->_currentEditor) {
         return [[self selectedCell] hasValidObjectValue];
     }
     return YES;
@@ -627,7 +628,7 @@ static NSMutableDictionary *cellClassDictionary = nil;
 }
 
 - (void) textDidBeginEditing: (NSNotification *) note {
-    if ([note object] != _currentEditor)
+    if ([note object] != NS_EXTRA(NSControl, self)->_currentEditor)
         return;
 
     [[NSNotificationCenter defaultCenter]
@@ -650,7 +651,7 @@ static NSMutableDictionary *cellClassDictionary = nil;
 }
 
 - (void) textDidChange: (NSNotification *) note {
-    if ([note object] != _currentEditor)
+    if ([note object] != NS_EXTRA(NSControl, self)->_currentEditor)
         return;
 
     // FIX, Add formatter logic here
@@ -668,7 +669,7 @@ static NSMutableDictionary *cellClassDictionary = nil;
 - (void) textDidEndEditing: (NSNotification *) note {
     // It is possible for an NSControl subclass to be the delegate of another
     // text view
-    if ([note object] != _currentEditor)
+    if ([note object] != NS_EXTRA(NSControl, self)->_currentEditor)
         return;
 
     [self validateEditing];
@@ -748,11 +749,11 @@ static NSMutableDictionary *cellClassDictionary = nil;
 }
 
 - (BOOL) _setsMaxLayoutWidthAtFirstLayout {
-    return _setsMaxLayoutWidthAtFirstLayout;
+    return NS_EXTRA(NSControl, self)->_setsMaxLayoutWidthAtFirstLayout;
 }
 
 - (void) _setSetsMaxLayoutWidthAtFirstLayout: (BOOL) setsMaxLayoutWidthAtFirstLayout {
-    _setsMaxLayoutWidthAtFirstLayout = setsMaxLayoutWidthAtFirstLayout;
+    NS_EXTRA(NSControl, self)->_setsMaxLayoutWidthAtFirstLayout = setsMaxLayoutWidthAtFirstLayout;
 }
 
 // NSEditor methods

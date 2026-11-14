@@ -18,10 +18,15 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/NSControl.h>
 #import <AppKit/NSImageCell.h>
 
+// Legacy ObjC ABI (i386): instance size must stay 0x68, Apple's; these ivars
+// sit at Apple's offsets. New state needs an extra ivars struct
+// (AppKitIvarLayout.h), never a new ivar.
 @interface NSImageView : NSControl {
+    NS_LEGACY_IVAR_PAD(_NSImageViewReserved1, 4)
     id _target;
     SEL _action;
 }

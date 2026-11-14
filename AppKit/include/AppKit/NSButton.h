@@ -17,12 +17,18 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/NSButtonCell.h>
 #import <AppKit/NSControl.h>
 
+// Legacy ObjC ABI (i386): instance size must stay 0x5c, Apple's; the ivars
+// before the extras sit at Apple's offsets. Add new state to the extra
+// struct, never as an ivar.
 @interface NSButton : NSControl {
-    NSColor *_contentTintColor;
-    BOOL _hasDestructiveAction;
+    NS_EXTRA_IVARS_BEGIN(NSButton)
+        NSColor *_contentTintColor;
+        BOOL _hasDestructiveAction;
+    NS_SIDE_IVARS_END(NSButton)
 }
 
 + (instancetype) buttonWithTitle: (NSString *) title image: (NSImage *) image target: (id) target action: (SEL) action;

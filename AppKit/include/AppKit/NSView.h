@@ -20,6 +20,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 // Reviewed for API completeness against 10.6.
 
+#import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/AppKitExport.h>
 #import <AppKit/NSAnimation.h>
 #import <AppKit/NSGraphics.h>
@@ -93,77 +94,84 @@ APPKIT_EXPORT const NSNotificationName NSViewGlobalFrameDidChangeNotification;
 
 APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPresentationOptions;
 
+// Legacy ObjC ABI (i386): instance size must stay 0x50, Apple's; the ivars
+// before the extras sit at Apple's offsets. Add new state to the extra
+// struct, never as an ivar.
 @interface NSView : NSResponder <NSAnimatablePropertyContainer, NSUserInterfaceItemIdentification, NSAppearanceCustomization> {
     NSRect _frame;
     NSRect _bounds;
-    NSWindow *_window;
-    NSMenu *_menu;
     NSView *_superview;
     NSMutableArray *_subviews;
-    NSView *_nextKeyView;
-    NSView *_previousKeyView;
-    BOOL _isHidden;
-    CGFloat _alphaValue;
-    BOOL _postsNotificationOnFrameChange;
-    BOOL _postsNotificationOnBoundsChange;
-    BOOL _autoresizesSubviews;
-    BOOL _inLiveResize;
-    NSAutoresizingMaskOptions _autoresizingMask;
-    NSInteger _tag;
-    NSArray *_draggedTypes;
-    NSMutableArray *_trackingAreas;
-    BOOL _needsDisplay;
-    NSUInteger _invalidRectCount;
-    NSRect *_invalidRects;
-    NSRect *_rectsBeingRedrawn;
-    NSInteger _rectsBeingRedrawnCount;
-    CGFloat _frameRotation;
-    CGFloat _boundsRotation;
-    BOOL _translatesAutoresizingMaskIntoConstraints;
-
-    BOOL _validTrackingAreas;
-    BOOL _validTransforms;
-    CGAffineTransform _transformFromWindow;
-    CGAffineTransform _transformToWindow;
-    CGAffineTransform _transformToLayer;
-    NSRect _visibleRect;
-    NSFocusRingType _focusRingType;
-
-    BOOL _wantsLayer;
+    NSWindow *_window;
+    NS_LEGACY_IVAR_PAD(_NSViewReserved1, 8)
     CALayer *_layer;
-    NSArray *_contentFilters;
-    CIFilter *_compositingFilter;
-    NSViewLayerContentsPlacement _layerContentsPlacement;
-    NSViewLayerContentsRedrawPolicy _layerContentsRedrawPolicy;
-    NSShadow *_shadow;
-    NSDictionary *_animations;
+    NS_LEGACY_IVAR_PAD(_NSViewReserved2, 12)
+    NS_EXTRA_IVARS_BEGIN(NSView)
+        NSMenu *_menu;
+        NSView *_nextKeyView;
+        NSView *_previousKeyView;
+        BOOL _isHidden;
+        CGFloat _alphaValue;
+        BOOL _postsNotificationOnFrameChange;
+        BOOL _postsNotificationOnBoundsChange;
+        BOOL _autoresizesSubviews;
+        BOOL _inLiveResize;
+        NSAutoresizingMaskOptions _autoresizingMask;
+        NSInteger _tag;
+        NSArray *_draggedTypes;
+        NSMutableArray *_trackingAreas;
+        BOOL _needsDisplay;
+        NSUInteger _invalidRectCount;
+        NSRect *_invalidRects;
+        NSRect *_rectsBeingRedrawn;
+        NSInteger _rectsBeingRedrawnCount;
+        CGFloat _frameRotation;
+        CGFloat _boundsRotation;
+        BOOL _translatesAutoresizingMaskIntoConstraints;
 
-    CALayerContext *_layerContext;
-    id __remove;
-    NSUserInterfaceItemIdentifier _identifier;
-    NSLayoutPriority _horizontalContentHuggingPriority;
-    BOOL _wantsBestResolutionOpenGLSurface;
-    NSLayoutPriority _verticalContentHuggingPriority;
-    NSLayoutPriority _horizontalContentCompressionResistancePriority;
-    NSLayoutPriority _verticalContentCompressionResistancePriority;
-    NSString *_accessibilityTitle;
+        BOOL _validTrackingAreas;
+        BOOL _validTransforms;
+        CGAffineTransform _transformFromWindow;
+        CGAffineTransform _transformToWindow;
+        CGAffineTransform _transformToLayer;
+        NSRect _visibleRect;
+        NSFocusRingType _focusRingType;
 
-    NSAppearance *_appearance;
-    NSTouchTypeMask _allowedTouchTypes;
-    BOOL _canDrawSubviewsIntoLayer;
-    BOOL _hasExplicitUserInterfaceLayoutDirection;
-    NSUserInterfaceLayoutDirection _userInterfaceLayoutDirection;
-    int _frameChangeDepth;
-    BOOL _canDrawConcurrently;
-    NSMutableArray *_gestureRecognizers;
+        BOOL _wantsLayer;
+        NSArray *_contentFilters;
+        CIFilter *_compositingFilter;
+        NSViewLayerContentsPlacement _layerContentsPlacement;
+        NSViewLayerContentsRedrawPolicy _layerContentsRedrawPolicy;
+        NSShadow *_shadow;
+        NSDictionary *_animations;
 
-    NSMutableArray *_constraints;
+        CALayerContext *_layerContext;
+        id __remove;
+        NSUserInterfaceItemIdentifier _identifier;
+        NSLayoutPriority _horizontalContentHuggingPriority;
+        BOOL _wantsBestResolutionOpenGLSurface;
+        NSLayoutPriority _verticalContentHuggingPriority;
+        NSLayoutPriority _horizontalContentCompressionResistancePriority;
+        NSLayoutPriority _verticalContentCompressionResistancePriority;
+        NSString *_accessibilityTitle;
 
-    BOOL _needsLayout;
-    BOOL _needsUpdateConstraints;
-    BOOL _clipsToBounds;
-    BOOL _hasPreparedContentRect;
-    NSRect _preparedContentRect;
+        NSAppearance *_appearance;
+        NSTouchTypeMask _allowedTouchTypes;
+        BOOL _canDrawSubviewsIntoLayer;
+        BOOL _hasExplicitUserInterfaceLayoutDirection;
+        NSUserInterfaceLayoutDirection _userInterfaceLayoutDirection;
+        int _frameChangeDepth;
+        BOOL _canDrawConcurrently;
+        NSMutableArray *_gestureRecognizers;
+
+        NSMutableArray *_constraints;
+
+        BOOL _needsLayout;
+        BOOL _needsUpdateConstraints;
+        BOOL _clipsToBounds;
+        BOOL _hasPreparedContentRect;
+        NSRect _preparedContentRect;
+    NS_EXTRA_IVARS_END(NSView)
 }
 
 // Constraints installed on this view, in the order they were added. A

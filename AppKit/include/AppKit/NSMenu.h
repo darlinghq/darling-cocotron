@@ -17,6 +17,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/AppKitExport.h>
 #import <Foundation/Foundation.h>
 #import <AppKit/NSUserInterfaceItemIdentification.h>
@@ -33,15 +34,21 @@ APPKIT_EXPORT const NSNotificationName NSMenuDidAddItemNotification;
 APPKIT_EXPORT const NSNotificationName NSMenuDidRemoveItemNotification;
 APPKIT_EXPORT const NSNotificationName NSMenuDidChangeItemNotification;
 
+// Legacy ObjC ABI (i386): instance size must stay 0x1c, Apple's; the ivars
+// before the extras sit at Apple's offsets. Add new state to the extra
+// struct, never as an ivar.
 @interface NSMenu : NSObject <NSCopying, NSUserInterfaceItemIdentification> {
     NSMenu *_supermenu;
     NSString *_title;
-    NSString *_name;
-    NSMutableArray *_itemArray;
-    BOOL _autoenablesItems;
-    id<NSMenuDelegate> _delegate;
-    BOOL _showsStateColumn;
-    NSUserInterfaceItemIdentifier _identifier;
+    NS_LEGACY_IVAR_PAD(_NSMenuReserved1, 12)
+    NS_EXTRA_IVARS_BEGIN(NSMenu)
+        NSString *_name;
+        NSMutableArray *_itemArray;
+        BOOL _autoenablesItems;
+        id<NSMenuDelegate> _delegate;
+        BOOL _showsStateColumn;
+        NSUserInterfaceItemIdentifier _identifier;
+    NS_EXTRA_IVARS_END(NSMenu)
 }
 
 @property BOOL showsStateColumn;

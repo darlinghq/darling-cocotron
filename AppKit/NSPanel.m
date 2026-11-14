@@ -44,7 +44,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     } else {
         _level = NSNormalWindowLevel;
     }
-    _releaseWhenClosed = NO;
+    NS_EXTRA(NSWindow, self)->_releaseWhenClosed = NO;
     return self;
 }
 
@@ -58,27 +58,27 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (BOOL) worksWhenModal {
-    return _worksWhenModal;
+    return NS_EXTRA(NSPanel, self)->_worksWhenModal;
 }
 
 - (BOOL) becomesKeyOnlyIfNeeded {
-    return _becomesKeyOnlyIfNeeded;
+    return NS_EXTRA(NSPanel, self)->_becomesKeyOnlyIfNeeded;
 }
 
 - (BOOL) isFloatingPanel {
-    return _isFloatingPanel;
+    return NS_EXTRA(NSPanel, self)->_isFloatingPanel;
 }
 
 - (void) setWorksWhenModal: (BOOL) flag {
-    _worksWhenModal = flag;
+    NS_EXTRA(NSPanel, self)->_worksWhenModal = flag;
 }
 
 - (void) setBecomesKeyOnlyIfNeeded: (BOOL) flag {
-    _becomesKeyOnlyIfNeeded = flag;
+    NS_EXTRA(NSPanel, self)->_becomesKeyOnlyIfNeeded = flag;
 }
 
 - (void) setFloatingPanel: (BOOL) flag {
-    _isFloatingPanel = flag;
+    NS_EXTRA(NSPanel, self)->_isFloatingPanel = flag;
 }
 
 @end

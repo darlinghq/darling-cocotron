@@ -17,15 +17,20 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/NSEvent.h>
 #import <Foundation/Foundation.h>
 
 @class NSMenu, NSUndoManager, NSTouchBar;
 
+// Legacy ObjC ABI (i386): instance size must stay 0x8, Apple's (only
+// _nextResponder, at 0x4). Add new state to the extra struct, never as an ivar.
 @interface NSResponder : NSObject <NSCoding> {
     id _nextResponder;
-    NSTouchBar *_touchBar;
-    NSUserActivity *_userActivity;
+    NS_EXTRA_IVARS_BEGIN(NSResponder)
+        NSTouchBar *_touchBar;
+        NSUserActivity *_userActivity;
+    NS_SIDE_IVARS_END(NSResponder)
 }
 
 @property (weak) NSResponder *nextResponder;

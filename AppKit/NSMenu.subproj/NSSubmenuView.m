@@ -137,7 +137,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
     [self initWithFrame: frame];
 
-    _menu = [menu retain];
+    NS_EXTRA(NSView, self)->_menu = [menu retain];
     _selectedItemIndex = NSNotFound;
 
     frame.size = [self sizeForMenuItems: [self visibleItemArray]];
