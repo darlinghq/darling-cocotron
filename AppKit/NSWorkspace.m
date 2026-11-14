@@ -92,8 +92,9 @@ NSNotificationName NSWorkspaceWillUnmountNotification = @"NSWorkspaceWillUnmount
 - (BOOL) accessibilityDisplayShouldInvertColors { return NO; }
 - (BOOL) accessibilityDisplayShouldReduceMotion { return NO; }
 
-// No assistive-technology client exists on this platform, so VoiceOver is never running.
+// No assistive-technology client exists on this platform, so VoiceOver and Switch Control are never running.
 - (BOOL) isVoiceOverEnabled { return NO; }
+- (BOOL) isSwitchControlEnabled { return NO; }
 
 - (NSImage *) iconForFile: (NSString *) path {
     NSInvalidAbstractInvocation();

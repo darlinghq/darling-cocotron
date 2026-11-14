@@ -87,6 +87,7 @@ typedef NS_ENUM(NSInteger, NSWorkspaceAuthorizationType) {
 @property(readonly) BOOL accessibilityDisplayShouldInvertColors;
 @property(readonly) BOOL accessibilityDisplayShouldReduceMotion;
 @property(readonly, getter=isVoiceOverEnabled) BOOL voiceOverEnabled;
+@property(readonly, getter=isSwitchControlEnabled) BOOL switchControlEnabled;
 
 - (NSImage *) iconForFile: (NSString *) path;
 - (NSImage *) iconForFiles: (NSArray *) array;
