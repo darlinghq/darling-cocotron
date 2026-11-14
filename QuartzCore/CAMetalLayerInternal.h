@@ -60,6 +60,7 @@ class CAMetalDrawableActual;
 
 - (void)queuePresent: (NSUInteger)drawableID;
 - (void)releaseDrawable: (NSUInteger)drawableID;
+- (void)releaseDisplayedDrawable;
 
 - (BOOL)hasQueuedDrawables;
 
