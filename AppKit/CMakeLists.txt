@@ -680,51 +680,11 @@ set_source_files_properties(DarlingLayout.mm PROPERTIES LANGUAGE CXX COMPILE_FLA
 # explicitly (see WaylandBackendSelected()); otherwise AppKit falls through to X11.
 # libwayland-client and libxkbcommon are loaded with dlopen() only when it is
 # selected, so building it needs just their headers, wayland-scanner and the
-# protocol files. It is skipped when any of them is missing.
-# 1.20 added wl_proxy_marshal_array_flags.
-pkg_check_modules(WAYLAND_CLIENT wayland-client>=1.20)
-pkg_check_modules(WAYLAND_CURSOR wayland-cursor)
-pkg_check_modules(XKBCOMMON xkbcommon)
-pkg_check_modules(WAYLAND_PROTOCOLS wayland-protocols)
-pkg_check_modules(WAYLAND_SCANNER wayland-scanner)
-find_program(WAYLAND_SCANNER_EXECUTABLE wayland-scanner)
+# protocol files (see WaylandProtocols.cmake). It is skipped when any of them is missing.
+include(${CMAKE_CURRENT_SOURCE_DIR}/../CoreGraphics/WaylandSupport/WaylandProtocols.cmake)
 
-if (WAYLAND_SCANNER_FOUND AND WAYLAND_PROTOCOLS_FOUND)
-	pkg_get_variable(WAYLAND_CORE_PROTOCOL_DIR wayland-scanner pkgdatadir)
-	pkg_get_variable(WAYLAND_PROTOCOLS_DIR wayland-protocols pkgdatadir)
-endif ()
-set(WAYLAND_PROTOCOL_FILES
-	"${WAYLAND_CORE_PROTOCOL_DIR}/wayland.xml"
-	"${WAYLAND_PROTOCOLS_DIR}/stable/xdg-shell/xdg-shell.xml"
-	"${WAYLAND_PROTOCOLS_DIR}/staging/fractional-scale/fractional-scale-v1.xml"
-	"${WAYLAND_PROTOCOLS_DIR}/unstable/xdg-output/xdg-output-unstable-v1.xml"
-	"${WAYLAND_PROTOCOLS_DIR}/stable/viewporter/viewporter.xml"
-	"${WAYLAND_PROTOCOLS_DIR}/unstable/xdg-decoration/xdg-decoration-unstable-v1.xml"
-	"${WAYLAND_PROTOCOLS_DIR}/unstable/pointer-gestures/pointer-gestures-unstable-v1.xml"
-	"${WAYLAND_PROTOCOLS_DIR}/unstable/relative-pointer/relative-pointer-unstable-v1.xml"
-	"${WAYLAND_PROTOCOLS_DIR}/unstable/pointer-constraints/pointer-constraints-unstable-v1.xml")
-set(WAYLAND_PROTOCOL_FILES_FOUND TRUE)
-foreach(protocol ${WAYLAND_PROTOCOL_FILES})
-	if (NOT EXISTS "${protocol}")
-		set(WAYLAND_PROTOCOL_FILES_FOUND FALSE)
-	endif ()
-endforeach()
-
-if (WAYLAND_CLIENT_FOUND AND WAYLAND_CURSOR_FOUND AND XKBCOMMON_FOUND
-		AND WAYLAND_SCANNER_EXECUTABLE AND WAYLAND_PROTOCOL_FILES_FOUND)
-	set(WAYLAND_PROTOCOL_SOURCES)
-	foreach(protocol ${WAYLAND_PROTOCOL_FILES})
-		get_filename_component(protocol_name "${protocol}" NAME_WE)
-		# Generated as .m: AppKit's C flags pre-include Foundation.
-		set(protocol_source "${CMAKE_CURRENT_BINARY_DIR}/Wayland.backend/${protocol_name}-protocol.m")
-		add_custom_command(
-			OUTPUT "${protocol_source}"
-			COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/Wayland.backend"
-			COMMAND "${WAYLAND_SCANNER_EXECUTABLE}" private-code "${protocol}" "${protocol_source}"
-			DEPENDS "${protocol}"
-		)
-		list(APPEND WAYLAND_PROTOCOL_SOURCES "${protocol_source}")
-	endforeach()
+if (WAYLAND_PROTOCOLS_USABLE)
+	wayland_protocol_sources(WAYLAND_PROTOCOL_SOURCES "${CMAKE_CURRENT_BINARY_DIR}/Wayland.backend")
 
 	add_backend(Wayland
 		SOURCES

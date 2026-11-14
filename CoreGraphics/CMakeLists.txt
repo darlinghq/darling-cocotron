@@ -178,3 +178,4 @@ function(add_backend name)
 endfunction(add_backend)
 
 add_subdirectory(X11.backend)
+add_subdirectory(Wayland.backend)
