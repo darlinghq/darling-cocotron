@@ -3,7 +3,6 @@ add_backend(X11
 		CGSConnectionX11.m
 		CGSWindowX11.m
 		CGSSurfaceX11.m
-		X11KeySymToUCS.m
 	INFO_PLIST
 		Info.plist
 	DEPENDENCIES

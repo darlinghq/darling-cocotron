@@ -21,7 +21,7 @@
 #import <CoreGraphics/CGSKeyboardLayout.h>
 #import <CoreGraphics/CGSScreen.h>
 #include "CarbonKeys.h"
-#import "X11KeySymToUCS.h"
+#import <CoreGraphics/CGSKeySymToUnicodePrivate.h>
 #import <Foundation/NSDebug.h>
 #import <Foundation/NSString.h>
 #include <stdlib.h>
@@ -262,7 +262,7 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type, CFDataRef a
 			KeySym sym = XkbKeycodeToKeysym(_display, x11KeyCode, 0, shift);
 
 			if (sym != NoSymbol)
-				outTable[i] = X11KeySymToUCS(sym);
+				outTable[i] = CGSKeySymToUnicode(sym);
 			else
 				outTable[i] = 0;
 		}

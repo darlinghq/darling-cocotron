@@ -107,6 +107,7 @@ set(CoreGraphics_sources
 	CGSWindow.m
 	CGSSurface.m
 	CGSKeyboardLayout.m
+	CGSKeySymToUnicode.m
 	CGSRegion.m
 	CGSScreen.m
 	CGSServerSPI.m
