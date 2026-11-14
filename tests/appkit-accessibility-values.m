@@ -73,6 +73,7 @@ int main(void) {
         EXPECT(NSAccessibilityVisibleNameKey, "AXVisibleName");
         EXPECT(NSAccessibilityCancelButtonAttribute, "AXCancelButton");
         EXPECT(NSAccessibilityCloseButtonAttribute, "AXCloseButton");
+        EXPECT(NSAccessibilityFullScreenButtonAttribute, "AXFullScreenButton");
         EXPECT(NSAccessibilityDefaultButtonAttribute, "AXDefaultButton");
         EXPECT(NSAccessibilityGrowAreaAttribute, "AXGrowArea");
         EXPECT(NSAccessibilityMainAttribute, "AXMain");
