@@ -593,6 +593,7 @@ add_framework(AppKit
 		Onyx2D
 		CoreText
 		CoreData
+		CollectionViewCore
 		OpenGL
 		QuartzCore
 		CoreGraphics
@@ -606,6 +607,8 @@ add_framework(AppKit
 		HIToolbox
 )
 
+# Applications bind the NSCollectionLayout* names to AppKit, so AppKit re-exports the framework that defines them.
+reexport(AppKit CollectionViewCore ${CMAKE_BINARY_DIR}/src/external/cocotron/CollectionViewCore/CollectionViewCore)
 reexport(AppKit Foundation ${CMAKE_BINARY_DIR}/src/external/foundation/Foundation)
 reexport(AppKit ApplicationServices ${CMAKE_BINARY_DIR}/src/frameworks/ApplicationServices/ApplicationServices)
 

@@ -2,6 +2,7 @@ project(cocotron)
 
 add_subdirectory(CoreGraphics)
 add_subdirectory(Onyx2D)
+add_subdirectory(CollectionViewCore)
 add_subdirectory(AppKit)
 add_subdirectory(CoreText)
 add_subdirectory(Cocoa)
