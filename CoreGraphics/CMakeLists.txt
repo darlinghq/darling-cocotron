@@ -130,7 +130,7 @@ generate_sdk_framework(CoreGraphics
     HEADER "include/CoreGraphics"
 )
 
-add_framework(CoreGraphics
+add_separated_framework(CoreGraphics
 	FAT
 	CURRENT_VERSION
 	SOURCES
