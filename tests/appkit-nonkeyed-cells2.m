@@ -181,8 +181,12 @@ static void testImageReps(NSString *dir)
 - (unsigned) systemVersion { return 1000; }
 - (NSInteger) versionForClassName: (NSString *) name
 {
+    // The class versions the archive would carry (those of Mac OS X 10.14); Darling's AppKit
+    // classes report version 0.
     if ([name isEqualToString: @"NSBrowser"])
         return 60;
+    if ([name isEqualToString: @"NSView"] || [name isEqualToString: @"NSControl"])
+        return 41;
     Class c = NSClassFromString(name);
     return c ? (NSInteger) [c version] : 0;
 }
