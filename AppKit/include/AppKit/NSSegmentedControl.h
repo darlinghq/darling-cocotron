@@ -20,13 +20,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSCell.h>
 #import <AppKit/NSControl.h>
 
-typedef enum {
+typedef NS_ENUM(NSUInteger, NSSegmentSwitchTracking) {
     NSSegmentSwitchTrackingSelectOne,
     NSSegmentSwitchTrackingSelectAny,
     NSSegmentSwitchTrackingMomentary
-} NSSegmentSwitchTracking;
+};
 
-enum {
+typedef NS_ENUM(NSInteger, NSSegmentStyle) {
     NSSegmentStyleAutomatic = 0,
     NSSegmentStyleRounded = 1,
     NSSegmentStyleTexturedRounded = 2,
@@ -35,7 +35,6 @@ enum {
     NSSegmentStyleCapsule = 5,
     NSSegmentStyleSmallSquare = 6,
 };
-typedef NSInteger NSSegmentStyle;
 
 @interface NSSegmentedControl : NSControl
 

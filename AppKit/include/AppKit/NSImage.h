@@ -28,12 +28,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 typedef NSString *NSImageHintKey NS_TYPED_ENUM NS_SWIFT_NAME(NSImageRep.HintKey);
 
-typedef enum {
+typedef NS_ENUM(NSUInteger, NSImageCacheMode) {
     NSImageCacheDefault,
     NSImageCacheAlways,
     NSImageCacheBySize,
     NSImageCacheNever,
-} NSImageCacheMode;
+};
 
 typedef NS_ENUM(NSInteger, NSImageResizingMode) {
     NSImageResizingModeStretch = 0,

@@ -55,7 +55,7 @@ typedef NS_OPTIONS(NSUInteger, NSWindowStyleMask) {
     NSWindowStyleMaskMiniaturizable = 0x04,
     NSWindowStyleMaskResizable = 0x08,
     NSWindowStyleMaskTexturedBackground = 0x100,
-    NSWindiwStyleMaskUnifiedTitleAndToolbar = 0x1000,
+    NSWindowStyleMaskUnifiedTitleAndToolbar = 0x1000,
     NSWindowStyleMaskFullScreen = 0x4000,
     NSWindowStyleMaskFullSizeContentView = 0x8000,
     // NSPanel only:
@@ -63,6 +63,11 @@ typedef NS_OPTIONS(NSUInteger, NSWindowStyleMask) {
     NSWindowStyleMaskDocModalWindow = 0x40,
     NSWindowStyleMaskNonactivatingPanel = 0x80,
     NSWindowStyleMaskHUDWindow = 0x2000,
+};
+
+// Names used before the modern spellings; plain constants, so Swift does not see them.
+enum {
+    NSWindiwStyleMaskUnifiedTitleAndToolbar = NSWindowStyleMaskUnifiedTitleAndToolbar,
 };
 
 typedef NS_ENUM(NSUInteger, NSBackingStoreType) {
@@ -159,8 +164,7 @@ typedef NS_ENUM(NSInteger, NSWindowAnimationBehavior) {
     NSWindowAnimationBehaviorAlertPanel = 5
 };
 
-typedef int NSSelectionDirection;
-enum {
+typedef NS_ENUM(int, NSSelectionDirection) {
     NSDirectSelection = 0,
     NSSelectingNext = 1,
     NSSelectingPrevious = 2,

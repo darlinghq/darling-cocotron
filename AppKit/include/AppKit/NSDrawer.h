@@ -23,12 +23,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 @class NSString, NSView, NSWindow;
 @class NSDrawerWindow;
 
-typedef enum {
+typedef NS_ENUM(NSUInteger, NSDrawerState) {
     NSDrawerClosedState,
     NSDrawerOpeningState,
     NSDrawerOpenState,
     NSDrawerClosingState
-} NSDrawerState;
+};
 
 APPKIT_EXPORT NSString *const NSDrawerWillOpenNotification;
 APPKIT_EXPORT NSString *const NSDrawerDidOpenNotification;

@@ -19,17 +19,31 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSActionCell.h>
 
-typedef enum {
-    NSTickMarkBelow = 0,
-    NSTickMarkAbove = 1,
-    NSTickMarkLeft = NSTickMarkAbove,
-    NSTickMarkRight = NSTickMarkBelow,
-} NSTickMarkPosition;
+typedef NS_ENUM(NSUInteger, NSTickMarkPosition) {
+    NSTickMarkPositionBelow = 0,
+    NSTickMarkPositionAbove = 1,
+    NSTickMarkPositionLeading = NSTickMarkPositionAbove,
+    NSTickMarkPositionTrailing = NSTickMarkPositionBelow,
+};
 
-typedef enum {
-    NSLinearSlider = 0,
-    NSCircularSlider = 1,
-} NSSliderType;
+// Names used before the modern spellings; plain constants, so Swift does not see them.
+enum {
+    NSTickMarkBelow = NSTickMarkPositionBelow,
+    NSTickMarkAbove = NSTickMarkPositionAbove,
+    NSTickMarkLeft = NSTickMarkPositionLeading,
+    NSTickMarkRight = NSTickMarkPositionTrailing,
+};
+
+typedef NS_ENUM(NSUInteger, NSSliderType) {
+    NSSliderTypeLinear = 0,
+    NSSliderTypeCircular = 1,
+};
+
+// Names used before the modern spellings; plain constants, so Swift does not see them.
+enum {
+    NSLinearSlider = NSSliderTypeLinear,
+    NSCircularSlider = NSSliderTypeCircular,
+};
 
 @interface NSSliderCell : NSActionCell {
     NSSliderType _type;

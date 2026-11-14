@@ -22,18 +22,18 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSMutableArray, NSArray, NSTimer;
 
-typedef enum {
+typedef NS_ENUM(NSUInteger, NSAnimationCurve) {
     NSAnimationEaseInOut,
     NSAnimationEaseIn,
     NSAnimationEaseOut,
     NSAnimationLinear,
-} NSAnimationCurve;
+};
 
-typedef enum {
+typedef NS_ENUM(NSUInteger, NSAnimationBlockingMode) {
     NSAnimationBlocking,
     NSAnimationNonblocking,
     NSAnimationNonblockingThreaded
-} NSAnimationBlockingMode;
+};
 
 typedef float NSAnimationProgress;
 

@@ -21,11 +21,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSMenuItem;
 
-typedef enum {
+typedef NS_ENUM(NSUInteger, NSPopUpArrowPosition) {
     NSPopUpNoArrow = 0,
     NSPopUpArrowAtCenter = 1,
     NSPopUpArrowAtBottom = 2
-} NSPopUpArrowPosition;
+};
 
 @interface NSPopUpButtonCell : NSMenuItemCell {
     NSMenu *_menu;

@@ -21,7 +21,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSView, NSColor, NSTabView, NSViewController;
 
-typedef enum { NSSelectedTab, NSBackgroundTab, NSPressedTab } NSTabState;
+typedef NS_ENUM(NSUInteger, NSTabState) {
+    NSSelectedTab,
+    NSBackgroundTab,
+    NSPressedTab,
+};
 
 @interface NSTabViewItem : NSObject {
     id _identifier;

@@ -19,7 +19,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <Foundation/Foundation.h>
 
-enum {
+typedef NS_OPTIONS(NSInteger, NSStringDrawingOptions) {
     NSStringDrawingUsesLineFragmentOrigin = 0x01,
     NSStringDrawingUsesFontLeading = 0x02,
     NSStringDrawingDisableScreenFontSubstitution = 0x04,
@@ -27,8 +27,6 @@ enum {
     NSStringDrawingOneShot = 0x10,
     NSStringDrawingTruncatesLastVisibleLine = 0x20,
 };
-
-typedef NSInteger NSStringDrawingOptions;
 
 @interface NSString (NSStringDrawing)
 - (void) drawAtPoint: (NSPoint) point

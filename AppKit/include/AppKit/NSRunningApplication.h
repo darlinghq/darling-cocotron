@@ -22,11 +22,11 @@
 
 @class NSString;
 
-typedef enum {
+typedef NS_ENUM(NSInteger, NSApplicationActivationPolicy) {
     NSApplicationActivationPolicyRegular,
     NSApplicationActivationPolicyAccessory,
     NSApplicationActivationPolicyProhibited
-} NSApplicationActivationPolicy;
+};
 
 typedef NS_OPTIONS(NSUInteger, NSApplicationActivationOptions) {
     NSApplicationActivateAllWindows = 1 << 0,

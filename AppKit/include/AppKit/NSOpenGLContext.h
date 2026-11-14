@@ -25,15 +25,26 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSOpenGLPixelFormat, NSOpenGLPixelBuffer, NSView;
 
-typedef enum {
-    NSOpenGLCPSwapRectangle = 200,
-    NSOpenGLCPSwapRectangleEnable = 201,
-    NSOpenGLCPRasterizationEnable = 221,
-    NSOpenGLCPSwapInterval = 222,
-    NSOpenGLCPSurfaceOrder = 235,
-    NSOpenGLCPSurfaceOpacity = 236,
-    NSOpenGLCPStateValidation = 301,
-} NSOpenGLContextParameter;
+typedef NS_ENUM(NSInteger, NSOpenGLContextParameter) {
+    NSOpenGLContextParameterSwapRectangle = 200,
+    NSOpenGLContextParameterSwapRectangleEnable = 201,
+    NSOpenGLContextParameterRasterizationEnable = 221,
+    NSOpenGLContextParameterSwapInterval = 222,
+    NSOpenGLContextParameterSurfaceOrder = 235,
+    NSOpenGLContextParameterSurfaceOpacity = 236,
+    NSOpenGLContextParameterStateValidation = 301,
+};
+
+// Names used before the modern spellings; plain constants, so Swift does not see them.
+enum {
+    NSOpenGLCPSwapRectangle = NSOpenGLContextParameterSwapRectangle,
+    NSOpenGLCPSwapRectangleEnable = NSOpenGLContextParameterSwapRectangleEnable,
+    NSOpenGLCPRasterizationEnable = NSOpenGLContextParameterRasterizationEnable,
+    NSOpenGLCPSwapInterval = NSOpenGLContextParameterSwapInterval,
+    NSOpenGLCPSurfaceOrder = NSOpenGLContextParameterSurfaceOrder,
+    NSOpenGLCPSurfaceOpacity = NSOpenGLContextParameterSurfaceOpacity,
+    NSOpenGLCPStateValidation = NSOpenGLContextParameterStateValidation,
+};
 
 // Legacy ObjC ABI (i386): instance size must stay 0xc, Apple's; the ivars
 // before the extras keep their position in the original order. Add new state

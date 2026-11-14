@@ -5,9 +5,9 @@
 
 @class NSLayoutManager, NSParagraphStyle, NSTextTab;
 
-typedef enum {
+typedef NS_ENUM(NSInteger, NSTypesetterBehavior) {
     NSTypesetterLatestBehavior,
-} NSTypesetterBehavior;
+};
 
 typedef enum {
     NSTypesetterZeroAdvancementAction,

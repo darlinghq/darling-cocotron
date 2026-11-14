@@ -22,25 +22,48 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSColor, NSCalendar, NSLocale, NSTimeZone;
 
-enum {
-    NSHourMinuteDatePickerElementFlag = 0x000c,
-    NSHourMinuteSecondDatePickerElementFlag = 0x000e,
-    NSTimeZoneDatePickerElementFlag = 0x0010,
-    NSYearMonthDatePickerElementFlag = 0x00c0,
-    NSYearMonthDayDatePickerElementFlag = 0x00e0,
-    NSEraDatePickerElementFlag = 0x0100,
+typedef NS_OPTIONS(NSUInteger, NSDatePickerElementFlags) {
+    NSDatePickerElementFlagHourMinute = 0x000c,
+    NSDatePickerElementFlagHourMinuteSecond = 0x000e,
+    NSDatePickerElementFlagTimeZone = 0x0010,
+    NSDatePickerElementFlagYearMonth = 0x00c0,
+    NSDatePickerElementFlagYearMonthDay = 0x00e0,
+    NSDatePickerElementFlagEra = 0x0100,
 };
-typedef NSUInteger NSDatePickerElementFlags;
 
-enum { NSSingleDateMode = 0, NSRangeDateMode = 1 };
-typedef NSUInteger NSDatePickerMode;
-
+// Names used before the modern spellings; plain constants, so Swift does not see them.
 enum {
-    NSTextFieldAndStepperDatePickerStyle = 0,
-    NSClockAndCalendarDatePickerStyle = 1,
-    NSTextFieldDatePickerStyle = 2
+    NSHourMinuteDatePickerElementFlag = NSDatePickerElementFlagHourMinute,
+    NSHourMinuteSecondDatePickerElementFlag = NSDatePickerElementFlagHourMinuteSecond,
+    NSTimeZoneDatePickerElementFlag = NSDatePickerElementFlagTimeZone,
+    NSYearMonthDatePickerElementFlag = NSDatePickerElementFlagYearMonth,
+    NSYearMonthDayDatePickerElementFlag = NSDatePickerElementFlagYearMonthDay,
+    NSEraDatePickerElementFlag = NSDatePickerElementFlagEra,
 };
-typedef NSUInteger NSDatePickerStyle;
+
+typedef NS_ENUM(NSUInteger, NSDatePickerMode) {
+    NSDatePickerModeSingle = 0,
+    NSDatePickerModeRange = 1,
+};
+
+// Names used before the modern spellings; plain constants, so Swift does not see them.
+enum {
+    NSSingleDateMode = NSDatePickerModeSingle,
+    NSRangeDateMode = NSDatePickerModeRange,
+};
+
+typedef NS_ENUM(NSUInteger, NSDatePickerStyle) {
+    NSDatePickerStyleTextFieldAndStepper = 0,
+    NSDatePickerStyleClockAndCalendar = 1,
+    NSDatePickerStyleTextField = 2
+};
+
+// Names used before the modern spellings; plain constants, so Swift does not see them.
+enum {
+    NSTextFieldAndStepperDatePickerStyle = NSDatePickerStyleTextFieldAndStepper,
+    NSClockAndCalendarDatePickerStyle = NSDatePickerStyleClockAndCalendar,
+    NSTextFieldDatePickerStyle = NSDatePickerStyleTextField,
+};
 
 @interface NSDatePickerCell : NSActionCell {
     id _delegate;

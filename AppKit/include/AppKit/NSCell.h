@@ -61,6 +61,10 @@ typedef NS_ENUM(NSUInteger, NSImageScaling) {
     NSImageScaleProportionallyUpOrDown = 3,
 
     // deprecated
+};
+
+// Names used before the modern spellings; plain constants, so Swift does not see them.
+enum {
     NSScaleProportionally = NSImageScaleProportionallyDown,
     NSScaleToFit = NSImageScaleAxesIndependently,
     NSScaleNone = NSImageScaleNone,
@@ -94,10 +98,16 @@ typedef NS_ENUM(NSUInteger, NSControlSize) {
 typedef NSUInteger NSControlTint;
 
 typedef NS_ENUM(NSInteger, NSBackgroundStyle) {
-    NSBackgroundStyleLight = 0,
-    NSBackgroundStyleDark = 1,
+    NSBackgroundStyleNormal = 0,
+    NSBackgroundStyleEmphasized = 1,
     NSBackgroundStyleRaised = 2,
     NSBackgroundStyleLowered = 3,
+};
+
+// Names used before the modern spellings; plain constants, so Swift does not see them.
+enum {
+    NSBackgroundStyleLight = NSBackgroundStyleNormal,
+    NSBackgroundStyleDark = NSBackgroundStyleEmphasized,
 };
 
 enum {

@@ -20,12 +20,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/NSControl.h>
 
-typedef enum {
+typedef NS_ENUM(NSUInteger, NSMatrixMode) {
     NSRadioModeMatrix,
     NSHighlightModeMatrix,
     NSListModeMatrix,
     NSTrackModeMatrix
-} NSMatrixMode;
+};
 
 // Legacy ObjC ABI (i386): instance size must stay 0xb0, Apple's; the ivars
 // before the extras sit at Apple's offsets. Add new state to the extra

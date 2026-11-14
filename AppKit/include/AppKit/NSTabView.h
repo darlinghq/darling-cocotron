@@ -22,23 +22,34 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSTabViewItem, NSFont;
 
-typedef enum {
-    NSTopTabsBezelBorder,
-    NSLeftTabsBezelBorder,
-    NSBottomTabsBezelBorder,
-    NSRightTabsBezelBorder,
-    NSNoTabsBezelBorder,
-    NSNoTabsLineBorder,
-    NSNoTabsNoBorder
-} NSTabViewType;
+typedef NS_ENUM(NSUInteger, NSTabViewType) {
+    NSTabViewTypeTopTabsBezelBorder,
+    NSTabViewTypeLeftTabsBezelBorder,
+    NSTabViewTypeBottomTabsBezelBorder,
+    NSTabViewTypeRightTabsBezelBorder,
+    NSTabViewTypeNoTabsBezelBorder,
+    NSTabViewTypeNoTabsLineBorder,
+    NSTabViewTypeNoTabsNoBorder
+};
 
-typedef enum {
+// Names used before the modern spellings; plain constants, so Swift does not see them.
+enum {
+    NSTopTabsBezelBorder = NSTabViewTypeTopTabsBezelBorder,
+    NSLeftTabsBezelBorder = NSTabViewTypeLeftTabsBezelBorder,
+    NSBottomTabsBezelBorder = NSTabViewTypeBottomTabsBezelBorder,
+    NSRightTabsBezelBorder = NSTabViewTypeRightTabsBezelBorder,
+    NSNoTabsBezelBorder = NSTabViewTypeNoTabsBezelBorder,
+    NSNoTabsLineBorder = NSTabViewTypeNoTabsLineBorder,
+    NSNoTabsNoBorder = NSTabViewTypeNoTabsNoBorder,
+};
+
+typedef NS_ENUM(NSUInteger, NSTabPosition) {
     NSTabPositionNone,
     NSTabPositionTop,
     NSTabPositionLeft,
     NSTabPositionBottom,
     NSTabPositionRight
-} NSTabPosition;
+};
 
 @interface NSTabView : NSView {
     NSMutableArray *_items;

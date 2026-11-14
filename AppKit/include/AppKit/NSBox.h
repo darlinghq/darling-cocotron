@@ -22,7 +22,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSFont;
 
-typedef enum {
+typedef NS_ENUM(NSUInteger, NSTitlePosition) {
     NSNoTitle,
     NSAboveTop,
     NSAtTop,
@@ -30,15 +30,15 @@ typedef enum {
     NSAboveBottom,
     NSAtBottom,
     NSBelowBottom,
-} NSTitlePosition;
+};
 
-typedef enum {
+typedef NS_ENUM(NSUInteger, NSBoxType) {
     NSBoxPrimary,
     NSBoxSecondary,
     NSBoxSeparator,
     NSBoxOldStyle,
     NSBoxCustom
-} NSBoxType;
+};
 
 // Legacy ObjC ABI (i386): instance size must stay 0x88, Apple's; the ivars
 // before the extras sit at Apple's offsets. Add new state to the extra

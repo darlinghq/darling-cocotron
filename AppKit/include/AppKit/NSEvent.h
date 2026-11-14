@@ -26,77 +26,80 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 typedef NS_ENUM(NSUInteger, NSEventType) {
     NSEventTypeLeftMouseDown = 1,
-    NSLeftMouseDown = 1,
 
     NSEventTypeLeftMouseUp = 2,
-    NSLeftMouseUp = 2,
 
     NSEventTypeRightMouseDown = 3,
-    NSRightMouseDown = 3,
 
     NSEventTypeRightMouseUp = 4,
-    NSRightMouseUp = 4,
 
     NSEventTypeMouseMoved = 5,
-    NSMouseMoved = 5,
 
     NSEventTypeLeftMouseDragged = 6,
-    NSLeftMouseDragged = 6,
 
     NSEventTypeRightMouseDragged = 7,
-    NSRightMouseDragged = 7,
 
     NSEventTypeMouseEntered = 8,
-    NSMouseEntered = 8,
 
     NSEventTypeMouseExited = 9,
-    NSMouseExited = 9,
 
     NSEventTypeKeyDown = 10,
-    NSKeyDown = 10,
 
     NSEventTypeKeyUp = 11,
-    NSKeyUp = 11,
 
     NSEventTypeFlagsChanged = 12,
-    NSFlagsChanged = 12,
 
     NSEventTypeAppKitDefined = 13,
-    NSAppKitDefined = 13,
 
     NSEventTypeSystemDefined = 14,
-    NSSystemDefined = 14,
 
     NSEventTypeApplicationDefined = 15,
-    NSApplicationDefined = 15,
 
     NSEventTypePeriodic = 16,
-    NSPeriodic = 16,
 
     NSEventTypeCursorUpdate = 17,
-    NSCursorUpdate = 17,
 
     NSEventTypeRotate = 18,
 
     NSEventTypeScrollWheel = 22,
-    NSScrollWheel = 22,
 
     NSEventTypeOtherMouseDown = 25,
-    NSOtherMouseDown = 25,
 
     NSEventTypeOtherMouseUp = 26,
-    NSOtherMouseUp = 26,
 
     NSEventTypeOtherMouseDragged = 27,
-    NSOtherMouseDragged = 27,
 
     NSEventTypeMagnify = 30,
+};
 
-    NSAppKitSystem = 100,
+// Names used before the modern spellings; plain constants, so Swift does not see them.
+enum {
+    NSLeftMouseDown = 1,
+    NSLeftMouseUp = 2,
+    NSRightMouseDown = 3,
+    NSRightMouseUp = 4,
+    NSMouseMoved = 5,
+    NSLeftMouseDragged = 6,
+    NSRightMouseDragged = 7,
+    NSMouseEntered = 8,
+    NSMouseExited = 9,
+    NSKeyDown = 10,
+    NSKeyUp = 11,
+    NSFlagsChanged = 12,
+    NSAppKitDefined = 13,
+    NSSystemDefined = 14,
+    NSApplicationDefined = 15,
+    NSPeriodic = 16,
+    NSCursorUpdate = 17,
+    NSScrollWheel = 22,
+    NSOtherMouseDown = 25,
+    NSOtherMouseUp = 26,
+    NSOtherMouseDragged = 27,
 
     // Cocotron-private; numbered where AppKit defines no event type.
+    NSAppKitSystem = 100,
     NSPlatformSpecific = 21,
-    NSPlatformSpecificDisplayEvent = 28
+    NSPlatformSpecificDisplayEvent = 28,
 };
 
 typedef NS_OPTIONS(unsigned long long, NSEventMask) {

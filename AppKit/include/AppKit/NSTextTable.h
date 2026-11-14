@@ -19,10 +19,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSTextBlock.h>
 
-typedef enum {
+typedef NS_ENUM(NSUInteger, NSTextTableLayoutAlgorithm) {
     NSTextTableAutomaticLayoutAlgorithm,
     NSTextTableFixedLayoutAlgorithm
-} NSTextTableLayoutAlgorithm;
+};
 
 @interface NSTextTable : NSTextBlock {
     unsigned _numberOfColumns;

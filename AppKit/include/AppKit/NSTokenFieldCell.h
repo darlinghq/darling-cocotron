@@ -19,11 +19,18 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSTextFieldCell.h>
 
-typedef enum {
-    NSDefaultTokenStyle,
-    NSPlainTextTokenStyle,
-    NSRoundedTokenStyle,
-} NSTokenStyle;
+typedef NS_ENUM(NSUInteger, NSTokenStyle) {
+    NSTokenStyleDefault,
+    NSTokenStylePlainSquared,
+    NSTokenStyleRounded,
+};
+
+// Names used before the modern spellings; plain constants, so Swift does not see them.
+enum {
+    NSDefaultTokenStyle = NSTokenStyleDefault,
+    NSPlainTextTokenStyle = NSTokenStylePlainSquared,
+    NSRoundedTokenStyle = NSTokenStyleRounded,
+};
 
 @interface NSTokenFieldCell : NSTextFieldCell {
     NSTokenStyle _style;

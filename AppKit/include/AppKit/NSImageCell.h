@@ -19,7 +19,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSCell.h>
 
-typedef enum {
+typedef NS_ENUM(NSUInteger, NSImageAlignment) {
     NSImageAlignCenter,
     NSImageAlignTop,
     NSImageAlignTopLeft,
@@ -29,15 +29,15 @@ typedef enum {
     NSImageAlignBottomLeft,
     NSImageAlignBottomRight,
     NSImageAlignRight
-} NSImageAlignment;
+};
 
-typedef enum {
+typedef NS_ENUM(NSUInteger, NSImageFrameStyle) {
     NSImageFrameNone,
     NSImageFramePhoto,
     NSImageFrameGrayBezel,
     NSImageFrameGroove,
     NSImageFrameButton
-} NSImageFrameStyle;
+};
 
 @interface NSImageCell : NSCell {
     BOOL _animates;

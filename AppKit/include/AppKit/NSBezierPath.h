@@ -21,29 +21,57 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSAffineTransform;
 
-typedef enum {
-    NSMoveToBezierPathElement,
-    NSLineToBezierPathElement,
-    NSCurveToBezierPathElement,
-    NSClosePathBezierPathElement,
-} NSBezierPathElement;
+typedef NS_ENUM(NSInteger, NSBezierPathElement) {
+    NSBezierPathElementMoveTo,
+    NSBezierPathElementLineTo,
+    NSBezierPathElementCurveTo,
+    NSBezierPathElementClosePath,
+};
 
-typedef enum {
-    NSMiterLineJoinStyle,
-    NSRoundLineJoinStyle,
-    NSBevelLineJoinStyle,
-} NSLineJoinStyle;
+// Names used before the modern spellings; plain constants, so Swift does not see them.
+enum {
+    NSMoveToBezierPathElement = NSBezierPathElementMoveTo,
+    NSLineToBezierPathElement = NSBezierPathElementLineTo,
+    NSCurveToBezierPathElement = NSBezierPathElementCurveTo,
+    NSClosePathBezierPathElement = NSBezierPathElementClosePath,
+};
 
-typedef enum {
-    NSButtLineCapStyle,
-    NSRoundLineCapStyle,
-    NSSquareLineCapStyle,
-} NSLineCapStyle;
+typedef NS_ENUM(NSUInteger, NSLineJoinStyle) {
+    NSLineJoinStyleMiter,
+    NSLineJoinStyleRound,
+    NSLineJoinStyleBevel,
+};
 
-typedef enum {
-    NSNonZeroWindingRule,
-    NSEvenOddWindingRule,
-} NSWindingRule;
+// Names used before the modern spellings; plain constants, so Swift does not see them.
+enum {
+    NSMiterLineJoinStyle = NSLineJoinStyleMiter,
+    NSRoundLineJoinStyle = NSLineJoinStyleRound,
+    NSBevelLineJoinStyle = NSLineJoinStyleBevel,
+};
+
+typedef NS_ENUM(NSUInteger, NSLineCapStyle) {
+    NSLineCapStyleButt,
+    NSLineCapStyleRound,
+    NSLineCapStyleSquare,
+};
+
+// Names used before the modern spellings; plain constants, so Swift does not see them.
+enum {
+    NSButtLineCapStyle = NSLineCapStyleButt,
+    NSRoundLineCapStyle = NSLineCapStyleRound,
+    NSSquareLineCapStyle = NSLineCapStyleSquare,
+};
+
+typedef NS_ENUM(NSUInteger, NSWindingRule) {
+    NSWindingRuleNonZero,
+    NSWindingRuleEvenOdd,
+};
+
+// Names used before the modern spellings; plain constants, so Swift does not see them.
+enum {
+    NSNonZeroWindingRule = NSWindingRuleNonZero,
+    NSEvenOddWindingRule = NSWindingRuleEvenOdd,
+};
 
 @interface NSBezierPath : NSObject <NSCopying> {
     NSUInteger _capacityOfElements;
