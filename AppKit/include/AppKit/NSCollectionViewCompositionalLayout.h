@@ -16,6 +16,8 @@
 */
 
 #import <AppKit/NSLayoutConstraint.h>
+#import <AppKit/NSCollectionViewFlowLayout.h>
+#import <AppKit/NSCollectionViewLayout.h>
 #import <Foundation/NSArray.h>
 #import <Foundation/NSGeometry.h>
 #import <Foundation/NSObject.h>
@@ -212,5 +214,42 @@ typedef NS_ENUM(NSInteger, NSRectAlignment) {
 // GUESS: YES by default; the documentation does not give the default.
 @property BOOL supplementariesFollowContentInsets;
 @property(copy) NSArray<NSCollectionLayoutDecorationItem *> *decorationItems;
+
+@end
+
+@protocol NSCollectionLayoutContainer <NSObject>
+@property(readonly) NSSize contentSize;
+@property(readonly) NSSize effectiveContentSize;
+@property(readonly) NSDirectionalEdgeInsets contentInsets;
+@property(readonly) NSDirectionalEdgeInsets effectiveContentInsets;
+@end
+
+@protocol NSCollectionLayoutEnvironment <NSObject>
+@property(readonly) id<NSCollectionLayoutContainer> container;
+@end
+
+typedef NSCollectionLayoutSection * (^NSCollectionViewCompositionalLayoutSectionProvider)(
+        NSInteger sectionIndex, id<NSCollectionLayoutEnvironment> layoutEnvironment);
+
+// AppKit defines the two classes below (they are not part of CollectionViewCore): they are layouts, subclasses of
+// AppKit's NSCollectionViewLayout, and hold the sections built from the classes above.
+@interface NSCollectionViewCompositionalLayoutConfiguration : NSObject <NSCopying>
+
+@property NSCollectionViewScrollDirection scrollDirection;
+@property CGFloat interSectionSpacing;
+@property(copy) NSArray<NSCollectionLayoutBoundarySupplementaryItem *> *boundarySupplementaryItems;
+
+@end
+
+@interface NSCollectionViewCompositionalLayout : NSCollectionViewLayout
+
+- (instancetype) initWithSection: (NSCollectionLayoutSection *) section;
+- (instancetype) initWithSection: (NSCollectionLayoutSection *) section
+                   configuration: (NSCollectionViewCompositionalLayoutConfiguration *) configuration;
+- (instancetype) initWithSectionProvider: (NSCollectionViewCompositionalLayoutSectionProvider) sectionProvider;
+- (instancetype) initWithSectionProvider: (NSCollectionViewCompositionalLayoutSectionProvider) sectionProvider
+                           configuration: (NSCollectionViewCompositionalLayoutConfiguration *) configuration;
+
+@property(copy) NSCollectionViewCompositionalLayoutConfiguration *configuration;
 
 @end

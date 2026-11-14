@@ -453,6 +453,7 @@ set(AppKit_sources
 	NSATSTypesetter.m
 	NSOpenGLLayer.m
 	NSCollectionViewLayout.m
+	NSCollectionViewCompositionalLayout.m
 
 	NSSharingService.m
 	MacWorkspace.m
