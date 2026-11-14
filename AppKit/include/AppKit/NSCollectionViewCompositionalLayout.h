@@ -27,6 +27,7 @@
 // which AppKit re-exports), not by AppKit: on a dyld-cache stage that image is the cache's own. They declare no
 // instance variables here, so nothing compiled against this header depends on how either image lays them out.
 
+@class NSCollectionLayoutSupplementaryItem;
 // Edge specification interpreted according to the user interface layout direction.
 // The case order is the documented one; the values are a GUESS (the documentation gives no raw values).
 typedef NS_OPTIONS(NSUInteger, NSDirectionalRectEdge) {
@@ -106,5 +107,39 @@ typedef NS_OPTIONS(NSUInteger, NSDirectionalRectEdge) {
 @property(readonly) NSPoint offset;
 @property(readonly) BOOL isAbsoluteOffset;
 @property(readonly) BOOL isFractionalOffset;
+
+@end
+
+@interface NSCollectionLayoutItem : NSObject <NSCopying>
+
++ (instancetype) itemWithLayoutSize: (NSCollectionLayoutSize *) layoutSize;
++ (instancetype) itemWithLayoutSize: (NSCollectionLayoutSize *) layoutSize
+                 supplementaryItems:
+                         (NSArray<NSCollectionLayoutSupplementaryItem *> *)
+                                 supplementaryItems;
+
+// Adjusts the final size of the item after layout; ignored for estimated dimensions.
+@property NSDirectionalEdgeInsets contentInsets;
+// Additional space surrounding the item when laying out.
+@property(copy, nullable) NSCollectionLayoutEdgeSpacing *edgeSpacing;
+@property(readonly) NSCollectionLayoutSize *layoutSize;
+@property(readonly) NSArray<NSCollectionLayoutSupplementaryItem *> *supplementaryItems;
+
+@end
+
+@interface NSCollectionLayoutSupplementaryItem : NSCollectionLayoutItem
+
++ (instancetype) supplementaryItemWithLayoutSize: (NSCollectionLayoutSize *) layoutSize
+                                     elementKind: (NSString *) elementKind
+                                 containerAnchor: (NSCollectionLayoutAnchor *) containerAnchor;
++ (instancetype) supplementaryItemWithLayoutSize: (NSCollectionLayoutSize *) layoutSize
+                                     elementKind: (NSString *) elementKind
+                                 containerAnchor: (NSCollectionLayoutAnchor *) containerAnchor
+                                      itemAnchor: (NSCollectionLayoutAnchor *) itemAnchor;
+
+@property NSInteger zIndex;
+@property(readonly) NSString *elementKind;
+@property(readonly) NSCollectionLayoutAnchor *containerAnchor;
+@property(readonly, nullable) NSCollectionLayoutAnchor *itemAnchor;
 
 @end

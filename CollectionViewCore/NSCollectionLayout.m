@@ -278,3 +278,140 @@ enum {
 }
 
 @end
+
+@implementation NSCollectionLayoutItem {
+    NSDirectionalEdgeInsets _contentInsets;
+    NSCollectionLayoutEdgeSpacing *_edgeSpacing;
+    NSCollectionLayoutSize *_layoutSize;
+    NSArray *_supplementaryItems;
+}
+
++ (instancetype) itemWithLayoutSize: (NSCollectionLayoutSize *) layoutSize {
+    return [self itemWithLayoutSize: layoutSize supplementaryItems: nil];
+}
+
++ (instancetype) itemWithLayoutSize: (NSCollectionLayoutSize *) layoutSize
+                 supplementaryItems:
+                         (NSArray<NSCollectionLayoutSupplementaryItem *> *)
+                                 supplementaryItems {
+    NSCollectionLayoutItem *item = [[[self alloc] init] autorelease];
+
+    item->_layoutSize = [layoutSize retain];
+    item->_supplementaryItems =
+            [(supplementaryItems ? supplementaryItems : @[]) copy];
+    return item;
+}
+
+- (void) dealloc {
+    [_edgeSpacing release];
+    [_layoutSize release];
+    [_supplementaryItems release];
+    [super dealloc];
+}
+
+- (NSDirectionalEdgeInsets) contentInsets {
+    return _contentInsets;
+}
+
+- (void) setContentInsets: (NSDirectionalEdgeInsets) contentInsets {
+    _contentInsets = contentInsets;
+}
+
+- (NSCollectionLayoutEdgeSpacing *) edgeSpacing {
+    return _edgeSpacing;
+}
+
+- (void) setEdgeSpacing: (NSCollectionLayoutEdgeSpacing *) edgeSpacing {
+    edgeSpacing = [edgeSpacing copy];
+    [_edgeSpacing release];
+    _edgeSpacing = edgeSpacing;
+}
+
+- (NSCollectionLayoutSize *) layoutSize {
+    return _layoutSize;
+}
+
+- (NSArray<NSCollectionLayoutSupplementaryItem *> *) supplementaryItems {
+    return _supplementaryItems;
+}
+
+// A copy keeps every property; the subclasses add theirs on top of this.
+- (id) copyWithZone: (NSZone *) zone {
+    NSCollectionLayoutItem *copy = [[[self class] allocWithZone: zone] init];
+
+    copy->_contentInsets = _contentInsets;
+    copy->_edgeSpacing = [_edgeSpacing copy];
+    copy->_layoutSize = [_layoutSize retain];
+    copy->_supplementaryItems = [_supplementaryItems copy];
+    return copy;
+}
+
+@end
+
+@implementation NSCollectionLayoutSupplementaryItem {
+    NSInteger _zIndex;
+    NSString *_elementKind;
+    NSCollectionLayoutAnchor *_containerAnchor;
+    NSCollectionLayoutAnchor *_itemAnchor;
+}
+
++ (instancetype) supplementaryItemWithLayoutSize: (NSCollectionLayoutSize *) layoutSize
+                                     elementKind: (NSString *) elementKind
+                                 containerAnchor: (NSCollectionLayoutAnchor *) containerAnchor {
+    return [self supplementaryItemWithLayoutSize: layoutSize
+                                     elementKind: elementKind
+                                 containerAnchor: containerAnchor
+                                      itemAnchor: nil];
+}
+
++ (instancetype) supplementaryItemWithLayoutSize: (NSCollectionLayoutSize *) layoutSize
+                                     elementKind: (NSString *) elementKind
+                                 containerAnchor: (NSCollectionLayoutAnchor *) containerAnchor
+                                      itemAnchor: (NSCollectionLayoutAnchor *) itemAnchor {
+    NSCollectionLayoutSupplementaryItem *item =
+            [self itemWithLayoutSize: layoutSize];
+
+    item->_elementKind = [elementKind copy];
+    item->_containerAnchor = [containerAnchor retain];
+    item->_itemAnchor = [itemAnchor retain];
+    return item;
+}
+
+- (void) dealloc {
+    [_elementKind release];
+    [_containerAnchor release];
+    [_itemAnchor release];
+    [super dealloc];
+}
+
+- (NSInteger) zIndex {
+    return _zIndex;
+}
+
+- (void) setZIndex: (NSInteger) zIndex {
+    _zIndex = zIndex;
+}
+
+- (NSString *) elementKind {
+    return _elementKind;
+}
+
+- (NSCollectionLayoutAnchor *) containerAnchor {
+    return _containerAnchor;
+}
+
+- (NSCollectionLayoutAnchor *) itemAnchor {
+    return _itemAnchor;
+}
+
+- (id) copyWithZone: (NSZone *) zone {
+    NSCollectionLayoutSupplementaryItem *copy = [super copyWithZone: zone];
+
+    copy->_zIndex = _zIndex;
+    copy->_elementKind = [_elementKind copy];
+    copy->_containerAnchor = [_containerAnchor retain];
+    copy->_itemAnchor = [_itemAnchor retain];
+    return copy;
+}
+
+@end
