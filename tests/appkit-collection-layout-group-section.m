@@ -52,14 +52,14 @@ int main(void) {
         NSCollectionLayoutBoundarySupplementaryItem *tag = [boundaryClass boundarySupplementaryItemWithLayoutSize: fill
                                                                                                       elementKind: @"tag"
                                                                                                         alignment: NSRectAlignmentTop];
-        expect([[horizontal supplementaryItems] count] == 0, @"a group has no supplementary items to start with");
+        expect([[horizontal supplementaryItems] isEqual: @[]], @"a group has an empty supplementary items array to start with, not nil");
         NSMutableArray *tags = [NSMutableArray arrayWithObject: tag];
         [horizontal setSupplementaryItems: tags];
         [tags removeAllObjects];
         expect([[horizontal supplementaryItems] isEqual: @[tag]], @"a group's supplementary items round-trip as a copy");
         expect([[[[horizontal copy] autorelease] supplementaryItems] isEqual: @[tag]], @"a group's copy keeps them");
         [horizontal setSupplementaryItems: nil];
-        expect([[horizontal supplementaryItems] count] == 0, @"setting nil clears them");
+        expect([[horizontal supplementaryItems] isEqual: @[]], @"setting nil gives the empty array, not nil");
         expect([[[groupClass horizontalGroupWithLayoutSize: fill subitems: @[item]] visualDescription] containsString: @"horizontal"] &&
                        [[[groupClass verticalGroupWithLayoutSize: fill subitems: @[item, other]] visualDescription] containsString: @"vertical"] &&
                        [[[groupClass verticalGroupWithLayoutSize: fill subitems: @[item, other]] visualDescription] containsString: @"2 subitems"],
