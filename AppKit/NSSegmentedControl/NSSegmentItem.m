@@ -36,9 +36,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         // The width, the image, label, menu and tool tip, the tag, a flag word (bit 31
         // selected, bit 30 disabled) and two unused ints.
         int flags, unused[2];
+        float width;  // archived as a float, narrower than a CGFloat
 
-        [decoder decodeValuesOfObjCTypes: "f@@@@iiii", &_width, &_image, &_label, &_menu, &_toolTip, &_tag,
+        [decoder decodeValuesOfObjCTypes: "f@@@@iiii", &width, &_image, &_label, &_menu, &_toolTip, &_tag,
                                           &flags, &unused[0], &unused[1]];
+        _width = width;
         _isEnabled = ((unsigned) flags & 0x40000000u) == 0;
         _isSelected = ((unsigned) flags & 0x80000000u) != 0;
         return self;

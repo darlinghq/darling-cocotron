@@ -144,6 +144,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (NSSize) size {
+    // A size given with -setSize: (or archived) replaces the page's media box.
+    if (_size.width > 0 && _size.height > 0)
+        return _size;
     if (_document == NULL)
         return NSZeroSize;
 
