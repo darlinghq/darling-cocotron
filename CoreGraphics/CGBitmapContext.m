@@ -35,8 +35,10 @@ CGContextRef CGBitmapContextCreateWithData(void *data, size_t width, size_t heig
                                            CGBitmapContextReleaseDataCallback releaseCallback,
                                            void *releaseInfo)
 {
-    printf("STUB %s\n", __PRETTY_FUNCTION__);
-    return nil;
+    return (CGContextRef)O2BitmapContextCreateWithData(
+            data, width, height, bitsPerComponent, bytesPerRow,
+            (O2ColorSpaceRef)space, bitmapInfo,
+            (O2BitmapContextReleaseDataCallback)releaseCallback, releaseInfo);
 }
 
 void *CGBitmapContextGetData(CGContextRef self) {

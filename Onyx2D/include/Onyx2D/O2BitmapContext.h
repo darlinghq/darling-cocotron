@@ -28,6 +28,8 @@ typedef void (*O2BitmapContextReleaseDataCallback)(void *userInfo, void *data);
 
 @interface O2BitmapContext : O2Context {
     O2Surface *_surface;
+    O2BitmapContextReleaseDataCallback _releaseCallback;
+    void *_releaseInfo;
 }
 
 - (Class) surfaceClass;
