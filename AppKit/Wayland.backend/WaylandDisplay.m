@@ -2422,26 +2422,4 @@ static NSUInteger modifierDeviceMask(int code) {
     return NO;
 }
 
-- (Display *) display {
-    return NULL;
-}
-
-- (void) setWindow: (id) window forID: (XID) i {
-}
-
-- (id) windowForID: (XID) i {
-    return nil;
-}
-
-- (NSEventModifierFlags) modifierFlagsForState: (unsigned int) state {
-    return 0;
-}
-
-- (void) postXEvent: (XEvent *) ev {
-}
-
-- (int) handleError: (XErrorEvent *) errorEvent {
-    return 0;
-}
-
 @end
