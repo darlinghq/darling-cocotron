@@ -1870,7 +1870,14 @@ static NSUInteger modifierDeviceMask(int code) {
         }
         WaylandScreen *screen = [[[WaylandScreen alloc] initWithFrame: frame
                                                visibleFrame: frame] autorelease];
-        screen->_waylandScale = output->_current.scale;
+        // Whole scale factors only: a compositor that scales an output by 1.5 reports 2, and the
+        // logical size says so even when wl_output rounds down.
+        CGFloat wholeScale = output->_current.scale;
+        if (logical && output->_logicalCurrent.width > 0) {
+            CGFloat ratio = width / output->_logicalCurrent.width;
+            wholeScale = MAX(wholeScale, ceil(ratio - 0.01));
+        }
+        screen->_waylandScale = wholeScale;
         [screen setCgDirectDisplayID: [screens count] + 1];
         [screens addObject: screen];
         x += frame.size.width;
