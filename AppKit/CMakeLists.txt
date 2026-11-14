@@ -312,6 +312,7 @@ set(AppKit_sources
 	NSFontDescriptor.m
 	NSDisplay.m
 	DarlingDisplay.m
+	DarlingKeySymToUnicode.m
 
 	NSOpenGL/NSOpenGLView.m
 	NSOpenGL/NSOpenGLPixelBuffer.m
@@ -651,7 +652,6 @@ add_backend(X11
 		X11.backend/X11Event.m
 		X11.backend/X11Pasteboard.m
 		X11.backend/X11Cursor.m
-		X11.backend/X11KeySymToUCS.m
 		X11.backend/X11DropSession.m
 		X11.backend/X11DraggingManager.m
 	INFO_PLIST
@@ -712,8 +712,6 @@ if (WAYLAND_PROTOCOLS_USABLE)
 			Onyx2D
 			CoreGraphics
 			OpenGL
-			# WaylandDisplay subclasses X11Display for its backend-independent parts.
-			X11_backend
 	)
 	target_include_directories(Wayland_backend PRIVATE
 		Wayland.backend

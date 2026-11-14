@@ -17,7 +17,7 @@
  SOFTWARE. */
 
 #import "WaylandDisplay.h"
-#import "CarbonKeys.h"
+#import "../private-include/AppKit/CarbonKeys.h"
 #import "NSEvent_gesture.h"
 #import "NSEvent_mouse.h"
 #import "WaylandCursor.h"
@@ -30,7 +30,7 @@
 #import "WaylandPointerLock.h"
 #import "WaylandProtocol.h"
 #import "WaylandWindow.h"
-#import "X11KeySymToUCS.h"
+#import "../private-include/AppKit/DarlingKeySymToUnicode.h"
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSCursor.h>
 #import <AppKit/NSScreen.h>
@@ -1623,8 +1623,9 @@ static NSUInteger modifierDeviceMask(int code) {
 }
 
 - (uint32_t) codepointForKeysym: (xkb_keysym_t) keysym {
-    // X11KeySymToUCS knows AppKit's function key codes; XKB keysyms are X11's.
-    uint32_t codepoint = X11KeySymToUCS(keysym);
+    // DarlingKeySymToUnicode knows AppKit's function key codes; XKB keysyms
+    // have the same values as X11 keysyms.
+    uint32_t codepoint = DarlingKeySymToUnicode(keysym);
     if (codepoint == 0)
         codepoint = WL.xkb_keysym_to_utf32(keysym);
     return codepoint;
@@ -1659,7 +1660,7 @@ static NSUInteger modifierDeviceMask(int code) {
         return;
 
     xkb_keysym_t keysym = WL.xkb_state_key_get_one_sym(_xkbState, keycode);
-    uint32_t special = X11KeySymToUCS(keysym);
+    uint32_t special = DarlingKeySymToUnicode(keysym);
     NSString *characters;
 
     if (special >= 0xF700 && special <= 0xF8FF) {

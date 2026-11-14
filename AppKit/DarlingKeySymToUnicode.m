@@ -1,9 +1,9 @@
-#include "X11KeySymToUCS.h"
+#include "private-include/AppKit/DarlingKeySymToUnicode.h"
 #include <stdlib.h>
 
 // Source: https://github.com/substack/node-keysym/blob/master/data/keysyms.txt
 
-static const uint32_t x11KeySymToUCSData[][2] = {
+static const uint32_t keySymToUCSData[][2] = {
 {0x0020, 0x0020},
 {0x0021, 0x0021},
 {0x0022, 0x0022},
@@ -1649,13 +1649,13 @@ static int comparator(const void *a, const void *b) {
         return 0;
 }
 
-uint32_t X11KeySymToUCS(uint32_t x11KeySym) {
-    uint32_t key[2] = {x11KeySym, 0};
+uint32_t DarlingKeySymToUnicode(uint32_t keySym) {
+    uint32_t key[2] = {keySym, 0};
 
     const uint32_t *found = (uint32_t *) bsearch(
-            key, x11KeySymToUCSData,
-            sizeof(x11KeySymToUCSData) / sizeof(x11KeySymToUCSData[0]),
-            sizeof(x11KeySymToUCSData[0]), comparator);
+            key, keySymToUCSData,
+            sizeof(keySymToUCSData) / sizeof(keySymToUCSData[0]),
+            sizeof(keySymToUCSData[0]), comparator);
 
     if (found)
         return found[1];
