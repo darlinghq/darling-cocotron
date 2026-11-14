@@ -83,6 +83,11 @@ ONYX2D_STATIC BOOL initFunctionsForMonochrome(O2Image *self,
             self->_read_a8u = O2ImageRead_G8_to_A8;
             self->_read_argb8u = O2ImageRead_G8_to_argb8u;
             return YES;
+
+        case 16:
+            // Gray and alpha bytes (gray first), as a bitmap context makes them.
+            self->_read_argb8u = O2ImageRead_GA88_to_argb8u;
+            return YES;
         }
         break;
     }

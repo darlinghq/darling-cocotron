@@ -87,8 +87,36 @@ static O2Float invgamma(O2Float c)
 }
 
 #endif
-static O2Float lRGBtoL(O2Float r, O2Float g, O2Float b) {
-    return 0.2126f * r + 0.7152f * g + 0.0722f * b;
+// An RGB pixel stored in a gray surface becomes the gray of the same luminance: the components are
+// decoded with the sRGB curve, weighted with the luminance row of the sRGB primaries adapted to D50, and the
+// result is encoded with the sRGB curve again. Plain gray pixels keep their value.
+// QUIRK: macOS stores 130 for sRGB red and 145 for (0.2, 0.6, 0.9) in an 8-bit gray bitmap context, which is
+// this conversion; weighting the encoded components (0.2126, 0.7152, 0.0722) would give 54 and 119. Evidence:
+// black-box observation on macOS 26.7.3 (tier 2), mac-probes/v470-bitmap-context-formats.c.
+// Test: gray8-bitmap-context.c (rgb fill into the gray context).
+static O2Float grayFromEncodedRGB(O2Float r, O2Float g, O2Float b) {
+    if (r == g && g == b)
+        return r;
+
+    O2Float linear[3] = {r, g, b};
+    int i;
+    for (i = 0; i < 3; i++) {
+        O2Float c = linear[i] < 0 ? 0 : (linear[i] > 1 ? 1 : linear[i]);
+        linear[i] = (c <= 0.04045f) ? c / 12.92f
+                                    : powf((c + 0.055f) / 1.055f, 2.4f);
+    }
+    O2Float y = 0.2225f * linear[0] + 0.7169f * linear[1] + 0.0606f * linear[2];
+    return (y <= 0.0031308f) ? y * 12.92f
+                             : 1.055f * powf(y, 1.0f / 2.4f) - 0.055f;
+}
+
+// Premultiplied input: the gray is taken from the color without the alpha and multiplied by it again.
+static O2Float premultipliedGray(O2Float r, O2Float g, O2Float b, O2Float a) {
+    if (a <= 0)
+        return 0;
+    if (a >= 1)
+        return grayFromEncodedRGB(r, g, b);
+    return grayFromEncodedRGB(r / a, g / a, b / a) * a;
 }
 
 static void colorToBytesLittle(O2Float32 color, uint8_t *scanline) {
@@ -191,8 +219,26 @@ static void O2SurfaceWrite_argb32f_to_GA88(O2Surface *self, int x, int y,
     for (i = 0; i < length; i++) {
         O2argb32f rgba = *span++;
 
-        *scanline++ = O2ByteFromFloat(rgba.r);
+        *scanline++ = O2ByteFromFloat(
+                premultipliedGray(rgba.r, rgba.g, rgba.b, rgba.a));
         *scanline++ = O2ByteFromFloat(rgba.a);
+    }
+}
+
+static void O2SurfaceWrite_argb8u_to_GA88(O2Surface *self, int x, int y,
+                                          O2argb8u *span, int length)
+{
+    uint8_t *scanline = self->_pixelBytes + y * self->_bytesPerRow;
+    int i;
+
+    scanline += x * 2;
+    for (i = 0; i < length; i++) {
+        O2argb8u rgba = *span++;
+
+        *scanline++ = O2ByteFromFloat(
+                premultipliedGray(rgba.r / 255.0f, rgba.g / 255.0f,
+                                  rgba.b / 255.0f, rgba.a / 255.0f));
+        *scanline++ = rgba.a;
     }
 }
 
@@ -206,7 +252,27 @@ static void O2SurfaceWrite_argb32f_to_G8(O2Surface *self, int x, int y,
     for (i = 0; i < length; i++) {
         O2argb32f rgba = *span++;
 
-        *scanline++ = O2ByteFromFloat(lRGBtoL(rgba.r, rgba.g, rgba.b));
+        // The surface has no alpha: the pixel is the blended, opaque result.
+        *scanline++ = O2ByteFromFloat(
+                grayFromEncodedRGB(rgba.r, rgba.g, rgba.b));
+    }
+}
+
+static void O2SurfaceWrite_argb8u_to_G8(O2Surface *self, int x, int y,
+                                        O2argb8u *span, int length)
+{
+    uint8_t *scanline = self->_pixelBytes + y * self->_bytesPerRow;
+    int i;
+
+    scanline += x;
+    for (i = 0; i < length; i++) {
+        O2argb8u rgba = *span++;
+
+        if (rgba.r == rgba.g && rgba.g == rgba.b)
+            *scanline++ = rgba.r;
+        else
+            *scanline++ = O2ByteFromFloat(grayFromEncodedRGB(
+                    rgba.r / 255.0f, rgba.g / 255.0f, rgba.b / 255.0f));
     }
 }
 
@@ -438,10 +504,12 @@ static BOOL initFunctionsForParameters(O2Surface *self, size_t bitsPerComponent,
 
         case 8:
             self->_writeargb32f = O2SurfaceWrite_argb32f_to_G8;
+            self->_writeargb8u = O2SurfaceWrite_argb8u_to_G8;
             return YES;
 
         case 16:
             self->_writeargb32f = O2SurfaceWrite_argb32f_to_GA88;
+            self->_writeargb8u = O2SurfaceWrite_argb8u_to_GA88;
             return YES;
 
         case 24:
@@ -574,6 +642,25 @@ static BOOL initFunctionsForParameters(O2Surface *self, size_t bitsPerComponent,
     return NO;
 }
 
+// The size of a pixel of a surface. Most formats are 32 bits per pixel; 8-bit gray surfaces are 8 bits per
+// pixel, or 16 with an alpha channel (premultiplied last, or skipped last).
+static int bitsPerPixelForParameters(size_t bitsPerComponent,
+                                     O2ColorSpaceRef colorSpace,
+                                     O2BitmapInfo bitmapInfo)
+{
+    if (colorSpace != NULL && bitsPerComponent == 8 &&
+        [colorSpace type] == kO2ColorSpaceModelMonochrome) {
+        switch (bitmapInfo & kO2BitmapAlphaInfoMask) {
+        case kO2ImageAlphaNone:
+            return 8;
+        case kO2ImageAlphaPremultipliedLast:
+        case kO2ImageAlphaNoneSkipLast:
+            return 16;
+        }
+    }
+    return 32;
+}
+
 - initWithBytes: (void *) bytes
                    width: (size_t) width
                   height: (size_t) height
@@ -583,7 +670,8 @@ static BOOL initFunctionsForParameters(O2Surface *self, size_t bitsPerComponent,
               bitmapInfo: (O2BitmapInfo) bitmapInfo
 {
     O2DataProvider *provider;
-    int bitsPerPixel = 32;
+    int bitsPerPixel =
+            bitsPerPixelForParameters(bitsPerComponent, colorSpace, bitmapInfo);
 
     // Both local rejection and superclass initialization failure call dealloc.
     // Establish the mutex before either path can destroy it.
