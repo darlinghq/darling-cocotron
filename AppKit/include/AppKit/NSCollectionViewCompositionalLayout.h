@@ -39,6 +39,19 @@ typedef NS_OPTIONS(NSUInteger, NSDirectionalRectEdge) {
     NSDirectionalRectEdgeAll = NSDirectionalRectEdgeTop | NSDirectionalRectEdgeLeading |
                                NSDirectionalRectEdgeBottom | NSDirectionalRectEdgeTrailing
 };
+// Alignment specification interpreted according to the user interface layout direction.
+// The case order is the documented one; the values are a GUESS (the documentation gives no raw values).
+typedef NS_ENUM(NSInteger, NSRectAlignment) {
+    NSRectAlignmentNone = 0,
+    NSRectAlignmentTop,
+    NSRectAlignmentTopLeading,
+    NSRectAlignmentLeading,
+    NSRectAlignmentBottomLeading,
+    NSRectAlignmentBottom,
+    NSRectAlignmentBottomTrailing,
+    NSRectAlignmentTrailing,
+    NSRectAlignmentTopTrailing,
+};
 
 @interface NSCollectionLayoutDimension : NSObject <NSCopying>
 
@@ -141,5 +154,32 @@ typedef NS_OPTIONS(NSUInteger, NSDirectionalRectEdge) {
 @property(readonly) NSString *elementKind;
 @property(readonly) NSCollectionLayoutAnchor *containerAnchor;
 @property(readonly, nullable) NSCollectionLayoutAnchor *itemAnchor;
+
+@end
+
+@interface NSCollectionLayoutBoundarySupplementaryItem : NSCollectionLayoutSupplementaryItem
+
++ (instancetype) boundarySupplementaryItemWithLayoutSize: (NSCollectionLayoutSize *) layoutSize
+                                             elementKind: (NSString *) elementKind
+                                               alignment: (NSRectAlignment) alignment;
++ (instancetype) boundarySupplementaryItemWithLayoutSize: (NSCollectionLayoutSize *) layoutSize
+                                             elementKind: (NSString *) elementKind
+                                               alignment: (NSRectAlignment) alignment
+                                          absoluteOffset: (NSPoint) absoluteOffset;
+
+@property BOOL extendsBoundary;
+@property BOOL pinToVisibleBounds;
+@property(readonly) NSRectAlignment alignment;
+@property(readonly) NSPoint offset;
+
+@end
+
+@interface NSCollectionLayoutDecorationItem : NSCollectionLayoutItem
+
++ (instancetype) backgroundDecorationItemWithElementKind: (NSString *) elementKind;
+
+// Default 0; the other items of a section are promoted to 1.
+@property NSInteger zIndex;
+@property(readonly) NSString *elementKind;
 
 @end

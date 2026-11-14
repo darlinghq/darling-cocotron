@@ -415,3 +415,143 @@ enum {
 }
 
 @end
+
+// The edges of the container a boundary supplementary item with this alignment is anchored to.
+static NSDirectionalRectEdge EdgesForAlignment(NSRectAlignment alignment) {
+    switch (alignment) {
+    case NSRectAlignmentTop:
+        return NSDirectionalRectEdgeTop;
+    case NSRectAlignmentTopLeading:
+        return NSDirectionalRectEdgeTop | NSDirectionalRectEdgeLeading;
+    case NSRectAlignmentLeading:
+        return NSDirectionalRectEdgeLeading;
+    case NSRectAlignmentBottomLeading:
+        return NSDirectionalRectEdgeBottom | NSDirectionalRectEdgeLeading;
+    case NSRectAlignmentBottom:
+        return NSDirectionalRectEdgeBottom;
+    case NSRectAlignmentBottomTrailing:
+        return NSDirectionalRectEdgeBottom | NSDirectionalRectEdgeTrailing;
+    case NSRectAlignmentTrailing:
+        return NSDirectionalRectEdgeTrailing;
+    case NSRectAlignmentTopTrailing:
+        return NSDirectionalRectEdgeTop | NSDirectionalRectEdgeTrailing;
+    case NSRectAlignmentNone:
+        break;
+    }
+    return NSDirectionalRectEdgeNone;
+}
+
+@implementation NSCollectionLayoutBoundarySupplementaryItem {
+    BOOL _extendsBoundary;
+    BOOL _pinToVisibleBounds;
+    NSRectAlignment _alignment;
+    NSPoint _offset;
+}
+
++ (instancetype) boundarySupplementaryItemWithLayoutSize: (NSCollectionLayoutSize *) layoutSize
+                                             elementKind: (NSString *) elementKind
+                                               alignment: (NSRectAlignment) alignment {
+    return [self boundarySupplementaryItemWithLayoutSize: layoutSize
+                                             elementKind: elementKind
+                                               alignment: alignment
+                                          absoluteOffset: NSZeroPoint];
+}
+
+// GUESS, none of it in the header: the container anchor is the alignment's edges (no item anchor), and a boundary
+// item extends the boundary by default (the same property of UIKit's twin class defaults to true) and is not pinned.
++ (instancetype) boundarySupplementaryItemWithLayoutSize: (NSCollectionLayoutSize *) layoutSize
+                                             elementKind: (NSString *) elementKind
+                                               alignment: (NSRectAlignment) alignment
+                                          absoluteOffset: (NSPoint) absoluteOffset {
+    NSCollectionLayoutBoundarySupplementaryItem *item = [self
+            supplementaryItemWithLayoutSize: layoutSize
+                                elementKind: elementKind
+                            containerAnchor: [NSCollectionLayoutAnchor
+                                                     layoutAnchorWithEdges: EdgesForAlignment(alignment)
+                                                            absoluteOffset: absoluteOffset]];
+
+    item->_alignment = alignment;
+    item->_offset = absoluteOffset;
+    item->_extendsBoundary = YES;
+    return item;
+}
+
+- (BOOL) extendsBoundary {
+    return _extendsBoundary;
+}
+
+- (void) setExtendsBoundary: (BOOL) extendsBoundary {
+    _extendsBoundary = extendsBoundary;
+}
+
+- (BOOL) pinToVisibleBounds {
+    return _pinToVisibleBounds;
+}
+
+- (void) setPinToVisibleBounds: (BOOL) pinToVisibleBounds {
+    _pinToVisibleBounds = pinToVisibleBounds;
+}
+
+- (NSRectAlignment) alignment {
+    return _alignment;
+}
+
+- (NSPoint) offset {
+    return _offset;
+}
+
+- (id) copyWithZone: (NSZone *) zone {
+    NSCollectionLayoutBoundarySupplementaryItem *copy =
+            [super copyWithZone: zone];
+
+    copy->_extendsBoundary = _extendsBoundary;
+    copy->_pinToVisibleBounds = _pinToVisibleBounds;
+    copy->_alignment = _alignment;
+    copy->_offset = _offset;
+    return copy;
+}
+
+@end
+
+@implementation NSCollectionLayoutDecorationItem {
+    NSInteger _zIndex;
+    NSString *_elementKind;
+}
+
+// GUESS: a background decoration fills its section, so its size is the whole container (the header gives none).
++ (instancetype) backgroundDecorationItemWithElementKind: (NSString *) elementKind {
+    NSCollectionLayoutDecorationItem *item = [self
+            itemWithLayoutSize: [NSCollectionLayoutSize
+                                        sizeWithWidthDimension: [NSCollectionLayoutDimension fractionalWidthDimension: 1.0]
+                                               heightDimension: [NSCollectionLayoutDimension fractionalHeightDimension: 1.0]]];
+
+    item->_elementKind = [elementKind copy];
+    return item;
+}
+
+- (void) dealloc {
+    [_elementKind release];
+    [super dealloc];
+}
+
+- (NSInteger) zIndex {
+    return _zIndex;
+}
+
+- (void) setZIndex: (NSInteger) zIndex {
+    _zIndex = zIndex;
+}
+
+- (NSString *) elementKind {
+    return _elementKind;
+}
+
+- (id) copyWithZone: (NSZone *) zone {
+    NSCollectionLayoutDecorationItem *copy = [super copyWithZone: zone];
+
+    copy->_zIndex = _zIndex;
+    copy->_elementKind = [_elementKind copy];
+    return copy;
+}
+
+@end
