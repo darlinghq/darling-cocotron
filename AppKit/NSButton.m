@@ -97,7 +97,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (void) dealloc {
-    [_contentTintColor release];
+    if (NS_EXTRA_ALLOCATED(NSButton, self)) {
+        [NS_EXTRA(NSButton, self)->_contentTintColor release];
+    }
     [super dealloc];
 }
 
@@ -351,13 +353,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 @implementation NSButton (NSButtonContentTint)
 
 - (NSColor *) contentTintColor {
-    return _contentTintColor;
+    return NS_EXTRA(NSButton, self)->_contentTintColor;
 }
 
 - (void) setContentTintColor: (NSColor *) color {
     color = [color copy];
-    [_contentTintColor release];
-    _contentTintColor = color;
+    [NS_EXTRA(NSButton, self)->_contentTintColor release];
+    NS_EXTRA(NSButton, self)->_contentTintColor = color;
 }
 
 @end
@@ -365,11 +367,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 @implementation NSButton (NSDestructiveAction)
 
 - (BOOL) hasDestructiveAction {
-    return _hasDestructiveAction;
+    return NS_EXTRA(NSButton, self)->_hasDestructiveAction;
 }
 
 - (void) setHasDestructiveAction: (BOOL) value {
-    _hasDestructiveAction = value;
+    NS_EXTRA(NSButton, self)->_hasDestructiveAction = value;
 }
 
 @end

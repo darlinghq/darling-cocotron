@@ -48,7 +48,7 @@ NSString *const NSSplitViewWillResizeSubviewsNotification =
     if ([coder allowsKeyedCoding]) {
         NSKeyedUnarchiver *keyed = (NSKeyedUnarchiver *) coder;
 
-        _isVertical = [keyed decodeBoolForKey: @"NSIsVertical"];
+        NS_EXTRA(NSSplitView, self)->_isVertical = [keyed decodeBoolForKey: @"NSIsVertical"];
         // The divider thickness in the nib may not be the same as ours
         [self resizeSubviewsWithOldSize: [self bounds].size];
     } else {
@@ -68,7 +68,7 @@ NSString *const NSSplitViewWillResizeSubviewsNotification =
         if (version >= 348) {
             [coder decodeValueOfObjCType: @encode(char) at: &flags];
         }
-        _isVertical = (flags & 1) ? YES : NO;
+        NS_EXTRA(NSSplitView, self)->_isVertical = (flags & 1) ? YES : NO;
         [self setDelegate: delegate];
     }
 
@@ -76,16 +76,17 @@ NSString *const NSSplitViewWillResizeSubviewsNotification =
 }
 
 - (void) dealloc {
-    [_autosaveName release];
+    [NS_EXTRA(NSSplitView, self)->_autosaveName release];
+    NS_EXTRA_FREE(NSSplitView, self);
     [super dealloc];
 }
 
 - (id) delegate {
-    return _delegate;
+    return NS_EXTRA(NSSplitView, self)->_delegate;
 }
 
 - (BOOL) isVertical {
-    return _isVertical;
+    return NS_EXTRA(NSSplitView, self)->_isVertical;
 }
 
 - (void) _postNoteWillResize {
@@ -101,39 +102,39 @@ NSString *const NSSplitViewWillResizeSubviewsNotification =
 }
 
 - (void) setDelegate: (id) delegate {
-    if ([_delegate respondsToSelector: @selector(splitViewDidResizeSubviews:)])
+    if ([NS_EXTRA(NSSplitView, self)->_delegate respondsToSelector: @selector(splitViewDidResizeSubviews:)])
         [[NSNotificationCenter defaultCenter]
-                removeObserver: _delegate
+                removeObserver: NS_EXTRA(NSSplitView, self)->_delegate
                           name: NSSplitViewDidResizeSubviewsNotification
                         object: self];
-    if ([_delegate respondsToSelector: @selector(splitViewWillResizeSubviews:)])
+    if ([NS_EXTRA(NSSplitView, self)->_delegate respondsToSelector: @selector(splitViewWillResizeSubviews:)])
         [[NSNotificationCenter defaultCenter]
-                removeObserver: _delegate
+                removeObserver: NS_EXTRA(NSSplitView, self)->_delegate
                           name: NSSplitViewWillResizeSubviewsNotification
                         object: self];
 
-    _delegate = delegate;
+    NS_EXTRA(NSSplitView, self)->_delegate = delegate;
 
-    if ([_delegate respondsToSelector: @selector(splitViewDidResizeSubviews:)])
+    if ([NS_EXTRA(NSSplitView, self)->_delegate respondsToSelector: @selector(splitViewDidResizeSubviews:)])
         [[NSNotificationCenter defaultCenter]
-                addObserver: _delegate
+                addObserver: NS_EXTRA(NSSplitView, self)->_delegate
                    selector: @selector(splitViewDidResizeSubviews:)
                        name: NSSplitViewDidResizeSubviewsNotification
                      object: self];
-    if ([_delegate respondsToSelector: @selector(splitViewWillResizeSubviews:)])
+    if ([NS_EXTRA(NSSplitView, self)->_delegate respondsToSelector: @selector(splitViewWillResizeSubviews:)])
         [[NSNotificationCenter defaultCenter]
-                addObserver: _delegate
+                addObserver: NS_EXTRA(NSSplitView, self)->_delegate
                    selector: @selector(splitViewWillResizeSubviews:)
                        name: NSSplitViewWillResizeSubviewsNotification
                      object: self];
 }
 
 - (void) setVertical: (BOOL) flag {
-    if (_isVertical == flag) {
+    if (NS_EXTRA(NSSplitView, self)->_isVertical == flag) {
         // Don't do unneccessary work
         return;
     }
-    _isVertical = flag;
+    NS_EXTRA(NSSplitView, self)->_isVertical = flag;
 
     // Now get the split axis sorted
     [self adjustSubviews];
@@ -155,12 +156,12 @@ NSString *const NSSplitViewWillResizeSubviewsNotification =
 }
 
 - (void) setDividerStyle: (NSSplitViewDividerStyle) style {
-    _dividerStyle = style;
+    NS_EXTRA(NSSplitView, self)->_dividerStyle = style;
     [self setNeedsDisplay: YES];
 }
 
 - (NSSplitViewDividerStyle) dividerStyle {
-    return _dividerStyle;
+    return NS_EXTRA(NSSplitView, self)->_dividerStyle;
 }
 
 // The autosaved layout is this implementation's own format; Apple does not
@@ -185,15 +186,15 @@ static NSString *autosaveKey(NSString *name) {
 }
 
 - (NSString *) autosaveName {
-    return _autosaveName;
+    return NS_EXTRA(NSSplitView, self)->_autosaveName;
 }
 
 - (void) setAutosaveName: (NSString *) name {
     if ([name length] == 0)
         name = nil;
     name = [name copy];
-    [_autosaveName release];
-    _autosaveName = name;
+    [NS_EXTRA(NSSplitView, self)->_autosaveName release];
+    NS_EXTRA(NSSplitView, self)->_autosaveName = name;
     [self _restoreDividerPositions];
 }
 
@@ -202,11 +203,11 @@ static NSString *autosaveKey(NSString *name) {
     CGFloat space = [self _spaceForSubviews], position = 0;
     NSArray *saved;
 
-    if (_autosaveName == nil || count < 2 || space <= 0)
+    if (NS_EXTRA(NSSplitView, self)->_autosaveName == nil || count < 2 || space <= 0)
         return;
     // Each setPosition: below saves the layout again, replacing this entry.
     saved = [[[[NSUserDefaults standardUserDefaults]
-            arrayForKey: autosaveKey(_autosaveName)] retain] autorelease];
+            arrayForKey: autosaveKey(NS_EXTRA(NSSplitView, self)->_autosaveName)] retain] autorelease];
     if ([saved count] != count - 1)
         return;
     for (id fraction in saved)
@@ -225,14 +226,14 @@ static NSString *autosaveKey(NSString *name) {
     CGFloat space = [self _spaceForSubviews];
     NSMutableArray *saved;
 
-    if (_autosaveName == nil || count < 2 || space <= 0)
+    if (NS_EXTRA(NSSplitView, self)->_autosaveName == nil || count < 2 || space <= 0)
         return;
     saved = [NSMutableArray array];
     for (i = 0; i + 1 < count; i++)
         [saved addObject: [NSNumber numberWithDouble:
                         [self _lengthOfSubview: [_subviews objectAtIndex: i]] / space]];
     [[NSUserDefaults standardUserDefaults] setObject: saved
-                                              forKey: autosaveKey(_autosaveName)];
+                                              forKey: autosaveKey(NS_EXTRA(NSSplitView, self)->_autosaveName)];
 }
 
 /** adjust all the non-collapsed subviews so that they are equally spaced
@@ -376,7 +377,7 @@ static NSString *autosaveKey(NSString *name) {
 }
 
 - (CGFloat) dividerThickness {
-    if (_dividerStyle == NSSplitViewDividerStyleThick) {
+    if (NS_EXTRA(NSSplitView, self)->_dividerStyle == NSSplitViewDividerStyleThick) {
         return 10;
     } else {
         return 5;
@@ -392,7 +393,7 @@ static NSString *autosaveKey(NSString *name) {
 
 - (void) drawDividerInRect: (NSRect) rect {
 
-    if (_dividerStyle != NSSplitViewDividerStylePaneSplitter) {
+    if (NS_EXTRA(NSSplitView, self)->_dividerStyle != NSSplitViewDividerStylePaneSplitter) {
         // Fill in the view - pane splitter means just draw the dimple
         [[NSColor controlColor] setFill];
         NSRectFill(rect);
@@ -436,9 +437,9 @@ static NSString *autosaveKey(NSString *name) {
     if (oldSize.height < 1)
         oldSize.height = 1;
 
-    if ([_delegate respondsToSelector: @selector(splitView:
+    if ([NS_EXTRA(NSSplitView, self)->_delegate respondsToSelector: @selector(splitView:
                                                resizeSubviewsWithOldSize:)]) {
-        [_delegate splitView: self resizeSubviewsWithOldSize: oldSize];
+        [NS_EXTRA(NSSplitView, self)->_delegate splitView: self resizeSubviewsWithOldSize: oldSize];
     } else {
 
         // Apple docs say just call adjustSubviews
@@ -625,42 +626,42 @@ static CGFloat constrainTo(CGFloat value, CGFloat min, CGFloat max) {
 
     // Check in with the delegate and see if it wants to tweak the min and max
 
-    if ([_delegate respondsToSelector: @selector
+    if ([NS_EXTRA(NSSplitView, self)->_delegate respondsToSelector: @selector
                    (splitView:constrainMinCoordinate:ofSubviewAt:)] ||
-        [_delegate respondsToSelector: @selector
+        [NS_EXTRA(NSSplitView, self)->_delegate respondsToSelector: @selector
                    (splitView:constrainMaxCoordinate:ofSubviewAt:)]) {
         // Use the modern API
-        if ([_delegate respondsToSelector: @selector
+        if ([NS_EXTRA(NSSplitView, self)->_delegate respondsToSelector: @selector
                        (splitView:constrainMinCoordinate:ofSubviewAt:)]) {
-            minPosition = [_delegate splitView: self
+            minPosition = [NS_EXTRA(NSSplitView, self)->_delegate splitView: self
                         constrainMinCoordinate: minPosition
                                    ofSubviewAt: index];
         }
-        if ([_delegate respondsToSelector: @selector
+        if ([NS_EXTRA(NSSplitView, self)->_delegate respondsToSelector: @selector
                        (splitView:constrainMaxCoordinate:ofSubviewAt:)]) {
-            maxPosition = [_delegate splitView: self
+            maxPosition = [NS_EXTRA(NSSplitView, self)->_delegate splitView: self
                         constrainMaxCoordinate: maxPosition
                                    ofSubviewAt: index];
         }
-    } else if ([_delegate respondsToSelector: @selector
+    } else if ([NS_EXTRA(NSSplitView, self)->_delegate respondsToSelector: @selector
                           (splitView:
                                   constrainMinCoordinate:maxCoordinate
                                                         :ofSubviewAt:)]) {
         // Use the deprecated API
 
-        [_delegate splitView: self
+        [NS_EXTRA(NSSplitView, self)->_delegate splitView: self
                 constrainMinCoordinate: &minPosition
                          maxCoordinate: &maxPosition
                            ofSubviewAt: index];
     }
 
     // And if it wants to constrain the divider position
-    BOOL delegateWantsTrackConstraining = [_delegate
+    BOOL delegateWantsTrackConstraining = [NS_EXTRA(NSSplitView, self)->_delegate
             respondsToSelector: @selector(splitView:
                                         constrainSplitPosition:ofSubviewAt:)];
 
     if (delegateWantsTrackConstraining) {
-        position = [_delegate splitView: self
+        position = [NS_EXTRA(NSSplitView, self)->_delegate splitView: self
                  constrainSplitPosition: position
                             ofSubviewAt: index];
     }
@@ -670,7 +671,7 @@ static CGFloat constrainTo(CGFloat value, CGFloat min, CGFloat max) {
     NSRect resize1 = frame1;
 
     BOOL subviewsWereCollapsedOrExpanded = NO;
-    BOOL checkWithDelegateAboutCollapsingViews = [_delegate
+    BOOL checkWithDelegateAboutCollapsingViews = [NS_EXTRA(NSSplitView, self)->_delegate
             respondsToSelector: @selector(splitView:canCollapseSubview:)];
     if ([self isVertical]) {
 
@@ -684,12 +685,12 @@ static CGFloat constrainTo(CGFloat value, CGFloat min, CGFloat max) {
 
         if (checkWithDelegateAboutCollapsingViews) {
             if (position < minPosition) {
-                if ([_delegate splitView: self canCollapseSubview: subview0]) {
+                if ([NS_EXTRA(NSSplitView, self)->_delegate splitView: self canCollapseSubview: subview0]) {
                     [subview0 setHidden: YES];
                     subviewsWereCollapsedOrExpanded = YES;
                 }
             } else if (position > maxPosition) {
-                if ([_delegate splitView: self canCollapseSubview: subview1]) {
+                if ([NS_EXTRA(NSSplitView, self)->_delegate splitView: self canCollapseSubview: subview1]) {
                     [subview1 setHidden: YES];
                     subviewsWereCollapsedOrExpanded = YES;
                 }
@@ -723,12 +724,12 @@ static CGFloat constrainTo(CGFloat value, CGFloat min, CGFloat max) {
 
         if (checkWithDelegateAboutCollapsingViews) {
             if (position < minPosition) {
-                if ([_delegate splitView: self canCollapseSubview: subview0]) {
+                if ([NS_EXTRA(NSSplitView, self)->_delegate splitView: self canCollapseSubview: subview0]) {
                     [subview0 setHidden: YES];
                     subviewsWereCollapsedOrExpanded = YES;
                 }
             } else if (position > maxPosition) {
-                if ([_delegate splitView: self canCollapseSubview: subview1]) {
+                if ([NS_EXTRA(NSSplitView, self)->_delegate splitView: self canCollapseSubview: subview1]) {
                     [subview1 setHidden: YES];
                     subviewsWereCollapsedOrExpanded = YES;
                 }

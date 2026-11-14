@@ -17,24 +17,31 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/NSNib.h>
 #import <AppKit/NSResponder.h>
 
 @class NSWindow, NSDocument, NSStoryboard, NSViewController;
 
+// Legacy ObjC ABI (i386): instance size must stay 0x28, Apple's; the ivars
+// before the extras sit at Apple's offsets. Add new state to the extra
+// struct, never as an ivar.
 @interface NSWindowController : NSResponder {
     NSWindow *_window;
     NSString *_nibName;
-    NSString *_nibPath;
-    id _owner;
     NSDocument *_document;
-    BOOL _shouldCloseDocument;
-    BOOL _shouldCascadeWindows;
-    NSString *_windowFrameAutosaveName;
     NSArray *_topLevelObjects;
-    NSStoryboard *_storyboard;
-    BOOL _loadingWindowLifecycle;
-    BOOL _loadingWindowNib;
+    id _owner;
+    NS_LEGACY_IVAR_PAD(_NSWindowControllerReserved1, 4)
+    NSString *_windowFrameAutosaveName;
+    NS_EXTRA_IVARS_BEGIN(NSWindowController)
+        NSString *_nibPath;
+        BOOL _shouldCloseDocument;
+        BOOL _shouldCascadeWindows;
+        NSStoryboard *_storyboard;
+        BOOL _loadingWindowLifecycle;
+        BOOL _loadingWindowNib;
+    NS_EXTRA_IVARS_END(NSWindowController)
 }
 
 - initWithWindow: (NSWindow *) window;

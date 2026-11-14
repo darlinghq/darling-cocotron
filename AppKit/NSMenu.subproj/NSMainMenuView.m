@@ -52,7 +52,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - initWithFrame: (NSRect) frame menu: (NSMenu *) menu {
     [super initWithFrame: frame];
 
-    _menu = [menu retain];
+    NS_EXTRA(NSView, self)->_menu = [menu retain];
     _font = [[[self class] menuFont] retain];
     _selectedItemIndex = NSNotFound;
     [self sizeToFit];
@@ -76,7 +76,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (NSMenu *) menu {
-    return _menu;
+    return NS_EXTRA(NSView, self)->_menu;
 }
 
 - (void) setMenu: (NSMenu *) menu {

@@ -108,10 +108,10 @@ NSNotificationName NSControlTintDidChangeNotification = @"NSControlTintDidChange
 
 @implementation NSCell
 
-@synthesize identifier = _identifier;
-@synthesize truncatesLastVisibleLine = _truncatesLastVisibleLine;
-@synthesize allowsUndo = _allowsUndo;
-@synthesize userInterfaceLayoutDirection = _userInterfaceLayoutDirection;
+NS_EXTRA_SYNTHESIZE_COPY(NSCell, identifier, _identifier, NSUserInterfaceItemIdentifier, identifier, setIdentifier:)
+NS_EXTRA_SYNTHESIZE_ASSIGN(NSCell, truncatesLastVisibleLine, _truncatesLastVisibleLine, BOOL, truncatesLastVisibleLine, setTruncatesLastVisibleLine:)
+NS_EXTRA_SYNTHESIZE_ASSIGN(NSCell, allowsUndo, _allowsUndo, BOOL, allowsUndo, setAllowsUndo:)
+NS_EXTRA_SYNTHESIZE_ASSIGN(NSCell, userInterfaceLayoutDirection, _userInterfaceLayoutDirection, NSUserInterfaceLayoutDirection, userInterfaceLayoutDirection, setUserInterfaceLayoutDirection:)
 
 #pragma mark -
 #pragma mark Class Methods
@@ -133,32 +133,32 @@ NSNotificationName NSControlTintDidChangeNotification = @"NSControlTintDidChange
 - (void) _applyAppleFlags: (unsigned int) flags flags2: (unsigned int) flags2 {
     // These flags are big endian so the first flag is over on the left of the
     // int
-    _state = (flags & NSCellAppleFlagOnState) ? NSControlStateValueOn : NSControlStateValueOff;
-    _isHighlighted = (flags & NSCellAppleFlagHighlighted) ? YES : NO;
-    _isEnabled = (flags & NSCellAppleFlagDisabled) ? NO : YES; // "disabled" in Cocoa
-    _isEditable = (flags & NSCellAppleFlagEditable) ? YES : NO;
-    _cellType = (flags & NSCellAppleFlagTypeMask) >> NSCellAppleFlagTypeShift;
+    NS_EXTRA(NSCell, self)->_state = (flags & NSCellAppleFlagOnState) ? NSControlStateValueOn : NSControlStateValueOff;
+    NS_EXTRA(NSCell, self)->_isHighlighted = (flags & NSCellAppleFlagHighlighted) ? YES : NO;
+    NS_EXTRA(NSCell, self)->_isEnabled = (flags & NSCellAppleFlagDisabled) ? NO : YES; // "disabled" in Cocoa
+    NS_EXTRA(NSCell, self)->_isEditable = (flags & NSCellAppleFlagEditable) ? YES : NO;
+    NS_EXTRA(NSCell, self)->_cellType = (flags & NSCellAppleFlagTypeMask) >> NSCellAppleFlagTypeShift;
 
     // vCentered     = (flags & 0x02000000)
     // hCentered     = (flags & 0x01000000)
 
-    _isBordered = (flags & NSCellAppleFlagBordered) ? YES : NO;
-    _isBezeled = (flags & NSCellAppleFlagBezeled) ? YES : NO;
-    _isSelectable = (flags & NSCellAppleFlagSelectable) ? YES : NO;
-    _isScrollable = (flags & NSCellAppleFlagScrollable) ? YES : NO;
+    NS_EXTRA(NSCell, self)->_isBordered = (flags & NSCellAppleFlagBordered) ? YES : NO;
+    NS_EXTRA(NSCell, self)->_isBezeled = (flags & NSCellAppleFlagBezeled) ? YES : NO;
+    NS_EXTRA(NSCell, self)->_isSelectable = (flags & NSCellAppleFlagSelectable) ? YES : NO;
+    NS_EXTRA(NSCell, self)->_isScrollable = (flags & NSCellAppleFlagScrollable) ? YES : NO;
     // _wraps        = (flags & 0x00100000) ? NO : YES; // ! scrollable, use
     // lineBreakMode ?
 
     // 0x00080000 = continuous
     // 0x00040000 = action on mouse down
     // 0x00000100 = action on mouse drag
-    _isContinuous = (flags & (NSCellAppleFlagContinuous | NSCellAppleFlagActOnMouseDrag)) ? YES : NO;
+    NS_EXTRA(NSCell, self)->_isContinuous = (flags & (NSCellAppleFlagContinuous | NSCellAppleFlagActOnMouseDrag)) ? YES : NO;
 
     // actOnMouseDown = (flags & 0x00040000)
     // isLeaf         = (flags & 0x00020000)
 
     // invObjectVal  = (flags & 0x00010000)
-    _hasValidObjectValue = YES;
+    NS_EXTRA(NSCell, self)->_hasValidObjectValue = YES;
 
     // invalidFont   = (flags & 0x00008000)
     // cellReserved1 = (flags & 0x00001800)
@@ -171,7 +171,7 @@ NSNotificationName NSControlTintDidChangeNotification = @"NSControlTintDidChange
     // userKeyEquiv  = (flags & 0x00000008)
     // showsFirstResp= (flags & 0x00000004)
 
-    _focusRingType = (flags & NSCellAppleFlagFocusRingTypeMask) >> NSCellAppleFlagFocusRingTypeShift;
+    NS_EXTRA(NSCell, self)->_focusRingType = (flags & NSCellAppleFlagFocusRingTypeMask) >> NSCellAppleFlagFocusRingTypeShift;
 
     // Now for flags2 - the layout of these flags seems to be more
     // random. So the best way to find out which bit(s) you need is
@@ -180,28 +180,28 @@ NSNotificationName NSControlTintDidChangeNotification = @"NSControlTintDidChange
     // NSCellFlags2 value to hex
     // wasSelectable = (flags2 & 0x80000000)
 
-    _isRichText = (flags2 & NSCellAppleFlag2RichText) ? YES : NO;
+    NS_EXTRA(NSCell, self)->_isRichText = (flags2 & NSCellAppleFlag2RichText) ? YES : NO;
 
     // importsGraph  = (flags2 & 0x10000000)
 
-    _textAlignment = (flags2 & NSCellAppleFlag2TextAlignmentMask) >> NSCellAppleFlag2TextAlignmentShift;
+    NS_EXTRA(NSCell, self)->_textAlignment = (flags2 & NSCellAppleFlag2TextAlignmentMask) >> NSCellAppleFlag2TextAlignmentShift;
 
     // layoutDirRTL  = (flags2 & 0x01000000)
-    _writingDirection = NSWritingDirectionNatural;
+    NS_EXTRA(NSCell, self)->_writingDirection = NSWritingDirectionNatural;
 
     // backgrdStyle  = (flags2 & 0x00c00000) >> 21;
     // cellReserved  = (flags2 & 0x003c0000)
-    _refusesFirstResponder = (flags2 & NSCellAppleFlag2RefusesFirstResponder) ? YES : NO;
-    _allowsMixedState = (flags2 & NSCellAppleFlag2AllowsMixedState) ? YES : NO;
+    NS_EXTRA(NSCell, self)->_refusesFirstResponder = (flags2 & NSCellAppleFlag2RefusesFirstResponder) ? YES : NO;
+    NS_EXTRA(NSCell, self)->_allowsMixedState = (flags2 & NSCellAppleFlag2AllowsMixedState) ? YES : NO;
 
     // inMixedState  = (flags2 & 0x00800000)
 
-    _sendsActionOnEndEditing = (flags2 & NSCellAppleFlag2ActOnEditingEnd) ? YES : NO;
+    NS_EXTRA(NSCell, self)->_sendsActionOnEndEditing = (flags2 & NSCellAppleFlag2ActOnEditingEnd) ? YES : NO;
 
     // Odd this isn't in flags - it's near other items in flags in the Cocoa
     // struct from which these are derived.
-    _lineBreakMode = (flags2 & NSCellAppleFlag2LineBreakModeMask) >> NSCellAppleFlag2LineBreakModeShift;
-    _controlSize = (flags2 & NSCellAppleFlag2ControlSizeMask) >> NSCellAppleFlag2ControlSizeShift;
+    NS_EXTRA(NSCell, self)->_lineBreakMode = (flags2 & NSCellAppleFlag2LineBreakModeMask) >> NSCellAppleFlag2LineBreakModeShift;
+    NS_EXTRA(NSCell, self)->_controlSize = (flags2 & NSCellAppleFlag2ControlSizeMask) >> NSCellAppleFlag2ControlSizeShift;
 }
 
 // The fields of the second flag word that NSArchiver data (non-keyed decoding) lays out
@@ -212,63 +212,63 @@ NSNotificationName NSControlTintDidChangeNotification = @"NSControlTintDidChange
 // bit 8 and right-to-left layout direction in bit 7.
 - (void) _applyNonKeyedFlags2: (unsigned int) flags2 {
     if (flags2 & (1u << 23))
-        _state = NSControlStateValueMixed;
-    _focusRingType = (flags2 >> 15) & 3;
+        NS_EXTRA(NSCell, self)->_state = NSControlStateValueMixed;
+    NS_EXTRA(NSCell, self)->_focusRingType = (flags2 >> 15) & 3;
     if (flags2 & (1u << 14))
-        _writingDirection = NSWritingDirectionRightToLeft;
-    _truncatesLastVisibleLine = (flags2 & (1u << 8)) ? YES : NO;
-    _userInterfaceLayoutDirection = (flags2 & (1u << 7)) ? NSUserInterfaceLayoutDirectionRightToLeft : NSUserInterfaceLayoutDirectionLeftToRight;
+        NS_EXTRA(NSCell, self)->_writingDirection = NSWritingDirectionRightToLeft;
+    NS_EXTRA(NSCell, self)->_truncatesLastVisibleLine = (flags2 & (1u << 8)) ? YES : NO;
+    NS_EXTRA(NSCell, self)->_userInterfaceLayoutDirection = (flags2 & (1u << 7)) ? NSUserInterfaceLayoutDirectionRightToLeft : NSUserInterfaceLayoutDirectionLeftToRight;
 }
 
 - (void) _generateAppleFlags: (unsigned int *) flags flags2: (unsigned int *) flags2 {
     *flags = 0;
     *flags2 = 0;
 
-    if (_state == NSControlStateValueOn)
+    if (NS_EXTRA(NSCell, self)->_state == NSControlStateValueOn)
         *flags |= NSCellAppleFlagOnState;
-    else if (_state == NSControlStateValueMixed)
+    else if (NS_EXTRA(NSCell, self)->_state == NSControlStateValueMixed)
         *flags2 |= NSCellAppleFlag2InMixedState;
 
-    if (_isHighlighted)
+    if (NS_EXTRA(NSCell, self)->_isHighlighted)
         *flags |= NSCellAppleFlagHighlighted;
-    if (!_isEnabled)
+    if (!NS_EXTRA(NSCell, self)->_isEnabled)
         *flags |= NSCellAppleFlagDisabled;
-    if (_isEditable)
+    if (NS_EXTRA(NSCell, self)->_isEditable)
         *flags |= NSCellAppleFlagEditable;
 
-    *flags |= (_cellType << NSCellAppleFlagTypeShift) & NSCellAppleFlagTypeMask;
+    *flags |= (NS_EXTRA(NSCell, self)->_cellType << NSCellAppleFlagTypeShift) & NSCellAppleFlagTypeMask;
 
-    if (_isBordered)
+    if (NS_EXTRA(NSCell, self)->_isBordered)
         *flags |= NSCellAppleFlagBordered;
-    if (_isBezeled)
+    if (NS_EXTRA(NSCell, self)->_isBezeled)
         *flags |= NSCellAppleFlagBezeled;
-    if (_isSelectable)
+    if (NS_EXTRA(NSCell, self)->_isSelectable)
         *flags |= NSCellAppleFlagSelectable;
-    if (_isScrollable)
+    if (NS_EXTRA(NSCell, self)->_isScrollable)
         *flags |= NSCellAppleFlagScrollable;
 
     // we don't really store whether it's continuous or mouse drag, so assume it's continuous
-    if (_isContinuous)
+    if (NS_EXTRA(NSCell, self)->_isContinuous)
         *flags |= NSCellAppleFlagContinuous;
 
-    *flags |= (_focusRingType << NSCellAppleFlagFocusRingTypeShift) & NSCellAppleFlagFocusRingTypeMask;
+    *flags |= (NS_EXTRA(NSCell, self)->_focusRingType << NSCellAppleFlagFocusRingTypeShift) & NSCellAppleFlagFocusRingTypeMask;
 
-    if (_isRichText)
+    if (NS_EXTRA(NSCell, self)->_isRichText)
         *flags2 |= NSCellAppleFlag2RichText;
 
-    *flags2 |= (_textAlignment << NSCellAppleFlag2TextAlignmentShift) & NSCellAppleFlag2TextAlignmentMask;
+    *flags2 |= (NS_EXTRA(NSCell, self)->_textAlignment << NSCellAppleFlag2TextAlignmentShift) & NSCellAppleFlag2TextAlignmentMask;
 
-    if (_refusesFirstResponder)
+    if (NS_EXTRA(NSCell, self)->_refusesFirstResponder)
         *flags2 |= NSCellAppleFlag2RefusesFirstResponder;
 
-    if (_allowsMixedState)
+    if (NS_EXTRA(NSCell, self)->_allowsMixedState)
         *flags2 |= NSCellAppleFlag2AllowsMixedState;
 
-    if (_sendsActionOnEndEditing)
+    if (NS_EXTRA(NSCell, self)->_sendsActionOnEndEditing)
         *flags2 |= NSCellAppleFlag2ActOnEditingEnd;
 
-    *flags2 |= (_lineBreakMode << NSCellAppleFlag2LineBreakModeShift) & NSCellAppleFlag2LineBreakModeMask;
-    *flags2 |= (_controlSize << NSCellAppleFlag2ControlSizeShift) & NSCellAppleFlag2ControlSizeMask;
+    *flags2 |= (NS_EXTRA(NSCell, self)->_lineBreakMode << NSCellAppleFlag2LineBreakModeShift) & NSCellAppleFlag2LineBreakModeMask;
+    *flags2 |= (NS_EXTRA(NSCell, self)->_controlSize << NSCellAppleFlag2ControlSizeShift) & NSCellAppleFlag2ControlSizeMask;
 }
 
 - initWithCoder: (NSCoder *) coder {
@@ -281,21 +281,21 @@ NSNotificationName NSControlTintDidChangeNotification = @"NSControlTintDidChange
 
         [self _applyAppleFlags: flags flags2: flags2];
 
-        _objectValue = [[keyed decodeObjectForKey: @"NSContents"] retain];
+        NS_EXTRA(NSCell, self)->_objectValue = [[keyed decodeObjectForKey: @"NSContents"] retain];
         check = [keyed decodeObjectForKey: @"NSNormalImage"];
         if ([check isKindOfClass: [NSImage class]])
-            _image = [check retain];
+            NS_EXTRA(NSCell, self)->_image = [check retain];
         else if ([check isKindOfClass: [NSFont class]])
-            _font = [check retain];
+            NS_EXTRA(NSCell, self)->_font = [check retain];
 
         check = [keyed decodeObjectForKey: @"NSSupport"];
         if ([check isKindOfClass: [NSFont class]])
-            _font = [check retain];
+            NS_EXTRA(NSCell, self)->_font = [check retain];
 
         [self setFormatter: [keyed decodeObjectForKey: @"NSFormatter"]];
 
-        if (_font == nil)
-            _font = [[NSFont userFontOfSize: [NSFont systemFontSizeForControlSize: _controlSize]] retain];
+        if (NS_EXTRA(NSCell, self)->_font == nil)
+            NS_EXTRA(NSCell, self)->_font = [[NSFont userFontOfSize: [NSFont systemFontSizeForControlSize: NS_EXTRA(NSCell, self)->_controlSize]] retain];
     } else {
         NSInteger version = [coder versionForClassName: @"NSCell"];
         if (version < 55)
@@ -336,19 +336,19 @@ NSNotificationName NSControlTintDidChangeNotification = @"NSControlTintDidChange
         [self _applyNonKeyedFlags2: flags2];
 
         id o1, o2, o3;
-        [coder decodeValuesOfObjCTypes: "@@@@", &_objectValue, &o1, &o2, &o3];
+        [coder decodeValuesOfObjCTypes: "@@@@", &NS_EXTRA(NSCell, self)->_objectValue, &o1, &o2, &o3];
         if (o1) {
             if ([o1 isKindOfClass: [NSImage class]])
-                _image = o1;
+                NS_EXTRA(NSCell, self)->_image = o1;
             else if ([o1 isKindOfClass: [NSFont class]])
-                _font = o1;
+                NS_EXTRA(NSCell, self)->_font = o1;
         }
 
         [self setFormatter: o2];
         [self setRepresentedObject: o3];
 
         // Is this correct?
-        _font = [[NSFont userFontOfSize: [NSFont systemFontSizeForControlSize: _controlSize]] retain];
+        NS_EXTRA(NSCell, self)->_font = [[NSFont userFontOfSize: [NSFont systemFontSizeForControlSize: NS_EXTRA(NSCell, self)->_controlSize]] retain];
     }
     return self;
 }
@@ -362,14 +362,14 @@ NSNotificationName NSControlTintDidChangeNotification = @"NSControlTintDidChange
     if (coder.allowsKeyedCoding) {
         [coder encodeInt: flags forKey: @"NSCellFlags"];
         [coder encodeInt: flags2 forKey: @"NSCellFlags2"];
-        [coder encodeObject: _objectValue forKey: @"NSContents"];
-        if (_image != nil) {
-            [coder encodeObject: _image forKey: @"NSNormalImage"];
-            if (_font != nil)
-                [coder encodeObject: _font forKey: @"NSSupport"];
-        } else if (_font != nil)
-            [coder encodeObject: _font forKey: @"NSNormalImage"];
-        [coder encodeObject: _formatter forKey: @"NSFormatter"];
+        [coder encodeObject: NS_EXTRA(NSCell, self)->_objectValue forKey: @"NSContents"];
+        if (NS_EXTRA(NSCell, self)->_image != nil) {
+            [coder encodeObject: NS_EXTRA(NSCell, self)->_image forKey: @"NSNormalImage"];
+            if (NS_EXTRA(NSCell, self)->_font != nil)
+                [coder encodeObject: NS_EXTRA(NSCell, self)->_font forKey: @"NSSupport"];
+        } else if (NS_EXTRA(NSCell, self)->_font != nil)
+            [coder encodeObject: NS_EXTRA(NSCell, self)->_font forKey: @"NSNormalImage"];
+        [coder encodeObject: NS_EXTRA(NSCell, self)->_formatter forKey: @"NSFormatter"];
     } else {
         [NSException raise: NSInvalidArchiveOperationException
                     format: @"TODO: support unkeyed encoding in NSCell"];
@@ -377,40 +377,40 @@ NSNotificationName NSControlTintDidChangeNotification = @"NSControlTintDidChange
 }
 
 - initTextCell: (NSString *) string {
-    _focusRingType = [[self class] defaultFocusRingType];
-    _state = NSControlStateValueOff;
-    _font = [[NSFont userFontOfSize: 0] retain];
-    _objectValue = [string copy];
-    _image = nil;
-    _cellType = NSTextCellType;
-    _isEnabled = YES;
-    _isEditable = NO;
-    _isSelectable = NO;
-    _isBordered = NO;
-    _isBezeled = NO;
-    _isHighlighted = NO;
-    _refusesFirstResponder = NO;
-    _lineBreakMode = NSLineBreakByWordWrapping;
-    _hasValidObjectValue = YES;
+    NS_EXTRA(NSCell, self)->_focusRingType = [[self class] defaultFocusRingType];
+    NS_EXTRA(NSCell, self)->_state = NSControlStateValueOff;
+    NS_EXTRA(NSCell, self)->_font = [[NSFont userFontOfSize: 0] retain];
+    NS_EXTRA(NSCell, self)->_objectValue = [string copy];
+    NS_EXTRA(NSCell, self)->_image = nil;
+    NS_EXTRA(NSCell, self)->_cellType = NSTextCellType;
+    NS_EXTRA(NSCell, self)->_isEnabled = YES;
+    NS_EXTRA(NSCell, self)->_isEditable = NO;
+    NS_EXTRA(NSCell, self)->_isSelectable = NO;
+    NS_EXTRA(NSCell, self)->_isBordered = NO;
+    NS_EXTRA(NSCell, self)->_isBezeled = NO;
+    NS_EXTRA(NSCell, self)->_isHighlighted = NO;
+    NS_EXTRA(NSCell, self)->_refusesFirstResponder = NO;
+    NS_EXTRA(NSCell, self)->_lineBreakMode = NSLineBreakByWordWrapping;
+    NS_EXTRA(NSCell, self)->_hasValidObjectValue = YES;
     return self;
 }
 
 - initImageCell: (NSImage *) image {
-    _focusRingType = [[self class] defaultFocusRingType];
-    _state = NSControlStateValueOff;
-    _font = nil;
-    _objectValue = nil;
-    _image = [image retain];
-    _cellType = NSImageCellType;
-    _isEnabled = YES;
-    _isEditable = NO;
-    _isSelectable = NO;
-    _isBordered = NO;
-    _isBezeled = NO;
-    _isHighlighted = NO;
-    _refusesFirstResponder = NO;
-    _lineBreakMode = NSLineBreakByWordWrapping;
-    _hasValidObjectValue = YES;
+    NS_EXTRA(NSCell, self)->_focusRingType = [[self class] defaultFocusRingType];
+    NS_EXTRA(NSCell, self)->_state = NSControlStateValueOff;
+    NS_EXTRA(NSCell, self)->_font = nil;
+    NS_EXTRA(NSCell, self)->_objectValue = nil;
+    NS_EXTRA(NSCell, self)->_image = [image retain];
+    NS_EXTRA(NSCell, self)->_cellType = NSImageCellType;
+    NS_EXTRA(NSCell, self)->_isEnabled = YES;
+    NS_EXTRA(NSCell, self)->_isEditable = NO;
+    NS_EXTRA(NSCell, self)->_isSelectable = NO;
+    NS_EXTRA(NSCell, self)->_isBordered = NO;
+    NS_EXTRA(NSCell, self)->_isBezeled = NO;
+    NS_EXTRA(NSCell, self)->_isHighlighted = NO;
+    NS_EXTRA(NSCell, self)->_refusesFirstResponder = NO;
+    NS_EXTRA(NSCell, self)->_lineBreakMode = NSLineBreakByWordWrapping;
+    NS_EXTRA(NSCell, self)->_hasValidObjectValue = YES;
     return self;
 }
 
@@ -419,37 +419,39 @@ NSNotificationName NSControlTintDidChangeNotification = @"NSControlTintDidChange
 }
 
 - (void) dealloc {
-    [_font release];
-    [_objectValue release];
-    [_image release];
-    [_formatter release];
-    [_representedObject release];
-    [_identifier release];
-    [_cellMenu release];
+    [NS_EXTRA(NSCell, self)->_font release];
+    [NS_EXTRA(NSCell, self)->_objectValue release];
+    [NS_EXTRA(NSCell, self)->_image release];
+    [NS_EXTRA(NSCell, self)->_formatter release];
+    [NS_EXTRA(NSCell, self)->_representedObject release];
+    [NS_EXTRA(NSCell, self)->_identifier release];
+    [NS_EXTRA(NSCell, self)->_cellMenu release];
+    NS_EXTRA_FREE(NSCell, self);
     [super dealloc];
 }
 
 - copyWithZone: (NSZone *) zone {
     NSCell *copy = NSCopyObject(self, 0, zone);
+    NS_EXTRA_COPY(NSCell, copy, self);
 
-    copy->_font = [_font retain];
-    copy->_objectValue = [_objectValue copy];
-    copy->_image = [_image retain];
-    copy->_formatter = [_formatter retain];
-    copy->_representedObject = [_representedObject retain];
-    copy->_cellMenu = [_cellMenu retain];
+    NS_EXTRA(NSCell, copy)->_font = [NS_EXTRA(NSCell, self)->_font retain];
+    NS_EXTRA(NSCell, copy)->_objectValue = [NS_EXTRA(NSCell, self)->_objectValue copy];
+    NS_EXTRA(NSCell, copy)->_image = [NS_EXTRA(NSCell, self)->_image retain];
+    NS_EXTRA(NSCell, copy)->_formatter = [NS_EXTRA(NSCell, self)->_formatter retain];
+    NS_EXTRA(NSCell, copy)->_representedObject = [NS_EXTRA(NSCell, self)->_representedObject retain];
+    NS_EXTRA(NSCell, copy)->_cellMenu = [NS_EXTRA(NSCell, self)->_cellMenu retain];
 
     return copy;
 }
 
 - (NSMenu *) menu {
-    return _cellMenu;
+    return NS_EXTRA(NSCell, self)->_cellMenu;
 }
 
 - (void) setMenu: (NSMenu *) menu {
     menu = [menu retain];
-    [_cellMenu release];
-    _cellMenu = menu;
+    [NS_EXTRA(NSCell, self)->_cellMenu release];
+    NS_EXTRA(NSCell, self)->_cellMenu = menu;
 }
 
 - (NSView *) controlView {
@@ -457,19 +459,19 @@ NSNotificationName NSControlTintDidChangeNotification = @"NSControlTintDidChange
 }
 
 - (NSCellType) type {
-    return _cellType;
+    return NS_EXTRA(NSCell, self)->_cellType;
 }
 
 - (NSControlStateValue) state {
-    if (_allowsMixedState) {
-        if (_state < 0)
+    if (NS_EXTRA(NSCell, self)->_allowsMixedState) {
+        if (NS_EXTRA(NSCell, self)->_state < 0)
             return -1;
-        else if (_state > 0)
+        else if (NS_EXTRA(NSCell, self)->_state > 0)
             return 1;
         else
             return 0;
     } else
-        return (ABS(_state) > 0) ? 1 : 0;
+        return (ABS(NS_EXTRA(NSCell, self)->_state) > 0) ? 1 : 0;
 }
 
 - target {
@@ -481,8 +483,8 @@ NSNotificationName NSControlTintDidChangeNotification = @"NSControlTintDidChange
 }
 
 - (NSInteger) sendActionOn: (NSInteger) mask {
-    NSInteger old = _sendActionOnMask;
-    _sendActionOnMask = mask;
+    NSInteger old = NS_EXTRA(NSCell, self)->_sendActionOnMask;
+    NS_EXTRA(NSCell, self)->_sendActionOnMask = mask;
     return old;
 }
 
@@ -491,40 +493,40 @@ NSNotificationName NSControlTintDidChangeNotification = @"NSControlTintDidChange
 }
 
 - (NSInteger) entryType {
-    return _entryType;
+    return NS_EXTRA(NSCell, self)->_entryType;
 }
 
 - (id) formatter {
-    return _formatter;
+    return NS_EXTRA(NSCell, self)->_formatter;
 }
 
 - (NSFont *) font {
-    return _font;
+    return NS_EXTRA(NSCell, self)->_font;
 }
 
 - (NSImage *) image {
-    return _image;
+    return NS_EXTRA(NSCell, self)->_image;
 }
 
 - (NSTextAlignment) alignment {
-    return _textAlignment;
+    return NS_EXTRA(NSCell, self)->_textAlignment;
 }
 
 - (NSLineBreakMode) lineBreakMode {
-    return _lineBreakMode;
+    return NS_EXTRA(NSCell, self)->_lineBreakMode;
 }
 
 - (BOOL) usesSingleLineMode {
-    return _usesSingleLineMode;
+    return NS_EXTRA(NSCell, self)->_usesSingleLineMode;
 }
 
 - (NSWritingDirection) baseWritingDirection {
-    return _writingDirection;
+    return NS_EXTRA(NSCell, self)->_writingDirection;
 }
 
 - (BOOL) wraps {
-    return (_lineBreakMode == NSLineBreakByWordWrapping ||
-            _lineBreakMode == NSLineBreakByCharWrapping)
+    return (NS_EXTRA(NSCell, self)->_lineBreakMode == NSLineBreakByWordWrapping ||
+            NS_EXTRA(NSCell, self)->_lineBreakMode == NSLineBreakByCharWrapping)
                    ? YES
                    : NO;
 }
@@ -534,47 +536,47 @@ NSNotificationName NSControlTintDidChangeNotification = @"NSControlTintDidChange
 }
 
 - (BOOL) isEnabled {
-    return _isEnabled;
+    return NS_EXTRA(NSCell, self)->_isEnabled;
 }
 
 - (BOOL) isEditable {
-    return _isEditable;
+    return NS_EXTRA(NSCell, self)->_isEditable;
 }
 
 - (BOOL) isSelectable {
-    return _isSelectable;
+    return NS_EXTRA(NSCell, self)->_isSelectable;
 }
 
 - (BOOL) isScrollable {
-    return _isScrollable;
+    return NS_EXTRA(NSCell, self)->_isScrollable;
 }
 
 - (BOOL) isBordered {
-    return _isBordered;
+    return NS_EXTRA(NSCell, self)->_isBordered;
 }
 
 - (BOOL) isBezeled {
-    return _isBezeled;
+    return NS_EXTRA(NSCell, self)->_isBezeled;
 }
 
 - (BOOL) isContinuous {
-    return _isContinuous;
+    return NS_EXTRA(NSCell, self)->_isContinuous;
 }
 
 - (BOOL) showsFirstResponder {
-    return _showsFirstResponder;
+    return NS_EXTRA(NSCell, self)->_showsFirstResponder;
 }
 
 - (BOOL) refusesFirstResponder {
-    return _refusesFirstResponder;
+    return NS_EXTRA(NSCell, self)->_refusesFirstResponder;
 }
 
 - (BOOL) isHighlighted {
-    return _isHighlighted;
+    return NS_EXTRA(NSCell, self)->_isHighlighted;
 }
 
 - (BOOL) hasValidObjectValue {
-    return _hasValidObjectValue;
+    return NS_EXTRA(NSCell, self)->_hasValidObjectValue;
 }
 
 /*
@@ -582,8 +584,8 @@ NSNotificationName NSControlTintDidChangeNotification = @"NSControlTintDidChange
  associated with the receiver."
  */
 - objectValue {
-    if (_hasValidObjectValue) {
-        return _objectValue;
+    if (NS_EXTRA(NSCell, self)->_hasValidObjectValue) {
+        return NS_EXTRA(NSCell, self)->_objectValue;
     } else {
         return nil;
     }
@@ -591,90 +593,90 @@ NSNotificationName NSControlTintDidChangeNotification = @"NSControlTintDidChange
 
 - (NSString *) stringValue {
     NSString *formatted;
-    if (_formatter != nil)
-        if ((formatted = [_formatter stringForObjectValue: _objectValue]) !=
+    if (NS_EXTRA(NSCell, self)->_formatter != nil)
+        if ((formatted = [NS_EXTRA(NSCell, self)->_formatter stringForObjectValue: NS_EXTRA(NSCell, self)->_objectValue]) !=
             nil)
             return formatted;
-    if ([_objectValue isKindOfClass: [NSAttributedString class]])
-        return [_objectValue string];
-    else if ([_objectValue isKindOfClass: [NSString class]])
-        return _objectValue;
+    if ([NS_EXTRA(NSCell, self)->_objectValue isKindOfClass: [NSAttributedString class]])
+        return [NS_EXTRA(NSCell, self)->_objectValue string];
+    else if ([NS_EXTRA(NSCell, self)->_objectValue isKindOfClass: [NSString class]])
+        return NS_EXTRA(NSCell, self)->_objectValue;
 
-    if ([_objectValue respondsToSelector: @selector(descriptionWithLocale:)])
-        return [_objectValue descriptionWithLocale: [NSLocale currentLocale]];
-    else if ([_objectValue respondsToSelector: @selector(description)])
-        return [_objectValue description];
+    if ([NS_EXTRA(NSCell, self)->_objectValue respondsToSelector: @selector(descriptionWithLocale:)])
+        return [NS_EXTRA(NSCell, self)->_objectValue descriptionWithLocale: [NSLocale currentLocale]];
+    else if ([NS_EXTRA(NSCell, self)->_objectValue respondsToSelector: @selector(description)])
+        return [NS_EXTRA(NSCell, self)->_objectValue description];
     else
         return @"";
 }
 
 - (int) intValue {
     NSString *objString =
-            ([_objectValue isKindOfClass: [NSAttributedString class]])
-                    ? [_objectValue string]
-                    : (NSString *) _objectValue;
+            ([NS_EXTRA(NSCell, self)->_objectValue isKindOfClass: [NSAttributedString class]])
+                    ? [NS_EXTRA(NSCell, self)->_objectValue string]
+                    : (NSString *) NS_EXTRA(NSCell, self)->_objectValue;
     if ([objString isKindOfClass: [NSString class]]) {
         int i = 0;
         [[NSScanner localizedScannerWithString: objString] scanInt: &i];
         return i;
     } else
-        return [_objectValue intValue];
+        return [NS_EXTRA(NSCell, self)->_objectValue intValue];
 }
 
 - (float) floatValue {
-    if (_objectValue == nil) {
+    if (NS_EXTRA(NSCell, self)->_objectValue == nil) {
         // [nil someFloatMethod] doesn't return 0.f on Cocotron - tmp fix until
         // the runtime is fixed
         return 0.f;
     }
     NSString *objString =
-            ([_objectValue isKindOfClass: [NSAttributedString class]])
-                    ? [_objectValue string]
-                    : (NSString *) _objectValue;
+            ([NS_EXTRA(NSCell, self)->_objectValue isKindOfClass: [NSAttributedString class]])
+                    ? [NS_EXTRA(NSCell, self)->_objectValue string]
+                    : (NSString *) NS_EXTRA(NSCell, self)->_objectValue;
     if ([objString isKindOfClass: [NSString class]]) {
         float f = 0.0;
         [[NSScanner localizedScannerWithString: objString] scanFloat: &f];
         return f;
     } else {
-        return [_objectValue floatValue];
+        return [NS_EXTRA(NSCell, self)->_objectValue floatValue];
     }
 }
 
 - (double) doubleValue {
-    if (_objectValue == nil) {
+    if (NS_EXTRA(NSCell, self)->_objectValue == nil) {
         // [nil someDoubleMethod] doesn't return 0. on Cocotron - tmp fix until
         // the runtime is fixed
         return 0.;
     }
 
     NSString *objString =
-            ([_objectValue isKindOfClass: [NSAttributedString class]])
-                    ? [_objectValue string]
-                    : (NSString *) _objectValue;
+            ([NS_EXTRA(NSCell, self)->_objectValue isKindOfClass: [NSAttributedString class]])
+                    ? [NS_EXTRA(NSCell, self)->_objectValue string]
+                    : (NSString *) NS_EXTRA(NSCell, self)->_objectValue;
     if ([objString isKindOfClass: [NSString class]]) {
         double d = 0.0;
         [[NSScanner localizedScannerWithString: objString] scanDouble: &d];
         return d;
     } else
-        return [_objectValue doubleValue];
+        return [NS_EXTRA(NSCell, self)->_objectValue doubleValue];
 }
 
 - (NSInteger) integerValue {
     NSString *objString =
-            ([_objectValue isKindOfClass: [NSAttributedString class]])
-                    ? [_objectValue string]
-                    : (NSString *) _objectValue;
+            ([NS_EXTRA(NSCell, self)->_objectValue isKindOfClass: [NSAttributedString class]])
+                    ? [NS_EXTRA(NSCell, self)->_objectValue string]
+                    : (NSString *) NS_EXTRA(NSCell, self)->_objectValue;
     if ([objString isKindOfClass: [NSString class]]) {
         NSInteger i = 0;
         [[NSScanner localizedScannerWithString: objString] scanInteger: &i];
         return i;
     } else
-        return [_objectValue integerValue];
+        return [NS_EXTRA(NSCell, self)->_objectValue integerValue];
 }
 
 - (NSAttributedString *) attributedStringValue {
-    if ([_objectValue isKindOfClass: [NSAttributedString class]])
-        return _objectValue;
+    if ([NS_EXTRA(NSCell, self)->_objectValue isKindOfClass: [NSAttributedString class]])
+        return NS_EXTRA(NSCell, self)->_objectValue;
     else {
         NSMutableDictionary *attributes = [NSMutableDictionary dictionary];
         NSMutableParagraphStyle *paraStyle =
@@ -697,8 +699,8 @@ NSNotificationName NSControlTintDidChangeNotification = @"NSControlTintDidChange
                            forKey: NSForegroundColorAttributeName];
         }
 
-        [paraStyle setLineBreakMode: _lineBreakMode];
-        [paraStyle setAlignment: _textAlignment];
+        [paraStyle setLineBreakMode: NS_EXTRA(NSCell, self)->_lineBreakMode];
+        [paraStyle setAlignment: NS_EXTRA(NSCell, self)->_textAlignment];
         [attributes setObject: paraStyle forKey: NSParagraphStyleAttributeName];
 
         return [[[NSAttributedString alloc] initWithString: [self stringValue]
@@ -708,23 +710,23 @@ NSNotificationName NSControlTintDidChangeNotification = @"NSControlTintDidChange
 }
 
 - (id) representedObject {
-    return _representedObject;
+    return NS_EXTRA(NSCell, self)->_representedObject;
 }
 
 - (NSControlSize) controlSize {
-    return _controlSize;
+    return NS_EXTRA(NSCell, self)->_controlSize;
 }
 
 - (NSFocusRingType) focusRingType {
-    return _focusRingType;
+    return NS_EXTRA(NSCell, self)->_focusRingType;
 }
 
 - (NSBackgroundStyle) backgroundStyle {
-    return _backgroundStyle;
+    return NS_EXTRA(NSCell, self)->_backgroundStyle;
 }
 
 - (NSBackgroundStyle) interiorBackgroundStyle {
-    return _backgroundStyle;
+    return NS_EXTRA(NSCell, self)->_backgroundStyle;
 }
 
 - (void) setControlView: (NSView *) view {
@@ -732,8 +734,8 @@ NSNotificationName NSControlTintDidChangeNotification = @"NSControlTintDidChange
 }
 
 - (void) setType: (NSCellType) type {
-    if (_cellType != type) {
-        _cellType = type;
+    if (NS_EXTRA(NSCell, self)->_cellType != type) {
+        NS_EXTRA(NSCell, self)->_cellType = type;
         if (type == NSTextCellType) {
             // FIX, localization
             [self setTitle: @"Cell"]; // mostly clarified in setEntryType dox
@@ -745,19 +747,19 @@ NSNotificationName NSControlTintDidChangeNotification = @"NSControlTintDidChange
 }
 
 - (void) setState: (NSControlStateValue) value {
-    if (_allowsMixedState) {
+    if (NS_EXTRA(NSCell, self)->_allowsMixedState) {
         if (value < 0)
-            _state = -1;
+            NS_EXTRA(NSCell, self)->_state = -1;
         else if (value > 0)
-            _state = 1;
+            NS_EXTRA(NSCell, self)->_state = 1;
         else
-            _state = 0;
+            NS_EXTRA(NSCell, self)->_state = 0;
     } else
-        _state = (ABS(value) > 0) ? 1 : 0;
+        NS_EXTRA(NSCell, self)->_state = (ABS(value) > 0) ? 1 : 0;
 }
 
 - (NSControlStateValue) nextState {
-    if (_allowsMixedState) {
+    if (NS_EXTRA(NSCell, self)->_allowsMixedState) {
         NSControlStateValue value = [self state];
         return value - ((value == -1) ? -2 : 1);
     } else
@@ -765,23 +767,23 @@ NSNotificationName NSControlTintDidChangeNotification = @"NSControlTintDidChange
 }
 
 - (void) setNextState {
-    _state = [self nextState];
+    NS_EXTRA(NSCell, self)->_state = [self nextState];
 }
 
 - (BOOL) allowsMixedState; {
-    return _allowsMixedState;
+    return NS_EXTRA(NSCell, self)->_allowsMixedState;
 }
 
 - (void) setAllowsMixedState: (BOOL) allow {
-    _allowsMixedState = allow;
+    NS_EXTRA(NSCell, self)->_allowsMixedState = allow;
 }
 
 - (BOOL) allowsEditingTextAttributes {
-    return _allowsEditingTextAttributes;
+    return NS_EXTRA(NSCell, self)->_allowsEditingTextAttributes;
 }
 
 - (void) setAllowsEditingTextAttributes: (BOOL) allow {
-    _allowsEditingTextAttributes = allow;
+    NS_EXTRA(NSCell, self)->_allowsEditingTextAttributes = allow;
 }
 
 - (void) setTarget: target {
@@ -803,20 +805,20 @@ NSNotificationName NSControlTintDidChangeNotification = @"NSControlTintDidChange
 }
 
 - (void) setEntryType: (NSInteger) type {
-    _entryType = type;
+    NS_EXTRA(NSCell, self)->_entryType = type;
     [self setType: NSTextCellType];
 }
 
 - (void) setFormatter: (NSFormatter *) formatter {
     formatter = [formatter retain];
-    [_formatter release];
-    _formatter = formatter;
+    [NS_EXTRA(NSCell, self)->_formatter release];
+    NS_EXTRA(NSCell, self)->_formatter = formatter;
 }
 
 - (void) setFont: (NSFont *) font {
     font = [font retain];
-    [_font release];
-    _font = font;
+    [NS_EXTRA(NSCell, self)->_font release];
+    NS_EXTRA(NSCell, self)->_font = font;
 }
 
 - (void) setImage: (NSImage *) image {
@@ -824,8 +826,8 @@ NSNotificationName NSControlTintDidChangeNotification = @"NSControlTintDidChange
         [self setType: NSImageCellType];
 
     image = [image retain];
-    [_image release];
-    _image = image;
+    [NS_EXTRA(NSCell, self)->_image release];
+    NS_EXTRA(NSCell, self)->_image = image;
     if ([[self controlView] respondsToSelector: @selector(updateCell:)]) {
         [[self controlView] performSelector: @selector(updateCell:)
                                  withObject: self];
@@ -835,23 +837,23 @@ NSNotificationName NSControlTintDidChangeNotification = @"NSControlTintDidChange
 }
 
 - (void) setAlignment: (NSTextAlignment) alignment {
-    _textAlignment = alignment;
+    NS_EXTRA(NSCell, self)->_textAlignment = alignment;
 }
 
 - (void) setLineBreakMode: (NSLineBreakMode) value {
-    _lineBreakMode = value;
+    NS_EXTRA(NSCell, self)->_lineBreakMode = value;
 }
 
 - (void) setUsesSingleLineMode: (BOOL) flag {
-    _usesSingleLineMode = flag;
+    NS_EXTRA(NSCell, self)->_usesSingleLineMode = flag;
 }
 
 - (void) setBaseWritingDirection: (NSWritingDirection) value {
-    _writingDirection = value;
+    NS_EXTRA(NSCell, self)->_writingDirection = value;
 }
 
 - (void) setWraps: (BOOL) wraps {
-    _lineBreakMode = wraps ? NSLineBreakByWordWrapping : NSLineBreakByClipping;
+    NS_EXTRA(NSCell, self)->_lineBreakMode = wraps ? NSLineBreakByWordWrapping : NSLineBreakByClipping;
 }
 
 - (void) setTitle: (NSString *) title {
@@ -859,56 +861,56 @@ NSNotificationName NSControlTintDidChangeNotification = @"NSControlTintDidChange
 }
 
 - (void) setEnabled: (BOOL) flag {
-    if (_isEnabled != flag) {
-        _isEnabled = flag;
+    if (NS_EXTRA(NSCell, self)->_isEnabled != flag) {
+        NS_EXTRA(NSCell, self)->_isEnabled = flag;
         [[[self controlView] window]
                 invalidateCursorRectsForView: [self controlView]];
     }
 }
 
 - (void) setEditable: (BOOL) flag {
-    if (_isEditable != flag) {
-        _isEditable = flag;
+    if (NS_EXTRA(NSCell, self)->_isEditable != flag) {
+        NS_EXTRA(NSCell, self)->_isEditable = flag;
         [[[self controlView] window]
                 invalidateCursorRectsForView: [self controlView]];
     }
 }
 
 - (void) setSelectable: (BOOL) flag {
-    if (_isSelectable != flag) {
-        _isSelectable = flag;
+    if (NS_EXTRA(NSCell, self)->_isSelectable != flag) {
+        NS_EXTRA(NSCell, self)->_isSelectable = flag;
         [[[self controlView] window]
                 invalidateCursorRectsForView: [self controlView]];
     }
 }
 
 - (void) setScrollable: (BOOL) flag {
-    _isScrollable = flag;
+    NS_EXTRA(NSCell, self)->_isScrollable = flag;
 }
 
 - (void) setBordered: (BOOL) flag {
-    _isBordered = flag;
-    _isBezeled = NO;
+    NS_EXTRA(NSCell, self)->_isBordered = flag;
+    NS_EXTRA(NSCell, self)->_isBezeled = NO;
 }
 
 - (void) setBezeled: (BOOL) flag {
-    _isBezeled = flag;
+    NS_EXTRA(NSCell, self)->_isBezeled = flag;
 }
 
 - (void) setContinuous: (BOOL) flag {
-    _isContinuous = flag;
+    NS_EXTRA(NSCell, self)->_isContinuous = flag;
 }
 
 - (void) setShowsFirstResponder: (BOOL) value {
-    _showsFirstResponder = value;
+    NS_EXTRA(NSCell, self)->_showsFirstResponder = value;
 }
 
 - (void) setRefusesFirstResponder: (BOOL) flag {
-    _refusesFirstResponder = flag;
+    NS_EXTRA(NSCell, self)->_refusesFirstResponder = flag;
 }
 
 - (void) setHighlighted: (BOOL) flag {
-    _isHighlighted = flag;
+    NS_EXTRA(NSCell, self)->_isHighlighted = flag;
 }
 
 // the problem with this method is that the dox specify that if autorange is
@@ -932,16 +934,16 @@ NSNotificationName NSControlTintDidChangeNotification = @"NSControlTintDidChange
         while (right--)
             [format appendString: @"0"];
     }
-    [(NSNumberFormatter *) _formatter setFormat: format];
+    [(NSNumberFormatter *) NS_EXTRA(NSCell, self)->_formatter setFormat: format];
 }
 
 - (void) setObjectValue: (id<NSCopying>) value {
     value = [value copyWithZone: NULL];
 
     [[self controlView] willChangeValueForKey: @"objectValue"];
-    [_objectValue release];
-    _objectValue = value;
-    _hasValidObjectValue = YES;
+    [NS_EXTRA(NSCell, self)->_objectValue release];
+    NS_EXTRA(NSCell, self)->_objectValue = value;
+    NS_EXTRA(NSCell, self)->_hasValidObjectValue = YES;
     [[self controlView] didChangeValueForKey: @"objectValue"];
 
     if ([[self controlView] respondsToSelector: @selector(updateCell:)]) {
@@ -962,15 +964,15 @@ NSNotificationName NSControlTintDidChangeNotification = @"NSControlTintDidChange
 
     [self setType: NSTextCellType];
 
-    if (_formatter != nil) {
+    if (NS_EXTRA(NSCell, self)->_formatter != nil) {
         id formattedValue = nil;
-        if ([_formatter getObjectValue: &formattedValue
+        if ([NS_EXTRA(NSCell, self)->_formatter getObjectValue: &formattedValue
                              forString: value
                       errorDescription: NULL]) {
             value = formattedValue;
         } else {
             // Invalid format
-            _hasValidObjectValue = NO;
+            NS_EXTRA(NSCell, self)->_hasValidObjectValue = NO;
             return;
         }
     }
@@ -999,14 +1001,14 @@ NSNotificationName NSControlTintDidChangeNotification = @"NSControlTintDidChange
 
 - (void) setRepresentedObject: (id) object {
     object = [object retain];
-    [_representedObject release];
-    _representedObject = object;
+    [NS_EXTRA(NSCell, self)->_representedObject release];
+    NS_EXTRA(NSCell, self)->_representedObject = object;
 }
 
 - (void) setControlSize: (NSControlSize) size {
-    _controlSize = size;
-    [_font release];
-    _font = [[NSFont userFontOfSize: [NSFont systemFontSizeForControlSize: _controlSize]] retain];
+    NS_EXTRA(NSCell, self)->_controlSize = size;
+    [NS_EXTRA(NSCell, self)->_font release];
+    NS_EXTRA(NSCell, self)->_font = [[NSFont userFontOfSize: [NSFont systemFontSizeForControlSize: NS_EXTRA(NSCell, self)->_controlSize]] retain];
     if ([[self controlView] respondsToSelector: @selector(updateCell:)]) {
         [[self controlView] performSelector: @selector(updateCell:)
                                  withObject: self];
@@ -1016,11 +1018,11 @@ NSNotificationName NSControlTintDidChangeNotification = @"NSControlTintDidChange
 }
 
 - (void) setFocusRingType: (NSFocusRingType) focusRingType {
-    _focusRingType = focusRingType;
+    NS_EXTRA(NSCell, self)->_focusRingType = focusRingType;
 }
 
 - (void) setBackgroundStyle: (NSBackgroundStyle) value {
-    _backgroundStyle = value;
+    NS_EXTRA(NSCell, self)->_backgroundStyle = value;
 }
 
 - (void) takeObjectValueFrom: sender {
@@ -1088,8 +1090,8 @@ NSNotificationName NSControlTintDidChangeNotification = @"NSControlTintDidChange
          withFrame: (NSRect) frame
             inView: (NSView *) view
 {
-    if (_isHighlighted != highlight) {
-        _isHighlighted = highlight;
+    if (NS_EXTRA(NSCell, self)->_isHighlighted != highlight) {
+        NS_EXTRA(NSCell, self)->_isHighlighted = highlight;
     }
 }
 
@@ -1184,14 +1186,14 @@ NSNotificationName NSControlTintDidChangeNotification = @"NSControlTintDidChange
     [editor setEditable: [self isEditable]];
     [editor setSelectable: [self isSelectable]];
     NSString *strValue = nil;
-    if (_formatter) {
+    if (NS_EXTRA(NSCell, self)->_formatter) {
         // Prioritize the editing string value over everything else
-        strValue = [_formatter editingStringForObjectValue: [self objectValue]];
+        strValue = [NS_EXTRA(NSCell, self)->_formatter editingStringForObjectValue: [self objectValue]];
     }
     if (strValue == nil) {
         strValue = [self stringValue];
     }
-    [editor setRichText: _isRichText];
+    [editor setRichText: NS_EXTRA(NSCell, self)->_isRichText];
     [editor setString: strValue];
     [editor setFont: [self font]];
     [editor setAlignment: [self alignment]];
@@ -1265,7 +1267,7 @@ NSNotificationName NSControlTintDidChangeNotification = @"NSControlTintDidChange
         return;
 
     if (view == nil || editor == nil || [self font] == nil ||
-        _cellType != NSTextCellType)
+        NS_EXTRA(NSCell, self)->_cellType != NSTextCellType)
         return;
 
     [self _setupFieldEditorWithFrame: frame
@@ -1286,7 +1288,7 @@ NSNotificationName NSControlTintDidChangeNotification = @"NSControlTintDidChange
         return;
 
     if (view == nil || editor == nil || [self font] == nil ||
-        _cellType != NSTextCellType)
+        NS_EXTRA(NSCell, self)->_cellType != NSTextCellType)
         return;
 
     [self _setupFieldEditorWithFrame: frame
@@ -1316,11 +1318,11 @@ NSNotificationName NSControlTintDidChangeNotification = @"NSControlTintDidChange
 }
 
 - (void) setSendsActionOnEndEditing: (BOOL) flag {
-    _sendsActionOnEndEditing = flag;
+    NS_EXTRA(NSCell, self)->_sendsActionOnEndEditing = flag;
 }
 
 - (BOOL) sendsActionOnEndEditing {
-    return _sendsActionOnEndEditing;
+    return NS_EXTRA(NSCell, self)->_sendsActionOnEndEditing;
 }
 
 static NSString *NSStringFromCellType(NSCellType type) {
@@ -1341,8 +1343,8 @@ static NSString *NSStringFromCellType(NSCellType type) {
     return [NSString
             stringWithFormat: @"%@\n\ttype: %@\n\tfont: %@\n\tobjectValue: %@",
                               [super description],
-                              NSStringFromCellType(_cellType), _font,
-                              _objectValue];
+                              NSStringFromCellType(NS_EXTRA(NSCell, self)->_cellType), NS_EXTRA(NSCell, self)->_font,
+                              NS_EXTRA(NSCell, self)->_objectValue];
 }
 
 - (void) _validateEditing: (id)unknown

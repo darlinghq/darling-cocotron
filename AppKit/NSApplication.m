@@ -147,6 +147,8 @@ static void hotKeyEventNotification(CGSNotificationType type, void *data, unsign
 
 @implementation NSApplication
 
+NS_EXTRA_DEALLOC(NSApplication)
+
 - (NSUserInterfaceLayoutDirection) userInterfaceLayoutDirection {
     // Use the app's selected localization, not the user's regional locale:
     // an app without an RTL localization still presents its LTR interface.
@@ -214,26 +216,26 @@ static void hotKeyEventNotification(CGSNotificationType type, void *data, unsign
     if (NSApp)
         NSAssert(!NSApp, @"NSApplication is a singleton");
     NSApp = self;
-    _display = [[NSDisplay currentDisplay] retain];
+    NS_EXTRA(NSApplication, self)->_display = [[NSDisplay currentDisplay] retain];
 
     _windows = [NSMutableArray new];
     _mainMenu = nil;
-    _servicesMenu = nil;
-    _helpMenu = nil;
+    NS_EXTRA(NSApplication, self)->_servicesMenu = nil;
+    NS_EXTRA(NSApplication, self)->_helpMenu = nil;
 
-    _dockTile = [[NSDockTile alloc] initWithOwner: self];
-    _modalStack = [NSMutableArray new];
+    NS_EXTRA(NSApplication, self)->_dockTile = [[NSDockTile alloc] initWithOwner: self];
+    NS_EXTRA(NSApplication, self)->_modalStack = [NSMutableArray new];
 
     CGSRegisterNotifyProc(hotKeyEventNotification, CGSNotificationSingleEventType(NX_SYSDEFINED), NULL);
 
-    _lock = NSZoneMalloc(NULL, sizeof(pthread_mutex_t));
+    NS_EXTRA(NSApplication, self)->_lock = NSZoneMalloc(NULL, sizeof(pthread_mutex_t));
 
     CFRunLoopAddCommonMode(CFRunLoopGetCurrent(),
                            (CFStringRef) NSModalPanelRunLoopMode);
     CFRunLoopAddCommonMode(CFRunLoopGetCurrent(),
                            (CFStringRef) NSEventTrackingRunLoopMode);
 
-    pthread_mutex_init(_lock, NULL);
+    pthread_mutex_init(NS_EXTRA(NSApplication, self)->_lock, NULL);
 
     [[NSNotificationCenter defaultCenter]
             addObserver: self
@@ -439,14 +441,14 @@ static NSMutableArray *pendingOpenFiles = nil;
 }
 
 - (NSMenu *) windowsMenu {
-    if (_windowsMenu == nil) {
-        _windowsMenu = [[NSApp mainMenu] _menuWithName: @"_NSWindowsMenu"];
-        NSMenuItem *lastItem = [[_windowsMenu itemArray] lastObject];
-        if (_windowsMenu && ![lastItem isSeparatorItem])
-            [_windowsMenu addItem: [NSMenuItem separatorItem]];
+    if (NS_EXTRA(NSApplication, self)->_windowsMenu == nil) {
+        NS_EXTRA(NSApplication, self)->_windowsMenu = [[NSApp mainMenu] _menuWithName: @"_NSWindowsMenu"];
+        NSMenuItem *lastItem = [[NS_EXTRA(NSApplication, self)->_windowsMenu itemArray] lastObject];
+        if (NS_EXTRA(NSApplication, self)->_windowsMenu && ![lastItem isSeparatorItem])
+            [NS_EXTRA(NSApplication, self)->_windowsMenu addItem: [NSMenuItem separatorItem]];
     }
 
-    return _windowsMenu;
+    return NS_EXTRA(NSApplication, self)->_windowsMenu;
 }
 
 - (NSWindow *) mainWindow {
@@ -466,7 +468,7 @@ static NSMutableArray *pendingOpenFiles = nil;
 }
 
 - (NSImage *) applicationIconImage {
-    return _applicationIconImage;
+    return NS_EXTRA(NSApplication, self)->_applicationIconImage;
 }
 
 - (BOOL) isActiveExcludingWindow: (NSWindow *) exclude {
@@ -488,7 +490,7 @@ static NSMutableArray *pendingOpenFiles = nil;
 // The application is active from the end of launching, and while one of its
 // windows has the input focus. Having a visible window is not required.
 - (BOOL) isActive {
-    return _isActive || [self isActiveExcludingWindow: nil];
+    return NS_EXTRA(NSApplication, self)->_isActive || [self isActiveExcludingWindow: nil];
 }
 
 // Becomes the active application, posting the notifications, unless it is
@@ -500,7 +502,7 @@ static NSMutableArray *pendingOpenFiles = nil;
     [[NSNotificationCenter defaultCenter]
             postNotificationName: NSApplicationWillBecomeActiveNotification
                           object: self];
-    _isActive = YES;
+    NS_EXTRA(NSApplication, self)->_isActive = YES;
     [[NSNotificationCenter defaultCenter]
             postNotificationName: NSApplicationDidBecomeActiveNotification
                           object: self];
@@ -509,7 +511,7 @@ static NSMutableArray *pendingOpenFiles = nil;
 }
 
 - (BOOL) isHidden {
-    return _isHidden;
+    return NS_EXTRA(NSApplication, self)->_isHidden;
 }
 
 - (BOOL) isRunning {
@@ -587,7 +589,7 @@ static NSMutableArray *pendingOpenFiles = nil;
 
 - (NSArray *) orderedWindows {
     NSMutableArray *result = [NSMutableArray array];
-    NSArray *numbers = [_display orderedWindowNumbers];
+    NSArray *numbers = [NS_EXTRA(NSApplication, self)->_display orderedWindowNumbers];
 
     for (NSNumber *number in numbers) {
         NSWindow *window = [self windowWithWindowNumber: [number integerValue]];
@@ -688,15 +690,15 @@ static NSMutableArray *pendingOpenFiles = nil;
             [window setMenu: _mainMenu];
     }
 
-    [_display _mainMenuDidChange: _mainMenu];
+    [NS_EXTRA(NSApplication, self)->_display _mainMenuDidChange: _mainMenu];
 }
 
 - (BOOL) isAutomaticCustomizeTouchBarMenuItemEnabled {
-    return _automaticCustomizeTouchBarMenuItemEnabled;
+    return NS_EXTRA(NSApplication, self)->_automaticCustomizeTouchBarMenuItemEnabled;
 }
 
 - (void) setAutomaticCustomizeTouchBarMenuItemEnabled: (BOOL) enabled {
-    _automaticCustomizeTouchBarMenuItemEnabled = enabled;
+    NS_EXTRA(NSApplication, self)->_automaticCustomizeTouchBarMenuItemEnabled = enabled;
 }
 
 - (unsigned int) contextID {
@@ -704,11 +706,11 @@ static NSMutableArray *pendingOpenFiles = nil;
 }
 
 - (BOOL) isDefaultHelpBookSearchEnabled {
-    return _defaultHelpBookSearchEnabled;
+    return NS_EXTRA(NSApplication, self)->_defaultHelpBookSearchEnabled;
 }
 
 - (void) setDefaultHelpBookSearchEnabled: (BOOL) enabled {
-    _defaultHelpBookSearchEnabled = enabled;
+    NS_EXTRA(NSApplication, self)->_defaultHelpBookSearchEnabled = enabled;
 }
 
 - (void) setMenu: (NSMenu *) menu {
@@ -717,8 +719,8 @@ static NSMutableArray *pendingOpenFiles = nil;
 
 - (void) setApplicationIconImage: (NSImage *) image {
     image = [image retain];
-    [_applicationIconImage release];
-    _applicationIconImage = image;
+    [NS_EXTRA(NSApplication, self)->_applicationIconImage release];
+    NS_EXTRA(NSApplication, self)->_applicationIconImage = image;
 
     [image setName: NSImageNameApplicationIcon];
 }
@@ -734,8 +736,8 @@ static NSMutableArray *pendingOpenFiles = nil;
 }
 
 - (void) setWindowsMenu: (NSMenu *) menu {
-    [_windowsMenu autorelease];
-    _windowsMenu = [menu retain];
+    [NS_EXTRA(NSApplication, self)->_windowsMenu autorelease];
+    NS_EXTRA(NSApplication, self)->_windowsMenu = [menu retain];
 }
 
 - (void) addWindowsItem: (NSWindow *) window
@@ -870,9 +872,9 @@ static NSMutableArray *pendingOpenFiles = nil;
 - (void) finishLaunching {
     // The launch notifications are delivered once. Applications may call
     // this themselves before -run, which calls it as well.
-    if (_finishedLaunching)
+    if (NS_EXTRA(NSApplication, self)->_finishedLaunching)
         return;
-    _finishedLaunching = YES;
+    NS_EXTRA(NSApplication, self)->_finishedLaunching = YES;
 
     NSAutoreleasePool *pool = [NSAutoreleasePool new];
 
@@ -1041,15 +1043,15 @@ static NSMutableArray *pendingOpenFiles = nil;
 
 - (void) _windowWillClose: (NSNotification *) note {
     if (![[note object] isKindOfClass: [NSPanel class]])
-        _windowClosedSinceTerminateCheck = YES;
+        NS_EXTRA(NSApplication, self)->_windowClosedSinceTerminateCheck = YES;
 }
 
 // Terminates the application once its last window has been closed, if the
 // delegate asks for that. Hiding or never opening windows does not count.
 - (void) _checkForTerminate {
-    if (!_windowClosedSinceTerminateCheck)
+    if (!NS_EXTRA(NSApplication, self)->_windowClosedSinceTerminateCheck)
         return;
-    _windowClosedSinceTerminateCheck = NO;
+    NS_EXTRA(NSApplication, self)->_windowClosedSinceTerminateCheck = NO;
 
     int count = [_windows count];
 
@@ -1206,7 +1208,7 @@ static NSMutableArray *pendingOpenFiles = nil;
         [self _checkForAppActivation];
         [self _displayAllWindowsIfNeeded];
 
-        nextEvent = [[_display nextEventMatchingMask: mask
+        nextEvent = [[NS_EXTRA(NSApplication, self)->_display nextEventMatchingMask: mask
                                            untilDate: untilDate
                                               inMode: mode
                                              dequeue: dequeue] retain];
@@ -1225,10 +1227,10 @@ static NSMutableArray *pendingOpenFiles = nil;
     if (nextEvent != nil) {
         nextEvent = [nextEvent retain];
 
-        pthread_mutex_lock(_lock);
+        pthread_mutex_lock(NS_EXTRA(NSApplication, self)->_lock);
         [_currentEvent release];
         _currentEvent = nextEvent;
-        pthread_mutex_unlock(_lock);
+        pthread_mutex_unlock(NS_EXTRA(NSApplication, self)->_lock);
     }
 
     return [nextEvent autorelease];
@@ -1239,9 +1241,9 @@ static NSMutableArray *pendingOpenFiles = nil;
      * OS X, so we need to be safe here too. */
     NSEvent *result;
 
-    pthread_mutex_lock(_lock);
+    pthread_mutex_lock(NS_EXTRA(NSApplication, self)->_lock);
     result = [_currentEvent retain];
-    pthread_mutex_unlock(_lock);
+    pthread_mutex_unlock(NS_EXTRA(NSApplication, self)->_lock);
 
     return [result autorelease];
 }
@@ -1249,11 +1251,11 @@ static NSMutableArray *pendingOpenFiles = nil;
 - (void) discardEventsMatchingMask: (NSEventMask) mask
                        beforeEvent: (NSEvent *) event
 {
-    [_display discardEventsMatchingMask: mask beforeEvent: event];
+    [NS_EXTRA(NSApplication, self)->_display discardEventsMatchingMask: mask beforeEvent: event];
 }
 
 - (void) postEvent: (NSEvent *) event atStart: (BOOL) atStart {
-    [_display postEvent: event atStart: atStart];
+    [NS_EXTRA(NSApplication, self)->_display postEvent: event atStart: atStart];
 }
 
 - _searchForAction: (SEL) action responder: target {
@@ -1376,7 +1378,7 @@ static NSMutableArray *pendingOpenFiles = nil;
 }
 
 - (void) setWindowsNeedUpdate: (BOOL) value {
-    _windowsNeedUpdate = value;
+    NS_EXTRA(NSApplication, self)->_windowsNeedUpdate = value;
     NSUnimplementedMethod();
 }
 
@@ -1393,7 +1395,7 @@ static NSMutableArray *pendingOpenFiles = nil;
     if (!flag)
         return;
 
-    if ([_display activateProcessIdentifier:
+    if ([NS_EXTRA(NSApplication, self)->_display activateProcessIdentifier:
                       [[NSProcessInfo processInfo] processIdentifier]])
         return;
 
@@ -1436,13 +1438,13 @@ static NSMutableArray *pendingOpenFiles = nil;
 }
 
 - (NSWindow *) modalWindow {
-    return [[_modalStack lastObject] modalWindow];
+    return [[NS_EXTRA(NSApplication, self)->_modalStack lastObject] modalWindow];
 }
 
 - (NSModalSession) beginModalSessionForWindow: (NSWindow *) window {
     NSModalSessionX *session = [NSModalSessionX sessionWithWindow: window];
 
-    [_modalStack addObject: session];
+    [NS_EXTRA(NSApplication, self)->_modalStack addObject: session];
 
     [window _hideMenuViewIfNeeded];
     if (![window isVisible]) {
@@ -1506,25 +1508,25 @@ static NSMutableArray *pendingOpenFiles = nil;
 }
 
 - (void) endModalSession: (NSModalSession) session {
-    if (session != [_modalStack lastObject])
+    if (session != [NS_EXTRA(NSApplication, self)->_modalStack lastObject])
         [NSException
                  raise: NSInvalidArgumentException
                 format: @"-[%@ %s] modal session %@ is not the current one %@",
                         [self class], sel_getName(_cmd), session,
-                        [_modalStack lastObject]];
+                        [NS_EXTRA(NSApplication, self)->_modalStack lastObject]];
 
     for (NSEvent *requeue in [session unprocessedEvents]) {
         [self postEvent: requeue atStart: YES];
     }
 
     [[session modalWindow] _showMenuViewIfNeeded];
-    [_modalStack removeLastObject];
+    [NS_EXTRA(NSApplication, self)->_modalStack removeLastObject];
 }
 
 - (void) stopModalWithCode: (NSModalResponse) code {
     // This should silently ignore any attempt to end a session when there is
     // none.
-    [[_modalStack lastObject] stopModalWithCode: code];
+    [[NS_EXTRA(NSApplication, self)->_modalStack lastObject] stopModalWithCode: code];
 }
 
 - (void) _mainThreadRunModalForWindow: (NSMutableDictionary *) values {
@@ -1663,8 +1665,8 @@ static NSMutableArray *pendingOpenFiles = nil;
 }
 
 - (int) requestUserAttention: (NSRequestUserAttentionType) attentionType {
-    [_attentionTimer invalidate];
-    _attentionTimer =
+    [NS_EXTRA(NSApplication, self)->_attentionTimer invalidate];
+    NS_EXTRA(NSApplication, self)->_attentionTimer =
             [NSTimer scheduledTimerWithTimeInterval: 3
                                              target: self
                                            selector: @selector(_attentionTimer:)
@@ -1676,8 +1678,8 @@ static NSMutableArray *pendingOpenFiles = nil;
 
 - (void) cancelUserAttentionRequest: (int) requestNumber {
     // There is only ever one request, so any number cancels it.
-    [_attentionTimer invalidate];
-    _attentionTimer = nil;
+    [NS_EXTRA(NSApplication, self)->_attentionTimer invalidate];
+    NS_EXTRA(NSApplication, self)->_attentionTimer = nil;
 }
 
 - (void) runPageLayout: sender {
@@ -1694,7 +1696,7 @@ static NSMutableArray *pendingOpenFiles = nil;
 
 - (void) hide: (id) sender {
     // Deactivates the application and hides all windows.
-    if (_isHidden) {
+    if (NS_EXTRA(NSApplication, self)->_isHidden) {
         return;
     }
     [[NSNotificationCenter defaultCenter]
@@ -1707,7 +1709,7 @@ static NSMutableArray *pendingOpenFiles = nil;
     [[NSNotificationCenter defaultCenter]
             postNotificationName: NSApplicationDidHideNotification
                           object: self];
-    _isHidden = YES;
+    NS_EXTRA(NSApplication, self)->_isHidden = YES;
 }
 
 - (void) hideOtherApplications: sender {
@@ -1716,7 +1718,7 @@ static NSMutableArray *pendingOpenFiles = nil;
 
 - (void) unhide: sender {
 
-    if (_isHidden) {
+    if (NS_EXTRA(NSApplication, self)->_isHidden) {
         [[NSNotificationCenter defaultCenter]
                 postNotificationName: NSApplicationWillUnhideNotification
                               object: self];
@@ -1726,7 +1728,7 @@ static NSMutableArray *pendingOpenFiles = nil;
                 postNotificationName: NSApplicationDidUnhideNotification
                               object: self];
     }
-    _isHidden = NO;
+    NS_EXTRA(NSApplication, self)->_isHidden = NO;
     //[self activateIgnoringOtherApps:NO]
 }
 
@@ -1735,7 +1737,7 @@ static NSMutableArray *pendingOpenFiles = nil;
 }
 
 - (void) unhideWithoutActivation {
-    if (_isHidden) {
+    if (NS_EXTRA(NSApplication, self)->_isHidden) {
 
         [[NSNotificationCenter defaultCenter]
                 postNotificationName: NSApplicationWillUnhideNotification
@@ -1746,11 +1748,11 @@ static NSMutableArray *pendingOpenFiles = nil;
                 postNotificationName: NSApplicationDidUnhideNotification
                               object: self];
     }
-    _isHidden = NO;
+    NS_EXTRA(NSApplication, self)->_isHidden = NO;
 }
 
 - (void) stop: sender {
-    if ([_modalStack lastObject] != nil) {
+    if ([NS_EXTRA(NSApplication, self)->_modalStack lastObject] != nil) {
         [self stopModal];
         return;
     }
@@ -1848,26 +1850,26 @@ static NSMutableArray *pendingOpenFiles = nil;
 }
 
 - (void) setServicesMenu: (NSMenu *) menu {
-    [_servicesMenu autorelease];
+    [NS_EXTRA(NSApplication, self)->_servicesMenu autorelease];
 
     if ([menu _name] == nil) {
         [menu _setMenuName: @"_NSServicesMenu"];
     }
 
-    _servicesMenu = [menu retain];
+    NS_EXTRA(NSApplication, self)->_servicesMenu = [menu retain];
 }
 
 - (NSMenu *) helpMenu {
-    return _helpMenu;
+    return NS_EXTRA(NSApplication, self)->_helpMenu;
 }
 
 - (void) setHelpMenu: (NSMenu *) menu {
-    [_helpMenu autorelease];
+    [NS_EXTRA(NSApplication, self)->_helpMenu autorelease];
 
-    [_helpMenu _setMenuName: @""];
+    [NS_EXTRA(NSApplication, self)->_helpMenu _setMenuName: @""];
     [menu _setMenuName: @"_NSHelpMenu"];
 
-    _helpMenu = [menu retain];
+    NS_EXTRA(NSApplication, self)->_helpMenu = [menu retain];
 }
 
 - servicesProvider {
@@ -1973,7 +1975,7 @@ static NSMutableArray *pendingOpenFiles = nil;
 }
 
 - (NSDockTile *) dockTile {
-    return _dockTile;
+    return NS_EXTRA(NSApplication, self)->_dockTile;
 }
 
 // Darling has no login session that relaunches applications, and the setting cannot be read
@@ -1996,8 +1998,8 @@ static NSMutableArray *pendingOpenFiles = nil;
 }
 
 - (void) _windowWillBecomeActive: (NSWindow *) window {
-    [_attentionTimer invalidate];
-    _attentionTimer = nil;
+    [NS_EXTRA(NSApplication, self)->_attentionTimer invalidate];
+    NS_EXTRA(NSApplication, self)->_attentionTimer = nil;
 
     if (![self isActive]) {
         [[NSNotificationCenter defaultCenter]
@@ -2015,8 +2017,8 @@ static BOOL resignPending;
 
 - (void) _windowDidBecomeActive: (NSWindow *) window {
     resignPending = NO;
-    if (!_isActive) {
-        _isActive = YES;
+    if (!NS_EXTRA(NSApplication, self)->_isActive) {
+        NS_EXTRA(NSApplication, self)->_isActive = YES;
         [[NSNotificationCenter defaultCenter]
                 postNotificationName: NSApplicationDidBecomeActiveNotification
                               object: self];
@@ -2047,7 +2049,7 @@ static BOOL resignPending;
     [[NSNotificationCenter defaultCenter]
             postNotificationName: NSApplicationWillResignActiveNotification
                           object: self];
-    _isActive = NO;
+    NS_EXTRA(NSApplication, self)->_isActive = NO;
 
     // Exposed menus are running tight event tracking loops and would remain
     // visible when the app deactivates (making the UI less than community
@@ -2078,10 +2080,10 @@ static BOOL resignPending;
     if ([_delegate respondsToSelector: @selector
                    (applicationShouldHandleReopen:hasVisibleWindows:)])
         doReopen = [_delegate applicationShouldHandleReopen: self
-                                          hasVisibleWindows: !_isHidden];
+                                          hasVisibleWindows: !NS_EXTRA(NSApplication, self)->_isHidden];
     if (!doReopen)
         return;
-    if (_isHidden)
+    if (NS_EXTRA(NSApplication, self)->_isHidden)
         [self unhide: nil];
 }
 
@@ -2094,7 +2096,7 @@ static BOOL resignPending;
 }
 
 - (NSApplicationPresentationOptions) presentationOptions {
-    return _presentationOptions;
+    return NS_EXTRA(NSApplication, self)->_presentationOptions;
 }
 
 - (void) setPresentationOptions: (NSApplicationPresentationOptions) options {
@@ -2152,7 +2154,7 @@ static BOOL resignPending;
     }
 #endif
 
-    _presentationOptions = options;
+    NS_EXTRA(NSApplication, self)->_presentationOptions = options;
 }
 
 @end

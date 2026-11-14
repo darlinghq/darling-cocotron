@@ -51,7 +51,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         _intercellSpacing = [keyed decodeSizeForKey: @"NSIntercellSpacing"];
         _backgroundColor =
                 [[keyed decodeObjectForKey: @"NSBackgroundColor"] retain];
-        _cellBackgroundColor =
+        NS_EXTRA(NSMatrix, self)->_cellBackgroundColor =
                 [[keyed decodeObjectForKey: @"NSCellBackgroundColor"] retain];
         name = [keyed decodeObjectForKey: @"NSCellClass"];
         if ((_cellClass = NSClassFromString(name)) == Nil) {
@@ -77,13 +77,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
             float cellWidth, cellHeight;
             float cellSpacingWidth, cellSpacingHeight;
 
-            [coder decodeValuesOfObjCTypes:"#iiii:::ffffi@@@@@", &_cellClass, &selectedRow, &selectedColumn, &_numberOfRows, &_numberOfColumns, &_action, &_doubleAction, &errorAction, &cellWidth, &cellHeight, &cellSpacingWidth, &cellSpacingHeight, &flags, &_cells, &_backgroundColor, &_cellBackgroundColor, &_font, &_protoCell];
+            [coder decodeValuesOfObjCTypes:"#iiii:::ffffi@@@@@", &_cellClass, &selectedRow, &selectedColumn, &_numberOfRows, &_numberOfColumns, &NS_EXTRA(NSMatrix, self)->_action, &_doubleAction, &errorAction, &cellWidth, &cellHeight, &cellSpacingWidth, &cellSpacingHeight, &flags, &_cells, &_backgroundColor, &NS_EXTRA(NSMatrix, self)->_cellBackgroundColor, &_font, &_protoCell];
 
             _cellSize = CGSizeMake(cellWidth, cellHeight);
             _intercellSpacing = CGSizeMake(cellSpacingWidth, cellSpacingHeight);
 
             _delegate = [coder decodeObject];
-            _target = [coder decodeObject];
+            NS_EXTRA(NSMatrix, self)->_target = [coder decodeObject];
             selectedCell = [coder decodeObject];
         } else {
             [NSException raise: NSInvalidArgumentException
@@ -91,47 +91,47 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                                 [self class], sel_getName(_cmd), coder];
         }
 
-        _tabKeyTraversesCells = (flags & 0x00200000) ? YES : NO;
-        _autosizesCells = (flags & 0x00800000) ? YES : NO;
-        _drawsBackground = (flags & 0x01000000) ? YES : NO;
-        _drawsCellBackground = (flags & 0x02000000) ? YES : NO;
-        _selectionByRect = (flags & 0x04000000) ? YES : NO;
-        _isAutoscroll = (flags & 0x08000000) ? YES : NO;
-        _allowsEmptySelection = (flags & 0x10000000) ? YES : NO;
+        NS_EXTRA(NSMatrix, self)->_tabKeyTraversesCells = (flags & 0x00200000) ? YES : NO;
+        NS_EXTRA(NSMatrix, self)->_autosizesCells = (flags & 0x00800000) ? YES : NO;
+        NS_EXTRA(NSMatrix, self)->_drawsBackground = (flags & 0x01000000) ? YES : NO;
+        NS_EXTRA(NSMatrix, self)->_drawsCellBackground = (flags & 0x02000000) ? YES : NO;
+        NS_EXTRA(NSMatrix, self)->_selectionByRect = (flags & 0x04000000) ? YES : NO;
+        NS_EXTRA(NSMatrix, self)->_isAutoscroll = (flags & 0x08000000) ? YES : NO;
+        NS_EXTRA(NSMatrix, self)->_allowsEmptySelection = (flags & 0x10000000) ? YES : NO;
 
-        _mode = NSTrackModeMatrix;
+        NS_EXTRA(NSMatrix, self)->_mode = NSTrackModeMatrix;
         if (flags & 0x20000000)
-            _mode = NSListModeMatrix;
+            NS_EXTRA(NSMatrix, self)->_mode = NSListModeMatrix;
         if (flags & 0x40000000)
-            _mode = NSRadioModeMatrix;
+            NS_EXTRA(NSMatrix, self)->_mode = NSRadioModeMatrix;
         if (flags & 0x80000000)
-            _mode = NSHighlightModeMatrix;
+            NS_EXTRA(NSMatrix, self)->_mode = NSHighlightModeMatrix;
 
-        if ((_selectedIndex = [_cells indexOfObjectIdenticalTo: selectedCell]) != NSNotFound)
+        if ((NS_EXTRA(NSMatrix, self)->_selectedIndex = [_cells indexOfObjectIdenticalTo: selectedCell]) != NSNotFound)
             [self selectCell: selectedCell];
         else
-            _selectedIndex = -1;
+            NS_EXTRA(NSMatrix, self)->_selectedIndex = -1;
     }
     return self;
 }
 
 - initWithFrame: (NSRect) frame {
     [super initWithFrame: frame];
-    _target = nil;
-    _action = NULL;
+    NS_EXTRA(NSMatrix, self)->_target = nil;
+    NS_EXTRA(NSMatrix, self)->_action = NULL;
     _doubleAction = NULL;
     _font = [[NSFont userFontOfSize: 0] retain];
     _cells = [NSMutableArray new];
     _numberOfRows = 0;
     _numberOfColumns = 1;
-    _selectedIndex = -1;
-    _keyCellIndex = -1;
+    NS_EXTRA(NSMatrix, self)->_selectedIndex = -1;
+    NS_EXTRA(NSMatrix, self)->_keyCellIndex = -1;
     _cellSize = NSMakeSize(frame.size.width, 20);
     _intercellSpacing = NSMakeSize(0, 0);
     _protoCell = nil;
     _cellClass = [NSCell class];
-    _mode = NSListModeMatrix;
-    _tabKeyTraversesCells = YES;
+    NS_EXTRA(NSMatrix, self)->_mode = NSListModeMatrix;
+    NS_EXTRA(NSMatrix, self)->_tabKeyTraversesCells = YES;
 
     return self;
 }
@@ -146,7 +146,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
     [self initWithFrame: frame];
 
-    _mode = mode;
+    NS_EXTRA(NSMatrix, self)->_mode = mode;
     _protoCell = [prototype copy];
     _numberOfRows = rows;
     _numberOfColumns = columns;
@@ -166,7 +166,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
     [self initWithFrame: frame];
 
-    _mode = mode;
+    NS_EXTRA(NSMatrix, self)->_mode = mode;
     _cellClass = cls;
     _numberOfRows = rows;
     _numberOfColumns = columns;
@@ -179,9 +179,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (void) dealloc {
     [_font release];
     [_backgroundColor release];
-    [_cellBackgroundColor release];
+    [NS_EXTRA(NSMatrix, self)->_cellBackgroundColor release];
     [_cells release];
     [_protoCell release];
+    NS_EXTRA_FREE(NSMatrix, self);
     [super dealloc];
 }
 
@@ -191,20 +192,20 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (void) setRefusesFirstResponder: (BOOL) flag {
-    _refusesFirstResponder = flag;
+    NS_EXTRA(NSMatrix, self)->_refusesFirstResponder = flag;
 }
 
 - (BOOL) refusesFirstResponder {
-    return _refusesFirstResponder;
+    return NS_EXTRA(NSMatrix, self)->_refusesFirstResponder;
 }
 
 - (void) resizeWithOldSuperviewSize: (NSSize) oldSize {
     [super resizeWithOldSuperviewSize: oldSize];
 
-    if (_autosizesCells) {
+    if (NS_EXTRA(NSMatrix, self)->_autosizesCells) {
         NSRect frame = [self frame];
 
-        if (_autoresizingMask & NSViewWidthSizable) {
+        if (NS_EXTRA(NSView, self)->_autoresizingMask & NSViewWidthSizable) {
             if (_numberOfColumns == 0)
                 _cellSize.width = frame.size.width;
             else
@@ -214,7 +215,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                         _numberOfColumns;
         }
 
-        if (_autoresizingMask & NSViewHeightSizable) {
+        if (NS_EXTRA(NSView, self)->_autoresizingMask & NSViewHeightSizable) {
             if (_numberOfRows == 0)
                 _cellSize.height = frame.size.height;
             else
@@ -268,11 +269,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - target {
-    return _target;
+    return NS_EXTRA(NSMatrix, self)->_target;
 }
 
 - (SEL) action {
-    return _action;
+    return NS_EXTRA(NSMatrix, self)->_action;
 }
 
 - delegate {
@@ -388,26 +389,26 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - keyCell {
-    if (_keyCellIndex == -1)
+    if (NS_EXTRA(NSMatrix, self)->_keyCellIndex == -1)
         return nil;
 
-    return [_cells objectAtIndex: _keyCellIndex];
+    return [_cells objectAtIndex: NS_EXTRA(NSMatrix, self)->_keyCellIndex];
 }
 
 - (NSMatrixMode) mode {
-    return _mode;
+    return NS_EXTRA(NSMatrix, self)->_mode;
 }
 
 - (BOOL) allowsEmptySelection {
-    return _allowsEmptySelection;
+    return NS_EXTRA(NSMatrix, self)->_allowsEmptySelection;
 }
 
 - (BOOL) tabKeyTraversesCells {
-    return _tabKeyTraversesCells;
+    return NS_EXTRA(NSMatrix, self)->_tabKeyTraversesCells;
 }
 
 - (BOOL) autosizesCells {
-    return _autosizesCells;
+    return NS_EXTRA(NSMatrix, self)->_autosizesCells;
 }
 
 - (NSSize) cellSize {
@@ -419,7 +420,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (BOOL) drawsBackground {
-    return _drawsBackground;
+    return NS_EXTRA(NSMatrix, self)->_drawsBackground;
 }
 
 - (NSColor *) backgroundColor {
@@ -427,40 +428,40 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (BOOL) drawsCellBackground {
-    return _drawsCellBackground;
+    return NS_EXTRA(NSMatrix, self)->_drawsCellBackground;
 }
 
 - (NSColor *) cellBackgroundColor {
-    return _cellBackgroundColor;
+    return NS_EXTRA(NSMatrix, self)->_cellBackgroundColor;
 }
 
 - (BOOL) isAutoscroll {
-    return _isAutoscroll;
+    return NS_EXTRA(NSMatrix, self)->_isAutoscroll;
 }
 
 - (NSInteger) selectedRow {
-    if (_selectedIndex < 0 || _numberOfRows == 0 || _numberOfColumns == 0)
+    if (NS_EXTRA(NSMatrix, self)->_selectedIndex < 0 || _numberOfRows == 0 || _numberOfColumns == 0)
         return -1;
 
-    return _selectedIndex / _numberOfColumns;
+    return NS_EXTRA(NSMatrix, self)->_selectedIndex / _numberOfColumns;
 }
 
 - (NSInteger) selectedColumn {
-    if (_selectedIndex < 0 || _numberOfRows == 0 || _numberOfColumns == 0)
+    if (NS_EXTRA(NSMatrix, self)->_selectedIndex < 0 || _numberOfRows == 0 || _numberOfColumns == 0)
         return -1;
 
-    return _selectedIndex % _numberOfColumns;
+    return NS_EXTRA(NSMatrix, self)->_selectedIndex % _numberOfColumns;
 }
 
 - selectedCell {
-    if (_selectedIndex < 0)
+    if (NS_EXTRA(NSMatrix, self)->_selectedIndex < 0)
         return nil;
 
     // FIX shouldn't need this check if _selectedIndex is kept in sync
-    if (_selectedIndex >= [_cells count])
+    if (NS_EXTRA(NSMatrix, self)->_selectedIndex >= [_cells count])
         return nil;
 
-    return [_cells objectAtIndex: _selectedIndex];
+    return [_cells objectAtIndex: NS_EXTRA(NSMatrix, self)->_selectedIndex];
 }
 
 - (NSArray *) selectedCells {
@@ -509,11 +510,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (void) setTarget: target {
-    _target = target;
+    NS_EXTRA(NSMatrix, self)->_target = target;
 }
 
 - (void) setAction: (SEL) action {
-    _action = action;
+    NS_EXTRA(NSMatrix, self)->_action = action;
 }
 
 - (void) setDoubleAction: (SEL) action {
@@ -533,8 +534,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (void) _deselectAllCells {
     NSUInteger i, count = [_cells count];
 
-    _selectedIndex = -1;
-    _keyCellIndex = -1;
+    NS_EXTRA(NSMatrix, self)->_selectedIndex = -1;
+    NS_EXTRA(NSMatrix, self)->_keyCellIndex = -1;
 
     for (i = 0; i < count; i++)
         [[_cells objectAtIndex: i] setState: NSOffState];
@@ -635,23 +636,23 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (void) setKeyCell: cell {
-    _keyCellIndex = [_cells indexOfObjectIdenticalTo: cell];
+    NS_EXTRA(NSMatrix, self)->_keyCellIndex = [_cells indexOfObjectIdenticalTo: cell];
 }
 
 - (void) setMode: (NSMatrixMode) mode {
-    _mode = mode;
+    NS_EXTRA(NSMatrix, self)->_mode = mode;
 }
 
 - (void) setAllowsEmptySelection: (BOOL) flag {
-    _allowsEmptySelection = flag;
+    NS_EXTRA(NSMatrix, self)->_allowsEmptySelection = flag;
 }
 
 - (void) setTabKeyTraversesCells: (BOOL) flag {
-    _tabKeyTraversesCells = flag;
+    NS_EXTRA(NSMatrix, self)->_tabKeyTraversesCells = flag;
 }
 
 - (void) setAutosizesCells: (BOOL) flag {
-    _autosizesCells = flag;
+    NS_EXTRA(NSMatrix, self)->_autosizesCells = flag;
 }
 
 - (void) setCellSize: (NSSize) size {
@@ -663,7 +664,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (void) setDrawsBackground: (BOOL) flag {
-    _drawsBackground = flag;
+    NS_EXTRA(NSMatrix, self)->_drawsBackground = flag;
 }
 
 - (void) setBackgroundColor: (NSColor *) color {
@@ -674,18 +675,18 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (void) setDrawsCellBackground: (BOOL) flag {
-    _drawsCellBackground = flag;
+    NS_EXTRA(NSMatrix, self)->_drawsCellBackground = flag;
 }
 
 - (void) setCellBackgroundColor: (NSColor *) color {
     color = [color retain];
-    [_cellBackgroundColor release];
-    _cellBackgroundColor = color;
+    [NS_EXTRA(NSMatrix, self)->_cellBackgroundColor release];
+    NS_EXTRA(NSMatrix, self)->_cellBackgroundColor = color;
     [self setNeedsDisplay: YES];
 }
 
 - (void) setAutoscroll: (BOOL) flag {
-    _isAutoscroll = flag;
+    NS_EXTRA(NSMatrix, self)->_isAutoscroll = flag;
 }
 
 - (void) selectCellAtRow: (NSInteger) row column: (NSInteger) column {
@@ -705,11 +706,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [self willChangeValueForKey: @"selectedTag"];
     [self willChangeValueForKey: @"selectedIndex"];
     if (select == nil)
-        _selectedIndex = -1;
+        NS_EXTRA(NSMatrix, self)->_selectedIndex = -1;
     else
-        _selectedIndex = [_cells indexOfObjectIdenticalTo: select];
+        NS_EXTRA(NSMatrix, self)->_selectedIndex = [_cells indexOfObjectIdenticalTo: select];
 
-    _keyCellIndex = _selectedIndex;
+    NS_EXTRA(NSMatrix, self)->_keyCellIndex = NS_EXTRA(NSMatrix, self)->_selectedIndex;
     [self didChangeValueForKey: @"selectedIndex"];
     [self didChangeValueForKey: @"selectedTag"];
 }
@@ -797,8 +798,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [self unlockFocus];
     [[self window] flushWindow];
 
-    _selectedIndex = -1;
-    _keyCellIndex = -1;
+    NS_EXTRA(NSMatrix, self)->_selectedIndex = -1;
+    NS_EXTRA(NSMatrix, self)->_keyCellIndex = -1;
 }
 
 - (void) deselectSelectedCell {
@@ -814,8 +815,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
             [cell setState: NSOffState];
             [self drawCellAtRow: row column: column];
         }
-    _selectedIndex = -1;
-    _keyCellIndex = -1;
+    NS_EXTRA(NSMatrix, self)->_selectedIndex = -1;
+    NS_EXTRA(NSMatrix, self)->_keyCellIndex = -1;
 }
 
 - (void) sizeToCells {
@@ -968,7 +969,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [self selectCell: cell];
 
     NSText *editor = [[self window] fieldEditor: YES forObject: self];
-    _currentEditor = [[cell setUpFieldEditorAttributes: editor] retain];
+    NS_EXTRA(NSControl, self)->_currentEditor = [[cell setUpFieldEditorAttributes: editor] retain];
 }
 
 - (void) _selectTextCell: (NSCell *) cell {
@@ -984,7 +985,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [self _fieldEditCell: cell row: row column: column];
     [cell selectWithFrame: cellFrame
                    inView: self
-                   editor: _currentEditor
+                   editor: NS_EXTRA(NSControl, self)->_currentEditor
                  delegate: self
                     start: 0
                    length: [[cell stringValue] length]];
@@ -1000,7 +1001,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [self _fieldEditCell: cell row: row column: column];
     [cell editWithFrame: cellFrame
                  inView: self
-                 editor: _currentEditor
+                 editor: NS_EXTRA(NSControl, self)->_currentEditor
                delegate: self
                   event: event];
 }
@@ -1088,8 +1089,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                               inRect: cellFrame
                               ofView: self
                         untilMouseUp: NO]) {
-                _selectedIndex = [_cells indexOfObjectIdenticalTo: cell];
-                _keyCellIndex = _selectedIndex;
+                NS_EXTRA(NSMatrix, self)->_selectedIndex = [_cells indexOfObjectIdenticalTo: cell];
+                NS_EXTRA(NSMatrix, self)->_keyCellIndex = NS_EXTRA(NSMatrix, self)->_selectedIndex;
                 [cell highlight: NO withFrame: cellFrame inView: self];
                 [self unlockFocus];
                 break;
@@ -1267,9 +1268,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     BOOL selectNextKeyView = YES;
 
     if ([self tabKeyTraversesCells] && [self mode] != NSRadioModeMatrix) {
-        _keyCellIndex++;
-        if (_keyCellIndex >= [_cells count])
-            _keyCellIndex = [_cells count] - 1;
+        NS_EXTRA(NSMatrix, self)->_keyCellIndex++;
+        if (NS_EXTRA(NSMatrix, self)->_keyCellIndex >= [_cells count])
+            NS_EXTRA(NSMatrix, self)->_keyCellIndex = [_cells count] - 1;
         else
             selectNextKeyView = NO;
 
@@ -1284,9 +1285,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     BOOL selectPreviousKeyView = YES;
 
     if ([self tabKeyTraversesCells] && [self mode] != NSRadioModeMatrix) {
-        _keyCellIndex--;
-        if (_keyCellIndex < 0)
-            _keyCellIndex = 0;
+        NS_EXTRA(NSMatrix, self)->_keyCellIndex--;
+        if (NS_EXTRA(NSMatrix, self)->_keyCellIndex < 0)
+            NS_EXTRA(NSMatrix, self)->_keyCellIndex = 0;
         else
             selectPreviousKeyView = NO;
 
@@ -1427,19 +1428,19 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
     if (movement == NSTabTextMovement) {
 
-        _keyCellIndex++;
-        if (_keyCellIndex >= [_cells count]) {
+        NS_EXTRA(NSMatrix, self)->_keyCellIndex++;
+        if (NS_EXTRA(NSMatrix, self)->_keyCellIndex >= [_cells count]) {
             NSView *next = [self nextValidKeyView];
 
-            _keyCellIndex = 0;
+            NS_EXTRA(NSMatrix, self)->_keyCellIndex = 0;
 
             if (next != nil) {
                 [[self window] makeFirstResponder: next];
                 return;
             }
         }
-        if (_keyCellIndex >= [_cells count])
-            _keyCellIndex = -1;
+        if (NS_EXTRA(NSMatrix, self)->_keyCellIndex >= [_cells count])
+            NS_EXTRA(NSMatrix, self)->_keyCellIndex = -1;
 
         [self _selectTextCell: [self keyCell]];
     }
@@ -1450,11 +1451,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 @implementation NSMatrix (Bindings)
 
 - (NSInteger) _selectedIndex {
-    return _selectedIndex;
+    return NS_EXTRA(NSMatrix, self)->_selectedIndex;
 }
 
 - (void) _setSelectedIndex: (NSInteger) index {
-    if (_selectedIndex != index) {
+    if (NS_EXTRA(NSMatrix, self)->_selectedIndex != index) {
         if (index < [_cells count]) {
             NSCell *cell = [_cells objectAtIndex: index];
             [self selectCell: cell];

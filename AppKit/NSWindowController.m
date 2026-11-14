@@ -39,11 +39,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                      object: _window];
 
     _nibName = nil;
-    _nibPath = nil;
+    NS_EXTRA(NSWindowController, self)->_nibPath = nil;
     _owner = self;
     _document = nil;
-    _shouldCloseDocument = NO;
-    _shouldCascadeWindows = YES;
+    NS_EXTRA(NSWindowController, self)->_shouldCloseDocument = NO;
+    NS_EXTRA(NSWindowController, self)->_shouldCascadeWindows = YES;
     _windowFrameAutosaveName = nil;
     return self;
 }
@@ -55,7 +55,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - initWithWindowNibName: (NSString *) nibName owner: owner {
     [self initWithWindow: nil];
     _nibName = [nibName copy];
-    _nibPath = nil;
+    NS_EXTRA(NSWindowController, self)->_nibPath = nil;
     _owner = owner;
     return self;
 }
@@ -64,7 +64,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [self initWithWindow: nil];
     _nibName =
             [[[nibPath lastPathComponent] stringByDeletingPathExtension] copy];
-    _nibPath = [nibPath copy];
+    NS_EXTRA(NSWindowController, self)->_nibPath = [nibPath copy];
     _owner = owner;
     return self;
 }
@@ -75,7 +75,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - initWithCoder: (NSCoder *) coder {
     self = [super initWithCoder: coder];
-    _storyboard = [[NSStoryboard _instantiatingStoryboard] retain];
+    NS_EXTRA(NSWindowController, self)->_storyboard = [[NSStoryboard _instantiatingStoryboard] retain];
     return self;
 }
 
@@ -85,22 +85,23 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [_window release];
     _window = nil;
     [_nibName release];
-    [_nibPath release];
+    [NS_EXTRA(NSWindowController, self)->_nibPath release];
     [_windowFrameAutosaveName release];
-    [_storyboard release];
+    [NS_EXTRA(NSWindowController, self)->_storyboard release];
     [_topLevelObjects makeObjectsPerformSelector: @selector(release)];
     [_topLevelObjects release];
+    NS_EXTRA_FREE(NSWindowController, self);
     [super dealloc];
 }
 
 - (NSStoryboard *) storyboard {
-    return _storyboard;
+    return NS_EXTRA(NSWindowController, self)->_storyboard;
 }
 
 - (NSWindow *) window {
-    if (_window == nil && !_loadingWindowLifecycle && !_loadingWindowNib &&
-            ([self windowNibName] != nil || _nibPath != nil)) {
-        _loadingWindowLifecycle = YES;
+    if (_window == nil && !NS_EXTRA(NSWindowController, self)->_loadingWindowLifecycle && !NS_EXTRA(NSWindowController, self)->_loadingWindowNib &&
+            ([self windowNibName] != nil || NS_EXTRA(NSWindowController, self)->_nibPath != nil)) {
+        NS_EXTRA(NSWindowController, self)->_loadingWindowLifecycle = YES;
         @try {
             [self windowWillLoad];
             [_document windowControllerWillLoadNib: self];
@@ -108,7 +109,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
             [self windowDidLoad];
             [_document windowControllerDidLoadNib: self];
         } @finally {
-            _loadingWindowLifecycle = NO;
+            NS_EXTRA(NSWindowController, self)->_loadingWindowLifecycle = NO;
         }
     }
 
@@ -168,9 +169,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (void) loadWindow {
-    if (_loadingWindowNib)
+    if (NS_EXTRA(NSWindowController, self)->_loadingWindowNib)
         return;
-    _loadingWindowNib = YES;
+    NS_EXTRA(NSWindowController, self)->_loadingWindowNib = YES;
     @try {
     if (![self isWindowLoaded]) {
         static NSPoint cascadeTopLeftSavedPoint = {0.0, 0.0};
@@ -199,12 +200,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
         [self synchronizeWindowTitleWithDocumentName];
 
-        if (_shouldCascadeWindows)
+        if (NS_EXTRA(NSWindowController, self)->_shouldCascadeWindows)
             cascadeTopLeftSavedPoint =
                     [_window cascadeTopLeftFromPoint: cascadeTopLeftSavedPoint];
     }
     } @finally {
-        _loadingWindowNib = NO;
+        NS_EXTRA(NSWindowController, self)->_loadingWindowNib = NO;
     }
 }
 
@@ -237,11 +238,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (BOOL) shouldCloseDocument {
-    return _shouldCloseDocument;
+    return NS_EXTRA(NSWindowController, self)->_shouldCloseDocument;
 }
 
 - (void) setShouldCloseDocument: (BOOL) flag {
-    _shouldCloseDocument = flag;
+    NS_EXTRA(NSWindowController, self)->_shouldCloseDocument = flag;
 }
 
 - owner {
@@ -253,8 +254,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (NSString *) windowNibPath {
-    if (_nibPath != nil)
-        return _nibPath;
+    if (NS_EXTRA(NSWindowController, self)->_nibPath != nil)
+        return NS_EXTRA(NSWindowController, self)->_nibPath;
     else {
         NSString *name = [self windowNibName];
         NSBundle *bundle = [NSBundle bundleForClass: [_owner class]];
@@ -268,11 +269,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (void) setShouldCascadeWindows: (BOOL) flag {
-    _shouldCascadeWindows = flag;
+    NS_EXTRA(NSWindowController, self)->_shouldCascadeWindows = flag;
 }
 
 - (BOOL) shouldCascadeWindows {
-    return _shouldCascadeWindows;
+    return NS_EXTRA(NSWindowController, self)->_shouldCascadeWindows;
 }
 
 - (void) setWindowFrameAutosaveName: (NSString *) name {

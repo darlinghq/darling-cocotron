@@ -212,14 +212,14 @@ NSString *const NSComboBoxWillPopUpNotification =
 
     if (selector == @selector(moveUp:)) {
         [[self cell] selectItemAtIndex: index - 1];
-        [_currentEditor setString: [[self cell] objectValue]];
+        [NS_EXTRA(NSControl, self)->_currentEditor setString: [[self cell] objectValue]];
         if (objectCache != nil)
             [[self cell] insertItemWithObjectValue: [objectCache autorelease]
                                            atIndex: 0];
         return YES;
     } else if (selector == @selector(moveDown:)) {
         [[self cell] selectItemAtIndex: index + 1];
-        [_currentEditor setString: [[self cell] objectValue]];
+        [NS_EXTRA(NSControl, self)->_currentEditor setString: [[self cell] objectValue]];
         if (objectCache != nil)
             [[self cell] insertItemWithObjectValue: [objectCache autorelease]
                                            atIndex: 0];

@@ -17,13 +17,19 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/NSButton.h>
 #import <AppKit/NSMenuItem.h>
 
 APPKIT_EXPORT NSString *const NSPopUpButtonWillPopUpNotification;
 
+// Legacy ObjC ABI (i386): instance size must stay 0x60, Apple's; the ivars
+// before the extras sit at Apple's offsets. Add new state to the extra
+// struct, never as an ivar.
 @interface NSPopUpButton : NSButton {
-    BOOL _observerAdded;
+    NS_EXTRA_IVARS_BEGIN(NSPopUpButton)
+        BOOL _observerAdded;
+    NS_EXTRA_IVARS_END(NSPopUpButton)
 }
 - initWithFrame: (NSRect) frame pullsDown: (BOOL) pullsDown;
 

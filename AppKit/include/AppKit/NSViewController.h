@@ -1,19 +1,26 @@
 #import <AppKit/NSResponder.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/NSUserInterfaceItemIdentification.h>
 
 @class NSView, NSStoryboard;
 
+// Legacy ObjC ABI (i386): instance size must stay 0x34, Apple's; the ivars
+// before the extras sit at Apple's offsets. Add new state to the extra
+// struct, never as an ivar.
 @interface NSViewController : NSResponder <NSUserInterfaceItemIdentification> {
     NSString *_nibName;
     NSBundle *_nibBundle;
     id _representedObject;
     NSString *_title;
     NSView *_view;
-    NSUserInterfaceItemIdentifier _identifier;
-    NSMutableArray *_childViewControllers;
-    NSViewController *_parentViewController;
-    NSStoryboard *_storyboard;
-    NSSize _preferredContentSize;
+    NS_LEGACY_IVAR_PAD(_NSViewControllerReserved1, 20)
+    NS_EXTRA_IVARS_BEGIN(NSViewController)
+        NSUserInterfaceItemIdentifier _identifier;
+        NSMutableArray *_childViewControllers;
+        NSViewController *_parentViewController;
+        NSStoryboard *_storyboard;
+        NSSize _preferredContentSize;
+    NS_EXTRA_IVARS_END(NSViewController)
 }
 
 - initWithNibName: (NSString *) name bundle: (NSBundle *) bundle;

@@ -17,21 +17,27 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/NSView.h>
 
 @class NSColor;
 
+// Legacy ObjC ABI (i386): instance size must stay 0x84, Apple's; the ivars
+// before the extras sit at Apple's offsets. Add new state to the extra
+// struct, never as an ivar.
 @interface NSClipView : NSView {
     NSColor *_backgroundColor;
-    NSCursor *_documentCursor;
-
     NSView *_docView;
     NSRect _docRect;
-
-    BOOL _drawsBackground;
-    BOOL _copiesOnScroll;
-    BOOL _automaticallyAdjustsContentInsets;
-    NSEdgeInsets _contentInsets;
+    NS_LEGACY_IVAR_PAD(_NSClipViewReserved1, 16)
+    NSCursor *_documentCursor;
+    NS_LEGACY_IVAR_PAD(_NSClipViewReserved2, 4)
+    NS_EXTRA_IVARS_BEGIN(NSClipView)
+        BOOL _drawsBackground;
+        BOOL _copiesOnScroll;
+        BOOL _automaticallyAdjustsContentInsets;
+        NSEdgeInsets _contentInsets;
+    NS_EXTRA_IVARS_END(NSClipView)
 }
 
 @property BOOL automaticallyAdjustsContentInsets;

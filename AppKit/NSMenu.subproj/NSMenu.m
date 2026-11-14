@@ -44,8 +44,8 @@ NSString *const _NSWindowsMenuName = @"Window";
 
 @implementation NSMenu
 
-@synthesize showsStateColumn = _showsStateColumn;
-@synthesize identifier = _identifier;
+NS_EXTRA_SYNTHESIZE_ASSIGN(NSMenu, showsStateColumn, _showsStateColumn, BOOL, showsStateColumn, setShowsStateColumn:)
+NS_EXTRA_SYNTHESIZE_COPY(NSMenu, identifier, _identifier, NSUserInterfaceItemIdentifier, identifier, setIdentifier:)
 
 + (void) popUpContextMenu: (NSMenu *) menu
                 withEvent: (NSEvent *) event
@@ -85,9 +85,9 @@ NSString *const _NSWindowsMenuName = @"Window";
 
 - (void) encodeWithCoder: (NSCoder *) coder {
     [coder encodeObject: _title forKey: @"NSTitle"];
-    [coder encodeObject: _name forKey: @"NSName"];
-    [coder encodeObject: _itemArray forKey: @"NSMenuItems"];
-    [coder encodeBool: !_autoenablesItems forKey: @"NSNoAutoenable"];
+    [coder encodeObject: NS_EXTRA(NSMenu, self)->_name forKey: @"NSName"];
+    [coder encodeObject: NS_EXTRA(NSMenu, self)->_itemArray forKey: @"NSMenuItems"];
+    [coder encodeBool: !NS_EXTRA(NSMenu, self)->_autoenablesItems forKey: @"NSNoAutoenable"];
 }
 
 - (void) setMenuChangedMessagesEnabled: (BOOL) flag {
@@ -95,42 +95,42 @@ NSString *const _NSWindowsMenuName = @"Window";
 }
 
 - initWithCoder: (NSCoder *) coder {
-    _showsStateColumn = YES;
+    NS_EXTRA(NSMenu, self)->_showsStateColumn = YES;
 
     if ([coder allowsKeyedCoding]) {
         NSKeyedUnarchiver *keyed = (NSKeyedUnarchiver *) coder;
 
         _supermenu = [keyed decodeObjectForKey: @"NSMenu"];
         _title = [[keyed decodeObjectForKey: @"NSTitle"] copy];
-        _name = [[keyed decodeObjectForKey: @"NSName"] copy];
+        NS_EXTRA(NSMenu, self)->_name = [[keyed decodeObjectForKey: @"NSName"] copy];
 
-        _itemArray = [[NSMutableArray alloc]
+        NS_EXTRA(NSMenu, self)->_itemArray = [[NSMutableArray alloc]
                 initWithArray: [keyed decodeObjectForKey: @"NSMenuItems"]];
-        _autoenablesItems = ![keyed decodeBoolForKey: @"NSNoAutoenable"];
+        NS_EXTRA(NSMenu, self)->_autoenablesItems = ![keyed decodeBoolForKey: @"NSNoAutoenable"];
     } else {
         // One layout for every class version, as recorded from Mac archives: a flag word
         // (bit 31: no automatic enabling of items, bit 29: no state column), the title,
         // the item array and the name.
         int flags;
 
-        [coder decodeValuesOfObjCTypes: "i@@@", &flags, &_title, &_itemArray, &_name];
+        [coder decodeValuesOfObjCTypes: "i@@@", &flags, &_title, &NS_EXTRA(NSMenu, self)->_itemArray, &NS_EXTRA(NSMenu, self)->_name];
 
-        _autoenablesItems = !(flags & 0x80000000);
-        _showsStateColumn = !(flags & 0x20000000);
+        NS_EXTRA(NSMenu, self)->_autoenablesItems = !(flags & 0x80000000);
+        NS_EXTRA(NSMenu, self)->_showsStateColumn = !(flags & 0x20000000);
 
-        NSMutableArray *items = [_itemArray isKindOfClass: [NSArray class]] ? [_itemArray mutableCopy]
+        NSMutableArray *items = [NS_EXTRA(NSMenu, self)->_itemArray isKindOfClass: [NSArray class]] ? [NS_EXTRA(NSMenu, self)->_itemArray mutableCopy]
                                                                            : [[NSMutableArray alloc] init];
-        [_itemArray release];
-        _itemArray = items;
+        [NS_EXTRA(NSMenu, self)->_itemArray release];
+        NS_EXTRA(NSMenu, self)->_itemArray = items;
     }
     return self;
 }
 
 - initWithTitle: (NSString *) title {
     _title = [title copy];
-    _itemArray = [NSMutableArray new];
-    _autoenablesItems = YES;
-    _showsStateColumn = YES;
+    NS_EXTRA(NSMenu, self)->_itemArray = [NSMutableArray new];
+    NS_EXTRA(NSMenu, self)->_autoenablesItems = YES;
+    NS_EXTRA(NSMenu, self)->_showsStateColumn = YES;
     return self;
 }
 
@@ -140,21 +140,23 @@ NSString *const _NSWindowsMenuName = @"Window";
 
 - (void) dealloc {
     [_title release];
-    [_name release];
-    [_itemArray makeObjectsPerformSelector: @selector(_setMenu:)
+    [NS_EXTRA(NSMenu, self)->_name release];
+    [NS_EXTRA(NSMenu, self)->_itemArray makeObjectsPerformSelector: @selector(_setMenu:)
                                 withObject: nil];
-    [_itemArray release];
-    [_identifier release];
+    [NS_EXTRA(NSMenu, self)->_itemArray release];
+    [NS_EXTRA(NSMenu, self)->_identifier release];
+    NS_EXTRA_FREE(NSMenu, self);
     [super dealloc];
 }
 
 - copyWithZone: (NSZone *) zone {
     NSMenu *copy = NSCopyObject(self, 0, zone);
+    NS_EXTRA_COPY(NSMenu, copy, self);
 
     copy->_title = [_title copyWithZone: zone];
-    copy->_name = [_name copyWithZone: zone];
-    copy->_itemArray = [[NSMutableArray alloc] init];
-    for (NSMenuItem *item in _itemArray) {
+    NS_EXTRA(NSMenu, copy)->_name = [NS_EXTRA(NSMenu, self)->_name copyWithZone: zone];
+    NS_EXTRA(NSMenu, copy)->_itemArray = [[NSMutableArray alloc] init];
+    for (NSMenuItem *item in NS_EXTRA(NSMenu, self)->_itemArray) {
         [copy addItem: [[item copyWithZone: zone] autorelease]];
     }
 
@@ -170,33 +172,33 @@ NSString *const _NSWindowsMenuName = @"Window";
 }
 
 - (NSInteger) numberOfItems {
-    return [_itemArray count];
+    return [NS_EXTRA(NSMenu, self)->_itemArray count];
 }
 
 - (NSArray *) itemArray {
-    return [NSArray arrayWithArray: _itemArray];
+    return [NSArray arrayWithArray: NS_EXTRA(NSMenu, self)->_itemArray];
 }
 
 - (void) _setItemArray: itemArray {
-    if (_itemArray != itemArray) {
-        [_itemArray release];
-        _itemArray = [itemArray retain];
+    if (NS_EXTRA(NSMenu, self)->_itemArray != itemArray) {
+        [NS_EXTRA(NSMenu, self)->_itemArray release];
+        NS_EXTRA(NSMenu, self)->_itemArray = [itemArray retain];
     }
 }
 
 - (BOOL) autoenablesItems {
-    return _autoenablesItems;
+    return NS_EXTRA(NSMenu, self)->_autoenablesItems;
 }
 
 - (NSMenuItem *) itemAtIndex: (NSInteger) index {
-    return [_itemArray objectAtIndex: index];
+    return [NS_EXTRA(NSMenu, self)->_itemArray objectAtIndex: index];
 }
 
 - (NSMenuItem *) itemWithTag: (NSInteger) tag {
-    NSInteger i, count = [_itemArray count];
+    NSInteger i, count = [NS_EXTRA(NSMenu, self)->_itemArray count];
 
     for (i = 0; i < count; i++) {
-        NSMenuItem *item = [_itemArray objectAtIndex: i];
+        NSMenuItem *item = [NS_EXTRA(NSMenu, self)->_itemArray objectAtIndex: i];
 
         if ([item tag] == tag)
             return item;
@@ -206,10 +208,10 @@ NSString *const _NSWindowsMenuName = @"Window";
 }
 
 - (NSMenuItem *) itemWithTitle: (NSString *) title {
-    NSInteger i, count = [_itemArray count];
+    NSInteger i, count = [NS_EXTRA(NSMenu, self)->_itemArray count];
 
     for (i = 0; i < count; i++) {
-        NSMenuItem *item = [_itemArray objectAtIndex: i];
+        NSMenuItem *item = [NS_EXTRA(NSMenu, self)->_itemArray objectAtIndex: i];
 
         if ([[item title] isEqualToString: title])
             return item;
@@ -219,34 +221,34 @@ NSString *const _NSWindowsMenuName = @"Window";
 }
 
 - (NSInteger) indexOfItem: (NSMenuItem *) item {
-    return [_itemArray indexOfObjectIdenticalTo: item];
+    return [NS_EXTRA(NSMenu, self)->_itemArray indexOfObjectIdenticalTo: item];
 }
 
 - (NSInteger) indexOfItemWithTag: (NSInteger) tag {
-    NSInteger i, count = [_itemArray count];
+    NSInteger i, count = [NS_EXTRA(NSMenu, self)->_itemArray count];
 
     for (i = 0; i < count; ++i)
-        if ([[_itemArray objectAtIndex: i] tag] == tag)
+        if ([[NS_EXTRA(NSMenu, self)->_itemArray objectAtIndex: i] tag] == tag)
             return i;
 
     return -1;
 }
 
 - (NSInteger) indexOfItemWithTitle: (NSString *) title {
-    NSInteger i, count = [_itemArray count];
+    NSInteger i, count = [NS_EXTRA(NSMenu, self)->_itemArray count];
 
     for (i = 0; i < count; i++)
-        if ([[[_itemArray objectAtIndex: i] title] isEqualToString: title])
+        if ([[[NS_EXTRA(NSMenu, self)->_itemArray objectAtIndex: i] title] isEqualToString: title])
             return i;
 
     return -1;
 }
 
 - (NSInteger) indexOfItemWithRepresentedObject: object {
-    NSInteger i, count = [_itemArray count];
+    NSInteger i, count = [NS_EXTRA(NSMenu, self)->_itemArray count];
 
     for (i = 0; i < count; i++)
-        if ([[(NSMenuItem *) [_itemArray objectAtIndex: i] representedObject]
+        if ([[(NSMenuItem *) [NS_EXTRA(NSMenu, self)->_itemArray objectAtIndex: i] representedObject]
                     isEqual: object])
             return i;
 
@@ -255,10 +257,10 @@ NSString *const _NSWindowsMenuName = @"Window";
 
 // needed this for NSApplication windowsMenu stuff, so i did 'em all..
 - (NSInteger) indexOfItemWithTarget: (id) target andAction: (SEL) action {
-    NSInteger i, count = [_itemArray count];
+    NSInteger i, count = [NS_EXTRA(NSMenu, self)->_itemArray count];
 
     for (i = 0; i < count; ++i) {
-        NSMenuItem *item = [_itemArray objectAtIndex: i];
+        NSMenuItem *item = [NS_EXTRA(NSMenu, self)->_itemArray objectAtIndex: i];
 
         if ([item target] == target) {
             if (action == NULL)
@@ -272,10 +274,10 @@ NSString *const _NSWindowsMenuName = @"Window";
 }
 
 - (NSInteger) indexOfItemWithSubmenu: (NSMenu *) submenu {
-    NSInteger i, count = [_itemArray count];
+    NSInteger i, count = [NS_EXTRA(NSMenu, self)->_itemArray count];
 
     for (i = 0; i < count; ++i)
-        if ([[_itemArray objectAtIndex: i] submenu] == submenu)
+        if ([[NS_EXTRA(NSMenu, self)->_itemArray objectAtIndex: i] submenu] == submenu)
             return i;
 
     return -1;
@@ -292,7 +294,7 @@ NSString *const _NSWindowsMenuName = @"Window";
 }
 
 - (void) setAutoenablesItems: (BOOL) flag {
-    _autoenablesItems = flag;
+    NS_EXTRA(NSMenu, self)->_autoenablesItems = flag;
 }
 
 // Tells observers that the structure of the menu changed. The index is
@@ -310,9 +312,9 @@ NSString *const _NSWindowsMenuName = @"Window";
 
 - (void) addItem: (NSMenuItem *) item {
     [item performSelector: @selector(_setMenu:) withObject: self];
-    [_itemArray addObject: item];
+    [NS_EXTRA(NSMenu, self)->_itemArray addObject: item];
     [self _postItemNotification: NSMenuDidAddItemNotification
-                        atIndex: [_itemArray count] - 1];
+                        atIndex: [NS_EXTRA(NSMenu, self)->_itemArray count] - 1];
 }
 
 - (NSMenuItem *) addItemWithTitle: (NSString *) title
@@ -330,27 +332,27 @@ NSString *const _NSWindowsMenuName = @"Window";
 }
 
 - (void) removeAllItems {
-    while ([_itemArray count] > 0)
-        [self removeItem: [_itemArray lastObject]];
+    while ([NS_EXTRA(NSMenu, self)->_itemArray count] > 0)
+        [self removeItem: [NS_EXTRA(NSMenu, self)->_itemArray lastObject]];
 }
 
 - (void) removeItem: (NSMenuItem *) item {
-    NSInteger index = [_itemArray indexOfObjectIdenticalTo: item];
+    NSInteger index = [NS_EXTRA(NSMenu, self)->_itemArray indexOfObjectIdenticalTo: item];
 
     [item performSelector: @selector(_setMenu:) withObject: nil];
-    [_itemArray removeObjectIdenticalTo: item];
+    [NS_EXTRA(NSMenu, self)->_itemArray removeObjectIdenticalTo: item];
     if (index != NSNotFound)
         [self _postItemNotification: NSMenuDidRemoveItemNotification
                             atIndex: index];
 }
 
 - (void) removeItemAtIndex: (NSInteger) index {
-    [self removeItem: [_itemArray objectAtIndex: index]];
+    [self removeItem: [NS_EXTRA(NSMenu, self)->_itemArray objectAtIndex: index]];
 }
 
 - (void) insertItem: (NSMenuItem *) item atIndex: (NSInteger) index {
     [item performSelector: @selector(_setMenu:) withObject: self];
-    [_itemArray insertObject: item atIndex: index];
+    [NS_EXTRA(NSMenu, self)->_itemArray insertObject: item atIndex: index];
     [self _postItemNotification: NSMenuDidAddItemNotification atIndex: index];
 }
 
@@ -400,16 +402,16 @@ BOOL itemIsEnabled(NSMenuItem *item) {
 }
 
 - (void) update {
-    if ([_delegate respondsToSelector: @selector(menuNeedsUpdate:)]) {
-        [_delegate menuNeedsUpdate: self];
+    if ([NS_EXTRA(NSMenu, self)->_delegate respondsToSelector: @selector(menuNeedsUpdate:)]) {
+        [NS_EXTRA(NSMenu, self)->_delegate menuNeedsUpdate: self];
     }
 
-    NSInteger i, count = [_itemArray count];
+    NSInteger i, count = [NS_EXTRA(NSMenu, self)->_itemArray count];
 
     for (i = 0; i < count; i++) {
-        NSMenuItem *item = [_itemArray objectAtIndex: i];
+        NSMenuItem *item = [NS_EXTRA(NSMenu, self)->_itemArray objectAtIndex: i];
 
-        if (_autoenablesItems) {
+        if (NS_EXTRA(NSMenu, self)->_autoenablesItems) {
             BOOL enabled = itemIsEnabled(item) ? YES : NO;
             BOOL currentlyEnabled = [item isEnabled] ? YES : NO;
 
@@ -425,7 +427,7 @@ BOOL itemIsEnabled(NSMenuItem *item) {
 }
 
 - (void) itemChanged: (NSMenuItem *) item {
-    NSInteger index = [_itemArray indexOfObjectIdenticalTo: item];
+    NSInteger index = [NS_EXTRA(NSMenu, self)->_itemArray indexOfObjectIdenticalTo: item];
 
     if (index != NSNotFound)
         [self _postItemNotification: NSMenuDidChangeItemNotification
@@ -453,13 +455,13 @@ BOOL itemIsEnabled(NSMenuItem *item) {
 }
 
 - (BOOL) performKeyEquivalent: (NSEvent *) event {
-    NSInteger i, count = [_itemArray count];
+    NSInteger i, count = [NS_EXTRA(NSMenu, self)->_itemArray count];
 
-    if (_autoenablesItems)
+    if (NS_EXTRA(NSMenu, self)->_autoenablesItems)
         [self update];
 
     for (i = 0; i < count; i++) {
-        NSMenuItem *item = [_itemArray objectAtIndex: i];
+        NSMenuItem *item = [NS_EXTRA(NSMenu, self)->_itemArray objectAtIndex: i];
 
         if (NSKeyEquivalentMatchesEvent([item keyEquivalent],
                                         [item keyEquivalentModifierMask], event)) {
@@ -467,7 +469,7 @@ BOOL itemIsEnabled(NSMenuItem *item) {
             // line with validation. Without it only isEnabled counts and
             // validation is not consulted.
             BOOL enabled = [item isEnabled];
-            if (enabled && _autoenablesItems)
+            if (enabled && NS_EXTRA(NSMenu, self)->_autoenablesItems)
                 enabled = itemIsEnabled(item);
             if (enabled)
                 [NSApp sendAction: [item action]
@@ -491,34 +493,34 @@ BOOL itemIsEnabled(NSMenuItem *item) {
 }
 
 - (void) setDelegate: (id<NSMenuDelegate>) object {
-    _delegate = object;
+    NS_EXTRA(NSMenu, self)->_delegate = object;
 }
 
 - (id<NSMenuDelegate>) delegate {
-    return _delegate;
+    return NS_EXTRA(NSMenu, self)->_delegate;
 }
 
 - (NSString *) _name {
-    return _name;
+    return NS_EXTRA(NSMenu, self)->_name;
 }
 
 - (void) _setMenuName: (NSString *) name {
     NSString* copied = [name copy];
-    [_name release];
-    _name = copied;
+    [NS_EXTRA(NSMenu, self)->_name release];
+    NS_EXTRA(NSMenu, self)->_name = copied;
 }
 
 - (void) _setHasPadding: (BOOL) hasPadding onEdge: (NSInteger) edge {
 }
 
 - (NSMenu *) _menuWithName: (NSString *) name {
-    if ([_name isEqual: name])
+    if ([NS_EXTRA(NSMenu, self)->_name isEqual: name])
         return self;
     else {
-        NSInteger i, count = [_itemArray count];
+        NSInteger i, count = [NS_EXTRA(NSMenu, self)->_itemArray count];
 
         for (i = 0; i < count; i++) {
-            NSMenu *check = [[[_itemArray objectAtIndex: i] submenu]
+            NSMenu *check = [[[NS_EXTRA(NSMenu, self)->_itemArray objectAtIndex: i] submenu]
                     _menuWithName: name];
 
             if (check != nil)

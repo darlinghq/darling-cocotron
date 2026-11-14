@@ -35,17 +35,17 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @implementation NSTextFieldCell
 
-@synthesize allowedInputSourceLocales = _allowedInputSourceLocales;
+NS_EXTRA_SYNTHESIZE_COPY(NSTextFieldCell, allowedInputSourceLocales, _allowedInputSourceLocales, NSArray *, allowedInputSourceLocales, setAllowedInputSourceLocales:)
 
 - (void) encodeWithCoder: (NSCoder *) coder {
     [super encodeWithCoder: coder];
 
     if (coder.allowsKeyedCoding) {
-        [coder encodeBool: _drawsBackground forKey: @"NSDrawsBackground"];
+        [coder encodeBool: NS_EXTRA(NSTextFieldCell, self)->_drawsBackground forKey: @"NSDrawsBackground"];
         [coder encodeObject: _backgroundColor forKey: @"NSBackgroundColor"];
         [coder encodeObject: _textColor forKey: @"NSTextColor"];
-        [coder encodeInteger: _bezelStyle forKey: @"NSTextBezelStyle"];
-        [coder encodeObject: _placeholder forKey: @"NSPlaceholderString"];
+        [coder encodeInteger: NS_EXTRA(NSTextFieldCell, self)->_bezelStyle forKey: @"NSTextBezelStyle"];
+        [coder encodeObject: NS_EXTRA(NSTextFieldCell, self)->_placeholder forKey: @"NSPlaceholderString"];
     } else {
         [NSException raise: NSInvalidArchiveOperationException
                     format: @"TODO: support unkeyed encoding in NSTextFieldCell"];
@@ -58,12 +58,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     if ([coder allowsKeyedCoding]) {
         NSKeyedUnarchiver *keyed = (NSKeyedUnarchiver *) coder;
 
-        _drawsBackground = [keyed decodeBoolForKey: @"NSDrawsBackground"];
+        NS_EXTRA(NSTextFieldCell, self)->_drawsBackground = [keyed decodeBoolForKey: @"NSDrawsBackground"];
         _backgroundColor =
                 [[keyed decodeObjectForKey: @"NSBackgroundColor"] retain];
         _textColor = [[keyed decodeObjectForKey: @"NSTextColor"] retain];
-        _bezelStyle = [keyed decodeIntegerForKey: @"NSTextBezelStyle"];
-        _placeholder =
+        NS_EXTRA(NSTextFieldCell, self)->_bezelStyle = [keyed decodeIntegerForKey: @"NSTextBezelStyle"];
+        NS_EXTRA(NSTextFieldCell, self)->_placeholder =
                 [[keyed decodeObjectForKey: @"NSPlaceholderString"] retain];
     } else {
         NSInteger version = [coder versionForClassName: @"NSTextFieldCell"];
@@ -72,8 +72,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
             [coder decodeValuesOfObjCTypes: "c@@", &flags, &_backgroundColor,
                                             &_textColor];
 
-            _drawsBackground = flags & 1;
-            _bezelStyle = (flags & 0xe) >> 1;
+            NS_EXTRA(NSTextFieldCell, self)->_drawsBackground = flags & 1;
+            NS_EXTRA(NSTextFieldCell, self)->_bezelStyle = (flags & 0xe) >> 1;
 
             if (version <= 60) {
                 if ([_textColor isEqual: [NSColor textColor]])
@@ -82,23 +82,23 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         } else if (version > 16) {
             char drawsBackground = 0;
             [coder decodeValuesOfObjCTypes: "c", &drawsBackground];
-            _drawsBackground = drawsBackground != 0;
+            NS_EXTRA(NSTextFieldCell, self)->_drawsBackground = drawsBackground != 0;
             [self setBackgroundColor: [coder decodeObject]];
             [self setTextColor: [coder decodeObject]];
         } else if (version > 1) {
             char drawsBackground = 0;
             [coder decodeValuesOfObjCTypes: "@@c", &_backgroundColor,
                                             &_textColor, &drawsBackground];
-            _drawsBackground = drawsBackground != 0;
+            NS_EXTRA(NSTextFieldCell, self)->_drawsBackground = drawsBackground != 0;
         } else {
             float bgcolor, fgcolor;
             [coder decodeValuesOfObjCTypes: "ff", &bgcolor, &fgcolor];
 
             if (bgcolor <= 0.0f) {
-                _drawsBackground = FALSE;
+                NS_EXTRA(NSTextFieldCell, self)->_drawsBackground = FALSE;
                 [self setBackgroundColor: [NSColor whiteColor]];
             } else {
-                _drawsBackground = TRUE;
+                NS_EXTRA(NSTextFieldCell, self)->_drawsBackground = TRUE;
                 [self setBackgroundColor:
                                 [NSColor colorWithCalibratedWhite: bgcolor
                                                             alpha: 1.0]];
@@ -146,13 +146,15 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (void) dealloc {
     [_backgroundColor release];
     [_textColor release];
-    [_placeholder release];
-    [_allowedInputSourceLocales release];
+    [NS_EXTRA(NSTextFieldCell, self)->_placeholder release];
+    [NS_EXTRA(NSTextFieldCell, self)->_allowedInputSourceLocales release];
+    NS_EXTRA_FREE(NSTextFieldCell, self);
     [super dealloc];
 }
 
 - copyWithZone: (NSZone *) zone {
     NSTextFieldCell *cell = [super copyWithZone: zone];
+    NS_EXTRA_COPY(NSTextFieldCell, cell, self);
 
     cell->_backgroundColor = [_backgroundColor copy];
     cell->_textColor = [_textColor copy];
@@ -173,23 +175,23 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (BOOL) drawsBackground {
-    return _drawsBackground;
+    return NS_EXTRA(NSTextFieldCell, self)->_drawsBackground;
 }
 
 - (NSTextFieldBezelStyle) bezelStyle {
-    return _bezelStyle;
+    return NS_EXTRA(NSTextFieldCell, self)->_bezelStyle;
 }
 
 - (NSString *) placeholderString {
-    if ([_placeholder isKindOfClass: [NSString class]])
-        return _placeholder;
+    if ([NS_EXTRA(NSTextFieldCell, self)->_placeholder isKindOfClass: [NSString class]])
+        return NS_EXTRA(NSTextFieldCell, self)->_placeholder;
 
     return nil;
 }
 
 - (NSAttributedString *) placeholderAttributedString {
-    if ([_placeholder isKindOfClass: [NSAttributedString class]])
-        return _placeholder;
+    if ([NS_EXTRA(NSTextFieldCell, self)->_placeholder isKindOfClass: [NSAttributedString class]])
+        return NS_EXTRA(NSTextFieldCell, self)->_placeholder;
 
     return nil;
 }
@@ -207,23 +209,23 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (void) setDrawsBackground: (BOOL) flag {
-    _drawsBackground = flag;
+    NS_EXTRA(NSTextFieldCell, self)->_drawsBackground = flag;
 }
 
 - (void) setBezelStyle: (NSTextFieldBezelStyle) value {
-    _bezelStyle = value;
+    NS_EXTRA(NSTextFieldCell, self)->_bezelStyle = value;
 }
 
 - (void) setPlaceholderString: (NSString *) value {
     value = [value copy];
-    [_placeholder release];
-    _placeholder = value;
+    [NS_EXTRA(NSTextFieldCell, self)->_placeholder release];
+    NS_EXTRA(NSTextFieldCell, self)->_placeholder = value;
 }
 
 - (void) setPlaceholderAttributedString: (NSAttributedString *) value {
     value = [value copy];
-    [_placeholder release];
-    _placeholder = value;
+    [NS_EXTRA(NSTextFieldCell, self)->_placeholder release];
+    NS_EXTRA(NSTextFieldCell, self)->_placeholder = value;
 }
 
 // titleRectForBounds is not used for generating the value rect in a text field
@@ -258,12 +260,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (NSAttributedString *) attributedStringValue {
-    if ([_objectValue isKindOfClass: [NSAttributedString class]]) {
+    if ([NS_EXTRA(NSCell, self)->_objectValue isKindOfClass: [NSAttributedString class]]) {
         if (_textColor == nil)
-            return _objectValue;
+            return NS_EXTRA(NSCell, self)->_objectValue;
         else {
             NSMutableAttributedString *result =
-                    [[_objectValue mutableCopy] autorelease];
+                    [[NS_EXTRA(NSCell, self)->_objectValue mutableCopy] autorelease];
 
             [result addAttribute: NSForegroundColorAttributeName
                            value: _textColor
@@ -298,8 +300,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     }
 #endif
 
-        [paraStyle setLineBreakMode: _lineBreakMode];
-        [paraStyle setAlignment: _textAlignment];
+        [paraStyle setLineBreakMode: NS_EXTRA(NSCell, self)->_lineBreakMode];
+        [paraStyle setAlignment: NS_EXTRA(NSCell, self)->_textAlignment];
         [attributes setObject: paraStyle forKey: NSParagraphStyleAttributeName];
 
         return [[[NSAttributedString alloc] initWithString: [self stringValue]
@@ -358,13 +360,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
     NSAttributedString *drawValue = [self attributedStringValue];
 
-    if ([drawValue length] == 0 && [_placeholder length] > 0) {
-        if ([_placeholder isKindOfClass: [NSAttributedString class]])
-            drawValue = _placeholder;
-        else if ([_placeholder isKindOfClass: [NSString class]]) {
+    if ([drawValue length] == 0 && [NS_EXTRA(NSTextFieldCell, self)->_placeholder length] > 0) {
+        if ([NS_EXTRA(NSTextFieldCell, self)->_placeholder isKindOfClass: [NSAttributedString class]])
+            drawValue = NS_EXTRA(NSTextFieldCell, self)->_placeholder;
+        else if ([NS_EXTRA(NSTextFieldCell, self)->_placeholder isKindOfClass: [NSString class]]) {
             NSMutableAttributedString *placeString =
                     [[drawValue mutableCopy] autorelease];
-            [[placeString mutableString] setString: _placeholder];
+            [[placeString mutableString] setString: NS_EXTRA(NSTextFieldCell, self)->_placeholder];
             [placeString addAttribute: NSForegroundColorAttributeName
                                 value: [NSColor disabledControlTextColor]
                                 range: NSMakeRange(0, [placeString length])];
@@ -372,7 +374,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         }
     }
     [drawValue _clipAndDrawInRect: titleRect
-                   lineBreakMode: _lineBreakMode];
+                   lineBreakMode: NS_EXTRA(NSCell, self)->_lineBreakMode];
 }
 
 static void drawRoundedBezel(CGContextRef context, CGRect frame) {
@@ -449,14 +451,14 @@ static void drawRoundedBezel(CGContextRef context, CGRect frame) {
 @implementation NSTextFieldCell (Bindings)
 
 - (CGFloat) _fontSize {
-    return [_font pointSize];
+    return [NS_EXTRA(NSCell, self)->_font pointSize];
 }
 - (void) _setFontSize: (CGFloat) fontSize {
-    NSString *fontName = [_font fontName];
+    NSString *fontName = [NS_EXTRA(NSCell, self)->_font fontName];
     [self setFont: [NSFont fontWithName: fontName size: fontSize]];
 }
 - (NSString *) _fontFamilyName {
-    return [_font familyName];
+    return [NS_EXTRA(NSCell, self)->_font familyName];
 }
 - (void) _setFontFamilyName: (NSString *) familyName {
     if (!familyName) {
@@ -465,7 +467,7 @@ static void drawRoundedBezel(CGContextRef context, CGRect frame) {
 
     NSLog(@"_setFontFamilyName: %@", familyName);
 
-    CGFloat currentSize = [_font pointSize];
+    CGFloat currentSize = [NS_EXTRA(NSCell, self)->_font pointSize];
     [self setFont: [NSFont fontWithName: familyName size: currentSize]];
 }
 

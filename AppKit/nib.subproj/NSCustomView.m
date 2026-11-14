@@ -53,16 +53,16 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
             if ([coder containsValueForKey: @"NSvFlags"]) {
                 unsigned vFlags = [coder decodeIntForKey: @"NSvFlags"];
 
-                newView->_autoresizingMask = vFlags & 0x3F;
-                newView->_autoresizesSubviews = (vFlags & 0x100) ? YES : NO;
-                newView->_isHidden = (vFlags & 0x80000000) ? YES : NO;
+                NS_EXTRA(NSView, newView)->_autoresizingMask = vFlags & 0x3F;
+                NS_EXTRA(NSView, newView)->_autoresizesSubviews = (vFlags & 0x100) ? YES : NO;
+                NS_EXTRA(NSView, newView)->_isHidden = (vFlags & 0x80000000) ? YES : NO;
             }
             // Despite the fact it appears _autoresizesSubviews is encoded in
             // the flags, it should always be on
-            newView->_autoresizesSubviews = YES;
+            NS_EXTRA(NSView, newView)->_autoresizesSubviews = YES;
 
             if ([coder containsValueForKey: @"NSTag"])
-                newView->_tag = [coder decodeIntForKey: @"NSTag"];
+                NS_EXTRA(NSView, newView)->_tag = [coder decodeIntForKey: @"NSTag"];
             NSArray *subviews = [coder decodeObjectForKey: @"NSSubviews"];
 
             // For some unknown reason custom view subviews are presented in
@@ -147,9 +147,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
             [(NSUnarchiver *) coder replaceObject: self withObject: newView];
         }
 
-        newView->_autoresizingMask = _autoresizingMask;
-        newView->_autoresizesSubviews = YES;
-        newView->_draggedTypes = [_draggedTypes retain];
+        NS_EXTRA(NSView, newView)->_autoresizingMask = NS_EXTRA(NSView, self)->_autoresizingMask;
+        NS_EXTRA(NSView, newView)->_autoresizesSubviews = YES;
+        NS_EXTRA(NSView, newView)->_draggedTypes = [NS_EXTRA(NSView, self)->_draggedTypes retain];
 
         [newView->_subviews addObjectsFromArray: _subviews];
         [newView->_subviews
