@@ -195,8 +195,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [attributes setObject: [NSColor whiteColor]
                    forKey: NSBackgroundColorAttributeName];
 
-    [paraStyle setLineBreakMode: _lineBreakMode];
-    [paraStyle setAlignment: _textAlignment];
+    [paraStyle setLineBreakMode: NS_EXTRA(NSCell, self)->_lineBreakMode];
+    [paraStyle setAlignment: NS_EXTRA(NSCell, self)->_textAlignment];
     [attributes setObject: paraStyle forKey: NSParagraphStyleAttributeName];
 
     return [[[NSAttributedString alloc] initWithString: [self stringValue]

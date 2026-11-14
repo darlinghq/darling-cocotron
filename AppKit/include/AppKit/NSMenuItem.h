@@ -17,6 +17,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/NSCell.h>
 #import <AppKit/NSUserInterfaceValidation.h>
 #import <Foundation/NSObject.h>
@@ -24,35 +25,41 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSMenu, NSImage, NSAttributedString, NSView, NSMenuItemBadge;
 
+// Legacy ObjC ABI (i386): instance size must stay 0x40, Apple's; the ivars
+// before the extras sit at Apple's offsets. Add new state to the extra
+// struct, never as an ivar.
 @interface NSMenuItem : NSObject <NSCopying, NSValidatedUserInterfaceItem, NSUserInterfaceItemIdentification> {
     NSMenu *_menu;
     NSString *_title;
-    NSAttributedString *_atitle;
-    id _target;
-    SEL _action;
-    NSString *_keyEquivalent;
-    unsigned _keyEquivalentModifierMask;
-    NSString *_mnemonic;
-    unsigned _mnemonicLocation;
-    NSMenu *_submenu;
-    NSInteger _tag;
-    NSInteger _indentationLevel;
-    BOOL _enabled;
-    BOOL _hidden;
-    NSControlStateValue _state;
-    id _representedObject;
-    NSImage *_image;
-    NSImage *_onStateImage;
-    NSImage *_offStateImage;
-    NSImage *_mixedStateImage;
-    BOOL _alternate;
-    BOOL _allowsKeyEquivalentWhenHidden;
-    NSUserInterfaceItemIdentifier _identifier;
-    NSView *_view;
-    NSString *_toolTip;
-    NSMenuItemBadge *_badge;
-    BOOL _isSectionHeader;
-    NSImage *_actionImage;
+    NS_LEGACY_IVAR_PAD(_NSMenuItemReserved1, 48)
+    NS_EXTRA_IVARS_BEGIN(NSMenuItem)
+        NSAttributedString *_atitle;
+        id _target;
+        SEL _action;
+        NSString *_keyEquivalent;
+        unsigned _keyEquivalentModifierMask;
+        NSString *_mnemonic;
+        unsigned _mnemonicLocation;
+        NSMenu *_submenu;
+        NSInteger _tag;
+        NSInteger _indentationLevel;
+        BOOL _enabled;
+        BOOL _hidden;
+        NSControlStateValue _state;
+        id _representedObject;
+        NSImage *_image;
+        NSImage *_onStateImage;
+        NSImage *_offStateImage;
+        NSImage *_mixedStateImage;
+        BOOL _alternate;
+        BOOL _allowsKeyEquivalentWhenHidden;
+        NSUserInterfaceItemIdentifier _identifier;
+        NSView *_view;
+        NSString *_toolTip;
+        NSMenuItemBadge *_badge;
+        BOOL _isSectionHeader;
+        NSImage *_actionImage;
+    NS_EXTRA_IVARS_END(NSMenuItem)
 }
 
 @property(copy) NSString *toolTip;

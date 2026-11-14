@@ -17,6 +17,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/NSWindow.h>
 
 enum {
@@ -24,10 +25,15 @@ enum {
     NSDocModalWindowMask = 0x40,
 };
 
+// Legacy ObjC ABI (i386): instance size must stay 0x84, Apple's; the ivars
+// before the extras sit at Apple's offsets. Add new state to the extra
+// struct, never as an ivar.
 @interface NSPanel : NSWindow {
-    BOOL _worksWhenModal;
-    BOOL _becomesKeyOnlyIfNeeded;
-    BOOL _isFloatingPanel;
+    NS_EXTRA_IVARS_BEGIN(NSPanel)
+        BOOL _worksWhenModal;
+        BOOL _becomesKeyOnlyIfNeeded;
+        BOOL _isFloatingPanel;
+    NS_SIDE_IVARS_END(NSPanel)
 }
 
 - (BOOL) worksWhenModal;

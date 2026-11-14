@@ -17,6 +17,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/NSControl.h>
 
 typedef enum {
@@ -26,34 +27,43 @@ typedef enum {
     NSTrackModeMatrix
 } NSMatrixMode;
 
+// Legacy ObjC ABI (i386): instance size must stay 0xb0, Apple's; the ivars
+// before the extras sit at Apple's offsets. Add new state to the extra
+// struct, never as an ivar.
 @interface NSMatrix : NSControl {
-    id _delegate;
-    id _target;
-    SEL _action;
+    NS_LEGACY_IVAR_PAD(_NSMatrixReserved1, 8)
     SEL _doubleAction;
-    NSFont *_font;
-    NSColor *_backgroundColor;
-    NSColor *_cellBackgroundColor;
-
-    NSMutableArray *_cells;
+    NS_LEGACY_IVAR_PAD(_NSMatrixReserved2, 4)
+    id _delegate;
+    NS_LEGACY_IVAR_PAD(_NSMatrixReserved3, 12)
     NSInteger _numberOfRows;
     NSInteger _numberOfColumns;
-    NSInteger _selectedIndex;
-    NSInteger _keyCellIndex;
     NSSize _cellSize;
     NSSize _intercellSpacing;
+    NSFont *_font;
     id _protoCell;
     Class _cellClass;
-    NSMatrixMode _mode;
-    BOOL _selectionByRect;
-    BOOL _allowsEmptySelection;
-    BOOL _tabKeyTraversesCells;
-    BOOL _isAutoscroll;
-    BOOL _isEnabled;
-    BOOL _autosizesCells;
-    BOOL _drawsBackground;
-    BOOL _drawsCellBackground;
-    BOOL _refusesFirstResponder;
+    NSColor *_backgroundColor;
+    NS_LEGACY_IVAR_PAD(_NSMatrixReserved4, 4)
+    NSMutableArray *_cells;
+    NS_EXTRA_IVARS_BEGIN(NSMatrix)
+        id _target;
+        SEL _action;
+        NSColor *_cellBackgroundColor;
+
+        NSInteger _selectedIndex;
+        NSInteger _keyCellIndex;
+        NSMatrixMode _mode;
+        BOOL _selectionByRect;
+        BOOL _allowsEmptySelection;
+        BOOL _tabKeyTraversesCells;
+        BOOL _isAutoscroll;
+        BOOL _isEnabled;
+        BOOL _autosizesCells;
+        BOOL _drawsBackground;
+        BOOL _drawsCellBackground;
+        BOOL _refusesFirstResponder;
+    NS_EXTRA_IVARS_END(NSMatrix)
 }
 
 - initWithFrame: (NSRect) frame

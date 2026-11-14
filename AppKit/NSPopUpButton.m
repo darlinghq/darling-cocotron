@@ -68,6 +68,7 @@ static NSString *const NSPopUpButtonBindingObservationContext =
     NS_HANDLER
     NS_ENDHANDLER
 
+            NS_EXTRA_FREE(NSPopUpButton, self);
             [super dealloc];
 }
 
@@ -422,8 +423,8 @@ static NSString *const NSPopUpButtonBindingObservationContext =
 {
     // No need to observe the same thing many times when we have several
     // bindings
-    if (!_observerAdded) {
-        _observerAdded = YES;
+    if (!NS_EXTRA(NSPopUpButton, self)->_observerAdded) {
+        NS_EXTRA(NSPopUpButton, self)->_observerAdded = YES;
         [self addObserver: self
                 forKeyPath: @"cell.menu.itemArray"
                    options: NSKeyValueObservingOptionPrior

@@ -17,6 +17,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/NSActionCell.h>
 
 typedef enum {
@@ -24,13 +25,18 @@ typedef enum {
     NSTextFieldRoundedBezel = 1,
 } NSTextFieldBezelStyle;
 
+// Legacy ObjC ABI (i386): instance size must stay 0x30, Apple's; the ivars
+// before the extras sit at Apple's offsets. Add new state to the extra
+// struct, never as an ivar.
 @interface NSTextFieldCell : NSActionCell {
     NSColor *_backgroundColor;
     NSColor *_textColor;
-    BOOL _drawsBackground;
-    NSTextFieldBezelStyle _bezelStyle;
-    id _placeholder;
-    NSArray<NSString *> *_allowedInputSourceLocales;
+    NS_EXTRA_IVARS_BEGIN(NSTextFieldCell)
+        BOOL _drawsBackground;
+        NSTextFieldBezelStyle _bezelStyle;
+        id _placeholder;
+        NSArray<NSString *> *_allowedInputSourceLocales;
+    NS_EXTRA_IVARS_END(NSTextFieldCell)
 }
 
 @property(copy) NSArray<NSString *> *allowedInputSourceLocales;

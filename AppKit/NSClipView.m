@@ -40,10 +40,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         NSKeyedUnarchiver *keyed = (NSKeyedUnarchiver *) coder;
         unsigned flags = [keyed decodeIntForKey: @"NScvFlags"];
 
-        _drawsBackground = (flags & 0x04) ? YES : NO;
+        NS_EXTRA(NSClipView, self)->_drawsBackground = (flags & 0x04) ? YES : NO;
         _backgroundColor = [[keyed decodeObjectForKey: @"NSBGColor"] retain];
         _docView = [[keyed decodeObjectForKey: @"NSDocView"] retain];
-        _automaticallyAdjustsContentInsets =
+        NS_EXTRA(NSClipView, self)->_automaticallyAdjustsContentInsets =
                 [keyed containsValueForKey: @"NSAutomaticallyAdjustsContentInsets"]
                         ? [keyed decodeBoolForKey: @"NSAutomaticallyAdjustsContentInsets"]
                         : YES;
@@ -122,8 +122,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         } else {
             [cursor release];
         }
-        _copiesOnScroll = noCopy ? NO : YES;
-        _drawsBackground = drawsBackground ? YES : NO;
+        NS_EXTRA(NSClipView, self)->_copiesOnScroll = noCopy ? NO : YES;
+        NS_EXTRA(NSClipView, self)->_drawsBackground = drawsBackground ? YES : NO;
 
         // The document view is already a subview from NSView decoding.
         if ([docView isKindOfClass: [NSView class]]) {
@@ -146,8 +146,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - initWithFrame: (NSRect) frame {
     [super initWithFrame: frame];
     _backgroundColor = [[NSColor controlBackgroundColor] retain];
-    _drawsBackground = YES;
-    _automaticallyAdjustsContentInsets = YES;
+    NS_EXTRA(NSClipView, self)->_drawsBackground = YES;
+    NS_EXTRA(NSClipView, self)->_automaticallyAdjustsContentInsets = YES;
     return self;
 }
 
@@ -155,32 +155,33 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [[NSNotificationCenter defaultCenter] removeObserver: self];
     [_backgroundColor release];
     [_docView release];
+    NS_EXTRA_FREE(NSClipView, self);
     [super dealloc];
 }
 
 - (BOOL) drawsBackground {
-    return _drawsBackground;
+    return NS_EXTRA(NSClipView, self)->_drawsBackground;
 }
 
 // Stored only: document view layout doesn't apply content insets yet.
 - (BOOL) automaticallyAdjustsContentInsets {
-    return _automaticallyAdjustsContentInsets;
+    return NS_EXTRA(NSClipView, self)->_automaticallyAdjustsContentInsets;
 }
 
 - (void) setAutomaticallyAdjustsContentInsets: (BOOL) value {
-    _automaticallyAdjustsContentInsets = value;
+    NS_EXTRA(NSClipView, self)->_automaticallyAdjustsContentInsets = value;
 }
 
 - (NSEdgeInsets) contentInsets {
-    return _contentInsets;
+    return NS_EXTRA(NSClipView, self)->_contentInsets;
 }
 
 - (void) setContentInsets: (NSEdgeInsets) insets {
-    _contentInsets = insets;
+    NS_EXTRA(NSClipView, self)->_contentInsets = insets;
 }
 
 - (BOOL) copiesOnScroll {
-    return _copiesOnScroll;
+    return NS_EXTRA(NSClipView, self)->_copiesOnScroll;
 }
 
 - (NSColor *) backgroundColor {
@@ -196,12 +197,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (void) setDrawsBackground: (BOOL) value {
-    _drawsBackground = value;
+    NS_EXTRA(NSClipView, self)->_drawsBackground = value;
     [self setNeedsDisplay: YES];
 }
 
 - (void) setCopiesOnScroll: (BOOL) value {
-    _copiesOnScroll = value;
+    NS_EXTRA(NSClipView, self)->_copiesOnScroll = value;
 }
 
 - (void) setBackgroundColor: (NSColor *) color {
@@ -318,7 +319,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (BOOL) isOpaque {
-    return _drawsBackground && [_backgroundColor alphaComponent] >= 1.;
+    return NS_EXTRA(NSClipView, self)->_drawsBackground && [_backgroundColor alphaComponent] >= 1.;
 }
 
 - (BOOL) isFlipped {

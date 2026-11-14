@@ -17,6 +17,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/AppKitExport.h>
 #import <AppKit/NSView.h>
 #import <AppKit/NSControl.h>
@@ -35,37 +36,43 @@ typedef NS_ENUM(NSInteger, NSScrollElasticity) {
     NSScrollElasticityAllowed = 2,
 };
 
+// Legacy ObjC ABI (i386): instance size must stay 0x78, Apple's; the ivars
+// before the extras sit at Apple's offsets. Add new state to the extra
+// struct, never as an ivar.
 @interface NSScrollView : NSView {
+    NSScroller *_verticalScroller;
+    NSScroller *_horizontalScroller;
     NSClipView *_clipView;
     NSClipView *_headerClipView;
     NSView *_cornerView;
-    NSScroller *_verticalScroller;
-    NSScroller *_horizontalScroller;
-    NSRulerView *_horizontalRuler;
-    NSRulerView *_verticalRuler;
-    NSColor *_backgroundColor;
-    CGFloat _verticalLineScroll;
-    CGFloat _verticalPageScroll;
-    CGFloat _horizontalLineScroll;
-    CGFloat _horizontalPageScroll;
-    int _borderType;
-    BOOL _drawsBackground;
-    BOOL _hasVerticalScroller;
-    BOOL _hasHorizontalScroller;
-    BOOL _hasHorizontalRuler;
-    BOOL _hasVerticalRuler;
-    BOOL _rulersVisible;
-    BOOL _scrollsDynamically;
-    BOOL _autohidesScrollers;
-    NSCursor *_documentCursor;
-    BOOL _allowsMagnification;
-    CGFloat _magnification;
-    CGFloat _minMagnification;
-    CGFloat _maxMagnification;
-    NSScrollerKnobStyle _scrollerKnobStyle;
-    NSScrollElasticity _horizontalScrollElasticity;
-    NSScrollElasticity _verticalScrollElasticity;
-    NSScrollerStyle _scrollerStyle;
+    NS_LEGACY_IVAR_PAD(_NSScrollViewReserved1, 16)
+    NS_EXTRA_IVARS_BEGIN(NSScrollView)
+        NSRulerView *_horizontalRuler;
+        NSRulerView *_verticalRuler;
+        NSColor *_backgroundColor;
+        CGFloat _verticalLineScroll;
+        CGFloat _verticalPageScroll;
+        CGFloat _horizontalLineScroll;
+        CGFloat _horizontalPageScroll;
+        int _borderType;
+        BOOL _drawsBackground;
+        BOOL _hasVerticalScroller;
+        BOOL _hasHorizontalScroller;
+        BOOL _hasHorizontalRuler;
+        BOOL _hasVerticalRuler;
+        BOOL _rulersVisible;
+        BOOL _scrollsDynamically;
+        BOOL _autohidesScrollers;
+        NSCursor *_documentCursor;
+        BOOL _allowsMagnification;
+        CGFloat _magnification;
+        CGFloat _minMagnification;
+        CGFloat _maxMagnification;
+        NSScrollerKnobStyle _scrollerKnobStyle;
+        NSScrollElasticity _horizontalScrollElasticity;
+        NSScrollElasticity _verticalScrollElasticity;
+        NSScrollerStyle _scrollerStyle;
+    NS_EXTRA_IVARS_END(NSScrollView)
 }
 
 @property NSScrollerKnobStyle scrollerKnobStyle;

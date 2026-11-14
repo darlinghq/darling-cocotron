@@ -17,6 +17,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/NSControl.h>
 
 typedef enum {
@@ -60,26 +61,32 @@ typedef NS_ENUM(NSInteger, NSScrollerKnobStyle) {
 
 typedef NSUInteger NSUsableScrollerParts;
 
+// Legacy ObjC ABI (i386): instance size must stay 0x78, Apple's; the ivars
+// before the extras sit at Apple's offsets. Add new state to the extra
+// struct, never as an ivar.
 @interface NSScroller : NSControl {
-    id _target;
-    SEL _action;
-    struct {
-        unsigned isHoriz : 1;
-        NSUsableScrollerParts partsUsable : 2;
-    } sFlags;
-
     float _floatValue;
     CGFloat _knobProportion;
-    NSScrollArrowPosition _arrowsPosition;
-    NSControlSize _controlSize;
+    NS_LEGACY_IVAR_PAD(_NSScrollerReserved1, 16)
+    NS_EXTRA_IVARS_BEGIN(NSScroller)
+        id _target;
+        SEL _action;
+        struct {
+            unsigned isHoriz : 1;
+            NSUsableScrollerParts partsUsable : 2;
+        } sFlags;
 
-    NSScrollerPart _hitPart;
-    BOOL _isEnabled;
-    BOOL _isHighlighted;
+        NSScrollArrowPosition _arrowsPosition;
+        NSControlSize _controlSize;
 
-    NSScrollerStyle _scrollerStyle;
-    NSScrollerKnobStyle _knobStyle;
-    NSControlTint _controlTint;
+        NSScrollerPart _hitPart;
+        BOOL _isEnabled;
+        BOOL _isHighlighted;
+
+        NSScrollerStyle _scrollerStyle;
+        NSScrollerKnobStyle _knobStyle;
+        NSControlTint _controlTint;
+    NS_EXTRA_IVARS_END(NSScroller)
 }
 
 + (CGFloat) scrollerWidth;

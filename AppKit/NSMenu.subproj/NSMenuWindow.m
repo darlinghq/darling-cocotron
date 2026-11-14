@@ -32,7 +32,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                         defer: NO];
     [self setLevel: NSSubmenuWindowLevel];
 
-    _releaseWhenClosed = YES;
+    NS_EXTRA(NSWindow, self)->_releaseWhenClosed = YES;
 
     _view = view;
 
@@ -53,7 +53,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                         defer: NO];
     [self setLevel: NSSubmenuWindowLevel];
 
-    _releaseWhenClosed = YES;
+    NS_EXTRA(NSWindow, self)->_releaseWhenClosed = YES;
 
     _view = view;
 

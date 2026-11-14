@@ -36,8 +36,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         [coder decodeValuesOfObjCTypes: "dddddiiiiiii", &value, &_minValue, &_maxValue, &_warningValue,
                                         &_criticalValue, &_numberOfTickMarks, &_numberOfMajorTickMarks, &flags,
                                         &unused[0], &unused[1], &unused[2], &unused[3]];
-        [_objectValue release];
-        _objectValue = [[NSNumber numberWithDouble: value] retain];
+        [NS_EXTRA(NSCell, self)->_objectValue release];
+        NS_EXTRA(NSCell, self)->_objectValue = [[NSNumber numberWithDouble: value] retain];
         _style = ((unsigned) flags >> 28) & 3;
         _tickMarkPosition = ((unsigned) flags >> 27) & 1 ? NSTickMarkAbove : NSTickMarkBelow;
     }

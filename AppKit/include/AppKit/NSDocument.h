@@ -17,6 +17,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/NSUserInterfaceValidation.h>
 #import <Foundation/Foundation.h>
 
@@ -43,21 +44,27 @@ typedef enum {
     NSAutosaveOperation,
 } NSSaveOperationType;
 
+// Legacy ObjC ABI (i386): instance size must stay 0x34, Apple's; the ivars
+// before the extras sit at Apple's offsets. Add new state to the extra
+// struct, never as an ivar.
 @interface NSDocument : NSObject {
-    NSMutableArray *_windowControllers;
-    NSURL *_fileURL;
-    NSString *_fileType;
-    NSDate *_fileModificationDate;
-    NSString *_lastComponentOfFileName;
-    NSURL *_autosavedContentsFileURL;
-    NSPrintInfo *_printInfo;
-    int _changeCount;
-    unsigned _untitledNumber;
-    NSUndoManager *_undoManager;
-    BOOL _hasUndoManager;
-    NSMutableArray *_activeEditors; // registered via NSEditorRegistration
-    BOOL _draft;
-    BOOL _autosaveScheduled;
+    NS_LEGACY_IVAR_PAD(_NSDocumentReserved1, 44)
+    NS_EXTRA_IVARS_BEGIN(NSDocument)
+        NSMutableArray *_windowControllers;
+        NSURL *_fileURL;
+        NSString *_fileType;
+        NSDate *_fileModificationDate;
+        NSString *_lastComponentOfFileName;
+        NSURL *_autosavedContentsFileURL;
+        NSPrintInfo *_printInfo;
+        int _changeCount;
+        unsigned _untitledNumber;
+        NSUndoManager *_undoManager;
+        BOOL _hasUndoManager;
+        NSMutableArray *_activeEditors; // registered via NSEditorRegistration
+        BOOL _draft;
+        BOOL _autosaveScheduled;
+    NS_EXTRA_IVARS_END(NSDocument)
 }
 
 + (NSArray *) readableTypes;

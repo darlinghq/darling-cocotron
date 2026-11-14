@@ -17,17 +17,24 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/NSView.h>
 
 @class NSOpenGLPixelFormat, NSOpenGLContext;
 
+// Legacy ObjC ABI (i386): instance size must stay 0x64, Apple's; the ivars
+// before the extras sit at Apple's offsets. Add new state to the extra
+// struct, never as an ivar.
 @interface NSOpenGLView : NSView {
   @private
-    NSOpenGLPixelFormat *_pixelFormat;
     NSOpenGLContext *_context;
-    BOOL _needsReshape;
-    NSSize _lastDrawablePixelSize;
-    NSMutableArray *_focusContexts;
+    NSOpenGLPixelFormat *_pixelFormat;
+    NS_LEGACY_IVAR_PAD(_NSOpenGLViewReserved1, 8)
+    NS_EXTRA_IVARS_BEGIN(NSOpenGLView)
+        BOOL _needsReshape;
+        NSSize _lastDrawablePixelSize;
+        NSMutableArray *_focusContexts;
+    NS_EXTRA_IVARS_END(NSOpenGLView)
 }
 
 + (NSOpenGLPixelFormat *) defaultPixelFormat;

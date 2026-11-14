@@ -55,8 +55,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         _maxValue = [keyed decodeDoubleForKey: @"NSMaxValue"];
         if ([keyed containsValueForKey: @"NSValue"]) {
             // This cell prefers NSValue to NSContents
-            [_objectValue release];
-            _objectValue = [[keyed decodeObjectForKey: @"NSValue"] retain];
+            [NS_EXTRA(NSCell, self)->_objectValue release];
+            NS_EXTRA(NSCell, self)->_objectValue = [[keyed decodeObjectForKey: @"NSValue"] retain];
         }
         _numberOfTickMarks = [keyed decodeIntForKey: @"NSNumberOfTickMarks"];
         _tickMarkPosition = [keyed decodeIntForKey: @"NSTickMarkPosition"];
@@ -132,7 +132,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - initTextCell: (NSString *) string {
     [super initTextCell: string];
-    _isContinuous = YES; // NSCell defaults to NO, NSSliderCell defaults to YES
+    NS_EXTRA(NSCell, self)->_isContinuous = YES; // NSCell defaults to NO, NSSliderCell defaults to YES
     _type = NSLinearSlider;
     _minValue = 0;
     _maxValue = 1.0;
@@ -147,7 +147,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - initImageCell: (NSImage *) image {
     [super initImageCell: image];
-    _isContinuous = YES; // NSCell defaults to NO, NSSliderCell defaults to YES
+    NS_EXTRA(NSCell, self)->_isContinuous = YES; // NSCell defaults to NO, NSSliderCell defaults to YES
     _type = NSLinearSlider;
     _minValue = 0;
     _maxValue = 1.0;
