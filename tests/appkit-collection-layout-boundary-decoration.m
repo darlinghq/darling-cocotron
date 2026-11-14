@@ -24,7 +24,7 @@ int main(void) {
                                                                                                          elementKind: @"header"
                                                                                                            alignment: NSRectAlignmentTop];
         expect([header alignment] == NSRectAlignmentTop, @"the boundary item keeps its alignment");
-        expect(NSRectAlignmentTopLeading == 2 && NSRectAlignmentTopTrailing == 8, @"the alignment values follow the header's order");
+        expect(NSRectAlignmentTopLeading == 2 && NSRectAlignmentTopTrailing == 8, @"the alignment values follow the declared case order (GUESS: the public documentation gives no raw values)");
         expect([header offset].x == 0 && [header offset].y == 0, @"its offset defaults to zero");
         expect([[header elementKind] isEqualToString: @"header"] && [header layoutSize] == size, @"it keeps the element kind and size");
         expect([header containerAnchor] != nil && [[header containerAnchor] edges] == NSDirectionalRectEdgeTop,

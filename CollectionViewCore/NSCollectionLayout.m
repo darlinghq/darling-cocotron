@@ -235,8 +235,8 @@ enum {
     return self;
 }
 
-// GUESS: with no offset the anchor sits on its edges (offset zero) and the zero offset is an absolute one; the
-// header does not say which kind it reports.
+// GUESS: with no offset the anchor sits on its edges (offset zero) and the zero offset is an absolute one; which
+// kind it reports is not in the public documentation.
 + (instancetype) layoutAnchorWithEdges: (NSDirectionalRectEdge) edges {
     return [[[self alloc] _initWithEdges: edges
                                   offset: NSZeroPoint
@@ -468,8 +468,9 @@ static NSDirectionalRectEdge EdgesForAlignment(NSRectAlignment alignment) {
                                           absoluteOffset: NSZeroPoint];
 }
 
-// GUESS, none of it in the header: the container anchor is the alignment's edges (no item anchor), and a boundary
-// item extends the boundary by default (the same property of UIKit's twin class defaults to true) and is not pinned.
+// GUESS, none of it in the public documentation: the container anchor is the alignment's edges (no item anchor),
+// and a boundary item extends the boundary by default (the same property of UIKit's twin class defaults to true) and
+// is not pinned.
 + (instancetype) boundarySupplementaryItemWithLayoutSize: (NSCollectionLayoutSize *) layoutSize
                                              elementKind: (NSString *) elementKind
                                                alignment: (NSRectAlignment) alignment
@@ -529,7 +530,7 @@ static NSDirectionalRectEdge EdgesForAlignment(NSRectAlignment alignment) {
     NSString *_elementKind;
 }
 
-// GUESS: a background decoration fills its section, so its size is the whole container (the header gives none).
+// GUESS: a background decoration fills its section, so its size is the whole container (not in the public documentation).
 + (instancetype) backgroundDecorationItemWithElementKind: (NSString *) elementKind {
     NSCollectionLayoutDecorationItem *item = [self
             itemWithLayoutSize: [NSCollectionLayoutSize
