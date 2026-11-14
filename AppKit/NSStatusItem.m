@@ -283,6 +283,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #endif
         // Items are visible until the application hides them.
         _visible = YES;
+        // The item's image, title, target and action live in its button, which exists from the start.
+        _button = [[NSStatusBarButton alloc] initWithFrame: NSMakeRect(0, 0, 16, 22)];
+        // A status item shows nothing until the application gives it a title or an image, unlike a plain NSButton.
+        [_button setTitle: @""];
     }
     return self;
 }
@@ -292,10 +296,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (SEL) action {
-    return _action;
+    return [_button action];
 }
 - (void) setAction: (SEL) action {
-    _action = action;
     [_button setAction: action];
 }
 - (SEL) doubleAction {
@@ -305,21 +308,18 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     _doubleAction = action;
 }
 - (id) target {
-    return _target;
+    return [_button target];
 }
 - (void) setTarget: (id) target {
-    _target = target;
     [_button setTarget: target];
 }
 
 - (NSImage *) image {
-    return _image;
+    return [_button image];
 }
 
 - (void) setImage: (NSImage *) image {
-    [_image release];
-    _image = nil;
-    _image = [image copy];
+    [_button setImage: image];
 #ifdef WIN32
     if (_trayIconID <= -1) {
         [self _createTrayIcon];
@@ -327,37 +327,25 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #endif
 }
 - (NSImage *) alternateImage {
-    return _alternateImage;
+    return [_button alternateImage];
 }
 - (void) setAlternateImage: (NSImage *) image {
-#ifndef WIN32
-    [_alternateImage release];
-    _alternateImage = nil;
-    _alternateImage = [image copy];
-#endif
+    [_button setAlternateImage: image];
 }
 
 - (NSString *) title {
-    return _title;
+    return [_button title];
 }
 - (void) setTitle: (NSString *) title {
-#ifndef WIN32
-    [_title release];
-    _title = nil;
-    _title = [title copy];
-#endif
+    [_button setTitle: title];
 }
 - (void) setToolTip: (NSString *) toolTip {
 }
 - (NSAttributedString *) attributedTitle {
-    return _atrTitle;
+    return [_button attributedTitle];
 }
 - (void) setAttributedTitle: (NSAttributedString *) title {
-#ifndef WIN32
-    [_atrTitle release];
-    _atrTitle = nil;
-    _atrTitle = [title copy];
-#endif
+    [_button setAttributedTitle: title];
 }
 
 - (NSView *) view {
@@ -378,10 +366,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (BOOL) isEnabled {
-    return _enabled;
+    return [_button isEnabled];
 }
 - (void) setEnabled: (BOOL) flag {
-    _enabled = flag;
+    [_button setEnabled: flag];
 }
 
 - (CGFloat) length {
@@ -467,22 +455,29 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (NSStatusBarButton *) button {
-    if (_button == nil) {
-        _button = [[NSStatusBarButton alloc] initWithFrame: NSMakeRect(0, 0, _length > 0 ? _length : 24, 22)];
-        [_button setTarget: [self target]];
-        [_button setAction: [self action]];
-    }
     return _button;
 }
 
 - (NSString *) autosaveName {
-    return _autosaveName;
+    return _autosaveName != nil ? _autosaveName : _defaultAutosaveName;
 }
 
 - (void) setAutosaveName: (NSString *) name {
+    // A nil name returns the item to the name the status bar gave it.
     if (_autosaveName != name) {
         [_autosaveName release];
         _autosaveName = [name copy];
+    }
+}
+
+- (NSString *) _defaultAutosaveName {
+    return _defaultAutosaveName;
+}
+
+- (void) _setDefaultAutosaveName: (NSString *) name {
+    if (_defaultAutosaveName != name) {
+        [_defaultAutosaveName release];
+        _defaultAutosaveName = [name copy];
     }
 }
 
@@ -495,14 +490,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (void) dealloc {
-    [_image release];
-    [_alternateImage release];
-    [_title release];
-    [_atrTitle release];
     [_view release];
     [_menu release];
     [_button release];
     [_autosaveName release];
+    [_defaultAutosaveName release];
     [super dealloc];
 }
 
