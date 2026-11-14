@@ -47,6 +47,10 @@
 // [super copyWithZone:], before the copy's extras are touched.
 // @synthesize of an extra: NS_EXTRA_SYNTHESIZE_ASSIGN/RETAIN/COPY.
 //
+// Creating the extras on first use is thread-safe (two threads touching a
+// fresh object at once share one block); using the extras afterwards is as
+// thread-safe as using the plain ivars was.
+//
 // Never add an ivar outside the extra struct to such a class: the class
 // comment states the instance size the legacy ABI requires.
 
@@ -77,19 +81,38 @@
 // sources; ARC code that includes the AppKit headers needs only the
 // declaration macros above.
 #if !__has_feature(objc_arc)
+// The first use of an object's extras may happen on two threads at once, and
+// both must end up with the same block: the pointer is published with a
+// compare-and-swap (the loser frees its block and uses the winner's), and the
+// side storage is created under the object's @synchronized lock. The fast path
+// for an existing block is a single acquire load (a plain load on x86) or the
+// association lookup.
 static inline void *_NSExtraIvarsPointer(void **slot, size_t size) {
-    if (__builtin_expect(*slot == NULL, 0))
-        *slot = calloc(1, size);
-    return *slot;
+    void *block = __atomic_load_n(slot, __ATOMIC_ACQUIRE);
+    if (__builtin_expect(block == NULL, 0)) {
+        void *fresh = calloc(1, size);
+        // on failure block is set to the pointer another thread stored first
+        if (__atomic_compare_exchange_n(slot, &block, fresh, 0,
+                                        __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE))
+            block = fresh;
+        else
+            free(fresh);
+    }
+    return block;
 }
 
 static inline void *_NSExtraIvarsSide(id object, SEL key, size_t size) {
     NSMutableData *storage = objc_getAssociatedObject(object, (const void *) key);
-    if (storage == nil) {
-        storage = [[NSMutableData alloc] initWithLength: size];
-        objc_setAssociatedObject(object, (const void *) key, storage,
-                                 OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        [storage release];
+    if (__builtin_expect(storage == nil, 0)) {
+        @synchronized(object) {
+            storage = objc_getAssociatedObject(object, (const void *) key);
+            if (storage == nil) {
+                storage = [[NSMutableData alloc] initWithLength: size];
+                objc_setAssociatedObject(object, (const void *) key, storage,
+                                         OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                [storage release];
+            }
+        }
     }
     return [storage mutableBytes];
 }
