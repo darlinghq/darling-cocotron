@@ -18,6 +18,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/AppKitExport.h>
+#import <AppKit/NSGraphics.h>
 #import <ApplicationServices/ApplicationServices.h>
 #import <Foundation/Foundation.h>
 
@@ -27,7 +28,6 @@ APPKIT_EXPORT NSNotificationName const NSSystemColorsDidChangeNotification;
 
 typedef NSString *NSColorListName;
 typedef NSString *NSColorName;
-typedef NSString *NSColorSpaceName;
 
 typedef NS_ENUM(NSInteger, NSColorType) {
     NSColorTypeComponentBased = 0,
