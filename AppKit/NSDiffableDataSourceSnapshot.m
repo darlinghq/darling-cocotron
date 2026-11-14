@@ -65,6 +65,13 @@
                 format: @"NSDiffableDataSourceSnapshot: %@ (GUESS: raising is not in the public documentation)", why];
 }
 
+// Public reports of the UIKit implementation of the same class name NSInternalInconsistencyException for identifiers that
+// are not unique; GUESS (not in the public documentation, not observed on AppKit) that AppKit does the same.
+- (void) raiseNotUnique: (NSString *) why {
+    [NSException raise: NSInternalInconsistencyException
+                format: @"NSDiffableDataSourceSnapshot: %@ (GUESS: raising is not in the public documentation)", why];
+}
+
 - (NSInteger) indexOfSectionIdentifier: (id) identifier {
     NSUInteger index = [_sections indexOfObject: identifier];
     return index == NSNotFound ? NSNotFound : (NSInteger) index;
@@ -121,7 +128,7 @@
     NSMutableArray *seen = [NSMutableArray array];
     for (id identifier in identifiers) {
         if ([_sections containsObject: identifier] || [seen containsObject: identifier]) {
-            [self raise: [NSString stringWithFormat: @"section identifier %@ is already in the snapshot", identifier]];
+            [self raiseNotUnique: [NSString stringWithFormat: @"section identifier %@ is already in the snapshot", identifier]];
         }
         [seen addObject: identifier];
     }
@@ -131,7 +138,7 @@
     NSMutableArray *seen = [NSMutableArray array];
     for (id identifier in identifiers) {
         if ([self sectionIndexOfItem: identifier position: NULL] != NSNotFound || [seen containsObject: identifier]) {
-            [self raise: [NSString stringWithFormat: @"item identifier %@ is already in the snapshot", identifier]];
+            [self raiseNotUnique: [NSString stringWithFormat: @"item identifier %@ is already in the snapshot", identifier]];
         }
         [seen addObject: identifier];
     }
@@ -198,9 +205,17 @@
     [self insertSections: identifiers atIndex: index + 1];
 }
 
+// Validate everything first so that a call with an absent identifier changes nothing.
 - (void) deleteSectionsWithIdentifiers: (NSArray *) identifiers {
     for (id identifier in identifiers) {
-        NSUInteger index = [self existingSectionIndex: identifier];
+        [self existingSectionIndex: identifier];
+    }
+    for (id identifier in identifiers) {
+        NSUInteger index = [_sections indexOfObject: identifier];
+        if (index == NSNotFound) {
+            continue;
+        }
+        [_reloadedItems removeObjectsInArray: [_items objectAtIndex: index]];
         [_sections removeObjectAtIndex: index];
         [_items removeObjectAtIndex: index];
         [_reloadedSections removeObject: identifier];
@@ -233,12 +248,13 @@
 - (void) reloadSectionsWithIdentifiers: (NSArray *) identifiers {
     for (id identifier in identifiers) {
         [self existingSectionIndex: identifier];
+    }
+    for (id identifier in identifiers) {
         if (![_reloadedSections containsObject: identifier]) {
             [_reloadedSections addObject: identifier];
         }
     }
 }
-
 
 - (void) appendItemsWithIdentifiers: (NSArray *) identifiers {
     if (![_sections count]) {
@@ -272,8 +288,14 @@
 
 - (void) deleteItemsWithIdentifiers: (NSArray *) identifiers {
     for (id identifier in identifiers) {
+        [self existingItemSection: identifier position: NULL];
+    }
+    for (id identifier in identifiers) {
         NSUInteger position;
-        NSUInteger section = [self existingItemSection: identifier position: &position];
+        NSUInteger section = [self sectionIndexOfItem: identifier position: &position];
+        if (section == NSNotFound) {
+            continue;
+        }
         [[_items objectAtIndex: section] removeObjectAtIndex: position];
         [_reloadedItems removeObject: identifier];
     }
@@ -312,6 +334,8 @@
 - (void) reloadItemsWithIdentifiers: (NSArray *) identifiers {
     for (id identifier in identifiers) {
         [self existingItemSection: identifier position: NULL];
+    }
+    for (id identifier in identifiers) {
         if (![_reloadedItems containsObject: identifier]) {
             [_reloadedItems addObject: identifier];
         }

@@ -6,14 +6,16 @@
 // The members are the ones Apple's documentation lists (numberOfItemsInSection: throws for an unknown section is
 // documented). Everything marked GUESS is not in the public documentation: raising for a duplicate identifier or an
 // absent anchor, the sections surviving deleteAllItems, the reload marks. Each GUESS EXPECT pins one of those.
-static BOOL raises(void (^block)(void)) {
+static BOOL raisesNamed(NSString *name, void (^block)(void)) {
     @try {
         block();
     } @catch (NSException *exception) {
-        return [[exception name] isEqual: NSInvalidArgumentException];
+        return [[exception name] isEqual: name];
     }
     return NO;
 }
+static BOOL raises(void (^block)(void)) { return raisesNamed(NSInvalidArgumentException, block); }
+static BOOL notUnique(void (^block)(void)) { return raisesNamed(NSInternalInconsistencyException, block); }
 
 int main(void) {
     NSAutoreleasePool *pool = [NSAutoreleasePool new];
@@ -79,10 +81,16 @@ int main(void) {
     EXPECT([s.itemIdentifiers isEqual: @[ @"y" ]], "changes to a copy do not reach the original");
 
     EXPECT(raises(^{ [s numberOfItemsInSection: @"nope"]; }), "numberOfItemsInSection: an unknown section raises");
-    EXPECT(raises(^{ [s appendSectionsWithIdentifiers: @[ @"A" ]]; }), "GUESS: a duplicate section raises");
-    EXPECT(raises(^{ [s appendSectionsWithIdentifiers: @[ @"Q", @"Q" ]]; }) && s.numberOfSections == 3,
+    EXPECT(notUnique(^{ [s appendSectionsWithIdentifiers: @[ @"A" ]]; }), "GUESS: a duplicate section raises NSInternalInconsistencyException");
+    EXPECT(notUnique(^{ [s appendSectionsWithIdentifiers: @[ @"Q", @"Q" ]]; }) && s.numberOfSections == 3,
            "GUESS: duplicates within one call raise before anything is added");
-    EXPECT(raises(^{ [s appendItemsWithIdentifiers: @[ @"y" ]]; }), "GUESS: a duplicate item raises");
+    EXPECT(notUnique(^{ [s appendItemsWithIdentifiers: @[ @"y" ]]; }), "GUESS: a duplicate item raises NSInternalInconsistencyException");
+    EXPECT(notUnique(^{ [s appendItemsWithIdentifiers: @[ @"fresh", @"fresh" ]]; }) && s.numberOfItems == 1,
+           "GUESS: duplicates within one append call raise before anything is added");
+    EXPECT(notUnique(^{ [s insertItemsWithIdentifiers: @[ @"y" ] beforeItemWithIdentifier: @"y"]; }) && s.numberOfItems == 1,
+           "GUESS: inserting an identifier that is already present raises");
+    EXPECT(notUnique(^{ [s insertSectionsWithIdentifiers: @[ @"A" ] afterSectionWithIdentifier: @"B"]; }) && s.numberOfSections == 3,
+           "GUESS: inserting a section identifier that is already present raises");
     EXPECT(raises(^{ [s appendItemsWithIdentifiers: @[ @"n" ] intoSectionWithIdentifier: @"nope"]; }),
            "GUESS: an absent section raises");
     EXPECT(raises(^{ [s insertItemsWithIdentifiers: @[ @"n" ] beforeItemWithIdentifier: @"nope"]; }),
@@ -102,6 +110,33 @@ int main(void) {
     EXPECT([s.reloadedItemIdentifiers isEqual: @[ @"y" ]] && [s.reloadedSectionIdentifiers isEqual: @[ @"A" ]],
            "GUESS: reload marks the identifiers");
     EXPECT(raises(^{ [s reloadItemsWithIdentifiers: @[ @"nope" ]]; }), "GUESS: reloading an absent item raises");
+
+    // Atomic: a call with an absent identifier changes nothing.
+    NSDiffableDataSourceSnapshot *atomic = [[cls alloc] init];
+    [atomic appendSectionsWithIdentifiers: @[ @"S1", @"S2" ]];
+    [atomic appendItemsWithIdentifiers: @[ @"i1", @"i2" ] intoSectionWithIdentifier: @"S1"];
+    EXPECT(raises(^{ [atomic deleteItemsWithIdentifiers: @[ @"i1", @"missing" ]]; }) && atomic.numberOfItems == 2,
+           "GUESS: deleteItems with an absent identifier raises and deletes nothing");
+    EXPECT(raises(^{ [atomic deleteSectionsWithIdentifiers: @[ @"S1", @"missing" ]]; }) && atomic.numberOfSections == 2,
+           "GUESS: deleteSections with an absent identifier raises and deletes nothing");
+    EXPECT(raises(^{ [atomic reloadItemsWithIdentifiers: @[ @"i1", @"missing" ]]; }) && [atomic.reloadedItemIdentifiers count] == 0,
+           "GUESS: reloadItems with an absent identifier raises and marks nothing");
+    EXPECT(raises(^{ [atomic reloadSectionsWithIdentifiers: @[ @"S1", @"missing" ]]; }) && [atomic.reloadedSectionIdentifiers count] == 0,
+           "GUESS: reloadSections with an absent identifier raises and marks nothing");
+    // Deleting a section drops its reload marks and its items' reload marks.
+    [atomic reloadSectionsWithIdentifiers: @[ @"S1" ]];
+    [atomic reloadItemsWithIdentifiers: @[ @"i1", @"i2" ]];
+    [atomic deleteSectionsWithIdentifiers: @[ @"S1" ]];
+    EXPECT([atomic.reloadedSectionIdentifiers count] == 0, "GUESS: deleting a section clears its reload mark");
+    EXPECT([atomic.reloadedItemIdentifiers count] == 0, "GUESS: deleting a section clears the reload marks of its items");
+    // Results are snapshots of the content, not live views of it.
+    [atomic appendItemsWithIdentifiers: @[ @"j1" ] intoSectionWithIdentifier: @"S2"];
+    NSArray *inSection = [atomic itemIdentifiersInSectionWithIdentifier: @"S2"];
+    NSArray *all = atomic.itemIdentifiers, *sections = atomic.sectionIdentifiers;
+    [atomic appendItemsWithIdentifiers: @[ @"j2" ]];
+    [atomic appendSectionsWithIdentifiers: @[ @"S3" ]];
+    EXPECT([inSection isEqual: @[ @"j1" ]] && [all isEqual: @[ @"j1" ]] && [sections isEqual: @[ @"S2" ]],
+           "itemIdentifiersInSection, itemIdentifiers and sectionIdentifiers return copies, not live arrays");
 
     [pool drain];
     printf("PASS: NSDiffableDataSourceSnapshot\n");
