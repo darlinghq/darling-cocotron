@@ -131,7 +131,16 @@ static void *NSBinderChangeContext;
     return [transformer reverseTransformedValue: object];
 }
 
+// displayPatternValue1..N fill one display pattern; the bindings are
+// read-only (Cocoa Bindings Reference, NSTextField).
+- (BOOL) isDisplayPatternBinding {
+    return [_binding hasPrefix: @"displayPatternValue"];
+}
+
 - (BOOL) allowsReverseTransformation {
+    if ([self isDisplayPatternBinding])
+        return NO;
+
     NSValueTransformer *transformer = [self valueTransformer];
 
     if (transformer == nil)
@@ -299,6 +308,18 @@ static void *NSBinderChangeContext;
     // there is only one binder and it's self
     if ([allUsedBinders count] == 1)
         return allUsedBinders;
+
+    // Every displayPatternValueN of the source fills the same pattern. The
+    // fake-path test below cannot tell them apart, since each one's path is
+    // the real objectValue.
+    if ([self isDisplayPatternBinding]) {
+        NSMutableArray *patternBinders = [NSMutableArray array];
+        for (_NSBinder *check in allUsedBinders) {
+            if ([check isDisplayPatternBinding])
+                [patternBinders addObject: check];
+        }
+        return patternBinders;
+    }
 
     // FIXME: total hack. assume only one digit at end, 1-9
 
