@@ -285,6 +285,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         _visible = YES;
         // The item's image, title, target and action live in its button, which exists from the start.
         _button = [[NSStatusBarButton alloc] initWithFrame: NSMakeRect(0, 0, 16, 22)];
+        // A status item shows nothing until the application gives it a title or an image, unlike a plain NSButton.
+        [_button setTitle: @""];
     }
     return self;
 }
