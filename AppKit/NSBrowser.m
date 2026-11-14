@@ -181,6 +181,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (void) dealloc {
+    [_cellPrototype release];
     [_explicitTitles release];
     [_titles release];
     [_matrices release];
@@ -191,6 +192,18 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (Class) cellClass {
     return _cellClass;
+}
+
+- (id) cellPrototype {
+    return _cellPrototype;
+}
+
+- (void) setCellPrototype: (NSCell *) cell {
+    [cell retain];
+    [_cellPrototype release];
+    _cellPrototype = cell;
+    if (cell != nil)
+        _cellClass = [cell class];
 }
 
 - target {
@@ -439,6 +452,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (void) setCellClass: (Class) class {
     _cellClass = class;
+    [_cellPrototype release];
+    _cellPrototype = nil;
 }
 
 - (void) setMaxVisibleColumns: (NSInteger) count {
@@ -632,7 +647,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         [matrix setAction: @selector(doClick:)];
         [matrix setDoubleAction: @selector(doDoubleClick:)];
 
-        [matrix setCellClass: [self cellClass]];
+        if (_cellPrototype != nil)
+            [matrix setPrototype: _cellPrototype];
+        else
+            [matrix setCellClass: [self cellClass]];
         [matrix setCellSize: NSMakeSize(frame.size.width, 16)];
         [matrix setAutoresizingMask: NSViewWidthSizable];
         [matrix setAutosizesCells: YES];
