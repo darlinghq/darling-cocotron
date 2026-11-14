@@ -54,6 +54,7 @@
     return _boundarySupplementaryItems;
 }
 
+// GUESS, not in the public documentation: setting nil on this non-optional array is treated as the empty array.
 - (void) setBoundarySupplementaryItems: (NSArray<NSCollectionLayoutBoundarySupplementaryItem *> *) items {
     items = [(items ? items : @[]) copy];
     [_boundarySupplementaryItems release];

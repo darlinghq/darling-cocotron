@@ -301,6 +301,7 @@ enum {
     NSCollectionLayoutItem *item = [[[self alloc] init] autorelease];
 
     item->_layoutSize = [layoutSize retain];
+    // GUESS, not in the public documentation: passing nil for this non-optional array is treated as the empty array.
     item->_supplementaryItems =
             [(supplementaryItems ? supplementaryItems : @[]) copy];
     return item;
@@ -336,6 +337,7 @@ enum {
 }
 
 // Readonly on an item; the group, which declares it settable, goes through this.
+// GUESS, not in the public documentation: setting nil on this non-optional array is treated as the empty array.
 - (void) _setSupplementaryItems: (NSArray *) supplementaryItems {
     supplementaryItems = [(supplementaryItems ? supplementaryItems : @[]) copy];
     [_supplementaryItems release];
@@ -718,6 +720,7 @@ static NSDirectionalRectEdge EdgesForAlignment(NSRectAlignment alignment) {
     return _boundarySupplementaryItems;
 }
 
+// GUESS, not in the public documentation: setting nil on this non-optional array is treated as the empty array.
 - (void) setBoundarySupplementaryItems: (NSArray<NSCollectionLayoutBoundarySupplementaryItem *> *) items {
     items = [(items ? items : @[]) copy];
     [_boundarySupplementaryItems release];
@@ -736,6 +739,7 @@ static NSDirectionalRectEdge EdgesForAlignment(NSRectAlignment alignment) {
     return _decorationItems;
 }
 
+// GUESS, not in the public documentation: setting nil on this non-optional array is treated as the empty array.
 - (void) setDecorationItems: (NSArray<NSCollectionLayoutDecorationItem *> *) items {
     items = [(items ? items : @[]) copy];
     [_decorationItems release];
