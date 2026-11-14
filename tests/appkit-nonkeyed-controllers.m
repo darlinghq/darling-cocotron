@@ -492,11 +492,8 @@ static void testFixtures(NSString *dir, BOOL templates)
             // (the height follows the sizing settings: the Mac gives 50 here)
             EXPECT([tv frame].origin.x == 1 && [tv frame].origin.y == 2 && [tv frame].size.width == 300);
         }
-        // (the contents are a serialized RTFD wrapper, which -initWithRTFD: here does not read yet:
-        // the text is only checked where it can be read)
-        if ([[tv string] length] > 0) {
-            expectString([tv string], @"Hello text", "text template contents");
-        }
+        // The contents are a serialized RTFD wrapper.
+        expectString([tv string], @"Hello text", "text template contents");
         EXPECT(![tv isEditable] && ![tv isRichText] && [tv drawsBackground] && [tv isSelectable]);
         NSColor *bg = [[tv backgroundColor] colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
         EXPECT(bg != nil && [bg redComponent] > 0.99 && [bg greenComponent] < 0.01);
