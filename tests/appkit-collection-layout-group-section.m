@@ -60,6 +60,12 @@ int main(void) {
         expect([[[[horizontal copy] autorelease] supplementaryItems] isEqual: @[tag]], @"a group's copy keeps them");
         [horizontal setSupplementaryItems: nil];
         expect([[horizontal supplementaryItems] isEqual: @[]], @"setting nil gives the empty array, not nil");
+        // A copy is built by the item's copy and then filled in, so the direction has to be copied explicitly; the
+        // vertical group is the one that shows it, because a lost direction reads as horizontal.
+        NSCollectionLayoutGroup *verticalGroup = [groupClass verticalGroupWithLayoutSize: fill subitems: @[item, other]];
+        NSCollectionLayoutGroup *verticalCopy = [[verticalGroup copy] autorelease];
+        expect([[verticalCopy visualDescription] containsString: @"vertical"] && [[copy visualDescription] containsString: @"horizontal"],
+               @"a group's copy keeps its direction");
         expect([[[groupClass horizontalGroupWithLayoutSize: fill subitems: @[item]] visualDescription] containsString: @"horizontal"] &&
                        [[[groupClass verticalGroupWithLayoutSize: fill subitems: @[item, other]] visualDescription] containsString: @"vertical"] &&
                        [[[groupClass verticalGroupWithLayoutSize: fill subitems: @[item, other]] visualDescription] containsString: @"2 subitems"],
