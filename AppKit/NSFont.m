@@ -401,7 +401,7 @@ static NSLock *_cacheLock = nil;
                 } ff;
 
                 ff.dword = NSSwapBigIntToHost(matrixBytes[i]);
-                _matrix[i] = ff.flt;
+                NS_EXTRA(NSFont, self)->_matrix[i] = ff.flt;
             }
         }
     } else {
@@ -464,7 +464,7 @@ static NSLock *_cacheLock = nil;
                 float transform[6];
                 [coder decodeArrayOfObjCType: "f" count: 6 at: transform];
                 for (int i = 0; i < 6; i++)
-                    _matrix[i] = transform[i];
+                    NS_EXTRA(NSFont, self)->_matrix[i] = transform[i];
             }
         }
 
@@ -483,23 +483,25 @@ static NSLock *_cacheLock = nil;
 - initWithName: (NSString *) name size: (CGFloat) size {
     _name = [name copy];
     _pointSize = size;
-    _matrix[0] = _pointSize;
-    _matrix[1] = 0;
-    _matrix[2] = 0;
-    _matrix[3] = _pointSize;
-    _matrix[4] = 0;
-    _matrix[5] = 0;
+    NS_EXTRA(NSFont, self)->_matrix[0] = _pointSize;
+    NS_EXTRA(NSFont, self)->_matrix[1] = 0;
+    NS_EXTRA(NSFont, self)->_matrix[2] = 0;
+    NS_EXTRA(NSFont, self)->_matrix[3] = _pointSize;
+    NS_EXTRA(NSFont, self)->_matrix[4] = 0;
+    NS_EXTRA(NSFont, self)->_matrix[5] = 0;
 
     if ([_name isEqualToString: @"Symbol"])
-        _encoding = NSSymbolStringEncoding;
+        NS_EXTRA(NSFont, self)->_encoding = NSSymbolStringEncoding;
     else
-        _encoding = NSUnicodeStringEncoding;
+        NS_EXTRA(NSFont, self)->_encoding = NSUnicodeStringEncoding;
 
-    _cgFont = CGFontCreateWithFontName((CFStringRef) _name);
-    if (_cgFont) {
-        _ctFont = CTFontCreateWithGraphicsFont(_cgFont, _pointSize, NULL, NULL);
+    NS_EXTRA(NSFont, self)->_cgFont = CGFontCreateWithFontName((CFStringRef) _name);
+    if (NS_EXTRA(NSFont, self)->_cgFont) {
+        NS_EXTRA(NSFont, self)->_ctFont = CTFontCreateWithGraphicsFont(
+                NS_EXTRA(NSFont, self)->_cgFont, _pointSize, NULL, NULL);
         [[self class] addFontToCache: self];
-        O2FontLog(@"name: %@ _cgFont: %@ _ctFont: %@", name, _cgFont, _ctFont);
+        O2FontLog(@"name: %@ _cgFont: %@ _ctFont: %@", name, NS_EXTRA(NSFont, self)->_cgFont,
+                  NS_EXTRA(NSFont, self)->_ctFont);
     } else {
         [self release];
         self = nil;
@@ -511,8 +513,11 @@ static NSLock *_cacheLock = nil;
     [[self class] removeFontFromCache: self];
 
     [_name release];
-    CGFontRelease(_cgFont);
-    [_ctFont release];
+    if (NS_EXTRA_ALLOCATED(NSFont, self)) {
+        CGFontRelease(NS_EXTRA(NSFont, self)->_cgFont);
+        [NS_EXTRA(NSFont, self)->_ctFont release];
+    }
+    NS_EXTRA_FREE(NSFont, self);
     [super dealloc];
 }
 
@@ -608,14 +613,14 @@ static NSLock *_cacheLock = nil;
 }
 
 - (const CGFloat *) matrix {
-    return _matrix;
+    return NS_EXTRA(NSFont, self)->_matrix;
 }
 
 - (NSAffineTransform *) textTransform {
     NSAffineTransform *result = [NSAffineTransform transform];
     NSAffineTransformStruct fields = {
-            _matrix[0], _matrix[1], _matrix[2],
-            _matrix[3], _matrix[4], _matrix[5],
+            NS_EXTRA(NSFont, self)->_matrix[0], NS_EXTRA(NSFont, self)->_matrix[1], NS_EXTRA(NSFont, self)->_matrix[2],
+            NS_EXTRA(NSFont, self)->_matrix[3], NS_EXTRA(NSFont, self)->_matrix[4], NS_EXTRA(NSFont, self)->_matrix[5],
     };
 
     [result setTransformStruct: fields];
@@ -629,11 +634,11 @@ static NSLock *_cacheLock = nil;
 }
 
 - (NSCharacterSet *) coveredCharacterSet {
-    return O2FontGetCoveredCharacterSet((O2FontRef)_cgFont);
+    return O2FontGetCoveredCharacterSet((O2FontRef)NS_EXTRA(NSFont, self)->_cgFont);
 }
 
 - (NSStringEncoding) mostCompatibleStringEncoding {
-    return _encoding;
+    return NS_EXTRA(NSFont, self)->_encoding;
 }
 
 - (NSString *) familyName {
@@ -730,11 +735,11 @@ static NSLock *_cacheLock = nil;
 
 // The CTFont behind this font, for CoreText functions given an NSFont.
 - (CTFontRef) _coreTextFont {
-    return _ctFont;
+    return NS_EXTRA(NSFont, self)->_ctFont;
 }
 
 - (NSRect) boundingRectForFont {
-    return CTFontGetBoundingBox(_ctFont);
+    return CTFontGetBoundingBox(NS_EXTRA(NSFont, self)->_ctFont);
 }
 
 - (NSRect) boundingRectForGlyph: (NSGlyph) glyph {
@@ -747,7 +752,7 @@ static NSLock *_cacheLock = nil;
 }
 
 - (NSUInteger) numberOfGlyphs {
-    return CTFontGetGlyphCount(_ctFont);
+    return CTFontGetGlyphCount(NS_EXTRA(NSFont, self)->_ctFont);
 }
 
 - (NSGlyph) glyphWithName: (NSString *) name {
@@ -756,28 +761,28 @@ static NSLock *_cacheLock = nil;
 }
 
 - (BOOL) glyphIsEncoded: (NSGlyph) glyph {
-    return (glyph < CTFontGetGlyphCount(_ctFont)) ? YES : NO;
+    return (glyph < CTFontGetGlyphCount(NS_EXTRA(NSFont, self)->_ctFont)) ? YES : NO;
 }
 
 - (NSSize) advancementForGlyph: (NSGlyph) glyph {
     CGSize cgSize;
     CGGlyph cgGlyphs[1] = {glyph};
 
-    CTFontGetAdvancesForGlyphs(_ctFont, 0, cgGlyphs, &cgSize, 1);
+    CTFontGetAdvancesForGlyphs(NS_EXTRA(NSFont, self)->_ctFont, 0, cgGlyphs, &cgSize, 1);
 
     return NSMakeSize(cgSize.width, cgSize.height);
 }
 
 - (NSSize) maximumAdvancement {
     CGSize max = CGSizeZero;
-    NSInteger glyph, glyphCount = CTFontGetGlyphCount(_ctFont);
+    NSInteger glyph, glyphCount = CTFontGetGlyphCount(NS_EXTRA(NSFont, self)->_ctFont);
     CGGlyph glyphs[glyphCount];
     CGSize advances[glyphCount];
 
     for (glyph = 0; glyph < glyphCount; glyph++)
         glyphs[glyph] = glyph;
 
-    CTFontGetAdvancesForGlyphs(_ctFont, 0, glyphs, advances, glyphCount);
+    CTFontGetAdvancesForGlyphs(NS_EXTRA(NSFont, self)->_ctFont, 0, glyphs, advances, glyphCount);
 
     for (glyph = 0; glyph < glyphCount; glyph++) {
         max.width = MAX(max.width, advances[glyph].width);
@@ -788,46 +793,46 @@ static NSLock *_cacheLock = nil;
 }
 
 - (CGFloat) underlinePosition {
-    return CTFontGetUnderlinePosition(_ctFont);
+    return CTFontGetUnderlinePosition(NS_EXTRA(NSFont, self)->_ctFont);
 }
 
 - (CGFloat) underlineThickness {
-    return CTFontGetUnderlineThickness(_ctFont);
+    return CTFontGetUnderlineThickness(NS_EXTRA(NSFont, self)->_ctFont);
 }
 
 - (CGFloat) ascender {
-    return CTFontGetAscent(_ctFont);
+    return CTFontGetAscent(NS_EXTRA(NSFont, self)->_ctFont);
 }
 
 // CT & NS descender value have opposite value on Cocoa
 - (CGFloat) descender {
-    return -CTFontGetDescent(_ctFont);
+    return -CTFontGetDescent(NS_EXTRA(NSFont, self)->_ctFont);
 }
 
 - (CGFloat) leading {
-    return CTFontGetLeading(_ctFont);
+    return CTFontGetLeading(NS_EXTRA(NSFont, self)->_ctFont);
 }
 
 - (CGFloat) defaultLineHeightForFont {
-    return roundf(CTFontGetAscent(_ctFont) + CTFontGetDescent(_ctFont) +
-                  CTFontGetLeading(_ctFont));
+    return roundf(CTFontGetAscent(NS_EXTRA(NSFont, self)->_ctFont) + CTFontGetDescent(NS_EXTRA(NSFont, self)->_ctFont) +
+                  CTFontGetLeading(NS_EXTRA(NSFont, self)->_ctFont));
 }
 
 - (BOOL) isFixedPitch {
     // A font that declares itself fixed-pitch is, even if it has glyphs,
     // such as combining marks, with other advances.
-    if (CTFontGetSymbolicTraits(_ctFont) & kCTFontTraitMonoSpace)
+    if (CTFontGetSymbolicTraits(NS_EXTRA(NSFont, self)->_ctFont) & kCTFontTraitMonoSpace)
         return YES;
 
     CGSize current;
-    NSInteger glyph, glyphCount = CTFontGetGlyphCount(_ctFont);
+    NSInteger glyph, glyphCount = CTFontGetGlyphCount(NS_EXTRA(NSFont, self)->_ctFont);
     CGGlyph glyphs[glyphCount];
     CGSize advances[glyphCount];
 
     for (glyph = 0; glyph < glyphCount; glyph++)
         glyphs[glyph] = glyph;
 
-    CTFontGetAdvancesForGlyphs(_ctFont, 0, glyphs, advances, glyphCount);
+    CTFontGetAdvancesForGlyphs(NS_EXTRA(NSFont, self)->_ctFont, 0, glyphs, advances, glyphCount);
     current = advances[0];
 
     for (glyph = 1; glyph < glyphCount; glyph++) {
@@ -840,21 +845,21 @@ static NSLock *_cacheLock = nil;
 }
 
 - (CGFloat) italicAngle {
-    return CTFontGetSlantAngle(_ctFont);
+    return CTFontGetSlantAngle(NS_EXTRA(NSFont, self)->_ctFont);
 }
 
 - (CGFloat) xHeight {
-    return CTFontGetXHeight(_ctFont);
+    return CTFontGetXHeight(NS_EXTRA(NSFont, self)->_ctFont);
 }
 
 - (CGFloat) capHeight {
-    return CTFontGetCapHeight(_ctFont);
+    return CTFontGetCapHeight(NS_EXTRA(NSFont, self)->_ctFont);
 }
 
 - (void) setInContext: (NSGraphicsContext *) context {
     CGContextRef cgContext = [context graphicsPort];
 
-    CGContextSetFont(cgContext, _cgFont);
+    CGContextSetFont(cgContext, NS_EXTRA(NSFont, self)->_cgFont);
     CGContextSetFontSize(cgContext, _pointSize);
 
     CGAffineTransform textMatrix;
@@ -876,7 +881,7 @@ static NSLock *_cacheLock = nil;
             precededByGlyph: (NSGlyph) previous
                   isNominal: (BOOL *) isNominalp
 {
-    return [_ctFont positionOfGlyph: current
+    return [NS_EXTRA(NSFont, self)->_ctFont positionOfGlyph: current
                     precededByGlyph: previous
                           isNominal: isNominalp];
 }
@@ -891,14 +896,14 @@ static NSLock *_cacheLock = nil;
     for (i = 0; i < count; i++)
         cgGlyphs[i] = glyphs[i];
 
-    CTFontGetAdvancesForGlyphs(_ctFont, 0, cgGlyphs, advancements, count);
+    CTFontGetAdvancesForGlyphs(NS_EXTRA(NSFont, self)->_ctFont, 0, cgGlyphs, advancements, count);
 }
 
 - (void) getAdvancements: (NSSize *) advancements
          forPackedGlyphs: (const void *) packed
                   length: (NSUInteger) length
 {
-    CTFontGetAdvancesForGlyphs(_ctFont, 0, packed, advancements, length);
+    CTFontGetAdvancesForGlyphs(NS_EXTRA(NSFont, self)->_ctFont, 0, packed, advancements, length);
 }
 
 - (void) getBoundingRects: (NSRect *) rects
@@ -915,7 +920,7 @@ static NSLock *_cacheLock = nil;
     CGGlyph cgGlyphs[length];
     NSInteger i;
 
-    CTFontGetGlyphsForCharacters(_ctFont, characters, cgGlyphs, length);
+    CTFontGetGlyphsForCharacters(NS_EXTRA(NSFont, self)->_ctFont, characters, cgGlyphs, length);
 
     for (i = 0; i < length; i++) {
         unichar check = characters[i];
@@ -934,7 +939,7 @@ static NSLock *_cacheLock = nil;
 // character to, or 0 (.notdef) when it has none.
 - (NSGlyph) _defaultGlyphForChar: (unichar) character {
     CGGlyph glyph = 0;
-    CTFontGetGlyphsForCharacters(_ctFont, &character, &glyph, 1);
+    CTFontGetGlyphsForCharacters(NS_EXTRA(NSFont, self)->_ctFont, &character, &glyph, 1);
     return glyph;
 }
 
