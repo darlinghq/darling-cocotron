@@ -28,6 +28,10 @@
 - (void) flush;
 - (BOOL) requiresMainThreadPresentation;
 
+// Refresh rate in millihertz of the output the window is shown on, or 0 when
+// the backend does not know. The OpenGL layer paces swaps to it.
+- (uint32_t) refreshMillihertz;
+
 - (void) show;
 - (void) hide;
 

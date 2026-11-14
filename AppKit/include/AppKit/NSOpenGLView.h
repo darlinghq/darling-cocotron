@@ -26,6 +26,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     NSOpenGLPixelFormat *_pixelFormat;
     NSOpenGLContext *_context;
     BOOL _needsReshape;
+    NSSize _lastDrawablePixelSize;
+    NSMutableArray *_focusContexts;
 }
 
 + (NSOpenGLPixelFormat *) defaultPixelFormat;

@@ -46,6 +46,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSWindow-Private.h>
 #import <AppKit/NSWorkspace.h>
 #import <CoreGraphics/CGSServerSPI.h>
+#import <CoreGraphics/CoreGraphicsPrivate.h>
+#import <HIToolbox/CarbonEvents.h>
+#import <HIToolbox/CarbonEventsCore.h>
 #import <CoreGraphics/CGWindowPrivate.h>
 #import <Foundation/NSAppleEventManager.h>
 #import <Foundation/NSAppleEventDescriptor.h>
@@ -114,6 +117,33 @@ NSApplication *NSApp = nil;
 @interface NSDockTile (private)
 - initWithOwner: owner;
 @end
+
+// The window system reports a hot key press or release as a system-defined event record; it is
+// queued for the application like any event, and -[NSApplication sendEvent:] passes it on.
+static void hotKeyEventNotification(CGSNotificationType type, void *data, unsigned long length, void *client) {
+    const CGSEventRecord *record = data;
+
+    if (length < sizeof(*record) || record->type != NX_SYSDEFINED)
+        return;
+
+    int subtype = record->data.compound.subType;
+    if (subtype != kCGSHotKeyPressedSubtype && subtype != kCGSHotKeyReleasedSubtype)
+        return;
+
+    // CG global coordinates have y down from the main display's top; NSEvent's have y up
+    NSRect main = [[[NSScreen screens] firstObject] frame];
+    NSPoint location = NSMakePoint(record->location.x, NSMaxY(main) - record->location.y);
+    NSEvent *event = [NSEvent otherEventWithType: NSSystemDefined
+                                        location: location
+                                   modifierFlags: (NSUInteger) record->flags & NSDeviceIndependentModifierFlagsMask
+                                       timestamp: (NSTimeInterval) record->time / 1e9
+                                    windowNumber: 0
+                                         context: nil
+                                         subtype: subtype
+                                           data1: record->data.compound.misc.L[0]
+                                           data2: 0];
+    [NSApp postEvent: event atStart: NO];
+}
 
 @implementation NSApplication
 
@@ -194,6 +224,8 @@ NSApplication *NSApp = nil;
     _dockTile = [[NSDockTile alloc] initWithOwner: self];
     _modalStack = [NSMutableArray new];
 
+    CGSRegisterNotifyProc(hotKeyEventNotification, CGSNotificationSingleEventType(NX_SYSDEFINED), NULL);
+
     _lock = NSZoneMalloc(NULL, sizeof(pthread_mutex_t));
 
     CFRunLoopAddCommonMode(CFRunLoopGetCurrent(),
@@ -219,30 +251,154 @@ NSApplication *NSApp = nil;
               forEventClass: kInternetEventClass
                  andEventID: kAEGetURL];
 
+    // Documents opened or printed through Launch Services arrive as kAEOpenDocuments and
+    // kAEPrintDocuments events.
+    [[NSAppleEventManager sharedAppleEventManager]
+            setEventHandler: self
+                andSelector: @selector(_handleOpenDocumentsEvent:withReplyEvent:)
+              forEventClass: kCoreEventClass
+                 andEventID: kAEOpenDocuments];
+    [[NSAppleEventManager sharedAppleEventManager]
+            setEventHandler: self
+                andSelector: @selector(_handlePrintDocumentsEvent:withReplyEvent:)
+              forEventClass: kCoreEventClass
+                 andEventID: kAEPrintDocuments];
+    [[NSAppleEventManager sharedAppleEventManager]
+            setEventHandler: self
+                andSelector: @selector(_handleOpenApplicationEvent:withReplyEvent:)
+              forEventClass: kCoreEventClass
+                 andEventID: kAEOpenApplication];
+    [[NSAppleEventManager sharedAppleEventManager]
+            setEventHandler: self
+                andSelector: @selector(_handleReopenApplicationEvent:withReplyEvent:)
+              forEventClass: kCoreEventClass
+                 andEventID: kAEReopenApplication];
+
     return NSApp;
 }
 
-- (void) _handleGetURLEvent: (NSAppleEventDescriptor *) event
-             withReplyEvent: (NSAppleEventDescriptor *) reply
-{
+// Paths named by the direct object of an open or print documents event: a file URL or a list of them.
+static NSArray *pathsOfDocumentsEvent(NSAppleEventDescriptor *event) {
     NSAppleEventDescriptor *object = [event paramDescriptorForKeyword: keyDirectObject];
-    NSMutableArray *urls = [NSMutableArray array];
-
-    // The direct object is the URL's text, or a list of them.
+    NSMutableArray *paths = [NSMutableArray array];
     NSInteger count = [object descriptorType] == typeAEList ? [object numberOfItems] : 1;
+
+    if (object == nil)
+        return paths;
     for (NSInteger i = 1; i <= count; i++) {
         NSAppleEventDescriptor *item =
                 [object descriptorType] == typeAEList ? [object descriptorAtIndex: i] : object;
-        NSString *string = [item stringValue];
+        NSData *data = [item data];
+        NSString *string = nil;
+
+        if ([item descriptorType] == typeFileURL || [item descriptorType] == typeUTF8Text)
+            string = [[[NSString alloc] initWithData: data encoding: NSUTF8StringEncoding] autorelease];
+
         NSURL *url = string != nil ? [NSURL URLWithString: string] : nil;
-
-        if (url != nil)
-            [urls addObject: url];
+        if ([url isFileURL] && [[url path] length] > 0)
+            [paths addObject: [url path]];
     }
+    return paths;
+}
 
-    if ([urls count] > 0 &&
-        [_delegate respondsToSelector: @selector(application:openURLs:)])
-        [_delegate application: self openURLs: urls];
+// Every launch receives one initial Apple Event: kAEOpenDocuments or kAEPrintDocuments when the
+// application was started to open documents, otherwise kAEOpenApplication. -finishLaunching waits
+// for it, handles it, and only then posts NSApplicationDidFinishLaunchingNotification.
+enum { InitialEventNone, InitialEventOpenApplication, InitialEventOpenDocuments, InitialEventPrintDocuments };
+
+// How long -finishLaunching waits for the initial event. The event is expected to arrive; this
+// only keeps an application running when nothing can send it.
+#define INITIAL_EVENT_TIMEOUT 5.0
+
+static int initialEventKind = InitialEventNone;     // an initial event that arrived before the wait began
+static NSArray *initialEventPaths = nil;
+static BOOL waitingForInitialEvent = NO;
+static BOOL initialEventHandled = NO;
+static BOOL launchComplete = NO;
+static BOOL finishLaunchingDeferred = NO;
+static BOOL argumentDocumentsOpened = NO;
+// Documents that arrive during launch after the initial event; opened when launching is done.
+static NSMutableArray *pendingOpenFiles = nil;
+
+- (void) _launchEvent: (int) kind paths: (NSArray *) paths {
+    if (initialEventHandled || (initialEventKind != InitialEventNone && !waitingForInitialEvent)) {
+        if (kind == InitialEventOpenDocuments && [paths count] > 0) {
+            if (pendingOpenFiles == nil)
+                pendingOpenFiles = [[NSMutableArray alloc] init];
+            [pendingOpenFiles addObjectsFromArray: paths];
+        }
+        return;
+    }
+    if (!waitingForInitialEvent) {
+        initialEventKind = kind;
+        initialEventPaths = [paths copy];
+        return;
+    }
+    [self _handleInitialEvent: kind paths: paths];
+}
+
+- (void) _handleOpenDocumentsEvent: (NSAppleEventDescriptor *) event
+                    withReplyEvent: (NSAppleEventDescriptor *) reply {
+    NSArray *paths = pathsOfDocumentsEvent(event);
+
+    if (launchComplete) {
+        if ([paths count] > 0)
+            [self _openFileNames: paths];
+        return;
+    }
+    [self _launchEvent: InitialEventOpenDocuments paths: paths];
+}
+
+- (void) _printFileNames: (NSArray *) paths {
+    if ([paths count] == 0)
+        return;
+    if ([_delegate respondsToSelector: @selector(application:
+                                                  printFiles:withSettings:
+                                              showPrintPanels:)]) {
+        [_delegate application: self
+                    printFiles: paths
+                  withSettings: nil
+               showPrintPanels: YES];
+    } else if ([_delegate respondsToSelector: @selector(application:printFile:)]) {
+        for (NSString *path in paths)
+            [_delegate application: self printFile: path];
+    }
+}
+
+- (void) _handlePrintDocumentsEvent: (NSAppleEventDescriptor *) event
+                     withReplyEvent: (NSAppleEventDescriptor *) reply {
+    NSArray *paths = pathsOfDocumentsEvent(event);
+
+    if (launchComplete)
+        [self _printFileNames: paths];
+    else
+        [self _launchEvent: InitialEventPrintDocuments paths: paths];
+}
+
+- (void) _handleOpenApplicationEvent: (NSAppleEventDescriptor *) event
+                      withReplyEvent: (NSAppleEventDescriptor *) reply {
+    // Only the launch's own event matters; an application that is running is already open.
+    if (!launchComplete)
+        [self _launchEvent: InitialEventOpenApplication paths: nil];
+}
+
+- (void) _handleReopenApplicationEvent: (NSAppleEventDescriptor *) event
+                        withReplyEvent: (NSAppleEventDescriptor *) reply {
+    if (!launchComplete)
+        return;
+
+    BOOL hasVisibleWindows = NO;
+    for (NSWindow *window in _windows)
+        if ([window isVisible] && !([window styleMask] & NSAppKitPrivateWindow))
+            hasVisibleWindows = YES;
+
+    BOOL handle = YES;
+    if ([_delegate respondsToSelector: @selector(applicationShouldHandleReopen:
+                                                               hasVisibleWindows:)])
+        handle = [_delegate applicationShouldHandleReopen: self
+                                        hasVisibleWindows: hasVisibleWindows];
+    if (handle && !hasVisibleWindows)
+        [self _openUntitledFileIfNeeded];
 }
 
 - (NSGraphicsContext *) context {
@@ -678,6 +834,15 @@ NSApplication *NSApp = nil;
         openFiles = nsOpen;
     }
 
+    [defaults removeObjectForKey: @"NSOpen"];
+
+    return [self _openFileNames: openFiles];
+}
+
+// Hands documents to the delegate (or the document controller) the way a request to open files is.
+- (BOOL) _openFileNames: (NSArray *) openFiles {
+    BOOL opened = NO;
+
     if ([openFiles count] == 0) {
         return NO;
     }
@@ -698,7 +863,6 @@ NSApplication *NSApp = nil;
             opened |= [target application: self openFile: aFile];
         }
     }
-    [defaults removeObjectForKey: @"NSOpen"];
 
     return opened;
 }
@@ -711,7 +875,6 @@ NSApplication *NSApp = nil;
     _finishedLaunching = YES;
 
     NSAutoreleasePool *pool = [NSAutoreleasePool new];
-    BOOL needsUntitled = YES;
 
     NS_DURING [[NSNotificationCenter defaultCenter]
             postNotificationName: NSApplicationWillFinishLaunchingNotification
@@ -737,15 +900,49 @@ NSApplication *NSApp = nil;
 
     [self _closeSplashImage];
 
+    // Documents named on the command line are opened first; an initial open-application event then
+    // creates no untitled document.
+    argumentDocumentsOpened = [self openFiles];
+
+    if (!initialEventHandled) {
+        if (initialEventKind != InitialEventNone) {
+            int kind = initialEventKind;
+            NSArray *paths = [initialEventPaths autorelease];
+
+            initialEventKind = InitialEventNone;
+            initialEventPaths = nil;
+            [self _handleInitialEvent: kind paths: paths];
+        } else {
+            // Without launchservicesd nothing can send the event.
+            const char *noServer = getenv("SCDontUseServer");
+            NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow: INITIAL_EVENT_TIMEOUT];
+
+            waitingForInitialEvent = !(noServer != NULL && atoi(noServer) != 0);
+            while (waitingForInitialEvent && !initialEventHandled &&
+                   [deadline timeIntervalSinceNow] > 0)
+                CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.05, true);
+            waitingForInitialEvent = NO;
+            if (!initialEventHandled)
+                [self _handleInitialEvent: InitialEventOpenApplication paths: nil];
+        }
+    }
+    if (finishLaunchingDeferred) {
+        finishLaunchingDeferred = NO;
+        [self _finishLaunchingIsDefault: NO];
+    }
+
+    [pool release];
+}
+
+// Opens a new untitled document the way a launch without documents does, if the delegate or the
+// document controller wants one.
+- (void) _openUntitledFileIfNeeded {
+    BOOL needsUntitled = YES;
     NSDocumentController *controller = nil;
     id types = [[[NSBundle mainBundle] infoDictionary]
             objectForKey: @"CFBundleDocumentTypes"];
     if ([types count] > 0)
         controller = [NSDocumentController sharedDocumentController];
-
-    if ([self openFiles]) {
-        needsUntitled = NO;
-    }
 
     if (needsUntitled && _delegate &&
         [_delegate respondsToSelector: @selector
@@ -768,10 +965,39 @@ NSApplication *NSApp = nil;
         [controller _updateRecentDocumentsMenu];
         [controller newDocument: self];
     }
+}
 
+// Handles the launch's initial event and completes launching: the application is told it
+// finished, with whether this was a plain launch (open-application) or one to open documents.
+- (void) _handleInitialEvent: (int) kind paths: (NSArray *) paths {
+    initialEventHandled = YES;
+
+    if (kind == InitialEventOpenApplication) {
+        if (!argumentDocumentsOpened)
+            [self _openUntitledFileIfNeeded];
+    } else if (kind == InitialEventOpenDocuments) {
+        [self _openFileNames: paths];
+    } else {
+        [self _printFileNames: paths];
+    }
+
+    // The did-finish notification follows the open-application event within its handling, but a
+    // documents event once its handling is over.
+    if (kind == InitialEventOpenApplication)
+        [self _finishLaunchingIsDefault: YES];
+    else
+        finishLaunchingDeferred = YES;
+}
+
+// Posts the did-finish notification and completes launching.
+- (void) _finishLaunchingIsDefault: (BOOL) isDefault {
     NS_DURING [[NSNotificationCenter defaultCenter]
             postNotificationName: NSApplicationDidFinishLaunchingNotification
-                          object: self];
+                          object: self
+                        userInfo: [NSDictionary
+                                          dictionaryWithObject: [NSNumber
+                                                                        numberWithBool: isDefault]
+                                                        forKey: NSApplicationLaunchIsDefaultLaunchKey]];
     NS_HANDLER [self reportException: localException];
     NS_ENDHANDLER
 
@@ -781,7 +1007,13 @@ NSApplication *NSApp = nil;
     NS_HANDLER [self reportException: localException];
     NS_ENDHANDLER
 
-            [pool release];
+    launchComplete = YES;
+    if ([pendingOpenFiles count] > 0) {
+        NSArray *paths = [pendingOpenFiles autorelease];
+
+        pendingOpenFiles = nil;
+        [self _openFileNames: paths];
+    }
 }
 
 - (void) _checkForReleasedWindows {
@@ -899,6 +1131,31 @@ NSApplication *NSApp = nil;
     event = NSEventApplyLocalMonitors(event);
     if (event == nil)
         return;
+
+    // QUIRK: a system-defined event of subtype 6 is a hot key press and one of subtype 9 a
+    // release; data1 names the hot key. HIToolbox turns it into the Carbon hot key event (AppKit
+    // passes it on with CreateEventWithCGEvent and SendEventToEventTarget), so an
+    // application that overrides -sendEvent: without calling super gets no Carbon callback, as on
+    // macOS. Not documented. Evidence: public write-ups (The Register, 2009,
+    // https://www.theregister.co.uk/2009/02/24/hotkeys_framework2/; cocoa-dev 2011-10,
+    // https://lists.apple.com/archives/cocoa-dev/2011/Oct/msg00526.html; cocoa-dev 2009-09,
+    // https://lists.apple.com/archives/cocoa-dev/2009/Sep/msg01824.html), tier 4. That data1 is
+    // the uid that HIToolbox gave the window system is inference: its value on 64-bit macOS is
+    // not verified.
+    // Test: tests/src/carbon_hotkeys_appkit.m
+    if ([event type] == NSSystemDefined &&
+        ([event subtype] == kCGSHotKeyPressedSubtype || [event subtype] == kCGSHotKeyReleasedSubtype)) {
+        // Through the public Carbon Event Manager: a raw event made from the event's CGEvent goes to
+        // the event dispatcher target, whose standard handler (in HIToolbox) sends the hot key event.
+        CGEventRef cgEvent = [event CGEvent];
+        EventRef carbonEvent = NULL;
+
+        if (cgEvent != NULL && CreateEventWithCGEvent(NULL, cgEvent, kEventAttributeNone, &carbonEvent) == noErr) {
+            SendEventToEventTarget(carbonEvent, GetEventDispatcherTarget());
+            ReleaseEvent(carbonEvent);
+        }
+        return;
+    }
 
     if ([event type] == NSKeyDown) {
         unsigned modifierFlags = [event modifierFlags];
@@ -1968,6 +2225,11 @@ void NSUpdateDynamicServices(void) {
 BOOL NSPerformService(NSString *itemName, NSPasteboard *pasteboard) {
     NSUnimplementedFunction();
     return NO;
+}
+
+BOOL NSApplicationLoad(void) {
+    [NSApplication sharedApplication];
+    return YES;
 }
 
 @implementation NSApplication (NSUserInterfaceItemSearching)

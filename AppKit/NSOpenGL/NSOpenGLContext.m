@@ -130,6 +130,7 @@ static inline void _clearCurrentContext() {
 }
 
 - (void) updateViewParameters {
+    if (_view == nil || [_view window] == nil) return;
     NSRect rect = [_view bounds];
 
     if ([_view window] != nil)
@@ -152,7 +153,15 @@ static inline void _clearCurrentContext() {
     if (_view == view)
         return;
 
+    // Detach before native-window destruction; EGL can defer destroying a
+    // drawable that remains current. Keep self alive across the thread release.
+    [self retain];
+    if (CGLGetCurrentContext() == _glContext) {
+        if (CGLSetCurrentContext(NULL) != kCGLNoError) { [self release]; return; }
+        if (_currentContext() == self) _setCurrentContext(nil);
+    }
     _hasPrepared = NO;
+    _drawableAttachmentSucceeded = NO;
     _view = view;
 
     if (_cglWindow != NULL) {
@@ -163,10 +172,12 @@ static inline void _clearCurrentContext() {
     _subwindow = nil;
 
     [self updateViewParameters];
+    [self release];
 }
 
 - (void) makeCurrentContext {
     CGLError error;
+    _drawableAttachmentSucceeded = NO;
 
     // Viewless contexts have no window geometry to update. In particular,
     // background resource uploads must not wait for a main-thread run loop.
@@ -180,6 +191,11 @@ static inline void _clearCurrentContext() {
         }
     }
 
+    if ([_subwindow respondsToSelector: @selector(requiresMainThreadPresentation)] &&
+        [_subwindow requiresMainThreadPresentation] && ![NSThread isMainThread]) {
+        NSLog(@"This window backend requires OpenGL rendering on the main thread");
+        return;
+    }
     if (_cglWindow != NULL) {
         if ((error = CGLContextMakeCurrentAndAttachToWindow(
                      _glContext, _cglWindow)) != kCGLNoError) {
@@ -197,6 +213,7 @@ static inline void _clearCurrentContext() {
     }
 
     _setCurrentContext(self);
+    _drawableAttachmentSucceeded = YES;
 
     if (!_hasPrepared) {
         _hasPrepared = YES;
@@ -254,6 +271,14 @@ static inline void _clearCurrentContext() {
     NSUnimplementedMethod();
 }
 
+- (BOOL) _drawableAttachmentSucceeded { return _drawableAttachmentSucceeded; }
+
+// Do not create a drawable just to answer a backing-coordinate query.
+- (NSSize) _drawablePixelSize {
+    return [_subwindow respondsToSelector: @selector(drawablePixelSize)]
+        ? [_subwindow drawablePixelSize] : NSZeroSize;
+}
+
 - (void) update {
     [self updateViewParameters];
 }
@@ -280,6 +305,10 @@ static inline void _clearCurrentContext() {
     if ([_subwindow requiresMainThreadPresentation] && ![NSThread isMainThread])
         return;
 
+    // Pace swaps to the refresh rate of the output the window is on; 0 means unknown.
+    CGLSetDrawableRefreshRate(_glContext,
+        [_subwindow respondsToSelector: @selector(refreshMillihertz)]
+        ? [_subwindow refreshMillihertz] : 0);
     if (CGLFlushDrawable(_glContext) == kCGLNoError)
         [_subwindow flush];
 }

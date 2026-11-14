@@ -18,38 +18,40 @@
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  SOFTWARE. */
 
-#import "X11FileURLs.h"
+#import "DarlingFileURIList.h"
 #include <string.h>
 
-static const NSUInteger X11TransferLimit = 16 * 1024 * 1024;
-static const NSUInteger X11RecordLimit = 4096;
-// Host paths reach the guest through this prefix, the same one the Wayland
-// backend hands out, so a drop and a paste of the same file agree on its name.
-static NSString *const X11HostRoot = @"/Volumes/SystemRoot";
+static const NSUInteger DarlingURITransferLimit = 16 * 1024 * 1024;
+static const NSUInteger DarlingURIRecordLimit = 4096;
+// Host paths reach the guest through this prefix, so a drop and a paste of the same
+// file agree on its name whichever backend delivered it.
+static NSString *const DarlingURIHostRoot = @"/Volumes/SystemRoot";
 
-static BOOL X11LiteralByte(unsigned char c) {
+static BOOL DarlingURILiteralByte(unsigned char c) {
     return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
            (c >= '0' && c <= '9') || c == '-' || c == '.' || c == '_' ||
            c == '~' || c == '/';
 }
 
-static int X11HexValue(unsigned char c) {
+static int DarlingURIHexValue(unsigned char c) {
     if (c >= '0' && c <= '9') return c - '0';
     if (c >= 'a' && c <= 'f') return c - 'a' + 10;
     if (c >= 'A' && c <= 'F') return c - 'A' + 10;
     return -1;
 }
 
-static BOOL X11ValidHostPath(NSString *path) {
+static BOOL DarlingURIValidHostPath(NSString *path) {
     if ([path length] >= 4096) return NO;
     NSData *bytes = [path dataUsingEncoding: NSUTF8StringEncoding];
-    if (!bytes || memchr([bytes bytes], 0, [bytes length]) != NULL) return NO;
+    // The byte bound includes the guest prefix, and is checked before the path is split.
+    if (!bytes || [bytes length] + [DarlingURIHostRoot length] >= 4096 ||
+        memchr([bytes bytes], 0, [bytes length]) != NULL) return NO;
     return [path hasPrefix: @"/"] && ![path hasPrefix: @"//"] &&
            ![[path componentsSeparatedByString: @"/"] containsObject: @".."];
 }
 
 // Decodes one URI path into a host path, refusing anything that could escape it.
-static NSString *X11HostPathFromURI(NSString *path) {
+static NSString *DarlingURIHostPathFromURI(NSString *path) {
     NSData *encoded = [path dataUsingEncoding: NSUTF8StringEncoding];
     if (!encoded) return nil;
     const unsigned char *p = [encoded bytes];
@@ -58,14 +60,14 @@ static NSString *X11HostPathFromURI(NSString *path) {
         unsigned char c = p[i];
         if (c == '%') {
             if (i + 2 >= [encoded length]) return nil;
-            int hi = X11HexValue(p[i + 1]), lo = X11HexValue(p[i + 2]);
+            int hi = DarlingURIHexValue(p[i + 1]), lo = DarlingURIHexValue(p[i + 2]);
             if (hi < 0 || lo < 0) return nil;
             c = (hi << 4) | lo;
             i += 2;
             // A NUL would truncate, and an escaped slash would forge a new path
             // component the sender never wrote.
             if (!c || c == '/') return nil;
-        } else if (!X11LiteralByte(c) && c != ':' && c != '@' &&
+        } else if (!DarlingURILiteralByte(c) && c != ':' && c != '@' &&
                    strchr("!$&'()*+,;=", c) == NULL) {
             return nil;
         }
@@ -73,10 +75,10 @@ static NSString *X11HostPathFromURI(NSString *path) {
     }
     NSString *host = [[[NSString alloc] initWithData: decoded
                                             encoding: NSUTF8StringEncoding] autorelease];
-    return X11ValidHostPath(host) ? host : nil;
+    return DarlingURIValidHostPath(host) ? host : nil;
 }
 
-static NSString *X11HostPathFromLine(NSString *line) {
+static NSString *DarlingURIHostPathFromLine(NSString *line) {
     if ([line length] < 6 ||
         [[line substringToIndex: 5] caseInsensitiveCompare: @"file:"] != NSOrderedSame)
         return nil;
@@ -92,20 +94,20 @@ static NSString *X11HostPathFromLine(NSString *line) {
             return nil;
         path = [path substringFromIndex: slash.location];
     }
-    return X11HostPathFromURI(path);
+    return DarlingURIHostPathFromURI(path);
 }
 
-NSArray *X11FilenamesFromURIList(NSData *data) {
+NSArray *DarlingFilenamesFromURIList(NSData *data) {
     if (![data isKindOfClass: [NSData class]] || ![data length] ||
-        [data length] > X11TransferLimit)
+        [data length] > DarlingURITransferLimit)
         return nil;
     // Bound the record count before splitting, so an input of nothing but newlines
     // cannot be expanded into an unbounded array.
     const unsigned char *wire = [data bytes];
     NSUInteger lines = 0;
     for (NSUInteger i = 0; i < [data length]; i++)
-        if (wire[i] == '\n' && ++lines > X11RecordLimit) return nil;
-    if (lines == X11RecordLimit && wire[[data length] - 1] != '\n') return nil;
+        if (wire[i] == '\n' && ++lines > DarlingURIRecordLimit) return nil;
+    if (lines == DarlingURIRecordLimit && wire[[data length] - 1] != '\n') return nil;
 
     NSString *text = [[[NSString alloc] initWithData: data
                                             encoding: NSUTF8StringEncoding] autorelease];
@@ -117,9 +119,38 @@ NSArray *X11FilenamesFromURIList(NSData *data) {
                                  ? [rawLine substringToIndex: [rawLine length] - 1]
                                  : rawLine;
         if (![line length] || [line hasPrefix: @"#"]) continue;
-        NSString *host = X11HostPathFromLine(line);
+        NSString *host = DarlingURIHostPathFromLine(line);
         if (!host) return nil; // All or nothing: a partial list would drop files.
-        [files addObject: [X11HostRoot stringByAppendingString: host]];
+        [files addObject: [DarlingURIHostRoot stringByAppendingString: host]];
     }
     return [files count] ? files : nil;
+}
+
+NSData *DarlingURIListFromFilenames(NSArray *filenames) {
+    if (![filenames isKindOfClass: [NSArray class]] || ![filenames count] ||
+        [filenames count] > DarlingURIRecordLimit)
+        return nil;
+    NSMutableData *result = [NSMutableData data];
+    NSString *boundary = [DarlingURIHostRoot stringByAppendingString: @"/"];
+    static const char hex[] = "0123456789ABCDEF";
+    for (id filename in filenames) {
+        if (![filename isKindOfClass: [NSString class]] || ![filename hasPrefix: boundary])
+            return nil;
+        NSString *host = [filename substringFromIndex: [DarlingURIHostRoot length]];
+        if (!DarlingURIValidHostPath(host)) return nil;
+        NSData *bytes = [host dataUsingEncoding: NSUTF8StringEncoding];
+        if ([result length] + 9 + 3 * [bytes length] > DarlingURITransferLimit) return nil;
+        [result appendBytes: "file://" length: 7];
+        const unsigned char *p = [bytes bytes];
+        for (NSUInteger i = 0; i < [bytes length]; i++) {
+            if (DarlingURILiteralByte(p[i])) {
+                [result appendBytes: p + i length: 1];
+            } else {
+                char escaped[] = {'%', hex[p[i] >> 4], hex[p[i] & 15]};
+                [result appendBytes: escaped length: 3];
+            }
+        }
+        [result appendBytes: "\r\n" length: 2];
+    }
+    return result;
 }

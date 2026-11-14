@@ -197,6 +197,7 @@ set(AppKit_sources
 	NSScrollEdgeEffectStyle.m
 	NSImageHintSymbolScale.m
 	NSPasteboard.m
+	DarlingFileURIList.m
 	NSSearchFieldCell.m
 	NSOutlineView.m
 	NSDocument.m
@@ -310,6 +311,7 @@ set(AppKit_sources
 	NSFontCollection.m
 	NSFontDescriptor.m
 	NSDisplay.m
+	DarlingDisplay.m
 
 	NSOpenGL/NSOpenGLView.m
 	NSOpenGL/NSOpenGLPixelBuffer.m
@@ -599,6 +601,7 @@ add_framework(AppKit
 		jpeg png tiff
 		CoreServices
 		UniformTypeIdentifiers
+		HIToolbox
 )
 
 reexport(AppKit Foundation ${CMAKE_BINARY_DIR}/src/external/foundation/Foundation)
@@ -651,7 +654,6 @@ add_backend(X11
 		X11.backend/X11KeySymToUCS.m
 		X11.backend/X11DropSession.m
 		X11.backend/X11DraggingManager.m
-		X11.backend/X11FileURLs.m
 	INFO_PLIST
 		X11.backend/Info.plist
 	DEPENDENCIES
@@ -675,3 +677,53 @@ add_backend(X11
 )
 
 set_source_files_properties(DarlingLayout.mm PROPERTIES LANGUAGE CXX COMPILE_FLAGS "-std=c++14 -fexceptions")
+
+# Wayland backend. It is used when a compositor is advertised unless the backend is chosen
+# explicitly (see WaylandBackendSelected()); otherwise AppKit falls through to X11.
+# libwayland-client and libxkbcommon are loaded with dlopen() only when it is
+# selected, so building it needs just their headers, wayland-scanner and the
+# protocol files (see WaylandProtocols.cmake). It is skipped when any of them is missing.
+include(${CMAKE_CURRENT_SOURCE_DIR}/../CoreGraphics/WaylandSupport/WaylandProtocols.cmake)
+
+if (WAYLAND_PROTOCOLS_USABLE)
+	wayland_protocol_sources(WAYLAND_PROTOCOL_SOURCES "${CMAKE_CURRENT_BINARY_DIR}/Wayland.backend")
+
+	add_backend(Wayland
+		SOURCES
+			Wayland.backend/WaylandCursor.m
+			Wayland.backend/WaylandDisplay.m
+			# Client glue shared with the CoreGraphics Wayland backend, which sits below AppKit.
+			../CoreGraphics/WaylandSupport/WaylandLibrary.m
+			Wayland.backend/WaylandDropSession.m
+			Wayland.backend/WaylandDraggingManager.m
+			Wayland.backend/WaylandDragIcon.m
+			Wayland.backend/WaylandPasteboard.m
+			Wayland.backend/WaylandWindow.m
+			Wayland.backend/WaylandSubWindow.m
+			${WAYLAND_PROTOCOL_SOURCES}
+		INFO_PLIST
+			Wayland.backend/Info.plist
+		DEPENDENCIES
+			objc
+			system
+			CoreFoundation
+			Foundation
+			AppKit
+			Onyx2D
+			CoreGraphics
+			OpenGL
+			# WaylandDisplay subclasses X11Display for its backend-independent parts.
+			X11_backend
+	)
+	target_include_directories(Wayland_backend PRIVATE
+		Wayland.backend
+		../CoreGraphics/WaylandSupport
+		${CMAKE_SOURCE_DIR}/src/startup/mldr/elfcalls
+		${WAYLAND_CLIENT_INCLUDE_DIRS}
+		${WAYLAND_CURSOR_INCLUDE_DIRS}
+		${XKBCOMMON_INCLUDE_DIRS}
+	)
+else ()
+	message(STATUS "AppKit: not building the Wayland backend (needs wayland-client >= 1.20, "
+		"wayland-cursor, xkbcommon and wayland-protocols headers and wayland-scanner)")
+endif ()

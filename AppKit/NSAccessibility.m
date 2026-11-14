@@ -6,472 +6,474 @@
 #import <AppKit/NSView.h>
 
 NSString *const NSAccessibilityChildrenAttribute =
-        @"NSAccessibilityChildrenAttribute";
+        @"AXChildren";
 NSString *const NSAccessibilityContentsAttribute =
-        @"NSAccessibilityContentsAttribute";
+        @"AXContents";
 NSString *const NSAccessibilityDescriptionAttribute =
-        @"NSAccessibilityDescriptionAttribute";
+        @"AXDescription";
 NSString *const NSAccessibilityEnabledAttribute =
-        @"NSAccessibilityEnabledAttribute";
+        @"AXEnabled";
 NSString *const NSAccessibilityFocusedAttribute =
-        @"NSAccessibilityFocusedAttribute";
+        @"AXFocused";
 NSString *const NSAccessibilityRequiredAttribute = @"AXRequired";
-NSString *const NSAccessibilityHelpAttribute = @"NSAccessibilityHelpAttribute";
+NSString *const NSAccessibilityHelpAttribute = @"AXHelp";
 NSString *const NSAccessibilityMaxValueAttribute =
-        @"NSAccessibilityMaxValueAttribute";
+        @"AXMaxValue";
 NSString *const NSAccessibilityMinValueAttribute =
-        @"NSAccessibilityMinValueAttribute";
+        @"AXMinValue";
 NSString *const NSAccessibilityParentAttribute =
-        @"NSAccessibilityParentAttribute";
+        @"AXParent";
 NSString *const NSAccessibilityPositionAttribute =
-        @"NSAccessibilityPositionAttribute";
-NSString *const NSAccessibilityRoleAttribute = @"NSAccessibilityRoleAttribute";
+        @"AXPosition";
+NSString *const NSAccessibilityRoleAttribute = @"AXRole";
 NSString *const NSAccessibilityRoleDescriptionAttribute =
-        @"NSAccessibilityRoleDescriptionAttribute";
+        @"AXRoleDescription";
 NSString *const NSAccessibilitySelectedChildrenAttribute =
-        @"NSAccessibilitySelectedChildrenAttribute";
+        @"AXSelectedChildren";
 NSString *const NSAccessibilityShownMenuAttribute =
-        @"NSAccessibilityShownMenuAttribute";
-NSString *const NSAccessibilitySizeAttribute = @"NSAccessibilitySizeAttribute";
+        @"AXShownMenuUIElement";
+NSString *const NSAccessibilitySizeAttribute = @"AXSize";
 NSString *const NSAccessibilitySubroleAttribute =
-        @"NSAccessibilitySubroleAttribute";
+        @"AXSubrole";
 NSString *const NSAccessibilityTitleAttribute =
-        @"NSAccessibilityTitleAttribute";
+        @"AXTitle";
 NSString *const NSAccessibilityTopLevelUIElementAttribute =
-        @"NSAccessibilityTopLevelUIElementAttribute";
+        @"AXTopLevelUIElement";
 NSString *const NSAccessibilityValueAttribute =
-        @"NSAccessibilityValueAttribute";
+        @"AXValue";
 NSString *const NSAccessibilityValueDescriptionAttribute =
-        @"NSAccessibilityValueDescriptionAttribute";
+        @"AXValueDescription";
 NSString *const NSAccessibilityVisibleChildrenAttribute =
-        @"NSAccessibilityVisibleChildrenAttribute";
+        @"AXVisibleChildren";
 NSString *const NSAccessibilityWindowAttribute =
-        @"NSAccessibilityWindowAttribute";
+        @"AXWindow";
 NSString *const NSAccessibilityIdentifierAttribute =
-        @"NSAccessibilityIdentifierAttribute";
+        @"AXIdentifier";
 
 NSString *const NSAccessibilityInsertionPointLineNumberAttribute =
-        @"NSAccessibilityInsertionPointLineNumberAttribute";
+        @"AXInsertionPointLineNumber";
 NSString *const NSAccessibilityNumberOfCharactersAttribute =
-        @"NSAccessibilityNumberOfCharactersAttribute";
+        @"AXNumberOfCharacters";
 NSString *const NSAccessibilitySelectedTextAttribute =
-        @"NSAccessibilitySelectedTextAttribute";
+        @"AXSelectedText";
 NSString *const NSAccessibilitySelectedTextRangeAttribute =
-        @"NSAccessibilitySelectedTextRangeAttribute";
+        @"AXSelectedTextRange";
 NSString *const NSAccessibilitySelectedTextRangesAttribute =
-        @"NSAccessibilitySelectedTextRangesAttribute";
+        @"AXSelectedTextRanges";
 NSString *const NSAccessibilitySharedCharacterRangeAttribute =
-        @"NSAccessibilitySharedCharacterRangeAttribute";
+        @"AXSharedCharacterRange";
 NSString *const NSAccessibilitySharedTextUIElementsAttribute =
-        @"NSAccessibilitySharedTextUIElementsAttribute";
+        @"AXSharedTextUIElements";
 NSString *const NSAccessibilityVisibleCharacterRangeAttribute =
-        @"NSAccessibilityVisibleCharacterRangeAttribute";
+        @"AXVisibleCharacterRange";
 
 NSString *const NSAccessibilityAttributedStringForRangeParameterizedAttribute =
-        @"NSAccessibilityAttributedStringForRangeParameterizedAttribute";
+        @"AXAttributedStringForRange";
 NSString *const NSAccessibilityBoundsForRangeParameterizedAttribute =
-        @"NSAccessibilityBoundsForRangeParameterizedAttribute";
+        @"AXBoundsForRange";
 NSString *const NSAccessibilityLineForIndexParameterizedAttribute =
-        @"NSAccessibilityLineForIndexParameterizedAttribute";
+        @"AXLineForIndex";
 NSString *const NSAccessibilityRTFForRangeParameterizedAttribute =
-        @"NSAccessibilityRTFForRangeParameterizedAttribute";
+        @"AXRTFForRange";
 NSString *const NSAccessibilityRangeForIndexParameterizedAttribute =
-        @"NSAccessibilityRangeForIndexParameterizedAttribute";
+        @"AXRangeForIndex";
 NSString *const NSAccessibilityRangeForLineParameterizedAttribute =
-        @"NSAccessibilityRangeForLineParameterizedAttribute";
+        @"AXRangeForLine";
 NSString *const NSAccessibilityRangeForPositionParameterizedAttribute =
-        @"NSAccessibilityRangeForPositionParameterizedAttribute";
+        @"AXRangeForPosition";
 NSString *const NSAccessibilityStringForRangeParameterizedAttribute =
-        @"NSAccessibilityStringForRangeParameterizedAttribute";
+        @"AXStringForRange";
 NSString *const NSAccessibilityStyleRangeForIndexParameterizedAttribute =
-        @"NSAccessibilityStyleRangeForIndexParameterizedAttribute";
+        @"AXStyleRangeForIndex";
 
 NSString *const NSAccessibilityAttachmentTextAttribute =
-        @"NSAccessibilityAttachmentTextAttribute";
+        @"AXAttachment";
 NSString *const NSAccessibilityBackgroundColorTextAttribute =
-        @"NSAccessibilityBackgroundColorTextAttribute";
-NSString *const NSAccessibilityFontFamilyKey = @"NSAccessibilityFontFamilyKey";
-NSString *const NSAccessibilityFontNameKey = @"NSAccessibilityFontNameKey";
-NSString *const NSAccessibilityFontSizeKey = @"NSAccessibilityFontSizeKey";
+        @"AXBackgroundColor";
+NSString *const NSAccessibilityFontFamilyKey = @"AXFontFamily";
+NSString *const NSAccessibilityFontNameKey = @"AXFontName";
+NSString *const NSAccessibilityFontSizeKey = @"AXFontSize";
 NSString *const NSAccessibilityFontTextAttribute =
-        @"NSAccessibilityFontTextAttribute";
+        @"AXFont";
 NSString *const NSAccessibilityForegroundColorTextAttribute =
-        @"NSAccessibilityForegroundColorTextAttribute";
+        @"AXForegroundColor";
 NSString *const NSAccessibilityLinkTextAttribute =
-        @"NSAccessibilityLinkTextAttribute";
+        @"AXLink";
 NSAttributedStringKey const NSAccessibilityMarkedMisspelledTextAttribute = @"AXMarkedMisspelled";
 NSString *const NSAccessibilityMisspelledTextAttribute =
-        @"NSAccessibilityMisspelledTextAttribute";
+        @"AXMisspelled";
 NSString *const NSAccessibilityShadowTextAttribute =
-        @"NSAccessibilityShadowTextAttribute";
+        @"AXShadow";
 NSString *const NSAccessibilityStrikethroughColorTextAttribute =
-        @"NSAccessibilityStrikethroughColorTextAttribute";
+        @"AXStrikethroughColor";
 NSString *const NSAccessibilityStrikethroughTextAttribute =
-        @"NSAccessibilityStrikethroughTextAttribute";
+        @"AXStrikethrough";
 NSString *const NSAccessibilitySuperscriptTextAttribute =
-        @"NSAccessibilitySuperscriptTextAttribute";
+        @"AXSuperscript";
 NSString *const NSAccessibilityUnderlineColorTextAttribute =
-        @"NSAccessibilityUnderlineColorTextAttribute";
+        @"AXUnderlineColor";
 NSString *const NSAccessibilityUnderlineTextAttribute =
-        @"NSAccessibilityUnderlineTextAttribute";
+        @"AXUnderline";
 NSString *const NSAccessibilityVisibleNameKey =
-        @"NSAccessibilityVisibleNameKey";
+        @"AXVisibleName";
 
 NSString *const NSAccessibilityCancelButtonAttribute =
-        @"NSAccessibilityCancelButtonAttribute";
+        @"AXCancelButton";
 NSString *const NSAccessibilityCloseButtonAttribute =
-        @"NSAccessibilityCloseButtonAttribute";
+        @"AXCloseButton";
+NSString *const NSAccessibilityFullScreenButtonAttribute =
+        @"AXFullScreenButton";
 NSString *const NSAccessibilityDefaultButtonAttribute =
-        @"NSAccessibilityDefaultButtonAttribute";
+        @"AXDefaultButton";
 NSString *const NSAccessibilityGrowAreaAttribute =
-        @"NSAccessibilityGrowAreaAttribute";
-NSString *const NSAccessibilityMainAttribute = @"NSAccessibilityMainAttribute";
+        @"AXGrowArea";
+NSString *const NSAccessibilityMainAttribute = @"AXMain";
 NSString *const NSAccessibilityMinimizeButtonAttribute =
-        @"NSAccessibilityMinimizeButtonAttribute";
+        @"AXMinimizeButton";
 NSString *const NSAccessibilityMinimizedAttribute =
-        @"NSAccessibilityMinimizedAttribute";
+        @"AXMinimized";
 NSString *const NSAccessibilityModalAttribute =
-        @"NSAccessibilityModalAttribute";
+        @"AXModal";
 NSString *const NSAccessibilityProxyAttribute =
-        @"NSAccessibilityProxyAttribute";
+        @"AXProxy";
 NSString *const NSAccessibilityToolbarButtonAttribute =
-        @"NSAccessibilityToolbarButtonAttribute";
+        @"AXToolbarButton";
 NSString *const NSAccessibilityZoomButtonAttribute =
-        @"NSAccessibilityZoomButtonAttribute";
+        @"AXZoomButton";
 
 NSString *const NSAccessibilityHorizontalOrientationValue =
-        @"NSAccessibilityHorizontalOrientationValue";
+        @"AXHorizontalOrientation";
 NSString *const NSAccessibilityVerticalOrientationValue =
-        @"NSAccessibilityVerticalOrientationValue";
+        @"AXVerticalOrientation";
 NSString *const NSAccessibilityUnknownOrientationValue =
-        @"NSAccessibilityUnknownOrientationValue";
+        @"AXUnknownOrientation";
 
 NSString *const NSAccessibilityClearButtonAttribute =
-        @"NSAccessibilityClearButtonAttribute";
+        @"AXClearButton";
 NSString *const NSAccessibilityColumnTitlesAttribute =
-        @"NSAccessibilityColumnTitlesAttribute";
+        @"AXColumnTitles";
 NSString *const NSAccessibilityFocusedUIElementAttribute =
-        @"NSAccessibilityFocusedUIElementAttribute";
+        @"AXFocusedUIElement";
 NSString *const NSAccessibilityFocusedWindowAttribute =
-        @"NSAccessibilityFocusedWindowAttribute";
+        @"AXFocusedWindow";
 NSString *const NSAccessibilityFrontmostAttribute =
-        @"NSAccessibilityFrontmostAttribute";
+        @"AXFrontmost";
 NSString *const NSAccessibilityHiddenAttribute =
-        @"NSAccessibilityHiddenAttribute";
+        @"AXHidden";
 NSString *const NSAccessibilityMainWindowAttribute =
-        @"NSAccessibilityMainWindowAttribute";
+        @"AXMainWindow";
 NSString *const NSAccessibilityMenuBarAttribute =
-        @"NSAccessibilityMenuBarAttribute";
+        @"AXMenuBar";
 NSString *const NSAccessibilityOrientationAttribute =
-        @"NSAccessibilityOrientationAttribute";
+        @"AXOrientation";
 NSString *const NSAccessibilitySearchButtonAttribute =
-        @"NSAccessibilitySearchButtonAttribute";
+        @"AXSearchButton";
 NSString *const NSAccessibilitySearchMenuAttribute =
-        @"NSAccessibilitySearchMenuAttribute";
+        @"AXSearchMenu";
 NSString *const NSAccessibilityWindowsAttribute =
-        @"NSAccessibilityWindowsAttribute";
+        @"AXWindows";
 
 NSString *const NSAccessibilityColumnCountAttribute =
-        @"NSAccessibilityColumnCountAttribute";
+        @"AXColumnCount";
 NSString *const NSAccessibilityOrderedByRowAttribute =
-        @"NSAccessibilityOrderedByRowAttribute";
+        @"AXOrderedByRow";
 NSString *const NSAccessibilityRowCountAttribute =
-        @"NSAccessibilityRowCountAttribute";
+        @"AXRowCount";
 
 NSString *const NSAccessibilityColumnHeaderUIElementsAttribute =
-        @"NSAccessibilityColumnHeaderUIElementsAttribute";
+        @"AXColumnHeaderUIElements";
 NSString *const NSAccessibilityColumnsAttribute =
-        @"NSAccessibilityColumnsAttribute";
+        @"AXColumns";
 NSString *const NSAccessibilityRowHeaderUIElementsAttribute =
-        @"NSAccessibilityRowHeaderUIElementsAttribute";
-NSString *const NSAccessibilityRowsAttribute = @"NSAccessibilityRowsAttribute";
+        @"AXRowHeaderUIElements";
+NSString *const NSAccessibilityRowsAttribute = @"AXRows";
 NSString *const NSAccessibilitySelectedColumnsAttribute =
-        @"NSAccessibilitySelectedColumnsAttribute";
+        @"AXSelectedColumns";
 NSString *const NSAccessibilitySelectedRowsAttribute =
-        @"NSAccessibilitySelectedRowsAttribute";
+        @"AXSelectedRows";
 NSString *const NSAccessibilitySortDirectionAttribute =
-        @"NSAccessibilitySortDirectionAttribute";
+        @"AXSortDirection";
 NSString *const NSAccessibilityVisibleColumnsAttribute =
-        @"NSAccessibilityVisibleColumnsAttribute";
+        @"AXVisibleColumns";
 NSString *const NSAccessibilityVisibleRowsAttribute =
-        @"NSAccessibilityVisibleRowsAttribute";
+        @"AXVisibleRows";
 
 NSString *const NSAccessibilityDisclosedByRowAttribute =
-        @"NSAccessibilityDisclosedByRowAttribute";
+        @"AXDisclosedByRow";
 NSString *const NSAccessibilityDisclosedRowsAttribute =
-        @"NSAccessibilityDisclosedRowsAttribute";
+        @"AXDisclosedRows";
 NSString *const NSAccessibilityDisclosingAttribute =
-        @"NSAccessibilityDisclosingAttribute";
+        @"AXDisclosing";
 NSString *const NSAccessibilityDisclosureLevelAttribute =
-        @"NSAccessibilityDisclosureLevelAttribute";
+        @"AXDisclosureLevel";
 
 NSString *const NSAccessibilitySelectedCellsAttribute =
-        @"NSAccessibilitySelectedCellsAttribute";
+        @"AXSelectedCells";
 NSString *const NSAccessibilityVisibleCellsAttribute =
-        @"NSAccessibilityVisibleCellsAttribute";
+        @"AXVisibleCells";
 
 NSString *const NSAccessibilityCellForColumnAndRowParameterizedAttribute =
-        @"NSAccessibilityCellForColumnAndRowParameterizedAttribute";
+        @"AXCellForColumnAndRow";
 
 NSString *const NSAccessibilityRowIndexRangeAttribute =
-        @"NSAccessibilityRowIndexRangeAttribute";
+        @"AXRowIndexRange";
 NSString *const NSAccessibilityColumnIndexRangeAttribute =
-        @"NSAccessibilityColumnIndexRangeAttribute";
+        @"AXColumnIndexRange";
 
 NSString *const NSAccessibilityAscendingSortDirectionValue =
-        @"NSAccessibilityAscendingSortDirectionValue";
+        @"AXAscendingSortDirection";
 NSString *const NSAccessibilityDescendingSortDirectionValue =
-        @"NSAccessibilityDescendingSortDirectionValue";
+        @"AXDescendingSortDirection";
 NSString *const NSAccessibilityUnknownSortDirectionValue =
-        @"NSAccessibilityUnknownSortDirectionValue";
+        @"AXUnknownSortDirection";
 
 NSString *const NSAccessibilityHorizontalUnitsAttribute =
-        @"NSAccessibilityHorizontalUnitsAttribute";
+        @"AXHorizontalUnits";
 NSString *const NSAccessibilityVerticalUnitsAttribute =
-        @"NSAccessibilityVerticalUnitsAttribute";
+        @"AXVerticalUnits";
 NSString *const NSAccessibilityHorizontalUnitDescriptionAttribute =
-        @"NSAccessibilityHorizontalUnitDescriptionAttribute";
+        @"AXHorizontalUnitDescription";
 NSString *const NSAccessibilityVerticalUnitDescriptionAttribute =
-        @"NSAccessibilityVerticalUnitDescriptionAttribute";
+        @"AXVerticalUnitDescription";
 
 NSString *const NSAccessibilityLayoutPointForScreenPointParameterizedAttribute =
-        @"NSAccessibilityLayoutPointForScreenPointParameterizedAttribute";
+        @"AXLayoutPointForScreenPoint";
 NSString *const NSAccessibilityLayoutSizeForScreenSizeParameterizedAttribute =
-        @"NSAccessibilityLayoutSizeForScreenSizeParameterizedAttribute";
+        @"AXLayoutSizeForScreenSize";
 NSString *const NSAccessibilityScreenPointForLayoutPointParameterizedAttribute =
-        @"NSAccessibilityScreenPointForLayoutPointParameterizedAttribute";
+        @"AXScreenPointForLayoutPoint";
 NSString *const NSAccessibilityScreenSizeForLayoutSizeParameterizedAttribute =
-        @"NSAccessibilityScreenSizeForLayoutSizeParameterizedAttribute";
+        @"AXScreenSizeForLayoutSize";
 
 NSString *const NSAccessibilityHandlesAttribute =
-        @"NSAccessibilityHandlesAttribute";
+        @"AXHandles";
 
 NSString *const NSAccessibilityAllowedValuesAttribute =
-        @"NSAccessibilityAllowedValuesAttribute";
+        @"AXAllowedValues";
 NSString *const NSAccessibilityLabelUIElementsAttribute =
-        @"NSAccessibilityLabelUIElementsAttribute";
+        @"AXLabelUIElements";
 NSString *const NSAccessibilityLabelValueAttribute =
-        @"NSAccessibilityLabelValueAttribute";
+        @"AXLabelValue";
 
 NSString *const NSAccessibilityMatteContentUIElementAttribute =
-        @"NSAccessibilityMatteContentUIElementAttribute";
+        @"AXMatteContentUIElement";
 NSString *const NSAccessibilityMatteHoleAttribute =
-        @"NSAccessibilityMatteHoleAttribute";
+        @"AXMatteHole";
 
 NSString *const NSAccessibilityMarkerGroupUIElementAttribute =
-        @"NSAccessibilityMarkerGroupUIElementAttribute";
+        @"AXMarkerGroupUIElement";
 NSString *const NSAccessibilityMarkerTypeAttribute =
-        @"NSAccessibilityMarkerTypeAttribute";
+        @"AXMarkerType";
 NSString *const NSAccessibilityMarkerTypeDescriptionAttribute =
-        @"NSAccessibilityMarkerTypeDescriptionAttribute";
+        @"AXMarkerTypeDescription";
 NSString *const NSAccessibilityMarkerUIElementsAttribute =
-        @"NSAccessibilityMarkerUIElementsAttribute";
+        @"AXMarkerUIElements";
 NSString *const NSAccessibilityMarkerValuesAttribute =
-        @"NSAccessibilityMarkerValuesAttribute";
+        @"AXMarkerValues";
 NSString *const NSAccessibilityUnitDescriptionAttribute =
-        @"NSAccessibilityUnitDescriptionAttribute";
+        @"AXUnitDescription";
 NSString *const NSAccessibilityUnitsAttribute =
-        @"NSAccessibilityUnitsAttribute";
+        @"AXUnits";
 
 NSString *const NSAccessibilityCenterTabStopMarkerTypeValue =
-        @"NSAccessibilityCenterTabStopMarkerTypeValue";
+        @"AXCenterTabStopMarkerType";
 NSString *const NSAccessibilityDecimalTabStopMarkerTypeValue =
-        @"NSAccessibilityDecimalTabStopMarkerTypeValue";
+        @"AXDecimalTabStopMarkerType";
 NSString *const NSAccessibilityFirstLineIndentMarkerTypeValue =
-        @"NSAccessibilityFirstLineIndentMarkerTypeValue";
+        @"AXFirstLineIndentMarkerType";
 NSString *const NSAccessibilityHeadIndentMarkerTypeValue =
-        @"NSAccessibilityHeadIndentMarkerTypeValue";
+        @"AXHeadIndentMarkerType";
 NSString *const NSAccessibilityLeftTabStopMarkerTypeValue =
-        @"NSAccessibilityLeftTabStopMarkerTypeValue";
+        @"AXLeftTabStopMarkerType";
 NSString *const NSAccessibilityRightTabStopMarkerTypeValue =
-        @"NSAccessibilityRightTabStopMarkerTypeValue";
+        @"AXRightTabStopMarkerType";
 NSString *const NSAccessibilityTailIndentMarkerTypeValue =
-        @"NSAccessibilityTailIndentMarkerTypeValue";
+        @"AXTailIndentMarkerType";
 NSString *const NSAccessibilityUnknownMarkerTypeValue =
-        @"NSAccessibilityUnknownMarkerTypeValue";
+        @"AXUnknownMarkerType";
 
 NSString *const NSAccessibilityCentimetersUnitValue =
-        @"NSAccessibilityCentimetersUnitValue";
+        @"AXCentimentersUnit";
 NSString *const NSAccessibilityInchesUnitValue =
-        @"NSAccessibilityInchesUnitValue";
+        @"AXInchesUnit";
 NSString *const NSAccessibilityPicasUnitValue =
-        @"NSAccessibilityPicasUnitValue";
+        @"AXPicasUnit";
 NSString *const NSAccessibilityPointsUnitValue =
-        @"NSAccessibilityPointsUnitValue";
+        @"AXPointsUnit";
 NSString *const NSAccessibilityUnknownUnitValue =
-        @"NSAccessibilityUnknownUnitValue";
+        @"AXUnknownUnit";
 
 NSString *const NSAccessibilityLinkedUIElementsAttribute =
-        @"NSAccessibilityLinkedUIElementsAttribute";
+        @"AXLinkedUIElements";
 NSString *const NSAccessibilityServesAsTitleForUIElementsAttribute =
-        @"NSAccessibilityServesAsTitleForUIElementsAttribute";
+        @"AXServesAsTitleForUIElements";
 NSString *const NSAccessibilityTitleUIElementAttribute =
-        @"NSAccessibilityTitleUIElementAttribute";
+        @"AXTitleUIElement";
 
 NSString *const NSAccessibilityDecrementButtonAttribute =
-        @"NSAccessibilityDecrementButtonAttribute";
+        @"AXDecrementButton";
 NSString *const NSAccessibilityDocumentAttribute =
-        @"NSAccessibilityDocumentAttribute";
+        @"AXDocument";
 NSString *const NSAccessibilityEditedAttribute =
-        @"NSAccessibilityEditedAttribute";
+        @"AXEdited";
 NSString *const NSAccessibilityExpandedAttribute =
-        @"NSAccessibilityExpandedAttribute";
+        @"AXExpanded";
 NSString *const NSAccessibilityFilenameAttribute =
-        @"NSAccessibilityFilenameAttribute";
+        @"AXFilename";
 NSString *const NSAccessibilityHeaderAttribute =
-        @"NSAccessibilityHeaderAttribute";
+        @"AXHeader";
 NSString *const NSAccessibilityHorizontalScrollBarAttribute =
-        @"NSAccessibilityHorizontalScrollBarAttribute";
+        @"AXHorizontalScrollBar";
 NSString *const NSAccessibilityIncrementButtonAttribute =
-        @"NSAccessibilityIncrementButtonAttribute";
+        @"AXIncrementButton";
 NSString *const NSAccessibilityIndexAttribute =
-        @"NSAccessibilityIndexAttribute";
+        @"AXIndex";
 NSString *const NSAccessibilityNextContentsAttribute =
-        @"NSAccessibilityNextContentsAttribute";
+        @"AXNextContents";
 NSString *const NSAccessibilityOverflowButtonAttribute =
-        @"NSAccessibilityOverflowButtonAttribute";
+        @"AXOverflowButton";
 NSString *const NSAccessibilityPreviousContentsAttribute =
-        @"NSAccessibilityPreviousContentsAttribute";
+        @"AXPreviousContents";
 NSString *const NSAccessibilitySelectedAttribute =
-        @"NSAccessibilitySelectedAttribute";
+        @"AXSelected";
 NSString *const NSAccessibilitySplittersAttribute =
-        @"NSAccessibilitySplittersAttribute";
-NSString *const NSAccessibilityTabsAttribute = @"NSAccessibilityTabsAttribute";
-NSString *const NSAccessibilityURLAttribute = @"NSAccessibilityURLAttribute";
+        @"AXSplitters";
+NSString *const NSAccessibilityTabsAttribute = @"AXTabs";
+NSString *const NSAccessibilityURLAttribute = @"AXURL";
 NSString *const NSAccessibilityVerticalScrollBarAttribute =
-        @"NSAccessibilityVerticalScrollBarAttribute";
+        @"AXVerticalScrollBar";
 NSString *const NSAccessibilityWarningValueAttribute =
-        @"NSAccessibilityWarningValueAttribute";
+        @"AXWarningValue";
 NSString *const NSAccessibilityCriticalValueAttribute =
-        @"NSAccessibilityCriticalValueAttribute";
+        @"AXCriticalValue";
 NSString *const NSAccessibilityPlaceholderValueAttribute =
-        @"NSAccessibilityPlaceholderValueAttribute";
+        @"AXPlaceholderValue";
 
 NSString *const NSAccessibilityApplicationRole =
-        @"NSAccessibilityApplicationRole";
-NSString *const NSAccessibilityBrowserRole = @"NSAccessibilityBrowserRole";
+        @"AXApplication";
+NSString *const NSAccessibilityBrowserRole = @"AXBrowser";
 NSString *const NSAccessibilityBusyIndicatorRole =
-        @"NSAccessibilityBusyIndicatorRole";
-NSString *const NSAccessibilityButtonRole = @"NSAccessibilityButtonRole";
-NSString *const NSAccessibilityCellRole = @"NSAccessibilityCellRole";
-NSString *const NSAccessibilityCheckBoxRole = @"NSAccessibilityCheckBoxRole";
-NSString *const NSAccessibilityColorWellRole = @"NSAccessibilityColorWellRole";
-NSString *const NSAccessibilityColumnRole = @"NSAccessibilityColumnRole";
-NSString *const NSAccessibilityComboBoxRole = @"NSAccessibilityComboBoxRole";
+        @"AXBusyIndicator";
+NSString *const NSAccessibilityButtonRole = @"AXButton";
+NSString *const NSAccessibilityCellRole = @"AXCell";
+NSString *const NSAccessibilityCheckBoxRole = @"AXCheckBox";
+NSString *const NSAccessibilityColorWellRole = @"AXColorWell";
+NSString *const NSAccessibilityColumnRole = @"AXColumn";
+NSString *const NSAccessibilityComboBoxRole = @"AXComboBox";
 NSString *const NSAccessibilityDisclosureTriangleRole =
-        @"NSAccessibilityDisclosureTriangleRole";
-NSString *const NSAccessibilityDrawerRole = @"NSAccessibilityDrawerRole";
-NSString *const NSAccessibilityGridRole = @"NSAccessibilityGridRole";
-NSString *const NSAccessibilityGroupRole = @"NSAccessibilityGroupRole";
-NSString *const NSAccessibilityGrowAreaRole = @"NSAccessibilityGrowAreaRole";
-NSString *const NSAccessibilityHandleRole = @"NSAccessibilityHandleRole";
-NSString *const NSAccessibilityHelpTagRole = @"NSAccessibilityHelpTagRole";
-NSString *const NSAccessibilityImageRole = @"NSAccessibilityImageRole";
+        @"AXDisclosureTriangle";
+NSString *const NSAccessibilityDrawerRole = @"AXDrawer";
+NSString *const NSAccessibilityGridRole = @"AXGrid";
+NSString *const NSAccessibilityGroupRole = @"AXGroup";
+NSString *const NSAccessibilityGrowAreaRole = @"AXGrowArea";
+NSString *const NSAccessibilityHandleRole = @"AXHandle";
+NSString *const NSAccessibilityHelpTagRole = @"AXHelpTag";
+NSString *const NSAccessibilityImageRole = @"AXImage";
 NSString *const NSAccessibilityIncrementorRole =
-        @"NSAccessibilityIncrementorRole";
+        @"AXIncrementor";
 NSString *const NSAccessibilityLayoutAreaRole =
-        @"NSAccessibilityLayoutAreaRole";
+        @"AXLayoutArea";
 NSString *const NSAccessibilityLayoutItemRole =
-        @"NSAccessibilityLayoutItemRole";
+        @"AXLayoutItem";
 NSAccessibilityRole const NSAccessibilityLevelIndicatorRole = @"AXLevelIndicator";
-NSString *const NSAccessibilityLinkRole = @"NSAccessibilityLinkRole";
-NSString *const NSAccessibilityListRole = @"NSAccessibilityListRole";
-NSString *const NSAccessibilityMatteRole = @"NSAccessibilityMatteRole";
+NSString *const NSAccessibilityLinkRole = @"AXLink";
+NSString *const NSAccessibilityListRole = @"AXList";
+NSString *const NSAccessibilityMatteRole = @"AXMatte";
 NSAccessibilityRole const NSAccessibilityMenuBarItemRole = @"AXMenuBarItem";
-NSString *const NSAccessibilityMenuBarRole = @"NSAccessibilityMenuBarRole";
+NSString *const NSAccessibilityMenuBarRole = @"AXMenuBar";
 NSString *const NSAccessibilityMenuButtonRole =
-        @"NSAccessibilityMenuButtonRole";
-NSString *const NSAccessibilityMenuItemRole = @"NSAccessibilityMenuItemRole";
-NSString *const NSAccessibilityMenuRole = @"NSAccessibilityMenuRole";
-NSString *const NSAccessibilityOutlineRole = @"NSAccessibilityOutlineRole";
+        @"AXMenuButton";
+NSString *const NSAccessibilityMenuItemRole = @"AXMenuItem";
+NSString *const NSAccessibilityMenuRole = @"AXMenu";
+NSString *const NSAccessibilityOutlineRole = @"AXOutline";
 NSString *const NSAccessibilityPopUpButtonRole =
-        @"NSAccessibilityPopUpButtonRole";
+        @"AXPopUpButton";
 NSString *const NSAccessibilityProgressIndicatorRole =
-        @"NSAccessibilityProgressIndicatorRole";
+        @"AXProgressIndicator";
 NSString *const NSAccessibilityRadioButtonRole =
-        @"NSAccessibilityRadioButtonRole";
+        @"AXRadioButton";
 NSString *const NSAccessibilityRadioGroupRole =
-        @"NSAccessibilityRadioGroupRole";
+        @"AXRadioGroup";
 NSString *const NSAccessibilityRelevanceIndicatorRole =
-        @"NSAccessibilityRelevanceIndicatorRole";
-NSString *const NSAccessibilityRowRole = @"NSAccessibilityRowRole";
+        @"AXRelevanceIndicator";
+NSString *const NSAccessibilityRowRole = @"AXRow";
 NSString *const NSAccessibilityRulerMarkerRole =
-        @"NSAccessibilityRulerMarkerRole";
-NSString *const NSAccessibilityRulerRole = @"NSAccessibilityRulerRole";
+        @"AXRulerMarker";
+NSString *const NSAccessibilityRulerRole = @"AXRuler";
 NSString *const NSAccessibilityScrollAreaRole =
-        @"NSAccessibilityScrollAreaRole";
-NSString *const NSAccessibilityScrollBarRole = @"NSAccessibilityScrollBarRole";
-NSString *const NSAccessibilitySheetRole = @"NSAccessibilitySheetRole";
-NSString *const NSAccessibilitySliderRole = @"NSAccessibilitySliderRole";
+        @"AXScrollArea";
+NSString *const NSAccessibilityScrollBarRole = @"AXScrollBar";
+NSString *const NSAccessibilitySheetRole = @"AXSheet";
+NSString *const NSAccessibilitySliderRole = @"AXSlider";
 NSString *const NSAccessibilitySortButtonRole =
-        @"NSAccessibilitySortButtonRole";
+        @"AXSortButton";
 NSString *const NSAccessibilitySplitGroupRole =
-        @"NSAccessibilitySplitGroupRole";
-NSString *const NSAccessibilitySplitterRole = @"NSAccessibilitySplitterRole";
+        @"AXSplitGroup";
+NSString *const NSAccessibilitySplitterRole = @"AXSplitter";
 NSString *const NSAccessibilityStaticTextRole =
-        @"NSAccessibilityStaticTextRole";
+        @"AXStaticText";
 NSString *const NSAccessibilitySystemWideRole =
-        @"NSAccessibilitySystemWideRole";
-NSString *const NSAccessibilityTabGroupRole = @"NSAccessibilityTabGroupRole";
-NSString *const NSAccessibilityTableRole = @"NSAccessibilityTableRole";
-NSString *const NSAccessibilityTextAreaRole = @"NSAccessibilityTextAreaRole";
-NSString *const NSAccessibilityTextFieldRole = @"NSAccessibilityTextFieldRole";
-NSString *const NSAccessibilityToolbarRole = @"NSAccessibilityToolbarRole";
-NSString *const NSAccessibilityUnknownRole = @"NSAccessibilityUnknownRole";
+        @"AXSystemWide";
+NSString *const NSAccessibilityTabGroupRole = @"AXTabGroup";
+NSString *const NSAccessibilityTableRole = @"AXTable";
+NSString *const NSAccessibilityTextAreaRole = @"AXTextArea";
+NSString *const NSAccessibilityTextFieldRole = @"AXTextField";
+NSString *const NSAccessibilityToolbarRole = @"AXToolbar";
+NSString *const NSAccessibilityUnknownRole = @"AXUnknown";
 NSString *const NSAccessibilityValueIndicatorRole =
-        @"NSAccessibilityValueIndicatorRole";
-NSString *const NSAccessibilityWindowRole = @"NSAccessibilityWindowRole";
+        @"AXValueIndicator";
+NSString *const NSAccessibilityWindowRole = @"AXWindow";
 
 NSString *const NSAccessibilityCloseButtonSubrole =
-        @"NSAccessibilityCloseButtonSubrole";
+        @"AXCloseButton";
 NSString *const NSAccessibilityDecrementArrowSubrole =
-        @"NSAccessibilityDecrementArrowSubrole";
+        @"AXDecrementArrow";
 NSString *const NSAccessibilityDecrementPageSubrole =
-        @"NSAccessibilityDecrementPageSubrole";
-NSString *const NSAccessibilityDialogSubrole = @"NSAccessibilityDialogSubrole";
+        @"AXDecrementPage";
+NSString *const NSAccessibilityDialogSubrole = @"AXDialog";
 NSString *const NSAccessibilityFloatingWindowSubrole =
-        @"NSAccessibilityFloatingWindowSubrole";
+        @"AXFloatingWindow";
 NSString *const NSAccessibilityIncrementArrowSubrole =
-        @"NSAccessibilityIncrementArrowSubrole";
+        @"AXIncrementArrow";
 NSString *const NSAccessibilityIncrementPageSubrole =
-        @"NSAccessibilityIncrementPageSubrole";
+        @"AXIncrementPage";
 NSString *const NSAccessibilityMinimizeButtonSubrole =
-        @"NSAccessibilityMinimizeButtonSubrole";
+        @"AXMinimizeButton";
 NSString *const NSAccessibilityOutlineRowSubrole =
-        @"NSAccessibilityOutlineRowSubrole";
+        @"AXOutlineRow";
 NSString *const NSAccessibilitySearchFieldSubrole =
-        @"NSAccessibilitySearchFieldSubrole";
+        @"AXSearchField";
 NSString *const NSAccessibilitySecureTextFieldSubrole =
-        @"NSAccessibilitySecureTextFieldSubrole";
+        @"AXSecureTextField";
 NSString *const NSAccessibilityStandardWindowSubrole =
-        @"NSAccessibilityStandardWindowSubrole";
+        @"AXStandardWindow";
 NSString *const NSAccessibilitySystemDialogSubrole =
-        @"NSAccessibilitySystemDialogSubrole";
+        @"AXSystemDialog";
 NSString *const NSAccessibilitySystemFloatingWindowSubrole =
-        @"NSAccessibilitySystemFloatingWindowSubrole";
+        @"AXSystemFloatingWindow";
 NSString *const NSAccessibilityTabButtonSubrole = @"AXTabButton";
 NSString *const NSAccessibilityTableRowSubrole =
-        @"NSAccessibilityTableRowSubrole";
+        @"AXTableRow";
 NSString *const NSAccessibilityTextAttachmentSubrole =
-        @"NSAccessibilityTextAttachmentSubrole";
+        @"AXTextAttachment";
 NSString *const NSAccessibilityTextLinkSubrole =
-        @"NSAccessibilityTextLinkSubrole";
+        @"AXTextLink";
 NSString *const NSAccessibilityTimelineSubrole =
-        @"NSAccessibilityTimelineSubrole";
+        @"AXTimeline";
 NSString *const NSAccessibilityToolbarButtonSubrole =
-        @"NSAccessibilityToolbarButtonSubrole";
+        @"AXToolbarButton";
 NSString *const NSAccessibilityUnknownSubrole =
-        @"NSAccessibilityUnknownSubrole";
+        @"AXUnknown";
 NSString *const NSAccessibilityZoomButtonSubrole =
-        @"NSAccessibilityZoomButtonSubrole";
+        @"AXZoomButton";
 NSString *const NSAccessibilitySortButtonSubrole =
-        @"NSAccessibilitySortButtonSubrole";
+        @"AXSortButton";
 NSString *const NSAccessibilityRatingIndicatorSubrole =
-        @"NSAccessibilityRatingIndicatorSubrole";
+        @"AXRatingIndicator";
 NSString *const NSAccessibilityContentListSubrole =
-        @"NSAccessibilityContentListSubrole";
+        @"AXContentList";
 NSString *const NSAccessibilityDefinitionListSubrole =
-        @"NSAccessibilityDefinitionListSubrole";
+        @"AXDefinitionList";
 
 NSString *const NSAccessibilityCancelAction = @"AXCancel";
 NSString *const NSAccessibilityConfirmAction = @"AXConfirm";
@@ -486,78 +488,77 @@ NSAccessibilityActionName const NSAccessibilityShowDefaultUIAction = @"AXShowDef
 NSString *const NSAccessibilityShowMenuAction = @"AXShowMenu";
 
 NSString *const NSAccessibilityMainWindowChangedNotification =
-        @"NSAccessibilityMainWindowChangedNotification";
+        @"AXMainWindowChanged";
 NSString *const NSAccessibilityFocusedWindowChangedNotification =
-        @"NSAccessibilityFocusedWindowChangedNotification";
+        @"AXFocusedWindowChanged";
 NSString *const NSAccessibilityFocusedUIElementChangedNotification =
-        @"NSAccessibilityFocusedUIElementChangedNotification";
+        @"AXFocusedUIElementChanged";
 
 NSString *const NSAccessibilityWindowCreatedNotification =
-        @"NSAccessibilityWindowCreatedNotification";
+        @"AXWindowCreated";
 NSString *const NSAccessibilityWindowDeminiaturizedNotification =
-        @"NSAccessibilityWindowDeminiaturizedNotification";
+        @"AXWindowDeminiaturized";
 NSString *const NSAccessibilityWindowMiniaturizedNotification =
-        @"NSAccessibilityWindowMiniaturizedNotification";
+        @"AXWindowMiniaturized";
 NSString *const NSAccessibilityWindowMovedNotification =
-        @"NSAccessibilityWindowMovedNotification";
+        @"AXWindowMoved";
 NSString *const NSAccessibilityWindowResizedNotification =
-        @"NSAccessibilityWindowResizedNotification";
+        @"AXWindowResized";
 
 NSString *const NSAccessibilityApplicationActivatedNotification =
-        @"NSAccessibilityApplicationActivatedNotification";
+        @"AXApplicationActivated";
 NSString *const NSAccessibilityApplicationDeactivatedNotification =
-        @"NSAccessibilityApplicationDeactivatedNotification";
+        @"AXApplicationDeactivated";
 NSString *const NSAccessibilityApplicationHiddenNotification =
-        @"NSAccessibilityApplicationHiddenNotification";
+        @"AXApplicationHidden";
 NSString *const NSAccessibilityApplicationShownNotification =
-        @"NSAccessibilityApplicationShownNotification";
+        @"AXApplicationShown";
 
 NSString *const NSAccessibilityDrawerCreatedNotification =
-        @"NSAccessibilityDrawerCreatedNotification";
+        @"AXDrawerCreated";
 NSString *const NSAccessibilitySheetCreatedNotification =
-        @"NSAccessibilitySheetCreatedNotification";
+        @"AXSheetCreated";
 
 NSString *const NSAccessibilityCreatedNotification =
-        @"NSAccessibilityCreatedNotification";
+        @"AXCreated";
 NSString *const NSAccessibilityMovedNotification =
-        @"NSAccessibilityMovedNotification";
+        @"AXMoved";
 NSString *const NSAccessibilityResizedNotification =
-        @"NSAccessibilityResizedNotification";
+        @"AXResized";
 NSString *const NSAccessibilityTitleChangedNotification =
-        @"NSAccessibilityTitleChangedNotification";
+        @"AXTitleChanged";
 NSString *const NSAccessibilityUIElementDestroyedNotification =
-        @"NSAccessibilityUIElementDestroyedNotification";
+        @"AXUIElementDestroyed";
 NSString *const NSAccessibilityValueChangedNotification =
-        @"NSAccessibilityValueChangedNotification";
+        @"AXValueChanged";
 
 NSString *const NSAccessibilityHelpTagCreatedNotification =
-        @"NSAccessibilityHelpTagCreatedNotification";
+        @"AXHelpTagCreated";
 NSString *const NSAccessibilityRowCountChangedNotification =
-        @"NSAccessibilityRowCountChangedNotification";
+        @"AXRowCountChanged";
 NSString *const NSAccessibilitySelectedChildrenChangedNotification =
-        @"NSAccessibilitySelectedChildrenChangedNotification";
+        @"AXSelectedChildrenChanged";
 NSString *const NSAccessibilitySelectedColumnsChangedNotification =
-        @"NSAccessibilitySelectedColumnsChangedNotification";
+        @"AXSelectedColumnsChanged";
 NSString *const NSAccessibilitySelectedRowsChangedNotification =
-        @"NSAccessibilitySelectedRowsChangedNotification";
+        @"AXSelectedRowsChanged";
 NSString *const NSAccessibilitySelectedTextChangedNotification =
-        @"NSAccessibilitySelectedTextChangedNotification";
+        @"AXSelectedTextChanged";
 NSString *const NSAccessibilityRowExpandedNotification =
-        @"NSAccessibilityRowExpandedNotification";
+        @"AXRowExpanded";
 NSString *const NSAccessibilityRowCollapsedNotification =
-        @"NSAccessibilityRowCollapsedNotification";
+        @"AXRowCollapsed";
 NSString *const NSAccessibilitySelectedCellsChangedNotification =
-        @"NSAccessibilitySelectedCellsChangedNotification";
+        @"AXSelectedCellsChanged";
 NSString *const NSAccessibilityUnitsChangedNotification =
-        @"NSAccessibilityUnitsChangedNotification";
+        @"AXUnitsChanged";
 NSString *const NSAccessibilitySelectedChildrenMovedNotification =
-        @"NSAccessibilitySelectedChildrenMovedNotification";
+        @"AXSelectedChildrenMoved";
 
+// Checked against macOS: this is the only constant here whose value is its own name.
 NSString *const NSAccessibilityErrorCodeExceptionInfo =
         @"NSAccessibilityErrorCodeExceptionInfo";
 
-/* The above constants are probably all wrong */
-/* The one below is right */
 NSString *const NSAccessibilityActivationPointAttribute = @"AXActivationPoint";
 
 /* Undocumented */
@@ -575,7 +576,7 @@ NSString *const NSAccessibilitySupportsMainThreadIdleNotificationAttribute =
 
 NSString *const NSAccessibilityLayoutChangedNotification = @"AXLayoutChanged";
 NSString *const NSAccessibilityUIElementsKey = @"AXUIElementsKey";
-NSString *const NSAccessibilityToggleSubrole = @"NSAccessibilityToggleSubrole";
+NSString *const NSAccessibilityToggleSubrole = @"AXToggle";
 
 NSString *const NSAccessibilityFullScreenButtonSubrole = @"AXFullScreenButton";
 

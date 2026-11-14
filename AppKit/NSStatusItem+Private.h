@@ -24,5 +24,7 @@
 HWND _eventhWnd;
 NOTIFYICONDATA niData;
 #endif
+- (NSString *) _defaultAutosaveName;
+- (void) _setDefaultAutosaveName: (NSString *) name;
 - (void) _showContextMenu;
 @end

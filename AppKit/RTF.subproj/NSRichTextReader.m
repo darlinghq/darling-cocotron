@@ -103,6 +103,7 @@ static const NSString *kStateCharacterBytesCountKey = @"characterBytesCount";
 - (void) dealloc {
     [_bufferIn release];
     [_imageDirectory release];
+    [_attachmentWrappers release];
     [_fontTable release];
     [_currentFontInfo release];
     [_colorTable release];
@@ -116,6 +117,18 @@ static const NSString *kStateCharacterBytesCountKey = @"characterBytesCount";
 
 + (NSAttributedString *) attributedStringWithData: (NSData *) data {
     NSRichTextReader *reader = [[self alloc] initWithData: data];
+    NSAttributedString *result =
+            [[[reader parseAttributedString] retain] autorelease];
+
+    [reader release];
+
+    return result;
+}
+
++ (NSAttributedString *) attributedStringWithData: (NSData *) data
+                           attachmentFileWrappers: (NSDictionary *) wrappers {
+    NSRichTextReader *reader = [[self alloc] initWithData: data];
+    reader->_attachmentWrappers = [wrappers copy];
     NSAttributedString *result =
             [[[reader parseAttributedString] retain] autorelease];
 
@@ -345,6 +358,9 @@ static inline void flushPreviousString(NSRichTextReader *self) {
 
 // An RTFD attachment is a file in the .rtfd bundle.
 - (NSTextAttachment *) _attachmentWithFileName: (NSString *) name {
+    NSFileWrapper *held = [_attachmentWrappers objectForKey: name];
+    if (held != nil)
+        return [[[NSTextAttachment alloc] initWithFileWrapper: held] autorelease];
     if (_imageDirectory == nil)
         return nil;
     NSURL *url = [NSURL

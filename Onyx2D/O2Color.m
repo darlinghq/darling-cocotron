@@ -95,12 +95,32 @@ O2ColorRef O2ColorCreate(O2ColorSpaceRef colorSpace, const O2Float *components)
     return O2ColorInitWithColorSpace([O2Color alloc], colorSpace, components);
 }
 
+// The generic colors are in the named generic spaces (CGColorCreateGenericRGB
+// is the Generic RGB space, which is not device RGB: a generic red filled into
+// an sRGB context gives different numbers). A space that cannot be created
+// falls back to the device one.
 O2ColorRef O2ColorCreateGenericGray(O2Float gray, O2Float a) {
-    return [[O2Color alloc] initWithDeviceGray: gray alpha: a];
+    O2ColorSpaceRef colorSpace =
+            O2ColorSpaceCreateWithName(CFSTR("kCGColorSpaceGenericGray"));
+    if (colorSpace == NULL)
+        return [[O2Color alloc] initWithDeviceGray: gray alpha: a];
+
+    O2Float components[2] = {gray, a};
+    O2ColorRef result = O2ColorCreate(colorSpace, components);
+    O2ColorSpaceRelease(colorSpace);
+    return result;
 }
 
 O2ColorRef O2ColorCreateGenericRGB(O2Float r, O2Float g, O2Float b, O2Float a) {
-    return [[O2Color alloc] initWithDeviceRed: r green: g blue: b alpha: a];
+    O2ColorSpaceRef colorSpace =
+            O2ColorSpaceCreateWithName(CFSTR("kCGColorSpaceGenericRGB"));
+    if (colorSpace == NULL)
+        return [[O2Color alloc] initWithDeviceRed: r green: g blue: b alpha: a];
+
+    O2Float components[4] = {r, g, b, a};
+    O2ColorRef result = O2ColorCreate(colorSpace, components);
+    O2ColorSpaceRelease(colorSpace);
+    return result;
 }
 
 O2ColorRef O2ColorCreateGenericCMYK(O2Float c, O2Float m, O2Float y, O2Float k,
@@ -296,8 +316,9 @@ int O2ColorConvertComponentsToDeviceRGB(O2ColorSpaceRef inputSpace,
     return 0;
 }
 
-// Converts through device RGB, which is how Onyx2D treats every color space
-// it can draw with; spaces it cannot convert from or to give NULL.
+// Spaces with colorimetric profiles (the named sRGB, Display P3, generic and
+// gray spaces) convert through CIE XYZ. Any other conversion goes through device
+// RGB; spaces it cannot convert from or to give NULL.
 O2ColorRef O2ColorCreateCopyByMatchingToColorSpace(O2ColorSpaceRef colorSpace,
                                                    O2ColorRef color)
 {
@@ -310,6 +331,25 @@ O2ColorRef O2ColorCreateCopyByMatchingToColorSpace(O2ColorSpaceRef colorSpace,
     O2ColorSpaceModel sourceModel = O2ColorSpaceGetModel(source);
     O2ColorSpaceModel targetModel = O2ColorSpaceGetModel(colorSpace);
     const O2Float *components = O2ColorGetComponents(color);
+
+    // Two spaces with colorimetric profiles convert through CIE XYZ.
+    O2ColorProfile sourceProfile, targetProfile;
+    if (O2ColorSpaceGetColorProfile(source, &sourceProfile) &&
+        O2ColorSpaceGetColorProfile(colorSpace, &targetProfile)) {
+        size_t sourceCount = O2ColorSpaceGetNumberOfComponents(source);
+        size_t targetCount = O2ColorSpaceGetNumberOfComponents(colorSpace);
+        double in[3] = {components[0], 0, 0};
+        for (size_t i = 1; i < sourceCount; i++)
+            in[i] = components[i];
+        double out[3];
+        O2ColorProfileConvert(&sourceProfile, &targetProfile, in, out);
+
+        O2Float result[4];
+        for (size_t i = 0; i < targetCount; i++)
+            result[i] = out[i];
+        result[targetCount] = components[sourceCount];
+        return O2ColorCreate(colorSpace, result);
+    }
 
     if (sourceModel == targetModel &&
         (targetModel == kO2ColorSpaceModelMonochrome ||

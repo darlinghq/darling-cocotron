@@ -290,6 +290,17 @@ NSImageName const NSImageNameTouchBarVolumeUpTemplate =
 }
 @end
 
+@interface NSImage (NineParts)
+- (BOOL) _drawNinePartInRect: (NSRect) rect
+                    fromRect: (NSRect) source
+                   operation: (NSCompositingOperation) operation
+                    fraction: (CGFloat) fraction;
+- (void) _drawPlainInRect: (NSRect) rect
+                 fromRect: (NSRect) source
+                operation: (NSCompositingOperation) operation
+                 fraction: (CGFloat) fraction;
+@end
+
 @implementation NSImage
 
 + (NSArray *) imageFileTypes {
@@ -1391,6 +1402,11 @@ static NSUInteger scaledRepCacheBytes(NSArray *cache) {
     if (![[NSGraphicsContext currentContext] isDrawingToScreen])
         return nil;
 
+    // The pre-scaled copy is made with the default resampling, so with interpolation
+    // turned off the source has to be sampled by the draw itself.
+    if ([[NSGraphicsContext currentContext] imageInterpolation] == NSImageInterpolationNone)
+        return nil;
+
     CGAffineTransform toDevice = CGContextGetUserSpaceToDeviceSpaceTransform(
             NSCurrentGraphicsPort());
 
@@ -1499,10 +1515,107 @@ static NSUInteger scaledRepCacheBytes(NSArray *cache) {
     return _drawingHandlerRepCache;
 }
 
+// Nine-part drawing. The cap insets cut the image into four corners, four edges and a centre.
+// The corners are drawn at their natural size in the corners of the destination, and the edges
+// and the centre fill what is left, either stretched or, with NSImageResizingModeTile, repeated
+// from the lower left corner of each destination part and clipped to it. With no caps the
+// whole image is the centre, so tile mode repeats the image. Geometry is in the image's own
+// (y up) space; flipping is left to the plain drawing of each part. Returns NO when the image
+// is drawn the ordinary way: stretch mode without caps, a partial source rectangle or a
+// destination with a negative size (as composite drawing in a flipped context passes).
+- (BOOL) _drawNinePartInRect: (NSRect) rect
+                    fromRect: (NSRect) source
+                   operation: (NSCompositingOperation) operation
+                    fraction: (CGFloat) fraction
+{
+    NSEdgeInsets caps = _capInsets;
+    BOOL hasCaps = caps.top > 0 || caps.left > 0 || caps.bottom > 0 || caps.right > 0;
+    if (!hasCaps && _resizingMode != NSImageResizingModeTile)
+        return NO;
+
+    NSSize size = [self size];
+    NSRect fullRect = {.origin = NSZeroPoint, .size = size};
+    if (!NSIsEmptyRect(source) && !NSEqualRects(source, fullRect))
+        return NO;
+    if (!(size.width > 0) || !(size.height > 0) || !(rect.size.width > 0) || !(rect.size.height > 0) ||
+        !isfinite(rect.origin.x) || !isfinite(rect.origin.y) || !isfinite(rect.size.width) ||
+        !isfinite(rect.size.height))
+        return NO;
+
+    // Caps are clamped so that opposite caps do not exceed the image.
+    CGFloat left = MIN(MAX(caps.left, 0), size.width);
+    CGFloat right = MIN(MAX(caps.right, 0), size.width - left);
+    CGFloat bottom = MIN(MAX(caps.bottom, 0), size.height);
+    CGFloat top = MIN(MAX(caps.top, 0), size.height - bottom);
+
+    // Column and row extents in the image and in the destination, lower left first. The
+    // centre is empty in the destination when the caps do not fit.
+    CGFloat srcX[3] = {0, left, size.width - right};
+    CGFloat srcW[3] = {left, size.width - left - right, right};
+    CGFloat srcY[3] = {0, bottom, size.height - top};
+    CGFloat srcH[3] = {bottom, size.height - bottom - top, top};
+    CGFloat dstX[3] = {rect.origin.x, rect.origin.x + left, NSMaxX(rect) - right};
+    CGFloat dstW[3] = {left, MAX(rect.size.width - left - right, 0), right};
+    CGFloat dstY[3] = {rect.origin.y, rect.origin.y + bottom, NSMaxY(rect) - top};
+    CGFloat dstH[3] = {bottom, MAX(rect.size.height - bottom - top, 0), top};
+
+    CGContextRef context = NSCurrentGraphicsPort();
+
+    // Bottom row first, then upwards, each row from left to right: where the caps overlap in
+    // a destination smaller than they are, the later part is on top.
+    for (int row = 0; row < 3; row++) {
+        for (int column = 0; column < 3; column++) {
+            if (srcW[column] <= 0 || srcH[row] <= 0 || dstW[column] <= 0 || dstH[row] <= 0)
+                continue;
+            NSRect from = NSMakeRect(srcX[column], srcY[row], srcW[column], srcH[row]);
+            NSRect to = NSMakeRect(dstX[column], dstY[row], dstW[column], dstH[row]);
+            BOOL isCorner = (column != 1 && row != 1);
+            // A very large number of tiles is drawn stretched instead.
+            BOOL tooManyTiles = ceil(to.size.width / from.size.width) * ceil(to.size.height / from.size.height) > 1000000;
+            if (isCorner || _resizingMode != NSImageResizingModeTile || tooManyTiles) {
+                [self _drawPlainInRect: to fromRect: from operation: operation fraction: fraction];
+                continue;
+            }
+            // A tiled part: whole tiles from the lower left, clipped to the part. An edge
+            // is as thick as its cap, so it repeats along its length only.
+            CGContextSaveGState(context);
+            CGContextClipToRect(context, NSRectToCGRect(to));
+            for (CGFloat y = to.origin.y; y < NSMaxY(to); y += from.size.height) {
+                for (CGFloat x = to.origin.x; x < NSMaxX(to); x += from.size.width) {
+                    [self _drawPlainInRect: NSMakeRect(x, y, from.size.width, from.size.height)
+                                  fromRect: from
+                                 operation: operation
+                                  fraction: fraction];
+                }
+            }
+            CGContextRestoreGState(context);
+        }
+    }
+    return YES;
+}
+
 - (void) drawInRect: (NSRect) rect
            fromRect: (NSRect) source
           operation: (NSCompositingOperation) operation
            fraction: (CGFloat) fraction
+{
+    if (![self _drawNinePartInRect: rect
+                          fromRect: source
+                         operation: operation
+                          fraction: fraction])
+    {
+        [self _drawPlainInRect: rect
+                      fromRect: source
+                     operation: operation
+                      fraction: fraction];
+    }
+}
+
+// The image drawn as one piece, stretched to fill the rectangle.
+- (void) _drawPlainInRect: (NSRect) rect
+                 fromRect: (NSRect) source
+                operation: (NSCompositingOperation) operation
+                 fraction: (CGFloat) fraction
 {
 
     // Keep a lid on any intermediate allocations while producing caches
@@ -1837,6 +1950,22 @@ static NSUInteger scaledRepCacheBytes(NSArray *cache) {
 
 - (NSImageSymbolConfiguration *) symbolConfiguration {
     return _symbolConfiguration;
+}
+
+- (NSEdgeInsets) capInsets {
+    return _capInsets;
+}
+
+- (void) setCapInsets: (NSEdgeInsets) capInsets {
+    _capInsets = capInsets;
+}
+
+- (NSImageResizingMode) resizingMode {
+    return _resizingMode;
+}
+
+- (void) setResizingMode: (NSImageResizingMode) resizingMode {
+    _resizingMode = resizingMode;
 }
 
 @end

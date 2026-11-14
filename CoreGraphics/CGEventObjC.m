@@ -68,6 +68,7 @@
 	_location = _eventRecord->location;
 	_type = _eventRecord->type; // These types match!
 	_timestamp = _eventRecord->time;
+	_flags = (CGEventFlags) _eventRecord->flags;
 
 	switch (_eventRecord->type)
 	{
