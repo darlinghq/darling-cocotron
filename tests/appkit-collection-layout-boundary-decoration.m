@@ -30,6 +30,26 @@ int main(void) {
         expect([header containerAnchor] != nil && [[header containerAnchor] edges] == NSDirectionalRectEdgeTop,
                @"its container anchor is the alignment's edge");
         expect(![header pinToVisibleBounds], @"it is not pinned by default");
+
+        // Every alignment anchors the boundary item to the edges the alignment names.
+        const struct { NSRectAlignment alignment; NSDirectionalRectEdge edges; const char *name; } anchors[] = {
+            {NSRectAlignmentNone, NSDirectionalRectEdgeNone, "none"},
+            {NSRectAlignmentTop, NSDirectionalRectEdgeTop, "top"},
+            {NSRectAlignmentTopLeading, NSDirectionalRectEdgeTop | NSDirectionalRectEdgeLeading, "top leading"},
+            {NSRectAlignmentLeading, NSDirectionalRectEdgeLeading, "leading"},
+            {NSRectAlignmentBottomLeading, NSDirectionalRectEdgeBottom | NSDirectionalRectEdgeLeading, "bottom leading"},
+            {NSRectAlignmentBottom, NSDirectionalRectEdgeBottom, "bottom"},
+            {NSRectAlignmentBottomTrailing, NSDirectionalRectEdgeBottom | NSDirectionalRectEdgeTrailing, "bottom trailing"},
+            {NSRectAlignmentTrailing, NSDirectionalRectEdgeTrailing, "trailing"},
+            {NSRectAlignmentTopTrailing, NSDirectionalRectEdgeTop | NSDirectionalRectEdgeTrailing, "top trailing"},
+        };
+        for (size_t i = 0; i < sizeof(anchors) / sizeof(anchors[0]); i++) {
+            NSCollectionLayoutBoundarySupplementaryItem *aligned = [boundaryClass boundarySupplementaryItemWithLayoutSize: size
+                                                                                                              elementKind: @"kind"
+                                                                                                                alignment: anchors[i].alignment];
+            expect([[aligned containerAnchor] edges] == anchors[i].edges,
+                   [NSString stringWithFormat: @"the %s alignment anchors to its own edges", anchors[i].name]);
+        }
         [header setPinToVisibleBounds: YES];
         [header setExtendsBoundary: NO];
         [header setZIndex: 3];
