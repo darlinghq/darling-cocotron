@@ -77,8 +77,8 @@ int main(void) {
         NSDirectionalEdgeInsets zero = [section contentInsets];
         expect(zero.top == 0 && zero.leading == 0 && zero.bottom == 0 && zero.trailing == 0, @"section insets start at zero");
         expect([section interGroupSpacing] == 0, @"inter group spacing starts at zero");
-        expect([[section boundarySupplementaryItems] count] == 0 && [[section decorationItems] count] == 0,
-               @"a section starts without boundary or decoration items");
+        expect([[section boundarySupplementaryItems] isEqual: @[]] && [[section decorationItems] isEqual: @[]],
+               @"a section starts with empty boundary and decoration item arrays, not nil");
         expect([section supplementariesFollowContentInsets], @"supplementaries follow content insets by default (GUESS)");
 
         NSCollectionLayoutBoundarySupplementaryItem *header = [boundaryClass boundarySupplementaryItemWithLayoutSize: fill
@@ -124,6 +124,10 @@ int main(void) {
         [sectionCopy setInterGroupSpacing: 1];
         expect([section interGroupSpacing] == 12, @"changing the copy leaves the original alone");
 
+        [section setBoundarySupplementaryItems: nil];
+        [section setDecorationItems: nil];
+        expect([[section boundarySupplementaryItems] isEqual: @[]] && [[section decorationItems] isEqual: @[]],
+               @"setting nil gives empty arrays");
         NSMutableArray *mutableItems = [NSMutableArray arrayWithObject: header];
         [section setBoundarySupplementaryItems: mutableItems];
         [mutableItems removeAllObjects];

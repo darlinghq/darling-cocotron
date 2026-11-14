@@ -683,6 +683,8 @@ static NSDirectionalRectEdge EdgesForAlignment(NSRectAlignment alignment) {
     NSCollectionLayoutSection *section = [[[self alloc] init] autorelease];
 
     section->_group = [group retain];
+    section->_boundarySupplementaryItems = [@[] retain];
+    section->_decorationItems = [@[] retain];
     section->_supplementariesFollowContentInsets = YES;
     return section;
 }
@@ -716,7 +718,7 @@ static NSDirectionalRectEdge EdgesForAlignment(NSRectAlignment alignment) {
 }
 
 - (void) setBoundarySupplementaryItems: (NSArray<NSCollectionLayoutBoundarySupplementaryItem *> *) items {
-    items = [items copy];
+    items = [(items ? items : @[]) copy];
     [_boundarySupplementaryItems release];
     _boundarySupplementaryItems = items;
 }
@@ -734,7 +736,7 @@ static NSDirectionalRectEdge EdgesForAlignment(NSRectAlignment alignment) {
 }
 
 - (void) setDecorationItems: (NSArray<NSCollectionLayoutDecorationItem *> *) items {
-    items = [items copy];
+    items = [(items ? items : @[]) copy];
     [_decorationItems release];
     _decorationItems = items;
 }

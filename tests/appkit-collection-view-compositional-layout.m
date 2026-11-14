@@ -49,8 +49,10 @@ int main(void) {
 
         NSCollectionViewCompositionalLayoutConfiguration *configuration = [[[configurationClass alloc] init] autorelease];
         expect([configuration scrollDirection] == NSCollectionViewScrollDirectionVertical && [configuration interSectionSpacing] == 0 &&
-                       [[configuration boundarySupplementaryItems] count] == 0,
-               @"a configuration starts vertical, without spacing or boundary items");
+                       [[configuration boundarySupplementaryItems] isEqual: @[]],
+               @"a configuration starts vertical, without spacing and with an empty (not nil) array of boundary items");
+        [configuration setBoundarySupplementaryItems: nil];
+        expect([[configuration boundarySupplementaryItems] isEqual: @[]], @"setting nil gives an empty array");
         [configuration setScrollDirection: NSCollectionViewScrollDirectionHorizontal];
         [configuration setInterSectionSpacing: 14];
         [configuration setBoundarySupplementaryItems: @[header]];

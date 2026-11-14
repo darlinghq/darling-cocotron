@@ -27,6 +27,13 @@
     NSArray *_boundarySupplementaryItems;
 }
 
+// The documentation declares the boundary items as a non-optional array: empty to start with.
+- (instancetype) init {
+    if ((self = [super init]) != nil)
+        _boundarySupplementaryItems = [@[] retain];
+    return self;
+}
+
 - (NSCollectionViewScrollDirection) scrollDirection {
     return _scrollDirection;
 }
@@ -48,7 +55,7 @@
 }
 
 - (void) setBoundarySupplementaryItems: (NSArray<NSCollectionLayoutBoundarySupplementaryItem *> *) items {
-    items = [items copy];
+    items = [(items ? items : @[]) copy];
     [_boundarySupplementaryItems release];
     _boundarySupplementaryItems = items;
 }
@@ -63,7 +70,7 @@
 
     copy->_scrollDirection = _scrollDirection;
     copy->_interSectionSpacing = _interSectionSpacing;
-    copy->_boundarySupplementaryItems = [_boundarySupplementaryItems copy];
+    [copy setBoundarySupplementaryItems: _boundarySupplementaryItems];
     return copy;
 }
 
