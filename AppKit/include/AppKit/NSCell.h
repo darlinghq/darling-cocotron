@@ -17,6 +17,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/AppKitExport.h>
 #import <AppKit/NSGraphics.h>
 #import <AppKit/NSParagraphStyle.h>
@@ -108,46 +109,52 @@ enum {
 
 APPKIT_EXPORT NSNotificationName NSControlTintDidChangeNotification;
 
+// Legacy ObjC ABI (i386): instance size must stay 0x14, Apple's; the ivars
+// before the extras sit at Apple's offsets. Add new state to the extra
+// struct, never as an ivar.
 @interface NSCell : NSObject <NSCopying, NSCoding, NSUserInterfaceItemIdentification> {
-    NSControlStateValue _state;
-    NSFont *_font;
-    NSInteger _entryType;
-    id _objectValue;
-    NSImage *_image;
-    int _textAlignment;
-    NSWritingDirection _writingDirection;
-    NSCellType _cellType;
-    NSFormatter *_formatter;
-    id _titleOrAttributedTitle;
-    id _representedObject;
-    NSControlSize _controlSize;
-    NSFocusRingType _focusRingType;
-    NSLineBreakMode _lineBreakMode;
-    NSBackgroundStyle _backgroundStyle;
-    NSUInteger _cFlags; // required for Xcode
-    NSUserInterfaceItemIdentifier _identifier;
+    NS_LEGACY_IVAR_PAD(_NSCellReserved1, 12)
+    NS_EXTRA_IVARS_BEGIN(NSCell)
+        NSControlStateValue _state;
+        NSFont *_font;
+        NSInteger _entryType;
+        id _objectValue;
+        NSImage *_image;
+        int _textAlignment;
+        NSWritingDirection _writingDirection;
+        NSCellType _cellType;
+        NSFormatter *_formatter;
+        id _titleOrAttributedTitle;
+        id _representedObject;
+        NSControlSize _controlSize;
+        NSFocusRingType _focusRingType;
+        NSLineBreakMode _lineBreakMode;
+        NSBackgroundStyle _backgroundStyle;
+        NSUInteger _cFlags; // required for Xcode
+        NSUserInterfaceItemIdentifier _identifier;
 
-    BOOL _isEnabled;
-    BOOL _isEditable;
-    BOOL _isRichText;
-    BOOL _isSelectable;
-    BOOL _isScrollable;
-    BOOL _isBordered;
-    BOOL _isBezeled;
-    BOOL _isHighlighted;
-    BOOL _showsFirstResponder;
-    BOOL _refusesFirstResponder;
-    BOOL _isContinuous;
-    BOOL _allowsMixedState;
-    BOOL _allowsEditingTextAttributes;
-    BOOL _sendsActionOnEndEditing;
-    BOOL _hasValidObjectValue;
-    BOOL _usesSingleLineMode;
-    NSInteger _sendActionOnMask;
-    BOOL _truncatesLastVisibleLine;
-    BOOL _allowsUndo;
-    NSUserInterfaceLayoutDirection _userInterfaceLayoutDirection;
-    NSMenu *_cellMenu;
+        BOOL _isEnabled;
+        BOOL _isEditable;
+        BOOL _isRichText;
+        BOOL _isSelectable;
+        BOOL _isScrollable;
+        BOOL _isBordered;
+        BOOL _isBezeled;
+        BOOL _isHighlighted;
+        BOOL _showsFirstResponder;
+        BOOL _refusesFirstResponder;
+        BOOL _isContinuous;
+        BOOL _allowsMixedState;
+        BOOL _allowsEditingTextAttributes;
+        BOOL _sendsActionOnEndEditing;
+        BOOL _hasValidObjectValue;
+        BOOL _usesSingleLineMode;
+        NSInteger _sendActionOnMask;
+        BOOL _truncatesLastVisibleLine;
+        BOOL _allowsUndo;
+        NSUserInterfaceLayoutDirection _userInterfaceLayoutDirection;
+        NSMenu *_cellMenu;
+    NS_EXTRA_IVARS_END(NSCell)
 }
 
 @property BOOL truncatesLastVisibleLine;

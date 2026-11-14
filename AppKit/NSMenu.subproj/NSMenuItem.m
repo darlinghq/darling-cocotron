@@ -31,11 +31,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @implementation NSMenuItem
 
-@synthesize alternate = _alternate;
-@synthesize allowsKeyEquivalentWhenHidden = _allowsKeyEquivalentWhenHidden;
-@synthesize identifier = _identifier;
-@synthesize view = _view;
-@synthesize badge = _badge;
+NS_EXTRA_SYNTHESIZE_ASSIGN(NSMenuItem, alternate, _alternate, BOOL, isAlternate, setAlternate:)
+NS_EXTRA_SYNTHESIZE_ASSIGN(NSMenuItem, allowsKeyEquivalentWhenHidden, _allowsKeyEquivalentWhenHidden, BOOL, allowsKeyEquivalentWhenHidden, setAllowsKeyEquivalentWhenHidden:)
+NS_EXTRA_SYNTHESIZE_COPY(NSMenuItem, identifier, _identifier, NSUserInterfaceItemIdentifier, identifier, setIdentifier:)
+NS_EXTRA_SYNTHESIZE_RETAIN(NSMenuItem, view, _view, NSView *, view, setView:)
+NS_EXTRA_SYNTHESIZE_RETAIN(NSMenuItem, badge, _badge, NSMenuItemBadge *, badge, setBadge:)
 
 + (NSMenuItem *) separatorItem {
     return [[[self alloc] initWithTitle: nil action: NULL
@@ -47,19 +47,19 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                                              action: NULL
                                       keyEquivalent: @""] autorelease];
     // A section header is an enabled item on macOS (not disabled), see MC26.8.
-    item->_isSectionHeader = YES;
+    NS_EXTRA(NSMenuItem, item)->_isSectionHeader = YES;
     return item;
 }
 
 - (void) encodeWithCoder: (NSCoder *) coder {
     [coder encodeObject: _title forKey: @"NSTitle"];
-    [coder encodeObject: _keyEquivalent forKey: @"NSKeyEquiv"];
-    [coder encodeInt: _keyEquivalentModifierMask
+    [coder encodeObject: NS_EXTRA(NSMenuItem, self)->_keyEquivalent forKey: @"NSKeyEquiv"];
+    [coder encodeInt: NS_EXTRA(NSMenuItem, self)->_keyEquivalentModifierMask
               forKey: @"NSKeyEquivModMask"];
-    [coder encodeObject: _submenu forKey: @"NSSubmenu"];
-    [coder encodeInt: _tag forKey: @"NSTag"];
-    [coder encodeObject: NSStringFromSelector(_action) forKey: @"NSAction"];
-    [coder encodeObject: _target forKey: @"NSTarget"];
+    [coder encodeObject: NS_EXTRA(NSMenuItem, self)->_submenu forKey: @"NSSubmenu"];
+    [coder encodeInt: NS_EXTRA(NSMenuItem, self)->_tag forKey: @"NSTag"];
+    [coder encodeObject: NSStringFromSelector(NS_EXTRA(NSMenuItem, self)->_action) forKey: @"NSAction"];
+    [coder encodeObject: NS_EXTRA(NSMenuItem, self)->_target forKey: @"NSTarget"];
 }
 
 - initWithCoder: (NSCoder *) coder {
@@ -80,11 +80,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         [self setKeyEquivalentModifierMask:
                         [keyed decodeIntForKey: @"NSKeyEquivModMask"]];
         [self setSubmenu: [keyed decodeObjectForKey: @"NSSubmenu"]];
-        _tag = [keyed decodeIntForKey: @"NSTag"];
+        NS_EXTRA(NSMenuItem, self)->_tag = [keyed decodeIntForKey: @"NSTag"];
         if ([keyed containsValueForKey: @"NSState"])
-            _state = [keyed decodeIntForKey: @"NSState"];
-        _hidden = [keyed decodeBoolForKey: @"NSIsHidden"];
-        _image = [[coder decodeObjectForKey: @"NSImage"] retain];
+            NS_EXTRA(NSMenuItem, self)->_state = [keyed decodeIntForKey: @"NSState"];
+        NS_EXTRA(NSMenuItem, self)->_hidden = [keyed decodeBoolForKey: @"NSIsHidden"];
+        NS_EXTRA(NSMenuItem, self)->_image = [[coder decodeObjectForKey: @"NSImage"] retain];
         if ([keyed decodeBoolForKey: @"NSIsSeparator"]) {
             [_title release];
             _title = nil;
@@ -103,14 +103,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         // The fifth value (all bits set in Mac archives) is of unknown meaning.
         unsigned int unused;
 
-        [coder decodeValuesOfObjCTypes:"i@@IIi@@@@:i@", &flags, &_title, &_keyEquivalent, &_keyEquivalentModifierMask, &unused, &_state, &_image, &_onStateImage, &_mixedStateImage, &_offStateImage, &_action, &_tag, &_representedObject];
+        [coder decodeValuesOfObjCTypes:"i@@IIi@@@@:i@", &flags, &_title, &NS_EXTRA(NSMenuItem, self)->_keyEquivalent, &NS_EXTRA(NSMenuItem, self)->_keyEquivalentModifierMask, &unused, &NS_EXTRA(NSMenuItem, self)->_state, &NS_EXTRA(NSMenuItem, self)->_image, &NS_EXTRA(NSMenuItem, self)->_onStateImage, &NS_EXTRA(NSMenuItem, self)->_mixedStateImage, &NS_EXTRA(NSMenuItem, self)->_offStateImage, &NS_EXTRA(NSMenuItem, self)->_action, &NS_EXTRA(NSMenuItem, self)->_tag, &NS_EXTRA(NSMenuItem, self)->_representedObject];
 
         // The flag word, in Mac archives: bit 31 disabled, bit 30 separator (the title is empty
         // then), bit 29 hidden, bit 28 alternate and bits 24-27 the indentation level.
-        _enabled = !(flags & 0x80000000);
-        _hidden = (flags & 0x20000000) != 0;
-        _alternate = (flags & 0x10000000) != 0;
-        _indentationLevel = (flags >> 24) & 0xf;
+        NS_EXTRA(NSMenuItem, self)->_enabled = !(flags & 0x80000000);
+        NS_EXTRA(NSMenuItem, self)->_hidden = (flags & 0x20000000) != 0;
+        NS_EXTRA(NSMenuItem, self)->_alternate = (flags & 0x10000000) != 0;
+        NS_EXTRA(NSMenuItem, self)->_indentationLevel = (flags >> 24) & 0xf;
 
         // If we have an empty title, it is for a separator, discard it, see isSeparatorItem
         if (_title && [_title length] == 0) {
@@ -119,19 +119,19 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         }
 
         if (version <= 320) {
-            if (_action != @selector(submenuAction:)) {
-                _target = [coder decodeObject];
+            if (NS_EXTRA(NSMenuItem, self)->_action != @selector(submenuAction:)) {
+                NS_EXTRA(NSMenuItem, self)->_target = [coder decodeObject];
             } else {
-                _submenu = [[coder decodeObject] retain];
+                NS_EXTRA(NSMenuItem, self)->_submenu = [[coder decodeObject] retain];
             }
         } else {
-            _target = [coder decodeObject];
-            _submenu = [[coder decodeObject] retain];
+            NS_EXTRA(NSMenuItem, self)->_target = [coder decodeObject];
+            NS_EXTRA(NSMenuItem, self)->_submenu = [[coder decodeObject] retain];
         }
-        [_submenu setSupermenu: _menu];
+        [NS_EXTRA(NSMenuItem, self)->_submenu setSupermenu: _menu];
 
         // Set other default values from [initWithTitle: action: keyEquivalent:]
-        _mnemonic = @"";
+        NS_EXTRA(NSMenuItem, self)->_mnemonic = @"";
     }
 
     return self;
@@ -142,69 +142,71 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         keyEquivalent: (NSString *) keyEquivalent
 {
     _title = [title copy];
-    _target = nil;
-    _action = action;
-    _keyEquivalent = [keyEquivalent copy];
-    _keyEquivalentModifierMask = NSCommandKeyMask;
-    _mnemonic = @"";
-    _mnemonicLocation = 0;
-    _submenu = nil;
-    _tag = -1;
-    _indentationLevel = 0;
-    _enabled = YES;
-    _hidden = NO;
+    NS_EXTRA(NSMenuItem, self)->_target = nil;
+    NS_EXTRA(NSMenuItem, self)->_action = action;
+    NS_EXTRA(NSMenuItem, self)->_keyEquivalent = [keyEquivalent copy];
+    NS_EXTRA(NSMenuItem, self)->_keyEquivalentModifierMask = NSCommandKeyMask;
+    NS_EXTRA(NSMenuItem, self)->_mnemonic = @"";
+    NS_EXTRA(NSMenuItem, self)->_mnemonicLocation = 0;
+    NS_EXTRA(NSMenuItem, self)->_submenu = nil;
+    NS_EXTRA(NSMenuItem, self)->_tag = -1;
+    NS_EXTRA(NSMenuItem, self)->_indentationLevel = 0;
+    NS_EXTRA(NSMenuItem, self)->_enabled = YES;
+    NS_EXTRA(NSMenuItem, self)->_hidden = NO;
 
     return self;
 }
 
 - (void) dealloc {
     [_title release];
-    [_atitle release];
-    [_keyEquivalent release];
-    [_submenu release];
-    [_image release];
-    [_onStateImage release];
-    [_mixedStateImage release];
-    [_offStateImage release];
-    [_representedObject release];
-    [_identifier release];
-    [_view release];
-    [_toolTip release];
-    [_badge release];
-    [_actionImage release];
+    [NS_EXTRA(NSMenuItem, self)->_atitle release];
+    [NS_EXTRA(NSMenuItem, self)->_keyEquivalent release];
+    [NS_EXTRA(NSMenuItem, self)->_submenu release];
+    [NS_EXTRA(NSMenuItem, self)->_image release];
+    [NS_EXTRA(NSMenuItem, self)->_onStateImage release];
+    [NS_EXTRA(NSMenuItem, self)->_mixedStateImage release];
+    [NS_EXTRA(NSMenuItem, self)->_offStateImage release];
+    [NS_EXTRA(NSMenuItem, self)->_representedObject release];
+    [NS_EXTRA(NSMenuItem, self)->_identifier release];
+    [NS_EXTRA(NSMenuItem, self)->_view release];
+    [NS_EXTRA(NSMenuItem, self)->_toolTip release];
+    [NS_EXTRA(NSMenuItem, self)->_badge release];
+    [NS_EXTRA(NSMenuItem, self)->_actionImage release];
+    NS_EXTRA_FREE(NSMenuItem, self);
     [super dealloc];
 }
 
 - copyWithZone: (NSZone *) zone {
     NSMenuItem *copy = NSCopyObject(self, 0, zone);
+    NS_EXTRA_COPY(NSMenuItem, copy, self);
 
     copy->_title = [_title copyWithZone: zone];
-    copy->_atitle = [_atitle copyWithZone: zone];
-    copy->_submenu = [_submenu copyWithZone: zone];
-    copy->_keyEquivalent = [_keyEquivalent copyWithZone: zone];
+    NS_EXTRA(NSMenuItem, copy)->_atitle = [NS_EXTRA(NSMenuItem, self)->_atitle copyWithZone: zone];
+    NS_EXTRA(NSMenuItem, copy)->_submenu = [NS_EXTRA(NSMenuItem, self)->_submenu copyWithZone: zone];
+    NS_EXTRA(NSMenuItem, copy)->_keyEquivalent = [NS_EXTRA(NSMenuItem, self)->_keyEquivalent copyWithZone: zone];
     ;
-    copy->_image = [_image retain];
-    copy->_onStateImage = [_onStateImage retain];
-    copy->_mixedStateImage = [_mixedStateImage retain];
-    copy->_offStateImage = [_offStateImage retain];
-    copy->_representedObject = [_representedObject retain];
-    copy->_identifier = [_identifier copyWithZone: zone];
-    copy->_view = [_view retain];
-    copy->_toolTip = [_toolTip copyWithZone: zone];
-    copy->_badge = [_badge retain];
-    copy->_actionImage = [_actionImage retain];
+    NS_EXTRA(NSMenuItem, copy)->_image = [NS_EXTRA(NSMenuItem, self)->_image retain];
+    NS_EXTRA(NSMenuItem, copy)->_onStateImage = [NS_EXTRA(NSMenuItem, self)->_onStateImage retain];
+    NS_EXTRA(NSMenuItem, copy)->_mixedStateImage = [NS_EXTRA(NSMenuItem, self)->_mixedStateImage retain];
+    NS_EXTRA(NSMenuItem, copy)->_offStateImage = [NS_EXTRA(NSMenuItem, self)->_offStateImage retain];
+    NS_EXTRA(NSMenuItem, copy)->_representedObject = [NS_EXTRA(NSMenuItem, self)->_representedObject retain];
+    NS_EXTRA(NSMenuItem, copy)->_identifier = [NS_EXTRA(NSMenuItem, self)->_identifier copyWithZone: zone];
+    NS_EXTRA(NSMenuItem, copy)->_view = [NS_EXTRA(NSMenuItem, self)->_view retain];
+    NS_EXTRA(NSMenuItem, copy)->_toolTip = [NS_EXTRA(NSMenuItem, self)->_toolTip copyWithZone: zone];
+    NS_EXTRA(NSMenuItem, copy)->_badge = [NS_EXTRA(NSMenuItem, self)->_badge retain];
+    NS_EXTRA(NSMenuItem, copy)->_actionImage = [NS_EXTRA(NSMenuItem, self)->_actionImage retain];
     return copy;
 }
 
 // Stored only: Darling's menus don't show tooltips.
 - (NSString *) toolTip {
-    return _toolTip;
+    return NS_EXTRA(NSMenuItem, self)->_toolTip;
 }
 
 - (void) setToolTip: (NSString *) toolTip {
-    if (toolTip != _toolTip) {
-        [_toolTip release];
-        _toolTip = [toolTip copy];
+    if (toolTip != NS_EXTRA(NSMenuItem, self)->_toolTip) {
+        [NS_EXTRA(NSMenuItem, self)->_toolTip release];
+        NS_EXTRA(NSMenuItem, self)->_toolTip = [toolTip copy];
     }
 }
 
@@ -230,7 +232,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (void) _setMenu: (NSMenu *) menu {
     _menu = menu;
-    _submenu.supermenu = menu;
+    NS_EXTRA(NSMenuItem, self)->_submenu.supermenu = menu;
 }
 
 - (NSString *) title {
@@ -238,75 +240,75 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (NSAttributedString *) attributedTitle {
-    return _atitle;
+    return NS_EXTRA(NSMenuItem, self)->_atitle;
 }
 
 - (NSString *) mnemonic {
-    return _mnemonic;
+    return NS_EXTRA(NSMenuItem, self)->_mnemonic;
 }
 
 - (unsigned) mnemonicLocation {
-    return _mnemonicLocation;
+    return NS_EXTRA(NSMenuItem, self)->_mnemonicLocation;
 }
 
 - (id) target {
-    return _target;
+    return NS_EXTRA(NSMenuItem, self)->_target;
 }
 
 - (SEL) action {
-    return _action;
+    return NS_EXTRA(NSMenuItem, self)->_action;
 }
 
 - (NSInteger) indentationLevel {
-    return _indentationLevel;
+    return NS_EXTRA(NSMenuItem, self)->_indentationLevel;
 }
 
 - (NSInteger) tag {
-    return _tag;
+    return NS_EXTRA(NSMenuItem, self)->_tag;
 }
 
 - (NSControlStateValue) state {
-    return _state;
+    return NS_EXTRA(NSMenuItem, self)->_state;
 }
 
 - (NSString *) keyEquivalent {
-    return _keyEquivalent;
+    return NS_EXTRA(NSMenuItem, self)->_keyEquivalent;
 }
 
 - (unsigned) keyEquivalentModifierMask {
-    return _keyEquivalentModifierMask;
+    return NS_EXTRA(NSMenuItem, self)->_keyEquivalentModifierMask;
 }
 
 - (NSImage *) image {
-    return _image;
+    return NS_EXTRA(NSMenuItem, self)->_image;
 }
 
 - (NSImage *) onStateImage {
-    return _onStateImage;
+    return NS_EXTRA(NSMenuItem, self)->_onStateImage;
 }
 
 - (NSImage *) offStateImage {
-    return _offStateImage;
+    return NS_EXTRA(NSMenuItem, self)->_offStateImage;
 }
 
 - (NSImage *) mixedStateImage {
-    return _mixedStateImage;
+    return NS_EXTRA(NSMenuItem, self)->_mixedStateImage;
 }
 
 - (id) representedObject {
-    return _representedObject;
+    return NS_EXTRA(NSMenuItem, self)->_representedObject;
 }
 
 - (BOOL) hasSubmenu {
-    return (_submenu != nil) ? YES : NO;
+    return (NS_EXTRA(NSMenuItem, self)->_submenu != nil) ? YES : NO;
 }
 
 - (NSMenu *) submenu {
-    return _submenu;
+    return NS_EXTRA(NSMenuItem, self)->_submenu;
 }
 
 - (BOOL) isSectionHeader {
-    return _isSectionHeader;
+    return NS_EXTRA(NSMenuItem, self)->_isSectionHeader;
 }
 
 - (BOOL) isSeparatorItem {
@@ -314,11 +316,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (BOOL) isEnabled {
-    return _enabled;
+    return NS_EXTRA(NSMenuItem, self)->_enabled;
 }
 
 - (BOOL) isHidden {
-    return _hidden;
+    return NS_EXTRA(NSMenuItem, self)->_hidden;
 }
 
 - (void) setTitle: (NSString *) title {
@@ -330,96 +332,96 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (void) setAttributedTitle: (NSAttributedString *) title {
     title = [title copy];
-    [_atitle release];
-    _atitle = title;
+    [NS_EXTRA(NSMenuItem, self)->_atitle release];
+    NS_EXTRA(NSMenuItem, self)->_atitle = title;
     [self setTitle: [title string]];
 }
 
 - (void) setTitleWithMnemonic: (NSString *) mnemonic {
     mnemonic = [mnemonic copy];
-    [_mnemonic release];
-    _mnemonic = mnemonic;
+    [NS_EXTRA(NSMenuItem, self)->_mnemonic release];
+    NS_EXTRA(NSMenuItem, self)->_mnemonic = mnemonic;
 }
 
 - (void) setMnemonicLocation: (unsigned) location {
-    _mnemonicLocation = location;
+    NS_EXTRA(NSMenuItem, self)->_mnemonicLocation = location;
 }
 
 - (void) setTarget: (id) target {
-    _target = target;
+    NS_EXTRA(NSMenuItem, self)->_target = target;
 }
 
 - (void) setAction: (SEL) action {
-    _action = action;
+    NS_EXTRA(NSMenuItem, self)->_action = action;
 }
 
 - (void) setIndentationLevel: (NSInteger) indentationLevel {
-    _indentationLevel = indentationLevel;
+    NS_EXTRA(NSMenuItem, self)->_indentationLevel = indentationLevel;
 }
 
 - (void) setTag: (NSInteger) tag {
-    _tag = tag;
+    NS_EXTRA(NSMenuItem, self)->_tag = tag;
 }
 
 - (void) setState: (NSControlStateValue) state {
-    _state = state;
+    NS_EXTRA(NSMenuItem, self)->_state = state;
     [_menu itemChanged: self];
 }
 
 - (void) setKeyEquivalent: (NSString *) keyEquivalent {
     keyEquivalent = [keyEquivalent copy];
-    [_keyEquivalent release];
-    _keyEquivalent = keyEquivalent;
+    [NS_EXTRA(NSMenuItem, self)->_keyEquivalent release];
+    NS_EXTRA(NSMenuItem, self)->_keyEquivalent = keyEquivalent;
     [_menu itemChanged: self];
 }
 
 - (void) setKeyEquivalentModifierMask: (unsigned) mask {
-    _keyEquivalentModifierMask = mask;
+    NS_EXTRA(NSMenuItem, self)->_keyEquivalentModifierMask = mask;
     [_menu itemChanged: self];
 }
 
 - (void) setImage: (NSImage *) image {
     image = [image retain];
-    [_image release];
-    _image = image;
+    [NS_EXTRA(NSMenuItem, self)->_image release];
+    NS_EXTRA(NSMenuItem, self)->_image = image;
     [_menu itemChanged: self];
 }
 
 - (void) setOnStateImage: (NSImage *) image {
-    [_onStateImage release];
-    _onStateImage = [image retain];
+    [NS_EXTRA(NSMenuItem, self)->_onStateImage release];
+    NS_EXTRA(NSMenuItem, self)->_onStateImage = [image retain];
 }
 
 - (void) setOffStateImage: (NSImage *) image {
-    [_offStateImage release];
-    _offStateImage = [image retain];
+    [NS_EXTRA(NSMenuItem, self)->_offStateImage release];
+    NS_EXTRA(NSMenuItem, self)->_offStateImage = [image retain];
 }
 
 - (void) setMixedStateImage: (NSImage *) image {
-    [_mixedStateImage release];
-    _mixedStateImage = [image retain];
+    [NS_EXTRA(NSMenuItem, self)->_mixedStateImage release];
+    NS_EXTRA(NSMenuItem, self)->_mixedStateImage = [image retain];
 }
 
 - (void) setRepresentedObject: (id) object {
-    [_representedObject release];
-    _representedObject = [object retain];
+    [NS_EXTRA(NSMenuItem, self)->_representedObject release];
+    NS_EXTRA(NSMenuItem, self)->_representedObject = [object retain];
 }
 
 - (void) setSubmenu: (NSMenu *) submenu {
     submenu = [submenu retain];
-    [_submenu release];
-    _submenu = submenu;
+    [NS_EXTRA(NSMenuItem, self)->_submenu release];
+    NS_EXTRA(NSMenuItem, self)->_submenu = submenu;
     [submenu setSupermenu: _menu];
     [_menu itemChanged: self];
 }
 
 - (void) setEnabled: (BOOL) flag {
-    _enabled = flag;
+    NS_EXTRA(NSMenuItem, self)->_enabled = flag;
     [_menu itemChanged: self];
 }
 
 - (void) setHidden: (BOOL) flag {
-    _hidden = flag;
+    NS_EXTRA(NSMenuItem, self)->_hidden = flag;
     [_menu itemChanged: self];
 }
 
@@ -462,23 +464,23 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (NSString *) _keyEquivalentDescription {
     NSString *result = @"";
-    NSString *uppercaseKey = [_keyEquivalent uppercaseString];
-    NSString *lowercaseKey = [_keyEquivalent lowercaseString];
+    NSString *uppercaseKey = [NS_EXTRA(NSMenuItem, self)->_keyEquivalent uppercaseString];
+    NSString *lowercaseKey = [NS_EXTRA(NSMenuItem, self)->_keyEquivalent lowercaseString];
     NSDictionary *keyNames = [[self class] keyNames];
     NSString *keyName;
     NSString *command = nil, *alt = nil;
-    if (![_keyEquivalent
+    if (![NS_EXTRA(NSMenuItem, self)->_keyEquivalent
                 isEqualToString: lowercaseKey]) // [key
                                                 // isEqualToString:uppercaseKey]
                                                 // doesn't work for numbers
         result = @"Shift+";
 
-    if (_keyEquivalentModifierMask & NSCommandKeyMask)
+    if (NS_EXTRA(NSMenuItem, self)->_keyEquivalentModifierMask & NSCommandKeyMask)
         if ((command = [self _scanModifierMapFor: @"Command"
                                         longForm: NO]) == nil)
             return @"";
 
-    if (_keyEquivalentModifierMask & NSAlternateKeyMask)
+    if (NS_EXTRA(NSMenuItem, self)->_keyEquivalentModifierMask & NSAlternateKeyMask)
         if ((alt = [self _scanModifierMapFor: @"Alt" longForm: NO]) == nil)
             return @"";
 
@@ -492,7 +494,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     if (alt != nil)
         result = [result stringByAppendingString: alt];
 
-    if ((keyName = [keyNames objectForKey: _keyEquivalent]) == nil)
+    if ((keyName = [keyNames objectForKey: NS_EXTRA(NSMenuItem, self)->_keyEquivalent]) == nil)
         keyName = uppercaseKey;
 
     result = [result stringByAppendingString: keyName];
@@ -504,7 +506,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return [NSString stringWithFormat:
                              @"<%@[0x%x]: title: %@ action: %@ hasSubmenu: %@>",
                              [self class], self, [self title],
-                             NSStringFromSelector(_action),
+                             NSStringFromSelector(NS_EXTRA(NSMenuItem, self)->_action),
                              ([self hasSubmenu] ? @"YES" : @"NO")];
 }
 
@@ -529,13 +531,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 // apps set from a system symbol image. Stored and returned; Cocotron's menus
 // don't draw it.
 - (NSImage *) _actionImage {
-    return _actionImage;
+    return NS_EXTRA(NSMenuItem, self)->_actionImage;
 }
 
 - (void) _setActionImage: (NSImage *) image {
     image = [image retain];
-    [_actionImage release];
-    _actionImage = image;
+    [NS_EXTRA(NSMenuItem, self)->_actionImage release];
+    NS_EXTRA(NSMenuItem, self)->_actionImage = image;
 }
 
 @end

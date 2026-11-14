@@ -43,13 +43,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         NSKeyedUnarchiver *keyed = (NSKeyedUnarchiver *) coder;
 
         _identifier = [[keyed decodeObjectForKey: @"NSIdentifier"] retain];
-        _headerCell = [[keyed decodeObjectForKey: @"NSHeaderCell"] retain];
-        _dataCell = [[keyed decodeObjectForKey: @"NSDataCell"] retain];
-        _width = [keyed decodeFloatForKey: @"NSWidth"];
-        _minWidth = [keyed decodeFloatForKey: @"NSMinWidth"];
-        _maxWidth = [keyed decodeFloatForKey: @"NSMaxWidth"];
-        _isResizable = [keyed decodeBoolForKey: @"NSIsResizeable"];
-        _isEditable = [keyed decodeBoolForKey: @"NSIsEditable"];
+        NS_EXTRA(NSTableColumn, self)->_headerCell = [[keyed decodeObjectForKey: @"NSHeaderCell"] retain];
+        NS_EXTRA(NSTableColumn, self)->_dataCell = [[keyed decodeObjectForKey: @"NSDataCell"] retain];
+        NS_EXTRA(NSTableColumn, self)->_width = [keyed decodeFloatForKey: @"NSWidth"];
+        NS_EXTRA(NSTableColumn, self)->_minWidth = [keyed decodeFloatForKey: @"NSMinWidth"];
+        NS_EXTRA(NSTableColumn, self)->_maxWidth = [keyed decodeFloatForKey: @"NSMaxWidth"];
+        NS_EXTRA(NSTableColumn, self)->_isResizable = [keyed decodeBoolForKey: @"NSIsResizeable"];
+        NS_EXTRA(NSTableColumn, self)->_isEditable = [keyed decodeBoolForKey: @"NSIsEditable"];
     } else {
         // One layout in every class version, as recorded from Mac archives: identifier,
         // width, minimum width, maximum width, header cell, data cell, resizable byte,
@@ -58,15 +58,15 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         char resizable = 0, editable = 0;
         id tableView = nil;
 
-        [coder decodeValuesOfObjCTypes: "@fff@@cc", &_identifier, &width, &minWidth, &maxWidth, &_headerCell, &_dataCell,
+        [coder decodeValuesOfObjCTypes: "@fff@@cc", &_identifier, &width, &minWidth, &maxWidth, &NS_EXTRA(NSTableColumn, self)->_headerCell, &NS_EXTRA(NSTableColumn, self)->_dataCell,
                                         &resizable, &editable];
         tableView = [coder decodeObject];
-        _width = width;
-        _minWidth = minWidth;
-        _maxWidth = maxWidth;
-        _isResizable = resizable != 0;
-        _isEditable = editable != 0;
-        _tableView = tableView;
+        NS_EXTRA(NSTableColumn, self)->_width = width;
+        NS_EXTRA(NSTableColumn, self)->_minWidth = minWidth;
+        NS_EXTRA(NSTableColumn, self)->_maxWidth = maxWidth;
+        NS_EXTRA(NSTableColumn, self)->_isResizable = resizable != 0;
+        NS_EXTRA(NSTableColumn, self)->_isEditable = editable != 0;
+        NS_EXTRA(NSTableColumn, self)->_tableView = tableView;
     }
 
     return self;
@@ -77,23 +77,24 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 // prototypes weren't initialized at all...
 - (instancetype) initWithIdentifier: (NSUserInterfaceItemIdentifier) identifier {
     _identifier = [identifier retain];
-    _width = 100.0;
-    _minWidth = 10.0;
-    _maxWidth = FLT_MAX; // Doc.s say MAXFLOAT, mingw doesnt have MAXFLOAT yet
+    NS_EXTRA(NSTableColumn, self)->_width = 100.0;
+    NS_EXTRA(NSTableColumn, self)->_minWidth = 10.0;
+    NS_EXTRA(NSTableColumn, self)->_maxWidth = FLT_MAX; // Doc.s say MAXFLOAT, mingw doesnt have MAXFLOAT yet
 
-    _headerCell = [[NSTableHeaderCell alloc] initTextCell: @""];
-    _dataCell = [[NSTextFieldCell alloc] initTextCell: @""];
+    NS_EXTRA(NSTableColumn, self)->_headerCell = [[NSTableHeaderCell alloc] initTextCell: @""];
+    NS_EXTRA(NSTableColumn, self)->_dataCell = [[NSTextFieldCell alloc] initTextCell: @""];
 
     return self;
 }
 
 - (void) dealloc {
     [_identifier release];
-    [_headerCell release];
-    [_dataCell release];
-    [_headerToolTip release];
-    [_sortDescriptorPrototype release];
+    [NS_EXTRA(NSTableColumn, self)->_headerCell release];
+    [NS_EXTRA(NSTableColumn, self)->_dataCell release];
+    [NS_EXTRA(NSTableColumn, self)->_headerToolTip release];
+    [NS_EXTRA(NSTableColumn, self)->_sortDescriptorPrototype release];
 
+    NS_EXTRA_FREE(NSTableColumn, self);
     [super dealloc];
 }
 
@@ -102,118 +103,118 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
             stringWithFormat:
                     @"<%@ 0x%08lx identifier: \"%@\" headerCell: %@ "
                     @"dataCell: %@ width: %f minWidth: %f maxWidth: %f>",
-                    [self class], self, _identifier, _headerCell, _dataCell,
-                    _width, _minWidth, _maxWidth];
+                    [self class], self, _identifier, NS_EXTRA(NSTableColumn, self)->_headerCell, NS_EXTRA(NSTableColumn, self)->_dataCell,
+                    NS_EXTRA(NSTableColumn, self)->_width, NS_EXTRA(NSTableColumn, self)->_minWidth, NS_EXTRA(NSTableColumn, self)->_maxWidth];
 }
 
 - (NSTableView *) tableView {
-    return _tableView;
+    return NS_EXTRA(NSTableColumn, self)->_tableView;
 }
 
 - (NSString *) title {
-    return [_headerCell stringValue];
+    return [NS_EXTRA(NSTableColumn, self)->_headerCell stringValue];
 }
 
 - (id) headerCell {
-    return _headerCell;
+    return NS_EXTRA(NSTableColumn, self)->_headerCell;
 }
 
 - (id) dataCell {
-    return _dataCell;
+    return NS_EXTRA(NSTableColumn, self)->_dataCell;
 }
 
 - (NSString *) headerToolTip {
-    return _headerToolTip;
+    return NS_EXTRA(NSTableColumn, self)->_headerToolTip;
 }
 
 - (CGFloat) width {
-    return _width;
+    return NS_EXTRA(NSTableColumn, self)->_width;
 }
 
 - (CGFloat) minWidth {
-    return _minWidth;
+    return NS_EXTRA(NSTableColumn, self)->_minWidth;
 }
 
 - (CGFloat) maxWidth {
-    return _maxWidth;
+    return NS_EXTRA(NSTableColumn, self)->_maxWidth;
 }
 
 - (BOOL) isResizable {
-    return _isResizable;
+    return NS_EXTRA(NSTableColumn, self)->_isResizable;
 }
 
 - (BOOL) isEditable {
-    return _isEditable;
+    return NS_EXTRA(NSTableColumn, self)->_isEditable;
 }
 
 - (NSUInteger) resizingMask {
-    return _resizingMask;
+    return NS_EXTRA(NSTableColumn, self)->_resizingMask;
 }
 
 - (void) setTableView: (NSTableView *) tableView {
-    _tableView = tableView;
+    NS_EXTRA(NSTableColumn, self)->_tableView = tableView;
 }
 
 - (void) setTitle: (NSString *) title {
-    [_headerCell setStringValue: title ?: @""];
+    [NS_EXTRA(NSTableColumn, self)->_headerCell setStringValue: title ?: @""];
 }
 
 - (void) setHeaderCell: (NSCell *) cell {
     cell = [cell retain];
-    [_headerCell release];
-    _headerCell = cell;
+    [NS_EXTRA(NSTableColumn, self)->_headerCell release];
+    NS_EXTRA(NSTableColumn, self)->_headerCell = cell;
 }
 
 - (void) setDataCell: (NSCell *) cell {
     cell = [cell retain];
-    [_dataCell release];
-    _dataCell = cell;
+    [NS_EXTRA(NSTableColumn, self)->_dataCell release];
+    NS_EXTRA(NSTableColumn, self)->_dataCell = cell;
 }
 
 - (void) setHeaderToolTip: (NSString *) value {
     value = [value copy];
-    [_headerToolTip release];
-    _headerToolTip = value;
+    [NS_EXTRA(NSTableColumn, self)->_headerToolTip release];
+    NS_EXTRA(NSTableColumn, self)->_headerToolTip = value;
 }
 
 - (void) setWidth: (CGFloat) width {
-    if (width > _maxWidth)
-        width = _maxWidth;
-    else if (width < _minWidth)
-        width = _minWidth;
+    if (width > NS_EXTRA(NSTableColumn, self)->_maxWidth)
+        width = NS_EXTRA(NSTableColumn, self)->_maxWidth;
+    else if (width < NS_EXTRA(NSTableColumn, self)->_minWidth)
+        width = NS_EXTRA(NSTableColumn, self)->_minWidth;
 
-    _width = width;
+    NS_EXTRA(NSTableColumn, self)->_width = width;
 }
 
 // Terminal's inspector asks each column whether it is shown. Cocotron's
 // table column has no column-hiding state, so the flag is stored and read back.
 - (BOOL) isHidden {
-    return _hidden;
+    return NS_EXTRA(NSTableColumn, self)->_hidden;
 }
 
 - (void) setHidden: (BOOL) hidden {
-    _hidden = hidden;
+    NS_EXTRA(NSTableColumn, self)->_hidden = hidden;
 }
 
 - (void) setMinWidth: (CGFloat) width {
-    _minWidth = width;
+    NS_EXTRA(NSTableColumn, self)->_minWidth = width;
 }
 
 - (void) setMaxWidth: (CGFloat) width {
-    _maxWidth = width;
+    NS_EXTRA(NSTableColumn, self)->_maxWidth = width;
 }
 
 - (void) setResizable: (BOOL) flag {
-    _isResizable = flag;
+    NS_EXTRA(NSTableColumn, self)->_isResizable = flag;
 }
 
 - (void) setEditable: (BOOL) flag {
-    _isEditable = flag;
-    [_dataCell setEditable: flag];
+    NS_EXTRA(NSTableColumn, self)->_isEditable = flag;
+    [NS_EXTRA(NSTableColumn, self)->_dataCell setEditable: flag];
 }
 
 - (void) setResizingMask: (NSUInteger) value {
-    _resizingMask = value;
+    NS_EXTRA(NSTableColumn, self)->_resizingMask = value;
 }
 
 - (NSCell *) dataCellForRow: (NSInteger) row {
@@ -240,13 +241,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (NSSortDescriptor *) sortDescriptorPrototype {
-    return [[_sortDescriptorPrototype retain] autorelease];
+    return [[NS_EXTRA(NSTableColumn, self)->_sortDescriptorPrototype retain] autorelease];
 }
 
 - (void) setSortDescriptorPrototype: (NSSortDescriptor *) value {
-    if (_sortDescriptorPrototype != value) {
-        [_sortDescriptorPrototype release];
-        _sortDescriptorPrototype = [value copy];
+    if (NS_EXTRA(NSTableColumn, self)->_sortDescriptorPrototype != value) {
+        [NS_EXTRA(NSTableColumn, self)->_sortDescriptorPrototype release];
+        NS_EXTRA(NSTableColumn, self)->_sortDescriptorPrototype = [value copy];
     }
 }
 
@@ -255,7 +256,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     if (!newDescriptor)
         return;
 
-    id allDescs = [[[_tableView sortDescriptors] mutableCopy] autorelease];
+    id allDescs = [[[NS_EXTRA(NSTableColumn, self)->_tableView sortDescriptors] mutableCopy] autorelease];
     NSInteger i;
 
     for (i = 0; i < [allDescs count]; i++) {
@@ -266,13 +267,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
             [allDescs insertObject: newDescriptor atIndex: 0];
             [allDescs removeObject: desc];
-            [_tableView setSortDescriptors: allDescs];
+            [NS_EXTRA(NSTableColumn, self)->_tableView setSortDescriptors: allDescs];
             return;
         }
     }
 
     [allDescs insertObject: newDescriptor atIndex: 0];
-    [_tableView setSortDescriptors: allDescs];
+    [NS_EXTRA(NSTableColumn, self)->_tableView setSortDescriptors: allDescs];
 }
 
 @end
@@ -287,10 +288,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (NSString *) _headerTitle {
-    return [_headerCell title];
+    return [NS_EXTRA(NSTableColumn, self)->_headerCell title];
 }
 - (void) _setHeaderTitle: (NSString *) title {
-    return [_headerCell setTitle: title];
+    return [NS_EXTRA(NSTableColumn, self)->_headerCell setTitle: title];
 }
 
 @end

@@ -17,6 +17,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/NSCell.h>
 #import <AppKit/NSText.h>
 #import <AppKit/NSView.h>
@@ -27,13 +28,18 @@ APPKIT_EXPORT const NSNotificationName NSControlTextDidBeginEditingNotification;
 APPKIT_EXPORT const NSNotificationName NSControlTextDidChangeNotification;
 APPKIT_EXPORT const NSNotificationName NSControlTextDidEndEditingNotification;
 
+// Legacy ObjC ABI (i386): instance size must stay 0x5c, Apple's; the ivars
+// before the extras sit at Apple's offsets. Add new state to the extra
+// struct, never as an ivar.
 @interface NSControl : NSView {
     NSControlAuxiliary *_aux;
     id _cell;
-    NSText *_currentEditor;
-    BOOL _allowsExpansionToolTips;
-    BOOL _setsMaxLayoutWidthAtFirstLayout;
-    BOOL _allowsLogicalLayoutDirection;
+    NS_EXTRA_IVARS_BEGIN(NSControl)
+        NSText *_currentEditor;
+        BOOL _allowsExpansionToolTips;
+        BOOL _setsMaxLayoutWidthAtFirstLayout;
+        BOOL _allowsLogicalLayoutDirection;
+    NS_EXTRA_IVARS_END(NSControl)
 }
 
 @property BOOL allowsExpansionToolTips;

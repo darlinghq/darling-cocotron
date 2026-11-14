@@ -17,6 +17,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/AppKitExport.h>
 #import <AppKit/NSDragging.h>
 #import <AppKit/NSTableView.h>
@@ -37,28 +38,36 @@ APPKIT_EXPORT NSString *const NSOutlineViewSelectionIsChangingNotification;
 
 APPKIT_EXPORT NSString *const NSOutlineViewDisclosureButtonKey;
 
+// Legacy ObjC ABI (i386): instance size must stay 0x14c, Apple's; the ivars
+// before the extras sit at Apple's offsets. Add new state to the extra
+// struct, never as an ivar.
 @interface NSOutlineView : NSTableView {
+    NS_LEGACY_IVAR_PAD(_NSOutlineViewReserved1, 24)
     NSTableColumn *_outlineTableColumn;
-    NSMapTable *_rowToItem;
-    NSMapTable *_itemToRow;
-    NSMapTable *_itemToParent;
-    NSMapTable *_itemToLevel;
-    NSMapTable *_itemToExpansionState;
-    NSMapTable *_itemToNumberOfChildren;
-
-    NSUInteger _numberOfCachedRows;
-    BOOL _rowCacheValid;
-    BOOL _isBuildingCache;
+    NS_LEGACY_IVAR_PAD(_NSOutlineViewReserved2, 8)
     NSButtonCell *_markerCell;
-    NSSize _markerSize;
-    id _clickedItem;
-    CGFloat _widestColumnWidth;
+    NS_LEGACY_IVAR_PAD(_NSOutlineViewReserved3, 60)
+    NS_EXTRA_IVARS_BEGIN(NSOutlineView)
+        NSMapTable *_rowToItem;
+        NSMapTable *_itemToRow;
+        NSMapTable *_itemToParent;
+        NSMapTable *_itemToLevel;
+        NSMapTable *_itemToExpansionState;
+        NSMapTable *_itemToNumberOfChildren;
 
-    CGFloat _indentationPerLevel;
-    BOOL _indentationMarkerFollowsCell;
-    BOOL _autoresizesOutlineColumn;
-    BOOL _autosaveExpandedItems;
-    CGFloat _editingCellPadding;
+        NSUInteger _numberOfCachedRows;
+        BOOL _rowCacheValid;
+        BOOL _isBuildingCache;
+        NSSize _markerSize;
+        id _clickedItem;
+        CGFloat _widestColumnWidth;
+
+        CGFloat _indentationPerLevel;
+        BOOL _indentationMarkerFollowsCell;
+        BOOL _autoresizesOutlineColumn;
+        BOOL _autosaveExpandedItems;
+        CGFloat _editingCellPadding;
+    NS_EXTRA_IVARS_END(NSOutlineView)
 }
 
 - (NSTableColumn *) outlineTableColumn;

@@ -36,8 +36,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (void) encodeWithCoder: (NSCoder *) coder {
     [super encodeWithCoder: coder];
-    [coder encodeInt: _borderType forKey: @"NSBox borderType"];
-    [coder encodeInt: _titlePosition forKey: @"NSBox titlePosition"];
+    [coder encodeInt: NS_EXTRA(NSBox, self)->_borderType forKey: @"NSBox borderType"];
+    [coder encodeInt: NS_EXTRA(NSBox, self)->_titlePosition forKey: @"NSBox titlePosition"];
     [coder encodeSize: _contentViewMargins forKey: @"NSBox contentViewMargins"];
     [coder encodeObject: _titleCell forKey: @"NSBox titleCell"];
 }
@@ -48,43 +48,43 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     if ([coder allowsKeyedCoding]) {
         NSKeyedUnarchiver *keyed = (NSKeyedUnarchiver *) coder;
 
-        _boxType = [keyed decodeIntForKey: @"NSBoxType"];
-        _borderType = [keyed decodeIntForKey: @"NSBorderType"];
-        _titlePosition = [keyed decodeIntForKey: @"NSTitlePosition"];
+        NS_EXTRA(NSBox, self)->_boxType = [keyed decodeIntForKey: @"NSBoxType"];
+        NS_EXTRA(NSBox, self)->_borderType = [keyed decodeIntForKey: @"NSBorderType"];
+        NS_EXTRA(NSBox, self)->_titlePosition = [keyed decodeIntForKey: @"NSTitlePosition"];
         _contentViewMargins = [keyed decodeSizeForKey: @"NSOffsets"];
         _titleCell = [[keyed decodeObjectForKey: @"NSTitleCell"] retain];
         // There is a key NSTransparent, but as far as I can tell it is always
         // NO
-        _isTransparent = [keyed decodeBoolForKey: @"NSFullyTransparent"];
+        NS_EXTRA(NSBox, self)->_isTransparent = [keyed decodeBoolForKey: @"NSFullyTransparent"];
 
         [[_subviews lastObject]
                 setAutoresizingMask: NSViewWidthSizable | NSViewHeightSizable];
         [[_subviews lastObject] setAutoresizesSubviews: YES];
 
-        if (_boxType == NSBoxCustom) {
+        if (NS_EXTRA(NSBox, self)->_boxType == NSBoxCustom) {
             id obj;
-            _customData = [[NSMutableDictionary alloc] init];
+            NS_EXTRA(NSBox, self)->_customData = [[NSMutableDictionary alloc] init];
 
             obj = [keyed decodeObjectForKey: @"NSBorderWidth2"];
             if (obj == nil)
                 obj = [NSNumber numberWithDouble: 1];
-            [_customData setObject: obj forKey: @"NSBorderWidth2"];
+            [NS_EXTRA(NSBox, self)->_customData setObject: obj forKey: @"NSBorderWidth2"];
 
             obj = [keyed decodeObjectForKey: @"NSCornerRadius2"];
             if (obj == nil)
                 obj = [NSNumber numberWithDouble: 0];
 
-            [_customData setObject: obj forKey: @"NSCornerRadius2"];
+            [NS_EXTRA(NSBox, self)->_customData setObject: obj forKey: @"NSCornerRadius2"];
 
             obj = [keyed decodeObjectForKey: @"NSBorderColor2"];
             if (obj == nil)
                 obj = [NSColor colorWithCalibratedWhite: 0.000 alpha: 0.420];
-            [_customData setObject: obj forKey: @"NSBorderColor2"];
+            [NS_EXTRA(NSBox, self)->_customData setObject: obj forKey: @"NSBorderColor2"];
 
             obj = [keyed decodeObjectForKey: @"NSFillColor2"];
             if (obj == nil)
                 obj = [NSColor colorWithCalibratedWhite: 0.000 alpha: 0.000];
-            [_customData setObject: obj forKey: @"NSFillColor2"];
+            [NS_EXTRA(NSBox, self)->_customData setObject: obj forKey: @"NSFillColor2"];
         }
     } else {
         NSInteger version = [coder versionForClassName: @"NSBox"];
@@ -123,9 +123,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
         // The first flag byte holds the border type in its low two bits and, from version
         // 42, the box type in the two above them (earlier versions have no box type).
-        _borderType = flags & 3;
-        _boxType = version >= 42 ? (flags >> 2) & 3 : NSBoxPrimary;
-        _titlePosition = titlePosition;
+        NS_EXTRA(NSBox, self)->_borderType = flags & 3;
+        NS_EXTRA(NSBox, self)->_boxType = version >= 42 ? (flags >> 2) & 3 : NSBoxPrimary;
+        NS_EXTRA(NSBox, self)->_titlePosition = titlePosition;
         _contentViewMargins = CGSizeMake(width, height);
         // The third byte is of unknown meaning (it sets a transparent-background bit that
         // no public accessor of the box reports).
@@ -138,10 +138,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
     [super initWithFrame: frame];
 
-    _isTransparent = YES;
+    NS_EXTRA(NSBox, self)->_isTransparent = YES;
     _titleCell = [[NSTextFieldCell alloc] initTextCell: @""];
-    _borderType = NSLineBorder;
-    _titlePosition = NSAboveTop;
+    NS_EXTRA(NSBox, self)->_borderType = NSLineBorder;
+    NS_EXTRA(NSBox, self)->_titlePosition = NSAboveTop;
 
     contentview = [[NSView alloc]
             initWithFrame: NSMakeRect(0, 0, NSWidth(frame), NSHeight(frame))];
@@ -153,17 +153,18 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (void) dealloc {
-    [_customData release];
+    [NS_EXTRA(NSBox, self)->_customData release];
     [_titleCell release];
+    NS_EXTRA_FREE(NSBox, self);
     [super dealloc];
 }
 
 - (NSBoxType) boxType {
-    return _boxType;
+    return NS_EXTRA(NSBox, self)->_boxType;
 }
 
 - (NSBorderType) borderType {
-    return _borderType;
+    return NS_EXTRA(NSBox, self)->_borderType;
 }
 
 - (NSString *) title {
@@ -183,20 +184,20 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (NSTitlePosition) titlePosition {
-    return _titlePosition;
+    return NS_EXTRA(NSBox, self)->_titlePosition;
 }
 
 - (BOOL) isTransparent {
-    return _isTransparent;
+    return NS_EXTRA(NSBox, self)->_isTransparent;
 }
 
 - (void) setBoxType: (NSBoxType) value {
-    _boxType = value;
+    NS_EXTRA(NSBox, self)->_boxType = value;
     [self setNeedsDisplay: YES];
 }
 
 - (void) setBorderType: (NSBorderType) value {
-    _borderType = value;
+    NS_EXTRA(NSBox, self)->_borderType = value;
     [self setNeedsDisplay: YES];
 }
 
@@ -224,12 +225,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (void) setTitlePosition: (NSTitlePosition) value {
-    _titlePosition = value;
+    NS_EXTRA(NSBox, self)->_titlePosition = value;
     [self setNeedsDisplay: YES];
 }
 
 - (void) setTransparent: (BOOL) value {
-    _isTransparent = value;
+    NS_EXTRA(NSBox, self)->_isTransparent = value;
     [self setNeedsDisplay: YES];
 }
 
@@ -279,7 +280,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                         result.origin.x; // use the whole width until the text
                                          // field cell size is fixed
 
-    switch (_titlePosition) {
+    switch (NS_EXTRA(NSBox, self)->_titlePosition) {
 
     case NSNoTitle:
         break;
@@ -337,7 +338,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     if ([self isTransparent])
         return;
 
-    switch (_titlePosition) {
+    switch (NS_EXTRA(NSBox, self)->_titlePosition) {
 
     case NSNoTitle:
         drawTitle = NO;
@@ -368,23 +369,23 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         break;
     }
 
-    if (_boxType != NSBoxSeparator) {
+    if (NS_EXTRA(NSBox, self)->_boxType != NSBoxSeparator) {
         // Separator are transparent except for drawing a line
         [[NSColor controlColor] setFill];
         NSRectFill(grooveRect);
     }
 
-    if (_boxType == NSBoxCustom) {
+    if (NS_EXTRA(NSBox, self)->_boxType == NSBoxCustom) {
 
         // Ignoring corner radius for now.
         [[self fillColor] set];
         NSRectFill(rect);
 
-        if (_borderType != NSNoBorder) {
+        if (NS_EXTRA(NSBox, self)->_borderType != NSNoBorder) {
             [[self borderColor] set];
             NSFrameRectWithWidth(_bounds, [self borderWidth]);
         }
-    } else if (_boxType == NSBoxSeparator) {
+    } else if (NS_EXTRA(NSBox, self)->_boxType == NSBoxSeparator) {
         // These are just the simple divider lines
         [[NSColor grayColor] set];
         NSBezierPath *line = [NSBezierPath bezierPath];
@@ -401,7 +402,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         }
         [line stroke];
     } else {
-        switch (_borderType) {
+        switch (NS_EXTRA(NSBox, self)->_borderType) {
         case NSNoBorder:
             break;
 
@@ -437,37 +438,37 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (CGFloat) borderWidth {
-    return [[_customData objectForKey: @"NSBorderWidth2"] doubleValue];
+    return [[NS_EXTRA(NSBox, self)->_customData objectForKey: @"NSBorderWidth2"] doubleValue];
 }
 
 - (CGFloat) cornerRadius; {
-    return [[_customData objectForKey: @"NSCornerRadius2"] doubleValue];
+    return [[NS_EXTRA(NSBox, self)->_customData objectForKey: @"NSCornerRadius2"] doubleValue];
 }
 
 - (NSColor *) borderColor; {
-    return [_customData objectForKey: @"NSBorderColor2"];
+    return [NS_EXTRA(NSBox, self)->_customData objectForKey: @"NSBorderColor2"];
 }
 
 - (NSColor *) fillColor; {
-    return [_customData objectForKey: @"NSFillColor2"];
+    return [NS_EXTRA(NSBox, self)->_customData objectForKey: @"NSFillColor2"];
 }
 
 - (void) setBorderWidth: (CGFloat) value {
-    [_customData setObject: [NSNumber numberWithDouble: value]
+    [NS_EXTRA(NSBox, self)->_customData setObject: [NSNumber numberWithDouble: value]
                     forKey: @"NSBorderWidth2"];
 }
 
 - (void) setCornerRadius: (CGFloat) value {
-    [_customData setObject: [NSNumber numberWithDouble: value]
+    [NS_EXTRA(NSBox, self)->_customData setObject: [NSNumber numberWithDouble: value]
                     forKey: @"NSCornerRadius2"];
 }
 
 - (void) setBorderColor: (NSColor *) value {
-    [_customData setObject: value forKey: @"NSBorderColor2"];
+    [NS_EXTRA(NSBox, self)->_customData setObject: value forKey: @"NSBorderColor2"];
 }
 
 - (void) setFillColor: (NSColor *) value {
-    [_customData setObject: value forKey: @"NSFillColor2"];
+    [NS_EXTRA(NSBox, self)->_customData setObject: value forKey: @"NSFillColor2"];
 }
 
 - (void) updateCell: (NSCell *) cell {

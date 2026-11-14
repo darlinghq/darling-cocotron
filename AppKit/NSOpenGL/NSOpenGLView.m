@@ -47,7 +47,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
     _pixelFormat = [pixelFormat retain];
     _context = nil;
-    _lastDrawablePixelSize = NSZeroSize;
+    NS_EXTRA(NSOpenGLView, self)->_lastDrawablePixelSize = NSZeroSize;
 
     return self;
 }
@@ -57,7 +57,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
     _pixelFormat = [[[self class] defaultPixelFormat] retain];
     _context = nil;
-    _lastDrawablePixelSize = NSZeroSize;
+    NS_EXTRA(NSOpenGLView, self)->_lastDrawablePixelSize = NSZeroSize;
 
     return self;
 }
@@ -74,9 +74,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (void) dealloc {
-    [_focusContexts release];
+    [NS_EXTRA(NSOpenGLView, self)->_focusContexts release];
     [_pixelFormat release];
     [_context release];
+    NS_EXTRA_FREE(NSOpenGLView, self);
     [super dealloc];
 }
 
@@ -89,7 +90,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         _context = [[NSOpenGLContext alloc] initWithFormat: _pixelFormat
                                               shareContext: nil];
         [_context setView: self];
-        _needsReshape = YES;
+        NS_EXTRA(NSOpenGLView, self)->_needsReshape = YES;
     }
 
     return _context;
@@ -112,9 +113,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     context = [context retain];
     [_context release];
     _context = context;
-    _lastDrawablePixelSize = NSZeroSize;
+    NS_EXTRA(NSOpenGLView, self)->_lastDrawablePixelSize = NSZeroSize;
     [_context setView: self];
-    _needsReshape = YES;
+    NS_EXTRA(NSOpenGLView, self)->_needsReshape = YES;
 }
 
 - (void) update {
@@ -147,10 +148,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (void) lockFocus {
     [super lockFocus];
     NSOpenGLContext *context = [self openGLContext];
-    if (!_focusContexts) _focusContexts = [NSMutableArray new];
+    if (!NS_EXTRA(NSOpenGLView, self)->_focusContexts) NS_EXTRA(NSOpenGLView, self)->_focusContexts = [NSMutableArray new];
     // The paired unlock must use the context we locked, even if application
     // prepareOpenGL/reshape replaces it or recursively focuses another view.
-    [_focusContexts addObject: context ?: (id)[NSNull null]];
+    [NS_EXTRA(NSOpenGLView, self)->_focusContexts addObject: context ?: (id)[NSNull null]];
     CGLLockContext([context CGLContextObj]);
     @try {
         [context setView: self];
@@ -159,25 +160,25 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
             [NSOpenGLContext currentContext] == context &&
             CGLGetCurrentContext() == [context CGLContextObj]) {
             NSSize pixels = [context _drawablePixelSize];
-            if (!NSEqualSizes(pixels, _lastDrawablePixelSize)) {
-                _lastDrawablePixelSize = pixels;
-                _needsReshape = YES;
+            if (!NSEqualSizes(pixels, NS_EXTRA(NSOpenGLView, self)->_lastDrawablePixelSize)) {
+                NS_EXTRA(NSOpenGLView, self)->_lastDrawablePixelSize = pixels;
+                NS_EXTRA(NSOpenGLView, self)->_needsReshape = YES;
             }
-            if (_needsReshape) {
-                _needsReshape = NO;
+            if (NS_EXTRA(NSOpenGLView, self)->_needsReshape) {
+                NS_EXTRA(NSOpenGLView, self)->_needsReshape = NO;
                 [self reshape];
             }
         }
     } @catch (id exception) {
-        if (_context == context) _needsReshape = YES;
+        if (_context == context) NS_EXTRA(NSOpenGLView, self)->_needsReshape = YES;
         [self unlockFocus];
         @throw;
     }
 }
 
 - (void) unlockFocus {
-    id context = [[_focusContexts lastObject] retain];
-    if (context != nil) [_focusContexts removeLastObject];
+    id context = [[NS_EXTRA(NSOpenGLView, self)->_focusContexts lastObject] retain];
+    if (context != nil) [NS_EXTRA(NSOpenGLView, self)->_focusContexts removeLastObject];
     if (context != [NSNull null]) CGLUnlockContext([context CGLContextObj]);
     [context release];
     [super unlockFocus];
@@ -187,7 +188,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [_context clearDrawable];
     [_context release];
     _context = nil;
-    _lastDrawablePixelSize = NSZeroSize;
+    NS_EXTRA(NSOpenGLView, self)->_lastDrawablePixelSize = NSZeroSize;
 }
 
 // Backing coordinates belong to this GL drawable, whose preferred scale can
@@ -224,7 +225,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (void) setFrameSize: (NSSize) size {
     [super setFrameSize: size];
-    _needsReshape = YES;
+    NS_EXTRA(NSOpenGLView, self)->_needsReshape = YES;
     [self update];
 }
 @end

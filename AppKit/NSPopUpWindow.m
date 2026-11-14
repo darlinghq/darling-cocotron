@@ -27,7 +27,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                       backing: NSBackingStoreBuffered
                         defer: NO];
     [self setLevel: NSPopUpMenuWindowLevel];
-    _releaseWhenClosed = YES;
+    NS_EXTRA(NSWindow, self)->_releaseWhenClosed = YES;
 
     _view = [[NSPopUpView alloc]
             initWithFrame: NSMakeRect(0, 0, frame.size.width,

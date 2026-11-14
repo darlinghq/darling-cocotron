@@ -20,6 +20,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 // Reviewed for API completeness against 10.6.
 
+#import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/AppKitExport.h>
 #import <AppKit/NSResponder.h>
 #import <AppKit/NSView.h>
@@ -227,129 +228,140 @@ APPKIT_EXPORT const NSNotificationName NSWindowWillExitVersionBrowserNotificatio
 APPKIT_EXPORT const NSNotificationName NSWindowDidExitVersionBrowserNotification
         NS_SWIFT_NAME(NSWindow.didExitVersionBrowserNotification);
 
+// Legacy ObjC ABI (i386): instance size must stay 0x84, Apple's; the ivars
+// before the extras sit at Apple's offsets. Add new state to the extra
+// struct, never as an ivar.
 @interface NSWindow : NSResponder <NSAnimatablePropertyContainer, NSUserInterfaceItemIdentification, NSAccessibility, NSAppearanceCustomization> {
     NSRect _frame;
-    NSWindowStyleMask _styleMask;
-    NSBackingStoreType _backingType;
-    NSWindowLevel _level;
-
-    NSSize _minSize;
-    NSSize _maxSize;
-    NSSize _contentMinSize;
-    NSSize _contentMaxSize;
-
-    NSWindow *_parentWindow;
-    NSMutableArray<NSWindow *> *_childWindows;
-
-    NSDictionary *_animations;
-
-    NSString *_representedFilename;
-    NSURL *_representedURL;
-    NSString *_title;
-    NSString *_miniwindowTitle;
-    NSImage *_miniwindowImage;
-
-    NSThemeFrame *_backgroundView;
-    NSMenu *_menu;
-    NSView *_menuView;
     NSView *_contentView;
-    NSViewController *_contentViewController;
-    NSColor *_backgroundColor;
-
     id<NSWindowDelegate> _delegate;
     NSResponder *_firstResponder;
-
+    NS_LEGACY_IVAR_PAD(_NSWindowReserved1, 8)
+    CGWindow *_platformWindow;  // a slot that Apple's layout leaves unused
     NSTextView *_sharedFieldEditor;
-    NSTextView *_currentFieldEditor;
-    NSArray *_draggedTypes;
-
-    NSMutableArray *_trackingAreas;
-
-    NSSheetContext *_sheetContext;
-
-    NSSize _resizeInfo;
-
-    int _cursorRectsDisabled;
-    int _flushDisabled;
-
-    BOOL _isOpaque;
-    BOOL _isVisible;
-    BOOL _isDocumentEdited;
-    BOOL _makeSureIsOnAScreen;
-
-    BOOL _acceptsMouseMovedEvents;
-    BOOL _excludedFromWindowsMenu;
-    BOOL _isDeferred;
-    BOOL _dynamicDepthLimit;
-    BOOL _canStoreColor;
-    BOOL _isOneShot;
-    BOOL _useOptimizedDrawing;
-    BOOL _releaseWhenClosed;
-    BOOL _isClosed;
-    BOOL _hidesOnDeactivate;
-    BOOL _hiddenForDeactivate;
-    BOOL _isActive;
-    BOOL _viewsNeedDisplay;
-    BOOL _flushNeeded;
-    BOOL _isFlushWindowDisabled;
-    BOOL _isAutodisplay;
-    BOOL _canHide;
-    BOOL _displaysWhenScreenProfileChanges;
-
-    CGFloat _alphaValue;
-    BOOL _hasShadow;
-    BOOL _showsResizeIndicator;
-    BOOL _showsToolbarButton;
-    BOOL _ignoresMouseEvents;
-    BOOL _isMovableByWindowBackground;
-    NSWindowAnimationBehavior _animationBehavior;
-    BOOL _allowsToolTipsWhenApplicationIsInactive;
-    BOOL _defaultButtonCellKeyEquivalentDisabled;
-    BOOL _autorecalculatesKeyViewLoop;
-    BOOL _hasBeenOnScreen;
-
-    BOOL _isInLiveResize;
-    BOOL _preservesContentDuringLiveResize;
-    NSSize _resizeIncrements;
-    NSSize _contentResizeIncrements;
-
+    NS_LEGACY_IVAR_PAD(_NSWindowReserved2, 8)
+    NSWindowLevel _level;
+    NSColor *_backgroundColor;
+    NSThemeFrame *_backgroundView;
+    NS_LEGACY_IVAR_PAD(_NSWindowReserved3, 12)
+    NSImage *_miniwindowImage;
+    NS_LEGACY_IVAR_PAD(_NSWindowReserved4, 8)
+    NSURL *_representedURL;
+    NS_LEGACY_IVAR_PAD(_NSWindowReserved5, 4)
     NSString *_autosaveFrameName;
-
-    CGWindow *_platformWindow;
-    NSMutableDictionary *_threadToContext;
-
-    NSUndoManager *_undoManager;
-    NSView *_initialFirstResponder;
-    NSButtonCell *_defaultButtonCell;
-
-    NSWindowController *_windowController;
-    NSMutableArray *_drawers;
-    BOOL _bottomCornerRounded;
     NSToolbar *_toolbar;
-    NSWindowAnimationContext *_animationContext;
+    NS_LEGACY_IVAR_PAD(_NSWindowReserved6, 8)
+    NSButtonCell *_defaultButtonCell;
+    NSView *_initialFirstResponder;
+    NS_EXTRA_IVARS_BEGIN(NSWindow)
+        NSWindowStyleMask _styleMask;
+        NSBackingStoreType _backingType;
 
-    NSRect _savedFrame;
-    NSMutableDictionary *_mouseDownViews;
+        NSSize _minSize;
+        NSSize _maxSize;
+        NSSize _contentMinSize;
+        NSSize _contentMaxSize;
 
-    NSAppearance *_appearance;
-    NSUserInterfaceItemIdentifier _identifier;
+        NSWindow *_parentWindow;
+        NSMutableArray<NSWindow *> *_childWindows;
 
-    BOOL _isAccessible;
-    BOOL _restorable;
-    NSWindowTabbingMode _tabbingMode;
-    NSWindowCollectionBehavior _collectionBehavior;
-    NSWindowTabbingIdentifier _tabbingIdentifier;
-    NSString *_subtitle;
-    NSWindowTitleVisibility _titleVisibility;
-    NSSize _minFullScreenContentSize;
-    NSSize _maxFullScreenContentSize;
-    NSTitlebarSeparatorStyle _titlebarSeparatorStyle;
-    NSWindowToolbarStyle _toolbarStyle;
-    BOOL _titlebarAppearsTransparent;
-    BOOL _isMovable;
-    NSButton *_standardWindowButtons[3];
+        NSDictionary *_animations;
 
-    NSMutableArray *_titlebarAccessoryViewControllers;
+        NSString *_representedFilename;
+        NSString *_title;
+        NSString *_miniwindowTitle;
+
+        NSMenu *_menu;
+        NSView *_menuView;
+        NSViewController *_contentViewController;
+
+
+        NSTextView *_currentFieldEditor;
+        NSArray *_draggedTypes;
+
+        NSMutableArray *_trackingAreas;
+
+        NSSheetContext *_sheetContext;
+
+        NSSize _resizeInfo;
+
+        int _cursorRectsDisabled;
+        int _flushDisabled;
+
+        BOOL _isOpaque;
+        BOOL _isVisible;
+        BOOL _isDocumentEdited;
+        BOOL _makeSureIsOnAScreen;
+
+        BOOL _acceptsMouseMovedEvents;
+        BOOL _excludedFromWindowsMenu;
+        BOOL _isDeferred;
+        BOOL _dynamicDepthLimit;
+        BOOL _canStoreColor;
+        BOOL _isOneShot;
+        BOOL _useOptimizedDrawing;
+        BOOL _releaseWhenClosed;
+        BOOL _isClosed;
+        BOOL _hidesOnDeactivate;
+        BOOL _hiddenForDeactivate;
+        BOOL _isActive;
+        BOOL _viewsNeedDisplay;
+        BOOL _flushNeeded;
+        BOOL _isFlushWindowDisabled;
+        BOOL _isAutodisplay;
+        BOOL _canHide;
+        BOOL _displaysWhenScreenProfileChanges;
+
+        CGFloat _alphaValue;
+        BOOL _hasShadow;
+        BOOL _showsResizeIndicator;
+        BOOL _showsToolbarButton;
+        BOOL _ignoresMouseEvents;
+        BOOL _isMovableByWindowBackground;
+        NSWindowAnimationBehavior _animationBehavior;
+        BOOL _allowsToolTipsWhenApplicationIsInactive;
+        BOOL _defaultButtonCellKeyEquivalentDisabled;
+        BOOL _autorecalculatesKeyViewLoop;
+        BOOL _hasBeenOnScreen;
+
+        BOOL _isInLiveResize;
+        BOOL _preservesContentDuringLiveResize;
+        NSSize _resizeIncrements;
+        NSSize _contentResizeIncrements;
+
+
+        NSMutableDictionary *_threadToContext;
+
+        NSUndoManager *_undoManager;
+
+        NSWindowController *_windowController;
+        NSMutableArray *_drawers;
+        BOOL _bottomCornerRounded;
+        NSWindowAnimationContext *_animationContext;
+
+        NSRect _savedFrame;
+        NSMutableDictionary *_mouseDownViews;
+
+        NSAppearance *_appearance;
+        NSUserInterfaceItemIdentifier _identifier;
+
+        BOOL _isAccessible;
+        BOOL _restorable;
+        NSWindowTabbingMode _tabbingMode;
+        NSWindowCollectionBehavior _collectionBehavior;
+        NSWindowTabbingIdentifier _tabbingIdentifier;
+        NSString *_subtitle;
+        NSWindowTitleVisibility _titleVisibility;
+        NSSize _minFullScreenContentSize;
+        NSSize _maxFullScreenContentSize;
+        NSTitlebarSeparatorStyle _titlebarSeparatorStyle;
+        NSWindowToolbarStyle _toolbarStyle;
+        BOOL _titlebarAppearsTransparent;
+        BOOL _isMovable;
+        NSButton *_standardWindowButtons[3];
+
+        NSMutableArray *_titlebarAccessoryViewControllers;
+    NS_EXTRA_IVARS_END(NSWindow)
 }
 
 @property(class) BOOL allowsAutomaticWindowTabbing;

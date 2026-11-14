@@ -17,6 +17,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#import <AppKit/AppKitIvarLayout.h>
 #import <Foundation/Foundation.h>
 #import <AppKit/NSUserInterfaceItemIdentification.h>
 
@@ -28,20 +29,26 @@ enum {
     NSTableColumnUserResizingMask = 0x02,
 };
 
+// Legacy ObjC ABI (i386): instance size must stay 0x28, Apple's; the ivars
+// before the extras sit at Apple's offsets. Add new state to the extra
+// struct, never as an ivar.
 @interface NSTableColumn : NSObject <NSUserInterfaceItemIdentification> {
     NSUserInterfaceItemIdentifier _identifier;
-    NSTableView *_tableView;
-    NSCell *_headerCell;
-    NSCell *_dataCell;
-    NSString *_headerToolTip;
-    CGFloat _width;
-    CGFloat _minWidth;
-    CGFloat _maxWidth;
-    BOOL _isResizable;
-    BOOL _isEditable;
-    NSUInteger _resizingMask;
-    BOOL _hidden;
-    NSSortDescriptor *_sortDescriptorPrototype;
+    NS_LEGACY_IVAR_PAD(_NSTableColumnReserved1, 28)
+    NS_EXTRA_IVARS_BEGIN(NSTableColumn)
+        NSTableView *_tableView;
+        NSCell *_headerCell;
+        NSCell *_dataCell;
+        NSString *_headerToolTip;
+        CGFloat _width;
+        CGFloat _minWidth;
+        CGFloat _maxWidth;
+        BOOL _isResizable;
+        BOOL _isEditable;
+        NSUInteger _resizingMask;
+        BOOL _hidden;
+        NSSortDescriptor *_sortDescriptorPrototype;
+    NS_EXTRA_IVARS_END(NSTableColumn)
 }
 
 - (instancetype) initWithIdentifier: (NSUserInterfaceItemIdentifier) identifier;

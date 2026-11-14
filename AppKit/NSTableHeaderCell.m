@@ -50,7 +50,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                           highlighted: [self isHighlighted]];
     [[self attributedStringValue]
             _clipAndDrawInRect: [self titleRectForBounds: cellFrame]
-                lineBreakMode: _lineBreakMode];
+                lineBreakMode: NS_EXTRA(NSCell, self)->_lineBreakMode];
 }
 
 @end

@@ -31,7 +31,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                       backing: NSBackingStoreBuffered
                         defer: NO];
     [self setLevel: NSPopUpMenuWindowLevel];
-    _releaseWhenClosed = YES;
+    NS_EXTRA(NSWindow, self)->_releaseWhenClosed = YES;
 
     rect.size = frame.size;
     _scrollView = [[NSScrollView alloc] initWithFrame: rect];

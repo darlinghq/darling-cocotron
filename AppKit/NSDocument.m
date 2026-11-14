@@ -108,10 +108,10 @@ static int untitled_document_number = 0;
 - (instancetype) init {
     self = [super init];
     if (self) {
-        _windowControllers = [NSMutableArray new];
-        _untitledNumber = untitled_document_number++;
-        _hasUndoManager = YES;
-        _activeEditors = [NSMutableArray new];
+        NS_EXTRA(NSDocument, self)->_windowControllers = [NSMutableArray new];
+        NS_EXTRA(NSDocument, self)->_untitledNumber = untitled_document_number++;
+        NS_EXTRA(NSDocument, self)->_hasUndoManager = YES;
+        NS_EXTRA(NSDocument, self)->_activeEditors = [NSMutableArray new];
     }
     return self;
 }
@@ -124,7 +124,7 @@ static int untitled_document_number = 0;
 
 - (void) _updateFileModificationDate {
     NSFileManager *fileManager = [NSFileManager defaultManager];
-    NSString *path = [_fileURL path];
+    NSString *path = [NS_EXTRA(NSDocument, self)->_fileURL path];
     if (path != nil) {
         NSDictionary *attributes = [fileManager fileAttributesAtPath: path
                                                         traverseLink: YES];
@@ -174,37 +174,38 @@ static int untitled_document_number = 0;
 - (void) dealloc {
     [[NSNotificationCenter defaultCenter] removeObserver: self];
 
-    [_windowControllers release];
-    [_fileURL release];
-    [_fileType release];
-    [_fileModificationDate release];
-    [_lastComponentOfFileName release];
-    [_autosavedContentsFileURL release];
-    [_printInfo release];
-    [_undoManager release];
-    [_activeEditors release];
+    [NS_EXTRA(NSDocument, self)->_windowControllers release];
+    [NS_EXTRA(NSDocument, self)->_fileURL release];
+    [NS_EXTRA(NSDocument, self)->_fileType release];
+    [NS_EXTRA(NSDocument, self)->_fileModificationDate release];
+    [NS_EXTRA(NSDocument, self)->_lastComponentOfFileName release];
+    [NS_EXTRA(NSDocument, self)->_autosavedContentsFileURL release];
+    [NS_EXTRA(NSDocument, self)->_printInfo release];
+    [NS_EXTRA(NSDocument, self)->_undoManager release];
+    [NS_EXTRA(NSDocument, self)->_activeEditors release];
 
+    NS_EXTRA_FREE(NSDocument, self);
     [super dealloc];
 }
 
 - (NSURL *) autosavedContentsFileURL {
-    return _autosavedContentsFileURL;
+    return NS_EXTRA(NSDocument, self)->_autosavedContentsFileURL;
 }
 
 - (NSDate *) fileModificationDate {
-    return _fileModificationDate;
+    return NS_EXTRA(NSDocument, self)->_fileModificationDate;
 }
 
 - (NSURL *) fileURL {
-    return _fileURL;
+    return NS_EXTRA(NSDocument, self)->_fileURL;
 }
 
 - (NSPrintInfo *) printInfo {
-    return _printInfo ? _printInfo : [NSPrintInfo sharedPrintInfo];
+    return NS_EXTRA(NSDocument, self)->_printInfo ? NS_EXTRA(NSDocument, self)->_printInfo : [NSPrintInfo sharedPrintInfo];
 }
 
 - (NSString *) fileType {
-    NSString *result = _fileType;
+    NSString *result = NS_EXTRA(NSDocument, self)->_fileType;
 
     if (result == nil) {
         // when `_fileType` is `nil`, it seems this method returns the first element of `[self writableTypesForSaveOperation: NSSaveOperation]`.
@@ -218,76 +219,76 @@ static int untitled_document_number = 0;
 }
 
 - (BOOL) hasUndoManager {
-    return _hasUndoManager;
+    return NS_EXTRA(NSDocument, self)->_hasUndoManager;
 }
 
 - (NSUndoManager *) undoManager {
-    if (_undoManager == nil && _hasUndoManager == YES) {
+    if (NS_EXTRA(NSDocument, self)->_undoManager == nil && NS_EXTRA(NSDocument, self)->_hasUndoManager == YES) {
         [self setUndoManager: [NSUndoManager new]];
-        [_undoManager beginUndoGrouping];
+        [NS_EXTRA(NSDocument, self)->_undoManager beginUndoGrouping];
     }
 
-    return _undoManager;
+    return NS_EXTRA(NSDocument, self)->_undoManager;
 }
 
 - (void) setAutosavedContentsFileURL: (NSURL *) url {
     url = [url copy];
-    [_autosavedContentsFileURL release];
-    _autosavedContentsFileURL = url;
+    [NS_EXTRA(NSDocument, self)->_autosavedContentsFileURL release];
+    NS_EXTRA(NSDocument, self)->_autosavedContentsFileURL = url;
 }
 
 - (void) setFileModificationDate: (NSDate *) value {
     value = [value copy];
-    [_fileModificationDate release];
-    _fileModificationDate = value;
+    [NS_EXTRA(NSDocument, self)->_fileModificationDate release];
+    NS_EXTRA(NSDocument, self)->_fileModificationDate = value;
 }
 
 - (void) setFileURL: (NSURL *) url {
     url = [url copy];
-    [_fileURL release];
-    _fileURL = url;
-    [_windowControllers makeObjectsPerformSelector: @selector
+    [NS_EXTRA(NSDocument, self)->_fileURL release];
+    NS_EXTRA(NSDocument, self)->_fileURL = url;
+    [NS_EXTRA(NSDocument, self)->_windowControllers makeObjectsPerformSelector: @selector
                         (synchronizeWindowTitleWithDocumentName)];
 }
 
 - (void) setPrintInfo: (NSPrintInfo *) value {
     value = [value copy];
-    [_printInfo release];
-    _printInfo = value;
+    [NS_EXTRA(NSDocument, self)->_printInfo release];
+    NS_EXTRA(NSDocument, self)->_printInfo = value;
 }
 
 - (void) setFileType: (NSString *) type {
     type = [type copy];
-    [_fileType release];
-    _fileType = type;
+    [NS_EXTRA(NSDocument, self)->_fileType release];
+    NS_EXTRA(NSDocument, self)->_fileType = type;
 }
 
 - (void) setHasUndoManager: (BOOL) flag {
-    _hasUndoManager = flag;
-    if (flag == YES && _undoManager == nil)
+    NS_EXTRA(NSDocument, self)->_hasUndoManager = flag;
+    if (flag == YES && NS_EXTRA(NSDocument, self)->_undoManager == nil)
         [self undoManager];
-    else if (flag == NO && _undoManager != nil)
+    else if (flag == NO && NS_EXTRA(NSDocument, self)->_undoManager != nil)
         [self setUndoManager: nil];
 }
 
 - (void) setUndoManager: (NSUndoManager *) undoManager {
-    if (_undoManager != nil) {
+    if (NS_EXTRA(NSDocument, self)->_undoManager != nil) {
         [[NSNotificationCenter defaultCenter]
                 removeObserver: self
                           name: NSUndoManagerDidUndoChangeNotification
-                        object: _undoManager];
+                        object: NS_EXTRA(NSDocument, self)->_undoManager];
         [[NSNotificationCenter defaultCenter]
                 removeObserver: self
                           name: NSUndoManagerDidRedoChangeNotification
-                        object: _undoManager];
+                        object: NS_EXTRA(NSDocument, self)->_undoManager];
         [[NSNotificationCenter defaultCenter]
                 removeObserver: self
                           name: NSUndoManagerWillCloseUndoGroupNotification
-                        object: _undoManager];
-        [_undoManager release];
+                        object: NS_EXTRA(NSDocument, self)->_undoManager];
+        [NS_EXTRA(NSDocument, self)->_undoManager release];
     }
 
-    _undoManager = [undoManager retain];
+    NS_EXTRA(NSDocument, self)->_undoManager = [undoManager retain];
 
     if (undoManager) {
         // Only add observers if we have an undoManager we're concerned about
@@ -295,22 +296,22 @@ static int untitled_document_number = 0;
                 addObserver: self
                    selector: @selector(_undoManagerDidUndoChange:)
                        name: NSUndoManagerDidUndoChangeNotification
-                     object: _undoManager];
+                     object: NS_EXTRA(NSDocument, self)->_undoManager];
         [[NSNotificationCenter defaultCenter]
                 addObserver: self
                    selector: @selector(_undoManagerDidRedoChange:)
                        name: NSUndoManagerDidRedoChangeNotification
-                     object: _undoManager];
+                     object: NS_EXTRA(NSDocument, self)->_undoManager];
         [[NSNotificationCenter defaultCenter]
                 addObserver: self
                    selector: @selector(_undoManagerDidCloseGroup:)
                        name: NSUndoManagerWillCloseUndoGroupNotification
-                     object: _undoManager];
+                     object: NS_EXTRA(NSDocument, self)->_undoManager];
     }
 }
 
 - (NSUndoManager *) windowWillReturnUndoManager: (NSWindow *) window {
-    if (_hasUndoManager)
+    if (NS_EXTRA(NSDocument, self)->_hasUndoManager)
         return [self undoManager];
 
     return nil;
@@ -327,8 +328,8 @@ static int untitled_document_number = 0;
 
 - (void) setLastComponentOfFileName: (NSString *) name {
     name = [name copy];
-    [_lastComponentOfFileName release];
-    _lastComponentOfFileName = name;
+    [NS_EXTRA(NSDocument, self)->_lastComponentOfFileName release];
+    NS_EXTRA(NSDocument, self)->_lastComponentOfFileName = name;
 }
 
 - (NSString *) windowNibName {
@@ -336,7 +337,7 @@ static int untitled_document_number = 0;
 }
 
 - (void) setWindow: (NSWindow *) window {
-    [[_windowControllers objectAtIndex: 0] setWindow: window];
+    [[NS_EXTRA(NSDocument, self)->_windowControllers objectAtIndex: 0] setWindow: window];
 }
 
 - (void) windowControllerDidLoadNib: (NSWindowController *) controller {
@@ -348,7 +349,7 @@ static int untitled_document_number = 0;
 }
 
 - (void) showWindows {
-    [_windowControllers makeObjectsPerformSelector: @selector(showWindow:)
+    [NS_EXTRA(NSDocument, self)->_windowControllers makeObjectsPerformSelector: @selector(showWindow:)
                                         withObject: self];
 }
 
@@ -365,39 +366,39 @@ static int untitled_document_number = 0;
 }
 
 - (NSArray *) windowControllers {
-    return _windowControllers;
+    return NS_EXTRA(NSDocument, self)->_windowControllers;
 }
 
 - (void) addWindowController: (NSWindowController *) controller {
-    [_windowControllers addObject: controller];
+    [NS_EXTRA(NSDocument, self)->_windowControllers addObject: controller];
     if ([controller document] == nil)
         [controller setDocument: self];
 }
 
 - (void) removeWindowController: (NSWindowController *) controller {
     [controller setDocument: nil];
-    [_windowControllers removeObjectIdenticalTo: controller];
+    [NS_EXTRA(NSDocument, self)->_windowControllers removeObjectIdenticalTo: controller];
 }
 
 - (NSString *) displayName {
-    if (_fileURL == nil) {
+    if (NS_EXTRA(NSDocument, self)->_fileURL == nil) {
         NSString *untitledName = NSLocalizedStringFromTableInBundle(
                 @"Untitled", nil, [NSBundle bundleForClass: [NSDocument class]],
                 @"The name of a untitled document");
-        if (_untitledNumber != 0)
+        if (NS_EXTRA(NSDocument, self)->_untitledNumber != 0)
             return [NSString
-                    stringWithFormat: @"%@ %d", untitledName, _untitledNumber];
+                    stringWithFormat: @"%@ %d", untitledName, NS_EXTRA(NSDocument, self)->_untitledNumber];
         else
             return untitledName;
     } else {
         return [[NSFileManager defaultManager]
-                displayNameAtPath: [_fileURL path]];
+                displayNameAtPath: [NS_EXTRA(NSDocument, self)->_fileURL path]];
     }
 }
 
 - (NSWindow *) windowForSheet {
-    if ([_windowControllers count] > 0) {
-        NSWindow *check = [[_windowControllers objectAtIndex: 0] window];
+    if ([NS_EXTRA(NSDocument, self)->_windowControllers count] > 0) {
+        NSWindow *check = [[NS_EXTRA(NSDocument, self)->_windowControllers objectAtIndex: 0] window];
 
         if (check != nil)
             return check;
@@ -407,31 +408,31 @@ static int untitled_document_number = 0;
 }
 
 - (BOOL) isDocumentEdited {
-    return _changeCount != 0 || [_activeEditors count] > 0;
+    return NS_EXTRA(NSDocument, self)->_changeCount != 0 || [NS_EXTRA(NSDocument, self)->_activeEditors count] > 0;
 }
 
 - (BOOL) isDraft {
-    return _draft;
+    return NS_EXTRA(NSDocument, self)->_draft;
 }
 
 - (void) setDraft: (BOOL) value {
-    _draft = value;
+    NS_EXTRA(NSDocument, self)->_draft = value;
 }
 
 - (void) updateChangeCount: (NSDocumentChangeType) changeType {
-    int count = [_windowControllers count];
+    int count = [NS_EXTRA(NSDocument, self)->_windowControllers count];
 
     switch (changeType) {
     case NSChangeDone:
-        _changeCount++;
+        NS_EXTRA(NSDocument, self)->_changeCount++;
         break;
 
     case NSChangeUndone:
-        _changeCount--;
+        NS_EXTRA(NSDocument, self)->_changeCount--;
         break;
 
     case NSChangeCleared:
-        _changeCount = 0;
+        NS_EXTRA(NSDocument, self)->_changeCount = 0;
         [self _updateFileModificationDate]; // Since file was just saved or
                                             // reverted
         break;
@@ -442,24 +443,24 @@ static int untitled_document_number = 0;
         break;
 
     case NSChangeRedone:
-        _changeCount++; //Opposite of Undo - this may be wrong
+        NS_EXTRA(NSDocument, self)->_changeCount++; //Opposite of Undo - this may be wrong
         break;
     }
 
     BOOL edited = [self isDocumentEdited];
     while (--count >= 0)
-        [[_windowControllers objectAtIndex: count] setDocumentEdited: edited];
+        [[NS_EXTRA(NSDocument, self)->_windowControllers objectAtIndex: count] setDocumentEdited: edited];
 
     NSTimeInterval delay = [[NSDocumentController sharedDocumentController] autosavingDelay];
     // _changeCount, not -hasUnautosavedChanges: an active editor would reschedule after every save.
-    if (delay > 0 && !_autosaveScheduled && _changeCount != 0) {
-        _autosaveScheduled = YES;
+    if (delay > 0 && !NS_EXTRA(NSDocument, self)->_autosaveScheduled && NS_EXTRA(NSDocument, self)->_changeCount != 0) {
+        NS_EXTRA(NSDocument, self)->_autosaveScheduled = YES;
         [self performSelector: @selector(_autosaveAfterDelay) withObject: nil afterDelay: delay];
     }
 }
 
 - (void) _autosaveAfterDelay {
-    _autosaveScheduled = NO;
+    NS_EXTRA(NSDocument, self)->_autosaveScheduled = NO;
     // Autosave is implicit: a failure leaves the document edited, so the user is told
     // when they save or close it, and nothing is presented here.
     [self autosaveWithImplicitCancellability: YES completionHandler: nil];
@@ -717,7 +718,7 @@ static int untitled_document_number = 0;
                            didSaveSelector: (SEL) selector
                                contextInfo: (void *) context
 {
-    NSString *path = [_fileURL path];
+    NSString *path = [NS_EXTRA(NSDocument, self)->_fileURL path];
     NSString *extension = [path pathExtension];
     if ([extension length] == 0) {
         extension = [[[NSDocumentController sharedDocumentController]
@@ -726,7 +727,7 @@ static int untitled_document_number = 0;
     NSSavePanel *savePanel = [NSSavePanel savePanel];
     [savePanel setRequiredFileType: extension];
     // Suggest a name before prepareSavePanel:, which may replace it.
-    if (_fileURL) {
+    if (NS_EXTRA(NSDocument, self)->_fileURL) {
         // Suggest saving alongside the original file
         [savePanel setDirectory: [path stringByDeletingLastPathComponent]];
         [savePanel setNameFieldStringValue: [path lastPathComponent]];
@@ -798,22 +799,22 @@ static int untitled_document_number = 0;
                       contextInfo: (void *) info
 {
     // First make sure there are no uncommitted changes
-    for (id editor in [[_activeEditors copy] autorelease]) {
+    for (id editor in [[NS_EXTRA(NSDocument, self)->_activeEditors copy] autorelease]) {
         [editor commitEditing];
     }
 
     // Do we already have a file on disk for this document?
-    if (_fileURL != nil) {
+    if (NS_EXTRA(NSDocument, self)->_fileURL != nil) {
 
         // Check if file has been changed by another process
         NSFileManager *fileManager = [NSFileManager defaultManager];
-        NSString *path = [_fileURL path];
+        NSString *path = [NS_EXTRA(NSDocument, self)->_fileURL path];
         NSDictionary *attributes = [fileManager fileAttributesAtPath: path
                                                         traverseLink: YES];
         NSDate *dateModified =
                 [attributes objectForKey: NSFileModificationDate];
         if (attributes != nil &&
-            ![dateModified isEqualToDate: _fileModificationDate]) {
+            ![dateModified isEqualToDate: NS_EXTRA(NSDocument, self)->_fileModificationDate]) {
             int result = NSRunAlertPanel(
                     [self displayName],
                     NSLocalizedStringFromTableInBundle(
@@ -847,13 +848,13 @@ static int untitled_document_number = 0;
                     (saveToFile:
                             saveOperation:delegate:didSaveSelector:contextInfo
                                          :)]) {
-            [self saveToFile: [_fileURL path]
+            [self saveToFile: [NS_EXTRA(NSDocument, self)->_fileURL path]
                       saveOperation: NSSaveOperation
                            delegate: delegate
                     didSaveSelector: selector
                         contextInfo: info];
         } else {
-            [self saveToURL: _fileURL
+            [self saveToURL: NS_EXTRA(NSDocument, self)->_fileURL
                               ofType: [self fileType]
                     forSaveOperation: NSSaveOperation
                             delegate: delegate
@@ -1000,15 +1001,15 @@ static int untitled_document_number = 0;
 }
 
 - (void) close {
-    if (_autosaveScheduled) {
-        _autosaveScheduled = NO;
+    if (NS_EXTRA(NSDocument, self)->_autosaveScheduled) {
+        NS_EXTRA(NSDocument, self)->_autosaveScheduled = NO;
         [NSObject cancelPreviousPerformRequestsWithTarget: self selector: @selector(_autosaveAfterDelay) object: nil];
     }
 
     // Make sure the controllers don't call -close on self again.
 
-    NSArray *controllers = _windowControllers;
-    _windowControllers = [NSMutableArray new];
+    NSArray *controllers = NS_EXTRA(NSDocument, self)->_windowControllers;
+    NS_EXTRA(NSDocument, self)->_windowControllers = [NSMutableArray new];
 
     for (NSWindowController *controller in controllers) {
         [controller setShouldCloseDocument: NO];
@@ -1076,7 +1077,7 @@ static int untitled_document_number = 0;
                  shouldCloseSelector: (SEL) selector
                          contextInfo: (void *) info
 {
-    if ([controller shouldCloseDocument] || [_windowControllers count] <= 1) {
+    if ([controller shouldCloseDocument] || [NS_EXTRA(NSDocument, self)->_windowControllers count] <= 1) {
         [self canCloseDocumentWithDelegate: delegate
                        shouldCloseSelector: selector
                                contextInfo: info];
@@ -1105,7 +1106,7 @@ static int untitled_document_number = 0;
             nil, [self displayName]);
 
     if (result == NSAlertDefaultReturn) {
-        for (id editor in [[_activeEditors copy] autorelease])
+        for (id editor in [[NS_EXTRA(NSDocument, self)->_activeEditors copy] autorelease])
             [editor discardEditing];
         [self revertToSavedFromFile: [self fileName] ofType: [self fileType]];
     }
@@ -1145,7 +1146,7 @@ static int untitled_document_number = 0;
 
 - (BOOL) validateUserInterfaceItem: (id<NSValidatedUserInterfaceItem>) item {
     if (sel_isEqual([item action], @selector(revertDocumentToSaved:)))
-        return (_fileURL != nil) ? YES : NO;
+        return (NS_EXTRA(NSDocument, self)->_fileURL != nil) ? YES : NO;
     if (sel_isEqual([item action], @selector(saveDocument:)))
         return YES;
     if ([self respondsToSelector: [item action]])
@@ -1155,24 +1156,24 @@ static int untitled_document_number = 0;
 }
 
 - (void) objectDidBeginEditing: editor {
-    [_activeEditors addObject: editor];
+    [NS_EXTRA(NSDocument, self)->_activeEditors addObject: editor];
 
     BOOL edited = [self isDocumentEdited];
-    for (NSWindowController *wc in _windowControllers)
+    for (NSWindowController *wc in NS_EXTRA(NSDocument, self)->_windowControllers)
         [wc setDocumentEdited: edited];
 }
 
 - (void) objectDidEndEditing: editor {
-    [_activeEditors removeObject: editor];
+    [NS_EXTRA(NSDocument, self)->_activeEditors removeObject: editor];
 
     BOOL edited = [self isDocumentEdited];
-    for (NSWindowController *wc in _windowControllers)
+    for (NSWindowController *wc in NS_EXTRA(NSDocument, self)->_windowControllers)
         [wc setDocumentEdited: edited];
 }
 
 - (BOOL) validateMenuItem: (NSMenuItem *) item {
     if (sel_isEqual([item action], @selector(revertDocumentToSaved:)))
-        return (_fileURL != nil) ? YES : NO;
+        return (NS_EXTRA(NSDocument, self)->_fileURL != nil) ? YES : NO;
     if (sel_isEqual([item action], @selector(saveDocument:)))
         return YES;
     if ([self respondsToSelector: [item action]])
@@ -1199,7 +1200,7 @@ static int untitled_document_number = 0;
 }
 
 - (NSString *) fileName {
-    return [_fileURL path];
+    return [NS_EXTRA(NSDocument, self)->_fileURL path];
 }
 
 - (NSString *) fileNameFromRunningSavePanelForSaveOperation:
@@ -1357,7 +1358,7 @@ static int untitled_document_number = 0;
 {
     if (path != nil) {
         BOOL success = [self writeWithBackupToFile: path
-                                            ofType: _fileType
+                                            ofType: NS_EXTRA(NSDocument, self)->_fileType
                                      saveOperation: operation];
 
         if (success) {
@@ -1427,7 +1428,7 @@ static int untitled_document_number = 0;
 }
 
 - (void) _setUntitledNumber: (int) number {
-    _untitledNumber = number;
+    NS_EXTRA(NSDocument, self)->_untitledNumber = number;
 }
 
 - (void) _undoManagerDidUndoChange: (NSNotification *) note {
@@ -1493,7 +1494,7 @@ static int untitled_document_number = 0;
 
             case NSAlertAlternateReturn:
                 // Let's prep the document to close cleanly.
-                for (id editor in [[_activeEditors copy] autorelease]) {
+                for (id editor in [[NS_EXTRA(NSDocument, self)->_activeEditors copy] autorelease]) {
                     [editor discardEditing];
                 }
                 [self updateChangeCount: NSChangeCleared];

@@ -94,18 +94,18 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (void) setState: (NSControlStateValue) value {
-    _state = value;
-    _isHighlighted = _state == NSOnState;
+    NS_EXTRA(NSCell, self)->_state = value;
+    NS_EXTRA(NSCell, self)->_isHighlighted = NS_EXTRA(NSCell, self)->_state == NSOnState;
 }
 
 - (void) set {
     [self setState: NSControlStateValueOn];
-    _isHighlighted = YES;
+    NS_EXTRA(NSCell, self)->_isHighlighted = YES;
 }
 
 - (void) reset {
     [self setState: NSControlStateValueOff];
-    _isHighlighted = NO;
+    NS_EXTRA(NSCell, self)->_isHighlighted = NO;
 }
 
 - (NSColor *) highlightColorInView: (NSView *) view {

@@ -17,13 +17,17 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/NSCell.h>
 
+// Legacy ObjC ABI (i386): instance size must stay 0x24, Apple's; these ivars
+// sit at Apple's offsets. New state needs an extra ivars struct
+// (AppKitIvarLayout.h), never a new ivar.
 @interface NSActionCell : NSCell {
-    NSView *_controlView;
+    NSInteger _tag;
     id _target;
     SEL _action;
-    NSInteger _tag;
+    NSView *_controlView;
 }
 
 - target;

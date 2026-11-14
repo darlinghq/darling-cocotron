@@ -41,8 +41,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         _maxValue = [keyed decodeDoubleForKey: @"NSMaxValue"];
         if ([keyed containsValueForKey: @"NSValue"]) {
             // This cell prefers NSValue to NSContents
-            [_objectValue release];
-            _objectValue = [[keyed decodeObjectForKey: @"NSValue"] retain];
+            [NS_EXTRA(NSCell, self)->_objectValue release];
+            NS_EXTRA(NSCell, self)->_objectValue = [[keyed decodeObjectForKey: @"NSValue"] retain];
         }
         _valueWraps = [keyed decodeBoolForKey: @"NSValueWraps"];
         _autorepeat = [keyed decodeBoolForKey: @"NSAutorepeat"];
@@ -55,8 +55,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
         [coder decodeValuesOfObjCTypes: "ddddiiiii", &value, &_minValue, &_maxValue, &_increment, &flags,
                                         &unused[0], &unused[1], &unused[2], &unused[3]];
-        [_objectValue release];
-        _objectValue = [[NSNumber numberWithDouble: value] retain];
+        [NS_EXTRA(NSCell, self)->_objectValue release];
+        NS_EXTRA(NSCell, self)->_objectValue = [[NSNumber numberWithDouble: value] retain];
         _valueWraps = ((unsigned) flags & 0x80000000u) != 0;
         _autorepeat = ((unsigned) flags & 0x40000000u) != 0;
     }

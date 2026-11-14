@@ -46,8 +46,8 @@ NSString *const NSPreferredScrollerStyleDidChangeNotification =
 
 @implementation NSScrollView
 
-@synthesize horizontalScrollElasticity = _horizontalScrollElasticity;
-@synthesize verticalScrollElasticity = _verticalScrollElasticity;
+NS_EXTRA_SYNTHESIZE_ASSIGN(NSScrollView, horizontalScrollElasticity, _horizontalScrollElasticity, NSScrollElasticity, horizontalScrollElasticity, setHorizontalScrollElasticity:)
+NS_EXTRA_SYNTHESIZE_ASSIGN(NSScrollView, verticalScrollElasticity, _verticalScrollElasticity, NSScrollElasticity, verticalScrollElasticity, setVerticalScrollElasticity:)
 
 static Class _rulerViewClass = nil;
 
@@ -173,10 +173,10 @@ static Class _rulerViewClass = nil;
         NSKeyedUnarchiver *keyed = (NSKeyedUnarchiver *) coder;
         unsigned flags = [keyed decodeIntForKey: @"NSsFlags"];
 
-        _hasVerticalScroller = (flags & 0x10) ? YES : NO;
-        _hasHorizontalScroller = (flags & 0x20) ? YES : NO;
-        _autohidesScrollers = (flags & 0x200) ? YES : NO;
-        _borderType = flags & 0x03;
+        NS_EXTRA(NSScrollView, self)->_hasVerticalScroller = (flags & 0x10) ? YES : NO;
+        NS_EXTRA(NSScrollView, self)->_hasHorizontalScroller = (flags & 0x20) ? YES : NO;
+        NS_EXTRA(NSScrollView, self)->_autohidesScrollers = (flags & 0x200) ? YES : NO;
+        NS_EXTRA(NSScrollView, self)->_borderType = flags & 0x03;
         _clipView = [[keyed decodeObjectForKey: @"NSContentView"] retain];
         _verticalScroller = [[keyed decodeObjectForKey: @"NSVScroller"] retain];
         _horizontalScroller =
@@ -188,29 +188,29 @@ static Class _rulerViewClass = nil;
         _headerClipView =
                 [[keyed decodeObjectForKey: @"NSHeaderClipView"] retain];
         _cornerView = [[keyed decodeObjectForKey: @"NSCornerView"] retain];
-        _backgroundColor = [[NSColor controlBackgroundColor] copy];
+        NS_EXTRA(NSScrollView, self)->_backgroundColor = [[NSColor controlBackgroundColor] copy];
 
         BOOL copyOnScroll = (flags & 0x80) ? YES : NO;
         if (copyOnScroll) {
-            _drawsBackground = YES;
+            NS_EXTRA(NSScrollView, self)->_drawsBackground = YES;
             [_clipView setDrawsBackground: YES];
             [_clipView setCopiesOnScroll: YES];
         } else {
-            _drawsBackground = [_clipView drawsBackground];
+            NS_EXTRA(NSScrollView, self)->_drawsBackground = [_clipView drawsBackground];
         }
 
-        _verticalLineScroll = 10.0; // the default value in IB is 10
-        _verticalPageScroll = 10.0;
-        _horizontalLineScroll = 10.0;
-        _verticalLineScroll = 10.0;
+        NS_EXTRA(NSScrollView, self)->_verticalLineScroll = 10.0; // the default value in IB is 10
+        NS_EXTRA(NSScrollView, self)->_verticalPageScroll = 10.0;
+        NS_EXTRA(NSScrollView, self)->_horizontalLineScroll = 10.0;
+        NS_EXTRA(NSScrollView, self)->_verticalLineScroll = 10.0;
         id scrollAmts = [keyed decodeObjectForKey: @"NSScrollAmts"];
         if ([scrollAmts isKindOfClass: [NSData class]] &&
             [scrollAmts length] == 4 * sizeof(NSSwappedFloat)) {
             NSSwappedFloat *amts = (NSSwappedFloat *) [scrollAmts bytes];
-            _horizontalPageScroll = NSSwapBigFloatToHost(amts[0]);
-            _verticalPageScroll = NSSwapBigFloatToHost(amts[1]);
-            _horizontalLineScroll = NSSwapBigFloatToHost(amts[2]);
-            _verticalLineScroll = NSSwapBigFloatToHost(amts[3]);
+            NS_EXTRA(NSScrollView, self)->_horizontalPageScroll = NSSwapBigFloatToHost(amts[0]);
+            NS_EXTRA(NSScrollView, self)->_verticalPageScroll = NSSwapBigFloatToHost(amts[1]);
+            NS_EXTRA(NSScrollView, self)->_horizontalLineScroll = NSSwapBigFloatToHost(amts[2]);
+            NS_EXTRA(NSScrollView, self)->_verticalLineScroll = NSSwapBigFloatToHost(amts[3]);
         }
     } else {
         // Layouts per class version as recorded from Mac archives, with the same grouping
@@ -305,17 +305,17 @@ static Class _rulerViewClass = nil;
         [_horizontalScroller setTarget: self];
         [_horizontalScroller setAction: @selector(_horizontalScroll:)];
 
-        _hasVerticalScroller = (flags & 0x80000000) ? YES : NO;
-        _hasHorizontalScroller = (flags & 0x40000000) ? YES : NO;
-        _scrollsDynamically = (flags & 0x08000000) ? NO : YES;
-        _borderType = (flags >> 25) & 3;
-        _autohidesScrollers = (flags & 0x8000) ? YES : NO;
-        _horizontalPageScroll = hPage;
-        _verticalPageScroll = vPage;
-        _horizontalLineScroll = hLine;
-        _verticalLineScroll = vLine;
-        _backgroundColor = [[NSColor controlBackgroundColor] copy];
-        _drawsBackground = [_clipView drawsBackground];
+        NS_EXTRA(NSScrollView, self)->_hasVerticalScroller = (flags & 0x80000000) ? YES : NO;
+        NS_EXTRA(NSScrollView, self)->_hasHorizontalScroller = (flags & 0x40000000) ? YES : NO;
+        NS_EXTRA(NSScrollView, self)->_scrollsDynamically = (flags & 0x08000000) ? NO : YES;
+        NS_EXTRA(NSScrollView, self)->_borderType = (flags >> 25) & 3;
+        NS_EXTRA(NSScrollView, self)->_autohidesScrollers = (flags & 0x8000) ? YES : NO;
+        NS_EXTRA(NSScrollView, self)->_horizontalPageScroll = hPage;
+        NS_EXTRA(NSScrollView, self)->_verticalPageScroll = vPage;
+        NS_EXTRA(NSScrollView, self)->_horizontalLineScroll = hLine;
+        NS_EXTRA(NSScrollView, self)->_verticalLineScroll = vLine;
+        NS_EXTRA(NSScrollView, self)->_backgroundColor = [[NSColor controlBackgroundColor] copy];
+        NS_EXTRA(NSScrollView, self)->_drawsBackground = [_clipView drawsBackground];
         [self tile];
     }
 
@@ -323,16 +323,16 @@ static Class _rulerViewClass = nil;
 }
 
 - (void) postAwakeFromNib {
-    if (!_hasVerticalScroller)
+    if (!NS_EXTRA(NSScrollView, self)->_hasVerticalScroller)
         [_verticalScroller removeFromSuperview];
-    if (!_hasHorizontalScroller)
+    if (!NS_EXTRA(NSScrollView, self)->_hasHorizontalScroller)
         [_horizontalScroller removeFromSuperview];
 }
 
 - (NSRect) insetBounds {
     NSRect bounds = [self bounds];
 
-    switch (_borderType) {
+    switch (NS_EXTRA(NSScrollView, self)->_borderType) {
     case NSNoBorder:
         break;
 
@@ -403,7 +403,7 @@ static Class _rulerViewClass = nil;
 - (NSRect) horizontalRulerFrame {
     NSRect result = [self insetBounds];
 
-    result.size.height = [_horizontalRuler requiredThickness];
+    result.size.height = [NS_EXTRA(NSScrollView, self)->_horizontalRuler requiredThickness];
 
     // The horizontal ruler spans the entire width of the scrollview
 
@@ -413,11 +413,11 @@ static Class _rulerViewClass = nil;
 - (NSRect) verticalRulerFrame {
     NSRect result = [self insetBounds];
 
-    result.size.width = [_verticalRuler requiredThickness];
+    result.size.width = [NS_EXTRA(NSScrollView, self)->_verticalRuler requiredThickness];
     if ([self rulersVisible] && [self hasHorizontalRuler]) {
         // The vertical ruler is positioned below the horizontal ruler
-        result.origin.y += [_horizontalRuler requiredThickness];
-        result.size.height -= [_horizontalRuler requiredThickness];
+        result.origin.y += [NS_EXTRA(NSScrollView, self)->_horizontalRuler requiredThickness];
+        result.size.height -= [NS_EXTRA(NSScrollView, self)->_horizontalRuler requiredThickness];
     }
 
     return result;
@@ -472,8 +472,8 @@ static Class _rulerViewClass = nil;
         result.size.height -= [self headerClipViewFrame].size.height;
     }
     if ([self rulersVisible] && [self hasHorizontalRuler]) {
-        result.origin.y += [_horizontalRuler requiredThickness];
-        result.size.height -= [_horizontalRuler requiredThickness];
+        result.origin.y += [NS_EXTRA(NSScrollView, self)->_horizontalRuler requiredThickness];
+        result.size.height -= [NS_EXTRA(NSScrollView, self)->_horizontalRuler requiredThickness];
     }
 
     return result;
@@ -493,8 +493,8 @@ static Class _rulerViewClass = nil;
     result.size.height = [NSScroller scrollerWidth];
 
     if ([self rulersVisible] && [self hasVerticalRuler]) {
-        result.origin.x += [_verticalRuler requiredThickness];
-        result.size.width -= [_verticalRuler requiredThickness];
+        result.origin.x += [NS_EXTRA(NSScrollView, self)->_verticalRuler requiredThickness];
+        result.size.width -= [NS_EXTRA(NSScrollView, self)->_verticalRuler requiredThickness];
     }
 
     return result;
@@ -528,11 +528,11 @@ static Class _rulerViewClass = nil;
     _clipView = [[NSClipView alloc] initWithFrame: [self clipViewFrame]];
     [_clipView setAutoresizingMask: NSViewWidthSizable | NSViewHeightSizable];
 
-    _hasVerticalScroller = NO;
-    _hasHorizontalScroller = NO;
-    _drawsBackground = YES;
-    _borderType = NSNoBorder;
-    _backgroundColor = [[NSColor controlBackgroundColor] copy];
+    NS_EXTRA(NSScrollView, self)->_hasVerticalScroller = NO;
+    NS_EXTRA(NSScrollView, self)->_hasHorizontalScroller = NO;
+    NS_EXTRA(NSScrollView, self)->_drawsBackground = YES;
+    NS_EXTRA(NSScrollView, self)->_borderType = NSNoBorder;
+    NS_EXTRA(NSScrollView, self)->_backgroundColor = [[NSColor controlBackgroundColor] copy];
 
     [self setLineScroll: 1.0];
     [self setPageScroll: 10.0]; // entirely arbitrary
@@ -549,14 +549,15 @@ static Class _rulerViewClass = nil;
     [_horizontalScroller release];
     [_headerClipView release];
     [_cornerView release];
-    [_horizontalRuler release];
-    [_verticalRuler release];
-    [_backgroundColor release];
+    [NS_EXTRA(NSScrollView, self)->_horizontalRuler release];
+    [NS_EXTRA(NSScrollView, self)->_verticalRuler release];
+    [NS_EXTRA(NSScrollView, self)->_backgroundColor release];
+    NS_EXTRA_FREE(NSScrollView, self);
     [super dealloc];
 }
 
 - (BOOL) isOpaque {
-    return _drawsBackground;
+    return NS_EXTRA(NSScrollView, self)->_drawsBackground;
 }
 
 - (BOOL) isFlipped {
@@ -596,34 +597,34 @@ static Class _rulerViewClass = nil;
 }
 
 - (void) createRulerViewsIfNeeded {
-    if (_rulersVisible) {
-        if (_hasHorizontalRuler) {
-            if (_horizontalRuler == nil)
-                _horizontalRuler = [[[[self class] rulerViewClass] alloc]
+    if (NS_EXTRA(NSScrollView, self)->_rulersVisible) {
+        if (NS_EXTRA(NSScrollView, self)->_hasHorizontalRuler) {
+            if (NS_EXTRA(NSScrollView, self)->_horizontalRuler == nil)
+                NS_EXTRA(NSScrollView, self)->_horizontalRuler = [[[[self class] rulerViewClass] alloc]
                         initWithScrollView: self
                                orientation: NSHorizontalRuler];
 
-            if ([_horizontalRuler superview] == nil)
-                [self addSubview: _horizontalRuler];
-        } else if ([_horizontalRuler superview] != nil) {
-            [_horizontalRuler removeFromSuperview];
+            if ([NS_EXTRA(NSScrollView, self)->_horizontalRuler superview] == nil)
+                [self addSubview: NS_EXTRA(NSScrollView, self)->_horizontalRuler];
+        } else if ([NS_EXTRA(NSScrollView, self)->_horizontalRuler superview] != nil) {
+            [NS_EXTRA(NSScrollView, self)->_horizontalRuler removeFromSuperview];
         }
-        if (_hasVerticalRuler) {
-            if (_verticalRuler == nil)
-                _verticalRuler = [[[[self class] rulerViewClass] alloc]
+        if (NS_EXTRA(NSScrollView, self)->_hasVerticalRuler) {
+            if (NS_EXTRA(NSScrollView, self)->_verticalRuler == nil)
+                NS_EXTRA(NSScrollView, self)->_verticalRuler = [[[[self class] rulerViewClass] alloc]
                         initWithScrollView: self
                                orientation: NSVerticalRuler];
 
-            if ([_verticalRuler superview] == nil)
-                [self addSubview: _verticalRuler];
-        } else if ([_verticalRuler superview] != nil) {
-            [_verticalRuler removeFromSuperview];
+            if ([NS_EXTRA(NSScrollView, self)->_verticalRuler superview] == nil)
+                [self addSubview: NS_EXTRA(NSScrollView, self)->_verticalRuler];
+        } else if ([NS_EXTRA(NSScrollView, self)->_verticalRuler superview] != nil) {
+            [NS_EXTRA(NSScrollView, self)->_verticalRuler removeFromSuperview];
         }
     } else {
-        if ([_horizontalRuler superview] != nil)
-            [_horizontalRuler removeFromSuperview];
-        if ([_verticalRuler superview] != nil)
-            [_verticalRuler removeFromSuperview];
+        if ([NS_EXTRA(NSScrollView, self)->_horizontalRuler superview] != nil)
+            [NS_EXTRA(NSScrollView, self)->_horizontalRuler removeFromSuperview];
+        if ([NS_EXTRA(NSScrollView, self)->_verticalRuler superview] != nil)
+            [NS_EXTRA(NSScrollView, self)->_verticalRuler removeFromSuperview];
     }
 }
 
@@ -648,7 +649,7 @@ static Class _rulerViewClass = nil;
 }
 
 - (NSBorderType) borderType {
-    return _borderType;
+    return NS_EXTRA(NSScrollView, self)->_borderType;
 }
 
 - (NSScroller *) verticalScroller {
@@ -660,79 +661,79 @@ static Class _rulerViewClass = nil;
 }
 
 - (NSRulerView *) verticalRulerView {
-    return _verticalRuler;
+    return NS_EXTRA(NSScrollView, self)->_verticalRuler;
 }
 
 - (void) setVerticalRulerView: (NSRulerView *) ruler {
     ruler = [ruler retain];
-    if (_verticalRuler) {
-        [_verticalRuler removeFromSuperview];
-        [_verticalRuler release];
+    if (NS_EXTRA(NSScrollView, self)->_verticalRuler) {
+        [NS_EXTRA(NSScrollView, self)->_verticalRuler removeFromSuperview];
+        [NS_EXTRA(NSScrollView, self)->_verticalRuler release];
     }
-    _verticalRuler = ruler;
-    if (_verticalRuler) {
-        [_verticalRuler setScrollView: self];
-        [_verticalRuler setOrientation: NSVerticalRuler];
-        [self addSubview: _verticalRuler];
+    NS_EXTRA(NSScrollView, self)->_verticalRuler = ruler;
+    if (NS_EXTRA(NSScrollView, self)->_verticalRuler) {
+        [NS_EXTRA(NSScrollView, self)->_verticalRuler setScrollView: self];
+        [NS_EXTRA(NSScrollView, self)->_verticalRuler setOrientation: NSVerticalRuler];
+        [self addSubview: NS_EXTRA(NSScrollView, self)->_verticalRuler];
     }
-    _hasVerticalRuler = _verticalRuler != nil;
+    NS_EXTRA(NSScrollView, self)->_hasVerticalRuler = NS_EXTRA(NSScrollView, self)->_verticalRuler != nil;
     [self tile];
 }
 
 - (void) setHorizontalRulerView: (NSRulerView *) ruler {
     ruler = [ruler retain];
-    if (_horizontalRuler) {
-        [_horizontalRuler removeFromSuperview];
-        [_horizontalRuler release];
+    if (NS_EXTRA(NSScrollView, self)->_horizontalRuler) {
+        [NS_EXTRA(NSScrollView, self)->_horizontalRuler removeFromSuperview];
+        [NS_EXTRA(NSScrollView, self)->_horizontalRuler release];
     }
-    _horizontalRuler = ruler;
-    if (_horizontalRuler) {
-        [_horizontalRuler setScrollView: self];
-        [_horizontalRuler setOrientation: NSHorizontalRuler];
-        [self addSubview: _horizontalRuler];
+    NS_EXTRA(NSScrollView, self)->_horizontalRuler = ruler;
+    if (NS_EXTRA(NSScrollView, self)->_horizontalRuler) {
+        [NS_EXTRA(NSScrollView, self)->_horizontalRuler setScrollView: self];
+        [NS_EXTRA(NSScrollView, self)->_horizontalRuler setOrientation: NSHorizontalRuler];
+        [self addSubview: NS_EXTRA(NSScrollView, self)->_horizontalRuler];
     }
-    _hasHorizontalRuler = _horizontalRuler != nil;
+    NS_EXTRA(NSScrollView, self)->_hasHorizontalRuler = NS_EXTRA(NSScrollView, self)->_horizontalRuler != nil;
     [self tile];
 }
 
 - (NSRulerView *) horizontalRulerView {
-    return _horizontalRuler;
+    return NS_EXTRA(NSScrollView, self)->_horizontalRuler;
 }
 
 - (BOOL) hasVerticalScroller {
-    return _hasVerticalScroller;
+    return NS_EXTRA(NSScrollView, self)->_hasVerticalScroller;
 }
 
 - (BOOL) hasHorizontalScroller {
-    return _hasHorizontalScroller;
+    return NS_EXTRA(NSScrollView, self)->_hasHorizontalScroller;
 }
 
 - (BOOL) hasVerticalRuler {
-    return _hasVerticalRuler;
+    return NS_EXTRA(NSScrollView, self)->_hasVerticalRuler;
 }
 
 - (BOOL) hasHorizontalRuler {
-    return _hasHorizontalRuler;
+    return NS_EXTRA(NSScrollView, self)->_hasHorizontalRuler;
 }
 
 - (BOOL) rulersVisible {
-    return _rulersVisible;
+    return NS_EXTRA(NSScrollView, self)->_rulersVisible;
 }
 
 - (CGFloat) verticalLineScroll {
-    return _verticalLineScroll;
+    return NS_EXTRA(NSScrollView, self)->_verticalLineScroll;
 }
 
 - (CGFloat) horizontalLineScroll {
-    return _horizontalLineScroll;
+    return NS_EXTRA(NSScrollView, self)->_horizontalLineScroll;
 }
 
 - (CGFloat) verticalPageScroll {
-    return _verticalPageScroll;
+    return NS_EXTRA(NSScrollView, self)->_verticalPageScroll;
 }
 
 - (CGFloat) horizontalPageScroll {
-    return _horizontalPageScroll;
+    return NS_EXTRA(NSScrollView, self)->_horizontalPageScroll;
 }
 
 - (CGFloat) lineScroll {
@@ -744,31 +745,31 @@ static Class _rulerViewClass = nil;
 }
 
 - (BOOL) scrollsDynamically {
-    return _scrollsDynamically;
+    return NS_EXTRA(NSScrollView, self)->_scrollsDynamically;
 }
 
 - (BOOL) autohidesScrollers {
-    return _autohidesScrollers;
+    return NS_EXTRA(NSScrollView, self)->_autohidesScrollers;
 }
 
 - (NSCursor *) documentCursor {
-    return _documentCursor;
+    return NS_EXTRA(NSScrollView, self)->_documentCursor;
 }
 
 - (CGFloat) magnification {
-    return _magnification;
+    return NS_EXTRA(NSScrollView, self)->_magnification;
 }
 
 - (CGFloat) minMagnification {
-    return _minMagnification;
+    return NS_EXTRA(NSScrollView, self)->_minMagnification;
 }
 
 - (CGFloat) maxMagnification {
-    return _maxMagnification;
+    return NS_EXTRA(NSScrollView, self)->_maxMagnification;
 }
 
 - (BOOL) allowsMagnification {
-    return _allowsMagnification;
+    return NS_EXTRA(NSScrollView, self)->_allowsMagnification;
 }
 
 - (void) setDocumentView: (NSView *) view {
@@ -784,14 +785,14 @@ static Class _rulerViewClass = nil;
     [self addSubview: _clipView];
     [_clipView setAutoresizingMask: NSViewWidthSizable | NSViewHeightSizable];
     [_clipView setAutoresizesSubviews: YES];
-    [_clipView setDrawsBackground: _drawsBackground];
+    [_clipView setDrawsBackground: NS_EXTRA(NSScrollView, self)->_drawsBackground];
     [self tile];
 }
 
 - (void) setDrawsBackground: (BOOL) value {
-    _drawsBackground = value;
+    NS_EXTRA(NSScrollView, self)->_drawsBackground = value;
     [_clipView setDrawsBackground: value];
-    if (!_drawsBackground)
+    if (!NS_EXTRA(NSScrollView, self)->_drawsBackground)
         [_clipView setCopiesOnScroll: NO];
 }
 
@@ -800,8 +801,8 @@ static Class _rulerViewClass = nil;
 }
 
 - (void) setBorderType: (NSBorderType) borderType {
-    if (_borderType != borderType) {
-        _borderType = borderType;
+    if (NS_EXTRA(NSScrollView, self)->_borderType != borderType) {
+        NS_EXTRA(NSScrollView, self)->_borderType = borderType;
         [self tile];
     }
 }
@@ -814,28 +815,28 @@ static Class _rulerViewClass = nil;
     [_verticalScroller setTarget: self];
     [_verticalScroller setAction: @selector(_verticalScroll:)];
 
-    if (_hasVerticalScroller)
+    if (NS_EXTRA(NSScrollView, self)->_hasVerticalScroller)
         [self addSubview: _verticalScroller];
 
     [self tile];
 }
 
 - (NSScrollerKnobStyle) scrollerKnobStyle {
-    return _scrollerKnobStyle;
+    return NS_EXTRA(NSScrollView, self)->_scrollerKnobStyle;
 }
 
 - (void) setScrollerKnobStyle: (NSScrollerKnobStyle) knobStyle {
-    _scrollerKnobStyle = knobStyle;
+    NS_EXTRA(NSScrollView, self)->_scrollerKnobStyle = knobStyle;
     [_verticalScroller setKnobStyle: knobStyle];
     [_horizontalScroller setKnobStyle: knobStyle];
 }
 
 - (NSScrollerStyle) scrollerStyle {
-    return _scrollerStyle;
+    return NS_EXTRA(NSScrollView, self)->_scrollerStyle;
 }
 
 - (void) setScrollerStyle: (NSScrollerStyle) newScrollerStyle {
-    _scrollerStyle = newScrollerStyle;
+    NS_EXTRA(NSScrollView, self)->_scrollerStyle = newScrollerStyle;
     [_verticalScroller setScrollerStyle: newScrollerStyle];
     [_horizontalScroller setScrollerStyle: newScrollerStyle];
     [self tile];
@@ -849,7 +850,7 @@ static Class _rulerViewClass = nil;
     [_horizontalScroller setTarget: self];
     [_horizontalScroller setAction: @selector(_horizontalScroll:)];
 
-    if (_hasHorizontalScroller)
+    if (NS_EXTRA(NSScrollView, self)->_hasHorizontalScroller)
         [self addSubview: _horizontalScroller];
 
     [self tile];
@@ -857,15 +858,15 @@ static Class _rulerViewClass = nil;
 
 - (void) setHasVerticalScroller: (BOOL) flag {
     if (flag) {
-        if (!_hasVerticalScroller) {
-            _hasVerticalScroller = flag;
+        if (!NS_EXTRA(NSScrollView, self)->_hasVerticalScroller) {
+            NS_EXTRA(NSScrollView, self)->_hasVerticalScroller = flag;
             [self createVerticalScrollerIfNeeded];
             [self addSubview: _verticalScroller];
             [self tile];
         }
     } else {
-        if (_hasVerticalScroller) {
-            _hasVerticalScroller = flag;
+        if (NS_EXTRA(NSScrollView, self)->_hasVerticalScroller) {
+            NS_EXTRA(NSScrollView, self)->_hasVerticalScroller = flag;
             [_verticalScroller removeFromSuperview];
             [self tile];
         }
@@ -874,15 +875,15 @@ static Class _rulerViewClass = nil;
 
 - (void) setHasHorizontalScroller: (BOOL) flag {
     if (flag) {
-        if (!_hasHorizontalScroller) {
-            _hasHorizontalScroller = flag;
+        if (!NS_EXTRA(NSScrollView, self)->_hasHorizontalScroller) {
+            NS_EXTRA(NSScrollView, self)->_hasHorizontalScroller = flag;
             [self createHorizontalScrollerIfNeeded];
             [self addSubview: _horizontalScroller];
             [self tile];
         }
     } else {
-        if (_hasHorizontalScroller) {
-            _hasHorizontalScroller = flag;
+        if (NS_EXTRA(NSScrollView, self)->_hasHorizontalScroller) {
+            NS_EXTRA(NSScrollView, self)->_hasHorizontalScroller = flag;
             [_horizontalScroller removeFromSuperview];
             [self tile];
         }
@@ -890,46 +891,46 @@ static Class _rulerViewClass = nil;
 }
 
 - (void) setHasVerticalRuler: (BOOL) flag {
-    if (_hasVerticalRuler != flag) {
-        _hasVerticalRuler = flag;
+    if (NS_EXTRA(NSScrollView, self)->_hasVerticalRuler != flag) {
+        NS_EXTRA(NSScrollView, self)->_hasVerticalRuler = flag;
         [self tile];
-        [_verticalRuler setNeedsDisplay: flag];
+        [NS_EXTRA(NSScrollView, self)->_verticalRuler setNeedsDisplay: flag];
     }
 }
 
 - (void) setHasHorizontalRuler: (BOOL) flag {
-    if (_hasHorizontalRuler != flag) {
-        _hasHorizontalRuler = flag;
+    if (NS_EXTRA(NSScrollView, self)->_hasHorizontalRuler != flag) {
+        NS_EXTRA(NSScrollView, self)->_hasHorizontalRuler = flag;
         [self tile];
-        [_horizontalRuler setNeedsDisplay: flag];
+        [NS_EXTRA(NSScrollView, self)->_horizontalRuler setNeedsDisplay: flag];
     }
 }
 
 - (void) setRulersVisible: (BOOL) flag {
-    if (_rulersVisible != flag) {
-        _rulersVisible = flag;
+    if (NS_EXTRA(NSScrollView, self)->_rulersVisible != flag) {
+        NS_EXTRA(NSScrollView, self)->_rulersVisible = flag;
         [self tile];
     }
 }
 
 - (void) setVerticalLineScroll: (CGFloat) value {
     if (value > 0.0)
-        _verticalLineScroll = value;
+        NS_EXTRA(NSScrollView, self)->_verticalLineScroll = value;
 }
 
 - (void) setHorizontalLineScroll: (CGFloat) value {
     if (value > 0.0)
-        _horizontalLineScroll = value;
+        NS_EXTRA(NSScrollView, self)->_horizontalLineScroll = value;
 }
 
 - (void) setVerticalPageScroll: (CGFloat) value {
     if (value > 0.0)
-        _verticalPageScroll = value;
+        NS_EXTRA(NSScrollView, self)->_verticalPageScroll = value;
 }
 
 - (void) setHorizontalPageScroll: (CGFloat) value {
     if (value > 0.0)
-        _horizontalPageScroll = value;
+        NS_EXTRA(NSScrollView, self)->_horizontalPageScroll = value;
 }
 
 - (void) setLineScroll: (CGFloat) value {
@@ -943,47 +944,47 @@ static Class _rulerViewClass = nil;
 }
 
 - (void) setScrollsDynamically: (BOOL) flag {
-    _scrollsDynamically = flag;
+    NS_EXTRA(NSScrollView, self)->_scrollsDynamically = flag;
 }
 
 - (void) setDocumentCursor: (NSCursor *) cursor {
     [_clipView discardCursorRects];
-    [_documentCursor release];
-    _documentCursor = [cursor retain];
-    if (_documentCursor != nil)
-        [_clipView addCursorRect: [_clipView bounds] cursor: _documentCursor];
+    [NS_EXTRA(NSScrollView, self)->_documentCursor release];
+    NS_EXTRA(NSScrollView, self)->_documentCursor = [cursor retain];
+    if (NS_EXTRA(NSScrollView, self)->_documentCursor != nil)
+        [_clipView addCursorRect: [_clipView bounds] cursor: NS_EXTRA(NSScrollView, self)->_documentCursor];
 }
 
 - (void) setAutohidesScrollers: (BOOL) value {
-    _autohidesScrollers = value;
+    NS_EXTRA(NSScrollView, self)->_autohidesScrollers = value;
     // FIXME: tile or hide/show scrollers?
 }
 
 - (void) setMagnification: (CGFloat) value {
-    if (value == _magnification)
+    if (value == NS_EXTRA(NSScrollView, self)->_magnification)
         return;
 
-    _magnification = value;
+    NS_EXTRA(NSScrollView, self)->_magnification = value;
 
-    if (_magnification < _minMagnification)
-        _magnification = _minMagnification;
-    if (_magnification < _maxMagnification)
-        _magnification = _maxMagnification;
+    if (NS_EXTRA(NSScrollView, self)->_magnification < NS_EXTRA(NSScrollView, self)->_minMagnification)
+        NS_EXTRA(NSScrollView, self)->_magnification = NS_EXTRA(NSScrollView, self)->_minMagnification;
+    if (NS_EXTRA(NSScrollView, self)->_magnification < NS_EXTRA(NSScrollView, self)->_maxMagnification)
+        NS_EXTRA(NSScrollView, self)->_magnification = NS_EXTRA(NSScrollView, self)->_maxMagnification;
 
     // TODO: calculate new bounds and call setBounds
 }
 
 - (void) setMinMagnification: (CGFloat) value {
-    _minMagnification = value;
+    NS_EXTRA(NSScrollView, self)->_minMagnification = value;
 
-    if (_minMagnification > _magnification)
+    if (NS_EXTRA(NSScrollView, self)->_minMagnification > NS_EXTRA(NSScrollView, self)->_magnification)
         [self setMagnification: value];
 }
 
 - (void) setMaxMagnification: (CGFloat) value {
-    _maxMagnification = value;
+    NS_EXTRA(NSScrollView, self)->_maxMagnification = value;
 
-    if (_maxMagnification < _magnification)
+    if (NS_EXTRA(NSScrollView, self)->_maxMagnification < NS_EXTRA(NSScrollView, self)->_magnification)
         [self setMagnification: value];
 }
 
@@ -1005,7 +1006,7 @@ static Class _rulerViewClass = nil;
 }
 
 - (void) setAllowsMagnification: (BOOL) value {
-    _allowsMagnification = value;
+    NS_EXTRA(NSScrollView, self)->_allowsMagnification = value;
 }
 
 - (void) tile {
@@ -1030,10 +1031,10 @@ static Class _rulerViewClass = nil;
     [_clipView setFrame: frame];
 
     frame = [self horizontalRulerFrame];
-    [_horizontalRuler setFrame: frame];
+    [NS_EXTRA(NSScrollView, self)->_horizontalRuler setFrame: frame];
 
     frame = [self verticalRulerFrame];
-    [_verticalRuler setFrame: frame];
+    [NS_EXTRA(NSScrollView, self)->_verticalRuler setFrame: frame];
 
     frame = [_clipView bounds];
     if (![self hasVerticalScroller])
@@ -1044,8 +1045,8 @@ static Class _rulerViewClass = nil;
 
     [self reflectScrolledClipView: _clipView];
     [_clipView discardCursorRects];
-    if (_documentCursor != nil)
-        [_clipView addCursorRect: [_clipView bounds] cursor: _documentCursor];
+    if (NS_EXTRA(NSScrollView, self)->_documentCursor != nil)
+        [_clipView addCursorRect: [_clipView bounds] cursor: NS_EXTRA(NSScrollView, self)->_documentCursor];
 }
 
 - (void) reflectScrolledClipView: (NSClipView *) clipView {
@@ -1056,9 +1057,9 @@ static Class _rulerViewClass = nil;
 
         if (docView == nil) {
             [_verticalScroller setEnabled: NO];
-            [_verticalScroller setHidden: _autohidesScrollers];
+            [_verticalScroller setHidden: NS_EXTRA(NSScrollView, self)->_autohidesScrollers];
             [_horizontalScroller setEnabled: NO];
-            [_horizontalScroller setHidden: _autohidesScrollers];
+            [_horizontalScroller setHidden: NS_EXTRA(NSScrollView, self)->_autohidesScrollers];
         } else {
             NSRect docRect = [docView frame];
             NSRect clipRect = [_clipView bounds];
@@ -1067,7 +1068,7 @@ static Class _rulerViewClass = nil;
 
             if (heightDiff <= 0) {
                 [_verticalScroller setEnabled: NO];
-                [_verticalScroller setHidden: _autohidesScrollers];
+                [_verticalScroller setHidden: NS_EXTRA(NSScrollView, self)->_autohidesScrollers];
             } else {
                 CGFloat value =
                         (heightDiff <= 0)
@@ -1087,7 +1088,7 @@ static Class _rulerViewClass = nil;
 
             if (widthDiff <= 0) {
                 [_horizontalScroller setEnabled: NO];
-                [_horizontalScroller setHidden: _autohidesScrollers];
+                [_horizontalScroller setHidden: NS_EXTRA(NSScrollView, self)->_autohidesScrollers];
             } else {
                 CGFloat value =
                         (widthDiff <= 0)
@@ -1105,8 +1106,8 @@ static Class _rulerViewClass = nil;
 
         // Can't do sublayout in here because it messes with the tile method
 
-        [_horizontalRuler invalidateHashMarks];
-        [_verticalRuler invalidateHashMarks];
+        [NS_EXTRA(NSScrollView, self)->_horizontalRuler invalidateHashMarks];
+        [NS_EXTRA(NSScrollView, self)->_verticalRuler invalidateHashMarks];
 
         // keep the header in line with the document
         // using scrollToPoint: ran into some ordering issues, since
@@ -1120,12 +1121,12 @@ static Class _rulerViewClass = nil;
 
 - (void) drawRect: (NSRect) rect {
 
-    if (_drawsBackground) {
+    if (NS_EXTRA(NSScrollView, self)->_drawsBackground) {
         [[self backgroundColor] setFill];
         NSRectFill(rect);
     }
 
-    switch (_borderType) {
+    switch (NS_EXTRA(NSScrollView, self)->_borderType) {
     case NSNoBorder:
         break;
 
@@ -1176,8 +1177,8 @@ static Class _rulerViewClass = nil;
     NSView *docView = [self documentView];
     NSRect docRect = [docView frame];
     NSRect clipRect = [_clipView bounds];
-    CGFloat lineScroll = _verticalLineScroll;
-    CGFloat pageScroll = _verticalPageScroll;
+    CGFloat lineScroll = NS_EXTRA(NSScrollView, self)->_verticalLineScroll;
+    CGFloat pageScroll = NS_EXTRA(NSScrollView, self)->_verticalPageScroll;
 
     if (![docView isFlipped]) {
         lineScroll = 0.0 - lineScroll;
@@ -1224,19 +1225,19 @@ static Class _rulerViewClass = nil;
 
     switch ([scroller hitPart]) {
     case NSScrollerIncrementLine:
-        clipRect.origin.x += _horizontalLineScroll;
+        clipRect.origin.x += NS_EXTRA(NSScrollView, self)->_horizontalLineScroll;
         break;
 
     case NSScrollerDecrementLine:
-        clipRect.origin.x -= _horizontalLineScroll;
+        clipRect.origin.x -= NS_EXTRA(NSScrollView, self)->_horizontalLineScroll;
         break;
 
     case NSScrollerIncrementPage:
-        clipRect.origin.x += _horizontalPageScroll;
+        clipRect.origin.x += NS_EXTRA(NSScrollView, self)->_horizontalPageScroll;
         break;
 
     case NSScrollerDecrementPage:
-        clipRect.origin.x -= _horizontalPageScroll;
+        clipRect.origin.x -= NS_EXTRA(NSScrollView, self)->_horizontalPageScroll;
         break;
 
     case NSScrollerKnobSlot:
