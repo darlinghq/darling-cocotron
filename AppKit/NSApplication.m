@@ -2206,7 +2206,9 @@ int NSApplicationMain(int argc, const char *argv[]) {
     NSStoryboard *storyboard = [NSStoryboard mainStoryboard];
     if (storyboard != nil)
         [storyboard _instantiateAsMainStoryboard];
-    else {
+    else if (nibFile != nil) {
+        // An app that declares no NSMainNibFile (a SwiftUI app, or one that builds its UI in code)
+        // has no main nib to load.
         nibFile = [nibFile stringByDeletingPathExtension];
 
         if (![NSBundle loadNibNamed: nibFile owner: NSApp])
