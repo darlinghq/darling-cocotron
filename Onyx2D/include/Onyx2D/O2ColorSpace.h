@@ -23,6 +23,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 typedef O2ColorSpace *O2ColorSpaceRef;
 
+#import <Onyx2D/O2ColorConversion.h>
 #import <Onyx2D/O2Function.h>
 
 typedef enum {
@@ -64,6 +65,10 @@ O2ColorSpaceRef O2ColorSpaceCreateDeviceN(const char **names,
 
 O2ColorSpaceRef O2ColorSpaceCreatePlatformRGB(void);
 BOOL O2ColorSpaceIsPlatformRGB(O2ColorSpaceRef self);
+
+// The colorimetric profile of a named color space (see O2ColorConversion.h);
+// NO for device, indexed, pattern and DeviceN spaces and for names without one.
+BOOL O2ColorSpaceGetColorProfile(O2ColorSpaceRef self, O2ColorProfile *profile);
 
 size_t O2ColorSpaceGetNumberOfComponents(O2ColorSpaceRef self);
 

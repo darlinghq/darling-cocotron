@@ -291,6 +291,25 @@ ONYX2D_STATIC O2Paint *paintFromColor(O2Context_builtin *self, O2ColorRef color,
     O2Paint *result = nil;
     O2PatternRef pattern = O2ColorGetPattern(color);
 
+    // A color of a profiled space is converted to the space of the surface.
+    O2ColorRef converted = NULL;
+    if (pattern == NULL) {
+        O2ColorSpaceRef surfaceSpace = O2ImageGetColorSpace(self->_surface);
+        O2ColorSpaceRef colorSpace = O2ColorGetColorSpace(color);
+        O2ColorProfile surfaceProfile, colorProfile;
+        CFStringRef surfaceName = O2ColorSpaceGetName(surfaceSpace);
+        CFStringRef colorName = O2ColorSpaceGetName(colorSpace);
+        if (surfaceName != NULL && colorName != NULL &&
+            !CFEqual(surfaceName, colorName) &&
+            O2ColorSpaceGetColorProfile(surfaceSpace, &surfaceProfile) &&
+            O2ColorSpaceGetColorProfile(colorSpace, &colorProfile)) {
+            converted = O2ColorCreateCopyByMatchingToColorSpace(surfaceSpace,
+                                                                color);
+            if (converted != NULL)
+                color = converted;
+        }
+    }
+
     if (pattern != NULL) {
         O2GState *gState = O2ContextCurrentGState(self);
         O2Size size = [pattern bounds].size;
@@ -330,6 +349,7 @@ ONYX2D_STATIC O2Paint *paintFromColor(O2Context_builtin *self, O2ColorRef color,
                                  surfaceToPaintTransform: surfaceToPaintMatrix];
     }
 
+    O2ColorRelease(converted);
     return result;
 }
 
