@@ -86,7 +86,7 @@ static NSMutableDictionary *sharedByName = nil;
 + (void) buildFontFamilies {
     NSSet *initialFamilyNames = [[NSDisplay currentDisplay] allFontFamilyNames];
     for (NSString *familyName in initialFamilyNames) {
-        [self addFontFamilyWithName: familyName];
+        [self addFontFamilyWithName: familyName]->_installed = YES;
     }
 }
 
@@ -144,6 +144,16 @@ static NSMutableDictionary *sharedByName = nil;
     }
 
     return (result == (NSArray *) [NSNull null]) ? nil : result;
+}
+
++ (NSFontFamily *) installedFontFamilyWithName: (NSString *) name {
+    if (name == nil)
+        return nil;
+    @synchronized([NSFontFamily class]) {
+        [self fontFamilies];
+        NSFontFamily *family = [sharedByName objectForKey: name];
+        return family != nil && family->_installed ? family : nil;
+    }
 }
 
 + (NSFontFamily *) fontFamilyWithTypefaceName: (NSString *) name {

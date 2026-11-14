@@ -28,10 +28,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     NSString *_name;
     NSMutableArray *_typefaces;
     BOOL _typefacesLoaded;
+    BOOL _installed;
 }
 
 + (NSArray *) allFontFamilyNames;
 + (NSFontFamily *) fontFamilyWithName: (NSString *) name;
+// A family the display reports, or nil. fontFamilyWithName: pretends to have any name; this does not.
++ (NSFontFamily *) installedFontFamilyWithName: (NSString *) name;
 + (NSFontFamily *) fontFamilyWithTypefaceName: (NSString *) name;
 + (NSFontTypeface *) fontTypefaceWithName: (NSString *) name;
 
