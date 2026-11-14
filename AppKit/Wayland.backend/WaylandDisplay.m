@@ -224,19 +224,13 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         return nil;
     }
 
-    // Skip -[X11Display init], which connects to an X server.
-    struct objc_super superInfo = {self, [NSDisplay class]};
-    self = ((id (*)(struct objc_super *, SEL)) objc_msgSendSuper)(&superInfo,
-                                                                 _cmd);
+    self = [super init];
     if (self == nil)
         return nil;
 
     _outputs = [NSMutableArray new];
     _afterDispatch = [NSMutableArray new];
     _windows = CFArrayCreateMutable(NULL, 0, NULL);
-    // Inherited from X11Display, whose -init was skipped above, so nothing else
-    // allocates it. A nil dictionary would make every click the first click.
-    _buttonClickCounts = [NSMutableDictionary new];
     _namedPasteboards = [NSMutableDictionary new];
     _repeatRate = 25;
     _repeatDelay = 600;
@@ -400,9 +394,6 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
     if (_windows != NULL)
         CFRelease(_windows);
 
-    // _buttonClickCounts is inherited, not owned separately: X11Display's -dealloc
-    // releases it, so doing it here too would over-release.
-    // X11Display's -dealloc only releases the X resources that exist.
     [super dealloc];
 }
 
@@ -469,11 +460,7 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
 {
     [self processPendingEvents];
 
-    // NSDisplay's queue handling, without X11Display's X event processing.
-    struct objc_super superInfo = {self, [NSDisplay class]};
-    return ((NSEvent * (*) (struct objc_super *, SEL, NSEventMask, NSDate *,
-                            NSRunLoopMode, BOOL)) objc_msgSendSuper)(
-            &superInfo, _cmd, mask, untilDate, mode, dequeue);
+    return [super nextEventMatchingMask: mask untilDate: untilDate inMode: mode dequeue: dequeue];
 }
 
 #pragma mark - Globals
@@ -1613,7 +1600,7 @@ static NSUInteger modifierDeviceMask(int code) {
                                            XKB_STATE_MODS_EFFECTIVE) > 0;
 }
 
-// The same mapping as -[X11Display modifierFlagsForState:].
+// The same mapping as the X11 backend's modifier flags for a key state.
 - (NSUInteger) currentModifierFlags {
     NSUInteger flags = 0;
     for (NSNumber *identity in [_heldKeyIdentities allValues])
@@ -1768,7 +1755,7 @@ static NSUInteger modifierDeviceMask(int code) {
         *fullName = layoutName;
 }
 
-// The same two-table layout (unshifted, shifted) as -[X11Display keyboardLayout:].
+// The same two-table layout (unshifted, shifted) as the X11 backend's keyboard layout.
 - (UCKeyboardLayout *) keyboardLayout: (uint32_t *) byteLength {
     struct Layout {
         UCKeyboardLayout layout;
@@ -2379,7 +2366,7 @@ static NSUInteger modifierDeviceMask(int code) {
     }
 }
 
-#pragma mark - Unsupported or X11-only
+#pragma mark - Clipboard, drag and drop, input state and unsupported calls
 
 - (uint32_t) clipboardSerial {
     return _keyboardWindow != nil ? _inputSerial : 0;
@@ -2426,8 +2413,6 @@ static NSUInteger modifierDeviceMask(int code) {
 - (void) beep {
 }
 
-// X11Display answers these from the X server, and this display never connected to one, so
-// the inherited versions would call Xlib with no connection.
 - (NSUInteger) pressedMouseButtons {
     return _pressedButtons;
 }
@@ -2435,28 +2420,6 @@ static NSUInteger modifierDeviceMask(int code) {
 // Wayland has no protocol to activate another client's window.
 - (BOOL) activateProcessIdentifier: (pid_t) processIdentifier {
     return NO;
-}
-
-- (Display *) display {
-    return NULL;
-}
-
-- (void) setWindow: (id) window forID: (XID) i {
-}
-
-- (id) windowForID: (XID) i {
-    return nil;
-}
-
-- (NSEventModifierFlags) modifierFlagsForState: (unsigned int) state {
-    return 0;
-}
-
-- (void) postXEvent: (XEvent *) ev {
-}
-
-- (int) handleError: (XErrorEvent *) errorEvent {
-    return 0;
 }
 
 @end

@@ -18,21 +18,19 @@
 
 // Wayland display backend.
 //
-// Selection: the backend is opt-in. Its NSPriority is above X11's, but -init
-// returns nil unless DARLING_APPKIT_BACKEND=wayland, so NSDisplay goes on to
-// the X11 backend as before. It also returns nil (after logging why) when
-// libwayland-client/libxkbcommon can't be loaded or the compositor named by
-// WAYLAND_DISPLAY can't be reached, which falls back to X11 the same way.
+// Selection: see WaylandBackendSelected(): DARLING_APPKIT_BACKEND, then the DisplayBackend
+// preference, then whether WAYLAND_DISPLAY is set. -init returns nil when the backend is not
+// selected and (after logging why) when libwayland-client/libxkbcommon can't be loaded or the
+// compositor can't be reached, which makes NSDisplay go on to the X11 backend.
 //
-// WaylandDisplay subclasses X11Display to share its backend-independent parts
-// (system colours, fontconfig font enumeration, metrics) without copying them.
-// It never opens an X connection and overrides every method that uses one.
+// WaylandDisplay subclasses DarlingDisplay, which holds the parts shared with the
+// X11 backend (system colours, fontconfig font enumeration, metrics, click counts).
 //
 // Toplevel origins remain virtual because Wayland controls global placement.
 // Clipboard and incoming copy drops use wl_data_device; EGL subwindows use
 // synchronized subsurfaces. Outgoing drags are a follow-on.
 
-#import "X11Display.h"
+#import "../private-include/AppKit/DarlingDisplay.h"
 #include <stdint.h>
 #include <wayland-util.h>
 #include "WaylandFullscreen.h"
@@ -90,7 +88,7 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
                                      union wl_argument *args,
                                      WaylandObjectKind kind, id object);
 
-@interface WaylandDisplay : X11Display {
+@interface WaylandDisplay : DarlingDisplay {
 @public
     struct wl_display *_wlDisplay;
     struct wl_proxy *_registry;

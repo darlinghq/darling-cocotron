@@ -6,7 +6,7 @@
 //  Copyright 2008 -. All rights reserved.
 //
 
-#import <AppKit/NSDisplay.h>
+#import "../private-include/AppKit/DarlingDisplay.h"
 #import "../../CoreGraphics/X11.backend/X11Monitors.h"
 #import "X11RelativeMouseGrab.h"
 #import <X11/Xlib.h>
@@ -20,7 +20,7 @@
 
 @class X11Cursor, X11AppMenu, X11Window;
 
-@interface X11Display : NSDisplay {
+@interface X11Display : DarlingDisplay {
     Display *_display;
     int _fileDescriptor;
 #ifndef DARLING
@@ -39,10 +39,7 @@
     X11AppMenu *_appMenu;
 
     id lastFocusedWindow;
-    // Clicks are grouped per button and per window, so state for the left
-    // button cannot make the next middle-button click look like a double click.
-    NSMutableDictionary *_buttonClickCounts;
-    NSInteger _clickCount;
+    // The click counts per button are in DarlingDisplay.
     Time _lastClickTime;       // X server milliseconds, wraps modulo 2^32.
     unsigned int _lastClickButton;
     XID _lastClickWindow;
