@@ -921,6 +921,99 @@ BOOL O2PDFParseDictionary(const char *bytes, unsigned length,
     return [object checkForType: kO2PDFObjectTypeDictionary value: dictionaryp];
 }
 
+// Reads a big-endian field of `width` bytes; a width of 0 gives `missing`.
+static O2PDFInteger xrefStreamField(const uint8_t *bytes, O2PDFInteger width,
+                                    O2PDFInteger missing)
+{
+    O2PDFInteger value = 0, i;
+
+    if (width == 0)
+        return missing;
+    for (i = 0; i < width; i++)
+        value = (value << 8) | bytes[i];
+    return value;
+}
+
+// A cross-reference stream (PDF 1.5, 7.5.8): an indirect stream object of
+// Type XRef whose data holds one entry per object, W giving the width of its
+// three fields (type, then position and generation for type 1, object stream
+// and index for type 2), Index the object numbers they cover. Its dictionary
+// is the trailer.
+static BOOL O2PDFParse_xrefStreamAtPosition(NSData *data, O2PDFInteger position,
+                                            O2PDFxref **xrefp)
+{
+    const char *bytes = [data bytes];
+    unsigned length = [data length];
+    O2PDFInteger number, generation, scan;
+    O2PDFObject *object;
+    O2PDFStream *stream;
+    O2PDFDictionary *dictionary;
+    O2PDFArray *widths, *index;
+    O2PDFInteger w[3], size, i;
+    const char *type;
+
+    if (!O2PDFScanInteger(bytes, length, position, &scan, &number) ||
+        !O2PDFScanInteger(bytes, length, scan, &scan, &generation))
+        return debugError(bytes, length, position, @"Expecting xref or a cross-reference stream");
+
+    O2PDFxref *table = [[[O2PDFxref alloc] initWithData: data] autorelease];
+
+    if (!O2PDFParseIndirectObject(data, position, &object, number, generation, table) ||
+        ![object checkForType: kO2PDFObjectTypeStream value: &stream])
+        return debugError(bytes, length, position, @"Expecting a cross-reference stream");
+
+    dictionary = [stream dictionary];
+    if (![dictionary getNameForKey: "Type" value: &type] || strcmp(type, "XRef") != 0 ||
+        ![dictionary getArrayForKey: "W" value: &widths] || [widths count] != 3 ||
+        ![dictionary getIntegerForKey: "Size" value: &size])
+        return debugError(bytes, length, position, @"Invalid cross-reference stream dictionary");
+
+    for (i = 0; i < 3; i++)
+        if (![widths getIntegerAtIndex: i value: &w[i]] || w[i] < 0 || w[i] > 8)
+            return debugError(bytes, length, position, @"Invalid W in cross-reference stream");
+
+    NSData *entries = [stream data];
+    const uint8_t *entry = [entries bytes];
+    const uint8_t *end = entry + [entries length];
+    O2PDFInteger entryLength = w[0] + w[1] + w[2];
+
+    if (![dictionary getArrayForKey: "Index" value: &index])
+        index = nil;
+
+    NSUInteger subsections = index ? [index count] / 2 : 1;
+
+    for (NSUInteger s = 0; s < subsections; s++) {
+        O2PDFInteger start = 0, count = size;
+
+        if (index && (![index getIntegerAtIndex: s * 2 value: &start] ||
+                      ![index getIntegerAtIndex: s * 2 + 1 value: &count]))
+            return debugError(bytes, length, position, @"Invalid Index in cross-reference stream");
+
+        for (O2PDFInteger k = 0; k < count; k++, entry += entryLength) {
+            if (entryLength == 0 || entry + entryLength > end)
+                break;
+
+            O2PDFInteger kind = xrefStreamField(entry, w[0], 1);
+            O2PDFInteger two = xrefStreamField(entry + w[0], w[1], 0);
+            O2PDFInteger three = xrefStreamField(entry + w[0] + w[1], w[2], 0);
+
+            if (kind == 1)
+                [table addEntry: [O2PDFxrefEntry xrefEntryWithPosition: two
+                                                                number: start + k
+                                                            generation: three]];
+            else if (kind == 2)
+                [table addEntry: [O2PDFxrefEntry xrefEntryInObjectStream: two
+                                                                   index: three
+                                                                  number: start + k]];
+            // 0: a free object; other types are reserved and ignored.
+        }
+    }
+
+    [table setTrailer: dictionary];
+    *xrefp = table;
+    return YES;
+}
+
 BOOL O2PDFParse_xrefAtPosition(NSData *data, O2PDFInteger position,
                                O2PDFxref **xrefp)
 {
@@ -929,6 +1022,13 @@ BOOL O2PDFParse_xrefAtPosition(NSData *data, O2PDFInteger position,
     O2PDFxref *table;
     O2PDFDictionary *trailer;
     O2PDFObject_identifier *identifier = nil;
+
+    O2PDFInteger afterKeyword;
+
+    // No xref keyword: a cross-reference stream (PDF 1.5) starts there.
+    if (!O2PDFScanIdentifier(bytes, length, position, &afterKeyword, &identifier) ||
+        [identifier identifier] != O2PDFIdentifier_xref)
+        return O2PDFParse_xrefStreamAtPosition(data, position, xrefp);
 
     if (!O2PDFScanIdentifier(bytes, length, position, &position, &identifier))
         return debugError(bytes, length, position, @"Expecting xref identifier",
@@ -1034,8 +1134,11 @@ BOOL O2PDFParse_xref(NSData *data, O2PDFxref **xrefp) {
     if (!O2PDFScanInteger(bytes, length, position, &ignore, &position))
         return debugError(bytes, length, position, @"Expecting integer");
 
-    do {
+    // Each section links to the one before through Prev; a bound on their
+    // number keeps a Prev loop in a damaged file from running forever.
+    for (int sections = 0; sections < 4096; sections++) {
         O2PDFxref *table;
+        O2PDFInteger streamPosition;
 
         if (!O2PDFParse_xrefAtPosition(data, position, &table))
             return NO;
@@ -1047,10 +1150,21 @@ BOOL O2PDFParse_xref(NSData *data, O2PDFxref **xrefp) {
 
         lastTable = table;
 
+        // Hybrid file (7.5.8.4): the objects a PDF 1.5 reader finds in object
+        // streams are listed in the cross-reference stream at XRefStm, looked
+        // up after this section and before the previous one.
+        if ([[table trailer] getIntegerForKey: "XRefStm" value: &streamPosition]) {
+            O2PDFxref *streamTable;
+
+            if (O2PDFParse_xrefStreamAtPosition(data, streamPosition, &streamTable)) {
+                [lastTable setPreviousTable: streamTable];
+                lastTable = streamTable;
+            }
+        }
+
         if (![[table trailer] getIntegerForKey: "Prev" value: &position])
             break;
-
-    } while (YES);
+    }
 
     return YES;
 }

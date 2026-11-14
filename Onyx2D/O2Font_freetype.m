@@ -436,11 +436,16 @@ O2FontRef O2FontCreateWithCodePointCoverage(const uint32_t *codePoints,
         _ftEncoding = FT_ENCODING_UNICODE;
     } else if (hasMacRoman) {
         _ftEncoding = FT_ENCODING_APPLE_ROMAN;
-    } else {
+    } else if (numberOfCharMaps > 0) {
         _ftEncoding = face->charmaps[0]->encoding;
+    } else {
+        // No cmap at all: common in the TrueType subsets PDFs embed for
+        // CIDFontType2 fonts, which address glyphs by index, not by character.
+        _ftEncoding = FT_ENCODING_NONE;
     }
 
-    if (FT_Select_Charmap(face, _ftEncoding) != 0) {
+    if (_ftEncoding != FT_ENCODING_NONE &&
+        FT_Select_Charmap(face, _ftEncoding) != 0) {
         NSLog(@"FT_Select_Charmap(%d) failed", _ftEncoding);
     }
 
