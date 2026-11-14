@@ -247,15 +247,12 @@ CGPathRef CGPathCreateCopyByTransformingPath(CGPathRef path,
     return (CGPathRef)copy;
 }
 
+// Onyx2D has one path class and its copies are mutable, so the "immutable" and the mutable transformed copy are one
+// implementation.
 CGMutablePathRef CGPathCreateMutableCopyByTransformingPath(CGPathRef path,
                                                            const CGAffineTransform *transform)
 {
-    if (path == NULL)
-        return NULL;
-    O2MutablePathRef copy = O2PathCreateMutableCopy((O2PathRef)path);
-    if (transform != NULL)
-        O2PathApplyTransform(copy, *(O2AffineTransform *) transform);
-    return (CGMutablePathRef)copy;
+    return (CGMutablePathRef)CGPathCreateCopyByTransformingPath(path, transform);
 }
 
 // GUESS (not in the public documentation): the private continuous ("squircle") rounded rectangle is answered with the
