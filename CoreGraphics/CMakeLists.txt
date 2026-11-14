@@ -54,7 +54,7 @@ set_property(SOURCE
 	CGSSurface.m
 	CGSRegion.m
 	CGSServerSPI.m
-	CGSSymbolicHotKeys.c
+	CGSSymbolicHotKeys.m
 
 	APPEND PROPERTY COMPILE_FLAGS "-include Foundation/Foundation.h"
 )
@@ -110,7 +110,7 @@ set(CoreGraphics_sources
 	CGSRegion.m
 	CGSScreen.m
 	CGSServerSPI.m
-	CGSSymbolicHotKeys.c
+	CGSSymbolicHotKeys.m
 	CGEvent.m
 	CGEventSource.m
 	CGEventTap.m
