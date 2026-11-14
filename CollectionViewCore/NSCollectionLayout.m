@@ -675,6 +675,8 @@ static NSDirectionalRectEdge EdgesForAlignment(NSRectAlignment alignment) {
     NSArray *_boundarySupplementaryItems;
     NSArray *_decorationItems;
     BOOL _supplementariesFollowContentInsets;
+    NSCollectionLayoutSectionOrthogonalScrollingBehavior _orthogonalScrollingBehavior;
+    NSCollectionLayoutSectionVisibleItemsInvalidationHandler _visibleItemsInvalidationHandler;
 }
 
 + (instancetype) sectionWithGroup: (NSCollectionLayoutGroup *) group {
@@ -689,6 +691,7 @@ static NSDirectionalRectEdge EdgesForAlignment(NSRectAlignment alignment) {
     [_group release];
     [_boundarySupplementaryItems release];
     [_decorationItems release];
+    [_visibleItemsInvalidationHandler release];
     [super dealloc];
 }
 
@@ -736,6 +739,24 @@ static NSDirectionalRectEdge EdgesForAlignment(NSRectAlignment alignment) {
     _decorationItems = items;
 }
 
+- (NSCollectionLayoutSectionOrthogonalScrollingBehavior) orthogonalScrollingBehavior {
+    return _orthogonalScrollingBehavior;
+}
+
+- (void) setOrthogonalScrollingBehavior: (NSCollectionLayoutSectionOrthogonalScrollingBehavior) behavior {
+    _orthogonalScrollingBehavior = behavior;
+}
+
+- (NSCollectionLayoutSectionVisibleItemsInvalidationHandler) visibleItemsInvalidationHandler {
+    return _visibleItemsInvalidationHandler;
+}
+
+- (void) setVisibleItemsInvalidationHandler: (NSCollectionLayoutSectionVisibleItemsInvalidationHandler) handler {
+    handler = [handler copy];
+    [_visibleItemsInvalidationHandler release];
+    _visibleItemsInvalidationHandler = handler;
+}
+
 - (id) copyWithZone: (NSZone *) zone {
     NSCollectionLayoutSection *copy = [[[self class] allocWithZone: zone] init];
 
@@ -745,6 +766,8 @@ static NSDirectionalRectEdge EdgesForAlignment(NSRectAlignment alignment) {
     copy->_boundarySupplementaryItems = [_boundarySupplementaryItems copy];
     copy->_decorationItems = [_decorationItems copy];
     copy->_supplementariesFollowContentInsets = _supplementariesFollowContentInsets;
+    copy->_orthogonalScrollingBehavior = _orthogonalScrollingBehavior;
+    copy->_visibleItemsInvalidationHandler = [_visibleItemsInvalidationHandler copy];
     return copy;
 }
 

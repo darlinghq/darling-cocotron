@@ -97,7 +97,25 @@ int main(void) {
         expect([[section decorationItems] isEqual: @[background]], @"decoration items round-trip");
         expect(![section supplementariesFollowContentInsets], @"supplementariesFollowContentInsets round-trips");
 
+        expect([section orthogonalScrollingBehavior] == NSCollectionLayoutSectionOrthogonalScrollingBehaviorNone &&
+                       [section visibleItemsInvalidationHandler] == nil,
+               @"a section does not scroll orthogonally and has no visible items handler to start with");
+        __block int handlerCalls = 0;
+        NSCollectionLayoutSectionVisibleItemsInvalidationHandler handler =
+                ^(NSArray<id<NSCollectionLayoutVisibleItem>> *items, NSPoint offset, id<NSCollectionLayoutEnvironment> environment) {
+                    handlerCalls++;
+                };
+        [section setOrthogonalScrollingBehavior: NSCollectionLayoutSectionOrthogonalScrollingBehaviorGroupPagingCentered];
+        [section setVisibleItemsInvalidationHandler: handler];
+        expect([section orthogonalScrollingBehavior] == NSCollectionLayoutSectionOrthogonalScrollingBehaviorGroupPagingCentered,
+               @"the scrolling behavior round-trips");
+        [section visibleItemsInvalidationHandler](@[], NSZeroPoint, nil);
+        expect(handlerCalls == 1, @"the handler comes back and runs");
+
         NSCollectionLayoutSection *sectionCopy = [[section copy] autorelease];
+        expect([sectionCopy orthogonalScrollingBehavior] == NSCollectionLayoutSectionOrthogonalScrollingBehaviorGroupPagingCentered &&
+                       [sectionCopy visibleItemsInvalidationHandler] != nil,
+               @"the copy keeps the scrolling behavior and the handler");
         expect([sectionCopy isMemberOfClass: sectionClass] && sectionCopy != section, @"a section copies to a new section");
         expect([sectionCopy contentInsets].leading == 6 && [sectionCopy interGroupSpacing] == 12 &&
                        [[sectionCopy boundarySupplementaryItems] isEqual: @[header]] &&

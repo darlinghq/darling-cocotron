@@ -220,6 +220,45 @@ typedef NSArray<NSCollectionLayoutGroupCustomItem *> * (^NSCollectionLayoutGroup
 
 @end
 
+// How a section scrolls across the main axis of its layout. The case order is the documented one; the values are a
+// GUESS (the documentation gives no raw values).
+typedef NS_ENUM(NSInteger, NSCollectionLayoutSectionOrthogonalScrollingBehavior) {
+    NSCollectionLayoutSectionOrthogonalScrollingBehaviorNone = 0,
+    NSCollectionLayoutSectionOrthogonalScrollingBehaviorContinuous,
+    NSCollectionLayoutSectionOrthogonalScrollingBehaviorContinuousGroupLeadingBoundary,
+    NSCollectionLayoutSectionOrthogonalScrollingBehaviorPaging,
+    NSCollectionLayoutSectionOrthogonalScrollingBehaviorGroupPaging,
+    NSCollectionLayoutSectionOrthogonalScrollingBehaviorGroupPagingCentered,
+};
+
+// The category of a layout element. The case order is the documented one; the values are a GUESS.
+typedef NS_ENUM(NSInteger, NSCollectionElementCategory) {
+    NSCollectionElementCategoryItem,
+    NSCollectionElementCategorySupplementaryView,
+    NSCollectionElementCategoryDecorationView,
+    NSCollectionElementCategoryInterItemGap,
+};
+
+// An item that is on screen, as a visible items invalidation handler sees it.
+@protocol NSCollectionLayoutVisibleItem <NSObject>
+@property(readonly) NSString *name;
+@property(readonly) NSIndexPath *indexPath;
+@property(readonly, nullable) NSString *representedElementKind;
+@property(readonly) NSCollectionElementCategory representedElementCategory;
+@property CGFloat alpha;
+@property(getter=isHidden) BOOL hidden;
+@property(readonly) NSRect frame;
+@property(readonly) NSRect bounds;
+@property NSPoint center;
+@property NSInteger zIndex;
+@end
+
+// Called before each layout cycle, with the section's visible items, the scroll offset and the environment. The
+// handler is stored and handed back; nothing calls it, because no layout engine exists yet.
+typedef void (^NSCollectionLayoutSectionVisibleItemsInvalidationHandler)(
+        NSArray<id<NSCollectionLayoutVisibleItem>> *visibleItems, NSPoint contentOffset,
+        id<NSCollectionLayoutEnvironment> layoutEnvironment);
+
 @interface NSCollectionLayoutSection : NSObject <NSCopying>
 
 + (instancetype) sectionWithGroup: (NSCollectionLayoutGroup *) group;
@@ -230,6 +269,8 @@ typedef NSArray<NSCollectionLayoutGroupCustomItem *> * (^NSCollectionLayoutGroup
 // GUESS: YES by default; the documentation does not give the default.
 @property BOOL supplementariesFollowContentInsets;
 @property(copy) NSArray<NSCollectionLayoutDecorationItem *> *decorationItems;
+@property NSCollectionLayoutSectionOrthogonalScrollingBehavior orthogonalScrollingBehavior;
+@property(copy, nullable) NSCollectionLayoutSectionVisibleItemsInvalidationHandler visibleItemsInvalidationHandler;
 
 @end
 
