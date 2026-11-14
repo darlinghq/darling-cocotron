@@ -29,8 +29,8 @@
 // It never opens an X connection and overrides every method that uses one.
 //
 // Toplevel origins remain virtual because Wayland controls global placement.
-// Clipboard and incoming copy drops use wl_data_device; outgoing drags and
-// OpenGL subwindows are follow-ons.
+// Clipboard and incoming copy drops use wl_data_device; EGL subwindows use
+// synchronized subsurfaces. Outgoing drags are a follow-on.
 
 #import "X11Display.h"
 #include <stdint.h>
@@ -44,6 +44,10 @@ struct xkb_keymap;
 struct xkb_state;
 
 @class WaylandCursor, WaylandWindow, WaylandPasteboard, WaylandDraggingManager;
+
+@protocol WaylandFractionalScaleOwner
+- (void) preferredScaleChanged: (uint32_t) scale120;
+@end
 
 // Identifies the object a dispatched event belongs to.
 typedef enum {
@@ -66,6 +70,7 @@ typedef enum {
     WaylandObjectDataDevice,
     WaylandObjectDataOffer,
     WaylandObjectDataSource,
+    WaylandObjectFractionalScale,
 } WaylandObjectKind;
 
 // The dispatcher installed on every proxy (see WaylandLibrary.h for why listeners
@@ -87,8 +92,12 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     struct wl_display *_wlDisplay;
     struct wl_proxy *_registry;
     struct wl_proxy *_compositor;
+    struct wl_proxy *_viewporter, *_fractionalScaleManager;
+    uint32_t _viewporterName, _fractionalScaleManagerName;
     struct wl_proxy *_logicalOutputManager, *_legacyLogicalOutputManager;
     uint32_t _logicalOutputManagerName;
+    struct wl_proxy *_subcompositor;
+    BOOL _eglAvailable;
     struct wl_proxy *_shm;
     struct wl_proxy *_wmBase;
     struct wl_proxy *_decorationManager;
@@ -150,10 +159,11 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     CFRunLoopTimerRef _repeatTimer;
 
     struct wl_cursor_theme *_cursorTheme;
-    int32_t _cursorThemeScale;
-    struct wl_proxy *_cursorSurface;
+    uint32_t _cursorThemeScale120;
+    struct wl_proxy *_cursorSurface, *_cursorFractionalScale, *_cursorViewport;
+    uint32_t _cursorPreferredScale120;
     struct wl_proxy *_imageCursorBuffer;
-    int32_t _imageCursorBufferScale;
+    uint32_t _imageCursorBufferScale120;
     WaylandCursor *_cursor;
     BOOL _applyingCursor, _cursorApplyPending, _cursorApplyQueued;
     WaylandPasteboard *_generalPasteboard;
@@ -171,6 +181,8 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 - (void) processPendingEvents;
 - (uint32_t) clipboardSerial;
 - (int32_t) scaleForOutput: (struct wl_proxy *) output;
+- (uint32_t) refreshForOutput: (struct wl_proxy *) output; // millihertz, 0 if unknown
+- (void) preferredScaleChanged: (uint32_t) scale120;
 - (void) windowScaleChanged: (WaylandWindow *) window;
 - (WaylandWindow *) popupParentForWindow: (WaylandWindow *) window;
 - (uint32_t) popupGrabSerialForParent: (WaylandWindow *) parent;
@@ -188,4 +200,5 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 - (void) windowUnmapped: (WaylandWindow *) window;
 - (void) windowDestroyed: (WaylandWindow *) window;
 
+- (struct wl_proxy *) newFractionalScaleForSurface: (struct wl_proxy *) surface owner: (id<WaylandFractionalScaleOwner>) owner;
 @end

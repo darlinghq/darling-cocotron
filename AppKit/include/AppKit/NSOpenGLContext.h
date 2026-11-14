@@ -40,7 +40,7 @@ typedef enum {
     void *_glContext;
     CGSubWindow *_subwindow;
     CGLWindowRef _cglWindow;
-    BOOL _hasPrepared;
+    BOOL _hasPrepared, _drawableAttachmentSucceeded;
 }
 
 + (NSOpenGLContext *) currentContext;

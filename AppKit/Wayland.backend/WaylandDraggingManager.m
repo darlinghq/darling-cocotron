@@ -187,7 +187,7 @@ static BOOL monotonicSeconds(double *seconds) {
             NSPoint iconOffset = NSMakePoint(location.x - pointer.x,
                     pointer.y - location.y - ceil([image size].height));
             _icon = [[WaylandDragIcon alloc] initWithImage: image display: _display
-                    scale: [origin bufferScale] offset: iconOffset];
+                    scale120: [origin renderScale120] fallbackScale: [origin bufferScale] offset: iconOffset];
         }
         // Lazy providers/image drawing may run the event loop, release the button or unmap.
         if ([snapshot count] && !_finished && _display &&

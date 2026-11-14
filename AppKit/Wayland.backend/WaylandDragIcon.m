@@ -18,6 +18,7 @@
 
 #import "WaylandDragIcon.h"
 #import "WaylandCursor.h"
+#import "WaylandScale.h"
 #import "WaylandLibrary.h"
 #import "WaylandProtocol.h"
 #import <AppKit/NSImage.h>
@@ -25,7 +26,7 @@
 
 @implementation WaylandDragIcon
 - (id) initWithImage: (NSImage *) image display: (WaylandDisplay *) display
-              scale: (int32_t) scale offset: (NSPoint) offset {
+              scale120: (uint32_t) scale120 fallbackScale: (int32_t) fallbackScale offset: (NSPoint) offset {
     if ((self = [super init]) == nil) return nil;
     _display = [display retain];
     NSSize size = [image size];
@@ -38,48 +39,74 @@
     }
     _offset = NSMakePoint(floor(offset.x), floor(offset.y));
     _outputs = [NSMutableSet new];
+    _initialScale120 = scale120; _initialBufferScale = fallbackScale;
     @try {
-        _image = [[WaylandCursor alloc] initWithImage: image hotSpot: NSZeroPoint];
-        if (_image == nil || ![self prepareScale: scale]) { [self release]; return nil; }
         union wl_argument args[1] = {{.o = NULL}};
         _surface = WaylandCreateObject(display->_compositor, WP_COMPOSITOR_CREATE_SURFACE,
                 &wl_surface_interface, args, WaylandObjectSurface, self);
+        _fractionalScale = [display newFractionalScaleForSurface: _surface owner: (id)self];
+        if (_fractionalScale) {
+            union wl_argument viewport[] = {{.o = NULL}, {.o = (struct wl_object *)_surface}};
+            _viewport = WaylandCreateObject(display->_viewporter, WP_VIEWPORTER_GET_VIEWPORT,
+                &wp_viewport_interface, viewport, 0, nil);
+        }
+        // WaylandCursor eagerly draws at 1x. Refuse an already over-cap target
+        // scale before that first application callback as well as before retries.
+        int32_t width, height;
+        uint32_t effective = [self effectiveScale120];
+        if (!WaylandScaleExtent((int32_t)ceil(size.width), effective, 4 * 1024 * 1024, &width) ||
+            !WaylandScaleExtent((int32_t)ceil(size.height), effective, 4 * 1024 * 1024, &height) ||
+            (uint64_t)width * height > 4 * 1024 * 1024) { [self release]; return nil; }
+        _image = [[WaylandCursor alloc] initWithImage: image hotSpot: NSZeroPoint];
+        if (_image == nil) {
+            [self release]; return nil;
+        }
+        // If the first rasterization cannot produce a buffer, keep the valid
+        // icon surface and request a bounded asynchronous retry; show() also
+        // retries when no buffer is available.
+        if (![self prepareScale120: [self effectiveScale120]]) [self scheduleScaleUpdate];
     } @catch (id exception) { [self release]; @throw; }
     return self;
 }
-- (BOOL) prepareScale: (int32_t) scale {
+- (BOOL) prepareScale120: (uint32_t) scale120 {
     if (_rendering) { _scaleDirty = YES; return NO; }
     _rendering = YES;
-    @try { return [self renderScale: scale]; }
+    @try { return [self renderScale120: scale120]; }
     @finally {
         _rendering = NO;
         if (_scaleDirty) { _scaleDirty = NO; [self scheduleScaleUpdate]; }
     }
 }
-- (BOOL) renderScale: (int32_t) scale {
-    if (_display->_compositorVersion < 3) scale = 1;
-    NSSize size = [_image size];
-    if (scale < 1 || size.width * size.height * scale * scale > 4 * 1024 * 1024) return NO;
+- (BOOL) renderScale120: (uint32_t) scale120 {
+    NSSize pixelsSize = [_image pixelSizeForScale120: scale120];
+    // Check the rounded allocation cap before invoking application image code.
+    if (pixelsSize.width < 1 || pixelsSize.height < 1 || pixelsSize.width * pixelsSize.height > 4 * 1024 * 1024) return NO;
     WaylandDisplay *display = _display;
-    NSData *pixels = [_image pixelsForScale: scale];
+    NSData *pixels = [_image pixelsForScale120: scale120];
     // Image drawing can cancel this drag through application callbacks.
-    if (!_display || _display != display || (_shown && !_surface)) return NO;
+    if (!_display || _display != display || !_surface || _scaleDirty || scale120 != [self effectiveScale120]) return NO;
     struct wl_proxy *buffer = [_display newARGBBuffer: pixels
-            pixelSize: NSMakeSize(size.width * scale, size.height * scale)];
+            pixelSize: pixelsSize];
     if (!buffer) return NO;
     struct wl_proxy *old = _buffer;
-    _buffer = buffer; _scale = scale;
+    _buffer = buffer; _scale120 = scale120;
     if (_shown) [self show];
     if (old) WaylandMarshal(old, WP_BUFFER_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
     return YES;
 }
 - (struct wl_proxy *) surface { return _surface; }
 - (void) show {
-    if (!_display || !_surface || !_buffer) return;
+    if (!_display || !_surface) return;
     _shown = YES;
+    if (!_buffer) { [self scheduleScaleUpdate]; return; }
     if (_display->_compositorVersion >= 3) {
-        union wl_argument scale[1] = {{.i = _scale}};
+        union wl_argument scale[1] = {{.i = _fractionalScale ? 1 : (int32_t)(_scale120 / 120)}};
         WaylandMarshal(_surface, WP_SURFACE_SET_BUFFER_SCALE, NULL, 0, scale);
+    }
+    if (_viewport) {
+        NSSize size = [_image size];
+        union wl_argument destination[] = {{.i = (int32_t)size.width}, {.i = (int32_t)size.height}};
+        WaylandMarshal(_viewport, WP_VIEWPORT_SET_DESTINATION, NULL, 0, destination);
     }
     // Backend binds compositor<=4: attach carries a relative content offset.
     // Apply it only once; repeating it on scale changes would move the icon.
@@ -94,12 +121,24 @@
     WaylandMarshal(_surface, WP_SURFACE_COMMIT, NULL, 0, NULL);
     _positioned = YES;
 }
+- (uint32_t) effectiveScale120 {
+    if (_fractionalScale && _preferredScale120) return _preferredScale120;
+    if ([_outputs count] == 0) return _fractionalScale ? _initialScale120
+        : (uint32_t)MIN((uint64_t)(_display->_compositorVersion >= 3 ? MAX(1, _initialBufferScale) : 1) * 120, UINT32_MAX);
+    int32_t scale = 1;
+    if (_display->_compositorVersion >= 3)
+        for (NSValue *output in _outputs) scale = MAX(scale, [_display scaleForOutput: [output pointerValue]]);
+    return (uint32_t)MIN((uint64_t)scale * 120, UINT32_MAX);
+}
+- (void) preferredScaleChanged: (uint32_t) scale120 {
+    if (!_fractionalScale || !scale120 || scale120 == _preferredScale120) return;
+    _preferredScale120 = scale120;
+    [self scheduleScaleUpdate];
+}
 - (void) updateScale {
     if (!_display || !_shown) return;
-    int32_t scale = 1;
-    for (NSValue *output in _outputs)
-        scale = MAX(scale, [_display scaleForOutput: [output pointerValue]]);
-    if (scale != _scale) [self prepareScale: scale];
+    uint32_t scale120 = [self effectiveScale120];
+    if (scale120 != _scale120 || !_buffer) [self prepareScale120: scale120];
 }
 - (void) scheduleScaleUpdate {
     if (!_display) return;
@@ -123,6 +162,9 @@
     [self scheduleScaleUpdate];
 }
 - (void) invalidate {
+    if (_fractionalScale) WaylandMarshal(_fractionalScale, WP_FRACTIONAL_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
+    if (_viewport) WaylandMarshal(_viewport, WP_VIEWPORT_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
+    _fractionalScale = _viewport = NULL;
     if (_surface) WaylandMarshal(_surface, WP_SURFACE_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
     if (_buffer) WaylandMarshal(_buffer, WP_BUFFER_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
     _surface = _buffer = NULL;

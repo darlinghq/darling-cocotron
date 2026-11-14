@@ -134,6 +134,15 @@ bool WaylandLibraryLoad(void) {
     WAYLAND_CURSOR_FUNCTIONS(WAYLAND_RESOLVE_OPTIONAL)
 #undef WAYLAND_RESOLVE_OPTIONAL
 
+    // Optional: CPU windows remain usable without EGL window support.
+    handle = openLibrary("libwayland-egl.so.1");
+    WL.hasEGL = handle != NULL;
+#define WAYLAND_RESOLVE_EGL(name) \
+    if (WL.hasEGL && !resolve(handle, #name, (void **) &WL.name)) \
+        WL.hasEGL = false;
+    WAYLAND_EGL_FUNCTIONS(WAYLAND_RESOLVE_EGL)
+#undef WAYLAND_RESOLVE_EGL
+
     WL.memfd_create = _elfcalls->dlsym(NULL, "memfd_create");
 
     loaded = 1;
@@ -161,6 +170,23 @@ bool WaylandCheckOpcodes(void) {
             {&wl_data_source_interface, true, WP_DATA_SOURCE_EV_DROP_PERFORMED, "dnd_drop_performed"},
             {&wl_data_source_interface, true, WP_DATA_SOURCE_EV_FINISHED, "dnd_finished"},
             {&wl_data_source_interface, true, WP_DATA_SOURCE_EV_ACTION, "action"},
+            {&wl_subsurface_interface, false, WP_SUBSURFACE_PLACE_ABOVE, "place_above"},
+            {&wp_fractional_scale_manager_v1_interface, false, WP_FRACTIONAL_MANAGER_DESTROY, "destroy"},
+            {&wp_fractional_scale_manager_v1_interface, false, WP_FRACTIONAL_MANAGER_GET_SCALE, "get_fractional_scale"},
+            {&wp_fractional_scale_v1_interface, false, WP_FRACTIONAL_DESTROY, "destroy"},
+            {&wp_fractional_scale_v1_interface, true, WP_FRACTIONAL_EV_PREFERRED, "preferred_scale"},
+            {&wp_viewporter_interface, false, WP_VIEWPORTER_DESTROY, "destroy"},
+            {&wp_viewport_interface, false, WP_VIEWPORT_SET_DESTINATION, "set_destination"},
+            {&wp_viewporter_interface, false, WP_VIEWPORTER_GET_VIEWPORT, "get_viewport"},
+            {&wp_viewport_interface, false, WP_VIEWPORT_DESTROY, "destroy"},
+            {&wp_viewport_interface, false, WP_VIEWPORT_SET_SOURCE, "set_source"},
+            {&wl_compositor_interface, false, WP_COMPOSITOR_CREATE_REGION, "create_region"},
+            {&wl_region_interface, false, WP_REGION_DESTROY, "destroy"},
+            {&wl_subcompositor_interface, false, WP_SUBCOMPOSITOR_GET_SUBSURFACE, "get_subsurface"},
+            {&wl_subsurface_interface, false, WP_SUBSURFACE_DESTROY, "destroy"},
+            {&wl_subsurface_interface, false, WP_SUBSURFACE_SET_POSITION, "set_position"},
+            {&wl_surface_interface, false, WP_SURFACE_SET_INPUT_REGION, "set_input_region"},
+
             {&wl_data_device_manager_interface, false, WP_DATA_MANAGER_CREATE_SOURCE, "create_data_source"},
             {&wl_data_device_manager_interface, false, WP_DATA_MANAGER_GET_DEVICE, "get_data_device"},
             {&wl_data_device_interface, false, WP_DATA_DEVICE_SET_SELECTION, "set_selection"},

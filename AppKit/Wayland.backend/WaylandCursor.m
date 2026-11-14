@@ -17,6 +17,7 @@
  SOFTWARE. */
 
 #import "WaylandCursor.h"
+#import "WaylandScale.h"
 #import <AppKit/NSGraphicsContext.h>
 #import <AppKit/NSImage.h>
 #import <Foundation/NSData.h>
@@ -57,13 +58,25 @@
 }
 
 - (NSData *) pixelsForScale: (int32_t) scale {
+    if (scale < 1 || (uint64_t)scale * 120 > UINT32_MAX) return nil;
+    return [self pixelsForScale120: (uint32_t)scale * 120];
+}
+
+- (NSSize) pixelSizeForScale120: (uint32_t) scale120 {
+    int32_t width, height;
+    if (!WaylandScaleExtent((int32_t)_size.width, scale120, INT32_MAX / 4, &width) ||
+        !WaylandScaleExtent((int32_t)_size.height, scale120, INT32_MAX / (width * 4), &height)) return NSZeroSize;
+    return NSMakeSize(width, height);
+}
+
+- (NSData *) pixelsForScale120: (uint32_t) scale120 {
     if (_image == nil)
         return nil;
-    if (_pixels != nil && _pixelScale == scale)
+    if (_pixels != nil && _pixelScale120 == scale120)
         return _pixels;
-    double width = _size.width * scale, height = _size.height * scale;
-    if (scale < 1 || width > INT32_MAX / 4 || height > INT32_MAX / (width * 4))
-        return nil;
+    NSSize dimensions = [self pixelSizeForScale120: scale120];
+    double width = dimensions.width, height = dimensions.height;
+    if (width < 1 || height < 1) return nil;
     CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
     CGContextRef context = CGBitmapContextCreate(NULL, width, height, 8, 0,
             colorSpace, kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Little);
@@ -75,7 +88,7 @@
         @try {
             [NSGraphicsContext setCurrentContext:
                     [NSGraphicsContext graphicsContextWithGraphicsPort: context flipped: NO]];
-            CGContextScaleCTM(context, scale, scale);
+            CGContextScaleCTM(context, width / _size.width, height / _size.height);
             [_image drawInRect: NSMakeRect(0, 0, _size.width, _size.height)
                      fromRect: NSZeroRect operation: NSCompositeCopy fraction: 1.0];
         } @finally {
@@ -91,7 +104,7 @@
         NSData *snapshot = [pixels copy];
         [_pixels release];
         _pixels = snapshot;
-        _pixelScale = scale;
+        _pixelScale120 = scale120;
     } @finally {
         CGContextRelease(context);
     }
