@@ -19,25 +19,37 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <CoreFoundation/CFBase.h>
 #import <Foundation/Foundation.h>
+#import <AppKit/NSButton.h>
 #ifdef WIN32
 #import <windows.h>
 #endif
-@class NSStatusBar, NSImage, NSAttributedString, NSMenu, NSView, NSWindow;
+
+typedef NS_OPTIONS(NSUInteger, NSStatusItemBehavior) {
+    NSStatusItemBehaviorRemovalAllowed = (1 << 1),
+    NSStatusItemBehaviorTerminationOnRemoval = (1 << 2),
+};
+
+@class NSStatusBar, NSImage, NSAttributedString, NSMenu, NSView, NSWindow, NSStatusBarButton;
+
+@interface NSStatusBarButton : NSButton {
+    BOOL _appearsDisabled;
+}
+- (BOOL) appearsDisabled;
+- (void) setAppearsDisabled: (BOOL) flag;
+@end
+
 @interface NSStatusItem : NSObject {
-    SEL _action;
     SEL _doubleAction;
-    id _target;
-    // Image-Based Item Vars
-    NSImage *_image;
-    NSImage *_alternateImage;
-    // Text-Based Item Vars
-    NSString *_title;
-    NSAttributedString *_atrTitle;
     // View-Based Item Vars
     NSView *_view;
+    // Modern status item vars
+    NSStatusItemBehavior _behavior;
+    NSStatusBarButton *_button;
+    NSString *_autosaveName;
+    NSString *_defaultAutosaveName;
+    BOOL _visible;
     // Other Vars
     BOOL _highlightMode;
-    BOOL _enabled;
     CGFloat _length;
     NSMenu *_menu;
     NSInteger _actionMask;
@@ -48,6 +60,17 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #endif
 }
 - (NSStatusBar *) statusBar;
+
+- (NSStatusItemBehavior) behavior;
+- (void) setBehavior: (NSStatusItemBehavior) behavior;
+
+- (NSStatusBarButton *) button;
+
+- (NSString *) autosaveName;
+- (void) setAutosaveName: (NSString *) name;
+
+- (BOOL) isVisible;
+- (void) setVisible: (BOOL) visible;
 
 - (SEL) action;
 - (void) setAction: (SEL) action;

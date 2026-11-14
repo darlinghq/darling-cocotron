@@ -19,6 +19,8 @@
 
 #import <AppKit/NSView.h>
 
+@class NSImage;
+
 typedef NS_ENUM(NSInteger, NSVisualEffectMaterial) {
     NSVisualEffectMaterialTitlebar = 3,
     NSVisualEffectMaterialSelection = 4,
@@ -51,8 +53,12 @@ typedef NS_ENUM(NSInteger, NSVisualEffectState) {
     NSVisualEffectMaterial _material;
     NSVisualEffectBlendingMode _blendingMode;
     NSVisualEffectState _state;
+    NSImage *_maskImage;
+    BOOL _emphasized;
 }
 @property NSVisualEffectMaterial material;
 @property NSVisualEffectBlendingMode blendingMode;
 @property NSVisualEffectState state;
+@property(strong, nullable) NSImage *maskImage;
+@property(getter=isEmphasized) BOOL emphasized;
 @end

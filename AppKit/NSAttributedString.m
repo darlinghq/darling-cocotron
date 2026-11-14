@@ -309,18 +309,44 @@ NSUInteger NSUnderlineByWordMask = 0x8000;
     return [self initWithAttributedString: string];
 }
 
+// RTFD data is a serialized file wrapper (see -[NSFileWrapper serializedRepresentation]);
+// plain RTF is not accepted.
 - initWithRTFD: (NSData *) rtfd
         documentAttributes: (NSDictionary **) attributes
 {
-    NSUnimplementedMethod();
-    return nil;
+    NSFileWrapper *wrapper = [[NSFileWrapper alloc] initWithSerializedRepresentation: rtfd];
+
+    if (wrapper == nil) {
+        [self release];
+        return nil;
+    }
+    self = [self initWithRTFDFileWrapper: wrapper documentAttributes: attributes];
+    [wrapper release];
+    if (self != nil && attributes != NULL)
+        *attributes = [NSDictionary dictionaryWithObject: NSRTFDTextDocumentType
+                                                  forKey: NSDocumentTypeDocumentAttribute];
+    return self;
 }
 
+// The wrapper must be a directory holding the text as TXT.rtf; the other files in it are
+// the attachments.
 - initWithRTFDFileWrapper: (NSFileWrapper *) wrapper
         documentAttributes: (NSDictionary **) attributes
 {
-    NSUnimplementedMethod();
-    return nil;
+    NSDictionary *children = [wrapper isDirectory] ? [wrapper fileWrappers] : nil;
+    NSFileWrapper *text = [children objectForKey: @"TXT.rtf"];
+    NSData *rtf = [text isRegularFile] ? [text regularFileContents] : nil;
+    NSAttributedString *string = nil;
+
+    if (rtf != nil)
+        string = [NSRichTextReader attributedStringWithData: rtf attachmentFileWrappers: children];
+    if (string == nil) {
+        [self release];
+        return nil;
+    }
+    if (attributes)
+        *attributes = [NSDictionary dictionary];
+    return [self initWithAttributedString: string];
 }
 
 - initWithURL: (NSURL *) url documentAttributes: (NSDictionary **) attributes {
@@ -537,10 +563,11 @@ NSUInteger NSUnderlineByWordMask = 0x8000;
     return [self fileWrapperFromRange: range documentAttributes: rtfd error: NULL];
 }
 
+// RTFD data is the serialized form of the RTFD file wrapper.
 - (NSData *) RTFDFromRange: (NSRange) range
         documentAttributes: (NSDictionary *) attributes
 {
-    return [NSRichTextWriter dataWithAttributedString: self range: range];
+    return [[self RTFDFileWrapperFromRange: range documentAttributes: attributes] serializedRepresentation];
 }
 
 - (NSData *) RTFFromRange: (NSRange) range
@@ -549,7 +576,7 @@ NSUInteger NSUnderlineByWordMask = 0x8000;
     return [NSRichTextWriter dataWithAttributedString: self range: range];
 }
 
-// RTF, RTFD (the RTF data, without attachments) and plain text, by the
+// RTF, RTFD (the serialized RTFD wrapper) and plain text, by the
 // NSDocumentTypeDocumentAttribute; plain text uses NSCharacterEncodingDocumentAttribute
 // or UTF-8. Other types fail with an error.
 - (NSData *) dataFromRange: (NSRange) range

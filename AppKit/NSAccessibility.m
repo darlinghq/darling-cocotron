@@ -121,6 +121,8 @@ NSString *const NSAccessibilityCancelButtonAttribute =
         @"AXCancelButton";
 NSString *const NSAccessibilityCloseButtonAttribute =
         @"AXCloseButton";
+NSString *const NSAccessibilityFullScreenButtonAttribute =
+        @"AXFullScreenButton";
 NSString *const NSAccessibilityDefaultButtonAttribute =
         @"AXDefaultButton";
 NSString *const NSAccessibilityGrowAreaAttribute =

@@ -14,6 +14,8 @@
 #include <X11/extensions/Xrandr.h>
 #include <stdbool.h>
 
+#include "../DarlingFullscreenPolicy.h"
+
 typedef struct {
     int x, y; /* root coordinates, device pixels */
     unsigned int width, height;
@@ -25,11 +27,7 @@ typedef struct {
 static inline bool X11FullscreenWanted(bool overrideRedirect, bool styleFullScreen, bool titled, bool coversMonitor) {
     if (overrideRedirect)
         return false;
-    if (styleFullScreen)
-        return true;
-    if (titled)
-        return false;
-    return coversMonitor;
+    return DarlingFullscreenWanted(styleFullScreen, titled, coversMonitor);
 }
 
 /* Whether a style change takes the window out of fullscreen whatever its frame: the application cleared the

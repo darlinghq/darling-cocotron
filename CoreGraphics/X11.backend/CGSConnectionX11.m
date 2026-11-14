@@ -25,6 +25,7 @@
 #import <Foundation/NSDebug.h>
 #import <Foundation/NSString.h>
 #include <stdlib.h>
+#include <time.h>
 #include <stdatomic.h>
 #import <X11/Xutil.h>
 #import <X11/extensions/Xrandr.h>
@@ -34,12 +35,34 @@
 #import "X11Monitors.h"
 #import "X11RandR.h"
 #import "X11WindowOwner.h"
+#import "X11HotKey.h"
 #import <CoreGraphics/CGWindowPrivate.h>
 #import <CoreGraphics/CGWindowLevel.h>
 
 // TODO: Use XInput2:
 // https://stackoverflow.com/questions/44095001/getting-double-rawkeypress-events-using-xinput2
 // https://github.com/openbsd/xenocara/blob/master/app/xinput/src/test_xi2.c
+
+// One registered global hot key
+@interface X11HotKeyEntry : NSObject
+{
+@public
+	int uid;
+	CGKeyCode virtualKey;
+	CGEventFlags flags;
+	int keycode;
+	unsigned modifiers;
+	BOOL enabled;
+}
+@end
+
+@implementation X11HotKeyEntry
+@end
+
+static NSNumber* grabKey(int keycode, unsigned modifiers)
+{
+	return [NSNumber numberWithUnsignedLongLong: ((unsigned long long) keycode << 32) | modifiers];
+}
 
 @implementation CGSConnectionX11
 
@@ -131,6 +154,10 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type, CFDataRef a
 	{
 		[_windows removeAllObjects];
 	}
+	// Closing the display releases the grabs
+	[_hotKeys release];
+	[_grabbedHotKeys release];
+	[_pressedHotKeys release];
 
 	if (_display)
 		XCloseDisplay(_display);
@@ -560,6 +587,7 @@ static double windowOpacity(Display* display, Window window)
 	{
 		case KeyPress:
 		case KeyRelease:
+			[self _deliverHotKeyEvent: &event->xkey];
 			break;
 		case ButtonPress:
 			break;
@@ -622,6 +650,214 @@ static double windowOpacity(Display* display, Window window)
 				_primaryRootValid = NO;
 			}
 		}
+	}
+}
+
+// A hot key reports while it is enabled and hot keys are not switched off
+-(BOOL) _hotKeyIsActive:(X11HotKeyEntry*)entry
+{
+	return entry->enabled && _hotKeyOperatingMode == 0;
+}
+
+// Makes the grabs on the X server those of the active hot keys. Returns NO if a grab was
+// refused. Called with the lock held.
+-(BOOL) _updateHotKeyGrabs
+{
+	NSMutableSet* wanted = [NSMutableSet set];
+	BOOL allGrabbed = YES;
+
+	for (X11HotKeyEntry* entry in _hotKeys)
+	{
+		if (entry->keycode != 0 && [self _hotKeyIsActive: entry])
+			[wanted addObject: grabKey(entry->keycode, entry->modifiers)];
+	}
+	if (!_grabbedHotKeys)
+		_grabbedHotKeys = [[NSMutableSet alloc] init];
+
+	for (NSNumber* key in [[_grabbedHotKeys copy] autorelease])
+	{
+		if (![wanted containsObject: key])
+		{
+			unsigned long long v = [key unsignedLongLongValue];
+			X11HotKeyUngrab(_display, (int) (v >> 32), (unsigned) v);
+			[_grabbedHotKeys removeObject: key];
+		}
+	}
+
+	for (NSNumber* key in wanted)
+	{
+		if ([_grabbedHotKeys containsObject: key])
+			continue;
+		if (!_detectableAutoRepeat)
+		{
+			// Without it a held key reports a release and a press for every repeat
+			Bool supported = False;
+			XkbSetDetectableAutoRepeat(_display, True, &supported);
+			_detectableAutoRepeat = supported;
+		}
+		unsigned long long v = [key unsignedLongLongValue];
+		if (X11HotKeyGrab(_display, (int) (v >> 32), (unsigned) v) == X11HotKeyGrabbed)
+			[_grabbedHotKeys addObject: key];
+		else
+			allGrabbed = NO;
+	}
+	return allGrabbed;
+}
+
+// The hot keys a grabbed key event selects are reported outside the lock, because the procs
+// may set or remove hot keys. A release goes to the hot keys whose press was reported, even
+// if the modifiers were let go before the key.
+-(void) _deliverHotKeyEvent:(XKeyEvent*) event
+{
+	NSMutableArray* uids = nil;
+	BOOL pressed = event->type == KeyPress;
+
+	@synchronized (self)
+	{
+		for (X11HotKeyEntry* entry in _hotKeys)
+		{
+			if (entry->keycode == 0 || entry->keycode != (int) event->keycode)
+				continue;
+
+			NSNumber* uid = [NSNumber numberWithInt: entry->uid];
+			if (pressed ? ([self _hotKeyIsActive: entry] && X11HotKeyMatches(event->state, entry->modifiers))
+				: [_pressedHotKeys containsObject: uid])
+			{
+				if (!uids)
+					uids = [NSMutableArray array];
+				[uids addObject: uid];
+				if (pressed)
+				{
+					if (!_pressedHotKeys)
+						_pressedHotKeys = [[NSMutableSet alloc] init];
+					[_pressedHotKeys addObject: uid];
+				}
+				else
+					[_pressedHotKeys removeObject: uid];
+			}
+		}
+	}
+
+	CGEventFlags flags = 0;
+	if (event->state & ShiftMask)
+		flags |= kCGEventFlagMaskShift;
+	if (event->state & LockMask)
+		flags |= kCGEventFlagMaskAlphaShift;
+	if (event->state & ControlMask)
+		flags |= kCGEventFlagMaskControl;
+	if (event->state & Mod1Mask)
+		flags |= kCGEventFlagMaskAlternate;
+	if (event->state & Mod4Mask)
+		flags |= kCGEventFlagMaskCommand;
+
+	X11Point point = X11CGPointFromRoot([self _primaryRoot], (X11Point){event->x_root, event->y_root});
+	for (NSNumber* uid in uids)
+	{
+		[self postHotKeyEventForUID: [uid intValue] pressed: pressed flags: flags
+			location: CGPointMake(point.x, point.y) time: clock_gettime_nsec_np(CLOCK_UPTIME_RAW)];
+	}
+}
+
+-(X11HotKeyEntry*) _hotKeyWithUID:(int)uid
+{
+	for (X11HotKeyEntry* entry in _hotKeys)
+	{
+		if (entry->uid == uid)
+			return entry;
+	}
+	return nil;
+}
+
+-(void) setHotKeyWithUID:(int)uid keyCode:(CGKeyCode)keyCode flags:(CGEventFlags)flags exclusion:(int)exclusion
+{
+	[self removeHotKeyWithUID: uid];
+
+	X11HotKeyEntry* entry = [[X11HotKeyEntry alloc] init];
+	entry->uid = uid;
+	entry->virtualKey = keyCode;
+	entry->flags = flags;
+	// A virtual key code with no X key is kept without one: it is never grabbed and never fires
+	entry->keycode = keyCode < sizeof(carbonToX11) / sizeof(carbonToX11[0]) ? carbonToX11[keyCode] : 0;
+	entry->modifiers = X11HotKeyModifiers((flags & kCGEventFlagMaskShift) != 0,
+		(flags & kCGEventFlagMaskControl) != 0, (flags & kCGEventFlagMaskAlternate) != 0,
+		(flags & kCGEventFlagMaskCommand) != 0);
+	entry->enabled = YES;
+
+	@synchronized (self)
+	{
+		if (!_hotKeys)
+			_hotKeys = [[NSMutableArray alloc] init];
+		[_hotKeys addObject: entry];
+		[self _updateHotKeyGrabs];
+
+		// A combination the server refused (another client holds it) is not kept. With hot
+		// keys switched off nothing is grabbed, and the hot key is kept.
+		if (entry->keycode != 0 && [self _hotKeyIsActive: entry] && ![_grabbedHotKeys containsObject: grabKey(entry->keycode, entry->modifiers)])
+		{
+			[_hotKeys removeObject: entry];
+			[self _updateHotKeyGrabs];
+		}
+	}
+	[entry release];
+}
+
+-(BOOL) getHotKeyWithUID:(int)uid keyCode:(CGKeyCode*)outKeyCode flags:(CGEventFlags*)outFlags
+{
+	@synchronized (self)
+	{
+		X11HotKeyEntry* entry = [self _hotKeyWithUID: uid];
+		if (!entry)
+			return NO;
+		if (outKeyCode)
+			*outKeyCode = entry->virtualKey;
+		if (outFlags)
+			*outFlags = entry->flags;
+		return YES;
+	}
+}
+
+-(void) removeHotKeyWithUID:(int)uid
+{
+	@synchronized (self)
+	{
+		X11HotKeyEntry* entry = [self _hotKeyWithUID: uid];
+		if (!entry)
+			return;
+		[_hotKeys removeObject: entry];
+		[_pressedHotKeys removeObject: [NSNumber numberWithInt: uid]];
+		// The grab is shared by all hot keys with the combination
+		[self _updateHotKeyGrabs];
+	}
+}
+
+-(BOOL) isHotKeyEnabledWithUID:(int)uid
+{
+	@synchronized (self)
+	{
+		X11HotKeyEntry* entry = [self _hotKeyWithUID: uid];
+		return entry && entry->enabled;
+	}
+}
+
+-(void) setHotKeyWithUID:(int)uid enabled:(BOOL)enabled
+{
+	@synchronized (self)
+	{
+		X11HotKeyEntry* entry = [self _hotKeyWithUID: uid];
+		if (!entry || entry->enabled == enabled)
+			return;
+		entry->enabled = enabled;
+		[self _updateHotKeyGrabs];
+	}
+}
+
+// Switching hot keys off lets their keys go to the focused window again
+-(void) hotKeyOperatingModeChanged
+{
+	@synchronized (self)
+	{
+		[_pressedHotKeys removeAllObjects];
+		[self _updateHotKeyGrabs];
 	}
 }
 

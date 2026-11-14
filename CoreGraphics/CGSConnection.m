@@ -79,6 +79,56 @@
 	return NO;
 }
 
+extern void _CGSPostHotKeyEvent(CGSConnectionID connection, int uid, BOOL pressed, CGEventFlags flags, CGPoint location, uint64_t time);
+
+-(void) setHotKeyWithUID:(int)uid keyCode:(CGKeyCode)keyCode flags:(CGEventFlags)flags exclusion:(int)exclusion
+{
+}
+
+-(BOOL) getHotKeyWithUID:(int)uid keyCode:(CGKeyCode*)outKeyCode flags:(CGEventFlags*)outFlags
+{
+	return NO;
+}
+
+-(void) removeHotKeyWithUID:(int)uid
+{
+}
+
+-(BOOL) isHotKeyEnabledWithUID:(int)uid
+{
+	return NO;
+}
+
+-(void) setHotKeyWithUID:(int)uid enabled:(BOOL)enabled
+{
+}
+
+-(CGError) getGlobalHotKeyOperatingMode:(int*)outMode
+{
+	if (!outMode)
+		return kCGErrorIllegalArgument;
+	*outMode = _hotKeyOperatingMode;
+	return kCGErrorSuccess;
+}
+
+-(CGError) setGlobalHotKeyOperatingMode:(int)mode
+{
+	if (mode < 0 || mode > 2)
+		return kCGErrorIllegalArgument;
+	_hotKeyOperatingMode = mode;
+	[self hotKeyOperatingModeChanged];
+	return kCGErrorSuccess;
+}
+
+-(void) hotKeyOperatingModeChanged
+{
+}
+
+-(void) postHotKeyEventForUID:(int)uid pressed:(BOOL)pressed flags:(CGEventFlags)flags location:(CGPoint)location time:(uint64_t)time
+{
+	_CGSPostHotKeyEvent(_connectionId, uid, pressed, flags, location, time);
+}
+
 -(NSArray *) modesForScreen:(int)screenIndex
 {
 	NSInvalidAbstractInvocation();
