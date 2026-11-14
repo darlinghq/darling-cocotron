@@ -5,6 +5,16 @@
 #include <math.h>
 #include <limits.h>
 
+// The scale windows render at. NSScreen and NSWindow report whole scale
+// factors, so a fractional preference is rounded up to the next whole scale:
+// the buffer is drawn at that scale and presented at the logical size through
+// the viewport, and the compositor scales it down.
+static inline uint32_t WaylandIntegralScale120(uint32_t scale120) {
+    uint64_t whole = ((uint64_t)scale120 + 119) / 120;
+    if (whole == 0) whole = 1;
+    return (uint32_t)(whole * 120);
+}
+
 // Round whole integral logical extents once, halfway away from zero. The limit
 // belongs to the caller (drawable and SHM allocation limits can differ).
 static inline int WaylandScaleExtent(int32_t logical, uint32_t scale120,
