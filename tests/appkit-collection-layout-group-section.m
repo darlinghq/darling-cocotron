@@ -48,6 +48,31 @@ int main(void) {
         [copy setInterItemSpacing: [spacingClass fixedSpacing: 9]];
         expect([[horizontal interItemSpacing] spacing] == 6, @"changing the copy leaves the original alone");
 
+        // Unlike an item's, a group's supplementary items can be set; the group keeps a copy of the array.
+        NSCollectionLayoutBoundarySupplementaryItem *tag = [boundaryClass boundarySupplementaryItemWithLayoutSize: fill
+                                                                                                      elementKind: @"tag"
+                                                                                                        alignment: NSRectAlignmentTop];
+        expect([[horizontal supplementaryItems] count] == 0, @"a group has no supplementary items to start with");
+        NSMutableArray *tags = [NSMutableArray arrayWithObject: tag];
+        [horizontal setSupplementaryItems: tags];
+        [tags removeAllObjects];
+        expect([[horizontal supplementaryItems] isEqual: @[tag]], @"a group's supplementary items round-trip as a copy");
+        expect([[[[horizontal copy] autorelease] supplementaryItems] isEqual: @[tag]], @"a group's copy keeps them");
+        [horizontal setSupplementaryItems: nil];
+        expect([[horizontal supplementaryItems] count] == 0, @"setting nil clears them");
+        expect([[[groupClass horizontalGroupWithLayoutSize: fill subitems: @[item]] visualDescription] containsString: @"horizontal"] &&
+                       [[[groupClass verticalGroupWithLayoutSize: fill subitems: @[item, other]] visualDescription] containsString: @"vertical"] &&
+                       [[[groupClass verticalGroupWithLayoutSize: fill subitems: @[item, other]] visualDescription] containsString: @"2 subitems"],
+               @"the visual description names the direction and the subitem count");
+
+        BOOL raised = NO;
+        @try {
+            [groupClass customGroupWithLayoutSize: fill itemProvider: ^NSArray *(id<NSCollectionLayoutEnvironment> environment) { return @[]; }];
+        } @catch (NSException *exception) {
+            raised = [[exception reason] containsString: @"not implemented"];
+        }
+        expect(raised, @"a custom group fails loud");
+
         NSCollectionLayoutSection *section = [sectionClass sectionWithGroup: horizontal];
         NSDirectionalEdgeInsets zero = [section contentInsets];
         expect(zero.top == 0 && zero.leading == 0 && zero.bottom == 0 && zero.trailing == 0, @"section insets start at zero");

@@ -186,6 +186,13 @@ typedef NS_ENUM(NSInteger, NSRectAlignment) {
 
 @end
 
+@protocol NSCollectionLayoutEnvironment;
+@class NSCollectionLayoutGroupCustomItem;
+
+// Supplies the arrangement of a custom group. Custom groups are not implemented (see +customGroupWithLayoutSize:itemProvider:).
+typedef NSArray<NSCollectionLayoutGroupCustomItem *> * (^NSCollectionLayoutGroupCustomItemProvider)(
+        id<NSCollectionLayoutEnvironment> layoutEnvironment);
+
 @interface NSCollectionLayoutGroup : NSCollectionLayoutItem
 
 + (instancetype) horizontalGroupWithLayoutSize: (NSCollectionLayoutSize *) layoutSize
@@ -199,8 +206,17 @@ typedef NS_ENUM(NSInteger, NSRectAlignment) {
 + (instancetype) verticalGroupWithLayoutSize: (NSCollectionLayoutSize *) layoutSize
                                     subitems: (NSArray<NSCollectionLayoutItem *> *) subitems;
 
+// Raises: no layout engine exists to call the provider, and NSCollectionLayoutGroupCustomItem is not defined either.
++ (instancetype) customGroupWithLayoutSize: (NSCollectionLayoutSize *) layoutSize
+                              itemProvider: (NSCollectionLayoutGroupCustomItemProvider) itemProvider;
+
 @property(copy, nullable) NSCollectionLayoutSpacing *interItemSpacing;
 @property(readonly) NSArray<NSCollectionLayoutItem *> *subitems;
+// Settable on a group (readonly on an item).
+@property(copy) NSArray<NSCollectionLayoutSupplementaryItem *> *supplementaryItems;
+
+// A description of the group for debugging its layout. GUESS: the documentation gives no format.
+- (NSString *) visualDescription;
 
 @end
 

@@ -279,6 +279,10 @@ enum {
 
 @end
 
+@interface NSCollectionLayoutItem ()
+- (void) _setSupplementaryItems: (NSArray *) supplementaryItems;
+@end
+
 @implementation NSCollectionLayoutItem {
     NSDirectionalEdgeInsets _contentInsets;
     NSCollectionLayoutEdgeSpacing *_edgeSpacing;
@@ -329,6 +333,13 @@ enum {
 
 - (NSCollectionLayoutSize *) layoutSize {
     return _layoutSize;
+}
+
+// Readonly on an item; the group, which declares it settable, goes through this.
+- (void) _setSupplementaryItems: (NSArray *) supplementaryItems {
+    supplementaryItems = [(supplementaryItems ? supplementaryItems : @[]) copy];
+    [_supplementaryItems release];
+    _supplementaryItems = supplementaryItems;
 }
 
 - (NSArray<NSCollectionLayoutSupplementaryItem *> *) supplementaryItems {
@@ -562,6 +573,9 @@ static NSDirectionalRectEdge EdgesForAlignment(NSRectAlignment alignment) {
     NSCollectionLayoutSpacing *_interItemSpacing;
 }
 
+// The getter is the item's; -setSupplementaryItems: is below.
+@dynamic supplementaryItems;
+
 + (instancetype) _groupWithLayoutSize: (NSCollectionLayoutSize *) layoutSize
                              subitems: (NSArray *) subitems
                              vertical: (BOOL) vertical {
@@ -570,6 +584,15 @@ static NSDirectionalRectEdge EdgesForAlignment(NSRectAlignment alignment) {
     group->_subitems = [subitems copy];
     group->_vertical = vertical;
     return group;
+}
+
+// No layout engine exists to call the provider, and NSCollectionLayoutGroupCustomItem is not defined, so a custom group
+// could only be a silent stub: fail loud instead.
++ (instancetype) customGroupWithLayoutSize: (NSCollectionLayoutSize *) layoutSize
+                              itemProvider: (NSCollectionLayoutGroupCustomItemProvider) itemProvider {
+    [NSException raise: NSGenericException
+                format: @"+[NSCollectionLayoutGroup customGroupWithLayoutSize:itemProvider:] is not implemented"];
+    return nil;
 }
 
 + (NSArray *) _repeatedItem: (NSCollectionLayoutItem *) item count: (NSInteger) count {
@@ -608,6 +631,16 @@ static NSDirectionalRectEdge EdgesForAlignment(NSRectAlignment alignment) {
     [_subitems release];
     [_interItemSpacing release];
     [super dealloc];
+}
+
+- (void) setSupplementaryItems: (NSArray<NSCollectionLayoutSupplementaryItem *> *) supplementaryItems {
+    [self _setSupplementaryItems: supplementaryItems];
+}
+
+- (NSString *) visualDescription {
+    return [NSString stringWithFormat: @"<%@: %@ group, %lu subitems, %lu supplementary items>", [self class],
+                                       _vertical ? @"vertical" : @"horizontal", (unsigned long) [_subitems count],
+                                       (unsigned long) [[self supplementaryItems] count]];
 }
 
 - (NSArray<NSCollectionLayoutItem *> *) subitems {
