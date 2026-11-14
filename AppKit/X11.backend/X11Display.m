@@ -1416,6 +1416,22 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
             }
         }
 
+        // Arrow, function and editing keys produce no text; AppKit reports
+        // them as the NS*FunctionKey private-use characters, as macOS and the
+        // Wayland backend do.
+        if (text[0] == 0) {
+            uint32_t functionKey = CGSKeySymToUnicode(keySym != NoSymbol ? keySym : shortcutKeySym);
+            if (functionKey >= 0xF700 && functionKey <= 0xF8FF) {
+                unichar functionKeyChar = (unichar) functionKey;
+                id functionKeyStr = [[NSString alloc] initWithCharacters: &functionKeyChar length: 1];
+                if (text != buf)
+                    free(text);
+                text = buf;
+                [functionKeyStr getCString: buf maxLength: sizeof(buf) encoding: NSUTF8StringEncoding];
+                [functionKeyStr release];
+            }
+        }
+
         id str = [[NSString alloc] initWithCString: text
                                           encoding: NSUTF8StringEncoding];
         if (text != buf)
