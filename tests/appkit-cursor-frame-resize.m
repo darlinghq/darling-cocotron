@@ -16,6 +16,8 @@ static void expect(BOOL condition, NSString *message)
 int main(void)
 {
     NSAutoreleasePool *pool = [NSAutoreleasePool new];
+    expect([NSCursor respondsToSelector:@selector(frameResizeCursorFromPosition:inDirections:)],
+           @"+[NSCursor frameResizeCursorFromPosition:inDirections:] exists");
     NSCursorFrameResizeDirections in = NSCursorFrameResizeDirectionsInward;
     NSCursorFrameResizeDirections out = NSCursorFrameResizeDirectionsOutward;
     NSCursorFrameResizeDirections all = NSCursorFrameResizeDirectionsAll;

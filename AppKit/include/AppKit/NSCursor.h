@@ -23,18 +23,20 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 @class NSImage, NSColor, NSEvent;
 
 // macOS 15: the edge or corner of a rectangular frame a resize cursor is for, and the directions the frame can
-// resize in. The documentation names the cases and gives no raw values (GUESS, not observed: the order top, left,
-// bottom, right, topLeft, topRight, bottomLeft, bottomRight, and the bits inward 1, outward 2).
+// resize in. The documentation names the cases and gives no raw values. GUESS (not in the public documentation, not
+// observed): the raw values follow the order of the documentation's table of cursors (top, bottom, left, right, topLeft,
+// topRight, bottomLeft, bottomRight; an earlier draft used top, left, bottom, right) and the bits are inward 1,
+// outward 2. The Swift name is the documented NSCursor.FrameResizePosition (Journal imports Swift symbols that name it).
 typedef NS_ENUM(NSUInteger, NSCursorFrameResizePosition) {
     NSCursorFrameResizePositionTop,
-    NSCursorFrameResizePositionLeft,
     NSCursorFrameResizePositionBottom,
+    NSCursorFrameResizePositionLeft,
     NSCursorFrameResizePositionRight,
     NSCursorFrameResizePositionTopLeft,
     NSCursorFrameResizePositionTopRight,
     NSCursorFrameResizePositionBottomLeft,
     NSCursorFrameResizePositionBottomRight,
-};
+} NS_SWIFT_NAME(NSCursor.FrameResizePosition);
 
 typedef NS_OPTIONS(NSUInteger, NSCursorFrameResizeDirections) {
     NSCursorFrameResizeDirectionsInward = 1 << 0,
