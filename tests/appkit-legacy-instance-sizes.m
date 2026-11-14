@@ -43,6 +43,7 @@ static const struct {
 } legacySizes[] = {
     {"NSResponder", 0x8},
     {"NSView", 0x50},
+    {"NSColor", 0x4},
     {"NSWindow", 0x84},
     {"NSPanel", 0x84},
     {"NSControl", 0x5c},
@@ -656,6 +657,38 @@ static void checkCopies(void) {
     [image release];
 }
 
+// NSColor is an abstract class cluster root of one word on the legacy ABI;
+// the state of the concrete colors lives in their own classes
+@interface NSObject (LegacyLayoutColorAPI)
++ (id) colorWithCalibratedRed: (CGFloat) red green: (CGFloat) green blue: (CGFloat) blue alpha: (CGFloat) alpha;
++ (id) colorWithCatalogName: (NSString *) catalog colorName: (NSString *) name;
++ (id) colorWithName: (NSString *) name dynamicProvider: (id (^)(id appearance)) provider;
++ (id) colorWithPatternImage: (id) image;
+- (NSString *) catalogNameComponent;
+- (NSString *) colorNameComponent;
+- (NSString *) colorSpaceName;
+- (id) patternImage;
+@end
+
+static void checkColor(void) {
+    id rgb = [appKitClass("NSColor") colorWithCalibratedRed: 0.25 green: 0.5 blue: 0.75 alpha: 1];
+    expect([[rgb catalogNameComponent] length] == 0, "NSColor component color has no catalog name");
+    expect([rgb colorSpaceName] != nil, "NSColor component color space name");
+
+    id image = [[appKitClass("NSImage") alloc] initWithSize: NSMakeSize(4, 4)];
+    id pattern = [appKitClass("NSColor") colorWithPatternImage: image];
+    expect([pattern patternImage] != nil, "NSColor pattern image");
+    [image release];
+
+    id catalog = [appKitClass("NSColor") colorWithCatalogName: @"System" colorName: @"controlTextColor"];
+    expect([[catalog catalogNameComponent] isEqual: @"System"], "NSColor catalog name");
+    expect([[catalog colorNameComponent] isEqual: @"controlTextColor"], "NSColor catalog color name");
+
+    id dynamic = [appKitClass("NSColor") colorWithName: @"legacy.dynamic"
+                                       dynamicProvider: ^id(id appearance) { return rgb; }];
+    expect([[dynamic colorNameComponent] isEqual: @"legacy.dynamic"], "NSColor dynamic color name");
+}
+
 int main(void) {
     setvbuf(stdout, NULL, _IONBF, 0);
     @autoreleasepool {
@@ -668,6 +701,7 @@ int main(void) {
         checkControlSubclasses();
         checkControllerSubclasses();
         checkCopies();
+        checkColor();
     }
     if (failures == 0)
         printf("PASS\n");
