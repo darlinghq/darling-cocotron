@@ -17,6 +17,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/NSLayoutManager.h>
 #import <Foundation/Foundation.h>
 
@@ -37,14 +38,19 @@ typedef enum {
     NSLineMovesRight,
 } NSLineMovementDirection;
 
+// Legacy ObjC ABI (i386): instance size must stay 0x1c, Apple's; the ivars
+// before the extras keep their position in the original order. Add new state
+// to the extra struct, never as an ivar.
 @interface NSTextContainer : NSObject {
     NSSize _size;
     NSTextView *_textView;
     NSLayoutManager *_layoutManager;
     CGFloat _lineFragmentPadding;
-    NSUInteger _maximumNumberOfLines;
-    BOOL _widthTracksTextView;
-    BOOL _heightTracksTextView;
+    NS_EXTRA_IVARS_BEGIN(NSTextContainer)
+        NSUInteger _maximumNumberOfLines;
+        BOOL _widthTracksTextView;
+        BOOL _heightTracksTextView;
+    NS_EXTRA_IVARS_END(NSTextContainer)
 }
 
 - initWithContainerSize: (NSSize) size;
