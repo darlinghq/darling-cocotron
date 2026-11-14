@@ -27,22 +27,15 @@ APPKIT_EXPORT NSString *const NSComboBoxWillPopUpNotification;
 @interface NSComboBox : NSTextField
 
 - dataSource;
-- (BOOL) usesDataSource;
-- (BOOL) isButtonBordered;
-- (CGFloat) itemHeight;
-- (BOOL) hasVerticalScroller;
-- (NSSize) intercellSpacing;
-- (BOOL) completes;
-- (NSInteger) numberOfVisibleItems;
+@property(nonatomic) BOOL usesDataSource;
+@property(nonatomic, getter=isButtonBordered) BOOL buttonBordered;
+@property(nonatomic) CGFloat itemHeight;
+@property(nonatomic) BOOL hasVerticalScroller;
+@property(nonatomic) NSSize intercellSpacing;
+@property(nonatomic) BOOL completes;
+@property(nonatomic) NSInteger numberOfVisibleItems;
 
 - (void) setDataSource: value;
-- (void) setUsesDataSource: (BOOL) value;
-- (void) setButtonBordered: (BOOL) value;
-- (void) setItemHeight: (CGFloat) value;
-- (void) setHasVerticalScroller: (BOOL) value;
-- (void) setIntercellSpacing: (NSSize) value;
-- (void) setCompletes: (BOOL) completes;
-- (void) setNumberOfVisibleItems: (NSInteger) value;
 
 - (NSInteger) numberOfItems;
 - (NSArray *) objectValues;

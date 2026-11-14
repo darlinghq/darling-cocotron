@@ -55,12 +55,11 @@ typedef NS_OPTIONS(NSUInteger, NSViewControllerTransitionOptions) {
 @property(readonly, strong) NSStoryboard *storyboard;
 // Stored for the controller's presenter; NSZeroSize until set.
 @property NSSize preferredContentSize;
-- (NSString *) title;
+@property(nonatomic, copy) NSString *title;
 - representedObject;
 
 - (void) setRepresentedObject: object;
 
-- (void) setTitle: (NSString *) value;
 
 
 - (void) loadView;

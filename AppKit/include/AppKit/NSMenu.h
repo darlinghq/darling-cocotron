@@ -76,11 +76,11 @@ typedef NS_OPTIONS(NSUInteger, NSMenuProperties) {
 
 - initWithTitle: (NSString *) title;
 
-- (NSMenu *) supermenu;
-- (NSString *) title;
-- (NSInteger) numberOfItems;
+@property(nonatomic, retain) NSMenu *supermenu;
+@property(nonatomic, copy) NSString *title;
+@property(nonatomic, readonly) NSInteger numberOfItems;
 - (NSArray *) itemArray;
-- (BOOL) autoenablesItems;
+@property(nonatomic) BOOL autoenablesItems;
 
 - (NSMenuItem *) itemAtIndex: (NSInteger) index;
 - (NSMenuItem *) itemWithTag: (NSInteger) tag;
@@ -93,9 +93,6 @@ typedef NS_OPTIONS(NSUInteger, NSMenuProperties) {
 - (NSInteger) indexOfItemWithTarget: (id) target andAction: (SEL) action;
 - (NSInteger) indexOfItemWithSubmenu: (NSMenu *) menu;
 
-- (void) setSupermenu: (NSMenu *) value;
-- (void) setTitle: (NSString *) title;
-- (void) setAutoenablesItems: (BOOL) flag;
 - (void) setMenuChangedMessagesEnabled: (BOOL) flag;
 
 - (void) addItem: (NSMenuItem *) item;
@@ -122,8 +119,7 @@ typedef NS_OPTIONS(NSUInteger, NSMenuProperties) {
 
 - (BOOL) performKeyEquivalent: (NSEvent *) event;
 
-- (void) setDelegate: (id<NSMenuDelegate>) object;
-- (id<NSMenuDelegate>) delegate;
+@property(nonatomic, assign) id<NSMenuDelegate> delegate;
 
 @end
 

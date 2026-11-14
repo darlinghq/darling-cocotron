@@ -33,10 +33,10 @@ APPKIT_EXPORT NSString *const NSPopUpButtonWillPopUpNotification;
 }
 - initWithFrame: (NSRect) frame pullsDown: (BOOL) pullsDown;
 
-- (BOOL) pullsDown;
-- (NSMenu *) menu;
-- (BOOL) autoenablesItems;
-- (NSRectEdge) preferredEdge;
+@property(nonatomic) BOOL pullsDown;
+@property(nonatomic, retain) NSMenu *menu;
+@property(nonatomic) BOOL autoenablesItems;
+@property(nonatomic) NSRectEdge preferredEdge;
 
 - (NSArray *) itemArray;
 - (NSInteger) numberOfItems;
@@ -55,10 +55,6 @@ APPKIT_EXPORT NSString *const NSPopUpButtonWillPopUpNotification;
 - (NSString *) titleOfSelectedItem;
 - (NSInteger) indexOfSelectedItem;
 
-- (void) setPullsDown: (BOOL) flag;
-- (void) setMenu: (NSMenu *) menu;
-- (void) setAutoenablesItems: (BOOL) value;
-- (void) setPreferredEdge: (NSRectEdge) edge;
 
 - (void) addItemWithTitle: (NSString *) title;
 - (void) addItemsWithTitles: (NSArray *) titles;

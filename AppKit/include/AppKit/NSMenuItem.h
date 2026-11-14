@@ -78,51 +78,34 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                  keyEquivalent: (NSString *) keyEquivalent;
 
 - (NSMenu *) menu;
-- (NSString *) title;
-- (NSAttributedString *) attributedTitle;
+@property(nonatomic, copy) NSString *title;
+@property(nonatomic, copy) NSAttributedString *attributedTitle;
 - (NSString *) mnemonic;
-- (unsigned) mnemonicLocation;
-- (id) target;
-- (SEL) action;
-- (NSInteger) indentationLevel;
-- (NSInteger) tag;
-- (NSControlStateValue) state;
-- (NSString *) keyEquivalent;
-- (unsigned) keyEquivalentModifierMask;
-- (NSImage *) image;
-- (NSImage *) onStateImage;
-- (NSImage *) offStateImage;
-- (NSImage *) mixedStateImage;
+@property(nonatomic) unsigned mnemonicLocation;
+@property(nonatomic, assign) id target;
+@property(nonatomic) SEL action;
+@property(nonatomic) NSInteger indentationLevel;
+@property(nonatomic) NSInteger tag;
+@property(nonatomic) NSControlStateValue state;
+@property(nonatomic, copy) NSString *keyEquivalent;
+@property(nonatomic) unsigned keyEquivalentModifierMask;
+@property(nonatomic, retain) NSImage *image;
+@property(nonatomic, retain) NSImage *onStateImage;
+@property(nonatomic, retain) NSImage *offStateImage;
+@property(nonatomic, retain) NSImage *mixedStateImage;
 
 - representedObject;
 
-- (BOOL) hasSubmenu;
-- (NSMenu *) submenu;
+@property(nonatomic, readonly) BOOL hasSubmenu;
+@property(nonatomic, retain) NSMenu *submenu;
 
-- (BOOL) isSeparatorItem;
+@property(nonatomic, getter=isSeparatorItem, readonly) BOOL separatorItem;
 - (BOOL) isSectionHeader;
-- (BOOL) isEnabled;
-- (BOOL) isHidden;
+@property(nonatomic, getter=isEnabled) BOOL enabled;
+@property(nonatomic, getter=isHidden) BOOL hidden;
 
-- (void) setTitle: (NSString *) title;
-- (void) setAttributedTitle: (NSAttributedString *) title;
 - (void) setTitleWithMnemonic: (NSString *) mnemonic;
-- (void) setMnemonicLocation: (unsigned) location;
-- (void) setTarget: target;
-- (void) setAction: (SEL) action;
-- (void) setIndentationLevel: (NSInteger) indentationLevel;
-- (void) setTag: (NSInteger) tag;
-- (void) setState: (NSControlStateValue) state;
-- (void) setKeyEquivalent: (NSString *) keyEquivalent;
-- (void) setKeyEquivalentModifierMask: (unsigned) mask;
-- (void) setImage: (NSImage *) image;
-- (void) setOnStateImage: (NSImage *) image;
-- (void) setOffStateImage: (NSImage *) image;
-- (void) setMixedStateImage: (NSImage *) image;
 - (void) setRepresentedObject: object;
-- (void) setSubmenu: (NSMenu *) submenu;
-- (void) setEnabled: (BOOL) flag;
-- (void) setHidden: (BOOL) flag;
 
 - (NSString *) _keyEquivalentDescription;
 

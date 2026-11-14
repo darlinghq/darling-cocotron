@@ -22,23 +22,16 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @interface NSSlider : NSControl
 
-- (double) minValue;
-- (double) maxValue;
-- (double) altIncrementValue;
+@property(nonatomic) double minValue;
+@property(nonatomic) double maxValue;
+@property(nonatomic) double altIncrementValue;
 
-- (NSInteger) numberOfTickMarks;
-- (NSTickMarkPosition) tickMarkPosition;
-- (BOOL) allowsTickMarkValuesOnly;
-- (CGFloat) knobThickness;
+@property(nonatomic) NSInteger numberOfTickMarks;
+@property(nonatomic) NSTickMarkPosition tickMarkPosition;
+@property(nonatomic) BOOL allowsTickMarkValuesOnly;
+@property(nonatomic) CGFloat knobThickness;
 
-- (void) setMinValue: (double) value;
-- (void) setMaxValue: (double) value;
-- (void) setAltIncrementValue: (double) value;
 
-- (void) setNumberOfTickMarks: (NSInteger) number;
-- (void) setTickMarkPosition: (NSTickMarkPosition) position;
-- (void) setAllowsTickMarkValuesOnly: (BOOL) valuesOnly;
-- (void) setKnobThickness: (CGFloat) thickness;
 
 - (NSInteger) isVertical;
 

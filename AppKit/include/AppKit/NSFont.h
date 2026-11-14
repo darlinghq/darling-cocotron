@@ -112,42 +112,41 @@ typedef enum {
 + (NSArray *) preferredFontNames;
 + (void) setPreferredFontNames: (NSArray *) fontNames;
 
-- (CGFloat) pointSize;
-- (NSString *) fontName;
-- (const CGFloat *) matrix;
-- (NSAffineTransform *) textTransform;
-- (NSFontRenderingMode) renderingMode;
-- (NSCharacterSet *) coveredCharacterSet;
-- (NSStringEncoding) mostCompatibleStringEncoding;
-- (NSString *) familyName;
-- (NSString *) displayName;
-- (NSFontDescriptor *) fontDescriptor;
+@property(nonatomic, readonly) CGFloat pointSize;
+@property(nonatomic, readonly) NSString *fontName;
+@property(nonatomic, readonly) const CGFloat *matrix;
+@property(nonatomic, readonly) NSAffineTransform *textTransform;
+@property(nonatomic, readonly) NSFontRenderingMode renderingMode;
+@property(nonatomic, readonly) NSCharacterSet *coveredCharacterSet;
+@property(nonatomic, readonly) NSStringEncoding mostCompatibleStringEncoding;
+@property(nonatomic, readonly) NSString *familyName;
+@property(nonatomic, readonly) NSString *displayName;
+@property(nonatomic, readonly) NSFontDescriptor *fontDescriptor;
 
-- (NSFont *) printerFont;
-- (NSFont *) screenFont;
+@property(nonatomic, readonly) NSFont *printerFont;
+@property(nonatomic, readonly) NSFont *screenFont;
 - (NSFont *) screenFontWithRenderingMode: (NSFontRenderingMode) mode;
 
-- (NSRect) boundingRectForFont;
+@property(nonatomic, readonly) NSRect boundingRectForFont;
 - (NSRect) boundingRectForGlyph: (NSGlyph) glyph;
 
 - (NSMultibyteGlyphPacking) glyphPacking;
-- (NSUInteger) numberOfGlyphs;
+@property(nonatomic, readonly) NSUInteger numberOfGlyphs;
 - (NSGlyph) glyphWithName: (NSString *) name;
 - (BOOL) glyphIsEncoded: (NSGlyph) glyph;
 - (NSSize) advancementForGlyph: (NSGlyph) glyph;
 
-- (NSSize) maximumAdvancement;
-- (CGFloat) underlinePosition;
-- (CGFloat) underlineThickness;
-- (CGFloat) ascender;
-- (CGFloat) descender;
-- (CGFloat) leading;
+@property(nonatomic, readonly) NSSize maximumAdvancement;
+@property(nonatomic, readonly) CGFloat underlinePosition;
+@property(nonatomic, readonly) CGFloat underlineThickness;
+@property(nonatomic, readonly) CGFloat ascender;
+@property(nonatomic, readonly) CGFloat descender;
+@property(nonatomic, readonly) CGFloat leading;
 - (CGFloat) defaultLineHeightForFont;
-- (BOOL) isFixedPitch;
-- (CGFloat) italicAngle;
-- (CGFloat) leading;
-- (CGFloat) xHeight;
-- (CGFloat) capHeight;
+@property(nonatomic, getter=isFixedPitch, readonly) BOOL fixedPitch;
+@property(nonatomic, readonly) CGFloat italicAngle;
+@property(nonatomic, readonly) CGFloat xHeight;
+@property(nonatomic, readonly) CGFloat capHeight;
 
 - (void) setInContext: (NSGraphicsContext *) context;
 - (void) set;

@@ -89,21 +89,16 @@ typedef NS_OPTIONS(NSInteger, NSControlCharacterAction) {
 
 - init;
 
-- (NSFont *) textFont;
-- (void) setTextFont: (NSFont *) font;
+@property(nonatomic, retain) NSFont *textFont;
 
-- (BOOL) showsControlCharacters;
-- (void) setShowsControlCharacters: (BOOL) flag;
-- (BOOL) showsInvisibleCharacters;
-- (void) setShowsInvisibleCharacters: (BOOL) flag;
-- (BOOL) usesFontLeading;
-- (void) setUsesFontLeading: (BOOL) flag;
-- (BOOL) backgroundLayoutEnabled;
-- (void) setBackgroundLayoutEnabled: (BOOL) flag;
+@property(nonatomic) BOOL showsControlCharacters;
+@property(nonatomic) BOOL showsInvisibleCharacters;
+@property(nonatomic) BOOL usesFontLeading;
+@property(nonatomic) BOOL backgroundLayoutEnabled;
 
-- (NSTextStorage *) textStorage;
-- (NSGlyphGenerator *) glyphGenerator;
-- (NSTypesetter *) typesetter;
+@property(nonatomic, retain) NSTextStorage *textStorage;
+@property(nonatomic, retain) NSGlyphGenerator *glyphGenerator;
+@property(nonatomic, retain) NSTypesetter *typesetter;
 - delegate;
 - (NSArray *) textContainers;
 
@@ -111,14 +106,10 @@ typedef NS_OPTIONS(NSInteger, NSControlCharacterAction) {
 - (NSTextView *) textViewForBeginningOfSelection;
 - (BOOL) layoutManagerOwnsFirstResponderInWindow: (NSWindow *) window;
 
-- (void) setTextStorage: (NSTextStorage *) textStorage;
 - (void) replaceTextStorage: (NSTextStorage *) textStorage;
-- (void) setGlyphGenerator: (NSGlyphGenerator *) generator;
-- (void) setTypesetter: (NSTypesetter *) typesetter;
 - (void) setDelegate: delegate;
 
-- (BOOL) usesScreenFonts;
-- (void) setUsesScreenFonts: (BOOL) yorn;
+@property(nonatomic) BOOL usesScreenFonts;
 
 - (void) addTextContainer: (NSTextContainer *) container;
 - (void) removeTextContainerAtIndex: (NSUInteger) index;
@@ -174,7 +165,7 @@ typedef NS_OPTIONS(NSInteger, NSControlCharacterAction) {
 - (NSRect) extraLineFragmentUsedRect;
 - (NSTextContainer *) extraLineFragmentTextContainer;
 
-- (BOOL) allowsNonContiguousLayout;
+@property(nonatomic) BOOL allowsNonContiguousLayout;
 
 - (void) setTextContainer: (NSTextContainer *) container
             forGlyphRange: (NSRange) glyphRange;
@@ -322,15 +313,12 @@ typedef NS_OPTIONS(NSInteger, NSControlCharacterAction) {
                                      ruler: (NSRulerView *) ruler
                                    enabled: (BOOL) isEnabled;
 
-- (void) setAllowsNonContiguousLayout: (BOOL) value;
 
 // Stored only: attachments are drawn at their own size. NSImageScaleNone
 // by default.
-- (NSImageScaling) defaultAttachmentScaling;
-- (void) setDefaultAttachmentScaling: (NSImageScaling) scaling;
+@property(nonatomic) NSImageScaling defaultAttachmentScaling;
 // Stored only (NO by default): the typesetter doesn't hyphenate.
-- (BOOL) usesDefaultHyphenation;
-- (void) setUsesDefaultHyphenation: (BOOL) flag;
+@property(nonatomic) BOOL usesDefaultHyphenation;
 @end
 
 @protocol NSLayoutManagerDelegate <NSObject>

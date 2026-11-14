@@ -78,9 +78,9 @@ typedef NS_ENUM(NSUInteger, NSMatrixMode) {
         numberOfColumns: (NSInteger) columns;
 
 - delegate;
-- (SEL) doubleAction;
+@property(nonatomic) SEL doubleAction;
 
-- (Class) cellClass;
+@property(nonatomic) Class cellClass;
 - prototype;
 
 - (NSArray *) cells;
@@ -102,29 +102,27 @@ typedef NS_ENUM(NSUInteger, NSMatrixMode) {
 
 - keyCell;
 
-- (NSMatrixMode) mode;
-- (BOOL) allowsEmptySelection;
-- (BOOL) tabKeyTraversesCells;
+@property(nonatomic) NSMatrixMode mode;
+@property(nonatomic) BOOL allowsEmptySelection;
+@property(nonatomic) BOOL tabKeyTraversesCells;
 
-- (BOOL) autosizesCells;
-- (NSSize) cellSize;
-- (NSSize) intercellSpacing;
+@property(nonatomic) BOOL autosizesCells;
+@property(nonatomic) NSSize cellSize;
+@property(nonatomic) NSSize intercellSpacing;
 
-- (BOOL) drawsBackground;
-- (NSColor *) backgroundColor;
+@property(nonatomic) BOOL drawsBackground;
+@property(nonatomic, retain) NSColor *backgroundColor;
 
-- (BOOL) drawsCellBackground;
-- (NSColor *) cellBackgroundColor;
+@property(nonatomic) BOOL drawsCellBackground;
+@property(nonatomic, retain) NSColor *cellBackgroundColor;
 
-- (BOOL) isAutoscroll;
+@property(nonatomic, getter=isAutoscroll) BOOL autoscroll;
 
 - (NSInteger) selectedRow;
 - (NSInteger) selectedColumn;
 - (NSArray *) selectedCells;
 
 - (void) setDelegate: delegate;
-- (void) setDoubleAction: (SEL) action;
-- (void) setCellClass: (Class) aClass;
 - (void) setPrototype: (NSCell *) cell;
 
 - (void) renewRows: (NSInteger) rows columns: (NSInteger) columns;
@@ -145,20 +143,9 @@ typedef NS_ENUM(NSUInteger, NSMatrixMode) {
 
 - (void) setKeyCell: cell;
 
-- (void) setMode: (NSMatrixMode) mode;
-- (void) setAllowsEmptySelection: (BOOL) flag;
-- (void) setTabKeyTraversesCells: (BOOL) flag;
 
-- (void) setAutosizesCells: (BOOL) flag;
-- (void) setCellSize: (NSSize) size;
-- (void) setIntercellSpacing: (NSSize) size;
 
-- (void) setDrawsBackground: (BOOL) flag;
-- (void) setBackgroundColor: (NSColor *) color;
-- (void) setDrawsCellBackground: (BOOL) flag;
-- (void) setCellBackgroundColor: (NSColor *) color;
 
-- (void) setAutoscroll: (BOOL) flag;
 
 - (void) selectCellAtRow: (NSInteger) row column: (NSInteger) column;
 - (void) selectCell: (NSCell *) cell;

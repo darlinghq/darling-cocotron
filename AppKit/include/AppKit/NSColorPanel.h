@@ -85,7 +85,7 @@ APPKIT_EXPORT NSString *const NSColorPanelColorDidChangeNotification;
 }
 
 + (BOOL) sharedColorPanelExists;
-+ (NSColorPanel *) sharedColorPanel;
+@property(class, readonly, retain, nonnull) NSColorPanel *sharedColorPanel;
 
 + (void) setPickerMask: (NSUInteger) mask;
 + (void) setPickerMode: (NSColorPanelMode) mode;
@@ -94,18 +94,13 @@ APPKIT_EXPORT NSString *const NSColorPanelColorDidChangeNotification;
          withEvent: (NSEvent *) event
           fromView: (NSView *) view;
 
-- (NSColor *) color;
+@property(nonatomic, retain) NSColor *color;
 - (CGFloat) alpha;
-- (NSColorPanelMode) mode;
-- (BOOL) showsAlpha;
-- (BOOL) isContinuous;
-- (NSView *) accessoryView;
+@property(nonatomic) NSColorPanelMode mode;
+@property(nonatomic) BOOL showsAlpha;
+@property(nonatomic, getter=isContinuous) BOOL continuous;
+@property(nonatomic, retain) NSView *accessoryView;
 
-- (void) setColor: (NSColor *) color;
-- (void) setMode: (NSColorPanelMode) mode;
-- (void) setShowsAlpha: (BOOL) flag;
-- (void) setContinuous: (BOOL) flag;
-- (void) setAccessoryView: (NSView *) view;
 
 - (void) setAction: (SEL) action;
 - (void) setTarget: target;

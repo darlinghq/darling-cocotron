@@ -41,20 +41,14 @@ typedef NS_ENUM(NSUInteger, NSTextFieldBezelStyle) {
 
 @property(copy) NSArray<NSString *> *allowedInputSourceLocales;
 
-- (NSColor *) backgroundColor;
-- (NSColor *) textColor;
-- (BOOL) drawsBackground;
-- (NSTextFieldBezelStyle) bezelStyle;
+@property(nonatomic, retain) NSColor *backgroundColor;
+@property(nonatomic, retain) NSColor *textColor;
+@property(nonatomic) BOOL drawsBackground;
+@property(nonatomic) NSTextFieldBezelStyle bezelStyle;
 
-- (NSString *) placeholderString;
-- (NSAttributedString *) placeholderAttributedString;
+@property(nonatomic, copy) NSString *placeholderString;
+@property(nonatomic, copy) NSAttributedString *placeholderAttributedString;
 
-- (void) setBackgroundColor: (NSColor *) color;
-- (void) setTextColor: (NSColor *) color;
-- (void) setDrawsBackground: (BOOL) flag;
-- (void) setBezelStyle: (NSTextFieldBezelStyle) value;
 
-- (void) setPlaceholderString: (NSString *) value;
-- (void) setPlaceholderAttributedString: (NSAttributedString *) value;
 
 @end

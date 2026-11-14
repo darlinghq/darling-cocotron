@@ -68,7 +68,7 @@ typedef NS_ENUM(NSInteger, NSCorrectionResponse) {
 #pragma mark -
 #pragma mark Getting the Spell Checker
 
-+ (NSSpellChecker *) sharedSpellChecker;
+@property(class, readonly, retain, nonnull) NSSpellChecker *sharedSpellChecker;
 + (BOOL) sharedSpellCheckerExists;
 
 #pragma mark -

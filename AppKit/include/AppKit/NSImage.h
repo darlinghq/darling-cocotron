@@ -113,34 +113,25 @@ typedef NS_ENUM(NSUInteger, NSImageLoadStatus) {
 @property NSRect alignmentRect;
 @property NSEdgeInsets capInsets;
 @property NSImageResizingMode resizingMode;
-- (NSColor *) backgroundColor;
+@property(nonatomic, retain) NSColor *backgroundColor;
 @property (getter=isFlipped) BOOL flipped;
 @property (setter=setTemplate:) BOOL isTemplate;
-- (BOOL) scalesWhenResized;
-- (BOOL) matchesOnMultipleResolution;
-- (BOOL) usesEPSOnResolutionMismatch;
-- (BOOL) prefersColorMatch;
-- (NSImageCacheMode) cacheMode;
-- (BOOL) isCachedSeparately;
-- (BOOL) cacheDepthMatchesImageDepth;
-- (BOOL) isDataRetained;
+@property(nonatomic) BOOL scalesWhenResized;
+@property(nonatomic) BOOL matchesOnMultipleResolution;
+@property(nonatomic) BOOL usesEPSOnResolutionMismatch;
+@property(nonatomic) BOOL prefersColorMatch;
+@property(nonatomic) NSImageCacheMode cacheMode;
+@property(nonatomic, getter=isCachedSeparately) BOOL cachedSeparately;
+@property(nonatomic) BOOL cacheDepthMatchesImageDepth;
+@property(nonatomic, getter=isDataRetained) BOOL dataRetained;
 - delegate;
 
 - (BOOL) setName: (NSString *) value;
-- (void) setBackgroundColor: (NSColor *) value;
-- (void) setScalesWhenResized: (BOOL) value;
-- (void) setMatchesOnMultipleResolution: (BOOL) value;
-- (void) setUsesEPSOnResolutionMismatch: (BOOL) value;
-- (void) setPrefersColorMatch: (BOOL) value;
-- (void) setCacheMode: (NSImageCacheMode) value;
-- (void) setCachedSeparately: (BOOL) value;
-- (void) setCacheDepthMatchesImageDepth: (BOOL) value;
-- (void) setDataRetained: (BOOL) value;
 - (void) setDelegate: delegate;
 
-- (BOOL) isValid;
+@property(nonatomic, getter=isValid, readonly) BOOL valid;
 
-- (NSArray *) representations;
+@property(nonatomic, readonly) NSArray *representations;
 - (void) addRepresentation: (NSImageRep *) representation;
 - (void) addRepresentations: (NSArray *) array;
 - (void) removeRepresentation: (NSImageRep *) representation;
@@ -206,7 +197,7 @@ typedef NS_ENUM(NSUInteger, NSImageLoadStatus) {
                   accessibilityDescription: (NSString *) description;
 - (NSImage *) imageWithSymbolConfiguration:
         (NSImageSymbolConfiguration *) configuration;
-- (NSImageSymbolConfiguration *) symbolConfiguration;
+@property(nonatomic, readonly) NSImageSymbolConfiguration *symbolConfiguration;
 // Private AppKit spelling of imageWithSystemSymbolName:accessibilityDescription:.
 + (instancetype) _imageWithSystemSymbolName: (NSString *) name;
 

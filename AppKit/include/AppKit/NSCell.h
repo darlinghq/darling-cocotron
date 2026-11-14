@@ -172,8 +172,7 @@ APPKIT_EXPORT NSNotificationName NSControlTintDidChangeNotification;
 @property NSUserInterfaceLayoutDirection userInterfaceLayoutDirection;
 
 // The cell's contextual menu.
-- (NSMenu *) menu;
-- (void) setMenu: (NSMenu *) menu;
+@property(nonatomic, retain) NSMenu *menu;
 
 #pragma mark -
 #pragma mark Class Methods
@@ -187,97 +186,66 @@ APPKIT_EXPORT NSNotificationName NSControlTintDidChangeNotification;
 - initTextCell: (NSString *) string;
 - initImageCell: (NSImage *) image;
 
-- (NSView *) controlView;
-- (NSCellType) type;
+@property(nonatomic, retain) NSView *controlView;
+@property(nonatomic) NSCellType type;
 @property NSControlStateValue state;
 
 - target;
-- (SEL) action;
-- (NSInteger) tag;
-- (NSInteger) entryType;
-- (id) formatter;
+@property(nonatomic) SEL action;
+@property(nonatomic) NSInteger tag;
+@property(nonatomic) NSInteger entryType;
+@property(nonatomic, retain) id formatter;
 @property (retain) NSFont *font;
-- (NSImage *) image;
-- (NSTextAlignment) alignment;
+@property(nonatomic, retain) NSImage *image;
+@property(nonatomic) NSTextAlignment alignment;
 @property NSLineBreakMode lineBreakMode;
-- (BOOL) usesSingleLineMode;
+@property(nonatomic) BOOL usesSingleLineMode;
 @property NSWritingDirection baseWritingDirection;
-- (BOOL) wraps;
-- (NSString *) title;
+@property(nonatomic) BOOL wraps;
+@property(nonatomic, copy) NSString *title;
 - (NSInteger) sendActionOn: (NSInteger) mask;
 
-- (BOOL) isEnabled;
-- (BOOL) isEditable;
-- (BOOL) isSelectable;
-- (BOOL) isScrollable;
-- (BOOL) isBordered;
-- (BOOL) isBezeled;
-- (BOOL) isContinuous;
-- (BOOL) showsFirstResponder;
-- (BOOL) refusesFirstResponder;
-- (BOOL) isHighlighted;
+@property(nonatomic, getter=isEnabled) BOOL enabled;
+@property(nonatomic, getter=isEditable) BOOL editable;
+@property(nonatomic, getter=isSelectable) BOOL selectable;
+@property(nonatomic, getter=isScrollable) BOOL scrollable;
+@property(nonatomic, getter=isBordered) BOOL bordered;
+@property(nonatomic, getter=isBezeled) BOOL bezeled;
+@property(nonatomic, getter=isContinuous) BOOL continuous;
+@property(nonatomic) BOOL showsFirstResponder;
+@property(nonatomic) BOOL refusesFirstResponder;
+@property(nonatomic, getter=isHighlighted) BOOL highlighted;
 
 - (BOOL) hasValidObjectValue;
 - objectValue;
-- (NSString *) stringValue;
-- (int) intValue;
-- (float) floatValue;
+@property(nonatomic, copy) NSString *stringValue;
+@property(nonatomic) int intValue;
+@property(nonatomic) float floatValue;
 @property double doubleValue;
-- (NSInteger) integerValue;
-- (NSAttributedString *) attributedStringValue;
-- (id) representedObject;
+@property(nonatomic) NSInteger integerValue;
+@property(nonatomic, copy) NSAttributedString *attributedStringValue;
+@property(nonatomic, assign) id representedObject;
 @property NSControlSize controlSize;
-- (NSFocusRingType) focusRingType;
-- (NSBackgroundStyle) backgroundStyle;
+@property(nonatomic) NSFocusRingType focusRingType;
+@property(nonatomic) NSBackgroundStyle backgroundStyle;
 
 // The background style the cell draws its interior for (read-only).
 - (NSBackgroundStyle) interiorBackgroundStyle;
 
-- (void) setControlView: (NSView *) view;
-- (void) setType: (NSCellType) type;
 
 - (NSControlStateValue) nextState;
 - (void) setNextState;
-- (BOOL) allowsMixedState;
-- (void) setAllowsMixedState: (BOOL) allow;
-- (BOOL) allowsEditingTextAttributes;
-- (void) setAllowsEditingTextAttributes: (BOOL) allow;
+@property(nonatomic) BOOL allowsMixedState;
+@property(nonatomic) BOOL allowsEditingTextAttributes;
 
 - (void) setTarget: target;
-- (void) setAction: (SEL) action;
-- (void) setTag: (NSInteger) tag;
-- (void) setEntryType: (NSInteger) type;
-- (void) setFormatter: (NSFormatter *) formatter;
-- (void) setImage: (NSImage *) image;
-- (void) setAlignment: (NSTextAlignment) alignment;
-- (void) setUsesSingleLineMode: (BOOL) flag;
-- (void) setWraps: (BOOL) wraps;
-- (void) setTitle: (NSString *) title;
 
-- (void) setEnabled: (BOOL) flag;
-- (void) setEditable: (BOOL) flag;
-- (void) setSelectable: (BOOL) flag;
-- (void) setScrollable: (BOOL) flag;
-- (void) setBordered: (BOOL) flag;
-- (void) setBezeled: (BOOL) flag;
-- (void) setContinuous: (BOOL) flag;
-- (void) setShowsFirstResponder: (BOOL) value;
-- (void) setRefusesFirstResponder: (BOOL) flag;
-- (void) setHighlighted: (BOOL) flag;
 
 - (void) setFloatingPointFormat: (BOOL) fpp
                            left: (NSUInteger) left
                           right: (NSUInteger) right;
 
 - (void) setObjectValue: (id<NSCopying>) value;
-- (void) setStringValue: (NSString *) value;
-- (void) setIntValue: (int) value;
-- (void) setFloatValue: (float) value;
-- (void) setIntegerValue: (NSInteger) value;
-- (void) setAttributedStringValue: (NSAttributedString *) value;
-- (void) setRepresentedObject: (id) object;
-- (void) setFocusRingType: (NSFocusRingType) focusRingType;
-- (void) setBackgroundStyle: (NSBackgroundStyle) value;
 
 - (void) takeObjectValueFrom: (id) sender;
 - (void) takeStringValueFrom: (id) sender;
@@ -330,8 +298,7 @@ APPKIT_EXPORT NSNotificationName NSControlTintDidChangeNotification;
 
 - (void) resetCursorRect: (NSRect) rect inView: (NSView *) view;
 
-- (void) setSendsActionOnEndEditing: (BOOL) flag;
-- (BOOL) sendsActionOnEndEditing;
+@property(nonatomic) BOOL sendsActionOnEndEditing;
 
 // The cell's menu, whatever the event and position.
 - (NSMenu *) menuForEvent: (NSEvent *) event

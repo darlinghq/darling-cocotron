@@ -40,18 +40,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - delegate;
 - (void) setDelegate: delegate;
 
-- (NSColor *) backgroundColor;
-- (NSColor *) textColor;
-- (BOOL) drawsBackground;
+@property(nonatomic, retain) NSColor *backgroundColor;
+@property(nonatomic, retain) NSColor *textColor;
+@property(nonatomic) BOOL drawsBackground;
 
-- (void) setBackgroundColor: (NSColor *) color;
-- (void) setTextColor: (NSColor *) color;
-- (void) setDrawsBackground: (BOOL) flag;
 - (NSTextFieldBezelStyle) bezelStyle;
 - (void) setBezelStyle: (NSTextFieldBezelStyle) style;
 
-- (BOOL) allowsEditingTextAttributes;
-- (void) setAllowsEditingTextAttributes: (BOOL) flag;
+@property(nonatomic) BOOL allowsEditingTextAttributes;
 
 - (NSInteger) maximumNumberOfLines;
 - (NSString *) placeholderString;

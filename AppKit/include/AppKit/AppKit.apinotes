@@ -2390,3 +2390,1191 @@ Functions:
   SwiftPrivate: true
 - Name: NSShowAnimationEffect
   SwiftPrivate: true
+
+# Method, property and initializer spellings of the classes (grouped by class).
+Classes:
+- Name: NSATSTypesetter
+  Methods:
+  - Selector: "getGlyphsInRange:glyphs:characterIndexes:glyphInscriptions:elasticBits:"
+    MethodKind: Instance
+    SwiftName: getGlyphs(in:glyphs:characterIndexes:glyphInscriptions:elasticBits:)
+- Name: NSAppearance
+  Methods:
+  - Selector: "bestMatchFromAppearancesWithNames:"
+    MethodKind: Instance
+    SwiftName: bestMatch(from:)
+  - Selector: "performAsCurrentDrawingAppearance:"
+    MethodKind: Instance
+    SwiftName: performAsCurrentDrawingAppearance(_:)
+  - Selector: "setCurrentAppearance:"
+    MethodKind: Class
+    SwiftName: setCurrent(_:)
+  - Selector: currentDrawingAppearance
+    MethodKind: Class
+    ResultType: "NSAppearance * _Nonnull"
+  Properties:
+  - Name: currentDrawingAppearance
+    PropertyKind: Class
+    SwiftImportAsAccessors: true
+- Name: NSApplication
+  Methods:
+  - Selector: "activateIgnoringOtherApps:"
+    MethodKind: Instance
+    SwiftName: activate(ignoringOtherApps:)
+  - Selector: "endModalSession:"
+    MethodKind: Instance
+    SwiftName: endModalSession(_:)
+  - Selector: "postEvent:atStart:"
+    MethodKind: Instance
+    SwiftName: postEvent(_:atStart:)
+  - Selector: "reportException:"
+    MethodKind: Instance
+    SwiftName: reportException(_:)
+  - Selector: "runModalSession:"
+    MethodKind: Instance
+    SwiftName: runModalSession(_:)
+  - Selector: "sendEvent:"
+    MethodKind: Instance
+    SwiftName: sendEvent(_:)
+- Name: NSArrayController
+  Methods:
+  - Selector: "addObjects:"
+    MethodKind: Instance
+    SwiftName: add(contentsOf:)
+  - Selector: "insertObjects:atArrangedObjectIndexes:"
+    MethodKind: Instance
+    SwiftName: insert(contentsOf:atArrangedObjectIndexes:)
+  - Selector: "removeObjectAtArrangedObjectIndex:"
+    MethodKind: Instance
+    SwiftName: remove(atArrangedObjectIndex:)
+  - Selector: "removeObjects:"
+    MethodKind: Instance
+    SwiftName: remove(contentsOf:)
+  - Selector: "removeObjectsAtArrangedObjectIndexes:"
+    MethodKind: Instance
+    SwiftName: remove(atArrangedObjectIndexes:)
+- Name: NSBezierPath
+  Methods:
+  - Selector: "appendBezierPathWithArcFromPoint:toPoint:radius:"
+    MethodKind: Instance
+    SwiftName: appendArc(from:to:radius:)
+  - Selector: "appendBezierPathWithArcWithCenter:radius:startAngle:endAngle:"
+    MethodKind: Instance
+    SwiftName: appendArc(withCenter:radius:startAngle:endAngle:)
+  - Selector: "appendBezierPathWithArcWithCenter:radius:startAngle:endAngle:clockwise:"
+    MethodKind: Instance
+    SwiftName: appendArc(withCenter:radius:startAngle:endAngle:clockwise:)
+  - Selector: "appendBezierPathWithGlyph:inFont:"
+    MethodKind: Instance
+    SwiftName: appendGlyph(_:in:)
+  - Selector: "appendBezierPathWithGlyphs:count:inFont:"
+    MethodKind: Instance
+    SwiftName: appendGlyphs(_:count:in:)
+  - Selector: "appendBezierPathWithOvalInRect:"
+    MethodKind: Instance
+    SwiftName: appendOval(in:)
+  - Selector: "appendBezierPathWithPackedGlyphs:"
+    MethodKind: Instance
+    SwiftName: appendPackedGlyphs(_:)
+  - Selector: "appendBezierPathWithPoints:count:"
+    MethodKind: Instance
+    SwiftName: appendPoints(_:count:)
+  - Selector: "appendBezierPathWithRect:"
+    MethodKind: Instance
+    SwiftName: appendRect(_:)
+  - Selector: "appendBezierPathWithRoundedRect:xRadius:yRadius:"
+    MethodKind: Instance
+    SwiftName: appendRoundedRect(_:xRadius:yRadius:)
+  - Selector: "clipRect:"
+    MethodKind: Class
+    SwiftName: clip(_:)
+  Properties:
+  - Name: bezierPathByFlatteningPath
+    PropertyKind: Instance
+    SwiftName: flattened
+  - Name: bezierPathByReversingPath
+    PropertyKind: Instance
+    SwiftName: reversed
+- Name: NSBrowser
+  Methods:
+  - Selector: "frameOfInsideOfColumn:"
+    MethodKind: Instance
+    SwiftName: frame(ofInsideOfColumn:)
+- Name: NSBundle
+  Methods:
+  - Selector: "pathForImageResource:"
+    MethodKind: Instance
+    SwiftName: pathForImageResource(_:)
+- Name: NSButton
+  Methods:
+  - Selector: "checkboxWithTitle:target:action:"
+    MethodKind: Class
+    SwiftName: init(checkboxWithTitle:target:action:)
+  - Selector: "mouseEntered:"
+    MethodKind: Instance
+    SwiftName: mouseEntered(with:)
+  - Selector: "mouseExited:"
+    MethodKind: Instance
+    SwiftName: mouseExited(with:)
+  - Selector: "radioButtonWithTitle:target:action:"
+    MethodKind: Class
+    SwiftName: init(radioButtonWithTitle:target:action:)
+- Name: NSButtonCell
+  Methods:
+  - Selector: "mouseEntered:"
+    MethodKind: Instance
+    SwiftName: mouseEntered(with:)
+  - Selector: "mouseExited:"
+    MethodKind: Instance
+    SwiftName: mouseExited(with:)
+- Name: NSCell
+  Methods:
+  - Selector: "continueTracking:at:inView:"
+    MethodKind: Instance
+    SwiftName: continueTracking(last:current:in:)
+  - Selector: "stopTracking:at:inView:mouseIsUp:"
+    MethodKind: Instance
+    SwiftName: stopTracking(last:current:in:mouseIsUp:)
+  - Selector: "trackMouse:inRect:ofView:untilMouseUp:"
+    MethodKind: Instance
+    SwiftName: trackMouse(with:in:of:untilMouseUp:)
+- Name: NSClipView
+  Methods:
+  - Selector: "autoscroll:"
+    MethodKind: Instance
+    SwiftName: autoscroll(with:)
+- Name: NSColor
+  Methods:
+  - Selector: "blendedColorWithFraction:ofColor:"
+    MethodKind: Instance
+    SwiftName: blended(withFraction:of:)
+  Properties:
+  - Name: alternateSelectedControlColor
+    PropertyKind: Class
+    SwiftName: alternateSelectedControlColor
+  - Name: alternateSelectedControlTextColor
+    PropertyKind: Class
+    SwiftName: alternateSelectedControlTextColor
+  - Name: controlAccentColor
+    PropertyKind: Class
+    SwiftName: controlAccentColor
+  - Name: controlBackgroundColor
+    PropertyKind: Class
+    SwiftName: controlBackgroundColor
+  - Name: controlColor
+    PropertyKind: Class
+    SwiftName: controlColor
+  - Name: controlDarkShadowColor
+    PropertyKind: Class
+    SwiftName: controlDarkShadowColor
+  - Name: controlHighlightColor
+    PropertyKind: Class
+    SwiftName: controlHighlightColor
+  - Name: controlLightHighlightColor
+    PropertyKind: Class
+    SwiftName: controlLightHighlightColor
+  - Name: controlShadowColor
+    PropertyKind: Class
+    SwiftName: controlShadowColor
+  - Name: controlTextColor
+    PropertyKind: Class
+    SwiftName: controlTextColor
+  - Name: disabledControlTextColor
+    PropertyKind: Class
+    SwiftName: disabledControlTextColor
+  - Name: gridColor
+    PropertyKind: Class
+    SwiftName: gridColor
+  - Name: headerColor
+    PropertyKind: Class
+    SwiftName: headerColor
+  - Name: headerTextColor
+    PropertyKind: Class
+    SwiftName: headerTextColor
+  - Name: highlightColor
+    PropertyKind: Class
+    SwiftName: highlightColor
+  - Name: keyboardFocusIndicatorColor
+    PropertyKind: Class
+    SwiftName: keyboardFocusIndicatorColor
+  - Name: knobColor
+    PropertyKind: Class
+    SwiftName: knobColor
+  - Name: labelColor
+    PropertyKind: Class
+    SwiftName: labelColor
+  - Name: linkColor
+    PropertyKind: Class
+    SwiftName: linkColor
+  - Name: quaternaryLabelColor
+    PropertyKind: Class
+    SwiftName: quaternaryLabelColor
+  - Name: scrollBarColor
+    PropertyKind: Class
+    SwiftName: scrollBarColor
+  - Name: secondaryLabelColor
+    PropertyKind: Class
+    SwiftName: secondaryLabelColor
+  - Name: secondarySelectedControlColor
+    PropertyKind: Class
+    SwiftName: secondarySelectedControlColor
+  - Name: selectedContentBackgroundColor
+    PropertyKind: Class
+    SwiftName: selectedContentBackgroundColor
+  - Name: selectedControlColor
+    PropertyKind: Class
+    SwiftName: selectedControlColor
+  - Name: selectedControlTextColor
+    PropertyKind: Class
+    SwiftName: selectedControlTextColor
+  - Name: selectedKnobColor
+    PropertyKind: Class
+    SwiftName: selectedKnobColor
+  - Name: selectedMenuItemColor
+    PropertyKind: Class
+    SwiftName: selectedMenuItemColor
+  - Name: selectedMenuItemTextColor
+    PropertyKind: Class
+    SwiftName: selectedMenuItemTextColor
+  - Name: selectedTextBackgroundColor
+    PropertyKind: Class
+    SwiftName: selectedTextBackgroundColor
+  - Name: selectedTextColor
+    PropertyKind: Class
+    SwiftName: selectedTextColor
+  - Name: separatorColor
+    PropertyKind: Class
+    SwiftName: separatorColor
+  - Name: shadowColor
+    PropertyKind: Class
+    SwiftName: shadowColor
+  - Name: tertiaryLabelColor
+    PropertyKind: Class
+    SwiftName: tertiaryLabelColor
+  - Name: textBackgroundColor
+    PropertyKind: Class
+    SwiftName: textBackgroundColor
+  - Name: textColor
+    PropertyKind: Class
+    SwiftName: textColor
+  - Name: textInsertionPointColor
+    PropertyKind: Class
+    SwiftName: textInsertionPointColor
+  - Name: unemphasizedSelectedContentBackgroundColor
+    PropertyKind: Class
+    SwiftName: unemphasizedSelectedContentBackgroundColor
+  - Name: unemphasizedSelectedTextBackgroundColor
+    PropertyKind: Class
+    SwiftName: unemphasizedSelectedTextBackgroundColor
+  - Name: unemphasizedSelectedTextColor
+    PropertyKind: Class
+    SwiftName: unemphasizedSelectedTextColor
+  - Name: windowBackgroundColor
+    PropertyKind: Class
+    SwiftName: windowBackgroundColor
+  - Name: windowFrameColor
+    PropertyKind: Class
+    SwiftName: windowFrameColor
+  - Name: windowFrameTextColor
+    PropertyKind: Class
+    SwiftName: windowFrameTextColor
+- Name: NSColorList
+  Methods:
+  - Selector: "insertColor:key:atIndex:"
+    MethodKind: Instance
+    SwiftName: insertColor(_:key:at:)
+- Name: NSColorPanel
+  Methods:
+  - Selector: "attachColorList:"
+    MethodKind: Instance
+    SwiftName: attachColorList(_:)
+  - Selector: "detachColorList:"
+    MethodKind: Instance
+    SwiftName: detachColorList(_:)
+  - Selector: "dragColor:withEvent:fromView:"
+    MethodKind: Class
+    SwiftName: dragColor(_:with:from:)
+- Name: NSColorWell
+  Methods:
+  - Selector: "drawWellInside:"
+    MethodKind: Instance
+    SwiftName: drawWell(inside:)
+- Name: NSComboBox
+  Methods:
+  - Selector: "addItemWithObjectValue:"
+    MethodKind: Instance
+    SwiftName: addItem(withObjectValue:)
+  - Selector: "addItemsWithObjectValues:"
+    MethodKind: Instance
+    SwiftName: addItems(withObjectValues:)
+  - Selector: "indexOfItemWithObjectValue:"
+    MethodKind: Instance
+    SwiftName: indexOfItem(withObjectValue:)
+  - Selector: "insertItemWithObjectValue:atIndex:"
+    MethodKind: Instance
+    SwiftName: insertItem(withObjectValue:at:)
+  - Selector: "removeItemWithObjectValue:"
+    MethodKind: Instance
+    SwiftName: removeItem(withObjectValue:)
+  - Selector: "scrollItemAtIndexToTop:"
+    MethodKind: Instance
+    SwiftName: scrollItemAtIndexToTop(_:)
+  - Selector: "selectItemWithObjectValue:"
+    MethodKind: Instance
+    SwiftName: selectItem(withObjectValue:)
+- Name: NSComboBoxCell
+  Methods:
+  - Selector: "addItemWithObjectValue:"
+    MethodKind: Instance
+    SwiftName: addItem(withObjectValue:)
+  - Selector: "addItemsWithObjectValues:"
+    MethodKind: Instance
+    SwiftName: addItems(withObjectValues:)
+  - Selector: "indexOfItemWithObjectValue:"
+    MethodKind: Instance
+    SwiftName: indexOfItem(withObjectValue:)
+  - Selector: "insertItemWithObjectValue:atIndex:"
+    MethodKind: Instance
+    SwiftName: insertItem(withObjectValue:at:)
+  - Selector: "removeItemWithObjectValue:"
+    MethodKind: Instance
+    SwiftName: removeItem(withObjectValue:)
+  - Selector: "scrollItemAtIndexToTop:"
+    MethodKind: Instance
+    SwiftName: scrollItemAtIndexToTop(_:)
+  - Selector: "selectItemWithObjectValue:"
+    MethodKind: Instance
+    SwiftName: selectItem(withObjectValue:)
+- Name: NSControl
+  Methods:
+  - Selector: "drawCellInside:"
+    MethodKind: Instance
+    SwiftName: drawCellInside(_:)
+  - Selector: "initWithFrame:"
+    MethodKind: Instance
+    DesignatedInit: true
+  - Selector: "mouseDown:"
+    MethodKind: Instance
+    SwiftName: mouseDown(with:)
+  - Selector: "updateCellInside:"
+    MethodKind: Instance
+    SwiftName: updateCellInside(_:)
+- Name: NSCursor
+  Methods:
+  - Selector: "mouseEntered:"
+    MethodKind: Instance
+    SwiftName: mouseEntered(with:)
+  - Selector: "mouseExited:"
+    MethodKind: Instance
+    SwiftName: mouseExited(with:)
+- Name: NSDocument
+  Methods:
+  - Selector: "browseDocumentVersions:"
+    MethodKind: Instance
+    SwiftName: browseVersions(_:)
+  - Selector: "preparePageLayout:"
+    MethodKind: Instance
+    SwiftName: preparePageLayout(_:)
+  - Selector: "prepareSavePanel:"
+    MethodKind: Instance
+    SwiftName: prepareSavePanel(_:)
+  - Selector: "printDocument:"
+    MethodKind: Instance
+    SwiftName: printDocument(_:)
+  - Selector: "revertDocumentToSaved:"
+    MethodKind: Instance
+    SwiftName: revertToSaved(_:)
+  - Selector: init
+    MethodKind: Instance
+    DesignatedInit: true
+- Name: NSDocumentController
+  Methods:
+  - Selector: init
+    MethodKind: Instance
+    DesignatedInit: true
+- Name: NSFont
+  Methods:
+  - Selector: "labelFontOfSize:"
+    MethodKind: Class
+    SwiftName: labelFont(ofSize:)
+  - Selector: "setInContext:"
+    MethodKind: Instance
+    SwiftName: set(in:)
+  - Selector: labelFontSize
+    MethodKind: Class
+    SwiftName: labelFontSize()
+  Properties:
+  - Name: labelFontSize
+    PropertyKind: Class
+    SwiftName: labelFontSize
+- Name: NSFontManager
+  Methods:
+  - Selector: "availableFontNamesWithTraits:"
+    MethodKind: Instance
+    SwiftName: availableFontNames(with:)
+- Name: NSFontPanel
+  Methods:
+  - Selector: "panelConvertFont:"
+    MethodKind: Instance
+    SwiftName: convert(_:)
+- Name: NSGestureRecognizer
+  Methods:
+  - Selector: "flagsChanged:"
+    MethodKind: Instance
+    SwiftName: flagsChanged(with:)
+  - Selector: "keyDown:"
+    MethodKind: Instance
+    SwiftName: keyDown(with:)
+  - Selector: "keyUp:"
+    MethodKind: Instance
+    SwiftName: keyUp(with:)
+  - Selector: "mouseDown:"
+    MethodKind: Instance
+    SwiftName: mouseDown(with:)
+  - Selector: "mouseDragged:"
+    MethodKind: Instance
+    SwiftName: mouseDragged(with:)
+  - Selector: "mouseUp:"
+    MethodKind: Instance
+    SwiftName: mouseUp(with:)
+  - Selector: "otherMouseDown:"
+    MethodKind: Instance
+    SwiftName: otherMouseDown(with:)
+  - Selector: "otherMouseDragged:"
+    MethodKind: Instance
+    SwiftName: otherMouseDragged(with:)
+  - Selector: "otherMouseUp:"
+    MethodKind: Instance
+    SwiftName: otherMouseUp(with:)
+  - Selector: "rightMouseDown:"
+    MethodKind: Instance
+    SwiftName: rightMouseDown(with:)
+  - Selector: "rightMouseDragged:"
+    MethodKind: Instance
+    SwiftName: rightMouseDragged(with:)
+  - Selector: "rightMouseUp:"
+    MethodKind: Instance
+    SwiftName: rightMouseUp(with:)
+- Name: NSGraphicsContext
+  Methods:
+  - Selector: "setCurrentContext:"
+    MethodKind: Class
+    SwiftName: setCurrent(_:)
+- Name: NSGroupTouchBarItem
+  Methods:
+  - Selector: "alertStyleGroupItemWithIdentifier:"
+    MethodKind: Class
+    SwiftName: init(alertStyleWithIdentifier:)
+- Name: NSImageRep
+  Methods:
+  - Selector: "imageRepClassForData:"
+    MethodKind: Class
+    SwiftName: class(for:)
+  - Selector: "imageRepClassForFileType:"
+    MethodKind: Class
+    SwiftName: class(forFileType:)
+  - Selector: "imageRepClassForPasteboardType:"
+    MethodKind: Class
+    SwiftName: class(forPasteboardType:)
+  - Selector: "unregisterImageRepClass:"
+    MethodKind: Class
+    SwiftName: unregisterClass(_:)
+  - Selector: registeredImageRepClasses
+    MethodKind: Class
+    SwiftName: registeredClasses()
+  Properties:
+  - Name: registeredImageRepClasses
+    PropertyKind: Class
+    SwiftName: registeredClasses
+- Name: NSLayoutAnchor
+  Methods:
+  - Selector: "constraintEqualToAnchor:"
+    MethodKind: Instance
+    SwiftName: constraint(equalTo:)
+  - Selector: "constraintEqualToAnchor:constant:"
+    MethodKind: Instance
+    SwiftName: constraint(equalTo:constant:)
+  - Selector: "constraintGreaterThanOrEqualToAnchor:"
+    MethodKind: Instance
+    SwiftName: constraint(greaterThanOrEqualTo:)
+  - Selector: "constraintGreaterThanOrEqualToAnchor:constant:"
+    MethodKind: Instance
+    SwiftName: constraint(greaterThanOrEqualTo:constant:)
+  - Selector: "constraintLessThanOrEqualToAnchor:"
+    MethodKind: Instance
+    SwiftName: constraint(lessThanOrEqualTo:)
+  - Selector: "constraintLessThanOrEqualToAnchor:constant:"
+    MethodKind: Instance
+    SwiftName: constraint(lessThanOrEqualTo:constant:)
+- Name: NSLayoutDimension
+  Methods:
+  - Selector: "constraintEqualToAnchor:multiplier:"
+    MethodKind: Instance
+    SwiftName: constraint(equalTo:multiplier:)
+  - Selector: "constraintEqualToAnchor:multiplier:constant:"
+    MethodKind: Instance
+    SwiftName: constraint(equalTo:multiplier:constant:)
+  - Selector: "constraintEqualToConstant:"
+    MethodKind: Instance
+    SwiftName: constraint(equalToConstant:)
+  - Selector: "constraintGreaterThanOrEqualToAnchor:multiplier:"
+    MethodKind: Instance
+    SwiftName: constraint(greaterThanOrEqualTo:multiplier:)
+  - Selector: "constraintGreaterThanOrEqualToAnchor:multiplier:constant:"
+    MethodKind: Instance
+    SwiftName: constraint(greaterThanOrEqualTo:multiplier:constant:)
+  - Selector: "constraintGreaterThanOrEqualToConstant:"
+    MethodKind: Instance
+    SwiftName: constraint(greaterThanOrEqualToConstant:)
+  - Selector: "constraintLessThanOrEqualToAnchor:multiplier:"
+    MethodKind: Instance
+    SwiftName: constraint(lessThanOrEqualTo:multiplier:)
+  - Selector: "constraintLessThanOrEqualToAnchor:multiplier:constant:"
+    MethodKind: Instance
+    SwiftName: constraint(lessThanOrEqualTo:multiplier:constant:)
+  - Selector: "constraintLessThanOrEqualToConstant:"
+    MethodKind: Instance
+    SwiftName: constraint(lessThanOrEqualToConstant:)
+- Name: NSLayoutManager
+  Methods:
+  - Selector: "getGlyphsInRange:glyphs:characterIndexes:glyphInscriptions:elasticBits:"
+    MethodKind: Instance
+    SwiftName: getGlyphs(in:glyphs:characterIndexes:glyphInscriptions:elasticBits:)
+  - Selector: "getGlyphsInRange:glyphs:characterIndexes:glyphInscriptions:elasticBits:bidiLevels:"
+    MethodKind: Instance
+    SwiftName: getGlyphs(in:glyphs:characterIndexes:glyphInscriptions:elasticBits:bidiLevels:)
+  - Selector: "lineFragmentRectForGlyphAtIndex:effectiveRange:"
+    MethodKind: Instance
+    SwiftName: lineFragmentRect(forGlyphAt:effectiveRange:)
+  - Selector: "lineFragmentUsedRectForGlyphAtIndex:effectiveRange:"
+    MethodKind: Instance
+    SwiftName: lineFragmentUsedRect(forGlyphAt:effectiveRange:)
+  - Selector: "locationForGlyphAtIndex:"
+    MethodKind: Instance
+    SwiftName: location(forGlyphAt:)
+  - Selector: "textContainerForGlyphAtIndex:effectiveRange:"
+    MethodKind: Instance
+    SwiftName: textContainer(forGlyphAt:effectiveRange:)
+  - Selector: init
+    MethodKind: Instance
+    DesignatedInit: true
+- Name: NSMatrix
+  Methods:
+  - Selector: "acceptsFirstMouse:"
+    MethodKind: Instance
+    SwiftName: acceptsFirstMouse(for:)
+  - Selector: "mouseDown:"
+    MethodKind: Instance
+    SwiftName: mouseDown(with:)
+  - Selector: "performKeyEquivalent:"
+    MethodKind: Instance
+    SwiftName: performKeyEquivalent(with:)
+- Name: NSMenu
+  Methods:
+  - Selector: "addItem:"
+    MethodKind: Instance
+    SwiftName: addItem(_:)
+  - Selector: "initWithTitle:"
+    MethodKind: Instance
+    DesignatedInit: true
+  - Selector: "insertItem:atIndex:"
+    MethodKind: Instance
+    SwiftName: insertItem(_:at:)
+  - Selector: "performKeyEquivalent:"
+    MethodKind: Instance
+    SwiftName: performKeyEquivalent(with:)
+  - Selector: "removeItem:"
+    MethodKind: Instance
+    SwiftName: removeItem(_:)
+  Properties:
+  - Name: itemArray
+    PropertyKind: Instance
+    SwiftName: items
+- Name: NSMenuItem
+  Properties:
+  - Name: isSeparatorItem
+    PropertyKind: Instance
+    SwiftName: isSeparator
+- Name: NSNib
+  Methods:
+  - Selector: "instantiateWithOwner:topLevelObjects:"
+    MethodKind: Instance
+    SwiftName: instantiate(withOwner:topLevelObjects:)
+- Name: NSObject
+  Methods:
+  - Selector: "infoForBinding:"
+    MethodKind: Instance
+    SwiftName: infoForBinding(_:)
+  - Selector: "validateMenuItem:"
+    MethodKind: Instance
+    SwiftName: validateMenuItem(_:)
+  - Selector: "validateToolbarItem:"
+    MethodKind: Instance
+    SwiftName: "validateToolbarItem(_:)"
+- Name: NSObjectController
+  Methods:
+  - Selector: "addObject:"
+    MethodKind: Instance
+    SwiftName: "addObject(_:)"
+  - Selector: "removeObject:"
+    MethodKind: Instance
+    SwiftName: "removeObject(_:)"
+  - Selector: "validateUserInterfaceItem:"
+    MethodKind: Instance
+    SwiftName: validateUserInterfaceItem(_:)
+- Name: NSPasteboard
+  Methods:
+  - Selector: "canReadItemWithDataConformingToTypes:"
+    MethodKind: Instance
+    SwiftName: canReadItem(withDataConformingToTypes:)
+- Name: NSPathCell
+  Methods:
+  - Selector: "mouseEntered:withFrame:inView:"
+    MethodKind: Instance
+    SwiftName: mouseEntered(with:frame:in:)
+  - Selector: "mouseExited:withFrame:inView:"
+    MethodKind: Instance
+    SwiftName: mouseExited(with:frame:in:)
+- Name: NSPopover
+  Methods:
+  - Selector: "showRelativeToRect:ofView:preferredEdge:"
+    MethodKind: Instance
+    SwiftName: show(relativeTo:of:preferredEdge:)
+- Name: NSPrintInfo
+  Methods:
+  - Selector: "setSharedPrintInfo:"
+    MethodKind: Class
+    SwiftName: setShared(_:)
+- Name: NSResponder
+  Methods:
+  - Selector: "cursorUpdate:"
+    MethodKind: Instance
+    SwiftName: cursorUpdate(with:)
+  - Selector: "flagsChanged:"
+    MethodKind: Instance
+    SwiftName: flagsChanged(with:)
+  - Selector: "keyDown:"
+    MethodKind: Instance
+    SwiftName: keyDown(with:)
+  - Selector: "keyUp:"
+    MethodKind: Instance
+    SwiftName: keyUp(with:)
+  - Selector: "mouseDown:"
+    MethodKind: Instance
+    SwiftName: mouseDown(with:)
+  - Selector: "mouseDragged:"
+    MethodKind: Instance
+    SwiftName: mouseDragged(with:)
+  - Selector: "mouseEntered:"
+    MethodKind: Instance
+    SwiftName: mouseEntered(with:)
+  - Selector: "mouseExited:"
+    MethodKind: Instance
+    SwiftName: mouseExited(with:)
+  - Selector: "mouseMoved:"
+    MethodKind: Instance
+    SwiftName: mouseMoved(with:)
+  - Selector: "mouseUp:"
+    MethodKind: Instance
+    SwiftName: mouseUp(with:)
+  - Selector: "otherMouseDown:"
+    MethodKind: Instance
+    SwiftName: otherMouseDown(with:)
+  - Selector: "otherMouseDragged:"
+    MethodKind: Instance
+    SwiftName: otherMouseDragged(with:)
+  - Selector: "otherMouseUp:"
+    MethodKind: Instance
+    SwiftName: otherMouseUp(with:)
+  - Selector: "performKeyEquivalent:"
+    MethodKind: Instance
+    SwiftName: performKeyEquivalent(with:)
+  - Selector: "rightMouseDown:"
+    MethodKind: Instance
+    SwiftName: rightMouseDown(with:)
+  - Selector: "rightMouseDragged:"
+    MethodKind: Instance
+    SwiftName: rightMouseDragged(with:)
+  - Selector: "rightMouseUp:"
+    MethodKind: Instance
+    SwiftName: rightMouseUp(with:)
+  - Selector: "scrollWheel:"
+    MethodKind: Instance
+    SwiftName: scrollWheel(with:)
+  - Selector: "tryToPerform:with:"
+    MethodKind: Instance
+    SwiftName: "tryToPerform(_:with:)"
+  Properties:
+  - Name: nextResponder
+    PropertyKind: Instance
+    SwiftName: nextResponder
+- Name: NSRulerMarker
+  Methods:
+  - Selector: "trackMouse:adding:"
+    MethodKind: Instance
+    SwiftName: trackMouse(with:adding:)
+- Name: NSScreen
+  Properties:
+  - Name: auxiliaryTopLeftArea
+    PropertyKind: Instance
+    SwiftPrivate: true
+  - Name: auxiliaryTopRightArea
+    PropertyKind: Instance
+    SwiftPrivate: true
+- Name: NSScroller
+  Methods:
+  - Selector: "drawArrow:highlight:"
+    MethodKind: Instance
+    SwiftName: drawArrow(_:highlight:)
+  - Selector: "scrollWheel:"
+    MethodKind: Instance
+    SwiftName: scrollWheel(with:)
+  - Selector: "trackKnob:"
+    MethodKind: Instance
+    SwiftName: trackKnob(with:)
+  - Selector: "trackScrollButtons:"
+    MethodKind: Instance
+    SwiftName: trackScrollButtons(with:)
+- Name: NSSharingServicePicker
+  Methods:
+  - Selector: "showRelativeToRect:ofView:preferredEdge:"
+    MethodKind: Instance
+    SwiftName: show(relativeTo:of:preferredEdge:)
+- Name: NSSlider
+  Methods:
+  - Selector: "acceptsFirstMouse:"
+    MethodKind: Instance
+    SwiftName: acceptsFirstMouse(for:)
+- Name: NSSliderCell
+  Methods:
+  - Selector: "knobRectFlipped:"
+    MethodKind: Instance
+    SwiftName: knobRect(flipped:)
+- Name: NSSpellChecker
+  Methods:
+  - Selector: "ignoredWordsInSpellDocumentWithTag:"
+    MethodKind: Instance
+    SwiftName: ignoredWords(inSpellDocumentWithTag:)
+- Name: NSSplitViewItem
+  Methods:
+  - Selector: "contentListWithViewController:"
+    MethodKind: Class
+    SwiftName: init(contentListWithViewController:)
+  - Selector: "sidebarWithViewController:"
+    MethodKind: Class
+    SwiftName: init(sidebarWithViewController:)
+- Name: NSStatusBar
+  Methods:
+  - Selector: "removeStatusItem:"
+    MethodKind: Instance
+    SwiftName: removeStatusItem(_:)
+- Name: NSString
+  Methods:
+  - Selector: "sizeWithAttributes:"
+    MethodKind: Instance
+    SwiftName: size(withAttributes:)
+- Name: NSTabView
+  Methods:
+  - Selector: "addTabViewItem:"
+    MethodKind: Instance
+    SwiftName: addTabViewItem(_:)
+  - Selector: "indexOfTabViewItem:"
+    MethodKind: Instance
+    SwiftName: indexOfTabViewItem(_:)
+  - Selector: "selectTabViewItemAtIndex:"
+    MethodKind: Instance
+    SwiftName: selectTabViewItem(at:)
+  - Selector: "selectTabViewItemWithIdentifier:"
+    MethodKind: Instance
+    SwiftName: selectTabViewItem(withIdentifier:)
+- Name: NSTabViewItem
+  Methods:
+  - Selector: "sizeOfLabel:"
+    MethodKind: Instance
+    SwiftName: sizeOfLabel(_:)
+- Name: NSTableColumn
+  Methods:
+  - Selector: "initWithIdentifier:"
+    MethodKind: Instance
+    DesignatedInit: true
+- Name: NSTableView
+  Methods:
+  - Selector: "makeViewWithIdentifier:owner:"
+    MethodKind: Instance
+    SwiftName: "makeView(withIdentifier:owner:)"
+- Name: NSTextBlock
+  Methods:
+  - Selector: init
+    MethodKind: Instance
+    DesignatedInit: true
+- Name: NSTextContentStorage
+  Methods:
+  - Selector: "locationFromLocation:withOffset:"
+    MethodKind: Instance
+    SwiftName: location(_:offsetBy:)
+- Name: NSTextField
+  Methods:
+  - Selector: "labelWithString:"
+    MethodKind: Class
+    SwiftName: init(labelWithString:)
+- Name: NSTextFinder
+  Methods:
+  - Selector: init
+    MethodKind: Instance
+    DesignatedInit: true
+- Name: NSTextInputContext
+  Methods:
+  - Selector: "handleEvent:"
+    MethodKind: Instance
+    SwiftName: handleEvent(_:)
+  - Selector: "initWithClient:"
+    MethodKind: Instance
+    DesignatedInit: true
+- Name: NSTextLayoutManager
+  Methods:
+  - Selector: "replaceTextContentManager:"
+    MethodKind: Instance
+    SwiftName: replace(_:)
+- Name: NSTextRange
+  Methods:
+  - Selector: "containsLocation:"
+    MethodKind: Instance
+    SwiftName: contains(_:)
+  - Selector: "containsRange:"
+    MethodKind: Instance
+    SwiftName: contains(_:)
+  - Selector: "initWithLocation:"
+    MethodKind: Instance
+    SwiftName: init(location:)
+  - Selector: "intersectsWithTextRange:"
+    MethodKind: Instance
+    SwiftName: intersects(_:)
+  - Selector: "textRangeByFormingUnionWithTextRange:"
+    MethodKind: Instance
+    SwiftName: union(_:)
+  - Selector: "textRangeByIntersectingWithTextRange:"
+    MethodKind: Instance
+    SwiftName: intersection(_:)
+- Name: NSTextView
+  Methods:
+  - Selector: "initWithFrame:"
+    MethodKind: Instance
+    DesignatedInit: true
+  - Selector: "rulerView:handleMouseDown:"
+    MethodKind: Instance
+    SwiftName: rulerView(_:handleMouseDownWith:)
+  - Selector: "setNeedsDisplayInRect:avoidAdditionalLayout:"
+    MethodKind: Instance
+    SwiftName: setNeedsDisplay(_:avoidAdditionalLayout:)
+- Name: NSToolbar
+  Methods:
+  - Selector: "setConfigurationFromDictionary:"
+    MethodKind: Instance
+    SwiftName: setConfiguration(_:)
+  Properties:
+  - Name: configurationDictionary
+    PropertyKind: Instance
+    SwiftName: configuration
+- Name: NSTreeNode
+  Methods:
+  - Selector: "descendantNodeAtIndexPath:"
+    MethodKind: Instance
+    SwiftName: descendant(at:)
+  Properties:
+  - Name: childNodes
+    PropertyKind: Instance
+    SwiftName: children
+- Name: NSTypesetter
+  Methods:
+  - Selector: "beginLineWithGlyphAtIndex:"
+    MethodKind: Instance
+    SwiftName: beginLine(withGlyphAt:)
+  - Selector: "boundingBoxForControlGlyphAtIndex:forTextContainer:proposedLineFragment:glyphPosition:characterIndex:"
+    MethodKind: Instance
+    SwiftName: boundingBox(forControlGlyphAt:for:proposedLineFragment:glyphPosition:characterIndex:)
+  - Selector: "getGlyphsInRange:glyphs:characterIndexes:glyphInscriptions:elasticBits:bidiLevels:"
+    MethodKind: Instance
+    SwiftName: getGlyphs(in:glyphs:characterIndexes:glyphInscriptions:elasticBits:bidiLevels:)
+  - Selector: "hyphenCharacterForGlyphAtIndex:"
+    MethodKind: Instance
+    SwiftName: hyphenCharacter(forGlyphAt:)
+  - Selector: "hyphenationFactorForGlyphAtIndex:"
+    MethodKind: Instance
+    SwiftName: hyphenationFactor(forGlyphAt:)
+  - Selector: "lineSpacingAfterGlyphAtIndex:withProposedLineFragmentRect:"
+    MethodKind: Instance
+    SwiftName: lineSpacing(afterGlyphAt:withProposedLineFragmentRect:)
+  - Selector: "paragraphSpacingAfterGlyphAtIndex:withProposedLineFragmentRect:"
+    MethodKind: Instance
+    SwiftName: paragraphSpacing(afterGlyphAt:withProposedLineFragmentRect:)
+  - Selector: "paragraphSpacingBeforeGlyphAtIndex:withProposedLineFragmentRect:"
+    MethodKind: Instance
+    SwiftName: paragraphSpacing(beforeGlyphAt:withProposedLineFragmentRect:)
+  - Selector: "shouldBreakLineByHyphenatingBeforeCharacterAtIndex:"
+    MethodKind: Instance
+    SwiftName: shouldBreakLine(byHyphenatingBeforeCharacterAt:)
+  - Selector: "shouldBreakLineByWordBeforeCharacterAtIndex:"
+    MethodKind: Instance
+    SwiftName: shouldBreakLine(byWordBeforeCharacterAt:)
+  Properties:
+  - Name: sharedSystemTypesetter
+    PropertyKind: Class
+    SwiftName: sharedSystemTypesetter
+- Name: NSView
+  Methods:
+  - Selector: "acceptsFirstMouse:"
+    MethodKind: Instance
+    SwiftName: acceptsFirstMouse(for:)
+  - Selector: "autoscroll:"
+    MethodKind: Instance
+    SwiftName: autoscroll(with:)
+  - Selector: "convertPointFromBacking:"
+    MethodKind: Instance
+    SwiftName: convertFromBacking(_:)
+  - Selector: "convertPointToBacking:"
+    MethodKind: Instance
+    SwiftName: convertToBacking(_:)
+  - Selector: "convertRectFromBacking:"
+    MethodKind: Instance
+    SwiftName: convertFromBacking(_:)
+  - Selector: "convertRectToBacking:"
+    MethodKind: Instance
+    SwiftName: convertToBacking(_:)
+  - Selector: "convertSizeFromBacking:"
+    MethodKind: Instance
+    SwiftName: convertFromBacking(_:)
+  - Selector: "convertSizeToBacking:"
+    MethodKind: Instance
+    SwiftName: convertToBacking(_:)
+  - Selector: "displayIfNeededInRect:"
+    MethodKind: Instance
+    SwiftName: displayIfNeeded(_:)
+  - Selector: "displayIfNeededInRectIgnoringOpacity:"
+    MethodKind: Instance
+    SwiftName: displayIfNeededIgnoringOpacity(_:)
+  - Selector: "displayRectIgnoringOpacity:"
+    MethodKind: Instance
+    SwiftName: displayIgnoringOpacity(_:)
+  - Selector: "displayRectIgnoringOpacity:inContext:"
+    MethodKind: Instance
+    SwiftName: displayIgnoringOpacity(_:in:)
+  - Selector: "locationOfPrintRect:"
+    MethodKind: Instance
+    SwiftName: locationOfPrintRect(_:)
+  - Selector: "mouse:inRect:"
+    MethodKind: Instance
+    SwiftName: "isMousePoint(_:in:)"
+  - Selector: "needsToDrawRect:"
+    MethodKind: Instance
+    SwiftName: needsToDraw(_:)
+  - Selector: "performKeyEquivalent:"
+    MethodKind: Instance
+    SwiftName: performKeyEquivalent(with:)
+  - Selector: "print:"
+    MethodKind: Instance
+    SwiftName: printView(_:)
+  - Selector: "rectForPage:"
+    MethodKind: Instance
+    SwiftName: rectForPage(_:)
+  - Selector: "registerForDraggedTypes:"
+    MethodKind: Instance
+    SwiftName: registerForDraggedTypes(_:)
+  - Selector: "rotateByAngle:"
+    MethodKind: Instance
+    SwiftName: rotate(byDegrees:)
+  - Selector: "rulerView:handleMouseDown:"
+    MethodKind: Instance
+    SwiftName: rulerView(_:handleMouseDownWith:)
+  - Selector: "scrollRectToVisible:"
+    MethodKind: Instance
+    SwiftName: scrollToVisible(_:)
+  - Selector: "setKeyboardFocusRingNeedsDisplayInRect:"
+    MethodKind: Instance
+    SwiftName: setKeyboardFocusRingNeedsDisplay(_:)
+  - Selector: "setNeedsDisplayInRect:"
+    MethodKind: Instance
+    SwiftName: setNeedsDisplay(_:)
+  - Selector: "viewWillMoveToWindow:"
+    MethodKind: Instance
+    SwiftName: viewWillMove(toWindow:)
+  - Selector: focusView
+    MethodKind: Class
+    SwiftName: focusView()
+  Properties:
+  - Name: focusView
+    PropertyKind: Class
+    SwiftName: focusView
+  - Name: nextKeyView
+    PropertyKind: Instance
+    SwiftName: nextKeyView
+  - Name: nextValidKeyView
+    PropertyKind: Instance
+    SwiftName: nextValidKeyView
+  - Name: previousKeyView
+    PropertyKind: Instance
+    SwiftName: previousKeyView
+  - Name: previousValidKeyView
+    PropertyKind: Instance
+    SwiftName: previousValidKeyView
+- Name: NSViewController
+  Methods:
+  - Selector: "addChildViewController:"
+    MethodKind: Instance
+    SwiftName: "addChild(_:)"
+  - Selector: "insertChildViewController:atIndex:"
+    MethodKind: Instance
+    SwiftName: "insertChild(_:at:)"
+  - Selector: "removeChildViewControllerAtIndex:"
+    MethodKind: Instance
+    SwiftName: "removeChild(at:)"
+  - Selector: "removeFromParentViewController"
+    MethodKind: Instance
+    SwiftName: "removeFromParent()"
+  Properties:
+  - Name: childViewControllers
+    PropertyKind: Instance
+    SwiftName: children
+- Name: NSWindow
+  Methods:
+  - Selector: "convertRectFromBacking:"
+    MethodKind: Instance
+    SwiftName: convertFromBacking(_:)
+  - Selector: "convertRectFromScreen:"
+    MethodKind: Instance
+    SwiftName: convertFromScreen(_:)
+  - Selector: "convertRectToBacking:"
+    MethodKind: Instance
+    SwiftName: convertToBacking(_:)
+  - Selector: "convertRectToScreen:"
+    MethodKind: Instance
+    SwiftName: convertToScreen(_:)
+  - Selector: "initWithContentRect:styleMask:backing:defer:"
+    MethodKind: Instance
+    DesignatedInit: true
+  - Selector: "keyDown:"
+    MethodKind: Instance
+    SwiftName: keyDown(with:)
+  - Selector: "postEvent:atStart:"
+    MethodKind: Instance
+    SwiftName: postEvent(_:atStart:)
+  - Selector: "print:"
+    MethodKind: Instance
+    SwiftName: printWindow(_:)
+  - Selector: "registerForDraggedTypes:"
+    MethodKind: Instance
+    SwiftName: registerForDraggedTypes(_:)
+  - Selector: "selectKeyViewPrecedingView:"
+    MethodKind: Instance
+    SwiftName: selectKeyView(preceding:)
+  - Selector: "sendEvent:"
+    MethodKind: Instance
+    SwiftName: sendEvent(_:)
+  - Selector: "setFrameFromString:"
+    MethodKind: Instance
+    SwiftName: "setFrame(from:)"
+  - Selector: becomeKeyWindow
+    MethodKind: Instance
+    SwiftName: becomeKey()
+  - Selector: becomeMainWindow
+    MethodKind: Instance
+    SwiftName: becomeMain()
+  - Selector: disableFlushWindow
+    MethodKind: Instance
+    SwiftName: disableFlushing()
+  - Selector: enableFlushWindow
+    MethodKind: Instance
+    SwiftName: enableFlushing()
+  - Selector: flushWindow
+    MethodKind: Instance
+    SwiftName: flush()
+  - Selector: flushWindowIfNeeded
+    MethodKind: Instance
+    SwiftName: flushIfNeeded()
+  - Selector: makeKeyWindow
+    MethodKind: Instance
+    SwiftName: makeKey()
+  - Selector: makeMainWindow
+    MethodKind: Instance
+    SwiftName: makeMain()
+  - Selector: resignKeyWindow
+    MethodKind: Instance
+    SwiftName: resignKey()
+  - Selector: resignMainWindow
+    MethodKind: Instance
+    SwiftName: resignMain()
+  Properties:
+  - Name: canBecomeKeyWindow
+    PropertyKind: Instance
+    SwiftName: canBecomeKey
+  - Name: canBecomeMainWindow
+    PropertyKind: Instance
+    SwiftName: canBecomeMain
+  - Name: isAutodisplay
+    PropertyKind: Instance
+    SwiftName: isAutodisplaying
+  - Name: isFlushWindowDisabled
+    PropertyKind: Instance
+    SwiftName: isFlushingDisabled
+  - Name: isKeyWindow
+    PropertyKind: Instance
+    SwiftName: isKey
+  - Name: isMainWindow
+    PropertyKind: Instance
+    SwiftName: isMain
+- Name: NSWorkspace
+  Methods:
+  - Selector: "absolutePathForAppBundleWithIdentifier:"
+    MethodKind: Instance
+    SwiftName: absolutePathForApplication(withBundleIdentifier:)
+- Name: NSWorkspaceOpenConfiguration
+  SwiftName: NSWorkspace.OpenConfiguration
+
+# Method spellings of the protocols.
+Protocols:
+- Name: NSApplicationDelegate
+  Methods:
+  - Selector: "applicationShouldTerminateAfterLastWindowClosed:"
+    MethodKind: Instance
+    SwiftName: applicationShouldTerminateAfterLastWindowClosed(_:)
+- Name: NSColorPickingDefault
+  Methods:
+  - Selector: "attachColorList:"
+    MethodKind: Instance
+    SwiftName: attachColorList(_:)
+  - Selector: "detachColorList:"
+    MethodKind: Instance
+    SwiftName: detachColorList(_:)
+- Name: NSDraggingDestination
+  Methods:
+  - Selector: "prepareForDragOperation:"
+    MethodKind: Instance
+    SwiftName: prepareForDragOperation(_:)
+- Name: NSTabViewDelegate
+  Methods:
+  - Selector: "tabViewDidChangeNumberOfTabViewItems:"
+    MethodKind: Instance
+    SwiftName: tabViewDidChangeNumberOfTabViewItems(_:)
+- Name: NSTextAttachmentCell
+  Methods:
+  - Selector: "trackMouse:inRect:ofView:atCharacterIndex:untilMouseUp:"
+    MethodKind: Instance
+    SwiftName: trackMouse(with:in:of:atCharacterIndex:untilMouseUp:)
+  - Selector: "trackMouse:inRect:ofView:untilMouseUp:"
+    MethodKind: Instance
+    SwiftName: trackMouse(with:in:of:untilMouseUp:)
+- Name: NSTextAttachmentLayout
+  Methods:
+  - Selector: "attachmentBoundsForAttributes:location:textContainer:proposedLineFragment:position:"
+    MethodKind: Instance
+    SwiftName: attachmentBounds(for:location:textContainer:proposedLineFragment:position:)
+  - Selector: "imageForBounds:attributes:location:textContainer:"
+    MethodKind: Instance
+    SwiftName: image(for:attributes:location:textContainer:)
+  - Selector: "viewProviderForParentView:location:textContainer:"
+    MethodKind: Instance
+    SwiftName: viewProvider(for:location:textContainer:)
+- Name: NSUserInterfaceValidations
+  Methods:
+  - Selector: "validateUserInterfaceItem:"
+    MethodKind: Instance
+    SwiftName: validateUserInterfaceItem(_:)

@@ -78,16 +78,12 @@ typedef enum {
 @property (readonly) BOOL isDrawingToScreen;
 @property (readonly) BOOL isFlipped;
 
-- (void) setShouldAntialias: (BOOL) value;
-- (void) setImageInterpolation: (NSImageInterpolation) value;
-- (void) setColorRenderingIntent: (NSColorRenderingIntent) value;
-- (void) setPatternPhase: (NSPoint) phase;
 
-- (BOOL) shouldAntialias;
-- (NSImageInterpolation) imageInterpolation;
-- (NSColorRenderingIntent) colorRenderingIntent;
+@property(nonatomic) BOOL shouldAntialias;
+@property(nonatomic) NSImageInterpolation imageInterpolation;
+@property(nonatomic) NSColorRenderingIntent colorRenderingIntent;
 @property NSCompositingOperation compositingOperation;
-- (NSPoint) patternPhase;
+@property(nonatomic) NSPoint patternPhase;
 
 - (CIContext *) CIContext;
 

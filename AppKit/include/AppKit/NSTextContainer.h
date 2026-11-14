@@ -55,29 +55,22 @@ typedef NS_ENUM(NSUInteger, NSLineMovementDirection) {
 
 - initWithContainerSize: (NSSize) size;
 
-- (NSSize) containerSize;
+@property(nonatomic) NSSize containerSize;
 
-- (NSTextView *) textView;
+@property(nonatomic, retain) NSTextView *textView;
 @property(readonly) NSTextLayoutOrientation layoutOrientation;
-- (BOOL) widthTracksTextView;
-- (BOOL) heightTracksTextView;
+@property(nonatomic) BOOL widthTracksTextView;
+@property(nonatomic) BOOL heightTracksTextView;
 
-- (NSLayoutManager *) layoutManager;
+@property(nonatomic, retain) NSLayoutManager *layoutManager;
 
-- (CGFloat) lineFragmentPadding;
-- (NSUInteger) maximumNumberOfLines;
+@property(nonatomic) CGFloat lineFragmentPadding;
+@property(nonatomic) NSUInteger maximumNumberOfLines;
 
-- (void) setContainerSize: (NSSize) size;
 
-- (void) setTextView: (NSTextView *) textView;
-- (void) setWidthTracksTextView: (BOOL) flag;
-- (void) setHeightTracksTextView: (BOOL) flag;
 
-- (void) setLayoutManager: (NSLayoutManager *) layoutManager;
 - (void) replaceLayoutManager: (NSLayoutManager *) layoutManager;
 
-- (void) setLineFragmentPadding: (CGFloat) padding;
-- (void) setMaximumNumberOfLines: (NSUInteger) maximumNumberOfLines;
 
 - (BOOL) isSimpleRectangularTextContainer;
 

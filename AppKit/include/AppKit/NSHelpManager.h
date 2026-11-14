@@ -31,7 +31,7 @@ APPKIT_EXPORT NSString *const NSContextHelpModeDidDeactivateNotification;
     NSMapTable *_objectToText;
 }
 
-+ (NSHelpManager *) sharedHelpManager;
+@property(class, readonly, retain, nonnull) NSHelpManager *sharedHelpManager;
 
 + (BOOL) isContextHelpModeActive;
 + (void) setContextHelpModeActive: (BOOL) flag;

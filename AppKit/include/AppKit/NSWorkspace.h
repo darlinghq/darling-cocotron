@@ -77,7 +77,7 @@ typedef NS_ENUM(NSInteger, NSWorkspaceAuthorizationType) {
     NSNotificationCenter *_notificationCenter;
 }
 
-@property (class, readonly, retain) NSWorkspace *sharedWorkspace;
+@property (class, readonly, retain, nonnull) NSWorkspace *sharedWorkspace;
 
 - (NSNotificationCenter *) notificationCenter;
 
@@ -156,7 +156,7 @@ typedef NS_ENUM(NSInteger, NSWorkspaceAuthorizationType) {
 - (NSString *) absolutePathForAppBundleWithIdentifier: (NSString *) identifier;
 - (NSString *) pathForApplication: (NSString *) application;
 - (NSArray *) launchedApplications;
-- (NSArray *) runningApplications;
+@property(nonatomic, readonly) NSArray *runningApplications;
 - (BOOL) launchApplication: (NSString *) application;
 - (BOOL) launchApplication: (NSString *) application
                   showIcon: (BOOL) showIcon

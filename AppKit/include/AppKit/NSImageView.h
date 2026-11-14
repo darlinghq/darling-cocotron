@@ -31,21 +31,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     SEL _action;
 }
 
-- (BOOL) allowsCutCopyPaste;
-- (BOOL) animates;
+@property(nonatomic) BOOL allowsCutCopyPaste;
+@property(nonatomic) BOOL animates;
 + (NSImageView *) imageViewWithImage: (NSImage *) image;
 - (instancetype) initWithImage: (NSImage *) image;
-- (NSImage *) image;
-- (NSImageAlignment) imageAlignment;
-- (NSImageFrameStyle) imageFrameStyle;
-- (NSImageScaling) imageScaling;
-- (BOOL) isEditable;
-- (void) setAllowsCutCopyPaste: (BOOL) allow;
-- (void) setAnimates: (BOOL) flag;
-- (void) setEditable: (BOOL) flag;
-- (void) setImage: (NSImage *) image;
-- (void) setImageAlignment: (NSImageAlignment) alignment;
-- (void) setImageFrameStyle: (NSImageFrameStyle) frameStyle;
-- (void) setImageScaling: (NSImageScaling) scaling;
+@property(nonatomic, retain) NSImage *image;
+@property(nonatomic) NSImageAlignment imageAlignment;
+@property(nonatomic) NSImageFrameStyle imageFrameStyle;
+@property(nonatomic) NSImageScaling imageScaling;
+@property(nonatomic, getter=isEditable) BOOL editable;
 
 @end

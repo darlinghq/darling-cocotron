@@ -24,48 +24,33 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @interface NSDatePicker : NSControl
 
-- (BOOL) isBezeled;
-- (BOOL) isBordered;
+@property(nonatomic, getter=isBezeled) BOOL bezeled;
+@property(nonatomic, getter=isBordered) BOOL bordered;
 
 - delegate;
 
-- (NSDatePickerElementFlags) datePickerElements;
-- (NSDatePickerMode) datePickerMode;
-- (NSDatePickerStyle) datePickerStyle;
+@property(nonatomic) NSDatePickerElementFlags datePickerElements;
+@property(nonatomic) NSDatePickerMode datePickerMode;
+@property(nonatomic) NSDatePickerStyle datePickerStyle;
 
-- (NSCalendar *) calendar;
-- (NSLocale *) locale;
-- (NSDate *) minDate;
-- (NSDate *) maxDate;
+@property(nonatomic, retain) NSCalendar *calendar;
+@property(nonatomic, retain) NSLocale *locale;
+@property(nonatomic, retain) NSDate *minDate;
+@property(nonatomic, retain) NSDate *maxDate;
 
-- (NSDate *) dateValue;
-- (NSTimeInterval) timeInterval;
-- (NSTimeZone *) timeZone;
+@property(nonatomic, retain) NSDate *dateValue;
+@property(nonatomic) NSTimeInterval timeInterval;
+@property(nonatomic, retain) NSTimeZone *timeZone;
 
-- (BOOL) drawsBackground;
-- (NSColor *) backgroundColor;
-- (NSColor *) textColor;
+@property(nonatomic) BOOL drawsBackground;
+@property(nonatomic, retain) NSColor *backgroundColor;
+@property(nonatomic, retain) NSColor *textColor;
 
-- (void) setBezeled: (BOOL) flag;
-- (void) setBordered: (BOOL) flag;
 
 - (void) setDelegate: delegate;
 
-- (void) setDatePickerElements: (NSDatePickerElementFlags) elements;
-- (void) setDatePickerMode: (NSDatePickerMode) mode;
-- (void) setDatePickerStyle: (NSDatePickerStyle) style;
 
-- (void) setCalendar: (NSCalendar *) calendar;
-- (void) setLocale: (NSLocale *) locale;
-- (void) setMinDate: (NSDate *) date;
-- (void) setMaxDate: (NSDate *) date;
 
-- (void) setDateValue: (NSDate *) date;
-- (void) setTimeInterval: (NSTimeInterval) interval;
-- (void) setTimeZone: (NSTimeZone *) timeZone;
 
-- (void) setDrawsBackground: (BOOL) flag;
-- (void) setBackgroundColor: (NSColor *) color;
-- (void) setTextColor: (NSColor *) color;
 
 @end

@@ -59,6 +59,9 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
 
 @implementation NSTableView
 
+// The accessors are in the NSTableViewStyle category below.
+@dynamic style;
+
 - (id) _replacementKeyPathForBinding: (id) binding {
     if ([binding isEqual: @"selectionIndexes"])
         return @"selectedRowIndexes";

@@ -71,38 +71,25 @@ APPKIT_EXPORT const NSToolbarItemIdentifier NSToolbarSpaceItemIdentifier;
 - (NSToolbarItemIdentifier) itemIdentifier;
 - (NSToolbar *) toolbar;
 
-- (NSString *) label;
-- (NSString *) paletteLabel;
-- (NSMenuItem *) menuFormRepresentation;
-- (NSView *) view;
-- (NSSize) minSize;
-- (NSSize) maxSize;
-- (NSInteger) visibilityPriority;
-- (BOOL) autovalidates;
+@property(nonatomic, copy) NSString *label;
+@property(nonatomic, copy) NSString *paletteLabel;
+@property(nonatomic, retain) NSMenuItem *menuFormRepresentation;
+@property(nonatomic, retain) NSView *view;
+@property(nonatomic) NSSize minSize;
+@property(nonatomic) NSSize maxSize;
+@property(nonatomic) NSInteger visibilityPriority;
+@property(nonatomic) BOOL autovalidates;
 - (BOOL) allowsDuplicatesInToolbar;
 
-- (void) setLabel: (NSString *) label;
-- (void) setPaletteLabel: (NSString *) label;
-- (void) setMenuFormRepresentation: (NSMenuItem *) menuItem;
-- (void) setView: (NSView *) view;
-- (void) setMinSize: (NSSize) size;
-- (void) setMaxSize: (NSSize) size;
-- (void) setVisibilityPriority: (NSInteger) value;
-- (void) setAutovalidates: (BOOL) value;
 
-- (NSImage *) image;
+@property(nonatomic, retain) NSImage *image;
 - target;
-- (SEL) action;
-- (NSInteger) tag;
-- (BOOL) isEnabled;
-- (NSString *) toolTip;
+@property(nonatomic) SEL action;
+@property(nonatomic) NSInteger tag;
+@property(nonatomic, getter=isEnabled) BOOL enabled;
+@property(nonatomic, copy) NSString *toolTip;
 
-- (void) setImage: (NSImage *) image;
 - (void) setTarget: target;
-- (void) setAction: (SEL) action;
-- (void) setTag: (NSInteger) tag;
-- (void) setEnabled: (BOOL) enabled;
-- (void) setToolTip: (NSString *) tip;
 
 - (void) validate;
 

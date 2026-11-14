@@ -67,22 +67,22 @@ typedef NS_ENUM(NSUInteger, NSBrowserDropOperation) {
 }
 
 - delegate;
-- (NSColor *) backgroundColor;
-- (SEL) doubleAction;
-- (Class) matrixClass;
-- (NSInteger) maxVisibleColumns;
-- (BOOL) hasHorizontalScroller;
-- (BOOL) separatesColumns;
-- (BOOL) isTitled;
-- (BOOL) takesTitleFromPreviousColumn;
-- (BOOL) allowsMultipleSelection;
-- (BOOL) allowsBranchSelection;
-- (BOOL) allowsEmptySelection;
-- (BOOL) acceptsArrowKeys;
-- (BOOL) sendsActionOnArrowKeys;
-- (BOOL) reusesColumns;
+@property(nonatomic, retain) NSColor *backgroundColor;
+@property(nonatomic) SEL doubleAction;
+@property(nonatomic) Class matrixClass;
+@property(nonatomic) NSInteger maxVisibleColumns;
+@property(nonatomic) BOOL hasHorizontalScroller;
+@property(nonatomic) BOOL separatesColumns;
+@property(nonatomic, getter=isTitled) BOOL titled;
+@property(nonatomic) BOOL takesTitleFromPreviousColumn;
+@property(nonatomic) BOOL allowsMultipleSelection;
+@property(nonatomic) BOOL allowsBranchSelection;
+@property(nonatomic) BOOL allowsEmptySelection;
+@property(nonatomic) BOOL acceptsArrowKeys;
+@property(nonatomic) BOOL sendsActionOnArrowKeys;
+@property(nonatomic) BOOL reusesColumns;
 
-- (NSInteger) lastColumn;
+@property(nonatomic) NSInteger lastColumn;
 - (NSInteger) lastVisibleColumn;
 - (NSInteger) firstVisibleColumn;
 
@@ -102,23 +102,8 @@ typedef NS_ENUM(NSUInteger, NSBrowserDropOperation) {
 - (NSRect) frameOfInsideOfColumn: (NSInteger) column;
 
 - (void) setDelegate: delegate;
-- (void) setBackgroundColor: (NSColor *) color;
-- (void) setDoubleAction: (SEL) action;
-- (void) setMatrixClass: (Class) aClass;
 - (void) setCellClass: (Class) aClass;
-- (id) cellPrototype;
-- (void) setCellPrototype: (NSCell *) cell;
-- (void) setMaxVisibleColumns: (NSInteger) count;
-- (void) setHasHorizontalScroller: (BOOL) flag;
-- (void) setSeparatesColumns: (BOOL) flag;
-- (void) setTitled: (BOOL) flag;
-- (void) setTakesTitleFromPreviousColumn: (BOOL) flag;
-- (void) setAllowsMultipleSelection: (BOOL) flag;
-- (void) setAllowsBranchSelection: (BOOL) flag;
-- (void) setAllowsEmptySelection: (BOOL) flag;
-- (void) setAcceptsArrowKeys: (BOOL) flag;
-- (void) setSendsActionOnArrowKeys: (BOOL) flag;
-- (void) setReusesColumns: (BOOL) flag;
+@property(nonatomic, retain) id cellPrototype;
 
 - (void) setTitle: (NSString *) title ofColumn: (NSInteger) column;
 
@@ -132,7 +117,6 @@ typedef NS_ENUM(NSUInteger, NSBrowserDropOperation) {
 - (void) loadColumnZero;
 - (void) reloadColumn: (NSInteger) column;
 - (void) addColumn;
-- (void) setLastColumn: (NSInteger) column;
 - (void) validateVisibleColumns;
 
 - (void) scrollColumnsLeftBy: (NSInteger) delta;
