@@ -128,3 +128,153 @@ enum {
 }
 
 @end
+
+@implementation NSCollectionLayoutSpacing {
+    CGFloat _spacing;
+    BOOL _flexible;
+}
+
++ (instancetype) flexibleSpacing: (CGFloat) flexibleSpacing {
+    NSCollectionLayoutSpacing *spacing = [[[self alloc] init] autorelease];
+
+    spacing->_spacing = flexibleSpacing;
+    spacing->_flexible = YES;
+    return spacing;
+}
+
++ (instancetype) fixedSpacing: (CGFloat) fixedSpacing {
+    NSCollectionLayoutSpacing *spacing = [[[self alloc] init] autorelease];
+
+    spacing->_spacing = fixedSpacing;
+    return spacing;
+}
+
+- (CGFloat) spacing {
+    return _spacing;
+}
+
+- (BOOL) isFlexibleSpacing {
+    return _flexible;
+}
+
+- (BOOL) isFixedSpacing {
+    return !_flexible;
+}
+
+- (id) copyWithZone: (NSZone *) zone {
+    return [self retain];
+}
+
+@end
+
+@implementation NSCollectionLayoutEdgeSpacing {
+    NSCollectionLayoutSpacing *_leading;
+    NSCollectionLayoutSpacing *_top;
+    NSCollectionLayoutSpacing *_trailing;
+    NSCollectionLayoutSpacing *_bottom;
+}
+
++ (instancetype) spacingForLeading: (NSCollectionLayoutSpacing *) leading
+                               top: (NSCollectionLayoutSpacing *) top
+                          trailing: (NSCollectionLayoutSpacing *) trailing
+                            bottom: (NSCollectionLayoutSpacing *) bottom {
+    NSCollectionLayoutEdgeSpacing *spacing = [[[self alloc] init] autorelease];
+
+    spacing->_leading = [leading retain];
+    spacing->_top = [top retain];
+    spacing->_trailing = [trailing retain];
+    spacing->_bottom = [bottom retain];
+    return spacing;
+}
+
+- (void) dealloc {
+    [_leading release];
+    [_top release];
+    [_trailing release];
+    [_bottom release];
+    [super dealloc];
+}
+
+- (NSCollectionLayoutSpacing *) leading {
+    return _leading;
+}
+
+- (NSCollectionLayoutSpacing *) top {
+    return _top;
+}
+
+- (NSCollectionLayoutSpacing *) trailing {
+    return _trailing;
+}
+
+- (NSCollectionLayoutSpacing *) bottom {
+    return _bottom;
+}
+
+- (id) copyWithZone: (NSZone *) zone {
+    return [self retain];
+}
+
+@end
+
+@implementation NSCollectionLayoutAnchor {
+    NSDirectionalRectEdge _edges;
+    NSPoint _offset;
+    BOOL _fractional;
+}
+
+- (instancetype) _initWithEdges: (NSDirectionalRectEdge) edges
+                         offset: (NSPoint) offset
+                     fractional: (BOOL) fractional {
+    self = [super init];
+    if (self) {
+        _edges = edges;
+        _offset = offset;
+        _fractional = fractional;
+    }
+    return self;
+}
+
+// GUESS: with no offset the anchor sits on its edges (offset zero) and the zero offset is an absolute one; the
+// header does not say which kind it reports.
++ (instancetype) layoutAnchorWithEdges: (NSDirectionalRectEdge) edges {
+    return [[[self alloc] _initWithEdges: edges
+                                  offset: NSZeroPoint
+                              fractional: NO] autorelease];
+}
+
++ (instancetype) layoutAnchorWithEdges: (NSDirectionalRectEdge) edges
+                        absoluteOffset: (NSPoint) absoluteOffset {
+    return [[[self alloc] _initWithEdges: edges
+                                  offset: absoluteOffset
+                              fractional: NO] autorelease];
+}
+
++ (instancetype) layoutAnchorWithEdges: (NSDirectionalRectEdge) edges
+                      fractionalOffset: (NSPoint) fractionalOffset {
+    return [[[self alloc] _initWithEdges: edges
+                                  offset: fractionalOffset
+                              fractional: YES] autorelease];
+}
+
+- (NSDirectionalRectEdge) edges {
+    return _edges;
+}
+
+- (NSPoint) offset {
+    return _offset;
+}
+
+- (BOOL) isAbsoluteOffset {
+    return !_fractional;
+}
+
+- (BOOL) isFractionalOffset {
+    return _fractional;
+}
+
+- (id) copyWithZone: (NSZone *) zone {
+    return [self retain];
+}
+
+@end

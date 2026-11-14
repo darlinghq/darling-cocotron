@@ -27,6 +27,18 @@
 // which AppKit re-exports), not by AppKit: on a dyld-cache stage that image is the cache's own. They declare no
 // instance variables here, so nothing compiled against this header depends on how either image lays them out.
 
+// Edge specification interpreted according to the user interface layout direction.
+// The case order is the documented one; the values are a GUESS (the documentation gives no raw values).
+typedef NS_OPTIONS(NSUInteger, NSDirectionalRectEdge) {
+    NSDirectionalRectEdgeNone = 0,
+    NSDirectionalRectEdgeTop = 1 << 0,
+    NSDirectionalRectEdgeLeading = 1 << 1,
+    NSDirectionalRectEdgeBottom = 1 << 2,
+    NSDirectionalRectEdgeTrailing = 1 << 3,
+    NSDirectionalRectEdgeAll = NSDirectionalRectEdgeTop | NSDirectionalRectEdgeLeading |
+                               NSDirectionalRectEdgeBottom | NSDirectionalRectEdgeTrailing
+};
+
 @interface NSCollectionLayoutDimension : NSObject <NSCopying>
 
 // A fraction of the width or height of the containing group.
@@ -52,5 +64,47 @@
 
 @property(readonly) NSCollectionLayoutDimension *widthDimension;
 @property(readonly) NSCollectionLayoutDimension *heightDimension;
+
+@end
+
+@interface NSCollectionLayoutSpacing : NSObject <NSCopying>
+
+// A flexible spacing is a minimum (>=); a fixed spacing is exact (==).
++ (instancetype) flexibleSpacing: (CGFloat) flexibleSpacing;
++ (instancetype) fixedSpacing: (CGFloat) fixedSpacing;
+
+@property(readonly) CGFloat spacing;
+@property(readonly) BOOL isFlexibleSpacing;
+@property(readonly) BOOL isFixedSpacing;
+
+@end
+
+@interface NSCollectionLayoutEdgeSpacing : NSObject <NSCopying>
+
+// Additional outsets around items; an edge may be omitted.
++ (instancetype) spacingForLeading: (NSCollectionLayoutSpacing *) leading
+                               top: (NSCollectionLayoutSpacing *) top
+                          trailing: (NSCollectionLayoutSpacing *) trailing
+                            bottom: (NSCollectionLayoutSpacing *) bottom;
+
+@property(readonly) NSCollectionLayoutSpacing *leading;
+@property(readonly) NSCollectionLayoutSpacing *top;
+@property(readonly) NSCollectionLayoutSpacing *trailing;
+@property(readonly) NSCollectionLayoutSpacing *bottom;
+
+@end
+
+@interface NSCollectionLayoutAnchor : NSObject <NSCopying>
+
++ (instancetype) layoutAnchorWithEdges: (NSDirectionalRectEdge) edges;
++ (instancetype) layoutAnchorWithEdges: (NSDirectionalRectEdge) edges
+                        absoluteOffset: (NSPoint) absoluteOffset;
++ (instancetype) layoutAnchorWithEdges: (NSDirectionalRectEdge) edges
+                      fractionalOffset: (NSPoint) fractionalOffset;
+
+@property(readonly) NSDirectionalRectEdge edges;
+@property(readonly) NSPoint offset;
+@property(readonly) BOOL isAbsoluteOffset;
+@property(readonly) BOOL isFractionalOffset;
 
 @end
