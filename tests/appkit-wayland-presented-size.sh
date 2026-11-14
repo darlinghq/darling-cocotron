@@ -15,7 +15,7 @@ pid=$!
 width=
 for i in $(seq 30); do
     sleep 0.5
-    width=$(swaymsg -t get_tree | grep -A8 '"shell": "xdg_shell"' | grep -m1 '"width"' | tr -dc '0-9')
+    width=$(swaymsg -t get_tree | grep -B30 '"shell": "xdg_shell"' | grep -A4 '"window_rect"' | grep -m1 '"width"' | tr -dc '0-9')
     [ -n "$width" ] && [ "$width" != 0 ] && break
 done
 wait "$pid"
