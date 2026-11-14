@@ -28,13 +28,9 @@
 // (system colours, fontconfig font enumeration, metrics) without copying them.
 // It never opens an X connection and overrides every method that uses one.
 //
-// Limitations of this first version: Wayland lets clients neither place
-// toplevels nor read global coordinates, so each window keeps the origin
-// AppKit gave it and the compositor chooses the real position; menus and
-// pop-ups are separate toplevels (no xdg_popup yet); there is no clipboard or
-// drag and drop, no OpenGL subwindow, no pointer warping or grabbing; buffers
-// use scale 1 and HiDPI outputs are scaled by the compositor; windows have no
-// title bar unless the compositor offers server-side decorations.
+// Toplevel origins remain virtual because Wayland controls global placement.
+// Clipboard and incoming copy drops use wl_data_device; outgoing drags and
+// OpenGL subwindows are follow-ons.
 
 #import "X11Display.h"
 #include <stdint.h>
@@ -47,7 +43,7 @@ struct xkb_context;
 struct xkb_keymap;
 struct xkb_state;
 
-@class WaylandCursor, WaylandWindow;
+@class WaylandCursor, WaylandWindow, WaylandPasteboard, WaylandDraggingManager;
 
 // Identifies the object a dispatched event belongs to.
 typedef enum {
@@ -67,6 +63,9 @@ typedef enum {
     WaylandObjectKeyboardSync,
     WaylandObjectLogicalOutput,
     WaylandObjectPinchGesture,
+    WaylandObjectDataDevice,
+    WaylandObjectDataOffer,
+    WaylandObjectDataSource,
 } WaylandObjectKind;
 
 // The dispatcher installed on every proxy (see WaylandLibrary.h for why listeners
@@ -93,6 +92,7 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     struct wl_proxy *_shm;
     struct wl_proxy *_wmBase;
     struct wl_proxy *_decorationManager;
+    struct wl_proxy *_dataDeviceManager;
     uint32_t _compositorVersion;
 
 @protected
@@ -128,6 +128,10 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     uint32_t _inputSerial;
     NSEvent *_inputEvent;
     WaylandWindow *_inputWindow;
+    NSEvent *_dragPressEvent;
+    WaylandWindow *_dragPressWindow; // Nonretained; invalidated on unmap.
+    uint32_t _dragPressSerial, _dragPressButton;
+    WaylandDraggingManager *_draggingManager;
 
     struct xkb_context *_xkbContext;
     struct xkb_keymap *_xkbKeymap;
@@ -152,9 +156,20 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     int32_t _imageCursorBufferScale;
     WaylandCursor *_cursor;
     BOOL _applyingCursor, _cursorApplyPending, _cursorApplyQueued;
+    WaylandPasteboard *_generalPasteboard;
+    NSMutableDictionary *_namedPasteboards;
 }
 
+- (WaylandWindow *) windowForSurface: (struct wl_proxy *) surface;
+// Caller owns the returned native immutable buffer.
+- (struct wl_proxy *) newARGBBuffer: (NSData *) pixels pixelSize: (NSSize) size;
+- (struct wl_proxy *) dragDataDevice;
+- (WaylandWindow *) dragOriginForEvent: (NSEvent *) event;
+- (uint32_t) dragSerialForEvent: (NSEvent *) event;
+- (void) consumeDragPress;
 - (void) flush;
+- (void) processPendingEvents;
+- (uint32_t) clipboardSerial;
 - (int32_t) scaleForOutput: (struct wl_proxy *) output;
 - (void) windowScaleChanged: (WaylandWindow *) window;
 - (WaylandWindow *) popupParentForWindow: (WaylandWindow *) window;

@@ -21,6 +21,8 @@
 #import "NSEvent_gesture.h"
 #import "NSEvent_mouse.h"
 #import "WaylandCursor.h"
+#import "WaylandPasteboard.h"
+#import "WaylandDraggingManager.h"
 #import "WaylandLibrary.h"
 #import "WaylandProtocol.h"
 #import "WaylandWindow.h"
@@ -118,6 +120,12 @@ int WaylandDispatch(const void *kind, void *proxy, uint32_t opcode,
             case WaylandObjectLogicalOutput:
                 [((WaylandOutput *) object)->_display logicalOutputEvent: opcode
                                                                   output: object arguments: args];
+                break;
+            case WaylandObjectDataDevice:
+            case WaylandObjectDataOffer:
+            case WaylandObjectDataSource:
+                [(WaylandPasteboard *) object handleEvent: opcode kind: objectKind
+                                                     proxy: proxy arguments: args];
                 break;
             case WaylandObjectOutput:
                 [((WaylandOutput *) object)->_display handleEvent: opcode
@@ -221,6 +229,7 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
     // Inherited from X11Display, whose -init was skipped above, so nothing else
     // allocates it. A nil dictionary would make every click the first click.
     _buttonClickCounts = [NSMutableDictionary new];
+    _namedPasteboards = [NSMutableDictionary new];
     _repeatRate = 25;
     _repeatDelay = 600;
 
@@ -259,6 +268,9 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         [self release];
         return nil;
     }
+
+    _generalPasteboard = [[WaylandPasteboard alloc] initWithName: NSGeneralPboard display: self
+                                                      manager: _dataDeviceManager seat: _seat];
 
     _xkbContext = WL.xkb_context_new(XKB_CONTEXT_NO_FLAGS);
     if (_xkbContext == NULL)
@@ -307,6 +319,14 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
 }
 
 - (void) dealloc {
+    [_draggingManager invalidate];
+    [_draggingManager release];
+    [self consumeDragPress];
+    [_generalPasteboard invalidate];
+    [_generalPasteboard release];
+    for (WaylandPasteboard *pasteboard in [_namedPasteboards allValues])
+        [pasteboard invalidate];
+    [_namedPasteboards release];
     [self stopKeyRepeat];
     [self cancelPendingModifier];
     [_heldKeyIdentities release];
@@ -331,7 +351,7 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
     if (_wlDisplay != NULL) {
         // wl_display_disconnect() doesn't free proxies.
         struct wl_proxy *proxies[] = {_imageCursorBuffer, _cursorSurface, _pinchGesture, _pointerGestures, _pointer, _keyboard,
-                                      _seat, _decorationManager, _wmBase,
+                                      _seat, _decorationManager, _dataDeviceManager, _wmBase,
                                       _shm, _logicalOutputManager,
                                       _legacyLogicalOutputManager, _compositor, _registry};
         for (size_t i = 0; i < sizeof(proxies) / sizeof(proxies[0]); i++)
@@ -466,6 +486,9 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
                                version: _compositorVersion
                                   kind: 0
                                 object: nil];
+    } else if (strcmp(interface, "wl_data_device_manager") == 0 && _dataDeviceManager == NULL) {
+        _dataDeviceManager = [self bindGlobal: name interface: &wl_data_device_manager_interface
+                                    version: MIN(version, 3) kind: 0 object: nil];
     } else if (strcmp(interface, "wl_shm") == 0 && _shm == NULL) {
         _shm = [self bindGlobal: name
                       interface: &wl_shm_interface
@@ -596,6 +619,7 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
             if (output->_logicalProxy)
                 WaylandMarshal(output->_logicalProxy, WP_LOGICAL_OUTPUT_DESTROY, NULL,
                                WL_MARSHAL_FLAG_DESTROY, NULL);
+            [_draggingManager outputRemoved: output->_proxy];
             WL.wl_proxy_destroy(output->_proxy);
             [_outputs removeObject: output];
             [self invalidateScreens];
@@ -628,6 +652,7 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
     [output->_modes release];
     output->_modes = [output->_pendingModes copy];
     [self invalidateScreens];
+    [_draggingManager outputsChanged];
     for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
         [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) scheduleScaleUpdate];
 }
@@ -756,6 +781,8 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         [self attachPinchGesture];
     } else if (!(capabilities & WP_SEAT_CAPABILITY_POINTER) && _pointer != NULL) {
         [self detachPinchGesture];
+        [_draggingManager cancel];
+        [self consumeDragPress];
         [self releaseInputDevice: &_pointer opcode: WP_POINTER_RELEASE];
         _pointerWindow = nil;
         _pointerEnterSerial = 0;
@@ -813,6 +840,7 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
     case WP_POINTER_EV_LEAVE:
         _pressedButtons = 0;
         [_buttonClickCounts removeAllObjects];
+        [self consumeDragPress];
         _lastMouseLocation = [self mouseLocation];
         _pointerWindow = nil;
         _pointerEnterSerial = 0;
@@ -826,13 +854,15 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
                              y: wl_fixed_to_double(args[2].f)];
         break;
 
-    case WP_POINTER_EV_BUTTON:
+    case WP_POINTER_EV_BUTTON: {
+        BOOL firstPress = _pressedButtons == 0;
         if (_pressedButtons == 0 && [_pointerWindow decorationButton: args[2].u
                 pressed: args[3].u == WP_POINTER_BUTTON_STATE_PRESSED
                 serial: args[0].u atPoint: _pointerSurfacePoint])
             break;
         if (args[3].u == WP_POINTER_BUTTON_STATE_PRESSED) {
             _inputSerial = args[0].u;
+            [_generalPasteboard inputAvailable];
             [_inputEvent release];
             _inputEvent = nil;
             _inputWindow = nil;
@@ -840,8 +870,19 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         [self pointerButton: args[2].u
                     pressed: args[3].u == WP_POINTER_BUTTON_STATE_PRESSED
                        time: args[1].u];
+        if (firstPress && args[3].u == WP_POINTER_BUTTON_STATE_PRESSED && _inputEvent != nil) {
+            [self consumeDragPress];
+            _dragPressEvent = [_inputEvent retain];
+            _dragPressWindow = _pointerWindow;
+            _dragPressSerial = args[0].u;
+            _dragPressButton = args[2].u;
+        } else if (args[3].u != WP_POINTER_BUTTON_STATE_PRESSED &&
+                   args[2].u == _dragPressButton) {
+            [self consumeDragPress];
+        }
         break;
 
+    }
     case WP_POINTER_EV_AXIS:
         [self pointerAxis: args[1].u value: wl_fixed_to_double(args[2].f)];
         break;
@@ -1238,6 +1279,7 @@ static NSUInteger modifierDeviceMask(int code) {
         BOOL pressed = args[3].u == WP_KEYBOARD_KEY_STATE_PRESSED;
         if (pressed) {
             _inputSerial = args[0].u;
+            [_generalPasteboard inputAvailable];
             [_inputEvent release];
             _inputEvent = nil;
             _inputWindow = nil;
@@ -1748,6 +1790,8 @@ static NSUInteger modifierDeviceMask(int code) {
         _wlLastClickWindow = nil;
     if (_pinchWindow == window)
         [self postPinchPhase: NSEventPhaseCancelled];
+    [_draggingManager windowUnmapped: window];
+    if (_dragPressWindow == window) [self consumeDragPress];
     if (_pointerWindow == window) {
         _pointerWindow = nil;
         _pointerEnterSerial = 0;
@@ -2034,9 +2078,46 @@ static NSUInteger modifierDeviceMask(int code) {
 
 #pragma mark - Unsupported or X11-only
 
-- (NSPasteboard *) pasteboardWithName: (NSString *) name {
-    // The clipboard isn't implemented yet.
+- (uint32_t) clipboardSerial {
+    return _keyboardWindow != nil ? _inputSerial : 0;
+}
+
+- (NSDraggingManager *) draggingManager {
+    if (_draggingManager == nil)
+        _draggingManager = [[WaylandDraggingManager alloc] initWithDisplay: self];
+    return _draggingManager;
+}
+- (struct wl_proxy *) dragDataDevice { return [_generalPasteboard dataDevice]; }
+- (void) consumeDragPress {
+    [_dragPressEvent release]; _dragPressEvent = nil;
+    _dragPressWindow = nil; _dragPressSerial = 0;
+}
+- (WaylandWindow *) dragOriginForEvent: (NSEvent *) event {
+    if (_dragPressEvent == nil || _dragPressSerial == 0 ||
+        _dragPressWindow == nil || ![_dragPressWindow isMapped]) return nil;
+    if (event == _dragPressEvent) return _dragPressWindow;
+    // A drag may start from the down event or the currently dispatched motion.
+    if (_dragPressButton != WP_BTN_LEFT && _dragPressButton != WP_BTN_RIGHT) return nil;
+    NSEventType expected = _dragPressButton == WP_BTN_LEFT ? NSLeftMouseDragged : NSRightMouseDragged;
+    if ([NSApp currentEvent] == event && [event type] == expected &&
+        [event window] == [_dragPressWindow delegate]) return _dragPressWindow;
     return nil;
+}
+- (uint32_t) dragSerialForEvent: (NSEvent *) event {
+    return [self dragOriginForEvent: event] ? _dragPressSerial : 0;
+}
+
+- (NSPasteboard *) pasteboardWithName: (NSString *) name {
+    if ([name isEqual: NSGeneralPboard] || [name isEqual: NSPasteboardNameGeneral])
+        return _generalPasteboard;
+    if (name == nil) return nil;
+    WaylandPasteboard *pasteboard = [_namedPasteboards objectForKey: name];
+    if (!pasteboard) {
+        pasteboard = [[[WaylandPasteboard alloc] initWithName: name display: self
+                                                    manager: NULL seat: NULL] autorelease];
+        [_namedPasteboards setObject: pasteboard forKey: name];
+    }
+    return pasteboard;
 }
 
 - (void) beep {

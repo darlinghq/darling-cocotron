@@ -30,8 +30,25 @@ backend draw the window frame itself even when the compositor offers server-side
   keymap and key repeat, aggregate and left/right modifier changes, touchpad pinch as magnify and rotate
   events.
 - Cursors: themed cursors and `NSImage` cursors with their hotspot.
+- Clipboard and drag-and-drop: see below.
 - Outputs: output batches are applied atomically, rotation and the xdg-output logical layout feed `NSScreen`,
   integer buffer scale follows the outputs a window is on.
+
+## Clipboard and drag-and-drop
+
+The general pasteboard is the selection of `wl_data_device` (core protocol, `wl_data_device_manager`
+version 3 for drag actions). Text maps to `text/plain;charset=utf-8`, `text/plain` and `UTF8_STRING`, PNG and
+TIFF images to `image/png` and `image/tiff`, file lists (`NSFilenamesPboardType`) to `text/uri-list`; other
+types travel under their own names. Other named pasteboards are process-local. Publishing needs keyboard
+focus and an input serial, so writes made earlier stay local until input arrives. Transfers are limited to
+16 MiB and five seconds, a reader that stalls or an oversized transfer yields nil rather than truncated data.
+
+Incoming drops use AppKit's drag hit testing and the same enter, update, exit and perform sequence as the
+other backends; copy and move are negotiated, the drag pasteboard is separate from the clipboard, and
+callbacks run after native dispatch. Outgoing drags start from a mouse press and show a drag icon at the
+output scale. A drag whose source and target are the same process stays in the process and keeps the
+original Cocoa data. File lists are converted by `AppKit/DarlingFileURIList.m`, shared with the X11 backend:
+only paths below `/Volumes/SystemRoot` (host paths) are offered to other processes.
 
 Native libraries (libwayland-client, libwayland-cursor, libxkbcommon) are loaded with `dlopen` through the
 loader's native-call table only when the backend is selected, so the bundle has no link-time dependency on

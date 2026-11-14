@@ -23,7 +23,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 const NSPasteboardType NSPasteboardTypeString = @"NSStringPboardType";
 const NSPasteboardType NSPasteboardTypePDF = @"NSPDFPboardType";
-const NSPasteboardType NSPasteboardTypePNG = @"NSPDFPboardType";
+const NSPasteboardType NSPasteboardTypePNG = @"public.png";
 const NSPasteboardType NSPasteboardTypeTIFF = @"NSTIFFPboardType";
 const NSPasteboardType NSPasteboardTypeRTF = @"NSRTFPboardType";
 const NSPasteboardType NSPasteboardTypeRTFD = @"NSRTFDPboardType";

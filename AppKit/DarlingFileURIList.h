@@ -21,9 +21,16 @@
 #pragma once
 #import <Foundation/Foundation.h>
 
-// Parses an RFC 2483 text/uri-list into the guest-visible file paths an AppKit
-// receiver expects, or nil if the list is not entirely well formed. Pure: it
-// never touches the filesystem. Mirrors WaylandFilenamesFromURIList, which the
-// Wayland backend depends on this one at build time rather than the reverse, so
-// the two cannot share one implementation.
-NSArray *X11FilenamesFromURIList(NSData *data);
+// Conversion between an RFC 2483 text/uri-list and the guest-visible file paths an
+// AppKit pasteboard (NSFilenamesPboardType) carries, shared by the window-system
+// backends' clipboard and drag-and-drop code. Host paths are visible in the guest
+// below /Volumes/SystemRoot. Both functions are pure, never touch the filesystem
+// and are all-or-nothing: one entry that is not well formed rejects the whole list.
+
+// The guest paths of a text/uri-list, or nil if the list is not entirely well formed.
+NSArray *DarlingFilenamesFromURIList(NSData *data);
+
+// A text/uri-list for guest paths below /Volumes/SystemRoot, or nil if any entry is
+// not a host-visible absolute path (a path that exists only in the guest cannot be
+// named to another process) or the list is empty or too large.
+NSData *DarlingURIListFromFilenames(NSArray *filenames);

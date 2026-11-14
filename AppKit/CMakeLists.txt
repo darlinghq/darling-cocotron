@@ -197,6 +197,7 @@ set(AppKit_sources
 	NSScrollEdgeEffectStyle.m
 	NSImageHintSymbolScale.m
 	NSPasteboard.m
+	DarlingFileURIList.m
 	NSSearchFieldCell.m
 	NSOutlineView.m
 	NSDocument.m
@@ -651,7 +652,6 @@ add_backend(X11
 		X11.backend/X11KeySymToUCS.m
 		X11.backend/X11DropSession.m
 		X11.backend/X11DraggingManager.m
-		X11.backend/X11FileURLs.m
 	INFO_PLIST
 		X11.backend/Info.plist
 	DEPENDENCIES
@@ -728,6 +728,10 @@ if (WAYLAND_CLIENT_FOUND AND WAYLAND_CURSOR_FOUND AND XKBCOMMON_FOUND
 			Wayland.backend/WaylandDisplay.m
 			# Client glue shared with the CoreGraphics Wayland backend, which sits below AppKit.
 			../CoreGraphics/WaylandSupport/WaylandLibrary.m
+			Wayland.backend/WaylandDropSession.m
+			Wayland.backend/WaylandDraggingManager.m
+			Wayland.backend/WaylandDragIcon.m
+			Wayland.backend/WaylandPasteboard.m
 			Wayland.backend/WaylandWindow.m
 			${WAYLAND_PROTOCOL_SOURCES}
 		INFO_PLIST
