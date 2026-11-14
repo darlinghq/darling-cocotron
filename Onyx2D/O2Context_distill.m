@@ -15,24 +15,26 @@ static void O2ContextDistillShowText(O2ContextRef self, const char *text,
             O2SizeMake(0, O2GStatePointSize(gState)), Trm);
     O2Encoding *encoding = [gState encoding];
     O2PDFCharWidths *widths = [gState pdfCharWidths];
-    O2Glyph glyphs[length];
-    uint16_t unicode[length];
+    // A CID font takes two bytes per glyph.
+    NSUInteger count = O2EncodingGetGlyphCountForBytes(encoding, length);
+    O2Glyph glyphs[count + 1];
+    uint16_t unicode[count + 1];
 
     O2EncodingGetGlyphsForBytes(encoding, glyphs, text, length);
     O2EncodingGetUnicodeForBytes(encoding, unicode, text, length);
 
-    O2Size advances[length];
+    O2Size advances[count + 1];
     int i;
 
     if (widths != nil) {
         // PDF widths are in text space units per unit of font size.
         O2PDFCharWidthsGetAdvances(widths, advances, text, length);
-        for (i = 0; i < length; i++)
+        for (i = 0; i < count; i++)
             advances[i].width *= O2GStatePointSize(gState);
     } else
-        O2ContextGetDefaultAdvances(self, glyphs, advances, length);
+        O2ContextGetDefaultAdvances(self, glyphs, advances, count);
 
-    for (i = 0; i < length; i++) {
+    for (i = 0; i < count; i++) {
         advances[i].width += gState->_characterSpacing;
     }
 
@@ -41,7 +43,7 @@ static void O2ContextDistillShowText(O2ContextRef self, const char *text,
     // the device transform, just the CTM because we want the results officially
     // in default user space, not device
 
-    O2Rect glyphRects[length];
+    O2Rect glyphRects[count + 1];
     O2Font *font = O2GStateFont(gState);
     O2Float descent = ((CGFloat) O2FontGetDescent(font) /
                        (CGFloat) O2FontGetUnitsPerEm(font)) *
@@ -49,7 +51,7 @@ static void O2ContextDistillShowText(O2ContextRef self, const char *text,
 
     descent = O2SizeApplyAffineTransform(O2SizeMake(0, descent), Trm).height;
 
-    for (i = 0; i < length; i++) {
+    for (i = 0; i < count; i++) {
         O2Size advance = O2SizeApplyAffineTransform(advances[i], Trm);
 
         glyphRects[i].origin = point;
@@ -61,13 +63,13 @@ static void O2ContextDistillShowText(O2ContextRef self, const char *text,
         point.y += advance.height;
     }
 
-    O2ContextConcatAdvancesToTextMatrix(self, advances, length);
+    O2ContextConcatAdvancesToTextMatrix(self, advances, count);
 
     [((O2Context_distill *) self)->_delegate
             distiller: (O2Context_distill *) self
               unicode: unicode
                 rects: glyphRects
-                 count: length];
+                count: count];
 }
 
 - (void) drawPath: (O2PathDrawingMode) pathMode {

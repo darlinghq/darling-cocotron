@@ -1274,14 +1274,16 @@ void O2ContextDefaultShowText(O2ContextRef self, const char *text,
     O2GState *gState = O2ContextCurrentGState(self);
     O2Encoding *encoding = O2GStateEncoding(gState);
     O2PDFCharWidths *widths = O2GStateCharWidths(gState);
-    O2Glyph glyphs[length];
+    // A CID font takes two bytes per glyph.
+    NSUInteger count = O2EncodingGetGlyphCountForBytes(encoding, length);
+    O2Glyph glyphs[count + 1];
 
     O2EncodingGetGlyphsForBytes(encoding, glyphs, (const uint8_t *) text,
                                 length);
     if (widths == nil && gState->_characterSpacing == 0)
-        self->_showGlyphsFunction(self, NULL, glyphs, NULL, length);
+        self->_showGlyphsFunction(self, NULL, glyphs, NULL, count);
     else {
-        O2Size advances[length];
+        O2Size advances[count + 1];
         int i;
 
         if (widths != nil) {
@@ -1290,16 +1292,16 @@ void O2ContextDefaultShowText(O2ContextRef self, const char *text,
 
             O2PDFCharWidthsGetAdvances(widths, advances, (const uint8_t *) text,
                                        length);
-            for (i = 0; i < length; i++)
+            for (i = 0; i < count; i++)
                 advances[i].width *= size;
         } else
-            O2ContextGetDefaultAdvances(self, glyphs, advances, length);
+            O2ContextGetDefaultAdvances(self, glyphs, advances, count);
 
-        for (i = 0; i < length; i++) {
+        for (i = 0; i < count; i++) {
             advances[i].width += gState->_characterSpacing;
         }
 
-        self->_showGlyphsFunction(self, NULL, glyphs, advances, length);
+        self->_showGlyphsFunction(self, NULL, glyphs, advances, count);
     }
 }
 

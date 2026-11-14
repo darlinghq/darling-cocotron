@@ -7,6 +7,94 @@
 
 @implementation O2PDFFont
 
+// The font program embedded in a font descriptor (FontFile, FontFile2 or
+// FontFile3), or nil.
+static O2Font *createFontFromDescriptor(O2PDFDictionary *fontDescriptor) {
+    O2PDFStream *fontStream = NULL;
+    const char *key;
+
+    if ([fontDescriptor getStreamForKey: "FontFile" value: &fontStream])
+        key = "FontFile";
+    else if ([fontDescriptor getStreamForKey: "FontFile2" value: &fontStream])
+        key = "FontFile2";
+    else if ([fontDescriptor getStreamForKey: "FontFile3" value: &fontStream]) {
+        const char *name;
+
+        key = "FontFile3";
+        if (![[fontStream dictionary] getNameForKey: "Subtype" value: &name])
+            O2PDFError(__FILE__, __LINE__, @"No Subtype on FontFile3 stream");
+    } else
+        return nil;
+
+    NSData *data = [fontStream data];
+
+    if (data == nil) {
+        O2PDFError(__FILE__, __LINE__, @"No data on %s stream", key);
+        return nil;
+    }
+
+    O2DataProviderRef provider = O2DataProviderCreateWithCFData((CFDataRef) data);
+    O2Font *font = O2FontCreateWithDataProvider(provider);
+
+    O2DataProviderRelease(provider);
+    return font;
+}
+
+// A Type0 (composite) font: its glyphs and widths come from its CIDFont, the
+// single entry of DescendantFonts. Supported: the Identity-H CMap (each pair of
+// bytes is a CID) with a CIDFontType2 (TrueType) font program, the CIDs mapped
+// to glyphs by CIDToGIDMap. Returns NO for anything else.
+- (BOOL) loadType0Font: (O2PDFDictionary *) dictionary {
+    const char *cmap;
+    const char *subtype = NULL;
+    O2PDFArray *descendants;
+    O2PDFDictionary *cidFont;
+    O2PDFDictionary *fontDescriptor;
+    O2PDFArray *widths = NULL;
+    O2PDFReal defaultWidth = 1000;
+    O2PDFObject *map;
+    NSData *cidToGID = nil;
+
+    if (![dictionary getNameForKey: "Encoding" value: &cmap] ||
+        strcmp(cmap, "Identity-H") != 0) {
+        O2PDFError(__FILE__, __LINE__, @"Type0 font: only the Identity-H CMap is implemented");
+        return NO;
+    }
+    if (![dictionary getArrayForKey: "DescendantFonts" value: &descendants] ||
+        ![descendants getDictionaryAtIndex: 0 value: &cidFont]) {
+        O2PDFError(__FILE__, __LINE__, @"Type0 font without DescendantFonts");
+        return NO;
+    }
+    if (![cidFont getNameForKey: "Subtype" value: &subtype] ||
+        strcmp(subtype, "CIDFontType2") != 0) {
+        O2PDFError(__FILE__, __LINE__, @"Type0 font: CIDFont subtype %s unimplemented",
+                   subtype ? subtype : "(none)");
+        return NO;
+    }
+    // The glyph numbers belong to the embedded TrueType program: without it
+    // there is nothing they could index.
+    if (![cidFont getDictionaryForKey: "FontDescriptor" value: &fontDescriptor] ||
+        (_resourceFont = createFontFromDescriptor(fontDescriptor)) == nil) {
+        O2PDFError(__FILE__, __LINE__, @"Type0 font: CIDFontType2 is not embedded");
+        return NO;
+    }
+
+    [cidFont getNumberForKey: "DW" value: &defaultWidth];
+    [cidFont getArrayForKey: "W" value: &widths];
+    if ([cidFont getObjectForKey: "CIDToGIDMap" value: &map]) {
+        O2PDFStream *stream;
+
+        if ([map checkForType: kO2PDFObjectTypeStream value: &stream])
+            cidToGID = [stream data];
+        // Otherwise the name Identity: the CID is the glyph.
+    }
+
+    _encoding = [[O2Encoding alloc] initWithCIDToGIDMap: cidToGID];
+    _pdfCharWidths = [[O2PDFCharWidths alloc] initWithCIDWidths: widths
+                                                   defaultWidth: defaultWidth];
+    return YES;
+}
+
 static inline O2TextEncoding textEncodingWithName(const char *name) {
     if (strcmp(name, "MacRomanEncoding") == 0)
         return kO2EncodingMacRoman;
@@ -60,54 +148,7 @@ static inline O2TextEncoding textEncodingWithName(const char *name) {
 
         [fontDescriptor getNameForKey: "FontName" value: &fontName];
 
-        O2PDFStream *fontStream = NULL;
-
-        if ([fontDescriptor getStreamForKey: "FontFile" value: &fontStream]) {
-            NSData *data = [fontStream data];
-
-            if (data == nil)
-                O2PDFError(__FILE__, __LINE__, @"No data on FontFile stream");
-            else {
-                O2DataProviderRef provider =
-                        O2DataProviderCreateWithCFData((CFDataRef) data);
-                _resourceFont = O2FontCreateWithDataProvider(provider);
-
-                O2DataProviderRelease(provider);
-            }
-        } else if ([fontDescriptor getStreamForKey: "FontFile2"
-                                             value: &fontStream]) {
-            NSData *data = [fontStream data];
-
-            if (data == nil)
-                O2PDFError(__FILE__, __LINE__, @"No data on FontFile2 stream");
-            else {
-                O2DataProviderRef provider =
-                        O2DataProviderCreateWithCFData((CFDataRef) data);
-                _resourceFont = O2FontCreateWithDataProvider(provider);
-
-                O2DataProviderRelease(provider);
-            }
-        } else if ([fontDescriptor getStreamForKey: "FontFile3"
-                                             value: &fontStream]) {
-            O2PDFDictionary *streamDictionary = [fontStream dictionary];
-            NSData *data = [fontStream data];
-            const char *name;
-
-            if (![streamDictionary getNameForKey: "Subtype" value: &name]) {
-                O2PDFError(__FILE__, __LINE__,
-                           @"No Subtype on FontFile3 stream");
-            }
-
-            if (data == nil)
-                O2PDFError(__FILE__, __LINE__, @"No data on FontFile3 stream");
-            else {
-                O2DataProviderRef provider =
-                        O2DataProviderCreateWithCFData((CFDataRef) data);
-                _resourceFont = O2FontCreateWithDataProvider(provider);
-
-                O2DataProviderRelease(provider);
-            }
-        }
+        _resourceFont = createFontFromDescriptor(fontDescriptor);
     }
 
     if ([dictionary getArrayForKey: "Widths" value: &widthsArray])
@@ -116,7 +157,8 @@ static inline O2TextEncoding textEncodingWithName(const char *name) {
                                                        lastChar: lastChar
                                                    missingWidth: missingWidth];
 
-    if ([dictionary getObjectForKey: "Encoding" value: &encoding]) {
+    if (strcmp(subtype, "Type0") != 0 &&
+        [dictionary getObjectForKey: "Encoding" value: &encoding]) {
         if ([encoding objectType] == kO2PDFObjectTypeName) {
             const char *name = [(O2PDFObject_Name *) encoding name];
 
@@ -142,8 +184,7 @@ static inline O2TextEncoding textEncodingWithName(const char *name) {
     }
 
     if (strcmp(subtype, "Type0") == 0) {
-        O2PDFError(__FILE__, __LINE__, @"Font subtype %s unimplemented",
-                   subtype);
+        [self loadType0Font: dictionary];
     } else if (strcmp(subtype, "Type1") == 0) {
 
         if (![dictionary getNameForKey: "BaseFont" value: &_baseFont]) {
@@ -181,7 +222,8 @@ static inline O2TextEncoding textEncodingWithName(const char *name) {
                 stringWithCString: _baseFont
                          encoding: NSUTF8StringEncoding]);
 
-    _encoding = [_graphicsFont createEncodingForTextEncoding: textEncoding];
+    if (_encoding == nil)
+        _encoding = [_graphicsFont createEncodingForTextEncoding: textEncoding];
 
     if (differences != NULL) {
         O2MutableEncoding *newEncoding = [_encoding mutableCopy];
