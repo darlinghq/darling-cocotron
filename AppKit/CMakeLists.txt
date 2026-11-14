@@ -318,6 +318,7 @@ set(AppKit_sources
 	NSOpenGL/NSOpenGLPixelFormat.m
 	# NSOpenGL/NSOpenGLDrawable.m
 	NSOpenGL/NSOpenGLContext.m
+	NSOpenGL/NSOpenGLOptions.m
 
 	NSMenuItemCell.m
 	NSPopUpButtonCell.m
