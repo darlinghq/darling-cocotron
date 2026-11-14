@@ -21,6 +21,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSPDFImageRep.h>
 #import <ApplicationServices/ApplicationServices.h>
 
+@interface NSPDFImageRep (Loading)
+- (void) _useData: (NSData *) data;
+@end
+
 @implementation NSPDFImageRep
 
 + (NSArray *) imageUnfilteredFileTypes {
@@ -56,23 +60,41 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 // (test_quirk_unreadable_data_gives_a_page_less_rep)
 - initWithData: (NSData *) data {
     self = [super init];
-    if (self) {
-        _pdf = [data retain];
-        _currentPage = 0;
-        if ([_pdf length] > 0) {
-            CGDataProviderRef provider =
-                    CGDataProviderCreateWithCFData((CFDataRef) _pdf);
-            @try {
-                _document = CGPDFDocumentCreateWithProvider(provider);
-            }
-            @catch (id ex) {
-                _document = NULL;
-            }
-            @finally {
-                CGDataProviderRelease(provider);
-            }
+    if (self)
+        [self _useData: data];
+    return self;
+}
+
+- (void) _useData: (NSData *) data {
+    _pdf = [data retain];
+    _currentPage = 0;
+    if ([_pdf length] > 0) {
+        CGDataProviderRef provider =
+                CGDataProviderCreateWithCFData((CFDataRef) _pdf);
+        @try {
+            _document = CGPDFDocumentCreateWithProvider(provider);
+        }
+        @catch (id ex) {
+            _document = NULL;
+        }
+        @finally {
+            CGDataProviderRelease(provider);
         }
     }
+}
+
+// After the image rep part an NSArchiver archive holds the PDF data, the current page and one
+// more int (unknown). The size comes from the image rep part, as it was archived.
+- initWithCoder: (NSCoder *) coder {
+    if ((self = [super initWithCoder: coder]) == nil)
+        return nil;
+
+    NSData *data = [coder decodeObject];
+    int page, unknown;
+
+    [coder decodeValuesOfObjCTypes: "ii", &page, &unknown];
+    [self _useData: [data isKindOfClass: [NSData class]] ? data : nil];
+    _currentPage = page > 0 ? page : 0;
     return self;
 }
 
@@ -122,6 +144,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (NSSize) size {
+    // A size given with -setSize: (or archived) replaces the page's media box.
+    if (_size.width > 0 && _size.height > 0)
+        return _size;
     if (_document == NULL)
         return NSZeroSize;
 

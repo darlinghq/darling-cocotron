@@ -57,3 +57,10 @@ NSDictionaryController is not archived: 10.14.4 does not read back its own archi
 
 mkfix-enabled.m (same run procedure) writes archives of an NSButton, NSScroller, NSTextField and
 NSSlider, each enabled (-on) and disabled (-off), expected by tests/appkit-nonkeyed-control-enabled.m.
+
+mkfix-cells.m (same run procedure) writes archives of a stepper cell and stepper (range 11..77,
+increment 3, value 22, no wrap, no autorepeat), level indicator cells and a level indicator,
+a secure text field cell, a search field cell (whole string, immediately, 7 recents, autosave
+name, menu template), a form cell (title width 55), a segmented control (three segments with
+labels, a disabled one with tag 77, select-any tracking), browser cells (leaf and branch) and
+custom and PDF image reps, expected by tests/appkit-nonkeyed-cells2.m.

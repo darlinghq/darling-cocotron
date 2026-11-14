@@ -280,12 +280,37 @@ static NSArray *typesForFileTypes(NSArray *fileTypes) {
     return nil;
 }
 
+// An NSArchiver archive holds the size, a byte for has-alpha, a byte for opaque, then the
+// pixel width and height, the bits per sample and the colour space name. Versions up to 16
+// are not read.
 - (instancetype) initWithCoder:(NSCoder *) coder
 {
-    [NSException raise: NSInvalidArgumentException
-                    format: @"-[%@ %s] is not implemented for coder %@",
-                            [self class], sel_getName(_cmd), coder];
-    return nil;
+    if ([coder allowsKeyedCoding] || [coder versionForClassName: @"NSImageRep"] < 17) {
+        [NSException raise: NSInvalidArgumentException
+                        format: @"-[%@ %s] is not implemented for coder %@",
+                                [self class], sel_getName(_cmd), coder];
+        return nil;
+    }
+    if ((self = [super init]) == nil)
+        return nil;
+
+    float width, height;
+    char hasAlpha, opaque;
+    int pixelsWide, pixelsHigh, bitsPerSample;
+    NSString *colorSpaceName = nil;
+
+    [coder decodeValuesOfObjCTypes: "ff", &width, &height];
+    [coder decodeValuesOfObjCTypes: "c", &hasAlpha];
+    [coder decodeValuesOfObjCTypes: "c", &opaque];
+    [coder decodeValuesOfObjCTypes: "iii@", &pixelsWide, &pixelsHigh, &bitsPerSample, &colorSpaceName];
+    _size = NSMakeSize(width, height);
+    _hasAlpha = hasAlpha != 0;
+    _isOpaque = opaque != 0;
+    _pixelsWide = pixelsWide;
+    _pixelsHigh = pixelsHigh;
+    _bitsPerSample = bitsPerSample;
+    _colorSpaceName = colorSpaceName;
+    return self;
 }
 
 - copyWithZone: (NSZone *) zone {

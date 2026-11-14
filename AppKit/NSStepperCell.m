@@ -48,9 +48,17 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         _autorepeat = [keyed decodeBoolForKey: @"NSAutorepeat"];
         _increment = [keyed decodeDoubleForKey: @"NSIncrement"];
     } else {
-        [NSException raise: NSInvalidArgumentException
-                    format: @"-[%@ %s] is not implemented for coder %@",
-                            [self class], sel_getName(_cmd), coder];
+        // The value, minimum, maximum and increment, then a flag word (bit 31 value
+        // wraps, bit 30 autorepeat) and four unused ints.
+        double value;
+        int flags, unused[4];
+
+        [coder decodeValuesOfObjCTypes: "ddddiiiii", &value, &_minValue, &_maxValue, &_increment, &flags,
+                                        &unused[0], &unused[1], &unused[2], &unused[3]];
+        [_objectValue release];
+        _objectValue = [[NSNumber numberWithDouble: value] retain];
+        _valueWraps = ((unsigned) flags & 0x80000000u) != 0;
+        _autorepeat = ((unsigned) flags & 0x40000000u) != 0;
     }
 
     return self;

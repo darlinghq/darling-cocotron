@@ -43,9 +43,18 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         _titleWidth = [keyed decodeFloatForKey: @"NSTitleWidth"];
         _titleCell = [[keyed decodeObjectForKey: @"NSTitleCell"] retain];
     } else {
-        [NSException raise: NSInvalidArgumentException
-                    format: @"-[%@ %s] is not implemented for coder %@",
-                            [self class], sel_getName(_cmd), coder];
+        // The title width and the title cell; versions 17 to 40 read the cell separately.
+        // The width is archived as a float, which is narrower than a CGFloat.
+        NSInteger version = [coder versionForClassName: @"NSFormCell"];
+        float titleWidth;
+
+        if (version >= 17 && version < 41) {
+            [coder decodeValuesOfObjCTypes: "f", &titleWidth];
+            _titleCell = [[coder decodeObject] retain];
+        } else {
+            [coder decodeValuesOfObjCTypes: "f@", &titleWidth, &_titleCell];
+        }
+        _titleWidth = titleWidth;
     }
     return self;
 }

@@ -38,6 +38,31 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                     [NSImage
                             imageNamed: @"NSStopProgressFreestandingTemplate"]];
     [_cancelButtonCell setImageScaling: NSImageScaleProportionallyUpOrDown];
+
+    if (![coder allowsKeyedCoding]) {
+        // The search and cancel button cells, the search menu template, the recents autosave
+        // name, two bytes (sends the whole search string; maximum recents, -1 for the
+        // default), a flag word (bit 27 sends the search string immediately) and three
+        // unused ints. The button cells of an archive carry no images (the system draws
+        // them), so the ones made above stay.
+        id searchCell = nil, cancelCell = nil, menu = nil, autosaveName = nil;
+        char wholeString, maximumRecents;
+        int flags, unused[3];
+
+        [coder decodeValuesOfObjCTypes: "@@@@cciiii", &searchCell, &cancelCell, &menu, &autosaveName, &wholeString,
+                                        &maximumRecents, &flags, &unused[0], &unused[1], &unused[2]];
+        [searchCell release];
+        [cancelCell release];
+        _searchMenuTemplate = [menu isKindOfClass: [NSMenu class]] ? menu : nil;
+        if (_searchMenuTemplate == nil)
+            [menu release];
+        [self setRecentsAutosaveName: [autosaveName isKindOfClass: [NSString class]] ? autosaveName : nil];
+        [autosaveName release];
+        _sendsWholeSearchString = wholeString != 0;
+        _sendsSearchStringImmediately = ((unsigned) flags & 0x08000000u) != 0;
+        if (maximumRecents >= 0)
+            _maximumRecents = maximumRecents;
+    }
     return self;
 }
 

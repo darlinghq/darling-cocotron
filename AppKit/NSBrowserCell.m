@@ -26,7 +26,17 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSStringDrawer.h>
 #import <AppKit/NSStringDrawing.h>
 
+@interface NSCell (NSBrowserCellFlags)
+- (void) _applyAppleFlags: (unsigned int) flags flags2: (unsigned int) flags2;
+@end
+
 @implementation NSBrowserCell
+
+// Bit 17 of the first cell flag word is the leaf flag.
+- (void) _applyAppleFlags: (unsigned int) flags flags2: (unsigned int) flags2 {
+    [super _applyAppleFlags: flags flags2: flags2];
+    _isLeaf = (flags & 0x00020000) ? YES : NO;
+}
 
 + (NSImage *) branchImage {
     return [NSImage imageNamed: @"NSBrowserCellArrow"];
