@@ -27,6 +27,7 @@
 #import <OpenGL/CGLInternal.h>
 #include <dlfcn.h>
 #import "WaylandLibrary.h"
+#import "WaylandPointerLock.h"
 #import "WaylandProtocol.h"
 #import "WaylandWindow.h"
 #import "X11KeySymToUCS.h"
@@ -375,7 +376,9 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         WL.wl_cursor_theme_destroy(_cursorTheme);
     if (_wlDisplay != NULL) {
         // wl_display_disconnect() doesn't free proxies.
-        struct wl_proxy *proxies[] = {_imageCursorBuffer, _cursorFractionalScale, _cursorViewport, _cursorSurface, _pinchGesture, _pointerGestures, _pointer, _keyboard,
+        struct wl_proxy *proxies[] = {_imageCursorBuffer, _cursorFractionalScale, _cursorViewport, _cursorSurface,
+                                      _lockedPointer, _relativePointer, _pointerConstraints, _relativePointerManager,
+                                      _pinchGesture, _pointerGestures, _pointer, _keyboard,
                                       _seat, _decorationManager, _dataDeviceManager, _wmBase,
                                       _shm, _viewporter, _fractionalScaleManager, _subcompositor, _logicalOutputManager,
                                       _legacyLogicalOutputManager, _compositor, _registry};
@@ -552,6 +555,16 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         _pointerGestures = [self bindGlobal: name interface: &zwp_pointer_gestures_v1_interface
                                     version: MIN(version, 2) kind: 0 object: nil];
         [self attachPinchGesture];
+    } else if (strcmp(interface, "zwp_pointer_constraints_v1") == 0 && _pointerConstraints == NULL) {
+        _pointerConstraintsName = name;
+        _pointerConstraints = [self bindGlobal: name interface: &zwp_pointer_constraints_v1_interface
+                                       version: 1 kind: 0 object: nil];
+        [self updatePointerLock];
+    } else if (strcmp(interface, "zwp_relative_pointer_manager_v1") == 0 && _relativePointerManager == NULL) {
+        _relativePointerManagerName = name;
+        _relativePointerManager = [self bindGlobal: name interface: &zwp_relative_pointer_manager_v1_interface
+                                           version: 1 kind: 0 object: nil];
+        [self updatePointerLock];
     } else if (strcmp(interface, "wl_seat") == 0 && _seat == NULL) {
         // Version 4 adds wl_keyboard.repeat_info, 5 wl_pointer.frame.
         _seat = [self bindGlobal: name
@@ -644,6 +657,19 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         _pointerGestures = NULL; _pointerGesturesName = 0;
         return;
     }
+    if ((_pointerConstraints && name == _pointerConstraintsName) ||
+        (_relativePointerManager && name == _relativePointerManagerName))
+    {
+        [self releasePointerLock];
+        if (name == _pointerConstraintsName) {
+            WaylandMarshal(_pointerConstraints, WP_POINTER_CONSTRAINTS_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
+            _pointerConstraints = NULL; _pointerConstraintsName = 0;
+        } else {
+            WaylandMarshal(_relativePointerManager, WP_RELATIVE_POINTER_MANAGER_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
+            _relativePointerManager = NULL; _relativePointerManagerName = 0;
+        }
+        return;
+    }
     if (_fractionalScaleManager && name == _fractionalScaleManagerName) {
         WaylandMarshal(_fractionalScaleManager, WP_FRACTIONAL_MANAGER_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
         _fractionalScaleManager = NULL; _fractionalScaleManagerName = 0;
@@ -676,6 +702,8 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
             WL.wl_proxy_destroy(output->_proxy);
             [_outputs removeObject: output];
             [self invalidateScreens];
+            for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
+                [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) outputsChanged];
             break;
         }
     }
@@ -713,8 +741,11 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
     output->_modes = [output->_pendingModes copy];
     [self invalidateScreens];
     [_draggingManager outputsChanged];
-    for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
-        [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) scheduleScaleUpdate];
+    for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++) {
+        WaylandWindow *window = (WaylandWindow *) CFArrayGetValueAtIndex(_windows, i);
+        [window scheduleScaleUpdate];
+        [window outputsChanged];
+    }
 }
 
 - (void) outputEvent: (uint32_t) opcode
@@ -802,6 +833,19 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         [self pinchEvent: opcode arguments: args];
         break;
 
+    case WaylandObjectLockedPointer:
+        if (proxy == _lockedPointer) {
+            _pointerLocked = opcode == WP_LOCKED_POINTER_EV_LOCKED;
+        }
+        break;
+
+    case WaylandObjectRelativePointer: {
+        double dx, dy;
+        if (proxy == _relativePointer && WaylandRelativeMotionDelta(opcode, args, &dx, &dy))
+            [self pointerRelativeMotionByX: dx y: dy];
+        break;
+    }
+
     case WaylandObjectKeyboardSync:
         if (proxy == _modifierSync && opcode == WP_CALLBACK_EV_DONE)
             [self flushPendingModifier];
@@ -839,8 +883,10 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
                                        &wl_pointer_interface, args,
                                        WaylandObjectPointer, self);
         [self attachPinchGesture];
+        [self updatePointerLock];
     } else if (!(capabilities & WP_SEAT_CAPABILITY_POINTER) && _pointer != NULL) {
         [self detachPinchGesture];
+        [self releasePointerLock];
         [_draggingManager cancel];
         [self consumeDragPress];
         [self releaseInputDevice: &_pointer opcode: WP_POINTER_RELEASE];
@@ -954,14 +1000,29 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
 }
 
 - (void) pointerMotionToX: (CGFloat) x y: (CGFloat) y {
+    // Track the position even when no surface is under the pointer. Opening a
+    // menu maps a new surface under a stationary cursor, so the compositor
+    // sends leave and then motion with no window; dropping that motion left
+    // _pointerSurfacePoint stale and the following button landed wherever the
+    // pointer last was over a known surface.
+    CGPoint previousPoint = _pointerSurfacePoint;
+    _pointerSurfacePoint = CGPointMake(x, y);
+
     WaylandWindow *window = _pointerWindow;
     if (window == nil)
         return;
 
-    _pointerSurfacePoint = CGPointMake(x, y);
     NSPoint location = [window transformPoint: _pointerSurfacePoint];
     NSPoint last = [window mouseLocationOutsideOfEventStream];
     [window setLastKnownCursorPosition: location];
+
+    // The pointer moved: a cursor hidden until then comes back, even when the
+    // application does not want the mouse-moved event. A compositor repeats the
+    // position when a surface changes under a still pointer, and a locked pointer
+    // moves nothing on screen: neither is a move. The AppKit work runs outside
+    // libwayland's listener, as for the cursor below.
+    if (!_pointerLocked && (x != previousPoint.x || y != previousPoint.y))
+        [self performAfterDispatch: ^{ [self pointerMoved]; }];
 
     if (_pressedButtons == 0 && [window isDecorationPoint: _pointerSurfacePoint]) {
         [self performAfterDispatch: ^{ [self applyCursor]; }];
@@ -977,13 +1038,15 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         type = NSRightMouseDragged;
 
     if (type != NSMouseMoved || [delegate acceptsMouseMovedEvents]) {
+        // deltaY is positive downward, as AppKit and the X11 backend report it;
+        // locations are bottom-left, hence last - location.
         NSEvent *event = [NSEvent mouseEventWithType: type
                                             location: location
                                        modifierFlags: [self currentModifierFlags]
                                               window: delegate
                                           clickCount: 1
                                               deltaX: location.x - last.x
-                                              deltaY: location.y - last.y];
+                                              deltaY: last.y - location.y];
         // Not coalesced with -discardEventsMatchingMask:beforeEvent:, which
         // currently removes every older queued event, mouse-downs included.
         [self postEvent: event atStart: NO];
@@ -1212,12 +1275,112 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
     return NSMakePoint(frame.origin.x + location.x, frame.origin.y + location.y);
 }
 
+// Wayland clients can't move the pointer, but while it is locked the cursor is
+// the application's own and a warp only moves where it is. That position is
+// where mouseLocation reports it and where the pointer reappears on unlock.
+// Without a lock the call does nothing, and nothing pretends otherwise.
+// position is in CoreGraphics' global space, as -[NSDisplay warpMouse:] documents.
 - (void) warpMouse: (NSPoint) position {
-    // Wayland clients can't move the pointer.
+    WaylandWindow *window = _lockWindow;
+    if (!_pointerLocked || window == nil)
+        return;
+    NSArray *screens = [self screens];
+    double primaryHeight = [screens count] > 0 ? NSHeight([[screens objectAtIndex: 0] frame]) : 0;
+    double screenX, screenY;
+    WaylandScreenPointFromCG(position.x, position.y, primaryHeight, &screenX, &screenY);
+    NSRect frame = [window frame];
+    NSPoint offset = [window contentOffset];
+    WaylandWarp warp = WaylandWarpTarget(screenX, screenY, frame.origin.x, frame.origin.y,
+                                         frame.size.width, frame.size.height, offset.x, offset.y);
+    _pointerSurfacePoint = CGPointMake(warp.surfaceX, warp.surfaceY);
+    // Window coordinates, like every other writer of the last known position.
+    [window setLastKnownCursorPosition: NSMakePoint(warp.windowX, warp.windowY)];
 }
 
 - (void) grabMouse: (BOOL) doGrab {
-    // Needs the pointer-constraints protocol; not supported yet.
+    _pointerLockRequested = doGrab;
+    [self updatePointerLock];
+}
+
+#pragma mark - Pointer lock
+
+// The window to lock: the one activated last. The lock activates once it also
+// has pointer focus.
+- (WaylandWindow *) pointerLockTarget {
+    for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++) {
+        WaylandWindow *window = (WaylandWindow *) CFArrayGetValueAtIndex(_windows, i);
+        if ([window isMapped] && ![window isPopup])
+            return window;
+    }
+    return nil;
+}
+
+// Makes the lock objects match what was asked for. The compositor activates
+// the lock when the window has pointer focus, which can be later.
+- (void) updatePointerLock {
+    WaylandWindow *target = _pointerLockRequested ? [self pointerLockTarget] : nil;
+    BOOL possible = _pointer != NULL && _pointerConstraints != NULL && _relativePointerManager != NULL;
+    static BOOL loggedMissing;
+    if (_pointerLockRequested && !loggedMissing &&
+        (_pointerConstraints == NULL || _relativePointerManager == NULL)) {
+        loggedMissing = YES;
+        NSLog(@"Wayland backend: relative mouse mode was requested, but the compositor offers no %s: "
+              @"the cursor stays free and no deltas are delivered",
+              _pointerConstraints == NULL ? "zwp_pointer_constraints_v1"
+                                          : "zwp_relative_pointer_manager_v1");
+    }
+    if (!possible || target == nil || (_lockWindow != nil && _lockWindow != target)) {
+        [self releasePointerLock];
+        if (!possible || target == nil)
+            return;
+    }
+    if (_lockedPointer != NULL)
+        return;
+    _lockWindow = target;
+    _lockedPointer = WaylandLockPointer(_pointerConstraints, [target surface], _pointer);
+    _relativePointer = WaylandGetRelativePointer(_relativePointerManager, _pointer);
+    WL.wl_proxy_add_dispatcher(_lockedPointer, WaylandDispatch,
+                               (void *) (uintptr_t) WaylandObjectLockedPointer, self);
+    WL.wl_proxy_add_dispatcher(_relativePointer, WaylandDispatch,
+                               (void *) (uintptr_t) WaylandObjectRelativePointer, self);
+    [self flush];
+}
+
+- (void) releasePointerLock {
+    if (_lockedPointer == NULL)
+        return;
+    WaylandWindow *window = _lockWindow;
+    _lockWindow = nil;
+    _pointerLocked = NO;
+    // The pointer comes back where the application left its cursor.
+    WaylandUnlockPointer(_lockedPointer, _relativePointer, [window surface],
+                         _pointerSurfacePoint.x, _pointerSurfacePoint.y);
+    _lockedPointer = _relativePointer = NULL;
+    [self flush];
+}
+
+// A locked pointer moves nothing on screen: the event carries the delta at the
+// frozen cursor position, as macOS reports it while the cursor is disassociated.
+- (void) pointerRelativeMotionByX: (CGFloat) dx y: (CGFloat) dy {
+    WaylandWindow *window = _lockWindow;
+    if (!_pointerLocked || window == nil)
+        return;
+    NSEventType type = NSMouseMoved;
+    if (_pressedButtons & 1)
+        type = NSLeftMouseDragged;
+    else if (_pressedButtons & 2)
+        type = NSRightMouseDragged;
+    NSWindow *delegate = [window delegate];
+    if (delegate == nil || (type == NSMouseMoved && ![delegate acceptsMouseMovedEvents]))
+        return;
+    [self postEvent: [NSEvent mouseEventWithType: type
+                                        location: [window transformPoint: _pointerSurfacePoint]
+                                   modifierFlags: [self currentModifierFlags]
+                                          window: delegate
+                                      clickCount: 1
+                                          deltaX: dx
+                                          deltaY: dy]
+            atStart: NO];
 }
 
 #pragma mark - Keyboard
@@ -1739,6 +1902,43 @@ static NSUInteger modifierDeviceMask(int code) {
     return [[_screens retain] autorelease];
 }
 
+// -screens is built from -outputsWithModes in order, so the indexes agree.
+- (size_t) fullscreenOutputs: (WaylandFullscreenOutput *) result
+                     proxies: (struct wl_proxy **) proxies
+                         max: (size_t) max
+                     entered: (NSSet *) entered
+{
+    NSArray *outputs = [self outputsWithModes];
+    // -screens invents a screen when no output has reported a mode yet.
+    if ([outputs count] == 0)
+        return 0;
+    NSArray *screens = [self screens];
+    size_t count = 0;
+    for (NSUInteger i = 0; i < [outputs count] && i < [screens count] && count < max; i++) {
+        struct wl_proxy *proxy = ((WaylandOutput *) outputs[i])->_proxy;
+        NSSize size = [(NSScreen *) screens[i] frame].size;
+        result[count] = (WaylandFullscreenOutput) {
+            .width = WaylandFullscreenRound(size.width),
+            .height = WaylandFullscreenRound(size.height),
+            .entered = [entered containsObject: [NSValue valueWithPointer: proxy]],
+        };
+        proxies[count++] = proxy;
+    }
+    return count;
+}
+
+- (CGRect) insetRect: (CGRect) frame
+        forNativeWindowBorderWithStyle: (NSUInteger) styleMask
+{
+    return frame;
+}
+
+- (CGRect) outsetRect: (CGRect) frame
+        forNativeWindowBorderWithStyle: (NSUInteger) styleMask
+{
+    return frame;
+}
+
 - (NSArray *) modesForScreen: (int) screenIndex {
     NSArray *outputs = [self outputsWithModes];
     if (screenIndex < 0 || screenIndex >= (int) [outputs count])
@@ -1850,9 +2050,14 @@ static NSUInteger modifierDeviceMask(int code) {
         CFArrayRemoveValueAtIndex(_windows, index);
         CFArrayInsertValueAtIndex(_windows, 0, window);
     }
+    [self updatePointerLock];
 }
 
 - (void) windowUnmapped: (WaylandWindow *) window {
+    if (_lockWindow == window) {
+        [self releasePointerLock];
+        [self performAfterDispatch: ^{ [self updatePointerLock]; }];
+    }
     if (_wlLastClickWindow == window)
         _wlLastClickWindow = nil;
     if (_pinchWindow == window)
