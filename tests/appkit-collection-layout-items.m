@@ -61,6 +61,8 @@ int main(void) {
 
         NSCollectionLayoutItem *host = [itemClass itemWithLayoutSize: size supplementaryItems: @[badge]];
         expect([[host supplementaryItems] isEqual: @[badge]], @"an item keeps the supplementary items it was made with");
+        NSCollectionLayoutItem *hostCopy = [[host copy] autorelease];
+        expect([[hostCopy supplementaryItems] isEqual: @[badge]], @"an item's copy keeps its supplementary items");
 
     }
     printf("PASS: collection layout items and supplementary items\n");
