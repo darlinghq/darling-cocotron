@@ -394,6 +394,11 @@ static NSDisplay *processDisplay = nil;
     return nil;
 }
 
+- (NSString *) fontFamilyNameForGenericFamily: (NSString *) generic {
+    NSInvalidAbstractInvocation();
+    return nil;
+}
+
 - (CGFloat) scrollerWidth {
     NSInvalidAbstractInvocation();
     return 0;

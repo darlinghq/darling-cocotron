@@ -184,6 +184,58 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     }
 }
 
+// The rest of NSFont's glyph interface. A CTFontRef is toll-free bridged to
+// NSFont, so code holding one can send these messages to it. The glyph
+// parameters are NSGlyph (NSUInteger) as in NSFont.
+
+- (CGRect) boundingRectForGlyph: (NSUInteger) glyph {
+    CGGlyph cgGlyph = (CGGlyph) glyph;
+    CGRect rect = CGRectZero;
+    CTFontGetBoundingRectsForGlyphs((CTFontRef) self, kCTFontOrientationDefault, &cgGlyph,
+                                    &rect, 1);
+    return rect;
+}
+
+// NSNativeShortGlyphPacking
+- (NSUInteger) glyphPacking {
+    return 0;
+}
+
+- (NSUInteger) glyphWithName: (NSString *) name {
+    return name == nil ? 0 : CTFontGetGlyphWithName((CTFontRef) self, (CFStringRef) name);
+}
+
+- (BOOL) glyphIsEncoded: (NSUInteger) glyph {
+    return glyph < [self numberOfGlyphs];
+}
+
+- (CGSize) advancementForGlyph: (NSUInteger) glyph {
+    CGGlyph cgGlyph = (CGGlyph) glyph;
+    CGSize advance = CGSizeZero;
+    [self getAdvancements: &advance forGlyphs: &cgGlyph count: 1];
+    return advance;
+}
+
+- (CGSize) maximumAdvancement {
+    enum { batchSize = 256 };
+    CGGlyph glyphs[batchSize];
+    CGSize advances[batchSize];
+    CGSize max = CGSizeZero;
+    NSUInteger glyphCount = [self numberOfGlyphs];
+
+    for (NSUInteger offset = 0; offset < glyphCount; offset += batchSize) {
+        NSUInteger batch = MIN((NSUInteger) batchSize, glyphCount - offset);
+        for (NSUInteger i = 0; i < batch; i++)
+            glyphs[i] = (CGGlyph) (offset + i);
+        [self getAdvancements: advances forGlyphs: glyphs count: batch];
+        for (NSUInteger i = 0; i < batch; i++) {
+            max.width = MAX(max.width, advances[i].width);
+            max.height = MAX(max.height, advances[i].height);
+        }
+    }
+    return max;
+}
+
 - (CFCharacterSetRef) copyCharacterSet {
     return NULL;
 }

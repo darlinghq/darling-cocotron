@@ -208,29 +208,41 @@ void NSColorSetCatalogColor(NSColorListName catalogName, NSColorName colorName, 
     return ret;
 }
 
-- (NSString *) substituteFamilyName: (NSString *) familyName {
-    FcConfig *config = O2FontSharedFontConfig();
-
-    FcPattern *pat = FcNameParse((FcChar8 *) [familyName UTF8String]);
+static NSString *matchedFamily(FcConfig *config, NSString *family) {
+    FcPattern *pat = FcPatternCreate();
+    if (family != nil) {
+        FcPatternAddString(pat, FC_FAMILY,
+                           (const FcChar8 *) [family UTF8String]);
+    }
     FcConfigSubstitute(config, pat, FcMatchPattern);
     FcDefaultSubstitute(pat);
 
-    FcResult fcResult;
-    FcPattern *match = FcFontMatch(config, pat, &fcResult);
+    FcResult result;
+    FcPattern *match = FcFontMatch(config, pat, &result);
     FcPatternDestroy(pat);
     if (match == NULL)
-        return NULL;
+        return nil;
 
-    FcChar8 *rawRes = NULL;
-    FcPatternGetString(match, FC_FAMILY, 0, &rawRes);
-
+    FcChar8 *matched = NULL;
     NSString *res = nil;
-    if (rawRes != NULL) {
-        res = [NSString stringWithUTF8String: (char *) rawRes];
-    }
-
+    if (FcPatternGetString(match, FC_FAMILY, 0, &matched) == FcResultMatch)
+        res = [NSString stringWithUTF8String: (const char *) matched];
     FcPatternDestroy(match);
     return res;
+}
+
+- (NSString *) substituteFamilyName: (NSString *) familyName {
+    return matchedFamily(O2FontSharedFontConfig(), familyName);
+}
+
+// A generic family with no installed member matches the same default font as
+// a pattern without any family.
+- (NSString *) fontFamilyNameForGenericFamily: (NSString *) generic {
+    FcConfig *config = O2FontSharedFontConfig();
+    NSString *family = matchedFamily(config, generic);
+    if (family == nil || [family isEqualToString: matchedFamily(config, nil)])
+        return nil;
+    return family;
 }
 
 // NSUnboldFontMask and NSUnitalicFontMask are conversion requests, not face

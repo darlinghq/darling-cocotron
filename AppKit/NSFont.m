@@ -930,6 +930,14 @@ static NSLock *_cacheLock = nil;
     return length;
 }
 
+// Private AppKit method that apps call: the glyph the font maps a
+// character to, or 0 (.notdef) when it has none.
+- (NSGlyph) _defaultGlyphForChar: (unichar) character {
+    CGGlyph glyph = 0;
+    CTFontGetGlyphsForCharacters(_ctFont, &character, &glyph, 1);
+    return glyph;
+}
+
 - (NSString *) description {
     return [NSString
             stringWithFormat: @"<%@ %@ %f>", [self class], _name, _pointSize];
