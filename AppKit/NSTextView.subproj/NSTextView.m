@@ -1042,12 +1042,16 @@ static NSTextView *s_targetTextView = nil;
                                      glyphInscriptions: NULL
                                            elasticBits: NULL
                                             bidiLevels: &level];
+                // The used rect also covers the line fragment padding, the
+                // glyphs themselves start at the fragment location.
                 if (level & 1) {
                     // Right to Left fragment
-                    result.origin.x = NSMinX(result);
+                    result.origin.x = [[self layoutManager]
+                            locationForGlyphAtIndex: range.location].x;
                 } else {
                     // Left to right fragment
-                    result.origin.x = NSMaxX(result);
+                    result.origin.x = NSMaxX(result) -
+                                      [[self textContainer] lineFragmentPadding];
                 }
             }
             result.size.width = 1;
@@ -2962,9 +2966,8 @@ static NSTextView *s_targetTextView = nil;
         extraRect.size.width = NSMaxX(usedRect) - NSMinX(extraRect);
         usedRect = NSUnionRect(usedRect, extraRect);
     }
-    // Used rects start after the left padding; add the right one too.
-    size.width = NSMaxX(usedRect) + [[self textContainer] lineFragmentPadding] +
-                 _textContainerInset.width * 2;
+    // Used rects already cover the padding on both sides of the line.
+    size.width = NSMaxX(usedRect) + _textContainerInset.width * 2;
     size.height = usedRect.size.height + _textContainerInset.height * 2;
 
     if (![self isHorizontallyResizable])

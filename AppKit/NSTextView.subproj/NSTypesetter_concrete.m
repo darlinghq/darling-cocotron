@@ -758,6 +758,21 @@ static void loadGlyphAndCharacterCacheForLocation(NSTypesetter_concrete *self,
 
             usedRect.size.height = backRect.size.height = _scanRect.size.height;
             location.y += _maxAscender;
+            // The line fragment padding is part of the line: the used rect
+            // covers it on both ends of the line, around the glyphs. The
+            // fragment rect itself is widened below, once its final extent
+            // is known.
+            CGFloat padding = _container.lineFragmentPadding;
+            if (i == 0) {
+                usedRect.origin.x -= padding;
+                usedRect.size.width += padding;
+                backRect.origin.x -= padding;
+                backRect.size.width += padding;
+            }
+            if (i + 1 == count) {
+                usedRect.size.width += padding;
+                backRect.size.width += padding;
+            }
             if (_alignment == NSJustifiedTextAlignment) {
 #if DEBUG_GETLINEFRAGMENTRECT
                 NSLog(@"    NSJustifiedTextAlignment");
@@ -812,7 +827,7 @@ static void loadGlyphAndCharacterCacheForLocation(NSTypesetter_concrete *self,
                     backRect.size.width -= alignmentDelta;
                 }
             }
-            if (i + 1 < count || !advanceScanRect || endOfString) {
+            if (i + 1 < count) {
 #if DEBUG_GETLINEFRAGMENTRECT
                 NSLog(@"setting fragment rect");
 #endif
