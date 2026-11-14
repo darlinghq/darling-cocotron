@@ -490,17 +490,38 @@ MTL_UNSUPPORTED_CLASS
 				[_drawableCondition lock];
 				[context release];
 				if (rendered && _queuedDrawableCount < queuedBefore) {
+					if (_usableDrawablesBitmap == 0) {
+						// The pass above made the drawable it took the layer's displayed one, and
+						// that one is only recycled when another present replaces it. This thread
+						// is the one that would have to render that present, so it hands the
+						// displayed drawable back itself: its content was copied into the layer's
+						// texture during the pass.
+						[_drawableCondition unlock];
+						[self releaseDisplayedDrawable];
+						[_drawableCondition lock];
+					}
 					continue;
 				}
 			}
 		}
 
+		// While this wait lasts, -queuePresent: wakes it, so that a present queued by another thread
+		// after the check above is rendered here too: the main thread cannot run the block that would do it.
+		BOOL isMainThread = [NSThread isMainThread];
+		BOOL timedOut = NO;
+		if (isMainThread) {
+			_mainThreadWaitingForDrawable = YES;
+		}
 		if (_allowsNextDrawableTimeout) {
-			if (![_drawableCondition waitUntilDate: endTime]) {
-				break;
-			}
+			timedOut = ![_drawableCondition waitUntilDate: endTime];
 		} else {
 			[_drawableCondition wait];
+		}
+		if (isMainThread) {
+			_mainThreadWaitingForDrawable = NO;
+		}
+		if (timedOut) {
+			break;
 		}
 	}
 
@@ -547,6 +568,10 @@ MTL_UNSUPPORTED_CLASS
 	if (_queuedDrawableCount < _drawables.size()) {
 		_queuedDrawables[_queuedDrawableCount] = drawableID;
 		++_queuedDrawableCount;
+		if (_mainThreadWaitingForDrawable) {
+			// Broadcast, because other threads may wait on the same condition.
+			[_drawableCondition broadcast];
+		}
 	} else {
 		overflowed = _drawables[drawableID];
 	}
@@ -564,6 +589,22 @@ MTL_UNSUPPORTED_CLASS
 	// FIXME: once we fix up CALayer and make it more featureful, this needs to change to `self.needsDisplay = YES` or equivalently `[self setNeedsDisplay: YES]`
 	// right now, CALayer is missing all the needs-display logic (which is currently in NSView)
 	[self display];
+}
+
+// Reports the drawable shown by the last composited present as presented, which
+// recycles it. Called without the drawable lock held, since recycling takes it.
+- (void)releaseDisplayedDrawable
+{
+	std::shared_ptr<CAMetalDrawableActual> displayed;
+
+	@synchronized(self) {
+		displayed = std::move(_lastPresentedDrawable);
+		_lastPresentedDrawable = nullptr;
+	}
+
+	if (displayed) {
+		displayed->didPresent();
+	}
 }
 
 - (void)releaseDrawable: (NSUInteger)drawableID
