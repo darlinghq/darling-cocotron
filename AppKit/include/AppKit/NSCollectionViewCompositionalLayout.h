@@ -183,3 +183,34 @@ typedef NS_ENUM(NSInteger, NSRectAlignment) {
 @property(readonly) NSString *elementKind;
 
 @end
+
+@interface NSCollectionLayoutGroup : NSCollectionLayoutItem
+
++ (instancetype) horizontalGroupWithLayoutSize: (NSCollectionLayoutSize *) layoutSize
+                                       subitem: (NSCollectionLayoutItem *) subitem
+                                         count: (NSInteger) count;
++ (instancetype) horizontalGroupWithLayoutSize: (NSCollectionLayoutSize *) layoutSize
+                                      subitems: (NSArray<NSCollectionLayoutItem *> *) subitems;
++ (instancetype) verticalGroupWithLayoutSize: (NSCollectionLayoutSize *) layoutSize
+                                     subitem: (NSCollectionLayoutItem *) subitem
+                                       count: (NSInteger) count;
++ (instancetype) verticalGroupWithLayoutSize: (NSCollectionLayoutSize *) layoutSize
+                                    subitems: (NSArray<NSCollectionLayoutItem *> *) subitems;
+
+@property(copy, nullable) NSCollectionLayoutSpacing *interItemSpacing;
+@property(readonly) NSArray<NSCollectionLayoutItem *> *subitems;
+
+@end
+
+@interface NSCollectionLayoutSection : NSObject <NSCopying>
+
++ (instancetype) sectionWithGroup: (NSCollectionLayoutGroup *) group;
+
+@property NSDirectionalEdgeInsets contentInsets;
+@property CGFloat interGroupSpacing;
+@property(copy) NSArray<NSCollectionLayoutBoundarySupplementaryItem *> *boundarySupplementaryItems;
+// GUESS: YES by default; the documentation does not give the default.
+@property BOOL supplementariesFollowContentInsets;
+@property(copy) NSArray<NSCollectionLayoutDecorationItem *> *decorationItems;
+
+@end

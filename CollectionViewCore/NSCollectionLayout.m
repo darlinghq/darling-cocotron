@@ -555,3 +555,164 @@ static NSDirectionalRectEdge EdgesForAlignment(NSRectAlignment alignment) {
 }
 
 @end
+
+@implementation NSCollectionLayoutGroup {
+    NSArray *_subitems;
+    BOOL _vertical;
+    NSCollectionLayoutSpacing *_interItemSpacing;
+}
+
++ (instancetype) _groupWithLayoutSize: (NSCollectionLayoutSize *) layoutSize
+                             subitems: (NSArray *) subitems
+                             vertical: (BOOL) vertical {
+    NSCollectionLayoutGroup *group = [self itemWithLayoutSize: layoutSize];
+
+    group->_subitems = [subitems copy];
+    group->_vertical = vertical;
+    return group;
+}
+
++ (NSArray *) _repeatedItem: (NSCollectionLayoutItem *) item count: (NSInteger) count {
+    NSMutableArray *items = [NSMutableArray array];
+
+    for (NSInteger i = 0; i < count; i++)
+        [items addObject: item];
+    return items;
+}
+
++ (instancetype) horizontalGroupWithLayoutSize: (NSCollectionLayoutSize *) layoutSize
+                                       subitem: (NSCollectionLayoutItem *) subitem
+                                         count: (NSInteger) count {
+    return [self horizontalGroupWithLayoutSize: layoutSize
+                                      subitems: [self _repeatedItem: subitem count: count]];
+}
+
++ (instancetype) horizontalGroupWithLayoutSize: (NSCollectionLayoutSize *) layoutSize
+                                      subitems: (NSArray *) subitems {
+    return [self _groupWithLayoutSize: layoutSize subitems: subitems vertical: NO];
+}
+
++ (instancetype) verticalGroupWithLayoutSize: (NSCollectionLayoutSize *) layoutSize
+                                     subitem: (NSCollectionLayoutItem *) subitem
+                                       count: (NSInteger) count {
+    return [self verticalGroupWithLayoutSize: layoutSize
+                                    subitems: [self _repeatedItem: subitem count: count]];
+}
+
++ (instancetype) verticalGroupWithLayoutSize: (NSCollectionLayoutSize *) layoutSize
+                                    subitems: (NSArray *) subitems {
+    return [self _groupWithLayoutSize: layoutSize subitems: subitems vertical: YES];
+}
+
+- (void) dealloc {
+    [_subitems release];
+    [_interItemSpacing release];
+    [super dealloc];
+}
+
+- (NSArray<NSCollectionLayoutItem *> *) subitems {
+    return _subitems;
+}
+
+- (NSCollectionLayoutSpacing *) interItemSpacing {
+    return _interItemSpacing;
+}
+
+- (void) setInterItemSpacing: (NSCollectionLayoutSpacing *) interItemSpacing {
+    interItemSpacing = [interItemSpacing copy];
+    [_interItemSpacing release];
+    _interItemSpacing = interItemSpacing;
+}
+
+- (id) copyWithZone: (NSZone *) zone {
+    NSCollectionLayoutGroup *copy = [super copyWithZone: zone];
+
+    copy->_subitems = [_subitems copy];
+    copy->_vertical = _vertical;
+    copy->_interItemSpacing = [_interItemSpacing copy];
+    return copy;
+}
+
+@end
+
+@implementation NSCollectionLayoutSection {
+    NSCollectionLayoutGroup *_group;
+    NSDirectionalEdgeInsets _contentInsets;
+    CGFloat _interGroupSpacing;
+    NSArray *_boundarySupplementaryItems;
+    NSArray *_decorationItems;
+    BOOL _supplementariesFollowContentInsets;
+}
+
++ (instancetype) sectionWithGroup: (NSCollectionLayoutGroup *) group {
+    NSCollectionLayoutSection *section = [[[self alloc] init] autorelease];
+
+    section->_group = [group retain];
+    section->_supplementariesFollowContentInsets = YES;
+    return section;
+}
+
+- (void) dealloc {
+    [_group release];
+    [_boundarySupplementaryItems release];
+    [_decorationItems release];
+    [super dealloc];
+}
+
+- (NSDirectionalEdgeInsets) contentInsets {
+    return _contentInsets;
+}
+
+- (void) setContentInsets: (NSDirectionalEdgeInsets) contentInsets {
+    _contentInsets = contentInsets;
+}
+
+- (CGFloat) interGroupSpacing {
+    return _interGroupSpacing;
+}
+
+- (void) setInterGroupSpacing: (CGFloat) interGroupSpacing {
+    _interGroupSpacing = interGroupSpacing;
+}
+
+- (NSArray<NSCollectionLayoutBoundarySupplementaryItem *> *) boundarySupplementaryItems {
+    return _boundarySupplementaryItems;
+}
+
+- (void) setBoundarySupplementaryItems: (NSArray<NSCollectionLayoutBoundarySupplementaryItem *> *) items {
+    items = [items copy];
+    [_boundarySupplementaryItems release];
+    _boundarySupplementaryItems = items;
+}
+
+- (BOOL) supplementariesFollowContentInsets {
+    return _supplementariesFollowContentInsets;
+}
+
+- (void) setSupplementariesFollowContentInsets: (BOOL) follow {
+    _supplementariesFollowContentInsets = follow;
+}
+
+- (NSArray<NSCollectionLayoutDecorationItem *> *) decorationItems {
+    return _decorationItems;
+}
+
+- (void) setDecorationItems: (NSArray<NSCollectionLayoutDecorationItem *> *) items {
+    items = [items copy];
+    [_decorationItems release];
+    _decorationItems = items;
+}
+
+- (id) copyWithZone: (NSZone *) zone {
+    NSCollectionLayoutSection *copy = [[[self class] allocWithZone: zone] init];
+
+    copy->_group = [_group copy];
+    copy->_contentInsets = _contentInsets;
+    copy->_interGroupSpacing = _interGroupSpacing;
+    copy->_boundarySupplementaryItems = [_boundarySupplementaryItems copy];
+    copy->_decorationItems = [_decorationItems copy];
+    copy->_supplementariesFollowContentInsets = _supplementariesFollowContentInsets;
+    return copy;
+}
+
+@end

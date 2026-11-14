@@ -1,0 +1,91 @@
+#import "appkit-collection-layout.h"
+
+// NSCollectionLayoutGroup and NSCollectionLayoutSection (NSCollectionViewCompositionalLayout.h, macOS 10.15): the
+// composite objects Notes, Podcasts and Activity Monitor build their layouts from.
+
+int main(void) {
+    @autoreleasepool {
+        Class itemClass = NSClassFromString(@"NSCollectionLayoutItem");
+        Class groupClass = NSClassFromString(@"NSCollectionLayoutGroup");
+        Class sectionClass = NSClassFromString(@"NSCollectionLayoutSection");
+        Class sizeClass = NSClassFromString(@"NSCollectionLayoutSize");
+        Class dimensionClass = NSClassFromString(@"NSCollectionLayoutDimension");
+        Class spacingClass = NSClassFromString(@"NSCollectionLayoutSpacing");
+        Class boundaryClass = NSClassFromString(@"NSCollectionLayoutBoundarySupplementaryItem");
+        Class decorationClass = NSClassFromString(@"NSCollectionLayoutDecorationItem");
+        expect(groupClass != Nil && sectionClass != Nil, @"the group and section classes exist");
+        expectFromCollectionViewCore(groupClass);
+        expectFromCollectionViewCore(sectionClass);
+        expect([groupClass isSubclassOfClass: itemClass], @"a group is an item");
+
+        NSCollectionLayoutSize *fill = [sizeClass sizeWithWidthDimension: [dimensionClass fractionalWidthDimension: 1.0]
+                                                         heightDimension: [dimensionClass fractionalHeightDimension: 1.0]];
+        NSCollectionLayoutItem *item = [itemClass itemWithLayoutSize: fill];
+        NSCollectionLayoutItem *other = [itemClass itemWithLayoutSize: fill];
+
+        NSCollectionLayoutGroup *horizontal = [groupClass horizontalGroupWithLayoutSize: fill subitems: @[item, other]];
+        expect([horizontal layoutSize] == fill, @"the group keeps its layout size");
+        expect([[horizontal subitems] isEqual: @[item, other]], @"the group keeps its subitems in order");
+        expect([horizontal interItemSpacing] == nil, @"inter item spacing starts nil");
+
+        NSCollectionLayoutGroup *counted = [groupClass verticalGroupWithLayoutSize: fill subitem: item count: 3];
+        expect([[counted subitems] count] == 3, @"a counted group repeats its subitem count times");
+        for (NSCollectionLayoutItem *subitem in [counted subitems])
+            expect(subitem == item, @"every repeated subitem is the given one");
+        expect([[groupClass horizontalGroupWithLayoutSize: fill subitem: item count: 0] subitems].count == 0,
+               @"a count of zero gives no subitems");
+
+        NSCollectionLayoutSpacing *gap = [spacingClass fixedSpacing: 6];
+        [horizontal setInterItemSpacing: gap];
+        expect([[horizontal interItemSpacing] spacing] == 6 && [[horizontal interItemSpacing] isFixedSpacing],
+               @"inter item spacing round-trips");
+        [horizontal setContentInsets: NSDirectionalEdgeInsetsMake(1, 2, 3, 4)];
+        NSCollectionLayoutGroup *copy = [[horizontal copy] autorelease];
+        expect([copy isMemberOfClass: groupClass] && copy != horizontal, @"a group copies to a new group");
+        expect([[copy subitems] isEqual: @[item, other]] && [[copy interItemSpacing] spacing] == 6 &&
+                       [copy layoutSize] == fill && [copy contentInsets].trailing == 4,
+               @"the copy keeps the subitems, spacing, size and insets");
+        [copy setInterItemSpacing: [spacingClass fixedSpacing: 9]];
+        expect([[horizontal interItemSpacing] spacing] == 6, @"changing the copy leaves the original alone");
+
+        NSCollectionLayoutSection *section = [sectionClass sectionWithGroup: horizontal];
+        NSDirectionalEdgeInsets zero = [section contentInsets];
+        expect(zero.top == 0 && zero.leading == 0 && zero.bottom == 0 && zero.trailing == 0, @"section insets start at zero");
+        expect([section interGroupSpacing] == 0, @"inter group spacing starts at zero");
+        expect([[section boundarySupplementaryItems] count] == 0 && [[section decorationItems] count] == 0,
+               @"a section starts without boundary or decoration items");
+        expect([section supplementariesFollowContentInsets], @"supplementaries follow content insets by default (GUESS)");
+
+        NSCollectionLayoutBoundarySupplementaryItem *header = [boundaryClass boundarySupplementaryItemWithLayoutSize: fill
+                                                                                                         elementKind: @"header"
+                                                                                                           alignment: NSRectAlignmentTop];
+        NSCollectionLayoutDecorationItem *background = [decorationClass backgroundDecorationItemWithElementKind: @"background"];
+        [section setContentInsets: NSDirectionalEdgeInsetsMake(5, 6, 7, 8)];
+        [section setInterGroupSpacing: 12];
+        [section setBoundarySupplementaryItems: @[header]];
+        [section setDecorationItems: @[background]];
+        [section setSupplementariesFollowContentInsets: NO];
+        NSDirectionalEdgeInsets insets = [section contentInsets];
+        expect(insets.top == 5 && insets.leading == 6 && insets.bottom == 7 && insets.trailing == 8, @"section insets round-trip");
+        expect([section interGroupSpacing] == 12, @"inter group spacing round-trips");
+        expect([[section boundarySupplementaryItems] isEqual: @[header]], @"boundary items round-trip");
+        expect([[section decorationItems] isEqual: @[background]], @"decoration items round-trip");
+        expect(![section supplementariesFollowContentInsets], @"supplementariesFollowContentInsets round-trips");
+
+        NSCollectionLayoutSection *sectionCopy = [[section copy] autorelease];
+        expect([sectionCopy isMemberOfClass: sectionClass] && sectionCopy != section, @"a section copies to a new section");
+        expect([sectionCopy contentInsets].leading == 6 && [sectionCopy interGroupSpacing] == 12 &&
+                       [[sectionCopy boundarySupplementaryItems] isEqual: @[header]] &&
+                       [[sectionCopy decorationItems] isEqual: @[background]] && ![sectionCopy supplementariesFollowContentInsets],
+               @"the copy keeps every property");
+        [sectionCopy setInterGroupSpacing: 1];
+        expect([section interGroupSpacing] == 12, @"changing the copy leaves the original alone");
+
+        NSMutableArray *mutableItems = [NSMutableArray arrayWithObject: header];
+        [section setBoundarySupplementaryItems: mutableItems];
+        [mutableItems removeAllObjects];
+        expect([[section boundarySupplementaryItems] count] == 1, @"the section copies the array it is given");
+    }
+    printf("PASS: collection layout group and section\n");
+    return 0;
+}
