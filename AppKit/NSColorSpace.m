@@ -19,6 +19,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSColorSpace.h>
 #import <Foundation/NSRaise.h>
+#import <dispatch/dispatch.h>
 
 // not sure where these belong
 NSString *const _NSColorCoreUICatalogMainBundleID =
@@ -44,6 +45,20 @@ NSString *const _NSColorCoreUICatalogNamePrefix =
             [[[self alloc] initWithCGColorSpace: srgb] autorelease];
     CGColorSpaceRelease(srgb);
     return colorSpace;
+}
+
++ (NSColorSpace *) extendedSRGBColorSpace {
+    static NSColorSpace *shared = nil;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+      CGColorSpaceRef space =
+              CGColorSpaceCreateWithName(kCGColorSpaceExtendedSRGB);
+      if (space != NULL) {
+          shared = [[self alloc] initWithCGColorSpace: space];
+          CGColorSpaceRelease(space);
+      }
+    });
+    return shared;
 }
 
 // The generic spaces fall back to sRGB / device gray if the named space cannot be created.

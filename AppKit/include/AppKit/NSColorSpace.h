@@ -41,6 +41,7 @@ typedef NS_ENUM(NSInteger, NSColorSpaceModel) {
 @property(class, strong, readonly) NSColorSpace *genericRGBColorSpace;
 @property(class, strong, readonly) NSColorSpace *genericGrayColorSpace;
 @property(class, strong, readonly) NSColorSpace *genericGamma22GrayColorSpace;
+@property(class, strong, readonly) NSColorSpace *extendedSRGBColorSpace;
 
 + (NSColorSpace *) deviceRGBColorSpace;
 
