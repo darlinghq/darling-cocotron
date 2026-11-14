@@ -22,7 +22,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSDictionary, NSAffineTransform, NSArray, NSSet, NSFontDescriptor;
 
-typedef NSString *NSFontDescriptorAttributeName;
+typedef NSString *NSFontDescriptorAttributeName NS_STRING_ENUM;
 
 APPKIT_EXPORT NSFontDescriptorAttributeName NSFontFamilyAttribute;
 APPKIT_EXPORT NSFontDescriptorAttributeName NSFontNameAttribute;
@@ -37,7 +37,7 @@ APPKIT_EXPORT NSFontDescriptorAttributeName NSFontTraitsAttribute;
 APPKIT_EXPORT NSFontDescriptorAttributeName NSFontFixedAdvanceAttribute;
 APPKIT_EXPORT NSFontDescriptorAttributeName NSFontFeatureSettingsAttribute;
 
-typedef NSString *NSFontDescriptorFeatureKey;
+typedef NSString *NSFontDescriptorFeatureKey NS_STRING_ENUM;
 
 APPKIT_EXPORT NSFontDescriptorFeatureKey NSFontFeatureTypeIdentifierKey;
 APPKIT_EXPORT NSFontDescriptorFeatureKey NSFontFeatureSelectorIdentifierKey;
@@ -96,7 +96,7 @@ enum {
     NSFontUIOptimizedTrait = (1 << 12)
 };
 
-typedef NSString *NSFontDescriptorTraitKey;
+typedef NSString *NSFontDescriptorTraitKey NS_STRING_ENUM;
 
 APPKIT_EXPORT NSFontDescriptorTraitKey NSFontSymbolicTrait;
 APPKIT_EXPORT NSFontDescriptorTraitKey NSFontWeightTrait;

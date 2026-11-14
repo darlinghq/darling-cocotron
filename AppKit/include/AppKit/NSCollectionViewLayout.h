@@ -21,7 +21,7 @@
 #import <AppKit/NSCollectionView.h>
 #import <Foundation/NSString.h>
 
-typedef NSString *NSCollectionViewDecorationElementKind;
+typedef NSString *NSCollectionViewDecorationElementKind NS_SWIFT_BRIDGED_TYPEDEF;
 
 APPKIT_EXPORT NSCollectionViewSupplementaryElementKind const
         NSCollectionElementKindInterItemGapIndicator;

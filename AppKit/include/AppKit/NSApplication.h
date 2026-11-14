@@ -70,9 +70,9 @@ APPKIT_EXPORT const NSAppKitVersion NSAppKitVersionNumber;
 typedef id NSModalSession;
 
 enum {
-    NSRunStoppedResponse = -1000,
-    NSRunAbortedResponse = -1001,
-    NSRunContinuesResponse = -1002
+    NSRunStoppedResponse = NSModalResponseStop,
+    NSRunAbortedResponse = NSModalResponseAbort,
+    NSRunContinuesResponse = NSModalResponseContinue
 };
 
 typedef NS_ENUM(NSUInteger, NSApplicationTerminateReply) {

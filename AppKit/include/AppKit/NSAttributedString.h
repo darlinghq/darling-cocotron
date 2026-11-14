@@ -24,10 +24,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 @class NSFont, NSColor, NSParagraphStyle, NSTextAttachment, NSFileWrapper,
         NSTextList, NSTextBlock, NSTextTable, NSStringDrawingContext, NSPasteboard;
 
-typedef NSString *NSAttributedStringDocumentReadingOptionKey;
-typedef NSString *NSAttributedStringDocumentAttributeKey;
-typedef NSString *NSAttributedStringDocumentType;
-typedef NSString *NSTextLayoutSectionKey;
+typedef NSString *NSAttributedStringDocumentReadingOptionKey NS_STRING_ENUM;
+typedef NSString *NSAttributedStringDocumentAttributeKey NS_STRING_ENUM;
+typedef NSString *NSAttributedStringDocumentType NS_STRING_ENUM;
+typedef NSString *NSTextLayoutSectionKey NS_STRING_ENUM;
 typedef NSString *NSAttributedStringKey;
 
 // The following constants are *not* declared as `const` in Apple's AppKit (they are located in __data)

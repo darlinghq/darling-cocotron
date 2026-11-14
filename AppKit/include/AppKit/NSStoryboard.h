@@ -20,8 +20,8 @@
 #import <AppKit/AppKitExport.h>
 #import <Foundation/Foundation.h>
 
-typedef NSString *NSStoryboardName;
-typedef NSString *NSStoryboardSceneIdentifier;
+typedef NSString *NSStoryboardName NS_SWIFT_BRIDGED_TYPEDEF;
+typedef NSString *NSStoryboardSceneIdentifier NS_SWIFT_BRIDGED_TYPEDEF;
 
 @interface NSStoryboard : NSObject {
     NSString *_path;

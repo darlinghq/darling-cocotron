@@ -21,6 +21,15 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSButton, NSImage, NSArray, NSWindow, NSError, NSView, NSMutableArray;
 
+// NSApplication.h imports this header, so the modal response type is declared here.
+typedef NSInteger NSModalResponse NS_TYPED_EXTENSIBLE_ENUM;
+
+static const NSModalResponse NSModalResponseOK = 1;
+static const NSModalResponse NSModalResponseCancel = 0;
+static const NSModalResponse NSModalResponseStop = -1000;
+static const NSModalResponse NSModalResponseAbort = -1001;
+static const NSModalResponse NSModalResponseContinue = -1002;
+
 typedef NS_ENUM(NSUInteger, NSAlertStyle) {
     NSAlertStyleWarning = 0,
     NSAlertStyleInformational = 1,
@@ -34,13 +43,9 @@ enum {
     NSCriticalAlertStyle = NSAlertStyleCritical,
 };
 
-enum {
-    NSAlertFirstButtonReturn = 1000,
-    NSAlertSecondButtonReturn = 1001,
-    NSAlertThirdButtonReturn = 1002,
-};
-
-typedef NSInteger NSModalResponse;
+static const NSModalResponse NSAlertFirstButtonReturn = 1000;
+static const NSModalResponse NSAlertSecondButtonReturn = 1001;
+static const NSModalResponse NSAlertThirdButtonReturn = 1002;
 
 @interface NSAlert : NSObject {
     id _delegate;
@@ -102,7 +107,7 @@ typedef NSInteger NSModalResponse;
 - (void) beginSheetModalForWindow: (NSWindow *) sheetWindow
                 completionHandler:
                         (void (^)(NSModalResponse returnCode)) handler;
-- (NSInteger) runModal;
+- (NSModalResponse) runModal;
 
 @end
 

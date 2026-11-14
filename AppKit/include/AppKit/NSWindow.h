@@ -154,7 +154,8 @@ typedef NS_ENUM(NSInteger, NSWindowToolbarStyle) {
     NSWindowToolbarStyleUnifiedCompact = 4,
 };
 
-typedef NSString *NSWindowTabbingIdentifier;
+typedef NSString *NSWindowTabbingIdentifier NS_SWIFT_BRIDGED_TYPEDEF;
+typedef NSString *NSWindowFrameAutosaveName NS_SWIFT_BRIDGED_TYPEDEF;
 
 typedef NS_ENUM(NSInteger, NSWindowAnimationBehavior) {
     NSWindowAnimationBehaviorDefault = 0,
@@ -453,7 +454,7 @@ typedef NS_ENUM(NSInteger, NSWindowUserTabbingPreference) {
 - (BOOL) isExcludedFromWindowsMenu;
 - (BOOL) isAutodisplay;
 - (BOOL) isFlushWindowDisabled;
-- (NSString *) frameAutosaveName;
+- (NSWindowFrameAutosaveName) frameAutosaveName;
 - (BOOL) hasShadow;
 - (BOOL) ignoresMouseEvents;
 - (NSSize) aspectRatio;
@@ -540,7 +541,7 @@ typedef NS_ENUM(NSInteger, NSWindowUserTabbingPreference) {
 
 - (BOOL) setFrameUsingName: (NSString *) name;
 - (BOOL) setFrameUsingName: (NSString *) name force: (BOOL) force;
-- (BOOL) setFrameAutosaveName: (NSString *) name;
+- (BOOL) setFrameAutosaveName: (NSWindowFrameAutosaveName) name;
 - (void) saveFrameUsingName: (NSString *) name;
 - (void) setFrameFromString: (NSString *) value;
 - (NSString *) stringWithSavedFrame;

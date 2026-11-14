@@ -38,7 +38,7 @@ typedef NS_ENUM(NSUInteger, NSPrintingOrientation) {
     NSLandscapeOrientation,
 };
 
-typedef NSString *NSPrintInfoAttributeKey;
+typedef NSString *NSPrintInfoAttributeKey NS_STRING_ENUM;
 
 /* Page Setup */
 APPKIT_EXPORT NSPrintInfoAttributeKey const NSPrintPaperName;
@@ -70,7 +70,7 @@ APPKIT_EXPORT NSPrintInfoAttributeKey const NSPrintPrinter;
 APPKIT_EXPORT NSPrintInfoAttributeKey const NSPrintPrinterName;
 APPKIT_EXPORT NSPrintInfoAttributeKey const NSPrintSelectionOnly;
 
-typedef NSString *NSPrintJobDispositionValue;
+typedef NSString *NSPrintJobDispositionValue NS_STRING_ENUM;
 
 APPKIT_EXPORT NSPrintJobDispositionValue const NSPrintSpoolJob;
 APPKIT_EXPORT NSPrintJobDispositionValue const NSPrintPreviewJob;

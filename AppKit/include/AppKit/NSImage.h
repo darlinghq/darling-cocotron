@@ -253,7 +253,7 @@ typedef NS_ENUM(NSInteger, NSImageSymbolScale) {
 
 @end
 
-typedef NSString *NSImageName;
+typedef NSString *NSImageName NS_SWIFT_BRIDGED_TYPEDEF;
 
 APPKIT_EXPORT NSImageName const NSImageNameActionTemplate;
 APPKIT_EXPORT NSImageName const NSImageNameAddTemplate;
