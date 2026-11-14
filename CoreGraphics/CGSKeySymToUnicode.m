@@ -1,4 +1,4 @@
-#include "private-include/AppKit/DarlingKeySymToUnicode.h"
+#include <CoreGraphics/CGSKeySymToUnicodePrivate.h>
 #include <stdlib.h>
 
 // Source: https://github.com/substack/node-keysym/blob/master/data/keysyms.txt
@@ -1649,7 +1649,7 @@ static int comparator(const void *a, const void *b) {
         return 0;
 }
 
-uint32_t DarlingKeySymToUnicode(uint32_t keySym) {
+uint32_t CGSKeySymToUnicode(uint32_t keySym) {
     uint32_t key[2] = {keySym, 0};
 
     const uint32_t *found = (uint32_t *) bsearch(

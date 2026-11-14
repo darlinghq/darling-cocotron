@@ -48,7 +48,7 @@
 #import <OpenGL/CGLInternal.h>
 
 #import "../private-include/AppKit/CarbonKeys.h"
-#import "../private-include/AppKit/DarlingKeySymToUnicode.h"
+#import <CoreGraphics/CGSKeySymToUnicodePrivate.h>
 #import "X11KeyEvent.h"
 #import <X11/XKBlib.h>
 #import <X11/Xutil.h>
@@ -687,7 +687,7 @@ static NSDictionary *modeInfoToDictionary(const XRRModeInfo *mi, int depth,
             KeySym sym = XkbKeycodeToKeysym(_display, x11KeyCode, 0, shift);
 
             if (sym != NoSymbol)
-                outTable[i] = DarlingKeySymToUnicode(sym);
+                outTable[i] = CGSKeySymToUnicode(sym);
             else
                 outTable[i] = 0;
         }
@@ -1424,7 +1424,7 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
                 [window logicalPoint: NSMakePoint(ev->xkey.x, ev->xkey.y)];
 
         // The text above retains normal XIM/keyboard modifier behavior.
-        uint16_t shortcutCode = (uint16_t) DarlingKeySymToUnicode(shortcutKeySym);
+        uint16_t shortcutCode = (uint16_t) CGSKeySymToUnicode(shortcutKeySym);
         NSString* strIg = [NSString stringWithCharacters: &shortcutCode length: 1];
 
         // If there's an app that uses constants from HIToolbox/Events.h (e.g.

@@ -312,7 +312,6 @@ set(AppKit_sources
 	NSFontDescriptor.m
 	NSDisplay.m
 	DarlingDisplay.m
-	DarlingKeySymToUnicode.m
 
 	NSOpenGL/NSOpenGLView.m
 	NSOpenGL/NSOpenGLPixelBuffer.m

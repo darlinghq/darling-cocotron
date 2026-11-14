@@ -30,7 +30,7 @@
 #import "WaylandPointerLock.h"
 #import "WaylandProtocol.h"
 #import "WaylandWindow.h"
-#import "../private-include/AppKit/DarlingKeySymToUnicode.h"
+#import <CoreGraphics/CGSKeySymToUnicodePrivate.h>
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSCursor.h>
 #import <AppKit/NSScreen.h>
@@ -1623,9 +1623,9 @@ static NSUInteger modifierDeviceMask(int code) {
 }
 
 - (uint32_t) codepointForKeysym: (xkb_keysym_t) keysym {
-    // DarlingKeySymToUnicode knows AppKit's function key codes; XKB keysyms
+    // CGSKeySymToUnicode knows AppKit's function key codes; XKB keysyms
     // have the same values as X11 keysyms.
-    uint32_t codepoint = DarlingKeySymToUnicode(keysym);
+    uint32_t codepoint = CGSKeySymToUnicode(keysym);
     if (codepoint == 0)
         codepoint = WL.xkb_keysym_to_utf32(keysym);
     return codepoint;
@@ -1660,7 +1660,7 @@ static NSUInteger modifierDeviceMask(int code) {
         return;
 
     xkb_keysym_t keysym = WL.xkb_state_key_get_one_sym(_xkbState, keycode);
-    uint32_t special = DarlingKeySymToUnicode(keysym);
+    uint32_t special = CGSKeySymToUnicode(keysym);
     NSString *characters;
 
     if (special >= 0xF700 && special <= 0xF8FF) {
