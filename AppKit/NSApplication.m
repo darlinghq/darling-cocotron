@@ -47,6 +47,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSWorkspace.h>
 #import <CoreGraphics/CGSServerSPI.h>
 #import <CoreGraphics/CoreGraphicsPrivate.h>
+#import <HIToolbox/CarbonEvents.h>
 #import <HIToolbox/CarbonEventsCore.h>
 #import <CoreGraphics/CGWindowPrivate.h>
 #import <Foundation/NSAppleEventManager.h>
