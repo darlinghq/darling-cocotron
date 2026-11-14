@@ -3,6 +3,19 @@
 // NSCollectionLayoutGroup and NSCollectionLayoutSection (NSCollectionViewCompositionalLayout.h, macOS 10.15): the
 // composite objects Notes, Podcasts and Activity Monitor build their layouts from.
 
+static int gHandlerSaw;
+
+// Installs a block that captures a local, so the literal is a stack block that dies when this function returns.
+// The section has to copy it to the heap: a retain would keep a pointer to a dead frame. Reports where the stack block was.
+__attribute__((noinline)) static void installStackHandler(NSCollectionLayoutSection *section, int token, void **stackAddress) {
+    NSCollectionLayoutSectionVisibleItemsInvalidationHandler stackHandler =
+            ^(NSArray<id<NSCollectionLayoutVisibleItem>> *items, NSPoint offset, id<NSCollectionLayoutEnvironment> environment) {
+                gHandlerSaw = token;
+            };
+    *stackAddress = (void *) stackHandler;
+    [section setVisibleItemsInvalidationHandler: stackHandler];
+}
+
 int main(void) {
     @autoreleasepool {
         Class itemClass = NSClassFromString(@"NSCollectionLayoutItem");
@@ -117,6 +130,15 @@ int main(void) {
                @"the scrolling behavior round-trips");
         [section visibleItemsInvalidationHandler](@[], NSZeroPoint, nil);
         expect(handlerCalls == 1, @"the handler comes back and runs");
+
+        // A handler copied to the heap outlives the stack block it was made from; one that is only retained does not.
+        void *stackAddress = NULL;
+        installStackHandler(section, 41, &stackAddress);
+        expect(stackAddress != NULL && (void *) [section visibleItemsInvalidationHandler] != stackAddress,
+               @"the section holds a heap copy of the handler, not the caller's stack block");
+        gHandlerSaw = 0;
+        [section visibleItemsInvalidationHandler](@[], NSZeroPoint, nil);
+        expect(gHandlerSaw == 41, @"the copied handler still has the value it captured after the installing function returned");
 
         NSCollectionLayoutSection *sectionCopy = [[section copy] autorelease];
         expect([sectionCopy orthogonalScrollingBehavior] == NSCollectionLayoutSectionOrthogonalScrollingBehaviorGroupPagingCentered &&
