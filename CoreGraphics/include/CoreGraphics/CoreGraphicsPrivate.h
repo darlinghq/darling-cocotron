@@ -94,6 +94,15 @@ extern void CGSSetHotKeyEnabled(CGSConnectionID cid, int uid, bool enabled);
 extern CGError CGSGetGlobalHotKeyOperatingMode(CGSConnectionID cid, int* mode);
 extern CGError CGSSetGlobalHotKeyOperatingMode(CGSConnectionID cid, int mode);
 
+// Symbolic hot keys: the numbered system-wide shortcuts (Spotlight, Mission Control ...).
+// State is kept in the com.apple.symbolichotkeys preference domain; nothing acts on it in
+// Darling. A value is the key equivalent character (0xFFFF for none), the virtual key code
+// and CGEventFlags modifier bits. Unknown numbers give kCGErrorRangeCheck from the getter.
+extern bool CGSIsSymbolicHotKeyEnabled(int number);
+extern CGError CGSSetSymbolicHotKeyEnabled(int number, bool enabled);
+extern CGError CGSGetSymbolicHotKeyValue(int number, uint16_t* keyEquivalent, uint16_t* keyCode, CGSModifierFlags* modifiers);
+extern CGError CGSSetSymbolicHotKeyValue(int number, uint16_t keyEquivalent, uint16_t keyCode, CGSModifierFlags modifiers);
+
 
 extern CGError CGSNewWindow(CGSConnectionID conn, CFIndex flags, float, float, const CGSRegionRef region, CGSWindowID* windowID);
 extern CGError CGSReleaseWindow(CGSConnectionID cid, CGSWindowID wid);
