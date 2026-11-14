@@ -65,6 +65,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSDatePicker.h>
 #import <AppKit/NSDatePickerCell.h>
 #import <AppKit/NSDictionaryController.h>
+#import <AppKit/NSDiffableDataSourceSnapshot.h>
 #import <AppKit/NSDockTile.h>
 #import <AppKit/NSDocument.h>
 #import <AppKit/NSDocumentController.h>
