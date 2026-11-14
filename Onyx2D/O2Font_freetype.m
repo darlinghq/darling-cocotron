@@ -104,11 +104,57 @@ static void addAppFont(FcConfig *config, NSString *path) {
     }
 }
 
+#ifdef DARLING
+// fontconfig runs on the host: it expands "~" and the XDG cache directory
+// from a HOME that names the guest's home directory, which does not exist on
+// the host, and the system cache directory is not writable by a user. With no
+// writable cache directory it reports an error on every use and rescans the
+// fonts each time. Give it a cache directory in the user's Caches folder,
+// which lives inside the prefix, as an additional <cachedir> (fonts.conf(5)):
+// fontconfig writes to the first one that is writable.
+static void addPrefixCacheDirectory(FcConfig *config) {
+    NSArray *caches = NSSearchPathForDirectoriesInDomains(
+            NSCachesDirectory, NSUserDomainMask, YES);
+    if ([caches count] == 0)
+        return;
+
+    NSString *guestDirectory =
+            [[caches objectAtIndex: 0] stringByAppendingPathComponent: @"fontconfig"];
+    NSMutableString *hostDirectory =
+            [hostPathFromGuestPath(guestDirectory) mutableCopy];
+    // the directory goes into XML text
+    [hostDirectory replaceOccurrencesOfString: @"&" withString: @"&amp;"
+                                      options: 0
+                                        range: NSMakeRange(0, [hostDirectory length])];
+    [hostDirectory replaceOccurrencesOfString: @"<" withString: @"&lt;"
+                                      options: 0
+                                        range: NSMakeRange(0, [hostDirectory length])];
+    [hostDirectory replaceOccurrencesOfString: @">" withString: @"&gt;"
+                                      options: 0
+                                        range: NSMakeRange(0, [hostDirectory length])];
+
+    NSString *xml = [NSString stringWithFormat:
+            @"<?xml version=\"1.0\"?><fontconfig><cachedir>%@</cachedir></fontconfig>",
+            hostDirectory];
+    [hostDirectory release];
+    FcConfigParseAndLoadFromMemory(
+            config, (const FcChar8 *) [xml UTF8String], FcTrue);
+}
+#endif
+
 FcConfig *O2FontSharedFontConfig() {
     static FcConfig *fontConfig = NULL;
 
     if (fontConfig == NULL) {
+#ifdef DARLING
+        fontConfig = FcInitLoadConfig();
+        if (fontConfig != NULL) {
+            addPrefixCacheDirectory(fontConfig);
+            FcConfigBuildFonts(fontConfig);
+        }
+#else
         fontConfig = FcInitLoadConfigAndFonts();
+#endif
 
         id appFontsPath = [[NSBundle mainBundle]
                 objectForInfoDictionaryKey: @"ATSApplicationFontsPath"];
