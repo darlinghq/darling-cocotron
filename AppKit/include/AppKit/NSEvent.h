@@ -384,7 +384,7 @@ typedef NS_OPTIONS(NSUInteger, NSEventPhase) {
 - (CGEventRef) CGEvent;
 
 - (NSString *) characters;
-- (NSString *) charactersIgnoringModifiers;
+@property(readonly, copy) NSString *charactersIgnoringModifiers;
 - (unsigned short) keyCode;
 
 + (void) startPeriodicEventsAfterDelay: (NSTimeInterval) delay

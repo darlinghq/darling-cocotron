@@ -208,7 +208,7 @@ NSMutableArray *NSCurrentFocusStack() {
     return [[NSGraphicsContext currentContext] isDrawingToScreen];
 }
 
-- (CGContextRef) graphicsPort {
+- (void *) graphicsPort {
     return _graphicsPort;
 }
 

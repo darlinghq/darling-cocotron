@@ -76,7 +76,7 @@ APPKIT_EXPORT NSFontDescriptorTraitKey NSFontWeightTrait;
 APPKIT_EXPORT NSFontDescriptorTraitKey NSFontWidthTrait;
 APPKIT_EXPORT NSFontDescriptorTraitKey NSFontSlantTrait;
 
-typedef CGFloat NSFontWeight;
+typedef CGFloat NSFontWeight NS_TYPED_EXTENSIBLE_ENUM;
 
 APPKIT_EXPORT const NSFontWeight NSFontWeightThin;
 APPKIT_EXPORT const NSFontWeight NSFontWeightLight;
