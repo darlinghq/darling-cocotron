@@ -24,9 +24,12 @@ static void O2ContextDistillShowText(O2ContextRef self, const char *text,
     O2Size advances[length];
     int i;
 
-    if (widths != nil)
+    if (widths != nil) {
+        // PDF widths are in text space units per unit of font size.
         O2PDFCharWidthsGetAdvances(widths, advances, text, length);
-    else
+        for (i = 0; i < length; i++)
+            advances[i].width *= O2GStatePointSize(gState);
+    } else
         O2ContextGetDefaultAdvances(self, glyphs, advances, length);
 
     for (i = 0; i < length; i++) {
@@ -64,7 +67,7 @@ static void O2ContextDistillShowText(O2ContextRef self, const char *text,
             distiller: (O2Context_distill *) self
               unicode: unicode
                 rects: glyphRects
-                count: length];
+                 count: length];
 }
 
 - (void) drawPath: (O2PathDrawingMode) pathMode {

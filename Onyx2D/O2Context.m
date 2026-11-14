@@ -1284,10 +1284,15 @@ void O2ContextDefaultShowText(O2ContextRef self, const char *text,
         O2Size advances[length];
         int i;
 
-        if (widths != nil)
+        if (widths != nil) {
+            // PDF widths are in text space units per unit of font size.
+            O2Float size = O2GStatePointSize(gState);
+
             O2PDFCharWidthsGetAdvances(widths, advances, (const uint8_t *) text,
                                        length);
-        else
+            for (i = 0; i < length; i++)
+                advances[i].width *= size;
+        } else
             O2ContextGetDefaultAdvances(self, glyphs, advances, length);
 
         for (i = 0; i < length; i++) {
@@ -1494,7 +1499,9 @@ void O2ContextGetDefaultAdvances(O2ContextRef self, const O2Glyph *glyphs,
     int intAdvances[256];
     O2Float unitsPerEm = O2FontGetUnitsPerEm(font);
     O2Float pointSize = O2GStatePointSize(gState);
-    O2Float scale = [font nativeSizeForSize: pointSize] / unitsPerEm;
+    // A font without a valid unitsPerEm has no usable advances.
+    O2Float scale =
+            unitsPerEm > 0 ? [font nativeSizeForSize: pointSize] / unitsPerEm : 0;
     for (size_t offset = 0; offset < count;) {
         size_t chunk = MIN(count - offset,
                            sizeof(intAdvances) / sizeof(intAdvances[0]));
