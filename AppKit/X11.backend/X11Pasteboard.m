@@ -559,12 +559,12 @@ static size_t MaximumPropertyBytes(Display *display) {
     if (data == nil)
         return nil;
 
-    NSStringEncoding encoding = NSUnicodeStringEncoding;
-    if ([NSPasteboardCanonicalType(type) isEqual: NSPasteboardTypeString]) {
-        encoding = NSUTF8StringEncoding;
-    }
-    return [[[NSString alloc] initWithData: data
-                                  encoding: encoding] autorelease];
+    // UTF-8 is what macOS reads strings of other clients' types as; data that is not valid UTF-8
+    // (what -setString:forType: stores for a type other than the string type) is read as Unicode.
+    NSString *string = [[[NSString alloc] initWithData: data encoding: NSUTF8StringEncoding] autorelease];
+    if (string == nil && ![NSPasteboardCanonicalType(type) isEqual: NSPasteboardTypeString])
+        string = [[[NSString alloc] initWithData: data encoding: NSUnicodeStringEncoding] autorelease];
+    return string;
 }
 
 - (NSInteger) addTypes: (NSArray<NSPasteboardType> *) types
@@ -623,10 +623,10 @@ static size_t MaximumPropertyBytes(Display *display) {
 
 - (NSArray<NSPasteboardType> *) localTypes {
     NSMutableArray *types = [NSMutableArray array];
-    for (NSPasteboardType type in _typeOrder) {
-        if (_typeToData[type] != nil || _typeToOwner[type] != nil)
-            [types addObject: type];
-    }
+    // Every declared type is listed, also one declared without an owner and not yet given data
+    // (declareTypes:owner: with a nil owner)
+    for (NSPasteboardType type in _typeOrder)
+        [types addObject: type];
     return types;
 }
 

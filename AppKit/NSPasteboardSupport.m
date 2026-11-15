@@ -109,6 +109,15 @@ static BOOL typeIsPlainText(NSPasteboardType type) {
     // The flat types are the first item's, and the 10.0 URL type is its URL: that is what this
     // 10.0 method has always answered with, before the pasteboard had several items.
     NSArray *types = NSPasteboardCanonicalTypes([pasteboard types]);
+    // QUIRK: with a web URL first and a file URL after it, macOS (26.7.3 and 10.14.4) answers the
+    // file URL, the last file item, not the first item's URL. Not documented.
+    // Evidence: black-box observation (tier 2, MAC-EVIDENCE V615, "URLs, files").
+    // Test: tests/appkit-pasteboard-api.m (testURLs, URLFromPasteboard)
+    NSArray *fileURLs = [pasteboard readObjectsForClasses: [NSArray arrayWithObject: [NSURL class]]
+                                                  options: [NSDictionary dictionaryWithObject: [NSNumber numberWithBool: YES]
+                                                                                       forKey: NSPasteboardURLReadingFileURLsOnlyKey]];
+    if ([fileURLs count] > 0)
+        return [fileURLs lastObject];
     for (NSPasteboardType type in [NSArray arrayWithObjects: NSPasteboardTypeFileURL, NSPasteboardTypeURL, nil]) {
         if (![types containsObject: type])
             continue;
