@@ -22,12 +22,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 typedef NS_ENUM(NSUInteger, NSScrollerPart) {
     NSScrollerNoPart = 0,
-    NSScrollerIncrementLine,
-    NSScrollerDecrementLine,
-    NSScrollerIncrementPage,
-    NSScrollerDecrementPage,
-    NSScrollerKnob,
-    NSScrollerKnobSlot
+    NSScrollerDecrementPage = 1,
+    NSScrollerKnob = 2,
+    NSScrollerIncrementPage = 3,
+    NSScrollerDecrementLine = 4,
+    NSScrollerIncrementLine = 5,
+    NSScrollerKnobSlot = 6,
 };
 
 typedef NS_ENUM(NSUInteger, NSScrollerArrow) {

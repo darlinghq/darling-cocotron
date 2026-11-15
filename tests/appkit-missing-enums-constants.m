@@ -298,6 +298,10 @@ _Static_assert((long long) NSWorkspaceAuthorizationTypeReplaceFile == 2LL, "NSWo
 _Static_assert((long long) NSWorkspaceAuthorizationTypeSetAttributes == 1LL, "NSWorkspaceAuthorizationTypeSetAttributes");
 _Static_assert((long long) NSWritingDirectionEmbedding == 0LL, "NSWritingDirectionEmbedding");
 _Static_assert((long long) NSWritingDirectionOverride == 2LL, "NSWritingDirectionOverride");
+_Static_assert(NSScrollerNoPart == 0 && NSScrollerDecrementPage == 1 && NSScrollerKnob == 2 && NSScrollerIncrementPage == 3 &&
+                       NSScrollerDecrementLine == 4 && NSScrollerIncrementLine == 5 && NSScrollerKnobSlot == 6,
+               "NSScrollerPart has the public values");
+
 static int failures;
 
 static const struct {
