@@ -47,4 +47,8 @@ CORETEXT_EXPORT CGRect CTLineGetImageBounds(CTLineRef line, CGContextRef context
 CORETEXT_EXPORT CFIndex CTLineGetStringIndexForPosition(CTLineRef line, CGPoint position);
 CORETEXT_EXPORT CGFloat CTLineGetOffsetForStringIndex(CTLineRef line, CFIndex charIndex, CGFloat *secondaryOffset);
 
+// Calls block for the leading and then the trailing edge of every character cluster, in visual order. offset is the
+// distance from the line origin, charIndex the string index of the cluster. Setting *stop ends the enumeration.
+CORETEXT_EXPORT void CTLineEnumerateCaretOffsets(CTLineRef line, void (^block)(double offset, CFIndex charIndex, bool leadingEdge, bool *stop));
+
 CF_IMPLICIT_BRIDGING_DISABLED
