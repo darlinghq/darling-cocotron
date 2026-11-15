@@ -75,6 +75,7 @@ typedef enum {
 
 APPKIT_EXPORT NSString *const NSTextViewDidChangeSelectionNotification;
 APPKIT_EXPORT NSString *const NSOldSelectedCharacterRange;
+APPKIT_EXPORT NSString *const NSTextViewDidChangeTypingAttributesNotification;
 APPKIT_EXPORT NSString *const NSAllRomanInputSourcesLocaleIdentifier;
 
 @class NSUndoTyping;
@@ -311,6 +312,24 @@ typedef NS_ENUM(NSUInteger, NSFindPanelSubstringMatchType) {
 @property(nonatomic) BOOL allowsDocumentBackgroundColorChange;
 
 - (void) setSpellingState: (NSInteger) value range: (NSRange) characterRange;
+- (void) toggleGrammarChecking: (nullable id) sender;
+
+@property(nonatomic, readonly) NSSelectionAffinity selectionAffinity;
+@property(nonatomic) NSSelectionGranularity selectionGranularity;
+// If set, link attributes act as implicit tool tips. Default YES.
+@property(nonatomic) BOOL displaysLinkToolTips;
+@property(nonatomic) BOOL allowsImageEditing;
+@property(nonatomic) BOOL usesRolloverButtonForSelection;
+@property(nonatomic, getter=isAutomaticTextCompletionEnabled) BOOL automaticTextCompletionEnabled;
+@property(nonatomic) BOOL allowsCharacterPickerTouchBarItem;
+@property(nonatomic, copy, nullable) NSArray<NSString *> *allowedInputSourceLocales;
+@property(nonatomic, readonly, getter=isCoalescingUndo) BOOL coalescingUndo;
+// The multiple-range forms; nil when the change is not permitted.
+- (BOOL) shouldChangeTextInRanges: (NSArray *) affectedRanges
+                replacementStrings: (nullable NSArray *) replacementStrings;
+@property(nonatomic, readonly, copy, nullable) NSArray *rangesForUserTextChange;
+@property(nonatomic, readonly, copy, nullable) NSArray *rangesForUserCharacterAttributeChange;
+@property(nonatomic, readonly, copy, nullable) NSArray *rangesForUserParagraphAttributeChange;
 
 @property(nonatomic, getter=isIncrementalSearchingEnabled) BOOL incrementalSearchingEnabled;
 @property(nonatomic) BOOL usesFindBar;
@@ -361,6 +380,93 @@ typedef NS_ENUM(NSUInteger, NSFindPanelSubstringMatchType) {
 @end
 
 @protocol NSTextViewDelegate <NSTextDelegate>
+@optional
+- (BOOL) textView: (NSTextView *) textView clickedOnLink: (id) link atIndex: (NSUInteger) charIndex;
+- (void) textView: (NSTextView *) textView
+        clickedOnCell: (id<NSTextAttachmentCell>) cell
+               inRect: (NSRect) cellFrame
+              atIndex: (NSUInteger) charIndex;
+- (void) textView: (NSTextView *) textView
+        doubleClickedOnCell: (id<NSTextAttachmentCell>) cell
+                     inRect: (NSRect) cellFrame
+                    atIndex: (NSUInteger) charIndex;
+- (void) textView: (NSTextView *) view
+        draggedCell: (id<NSTextAttachmentCell>) cell
+             inRect: (NSRect) rect
+              event: (NSEvent *) event
+            atIndex: (NSUInteger) charIndex;
+- (NSArray *) textView: (NSTextView *) view
+        writablePasteboardTypesForCell: (id<NSTextAttachmentCell>) cell
+                               atIndex: (NSUInteger) charIndex;
+- (BOOL) textView: (NSTextView *) view
+          writeCell: (id<NSTextAttachmentCell>) cell
+            atIndex: (NSUInteger) charIndex
+       toPasteboard: (NSPasteboard *) pboard
+               type: (NSString *) type;
+- (NSRange) textView: (NSTextView *) textView
+        willChangeSelectionFromCharacterRange: (NSRange) oldSelectedCharRange
+                             toCharacterRange: (NSRange) newSelectedCharRange;
+- (NSArray *) textView: (NSTextView *) textView
+        willChangeSelectionFromCharacterRanges: (NSArray *) oldSelectedCharRanges
+                             toCharacterRanges: (NSArray *) newSelectedCharRanges;
+- (BOOL) textView: (NSTextView *) textView
+        shouldChangeTextInRanges: (NSArray *) affectedRanges
+               replacementStrings: (nullable NSArray *) replacementStrings;
+- (NSDictionary *) textView: (NSTextView *) textView
+        shouldChangeTypingAttributes: (NSDictionary *) oldTypingAttributes
+                        toAttributes: (NSDictionary *) newTypingAttributes;
+- (void) textViewDidChangeSelection: (NSNotification *) notification;
+- (void) textViewDidChangeTypingAttributes: (NSNotification *) notification;
+- (nullable NSString *) textView: (NSTextView *) textView
+                willDisplayToolTip: (NSString *) tooltip
+              forCharacterAtIndex: (NSUInteger) characterIndex;
+- (NSArray *) textView: (NSTextView *) textView
+                completions: (NSArray *) words
+        forPartialWordRange: (NSRange) charRange
+        indexOfSelectedItem: (nullable NSInteger *) index;
+- (BOOL) textView: (NSTextView *) textView
+        shouldChangeTextInRange: (NSRange) affectedCharRange
+              replacementString: (nullable NSString *) replacementString;
+- (BOOL) textView: (NSTextView *) textView doCommandBySelector: (SEL) commandSelector;
+- (NSInteger) textView: (NSTextView *) textView
+        shouldSetSpellingState: (NSInteger) value
+                         range: (NSRange) affectedCharRange;
+- (nullable NSMenu *) textView: (NSTextView *) view
+                          menu: (NSMenu *) menu
+                      forEvent: (NSEvent *) event
+                       atIndex: (NSUInteger) charIndex;
+- (NSDictionary *) textView: (NSTextView *) view
+        willCheckTextInRange: (NSRange) range
+                     options: (NSDictionary *) options
+                       types: (NSTextCheckingTypes *) checkingTypes;
+- (NSArray *) textView: (NSTextView *) view
+        didCheckTextInRange: (NSRange) range
+                      types: (NSTextCheckingTypes) checkingTypes
+                    options: (NSDictionary *) options
+                    results: (NSArray *) results
+                orthography: (NSOrthography *) orthography
+                  wordCount: (NSInteger) wordCount;
+- (nullable NSURL *) textView: (NSTextView *) textView
+        URLForContentsOfTextAttachment: (NSTextAttachment *) textAttachment
+                               atIndex: (NSUInteger) charIndex;
+- (nullable NSSharingServicePicker *) textView: (NSTextView *) textView
+                  willShowSharingServicePicker: (NSSharingServicePicker *) servicePicker
+                                      forItems: (NSArray *) items;
+- (nullable NSUndoManager *) undoManagerForTextView: (NSTextView *) view;
+// Not sent: there is no Touch Bar, candidate list or Writing Tools here.
+- (NSArray *) textView: (NSTextView *) textView
+        shouldUpdateTouchBarItemIdentifiers: (NSArray *) identifiers;
+- (nullable NSArray *) textView: (NSTextView *) textView
+                candidatesForSelectedRange: (NSRange) selectedRange;
+- (NSArray *) textView: (NSTextView *) textView
+                candidates: (NSArray *) candidates
+          forSelectedRange: (NSRange) selectedRange;
+- (BOOL) textView: (NSTextView *) textView shouldSelectCandidateAtIndex: (NSUInteger) index;
+// The forms that predate the character index.
+- (BOOL) textView: (NSTextView *) textView clickedOnLink: (id) link;
+- (void) textView: (NSTextView *) textView clickedOnCell: (id<NSTextAttachmentCell>) cell inRect: (NSRect) cellFrame;
+- (void) textView: (NSTextView *) textView doubleClickedOnCell: (id<NSTextAttachmentCell>) cell inRect: (NSRect) cellFrame;
+- (void) textView: (NSTextView *) view draggedCell: (id<NSTextAttachmentCell>) cell inRect: (NSRect) rect event: (NSEvent *) event;
 @end
 
 NS_ASSUME_NONNULL_END

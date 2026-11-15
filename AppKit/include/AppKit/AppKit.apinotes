@@ -1784,6 +1784,8 @@ Globals:
   SwiftName: NSTextStorage.willProcessEditingNotification
 - Name: NSTextViewDidChangeSelectionNotification
   SwiftName: NSTextView.didChangeSelectionNotification
+- Name: NSTextViewDidChangeTypingAttributesNotification
+  SwiftName: NSTextView.didChangeTypingAttributesNotification
 - Name: NSTexturedBackgroundWindowMask
   Availability: nonswift
 - Name: NSTexturedRoundedBezelStyle
