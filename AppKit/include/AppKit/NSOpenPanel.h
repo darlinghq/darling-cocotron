@@ -35,7 +35,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (NSInteger) runModalForDirectory: (NSString *) directory
                               file: (NSString *) file
                              types: (NSArray *) types;
-- (NSInteger) runModalForTypes: (NSArray *) types;
+- (NSModalResponse) runModalForTypes: (NSArray *) types;
 
 - (BOOL) allowsMultipleSelection;
 - (BOOL) canChooseDirectories;

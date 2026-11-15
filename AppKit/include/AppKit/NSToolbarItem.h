@@ -31,7 +31,7 @@ static const NSToolbarItemVisibilityPriority NSToolbarItemVisibilityPriorityLow 
 static const NSToolbarItemVisibilityPriority NSToolbarItemVisibilityPriorityHigh = 1000;
 static const NSToolbarItemVisibilityPriority NSToolbarItemVisibilityPriorityUser = 2000;
 
-typedef NSString *NSToolbarItemIdentifier;
+typedef NSString *NSToolbarItemIdentifier NS_EXTENSIBLE_STRING_ENUM;
 
 APPKIT_EXPORT const NSToolbarItemIdentifier
         NSToolbarCustomizeToolbarItemIdentifier;

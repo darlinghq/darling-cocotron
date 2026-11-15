@@ -20,7 +20,7 @@
 #import <AppKit/AppKitExport.h>
 #import <Foundation/Foundation.h>
 
-typedef NSString *NSTouchBarItemIdentifier;
+typedef NSString *NSTouchBarItemIdentifier NS_EXTENSIBLE_STRING_ENUM;
 
 typedef float NSTouchBarItemPriority NS_TYPED_EXTENSIBLE_ENUM;
 

@@ -72,9 +72,9 @@ enum {
 - (void) beginSheetModalForWindow: (NSWindow *) window
                 completionHandler: (void (^)(NSModalResponse result)) handler;
 
-- (NSInteger) runModalForDirectory: (NSString *) directory
-                              file: (NSString *) file;
-- (NSInteger) runModal;
+- (NSModalResponse) runModalForDirectory: (NSString *) directory
+                                    file: (NSString *) file;
+- (NSModalResponse) runModal;
 
 - (NSString *) directory;
 - (BOOL) treatsFilePackagesAsDirectories;

@@ -26,8 +26,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 APPKIT_EXPORT NSNotificationName const NSSystemColorsDidChangeNotification;
 
-typedef NSString *NSColorListName;
-typedef NSString *NSColorName;
+typedef NSString *NSColorListName NS_SWIFT_BRIDGED_TYPEDEF;
+typedef NSString *NSColorName NS_SWIFT_BRIDGED_TYPEDEF;
 
 typedef NS_ENUM(NSInteger, NSColorType) {
     NSColorTypeComponentBased = 0,

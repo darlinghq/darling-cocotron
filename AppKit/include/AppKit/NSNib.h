@@ -22,10 +22,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSURL, NSBundle, NSDictionary, NSArray, NSData, NSMutableArray, NSNib;
 
-#ifndef NS_SWIFT_BRIDGED_TYPEDEF
-#define NS_SWIFT_BRIDGED_TYPEDEF __attribute__((swift_bridged_typedef))
-#endif
-
 typedef NSString *NSNibName NS_SWIFT_BRIDGED_TYPEDEF NS_SWIFT_NAME(NSNib.Name);
 
 APPKIT_EXPORT NSString *const NSNibOwner;

@@ -20,7 +20,7 @@
 #import <AppKit/AppKitExport.h>
 #import <Foundation/NSObject.h>
 
-typedef NSString *NSDraggingImageComponentKey;
+typedef NSString *NSDraggingImageComponentKey NS_STRING_ENUM;
 
 APPKIT_EXPORT NSDraggingImageComponentKey const NSDraggingImageComponentIconKey;
 APPKIT_EXPORT NSDraggingImageComponentKey const NSDraggingImageComponentLabelKey;

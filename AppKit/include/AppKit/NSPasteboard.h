@@ -20,8 +20,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/AppKitExport.h>
 #import <Foundation/Foundation.h>
 
-typedef NSString *NSPasteboardType;
-typedef NSString *NSPasteboardName;
+typedef NSString *NSPasteboardType NS_EXTENSIBLE_STRING_ENUM;
+typedef NSString *NSPasteboardName NS_EXTENSIBLE_STRING_ENUM;
 
 // New Pasteboard Types (added in 10.6) and interchangeable with the old
 // pasteboard types in Cocotron
@@ -74,7 +74,7 @@ APPKIT_EXPORT const NSPasteboardName NSPasteboardNameFind;
 APPKIT_EXPORT const NSPasteboardName NSPasteboardNameFont;
 APPKIT_EXPORT const NSPasteboardName NSPasteboardNameGeneral;
 
-typedef NSString *NSPasteboardReadingOptionKey;
+typedef NSString *NSPasteboardReadingOptionKey NS_STRING_ENUM;
 
 APPKIT_EXPORT const NSPasteboardReadingOptionKey
         NSPasteboardURLReadingContentsConformToTypesKey;

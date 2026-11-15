@@ -54,7 +54,7 @@ typedef NS_OPTIONS(NSUInteger, NSCollectionViewScrollPosition) {
 - (NSInteger)numberOfSectionsInCollectionView:(NSCollectionView *)view;
 @end
 
-typedef NSString *NSCollectionViewSupplementaryElementKind;
+typedef NSString *NSCollectionViewSupplementaryElementKind NS_SWIFT_BRIDGED_TYPEDEF;
 
 @interface NSCollectionView : NSView {
     NSArray *_content;

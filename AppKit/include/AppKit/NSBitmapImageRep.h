@@ -68,7 +68,7 @@ enum {
     NSFloatingPointSamplesBitmapFormat = NSBitmapFormatFloatingPointSamples,
 };
 
-typedef NSString *NSBitmapImageRepPropertyKey;
+typedef NSString *NSBitmapImageRepPropertyKey NS_STRING_ENUM;
 
 APPKIT_EXPORT NSBitmapImageRepPropertyKey NSImageCompressionFactor;
 APPKIT_EXPORT NSBitmapImageRepPropertyKey NSImageCompressionMethod;

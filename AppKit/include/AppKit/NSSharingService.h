@@ -20,7 +20,7 @@
 #import <AppKit/AppKitExport.h>
 #import <Foundation/NSObject.h>
 
-typedef NSString *NSSharingServiceName;
+typedef NSString *NSSharingServiceName NS_EXTENSIBLE_STRING_ENUM;
 
 APPKIT_EXPORT NSSharingServiceName const NSSharingServiceNameAddToIPhoto;
 APPKIT_EXPORT NSSharingServiceName const NSSharingServiceNameAddToSafariReadingList;

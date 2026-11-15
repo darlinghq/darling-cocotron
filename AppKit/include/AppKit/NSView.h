@@ -46,7 +46,7 @@ typedef NS_OPTIONS(NSUInteger, NSTouchTypeMask) {
 // Issues
 typedef NSTrackingArea *NSTrackingRectTag NS_SWIFT_NAME(NSView.TrackingRectTag);
 typedef NSTrackingArea *NSToolTipTag NS_SWIFT_NAME(NSView.ToolTipTag);
-typedef NSString *NSViewFullScreenModeOptionKey;
+typedef NSString *NSViewFullScreenModeOptionKey NS_STRING_ENUM;
 
 typedef NS_OPTIONS(NSUInteger, NSAutoresizingMaskOptions) {
     NSViewNotSizable = 0x00,

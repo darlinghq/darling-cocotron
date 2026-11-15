@@ -21,19 +21,19 @@
 #import <Foundation/NSObject.h>
 #import <Foundation/NSString.h>
 
-typedef NSString *NSVoiceGenderName;
+typedef NSString *NSVoiceGenderName NS_STRING_ENUM;
 
 APPKIT_EXPORT NSVoiceGenderName const NSVoiceGenderFemale;
 APPKIT_EXPORT NSVoiceGenderName const NSVoiceGenderMale;
 
-typedef NSString *NSVoiceAttributeKey;
+typedef NSString *NSVoiceAttributeKey NS_STRING_ENUM;
 
 APPKIT_EXPORT NSVoiceAttributeKey const NSVoiceName;
 APPKIT_EXPORT NSVoiceAttributeKey const NSVoiceGender;
 APPKIT_EXPORT NSVoiceAttributeKey const NSVoiceDemoText;
 APPKIT_EXPORT NSVoiceAttributeKey const NSVoiceLocaleIdentifier;
 
-typedef NSString *NSSpeechPropertyKey;
+typedef NSString *NSSpeechPropertyKey NS_STRING_ENUM;
 
 APPKIT_EXPORT NSSpeechPropertyKey const NSSpeechRateProperty;
 APPKIT_EXPORT NSSpeechPropertyKey const NSSpeechPitchBaseProperty;
