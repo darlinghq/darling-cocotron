@@ -38,7 +38,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 NS_ASSUME_NONNULL_BEGIN
 
 @class NSTextStorage, NSLayoutManager, NSTextContainer, NSUndoManager;
-@class NSRulerView, NSRulerMarker;
+@class NSRulerView, NSRulerMarker, NSOrthography, NSSharingServicePicker, NSTextAttachment, NSMenu, NSEvent;
+@protocol NSTextAttachmentCell;
 
 typedef NS_ENUM(NSUInteger, NSTextViewSelectionGranularity) {
     NSSelectByCharacter = 0,
@@ -172,6 +173,22 @@ typedef NS_ENUM(NSUInteger, NSFindPanelSubstringMatchType) {
         BOOL _acceptsGlyphInfo;
         BOOL _usesAdaptiveColorMappingForDarkAppearance;
         BOOL _importsGraphics;
+
+        // New state sits here, inverted where the documented default is YES, so that
+        // zero-filled storage means the default.
+        BOOL _displaysLinkToolTipsDisabled;
+        BOOL _usesRolloverButtonDisabled;
+        BOOL _allowsImageEditing;
+        BOOL _usesFindPanel;
+        BOOL _automaticTextCompletionDisabled;
+        BOOL _allowsCharacterPickerDisabled;
+        NSArray *_allowedInputSourceLocales;
+        BOOL _hasMarkedText;
+        NSRange _markedRange;
+        BOOL _updatingMarkedText;
+        BOOL _pendingTypedRangeValid;
+        NSRange _pendingTypedRange;
+        BOOL _applyAllTextCheckingResults;
     NS_EXTRA_IVARS_END(NSTextView)
 }
 

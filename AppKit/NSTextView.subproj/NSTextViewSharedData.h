@@ -19,7 +19,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <Foundation/NSObject.h>
 
-@class NSColor, NSParagraphStyle, NSDictionary;
+@class NSColor, NSParagraphStyle, NSDictionary, NSTextView;
 
 @interface NSTextViewSharedData : NSObject {
     NSColor *_backgroundColor;
@@ -29,6 +29,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     NSDictionary *_linkAttributes;
     NSDictionary *_markedAttributes;
     NSDictionary *_selectedAttributes;
+    unsigned _moreFlags;
+    BOOL _automaticTextCompletionDisabled;
+    BOOL _hasMoreFlags;
+    int _finderStyle;
 }
 
 - (NSColor *) backgroundColor;
@@ -41,5 +45,16 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (BOOL) isSelectable;
 - (BOOL) isRichText;
 - (BOOL) allowsUndo;
+
+// The archived flag words and the other archived settings; NSTextView applies
+// them.
+- (unsigned) flags;
+- (unsigned) moreFlags;
+- (BOOL) hasMoreFlags;
+- (BOOL) automaticTextCompletionDisabled;
+- (int) finderStyle;
+- (NSDictionary *) linkAttributes;
+- (NSDictionary *) markedAttributes;
+- (NSDictionary *) selectedAttributes;
 
 @end

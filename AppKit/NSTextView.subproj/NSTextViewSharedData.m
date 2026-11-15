@@ -44,6 +44,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                 [[keyed decodeObjectForKey: @"NSMarkedAttributes"] retain];
         _selectedAttributes =
                 [[keyed decodeObjectForKey: @"NSSelectedAttributes"] retain];
+        _hasMoreFlags = [keyed containsValueForKey: @"NSMoreFlags"];
+        if (_hasMoreFlags)
+            _moreFlags = [keyed decodeIntForKey: @"NSMoreFlags"];
+        _automaticTextCompletionDisabled =
+                [keyed decodeBoolForKey: @"NSAutomaticTextCompletionDisabled"];
+        _finderStyle = [keyed decodeIntForKey: @"NSPreferredTextFinderStyle"];
     } else {
         [NSException raise: NSInvalidArgumentException
                     format: @"-[%@ %s] is not implemented for coder %@",
@@ -93,6 +99,38 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (BOOL) allowsUndo {
     return (_flags & 0x00000400) ? YES : NO;
+}
+
+- (unsigned) flags {
+    return _flags;
+}
+
+- (unsigned) moreFlags {
+    return _moreFlags;
+}
+
+- (BOOL) hasMoreFlags {
+    return _hasMoreFlags;
+}
+
+- (BOOL) automaticTextCompletionDisabled {
+    return _automaticTextCompletionDisabled;
+}
+
+- (int) finderStyle {
+    return _finderStyle;
+}
+
+- (NSDictionary *) linkAttributes {
+    return _linkAttributes;
+}
+
+- (NSDictionary *) markedAttributes {
+    return _markedAttributes;
+}
+
+- (NSDictionary *) selectedAttributes {
+    return _selectedAttributes;
 }
 
 @end

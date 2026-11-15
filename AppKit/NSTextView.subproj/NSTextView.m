@@ -75,7 +75,17 @@ NSString *const NSAllRomanInputSourcesLocaleIdentifier =
 @end
 
 @interface NSTextView ()
+- (NSUInteger) _linkedCharacterIndexAtPoint: (NSPoint) point;
+- (NSUInteger) glyphIndexForPoint: (NSPoint) point
+        fractionOfDistanceThroughGlyph: (CGFloat *) fraction;
 - (void) _updateTypingAttributes;
+- (void) _setDefaultSettings;
+- (void) _applyTypedTextSubstitutionsForRange: (NSRange) typed;
+- (void) _pasteRestrictedToTypes: (NSArray *) types;
+- (void) _applySharedData: (NSTextViewSharedData *) sharedData;
+- (void) _clearMarkedText;
+- (BOOL) _delegateChangeTextInRanges: (NSArray *) ranges
+                   replacementStrings: (NSArray *) strings;
 - (void) _replaceCharactersInRange: (NSRange) range
                         withString: (id) string
                useTypingAttributes: (BOOL) useTypingAttributes
@@ -358,6 +368,8 @@ static NSTextView *s_targetTextView = nil;
         NS_EXTRA(NSTextView, self)->_insertionPointColor = [[sharedData insertionColor] retain];
 
         NS_EXTRA(NSTextView, self)->_usesFontPanel = YES;
+        [self _setDefaultSettings];
+        [self _applySharedData: sharedData];
 
         NS_EXTRA(NSTextView, self)->_isFieldEditor = NO;
         NS_EXTRA(NSTextView, self)->_maxSize = [self bounds].size;
@@ -462,6 +474,7 @@ static NSTextView *s_targetTextView = nil;
                                           [NSColor selectedTextBackgroundColor],
                                           NSBackgroundColorAttributeName, nil]
             retain];
+    [self _setDefaultSettings];
 
     [self _setTextStorage: [[container layoutManager] textStorage]];
 
@@ -3141,11 +3154,11 @@ static NSTextView *s_targetTextView = nil;
     NS_EXTRA(NSTextView, self)->_firstResponderButNotEditingYet = YES;
     NS_EXTRA(NSTextView, self)->_didSendTextDidEndNotification = NO;
 
+    // usesRuler only allows a ruler; it does not make one appear, and becoming
+    // first responder does not change the scroll view's rulers (observed on
+    // macOS 10.14.4 and 26.7.3). An already visible ruler gets this client.
+    // Test: appkit-textview-api-defaults.m (rulers)
     NSScrollView *enclosingScrollView = [self enclosingScrollView];
-    if ([self usesRuler] == NO) {
-        BOOL usesRuler = [enclosingScrollView rulersVisible];
-        [self setUsesRuler: usesRuler];
-    }
     if ([self usesRuler]) {
         [[enclosingScrollView horizontalRulerView] setClientView: self];
         [self updateRuler];
@@ -4098,15 +4111,71 @@ static NSTextView *s_targetTextView = nil;
 - (void) toggleAutomaticSpellingCorrection: sender {
     NS_EXTRA(NSTextView, self)->_isAutomaticSpellingCorrectionEnabled =
             !NS_EXTRA(NSTextView, self)->_isAutomaticSpellingCorrectionEnabled;
-    NSUnimplementedMethod();
 }
 
+// The checking types are the substitution and checking switches plus a few
+// bits that no switch covers. _enabledTextCheckingTypes holds only those other
+// bits; the switches are folded in when the types are read and split out when
+// they are set. Layout read off a text view whose switches and types were set
+// one at a time (black-box observation on macOS 10.14.4 and 26.7.3, same on
+// both): spelling 0x2 is continuous checking, grammar 0x4 only shows while
+// spelling is on, link 0x20, quote 0x40, dash 0x80, replacement 0x100,
+// correction 0x200, date/address 0x18 together with 0x1800 mean data
+// detection. A fresh text view has 0x2001 as the other bits.
+// Test: appkit-textview-api-defaults.m (text checking types)
+enum {
+    _NSTextViewTypeSpelling = 0x2,
+    _NSTextViewTypeGrammar = 0x4,
+    _NSTextViewTypeLink = 0x20,
+    _NSTextViewTypeQuote = 0x40,
+    _NSTextViewTypeDash = 0x80,
+    _NSTextViewTypeReplacement = 0x100,
+    _NSTextViewTypeCorrection = 0x200,
+    _NSTextViewTypeDataDetection = 0x18,
+    _NSTextViewTypeDataDetectionExtra = 0x1800,
+    _NSTextViewTypesWithSwitch = 0x2 | 0x4 | 0x20 | 0x40 | 0x80 | 0x100 | 0x200 | 0x18,
+    _NSTextViewDefaultOtherTypes = 0x2001,
+};
+
 - (NSTextCheckingTypes) enabledTextCheckingTypes {
-    return NS_EXTRA(NSTextView, self)->_enabledTextCheckingTypes;
+    NSTextCheckingTypes types = NS_EXTRA(NSTextView, self)->_enabledTextCheckingTypes;
+    if (NS_EXTRA(NSTextView, self)->_isContinuousSpellCheckingEnabled) {
+        types |= _NSTextViewTypeSpelling;
+        if (NS_EXTRA(NSTextView, self)->_grammarCheckingEnabled)
+            types |= _NSTextViewTypeGrammar;
+    }
+    if (NS_EXTRA(NSTextView, self)->_automaticLinkDetectionEnabled)
+        types |= _NSTextViewTypeLink;
+    if (NS_EXTRA(NSTextView, self)->_automaticQuoteSubstitutionEnabled)
+        types |= _NSTextViewTypeQuote;
+    if (NS_EXTRA(NSTextView, self)->_automaticDashSubstitutionEnabled)
+        types |= _NSTextViewTypeDash;
+    if (NS_EXTRA(NSTextView, self)->_automaticTextReplacementEnabled)
+        types |= _NSTextViewTypeReplacement;
+    if (NS_EXTRA(NSTextView, self)->_isAutomaticSpellingCorrectionEnabled)
+        types |= _NSTextViewTypeCorrection;
+    if (NS_EXTRA(NSTextView, self)->_automaticDataDetectionEnabled)
+        types |= _NSTextViewTypeDataDetection;
+    return types;
 }
 
 - (void) setEnabledTextCheckingTypes: (NSTextCheckingTypes) checkingTypes {
-    NS_EXTRA(NSTextView, self)->_enabledTextCheckingTypes = checkingTypes;
+    BOOL wasChecking = NS_EXTRA(NSTextView, self)->_isContinuousSpellCheckingEnabled;
+    NS_EXTRA(NSTextView, self)->_isContinuousSpellCheckingEnabled = (checkingTypes & _NSTextViewTypeSpelling) != 0;
+    NS_EXTRA(NSTextView, self)->_grammarCheckingEnabled = (checkingTypes & _NSTextViewTypeGrammar) != 0;
+    NS_EXTRA(NSTextView, self)->_automaticLinkDetectionEnabled = (checkingTypes & _NSTextViewTypeLink) != 0;
+    NS_EXTRA(NSTextView, self)->_automaticQuoteSubstitutionEnabled = (checkingTypes & _NSTextViewTypeQuote) != 0;
+    NS_EXTRA(NSTextView, self)->_automaticDashSubstitutionEnabled = (checkingTypes & _NSTextViewTypeDash) != 0;
+    NS_EXTRA(NSTextView, self)->_automaticTextReplacementEnabled = (checkingTypes & _NSTextViewTypeReplacement) != 0;
+    NS_EXTRA(NSTextView, self)->_isAutomaticSpellingCorrectionEnabled = (checkingTypes & _NSTextViewTypeCorrection) != 0;
+    NS_EXTRA(NSTextView, self)->_automaticDataDetectionEnabled = (checkingTypes & _NSTextViewTypeDataDetection) != 0;
+
+    NSTextCheckingTypes other = checkingTypes & ~(NSTextCheckingTypes) _NSTextViewTypesWithSwitch;
+    if (NS_EXTRA(NSTextView, self)->_automaticDataDetectionEnabled)
+        other |= _NSTextViewTypeDataDetectionExtra;
+    NS_EXTRA(NSTextView, self)->_enabledTextCheckingTypes = other;
+    if (wasChecking != NS_EXTRA(NSTextView, self)->_isContinuousSpellCheckingEnabled)
+        [self _continuousSpellCheck];
 }
 
 - (BOOL) smartInsertDeleteEnabled {
@@ -4526,10 +4595,182 @@ static NSTextView *s_targetTextView = nil;
 
 - (void) setAutomaticDataDetectionEnabled: (BOOL) value {
     NS_EXTRA(NSTextView, self)->_automaticDataDetectionEnabled = value;
+    if (value)
+        NS_EXTRA(NSTextView, self)->_enabledTextCheckingTypes |= _NSTextViewTypeDataDetectionExtra;
+    else
+        NS_EXTRA(NSTextView, self)->_enabledTextCheckingTypes &= ~(NSTextCheckingTypes) _NSTextViewTypeDataDetectionExtra;
 }
 
 - (void) setAutomaticTextReplacementEnabled: (BOOL) value {
     NS_EXTRA(NSTextView, self)->_automaticTextReplacementEnabled = value;
+}
+
+// The bit positions of NSFlags were read off keyed archives of text views whose
+// settings were changed one at a time (black-box observation on macOS 10.14.4
+// and 26.7.3, same layout on both): selectable 0x1, editable 0x2, rich text 0x4,
+// imports graphics 0x8, field editor 0x10, uses font panel 0x20, uses ruler 0x40,
+// continuous spell checking 0x80, draws background 0x100, smart insert/delete
+// 0x200, allows undo 0x400, uses find panel 0x2000, allows document background
+// colour change 0x4000, grammar checking 0x8000, allows image editing 0x10000,
+// quote substitution 0x20000, link detection 0x40000, link tool tips off
+// 0x80000, ruler visible 0x100000, orthography checking off 0x200000, data
+// detection 0xC00000, dash substitution 0x1000000, text replacement 0x2000000,
+// spelling correction 0x4000000, incremental searching 0x40000000, inspector
+// bar 0x80000000. NSMoreFlags: bit 0 rollover button on, bit 1 character picker
+// item off. Not applied: the ruler bits and the field editor bit (the text view
+// derives the ruler state from its scroll view, and field editors are made by
+// their owner), and the text replacement and spelling correction bits, which
+// are written but not read back: a text view made from an archive has both on
+// whatever the bits say (observed on both systems).
+// Test: appkit-textview-archive-flags.m
+- (void) _applySharedData: (NSTextViewSharedData *) sharedData {
+    unsigned f = [sharedData flags];
+
+    NS_EXTRA(NSTextView, self)->_importsGraphics = (f & 0x8) != 0;
+    NS_EXTRA(NSTextView, self)->_usesFontPanel = (f & 0x20) != 0;
+    NS_EXTRA(NSTextView, self)->_isContinuousSpellCheckingEnabled = (f & 0x80) != 0;
+    NS_EXTRA(NSTextView, self)->_smartInsertDeleteEnabled = (f & 0x200) != 0;
+    NS_EXTRA(NSTextView, self)->_usesFindPanel = (f & 0x2000) != 0;
+    NS_EXTRA(NSTextView, self)->_allowsDocumentBackgroundColorChange = (f & 0x4000) != 0;
+    NS_EXTRA(NSTextView, self)->_grammarCheckingEnabled = (f & 0x8000) != 0;
+    NS_EXTRA(NSTextView, self)->_allowsImageEditing = (f & 0x10000) != 0;
+    NS_EXTRA(NSTextView, self)->_automaticQuoteSubstitutionEnabled = (f & 0x20000) != 0;
+    NS_EXTRA(NSTextView, self)->_automaticLinkDetectionEnabled = (f & 0x40000) != 0;
+    NS_EXTRA(NSTextView, self)->_displaysLinkToolTipsDisabled = (f & 0x80000) != 0;
+    NS_EXTRA(NSTextView, self)->_automaticDataDetectionEnabled = (f & 0xC00000) != 0;
+    NS_EXTRA(NSTextView, self)->_automaticDashSubstitutionEnabled = (f & 0x1000000) != 0;
+    if (f & 0x200000)
+        NS_EXTRA(NSTextView, self)->_enabledTextCheckingTypes &= ~(NSTextCheckingTypes) 0x1;
+    NS_EXTRA(NSTextView, self)->_incrementalSearchingEnabled = (f & 0x40000000) != 0;
+    NS_EXTRA(NSTextView, self)->_usesInspectorBar = (f & 0x80000000) != 0;
+
+    if ([sharedData hasMoreFlags]) {
+        NS_EXTRA(NSTextView, self)->_usesRolloverButtonDisabled = ([sharedData moreFlags] & 0x1) == 0;
+        NS_EXTRA(NSTextView, self)->_allowsCharacterPickerDisabled = ([sharedData moreFlags] & 0x2) != 0;
+    }
+    // NSPreferredTextFinderStyle: 1 find panel, 2 find bar (observed alongside the flag above)
+    if ([sharedData finderStyle] == 2)
+        NS_EXTRA(NSTextView, self)->_usesFindBar = YES;
+    NS_EXTRA(NSTextView, self)->_automaticTextCompletionDisabled = [sharedData automaticTextCompletionDisabled];
+
+    if ([sharedData linkAttributes] != nil) {
+        [NS_EXTRA(NSTextView, self)->_linkTextAttributes release];
+        NS_EXTRA(NSTextView, self)->_linkTextAttributes = [[sharedData linkAttributes] copy];
+    }
+    if ([sharedData markedAttributes] != nil) {
+        [NS_EXTRA(NSTextView, self)->_markedTextAttributes release];
+        NS_EXTRA(NSTextView, self)->_markedTextAttributes = [[sharedData markedAttributes] copy];
+    }
+    if ([sharedData selectedAttributes] != nil) {
+        [NS_EXTRA(NSTextView, self)->_selectedTextAttributes release];
+        NS_EXTRA(NSTextView, self)->_selectedTextAttributes = [[sharedData selectedAttributes] retain];
+    }
+}
+
+// Settings a text view starts with. Found on a fresh text view on macOS
+// 10.14.4 and 26.7.3 (black-box observation, MAC-EVIDENCE V613): rulers
+// allowed, smart insert/delete, text replacement and spelling correction on, quote
+// and dash substitution, link and data detection and grammar checking off.
+// macOS 26.7.3 differs from 10.14.4 in having quote and dash substitution and
+// grammar checking on; the older values are used here. usesRuler is YES
+// (it only allows a ruler; isRulerVisible stays NO).
+// Test: appkit-textview-api-defaults.m
+- (void) _setDefaultSettings {
+    NS_EXTRA(NSTextView, self)->_usesRuler = YES;
+    NS_EXTRA(NSTextView, self)->_smartInsertDeleteEnabled = YES;
+    NS_EXTRA(NSTextView, self)->_automaticTextReplacementEnabled = YES;
+    NS_EXTRA(NSTextView, self)->_isAutomaticSpellingCorrectionEnabled = YES;
+    NS_EXTRA(NSTextView, self)->_enabledTextCheckingTypes = _NSTextViewDefaultOtherTypes;
+    // markedTextAttributes: the fixed defaults of a text view
+    NS_EXTRA(NSTextView, self)->_markedTextAttributes = [[NSDictionary
+            dictionaryWithObjectsAndKeys: [NSColor textColor],
+                                          NSForegroundColorAttributeName,
+                                          [NSColor yellowColor],
+                                          NSBackgroundColorAttributeName, nil]
+            retain];
+}
+
+- (NSSelectionAffinity) selectionAffinity {
+    return NS_EXTRA(NSTextView, self)->_selectionAffinity;
+}
+
+- (NSSelectionGranularity) selectionGranularity {
+    return NS_EXTRA(NSTextView, self)->_selectionGranularity;
+}
+
+- (void) setSelectionGranularity: (NSSelectionGranularity) granularity {
+    NS_EXTRA(NSTextView, self)->_selectionGranularity = granularity;
+}
+
+- (BOOL) displaysLinkToolTips {
+    return !NS_EXTRA(NSTextView, self)->_displaysLinkToolTipsDisabled;
+}
+
+- (void) setDisplaysLinkToolTips: (BOOL) value {
+    NS_EXTRA(NSTextView, self)->_displaysLinkToolTipsDisabled = !value;
+}
+
+// Stored only: there is no image editing UI.
+- (BOOL) allowsImageEditing {
+    return NS_EXTRA(NSTextView, self)->_allowsImageEditing;
+}
+
+- (void) setAllowsImageEditing: (BOOL) value {
+    NS_EXTRA(NSTextView, self)->_allowsImageEditing = value;
+}
+
+// Stored only: there are no extension services to offer in a selection.
+- (BOOL) usesRolloverButtonForSelection {
+    return !NS_EXTRA(NSTextView, self)->_usesRolloverButtonDisabled;
+}
+
+- (void) setUsesRolloverButtonForSelection: (BOOL) value {
+    NS_EXTRA(NSTextView, self)->_usesRolloverButtonDisabled = !value;
+}
+
+// Stored only: there is no Touch Bar.
+- (BOOL) isAutomaticTextCompletionEnabled {
+    return !NS_EXTRA(NSTextView, self)->_automaticTextCompletionDisabled;
+}
+
+- (void) setAutomaticTextCompletionEnabled: (BOOL) value {
+    NS_EXTRA(NSTextView, self)->_automaticTextCompletionDisabled = !value;
+}
+
+- (void) toggleAutomaticTextCompletion: (id) sender {
+    [self setAutomaticTextCompletionEnabled: ![self isAutomaticTextCompletionEnabled]];
+}
+
+- (BOOL) allowsCharacterPickerTouchBarItem {
+    return !NS_EXTRA(NSTextView, self)->_allowsCharacterPickerDisabled;
+}
+
+- (void) setAllowsCharacterPickerTouchBarItem: (BOOL) value {
+    NS_EXTRA(NSTextView, self)->_allowsCharacterPickerDisabled = !value;
+}
+
+// Stored only: input sources are not switched per text view.
+- (NSArray *) allowedInputSourceLocales {
+    return NS_EXTRA(NSTextView, self)->_allowedInputSourceLocales;
+}
+
+- (void) setAllowedInputSourceLocales: (NSArray *) locales {
+    NSArray *copy = [locales copy];
+    [NS_EXTRA(NSTextView, self)->_allowedInputSourceLocales release];
+    NS_EXTRA(NSTextView, self)->_allowedInputSourceLocales = copy;
+}
+
+// Stored only: the find bar is not shown; find actions use the find panel.
+- (BOOL) usesFindPanel {
+    return NS_EXTRA(NSTextView, self)->_usesFindPanel;
+}
+
+- (void) setUsesFindPanel: (BOOL) value {
+    NS_EXTRA(NSTextView, self)->_usesFindPanel = value;
+}
+
+- (BOOL) isCoalescingUndo {
+    return NS_EXTRA(NSTextView, self)->_undoTyping != nil;
 }
 
 // Stored only: dropped or pasted graphics aren't handled differently.
