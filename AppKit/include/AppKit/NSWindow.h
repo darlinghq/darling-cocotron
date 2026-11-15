@@ -116,7 +116,12 @@ typedef NS_OPTIONS(NSUInteger, NSWindowCollectionBehavior) {
     NSWindowCollectionBehaviorTransient = 0x08,
     NSWindowCollectionBehaviorStationary = 0x10,
     NSWindowCollectionBehaviorParticipatesInCycle = 0x20,
-    NSWindowCollectionBehaviorIgnoresCycle = 0x40
+    NSWindowCollectionBehaviorIgnoresCycle = 0x40,
+    NSWindowCollectionBehaviorFullScreenPrimary = 0x80,
+    NSWindowCollectionBehaviorFullScreenAuxiliary = 0x100,
+    NSWindowCollectionBehaviorFullScreenNone = 0x200,
+    NSWindowCollectionBehaviorFullScreenAllowsTiling = 0x800,
+    NSWindowCollectionBehaviorFullScreenDisallowsTiling = 0x1000
 };
 
 typedef NS_ENUM(NSUInteger, NSWindowSharingType) {
@@ -365,6 +370,8 @@ typedef NS_ENUM(NSInteger, NSWindowUserTabbingPreference) {
         NSWindowTitleVisibility _titleVisibility;
         NSSize _minFullScreenContentSize;
         NSSize _maxFullScreenContentSize;
+        NSInteger _fullScreenTransition;
+        NSUInteger _fullScreenTransitionGeneration;
         NSTitlebarSeparatorStyle _titlebarSeparatorStyle;
         NSWindowToolbarStyle _toolbarStyle;
         BOOL _titlebarAppearsTransparent;

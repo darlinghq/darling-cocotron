@@ -3528,16 +3528,100 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
     [_backgroundView print: sender];
 }
 
-- (void) toggleFullScreen: (id) sender {
-    NSWindowStyleMask mask = NS_EXTRA(NSWindow, self)->_styleMask;
+// Full screen is a transition the window system has to confirm: the style mask
+// gains NSWindowStyleMaskFullScreen when the request is made and the Did
+// notification follows the platform window's confirmation. A window the system
+// does not put into (or take out of) full screen reports the failure to the
+// delegate and returns to its previous state.
+enum {
+    FullScreenIdle,
+    FullScreenEntering,
+    FullScreenExiting,
+};
 
-    if (mask & NSWindowStyleMaskFullScreen) {
-        mask &= ~NSWindowStyleMaskFullScreen;
-    } else {
+// How long the window system has to confirm a full screen change.
+static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
+
+- (void) toggleFullScreen: (id) sender {
+    if (NS_EXTRA(NSWindow, self)->_fullScreenTransition != FullScreenIdle)
+        return;
+
+    BOOL entering = !(NS_EXTRA(NSWindow, self)->_styleMask & NSWindowStyleMaskFullScreen);
+
+    NS_EXTRA(NSWindow, self)->_fullScreenTransition = entering ? FullScreenEntering : FullScreenExiting;
+    NS_EXTRA(NSWindow, self)->_fullScreenTransitionGeneration++;
+    [self postNotificationName: entering ? NSWindowWillEnterFullScreenNotification
+                                         : NSWindowWillExitFullScreenNotification];
+
+    NSWindowStyleMask mask = NS_EXTRA(NSWindow, self)->_styleMask;
+    if (entering)
         mask |= NSWindowStyleMaskFullScreen;
+    else
+        mask &= ~NSWindowStyleMaskFullScreen;
+    [self setStyleMask: mask];
+
+    // The window system may already be in the requested state.
+    if ([_platformWindow respondsToSelector: @selector(isFullScreen)] &&
+        [(id) _platformWindow isFullScreen] == entering) {
+        [self platformWindow: _platformWindow didChangeFullScreen: entering];
+        return;
     }
 
+    // Without a mapped window there is nobody to confirm: fail without waiting.
+    NSTimeInterval wait = [self isVisible] ? FullScreenConfirmationTimeout : 0;
+    [self performSelector: @selector(_fullScreenTransitionTimedOut:)
+               withObject: @(NS_EXTRA(NSWindow, self)->_fullScreenTransitionGeneration)
+               afterDelay: wait
+                  inModes: @[NSRunLoopCommonModes]];
+}
+
+- (void) _finishFullScreenTransition {
+    [NSObject cancelPreviousPerformRequestsWithTarget: self
+                                             selector: @selector(_fullScreenTransitionTimedOut:)
+                                               object: @(NS_EXTRA(NSWindow, self)->_fullScreenTransitionGeneration)];
+    NS_EXTRA(NSWindow, self)->_fullScreenTransition = FullScreenIdle;
+}
+
+- (void) _fullScreenTransitionTimedOut: (NSNumber *) generation {
+    if ([generation unsignedIntegerValue] != NS_EXTRA(NSWindow, self)->_fullScreenTransitionGeneration)
+        return;
+
+    NSInteger transition = NS_EXTRA(NSWindow, self)->_fullScreenTransition;
+    if (transition == FullScreenIdle)
+        return;
+    NS_EXTRA(NSWindow, self)->_fullScreenTransition = FullScreenIdle;
+
+    // Return to the state before the request.
+    NSWindowStyleMask mask = NS_EXTRA(NSWindow, self)->_styleMask;
+    if (transition == FullScreenEntering)
+        mask &= ~NSWindowStyleMaskFullScreen;
+    else
+        mask |= NSWindowStyleMaskFullScreen;
     [self setStyleMask: mask];
+
+    SEL failure = transition == FullScreenEntering ? @selector(windowDidFailToEnterFullScreen:)
+                                                   : @selector(windowDidFailToExitFullScreen:);
+    if ([_delegate respondsToSelector: failure])
+        [_delegate performSelector: failure withObject: self];
+}
+
+// The window system reports whether the window is shown fullscreen now.
+- (void) platformWindow: (CGWindow *) window didChangeFullScreen: (BOOL) fullScreen {
+    NSInteger transition = NS_EXTRA(NSWindow, self)->_fullScreenTransition;
+
+    if (transition == FullScreenEntering && fullScreen) {
+        [self _finishFullScreenTransition];
+        [self postNotificationName: NSWindowDidEnterFullScreenNotification];
+    } else if (transition == FullScreenExiting && !fullScreen) {
+        [self _finishFullScreenTransition];
+        [self postNotificationName: NSWindowDidExitFullScreenNotification];
+    } else if (transition == FullScreenIdle && !fullScreen &&
+               (NS_EXTRA(NSWindow, self)->_styleMask & NSWindowStyleMaskFullScreen)) {
+        // The window system took the window out of full screen on its own.
+        [self postNotificationName: NSWindowWillExitFullScreenNotification];
+        [self setStyleMask: NS_EXTRA(NSWindow, self)->_styleMask & ~NSWindowStyleMaskFullScreen];
+        [self postNotificationName: NSWindowDidExitFullScreenNotification];
+    }
 }
 
 - (void) toggleToolbarShown: (id) sender {

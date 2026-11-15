@@ -377,6 +377,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     // The tracker survives hiding: _frame keeps the fullscreen size, so the size
     // from before fullscreen would be lost if the next map saved it again.
     _fullscreenRequested = _pendingFullscreen = _fullscreenRecheckPending = NO;
+    _fullscreenReported = NO;
     [_display windowUnmapped: self];
     [_display flush];
 }
@@ -1065,6 +1066,10 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     BOOL firstConfigure = !_configured;
     _configured = YES;
 
+    // Tell the delegate when the compositor's fullscreen state changes.
+    BOOL fullscreenChanged = _pendingFullscreen != _fullscreenReported;
+    _fullscreenReported = _pendingFullscreen;
+
     BOOL sized = NO;
     BOOL moved = NO;
     if (_popupParent != nil) {
@@ -1091,6 +1096,14 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 
     [self updateSubwindows];
     [self recheckFullscreen];
+
+    if (fullscreenChanged) {
+        BOOL fullscreen = _fullscreenReported;
+        [_display performAfterDispatch: ^{
+          if ([self->_delegate respondsToSelector: @selector(platformWindow:didChangeFullScreen:)])
+              [self->_delegate platformWindow: self didChangeFullScreen: fullscreen];
+        }];
+    }
 
     BOOL activationChanged = _pendingActivated != _activated;
     BOOL activated = _pendingActivated;
@@ -1128,6 +1141,11 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     }
 
     [self presentIfPossible];
+}
+
+// Whether the compositor currently holds the window fullscreen.
+- (BOOL) isFullScreen {
+    return _mapped && _fullscreenReported;
 }
 
 - (void) closeRequested {
