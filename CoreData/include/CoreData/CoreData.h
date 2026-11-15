@@ -1,3 +1,4 @@
+#import <CoreData/CoreDataErrors.h>
 #import <CoreData/NSAttributeDescription.h>
 #import <CoreData/NSEntityDescription.h>
 #import <CoreData/NSEntityMapping.h>

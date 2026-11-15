@@ -63,14 +63,14 @@ static inline void _clearCurrentContext() {
         // least one app that does it Maybe Cocoa just leaks, we don't
         [_pixelFormat release];
         _pixelFormat = nil;
-        CGLReleaseContext(_glContext);
-        _glContext = NULL;
+        CGLReleaseContext(NS_EXTRA(NSOpenGLContext, self)->_glContext);
+        NS_EXTRA(NSOpenGLContext, self)->_glContext = NULL;
     }
 
     _pixelFormat = [pixelFormat retain];
     if ((error = CGLCreateContext(
                  [_pixelFormat CGLPixelFormatObj], [shareContext CGLContextObj],
-                 (CGLContextObj *) &_glContext)) != kCGLNoError)
+                 (CGLContextObj *) &NS_EXTRA(NSOpenGLContext, self)->_glContext)) != kCGLNoError)
         NSLog(@"CGLCreateContext failed with %d in %s %d", error, __FILE__,
               __LINE__);
 
@@ -84,18 +84,19 @@ static inline void _clearCurrentContext() {
         _clearCurrentContext();
     [_pixelFormat release];
 
-    if (_cglWindow != NULL) {
-        CGLDestroyWindow(_cglWindow);
+    if (NS_EXTRA(NSOpenGLContext, self)->_cglWindow != NULL) {
+        CGLDestroyWindow(NS_EXTRA(NSOpenGLContext, self)->_cglWindow);
     }
-    [_subwindow release];
-    _view = nil;
+    [NS_EXTRA(NSOpenGLContext, self)->_subwindow release];
+    NS_EXTRA(NSOpenGLContext, self)->_view = nil;
 
-    CGLReleaseContext(_glContext);
+    CGLReleaseContext(NS_EXTRA(NSOpenGLContext, self)->_glContext);
+    NS_EXTRA_FREE(NSOpenGLContext, self);
     [super dealloc];
 }
 
 - (NSView *) view {
-    return _view;
+    return NS_EXTRA(NSOpenGLContext, self)->_view;
 }
 
 - (NSOpenGLPixelBuffer *) pixelBuffer {
@@ -114,62 +115,62 @@ static inline void _clearCurrentContext() {
 }
 
 - (void *) CGLContextObj {
-    return _glContext;
+    return NS_EXTRA(NSOpenGLContext, self)->_glContext;
 }
 
 - (void) getValues: (GLint *) vals
         forParameter: (NSOpenGLContextParameter) parameter
 {
-    CGLGetParameter(_glContext, parameter, vals);
+    CGLGetParameter(NS_EXTRA(NSOpenGLContext, self)->_glContext, parameter, vals);
 }
 
 - (void) setValues: (const GLint *) vals
         forParameter: (NSOpenGLContextParameter) parameter
 {
-    CGLSetParameter(_glContext, parameter, vals);
+    CGLSetParameter(NS_EXTRA(NSOpenGLContext, self)->_glContext, parameter, vals);
 }
 
 - (void) updateViewParameters {
-    if (_view == nil || [_view window] == nil) return;
-    NSRect rect = [_view bounds];
+    if (NS_EXTRA(NSOpenGLContext, self)->_view == nil || [NS_EXTRA(NSOpenGLContext, self)->_view window] == nil) return;
+    NSRect rect = [NS_EXTRA(NSOpenGLContext, self)->_view bounds];
 
-    if ([_view window] != nil)
-        rect = [_view convertRect: rect toView: nil];
-    if (_subwindow == nil) {
-        _subwindow = [[[_view window] _createSubWindowWithFrame: rect] retain];
-        _cglWindow = CGLGetWindowForContext(_glContext, [_subwindow nativeWindow]);
+    if ([NS_EXTRA(NSOpenGLContext, self)->_view window] != nil)
+        rect = [NS_EXTRA(NSOpenGLContext, self)->_view convertRect: rect toView: nil];
+    if (NS_EXTRA(NSOpenGLContext, self)->_subwindow == nil) {
+        NS_EXTRA(NSOpenGLContext, self)->_subwindow = [[[NS_EXTRA(NSOpenGLContext, self)->_view window] _createSubWindowWithFrame: rect] retain];
+        NS_EXTRA(NSOpenGLContext, self)->_cglWindow = CGLGetWindowForContext(NS_EXTRA(NSOpenGLContext, self)->_glContext, [NS_EXTRA(NSOpenGLContext, self)->_subwindow nativeWindow]);
     } else {
-        [_subwindow setFrame: rect];
+        [NS_EXTRA(NSOpenGLContext, self)->_subwindow setFrame: rect];
     }
 
-    if ([_view isHidden]) {
-        [_subwindow hide];
+    if ([NS_EXTRA(NSOpenGLContext, self)->_view isHidden]) {
+        [NS_EXTRA(NSOpenGLContext, self)->_subwindow hide];
     } else {
-        [_subwindow show];
+        [NS_EXTRA(NSOpenGLContext, self)->_subwindow show];
     }
 }
 
 - (void) setView: (NSView *) view {
-    if (_view == view)
+    if (NS_EXTRA(NSOpenGLContext, self)->_view == view)
         return;
 
     // Detach before native-window destruction; EGL can defer destroying a
     // drawable that remains current. Keep self alive across the thread release.
     [self retain];
-    if (CGLGetCurrentContext() == _glContext) {
+    if (CGLGetCurrentContext() == NS_EXTRA(NSOpenGLContext, self)->_glContext) {
         if (CGLSetCurrentContext(NULL) != kCGLNoError) { [self release]; return; }
         if (_currentContext() == self) _setCurrentContext(nil);
     }
-    _hasPrepared = NO;
-    _drawableAttachmentSucceeded = NO;
-    _view = view;
+    NS_EXTRA(NSOpenGLContext, self)->_hasPrepared = NO;
+    NS_EXTRA(NSOpenGLContext, self)->_drawableAttachmentSucceeded = NO;
+    NS_EXTRA(NSOpenGLContext, self)->_view = view;
 
-    if (_cglWindow != NULL) {
-        CGLDestroyWindow(_cglWindow);
-        _cglWindow = NULL;
+    if (NS_EXTRA(NSOpenGLContext, self)->_cglWindow != NULL) {
+        CGLDestroyWindow(NS_EXTRA(NSOpenGLContext, self)->_cglWindow);
+        NS_EXTRA(NSOpenGLContext, self)->_cglWindow = NULL;
     }
-    [_subwindow release];
-    _subwindow = nil;
+    [NS_EXTRA(NSOpenGLContext, self)->_subwindow release];
+    NS_EXTRA(NSOpenGLContext, self)->_subwindow = nil;
 
     [self updateViewParameters];
     [self release];
@@ -177,11 +178,11 @@ static inline void _clearCurrentContext() {
 
 - (void) makeCurrentContext {
     CGLError error;
-    _drawableAttachmentSucceeded = NO;
+    NS_EXTRA(NSOpenGLContext, self)->_drawableAttachmentSucceeded = NO;
 
     // Viewless contexts have no window geometry to update. In particular,
     // background resource uploads must not wait for a main-thread run loop.
-    if (_subwindow == nil && _view != nil) {
+    if (NS_EXTRA(NSOpenGLContext, self)->_subwindow == nil && NS_EXTRA(NSOpenGLContext, self)->_view != nil) {
         if ([NSThread isMainThread]) {
             [self updateViewParameters];
         } else {
@@ -191,37 +192,37 @@ static inline void _clearCurrentContext() {
         }
     }
 
-    if ([_subwindow respondsToSelector: @selector(requiresMainThreadPresentation)] &&
-        [_subwindow requiresMainThreadPresentation] && ![NSThread isMainThread]) {
+    if ([NS_EXTRA(NSOpenGLContext, self)->_subwindow respondsToSelector: @selector(requiresMainThreadPresentation)] &&
+        [NS_EXTRA(NSOpenGLContext, self)->_subwindow requiresMainThreadPresentation] && ![NSThread isMainThread]) {
         NSLog(@"This window backend requires OpenGL rendering on the main thread");
         return;
     }
-    if (_cglWindow != NULL) {
+    if (NS_EXTRA(NSOpenGLContext, self)->_cglWindow != NULL) {
         if ((error = CGLContextMakeCurrentAndAttachToWindow(
-                     _glContext, _cglWindow)) != kCGLNoError) {
+                     NS_EXTRA(NSOpenGLContext, self)->_glContext, NS_EXTRA(NSOpenGLContext, self)->_cglWindow)) != kCGLNoError) {
             NSLog(@"CGLSetCurrentContext failed with %d in %s %d", error, __FILE__,
                   __LINE__);
             // A swap-interval error may occur after EGL successfully switched.
-            if (CGLGetCurrentContext() == _glContext) _setCurrentContext(self);
+            if (CGLGetCurrentContext() == NS_EXTRA(NSOpenGLContext, self)->_glContext) _setCurrentContext(self);
             return;
         }
     } else {
-        if ((error = CGLSetCurrentContext(_glContext)) != kCGLNoError) {
+        if ((error = CGLSetCurrentContext(NS_EXTRA(NSOpenGLContext, self)->_glContext)) != kCGLNoError) {
             NSLog(@"CGLSetCurrentContext without window failed with %d in %s %d", error, __FILE__, __LINE__);
             return;
         }
     }
 
     _setCurrentContext(self);
-    _drawableAttachmentSucceeded = YES;
+    NS_EXTRA(NSOpenGLContext, self)->_drawableAttachmentSucceeded = YES;
 
-    if (!_hasPrepared) {
-        _hasPrepared = YES;
+    if (!NS_EXTRA(NSOpenGLContext, self)->_hasPrepared) {
+        NS_EXTRA(NSOpenGLContext, self)->_hasPrepared = YES;
 
         // NSOpenGLContext will call prepareOpenGL on any view, not just
         // NSOpenGLView
-        if ([_view respondsToSelector: @selector(prepareOpenGL)])
-            [_view performSelector: @selector(prepareOpenGL)];
+        if ([NS_EXTRA(NSOpenGLContext, self)->_view respondsToSelector: @selector(prepareOpenGL)])
+            [NS_EXTRA(NSOpenGLContext, self)->_view performSelector: @selector(prepareOpenGL)];
     }
 }
 
@@ -243,7 +244,7 @@ static inline void _clearCurrentContext() {
 }
 
 - (void) setFullScreen {
-    if (_view != nil)
+    if (NS_EXTRA(NSOpenGLContext, self)->_view != nil)
         NSLog(@"NSOpenGLContext has view, full-screen not allowed");
 
     NSUnimplementedMethod();
@@ -271,12 +272,14 @@ static inline void _clearCurrentContext() {
     NSUnimplementedMethod();
 }
 
-- (BOOL) _drawableAttachmentSucceeded { return _drawableAttachmentSucceeded; }
+- (BOOL) _drawableAttachmentSucceeded {
+    return NS_EXTRA(NSOpenGLContext, self)->_drawableAttachmentSucceeded;
+}
 
 // Do not create a drawable just to answer a backing-coordinate query.
 - (NSSize) _drawablePixelSize {
-    return [_subwindow respondsToSelector: @selector(drawablePixelSize)]
-        ? [_subwindow drawablePixelSize] : NSZeroSize;
+    return [NS_EXTRA(NSOpenGLContext, self)->_subwindow respondsToSelector: @selector(drawablePixelSize)]
+        ? [NS_EXTRA(NSOpenGLContext, self)->_subwindow drawablePixelSize] : NSZeroSize;
 }
 
 - (void) update {
@@ -302,15 +305,15 @@ static inline void _clearCurrentContext() {
 
 - (void) flushBuffer {
     // A backend that presents on its own thread cannot be swapped from another.
-    if ([_subwindow requiresMainThreadPresentation] && ![NSThread isMainThread])
+    if ([NS_EXTRA(NSOpenGLContext, self)->_subwindow requiresMainThreadPresentation] && ![NSThread isMainThread])
         return;
 
     // Pace swaps to the refresh rate of the output the window is on; 0 means unknown.
-    CGLSetDrawableRefreshRate(_glContext,
-        [_subwindow respondsToSelector: @selector(refreshMillihertz)]
-        ? [_subwindow refreshMillihertz] : 0);
-    if (CGLFlushDrawable(_glContext) == kCGLNoError)
-        [_subwindow flush];
+    CGLSetDrawableRefreshRate(NS_EXTRA(NSOpenGLContext, self)->_glContext,
+        [NS_EXTRA(NSOpenGLContext, self)->_subwindow respondsToSelector: @selector(refreshMillihertz)]
+        ? [NS_EXTRA(NSOpenGLContext, self)->_subwindow refreshMillihertz] : 0);
+    if (CGLFlushDrawable(NS_EXTRA(NSOpenGLContext, self)->_glContext) == kCGLNoError)
+        [NS_EXTRA(NSOpenGLContext, self)->_subwindow flush];
 }
 
 @end

@@ -22,15 +22,27 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSArray, NSData, NSPasteboard, NSURL;
 
+// Legacy ObjC ABI (i386): instance size must stay 0x1c, Apple's, which leaves
+// no room for further ivars or for a pointer to extra state: the two flags
+// share the storage unit of _bitsPerSample there (assign them YES/NO only).
+// Never add an ivar to this class.
 @interface NSImageRep : NSObject <NSCopying> {
     NSSize _size;
     NSString *_colorSpaceName;
+#if __OBJC2__
     NSInteger _bitsPerSample;
     int _pixelsWide;
     int _pixelsHigh;
 
     BOOL _hasAlpha;
     BOOL _isOpaque;
+#else
+    NSInteger _bitsPerSample : 30;
+    unsigned int _hasAlpha : 1;
+    unsigned int _isOpaque : 1;
+    int _pixelsWide;
+    int _pixelsHigh;
+#endif
 }
 
 + (NSArray *) registeredImageRepClasses;

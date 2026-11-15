@@ -17,6 +17,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/NSColorSpace.h>
 #import <AppKit/NSGraphics.h>
 #import <AppKit/NSImageRep.h>
@@ -73,18 +74,23 @@ APPKIT_EXPORT NSBitmapImageRepPropertyKey NSImageLoopCount;
 APPKIT_EXPORT NSBitmapImageRepPropertyKey NSImageCurrentFrameDuration;
 APPKIT_EXPORT NSBitmapImageRepPropertyKey NSImageCurrentFrame;
 
+// Legacy ObjC ABI (i386): instance size must stay 0x34, Apple's; the ivars
+// before the extras keep their position in the original order. Add new state
+// to the extra struct, never as an ivar.
 @interface NSBitmapImageRep : NSImageRep {
     int _samplesPerPixel;
     int _bitsPerPixel;
     int _bytesPerRow;
     int _bytesPerPlane;
     NSBitmapFormat _bitmapFormat;
-    BOOL _freeWhenDone;
-    BOOL _isPlanar;
-    unsigned char **_bitmapPlanes;
-    NSMutableDictionary *_properties;
+    NS_EXTRA_IVARS_BEGIN(NSBitmapImageRep)
+        BOOL _freeWhenDone;
+        BOOL _isPlanar;
+        unsigned char **_bitmapPlanes;
+        NSMutableDictionary *_properties;
 
-    CGImageRef _cgImage;
+        CGImageRef _cgImage;
+    NS_EXTRA_IVARS_END(NSBitmapImageRep)
 }
 
 + (void) getTIFFCompressionTypes: (const NSTIFFCompression **) types
