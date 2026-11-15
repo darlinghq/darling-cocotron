@@ -55,38 +55,26 @@ typedef NS_OPTIONS(NSUInteger, NSTableColumnResizingOptions) {
 
 @property(copy) NSString *title;
 
-- (NSTableView *) tableView;
+@property(nonatomic, retain) NSTableView *tableView;
 - (NSString *) title;
-- (id) headerCell;
-- (id) dataCell;
-- (NSString *) headerToolTip;
+@property(nonatomic, retain) id headerCell;
+@property(nonatomic, retain) id dataCell;
+@property(nonatomic, copy) NSString *headerToolTip;
 
-- (BOOL) isHidden;
-- (void) setHidden: (BOOL) hidden;
-- (CGFloat) width;
-- (CGFloat) minWidth;
-- (CGFloat) maxWidth;
-- (BOOL) isResizable;
-- (BOOL) isEditable;
-- (NSUInteger) resizingMask;
+@property(nonatomic, getter=isHidden) BOOL hidden;
+@property(nonatomic) CGFloat width;
+@property(nonatomic) CGFloat minWidth;
+@property(nonatomic) CGFloat maxWidth;
+@property(nonatomic, getter=isResizable) BOOL resizable;
+@property(nonatomic, getter=isEditable) BOOL editable;
+@property(nonatomic) NSUInteger resizingMask;
 
-- (void) setTableView: (NSTableView *) tableView;
 - (void) setTitle: (NSString *) title;
-- (void) setHeaderCell: (NSCell *) cell;
-- (void) setDataCell: (NSCell *) cell;
-- (void) setHeaderToolTip: (NSString *) value;
 
-- (void) setWidth: (CGFloat) width;
-- (void) setMinWidth: (CGFloat) width;
-- (void) setMaxWidth: (CGFloat) width;
-- (void) setResizable: (BOOL) flag;
-- (void) setEditable: (BOOL) flag;
-- (void) setResizingMask: (NSUInteger) value;
 
 - (NSCell *) dataCellForRow: (NSInteger) row;
 
-- (NSSortDescriptor *) sortDescriptorPrototype;
-- (void) setSortDescriptorPrototype: (NSSortDescriptor *) value;
+@property(nonatomic, retain) NSSortDescriptor *sortDescriptorPrototype;
 
 // internal
 - (void) prepareCell: (id) cell inRow: (NSInteger) row;

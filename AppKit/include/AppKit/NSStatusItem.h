@@ -34,8 +34,7 @@ typedef NS_OPTIONS(NSUInteger, NSStatusItemBehavior) {
 @interface NSStatusBarButton : NSButton {
     BOOL _appearsDisabled;
 }
-- (BOOL) appearsDisabled;
-- (void) setAppearsDisabled: (BOOL) flag;
+@property(nonatomic) BOOL appearsDisabled;
 @end
 
 @interface NSStatusItem : NSObject {
@@ -61,49 +60,34 @@ typedef NS_OPTIONS(NSUInteger, NSStatusItemBehavior) {
 }
 - (NSStatusBar *) statusBar;
 
-- (NSStatusItemBehavior) behavior;
-- (void) setBehavior: (NSStatusItemBehavior) behavior;
+@property(nonatomic) NSStatusItemBehavior behavior;
 
 - (NSStatusBarButton *) button;
 
-- (NSString *) autosaveName;
-- (void) setAutosaveName: (NSString *) name;
+@property(nonatomic, copy) NSString *autosaveName;
 
-- (BOOL) isVisible;
-- (void) setVisible: (BOOL) visible;
+@property(nonatomic, getter=isVisible) BOOL visible;
 
-- (SEL) action;
-- (void) setAction: (SEL) action;
-- (SEL) doubleAction;
-- (void) setDoubleAction: (SEL) action;
-- (id) target;
-- (void) setTarget: (id) target;
+@property(nonatomic) SEL action;
+@property(nonatomic) SEL doubleAction;
+@property(nonatomic, assign) id target;
 
-- (NSImage *) image;
-- (void) setImage: (NSImage *) image;
-- (NSImage *) alternateImage;
-- (void) setAlternateImage: (NSImage *) image;
+@property(nonatomic, retain) NSImage *image;
+@property(nonatomic, retain) NSImage *alternateImage;
 
-- (NSString *) title;
-- (void) setTitle: (NSString *) title;
+@property(nonatomic, copy) NSString *title;
 - (void) setToolTip: (NSString *) toolTip;
-- (NSAttributedString *) attributedTitle;
-- (void) setAttributedTitle: (NSAttributedString *) title;
+@property(nonatomic, copy) NSAttributedString *attributedTitle;
 
-- (NSView *) view;
-- (void) setView: (NSView *) view;
+@property(nonatomic, retain) NSView *view;
 
-- (BOOL) highlightMode;
-- (void) setHighlightMode: (BOOL) flag;
+@property(nonatomic) BOOL highlightMode;
 
-- (BOOL) isEnabled;
-- (void) setEnabled: (BOOL) flag;
+@property(nonatomic, getter=isEnabled) BOOL enabled;
 
-- (CGFloat) length;
-- (void) setLength: (CGFloat) len;
+@property(nonatomic) CGFloat length;
 
-- (NSMenu *) menu;
-- (void) setMenu: (NSMenu *) menu;
+@property(nonatomic, retain) NSMenu *menu;
 
 - (void) popUpStatusItemMenu: (NSMenu *) menu;
 - (NSInteger) sendActionOn: (NSInteger) mask;

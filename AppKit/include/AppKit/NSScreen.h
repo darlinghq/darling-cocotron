@@ -39,38 +39,36 @@ typedef NSString *NSDeviceDescriptionKey;
 
 @property (class, readonly, retain) NSScreen *mainScreen;
 
-+ (NSArray *) screens;
+@property(class, readonly, retain, nonnull) NSArray *screens;
 
 - initWithFrame: (NSRect) frame visibleFrame: (NSRect) visibleFrame;
 
 @property (readonly) NSRect frame;
 
-- (NSRect) visibleFrame;
+@property(nonatomic, readonly) NSRect visibleFrame;
 
-- (CGFloat) userSpaceScaleFactor;
+@property(nonatomic, readonly) CGFloat userSpaceScaleFactor;
 @property (readonly) CGFloat backingScaleFactor;
-- (NSColorSpace *) colorSpace;
-- (NSString *) localizedName;
+@property(nonatomic, readonly) NSColorSpace *colorSpace;
+@property(nonatomic, readonly) NSString *localizedName;
 
-- (CGFloat) maximumExtendedDynamicRangeColorComponentValue;
-- (CGFloat) maximumPotentialExtendedDynamicRangeColorComponentValue;
-- (CGFloat) maximumReferenceExtendedDynamicRangeColorComponentValue;
+@property(nonatomic, readonly) CGFloat maximumExtendedDynamicRangeColorComponentValue;
+@property(nonatomic, readonly) CGFloat maximumPotentialExtendedDynamicRangeColorComponentValue;
+@property(nonatomic, readonly) CGFloat maximumReferenceExtendedDynamicRangeColorComponentValue;
 
-- (NSTimeInterval) minimumRefreshInterval;
-- (NSTimeInterval) maximumRefreshInterval;
-- (NSInteger) maximumFramesPerSecond;
+@property(nonatomic, readonly) NSTimeInterval minimumRefreshInterval;
+@property(nonatomic, readonly) NSTimeInterval maximumRefreshInterval;
+@property(nonatomic, readonly) NSInteger maximumFramesPerSecond;
 
 @property(readonly) NSEdgeInsets safeAreaInsets;
 @property(readonly) NSRect auxiliaryTopLeftArea;
 @property(readonly) NSRect auxiliaryTopRightArea;
-- (NSTimeInterval) displayUpdateGranularity;
+@property(nonatomic, readonly) NSTimeInterval displayUpdateGranularity;
 
 @end
 
 @interface NSScreen (Darling)
-- (NSData *) edid;
-- (void) setEdid: (NSData *) data;
+@property(nonatomic, copy) NSData *edid;
 
-- (CGDirectDisplayID) cgDirectDisplayID;
-- (void) setCgDirectDisplayID: (CGDirectDisplayID) displayID;
+@property(nonatomic) CGDirectDisplayID cgDirectDisplayID;
 @end

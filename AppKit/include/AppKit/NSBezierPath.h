@@ -106,19 +106,13 @@ enum {
                                      xRadius: (CGFloat) xRadius
                                      yRadius: (CGFloat) yRadius;
 
-+ (CGFloat) defaultLineWidth;
-+ (CGFloat) defaultMiterLimit;
-+ (CGFloat) defaultFlatness;
-+ (NSWindingRule) defaultWindingRule;
-+ (NSLineCapStyle) defaultLineCapStyle;
-+ (NSLineJoinStyle) defaultLineJoinStyle;
+@property(class) CGFloat defaultLineWidth;
+@property(class) CGFloat defaultMiterLimit;
+@property(class) CGFloat defaultFlatness;
+@property(class) NSWindingRule defaultWindingRule;
+@property(class) NSLineCapStyle defaultLineCapStyle;
+@property(class) NSLineJoinStyle defaultLineJoinStyle;
 
-+ (void) setDefaultLineWidth: (CGFloat) width;
-+ (void) setDefaultMiterLimit: (CGFloat) limit;
-+ (void) setDefaultFlatness: (CGFloat) flatness;
-+ (void) setDefaultWindingRule: (NSWindingRule) rule;
-+ (void) setDefaultLineCapStyle: (NSLineCapStyle) style;
-+ (void) setDefaultLineJoinStyle: (NSLineJoinStyle) style;
 
 + (void) fillRect: (NSRect) rect;
 + (void) strokeRect: (NSRect) rect;
@@ -126,34 +120,27 @@ enum {
 + (void) drawPackedGlyphs: (const char *) packed atPoint: (NSPoint) point;
 + (void) clipRect: (NSRect) rect;
 
-- (CGFloat) lineWidth;
-- (CGFloat) miterLimit;
-- (CGFloat) flatness;
-- (NSWindingRule) windingRule;
-- (NSLineCapStyle) lineCapStyle;
-- (NSLineJoinStyle) lineJoinStyle;
+@property(nonatomic) CGFloat lineWidth;
+@property(nonatomic) CGFloat miterLimit;
+@property(nonatomic) CGFloat flatness;
+@property(nonatomic) NSWindingRule windingRule;
+@property(nonatomic) NSLineCapStyle lineCapStyle;
+@property(nonatomic) NSLineJoinStyle lineJoinStyle;
 
 - (void) getLineDash: (CGFloat *) dashes
                count: (int *) count
                phase: (CGFloat *) phase;
 
-- (BOOL) cachesBezierPath;
+@property(nonatomic) BOOL cachesBezierPath;
 
 - (int) elementCount;
 - (NSBezierPathElement) elementAtIndex: (int) index;
 - (NSBezierPathElement) elementAtIndex: (int) index
                       associatedPoints: (NSPoint *) points;
 
-- (void) setLineWidth: (CGFloat) width;
-- (void) setMiterLimit: (CGFloat) limit;
-- (void) setFlatness: (CGFloat) flatness;
-- (void) setWindingRule: (NSWindingRule) rule;
-- (void) setLineCapStyle: (NSLineCapStyle) style;
-- (void) setLineJoinStyle: (NSLineJoinStyle) style;
 - (void) setLineDash: (const CGFloat *) dashes
                count: (int) count
                phase: (CGFloat) phase;
-- (void) setCachesBezierPath: (BOOL) flag;
 
 - (BOOL) isEmpty;
 - (NSRect) bounds;

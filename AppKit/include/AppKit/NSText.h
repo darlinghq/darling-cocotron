@@ -105,34 +105,33 @@ typedef NS_ENUM(NSInteger, NSTextMovement) {
 - (instancetype) initWithFrame: (NSRect) frameRect;
 
 - delegate;
-- (NSString *) string;
+@property(nonatomic, copy) NSString *string;
 - (NSData *) RTFFromRange: (NSRange) range;
 - (NSData *) RTFDFromRange: (NSRange) range;
 
-- (BOOL) isEditable;
-- (BOOL) isSelectable;
-- (BOOL) isRichText;
-- (BOOL) isFieldEditor;
-- (BOOL) usesFontPanel;
-- (BOOL) importsGraphics;
+@property(nonatomic, getter=isEditable) BOOL editable;
+@property(nonatomic, getter=isSelectable) BOOL selectable;
+@property(nonatomic, getter=isRichText) BOOL richText;
+@property(nonatomic, getter=isFieldEditor) BOOL fieldEditor;
+@property(nonatomic) BOOL usesFontPanel;
+@property(nonatomic) BOOL importsGraphics;
 
-- (NSFont *) font;
-- (NSTextAlignment) alignment;
+@property(nonatomic, retain) NSFont *font;
+@property(nonatomic) NSTextAlignment alignment;
 
-- (NSColor *) textColor;
+@property(nonatomic, retain) NSColor *textColor;
 
-- (BOOL) drawsBackground;
-- (NSColor *) backgroundColor;
+@property(nonatomic) BOOL drawsBackground;
+@property(nonatomic, retain) NSColor *backgroundColor;
 
-- (BOOL) isHorizontallyResizable;
-- (BOOL) isVerticallyResizable;
-- (NSSize) maxSize;
-- (NSSize) minSize;
+@property(nonatomic, getter=isHorizontallyResizable) BOOL horizontallyResizable;
+@property(nonatomic, getter=isVerticallyResizable) BOOL verticallyResizable;
+@property(nonatomic) NSSize maxSize;
+@property(nonatomic) NSSize minSize;
 
-- (NSRange) selectedRange;
+@property(nonatomic) NSRange selectedRange;
 
 - (void) setDelegate: delegate;
-- (void) setString: (NSString *) string;
 
 - (void) replaceCharactersInRange: (NSRange) range
                        withString: (NSString *) string;
@@ -142,31 +141,15 @@ typedef NS_ENUM(NSInteger, NSTextMovement) {
 - (void) replaceCharactersInRange: (NSRange) range withRTF: (NSData *) rtf;
 - (void) replaceCharactersInRange: (NSRange) range withRTFD: (NSData *) rtfd;
 
-- (void) setEditable: (BOOL) flag;
-- (void) setSelectable: (BOOL) flag;
-- (void) setRichText: (BOOL) flag;
-- (void) setFieldEditor: (BOOL) flag;
-- (void) setUsesFontPanel: (BOOL) value;
-- (void) setImportsGraphics: (BOOL) value;
 
-- (void) setFont: (NSFont *) font;
 - (void) setFont: (NSFont *) font range: (NSRange) range;
-- (void) setAlignment: (NSTextAlignment) alignment;
 - (void) setBaseWritingDirection: (NSWritingDirection) direction
                            range: (NSRange) range;
 
-- (void) setTextColor: (NSColor *) color;
 - (void) setTextColor: (NSColor *) color range: (NSRange) range;
 
-- (void) setDrawsBackground: (BOOL) flag;
-- (void) setBackgroundColor: (NSColor *) color;
 
-- (void) setHorizontallyResizable: (BOOL) flag;
-- (void) setVerticallyResizable: (BOOL) flag;
-- (void) setMaxSize: (NSSize) size;
-- (void) setMinSize: (NSSize) size;
 
-- (void) setSelectedRange: (NSRange) range;
 
 - (void) sizeToFit;
 

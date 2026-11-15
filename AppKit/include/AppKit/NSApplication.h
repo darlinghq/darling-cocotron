@@ -195,7 +195,7 @@ typedef NS_OPTIONS(NSUInteger, NSRemoteNotificationType) {
 // Private AppKit flag for the help-viewer's find bar.
 @property(getter=isDefaultHelpBookSearchEnabled) BOOL defaultHelpBookSearchEnabled;
 
-@property (class, readonly, retain) NSApplication *sharedApplication;
+@property (class, readonly, retain, nonnull) NSApplication *sharedApplication;
 
 + (void) detachDrawingThread: (SEL) selector
                     toTarget: target
@@ -206,33 +206,30 @@ typedef NS_OPTIONS(NSUInteger, NSRemoteNotificationType) {
 - (NSGraphicsContext *) context;
 
 @property(assign) id<NSApplicationDelegate> delegate;
-- (NSArray *) windows;
+@property(nonatomic, readonly) NSArray *windows;
 - (NSWindow *) windowWithWindowNumber: (NSInteger) number;
 
-- (NSMenu *) mainMenu;
-- (NSMenu *) windowsMenu;
-- (NSWindow *) mainWindow;
-- (NSWindow *) keyWindow;
-- (NSImage *) applicationIconImage;
-- (BOOL) isActive;
+@property(nonatomic, retain) NSMenu *mainMenu;
+@property(nonatomic, retain) NSMenu *windowsMenu;
+@property(nonatomic, readonly) NSWindow *mainWindow;
+@property(nonatomic, readonly) NSWindow *keyWindow;
+@property(nonatomic, retain) NSImage *applicationIconImage;
+@property(nonatomic, getter=isActive, readonly) BOOL active;
 @property (readonly) BOOL isHidden;
-- (BOOL) isRunning;
-- (BOOL) isFullKeyboardAccessEnabled;
+@property(nonatomic, getter=isRunning, readonly) BOOL running;
+@property(nonatomic, getter=isFullKeyboardAccessEnabled, readonly) BOOL fullKeyboardAccessEnabled;
 
 - (NSWindow *) makeWindowsPerform: (SEL) selector inOrder: (BOOL) inOrder;
 - (void) miniaturizeAll: sender;
 
-- (NSArray *) orderedDocuments;
-- (NSArray *) orderedWindows;
+@property(nonatomic, readonly) NSArray *orderedDocuments;
+@property(nonatomic, readonly) NSArray *orderedWindows;
 - (void) preventWindowOrdering;
 
-- (void) setMainMenu: (NSMenu *) menu;
-- (void) setApplicationIconImage: (NSImage *) image;
 
 - (NSApplicationActivationPolicy) activationPolicy;
 - (BOOL) setActivationPolicy: (NSApplicationActivationPolicy) activationPolicy;
 
-- (void) setWindowsMenu: (NSMenu *) menu;
 - (void) addWindowsItem: (NSWindow *) window
                   title: (NSString *) title
                filename: (BOOL) filename;
@@ -251,7 +248,7 @@ typedef NS_OPTIONS(NSUInteger, NSRemoteNotificationType) {
                           untilDate: (NSDate *) untilDate
                              inMode: (NSRunLoopMode) mode
                             dequeue: (BOOL) dequeue;
-- (NSEvent *) currentEvent;
+@property(nonatomic, readonly) NSEvent *currentEvent;
 - (void) discardEventsMatchingMask: (NSEventMask) mask
                        beforeEvent: (NSEvent *) event;
 - (void) postEvent: (NSEvent *) event atStart: (BOOL) atStart;
@@ -270,7 +267,7 @@ typedef NS_OPTIONS(NSUInteger, NSRemoteNotificationType) {
 - (void) yieldActivationToApplication: (NSRunningApplication *) application;
 - (void) yieldActivationToApplicationWithBundleIdentifier: (NSString *) bundleIdentifier;
 
-- (NSWindow *) modalWindow;
+@property(nonatomic, readonly) NSWindow *modalWindow;
 - (NSModalSession) beginModalSessionForWindow: (NSWindow *) window;
 - (NSModalResponse) runModalSession: (NSModalSession) session;
 - (void) endModalSession: (NSModalSession) session;
@@ -311,8 +308,7 @@ typedef NS_OPTIONS(NSUInteger, NSRemoteNotificationType) {
 
 - (void) arrangeInFront: sender;
 
-- (NSMenu *) servicesMenu;
-- (void) setServicesMenu: (NSMenu *) menu;
+@property(nonatomic, retain) NSMenu *servicesMenu;
 - servicesProvider;
 - (void) setServicesProvider: provider;
 - (void) registerServicesMenuSendTypes: (NSArray *) sendTypes
@@ -325,7 +321,7 @@ typedef NS_OPTIONS(NSUInteger, NSRemoteNotificationType) {
 - (void) activateContextHelpMode: sender;
 - (void) showHelp: sender;
 
-- (NSDockTile *) dockTile;
+@property(nonatomic, readonly) NSDockTile *dockTile;
 
 - (void) disableRelaunchOnLogin;
 - (void) enableRelaunchOnLogin;

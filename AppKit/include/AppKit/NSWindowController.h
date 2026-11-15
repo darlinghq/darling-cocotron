@@ -53,8 +53,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 // Loads the window first if it isn't loaded and a nib name is set, as
 // subclasses that build the window in -loadWindow rely on.
-- (NSWindow *) window;
-- (void) setWindow: (NSWindow *) window;
+@property(nonatomic, retain) NSWindow *window;
 @property (retain) NSViewController *contentViewController;
 
 - (BOOL) isWindowLoaded;
@@ -69,18 +68,15 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (void) setDocumentEdited: (BOOL) flag;
 
 - (void) close;
-- (BOOL) shouldCloseDocument;
-- (void) setShouldCloseDocument: (BOOL) flag;
+@property(nonatomic) BOOL shouldCloseDocument;
 
 - owner;
 @property (readonly, copy) NSNibName windowNibName;
 - (NSString *) windowNibPath;
 
-- (void) setShouldCascadeWindows: (BOOL) flag;
-- (BOOL) shouldCascadeWindows;
+@property(nonatomic) BOOL shouldCascadeWindows;
 
-- (void) setWindowFrameAutosaveName: (NSString *) name;
-- (NSString *) windowFrameAutosaveName;
+@property(nonatomic, copy) NSString *windowFrameAutosaveName;
 
 - (void) synchronizeWindowTitleWithDocumentName;
 - (NSString *) windowTitleForDocumentDisplayName: (NSString *) displayName;

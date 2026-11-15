@@ -45,9 +45,9 @@ typedef NS_ENUM(NSInteger, NSSegmentDistribution) {
 
 @interface NSSegmentedControl : NSControl
 
-- (NSInteger) segmentCount;
-- (NSSegmentStyle) segmentStyle;
-- (NSSegmentSwitchTracking) trackingMode;
+@property(nonatomic) NSInteger segmentCount;
+@property(nonatomic) NSSegmentStyle segmentStyle;
+@property(nonatomic) NSSegmentSwitchTracking trackingMode;
 
 - (NSInteger) tagForSegment: (NSInteger) segment;
 - (NSImage *) imageForSegment: (NSInteger) segment;
@@ -58,12 +58,9 @@ typedef NS_ENUM(NSInteger, NSSegmentDistribution) {
 - (CGFloat) widthForSegment: (NSInteger) segment;
 - (NSImageScaling) imageScalingForSegment: (NSInteger) segment;
 
-- (NSInteger) selectedSegment;
+@property(nonatomic) NSInteger selectedSegment;
 - (BOOL) isSelectedForSegment: (NSInteger) segment;
 
-- (void) setSegmentCount: (NSInteger) count;
-- (void) setSegmentStyle: (NSSegmentStyle) value;
-- (void) setTrackingMode: (NSSegmentSwitchTracking) trackingMode;
 
 - (void) setTag: (NSInteger) tag forSegment: (NSInteger) segment;
 - (void) setImage: (NSImage *) image forSegment: (NSInteger) segment;
@@ -77,6 +74,5 @@ typedef NS_ENUM(NSInteger, NSSegmentDistribution) {
 
 - (BOOL) selectSegmentWithTag: (NSInteger) tag;
 - (void) setSelected: (BOOL) flag forSegment: (NSInteger) segment;
-- (void) setSelectedSegment: (NSInteger) segment;
 
 @end

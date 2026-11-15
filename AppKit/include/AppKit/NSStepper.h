@@ -21,18 +21,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @interface NSStepper : NSControl
 
-- (double) minValue;
-- (double) increment;
-- (double) maxValue;
+@property(nonatomic) double minValue;
+@property(nonatomic) double increment;
+@property(nonatomic) double maxValue;
 
-- (BOOL) autorepeat;
-- (BOOL) valueWraps;
+@property(nonatomic) BOOL autorepeat;
+@property(nonatomic) BOOL valueWraps;
 
-- (void) setMinValue: (double) value;
-- (void) setIncrement: (double) value;
-- (void) setMaxValue: (double) value;
 
-- (void) setAutorepeat: (BOOL) flag;
-- (void) setValueWraps: (BOOL) flag;
 
 @end

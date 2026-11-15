@@ -57,23 +57,16 @@ typedef NS_ENUM(NSUInteger, NSBoxType) {
     NS_EXTRA_IVARS_END(NSBox)
 }
 
-- (NSBoxType) boxType;
-- (NSBorderType) borderType;
-- (NSString *) title;
-- (NSFont *) titleFont;
+@property(nonatomic) NSBoxType boxType;
+@property(nonatomic) NSBorderType borderType;
+@property(nonatomic, copy) NSString *title;
+@property(nonatomic, retain) NSFont *titleFont;
 - contentView;
-- (NSSize) contentViewMargins;
-- (NSTitlePosition) titlePosition;
-- (BOOL) isTransparent;
+@property(nonatomic) NSSize contentViewMargins;
+@property(nonatomic) NSTitlePosition titlePosition;
+@property(nonatomic, getter=isTransparent) BOOL transparent;
 
-- (void) setBoxType: (NSBoxType) value;
-- (void) setBorderType: (NSBorderType) value;
-- (void) setTitle: (NSString *) title;
-- (void) setTitleFont: (NSFont *) font;
 - (void) setContentView: (NSView *) view;
-- (void) setContentViewMargins: (NSSize) value;
-- (void) setTitlePosition: (NSTitlePosition) value;
-- (void) setTransparent: (BOOL) value;
 - (void) setTitleWithMnemonic: (NSString *) value;
 
 - (NSRect) titleRect;
@@ -83,14 +76,10 @@ typedef NS_ENUM(NSUInteger, NSBoxType) {
 - (void) setFrameFromContentFrame: (NSRect) content;
 - (void) sizeToFit;
 
-- (CGFloat) borderWidth;
-- (CGFloat) cornerRadius;
-- (NSColor *) borderColor;
-- (NSColor *) fillColor;
+@property(nonatomic) CGFloat borderWidth;
+@property(nonatomic) CGFloat cornerRadius;
+@property(nonatomic, retain) NSColor *borderColor;
+@property(nonatomic, retain) NSColor *fillColor;
 
-- (void) setBorderWidth: (CGFloat) value;
-- (void) setCornerRadius: (CGFloat) value;
-- (void) setBorderColor: (NSColor *) value;
-- (void) setFillColor: (NSColor *) value;
 
 @end

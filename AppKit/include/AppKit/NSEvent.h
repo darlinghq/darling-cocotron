@@ -311,9 +311,9 @@ typedef NS_OPTIONS(NSUInteger, NSEventSwipeTrackingOptions) {
     NSInteger _windowNumber;
 }
 
-+ (NSPoint) mouseLocation;
+@property(class, readonly) NSPoint mouseLocation;
 @property (class, readonly) NSEventModifierFlags modifierFlags;
-+ (NSUInteger) pressedMouseButtons;
+@property(class, readonly) NSUInteger pressedMouseButtons;
 
 + (id) addLocalMonitorForEventsMatchingMask: (NSEventMask) mask
                                     handler: (NSEvent *_Nullable (^)(NSEvent *_Nonnull event)) block;
@@ -384,49 +384,49 @@ typedef NS_OPTIONS(NSUInteger, NSEventSwipeTrackingOptions) {
                            data1: (NSInteger) data1
                            data2: (NSInteger) data2;
 
-- (NSEventType) type;
+@property(nonatomic, readonly) NSEventType type;
 @property (readonly) NSTimeInterval timestamp;
 @property (readonly) NSPoint locationInWindow;
 @property (readonly) NSEventModifierFlags modifierFlags;
 @property (readonly, weak) NSWindow *window;
-- (NSInteger) windowNumber;
+@property(nonatomic, readonly) NSInteger windowNumber;
 
 @property (readonly) NSInteger clickCount;
 @property (readonly) NSInteger eventNumber;
-- (CGFloat) deltaX;
-- (CGFloat) deltaY;
-- (CGFloat) deltaZ;
+@property(nonatomic, readonly) CGFloat deltaX;
+@property(nonatomic, readonly) CGFloat deltaY;
+@property(nonatomic, readonly) CGFloat deltaZ;
 
 // Set on magnify and rotate events; NSEventPhaseNone, 0 and 0 on every other event.
-- (NSEventPhase) phase;
-- (NSEventPhase) momentumPhase;
-- (CGFloat) magnification;
-- (float) rotation;
-- (BOOL) hasPreciseScrollingDeltas;
-- (CGFloat) scrollingDeltaX;
-- (CGFloat) scrollingDeltaY;
-- (BOOL) isDirectionInvertedFromDevice;
+@property(nonatomic, readonly) NSEventPhase phase;
+@property(nonatomic, readonly) NSEventPhase momentumPhase;
+@property(nonatomic, readonly) CGFloat magnification;
+@property(nonatomic, readonly) float rotation;
+@property(nonatomic, readonly) BOOL hasPreciseScrollingDeltas;
+@property(nonatomic, readonly) CGFloat scrollingDeltaX;
+@property(nonatomic, readonly) CGFloat scrollingDeltaY;
+@property(nonatomic, getter=isDirectionInvertedFromDevice, readonly) BOOL directionInvertedFromDevice;
 + (BOOL) isSwipeTrackingFromScrollEventsEnabled;
 
 - (CGEventRef) CGEvent;
 
-- (NSString *) characters;
+@property(nonatomic, readonly) NSString *characters;
 @property(readonly, copy) NSString *charactersIgnoringModifiers;
-- (unsigned short) keyCode;
+@property(nonatomic, readonly) unsigned short keyCode;
 
 + (void) startPeriodicEventsAfterDelay: (NSTimeInterval) delay
                             withPeriod: (NSTimeInterval) period;
 + (void) stopPeriodicEvents;
 
-- (short) subtype;
-- (NSInteger) data1;
-- (NSInteger) data2;
-- (NSInteger) trackingNumber;
-- (NSTrackingArea *) trackingArea;
-- (void *) userData;
+@property(nonatomic, readonly) short subtype;
+@property(nonatomic, readonly) NSInteger data1;
+@property(nonatomic, readonly) NSInteger data2;
+@property(nonatomic, readonly) NSInteger trackingNumber;
+@property(nonatomic, readonly) NSTrackingArea *trackingArea;
+@property(nonatomic, readonly) void *userData;
 
 @property(getter=isARepeat, readonly) BOOL ARepeat;
-- (BOOL) isARepeat;
+@property(nonatomic, getter=isARepeat, readonly) BOOL aRepeat;
 @property(readonly) NSInteger buttonNumber;
 - (NSInteger) buttonNumber;
 

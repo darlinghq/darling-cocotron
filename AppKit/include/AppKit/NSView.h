@@ -228,16 +228,16 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPre
 - (nullable instancetype) initWithCoder: (NSCoder *) coder NS_DESIGNATED_INITIALIZER;
 
 @property NSRect frame;
-- (CGFloat) frameRotation;
-- (CGFloat) frameCenterRotation;
+@property(nonatomic) CGFloat frameRotation;
+@property(nonatomic) CGFloat frameCenterRotation;
 @property NSRect bounds;
-- (CGFloat) boundsRotation;
-- (BOOL) isRotatedFromBase;
-- (BOOL) isRotatedOrScaledFromBase;
+@property(nonatomic) CGFloat boundsRotation;
+@property(nonatomic, getter=isRotatedFromBase, readonly) BOOL rotatedFromBase;
+@property(nonatomic, getter=isRotatedOrScaledFromBase, readonly) BOOL rotatedOrScaledFromBase;
 - (void) translateOriginToPoint: (NSPoint) point;
 - (void) rotateByAngle: (CGFloat) angle;
-- (BOOL) postsFrameChangedNotifications;
-- (BOOL) postsBoundsChangedNotifications;
+@property(nonatomic) BOOL postsFrameChangedNotifications;
+@property(nonatomic) BOOL postsBoundsChangedNotifications;
 
 - (void) scaleUnitSquareToSize: (NSSize) size;
 
@@ -245,15 +245,15 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPre
 @property (readonly, weak) NSView *superview;
 - (BOOL) isDescendantOf: (NSView *) other;
 - (NSView *) ancestorSharedWithView: (NSView *) view;
-- (NSScrollView *) enclosingScrollView;
+@property(nonatomic, readonly) NSScrollView *enclosingScrollView;
 - (NSRect) adjustScroll: (NSRect) toRect;
 
 @property (copy, nonnull) NSArray<__kindof NSView *> *subviews;
 @property BOOL autoresizesSubviews;
-- (NSAutoresizingMaskOptions) autoresizingMask;
-- (NSFocusRingType) focusRingType;
+@property(nonatomic) NSAutoresizingMaskOptions autoresizingMask;
+@property(nonatomic) NSFocusRingType focusRingType;
 
-- (NSInteger) tag;
+@property(nonatomic, readonly) NSInteger tag;
 @property (readonly) BOOL isFlipped;
 @property (readonly) BOOL isOpaque;
 @property CGFloat alphaValue;
@@ -261,8 +261,8 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPre
 // Makes the view visible and opaque again before it is reused.
 - (void) prepareForReuse;
 - (int) gState;
-- (NSRect) visibleRect;
-- (BOOL) wantsDefaultClipping;
+@property(nonatomic, readonly) NSRect visibleRect;
+@property(nonatomic, readonly) BOOL wantsDefaultClipping;
 
 - (NSBitmapImageRep *) bitmapImageRepForCachingDisplayInRect: (NSRect) rect;
 - (void) cacheDisplayInRect: (NSRect) rect
@@ -274,18 +274,18 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPre
 - (void) viewDidHide;
 - (void) viewDidUnhide;
 
-- (BOOL) canBecomeKeyView;
-- (BOOL) needsPanelToBecomeKey;
+@property(nonatomic, readonly) BOOL canBecomeKeyView;
+@property(nonatomic, readonly) BOOL needsPanelToBecomeKey;
 
-- (NSView *) nextKeyView;
-- (NSView *) nextValidKeyView;
+@property(nonatomic, retain) NSView *nextKeyView;
+@property(nonatomic, readonly) NSView *nextValidKeyView;
 
 - (NSView *) previousKeyView;
-- (NSView *) previousValidKeyView;
+@property(nonatomic, readonly) NSView *previousValidKeyView;
 
 - (NSMenu *) menuForEvent: (NSEvent *) event;
-- (NSMenuItem *) enclosingMenuItem;
-- (NSString *) toolTip;
+@property(nonatomic, readonly) NSMenuItem *enclosingMenuItem;
+@property(nonatomic, copy) NSString *toolTip;
 
 - viewWithTag: (NSInteger) tag;
 - (NSView *) hitTest: (NSPoint) point;
@@ -302,22 +302,13 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPre
 
 - (void) setFrameSize: (NSSize) size;
 - (void) setFrameOrigin: (NSPoint) origin;
-- (void) setFrameRotation: (CGFloat) angle;
-- (void) setFrameCenterRotation: (CGFloat) angle;
 
 - (void) setBoundsSize: (NSSize) size;
 - (void) setBoundsOrigin: (NSPoint) origin;
-- (void) setBoundsRotation: (CGFloat) angle;
 
-- (CGFloat) frameRotation;
-- (CGFloat) boundsRotation;
 
-- (void) setFrameRotation: (CGFloat) degrees;
-- (void) setBoundsRotation: (CGFloat) degrees;
 - (void) rotateByAngle: (CGFloat) degrees;
 
-- (void) setPostsFrameChangedNotifications: (BOOL) flag;
-- (void) setPostsBoundsChangedNotifications: (BOOL) flag;
 
 - (void) addSubview: (NSView *) view;
 - (void) addSubview: (NSView *) view
@@ -329,20 +320,14 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPre
                            context: (void *) context;
 - (void) didAddSubview: (NSView *) subview;
 - (void) willRemoveSubview: (NSView *) subview;
-- (void) setAutoresizingMask: (NSAutoresizingMaskOptions) mask;
-- (void) setFocusRingType: (NSFocusRingType) value;
 
-- (void) setNextKeyView: (NSView *) next;
 - (BOOL) acceptsFirstMouse: (NSEvent *) event NS_SWIFT_NAME(acceptsFirstMouse(for:));
-- (BOOL) acceptsTouchEvents;
-- (void) setAcceptsTouchEvents: (BOOL) accepts;
-- (BOOL) wantsRestingTouches;
-- (void) setWantsRestingTouches: (BOOL) wants;
+@property(nonatomic) BOOL acceptsTouchEvents;
+@property(nonatomic) BOOL wantsRestingTouches;
 
 - (BOOL) performKeyEquivalent: (NSEvent *) event;
 - (BOOL) performMnemonic: (NSString *) string;
 
-- (void) setToolTip: (NSString *) string;
 - (NSToolTipTag) addToolTipRect: (NSRect) rect
                           owner: object
                        userData: (void *) userData;
@@ -354,7 +339,7 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPre
 - (void) discardCursorRects;
 - (void) resetCursorRects;
 
-- (NSArray *) trackingAreas;
+@property(nonatomic, readonly) NSArray *trackingAreas;
 - (void) addTrackingArea: (NSTrackingArea *) trackingArea;
 - (void) removeTrackingArea: (NSTrackingArea *) trackingArea;
 - (void) updateTrackingAreas;
@@ -365,11 +350,11 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPre
                          assumeInside: (BOOL) assumeInside;
 - (void) removeTrackingRect: (NSTrackingRectTag) tag;
 
-- (NSTextInputContext *) inputContext;
+@property(nonatomic, readonly) NSTextInputContext *inputContext;
 
 - (void) registerForDraggedTypes: (NSArray *) types;
 - (void) unregisterDraggedTypes;
-- (NSArray *) registeredDraggedTypes;
+@property(nonatomic, readonly) NSArray *registeredDraggedTypes;
 
 - (void) removeFromSuperview;
 - (void) removeFromSuperviewWithoutNeedingDisplay;
@@ -387,15 +372,15 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPre
 - (void) resizeSubviewsWithOldSize: (NSSize) oldSize;
 - (void) resizeWithOldSuperviewSize: (NSSize) oldSize;
 
-- (BOOL) inLiveResize;
-- (BOOL) preservesContentDuringLiveResize;
-- (NSRect) rectPreservedDuringLiveResize;
+@property(nonatomic, readonly) BOOL inLiveResize;
+@property(nonatomic, readonly) BOOL preservesContentDuringLiveResize;
+@property(nonatomic, readonly) NSRect rectPreservedDuringLiveResize;
 - (void) viewWillStartLiveResize;
 - (void) viewDidEndLiveResize;
 
 - (BOOL) enterFullScreenMode: (NSScreen *) screen
                  withOptions: (NSDictionary *) options;
-- (BOOL) isInFullScreenMode;
+@property(nonatomic, getter=isInFullScreenMode, readonly) BOOL inFullScreenMode;
 - (void) exitFullScreenModeWithOptions: (NSDictionary *) options;
 
 - (void) scrollPoint: (NSPoint) point;
@@ -430,14 +415,10 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPre
 // Stored; there are no touch devices to send touches.
 @property NSTouchTypeMask allowedTouchTypes;
 
-- (NSArray *) backgroundFilters;
-- (void) setBackgroundFilters: (NSArray *) filters;
-- (NSArray *) contentFilters;
-- (void) setContentFilters: (NSArray *) filters;
-- (CIFilter *) compositingFilter;
-- (void) setCompositingFilter: (CIFilter *) filter;
-- (NSShadow *) shadow;
-- (void) setShadow: (NSShadow *) shadow;
+@property(nonatomic, copy) NSArray *backgroundFilters;
+@property(nonatomic, copy) NSArray *contentFilters;
+@property(nonatomic, retain) CIFilter *compositingFilter;
+@property(nonatomic, retain) NSShadow *shadow;
 
 @property BOOL needsDisplay;
 - (void) setNeedsDisplayInRect: (NSRect) rect;
@@ -446,10 +427,9 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPre
 - (void) drawFocusRingMask;
 - (void) translateRectsNeedingDisplayInRect: (NSRect) rect by: (NSSize) delta;
 
-- (BOOL) canDraw;
-- (BOOL) canDrawConcurrently;
+@property(nonatomic, readonly) BOOL canDraw;
+@property(nonatomic) BOOL canDrawConcurrently;
 - (void) viewWillDraw;
-- (void) setCanDrawConcurrently: (BOOL) canDraw;
 - (void) lockFocus;
 - (BOOL) lockFocusIfCanDraw;
 - (BOOL) lockFocusIfCanDrawInContext: (NSGraphicsContext *) context;
@@ -462,7 +442,7 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPre
 
 - (BOOL) shouldDrawColor;
 
-- (NSView *) opaqueAncestor;
+@property(nonatomic, readonly) NSView *opaqueAncestor;
 - (void) display;
 - (CADisplayLink *)displayLinkWithTarget:(id)target selector:(SEL)selector;
 - (void) displayIfNeeded;
@@ -477,7 +457,7 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPre
 
 - (BOOL) autoscroll: (NSEvent *) event;
 - (void) scrollRect: (NSRect) rect by: (NSSize) delta;
-- (BOOL) mouseDownCanMoveWindow;
+@property(nonatomic, readonly) BOOL mouseDownCanMoveWindow;
 
 - (void) print: sender;
 

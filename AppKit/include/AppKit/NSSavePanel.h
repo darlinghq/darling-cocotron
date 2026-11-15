@@ -76,43 +76,32 @@ enum {
                                     file: (NSString *) file;
 - (NSModalResponse) runModal;
 
-- (NSString *) directory;
-- (BOOL) treatsFilePackagesAsDirectories;
-- (NSView *) accessoryView;
+@property(nonatomic, copy) NSString *directory;
+@property(nonatomic) BOOL treatsFilePackagesAsDirectories;
+@property(nonatomic, retain) NSView *accessoryView;
 
 - (void) setTitle: (NSString *) title;
 
-- (void) setDirectory: (NSString *) directory;
 
 - (void) setRequiredFileType: (NSString *) type;
-- (void) setTreatsFilePackagesAsDirectories: (BOOL) flag;
 
-- (void) setDirectoryURL: (NSURL *) url;
-- (NSURL *) directoryURL;
+@property(nonatomic, copy) NSURL *directoryURL;
 
-- (NSArray *) allowedFileTypes;
+@property(nonatomic, copy) NSArray *allowedFileTypes;
 
-- (void) setAccessoryView: (NSView *) view;
 - (void) setCanCreateDirectories: (BOOL) value;
-- (void) setAllowedFileTypes: (NSArray *) value;
 // UTType objects (macOS 11). Setting them also sets allowedFileTypes to their
 // preferred filename extensions, or nil (any file) when none has one.
-- (NSArray *) allowedContentTypes;
-- (void) setAllowedContentTypes: (NSArray *) types;
+@property(nonatomic, copy) NSArray *allowedContentTypes;
 - (void) setAllowsOtherFileTypes: (BOOL) value;
 
-- (void) setMessage: (NSString *) message;
-- (NSString *) message;
+@property(nonatomic, copy) NSString *message;
 
-- (void) setPrompt: (NSString *) message;
-- (NSString *) prompt;
+@property(nonatomic, copy) NSString *prompt;
 
-- (void) setNameFieldLabel: (NSString *) label;
-- (NSString *) nameFieldLabel;
-- (void) setShowsTagField: (BOOL) flag;
-- (BOOL) showsTagField;
-- (void) setTagNames: (NSArray *) names;
-- (NSArray *) tagNames;
+@property(nonatomic, copy) NSString *nameFieldLabel;
+@property(nonatomic) BOOL showsTagField;
+@property(nonatomic, copy) NSArray *tagNames;
 - (void) setExtensionHidden: (BOOL) flag;
 - (BOOL) isExtensionHidden;
 - (void) setCanSelectHiddenExtension: (BOOL) flag;

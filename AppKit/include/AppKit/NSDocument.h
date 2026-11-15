@@ -82,21 +82,14 @@ typedef NS_ENUM(NSUInteger, NSSaveOperationType) {
                    ofType: (NSString *) type
                     error: (NSError **) error;
 
-- (NSURL *) autosavedContentsFileURL;
-- (NSDate *) fileModificationDate;
-- (NSURL *) fileURL;
-- (NSPrintInfo *) printInfo;
-- (NSString *) fileType;
-- (BOOL) hasUndoManager;
-- (NSUndoManager *) undoManager;
+@property(nonatomic, copy) NSURL *autosavedContentsFileURL;
+@property(nonatomic, retain) NSDate *fileModificationDate;
+@property(nonatomic, copy) NSURL *fileURL;
+@property(nonatomic, retain) NSPrintInfo *printInfo;
+@property(nonatomic, copy) NSString *fileType;
+@property(nonatomic) BOOL hasUndoManager;
+@property(nonatomic, retain) NSUndoManager *undoManager;
 
-- (void) setAutosavedContentsFileURL: (NSURL *) url;
-- (void) setFileModificationDate: (NSDate *) value;
-- (void) setFileURL: (NSURL *) url;
-- (void) setPrintInfo: (NSPrintInfo *) value;
-- (void) setFileType: (NSString *) value;
-- (void) setHasUndoManager: (BOOL) value;
-- (void) setUndoManager: (NSUndoManager *) value;
 
 - (BOOL) hasUnautosavedChanges;
 - (NSString *) autosavingFileType;
@@ -118,8 +111,7 @@ typedef NS_ENUM(NSUInteger, NSSaveOperationType) {
 - (NSWindow *) windowForSheet;
 
 - (BOOL) isDocumentEdited;
-- (BOOL) isDraft;
-- (void) setDraft: (BOOL) value;
+@property(nonatomic, getter=isDraft) BOOL draft;
 - (void) updateChangeCount: (NSDocumentChangeType) changeType;
 
 - (BOOL) readFromData: (NSData *) data
@@ -241,7 +233,7 @@ typedef NS_ENUM(NSUInteger, NSSaveOperationType) {
 - (NSDictionary *) fileAttributesToWriteToFile: (NSString *) path
                                         ofType: (NSString *) type
                                  saveOperation: (NSSaveOperationType) operation;
-- (NSString *) fileName;
+@property(nonatomic, copy) NSString *fileName;
 - (NSString *) fileNameFromRunningSavePanelForSaveOperation:
         (NSSaveOperationType) operation;
 - (NSFileWrapper *) fileWrapperRepresentationOfType: (NSString *) type;
@@ -258,7 +250,6 @@ typedef NS_ENUM(NSUInteger, NSSaveOperationType) {
 - (int) runModalSavePanel: (NSSavePanel *) savePanel
         withAccessoryView: (NSView *) accessoryView;
 - (int) runModalPageLayoutWithPrintInfo: (NSPrintInfo *) printInfo;
-- (void) setFileName: (NSString *) path;
 - (void) saveToFile: (NSString *) path
           saveOperation: (NSSaveOperationType) operation
                delegate: delegate

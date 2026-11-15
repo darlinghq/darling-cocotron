@@ -35,43 +35,27 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 + (instancetype) checkboxWithTitle: (NSString *) title target: (id) target action: (SEL) action;
 + (instancetype) radioButtonWithTitle: (NSString *) title target: (id) target action: (SEL) action;
 
-- (BOOL) isTransparent;
-- (NSString *) keyEquivalent;
-- (NSEventModifierFlags) keyEquivalentModifierMask;
-- (NSImage *) image;
-- (NSCellImagePosition) imagePosition;
-- (NSString *) title;
-- (NSControlStateValue) state;
-- (BOOL) allowsMixedState;
-- (NSSound *) sound;
+@property(nonatomic, getter=isTransparent) BOOL transparent;
+@property(nonatomic, copy) NSString *keyEquivalent;
+@property(nonatomic) NSEventModifierFlags keyEquivalentModifierMask;
+@property(nonatomic, retain) NSImage *image;
+@property(nonatomic) NSCellImagePosition imagePosition;
+@property(nonatomic, copy) NSString *title;
+@property(nonatomic) NSControlStateValue state;
+@property(nonatomic) BOOL allowsMixedState;
+@property(nonatomic, retain) NSSound *sound;
 
-- (NSBezelStyle) bezelStyle;
-- (NSString *) alternateTitle;
-- (NSImage *) alternateImage;
-- (NSAttributedString *) attributedTitle;
-- (NSAttributedString *) attributedAlternateTitle;
-- (BOOL) showsBorderOnlyWhileMouseInside;
+@property(nonatomic) NSBezelStyle bezelStyle;
+@property(nonatomic, copy) NSString *alternateTitle;
+@property(nonatomic, retain) NSImage *alternateImage;
+@property(nonatomic, copy) NSAttributedString *attributedTitle;
+@property(nonatomic, copy) NSAttributedString *attributedAlternateTitle;
+@property(nonatomic) BOOL showsBorderOnlyWhileMouseInside;
 - (void) getPeriodicDelay: (float *) delay interval: (float *) interval;
 
-- (void) setTransparent: (BOOL) value;
-- (void) setKeyEquivalent: (NSString *) value;
-- (void) setKeyEquivalentModifierMask: (NSEventModifierFlags) value;
-- (void) setImage: (NSImage *) value;
-- (void) setImagePosition: (NSCellImagePosition) value;
-- (NSImageScaling) imageScaling;
-- (void) setImageScaling: (NSImageScaling) value;
-- (void) setTitle: (NSString *) value;
-- (void) setState: (NSControlStateValue) value;
+@property(nonatomic) NSImageScaling imageScaling;
 - (void) setNextState;
-- (void) setAllowsMixedState: (BOOL) value;
-- (void) setSound: (NSSound *) value;
 
-- (void) setBezelStyle: (NSBezelStyle) value;
-- (void) setAlternateTitle: (NSString *) value;
-- (void) setAlternateImage: (NSImage *) value;
-- (void) setAttributedTitle: (NSAttributedString *) value;
-- (void) setAttributedAlternateTitle: (NSAttributedString *) value;
-- (void) setShowsBorderOnlyWhileMouseInside: (BOOL) value;
 - (void) setPeriodicDelay: (float) delay interval: (float) interval;
 
 - (void) setButtonType: (NSButtonType) value;
@@ -98,6 +82,5 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @interface NSButton (NSDestructiveAction)
 // macOS 11: marks a button whose action is destructive (stored; not drawn differently).
-- (BOOL) hasDestructiveAction;
-- (void) setHasDestructiveAction: (BOOL) value;
+@property(nonatomic) BOOL hasDestructiveAction;
 @end

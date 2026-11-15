@@ -41,11 +41,9 @@ typedef NS_ENUM(NSInteger, NSSplitViewDividerStyle) {
     NS_EXTRA_IVARS_END(NSSplitView)
 }
 
-- (id) delegate;
-- (BOOL) isVertical;
+@property(nonatomic, assign) id delegate;
+@property(nonatomic, getter=isVertical) BOOL vertical;
 
-- (void) setDelegate: (id) delegate;
-- (void) setVertical: (BOOL) flag;
 
 - (void) adjustSubviews;
 
@@ -54,11 +52,9 @@ typedef NS_ENUM(NSInteger, NSSplitViewDividerStyle) {
 
 - (BOOL) isSubviewCollapsed: (NSView *) subview;
 
-- (void) setDividerStyle: (NSSplitViewDividerStyle) style;
-- (NSSplitViewDividerStyle) dividerStyle;
+@property(nonatomic) NSSplitViewDividerStyle dividerStyle;
 
-- (NSString *) autosaveName;
-- (void) setAutosaveName: (NSString *) name;
+@property(nonatomic, copy) NSString *autosaveName;
 
 /* Get the minimum or maximum possible position of a divider */
 - (CGFloat) minPossiblePositionOfDividerAtIndex: (int) index;

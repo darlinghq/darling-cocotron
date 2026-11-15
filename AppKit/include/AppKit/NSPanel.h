@@ -36,13 +36,10 @@ enum {
     NS_SIDE_IVARS_END(NSPanel)
 }
 
-- (BOOL) worksWhenModal;
-- (BOOL) becomesKeyOnlyIfNeeded;
-- (BOOL) isFloatingPanel;
+@property(nonatomic) BOOL worksWhenModal;
+@property(nonatomic) BOOL becomesKeyOnlyIfNeeded;
+@property(nonatomic, getter=isFloatingPanel) BOOL floatingPanel;
 
-- (void) setWorksWhenModal: (BOOL) flag;
-- (void) setFloatingPanel: (BOOL) flag;
-- (void) setBecomesKeyOnlyIfNeeded: (BOOL) flag;
 
 @end
 

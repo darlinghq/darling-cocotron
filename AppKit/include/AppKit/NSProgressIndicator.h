@@ -56,24 +56,19 @@ typedef NS_ENUM(NSUInteger, NSProgressIndicatorThickness) {
 
 @property NSProgressIndicatorStyle style;
 @property NSControlSize controlSize;
-- (NSControlTint) controlTint;
-- (BOOL) isDisplayedWhenStopped;
-- (BOOL) usesThreadedAnimation;
+@property(nonatomic) NSControlTint controlTint;
+@property(nonatomic, getter=isDisplayedWhenStopped) BOOL displayedWhenStopped;
+@property(nonatomic) BOOL usesThreadedAnimation;
 
 @property double minValue;
 @property double maxValue;
 @property double doubleValue;
 
-- (NSTimeInterval) animationDelay;
+@property(nonatomic) NSTimeInterval animationDelay;
 @property (getter=isIndeterminate) BOOL indeterminate;
-- (BOOL) isBezeled;
+@property(nonatomic, getter=isBezeled) BOOL bezeled;
 
-- (void) setControlTint: (NSControlTint) value;
-- (void) setDisplayedWhenStopped: (BOOL) value;
-- (void) setUsesThreadedAnimation: (BOOL) value;
 
-- (void) setAnimationDelay: (double) value;
-- (void) setBezeled: (BOOL) value;
 
 - (void) incrementBy: (double) value;
 

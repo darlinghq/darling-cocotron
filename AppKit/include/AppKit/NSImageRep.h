@@ -78,21 +78,15 @@ typedef NS_ENUM(NSInteger, NSImageLayoutDirection) {
 
 - (instancetype) initWithCoder:(NSCoder *) coder;
 
-- (NSSize) size;
-- (int) pixelsWide;
-- (int) pixelsHigh;
-- (BOOL) isOpaque;
+@property(nonatomic) NSSize size;
+@property(nonatomic) int pixelsWide;
+@property(nonatomic) int pixelsHigh;
+@property(nonatomic, getter=isOpaque) BOOL opaque;
 - (BOOL) hasAlpha;
-- (NSString *) colorSpaceName;
-- (NSInteger) bitsPerSample;
+@property(nonatomic, copy) NSString *colorSpaceName;
+@property(nonatomic) NSInteger bitsPerSample;
 
-- (void) setSize: (NSSize) value;
-- (void) setPixelsWide: (int) value;
-- (void) setPixelsHigh: (int) value;
-- (void) setOpaque: (BOOL) value;
 - (void) setAlpha: (BOOL) value;
-- (void) setColorSpaceName: (NSString *) value;
-- (void) setBitsPerSample: (int) value;
 
 - (BOOL) draw;
 - (BOOL) drawAtPoint: (NSPoint) point;

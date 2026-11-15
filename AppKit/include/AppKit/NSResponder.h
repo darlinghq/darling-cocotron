@@ -38,10 +38,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 @property(retain) NSTouchBar *touchBar;
 - (NSTouchBar *) makeTouchBar;
 
-- (NSMenu *) menu;
+@property(nonatomic, retain) NSMenu *menu;
 - (NSUndoManager *) undoManager;
 
-- (void) setMenu: (NSMenu *) menu;
 
 - validRequestorForSendType: (NSString *) sendType
                  returnType: (NSString *) returnType;

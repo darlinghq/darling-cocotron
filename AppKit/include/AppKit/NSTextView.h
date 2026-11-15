@@ -179,48 +179,36 @@ typedef NS_ENUM(NSUInteger, NSFindPanelSubstringMatchType) {
 
 - initWithFrame: (NSRect) frame;
 
-- (BOOL) acceptsGlyphInfo;
-- (void) setAcceptsGlyphInfo: (BOOL) flag;
+@property(nonatomic) BOOL acceptsGlyphInfo;
 
 - (void) setNeedsDisplayInRect: (NSRect) rect avoidAdditionalLayout: (BOOL) avoidLayout;
 
 - (void) _setTextStorage: (NSTextStorage *) storage;
 - (void) replaceTextStorage: (NSTextStorage *) textStorage;
 
-- (NSTextContainer *) textContainer;
+@property(nonatomic, retain) NSTextContainer *textContainer;
 
-- (NSSize) textContainerInset;
-- (NSPoint) textContainerOrigin;
+@property(nonatomic) NSSize textContainerInset;
+@property(nonatomic, readonly) NSPoint textContainerOrigin;
 
-- (NSLayoutManager *) layoutManager;
-- (NSTextStorage *) textStorage;
+@property(nonatomic, readonly) NSLayoutManager *layoutManager;
+@property(nonatomic, readonly) NSTextStorage *textStorage;
 
 - (void) insertText: (id) string;
 - (void) insertText: (id) string replacementRange: (NSRange) replacementRange;
 
-- (BOOL) usesRuler;
-- (BOOL) isRulerVisible;
-- (BOOL) allowsUndo;
-- (NSColor *) insertionPointColor;
-- (NSDictionary *) typingAttributes;
-- (NSDictionary *) selectedTextAttributes;
-- (NSDictionary *) linkTextAttributes;
-- (NSDictionary *) markedTextAttributes;
-- (NSArray *) selectedRanges;
-- (NSParagraphStyle *) defaultParagraphStyle;
+@property(nonatomic) BOOL usesRuler;
+@property(nonatomic, getter=isRulerVisible) BOOL rulerVisible;
+@property(nonatomic) BOOL allowsUndo;
+@property(nonatomic, retain) NSColor *insertionPointColor;
+@property(nonatomic, copy) NSDictionary *typingAttributes;
+@property(nonatomic, copy) NSDictionary *selectedTextAttributes;
+@property(nonatomic, copy) NSDictionary *linkTextAttributes;
+@property(nonatomic, copy) NSDictionary *markedTextAttributes;
+@property(nonatomic, copy) NSArray *selectedRanges;
+@property(nonatomic, retain) NSParagraphStyle *defaultParagraphStyle;
 
-- (void) setTextContainer: (NSTextContainer *) container;
-- (void) setTextContainerInset: (NSSize) size;
 
-- (void) setUsesRuler: (BOOL) flag;
-- (void) setRulerVisible: (BOOL) flag;
-- (void) setAllowsUndo: (BOOL) flag;
-- (void) setInsertionPointColor: (NSColor *) color;
-- (void) setTypingAttributes: (NSDictionary *) attributes;
-- (void) setSelectedTextAttributes: (NSDictionary *) attributes;
-- (void) setLinkTextAttributes: (NSDictionary *) attributes;
-- (void) setMarkedTextAttributes: (NSDictionary *) attributes;
-- (void) setDefaultParagraphStyle: (NSParagraphStyle *) paragraphStyle;
 
 - (NSRange) selectionRangeForProposedRange: (NSRange) range
                                granularity:
@@ -233,9 +221,8 @@ typedef NS_ENUM(NSUInteger, NSFindPanelSubstringMatchType) {
                   affinity: (NSSelectionAffinity) affinity
             stillSelecting: (BOOL) stillSelecting;
 
-- (void) setSelectedRanges: (NSArray *) value;
 
-- (NSRange) rangeForUserCompletion;
+@property(nonatomic, readonly) NSRange rangeForUserCompletion;
 - (NSArray *) completionsForPartialWordRange: (NSRange) range
                          indexOfSelectedItem: (NSInteger *) index;
 - (void) insertCompletion: (NSString *) string
@@ -243,15 +230,15 @@ typedef NS_ENUM(NSUInteger, NSFindPanelSubstringMatchType) {
                    movement: (NSInteger) movement
                     isFinal: (BOOL) isFinal;
 
-- (NSArray *) writablePasteboardTypes;
+@property(nonatomic, readonly) NSArray *writablePasteboardTypes;
 - (BOOL) writeSelectionToPasteboard: (NSPasteboard *) pasteboard
                                type: (NSString *) type;
 - (BOOL) writeSelectionToPasteboard: (NSPasteboard *) pasteboard
                               types: (NSArray *) types;
 
-- (NSRange) rangeForUserTextChange;
-- (NSRange) rangeForUserCharacterAttributeChange;
-- (NSRange) rangeForUserParagraphAttributeChange;
+@property(nonatomic, readonly) NSRange rangeForUserTextChange;
+@property(nonatomic, readonly) NSRange rangeForUserCharacterAttributeChange;
+@property(nonatomic, readonly) NSRange rangeForUserParagraphAttributeChange;
 
 - (BOOL) shouldChangeTextInRange: (NSRange) changeInRange
                replacementString: (NSString *) replacementString;
@@ -292,49 +279,35 @@ typedef NS_ENUM(NSUInteger, NSFindPanelSubstringMatchType) {
 - (void) _setFieldEditorUndoManager: (NSUndoManager *) undoManager;
 - (void) breakUndoCoalescing;
 
-- (NSInteger) spellCheckerDocumentTag;
+@property(nonatomic, readonly) NSInteger spellCheckerDocumentTag;
 
-- (BOOL) isContinuousSpellCheckingEnabled;
-- (void) setContinuousSpellCheckingEnabled: (BOOL) value;
+@property(nonatomic, getter=isContinuousSpellCheckingEnabled) BOOL continuousSpellCheckingEnabled;
 - (void) toggleContinuousSpellChecking: sender;
 
-- (BOOL) isAutomaticSpellingCorrectionEnabled;
-- (void) setAutomaticSpellingCorrectionEnabled: (BOOL) value;
+@property(nonatomic, getter=isAutomaticSpellingCorrectionEnabled) BOOL automaticSpellingCorrectionEnabled;
 - (void) toggleAutomaticSpellingCorrection: sender;
 
-- (NSTextCheckingTypes) enabledTextCheckingTypes;
-- (void) setEnabledTextCheckingTypes: (NSTextCheckingTypes) checkingTypes;
+@property(nonatomic) NSTextCheckingTypes enabledTextCheckingTypes;
 
-- (BOOL) smartInsertDeleteEnabled;
-- (void) setSmartInsertDeleteEnabled: (BOOL) boolForKey;
+@property(nonatomic) BOOL smartInsertDeleteEnabled;
 
-- (BOOL) allowsDocumentBackgroundColorChange;
-- (void) setAllowsDocumentBackgroundColorChange: (BOOL) value;
+@property(nonatomic) BOOL allowsDocumentBackgroundColorChange;
 
 - (void) setSpellingState: (NSInteger) value range: (NSRange) characterRange;
 
-- (BOOL) isIncrementalSearchingEnabled;
-- (BOOL) usesFindBar;
-- (BOOL) usesInspectorBar;
-- (void) setIncrementalSearchingEnabled: (BOOL) value;
-- (void) setUsesFindBar: (BOOL) value;
-- (void) setUsesInspectorBar: (BOOL) value;
+@property(nonatomic, getter=isIncrementalSearchingEnabled) BOOL incrementalSearchingEnabled;
+@property(nonatomic) BOOL usesFindBar;
+@property(nonatomic) BOOL usesInspectorBar;
 - (void) performFindPanelAction: (id) sender;
 
 - (void) setLayoutOrientation:(NSTextLayoutOrientation)orientation;
 
-- (BOOL) isGrammarCheckingEnabled;
-- (BOOL) isAutomaticQuoteSubstitutionEnabled;
-- (BOOL) isAutomaticDashSubstitutionEnabled;
-- (BOOL) isAutomaticLinkDetectionEnabled;
-- (BOOL) isAutomaticDataDetectionEnabled;
-- (BOOL) isAutomaticTextReplacementEnabled;
-- (void) setGrammarCheckingEnabled: (BOOL) value;
-- (void) setAutomaticQuoteSubstitutionEnabled: (BOOL) value;
-- (void) setAutomaticDashSubstitutionEnabled: (BOOL) value;
-- (void) setAutomaticLinkDetectionEnabled: (BOOL) value;
-- (void) setAutomaticDataDetectionEnabled: (BOOL) value;
-- (void) setAutomaticTextReplacementEnabled: (BOOL) value;
+@property(nonatomic, getter=isGrammarCheckingEnabled) BOOL grammarCheckingEnabled;
+@property(nonatomic, getter=isAutomaticQuoteSubstitutionEnabled) BOOL automaticQuoteSubstitutionEnabled;
+@property(nonatomic, getter=isAutomaticDashSubstitutionEnabled) BOOL automaticDashSubstitutionEnabled;
+@property(nonatomic, getter=isAutomaticLinkDetectionEnabled) BOOL automaticLinkDetectionEnabled;
+@property(nonatomic, getter=isAutomaticDataDetectionEnabled) BOOL automaticDataDetectionEnabled;
+@property(nonatomic, getter=isAutomaticTextReplacementEnabled) BOOL automaticTextReplacementEnabled;
 
 // An NSTextView wrapped in a configured, vertically-scrolling NSScrollView (10.14)
 + (NSScrollView *) scrollableTextView;

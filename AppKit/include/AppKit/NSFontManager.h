@@ -65,18 +65,17 @@ typedef NS_OPTIONS(NSUInteger, NSFontCollectionOptions) {
     int _currentTrait;
 }
 
-+ (NSFontManager *) sharedFontManager;
+@property(class, readonly, retain, nonnull) NSFontManager *sharedFontManager;
 
 + (void) setFontManagerFactory: (Class) value;
 + (void) setFontPanelFactory: (Class) value;
 
 - delegate;
 - target;
-- (SEL) action;
+@property(nonatomic) SEL action;
 
 - (void) setDelegate: delegate;
 - (void) setTarget: target;
-- (void) setAction: (SEL) value;
 
 - (NSFontAction) currentFontAction;
 

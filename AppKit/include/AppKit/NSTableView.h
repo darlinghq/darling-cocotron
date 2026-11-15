@@ -191,44 +191,43 @@ typedef NS_ENUM(NSInteger, NSTableRowActionEdge) {
 - (void) registerNib: (NSNib *) nib forIdentifier: (NSString *) identifier;
 - (NSView *) viewAtColumn: (NSInteger) column row: (NSInteger) row makeIfNecessary: (BOOL) makeIfNecessary;
 
-- (SEL) doubleAction;
+@property(nonatomic) SEL doubleAction;
 
-- (id) dataSource;
-- (id) delegate;
+@property(nonatomic, assign) id dataSource;
+@property(nonatomic, assign) id delegate;
 
-- (NSView *) headerView;
-- (NSView *) cornerView;
+@property(nonatomic, retain) NSView *headerView;
+@property(nonatomic, retain) NSView *cornerView;
 
-- (CGFloat) rowHeight;
-- (NSSize) intercellSpacing;
-- (NSColor *) backgroundColor;
-- (NSColor *) gridColor;
-- (NSString *) autosaveName;
+@property(nonatomic) CGFloat rowHeight;
+@property(nonatomic) NSSize intercellSpacing;
+@property(nonatomic, retain) NSColor *backgroundColor;
+@property(nonatomic, retain) NSColor *gridColor;
+@property(nonatomic, copy) NSString *autosaveName;
 
-- (BOOL) drawsGrid;
-- (BOOL) allowsColumnReordering;
-- (BOOL) allowsColumnResizing;
-- (BOOL) autoresizesAllColumnsToFit;
-- (BOOL) allowsMultipleSelection;
-- (BOOL) allowsEmptySelection;
-- (BOOL) allowsColumnSelection;
-- (BOOL) allowsTypeSelect;
-- (BOOL) autosaveTableColumns;
+@property(nonatomic) BOOL drawsGrid;
+@property(nonatomic) BOOL allowsColumnReordering;
+@property(nonatomic) BOOL allowsColumnResizing;
+@property(nonatomic) BOOL autoresizesAllColumnsToFit;
+@property(nonatomic) BOOL allowsMultipleSelection;
+@property(nonatomic) BOOL allowsEmptySelection;
+@property(nonatomic) BOOL allowsColumnSelection;
+@property(nonatomic) BOOL allowsTypeSelect;
+@property(nonatomic) BOOL autosaveTableColumns;
 
-- (BOOL) usesAlternatingRowBackgroundColors;
-- (NSTableViewGridLineStyle) gridStyleMask;
-- (NSTableViewSelectionHighlightStyle) selectionHighlightStyle;
-- (BOOL) usesAutomaticRowHeights;
-- (void) setUsesAutomaticRowHeights: (BOOL) value;
+@property(nonatomic) BOOL usesAlternatingRowBackgroundColors;
+@property(nonatomic) NSTableViewGridLineStyle gridStyleMask;
+@property(nonatomic) NSTableViewSelectionHighlightStyle selectionHighlightStyle;
+@property(nonatomic) BOOL usesAutomaticRowHeights;
 // Floating applies to view-based tables only; Cocotron's tables are cell-based.
-- (BOOL) floatsGroupRows;
-- (NSTableViewRowSizeStyle) rowSizeStyle;
-- (NSTableViewRowSizeStyle) effectiveRowSizeStyle;
-- (NSTableViewStyle) style;
+@property(nonatomic) BOOL floatsGroupRows;
+@property(nonatomic) NSTableViewRowSizeStyle rowSizeStyle;
+@property(nonatomic, readonly) NSTableViewRowSizeStyle effectiveRowSizeStyle;
+@property(nonatomic) NSTableViewStyle style;
 
-- (NSInteger) numberOfRows;
-- (NSUInteger) numberOfColumns;
-- (NSArray *) tableColumns;
+@property(nonatomic, readonly) NSInteger numberOfRows;
+@property(nonatomic, readonly) NSUInteger numberOfColumns;
+@property(nonatomic, readonly) NSArray *tableColumns;
 - (NSInteger) columnWithIdentifier: (id) identifier;
 - (NSTableColumn *) tableColumnWithIdentifier: identifier;
 
@@ -240,62 +239,37 @@ typedef NS_ENUM(NSInteger, NSTableRowActionEdge) {
 - (NSInteger) columnAtPoint: (NSPoint) point;
 - (NSRect) frameOfCellAtColumn: (NSInteger) column row: (NSInteger) row;
 
-- (void) setDoubleAction: (SEL) action;
 
-- (void) setDataSource: dataSource;
-- (void) setDelegate: delegate;
 
-- (void) setHeaderView: (NSTableHeaderView *) headerView;
-- (void) setCornerView: (NSView *) view;
 
-- (void) setRowHeight: (CGFloat) height;
-- (void) setIntercellSpacing: (NSSize) size;
-- (void) setBackgroundColor: (NSColor *) color;
-- (void) setGridColor: (NSColor *) color;
-- (void) setAutosaveName: (NSString *) name;
 
-- (void) setDrawsGrid: (BOOL) flag;
-- (void) setAllowsColumnReordering: (BOOL) flag;
-- (void) setAllowsColumnResizing: (BOOL) flag;
-- (void) setAutoresizesAllColumnsToFit: (BOOL) flag;
-- (void) setAllowsMultipleSelection: (BOOL) flag;
-- (void) setAllowsEmptySelection: (BOOL) flag;
-- (void) setAllowsColumnSelection: (BOOL) flag;
-- (void) setAllowsTypeSelect: (BOOL) flag;
 - (void) setDraggingSourceOperationMask: (NSDragOperation) mask
                                forLocal: (BOOL) isLocal;
 - (NSDragOperation) draggingSourceOperationMaskForLocal: (BOOL) isLocal;
-- (void) setAutosaveTableColumns: (BOOL) flag;
 
-- (void) setUsesAlternatingRowBackgroundColors: (BOOL) flag;
-- (void) setGridStyleMask: (NSTableViewGridLineStyle) gridStyle;
-- (void) setSelectionHighlightStyle: (NSTableViewSelectionHighlightStyle) value;
-- (void) setFloatsGroupRows: (BOOL) flag;
-- (void) setRowSizeStyle: (NSTableViewRowSizeStyle) style;
-- (void) setStyle: (NSTableViewStyle) style;
 
 - (void) addTableColumn: (NSTableColumn *) column;
 - (void) removeTableColumn: (NSTableColumn *) column;
 - (void) moveColumn: (NSInteger) columnIndex toColumn: (NSInteger) newIndex;
 
-- (NSInteger) editedRow;
-- (NSInteger) editedColumn;
+@property(nonatomic, readonly) NSInteger editedRow;
+@property(nonatomic, readonly) NSInteger editedColumn;
 - (void) editColumn: (NSInteger) column
                 row: (NSInteger) row
           withEvent: (NSEvent *) event
              select: (BOOL) select;
 
-- (NSInteger) clickedRow;
-- (NSInteger) clickedColumn;
-- (NSInteger) selectedRow;
-- (NSInteger) selectedColumn;
-- (NSInteger) numberOfSelectedRows;
-- (NSInteger) numberOfSelectedColumns;
+@property(nonatomic, readonly) NSInteger clickedRow;
+@property(nonatomic, readonly) NSInteger clickedColumn;
+@property(nonatomic, readonly) NSInteger selectedRow;
+@property(nonatomic, readonly) NSInteger selectedColumn;
+@property(nonatomic, readonly) NSInteger numberOfSelectedRows;
+@property(nonatomic, readonly) NSInteger numberOfSelectedColumns;
 - (BOOL) isColumnSelected: (NSInteger) row;
 - (BOOL) isRowSelected: (NSInteger) row;
 - (NSEnumerator *) selectedRowEnumerator;
 - (NSEnumerator *) selectedColumnEnumerator;
-- (NSIndexSet *) selectedColumnIndexes;
+@property(nonatomic, readonly) NSIndexSet *selectedColumnIndexes;
 
 - (void) selectRow: (NSInteger) row byExtendingSelection: (BOOL) extend;
 - (void) selectColumn: (NSInteger) column byExtendingSelection: (BOOL) extend;
@@ -334,12 +308,11 @@ typedef NS_ENUM(NSInteger, NSTableRowActionEdge) {
 - (NSCell *) preparedCellAtColumn: (NSInteger) columnNumber
                               row: (NSInteger) row;
 
-- (NSIndexSet *) selectedRowIndexes;
+@property(nonatomic, readonly) NSIndexSet *selectedRowIndexes;
 - (void) selectRowIndexes: (NSIndexSet *) indexes
         byExtendingSelection: (BOOL) extend;
 
-- (NSArray *) sortDescriptors;
-- (void) setSortDescriptors: (NSArray *) value;
+@property(nonatomic, copy) NSArray *sortDescriptors;
 @end
 
 @protocol NSTableViewDataSource <NSObject>

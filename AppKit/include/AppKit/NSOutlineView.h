@@ -70,7 +70,7 @@ APPKIT_EXPORT NSString *const NSOutlineViewDisclosureButtonKey;
     NS_EXTRA_IVARS_END(NSOutlineView)
 }
 
-- (NSTableColumn *) outlineTableColumn;
+@property(nonatomic, retain) NSTableColumn *outlineTableColumn;
 
 - itemAtRow: (NSInteger) row;
 - (NSInteger) rowForItem: item;
@@ -80,18 +80,13 @@ APPKIT_EXPORT NSString *const NSOutlineViewDisclosureButtonKey;
 - (NSInteger) levelForItem: item;
 - (NSInteger) levelForRow: (NSInteger) row;
 - (BOOL) isItemExpanded: item;
-- (CGFloat) indentationPerLevel;
+@property(nonatomic) CGFloat indentationPerLevel;
 
-- (BOOL) autoresizesOutlineColumn;
-- (BOOL) indentationMarkerFollowsCell;
-- (BOOL) autosaveExpandedItems;
+@property(nonatomic) BOOL autoresizesOutlineColumn;
+@property(nonatomic) BOOL indentationMarkerFollowsCell;
+@property(nonatomic) BOOL autosaveExpandedItems;
 
-- (void) setOutlineTableColumn: (NSTableColumn *) tableColumn;
 
-- (void) setIndentationPerLevel: (CGFloat) value;
-- (void) setAutoresizesOutlineColumn: (BOOL) flag;
-- (void) setIndentationMarkerFollowsCell: (BOOL) flag;
-- (void) setAutosaveExpandedItems: (BOOL) flag;
 
 - (void) expandItem: item expandChildren: (BOOL) expandChildren;
 - (void) expandItem: item;

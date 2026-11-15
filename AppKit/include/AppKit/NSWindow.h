@@ -407,11 +407,10 @@ typedef NS_ENUM(NSInteger, NSWindowUserTabbingPreference) {
 
 - (NSWindow *) initWithWindowRef: (void *) carbonRef NS_RETURNS_NOT_RETAINED;
 
-- (NSGraphicsContext *) graphicsContext;
-- (NSDictionary *) deviceDescription;
+@property(nonatomic, readonly) NSGraphicsContext *graphicsContext;
+@property(nonatomic, readonly) NSDictionary *deviceDescription;
 - (void *) windowRef;
-- (BOOL) allowsConcurrentViewDrawing;
-- (void) setAllowsConcurrentViewDrawing: (BOOL) allows;
+@property(nonatomic) BOOL allowsConcurrentViewDrawing;
 
 @property (retain) NSView *contentView;
 @property (weak) id<NSWindowDelegate> delegate;
@@ -421,66 +420,64 @@ typedef NS_ENUM(NSInteger, NSWindowUserTabbingPreference) {
 // controller's preferredContentSize, or else its view, and titled after it.
 + (instancetype) windowWithContentViewController: (NSViewController *) contentViewController;
 
-- (NSString *) title;
-- (NSString *) representedFilename;
-- (NSURL *) representedURL;
+@property(nonatomic, copy) NSString *title;
+@property(nonatomic, copy) NSString *representedFilename;
+@property(nonatomic, copy) NSURL *representedURL;
 
-- (NSWindowLevel) level;
+@property(nonatomic) NSWindowLevel level;
 @property(readonly) NSRect frame;
 - (NSRect) frame;
-- (NSWindowStyleMask) styleMask;
-- (NSBackingStoreType) backingType;
-- (NSWindowBackingLocation) preferredBackingLocation;
-- (void) setPreferredBackingLocation: (NSWindowBackingLocation) location;
-- (NSWindowBackingLocation) backingLocation;
+@property(nonatomic) NSWindowStyleMask styleMask;
+@property(nonatomic) NSBackingStoreType backingType;
+@property(nonatomic) NSWindowBackingLocation preferredBackingLocation;
+@property(nonatomic, readonly) NSWindowBackingLocation backingLocation;
 
-- (NSSize) minSize;
-- (NSSize) maxSize;
+@property(nonatomic) NSSize minSize;
+@property(nonatomic) NSSize maxSize;
 @property NSSize contentMinSize;
 @property NSSize contentMaxSize;
 @property NSSize minFullScreenContentSize;
 @property NSSize maxFullScreenContentSize;
 
-- (BOOL) isOneShot;
+@property(nonatomic, getter=isOneShot) BOOL oneShot;
 @property (getter=isOpaque) BOOL opaque;
 - (BOOL) hasDynamicDepthLimit;
-- (BOOL) isReleasedWhenClosed;
-- (BOOL) preventsApplicationTerminationWhenModal;
-- (void) setPreventsApplicationTerminationWhenModal: (BOOL) prevents;
-- (BOOL) hidesOnDeactivate;
+@property(nonatomic, getter=isReleasedWhenClosed) BOOL releasedWhenClosed;
+@property(nonatomic) BOOL preventsApplicationTerminationWhenModal;
+@property(nonatomic) BOOL hidesOnDeactivate;
 - (BOOL) worksWhenModal;
-- (BOOL) isSheet;
-- (BOOL) acceptsMouseMovedEvents;
-- (BOOL) isExcludedFromWindowsMenu;
-- (BOOL) isAutodisplay;
+@property(nonatomic, getter=isSheet, readonly) BOOL sheet;
+@property(nonatomic) BOOL acceptsMouseMovedEvents;
+@property(nonatomic, getter=isExcludedFromWindowsMenu) BOOL excludedFromWindowsMenu;
+@property(nonatomic, getter=isAutodisplay) BOOL autodisplay;
 - (BOOL) isFlushWindowDisabled;
 - (NSWindowFrameAutosaveName) frameAutosaveName;
-- (BOOL) hasShadow;
-- (BOOL) ignoresMouseEvents;
-- (NSSize) aspectRatio;
-- (NSSize) contentAspectRatio;
-- (BOOL) autorecalculatesKeyViewLoop;
-- (BOOL) canHide;
+@property(nonatomic) BOOL hasShadow;
+@property(nonatomic) BOOL ignoresMouseEvents;
+@property(nonatomic) NSSize aspectRatio;
+@property(nonatomic) NSSize contentAspectRatio;
+@property(nonatomic) BOOL autorecalculatesKeyViewLoop;
+@property(nonatomic) BOOL canHide;
 - (BOOL) canStoreColor;
-- (BOOL) showsResizeIndicator;
-- (BOOL) showsToolbarButton;
-- (BOOL) displaysWhenScreenProfileChanges;
-- (BOOL) isMovableByWindowBackground;
-- (BOOL) allowsToolTipsWhenApplicationIsInactive;
+@property(nonatomic) BOOL showsResizeIndicator;
+@property(nonatomic) BOOL showsToolbarButton;
+@property(nonatomic) BOOL displaysWhenScreenProfileChanges;
+@property(nonatomic, getter=isMovableByWindowBackground) BOOL movableByWindowBackground;
+@property(nonatomic) BOOL allowsToolTipsWhenApplicationIsInactive;
 
 - (BOOL) autorecalculatesContentBorderThicknessForEdge: (NSRectEdge) edge;
 - (CGFloat) contentBorderThicknessForEdge: (NSRectEdge) edge;
 
-- (NSImage *) miniwindowImage;
-- (NSString *) miniwindowTitle;
-- (NSDockTile *) dockTile;
-- (NSColor *) backgroundColor;
-- (CGFloat) alphaValue;
-- (NSWindowDepth) depthLimit;
-- (NSSize) resizeIncrements;
-- (NSSize) contentResizeIncrements;
-- (BOOL) preservesContentDuringLiveResize;
-- (NSToolbar *) toolbar;
+@property(nonatomic, retain) NSImage *miniwindowImage;
+@property(nonatomic, copy) NSString *miniwindowTitle;
+@property(nonatomic, readonly) NSDockTile *dockTile;
+@property(nonatomic, retain) NSColor *backgroundColor;
+@property(nonatomic) CGFloat alphaValue;
+@property(nonatomic) NSWindowDepth depthLimit;
+@property(nonatomic) NSSize resizeIncrements;
+@property(nonatomic) NSSize contentResizeIncrements;
+@property(nonatomic) BOOL preservesContentDuringLiveResize;
+@property(nonatomic, retain) NSToolbar *toolbar;
 - (NSView *) initialFirstResponder;
 
 - (void) setFrame: (NSRect) frame display: (BOOL) display;
@@ -488,56 +485,15 @@ typedef NS_ENUM(NSInteger, NSWindowUserTabbingPreference) {
 - (void) setContentSize: (NSSize) contentSize;
 - (void) setFrameOrigin: (NSPoint) point;
 - (void) setFrameTopLeftPoint: (NSPoint) point;
-- (void) setStyleMask: (NSWindowStyleMask) styleMask;
-- (void) setMinSize: (NSSize) size;
-- (void) setMaxSize: (NSSize) size;
 - (void) setContentBorderThickness: (CGFloat) thickness
                            forEdge: (NSRectEdge) edge;
-- (void) setMovable: (BOOL) movable;
 
-- (void) setBackingType: (NSBackingStoreType) value;
 - (void) setDynamicDepthLimit: (BOOL) value;
-- (void) setOneShot: (BOOL) flag;
-- (void) setReleasedWhenClosed: (BOOL) flag;
-- (void) setHidesOnDeactivate: (BOOL) flag;
-- (void) setAcceptsMouseMovedEvents: (BOOL) flag;
-- (void) setExcludedFromWindowsMenu: (BOOL) value;
-- (void) setAutodisplay: (BOOL) value;
 - (void) setAutorecalculatesContentBorderThickness: (BOOL) automatic
                                            forEdge: (NSRectEdge) edge;
-- (void) setTitle: (NSString *) title;
 - (void) setTitleWithRepresentedFilename: (NSString *) filename;
 
 - (void) setInitialFirstResponder: (NSView *) view;
-- (void) setMiniwindowImage: (NSImage *) image;
-- (void) setMiniwindowTitle: (NSString *) title;
-- (void) setBackgroundColor: (NSColor *) color;
-- (void) setAlphaValue: (CGFloat) value;
-- (void) setToolbar: (NSToolbar *) toolbar;
-- (void) setDefaultButtonCell: (NSButtonCell *) cell;
-- (void) setWindowController: (NSWindowController *) value;
-- (void) setDocumentEdited: (BOOL) flag;
-- (void) setContentAspectRatio: (NSSize) value;
-- (void) setHasShadow: (BOOL) value;
-- (void) setIgnoresMouseEvents: (BOOL) value;
-- (void) setAspectRatio: (NSSize) value;
-- (void) setAutorecalculatesKeyViewLoop: (BOOL) value;
-- (void) setCanHide: (BOOL) value;
-- (void) setCanBecomeVisibleWithoutLogin: (BOOL) flag;
-- (void) setCollectionBehavior: (NSWindowCollectionBehavior) behavior;
-- (void) setLevel: (NSInteger) value;
-- (void) setParentWindow: (NSWindow *) value;
-- (void) setPreservesContentDuringLiveResize: (BOOL) value;
-- (void) setRepresentedFilename: (NSString *) value;
-- (void) setRepresentedURL: (NSURL *) newURL;
-- (void) setResizeIncrements: (NSSize) value;
-- (void) setShowsResizeIndicator: (BOOL) value;
-- (void) setShowsToolbarButton: (BOOL) value;
-- (void) setContentResizeIncrements: (NSSize) value;
-- (void) setDepthLimit: (NSWindowDepth) value;
-- (void) setDisplaysWhenScreenProfileChanges: (BOOL) value;
-- (void) setMovableByWindowBackground: (BOOL) value;
-- (void) setAllowsToolTipsWhenApplicationIsInactive: (BOOL) value;
 
 - (BOOL) setFrameUsingName: (NSString *) name;
 - (BOOL) setFrameUsingName: (NSString *) name force: (BOOL) force;
@@ -547,19 +503,19 @@ typedef NS_ENUM(NSInteger, NSWindowUserTabbingPreference) {
 - (NSString *) stringWithSavedFrame;
 
 - (NSEventModifierFlags) resizeFlags;
-- (CGFloat) userSpaceScaleFactor;
-- (NSResponder *) firstResponder;
+@property(nonatomic, readonly) CGFloat userSpaceScaleFactor;
+@property(nonatomic, readonly) NSResponder *firstResponder;
 
 - (NSButton *) standardWindowButton: (NSWindowButton) value;
-- (NSButtonCell *) defaultButtonCell;
-- (NSWindow *) attachedSheet;
-- (NSWindow *) sheetParent;
-- (NSArray<NSWindow *> *) tabbedWindows;
+@property(nonatomic, retain) NSButtonCell *defaultButtonCell;
+@property(nonatomic, readonly) NSWindow *attachedSheet;
+@property(nonatomic, readonly) NSWindow *sheetParent;
+@property(nonatomic, readonly) NSArray<NSWindow *> *tabbedWindows;
 
-- (id) windowController;
+@property(nonatomic, retain) id windowController;
 - (NSArray *) drawers;
 
-- (NSInteger) windowNumber;
+@property(nonatomic, readonly) NSInteger windowNumber;
 - (int) gState;
 
 @property(readonly, strong) NSScreen *screen;
@@ -567,34 +523,30 @@ typedef NS_ENUM(NSInteger, NSWindowUserTabbingPreference) {
 
 - (NSScreen *) screen;
 - (NSScreen *) deepestScreen;
-- (NSColorSpace *) colorSpace;
-- (void) setColorSpace: (NSColorSpace *) newColorSpace;
-- (BOOL) isOnActiveSpace;
-- (NSWindowSharingType) sharingType;
-- (NSWindowAnimationBehavior) animationBehavior;
-- (void) setAnimationBehavior: (NSWindowAnimationBehavior) behavior;
-- (void) setSharingType: (NSWindowSharingType) type;
+@property(nonatomic, retain) NSColorSpace *colorSpace;
+@property(nonatomic, getter=isOnActiveSpace, readonly) BOOL onActiveSpace;
+@property(nonatomic) NSWindowSharingType sharingType;
+@property(nonatomic) NSWindowAnimationBehavior animationBehavior;
 
-- (BOOL) isDocumentEdited;
-- (BOOL) isZoomed;
+@property(nonatomic, getter=isDocumentEdited) BOOL documentEdited;
+@property(nonatomic, getter=isZoomed, readonly) BOOL zoomed;
 @property(readonly) NSWindowOcclusionState occlusionState;
 
-- (BOOL) isVisible;
+@property(nonatomic, getter=isVisible, readonly) BOOL visible;
 - (void) setIsVisible: (BOOL) flag;
-- (BOOL) isKeyWindow;
-- (BOOL) isMainWindow;
-- (BOOL) isMiniaturized;
-- (BOOL) isMovable;
+@property(nonatomic, getter=isKeyWindow, readonly) BOOL keyWindow;
+@property(nonatomic, getter=isMainWindow, readonly) BOOL mainWindow;
+@property(nonatomic, getter=isMiniaturized, readonly) BOOL miniaturized;
+@property(nonatomic, getter=isMovable) BOOL movable;
 - (void) performWindowDragWithEvent: (NSEvent *) event;
-- (BOOL) inLiveResize;
-- (BOOL) canBecomeKeyWindow;
-- (BOOL) canBecomeMainWindow;
-- (BOOL) canBecomeVisibleWithoutLogin;
-- (NSWindowCollectionBehavior) collectionBehavior;
+@property(nonatomic, readonly) BOOL inLiveResize;
+@property(nonatomic, readonly) BOOL canBecomeKeyWindow;
+@property(nonatomic, readonly) BOOL canBecomeMainWindow;
+@property(nonatomic) BOOL canBecomeVisibleWithoutLogin;
+@property(nonatomic) NSWindowCollectionBehavior collectionBehavior;
 
 /* Window tabbing is not implemented, so the value is stored and ignored. */
-- (NSWindowTabbingMode) tabbingMode;
-- (void) setTabbingMode: (NSWindowTabbingMode)tabbingMode;
+@property(nonatomic) NSWindowTabbingMode tabbingMode;
 @property(copy) NSWindowTabbingIdentifier tabbingIdentifier;
 
 /* Title bar and toolbar appearance. The window manager draws the title bar,
@@ -633,8 +585,8 @@ typedef NS_ENUM(NSInteger, NSWindowUserTabbingPreference) {
 - (NSRect) accessibilityFrame;
 - (NSRect) constrainFrameRect: (NSRect) rect toScreen: (NSScreen *) screen;
 
-- (NSWindow *) parentWindow;
-- (NSArray *) childWindows;
+@property(nonatomic, retain) NSWindow *parentWindow;
+@property(nonatomic, readonly) NSArray *childWindows;
 - (void) addChildWindow: (NSWindow *) child
                 ordered: (NSWindowOrderingMode) ordered;
 - (void) removeChildWindow: (NSWindow *) child;
@@ -666,8 +618,7 @@ typedef NS_ENUM(NSInteger, NSWindowUserTabbingPreference) {
 
 - (void) disableScreenUpdatesUntilFlush;
 - (void) useOptimizedDrawing: (BOOL) flag;
-- (BOOL) viewsNeedDisplay;
-- (void) setViewsNeedDisplay: (BOOL) flag;
+@property(nonatomic) BOOL viewsNeedDisplay;
 - (void) disableFlushWindow;
 - (void) enableFlushWindow;
 - (void) flushWindow;
@@ -808,8 +759,7 @@ typedef NS_ENUM(NSInteger, NSWindowUserTabbingPreference) {
 
 // Private AppKit compatibility used by older window subclasses.
 @interface NSWindow (NSPrivateCornerStyle)
-- (BOOL) bottomCornerRounded;
-- (void) setBottomCornerRounded: (BOOL) rounded;
+@property(nonatomic) BOOL bottomCornerRounded;
 @end
 
 // private

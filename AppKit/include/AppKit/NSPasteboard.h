@@ -106,7 +106,7 @@ typedef NS_OPTIONS(NSUInteger, NSPasteboardReadingOptions) {
 
 @interface NSPasteboard : NSObject
 
-+ (NSPasteboard *) generalPasteboard;
+@property(class, readonly, retain, nonnull) NSPasteboard *generalPasteboard;
 + (NSPasteboard *) pasteboardWithName: (NSPasteboardName) name;
 
 - (NSPasteboardName) name;

@@ -74,20 +74,14 @@ typedef NS_ENUM(NSUInteger, NSTabViewBorderType) {
 - (NSSize) minimumSize;
 - (NSRect) contentRect;
 
-- (NSFont *) font;
-- (NSControlSize) controlSize;
-- (NSTabViewType) tabViewType;
-- (NSTabPosition) tabPosition;
-- (BOOL) drawsBackground;
-- (BOOL) allowsTruncatedLabels;
+@property(nonatomic, retain) NSFont *font;
+@property(nonatomic) NSControlSize controlSize;
+@property(nonatomic) NSTabViewType tabViewType;
+@property(nonatomic) NSTabPosition tabPosition;
+@property(nonatomic) BOOL drawsBackground;
+@property(nonatomic) BOOL allowsTruncatedLabels;
 
 - (void) setDelegate: delegate;
-- (void) setFont: (NSFont *) font;
-- (void) setControlSize: (NSControlSize) controlSize;
-- (void) setTabViewType: (NSTabViewType) type;
-- (void) setTabPosition: (NSTabPosition) position;
-- (void) setDrawsBackground: (BOOL) flag;
-- (void) setAllowsTruncatedLabels: (BOOL) flag;
 
 - (NSInteger) numberOfTabViewItems;
 - (NSArray *) tabViewItems;

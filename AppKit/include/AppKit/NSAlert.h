@@ -74,27 +74,19 @@ static const NSModalResponse NSAlertThirdButtonReturn = 1002;
          informativeTextWithFormat: (NSString *) format, ...;
 
 - delegate;
-- (NSAlertStyle) alertStyle;
-- (NSImage *) icon;
-- (NSString *) messageText;
-- (NSString *) informativeText;
-- (NSView *) accessoryView;
-- (BOOL) showsHelp;
-- (BOOL) showsSuppressionButton;
-- (NSString *) helpAnchor;
-- (NSArray *) buttons;
-- (NSButton *) suppressionButton;
+@property(nonatomic) NSAlertStyle alertStyle;
+@property(nonatomic, retain) NSImage *icon;
+@property(nonatomic, copy) NSString *messageText;
+@property(nonatomic, copy) NSString *informativeText;
+@property(nonatomic, retain) NSView *accessoryView;
+@property(nonatomic) BOOL showsHelp;
+@property(nonatomic) BOOL showsSuppressionButton;
+@property(nonatomic, copy) NSString *helpAnchor;
+@property(nonatomic, readonly) NSArray *buttons;
+@property(nonatomic, readonly) NSButton *suppressionButton;
 - window;
 
 - (void) setDelegate: delegate;
-- (void) setAlertStyle: (NSAlertStyle) value;
-- (void) setIcon: (NSImage *) value;
-- (void) setMessageText: (NSString *) value;
-- (void) setInformativeText: (NSString *) value;
-- (void) setAccessoryView: (NSView *) value;
-- (void) setShowsHelp: (BOOL) value;
-- (void) setShowsSuppressionButton: (BOOL) value;
-- (void) setHelpAnchor: (NSString *) value;
 
 - (NSButton *) addButtonWithTitle: (NSString *) title;
 
