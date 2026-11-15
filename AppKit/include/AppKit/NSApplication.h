@@ -75,29 +75,29 @@ enum {
     NSRunContinuesResponse = -1002
 };
 
-typedef enum {
+typedef NS_ENUM(NSUInteger, NSApplicationTerminateReply) {
     NSTerminateCancel,
     NSTerminateNow,
     NSTerminateLater,
-} NSApplicationTerminateReply;
+};
 
-typedef enum {
+typedef NS_ENUM(NSUInteger, NSRequestUserAttentionType) {
     NSCriticalRequest,
     NSInformationalRequest,
-} NSRequestUserAttentionType;
+};
 
-typedef enum {
+typedef NS_ENUM(NSUInteger, NSApplicationDelegateReply) {
     NSApplicationDelegateReplySuccess,
     NSApplicationDelegateReplyCancel,
     NSApplicationDelegateReplyFailure,
-} NSApplicationDelegateReply;
+};
 
-typedef enum {
+typedef NS_ENUM(NSUInteger, NSApplicationPrintReply) {
     NSPrintingCancelled,
     NSPrintingSuccess,
     NSPrintingReplyLater,
     NSPrintingFailure,
-} NSApplicationPrintReply;
+};
 
 typedef NS_OPTIONS(NSUInteger, NSApplicationPresentationOptions) {
     NSApplicationPresentationDefault = 0,

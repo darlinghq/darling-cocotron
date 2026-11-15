@@ -31,7 +31,7 @@ enum {
     NSChangeBackgroundCellMask = 0x08,
 };
 
-typedef enum {
+typedef NS_ENUM(NSUInteger, NSButtonType) {
     NSButtonTypeMomentaryLight = 0,
     NSButtonTypePushOnPushOff = 1,
     NSButtonTypeToggle = 2,
@@ -42,8 +42,10 @@ typedef enum {
     NSButtonTypeMomentaryPushIn = 7,
     NSButtonTypeAccelerator = 8,
     NSButtonTypeMultiLevelAccelerator = 9,
+};
 
-    // Deprecated / legacy names:
+// Names used before the modern spellings; plain constants, so Swift does not see them.
+enum {
     NSMomentaryLightButton = NSButtonTypeMomentaryLight,
     NSPushOnPushOffButton = NSButtonTypePushOnPushOff,
     NSToggleButton = NSButtonTypeToggle,
@@ -53,49 +55,53 @@ typedef enum {
     NSOnOffButton = NSButtonTypeOnOff,
     NSMomentaryPushInButton = NSButtonTypeMomentaryPushIn,
     NSMomentaryPushButton = 0,
-    NSMomentaryLight = 7
-} NSButtonType;
+    NSMomentaryLight = 7,
+};
 
-typedef enum {
-    NSRoundedBezelStyle = 1,
-    NSRegularSquareBezelStyle = 2,
-    NSThickSquareBezelStyle = 3,
-    NSThickerSquareBezelStyle = 4,
-    NSDisclosureBezelStyle = 5,
-    NSShadowlessSquareBezelStyle = 6,
-    NSCircularBezelStyle = 7,
-    NSTexturedSquareBezelStyle = 8,
-    NSHelpButtonBezelStyle = 9,
-    NSSmallSquareBezelStyle = 10,
-    NSTexturedRoundedBezelStyle = 11,
-    NSRoundRectBezelStyle = 12,
-    NSRecessedBezelStyle = 13,
-    NSRoundedDisclosureBezelStyle = 14,
-    NSInlineBezelStyle = 15,
+typedef NS_ENUM(NSUInteger, NSBezelStyle) {
+    NSBezelStyleRounded = 1,
+    NSBezelStyleRegularSquare = 2,
+    NSBezelStyleThickSquare = 3,
+    NSBezelStyleThickerSquare = 4,
+    NSBezelStyleDisclosure = 5,
+    NSBezelStyleShadowlessSquare = 6,
+    NSBezelStyleCircular = 7,
+    NSBezelStyleTexturedSquare = 8,
+    NSBezelStyleHelpButton = 9,
+    NSBezelStyleSmallSquare = 10,
+    NSBezelStyleTexturedRounded = 11,
+    NSBezelStyleRoundRect = 12,
+    NSBezelStyleRecessed = 13,
+    NSBezelStyleRoundedDisclosure = 14,
+    NSBezelStyleInline = 15,
+};
 
-    // Names used by the macOS 10.14+ SDK.
-    NSBezelStyleRounded = NSRoundedBezelStyle,
-    NSBezelStyleRegularSquare = NSRegularSquareBezelStyle,
-    NSBezelStyleDisclosure = NSDisclosureBezelStyle,
-    NSBezelStyleShadowlessSquare = NSShadowlessSquareBezelStyle,
-    NSBezelStyleCircular = NSCircularBezelStyle,
-    NSBezelStyleTexturedSquare = NSTexturedSquareBezelStyle,
-    NSBezelStyleHelpButton = NSHelpButtonBezelStyle,
-    NSBezelStyleSmallSquare = NSSmallSquareBezelStyle,
-    NSBezelStyleTexturedRounded = NSTexturedRoundedBezelStyle,
-    NSBezelStyleRoundRect = NSRoundRectBezelStyle,
-    NSBezelStyleRecessed = NSRecessedBezelStyle,
-    NSBezelStyleRoundedDisclosure = NSRoundedDisclosureBezelStyle,
-    NSBezelStyleInline = NSInlineBezelStyle,
-} NSBezelStyle;
+// Names used before the modern spellings; plain constants, so Swift does not see them.
+enum {
+    NSRoundedBezelStyle = NSBezelStyleRounded,
+    NSRegularSquareBezelStyle = NSBezelStyleRegularSquare,
+    NSDisclosureBezelStyle = NSBezelStyleDisclosure,
+    NSShadowlessSquareBezelStyle = NSBezelStyleShadowlessSquare,
+    NSCircularBezelStyle = NSBezelStyleCircular,
+    NSTexturedSquareBezelStyle = NSBezelStyleTexturedSquare,
+    NSHelpButtonBezelStyle = NSBezelStyleHelpButton,
+    NSSmallSquareBezelStyle = NSBezelStyleSmallSquare,
+    NSTexturedRoundedBezelStyle = NSBezelStyleTexturedRounded,
+    NSRoundRectBezelStyle = NSBezelStyleRoundRect,
+    NSRecessedBezelStyle = NSBezelStyleRecessed,
+    NSRoundedDisclosureBezelStyle = NSBezelStyleRoundedDisclosure,
+    NSInlineBezelStyle = NSBezelStyleInline,
+    NSThickSquareBezelStyle = NSBezelStyleThickSquare,
+    NSThickerSquareBezelStyle = NSBezelStyleThickerSquare,
+};
 
-typedef enum {
+typedef NS_ENUM(NSUInteger, NSGradientType) {
     NSGradientNone = 0,
     NSGradientConcaveWeak = 1,
     NSGradientConcaveStrong = 2,
     NSGradientConvexWeak = 3,
     NSGradientConvexStrong = 4,
-} NSGradientType;
+};
 
 // Legacy ObjC ABI (i386): instance size must stay 0x44, Apple's; the ivars
 // before the extras sit at Apple's offsets. Add new state to the extra

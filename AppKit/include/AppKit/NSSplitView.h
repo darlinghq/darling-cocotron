@@ -23,11 +23,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 APPKIT_EXPORT NSString *const NSSplitViewDidResizeSubviewsNotification;
 APPKIT_EXPORT NSString *const NSSplitViewWillResizeSubviewsNotification;
 
-typedef enum {
+typedef NS_ENUM(NSInteger, NSSplitViewDividerStyle) {
     NSSplitViewDividerStyleThick = 1,
     NSSplitViewDividerStyleThin,
     NSSplitViewDividerStylePaneSplitter,
-} NSSplitViewDividerStyle;
+};
 
 // Legacy ObjC ABI (i386): instance size must stay 0x54, Apple's; the ivars
 // before the extras sit at Apple's offsets. Add new state to the extra

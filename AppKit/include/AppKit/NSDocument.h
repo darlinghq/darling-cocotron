@@ -34,7 +34,7 @@ typedef enum NSDocumentChangeType : NSUInteger {
     NSChangeDiscardable = 256,
 } NSDocumentChangeType;
 
-typedef enum {
+typedef NS_ENUM(NSUInteger, NSSaveOperationType) {
     NSSaveOperation,
     NSSaveAsOperation,
     NSSaveToOperation,
@@ -42,7 +42,7 @@ typedef enum {
     NSAutosaveInPlaceOperation,
     NSAutosaveAsOperation,
     NSAutosaveOperation,
-} NSSaveOperationType;
+};
 
 // Legacy ObjC ABI (i386): instance size must stay 0x34, Apple's; the ivars
 // before the extras sit at Apple's offsets. Add new state to the extra

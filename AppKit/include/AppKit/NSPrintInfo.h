@@ -33,10 +33,10 @@ static const NSPrintingPaginationMode NSFitPagination = NSPrintingPaginationMode
 static const NSPrintingPaginationMode NSAutoPagination = NSPrintingPaginationModeAutomatic;
 static const NSPrintingPaginationMode NSClipPagination = NSPrintingPaginationModeClip;
 
-typedef enum {
+typedef NS_ENUM(NSUInteger, NSPrintingOrientation) {
     NSPortraitOrientation,
     NSLandscapeOrientation,
-} NSPrintingOrientation;
+};
 
 typedef NSString *NSPrintInfoAttributeKey;
 

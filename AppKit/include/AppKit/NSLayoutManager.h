@@ -25,13 +25,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         NSTextView, NSRulerView;
 @class NSWindow, NSColor, NSCell;
 
-typedef enum {
+typedef NS_ENUM(NSUInteger, NSGlyphInscription) {
     NSGlyphInscribeBase,
     NSGlyphInscribeBelow,
     NSGlyphInscribeAbove,
     NSGlyphInscribeOverstrike,
     NSGlyphInscribeOverBelow,
-} NSGlyphInscription;
+};
 
 typedef NS_ENUM(NSInteger, NSTextLayoutOrientation) {
     NSTextLayoutOrientationHorizontal,

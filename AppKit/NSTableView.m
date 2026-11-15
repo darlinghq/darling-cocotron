@@ -152,7 +152,7 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
         NS_EXTRA(NSTableView, self)->_alternatingRowBackground = (flags & 0x00800000) ? YES : NO;
         NS_EXTRA(NSTableView, self)->_floatsGroupRows = YES;
         if ([keyed containsValueForKey: @"NSGridStyleMask"])
-            NS_EXTRA(NSTableView, self)->_gridStyleMask = [keyed decodeIntForKey: @"NSGridStyleMask"];
+            NS_EXTRA(NSTableView, self)->_gridStyleMask = (NSTableViewGridLineStyle)[keyed decodeIntForKey: @"NSGridStyleMask"];
         else
             NS_EXTRA(NSTableView, self)->_gridStyleMask = NSTableViewGridNone;
     } else {
@@ -402,7 +402,7 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
     return NS_EXTRA(NSTableView, self)->_alternatingRowBackground;
 }
 
-- (unsigned int) gridStyleMask {
+- (NSTableViewGridLineStyle) gridStyleMask {
     return NS_EXTRA(NSTableView, self)->_gridStyleMask;
 }
 
@@ -804,7 +804,7 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     NS_EXTRA(NSTableView, self)->_alternatingRowBackground = flag;
 }
 
-- (void) setGridStyleMask: (unsigned int) gridStyle {
+- (void) setGridStyleMask: (NSTableViewGridLineStyle) gridStyle {
     NS_EXTRA(NSTableView, self)->_gridStyleMask = gridStyle;
     [self setNeedsDisplay: YES];
 }

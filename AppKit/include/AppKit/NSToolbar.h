@@ -26,18 +26,18 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         NSMutableDictionary, NSWindow, NSView, NSToolbarItem, NSToolbarView,
         NSToolbarCustomizationPalette;
 
-typedef enum {
+typedef NS_ENUM(NSUInteger, NSToolbarSizeMode) {
     NSToolbarSizeModeDefault,
     NSToolbarSizeModeRegular,
     NSToolbarSizeModeSmall
-} NSToolbarSizeMode;
+};
 
-typedef enum {
+typedef NS_ENUM(NSUInteger, NSToolbarDisplayMode) {
     NSToolbarDisplayModeDefault,
     NSToolbarDisplayModeIconAndLabel,
     NSToolbarDisplayModeIconOnly,
     NSToolbarDisplayModeLabelOnly
-} NSToolbarDisplayMode;
+};
 
 APPKIT_EXPORT const NSNotificationName NSToolbarWillAddItemNotification;
 APPKIT_EXPORT const NSNotificationName NSToolbarDidRemoveItemNotification;

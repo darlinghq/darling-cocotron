@@ -3,7 +3,7 @@
 
 @class NSArray, NSMutableArray, NSMutableDictionary, NSViewController;
 
-enum {
+typedef NS_OPTIONS(NSInteger, NSPrintPanelOptions) {
 
     NSPrintPanelShowsCopies = 1 << 0,
     NSPrintPanelShowsPageRange = 1 << 1,
@@ -14,8 +14,6 @@ enum {
     NSPrintPanelShowsPageSetupAccessory = 1 << 8,
     NSPrintPanelShowsPreview = 1 << 17
 };
-
-typedef NSInteger NSPrintPanelOptions;
 
 @interface NSPrintPanel : NSObject {
     NSMutableDictionary *_attributes;

@@ -20,12 +20,20 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSActionCell.h>
 #import <AppKit/NSSliderCell.h>
 
-typedef enum {
-    NSRatingLevelIndicatorStyle,
-    NSDiscreteCapacityLevelIndicatorStyle,
-    NSContinuousCapacityLevelIndicatorStyle,
-    NSRelevancyLevelIndicatorStyle,
-} NSLevelIndicatorStyle;
+typedef NS_ENUM(NSUInteger, NSLevelIndicatorStyle) {
+    NSLevelIndicatorStyleRelevancy = 0,
+    NSLevelIndicatorStyleContinuousCapacity = 1,
+    NSLevelIndicatorStyleDiscreteCapacity = 2,
+    NSLevelIndicatorStyleRating = 3,
+};
+
+// Names used before the modern spellings; plain constants, so Swift does not see them.
+enum {
+    NSRatingLevelIndicatorStyle = NSLevelIndicatorStyleRating,
+    NSDiscreteCapacityLevelIndicatorStyle = NSLevelIndicatorStyleDiscreteCapacity,
+    NSContinuousCapacityLevelIndicatorStyle = NSLevelIndicatorStyleContinuousCapacity,
+    NSRelevancyLevelIndicatorStyle = NSLevelIndicatorStyleRelevancy,
+};
 
 @interface NSLevelIndicatorCell : NSActionCell {
     NSLevelIndicatorStyle _style;

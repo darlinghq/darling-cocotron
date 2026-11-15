@@ -20,7 +20,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/NSControl.h>
 
-typedef enum {
+typedef NS_ENUM(NSUInteger, NSScrollerPart) {
     NSScrollerNoPart = 0,
     NSScrollerIncrementLine,
     NSScrollerDecrementLine,
@@ -28,21 +28,21 @@ typedef enum {
     NSScrollerDecrementPage,
     NSScrollerKnob,
     NSScrollerKnobSlot
-} NSScrollerPart;
+};
 
-typedef enum {
+typedef NS_ENUM(NSUInteger, NSScrollerArrow) {
     NSScrollerIncrementArrow,
     NSScrollerDecrementArrow
-} NSScrollerArrow;
+};
 
-typedef enum {
+typedef NS_ENUM(NSUInteger, NSScrollArrowPosition) {
     NSScrollerArrowsMaxEnd = 0,
     NSScrollerArrowsMinEnd = 1,
     NSScrollerArrowsNone = 2,
     NSScrollerArrowsDefaultSetting = NSScrollerArrowsMaxEnd,
-} NSScrollArrowPosition;
+};
 
-enum {
+typedef NS_ENUM(NSUInteger, NSUsableScrollerParts) {
     NSNoScrollerParts = 0,
     NSOnlyScrollerArrows = 1,
     NSAllScrollerParts = 2,
@@ -58,8 +58,6 @@ typedef NS_ENUM(NSInteger, NSScrollerKnobStyle) {
     NSScrollerKnobStyleDark = 1,
     NSScrollerKnobStyleLight = 2,
 };
-
-typedef NSUInteger NSUsableScrollerParts;
 
 // Legacy ObjC ABI (i386): instance size must stay 0x78, Apple's; the ivars
 // before the extras sit at Apple's offsets. Add new state to the extra

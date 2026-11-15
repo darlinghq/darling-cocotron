@@ -24,7 +24,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSView;
 
-enum {
+typedef NS_OPTIONS(NSUInteger, NSTrackingAreaOptions) {
     NSTrackingMouseEnteredAndExited = (1 << 0),
     NSTrackingMouseMoved = (1 << 1),
     NSTrackingCursorUpdate = (1 << 2),
@@ -38,8 +38,6 @@ enum {
     NSTrackingInVisibleRect = (1 << 9),
     NSTrackingEnabledDuringMouseDrag = (1 << 10),
 };
-
-typedef NSUInteger NSTrackingAreaOptions;
 
 @interface NSTrackingArea : NSObject {
     NSRect _rect;

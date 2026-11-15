@@ -58,18 +58,18 @@ APPKIT_EXPORT NSString *const NSTableViewColumnDidResizeNotification;
 
 APPKIT_EXPORT NSString *const NSTableViewRowViewKey;
 
-enum {
-    NSTableViewGridNone,
-    NSTableViewSolidVerticalGridLineMask,
-    NSTableViewSolidHorizontalGridLineMask
+typedef NS_OPTIONS(NSUInteger, NSTableViewGridLineStyle) {
+    NSTableViewGridNone = 0,
+    NSTableViewSolidVerticalGridLineMask = 1 << 0,
+    NSTableViewSolidHorizontalGridLineMask = 1 << 1,
+    NSTableViewDashedHorizontalGridLineMask = 1 << 3,
 };
 
-enum {
+typedef NS_ENUM(NSInteger, NSTableViewSelectionHighlightStyle) {
     NSTableViewSelectionHighlightStyleNone = -1,
     NSTableViewSelectionHighlightStyleRegular = 0,
     NSTableViewSelectionHighlightStyleSourceList = 1,
 };
-typedef NSInteger NSTableViewSelectionHighlightStyle;
 
 typedef NS_ENUM(NSInteger, NSTableViewRowSizeStyle) {
     NSTableViewRowSizeStyleDefault = -1,
@@ -87,10 +87,10 @@ typedef NS_ENUM(NSInteger, NSTableViewStyle) {
     NSTableViewStylePlain = 4,
 };
 
-typedef enum {
+typedef NS_ENUM(NSUInteger, NSTableViewDropOperation) {
     NSTableViewDropOn,
     NSTableViewDropAbove
-} NSTableViewDropOperation;
+};
 
 typedef NS_OPTIONS(NSUInteger, NSTableViewAnimationOptions) {
     NSTableViewAnimationEffectNone = 0x0,
@@ -195,7 +195,7 @@ typedef NS_OPTIONS(NSUInteger, NSTableViewAnimationOptions) {
 - (BOOL) autosaveTableColumns;
 
 - (BOOL) usesAlternatingRowBackgroundColors;
-- (unsigned int) gridStyleMask;
+- (NSTableViewGridLineStyle) gridStyleMask;
 - (NSTableViewSelectionHighlightStyle) selectionHighlightStyle;
 - (BOOL) usesAutomaticRowHeights;
 - (void) setUsesAutomaticRowHeights: (BOOL) value;
@@ -247,7 +247,7 @@ typedef NS_OPTIONS(NSUInteger, NSTableViewAnimationOptions) {
 - (void) setAutosaveTableColumns: (BOOL) flag;
 
 - (void) setUsesAlternatingRowBackgroundColors: (BOOL) flag;
-- (void) setGridStyleMask: (unsigned int) gridStyle;
+- (void) setGridStyleMask: (NSTableViewGridLineStyle) gridStyle;
 - (void) setSelectionHighlightStyle: (NSTableViewSelectionHighlightStyle) value;
 - (void) setFloatsGroupRows: (BOOL) flag;
 - (void) setRowSizeStyle: (NSTableViewRowSizeStyle) style;

@@ -49,7 +49,10 @@ APPKIT_EXPORT NSNotificationName NSWorkspaceDidMountNotification;
 APPKIT_EXPORT NSNotificationName NSWorkspaceDidUnmountNotification;
 APPKIT_EXPORT NSNotificationName NSWorkspaceWillUnmountNotification;
 
-typedef NSUInteger NSWorkspaceIconCreationOptions;
+typedef NS_OPTIONS(NSUInteger, NSWorkspaceIconCreationOptions) {
+    NSExcludeQuickDrawElementsIconCreationOption = 1 << 1,
+    NSExclude10_4ElementsIconCreationOption = 1 << 2,
+};
 
 typedef NS_OPTIONS(NSUInteger, NSWorkspaceLaunchOptions) {
     NSWorkspaceLaunchAndPrint = 0x00000002,

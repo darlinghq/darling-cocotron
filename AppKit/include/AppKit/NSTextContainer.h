@@ -23,20 +23,20 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSTextView;
 
-typedef enum {
+typedef NS_ENUM(NSUInteger, NSLineSweepDirection) {
     NSLineSweepUp,
     NSLineSweepDown,
     NSLineSweepLeft,
     NSLineSweepRight,
-} NSLineSweepDirection;
+};
 
-typedef enum {
+typedef NS_ENUM(NSUInteger, NSLineMovementDirection) {
     NSLineDoesntMove,
     NSLineMovesUp,
     NSLineMovesDown,
     NSLineMovesLeft,
     NSLineMovesRight,
-} NSLineMovementDirection;
+};
 
 // Legacy ObjC ABI (i386): instance size must stay 0x1c, Apple's; the ivars
 // before the extras keep their position in the original order. Add new state

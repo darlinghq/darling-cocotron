@@ -23,7 +23,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSTableView, NSCell;
 
-enum {
+typedef NS_OPTIONS(NSUInteger, NSTableColumnResizingOptions) {
     NSTableColumnNoResizing = 0x00,
     NSTableColumnAutoresizingMask = 0x01,
     NSTableColumnUserResizingMask = 0x02,

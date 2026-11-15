@@ -39,14 +39,13 @@ APPKIT_EXPORT NSString *const NSTextCheckingDocumentURLKey;
 APPKIT_EXPORT NSString *const NSTextCheckingDocumentTitleKey;
 APPKIT_EXPORT NSString *const NSTextCheckingDocumentAuthorKey;
 
-enum {
+typedef NS_ENUM(NSInteger, NSCorrectionIndicatorType) {
     NSCorrectionIndicatorTypeDefault = 0,
     NSCorrectionIndicatorTypeReversion,
     NSCorrectionIndicatorTypeGuesses,
 };
-typedef NSInteger NSCorrectionIndicatorType;
 
-enum {
+typedef NS_ENUM(NSInteger, NSCorrectionResponse) {
     NSCorrectionResponseNone,
     NSCorrectionResponseAccepted,
     NSCorrectionResponseRejected,
@@ -54,7 +53,6 @@ enum {
     NSCorrectionResponseEdited,
     NSCorrectionResponseReverted,
 };
-typedef NSInteger NSCorrectionResponse;
 
 @interface NSSpellChecker : NSObject {
     NSPanel *_spellingPanel;

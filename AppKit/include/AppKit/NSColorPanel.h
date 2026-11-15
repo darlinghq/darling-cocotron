@@ -35,19 +35,30 @@ enum {
     NSColorPanelAllModesMask = 0xFFFF,
 };
 
-enum {
-    NSNoModeColorPanel = -1,
-    NSGrayModeColorPanel = 0,
-    NSRGBModeColorPanel = 1,
-    NSCMYKModeColorPanel = 2,
-    NSHSBModeColorPanel = 3,
-    NSCustomPaletteModeColorPanel = 4,
-    NSColorListModeColorPanel = 5,
-    NSWheelModeColorPanel = 6,
-    NSCrayonModeColorPanel = 7,
+typedef NS_ENUM(NSInteger, NSColorPanelMode) {
+    NSColorPanelModeNone = -1,
+    NSColorPanelModeGray = 0,
+    NSColorPanelModeRGB = 1,
+    NSColorPanelModeCMYK = 2,
+    NSColorPanelModeHSB = 3,
+    NSColorPanelModeCustomPalette = 4,
+    NSColorPanelModeColorList = 5,
+    NSColorPanelModeWheel = 6,
+    NSColorPanelModeCrayon = 7,
 };
 
-typedef NSInteger NSColorPanelMode;
+// Names used before the modern spellings; plain constants, so Swift does not see them.
+enum {
+    NSNoModeColorPanel = NSColorPanelModeNone,
+    NSGrayModeColorPanel = NSColorPanelModeGray,
+    NSRGBModeColorPanel = NSColorPanelModeRGB,
+    NSCMYKModeColorPanel = NSColorPanelModeCMYK,
+    NSHSBModeColorPanel = NSColorPanelModeHSB,
+    NSCustomPaletteModeColorPanel = NSColorPanelModeCustomPalette,
+    NSColorListModeColorPanel = NSColorPanelModeColorList,
+    NSWheelModeColorPanel = NSColorPanelModeWheel,
+    NSCrayonModeColorPanel = NSColorPanelModeCrayon,
+};
 
 APPKIT_EXPORT NSString *const NSColorPanelColorDidChangeNotification;
 

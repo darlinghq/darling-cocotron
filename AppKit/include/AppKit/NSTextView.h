@@ -40,16 +40,24 @@ NS_ASSUME_NONNULL_BEGIN
 @class NSTextStorage, NSLayoutManager, NSTextContainer, NSUndoManager;
 @class NSRulerView, NSRulerMarker;
 
-typedef enum {
-    NSSelectByCharacter,
-    NSSelectByWord,
-    NSSelectByParagraph
-} NSSelectionGranularity;
+typedef NS_ENUM(NSUInteger, NSTextViewSelectionGranularity) {
+    NSSelectByCharacter = 0,
+    NSSelectByWord = 1,
+    NSSelectByParagraph = 2,
+};
+typedef NSTextViewSelectionGranularity NSSelectionGranularity;
 
-typedef enum {
-    NSSelectionAffinityUpstream,
-    NSSelectionAffinityDownstream,
-} NSSelectionAffinity;
+typedef NS_ENUM(NSUInteger, NSTextViewSelectionAffinity) {
+    NSTextViewSelectionAffinityUpstream = 0,
+    NSTextViewSelectionAffinityDownstream = 1,
+};
+
+// Names used before the modern spellings; plain constants, so Swift does not see them.
+enum {
+    NSSelectionAffinityUpstream = NSTextViewSelectionAffinityUpstream,
+    NSSelectionAffinityDownstream = NSTextViewSelectionAffinityDownstream,
+};
+typedef NSTextViewSelectionAffinity NSSelectionAffinity;
 
 typedef enum {
     NSFindPanelActionShowFindPanel = 1,

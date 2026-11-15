@@ -21,7 +21,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSString, NSMutableArray, NSScrollView, NSRulerMarker, NSMeasurementUnit;
 
-typedef enum { NSHorizontalRuler, NSVerticalRuler } NSRulerOrientation;
+typedef NS_ENUM(NSUInteger, NSRulerOrientation) {
+    NSHorizontalRuler,
+    NSVerticalRuler,
+};
 
 @interface NSRulerView : NSView {
     NSScrollView *_scrollView;

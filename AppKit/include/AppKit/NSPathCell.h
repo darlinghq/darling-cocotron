@@ -3,12 +3,11 @@
 
 @class NSPathComponentCell, NSURL, NSColor;
 
-enum {
+typedef NS_ENUM(NSInteger, NSPathStyle) {
     NSPathStyleStandard,
     NSPathStyleNavigationBar,
     NSPathStylePopUp,
 };
-typedef NSInteger NSPathStyle;
 
 @interface NSPathCell : NSActionCell /* < NSOpenSavePanelDelegate > */ {
     NSURL *_URL;

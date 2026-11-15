@@ -23,24 +23,28 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSImageRep.h>
 #import <ApplicationServices/ApplicationServices.h>
 
-typedef enum {
-    NSTIFFFileType,
-    NSBMPFileType,
-    NSGIFFileType,
-    NSJPEGFileType,
-    NSPNGFileType,
-    NSJPEG2000FileType,
+typedef NS_ENUM(NSUInteger, NSBitmapImageFileType) {
+    NSBitmapImageFileTypeTIFF,
+    NSBitmapImageFileTypeBMP,
+    NSBitmapImageFileTypeGIF,
+    NSBitmapImageFileTypeJPEG,
+    NSBitmapImageFileTypePNG,
+    NSBitmapImageFileTypeJPEG2000,
 
     // Names used by the macOS 10.12+ SDK.
-    NSBitmapImageFileTypeTIFF = NSTIFFFileType,
-    NSBitmapImageFileTypeBMP = NSBMPFileType,
-    NSBitmapImageFileTypeGIF = NSGIFFileType,
-    NSBitmapImageFileTypeJPEG = NSJPEGFileType,
-    NSBitmapImageFileTypePNG = NSPNGFileType,
-    NSBitmapImageFileTypeJPEG2000 = NSJPEG2000FileType,
-} NSBitmapImageFileType;
+};
 
-typedef enum {
+// Names used before the modern spellings; plain constants, so Swift does not see them.
+enum {
+    NSTIFFFileType = NSBitmapImageFileTypeTIFF,
+    NSBMPFileType = NSBitmapImageFileTypeBMP,
+    NSGIFFileType = NSBitmapImageFileTypeGIF,
+    NSJPEGFileType = NSBitmapImageFileTypeJPEG,
+    NSPNGFileType = NSBitmapImageFileTypePNG,
+    NSJPEG2000FileType = NSBitmapImageFileTypeJPEG2000,
+};
+
+typedef NS_ENUM(NSUInteger, NSTIFFCompression) {
     NSTIFFCompressionNone = 1,
     NSTIFFCompressionCCITTFAX3 = 3,
     NSTIFFCompressionCCITTFAX4 = 4,
@@ -49,13 +53,20 @@ typedef enum {
     NSTIFFCompressionNEXT = 32766,
     NSTIFFCompressionPackBits = 32773,
     NSTIFFCompressionOldJPEG = 32865,
-} NSTIFFCompression;
+};
 
-typedef enum {
-    NSAlphaFirstBitmapFormat = 0x01,
-    NSAlphaNonpremultipliedBitmapFormat = 0x02,
-    NSFloatingPointSamplesBitmapFormat = 0x04,
-} NSBitmapFormat;
+typedef NS_OPTIONS(NSUInteger, NSBitmapFormat) {
+    NSBitmapFormatAlphaFirst = 0x01,
+    NSBitmapFormatAlphaNonpremultiplied = 0x02,
+    NSBitmapFormatFloatingPointSamples = 0x04,
+};
+
+// Names used before the modern spellings; plain constants, so Swift does not see them.
+enum {
+    NSAlphaFirstBitmapFormat = NSBitmapFormatAlphaFirst,
+    NSAlphaNonpremultipliedBitmapFormat = NSBitmapFormatAlphaNonpremultiplied,
+    NSFloatingPointSamplesBitmapFormat = NSBitmapFormatFloatingPointSamples,
+};
 
 typedef NSString *NSBitmapImageRepPropertyKey;
 

@@ -23,32 +23,32 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSColor, NSMutableArray, NSTextContainer, NSView, NSLayoutManager;
 
-typedef enum {
+typedef NS_ENUM(NSUInteger, NSTextBlockVerticalAlignment) {
     NSTextBlockTopAlignment,
     NSTextBlockMiddleAlignment,
     NSTextBlockBottomAlignment,
     NSTextBlockBaselineAlignment
-} NSTextBlockVerticalAlignment;
+};
 
-typedef enum {
+typedef NS_ENUM(NSUInteger, NSTextBlockValueType) {
     NSTextBlockAbsoluteValueType,
     NSTextBlockPercentageValueType,
-} NSTextBlockValueType;
+};
 
-typedef enum {
+typedef NS_ENUM(NSUInteger, NSTextBlockDimension) {
     NSTextBlockWidth,
     NSTextBlockMinimumWidth,
     NSTextBlockMaximumWidth,
     NSTextBlockHeight,
     NSTextBlockMinimumHeight,
     NSTextBlockMaximumHeight,
-} NSTextBlockDimension;
+};
 
-typedef enum {
+typedef NS_ENUM(NSUInteger, NSTextBlockLayer) {
     NSTextBlockPadding,
     NSTextBlockBorder,
     NSTextBlockMargin,
-} NSTextBlockLayer;
+};
 
 @interface NSTextBlock : NSObject {
     NSColor *_backgroundColor;
