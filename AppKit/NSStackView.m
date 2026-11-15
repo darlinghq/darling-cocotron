@@ -760,6 +760,13 @@ static const char constraintModeKey;
 - (BOOL) _constraintArrangementIsActive {
     if (_keepsDecodedFrames)
         return NO;
+    // A stack view that Auto Layout places is laid out by constraints throughout: on macOS its
+    // views are arranged by constraints, and with equal hugging priorities the first view of a
+    // fill distribution stretches there, while a stack view laid out by frames stretches the last
+    // (observed on macOS 26.7.3 and 10.14.4; tests appkit-stack-view-constraint-arrangement and
+    // appkit-stack-view-layout).
+    if (![self translatesAutoresizingMaskIntoConstraints] && [_entries count] != 0)
+        return YES;
     for (NSStackViewEntry *entry in _entries)
         if (!entry->detached && [self _entryTakesPartInAutoLayout: entry])
             return YES;
