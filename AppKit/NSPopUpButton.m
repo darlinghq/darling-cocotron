@@ -200,12 +200,22 @@ static NSString *const NSPopUpButtonBindingObservationContext =
 }
 
 - (void) selectItemAtIndex: (NSInteger) index {
+    NSInteger previous = [self indexOfSelectedItem];
+
     [_cell selectItemAtIndex: index];
+    // The title that is shown changes with the selection, and so does the intrinsic size; selecting
+    // what is selected already changes nothing
+    if ([self indexOfSelectedItem] != previous)
+        [self invalidateIntrinsicContentSize];
     [self setNeedsDisplay: YES];
 }
 
 - (void) selectItemWithTitle: (NSString *) title {
+    NSInteger previous = [self indexOfSelectedItem];
+
     [_cell selectItemWithTitle: title];
+    if ([self indexOfSelectedItem] != previous)
+        [self invalidateIntrinsicContentSize];
     [self setNeedsDisplay: YES];
 }
 
