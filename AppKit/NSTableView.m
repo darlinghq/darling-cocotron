@@ -1458,10 +1458,8 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
         for (i = 0; i < count - 1; ++i)
             lastWidth -= [[_tableColumns objectAtIndex: i] width];
 
-        if (lastWidth > 0)
-            [lastColumn setWidth: lastWidth];
-        else if (lastWidth < 0)
-            [lastColumn setWidth: [lastColumn width] + lastWidth];
+        // The last column takes what the others leave and stops at its minimum width.
+        [lastColumn setWidth: MAX(lastWidth, [lastColumn minWidth])];
 
         [self setNeedsDisplay: YES];
     }
