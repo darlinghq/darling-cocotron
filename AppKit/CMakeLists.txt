@@ -310,6 +310,7 @@ set(AppKit_sources
 	NSProgressIndicator.m
 	NSFontCollection.m
 	NSFontDescriptor.m
+	UIFontNames.m
 	NSDisplay.m
 	DarlingDisplay.m
 

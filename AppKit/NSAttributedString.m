@@ -53,9 +53,15 @@ NSAttributedStringKey NSCursorAttributeName = @"NSCursor";
 NSAttributedStringKey NSMarkedClauseSegmentAttributeName = @"NSMarkedClauseSegment";
 NSAttributedStringKey NSToolTipAttributeName = @"NSToolTip";
 NSAttributedStringKey NSGlyphInfoAttributeName = @"NSGlyphInfo";
-NSAttributedStringKey NSVerticalGlyphFormAttributeName = @"NSVerticalGlyphForm";
+// The string the attribute is stored under: macOS 26.7.3 and macOS 10.14 both hold "CTVerticalForms" (black-box observation of the
+// exported constant; the earlier "NSVerticalGlyphForm" was a guess).
+NSAttributedStringKey NSVerticalGlyphFormAttributeName = @"CTVerticalForms";
 NSAttributedStringKey NSTextAlternativesAttributeName = @"NSTextAlternatives";
 NSAttributedStringKey NSSpellingStateAttributeName = @"NSSpellingState"; // temporary attribute
+
+// Not declared in the public SDK headers, but exported by macOS and bound by applications. The string was read from the exported
+// constant on macOS 26.7.3 (black-box observation; absent on macOS 10.14, so applications that bind it need a newer system).
+NSAttributedStringKey NSParagraphAttachmentAttributeName = @"NSTextParagraphAnchoredAttachment";
 
 NSAttributedStringDocumentAttributeKey NSDocumentTypeDocumentAttribute = @"DocumentType";
 NSAttributedStringDocumentAttributeKey NSConvertedDocumentAttribute = @"Converted";

@@ -33,6 +33,7 @@ int main(void) {
         EXPECT(NSToolTipAttributeName, "NSToolTip");
         EXPECT(NSSpellingStateAttributeName, "NSSpellingState");
         EXPECT(NSWritingDirectionAttributeName, "NSWritingDirection");
+        EXPECT(NSVerticalGlyphFormAttributeName, "CTVerticalForms");
         EXPECT(NSCocoaVersionDocumentAttribute, "CocoaRTFVersion");
         EXPECT(NSAccessibilityMenuBarItemRole, "AXMenuBarItem");
         EXPECT(NSAccessibilityTabButtonSubrole, "AXTabButton");
