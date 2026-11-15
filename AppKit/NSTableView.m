@@ -1410,11 +1410,67 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
         [self _setSelectedRowIndexes: selection];
 }
 
+static const char cellViewsKey;
+static const char reusePoolKey;
+
+// The views the delegate handed out for the cells of a view-based table, by
+// "row,column" (group rows use "row,-1"); and the views taken out of the table
+// that makeViewWithIdentifier:owner: may hand out again, by identifier.
+- (NSMutableDictionary *) _lazyDictionaryForKey: (const void *) key {
+    NSMutableDictionary *dictionary = objc_getAssociatedObject(self, key);
+
+    if (dictionary == nil) {
+        dictionary = [NSMutableDictionary dictionary];
+        objc_setAssociatedObject(self, key, dictionary, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    return dictionary;
+}
+
+- (NSMutableDictionary *) _cellViewsByPosition {
+    return [self _lazyDictionaryForKey: &cellViewsKey];
+}
+
+- (void) _recycleView: (NSView *) view {
+    [view removeFromSuperview];
+    NSString *identifier = [view identifier];
+
+    if (identifier == nil)
+        return;
+
+    NSMutableDictionary *pool = [self _lazyDictionaryForKey: &reusePoolKey];
+    NSMutableArray *queue = [pool objectForKey: identifier];
+
+    if (queue == nil) {
+        queue = [NSMutableArray array];
+        [pool setObject: queue forKey: identifier];
+    }
+    if (![queue containsObject: view])
+        [queue addObject: view];
+}
+
+// Puts the view the delegate returned for a cell into the table. A different
+// view that stood at the cell before is taken out and becomes reusable.
+- (void) _placeCellView: (NSView *) view atRow: (NSInteger) row column: (NSInteger) column {
+    NSString *key = [NSString stringWithFormat: @"%ld,%ld", (long) row, (long) column];
+    NSMutableDictionary *cells = [self _cellViewsByPosition];
+    NSView *previous = [cells objectForKey: key];
+
+    if (previous != nil && previous != view)
+        [self _recycleView: previous];
+    [cells setObject: view forKey: key];
+    if ([view superview] != self)
+        [self addSubview: view];
+}
+
 - (void) reloadData {
     for (NSView *view in NS_EXTRA(NSTableView, self)->_activeRowViews) {
-        [view removeFromSuperview];
+        [self _recycleView: view];
     }
     [NS_EXTRA(NSTableView, self)->_activeRowViews removeAllObjects];
+    for (NSView *view in [[self _cellViewsByPosition] allValues]) {
+        [self _recycleView: view];
+    }
+    [[self _cellViewsByPosition] removeAllObjects];
     [self noteNumberOfRowsChanged];
     [self setNeedsDisplay: YES];
     [_headerView setNeedsDisplay: YES];
@@ -1543,8 +1599,7 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 
             if (groupView != nil) {
                 [groupView setFrame: [self rectOfRow: row]];
-                if ([groupView superview] != self)
-                    [self addSubview: groupView];
+                [self _placeCellView: groupView atRow: row column: -1];
                 [groupView setHidden: NO];
                 [groupView displayRectIgnoringOpacity: [groupView bounds]];
             }
@@ -1557,9 +1612,7 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
             NSView *cellView = [_delegate tableView: self viewForTableColumn: column row: row];
             if (cellView != nil) {
                 [cellView setFrame: cellRect];
-                if ([cellView superview] != self) {
-                    [self addSubview: cellView];
-                }
+                [self _placeCellView: cellView atRow: row column: drawThisColumn];
                 [cellView setHidden: NO];
                 [cellView displayRectIgnoringOpacity: [cellView bounds]];
             }
@@ -2527,8 +2580,7 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     // The view sits in the table at its cell, as it does once drawn
     if (view != nil) {
         [view setFrame: frame];
-        if ([view superview] != self)
-            [self addSubview: view];
+        [self _placeCellView: view atRow: row column: [self _isGroupRow: row] ? -1 : column];
     }
     return view;
 }
@@ -2536,6 +2588,15 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 // Creates the view from the nib registered for the identifier, owned by the
 // given object. Returns nil when no nib is registered for it.
 - (NSView *) makeViewWithIdentifier: (NSString *) identifier owner: (id) owner {
+    NSMutableArray *queue = identifier != nil ? [[self _lazyDictionaryForKey: &reusePoolKey] objectForKey: identifier] : nil;
+
+    if ([queue count] > 0) {
+        NSView *reused = [[[queue lastObject] retain] autorelease];
+
+        [queue removeLastObject];
+        return reused;
+    }
+
     NSNib *nib = identifier != nil ? [NS_EXTRA(NSTableView, self)->_registeredNibs objectForKey: identifier] : nil;
     NSArray *topLevelObjects = nil;
 
