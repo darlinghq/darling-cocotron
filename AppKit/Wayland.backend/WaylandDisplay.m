@@ -453,7 +453,7 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
     WL.wl_display_flush(_wlDisplay);
 }
 
-- (NSEvent *) nextEventMatchingMask: (NSEventMask) mask
+- (NSEvent *) nextEventMatchingMask: (NSUInteger) mask
                           untilDate: (NSDate *) untilDate
                              inMode: (NSRunLoopMode) mode
                             dequeue: (BOOL) dequeue

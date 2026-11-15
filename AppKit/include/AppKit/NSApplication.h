@@ -249,12 +249,12 @@ typedef NS_OPTIONS(NSUInteger, NSRemoteNotificationType) {
 
 - (void) sendEvent: (NSEvent *) event;
 
-- (NSEvent *) nextEventMatchingMask: (NSEventMask) mask
+- (NSEvent *) nextEventMatchingMask: (NSUInteger) mask
                           untilDate: (NSDate *) untilDate
                              inMode: (NSRunLoopMode) mode
                             dequeue: (BOOL) dequeue;
 @property(nonatomic, readonly) NSEvent *currentEvent;
-- (void) discardEventsMatchingMask: (NSEventMask) mask
+- (void) discardEventsMatchingMask: (NSUInteger) mask
                        beforeEvent: (NSEvent *) event;
 - (void) postEvent: (NSEvent *) event atStart: (BOOL) atStart;
 

@@ -219,7 +219,7 @@ static NSDisplay *processDisplay = nil;
     NSInvalidAbstractInvocation();
 }
 
-- (NSEvent *) nextEventMatchingMask: (NSEventMask) mask
+- (NSEvent *) nextEventMatchingMask: (NSUInteger) mask
                           untilDate: (NSDate *) untilDate
                              inMode: (NSString *) mode
                             dequeue: (BOOL) dequeue
@@ -277,7 +277,7 @@ static NSDisplay *processDisplay = nil;
     return result;
 }
 
-- (void) discardEventsMatchingMask: (NSEventMask) mask
+- (void) discardEventsMatchingMask: (NSUInteger) mask
                        beforeEvent: (NSEvent *) event
 {
     [_eventQueueLock lock];

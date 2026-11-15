@@ -980,7 +980,7 @@ static NSDictionary *modeInfoToDictionary(const XRRModeInfo *mi, int depth,
     return [_windowsByID objectForKey: [NSNumber numberWithUnsignedLong: i]];
 }
 
-- (NSEvent *) nextEventMatchingMask: (NSEventMask) mask
+- (NSEvent *) nextEventMatchingMask: (NSUInteger) mask
                           untilDate: (NSDate *) untilDate
                              inMode: (NSRunLoopMode) mode
                             dequeue: (BOOL) dequeue

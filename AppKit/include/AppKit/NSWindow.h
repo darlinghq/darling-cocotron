@@ -650,14 +650,14 @@ typedef NS_ENUM(NSInteger, NSWindowUserTabbingPreference) {
 - (NSPoint) mouseLocationOutsideOfEventStream;
 
 - (NSEvent *) currentEvent;
-- (NSEvent *) nextEventMatchingMask: (NSEventMask) mask;
+- (NSEvent *) nextEventMatchingMask: (NSUInteger) mask;
 
-- (NSEvent *) nextEventMatchingMask: (NSEventMask) mask
+- (NSEvent *) nextEventMatchingMask: (NSUInteger) mask
                           untilDate: (NSDate *) untilDate
                              inMode: (NSRunLoopMode) mode
                             dequeue: (BOOL) dequeue;
 
-- (void) discardEventsMatchingMask: (NSEventMask) mask
+- (void) discardEventsMatchingMask: (NSUInteger) mask
                        beforeEvent: (NSEvent *) event;
 
 - (void) sendEvent: (NSEvent *) event;
