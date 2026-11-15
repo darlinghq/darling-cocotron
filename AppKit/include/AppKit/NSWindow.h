@@ -24,6 +24,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/AppKitExport.h>
 #import <AppKit/NSResponder.h>
 #import <AppKit/NSView.h>
+#import <AppKit/NSApplication.h>
 #import <ApplicationServices/ApplicationServices.h>
 #import <CoreGraphics/CGSubWindow.h>
 #import <AppKit/NSUserInterfaceItemIdentification.h>
