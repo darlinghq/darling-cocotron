@@ -30,3 +30,4 @@ typedef NS_OPTIONS(NSUInteger, NSFontCollectionVisibility) {
 @end
 
 APPKIT_EXPORT NSNotificationName const NSFontCollectionDidChangeNotification;
+APPKIT_EXPORT NSString *const NSFontCollectionUser;

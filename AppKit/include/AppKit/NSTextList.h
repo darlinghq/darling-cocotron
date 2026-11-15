@@ -21,6 +21,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 APPKIT_EXPORT NSString *const NSTextListMarkerDecimal;
 APPKIT_EXPORT NSString *const NSTextListMarkerDisc;
+APPKIT_EXPORT NSString *const NSTextListMarkerHyphen;
 
 enum { NSTextListPrependEnclosingMarker = 0x01 };
 

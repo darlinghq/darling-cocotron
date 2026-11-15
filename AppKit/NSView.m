@@ -75,6 +75,8 @@ const NSNotificationName NSViewGlobalFrameDidChangeNotification =
 
 const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPresentationOptions =
         @"NSFullScreenModeApplicationPresentationOptions";
+const NSViewFullScreenModeOptionKey NSFullScreenModeAllScreens =
+        @"NSFullScreenModeAllScreens";
 
 @interface NSView (NSView_forward)
 - (CGAffineTransform) transformFromWindow;

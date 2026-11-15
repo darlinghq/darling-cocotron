@@ -37,6 +37,7 @@ APPKIT_EXPORT NSString *const NSOutlineViewSelectionDidChangeNotification;
 APPKIT_EXPORT NSString *const NSOutlineViewSelectionIsChangingNotification;
 
 APPKIT_EXPORT NSString *const NSOutlineViewDisclosureButtonKey;
+APPKIT_EXPORT NSString *const NSOutlineViewShowHideButtonKey;
 
 // Legacy ObjC ABI (i386): instance size must stay 0x14c, Apple's; the ivars
 // before the extras sit at Apple's offsets. Add new state to the extra

@@ -24,6 +24,17 @@ NSString *const NSCollectionElementKindSectionHeader =
 NSString *const NSCollectionElementKindSectionFooter =
         @"UICollectionElementKindSectionFooter";
 
+// Not declared in a public header.
+APPKIT_EXPORT NSString *const NSFlowLayoutCommonRowHorizontalAlignmentKey;
+APPKIT_EXPORT NSString *const NSFlowLayoutLastRowHorizontalAlignmentKey;
+APPKIT_EXPORT NSString *const NSFlowLayoutRowVerticalAlignmentKey;
+NSString *const NSFlowLayoutCommonRowHorizontalAlignmentKey =
+        @"UIFlowLayoutCommonRowHorizontalAlignmentKey";
+NSString *const NSFlowLayoutLastRowHorizontalAlignmentKey =
+        @"UIFlowLayoutLastRowHorizontalAlignmentKey";
+NSString *const NSFlowLayoutRowVerticalAlignmentKey =
+        @"UIFlowLayoutRowVerticalAlignmentKey";
+
 @implementation NSCollectionViewFlowLayout
 @synthesize itemSize = _itemSize;
 @synthesize sectionInset = _sectionInset;
