@@ -2157,6 +2157,13 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
                            forTableColumn: clickedColumnObject
                                       row: NS_EXTRA(NSTableView, self)->_clickedRow];
 
+    // The delegate's YES only takes effect for button cells: on macOS (26.7.3 and 10.14.4,
+    // black-box test appkit-table-delegate-selection) a click on a text cell still selects the
+    // row when the delegate answers YES, so the click does not turn into a cell tracking
+    // session that leaves the selection alone.
+    if (![clickedCell isKindOfClass: [NSButtonCell class]])
+        tracksCell = NO;
+
     if (tracksCell) {
         [clickedCell
                 setObjectValue:
