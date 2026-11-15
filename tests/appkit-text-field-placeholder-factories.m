@@ -32,11 +32,6 @@ int main(void)
         expect([wrapping lineBreakMode] == NSLineBreakByWordWrapping && [[wrapping stringValue] isEqualToString:@"hi"],
                @"wrapping label wraps words");
 
-        NSTextField *attributed = [NSTextField labelWithAttributedString:[[[NSAttributedString alloc] initWithString:@"hi"] autorelease]];
-        expect(![attributed isEditable] && ![attributed isSelectable] && ![attributed isBezeled] && ![attributed drawsBackground],
-               @"attributed label flags");
-        expect([[attributed stringValue] isEqualToString:@"hi"], @"attributed label text");
-
         NSTextField *field = [NSTextField textFieldWithString:@"hi"];
         expect([field isEditable] && [field isSelectable] && [field isBezeled] && [field drawsBackground], @"text field flags");
         expect([[field stringValue] isEqualToString:@"hi"], @"text field text");

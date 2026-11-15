@@ -72,18 +72,6 @@ NS_EXTRA_DEALLOC(NSTextField)
     return label;
 }
 
-+ (instancetype) labelWithAttributedString: (NSAttributedString *) attributedStringValue {
-    NSTextField *label = [[[self alloc] initWithFrame: NSZeroRect] autorelease];
-    [label setAttributedStringValue: (attributedStringValue != nil) ? attributedStringValue : [[[NSAttributedString alloc] initWithString: @""] autorelease]];
-    [label setBezeled: NO];
-    [label setDrawsBackground: NO];
-    [label setEditable: NO];
-    [label setSelectable: NO];
-    [label setLineBreakMode: NSLineBreakByWordWrapping];
-    [label sizeToFit];
-    return label;
-}
-
 + (instancetype) textFieldWithString: (NSString *) stringValue {
     NSTextField *field = [[[self alloc] initWithFrame: NSZeroRect] autorelease];
     [field setStringValue: (stringValue != nil) ? stringValue : @""];
