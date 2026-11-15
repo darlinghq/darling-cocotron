@@ -94,4 +94,26 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [[self _searchCell] setSearchMenuTemplate: menu];
 }
 
+// The delegate hears that searching started when the field's text becomes
+// non-empty and that it ended when the text is empty again (typing it away or
+// pressing the cancel button).
+- (void) _searchTextDidChange {
+    BOOL hasText = [[self stringValue] length] > 0;
+
+    if (hasText == _searching)
+        return;
+    _searching = hasText;
+
+    id delegate = [self delegate];
+    SEL selector = hasText ? @selector(searchFieldDidStartSearching:) : @selector(searchFieldDidEndSearching:);
+
+    if ([delegate respondsToSelector: selector])
+        [delegate performSelector: selector withObject: self];
+}
+
+- (void) textDidChange: (NSNotification *) note {
+    [super textDidChange: note];
+    [self _searchTextDidChange];
+}
+
 @end

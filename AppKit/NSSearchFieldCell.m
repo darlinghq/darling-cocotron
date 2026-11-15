@@ -212,6 +212,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                                ofView: view
                          untilMouseUp: YES]) {
         [(NSControl *) view setStringValue: @""];
+        // lets a search field tell its delegate that searching ended
+        if ([view respondsToSelector: NSSelectorFromString(@"_searchTextDidChange")])
+            [view performSelector: NSSelectorFromString(@"_searchTextDidChange")];
 
         if (_resignsFirstResponderWithCancel)
             [[view window] makeFirstResponder: nil];

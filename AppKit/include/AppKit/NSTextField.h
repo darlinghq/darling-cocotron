@@ -50,8 +50,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 @property(nonatomic) BOOL allowsEditingTextAttributes;
 
 - (NSInteger) maximumNumberOfLines;
-- (NSString *) placeholderString;
-- (NSAttributedString *) placeholderAttributedString;
+@property(copy) NSString *placeholderString;
+@property(copy) NSAttributedString *placeholderAttributedString;
 
 - (void) selectText: sender;
 
@@ -65,6 +65,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 // Convenience constructor for a non-editable, borderless label (10.12)
 + (instancetype) labelWithString: (NSString *) stringValue;
+// Convenience constructors (10.12): a label that wraps, a label for an
+// attributed string and an editable, bezeled text field
++ (instancetype) wrappingLabelWithString: (NSString *) stringValue;
++ (instancetype) labelWithAttributedString: (NSAttributedString *) attributedStringValue;
++ (instancetype) textFieldWithString: (NSString *) stringValue;
 
 @end
 
