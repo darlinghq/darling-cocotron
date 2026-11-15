@@ -43,7 +43,21 @@ NSString *const IBCocoaFramework = @"IBCocoaFramework";
 
 @interface NSNib (private)
 - (NSDictionary *) externalNameTable;
+- (void) _replaceDecodedObject: (id) object withObject: (id) replacement;
 @end
+
+// -replaceObject:withObject: does not always tell the delegate, and the system
+// NSKeyedUnarchiver does not change what later decodes of the object return
+// either. So tell the nib directly, and remember the replacement so that the
+// loop over the object table reuses it instead of instantiating the
+// placeholder a second time.
+static void replaceDecodedObject(NSKeyedUnarchiver *keyed, NSMapTable *replacements, id object, id replacement) {
+    [keyed replaceObject: object withObject: replacement];
+    [replacements setObject: replacement forKey: object];
+    id nib = [keyed delegate];
+    if ([nib respondsToSelector: @selector(_replaceDecodedObject:withObject:)])
+        [nib _replaceDecodedObject: object withObject: replacement];
+}
 
 @interface NSMenu (private)
 - (NSString *) _name;
@@ -112,6 +126,8 @@ NSString *const IBCocoaFramework = @"IBCocoaFramework";
         NSKeyedUnarchiver *keyed = (NSKeyedUnarchiver *) coder;
         NSMutableDictionary *nameTable = [NSMutableDictionary
                 dictionaryWithDictionary: [[keyed delegate] externalNameTable]];
+        NSMapTable *replacements = [NSMapTable mapTableWithKeyOptions: NSPointerFunctionsObjectPointerPersonality | NSPointerFunctionsStrongMemory
+                                                         valueOptions: NSPointerFunctionsObjectPointerPersonality | NSPointerFunctionsStrongMemory];
         int i, count;
         id owner;
 
@@ -130,7 +146,7 @@ NSString *const IBCocoaFramework = @"IBCocoaFramework";
             id nibObject = [namedObjects objectAtIndex: i];
 
             if (external != nil) {
-                [keyed replaceObject: nibObject withObject: external];
+                replaceDecodedObject(keyed, replacements, nibObject, external);
                 [_nameTable setObject: check forKey: external];
             } else if ([nibObject isKindOfClass: [NSCustomObject class]]) {
                 id replacement = [nibObject createCustomInstance];
@@ -138,7 +154,7 @@ NSString *const IBCocoaFramework = @"IBCocoaFramework";
                 if (replacement == nil) {
                     [_nameTable setObject: check forKey: nibObject];
                 } else {
-                    [keyed replaceObject: nibObject withObject: replacement];
+                    replaceDecodedObject(keyed, replacements, nibObject, replacement);
                     [_nameTable setObject: check forKey: replacement];
                     [replacement release];
                 }
@@ -154,7 +170,7 @@ NSString *const IBCocoaFramework = @"IBCocoaFramework";
                 // Already-decoded arrays and connectors can still reference
                 // the placeholder after the decoder accepts replacement.
                 // Preserve it until buildConnectionsWithNameTable: repairs them.
-                [keyed replaceObject: _fileOwner withObject: owner];
+                replaceDecodedObject(keyed, replacements, _fileOwner, owner);
             }
         }
 
@@ -186,15 +202,22 @@ NSString *const IBCocoaFramework = @"IBCocoaFramework";
             id aValue = objectValues[i];
             id replacement = nil;
 
-            if ((aValue == _fileOwner || (owner != nil && aValue == owner)) &&
-                [aKey isKindOfClass: [NSCustomObject class]]) {
-                replacement = [aKey createCustomInstance];
+            if ([aKey isKindOfClass: [NSCustomObject class]]) {
+                id known = [replacements objectForKey: aKey];
+
+                if (known != nil) {
+                    // Already replaced above; an unarchiver that ignores
+                    // replaceObject:withObject: still hands out the placeholder.
+                    replacement = [known retain];
+                } else if (aValue == _fileOwner || (owner != nil && aValue == owner)) {
+                    replacement = [aKey createCustomInstance];
+                }
             }
 
             if (replacement != nil) {
                 // Tell the decoder we are now using that - that will notify
                 // the Nib object
-                [keyed replaceObject: aKey withObject: replacement];
+                replaceDecodedObject(keyed, replacements, aKey, replacement);
                 // Update the connections
                 [self replaceObject: aKey withObject: replacement];
 

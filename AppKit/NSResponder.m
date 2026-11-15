@@ -175,6 +175,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return [_nextResponder tryToPerform: action with: object];
 }
 
+// Public since macOS 10.7. The base implementation returns nil and does not
+// forward to the next responder (observed on macOS); a subclass names an object
+// outside the responder chain (a window controller, a document) that handles
+// the action by overriding this, for itself only.
+- (id) supplementalTargetForAction: (SEL) action sender: (id) sender {
+    return nil;
+}
+
 - (void) noResponderFor: (SEL) action {
     if (sel_isEqual(action, @selector(keyDown:)))
         NSBeep();
