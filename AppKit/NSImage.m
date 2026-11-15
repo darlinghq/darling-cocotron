@@ -1858,10 +1858,24 @@ static NSUInteger scaledRepCacheBytes(NSArray *cache) {
                 configurationWithScale: (NSImageSymbolScale) [scale integerValue]];
         image = [self imageWithSymbolConfiguration: configuration];
     }
+    if (!respectFlipped || ![[NSGraphicsContext currentContext] isFlipped]) {
+        [image drawInRect: rect
+                 fromRect: source
+                operation: operation
+                 fraction: fraction];
+        return;
+    }
+    // Upright in a flipped context: flip the rect's own coordinates back
+    // around its vertical centre.
+    CGContextRef context = NSCurrentGraphicsPort();
+    CGContextSaveGState(context);
+    CGContextTranslateCTM(context, 0, NSMinY(rect) + NSMaxY(rect));
+    CGContextScaleCTM(context, 1, -1);
     [image drawInRect: rect
-            fromRect: source
-           operation: operation
-            fraction: fraction];
+             fromRect: source
+            operation: operation
+             fraction: fraction];
+    CGContextRestoreGState(context);
 }
 
 - (NSString *) description {
@@ -2123,7 +2137,11 @@ static NSUInteger scaledRepCacheBytes(NSArray *cache) {
     NSString *extension = [name pathExtension];
     if (extension && extension.length) {
         NSString *baseName = [name stringByDeletingPathExtension];
-        return [self pathForResource: baseName ofType: extension];
+        NSString *path = [self pathForResource: baseName ofType: extension];
+        // "com.example.icon" has a path extension that is not an image type:
+        // fall through and try the image types on the whole name.
+        if (path != nil)
+            return path;
     }
     NSArray *types = [NSImage imageFileTypes];
     int i, count = [types count];
@@ -2138,6 +2156,13 @@ static NSUInteger scaledRepCacheBytes(NSArray *cache) {
 
     return [self pathForResource: [name stringByDeletingPathExtension]
                           ofType: [name pathExtension]];
+}
+
+- (NSURL *) URLForImageResource: (NSString *) name {
+    NSString *path = [self pathForImageResource: name];
+    if (path == nil)
+        return nil;
+    return [NSURL fileURLWithPath: path];
 }
 
 - (NSImage *) imageForResource: (NSString *) name {
