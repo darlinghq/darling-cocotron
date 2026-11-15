@@ -22,6 +22,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSUserInterfaceItemSearching.h>
 #import <AppKit/NSColorPanel.h>
+#import <AppKit/NSColor.h>
 #import <AppKit/NSDisplay.h>
 #import <AppKit/NSGlobalMenu+Private.h>
 #import <AppKit/NSDockTile.h>
@@ -54,8 +55,21 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import "private-include/AppKit/NSEventTime.h"
 #import <Foundation/NSAppleEventDescriptor.h>
 #import <objc/message.h>
-#include <notify.h>
 #import <pthread.h>
+#include <notify.h>
+#include <mach-o/dyld_priv.h>
+
+@interface NSApplication (AppearancePrivate)
+- (void) _systemAppearanceDidChange;
+@end
+
+// QUIRK: macOS posts AppleInterfaceThemeChangedNotification through the distributed
+// notification center when the interface style changes.
+// Evidence: observing distributed notifications on macOS 10.14+ (tier 2, MAC-EVIDENCE).
+// Test: tests/appkit-appearance-theme.m
+static void _themeChangedNotificationCallback(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo) {
+    [(NSApplication *)observer _systemAppearanceDidChange];
+}
 
 // Runs the +[NSEvent addLocalMonitorForEventsMatchingMask:handler:] handlers.
 extern NSEvent *NSEventApplyLocalMonitors(NSEvent *event);
@@ -307,6 +321,18 @@ static void observeProcessCommands(NSApplication *application) {
                selector: @selector(_windowWillClose:)
                    name: NSWindowWillCloseNotification
                  object: nil];
+
+    CFNotificationCenterRef distCenter = CFNotificationCenterGetDistributedCenter();
+    if (distCenter != NULL) {
+        CFNotificationCenterAddObserver(
+            distCenter,
+            (void *)self,
+            _themeChangedNotificationCallback,
+            CFSTR("AppleInterfaceThemeChangedNotification"),
+            NULL,
+            CFNotificationSuspensionBehaviorDeliverImmediately
+        );
+    }
 
     [self _showSplashImage];
 
@@ -682,31 +708,137 @@ static NSMutableArray *pendingOpenURLs = nil;
 // Observers of a window's effectiveAppearance are told when the application's
 // appearance changes, because a window without an appearance of its own
 // follows the application's.
+static void _propagateAppearanceChangeToView(NSView *view) {
+    if (view == nil)
+        return;
+    if ([view appearance] != nil)
+        return; // View has an explicit appearance; its effectiveAppearance did not change.
+    [view viewDidChangeEffectiveAppearance];
+    [view setNeedsDisplay: YES];
+    for (NSView *subview in [view subviews]) {
+        _propagateAppearanceChangeToView(subview);
+    }
+}
+
 - (void) setAppearance: (NSAppearance *) appearance {
+    if (_appearance == appearance)
+        return;
     NSArray *windows = [[self windows] copy];
 
-    for (NSWindow *window in windows)
-        [window willChangeValueForKey: @"effectiveAppearance"];
+    [self willChangeValueForKey: @"effectiveAppearance"];
+    for (NSWindow *window in windows) {
+        if ([window appearance] == nil)
+            [window willChangeValueForKey: @"effectiveAppearance"];
+    }
     appearance = [appearance retain];
     [_appearance release];
     _appearance = appearance;
-    for (NSWindow *window in windows)
-        [window didChangeValueForKey: @"effectiveAppearance"];
+    [self didChangeValueForKey: @"effectiveAppearance"];
+    for (NSWindow *window in windows) {
+        if ([window appearance] == nil) {
+            [window didChangeValueForKey: @"effectiveAppearance"];
+            _propagateAppearanceChangeToView([window contentView]);
+        }
+    }
     [windows release];
 }
 
-// Without an explicit appearance the application follows the system one,
-// which is always Aqua here.
-- (NSAppearance *) effectiveAppearance {
-    static NSAppearance *systemAppearance;
+- (void) _systemAppearanceDidChange {
+    CFPreferencesAppSynchronize(kCFPreferencesCurrentApplication);
+    CFPreferencesAppSynchronize(kCFPreferencesAnyApplication);
+    [[NSUserDefaults standardUserDefaults] synchronize];
 
+    static id s_lastAccent = nil;
+    static id s_lastHighlight = nil;
+    id currentAccent = [[NSUserDefaults standardUserDefaults] objectForKey: @"AppleAccentColor"];
+    id currentHighlight = [[NSUserDefaults standardUserDefaults] objectForKey: @"AppleHighlightColor"];
+    BOOL colorsChanged = NO;
+    if ((currentAccent != nil || s_lastAccent != nil) && ![currentAccent isEqual: s_lastAccent]) {
+        colorsChanged = YES;
+    }
+    if ((currentHighlight != nil || s_lastHighlight != nil) && ![currentHighlight isEqual: s_lastHighlight]) {
+        colorsChanged = YES;
+    }
+    [s_lastAccent release];
+    s_lastAccent = [currentAccent retain];
+    [s_lastHighlight release];
+    s_lastHighlight = [currentHighlight retain];
+
+    if (colorsChanged) {
+        [[NSNotificationCenter defaultCenter] postNotificationName: NSSystemColorsDidChangeNotification object: nil];
+    }
+
+    static NSAppearanceName s_lastEffectiveAppearanceName = nil;
+    NSAppearance *newAppAppearance = [self effectiveAppearance];
+    NSAppearanceName newName = [newAppAppearance name];
+    BOOL appAppearanceChanged = (_appearance == nil && (![newName isEqualToString: s_lastEffectiveAppearanceName]));
+    if (s_lastEffectiveAppearanceName == nil) {
+        s_lastEffectiveAppearanceName = [newName copy];
+    } else if (appAppearanceChanged) {
+        [s_lastEffectiveAppearanceName release];
+        s_lastEffectiveAppearanceName = [newName copy];
+    }
+
+    if (appAppearanceChanged) {
+        [self willChangeValueForKey: @"effectiveAppearance"];
+        [self didChangeValueForKey: @"effectiveAppearance"];
+    }
+
+    if (appAppearanceChanged || colorsChanged) {
+        NSArray *windows = [[self windows] copy];
+        for (NSWindow *window in windows) {
+            BOOL windowHasExplicitAppearance = ([window appearance] != nil);
+            if (appAppearanceChanged && !windowHasExplicitAppearance) {
+                [window willChangeValueForKey: @"effectiveAppearance"];
+                [window didChangeValueForKey: @"effectiveAppearance"];
+            }
+            NSView *contentView = [window contentView];
+            if (contentView != nil) {
+                if (appAppearanceChanged && !windowHasExplicitAppearance) {
+                    _propagateAppearanceChangeToView(contentView);
+                } else {
+                    [contentView setNeedsDisplay: YES];
+                }
+            }
+        }
+        [windows release];
+    }
+}
+
+// Without an explicit appearance the application follows the system one,
+// derived from AppleInterfaceStyle.
+- (NSAppearance *) effectiveAppearance {
     if (_appearance != nil)
         return _appearance;
 
-    if (systemAppearance == nil)
-        systemAppearance =
-                [[NSAppearance appearanceNamed: NSAppearanceNameAqua] retain];
-    return systemAppearance;
+    // QUIRK: macOS 10.14 Mojave keeps Aqua appearance for binaries linked against SDK < 10.14.
+    // Evidence: dyld_get_program_sdk_version() check on macOS 10.14+ (tier 2, MAC-EVIDENCE).
+    // Test: tests/appkit-appearance-theme.m
+    uint32_t sdk = dyld_get_program_sdk_version();
+    if (sdk != 0 && sdk < 0x000A0E00) {
+        return [NSAppearance appearanceNamed: NSAppearanceNameAqua];
+    }
+
+    // QUIRK: NSRequiresAquaSystemAppearance in NSUserDefaults or Info.plist forces Aqua appearance.
+    // Evidence: Apple documentation and Mojave defaults behavior.
+    // Test: tests/appkit-appearance-theme.m
+    id reqAqua = [[NSUserDefaults standardUserDefaults] objectForKey: @"NSRequiresAquaSystemAppearance"];
+    if (reqAqua == nil) {
+        reqAqua = [[NSBundle mainBundle] objectForInfoDictionaryKey: @"NSRequiresAquaSystemAppearance"];
+    }
+    if (reqAqua != nil && [reqAqua boolValue]) {
+        return [NSAppearance appearanceNamed: NSAppearanceNameAqua];
+    }
+
+    // QUIRK: AppleInterfaceStyle preference in NSGlobalDomain determines dark mode when set to "Dark".
+    // Evidence: macOS System Preferences General pane dark mode setting.
+    // Test: tests/appkit-appearance-theme.m
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    NSString *style = [defaults stringForKey: @"AppleInterfaceStyle"];
+    if (style != nil && [style isEqualToString: @"Dark"]) {
+        return [NSAppearance appearanceNamed: NSAppearanceNameDarkAqua];
+    }
+    return [NSAppearance appearanceNamed: NSAppearanceNameAqua];
 }
 
 - (NSWindow *) makeWindowsPerform: (SEL) selector inOrder: (BOOL) inOrder {

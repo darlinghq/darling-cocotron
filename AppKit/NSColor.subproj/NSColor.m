@@ -79,7 +79,15 @@ static NSColor *constantWhite(CGFloat white, CGFloat alpha) {
     return result;
 }
 
+static void _initializeDynamicSystemColors(void);
+
 @implementation NSColor
+
++ (void) initialize {
+    if (self == [NSColor class]) {
+        _initializeDynamicSystemColors();
+    }
+}
 
 - (NSColorType) type {
     return NSColorTypeComponentBased;
@@ -478,17 +486,51 @@ static NSColor *constantWhite(CGFloat white, CGFloat alpha) {
     return [NSColor colorWithCatalogName: @"System" colorName: @"controlColor"];
 }
 
-// The user's accent colour. There is no accent setting to follow here, so it
-// is the default one, the system blue (sRGB 0, 122, 255).
-+ (NSColor *) controlAccentColor {
-    return [NSColor colorWithSRGBRed: 0.0
-                               green: 122.0 / 255.0
-                                blue: 1.0
-                               alpha: 1.0];
+// QUIRK: AppleAccentColor preference is an integer from -1 (Graphite) to 6 (Pink), default 4 (Blue).
+// Values measured on macOS 10.14.4 Mojave in sRGB color space.
+// Evidence: macOS System Preferences General pane setting written to NSGlobalDomain AppleAccentColor.
+// Test: tests/appkit-appearance-theme.m
++ (NSColor *) _accentColorForCode: (NSInteger) code {
+    switch (code) {
+    case -1: // Graphite
+        return [NSColor colorWithSRGBRed: 0.557f green: 0.557f blue: 0.576f alpha: 1.0f];
+    case 0: // Red
+        return [NSColor colorWithSRGBRed: 1.0f green: 0.231f blue: 0.188f alpha: 1.0f];
+    case 1: // Orange
+        return [NSColor colorWithSRGBRed: 1.0f green: 0.584f blue: 0.0f alpha: 1.0f];
+    case 2: // Yellow
+        return [NSColor colorWithSRGBRed: 1.0f green: 0.8f blue: 0.0f alpha: 1.0f];
+    case 3: // Green
+        return [NSColor colorWithSRGBRed: 0.157f green: 0.804f blue: 0.255f alpha: 1.0f];
+    case 4: // Blue
+    default:
+        return [NSColor colorWithSRGBRed: 0.0f green: 0.478f blue: 1.0f alpha: 1.0f];
+    case 5: // Purple
+        return [NSColor colorWithSRGBRed: 0.686f green: 0.322f blue: 0.871f alpha: 1.0f];
+    case 6: // Pink
+        return [NSColor colorWithSRGBRed: 1.0f green: 0.176f blue: 0.333f alpha: 1.0f];
+    }
 }
 
-// The blue tint is the default appearance.
+// The user's accent colour. Follows AppleAccentColor preference as a System catalog color.
++ (NSColor *) controlAccentColor {
+    return [NSColor colorWithCatalogName: @"System" colorName: @"controlAccentColor"];
+}
+
+// QUIRK: AppleAquaColorVariant == 6 corresponds to Graphite control tint (or AppleAccentColor == -1).
+// Any other variant or default is NSBlueControlTint (value 1, not NSDefaultControlTint which is 0).
+// Evidence: macOS 10.14+ defaults read -g AppleAquaColorVariant.
+// Test: tests/appkit-appearance-theme.m
 + (NSControlTint) currentControlTint {
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    id variant = [defaults objectForKey: @"AppleAquaColorVariant"];
+    if (variant != nil && [variant integerValue] == 6) {
+        return NSGraphiteControlTint;
+    }
+    id accent = [defaults objectForKey: @"AppleAccentColor"];
+    if (accent != nil && [accent integerValue] == -1) {
+        return NSGraphiteControlTint;
+    }
     return NSBlueControlTint;
 }
 
@@ -654,12 +696,102 @@ static NSColor *constantWhite(CGFloat white, CGFloat alpha) {
 }
 
 // NSDisplay.m
+void NSColorSetCatalogColor(NSColorListName catalogName, NSColorName colorName,
+                            NSColor *color);
 NSColor *NSColorGetCatalogColor(NSColorListName catalogName,
                                 NSColorName colorName);
+
+static BOOL isDarkAppearance(NSAppearance *appearance) {
+    if (appearance == nil)
+        appearance = [NSAppearance currentAppearance];
+    NSAppearanceName match = [appearance bestMatchFromAppearancesWithNames: @[
+        NSAppearanceNameAqua,
+        NSAppearanceNameDarkAqua
+    ]];
+    return [match isEqualToString: NSAppearanceNameDarkAqua];
+}
+
+static void registerDynamicSystemColor(NSColorName name, NSColor *light, NSColor *dark) {
+    NSColor *dynamic = [NSColor colorWithName: name dynamicProvider: ^NSColor *(NSAppearance *appearance) {
+        return isDarkAppearance(appearance) ? dark : light;
+    }];
+    NSColorSetCatalogColor(@"System", name, dynamic);
+}
+
+// QUIRK: AppleHighlightColor in NSGlobalDomain stores RGB components as a space-separated float string.
+// Default macOS 10.14 Mojave Blue highlight color is sRGB (0.698039, 0.843137, 1.0).
+// Evidence: macOS 10.14+ defaults read -g AppleHighlightColor.
+// Test: tests/appkit-appearance-theme.m
+static NSColor *highlightColorFromDefaults(NSAppearance *appearance) {
+    NSString *val = [[NSUserDefaults standardUserDefaults] stringForKey: @"AppleHighlightColor"];
+    if (val != nil && [val length] > 0) {
+        float r = 0, g = 0, b = 0, a = 1.0;
+        int count = sscanf([val UTF8String], "%f %f %f %f", &r, &g, &b, &a);
+        if (count >= 3) {
+            return [NSColor colorWithSRGBRed: r green: g blue: b alpha: (count >= 4) ? a : 1.0f];
+        }
+    }
+    if (isDarkAppearance(appearance)) {
+        return [NSColor colorWithSRGBRed: 0.247f green: 0.427f blue: 0.698f alpha: 1.0f];
+    }
+    return [NSColor colorWithSRGBRed: 0.698039f green: 0.843137f blue: 1.0f alpha: 1.0f];
+}
+
+static void _initializeDynamicSystemColors(void) {
+    static BOOL initialized = NO;
+    if (initialized)
+        return;
+    initialized = YES;
+
+    registerDynamicSystemColor(@"textColor", constantWhite(0.0, 1.0), constantWhite(1.0, 1.0));
+    registerDynamicSystemColor(@"textBackgroundColor", constantWhite(1.0, 1.0), constantRGB(0.12, 0.12, 0.12, 1.0));
+    registerDynamicSystemColor(@"controlColor", [NSColor colorWithCalibratedWhite: 0.93 alpha: 1.0], constantRGB(0.20, 0.20, 0.20, 1.0));
+    registerDynamicSystemColor(@"controlTextColor", constantWhite(0.0, 1.0), constantWhite(1.0, 1.0));
+    registerDynamicSystemColor(@"selectedControlTextColor", constantWhite(0.0, 1.0), constantWhite(1.0, 1.0));
+    registerDynamicSystemColor(@"controlBackgroundColor", constantWhite(1.0, 1.0), constantRGB(0.15, 0.15, 0.15, 1.0));
+    registerDynamicSystemColor(@"labelColor", [NSColor colorWithSRGBRed: 0.0f green: 0.0f blue: 0.0f alpha: 0.847059f],
+                                            [NSColor colorWithSRGBRed: 1.0f green: 1.0f blue: 1.0f alpha: 0.847059f]);
+    registerDynamicSystemColor(@"secondaryLabelColor", [NSColor colorWithSRGBRed: 0.0f green: 0.0f blue: 0.0f alpha: 0.498f],
+                                                     [NSColor colorWithSRGBRed: 1.0f green: 1.0f blue: 1.0f alpha: 0.55f]);
+    registerDynamicSystemColor(@"tertiaryLabelColor", [NSColor colorWithSRGBRed: 0.0f green: 0.0f blue: 0.0f alpha: 0.247f],
+                                                    [NSColor colorWithSRGBRed: 1.0f green: 1.0f blue: 1.0f alpha: 0.25f]);
+    registerDynamicSystemColor(@"quaternaryLabelColor", [NSColor colorWithSRGBRed: 0.0f green: 0.0f blue: 0.0f alpha: 0.098f],
+                                                     [NSColor colorWithSRGBRed: 1.0f green: 1.0f blue: 1.0f alpha: 0.10f]);
+    registerDynamicSystemColor(@"placeholderTextColor", [NSColor colorWithSRGBRed: 0.0f green: 0.0f blue: 0.0f alpha: 0.247f],
+                                                      [NSColor colorWithSRGBRed: 1.0f green: 1.0f blue: 1.0f alpha: 0.25f]);
+    registerDynamicSystemColor(@"windowFrameTextColor", [NSColor colorWithSRGBRed: 0.0f green: 0.0f blue: 0.0f alpha: 0.847f],
+                                                       [NSColor colorWithSRGBRed: 1.0f green: 1.0f blue: 1.0f alpha: 0.847f]);
+    registerDynamicSystemColor(@"separatorColor", [NSColor colorWithSRGBRed: 0.0f green: 0.0f blue: 0.0f alpha: 0.098f],
+                                                [NSColor colorWithSRGBRed: 1.0f green: 1.0f blue: 1.0f alpha: 0.10f]);
+    registerDynamicSystemColor(@"linkColor", [NSColor colorWithSRGBRed: 0.0f green: 0.411765f blue: 0.850980f alpha: 1.0f],
+                                           [NSColor colorWithSRGBRed: 0.254902f green: 0.596078f blue: 1.0f alpha: 1.0f]);
+    registerDynamicSystemColor(@"windowBackgroundColor", [NSColor colorWithSRGBRed: 0.925f green: 0.925f blue: 0.925f alpha: 1.0f],
+                                                       constantRGB(0.20, 0.20, 0.20, 1.0));
+    registerDynamicSystemColor(@"selectedContentBackgroundColor", [NSColor colorWithSRGBRed: 0.0f green: 0.388235f blue: 0.882353f alpha: 1.0f],
+                                                                 [NSColor colorWithSRGBRed: 0.0f green: 0.345098f blue: 0.815686f alpha: 1.0f]);
+    registerDynamicSystemColor(@"unemphasizedSelectedContentBackgroundColor", [NSColor colorWithSRGBRed: 0.862745f green: 0.862745f blue: 0.862745f alpha: 1.0f],
+                                                                             [NSColor colorWithSRGBRed: 0.274510f green: 0.274510f blue: 0.274510f alpha: 1.0f]);
+    registerDynamicSystemColor(@"unemphasizedSelectedTextColor", constantWhite(0.0, 1.0), constantWhite(1.0, 1.0));
+    registerDynamicSystemColor(@"unemphasizedSelectedTextBackgroundColor", [NSColor colorWithSRGBRed: 0.863f green: 0.863f blue: 0.863f alpha: 1.0f],
+                                                                          [NSColor colorWithSRGBRed: 0.275f green: 0.275f blue: 0.275f alpha: 1.0f]);
+
+    NSColor *dynamicAccent = [NSColor colorWithName: @"controlAccentColor" dynamicProvider: ^NSColor *(NSAppearance *appearance) {
+        id val = [[NSUserDefaults standardUserDefaults] objectForKey: @"AppleAccentColor"];
+        NSInteger code = (val != nil) ? [val integerValue] : 4;
+        return [NSColor _accentColorForCode: code];
+    }];
+    NSColorSetCatalogColor(@"System", @"controlAccentColor", dynamicAccent);
+
+    NSColor *dynamicHighlight = [NSColor colorWithName: @"selectedTextBackgroundColor" dynamicProvider: ^NSColor *(NSAppearance *appearance) {
+        return highlightColorFromDefaults(appearance);
+    }];
+    NSColorSetCatalogColor(@"System", @"selectedTextBackgroundColor", dynamicHighlight);
+}
 
 // A System catalog color that display backends may not know: the value a
 // backend registered in the catalog, else the given default.
 static NSColor *systemCatalogColor(NSColorName name, NSColor *fallback) {
+    _initializeDynamicSystemColors();
     NSColor *color = [[NSDisplay currentDisplay] colorWithName: name];
 
     if (color == nil)
@@ -671,18 +803,15 @@ static NSColor *systemCatalogColor(NSColorName name, NSColor *fallback) {
 
 // Label text at decreasing emphasis: black with less alpha than labelColor.
 + (NSColor *) secondaryLabelColor {
-    return systemCatalogColor(@"secondaryLabelColor",
-                              constantWhite(0.0, 0.5));
+    return [NSColor colorWithCatalogName: @"System" colorName: @"secondaryLabelColor"];
 }
 
 + (NSColor *) tertiaryLabelColor {
-    return systemCatalogColor(@"tertiaryLabelColor",
-                              constantWhite(0.0, 0.26));
+    return [NSColor colorWithCatalogName: @"System" colorName: @"tertiaryLabelColor"];
 }
 
 + (NSColor *) quaternaryLabelColor {
-    return systemCatalogColor(@"quaternaryLabelColor",
-                              constantWhite(0.0, 0.1));
+    return [NSColor colorWithCatalogName: @"System" colorName: @"quaternaryLabelColor"];
 }
 
 // The Aqua values (the appearance of this implementation) of colors that macOS's System catalog
@@ -692,11 +821,7 @@ static NSColor *systemCatalogColor(NSColorName name, NSColor *fallback) {
 }
 
 + (NSColor *) placeholderTextColor {
-    // QUIRK: macOS 10.14 answers black at 0.247 alpha and macOS 26.7.3 black at 0.498; the lighter
-    // older value is used (the same difference as tertiaryLabelColor). Not documented.
-    // Evidence: black-box observation on both (tier 2, MAC-EVIDENCE V615, probe v615_color_values.m).
-    // Test: tests/appkit-color-api.m (testSystemColors)
-    return systemCatalogColor(@"placeholderTextColor", constantWhite(0.0, 0.247));
+    return [NSColor colorWithCatalogName: @"System" colorName: @"placeholderTextColor"];
 }
 
 + (NSColor *) underPageBackgroundColor {
@@ -1020,6 +1145,9 @@ static NSColor *systemCatalogColor(NSColorName name, NSColor *fallback) {
 + (NSColor *) colorWithCatalogName: (NSColorListName) catalogName
                          colorName: (NSColorName) colorName
 {
+    if ([catalogName isEqualToString: @"System"]) {
+        _initializeDynamicSystemColors();
+    }
     return [NSColor_catalog colorWithCatalogName: catalogName
                                        colorName: colorName];
 }
