@@ -25,7 +25,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSSet, NSMutableSet, NSNotification, NSUndoManager, NSMapTable;
 @class NSManagedObject, NSManagedObjectID, NSFetchRequest, NSPersistentStore,
-        NSPersistentStoreCoordinator;
+        NSPersistentStoreCoordinator, NSPersistentStoreRequest;
 
 COREDATA_EXPORT NSString *const NSManagedObjectContextObjectsDidChangeNotification;
 COREDATA_EXPORT NSString *const NSManagedObjectContextWillSaveNotification;
@@ -130,6 +130,11 @@ typedef NS_ENUM(NSUInteger, NSManagedObjectContextConcurrencyType) {
 - (NSUInteger) countForFetchRequest: (NSFetchRequest *) request
                               error: (NSError **) error NS_SWIFT_NAME(count(for:))
         __attribute__((swift_error(nonnull_error)));
+
+// Runs an NSBatchUpdateRequest or NSBatchDeleteRequest and returns its result object. Other
+// request kinds are not supported: nil is returned with NSPersistentStoreOperationError.
+- (id) executeRequest: (NSPersistentStoreRequest *) request
+                error: (NSError **) error;
 
 - (void) insertObject: (NSManagedObject *) object;
 - (void) deleteObject: (NSManagedObject *) object;

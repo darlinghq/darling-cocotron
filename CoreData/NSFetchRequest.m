@@ -37,7 +37,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return self;
 }
 
- + (instancetype)fetchRequestWithEntityName:(NSString *)name {
++ (instancetype)fetchRequestWithEntityName:(NSString *)name {
     return [[[self alloc] initWithEntityName:name] autorelease];
 }
 
@@ -77,7 +77,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [_entity release];
     [_predicate release];
     [_sortDescriptors release];
-    [_affectedStores release];
     [super dealloc];
 }
 
@@ -85,7 +84,20 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return _resultType;
 }
 
+// QUIRK: -entity on a request created from an entity name raises NSObjectInaccessibleException
+// until the request is used by a context. Not documented. Evidence: black-box observation on
+// macOS 26.7.3 (tier 2).
+// Test: tests/coredata-batch-requests.m (fetchRaised check)
 - (NSEntityDescription *) entity {
+    if (_entity == nil && _entityName != nil)
+        [NSException raise: @"NSObjectInaccessibleException"
+                    format: @"This fetch request was created with a string name (%@) and cannot "
+                             "respond to -entity until used by an NSManagedObjectContext",
+                            _entityName];
+    return _entity;
+}
+
+- (NSEntityDescription *) _entityIfKnown {
     return _entity;
 }
 
@@ -95,10 +107,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (NSArray *) sortDescriptors {
     return _sortDescriptors;
-}
-
-- (NSArray *) affectedStores {
-    return _affectedStores;
 }
 
 - (NSUInteger) fetchLimit {
@@ -161,12 +169,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     value = [value copy];
     [_sortDescriptors release];
     _sortDescriptors = value;
-}
-
-- (void) setAffectedStores: (NSArray *) value {
-    value = [value copy];
-    [_affectedStores release];
-    _affectedStores = value;
 }
 
 - (void) setFetchLimit: (NSUInteger) value {
