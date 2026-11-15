@@ -437,10 +437,6 @@ static NSData *makeWindowIcon() {
     if (!_dock && !_overrideRedirect && !isMenuWindow)
         [[x11disp appMenu] windowCreated: _window];
 
-    // FIXME: Move this call into setStyleMaskInternal below!
-    if (_styleMask == NSBorderlessWindowMask) {
-        [[self class] removeDecorationForWindow: _window onDisplay: _display];
-    }
     [self setStyleMaskInternal: _styleMask force: YES];
 
     [self setWindowIcon];
@@ -609,10 +605,26 @@ static NSData *makeWindowIcon() {
     [self updateLayerPresentationHints];
 }
 
+// A window gets the window manager's frame only when its style mask has a
+// title bar (NSWindowStyleMaskTitled); a mask without that bit, borderless or
+// not, asks for none. The mask is passed in rather than read from _styleMask
+// because -setStyleMask: hands the new mask here before it stores it.
+- (void) updateDecorationsForStyleMask: (NSUInteger) mask {
+    if (mask & NSWindowStyleMaskTitled)
+        XDeleteProperty(_display, _window,
+                        XInternAtom(_display, "_MOTIF_WM_HINTS", False));
+    else
+        [[self class] removeDecorationForWindow: _window onDisplay: _display];
+}
+
 - (void) setStyleMaskInternal: (NSUInteger) mask force: (BOOL) force {
     if (force || (mask & NSWindowStyleMaskResizable) !=
                          (_styleMask & NSWindowStyleMaskResizable)) {
         [self updateSizeHints: mask];
+    }
+    if (force || (mask & NSWindowStyleMaskTitled) !=
+                         (_styleMask & NSWindowStyleMaskTitled)) {
+        [self updateDecorationsForStyleMask: mask];
     }
 
     BOOL fullscreen =
@@ -627,18 +639,6 @@ static NSData *makeWindowIcon() {
     NSLog(@"X11Window setStyleMask: 0x%lx\n", (unsigned long) mask);
 
     [self setStyleMaskInternal: mask force: NO];
-
-    // The window manager draws the frame of a titled window and none for a
-    // borderless one, so the decoration hint follows the style.
-    BOOL borderless = mask == NSBorderlessWindowMask;
-    if (borderless != (_styleMask == NSBorderlessWindowMask)) {
-        if (borderless)
-            [[self class] removeDecorationForWindow: _window
-                                          onDisplay: _display];
-        else
-            XDeleteProperty(_display, _window,
-                            XInternAtom(_display, "_MOTIF_WM_HINTS", False));
-    }
 
     _styleMask = mask;
 }
