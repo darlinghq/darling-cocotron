@@ -112,9 +112,9 @@ CFStringRef CGColorSpaceCopyName(CGColorSpaceRef colorSpace) {
 }
 
 CFDataRef CGColorSpaceCopyICCData(CGColorSpaceRef colorSpace) {
-    // Onyx2D color spaces are not built from ICC profiles and carry none;
-    // a color space without a profile reports NULL.
-    return NULL;
+    // Only the named spaces with a colorimetric profile have ICC data
+    // (synthesized from that profile); device and other spaces report NULL.
+    return O2ColorSpaceCopyICCData((O2ColorSpaceRef)colorSpace);
 }
 
 CGColorSpaceRef CGColorSpaceCreateICCBased(size_t nComponents, const CGFloat *range,
