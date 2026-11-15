@@ -115,6 +115,12 @@ NSImageName const NSImageNameGoForwardTemplate = @"NSGoForwardTemplate";
 NSImageHintKey const NSImageHintInterpolation = @"NSImageHintInterpolation";
 NSImageHintKey const NSImageHintCTM = @"NSImageHintCTM";
 
+// Not declared in a public header.
+APPKIT_EXPORT NSImageHintKey const NSImageHintSymbolFont;
+NSImageHintKey const NSImageHintSymbolFont = @"NSImageHintSymbolFont";
+APPKIT_EXPORT NSImageName const NSImageNameToolbarBookmarks;
+NSImageName const NSImageNameToolbarBookmarks = @"NSToolbarBookmarks";
+
 NSImageName const NSImageNameTouchBarDeleteTemplate =
         @"NSTouchBarDeleteTemplate";
 NSImageName const NSImageNameTouchBarPauseTemplate = @"NSTouchBarPauseTemplate";

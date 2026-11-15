@@ -56,6 +56,8 @@ NSString *const NSOutlineViewSelectionIsChangingNotification =
 
 NSString *const NSOutlineViewDisclosureButtonKey =
         @"NSOutlineViewDisclosureButtonKey";
+NSString *const NSOutlineViewShowHideButtonKey =
+        @"NSOutlineViewShowHideButtonKey";
 
 // We probably don't want this public, but NSOutlineView needs it, and it would
 // prove invaluable to other subclasses of NSTableView.

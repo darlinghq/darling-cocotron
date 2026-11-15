@@ -93,6 +93,7 @@ APPKIT_EXPORT const NSNotificationName NSViewFocusDidChangeNotification;
 APPKIT_EXPORT const NSNotificationName NSViewGlobalFrameDidChangeNotification;
 
 APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeApplicationPresentationOptions;
+APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeAllScreens;
 
 // Legacy ObjC ABI (i386): instance size must stay 0x50, Apple's; the ivars
 // before the extras sit at Apple's offsets. Add new state to the extra

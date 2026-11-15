@@ -38,6 +38,7 @@ const NSNotificationName NSToolbarWillAddItemNotification =
         @"NSToolbarWillAddItemNotification";
 const NSNotificationName NSToolbarDidRemoveItemNotification =
         @"NSToolbarDidRemoveItemNotification";
+NSString *const NSToolbarItemKey = @"item";
 
 // Private inter-toolbar notification.
 const NSNotificationName NSToolbarChangeAppearanceNotification =

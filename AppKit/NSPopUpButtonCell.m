@@ -27,6 +27,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSRaise.h>
 #import <Foundation/NSKeyedArchiver.h>
 
+NSNotificationName NSPopUpButtonCellWillPopUpNotification =
+        @"NSPopUpButtonCellWillPopUpNotification";
+
 @implementation NSPopUpButtonCell
 
 - init {

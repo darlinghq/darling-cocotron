@@ -29,6 +29,13 @@ NSString *const NSWorkspaceWillPowerOffNotification =
 
 NSString *const NSWorkspaceRecycleOperation = @"NSWorkspaceRecycleOperation";
 NSString *const NSWorkspaceDuplicateOperation = @"NSWorkspaceDuplicateOperation";
+NSString *const NSWorkspaceMoveOperation = @"move";
+
+// Not declared in a public header.
+APPKIT_EXPORT const NSNotificationName
+        NSWorkspaceAccessibilityFocusedElementDidChangeNotification;
+const NSNotificationName NSWorkspaceAccessibilityFocusedElementDidChangeNotification =
+        @"NSWorkspaceAccessibilityFocusedElementDidChangeNotification";
 
 NSString *const NSWorkspaceLaunchConfigurationAppleEvent =
         @"NSWorkspaceLaunchConfigurationAppleEvent";

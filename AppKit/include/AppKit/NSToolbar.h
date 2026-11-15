@@ -41,6 +41,7 @@ typedef NS_ENUM(NSUInteger, NSToolbarDisplayMode) {
 
 APPKIT_EXPORT const NSNotificationName NSToolbarWillAddItemNotification;
 APPKIT_EXPORT const NSNotificationName NSToolbarDidRemoveItemNotification;
+APPKIT_EXPORT NSString *const NSToolbarItemKey;
 
 typedef NSString *NSToolbarIdentifier NS_SWIFT_BRIDGED_TYPEDEF;
 

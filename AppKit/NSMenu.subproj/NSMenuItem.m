@@ -26,6 +26,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Foundation/NSKeyedArchiver.h>
 #import <AppKit/NSButtonCell.h>
 
+// Not declared in a public header.
+APPKIT_EXPORT NSString *const NSAppleMenuName;
+NSString *const NSAppleMenuName = @"NSAppleMenu";
+
 @interface NSMenuItemCell : NSButtonCell
 @end
 

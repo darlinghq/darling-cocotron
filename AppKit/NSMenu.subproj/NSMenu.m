@@ -35,6 +35,10 @@ const NSNotificationName NSMenuDidEndTrackingNotification = @"NSMenuDidEndTracki
 const NSNotificationName NSMenuDidAddItemNotification = @"NSMenuDidAddItemNotification";
 const NSNotificationName NSMenuDidRemoveItemNotification = @"NSMenuDidRemoveItemNotification";
 const NSNotificationName NSMenuDidChangeItemNotification = @"NSMenuDidChangeItemNotification";
+
+// Not declared in a public header.
+APPKIT_EXPORT const NSNotificationName NSMenuDidCompleteInteractionNotification;
+const NSNotificationName NSMenuDidCompleteInteractionNotification = @"NSMenuDidCompleteInteractionNotification";
 NSString *const _NSFontMenuName = @"Font";
 NSString *const _NSHelpMenuName = @"Help";
 NSString *const _NSMainMenuName = @"Application";

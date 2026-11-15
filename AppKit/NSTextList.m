@@ -21,6 +21,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 NSString *const NSTextListMarkerDecimal = @"{decimal}";
 NSString *const NSTextListMarkerDisc = @"{disc}";
+NSString *const NSTextListMarkerHyphen = @"{hyphen}";
 
 @implementation NSTextList
 

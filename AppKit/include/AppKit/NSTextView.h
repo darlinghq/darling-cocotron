@@ -76,6 +76,11 @@ APPKIT_EXPORT NSString *const NSTextViewDidChangeSelectionNotification;
 APPKIT_EXPORT NSString *const NSOldSelectedCharacterRange;
 APPKIT_EXPORT NSString *const NSAllRomanInputSourcesLocaleIdentifier;
 
+APPKIT_EXPORT NSString *const NSTouchBarItemIdentifierTextStyle;
+APPKIT_EXPORT NSString *const NSTouchBarItemIdentifierTextAlignment;
+APPKIT_EXPORT NSString *const NSTouchBarItemIdentifierTextColorPicker;
+APPKIT_EXPORT NSString *const NSTouchBarItemIdentifierTextList;
+
 @class NSUndoTyping;
 
 typedef NS_ENUM(NSUInteger, NSFindPanelSubstringMatchType) {

@@ -28,6 +28,7 @@ APPKIT_EXPORT NSString *const NSWorkspaceWillPowerOffNotification;
 
 APPKIT_EXPORT NSString *const NSWorkspaceRecycleOperation;
 APPKIT_EXPORT NSString *const NSWorkspaceDuplicateOperation;
+APPKIT_EXPORT NSString *const NSWorkspaceMoveOperation;
 
 APPKIT_EXPORT NSString *const NSWorkspaceLaunchConfigurationAppleEvent;
 APPKIT_EXPORT NSString *const NSWorkspaceLaunchConfigurationArguments;
