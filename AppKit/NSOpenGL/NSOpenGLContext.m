@@ -26,6 +26,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @interface NSOpenGLContext (private)
 - (void) _clearCurrentContext;
+- (void) _startObservingView;
+- (void) _stopObservingView;
 @end
 
 @implementation NSOpenGLContext
@@ -78,6 +80,7 @@ static inline void _clearCurrentContext() {
 }
 
 - (void) dealloc {
+    [self _stopObservingView];
     // FIXME: this doesn't actually work because if we are the current context
     // we're retained by the thread shared object dict
     if (_currentContext() == self)
@@ -150,6 +153,39 @@ static inline void _clearCurrentContext() {
     }
 }
 
+// A view that has a context attached posts NSViewGlobalFrameDidChangeNotification
+// when its frame changes; applications observe it to call -update when the
+// view is resized. Plain views do not post it. The notification is queued for
+// when the run loop is idle and coalesced per view: on macOS it is posted from
+// inside -setFrame:, but a thread that is waiting for this thread (an
+// application's drawing thread holding its lock) must not be able to block the
+// callout that changed the frame, because a context can be current on one
+// thread at a time here and the main thread has to get to its run loop to
+// hand its context over (see CGLSetCurrentContext).
+- (void) _viewFrameDidChange: (NSNotification *) note {
+    [[NSNotificationQueue defaultQueue]
+            enqueueNotification: [NSNotification notificationWithName: NSViewGlobalFrameDidChangeNotification
+                                                               object: _view]
+                   postingStyle: NSPostWhenIdle
+                   coalesceMask: NSNotificationCoalescingOnName | NSNotificationCoalescingOnSender
+                       forModes: nil];
+}
+
+- (void) _startObservingView {
+    if (_view != nil)
+        [[NSNotificationCenter defaultCenter] addObserver: self
+                                                 selector: @selector(_viewFrameDidChange:)
+                                                     name: NSViewFrameDidChangeNotification
+                                                   object: _view];
+}
+
+- (void) _stopObservingView {
+    if (_view != nil)
+        [[NSNotificationCenter defaultCenter] removeObserver: self
+                                                        name: NSViewFrameDidChangeNotification
+                                                      object: _view];
+}
+
 - (void) setView: (NSView *) view {
     if (NS_EXTRA(NSOpenGLContext, self)->_view == view)
         return;
@@ -163,7 +199,9 @@ static inline void _clearCurrentContext() {
     }
     NS_EXTRA(NSOpenGLContext, self)->_hasPrepared = NO;
     NS_EXTRA(NSOpenGLContext, self)->_drawableAttachmentSucceeded = NO;
+    [self _stopObservingView];
     NS_EXTRA(NSOpenGLContext, self)->_view = view;
+    [self _startObservingView];
 
     if (NS_EXTRA(NSOpenGLContext, self)->_cglWindow != NULL) {
         CGLDestroyWindow(NS_EXTRA(NSOpenGLContext, self)->_cglWindow);

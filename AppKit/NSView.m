@@ -1700,8 +1700,10 @@ static void postFrameChange(NSView *self) {
     }
 }
 
+// A snapshot: -updateTrackingAreas overrides commonly walk the array while
+// removing each area from the view.
 - (NSArray *) trackingAreas {
-    return NS_EXTRA(NSView, self)->_trackingAreas;
+    return [[NS_EXTRA(NSView, self)->_trackingAreas copy] autorelease];
 }
 
 - (void) _trackingAreasChanged {
