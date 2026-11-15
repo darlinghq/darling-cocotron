@@ -4,13 +4,18 @@
 # both first, see the guest-testing notes) and checks, with a host helper, what
 # the X server holds for each window the test names.
 #   run.sh hidden      GUEST_BIN=<cross-compiled hidden-window in the guest>
+#   run.sh decorations GUEST_BIN=<cross-compiled decorations in the guest>
 # Exit status 0 when every window is as expected.
 #
 # Expectations come from the documented AppKit contract: -orderOut: and
-# -makeKeyWindow do not show a window (only the -orderFront family does).
+# -makeKeyWindow do not show a window (only the -orderFront family does), and
+# NSWindowStyleMaskTitled is the style bit for a title bar. On macOS 26.7.3
+# a window whose mask lacks Titled has no title bar (frame and content height
+# are equal), while a titled window keeps its 32 point title bar when
+# titlebarAppearsTransparent is YES and titleVisibility is hidden.
 set -euo pipefail
 here=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
-mode=${1:?hidden}
+mode=${1:?hidden or decorations}
 temp=$(mktemp -d); trap 'rm -rf "$temp"' EXIT
 cc -Wall "$here/probe.c" -lX11 -o "$temp/probe"
 export DISPLAY=:99
@@ -35,6 +40,16 @@ hidden)
     for t in restack-hidden-above restack-hidden-below restack-hidden-key restack-ordered-out; do
         check "$t" "mapped=0"
     done
+    ;;
+decorations)
+    framed="motif=none"
+    frameless="motif=flags:2 decorations:0$"
+    check deco-titled "$framed"
+    check deco-borderless "$frameless"
+    check deco-untitled "$frameless"
+    check deco-titled-to-untitled "$frameless"
+    check deco-untitled-to-titled "$framed"
+    check deco-titled-transparent "$framed"
     ;;
 *) echo "unknown mode $mode"; exit 2 ;;
 esac
