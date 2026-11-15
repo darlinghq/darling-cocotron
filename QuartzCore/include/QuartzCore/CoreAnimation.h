@@ -18,5 +18,6 @@
 #import <QuartzCore/CAReplicatorLayer.h>
 #import <QuartzCore/CAScrollLayer.h>
 #import <QuartzCore/CAShapeLayer.h>
+#import <QuartzCore/CATiledLayer.h>
 #import <QuartzCore/CATransformLayer.h>
 #import <QuartzCore/CASpringAnimation.h>
