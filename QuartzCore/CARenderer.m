@@ -14,6 +14,10 @@
 - (CGFloat) _springProgressAtTime: (CFTimeInterval) t;
 @end
 
+@interface CAMediaTimingFunction (Private)
+- (float) _solveForInput: (float) input;
+@end
+
 NSString *const kCARendererColorSpace = @"kCARendererColorSpace";
 
 @implementation CARenderer
@@ -69,31 +73,10 @@ static void startAnimationsInLayer(CALayer *layer, CFTimeInterval currentTime) {
     startAnimationsInLayer(_rootLayer, currentTime);
 }
 
-static inline CGFloat cubed(CGFloat value) {
-    return value * value * value;
-}
-
-static inline CGFloat squared(CGFloat value) {
-    return value * value;
-}
-
 static CGFloat applyMediaTimingFunction(CAMediaTimingFunction *function,
                                         CGFloat t)
 {
-    CGFloat result;
-    CGFloat cp1[2];
-    CGFloat cp2[2];
-
-    [function getControlPointAtIndex: 1 values: cp1];
-    [function getControlPointAtIndex: 2 values: cp2];
-
-    double x = cubed(1.0 - t) * 0.0 + 3 * squared(1 - t) * t * cp1[0] +
-               3 * (1 - t) * squared(t) * cp2[0] + cubed(t) * 1.0;
-    double y = cubed(1.0 - t) * 0.0 + 3 * squared(1 - t) * t * cp1[1] +
-               3 * (1 - t) * squared(t) * cp2[1] + cubed(t) * 1.0;
-
-    // this is wrong
-    return y;
+    return [function _solveForInput: t];
 }
 
 static CGFloat mediaTimingScale(CAAnimation *animation,
