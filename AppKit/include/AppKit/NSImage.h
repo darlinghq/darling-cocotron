@@ -70,6 +70,9 @@ typedef NS_ENUM(NSUInteger, NSImageLoadStatus) {
         BOOL _matchesOnMultipleResolution;
         BOOL _usesEPSOnResolutionMismatch;
         BOOL _matchesOnlyOnBestFittingAxis;
+        // lockFocusFlipped: holds the flippedness until the matching unlockFocus
+        BOOL _lockedFlippedActive;
+        BOOL _lockedFlippedPrevious;
         BOOL _prefersColorMatch;
         BOOL _isCachedSeparately;
         BOOL _cacheDepthMatchesImageDepth;

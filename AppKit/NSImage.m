@@ -412,6 +412,9 @@ NSImageName const NSImageNameTouchBarVolumeUpTemplate =
         if (tiff != nil)
             [coder encodeBytes: [tiff bytes] length: [tiff length] forKey: @"NSTIFFRepresentation"];
         [coder encodeInt: 0 forKey: @"NSInternalLayoutDirection"];
+        // The size is stored when it is not the one of the representations
+        if (!NSEqualSizes(_size, NSZeroSize))
+            [coder encodeSize: _size forKey: @"NSImageExplicitSize"];
         return;
     }
     NSUnimplementedMethod();
@@ -434,16 +437,15 @@ NSImageName const NSImageNameTouchBarVolumeUpTemplate =
         const unsigned char *tiff =
                 [keyed decodeBytesForKey: @"NSTIFFRepresentation"
                           returnedLength: &length];
-        NSBitmapImageRep *rep;
 
         if (tiff == NULL) {
             [self release];
             return nil;
         }
 
-        rep = [NSBitmapImageRep
-                imageRepWithData: [NSData dataWithBytes: tiff length: length]];
-        if (rep == nil) {
+        // The data of an image with several representations holds all of them
+        NSArray *reps = [NSBitmapImageRep imageRepsWithData: [NSData dataWithBytes: tiff length: length]];
+        if ([reps count] == 0) {
             [self release];
             return nil;
         }
@@ -452,7 +454,9 @@ NSImageName const NSImageNameTouchBarVolumeUpTemplate =
         _size = NSMakeSize(0, 0);
         NS_EXTRA(NSImage, self)->_representations = [NSMutableArray new];
 
-        [NS_EXTRA(NSImage, self)->_representations addObject: rep];
+        [NS_EXTRA(NSImage, self)->_representations addObjectsFromArray: reps];
+        if ([keyed containsValueForKey: @"NSImageExplicitSize"])
+            _size = [keyed decodeSizeForKey: @"NSImageExplicitSize"];
     } else {
         NSInteger version = [coder versionForClassName: @"NSImage"];
 
@@ -591,6 +595,8 @@ NSImageName const NSImageNameTouchBarVolumeUpTemplate =
     _name = nil;
     _size = size;
     NS_EXTRA(NSImage, self)->_representations = [NSMutableArray new];
+    // Representation selection for a destination matches on multiple resolutions by default
+    NS_EXTRA(NSImage, self)->_matchesOnMultipleResolution = YES;
     return self;
 }
 
@@ -888,6 +894,9 @@ NSImageName const NSImageNameTouchBarVolumeUpTemplate =
     name = [name copy];
     [_name release];
     _name = name;
+
+    if (_name == nil)
+        return YES; // a nil name takes the image out of the name registry
 
     if ([[NSImage allImages] objectForKey: _name] != nil)
         return NO;
@@ -1391,7 +1400,9 @@ static CGFloat repScale(NSImageRep *rep, NSSize imageSize) {
     for (NSImageRep *check in NS_EXTRA(NSImage, self)->_representations) {
         if ([check isKindOfClass: [NSBitmapImageRep class]]) {
             [bitmaps addObject: check];
-        } else if ([check isKindOfClass: [NSCachedImageRep class]]) {
+        } else if ([check isKindOfClass: [NSCachedImageRep class]] && [self isFlipped]) {
+            // (An unflipped image goes through the general case below: capturing the focused view
+            // is not implemented for the display contexts of this system.)
             // We don't use the general case else we get flipped results for
             // flipped images since lockFocusOnRepresentation is flipping and
             // the Cache content is already flipped
@@ -1438,14 +1449,19 @@ static CGFloat repScale(NSImageRep *rep, NSSize imageSize) {
 }
 
 // Focus is locked with the given flippedness, the image's own property is left as it was.
+// The context asks the image whether it is flipped for as long as the focus is locked, so the
+// flippedness stays set until -unlockFocus.
 - (void) lockFocusFlipped: (BOOL) flipped {
     BOOL previous = NS_EXTRA(NSImage, self)->_isFlipped;
     NS_EXTRA(NSImage, self)->_isFlipped = flipped;
     @try {
         [self lockFocus];
-    } @finally {
+    } @catch (NSException *e) {
         NS_EXTRA(NSImage, self)->_isFlipped = previous;
+        @throw;
     }
+    NS_EXTRA(NSImage, self)->_lockedFlippedActive = YES;
+    NS_EXTRA(NSImage, self)->_lockedFlippedPrevious = previous;
 }
 
 - (void) lockFocusOnRepresentation: (NSImageRep *) representation {
@@ -1521,6 +1537,11 @@ static CGFloat repScale(NSImageRep *rep, NSSize imageSize) {
     CGContextRestoreGState(graphicsPort);
 
     [NSGraphicsContext restoreGraphicsState];
+
+    if (NS_EXTRA(NSImage, self)->_lockedFlippedActive) {
+        NS_EXTRA(NSImage, self)->_isFlipped = NS_EXTRA(NSImage, self)->_lockedFlippedPrevious;
+        NS_EXTRA(NSImage, self)->_lockedFlippedActive = NO;
+    }
 }
 
 - (BOOL) drawRepresentation: (NSImageRep *) representation
