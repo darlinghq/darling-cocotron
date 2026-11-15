@@ -18,6 +18,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <CoreData/CoreDataExports.h>
 #import <Foundation/NSObject.h>
+#import <CoreData/NSFetchRequest.h>
 
 @class NSManagedObjectID, NSEntityDescription, NSManagedObjectContext,
         NSPropertyDescription, NSMutableDictionary, NSDictionary, NSError,
@@ -28,7 +29,7 @@ COREDATA_EXPORT NSString *const NSValidationObjectErrorKey;
 COREDATA_EXPORT NSString *const NSValidationPredicateErrorKey;
 COREDATA_EXPORT NSString *const NSValidationValueErrorKey;
 
-@interface NSManagedObject : NSObject {
+@interface NSManagedObject : NSObject <NSFetchRequestResult> {
     NSManagedObjectID *_objectID;
     NSManagedObjectContext *_context;
     BOOL _isInserted, _isUpdated, _isDeleted, _isFault;
