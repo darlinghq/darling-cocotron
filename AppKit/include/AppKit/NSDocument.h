@@ -64,6 +64,7 @@ typedef NS_ENUM(NSUInteger, NSSaveOperationType) {
         NSMutableArray *_activeEditors; // registered via NSEditorRegistration
         BOOL _draft;
         BOOL _autosaveScheduled;
+        NSString *_displayName;
     NS_EXTRA_IVARS_END(NSDocument)
 }
 
@@ -108,6 +109,7 @@ typedef NS_ENUM(NSUInteger, NSSaveOperationType) {
 - (void) removeWindowController: (NSWindowController *) controller;
 
 - (NSString *) displayName;
+- (void) setDisplayName: (NSString *) displayNameOrNil;
 - (NSWindow *) windowForSheet;
 
 - (BOOL) isDocumentEdited;
