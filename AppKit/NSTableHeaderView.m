@@ -21,6 +21,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSClipView.h>
 #import <AppKit/NSCursor.h>
 #import <AppKit/NSGraphics.h>
+#import <AppKit/NSImage.h>
 #import <AppKit/NSRaise.h>
 #import <AppKit/NSScrollView.h>
 #import <AppKit/NSTableColumn.h>

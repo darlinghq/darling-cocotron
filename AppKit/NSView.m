@@ -38,6 +38,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSScrollView.h>
 #import <AppKit/NSTrackingArea.h>
 #import <AppKit/NSView.h>
+#import <AppKit/NSBitmapImageRep.h>
 #import <AppKit/NSViewBackingLayer.h>
 #import <AppKit/NSWindow-Private.h>
 #import <AppKit/NSDocument.h>
@@ -876,14 +877,92 @@ static inline void buildTransformsIfNeeded(NSView *self) {
 }
 
 - (NSBitmapImageRep *) bitmapImageRepForCachingDisplayInRect: (NSRect) rect {
-    NSUnimplementedMethod();
-    return nil;
+    CGFloat scale = [_window backingScaleFactor];
+
+    if (scale < 1)
+        scale = 1;
+    rect = NSIntersectionRect(rect, [self bounds]);
+    NSInteger width = (NSInteger) ceil(NSWidth(rect) * scale);
+    NSInteger height = (NSInteger) ceil(NSHeight(rect) * scale);
+
+    if (width <= 0 || height <= 0)
+        return nil;
+    return [[[NSBitmapImageRep alloc] initWithBitmapDataPlanes: NULL
+                                                    pixelsWide: width
+                                                    pixelsHigh: height
+                                                 bitsPerSample: 8
+                                               samplesPerPixel: 4
+                                                      hasAlpha: YES
+                                                      isPlanar: NO
+                                                colorSpaceName: NSDeviceRGBColorSpace
+                                                   bytesPerRow: 0
+                                                  bitsPerPixel: 0] autorelease];
 }
 
+// Draws the view and its visible subviews, in their own coordinates, into the
+// current CGContext. The context's origin is the view's bounds origin.
+static void drawViewTreeInContext(NSView *view, CGContextRef port, NSRect rect) {
+    NSGraphicsContext *context = [NSGraphicsContext graphicsContextWithGraphicsPort: port flipped: [view isFlipped]];
+
+    [NSGraphicsContext saveGraphicsState];
+    [NSGraphicsContext setCurrentContext: context];
+    CGContextSaveGState(port);
+    CGContextClipToRect(port, rect);
+    [view drawRect: rect];
+    CGContextRestoreGState(port);
+    [NSGraphicsContext restoreGraphicsState];
+
+    for (NSView *child in [view subviews]) {
+        if ([child isHidden])
+            continue;
+        NSRect childRect = NSIntersectionRect([view convertRect: rect toView: child], [child bounds]);
+
+        if (NSIsEmptyRect(childRect))
+            continue;
+
+        NSRect frame = [child frame];
+
+        CGContextSaveGState(port);
+        CGContextTranslateCTM(port, frame.origin.x, frame.origin.y);
+        if ([child isFlipped] != [view isFlipped]) {
+            CGContextTranslateCTM(port, 0, frame.size.height);
+            CGContextScaleCTM(port, 1, -1);
+        }
+        CGContextTranslateCTM(port, -[child bounds].origin.x, -[child bounds].origin.y);
+        drawViewTreeInContext(child, port, childRect);
+        CGContextRestoreGState(port);
+    }
+}
+
+// Renders the view hierarchy with the view's own drawing methods. Layer
+// content, and anything that draws through the window's graphics context
+// instead of the current one, is not captured.
 - (void) cacheDisplayInRect: (NSRect) rect
            toBitmapImageRep: (NSBitmapImageRep *) imageRep
 {
-    NSUnimplementedMethod();
+    rect = NSIntersectionRect(rect, [self bounds]);
+    if (imageRep == nil || NSIsEmptyRect(rect))
+        return;
+
+    NSGraphicsContext *bitmapContext = [NSGraphicsContext graphicsContextWithBitmapImageRep: imageRep];
+    CGContextRef port = [bitmapContext graphicsPort];
+
+    if (port == NULL)
+        return;
+
+    CGFloat scaleX = (CGFloat) [imageRep pixelsWide] / NSWidth(rect);
+    CGFloat scaleY = (CGFloat) [imageRep pixelsHigh] / NSHeight(rect);
+
+    CGContextSaveGState(port);
+    CGContextClearRect(port, CGRectMake(0, 0, [imageRep pixelsWide], [imageRep pixelsHigh]));
+    CGContextScaleCTM(port, scaleX, scaleY);
+    if ([self isFlipped]) {
+        CGContextTranslateCTM(port, 0, NSHeight(rect));
+        CGContextScaleCTM(port, 1, -1);
+    }
+    CGContextTranslateCTM(port, -rect.origin.x, -rect.origin.y);
+    drawViewTreeInContext(self, port, rect);
+    CGContextRestoreGState(port);
 }
 
 - (BOOL) isHidden {
