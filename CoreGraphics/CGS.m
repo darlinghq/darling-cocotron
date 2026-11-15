@@ -21,6 +21,7 @@
 #include <dispatch/dispatch.h>
 #include <stdatomic.h>
 #import <CoreGraphics/CGSConnection.h>
+#import <CoreGraphics/CGSKeyboardLayout.h>
 #import <CoreGraphics/CGSWindow.h>
 #import <CoreGraphics/CGWindowPrivate.h>
 #import <CoreGraphics/CGSSurface.h>
@@ -570,4 +571,29 @@ void _CGSPostHotKeyEvent(CGSConnectionID connection, int uid, BOOL pressed, CGEv
 		const NotifyProcEntry* e = [entry bytes];
 		e->proc(e->notificationType, &record, sizeof(record), e->private);
 	}
+}
+
+// The current keyboard layout of the window-system backend: a dictionary with the 'uchr' data
+// (key "data", CFData) and the layout's "name" and "fullName" strings, or NULL when the backend has
+// no layout (no connection, or a backend that does not provide one). The caller releases it.
+// Used by the Text Input Sources API (HIToolbox).
+CFDictionaryRef _CGSCopyCurrentKeyboardLayoutInfo(void)
+{
+	CGSConnection* connection = _CGSConnectionForID(_CGSDefaultConnection());
+	CGSKeyboardLayout* layout = [connection createKeyboardLayout];
+	if (!layout || !layout.layout || layout.layoutLength == 0)
+	{
+		[layout release];
+		return NULL;
+	}
+
+	CFDataRef data = CFDataCreate(NULL, (const UInt8*) layout.layout, layout.layoutLength);
+	NSDictionary* info = @{
+		@"data": (id) data,
+		@"name": layout.name ?: @"?",
+		@"fullName": layout.fullName ?: @"?",
+	};
+	CFRelease(data);
+	[layout release];
+	return (CFDictionaryRef) [info retain];
 }
