@@ -92,11 +92,29 @@ int main(int argc, char **argv) {
         [[NSScreen screens] count]; // screens are built before the change
 
         // Bad arguments.
-        CHECK(9, CGDisplaySwitchToMode(display, NULL) == kCGErrorIllegalArgument);
+        CFDictionaryRef current0 = CGDisplayCurrentMode(display);
+        // Errors as observed on macOS 10.14.4: a missing or unlisted mode and an unknown display are kCGErrorFailure.
+        CHECK(9, CGDisplaySwitchToMode(display, NULL) == kCGErrorFailure);
         CFDictionaryRef bogus = (__bridge CFDictionaryRef) @{ @"Width" : @7, @"Height" : @3 };
-        CHECK(10, CGDisplaySwitchToMode(display, bogus) == kCGErrorIllegalArgument);
-        CHECK(11, CGDisplaySwitchToMode(0xdeadbeef, target) != kCGErrorSuccess);
-        CHECK(12, gBegin == 0 && gSetMode == 0);
+        CHECK(10, CGDisplaySwitchToMode(display, bogus) == kCGErrorFailure);
+        CHECK(11, CGDisplaySwitchToMode(0xdeadbeef, target) == kCGErrorFailure);
+        // Capturing an unknown display succeeds and captures nothing (a quirk of macOS 10.14.4);
+        // releasing one, or one that was not captured, is an illegal argument; releasing all
+        // with nothing captured is a failure.
+        CHECK(12, CGDisplayCapture(0xdeadbeef) == kCGErrorSuccess && !CGDisplayIsCaptured(0xdeadbeef));
+        CHECK(45, CGDisplayRelease(0xdeadbeef) == kCGErrorIllegalArgument);
+        CHECK(46, CGDisplayRelease(display) == kCGErrorIllegalArgument);
+        CHECK(47, CGReleaseAllDisplays() == kCGErrorFailure);
+        CHECK(48, CGDisplaySetDisplayMode(display, NULL, NULL) == kCGErrorFailure);
+        // A mode listed by index but changed in size no longer names that mode.
+        CFMutableDictionaryRef edited = CFDictionaryCreateMutableCopy(NULL, 0, current0);
+        int seven = 7;
+        CFNumberRef sevenNumber = CFNumberCreate(NULL, kCFNumberIntType, &seven);
+        CFDictionarySetValue(edited, kCGDisplayWidth, sevenNumber);
+        CHECK(49, CGDisplaySwitchToMode(display, edited) == kCGErrorFailure);
+        CFRelease(edited);
+        CFRelease(sevenNumber);
+        CHECK(50, gBegin == 0 && gSetMode == 0);
 
         // Switching to the current mode changes nothing and succeeds.
         CFDictionaryRef current = CGDisplayCurrentMode(display);

@@ -803,8 +803,14 @@ static BOOL sameBackendMode(NSDictionary *a, NSDictionary *b) {
 // mode, and among modes of that size the nearest refresh rate does.
 static NSUInteger indexOfMode(NSArray *modes, NSDictionary *wanted) {
     NSNumber *wantedIndex = [wanted objectForKey: (NSString *) kCGDisplayMode];
-    if (wantedIndex && [wantedIndex unsignedIntegerValue] < [modes count])
-        return [wantedIndex unsignedIntegerValue];
+    if (wantedIndex && [wantedIndex unsignedIntegerValue] < [modes count]) {
+        // The index names a mode only while the dictionary still describes it.
+        NSDictionary *listed = [modes objectAtIndex: [wantedIndex unsignedIntegerValue]];
+        NSNumber *width = [wanted objectForKey: @"Width"], *height = [wanted objectForKey: @"Height"];
+        if ((width == nil || [width isEqual: [listed objectForKey: @"Width"]]) &&
+            (height == nil || [height isEqual: [listed objectForKey: @"Height"]]))
+            return [wantedIndex unsignedIntegerValue];
+    }
     NSUInteger found = NSNotFound;
     double foundDistance = 0;
     double wantedRate = [[wanted objectForKey: @"RefreshRate"] doubleValue];
@@ -916,9 +922,13 @@ static void restoreAllDisplayModes(void) {
 // calls return are). Switching to the mode the display is already in
 // succeeds; any other is left to the display backend, which reports whether
 // it could change the mode.
+//
+// The errors are kCGErrorFailure for a missing mode, a mode the display does not
+// list and an unknown display (observed on macOS 10.14.4; pinned by
+// tests/coregraphics-display-mode-switch.m).
 CGError CGDisplaySwitchToMode(CGDirectDisplayID displayID, CFDictionaryRef mode) {
     if (mode == NULL)
-        return kCGErrorIllegalArgument;
+        return kCGErrorFailure;
     NSUInteger currentIndex = 0;
     NSArray *modes = backendModesForDisplay(displayID, &currentIndex);
     if ([modes count] == 0)
@@ -926,28 +936,31 @@ CGError CGDisplaySwitchToMode(CGDirectDisplayID displayID, CFDictionaryRef mode)
 
     NSUInteger index = indexOfMode(modes, (NSDictionary *) mode);
     if (index == NSNotFound)
-        return kCGErrorIllegalArgument;
+        return kCGErrorFailure;
     return changeBackendMode(displayID, [modes objectAtIndex: index], YES);
 }
 
 CGError CGDisplaySetDisplayMode(CGDirectDisplayID displayID, CGDisplayModeRef mode, CFDictionaryRef options) {
     if (mode == NULL)
-        return kCGErrorIllegalArgument;
+        return kCGErrorFailure;
     NSArray *modes = backendModesForDisplay(displayID, NULL);
     if ([modes count] == 0)
         return kCGErrorFailure;
     NSUInteger index = indexOfMode(modes, (NSDictionary *) mode);
     if (index == NSNotFound)
-        return kCGErrorIllegalArgument;
+        return kCGErrorFailure;
     return changeBackendMode(displayID, [modes objectAtIndex: index], YES);
 }
 
+// QUIRK: capturing a display ID that is not a display succeeds (and captures
+// nothing). Not documented. Evidence: black-box observation on macOS 10.14.4
+// (tier 2). Test: coregraphics-display-mode-switch, check 12.
 CGError CGDisplayCapture(CGDirectDisplayID display) {
     NSDisplay *backend = currentDisplay();
     if (!backend)
         return kCGErrorInvalidConnection;
     if (!screenForDisplayID([backend screens], display))
-        return kCGErrorIllegalArgument;
+        return kCGErrorSuccess;
     initDisplayState();
     @synchronized(gDisplayStateLock) {
         [stateForDisplay(display) setObject: @YES forKey: @"captured"];
@@ -955,7 +968,9 @@ CGError CGDisplayCapture(CGDirectDisplayID display) {
     return kCGErrorSuccess;
 }
 
-// Releasing a display puts back the mode this process switched it from.
+// Releasing a display puts back the mode this process switched it from. A
+// display that is neither captured nor was switched by this process, and one
+// that does not exist, give kCGErrorIllegalArgument (observed on macOS 10.14.4).
 CGError CGDisplayRelease(CGDirectDisplayID display) {
     NSDisplay *backend = currentDisplay();
     if (!backend)
@@ -963,9 +978,14 @@ CGError CGDisplayRelease(CGDirectDisplayID display) {
     if (!screenForDisplayID([backend screens], display))
         return kCGErrorIllegalArgument;
     initDisplayState();
+    BOOL known;
     @synchronized(gDisplayStateLock) {
-        [[gDisplayState objectForKey: @(display)] removeObjectForKey: @"captured"];
+        NSMutableDictionary *state = [gDisplayState objectForKey: @(display)];
+        known = [state objectForKey: @"captured"] != nil || [state objectForKey: @"original"] != nil;
+        [state removeObjectForKey: @"captured"];
     }
+    if (!known)
+        return kCGErrorIllegalArgument;
     restoreDisplayMode(display);
     return kCGErrorSuccess;
 }
@@ -979,21 +999,27 @@ CGError CGCaptureAllDisplays(void) {
     return kCGErrorSuccess;
 }
 
+// kCGErrorFailure when nothing was captured or switched (observed on macOS 10.14.4).
 CGError CGReleaseAllDisplays(void) {
     NSDisplay *backend = currentDisplay();
     if (!backend)
         return kCGErrorInvalidConnection;
     initDisplayState();
     NSArray *ids;
+    BOOL any = NO;
     @synchronized(gDisplayStateLock) {
         ids = [[gDisplayState allKeys] copy];
-        for (NSNumber *key in ids)
-            [[gDisplayState objectForKey: key] removeObjectForKey: @"captured"];
+        for (NSNumber *key in ids) {
+            NSMutableDictionary *state = [gDisplayState objectForKey: key];
+            if ([state objectForKey: @"captured"] || [state objectForKey: @"original"])
+                any = YES;
+            [state removeObjectForKey: @"captured"];
+        }
     }
     for (NSNumber *key in ids)
         restoreDisplayMode([key unsignedIntValue]);
     [ids release];
-    return kCGErrorSuccess;
+    return any ? kCGErrorSuccess : kCGErrorFailure;
 }
 
 boolean_t CGDisplayIsCaptured(CGDirectDisplayID display) {
