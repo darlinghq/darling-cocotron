@@ -136,6 +136,10 @@ static NSColor *constantWhite(CGFloat white, CGFloat alpha) {
 
     if ([coder allowsKeyedCoding]) {
         NSColorSpaceName spaceName = [self colorSpaceName];
+        // An sRGB color is tagged with the named color space but has no catalog entry: it is
+        // archived by its RGB components
+        if ([spaceName isEqualToString: NSNamedColorSpace] && [self type] != NSColorTypeCatalog)
+            spaceName = NSCalibratedRGBColorSpace;
 
         if ([spaceName isEqualToString: NSCalibratedRGBColorSpace]) {
             CGFloat r, g, b, a;
@@ -203,6 +207,8 @@ static NSColor *constantWhite(CGFloat white, CGFloat alpha) {
         // The layout -initWithCoder: reads: a color space byte followed by
         // the components as floats (or the names, for a catalog color).
         NSColorSpaceName spaceName = [self colorSpaceName];
+        if ([spaceName isEqualToString: NSNamedColorSpace] && [self type] != NSColorTypeCatalog)
+            spaceName = NSCalibratedRGBColorSpace;
 
         if ([spaceName isEqualToString: NSCalibratedRGBColorSpace] ||
             [spaceName isEqualToString: NSDeviceRGBColorSpace]) {
@@ -1436,11 +1442,17 @@ static NSColor *colorWithEffect(NSColor *color, NSColorSystemEffect effect) {
 // Evidence: black-box observation on macOS 10.14.4 and 26.7.3 (tier 2, MAC-EVIDENCE V615).
 // Test: tests/appkit-color-api.m (testCatalogNames)
 - (NSString *) localizedCatalogNameComponent {
+    // The localized names are only for catalog colors; any other color raises (macOS 26.7.3 and
+    // 10.14.4, test appkit-color-api.m testCatalogNames)
+    if ([self type] != NSColorTypeCatalog)
+        [NSException raise: NSInvalidArgumentException format: @"-[NSColor localizedCatalogNameComponent]: not a catalog color"];
     NSString *name = [self catalogNameComponent];
     return [name isEqual: @"System"] ? @"Developer" : name;
 }
 
 - (NSString *) localizedColorNameComponent {
+    if ([self type] != NSColorTypeCatalog)
+        [NSException raise: NSInvalidArgumentException format: @"-[NSColor localizedColorNameComponent]: not a catalog color"];
     return [self colorNameComponent];
 }
 

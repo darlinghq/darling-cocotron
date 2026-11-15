@@ -48,4 +48,6 @@ typedef NS_ENUM(NSInteger, NSColorSpaceModel) {
 
 - (CGColorSpaceRef) CGColorSpace;
 
+@property(nullable, readonly, copy) NSString *localizedName;
+
 @end
