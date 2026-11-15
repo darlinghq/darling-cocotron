@@ -24,6 +24,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @interface NSColor (NSAppKitPrivate)
 - (CGColorRef) CGColorRef;
+- (NSColor *) _resolvedColor;
 @end
 
 void NSColorSetCatalogColor(NSColorListName catalogName, NSColorName colorName,
@@ -173,10 +174,9 @@ NSColor *NSColorGetCatalogColor(NSColorListName catalogName,
     [_color setStroke];
 }
 
-- (NSColor *) highlightWithLevel: (CGFloat) level {
-    level = MIN(1.0, MAX(0.0, level));
-
-    return self;
+// The color the catalog entry stands for now (a dynamic one resolves for the current appearance).
+- (NSColor *) _resolvedColor {
+    return [_color _resolvedColor];
 }
 
 @end

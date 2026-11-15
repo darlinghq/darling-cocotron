@@ -76,6 +76,15 @@ typedef NS_ENUM(NSInteger, NSColorSystemEffect) {
                             count: (NSInteger) count;
 
 @property(class, strong, readonly) NSColor *labelColor;
+@property(class, strong, readonly) NSColor *quinaryLabelColor;
+@property(class, strong, readonly) NSColor *placeholderTextColor;
+@property(class, strong, readonly) NSColor *underPageBackgroundColor;
+@property(class, strong, readonly) NSColor *findHighlightColor;
+@property(class, strong, readonly) NSColor *systemFillColor;
+@property(class, strong, readonly) NSColor *secondarySystemFillColor;
+@property(class, strong, readonly) NSColor *tertiarySystemFillColor;
+@property(class, strong, readonly) NSColor *quaternarySystemFillColor;
+@property(class, strong, readonly) NSColor *quinarySystemFillColor;
 @property(class, strong, readonly) NSColor *secondaryLabelColor;
 @property(class, strong, readonly) NSColor *tertiaryLabelColor;
 @property(class, strong, readonly) NSColor *quaternaryLabelColor;
@@ -292,6 +301,11 @@ typedef NS_ENUM(NSInteger, NSColorSystemEffect) {
                 saturation: (CGFloat) saturation
                 brightness: (CGFloat) brightness
                      alpha: (CGFloat) alpha;
++ (NSColor *) colorWithColorSpace: (NSColorSpace *) space
+                              hue: (CGFloat) hue
+                       saturation: (CGFloat) saturation
+                       brightness: (CGFloat) brightness
+                            alpha: (CGFloat) alpha;
 
 + (NSColor *) colorWithGenericGamma22White:(CGFloat) white 
                                      alpha:(CGFloat) alpha;
@@ -357,6 +371,19 @@ NS_ASSUME_NONNULL_END
 
 - (NSColor *) blendedColorWithFraction: (CGFloat) fraction
                                ofColor: (NSColor *) color;
+- (NSColor *) highlightWithLevel: (CGFloat) level;
+- (NSColor *) shadowWithLevel: (CGFloat) level;
+- (NSColor *) colorWithSystemEffect: (NSColorSystemEffect) systemEffect;
+- (NSColor *) colorUsingType: (NSColorType) type;
+
+// The names of a catalog color for display. The name of the catalog is the one of the System list.
+@property(copy, readonly) NSString *localizedCatalogNameComponent;
+@property(copy, readonly) NSString *localizedColorNameComponent;
+
+// Dynamic range (macOS 26): colors here are always standard dynamic range.
+@property(readonly) CGFloat linearExposure;
+@property(copy, readonly) NSColor *standardDynamicRangeColor;
+- (NSColor *) colorByApplyingContentHeadroom: (CGFloat) contentHeadroom;
 
 - (void) set;
 - (void) setStroke;
