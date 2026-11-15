@@ -336,6 +336,7 @@ static void beforeWaitingCallback(CFRunLoopObserverRef observer,
         _lastScreens = nil;
     }
     _primaryRootFrameValid = NO;
+    [self reevaluateBackingScale];
     [self _postScreenParametersChanged];
 }
 
@@ -351,6 +352,30 @@ static void beforeWaitingCallback(CFRunLoopObserverRef observer,
                                                coalesceMask: NSNotificationCoalescingOnName |
                                                              NSNotificationCoalescingOnSender
                                                    forModes: nil];
+}
+
+// X11 has no scale event: the scale comes from the user's setting or the
+// session's GDK_SCALE (see -backingScale), so the places where it is looked at
+// again are the moments the display layout changes. When the value differs
+// from the one in use, the screens drop their cached frames and every window
+// keeps its size in points at the new scale, and learns of the change (which
+// posts NSWindowDidChangeBackingPropertiesNotification).
+- (void) reevaluateBackingScale {
+    CGFloat oldScale = _backingScale;
+    if (oldScale <= 0)
+        return; // Nothing has used a scale yet; the first use reads it.
+    _backingScale = 0;
+    CGFloat newScale = [self backingScale];
+    if (newScale == oldScale)
+        return;
+
+    [_lastScreens release];
+    _lastScreens = nil;
+    _primaryRootFrameValid = NO;
+    for (id window in [_windowsByID allValues]) {
+        if ([window isKindOfClass: [X11Window class]])
+            [window displayBackingScaleChangedFrom: oldScale];
+    }
 }
 
 // The main monitor's rectangle in root coordinates, device pixels: the origin

@@ -93,6 +93,10 @@
 // would win).
 - (CGFloat) backingScaleFactor;
 
+// Called by the display after it re-read a changed scale (see
+// -[X11Display reevaluateBackingScale]).
+- (void) displayBackingScaleChangedFrom: (CGFloat) oldScale;
+
 // Points to the device pixels libX11 takes. AppKit-level geometry is in points;
 // every value handed to X is in device pixels. One rounding serves the X window
 // and the backing surface, which the GL viewport follows.

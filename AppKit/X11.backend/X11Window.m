@@ -1489,6 +1489,25 @@ static int ignoreBadWindow(Display *display, XErrorEvent *errorEvent) {
     return [(X11Display *) [NSDisplay currentDisplay] backingScale];
 }
 
+// The display's device pixels per point changed. _frame stays in points, so the
+// X window is resized to the same points at the new scale, the backing surface
+// is rebuilt at the new device size, and the window and its views are told
+// before they redraw.
+- (void) displayBackingScaleChangedFrom: (CGFloat) oldScale {
+    O2Rect deviceFrame = [self deviceRect: _frame];
+    XMoveResizeWindow(_display, _window, deviceFrame.origin.x,
+                      deviceFrame.origin.y, deviceFrame.size.width,
+                      deviceFrame.size.height);
+    [_context release];
+    _context = nil;
+    [_delegate platformWindowDidInvalidateCGContext: self];
+    if ([_delegate respondsToSelector: @selector(platformWindow:didChangeBackingScaleFrom:)])
+        [_delegate platformWindow: self didChangeBackingScaleFrom: oldScale];
+    [_delegate platformWindowExposed: self
+                              inRect: NSMakeRect(0, 0, _frame.size.width,
+                                                 _frame.size.height)];
+}
+
 // Rounds points to whole device pixels. Origins are rounded plainly, extents
 // are at least one pixel (a zero-size X window is invalid); one rounding for
 // both keeps the X window and the backing surface in agreement.
