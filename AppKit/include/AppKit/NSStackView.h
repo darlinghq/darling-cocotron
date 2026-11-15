@@ -54,8 +54,10 @@ static const NSStackViewVisibilityPriority NSStackViewVisibilityPriorityNotVisib
 
 static const CGFloat NSStackViewSpacingUseDefault = FLT_MAX;
 
-// Frame-based: there is no constraint solver, so the stack view sets its
-// views' frames itself whenever its contents, settings or size change.
+// The stack view sets its views' frames itself whenever its contents, settings
+// or size change, unless an arranged view takes part in Auto Layout (it has
+// constraints of its own); then the stack view arranges all its views with
+// constraints.
 @interface NSStackView : NSView {
     id<NSStackViewDelegate> _delegate;
     NSUserInterfaceLayoutOrientation _orientation;
