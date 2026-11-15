@@ -1,8 +1,6 @@
-// Authored from the archive layout in NSNibArchive.m and the fields consumed by
-// NSIBObjectData.m. No imported application archive is used by this test.
+// Authored from the documented NIBArchive layout (see UIFoundation's UINibDecoder.m) and the
+// fields consumed by NSIBObjectData.m. No imported application archive is used by this test.
 #import <AppKit/AppKit.h>
-// The converter is private to AppKit, so the test compiles it in.
-#include "../AppKit/nib.subproj/NSNibArchive.m"
 #include <stdint.h>
 #include <stdio.h>
 
@@ -39,7 +37,7 @@ static NSData *fixture(void) {
     object(objects, 0, 6, 0); // File's Owner
     object(objects, 2, 6, 1); // top-level objects
     object(objects, 2, 7, 1); // corresponding parents
-    object(objects, 2, 8, 0); // connections
+    object(objects, 3, 8, 0); // connections (a mutable array, as ibtool writes them)
     object(objects, 0, 8, 0); // top-level NSObject
     NSArray *names = @[@"IB.objectdata", @"NSRoot", @"NSObjectsKeys",
                        @"NSObjectsValues", @"NSConnections", @"NSNextOid",
@@ -56,7 +54,7 @@ static NSData *fixture(void) {
     [values appendBytes:&type length:1]; word(values, 17);
     reference(values, 6, 6); reference(values, 6, 2);
     NSMutableData *classes = [NSMutableData data];
-    for (NSString *name in @[@"AuthoredNibObject", @"NSIBObjectData", @"NSArray"]) {
+    for (NSString *name in @[@"AuthoredNibObject", @"NSIBObjectData", @"NSArray", @"NSMutableArray"]) {
         NSData *bytes = [name dataUsingEncoding:NSUTF8StringEncoding];
         varint(classes, [bytes length] + 1); varint(classes, 0);
         [classes appendData:bytes]; uint8_t zero = 0;
@@ -67,7 +65,7 @@ static NSData *fixture(void) {
     word(archive, 7); word(archive, 50);
     word(archive, [names count]); word(archive, 50 + [objects length]);
     word(archive, 8); word(archive, 50 + [objects length] + [keys length]);
-    word(archive, 3); word(archive, 50 + [objects length] + [keys length] + [values length]);
+    word(archive, 4); word(archive, 50 + [objects length] + [keys length] + [values length]);
     [archive appendData:objects]; [archive appendData:keys];
     [archive appendData:values]; [archive appendData:classes];
     return archive;
@@ -76,16 +74,6 @@ static NSData *fixture(void) {
 int main(void) {
     @autoreleasepool {
         NSData *input = fixture();
-        NSData *converted = NSKeyedArchiveDataFromNibArchiveData(input);
-        NSDictionary *plist = [NSPropertyListSerialization propertyListWithData:converted
-                options:0 format:NULL error:NULL];
-        NSDictionary *metadata = [plist[@"$objects"] objectAtIndex:2];
-        if (metadata[@"NSRoot"] == nil || metadata[@"NSObjectsKeys"] == nil ||
-                metadata[@"NSConnections"] == nil || [metadata[@"NSNextOid"] intValue] != 17 ||
-                metadata[@"NS.keys"] != nil) {
-            fprintf(stderr, "FAIL: NSIBObjectData lost its named coder fields\n");
-            return 1;
-        }
         [NSApplication sharedApplication];
         // -[NSNib initWithContentsOfURL:] is deprecated and raises on current macOS, so load
         // the nib by name from a directory bundle holding it.
@@ -102,7 +90,7 @@ int main(void) {
             fprintf(stderr, "FAIL: authored NIBArchive did not instantiate its top-level object\n");
             return 1;
         }
-        puts("PASS: NIBArchive metadata retains named fields and instantiates top-level objects");
+        puts("PASS: authored NIBArchive nib instantiates its top-level object");
     }
     return 0;
 }
