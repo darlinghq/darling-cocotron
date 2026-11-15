@@ -25,6 +25,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSScrollView.h>
 #import <AppKit/NSTableColumn.h>
 #import <AppKit/NSTableHeaderView.h>
+#import <AppKit/NSTableHeaderCell.h>
 #import <AppKit/NSTableView.h>
 #import <AppKit/NSWindow.h>
 #import <Foundation/NSKeyedArchiver.h>
@@ -117,13 +118,28 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         NSTableColumn *column = [tableColumns objectAtIndex: i];
 
         columnRect.size.width = [column width] + spacing.width;
+        // The selected columns and the table's highlighted column show highlighted
         [[column headerCell]
                 setHighlighted:
                         [_tableView isColumnSelected:
                                             [[_tableView tableColumns]
-                                                    indexOfObject: column]]];
+                                                    indexOfObject: column]] ||
+                        column == [_tableView highlightedTableColumn]];
         [[column headerCell] setControlView: self];
         [[column headerCell] drawWithFrame: columnRect inView: self];
+
+        NSImage *indicator = [_tableView indicatorImageInTableColumn: column];
+
+        if (indicator != nil) {
+            NSRect indicatorRect = [(NSTableHeaderCell *)[column headerCell] sortIndicatorRectForBounds: columnRect];
+
+            [indicator drawInRect: indicatorRect
+                         fromRect: NSZeroRect
+                        operation: NSCompositeSourceOver
+                         fraction: 1.0
+                   respectFlipped: YES
+                            hints: nil];
+        }
         columnRect.origin.x += [column width] + spacing.width;
     }
 }

@@ -126,7 +126,10 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
         _standardRowHeight = [keyed decodeFloatForKey: @"NSRowHeight"];
         NS_EXTRA(NSTableView, self)->_allowsColumnReordering = (flags & 0x80000000) ? YES : NO;
         NS_EXTRA(NSTableView, self)->_allowsColumnResizing = (flags & 0x40000000) ? YES : NO;
-        NS_EXTRA(NSTableView, self)->_autoresizesAllColumnsToFit = (flags & 0x00008000) ? YES : NO;
+        if ([keyed containsValueForKey: @"NSColumnAutoresizingStyle"])
+            NS_EXTRA(NSTableView, self)->_columnAutoresizingStyle = [keyed decodeIntForKey: @"NSColumnAutoresizingStyle"];
+        else
+            NS_EXTRA(NSTableView, self)->_columnAutoresizingStyle = (flags & 0x00008000) ? NSTableViewUniformColumnAutoresizingStyle : NSTableViewLastColumnOnlyAutoresizingStyle;
         NS_EXTRA(NSTableView, self)->_allowsMultipleSelection = (flags & 0x08000000) ? YES : NO;
         NS_EXTRA(NSTableView, self)->_allowsEmptySelection = (flags & 0x10000000) ? YES : NO;
         NS_EXTRA(NSTableView, self)->_allowsColumnSelection = (flags & 0x04000000) ? YES : NO;
@@ -169,7 +172,7 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
         _standardRowHeight = 16.0;
         NS_EXTRA(NSTableView, self)->_allowsColumnReordering = YES;
         NS_EXTRA(NSTableView, self)->_allowsColumnResizing = YES;
-        NS_EXTRA(NSTableView, self)->_autoresizesAllColumnsToFit = YES;
+        NS_EXTRA(NSTableView, self)->_columnAutoresizingStyle = NSTableViewUniformColumnAutoresizingStyle;
 
         id headerView = nil, cornerView = nil, cols = nil;
         id bgColor = nil, gridColor = nil;
@@ -211,7 +214,7 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
 
         NS_EXTRA(NSTableView, self)->_allowsColumnReordering = (flags & 0x80000000) ? YES : NO;
         NS_EXTRA(NSTableView, self)->_allowsColumnResizing = (flags & 0x40000000) ? YES : NO;
-        NS_EXTRA(NSTableView, self)->_autoresizesAllColumnsToFit = (flags & 0x00008000) ? YES : NO;
+        NS_EXTRA(NSTableView, self)->_columnAutoresizingStyle = (flags & 0x00008000) ? NSTableViewUniformColumnAutoresizingStyle : NSTableViewLastColumnOnlyAutoresizingStyle;
         NS_EXTRA(NSTableView, self)->_allowsMultipleSelection = (flags & 0x08000000) ? YES : NO;
         NS_EXTRA(NSTableView, self)->_allowsEmptySelection = (flags & 0x10000000) ? YES : NO;
         NS_EXTRA(NSTableView, self)->_allowsColumnSelection = (flags & 0x04000000) ? YES : NO;
@@ -240,9 +243,7 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
 
     NS_EXTRA(NSTableView, self)->_allowsColumnReordering = YES;
     NS_EXTRA(NSTableView, self)->_allowsColumnResizing = YES;
-    NS_EXTRA(NSTableView, self)->_autoresizesAllColumnsToFit =
-            NO; // the default isn't actually given in the spec, but this seems
-                // more like default behavior
+    NS_EXTRA(NSTableView, self)->_columnAutoresizingStyle = NSTableViewLastColumnOnlyAutoresizingStyle;
     NS_EXTRA(NSTableView, self)->_allowsMultipleSelection = NO;
     NS_EXTRA(NSTableView, self)->_allowsEmptySelection = YES;
     NS_EXTRA(NSTableView, self)->_allowsColumnSelection = YES;
@@ -281,6 +282,7 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
     [NS_EXTRA(NSTableView, self)->_sortDescriptors release];
     [NS_EXTRA(NSTableView, self)->_registeredNibs release];
     [NS_EXTRA(NSTableView, self)->_activeRowViews release];
+    [NS_EXTRA(NSTableView, self)->_indicatorImages release];
     NS_EXTRA_FREE(NSTableView, self);
     [super dealloc];
 }
@@ -375,8 +377,29 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
     return NS_EXTRA(NSTableView, self)->_allowsColumnResizing;
 }
 
+// The deprecated flag maps onto the style: YES is uniform autoresizing, NO the
+// last-column-only style, and reading it reports YES for the uniform and the
+// two sequential styles.
 - (BOOL) autoresizesAllColumnsToFit {
-    return NS_EXTRA(NSTableView, self)->_autoresizesAllColumnsToFit;
+    switch (NS_EXTRA(NSTableView, self)->_columnAutoresizingStyle) {
+    case NSTableViewUniformColumnAutoresizingStyle:
+    case NSTableViewSequentialColumnAutoresizingStyle:
+    case NSTableViewReverseSequentialColumnAutoresizingStyle:
+        return YES;
+    default:
+        return NO;
+    }
+}
+
+- (NSTableViewColumnAutoresizingStyle) columnAutoresizingStyle {
+    return NS_EXTRA(NSTableView, self)->_columnAutoresizingStyle;
+}
+
+- (void) setColumnAutoresizingStyle: (NSTableViewColumnAutoresizingStyle) style {
+    // An out-of-range style is ignored
+    if (style > NSTableViewFirstColumnOnlyAutoresizingStyle)
+        return;
+    NS_EXTRA(NSTableView, self)->_columnAutoresizingStyle = style;
 }
 
 - (BOOL) allowsMultipleSelection {
@@ -779,7 +802,7 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 }
 
 - (void) setAutoresizesAllColumnsToFit: (BOOL) flag {
-    NS_EXTRA(NSTableView, self)->_autoresizesAllColumnsToFit = flag;
+    [self setColumnAutoresizingStyle: flag ? NSTableViewUniformColumnAutoresizingStyle : NSTableViewLastColumnOnlyAutoresizingStyle];
 }
 
 - (void) setAllowsMultipleSelection: (BOOL) flag {
@@ -1000,8 +1023,12 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 
 - (void) setSortDescriptors: (NSArray *) value {
     if (NS_EXTRA(NSTableView, self)->_sortDescriptors != value) {
-        [NS_EXTRA(NSTableView, self)->_sortDescriptors release];
+        NSArray *old = [NS_EXTRA(NSTableView, self)->_sortDescriptors autorelease];
         NS_EXTRA(NSTableView, self)->_sortDescriptors = [value copy];
+        // The data source hears of every change, whether the user clicked a
+        // column header or the sort descriptors were set programmatically.
+        if ([_dataSource respondsToSelector: @selector(tableView:sortDescriptorsDidChange:)])
+            [_dataSource tableView: self sortDescriptorsDidChange: old != nil ? old : [NSArray array]];
     }
 }
 
@@ -1402,7 +1429,10 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 - (void) tile {
     NSRect rect;
 
-    [self sizeLastColumnToFit];
+    // Only the last-column style keeps the columns filled whenever the table
+    // is laid out; the other styles adjust widths when the clip view resizes.
+    if (NS_EXTRA(NSTableView, self)->_columnAutoresizingStyle == NSTableViewLastColumnOnlyAutoresizingStyle)
+        [self sizeLastColumnToFit];
     [self noteNumberOfRowsChanged];
     rect = [_headerView frame];
     rect.size.width = [self frame].size.width;
@@ -1507,6 +1537,20 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
         if ([self isRowSelected: row]) {
             [[NSColor selectedControlColor] setFill];
             NSRectFill([self rectOfRow: row]);
+        }
+
+        if ([self _isGroupRow: row]) {
+            // A group row is one view over the whole row, asked for without a column
+            NSView *groupView = [_delegate tableView: self viewForTableColumn: nil row: row];
+
+            if (groupView != nil) {
+                [groupView setFrame: [self rectOfRow: row]];
+                if ([groupView superview] != self)
+                    [self addSubview: groupView];
+                [groupView setHidden: NO];
+                [groupView displayRectIgnoringOpacity: [groupView bounds]];
+            }
+            return;
         }
 
         for (; drawThisColumn < NSMaxRange(visibleColumns); drawThisColumn++) {
@@ -1662,7 +1706,60 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     return result;
 }
 
+// Moves the width the columns miss (or exceed) relative to the clip view onto
+// the columns the autoresizing style names. Columns stop at their minimum and
+// maximum widths, and what a column cannot absorb passes to the next one.
+- (void) _autoresizeColumnsToFitClipView {
+    NSTableViewColumnAutoresizingStyle style = NS_EXTRA(NSTableView, self)->_columnAutoresizingStyle;
+    NSInteger count = [_tableColumns count];
+
+    if (count == 0 || ![[self superview] isKindOfClass: [NSClipView class]])
+        return;
+
+    switch (style) {
+    case NSTableViewNoColumnAutoresizing:
+        return;
+
+    case NSTableViewLastColumnOnlyAutoresizingStyle:
+        [self sizeLastColumnToFit];
+        return;
+
+    default:
+        break;
+    }
+
+    CGFloat delta = [[self superview] bounds].size.width - [self _displayWidthOfColumns];
+    NSInteger i;
+
+    if (style == NSTableViewUniformColumnAutoresizingStyle) {
+        for (i = 0; i < count; ++i) {
+            NSTableColumn *column = [_tableColumns objectAtIndex: i];
+            [column setWidth: [column width] + floor(delta / count)];
+        }
+    } else {
+        // Sequential runs from the last column towards the first, the reverse
+        // style from the first towards the last, and the first-column style
+        // touches the first column only.
+        BOOL fromLast = style == NSTableViewSequentialColumnAutoresizingStyle;
+        NSInteger visits = style == NSTableViewFirstColumnOnlyAutoresizingStyle ? 1 : count;
+
+        for (i = 0; i < visits && fabs(delta) >= 0.5; ++i) {
+            NSTableColumn *column = [_tableColumns objectAtIndex: fromLast ? count - 1 - i : i];
+            CGFloat before = [column width];
+
+            [column setWidth: before + delta];
+            delta -= [column width] - before;
+        }
+    }
+    [self setNeedsDisplay: YES];
+}
+
 - (void) resizeWithOldSuperviewSize: (NSSize) oldSize {
+    // Growing: Mac OS X 10.14 leaves the columns unchanged when the clip view
+    // widens, macOS 26 spreads the extra width as the autoresizing style says.
+    // We follow macOS 26 so the last-column fill keeps working (see the V605
+    // section of MAC-EVIDENCE.md, tests/appkit-table-column-autoresizing.m
+    // covers shrinking, where both agree).
     NSSize size = [self frame].size;
 
     if (size.width < [[self superview] bounds].size.width) {
@@ -1670,19 +1767,7 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
         [self setFrameSize: size];
     }
 
-    if (NS_EXTRA(NSTableView, self)->_autoresizesAllColumnsToFit) {
-        CGFloat delta = [[self enclosingScrollView] contentSize].width -
-                        [self _displayWidthOfColumns];
-        NSInteger i, count = [_tableColumns count];
-
-        for (i = 0; i < count; ++i) {
-            NSTableColumn *column = [_tableColumns objectAtIndex: i];
-            [column setWidth: [column width] + floor((delta / count))];
-        }
-
-    } else
-        [self sizeLastColumnToFit];
-
+    [self _autoresizeColumnsToFitClipView];
     [self tile];
 }
 
@@ -2333,13 +2418,121 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
         [NS_EXTRA(NSTableView, self)->_registeredNibs removeObjectForKey: identifier];
 }
 
+- (NSTableColumn *) highlightedTableColumn {
+    return NS_EXTRA(NSTableView, self)->_highlightedTableColumn;
+}
+
+- (void) setHighlightedTableColumn: (NSTableColumn *) column {
+    NS_EXTRA(NSTableView, self)->_highlightedTableColumn = column;
+    [_headerView setNeedsDisplay: YES];
+}
+
+- (BOOL) verticalMotionCanBeginDrag {
+    return !NS_EXTRA(NSTableView, self)->_verticalMotionCannotBeginDrag;
+}
+
+- (void) setVerticalMotionCanBeginDrag: (BOOL) flag {
+    NS_EXTRA(NSTableView, self)->_verticalMotionCannotBeginDrag = !flag;
+}
+
+- (BOOL) rowActionsVisible {
+    return NS_EXTRA(NSTableView, self)->_rowActionsVisible;
+}
+
+- (void) setRowActionsVisible: (BOOL) flag {
+    NS_EXTRA(NSTableView, self)->_rowActionsVisible = flag;
+}
+
+- (BOOL) usesStaticContents {
+    return NS_EXTRA(NSTableView, self)->_usesStaticContents;
+}
+
+- (void) setUsesStaticContents: (BOOL) flag {
+    NS_EXTRA(NSTableView, self)->_usesStaticContents = flag;
+}
+
+- (NSTableViewDraggingDestinationFeedbackStyle) draggingDestinationFeedbackStyle {
+    return NS_EXTRA(NSTableView, self)->_draggingDestinationFeedbackStyle;
+}
+
+- (void) setDraggingDestinationFeedbackStyle: (NSTableViewDraggingDestinationFeedbackStyle) style {
+    NS_EXTRA(NSTableView, self)->_draggingDestinationFeedbackStyle = style;
+}
+
+// The style in effect: an automatic style resolves the way -style reports it.
+- (NSTableViewStyle) effectiveStyle {
+    return [self style];
+}
+
+// The indicator image is kept per column for the header to show.
+- (void) setIndicatorImage: (NSImage *) image inTableColumn: (NSTableColumn *) tableColumn {
+    NSValue *key = [NSValue valueWithNonretainedObject: tableColumn];
+
+    if (NS_EXTRA(NSTableView, self)->_indicatorImages == nil)
+        NS_EXTRA(NSTableView, self)->_indicatorImages = [[NSMutableDictionary alloc] init];
+    if (image != nil)
+        [NS_EXTRA(NSTableView, self)->_indicatorImages setObject: image forKey: key];
+    else
+        [NS_EXTRA(NSTableView, self)->_indicatorImages removeObjectForKey: key];
+    [_headerView setNeedsDisplay: YES];
+}
+
+- (NSImage *) indicatorImageInTableColumn: (NSTableColumn *) tableColumn {
+    return [NS_EXTRA(NSTableView, self)->_indicatorImages objectForKey: [NSValue valueWithNonretainedObject: tableColumn]];
+}
+
+// The row (column) of the cell a view belongs to: the view is looked up by
+// climbing to the table's direct subview and finding what its frame centre lies in.
+- (NSInteger) _cellIndexForView: (NSView *) view row: (BOOL) wantRow {
+    while (view != nil && [view superview] != self)
+        view = [view superview];
+    if (view == nil)
+        return -1;
+
+    NSRect frame = [view frame];
+    NSPoint centre = NSMakePoint(NSMidX(frame), NSMidY(frame));
+
+    return wantRow ? [self rowAtPoint: centre] : [self columnAtPoint: centre];
+}
+
+- (NSInteger) rowForView: (NSView *) view {
+    return [self _cellIndexForView: view row: YES];
+}
+
+- (NSInteger) columnForView: (NSView *) view {
+    return [self _cellIndexForView: view row: NO];
+}
+
+// Group rows come from the delegate (tableView:isGroupRow:) and span all columns.
+- (BOOL) _isGroupRow: (NSInteger) row {
+    return [_delegate respondsToSelector: @selector(tableView:isGroupRow:)] &&
+           [_delegate tableView: self isGroupRow: row];
+}
+
 - (NSView *) viewAtColumn: (NSInteger) column row: (NSInteger) row makeIfNecessary: (BOOL) makeIfNecessary {
-    if (column >= 0 && column < [_tableColumns count] &&
-        [_delegate respondsToSelector: @selector(tableView:viewForTableColumn:row:)]) {
-        NSTableColumn *col = [_tableColumns objectAtIndex: column];
-        return [_delegate tableView: self viewForTableColumn: col row: row];
+    if (column < 0 || column >= [_tableColumns count] ||
+        ![_delegate respondsToSelector: @selector(tableView:viewForTableColumn:row:)])
+        return nil;
+
+    NSView *view;
+    NSRect frame;
+
+    if ([self _isGroupRow: row]) {
+        if (column != 0)
+            return nil;
+        view = [_delegate tableView: self viewForTableColumn: nil row: row];
+        frame = [self rectOfRow: row];
+    } else {
+        view = [_delegate tableView: self viewForTableColumn: [_tableColumns objectAtIndex: column] row: row];
+        frame = [self frameOfCellAtColumn: column row: row];
     }
-    return nil;
+    // The view sits in the table at its cell, as it does once drawn
+    if (view != nil) {
+        [view setFrame: frame];
+        if ([view superview] != self)
+            [self addSubview: view];
+    }
+    return view;
 }
 
 // Creates the view from the nib registered for the identifier, owned by the
