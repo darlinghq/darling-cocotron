@@ -256,15 +256,43 @@ static NSString *applicationName(void) {
 
 #pragma mark - Menu bar
 
-// The bar is shown while the application is active, has a main menu and the
-// desktop shows no global menu.
-- (void) updateBar {
-    BOOL globalMenu = _exporter != nil && [_exporter registrarPresent];
-    BOOL wanted = _menu != nil && NSApp != nil && [NSApp isActive] && !globalMenu;
+// Whether the application asks for the menu bar to be out of the way: through
+// its presentation options, or because a window of it is in full screen mode
+// (it has the full screen style), where the menu bar is hidden as well.
+static BOOL menuBarHiddenByApplication(void) {
+    NSApplicationPresentationOptions options = [NSApp presentationOptions];
 
-    if (!wanted) {
+    if (options & (NSApplicationPresentationHideMenuBar |
+                   NSApplicationPresentationAutoHideMenuBar))
+        return YES;
+
+    return ([[NSApp keyWindow] styleMask] & NSWindowStyleMaskFullScreen) != 0 ||
+           ([[NSApp mainWindow] styleMask] & NSWindowStyleMaskFullScreen) != 0;
+}
+
+// The bar is shown while the application is active, has a main menu and the
+// desktop shows no global menu, unless the application hides the menu bar.
+- (BOOL) barWanted {
+    BOOL globalMenu = _exporter != nil && [_exporter registrarPresent];
+
+    return _menu != nil && NSApp != nil && [NSApp isActive] && !globalMenu &&
+           !menuBarHiddenByApplication();
+}
+
+- (void) updateBar {
+    // Presentation options and window styles have no notification of their
+    // own, so the observer below keeps checking while the application has a
+    // main menu.
+    if (_menu == nil)
         [self stopRedrawingBar];
+    else
+        [self startRedrawingBar];
+
+    if (![self barWanted]) {
         [_bar orderOut: nil];
+        _barShown = NO;
+        // This can run from the run loop observer with no event to flush it.
+        XFlush(_display);
         return;
     }
 
@@ -273,12 +301,21 @@ static NSString *applicationName(void) {
                                       applicationName: applicationName()];
     [_bar placeAtTopOfScreen];
     [_bar orderFront: nil];
-    [self startRedrawingBar];
+    _barShown = YES;
+    XFlush(_display);
 }
 
 static void redrawBar(CFRunLoopObserverRef observer, CFRunLoopActivity activity,
                       void *info) {
-    [[(X11AppMenu *) info bar] displayIfNeeded];
+    X11AppMenu *menu = info;
+
+    if ([menu barWanted] != [menu barShown])
+        [menu updateBar];
+    [[menu bar] displayIfNeeded];
+}
+
+- (BOOL) barShown {
+    return _barShown;
 }
 
 - (X11MenuBarWindow *) bar {
