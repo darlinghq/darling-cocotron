@@ -179,15 +179,19 @@ NSString *const NSNibTopLevelObjects = @"NSNibTopLevelObjects";
     return object;
 }
 
-- (void) unarchiver: (NSKeyedUnarchiver *) unarchiver
-        willReplaceObject: object
-               withObject: replacement
-{
+- (void) _replaceDecodedObject: object withObject: replacement {
     if (object != nil && replacement != nil) {
         NSUInteger index = [_allObjects indexOfObjectIdenticalTo: object];
         if (index != NSNotFound)
             [_allObjects replaceObjectAtIndex: index withObject: replacement];
     }
+}
+
+- (void) unarchiver: (NSKeyedUnarchiver *) unarchiver
+        willReplaceObject: object
+               withObject: replacement
+{
+    [self _replaceDecodedObject: object withObject: replacement];
 }
 
 - (NSDictionary *) externalNameTable {
@@ -233,7 +237,14 @@ NSString *const NSNibTopLevelObjects = @"NSNibTopLevelObjects";
                 objectData = nil;
             }
         } else if (_flags._isKeyed) {
-            NSKeyedUnarchiver *keyed = [[[NSKeyedUnarchiver alloc] initForReadingWithData: _data] autorelease];
+            NSKeyedUnarchiver *keyed = nil;
+            @try {
+                keyed = [[[NSKeyedUnarchiver alloc] initForReadingWithData: _data] autorelease];
+            } @catch (NSException *exception) {
+                // Like the NIBArchive path: data that is not an archive (such as an empty file)
+                // fails to instantiate without raising.
+                return NO;
+            }
             unarchiver = keyed;
 
             [keyed setDelegate: self];
