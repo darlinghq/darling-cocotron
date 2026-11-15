@@ -1932,7 +1932,9 @@ static BOOL _allowsAutomaticWindowTabbing;
 
 - (BOOL) canBecomeKeyWindow {
     // The NSWindow implementation returns YES if the window has a title bar or
-    // a resize bar, or NO otherwise
+    // a resize bar, or NO otherwise. Mac OS X 10.14 behaves this way for a
+    // Resizable mask without Titled too; macOS 26 answers NO for it. We follow
+    // 10.14.
     return (NS_EXTRA(NSWindow, self)->_styleMask & (NSTitledWindowMask | NSResizableWindowMask)) != 0;
 }
 

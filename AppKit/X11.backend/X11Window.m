@@ -437,10 +437,6 @@ static NSData *makeWindowIcon() {
     if (!_dock && !_overrideRedirect && !isMenuWindow)
         [[x11disp appMenu] windowCreated: _window];
 
-    // FIXME: Move this call into setStyleMaskInternal below!
-    if (_styleMask == NSBorderlessWindowMask) {
-        [[self class] removeDecorationForWindow: _window onDisplay: _display];
-    }
     [self setStyleMaskInternal: _styleMask force: YES];
 
     [self setWindowIcon];
@@ -609,10 +605,34 @@ static NSData *makeWindowIcon() {
     [self updateLayerPresentationHints];
 }
 
+// A window gets the window manager's full frame (with a title bar) when its
+// style mask has NSWindowStyleMaskTitled or NSWindowStyleMaskResizable; a mask
+// with neither bit asks for no frame. The mask is passed in rather than read
+// from _styleMask because -setStyleMask: hands the new mask here before it
+// stores it.
+//
+// Platform discrepancy: Mac OS X 10.14 treats a Resizable mask without Titled
+// (including Borderless|Resizable) like a titled one: it adds a 22 pt title
+// bar and the window can become key. macOS 26 shows no title bar for such
+// windows and they cannot become key. We follow 10.14.
+- (void) updateDecorationsForStyleMask: (NSUInteger) mask {
+    if (mask & (NSWindowStyleMaskTitled | NSWindowStyleMaskResizable))
+        XDeleteProperty(_display, _window,
+                        XInternAtom(_display, "_MOTIF_WM_HINTS", False));
+    else
+        [[self class] removeDecorationForWindow: _window onDisplay: _display];
+}
+
 - (void) setStyleMaskInternal: (NSUInteger) mask force: (BOOL) force {
     if (force || (mask & NSWindowStyleMaskResizable) !=
                          (_styleMask & NSWindowStyleMaskResizable)) {
         [self updateSizeHints: mask];
+    }
+    if (force ||
+        (mask & (NSWindowStyleMaskTitled | NSWindowStyleMaskResizable)) !=
+                (_styleMask &
+                 (NSWindowStyleMaskTitled | NSWindowStyleMaskResizable))) {
+        [self updateDecorationsForStyleMask: mask];
     }
 
     BOOL fullscreen =
@@ -627,18 +647,6 @@ static NSData *makeWindowIcon() {
     NSLog(@"X11Window setStyleMask: 0x%lx\n", (unsigned long) mask);
 
     [self setStyleMaskInternal: mask force: NO];
-
-    // The window manager draws the frame of a titled window and none for a
-    // borderless one, so the decoration hint follows the style.
-    BOOL borderless = mask == NSBorderlessWindowMask;
-    if (borderless != (_styleMask == NSBorderlessWindowMask)) {
-        if (borderless)
-            [[self class] removeDecorationForWindow: _window
-                                          onDisplay: _display];
-        else
-            XDeleteProperty(_display, _window,
-                            XInternAtom(_display, "_MOTIF_WM_HINTS", False));
-    }
 
     _styleMask = mask;
 }
@@ -796,6 +804,14 @@ static NSData *makeWindowIcon() {
     XChangeProperty(_display, _window,
                     XInternAtom(_display, "_NET_WM_STRUT", False), XA_CARDINAL,
                     32, PropModeReplace, (const unsigned char *) strut, 4);
+}
+
+// Restacking a window only maps it while AppKit shows it.
+// -[NSWindow orderWindow:relativeTo:] marks the window visible before it
+// restacks, so ordering a window in still maps it.
+- (void) ensureMappedIfVisible {
+    if (_delegate == nil || [_delegate isVisible])
+        [self ensureMapped];
 }
 
 - (BOOL) isMapped {
@@ -1065,7 +1081,7 @@ static NSData *makeWindowIcon() {
 
 - (void) placeAboveWindow: (NSInteger) otherNumber {
     X11Window *other = [X11Window windowWithWindowNumber: otherNumber];
-    [self ensureMapped];
+    [self ensureMappedIfVisible];
 
     if (!other) {
         XRaiseWindow(_display, _window);
@@ -1077,7 +1093,7 @@ static NSData *makeWindowIcon() {
 
 - (void) placeBelowWindow: (NSInteger) otherNumber {
     X11Window *other = [X11Window windowWithWindowNumber: otherNumber];
-    [self ensureMapped];
+    [self ensureMappedIfVisible];
 
     if (!other) {
         XLowerWindow(_display, _window);
