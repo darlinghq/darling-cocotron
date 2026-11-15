@@ -17,17 +17,28 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Foundation/NSObject.h>
+#import <Foundation/NSObjCRuntime.h>
 
-@class NSEntityDescription, NSPredicate, NSArray;
+@class NSEntityDescription, NSPredicate, NSArray, NSManagedObjectContext;
 
-enum {
+typedef NS_ENUM(NSUInteger, NSFetchRequestResultType) {
     NSManagedObjectResultType = 0x00,
     NSManagedObjectIDResultType = 0x01,
     NSDictionaryResultType = 0x02
 };
-typedef NSUInteger NSFetchRequestResultType;
 
-@interface NSFetchRequest : NSObject <NSCoding, NSCopying> {
+// Marks the classes a fetch can return; it is the bound of NSFetchRequest's type parameter.
+@protocol NSFetchRequestResult <NSObject>
+@end
+
+@interface NSNumber (NSFetchRequestResultConformance) <NSFetchRequestResult>
+@end
+@interface NSDictionary (NSFetchRequestResultConformance) <NSFetchRequestResult>
+@end
+
+// The type parameter is the element type of the fetch result; Swift imports the class as
+// NSFetchRequest<ResultType>.
+@interface NSFetchRequest<__covariant ResultType : id<NSFetchRequestResult>> : NSObject <NSCoding, NSCopying> {
     NSFetchRequestResultType _resultType;
     NSEntityDescription *_entity;
     NSPredicate *_predicate;

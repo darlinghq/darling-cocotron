@@ -29,7 +29,9 @@ int main(void) {
     expect(0xff0d, 0x000d, "Return");
     expect(0xff52, NSUpArrowFunctionKey, "Up");
     expect(0xff54, NSDownArrowFunctionKey, "Down");
+    expect(0xff51, NSLeftArrowFunctionKey, "Left");
     expect(0xffbe, NSF1FunctionKey, "F1");
+    expect(0xffc9, NSF12FunctionKey, "F12");
     expect(0xffff, NSDeleteFunctionKey, "Delete");
     expect(0x00000000, 0, "NoSymbol");
     expect(0x0fffffff, 0, "unmapped keysym");

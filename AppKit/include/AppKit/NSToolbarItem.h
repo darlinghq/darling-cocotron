@@ -24,12 +24,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSString, NSImage, NSView, NSMenuItem, NSToolbar, NSToolbarItemView;
 
-enum {
-    NSToolbarItemVisibilityPriorityStandard = 0,
-    NSToolbarItemVisibilityPriorityLow = -1000,
-    NSToolbarItemVisibilityPriorityHigh = 1000,
-    NSToolbarItemVisibilityPriorityUser = 2000
-};
+typedef NSInteger NSToolbarItemVisibilityPriority NS_TYPED_EXTENSIBLE_ENUM;
+
+static const NSToolbarItemVisibilityPriority NSToolbarItemVisibilityPriorityStandard = 0;
+static const NSToolbarItemVisibilityPriority NSToolbarItemVisibilityPriorityLow = -1000;
+static const NSToolbarItemVisibilityPriority NSToolbarItemVisibilityPriorityHigh = 1000;
+static const NSToolbarItemVisibilityPriority NSToolbarItemVisibilityPriorityUser = 2000;
 
 typedef NSString *NSToolbarItemIdentifier;
 

@@ -42,22 +42,29 @@ static const struct {
     size_t size;
 } legacySizes[] = {
     {"NSResponder", 0x8},
+    {"NSFont", 0x18},
     {"NSView", 0x50},
+    {"NSColor", 0x4},
     {"NSWindow", 0x84},
     {"NSPanel", 0x84},
     {"NSControl", 0x5c},
     {"NSButton", 0x5c},
+    {"NSImageRep", 0x1c},
+    {"NSBitmapImageRep", 0x34},
     {"NSPopUpButton", 0x60},
     {"NSTextField", 0x64},
     {"NSSecureTextField", 0x64},
     {"NSSlider", 0x5c},
     {"NSImageView", 0x68},
     {"NSTableView", 0xe4},
+    {"NSOpenGLContext", 0xc},
     {"NSOutlineView", 0x14c},
     {"NSScrollView", 0x78},
     {"NSClipView", 0x84},
     {"NSTextView", 0x54},
     {"NSBox", 0x88},
+    {"NSTextStorage", 0x1c},
+    {"NSTextContainer", 0x1c},
     {"NSOpenGLView", 0x64},
     {"NSCell", 0x14},
     {"NSActionCell", 0x24},
@@ -656,6 +663,238 @@ static void checkCopies(void) {
     [image release];
 }
 
+// NSTextStorage and NSTextContainer are 0x1c bytes; their state beyond the
+// words that fit is kept in the extras block
+@interface NSObject (LegacyLayoutTextAPI)
+- (id) initWithString: (NSString *) string;
+- (NSRange) editedRange;
+- (NSUInteger) editedMask;
+- (NSInteger) changeInLength;
+- (void) beginEditing;
+- (void) endEditing;
+- (void) replaceCharactersInRange: (NSRange) range withString: (NSString *) string;
+- (void) addLayoutManager: (id) manager;
+- (id) initWithContainerSize: (NSSize) size;
+- (void) setLineFragmentPadding: (CGFloat) padding;
+- (CGFloat) lineFragmentPadding;
+- (void) setMaximumNumberOfLines: (NSUInteger) lines;
+- (NSUInteger) maximumNumberOfLines;
+- (void) setWidthTracksTextView: (BOOL) flag;
+- (BOOL) widthTracksTextView;
+- (void) setHeightTracksTextView: (BOOL) flag;
+- (BOOL) heightTracksTextView;
+- (NSSize) containerSize;
+- (void) setContainerSize: (NSSize) size;
+- (void) setTextContainer: (id) container;
+@end
+
+static void checkTextStorageAndContainer(void) {
+    id storage = [[appKitClass("NSTextStorage") alloc] initWithString: @"hello"];
+    [storage beginEditing];
+    [storage replaceCharactersInRange: NSMakeRange(1, 2) withString: @"EYYY"];
+    [storage endEditing];
+    expect([[storage string] isEqual: @"hEYYYlo"], "NSTextStorage edit");
+    id copy = [[appKitClass("NSTextStorage") alloc] initWithString: @"x"];
+    [copy beginEditing];
+    [copy replaceCharactersInRange: NSMakeRange(0, 1) withString: @"yz"];
+    // inside an edit the range being changed is tracked in the extras
+    expect([copy editedRange].location == 0 && [copy editedRange].length == 2, "NSTextStorage editedRange");
+    expect([copy changeInLength] == 1, "NSTextStorage changeInLength");
+    [copy endEditing];
+    [copy release];
+    [storage release];
+
+    id container = [[appKitClass("NSTextContainer") alloc] initWithContainerSize: NSMakeSize(100, 50)];
+    expect([container containerSize].width == 100 && [container containerSize].height == 50,
+           "NSTextContainer size");
+    [container setLineFragmentPadding: 3];
+    [container setMaximumNumberOfLines: 7];
+    [container setWidthTracksTextView: YES];
+    [container setHeightTracksTextView: YES];
+    expect([container lineFragmentPadding] == 3, "NSTextContainer lineFragmentPadding");
+    expect([container maximumNumberOfLines] == 7, "NSTextContainer maximumNumberOfLines");
+    expect([container widthTracksTextView] && [container heightTracksTextView],
+           "NSTextContainer tracking flags");
+    [container setWidthTracksTextView: NO];
+    expect(![container widthTracksTextView] && [container heightTracksTextView],
+           "NSTextContainer tracking flags independent");
+    expect([container containerSize].width == 100, "NSTextContainer size unchanged");
+    [container release];
+}
+
+// NSImageRep (0x1c) has no room for any extra state and NSBitmapImageRep
+// (0x34) only one pointer; an application's subclass keeps its ivars after
+// them
+@interface NSImageRep : NSObject {
+    void *_imageRepLayout[6];
+}
+@end
+
+@interface NSBitmapImageRep : NSImageRep {
+    void *_bitmapImageRepLayout[6];
+}
+@end
+
+APP_SUBCLASS(AppBitmapImageRep, NSBitmapImageRep)
+
+@interface NSObject (LegacyLayoutBitmapAPI)
+- (id) initWithBitmapDataPlanes: (unsigned char **) planes
+                     pixelsWide: (NSInteger) width
+                     pixelsHigh: (NSInteger) height
+                  bitsPerSample: (NSInteger) bitsPerSample
+                samplesPerPixel: (NSInteger) samplesPerPixel
+                       hasAlpha: (BOOL) hasAlpha
+                       isPlanar: (BOOL) isPlanar
+                 colorSpaceName: (NSString *) colorSpaceName
+                    bytesPerRow: (NSInteger) bytesPerRow
+                   bitsPerPixel: (NSInteger) bitsPerPixel;
+- (NSInteger) pixelsWide;
+- (NSInteger) pixelsHigh;
+- (NSInteger) bitsPerSample;
+- (NSInteger) samplesPerPixel;
+- (NSInteger) bitsPerPixel;
+- (NSInteger) bytesPerRow;
+- (BOOL) hasAlpha;
+- (BOOL) isOpaque;
+- (BOOL) isPlanar;
+- (void) setOpaque: (BOOL) flag;
+- (void) setAlpha: (BOOL) flag;
+- (unsigned char *) bitmapData;
+- (NSString *) colorSpaceName;
+- (void) setProperty: (NSString *) property withValue: (id) value;
+- (id) valueForProperty: (NSString *) property;
+@end
+
+static void checkImageReps(void) {
+#if !__OBJC2__
+    expect(CANARY_OFFSET(AppBitmapImageRep) == 0x34, "test declares NSBitmapImageRep as 0x34 bytes");
+#endif
+    AppBitmapImageRep *rep = [[AppBitmapImageRep alloc] initWithBitmapDataPlanes: NULL
+                                                                      pixelsWide: 5
+                                                                      pixelsHigh: 3
+                                                                   bitsPerSample: 8
+                                                                 samplesPerPixel: 4
+                                                                        hasAlpha: YES
+                                                                        isPlanar: NO
+                                                                  colorSpaceName: @"NSCalibratedRGBColorSpace"
+                                                                     bytesPerRow: 20
+                                                                    bitsPerPixel: 32];
+    expect(rep != nil, "NSBitmapImageRep created");
+    fillCanary(rep->_canary);
+    expect([rep pixelsWide] == 5 && [rep pixelsHigh] == 3, "NSImageRep pixel size");
+    expect([rep bitsPerSample] == 8, "NSImageRep bitsPerSample");
+    expect([rep hasAlpha] == YES && [rep isOpaque] == NO, "NSImageRep alpha flags");
+    [rep setOpaque: YES];
+    [rep setAlpha: NO];
+    expect([rep hasAlpha] == NO && [rep isOpaque] == YES, "NSImageRep alpha flags set");
+    [rep setOpaque: NO];
+    [rep setAlpha: YES];
+    expect([rep hasAlpha] == YES && [rep isOpaque] == NO, "NSImageRep alpha flags set again");
+    expect([rep bitsPerSample] == 8 && [rep pixelsWide] == 5, "NSImageRep flags leave neighbours alone");
+    expect([rep samplesPerPixel] == 4 && [rep bitsPerPixel] == 32 && [rep bytesPerRow] == 20,
+           "NSBitmapImageRep layout");
+    expect([rep isPlanar] == NO, "NSBitmapImageRep isPlanar");
+    unsigned char *data = [rep bitmapData];
+    expect(data != NULL, "NSBitmapImageRep bitmapData");
+    if (data != NULL) {
+        memset(data, 0x5a, 20 * 3);
+        expect(data[0] == 0x5a && data[59] == 0x5a, "NSBitmapImageRep pixel storage");
+    }
+    [rep setProperty: @"legacyProperty" withValue: @"v"];
+    expect(canaryIntact(rep->_canary), "NSBitmapImageRep subclass ivars intact");
+    [rep release];
+}
+
+// An application's NSOpenGLContext subclass keeps its ivars after Apple's
+// 0xc bytes. The context is only allocated (no GL driver is needed): the
+// state AppKit keeps for a view must not touch the subclass's ivars.
+@interface NSOpenGLContext : NSObject {
+    void *_openGLContextLayout[2];
+}
+@end
+
+APP_SUBCLASS(AppOpenGLContext, NSOpenGLContext)
+
+@interface NSObject (LegacyLayoutOpenGLAPI)
+- (void) setView: (id) view;
+- (id) view;
+@end
+
+static void checkOpenGLContext(void) {
+#if !__OBJC2__
+    expect(CANARY_OFFSET(AppOpenGLContext) == 0xc, "test declares NSOpenGLContext as 0xc bytes");
+#endif
+    AppOpenGLContext *context = [AppOpenGLContext alloc];
+    fillCanary(context->_canary);
+    id view = [[appKitClass("NSView") alloc] initWithFrame: NSMakeRect(0, 0, 10, 10)];
+    expect([context view] == nil, "NSOpenGLContext has no view yet");
+    [context setView: view];
+    expect([context view] == view, "NSOpenGLContext view");
+    expect(canaryIntact(context->_canary), "NSOpenGLContext subclass ivars intact");
+    [context setView: nil];
+    expect([context view] == nil, "NSOpenGLContext view cleared");
+    expect(canaryIntact(context->_canary), "NSOpenGLContext subclass ivars intact after clearing");
+    [view release];
+    // the context is not released: it was never initialized with a pixel format
+}
+
+// NSColor is an abstract class cluster root of one word on the legacy ABI;
+// the state of the concrete colors lives in their own classes
+@interface NSObject (LegacyLayoutColorAPI)
++ (id) colorWithCalibratedRed: (CGFloat) red green: (CGFloat) green blue: (CGFloat) blue alpha: (CGFloat) alpha;
++ (id) colorWithCatalogName: (NSString *) catalog colorName: (NSString *) name;
++ (id) colorWithName: (NSString *) name dynamicProvider: (id (^)(id appearance)) provider;
++ (id) colorWithPatternImage: (id) image;
+- (NSString *) catalogNameComponent;
+- (NSString *) colorNameComponent;
+- (NSString *) colorSpaceName;
+- (id) patternImage;
+@end
+
+static void checkColor(void) {
+    id rgb = [appKitClass("NSColor") colorWithCalibratedRed: 0.25 green: 0.5 blue: 0.75 alpha: 1];
+    expect([[rgb catalogNameComponent] length] == 0, "NSColor component color has no catalog name");
+    expect([rgb colorSpaceName] != nil, "NSColor component color space name");
+
+    id image = [[appKitClass("NSImage") alloc] initWithSize: NSMakeSize(4, 4)];
+    id pattern = [appKitClass("NSColor") colorWithPatternImage: image];
+    expect([pattern patternImage] != nil, "NSColor pattern image");
+    [image release];
+
+    id catalog = [appKitClass("NSColor") colorWithCatalogName: @"System" colorName: @"controlTextColor"];
+    expect([[catalog catalogNameComponent] isEqual: @"System"], "NSColor catalog name");
+    expect([[catalog colorNameComponent] isEqual: @"controlTextColor"], "NSColor catalog color name");
+
+    id dynamic = [appKitClass("NSColor") colorWithName: @"legacy.dynamic"
+                                       dynamicProvider: ^id(id appearance) { return rgb; }];
+    expect([[dynamic colorNameComponent] isEqual: @"legacy.dynamic"], "NSColor dynamic color name");
+}
+
+// NSFont keeps its state in the extra struct: the legacy size must not cost
+// functionality
+@interface NSObject (LegacyLayoutFontAPI)
++ (id) fontWithName: (NSString *) name size: (CGFloat) size;
+- (CGFloat) pointSize;
+- (NSString *) fontName;
+- (CGFloat) ascender;
+- (CGFloat) descender;
+- (const CGFloat *) matrix;
+@end
+
+static void checkFont(void) {
+    id font = [appKitClass("NSFont") systemFontOfSize: 13];
+    expect([font pointSize] == 13, "NSFont pointSize");
+    expect([[font fontName] length] > 0, "NSFont fontName");
+    expect([font ascender] > 0 && [font descender] < 0, "NSFont ascender/descender");
+    expect([font matrix] != NULL && [font matrix][0] == 13 && [font matrix][3] == 13,
+           "NSFont matrix");
+    id same = [appKitClass("NSFont") fontWithName: [font fontName] size: 13];
+    expect([same pointSize] == 13 && [[same fontName] isEqual: [font fontName]],
+           "NSFont fontWithName:size:");
+    expect([font copy] == font, "NSFont copy returns itself");
+    [font release]; // the copy
+}
+
 int main(void) {
     setvbuf(stdout, NULL, _IONBF, 0);
     @autoreleasepool {
@@ -668,6 +907,11 @@ int main(void) {
         checkControlSubclasses();
         checkControllerSubclasses();
         checkCopies();
+        checkTextStorageAndContainer();
+        checkImageReps();
+        checkOpenGLContext();
+        checkColor();
+        checkFont();
     }
     if (failures == 0)
         printf("PASS\n");
