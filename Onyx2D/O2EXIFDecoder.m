@@ -158,7 +158,8 @@ enum {
     kGPS_GPSDestBearingRef = 0x0017,
     kGPS_GPSDestBearing = 0x0018,
     kGPS_GPSDestDistanceRef = 0x0019,
-    kGPS_GPSDestDistance = 0x001A
+    kGPS_GPSDestDistance = 0x001A,
+    kGPS_GPSDateStamp = 0x001D
 };
 
 typedef struct tEXIFTagToLabel {
@@ -283,33 +284,36 @@ static tEXIFTagToLabel EXIFTagToLabel[] = {
         {kInterop, kInterop_RelatedImageWidth, @"RelatedImageWidth"},
         {kInterop, kInterop_RelatedImageLength, @"RelatedImageLength"},
 
-        {kGPS, kGPS_GPSVersionID, @"GPSVersionID"},
-        {kGPS, kGPS_GPSLatitudeRef, @"GPSLatitudeRef"},
-        {kGPS, kGPS_GPSLatitude, @"GPSLatitude"},
-        {kGPS, kGPS_GPSLongitudeRef, @"GPSLongitudeRef"},
-        {kGPS, kGPS_GPSLongitude, @"GPSLongitude"},
-        {kGPS, kGPS_GPSAltitudeRef, @"GPSAltitudeRef"},
-        {kGPS, kGPS_GPSAltitude, @"GPSAltitude"},
-        {kGPS, kGPS_GPSTimeStamp, @"GPSTimeStamp"},
-        {kGPS, kGPS_GPSSatellites, @"GPSSatellites"},
-        {kGPS, kGPS_GPSStatus, @"GPSStatus"},
-        {kGPS, kGPS_GPSMeasureMode, @"GPSMeasureMode"},
-        {kGPS, kGPS_GPSDOP, @"GPSDOP"},
-        {kGPS, kGPS_GPSSpeedRef, @"GPSSpeedRef"},
-        {kGPS, kGPS_GPSSpeed, @"GPSSpeed"},
-        {kGPS, kGPS_GPSTrackRef, @"GPSTrackRef"},
-        {kGPS, kGPS_GPSTrack, @"GPSTrack"},
-        {kGPS, kGPS_GPSImgDirectionRef, @"GPSImgDirectionRef"},
-        {kGPS, kGPS_GPSImgDirection, @"GPSImgDirection"},
-        {kGPS, kGPS_GPSMapDatum, @"GPSMapDatum"},
-        {kGPS, kGPS_GPSDestLatitudeRef, @"GPSDestLatitudeRef"},
-        {kGPS, kGPS_GPSDestLatitude, @"GPSDestLatitude"},
-        {kGPS, kGPS_GPSDestLongitudeRef, @"GPSDestLongitudeRef"},
-        {kGPS, kGPS_GPSDestLongitude, @"GPSDestLongitude"},
-        {kGPS, kGPS_GPSDestBearingRef, @"GPSDestBearingRef"},
-        {kGPS, kGPS_GPSDestBearing, @"GPSDestBearing"},
-        {kGPS, kGPS_GPSDestDistanceRef, @"GPSDestDistanceRef"},
-        {kGPS, kGPS_GPSDestDistance, @"GPSDestDistance"},
+        // The {GPS} labels are the ImageIO property key strings (kCGImagePropertyGPS*): the tag name
+        // without its "GPS" prefix, except for GPSVersion.
+        {kGPS, kGPS_GPSVersionID, @"GPSVersion"},
+        {kGPS, kGPS_GPSLatitudeRef, @"LatitudeRef"},
+        {kGPS, kGPS_GPSLatitude, @"Latitude"},
+        {kGPS, kGPS_GPSLongitudeRef, @"LongitudeRef"},
+        {kGPS, kGPS_GPSLongitude, @"Longitude"},
+        {kGPS, kGPS_GPSAltitudeRef, @"AltitudeRef"},
+        {kGPS, kGPS_GPSAltitude, @"Altitude"},
+        {kGPS, kGPS_GPSTimeStamp, @"TimeStamp"},
+        {kGPS, kGPS_GPSSatellites, @"Satellites"},
+        {kGPS, kGPS_GPSStatus, @"Status"},
+        {kGPS, kGPS_GPSMeasureMode, @"MeasureMode"},
+        {kGPS, kGPS_GPSDOP, @"DOP"},
+        {kGPS, kGPS_GPSSpeedRef, @"SpeedRef"},
+        {kGPS, kGPS_GPSSpeed, @"Speed"},
+        {kGPS, kGPS_GPSTrackRef, @"TrackRef"},
+        {kGPS, kGPS_GPSTrack, @"Track"},
+        {kGPS, kGPS_GPSImgDirectionRef, @"ImgDirectionRef"},
+        {kGPS, kGPS_GPSImgDirection, @"ImgDirection"},
+        {kGPS, kGPS_GPSMapDatum, @"MapDatum"},
+        {kGPS, kGPS_GPSDestLatitudeRef, @"DestLatitudeRef"},
+        {kGPS, kGPS_GPSDestLatitude, @"DestLatitude"},
+        {kGPS, kGPS_GPSDestLongitudeRef, @"DestLongitudeRef"},
+        {kGPS, kGPS_GPSDestLongitude, @"DestLongitude"},
+        {kGPS, kGPS_GPSDestBearingRef, @"DestBearingRef"},
+        {kGPS, kGPS_GPSDestBearing, @"DestBearing"},
+        {kGPS, kGPS_GPSDestDistanceRef, @"DestDistanceRef"},
+        {kGPS, kGPS_GPSDestDistance, @"DestDistance"},
+        {kGPS, kGPS_GPSDateStamp, @"DateStamp"},
 
         {-1, -1, nil}};
 
@@ -361,6 +365,64 @@ static unsigned long _getLong(const unsigned char *data, size_t offset,
         return (((((v4 << 8) + v3) << 8) + v2) << 8) + v1;
 }
 
+// GPS values as ImageIO presents them. QUIRK: the raw EXIF shapes (arrays of
+// rationals, a byte for the altitude reference) are not what ImageIO returns.
+// Observed behaviour (black-box, macOS 26.7.3, JPEG files with a hand-built
+// GPS IFD, tier 2):
+//  - Latitude, Longitude, DestLatitude and DestLongitude (three rationals) are
+//    one double, degrees + minutes/60 + seconds/3600, never negative (the sign
+//    is in the Ref string, 40/90/90 gives 41.525, no range check). Other counts
+//    drop the tag.
+//  - TimeStamp (three rationals) is the string "HH:MM:SS", each part truncated
+//    to an integer and zero padded; other counts drop the tag.
+//  - every other rational tag with a count of 1 is a double.
+//  - a rational with a zero denominator is 0.
+//  - AltitudeRef is the byte as an int (0, 1 and 2 were observed).
+//  - GPSVersion (four bytes) is an array of four numbers.
+//  - LatitudeRef "N" and LongitudeRef "E" appear when a Latitude or Longitude
+//    was read and the file has no Ref.
+// Test: tests/imageio-jpeg-gps-keys.c
+static double _gpsRational(const unsigned char *rawValue, long index,
+                           bool bigendian)
+{
+    unsigned long a = _getLong(rawValue, index * 8, bigendian);
+    unsigned long b = _getLong(rawValue, index * 8 + 4, bigendian);
+    return b == 0 ? 0 : (double) a / (double) b;
+}
+
+static BOOL _gpsIsCoordinateTag(unsigned tag) {
+    return tag == kGPS_GPSLatitude || tag == kGPS_GPSLongitude ||
+           tag == kGPS_GPSDestLatitude || tag == kGPS_GPSDestLongitude;
+}
+
+// Returns the ImageIO value for a rational GPS tag, nil to drop it.
+static id _gpsRationalValue(unsigned tag, const unsigned char *rawValue,
+                            long count, bool bigendian)
+{
+    if (_gpsIsCoordinateTag(tag)) {
+        if (count != 3) {
+            return nil;
+        }
+        double degrees = _gpsRational(rawValue, 0, bigendian) +
+                         _gpsRational(rawValue, 1, bigendian) / 60 +
+                         _gpsRational(rawValue, 2, bigendian) / 3600;
+        return [NSNumber numberWithDouble: degrees];
+    }
+    if (tag == kGPS_GPSTimeStamp) {
+        if (count != 3) {
+            return nil;
+        }
+        return [NSString stringWithFormat: @"%02ld:%02ld:%02ld",
+                         (long) _gpsRational(rawValue, 0, bigendian),
+                         (long) _gpsRational(rawValue, 1, bigendian),
+                         (long) _gpsRational(rawValue, 2, bigendian)];
+    }
+    if (count != 1) {
+        return nil;
+    }
+    return [NSNumber numberWithDouble: _gpsRational(rawValue, 0, bigendian)];
+}
+
 - (id) keyForType: (int) type {
     id typeKey = nil;
     switch (type) {
@@ -404,6 +466,20 @@ static unsigned long _getLong(const unsigned char *data, size_t offset,
         // numberKey = [NSString stringWithFormat:@"<%d>", tagNumber];
     }
     return numberKey;
+}
+
+// QUIRK: see _gpsRationalValue above; the default Refs are part of the same
+// observed behaviour.
+- (void) _addDefaultGPSRefs {
+    id typeKey = [self keyForType: kGPS];
+    if ([self tagForTypeKey: typeKey numberKey: @"Latitude"] != nil &&
+        [self tagForTypeKey: typeKey numberKey: @"LatitudeRef"] == nil) {
+        [self setTagForTypeKey: typeKey numberKey: @"LatitudeRef" value: @"N"];
+    }
+    if ([self tagForTypeKey: typeKey numberKey: @"Longitude"] != nil &&
+        [self tagForTypeKey: typeKey numberKey: @"LongitudeRef"] == nil) {
+        [self setTagForTypeKey: typeKey numberKey: @"LongitudeRef" value: @"E"];
+    }
 }
 
 - (id) tagForKey: (int) type number: (int) tagNumber {
@@ -510,7 +586,14 @@ static unsigned long _getLong(const unsigned char *data, size_t offset,
         case tByte:
         case tSByte:
         case tUndefined:
-            if (count == 1) {
+            if (mode == kGPS && tag == kGPS_GPSAltitudeRef && count == 1) {
+                val = [NSNumber numberWithInt: _getByte(rawValue, 0, bigendian)];
+            } else if (mode == kGPS && tag == kGPS_GPSVersionID && count == 4) {
+                val = [NSMutableArray arrayWithCapacity: 4];
+                for (int j = 0; j < 4; j++) {
+                    [val addObject: [NSNumber numberWithInt: _getByte(rawValue, j, bigendian)]];
+                }
+            } else if (count == 1) {
                 value = _getByte(rawValue, 0, bigendian);
                 val = [NSNumber numberWithChar: value];
             } else {
@@ -552,7 +635,9 @@ static unsigned long _getLong(const unsigned char *data, size_t offset,
             }
             break;
         case tRational:
-            if (count == 1) {
+            if (mode == kGPS) {
+                val = _gpsRationalValue(tag, rawValue, count, bigendian);
+            } else if (count == 1) {
                 unsigned long a = _getLong(rawValue, 0, bigendian);
                 unsigned long b = _getLong(rawValue, 4, bigendian);
                 val = [NSNumber numberWithFloat: a / (float) b];
@@ -629,6 +714,7 @@ static unsigned long _getLong(const unsigned char *data, size_t offset,
                     bigendian: bigendian
                          mode: kGPS
                          size: size];
+            [self _addDefaultGPSRefs];
         } else if ((mode == kEXIF) &&
                    (tag == kEXIF_InteropIFDOffset)) { // InteropIFDOffset
             [self _readIFD: data
