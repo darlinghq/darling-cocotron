@@ -508,6 +508,12 @@ static Class _fontPanelFactory;
     if (addTraits & NSUnitalicFontMask)
         traits &= ~NSItalicFontMask;
 
+    // A font that already has the requested traits is returned as it is: the
+    // face found for the trait mask can be another face of the family, with a
+    // different name.
+    if (traits == [typeface traits] && typeface != nil)
+        return font;
+
     newface = [family typefaceWithTraits: traits];
 
     if (newface != nil) {
@@ -527,6 +533,8 @@ static Class _fontPanelFactory;
     NSFontFamily *family = [NSFontFamily fontFamilyWithName: [font familyName]];
     NSFontTypeface *typeface = [family typefaceWithName: [font fontName]];
     NSFontTraitMask traits = [typeface traits];
+    if ((traits & trait) == 0)
+        return font; // it has none of these traits already
     traits &= ~trait; // remove the traits
     NSFontTypeface *newface;
 

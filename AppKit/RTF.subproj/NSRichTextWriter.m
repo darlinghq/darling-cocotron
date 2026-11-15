@@ -197,11 +197,10 @@
         underlineColor = [underlineColor
                 colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
 
-        // Put there the font name without the italic/bold.. attributes
-        NSFont *plainFont =
-                [[NSFontManager sharedFontManager] convertFont: font
-                                                toNotHaveTrait: 0xFFFFFF];
-        NSString *fontName = [plainFont fontName];
+        // The font table names the font itself; bold and italic are also
+        // written as the \b and \i switches, which the reader applies to a
+        // font that already has them without changing it.
+        NSString *fontName = [font fontName];
         if (fontName && [fonts containsObject: fontName] == NO) {
             [fonts addObject: fontName];
         }
@@ -273,9 +272,6 @@
                 [_attributedString attributesAtIndex: location
                                       effectiveRange: &effectiveRange];
         NSFont *font = [attributes objectForKey: NSFontAttributeName];
-        NSFont *plainFont =
-                [[NSFontManager sharedFontManager] convertFont: font
-                                                toNotHaveTrait: 0xFFFFFF];
         NSFontTraitMask traits =
                 [[NSFontManager sharedFontManager] traitsOfFont: font];
         NSColor *color =
@@ -365,7 +361,7 @@
         }
 
         if (font) {
-            NSUInteger idx = [fonts indexOfObject: [plainFont fontName]];
+            NSUInteger idx = [fonts indexOfObject: [font fontName]];
             if (idx != NSNotFound && idx != currentFontIdx) {
                 NSString *fontNum = [NSString
                         stringWithFormat: @"\\f%ld ", (unsigned long) idx];
