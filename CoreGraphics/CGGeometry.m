@@ -39,6 +39,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #warning MAX is already defined, MAX(a, b) may not not behave as expected.
 #endif
 
+#include <math.h>
 #import <CoreGraphics/CGGeometry.h>
 
 const CGRect CGRectZero = {{0, 0}, {0, 0}};
@@ -372,4 +373,12 @@ void CGRectDivide(CGRect rect, CGRect *slice, CGRect *remainder,
         remainder->size.height -= amount;
         break;
     }
+}
+
+// Private. True for every finite value, false for NaN and the infinities.
+// Evidence: black-box calls on macOS 26.7.3 (tier 2) with 0, -0, 1, -1, the
+// smallest subnormal, DBL_MAX, 1e39, NaN, -NaN, +inf and -inf.
+// Test: coregraphics-private-context-functions.c
+bool CGFloatIsValid(CGFloat value) {
+    return isfinite(value);
 }

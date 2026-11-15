@@ -19,6 +19,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <CoreGraphics/CGBitmapContext.h>
 #import <Onyx2D/O2BitmapContext.h>
+#import <CoreGraphics/CoreGraphicsPrivate.h>
 
 CGContextRef CGBitmapContextCreate(void *bytes, size_t width, size_t height,
                                    size_t bitsPerComponent, size_t bytesPerRow,
@@ -79,4 +80,15 @@ CGImageAlphaInfo CGBitmapContextGetAlphaInfo(CGContextRef self) {
 
 CGImageRef CGBitmapContextCreateImage(CGContextRef self) {
     return (CGImageRef)O2BitmapContextCreateImage((O2ContextRef)self);
+}
+
+// Private. Rounds a row length in bytes up to the row alignment that bitmap
+// contexts prefer.
+// QUIRK: the alignment is 32 bytes, 0 stays 0, and a length within 31 of
+// SIZE_MAX wraps around to 0 instead of failing. Not documented. Evidence:
+// black-box calls on macOS 26.7.3 (tier 2) with lengths 0, 1, 4, 31, 32, 33, 63,
+// 64, 65, 100, 1000, 10000, SIZE_MAX - 31 (unchanged), SIZE_MAX - 30 and SIZE_MAX.
+// Test: coregraphics-private-context-functions.c
+size_t CGBitmapGetAlignedBytesPerRow(size_t bytesPerRow) {
+    return (bytesPerRow + 31) & ~(size_t)31;
 }
