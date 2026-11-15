@@ -87,6 +87,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (NSSet *) allFontFamilyNames;
 - (NSArray<NSFontTypeface *> *) fontTypefacesForFamilyName: (NSString *) name;
+// The installed family a font name no family lists is drawn with; nil when the display substitutes none.
+- (NSString *) substituteFamilyName: (NSString *) familyName;
 // nil when no installed family is configured for the generic family.
 - (NSString *) fontFamilyNameForGenericFamily: (NSString *) generic;
 

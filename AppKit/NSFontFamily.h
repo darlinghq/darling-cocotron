@@ -28,11 +28,18 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     NSString *_name;
     NSMutableArray *_typefaces;
     BOOL _typefacesLoaded;
+    BOOL _installed;
 }
 
 + (NSArray *) allFontFamilyNames;
 + (NSFontFamily *) fontFamilyWithName: (NSString *) name;
+// A family the display reports, or nil. fontFamilyWithName: pretends to have any name; this does not.
++ (NSFontFamily *) installedFontFamilyWithName: (NSString *) name;
 + (NSFontFamily *) fontFamilyWithTypefaceName: (NSString *) name;
+// The installed family a font of this name is drawn with: the one that lists it, else the one the display substitutes for a name
+// no family lists (the system font "San Francisco"); nil when the display substitutes none. This lookup adds no family to the list,
+// but the family it returns can be one that fontFamilyWithName: invented earlier (-fontDescriptor, NSFontPanel, convertFont:toNotHaveTrait:/toFamily:).
++ (NSFontFamily *) fontFamilyForFontName: (NSString *) name;
 + (NSFontTypeface *) fontTypefaceWithName: (NSString *) name;
 
 - initWithName: (NSString *) name;
