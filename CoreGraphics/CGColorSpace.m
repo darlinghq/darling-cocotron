@@ -84,6 +84,10 @@ CGColorSpaceRef CGColorSpaceCreatePattern(CGColorSpaceRef baseSpace) {
     return (CGColorSpaceRef)O2ColorSpaceCreatePattern((O2ColorSpaceRef)baseSpace);
 }
 
+CGColorSpaceRef CGColorSpaceCreateIndexed(CGColorSpaceRef baseSpace, size_t lastIndex, const unsigned char *colorTable) {
+    return (CGColorSpaceRef)O2ColorSpaceCreateIndexed((O2ColorSpaceRef)baseSpace, lastIndex, colorTable);
+}
+
 CGColorSpaceModel CGColorSpaceGetModel(CGColorSpaceRef self) {
     return (CGColorSpaceModel)O2ColorSpaceGetModel((O2ColorSpaceRef)self);
 }
@@ -194,4 +198,26 @@ bool CGColorSpaceUsesITUR_2100TF(CGColorSpaceRef space) {
 bool CGColorSpaceIsHLGBased(CGColorSpaceRef space) {
     CFStringRef name = space != NULL ? CGColorSpaceGetName(space) : NULL;
     return name != NULL && CFEqual(name, kCGColorSpaceITUR_2100_HLG);
+}
+
+// QUIRK: which spaces count as HDR is not documented. Observed on macOS 26.7.3
+// (tier 2, one query per named space): true for kCGColorSpaceITUR_2100_PQ,
+// kCGColorSpaceITUR_2100_HLG and kCGColorSpaceDisplayP3_PQ, false for sRGB,
+// linear and extended sRGB, Display P3, ITU-R 709 and 2020, DCI-P3, ROMM, ACEScg,
+// the generic gray, RGB, CMYK, Lab and XYZ spaces and a device RGB space. That is
+// the BT.2100 transfer function test. A NULL space is not observed and gives false.
+// Test: tests/coregraphics-colorspace-hdr-output.c
+bool CGColorSpaceIsHDR(CGColorSpaceRef space) {
+    return space != NULL && CGColorSpaceUsesITUR_2100TF(space);
+}
+
+// QUIRK: observed on macOS 26.7.3 (tier 2): true for every RGB, gray, CMYK, Lab
+// and XYZ space queried, false for an indexed space (and a pattern space, which
+// cannot be created here). A NULL space is not observed and gives false.
+// Test: tests/coregraphics-colorspace-hdr-output.c
+bool CGColorSpaceSupportsOutput(CGColorSpaceRef space) {
+    if (space == NULL)
+        return false;
+    CGColorSpaceModel model = CGColorSpaceGetModel(space);
+    return model != kCGColorSpaceModelIndexed && model != kCGColorSpaceModelPattern;
 }

@@ -52,6 +52,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     _path = [[[NSFileManager defaultManager]
             stringWithFileSystemRepresentation: pathCString
                                         length: len] copy];
+    if (![[NSFileManager defaultManager] isReadableFileAtPath: _path]) {
+        // A file that cannot be opened for reading gives no provider.
+        [self release];
+        return nil;
+    }
     _inputStream = [[NSInputStream inputStreamWithFileAtPath: _path] retain];
     [_inputStream open];
     _data = nil;

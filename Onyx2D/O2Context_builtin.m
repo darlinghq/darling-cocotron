@@ -516,12 +516,145 @@ createImageToSurfaceTransform(O2ImageRef image, O2Rect rect,
     return result;
 }
 
+/* An image drawn pixel for pixel (moved by whole pixels, perhaps flipped)
+   and clipped to a rectangle, as a GL frame or a window's contents are: its
+   rows are copied, not resampled and blended a pixel at a time. Images in
+   the surface's order (BGRA) are copied as they are, RGBA ones swapped. */
+ONYX2D_STATIC BOOL drawImagePixelForPixel(O2Context_builtin *self,
+                                          O2Image *image,
+                                          O2AffineTransform imageToSurface)
+{
+    O2GState *gState = O2ContextCurrentGState(self);
+    O2Surface *surface = self->_surface;
+    const O2Float epsilon = 1.0e-4;
+
+    if (O2ImageGetMask(image) != NULL || O2ImageIsMask(image) ||
+        O2ImageGetDecode(image) != NULL || self->_clipContext != nil ||
+        [self->_layerStack count] > 0 || gState->_alpha != 1 ||
+        (gState->_blendMode != kO2BlendModeNormal &&
+         gState->_blendMode != kO2BlendModeCopy))
+        return NO;
+    if (fabs(imageToSurface.a - 1) > epsilon || imageToSurface.b != 0 ||
+        imageToSurface.c != 0 || fabs(fabs(imageToSurface.d) - 1) > epsilon)
+        return NO;
+    int tx = (int) lround(imageToSurface.tx);
+    int ty = (int) lround(imageToSurface.ty);
+    if (fabs(imageToSurface.tx - tx) > epsilon ||
+        fabs(imageToSurface.ty - ty) > epsilon)
+        return NO;
+    BOOL flipped = imageToSurface.d < 0;
+
+    O2BitmapInfo surfaceInfo = O2ImageGetBitmapInfo(surface);
+    O2BitmapInfo surfaceAlpha = surfaceInfo & kO2BitmapAlphaInfoMask;
+    if (O2ImageGetBitsPerPixel(surface) != 32 ||
+        (surfaceInfo & kO2BitmapByteOrderMask) != kO2BitmapByteOrder32Little ||
+        (surfaceAlpha != kO2ImageAlphaPremultipliedFirst &&
+         surfaceAlpha != kO2ImageAlphaNoneSkipFirst))
+        return NO;
+
+    O2BitmapInfo info = O2ImageGetBitmapInfo(image);
+    O2BitmapInfo alpha = info & kO2BitmapAlphaInfoMask;
+    O2BitmapInfo order = info & kO2BitmapByteOrderMask;
+    BOOL swap, opaque;
+    if (O2ImageGetBitsPerComponent(image) != 8 ||
+        O2ImageGetBitsPerPixel(image) != 32 ||
+        O2ColorSpaceGetModel(O2ImageGetColorSpace(image)) !=
+                kO2ColorSpaceModelRGB)
+        return NO;
+    if (order == kO2BitmapByteOrder32Little &&
+        (alpha == kO2ImageAlphaPremultipliedFirst ||
+         alpha == kO2ImageAlphaNoneSkipFirst)) {
+        swap = NO;
+        opaque = alpha == kO2ImageAlphaNoneSkipFirst;
+    } else if ((order == kO2BitmapByteOrderDefault ||
+                order == kO2BitmapByteOrder32Big) &&
+               (alpha == kO2ImageAlphaPremultipliedLast ||
+                alpha == kO2ImageAlphaNoneSkipLast)) {
+        swap = YES;
+        opaque = alpha == kO2ImageAlphaNoneSkipLast;
+    } else
+        return NO;
+
+    int width = (int) O2ImageGetWidth(image);
+    int height = (int) O2ImageGetHeight(image);
+    size_t bytesPerRow = O2ImageGetBytesPerRow(image);
+    const uint8_t *bytes = [image directBytes];
+    if (bytes == NULL || [[image directData] length] < bytesPerRow * height)
+        return NO;
+
+    /* The image's pixels in the surface, within the clip. */
+    int top = flipped ? ty - height : ty;
+    int x0 = MAX(tx, MAX(self->_vpx, 0));
+    int x1 = MIN(tx + width,
+                 MIN(self->_vpx + self->_vpwidth, (int) O2ImageGetWidth(surface)));
+    int y0 = MAX(top, MAX(self->_vpy, 0));
+    int y1 = MIN(top + height, MIN(self->_vpy + self->_vpheight,
+                                   (int) O2ImageGetHeight(surface)));
+    if (x0 >= x1 || y0 >= y1)
+        return YES;
+
+    uint8_t *pixels = O2SurfaceGetPixelBytes(surface);
+    size_t surfaceBytesPerRow = O2ImageGetBytesPerRow(surface);
+    BOOL blend = !opaque && gState->_blendMode == kO2BlendModeNormal;
+    int count = x1 - x0;
+
+    for (int y = y0; y < y1; y++) {
+        int row = flipped ? ty - y - 1 : y - ty;
+        const uint32_t *from =
+                (const uint32_t *) (bytes + row * bytesPerRow) + (x0 - tx);
+        uint32_t *to = (uint32_t *) (pixels + y * surfaceBytesPerRow) + x0;
+
+        /* One plain loop per case, so the compiler can vectorize them. */
+        if (!swap && !opaque && !blend)
+            memcpy(to, from, count * 4);
+        else if (!swap && opaque)
+            for (int i = 0; i < count; i++)
+                to[i] = from[i] | 0xFF000000;
+        else if (opaque)
+            for (int i = 0; i < count; i++) {
+                uint32_t pixel = from[i];
+                to[i] = (pixel & 0x0000FF00) | ((pixel & 0xFF) << 16) |
+                        ((pixel >> 16) & 0xFF) | 0xFF000000;
+            }
+        else if (!blend)
+            for (int i = 0; i < count; i++) {
+                uint32_t pixel = from[i];
+                to[i] = (pixel & 0xFF00FF00) | ((pixel & 0xFF) << 16) |
+                        ((pixel >> 16) & 0xFF);
+            }
+        else
+            for (int i = 0; i < count; i++) {
+                uint32_t pixel = from[i];
+                if (swap)
+                    pixel = (pixel & 0xFF00FF00) | ((pixel & 0xFF) << 16) |
+                            ((pixel >> 16) & 0xFF);
+                uint32_t a = pixel >> 24;
+                if (a == 255) {
+                    to[i] = pixel;
+                    continue;
+                }
+                if (pixel == 0)
+                    continue;
+                /* Premultiplied source over: each channel s + d * (1 - a). */
+                uint32_t under = to[i], keep = 255 - a;
+                uint32_t rb = (under & 0x00FF00FF) * keep + 0x00800080;
+                rb = ((rb + ((rb >> 8) & 0x00FF00FF)) >> 8) & 0x00FF00FF;
+                uint32_t ag = ((under >> 8) & 0x00FF00FF) * keep + 0x00800080;
+                ag = (ag + ((ag >> 8) & 0x00FF00FF)) & 0xFF00FF00;
+                to[i] = pixel + rb + ag;
+            }
+    }
+    return YES;
+}
+
 - (void) drawImage: (O2Image *) image inRect: (O2Rect) rect {
     O2GState *gState = O2ContextCurrentGState(self);
     O2ImageRef softMask = O2ImageGetMask(image);
 
     O2AffineTransform imageToSurface = createImageToSurfaceTransform(
             image, rect, gState->_deviceSpaceTransform);
+    if (drawImagePixelForPixel(self, image, imageToSurface))
+        return;
     O2AffineTransform maskToSurface;
 
     if (softMask == NULL)

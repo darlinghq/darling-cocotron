@@ -198,6 +198,17 @@ void* _CGSNativeDisplay(CGSConnectionID connId);
 void* _CGSNativeWindowForID(CGSConnectionID connId, CGSWindowID winId);
 void* _CGSNativeWindowForSurfaceID(CGSConnectionID connId, CGSWindowID winId, CGSSurfaceID surfaceId);
 
+// Private context functions (see CGContext.m). The composite operation is the
+// context's blend mode under a different numbering.
+extern size_t CGContextGetLineDashCount(CGContextRef context);
+extern void CGContextGetLineDashPattern(CGContextRef context, CGFloat *phase, CGFloat *lengths, size_t capacity);
+extern int CGContextGetCompositeOperation(CGContextRef context);
+extern void CGContextSetCompositeOperation(CGContextRef context, int operation);
+
+// Private numeric helpers.
+extern bool CGFloatIsValid(CGFloat value);
+extern size_t CGBitmapGetAlignedBytesPerRow(size_t bytesPerRow);
+
 extern CGEventRef CGEventCreateWithEventRecord(const CGSEventRecordPtr event, uint32_t eventRecordSize);
 extern CGError CGEventGetEventRecord(CGEventRef event, CGSEventRecordPtr eventRecord, uint32_t eventRecordSize);
 extern CGError CGEventSetEventRecord(CGEventRef event, CGSEventRecordPtr eventRecord, uint32_t eventRecordSize);
