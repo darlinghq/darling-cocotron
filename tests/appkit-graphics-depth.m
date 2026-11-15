@@ -109,6 +109,60 @@ static NSUInteger pixelAt(NSBitmapImageRep *rep, NSInteger x, NSInteger y)
     return (pixel[0] << 24) | (pixel[1] << 16) | (pixel[2] << 8) | pixel[3];
 }
 
+static NSBitmapImageRep *makeRep(NSInteger bits, NSInteger samples, BOOL planar, NSInteger bitsPerPixel)
+{
+    return [[[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL
+                                                    pixelsWide:5
+                                                    pixelsHigh:3
+                                                 bitsPerSample:bits
+                                               samplesPerPixel:samples
+                                                      hasAlpha:NO
+                                                      isPlanar:planar
+                                                colorSpaceName:samples == 1 ? NSCalibratedWhiteColorSpace : NSCalibratedRGBColorSpace
+                                                  bitmapFormat:0
+                                                   bytesPerRow:0
+                                                  bitsPerPixel:bitsPerPixel] autorelease];
+}
+
+static void checkPixelRoundTrip(const char *what, NSBitmapImageRep *rep, NSUInteger maxValue)
+{
+    NSInteger samples = [rep samplesPerPixel];
+    BOOL ok = YES;
+    for (NSInteger y = 0; y < 3; y++) {
+        for (NSInteger x = 0; x < 5; x++) {
+            NSUInteger in[4] = {0, 0, 0, 0};
+            for (NSInteger i = 0; i < samples; i++)
+                in[i] = (x * 7 + y * 3 + i * 5) % (maxValue + 1);
+            [rep setPixel:in atX:x y:y];
+        }
+    }
+    for (NSInteger y = 0; y < 3; y++) {
+        for (NSInteger x = 0; x < 5; x++) {
+            NSUInteger out[4] = {99, 99, 99, 99};
+            [rep getPixel:out atX:x y:y];
+            for (NSInteger i = 0; i < samples; i++)
+                if (out[i] != (NSUInteger)((x * 7 + y * 3 + i * 5) % (maxValue + 1)))
+                    ok = NO;
+        }
+    }
+    expect(ok, what);
+}
+
+static void checkPixels(void)
+{
+    checkPixelRoundTrip("getPixel/setPixel, 8 bit chunky RGB", makeRep(8, 3, NO, 24), 255);
+    checkPixelRoundTrip("getPixel/setPixel, 8 bit planar RGB", makeRep(8, 3, YES, 8), 255);
+    checkPixelRoundTrip("getPixel/setPixel, 16 bit chunky RGB", makeRep(16, 3, NO, 48), 65535);
+    checkPixelRoundTrip("getPixel/setPixel, 4 bit gray", makeRep(4, 1, NO, 4), 15);
+    checkPixelRoundTrip("getPixel/setPixel, 1 bit gray", makeRep(1, 1, NO, 1), 1);
+
+    NSBitmapImageRep *rep = makeRep(8, 3, NO, 24);
+    NSUInteger in[3] = {10, 20, 30};
+    [rep setPixel:in atX:1 y:0];
+    unsigned char *data = [rep bitmapData];
+    expect(data[3] == 10 && data[4] == 20 && data[5] == 30, "setPixel writes the samples in order into the bitmap data");
+}
+
 static void checkFills(void)
 {
     NSBitmapImageRep *rep = [[[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL
@@ -143,6 +197,7 @@ int main(void)
         checkValues();
         checkDepths();
         checkOpenGLOptions();
+        checkPixels();
         checkFills();
     }
     return failures ? 1 : 0;
