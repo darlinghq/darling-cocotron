@@ -22,6 +22,12 @@
 
 typedef NSString *NSTouchBarItemIdentifier;
 
+typedef float NSTouchBarItemPriority NS_TYPED_EXTENSIBLE_ENUM;
+
+static const NSTouchBarItemPriority NSTouchBarItemPriorityHigh = 1000;
+static const NSTouchBarItemPriority NSTouchBarItemPriorityNormal = 0;
+static const NSTouchBarItemPriority NSTouchBarItemPriorityLow = -1000;
+
 APPKIT_EXPORT NSTouchBarItemIdentifier const
         NSTouchBarItemIdentifierFixedSpaceLarge;
 APPKIT_EXPORT NSTouchBarItemIdentifier const

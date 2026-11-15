@@ -64,7 +64,7 @@ APPKIT_EXPORT const NSNotificationName
 APPKIT_EXPORT NSString *const NSApplicationLaunchIsDefaultLaunchKey;
 APPKIT_EXPORT NSString *const NSApplicationLaunchUserNotificationKey;
 
-typedef double NSAppKitVersion;
+typedef double NSAppKitVersion NS_TYPED_EXTENSIBLE_ENUM;
 APPKIT_EXPORT const NSAppKitVersion NSAppKitVersionNumber;
 
 typedef id NSModalSession;
@@ -382,7 +382,7 @@ APPKIT_EXPORT __kindof NSApplication *NSApp;
 
 @end
 
-APPKIT_EXPORT int NSApplicationMain(int argc, const char *argv[]);
+APPKIT_EXPORT int NSApplicationMain(int argc, const char *_Nonnull argv[_Nonnull]);
 APPKIT_EXPORT BOOL NSApplicationLoad(void);
 
 APPKIT_EXPORT void NSUpdateDynamicServices(void);

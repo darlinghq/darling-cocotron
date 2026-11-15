@@ -63,7 +63,7 @@ typedef enum {
 + (NSGraphicsContext *) graphicsContextWithCGContext: (CGContextRef) context
                                              flipped: (BOOL) flipped;
 
-@property (class, readonly, retain) NSGraphicsContext *currentContext;
+@property (class, readonly, retain) NSGraphicsContext *currentContext NS_SWIFT_NAME(current);
 + (void) setCurrentContext: (NSGraphicsContext *) context;
 
 + (void) saveGraphicsState;
@@ -71,8 +71,8 @@ typedef enum {
 
 + (BOOL) currentContextDrawingToScreen;
 
-- (CGContextRef) graphicsPort;
-- (CGContextRef) CGContext;
+@property (readonly) void *graphicsPort;
+@property (readonly) CGContextRef CGContext NS_SWIFT_NAME(cgContext);
 - (NSMutableArray *) focusStack;
 
 @property (readonly) BOOL isDrawingToScreen;
@@ -81,13 +81,12 @@ typedef enum {
 - (void) setShouldAntialias: (BOOL) value;
 - (void) setImageInterpolation: (NSImageInterpolation) value;
 - (void) setColorRenderingIntent: (NSColorRenderingIntent) value;
-- (void) setCompositingOperation: (NSCompositingOperation) value;
 - (void) setPatternPhase: (NSPoint) phase;
 
 - (BOOL) shouldAntialias;
 - (NSImageInterpolation) imageInterpolation;
 - (NSColorRenderingIntent) colorRenderingIntent;
-- (NSCompositingOperation) compositingOperation;
+@property NSCompositingOperation compositingOperation;
 - (NSPoint) patternPhase;
 
 - (CIContext *) CIContext;

@@ -46,7 +46,7 @@ typedef NS_ENUM(NSInteger, NSStackViewDistribution) {
     NSStackViewDistributionEqualCentering,
 };
 
-typedef float NSStackViewVisibilityPriority;
+typedef float NSStackViewVisibilityPriority NS_TYPED_EXTENSIBLE_ENUM;
 
 static const NSStackViewVisibilityPriority NSStackViewVisibilityPriorityMustHold = 1000;
 static const NSStackViewVisibilityPriority NSStackViewVisibilityPriorityDetachOnlyIfNecessary = 900;

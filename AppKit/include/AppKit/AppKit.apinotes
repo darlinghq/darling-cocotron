@@ -1,0 +1,132 @@
+---
+# Swift API notes for Darling's AppKit: the Swift names and importer behaviour the AppKit overlay
+# (and applications written against the public AppKit API) rely on. This file covers the declarations the
+# overlay uses; the rest of the public AppKit surface is added as it is declared in these headers.
+Name: AppKit
+
+# Types that Swift nests in the class they belong to.
+Typedefs:
+- Name: NSFontWeight
+  SwiftName: NSFont.Weight
+- Name: NSStackViewVisibilityPriority
+  SwiftName: NSStackView.VisibilityPriority
+- Name: NSToolbarItemVisibilityPriority
+  SwiftName: NSToolbarItem.VisibilityPriority
+- Name: NSTouchBarItemPriority
+  SwiftName: NSTouchBarItem.Priority
+- Name: NSWindowLevel
+  SwiftName: NSWindow.Level
+
+Tags:
+- Name: NSWindowDepth
+  SwiftName: NSWindow.Depth
+
+# Constants of the typed enums whose C names do not start with the type name
+# (and NSColorSpaceName, whose Swift names drop the "ColorSpace" suffix).
+Globals:
+- Name: NSCalibratedBlackColorSpace
+  SwiftName: calibratedBlack
+- Name: NSCalibratedRGBColorSpace
+  SwiftName: calibratedRGB
+- Name: NSCalibratedWhiteColorSpace
+  SwiftName: calibratedWhite
+- Name: NSCustomColorSpace
+  SwiftName: custom
+- Name: NSDeviceBlackColorSpace
+  SwiftName: deviceBlack
+- Name: NSDeviceCMYKColorSpace
+  SwiftName: deviceCMYK
+- Name: NSDeviceRGBColorSpace
+  SwiftName: deviceRGB
+- Name: NSDeviceWhiteColorSpace
+  SwiftName: deviceWhite
+- Name: NSNamedColorSpace
+  SwiftName: named
+- Name: NSPatternColorSpace
+  SwiftName: pattern
+- Name: NSAppKitVersionNumber
+  SwiftName: current
+- Name: NSFloatingWindowLevel
+  SwiftName: floating
+- Name: NSMainMenuWindowLevel
+  SwiftName: mainMenu
+- Name: NSModalPanelWindowLevel
+  SwiftName: modalPanel
+- Name: NSNormalWindowLevel
+  SwiftName: normal
+- Name: NSPopUpMenuWindowLevel
+  SwiftName: popUpMenu
+- Name: NSScreenSaverWindowLevel
+  SwiftName: screenSaver
+- Name: NSStatusWindowLevel
+  SwiftName: statusBar
+- Name: NSSubmenuWindowLevel
+  SwiftName: submenu
+- Name: NSTornOffMenuWindowLevel
+  SwiftName: tornOffMenu
+
+Enumerators:
+- Name: NSCompositingOperationXOR
+  SwiftName: xor
+- Name: NSOpenGLGOClearFormatCache
+  SwiftName: 'NSOpenGLGlobalOption.clearFormatCache'
+- Name: NSOpenGLGOFormatCacheSize
+  SwiftName: 'NSOpenGLGlobalOption.formatCacheSize'
+- Name: NSOpenGLGORetainRenderers
+  SwiftName: 'NSOpenGLGlobalOption.retainRenderers'
+- Name: NSOpenGLGOUseBuildCache
+  SwiftName: 'NSOpenGLGlobalOption.useBuildCache'
+
+# SwiftPrivate functions are imported with a "__" prefix; the AppKit overlay wraps them in the Swift API
+# (NSRect.fill(), NSWindow.Depth.bestDepth, NSSound.beep(), ...).
+Functions:
+- Name: NSApplicationLoad
+  SwiftPrivate: true
+- Name: NSApplicationMain
+  SwiftPrivate: true
+- Name: NSAvailableWindowDepths
+  SwiftPrivate: true
+- Name: NSBeep
+  SwiftPrivate: true
+- Name: NSBestDepth
+  SwiftPrivate: true
+- Name: NSBitsPerPixelFromDepth
+  SwiftName: 'getter:NSWindowDepth.bitsPerPixel(self:)'
+- Name: NSBitsPerSampleFromDepth
+  SwiftName: 'getter:NSWindowDepth.bitsPerSample(self:)'
+- Name: NSColorSpaceFromDepth
+  SwiftName: 'getter:NSWindowDepth.colorSpaceName(self:)'
+- Name: NSFrameRect
+  SwiftPrivate: true
+- Name: NSFrameRectWithWidth
+  SwiftPrivate: true
+- Name: NSFrameRectWithWidthUsingOperation
+  SwiftPrivate: true
+- Name: NSOpenGLGetOption
+  SwiftPrivate: true
+- Name: NSOpenGLGetVersion
+  SwiftPrivate: true
+- Name: NSOpenGLSetOption
+  SwiftPrivate: true
+- Name: NSPlanarFromDepth
+  SwiftName: 'getter:NSWindowDepth.isPlanar(self:)'
+- Name: NSRectClip
+  SwiftPrivate: true
+- Name: NSRectClipList
+  SwiftPrivate: true
+- Name: NSRectFill
+  SwiftPrivate: true
+- Name: NSRectFillList
+  SwiftPrivate: true
+- Name: NSRectFillListUsingOperation
+  SwiftPrivate: true
+- Name: NSRectFillListWithColors
+  SwiftPrivate: true
+- Name: NSRectFillListWithColorsUsingOperation
+  SwiftPrivate: true
+- Name: NSRectFillListWithGrays
+  SwiftPrivate: true
+- Name: NSRectFillUsingOperation
+  SwiftPrivate: true
+- Name: NSShowAnimationEffect
+  SwiftPrivate: true

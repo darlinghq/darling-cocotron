@@ -90,18 +90,17 @@ typedef NS_ENUM(NSUInteger, NSWindowBackingLocation) {
     NSWindowBackingLocationMainMemory = 0x02
 };
 
-enum {
-    NSNormalWindowLevel = kCGNormalWindowLevel,
-    NSFloatingWindowLevel = kCGFloatingWindowLevel,
-    NSSubmenuWindowLevel = kCGTornOffMenuWindowLevel,
-    NSTornOffMenuWindowLevel = kCGTornOffMenuWindowLevel,
-    NSMainMenuWindowLevel = kCGMainMenuWindowLevel,
-    NSStatusWindowLevel = kCGStatusWindowLevel,
-    NSModalPanelWindowLevel = kCGModalPanelWindowLevel,
-    NSPopUpMenuWindowLevel = kCGPopUpMenuWindowLevel,
-    NSScreenSaverWindowLevel = kCGScreenSaverWindowLevel,
-};
-typedef NSInteger NSWindowLevel;
+typedef NSInteger NSWindowLevel NS_TYPED_EXTENSIBLE_ENUM;
+
+static const NSWindowLevel NSNormalWindowLevel = kCGNormalWindowLevel;
+static const NSWindowLevel NSFloatingWindowLevel = kCGFloatingWindowLevel;
+static const NSWindowLevel NSSubmenuWindowLevel = kCGTornOffMenuWindowLevel;
+static const NSWindowLevel NSTornOffMenuWindowLevel = kCGTornOffMenuWindowLevel;
+static const NSWindowLevel NSMainMenuWindowLevel = kCGMainMenuWindowLevel;
+static const NSWindowLevel NSStatusWindowLevel = kCGStatusWindowLevel;
+static const NSWindowLevel NSModalPanelWindowLevel = kCGModalPanelWindowLevel;
+static const NSWindowLevel NSPopUpMenuWindowLevel = kCGPopUpMenuWindowLevel;
+static const NSWindowLevel NSScreenSaverWindowLevel = kCGScreenSaverWindowLevel;
 
 typedef NS_OPTIONS(NSUInteger, NSWindowCollectionBehavior) {
     NSWindowCollectionBehaviorDefault = 0x00,
