@@ -131,6 +131,11 @@ typedef enum {
 
 - (void) platformWindow: (CGWindow *) window needsDisplayInRect: (NSRect) rect;
 - (void) platformWindowStyleChanged: (CGWindow *) window;
+
+// The window's backing scale factor (its device pixels per point) changed, for
+// instance because it moved to an output with another scale. The window already
+// reports the new value from -backingScaleFactor.
+- (void) platformWindow: (CGWindow *) window didChangeBackingScaleFrom: (CGFloat) oldScale;
 - (void) platformWindowWillClose: (CGWindow *) window;
 
 - (void) platformWindowWillMove: (CGWindow *) window;

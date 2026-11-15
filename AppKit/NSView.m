@@ -1987,6 +1987,14 @@ static char inputContextKey;
 - (void) viewDidChangeBackingProperties {
 }
 
+// Tells this view and, depth first, its subviews that the window's backing
+// properties changed.
+- (void) _backingPropertiesDidChange {
+    [self viewDidChangeBackingProperties];
+    for (NSView *subview in [[[self subviews] copy] autorelease])
+        [subview _backingPropertiesDidChange];
+}
+
 - (void) viewDidChangeEffectiveAppearance {
 }
 

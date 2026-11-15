@@ -717,6 +717,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
         uint32_t render = self->_fractionalScale && self->_preferredScale120
             ? WaylandIntegralScale120(self->_preferredScale120) : (uint32_t)MIN((uint64_t)scale * 120, UINT32_MAX);
         if (scale == self->_bufferScale && render == self->_renderScale120) return;
+        CGFloat oldScale = self->_renderScale120 / 120.0;
         self->_bufferScale = scale;
         self->_renderScale120 = render;
         [self updateSubwindows];
@@ -724,6 +725,9 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
         self->_context = nil;
         self->_needsPresent = NO;
         [self->_delegate platformWindowDidInvalidateCGContext: self];
+        // The window and its views learn of the new scale before they redraw.
+        if ([self->_delegate respondsToSelector: @selector(platformWindow:didChangeBackingScaleFrom:)])
+            [self->_delegate platformWindow: self didChangeBackingScaleFrom: oldScale];
         [self->_delegate platformWindowExposed: self
                                       inRect: NSMakeRect(0, 0, self->_frame.size.width,
                                                          self->_frame.size.height)];
