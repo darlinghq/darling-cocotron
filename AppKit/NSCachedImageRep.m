@@ -96,7 +96,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                     format: @"-[%@ %s]: unreadable TIFF data (%lu bytes)", [self class], sel_getName(_cmd),
                             (unsigned long) [tiff length]];
     [self release];
-    return bitmap;
+    return (id) bitmap;
 }
 
 - (void) dealloc {
