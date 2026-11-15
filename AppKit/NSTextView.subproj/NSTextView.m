@@ -2958,8 +2958,10 @@ static NSTextView *s_targetTextView = nil;
 }
 
 - (void) setSelectedRange: (NSRange) range {
+    // The plain setter resets the affinity to upstream (as on macOS 26.7.3 and 10.14.4;
+    // test appkit-textview-api-defaults)
     [self setSelectedRange: range
-                  affinity: NS_EXTRA(NSTextView, self)->_selectionAffinity
+                  affinity: NSSelectionAffinityUpstream
             stillSelecting: NO];
 }
 
@@ -4435,7 +4437,7 @@ enum {
     _NSTextViewTypeCorrection = 0x200,
     _NSTextViewTypeDataDetection = 0x18,
     _NSTextViewTypeDataDetectionExtra = 0x1800,
-    _NSTextViewTypesWithSwitch = 0x2 | 0x4 | 0x20 | 0x40 | 0x80 | 0x100 | 0x200 | 0x18,
+    _NSTextViewTypesWithSwitch = 0x2 | 0x4 | 0x20 | 0x40 | 0x80 | 0x100 | 0x200,
     _NSTextViewDefaultOtherTypes = 0x2001,
 };
 
@@ -4456,7 +4458,8 @@ enum {
         types |= _NSTextViewTypeReplacement;
     if (NS_EXTRA(NSTextView, self)->_isAutomaticSpellingCorrectionEnabled)
         types |= _NSTextViewTypeCorrection;
-    if (NS_EXTRA(NSTextView, self)->_automaticDataDetectionEnabled)
+    // Data detection reads back with the date/address bits that were set; with none set, both
+    if (NS_EXTRA(NSTextView, self)->_automaticDataDetectionEnabled && (types & _NSTextViewTypeDataDetection) == 0)
         types |= _NSTextViewTypeDataDetection;
     return types;
 }
@@ -4906,7 +4909,7 @@ enum {
     if (value)
         NS_EXTRA(NSTextView, self)->_enabledTextCheckingTypes |= _NSTextViewTypeDataDetectionExtra;
     else
-        NS_EXTRA(NSTextView, self)->_enabledTextCheckingTypes &= ~(NSTextCheckingTypes) _NSTextViewTypeDataDetectionExtra;
+        NS_EXTRA(NSTextView, self)->_enabledTextCheckingTypes &= ~(NSTextCheckingTypes) (_NSTextViewTypeDataDetectionExtra | _NSTextViewTypeDataDetection);
 }
 
 - (void) setAutomaticTextReplacementEnabled: (BOOL) value {
