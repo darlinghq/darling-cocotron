@@ -31,6 +31,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSImageRep.h>
 #import <AppKit/NSPDFImageRep.h>
 #import <AppKit/NSPasteboard.h>
+#import "NSPasteboardAliases.h"
 #import <AppKit/NSRaise.h>
 #import <Foundation/NSKeyedArchiver.h>
 
@@ -698,6 +699,36 @@ NSImageName const NSImageNameTouchBarVolumeUpTemplate =
         return nil;
     }
     return [self initWithData: data];
+}
+
+#pragma mark NSPasteboardWriting, NSPasteboardReading
+
+- (NSArray<NSPasteboardType> *) writableTypesForPasteboard: (NSPasteboard *) pasteboard {
+    return [NSArray arrayWithObject: NSPasteboardTypeTIFF];
+}
+
+- (id) pasteboardPropertyListForType: (NSPasteboardType) type {
+    if (!NSPasteboardTypeConformsTo(type, NSPasteboardTypeTIFF))
+        return nil;
+    return [self TIFFRepresentation];
+}
+
++ (NSArray<NSPasteboardType> *) readableTypesForPasteboard: (NSPasteboard *) pasteboard {
+    NSMutableArray *types = [NSMutableArray arrayWithObjects: NSPasteboardTypeTIFF, NSPasteboardTypePNG,
+                                                              NSPasteboardTypePDF, nil];
+    for (NSPasteboardType type in NSPasteboardCanonicalTypes([self imageUnfilteredPasteboardTypes])) {
+        if (![types containsObject: type])
+            [types addObject: type];
+    }
+    return types;
+}
+
+- (id) initWithPasteboardPropertyList: (id) propertyList ofType: (NSPasteboardType) type {
+    if (![propertyList isKindOfClass: [NSData class]]) {
+        [self release];
+        return nil;
+    }
+    return [self initWithData: propertyList];
 }
 
 - initByReferencingFile: (NSString *) path {

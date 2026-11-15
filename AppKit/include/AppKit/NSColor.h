@@ -19,6 +19,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/AppKitExport.h>
 #import <AppKit/NSGraphics.h>
+#import <AppKit/NSPasteboard.h>
 #import <ApplicationServices/ApplicationServices.h>
 #import <Foundation/Foundation.h>
 
@@ -61,7 +62,7 @@ typedef NS_ENUM(NSInteger, NSColorSystemEffect) {
 // concrete subclasses (NSColor_CGColor, NSColor_catalog, NSColor_dynamic),
 // which declare their share of it themselves on that ABI. Never add an ivar
 // to NSColor itself.
-@interface NSColor : NSObject <NSCopying, NSCoding> {
+@interface NSColor : NSObject <NSCopying, NSCoding, NSPasteboardWriting, NSPasteboardReading> {
 #if __OBJC2__
     NSColorListName _catalogName;
     NSColorName _colorName;

@@ -29,6 +29,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSGraphicsContext.h>
 
 #import <AppKit/NSPasteboard.h>
+#import "NSPasteboardAliases.h"
 #import <Foundation/NSKeyedArchiver.h>
 
 #import <objc/runtime.h>
@@ -1306,6 +1307,27 @@ static void releasePatternInfo(void *info) {
     NSData *data = [NSKeyedArchiver archivedDataWithRootObject: self];
 
     [pasteboard setData: data forType: NSColorPboardType];
+}
+
+#pragma mark NSPasteboardWriting, NSPasteboardReading
+
+- (NSArray<NSPasteboardType> *) writableTypesForPasteboard: (NSPasteboard *) pasteboard {
+    return [NSArray arrayWithObject: NSPasteboardTypeColor];
+}
+
+- (id) pasteboardPropertyListForType: (NSPasteboardType) type {
+    if (!NSPasteboardTypeConformsTo(type, NSPasteboardTypeColor))
+        return nil;
+    return [NSKeyedArchiver archivedDataWithRootObject: self];
+}
+
++ (NSArray<NSPasteboardType> *) readableTypesForPasteboard: (NSPasteboard *) pasteboard {
+    return [NSArray arrayWithObject: NSPasteboardTypeColor];
+}
+
+// The data of the type is an archive of the color: the object that comes out of it is the result.
++ (NSPasteboardReadingOptions) readingOptionsForType: (NSPasteboardType) type pasteboard: (NSPasteboard *) pasteboard {
+    return NSPasteboardReadingAsKeyedArchive;
 }
 
 + (void) setIgnoresAlpha: (BOOL) ignores {

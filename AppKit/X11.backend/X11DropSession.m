@@ -20,6 +20,7 @@
 
 #import "X11DropSession.h"
 #import "DarlingFileURIList.h"
+#import "NSPasteboardAliases.h"
 #import "X11Window.h"
 #import "X11Display.h"
 #import <AppKit/NSWindow-Drag.h>
@@ -38,7 +39,7 @@
         _targetWindow = [target retain];
         _destination = [[target delegate] retain];
         _source = source;
-        _types = [types copy];
+        _types = [NSPasteboardCanonicalTypes(types) copy];
         _sourceOperations = operations;
         static int nextSequence = 0;
         _sequence = ++nextSequence;
@@ -177,10 +178,11 @@
 }
 
 - (NSArray *) types {
-    return _types;
+    return NSPasteboardTypesWithAliases(_types);
 }
 
 - (NSData *) dataForType: (NSPasteboardType) type {
+    type = NSPasteboardCanonicalType(type);
     // A source that never offered a type has not failed to send one, so this
     // must not be counted as a broken transfer.
     if (_invalidated || ![_types containsObject: type])

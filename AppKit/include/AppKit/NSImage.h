@@ -21,6 +21,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSBitmapImageRep.h>
 #import <AppKit/NSFontDescriptor.h>
 #import <AppKit/NSGraphics.h>
+#import <AppKit/NSPasteboard.h>
 
 @class NSImageRep;
 @class NSImageSymbolConfiguration;
@@ -51,7 +52,7 @@ typedef NS_ENUM(NSUInteger, NSImageLoadStatus) {
 // Legacy ObjC ABI (i386): instance size must stay 0x1c, Apple's; the ivars
 // before the extras sit at Apple's offsets. Add new state to the extra
 // struct, never as an ivar.
-@interface NSImage : NSObject <NSCopying, NSCoding> {
+@interface NSImage : NSObject <NSCopying, NSCoding, NSPasteboardWriting, NSPasteboardReading> {
     NSString *_name;
     NSSize _size;
     NS_LEGACY_IVAR_PAD(_NSImageReserved1, 8)

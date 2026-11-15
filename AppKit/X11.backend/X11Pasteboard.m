@@ -18,6 +18,7 @@ along with Darling.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #import "X11Pasteboard.h"
+#import "NSPasteboardAliases.h"
 
 static const NSUInteger X11IncrChunkSize = 64 * 1024;
 static const NSTimeInterval kSelectionPollInterval = 0.02;
@@ -142,6 +143,8 @@ static size_t MaximumPropertyBytes(Display *display) {
         _typeToData = [NSMutableDictionary new];
     if (_typeToOwner == nil)
         _typeToOwner = [NSMutableDictionary new];
+    if (_typeOrder == nil)
+        _typeOrder = [NSMutableArray new];
     [self discardRemoteTypes];
 
     _changeCount++;
@@ -156,6 +159,7 @@ static size_t MaximumPropertyBytes(Display *display) {
     NSArray *owners = [_typeToOwner allValues];
     [_typeToOwner removeAllObjects];
     [_typeToData removeAllObjects];
+    [_typeOrder removeAllObjects];
     // Bump here rather than only in ensureSelectionOwner, which fires once per ownership
     // transition: clearing twice in a row used to leave -changeCount unchanged, so a
     // poller saw no change even though the contents were replaced.
@@ -176,6 +180,8 @@ static size_t MaximumPropertyBytes(Display *display) {
 
     [_typeToData release];
     _typeToData = nil;
+    [_typeOrder release];
+    _typeOrder = nil;
 
     [self discardRemoteTypes];
     _changeCount++;
@@ -232,7 +238,7 @@ static size_t MaximumPropertyBytes(Display *display) {
 }
 
 + (NSArray<NSString *> *) targetsForType: (NSPasteboardType) type {
-    if ([type isEqual: NSStringPboardType]) {
+    if ([NSPasteboardCanonicalType(type) isEqual: NSPasteboardTypeString]) {
         return @[
             @"UTF8_STRING", @"STRING", @"TEXT", @"text/plain",
             @"text/plain;charset=utf-8"
@@ -247,7 +253,7 @@ static size_t MaximumPropertyBytes(Display *display) {
         [target isEqual: @"text/plain"] ||
         [target isEqual: @"text/plain;charset=utf-8"] ||
         [target isEqual: @"UTF8_STRING"]) {
-        return NSStringPboardType;
+        return NSPasteboardTypeString;
     }
     // TODO...
     return target;
@@ -505,6 +511,7 @@ static size_t MaximumPropertyBytes(Display *display) {
 }
 
 - (NSData *) dataForType: (NSPasteboardType) type {
+    type = NSPasteboardCanonicalType(type);
 
     if (_typeToOwner != nil) {
         // We're the owner; just fetch the data directly.
@@ -527,7 +534,7 @@ static size_t MaximumPropertyBytes(Display *display) {
                                          deadline: deadline];
         if (data == nil)
             continue;
-        if (![type isEqual: NSStringPboardType])
+        if (![type isEqual: NSPasteboardTypeString])
             return data;
         // Text is kept as UTF-8. ICCCM's STRING is ISO Latin-1, and a TEXT
         // reply is in whichever encoding its type names.
@@ -553,7 +560,7 @@ static size_t MaximumPropertyBytes(Display *display) {
         return nil;
 
     NSStringEncoding encoding = NSUnicodeStringEncoding;
-    if ([type isEqual: NSStringPboardType]) {
+    if ([NSPasteboardCanonicalType(type) isEqual: NSPasteboardTypeString]) {
         encoding = NSUTF8StringEncoding;
     }
     return [[[NSString alloc] initWithData: data
@@ -564,7 +571,11 @@ static size_t MaximumPropertyBytes(Display *display) {
                  owner: (id<NSPasteboardTypeOwner>) owner
 {
     [self ensureSelectionOwner];
-    for (NSPasteboardType type in types) {
+    for (NSPasteboardType declared in types) {
+        // Stored under the UTI spelling; the 10.0 name of the same type reaches it too.
+        NSPasteboardType type = NSPasteboardCanonicalType(declared);
+        if (![_typeOrder containsObject: type])
+            [_typeOrder addObject: type];
         [_typeToData removeObjectForKey: type];
         // A nil owner is valid: an object that does not want pasteboardChangedOwner: callbacks
         // declares its types with none, which is what -[NSTextView copy:] does. Storing nil in
@@ -586,7 +597,10 @@ static size_t MaximumPropertyBytes(Display *display) {
 }
 
 - (BOOL) setData: (NSData *) data forType: (NSPasteboardType) type {
+    type = NSPasteboardCanonicalType(type);
     [self ensureSelectionOwner];
+    if (![_typeOrder containsObject: type])
+        [_typeOrder addObject: type];
     // Make sure to retain data before releasing the owner,
     // because it might be the owner that is providing us
     // with this data.
@@ -600,7 +614,7 @@ static size_t MaximumPropertyBytes(Display *display) {
 
 - (BOOL) setString: (NSString *) string forType: (NSPasteboardType) type {
     NSStringEncoding encoding = NSUnicodeStringEncoding;
-    if ([type isEqual: NSStringPboardType]) {
+    if ([NSPasteboardCanonicalType(type) isEqual: NSPasteboardTypeString]) {
         encoding = NSUTF8StringEncoding;
     }
     NSData *data = [string dataUsingEncoding: encoding];
@@ -609,8 +623,10 @@ static size_t MaximumPropertyBytes(Display *display) {
 
 - (NSArray<NSPasteboardType> *) localTypes {
     NSMutableArray *types = [NSMutableArray array];
-    [types addObjectsFromArray: [_typeToData allKeys]];
-    [types addObjectsFromArray: [_typeToOwner allKeys]];
+    for (NSPasteboardType type in _typeOrder) {
+        if (_typeToData[type] != nil || _typeToOwner[type] != nil)
+            [types addObject: type];
+    }
     return types;
 }
 
@@ -683,9 +699,9 @@ static size_t MaximumPropertyBytes(Display *display) {
 
 - (NSArray<NSPasteboardType> *) types {
     if (_typeToOwner != nil)
-        return [self localTypes];
+        return NSPasteboardTypesWithAliases([self localTypes]);
 
-    return [self remoteTypes];
+    return NSPasteboardTypesWithAliases([self remoteTypes]);
 }
 
 - (void) selectionNotify: (XSelectionEvent *) event {
@@ -789,7 +805,7 @@ static size_t MaximumPropertyBytes(Display *display) {
     // fit is refused and the requestor can ask for UTF8_STRING instead; TEXT
     // leaves the encoding to the owner, and the reply's type names it.
     Atom replyType = event->target;
-    if ([type isEqual: NSStringPboardType]) {
+    if ([type isEqual: NSPasteboardTypeString]) {
         if (event->target == XA_STRING) {
             NSString *text = [[[NSString alloc]
                     initWithData: data
