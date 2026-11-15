@@ -414,6 +414,13 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeAllScreens;
 // NSEdgeInsetsZero here; subclasses whose content sits inside their frame
 // override it, and the two conversions below follow.
 @property(readonly) NSEdgeInsets alignmentRectInsets;
+// Distances from the top and the bottom of the alignment rectangle to the first
+// and last baselines of the view's text (0 for a view without text).
+@property(readonly) CGFloat firstBaselineOffsetFromTop;
+@property(readonly) CGFloat lastBaselineOffsetFromBottom;
+@property(readonly) CGFloat baselineOffsetFromBottom;
+// The smallest size the view's constraints allow; its frame is not changed.
+@property(readonly) NSSize fittingSize;
 - (NSRect) alignmentRectForFrame: (NSRect) frame;
 - (NSRect) frameForAlignmentRect: (NSRect) alignmentRect;
 // Stored; subviews are drawn into their own layers either way.
@@ -588,6 +595,8 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeAllScreens;
 @property(readonly, retain) NSLayoutYAxisAnchor *topAnchor;
 @property(readonly, retain) NSLayoutYAxisAnchor *bottomAnchor;
 @property(readonly, retain) NSLayoutYAxisAnchor *centerYAnchor;
+@property(readonly, retain) NSLayoutYAxisAnchor *firstBaselineAnchor;
+@property(readonly, retain) NSLayoutYAxisAnchor *lastBaselineAnchor;
 
 @end
 

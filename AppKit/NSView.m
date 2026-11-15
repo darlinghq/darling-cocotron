@@ -2247,6 +2247,22 @@ static char inputContextKey;
 
 // The insets are measured in the view's own coordinates, so which of top and
 // bottom touches the frame's origin depends on whether the view is flipped.
+- (CGFloat) firstBaselineOffsetFromTop {
+    return 0;
+}
+
+- (CGFloat) lastBaselineOffsetFromBottom {
+    return 0;
+}
+
+- (CGFloat) baselineOffsetFromBottom {
+    return [self lastBaselineOffsetFromBottom];
+}
+
+- (NSSize) fittingSize {
+    return DarlingLayoutFittingSize(self);
+}
+
 - (NSRect) frameForAlignmentRect: (NSRect) alignmentRect {
     NSEdgeInsets insets = [self alignmentRectInsets];
     CGFloat originInset = [self isFlipped] ? insets.top : insets.bottom;
@@ -3931,6 +3947,14 @@ static id anchorForView(NSView *view, Class anchorClass, NSLayoutAttribute attri
 
 - (NSLayoutYAxisAnchor *) bottomAnchor {
     return anchorForView(self, [NSLayoutYAxisAnchor class], NSLayoutAttributeBottom);
+}
+
+- (NSLayoutYAxisAnchor *) firstBaselineAnchor {
+    return anchorForView(self, [NSLayoutYAxisAnchor class], NSLayoutAttributeFirstBaseline);
+}
+
+- (NSLayoutYAxisAnchor *) lastBaselineAnchor {
+    return anchorForView(self, [NSLayoutYAxisAnchor class], NSLayoutAttributeLastBaseline);
 }
 
 - (NSLayoutYAxisAnchor *) centerYAnchor {

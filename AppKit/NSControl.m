@@ -654,6 +654,38 @@ static NSMutableDictionary *cellClassDictionary = nil;
     return [[self cell] cellSize];
 }
 
+// Text is centered vertically in the alignment rectangle, whose height is the
+// control's intrinsic height when it has one (it is the height of one line of
+// the font otherwise): the first baseline is below the top by the space above
+// the line and the ascent, the last above the bottom by the space below it and
+// the descent. A control without a font has no baselines.
+- (CGFloat) _textBaselineSpaceAbove: (BOOL) above {
+    NSFont *font = [self font];
+
+    if (font == nil)
+        return -1;
+
+    CGFloat ascent = ceil([font ascender]);
+    CGFloat descent = ceil(-[font descender]);
+    CGFloat height = [self intrinsicContentSize].height;
+    CGFloat spare = height > ascent + descent ? height - ascent - descent : 0;
+    CGFloat spaceAbove = floor(spare / 2);
+
+    return above ? spaceAbove + ascent : spare - spaceAbove + descent;
+}
+
+- (CGFloat) firstBaselineOffsetFromTop {
+    CGFloat offset = [self _textBaselineSpaceAbove: YES];
+
+    return offset >= 0 ? offset : [super firstBaselineOffsetFromTop];
+}
+
+- (CGFloat) lastBaselineOffsetFromBottom {
+    CGFloat offset = [self _textBaselineSpaceAbove: NO];
+
+    return offset >= 0 ? offset : [super lastBaselineOffsetFromBottom];
+}
+
 - (void) sizeToFit {
     NSSize cellSize = [[self cell] cellSize];
 

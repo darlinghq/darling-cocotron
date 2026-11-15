@@ -9,6 +9,9 @@ namespace {
 struct Geometry { kiwi::Variable x, y, width, height; };
 class Layout {
     NSView *root;
+    // Fitting solves for the root's own size instead of pinning it, with the
+    // vertical axis running downwards whatever the root's flippedness is.
+    bool fitting;
     kiwi::Solver solver;
     std::map<NSView *, Geometry> geometry;
     std::vector<NSView *> traversal;
@@ -22,6 +25,18 @@ class Layout {
         for (NSView *child in [view subviews]) collect(child);
     }
 
+    bool rootFlipped() const { return fitting || [root isFlipped]; }
+
+    // Maps a rectangle in the root's coordinates to the solver's, where y runs
+    // downwards in fitting mode (the root's height is a variable there).
+    NSRect solverRect(NSRect rect) const {
+        if (fitting && ![root isFlipped])
+            rect.origin.y = NSMaxY([root bounds]) - NSMaxY(rect);
+        return rect;
+    }
+
+    // The edges and sizes layout constraints refer to are those of the view's
+    // alignment rectangle: the frame less the alignment insets.
     kiwi::Expression attribute(NSView *view, NSInteger attr) {
         auto found = geometry.find(view);
         if (found == geometry.end())
@@ -34,17 +49,28 @@ class Layout {
         }
         // Auto Layout y values increase downwards in AppKit too, so an unflipped
         // root's y is measured from its top edge.
-        bool flipped = [root isFlipped];
+        bool flipped = rootFlipped();
         double top = NSMaxY([root bounds]);
+        NSEdgeInsets insets = [view alignmentRectInsets];
+        // Insets name the visual sides, so top and bottom are the same in any
+        // coordinate system.
+        kiwi::Expression left = g.x + insets.left;
+        kiwi::Expression right = g.x + g.width - insets.right;
+        kiwi::Expression above = flipped ? g.y + insets.top : top - (g.y + g.height) + insets.top;
+        kiwi::Expression below = flipped ? g.y + g.height - insets.bottom : top - g.y - insets.bottom;
         switch (attr) {
-        case NSLayoutAttributeLeft: return kiwi::Term(g.x);
-        case NSLayoutAttributeRight: return g.x + g.width;
-        case NSLayoutAttributeTop: return flipped ? kiwi::Expression(kiwi::Term(g.y)) : top - (g.y + g.height);
-        case NSLayoutAttributeBottom: return flipped ? g.y + g.height : top - g.y;
-        case NSLayoutAttributeWidth: return kiwi::Term(g.width);
-        case NSLayoutAttributeHeight: return kiwi::Term(g.height);
-        case NSLayoutAttributeCenterX: return g.x + g.width * 0.5;
-        case NSLayoutAttributeCenterY: return flipped ? g.y + g.height * 0.5 : top - (g.y + g.height * 0.5);
+        case NSLayoutAttributeLeft: return left;
+        case NSLayoutAttributeRight: return right;
+        case NSLayoutAttributeTop: return above;
+        case NSLayoutAttributeBottom: return below;
+        case NSLayoutAttributeWidth: return g.width - (insets.left + insets.right);
+        case NSLayoutAttributeHeight: return g.height - (insets.top + insets.bottom);
+        case NSLayoutAttributeCenterX: return (left + right) * 0.5;
+        case NSLayoutAttributeCenterY: return (above + below) * 0.5;
+        case NSLayoutAttributeFirstBaseline:
+            return above + [view firstBaselineOffsetFromTop];
+        case NSLayoutAttributeLastBaseline:
+            return below - [view lastBaselineOffsetFromBottom];
         default:
             [NSException raise:NSInvalidArgumentException format:@"Unsupported layout attribute: %ld", (long)attr];
             return kiwi::Expression();
@@ -85,7 +111,10 @@ class Layout {
 
     void intrinsic(NSView *view, Geometry &g) {
         NSSize size = [view intrinsicContentSize];
-        kiwi::Variable dimensions[] = {g.width, g.height};
+        NSEdgeInsets insets = [view alignmentRectInsets];
+        // The intrinsic size is that of the alignment rectangle.
+        kiwi::Expression dimensions[] = {g.width - (insets.left + insets.right),
+                                         g.height - (insets.top + insets.bottom)};
         double values[] = {size.width, size.height};
         for (int axis = 0; axis < 2; ++axis) {
             if (values[axis] == NSViewNoIntrinsicMetric) continue;
@@ -99,15 +128,45 @@ class Layout {
     }
 
 public:
-    explicit Layout(NSView *view) : root(view), constraints([[NSMutableArray alloc] init]) {}
+    explicit Layout(NSView *view, bool fittingSolve = false)
+        : root(view), fitting(fittingSolve), constraints([[NSMutableArray alloc] init]) {}
     ~Layout() { [constraints release]; }
+    // The size of the root that satisfies the constraints of its subtree with
+    // the least room: the root is not pinned to its frame and is pulled
+    // towards zero size at NSLayoutPriorityFittingSizeCompression, so anything
+    // of higher priority (required constraints, intrinsic sizes that resist
+    // compression) keeps it open. No view is touched.
+    NSSize fittingSize() {
+        collect(root);
+        buildConstraints();
+        Geometry &g = geometry.at(root);
+        add(g.x == 0.0);
+        add(g.y == 0.0);
+        add((g.width == 0.0) | (double)NSLayoutPriorityFittingSizeCompression);
+        add((g.height == 0.0) | (double)NSLayoutPriorityFittingSizeCompression);
+        solvePriorities();
+        return NSMakeSize(g.width.value(), g.height.value());
+    }
+
     void run() {
         collect(root);
         if ([constraints count] == 0) return;
+        buildConstraints();
+        solvePriorities();
+        applyResults();
+    }
+
+private:
+    void buildConstraints() {
         for (auto &entry : geometry) {
             NSView *view = entry.first;
             Geometry &g = entry.second;
-            NSRect frame = view == root ? [root bounds] : [view convertRect:[view bounds] toView:root];
+            if (view == root && fitting) {
+                add(g.width >= 0.0); add(g.height >= 0.0);
+                intrinsic(view, g);
+                continue;
+            }
+            NSRect frame = view == root ? [root bounds] : solverRect([view convertRect:[view bounds] toView:root]);
             if (view == root || [view translatesAutoresizingMaskIntoConstraints]) {
                 add(g.x == frame.origin.x); add(g.y == frame.origin.y);
                 add(g.width == frame.size.width); add(g.height == frame.size.height);
@@ -133,7 +192,9 @@ public:
             default: [NSException raise:NSInvalidArgumentException format:@"Invalid constraint relation: %@", constraint];
             }
         }
-        solvePriorities();
+    }
+
+    void applyResults() {
         // Convert every result before changing any ancestor frame.
         NSMutableArray *views = [NSMutableArray array];
         NSMutableArray *frames = [NSMutableArray array];
@@ -154,6 +215,14 @@ public:
             [[views objectAtIndex:i] setFrame:[[frames objectAtIndex:i] rectValue]];
     }
 };
+}
+
+NSSize DarlingLayoutFittingSize(NSView *root) {
+    try { return Layout(root, true).fittingSize(); }
+    catch (const std::exception &error) {
+        NSLog(@"Unable to simultaneously satisfy constraints: %s", error.what());
+        return NSZeroSize;
+    }
 }
 
 void DarlingLayoutSubtree(NSView *root) {
