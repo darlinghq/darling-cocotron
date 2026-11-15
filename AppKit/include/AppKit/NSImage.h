@@ -21,6 +21,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSBitmapImageRep.h>
 #import <AppKit/NSFontDescriptor.h>
 #import <AppKit/NSGraphics.h>
+#import <AppKit/NSPasteboard.h>
 
 @class NSImageRep;
 @class NSImageSymbolConfiguration;
@@ -51,7 +52,7 @@ typedef NS_ENUM(NSUInteger, NSImageLoadStatus) {
 // Legacy ObjC ABI (i386): instance size must stay 0x1c, Apple's; the ivars
 // before the extras sit at Apple's offsets. Add new state to the extra
 // struct, never as an ivar.
-@interface NSImage : NSObject <NSCopying, NSCoding> {
+@interface NSImage : NSObject <NSCopying, NSCoding, NSPasteboardWriting, NSPasteboardReading> {
     NSString *_name;
     NSSize _size;
     NS_LEGACY_IVAR_PAD(_NSImageReserved1, 8)
@@ -68,6 +69,10 @@ typedef NS_ENUM(NSUInteger, NSImageLoadStatus) {
         BOOL _scalesWhenResized;
         BOOL _matchesOnMultipleResolution;
         BOOL _usesEPSOnResolutionMismatch;
+        BOOL _matchesOnlyOnBestFittingAxis;
+        // lockFocusFlipped: holds the flippedness until the matching unlockFocus
+        BOOL _lockedFlippedActive;
+        BOOL _lockedFlippedPrevious;
         BOOL _prefersColorMatch;
         BOOL _isCachedSeparately;
         BOOL _cacheDepthMatchesImageDepth;
@@ -104,6 +109,9 @@ typedef NS_ENUM(NSUInteger, NSImageLoadStatus) {
                               context: (NSGraphicsContext *) context
                                 hints: (NSDictionary *) hints;
 
+// As -initWithData:, but a TIFF or JPEG orientation tag is not applied to the pixels.
+- initWithDataIgnoringOrientation: (NSData *) data;
+
 - initWithPasteboard: (NSPasteboard *) pasteboard;
 - initByReferencingFile: (NSString *) path;
 - initByReferencingURL: (NSURL *) url;
@@ -118,6 +126,7 @@ typedef NS_ENUM(NSUInteger, NSImageLoadStatus) {
 @property (setter=setTemplate:) BOOL isTemplate;
 @property(nonatomic) BOOL scalesWhenResized;
 @property(nonatomic) BOOL matchesOnMultipleResolution;
+@property(nonatomic) BOOL matchesOnlyOnBestFittingAxis;
 @property(nonatomic) BOOL usesEPSOnResolutionMismatch;
 @property(nonatomic) BOOL prefersColorMatch;
 @property(nonatomic) NSImageCacheMode cacheMode;
@@ -137,6 +146,24 @@ typedef NS_ENUM(NSUInteger, NSImageLoadStatus) {
 - (void) removeRepresentation: (NSImageRep *) representation;
 - (NSImageRep *) bestRepresentationForDevice: (NSDictionary *) device;
 
+// The representation to draw into rect of a context, by the scale of the context (or of the
+// NSImageHintCTM hint).
+- (NSImageRep *) bestRepresentationForRect: (NSRect) rect
+                                   context: (NSGraphicsContext *) referenceContext
+                                     hints: (NSDictionary<NSImageHintKey, id> *) hints;
+// Whether a non-transparent pixel of the image drawn into imageRectDestSpace lies within
+// testRectDestSpace.
+- (BOOL) hitTestRect: (NSRect) testRectDestSpace
+        withImageDestinationRect: (NSRect) imageRectDestSpace
+                         context: (NSGraphicsContext *) context
+                           hints: (NSDictionary<NSImageHintKey, id> *) hints
+                         flipped: (BOOL) flipped;
+
+// For CALayer contents: the scale (1x, 2x ...) of the representation that suits a layer with the
+// preferred contents scale, and an object (a CGImage) to assign to the layer for that scale.
+- (CGFloat) recommendedLayerContentsScale: (CGFloat) preferredContentsScale;
+- (id) layerContentsForContentsScale: (CGFloat) layerContentsScale;
+
 - (void) recache;
 - (void) cancelIncrementalLoad;
 
@@ -145,6 +172,7 @@ typedef NS_ENUM(NSUInteger, NSImageLoadStatus) {
                                          factor: (float) factor;
 
 - (void) lockFocus;
+- (void) lockFocusFlipped: (BOOL) flipped;
 - (void) lockFocusOnRepresentation: (NSImageRep *) representation;
 - (void) unlockFocus;
 
@@ -241,9 +269,14 @@ typedef NS_ENUM(NSInteger, NSImageSymbolScale) {
 @end
 
 @protocol NSImageDelegate <NSObject>
-
-// TODO
-
+@optional
+// Asked when the image has nothing to draw into rect: the image to draw there instead, or nil.
+- (NSImage *) imageDidNotDraw: (NSImage *) sender inRect: (NSRect) rect;
+// Progressive loading (10.0 - 10.3); images are decoded when created, so none of these is sent.
+- (void) image: (NSImage *) image willLoadRepresentation: (NSImageRep *) rep;
+- (void) image: (NSImage *) image didLoadRepresentationHeader: (NSImageRep *) rep;
+- (void) image: (NSImage *) image didLoadPartOfRepresentation: (NSImageRep *) rep withValidRows: (NSInteger) rows;
+- (void) image: (NSImage *) image didLoadRepresentation: (NSImageRep *) rep withStatus: (NSImageLoadStatus) status;
 @end
 
 typedef NSString *NSImageName NS_SWIFT_BRIDGED_TYPEDEF;

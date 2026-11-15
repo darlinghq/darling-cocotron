@@ -101,7 +101,14 @@ NSBitmapImageRepPropertyKey NSImageCurrentFrame = @"NSImageCurrentFrame";
             [array count], NULL);
 
     for (NSBitmapImageRep *bitmap in array) {
-        CGImageDestinationAddImage(dest, [bitmap CGImage], NULL);
+        // The resolution carries the size in points, so reading the data back gives the same size
+        NSSize size = [bitmap size];
+        NSDictionary *properties = nil;
+        if (size.width > 0 && size.height > 0)
+            properties = [NSDictionary dictionaryWithObjectsAndKeys:
+                    [NSNumber numberWithDouble: 72.0 * [bitmap pixelsWide] / size.width], (id) kCGImagePropertyDPIWidth,
+                    [NSNumber numberWithDouble: 72.0 * [bitmap pixelsHigh] / size.height], (id) kCGImagePropertyDPIHeight, nil];
+        CGImageDestinationAddImage(dest, [bitmap CGImage], (CFDictionaryRef) properties);
     }
 
     CGImageDestinationFinalize(dest);
@@ -722,9 +729,50 @@ NSBitmapImageRepPropertyKey NSImageCurrentFrame = @"NSImageCurrentFrame";
     [self _accessPixel: pixel atX: x y: y store: YES];
 }
 
+// The color of a pixel of an integer-sample bitmap: gray, RGB or CMYK samples, with an optional
+// alpha sample before or after them; premultiplied color samples are divided by the alpha.
 - (NSColor *) colorAtX: (NSInteger) x y: (NSInteger) y {
-    NSUnimplementedMethod();
-    return nil;
+    if (x < 0 || y < 0 || x >= _pixelsWide || y >= _pixelsHigh)
+        [NSException raise: NSRangeException
+                    format: @"-[NSBitmapImageRep colorAtX:y:]: (%ld, %ld) is outside the %ld x %ld image", (long) x, (long) y,
+                            (long) _pixelsWide, (long) _pixelsHigh];
+
+    int samples = _samplesPerPixel;
+    if (samples < 1 || samples > 8 || _bitsPerSample < 1 || _bitsPerSample > 32 ||
+        (_bitmapFormat & NSFloatingPointSamplesBitmapFormat) != 0)
+        return nil;
+
+    NSUInteger pixel[8];
+    [self getPixel: pixel atX: x y: y];
+
+    BOOL alphaFirst = [self hasAlpha] && (_bitmapFormat & NSAlphaFirstBitmapFormat) != 0;
+    int colorCount = [self hasAlpha] ? samples - 1 : samples;
+    int offset = alphaFirst ? 1 : 0;
+    double maximum = _bitsPerSample >= 32 ? 4294967295.0 : (double) ((1ULL << _bitsPerSample) - 1);
+
+    CGFloat alpha = 1.0;
+    if ([self hasAlpha])
+        alpha = pixel[alphaFirst ? 0 : samples - 1] / maximum;
+
+    CGFloat c[4] = { 0, 0, 0, 0 };
+    if (colorCount < 1 || colorCount > 4)
+        return nil;
+    for (int i = 0; i < colorCount; i++) {
+        c[i] = pixel[offset + i] / maximum;
+        if ([self hasAlpha] && (_bitmapFormat & NSAlphaNonpremultipliedBitmapFormat) == 0 && alpha > 0.0)
+            c[i] = MIN(1.0, c[i] / alpha);
+    }
+
+    switch (colorCount) {
+    case 1:
+        return [NSColor colorWithCalibratedWhite: c[0] alpha: alpha];
+    case 3:
+        return [NSColor colorWithCalibratedRed: c[0] green: c[1] blue: c[2] alpha: alpha];
+    case 4:
+        return [NSColor colorWithDeviceCyan: c[0] magenta: c[1] yellow: c[2] black: c[3] alpha: alpha];
+    default:
+        return nil;
+    }
 }
 
 - (void) setColor: (NSColor *) color atX: (NSInteger) x y: (NSInteger) y {

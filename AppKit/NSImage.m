@@ -31,6 +31,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSImageRep.h>
 #import <AppKit/NSPDFImageRep.h>
 #import <AppKit/NSPasteboard.h>
+#import "NSPasteboardAliases.h"
 #import <AppKit/NSRaise.h>
 #import <Foundation/NSKeyedArchiver.h>
 
@@ -405,7 +406,23 @@ NSImageName const NSImageNameTouchBarVolumeUpTemplate =
     return image;
 }
 
+// An image archived by name stands for the image of that name again. Any other image is
+// archived as a TIFF of all its representations.
 - (void) encodeWithCoder: (NSCoder *) coder {
+    if ([coder allowsKeyedCoding]) {
+        if (_name != nil && [NSImage imageNamed: _name] != nil) {
+            [coder encodeObject: _name forKey: @"NSName"];
+            return;
+        }
+        NSData *tiff = [self TIFFRepresentation];
+        if (tiff != nil)
+            [coder encodeBytes: [tiff bytes] length: [tiff length] forKey: @"NSTIFFRepresentation"];
+        [coder encodeInt: 0 forKey: @"NSInternalLayoutDirection"];
+        // The size is stored when it is not the one of the representations
+        if (!NSEqualSizes(_size, NSZeroSize))
+            [coder encodeSize: _size forKey: @"NSImageExplicitSize"];
+        return;
+    }
     NSUnimplementedMethod();
 }
 
@@ -413,19 +430,28 @@ NSImageName const NSImageNameTouchBarVolumeUpTemplate =
     if ([coder allowsKeyedCoding]) {
         NSKeyedUnarchiver *keyed = (NSKeyedUnarchiver *) coder;
         NSUInteger length;
+
+        if ([keyed containsValueForKey: @"NSName"] && ![keyed containsValueForKey: @"NSTIFFRepresentation"]) {
+            NSString *name = [keyed decodeObjectForKey: @"NSName"];
+            NSImage *named = name != nil ? [NSImage imageNamed: name] : nil;
+            if (named != nil) {
+                [self release];
+                return [named retain];
+            }
+        }
+
         const unsigned char *tiff =
                 [keyed decodeBytesForKey: @"NSTIFFRepresentation"
                           returnedLength: &length];
-        NSBitmapImageRep *rep;
 
         if (tiff == NULL) {
             [self release];
             return nil;
         }
 
-        rep = [NSBitmapImageRep
-                imageRepWithData: [NSData dataWithBytes: tiff length: length]];
-        if (rep == nil) {
+        // The data of an image with several representations holds all of them
+        NSArray *reps = [NSBitmapImageRep imageRepsWithData: [NSData dataWithBytes: tiff length: length]];
+        if ([reps count] == 0) {
             [self release];
             return nil;
         }
@@ -434,7 +460,9 @@ NSImageName const NSImageNameTouchBarVolumeUpTemplate =
         _size = NSMakeSize(0, 0);
         NS_EXTRA(NSImage, self)->_representations = [NSMutableArray new];
 
-        [NS_EXTRA(NSImage, self)->_representations addObject: rep];
+        [NS_EXTRA(NSImage, self)->_representations addObjectsFromArray: reps];
+        if ([keyed containsValueForKey: @"NSImageExplicitSize"])
+            _size = [keyed decodeSizeForKey: @"NSImageExplicitSize"];
     } else {
         NSInteger version = [coder versionForClassName: @"NSImage"];
 
@@ -573,6 +601,8 @@ NSImageName const NSImageNameTouchBarVolumeUpTemplate =
     _name = nil;
     _size = size;
     NS_EXTRA(NSImage, self)->_representations = [NSMutableArray new];
+    // Representation selection for a destination matches on multiple resolutions by default
+    NS_EXTRA(NSImage, self)->_matchesOnMultipleResolution = YES;
     return self;
 }
 
@@ -619,6 +649,12 @@ NSImageName const NSImageNameTouchBarVolumeUpTemplate =
     [NS_EXTRA(NSImage, self)->_representations addObjectsFromArray: reps];
 
     return self;
+}
+
+// The bitmap decoders keep the pixels as stored and do not apply an orientation tag, so there is
+// nothing to ignore.
+- initWithDataIgnoringOrientation: (NSData *) data {
+    return [self initWithData: data];
 }
 
 - initWithContentsOfFile: (NSString *) path {
@@ -704,6 +740,36 @@ NSImageName const NSImageNameTouchBarVolumeUpTemplate =
         return nil;
     }
     return [self initWithData: data];
+}
+
+#pragma mark NSPasteboardWriting, NSPasteboardReading
+
+- (NSArray<NSPasteboardType> *) writableTypesForPasteboard: (NSPasteboard *) pasteboard {
+    return [NSArray arrayWithObject: NSPasteboardTypeTIFF];
+}
+
+- (id) pasteboardPropertyListForType: (NSPasteboardType) type {
+    if (!NSPasteboardTypeConformsTo(type, NSPasteboardTypeTIFF))
+        return nil;
+    return [self TIFFRepresentation];
+}
+
++ (NSArray<NSPasteboardType> *) readableTypesForPasteboard: (NSPasteboard *) pasteboard {
+    NSMutableArray *types = [NSMutableArray arrayWithObjects: NSPasteboardTypeTIFF, NSPasteboardTypePNG,
+                                                              NSPasteboardTypePDF, nil];
+    for (NSPasteboardType type in NSPasteboardCanonicalTypes([self imageUnfilteredPasteboardTypes])) {
+        if (![types containsObject: type])
+            [types addObject: type];
+    }
+    return types;
+}
+
+- (id) initWithPasteboardPropertyList: (id) propertyList ofType: (NSPasteboardType) type {
+    if (![propertyList isKindOfClass: [NSData class]]) {
+        [self release];
+        return nil;
+    }
+    return [self initWithData: propertyList];
 }
 
 - initByReferencingFile: (NSString *) path {
@@ -835,6 +901,9 @@ NSImageName const NSImageNameTouchBarVolumeUpTemplate =
     [_name release];
     _name = name;
 
+    if (_name == nil)
+        return YES; // a nil name takes the image out of the name registry
+
     if ([[NSImage allImages] objectForKey: _name] != nil)
         return NO;
 
@@ -865,6 +934,14 @@ NSImageName const NSImageNameTouchBarVolumeUpTemplate =
 
 - (void) setScalesWhenResized: (BOOL) value {
     NS_EXTRA(NSImage, self)->_scalesWhenResized = value;
+}
+
+- (BOOL) matchesOnlyOnBestFittingAxis {
+    return NS_EXTRA(NSImage, self)->_matchesOnlyOnBestFittingAxis;
+}
+
+- (void) setMatchesOnlyOnBestFittingAxis: (BOOL) value {
+    NS_EXTRA(NSImage, self)->_matchesOnlyOnBestFittingAxis = value;
 }
 
 - (void) setMatchesOnMultipleResolution: (BOOL) value {
@@ -900,9 +977,17 @@ NSImageName const NSImageNameTouchBarVolumeUpTemplate =
     NS_EXTRA(NSImage, self)->_delegate = delegate;
 }
 
+// An image can be drawn unless every one of its representations is an empty bitmap. An image
+// with no representations at all is valid (there is nothing that failed).
 - (BOOL) isValid {
-    NSUnimplementedMethod();
-    return 0;
+    NSArray *reps = NS_EXTRA(NSImage, self)->_representations;
+    if ([reps count] == 0)
+        return YES;
+    for (NSImageRep *rep in reps) {
+        if (![rep isKindOfClass: [NSBitmapImageRep class]] || [rep pixelsWide] > 0 || [rep pixelsHigh] > 0)
+            return YES;
+    }
+    return NO;
 }
 
 - (NSArray *) representations {
@@ -1107,6 +1192,191 @@ NSImageName const NSImageNameTouchBarVolumeUpTemplate =
     return [NS_EXTRA(NSImage, self)->_representations lastObject];
 }
 
+#pragma mark Representation selection for a destination
+
+// The factor by which a context or a CTM hint scales drawing, per axis.
+static NSSize destinationScale(NSGraphicsContext *context, NSDictionary *hints) {
+    NSAffineTransform *ctm = [hints objectForKey: NSImageHintCTM];
+    if ([ctm isKindOfClass: [NSAffineTransform class]]) {
+        NSAffineTransformStruct m = [ctm transformStruct];
+        return NSMakeSize(hypot(m.m11, m.m12), hypot(m.m21, m.m22));
+    }
+    if (context == nil)
+        context = [NSGraphicsContext currentContext];
+    CGContextRef port = [context graphicsPort];
+    if (port == NULL)
+        return NSMakeSize(1, 1);
+    CGAffineTransform t = CGContextGetUserSpaceToDeviceSpaceTransform(port);
+    return NSMakeSize(hypot(t.a, t.b), hypot(t.c, t.d));
+}
+
+// A representation that is not made of a fixed number of pixels (a PDF, a drawing handler) reports
+// a pixel size of 0 (NSImageRepMatchesDevice).
+static BOOL isVectorRep(NSImageRep *rep) {
+    return [rep pixelsWide] <= 0 || [rep pixelsHigh] <= 0;
+}
+
+// The drawable representations (cached ones only when nothing else exists).
+- (NSArray *) _drawableRepresentations {
+    NSMutableArray *result = [NSMutableArray array];
+    for (NSImageRep *rep in NS_EXTRA(NSImage, self)->_representations) {
+        if (![rep isKindOfClass: [NSCachedImageRep class]])
+            [result addObject: rep];
+    }
+    if ([result count] == 0)
+        [result addObjectsFromArray: NS_EXTRA(NSImage, self)->_representations];
+    return result;
+}
+
+// The representation with the fewest pixels that still has as many as the destination needs; when
+// none has, the one with the most. A representation without a pixel size (a PDF, a drawing
+// handler) fits any size, and is the choice when no bitmap has enough pixels. A destination size
+// is the rect scaled by the context (or by the CTM hint), whatever -matchesOnMultipleResolution
+// says (macOS 10.14.4 and 26.7.3 select the same with it off). With -matchesOnlyOnBestFittingAxis
+// only the axis that needs the most pixels is compared (no evidence for that one). The selection
+// rule is this implementation's; it is checked against the results of macOS for images with
+// representations of one point size and several pixel sizes (MAC-EVIDENCE V615).
+- (NSImageRep *) bestRepresentationForRect: (NSRect) rect
+                                   context: (NSGraphicsContext *) referenceContext
+                                     hints: (NSDictionary<NSImageHintKey, id> *) hints
+{
+    NSArray *reps = [self _drawableRepresentations];
+    if ([reps count] == 0)
+        return nil;
+
+    NSSize scale = destinationScale(referenceContext, hints);
+    NSSize size = NSIsEmptyRect(rect) ? [self size] : rect.size;
+    CGFloat needWide = ceil(ABS(size.width) * scale.width - 1e-6);
+    CGFloat needHigh = ceil(ABS(size.height) * scale.height - 1e-6);
+    BOOL oneAxis = NS_EXTRA(NSImage, self)->_matchesOnlyOnBestFittingAxis;
+    CGFloat needOneAxis = MAX(needWide, needHigh);
+
+    NSImageRep *enough = nil, *largest = nil, *vector = nil;
+    CGFloat enoughPixels = 0, largestPixels = 0;
+    for (NSImageRep *rep in reps) {
+        if (isVectorRep(rep)) {
+            if (vector == nil)
+                vector = rep;
+            continue;
+        }
+        CGFloat wide = [rep pixelsWide], high = [rep pixelsHigh];
+        CGFloat pixels = oneAxis ? MAX(wide, high) : wide * high;
+        BOOL fits = oneAxis ? pixels >= needOneAxis : (wide >= needWide && high >= needHigh);
+        if (fits && (enough == nil || pixels < enoughPixels)) {
+            enough = rep;
+            enoughPixels = pixels;
+        }
+        if (largest == nil || pixels > largestPixels) {
+            largest = rep;
+            largestPixels = pixels;
+        }
+    }
+
+    if (enough != nil)
+        return enough;
+    if (vector != nil)
+        return vector;
+    return largest;
+}
+
+// The scale of a representation: its pixels per point of the image.
+static CGFloat repScale(NSImageRep *rep, NSSize imageSize) {
+    NSSize repSize = [rep size];
+    if (isVectorRep(rep) || repSize.width <= 0)
+        return 0;
+    return [rep pixelsWide] / repSize.width;
+}
+
+- (CGFloat) recommendedLayerContentsScale: (CGFloat) preferredContentsScale {
+    CGFloat preferred = MAX(preferredContentsScale, 1.0);
+    CGFloat smallestEnough = 0, largest = 0;
+    NSSize size = [self size];
+    for (NSImageRep *rep in [self _drawableRepresentations]) {
+        CGFloat scale = repScale(rep, size);
+        if (scale <= 0)
+            continue;
+        if (scale >= preferred - 1e-6 && (smallestEnough == 0 || scale < smallestEnough))
+            smallestEnough = scale;
+        if (scale > largest)
+            largest = scale;
+    }
+    if (smallestEnough > 0)
+        return smallestEnough;
+    // Nothing is as sharp as asked for: the sharpest there is. Only scalable representations (or
+    // none) mean any scale will do.
+    return largest > 0 ? largest : preferred;
+}
+
+// The CGImage of the representation that suits the scale, which is what a CALayer takes as its
+// contents.
+- (id) layerContentsForContentsScale: (CGFloat) layerContentsScale {
+    CGFloat scale = [self recommendedLayerContentsScale: layerContentsScale];
+    NSSize size = [self size];
+
+    NSImageRep *rep = [self bestRepresentationForRect: NSMakeRect(0, 0, size.width, size.height)
+                                              context: nil
+                                                hints: [self _scaleHint: scale]];
+    if ([rep isKindOfClass: [NSBitmapImageRep class]] && repScale(rep, size) == scale) {
+        CGImageRef image = [(NSBitmapImageRep *) rep CGImage];
+        if (image != NULL)
+            return (id) image;
+    }
+
+    // No bitmap of that scale: the image drawn at it.
+    NSRect rect = NSMakeRect(0, 0, ceil(size.width * scale), ceil(size.height * scale));
+    return (id) [self CGImageForProposedRect: &rect context: nil hints: nil];
+}
+
+- (NSDictionary *) _scaleHint: (CGFloat) scale {
+    NSAffineTransform *transform = [NSAffineTransform transform];
+    [transform scaleBy: scale];
+    return [NSDictionary dictionaryWithObject: transform forKey: NSImageHintCTM];
+}
+
+- (BOOL) hitTestRect: (NSRect) testRect
+        withImageDestinationRect: (NSRect) imageRect
+                         context: (NSGraphicsContext *) context
+                           hints: (NSDictionary<NSImageHintKey, id> *) hints
+                         flipped: (BOOL) flipped
+{
+    NSRect area = NSIntersectionRect(testRect, imageRect);
+    if (NSIsEmptyRect(area) || NSIsEmptyRect(imageRect))
+        return NO;
+
+    NSImageRep *rep = [self bestRepresentationForRect: imageRect context: context hints: hints];
+    if (![rep isKindOfClass: [NSBitmapImageRep class]] || ![(NSBitmapImageRep *) rep hasAlpha])
+        return YES; // opaque, or not made of pixels: the whole rect is the image
+
+    NSBitmapImageRep *bitmap = (NSBitmapImageRep *) rep;
+    NSInteger wide = [bitmap pixelsWide], high = [bitmap pixelsHigh];
+    // The pixels of the image under the test rect, columns left to right, rows top to bottom.
+    CGFloat left = (NSMinX(area) - NSMinX(imageRect)) / NSWidth(imageRect);
+    CGFloat right = (NSMaxX(area) - NSMinX(imageRect)) / NSWidth(imageRect);
+    CGFloat top, bottom;
+    if (flipped) {
+        top = (NSMinY(area) - NSMinY(imageRect)) / NSHeight(imageRect);
+        bottom = (NSMaxY(area) - NSMinY(imageRect)) / NSHeight(imageRect);
+    } else {
+        top = (NSMaxY(imageRect) - NSMaxY(area)) / NSHeight(imageRect);
+        bottom = (NSMaxY(imageRect) - NSMinY(area)) / NSHeight(imageRect);
+    }
+    NSInteger firstColumn = MAX(0, (NSInteger) floor(left * wide));
+    NSInteger lastColumn = MIN(wide - 1, (NSInteger) ceil(right * wide) - 1);
+    NSInteger firstRow = MAX(0, (NSInteger) floor(top * high));
+    NSInteger lastRow = MIN(high - 1, (NSInteger) ceil(bottom * high) - 1);
+
+    // A test rect covering a lot of pixels is sampled, not read pixel by pixel.
+    NSInteger stepX = MAX((NSInteger) 1, (lastColumn - firstColumn + 1) / 64);
+    NSInteger stepY = MAX((NSInteger) 1, (lastRow - firstRow + 1) / 64);
+    for (NSInteger y = firstRow; y <= lastRow; y += stepY) {
+        for (NSInteger x = firstColumn; x <= lastColumn; x += stepX) {
+            if ([[bitmap colorAtX: x y: y] alphaComponent] > 0)
+                return YES;
+        }
+    }
+    return NO;
+}
+
 - (void) recache {
     [NS_EXTRA(NSImage, self)->_drawingHandlerRepCache removeAllObjects];
     // This doesn't actually remove the cache, it just marks it as invalid
@@ -1119,8 +1389,8 @@ NSImageName const NSImageNameTouchBarVolumeUpTemplate =
     [NS_EXTRA(NSImage, self)->_scaledRepCache removeAllObjects];
 }
 
+// Images are decoded when they are created, so there is no incremental load to cancel.
 - (void) cancelIncrementalLoad {
-    NSUnimplementedMethod();
 }
 
 - (NSData *) TIFFRepresentation {
@@ -1136,7 +1406,9 @@ NSImageName const NSImageNameTouchBarVolumeUpTemplate =
     for (NSImageRep *check in NS_EXTRA(NSImage, self)->_representations) {
         if ([check isKindOfClass: [NSBitmapImageRep class]]) {
             [bitmaps addObject: check];
-        } else if ([check isKindOfClass: [NSCachedImageRep class]]) {
+        } else if ([check isKindOfClass: [NSCachedImageRep class]] && [self isFlipped]) {
+            // (An unflipped image goes through the general case below: capturing the focused view
+            // is not implemented for the display contexts of this system.)
             // We don't use the general case else we get flipped results for
             // flipped images since lockFocusOnRepresentation is flipping and
             // the Cache content is already flipped
@@ -1180,6 +1452,22 @@ NSImageName const NSImageNameTouchBarVolumeUpTemplate =
 
 - (void) lockFocus {
     [self lockFocusOnRepresentation: nil];
+}
+
+// Focus is locked with the given flippedness, the image's own property is left as it was.
+// The context asks the image whether it is flipped for as long as the focus is locked, so the
+// flippedness stays set until -unlockFocus.
+- (void) lockFocusFlipped: (BOOL) flipped {
+    BOOL previous = NS_EXTRA(NSImage, self)->_isFlipped;
+    NS_EXTRA(NSImage, self)->_isFlipped = flipped;
+    @try {
+        [self lockFocus];
+    } @catch (NSException *e) {
+        NS_EXTRA(NSImage, self)->_isFlipped = previous;
+        @throw;
+    }
+    NS_EXTRA(NSImage, self)->_lockedFlippedActive = YES;
+    NS_EXTRA(NSImage, self)->_lockedFlippedPrevious = previous;
 }
 
 - (void) lockFocusOnRepresentation: (NSImageRep *) representation {
@@ -1255,6 +1543,11 @@ NSImageName const NSImageNameTouchBarVolumeUpTemplate =
     CGContextRestoreGState(graphicsPort);
 
     [NSGraphicsContext restoreGraphicsState];
+
+    if (NS_EXTRA(NSImage, self)->_lockedFlippedActive) {
+        NS_EXTRA(NSImage, self)->_isFlipped = NS_EXTRA(NSImage, self)->_lockedFlippedPrevious;
+        NS_EXTRA(NSImage, self)->_lockedFlippedActive = NO;
+    }
 }
 
 - (BOOL) drawRepresentation: (NSImageRep *) representation
@@ -1329,14 +1622,14 @@ NSImageName const NSImageNameTouchBarVolumeUpTemplate =
 }
 
 - (void) dissolveToPoint: (NSPoint) point fraction: (CGFloat) fraction {
-    NSUnimplementedMethod();
+    [self dissolveToPoint: point fromRect: NSZeroRect fraction: fraction];
 }
 
 - (void) dissolveToPoint: (NSPoint) point
                 fromRect: (NSRect) rect
                 fraction: (CGFloat) fraction
 {
-    NSUnimplementedMethod();
+    [self drawAtPoint: point fromRect: rect operation: NSCompositeSourceOver fraction: fraction];
 }
 
 - (void) drawAtPoint: (NSPoint) point
@@ -1633,6 +1926,16 @@ static NSUInteger scaledRepCacheBytes(NSArray *cache) {
                 _bestUncachedFallbackCachedRepresentationForDevice: nil
                                                               size: rect.size]
                 retain] autorelease];
+        if (any == nil) {
+            // Nothing to draw: the delegate may have another image for the rect.
+            id delegate = NS_EXTRA(NSImage, self)->_delegate;
+            NSImage *replacement = [delegate respondsToSelector: @selector(imageDidNotDraw:inRect:)]
+                    ? [delegate imageDidNotDraw: self inRect: rect]
+                    : nil;
+            if (replacement != nil && replacement != self)
+                [replacement drawInRect: rect fromRect: NSZeroRect operation: operation fraction: fraction];
+            return;
+        }
         NSImageRep *cachedRep = nil;
         CGContextRef context;
         NSRect fullRect = {.origin = NSZeroPoint, .size = self.size};

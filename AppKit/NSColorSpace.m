@@ -119,6 +119,38 @@ NSString *const _NSColorCoreUICatalogNamePrefix =
     return _cgColorSpace;
 }
 
+// The name macOS shows for the space (its profile description). Only the named spaces of this class
+// are told apart; any other space gets the name of its model.
+- (NSString *) localizedName {
+    struct {
+        CFStringRef creator;
+        NSString *name;
+    } named[] = {
+        { kCGColorSpaceSRGB, @"sRGB IEC61966-2.1" },
+        { kCGColorSpaceDisplayP3, @"Display P3" },
+        { kCGColorSpaceGenericRGB, @"Generic RGB Profile" },
+        { kCGColorSpaceGenericGray, @"Generic Gray Profile" },
+        { kCGColorSpaceGenericGrayGamma2_2, @"Generic Gray Gamma 2.2 Profile" },
+    };
+    for (size_t i = 0; i < sizeof(named) / sizeof(named[0]); i++) {
+        CGColorSpaceRef space = CGColorSpaceCreateWithName(named[i].creator);
+        BOOL same = space != NULL && CFEqual(space, _cgColorSpace);
+        CGColorSpaceRelease(space);
+        if (same)
+            return named[i].name;
+    }
+    switch (CGColorSpaceGetModel(_cgColorSpace)) {
+    case kCGColorSpaceModelMonochrome:
+        return @"Gray";
+    case kCGColorSpaceModelRGB:
+        return @"RGB";
+    case kCGColorSpaceModelCMYK:
+        return @"CMYK";
+    default:
+        return @"Color Space";
+    }
+}
+
 @end
 
 NSString* _NSColorSpaceNameFromNum(void) {
