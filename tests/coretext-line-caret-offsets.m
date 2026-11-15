@@ -3,13 +3,16 @@
 #import <Foundation/Foundation.h>
 #import <CoreText/CoreText.h>
 #include <math.h>
+#ifndef FONT_NAME
+#define FONT_NAME "DejaVu Sans"
+#endif
 #include <stdio.h>
 
 static int failures;
 #define CHECK(cond, ...) do { if (cond) printf("PASS "); else { printf("FAIL "); ++failures; } printf(__VA_ARGS__); printf("\n"); } while (0)
 
 int main(void) { @autoreleasepool {
-    CTFontRef font = CTFontCreateWithName(CFSTR("DejaVu Sans"), 18, NULL);
+    CTFontRef font = CTFontCreateWithName(CFSTR(FONT_NAME), 18, NULL);
     const void *keys[] = {kCTFontAttributeName}, *values[] = {font};
     CFDictionaryRef attributes = CFDictionaryCreate(NULL, keys, values, 1, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
     CFStringRef string = CFSTR("Wide i");
@@ -37,6 +40,17 @@ int main(void) { @autoreleasepool {
     __block int stopped = 0;
     CTLineEnumerateCaretOffsets(line, ^(double offset, CFIndex charIndex, bool leadingEdge, bool *stop) { if (++stopped == 3) *stop = true; });
     CHECK(stopped == 3, "setting stop ends the enumeration (%d calls)", stopped);
+    // QUIRK check (macOS 26.7.3): the trailing edge of a cluster reports the index of its last UTF-16 unit
+    {
+        UniChar chars[] = {'a', 'e', 0x0301, 'f'};
+        CFStringRef accented = CFStringCreateWithCharacters(NULL, chars, 4);
+        CFAttributedStringRef accentedText = CFAttributedStringCreate(NULL, accented, attributes);
+        CTLineRef accentedLine = CTLineCreateWithAttributedString(accentedText);
+        static CFIndex seen[16]; static bool lead[16]; __block int k = 0;
+        CTLineEnumerateCaretOffsets(accentedLine, ^(double offset, CFIndex charIndex, bool leadingEdge, bool *stop) { if (k < 16) { seen[k] = charIndex; lead[k] = leadingEdge; } ++k; });
+        CHECK(k == 6 && seen[2] == 1 && lead[2] && seen[3] == 2 && !lead[3] && seen[4] == 3 && lead[4], "cluster e + U+0301: leading index 1, trailing index 2; %d callbacks", k);
+        CFRelease(accentedLine); CFRelease(accentedText); CFRelease(accented);
+    }
     CTLineEnumerateCaretOffsets(NULL, ^(double o, CFIndex i, bool l, bool *s) { ++failures; });
     CFRelease(line); CFRelease(attributed); CFRelease(attributes); CFRelease(font);
     printf("RESULT failures=%d\n", failures);

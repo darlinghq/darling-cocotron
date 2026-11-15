@@ -2,6 +2,9 @@
 #import <Foundation/Foundation.h>
 #import <CoreText/CoreText.h>
 #include <math.h>
+#ifndef FONT_NAME
+#define FONT_NAME "DejaVu Sans"
+#endif
 #include <stdio.h>
 #include <string.h>
 
@@ -34,6 +37,8 @@ static CFIndex collect(CTLineRef line, CGPoint *positions, CGSize *advances) {
 }
 
 // Checks that glyph i of the justified line has the font advance of character i plus extra for each space, and sits at the sum of the advances before it.
+// Approximation of ours: the extra width goes to the spaces only. macOS 26.7.3 does the same for a small extra but
+// also widens letters for a large one; the total width is the same either way.
 static void checkLayout(const char *name, CFStringRef string, CTLineRef justified, double extraPerSpace) {
     CFIndex length = CFStringGetLength(string);
     CGPoint pos[128]; CGSize adv[128];
@@ -52,7 +57,7 @@ static void checkLayout(const char *name, CFStringRef string, CTLineRef justifie
 }
 
 int main(void) { @autoreleasepool {
-    font = CTFontCreateWithName(CFSTR("DejaVu Sans"), 16, NULL);
+    font = CTFontCreateWithName(CFSTR(FONT_NAME), 16, NULL);
     CFStringRef text = CFSTR("The quick brown fox");
     CTLineRef line = lineFor(text);
     double natural = CTLineGetTypographicBounds(line, NULL, NULL, NULL);
@@ -72,6 +77,13 @@ int main(void) { @autoreleasepool {
     CTLineRef tight = CTLineCreateJustifiedLine(line, 1.0, natural - 12);
     CHECK(tight != NULL && fabs(CTLineGetTypographicBounds(tight, NULL, NULL, NULL) - (natural - 12)) < 0.001, "a width below the natural width squeezes the line");
     if (tight) { checkLayout("tight", text, tight, -4); CFRelease(tight); }
+    // QUIRK check (macOS 26.7.3): a partial factor with a width below the line's gives NULL, full factor squeezes
+    CTLineRef partialNarrow = CTLineCreateJustifiedLine(line, 0.5, natural - 12);
+    CHECK(partialNarrow == NULL, "factor 0.5 with a width below the natural width returns NULL");
+    if (partialNarrow) CFRelease(partialNarrow);
+    CTLineRef equal = CTLineCreateJustifiedLine(line, 0.5, natural);
+    CHECK(equal != NULL && fabs(CTLineGetTypographicBounds(equal, NULL, NULL, NULL) - natural) < 0.001, "factor 0.5 with the natural width leaves the line alone");
+    if (equal) CFRelease(equal);
     CTLineRef none = CTLineCreateJustifiedLine(line, 0.0, natural + 60);
     CHECK(none != NULL && fabs(CTLineGetTypographicBounds(none, NULL, NULL, NULL) - natural) < 0.001, "factor 0 leaves the width alone");
     if (none) CFRelease(none);
@@ -108,7 +120,9 @@ int main(void) { @autoreleasepool {
         CGPoint pos[32]; CGSize adv[32];
         CFIndex n = collect(paddedJustified, pos, adv);
         CHECK(n == 14 && fabs(pos[10].x + adv[10].width - (content + 30)) < 0.001, "the d of the last word ends at %.3f", content + 30);
-        CHECK(n == 14 && fabs(CTLineGetTrailingWhitespaceWidth(paddedJustified) - trailing) < 0.001, "trailing whitespace keeps its width");
+        // QUIRK check (macOS 26.7.3): the justified line has no advance for its trailing whitespace
+        CHECK(n == 14 && adv[11].width == 0 && adv[12].width == 0 && adv[13].width == 0 && fabs(CTLineGetTypographicBounds(paddedJustified, NULL, NULL, NULL) - (content + 30)) < 0.001, "trailing whitespace has no advance and the line is exactly the justified width");
+        CHECK(fabs(CTLineGetTrailingWhitespaceWidth(paddedJustified)) < 0.001, "so the trailing whitespace width reads 0");
         CFRelease(paddedJustified);
     }
     CTLineRef single = lineFor(CFSTR("W"));

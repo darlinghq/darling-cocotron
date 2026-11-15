@@ -591,7 +591,7 @@ CTLineRef CTLineCreateTruncatedLine(CTLineRef line, double width,
         return NULL;
     double lineWidth = CTLineGetTypographicBounds(line, NULL, NULL, NULL);
     if (lineWidth <= width)
-        return CFRetain(line);
+        return (CTLineRef)CFRetain(line);
 
     CFAttributedStringRef string = (CFAttributedStringRef)CFDictionaryGetValue(
             KTCoreTextObjectDictionary(line), KTLineAttributedStringKey);
@@ -600,7 +600,7 @@ CTLineRef CTLineCreateTruncatedLine(CTLineRef line, double width,
     CFIndex end = range.location + range.length;
 
     // A NULL token means no token: the text is simply cut off.
-    CTLineRef token = truncationToken != NULL ? CFRetain(truncationToken) : NULL;
+    CTLineRef token = truncationToken != NULL ? (CTLineRef)CFRetain(truncationToken) : NULL;
     double tokenWidth = token != NULL ? CTLineGetTypographicBounds(token, NULL, NULL, NULL) : 0;
     if (tokenWidth > width) {
         CFRelease(token);
@@ -641,6 +641,22 @@ CTLineRef CTLineCreateTruncatedLine(CTLineRef line, double width,
         }
     }
 
+    // QUIRK: whitespace next to the truncation point is dropped as well: the kept head does not end in
+    // whitespace and the kept tail does not start with any, even where it would still fit. Not documented.
+    // Evidence: black-box calls on macOS 26.7.3 (tier 2): "The quick brown fox" in a 20 pt font cut at a width that
+    // admits "The quick " plus the token keeps "The quick" for end truncation, and a width that admits " brown fox"
+    // plus the token keeps "brown fox" for start truncation.
+    // Test: tests/coretext-line-truncation.m (QUIRK checks)
+    CFCharacterSetRef whitespace = CFCharacterSetGetPredefined(kCFCharacterSetWhitespaceAndNewline);
+    CFIndex headEnd = keepEnd, tailStart = resume;
+    while (headEnd > range.location &&
+           CFCharacterSetIsCharacterMember(whitespace, CFStringGetCharacterAtIndex(characters, headEnd - 1)))
+        --headEnd;
+    while (tailStart < end &&
+           CFCharacterSetIsCharacterMember(whitespace, CFStringGetCharacterAtIndex(characters, tailStart)))
+        ++tailStart;
+    keepEnd = headEnd;
+    resume = tailStart;
     CTLineRef head = createPiece(string, range.location, keepEnd);
     CTLineRef tail = createPiece(string, resume, end);
     CFMutableArrayRef runs = CFArrayCreateMutable(kCFAllocatorDefault, 0, &kCFTypeArrayCallBacks);
@@ -758,9 +774,18 @@ CTLineRef CTLineCreateJustifiedLine(CTLineRef line,
     CFIndex opportunities = spaces > 0 ? spaces : gaps - 1;
     // 1.0 and above is full justification, 0 and below none.
     justificationFactor = justificationFactor > 1 ? 1 : justificationFactor < 0 ? 0 : justificationFactor;
-    double delta = (justificationWidth - (lineWidth - trailing)) * justificationFactor;
+    double contentWidth = lineWidth - trailing;
+    // QUIRK: a partial justification (a factor between 0 and 1) of a line that is already wider than the requested
+    // width gives NULL, while a factor of 1 squeezes the line and a factor of 0 or less returns it unchanged.
+    // Not documented. Evidence: black-box calls on macOS 26.7.3 (tier 2): a 60.04 pt line with factors 0.1, 0.5 and 0.9
+    // and widths 0, 30, 40, 55 and 59 gives NULL; factor 1 with widths 0, 40 and 59 gives lines of that width;
+    // factor 0.5 with a width equal to the line's gives the line unchanged.
+    // Test: tests/coretext-line-justification.m (QUIRK checks)
+    if (justificationFactor > 0 && justificationFactor < 1 && justificationWidth < contentWidth)
+        return NULL;
+    double delta = (justificationWidth - contentWidth) * justificationFactor;
     if (opportunities <= 0 || delta == 0)
-        return CFRetain(line);
+        return (CTLineRef)CFRetain(line);
     CGFloat each = (CGFloat)(delta / opportunities);
 
     CFMutableArrayRef runs = CFArrayCreateMutable(kCFAllocatorDefault, 0, &kCFTypeArrayCallBacks);
@@ -778,7 +803,15 @@ CTLineRef CTLineCreateJustifiedLine(CTLineRef line,
             break;
         }
         for (CFIndex i = 0; i < count; ++i, ++glyphTotal) {
-            if (indices[i] >= trailingStart || advances[i].width <= 0)
+            if (indices[i] >= trailingStart) {
+                // QUIRK: the justified line has no advance for its trailing whitespace, so the line is exactly
+                // as wide as requested. Evidence: black-box calls on macOS 26.7.3 (tier 2): "a b  " justified to 100 pt
+                // has two trailing spaces of advance 0 at x = 100, and its trailing whitespace width reads 0.
+                // Test: tests/coretext-line-justification.m (QUIRK checks)
+                extra[i] = -advances[i].width;
+                continue;
+            }
+            if (advances[i].width <= 0)
                 continue;
             bool space = isJustificationSpace(CFStringGetCharacterAtIndex(characters, indices[i]));
             if (spaces > 0 ? space : glyphTotal != lastAdvancing)
@@ -788,7 +821,7 @@ CTLineRef CTLineCreateJustifiedLine(CTLineRef line,
         free(extra);
     }
     if (ok)
-        width = (CGFloat)(lineWidth + delta);
+        width = (CGFloat)(contentWidth + delta);
     CTLineRef result = ok ? createLineObject(string, range, runs, width, ascent, descent, leading) : NULL;
     if (runs != NULL)
         CFRelease(runs);
@@ -949,6 +982,8 @@ void CTLineEnumerateCaretOffsets(CTLineRef line, void (^block)(double offset, CF
 {
     if (line == NULL || block == NULL)
         return;
+    CFStringRef characters = CFAttributedStringGetString((CFAttributedStringRef)CFDictionaryGetValue(
+            KTCoreTextObjectDictionary(line), KTLineAttributedStringKey));
     bool stop = false;
     CFArrayRef runs = CTLineGetGlyphRuns(line);
     for (CFIndex runIndex = 0; !stop && runIndex < CFArrayGetCount(runs); ++runIndex) {
@@ -961,9 +996,15 @@ void CTLineEnumerateCaretOffsets(CTLineRef line, void (^block)(double offset, CF
             // A glyph without advance is a mark of the cluster before it and has no caret of its own.
             if (advances[index].width <= 0)
                 continue;
+            // QUIRK: the trailing edge reports the index of the last UTF-16 unit of the character cluster
+            // (the combining mark of "e" + U+0301), the leading edge the first. Not documented.
+            // Evidence: black-box calls on macOS 26.7.3 (tier 2): "ab e" + U+0301 + "f" reports index 3 for the
+            // leading and 4 for the trailing edge of the accented letter.
+            // Test: tests/coretext-line-caret-offsets.m (QUIRK check)
+            CFRange cluster = CFStringGetRangeOfComposedCharactersAtIndex(characters, indices[index]);
             block(positions[index].x, indices[index], true, &stop);
             if (!stop)
-                block(positions[index].x + advances[index].width, indices[index], false, &stop);
+                block(positions[index].x + advances[index].width, cluster.location + cluster.length - 1, false, &stop);
         }
     }
 }

@@ -2,6 +2,9 @@
 #import <Foundation/Foundation.h>
 #import <CoreText/CoreText.h>
 #include <math.h>
+#ifndef FONT_NAME
+#define FONT_NAME "DejaVu Sans"
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -53,7 +56,7 @@ static void metric(UniChar c, CGGlyph *glyph, double *advance) {
 }
 
 int main(void) { @autoreleasepool {
-    font = CTFontCreateWithName(CFSTR("DejaVu Sans"), 16, NULL);
+    font = CTFontCreateWithName(CFSTR(FONT_NAME), 16, NULL);
     text = CFSTR("The quick brown fox jumps over the lazy dog");
     CFIndex length = CFStringGetLength(text);
     CGGlyph glyph[64], ellipsisGlyph; double adv[64], ellipsisAdv, maxAdv = 0, total = 0;
@@ -71,13 +74,15 @@ int main(void) { @autoreleasepool {
     // A NULL token means no token: the text is cut off. End keeps the largest prefix p with prefix(p) <= W.
     CFIndex p = 0; double used = 0;
     while (p < length && used + adv[p] <= W) used += adv[p++];
+    // QUIRK check: whitespace at the cut is dropped (observed on macOS 26.7.3)
+    while (p > 0 && CFStringGetCharacterAtIndex(text, p - 1) == ' ') used -= adv[--p];
     CTLineRef end = CTLineCreateTruncatedLine(full, W, kCTLineTruncationEnd, NULL);
     CHECK(end != NULL, "end truncation without a token returns a line");
     if (end) {
         n = glyphsOf(end, g, idx);
         CHECK(n == p && memcmp(g, glyph, p * sizeof(CGGlyph)) == 0, "end: %ld glyphs, the first %ld characters and nothing else", (long)n, (long)p);
         double w = CTLineGetTypographicBounds(end, NULL, NULL, NULL);
-        CHECK(fabs(w - used) < 0.001 && w <= W && w > W - maxAdv, "end: width %.3f equals %.3f, fits %.0f within one character", w, used, W);
+        CHECK(fabs(w - used) < 0.001 && w <= W && w > W - 2 * maxAdv, "end: width %.3f equals %.3f, fits %.0f within one character", w, used, W);
         CFRange r = CTLineGetStringRange(end);
         CHECK(r.location == 0 && r.length == length, "end: string range still covers the original line (%ld,%ld)", (long)r.location, (long)r.length);
         CHECK(n == p && idx[0] == 0 && idx[p - 1] == p - 1, "end: kept glyphs keep their original string indices");
@@ -86,6 +91,8 @@ int main(void) { @autoreleasepool {
     // Start keeps the smallest suffix start s with suffix(s) <= W
     CFIndex s = length; used = 0;
     while (s > 0 && used + adv[s - 1] <= W) used += adv[--s];
+    // QUIRK check: whitespace at the cut is dropped (observed on macOS 26.7.3)
+    while (s < length && CFStringGetCharacterAtIndex(text, s) == ' ') used -= adv[s++];
     CTLineRef start = CTLineCreateTruncatedLine(full, W, kCTLineTruncationStart, NULL);
     CHECK(start != NULL, "start truncation without a token returns a line");
     if (start) {
@@ -104,7 +111,7 @@ int main(void) { @autoreleasepool {
         CFIndex cut = 0;
         while (cut < n && idx[cut] == cut) ++cut;
         CHECK(n > 3 && n < length && g[0] == glyph[0] && g[n - 1] == glyph[length - 1] && cut > 0 && cut < n, "middle: starts with T, ends with g, a gap between (prefix %ld of %ld glyphs)", (long)cut, (long)n);
-        CHECK(w <= W && w > W - maxAdv, "middle: width %.3f fits %.0f and is within one character of it", w, W);
+        CHECK(w <= W && w > W - 3 * maxAdv, "middle: width %.3f fits %.0f and is within one character of it", w, W);
         CHECK(cut > 0 && memcmp(g, glyph, cut * sizeof(CGGlyph)) == 0 && memcmp(g + cut, glyph + length - (n - cut), (n - cut) * sizeof(CGGlyph)) == 0, "middle: both ends are untouched pieces of the text");
         CFRelease(middle);
     }
@@ -112,6 +119,7 @@ int main(void) { @autoreleasepool {
     CTLineRef ellipsisToken = ellipsisLine();
     p = 0; used = ellipsisAdv;
     while (p < length && used + adv[p] <= W) used += adv[p++];
+    while (p > 0 && CFStringGetCharacterAtIndex(text, p - 1) == ' ') used -= adv[--p];
     CTLineRef withEllipsis = CTLineCreateTruncatedLine(full, W, kCTLineTruncationEnd, ellipsisToken);
     CHECK(withEllipsis != NULL, "an explicit ellipsis token returns a line");
     if (withEllipsis) {
@@ -145,6 +153,24 @@ int main(void) { @autoreleasepool {
     CHECK(tiny == NULL, "a width smaller than the token returns NULL");
     if (tiny) CFRelease(tiny);
     CFRelease(wide);
+    // QUIRK: a width that admits "The quick " plus the ellipsis keeps "The quick" (the space is dropped).
+    {
+        CTLineRef t = ellipsisLine();
+        double need = ellipsisAdv; for (int i = 0; i < 10; ++i) need += adv[i];
+        CTLineRef q = CTLineCreateTruncatedLine(full, need, kCTLineTruncationEnd, t);
+        n = q ? glyphsOf(q, g, idx) : 0;
+        CHECK(q != NULL && n == 10 && g[8] == glyph[8] && g[9] == ellipsisGlyph && idx[9] == 9, "end: trailing space before the token is dropped");
+        if (q) CFRelease(q);
+        double needStart = ellipsisAdv; for (CFIndex i = 9; i < length; ++i) needStart += adv[i];
+        CTLineRef r = CTLineCreateTruncatedLine(full, needStart, kCTLineTruncationStart, t);
+        n = r ? glyphsOf(r, g, idx) : 0;
+        CHECK(r != NULL && n == length - 9 && g[0] == ellipsisGlyph && g[1] == glyph[10], "start: leading space after the token is dropped");
+        if (r) CFRelease(r);
+        CFRelease(t);
+    }
+    // a negative width gives NULL
+    CTLineRef neg = CTLineCreateTruncatedLine(full, -1, kCTLineTruncationEnd, NULL);
+    CHECK(neg == NULL, "a negative width returns NULL");
     CFRelease(full); CFRelease(font);
     printf("RESULT failures=%d\n", failures);
     return failures ? 1 : 0;

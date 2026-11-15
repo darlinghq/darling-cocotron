@@ -3,6 +3,9 @@
 #import <Foundation/Foundation.h>
 #import <CoreText/CoreText.h>
 #include <math.h>
+#ifndef FONT_NAME
+#define FONT_NAME "DejaVu Sans"
+#endif
 #include <stdio.h>
 
 static int failures;
@@ -20,7 +23,7 @@ static CTLineRef lineFor(CTFontRef font, CFStringRef string) {
 }
 
 int main(void) { @autoreleasepool {
-    CTFontRef font = CTFontCreateWithName(CFSTR("DejaVu Sans"), 20, NULL);
+    CTFontRef font = CTFontCreateWithName(CFSTR(FONT_NAME), 20, NULL);
     UniChar space = ' ';
     CGGlyph spaceGlyph = 0;
     CGSize spaceAdvance = CGSizeZero;
