@@ -18,6 +18,7 @@
 */
 
 #import "CGDisplayGeometry.h"
+#import "CGDisplayReconfiguration.h"
 #import <AppKit/NSDisplay.h>
 #import <AppKit/NSScreen.h>
 #import <CoreGraphics/CGDirectDisplay.h>
@@ -28,6 +29,7 @@
 #include <dispatch/dispatch.h>
 #include <math.h>
 #include <pthread.h>
+#include <stdlib.h>
 #include <sys/mman.h>
 
 // not sure what type or value this has
@@ -36,14 +38,6 @@ unsigned int kCGDisplayPixelWidth = 8200;
 
 const CFStringRef kCGDisplayProductNameKey = CFSTR("kCGDisplayProductNameKey");
 const CFStringRef kCGDisplayShowDuplicateLowResolutionModes = CFSTR("kCGDisplayShowDuplicateLowResolutionModes");
-
-CGError CGCaptureAllDisplays(void) {
-    return kCGErrorSuccess;
-}
-
-CGError CGReleaseAllDisplays(void) {
-    return kCGErrorSuccess;
-}
 
 // Our platform abstraction is in AppKit
 static NSDisplay *currentDisplay(void) {
@@ -237,14 +231,6 @@ CGError CGGetDisplaysWithRect(CGRect rect, uint32_t maxDisplays,
     return kCGErrorSuccess;
 }
 
-CGError CGDisplayCapture(CGDirectDisplayID display) {
-    return kCGErrorSuccess;
-}
-
-CGError CGDisplayRelease(CGDirectDisplayID display) {
-    return kCGErrorSuccess;
-}
-
 CGRect CGDisplayBounds(CGDirectDisplayID displayIndex) {
     NSDisplay *display = currentDisplay();
     if (!display)
@@ -358,17 +344,6 @@ CFArrayRef CGDisplayCopyAllDisplayModes(CGDirectDisplayID displayIndex,
     if (!display)
         return NULL;
     return (CFArrayRef)[[display modesForScreen: displayIndex - 1] retain];
-}
-
-CGError CGDisplaySetDisplayMode(CGDirectDisplayID displayId,
-                                CGDisplayModeRef mode, CFDictionaryRef options)
-{
-    NSDisplay *display = currentDisplay();
-    if (!display)
-        return kCGErrorInvalidConnection;
-    BOOL result = [display setMode: mode forScreen: displayId - 1];
-
-    return result ? kCGErrorSuccess : kCGErrorFailure;
 }
 
 static NSData *edidForDisplay(CGDirectDisplayID displayId) {
@@ -806,6 +781,137 @@ CFDictionaryRef CGDisplayBestModeForParameters(CGDirectDisplayID display,
                                                         exactMatch);
 }
 
+#pragma mark - Mode switching, capture and release
+
+// A backend mode is identified by its size in device pixels (the point size
+// when the backend reports none) and its refresh rate.
+static BOOL sameBackendMode(NSDictionary *a, NSDictionary *b) {
+    NSNumber *aw = [a objectForKey: @"PixelWidth"] ?: [a objectForKey: @"Width"];
+    NSNumber *ah = [a objectForKey: @"PixelHeight"] ?: [a objectForKey: @"Height"];
+    NSNumber *bw = [b objectForKey: @"PixelWidth"] ?: [b objectForKey: @"Width"];
+    NSNumber *bh = [b objectForKey: @"PixelHeight"] ?: [b objectForKey: @"Height"];
+    if (![aw isEqual: bw] || ![ah isEqual: bh])
+        return NO;
+    double ar = [[a objectForKey: @"RefreshRate"] doubleValue];
+    double br = [[b objectForKey: @"RefreshRate"] doubleValue];
+    return fabs(ar - br) < 0.01;
+}
+
+// The display's mode list entry a mode (a legacy dictionary or a
+// CGDisplayModeRef) stands for, or NSNotFound. A legacy dictionary carries the
+// index it had in CGDisplayAvailableModes; otherwise the size selects the
+// mode, and among modes of that size the nearest refresh rate does.
+static NSUInteger indexOfMode(NSArray *modes, NSDictionary *wanted) {
+    NSNumber *wantedIndex = [wanted objectForKey: (NSString *) kCGDisplayMode];
+    if (wantedIndex && [wantedIndex unsignedIntegerValue] < [modes count])
+        return [wantedIndex unsignedIntegerValue];
+    NSUInteger found = NSNotFound;
+    double foundDistance = 0;
+    double wantedRate = [[wanted objectForKey: @"RefreshRate"] doubleValue];
+    for (NSUInteger i = 0; i < [modes count]; i++) {
+        NSDictionary *candidate = [modes objectAtIndex: i];
+        NSNumber *pw = [wanted objectForKey: @"PixelWidth"], *ph = [wanted objectForKey: @"PixelHeight"];
+        BOOL sameSize = (pw && ph && [candidate objectForKey: @"PixelWidth"])
+            ? ([pw isEqual: [candidate objectForKey: @"PixelWidth"]] &&
+               [ph isEqual: [candidate objectForKey: @"PixelHeight"]])
+            : ([[candidate objectForKey: @"Width"] isEqual: [wanted objectForKey: @"Width"]] &&
+               [[candidate objectForKey: @"Height"] isEqual: [wanted objectForKey: @"Height"]]);
+        if (!sameSize)
+            continue;
+        double distance = fabs([[candidate objectForKey: @"RefreshRate"] doubleValue] - wantedRate);
+        if (found == NSNotFound || distance < foundDistance) {
+            found = i;
+            foundDistance = distance;
+        }
+    }
+    return found;
+}
+
+// Per display: whether the process captured it, and the mode it had before
+// the first switch since it was last restored.
+static NSMutableDictionary *gDisplayState;
+static NSObject *gDisplayStateLock;
+static dispatch_once_t gDisplayStateOnce;
+
+static void restoreAllDisplayModes(void);
+
+static void initDisplayState(void) {
+    dispatch_once(&gDisplayStateOnce, ^{
+        gDisplayState = [[NSMutableDictionary alloc] init];
+        gDisplayStateLock = [[NSObject alloc] init];
+        // The modes this process changed go back when it exits.
+        atexit(restoreAllDisplayModes);
+    });
+}
+
+static NSMutableDictionary *stateForDisplay(CGDirectDisplayID display) {
+    NSNumber *key = @(display);
+    NSMutableDictionary *state = [gDisplayState objectForKey: key];
+    if (!state) {
+        state = [NSMutableDictionary dictionary];
+        [gDisplayState setObject: state forKey: key];
+    }
+    return state;
+}
+
+// Asks the backend for the mode, reporting the change to the registered
+// reconfiguration callbacks. When remember is set, the mode the display had
+// is kept so that a release restores it.
+static CGError changeBackendMode(CGDirectDisplayID displayID, NSDictionary *mode, BOOL remember) {
+    NSDisplay *display = currentDisplay();
+    if (!display)
+        return kCGErrorInvalidConnection;
+    NSDictionary *before = [display currentModeForScreen: displayID - 1];
+    if (sameBackendMode(before, mode))
+        return kCGErrorSuccess;
+
+    initDisplayState();
+    CGDisplayPostReconfiguration(displayID, kCGDisplayBeginConfigurationFlag);
+    BOOL changed = [display setMode: mode forScreen: displayID - 1];
+    CGDisplayChangeSummaryFlags flags = 0;
+    if (changed) {
+        flags = kCGDisplaySetModeFlag;
+        NSDictionary *after = [display currentModeForScreen: displayID - 1];
+        for (NSString *key in @[ @"Width", @"Height", @"PixelWidth", @"PixelHeight" ]) {
+            if (![[before objectForKey: key] isEqual: [after objectForKey: key]])
+                flags |= kCGDisplayDesktopShapeChangedFlag;
+        }
+        if (remember) {
+            @synchronized(gDisplayStateLock) {
+                NSMutableDictionary *state = stateForDisplay(displayID);
+                if (![state objectForKey: @"original"])
+                    [state setObject: before forKey: @"original"];
+            }
+        }
+    }
+    CGDisplayPostReconfiguration(displayID, flags);
+    return changed ? kCGErrorSuccess : kCGErrorFailure;
+}
+
+// Puts the display back in the mode it had before this process changed it.
+static void restoreDisplayMode(CGDirectDisplayID displayID) {
+    NSDictionary *original = nil;
+    @synchronized(gDisplayStateLock) {
+        NSMutableDictionary *state = [gDisplayState objectForKey: @(displayID)];
+        original = [[state objectForKey: @"original"] retain];
+        [state removeObjectForKey: @"original"];
+    }
+    if (original) {
+        changeBackendMode(displayID, original, NO);
+        [original release];
+    }
+}
+
+static void restoreAllDisplayModes(void) {
+    NSArray *ids;
+    @synchronized(gDisplayStateLock) {
+        ids = [[gDisplayState allKeys] copy];
+    }
+    for (NSNumber *key in ids)
+        restoreDisplayMode([key unsignedIntValue]);
+    [ids release];
+}
+
 // The mode must be one the display lists (as the dictionaries the legacy
 // calls return are). Switching to the mode the display is already in
 // succeeds; any other is left to the display backend, which reports whether
@@ -818,27 +924,84 @@ CGError CGDisplaySwitchToMode(CGDirectDisplayID displayID, CFDictionaryRef mode)
     if ([modes count] == 0)
         return kCGErrorFailure;
 
-    NSDictionary *wanted = (NSDictionary *) mode;
-    NSNumber *wantedIndex = [wanted objectForKey: (NSString *) kCGDisplayMode];
-    NSUInteger index = [modes count];
-    if (wantedIndex && [wantedIndex unsignedIntegerValue] < [modes count]) {
-        index = [wantedIndex unsignedIntegerValue];
-    } else {
-        for (NSUInteger i = 0; i < [modes count]; i++) {
-            NSDictionary *candidate = [modes objectAtIndex: i];
-            if ([[candidate objectForKey: @"Width"] isEqual: [wanted objectForKey: @"Width"]] &&
-                [[candidate objectForKey: @"Height"] isEqual: [wanted objectForKey: @"Height"]]) {
-                index = i;
-                break;
-            }
-        }
-    }
-    if (index >= [modes count])
+    NSUInteger index = indexOfMode(modes, (NSDictionary *) mode);
+    if (index == NSNotFound)
         return kCGErrorIllegalArgument;
-    if (index == currentIndex)
-        return kCGErrorSuccess;
-    return [currentDisplay() setMode: [modes objectAtIndex: index]
-                           forScreen: displayID - 1] ? kCGErrorSuccess : kCGErrorFailure;
+    return changeBackendMode(displayID, [modes objectAtIndex: index], YES);
+}
+
+CGError CGDisplaySetDisplayMode(CGDirectDisplayID displayID, CGDisplayModeRef mode, CFDictionaryRef options) {
+    if (mode == NULL)
+        return kCGErrorIllegalArgument;
+    NSArray *modes = backendModesForDisplay(displayID, NULL);
+    if ([modes count] == 0)
+        return kCGErrorFailure;
+    NSUInteger index = indexOfMode(modes, (NSDictionary *) mode);
+    if (index == NSNotFound)
+        return kCGErrorIllegalArgument;
+    return changeBackendMode(displayID, [modes objectAtIndex: index], YES);
+}
+
+CGError CGDisplayCapture(CGDirectDisplayID display) {
+    NSDisplay *backend = currentDisplay();
+    if (!backend)
+        return kCGErrorInvalidConnection;
+    if (!screenForDisplayID([backend screens], display))
+        return kCGErrorIllegalArgument;
+    initDisplayState();
+    @synchronized(gDisplayStateLock) {
+        [stateForDisplay(display) setObject: @YES forKey: @"captured"];
+    }
+    return kCGErrorSuccess;
+}
+
+// Releasing a display puts back the mode this process switched it from.
+CGError CGDisplayRelease(CGDirectDisplayID display) {
+    NSDisplay *backend = currentDisplay();
+    if (!backend)
+        return kCGErrorInvalidConnection;
+    if (!screenForDisplayID([backend screens], display))
+        return kCGErrorIllegalArgument;
+    initDisplayState();
+    @synchronized(gDisplayStateLock) {
+        [[gDisplayState objectForKey: @(display)] removeObjectForKey: @"captured"];
+    }
+    restoreDisplayMode(display);
+    return kCGErrorSuccess;
+}
+
+CGError CGCaptureAllDisplays(void) {
+    NSDisplay *backend = currentDisplay();
+    if (!backend)
+        return kCGErrorInvalidConnection;
+    for (NSScreen *screen in [backend screens])
+        CGDisplayCapture([screen cgDirectDisplayID]);
+    return kCGErrorSuccess;
+}
+
+CGError CGReleaseAllDisplays(void) {
+    NSDisplay *backend = currentDisplay();
+    if (!backend)
+        return kCGErrorInvalidConnection;
+    initDisplayState();
+    NSArray *ids;
+    @synchronized(gDisplayStateLock) {
+        ids = [[gDisplayState allKeys] copy];
+        for (NSNumber *key in ids)
+            [[gDisplayState objectForKey: key] removeObjectForKey: @"captured"];
+    }
+    for (NSNumber *key in ids)
+        restoreDisplayMode([key unsignedIntValue]);
+    [ids release];
+    return kCGErrorSuccess;
+}
+
+boolean_t CGDisplayIsCaptured(CGDirectDisplayID display) {
+    if (gDisplayState == nil)
+        return FALSE;
+    @synchronized(gDisplayStateLock) {
+        return [[gDisplayState objectForKey: @(display)] objectForKey: @"captured"] != nil;
+    }
 }
 
 #pragma mark - Framebuffer access and palettes
@@ -922,10 +1085,6 @@ boolean_t CGDisplayCanSetPalette(CGDirectDisplayID display) {
 
 CGError CGDisplaySetPalette(CGDirectDisplayID display, const CGDirectPaletteRef palette) {
     return kCGErrorNoneAvailable;
-}
-
-boolean_t CGDisplayIsCaptured(CGDirectDisplayID display) {
-    return FALSE;
 }
 
 size_t CGDisplayModeGetPixelWidth(CGDisplayModeRef mode) {

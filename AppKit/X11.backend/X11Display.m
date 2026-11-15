@@ -284,6 +284,21 @@ static void beforeWaitingCallback(CFRunLoopObserverRef observer,
         _lastScreens = nil;
     }
     _primaryRootFrameValid = NO;
+    [self _postScreenParametersChanged];
+}
+
+// RandR reports one change as several events, so the notification is queued
+// and merged per run loop pass, and goes out on the next pass like the
+// notification on macOS (the screens themselves are already up to date).
+- (void) _postScreenParametersChanged {
+    NSNotification *note = [NSNotification
+            notificationWithName: NSApplicationDidChangeScreenParametersNotification
+                          object: NSApp];
+    [[NSNotificationQueue defaultQueue] enqueueNotification: note
+                                               postingStyle: NSPostASAP
+                                               coalesceMask: NSNotificationCoalescingOnName |
+                                                             NSNotificationCoalescingOnSender
+                                                   forModes: nil];
 }
 
 // The main monitor's rectangle in root coordinates, device pixels: the origin
@@ -493,15 +508,135 @@ static NSDictionary *modeInfoToDictionary(const XRRModeInfo *mi, int depth,
     }
 }
 
+static Bool isRandRLayoutEvent(Display *display, XEvent *event, XPointer arg) {
+    return X11RandRIsLayoutChange(event, *(int *) arg);
+}
+
+// Bounding box of the active CRTCs, in root coordinates, with the CRTC being
+// changed taken at its new size.
+static void crtcBoundingBox(Display *display, XRRScreenResources *resources, RRCrtc changed,
+                            int newWidth, int newHeight, int newX, int newY, int *width, int *height) {
+    int maxX = 0, maxY = 0;
+    for (int i = 0; i < resources->ncrtc; i++) {
+        int x, y, w, h;
+        if (resources->crtcs[i] == changed) {
+            x = newX; y = newY; w = newWidth; h = newHeight;
+        } else {
+            XRRCrtcInfo *info = XRRGetCrtcInfo(display, resources, resources->crtcs[i]);
+            if (info == NULL)
+                continue;
+            x = info->x; y = info->y;
+            w = info->width; h = info->height;
+            if (info->mode == None) {
+                XRRFreeCrtcInfo(info);
+                continue;
+            }
+            if (info->rotation & (RR_Rotate_90 | RR_Rotate_270)) {
+                int t = w; w = h; h = t;
+            }
+            XRRFreeCrtcInfo(info);
+        }
+        if (x + w > maxX) maxX = x + w;
+        if (y + h > maxY) maxY = y + h;
+    }
+    *width = maxX;
+    *height = maxY;
+}
+
+// Sets the CRTC that drives the output to the RandR mode of the same size and
+// refresh rate as mode (a dictionary from modesForScreen:), growing the
+// screen first when the new bounding box needs it and shrinking it to the
+// bounding box afterwards, as the desktop follows the mode on macOS.
 - (BOOL) setMode: (NSDictionary *) mode forScreen: (int) screenIndex {
     int eventBase, errorBase;
+    if (mode == nil || !XRRQueryExtension(_display, &eventBase, &errorBase))
+        return NO;
 
-    if (XRRQueryExtension(_display, &eventBase, &errorBase)) {
-        // TODO: Use XRRSetCrtcConfig
-        // https://cgit.freedesktop.org/xorg/lib/libXrandr/tree/include/X11/extensions/Xrandr.h#n283
+    Window root = DefaultRootWindow(_display);
+    XRRScreenResources *resources = XRRGetScreenResourcesCurrent(_display, root);
+    if (resources == NULL)
+        return NO;
+    if (screenIndex < 0 || screenIndex >= resources->noutput) {
+        XRRFreeScreenResources(resources);
+        return NO;
+    }
+    RROutput output = resources->outputs[screenIndex];
+    XRROutputInfo *oinfo = XRRGetOutputInfo(_display, resources, output);
+    XRRCrtcInfo *crtc = (oinfo && oinfo->crtc) ? XRRGetCrtcInfo(_display, resources, oinfo->crtc) : NULL;
+    BOOL ok = NO;
+
+    // The wanted RandR mode: one of the output's modes with the wanted size and the nearest rate.
+    RRMode wanted = None;
+    const XRRModeInfo *wantedInfo = NULL;
+    if (crtc != NULL) {
+        NSNumber *pw = [mode objectForKey: @"PixelWidth"], *ph = [mode objectForKey: @"PixelHeight"];
+        double rate = [[mode objectForKey: @"RefreshRate"] doubleValue], best = 0;
+        for (int i = 0; i < oinfo->nmode; i++) {
+            for (int j = 0; j < resources->nmode; j++) {
+                const XRRModeInfo *mi = &resources->modes[j];
+                if (mi->id != oinfo->modes[i])
+                    continue;
+                if (pw == nil || ph == nil || mi->width != [pw unsignedIntValue] || mi->height != [ph unsignedIntValue])
+                    break;
+                double r = (mi->hTotal && mi->vTotal)
+                        ? (double) mi->dotClock / ((double) mi->hTotal * mi->vTotal) : 0;
+                if (wanted == None || fabs(r - rate) < best) {
+                    wanted = mi->id;
+                    wantedInfo = mi;
+                    best = fabs(r - rate);
+                }
+                break;
+            }
+        }
     }
 
-    return FALSE;
+    if (wanted != None) {
+        BOOL turned = (crtc->rotation & (RR_Rotate_90 | RR_Rotate_270)) != 0;
+        int w = turned ? wantedInfo->height : wantedInfo->width;
+        int h = turned ? wantedInfo->width : wantedInfo->height;
+        int boxW, boxH, minW, minH, maxW, maxH;
+        crtcBoundingBox(_display, resources, oinfo->crtc, w, h, crtc->x, crtc->y, &boxW, &boxH);
+        int oldW = DisplayWidth(_display, DefaultScreen(_display));
+        int oldH = DisplayHeight(_display, DefaultScreen(_display));
+        if (boxW < 1) boxW = 1;
+        if (boxH < 1) boxH = 1;
+        BOOL sizeKnown = XRRGetScreenSizeRange(_display, root, &minW, &minH, &maxW, &maxH);
+        if (sizeKnown && (boxW < minW || boxH < minH || boxW > maxW || boxH > maxH)) {
+            wanted = None;
+        } else {
+            // Millimetres follow the pixel size at the current density.
+            int mmW = (int) lround((double) DisplayWidthMM(_display, DefaultScreen(_display)) * boxW / (oldW ? oldW : 1));
+            int mmH = (int) lround((double) DisplayHeightMM(_display, DefaultScreen(_display)) * boxH / (oldH ? oldH : 1));
+            if (boxW > oldW || boxH > oldH)
+                XRRSetScreenSize(_display, root, MAX(boxW, oldW), MAX(boxH, oldH),
+                                 MAX(mmW, 1), MAX(mmH, 1));
+            Status status = XRRSetCrtcConfig(_display, resources, oinfo->crtc, CurrentTime, crtc->x, crtc->y,
+                                             wanted, crtc->rotation, crtc->outputs, crtc->noutput);
+            ok = (status == RRSetConfigSuccess);
+            if (ok && (boxW < oldW || boxH < oldH))
+                XRRSetScreenSize(_display, root, boxW, boxH, MAX(mmW, 1), MAX(mmH, 1));
+            if (!ok && (boxW > oldW || boxH > oldH))
+                XRRSetScreenSize(_display, root, oldW, oldH,
+                                 DisplayWidthMM(_display, DefaultScreen(_display)),
+                                 DisplayHeightMM(_display, DefaultScreen(_display)));
+        }
+    }
+
+    if (crtc) XRRFreeCrtcInfo(crtc);
+    if (oinfo) XRRFreeOutputInfo(oinfo);
+    XRRFreeScreenResources(resources);
+
+    if (ok) {
+        // The callers read the screens right away, so apply the layout events
+        // now instead of when the event loop gets to them.
+        XSync(_display, False);
+        XEvent event;
+        int base = _rrEventBase;
+        while (XCheckIfEvent(_display, &event, isRandRLayoutEvent, (XPointer) &base))
+            X11RandRHandleLayoutChange(&event, _rrEventBase);
+        [self _invalidateRRCache];
+    }
+    return ok;
 }
 
 - (NSDictionary *) currentModeForScreen: (int) screenIndex {
