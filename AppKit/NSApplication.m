@@ -97,6 +97,13 @@ const NSNotificationName NSApplicationWillTerminateNotification =
 const NSNotificationName NSApplicationDidChangeScreenParametersNotification =
         @"NSApplicationDidChangeScreenParametersNotification";
 
+NSNotificationName
+        NSApplicationShouldBeginSuppressingHighDynamicRangeContentNotification =
+                @"NSApplicationShouldBeginSuppressingHighDynamicRangeContentNotification";
+NSNotificationName
+        NSApplicationShouldEndSuppressingHighDynamicRangeContentNotification =
+                @"NSApplicationShouldEndSuppressingHighDynamicRangeContentNotification";
+
 NSString *const NSApplicationLaunchIsDefaultLaunchKey =
         @"NSApplicationLaunchIsDefaultLaunchKey";
 NSString *const NSApplicationLaunchUserNotificationKey =

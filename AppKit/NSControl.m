@@ -40,6 +40,14 @@ NSString *const NSControlTextDidChangeNotification =
 NSString *const NSControlTextDidEndEditingNotification =
         @"NSControlTextDidEndEditingNotification";
 
+// Not declared in a public header.
+APPKIT_EXPORT const NSNotificationName NSControlWillBeginContinuousTrackingNotification;
+APPKIT_EXPORT const NSNotificationName NSControlDidEndContinuousTrackingNotification;
+const NSNotificationName NSControlWillBeginContinuousTrackingNotification =
+        @"NSControlWillBeginContinuousTrackingNotification";
+const NSNotificationName NSControlDidEndContinuousTrackingNotification =
+        @"NSControlDidEndContinuousTrackingNotification";
+
 @implementation NSControl
 
 // QUIRK: controls answer NO, whatever their opacity; NSTextField goes back

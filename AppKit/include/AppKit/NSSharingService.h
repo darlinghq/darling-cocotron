@@ -30,6 +30,8 @@ APPKIT_EXPORT NSSharingServiceName const NSSharingServiceNameComposeMessage;
 /* Deprecated */
 APPKIT_EXPORT NSSharingServiceName const NSSharingServiceNamePostOnFacebook;
 APPKIT_EXPORT NSSharingServiceName const NSSharingServiceNamePostOnLinkedIn;
+APPKIT_EXPORT NSSharingServiceName const NSSharingServiceNameSendViaAirDrop;
+APPKIT_EXPORT NSSharingServiceName const NSSharingServiceNameCloudSharing;
 APPKIT_EXPORT NSSharingServiceName const NSSharingServiceNamePostOnSinaWeibo;
 APPKIT_EXPORT NSSharingServiceName const NSSharingServiceNamePostOnTencentWeibo;
 APPKIT_EXPORT NSSharingServiceName const NSSharingServiceNamePostOnTwitter;

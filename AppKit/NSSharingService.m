@@ -11,6 +11,14 @@ NSSharingServiceName const NSSharingServiceNamePostOnTwitter = @"com.apple.share
 NSSharingServiceName const NSSharingServiceNamePostOnSinaWeibo = @"com.apple.share.SinaWeibo.post";
 NSSharingServiceName const NSSharingServiceNamePostOnTencentWeibo = @"com.apple.share.TencentWeibo.post";
 NSSharingServiceName const NSSharingServiceNamePostOnLinkedIn = @"com.apple.share.LinkedIn.post";
+NSSharingServiceName const NSSharingServiceNameSendViaAirDrop = @"com.apple.share.AirDrop.send";
+NSSharingServiceName const NSSharingServiceNameCloudSharing = @"com.apple.share.CloudSharing";
+
+// Not declared in a public header.
+APPKIT_EXPORT NSSharingServiceName const NSSharingServiceNameUseAsAccountPicture;
+APPKIT_EXPORT NSString *const NSSharingServiceParametersDefaultRecipientsKey;
+NSSharingServiceName const NSSharingServiceNameUseAsAccountPicture = @"com.apple.share.System.set-account-picture";
+NSString *const NSSharingServiceParametersDefaultRecipientsKey = @"NSSharingServiceParametersDefaultRecipientsKey";
 
 @implementation NSSharingService
 

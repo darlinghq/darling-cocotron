@@ -21,6 +21,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSMenuItem;
 
+APPKIT_EXPORT NSNotificationName NSPopUpButtonCellWillPopUpNotification;
+
 typedef NS_ENUM(NSUInteger, NSPopUpArrowPosition) {
     NSPopUpNoArrow = 0,
     NSPopUpArrowAtCenter = 1,
