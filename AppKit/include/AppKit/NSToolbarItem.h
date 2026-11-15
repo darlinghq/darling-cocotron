@@ -42,6 +42,11 @@ APPKIT_EXPORT const NSToolbarItemIdentifier NSToolbarSeparatorItemIdentifier;
 APPKIT_EXPORT const NSToolbarItemIdentifier NSToolbarShowColorsItemIdentifier;
 APPKIT_EXPORT const NSToolbarItemIdentifier NSToolbarShowFontsItemIdentifier;
 APPKIT_EXPORT const NSToolbarItemIdentifier NSToolbarSpaceItemIdentifier;
+// The system SDK declares these three without const.
+APPKIT_EXPORT NSToolbarItemIdentifier NSToolbarToggleSidebarItemIdentifier;
+APPKIT_EXPORT NSToolbarItemIdentifier
+        NSToolbarSidebarTrackingSeparatorItemIdentifier;
+APPKIT_EXPORT NSToolbarItemIdentifier NSToolbarWritingToolsItemIdentifier;
 
 @interface NSToolbarItem : NSObject <NSCopying, NSValidatedUserInterfaceItem> {
     NSToolbarItemIdentifier _itemIdentifier;

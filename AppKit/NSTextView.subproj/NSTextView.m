@@ -61,6 +61,14 @@ NSString *const NSTextViewDidChangeSelectionNotification =
 NSString *const NSOldSelectedCharacterRange = @"NSOldSelectedCharacterRange";
 NSString *const NSAllRomanInputSourcesLocaleIdentifier =
         @"NSAllRomanInputSourcesLocaleIdentifier";
+NSString *const NSTouchBarItemIdentifierTextStyle =
+        @"NSTouchBarItemIdentifierTextStyle";
+NSString *const NSTouchBarItemIdentifierTextAlignment =
+        @"NSTouchBarItemIdentifierTextAlignment";
+NSString *const NSTouchBarItemIdentifierTextColorPicker =
+        @"NSTouchBarItemIdentifierTextColorPicker";
+NSString *const NSTouchBarItemIdentifierTextList =
+        @"NSTouchBarItemIdentifierTextList";
 
 @interface NSLayoutManager (NSLayoutManager_visualKeyboardMovement)
 - (NSRange) _softLineRangeForCharacterAtIndex: (NSUInteger) location;

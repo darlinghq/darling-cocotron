@@ -427,6 +427,7 @@ set(AppKit_sources
 	NSCandidateListTouchBarItem.m
 	NSCollectionViewFlowLayout.m
 	NSTouchBarItem.m
+	NSInspectorBarItemIdentifiers.m
 	NSLayoutConstraint.m
 	NSLayoutAnchor.m
 	NSAutoresizingMaskLayoutConstraint.m
