@@ -55,6 +55,7 @@ static const struct {
     {"NSSlider", 0x5c},
     {"NSImageView", 0x68},
     {"NSTableView", 0xe4},
+    {"NSOpenGLContext", 0xc},
     {"NSOutlineView", 0x14c},
     {"NSScrollView", 0x78},
     {"NSClipView", 0x84},
@@ -658,6 +659,39 @@ static void checkCopies(void) {
     [image release];
 }
 
+// An application's NSOpenGLContext subclass keeps its ivars after Apple's
+// 0xc bytes. The context is only allocated (no GL driver is needed): the
+// state AppKit keeps for a view must not touch the subclass's ivars.
+@interface NSOpenGLContext : NSObject {
+    void *_openGLContextLayout[2];
+}
+@end
+
+APP_SUBCLASS(AppOpenGLContext, NSOpenGLContext)
+
+@interface NSObject (LegacyLayoutOpenGLAPI)
+- (void) setView: (id) view;
+- (id) view;
+@end
+
+static void checkOpenGLContext(void) {
+#if !__OBJC2__
+    expect(CANARY_OFFSET(AppOpenGLContext) == 0xc, "test declares NSOpenGLContext as 0xc bytes");
+#endif
+    AppOpenGLContext *context = [AppOpenGLContext alloc];
+    fillCanary(context->_canary);
+    id view = [[appKitClass("NSView") alloc] initWithFrame: NSMakeRect(0, 0, 10, 10)];
+    expect([context view] == nil, "NSOpenGLContext has no view yet");
+    [context setView: view];
+    expect([context view] == view, "NSOpenGLContext view");
+    expect(canaryIntact(context->_canary), "NSOpenGLContext subclass ivars intact");
+    [context setView: nil];
+    expect([context view] == nil, "NSOpenGLContext view cleared");
+    expect(canaryIntact(context->_canary), "NSOpenGLContext subclass ivars intact after clearing");
+    [view release];
+    // the context is not released: it was never initialized with a pixel format
+}
+
 // NSColor is an abstract class cluster root of one word on the legacy ABI;
 // the state of the concrete colors lives in their own classes
 @interface NSObject (LegacyLayoutColorAPI)
@@ -727,6 +761,7 @@ int main(void) {
         checkControlSubclasses();
         checkControllerSubclasses();
         checkCopies();
+        checkOpenGLContext();
         checkColor();
         checkFont();
     }
