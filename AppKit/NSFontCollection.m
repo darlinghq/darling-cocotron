@@ -32,3 +32,5 @@
 }
 
 @end
+
+NSNotificationName const NSFontCollectionDidChangeNotification = @"NSFontCollectionDidChange";

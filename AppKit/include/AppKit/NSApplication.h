@@ -120,6 +120,17 @@ typedef NS_OPTIONS(NSInteger, NSWindowListOptions) {
     NSWindowListOrderedFrontToBack = (1 << 0),
 };
 
+typedef NS_OPTIONS(NSUInteger, NSApplicationOcclusionState) {
+    NSApplicationOcclusionStateVisible = 1UL << 1,
+};
+
+typedef NS_OPTIONS(NSUInteger, NSRemoteNotificationType) {
+    NSRemoteNotificationTypeNone = 0,
+    NSRemoteNotificationTypeBadge = 1 << 0,
+    NSRemoteNotificationTypeSound = 1 << 1,
+    NSRemoteNotificationTypeAlert = 1 << 2,
+};
+
 // Legacy ObjC ABI (i386): instance size must stay 0x4c, Apple's; the ivars
 // before the extras sit at Apple's offsets. Add new state to the extra
 // struct, never as an ivar.
@@ -400,3 +411,13 @@ APPKIT_EXPORT BOOL NSPerformService(NSString *itemName,
 - (void) finishedTest: (NSString *) name;
 - (void) failedTest: (NSString *) name withFailure: (NSString *) failureReason;
 @end
+
+typedef NSString *NSAboutPanelOptionKey NS_TYPED_ENUM;
+
+APPKIT_EXPORT NSAboutPanelOptionKey const NSAboutPanelOptionCredits;
+APPKIT_EXPORT NSAboutPanelOptionKey const NSAboutPanelOptionApplicationName;
+APPKIT_EXPORT NSAboutPanelOptionKey const NSAboutPanelOptionApplicationIcon;
+APPKIT_EXPORT NSAboutPanelOptionKey const NSAboutPanelOptionVersion;
+APPKIT_EXPORT NSAboutPanelOptionKey const NSAboutPanelOptionApplicationVersion;
+APPKIT_EXPORT NSString * const NSApplicationLaunchRemoteNotificationKey;
+APPKIT_EXPORT NSNotificationName const NSApplicationDidChangeOcclusionStateNotification;

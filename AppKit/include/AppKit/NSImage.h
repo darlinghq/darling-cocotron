@@ -40,6 +40,14 @@ typedef NS_ENUM(NSInteger, NSImageResizingMode) {
     NSImageResizingModeTile = 1,
 };
 
+typedef NS_ENUM(NSUInteger, NSImageLoadStatus) {
+    NSImageLoadStatusCompleted,
+    NSImageLoadStatusCancelled,
+    NSImageLoadStatusInvalidData,
+    NSImageLoadStatusUnexpectedEOF,
+    NSImageLoadStatusReadError,
+};
+
 // Legacy ObjC ABI (i386): instance size must stay 0x1c, Apple's; the ivars
 // before the extras sit at Apple's offsets. Add new state to the extra
 // struct, never as an ivar.
@@ -319,3 +327,77 @@ APPKIT_EXPORT NSImageName const NSImageNameTouchBarAddTabTemplate;
 APPKIT_EXPORT NSImageHintKey const NSImageHintInterpolation;
 APPKIT_EXPORT NSImageHintKey const NSImageHintCTM NS_SWIFT_NAME(ctm);
 APPKIT_EXPORT NSImageHintKey const NSImageHintSymbolScale;
+
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarAddDetailTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarAddTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarAlarmTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarAudioInputMuteTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarAudioInputTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarAudioOutputMuteTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarAudioOutputVolumeHighTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarAudioOutputVolumeLowTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarAudioOutputVolumeMediumTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarAudioOutputVolumeOffTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarBookmarksTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarColorPickerFill;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarColorPickerFont;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarColorPickerStroke;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarCommunicationAudioTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarCommunicationVideoTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarComposeTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarDownloadTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarEnterFullScreenTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarExitFullScreenTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarFastForwardTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarFolderCopyToTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarFolderMoveToTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarFolderTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarGetInfoTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarGoBackTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarGoDownTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarGoForwardTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarGoUpTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarHistoryTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarIconViewTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarListViewTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarMailTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarNewFolderTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarNewMessageTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarOpenInBrowserTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarPlayPauseTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarQuickLookTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarRecordStartTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarRefreshTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarRemoveTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarRewindTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarRotateLeftTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarRotateRightTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarSearchTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarShareTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarSidebarTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarSkipAhead15SecondsTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarSkipAhead30SecondsTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarSkipAheadTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarSkipBack15SecondsTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarSkipBack30SecondsTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarSkipBackTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarSkipToEndTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarSkipToStartTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarSlideshowTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarTagIconTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarTextBoldTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarTextBoxTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarTextCenterAlignTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarTextItalicTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarTextJustifiedAlignTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarTextLeftAlignTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarTextListTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarTextRightAlignTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarTextStrikethroughTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarTextUnderlineTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarUserAddTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarUserGroupTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarUserTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarVolumeDownTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarVolumeUpTemplate;
+APPKIT_EXPORT NSImageName const NSImageNameTouchBarPlayheadTemplate;

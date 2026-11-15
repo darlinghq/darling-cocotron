@@ -21,6 +21,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSPrintInfo, NSWindow;
 
+typedef NS_ENUM(NSInteger, NSPageLayoutResult) {
+    NSPageLayoutResultCancelled = 0,
+    NSPageLayoutResultChanged,
+};
+
 @interface NSPageLayout : NSObject {
 }
 

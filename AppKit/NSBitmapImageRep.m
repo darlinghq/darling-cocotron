@@ -26,6 +26,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Onyx2D/O2ImageDestination.h>
 #include <limits.h>
 #include <stdint.h>
+#include <string.h>
 
 NSBitmapImageRepPropertyKey NSImageCompressionFactor =
         @"NSImageCompressionFactor";
@@ -642,31 +643,83 @@ NSBitmapImageRepPropertyKey NSImageCurrentFrame = @"NSImageCurrentFrame";
         planes[i] = NULL;
 }
 
-- (void) getPixel: (NSUInteger[]) pixel atX: (NSInteger) x y: (NSInteger) y {
-    NSUnimplementedMethod();
-}
-
-- (void) setPixel: (NSUInteger[]) pixel atX: (NSInteger) x y: (NSInteger) y {
+// Reads or writes the integer samples of one pixel. The pixel array holds one value per sample, in
+// plane order for planar data. Samples narrower than a byte are packed most significant bit first;
+// 16 and 32 bit samples use the byte order of the host. Floating point samples are not supported.
+- (void) _accessPixel: (NSUInteger[]) pixel atX: (NSInteger) x y: (NSInteger) y store: (BOOL) store {
     NSAssert(x >= 0 && x < [self pixelsWide], @"x out of bounds");
     NSAssert(y >= 0 && y < [self pixelsHigh], @"y out of bounds");
 
     [self createBitmapIfNeeded];
 
-    if (NS_EXTRA(NSBitmapImageRep, self)->_isPlanar) {
+    int bitsPerSample = [self bitsPerSample];
+
+    if ((_bitmapFormat & NSFloatingPointSamplesBitmapFormat) ||
+        !(bitsPerSample == 1 || bitsPerSample == 2 || bitsPerSample == 4 || bitsPerSample == 8 ||
+          bitsPerSample == 16 || bitsPerSample == 32)) {
         NSUnimplementedMethod();
-    } else {
-        if (_bitsPerPixel / _samplesPerPixel != 8) {
-            NSUnimplementedMethod();
+        return;
+    }
+
+    int i;
+
+    for (i = 0; i < _samplesPerPixel; i++) {
+        unsigned char *row;
+        NSUInteger bitOffset;
+
+        if (NS_EXTRA(NSBitmapImageRep, self)->_isPlanar) {
+            row = NS_EXTRA(NSBitmapImageRep, self)->_bitmapPlanes[i] + _bytesPerRow * y;
+            bitOffset = (NSUInteger) x * bitsPerSample;
+        } else {
+            row = NS_EXTRA(NSBitmapImageRep, self)->_bitmapPlanes[0] + _bytesPerRow * y;
+            bitOffset = (NSUInteger) x * _bitsPerPixel + (NSUInteger) i * bitsPerSample;
         }
-        unsigned char *bits =
-                NS_EXTRA(NSBitmapImageRep, self)->_bitmapPlanes[0] + _bytesPerRow * y + (x * _bitsPerPixel) / 8;
 
-        int i;
+        unsigned char *bits = row + bitOffset / 8;
 
-        for (i = 0; i < _samplesPerPixel; i++) {
-            bits[i] = pixel[i];
+        if (bitsPerSample < 8) {
+            int shift = 8 - bitsPerSample - (int) (bitOffset % 8);
+            unsigned char mask = ((1 << bitsPerSample) - 1) << shift;
+
+            if (store)
+                *bits = (*bits & ~mask) | ((pixel[i] << shift) & mask);
+            else
+                pixel[i] = (*bits & mask) >> shift;
+        } else if (bitsPerSample == 8) {
+            if (store)
+                *bits = pixel[i];
+            else
+                pixel[i] = *bits;
+        } else if (bitsPerSample == 16) {
+            uint16_t value;
+
+            if (store) {
+                value = pixel[i];
+                memcpy(bits, &value, sizeof(value));
+            } else {
+                memcpy(&value, bits, sizeof(value));
+                pixel[i] = value;
+            }
+        } else {
+            uint32_t value;
+
+            if (store) {
+                value = pixel[i];
+                memcpy(bits, &value, sizeof(value));
+            } else {
+                memcpy(&value, bits, sizeof(value));
+                pixel[i] = value;
+            }
         }
     }
+}
+
+- (void) getPixel: (NSUInteger[]) pixel atX: (NSInteger) x y: (NSInteger) y {
+    [self _accessPixel: pixel atX: x y: y store: NO];
+}
+
+- (void) setPixel: (NSUInteger[]) pixel atX: (NSInteger) x y: (NSInteger) y {
+    [self _accessPixel: pixel atX: x y: y store: YES];
 }
 
 - (NSColor *) colorAtX: (NSInteger) x y: (NSInteger) y {

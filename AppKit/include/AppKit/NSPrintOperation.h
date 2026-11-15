@@ -21,6 +21,18 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSPrintInfo, NSPrintPanel, NSView, NSGraphicsContext;
 
+typedef NS_ENUM(NSInteger, NSPrintingPageOrder) {
+    NSDescendingPageOrder = -1,
+    NSSpecialPageOrder = 0,
+    NSAscendingPageOrder = 1,
+    NSUnknownPageOrder = 2,
+};
+
+typedef NS_ENUM(NSInteger, NSPrintRenderingQuality) {
+    NSPrintRenderingQualityBest,
+    NSPrintRenderingQualityResponsive,
+};
+
 @interface NSPrintOperation : NSObject {
     NSView *_view;
     NSPrintInfo *_printInfo;

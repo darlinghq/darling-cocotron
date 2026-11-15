@@ -776,3 +776,5 @@ static inline CGFloat roundFloat(CGFloat value) {
 }
 
 @end
+
+NSNotificationName const NSPreferredScrollerStyleDidChangeNotification = @"NSPreferredScrollerStyleDidChangeNotification";

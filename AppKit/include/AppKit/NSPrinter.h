@@ -22,6 +22,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSArray, NSDictionary, NSString;
 
+typedef NS_ENUM(NSUInteger, NSPrinterTableStatus) {
+    NSPrinterTableOK = 0,
+    NSPrinterTableNotFound = 1,
+    NSPrinterTableError = 2,
+};
+
 @interface NSPrinter : NSObject {
     NSString *_name;
     NSString *_type;

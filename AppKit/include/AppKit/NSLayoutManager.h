@@ -38,6 +38,22 @@ typedef NS_ENUM(NSInteger, NSTextLayoutOrientation) {
     NSTextLayoutOrientationVertical,
 };
 
+typedef NS_OPTIONS(NSInteger, NSGlyphProperty) {
+    NSGlyphPropertyNull = (1 << 0),
+    NSGlyphPropertyControlCharacter = (1 << 1),
+    NSGlyphPropertyElastic = (1 << 2),
+    NSGlyphPropertyNonBaseCharacter = (1 << 3),
+};
+
+typedef NS_OPTIONS(NSInteger, NSControlCharacterAction) {
+    NSControlCharacterActionZeroAdvancement = (1 << 0),
+    NSControlCharacterActionWhitespace = (1 << 1),
+    NSControlCharacterActionHorizontalTab = (1 << 2),
+    NSControlCharacterActionLineBreak = (1 << 3),
+    NSControlCharacterActionParagraphBreak = (1 << 4),
+    NSControlCharacterActionContainerBreak = (1 << 5),
+};
+
 @interface NSLayoutManager : NSObject {
     NSTextStorage *_textStorage;
     NSGlyphGenerator *_glyphGenerator;

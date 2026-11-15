@@ -21,6 +21,17 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSMatrix, NSScroller;
 
+typedef NS_ENUM(NSUInteger, NSBrowserColumnResizingType) {
+    NSBrowserNoColumnResizing = 0,
+    NSBrowserAutoColumnResizing = 1,
+    NSBrowserUserColumnResizing = 2,
+};
+
+typedef NS_ENUM(NSUInteger, NSBrowserDropOperation) {
+    NSBrowserDropOn,
+    NSBrowserDropAbove,
+};
+
 @interface NSBrowser : NSControl {
     id _target;
     SEL _action;

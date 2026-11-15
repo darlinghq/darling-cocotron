@@ -42,7 +42,34 @@ typedef NSString *NSFontDescriptorFeatureKey;
 APPKIT_EXPORT NSFontDescriptorFeatureKey NSFontFeatureTypeIdentifierKey;
 APPKIT_EXPORT NSFontDescriptorFeatureKey NSFontFeatureSelectorIdentifierKey;
 
-typedef unsigned NSFontSymbolicTraits;
+typedef NS_OPTIONS(uint32_t, NSFontDescriptorSymbolicTraits) {
+    NSFontDescriptorTraitItalic = 1u << 0,
+    NSFontDescriptorTraitBold = 1u << 1,
+    NSFontDescriptorTraitExpanded = 1u << 5,
+    NSFontDescriptorTraitCondensed = 1u << 6,
+    NSFontDescriptorTraitMonoSpace = 1u << 10,
+    NSFontDescriptorTraitVertical = 1u << 11,
+    NSFontDescriptorTraitUIOptimized = 1u << 12,
+    NSFontDescriptorTraitTightLeading = 1u << 15,
+    NSFontDescriptorTraitLooseLeading = 1u << 16,
+
+    NSFontDescriptorClassMask = 0xF0000000,
+
+    NSFontDescriptorClassUnknown = 0u << 28,
+    NSFontDescriptorClassOldStyleSerifs = 1u << 28,
+    NSFontDescriptorClassTransitionalSerifs = 2u << 28,
+    NSFontDescriptorClassModernSerifs = 3u << 28,
+    NSFontDescriptorClassClarendonSerifs = 4u << 28,
+    NSFontDescriptorClassSlabSerifs = 5u << 28,
+    NSFontDescriptorClassFreeformSerifs = 7u << 28,
+    NSFontDescriptorClassSansSerif = 8u << 28,
+    NSFontDescriptorClassOrnamentals = 9u << 28,
+    NSFontDescriptorClassScripts = 10u << 28,
+    NSFontDescriptorClassSymbolic = 12u << 28,
+};
+
+// The older name of the same type.
+typedef NSFontDescriptorSymbolicTraits NSFontSymbolicTraits;
 
 enum {
     NSFontUnknownClass = 0 << 28,
@@ -130,3 +157,17 @@ APPKIT_EXPORT NSFontDescriptorSystemDesign const NSFontDescriptorSystemDesignRou
 - (NSFontDescriptor *) matchingFontDescriptorWithMandatoryKeys: (NSSet *) keys;
 
 @end
+
+typedef NSString *NSFontTextStyle NS_TYPED_ENUM;
+
+APPKIT_EXPORT NSFontTextStyle const NSFontTextStyleLargeTitle;
+APPKIT_EXPORT NSFontTextStyle const NSFontTextStyleTitle1;
+APPKIT_EXPORT NSFontTextStyle const NSFontTextStyleTitle2;
+APPKIT_EXPORT NSFontTextStyle const NSFontTextStyleTitle3;
+APPKIT_EXPORT NSFontTextStyle const NSFontTextStyleHeadline;
+APPKIT_EXPORT NSFontTextStyle const NSFontTextStyleSubheadline;
+APPKIT_EXPORT NSFontTextStyle const NSFontTextStyleBody;
+APPKIT_EXPORT NSFontTextStyle const NSFontTextStyleCallout;
+APPKIT_EXPORT NSFontTextStyle const NSFontTextStyleFootnote;
+APPKIT_EXPORT NSFontTextStyle const NSFontTextStyleCaption1;
+APPKIT_EXPORT NSFontTextStyle const NSFontTextStyleCaption2;

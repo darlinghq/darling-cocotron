@@ -196,3 +196,8 @@ APPKIT_EXPORT void NSShowAnimationEffect(NSAnimationEffect effect,
                                          NSPoint center, NSSize size,
                                          id delegate, SEL didEndSelector,
                                          void *context);
+typedef NS_ENUM(NSInteger, NSDisplayGamut) {
+    NSDisplayGamutSRGB = 1,
+    NSDisplayGamutP3,
+};
+

@@ -20,6 +20,11 @@
 #import <AppKit/AppKitExport.h>
 #import <Foundation/Foundation.h>
 
+typedef NS_ENUM(NSInteger, NSTableViewRowActionStyle) {
+    NSTableViewRowActionStyleRegular,
+    NSTableViewRowActionStyleDestructive,
+};
+
 @interface NSTableViewRowAction : NSObject
 
 @end

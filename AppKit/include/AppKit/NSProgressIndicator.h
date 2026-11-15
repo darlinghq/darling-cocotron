@@ -30,6 +30,13 @@ typedef NS_ENUM(NSUInteger, NSProgressIndicatorStyle) {
 #define NSProgressIndicatorBarStyle NSProgressIndicatorStyleBar
 #define NSProgressIndicatorSpinningStyle NSProgressIndicatorStyleSpinning
 
+typedef NS_ENUM(NSUInteger, NSProgressIndicatorThickness) {
+    NSProgressIndicatorPreferredThickness = 14,
+    NSProgressIndicatorPreferredSmallThickness = 10,
+    NSProgressIndicatorPreferredLargeThickness = 18,
+    NSProgressIndicatorPreferredAquaThickness = 12,
+};
+
 @interface NSProgressIndicator : NSView {
     double _minValue;
     double _maxValue;

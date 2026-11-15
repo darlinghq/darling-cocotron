@@ -36,6 +36,11 @@ typedef NS_ENUM(NSInteger, NSPopoverBehavior) {
     NSPopoverBehaviorSemitransient = 2,
 };
 
+typedef NS_ENUM(NSInteger, NSPopoverAppearance) {
+    NSPopoverAppearanceMinimal = 0,
+    NSPopoverAppearanceHUD = 1,
+};
+
 @interface NSPopover : NSResponder <NSCoding> {
     NSPopoverBehavior _behavior;
     BOOL _animates;
@@ -70,3 +75,5 @@ typedef NS_ENUM(NSInteger, NSPopoverBehavior) {
 - (void) popoverWillClose: (NSNotification *) notification;
 - (void) popoverDidClose: (NSNotification *) notification;
 @end
+
+APPKIT_EXPORT NSString * const NSPopoverCloseReasonKey;

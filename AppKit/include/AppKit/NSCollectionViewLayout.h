@@ -26,6 +26,21 @@ typedef NSString *NSCollectionViewDecorationElementKind;
 APPKIT_EXPORT NSCollectionViewSupplementaryElementKind const
         NSCollectionElementKindInterItemGapIndicator;
 
+typedef NS_ENUM(NSInteger, NSCollectionElementCategory) {
+    NSCollectionElementCategoryItem,
+    NSCollectionElementCategorySupplementaryView,
+    NSCollectionElementCategoryDecorationView,
+    NSCollectionElementCategoryInterItemGap,
+};
+
+typedef NS_ENUM(NSInteger, NSCollectionUpdateAction) {
+    NSCollectionUpdateActionInsert,
+    NSCollectionUpdateActionDelete,
+    NSCollectionUpdateActionReload,
+    NSCollectionUpdateActionMove,
+    NSCollectionUpdateActionNone,
+};
+
 @interface NSCollectionViewLayout : NSObject
 
 @end

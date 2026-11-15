@@ -37,6 +37,12 @@ APPKIT_EXPORT NSSharingServiceName const NSSharingServiceNamePostOnTwitter;
 @class NSImage, NSArray, NSMenu, NSView;
 @protocol NSSharingServiceDelegate, NSSharingServicePickerDelegate;
 
+typedef NS_ENUM(NSInteger, NSSharingContentScope) {
+    NSSharingContentScopeItem,
+    NSSharingContentScopePartial,
+    NSSharingContentScopeFull,
+};
+
 @interface NSSharingService : NSObject {
     NSString *_title;
     NSImage *_image;

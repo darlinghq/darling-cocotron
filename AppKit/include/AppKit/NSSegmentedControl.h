@@ -36,6 +36,13 @@ typedef NS_ENUM(NSInteger, NSSegmentStyle) {
     NSSegmentStyleSmallSquare = 6,
 };
 
+typedef NS_ENUM(NSInteger, NSSegmentDistribution) {
+    NSSegmentDistributionFit = 0,
+    NSSegmentDistributionFill,
+    NSSegmentDistributionFillEqually,
+    NSSegmentDistributionFillProportionally,
+};
+
 @interface NSSegmentedControl : NSControl
 
 - (NSInteger) segmentCount;

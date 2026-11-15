@@ -231,6 +231,12 @@ APPKIT_EXPORT const NSNotificationName NSWindowWillExitVersionBrowserNotificatio
 APPKIT_EXPORT const NSNotificationName NSWindowDidExitVersionBrowserNotification
         NS_SWIFT_NAME(NSWindow.didExitVersionBrowserNotification);
 
+typedef NS_ENUM(NSInteger, NSWindowUserTabbingPreference) {
+    NSWindowUserTabbingPreferenceManual,
+    NSWindowUserTabbingPreferenceAlways,
+    NSWindowUserTabbingPreferenceInFullScreen,
+};
+
 // Legacy ObjC ABI (i386): instance size must stay 0x84, Apple's; the ivars
 // before the extras sit at Apple's offsets. Add new state to the extra
 // struct, never as an ivar.
@@ -809,3 +815,6 @@ APPKIT_EXPORT const NSNotificationName NSWindowDidExitVersionBrowserNotification
 APPKIT_EXPORT const NSNotificationName NSWindowWillAnimateNotification;
 APPKIT_EXPORT const NSNotificationName NSWindowAnimatingNotification;
 APPKIT_EXPORT const NSNotificationName NSWindowDidAnimateNotification;
+
+APPKIT_EXPORT NSNotificationName const NSWindowDidChangeBackingPropertiesNotification;
+APPKIT_EXPORT NSString * const NSBackingPropertyOldColorSpaceKey;

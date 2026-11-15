@@ -21,6 +21,13 @@
 #import <Foundation/Foundation.h>
 #import <AppKit/NSViewController.h>
 
+typedef NS_ENUM(NSInteger, NSTabViewControllerTabStyle) {
+    NSTabViewControllerTabStyleSegmentedControlOnTop = 0,
+    NSTabViewControllerTabStyleSegmentedControlOnBottom,
+    NSTabViewControllerTabStyleToolbar,
+    NSTabViewControllerTabStyleUnspecified = -1,
+};
+
 @interface NSTabViewController : NSViewController
 
 @end

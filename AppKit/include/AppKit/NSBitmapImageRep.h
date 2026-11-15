@@ -85,6 +85,15 @@ APPKIT_EXPORT NSBitmapImageRepPropertyKey NSImageLoopCount;
 APPKIT_EXPORT NSBitmapImageRepPropertyKey NSImageCurrentFrameDuration;
 APPKIT_EXPORT NSBitmapImageRepPropertyKey NSImageCurrentFrame;
 
+typedef NS_ENUM(NSInteger, NSImageRepLoadStatus) {
+    NSImageRepLoadStatusUnknownType = -1,
+    NSImageRepLoadStatusReadingHeader = -2,
+    NSImageRepLoadStatusWillNeedAllData = -3,
+    NSImageRepLoadStatusInvalidData = -4,
+    NSImageRepLoadStatusUnexpectedEOF = -5,
+    NSImageRepLoadStatusCompleted = -6,
+};
+
 // Legacy ObjC ABI (i386): instance size must stay 0x34, Apple's; the ivars
 // before the extras keep their position in the original order. Add new state
 // to the extra struct, never as an ivar.

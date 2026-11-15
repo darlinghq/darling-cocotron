@@ -166,6 +166,16 @@ enum {
     NSUnderlinePatternDashDotDot = 0x400,
 };
 
+typedef NS_ENUM(NSInteger, NSWritingDirectionFormatType) {
+    NSWritingDirectionEmbedding = (0 << 1),
+    NSWritingDirectionOverride = (1 << 1),
+};
+
+typedef NS_ENUM(NSInteger, NSTextScalingType) {
+    NSTextScalingStandard = 0,
+    NSTextScalingiOS,
+};
+
 @interface NSAttributedString (NSAttributedString_AppKit)
 
 #pragma mark -

@@ -67,6 +67,12 @@ typedef NS_OPTIONS(NSUInteger, NSWorkspaceLaunchOptions) {
     NSWorkspaceLaunchDefault = NSWorkspaceLaunchAsync,
 };
 
+typedef NS_ENUM(NSInteger, NSWorkspaceAuthorizationType) {
+    NSWorkspaceAuthorizationTypeCreateSymbolicLink,
+    NSWorkspaceAuthorizationTypeSetAttributes,
+    NSWorkspaceAuthorizationTypeReplaceFile,
+};
+
 @interface NSWorkspace : NSObject {
     NSNotificationCenter *_notificationCenter;
 }
@@ -224,3 +230,12 @@ typedef NS_OPTIONS(NSUInteger, NSWorkspaceLaunchOptions) {
                       configuration: (NSDictionary *) configuration
                               error: (NSError **) error;
 @end
+
+APPKIT_EXPORT NSNotificationName const NSWorkspaceDidHideApplicationNotification;
+APPKIT_EXPORT NSNotificationName const NSWorkspaceDidUnhideApplicationNotification;
+APPKIT_EXPORT NSString * const NSWorkspaceVolumeLocalizedNameKey;
+APPKIT_EXPORT NSString * const NSWorkspaceVolumeURLKey;
+APPKIT_EXPORT NSString * const NSWorkspaceVolumeOldLocalizedNameKey;
+APPKIT_EXPORT NSString * const NSWorkspaceVolumeOldURLKey;
+APPKIT_EXPORT NSNotificationName const NSWorkspaceDidRenameVolumeNotification;
+APPKIT_EXPORT NSNotificationName const NSWorkspaceDidChangeFileLabelsNotification;

@@ -87,6 +87,18 @@ APPKIT_EXPORT NSString *const NSTextDidBeginEditingNotification;
 APPKIT_EXPORT NSString *const NSTextDidEndEditingNotification;
 APPKIT_EXPORT NSString *const NSTextDidChangeNotification;
 
+typedef NS_ENUM(NSInteger, NSTextMovement) {
+    NSTextMovementReturn = 0x10,
+    NSTextMovementTab = 0x11,
+    NSTextMovementBacktab = 0x12,
+    NSTextMovementLeft = 0x13,
+    NSTextMovementRight = 0x14,
+    NSTextMovementUp = 0x15,
+    NSTextMovementDown = 0x16,
+    NSTextMovementCancel = 0x17,
+    NSTextMovementOther = 0,
+};
+
 @interface NSText : NSView <NSChangeSpelling, NSIgnoreMisspelledWords>
 
 - (instancetype) initWithCoder: (NSCoder *) coder;
@@ -199,3 +211,5 @@ APPKIT_EXPORT NSString *const NSTextDidChangeNotification;
 @interface NSText (NSRTFDWriting)
 - (BOOL) writeRTFDToFile: (NSString *) path atomically: (BOOL) atomically;
 @end
+
+APPKIT_EXPORT NSString * const NSTextMovementUserInfoKey;

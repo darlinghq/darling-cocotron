@@ -102,6 +102,27 @@ typedef NS_OPTIONS(NSUInteger, NSTableViewAnimationOptions) {
     NSTableViewAnimationSlideRight = 0x40,
 };
 
+typedef NS_ENUM(NSUInteger, NSTableViewColumnAutoresizingStyle) {
+    NSTableViewNoColumnAutoresizing = 0,
+    NSTableViewUniformColumnAutoresizingStyle,
+    NSTableViewSequentialColumnAutoresizingStyle,
+    NSTableViewReverseSequentialColumnAutoresizingStyle,
+    NSTableViewLastColumnOnlyAutoresizingStyle,
+    NSTableViewFirstColumnOnlyAutoresizingStyle,
+};
+
+typedef NS_ENUM(NSInteger, NSTableViewDraggingDestinationFeedbackStyle) {
+    NSTableViewDraggingDestinationFeedbackStyleNone = -1,
+    NSTableViewDraggingDestinationFeedbackStyleRegular = 0,
+    NSTableViewDraggingDestinationFeedbackStyleSourceList = 1,
+    NSTableViewDraggingDestinationFeedbackStyleGap = 2,
+};
+
+typedef NS_ENUM(NSInteger, NSTableRowActionEdge) {
+    NSTableRowActionEdgeLeading,
+    NSTableRowActionEdgeTrailing,
+};
+
 // Legacy ObjC ABI (i386): instance size must stay 0xe4, Apple's; the ivars
 // before the extras sit at Apple's offsets. Add new state to the extra
 // struct, never as an ivar.

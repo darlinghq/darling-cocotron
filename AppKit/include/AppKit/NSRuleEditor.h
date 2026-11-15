@@ -4,6 +4,18 @@
 
 APPKIT_EXPORT NSString *const NSRuleEditorRowsDidChangeNotification;
 
+typedef NS_ENUM(NSUInteger, NSRuleEditorNestingMode) {
+    NSRuleEditorNestingModeSingle,
+    NSRuleEditorNestingModeList,
+    NSRuleEditorNestingModeCompound,
+    NSRuleEditorNestingModeSimple,
+};
+
+typedef NS_ENUM(NSUInteger, NSRuleEditorRowType) {
+    NSRuleEditorRowTypeSimple,
+    NSRuleEditorRowTypeCompound,
+};
+
 @interface NSRuleEditor : NSControl <NSCoding>
 
 @end

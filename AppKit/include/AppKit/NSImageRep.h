@@ -22,6 +22,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSArray, NSData, NSPasteboard, NSURL;
 
+typedef NS_ENUM(NSInteger, NSImageLayoutDirection) {
+    NSImageLayoutDirectionUnspecified = -1,
+    NSImageLayoutDirectionLeftToRight = 2,
+    NSImageLayoutDirectionRightToLeft = 3,
+};
+
 // Legacy ObjC ABI (i386): instance size must stay 0x1c, Apple's, which leaves
 // no room for further ivars or for a pointer to extra state: the two flags
 // share the storage unit of _bitsPerSample there (assign them YES/NO only).
