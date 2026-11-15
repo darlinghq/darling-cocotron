@@ -24,6 +24,7 @@ set_property(SOURCE
 	CGDataConsumer.m
 	CGDataProvider.m
 	CGDirectDisplay.m
+	CGDirectPalette.m
 	CGDisplayConfiguration.m
 	CGFont.m
 	CGFunction.m
@@ -79,6 +80,7 @@ set(CoreGraphics_sources
 	CGDataConsumer.m
 	CGDataProvider.m
 	CGDirectDisplay.m
+	CGDirectPalette.m
 	CGDisplayConfiguration.m
 	CGDisplayStream.m
 	src/CGEvent.c
