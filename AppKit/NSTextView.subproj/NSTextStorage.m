@@ -52,6 +52,7 @@ NSString *const NSTextStorageDidProcessEditingNotification =
 
 - (void) dealloc {
     [_layoutManagers release];
+    NS_EXTRA_FREE(NSTextStorage, self);
     [super dealloc];
 }
 
@@ -72,7 +73,7 @@ NSString *const NSTextStorageDidProcessEditingNotification =
 }
 
 - (NSRange) editedRange {
-    return _editedRange;
+    return NS_EXTRA(NSTextStorage, self)->_editedRange;
 }
 
 - (void) setDelegate: delegate {
@@ -94,7 +95,7 @@ NSString *const NSTextStorageDidProcessEditingNotification =
 
     if (_beginEditing == 0) {
         _editedMask = 0;
-        _editedRange = NSMakeRange(-1, -1);
+        NS_EXTRA(NSTextStorage, self)->_editedRange = NSMakeRange(-1, -1);
         _changeInLength = 0;
     }
 
@@ -112,7 +113,7 @@ NSString *const NSTextStorageDidProcessEditingNotification =
 }
 
 - (NSRange) invalidatedRange {
-    return _editedRange;
+    return NS_EXTRA(NSTextStorage, self)->_editedRange;
 }
 
 - (void) processEditing {
@@ -132,7 +133,7 @@ NSString *const NSTextStorageDidProcessEditingNotification =
             postNotificationName: NSTextStorageWillProcessEditingNotification
                           object: self];
 
-    [self fixAttributesInRange: _editedRange];
+    [self fixAttributesInRange: NS_EXTRA(NSTextStorage, self)->_editedRange];
 
     if ([_delegate
                 respondsToSelector: @selector(textStorageDidProcessEditing:)]) {
@@ -168,7 +169,7 @@ NSString *const NSTextStorageDidProcessEditingNotification =
         _editedMask = editedMask;
         _changeInLength = delta;
         range.length += delta;
-        _editedRange = range;
+        NS_EXTRA(NSTextStorage, self)->_editedRange = range;
 
         // Prevent any change to trigger more notification
         _beginEditing++;
@@ -179,10 +180,10 @@ NSString *const NSTextStorageDidProcessEditingNotification =
         _changeInLength += delta;
         range.length += delta;
 
-        if (_editedRange.location == -1 && _editedRange.length == -1)
-            _editedRange = range;
+        if (NS_EXTRA(NSTextStorage, self)->_editedRange.location == -1 && NS_EXTRA(NSTextStorage, self)->_editedRange.length == -1)
+            NS_EXTRA(NSTextStorage, self)->_editedRange = range;
         else
-            _editedRange = NSUnionRange(_editedRange, range);
+            NS_EXTRA(NSTextStorage, self)->_editedRange = NSUnionRange(NS_EXTRA(NSTextStorage, self)->_editedRange, range);
     }
 }
 

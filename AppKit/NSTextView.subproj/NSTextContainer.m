@@ -43,8 +43,8 @@ static const CGFloat NSTextContainerDefaultLineFragmentPadding = 5.0;
         _lineFragmentPadding = NSTextContainerDefaultLineFragmentPadding;
 
         int flags = [coder decodeIntForKey: @"NSTCFlags"];
-        _widthTracksTextView = (flags & 1) != 0;
-        _heightTracksTextView = (flags & 2) != 0;
+        NS_EXTRA(NSTextContainer, self)->_widthTracksTextView = (flags & 1) != 0;
+        NS_EXTRA(NSTextContainer, self)->_heightTracksTextView = (flags & 2) != 0;
         // TODO: maximumNumberOfLines
     } else {
         [NSException raise: NSInvalidArgumentException
@@ -59,21 +59,22 @@ static const CGFloat NSTextContainerDefaultLineFragmentPadding = 5.0;
     _textView = nil;
     _layoutManager = nil;
     _lineFragmentPadding = NSTextContainerDefaultLineFragmentPadding;
-    _maximumNumberOfLines = 0;
-    _widthTracksTextView = YES;
-    _heightTracksTextView = YES;
+    NS_EXTRA(NSTextContainer, self)->_maximumNumberOfLines = 0;
+    NS_EXTRA(NSTextContainer, self)->_widthTracksTextView = YES;
+    NS_EXTRA(NSTextContainer, self)->_heightTracksTextView = YES;
     return self;
 }
 
 - init {
     self = [self initWithContainerSize: NSZeroSize];
-    _widthTracksTextView = NO;
-    _heightTracksTextView = NO;
+    NS_EXTRA(NSTextContainer, self)->_widthTracksTextView = NO;
+    NS_EXTRA(NSTextContainer, self)->_heightTracksTextView = NO;
     return self;
 }
 
 - (void) dealloc {
     [[NSNotificationCenter defaultCenter] removeObserver: self];
+    NS_EXTRA_FREE(NSTextContainer, self);
     [super dealloc];
 }
 - (NSSize) containerSize {
@@ -90,11 +91,11 @@ static const CGFloat NSTextContainerDefaultLineFragmentPadding = 5.0;
 }
 
 - (BOOL) widthTracksTextView {
-    return _widthTracksTextView;
+    return NS_EXTRA(NSTextContainer, self)->_widthTracksTextView;
 }
 
 - (BOOL) heightTracksTextView {
-    return _heightTracksTextView;
+    return NS_EXTRA(NSTextContainer, self)->_heightTracksTextView;
 }
 
 - (NSLayoutManager *) layoutManager {
@@ -106,7 +107,7 @@ static const CGFloat NSTextContainerDefaultLineFragmentPadding = 5.0;
 }
 
 - (NSUInteger) maximumNumberOfLines {
-    return _maximumNumberOfLines;
+    return NS_EXTRA(NSTextContainer, self)->_maximumNumberOfLines;
 }
 
 - (void) setContainerSize: (NSSize) size {
@@ -117,7 +118,7 @@ static const CGFloat NSTextContainerDefaultLineFragmentPadding = 5.0;
 }
 
 - (void) setTextView: (NSTextView *) textView {
-    if (_heightTracksTextView || _widthTracksTextView) {
+    if (NS_EXTRA(NSTextContainer, self)->_heightTracksTextView || NS_EXTRA(NSTextContainer, self)->_widthTracksTextView) {
         if (_textView) {
             [[NSNotificationCenter defaultCenter]
                     removeObserver: self
@@ -127,7 +128,7 @@ static const CGFloat NSTextContainerDefaultLineFragmentPadding = 5.0;
     }
     _textView = textView;
     [_textView setTextContainer: self];
-    if (_heightTracksTextView || _widthTracksTextView) {
+    if (NS_EXTRA(NSTextContainer, self)->_heightTracksTextView || NS_EXTRA(NSTextContainer, self)->_widthTracksTextView) {
         if (_textView) {
             [_textView setPostsFrameChangedNotifications: YES];
             [[NSNotificationCenter defaultCenter]
@@ -149,21 +150,21 @@ static const CGFloat NSTextContainerDefaultLineFragmentPadding = 5.0;
     NSSize newSize = _size;
     NSSize tracked =
             [_textView _textContainerSizeForViewSize: [_textView frame].size];
-    if (_widthTracksTextView) {
+    if (NS_EXTRA(NSTextContainer, self)->_widthTracksTextView) {
         newSize.width = tracked.width;
     }
-    if (_heightTracksTextView) {
+    if (NS_EXTRA(NSTextContainer, self)->_heightTracksTextView) {
         newSize.height = tracked.height;
     }
     [self setContainerSize: newSize];
 }
 
 - (void) setWidthTracksTextView: (BOOL) flag {
-    if (flag != _widthTracksTextView) {
-        _widthTracksTextView = flag;
+    if (flag != NS_EXTRA(NSTextContainer, self)->_widthTracksTextView) {
+        NS_EXTRA(NSTextContainer, self)->_widthTracksTextView = flag;
         if (_textView) {
-            if (_widthTracksTextView) {
-                if (_heightTracksTextView == NO) {
+            if (NS_EXTRA(NSTextContainer, self)->_widthTracksTextView) {
+                if (NS_EXTRA(NSTextContainer, self)->_heightTracksTextView == NO) {
                     // Observe our textView frame changes
                     [_textView setPostsFrameChangedNotifications: YES];
                     [[NSNotificationCenter defaultCenter]
@@ -173,7 +174,7 @@ static const CGFloat NSTextContainerDefaultLineFragmentPadding = 5.0;
                                  object: _textView];
                 }
             } else {
-                if (_heightTracksTextView == NO) {
+                if (NS_EXTRA(NSTextContainer, self)->_heightTracksTextView == NO) {
                     [[NSNotificationCenter defaultCenter]
                             removeObserver: self
                                       name: NSViewFrameDidChangeNotification
@@ -185,11 +186,11 @@ static const CGFloat NSTextContainerDefaultLineFragmentPadding = 5.0;
 }
 
 - (void) setHeightTracksTextView: (BOOL) flag {
-    if (flag != _heightTracksTextView) {
-        _heightTracksTextView = flag;
+    if (flag != NS_EXTRA(NSTextContainer, self)->_heightTracksTextView) {
+        NS_EXTRA(NSTextContainer, self)->_heightTracksTextView = flag;
         if (_textView) {
-            if (_heightTracksTextView) {
-                if (_widthTracksTextView == NO) {
+            if (NS_EXTRA(NSTextContainer, self)->_heightTracksTextView) {
+                if (NS_EXTRA(NSTextContainer, self)->_widthTracksTextView == NO) {
                     // Observe our textView frame changes
                     [_textView setPostsFrameChangedNotifications: YES];
                     [[NSNotificationCenter defaultCenter]
@@ -199,7 +200,7 @@ static const CGFloat NSTextContainerDefaultLineFragmentPadding = 5.0;
                                  object: _textView];
                 }
             } else {
-                if (_widthTracksTextView == NO) {
+                if (NS_EXTRA(NSTextContainer, self)->_widthTracksTextView == NO) {
                     [[NSNotificationCenter defaultCenter]
                             removeObserver: self
                                       name: NSViewFrameDidChangeNotification
@@ -259,7 +260,7 @@ static const CGFloat NSTextContainerDefaultLineFragmentPadding = 5.0;
 }
 
 - (void) setMaximumNumberOfLines: (NSUInteger) maximumNumberOfLines {
-    _maximumNumberOfLines = maximumNumberOfLines;
+    NS_EXTRA(NSTextContainer, self)->_maximumNumberOfLines = maximumNumberOfLines;
 }
 
 - (BOOL) isSimpleRectangularTextContainer {
