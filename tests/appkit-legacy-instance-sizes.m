@@ -42,7 +42,9 @@ static const struct {
     size_t size;
 } legacySizes[] = {
     {"NSResponder", 0x8},
+    {"NSFont", 0x18},
     {"NSView", 0x50},
+    {"NSColor", 0x4},
     {"NSWindow", 0x84},
     {"NSPanel", 0x84},
     {"NSControl", 0x5c},
@@ -55,6 +57,7 @@ static const struct {
     {"NSSlider", 0x5c},
     {"NSImageView", 0x68},
     {"NSTableView", 0xe4},
+    {"NSOpenGLContext", 0xc},
     {"NSOutlineView", 0x14c},
     {"NSScrollView", 0x78},
     {"NSClipView", 0x84},
@@ -741,6 +744,96 @@ static void checkImageReps(void) {
     [rep release];
 }
 
+// An application's NSOpenGLContext subclass keeps its ivars after Apple's
+// 0xc bytes. The context is only allocated (no GL driver is needed): the
+// state AppKit keeps for a view must not touch the subclass's ivars.
+@interface NSOpenGLContext : NSObject {
+    void *_openGLContextLayout[2];
+}
+@end
+
+APP_SUBCLASS(AppOpenGLContext, NSOpenGLContext)
+
+@interface NSObject (LegacyLayoutOpenGLAPI)
+- (void) setView: (id) view;
+- (id) view;
+@end
+
+static void checkOpenGLContext(void) {
+#if !__OBJC2__
+    expect(CANARY_OFFSET(AppOpenGLContext) == 0xc, "test declares NSOpenGLContext as 0xc bytes");
+#endif
+    AppOpenGLContext *context = [AppOpenGLContext alloc];
+    fillCanary(context->_canary);
+    id view = [[appKitClass("NSView") alloc] initWithFrame: NSMakeRect(0, 0, 10, 10)];
+    expect([context view] == nil, "NSOpenGLContext has no view yet");
+    [context setView: view];
+    expect([context view] == view, "NSOpenGLContext view");
+    expect(canaryIntact(context->_canary), "NSOpenGLContext subclass ivars intact");
+    [context setView: nil];
+    expect([context view] == nil, "NSOpenGLContext view cleared");
+    expect(canaryIntact(context->_canary), "NSOpenGLContext subclass ivars intact after clearing");
+    [view release];
+    // the context is not released: it was never initialized with a pixel format
+}
+
+// NSColor is an abstract class cluster root of one word on the legacy ABI;
+// the state of the concrete colors lives in their own classes
+@interface NSObject (LegacyLayoutColorAPI)
++ (id) colorWithCalibratedRed: (CGFloat) red green: (CGFloat) green blue: (CGFloat) blue alpha: (CGFloat) alpha;
++ (id) colorWithCatalogName: (NSString *) catalog colorName: (NSString *) name;
++ (id) colorWithName: (NSString *) name dynamicProvider: (id (^)(id appearance)) provider;
++ (id) colorWithPatternImage: (id) image;
+- (NSString *) catalogNameComponent;
+- (NSString *) colorNameComponent;
+- (NSString *) colorSpaceName;
+- (id) patternImage;
+@end
+
+static void checkColor(void) {
+    id rgb = [appKitClass("NSColor") colorWithCalibratedRed: 0.25 green: 0.5 blue: 0.75 alpha: 1];
+    expect([[rgb catalogNameComponent] length] == 0, "NSColor component color has no catalog name");
+    expect([rgb colorSpaceName] != nil, "NSColor component color space name");
+
+    id image = [[appKitClass("NSImage") alloc] initWithSize: NSMakeSize(4, 4)];
+    id pattern = [appKitClass("NSColor") colorWithPatternImage: image];
+    expect([pattern patternImage] != nil, "NSColor pattern image");
+    [image release];
+
+    id catalog = [appKitClass("NSColor") colorWithCatalogName: @"System" colorName: @"controlTextColor"];
+    expect([[catalog catalogNameComponent] isEqual: @"System"], "NSColor catalog name");
+    expect([[catalog colorNameComponent] isEqual: @"controlTextColor"], "NSColor catalog color name");
+
+    id dynamic = [appKitClass("NSColor") colorWithName: @"legacy.dynamic"
+                                       dynamicProvider: ^id(id appearance) { return rgb; }];
+    expect([[dynamic colorNameComponent] isEqual: @"legacy.dynamic"], "NSColor dynamic color name");
+}
+
+// NSFont keeps its state in the extra struct: the legacy size must not cost
+// functionality
+@interface NSObject (LegacyLayoutFontAPI)
++ (id) fontWithName: (NSString *) name size: (CGFloat) size;
+- (CGFloat) pointSize;
+- (NSString *) fontName;
+- (CGFloat) ascender;
+- (CGFloat) descender;
+- (const CGFloat *) matrix;
+@end
+
+static void checkFont(void) {
+    id font = [appKitClass("NSFont") systemFontOfSize: 13];
+    expect([font pointSize] == 13, "NSFont pointSize");
+    expect([[font fontName] length] > 0, "NSFont fontName");
+    expect([font ascender] > 0 && [font descender] < 0, "NSFont ascender/descender");
+    expect([font matrix] != NULL && [font matrix][0] == 13 && [font matrix][3] == 13,
+           "NSFont matrix");
+    id same = [appKitClass("NSFont") fontWithName: [font fontName] size: 13];
+    expect([same pointSize] == 13 && [[same fontName] isEqual: [font fontName]],
+           "NSFont fontWithName:size:");
+    expect([font copy] == font, "NSFont copy returns itself");
+    [font release]; // the copy
+}
+
 int main(void) {
     setvbuf(stdout, NULL, _IONBF, 0);
     @autoreleasepool {
@@ -754,6 +847,9 @@ int main(void) {
         checkControllerSubclasses();
         checkCopies();
         checkImageReps();
+        checkOpenGLContext();
+        checkColor();
+        checkFont();
     }
     if (failures == 0)
         printf("PASS\n");

@@ -42,7 +42,6 @@ NSString *const NSDeletedObjectsKey = @"NSDeletedObjectsKey";
 NSString *const NSRefreshedObjectsKey = @"NSRefreshedObjectsKey";
 NSString *const NSInvalidatedObjectsKey = @"NSInvalidatedObjectsKey";
 NSString *const NSInvalidatedAllObjectsKey = @"NSInvalidatedAllObjectsKey";
-NSString *const NSAffectedObjectsErrorKey = @"NSAffectedObjectsErrorKey";
 
 @interface NSAtomicStore (private)
 - (void) _uniqueObjectID: (NSManagedObjectID *) objectID;

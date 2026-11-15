@@ -20,6 +20,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSColor.h>
 
 @interface NSColor_catalog : NSColor {
+#if !__OBJC2__ // NSColor's ivars, see NSColor.h
+    NSColorListName _catalogName;
+    NSColorName _colorName;
+#endif
     NSColor *_color;
 }
 

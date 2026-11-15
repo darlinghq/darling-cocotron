@@ -17,6 +17,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/NSCell.h>
 #import <ApplicationServices/ApplicationServices.h>
 #import <Foundation/Foundation.h>
@@ -54,14 +55,20 @@ typedef enum {
     NSFontAntialiasedIntegerAdvancementsRenderingMode,
 } NSFontRenderingMode;
 
+// Legacy ObjC ABI (i386): instance size must stay 0x18, Apple's; the ivars
+// before the extras keep their position in the original order. Add new state
+// to the extra struct, never as an ivar.
 @interface NSFont : NSObject <NSCopying, NSSecureCoding> {
     NSString *_name;
     CGFloat _pointSize;
-    CGFloat _matrix[6];
-    NSStringEncoding _encoding;
+    NS_LEGACY_IVAR_PAD(_NSFontReserved1, 8)
+    NS_EXTRA_IVARS_BEGIN(NSFont)
+        CGFloat _matrix[6];
+        NSStringEncoding _encoding;
 
-    CGFontRef _cgFont;
-    CTFontRef _ctFont;
+        CGFontRef _cgFont;
+        CTFontRef _ctFont;
+    NS_EXTRA_IVARS_END(NSFont)
 }
 
 + (CGFloat) systemFontSize;

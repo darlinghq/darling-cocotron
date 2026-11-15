@@ -17,10 +17,11 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Foundation/NSObject.h>
+#import <CoreData/NSFetchRequest.h>
 
 @class NSEntityDescription, NSPersistentStore, NSURL;
 
-@interface NSManagedObjectID : NSObject <NSCopying> {
+@interface NSManagedObjectID : NSObject <NSCopying, NSFetchRequestResult> {
     NSEntityDescription *_entity;
     BOOL _isTemporaryID;
     NSString *_storeIdentifier;

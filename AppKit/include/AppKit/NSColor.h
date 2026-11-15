@@ -48,10 +48,17 @@ enum {
     NSClearControlTint = 7,
 };
 
+// Legacy ObjC ABI (i386): instance size must stay 0x4, Apple's (the isa only;
+// NSColor is an abstract class cluster root). The state below belongs to the
+// concrete subclasses (NSColor_CGColor, NSColor_catalog, NSColor_dynamic),
+// which declare their share of it themselves on that ABI. Never add an ivar
+// to NSColor itself.
 @interface NSColor : NSObject <NSCopying, NSCoding> {
+#if __OBJC2__
     NSColorListName _catalogName;
     NSColorName _colorName;
     NSImage *_pattern;
+#endif
 }
 
 + (NSColor *) colorWithCGColor: (CGColorRef) color;

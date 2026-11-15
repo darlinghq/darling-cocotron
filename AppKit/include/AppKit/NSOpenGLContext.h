@@ -17,6 +17,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#import <AppKit/AppKitIvarLayout.h>
 #import <CoreGraphics/CGSubWindow.h>
 #import <Foundation/NSObject.h>
 #import <OpenGL/CGLInternal.h>
@@ -34,13 +35,18 @@ typedef enum {
     NSOpenGLCPStateValidation = 301,
 } NSOpenGLContextParameter;
 
+// Legacy ObjC ABI (i386): instance size must stay 0xc, Apple's; the ivars
+// before the extras keep their position in the original order. Add new state
+// to the extra struct, never as an ivar.
 @interface NSOpenGLContext : NSObject {
     NSOpenGLPixelFormat *_pixelFormat;
-    NSView *_view;
-    void *_glContext;
-    CGSubWindow *_subwindow;
-    CGLWindowRef _cglWindow;
-    BOOL _hasPrepared, _drawableAttachmentSucceeded;
+    NS_EXTRA_IVARS_BEGIN(NSOpenGLContext)
+        NSView *_view;
+        void *_glContext;
+        CGSubWindow *_subwindow;
+        CGLWindowRef _cglWindow;
+        BOOL _hasPrepared, _drawableAttachmentSucceeded;
+    NS_EXTRA_IVARS_END(NSOpenGLContext)
 }
 
 + (NSOpenGLContext *) currentContext;
