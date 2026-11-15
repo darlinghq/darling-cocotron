@@ -2508,6 +2508,21 @@ static NSTextView *s_targetTextView = nil;
 // 2, MAC-EVIDENCE V613).
 // Test: appkit-textview-editing-api.m (programmatic changes skip the delegate)
 - (void) setString: (NSString *) string {
+    // The new text starts from the view's own attributes: typing attributes that earlier
+    // typing or pasting changed are dropped (macOS 26.7.3, black-box probe: after pasting
+    // 20 point text, setString: leaves typing attributes and text at the view's font).
+    {
+        NSMutableDictionary *reset = [NSMutableDictionary dictionary];
+        if (NS_EXTRA(NSTextView, self)->_font != nil)
+            [reset setObject: NS_EXTRA(NSTextView, self)->_font forKey: NSFontAttributeName];
+        if (NS_EXTRA(NSTextView, self)->_textColor != nil)
+            [reset setObject: NS_EXTRA(NSTextView, self)->_textColor forKey: NSForegroundColorAttributeName];
+        id paragraph = [NS_EXTRA(NSTextView, self)->_typingAttributes objectForKey: NSParagraphStyleAttributeName];
+        if (paragraph != nil)
+            [reset setObject: paragraph forKey: NSParagraphStyleAttributeName];
+        [NS_EXTRA(NSTextView, self)->_typingAttributes release];
+        NS_EXTRA(NSTextView, self)->_typingAttributes = [reset retain];
+    }
     [self _replaceCharactersInRange: NSMakeRange(0, [NS_EXTRA(NSTextView, self)->_textStorage length])
                          withString: string];
     // this does not didChangeText

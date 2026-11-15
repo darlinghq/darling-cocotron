@@ -527,6 +527,8 @@ static Class _fontPanelFactory;
     NSFontFamily *family = [NSFontFamily fontFamilyWithName: [font familyName]];
     NSFontTypeface *typeface = [family typefaceWithName: [font fontName]];
     NSFontTraitMask traits = [typeface traits];
+    if ((traits & trait) == 0)
+        return font; // it has none of these traits already
     traits &= ~trait; // remove the traits
     NSFontTypeface *newface;
 
