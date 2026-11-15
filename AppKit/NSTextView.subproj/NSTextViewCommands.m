@@ -385,6 +385,36 @@ static CGFloat _NSTextViewKernStep(NSFont *font) {
     }
 }
 
+#pragma mark - Base writing direction
+
+// The writing direction of the whole text: the direction of the first
+// paragraph, natural when no paragraph style says otherwise. Setting it changes
+// every paragraph and the typing attributes, whatever the selection and
+// whether or not the view is editable (observed on macOS 10.14.4 and 26.7.3).
+// Test: appkit-textview-editing-api.m (base writing direction)
+- (NSWritingDirection) baseWritingDirection {
+    NSTextStorage *storage = [self textStorage];
+    NSParagraphStyle *style = [storage length] > 0
+            ? [storage attribute: NSParagraphStyleAttributeName atIndex: 0 effectiveRange: NULL]
+            : [[self typingAttributes] objectForKey: NSParagraphStyleAttributeName];
+    return style != nil ? [style baseWritingDirection] : NSWritingDirectionNatural;
+}
+
+- (void) setBaseWritingDirection: (NSWritingDirection) direction {
+    NSTextStorage *storage = [self textStorage];
+    if ([storage length] > 0)
+        [storage setBaseWritingDirection: direction range: NSMakeRange(0, [storage length])];
+
+    NSMutableDictionary *typing = [[[self typingAttributes] mutableCopy] autorelease];
+    if (typing == nil)
+        typing = [NSMutableDictionary dictionary];
+    NSParagraphStyle *style = [typing objectForKey: NSParagraphStyleAttributeName];
+    NSMutableParagraphStyle *changed = [[(style != nil ? style : [NSParagraphStyle defaultParagraphStyle]) mutableCopy] autorelease];
+    [changed setBaseWritingDirection: direction];
+    [typing setObject: changed forKey: NSParagraphStyleAttributeName];
+    [self setTypingAttributes: typing];
+}
+
 #pragma mark - Toggles
 
 - (void) toggleGrammarChecking: (id) sender {

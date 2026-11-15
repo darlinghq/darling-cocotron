@@ -145,6 +145,7 @@ typedef NS_ENUM(NSInteger, NSTextMovement) {
 - (void) setFont: (NSFont *) font range: (NSRange) range;
 - (void) setBaseWritingDirection: (NSWritingDirection) direction
                            range: (NSRange) range;
+@property(nonatomic) NSWritingDirection baseWritingDirection;
 
 - (void) setTextColor: (NSColor *) color range: (NSRange) range;
 

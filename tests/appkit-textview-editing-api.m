@@ -28,6 +28,8 @@
 - (void) toggleGrammarChecking: (id) sender;
 - (void) turnOffLigatures: (id) sender;
 - (void) clickedOnLink: (id) link atIndex: (NSUInteger) index;
+- (NSWritingDirection) baseWritingDirection;
+- (void) setBaseWritingDirection: (NSWritingDirection) direction;
 @end
 
 @interface NSTextView (V613TestPrivate)
@@ -498,10 +500,33 @@ static void testGeometry(void)
     [view release];
 }
 
+static NSWritingDirection paragraphDirection(NSTextView *view, NSUInteger index)
+{
+    NSParagraphStyle *style = [[view textStorage] attribute: NSParagraphStyleAttributeName atIndex: index effectiveRange: NULL];
+    return style != nil ? [style baseWritingDirection] : (NSWritingDirection) -99;
+}
+
+static void testBaseWritingDirection(void)
+{
+    NSTextView *view = makeView(@"abc\ndef\nghi");
+    expect([view baseWritingDirection] == NSWritingDirectionNatural, "the base writing direction starts out natural");
+    [view setSelectedRange: NSMakeRange(5, 1)];
+    [view setBaseWritingDirection: NSWritingDirectionRightToLeft];
+    expect(paragraphDirection(view, 0) == NSWritingDirectionRightToLeft && paragraphDirection(view, 5) == NSWritingDirectionRightToLeft &&
+                   paragraphDirection(view, 10) == NSWritingDirectionRightToLeft,
+           "setBaseWritingDirection: changes every paragraph, not just the selection's");
+    expect([view baseWritingDirection] == NSWritingDirectionRightToLeft, "and is read back");
+    [view setEditable: NO];
+    [view setBaseWritingDirection: NSWritingDirectionLeftToRight];
+    expect([view baseWritingDirection] == NSWritingDirectionLeftToRight, "also in a view that is not editable");
+    [view release];
+}
+
 int main(void)
 {
     @autoreleasepool {
         [NSApplication sharedApplication];
+        testBaseWritingDirection();
         testRangesForUserChange();
         testDelegateChangeRanges();
         testTypingAttributesDelegation();
