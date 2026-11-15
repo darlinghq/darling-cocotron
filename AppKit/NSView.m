@@ -1501,14 +1501,37 @@ static void postFrameChange(NSView *self) {
 - (void) _insertSubview: (NSView *) view atIndex: (NSInteger) index {
 
     [view retain];
-    if ([view superview] == self)
+
+    // Adding a view announces the move to the new superview first. A view
+    // that already has a superview, this one included, is taken out of it
+    // with -willRemoveSubview: and then added again, so the hooks run in the
+    // same order for a move between superviews and for a re-add.
+    // QUIRK: adding a view that is already a subview of this view
+    // (-addSubview:, -addSubview:positioned:relativeTo:, -replaceSubview:with:
+    // with such a view) runs all four hooks even when the order does not
+    // change. Not documented. Evidence: black-box observation (tier 2) on
+    // macOS 10.14.4 (x86_64 and i386); macOS 26.7.3 runs them only for
+    // -addSubview: that changes the order and not for the positioned
+    // variant, and the older behaviour is followed. Reorders done by
+    // -sortSubviewsUsingFunction:context: and -setSubviews: run none.
+    // Test: tests/appkit-view-subview-hooks.m
+    [view viewWillMoveToSuperview: self];
+
+    NSView *oldSuperview = [view superview];
+    if (oldSuperview == self) {
+        [self willRemoveSubview: view];
+        // the index refers to the subviews before the view was taken out
+        NSUInteger oldIndex = [_subviews indexOfObjectIdenticalTo: view];
         [_subviews removeObjectIdenticalTo: view];
-    else {
-        [view removeFromSuperview];
+        if (index != NSNotFound && oldIndex < (NSUInteger) index)
+            index--;
+    } else {
+        if (oldSuperview != nil) {
+            [oldSuperview setNeedsDisplayInRect: [view frame]];
+            [view _removeFromSuperviewSendingMoveHooks: NO];
+        }
 
         [view _setWindow: _window];
-
-        [view viewWillMoveToSuperview: self];
         [view _setSuperview: self];
     }
 
@@ -1521,6 +1544,8 @@ static void postFrameChange(NSView *self) {
     invalidateTransform(view);
 
     [self setNeedsDisplayInRect: [view frame]];
+
+    [self didAddSubview: view];
 
     [view viewDidMoveToSuperview];
 
@@ -1553,24 +1578,44 @@ static void postFrameChange(NSView *self) {
 }
 
 - (void) replaceSubview: (NSView *) oldView with: (NSView *) newView {
+    if (oldView == newView)
+        return;
+
     NSUInteger index = [_subviews indexOfObjectIdenticalTo: oldView];
 
+    // The new view is added at the position of the old one before the old
+    // one is removed (this is the order of the hooks on macOS).
     [oldView retain];
-    [oldView removeFromSuperview];
     [self _insertSubview: newView atIndex: index];
+    [oldView removeFromSuperview];
     [oldView release];
 }
 
 - (void) setSubviews: (NSArray *) array {
     // This method marks as needing display per doc.s
 
-    while ([_subviews count])
-        [[_subviews lastObject] removeFromSuperview];
+    NSArray *wanted = [[array copy] autorelease];
 
-    for (NSView *view in array) {
-        [self addSubview: view];
+    // Views that are not in the new list are removed, the new ones are added
+    // with the usual hooks.
+    for (NSView *view in [[_subviews copy] autorelease]) {
+        if ([wanted indexOfObjectIdenticalTo: view] == NSNotFound)
+            [view removeFromSuperview];
+    }
+
+    NSMutableArray *ordered = [NSMutableArray arrayWithCapacity: [wanted count]];
+    for (NSView *view in wanted) {
+        if ([view superview] != self)
+            [self addSubview: view];
+        if ([ordered indexOfObjectIdenticalTo: view] == NSNotFound)
+            [ordered addObject: view];
         [view setNeedsDisplay: YES];
     }
+
+    // Subviews that stay are only put in the order of the list, without
+    // hooks (macOS runs none for a reorder done through this method).
+    if (![_subviews isEqualToArray: ordered])
+        [_subviews setArray: ordered];
 }
 
 - (void) sortSubviewsUsingFunction:
@@ -1891,9 +1936,21 @@ static char inputContextKey;
 }
 
 - (void) removeFromSuperviewWithoutNeedingDisplay {
+    [self _removeFromSuperviewSendingMoveHooks: YES];
+}
+
+// With hooks the superview change is announced to the view itself, as
+// -viewWillMoveToSuperview: nil and -viewDidMoveToSuperview. Adding the view
+// to another superview announces its own move and passes NO.
+- (void) _removeFromSuperviewSendingMoveHooks: (BOOL) moveHooks {
     [[self retain] autorelease];
     NSView *removeFrom = [_superview retain];
+    moveHooks = moveHooks && removeFrom != nil;
     NSWindow *window = [[self window] retain];
+
+    if (moveHooks)
+        [self viewWillMoveToSuperview: nil];
+    [removeFrom willRemoveSubview: self];
 
     for (NSView *ancestor = _superview; ancestor != nil; ancestor = [ancestor superview]) {
         for (NSLayoutConstraint *constraint in [ancestor constraints]) {
@@ -1909,6 +1966,8 @@ static char inputContextKey;
     [self _setWindow: nil];
 
     [removeFrom _removeViewWithoutDisplay: self];
+    if (moveHooks)
+        [self viewDidMoveToSuperview];
     [window _invalidateTrackingAreas];
     [window release];
     [removeFrom release];
