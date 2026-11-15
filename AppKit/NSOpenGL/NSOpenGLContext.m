@@ -165,25 +165,25 @@ static inline void _clearCurrentContext() {
 - (void) _viewFrameDidChange: (NSNotification *) note {
     [[NSNotificationQueue defaultQueue]
             enqueueNotification: [NSNotification notificationWithName: NSViewGlobalFrameDidChangeNotification
-                                                               object: _view]
+                                                               object: NS_EXTRA(NSOpenGLContext, self)->_view]
                    postingStyle: NSPostWhenIdle
                    coalesceMask: NSNotificationCoalescingOnName | NSNotificationCoalescingOnSender
                        forModes: nil];
 }
 
 - (void) _startObservingView {
-    if (_view != nil)
+    if (NS_EXTRA(NSOpenGLContext, self)->_view != nil)
         [[NSNotificationCenter defaultCenter] addObserver: self
                                                  selector: @selector(_viewFrameDidChange:)
                                                      name: NSViewFrameDidChangeNotification
-                                                   object: _view];
+                                                   object: NS_EXTRA(NSOpenGLContext, self)->_view];
 }
 
 - (void) _stopObservingView {
-    if (_view != nil)
+    if (NS_EXTRA(NSOpenGLContext, self)->_view != nil)
         [[NSNotificationCenter defaultCenter] removeObserver: self
                                                         name: NSViewFrameDidChangeNotification
-                                                      object: _view];
+                                                      object: NS_EXTRA(NSOpenGLContext, self)->_view];
 }
 
 - (void) setView: (NSView *) view {
