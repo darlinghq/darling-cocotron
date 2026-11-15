@@ -151,7 +151,6 @@ set(AppKit_sources
 	nib.subproj/NSNibControlConnector.m
 	nib.subproj/NSNibOutletConnector.m
 	nib.subproj/NSNib.m
-	nib.subproj/NSNibArchive.m
 	nib.subproj/NSWindowTemplate.m
 	nib.subproj/NSViewTemplate.m
 	nib.subproj/NSMenuTemplate.m
@@ -163,7 +162,6 @@ set(AppKit_sources
 	nib.subproj/NSNibAuxiliaryActionConnector.m
 	nib.subproj/NSNibExternalObjectPlaceholder.m
 	nib.subproj/NSIBHelpConnector.m
-	nib.subproj/UINibCoding.m
 
 	NSTextFieldCell.m
 	NSFormCell.m
