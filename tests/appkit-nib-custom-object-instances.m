@@ -2,24 +2,21 @@
 //
 // The nib loader replaces each NSCustomObject placeholder by an instance while it decodes, and must
 // forget the placeholder afterwards. It used to learn of the replacement only from the unarchiver
-// delegate message unarchiver:willReplaceObject:withObject:, which the system NSKeyedUnarchiver does
-// not send for replaceObject:withObject:. The loader then made a second instance for every
-// placeholder, and the duplicates died with the NSNib. TextEdit's DocumentPropertiesPanelController
-// removes its key-value observer in dealloc and registers it only in windowDidLoad, so the dead
-// duplicate raised NSRangeException at launch. Terminal's nib has a placeholder of an NSApplication
-// subclass; the second instance is refused by NSApplication's singleton check ("NSApplication is a
-// singleton"). The test makes File's Owner that placeholder.
+// delegate message unarchiver:willReplaceObject:withObject:, and to rely on later decodes of the
+// placeholder returning the replacement. Black-box observation of macOS (26.7.3 x86_64 and 10.14.4
+// i386): -[NSKeyedUnarchiver replaceObject:withObject:] sends the delegate no message and a later
+// decode of the same archived object still returns the original object. The loader then made a second
+// instance for every placeholder, and the duplicates died with the NSNib. An object that removes a
+// key-value observer in dealloc which it registers only in windowDidLoad raises NSRangeException when
+// such a never-loaded duplicate is released; a placeholder of an NSApplication subclass is refused by
+// NSApplication's singleton check ("NSApplication is a singleton"). The test makes File's Owner that
+// placeholder.
 //
-// Run with no argument (the platform's unarchiver), with "silent-replace" (the unarchiver sends no
-// delegate message from replaceObject:withObject:, as the system one) and with "no-remap" (it does
-// nothing at all: later decodes of a replaced placeholder still return the placeholder). The system
-// NSKeyedUnarchiver behaves as "no-remap" (measured on the arm64e stage, Apple's Foundation): the loop
-// over NSObjectsKeys meets a placeholder the loop over NSNamesKeys already replaced, and
-// instantiates it again. The nib is built with NSKeyedArchiver from stand-in classes whose class
-// names are then rewritten to the nib classes.
-//
-// "silent-replace" keeps the platform unarchiver's remapping: after replaceObject:withObject: every
-// later decode of the placeholder yields the replacement.
+// Run with no argument (Darling's own unarchiver), with "silent-replace" (no delegate message from
+// replaceObject:withObject:, later decodes are remapped) and with "no-remap" (it does nothing at all:
+// later decodes of a replaced placeholder still return the placeholder, which is what macOS does).
+// The nib is built with NSKeyedArchiver from stand-in classes whose class names are then rewritten to
+// the nib classes.
 #import <AppKit/AppKit.h>
 #import <objc/runtime.h>
 #include <stdlib.h>
@@ -37,15 +34,15 @@ static void expect(BOOL condition, NSString *message)
 static NSString *const KeyPath = @"mainWindow.windowController.document";
 static int created, deallocated, unregisteredRemovals;
 
-// Same shape as TextEdit's panel controller: it starts observing only on demand, and always removes
+// An object that starts observing only on demand, and always removes
 // the observer on dealloc.
-@interface PanelController : NSObject
+@interface PanelController : NSObject {
+    BOOL _observing;
+}
 - (void)startObserving;
 @end
 
-@implementation PanelController {
-    BOOL _observing;
-}
+@implementation PanelController
 - (id)init
 {
     if ((self = [super init])) created++;
