@@ -183,7 +183,11 @@ typedef NS_ENUM(NSInteger, NSTableRowActionEdge) {
         NSDragOperation _draggingSourceMaskNonLocal;
 
         NSMutableDictionary *_registeredNibs;
-        NSMutableArray *_activeRowViews;
+        NSMutableDictionary *_cellViews;    // views in the table, keyed by cell position
+        NSMutableDictionary *_reuseQueues;  // identifier -> views waiting for reuse
+        NSString *_typeSelectString;
+        NSString *_toolTipSignature;
+        NSTimeInterval _typeSelectTime;
 
         NSTableColumn *_highlightedTableColumn; // not retained
         NSMutableDictionary *_indicatorImages;
@@ -378,6 +382,30 @@ typedef NS_ENUM(NSInteger, NSTableRowActionEdge) {
 - (NSView *) tableView: (NSTableView *) tableView
     viewForTableColumn: (NSTableColumn *) tableColumn
                    row: (NSInteger) row;
+- (NSIndexSet *) tableView: (NSTableView *) tableView
+        selectionIndexesForProposedSelection: (NSIndexSet *) proposedSelectionIndexes;
+- (void) tableView: (NSTableView *) tableView didClickTableColumn: (NSTableColumn *) tableColumn;
+- (BOOL) tableView: (NSTableView *) tableView shouldReorderColumn: (NSInteger) columnIndex toColumn: (NSInteger) newColumnIndex;
+- (CGFloat) tableView: (NSTableView *) tableView sizeToFitWidthOfColumn: (NSInteger) column;
+- (NSString *) tableView: (NSTableView *) tableView
+          toolTipForCell: (NSCell *) cell
+                    rect: (NSRectPointer) rect
+             tableColumn: (NSTableColumn *) tableColumn
+                     row: (NSInteger) row
+           mouseLocation: (NSPoint) mouseLocation;
+- (BOOL) tableView: (NSTableView *) tableView shouldShowCellExpansionForTableColumn: (NSTableColumn *) tableColumn row: (NSInteger) row;
+- (BOOL) tableView: (NSTableView *) tableView
+        shouldTrackCell: (NSCell *) cell
+         forTableColumn: (NSTableColumn *) tableColumn
+                    row: (NSInteger) row;
+- (NSString *) tableView: (NSTableView *) tableView typeSelectStringForTableColumn: (NSTableColumn *) tableColumn row: (NSInteger) row;
+- (NSInteger) tableView: (NSTableView *) tableView
+        nextTypeSelectMatchFromRow: (NSInteger) startRow
+                             toRow: (NSInteger) endRow
+                         forString: (NSString *) searchString;
+- (BOOL) tableView: (NSTableView *) tableView
+        shouldTypeSelectForEvent: (NSEvent *) event
+         withCurrentSearchString: (NSString *) searchString;
 @end
 
 @interface NSObject (NSTableView_notifications)

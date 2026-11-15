@@ -33,6 +33,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @interface NSTableView (NSTableView_private)
 - (void) noteColumnDidResizeWithOldWidth: (CGFloat) oldWidth;
+- (void) _noteColumn: (NSTableColumn *) column didResizeFromWidth: (CGFloat) oldWidth;
+- (void) _sizeColumnToFit: (NSInteger) columnIndex;
+- (void) _moveColumn: (NSInteger) columnIndex toColumn: (NSInteger) newIndex notify: (BOOL) notify;
+- (void) _noteColumnDidMoveFrom: (NSInteger) oldIndex to: (NSInteger) newIndex;
 @end
 
 @implementation NSTableHeaderView
@@ -159,7 +163,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                                  fromView: nil];
     NSInteger clickedColumn = [self columnAtPoint: location];
 
-    if ([[_tableView delegate] respondsToSelector: @selector
+    if (clickedColumn != NSNotFound &&
+        [[_tableView delegate] respondsToSelector: @selector
                                (tableView:mouseDownInHeaderOfTableColumn:)])
         [[_tableView delegate] tableView: _tableView
                 mouseDownInHeaderOfTableColumn:
@@ -185,6 +190,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
                 if (![resizingColumn isResizable])
                     return;
+
+                // Double-clicking the divider fits the column to its contents
+                if ([theEvent clickCount] == 2) {
+                    [_tableView _sizeColumnToFit: i - 1];
+                    return;
+                }
 
                 _resizedColumn = i - 1;
                 location = [self convertPoint: [theEvent locationInWindow]
@@ -221,12 +232,54 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
                 [[self window] invalidateCursorRectsForView: self];
 
-                [_tableView
-                        noteColumnDidResizeWithOldWidth: resizedColumnWidth];
+                [_tableView _noteColumn: resizingColumn didResizeFromWidth: resizedColumnWidth];
 
                 _resizedColumn = -1;
                 return;
             }
+        }
+    }
+
+    if (clickedColumn == NSNotFound)
+        return;
+
+    // Dragging a header cell moves its column when the table allows reordering
+    if ([_tableView allowsColumnReordering]) {
+        id delegate = [_tableView delegate];
+        BOOL dragged = NO, mayMove = YES;
+        NSInteger current = clickedColumn;
+        NSPoint start = location;
+
+        do {
+            theEvent = [[self window] nextEventMatchingMask: NSLeftMouseUpMask | NSLeftMouseDraggedMask];
+            NSPoint point = [self convertPoint: [theEvent locationInWindow] fromView: nil];
+
+            if ([theEvent type] != NSLeftMouseDragged)
+                break;
+            if (!dragged) {
+                if (fabs(point.x - start.x) < 3.0)
+                    continue;
+                dragged = YES;
+                // The delegate is first asked about the column as a whole
+                if ([delegate respondsToSelector: @selector(tableView:shouldReorderColumn:toColumn:)])
+                    mayMove = [delegate tableView: _tableView shouldReorderColumn: clickedColumn toColumn: -1];
+            }
+            if (mayMove) {
+                NSInteger target = [self columnAtPoint: point];
+
+                if (target != NSNotFound && target != current &&
+                    (![delegate respondsToSelector: @selector(tableView:shouldReorderColumn:toColumn:)] ||
+                     [delegate tableView: _tableView shouldReorderColumn: current toColumn: target])) {
+                    [_tableView _moveColumn: current toColumn: target notify: NO];
+                    current = target;
+                }
+            }
+        } while ([theEvent type] != NSLeftMouseUp);
+
+        if (dragged) {
+            if (current != clickedColumn)
+                [_tableView _noteColumnDidMoveFrom: clickedColumn to: current];
+            return;
         }
     }
 
@@ -259,6 +312,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         } else
             [_tableView selectColumn: clickedColumn byExtendingSelection: NO];
     }
+
+    if ([[_tableView delegate] respondsToSelector: @selector(tableView:didClickTableColumn:)])
+        [[_tableView delegate] tableView: _tableView
+                     didClickTableColumn: [[_tableView tableColumns] objectAtIndex: clickedColumn]];
 
     [[[_tableView tableColumns] objectAtIndex: clickedColumn] _sort];
 }

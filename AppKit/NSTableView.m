@@ -47,6 +47,17 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
 - (BOOL) delegateShouldEditTableColumn: (NSTableColumn *) tableColumn
                                    row: (NSInteger) row;
 - (BOOL) delegateSelectionShouldChange;
+- (NSIndexSet *) _delegateFilteredSelection: (NSIndexSet *) proposed;
+- (BOOL) _userSelectRowIndexes: (NSIndexSet *) indexes byExtendingSelection: (BOOL) extend;
+- (void) _recycleAllCellViews;
+- (void) _sizeColumnToFit: (NSInteger) columnIndex;
+- (void) _moveColumn: (NSInteger) columnIndex toColumn: (NSInteger) newIndex notify: (BOOL) notify;
+- (void) _noteColumnDidMoveFrom: (NSInteger) oldIndex to: (NSInteger) newIndex;
+- (void) _recycleView: (NSView *) view;
+- (void) _recycleCellViewsOutsideRows: (NSRange) rows;
+- (NSView *) _cellViewAtColumn: (NSInteger) column row: (NSInteger) row make: (BOOL) make;
+- (BOOL) _typeSelectEvent: (NSEvent *) event;
+- (void) _updateToolTipAreas;
 - (void) noteSelectionIsChanging;
 - (void) noteSelectionDidChange;
 - (void) noteColumnDidResizeWithOldWidth: (CGFloat) oldWidth;
@@ -137,7 +148,8 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
         NS_EXTRA(NSTableView, self)->_selectedRowIndexes = [[NSIndexSet alloc] init];
         NS_EXTRA(NSTableView, self)->_selectedColumns = [[NSMutableArray alloc] init];
         NS_EXTRA(NSTableView, self)->_registeredNibs = [[NSMutableDictionary alloc] init];
-        NS_EXTRA(NSTableView, self)->_activeRowViews = [[NSMutableArray alloc] init];
+        NS_EXTRA(NSTableView, self)->_cellViews = [[NSMutableDictionary alloc] init];
+        NS_EXTRA(NSTableView, self)->_reuseQueues = [[NSMutableDictionary alloc] init];
         _editedColumn = -1;
         _editedRow = -1;
         NS_EXTRA(NSTableView, self)->_numberOfRows = -1;
@@ -171,6 +183,7 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
         _intercellSpacing = NSMakeSize(3.0, 2.0);
         _standardRowHeight = 16.0;
         NS_EXTRA(NSTableView, self)->_allowsColumnReordering = YES;
+        NS_EXTRA(NSTableView, self)->_allowsTypeSelect = YES;
         NS_EXTRA(NSTableView, self)->_allowsColumnResizing = YES;
         NS_EXTRA(NSTableView, self)->_columnAutoresizingStyle = NSTableViewUniformColumnAutoresizingStyle;
 
@@ -233,7 +246,8 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
     NS_EXTRA(NSTableView, self)->_selectedRowIndexes = [[NSIndexSet alloc] init];
     NS_EXTRA(NSTableView, self)->_selectedColumns = [[NSMutableArray alloc] init];
     NS_EXTRA(NSTableView, self)->_registeredNibs = [[NSMutableDictionary alloc] init];
-    NS_EXTRA(NSTableView, self)->_activeRowViews = [[NSMutableArray alloc] init];
+    NS_EXTRA(NSTableView, self)->_cellViews = [[NSMutableDictionary alloc] init];
+        NS_EXTRA(NSTableView, self)->_reuseQueues = [[NSMutableDictionary alloc] init];
     _editedColumn = -1;
     _editedRow = -1;
     NS_EXTRA(NSTableView, self)->_numberOfRows = -1;
@@ -242,6 +256,7 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
     NS_EXTRA(NSTableView, self)->_draggingSourceMaskNonLocal = NSDragOperationNone;
 
     NS_EXTRA(NSTableView, self)->_allowsColumnReordering = YES;
+    NS_EXTRA(NSTableView, self)->_allowsTypeSelect = YES;
     NS_EXTRA(NSTableView, self)->_allowsColumnResizing = YES;
     NS_EXTRA(NSTableView, self)->_columnAutoresizingStyle = NSTableViewLastColumnOnlyAutoresizingStyle;
     NS_EXTRA(NSTableView, self)->_allowsMultipleSelection = NO;
@@ -281,7 +296,10 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
     [NS_EXTRA(NSTableView, self)->_selectedColumns release];
     [NS_EXTRA(NSTableView, self)->_sortDescriptors release];
     [NS_EXTRA(NSTableView, self)->_registeredNibs release];
-    [NS_EXTRA(NSTableView, self)->_activeRowViews release];
+    [NS_EXTRA(NSTableView, self)->_cellViews release];
+    [NS_EXTRA(NSTableView, self)->_reuseQueues release];
+    [NS_EXTRA(NSTableView, self)->_typeSelectString release];
+    [NS_EXTRA(NSTableView, self)->_toolTipSignature release];
     [NS_EXTRA(NSTableView, self)->_indicatorImages release];
     NS_EXTRA_FREE(NSTableView, self);
     [super dealloc];
@@ -870,7 +888,40 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 }
 
 - (void) moveColumn: (NSInteger) columnIndex toColumn: (NSInteger) newIndex {
-    NSUnimplementedMethod();
+    [self _moveColumn: columnIndex toColumn: newIndex notify: YES];
+}
+
+- (void) _moveColumn: (NSInteger) columnIndex toColumn: (NSInteger) newIndex notify: (BOOL) notify {
+    NSInteger count = [_tableColumns count];
+
+    if (columnIndex < 0 || columnIndex >= count || newIndex < 0 || newIndex >= count)
+        [NSException raise: NSRangeException
+                    format: @"moveColumn:toColumn: index out of range (valid are 0 to %ld)", (long) count - 1];
+    if (columnIndex == newIndex)
+        return;
+
+    NSTableColumn *column = [[_tableColumns objectAtIndex: columnIndex] retain];
+
+    [_tableColumns removeObjectAtIndex: columnIndex];
+    [_tableColumns insertObject: column atIndex: newIndex];
+    [column release];
+
+    // The views of a view-based table sit at their columns' positions
+    [self _recycleAllCellViews];
+    [self setNeedsDisplay: YES];
+    [_headerView setNeedsDisplay: YES];
+    if (notify)
+        [self _noteColumnDidMoveFrom: columnIndex to: newIndex];
+}
+
+- (void) _noteColumnDidMoveFrom: (NSInteger) oldIndex to: (NSInteger) newIndex {
+    [[NSNotificationCenter defaultCenter]
+            postNotificationName: NSTableViewColumnDidMoveNotification
+                          object: self
+                        userInfo: [NSDictionary
+                                          dictionaryWithObjectsAndKeys:
+                                                  [NSNumber numberWithInteger: oldIndex], @"NSOldColumn",
+                                                  [NSNumber numberWithInteger: newIndex], @"NSNewColumn", nil]];
 }
 
 - (NSInteger) editedRow {
@@ -1362,6 +1413,8 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     NS_EXTRA(NSTableView, self)->_numberOfRows = -1;
     NSInteger numberOfRows = [self numberOfRows];
 
+    [self _recycleCellViewsOutsideRows: NSMakeRange(0, numberOfRows)];
+
     // There isn't much point in trying to validate the heights of
     // visible rows only, as the often used -rectOfColumn: needs them all.
     [self noteHeightOfRowsWithIndexesChanged:
@@ -1410,67 +1463,8 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
         [self _setSelectedRowIndexes: selection];
 }
 
-static const char cellViewsKey;
-static const char reusePoolKey;
-
-// The views the delegate handed out for the cells of a view-based table, by
-// "row,column" (group rows use "row,-1"); and the views taken out of the table
-// that makeViewWithIdentifier:owner: may hand out again, by identifier.
-- (NSMutableDictionary *) _lazyDictionaryForKey: (const void *) key {
-    NSMutableDictionary *dictionary = objc_getAssociatedObject(self, key);
-
-    if (dictionary == nil) {
-        dictionary = [NSMutableDictionary dictionary];
-        objc_setAssociatedObject(self, key, dictionary, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    }
-    return dictionary;
-}
-
-- (NSMutableDictionary *) _cellViewsByPosition {
-    return [self _lazyDictionaryForKey: &cellViewsKey];
-}
-
-- (void) _recycleView: (NSView *) view {
-    [view removeFromSuperview];
-    NSString *identifier = [view identifier];
-
-    if (identifier == nil)
-        return;
-
-    NSMutableDictionary *pool = [self _lazyDictionaryForKey: &reusePoolKey];
-    NSMutableArray *queue = [pool objectForKey: identifier];
-
-    if (queue == nil) {
-        queue = [NSMutableArray array];
-        [pool setObject: queue forKey: identifier];
-    }
-    if (![queue containsObject: view])
-        [queue addObject: view];
-}
-
-// Puts the view the delegate returned for a cell into the table. A different
-// view that stood at the cell before is taken out and becomes reusable.
-- (void) _placeCellView: (NSView *) view atRow: (NSInteger) row column: (NSInteger) column {
-    NSString *key = [NSString stringWithFormat: @"%ld,%ld", (long) row, (long) column];
-    NSMutableDictionary *cells = [self _cellViewsByPosition];
-    NSView *previous = [cells objectForKey: key];
-
-    if (previous != nil && previous != view)
-        [self _recycleView: previous];
-    [cells setObject: view forKey: key];
-    if ([view superview] != self)
-        [self addSubview: view];
-}
-
 - (void) reloadData {
-    for (NSView *view in NS_EXTRA(NSTableView, self)->_activeRowViews) {
-        [self _recycleView: view];
-    }
-    [NS_EXTRA(NSTableView, self)->_activeRowViews removeAllObjects];
-    for (NSView *view in [[self _cellViewsByPosition] allValues]) {
-        [self _recycleView: view];
-    }
-    [[self _cellViewsByPosition] removeAllObjects];
+    [self _recycleAllCellViews];
     [self noteNumberOfRowsChanged];
     [self setNeedsDisplay: YES];
     [_headerView setNeedsDisplay: YES];
@@ -1479,6 +1473,22 @@ static const char reusePoolKey;
 - (void) reloadDataForRowIndexes: (NSIndexSet *) rowIndexes
                    columnIndexes: (NSIndexSet *) columnIndexes
 {
+    // View-based tables ask for the views of the reloaded cells again
+    NSMutableDictionary *views = NS_EXTRA(NSTableView, self)->_cellViews;
+
+    for (NSNumber *key in [views allKeys]) {
+        unsigned long long value = [key unsignedLongLongValue];
+        NSInteger row = (NSInteger) (value >> 24);
+        NSInteger column = (NSInteger) (value & 0xFFFFFF);
+
+        if (![rowIndexes containsIndex: row])
+            continue;
+        // A group row's view spans the columns: any reloaded column reloads it
+        if (column != 0xFFFFFF && ![columnIndexes containsIndex: column])
+            continue;
+        [self _recycleView: [views objectForKey: key]];
+        [views removeObjectForKey: key];
+    }
     [self setNeedsDisplay: YES];
 }
 
@@ -1595,11 +1605,9 @@ static const char reusePoolKey;
 
         if ([self _isGroupRow: row]) {
             // A group row is one view over the whole row, asked for without a column
-            NSView *groupView = [_delegate tableView: self viewForTableColumn: nil row: row];
+            NSView *groupView = [self _cellViewAtColumn: 0 row: row make: YES];
 
             if (groupView != nil) {
-                [groupView setFrame: [self rectOfRow: row]];
-                [self _placeCellView: groupView atRow: row column: -1];
                 [groupView setHidden: NO];
                 [groupView displayRectIgnoringOpacity: [groupView bounds]];
             }
@@ -1607,12 +1615,9 @@ static const char reusePoolKey;
         }
 
         for (; drawThisColumn < NSMaxRange(visibleColumns); drawThisColumn++) {
-            NSTableColumn *column = [_tableColumns objectAtIndex: drawThisColumn];
-            NSRect cellRect = [self frameOfCellAtColumn: drawThisColumn row: row];
-            NSView *cellView = [_delegate tableView: self viewForTableColumn: column row: row];
+            NSView *cellView = [self _cellViewAtColumn: drawThisColumn row: row make: YES];
+
             if (cellView != nil) {
-                [cellView setFrame: cellRect];
-                [self _placeCellView: cellView atRow: row column: drawThisColumn];
                 [cellView setHidden: NO];
                 [cellView displayRectIgnoringOpacity: [cellView bounds]];
             }
@@ -1987,6 +1992,13 @@ static const char reusePoolKey;
         }
     }
 
+    if ([_delegate respondsToSelector: @selector(tableView:viewForTableColumn:row:)]) {
+        // Views of rows that are no longer visible leave the table for the reuse queue
+        [self _recycleCellViewsOutsideRows: [self rowsInRect: [self visibleRect]]];
+    } else if ([_delegate respondsToSelector: @selector(tableView:toolTipForCell:rect:tableColumn:row:mouseLocation:)]) {
+        [self _updateToolTipAreas];
+    }
+
     if ([self drawsGrid])
         [self drawGridInClipRect: clipRect];
 
@@ -2024,6 +2036,49 @@ static const char reusePoolKey;
     }
 }
 
+// Selection changes the user makes (clicks, arrow keys, type select) go through
+// the delegate. tableView:selectionIndexesForProposedSelection: takes
+// precedence; without it tableView:shouldSelectRow: is asked for each proposed
+// row. Programmatic changes (selectRowIndexes:byExtendingSelection:) are not
+// subject to the delegate.
+- (NSIndexSet *) _delegateFilteredSelection: (NSIndexSet *) proposed {
+    if ([_delegate respondsToSelector: @selector(tableView:selectionIndexesForProposedSelection:)]) {
+        NSIndexSet *result = [_delegate tableView: self selectionIndexesForProposedSelection: proposed];
+
+        return result != nil ? result : [NSIndexSet indexSet];
+    }
+
+    if ([_delegate respondsToSelector: @selector(tableView:shouldSelectRow:)]) {
+        NSMutableIndexSet *allowed = [[proposed mutableCopy] autorelease];
+
+        for (NSUInteger row = [proposed firstIndex]; row != NSNotFound; row = [proposed indexGreaterThanIndex: row]) {
+            if (![_delegate tableView: self shouldSelectRow: row])
+                [allowed removeIndex: row];
+        }
+        return allowed;
+    }
+
+    return proposed;
+}
+
+- (BOOL) _userSelectRowIndexes: (NSIndexSet *) indexes byExtendingSelection: (BOOL) extend {
+    NSIndexSet *current = NS_EXTRA(NSTableView, self)->_selectedRowIndexes;
+    NSMutableIndexSet *proposed = [[indexes mutableCopy] autorelease];
+
+    if (extend)
+        [proposed addIndexes: current];
+
+    NSIndexSet *result = [self _delegateFilteredSelection: proposed];
+
+    // A proposal the delegate rejected completely leaves the selection as it is
+    if ([result count] == 0 && [proposed count] > 0)
+        return NO;
+    if ([result isEqualToIndexSet: current])
+        return NO;
+    [self selectRowIndexes: result byExtendingSelection: NO];
+    return YES;
+}
+
 - (BOOL) delegateSelectionShouldChange {
     if ([_delegate respondsToSelector: @selector
                    (selectionShouldChangeInTableView:)])
@@ -2042,6 +2097,16 @@ static const char reusePoolKey;
     [[NSNotificationCenter defaultCenter]
             postNotificationName: NSTableViewSelectionDidChangeNotification
                           object: self];
+}
+
+- (void) _noteColumn: (NSTableColumn *) column didResizeFromWidth: (CGFloat) oldWidth {
+    [[NSNotificationCenter defaultCenter]
+            postNotificationName: NSTableViewColumnDidResizeNotification
+                          object: self
+                        userInfo: [NSDictionary
+                                          dictionaryWithObjectsAndKeys:
+                                                  [NSNumber numberWithFloat: oldWidth], @"NSOldWidth",
+                                                  column, @"NSTableColumn", nil]];
 }
 
 - (void) noteColumnDidResizeWithOldWidth: (CGFloat) oldWidth {
@@ -2079,15 +2144,20 @@ static const char reusePoolKey;
     NSTableColumn *clickedColumnObject =
             [_tableColumns objectAtIndex: NS_EXTRA(NSTableView, self)->_clickedColumn];
 
-    if (![self delegateShouldSelectTableColumn: clickedColumnObject])
-        return;
-    if (![self delegateShouldSelectRow: NS_EXTRA(NSTableView, self)->_clickedRow])
-        return;
-
     NSCell *clickedCell = [clickedColumnObject dataCellForRow: NS_EXTRA(NSTableView, self)->_clickedRow];
 
     [clickedCell setControlView: self];
-    if ([clickedCell isKindOfClass: [NSButtonCell class]]) {
+
+    // Button cells track the mouse by default; the delegate can change that for any cell
+    BOOL tracksCell = [clickedCell isKindOfClass: [NSButtonCell class]];
+
+    if ([_delegate respondsToSelector: @selector(tableView:shouldTrackCell:forTableColumn:row:)])
+        tracksCell = [_delegate tableView: self
+                          shouldTrackCell: clickedCell
+                           forTableColumn: clickedColumnObject
+                                      row: NS_EXTRA(NSTableView, self)->_clickedRow];
+
+    if (tracksCell) {
         [clickedCell
                 setObjectValue:
                         [self dataSourceObjectValueForTableColumn:
@@ -2099,14 +2169,17 @@ static const char reusePoolKey;
                                                            row: NS_EXTRA(NSTableView, self)->_clickedRow]
                              ofView: self
                        untilMouseUp: YES]) {
-            [clickedCell setNextState];
-            NSNumber *value = nil;
+            if ([clickedCell isKindOfClass: [NSButtonCell class]])
+                [clickedCell setNextState];
+            id value = nil;
             if ([clickedCell isKindOfClass: [NSPopUpButtonCell class]]) {
                 value = [NSNumber
                         numberWithInt: [(NSPopUpButtonCell *) clickedCell
                                                indexOfSelectedItem]];
-            } else {
+            } else if ([clickedCell isKindOfClass: [NSButtonCell class]]) {
                 value = [NSNumber numberWithInt: [clickedCell state]];
+            } else {
+                value = [clickedCell objectValue];
             }
             [self dataSourceSetObjectValue: value
                             forTableColumn: clickedColumnObject
@@ -2131,11 +2204,15 @@ static const char reusePoolKey;
             if ([self isRowSelected: NS_EXTRA(NSTableView, self)->_clickedRow]) { // deselect previously
                                                      // selected?
                 if ([self allowsEmptySelection] ||
-                    [self numberOfSelectedColumns] > 1)
-                    [self deselectRow: NS_EXTRA(NSTableView, self)->_clickedRow];
+                    [self numberOfSelectedColumns] > 1) {
+                    NSMutableIndexSet *remaining = [[[self selectedRowIndexes] mutableCopy] autorelease];
+
+                    [remaining removeIndex: NS_EXTRA(NSTableView, self)->_clickedRow];
+                    [self _userSelectRowIndexes: remaining byExtendingSelection: NO];
+                }
             } else if ([self allowsMultipleSelection]) {
-                [self selectRowIndexes: [NSIndexSet
-                                                indexSetWithIndex: NS_EXTRA(NSTableView, self)->_clickedRow]
+                [self _userSelectRowIndexes: [NSIndexSet
+                                                     indexSetWithIndex: NS_EXTRA(NSTableView, self)->_clickedRow]
                         byExtendingSelection: YES]; // add to selection
             }
         } else if ([event modifierFlags] & NSShiftKeyMask) {
@@ -2148,16 +2225,16 @@ static const char reusePoolKey;
                     startRow = NS_EXTRA(NSTableView, self)->_clickedRow;
                 }
 
-                [self selectRowIndexes:
-                                [NSIndexSet
-                                        indexSetWithIndexesInRange:
-                                                NSMakeRange(startRow,
-                                                            endRow - startRow +
-                                                                    1)]
+                [self _userSelectRowIndexes:
+                                      [NSIndexSet
+                                              indexSetWithIndexesInRange:
+                                                      NSMakeRange(startRow,
+                                                                  endRow - startRow +
+                                                                          1)]
                         byExtendingSelection: NO];
             } else
-                [self selectRowIndexes: [NSIndexSet
-                                                indexSetWithIndex: NS_EXTRA(NSTableView, self)->_clickedRow]
+                [self _userSelectRowIndexes: [NSIndexSet
+                                                     indexSetWithIndex: NS_EXTRA(NSTableView, self)->_clickedRow]
                         byExtendingSelection: NO];
         } else { // normal selection, allow for dragging
             BOOL dragging = NO;
@@ -2214,8 +2291,8 @@ static const char reusePoolKey;
                 // normal selection, allow for dragging
                 NSInteger firstClickedRow = NS_EXTRA(NSTableView, self)->_clickedRow;
 
-                [self selectRowIndexes: [NSIndexSet
-                                                indexSetWithIndex: NS_EXTRA(NSTableView, self)->_clickedRow]
+                [self _userSelectRowIndexes: [NSIndexSet
+                                                     indexSetWithIndex: NS_EXTRA(NSTableView, self)->_clickedRow]
                         byExtendingSelection: NO];
                 if ([self allowsMultipleSelection] == YES) {
                     do {
@@ -2233,7 +2310,7 @@ static const char reusePoolKey;
                             // we need to smooth out the selection granularity.
                             // on my slow system, the mouse moves too quickly
                             // for the NSEvents to show up for each row..
-                            NSInteger startRow, endRow, i;
+                            NSInteger startRow, endRow;
 
                             if (firstClickedRow > row) {
                                 endRow = firstClickedRow;
@@ -2243,16 +2320,9 @@ static const char reusePoolKey;
                                 endRow = row;
                             }
 
-                            for (i = 0; i < numberOfRows; i++) {
-                                if (i >= startRow && i <= endRow)
-                                    [self selectRowIndexes:
-                                                    [NSIndexSet
-                                                            indexSetWithIndex:
-                                                                    i]
-                                            byExtendingSelection: YES];
-                                else
-                                    [self deselectRow: i];
-                            }
+                            [self _userSelectRowIndexes:
+                                          [NSIndexSet indexSetWithIndexesInRange: NSMakeRange(startRow, endRow - startRow + 1)]
+                                    byExtendingSelection: NO];
                         }
 
                         [self noteSelectionIsChanging];
@@ -2291,7 +2361,8 @@ static const char reusePoolKey;
     }
 }
 
-- (void) _tightenUpColumn: (NSTableColumn *) column {
+// The width a column needs for its header and the contents of its cells.
+- (CGFloat) _naturalWidthOfColumn: (NSTableColumn *) column {
     NSInteger i, numberOfRows = [self numberOfRows];
     CGFloat minWidth = 0.0, width;
 
@@ -2310,8 +2381,28 @@ static const char reusePoolKey;
     width = [[[column headerCell] attributedStringValue] size].width;
     if (width > minWidth)
         minWidth = width;
+    return minWidth;
+}
 
-    [column setMinWidth: minWidth];
+// Double-clicking the divider after a column: the delegate may name the width.
+- (void) _sizeColumnToFit: (NSInteger) columnIndex {
+    NSTableColumn *column = [_tableColumns objectAtIndex: columnIndex];
+    CGFloat oldWidth = [column width], width;
+
+    if ([_delegate respondsToSelector: @selector(tableView:sizeToFitWidthOfColumn:)])
+        width = [_delegate tableView: self sizeToFitWidthOfColumn: columnIndex];
+    else if ([_delegate respondsToSelector: @selector(tableView:viewForTableColumn:row:)])
+        width = oldWidth; // views have no cell to measure
+    else
+        width = [self _naturalWidthOfColumn: column];
+
+    [column setWidth: width];
+    [self tile];
+    [self _noteColumn: column didResizeFromWidth: oldWidth];
+}
+
+- (void) _tightenUpColumn: (NSTableColumn *) column {
+    [column setMinWidth: [self _naturalWidthOfColumn: column]];
 }
 
 - (void) sizeToFit {
@@ -2415,29 +2506,210 @@ static const char reusePoolKey;
 }
 
 - (void) _moveUp: (BOOL) up extend: (BOOL) extend {
-
+    NSIndexSet *selected = NS_EXTRA(NSTableView, self)->_selectedRowIndexes;
+    NSInteger numberOfRows = [self numberOfRows];
     NSInteger rowToSelect = -1;
 
-    if ([NS_EXTRA(NSTableView, self)->_selectedRowIndexes count] == 0)
+    if ([selected count] == 0)
         rowToSelect = 0;
     else if (up) {
-        NSInteger first = [NS_EXTRA(NSTableView, self)->_selectedRowIndexes firstIndex];
+        NSInteger first = [selected firstIndex];
         if (first > 0)
             rowToSelect = first - 1;
         else if (!extend)
             rowToSelect = first;
     } else {
-        NSInteger last = [NS_EXTRA(NSTableView, self)->_selectedRowIndexes lastIndex];
-        if (last < [self numberOfRows] - 1)
+        NSInteger last = [selected lastIndex];
+        if (last < numberOfRows - 1)
             rowToSelect = last + 1;
         else if (!extend)
             rowToSelect = last;
     }
 
-    if (rowToSelect != -1) {
-        [self selectRow: rowToSelect byExtendingSelection: extend];
-        [self scrollRowToVisible: rowToSelect];
+    // Rows the delegate refuses are stepped over when moving without extending
+    while (rowToSelect >= 0 && rowToSelect < numberOfRows) {
+        NSIndexSet *proposed;
+
+        if (extend) {
+            NSInteger startRow = [self selectedRow] >= 0 ? [self selectedRow] : rowToSelect, endRow = rowToSelect;
+
+            if (startRow > endRow) {
+                endRow = startRow;
+                startRow = rowToSelect;
+            }
+            proposed = [NSIndexSet indexSetWithIndexesInRange: NSMakeRange(startRow, endRow - startRow + 1)];
+        } else
+            proposed = [NSIndexSet indexSetWithIndex: rowToSelect];
+
+        if (![self delegateSelectionShouldChange])
+            return;
+
+        NSIndexSet *result = [self _delegateFilteredSelection: proposed];
+
+        if ([result count] == 0 && !extend) {
+            rowToSelect += up ? -1 : 1;
+            continue;
+        }
+        if ([result count] > 0 && ![result isEqualToIndexSet: selected])
+            [self selectRowIndexes: result byExtendingSelection: NO];
+        if ([result count] > 0)
+            [self scrollRowToVisible: rowToSelect];
+        break;
     }
+}
+
+// Typing selects the next row whose text begins with what was typed. The
+// text of the cells comes from tableView:typeSelectStringForTableColumn:row:,
+// or, without it, from the values of cell-based columns. The documentation
+// does not say how long a pause ends a search: one second is used.
+#define NSTableViewTypeSelectPause 1.0
+- (NSString *) _typeSelectStringForColumn: (NSTableColumn *) column row: (NSInteger) row {
+    if ([_delegate respondsToSelector: @selector(tableView:typeSelectStringForTableColumn:row:)])
+        return [_delegate tableView: self typeSelectStringForTableColumn: column row: row];
+
+    id value = [self dataSourceObjectValueForTableColumn: column row: row];
+
+    if ([value isKindOfClass: [NSAttributedString class]])
+        return [value string];
+    return [value isKindOfClass: [NSString class]] ? value : nil;
+}
+
+- (BOOL) _typeSelectEvent: (NSEvent *) event {
+    NSInteger numberOfRows = [self numberOfRows];
+    NSString *characters = [event characters];
+    NSUInteger flags = [event modifierFlags];
+
+    if (!NS_EXTRA(NSTableView, self)->_allowsTypeSelect || _editingCell != nil || numberOfRows == 0 || [characters length] == 0 ||
+        (flags & (NSCommandKeyMask | NSControlKeyMask)))
+        return NO;
+
+    unichar first = [characters characterAtIndex: 0];
+
+    // Control characters and the private-use function keys do not type
+    if (first < 0x20 || first == 0x7F || (first >= 0xF700 && first <= 0xF8FF))
+        return NO;
+
+    NSTimeInterval now = [NSDate timeIntervalSinceReferenceDate];
+    NSString *current = NS_EXTRA(NSTableView, self)->_typeSelectString;
+
+    if (current != nil && now - NS_EXTRA(NSTableView, self)->_typeSelectTime > NSTableViewTypeSelectPause)
+        current = nil;
+
+    if ([_delegate respondsToSelector: @selector(tableView:shouldTypeSelectForEvent:withCurrentSearchString:)] &&
+        ![_delegate tableView: self shouldTypeSelectForEvent: event withCurrentSearchString: current])
+        return NO;
+
+    NSString *search = current != nil ? [current stringByAppendingString: characters] : characters;
+    NSInteger selectedRow = [self selectedRow];
+    NSInteger startRow = 0, endRow = 0;
+
+    if (selectedRow >= 0) {
+        // A search that goes on starts at the selected row; a new one after it
+        startRow = current != nil ? selectedRow : (selectedRow + 1) % numberOfRows;
+        endRow = current != nil ? 0 : selectedRow;
+    }
+
+    NSInteger match = -1;
+
+    if ([_delegate respondsToSelector: @selector(tableView:nextTypeSelectMatchFromRow:toRow:forString:)]) {
+        match = [_delegate tableView: self nextTypeSelectMatchFromRow: startRow toRow: endRow forString: search];
+    } else {
+        // The range includes the start row, excludes the end row and wraps; equal rows cover the table
+        NSInteger count = (endRow - startRow + numberOfRows) % numberOfRows;
+        NSInteger i;
+
+        if (count == 0)
+            count = numberOfRows;
+        for (i = 0; i < count && match < 0; i++) {
+            NSInteger row = (startRow + i) % numberOfRows;
+
+            // Only rows that can be selected are candidates
+            if ([[self _delegateFilteredSelection: [NSIndexSet indexSetWithIndex: row]] count] == 0)
+                continue;
+            for (NSTableColumn *column in _tableColumns) {
+                NSString *text = [self _typeSelectStringForColumn: column row: row];
+
+                if ([text length] > 0 &&
+                    [text rangeOfString: search
+                                options: NSAnchoredSearch | NSCaseInsensitiveSearch | NSDiacriticInsensitiveSearch].location != NSNotFound) {
+                    match = row;
+                    break;
+                }
+            }
+        }
+    }
+
+    if (match >= 0 && match < numberOfRows) {
+        [NS_EXTRA(NSTableView, self)->_typeSelectString release];
+        NS_EXTRA(NSTableView, self)->_typeSelectString = [search copy];
+        if ([self delegateSelectionShouldChange] &&
+            [self _userSelectRowIndexes: [NSIndexSet indexSetWithIndex: match] byExtendingSelection: NO])
+            [self scrollRowToVisible: match];
+    }
+    // A search that finds nothing keeps the text that last matched
+    NS_EXTRA(NSTableView, self)->_typeSelectTime = now;
+    return YES;
+}
+
+- (void) keyDown: (NSEvent *) event {
+    if ([self _typeSelectEvent: event])
+        return;
+
+    NSString *characters = [event charactersIgnoringModifiers];
+
+    if ([characters length] == 1) {
+        unichar key = [characters characterAtIndex: 0];
+
+        if (key == NSUpArrowFunctionKey || key == NSDownArrowFunctionKey) {
+            [self interpretKeyEvents: [NSArray arrayWithObject: event]];
+            return;
+        }
+    }
+    [super keyDown: event];
+}
+
+// Cell tool tips: the delegate names the text for the cell under the pointer.
+// Every visible cell of a cell-based table gets a tool tip area, which is
+// rebuilt when the visible cells change.
+- (void) _updateToolTipAreas {
+    NSRect visible = [self visibleRect];
+    NSRange rows = [self rowsInRect: visible], columns = [self columnsInRect: visible];
+    CGFloat widths = 0;
+
+    for (NSTableColumn *column in _tableColumns)
+        widths += [column width];
+
+    NSString *signature = [NSString stringWithFormat: @"%@ %@ %ld %lu %g", NSStringFromRange(rows), NSStringFromRange(columns),
+                                                      (long) [self numberOfRows], (unsigned long) [_tableColumns count], widths];
+
+    if ([signature isEqualToString: NS_EXTRA(NSTableView, self)->_toolTipSignature])
+        return;
+    [NS_EXTRA(NSTableView, self)->_toolTipSignature release];
+    NS_EXTRA(NSTableView, self)->_toolTipSignature = [signature copy];
+
+    [self removeAllToolTips];
+    for (NSInteger row = rows.location; row < (NSInteger) NSMaxRange(rows); row++)
+        for (NSInteger column = columns.location; column < (NSInteger) NSMaxRange(columns); column++)
+            [self addToolTipRect: [self frameOfCellAtColumn: column row: row] owner: self userData: NULL];
+}
+
+- (NSString *) view: (NSView *) view stringForToolTip: (NSToolTipTag) tag point: (NSPoint) point userData: (void *) data {
+    NSInteger row = [self rowAtPoint: point], column = [self columnAtPoint: point];
+
+    if (view != self || row < 0 || column < 0 ||
+        ![_delegate respondsToSelector: @selector(tableView:toolTipForCell:rect:tableColumn:row:mouseLocation:)] ||
+        [_delegate respondsToSelector: @selector(tableView:viewForTableColumn:row:)])
+        return nil;
+
+    NSRect rect = [self frameOfCellAtColumn: column row: row];
+    NSTableColumn *tableColumn = [_tableColumns objectAtIndex: column];
+
+    return [_delegate tableView: self
+                 toolTipForCell: [self preparedCellAtColumn: column row: row]
+                           rect: &rect
+                    tableColumn: tableColumn
+                            row: row
+                  mouseLocation: point];
 }
 
 - (void) moveUp: sender {
@@ -2560,44 +2832,128 @@ static const char reusePoolKey;
            [_delegate tableView: self isGroupRow: row];
 }
 
-- (NSView *) viewAtColumn: (NSInteger) column row: (NSInteger) row makeIfNecessary: (BOOL) makeIfNecessary {
-    if (column < 0 || column >= [_tableColumns count] ||
-        ![_delegate respondsToSelector: @selector(tableView:viewForTableColumn:row:)])
-        return nil;
+// The key of a view in _cellViews: its row and column, a group row's view
+// (which has no column) using the all-ones column.
+static NSNumber *CellViewKey(NSInteger row, NSInteger column, BOOL group) {
+    unsigned long long value = ((unsigned long long) row << 24) | (group ? 0xFFFFFF : ((unsigned long long) column & 0xFFFFFF));
 
-    NSView *view;
-    NSRect frame;
+    return [NSNumber numberWithUnsignedLongLong: value];
+}
 
-    if ([self _isGroupRow: row]) {
-        if (column != 0)
-            return nil;
-        view = [_delegate tableView: self viewForTableColumn: nil row: row];
-        frame = [self rectOfRow: row];
-    } else {
-        view = [_delegate tableView: self viewForTableColumn: [_tableColumns objectAtIndex: column] row: row];
-        frame = [self frameOfCellAtColumn: column row: row];
+// More than this many waiting views per identifier are let go: a delegate that
+// never asks for reused views would otherwise grow the queue on every reload.
+#define NSTableViewReuseQueueLimit 128
+
+// Takes a view out of the table. A view with an identifier waits for
+// makeViewWithIdentifier:owner: to hand it out again.
+- (void) _recycleView: (NSView *) view {
+    NSString *identifier = [view identifier];
+
+    [[view retain] autorelease];
+    [view removeFromSuperview];
+    if (identifier == nil)
+        return;
+
+    NSMutableArray *queue = [NS_EXTRA(NSTableView, self)->_reuseQueues objectForKey: identifier];
+
+    if (queue == nil) {
+        queue = [NSMutableArray array];
+        [NS_EXTRA(NSTableView, self)->_reuseQueues setObject: queue forKey: identifier];
     }
-    // The view sits in the table at its cell, as it does once drawn
-    if (view != nil) {
-        [view setFrame: frame];
-        [self _placeCellView: view atRow: row column: [self _isGroupRow: row] ? -1 : column];
+    if ([queue count] < NSTableViewReuseQueueLimit && ![queue containsObject: view])
+        [queue addObject: view];
+}
+
+- (void) _recycleAllCellViews {
+    NSMutableDictionary *views = NS_EXTRA(NSTableView, self)->_cellViews;
+
+    for (NSNumber *key in [views allKeys])
+        [self _recycleView: [views objectForKey: key]];
+    [views removeAllObjects];
+}
+
+- (void) _recycleCellViewsOutsideRows: (NSRange) rows {
+    NSMutableDictionary *views = NS_EXTRA(NSTableView, self)->_cellViews;
+
+    for (NSNumber *key in [views allKeys]) {
+        NSInteger row = (NSInteger) ([key unsignedLongLongValue] >> 24);
+
+        if (!NSLocationInRange(row, rows)) {
+            [self _recycleView: [views objectForKey: key]];
+            [views removeObjectForKey: key];
+        }
     }
+}
+
+// The view shown at a cell. It is asked of the delegate once, when the cell
+// becomes visible or is reloaded, and kept in the table until then.
+- (NSView *) _cellViewAtColumn: (NSInteger) column row: (NSInteger) row make: (BOOL) make {
+    BOOL group = [self _isGroupRow: row];
+    NSNumber *key = CellViewKey(row, column, group);
+    NSView *view = [NS_EXTRA(NSTableView, self)->_cellViews objectForKey: key];
+
+    if (view == nil && make) {
+        NSRect frame;
+
+        if (group) {
+            view = [_delegate tableView: self viewForTableColumn: nil row: row];
+            frame = [self rectOfRow: row];
+        } else {
+            view = [_delegate tableView: self viewForTableColumn: [_tableColumns objectAtIndex: column] row: row];
+            frame = [self frameOfCellAtColumn: column row: row];
+        }
+        if (view != nil) {
+            [view setFrame: frame];
+            [NS_EXTRA(NSTableView, self)->_cellViews setObject: view forKey: key];
+        }
+    } else if (view != nil) {
+        [view setFrame: group ? [self rectOfRow: row] : [self frameOfCellAtColumn: column row: row]];
+    }
+    if (view != nil && [view superview] != self)
+        [self addSubview: view];
     return view;
 }
 
-// Creates the view from the nib registered for the identifier, owned by the
-// given object. Returns nil when no nib is registered for it.
+- (NSView *) viewAtColumn: (NSInteger) column row: (NSInteger) row makeIfNecessary: (BOOL) makeIfNecessary {
+    if (![_delegate respondsToSelector: @selector(tableView:viewForTableColumn:row:)])
+        return nil;
+
+    // Bad indexes raise as on macOS: a row beyond the table is an NSTableViewException, a
+    // column beyond the columns an NSInternalInconsistencyException. A negative column
+    // gives nil here (macOS returns a view for -1, apparently the row's own).
+    if (row < 0 || row >= [self numberOfRows])
+        [NSException raise: @"NSTableViewException"
+                    format: @"Row index %ld out of row range (numberOfRows: %ld) for %@", (long) row, (long) [self numberOfRows], self];
+    if (column >= (NSInteger) [_tableColumns count])
+        [NSException raise: NSInternalInconsistencyException
+                    format: @"Invalid parameter not satisfying: column >= 0 && column < _columnCount"];
+    if (column < 0)
+        return nil;
+
+    // A group row has its view in the first column only
+    if (column != 0 && [self _isGroupRow: row])
+        return nil;
+    return [self _cellViewAtColumn: column row: row make: makeIfNecessary];
+}
+
+// Hands out a view for the identifier: one that left the table earlier, else
+// one made from the nib registered for the identifier, else nil. The caller
+// owns the placement; the table keeps track of the view once it is returned
+// from tableView:viewForTableColumn:row:.
 - (NSView *) makeViewWithIdentifier: (NSString *) identifier owner: (id) owner {
-    NSMutableArray *queue = identifier != nil ? [[self _lazyDictionaryForKey: &reusePoolKey] objectForKey: identifier] : nil;
+    if (identifier == nil)
+        return nil;
+
+    NSMutableArray *queue = [NS_EXTRA(NSTableView, self)->_reuseQueues objectForKey: identifier];
 
     if ([queue count] > 0) {
-        NSView *reused = [[[queue lastObject] retain] autorelease];
+        NSView *view = [[[queue lastObject] retain] autorelease];
 
         [queue removeLastObject];
-        return reused;
+        return view;
     }
 
-    NSNib *nib = identifier != nil ? [NS_EXTRA(NSTableView, self)->_registeredNibs objectForKey: identifier] : nil;
+    NSNib *nib = [NS_EXTRA(NSTableView, self)->_registeredNibs objectForKey: identifier];
     NSArray *topLevelObjects = nil;
 
     if (nib == nil || ![nib instantiateWithOwner: owner topLevelObjects: &topLevelObjects])
@@ -2607,7 +2963,6 @@ static const char reusePoolKey;
         if ([object isKindOfClass: [NSView class]]) {
             if ([object identifier] == nil)
                 [object setIdentifier: identifier];
-            [NS_EXTRA(NSTableView, self)->_activeRowViews addObject: object];
             return object;
         }
     }
