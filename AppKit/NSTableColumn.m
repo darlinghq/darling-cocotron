@@ -48,7 +48,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         NS_EXTRA(NSTableColumn, self)->_width = [keyed decodeFloatForKey: @"NSWidth"];
         NS_EXTRA(NSTableColumn, self)->_minWidth = [keyed decodeFloatForKey: @"NSMinWidth"];
         NS_EXTRA(NSTableColumn, self)->_maxWidth = [keyed decodeFloatForKey: @"NSMaxWidth"];
-        NS_EXTRA(NSTableColumn, self)->_isResizable = [keyed decodeBoolForKey: @"NSIsResizeable"];
+        [self setResizable: [keyed decodeBoolForKey: @"NSIsResizeable"]];
         NS_EXTRA(NSTableColumn, self)->_isEditable = [keyed decodeBoolForKey: @"NSIsEditable"];
     } else {
         // One layout in every class version, as recorded from Mac archives: identifier,
@@ -64,7 +64,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         NS_EXTRA(NSTableColumn, self)->_width = width;
         NS_EXTRA(NSTableColumn, self)->_minWidth = minWidth;
         NS_EXTRA(NSTableColumn, self)->_maxWidth = maxWidth;
-        NS_EXTRA(NSTableColumn, self)->_isResizable = resizable != 0;
+        [self setResizable: resizable != 0];
         NS_EXTRA(NSTableColumn, self)->_isEditable = editable != 0;
         NS_EXTRA(NSTableColumn, self)->_tableView = tableView;
     }
@@ -80,6 +80,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     NS_EXTRA(NSTableColumn, self)->_width = 100.0;
     NS_EXTRA(NSTableColumn, self)->_minWidth = 10.0;
     NS_EXTRA(NSTableColumn, self)->_maxWidth = FLT_MAX; // Doc.s say MAXFLOAT, mingw doesnt have MAXFLOAT yet
+    // A new column resizes with the table and by the user (macOS 26.7.3: resizingMask 3)
+    [self setResizable: YES];
 
     NS_EXTRA(NSTableColumn, self)->_headerCell = [[NSTableHeaderCell alloc] initTextCell: @""];
     NS_EXTRA(NSTableColumn, self)->_dataCell = [[NSTextFieldCell alloc] initTextCell: @""];
@@ -140,7 +142,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (BOOL) isResizable {
-    return NS_EXTRA(NSTableColumn, self)->_isResizable;
+    return (NS_EXTRA(NSTableColumn, self)->_resizingMask & NSTableColumnUserResizingMask) != 0;
 }
 
 - (BOOL) isEditable {
@@ -205,6 +207,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (void) setResizable: (BOOL) flag {
+    // macOS 26.7.3: setResizable:YES sets the mask to auto plus user resizing, NO clears it
+    NS_EXTRA(NSTableColumn, self)->_resizingMask = flag ? (NSTableColumnAutoresizingMask | NSTableColumnUserResizingMask) : NSTableColumnNoResizing;
     NS_EXTRA(NSTableColumn, self)->_isResizable = flag;
 }
 
