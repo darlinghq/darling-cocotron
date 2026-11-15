@@ -32,6 +32,14 @@ CGDataProviderRef CGDataProviderCreateWithCFData(CFDataRef data) {
     return (CGDataProviderRef)O2DataProviderCreateWithCFData(data);
 }
 
+// NULL for a NULL name and for a file that cannot be opened for reading
+// (observed on macOS 26.7.3 for a missing file).
+CGDataProviderRef CGDataProviderCreateWithFilename(const char *filename) {
+    if (filename == NULL)
+        return NULL;
+    return (CGDataProviderRef)O2DataProviderCreateWithFilename(filename);
+}
+
 COREGRAPHICS_EXPORT CGDataProviderRef
 CGDataProviderCreateWithData(void *info, const void *data, size_t size,
                              CGDataProviderReleaseDataCallback releaseCallback)

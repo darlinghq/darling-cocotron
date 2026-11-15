@@ -91,6 +91,8 @@ COREGRAPHICS_EXPORT bool CGColorSpaceUsesExtendedRange(CGColorSpaceRef space);
 // True if the space uses a transfer function defined in ITU-R BT.2100 (PQ or HLG).
 COREGRAPHICS_EXPORT bool CGColorSpaceUsesITUR_2100TF(CGColorSpaceRef space);
 COREGRAPHICS_EXPORT bool CGColorSpaceIsHLGBased(CGColorSpaceRef space);
+COREGRAPHICS_EXPORT bool CGColorSpaceIsHDR(CGColorSpaceRef space);
+COREGRAPHICS_EXPORT bool CGColorSpaceSupportsOutput(CGColorSpaceRef space);
 
 CF_IMPLICIT_BRIDGING_DISABLED
 

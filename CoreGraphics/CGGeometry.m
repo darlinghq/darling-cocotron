@@ -382,3 +382,16 @@ void CGRectDivide(CGRect rect, CGRect *slice, CGRect *remainder,
 bool CGFloatIsValid(CGFloat value) {
     return isfinite(value);
 }
+
+// The same rectangle with a non-negative width and height. A negative size
+// moves the origin by the size. Observed on macOS 26.7.3: CGRectNull and
+// CGRectInfinite come back unchanged, and a size of -0 becomes +0.
+CGRect CGRectStandardize(CGRect rect) {
+    if (rect.size.width < 0)
+        rect.origin.x += rect.size.width;
+    if (rect.size.height < 0)
+        rect.origin.y += rect.size.height;
+    rect.size.width = fabs(rect.size.width);
+    rect.size.height = fabs(rect.size.height);
+    return rect;
+}

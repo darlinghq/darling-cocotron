@@ -50,6 +50,14 @@ void CGContextBeginTransparencyLayer(CGContextRef context,
     O2ContextBeginTransparencyLayer((O2ContextRef)context, (NSDictionary *) unused);
 }
 
+// The rectangle only bounds the layer, a hint to the renderer, so the layer's
+// contents do not depend on it; it is not used to clip.
+void CGContextBeginTransparencyLayerWithRect(CGContextRef context, CGRect rect,
+                                             CFDictionaryRef auxiliaryInfo)
+{
+    CGContextBeginTransparencyLayer(context, auxiliaryInfo);
+}
+
 void CGContextEndTransparencyLayer(CGContextRef context) {
     O2ContextEndTransparencyLayer((O2ContextRef)context);
 }

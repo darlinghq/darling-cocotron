@@ -117,6 +117,7 @@ COREGRAPHICS_EXPORT CGImageRef CGImageCreateWithMask(CGImageRef self,
 COREGRAPHICS_EXPORT CGImageRef
 CGImageCreateWithMaskingColors(CGImageRef self, const CGFloat *components);
 
+COREGRAPHICS_EXPORT CFTypeID CGImageGetTypeID(void);
 COREGRAPHICS_EXPORT size_t CGImageGetWidth(CGImageRef self);
 COREGRAPHICS_EXPORT size_t CGImageGetHeight(CGImageRef self);
 COREGRAPHICS_EXPORT size_t CGImageGetBitsPerComponent(CGImageRef self);
