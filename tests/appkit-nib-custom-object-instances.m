@@ -87,20 +87,31 @@ static int applicationsAllocated;
 @end
 
 @interface TestCustomPlaceholder : NSObject <NSCoding>
+{
+    NSString *_className;
+}
 @property (copy) NSString *className;
 @end
 @implementation TestCustomPlaceholder
+@synthesize className = _className;
 - (void)encodeWithCoder:(NSCoder *)coder { [coder encodeObject:self.className forKey:@"NSClassName"]; }
 - (id)initWithCoder:(NSCoder *)coder { return [self init]; }
 @end
 
 @interface TestObjectData : NSObject <NSCoding>
+{
+    id _root;
+    NSArray *_objects;
+    NSArray *_names;
+    NSArray *_namedObjects;
+}
 @property (retain) id root;
 @property (retain) NSArray *objects;
 @property (retain) NSArray *names;        // NSNamesValues
 @property (retain) NSArray *namedObjects; // NSNamesKeys
 @end
 @implementation TestObjectData
+@synthesize root = _root, objects = _objects, names = _names, namedObjects = _namedObjects;
 - (void)encodeWithCoder:(NSCoder *)coder
 {
     NSMutableArray *parents = [NSMutableArray array];
