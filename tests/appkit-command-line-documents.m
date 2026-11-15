@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Lubos Dolezel
 //
-// A document path named on the command line reaches the application delegate through the NSOpen
-// user default that NSApplicationMain sets up; "-key value" pairs are not mistaken for documents.
+// A document path named on the command line reaches the application delegate when launching finishes;
+// "-key value" pairs are not mistaken for documents.
 // Run: appkit-command-line-documents -ApplePersistenceIgnoreState YES /tmp/one.txt /tmp/two.txt
 // Needs a display connection (NSApplicationMain starts the application). Prints PASS and exits 0.
 #import <AppKit/AppKit.h>
