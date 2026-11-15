@@ -156,8 +156,7 @@ static BOOL NSShowAllViews = NO;
 }
 
 + (NSFocusRingType) defaultFocusRingType {
-    NSUnimplementedMethod();
-    return 0;
+    return NSFocusRingTypeExterior;
 }
 
 typedef struct __VFlags {
@@ -798,7 +797,13 @@ static inline void buildTransformsIfNeeded(NSView *self) {
 }
 
 - (NSView *) ancestorSharedWithView: (NSView *) view {
-    NSUnimplementedMethod();
+    // The closest view that is the receiver, or an ancestor of it, and that
+    // is also the other view or one of its ancestors.
+    for (NSView *candidate = self; candidate != nil;
+            candidate = [candidate superview]) {
+        if ([view isDescendantOf: candidate])
+            return candidate;
+    }
     return nil;
 }
 
@@ -872,8 +877,8 @@ static inline void buildTransformsIfNeeded(NSView *self) {
 }
 
 - (BOOL) wantsDefaultClipping {
-    NSUnimplementedMethod();
-    return NO;
+    // Documented default: the view is clipped to its bounds before drawing.
+    return YES;
 }
 
 - (NSBitmapImageRep *) bitmapImageRepForCachingDisplayInRect: (NSRect) rect {
@@ -1580,11 +1585,11 @@ static void postFrameChange(NSView *self) {
 }
 
 - (void) didAddSubview: (NSView *) subview {
-    NSUnimplementedMethod();
+    // Override hook; the default implementation does nothing.
 }
 
 - (void) willRemoveSubview: (NSView *) subview {
-    NSUnimplementedMethod();
+    // Override hook; the default implementation does nothing.
 }
 
 - (void) setAutoresizesSubviews: (BOOL) flag {
@@ -1618,26 +1623,26 @@ static void postFrameChange(NSView *self) {
 }
 
 - (BOOL) acceptsFirstMouse: (NSEvent *) event {
-    NSUnimplementedMethod();
+    // Documented default: a click that activates the window isn't passed on.
     return NO;
 }
 
+// There are no touch devices on this platform, so no touches are ever
+// delivered; the flags are stored as the documented (deprecated) properties.
 - (BOOL) acceptsTouchEvents {
-    NSUnimplementedMethod();
-    return NO;
+    return NS_EXTRA(NSView, self)->_acceptsTouchEvents;
 }
 
 - (void) setAcceptsTouchEvents: (BOOL) accepts {
-    NSUnimplementedMethod();
+    NS_EXTRA(NSView, self)->_acceptsTouchEvents = accepts;
 }
 
 - (BOOL) wantsRestingTouches {
-    NSUnimplementedMethod();
-    return NO;
+    return NS_EXTRA(NSView, self)->_wantsRestingTouches;
 }
 
 - (void) setWantsRestingTouches: (BOOL) wants {
-    NSUnimplementedMethod();
+    NS_EXTRA(NSView, self)->_wantsRestingTouches = wants;
 }
 
 - (void) setToolTip: (NSString *) string {
@@ -1932,7 +1937,7 @@ static char inputContextKey;
 }
 
 - (BOOL) shouldDelayWindowOrderingForEvent: (NSEvent *) event {
-    NSUnimplementedMethod();
+    // Subclasses return YES to keep a click from bringing the window forward.
     return NO;
 }
 
@@ -2018,12 +2023,11 @@ static char inputContextKey;
 }
 
 - (BOOL) preservesContentDuringLiveResize {
-    NSUnimplementedMethod();
     return NO;
 }
 
 - (NSRect) rectPreservedDuringLiveResize {
-    NSUnimplementedMethod();
+    // Nothing is preserved unless a subclass opts in.
     return NSZeroRect;
 }
 
@@ -2785,7 +2789,8 @@ static NSView *viewBeingPrinted = nil;
 }
 
 - (BOOL) shouldDrawColor {
-    NSUnimplementedMethod();
+    // Documented default: views draw in colour, printing to a black and white
+    // device is the only case that turns it off.
     return YES;
 }
 
@@ -3574,6 +3579,148 @@ static NSMutableArray *installedViewLayoutGuides(NSView *view, BOOL create) {
         return;
     [recognizer _setView: nil];
     [NS_EXTRA(NSView, self)->_gestureRecognizers removeObjectIdenticalTo: recognizer];
+}
+
+@end
+
+@implementation NSView (NSViewHooks)
+
+- (void) prepareContentInRect: (NSRect) rect {
+    // The recommended area is simply adopted.
+    [self setPreparedContentRect: rect];
+}
+
++ (BOOL) isCompatibleWithResponsiveScrolling {
+    return YES;
+}
+
+- (NSRect) rectForSmartMagnificationAtPoint: (NSPoint) location
+                                     inRect: (NSRect) visibleRect
+{
+    // Documented default: no suggestion, which makes the scroll view fall
+    // back to its own smart magnification.
+    return NSZeroRect;
+}
+
+- (BOOL) allowsVibrancy {
+    return NO;
+}
+
+- (void) noteFocusRingMaskChanged {
+    // Only a view that is drawing a ring has anything to redraw. The ring is
+    // drawn outside the mask bounds, so invalidate a margin around them.
+    if ([[self window] firstResponder] != self)
+        return;
+
+    NSRect rect = NSInsetRect([self focusRingMaskBounds], -8, -8);
+    if (NSIsEmptyRect(rect))
+        rect = [self bounds];
+    [self setNeedsDisplayInRect: NSInsetRect(rect, -8, -8)];
+}
+
+- (void) willOpenMenu: (NSMenu *) menu withEvent: (NSEvent *) event {
+    // Notification hook; the default implementation does nothing.
+}
+
+- (void) didCloseMenu: (NSMenu *) menu withEvent: (NSEvent *) event {
+    // Notification hook; the default implementation does nothing.
+}
+
+@end
+
+@implementation NSView (NSViewLayerGeometry)
+
+- (BOOL) layerUsesCoreImageFilters {
+    return NS_EXTRA(NSView, self)->_layerUsesCoreImageFilters;
+}
+
+- (void) setLayerUsesCoreImageFilters: (BOOL) flag {
+    NS_EXTRA(NSView, self)->_layerUsesCoreImageFilters = flag;
+}
+
+// The layer's y axis points up, so a flipped view's y axis is mirrored within
+// its bounds to get to layer coordinates (and back, which is the same
+// mirroring).
+// QUIRK: macOS 10.14 mirrors like this; macOS 26 returns the value unchanged
+// for a layer-backed flipped view. We follow the older behaviour, as the
+// older platform is the wider one. Evidence: black-box observation on macOS
+// 10.14.4 and 26.7.3 (tier 2). Test: appkit-view-geometry-api.
+- (NSPoint) _layerPoint: (NSPoint) point {
+    if ([self layer] == nil || ![self isFlipped])
+        return point;
+    NSRect bounds = [self bounds];
+    point.y = NSMinY(bounds) + NSMaxY(bounds) - point.y;
+    return point;
+}
+
+- (NSPoint) convertPointToLayer: (NSPoint) point {
+    return [self _layerPoint: point];
+}
+
+- (NSPoint) convertPointFromLayer: (NSPoint) point {
+    return [self _layerPoint: point];
+}
+
+- (NSSize) convertSizeToLayer: (NSSize) size {
+    return size;
+}
+
+- (NSSize) convertSizeFromLayer: (NSSize) size {
+    return size;
+}
+
+- (NSRect) convertRectToLayer: (NSRect) rect {
+    if ([self layer] == nil || ![self isFlipped])
+        return rect;
+    NSRect bounds = [self bounds];
+    rect.origin.y = NSMinY(bounds) + NSMaxY(bounds) - NSMaxY(rect);
+    return rect;
+}
+
+- (NSRect) convertRectFromLayer: (NSRect) rect {
+    return [self convertRectToLayer: rect];
+}
+
+@end
+
+@implementation NSView (NSViewSafeAreas)
+
+- (BOOL) prefersCompactControlSizeMetrics {
+    return NS_EXTRA(NSView, self)->_prefersCompactControlSizeMetrics;
+}
+
+- (void) setPrefersCompactControlSizeMetrics: (BOOL) flag {
+    NS_EXTRA(NSView, self)->_prefersCompactControlSizeMetrics = flag;
+}
+
+- (NSEdgeInsets) additionalSafeAreaInsets {
+    return NS_EXTRA(NSView, self)->_additionalSafeAreaInsets;
+}
+
+- (void) setAdditionalSafeAreaInsets: (NSEdgeInsets) insets {
+    NS_EXTRA(NSView, self)->_additionalSafeAreaInsets = insets;
+}
+
+- (NSEdgeInsets) safeAreaInsets {
+    // No screen furniture overlaps views here, so only the additional
+    // insets remain.
+    return [self additionalSafeAreaInsets];
+}
+
+- (NSRect) safeAreaRect {
+    NSRect rect = [self bounds];
+    NSEdgeInsets insets = [self safeAreaInsets];
+    rect.origin.x += insets.left;
+    rect.size.width -= insets.left + insets.right;
+    // The insets are given from the visual top/bottom: with a flipped view
+    // the top is at the low y end.
+    if ([self isFlipped]) {
+        rect.origin.y += insets.top;
+    } else {
+        rect.origin.y += insets.bottom;
+    }
+    rect.size.height -= insets.top + insets.bottom;
+    return rect;
 }
 
 @end
