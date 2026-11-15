@@ -93,6 +93,9 @@ static void checkOldNames(void)
     expect(NSDefaultTokenStyle == NSTokenStyleDefault && NSPlainTextTokenStyle == NSTokenStylePlainSquared,
            "old NSTokenStyle names");
     expect(NSRatingLevelIndicatorStyle == NSLevelIndicatorStyleRating, "old level indicator names");
+    expect(NSLevelIndicatorStyleRelevancy == 0 && NSLevelIndicatorStyleContinuousCapacity == 1 &&
+                   NSLevelIndicatorStyleDiscreteCapacity == 2 && NSLevelIndicatorStyleRating == 3,
+           "NSLevelIndicatorStyle values");
 }
 
 int main(void)

@@ -21,10 +21,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSSliderCell.h>
 
 typedef NS_ENUM(NSUInteger, NSLevelIndicatorStyle) {
-    NSLevelIndicatorStyleRating,
-    NSLevelIndicatorStyleDiscreteCapacity,
-    NSLevelIndicatorStyleContinuousCapacity,
-    NSLevelIndicatorStyleRelevancy,
+    NSLevelIndicatorStyleRelevancy = 0,
+    NSLevelIndicatorStyleContinuousCapacity = 1,
+    NSLevelIndicatorStyleDiscreteCapacity = 2,
+    NSLevelIndicatorStyleRating = 3,
 };
 
 // Names used before the modern spellings; plain constants, so Swift does not see them.
