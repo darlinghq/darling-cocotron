@@ -6,7 +6,7 @@
 // Host-side helper for the x11-window-state tests: waits up to ten seconds for
 // the client window whose WM_NAME is argv[1], then prints how the X server
 // sees it:
-//   mapped=<0|1> motif=<none|flags:<hex> decorations:<hex>>
+//   mapped=<0|1> motif=<none|flags:<hex> functions:<hex> decorations:<hex>>
 // "motif" is the _MOTIF_WM_HINTS property the AppKit backend uses to ask the
 // window manager for no frame. Build: cc probe.c -lX11
 #include <X11/Xatom.h>
@@ -65,8 +65,8 @@ int main(int argc, char **argv) {
                            &data) == Success &&
         data != NULL && count >= 3) {
         long *words = (long *) data;
-        snprintf(motif, sizeof motif, "flags:%lx decorations:%lx", (unsigned long) words[0],
-                 (unsigned long) words[2]);
+        snprintf(motif, sizeof motif, "flags:%lx functions:%lx decorations:%lx",
+                 (unsigned long) words[0], (unsigned long) words[1], (unsigned long) words[2]);
     }
     if (data)
         XFree(data);

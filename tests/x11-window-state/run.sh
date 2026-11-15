@@ -12,7 +12,10 @@
 # NSWindowStyleMaskTitled is the style bit for a title bar. On macOS 26.7.3
 # a window whose mask lacks Titled has no title bar (frame and content height
 # are equal), while a titled window keeps its 32 point title bar when
-# titlebarAppearsTransparent is YES and titleVisibility is hidden.
+# titlebarAppearsTransparent is YES and titleVisibility is hidden. A mask with
+# Resizable but without Titled has no title bar on 26.7.3 but a 22 point one on
+# macOS 10.14.4; we follow 10.14.4, so under X11 it gets the full window
+# manager frame like a titled window. Closable alone and Borderless have none.
 set -euo pipefail
 here=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 mode=${1:?hidden or decorations}
@@ -43,11 +46,15 @@ hidden)
     ;;
 decorations)
     framed="motif=none"
-    frameless="motif=flags:2 decorations:0$"
+    frameless="motif=flags:2 functions:0 decorations:0$"
+    # Resizable without Titled gets the full frame too (follows Mac OS X 10.14)
     check deco-titled "$framed"
     check deco-borderless "$frameless"
-    check deco-untitled "$frameless"
-    check deco-titled-to-untitled "$frameless"
+    check deco-untitled "$framed"
+    check deco-untitled-fixed "$frameless"
+    check deco-borderless-resizable "$framed"
+    check deco-titled-to-untitled "$framed"
+    check deco-untitled-to-fixed "$frameless"
     check deco-untitled-to-titled "$framed"
     check deco-titled-transparent "$framed"
     ;;

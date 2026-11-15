@@ -605,12 +605,18 @@ static NSData *makeWindowIcon() {
     [self updateLayerPresentationHints];
 }
 
-// A window gets the window manager's frame only when its style mask has a
-// title bar (NSWindowStyleMaskTitled); a mask without that bit, borderless or
-// not, asks for none. The mask is passed in rather than read from _styleMask
-// because -setStyleMask: hands the new mask here before it stores it.
+// A window gets the window manager's full frame (with a title bar) when its
+// style mask has NSWindowStyleMaskTitled or NSWindowStyleMaskResizable; a mask
+// with neither bit asks for no frame. The mask is passed in rather than read
+// from _styleMask because -setStyleMask: hands the new mask here before it
+// stores it.
+//
+// Platform discrepancy: Mac OS X 10.14 treats a Resizable mask without Titled
+// (including Borderless|Resizable) like a titled one: it adds a 22 pt title
+// bar and the window can become key. macOS 26 shows no title bar for such
+// windows and they cannot become key. We follow 10.14.
 - (void) updateDecorationsForStyleMask: (NSUInteger) mask {
-    if (mask & NSWindowStyleMaskTitled)
+    if (mask & (NSWindowStyleMaskTitled | NSWindowStyleMaskResizable))
         XDeleteProperty(_display, _window,
                         XInternAtom(_display, "_MOTIF_WM_HINTS", False));
     else
@@ -622,8 +628,10 @@ static NSData *makeWindowIcon() {
                          (_styleMask & NSWindowStyleMaskResizable)) {
         [self updateSizeHints: mask];
     }
-    if (force || (mask & NSWindowStyleMaskTitled) !=
-                         (_styleMask & NSWindowStyleMaskTitled)) {
+    if (force ||
+        (mask & (NSWindowStyleMaskTitled | NSWindowStyleMaskResizable)) !=
+                (_styleMask &
+                 (NSWindowStyleMaskTitled | NSWindowStyleMaskResizable))) {
         [self updateDecorationsForStyleMask: mask];
     }
 

@@ -3,11 +3,12 @@
 
  Licensed under the MIT license, the same as the rest of this project.
 */
-// X11 backend: the window manager frames a window that has a title bar, and
-// only that. NSWindowStyleMaskTitled is the documented title bar bit; a mask
-// without it asks for no frame, at creation and after -setStyleMask:. A
-// titled window keeps its frame when its title bar is transparent and its
-// title hidden (the title bar region stays, see the macOS note in run.sh).
+// X11 backend: the window manager frames a window whose style mask has a
+// title bar (NSWindowStyleMaskTitled) or Resizable; a mask with neither bit
+// asks for no frame, at creation and after -setStyleMask:. Resizable without
+// Titled gets the full frame because Mac OS X 10.14 gives such a window a
+// title bar (macOS 26 does not). A titled window keeps its frame when its
+// title bar is transparent and its title hidden.
 // Run by x11-window-state/run.sh with DARLING_APPKIT_BACKEND=x11, which reads
 // _MOTIF_WM_HINTS from the X server with the host helper.
 #import <AppKit/AppKit.h>
@@ -28,10 +29,11 @@ static void spin(NSTimeInterval seconds) {
 static int column;
 
 static NSWindow *makeWindow(NSString *title, NSUInteger mask) {
-    NSWindow *window = [[NSWindow alloc] initWithContentRect: NSMakeRect(40 + 230 * column++, 200, 200, 120)
+    NSWindow *window = [[NSWindow alloc] initWithContentRect: NSMakeRect(40 + 230 * (column % 5), 100 + 180 * (column / 5), 200, 120)
                                                    styleMask: mask
                                                      backing: NSBackingStoreBuffered
                                                        defer: NO];
+    column++;
     [window setTitle: title];
     [window orderFront: nil];
     return window;
@@ -46,13 +48,17 @@ int main(void) {
         makeWindow(@"deco-titled", titled);
         makeWindow(@"deco-borderless", NSWindowStyleMaskBorderless);
         makeWindow(@"deco-untitled", untitled);
+        makeWindow(@"deco-untitled-fixed", NSWindowStyleMaskClosable);
+        makeWindow(@"deco-borderless-resizable", NSWindowStyleMaskBorderless | NSWindowStyleMaskResizable);
 
         NSWindow *toUntitled = makeWindow(@"deco-titled-to-untitled", titled);
+        NSWindow *toFixed = makeWindow(@"deco-untitled-to-fixed", untitled);
         NSWindow *toTitled = makeWindow(@"deco-untitled-to-titled", untitled);
         NSWindow *transparent = makeWindow(@"deco-titled-transparent", titled);
         spin(1);
 
         [toUntitled setStyleMask: untitled];
+        [toFixed setStyleMask: NSWindowStyleMaskClosable];
         [toTitled setStyleMask: titled];
         [transparent setTitlebarAppearsTransparent: YES];
         [transparent setTitleVisibility: NSWindowTitleHidden];
