@@ -209,6 +209,7 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 - (void) preferredScaleChanged: (uint32_t) scale120;
 - (void) windowScaleChanged: (WaylandWindow *) window;
 - (WaylandWindow *) popupParentForWindow: (WaylandWindow *) window;
+- (WaylandWindow *) levelParentForWindow: (WaylandWindow *) window;
 - (uint32_t) popupGrabSerialForParent: (WaylandWindow *) parent;
 - (struct wl_proxy *) seat;
 // Fills `result` and `proxies` with up to `max` outputs in -screens order: their

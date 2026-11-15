@@ -31,6 +31,7 @@
 #import "WaylandPointerLock.h"
 #import "WaylandProtocol.h"
 #import "WaylandWindow.h"
+#import "../DarlingWindowLevelPolicy.h"
 #import <CoreGraphics/CGSKeySymToUnicodePrivate.h>
 #import <CoreGraphics/CoreGraphicsPrivate.h>
 #import <CoreFoundation/CFNotificationCenter.h>
@@ -2088,6 +2089,26 @@ static NSUInteger modifierDeviceMask(int code) {
     return nil;
 }
 
+// The window a window of a raised level is made transient for: the application's key
+// window, else its main window, provided it is a mapped toplevel and naming it would
+// not make a window its own ancestor.
+- (WaylandWindow *) levelParentForWindow: (WaylandWindow *) window {
+    NSWindow *candidates[2] = {[NSApp keyWindow], [NSApp mainWindow]};
+
+    for (int i = 0; i < 2; i++) {
+        id platform = [candidates[i] platformWindow];
+        if (![platform isKindOfClass: [WaylandWindow class]] || ![platform isMapped] || [platform isPopup])
+            continue;
+        const void *ancestors[16];
+        int count = 0;
+        for (WaylandWindow *up = [platform levelParent]; up != nil && count < 16; up = [up levelParent])
+            ancestors[count++] = up;
+        if (DarlingWindowParentAllowed(window, platform, ancestors, count))
+            return platform;
+    }
+    return nil;
+}
+
 - (uint32_t) popupGrabSerialForParent: (WaylandWindow *) parent {
     if ([parent isPopup])
         return [parent popupGrabSerial];
@@ -2157,6 +2178,12 @@ static NSUInteger modifierDeviceMask(int code) {
 }
 
 - (void) windowUnmapped: (WaylandWindow *) window {
+    // The compositor reparents the window's transient children itself.
+    for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++) {
+        WaylandWindow *other = (WaylandWindow *) CFArrayGetValueAtIndex(_windows, i);
+        if ([other levelParent] == window)
+            [other levelParentUnmapped];
+    }
     if (_lockWindow == window) {
         [self releasePointerLock];
         [self performAfterDispatch: ^{ [self updatePointerLock]; }];

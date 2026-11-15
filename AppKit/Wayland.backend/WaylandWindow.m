@@ -20,6 +20,7 @@
 #import "WaylandSubWindow.h"
 #import "WaylandLibrary.h"
 #import "WaylandProtocol.h"
+#import "WaylandWindowLevel.h"
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSWindow.h>
 #import <AppKit/NSGraphicsContext.h>
@@ -246,6 +247,8 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
         _fullscreenRequested = NO;
         [self updateFullscreen];
         [self updateSizeLimits];
+        _levelParent = nil;
+        [self updateLevelParent];
 
         if (_display->_decorationManager != NULL && (_styleMask & NSWindowStyleMaskTitled)) {
             args[0].o = NULL;
@@ -371,6 +374,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     [self destroyBuffers];
 
     _mapped = NO;
+    _levelParent = nil;
     _configureUpdatePending = NO;
     _configured = NO;
     _activated = NO;
@@ -523,6 +527,36 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 
 - (void) setLevel: (int) value {
     _level = value;
+    [self updateLevelParent];
+}
+
+// xdg-shell cannot stack a window above arbitrary windows, but it can keep a
+// window in front of another toplevel of the application: a window whose level is
+// above the normal one but below the main menu's (floating panels, modal panels,
+// utility windows) is made transient for the key window, so it stays in front of
+// the window the user works in. Higher levels need a layering protocol that
+// xdg-shell does not have and stay ordinary windows (see DarlingWindowLevelPolicy.h).
+- (void) updateLevelParent {
+    if (_toplevel == NULL)
+        return;
+
+    WaylandWindow *parent = nil;
+    if (DarlingWindowRoleForLevel(_level) == DarlingWindowRoleTransient)
+        parent = [_display levelParentForWindow: self];
+    if (parent == _levelParent || (parent != nil && parent->_toplevel == NULL))
+        return;
+    _levelParent = parent;
+    WaylandToplevelSetParent(_toplevel, parent != nil ? parent->_toplevel : NULL);
+    [_display flush];
+}
+
+- (WaylandWindow *) levelParent {
+    return _levelParent;
+}
+
+// The compositor drops the relation when the parent unmaps.
+- (void) levelParentUnmapped {
+    _levelParent = nil;
 }
 
 - (void) updateTitle {
