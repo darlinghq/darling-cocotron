@@ -60,6 +60,30 @@ NS_EXTRA_DEALLOC(NSTextField)
     return label;
 }
 
++ (instancetype) wrappingLabelWithString: (NSString *) stringValue {
+    NSTextField *label = [[[self alloc] initWithFrame: NSZeroRect] autorelease];
+    [label setStringValue: (stringValue != nil) ? stringValue : @""];
+    [label setBezeled: NO];
+    [label setDrawsBackground: NO];
+    [label setEditable: NO];
+    [label setSelectable: YES];
+    [label setFont: [NSFont systemFontOfSize: [NSFont systemFontSize]]];
+    [label setLineBreakMode: NSLineBreakByWordWrapping];
+    return label;
+}
+
++ (instancetype) textFieldWithString: (NSString *) stringValue {
+    NSTextField *field = [[[self alloc] initWithFrame: NSZeroRect] autorelease];
+    [field setStringValue: (stringValue != nil) ? stringValue : @""];
+    [field setBezeled: YES];
+    [field setDrawsBackground: YES];
+    [field setEditable: YES];
+    [field setSelectable: YES];
+    [field setFont: [NSFont systemFontOfSize: [NSFont systemFontSize]]];
+    [field sizeToFit];
+    return field;
+}
+
 + (Class) _binderClassForBinding: (id) binding {
     if ([binding isEqual: @"value"])
         return [_NSTextFieldBinder class];
@@ -234,6 +258,7 @@ NS_EXTRA_DEALLOC(NSTextField)
 
 - (void) setPlaceholderString: (NSString *) placeholderString {
     [_cell setPlaceholderString: placeholderString];
+    [self setNeedsDisplay: YES];
 }
 
 - (NSAttributedString *) placeholderAttributedString {
@@ -244,6 +269,7 @@ NS_EXTRA_DEALLOC(NSTextField)
         (NSAttributedString *) placeholderAttributedString
 {
     [_cell setPlaceholderAttributedString: placeholderAttributedString];
+    [self setNeedsDisplay: YES];
 }
 
 - (NSInteger) maximumNumberOfLines {

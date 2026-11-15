@@ -23,17 +23,39 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @implementation NSTableHeaderCell
 
+// The indicator sits at the right end of the header cell
 - (NSRect) sortIndicatorRectForBounds: (NSRect) bounds {
-    NSUnimplementedMethod();
-    return bounds;
+    NSRect rect;
+
+    rect.size = NSMakeSize(12.0, 12.0);
+    rect.origin.x = NSMaxX(bounds) - rect.size.width - 4.0;
+    rect.origin.y = NSMidY(bounds) - rect.size.height / 2.0;
+    return rect;
 }
 
+// An ascending indicator points up and a descending one down
 - (void) drawSortIndicatorWithFrame: (NSRect) frame
                              inView: (NSView *) controlView
                           ascending: (BOOL) ascending
                            priority: (NSInteger) priority
 {
-    NSUnimplementedMethod();
+    BOOL pointsUp = ascending != [controlView isFlipped];
+    NSBezierPath *arrow = [NSBezierPath bezierPath];
+    CGFloat inset = 2.0;
+    NSRect box = NSInsetRect(frame, inset, inset + 1.0);
+
+    if (pointsUp) {
+        [arrow moveToPoint: NSMakePoint(NSMinX(box), NSMinY(box))];
+        [arrow lineToPoint: NSMakePoint(NSMaxX(box), NSMinY(box))];
+        [arrow lineToPoint: NSMakePoint(NSMidX(box), NSMaxY(box))];
+    } else {
+        [arrow moveToPoint: NSMakePoint(NSMinX(box), NSMaxY(box))];
+        [arrow lineToPoint: NSMakePoint(NSMaxX(box), NSMaxY(box))];
+        [arrow lineToPoint: NSMakePoint(NSMidX(box), NSMinY(box))];
+    }
+    [arrow closePath];
+    [[NSColor darkGrayColor] setFill];
+    [arrow fill];
 }
 
 - (NSRect) titleRectForBounds: (NSRect) rect {

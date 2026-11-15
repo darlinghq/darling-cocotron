@@ -21,7 +21,17 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSButtonCell, NSMenu;
 
-@interface NSSearchField : NSTextField
+@class NSSearchField;
+
+@protocol NSSearchFieldDelegate <NSTextFieldDelegate>
+@optional
+- (void) searchFieldDidStartSearching: (NSSearchField *) sender;
+- (void) searchFieldDidEndSearching: (NSSearchField *) sender;
+@end
+
+@interface NSSearchField : NSTextField {
+    BOOL _searching;
+}
 
 @property(nonatomic, copy) NSArray *recentSearches;
 @property(nonatomic, copy) NSString *recentsAutosaveName;

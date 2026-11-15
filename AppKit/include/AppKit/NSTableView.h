@@ -154,7 +154,7 @@ typedef NS_ENUM(NSInteger, NSTableRowActionEdge) {
         CGFloat *_rowHeights;
         BOOL _allowsColumnReordering;
         BOOL _allowsColumnResizing;
-        BOOL _autoresizesAllColumnsToFit;
+        NSTableViewColumnAutoresizingStyle _columnAutoresizingStyle;
         BOOL _allowsMultipleSelection;
         BOOL _allowsEmptySelection;
         BOOL _allowsColumnSelection;
@@ -184,11 +184,22 @@ typedef NS_ENUM(NSInteger, NSTableRowActionEdge) {
 
         NSMutableDictionary *_registeredNibs;
         NSMutableArray *_activeRowViews;
+
+        NSTableColumn *_highlightedTableColumn; // not retained
+        NSMutableDictionary *_indicatorImages;
+        BOOL _verticalMotionCannotBeginDrag;
+        BOOL _rowActionsVisible;
+        BOOL _usesStaticContents;
+        NSTableViewDraggingDestinationFeedbackStyle _draggingDestinationFeedbackStyle;
     NS_EXTRA_IVARS_END(NSTableView)
 }
 
-- (NSView *) makeViewWithIdentifier: (NSString *) identifier owner: (id) owner;
+- (__kindof NSView *) makeViewWithIdentifier: (NSString *) identifier owner: (id) owner;
 - (void) registerNib: (NSNib *) nib forIdentifier: (NSString *) identifier;
+- (void) setIndicatorImage: (NSImage *) image inTableColumn: (NSTableColumn *) tableColumn;
+- (NSImage *) indicatorImageInTableColumn: (NSTableColumn *) tableColumn;
+- (NSInteger) rowForView: (NSView *) view;
+- (NSInteger) columnForView: (NSView *) view;
 - (NSView *) viewAtColumn: (NSInteger) column row: (NSInteger) row makeIfNecessary: (BOOL) makeIfNecessary;
 
 @property(nonatomic) SEL doubleAction;
@@ -209,6 +220,13 @@ typedef NS_ENUM(NSInteger, NSTableRowActionEdge) {
 @property(nonatomic) BOOL allowsColumnReordering;
 @property(nonatomic) BOOL allowsColumnResizing;
 @property(nonatomic) BOOL autoresizesAllColumnsToFit;
+@property(nonatomic) NSTableViewColumnAutoresizingStyle columnAutoresizingStyle;
+@property(nonatomic, assign) NSTableColumn *highlightedTableColumn;
+@property(nonatomic) BOOL verticalMotionCanBeginDrag;
+@property(nonatomic) BOOL rowActionsVisible;
+@property(nonatomic) BOOL usesStaticContents;
+@property(nonatomic) NSTableViewDraggingDestinationFeedbackStyle draggingDestinationFeedbackStyle;
+@property(readonly) NSTableViewStyle effectiveStyle;
 @property(nonatomic) BOOL allowsMultipleSelection;
 @property(nonatomic) BOOL allowsEmptySelection;
 @property(nonatomic) BOOL allowsColumnSelection;
@@ -316,6 +334,7 @@ typedef NS_ENUM(NSInteger, NSTableRowActionEdge) {
 @end
 
 @protocol NSTableViewDataSource <NSObject>
+@optional
 - (NSInteger) numberOfRowsInTableView: (NSTableView *) tableView;
 - (id) tableView: (NSTableView *) tableView
         objectValueForTableColumn: (NSTableColumn *) tableColumn
@@ -335,15 +354,19 @@ typedef NS_ENUM(NSInteger, NSTableRowActionEdge) {
            acceptDrop: (id<NSDraggingInfo>) draggingInfo
                   row: (NSInteger) row
         dropOperation: (NSTableViewDropOperation) dropOperation;
+- (void) tableView: (NSTableView *) tableView
+        sortDescriptorsDidChange: (NSArray<NSSortDescriptor *> *) oldDescriptors;
 @end
 
 @protocol NSTableViewDelegate <NSObject>
+@optional
 - (BOOL) tableView: (NSTableView *) tableView
         shouldEditTableColumn: (NSTableColumn *) tableColumn
                           row: (NSInteger) row;
 - (BOOL) selectionShouldChangeInTableView: (NSTableView *) tableView;
 - (CGFloat) tableView: (NSTableView *) tableView heightOfRow: (NSInteger) row;
 - (BOOL) tableView: (NSTableView *) tableView shouldSelectRow: (NSInteger) row;
+- (BOOL) tableView: (NSTableView *) tableView isGroupRow: (NSInteger) row;
 - (BOOL) tableView: (NSTableView *) tableView
         shouldSelectTableColumn: (NSTableColumn *) tableColumn;
 - (void) tableView: (NSTableView *) tableView

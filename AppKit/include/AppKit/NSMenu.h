@@ -79,7 +79,7 @@ typedef NS_OPTIONS(NSUInteger, NSMenuProperties) {
 @property(nonatomic, retain) NSMenu *supermenu;
 @property(nonatomic, copy) NSString *title;
 @property(nonatomic, readonly) NSInteger numberOfItems;
-- (NSArray *) itemArray;
+- (NSArray<NSMenuItem *> *) itemArray;
 @property(nonatomic) BOOL autoenablesItems;
 
 - (NSMenuItem *) itemAtIndex: (NSInteger) index;
