@@ -55,6 +55,7 @@
     X11DBusMenu *_exporter;
     BOOL _connectionTried;
     X11MenuBarWindow *_bar;
+    BOOL _barShown;
     // The bar is not among the application's windows, so nothing else redraws it.
     CFRunLoopObserverRef _displayObserver;
     NSMutableSet *_windows;

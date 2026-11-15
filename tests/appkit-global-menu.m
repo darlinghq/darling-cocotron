@@ -12,6 +12,10 @@
 //                                  SECONDS (default 120)
 //   appkit-global-menu LOG strip   print whether titled windows and panels
 //                                  carry the in-window menu strip, and exit
+//   appkit-global-menu LOG hiding  with a titled window as the key window, go
+//                                  through the states in which the menu bar is
+//                                  hidden or shown, logging "STEP <state>" after
+//                                  each change and waiting for the host to look
 //
 // A line "READY" is logged once the application is active and the menu is set.
 #import <AppKit/AppKit.h>
@@ -226,6 +230,52 @@ int main(int argc, char **argv) {
         }
 
         [NSApp setDelegate: target];
+        if (!strcmp(argv[2], "hiding")) {
+            NSWindow *window = [[NSWindow alloc] initWithContentRect: NSMakeRect(100, 100, 300, 200)
+                                                           styleMask: NSWindowStyleMaskTitled |
+                                                                      NSWindowStyleMaskResizable
+                                                             backing: NSBackingStoreBuffered
+                                                                defer: NO];
+            [window makeKeyAndOrderFront: nil];
+            [NSApp activateIgnoringOtherApps: YES];
+            // Each state is held for a while so that the host can look at the screen.
+            static const char *const names[] = {"windowed", "full-screen-style", "windowed-again",
+                                   "hide-menu-bar", "default-options", "auto-hide-menu-bar",
+                                   "default-options-again"};
+            __block int step = 0;
+            [NSTimer scheduledTimerWithTimeInterval: 4.0 repeats: YES block: ^(NSTimer *t) {
+                switch (step) {
+                case 1:
+                    [window setStyleMask: [window styleMask] | NSWindowStyleMaskFullScreen];
+                    break;
+                case 2:
+                    [window setStyleMask: [window styleMask] & ~NSWindowStyleMaskFullScreen];
+                    break;
+                case 3:
+                    [NSApp setPresentationOptions: NSApplicationPresentationHideMenuBar |
+                                                   NSApplicationPresentationHideDock];
+                    break;
+                case 4:
+                case 6:
+                    [NSApp setPresentationOptions: NSApplicationPresentationDefault];
+                    break;
+                case 5:
+                    [NSApp setPresentationOptions: NSApplicationPresentationAutoHideMenuBar |
+                                                   NSApplicationPresentationAutoHideDock];
+                    break;
+                default:
+                    break;
+                }
+                if (step >= 7) {
+                    note("done");
+                    exit(0);
+                }
+                note("STEP %s key=%d", names[step], (int) [window isKeyWindow]);
+                step++;
+            }];
+            [NSApp run];
+            return 0;
+        }
         NSPanel *panel = [[NSPanel alloc] initWithContentRect: NSMakeRect(400, 400, 240, 60)
                                                     styleMask: NSWindowStyleMaskTitled | NSWindowStyleMaskUtilityWindow
                                                       backing: NSBackingStoreBuffered
