@@ -683,6 +683,7 @@ static BOOL _allowsAutomaticWindowTabbing;
     [NS_EXTRA(NSWindow, self)->_miniwindowTitle release];
     [_miniwindowImage release];
     [NS_EXTRA(NSWindow, self)->_appearance release];
+    objc_storeWeak(&NS_EXTRA(NSWindow, self)->_appearanceSource, nil);
     [_backgroundView _setWindow: nil];
     [_backgroundView release];
     [NS_EXTRA(NSWindow, self)->_menu release];
@@ -784,13 +785,14 @@ static BOOL _allowsAutomaticWindowTabbing;
     return NULL;
 }
 
+// Views are drawn on the main thread one after another whatever this says,
+// which the documentation allows: the flag only permits concurrent drawing.
 - (BOOL) allowsConcurrentViewDrawing {
-    NSUnimplementedMethod();
-    return NO;
+    return !NS_EXTRA(NSWindow, self)->_concurrentViewDrawingDisabled;
 }
 
 - (void) setAllowsConcurrentViewDrawing: (BOOL) allows {
-    NSUnimplementedMethod();
+    NS_EXTRA(NSWindow, self)->_concurrentViewDrawingDisabled = !allows;
 }
 
 - (NSView *) contentView {
@@ -893,12 +895,11 @@ static BOOL _allowsAutomaticWindowTabbing;
 }
 
 - (BOOL) preventsApplicationTerminationWhenModal {
-    NSUnimplementedMethod();
-    return NO;
+    return !NS_EXTRA(NSWindow, self)->_allowsTerminationWhenModal;
 }
 
 - (void) setPreventsApplicationTerminationWhenModal: (BOOL) prevents {
-    NSUnimplementedMethod();
+    NS_EXTRA(NSWindow, self)->_allowsTerminationWhenModal = !prevents;
 }
 
 - (BOOL) hidesOnDeactivate {
@@ -1069,6 +1070,32 @@ static BOOL _allowsAutomaticWindowTabbing;
             {NSWindowDidEndLiveResizeNotification,
              @selector(windowDidEndLiveResize:)},
             {NSWindowDidUpdateNotification, @selector(windowDidUpdate:)},
+            {NSWindowDidChangeScreenNotification,
+             @selector(windowDidChangeScreen:)},
+            {NSWindowDidChangeScreenProfileNotification,
+             @selector(windowDidChangeScreenProfile:)},
+            {NSWindowDidExposeNotification, @selector(windowDidExpose:)},
+            {NSWindowDidChangeBackingPropertiesNotification,
+             @selector(windowDidChangeBackingProperties:)},
+            {NSWindowWillBeginSheetNotification,
+             @selector(windowWillBeginSheet:)},
+            {NSWindowDidEndSheetNotification, @selector(windowDidEndSheet:)},
+            {NSWindowWillEnterFullScreenNotification,
+             @selector(windowWillEnterFullScreen:)},
+            {NSWindowDidEnterFullScreenNotification,
+             @selector(windowDidEnterFullScreen:)},
+            {NSWindowWillExitFullScreenNotification,
+             @selector(windowWillExitFullScreen:)},
+            {NSWindowDidExitFullScreenNotification,
+             @selector(windowDidExitFullScreen:)},
+            {NSWindowWillEnterVersionBrowserNotification,
+             @selector(windowWillEnterVersionBrowser:)},
+            {NSWindowDidEnterVersionBrowserNotification,
+             @selector(windowDidEnterVersionBrowser:)},
+            {NSWindowWillExitVersionBrowserNotification,
+             @selector(windowWillExitVersionBrowser:)},
+            {NSWindowDidExitVersionBrowserNotification,
+             @selector(windowDidExitVersionBrowser:)},
             {NSWindowWillCloseNotification, @selector(windowWillClose:)},
             {NSWindowWillMiniaturizeNotification,
              @selector(windowWillMiniaturize:)},
@@ -1605,8 +1632,9 @@ static BOOL _allowsAutomaticWindowTabbing;
     NS_EXTRA(NSWindow, self)->_canHide = value;
 }
 
+// There is no login window to show windows on, so the flag is only stored.
 - (void) setCanBecomeVisibleWithoutLogin: (BOOL) flag {
-    //   NSUnimplementedMethod();
+    NS_EXTRA(NSWindow, self)->_canBecomeVisibleWithoutLogin = flag;
 }
 
 - (NSArray<NSWindow *> *) tabbedWindows {
@@ -1946,8 +1974,7 @@ static BOOL _allowsAutomaticWindowTabbing;
 }
 
 - (BOOL) canBecomeVisibleWithoutLogin {
-    NSUnimplementedMethod();
-    return NO;
+    return NS_EXTRA(NSWindow, self)->_canBecomeVisibleWithoutLogin;
 }
 
 - (NSWindowCollectionBehavior) collectionBehavior {
@@ -3738,6 +3765,8 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
 {
     NSWindow *sheet = [sheetContext sheet];
 
+    [self postNotificationName: NSWindowWillBeginSheetNotification];
+
     if ([sheet styleMask] != NSDocModalWindowMask)
         [sheet setStyleMask: NSDocModalWindowMask];
 
@@ -3783,6 +3812,8 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
 
     [NS_EXTRA(NSWindow, self)->_sheetContext release];
     NS_EXTRA(NSWindow, self)->_sheetContext = nil;
+
+    [self postNotificationName: NSWindowDidEndSheetNotification];
 }
 
 - (void) _flashWindow {
@@ -4334,7 +4365,25 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
 }
 
 - (NSAppearance *) effectiveAppearance {
-    return NS_EXTRA(NSWindow, self)->_appearance != nil ? NS_EXTRA(NSWindow, self)->_appearance : [NSApp effectiveAppearance];
+    if (NS_EXTRA(NSWindow, self)->_appearance != nil)
+        return NS_EXTRA(NSWindow, self)->_appearance;
+
+    id source = [self appearanceSource];
+    if (source != self && source != NSApp && source != nil)
+        return [source effectiveAppearance];
+    return [NSApp effectiveAppearance];
+}
+
+- (NSObject<NSAppearanceCustomization> *) appearanceSource {
+    NSObject<NSAppearanceCustomization> *source =
+            objc_loadWeak(&NS_EXTRA(NSWindow, self)->_appearanceSource);
+    return source != nil ? source : (id) NSApp;
+}
+
+- (void) setAppearanceSource: (NSObject<NSAppearanceCustomization> *) source {
+    [self willChangeValueForKey: @"effectiveAppearance"];
+    objc_storeWeak(&NS_EXTRA(NSWindow, self)->_appearanceSource, source);
+    [self didChangeValueForKey: @"effectiveAppearance"];
 }
 
 // Private AppKit method that applications call on a mouse down to find out
@@ -4563,6 +4612,122 @@ static inline NSRect scaleWindowRect(NSRect rect, CGFloat scale) {
     if (NS_EXTRA(NSWindow, self)->_titlebarAccessoryViewControllers == nil)
         NS_EXTRA(NSWindow, self)->_titlebarAccessoryViewControllers = [[NSMutableArray alloc] init];
     [NS_EXTRA(NSWindow, self)->_titlebarAccessoryViewControllers addObject: controller];
+}
+
+@end
+
+@implementation NSWindow (NSWindowTitlebarAccessoryIndexing)
+
+- (void) insertTitlebarAccessoryViewController:
+                 (NSTitlebarAccessoryViewController *) controller
+                                       atIndex: (NSInteger) index
+{
+    NSMutableArray *accessories =
+            NS_EXTRA(NSWindow, self)->_titlebarAccessoryViewControllers;
+
+    if (index < 0 || index > (NSInteger) [accessories count]) {
+        [NSException raise: NSInternalInconsistencyException
+                    format: @"-[NSWindow insertTitlebarAccessoryViewController:atIndex:]: index %ld is out of range",
+                            (long) index];
+    }
+    if (controller == nil || [accessories containsObject: controller])
+        return;
+    if (accessories == nil)
+        accessories = NS_EXTRA(NSWindow, self)->_titlebarAccessoryViewControllers = [[NSMutableArray alloc] init];
+    [accessories insertObject: controller atIndex: index];
+}
+
+- (void) removeTitlebarAccessoryViewControllerAtIndex: (NSInteger) index {
+    NSMutableArray *accessories =
+            NS_EXTRA(NSWindow, self)->_titlebarAccessoryViewControllers;
+
+    if (index < 0 || index >= (NSInteger) [accessories count]) {
+        [NSException raise: NSRangeException
+                    format: @"-[NSWindow removeTitlebarAccessoryViewControllerAtIndex:]: index %ld is out of range",
+                            (long) index];
+    }
+    [accessories removeObjectAtIndex: index];
+}
+
+@end
+
+@implementation NSWindow (NSWindowAdditionalAPI)
+
+- (NSArray<NSWindow *> *) sheets {
+    NSWindow *sheet = [self attachedSheet];
+    return sheet != nil ? [NSArray arrayWithObject: sheet] : [NSArray array];
+}
+
+- (void) beginCriticalSheet: (NSWindow *) sheetWindow
+          completionHandler: (void (^)(NSModalResponse returnCode)) handler
+{
+    [self beginSheet: sheetWindow completionHandler: handler];
+}
+
+- (BOOL) canRepresentDisplayGamut: (NSDisplayGamut) displayGamut {
+    return displayGamut == NSDisplayGamutSRGB;
+}
+
++ (NSWindowUserTabbingPreference) userTabbingPreference {
+    // The System Settings choice is stored as one of three strings; a missing
+    // or unknown value means tabs in full screen only.
+    NSString *mode = [[NSUserDefaults standardUserDefaults]
+            stringForKey: @"AppleWindowTabbingMode"];
+
+    if ([mode isEqualToString: @"always"])
+        return NSWindowUserTabbingPreferenceAlways;
+    if ([mode isEqualToString: @"manual"])
+        return NSWindowUserTabbingPreferenceManual;
+    return NSWindowUserTabbingPreferenceInFullScreen;
+}
+
+- (NSUserInterfaceLayoutDirection) windowTitlebarLayoutDirection {
+    return [NSApp userInterfaceLayoutDirection];
+}
+
+- (NSRect) cascadingReferenceFrame {
+    return [self frame];
+}
+
+- (void) selectNextTab: (id) sender {
+    // No tab UI: nothing to select.
+}
+
+- (void) selectPreviousTab: (id) sender {
+    // No tab UI: nothing to select.
+}
+
+- (void) moveTabToNewWindow: (id) sender {
+    // A window that is the only tab of its group is already in its own window.
+}
+
+- (void) toggleTabBar: (id) sender {
+    // No tab bar to show or hide.
+}
+
+- (void) toggleTabOverview: (id) sender {
+    // No tab overview to show or hide.
+}
+
+- (void) trackEventsMatchingMask: (NSEventMask) mask
+                         timeout: (NSTimeInterval) timeout
+                            mode: (NSRunLoopMode) mode
+                         handler: (void (^)(NSEvent *event, BOOL *stop)) trackingHandler
+{
+    BOOL stop = NO;
+
+    while (!stop) {
+        NSDate *limit = timeout >= 1e9 ? [NSDate distantFuture]
+                : [NSDate dateWithTimeIntervalSinceNow: timeout];
+        NSEvent *event = [NSApp nextEventMatchingMask: mask
+                                            untilDate: limit
+                                               inMode: mode
+                                              dequeue: YES];
+
+        // A nil event reports that the timeout elapsed; tracking goes on
+        // until the handler asks to stop.
+        trackingHandler(event, &stop);
+    }
 }
 
 @end

@@ -24,6 +24,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/AppKitExport.h>
 #import <AppKit/NSResponder.h>
 #import <AppKit/NSView.h>
+#import <AppKit/NSApplication.h>
 #import <ApplicationServices/ApplicationServices.h>
 #import <CoreGraphics/CGSubWindow.h>
 #import <AppKit/NSUserInterfaceItemIdentification.h>
@@ -371,6 +372,12 @@ typedef NS_ENUM(NSInteger, NSWindowUserTabbingPreference) {
         NSButton *_standardWindowButtons[3];
 
         NSMutableArray *_titlebarAccessoryViewControllers;
+        // Inverted so that the zero-filled extras give the documented defaults.
+        BOOL _concurrentViewDrawingDisabled;
+        BOOL _allowsTerminationWhenModal;
+        BOOL _canBecomeVisibleWithoutLogin;
+        // Zeroing weak reference to the appearance source.
+        id _appearanceSource;
     NS_EXTRA_IVARS_END(NSWindow)
 }
 
@@ -742,6 +749,46 @@ typedef NS_ENUM(NSInteger, NSWindowUserTabbingPreference) {
 - (BOOL) windowShouldClose: sender;
 - (void) windowWillClose: (NSNotification *) note;
 
+- (void) windowDidChangeBackingProperties: (NSNotification *) note;
+- (void) windowWillStartLiveResize: (NSNotification *) note;
+- (void) windowDidEndLiveResize: (NSNotification *) note;
+- (void) windowWillEnterFullScreen: (NSNotification *) note;
+- (void) windowDidEnterFullScreen: (NSNotification *) note;
+- (void) windowWillExitFullScreen: (NSNotification *) note;
+- (void) windowDidExitFullScreen: (NSNotification *) note;
+- (void) windowWillEnterVersionBrowser: (NSNotification *) note;
+- (void) windowDidEnterVersionBrowser: (NSNotification *) note;
+- (void) windowWillExitVersionBrowser: (NSNotification *) note;
+- (void) windowDidExitVersionBrowser: (NSNotification *) note;
+
+// Declared for source compatibility: this implementation has no title-bar
+// document icon, no custom full-screen animation and no version browser, so
+// these are not sent.
+- (BOOL) window: (NSWindow *) window shouldPopUpDocumentPathMenu: (NSMenu *) menu;
+- (BOOL) window: (NSWindow *) window
+        shouldDragDocumentWithEvent: (NSEvent *) event
+                               from: (NSPoint) dragImageLocation
+                     withPasteboard: (NSPasteboard *) pasteboard;
+- (NSSize) window: (NSWindow *) window willUseFullScreenContentSize: (NSSize) proposedSize;
+- (NSApplicationPresentationOptions) window: (NSWindow *) window
+        willUseFullScreenPresentationOptions: (NSApplicationPresentationOptions) proposedOptions;
+- (NSArray<NSWindow *> *) customWindowsToEnterFullScreenForWindow: (NSWindow *) window;
+- (NSArray<NSWindow *> *) customWindowsToEnterFullScreenForWindow: (NSWindow *) window
+                                                         onScreen: (NSScreen *) screen;
+- (void) window: (NSWindow *) window startCustomAnimationToEnterFullScreenWithDuration: (NSTimeInterval) duration;
+- (void) window: (NSWindow *) window
+        startCustomAnimationToEnterFullScreenOnScreen: (NSScreen *) screen
+                                         withDuration: (NSTimeInterval) duration;
+- (void) windowDidFailToEnterFullScreen: (NSWindow *) window;
+- (NSArray<NSWindow *> *) customWindowsToExitFullScreenForWindow: (NSWindow *) window;
+- (void) window: (NSWindow *) window startCustomAnimationToExitFullScreenWithDuration: (NSTimeInterval) duration;
+- (void) windowDidFailToExitFullScreen: (NSWindow *) window;
+- (NSSize) window: (NSWindow *) window
+        willResizeForVersionBrowserWithMaxPreferredSize: (NSSize) maxPreferredFrameSize
+                                         maxAllowedSize: (NSSize) maxAllowedFrameSize;
+- (void) window: (NSWindow *) window willEncodeRestorableState: (NSCoder *) state;
+- (void) window: (NSWindow *) window didDecodeRestorableState: (NSCoder *) state;
+
 - (CGSubWindow *) _createSubWindowWithFrame: (CGRect) frame;
 
 @end
@@ -751,6 +798,57 @@ typedef NS_ENUM(NSInteger, NSWindowUserTabbingPreference) {
 @property(readonly, copy) NSArray *titlebarAccessoryViewControllers;
 - (void) addTitlebarAccessoryViewController:
         (NSTitlebarAccessoryViewController *) controller;
+@end
+
+@interface NSWindow (NSWindowTitlebarAccessoryIndexing)
+// Index 0 is the first accessory. An index past the end raises.
+- (void) insertTitlebarAccessoryViewController:
+                 (NSTitlebarAccessoryViewController *) controller
+                                       atIndex: (NSInteger) index;
+- (void) removeTitlebarAccessoryViewControllerAtIndex: (NSInteger) index;
+@end
+
+@interface NSWindow (NSWindowAdditionalAPI)
+
+// The sheets attached to the window: at most one, as sheets aren't queued.
+@property(readonly, copy) NSArray<NSWindow *> *sheets;
+// A critical sheet is presented like any other sheet; there is no separate
+// queue for it.
+- (void) beginCriticalSheet: (NSWindow *) sheetWindow
+          completionHandler: (void (^_Nullable)(NSModalResponse returnCode)) handler;
+
+// The window's own appearance, else the source's, else the application's.
+// Resetting to nil makes the application the source.
+@property(weak, null_resettable) NSObject<NSAppearanceCustomization> *appearanceSource;
+
+// The windows here only have an sRGB backing store.
+- (BOOL) canRepresentDisplayGamut: (NSDisplayGamut) displayGamut;
+
+// From the AppleWindowTabbingMode default (always, manual, else in full screen).
+@property(class, readonly) NSWindowUserTabbingPreference userTabbingPreference;
+
+// The application's layout direction.
+@property(readonly) NSUserInterfaceLayoutDirection windowTitlebarLayoutDirection;
+
+// The frame cascading starts from: the window's frame.
+@property(readonly) NSRect cascadingReferenceFrame;
+
+// Window tabbing is not implemented, so every window is the only tab of its
+// own tab group and these have no effect.
+- (void) selectNextTab: (nullable id) sender;
+- (void) selectPreviousTab: (nullable id) sender;
+- (void) moveTabToNewWindow: (nullable id) sender;
+- (void) toggleTabBar: (nullable id) sender;
+- (void) toggleTabOverview: (nullable id) sender;
+
+// Takes events matching the mask from the event queue in the given mode and
+// passes them to the handler until it sets *stop. When no event arrives for
+// `timeout` seconds the handler is called with a nil event.
+- (void) trackEventsMatchingMask: (NSEventMask) mask
+                         timeout: (NSTimeInterval) timeout
+                            mode: (NSRunLoopMode) mode
+                         handler: (void (^)(NSEvent *_Nullable event, BOOL *stop)) trackingHandler;
+
 @end
 
 @interface NSWindow (Darling)
