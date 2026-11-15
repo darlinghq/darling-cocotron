@@ -388,6 +388,21 @@ NSString *const NSAccessibilityMenuRole = @"AXMenu";
 NSString *const NSAccessibilityOutlineRole = @"AXOutline";
 NSString *const NSAccessibilityPopUpButtonRole =
         @"AXPopUpButton";
+NSString *const NSAccessibilityPopoverRole = @"AXPopover";
+NSString *const NSAccessibilityChildrenInNavigationOrderAttribute =
+        @"AXChildrenInNavigationOrder";
+NSString *const NSAccessibilityDateTimeComponentsAttribute =
+        @"AXDateTimeComponents";
+
+// Not declared in a public header.
+APPKIT_EXPORT NSString *const NSAccessibilityOpenAction;
+APPKIT_EXPORT NSString *const NSAccessibilityEnhancedUserInterfaceAttribute;
+APPKIT_EXPORT NSString *const NSAccessibilityFocusedElementKey;
+NSString *const NSAccessibilityOpenAction = @"AXOpen";
+NSString *const NSAccessibilityEnhancedUserInterfaceAttribute =
+        @"AXEnhancedUserInterface";
+NSString *const NSAccessibilityFocusedElementKey =
+        @"NSAccessibilityFocusedElementKey";
 NSString *const NSAccessibilityProgressIndicatorRole =
         @"AXProgressIndicator";
 NSString *const NSAccessibilityRadioButtonRole =
