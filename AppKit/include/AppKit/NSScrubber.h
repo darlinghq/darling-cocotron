@@ -19,6 +19,18 @@
 
 #import <AppKit/NSView.h>
 
+typedef NS_ENUM(NSInteger, NSScrubberMode) {
+    NSScrubberModeFixed = 0,
+    NSScrubberModeFree,
+};
+
+typedef NS_ENUM(NSInteger, NSScrubberAlignment) {
+    NSScrubberAlignmentNone = 0,
+    NSScrubberAlignmentLeading,
+    NSScrubberAlignmentTrailing,
+    NSScrubberAlignmentCenter,
+};
+
 @interface NSScrubber : NSView
 @end
 

@@ -24,6 +24,11 @@
 APPKIT_EXPORT NSString *const NSCollectionElementKindSectionHeader;
 APPKIT_EXPORT NSString *const NSCollectionElementKindSectionFooter;
 
+typedef NS_ENUM(NSInteger, NSCollectionViewScrollDirection) {
+    NSCollectionViewScrollDirectionVertical,
+    NSCollectionViewScrollDirectionHorizontal,
+};
+
 @interface NSCollectionViewFlowLayout : NSCollectionViewLayout
 {
     NSSize _itemSize;

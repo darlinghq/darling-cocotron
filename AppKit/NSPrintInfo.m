@@ -291,3 +291,15 @@ NSString *const NSPrintSavePath = @"NSPrintSavePath";
 }
 
 @end
+
+NSPrintInfoAttributeKey const NSPrintReversePageOrder = @"NSReversePageOrder";
+NSPrintInfoAttributeKey const NSPrintPagesAcross = @"NSPagesAcross";
+NSPrintInfoAttributeKey const NSPrintPagesDown = @"NSPagesDown";
+NSPrintInfoAttributeKey const NSPrintTime = @"NSPrintTime";
+NSPrintInfoAttributeKey const NSPrintFaxNumber = @"NSFaxNumber";
+NSPrintInfoAttributeKey const NSPrintJobSavingFileNameExtensionHidden = @"NSJobSavingFileNameExtensionHidden";
+NSString * const NSPrintFormName = @"NSFormName";
+NSString * const NSPrintJobFeatures = @"NSJobFeatures";
+NSString * const NSPrintManualFeed = @"NSPrintManualFeed";
+NSString * const NSPrintPagesPerSheet = @"NSPagesPerSheet";
+NSString * const NSPrintPaperFeed = @"NSPaperFeed";

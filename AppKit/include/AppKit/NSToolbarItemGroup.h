@@ -20,6 +20,18 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSArray;
 
+typedef NS_ENUM(NSInteger, NSToolbarItemGroupSelectionMode) {
+    NSToolbarItemGroupSelectionModeSelectOne = 0,
+    NSToolbarItemGroupSelectionModeSelectAny = 1,
+    NSToolbarItemGroupSelectionModeMomentary = 2,
+};
+
+typedef NS_ENUM(NSInteger, NSToolbarItemGroupControlRepresentation) {
+    NSToolbarItemGroupControlRepresentationAutomatic,
+    NSToolbarItemGroupControlRepresentationExpanded,
+    NSToolbarItemGroupControlRepresentationCollapsed,
+};
+
 @interface NSToolbarItemGroup : NSToolbarItem {
     NSArray *_subitems;
 }

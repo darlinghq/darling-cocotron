@@ -145,3 +145,5 @@ NSNotificationName const NSPopoverDidShowNotification = @"NSPopoverDidShowNotifi
 }
 
 @end
+
+NSString * const NSPopoverCloseReasonKey = @"NSPopoverCloseReasonKey";

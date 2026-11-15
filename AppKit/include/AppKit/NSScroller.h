@@ -125,3 +125,5 @@ typedef NS_ENUM(NSInteger, NSScrollerKnobStyle) {
 - (void) trackScrollButtons: (NSEvent *) event;
 
 @end
+
+APPKIT_EXPORT NSNotificationName const NSPreferredScrollerStyleDidChangeNotification;

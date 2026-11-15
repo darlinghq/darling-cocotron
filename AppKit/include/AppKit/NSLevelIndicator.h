@@ -20,6 +20,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSControl.h>
 #import <AppKit/NSSliderCell.h>
 
+typedef NS_ENUM(NSInteger, NSLevelIndicatorPlaceholderVisibility) {
+    NSLevelIndicatorPlaceholderVisibilityAutomatic = 0,
+    NSLevelIndicatorPlaceholderVisibilityAlways = 1,
+    NSLevelIndicatorPlaceholderVisibilityWhileEditing = 2,
+};
+
 @interface NSLevelIndicator : NSControl
 
 @property double minValue;

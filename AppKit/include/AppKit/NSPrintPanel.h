@@ -15,6 +15,11 @@ typedef NS_OPTIONS(NSInteger, NSPrintPanelOptions) {
     NSPrintPanelShowsPreview = 1 << 17
 };
 
+typedef NS_ENUM(NSInteger, NSPrintPanelResult) {
+    NSPrintPanelResultCancelled = 0,
+    NSPrintPanelResultPrinted,
+};
+
 @interface NSPrintPanel : NSObject {
     NSMutableDictionary *_attributes;
     NSInteger _options;

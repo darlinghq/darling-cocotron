@@ -17,7 +17,16 @@
  along with Darling.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#import <Foundation/NSObject.h>
+#import <AppKit/AppKitExport.h>
+#import <Foundation/Foundation.h>
+
+typedef NS_OPTIONS(NSUInteger, NSFontCollectionVisibility) {
+    NSFontCollectionVisibilityProcess = (1UL << 0),
+    NSFontCollectionVisibilityUser = (1UL << 1),
+    NSFontCollectionVisibilityComputer = (1UL << 2),
+};
 
 @interface NSFontCollection: NSObject <NSCoding, NSCopying, NSMutableCopying>
 @end
+
+APPKIT_EXPORT NSNotificationName const NSFontCollectionDidChangeNotification;

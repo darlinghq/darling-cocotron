@@ -20,6 +20,17 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <ApplicationServices/ApplicationServices.h>
 #import <Foundation/NSObject.h>
 
+typedef NS_ENUM(NSInteger, NSColorSpaceModel) {
+    NSColorSpaceModelUnknown = -1,
+    NSColorSpaceModelGray,
+    NSColorSpaceModelRGB,
+    NSColorSpaceModelCMYK,
+    NSColorSpaceModelLAB,
+    NSColorSpaceModelDeviceN,
+    NSColorSpaceModelIndexed,
+    NSColorSpaceModelPatterned,
+};
+
 @interface NSColorSpace : NSObject {
     CGColorSpaceRef _cgColorSpace;
 }

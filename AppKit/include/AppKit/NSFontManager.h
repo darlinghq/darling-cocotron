@@ -49,6 +49,10 @@ enum {
     NSUnitalicFontMask = 0x01000000,
 };
 
+typedef NS_OPTIONS(NSUInteger, NSFontCollectionOptions) {
+    NSFontCollectionApplicationOnlyMask = 1 << 0,
+};
+
 @interface NSFontManager : NSObject {
     NSFontPanel *_panel;
     id _delegate;

@@ -78,6 +78,13 @@ APPKIT_EXPORT NSString *const NSAllRomanInputSourcesLocaleIdentifier;
 
 @class NSUndoTyping;
 
+typedef NS_ENUM(NSUInteger, NSFindPanelSubstringMatchType) {
+    NSFindPanelSubstringMatchTypeContains = 0,
+    NSFindPanelSubstringMatchTypeStartsWith = 1,
+    NSFindPanelSubstringMatchTypeFullWord = 2,
+    NSFindPanelSubstringMatchTypeEndsWith = 3,
+};
+
 // Legacy ObjC ABI (i386): instance size must stay 0x54, Apple's; the ivars
 // before the extras sit at Apple's offsets. Add new state to the extra
 // struct, never as an ivar.
@@ -384,3 +391,4 @@ NS_ASSUME_NONNULL_END
 - (void) orderFrontLinkPanel: (id) sender;
 - (BOOL) readSelectionFromPasteboard: (NSPasteboard *) pasteboard type: (NSString *) type;
 @end
+

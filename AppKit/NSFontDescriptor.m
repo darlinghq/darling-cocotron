@@ -258,3 +258,15 @@ static NSString *const NSFontUIFontDesignTrait = @"NSCTFontUIFontDesignTrait";
 }
 
 @end
+
+NSFontTextStyle const NSFontTextStyleLargeTitle = @"UICTFontTextStyleTitle0";
+NSFontTextStyle const NSFontTextStyleTitle1 = @"UICTFontTextStyleTitle1";
+NSFontTextStyle const NSFontTextStyleTitle2 = @"UICTFontTextStyleTitle2";
+NSFontTextStyle const NSFontTextStyleTitle3 = @"UICTFontTextStyleTitle3";
+NSFontTextStyle const NSFontTextStyleHeadline = @"UICTFontTextStyleHeadline";
+NSFontTextStyle const NSFontTextStyleSubheadline = @"UICTFontTextStyleSubhead";
+NSFontTextStyle const NSFontTextStyleBody = @"UICTFontTextStyleBody";
+NSFontTextStyle const NSFontTextStyleCallout = @"UICTFontTextStyleCallout";
+NSFontTextStyle const NSFontTextStyleFootnote = @"UICTFontTextStyleFootnote";
+NSFontTextStyle const NSFontTextStyleCaption1 = @"UICTFontTextStyleCaption1";
+NSFontTextStyle const NSFontTextStyleCaption2 = @"UICTFontTextStyleCaption2";

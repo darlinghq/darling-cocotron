@@ -79,6 +79,11 @@ APPKIT_EXPORT NSPrintJobDispositionValue const NSPrintCancelJob;
 
 APPKIT_EXPORT NSString *const NSPrintSavePath;
 
+typedef NS_ENUM(NSInteger, NSPaperOrientation) {
+    NSPaperOrientationPortrait = 0,
+    NSPaperOrientationLandscape = 1,
+};
+
 @interface NSPrintInfo : NSObject <NSCopying> {
     NSMutableDictionary *_attributes;
 }
@@ -141,3 +146,15 @@ APPKIT_EXPORT NSString *const NSPrintSavePath;
 - (void) setUpPrintOperationDefaultValues;
 
 @end
+
+APPKIT_EXPORT NSPrintInfoAttributeKey const NSPrintReversePageOrder;
+APPKIT_EXPORT NSPrintInfoAttributeKey const NSPrintPagesAcross;
+APPKIT_EXPORT NSPrintInfoAttributeKey const NSPrintPagesDown;
+APPKIT_EXPORT NSPrintInfoAttributeKey const NSPrintTime;
+APPKIT_EXPORT NSPrintInfoAttributeKey const NSPrintFaxNumber;
+APPKIT_EXPORT NSPrintInfoAttributeKey const NSPrintJobSavingFileNameExtensionHidden;
+APPKIT_EXPORT NSString * const NSPrintFormName;
+APPKIT_EXPORT NSString * const NSPrintJobFeatures;
+APPKIT_EXPORT NSString * const NSPrintManualFeed;
+APPKIT_EXPORT NSString * const NSPrintPagesPerSheet;
+APPKIT_EXPORT NSString * const NSPrintPaperFeed;

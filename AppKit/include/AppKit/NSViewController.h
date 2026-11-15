@@ -4,6 +4,18 @@
 
 @class NSView, NSStoryboard;
 
+typedef NS_OPTIONS(NSUInteger, NSViewControllerTransitionOptions) {
+    NSViewControllerTransitionNone = 0x0,
+    NSViewControllerTransitionCrossfade = 0x1,
+    NSViewControllerTransitionSlideUp = 0x10,
+    NSViewControllerTransitionSlideDown = 0x20,
+    NSViewControllerTransitionSlideLeft = 0x40,
+    NSViewControllerTransitionSlideRight = 0x80,
+    NSViewControllerTransitionSlideForward = 0x140,
+    NSViewControllerTransitionSlideBackward = 0x180,
+    NSViewControllerTransitionAllowUserInteraction = 0x1000,
+};
+
 // Legacy ObjC ABI (i386): instance size must stay 0x34, Apple's; the ivars
 // before the extras sit at Apple's offsets. Add new state to the extra
 // struct, never as an ivar.

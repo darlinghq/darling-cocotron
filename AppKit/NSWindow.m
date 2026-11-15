@@ -4564,3 +4564,5 @@ static inline NSRect scaleWindowRect(NSRect rect, CGFloat scale) {
 }
 
 @end
+
+NSString * const NSBackingPropertyOldColorSpaceKey = @"NSBackingPropertyOldColorSpaceKey";

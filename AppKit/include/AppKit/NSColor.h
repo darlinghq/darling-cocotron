@@ -48,6 +48,14 @@ enum {
     NSClearControlTint = 7,
 };
 
+typedef NS_ENUM(NSInteger, NSColorSystemEffect) {
+    NSColorSystemEffectNone,
+    NSColorSystemEffectPressed,
+    NSColorSystemEffectDeepPressed,
+    NSColorSystemEffectDisabled,
+    NSColorSystemEffectRollover,
+};
+
 // Legacy ObjC ABI (i386): instance size must stay 0x4, Apple's (the isa only;
 // NSColor is an abstract class cluster root). The state below belongs to the
 // concrete subclasses (NSColor_CGColor, NSColor_catalog, NSColor_dynamic),

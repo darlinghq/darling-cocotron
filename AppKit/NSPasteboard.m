@@ -197,3 +197,7 @@ const NSPasteboardReadingOptionKey
 }
 
 @end
+
+NSPasteboardType const NSPasteboardTypeSound = @"com.apple.cocoa.pasteboard.sound";
+NSPasteboardType const NSPasteboardTypeTextFinderOptions = @"com.apple.cocoa.pasteboard.find-panel-search-options";
+NSPasteboardType const NSPasteboardTypeFindPanelSearchOptions = @"com.apple.cocoa.pasteboard.find-panel-search-options";

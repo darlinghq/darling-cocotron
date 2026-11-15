@@ -279,6 +279,30 @@ typedef NS_OPTIONS(NSUInteger, NSEventPhase) {
     NSEventPhaseMayBegin = 0x1 << 5,
 } NS_SWIFT_NAME(NSEvent.Phase);
 
+typedef NS_ENUM(NSUInteger, NSPointingDeviceType) {
+    NSPointingDeviceTypeUnknown = 0,
+    NSPointingDeviceTypePen = 1,
+    NSPointingDeviceTypeCursor = 2,
+    NSPointingDeviceTypeEraser = 3,
+};
+
+typedef NS_OPTIONS(NSUInteger, NSEventButtonMask) {
+    NSEventButtonMaskPenTip = 1,
+    NSEventButtonMaskPenLowerSide = 2,
+    NSEventButtonMaskPenUpperSide = 4,
+};
+
+typedef NS_ENUM(NSInteger, NSEventGestureAxis) {
+    NSEventGestureAxisNone = 0,
+    NSEventGestureAxisHorizontal,
+    NSEventGestureAxisVertical,
+};
+
+typedef NS_OPTIONS(NSUInteger, NSEventSwipeTrackingOptions) {
+    NSEventSwipeTrackingLockDirection = 0x1 << 0,
+    NSEventSwipeTrackingClampGestureAmount = 0x1 << 1,
+};
+
 @interface NSEvent : NSObject {
     NSEventType _type;
     NSTimeInterval _timestamp;

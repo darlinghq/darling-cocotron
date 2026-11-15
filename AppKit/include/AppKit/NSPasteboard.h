@@ -89,6 +89,21 @@ APPKIT_EXPORT const NSPasteboardReadingOptionKey
 - (void) pasteboardChangedOwner: (NSPasteboard *) sender;
 @end
 
+typedef NS_OPTIONS(NSUInteger, NSPasteboardContentsOptions) {
+    NSPasteboardContentsCurrentHostOnly = 1 << 0,
+};
+
+typedef NS_OPTIONS(NSUInteger, NSPasteboardWritingOptions) {
+    NSPasteboardWritingPromised = 1 << 9,
+};
+
+typedef NS_OPTIONS(NSUInteger, NSPasteboardReadingOptions) {
+    NSPasteboardReadingAsData = 0,
+    NSPasteboardReadingAsString = 1 << 0,
+    NSPasteboardReadingAsPropertyList = 1 << 1,
+    NSPasteboardReadingAsKeyedArchive = 1 << 2,
+};
+
 @interface NSPasteboard : NSObject
 
 + (NSPasteboard *) generalPasteboard;
@@ -132,3 +147,7 @@ APPKIT_EXPORT const NSPasteboardReadingOptionKey
 // TODO
 
 @end
+
+APPKIT_EXPORT NSPasteboardType const NSPasteboardTypeSound;
+APPKIT_EXPORT NSPasteboardType const NSPasteboardTypeTextFinderOptions;
+APPKIT_EXPORT NSPasteboardType const NSPasteboardTypeFindPanelSearchOptions;

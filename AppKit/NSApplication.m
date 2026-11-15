@@ -2278,3 +2278,11 @@ BOOL NSApplicationLoad(void) {
 }
 
 @end
+
+NSAboutPanelOptionKey const NSAboutPanelOptionCredits = @"Credits";
+NSAboutPanelOptionKey const NSAboutPanelOptionApplicationName = @"ApplicationName";
+NSAboutPanelOptionKey const NSAboutPanelOptionApplicationIcon = @"ApplicationIcon";
+NSAboutPanelOptionKey const NSAboutPanelOptionVersion = @"Version";
+NSAboutPanelOptionKey const NSAboutPanelOptionApplicationVersion = @"ApplicationVersion";
+NSString * const NSApplicationLaunchRemoteNotificationKey = @"NSApplicationLaunchRemoteNotificationKey";
+NSNotificationName const NSApplicationDidChangeOcclusionStateNotification = @"NSApplicationDidChangeOcclusionStateNotification";

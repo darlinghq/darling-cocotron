@@ -443,3 +443,12 @@ NSNotificationName NSWorkspaceWillUnmountNotification = @"NSWorkspaceWillUnmount
 }
 
 @end
+
+NSNotificationName const NSWorkspaceDidHideApplicationNotification = @"NSWorkspaceDidHideApplicationNotification";
+NSNotificationName const NSWorkspaceDidUnhideApplicationNotification = @"NSWorkspaceDidUnhideApplicationNotification";
+NSString * const NSWorkspaceVolumeLocalizedNameKey = @"NSWorkspaceVolumeLocalizedNameKey";
+NSString * const NSWorkspaceVolumeURLKey = @"NSWorkspaceVolumeURLKey";
+NSString * const NSWorkspaceVolumeOldLocalizedNameKey = @"NSWorkspaceVolumeOldLocalizedNameKey";
+NSString * const NSWorkspaceVolumeOldURLKey = @"NSWorkspaceVolumeOldURLKey";
+NSNotificationName const NSWorkspaceDidRenameVolumeNotification = @"NSWorkspaceDidRenameVolumeNotification";
+NSNotificationName const NSWorkspaceDidChangeFileLabelsNotification = @"NSWorkspaceDidChangeFileLabelsNotification";

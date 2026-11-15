@@ -29,6 +29,13 @@ typedef NS_ENUM(NSInteger, NSSplitViewItemBehavior) {
     NSSplitViewItemBehaviorContentList,
 };
 
+typedef NS_ENUM(NSInteger, NSSplitViewItemCollapseBehavior) {
+    NSSplitViewItemCollapseBehaviorDefault,
+    NSSplitViewItemCollapseBehaviorPreferResizingSplitViewWithFixedSiblings,
+    NSSplitViewItemCollapseBehaviorPreferResizingSiblingsWithFixedSplitView,
+    NSSplitViewItemCollapseBehaviorUseConstraints,
+};
+
 @interface NSSplitViewItem : NSObject <NSCoding> {
     NSViewController *_viewController;
     NSSplitViewItemBehavior _behavior;

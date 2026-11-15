@@ -41,9 +41,6 @@ NSString *const NSScrollViewWillStartLiveMagnifyNotification =
 NSString *const NSScrollViewDidEndLiveMagnifyNotification =
         @"NSScrollViewDidEndLiveMagnifyNotification";
 
-NSString *const NSPreferredScrollerStyleDidChangeNotification =
-        @"NSPreferredScrollerStyleDidChangeNotification";
-
 @implementation NSScrollView
 
 NS_EXTRA_SYNTHESIZE_ASSIGN(NSScrollView, horizontalScrollElasticity, _horizontalScrollElasticity, NSScrollElasticity, horizontalScrollElasticity, setHorizontalScrollElasticity:)
@@ -1263,3 +1260,4 @@ static Class _rulerViewClass = nil;
 }
 
 @end
+

@@ -45,6 +45,37 @@ typedef NS_OPTIONS(NSUInteger, NSDragOperation) {
 - (NSArray *) namesOfPromisedFilesDroppedAtDestination: (NSURL *) destination;
 @end
 
+typedef NS_ENUM(NSInteger, NSDraggingFormation) {
+    NSDraggingFormationDefault = 0,
+    NSDraggingFormationNone,
+    NSDraggingFormationPile,
+    NSDraggingFormationList,
+    NSDraggingFormationStack,
+};
+
+typedef NS_ENUM(NSInteger, NSDraggingContext) {
+    NSDraggingContextOutsideApplication = 0,
+    NSDraggingContextWithinApplication,
+};
+
+typedef NS_OPTIONS(NSUInteger, NSDraggingItemEnumerationOptions) {
+    NSDraggingItemEnumerationConcurrent = 1,
+    NSDraggingItemEnumerationClearNonenumeratedImages = (1UL << 16),
+};
+
+typedef NS_ENUM(NSInteger, NSSpringLoadingHighlight) {
+    NSSpringLoadingHighlightNone = 0,
+    NSSpringLoadingHighlightStandard,
+    NSSpringLoadingHighlightEmphasized,
+};
+
+typedef NS_OPTIONS(NSUInteger, NSSpringLoadingOptions) {
+    NSSpringLoadingDisabled = 0,
+    NSSpringLoadingEnabled = 1UL << 0,
+    NSSpringLoadingContinuousActivation = 1UL << 1,
+    NSSpringLoadingNoHover = 1UL << 3,
+};
+
 @protocol NSDraggingDestination <NSObject>
 @optional
 - (BOOL) prepareForDragOperation: (id<NSDraggingInfo>) sender;

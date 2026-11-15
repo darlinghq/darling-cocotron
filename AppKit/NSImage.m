@@ -122,153 +122,153 @@ NSImageName const NSImageNameTouchBarPlayTemplate = @"NSTouchBarPlayTemplate";
 NSImageName const NSImageNameTouchBarRecordStopTemplate =
         @"NSTouchBarRecordStopTemplate";
 NSImageName const NSImageNameTouchBarAddDetailTemplate =
-        @"NSImageNameTouchBarAddDetailTemplate";
+        @"NSTouchBarAddDetailTemplate";
 NSImageName const NSImageNameTouchBarAddTemplate =
-        @"NSImageNameTouchBarAddTemplate";
+        @"NSTouchBarAddTemplate";
 NSImageName const NSImageNameTouchBarAddTabTemplate =
         @"NSImageNameTouchBarAddTabTemplate";
 NSImageName const NSImageNameTouchBarAlarmTemplate =
-        @"NSImageNameTouchBarAlarmTemplate";
+        @"NSTouchBarAlarmTemplate";
 NSImageName const NSImageNameTouchBarAudioInputMuteTemplate =
-        @"NSImageNameTouchBarAudioInputMuteTemplate";
+        @"NSTouchBarAudioInputMuteTemplate";
 NSImageName const NSImageNameTouchBarAudioInputTemplate =
-        @"NSImageNameTouchBarAudioInputTemplate";
+        @"NSTouchBarAudioInputTemplate";
 NSImageName const NSImageNameTouchBarAudioOutputMuteTemplate =
-        @"NSImageNameTouchBarAudioOutputMuteTemplate";
+        @"NSTouchBarAudioOutputMuteTemplate";
 NSImageName const NSImageNameTouchBarAudioOutputVolumeHighTemplate =
-        @"NSImageNameTouchBarAudioOutputVolumeHighTemplate";
+        @"NSTouchBarAudioOutputVolumeHighTemplate";
 NSImageName const NSImageNameTouchBarAudioOutputVolumeLowTemplate =
-        @"NSImageNameTouchBarAudioOutputVolumeLowTemplate";
+        @"NSTouchBarAudioOutputVolumeLowTemplate";
 NSImageName const NSImageNameTouchBarAudioOutputVolumeMediumTemplate =
-        @"NSImageNameTouchBarAudioOutputVolumeMediumTemplate";
+        @"NSTouchBarAudioOutputVolumeMediumTemplate";
 NSImageName const NSImageNameTouchBarAudioOutputVolumeOffTemplate =
-        @"NSImageNameTouchBarAudioOutputVolumeOffTemplate";
+        @"NSTouchBarAudioOutputVolumeOffTemplate";
 NSImageName const NSImageNameTouchBarBookmarksTemplate =
-        @"NSImageNameTouchBarBookmarksTemplate";
+        @"NSTouchBarBookmarksTemplate";
 NSImageName const NSImageNameTouchBarColorPickerFill =
-        @"NSImageNameTouchBarColorPickerFill";
+        @"NSTouchBarColorPickerFill";
 NSImageName const NSImageNameTouchBarColorPickerFont =
-        @"NSImageNameTouchBarColorPickerFont";
+        @"NSTouchBarColorPickerFont";
 NSImageName const NSImageNameTouchBarColorPickerStroke =
-        @"NSImageNameTouchBarColorPickerStroke";
+        @"NSTouchBarColorPickerStroke";
 NSImageName const NSImageNameTouchBarCommunicationAudioTemplate =
-        @"NSImageNameTouchBarCommunicationAudioTemplate";
+        @"NSTouchBarCommunicationAudioTemplate";
 NSImageName const NSImageNameTouchBarCommunicationVideoTemplate =
-        @"NSImageNameTouchBarCommunicationVideoTemplate";
+        @"NSTouchBarCommunicationVideoTemplate";
 NSImageName const NSImageNameTouchBarComposeTemplate =
-        @"NSImageNameTouchBarComposeTemplate";
+        @"NSTouchBarComposeTemplate";
 NSImageName const NSImageNameTouchBarDownloadTemplate =
-        @"NSImageNameTouchBarDownloadTemplate";
+        @"NSTouchBarDownloadTemplate";
 NSImageName const NSImageNameTouchBarEnterFullScreenTemplate =
-        @"NSImageNameTouchBarEnterFullScreenTemplate";
+        @"NSTouchBarEnterFullScreenTemplate";
 NSImageName const NSImageNameTouchBarExitFullScreenTemplate =
-        @"NSImageNameTouchBarExitFullScreenTemplate";
+        @"NSTouchBarExitFullScreenTemplate";
 NSImageName const NSImageNameTouchBarFastForwardTemplate =
-        @"NSImageNameTouchBarFastForwardTemplate";
+        @"NSTouchBarFastForwardTemplate";
 NSImageName const NSImageNameTouchBarFolderCopyToTemplate =
-        @"NSImageNameTouchBarFolderCopyToTemplate";
+        @"NSTouchBarFolderCopyToTemplate";
 NSImageName const NSImageNameTouchBarFolderMoveToTemplate =
-        @"NSImageNameTouchBarFolderMoveToTemplate";
+        @"NSTouchBarFolderMoveToTemplate";
 NSImageName const NSImageNameTouchBarFolderTemplate =
-        @"NSImageNameTouchBarFolderTemplate";
+        @"NSTouchBarFolderTemplate";
 NSImageName const NSImageNameTouchBarGetInfoTemplate =
-        @"NSImageNameTouchBarGetInfoTemplate";
+        @"NSTouchBarGetInfoTemplate";
 NSImageName const NSImageNameTouchBarGoBackTemplate =
-        @"NSImageNameTouchBarGoBackTemplate";
+        @"NSTouchBarGoBackTemplate";
 NSImageName const NSImageNameTouchBarGoDownTemplate =
-        @"NSImageNameTouchBarGoDownTemplate";
+        @"NSTouchBarGoDownTemplate";
 NSImageName const NSImageNameTouchBarGoForwardTemplate =
-        @"NSImageNameTouchBarGoForwardTemplate";
+        @"NSTouchBarGoForwardTemplate";
 NSImageName const NSImageNameTouchBarGoUpTemplate =
-        @"NSImageNameTouchBarGoUpTemplate";
+        @"NSTouchBarGoUpTemplate";
 NSImageName const NSImageNameTouchBarHistoryTemplate =
-        @"NSImageNameTouchBarHistoryTemplate";
+        @"NSTouchBarHistoryTemplate";
 NSImageName const NSImageNameTouchBarIconViewTemplate =
-        @"NSImageNameTouchBarIconViewTemplate";
+        @"NSTouchBarIconViewTemplate";
 NSImageName const NSImageNameTouchBarListViewTemplate =
-        @"NSImageNameTouchBarListViewTemplate";
+        @"NSTouchBarListViewTemplate";
 NSImageName const NSImageNameTouchBarMailTemplate =
-        @"NSImageNameTouchBarMailTemplate";
+        @"NSTouchBarMailTemplate";
 NSImageName const NSImageNameTouchBarNewFolderTemplate =
-        @"NSImageNameTouchBarNewFolderTemplate";
+        @"NSTouchBarNewFolderTemplate";
 NSImageName const NSImageNameTouchBarNewMessageTemplate =
-        @"NSImageNameTouchBarNewMessageTemplate";
+        @"NSTouchBarNewMessageTemplate";
 NSImageName const NSImageNameTouchBarOpenInBrowserTemplate =
-        @"NSImageNameTouchBarOpenInBrowserTemplate";
+        @"NSTouchBarOpenInBrowserTemplate";
 NSImageName const NSImageNameTouchBarPlayheadTemplate =
-        @"NSImageNameTouchBarPlayheadTemplate";
+        @"NSTouchBarPlayheadTemplate";
 NSImageName const NSImageNameTouchBarPlayPauseTemplate =
-        @"NSImageNameTouchBarPlayPauseTemplate";
+        @"NSTouchBarPlayPauseTemplate";
 NSImageName const NSImageNameTouchBarQuickLookTemplate =
-        @"NSImageNameTouchBarQuickLookTemplate";
+        @"NSTouchBarQuickLookTemplate";
 NSImageName const NSImageNameTouchBarRecordStartTemplate =
-        @"NSImageNameTouchBarRecordStartTemplate";
+        @"NSTouchBarRecordStartTemplate";
 NSImageName const NSImageNameTouchBarRefreshTemplate =
-        @"NSImageNameTouchBarRefreshTemplate";
+        @"NSTouchBarRefreshTemplate";
 NSImageName const NSImageNameTouchBarRemoveTemplate =
-        @"NSImageNameTouchBarRemoveTemplate";
+        @"NSTouchBarRemoveTemplate";
 NSImageName const NSImageNameTouchBarRewindTemplate =
-        @"NSImageNameTouchBarRewindTemplate";
+        @"NSTouchBarRewindTemplate";
 NSImageName const NSImageNameTouchBarRotateLeftTemplate =
-        @"NSImageNameTouchBarRotateLeftTemplate";
+        @"NSTouchBarRotateLeftTemplate";
 NSImageName const NSImageNameTouchBarRotateRightTemplate =
-        @"NSImageNameTouchBarRotateRightTemplate";
+        @"NSTouchBarRotateRightTemplate";
 NSImageName const NSImageNameTouchBarSearchTemplate =
-        @"NSImageNameTouchBarSearchTemplate";
+        @"NSTouchBarSearchTemplate";
 NSImageName const NSImageNameTouchBarShareTemplate =
-        @"NSImageNameTouchBarShareTemplate";
+        @"NSTouchBarShareTemplate";
 NSImageName const NSImageNameTouchBarSidebarTemplate =
-        @"NSImageNameTouchBarSidebarTemplate";
+        @"NSTouchBarSidebarTemplate";
 NSImageName const NSImageNameTouchBarSkipAhead15SecondsTemplate =
-        @"NSImageNameTouchBarSkipAhead15SecondsTemplate";
+        @"NSTouchBarSkipAhead15SecondsTemplate";
 NSImageName const NSImageNameTouchBarSkipAhead30SecondsTemplate =
-        @"NSImageNameTouchBarSkipAhead30SecondsTemplate";
+        @"NSTouchBarSkipAhead30SecondsTemplate";
 NSImageName const NSImageNameTouchBarSkipAheadTemplate =
-        @"NSImageNameTouchBarSkipAheadTemplate";
+        @"NSTouchBarSkipAheadTemplate";
 NSImageName const NSImageNameTouchBarSkipBack15SecondsTemplate =
-        @"NSImageNameTouchBarSkipBack15SecondsTemplate";
+        @"NSTouchBarSkipBack15SecondsTemplate";
 NSImageName const NSImageNameTouchBarSkipBack30SecondsTemplate =
-        @"NSImageNameTouchBarSkipBack30SecondsTemplate";
+        @"NSTouchBarSkipBack30SecondsTemplate";
 NSImageName const NSImageNameTouchBarSkipBackTemplate =
-        @"NSImageNameTouchBarSkipBackTemplate";
+        @"NSTouchBarSkipBackTemplate";
 NSImageName const NSImageNameTouchBarSkipToEndTemplate =
-        @"NSImageNameTouchBarSkipToEndTemplate";
+        @"NSTouchBarSkipToEndTemplate";
 NSImageName const NSImageNameTouchBarSkipToStartTemplate =
-        @"NSImageNameTouchBarSkipToStartTemplate";
+        @"NSTouchBarSkipToStartTemplate";
 NSImageName const NSImageNameTouchBarSlideshowTemplate =
-        @"NSImageNameTouchBarSlideshowTemplate";
+        @"NSTouchBarSlideshowTemplate";
 NSImageName const NSImageNameTouchBarTagIconTemplate =
-        @"NSImageNameTouchBarTagIconTemplate";
+        @"NSTouchBarTagIconTemplate";
 NSImageName const NSImageNameTouchBarTextBoldTemplate =
-        @"NSImageNameTouchBarTextBoldTemplate";
+        @"NSTouchBarTextBoldTemplate";
 NSImageName const NSImageNameTouchBarTextBoxTemplate =
-        @"NSImageNameTouchBarTextBoxTemplate";
+        @"NSTouchBarTextBoxTemplate";
 NSImageName const NSImageNameTouchBarTextCenterAlignTemplate =
-        @"NSImageNameTouchBarTextCenterAlignTemplate";
+        @"NSTouchBarTextCenterAlignTemplate";
 NSImageName const NSImageNameTouchBarTextItalicTemplate =
-        @"NSImageNameTouchBarTextItalicTemplate";
+        @"NSTouchBarTextItalicTemplate";
 NSImageName const NSImageNameTouchBarTextJustifiedAlignTemplate =
-        @"NSImageNameTouchBarTextJustifiedAlignTemplate";
+        @"NSTouchBarTextJustifiedAlignTemplate";
 NSImageName const NSImageNameTouchBarTextLeftAlignTemplate =
-        @"NSImageNameTouchBarTextLeftAlignTemplate";
+        @"NSTouchBarTextLeftAlignTemplate";
 NSImageName const NSImageNameTouchBarTextListTemplate =
-        @"NSImageNameTouchBarTextListTemplate";
+        @"NSTouchBarTextListTemplate";
 NSImageName const NSImageNameTouchBarTextRightAlignTemplate =
-        @"NSImageNameTouchBarTextRightAlignTemplate";
+        @"NSTouchBarTextRightAlignTemplate";
 NSImageName const NSImageNameTouchBarTextStrikethroughTemplate =
-        @"NSImageNameTouchBarTextStrikethroughTemplate";
+        @"NSTouchBarTextStrikethroughTemplate";
 NSImageName const NSImageNameTouchBarTextUnderlineTemplate =
-        @"NSImageNameTouchBarTextUnderlineTemplate";
+        @"NSTouchBarTextUnderlineTemplate";
 NSImageName const NSImageNameTouchBarUserAddTemplate =
-        @"NSImageNameTouchBarUserAddTemplate";
+        @"NSTouchBarUserAddTemplate";
 NSImageName const NSImageNameTouchBarUserGroupTemplate =
-        @"NSImageNameTouchBarUserGroupTemplate";
+        @"NSTouchBarUserGroupTemplate";
 NSImageName const NSImageNameTouchBarUserTemplate =
-        @"NSImageNameTouchBarUserTemplate";
+        @"NSTouchBarUserTemplate";
 NSImageName const NSImageNameTouchBarVolumeDownTemplate =
-        @"NSImageNameTouchBarVolumeDownTemplate";
+        @"NSTouchBarVolumeDownTemplate";
 NSImageName const NSImageNameTouchBarVolumeUpTemplate =
-        @"NSImageNameTouchBarVolumeUpTemplate";
+        @"NSTouchBarVolumeUpTemplate";
 
 // Private class used so the context knows the flipped status of a locked image
 // 10.4 does something like that - probably for more than just getting the
@@ -2142,3 +2142,4 @@ static NSUInteger scaledRepCacheBytes(NSArray *cache) {
 }
 
 @end
+

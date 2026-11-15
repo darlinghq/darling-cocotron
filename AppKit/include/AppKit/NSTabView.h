@@ -51,6 +51,12 @@ typedef NS_ENUM(NSUInteger, NSTabPosition) {
     NSTabPositionRight
 };
 
+typedef NS_ENUM(NSUInteger, NSTabViewBorderType) {
+    NSTabViewBorderTypeNone = 0,
+    NSTabViewBorderTypeLine = 1,
+    NSTabViewBorderTypeBezel = 2,
+};
+
 @interface NSTabView : NSView {
     NSMutableArray *_items;
     NSTabViewItem *_selectedItem;

@@ -362,3 +362,5 @@ NSString *const NSTextDidChangeNotification = @"NSTextDidChangeNotification";
 }
 
 @end
+
+NSString * const NSTextMovementUserInfoKey = @"NSTextMovement";
