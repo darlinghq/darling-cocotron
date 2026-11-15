@@ -138,6 +138,7 @@ NSString *const NSSplitViewWillResizeSubviewsNotification =
         return;
     }
     NS_EXTRA(NSSplitView, self)->_isVertical = flag;
+    [self setNeedsUpdateConstraints: YES];
 
     // Now get the split axis sorted
     [self adjustSubviews];
@@ -160,6 +161,7 @@ NSString *const NSSplitViewWillResizeSubviewsNotification =
 
 - (void) setDividerStyle: (NSSplitViewDividerStyle) style {
     NS_EXTRA(NSSplitView, self)->_dividerStyle = style;
+    [self setNeedsUpdateConstraints: YES];
     [self setNeedsDisplay: YES];
 }
 
@@ -240,6 +242,31 @@ static NSString *autosaveKey(NSString *name) {
 }
 
 static const char holdingPriorityKey;
+static const char preferredLengthKey;
+
+// The length the constraint-based layout keeps for a subview: its length when it
+// was arranged, and after that the length the user (or the API) last gave it.
+- (CGFloat) _preferredLengthOfSubview: (NSView *) subview {
+    NSNumber *length = objc_getAssociatedObject(subview, &preferredLengthKey);
+
+    if (length != nil)
+        return [length doubleValue];
+    return [self isVertical] ? NSWidth([subview frame]) : NSHeight([subview frame]);
+}
+
+- (void) _recordPreferredLengthOfSubview: (NSView *) subview {
+    CGFloat length = [self isVertical] ? NSWidth([subview frame]) : NSHeight([subview frame]);
+
+    objc_setAssociatedObject(subview, &preferredLengthKey, [NSNumber numberWithDouble: length], OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
+
+- (void) _recordPreferredLengths {
+    NSView *subview;
+
+    for (subview in [self _arrangedList])
+        if (![self isSubviewCollapsed: subview])
+            [self _recordPreferredLengthOfSubview: subview];
+}
 
 - (NSLayoutPriority) _holdingPriorityOfSubview: (NSView *) subview {
     NSNumber *priority = objc_getAssociatedObject(subview, &holdingPriorityKey);
@@ -581,6 +608,7 @@ static const char holdingPriorityKey;
     // The view goes in front of the subview currently at that index
     NSView *before = (NSUInteger) index < [arranged count] ? [arranged objectAtIndex: index] : nil;
 
+    [self _recordPreferredLengthOfSubview: view];
     if (explicit != nil)
         [explicit removeObjectIdenticalTo: view];
     if (before != nil)
@@ -589,6 +617,7 @@ static const char holdingPriorityKey;
         [super addSubview: view];
     if (explicit != nil)
         [explicit insertObject: view atIndex: MIN((NSUInteger) index, [explicit count])];
+    [self setNeedsUpdateConstraints: YES];
     [self adjustSubviews];
 }
 
@@ -601,9 +630,11 @@ static const char holdingPriorityKey;
 - (void) removeArrangedSubview: (NSView *) view {
     if (![self arrangesAllSubviews]) {
         [NS_EXTRA(NSSplitView, self)->_explicitArranged removeObjectIdenticalTo: view];
+        [self setNeedsUpdateConstraints: YES];
         [self adjustSubviews];
     } else if ([view superview] == self) {
         [view removeFromSuperview];
+        [self setNeedsUpdateConstraints: YES];
         [self adjustSubviews];
     }
 }
@@ -626,11 +657,106 @@ static const char holdingPriorityKey;
     objc_setAssociatedObject([arranged objectAtIndex: index], &holdingPriorityKey,
                              [NSNumber numberWithFloat: priority],
                              OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    [self _recordPreferredLengths];
+    [self setNeedsUpdateConstraints: YES];
 }
 
 - (void) addSubview: (NSView *) view {
+    [self _recordPreferredLengthOfSubview: view];
     [super addSubview: view];
+    [self setNeedsUpdateConstraints: YES];
     [self adjustSubviews];
+}
+
+static const char arrangedConstraintsKey;
+
+// When every visible arranged subview is laid out by constraints, the split view
+// provides the constraints that arrange them: the subviews follow one another
+// along the split axis separated by the divider thickness, fill the split view
+// across it, and keep their current length at their holding priority. The
+// subviews with the lowest holding priority are tied to each other in proportion
+// to their current lengths and take up what the others do not hold.
+- (void) updateConstraints {
+    NSArray *old = objc_getAssociatedObject(self, &arrangedConstraintsKey);
+
+    if (old != nil) {
+        [self removeConstraints: old];
+        objc_setAssociatedObject(self, &arrangedConstraintsKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+
+    NSMutableArray *visible = [NSMutableArray array];
+    NSView *subview;
+    BOOL allConstrained = YES;
+
+    for (subview in [self _arrangedList]) {
+        if ([self isSubviewCollapsed: subview])
+            continue;
+        [visible addObject: subview];
+        if ([subview translatesAutoresizingMaskIntoConstraints])
+            allConstrained = NO;
+    }
+
+    NSUInteger i, count = [visible count];
+
+    if (count > 0 && allConstrained) {
+        NSMutableArray *created = [NSMutableArray array];
+        BOOL vertical = [self isVertical];
+        NSLayoutAttribute startEdge = vertical ? NSLayoutAttributeLeft : NSLayoutAttributeTop;
+        NSLayoutAttribute endEdge = vertical ? NSLayoutAttributeRight : NSLayoutAttributeBottom;
+        NSLayoutAttribute crossStart = vertical ? NSLayoutAttributeTop : NSLayoutAttributeLeft;
+        NSLayoutAttribute crossEnd = vertical ? NSLayoutAttributeBottom : NSLayoutAttributeRight;
+        NSLayoutAttribute length = vertical ? NSLayoutAttributeWidth : NSLayoutAttributeHeight;
+        CGFloat thickness = [self dividerThickness];
+        NSLayoutPriority lowest = NSLayoutPriorityRequired;
+        NSLayoutPriority tiePriority = NSLayoutPriorityDefaultHigh;
+        NSView *tieAnchor = nil;
+        CGFloat tieAnchorLength = 0;
+
+        for (subview in visible) {
+            NSLayoutPriority priority = [self _holdingPriorityOfSubview: subview];
+
+            if (priority < lowest)
+                lowest = priority;
+        }
+
+        for (i = 0; i < count; ++i) {
+            subview = [visible objectAtIndex: i];
+            CGFloat subviewLength = [self _preferredLengthOfSubview: subview];
+            NSLayoutPriority priority = [self _holdingPriorityOfSubview: subview];
+
+            [created addObject: [NSLayoutConstraint constraintWithItem: subview attribute: startEdge relatedBy: NSLayoutRelationEqual
+                                                                toItem: i == 0 ? (id) self : [visible objectAtIndex: i - 1]
+                                                             attribute: i == 0 ? startEdge : endEdge
+                                                            multiplier: 1 constant: i == 0 ? 0 : thickness]];
+            [created addObject: [NSLayoutConstraint constraintWithItem: subview attribute: crossStart relatedBy: NSLayoutRelationEqual
+                                                                toItem: self attribute: crossStart multiplier: 1 constant: 0]];
+            [created addObject: [NSLayoutConstraint constraintWithItem: subview attribute: crossEnd relatedBy: NSLayoutRelationEqual
+                                                                toItem: self attribute: crossEnd multiplier: 1 constant: 0]];
+            if (i == count - 1)
+                [created addObject: [NSLayoutConstraint constraintWithItem: subview attribute: endEdge relatedBy: NSLayoutRelationEqual
+                                                                    toItem: self attribute: endEdge multiplier: 1 constant: 0]];
+
+            if (priority > lowest) {
+                NSLayoutConstraint *hold = [NSLayoutConstraint constraintWithItem: subview attribute: length relatedBy: NSLayoutRelationEqual
+                                                                           toItem: nil attribute: NSLayoutAttributeNotAnAttribute
+                                                                       multiplier: 1 constant: subviewLength];
+                [hold setPriority: priority];
+                [created addObject: hold];
+            } else if (tieAnchor == nil) {
+                tieAnchor = subview;
+                tieAnchorLength = subviewLength;
+            } else if (tieAnchorLength > 0 && subviewLength > 0) {
+                NSLayoutConstraint *tie = [NSLayoutConstraint constraintWithItem: subview attribute: length relatedBy: NSLayoutRelationEqual
+                                                                          toItem: tieAnchor attribute: length
+                                                                      multiplier: subviewLength / tieAnchorLength constant: 0];
+                [tie setPriority: tiePriority];
+                [created addObject: tie];
+            }
+        }
+        [self addConstraints: created];
+        objc_setAssociatedObject(self, &arrangedConstraintsKey, created, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    [super updateConstraints];
 }
 
 - (void) resizeSubviewsWithOldSize: (NSSize) oldSize {
@@ -806,6 +932,7 @@ static CGFloat constrainTo(CGFloat value, CGFloat min, CGFloat max) {
  * honoring the constraints imposed by the delegate (if any)
  */
 - (void) setPosition: (CGFloat) position ofDividerAtIndex: (int) index {
+    [self setNeedsUpdateConstraints: YES];
     NSAssert(index >= 0 && index < [[self _arrangedList] count] - 1,
              @"divider index out of range");
 
@@ -1012,6 +1139,7 @@ static CGFloat constrainTo(CGFloat value, CGFloat min, CGFloat max) {
         [subview1 setNeedsDisplay: YES];
     }
 
+    [self _recordPreferredLengths];
     [self setNeedsDisplay: YES];
     [self _autosaveSubviewLayoutIfNecessary];
 }
