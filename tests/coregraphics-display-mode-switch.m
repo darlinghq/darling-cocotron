@@ -15,6 +15,8 @@
 //                                                      the runner checks the display
 //                                                      went back to its mode
 // Exit code 0 is success, otherwise the number of the failed check.
+// Link with -framework AppKit -framework CoreGraphics: the test creates an
+// NSApplication and observes NSScreen's reaction, so it needs AppKit itself.
 #import <AppKit/AppKit.h>
 #import <CoreGraphics/CoreGraphics.h>
 #include <stdio.h>

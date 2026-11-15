@@ -800,7 +800,8 @@ static BOOL sameBackendMode(NSDictionary *a, NSDictionary *b) {
 // The display's mode list entry a mode (a legacy dictionary or a
 // CGDisplayModeRef) stands for, or NSNotFound. A legacy dictionary carries the
 // index it had in CGDisplayAvailableModes; otherwise the size selects the
-// mode, and among modes of that size the nearest refresh rate does.
+// mode (all the size keys the dictionary has must agree), and among modes of
+// that size the nearest refresh rate does.
 static NSUInteger indexOfMode(NSArray *modes, NSDictionary *wanted) {
     NSNumber *wantedIndex = [wanted objectForKey: (NSString *) kCGDisplayMode];
     if (wantedIndex && [wantedIndex unsignedIntegerValue] < [modes count]) {
@@ -814,14 +815,18 @@ static NSUInteger indexOfMode(NSArray *modes, NSDictionary *wanted) {
     NSUInteger found = NSNotFound;
     double foundDistance = 0;
     double wantedRate = [[wanted objectForKey: @"RefreshRate"] doubleValue];
+    // Every size key the dictionary carries has to match, so a dictionary
+    // edited in any one of them names no listed mode.
+    NSArray *sizeKeys = @[ @"Width", @"Height", @"PixelWidth", @"PixelHeight" ];
     for (NSUInteger i = 0; i < [modes count]; i++) {
         NSDictionary *candidate = [modes objectAtIndex: i];
-        NSNumber *pw = [wanted objectForKey: @"PixelWidth"], *ph = [wanted objectForKey: @"PixelHeight"];
-        BOOL sameSize = (pw && ph && [candidate objectForKey: @"PixelWidth"])
-            ? ([pw isEqual: [candidate objectForKey: @"PixelWidth"]] &&
-               [ph isEqual: [candidate objectForKey: @"PixelHeight"]])
-            : ([[candidate objectForKey: @"Width"] isEqual: [wanted objectForKey: @"Width"]] &&
-               [[candidate objectForKey: @"Height"] isEqual: [wanted objectForKey: @"Height"]]);
+        BOOL sameSize = YES;
+        for (NSString *key in sizeKeys) {
+            NSNumber *value = [wanted objectForKey: key], *listed = [candidate objectForKey: key];
+            // A backend that reports no pixel size lists none to compare.
+            if (value && listed && ![value isEqual: listed])
+                sameSize = NO;
+        }
         if (!sameSize)
             continue;
         double distance = fabs([[candidate objectForKey: @"RefreshRate"] doubleValue] - wantedRate);
