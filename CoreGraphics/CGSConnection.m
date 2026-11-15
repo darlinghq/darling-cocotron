@@ -59,6 +59,11 @@
 	NSInvalidAbstractInvocation();
 }
 
++(CGError) activateWindowsOfProcess:(pid_t)pid options:(uint32_t)options
+{
+	return kCGErrorNotImplemented;
+}
+
 -(CGSKeyboardLayout*) createKeyboardLayout
 {
 	NSInvalidAbstractInvocation();
