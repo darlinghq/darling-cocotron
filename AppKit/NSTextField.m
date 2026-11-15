@@ -20,6 +20,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import "NSKeyValueBinding/NSTextFieldBinder.h"
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSCursor.h>
+#import <AppKit/NSParagraphStyle.h>
 #import <AppKit/NSDragging.h>
 #import <AppKit/NSPasteboard.h>
 #import <AppKit/NSTextField.h>
@@ -41,6 +42,34 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 NS_EXTRA_SYNTHESIZE_ASSIGN(NSTextField, preferredMaxLayoutWidth, _preferredMaxLayoutWidth, CGFloat, preferredMaxLayoutWidth, setPreferredMaxLayoutWidth:)
 NS_EXTRA_DEALLOC(NSTextField)
+
+// A non-editable, non-selectable, borderless field without background that shows
+// the attributed text, sized to fit it. The line break mode comes from the
+// string's paragraph style; without one the cell's default (word wrapping)
+// stays, as observed on macOS.
++ (instancetype) labelWithAttributedString: (NSAttributedString *) attributedStringValue {
+    NSTextField *label = [[[self alloc] initWithFrame: NSZeroRect] autorelease];
+    [label setAttributedStringValue: attributedStringValue];
+    [label setBezeled: NO];
+    [label setBordered: NO];
+    [label setDrawsBackground: NO];
+    [label setEditable: NO];
+    [label setSelectable: NO];
+    if ([attributedStringValue length] > 0) {
+        NSParagraphStyle *style = [attributedStringValue attribute: NSParagraphStyleAttributeName
+                                                           atIndex: 0
+                                                    effectiveRange: NULL];
+        // QUIRK: the field's lineBreakMode follows the paragraph style of the text. Not
+        // documented beyond the header saying the mode is "determined by" the style.
+        // Evidence: black-box observation on macOS 10.14.4 (tier 2; macOS 26.7.3 reports
+        // word wrapping for every style, the wider older behaviour is followed).
+        // Test: tests/appkit-text-field-label-attributed.m
+        if (style != nil)
+            [label setLineBreakMode: [style lineBreakMode]];
+    }
+    [label sizeToFit];
+    return label;
+}
 
 + (Class) cellClass {
     return [NSTextFieldCell class];
