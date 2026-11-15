@@ -21,6 +21,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <ApplicationServices/ApplicationServices.h>
 
 @interface NSColor_CGColor : NSColor {
+#if !__OBJC2__ // NSColor's ivars, see NSColor.h
+    NSColorListName _catalogName;
+    NSImage *_pattern;
+#endif
     CGColorRef _colorRef;
     NSString *_colorSpaceName;
 }

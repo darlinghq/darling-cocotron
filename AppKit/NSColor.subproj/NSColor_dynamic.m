@@ -22,6 +22,9 @@
 
 // A color from +colorWithName:dynamicProvider:, resolved against the current appearance each time it is used.
 @interface NSColor_dynamic : NSColor {
+#if !__OBJC2__ // NSColor's ivars, see NSColor.h
+    NSColorName _colorName;
+#endif
     NSColor *(^_provider)(NSAppearance *);
 }
 @end
