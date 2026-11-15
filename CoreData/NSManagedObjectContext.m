@@ -37,18 +37,35 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Foundation/NSRaise.h>
 #import <Foundation/NSUndoManager.h>
 
-NSString *const NSManagedObjectContextObjectsDidChangeNotification = @"NSManagedObjectContextObjectsDidChangeNotification";
+// QUIRK: several of these notification names and keys have string values that are not spelled
+// like the symbol (for example the "inserted" key and the NSManagingContext...Notification
+// names). Not documented: the headers declare only the symbols. Evidence: black-box observation
+// of the exported constants on macOS 26.7.3 (tier 2); macOS 10.14.4 agrees for the notification
+// names, the inserted and updated keys and the object-ID keys.
+// Test: tests/coredata-context-notification-names.m
 NSString *const NSManagedObjectContextWillSaveNotification =
-        @"NSManagedObjectContextWillSaveNotification";
+        @"NSManagingContextWillSaveChangesNotification";
 NSString *const NSManagedObjectContextDidSaveNotification =
-        @"NSManagedObjectContextDidSaveNotification";
+        @"NSManagingContextDidSaveChangesNotification";
+NSString *const NSManagedObjectContextObjectsDidChangeNotification =
+        @"NSObjectsChangedInManagingContextNotification";
+NSString *const NSManagedObjectContextDidSaveObjectIDsNotification =
+        @"NSManagedObjectContextDidSaveObjectIDsNotification";
+NSString *const NSManagedObjectContextDidMergeChangesObjectIDsNotification =
+        @"NSManagedObjectContextDidMergeChangesObjectIDsNotification";
 
-NSString *const NSInsertedObjectsKey = @"NSInsertedObjectsKey";
-NSString *const NSUpdatedObjectsKey = @"NSUpdatedObjectsKey";
-NSString *const NSDeletedObjectsKey = @"NSDeletedObjectsKey";
-NSString *const NSRefreshedObjectsKey = @"NSRefreshedObjectsKey";
-NSString *const NSInvalidatedObjectsKey = @"NSInvalidatedObjectsKey";
-NSString *const NSInvalidatedAllObjectsKey = @"NSInvalidatedAllObjectsKey";
+NSString *const NSInsertedObjectsKey = @"inserted";
+NSString *const NSUpdatedObjectsKey = @"updated";
+NSString *const NSDeletedObjectsKey = @"deleted";
+NSString *const NSRefreshedObjectsKey = @"refreshed";
+NSString *const NSInvalidatedObjectsKey = @"invalidated";
+NSString *const NSInvalidatedAllObjectsKey = @"invalidatedAll";
+
+NSString *const NSInsertedObjectIDsKey = @"inserted_objectIDs";
+NSString *const NSUpdatedObjectIDsKey = @"updated_objectIDs";
+NSString *const NSDeletedObjectIDsKey = @"deleted_objectIDs";
+NSString *const NSRefreshedObjectIDsKey = @"refreshed_objectIDs";
+NSString *const NSInvalidatedObjectIDsKey = @"invalidated_objectIDs";
 
 @interface NSAtomicStore (private)
 - (void) _uniqueObjectID: (NSManagedObjectID *) objectID;

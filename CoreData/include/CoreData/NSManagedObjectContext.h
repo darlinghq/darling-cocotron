@@ -30,6 +30,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 COREDATA_EXPORT NSString *const NSManagedObjectContextObjectsDidChangeNotification;
 COREDATA_EXPORT NSString *const NSManagedObjectContextWillSaveNotification;
 COREDATA_EXPORT NSString *const NSManagedObjectContextDidSaveNotification;
+COREDATA_EXPORT NSString *const NSManagedObjectContextObjectsDidChangeNotification;
+COREDATA_EXPORT NSString *const NSManagedObjectContextDidSaveObjectIDsNotification;
+COREDATA_EXPORT NSString *const NSManagedObjectContextDidMergeChangesObjectIDsNotification;
 
 COREDATA_EXPORT NSString *const NSInsertedObjectsKey;
 COREDATA_EXPORT NSString *const NSUpdatedObjectsKey;
@@ -37,6 +40,13 @@ COREDATA_EXPORT NSString *const NSDeletedObjectsKey;
 COREDATA_EXPORT NSString *const NSRefreshedObjectsKey;
 COREDATA_EXPORT NSString *const NSInvalidatedObjectsKey;
 COREDATA_EXPORT NSString *const NSInvalidatedAllObjectsKey;
+
+COREDATA_EXPORT NSString *const NSInsertedObjectIDsKey;
+COREDATA_EXPORT NSString *const NSUpdatedObjectIDsKey;
+COREDATA_EXPORT NSString *const NSDeletedObjectIDsKey;
+COREDATA_EXPORT NSString *const NSRefreshedObjectIDsKey;
+COREDATA_EXPORT NSString *const NSInvalidatedObjectIDsKey;
+
 COREDATA_EXPORT NSString *const NSPersistentStoreSaveConflictsErrorKey;
 
 typedef NS_ENUM(NSUInteger, NSManagedObjectContextConcurrencyType) {
