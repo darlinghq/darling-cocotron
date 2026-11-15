@@ -49,6 +49,8 @@ static const struct {
     {"NSPanel", 0x84},
     {"NSControl", 0x5c},
     {"NSButton", 0x5c},
+    {"NSImageRep", 0x1c},
+    {"NSBitmapImageRep", 0x34},
     {"NSPopUpButton", 0x60},
     {"NSTextField", 0x64},
     {"NSSecureTextField", 0x64},
@@ -659,6 +661,89 @@ static void checkCopies(void) {
     [image release];
 }
 
+// NSImageRep (0x1c) has no room for any extra state and NSBitmapImageRep
+// (0x34) only one pointer; an application's subclass keeps its ivars after
+// them
+@interface NSImageRep : NSObject {
+    void *_imageRepLayout[6];
+}
+@end
+
+@interface NSBitmapImageRep : NSImageRep {
+    void *_bitmapImageRepLayout[6];
+}
+@end
+
+APP_SUBCLASS(AppBitmapImageRep, NSBitmapImageRep)
+
+@interface NSObject (LegacyLayoutBitmapAPI)
+- (id) initWithBitmapDataPlanes: (unsigned char **) planes
+                     pixelsWide: (NSInteger) width
+                     pixelsHigh: (NSInteger) height
+                  bitsPerSample: (NSInteger) bitsPerSample
+                samplesPerPixel: (NSInteger) samplesPerPixel
+                       hasAlpha: (BOOL) hasAlpha
+                       isPlanar: (BOOL) isPlanar
+                 colorSpaceName: (NSString *) colorSpaceName
+                    bytesPerRow: (NSInteger) bytesPerRow
+                   bitsPerPixel: (NSInteger) bitsPerPixel;
+- (NSInteger) pixelsWide;
+- (NSInteger) pixelsHigh;
+- (NSInteger) bitsPerSample;
+- (NSInteger) samplesPerPixel;
+- (NSInteger) bitsPerPixel;
+- (NSInteger) bytesPerRow;
+- (BOOL) hasAlpha;
+- (BOOL) isOpaque;
+- (BOOL) isPlanar;
+- (void) setOpaque: (BOOL) flag;
+- (void) setAlpha: (BOOL) flag;
+- (unsigned char *) bitmapData;
+- (NSString *) colorSpaceName;
+- (void) setProperty: (NSString *) property withValue: (id) value;
+- (id) valueForProperty: (NSString *) property;
+@end
+
+static void checkImageReps(void) {
+#if !__OBJC2__
+    expect(CANARY_OFFSET(AppBitmapImageRep) == 0x34, "test declares NSBitmapImageRep as 0x34 bytes");
+#endif
+    AppBitmapImageRep *rep = [[AppBitmapImageRep alloc] initWithBitmapDataPlanes: NULL
+                                                                      pixelsWide: 5
+                                                                      pixelsHigh: 3
+                                                                   bitsPerSample: 8
+                                                                 samplesPerPixel: 4
+                                                                        hasAlpha: YES
+                                                                        isPlanar: NO
+                                                                  colorSpaceName: @"NSCalibratedRGBColorSpace"
+                                                                     bytesPerRow: 20
+                                                                    bitsPerPixel: 32];
+    expect(rep != nil, "NSBitmapImageRep created");
+    fillCanary(rep->_canary);
+    expect([rep pixelsWide] == 5 && [rep pixelsHigh] == 3, "NSImageRep pixel size");
+    expect([rep bitsPerSample] == 8, "NSImageRep bitsPerSample");
+    expect([rep hasAlpha] == YES && [rep isOpaque] == NO, "NSImageRep alpha flags");
+    [rep setOpaque: YES];
+    [rep setAlpha: NO];
+    expect([rep hasAlpha] == NO && [rep isOpaque] == YES, "NSImageRep alpha flags set");
+    [rep setOpaque: NO];
+    [rep setAlpha: YES];
+    expect([rep hasAlpha] == YES && [rep isOpaque] == NO, "NSImageRep alpha flags set again");
+    expect([rep bitsPerSample] == 8 && [rep pixelsWide] == 5, "NSImageRep flags leave neighbours alone");
+    expect([rep samplesPerPixel] == 4 && [rep bitsPerPixel] == 32 && [rep bytesPerRow] == 20,
+           "NSBitmapImageRep layout");
+    expect([rep isPlanar] == NO, "NSBitmapImageRep isPlanar");
+    unsigned char *data = [rep bitmapData];
+    expect(data != NULL, "NSBitmapImageRep bitmapData");
+    if (data != NULL) {
+        memset(data, 0x5a, 20 * 3);
+        expect(data[0] == 0x5a && data[59] == 0x5a, "NSBitmapImageRep pixel storage");
+    }
+    [rep setProperty: @"legacyProperty" withValue: @"v"];
+    expect(canaryIntact(rep->_canary), "NSBitmapImageRep subclass ivars intact");
+    [rep release];
+}
+
 // An application's NSOpenGLContext subclass keeps its ivars after Apple's
 // 0xc bytes. The context is only allocated (no GL driver is needed): the
 // state AppKit keeps for a view must not touch the subclass's ivars.
@@ -761,6 +846,7 @@ int main(void) {
         checkControlSubclasses();
         checkControllerSubclasses();
         checkCopies();
+        checkImageReps();
         checkOpenGLContext();
         checkColor();
         checkFont();
