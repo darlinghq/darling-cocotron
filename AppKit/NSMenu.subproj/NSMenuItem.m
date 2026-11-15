@@ -81,6 +81,7 @@ NS_EXTRA_SYNTHESIZE_RETAIN(NSMenuItem, badge, _badge, NSMenuItemBadge *, badge, 
                         [keyed decodeIntForKey: @"NSKeyEquivModMask"]];
         [self setSubmenu: [keyed decodeObjectForKey: @"NSSubmenu"]];
         NS_EXTRA(NSMenuItem, self)->_tag = [keyed decodeIntForKey: @"NSTag"];
+        NS_EXTRA(NSMenuItem, self)->_indentationLevel = [keyed decodeIntForKey: @"NSIndent"];
         if ([keyed containsValueForKey: @"NSState"])
             NS_EXTRA(NSMenuItem, self)->_state = [keyed decodeIntForKey: @"NSState"];
         NS_EXTRA(NSMenuItem, self)->_hidden = [keyed decodeBoolForKey: @"NSIsHidden"];
