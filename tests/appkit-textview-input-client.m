@@ -26,7 +26,9 @@ int main(void)
 
         expect([view conformsToProtocol: @protocol(NSTextInputClient)], "NSTextView is an NSTextInputClient");
         expect(![view hasMarkedText], "no marked text");
-        expect([view markedRange].location == NSNotFound, "the marked range is not found");
+        // QUIRK test: macOS 10.14.4 and 26.7.3 answer {length, 0}, not {NSNotFound, 0}
+        expect(NSEqualRanges([view markedRange], NSMakeRange([[view string] length], 0)),
+               "the marked range without marked text is empty at the end of the text");
         expect([view validAttributesForMarkedText] != nil, "valid marked text attributes are an array");
 
         NSRange actual;

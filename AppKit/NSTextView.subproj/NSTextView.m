@@ -207,39 +207,6 @@ static NSTextView *s_targetTextView = nil;
 
 @implementation NSTextView
 
-+ (NSScrollView *) scrollableTextView {
-    NSScrollView *scrollView =
-            [[[NSScrollView alloc] initWithFrame: NSMakeRect(0, 0, 200, 100)]
-                    autorelease];
-
-    [scrollView setHasVerticalScroller: YES];
-    [scrollView setBorderType: NSBezelBorder];
-
-    // Fill the visible area once the scroller and border are accounted for,
-    // so that autoresizing keeps the text view as wide as the content area.
-    NSSize contentSize = [scrollView contentSize];
-    NSTextView *textView = [[[self alloc]
-            initWithFrame: NSMakeRect(0, 0, contentSize.width,
-                                      contentSize.height)] autorelease];
-
-    // The text view grows downwards without limit as text is added.
-    [textView setMinSize: NSMakeSize(0, contentSize.height)];
-    [textView setMaxSize: NSMakeSize(FLT_MAX, FLT_MAX)];
-    [textView setVerticallyResizable: YES];
-    [textView setHorizontallyResizable: NO];
-    [textView setAutoresizingMask: NSViewWidthSizable];
-    // The container follows the view's width but not its height, which
-    // setVerticallyResizable: would otherwise make it track.
-    [[textView textContainer] setWidthTracksTextView: YES];
-    [[textView textContainer] setHeightTracksTextView: NO];
-    [[textView textContainer]
-            setContainerSize: NSMakeSize(contentSize.width, FLT_MAX)];
-
-    [scrollView setDocumentView: textView];
-
-    return scrollView;
-}
-
 - (void) configureMenu {
     static NSMenu *menu = nil;
 
@@ -426,10 +393,7 @@ static NSTextView *s_targetTextView = nil;
                     format: @"-[%@ %s] is not implemented for coder %@",
                             [self class], sel_getName(_cmd), coder];
     }
-    [self registerForDraggedTypes: [NSArray
-                                           arrayWithObjects: NSRTFPboardType,
-                                                             NSStringPboardType,
-                                                             nil]];
+    [self updateDragTypeRegistration];
 
     return self;
 }
@@ -485,10 +449,7 @@ static NSTextView *s_targetTextView = nil;
                                        -NS_EXTRA(NSTextView, self)->_textContainerInset.height)];
     [self configureMenu];
 
-    [self registerForDraggedTypes: [NSArray
-                                           arrayWithObjects: NSRTFPboardType,
-                                                             NSStringPboardType,
-                                                             nil]];
+    [self updateDragTypeRegistration];
 
     return self;
 }
@@ -541,6 +502,7 @@ static NSTextView *s_targetTextView = nil;
     [NS_EXTRA(NSTextView, self)->_markedTextAttributes release];
     [NS_EXTRA(NSTextView, self)->_fieldEditorUndoManager release];
     [NS_EXTRA(NSTextView, self)->_undoTyping release];
+    [NS_EXTRA(NSTextView, self)->_allowedInputSourceLocales release];
     NS_EXTRA_FREE(NSTextView, self);
     [super dealloc];
 }
@@ -923,7 +885,14 @@ static NSTextView *s_targetTextView = nil;
     }
 }
 
+// Nothing can be written without a selection; plain text offers only the
+// string (observed on macOS 10.14.4 and 26.7.3).
+// Test: appkit-textview-editing-api.m (writable pasteboard types)
 - (NSArray *) writablePasteboardTypes {
+    if ([self selectedRange].length == 0)
+        return [NSArray array];
+    if (!NS_EXTRA(NSTextView, self)->_isRichText)
+        return [NSArray arrayWithObject: NSStringPboardType];
     return [NSArray arrayWithObjects: NSRTFPboardType, NSStringPboardType, nil];
 }
 
@@ -1254,30 +1223,7 @@ static NSTextView *s_targetTextView = nil;
 }
 
 - (void) paste: sender {
-    id string = nil;
-
-    NSPasteboard *pboard = [NSPasteboard generalPasteboard];
-    if (NS_EXTRA(NSTextView, self)->_isRichText) {
-        NSData *data = [pboard dataForType: NSRTFPboardType];
-        if (data && data.length > 0) {
-            string =
-                    [[[NSAttributedString alloc] initWithRTF: data
-                                          documentAttributes: nil] autorelease];
-        }
-    }
-    if (string == nil) {
-        string = [pboard stringForType: NSStringPboardType];
-    }
-    if ([string length] > 0) {
-        if (![self _delegateChangeTextInRange: [self selectedRange]
-                            replacementString: string])
-            return;
-
-        [self _replaceCharactersInRange: [self selectedRange]
-                             withString: string
-                    useTypingAttributes: NO];
-        [self didChangeText];
-    }
+    [self _pasteRestrictedToTypes: nil];
 }
 
 - (void) selectAll: sender {
@@ -2884,6 +2830,7 @@ static NSTextView *s_targetTextView = nil;
 
 - (void) setEditable: (BOOL) flag {
     NS_EXTRA(NSTextView, self)->_isEditable = flag;
+    [self updateDragTypeRegistration];
 }
 
 - (void) setSelectable: (BOOL) flag {
@@ -3342,6 +3289,8 @@ static NSTextView *s_targetTextView = nil;
                          withString: object
              allowsTypingCoalescing: YES];
     [self didChangeText];
+    if (NS_EXTRA(NSTextView, self)->_processingKeyEvent)
+        [self _applyTypedTextSubstitutionsForRange: NSMakeRange(range.location, [replacementString length])];
     [self scrollRangeToVisible: [self selectedRange]];
 }
 
@@ -3390,9 +3339,15 @@ static NSTextView *s_targetTextView = nil;
 // macOS 10.14.4 and 26.7.3 (tier 2, MAC-EVIDENCE V613).
 // Test: appkit-textview-editing-api.m (marked range without marked text)
 - (NSRange) markedRange {
-    if (NS_EXTRA(NSTextView, self)->_hasMarkedText)
-        return NS_EXTRA(NSTextView, self)->_markedRange;
-    return NSMakeRange([NS_EXTRA(NSTextView, self)->_textStorage length], 0);
+    NSUInteger length = [NS_EXTRA(NSTextView, self)->_textStorage length];
+    if (NS_EXTRA(NSTextView, self)->_hasMarkedText) {
+        // text changed behind our back (straight in the text storage) may have
+        // cut the marked text off
+        if (NSMaxRange(NS_EXTRA(NSTextView, self)->_markedRange) <= length)
+            return NS_EXTRA(NSTextView, self)->_markedRange;
+        [self _clearMarkedText];
+    }
+    return NSMakeRange(length, 0);
 }
 
 // Forgets the marked state and takes the marked text attributes off; the text
@@ -3596,10 +3551,7 @@ static NSTextView *s_targetTextView = nil;
     if (gRange.location == NSNotFound)
         gRange = [layoutManager glyphRangeForTextContainer: [self textContainer]];
 
-    if ([self drawsBackground]) {
-        [NS_EXTRA(NSTextView, self)->_backgroundColor setFill];
-        NSRectFill(rect);
-    }
+    [self drawViewBackgroundInRect: rect];
     [layoutManager drawBackgroundForGlyphRange: gRange atPoint: origin];
     [layoutManager drawGlyphsForGlyphRange: gRange atPoint: origin];
     if ([self shouldDrawInsertionPoint]) {
@@ -3862,6 +3814,49 @@ static NSTextView *s_targetTextView = nil;
     else if ([item action] == @selector(toggleContinuousSpellChecking:)) {
         [item setState: [self isContinuousSpellCheckingEnabled]];
     }
+
+    // The toggles show their state; they and the commands that change the text
+    // or its attributes are only available in an editable view (observed on
+    // macOS 10.14.4 and 26.7.3).
+    // Test: appkit-textview-editing-api.m (validating menu items)
+    SEL action = [item action];
+    if (action == @selector(toggleAutomaticQuoteSubstitution:) ||
+        action == @selector(toggleAutomaticDashSubstitution:) ||
+        action == @selector(toggleAutomaticLinkDetection:) ||
+        action == @selector(toggleAutomaticDataDetection:) ||
+        action == @selector(toggleAutomaticTextReplacement:) ||
+        action == @selector(toggleAutomaticSpellingCorrection:) ||
+        action == @selector(toggleSmartInsertDelete:) ||
+        action == @selector(toggleGrammarChecking:)) {
+        BOOL on = NO;
+        if (action == @selector(toggleAutomaticQuoteSubstitution:))
+            on = [self isAutomaticQuoteSubstitutionEnabled];
+        else if (action == @selector(toggleAutomaticDashSubstitution:))
+            on = [self isAutomaticDashSubstitutionEnabled];
+        else if (action == @selector(toggleAutomaticLinkDetection:))
+            on = [self isAutomaticLinkDetectionEnabled];
+        else if (action == @selector(toggleAutomaticDataDetection:))
+            on = [self isAutomaticDataDetectionEnabled];
+        else if (action == @selector(toggleAutomaticTextReplacement:))
+            on = [self isAutomaticTextReplacementEnabled];
+        else if (action == @selector(toggleAutomaticSpellingCorrection:))
+            on = [self isAutomaticSpellingCorrectionEnabled];
+        else if (action == @selector(toggleSmartInsertDelete:))
+            on = [self smartInsertDeleteEnabled];
+        else
+            on = [self isGrammarCheckingEnabled];
+        [item setState: on ? NSOnState : NSOffState];
+        return NS_EXTRA(NSTextView, self)->_isEditable;
+    }
+    if (action == @selector(turnOffKerning:) || action == @selector(tightenKerning:) ||
+        action == @selector(loosenKerning:) || action == @selector(useStandardKerning:) ||
+        action == @selector(turnOffLigatures:) || action == @selector(useStandardLigatures:) ||
+        action == @selector(useAllLigatures:) || action == @selector(raiseBaseline:) ||
+        action == @selector(lowerBaseline:) || action == @selector(outline:) ||
+        action == @selector(superscript:) || action == @selector(subscript:) ||
+        action == @selector(unscript:) || action == @selector(pasteAsPlainText:) ||
+        action == @selector(pasteAsRichText:))
+        return NS_EXTRA(NSTextView, self)->_isEditable;
     return YES;
 }
 

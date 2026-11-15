@@ -196,6 +196,8 @@ typedef NS_ENUM(NSUInteger, NSFindPanelSubstringMatchType) {
 - initWithFrame: (NSRect) frame textContainer: (NSTextContainer *) container;
 
 - initWithFrame: (NSRect) frame;
+// TextKit 2 backing is not available; both values give the TextKit 1 network.
+- (instancetype) initUsingTextLayoutManager: (BOOL) usingTextLayoutManager;
 
 @property(nonatomic) BOOL acceptsGlyphInfo;
 
@@ -205,6 +207,9 @@ typedef NS_ENUM(NSUInteger, NSFindPanelSubstringMatchType) {
 - (void) replaceTextStorage: (NSTextStorage *) textStorage;
 
 @property(nonatomic, retain) NSTextContainer *textContainer;
+// Swaps the container, keeping the layout manager and text storage.
+- (void) replaceTextContainer: (NSTextContainer *) newContainer;
+- (void) invalidateTextContainerOrigin;
 
 @property(nonatomic) NSSize textContainerInset;
 @property(nonatomic, readonly) NSPoint textContainerOrigin;
@@ -214,6 +219,42 @@ typedef NS_ENUM(NSUInteger, NSFindPanelSubstringMatchType) {
 
 - (void) insertText: (id) string;
 - (void) insertText: (id) string replacementRange: (NSRange) replacementRange;
+
+// Sets the frame size, limited by minSize and maxSize in the directions the
+// view may resize in.
+- (void) setConstrainedFrameSize: (NSSize) desiredSize;
+- (void) setAlignment: (NSTextAlignment) alignment range: (NSRange) range;
+
+// Font menu commands
+- (void) turnOffKerning: (nullable id) sender;
+- (void) tightenKerning: (nullable id) sender;
+- (void) loosenKerning: (nullable id) sender;
+- (void) useStandardKerning: (nullable id) sender;
+- (void) turnOffLigatures: (nullable id) sender;
+- (void) useStandardLigatures: (nullable id) sender;
+- (void) useAllLigatures: (nullable id) sender;
+- (void) raiseBaseline: (nullable id) sender;
+- (void) lowerBaseline: (nullable id) sender;
+- (void) outline: (nullable id) sender;
+- (void) toggleTraditionalCharacterShape: (nullable id) sender;
+
+// Text commands
+- (void) changeColor: (nullable id) sender;
+- (void) changeAttributes: (nullable id) sender;
+- (void) changeDocumentBackgroundColor: (nullable id) sender;
+// No spacing, list or table panels exist: these do nothing.
+- (void) orderFrontSpacingPanel: (nullable id) sender;
+- (void) orderFrontListPanel: (nullable id) sender;
+- (void) orderFrontTablePanel: (nullable id) sender;
+
+// Override points
+- (void) drawViewBackgroundInRect: (NSRect) rect;
+- (void) updateDragTypeRegistration;
+- (void) clickedOnLink: (id) link atIndex: (NSUInteger) charIndex;
+- (NSUInteger) characterIndexForInsertionAtPoint: (NSPoint) point;
++ (BOOL) stronglyReferencesTextStorage;
+- (BOOL) performValidatedReplacementInRange: (NSRange) range
+                       withAttributedString: (NSAttributedString *) attributedString;
 
 @property(nonatomic) BOOL usesRuler;
 @property(nonatomic, getter=isRulerVisible) BOOL rulerVisible;
@@ -306,8 +347,38 @@ typedef NS_ENUM(NSUInteger, NSFindPanelSubstringMatchType) {
 - (void) toggleAutomaticSpellingCorrection: sender;
 
 @property(nonatomic) NSTextCheckingTypes enabledTextCheckingTypes;
+- (void) toggleAutomaticQuoteSubstitution: (nullable id) sender;
+- (void) toggleAutomaticLinkDetection: (nullable id) sender;
+- (void) toggleAutomaticDataDetection: (nullable id) sender;
+- (void) toggleAutomaticDashSubstitution: (nullable id) sender;
+- (void) toggleAutomaticTextReplacement: (nullable id) sender;
+- (void) toggleAutomaticTextCompletion: (nullable id) sender;
+- (void) checkTextInRange: (NSRange) range
+                    types: (NSTextCheckingTypes) checkingTypes
+                  options: (NSDictionary *) options;
+- (void) handleTextCheckingResults: (NSArray *) results
+                          forRange: (NSRange) range
+                             types: (NSTextCheckingTypes) checkingTypes
+                           options: (NSDictionary *) options
+                       orthography: (nullable NSOrthography *) orthography
+                         wordCount: (NSInteger) wordCount;
+// No substitutions panel exists: does nothing.
+- (void) orderFrontSubstitutionsPanel: (nullable id) sender;
+- (void) checkTextInSelection: (nullable id) sender;
+- (void) checkTextInDocument: (nullable id) sender;
+@property(nonatomic) BOOL usesFindPanel;
 
 @property(nonatomic) BOOL smartInsertDeleteEnabled;
+- (NSRange) smartDeleteRangeForProposedRange: (NSRange) proposedCharRange;
+- (void) toggleSmartInsertDelete: (nullable id) sender;
+- (void) smartInsertForString: (NSString *) pasteString
+               replacingRange: (NSRange) charRangeToReplace
+                 beforeString: (NSString *_Nullable *_Nullable) beforeString
+                  afterString: (NSString *_Nullable *_Nullable) afterString;
+- (nullable NSString *) smartInsertBeforeStringForString: (NSString *) pasteString
+                                          replacingRange: (NSRange) charRangeToReplace;
+- (nullable NSString *) smartInsertAfterStringForString: (NSString *) pasteString
+                                         replacingRange: (NSRange) charRangeToReplace;
 
 @property(nonatomic) BOOL allowsDocumentBackgroundColorChange;
 
@@ -347,6 +418,11 @@ typedef NS_ENUM(NSUInteger, NSFindPanelSubstringMatchType) {
 
 // An NSTextView wrapped in a configured, vertically-scrolling NSScrollView (10.14)
 + (NSScrollView *) scrollableTextView;
+// A text view configured as a field editor (10.14)
++ (instancetype) fieldEditor;
+// Text views for document contents, rich and plain, in a scroll view (10.14)
++ (NSScrollView *) scrollableDocumentContentTextView;
++ (NSScrollView *) scrollablePlainDocumentContentTextView;
 
 @end
 
@@ -488,3 +564,18 @@ NS_ASSUME_NONNULL_END
 - (BOOL) readSelectionFromPasteboard: (NSPasteboard *) pasteboard type: (NSString *) type;
 @end
 
+
+@interface NSTextView (NSPasteboard)
+@property(nonatomic, readonly, copy) NSArray *readablePasteboardTypes;
+- (NSString *) preferredPasteboardTypeFromArray: (NSArray *) availableTypes
+                     restrictedToTypesFromArray: (NSArray *) allowedTypes;
+- (BOOL) readSelectionFromPasteboard: (NSPasteboard *) pasteboard;
++ (void) registerForServices;
+- (id) validRequestorForSendType: (NSString *) sendType returnType: (NSString *) returnType;
+- (void) pasteAsPlainText: (id) sender;
+- (void) pasteAsRichText: (id) sender;
+@end
+
+@interface NSTextView (NSDragging)
+@property(nonatomic, readonly, copy) NSArray *acceptableDragTypes;
+@end

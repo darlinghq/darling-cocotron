@@ -160,6 +160,11 @@ typedef NS_ENUM(NSInteger, NSTextMovement) {
 - (void) alignLeft: sender;
 - (void) alignRight: sender;
 - (void) underline: sender;
+- (void) superscript: sender;
+- (void) subscript: sender;
+- (void) unscript: sender;
+- (void) copyFont: sender;
+- (void) pasteFont: sender;
 - (void) selectAll: sender;
 - (void) delete: sender;
 - (void) toggleRuler: sender;
