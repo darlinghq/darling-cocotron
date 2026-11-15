@@ -20,6 +20,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import "NSKeyValueBinding/NSTextFieldBinder.h"
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSCursor.h>
+#import <AppKit/NSAttributedString.h>
 #import <AppKit/NSParagraphStyle.h>
 #import <AppKit/NSDragging.h>
 #import <AppKit/NSPasteboard.h>
