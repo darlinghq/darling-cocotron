@@ -145,6 +145,32 @@ static void hotKeyEventNotification(CGSNotificationType type, void *data, unsign
     [NSApp postEvent: event atStart: NO];
 }
 
+// The documents a process argument list asks to open (arguments[0] is the
+// executable), by the rule the Cocoa application object follows: every
+// argument that is not a switch names a document, and "--" ends the list.
+// Every switch, -NSOpen included, takes the following argument as its value
+// ("-NSBindingDebugLogLevel 2", "-psn_0_12345"), so the value is not a
+// document, except that the value of -NSOpen is one. Empty arguments are
+// documents like any other.
+static NSArray *NSApplicationDocumentsInArguments(NSArray *arguments) {
+    NSMutableArray *documents = [NSMutableArray array];
+
+    for (NSUInteger i = 1; i < [arguments count]; i++) {
+        NSString *argument = [arguments objectAtIndex: i];
+
+        if ([argument isEqualToString: @"--"])
+            break;
+        if (![argument hasPrefix: @"-"]) {
+            [documents addObject: argument];
+            continue;
+        }
+        if (++i < [arguments count] && [argument isEqualToString: @"-NSOpen"]) {
+            [documents addObject: [arguments objectAtIndex: i]];
+        }
+    }
+    return documents;
+}
+
 @implementation NSApplication
 
 NS_EXTRA_DEALLOC(NSApplication)
@@ -869,6 +895,26 @@ static NSMutableArray *pendingOpenFiles = nil;
     return opened;
 }
 
+// Hands launch documents to the delegate (or the document controller) one call
+// per file, in order, as macOS does for documents named in the process
+// arguments: -application:openFiles: with a one-element array when the
+// delegate implements it, otherwise -application:openFile:.
+- (BOOL) _openArgumentDocuments: (NSArray *) documents {
+    BOOL opened = NO;
+
+    for (NSString *document in documents) {
+        NSArray *one = [NSArray arrayWithObject: document];
+
+        if ([_delegate respondsToSelector: @selector(application:openFiles:)]) {
+            [_delegate application: self openFiles: one];
+            opened = YES;
+        } else {
+            opened |= [self _openFileNames: one];
+        }
+    }
+    return opened;
+}
+
 - (void) finishLaunching {
     // The launch notifications are delivered once. Applications may call
     // this themselves before -run, which calls it as well.
@@ -904,7 +950,9 @@ static NSMutableArray *pendingOpenFiles = nil;
 
     // Documents named on the command line are opened first; an initial open-application event then
     // creates no untitled document.
-    argumentDocumentsOpened = [self openFiles];
+    argumentDocumentsOpened = [self _openArgumentDocuments:
+            NSApplicationDocumentsInArguments(
+                    [[NSProcessInfo processInfo] arguments])];
 
     if (!initialEventHandled) {
         if (initialEventKind != InitialEventNone) {
@@ -2159,6 +2207,9 @@ static BOOL resignPending;
 
 @end
 
+// argc and argv are not read: the documents to open come from the process
+// arguments when launching finishes (see -finishLaunching), as on macOS, so an
+// argv that does not match the process arguments is harmless.
 int NSApplicationMain(int argc, const char *argv[]) {
 #ifndef DARLING
     __NSInitializeProcess(argc, argv);
@@ -2168,30 +2219,6 @@ int NSApplicationMain(int argc, const char *argv[]) {
     NSBundle *bundle = [NSBundle mainBundle];
     Class class = [bundle principalClass];
     NSString *nibFile = [bundle infoDictionary][@"NSMainNibFile"];
-
-    if (argc > 1) {
-        // Arguments that are not "-key value" pairs (and not after "--") name documents to open.
-        NSMutableArray *arguments =
-                [NSMutableArray arrayWithCapacity: argc - 1];
-        for (int i = 1; i < argc; i++)
-            if (argv[i][0] != '-') {
-                // nil for an argument that is not valid UTF-8; -addObject: would raise.
-                NSString *argument = [NSString stringWithUTF8String: argv[i]];
-                if (argument != nil)
-                    [arguments addObject: argument];
-            }
-            else if (argv[i][1] == '-' && argv[i][2] == '\0')
-                break;
-            else // (argv[i][0] == '-' && argv[i] != "--")
-                    if (strcmp(argv[i], "-NSOpen") != 0)
-                i++;
-
-        if ((argc = [arguments count]))
-            [[NSUserDefaults standardUserDefaults]
-                    setObject: ((argc == 1) ? [arguments lastObject]
-                                            : arguments)
-                       forKey: @"NSOpen"];
-    }
 
 #ifndef DARLING
     [NSClassFromString(@"Win32RunningCopyPipe")
