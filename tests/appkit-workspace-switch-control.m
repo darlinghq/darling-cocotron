@@ -3,9 +3,9 @@
 
 #define EXPECT(cond, msg) do { if (!(cond)) { printf("FAIL: %s\n", msg); return 1; } } while (0)
 
-// NSAccessibility.h (macOS 10.13) puts switchControlEnabled, getter isSwitchControlEnabled, on NSWorkspace. Phone
-// sends it to the shared workspace, which is a MacWorkspace here. Darling has no assistive-technology client, so
-// Switch Control is never running.
+// NSAccessibility.h (macOS 10.13) puts switchControlEnabled, getter isSwitchControlEnabled, on NSWorkspace. The
+// shared workspace is a MacWorkspace here. Darling has no assistive-technology client, so Switch Control is never
+// running.
 int main(void) {
     @autoreleasepool {
         NSWorkspace *workspace = [NSWorkspace sharedWorkspace];

@@ -1,6 +1,6 @@
 /* Copyright (C) 2026 Lubos Dolezel */
 // -[NSDocument setDisplayName:] (NSDocument.h): the name the document is given for presentation; nil goes back
-// to the derived name. Link with the candidate AppKit; no windows are needed.
+// to the default name. Link with the candidate AppKit; no windows are needed.
 // The last two groups pin a QUIRK (see NSDocument.m -setFileURL:): assigning a file URL drops the set name.
 #import <AppKit/NSDocument.h>
 #include <stdlib.h>
@@ -51,7 +51,7 @@ int main(void) {
 
         [document setDisplayName:nil];
         expect([[document displayName] length] > 0 && ![[document displayName] isEqualToString:@"Second"],
-               @"nil goes back to the derived name");
+               @"nil goes back to the default name");
         [document removeObserver:observer forKeyPath:@"displayName"];
         [observer release];
 
@@ -60,8 +60,13 @@ int main(void) {
         expect([[document displayName] isEqualToString:@"appkit-display-name-a.txt"], @"the file name is the derived name");
         [document setDisplayName:@"Override"];
         expect([[document displayName] isEqualToString:@"Override"], @"a set name wins over the file name");
+        // QUIRK pinned: nil gives the Untitled default even though a file URL is set.
         [document setDisplayName:nil];
-        expect([[document displayName] isEqualToString:@"appkit-display-name-a.txt"], @"nil restores the file name");
+        expect([[document displayName] length] > 0 && ![[document displayName] isEqualToString:@"appkit-display-name-a.txt"] &&
+                   ![[document displayName] isEqualToString:@"Override"],
+               @"nil gives the default name, not the file name");
+        [document setFileURL:[NSURL fileURLWithPath:@"/tmp/appkit-display-name-a.txt"]];
+        expect([[document displayName] isEqualToString:@"appkit-display-name-a.txt"], @"assigning a file URL restores the file name");
 
         // QUIRK pinned: assigning a file URL discards the set name.
         [document setDisplayName:@"Override"];

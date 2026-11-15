@@ -65,6 +65,7 @@ typedef NS_ENUM(NSUInteger, NSSaveOperationType) {
         BOOL _draft;
         BOOL _autosaveScheduled;
         NSString *_displayName;
+        BOOL _displayNameReset;
     NS_EXTRA_IVARS_END(NSDocument)
 }
 

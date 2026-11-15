@@ -255,6 +255,7 @@ static int untitled_document_number = 0;
     // Test: appkit-document-display-name (set name, then setFileURL:)
     [NS_EXTRA(NSDocument, self)->_displayName release];
     NS_EXTRA(NSDocument, self)->_displayName = nil;
+    NS_EXTRA(NSDocument, self)->_displayNameReset = NO;
     [NS_EXTRA(NSDocument, self)->_windowControllers makeObjectsPerformSelector: @selector
                         (synchronizeWindowTitleWithDocumentName)];
 }
@@ -389,18 +390,23 @@ static int untitled_document_number = 0;
 }
 
 // NSDocument.h: the name the document is given for presentation; nil goes back
-// to the name derived from the file, or the "Untitled" default.
+// to the default name.
 - (void) setDisplayName: (NSString *) displayNameOrNil {
     NSString *name = [displayNameOrNil copy];
 
     [NS_EXTRA(NSDocument, self)->_displayName release];
     NS_EXTRA(NSDocument, self)->_displayName = name;
+    // QUIRK: setting nil makes -displayName answer the "Untitled" default even when the document
+    // has a file URL, until a file URL is assigned again. Not documented. Evidence: black-box
+    // observation on macOS 26.7.3 and 10.14.4 (tier 2).
+    // Test: tests/appkit-document-display-name.m (nil after a file URL)
+    NS_EXTRA(NSDocument, self)->_displayNameReset = (name == nil);
 }
 
 - (NSString *) displayName {
     if (NS_EXTRA(NSDocument, self)->_displayName != nil)
         return NS_EXTRA(NSDocument, self)->_displayName;
-    if (NS_EXTRA(NSDocument, self)->_fileURL == nil) {
+    if (NS_EXTRA(NSDocument, self)->_fileURL == nil || NS_EXTRA(NSDocument, self)->_displayNameReset) {
         NSString *untitledName = NSLocalizedStringFromTableInBundle(
                 @"Untitled", nil, [NSBundle bundleForClass: [NSDocument class]],
                 @"The name of a untitled document");
