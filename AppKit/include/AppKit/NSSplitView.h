@@ -19,6 +19,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/NSView.h>
+#import <AppKit/NSLayoutConstraint.h>
 
 APPKIT_EXPORT NSString *const NSSplitViewDidResizeSubviewsNotification;
 APPKIT_EXPORT NSString *const NSSplitViewWillResizeSubviewsNotification;
@@ -38,12 +39,24 @@ typedef NS_ENUM(NSInteger, NSSplitViewDividerStyle) {
         BOOL _isVertical;
         NSSplitViewDividerStyle _dividerStyle;
         NSString *_autosaveName;
+        NSMutableArray *_explicitArranged;
+        BOOL _arrangesOnlyExplicit;
     NS_EXTRA_IVARS_END(NSSplitView)
 }
 
 @property(nonatomic, assign) id delegate;
 @property(nonatomic, getter=isVertical) BOOL vertical;
 
+
+@property(readonly, copy) NSArray *arrangedSubviews;
+@property BOOL arrangesAllSubviews;
+
+- (void) addArrangedSubview: (NSView *) view;
+- (void) insertArrangedSubview: (NSView *) view atIndex: (NSInteger) index;
+- (void) removeArrangedSubview: (NSView *) view;
+
+- (NSLayoutPriority) holdingPriorityForSubviewAtIndex: (NSInteger) subviewIndex;
+- (void) setHoldingPriority: (NSLayoutPriority) priority forSubviewAtIndex: (NSInteger) subviewIndex;
 
 - (void) adjustSubviews;
 
