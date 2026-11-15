@@ -175,10 +175,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return [_nextResponder tryToPerform: action with: object];
 }
 
-// Public since macOS 10.7. Apple documents that NSResponder's implementation
-// returns nil: an object outside the responder chain that handles the action
-// (a window controller, a document) is named by a subclass overriding this,
-// and only for itself, not by every responder in front of it.
+// Public since macOS 10.7. The base implementation returns nil and does not
+// forward to the next responder (observed on macOS); a subclass names an object
+// outside the responder chain (a window controller, a document) that handles
+// the action by overriding this, for itself only.
 - (id) supplementalTargetForAction: (SEL) action sender: (id) sender {
     return nil;
 }
