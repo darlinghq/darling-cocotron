@@ -164,6 +164,7 @@ static NSString *const NSPopUpButtonBindingObservationContext =
 
 - (void) addItemWithTitle: (NSString *) title {
     [_cell addItemWithTitle: title];
+    [self invalidateIntrinsicContentSize];
     [self setNeedsDisplay: YES];
 }
 
@@ -174,6 +175,7 @@ static NSString *const NSPopUpButtonBindingObservationContext =
 
 - (void) removeAllItems {
     [_cell removeAllItems];
+    [self invalidateIntrinsicContentSize];
     [self setNeedsDisplay: YES];
 }
 

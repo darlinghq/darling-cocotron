@@ -118,6 +118,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (void) setImage: (NSImage *) image {
     [_cell setImage: image];
+    [self invalidateIntrinsicContentSize];
     [self setNeedsDisplay: YES];
 }
 
@@ -125,12 +126,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     NSImage *image =
             [[[NSImage alloc] initWithContentsOfFile: path] autorelease];
     [_cell setImage: image];
+    [self invalidateIntrinsicContentSize];
     [self setNeedsDisplay: YES];
 }
 
 - (void) setValueURL: (NSURL *) url {
     NSImage *image = [[[NSImage alloc] initWithContentsOfURL: url] autorelease];
     [_cell setImage: image];
+    [self invalidateIntrinsicContentSize];
     [self setNeedsDisplay: YES];
 }
 
@@ -141,6 +144,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (void) setImageFrameStyle: (NSImageFrameStyle) frameStyle {
     [_cell setImageFrameStyle: frameStyle];
+    [self invalidateIntrinsicContentSize];
     [self setNeedsDisplay: YES];
 }
 

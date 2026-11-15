@@ -18,6 +18,7 @@
 */
 
 #import <AppKit/NSStackView.h>
+#import "NSViewLayoutInternal.h"
 #import <Foundation/NSArray.h>
 #import <Foundation/NSException.h>
 #import <Foundation/NSKeyValueObserving.h>
@@ -720,6 +721,15 @@ typedef struct {
         if ([self _entryForView: view] == nil)
             [view resizeWithOldSuperviewSize: oldSize];
     [self _arrangeViews];
+}
+
+// An arranged view whose content changed has another natural size; the arrangement is redone at the
+// next layout pass, and the stack's own intrinsic size changes with it.
+- (void) _subviewIntrinsicContentSizeDidChange: (NSView *) subview {
+    if (_changingViews || [self _entryForView: subview] == nil)
+        return;
+    [self setNeedsLayout: YES];
+    [self invalidateIntrinsicContentSize];
 }
 
 - (void) layout {

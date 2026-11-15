@@ -55,6 +55,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSLayoutConstraint.h>
 #import <AppKit/NSLayoutGuide.h>
 #import "NSLayoutConstraintInternal.h"
+#import "NSViewLayoutInternal.h"
 #import <AppKit/NSTextInput.h>
 #import <AppKit/NSTextInputClient.h>
 #import <objc/runtime.h>
@@ -3466,6 +3467,20 @@ static CGFloat backingScaleFactor(NSView *view) {
 }
 
 - (void) invalidateIntrinsicContentSize {
+    // A view that is laid out with constraints has its intrinsic size taken into the layout when the
+    // constraints are updated, so it is queued for an update; the next layout pass reads the size again.
+    // QUIRK: a view whose autoresizing mask is translated into constraints is not queued, and
+    // -needsLayout of the view and its superview does not change. Not documented. Evidence: black-box
+    // observation on macOS 26.7.3 and 10.14.4 (tier 2, MAC-EVIDENCE V619).
+    // Test: tests/appkit-view-invalidate-intrinsic-size.m (flags after invalidation)
+    if (![self translatesAutoresizingMaskIntoConstraints]) {
+        NS_EXTRA(NSView, self)->_needsUpdateConstraints = YES;
+        [[self window] setViewsNeedDisplay: YES];
+    }
+    [[self superview] _subviewIntrinsicContentSizeDidChange: self];
+}
+
+- (void) _subviewIntrinsicContentSizeDidChange: (NSView *) subview {
 }
 
 - (NSArray *) constraints {

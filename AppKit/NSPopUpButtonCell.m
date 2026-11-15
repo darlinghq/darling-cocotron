@@ -348,7 +348,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         item = [itemArray objectAtIndex: _selectedIndex];
     }
     // With no items the title is the empty string rather than nil.
+    NSString *oldTitle = [[self title] retain];
+
     [super setTitle: item != nil ? [item title] : @""];
+    // The size of a pop-up button follows the title it shows.
+    if (![oldTitle isEqual: [self title]])
+        [[self controlView] invalidateIntrinsicContentSize];
+    [oldTitle release];
     // For a redraw of the control
     [(NSControl *) [self controlView] updateCell: self];
 }

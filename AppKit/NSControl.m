@@ -76,6 +76,7 @@ static NSMutableDictionary *cellClassDictionary = nil;
 
 - (void) setControlSize: (NSControlSize) size {
     [_cell setControlSize: size];
+    [self invalidateIntrinsicContentSize];
     [self setNeedsDisplay: YES];
 }
 
@@ -346,17 +347,24 @@ static NSMutableDictionary *cellClassDictionary = nil;
 }
 
 - (void) setFont: (NSFont *) font {
+    NSFont *before = [[_cell font] retain];
+
     [_cell setFont: font];
+    if (!(before == font || [before isEqual: font]))
+        [self invalidateIntrinsicContentSize];
+    [before release];
     [self setNeedsDisplay: YES];
 }
 
 - (void) setImage: (NSImage *) image {
     [[self cell] setImage: image];
+    [self invalidateIntrinsicContentSize];
     [self setNeedsDisplay: YES];
 }
 
 - (void) setAlignment: (NSTextAlignment) alignment {
     [_cell setAlignment: alignment];
+    [self invalidateIntrinsicContentSize];
     [self setNeedsDisplay: YES];
 }
 
@@ -386,11 +394,13 @@ static NSMutableDictionary *cellClassDictionary = nil;
 
 - (void) setBordered: (BOOL) flag {
     [_cell setBordered: flag];
+    [self invalidateIntrinsicContentSize];
     [self setNeedsDisplay: YES];
 }
 
 - (void) setBezeled: (BOOL) flag {
     [_cell setBezeled: flag];
+    [self invalidateIntrinsicContentSize];
     [self setNeedsDisplay: YES];
 }
 
@@ -415,81 +425,116 @@ static NSMutableDictionary *cellClassDictionary = nil;
     [_cell setUsesSingleLineMode: flag];
 }
 
+// The value a control shows is part of its intrinsic size; setting the value it already has changes nothing.
+- (void) _intrinsicContentSizeMayHaveChangedFromValue: (id) before {
+    id after = [[self selectedCell] objectValue];
+
+    if (!(before == after || [before isEqual: after]))
+        [self invalidateIntrinsicContentSize];
+    [before release];
+}
+
 - (void) setObjectValue: (id<NSCopying>) object {
     [self abortEditing];
+    id before = [[[self selectedCell] objectValue] retain];
     [(NSCell *) [self selectedCell] setObjectValue: object];
+    [self _intrinsicContentSizeMayHaveChangedFromValue: before];
     [self setNeedsDisplay: YES];
 }
 
 - (void) setStringValue: (NSString *) value {
     [self abortEditing];
+    id before = [[[self selectedCell] objectValue] retain];
     [[self selectedCell] setStringValue: value];
+    [self _intrinsicContentSizeMayHaveChangedFromValue: before];
     [self setNeedsDisplay: YES];
 }
 
 - (void) setIntValue: (int) value {
     [self abortEditing];
+    id before = [[[self selectedCell] objectValue] retain];
     [[self selectedCell] setIntValue: value];
+    [self _intrinsicContentSizeMayHaveChangedFromValue: before];
     [self setNeedsDisplay: YES];
 }
 
 - (void) setFloatValue: (float) value {
     [self abortEditing];
+    id before = [[[self selectedCell] objectValue] retain];
     [[self selectedCell] setFloatValue: value];
+    [self _intrinsicContentSizeMayHaveChangedFromValue: before];
     [self setNeedsDisplay: YES];
 }
 
 - (void) setDoubleValue: (double) value {
     [self abortEditing];
+    id before = [[[self selectedCell] objectValue] retain];
     [[self selectedCell] setDoubleValue: value];
+    [self _intrinsicContentSizeMayHaveChangedFromValue: before];
     [self setNeedsDisplay: YES];
 }
 
 - (void) setIntegerValue: (NSInteger) value {
     [self abortEditing];
+    id before = [[[self selectedCell] objectValue] retain];
     [[self selectedCell] setIntegerValue: value];
+    [self _intrinsicContentSizeMayHaveChangedFromValue: before];
     [self setNeedsDisplay: YES];
 }
 
 - (void) setAttributedStringValue: (NSAttributedString *) value {
     [self abortEditing];
+    id before = [[[self selectedCell] objectValue] retain];
     [[self selectedCell] setAttributedStringValue: value];
+    [self _intrinsicContentSizeMayHaveChangedFromValue: before];
     [self setNeedsDisplay: YES];
 }
 
 - (void) takeObjectValueFrom: sender {
     [self abortEditing];
+    id before = [[[self selectedCell] objectValue] retain];
     [[self selectedCell] takeObjectValueFrom: sender];
+    [self _intrinsicContentSizeMayHaveChangedFromValue: before];
     [self setNeedsDisplay: YES];
 }
 
 - (void) takeStringValueFrom: sender {
     [self abortEditing];
+    id before = [[[self selectedCell] objectValue] retain];
     [[self selectedCell] takeStringValueFrom: sender];
+    [self _intrinsicContentSizeMayHaveChangedFromValue: before];
     [self setNeedsDisplay: YES];
 }
 
 - (void) takeIntValueFrom: sender {
     [self abortEditing];
+    id before = [[[self selectedCell] objectValue] retain];
     [[self selectedCell] takeIntValueFrom: sender];
+    [self _intrinsicContentSizeMayHaveChangedFromValue: before];
     [self setNeedsDisplay: YES];
 }
 
 - (void) takeFloatValueFrom: sender {
     [self abortEditing];
+    id before = [[[self selectedCell] objectValue] retain];
     [[self selectedCell] takeFloatValueFrom: sender];
+    [self _intrinsicContentSizeMayHaveChangedFromValue: before];
     [self setNeedsDisplay: YES];
 }
 
 - (void) takeDoubleValueFrom: sender {
     [self abortEditing];
+    id before = [[[self selectedCell] objectValue] retain];
     [[self selectedCell] takeDoubleValueFrom: sender];
+    [self _intrinsicContentSizeMayHaveChangedFromValue: before];
     [self setNeedsDisplay: YES];
 }
 
 - (void) takeIntegerValueFrom: sender {
     [self abortEditing];
+    id before = [[[self selectedCell] objectValue] retain];
     [[self selectedCell] takeIntegerValueFrom: sender];
+    [self _intrinsicContentSizeMayHaveChangedFromValue: before];
     [self setNeedsDisplay: YES];
 }
 

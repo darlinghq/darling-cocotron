@@ -206,16 +206,23 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (void) setImage: (NSImage *) value {
     [_cell setImage: value];
+    [self invalidateIntrinsicContentSize];
     [self setNeedsDisplay: YES];
 }
 
 - (void) setImagePosition: (NSCellImagePosition) value {
     [_cell setImagePosition: value];
+    [self invalidateIntrinsicContentSize];
     [self setNeedsDisplay: YES];
 }
 
 - (void) setTitle: (NSString *) value {
+    NSString *before = [[_cell title] retain];
+
     [_cell setTitle: value];
+    if (!(before == [_cell title] || [before isEqual: [_cell title]]))
+        [self invalidateIntrinsicContentSize];
+    [before release];
     [self setNeedsDisplay: YES];
 }
 
@@ -239,26 +246,31 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (void) setBezelStyle: (NSBezelStyle) value {
     [_cell setBezelStyle: value];
+    [self invalidateIntrinsicContentSize];
     [self setNeedsDisplay: YES];
 }
 
 - (void) setAlternateTitle: (NSString *) value {
     [_cell setAlternateTitle: value];
+    [self invalidateIntrinsicContentSize];
     [self setNeedsDisplay: YES];
 }
 
 - (void) setAlternateImage: (NSImage *) value {
     [_cell setAlternateImage: value];
+    [self invalidateIntrinsicContentSize];
     [self setNeedsDisplay: YES];
 }
 
 - (void) setAttributedTitle: (NSAttributedString *) value {
     [_cell setAttributedTitle: value];
+    [self invalidateIntrinsicContentSize];
     [self setNeedsDisplay: YES];
 }
 
 - (void) setAttributedAlternateTitle: (NSAttributedString *) value {
     [_cell setAttributedAlternateTitle: value];
+    [self invalidateIntrinsicContentSize];
     [self setNeedsDisplay: YES];
 }
 
@@ -269,6 +281,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (void) setButtonType: (NSButtonType) value {
     [_cell setButtonType: value];
+    [self invalidateIntrinsicContentSize];
     [self setNeedsDisplay: YES];
 }
 
