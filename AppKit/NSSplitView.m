@@ -688,12 +688,24 @@ static const char arrangedConstraintsKey;
     NSView *subview;
     BOOL allConstrained = YES;
 
+    // The split view switches its arranged subviews to constraint-based layout when
+    // the split view or any of them takes part in Auto Layout: a subview that
+    // already opted out, or one that carries constraints of its own. Otherwise
+    // they stay frame-based.
+    BOOL constraintBased = ![self translatesAutoresizingMaskIntoConstraints];
+
     for (subview in [self _arrangedList]) {
         if ([self isSubviewCollapsed: subview])
             continue;
         [visible addObject: subview];
-        if ([subview translatesAutoresizingMaskIntoConstraints])
-            allConstrained = NO;
+        if (![subview translatesAutoresizingMaskIntoConstraints] || [[subview constraints] count] > 0)
+            constraintBased = YES;
+    }
+    if (constraintBased) {
+        for (subview in visible)
+            [subview setTranslatesAutoresizingMaskIntoConstraints: NO];
+    } else {
+        allConstrained = NO;
     }
 
     NSUInteger i, count = [visible count];
@@ -745,10 +757,12 @@ static const char arrangedConstraintsKey;
             } else if (tieAnchor == nil) {
                 tieAnchor = subview;
                 tieAnchorLength = subviewLength;
-            } else if (tieAnchorLength > 0 && subviewLength > 0) {
+            } else {
+                // equal shares when either has no length yet
+                CGFloat ratio = tieAnchorLength > 0 && subviewLength > 0 ? subviewLength / tieAnchorLength : 1;
                 NSLayoutConstraint *tie = [NSLayoutConstraint constraintWithItem: subview attribute: length relatedBy: NSLayoutRelationEqual
                                                                           toItem: tieAnchor attribute: length
-                                                                      multiplier: subviewLength / tieAnchorLength constant: 0];
+                                                                      multiplier: ratio constant: 0];
                 [tie setPriority: tiePriority];
                 [created addObject: tie];
             }
