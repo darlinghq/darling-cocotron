@@ -50,14 +50,18 @@ static const char **gArgv;
 }
 @end
 
+// NSApplication keeps its delegate unretained, so hold it strongly here
+// (also needed when the test is compiled with ARC).
+static Delegate *gDelegate;
+
 int main(int argc, const char *argv[]) {
     gArgc = argc;
     gArgv = argv;
     @autoreleasepool {
         NSApplication *app = [NSApplication sharedApplication];
-        Delegate *delegate = [[Delegate alloc] init];
-        delegate.opened = [NSMutableArray array];
-        [app setDelegate:delegate];
+        gDelegate = [[Delegate alloc] init];
+        gDelegate.opened = [NSMutableArray array];
+        [app setDelegate:gDelegate];
     }
     return NSApplicationMain(argc, argv);
 }

@@ -70,6 +70,7 @@ static const struct {
 static NSMutableArray *calls;
 static int caseIndex;
 static const char *shape;
+static id gDelegate;
 
 @interface Delegate : NSObject <NSApplicationDelegate>
 @end
@@ -193,7 +194,10 @@ int main(int argc, char **argv) {
         Class delegateClass = strcmp(shape, "single") == 0 ? [SingleDelegate class]
                               : strcmp(shape, "both") == 0 ? [BothDelegate class]
                                                            : [MultiDelegate class];
-        [app setDelegate: [[delegateClass alloc] init]];
+        // NSApplication keeps its delegate unretained: hold it strongly here
+        // (required when compiled with ARC, harmless without).
+        gDelegate = [[delegateClass alloc] init];
+        [app setDelegate: gDelegate];
     }
     if (strcmp(how, "advanced") == 0)
         return NSApplicationMain(argc, (const char **) (argv + argc - 1));
