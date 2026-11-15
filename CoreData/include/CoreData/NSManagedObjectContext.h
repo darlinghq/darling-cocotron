@@ -94,10 +94,14 @@ COREDATA_EXPORT NSString *const NSPersistentStoreSaveConflictsErrorKey;
 
 - (NSManagedObject *) objectWithID: (NSManagedObjectID *) objectID;
 
+// nil with *error set when the fetch fails.
 - (NSArray *) executeFetchRequest: (NSFetchRequest *) request
-                            error: (NSError **) error;
+                            error: (NSError **) error NS_SWIFT_NAME(fetch(_:));
+// NSNotFound with *error set when the count fails; Swift sees it as throwing, keyed on the error
+// being set rather than on the (otherwise always valid) count.
 - (NSUInteger) countForFetchRequest: (NSFetchRequest *) request
-                              error: (NSError **) error;
+                              error: (NSError **) error NS_SWIFT_NAME(count(for:))
+        __attribute__((swift_error(nonnull_error)));
 
 - (void) insertObject: (NSManagedObject *) object;
 - (void) deleteObject: (NSManagedObject *) object;

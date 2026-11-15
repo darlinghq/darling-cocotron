@@ -2,6 +2,7 @@
 #import <Foundation/NSString.h>
 
 COREDATA_EXPORT NSString *const NSAffectedStoresErrorKey;
+COREDATA_EXPORT NSString *const NSAffectedObjectsErrorKey;
 COREDATA_EXPORT NSString *const NSDetailedErrorsKey;
 
 enum {

@@ -42,6 +42,7 @@ static const struct {
     size_t size;
 } legacySizes[] = {
     {"NSResponder", 0x8},
+    {"NSFont", 0x18},
     {"NSView", 0x50},
     {"NSColor", 0x4},
     {"NSWindow", 0x84},
@@ -689,6 +690,31 @@ static void checkColor(void) {
     expect([[dynamic colorNameComponent] isEqual: @"legacy.dynamic"], "NSColor dynamic color name");
 }
 
+// NSFont keeps its state in the extra struct: the legacy size must not cost
+// functionality
+@interface NSObject (LegacyLayoutFontAPI)
++ (id) fontWithName: (NSString *) name size: (CGFloat) size;
+- (CGFloat) pointSize;
+- (NSString *) fontName;
+- (CGFloat) ascender;
+- (CGFloat) descender;
+- (const CGFloat *) matrix;
+@end
+
+static void checkFont(void) {
+    id font = [appKitClass("NSFont") systemFontOfSize: 13];
+    expect([font pointSize] == 13, "NSFont pointSize");
+    expect([[font fontName] length] > 0, "NSFont fontName");
+    expect([font ascender] > 0 && [font descender] < 0, "NSFont ascender/descender");
+    expect([font matrix] != NULL && [font matrix][0] == 13 && [font matrix][3] == 13,
+           "NSFont matrix");
+    id same = [appKitClass("NSFont") fontWithName: [font fontName] size: 13];
+    expect([same pointSize] == 13 && [[same fontName] isEqual: [font fontName]],
+           "NSFont fontWithName:size:");
+    expect([font copy] == font, "NSFont copy returns itself");
+    [font release]; // the copy
+}
+
 int main(void) {
     setvbuf(stdout, NULL, _IONBF, 0);
     @autoreleasepool {
@@ -702,6 +728,7 @@ int main(void) {
         checkControllerSubclasses();
         checkCopies();
         checkColor();
+        checkFont();
     }
     if (failures == 0)
         printf("PASS\n");
