@@ -172,33 +172,37 @@ void CGPaletteSetColorAtIndex(CGDirectPaletteRef palette, CGDeviceColor color, C
     entry->c[2] = color.blue;
 }
 
-// The entry nearest to the color by squared distance in RGB, with floating
-// point arithmetic and the first of equally near entries winning.
+// The entry nearest to the color by squared distance in RGB, computed in
+// double precision, the first of equally near entries winning (so exact ties
+// such as (1.5,0.5,0.5) between (1,0.6,0.6) and (1,0.4,0.4) are decided by the
+// rounding of the 8-bit levels).
 //
-// QUIRK: a color farther than a squared distance of 2 from every entry, such
-// as (-1,-1,-1) or (5,5,5) against the default palette, gives
-// kCGPaletteNoIndex, and so does an empty palette. Colors a little outside
-// 0...1, e.g. (1.5, 0.5, 0.5) or (-0.0001, 0.5, 0.5), still get their nearest
-// entry. The cut-off is not documented and was only bracketed by observation
-// (black-box, Mac OS X 10.14.4, i386 and x86_64, tier 2).
+// QUIRK: a color whose nearest entry is farther than a squared distance of 1
+// gives kCGPaletteNoIndex, and so does an empty palette. Colors outside 0...1
+// still get their nearest entry while within that distance, e.g.
+// (1.5,0.5,0.5) -> 21 and (-0.3,-0.3,-0.3) -> 0, but (1.6,1.7,1.5),
+// (1.7,1.7,-0.3), (-1,-1,-1) and (5,5,5) give none. The cut-off is not
+// documented; it was fitted to 1617 colors on a grid, where the largest
+// distance that still found an entry was 0.99 and the smallest that did not
+// was 1.02 (black-box, Mac OS X 10.14.4, i386 and x86_64, tier 2).
 // Test: coregraphics-direct-palette.c (quirk_index_for_distant_color).
 CGTableCount CGPaletteGetIndexForColor(CGDirectPaletteRef palette, CGDeviceColor color) {
     const CGTableCount count = CGPaletteGetNumberOfSamples(palette);
     const PaletteEntry *table = count > 0 ? entries(palette) : NULL;
     CGTableCount best = kCGPaletteNoIndex;
-    float bestDistance = 0;
+    double bestDistance = 0;
 
     for (CGTableCount i = 0; i < count; i++) {
-        float dr = color.red - table[i].c[0];
-        float dg = color.green - table[i].c[1];
-        float db = color.blue - table[i].c[2];
-        float distance = dr * dr + dg * dg + db * db;
+        double dr = (double) color.red - table[i].c[0];
+        double dg = (double) color.green - table[i].c[1];
+        double db = (double) color.blue - table[i].c[2];
+        double distance = dr * dr + dg * dg + db * db;
         if (best == kCGPaletteNoIndex || distance < bestDistance) {
             best = i;
             bestDistance = distance;
         }
     }
-    if (best != kCGPaletteNoIndex && bestDistance > 2.0f)
+    if (best != kCGPaletteNoIndex && bestDistance > 1.0)
         return kCGPaletteNoIndex;
     return best;
 }

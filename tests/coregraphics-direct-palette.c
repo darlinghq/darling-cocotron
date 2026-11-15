@@ -68,67 +68,81 @@ int main(void) {
     CGDeviceColor farBelow = {-1, -1, -1}, farAbove = {5, 5, 5};
     CHECK(29, CGPaletteGetIndexForColor(def, farBelow) == kCGPaletteNoIndex);   // quirk_index_for_distant_color
     CHECK(30, CGPaletteGetIndexForColor(def, farAbove) == kCGPaletteNoIndex);   // quirk_index_for_distant_color
+    CGDeviceColor farMixed1 = {1.6f, 1.7f, 1.5f}, farMixed2 = {1.7f, 1.7f, -0.3f}, nearOut = {-0.3f, -0.3f, -0.3f};
+    CHECK(31, CGPaletteGetIndexForColor(def, farMixed1) == kCGPaletteNoIndex);  // quirk_index_for_distant_color
+    CHECK(32, CGPaletteGetIndexForColor(def, farMixed2) == kCGPaletteNoIndex);  // quirk_index_for_distant_color
+    CHECK(33, CGPaletteGetIndexForColor(def, nearOut) == 0);
+    // Exact ties between entries (values from the Mac): the lower index wins unless the rounding of the levels decides.
+    CGDeviceColor tie1 = {0.3f, 0.3f, 0.3f}, tie2 = {0.9f, 0.9f, 0.9f}, tie3 = {0.5f, 0.5f, 1.5f};
+    CGDeviceColor tie4 = {0.5f, 1.5f, 0.3f}, tie5 = {1.5f, 0.5f, 0.6f}, tie6 = {0.5f, 1.5f, 0.6f}, tie7 = {1.5f, 0.5f, 0.3f};
+    CHECK(34, CGPaletteGetIndexForColor(def, tie1) == 251);
+    CHECK(35, CGPaletteGetIndexForColor(def, tie2) == 246);
+    CHECK(36, CGPaletteGetIndexForColor(def, tie3) == 126);
+    CHECK(37, CGPaletteGetIndexForColor(def, tie4) == 111);
+    CHECK(38, CGPaletteGetIndexForColor(def, tie5) == 20);
+    CHECK(39, CGPaletteGetIndexForColor(def, tie6) == 110);
+    CHECK(40, CGPaletteGetIndexForColor(def, tie7) == 21);
 
     // Copies are independent; equality compares the entries.
     CGDirectPaletteRef fresh = CGPaletteCreateDefaultColorPalette();
     CGDirectPaletteRef copy = CGPaletteCreateCopy(fresh);
-    CHECK(31, copy != NULL && copy != fresh && CGPaletteIsEqualToPalette(fresh, copy));
+    CHECK(41, copy != NULL && copy != fresh && CGPaletteIsEqualToPalette(fresh, copy));
     CGPaletteSetColorAtIndex(copy, red, 5);
-    CHECK(32, colorIs(copy, 5, 0xFF0000));
-    CHECK(33, colorIs(fresh, 5, 0xFFFF00));
-    CHECK(34, !CGPaletteIsEqualToPalette(fresh, copy));
-    CHECK(35, CGPaletteIsEqualToPalette(def, def));
+    CHECK(42, colorIs(copy, 5, 0xFF0000));
+    CHECK(43, colorIs(fresh, 5, 0xFFFF00));
+    CHECK(44, !CGPaletteIsEqualToPalette(fresh, copy));
+    CHECK(45, CGPaletteIsEqualToPalette(def, def));
     // Values are stored without clamping.
     CGPaletteSetColorAtIndex(copy, red, 300);
-    CHECK(36, CGPaletteGetNumberOfSamples(copy) == 256);
+    CHECK(46, CGPaletteGetNumberOfSamples(copy) == 256);
     CGDeviceColor unclamped = {2.0f, -1.0f, 0.5f};
     CGPaletteSetColorAtIndex(copy, unclamped, 6);
     CGDeviceColor got = CGPaletteGetColorAtIndex(copy, 6);
-    CHECK(37, got.red == 2.0f && got.green == -1.0f && got.blue == 0.5f);
+    CHECK(47, got.red == 2.0f && got.green == -1.0f && got.blue == 0.5f);
     CGPaletteRelease(copy);
     CGPaletteRelease(fresh);
 
     // Capacity: entries start as the default palette.
     CGDirectPaletteRef cap10 = CGPaletteCreateWithCapacity(10);
-    CHECK(38, cap10 && CGPaletteGetNumberOfSamples(cap10) == 10 && colorIs(cap10, 6, 0xFFCCFF));
+    CHECK(48, cap10 && CGPaletteGetNumberOfSamples(cap10) == 10 && colorIs(cap10, 6, 0xFFCCFF));
     CGDirectPaletteRef cap5 = CGPaletteCreateWithCapacity(5), cap5b = CGPaletteCreateWithCapacity(5);
-    CHECK(39, !CGPaletteIsEqualToPalette(cap5, cap10) && CGPaletteIsEqualToPalette(cap5, cap5b));
+    CHECK(49, !CGPaletteIsEqualToPalette(cap5, cap10) && CGPaletteIsEqualToPalette(cap5, cap5b));
     CGPaletteRelease(cap10);
     CGPaletteRelease(cap5);
     CGPaletteRelease(cap5b);
     CGDirectPaletteRef zero = CGPaletteCreateWithCapacity(0);
-    CHECK(40, zero != NULL && CGPaletteGetNumberOfSamples(zero) == 0);
+    CHECK(50, zero != NULL && CGPaletteGetNumberOfSamples(zero) == 0);
     CGDeviceColor anyColor = {0.5f, 0.5f, 0.5f};
-    CHECK(41, CGPaletteGetIndexForColor(zero, anyColor) == kCGPaletteNoIndex);
+    CHECK(51, CGPaletteGetIndexForColor(zero, anyColor) == kCGPaletteNoIndex);
     CGPaletteRelease(zero);
 
     // Samples.
     CGDeviceByteColor bytes[3] = {{255, 0, 128}, {1, 2, 3}, {0, 0, 0}};
     CGDirectPaletteRef byteP = CGPaletteCreateWithByteSamples(bytes, 3);
-    CHECK(42, byteP && CGPaletteGetNumberOfSamples(byteP) == 3);
-    CHECK(43, colorIs(byteP, 0, 0xFF0080) && colorIs(byteP, 1, 0x010203));
+    CHECK(52, byteP && CGPaletteGetNumberOfSamples(byteP) == 3);
+    CHECK(53, colorIs(byteP, 0, 0xFF0080) && colorIs(byteP, 1, 0x010203));
     CGDeviceColor samples[2] = {{0.25f, 0.5f, 0.75f}, {1.5f, 0, 0}};
     CGDirectPaletteRef sampleP = CGPaletteCreateWithSamples(samples, 2);
     got = CGPaletteGetColorAtIndex(sampleP, 1);
-    CHECK(44, CGPaletteGetNumberOfSamples(sampleP) == 2 && got.red == 1.5f);
+    CHECK(54, CGPaletteGetNumberOfSamples(sampleP) == 2 && got.red == 1.5f);
     CGDirectPaletteRef emptyP = CGPaletteCreateWithSamples(NULL, 0);
-    CHECK(45, emptyP != NULL && CGPaletteGetNumberOfSamples(emptyP) == 0);
+    CHECK(55, emptyP != NULL && CGPaletteGetNumberOfSamples(emptyP) == 0);
     CGPaletteRelease(emptyP);
     CGPaletteRelease(sampleP);
 
     // Blending moves each entry towards the color; the fraction is limited to 0...1.
     CGDirectPaletteRef half = CGPaletteCreateFromPaletteBlendedWithColor(byteP, 0.5f, white);
     got = CGPaletteGetColorAtIndex(half, 0);
-    CHECK(46, near(got.red, 1.0f) && near(got.green, 0.5f) && near(got.blue, 0.75098f));
+    CHECK(56, near(got.red, 1.0f) && near(got.green, 0.5f) && near(got.blue, 0.75098f));
     got = CGPaletteGetColorAtIndex(half, 2);
-    CHECK(47, near(got.red, 0.5f) && near(got.green, 0.5f) && near(got.blue, 0.5f));
+    CHECK(57, near(got.red, 0.5f) && near(got.green, 0.5f) && near(got.blue, 0.5f));
     CGDirectPaletteRef none = CGPaletteCreateFromPaletteBlendedWithColor(def, 0.0f, nearBlack);
-    CHECK(48, CGPaletteIsEqualToPalette(def, none));
+    CHECK(58, CGPaletteIsEqualToPalette(def, none));
     CGDirectPaletteRef full = CGPaletteCreateFromPaletteBlendedWithColor(def, 2.0f, nearBlack);
     got = CGPaletteGetColorAtIndex(full, 7);
-    CHECK(49, near(got.red, 0.1f) && near(got.green, 0.1f) && near(got.blue, 0.1f));
+    CHECK(59, near(got.red, 0.1f) && near(got.green, 0.1f) && near(got.blue, 0.1f));
     CGDirectPaletteRef negative = CGPaletteCreateFromPaletteBlendedWithColor(def, -1.0f, nearBlack);
-    CHECK(50, colorIs(negative, 7, 0xFFCCCC));
+    CHECK(60, colorIs(negative, 7, 0xFFCCCC));
     CGPaletteRelease(half);
     CGPaletteRelease(none);
     CGPaletteRelease(full);
@@ -136,18 +150,18 @@ int main(void) {
     CGPaletteRelease(byteP);
 
     // No display here has an indexed pixel format, so there is no palette for one.
-    CHECK(51, CGPaletteCreateWithDisplay(0) == NULL);
+    CHECK(61, CGPaletteCreateWithDisplay(0) == NULL);
 
     CGPaletteRelease(def);
 
     // A capacity beyond 256 (last, and never released, like the check after it).
     CGDirectPaletteRef cap = CGPaletteCreateWithCapacity(300);
-    CHECK(52, cap && CGPaletteGetNumberOfSamples(cap) == 300);
-    CHECK(53, colorIs(cap, 0, 0x000000) && colorIs(cap, 3, 0xFFFF66) && colorIs(cap, 250, 0x777777));
-    CHECK(54, colorIs(cap, 256, 0x000000) && colorIs(cap, 299, 0x000000));
+    CHECK(62, cap && CGPaletteGetNumberOfSamples(cap) == 300);
+    CHECK(63, colorIs(cap, 0, 0x000000) && colorIs(cap, 3, 0xFFFF66) && colorIs(cap, 250, 0x777777));
+    CHECK(64, colorIs(cap, 256, 0x000000) && colorIs(cap, 299, 0x000000));
     // Setting an index past the end changes nothing (last: the macOS used for the expected values damages the heap).
     CGPaletteSetColorAtIndex(cap, red, 300);
-    CHECK(55, CGPaletteGetNumberOfSamples(cap) == 300 && colorIs(cap, 299, 0x000000));
+    CHECK(65, CGPaletteGetNumberOfSamples(cap) == 300 && colorIs(cap, 299, 0x000000));
     printf("PASS\n");
     return 0;
 }
