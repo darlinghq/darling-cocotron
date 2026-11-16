@@ -50,8 +50,8 @@ static BOOL waitFor(BOOL (^condition)(void), NSTimeInterval timeout) {
     for (NSTrackingArea *area in [self trackingAreas])
         [self removeTrackingArea: area];
     [self addTrackingArea: [[NSTrackingArea alloc]
-            initWithRect: NSZeroRect
-                 options: NSTrackingCursorUpdate | NSTrackingActiveInKeyWindow | NSTrackingInVisibleRect
+            initWithRect: [self bounds]
+                 options: NSTrackingCursorUpdate | NSTrackingActiveInKeyWindow
                    owner: self
                 userInfo: nil]];
     [super updateTrackingAreas];
