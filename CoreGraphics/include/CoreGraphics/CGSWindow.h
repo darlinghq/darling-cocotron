@@ -45,6 +45,14 @@
 -(CGError) getRect:(CGRect*) outRect;
 -(CGError) setProperty:(CFStringRef) key value:(CFTypeRef) value;
 -(CGError) getProperty:(CFStringRef) key value:(CFTypeRef*) value;
+
+// Turns this (not yet ordered in) window into a display overlay: it covers
+// the display it is placed on, stays above ordinary windows, is not managed
+// by the window system's window manager and does not take keyboard focus or
+// pointer input, so that input keeps reaching the application's own windows
+// below it. *drawable receives the native handle a GL surface can be created
+// on. Backends that cannot do this keep the default, which refuses.
+-(CGError) becomeDisplayOverlay:(void**) drawable;
 -(void) invalidate;
 
 // Used, for example, by CGWindowContextCreate()

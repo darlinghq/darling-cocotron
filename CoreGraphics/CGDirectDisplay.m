@@ -181,8 +181,31 @@ CGError CGGetDisplaysWithOpenGLDisplayMask(CGOpenGLDisplayMask mask,
     return CGGetOnlineDisplayList(maxDisplays, displays, matchingDisplayCount);
 }
 
+// An OpenGL display mask has one bit per online display, the main display
+// (first in the online list) being bit 0.
+CGOpenGLDisplayMask CGDisplayIDToOpenGLDisplayMask(CGDirectDisplayID display) {
+    CGDirectDisplayID online[32];
+    uint32_t count = 0;
+    if (display == kCGNullDirectDisplay ||
+        CGGetOnlineDisplayList(32, online, &count) != kCGErrorSuccess)
+        return 0;
+    for (uint32_t i = 0; i < count && i < 32; i++) {
+        if (online[i] == display)
+            return (CGOpenGLDisplayMask) 1 << i;
+    }
+    return 0;
+}
+
 CGDirectDisplayID CGOpenGLDisplayMaskToDisplayID(CGOpenGLDisplayMask mask) {
-    return CGMainDisplayID();
+    CGDirectDisplayID online[32];
+    uint32_t count = 0;
+    if (mask == 0 || CGGetOnlineDisplayList(32, online, &count) != kCGErrorSuccess)
+        return kCGNullDirectDisplay;
+    for (uint32_t i = 0; i < count && i < 32; i++) {
+        if (mask & ((CGOpenGLDisplayMask) 1 << i))
+            return online[i];
+    }
+    return kCGNullDirectDisplay;
 }
 
 CGError CGGetDisplaysWithPoint(CGPoint point, uint32_t maxDisplays,

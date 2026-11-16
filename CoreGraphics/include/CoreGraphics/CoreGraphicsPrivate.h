@@ -213,6 +213,21 @@ void* _CGSNativeDisplay(CGSConnectionID connId);
 void* _CGSNativeWindowForID(CGSConnectionID connId, CGSWindowID winId);
 void* _CGSNativeWindowForSurfaceID(CGSConnectionID connId, CGSWindowID winId, CGSSurfaceID surfaceId);
 
+// Creates a window covering `bounds` (global display coordinates), above ordinary
+// windows, shown, and not taking input focus or pointer events, so that a GL
+// context can fill a display (CGLSetFullScreen) while the application's own
+// windows keep receiving input. *drawable is the native window handle a GL
+// surface is created on. Release it with CGSReleaseWindow.
+//
+// Once the window is shown, _kCGSDisplayOverlayWindowCreated is posted to the
+// default notification center, with the drawable as the NSNumber
+// "NativeWindow" in the user info. The window system backend of the
+// application's UI layer takes it up to receive the application's keyboard
+// input for the overlay, which has no window of the application's own.
+#define _kCGSDisplayOverlayWindowCreated CFSTR("_CGSDisplayOverlayWindowCreated")
+CGError _CGSCreateDisplayOverlayWindow(CGSConnectionID connId, CGRect bounds,
+                                       CGSWindowID* winId, void** drawable);
+
 // Private context functions (see CGContext.m). The composite operation is the
 // context's blend mode under a different numbering.
 extern size_t CGContextGetLineDashCount(CGContextRef context);

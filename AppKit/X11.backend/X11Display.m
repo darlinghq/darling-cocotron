@@ -177,6 +177,12 @@ static void beforeWaitingCallback(CFRunLoopObserverRef observer,
         _windowsByID = [NSMutableDictionary new];
         [self _enableDetectableAutoRepeat];
 
+        [[NSNotificationCenter defaultCenter]
+                addObserver: self
+                   selector: @selector(_displayOverlayWindowCreated:)
+                       name: (NSString *) _kCGSDisplayOverlayWindowCreated
+                     object: nil];
+
         XSetLocaleModifiers("");
         _xim = XOpenIM(_display, NULL, NULL, NULL);
 
@@ -204,7 +210,28 @@ static void beforeWaitingCallback(CFRunLoopObserverRef observer,
     return self;
 }
 
+// A display overlay window (CGLSetFullScreen) belongs to no NSWindow, so the
+// application's keyboard input for it is taken up here: its keys are selected
+// on this connection, and the keyboard focus goes to it. Pointer input is not
+// selected: the overlay passes it through to the windows below.
+- (void) _displayOverlayWindowCreated: (NSNotification *) notification {
+    if (![NSThread isMainThread]) {
+        [self performSelectorOnMainThread: _cmd
+                               withObject: notification
+                            waitUntilDone: YES];
+        return;
+    }
+    NSNumber *native = [[notification userInfo] objectForKey: @"NativeWindow"];
+    if (native == nil)
+        return;
+    Window overlay = (Window) [native unsignedLongValue];
+    XSelectInput(_display, overlay, KeyPressMask | KeyReleaseMask);
+    XSetInputFocus(_display, overlay, RevertToPointerRoot, CurrentTime);
+    XFlush(_display);
+}
+
 - (void) dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver: self];
 #ifdef DARLING
     // The observer uses the connection, so it goes before XCloseDisplay().
     if (_beforeWaitingObserver != NULL) {

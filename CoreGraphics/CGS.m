@@ -201,6 +201,46 @@ void* _CGSNativeWindowForSurfaceID(CGSConnectionID connId, CGSWindowID winId, CG
 	return [[[conn windowForId: winId] surfaceForId: surfaceId] nativeWindow];
 }
 
+CGError _CGSCreateDisplayOverlayWindow(CGSConnectionID connId, CGRect bounds,
+                                       CGSWindowID* winId, void** drawable)
+{
+	if (winId == NULL || drawable == NULL)
+		return kCGErrorIllegalArgument;
+
+	CGSConnection* c = _CGSConnectionForID(connId);
+	if (!c)
+		return kCGErrorInvalidConnection;
+
+	CGSRegionRef region = NULL;
+	CGError err = CGSNewRegionWithRect(&bounds, &region);
+	if (err != kCGErrorSuccess || region == NULL)
+		return kCGErrorIllegalArgument;
+
+	CGSWindow* window = [c newWindow: region];
+	CGSRegionRelease(region);
+	if (!window)
+		return kCGErrorIllegalArgument;
+
+	CGSWindowID wid = window.windowId;
+	void* native = NULL;
+	err = [window becomeDisplayOverlay: &native];
+	if (err == kCGSErrorSuccess)
+		err = [window orderWindow: kCGSOrderAbove relativeTo: nil];
+	if (err != kCGSErrorSuccess)
+	{
+		[c destroyWindow: wid];
+		return err;
+	}
+
+	*winId = wid;
+	*drawable = native;
+	[[NSNotificationCenter defaultCenter]
+		postNotificationName: (NSString*) _kCGSDisplayOverlayWindowCreated
+		object: nil
+		userInfo: @{ @"NativeWindow": @((uintptr_t) native) }];
+	return kCGSErrorSuccess;
+}
+
 void CGSSetHotKeyWithExclusion(CGSConnectionID connId, int uid, uint16_t options, uint16_t key, CGSModifierFlags modifierFlags, int exclusion)
 {
 	[_CGSConnectionForID(connId) setHotKeyWithUID: uid keyCode: key flags: modifierFlags exclusion: exclusion];
