@@ -419,6 +419,7 @@ set(AppKit_sources
 	NSCollectionView/NSCollectionView.m
 
 	NSStepper.m
+	NSDiffableDataSourceSnapshot.m
 	NSAccessibility.m
 	NSAppearance.m
 	NSAccessibilityCustomAction.m
