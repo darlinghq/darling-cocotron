@@ -207,6 +207,9 @@ static void beforeWaitingCallback(CFRunLoopObserverRef observer,
         _confinesPointer = appKitPreference(CFSTR("ConfinePointerToFullscreenWindows"));
         _controlActsAsCommand = appKitPreference(CFSTR("ControlKeyActsAsCommand"));
         _modifierFlags = 0;
+
+        // The general pasteboard and the CLIPBOARD selection show the same contents.
+        NSPasteboardRegisterHostClipboard([X11Pasteboard hostClipboardOfDisplay: self]);
     }
     return self;
 }
@@ -850,10 +853,6 @@ static void crtcBoundingBox(Display *display, XRRScreenResources *resources, RRC
     if (mask & Button2Mask)
         buttons |= 1 << 2;
     return buttons;
-}
-
-- (NSPasteboard *) pasteboardWithName: (NSString *) name {
-    return [X11Pasteboard pasteboardWithName: name];
 }
 
 - (NSDraggingManager *) draggingManager {

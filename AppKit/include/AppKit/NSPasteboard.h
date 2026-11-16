@@ -120,7 +120,12 @@ typedef NS_OPTIONS(NSUInteger, NSPasteboardReadingOptions) {
 };
 
 @interface NSPasteboard : NSObject {
-    NS_LEGACY_IVAR_PAD(_NSPasteboardReserved, 44)
+    // 44 bytes of Apple's instance on the legacy ABI: the 40 below plus the pointer to the extras
+    NS_LEGACY_IVAR_PAD(_NSPasteboardReserved, 40)
+    NS_EXTRA_IVARS_BEGIN(NSPasteboard)
+    // The CoreFoundation pasteboard this object fronts (nil for the read-only pasteboards of drag sessions)
+    id _cfState;
+    NS_EXTRA_IVARS_END(NSPasteboard)
 }
 
 @property(class, readonly, retain, nonnull) NSPasteboard *generalPasteboard;

@@ -18,11 +18,13 @@
 
 #import <AppKit/NSPasteboard.h>
 #import "WaylandDisplay.h"
+#import "NSPasteboardHostBridge.h"
 
 void WaylandSendData(WaylandDisplay *display, NSData *data, int fd);
 
-// General pasteboard uses wl_data_device; other names are process-local.
-@interface WaylandPasteboard : NSPasteboard {
+// The compositor's clipboard (wl_data_device selection) and the data of a drag: the host clipboard of the
+// general pasteboard (see NSPasteboardHostClipboard) and the source of drop sessions.
+@interface WaylandPasteboard : NSPasteboard <NSPasteboardHostClipboard> {
     WaylandDisplay *_display; // display owns pasteboards
     NSString *_name;
     struct wl_proxy *_manager, *_device, *_source, *_selection, *_dragOffer;
@@ -34,6 +36,7 @@ void WaylandSendData(WaylandDisplay *display, NSData *data, int fd);
     NSInteger _changeCount;
     NSUInteger _selectionGeneration;
     BOOL _owned, _needsPublish, _publishQueued, _publishing;
+    void (^_hostChangeHandler)(void);
 }
 - (id) initWithName: (NSString *) name display: (WaylandDisplay *) display
            manager: (struct wl_proxy *) manager seat: (struct wl_proxy *) seat;

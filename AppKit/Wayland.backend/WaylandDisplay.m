@@ -255,7 +255,6 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
     _outputs = [NSMutableArray new];
     _afterDispatch = [NSMutableArray new];
     _windows = CFArrayCreateMutable(NULL, 0, NULL);
-    _namedPasteboards = [NSMutableDictionary new];
     _repeatRate = 25;
     _repeatDelay = 600;
 
@@ -373,6 +372,9 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
     [self runAfterDispatchBlocks];
     [self flush];
 
+    // The general pasteboard and the compositor's clipboard show the same contents.
+    NSPasteboardRegisterHostClipboard(_generalPasteboard);
+
     return self;
 }
 
@@ -382,9 +384,6 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
     [self consumeDragPress];
     [_generalPasteboard invalidate];
     [_generalPasteboard release];
-    for (WaylandPasteboard *pasteboard in [_namedPasteboards allValues])
-        [pasteboard invalidate];
-    [_namedPasteboards release];
     [self stopKeyRepeat];
     [self cancelPendingModifier];
     [_heldKeyIdentities release];
@@ -2561,19 +2560,6 @@ static uint32_t WaylandKeyLayoutCodepoint(void *context, uint32_t keysym) {
 }
 - (uint32_t) dragSerialForEvent: (NSEvent *) event {
     return [self dragOriginForEvent: event] ? _dragPressSerial : 0;
-}
-
-- (NSPasteboard *) pasteboardWithName: (NSString *) name {
-    if ([name isEqual: NSGeneralPboard] || [name isEqual: NSPasteboardNameGeneral])
-        return _generalPasteboard;
-    if (name == nil) return nil;
-    WaylandPasteboard *pasteboard = [_namedPasteboards objectForKey: name];
-    if (!pasteboard) {
-        pasteboard = [[[WaylandPasteboard alloc] initWithName: name display: self
-                                                    manager: NULL seat: NULL] autorelease];
-        [_namedPasteboards setObject: pasteboard forKey: name];
-    }
-    return pasteboard;
 }
 
 - (void) beep {

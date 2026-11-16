@@ -60,8 +60,6 @@ static const NSTimeInterval kSelectionPollInterval = 0.02;
 
 @implementation X11Pasteboard
 
-static NSMutableDictionary<NSPasteboardName, X11Pasteboard *> *nameToPboard;
-
 static const NSTimeInterval SelectionTimeout = 5;
 
 // The Wayland backend bounds its clipboard transfers the same way, so the two
@@ -78,28 +76,30 @@ static size_t MaximumPropertyBytes(Display *display) {
     return (size_t) units * 4 / 2;
 }
 
-+ (X11Pasteboard *) pasteboardWithName: (NSPasteboardName) name {
+// Endpoints that are reachable by name, because an INCR transfer they serve is paced by events of another
+// client's window that only they can claim (see +dispatchPropertyNotify:).
+static NSMutableDictionary<NSPasteboardName, X11Pasteboard *> *nameToPboard;
+
++ (X11Pasteboard *) hostClipboardOfDisplay: (X11Display *) display {
     static dispatch_once_t once;
     dispatch_once(&once, ^{
       nameToPboard = [NSMutableDictionary new];
     });
 
-    if ([name isEqual: NSGeneralPboard] || [name isEqual: NSPasteboardNameGeneral] || [name isEqual: @"Apple CFPasteboard general"]) {
-        name = @"CLIPBOARD";
+    @synchronized(nameToPboard) {
+        if (nameToPboard[@"CLIPBOARD"] == nil)
+            nameToPboard[@"CLIPBOARD"] = [[[X11Pasteboard alloc] initWithName: @"CLIPBOARD" display: display] autorelease];
+        return nameToPboard[@"CLIPBOARD"];
     }
-
-    if (nameToPboard[name] == nil) {
-        nameToPboard[name] = [[X11Pasteboard alloc] initWithName: name];
-    }
-
-    return nameToPboard[name];
 }
 
 - (instancetype) initWithName: (NSPasteboardName) name {
+    return [self initWithName: name display: (X11Display *) [NSDisplay currentDisplay]];
+}
+
+- (instancetype) initWithName: (NSPasteboardName) name display: (X11Display *) x11Display {
     self = [super init];
     _name = [name retain];
-
-    X11Display *x11Display = (X11Display *) [NSDisplay currentDisplay];
 
     _display = [x11Display display];
     _selectionName = XInternAtom(_display, [name UTF8String], False);
@@ -244,8 +244,23 @@ static size_t MaximumPropertyBytes(Display *display) {
             @"text/plain;charset=utf-8"
         ];
     }
-    // TODO...
+    NSString *mime = [X11Pasteboard mimeTypeForType: NSPasteboardCanonicalType(type)];
+    if (mime != nil)
+        return @[ mime, type ];
     return @[ type ];
+}
+
+// The MIME types other X clients use for the types most pasteboards hold.
++ (NSString *) mimeTypeForType: (NSPasteboardType) type {
+    if ([type isEqual: NSPasteboardTypeHTML])
+        return @"text/html";
+    if ([type isEqual: NSPasteboardTypePNG])
+        return @"image/png";
+    if ([type isEqual: NSPasteboardTypeTIFF])
+        return @"image/tiff";
+    if ([type isEqual: NSPasteboardTypeRTF])
+        return @"text/rtf";
+    return nil;
 }
 
 + (NSPasteboardType) typeForTarget: (NSString *) target {
@@ -255,7 +270,10 @@ static size_t MaximumPropertyBytes(Display *display) {
         [target isEqual: @"UTF8_STRING"]) {
         return NSPasteboardTypeString;
     }
-    // TODO...
+    for (NSPasteboardType type in @[ NSPasteboardTypeHTML, NSPasteboardTypePNG, NSPasteboardTypeTIFF, NSPasteboardTypeRTF ]) {
+        if ([target isEqual: [X11Pasteboard mimeTypeForType: type]])
+            return type;
+    }
     return target;
 }
 
@@ -924,6 +942,43 @@ static size_t MaximumPropertyBytes(Display *display) {
                                                    data: data] autorelease];
 
     XFlush(_display);
+}
+
+#pragma mark NSPasteboardHostClipboard
+
+- (BOOL) ownsHostClipboard {
+    return _typeToOwner != nil;
+}
+
+- (void) setHostClipboardChangeHandler: (void (^)(void)) handler {
+    [_hostChangeHandler release];
+    _hostChangeHandler = [handler copy];
+    if (_hostWatcher != nil || handler == nil)
+        return;
+
+    _hostWatcher = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue());
+    dispatch_source_set_timer(_hostWatcher, dispatch_time(DISPATCH_TIME_NOW, 0), 200 * NSEC_PER_MSEC, 50 * NSEC_PER_MSEC);
+    dispatch_source_set_event_handler(_hostWatcher, ^{
+      [self pollHostOwner];
+    });
+    dispatch_resume(_hostWatcher);
+}
+
+// Another client having taken the selection is noticed by its owner changing. The owner is not looked at
+// while this endpoint believes it owns the selection: the X server's SelectionClear tells it first.
+- (void) pollHostOwner {
+    if (_typeToOwner != nil)
+        return;
+    Window owner = XGetSelectionOwner(_display, _selectionName);
+    if (owner == _watchedOwner)
+        return;
+    _watchedOwner = owner;
+    if (owner == None || owner == _window)
+        return;
+    // Drops what was known about the previous owner and counts the change.
+    [self observeSelectionOwner];
+    if (_hostChangeHandler != nil)
+        _hostChangeHandler();
 }
 
 - (Window) windowHandle {

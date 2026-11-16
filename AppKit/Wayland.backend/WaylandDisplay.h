@@ -193,7 +193,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     WaylandCursor *_cursor;
     BOOL _applyingCursor, _cursorApplyPending, _cursorApplyQueued;
     WaylandPasteboard *_generalPasteboard;
-    NSMutableDictionary *_namedPasteboards;
 }
 
 - (WaylandWindow *) windowForSurface: (struct wl_proxy *) surface;

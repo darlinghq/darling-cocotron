@@ -32,6 +32,8 @@
     NSMutableDictionary *_providers;
     NSPasteboard *_pasteboard;
     NSInteger _attachedChangeCount;
+    uint64_t _itemID;
+    BOOL _hasItemID;
     BOOL _derived;
     BOOL _attached;
     BOOL _providersFinished;
