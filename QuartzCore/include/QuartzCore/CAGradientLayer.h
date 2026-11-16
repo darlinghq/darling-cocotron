@@ -19,9 +19,25 @@
 
 #import <QuartzCore/CALayer.h>
 
-CA_EXPORT NSString *const kCAGradientLayerAxial;
-CA_EXPORT NSString *const kCAGradientLayerRadial;
-CA_EXPORT NSString *const kCAGradientLayerConic;
+typedef NSString *CAGradientLayerType NS_TYPED_ENUM;
 
-@interface CAGradientLayer : CALayer
+CA_EXPORT CAGradientLayerType const kCAGradientLayerAxial;
+CA_EXPORT CAGradientLayerType const kCAGradientLayerRadial;
+CA_EXPORT CAGradientLayerType const kCAGradientLayerConic;
+
+// Draws a color gradient into the layer's contents.
+@interface CAGradientLayer : CALayer {
+    NSArray *_colors;
+    NSArray *_locations;
+    CGPoint _startPoint;
+    CGPoint _endPoint;
+    CAGradientLayerType _type;
+}
+
+@property(copy) NSArray *colors;                 // CGColorRefs; default nil (nothing is drawn)
+@property(copy) NSArray<NSNumber *> *locations;  // optional; the colors are evenly spaced when nil
+@property CGPoint startPoint;                    // unit coordinates of the layer, default (0.5, 0)
+@property CGPoint endPoint;                      // default (0.5, 1)
+@property(copy) CAGradientLayerType type;        // kCAGradientLayerAxial (default)
+
 @end
