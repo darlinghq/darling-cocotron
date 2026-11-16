@@ -26,6 +26,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSStatusItem+Private.h>
 #import <AppKit/NSStatusItem.h>
 #import <AppKit/NSWindow.h>
+#ifndef WIN32
+#import "NSStatusItemNotifier.h"
+#endif
 #ifdef WIN32
 #import <AppKit/NSStatusBar_(Private).h>
 #import <AppKit/Win32Window.h>
@@ -42,6 +45,34 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     _appearsDisabled = flag;
     [self setNeedsDisplay: YES];
 }
+
+#ifndef WIN32
+// What the button shows is what the item shows in the system tray, whoever
+// changes it, the item or the application through its button.
+- (void) setImage: (NSImage *) image {
+    [super setImage: image];
+    [_statusItem _contentChanged: NSStatusItemNotifierIcon];
+}
+
+- (void) setTitle: (NSString *) title {
+    [super setTitle: title];
+    [_statusItem _contentChanged: NSStatusItemNotifierTitle];
+}
+
+- (void) setAttributedTitle: (NSAttributedString *) title {
+    [super setAttributedTitle: title];
+    [_statusItem _contentChanged: NSStatusItemNotifierTitle];
+}
+
+- (void) setToolTip: (NSString *) toolTip {
+    [super setToolTip: toolTip];
+    [_statusItem _contentChanged: NSStatusItemNotifierToolTip];
+}
+
+- (void) _setStatusItem: (NSStatusItem *) item {
+    _statusItem = item;
+}
+#endif
 
 @end
 
@@ -281,15 +312,54 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         _trayIconID = -1;
         _win32Menu = NULL;
 #endif
-        // Items are visible until the application hides them.
+        // Items are visible until the application hides them, highlight on click and send
+        // their action when the left button goes up (as observed on macOS 10.14 and 26).
         _visible = YES;
+        _highlightMode = YES;
+        _actionMask = NSLeftMouseUpMask;
         // The item's image, title, target and action live in its button, which exists from the start.
         _button = [[NSStatusBarButton alloc] initWithFrame: NSMakeRect(0, 0, 16, 22)];
         // A status item shows nothing until the application gives it a title or an image, unlike a plain NSButton.
         [_button setTitle: @""];
+#ifndef WIN32
+        [_button _setStatusItem: self];
+#endif
     }
     return self;
 }
+
+#ifndef WIN32
+- (void) _attachToStatusBar {
+    if (_notifier == nil)
+        _notifier = [[NSStatusItemNotifier alloc] initWithStatusItem: self];
+}
+
+- (void) _detachFromStatusBar {
+    [_notifier invalidate];
+    [_notifier release];
+    _notifier = nil;
+}
+
+- (void) _contentChanged: (NSUInteger) aspects {
+    [_notifier itemChanged: aspects];
+}
+
+// The click that the system tray calls the primary one is the left click, the
+// secondary one is the right click; the action goes out when the item is set
+// to send it on that kind of click (the left button going up, unless
+// sendActionOn: says otherwise).
+- (void) _sendActionForClick: (BOOL) secondary {
+    NSInteger mask = _actionMask;
+    NSInteger wanted = secondary ? (NSRightMouseDownMask | NSRightMouseUpMask)
+                                 : (NSLeftMouseDownMask | NSLeftMouseUpMask);
+
+    if ((mask & wanted) == 0 || ![_button isEnabled] || [_button action] == NULL)
+        return;
+    [[NSApplication sharedApplication] sendAction: [_button action]
+                                               to: [_button target]
+                                             from: _button];
+}
+#endif
 
 - (NSStatusBar *) statusBar {
     return [NSStatusBar systemStatusBar];
@@ -339,7 +409,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (void) setTitle: (NSString *) title {
     [_button setTitle: title];
 }
+- (NSString *) toolTip {
+    return [_button toolTip];
+}
 - (void) setToolTip: (NSString *) toolTip {
+    [_button setToolTip: toolTip];
 }
 - (NSAttributedString *) attributedTitle {
     return [_button attributedTitle];
@@ -397,9 +471,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return _menu;
 }
 - (void) setMenu: (NSMenu *) menu {
-    [_menu release];
-    _menu = nil;
-    _menu = [menu copy];
+    if (_menu != menu) {
+        [_menu release];
+        _menu = [menu retain];
+    }
+#ifndef WIN32
+    [self _contentChanged: NSStatusItemNotifierMenu | NSStatusItemNotifierStatus];
+#endif
 #ifdef WIN32
     // Preprocess Menu into HMENU ready for Win32 Events
     if (_win32Menu == NULL) {
@@ -487,9 +565,16 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (void) setVisible: (BOOL) visible {
     _visible = visible;
+#ifndef WIN32
+    [self _contentChanged: NSStatusItemNotifierStatus];
+#endif
 }
 
 - (void) dealloc {
+#ifndef WIN32
+    [self _detachFromStatusBar];
+    [_button _setStatusItem: nil];
+#endif
     [_view release];
     [_menu release];
     [_button release];
