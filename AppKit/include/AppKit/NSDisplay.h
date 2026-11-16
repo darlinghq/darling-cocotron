@@ -133,8 +133,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (NSDictionary *) currentModeForScreen: (int) screenIndex;
 - (BOOL) setMode: (NSDictionary *) mode forScreen: (int) screenIndex;
 
-// Returned memory must be free()ed by the caller
-- (UCKeyboardLayout *) keyboardLayout: (uint32_t *) byteLength;
 // Returns an opaque number of the current keyboard layout.
 // This is because apps tend to call TISCopyCurrentKeyboardLayoutInputSource()
 // repeatedly and expect to get the same pointer if layout hasn't changed.

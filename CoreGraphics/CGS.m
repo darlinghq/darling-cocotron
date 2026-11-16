@@ -698,6 +698,30 @@ void _CGSPostHotKeyEvent(CGSConnectionID connection, int uid, BOOL pressed, CGEv
 	}
 }
 
+// The layout a client of the window system registered with _CGSSetProvidedKeyboardLayout, for a
+// backend that cannot read the keymap itself (Wayland hands the keymap to the keyboard-owning
+// client, which is AppKit).
+static CGSKeyboardLayout* g_providedKeyboardLayout;
+static pthread_mutex_t g_providedKeyboardLayoutMutex = PTHREAD_MUTEX_INITIALIZER;
+
+void _CGSSetProvidedKeyboardLayout(const void* uchr, uint32_t length, CFStringRef name, CFStringRef fullName)
+{
+	CGSKeyboardLayout* layout = nil;
+	if (uchr != NULL && length != 0)
+	{
+		layout = [CGSKeyboardLayout new];
+		[layout setLayout: (UCKeyboardLayout*) uchr length: length];
+		layout.name = (NSString*) name;
+		layout.fullName = (NSString*) fullName;
+	}
+
+	pthread_mutex_lock(&g_providedKeyboardLayoutMutex);
+	CGSKeyboardLayout* old = g_providedKeyboardLayout;
+	g_providedKeyboardLayout = layout;
+	pthread_mutex_unlock(&g_providedKeyboardLayoutMutex);
+	[old release];
+}
+
 // The current keyboard layout of the window-system backend: a dictionary with the 'uchr' data
 // (key "data", CFData) and the layout's "name" and "fullName" strings, or NULL when the backend has
 // no layout (no connection, or a backend that does not provide one). The caller releases it.
@@ -706,6 +730,12 @@ CFDictionaryRef _CGSCopyCurrentKeyboardLayoutInfo(void)
 {
 	CGSConnection* connection = _CGSConnectionForID(_CGSDefaultConnection());
 	CGSKeyboardLayout* layout = [connection createKeyboardLayout];
+	if (!layout)
+	{
+		pthread_mutex_lock(&g_providedKeyboardLayoutMutex);
+		layout = [g_providedKeyboardLayout retain];
+		pthread_mutex_unlock(&g_providedKeyboardLayoutMutex);
+	}
 	if (!layout || !layout.layout || layout.layoutLength == 0)
 	{
 		[layout release];

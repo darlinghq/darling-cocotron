@@ -32,6 +32,8 @@
 #import "WaylandProtocol.h"
 #import "WaylandWindow.h"
 #import "../DarlingWindowLevelPolicy.h"
+#import "../../CoreGraphics/DarlingUnicodeKeyLayout.h"
+#import "../../CoreGraphics/DarlingUnicodeKeyLayoutCompose.h"
 #import <CoreGraphics/CGSKeySymToUnicodePrivate.h>
 #import <CoreGraphics/CoreGraphicsPrivate.h>
 #import <CoreFoundation/CFNotificationCenter.h>
@@ -1621,6 +1623,7 @@ static NSUInteger modifierDeviceMask(int code) {
         if (_xkbState != NULL) {
             WL.xkb_state_update_mask(_xkbState, args[1].u, args[2].u, args[3].u,
                                      0, 0, args[4].u);
+            [self publishKeyboardLayout];
             if (_classifyHeldKeys)
                 [self classifyHeldKeys];
         }
@@ -1679,6 +1682,8 @@ static NSUInteger modifierDeviceMask(int code) {
         WL.xkb_keymap_unref(_xkbKeymap);
     _xkbKeymap = keymap;
     _xkbState = state;
+    _publishedKeymap = NULL;
+    [self publishKeyboardLayout];
     [self cancelPendingModifier];
     // Preserve press-time identities through keymap changes until release.
     // Only enter-seeded keys need classification under the current group.
@@ -1847,64 +1852,78 @@ static NSUInteger modifierDeviceMask(int code) {
         *fullName = layoutName;
 }
 
-// The same two-table layout (unshifted, shifted) as the X11 backend's keyboard layout.
-- (UCKeyboardLayout *) keyboardLayout: (uint32_t *) byteLength {
-    struct Layout {
-        UCKeyboardLayout layout;
-        UCKeyModifiersToTableNum modifierVariants;
-        UInt8 secondTableNum, thirdTableNum;
-        UCKeyToCharTableIndex tableIndex;
-        UInt32 secondTableOffset;
-        UCKeyOutput table1[128];
-        UCKeyOutput table2[128];
+// What the keyboard layout builder needs of the compositor's keymap: a scratch XKB state that
+// is put into each modifier layer in turn, so XKB itself decides the level of a key.
+typedef struct {
+    struct xkb_state *state;
+    xkb_layout_index_t group;
+    xkb_mod_mask_t shift, caps, option;
+} WaylandKeyLayoutContext;
+
+static uint32_t WaylandKeyLayoutKeysym(void *context, int carbonKey, unsigned layer) {
+    WaylandKeyLayoutContext *keymap = context;
+    const int keycode = carbonToX11[carbonKey];
+    if (keycode == 0)
+        return 0;
+
+    xkb_mod_mask_t depressed = 0, locked = 0;
+    if (layer & DarlingKeyLayerShift)
+        depressed |= keymap->shift;
+    if (layer & DarlingKeyLayerOption)
+        depressed |= keymap->option;
+    if (layer & DarlingKeyLayerCaps)
+        locked |= keymap->caps;
+    WL.xkb_state_update_mask(keymap->state, depressed, 0, locked, 0, 0, keymap->group);
+    xkb_keysym_t keysym = WL.xkb_state_key_get_one_sym(keymap->state, keycode);
+    return keysym == XKB_KEY_NoSymbol ? 0 : keysym;
+}
+
+static uint32_t WaylandKeyLayoutCodepoint(void *context, uint32_t keysym) {
+    uint32_t codepoint = CGSKeySymToUnicode(keysym);
+    return codepoint != 0 ? codepoint : WL.xkb_keysym_to_utf32(keysym);
+}
+
+// Builds the 'uchr' layout of the compositor's keymap in its current group and registers it with
+// CoreGraphics, where the Text Input Sources API reads it: Wayland gives the keymap to the client
+// that owns the keyboard, so CoreGraphics' own Wayland connection cannot read it. Called when a
+// keymap arrives and when the group changes.
+- (void) publishKeyboardLayout {
+    if (_xkbState == NULL || _xkbKeymap == NULL)
+        return;
+    xkb_layout_index_t group = WL.xkb_state_serialize_layout(_xkbState, XKB_STATE_LAYOUT_EFFECTIVE);
+    if (_publishedKeymap == _xkbKeymap && _publishedGroup == group)
+        return;
+
+    WaylandKeyLayoutContext keymap;
+    keymap.state = WL.xkb_state_new(_xkbKeymap);
+    if (keymap.state == NULL)
+        return;
+    keymap.group = group;
+    xkb_mod_index_t shift = WL.xkb_keymap_mod_get_index(_xkbKeymap, XKB_MOD_NAME_SHIFT);
+    xkb_mod_index_t caps = WL.xkb_keymap_mod_get_index(_xkbKeymap, XKB_MOD_NAME_CAPS);
+    xkb_mod_index_t option = WL.xkb_keymap_mod_get_index(_xkbKeymap, "Mod5"); // AltGr
+    keymap.shift = shift != XKB_MOD_INVALID ? 1u << shift : 0;
+    keymap.caps = caps != XKB_MOD_INVALID ? 1u << caps : 0;
+    keymap.option = option != XKB_MOD_INVALID ? 1u << option : 0;
+
+    DarlingKeyLayoutSource source = {
+        .context = &keymap,
+        .keysym = WaylandKeyLayoutKeysym,
+        .codepoint = WaylandKeyLayoutCodepoint,
+        .compose = DarlingComposeCharacters,
     };
-
-    if (byteLength != NULL)
-        *byteLength = 0;
-    if (_xkbState == NULL)
-        return NULL;
-
-    struct Layout *layout = calloc(1, sizeof(struct Layout));
+    uint32_t length = 0;
+    UCKeyboardLayout *layout = DarlingCreateUnicodeKeyLayout(&source, &length);
+    WL.xkb_state_unref(keymap.state);
     if (layout == NULL)
-        return NULL;
+        return;
 
-    layout->layout.keyLayoutHeaderFormat = kUCKeyLayoutHeaderFormat;
-    layout->layout.keyboardTypeCount = 1;
-    layout->layout.keyboardTypeList[0].keyModifiersToTableNumOffset =
-            offsetof(struct Layout, modifierVariants);
-    layout->layout.keyboardTypeList[0].keyToCharTableIndexOffset =
-            offsetof(struct Layout, tableIndex);
-
-    layout->modifierVariants.keyModifiersToTableNumFormat =
-            kUCKeyModifiersToTableNumFormat;
-    layout->modifierVariants.defaultTableNum = 0;
-    layout->modifierVariants.modifiersCount = 3;
-    layout->modifierVariants.tableNum[0] = 0;
-    layout->modifierVariants.tableNum[1] = 0; // cmd key bit
-    layout->modifierVariants.tableNum[2] = 1; // shift key bit
-
-    layout->tableIndex.keyToCharTableIndexFormat = kUCKeyToCharTableIndexFormat;
-    layout->tableIndex.keyToCharTableSize = 128;
-    layout->tableIndex.keyToCharTableCount = 2;
-    layout->tableIndex.keyToCharTableOffsets[0] = offsetof(struct Layout, table1);
-    layout->tableIndex.keyToCharTableOffsets[1] = offsetof(struct Layout, table2);
-
-    for (xkb_level_index_t level = 0; level <= 1; level++) {
-        UCKeyOutput *table = level == 0 ? layout->table1 : layout->table2;
-        for (int carbonCode = 0; carbonCode < 128; carbonCode++) {
-            const int keycode = carbonToX11[carbonCode];
-            if (keycode == 0)
-                continue;
-            uint32_t codepoint = [self
-                    codepointForKeysym: [self keysymForKeycode: keycode
-                                                         level: level]];
-            table[carbonCode] = codepoint <= 0xFFFF ? codepoint : 0;
-        }
-    }
-
-    if (byteLength != NULL)
-        *byteLength = sizeof(struct Layout);
-    return &layout->layout;
+    NSString *name = nil, *fullName = nil;
+    [self keyboardLayoutName: &name fullName: &fullName];
+    _CGSSetProvidedKeyboardLayout(layout, length, (CFStringRef) name, (CFStringRef) fullName);
+    free(layout);
+    _publishedKeymap = _xkbKeymap;
+    _publishedGroup = group;
 }
 
 #pragma mark - Screens
