@@ -337,18 +337,17 @@ NS_EXTRA_SYNTHESIZE_ASSIGN(NSCell, userInterfaceLayoutDirection, _userInterfaceL
 
         id o1, o2, o3;
         [coder decodeValuesOfObjCTypes: "@@@@", &NS_EXTRA(NSCell, self)->_objectValue, &o1, &o2, &o3];
-        if (o1) {
-            if ([o1 isKindOfClass: [NSImage class]])
-                NS_EXTRA(NSCell, self)->_image = o1;
-            else if ([o1 isKindOfClass: [NSFont class]])
-                NS_EXTRA(NSCell, self)->_font = o1;
-        }
+        // The second object of a classic archive is the font of a text cell and the image of an image cell.
+        if ([o1 isKindOfClass: [NSImage class]])
+            NS_EXTRA(NSCell, self)->_image = [o1 retain];
+        else if ([o1 isKindOfClass: [NSFont class]])
+            NS_EXTRA(NSCell, self)->_font = [o1 retain];
 
         [self setFormatter: o2];
         [self setRepresentedObject: o3];
 
-        // Is this correct?
-        NS_EXTRA(NSCell, self)->_font = [[NSFont userFontOfSize: [NSFont systemFontSizeForControlSize: NS_EXTRA(NSCell, self)->_controlSize]] retain];
+        if (NS_EXTRA(NSCell, self)->_font == nil)
+            NS_EXTRA(NSCell, self)->_font = [[NSFont userFontOfSize: [NSFont systemFontSizeForControlSize: NS_EXTRA(NSCell, self)->_controlSize]] retain];
     }
     return self;
 }
