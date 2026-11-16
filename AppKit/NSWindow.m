@@ -549,6 +549,7 @@ static BOOL _allowsAutomaticWindowTabbing;
     }
     NS_EXTRA(NSWindow, self)->_styleMask = styleMask;
     NS_EXTRA(NSWindow, self)->_isMovable = YES;
+    NS_EXTRA(NSWindow, self)->_alphaValue = 1.0;
     NS_EXTRA(NSWindow, self)->_backingType = backing;
     NS_EXTRA(NSWindow, self)->_isDeferred = defer;
 

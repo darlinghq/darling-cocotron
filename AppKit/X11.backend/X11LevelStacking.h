@@ -32,6 +32,14 @@ static inline bool X11UnmanagedBelowManaged(bool unmanagedIsAnchor, int unmanage
     return unmanagedLevel <= managedLevel;
 }
 
+/* Whether an unmanaged window has to be stacked above a managed window that was just ordered to the front (or got
+ * a new level): a managed window is put in front of everything by the window manager, including an unmanaged
+ * window of a higher level (the borderless full screen window of a game at the screen saver level, with a
+ * titled window of the normal level ordered in later), so the unmanaged window has to be raised above its frame. */
+static inline bool X11UnmanagedAboveManaged(int unmanagedLevel, int managedLevel) {
+    return unmanagedLevel > managedLevel;
+}
+
 /* Whether `anchor`, an unmanaged window that was just ordered to the front or got a new level, has to be
  * stacked below `other`, another unmanaged window: the window of the higher level is in front, and windows of
  * one level keep the order in which they were ordered to the front. The menu bar (level 24) and the
@@ -87,6 +95,20 @@ static inline bool X11StackBelowIfAbove(Display *display, Window lower, Window u
         return false;
     Window pair[2] = {upper, lower};
     XRestackWindows(display, pair, 2);
+    return true;
+}
+
+/* Puts the unmanaged root child `upper` directly above the root child `lower` (typically a window manager's frame),
+ * unless it already is above it. `upper` must not be managed by a window manager. Returns whether it restacked. */
+static inline bool X11StackAboveIfBelow(Display *display, Window upper, Window lower) {
+    int upperIndex = X11StackIndex(display, upper);
+    int lowerIndex = X11StackIndex(display, lower);
+    if (upperIndex < 0 || lowerIndex < 0 || upperIndex > lowerIndex)
+        return false;
+    XWindowChanges changes;
+    changes.sibling = lower;
+    changes.stack_mode = Above;
+    XConfigureWindow(display, upper, CWSibling | CWStackMode, &changes);
     return true;
 }
 
