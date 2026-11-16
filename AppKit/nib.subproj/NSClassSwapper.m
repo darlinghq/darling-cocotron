@@ -36,9 +36,21 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (id) initWithCoder: (NSCoder *) coder {
-    _className = [[coder decodeObjectForKey: @"NSClassName"] retain];
-    _originalClassName =
-            [[coder decodeObjectForKey: @"NSOriginalClassName"] retain];
+    if ([coder allowsKeyedCoding]) {
+        _className = [[coder decodeObjectForKey: @"NSClassName"] retain];
+        _originalClassName =
+                [[coder decodeObjectForKey: @"NSOriginalClassName"] retain];
+    } else {
+        // NSArchiver (typedstream) nibs, as written by Interface Builder before
+        // keyed nibs: the custom class name as a string, then the class of the
+        // standard object it stands in for, then that object's own encoding.
+        NSString *className = nil;
+        Class originalClass = Nil;
+
+        [coder decodeValuesOfObjCTypes: "@#", &className, &originalClass];
+        _className = className;
+        _originalClassName = [NSStringFromClass(originalClass) retain];
+    }
 
     Class class = NSClassFromString(_className);
     Class original = NSClassFromString(_originalClassName);
