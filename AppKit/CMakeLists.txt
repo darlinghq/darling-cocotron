@@ -123,7 +123,6 @@ set(AppKit_sources
 	NSSecureTextField.m
 	NSScreen.m
 	NSPrintOperation.m
-	NSTextList.m
 	NSComboBoxWindow.m
 	NSSlider.m
 	NSTableHeaderView.m
@@ -166,7 +165,6 @@ set(AppKit_sources
 	NSTextFieldCell.m
 	NSFormCell.m
 	NSStepperCell.m
-	NSParagraphStyle.m
 	NSDatePicker.m
 	NSGlyphGenerator.m
 
@@ -184,11 +182,6 @@ set(AppKit_sources
 	NSForm.m
 	NSSheetContext.m
 
-	NSTextTable/NSTextTableBlock.m
-	NSTextTable/NSTextTable.m
-	NSTextTable/NSTextBlock.m
-
-	NSMutableParagraphStyle.m
 	NSBrowser.m
 	NSToolTipWindow.m
 	NSTitlebarAccessoryViewController.m
@@ -271,7 +264,6 @@ set(AppKit_sources
 	NSTextView.subproj/NSSecureLayoutManager.m
 	NSTextView.subproj/NSUndoTextOperation.m
 	NSTextView.subproj/NSSecureTextView.m
-	NSTextView.subproj/NSTextTab.m
 
 	NSTableColumn.m
 	NSTextField.m
@@ -286,7 +278,6 @@ set(AppKit_sources
 
 	NSButton.m
 	NSPrintPanel.m
-	NSGlyphInfo.m
 	NSWindowController.m
 	NSColorSampler.m
 	NSColorSpace.m
