@@ -305,6 +305,28 @@ static NSDisplay *processDisplay = nil;
     }
 }
 
+- (void) accumulateMouseDeltaX: (CGFloat) dx y: (CGFloat) dy {
+    [_eventQueueLock lock];
+    _mouseDeltaX += dx;
+    _mouseDeltaY += dy;
+    [_eventQueueLock unlock];
+}
+
+// Whole units are taken; the fraction stays for the next call, so a slow
+// motion in a fractional scale is not lost.
+- (void) takeMouseDeltaX: (int32_t *) dx y: (int32_t *) dy {
+    [_eventQueueLock lock];
+    double wholeX = _mouseDeltaX < 0 ? ceil(_mouseDeltaX) : floor(_mouseDeltaX);
+    double wholeY = _mouseDeltaY < 0 ? ceil(_mouseDeltaY) : floor(_mouseDeltaY);
+    _mouseDeltaX -= wholeX;
+    _mouseDeltaY -= wholeY;
+    [_eventQueueLock unlock];
+    if (dx != NULL)
+        *dx = (int32_t) wholeX;
+    if (dy != NULL)
+        *dy = (int32_t) wholeY;
+}
+
 - (void) postEvent: (NSEvent *) event atStart: (BOOL) atStart {
     // Callable from any thread
     [_eventQueueLock lock];

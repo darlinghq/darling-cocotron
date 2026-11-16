@@ -595,6 +595,18 @@ CGError CGDisplayMoveCursorToPoint(CGDirectDisplayID displayID, CGPoint newCurso
     return warpToGlobalPoint(display, CGPointMake(global.x, global.y));
 }
 
+// The mouse motion reported since the previous call, in screen pixels.
+void CGGetLastMouseDelta(int32_t *deltaX, int32_t *deltaY) {
+    NSDisplay *display = currentDisplay();
+    int32_t dx = 0, dy = 0;
+    if (display)
+        [display takeMouseDeltaX: &dx y: &dy];
+    if (deltaX)
+        *deltaX = dx;
+    if (deltaY)
+        *deltaY = dy;
+}
+
 CGError CGAssociateMouseAndMouseCursorPosition(boolean_t connected) {
     NSDisplay *display = currentDisplay();
     if (!display)

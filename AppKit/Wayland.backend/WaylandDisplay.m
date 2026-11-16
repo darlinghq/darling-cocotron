@@ -1086,6 +1086,7 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
     NSPoint location = [window transformPoint: _pointerSurfacePoint];
     NSPoint last = [window mouseLocationOutsideOfEventStream];
     [window setLastKnownCursorPosition: location];
+    [self accumulateMouseDeltaX: location.x - last.x y: last.y - location.y];
 
     // The pointer moved: a cursor hidden until then comes back, even when the
     // application does not want the mouse-moved event. A compositor repeats the
@@ -1441,6 +1442,7 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         type = NSLeftMouseDragged;
     else if (_pressedButtons & 2)
         type = NSRightMouseDragged;
+    [self accumulateMouseDeltaX: dx y: dy];
     NSWindow *delegate = [window delegate];
     if (delegate == nil || (type == NSMouseMoved && ![delegate acceptsMouseMovedEvents]))
         return;

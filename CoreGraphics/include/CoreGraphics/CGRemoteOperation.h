@@ -72,5 +72,7 @@ CGError CGWaitForScreenUpdateRects(CGScreenUpdateOperation requestedOperations, 
 
 CGError CGWarpMouseCursorPosition(CGPoint newCursorPosition);
 CGError CGAssociateMouseAndMouseCursorPosition(boolean_t connected);
+// The mouse motion since the last call, in the global display space's units (pixels, y down).
+void CGGetLastMouseDelta(int32_t *deltaX, int32_t *deltaY);
 
 #endif
