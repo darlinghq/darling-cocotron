@@ -1498,15 +1498,15 @@ static int ignoreBadWindowWhileOrdering(Display *display, XErrorEvent *errorEven
 
             X11Window *unmanaged = anchorUnmanaged ? anchor : other;
             X11Window *managed = anchorUnmanaged ? other : anchor;
-            if (!X11UnmanagedBelowManaged(anchorUnmanaged, [unmanaged stackingLevel],
-                                          [managed stackingLevel]))
-                continue;
-
             Window otherTop = X11TopLevelAncestor(_display, [other windowHandle]);
             Window unmanagedTop = anchorUnmanaged ? anchorTop : otherTop;
             Window managedTop = anchorUnmanaged ? otherTop : anchorTop;
-            if (unmanagedTop != None && managedTop != None)
+            if (unmanagedTop == None || managedTop == None)
+                continue;
+            if (X11UnmanagedBelowManaged(anchorUnmanaged, [unmanaged stackingLevel], [managed stackingLevel]))
                 X11StackBelowIfAbove(_display, unmanagedTop, managedTop);
+            else if (!anchorUnmanaged && X11UnmanagedAboveManaged([unmanaged stackingLevel], [managed stackingLevel]))
+                X11StackAboveIfBelow(_display, unmanagedTop, managedTop);
         }
     } @finally {
         XSetErrorHandler(previousHandler);

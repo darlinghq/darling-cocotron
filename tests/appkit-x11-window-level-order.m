@@ -84,6 +84,26 @@ int main(void) {
         [bar setLevel:NSScreenSaverWindowLevel + 1];
         settle();
         CHECK(front() == bar, "raising the level puts the unmanaged window in front of the other one, front is %s", [[front() title] UTF8String]);
+
+        // A full screen window of the screen saver level (unmanaged) stays in front of a titled window of the
+        // normal level that is ordered to the front after it, and the window manager must not put it on top.
+        [bar orderOut:nil];
+        [plain orderFront:nil];
+        settle();
+        NSWindow *small = [[NSWindow alloc] initWithContentRect:NSMakeRect(300, 300, 50, 1)
+                                                       styleMask:NSWindowStyleMaskTitled
+                                                         backing:NSBackingStoreBuffered defer:NO];
+        [small setTitle:@"small"];
+        [small makeKeyAndOrderFront:nil];
+        settle();
+        CHECK(front() == plain, "unmanaged window of a higher level stays in front of a normal window ordered in later, front is %s", [[front() title] UTF8String]);
+        CHECK([NSApp keyWindow] == small, "the normal window is still the key window");
+        // The window ordered in later at the same level as the unmanaged one goes in front of it.
+        [plain setLevel:NSNormalWindowLevel];
+        [small orderOut:nil];
+        [small makeKeyAndOrderFront:nil];
+        settle();
+        CHECK(front() == small, "at equal levels the window ordered in last is in front, front is %s", [[front() title] UTF8String]);
     }
     printf(failures ? "FAILED\n" : "PASSED\n");
     return failures != 0;

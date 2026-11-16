@@ -18,6 +18,15 @@ static void levelRule(void) {
     CHECK(!X11UnmanagedBelowManaged(true, 8, 0), "raised unmanaged window of a higher level stays above");
 }
 
+static void aboveRule(void) {
+    // An unmanaged window of a higher level is raised above a managed window ordered in later, which a window
+    // manager puts in front of everything.
+    CHECK(X11UnmanagedAboveManaged(1000, 0), "a full screen window of the screen saver level goes above a normal window");
+    CHECK(X11UnmanagedAboveManaged(8, 0), "a window of a higher level goes above");
+    CHECK(!X11UnmanagedAboveManaged(0, 0), "equal levels: the managed window ordered in last stays in front");
+    CHECK(!X11UnmanagedAboveManaged(0, 8), "a managed window of a higher level stays in front");
+}
+
 static void unmanagedPairRule(void) {
     // anchorLevel, otherLevel
     CHECK(X11UnmanagedBelowUnmanaged(24, 1000), "the menu bar ordered in last stays below a full screen window");
@@ -47,6 +56,14 @@ static void restacking(Display *display) {
     CHECK(!X11StackBelowIfAbove(display, lower, upper), "nothing to do when it is already below");
     CHECK(!X11StackBelowIfAbove(display, lower, 0x7ffffff), "a window that is gone is left alone");
 
+    // The opposite move: the unmanaged window is raised directly above the other one.
+    CHECK(X11StackAboveIfBelow(display, lower, upper), "raised a window that was below");
+    XSync(display, False);
+    CHECK(X11StackIndex(display, lower) == X11StackIndex(display, upper) + 1, "lower is directly above upper: %d vs %d",
+          X11StackIndex(display, lower), X11StackIndex(display, upper));
+    CHECK(!X11StackAboveIfBelow(display, lower, upper), "nothing to do when it is already above");
+    CHECK(!X11StackAboveIfBelow(display, lower, 0x7ffffff), "a window that is gone is left alone");
+
     // Without a reparenting window manager the top-level window is its own root child; inside a frame it is the frame.
     CHECK(X11TopLevelAncestor(display, upper) == upper, "a root child is its own top-level ancestor");
     Window frame = make(display, root, false), client = make(display, frame, false);
@@ -64,6 +81,7 @@ int main(void) {
         return 2;
     }
     levelRule();
+    aboveRule();
     unmanagedPairRule();
     restacking(display);
     XCloseDisplay(display);
