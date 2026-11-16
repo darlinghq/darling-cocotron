@@ -190,7 +190,25 @@ static NSMutableArray *_cursorStack = nil;
 }
 
 - initWithCoder: (NSCoder *) coder {
-    // TODO: Need to implement
+    if (![coder allowsKeyedCoding]) {
+        // QUIRK: a cursor archived with NSArchiver decodes to the standard arrow cursor,
+        // whichever cursor (standard or created from an image) was archived. The archive holds
+        // the hot spot as two floats, the image (nil for standard cursors) and two flag bytes,
+        // all of which are read and dropped. Not documented. Evidence: black-box observation on
+        // macOS 10.14.4, i386 and x86_64 (tier 2): 17 standard cursors and one image cursor
+        // all unarchive to +arrowCursor, also while another cursor is current.
+        // Test: tests/src/typedstream_appkit.m (test_quirk_cursor_decodes_as_arrow)
+        float hotSpot[2];
+        id image = nil;
+        char flags[2];
+
+        [coder decodeValuesOfObjCTypes: "ff", &hotSpot[0], &hotSpot[1]];
+        [coder decodeValueOfObjCType: @encode(id) at: &image];
+        [coder decodeValueOfObjCType: @encode(char) at: &flags[0]];
+        [coder decodeValueOfObjCType: @encode(char) at: &flags[1]];
+        [image release];
+        return [self initWithName: @"arrowCursor"];
+    }
     return self;
 }
 
