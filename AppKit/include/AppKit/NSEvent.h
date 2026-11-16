@@ -317,6 +317,8 @@ typedef NS_OPTIONS(NSUInteger, NSEventSwipeTrackingOptions) {
 
 + (id) addLocalMonitorForEventsMatchingMask: (NSEventMask) mask
                                     handler: (NSEvent *_Nullable (^)(NSEvent *_Nonnull event)) block;
++ (id) addGlobalMonitorForEventsMatchingMask: (NSEventMask) mask
+                                      handler: (void (^)(NSEvent *_Nonnull event)) block;
 + (void) removeMonitor: (id) eventMonitor;
 + (void) setMouseCoalescingEnabled: (BOOL) flag;
 + (BOOL) isMouseCoalescingEnabled;
