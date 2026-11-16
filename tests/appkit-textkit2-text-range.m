@@ -6,6 +6,7 @@
  * No window server needed.
  */
 #import <AppKit/AppKit.h>
+#include <objc/runtime.h>
 #include <stdio.h>
 
 @interface TestLocation : NSObject <NSTextLocation> {
@@ -84,6 +85,17 @@ int main(void)
         expect([[content textLayoutManagers] count] == 1, "one layout manager");
         [content removeTextLayoutManager: layout];
         expect([layout textContentManager] == nil, "removal detaches the layout manager");
+
+        // The layout manager must not keep pointing at the storage it was
+        // detached from: the storage is freed with its content manager.
+        // Darling's layout manager keeps its text system layout manager in an
+        // instance variable; skip where there is none.
+        Ivar inner = class_getInstanceVariable([NSTextLayoutManager class], "_layoutManager");
+        if (inner != NULL) {
+            NSLayoutManager *textKit1 = object_getIvar(layout, inner);
+            expect(textKit1 != nil && [textKit1 textStorage] == nil,
+                   "removal detaches the text storage from the layout manager");
+        }
     }
     if (failures)
         return 1;
