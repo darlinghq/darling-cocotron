@@ -628,7 +628,13 @@ static NSData *makeWindowIcon() {
 // bar and the window can become key. macOS 26 shows no title bar for such
 // windows and they cannot become key. We follow 10.14.
 - (void) updateDecorationsForStyleMask: (NSUInteger) mask {
-    if ((mask & (NSWindowStyleMaskTitled | NSWindowStyleMaskResizable)) && !_invisibleWithoutCompositor)
+    // A full-size content view with a transparent title bar shows no title bar at all: the content
+    // is all there is (the application draws its own header), so the window manager's frame would
+    // be a second title bar on top of it.
+    BOOL titlebarInvisible = (mask & NSWindowStyleMaskFullSizeContentView) && [_delegate titlebarAppearsTransparent];
+
+    if ((mask & (NSWindowStyleMaskTitled | NSWindowStyleMaskResizable)) && !_invisibleWithoutCompositor &&
+        !titlebarInvisible)
         XDeleteProperty(_display, _window,
                         XInternAtom(_display, "_MOTIF_WM_HINTS", False));
     else
@@ -641,9 +647,9 @@ static NSData *makeWindowIcon() {
         [self updateSizeHints: mask];
     }
     if (force ||
-        (mask & (NSWindowStyleMaskTitled | NSWindowStyleMaskResizable)) !=
-                (_styleMask &
-                 (NSWindowStyleMaskTitled | NSWindowStyleMaskResizable))) {
+        (mask & (NSWindowStyleMaskTitled | NSWindowStyleMaskResizable | NSWindowStyleMaskFullSizeContentView)) !=
+                (_styleMask & (NSWindowStyleMaskTitled | NSWindowStyleMaskResizable |
+                               NSWindowStyleMaskFullSizeContentView))) {
         [self updateDecorationsForStyleMask: mask];
     }
 

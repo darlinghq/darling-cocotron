@@ -2038,6 +2038,9 @@ static BOOL _allowsAutomaticWindowTabbing;
 
 - (void) setTitlebarAppearsTransparent: (BOOL) value {
     NS_EXTRA(NSWindow, self)->_titlebarAppearsTransparent = value;
+    // Whether the platform draws a title bar depends on it for full-size content views.
+    if ([_platformWindow respondsToSelector: @selector(updateDecorationsForStyleMask:)])
+        [(id) _platformWindow updateDecorationsForStyleMask: NS_EXTRA(NSWindow, self)->_styleMask];
 }
 
 - (NSTitlebarSeparatorStyle) titlebarSeparatorStyle {
