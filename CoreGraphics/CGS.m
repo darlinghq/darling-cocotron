@@ -28,6 +28,7 @@
 #include <pthread.h>
 #include <stdio.h>
 #include <CoreFoundation/CFNotificationCenter.h>
+#include <notify.h>
 
 static NSMutableDictionary<NSNumber*, CGSConnection*>* g_connections = nil;
 static Boolean g_denyConnections = FALSE;
@@ -173,6 +174,59 @@ CGError _CGSActivateProcess(pid_t pid, uint32_t options)
 	CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(),
 		notification, NULL, NULL, true);
 	CFRelease(notification);
+	return kCGErrorSuccess;
+}
+
+// The process that was activated last, for a display server that cannot be asked: the state of a
+// libnotify name, which is shared by all processes.
+static int frontProcessToken(void)
+{
+	static dispatch_once_t once;
+	static int token = -1;
+	dispatch_once(&once, ^{
+		if (notify_register_check(kCGSFrontProcessNotificationName, &token) != NOTIFY_STATUS_OK)
+			token = -1;
+	});
+	return token;
+}
+
+CGError _CGSGetFrontProcess(pid_t* pid)
+{
+	if (pid == NULL)
+		return kCGErrorIllegalArgument;
+
+	_CGSLoadBackendOnce();
+	if (g_backendClass != nil)
+	{
+		pid_t front = 0;
+		CGError err = [g_backendClass copyFrontProcessID: &front];
+		if (err == kCGErrorSuccess)
+		{
+			*pid = front;
+			return kCGErrorSuccess;
+		}
+		if (err != kCGErrorNotImplemented)
+			return err;
+	}
+
+	int token = frontProcessToken();
+	uint64_t state = 0;
+	if (token < 0 || notify_get_state(token, &state) != NOTIFY_STATUS_OK)
+		return kCGErrorCannotComplete;
+	if (state == 0 || state > INT32_MAX)
+		return kCGErrorNoneAvailable;
+	*pid = (pid_t) state;
+	return kCGErrorSuccess;
+}
+
+CGError _CGSSetFrontProcess(pid_t pid)
+{
+	if (pid <= 0)
+		return kCGErrorIllegalArgument;
+
+	int token = frontProcessToken();
+	if (token < 0 || notify_set_state(token, (uint64_t) pid) != NOTIFY_STATUS_OK)
+		return kCGErrorCannotComplete;
 	return kCGErrorSuccess;
 }
 

@@ -64,6 +64,11 @@
 	return kCGErrorNotImplemented;
 }
 
++(CGError) copyFrontProcessID:(pid_t*)pid
+{
+	return kCGErrorNotImplemented;
+}
+
 -(CGSKeyboardLayout*) createKeyboardLayout
 {
 	NSInvalidAbstractInvocation();

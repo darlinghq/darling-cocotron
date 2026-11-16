@@ -46,6 +46,11 @@
 // default implementation does nothing and returns kCGErrorNotImplemented: the display server
 // offers no way to activate another process' windows.
 +(CGError) activateWindowsOfProcess:(pid_t)pid options:(uint32_t)options;
+// The Darling process that owns the window with the input focus, as far as the display server
+// tells. Returns kCGErrorSuccess and sets *pid, kCGErrorNoneAvailable when no Darling process
+// has the focus, and kCGErrorNotImplemented (the default) when the display server does not say
+// who has it, as on Wayland.
++(CGError) copyFrontProcessID:(pid_t*)pid;
 -(CGError) destroyWindow:(CGSWindowID)winId;
 
 // The windows of Darling processes, front to back, each described with the

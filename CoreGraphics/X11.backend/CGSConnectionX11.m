@@ -1052,6 +1052,27 @@ static Time currentServerTime(Display* display)
 	return kCGErrorSuccess;
 }
 
++(CGError) copyFrontProcessID:(pid_t*)pid
+{
+	Display* display = XOpenDisplay(NULL);
+	if (display == NULL)
+		return kCGErrorCannotComplete;
+
+	// EWMH: the window manager names the focused top-level window in _NET_ACTIVE_WINDOW of the
+	// root window (None when there is none, or without a window manager that supports it).
+	NSArray<NSNumber*>* active = rootWindowList(display, "_NET_ACTIVE_WINDOW");
+	pid_t owner = 0;
+	if ([active count] > 0 && [active[0] unsignedLongValue] != None)
+		owner = X11WindowOwnerPID(display, (Window) [active[0] unsignedLongValue]);
+	XCloseDisplay(display);
+
+	// The owner is 0 for a window of a process that is not a Darling process.
+	if (owner <= 0)
+		return kCGErrorNoneAvailable;
+	*pid = owner;
+	return kCGErrorSuccess;
+}
+
 +(BOOL) isAvailable
 {
 	if (getenv("DISPLAY") != NULL)
