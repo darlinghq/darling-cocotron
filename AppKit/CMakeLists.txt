@@ -96,6 +96,7 @@ set(AppKit_sources
 	NSButtonCell.m
 	NSLevelIndicatorCell.m
 	NSPDFImageRep.m
+	NSPICTImageRep.m
 	NSScroller.m
 	NSCustomImageRep.m
 	NSClipView.m

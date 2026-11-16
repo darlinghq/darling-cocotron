@@ -126,6 +126,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSOpenPanel.h>
 #import <AppKit/NSOutlineView.h>
 #import <AppKit/NSPDFImageRep.h>
+#import <AppKit/NSPICTImageRep.h>
 #import <AppKit/NSPageController.h>
 #import <AppKit/NSPageLayout.h>
 #import <AppKit/NSPanel.h>
