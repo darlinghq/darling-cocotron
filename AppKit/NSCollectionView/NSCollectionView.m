@@ -268,20 +268,3 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 @end
-
-@implementation NSIndexPath (NSCollectionViewAdditions)
-
-+ (NSIndexPath *) indexPathForItem: (NSInteger) item inSection: (NSInteger) section {
-    NSUInteger indexes[2] = {section, item};
-    return [self indexPathWithIndexes: indexes length: 2];
-}
-
-- (NSInteger) item {
-    return [self indexAtPosition: 1];
-}
-
-- (NSInteger) section {
-    return [self indexAtPosition: 0];
-}
-
-@end
