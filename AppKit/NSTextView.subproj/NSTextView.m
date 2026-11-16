@@ -57,13 +57,7 @@
 #import "NSRulerMarker+NSTextExtensions.h"
 #import "NSUndoTextOperation.h"
 
-NSString *const NSTextViewDidChangeSelectionNotification =
-        @"NSTextViewDidChangeSelectionNotification";
 NSString *const NSOldSelectedCharacterRange = @"NSOldSelectedCharacterRange";
-NSString *const NSTextViewDidChangeTypingAttributesNotification =
-        @"NSTextViewDidChangeTypingAttributesNotification";
-NSString *const NSAllRomanInputSourcesLocaleIdentifier =
-        @"NSAllRomanInputSourcesLocaleIdentifier";
 NSString *const NSTouchBarItemIdentifierTextStyle =
         @"NSTouchBarItemIdentifierTextStyle";
 NSString *const NSTouchBarItemIdentifierTextAlignment =

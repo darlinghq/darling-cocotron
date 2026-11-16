@@ -166,7 +166,6 @@ set(AppKit_sources
 	NSFormCell.m
 	NSStepperCell.m
 	NSDatePicker.m
-	NSGlyphGenerator.m
 
 	CoreData_/_NSManagedProxy.m
 	CoreData_/NSPersistentDocument.m
@@ -252,10 +251,8 @@ set(AppKit_sources
 	NSTextView.subproj/NSBidiHelper.m
 	NSTextView.subproj/NSLayoutManager.m
 	NSTextView.subproj/NSTextViewSharedData.m
-	NSTextView.subproj/NSTextStorage.m
 	NSTextView.subproj/NSTextKit2.m
 	NSTextView.subproj/NSTypesetter_concrete.m
-	NSTextView.subproj/NSTextStorage_concrete.m
 	NSTextView.subproj/NSSubTextStorage.m
 	NSTextView.subproj/NSTypesetter.m
 	NSTextView.subproj/NSRulerMarker+NSTextExtensions.m
@@ -290,7 +287,6 @@ set(AppKit_sources
 
 	NSDocumentController.m
 	NSStatusItem.m
-	NSShadow.m
 	NSPathComponentCell.m
 	NSCachedImageRep.m
 	NSWindow-Drag.m
@@ -340,6 +336,7 @@ set(AppKit_sources
 	NSImageView.m
 	NSActionCell.m
 	NSAttributedString.m
+	NSUIFoundationProvider.m
 	RTF.subproj/NSRichTextReader.m
 	RTF.subproj/NSRichTextWriter.m
 	NSRulerMarker.m
@@ -404,7 +401,6 @@ set(AppKit_sources
 	NSKeyboardBinding/NSKeyboardBindingManager.m
 	NSKeyboardBinding/NSKeyboardBinding.m
 
-	NSTextAttachment.m
 
 	NSCollectionView/NSCollectionViewItem.m
 	NSCollectionView/NSCollectionView.m
