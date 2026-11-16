@@ -396,6 +396,9 @@ NSImageName const NSImageNameTouchBarVolumeUpTemplate =
                         autorelease];
                 [image setName: name];
                 if (image) {
+                    // Images whose name ends in "Template" are template images.
+                    if ([name hasSuffix: @"Template"])
+                        [image setTemplate: YES];
                     break;
                 }
             }
