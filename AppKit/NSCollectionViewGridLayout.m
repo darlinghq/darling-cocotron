@@ -18,8 +18,11 @@
 */
 
 #import <AppKit/NSCollectionViewLayout.h>
+#import <AppKit/AppKitIvarLayout.h>
 
-@interface NSCollectionViewGridLayout : NSCollectionViewLayout
+@interface NSCollectionViewGridLayout : NSCollectionViewLayout {
+    NS_LEGACY_IVAR_PAD(_NSCollectionViewGridLayoutReserved, 140)
+}
 @end
 
 @implementation NSCollectionViewGridLayout

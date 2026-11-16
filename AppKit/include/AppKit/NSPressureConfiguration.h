@@ -18,8 +18,11 @@
 */
 
 #import <AppKit/AppKitExport.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <Foundation/Foundation.h>
 
-@interface NSPressureConfiguration : NSObject
+@interface NSPressureConfiguration : NSObject {
+    NS_LEGACY_IVAR_PAD(_NSPressureConfigurationReserved, 8)
+}
 
 @end

@@ -1,14 +1,23 @@
 #import <AppKit/NSView.h>
+#import <AppKit/AppKitIvarLayout.h>
 
 const CGFloat NSGridViewSizeForContent = 0;
 
-@interface NSGridView : NSView
+@interface NSGridView : NSView {
+    NS_LEGACY_IVAR_PAD(_NSGridViewReserved, 48)
+}
 @end
-@interface NSGridCell : NSObject
+@interface NSGridCell : NSObject {
+    NS_LEGACY_IVAR_PAD(_NSGridCellReserved, 44)
+}
 @end
-@interface NSGridColumn : NSObject
+@interface NSGridColumn : NSObject {
+    NS_LEGACY_IVAR_PAD(_NSGridColumnReserved, 44)
+}
 @end
-@interface NSGridRow : NSObject
+@interface NSGridRow : NSObject {
+    NS_LEGACY_IVAR_PAD(_NSGridRowReserved, 52)
+}
 @end
 
 @implementation NSGridView

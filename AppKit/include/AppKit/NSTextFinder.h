@@ -1,4 +1,5 @@
 #import <Foundation/NSObject.h>
+#import <AppKit/AppKitIvarLayout.h>
 
 typedef NS_ENUM(NSInteger, NSTextFinderAction) {
     NSTextFinderActionShowFindInterface = 1,
@@ -31,6 +32,8 @@ typedef NS_ENUM(NSInteger, NSTextFinderMatchingType) {
 
 @end
 
-@interface NSTextFinder : NSObject
+@interface NSTextFinder : NSObject {
+    NS_LEGACY_IVAR_PAD(_NSTextFinderReserved, 24)
+}
 
 @end

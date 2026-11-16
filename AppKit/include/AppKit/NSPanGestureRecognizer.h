@@ -18,9 +18,12 @@
 */
 
 #import <AppKit/AppKitExport.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <Foundation/Foundation.h>
 #import <AppKit/NSGestureRecognizer.h>
 
-@interface NSPanGestureRecognizer : NSGestureRecognizer <NSCoding>
+@interface NSPanGestureRecognizer : NSGestureRecognizer <NSCoding> {
+    NS_LEGACY_IVAR_PAD(_NSPanGestureRecognizerReserved, 48)
+}
 
 @end

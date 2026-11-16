@@ -1,4 +1,5 @@
 #import <AppKit/AppKitExport.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/NSControl.h>
 #import <Foundation/NSString.h>
 
@@ -16,7 +17,9 @@ typedef NS_ENUM(NSUInteger, NSRuleEditorRowType) {
     NSRuleEditorRowTypeCompound,
 };
 
-@interface NSRuleEditor : NSControl <NSCoding>
+@interface NSRuleEditor : NSControl <NSCoding> {
+    NS_LEGACY_IVAR_PAD(_NSRuleEditorReserved, 112)
+}
 
 @end
 

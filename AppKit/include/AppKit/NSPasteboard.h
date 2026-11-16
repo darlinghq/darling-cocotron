@@ -18,6 +18,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/AppKitExport.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <Foundation/Foundation.h>
 
 typedef NSString *NSPasteboardType NS_EXTENSIBLE_STRING_ENUM;
@@ -118,7 +119,9 @@ typedef NS_OPTIONS(NSUInteger, NSPasteboardReadingOptions) {
     NSPasteboardReadingAsKeyedArchive = 1 << 2,
 };
 
-@interface NSPasteboard : NSObject
+@interface NSPasteboard : NSObject {
+    NS_LEGACY_IVAR_PAD(_NSPasteboardReserved, 44)
+}
 
 @property(class, readonly, retain, nonnull) NSPasteboard *generalPasteboard;
 + (NSPasteboard *) pasteboardWithName: (NSPasteboardName) name;

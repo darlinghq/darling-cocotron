@@ -18,6 +18,7 @@
 */
 
 #import <AppKit/AppKitExport.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/NSCollectionView.h>
 #import <Foundation/NSString.h>
 
@@ -41,6 +42,8 @@ typedef NS_ENUM(NSInteger, NSCollectionUpdateAction) {
     NSCollectionUpdateActionNone,
 };
 
-@interface NSCollectionViewLayout : NSObject
+@interface NSCollectionViewLayout : NSObject {
+    NS_LEGACY_IVAR_PAD(_NSCollectionViewLayoutReserved, 124)
+}
 
 @end

@@ -18,8 +18,11 @@
 */
 
 #import <AppKit/AppKitExport.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/NSTypesetter.h>
 
-@interface NSATSTypesetter : NSTypesetter
+@interface NSATSTypesetter : NSTypesetter {
+    NS_LEGACY_IVAR_PAD(_NSATSTypesetterReserved, 88)
+}
 + (NSATSTypesetter *) sharedSystemTypesetter;
 @end
