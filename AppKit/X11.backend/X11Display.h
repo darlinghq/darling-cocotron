@@ -109,6 +109,11 @@
 
 - (Display *) display;
 
+// Keeps the unmanaged windows (see -[X11Window isUnmanaged]) and the managed
+// ones in the order their levels give, after `anchor` was ordered to the
+// front, mapped or given another level (see X11LevelStacking.h).
+- (void) restackWindowsForLevelsAround: (X11Window *) anchor;
+
 // The main monitor's rectangle in root coordinates. It is the origin of the
 // global coordinate space; see X11Monitors.h.
 - (NSRect) primaryRootFrame;

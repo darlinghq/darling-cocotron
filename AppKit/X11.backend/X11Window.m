@@ -1040,7 +1040,27 @@ static NSData *makeWindowIcon() {
 }
 
 - (void) setLevel: (int) value {
+    if (value == _level)
+        return;
     _level = value;
+    [self restackForLevels];
+}
+
+- (int) stackingLevel {
+    return _level;
+}
+
+- (BOOL) isUnmanaged {
+    return _overrideRedirect;
+}
+
+- (BOOL) takesPartInLevelStacking {
+    return _mapped && !_dock && !_menuWindow && _window != 0;
+}
+
+- (void) restackForLevels {
+    if ([self takesPartInLevelStacking])
+        [(X11Display *) [NSDisplay currentDisplay] restackWindowsForLevelsAround: self];
 }
 
 - (void) setOpaque: (BOOL) value {
@@ -1089,6 +1109,7 @@ static NSData *makeWindowIcon() {
         Window w[2] = {_window, other->_window};
         XRestackWindows(_display, w, 2);
     }
+    [self restackForLevels];
 }
 
 - (void) placeBelowWindow: (NSInteger) otherNumber {
@@ -1182,6 +1203,8 @@ BOOL X11WindowManagerIsRunning(Display *display) {
 }
 
 - (void) mapNotified {
+    // The window manager has stacked the frame by now.
+    [self restackForLevels];
     if (_wantsInputFocus)
         [self requestInputFocus];
 }
@@ -1202,6 +1225,7 @@ BOOL X11WindowManagerIsRunning(Display *display) {
     if (_receivingFocus)
         return;
     XRaiseWindow(_display, _window);
+    [self restackForLevels];
     [self requestInputFocus];
 }
 
