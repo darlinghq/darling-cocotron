@@ -42,6 +42,7 @@ struct xkb_context;
 struct xkb_keymap;
 struct xkb_state;
 
+@class WaylandOutputManager;
 @class WaylandCursor, WaylandWindow, WaylandPasteboard, WaylandDraggingManager;
 
 @protocol WaylandFractionalScaleOwner
@@ -72,6 +73,10 @@ typedef enum {
     WaylandObjectFractionalScale,
     WaylandObjectLockedPointer,
     WaylandObjectRelativePointer,
+    WaylandObjectOutputManager,
+    WaylandObjectOutputHead,
+    WaylandObjectOutputHeadMode,
+    WaylandObjectOutputConfiguration,
     WaylandObjectActivationToken,
 } WaylandObjectKind;
 
@@ -104,6 +109,9 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     uint32_t _viewporterName, _fractionalScaleManagerName;
     struct wl_proxy *_logicalOutputManager, *_legacyLogicalOutputManager;
     uint32_t _logicalOutputManagerName;
+    // wlr-output-management, when the compositor has it: the only way to change a mode.
+    WaylandOutputManager *_outputManager;
+    uint32_t _outputManagerName;
     struct wl_proxy *_subcompositor;
     BOOL _eglAvailable;
     struct wl_proxy *_shm;
