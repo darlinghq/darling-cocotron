@@ -39,7 +39,7 @@ NSString *const kCAMediaTimingFunctionDefault =
     if ([name isEqualToString: kCAMediaTimingFunctionLinear])
         return [self functionWithControlPoints: 0: 0:1:1];
     if ([name isEqualToString: kCAMediaTimingFunctionEaseIn])
-        return [self functionWithControlPoints: 0.5: 0:1:1];
+        return [self functionWithControlPoints: 0.42: 0:1:1];
     if ([name isEqualToString: kCAMediaTimingFunctionEaseOut])
         return [self functionWithControlPoints: 0: 0:0.58:1];
     if ([name isEqualToString: kCAMediaTimingFunctionEaseInEaseOut])
