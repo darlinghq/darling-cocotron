@@ -46,6 +46,7 @@ enum {
     NSOpenGLCPStateValidation = NSOpenGLContextParameterStateValidation,
 };
 
+#define _NS_SIDE_NSOpenGLContext 0, 1,
 // Legacy ObjC ABI (i386): instance size must stay 0xc, Apple's; the ivars
 // before the extras keep their position in the original order. The CGL context
 // is the one at offset 8: code written against the original layout reads it

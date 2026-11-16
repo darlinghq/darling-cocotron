@@ -21,6 +21,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSButtonCell.h>
 #import <AppKit/NSControl.h>
 
+#define _NS_SIDE_NSButton 0, 1,
 // Legacy ObjC ABI (i386): instance size must stay 0x5c, Apple's; the ivars
 // before the extras sit at Apple's offsets. Add new state to the extra
 // struct, never as an ivar.
