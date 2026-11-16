@@ -484,10 +484,19 @@ NSBitmapImageRepPropertyKey NSImageCurrentFrame = @"NSImageCurrentFrame";
 
             // The default byte order and the 32-bit big-endian one both mean
             // component order for 8-bit samples.
-            if ((alphaInfo == kCGImageAlphaPremultipliedLast ||
-                 alphaInfo == kCGImageAlphaPremultipliedFirst) &&
-                (byteOrder == kCGBitmapByteOrderDefault ||
-                 byteOrder == kCGBitmapByteOrder32Big)) {
+            size_t imageBitsPerPixel = CGImageGetBitsPerPixel(NS_EXTRA(NSBitmapImageRep, self)->_cgImage);
+
+            if (imageBitsPerPixel != 32) {
+                // Images without a padding byte (24 bit RGB, 8 bit gray) already have the
+                // layout of the planes
+                for (i = 0; i < length; i++)
+                    NS_EXTRA(NSBitmapImageRep, self)->_bitmapPlanes[0][i] = bytes[i];
+            } else if ((alphaInfo == kCGImageAlphaPremultipliedLast ||
+                        alphaInfo == kCGImageAlphaPremultipliedFirst ||
+                        alphaInfo == kCGImageAlphaNoneSkipLast ||
+                        alphaInfo == kCGImageAlphaNoneSkipFirst) &&
+                       (byteOrder == kCGBitmapByteOrderDefault ||
+                        byteOrder == kCGBitmapByteOrder32Big)) {
                 for (i = 0; i < length; i++)
                     NS_EXTRA(NSBitmapImageRep, self)->_bitmapPlanes[0][i] = bytes[i];
             } else {
@@ -522,8 +531,9 @@ NSBitmapImageRepPropertyKey NSImageCurrentFrame = @"NSImageCurrentFrame";
 
     CGColorSpaceRef colorSpace = CGImageGetColorSpace(NS_EXTRA(NSBitmapImageRep, self)->_cgImage);
 
-    // FIXME:
-    _colorSpaceName = NSDeviceRGBColorSpace;
+    // Only RGB and one component (gray) images are mapped to a color space name so far.
+    _colorSpaceName = CGColorSpaceGetNumberOfComponents(colorSpace) == 1 ? NSDeviceWhiteColorSpace
+                                                                         : NSDeviceRGBColorSpace;
     _bitsPerSample = CGImageGetBitsPerComponent(NS_EXTRA(NSBitmapImageRep, self)->_cgImage);
     _pixelsWide = CGImageGetWidth(NS_EXTRA(NSBitmapImageRep, self)->_cgImage);
     _pixelsHigh = CGImageGetHeight(NS_EXTRA(NSBitmapImageRep, self)->_cgImage);

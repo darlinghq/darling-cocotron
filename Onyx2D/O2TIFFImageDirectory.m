@@ -498,6 +498,28 @@ static void sTIFFUnmapFileProc(thandle_t userData, tdata_t data, toff_t size) {
     return _imageWidth;
 }
 
+- (unsigned) opaqueSamplesPerPixel {
+    unsigned i;
+
+    if (_sizeOfExtraSamples != 0 || _bitsPerSample == NULL || _sizeOfBitsPerSample != _samplesPerPixel)
+        return 0;
+    if (_planarConfiguration > 1)
+        return 0;
+    for (i = 0; i < _sizeOfBitsPerSample; i++)
+        if (_bitsPerSample[i] != 8)
+            return 0;
+    if (_sampleFormats != NULL)
+        for (i = 0; i < _sizeOfSampleFormats; i++)
+            if (_sampleFormats[i] != NSTIFFSampleFormat_UINT)
+                return 0;
+    // photometric interpretation: 0 and 1 are gray, 2 is RGB
+    if (_samplesPerPixel == 3 && _photometricInterpretation == 2)
+        return 3;
+    if (_samplesPerPixel == 1 && (_photometricInterpretation == 0 || _photometricInterpretation == 1))
+        return 1;
+    return 0;
+}
+
 #if !LIBTIFF_PRESENT
 static void decode_R8_G8_B8_A8(const unsigned char *stripBytes,
                                unsigned byteCount, unsigned char *pixelBytes,
