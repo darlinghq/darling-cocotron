@@ -135,6 +135,10 @@
 - (void) menuWindowUnmapped: (X11Window *) window;
 - (id) windowForID: (XID) i;
 
+// Re-reads the backing scale and, when it changed, resizes the windows to the
+// new scale and notifies them.
+- (void) reevaluateBackingScale;
+
 // The object that shows the main menu outside the windows, created on first
 // use; nil if the menu is drawn inside the windows (DarlingInWindowMenuBar).
 - (X11AppMenu *) appMenu;
