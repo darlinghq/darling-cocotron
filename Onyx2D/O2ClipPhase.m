@@ -38,4 +38,12 @@ id O2ClipPhaseObject(O2ClipPhase *self) {
     return self->_object;
 }
 
+O2Rect O2ClipPhaseRect(O2ClipPhase *self) {
+    return self->_rect;
+}
+
+O2AffineTransform O2ClipPhaseTransform(O2ClipPhase *self) {
+    return self->_transform;
+}
+
 @end
