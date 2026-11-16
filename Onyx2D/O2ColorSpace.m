@@ -88,6 +88,7 @@ const CFStringRef kO2ColorSpaceExtendedLinearGray =
 - (void)dealloc {
     if (_name != NULL)
         CFRelease(_name);
+    [_patternBase release];
     [super dealloc];
 }
 
@@ -128,7 +129,9 @@ O2ColorSpaceRef O2ColorSpaceCreatePlatformRGB(void) {
 }
 
 O2ColorSpaceRef O2ColorSpaceCreatePattern(O2ColorSpaceRef baseSpace) {
-    return [[O2ColorSpace alloc] initWithPattern];
+    O2ColorSpace *space = [[O2ColorSpace alloc] initWithPattern];
+    space->_patternBase = [baseSpace retain];
+    return space;
 }
 
 O2ColorSpaceRef O2ColorSpaceCreateIndexed(O2ColorSpaceRef baseSpace, size_t lastIndex, const unsigned char *colorTable) {
@@ -287,6 +290,28 @@ size_t O2ColorSpaceGetNumberOfComponents(O2ColorSpaceRef self) {
     default:
         return 0;
     }
+}
+
+O2ColorSpaceRef O2ColorSpaceGetBaseColorSpace(O2ColorSpaceRef self) {
+    if ([self isKindOfClass: [O2ColorSpace_indexed class]])
+        return [(O2ColorSpace_indexed *) self baseColorSpace];
+    if (self != nil && self->_type == kO2ColorSpaceModelPattern)
+        return self->_patternBase;
+    return NULL;
+}
+
+size_t O2ColorSpaceGetColorTableCount(O2ColorSpaceRef self) {
+    if ([self isKindOfClass: [O2ColorSpace_indexed class]])
+        return [(O2ColorSpace_indexed *) self hival] + 1;
+    return 0;
+}
+
+void O2ColorSpaceGetColorTable(O2ColorSpaceRef self, unsigned char *table) {
+    if (table == NULL || ![self isKindOfClass: [O2ColorSpace_indexed class]])
+        return;
+    O2ColorSpace_indexed *indexed = (O2ColorSpace_indexed *) self;
+    memcpy(table, [indexed paletteBytes],
+           O2ColorSpaceGetNumberOfComponents([indexed baseColorSpace]) * ([indexed hival] + 1));
 }
 
 O2ColorSpaceModel O2ColorSpaceGetModel(O2ColorSpaceRef self) {
