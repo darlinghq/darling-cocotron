@@ -25,6 +25,7 @@ enum {
     NSDocModalWindowMask = 0x40,
 };
 
+#define _NS_SIDE_NSPanel 0, 1,
 // Legacy ObjC ABI (i386): instance size must stay 0x84, Apple's; the ivars
 // before the extras sit at Apple's offsets. Add new state to the extra
 // struct, never as an ivar.
