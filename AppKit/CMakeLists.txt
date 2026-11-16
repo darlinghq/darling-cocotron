@@ -412,12 +412,6 @@ set(AppKit_sources
 	NSCandidateListTouchBarItem.m
 	NSTouchBarItem.m
 	NSInspectorBarItemIdentifiers.m
-	NSLayoutConstraint.m
-	NSLayoutAnchor.m
-	NSAutoresizingMaskLayoutConstraint.m
-	NSContentSizeLayoutConstraint.m
-	NSIBPrototypingLayoutConstraint.m
-	NSDictionaryOfVariableBindings.m
 	NSSpeechSynthesizer.m
 	NSCustomTouchBarItem.m
 	NSGestureRecognizer.m
@@ -461,6 +455,7 @@ set(AppKit_sources
 	NSTabViewController.m
 	NSTableViewRowAction.m
 	NSLayoutGuide.m
+	NSViewLayoutConstants.m
 	NSPressGestureRecognizer.m
 	NSGridView.m
 	NSHaptics.m
@@ -577,6 +572,7 @@ add_framework(AppKit
 		system
 		CoreFoundation
 		Foundation
+		CoreAutoLayout
 		Onyx2D
 		CoreText
 		CoreData
@@ -595,10 +591,15 @@ add_framework(AppKit
 
 reexport(AppKit Foundation ${CMAKE_BINARY_DIR}/src/external/foundation/Foundation)
 reexport(AppKit ApplicationServices ${CMAKE_BINARY_DIR}/src/frameworks/ApplicationServices/ApplicationServices)
+# AppKit re-exports the layout classes too, so that programs built for SDKs that declare them in AppKit bind them
+# with AppKit as the library
+reexport(AppKit CoreAutoLayout ${CMAKE_BINARY_DIR}/src/external/cocotron/CoreAutoLayout/CoreAutoLayout)
 reexport(AppKit UIFoundation ${CMAKE_BINARY_DIR}/src/private-frameworks/UIFoundation/UIFoundation)
 
 target_include_directories(AppKit PRIVATE
 	private-include
+	# NSLayoutConstraintInternal.h, the view-facing SPI of CoreAutoLayout's constraint class
+	${CMAKE_CURRENT_SOURCE_DIR}/../CoreAutoLayout
 )
 
 function(add_backend name)
