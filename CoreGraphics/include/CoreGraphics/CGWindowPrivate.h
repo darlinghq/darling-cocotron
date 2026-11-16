@@ -153,6 +153,10 @@ typedef enum {
 
 - (void) platformWindowShouldZoom: (CGWindow *) window;
 
+// The window system confirms that the window is now (YES) or no longer (NO)
+// shown fullscreen. Sent when the state it reports changes, whoever asked for it.
+- (void) platformWindow: (CGWindow *) window didChangeFullScreen: (BOOL) fullScreen;
+
 @end
 #endif
 

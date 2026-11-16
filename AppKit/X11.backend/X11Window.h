@@ -51,6 +51,7 @@
     BOOL _dock; // the menu bar window (see X11MenuBarWindow)
     BOOL _menuWindow; // a menu or pop-up window
     BOOL _fullscreenRequested;
+    BOOL _fullscreenReported; // what the window manager last said, told to the delegate
     BOOL _isOpaque;
     BOOL _hasAlpha;   // created with the 32-bit visual and an alpha surface
     BOOL _wasMapped;  // the visual is settled when the window is first mapped

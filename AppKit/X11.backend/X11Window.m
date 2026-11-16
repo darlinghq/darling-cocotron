@@ -535,7 +535,17 @@ static NSData *makeWindowIcon() {
     if (_mapped) {
         _fullscreenRequested = X11FullscreenIsSet(_display, _window);
         [self updateLayerPresentationHints];
+        if (_fullscreenRequested != _fullscreenReported) {
+            _fullscreenReported = _fullscreenRequested;
+            if ([_delegate respondsToSelector: @selector(platformWindow:didChangeFullScreen:)])
+                [_delegate platformWindow: self didChangeFullScreen: _fullscreenReported];
+        }
     }
+}
+
+// Whether the window manager currently holds the window fullscreen.
+- (BOOL) isFullScreen {
+    return _mapped && _fullscreenReported;
 }
 
 // Hints for a compositor about a window that presents a full-size layer tree
@@ -1094,6 +1104,7 @@ static NSData *makeWindowIcon() {
         [(X11Display *) [NSDisplay currentDisplay] menuWindowUnmapped: self];
     // The window manager drops the fullscreen state of a withdrawn window.
     _fullscreenRequested = NO;
+    _fullscreenReported = NO;
     // A focus request still waiting for MapNotify is void once the window is
     // ordered out; otherwise a later non-key orderFront would take focus.
     _wantsInputFocus = NO;
