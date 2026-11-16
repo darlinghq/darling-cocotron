@@ -3641,7 +3641,13 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
 }
 
 - (void) keyDown: (NSEvent *) event {
-    if ([self performKeyEquivalent: event] == NO)
+    if ([self performKeyEquivalent: event])
+        return;
+    // A window that is its own first responder passes a key it does not handle along the responder chain
+    // (an application can put its own responder after the window).
+    if ([self nextResponder] != nil)
+        [[self nextResponder] keyDown: event];
+    else
         [self interpretKeyEvents: [NSArray arrayWithObject: event]];
 }
 
