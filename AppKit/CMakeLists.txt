@@ -283,6 +283,7 @@ set(AppKit_sources
 
 	NSDocumentController.m
 	NSStatusItem.m
+	NSStatusItemNotifier.m
 	NSDBusMenu.m
 	NSPathComponentCell.m
 	NSCachedImageRep.m

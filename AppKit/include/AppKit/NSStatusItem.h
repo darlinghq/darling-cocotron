@@ -29,10 +29,13 @@ typedef NS_OPTIONS(NSUInteger, NSStatusItemBehavior) {
     NSStatusItemBehaviorTerminationOnRemoval = (1 << 2),
 };
 
-@class NSStatusBar, NSImage, NSAttributedString, NSMenu, NSView, NSWindow, NSStatusBarButton;
+@class NSStatusBar, NSStatusItem, NSStatusItemNotifier, NSImage, NSAttributedString, NSMenu, NSView, NSWindow, NSStatusBarButton;
 
 @interface NSStatusBarButton : NSButton {
     BOOL _appearsDisabled;
+    // The item the button belongs to, which shows what the button shows
+    // outside the application. Not retained: the item owns the button.
+    NSStatusItem *_statusItem;
 }
 @property(nonatomic) BOOL appearsDisabled;
 @end
@@ -52,6 +55,9 @@ typedef NS_OPTIONS(NSUInteger, NSStatusItemBehavior) {
     CGFloat _length;
     NSMenu *_menu;
     NSInteger _actionMask;
+    // Shows the item in the desktop's system tray (NSStatusItemNotifier), nil
+    // without a session bus or once the item is removed.
+    NSStatusItemNotifier *_notifier;
 #ifdef WIN32
     int _trayIconID;
     HICON _trayIcon;
@@ -76,6 +82,7 @@ typedef NS_OPTIONS(NSUInteger, NSStatusItemBehavior) {
 @property(nonatomic, retain) NSImage *alternateImage;
 
 @property(nonatomic, copy) NSString *title;
+- (NSString *) toolTip;
 - (void) setToolTip: (NSString *) toolTip;
 @property(nonatomic, copy) NSAttributedString *attributedTitle;
 
