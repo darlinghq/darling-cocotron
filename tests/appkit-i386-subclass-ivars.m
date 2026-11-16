@@ -1,10 +1,14 @@
 // Copyright (C) 2026 Lubos Dolezel
 //
-// An application's subclass of NSBrowser or NSColorWell, compiled against the
-// Mac's layout of the legacy (32-bit) Objective-C ABI, keeps its own instance
-// variables in the bytes that follow the class's Apple instance size (160 and
-// 108 bytes). AppKit must neither write into those bytes nor read its own
-// state back from them. The expected sizes are what Mac OS X 10.14.4 reports.
+// An application's subclass of an AppKit class, compiled against the Mac's
+// layout of the legacy (32-bit) Objective-C ABI, keeps its own instance
+// variables in the bytes that follow the class's Apple instance size (for
+// example 160 bytes for NSBrowser and 108 for NSColorWell). AppKit must neither
+// write into those bytes nor read its own state back from them. The expected
+// sizes are what Mac OS X 10.14.4 reports. Besides NSBrowser and NSColorWell,
+// the classes that used to be larger than Apple's (NSCursor, NSTrackingArea,
+// NSToolbarItem, NSSplitViewItem, NSPasteboardItem, NSBrowserCell, NSTextAttachmentCell, NSCustomImageRep,
+// NSLayoutConstraint) are covered by the table-driven checks at the end.
 //
 // Two checks per class:
 //  - an ordinary subclass with its own instance variables keeps them intact
@@ -116,6 +120,180 @@ static void checkSubclasses(void) {
     [w release];
 }
 
+
+// Table-driven cases: each class has a way to create an initialised instance
+// from an allocated one, a way to change its state through the public API and
+// a summary of that state.
+typedef id (^CreateBlock)(id allocated);
+typedef void (^TouchBlock)(id object);
+typedef long (^StateBlock)(id object);
+
+static const struct {
+    const char *name;
+    size_t appleSize;
+} cases[] = {
+    {"NSCursor", 20}, {"NSTrackingArea", 40}, {"NSToolbarItem", 72},
+    {"NSSplitViewItem", 12}, {"NSPasteboardItem", 24}, {"NSBrowserCell", 20},
+    {"NSTextAttachmentCell", 24}, {"NSCustomImageRep", 40},
+    {"NSLayoutConstraint", 52},
+};
+
+#define OWN_IVARS                                                              \
+    {                                                                          \
+        int ownCounter;                                                        \
+        id ownObject;                                                          \
+        double ownValue;                                                       \
+    }                                                                          \
+    -(void) setOwn;                                                            \
+    -(BOOL) ownIntact;                                                         \
+    @end
+#define OWN_IMPL                                                               \
+    -(void) setOwn {                                                           \
+        ownCounter = 0x1234abcd;                                               \
+        ownObject = (id) 0x5a5a5a5a;                                           \
+        ownValue = 3.25;                                                       \
+    }                                                                          \
+    -(BOOL) ownIntact {                                                        \
+        return ownCounter == 0x1234abcd && ownObject == (id) 0x5a5a5a5a &&     \
+               ownValue == 3.25;                                               \
+    }                                                                          \
+    @end
+
+@interface SubNSCursor : NSCursor OWN_IVARS
+@implementation SubNSCursor OWN_IMPL
+@interface SubNSTrackingArea : NSTrackingArea OWN_IVARS
+@implementation SubNSTrackingArea OWN_IMPL
+@interface SubNSToolbarItem : NSToolbarItem OWN_IVARS
+@implementation SubNSToolbarItem OWN_IMPL
+@interface SubNSSplitViewItem : NSSplitViewItem OWN_IVARS
+@implementation SubNSSplitViewItem OWN_IMPL
+@interface SubNSPasteboardItem : NSPasteboardItem OWN_IVARS
+@implementation SubNSPasteboardItem OWN_IMPL
+@interface SubNSBrowserCell : NSBrowserCell OWN_IVARS
+@implementation SubNSBrowserCell OWN_IMPL
+@interface SubNSTextAttachmentCell : NSTextAttachmentCell OWN_IVARS
+@implementation SubNSTextAttachmentCell OWN_IMPL
+@interface SubNSCustomImageRep : NSCustomImageRep OWN_IVARS
+@implementation SubNSCustomImageRep OWN_IMPL
+@interface SubNSLayoutConstraint : NSLayoutConstraint OWN_IVARS
+@implementation SubNSLayoutConstraint OWN_IMPL
+
+static void caseBlocks(const char *name, CreateBlock *create, TouchBlock *touch, StateBlock *state) {
+    static NSImage *image;
+    static id owner;
+    if (image == nil) {
+        image = [[NSImage alloc] initWithSize: NSMakeSize(16, 16)];
+        owner = [[NSObject alloc] init];
+    }
+    if (strcmp(name, "NSCursor") == 0) {
+        *create = ^id(id o) { return [o initWithImage: image hotSpot: NSMakePoint(3, 4)]; };
+        *touch = ^(id o) { [o setOnMouseEntered: YES]; [o setOnMouseExited: YES]; };
+        *state = ^long(id o) {
+            return (long) ([o hotSpot].x * 10 + [o hotSpot].y) + [o isSetOnMouseEntered] * 100 +
+                   [o isSetOnMouseExited] * 1000 + ([o image] == image) * 10000;
+        };
+    } else if (strcmp(name, "NSTrackingArea") == 0) {
+        *create = ^id(id o) {
+            return [o initWithRect: NSMakeRect(1, 2, 30, 40)
+                           options: NSTrackingMouseEnteredAndExited | NSTrackingActiveAlways
+                             owner: owner
+                          userInfo: nil];
+        };
+        *touch = ^(id o) {};
+        *state = ^long(id o) {
+            return (long) [o rect].size.width + (long) [o options] * 100 + ([o owner] == owner) * 100000;
+        };
+    } else if (strcmp(name, "NSToolbarItem") == 0) {
+        *create = ^id(id o) { return [o initWithItemIdentifier: @"item"]; };
+        *touch = ^(id o) {
+            [o setLabel: @"label"];
+            [o setTag: 7];
+            [o setEnabled: NO];
+            [o setMinSize: NSMakeSize(10, 20)];
+            [o setMaxSize: NSMakeSize(30, 40)];
+        };
+        *state = ^long(id o) {
+            return (long) [[o label] length] + [o tag] * 10 + [o isEnabled] * 1000 +
+                   [[o itemIdentifier] length] * 10000 + (long) [o maxSize].height * 100000;
+        };
+    } else if (strcmp(name, "NSSplitViewItem") == 0) {
+        *create = ^id(id o) { return [o init]; };
+        *touch = ^(id o) { [o setCanCollapse: YES]; [o setHoldingPriority: 300]; };
+        *state = ^long(id o) { return [o canCollapse] + (long) [o holdingPriority] * 10; };
+    } else if (strcmp(name, "NSPasteboardItem") == 0) {
+        *create = ^id(id o) { return [o init]; };
+        *touch = ^(id o) { [o setString: @"text" forType: NSPasteboardTypeString]; };
+        *state = ^long(id o) {
+            return (long) [[o types] count] + (long) [[o stringForType: NSPasteboardTypeString] length] * 10;
+        };
+    } else if (strcmp(name, "NSBrowserCell") == 0) {
+        *create = ^id(id o) { return [o initTextCell: @"cell"]; };
+        *touch = ^(id o) { [o setLeaf: YES]; [o setLoaded: YES]; };
+        *state = ^long(id o) {
+            return (long) [[o stringValue] length] + [o isLeaf] * 10 + [o isLoaded] * 100;
+        };
+    } else if (strcmp(name, "NSTextAttachmentCell") == 0) {
+        *create = ^id(id o) { return [o initImageCell: image]; };
+        *touch = ^(id o) {
+            NSTextAttachment *a = [[NSTextAttachment alloc] initWithData: nil ofType: nil];
+            [o setAttachment: a];
+            [a release];
+        };
+        *state = ^long(id o) { return [o image] == image; };
+    } else if (strcmp(name, "NSCustomImageRep") == 0) {
+        *create = ^id(id o) { return [o initWithDrawSelector: @selector(description) delegate: owner]; };
+        *touch = ^(id o) { [o setSize: NSMakeSize(21, 22)]; };
+        *state = ^long(id o) {
+            return (long) [o size].width + (long) [o size].height * 100 +
+                   ([o drawSelector] == @selector(description)) * 100000 + ([o delegate] == owner) * 1000000;
+        };
+    } else if (strcmp(name, "NSLayoutConstraint") == 0) {
+        *create = ^id(id o) { return [o init]; };
+        *touch = ^(id o) {
+            [o setConstant: 12];
+            [o setPriority: 250];
+            [o setIdentifier: @"ident"];
+        };
+        *state = ^long(id o) {
+            return (long) [o constant] + (long) [o priority] * 100 + (long) [[o identifier] length] * 100000;
+        };
+    }
+}
+
+// Subclasses of the classes above, with instance variables of their own: those
+// stay intact while the AppKit state is used.
+static void checkTableSubclasses(void) {
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        char subName[64];
+        snprintf(subName, sizeof(subName), "Sub%s", cases[i].name);
+        Class sub = objc_getClass(subName);
+        CreateBlock create = nil;
+        TouchBlock touch = nil;
+        StateBlock state = nil;
+        caseBlocks(cases[i].name, &create, &touch, &state);
+        CHECK(sub != Nil && create != nil, "no case for %s", cases[i].name);
+        if (sub == Nil || create == nil)
+            continue;
+        id object = create([sub alloc]);
+        CHECK(object != nil, "%s could not be created", subName);
+        if (object == nil)
+            continue;
+        [object setOwn];
+        touch(object);
+        long expected = state(object);
+        CHECK([object ownIntact], "%s lost its own ivars after the setters", subName);
+        [object setOwn];
+        CHECK(state(object) == expected, "%s state changed (%ld, expected %ld)", subName, state(object), expected);
+        CHECK([object ownIntact], "%s lost its own ivars after reading the state", subName);
+        [object release];
+#if !__LP64__
+        CHECK(ivar_getOffset(class_getInstanceVariable(sub, "ownCounter")) == (ptrdiff_t) cases[i].appleSize,
+              "%s's first ivar at %td, expected Apple's %zu", subName,
+              ivar_getOffset(class_getInstanceVariable(sub, "ownCounter")), cases[i].appleSize);
+#endif
+    }
+}
+
 #if !__LP64__
 static const unsigned char pattern = 0xa5;
 enum { spare = 32 };
@@ -169,12 +347,40 @@ static void checkAppleLayoutColorWell(void) {
           "NSColorWell state wrong with a subclass's ivars set");
     [w release];
 }
+// The legacy-ABI check for the table: an instance of the class itself with
+// spare bytes after Apple's size (a subclass's instance variables) keeps them
+// through creation, use and release, and its state does not depend on them.
+static void checkAppleLayoutTable(void) {
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        CreateBlock create = nil;
+        TouchBlock touch = nil;
+        StateBlock state = nil;
+        caseBlocks(cases[i].name, &create, &touch, &state);
+        unsigned char *own;
+        id object = spareInstance(cases[i].name, cases[i].appleSize, &own);
+        memset(own, pattern, spare);
+        object = create(object);
+        CHECK(object != nil, "%s could not be created with spare bytes", cases[i].name);
+        if (object == nil)
+            continue;
+        CHECK(spareIntact(own), "%s wrote past Apple's %zu byte instance when created", cases[i].name,
+              cases[i].appleSize);
+        touch(object);
+        long expected = state(object);
+        CHECK(spareIntact(own), "%s wrote past Apple's %zu byte instance when used", cases[i].name,
+              cases[i].appleSize);
+        CHECK(state(object) == expected, "%s state depends on the bytes after Apple's %zu", cases[i].name,
+              cases[i].appleSize);
+        [object release];
+    }
+}
 #endif
 
 int main(void) {
     @autoreleasepool {
         [NSApplication sharedApplication];
         checkSubclasses();
+        checkTableSubclasses();
 #if !__LP64__
         CHECK(class_getInstanceSize([SubBrowser class]) >= 160 + 16, "SubBrowser size %zu",
               class_getInstanceSize([SubBrowser class]));
@@ -184,6 +390,7 @@ int main(void) {
               "SubColorWell's first ivar is not at Apple's 108");
         checkAppleLayoutBrowser();
         checkAppleLayoutColorWell();
+        checkAppleLayoutTable();
 #endif
     }
     if (failures != 0)
