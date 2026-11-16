@@ -1231,8 +1231,10 @@ static NSMutableArray *pendingOpenFiles = nil;
     NSArray *windows = [[NSApp windows] copy];
     @try {
         for (NSWindow *window in windows) {
-            if ([window isVisible] && ![window isMiniaturized])
+            if ([window isVisible] && ![window isMiniaturized]) {
+                [window _fitContentSizeToConstraints];
                 [[window _backgroundView] layoutSubtreeIfNeeded];
+            }
             [window displayIfNeeded];
         }
     } @finally {

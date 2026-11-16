@@ -45,6 +45,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSView.h>
 #import <AppKit/NSWindow-Private.h>
 #import <AppKit/NSWindow.h>
+#import "DarlingLayout.h"
 #import <AppKit/NSWindowAnimationContext.h>
 #import <ApplicationServices/ApplicationServices.h>
 #import <CoreGraphics/CGWindowPrivate.h>
@@ -2512,7 +2513,30 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
     [_contentView updateConstraintsForSubtreeIfNeeded];
 }
 
+/* Resizes the window to the size its content view's constraints ask for. The window resists
+   resizing at NSLayoutPriorityWindowSizeStayPut, so constraints of a higher priority (including
+   required ones) win, even over the minimum and maximum content sizes. The top left corner stays
+   where it is. */
+- (void) _fitContentSizeToConstraints {
+    if (_contentView == nil || [self isMiniaturized])
+        return;
+
+    [self updateConstraintsIfNeeded];
+
+    NSRect content = [self contentRectForFrameRect: _frame];
+    NSSize size = DarlingLayoutPreferredSize(_contentView, content.size);
+
+    if (size.width < 0 || size.height < 0 || NSEqualSizes(size, content.size))
+        return;
+
+    content.size = size;
+    NSRect frame = [self frameRectForContentRect: content];
+    frame.origin.y = NSMaxY(_frame) - NSHeight(frame);
+    [self setFrame: frame display: YES];
+}
+
 - (void) layoutIfNeeded {
+    [self _fitContentSizeToConstraints];
     [self updateConstraintsIfNeeded];
     [_contentView layoutSubtreeIfNeeded];
 }

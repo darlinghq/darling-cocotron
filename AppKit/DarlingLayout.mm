@@ -148,6 +148,22 @@ public:
         return NSMakeSize(g.width.value(), g.height.value());
     }
 
+    // Like fittingSize, but the root is held at currentSize by a constraint of window-size priority
+    // instead of being pulled towards zero. Returns false when there is nothing to solve.
+    bool preferredSize(NSSize currentSize, NSSize *result) {
+        collect(root);
+        if ([constraints count] == 0) return false;
+        buildConstraints();
+        Geometry &g = geometry.at(root);
+        add(g.x == 0.0);
+        add(g.y == 0.0);
+        add((g.width == currentSize.width) | (double)NSLayoutPriorityWindowSizeStayPut);
+        add((g.height == currentSize.height) | (double)NSLayoutPriorityWindowSizeStayPut);
+        solvePriorities();
+        *result = NSMakeSize(g.width.value(), g.height.value());
+        return true;
+    }
+
     void run() {
         collect(root);
         if ([constraints count] == 0) return;
@@ -230,4 +246,14 @@ void DarlingLayoutSubtree(NSView *root) {
     catch (const std::exception &error) {
         NSLog(@"Unable to simultaneously satisfy constraints: %s", error.what());
     }
+}
+
+NSSize DarlingLayoutPreferredSize(NSView *root, NSSize currentSize) {
+    NSSize result;
+    try {
+        if (Layout(root, true).preferredSize(currentSize, &result)) return result;
+    } catch (const std::exception &error) {
+        // The layout pass that follows reports the unsatisfiable constraints.
+    }
+    return currentSize;
 }
