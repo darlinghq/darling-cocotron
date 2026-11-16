@@ -18,6 +18,7 @@
  */
 
 #import <AppKit/NSView.h>
+#import <AppKit/AppKitIvarLayout.h>
 
 typedef NS_ENUM(NSInteger, NSScrubberMode) {
     NSScrubberModeFixed = 0,
@@ -31,16 +32,24 @@ typedef NS_ENUM(NSInteger, NSScrubberAlignment) {
     NSScrubberAlignmentCenter,
 };
 
-@interface NSScrubber : NSView
+@interface NSScrubber : NSView {
+    NS_LEGACY_IVAR_PAD(_NSScrubberReserved, 92)
+}
 @end
 
-@interface NSScrubberLayout : NSObject
+@interface NSScrubberLayout : NSObject {
+    NS_LEGACY_IVAR_PAD(_NSScrubberLayoutReserved, 8)
+}
 @end
 
-@interface NSScrubberFlowLayout : NSScrubberLayout
+@interface NSScrubberFlowLayout : NSScrubberLayout {
+    NS_LEGACY_IVAR_PAD(_NSScrubberFlowLayoutReserved, 16)
+}
 @end
 
-@interface NSScrubberProportionalLayout : NSScrubberLayout
+@interface NSScrubberProportionalLayout : NSScrubberLayout {
+    NS_LEGACY_IVAR_PAD(_NSScrubberProportionalLayoutReserved, 4)
+}
 @end
 
 @interface NSScrubberSelectionStyle : NSObject <NSCoding>

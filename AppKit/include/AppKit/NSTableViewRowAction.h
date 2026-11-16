@@ -18,6 +18,7 @@
 */
 
 #import <AppKit/AppKitExport.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <Foundation/Foundation.h>
 
 typedef NS_ENUM(NSInteger, NSTableViewRowActionStyle) {
@@ -25,6 +26,8 @@ typedef NS_ENUM(NSInteger, NSTableViewRowActionStyle) {
     NSTableViewRowActionStyleDestructive,
 };
 
-@interface NSTableViewRowAction : NSObject
+@interface NSTableViewRowAction : NSObject {
+    NS_LEGACY_IVAR_PAD(_NSTableViewRowActionReserved, 24)
+}
 
 @end

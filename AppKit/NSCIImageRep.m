@@ -1,4 +1,5 @@
 #import <AppKit/NSBitmapImageRep.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/NSCIImageRep.h>
 #import <AppKit/NSImageRep.h>
 #import <AppKit/NSRaise.h>
@@ -11,7 +12,9 @@
 
 @end
 
-@interface NSCIImageRep : NSImageRep
+@interface NSCIImageRep : NSImageRep {
+    NS_LEGACY_IVAR_PAD(_NSCIImageRepReserved, 4)
+}
 @end
 
 @implementation NSCIImageRep

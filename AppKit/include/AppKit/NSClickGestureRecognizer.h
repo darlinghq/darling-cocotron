@@ -18,8 +18,11 @@
 */
 
 #import <AppKit/AppKitExport.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/NSGestureRecognizer.h>
 #import <Foundation/Foundation.h>
 
-@interface NSClickGestureRecognizer : NSGestureRecognizer <NSCoding>
+@interface NSClickGestureRecognizer : NSGestureRecognizer <NSCoding> {
+    NS_LEGACY_IVAR_PAD(_NSClickGestureRecognizerReserved, 40)
+}
 @end

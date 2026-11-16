@@ -18,8 +18,11 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSSlider.h>
+#import <AppKit/AppKitIvarLayout.h>
 
-@interface NSSliderAccessory : NSObject
+@interface NSSliderAccessory : NSObject {
+    NS_LEGACY_IVAR_PAD(_NSSliderAccessoryReserved, 28)
+}
 @end
 
 @interface NSSliderAccessoryBehavior : NSObject

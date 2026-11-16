@@ -20,6 +20,8 @@
 //    for the object of a subclass compiled against the Mac layout, has that
 //    memory left alone and AppKit's state does not depend on it.
 #import <AppKit/AppKit.h>
+#import <AppKit/NSPanGestureRecognizer.h>
+#import <AppKit/NSTabViewController.h>
 #import <objc/runtime.h>
 #include <stdio.h>
 #include <string.h>
@@ -193,6 +195,35 @@ static const struct {
 @implementation SubNSCustomImageRep OWN_IMPL
 @interface SubNSLayoutConstraint : NSLayoutConstraint OWN_IVARS
 @implementation SubNSLayoutConstraint OWN_IMPL
+
+@interface SubStubNSTableRowView : NSTableRowView OWN_IVARS
+@implementation SubStubNSTableRowView OWN_IMPL
+@interface SubStubNSCollectionViewLayout : NSCollectionViewLayout OWN_IVARS
+@implementation SubStubNSCollectionViewLayout OWN_IMPL
+@interface SubStubNSCollectionViewFlowLayout : NSCollectionViewFlowLayout OWN_IVARS
+@implementation SubStubNSCollectionViewFlowLayout OWN_IMPL
+@interface SubStubNSClickGestureRecognizer : NSClickGestureRecognizer OWN_IVARS
+@implementation SubStubNSClickGestureRecognizer OWN_IMPL
+@interface SubStubNSPanGestureRecognizer : NSPanGestureRecognizer OWN_IVARS
+@implementation SubStubNSPanGestureRecognizer OWN_IMPL
+@interface SubStubNSScrubberItemView : NSScrubberItemView OWN_IVARS
+@implementation SubStubNSScrubberItemView OWN_IMPL
+@interface SubStubNSScrubberTextItemView : NSScrubberTextItemView OWN_IVARS
+@implementation SubStubNSScrubberTextItemView OWN_IMPL
+@interface SubStubNSPageController : NSPageController OWN_IVARS
+@implementation SubStubNSPageController OWN_IMPL
+@interface SubStubNSTabViewController : NSTabViewController OWN_IVARS
+@implementation SubStubNSTabViewController OWN_IMPL
+@interface SubStubNSPasteboard : NSPasteboard OWN_IVARS
+@implementation SubStubNSPasteboard OWN_IMPL
+@interface SubStubNSRuleEditor : NSRuleEditor OWN_IVARS
+@implementation SubStubNSRuleEditor OWN_IMPL
+@interface SubStubNSLayoutDimension : NSLayoutDimension OWN_IVARS
+@implementation SubStubNSLayoutDimension OWN_IMPL
+@interface SubStubNSTextFinder : NSTextFinder OWN_IVARS
+@implementation SubStubNSTextFinder OWN_IMPL
+@interface SubStubNSDraggingItem : NSDraggingItem OWN_IVARS
+@implementation SubStubNSDraggingItem OWN_IMPL
 
 static void caseBlocks(const char *name, CreateBlock *create, TouchBlock *touch, StateBlock *state) {
     static NSImage *image;
@@ -373,6 +404,55 @@ static void checkTableSubclasses(void) {
     }
 }
 
+
+// Stub classes that applications subclass (gesture recognizers, collection view
+// layouts, table row views, ...): a subclass compiled against the Mac layout
+// starts at Apple's instance size, and the variables of the stub and its
+// superclasses must not reach into it. The objects are created without -init,
+// only the layout is under test.
+static const struct {
+    const char *name;
+    size_t appleSize;
+} stubCases[] = {
+    {"NSTableRowView", 112},
+    {"NSCollectionViewLayout", 128},
+    {"NSCollectionViewFlowLayout", 252},
+    {"NSClickGestureRecognizer", 112},
+    {"NSPanGestureRecognizer", 120},
+    {"NSScrubberItemView", 132},
+    {"NSScrubberTextItemView", 152},
+    {"NSPageController", 120},
+    {"NSTabViewController", 64},
+    {"NSPasteboard", 48},
+    {"NSRuleEditor", 204},
+    {"NSLayoutDimension", 32},
+    {"NSTextFinder", 28},
+    {"NSDraggingItem", 40},
+};
+
+static void checkStubSubclasses(void) {
+    for (size_t i = 0; i < sizeof(stubCases) / sizeof(stubCases[0]); i++) {
+        char subName[96];
+        snprintf(subName, sizeof(subName), "SubStub%s", stubCases[i].name);
+        Class sub = objc_getClass(subName);
+        CHECK(sub != Nil, "%s is missing", subName);
+        if (sub == Nil)
+            continue;
+        id object = class_createInstance(sub, 0);
+        [object setOwn];
+        CHECK([object ownIntact], "%s lost its own ivars", subName);
+#if !__LP64__
+        CHECK(ivar_getOffset(class_getInstanceVariable(sub, "ownCounter")) == (ptrdiff_t) stubCases[i].appleSize,
+              "%s's first ivar at %td, expected Apple's %zu", subName,
+              ivar_getOffset(class_getInstanceVariable(sub, "ownCounter")), stubCases[i].appleSize);
+        CHECK(class_getInstanceSize(class_getSuperclass(sub)) == stubCases[i].appleSize,
+              "%s's superclass is %zu bytes, expected Apple's %zu", subName,
+              class_getInstanceSize(class_getSuperclass(sub)), stubCases[i].appleSize);
+#endif
+        object_dispose(object);
+    }
+}
+
 #if !__LP64__
 static const unsigned char pattern = 0xa5;
 enum { spare = 32 };
@@ -460,6 +540,7 @@ int main(void) {
         [NSApplication sharedApplication];
         checkSubclasses();
         checkTableSubclasses();
+        checkStubSubclasses();
 #if !__LP64__
         CHECK(class_getInstanceSize([SubBrowser class]) >= 160 + 16, "SubBrowser size %zu",
               class_getInstanceSize([SubBrowser class]));

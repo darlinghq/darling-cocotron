@@ -18,6 +18,7 @@
 */
 
 #import <AppKit/NSEvent.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/NSView.h>
 #import "NSGestureRecognizer-Private.h"
 
@@ -33,10 +34,14 @@
 
 @end
 
-@interface NSMagnificationGestureRecognizer : NSGestureRecognizer
+@interface NSMagnificationGestureRecognizer : NSGestureRecognizer {
+    NS_LEGACY_IVAR_PAD(_NSMagnificationGestureRecognizerReserved, 32)
+}
 @end
 
-@interface NSRotationGestureRecognizer : NSGestureRecognizer
+@interface NSRotationGestureRecognizer : NSGestureRecognizer {
+    NS_LEGACY_IVAR_PAD(_NSRotationGestureRecognizerReserved, 32)
+}
 @end
 
 @implementation NSGestureRecognizer

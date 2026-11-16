@@ -18,6 +18,7 @@
 */
 
 #import <AppKit/NSLayoutConstraint.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <Foundation/NSObject.h>
 #import <Foundation/NSString.h>
 
@@ -26,6 +27,7 @@
 @interface NSLayoutAnchor : NSObject {
     id _item;
     NSInteger _attribute;
+    NS_LEGACY_IVAR_PAD(_NSLayoutAnchorReserved, 20)
 }
 
 - (instancetype) initWithItem: (id) item attribute: (NSInteger) attribute;

@@ -18,6 +18,7 @@
 */
 
 #import <AppKit/AppKitExport.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <Foundation/NSObject.h>
 #import <Foundation/NSString.h>
 
@@ -41,7 +42,9 @@ APPKIT_EXPORT NSSpeechPropertyKey const NSSpeechVolumeProperty;
 
 @class NSArray, NSDictionary;
 
-@interface NSSpeechSynthesizer : NSObject
+@interface NSSpeechSynthesizer : NSObject {
+    NS_LEGACY_IVAR_PAD(_NSSpeechSynthesizerReserved, 4)
+}
 + (NSArray<NSString *> *) availableVoices;
 + (NSString *) defaultVoice;
 + (NSDictionary<NSVoiceAttributeKey, id> *) attributesForVoice: (NSString *) voice;

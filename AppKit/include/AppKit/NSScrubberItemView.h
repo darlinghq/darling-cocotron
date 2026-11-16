@@ -18,15 +18,24 @@
  */
 
 #import <AppKit/NSView.h>
+#import <AppKit/AppKitIvarLayout.h>
 
-@interface NSScrubberArrangedView : NSView
+@interface NSScrubberArrangedView : NSView {
+    NS_LEGACY_IVAR_PAD(_NSScrubberArrangedViewReserved, 20)
+}
 @end
 
-@interface NSScrubberItemView : NSScrubberArrangedView
+@interface NSScrubberItemView : NSScrubberArrangedView {
+    NS_LEGACY_IVAR_PAD(_NSScrubberItemViewReserved, 32)
+}
 @end
 
-@interface NSScrubberTextItemView : NSScrubberItemView
+@interface NSScrubberTextItemView : NSScrubberItemView {
+    NS_LEGACY_IVAR_PAD(_NSScrubberTextItemViewReserved, 20)
+}
 @end
 
-@interface NSScrubberImageItemView : NSScrubberItemView
+@interface NSScrubberImageItemView : NSScrubberItemView {
+    NS_LEGACY_IVAR_PAD(_NSScrubberImageItemViewReserved, 24)
+}
 @end
