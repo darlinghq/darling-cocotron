@@ -668,6 +668,13 @@ static NSMutableDictionary *cellClassDictionary = nil;
     CGFloat ascent = ceil([font ascender]);
     CGFloat descent = ceil(-[font descender]);
     CGFloat height = [self intrinsicContentSize].height;
+
+    // The two offsets always add up to the control's height: when the
+    // intrinsic height is less than the rounded-up ascent plus descent, the
+    // descent gives way.
+    if (height > 0 && height < ascent + descent)
+        descent = MAX(height - ascent, 0);
+
     CGFloat spare = height > ascent + descent ? height - ascent - descent : 0;
     CGFloat spaceAbove = floor(spare / 2);
 
