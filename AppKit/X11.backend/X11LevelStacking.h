@@ -32,6 +32,16 @@ static inline bool X11UnmanagedBelowManaged(bool unmanagedIsAnchor, int unmanage
     return unmanagedLevel <= managedLevel;
 }
 
+/* Whether `anchor`, an unmanaged window that was just ordered to the front or got a new level, has to be
+ * stacked below `other`, another unmanaged window: the window of the higher level is in front, and windows of
+ * one level keep the order in which they were ordered to the front. The menu bar (level 24) and the
+ * borderless full screen window of a game (a higher level) are two such windows: the server stacks both by
+ * the time they were raised, and the bar is raised after the game's window, when the application becomes
+ * active. */
+static inline bool X11UnmanagedBelowUnmanaged(int anchorLevel, int otherLevel) {
+    return otherLevel > anchorLevel;
+}
+
 /* The child of the root window that contains `window`: the window itself without a reparenting window manager,
  * its frame with one. Returns None when `window` is gone. */
 static inline Window X11TopLevelAncestor(Display *display, Window window) {

@@ -1453,7 +1453,22 @@ static int ignoreBadWindowWhileOrdering(Display *display, XErrorEvent *errorEven
             if (candidate == anchor || ![candidate isKindOfClass: [X11Window class]])
                 continue;
             X11Window *other = candidate;
-            if (![other takesPartInLevelStacking] || [other isUnmanaged] == anchorUnmanaged)
+            if (![other takesPartInLevelStacking])
+                continue;
+
+            if (anchorUnmanaged && [other isUnmanaged]) {
+                // Two override-redirect windows (the menu bar and a borderless window that cannot become
+                // key): the server stacks them in the order they were raised, so the level is applied here.
+                Window otherTop = X11TopLevelAncestor(_display, [other windowHandle]);
+                if (anchorTop == None || otherTop == None)
+                    continue;
+                if (X11UnmanagedBelowUnmanaged([anchor stackingLevel], [other stackingLevel]))
+                    X11StackBelowIfAbove(_display, anchorTop, otherTop);
+                else if (X11UnmanagedBelowUnmanaged([other stackingLevel], [anchor stackingLevel]))
+                    X11StackBelowIfAbove(_display, otherTop, anchorTop);
+                continue;
+            }
+            if ([other isUnmanaged] == anchorUnmanaged)
                 continue;
 
             X11Window *unmanaged = anchorUnmanaged ? anchor : other;
