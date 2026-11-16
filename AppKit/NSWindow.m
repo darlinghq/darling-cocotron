@@ -228,6 +228,10 @@ NSInteger NSBitsPerPixelFromDepth(NSWindowDepth depth) {
 }
 @end
 
+@interface NSView (NSWindowBackingProperties)
+- (void) _backingPropertiesDidChange;
+@end
+
 @implementation NSWindowSheetCompletion
 
 - initWithHandler: (void (^)(NSInteger returnCode)) handler {
@@ -4096,6 +4100,26 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
 
 - (void) platformWindow: (CGWindow *) window needsDisplayInRect: (NSRect) rect {
     [self display];
+}
+
+// The window's backing scale changed (it moved to an output with another
+// scale, or the output's scale changed): post the notification, then tell the
+// views so they can reload scale dependent resources before they redraw.
+- (void) platformWindow: (CGWindow *) window didChangeBackingScaleFrom: (CGFloat) oldScale {
+    if (oldScale == [self backingScaleFactor])
+        return;
+
+    NSMutableDictionary *info = [NSMutableDictionary
+            dictionaryWithObject: [NSNumber numberWithDouble: oldScale]
+                          forKey: NSBackingPropertyOldScaleFactorKey];
+    NSColorSpace *colorSpace = [[self screen] colorSpace];
+    if (colorSpace != nil)
+        [info setObject: colorSpace forKey: NSBackingPropertyOldColorSpaceKey];
+    [[NSNotificationCenter defaultCenter]
+            postNotificationName: NSWindowDidChangeBackingPropertiesNotification
+                          object: self
+                        userInfo: info];
+    [_backgroundView _backingPropertiesDidChange];
 }
 
 - (void) platformWindowStyleChanged: (CGWindow *) window {
