@@ -338,6 +338,38 @@ void O2PathAddArc(O2MutablePathRef self, const O2AffineTransform *matrix,
     }
 }
 
+void O2PathAddRelativeArc(O2MutablePathRef self, const O2AffineTransform *matrix,
+                          O2Float x, O2Float y, O2Float radius, O2Float startAngle,
+                          O2Float delta)
+{
+    if (!isfinite(x) || !isfinite(y) || !isfinite(radius) || !isfinite(startAngle) || !isfinite(delta))
+        return;
+
+    // Each piece is a cubic approximating a sweep of at most a quarter turn.
+    double quarter = M_PI / 2;
+    double pieces = ceil(fabs(delta) / quarter - 1e-9);
+    size_t count = pieces > 0 ? (size_t) pieces : 0;
+    O2Float angle = startAngle;
+    O2Point start = O2PointMake(x + radius * cos(angle), y + radius * sin(angle));
+
+    if (O2PathIsEmpty(self))
+        O2PathMoveToPoint(self, matrix, start.x, start.y);
+    else
+        O2PathAddLineToPoint(self, matrix, start.x, start.y);
+
+    double sweep = count ? delta / count : 0;
+    double handle = 4.0 / 3.0 * tan(sweep / 4);
+    for (size_t i = 0; i < count; i++) {
+        double a0 = startAngle + sweep * i;
+        double a1 = i + 1 == count ? startAngle + delta : startAngle + sweep * (i + 1);
+        double c0 = cos(a0), s0 = sin(a0), c1 = cos(a1), s1 = sin(a1);
+        O2PathAddCurveToPoint(self, matrix,
+                              x + radius * (c0 - handle * s0), y + radius * (s0 + handle * c0),
+                              x + radius * (c1 + handle * s1), y + radius * (s1 - handle * c1),
+                              x + radius * c1, y + radius * s1);
+    }
+}
+
 void O2PathAddArcToPoint(O2MutablePathRef self, const O2AffineTransform *matrix,
                          O2Float tx1, O2Float ty1, O2Float tx2, O2Float ty2,
                          O2Float radius)

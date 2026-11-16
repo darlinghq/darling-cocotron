@@ -190,6 +190,13 @@ void CGPathAddArc(CGMutablePathRef self, const CGAffineTransform *xform,
                  startRadian, endRadian, clockwise);
 }
 
+void CGPathAddRelativeArc(CGMutablePathRef self, const CGAffineTransform *xform,
+                          CGFloat x, CGFloat y, CGFloat radius, CGFloat startAngle,
+                          CGFloat delta)
+{
+    O2PathAddRelativeArc((O2MutablePathRef)self, O2AffineTransformPtrFromCG(xform), x, y, radius, startAngle, delta);
+}
+
 void CGPathAddArcToPoint(CGMutablePathRef self, const CGAffineTransform *xform,
                          CGFloat tx1, CGFloat ty1, CGFloat tx2, CGFloat ty2,
                          CGFloat radius)
@@ -269,6 +276,13 @@ CGPathRef CGPathCreateWithContinuousRoundedRect(CGRect rect, CGFloat cornerWidth
         fprintf(stderr, "CoreGraphics: CGPathCreateWithContinuousRoundedRect draws an ordinary rounded rectangle "
                         "(GUESS: not in the public documentation)\n");
     return CGPathCreateWithRoundedRect(rect, cornerWidth, cornerHeight, transform);
+}
+
+CGPathRef CGPathCreateCopyByDashingPath(CGPathRef path, const CGAffineTransform *transform, CGFloat phase,
+    const CGFloat *lengths, size_t count)
+{
+    return (CGPathRef)O2PathCreateCopyByDashingPath((O2PathRef)path, O2AffineTransformPtrFromCG(transform), phase,
+        lengths, count);
 }
 
 CGPathRef CGPathCreateCopyByStrokingPath(CGPathRef path,

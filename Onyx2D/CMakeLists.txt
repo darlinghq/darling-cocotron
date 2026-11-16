@@ -101,6 +101,7 @@ set(Onyx2D_sources
 	O2Paint_radialGradient.m
 	O2Paint_ramp.m
 	O2Path.m
+	O2PathDashing.m
 	O2Pattern.m
 	O2PDFArray.m
 	O2PDFBlock.m

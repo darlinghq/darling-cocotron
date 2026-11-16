@@ -54,6 +54,12 @@ void O2PathAddRects(O2MutablePathRef self, const O2AffineTransform *matrix,
 void O2PathAddArc(O2MutablePathRef self, const O2AffineTransform *matrix,
                   O2Float x, O2Float y, O2Float radius, O2Float startRadian,
                   O2Float endRadian, BOOL clockwise);
+// An arc of the circle with the given center and radius that starts at startAngle and sweeps by delta radians, in
+// pieces of at most a quarter turn; a positive delta turns towards increasing angles, and a delta beyond a full turn
+// keeps going around.
+void O2PathAddRelativeArc(O2MutablePathRef self, const O2AffineTransform *matrix,
+                          O2Float x, O2Float y, O2Float radius, O2Float startAngle,
+                          O2Float delta);
 void O2PathAddArcToPoint(O2MutablePathRef self, const O2AffineTransform *matrix,
                          O2Float tx1, O2Float ty1, O2Float tx2, O2Float ty2,
                          O2Float radius);
