@@ -172,6 +172,60 @@ public:
         applyResults();
     }
 
+    // One axis of a view whose autoresizing mask is translated into constraints. The low margin,
+    // the size and the high margin of the view's frame in its superview are each either fixed or
+    // flexible; flexible ones share the superview's remaining extent in proportion to their size
+    // when the layout started, as the autoresizing mask documentation describes.
+    void autoresizingAxis(kiwi::Variable &position, kiwi::Variable &extent, kiwi::Variable &parentPosition,
+                          kiwi::Variable &parentExtent, double low, double size, double high,
+                          bool lowFlexible, bool sizeFlexible, bool highFlexible) {
+        kiwi::Expression comps[3] = {position - parentPosition, kiwi::Expression(extent),
+                                     parentPosition + parentExtent - position - extent};
+        double original[3] = {low, size, high};
+        bool flexible[3] = {lowFlexible, sizeFlexible, highFlexible};
+        if (!lowFlexible && !sizeFlexible && !highFlexible) {
+            // Nothing flexible: the view keeps its distance from the low edge and its size.
+            add(comps[0] == low);
+            add(comps[1] == size);
+            return;
+        }
+        kiwi::Expression fixedSum;
+        double total = 0;
+        int flexibleCount = 0;
+        for (int i = 0; i < 3; ++i) {
+            if (flexible[i]) { total += original[i]; ++flexibleCount; }
+            else { add(comps[i] == original[i]); fixedSum = fixedSum + comps[i]; }
+        }
+        if (flexibleCount == 0) return;
+        kiwi::Expression remaining = parentExtent - fixedSum;
+        for (int i = 0; i < 3; ++i) {
+            if (!flexible[i]) continue;
+            double share = total > 0 ? original[i] / total : 1.0 / flexibleCount;
+            add(comps[i] == remaining * share);
+        }
+    }
+
+    void autoresizing(NSView *view, Geometry &g) {
+        NSView *parent = [view superview];
+        Geometry &p = geometry.at(parent);
+        NSRect frame = [view frame];
+        NSRect bounds = [parent bounds];
+        NSUInteger mask = [view autoresizingMask];
+        double lowX = frame.origin.x - bounds.origin.x;
+        autoresizingAxis(g.x, g.width, p.x, p.width, lowX, frame.size.width, bounds.size.width - lowX - frame.size.width,
+                         mask & NSViewMinXMargin, mask & NSViewWidthSizable, mask & NSViewMaxXMargin);
+        double nearY = frame.origin.y - bounds.origin.y;
+        double farY = bounds.size.height - nearY - frame.size.height;
+        // The solver's y axis follows the root; a superview flipped the other way sees its margins swapped.
+        bool swapped = [parent isFlipped] != rootFlipped();
+        if (!swapped)
+            autoresizingAxis(g.y, g.height, p.y, p.height, nearY, frame.size.height, farY,
+                             mask & NSViewMinYMargin, mask & NSViewHeightSizable, mask & NSViewMaxYMargin);
+        else
+            autoresizingAxis(g.y, g.height, p.y, p.height, farY, frame.size.height, nearY,
+                             mask & NSViewMaxYMargin, mask & NSViewHeightSizable, mask & NSViewMinYMargin);
+    }
+
 private:
     void buildConstraints() {
         for (auto &entry : geometry) {
@@ -183,7 +237,13 @@ private:
                 continue;
             }
             NSRect frame = view == root ? [root bounds] : solverRect([view convertRect:[view bounds] toView:root]);
-            if (view == root || [view translatesAutoresizingMaskIntoConstraints]) {
+            if (view == root) {
+                add(g.x == frame.origin.x); add(g.y == frame.origin.y);
+                add(g.width == frame.size.width); add(g.height == frame.size.height);
+            } else if ([view translatesAutoresizingMaskIntoConstraints] && [view superview] &&
+                       geometry.count([view superview])) {
+                autoresizing(view, g);
+            } else if ([view translatesAutoresizingMaskIntoConstraints]) {
                 add(g.x == frame.origin.x); add(g.y == frame.origin.y);
                 add(g.width == frame.size.width); add(g.height == frame.size.height);
             } else {

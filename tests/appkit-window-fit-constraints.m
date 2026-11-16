@@ -106,6 +106,29 @@ int main(void)
         [cv addConstraint:[NSLayoutConstraint constraintWithItem:cv attribute:NSLayoutAttributeWidth relatedBy:NSLayoutRelationGreaterThanOrEqual toItem:nil attribute:NSLayoutAttributeNotAnAttribute multiplier:1 constant:320]];
         [cv addConstraint:[NSLayoutConstraint constraintWithItem:cv attribute:NSLayoutAttributeHeight relatedBy:NSLayoutRelationEqual toItem:nil attribute:NSLayoutAttributeNotAnAttribute multiplier:1 constant:220]];
         [w orderFront:nil]; spin(); CHECK(contentIs(w, 320, 220));
+
+        // Views whose autoresizing masks are translated to constraints follow their container when
+        // its size comes from constraints (frames relative to the container, not absolute).
+        w = makeWindow(NSMakeSize(100, 100));
+        NSView *box = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 100, 100)];
+        box.translatesAutoresizingMaskIntoConstraints = NO;
+        [w.contentView addSubview:box];
+        NSView *wide = [[NSView alloc] initWithFrame:NSMakeRect(10, 10, 80, 80)];
+        wide.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+        NSView *corner = [[NSView alloc] initWithFrame:NSMakeRect(70, 70, 20, 20)];
+        corner.autoresizingMask = NSViewMinXMargin | NSViewMinYMargin;
+        NSView *plain = [[NSView alloc] initWithFrame:NSMakeRect(5, 5, 30, 30)];
+        NSView *middle = [[NSView alloc] initWithFrame:NSMakeRect(40, 40, 20, 20)];
+        middle.autoresizingMask = NSViewMinXMargin | NSViewMaxXMargin | NSViewMinYMargin | NSViewMaxYMargin;
+        for (NSView *v in @[wide, corner, plain, middle]) [box addSubview:v];
+        [w.contentView addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"H:|[box(==300)]|" options:0 metrics:nil views:@{@"box":box}]];
+        [w.contentView addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:|[box(==200)]|" options:0 metrics:nil views:@{@"box":box}]];
+        [w layoutIfNeeded];
+        CHECK(contentIs(w, 300, 200));
+        CHECK(NSEqualRects(wide.frame, NSMakeRect(10, 10, 280, 180)));
+        CHECK(NSEqualRects(corner.frame, NSMakeRect(270, 170, 20, 20)));
+        CHECK(NSEqualRects(plain.frame, NSMakeRect(5, 5, 30, 30)));
+        CHECK(NSEqualRects(middle.frame, NSMakeRect(140, 90, 20, 20)));
     }
     if (failures) return 1;
     printf("PASS\n");
