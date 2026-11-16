@@ -78,22 +78,78 @@ static int glyphPathCubicTo(const FT_Vector *control1, const FT_Vector *control2
 
 @implementation KTFont_FT
 
+// Default point sizes and faces of the UI font types, as CTFontCreateUIFontForLanguage
+// reports them when the requested size is 0. Darling has one UI family: the
+// system faces map to the sans-serif font known as "San Francisco" (bold where
+// the type is emphasized); the user font maps to Helvetica and the fixed pitch
+// font to a monospace face.
+typedef struct {
+    CGFloat size;
+    BOOL bold;
+    NSString *pattern;
+} KTUIFontSpec;
+
+static BOOL KTUIFontSpecForType(CTFontUIFontType type, KTUIFontSpec *spec) {
+    static const struct {
+        CGFloat size;
+        BOOL bold;
+    } sizes[] = {
+        [kCTFontUIFontUser] = { 12, NO },
+        [kCTFontUIFontUserFixedPitch] = { 10, NO },
+        [kCTFontUIFontSystem] = { 13, NO },
+        [kCTFontUIFontEmphasizedSystem] = { 13, YES },
+        [kCTFontUIFontSmallSystem] = { 11, NO },
+        [kCTFontUIFontSmallEmphasizedSystem] = { 11, YES },
+        [kCTFontUIFontMiniSystem] = { 9, NO },
+        [kCTFontUIFontMiniEmphasizedSystem] = { 9, YES },
+        [kCTFontUIFontViews] = { 12, NO },
+        [kCTFontUIFontApplication] = { 13, NO },
+        [kCTFontUIFontLabel] = { 10, NO },
+        [kCTFontUIFontMenuTitle] = { 14, NO },
+        [kCTFontUIFontMenuItem] = { 14, NO },
+        [kCTFontUIFontMenuItemMark] = { 14, NO },
+        [kCTFontUIFontMenuItemCmdKey] = { 14, NO },
+        [kCTFontUIFontWindowTitle] = { 13, NO },
+        [kCTFontUIFontPushButton] = { 13, NO },
+        [kCTFontUIFontUtilityWindowTitle] = { 11, NO },
+        [kCTFontUIFontAlertHeader] = { 13, YES },
+        [kCTFontUIFontSystemDetail] = { 9, NO },
+        [kCTFontUIFontEmphasizedSystemDetail] = { 9, YES },
+        [kCTFontUIFontToolbar] = { 11, NO },
+        [kCTFontUIFontSmallToolbar] = { 10, NO },
+        [23] = { 13, NO },
+        [24] = { 11, NO },
+    };
+
+    if (type > 24)
+        return NO;
+    spec->size = sizes[type].size;
+    spec->bold = sizes[type].bold;
+    if (type == kCTFontUIFontUser)
+        spec->pattern = @"Helvetica";
+    else if (type == kCTFontUIFontUserFixedPitch)
+        spec->pattern = @"monospace";
+    else
+        spec->pattern = spec->bold ? @"San Francisco:bold" : @"San Francisco";
+    return YES;
+}
+
 - initWithUIFontType: (CTFontUIFontType) uiFontType
                 size: (CGFloat) size
             language: (NSString *) language
 {
-    O2Font *font = nil;
+    KTUIFontSpec spec;
 
-    switch (uiFontType) {
+    if (!KTUIFontSpecForType(uiFontType, &spec)) {
+        [self release];
+        return nil;
+    }
+    if (size == 0)
+        size = spec.size;
 
-    case kCTFontMenuTitleFontType:
-    case kCTFontMenuItemFontType:
-        if (size == 0)
-            size = 12;
-        font = O2FontCreateWithFontName(@"San Francisco");
-        break;
-
-    default:
+    O2Font *font = O2FontCreateWithFontName(spec.pattern);
+    if (font == nil) {
+        [self release];
         return nil;
     }
 
