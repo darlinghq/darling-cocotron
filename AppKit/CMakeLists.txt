@@ -418,7 +418,6 @@ set(AppKit_sources
 	NSAccessibilityRemoteUIElement.m
 	NSKeyValueBinding.m
 	NSCandidateListTouchBarItem.m
-	NSCollectionViewFlowLayout.m
 	NSTouchBarItem.m
 	NSInspectorBarItemIdentifiers.m
 	NSLayoutConstraint.m
@@ -446,7 +445,7 @@ set(AppKit_sources
 	NSVisualEffectView.m
 	NSATSTypesetter.m
 	NSOpenGLLayer.m
-	NSCollectionViewLayout.m
+	NSCollectionViewGridLayout.m
 
 	NSSharingService.m
 	MacWorkspace.m
@@ -470,8 +469,6 @@ set(AppKit_sources
 	NSSplitViewItem.m
 	NSTabViewController.m
 	NSTableViewRowAction.m
-	NSCollectionViewLayoutAttributes.m
-	NSCollectionViewLayoutInvalidationContext.m
 	NSLayoutGuide.m
 	NSPressGestureRecognizer.m
 	NSGridView.m

@@ -22,6 +22,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSCollectionViewFlowLayout.h>
 #include <math.h>
 
+// Exported by AppKit but not declared in the public headers.
+APPKIT_EXPORT NSString *const NSCollectionElementKindSelectionRectIndicator;
+NSString *const NSCollectionElementKindSelectionRectIndicator =
+        @"NSCollectionElementKindSelectionRectIndicator";
+
 @implementation NSCollectionView
 @synthesize collectionViewLayout = _collectionViewLayout;
 @synthesize dataSource = _dataSource;
@@ -265,23 +270,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                     format: @"-[%@ %s]: no item class registered for identifier %@",
                             [self class], sel_getName(_cmd), identifier];
     return [[[itemClass alloc] init] autorelease];
-}
-
-@end
-
-@implementation NSIndexPath (NSCollectionViewAdditions)
-
-+ (NSIndexPath *) indexPathForItem: (NSInteger) item inSection: (NSInteger) section {
-    NSUInteger indexes[2] = {section, item};
-    return [self indexPathWithIndexes: indexes length: 2];
-}
-
-- (NSInteger) item {
-    return [self indexAtPosition: 1];
-}
-
-- (NSInteger) section {
-    return [self indexAtPosition: 0];
 }
 
 @end
