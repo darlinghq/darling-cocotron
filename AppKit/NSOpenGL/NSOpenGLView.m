@@ -67,8 +67,17 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
     if ([coder allowsKeyedCoding])
         _pixelFormat = [[coder decodeObjectForKey: @"NSPixelFormat"] retain];
-    else
-        NSUnimplementedMethod();
+    else {
+        // NSArchiver (typedstream): the pixel format (nil when the view has none) and three
+        // integers, zero in every archive seen, after the NSView fields. Layout established by
+        // archiving views with NSArchiver on macOS 10.14.4 (black-box,
+        // tests/src/typedstream_appkit.m).
+        NSOpenGLPixelFormat *format = nil;
+        int reserved[3];
+
+        [coder decodeValuesOfObjCTypes: "@iii", &format, &reserved[0], &reserved[1], &reserved[2]];
+        _pixelFormat = format;
+    }
 
     return self;
 }

@@ -65,8 +65,34 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         }
 
         return [self initWithAttributes: attributes];
-    } else
-        NSUnimplementedMethod();
+    } else {
+        // NSArchiver (typedstream): the attribute words as big-endian bytes inside an NSData
+        // (as in the keyed archive), then three integers (zero in every archive seen). A format
+        // that was not created from attribute data is archived with a nil NSData and decodes
+        // as the format of an empty attribute list. Layout established by archiving pixel
+        // formats with NSArchiver on macOS 10.14.4 (black-box,
+        // tests/src/typedstream_appkit.m).
+        NSData *data = nil;
+        int reserved[3];
+
+        [coder decodeValuesOfObjCTypes: "@iii", &data, &reserved[0], &reserved[1], &reserved[2]];
+        unsigned length = [data length];
+        const unsigned char *bytes = [data bytes];
+
+        if (length % 4 > 0) {
+            NSLog(@"pixel attributes are not a multiple of 4, length=%d", length);
+            return nil;
+        }
+
+        NSOpenGLPixelFormatAttribute attributes[length / 4 + 1];
+        unsigned a = 0;
+
+        for (unsigned i = 0; i < length; i += 4)
+            attributes[a++] = ((unsigned) bytes[i] << 24) | (bytes[i + 1] << 16) | (bytes[i + 2] << 8) | bytes[i + 3];
+        attributes[a] = 0;
+
+        return [self initWithAttributes: attributes];
+    }
 
     return self;
 }
