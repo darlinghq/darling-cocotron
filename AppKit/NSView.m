@@ -1376,6 +1376,16 @@ static BOOL applyFrame(NSView *self, NSRect frame) {
     [NS_EXTRA(NSView, self)->_layerContext setFrame: layerFrame];
 
     invalidateTransform(self);
+
+    // QUIRK: a frame change marks both the view and its superview as needing display; a call that
+    // leaves the frame as it is marks neither. Not documented. Evidence: black-box observation on
+    // Mac OS X 10.14.4 (tier 2, MAC-EVIDENCE "setFrame: marks views for display"). macOS 26.7.3
+    // keeps both flags clear because every view is layer-backed there, but the window shows the
+    // view redrawn at its new size on both. The software window backing needs the repaint,
+    // otherwise a view that layout resizes keeps the pixels of its old size.
+    // Test: tests/appkit-view-set-frame-needs-display.m
+    [self setNeedsDisplay: YES];
+    [self->_superview setNeedsDisplay: YES];
     return YES;
 }
 
