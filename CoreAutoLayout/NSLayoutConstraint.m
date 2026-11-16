@@ -18,8 +18,6 @@
 */
 
 #import <AppKit/NSLayoutConstraint.h>
-#import <AppKit/NSLayoutGuide.h>
-#import <AppKit/NSView.h>
 #import "NSLayoutConstraintInternal.h"
 #import <Foundation/NSArray.h>
 #import <Foundation/NSCoder.h>
@@ -30,10 +28,11 @@
 #import <Foundation/NSValue.h>
 
 // The container that holds an item: a view's superview, or a layout guide's
-// owning view.
+// owning view. CoreAutoLayout sits below AppKit, so the items are asked through
+// the selectors of the layout-item protocol instead of through AppKit's classes.
 static id _NSLayoutItemParent(id item)
 {
-    if ([item isKindOfClass:[NSView class]])
+    if ([item respondsToSelector:@selector(superview)])
         return [item superview];
     if ([item respondsToSelector:@selector(owningView)])
         return [item owningView];
@@ -223,7 +222,7 @@ static BOOL _NSLayoutItemIsWithin(id item, id container)
     // and the constraint stays inactive. Not documented. Evidence: black-box
     // observation on macOS 26.7.3 (tier 2), MAC-EVIDENCE MC26.3.
     // Test: appkit-layout-constraint-model.m (no common ancestor raises NSGenericException)
-    if (![owner isKindOfClass:[NSView class]])
+    if (![owner respondsToSelector:@selector(addConstraint:)])
         [NSException raise:NSGenericException
                     format:@"The items of a layout constraint must share a common ancestor view: %@", self];
     [owner addConstraint:self];
@@ -258,13 +257,6 @@ static BOOL _NSLayoutItemIsWithin(id item, id container)
 }
 
 @end
-
-// 0xbff0000000000000 is the bit pattern of -1.0, not the value; as a CGFloat
-// initialiser it yielded 1.38e19, so every "no intrinsic metric" test failed.
-const CGFloat NSViewNoInstrinsicMetric = -1.0;
-const CGFloat NSViewNoIntrinsicMetric = -1.0;
-
-const NSDirectionalEdgeInsets NSDirectionalEdgeInsetsZero = {0, 0, 0, 0};
 
 // "-" between two views, and between a view and its superview's edge.
 static const CGFloat VFLStandardSiblingSpacing = 8;
