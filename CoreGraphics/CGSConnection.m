@@ -69,9 +69,10 @@
 	return kCGErrorNotImplemented;
 }
 
+// A backend that can read the window system's keymap overrides this; nil means it has no layout.
 -(CGSKeyboardLayout*) createKeyboardLayout
 {
-	NSInvalidAbstractInvocation();
+	return nil;
 }
 
 -(CGPoint) mouseLocation

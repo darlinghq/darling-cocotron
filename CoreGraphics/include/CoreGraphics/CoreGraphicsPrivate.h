@@ -256,6 +256,11 @@ extern CGError CGEventGetEventRecord(CGEventRef event, CGSEventRecordPtr eventRe
 extern CGError CGEventSetEventRecord(CGEventRef event, CGSEventRecordPtr eventRecord, uint32_t eventRecordSize);
 extern uint32_t CGEventGetEventRecordSize(CGEventRef event);
 
+// Registers the 'uchr' keyboard layout (a UCKeyboardLayout blob of `length` bytes, copied) of the
+// window system's current keymap, for a backend that cannot read the keymap itself. The Text Input
+// Sources API returns it. NULL or a zero length removes it.
+extern void _CGSSetProvidedKeyboardLayout(const void* uchr, uint32_t length, CFStringRef name, CFStringRef fullName);
+
 #ifdef __OBJC__
 @class CGSConnection;
 CGSConnection* _CGSConnectionForID(CGSConnectionID connId);

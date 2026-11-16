@@ -21,6 +21,8 @@
 #import <CoreGraphics/CGSKeyboardLayout.h>
 #import <CoreGraphics/CGSScreen.h>
 #include "CarbonKeys.h"
+#import "../DarlingUnicodeKeyLayout.h"
+#import "../DarlingUnicodeKeyLayoutCompose.h"
 #import <CoreGraphics/CGSKeySymToUnicodePrivate.h>
 #import <Foundation/NSDebug.h>
 #import <Foundation/NSString.h>
@@ -141,7 +143,7 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type, CFDataRef a
 
 	if (XkbLibraryVersion(&major, &minor) && XkbQueryExtension(_display, NULL, &_xkbEventBase, &major, &minor, NULL))
 	{
-		XkbSelectEvents(_display, XkbUseCoreKbd, /*XkbMapNotifyMask |*/ XkbStateNotifyMask, 1);
+		XkbSelectEvents(_display, XkbUseCoreKbd, XkbMapNotifyMask | XkbNewKeyboardNotifyMask | XkbStateNotifyMask, 1);
 	}
 
 	return self;
@@ -186,90 +188,100 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type, CFDataRef a
 	}
 }
 
+// What the keyboard layout builder needs of the X server's keymap.
+typedef struct {
+	XkbDescPtr desc;
+	unsigned group;
+	unsigned optionMask; // the real modifier of the third level (ISO_Level3_Shift or Mode_switch)
+} X11KeyLayoutContext;
+
+static uint32_t X11KeyLayoutKeysym(void* context, int carbonKey, unsigned layer)
+{
+	X11KeyLayoutContext* keymap = context;
+	const int x11KeyCode = carbonToX11[carbonKey];
+	if (x11KeyCode == 0 || x11KeyCode < keymap->desc->min_key_code || x11KeyCode > keymap->desc->max_key_code)
+		return 0;
+
+	unsigned mods = 0;
+	if (layer & DarlingKeyLayerShift)
+		mods |= ShiftMask;
+	if (layer & DarlingKeyLayerCaps)
+		mods |= LockMask;
+	if (layer & DarlingKeyLayerOption)
+		mods |= keymap->optionMask;
+
+	KeySym symbol = NoSymbol;
+	unsigned consumed = 0;
+	if (!XkbTranslateKeyCode(keymap->desc, x11KeyCode, XkbBuildCoreState(mods, keymap->group), &consumed, &symbol))
+		return 0;
+	return symbol == NoSymbol ? 0 : (uint32_t) symbol;
+}
+
+static uint32_t X11KeyLayoutCodepoint(void* context, uint32_t keysym)
+{
+	uint32_t codepoint = CGSKeySymToUnicode(keysym);
+	return codepoint != 0 ? codepoint : DarlingUnicodeKeysymCharacter(keysym);
+}
+
+// The real modifier the keymap binds to the key that selects the third level (AltGr); Mod5 if none.
+static unsigned X11ThirdLevelModifier(XkbDescPtr desc, unsigned group)
+{
+	for (int keycode = desc->min_key_code; keycode <= desc->max_key_code; keycode++)
+	{
+		KeySym symbol = XkbKeycodeToKeysym(desc->dpy, keycode, group, 0);
+		if (symbol == XK_ISO_Level3_Shift || symbol == XK_Mode_switch)
+		{
+			unsigned mask = desc->map->modmap != NULL ? desc->map->modmap[keycode] : 0;
+			if (mask != 0)
+				return mask;
+		}
+	}
+	return Mod5Mask;
+}
+
 - (void) _doCreateKeyboardLayout
 {
 	int major = XkbMajorVersion, minor = XkbMinorVersion;
-	XkbDescPtr pKBDesc;
-	unsigned char group = 0;
 	XkbStateRec state;
-
-	struct MyLayout
-	{
-		UCKeyboardLayout layout;
-		UCKeyModifiersToTableNum modifierVariants;
-		UInt8 secondTableNum, thirdTableNum;
-		UCKeyToCharTableIndex tableIndex;
-		UInt32 secontTableOffset;
-		UCKeyOutput table1[128];
-		UCKeyOutput table2[128];
-	};
 
 	if (!XkbLibraryVersion(&major, &minor))
 		return;
 	if (!XkbQueryExtension(_display, NULL, NULL, &major, &minor, NULL))
 		return;
 
-	pKBDesc = XkbGetMap(_display, XkbAllClientInfoMask, XkbUseCoreKbd);
-	if (!pKBDesc)
+	// The server side of the map (virtual modifiers) is what XkbTranslateKeyCode needs to pick
+	// the level of a key for a modifier state.
+	XkbDescPtr map = XkbGetMap(_display, XkbAllMapComponentsMask, XkbUseCoreKbd);
+	if (!map)
 		return;
 
 	XkbDescPtr desc = XkbGetKeyboard(_display, XkbAllComponentsMask, XkbUseCoreKbd);
 	if (!desc)
-		return;
-
-	if (XkbGetState(_display, XkbUseCoreKbd, &state) == Success)
-		group = state.group;
-
-	struct MyLayout* layout = (struct MyLayout*) malloc(sizeof(struct MyLayout));
-
-	layout->layout.keyLayoutHeaderFormat = kUCKeyLayoutHeaderFormat;
-	layout->layout.keyLayoutDataVersion = 0;
-	layout->layout.keyLayoutFeatureInfoOffset = 0;
-	layout->layout.keyboardTypeCount = 1;
-
-	memset(layout->layout.keyboardTypeList, 0, sizeof(UCKeyboardTypeHeader));
-
-	layout->layout.keyboardTypeList[0].keyModifiersToTableNumOffset = offsetof(struct MyLayout, modifierVariants);
-	layout->layout.keyboardTypeList[0].keyToCharTableIndexOffset = offsetof(struct MyLayout, tableIndex);
-
-	layout->modifierVariants.keyModifiersToTableNumFormat = kUCKeyModifiersToTableNumFormat;
-	layout->modifierVariants.defaultTableNum = 0;
-	layout->modifierVariants.modifiersCount = 3;
-	layout->modifierVariants.tableNum[0] = 0;
-	layout->modifierVariants.tableNum[1] = 0; // cmd key bit
-	layout->modifierVariants.tableNum[2] = 1; // shift key bit
-
-	layout->tableIndex.keyToCharTableIndexFormat = kUCKeyToCharTableIndexFormat;
-	layout->tableIndex.keyToCharTableSize = 128;
-	layout->tableIndex.keyToCharTableCount = 2;
-	layout->tableIndex.keyToCharTableOffsets[0] = offsetof(struct MyLayout, table1);
-	layout->tableIndex.keyToCharTableOffsets[1] = offsetof(struct MyLayout, table2);
-
-	for (int shift = 0; shift <= 1; shift++)
 	{
-		UCKeyOutput* outTable = (shift == 0) ? layout->table1 : layout->table2;
-		for (int i = 0; i < 128; i++)
-		{
-			// Reverse the operation we do in -postXEvent:
-			const int x11KeyCode = carbonToX11[i];
-
-			if (!x11KeyCode)
-			{
-				outTable[i] = 0;
-				continue;
-			}
-
-			// NOTE: Not using the group here. It just works with 0 instead...
-			KeySym sym = XkbKeycodeToKeysym(_display, x11KeyCode, 0, shift);
-
-			if (sym != NoSymbol)
-				outTable[i] = CGSKeySymToUnicode(sym);
-			else
-				outTable[i] = 0;
-		}
+		XkbFreeKeyboard(map, XkbAllMapComponentsMask, True);
+		return;
 	}
 
-	XkbFreeClientMap(pKBDesc, XkbAllClientInfoMask, true);
+	memset(&state, 0, sizeof(state));
+	XkbGetState(_display, XkbUseCoreKbd, &state);
+
+	X11KeyLayoutContext keymap = { .desc = map, .group = state.group };
+	keymap.optionMask = X11ThirdLevelModifier(map, keymap.group);
+	DarlingKeyLayoutSource source = {
+		.context = &keymap,
+		.keysym = X11KeyLayoutKeysym,
+		.codepoint = X11KeyLayoutCodepoint,
+		.compose = DarlingComposeCharacters,
+	};
+	uint32_t layoutLength = 0;
+	UCKeyboardLayout* layout = DarlingCreateUnicodeKeyLayout(&source, &layoutLength);
+	XkbFreeKeyboard(map, XkbAllMapComponentsMask, True);
+	if (layout == NULL)
+	{
+		XkbFreeKeyboard(desc, XkbAllComponentsMask, True);
+		return;
+	}
+
 	NSString *name = @"?", *fullName = @"?";
 
 	if (fullName != NULL)
@@ -304,12 +316,14 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type, CFDataRef a
 
 	CGSKeyboardLayout* cgsLayout = [CGSKeyboardLayout new];
 
-	[cgsLayout setLayout: &layout->layout length: sizeof(struct MyLayout)];
+	[cgsLayout setLayout: layout length: layoutLength];
+	free(layout);
 	cgsLayout.name = name;
 	cgsLayout.fullName = fullName;
 
 	_keyboardLayout = cgsLayout;
 	_keyboardLayoutGroup = state.group;
+	XkbFreeKeyboard(desc, XkbAllComponentsMask, True);
 }
 
 // The main monitor's rectangle in root coordinates. Without RandR, or with no
@@ -620,11 +634,15 @@ static double windowOpacity(Display* display, Window window)
 		}
 		default:
 
-		if (/*event->type == _xkbEventBase + XkbMapNotify ||*/ event->type == _xkbEventBase + XkbStateNotify)
+		if (event->type == _xkbEventBase)
 		{
+			// All XKB events share one event type; xkb_type tells them apart.
 			XkbEvent* xkbevt = (XkbEvent*) event;
+			BOOL keymapChanged = xkbevt->any.xkb_type == XkbMapNotify || xkbevt->any.xkb_type == XkbNewKeyboardNotify;
+			BOOL groupChanged = xkbevt->any.xkb_type == XkbStateNotify && _keyboardLayoutGroup != xkbevt->state.group;
+
 			// Invalidate cached keyboard layout information
-			if (_keyboardLayout && _keyboardLayoutGroup != xkbevt->state.group)
+			if (keymapChanged || groupChanged)
 			{
 				// TODO: Emit kTISNotifySelectedKeyboardInputSourceChanged via NSDistributedNotificationCenter
 
@@ -633,7 +651,8 @@ static double windowOpacity(Display* display, Window window)
 					[_keyboardLayout release];
 					_keyboardLayout = nil;
 				}
-				_keyboardLayoutGroup = xkbevt->state.group;
+				if (groupChanged)
+					_keyboardLayoutGroup = xkbevt->state.group;
 			}
 
 			break;

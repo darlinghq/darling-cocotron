@@ -61,10 +61,10 @@ typedef enum {
     CGSWaylandObjectToplevel,
 } CGSWaylandObjectKind;
 
-// -createKeyboardLayout and -setMode:forScreen: are deliberately not overridden,
-// so they raise through NSInvalidAbstractInvocation(). Wayland only hands a
-// client the keymap over wl_keyboard once one of its surfaces has focus, and
-// mode setting is the compositor's alone; nothing in tree calls either.
+// -setMode:forScreen: is deliberately not overridden, so it raises through
+// NSInvalidAbstractInvocation(): mode setting is the compositor's alone, and nothing in tree
+// calls it. -createKeyboardLayout is not overridden either: the keymap belongs to the client
+// that owns the wl_keyboard, which registers its layout with _CGSSetProvidedKeyboardLayout().
 @interface CGSConnectionWayland : CGSConnection {
 @public
     struct wl_display *_wlDisplay;
