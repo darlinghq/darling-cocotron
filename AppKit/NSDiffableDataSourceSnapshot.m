@@ -21,12 +21,7 @@
 
 // Storage: two parallel arrays, the section identifiers in order and, at the same index, that section's item
 // identifiers in order. Identifiers are compared with isEqual:, as the Swift snapshot compares Hashable values.
-@implementation NSDiffableDataSourceSnapshot {
-    NSMutableArray *_sections;
-    NSMutableArray *_items;
-    NSMutableArray *_reloadedSections;
-    NSMutableArray *_reloadedItems;
-}
+@implementation NSDiffableDataSourceSnapshot
 
 - (instancetype) init {
     if ((self = [super init])) {
