@@ -2796,14 +2796,14 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
     return [NSApp currentEvent];
 }
 
-- (NSEvent *) nextEventMatchingMask: (NSEventMask) mask {
+- (NSEvent *) nextEventMatchingMask: (NSUInteger) mask {
     return [self nextEventMatchingMask: mask
                              untilDate: [NSDate distantFuture]
                                 inMode: NSEventTrackingRunLoopMode
                                dequeue: YES];
 }
 
-- (NSEvent *) nextEventMatchingMask: (NSEventMask) mask
+- (NSEvent *) nextEventMatchingMask: (NSUInteger) mask
                           untilDate: (NSDate *) untilDate
                              inMode: (NSRunLoopMode) mode
                             dequeue: (BOOL) dequeue
@@ -2822,7 +2822,7 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
     return event;
 }
 
-- (void) discardEventsMatchingMask: (NSEventMask) mask
+- (void) discardEventsMatchingMask: (NSUInteger) mask
                        beforeEvent: (NSEvent *) event
 {
     NSUnimplementedMethod();
