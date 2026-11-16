@@ -82,6 +82,9 @@ struct WaylandBuffer {
     // configure said, and the size to go back to.
     BOOL _fullscreenRequested, _pendingFullscreen, _fullscreenRecheckPending;
     WaylandFullscreenTracker _fullscreenTracker;
+    // The window this one is transient for because of its level, if any (not retained: the
+    // display clears it when that window goes away).
+    WaylandWindow *_levelParent;
     BOOL _configureUpdatePending;
     NSUInteger _surfaceGeneration;
 }
@@ -111,6 +114,9 @@ struct WaylandBuffer {
 - (void) outputsChanged;
 - (BOOL) isPopup;
 - (WaylandWindow *) popupParent;
+- (WaylandWindow *) levelParent;
+- (void) updateLevelParent;
+- (void) levelParentUnmapped;
 - (uint32_t) popupGrabSerial;
 - (struct wl_proxy *) xdgSurface;
 - (void) unmap;
