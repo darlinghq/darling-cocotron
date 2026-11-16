@@ -68,12 +68,29 @@ static NSData *dataOfPropertyList(id plist) {
     return self;
 }
 
+// An item of a pasteboard that is not backed by CoreFoundation: a view of the pasteboard's flat types.
 - (id) _initDerivedFromPasteboard: (NSPasteboard *) pasteboard {
     if ((self = [self init])) {
         NS_EXTRA(NSPasteboardItem, self)->_derived = YES;
         NS_EXTRA(NSPasteboardItem, self)->_pasteboard = pasteboard;
     }
     return self;
+}
+
+// An item some process wrote to the pasteboard. It reads the item while the pasteboard still has the contents
+// that were current when the item was made.
+- (id) _initDerivedFromPasteboard: (NSPasteboard *) pasteboard itemID: (uint64_t) identifier changeCount: (NSInteger) changeCount {
+    if ((self = [self _initDerivedFromPasteboard: pasteboard])) {
+        NS_EXTRA(NSPasteboardItem, self)->_hasItemID = YES;
+        NS_EXTRA(NSPasteboardItem, self)->_itemID = identifier;
+        NS_EXTRA(NSPasteboardItem, self)->_attachedChangeCount = changeCount;
+    }
+    return self;
+}
+
+// A derived item whose pasteboard has since been given other contents holds nothing any more.
+- (BOOL) _isStale {
+    return NS_EXTRA(NSPasteboardItem, self)->_hasItemID && [NS_EXTRA(NSPasteboardItem, self)->_pasteboard changeCount] != NS_EXTRA(NSPasteboardItem, self)->_attachedChangeCount;
 }
 
 - (id) _initWithWritingObject: (id<NSPasteboardWriting>) object pasteboard: (NSPasteboard *) pasteboard {
@@ -148,9 +165,11 @@ static NSData *dataOfPropertyList(id plist) {
 // The item is the first item of a pasteboard (the one whose types are the flat types): values
 // set on it afterwards, such as the result of a data provider, go to that pasteboard too, as
 // long as nothing else has changed it.
-- (void) _attachToPasteboard: (NSPasteboard *) pasteboard {
+- (void) _attachToPasteboard: (NSPasteboard *) pasteboard itemID: (uint64_t) identifier {
     NS_EXTRA(NSPasteboardItem, self)->_pasteboard = pasteboard;
     NS_EXTRA(NSPasteboardItem, self)->_attached = YES;
+    NS_EXTRA(NSPasteboardItem, self)->_hasItemID = YES;
+    NS_EXTRA(NSPasteboardItem, self)->_itemID = identifier;
     NS_EXTRA(NSPasteboardItem, self)->_attachedChangeCount = [pasteboard changeCount];
 }
 
@@ -167,12 +186,22 @@ static NSData *dataOfPropertyList(id plist) {
     // A provider that only set the value on the item (after the pasteboard was changed again, say)
     // leaves the pasteboard without it; hand it over.
     if (data != nil && [self _isAttachedToCurrentContents])
-        [NS_EXTRA(NSPasteboardItem, self)->_pasteboard setData: data forType: type];
+        [NS_EXTRA(NSPasteboardItem, self)->_pasteboard _setData: data forType: type ofItemID: NS_EXTRA(NSPasteboardItem, self)->_itemID];
 }
 
 - (NSArray<NSPasteboardType> *) types {
     if (!NS_EXTRA(NSPasteboardItem, self)->_derived)
         return [[NS_EXTRA(NSPasteboardItem, self)->_orderedTypes copy] autorelease];
+    if (NS_EXTRA(NSPasteboardItem, self)->_hasItemID) {
+        if ([self _isStale])
+            return [NSArray array];
+        NSMutableArray *itemTypes = [NSMutableArray array];
+        for (NSPasteboardType type in NSPasteboardCanonicalTypes([NS_EXTRA(NSPasteboardItem, self)->_pasteboard _typesOfItemID: NS_EXTRA(NSPasteboardItem, self)->_itemID])) {
+            if (![type isEqual: NSFilenamesPboardType] && ![type isEqual: NSURLPboardType])
+                [itemTypes addObject: type];
+        }
+        return itemTypes;
+    }
 
     // The flat types of the pasteboard in their UTI spelling. The older file name list and URL
     // types are another spelling of the file URL items, not types of their own.
@@ -221,14 +250,17 @@ static NSData *dataOfPropertyList(id plist) {
     type = NSPasteboardCanonicalType(type);
     if (data == nil || type == nil)
         return NO;
-    if (NS_EXTRA(NSPasteboardItem, self)->_derived)
+    if (NS_EXTRA(NSPasteboardItem, self)->_derived) {
+        if (NS_EXTRA(NSPasteboardItem, self)->_hasItemID)
+            return ![self _isStale] && [NS_EXTRA(NSPasteboardItem, self)->_pasteboard _setData: data forType: type ofItemID: NS_EXTRA(NSPasteboardItem, self)->_itemID];
         return [NS_EXTRA(NSPasteboardItem, self)->_pasteboard setData: data forType: type];
+    }
 
     if (![NS_EXTRA(NSPasteboardItem, self)->_orderedTypes containsObject: type])
         [NS_EXTRA(NSPasteboardItem, self)->_orderedTypes addObject: type];
     [NS_EXTRA(NSPasteboardItem, self)->_data setObject: [[data copy] autorelease] forKey: type];
     if ([self _isAttachedToCurrentContents])
-        [NS_EXTRA(NSPasteboardItem, self)->_pasteboard setData: data forType: type];
+        [NS_EXTRA(NSPasteboardItem, self)->_pasteboard _setData: data forType: type ofItemID: NS_EXTRA(NSPasteboardItem, self)->_itemID];
     return YES;
 }
 
@@ -242,8 +274,11 @@ static NSData *dataOfPropertyList(id plist) {
 
 - (NSData *) dataForType: (NSPasteboardType) type {
     type = NSPasteboardCanonicalType(type);
-    if (NS_EXTRA(NSPasteboardItem, self)->_derived)
+    if (NS_EXTRA(NSPasteboardItem, self)->_derived) {
+        if (NS_EXTRA(NSPasteboardItem, self)->_hasItemID)
+            return [self _isStale] ? nil : [NS_EXTRA(NSPasteboardItem, self)->_pasteboard _dataForType: type ofItemID: NS_EXTRA(NSPasteboardItem, self)->_itemID];
         return [NS_EXTRA(NSPasteboardItem, self)->_pasteboard dataForType: type];
+    }
 
     if ([NS_EXTRA(NSPasteboardItem, self)->_data objectForKey: type] == nil && [NS_EXTRA(NSPasteboardItem, self)->_providers objectForKey: type] != nil)
         [self _fulfillType: type];

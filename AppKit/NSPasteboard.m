@@ -17,12 +17,13 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
-#import <AppKit/NSDisplay.h>
 #import <AppKit/NSPasteboard.h>
 #import <AppKit/NSPasteboardItem.h>
 #import <AppKit/NSRaise.h>
+#import <AppKit/NSApplication.h>
 #import "NSPasteboardAliases.h"
 #import <LaunchServices/LaunchServices.h>
+#import <CoreFoundation/CFPasteboard_Private.h>
 #import <objc/runtime.h>
 
 // The pasteboard types. The UTI names are what macOS uses for NSPasteboardTypeXxx; the older
@@ -217,13 +218,19 @@ static const char kItemListKey;
 
 @interface NSPasteboardItem (NSPasteboardPrivate)
 - (id) _initDerivedFromPasteboard: (NSPasteboard *) pasteboard;
+- (id) _initDerivedFromPasteboard: (NSPasteboard *) pasteboard itemID: (uint64_t) identifier changeCount: (NSInteger) changeCount;
 - (id) _initWithWritingObject: (id<NSPasteboardWriting>) object pasteboard: (NSPasteboard *) pasteboard;
 - (NSArray *) _orderedTypes;
-- (BOOL) _hasStoredDataOrPromiseForType: (NSPasteboardType) type;
-- (NSPasteboardType) _promiseOnlyOwnerType;
-- (void) _attachToPasteboard: (NSPasteboard *) pasteboard;
+- (void) _attachToPasteboard: (NSPasteboard *) pasteboard itemID: (uint64_t) identifier;
 - (id<NSPasteboardTypeOwner>) _promiseOwner;
 - (NSData *) _storedDataForType: (NSPasteboardType) type;
+@end
+
+@interface NSPasteboard (NSPasteboardInternals)
+- (NSArray *) _itemsExpandingFileNamesOf: (NSArray *) items;
+- (CFPasteboardStatus) _writeItem: (NSPasteboardItem *) item asItemID: (CFPasteboardItemID) identifier;
+- (CFPasteboardStatus) _promiseType: (NSPasteboardType) type ofItem: (CFPasteboardItemID) item owner: (id) owner;
+- (CFPasteboardStatus) _statusOfSettingData: (NSData *) data forType: (NSPasteboardType) type ofItemID: (CFPasteboardItemID) item;
 @end
 
 static NSData *dataFromPropertyList(id plist) {
@@ -240,29 +247,247 @@ static NSData *dataFromPropertyList(id plist) {
     return data;
 }
 
+#pragma mark - CoreFoundation pasteboards
+
+// The data of a pasteboard lives in CoreFoundation's pasteboard (the pboard service, or the process when
+// the service is not there), shared with every other process and with the Pasteboard Manager. What stays
+// here is the promise bookkeeping: the objects that promised data (-declareTypes:owner:, item data
+// providers) live in this process, so CoreFoundation is given a provider that finds them again.
+
+// The owners of the promises of one generation of a pasteboard; CoreFoundation holds it until the
+// generation ends.
+@interface NSPasteboardProvider : NSObject {
+@public
+    NSPasteboard *pasteboard;
+    // "<item identifier>\t<type>" -> the owner (NSPasteboardTypeOwner or a promise owner of an item), until the
+    // type is given its data
+    NSMutableDictionary *owners;
+    // Every owner that promised something in this generation, each once
+    NSMutableArray *allOwners;
+    CFIndex generation;
+}
+@end
+
+@interface NSPasteboardCFState : NSObject {
+@public
+    CFPasteboardRef cf;
+    NSString *name;
+    BOOL unique;
+    // Unretained: CoreFoundation owns it from the first promise until the generation ends.
+    NSPasteboardProvider *provider;
+}
+@end
+
+@interface NSPasteboard (NSPasteboardProviderSupport)
+- (void) _providerDidEnd: (NSPasteboardProvider *) provider;
+@end
+
+static NSString *promiseKey(CFPasteboardItemID item, NSPasteboardType type) {
+    return [NSString stringWithFormat: @"%llu\t%@", (unsigned long long) item, type];
+}
+
+// Owners are application objects (a text view's -pasteboard:provideDataForType:) that expect to run on
+// the main thread, while CoreFoundation answers another process's read on one of its own threads.
+// A process that has no application has nothing to hop to.
+static void runOnOwnerThread(void (^block)(void)) {
+    if ([NSThread isMainThread] || NSApp == nil) {
+        block();
+        return;
+    }
+    dispatch_sync(dispatch_get_main_queue(), block);
+}
+
+static CFPasteboardStatus providerProvide(CFPasteboardRef cf, CFPasteboardItemID item, CFStringRef flavor, void *info) {
+    @autoreleasepool {
+        NSPasteboardProvider *provider = (NSPasteboardProvider *) info;
+        NSPasteboardType type = (NSPasteboardType) flavor;
+        id owner = nil;
+        @synchronized(provider) {
+            owner = [[provider->owners objectForKey: promiseKey(item, type)] retain];
+        }
+        if (owner == nil)
+            return kCFPasteboardNoProvider;
+        runOnOwnerThread(^{
+          if ([owner respondsToSelector: @selector(pasteboard:provideDataForType:)])
+              [owner pasteboard: provider->pasteboard provideDataForType: type];
+        });
+        [owner release];
+        // The owner supplies the data by setting it on the pasteboard, which clears the promise.
+        return CFPasteboardIsDataPromised(cf, item, flavor) ? kCFPasteboardNoProvider : kCFPasteboardSuccess;
+    }
+}
+
+// Every promise of the generation was kept: the owners have nothing left to provide.
+static void providerAllProvided(CFPasteboardRef cf, void *info) {
+    @autoreleasepool {
+        NSPasteboardProvider *provider = (NSPasteboardProvider *) info;
+        NSArray *distinct;
+        @synchronized(provider) {
+            distinct = [[provider->allOwners copy] autorelease];
+        }
+        NSPasteboard *pasteboard = provider->pasteboard;
+        runOnOwnerThread(^{
+          for (id owner in distinct) {
+              if ([owner respondsToSelector: @selector(pasteboardFinishedWithDataProvider:)])
+                  [owner pasteboardFinishedWithDataProvider: pasteboard];
+          }
+        });
+    }
+}
+
+static void providerOwnerChanged(CFPasteboardRef cf, void *info) {
+    @autoreleasepool {
+        NSPasteboardProvider *provider = (NSPasteboardProvider *) info;
+        // From a snapshot: an owner is application code and may write to the pasteboard from its callback.
+        NSArray *distinct;
+        @synchronized(provider) {
+            distinct = [[provider->allOwners copy] autorelease];
+        }
+        NSPasteboard *pasteboard = provider->pasteboard;
+        runOnOwnerThread(^{
+          for (id owner in distinct) {
+              if ([owner respondsToSelector: @selector(pasteboardChangedOwner:)])
+                  [owner pasteboardChangedOwner: pasteboard];
+          }
+        });
+    }
+}
+
+static void providerRelease(void *info) {
+    @autoreleasepool {
+        NSPasteboardProvider *provider = (NSPasteboardProvider *) info;
+        [provider->pasteboard _providerDidEnd: provider];
+        [provider release];
+    }
+}
+
+static const CFPasteboardProviderCallbacks providerCallbacks = {
+    0, providerProvide, providerAllProvided, providerOwnerChanged, providerRelease
+};
+
+@implementation NSPasteboardProvider
+
+- (id) init {
+    if ((self = [super init]))
+    {
+        owners = [NSMutableDictionary new];
+        allOwners = [NSMutableArray new];
+    }
+    return self;
+}
+
+- (void) dealloc {
+    [pasteboard release];
+    [owners release];
+    [allOwners release];
+    [super dealloc];
+}
+
+@end
+
+@implementation NSPasteboardCFState
+
+- (void) dealloc {
+    if (cf != NULL) {
+        if (unique)
+            CFPasteboardReleaseGlobally(cf);
+        CFRelease(cf);
+    }
+    [name release];
+    [super dealloc];
+}
+
+@end
+
+// The CoreFoundation pasteboard behind an object, without creating the extras of one that has none
+// (the read-only pasteboards of drag sessions are subclasses that never set it).
+#define CF_STATE(obj) (NS_EXTRA_ALLOCATED(NSPasteboard, obj) ? NS_EXTRA(NSPasteboard, obj)->_cfState : nil)
+
 @implementation NSPasteboard
 
 + (NSPasteboard *) generalPasteboard {
     return [self pasteboardWithName: NSGeneralPboard];
 }
 
+static NSMutableDictionary *namedPasteboards;
+
+- (id) _initWithCFPasteboard: (CFPasteboardRef) cf unique: (BOOL) unique {
+    if ((self = [super init])) {
+        NSPasteboardCFState *state = [NSPasteboardCFState new];
+        state->cf = (CFPasteboardRef) CFRetain(cf);
+        state->name = (NSString *) CFPasteboardCopyName(cf);
+        state->unique = unique;
+        NS_EXTRA(NSPasteboard, self)->_cfState = state;
+    }
+    return self;
+}
+
+// The unique pasteboards that are alive, by name, so that the name finds the pasteboard again. They are not
+// retained: a unique pasteboard that nobody holds any more is released in the pasteboard service.
+static NSMutableDictionary *uniquePasteboards;
+
+// One object per name in the process, so that the promises made through it are found again.
 + (NSPasteboard *) pasteboardWithName: (NSPasteboardName) name {
-    return [[NSDisplay currentDisplay] pasteboardWithName: name];
+    if (name == nil)
+        return nil;
+    @synchronized([NSPasteboard class]) {
+        if (namedPasteboards == nil)
+            namedPasteboards = [NSMutableDictionary new];
+        NSPasteboard *pasteboard = [namedPasteboards objectForKey: name];
+        if (pasteboard != nil)
+            return pasteboard;
+        pasteboard = [[uniquePasteboards objectForKey: name] nonretainedObjectValue];
+        if (pasteboard != nil)
+            return [[pasteboard retain] autorelease];
+
+        CFPasteboardRef cf = CFPasteboardCreate(NULL, (CFStringRef) name);
+        if (cf == NULL)
+            return nil;
+        pasteboard = [[NSPasteboard alloc] _initWithCFPasteboard: cf unique: NO];
+        CFRelease(cf);
+        [namedPasteboards setObject: pasteboard forKey: name];
+        [pasteboard release];
+        return pasteboard;
+    }
 }
 
 + (NSPasteboard *) pasteboardWithUniqueName {
-    NSString *uuid = [[NSUUID UUID] UUIDString];
-    return [self pasteboardWithName: [@"Apple CFPasteboard unique " stringByAppendingString: uuid]];
+    CFPasteboardRef cf = CFPasteboardCreateUnique(NULL);
+    if (cf == NULL)
+        return nil;
+    NSPasteboard *pasteboard = [[[NSPasteboard alloc] _initWithCFPasteboard: cf unique: YES] autorelease];
+    CFRelease(cf);
+    @synchronized([NSPasteboard class]) {
+        if (uniquePasteboards == nil)
+            uniquePasteboards = [NSMutableDictionary new];
+        [uniquePasteboards setObject: [NSValue valueWithNonretainedObject: pasteboard] forKey: [pasteboard name]];
+    }
+    return pasteboard;
+}
+
+- (void) dealloc {
+    NSPasteboardCFState *state = CF_STATE(self);
+    if (state != nil && state->unique) {
+        @synchronized([NSPasteboard class]) {
+            NSValue *entry = [uniquePasteboards objectForKey: state->name];
+            if ([entry nonretainedObjectValue] == self)
+                [uniquePasteboards removeObjectForKey: state->name];
+        }
+    }
+    if (NS_EXTRA_ALLOCATED(NSPasteboard, self))
+        [NS_EXTRA(NSPasteboard, self)->_cfState release];
+    NS_EXTRA_FREE(NSPasteboard, self);
+    [super dealloc];
 }
 
 - (NSPasteboardName) name {
-    NSUnimplementedMethod();
-    return nil;
+    NSPasteboardCFState *state = CF_STATE(self);
+    return state != nil ? state->name : nil;
 }
 
 - (NSInteger) changeCount {
-    NSUnimplementedMethod();
-    return 0;
+    NSPasteboardCFState *state = CF_STATE(self);
+    return state != nil ? (NSInteger) CFPasteboardGetChangeCount(state->cf) : 0;
 }
 
 // Nothing here lets a process refuse another one the pasteboard, so no behaviour is ever "ask" or
@@ -275,8 +500,8 @@ static NSData *dataFromPropertyList(id plist) {
 }
 
 - (NSInteger) clearContents {
-    NSUnimplementedMethod();
-    return 0;
+    NSPasteboardCFState *state = CF_STATE(self);
+    return state != nil ? (NSInteger) CFPasteboardBeginGeneration(state->cf) : 0;
 }
 
 // NSPasteboardContentsCurrentHostOnly keeps the contents off Handoff / Universal Clipboard. This
@@ -285,18 +510,124 @@ static NSData *dataFromPropertyList(id plist) {
     return [self clearContents];
 }
 
+// Only a pasteboard made with -pasteboardWithUniqueName is a resource of its own; the named ones
+// belong to every process.
 - (oneway void) releaseGlobally {
-    NSUnimplementedMethod();
+    NSPasteboardCFState *state = CF_STATE(self);
+    if (state != nil && state->unique)
+        CFPasteboardReleaseGlobally(state->cf);
+}
+
+#pragma mark Flat contents
+
+// The flat API (-types, -dataForType:, -setData:forType:, ...) works on the first item.
+
+- (CFPasteboardItemID) _firstItemCreating: (BOOL) create status: (CFPasteboardStatus *) status {
+    NSPasteboardCFState *state = CF_STATE(self);
+    CFIndex count = 0;
+    CFPasteboardItemID item = 0;
+    *status = CFPasteboardGetItemCount(state->cf, &count);
+    if (*status != kCFPasteboardSuccess)
+        return 0;
+    if (count > 0)
+        *status = CFPasteboardGetItemAtIndex(state->cf, 0, &item);
+    else if (create)
+        *status = CFPasteboardAddItem(state->cf, &item);
+    else
+        *status = kCFPasteboardBadIndex;
+    return item;
+}
+
+// Runs a write on the first item. A process that did not begin the current generation may not add to it:
+// the write then replaces the contents, the way a process that takes the pasteboard over does.
+- (CFPasteboardStatus) _writeToFirstItem: (CFPasteboardStatus (^)(CFPasteboardItemID item)) write {
+    NSPasteboardCFState *state = CF_STATE(self);
+    CFPasteboardStatus status;
+    CFPasteboardItemID item = [self _firstItemCreating: YES status: &status];
+    if (status == kCFPasteboardSuccess)
+        status = write(item);
+    if (status == kCFPasteboardNotOwner) {
+        if (CFPasteboardBeginGeneration(state->cf) == 0)
+            return kCFPasteboardUnavailable;
+        status = CFPasteboardAddItem(state->cf, &item);
+        if (status == kCFPasteboardSuccess)
+            status = write(item);
+    }
+    return status;
+}
+
+- (NSArray<NSPasteboardType> *) _typesOfItemID: (CFPasteboardItemID) item {
+    NSPasteboardCFState *state = CF_STATE(self);
+    CFArrayRef flavors = NULL;
+    if (state == nil || CFPasteboardCopyFlavorsForItem(state->cf, item, &flavors) != kCFPasteboardSuccess)
+        return nil;
+    NSArray *types = [[(NSArray *) flavors copy] autorelease];
+    CFRelease(flavors);
+    return types;
+}
+
+- (NSData *) _dataForType: (NSPasteboardType) type ofItemID: (CFPasteboardItemID) item {
+    NSPasteboardCFState *state = CF_STATE(self);
+    if (state == nil || type == nil)
+        return nil;
+    // The UTI spelling first, then the older name of the same type, then the name as it was given: other
+    // writers (the Pasteboard Manager) store whichever they like.
+    NSPasteboardType canonical = NSPasteboardCanonicalType(type);
+    NSMutableArray *candidates = [NSMutableArray arrayWithObject: canonical];
+    NSPasteboardType legacy = NSPasteboardLegacyAliasOfType(canonical);
+    if (legacy != nil)
+        [candidates addObject: legacy];
+    if (![candidates containsObject: type])
+        [candidates addObject: type];
+    for (NSPasteboardType candidate in candidates) {
+        CFDataRef data = NULL;
+        CFPasteboardStatus status = CFPasteboardCopyData(state->cf, item, (CFStringRef) candidate, &data);
+        if (status == kCFPasteboardSuccess && data != NULL)
+            return [(NSData *) data autorelease];
+        if (status != kCFPasteboardBadFlavor)
+            return nil;
+    }
+    return nil;
+}
+
+- (CFPasteboardStatus) _statusOfSettingData: (NSData *) data forType: (NSPasteboardType) type ofItemID: (CFPasteboardItemID) item {
+    NSPasteboardCFState *state = CF_STATE(self);
+    type = NSPasteboardCanonicalType(type);
+    if (state == nil || data == nil || type == nil)
+        return kCFPasteboardInvalid;
+    CFPasteboardStatus status = CFPasteboardSetData(state->cf, item, (CFStringRef) type, (CFDataRef) data,
+                                                    kCFPasteboardFlavorNoFlags);
+    if (status != kCFPasteboardSuccess)
+        return status;
+    NSPasteboardProvider *provider = state->provider;
+    if (provider != nil) {
+        // The promise is kept; the owner has nothing left to provide for this type.
+        @synchronized(provider) {
+            [provider->owners removeObjectForKey: promiseKey(item, type)];
+        }
+    }
+    return kCFPasteboardSuccess;
+}
+
+- (BOOL) _setData: (NSData *) data forType: (NSPasteboardType) type ofItemID: (CFPasteboardItemID) item {
+    return [self _statusOfSettingData: data forType: type ofItemID: item] == kCFPasteboardSuccess;
 }
 
 - (NSArray<NSPasteboardType> *) types {
-    NSUnimplementedMethod();
-    return nil;
+    NSPasteboardCFState *state = CF_STATE(self);
+    if (state == nil)
+        return [NSArray array];
+    CFPasteboardStatus status;
+    CFPasteboardItemID item = [self _firstItemCreating: NO status: &status];
+    if (status != kCFPasteboardSuccess)
+        return [NSArray array];
+    NSArray *types = [self _typesOfItemID: item];
+    return types != nil ? NSPasteboardTypesWithAliases(types) : [NSArray array];
 }
 
 - (NSPasteboardType) availableTypeFromArray: (NSArray<NSPasteboardType> *) types
 {
-    NSArray<NSPasteboardType> *available = NSPasteboardTypesWithAliases([self types]);
+    NSArray<NSPasteboardType> *available = [self types];
     for (NSPasteboardType type in types) {
         if ([available containsObject: type]) {
             return type;
@@ -306,8 +637,13 @@ static NSData *dataFromPropertyList(id plist) {
 }
 
 - (NSData *) dataForType: (NSPasteboardType) type {
-    NSUnimplementedMethod();
-    return nil;
+    if (CF_STATE(self) == nil)
+        return nil;
+    CFPasteboardStatus status;
+    CFPasteboardItemID item = [self _firstItemCreating: NO status: &status];
+    if (status != kCFPasteboardSuccess)
+        return nil;
+    return [self _dataForType: type ofItemID: item];
 }
 
 - (NSString *) stringForType: (NSPasteboardType) type {
@@ -315,9 +651,12 @@ static NSData *dataFromPropertyList(id plist) {
     if (data == nil)
         return nil;
 
-    NSStringEncoding encoding = [NSPasteboardCanonicalType(type) isEqual: NSPasteboardTypeString]
-            ? NSUTF8StringEncoding : NSUnicodeStringEncoding;
-    return [[[NSString alloc] initWithData: data encoding: encoding] autorelease];
+    // UTF-8 is what other clients' data is read as; data that is not valid UTF-8 (what -setString:forType:
+    // stores for a type other than the string type) is read as Unicode.
+    NSString *string = [[[NSString alloc] initWithData: data encoding: NSUTF8StringEncoding] autorelease];
+    if (string == nil && ![NSPasteboardCanonicalType(type) isEqual: NSPasteboardTypeString])
+        string = [[[NSString alloc] initWithData: data encoding: NSUnicodeStringEncoding] autorelease];
+    return string;
 }
 
 - (id) propertyListForType: (NSPasteboardType) type {
@@ -337,23 +676,97 @@ static NSData *dataFromPropertyList(id plist) {
     return nil;
 }
 
+- (void) _providerDidEnd: (NSPasteboardProvider *) provider {
+    NSPasteboardCFState *state = CF_STATE(self);
+    @synchronized(state) {
+        if (state->provider == provider)
+            state->provider = nil;
+    }
+}
+
+// The provider of the generation that is current now: the one CoreFoundation already holds, or a new one
+// (isNew), which CoreFoundation takes over with the first promise made through it.
+- (NSPasteboardProvider *) _providerCreating: (BOOL *) isNew {
+    NSPasteboardCFState *state = CF_STATE(self);
+    CFIndex generation = CFPasteboardGetChangeCount(state->cf);
+    @synchronized(state) {
+        NSPasteboardProvider *provider = state->provider;
+        if (provider != nil && provider->generation == generation) {
+            *isNew = NO;
+            return provider;
+        }
+        provider = [NSPasteboardProvider new];
+        provider->pasteboard = [self retain];
+        provider->generation = generation;
+        *isNew = YES;
+        return provider;
+    }
+}
+
+// Declares one type of an item as promised to the owner (nil: declared without data for now).
+- (CFPasteboardStatus) _promiseType: (NSPasteboardType) type
+                             ofItem: (CFPasteboardItemID) item
+                              owner: (id) owner
+{
+    NSPasteboardCFState *state = CF_STATE(self);
+    BOOL isNew = NO;
+    NSPasteboardProvider *provider = [self _providerCreating: &isNew];
+    @synchronized(provider) {
+        if (owner != nil) {
+            [provider->owners setObject: owner forKey: promiseKey(item, type)];
+            BOOL known = NO;
+            for (id other in provider->allOwners)
+                known = known || other == owner;
+            if (!known)
+                [provider->allOwners addObject: owner];
+        } else
+            [provider->owners removeObjectForKey: promiseKey(item, type)];
+    }
+    // Not flagged as promised for the Pasteboard Manager: macOS reports the promises made through
+    // NSPasteboard without that flag.
+    CFPasteboardStatus status = CFPasteboardPromiseData(state->cf, item, (CFStringRef) type, kCFPasteboardFlavorNoFlags,
+                                                        &providerCallbacks, provider);
+    if (status == kCFPasteboardSuccess) {
+        @synchronized(state) {
+            state->provider = provider;
+        }
+    } else if (isNew) {
+        [provider release];
+    }
+    return status;
+}
+
 - (NSInteger) declareTypes: (NSArray<NSPasteboardType> *) types
                      owner: (id<NSPasteboardTypeOwner>) owner
 {
-    NSUnimplementedMethod();
-    return 0;
+    if (CF_STATE(self) == nil || [self clearContents] == 0)
+        return 0;
+    return [self addTypes: types owner: owner];
 }
 
 - (NSInteger) addTypes: (NSArray<NSPasteboardType> *) types
                  owner: (id<NSPasteboardTypeOwner>) owner
 {
-    NSUnimplementedMethod();
-    return 0;
+    if (CF_STATE(self) == nil)
+        return 0;
+    for (NSPasteboardType declared in types) {
+        // Stored under the UTI spelling; the 10.0 name of the same type reaches it too.
+        NSPasteboardType type = NSPasteboardCanonicalType(declared);
+        CFPasteboardStatus status = [self _writeToFirstItem: ^CFPasteboardStatus(CFPasteboardItemID item) {
+          return [self _promiseType: type ofItem: item owner: owner];
+        }];
+        if (status != kCFPasteboardSuccess)
+            return 0;
+    }
+    return [self changeCount];
 }
 
 - (BOOL) setData: (NSData *) data forType: (NSPasteboardType) type {
-    NSUnimplementedMethod();
-    return NO;
+    if (CF_STATE(self) == nil || data == nil || type == nil)
+        return NO;
+    return [self _writeToFirstItem: ^CFPasteboardStatus(CFPasteboardItemID item) {
+      return [self _statusOfSettingData: data forType: type ofItemID: item];
+    }] == kCFPasteboardSuccess;
 }
 
 - (BOOL) setString: (NSString *) string forType: (NSPasteboardType) type {
@@ -383,39 +796,69 @@ static NSData *dataFromPropertyList(id plist) {
     if (remembered != nil && [remembered[@"changeCount"] integerValue] == [self changeCount])
         return [[remembered[@"items"] copy] autorelease];
 
-    // Whatever else wrote the pasteboard (a legacy -setData:forType:, another process) has
+    NSPasteboardCFState *state = CF_STATE(self);
+    if (state != nil) {
+        // The items some process wrote (this one, another one, or the Pasteboard Manager).
+        NSInteger changeCount = [self changeCount];
+        CFIndex count = 0;
+        if (CFPasteboardGetItemCount(state->cf, &count) != kCFPasteboardSuccess)
+            return [NSArray array];
+        NSMutableArray *items = [NSMutableArray array];
+        for (CFIndex i = 0; i < count; i++) {
+            CFPasteboardItemID identifier;
+            if (CFPasteboardGetItemAtIndex(state->cf, i, &identifier) != kCFPasteboardSuccess)
+                continue;
+            NSPasteboardItem *item = [[NSPasteboardItem alloc] _initDerivedFromPasteboard: self
+                                                                                  itemID: identifier
+                                                                             changeCount: changeCount];
+            [items addObject: item];
+            [item release];
+        }
+        // A single item that is a list of file names (the 10.0 way, and what a drag from a file manager
+        // brings) is every file of it as an item of its own.
+        if ([items count] == 1)
+            return [self _itemsExpandingFileNamesOf: items] ?: items;
+        return items;
+    }
+
+    // A pasteboard that is not a CoreFoundation one (the read-only pasteboard of a drag session) has
     // one item, made of all the types there are.
     NSArray *flat = NSPasteboardCanonicalTypes([self types]);
     if ([flat count] == 0)
         return [NSArray array];
-
-    // Except for a list of file names (the 10.0 way, and what a drag from a file manager brings):
-    // every file of it is an item of its own, a file URL.
-    if ([flat containsObject: NSFilenamesPboardType] && ![flat containsObject: NSPasteboardTypeFileURL]) {
-        id paths = [self propertyListForType: NSFilenamesPboardType];
-        if ([paths isKindOfClass: [NSArray class]] && [paths count] > 0) {
-            NSMutableArray *items = [NSMutableArray array];
-            for (id path in paths) {
-                if (![path isKindOfClass: [NSString class]])
-                    continue;
-                NSPasteboardItem *item = [[[NSPasteboardItem alloc] init] autorelease];
-                [item setString: [[NSURL fileURLWithPath: path] absoluteString] forType: NSPasteboardTypeFileURL];
-                [items addObject: item];
-            }
-            if ([items count] > 0)
-                return items;
-        }
-    }
-
+    NSArray *files = [self _itemsExpandingFileNamesOf: nil];
+    if (files != nil)
+        return files;
     NSPasteboardItem *item = [[[NSPasteboardItem alloc] _initDerivedFromPasteboard: self] autorelease];
     return [NSArray arrayWithObject: item];
+}
+
+// The single item holding a list of file names as one file URL item per file, or nil if it holds no
+// such list. The list is read from the flat types, which are those of the first item.
+- (NSArray *) _itemsExpandingFileNamesOf: (NSArray *) items {
+    NSArray *flat = NSPasteboardCanonicalTypes([self types]);
+    if (![flat containsObject: NSFilenamesPboardType] || [flat containsObject: NSPasteboardTypeFileURL])
+        return nil;
+    id paths = [self propertyListForType: NSFilenamesPboardType];
+    if (![paths isKindOfClass: [NSArray class]] || [paths count] == 0)
+        return nil;
+    NSMutableArray *expanded = [NSMutableArray array];
+    for (id path in paths) {
+        if (![path isKindOfClass: [NSString class]])
+            continue;
+        NSPasteboardItem *item = [[[NSPasteboardItem alloc] init] autorelease];
+        [item setString: [[NSURL fileURLWithPath: path] absoluteString] forType: NSPasteboardTypeFileURL];
+        [expanded addObject: item];
+    }
+    return [expanded count] > 0 ? expanded : nil;
 }
 
 - (NSUInteger) indexOfPasteboardItem: (NSPasteboardItem *) pasteboardItem {
     return [[self pasteboardItems] indexOfObjectIdenticalTo: pasteboardItem];
 }
 
-// Remembers the items a write produced under the change count the pasteboard has now.
+// Remembers the items a write produced under the change count the pasteboard has now, so that the very
+// objects written are the ones read back until something else changes the pasteboard.
 - (void) _rememberItems: (NSArray *) items {
     objc_setAssociatedObject(self, &kItemListKey,
                              [NSDictionary dictionaryWithObjectsAndKeys:
@@ -424,20 +867,28 @@ static NSData *dataFromPropertyList(id plist) {
                              OBJC_ASSOCIATION_RETAIN);
 }
 
-// The flat contents of the pasteboard are the first item. File URLs of any item also appear as the
-// older list of file names, which is how applications that predate file URLs read them.
-- (void) _writeFirstItemToTypes: (NSPasteboardItem *) item {
+// Puts the data and the promises of a standalone item into the CoreFoundation item. Types without data
+// are promised to the item (data providers).
+- (CFPasteboardStatus) _writeItem: (NSPasteboardItem *) item asItemID: (CFPasteboardItemID) identifier {
+    id<NSPasteboardTypeOwner> owner = nil;
     for (NSPasteboardType type in [item _orderedTypes]) {
         NSData *data = [item _storedDataForType: type];
+        CFPasteboardStatus status;
         if (data != nil) {
-            [self addTypes: [NSArray arrayWithObject: type] owner: nil];
-            [self setData: data forType: type];
+            status = [self _statusOfSettingData: data forType: type ofItemID: identifier];
         } else {
-            [self addTypes: [NSArray arrayWithObject: type] owner: [item _promiseOwner]];
+            if (owner == nil)
+                owner = [item _promiseOwner];
+            status = [self _promiseType: type ofItem: identifier owner: owner];
         }
+        if (status != kCFPasteboardSuccess)
+            return status;
     }
+    return kCFPasteboardSuccess;
 }
 
+// File URLs of any item also appear as the older list of file names, which is how applications that
+// predate file URLs read them.
 - (void) _writeLegacyTypesOfItems: (NSArray *) items {
     NSMutableArray *paths = [NSMutableArray array];
     for (NSPasteboardItem *item in items) {
@@ -469,6 +920,10 @@ static NSData *dataFromPropertyList(id plist) {
 }
 
 - (BOOL) writeObjects: (NSArray<id<NSPasteboardWriting> > *) objects {
+    NSPasteboardCFState *state = CF_STATE(self);
+    if (state == nil)
+        return NO;
+
     // The objects are added to what the pasteboard holds (-clearContents is the caller's call).
     NSMutableArray *items = [NSMutableArray arrayWithArray: [self pasteboardItems]];
     NSUInteger firstNew = [items count];
@@ -489,13 +944,31 @@ static NSData *dataFromPropertyList(id plist) {
         }
         [items addObject: item];
     }
+    if ([items count] == firstNew)
+        return YES;
 
-    if (firstNew == 0 && [items count] > 0) {
-        [self _writeFirstItemToTypes: [items objectAtIndex: 0]];
-        [[items objectAtIndex: 0] _attachToPasteboard: self];
+    NSMutableArray *attachments = [NSMutableArray array];
+    for (NSUInteger i = firstNew; i < [items count]; i++) {
+        NSPasteboardItem *item = [items objectAtIndex: i];
+        CFPasteboardItemID identifier = 0;
+        CFPasteboardStatus status = CFPasteboardAddItem(state->cf, &identifier);
+        if (status == kCFPasteboardNotOwner && firstNew == 0 && i == 0) {
+            // Nothing was cleared before: the write replaces the contents, as a write to the flat types does.
+            if (CFPasteboardBeginGeneration(state->cf) == 0)
+                return NO;
+            status = CFPasteboardAddItem(state->cf, &identifier);
+        }
+        if (status == kCFPasteboardSuccess)
+            status = [self _writeItem: item asItemID: identifier];
+        if (status != kCFPasteboardSuccess)
+            return NO;
+        [attachments addObject: [NSNumber numberWithUnsignedLongLong: identifier]];
     }
+
     [self _writeLegacyTypesOfItems: [items subarrayWithRange: NSMakeRange(firstNew, [items count] - firstNew)]];
     [self _rememberItems: items];
+    for (NSUInteger i = firstNew; i < [items count]; i++)
+        [[items objectAtIndex: i] _attachToPasteboard: self itemID: [[attachments objectAtIndex: i - firstNew] unsignedLongLongValue]];
     return YES;
 }
 

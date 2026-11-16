@@ -426,6 +426,7 @@ set(AppKit_sources
 	NSGroupTouchBarItem.m
 	NSKeyBindingManager.m
 	NSPasteboardItem.m
+	NSPasteboardHostBridge.m
 	NSPasteboardSupport.m
 	NSPopoverTouchBarItem.m
 	NSSpaceTouchBarItem.m

@@ -40,3 +40,12 @@ NSArray<NSPasteboardType> *NSPasteboardCanonicalTypes(NSArray<NSPasteboardType> 
 
 // Whether type is the same as, or a subtype of, conformsTo (exact match first, then the UTI hierarchy).
 BOOL NSPasteboardTypeConformsTo(NSPasteboardType type, NSPasteboardType conformsTo);
+
+// What NSPasteboardItem needs of the pasteboard that holds it. An item is identified by the
+// identifier CoreFoundation's pasteboard gave it; the pasteboards of drag sessions are not backed by
+// CoreFoundation and answer nil/NO.
+@interface NSPasteboard (NSPasteboardItemSupport)
+- (NSArray<NSPasteboardType> *) _typesOfItemID: (uint64_t) identifier;
+- (NSData *) _dataForType: (NSPasteboardType) type ofItemID: (uint64_t) identifier;
+- (BOOL) _setData: (NSData *) data forType: (NSPasteboardType) type ofItemID: (uint64_t) identifier;
+@end

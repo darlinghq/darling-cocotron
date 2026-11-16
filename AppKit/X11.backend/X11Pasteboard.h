@@ -19,10 +19,15 @@ along with Darling.  If not, see <http://www.gnu.org/licenses/>.
 
 #import "X11Display.h"
 #import <AppKit/NSPasteboard.h>
+#import "NSPasteboardHostBridge.h"
 #import <X11/Xlib.h>
 #import <X11/Xatom.h>
 
-@interface X11Pasteboard : NSPasteboard {
+// The X11 backend's pasteboards are selection endpoints: they own an X selection (or read the one another client
+// owns) and answer for it. The CLIPBOARD selection's endpoint is the host clipboard of the general pasteboard
+// (see NSPasteboardHostClipboard); XdndSelection endpoints carry the data of a drag. Neither is a pasteboard
+// an application gets from NSPasteboard.
+@interface X11Pasteboard : NSPasteboard <NSPasteboardHostClipboard> {
     NSPasteboardName _name;
     Display *_display;
     Window _window;
@@ -55,9 +60,19 @@ along with Darling.  If not, see <http://www.gnu.org/licenses/>.
     // waits for between chunks.
     BOOL _readingProperty;
     BOOL _propertyWritten;
+
+    // Host clipboard: X sends no event when another client takes a selection over, so the owner is polled.
+    void (^_hostChangeHandler)(void);
+    dispatch_source_t _hostWatcher;
+    Window _watchedOwner;
 }
 
+// The endpoint of the CLIPBOARD selection, made on first use. The display is given because this is called
+// while the display is being initialized, before NSDisplay publishes it.
++ (X11Pasteboard *) hostClipboardOfDisplay: (X11Display *) display;
+
 - (instancetype) initWithName: (NSPasteboardName) name;
+- (instancetype) initWithName: (NSPasteboardName) name display: (X11Display *) display;
 
 // The unmapped window that owns this pasteboard's selection and answers the
 // SelectionRequests for it. A drag publishes it as its XDND source window, so
@@ -74,6 +89,7 @@ along with Darling.  If not, see <http://www.gnu.org/licenses/>.
 // cannot drift apart.
 + (NSArray<NSString *> *) targetsForType: (NSPasteboardType) type;
 + (NSPasteboardType) typeForTarget: (NSString *) target;
++ (NSString *) mimeTypeForType: (NSPasteboardType) type;
 
 // An INCR transfer is paced by the receiver deleting the property, and that property
 // lives on the receiver's window, which belongs to another client and so never reaches

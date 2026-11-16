@@ -178,11 +178,17 @@ void WaylandSendData(WaylandDisplay *display, NSData *data, int fd) {
 }
 - (void) dealloc {
     [self invalidate];
+    [_hostChangeHandler release];
     [_name release]; [_offers release]; [_offerActions release]; [_types release];
     [_data release]; [_owners release]; [_sourceData release];
     [super dealloc];
 }
 - (NSString *) name { return _name; }
+- (BOOL) ownsHostClipboard { return _owned; }
+- (void) setHostClipboardChangeHandler: (void (^)(void)) handler {
+    [_hostChangeHandler release];
+    _hostChangeHandler = [handler copy];
+}
 - (NSInteger) changeCount {
     [_display processPendingEvents];
     return _changeCount;
@@ -371,6 +377,13 @@ void WaylandSendData(WaylandDisplay *display, NSData *data, int fd) {
                 _owned = NO;
             _selectionGeneration++;
             _changeCount++;
+            if (offer != NULL && !_owned && _hostChangeHandler != nil) {
+                void (^handler)(void) = [_hostChangeHandler retain];
+                [_display performAfterDispatch: ^{
+                    handler();
+                    [handler release];
+                }];
+            }
             // A local source may receive its own offer. Cancellation tells us
             // when ownership actually changes; NULL on focus loss is not loss.
         } else if (opcode == WP_DATA_DEVICE_EV_ENTER) {
