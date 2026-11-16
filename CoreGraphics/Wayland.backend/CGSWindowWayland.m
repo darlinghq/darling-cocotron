@@ -236,6 +236,37 @@
     }
 }
 
+- (CGError) becomeDisplayOverlay: (void **) drawable {
+    if (drawable == NULL)
+        return kCGErrorIllegalArgument;
+
+    // An empty input region lets pointer input reach the surfaces below.
+    union wl_argument regionArgs[1] = {{.o = NULL}};
+    struct wl_proxy *region = [_waylandConnection createObject: _waylandConnection->_compositor
+                                                        opcode: WP_COMPOSITOR_CREATE_REGION
+                                                     interface: &wl_region_interface
+                                                     arguments: regionArgs
+                                                          kind: CGSWaylandObjectNone
+                                                        object: nil];
+    if (region == NULL)
+        return kCGErrorFailure;
+    union wl_argument inputArgs[1] = {{.o = (struct wl_object *) region}};
+    WaylandMarshal(_surface, WP_SURFACE_SET_INPUT_REGION, NULL, 0, inputArgs);
+    WaylandMarshal(region, WP_REGION_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY,
+                   (union wl_argument[1]) {{.o = NULL}});
+
+    // Let the compositor pick the output; the window covers it.
+    union wl_argument fullscreenArgs[1] = {{.o = NULL}};
+    WaylandMarshal(_toplevel, WP_TOPLEVEL_SET_FULLSCREEN, NULL, 0, fullscreenArgs);
+    [_waylandConnection flush];
+
+    CGSSurface *surface = [self createSurface];
+    if (surface == nil)
+        return kCGErrorFailure;
+    *drawable = [surface nativeWindow];
+    return *drawable != NULL ? kCGSErrorSuccess : kCGErrorFailure;
+}
+
 - (CGError) moveTo: (const CGPoint *) point {
     // A Wayland client cannot place its own toplevels; xdg_toplevel.move only
     // starts an interactive drag, which is not what this asks for.

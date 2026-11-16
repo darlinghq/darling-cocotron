@@ -89,6 +89,10 @@ const CFStringRef kCGSWindowTitle = CFSTR("WindowTitle");
     NSInvalidAbstractInvocation();
 }
 
+- (CGError) becomeDisplayOverlay: (void **) drawable {
+    return kCGErrorNotImplemented;
+}
+
 - (CGSSurface *) createSurface {
     NSInvalidAbstractInvocation();
 }

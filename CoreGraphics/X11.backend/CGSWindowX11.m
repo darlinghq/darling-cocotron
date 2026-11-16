@@ -21,6 +21,7 @@
 #import "CGSSurfaceX11.h"
 
 #import <Foundation/NSString.h>
+#import <X11/extensions/shape.h>
 
 // X11's stacking requests need both windows mapped, which is the only precondition
 // XConfigureWindow() does not check for us.
@@ -152,6 +153,7 @@ static BOOL isViewable(Display* display, Window window)
 			return kCGSErrorSuccess;
 		case kCGSOrderAbove:
 			XMapRaised(_display, _window);
+			XFlush(_display);
 			return kCGSErrorSuccess;
 		case kCGSOrderBelow:
 		default:
@@ -161,6 +163,37 @@ static BOOL isViewable(Display* display, Window window)
 				"another window is not available on X11", (int) self.windowId, (int) place);
 			return kCGErrorNotImplemented;
 	}
+}
+
+-(CGError) becomeDisplayOverlay:(void**) drawable
+{
+	if (drawable == NULL)
+		return kCGErrorIllegalArgument;
+
+	// Override-redirect: the window manager neither decorates, places nor
+	// focuses the window, and it stays where it was stacked when it was mapped.
+	XSetWindowAttributes attributes = { .override_redirect = True };
+	XChangeWindowAttributes(_display, _window, CWOverrideRedirect, &attributes);
+
+	// An empty input shape lets pointer events fall through to the windows below.
+	int shapeEvent, shapeError;
+	if (!XShapeQueryExtension(_display, &shapeEvent, &shapeError))
+	{
+		NSLog(@"CoreGraphics X11 backend: the Shape extension is missing, so an "
+			@"overlay would swallow the application's pointer input");
+		return kCGErrorNotImplemented;
+	}
+	XShapeCombineRectangles(_display, _window, ShapeInput, 0, 0, NULL, 0,
+		ShapeSet, Unsorted);
+
+	// The drawable is used through other connections to the server (the GL
+	// library's), which only know the window once this connection's requests
+	// have reached the server.
+	XSync(_display, False);
+
+	// The window itself is the drawable: it is the one that gets mapped.
+	*drawable = (void*) (uintptr_t) _window;
+	return kCGSErrorSuccess;
 }
 
 -(CGError) moveTo:(const CGPoint*) point
