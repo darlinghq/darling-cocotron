@@ -47,8 +47,8 @@ find_package(OpenGL REQUIRED)
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(PC_CAIRO cairo)
-# The X11 backend exports the main menu on the host's D-Bus session bus, through
-# the dbus wrapper library of the native libdbus-1.
+# The main menu (X11 backend) and the status items (NSStatusItem) are exported on the
+# host's D-Bus session bus, through the dbus wrapper library of the native libdbus-1.
 pkg_check_modules(PC_DBUS REQUIRED dbus-1)
 pkg_check_modules(PC_FONTCONFIG fontconfig)
 
@@ -283,6 +283,7 @@ set(AppKit_sources
 
 	NSDocumentController.m
 	NSStatusItem.m
+	NSDBusMenu.m
 	NSPathComponentCell.m
 	NSCachedImageRep.m
 	NSWindow-Drag.m
@@ -587,6 +588,7 @@ add_framework(AppKit
 		CoreServices
 		UniformTypeIdentifiers
 		HIToolbox
+		dbus
 )
 
 reexport(AppKit Foundation ${CMAKE_BINARY_DIR}/src/external/foundation/Foundation)
@@ -636,7 +638,6 @@ add_backend(X11
 	SOURCES
 		X11.backend/X11Display.m
 		X11.backend/X11AppMenu.m
-		X11.backend/X11DBusMenu.m
 		X11.backend/X11Window.m
 		X11.backend/X11SubWindow.m
 		X11.backend/X11Event.m
@@ -658,7 +659,6 @@ add_backend(X11
 		QuartzCore
 		# native libraries
                 X11
-		dbus
 		Xext
 		XRandR
 		Xcursor

@@ -22,7 +22,7 @@
 // and the registrar is com.canonical.AppMenu.Registrar, as published at
 // https://github.com/KDE/plasma-workspace/blob/master/appmenu/com.canonical.AppMenu.Registrar.xml
 
-#import "X11DBusMenu.h"
+#import <AppKit/NSDBusMenu.h>
 #import <AppKit/NSEvent.h>
 #import <AppKit/NSMenu.h>
 #import <AppKit/NSMenuItem.h>
@@ -31,7 +31,7 @@
 #import <stdlib.h>
 #import <string.h>
 
-#define MENU_PATH "/MenuBar"
+#define DEFAULT_MENU_PATH "/MenuBar"
 #define MENU_INTERFACE "com.canonical.dbusmenu"
 #define REGISTRAR_NAME "com.canonical.AppMenu.Registrar"
 #define REGISTRAR_PATH "/com/canonical/AppMenu/Registrar"
@@ -102,7 +102,7 @@ static const char *introspectionXML =
 // code built for this platform passes variadic arguments on arm64. The
 // message iterators have fixed signatures, so every argument goes through
 // them instead.
-static BOOL appendArgument(DBusMessage *message, int type, const void *value) {
+BOOL NSDBusAppendArgument(DBusMessage *message, int type, const void *value) {
     DBusMessageIter iterator;
 
     dbus_message_iter_init_append(message, &iterator);
@@ -113,8 +113,8 @@ static BOOL appendArgument(DBusMessage *message, int type, const void *value) {
 // basic types; value i receives the address of a variable of the matching C
 // type. Returns NO if the message has fewer arguments or other types.
 // Strings point into the message, as with dbus_message_get_args().
-static BOOL readArguments(DBusMessage *message, const int *types,
-                          unsigned count, void **values) {
+BOOL NSDBusReadArguments(DBusMessage *message, const int *types,
+                         unsigned count, void **values) {
     DBusMessageIter iterator;
 
     if (!dbus_message_iter_init(message, &iterator))
@@ -263,17 +263,32 @@ static NSString *labelForTitle(NSString *title) {
                                             withString: @"__"];
 }
 
-@implementation X11DBusMenu
+@implementation NSDBusMenu
 
 + (NSString *) menuObjectPath {
-    return @MENU_PATH;
+    return @DEFAULT_MENU_PATH;
+}
+
+- (NSString *) objectPath {
+    return _path;
+}
+
+- (void) setObjectPath: (NSString *) path {
+    if (path != _path) {
+        [_path release];
+        _path = [path copy];
+    }
+}
+
+- (void *) connection {
+    return _connection;
 }
 
 #pragma mark - Connection
 
 static void socketCallback(CFSocketRef s, CFSocketCallBackType type,
                            CFDataRef address, const void *data, void *info) {
-    [(X11DBusMenu *) info readyToRead];
+    [(NSDBusMenu *) info readyToRead];
 }
 
 - (instancetype) initWithSessionBus {
@@ -310,6 +325,7 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type,
 
     _connection = connection;
     dbus_connection_set_exit_on_disconnect(connection, FALSE);
+    _path = [@DEFAULT_MENU_PATH copy];
     _busName = [[NSString stringWithUTF8String:
                                   dbus_bus_get_unique_name(connection)] retain];
     _idsByItem = [NSMutableDictionary new];
@@ -340,6 +356,7 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type,
 - (void) dealloc {
     [self invalidate];
     [_busName release];
+    [_path release];
     [_menu release];
     [_servedLayout release];
     [_idsByItem release];
@@ -401,7 +418,7 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type,
         return NO;
 
     const char *name = REGISTRAR_NAME;
-    appendArgument(call, DBUS_TYPE_STRING, &name);
+    NSDBusAppendArgument(call, DBUS_TYPE_STRING, &name);
 
     DBusError error;
     dbus_error_init(&error);
@@ -415,7 +432,7 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type,
         int types[] = { DBUS_TYPE_BOOLEAN };
         void *values[] = { &owned };
 
-        readArguments(reply, types, 1, values);
+        NSDBusReadArguments(reply, types, 1, values);
         dbus_message_unref(reply);
     }
     return owned ? YES : NO;
@@ -454,7 +471,8 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type,
 
         [self invalidate];
         _registrarPresent = NO;
-        if (wasPresent)
+        if (wasPresent &&
+            [delegate respondsToSelector: @selector(dbusMenuRegistrarChanged:)])
             [delegate dbusMenuRegistrarChanged: self];
     }
 }
@@ -469,7 +487,8 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type,
         for (NSNumber *window in _windows)
             [self sendRegistration: @"RegisterWindow"
                             window: [window unsignedLongValue]];
-    [_delegate dbusMenuRegistrarChanged: self];
+    if ([_delegate respondsToSelector: @selector(dbusMenuRegistrarChanged:)])
+        [_delegate dbusMenuRegistrarChanged: self];
 }
 
 - (void) sendRegistration: (NSString *) method window: (unsigned long) window {
@@ -480,10 +499,10 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type,
         return;
 
     dbus_uint32_t identifier = (dbus_uint32_t) window;
-    const char *path = MENU_PATH;
-    appendArgument(message, DBUS_TYPE_UINT32, &identifier);
+    const char *path = [_path UTF8String];
+    NSDBusAppendArgument(message, DBUS_TYPE_UINT32, &identifier);
     if ([method isEqualToString: @"RegisterWindow"])
-        appendArgument(message, DBUS_TYPE_OBJECT_PATH, &path);
+        NSDBusAppendArgument(message, DBUS_TYPE_OBJECT_PATH, &path);
     dbus_message_set_no_reply(message, TRUE);
     [self send: message];
     dbus_message_unref(message);
@@ -634,7 +653,7 @@ static NSDictionary *findNode(NSDictionary *node, int identifier) {
 }
 
 static void refreshCallback(CFRunLoopTimerRef timer, void *info) {
-    [(X11DBusMenu *) info refresh];
+    [(NSDBusMenu *) info refresh];
 }
 
 // Sends LayoutUpdated if the menu is no longer what a client last fetched.
@@ -655,14 +674,14 @@ static void refreshCallback(CFRunLoopTimerRef timer, void *info) {
     _servedLayout = [layout retain];
     _revision++;
 
-    DBusMessage *signal = dbus_message_new_signal(MENU_PATH, MENU_INTERFACE,
+    DBusMessage *signal = dbus_message_new_signal([_path UTF8String], MENU_INTERFACE,
                                                   "LayoutUpdated");
     if (signal == NULL)
         return;
     dbus_uint32_t revision = _revision;
     dbus_int32_t parent = 0;
-    appendArgument(signal, DBUS_TYPE_UINT32, &revision);
-    appendArgument(signal, DBUS_TYPE_INT32, &parent);
+    NSDBusAppendArgument(signal, DBUS_TYPE_UINT32, &revision);
+    NSDBusAppendArgument(signal, DBUS_TYPE_INT32, &parent);
     [self send: signal];
     dbus_message_unref(signal);
 }
@@ -902,7 +921,7 @@ static NSArray *integerArray(DBusMessageIter *iter) {
     int types[] = { DBUS_TYPE_INT32, DBUS_TYPE_STRING };
     void *values[] = { &identifier, &name };
 
-    if (!readArguments(call, types, 2, values)) {
+    if (!NSDBusReadArguments(call, types, 2, values)) {
         [self replyError: DBUS_ERROR_INVALID_ARGS message: "Bad arguments" to: call];
         return;
     }
@@ -964,7 +983,7 @@ static NSArray *integerArray(DBusMessageIter *iter) {
     int types[] = { DBUS_TYPE_INT32, DBUS_TYPE_STRING };
     void *values[] = { &identifier, &event };
 
-    if (!readArguments(call, types, 2, values)) {
+    if (!NSDBusReadArguments(call, types, 2, values)) {
         [self replyError: DBUS_ERROR_INVALID_ARGS message: "Bad arguments" to: call];
         return;
     }
@@ -1026,7 +1045,7 @@ static NSArray *integerArray(DBusMessageIter *iter) {
     int types[] = { DBUS_TYPE_INT32 };
     void *values[] = { &identifier };
 
-    if (!readArguments(call, types, 1, values)) {
+    if (!NSDBusReadArguments(call, types, 1, values)) {
         [self replyError: DBUS_ERROR_INVALID_ARGS message: "Bad arguments" to: call];
         return;
     }
@@ -1034,7 +1053,7 @@ static NSArray *integerArray(DBusMessageIter *iter) {
     dbus_bool_t needUpdate = [self aboutToShow: identifier];
     DBusMessage *reply = [self newReplyTo: call];
 
-    appendArgument(reply, DBUS_TYPE_BOOLEAN, &needUpdate);
+    NSDBusAppendArgument(reply, DBUS_TYPE_BOOLEAN, &needUpdate);
     [self sendReply: reply];
 }
 
@@ -1161,7 +1180,10 @@ static NSArray *integerArray(DBusMessageIter *iter) {
     const char *member = dbus_message_get_member(call);
     const char *path = dbus_message_get_path(call);
 
-    if (path == NULL || strcmp(path, MENU_PATH) != 0) {
+    if (path == NULL || strcmp(path, [_path UTF8String]) != 0) {
+        if ([_delegate respondsToSelector: @selector(dbusMenu:handleMessage:)] &&
+            [_delegate dbusMenu: self handleMessage: call])
+            return;
         [self replyError: DBUS_ERROR_UNKNOWN_OBJECT message: "Unknown object" to: call];
         return;
     }
@@ -1169,7 +1191,7 @@ static NSArray *integerArray(DBusMessageIter *iter) {
     if (interface != NULL && strcmp(interface, INTROSPECTABLE_INTERFACE) == 0) {
         DBusMessage *reply = [self newReplyTo: call];
 
-        appendArgument(reply, DBUS_TYPE_STRING, &introspectionXML);
+        NSDBusAppendArgument(reply, DBUS_TYPE_STRING, &introspectionXML);
         [self sendReply: reply];
     } else if (interface != NULL && strcmp(interface, PROPERTIES_INTERFACE) == 0) {
         [self handleProperties: call];
@@ -1211,10 +1233,14 @@ static NSArray *integerArray(DBusMessageIter *iter) {
                             DBUS_TYPE_STRING };
             void *values[] = { &name, &oldOwner, &newOwner };
 
-            if (readArguments(message, types, 3, values) &&
-                strcmp(name, REGISTRAR_NAME) == 0)
+            if (NSDBusReadArguments(message, types, 3, values) &&
+                strcmp(name, REGISTRAR_NAME) == 0) {
                 [self registrarOwnerChanged: newOwner[0] != '\0'];
+                break;
+            }
         }
+        if ([_delegate respondsToSelector: @selector(dbusMenu:handleMessage:)])
+            [_delegate dbusMenu: self handleMessage: message];
         break;
     default:
         break;
