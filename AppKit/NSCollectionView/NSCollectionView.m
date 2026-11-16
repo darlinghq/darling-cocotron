@@ -22,6 +22,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSCollectionViewFlowLayout.h>
 #include <math.h>
 
+// Exported by AppKit but not declared in the public headers.
+APPKIT_EXPORT NSString *const NSCollectionElementKindSelectionRectIndicator;
+NSString *const NSCollectionElementKindSelectionRectIndicator =
+        @"NSCollectionElementKindSelectionRectIndicator";
+
 @implementation NSCollectionView
 @synthesize collectionViewLayout = _collectionViewLayout;
 @synthesize dataSource = _dataSource;
