@@ -24,6 +24,10 @@ static void expectTrue(BOOL ok, const char *what) {
 
 static NSMutableArray *events;
 
+static CGFloat reportedScaleImp(id self, SEL _cmd) {
+    return reportedScale;
+}
+
 @interface ScaleView : NSView {
 @public
     NSString *label;
@@ -85,7 +89,7 @@ int main(void) {
             puts("SKIP: the platform window has no backingScaleFactor");
             return 0;
         }
-        method_setImplementation(method, imp_implementationWithBlock(^CGFloat(id self) { return reportedScale; }));
+        method_setImplementation(method, (IMP) reportedScaleImp);
 
         ScaleView *parent = [[ScaleView alloc] initWithFrame: NSMakeRect(0, 0, 200, 150)];
         parent->label = @"parent";
