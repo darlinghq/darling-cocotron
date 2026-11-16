@@ -17,6 +17,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSCollectionViewItem.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/NSView.h>
 
 @class NSCollectionViewLayout, NSCollectionView;
@@ -74,6 +75,7 @@ typedef NSString *NSCollectionViewSupplementaryElementKind NS_SWIFT_BRIDGED_TYPE
     id<NSCollectionViewDelegate> _delegate;
     NSMutableDictionary *_loadedItems;
     NSArray *_loadedPaths;
+    NS_LEGACY_IVAR_PAD(_NSCollectionViewReserved, 116)
 }
 
 - (NSArray *) content;

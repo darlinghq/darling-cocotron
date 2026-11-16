@@ -1,5 +1,6 @@
 #import <AppKit/NSControl.h>
 #import <AppKit/NSDragging.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/NSPathCell.h>
 
 @class NSPathComponentCell;
@@ -26,6 +27,7 @@
 @end
 
 @interface NSPathControl : NSControl {
+    NS_LEGACY_IVAR_PAD(_NSPathControlReserved, 20)
 }
 
 - (NSPathStyle) pathStyle;

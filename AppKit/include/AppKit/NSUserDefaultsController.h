@@ -17,6 +17,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSController.h>
+#import <AppKit/AppKitIvarLayout.h>
 
 @class NSUserDefaults, NSDictionary;
 
@@ -25,6 +26,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     NSDictionary *_initialValues;
     BOOL _appliesImmediately;
     id _valueProxy;
+    NS_LEGACY_IVAR_PAD(_NSUserDefaultsControllerReserved, 8)
 }
 
 + sharedUserDefaultsController;

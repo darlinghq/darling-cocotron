@@ -18,16 +18,20 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <Foundation/NSGeometry.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <Foundation/NSObject.h>
 
 @class NSImage, NSColor, NSEvent;
 
 @interface NSCursor : NSObject <NSCoding> {
+    NS_LEGACY_IVAR_PAD(_NSCursorReserved, 12)
+    NS_EXTRA_IVARS_BEGIN(NSCursor)
     NSImage *_image;
     NSPoint _hotSpot;
     BOOL _isSetOnMouseEntered;
     BOOL _isSetOnMouseExited;
     id _platformCursor;
+    NS_EXTRA_IVARS_END(NSCursor)
 }
 
 @property(class, readonly, retain, nonnull) NSCursor *currentCursor;

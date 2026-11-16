@@ -18,6 +18,7 @@
 */
 
 #import <AppKit/NSView.h>
+#import <AppKit/AppKitIvarLayout.h>
 
 @class NSImage;
 
@@ -55,6 +56,7 @@ typedef NS_ENUM(NSInteger, NSVisualEffectState) {
     NSVisualEffectState _state;
     NSImage *_maskImage;
     BOOL _emphasized;
+    NS_LEGACY_IVAR_PAD(_NSVisualEffectViewReserved, 40)
 }
 @property NSVisualEffectMaterial material;
 @property NSVisualEffectBlendingMode blendingMode;

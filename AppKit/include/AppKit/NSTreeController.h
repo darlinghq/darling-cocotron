@@ -17,6 +17,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSObjectController.h>
+#import <AppKit/AppKitIvarLayout.h>
 
 @class NSIndexPath, NSTreeNode;
 
@@ -31,6 +32,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     BOOL _preservesSelection;
     BOOL _selectsInsertedObjects;
     BOOL _alwaysUsesMultipleValuesMarker;
+    NS_LEGACY_IVAR_PAD(_NSTreeControllerReserved, 20)
 }
 
 - (NSString *) childrenKeyPath;

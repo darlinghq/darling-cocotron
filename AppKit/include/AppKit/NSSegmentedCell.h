@@ -18,6 +18,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSActionCell.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/NSSegmentedControl.h>
 
 @interface NSSegmentedCell : NSActionCell {
@@ -29,6 +30,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     NSInteger _selectedSegment;
     NSInteger _firstTrackingSegmentIndex;
     BOOL _firstTrackingSegmentInitialState;
+    NS_LEGACY_IVAR_PAD(_NSSegmentedCellReserved, 4)
 }
 
 - (NSInteger) segmentCount;

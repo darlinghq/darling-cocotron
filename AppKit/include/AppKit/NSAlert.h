@@ -18,6 +18,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <Foundation/NSObject.h>
+#import <AppKit/AppKitIvarLayout.h>
 
 @class NSButton, NSImage, NSArray, NSWindow, NSError, NSView, NSMutableArray;
 
@@ -64,6 +65,7 @@ static const NSModalResponse NSAlertThirdButtonReturn = 1002;
     BOOL _needsLayout;
     id _sheetDelegate;
     SEL _sheetDidEnd;
+    NS_LEGACY_IVAR_PAD(_NSAlertReserved, 60)
 }
 
 + (NSAlert *) alertWithError: (NSError *) error;

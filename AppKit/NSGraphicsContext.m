@@ -49,28 +49,28 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - initWithWindow: (NSWindow *) window {
-    _graphicsPort = CGContextRetain([window cgContext]);
-    _focusStack = [NSMutableArray new];
-    _isDrawingToScreen = YES;
-    _isFlipped = NO;
-    _deviceDescription = [[window deviceDescription] copy];
-    _shouldAntialias = YES;
-    _renderingIntent = NSColorRenderingIntentDefault;
-    _compOperation = NSCompositeSourceOver;
+    NS_EXTRA(NSGraphicsContext, self)->_graphicsPort = CGContextRetain([window cgContext]);
+    NS_EXTRA(NSGraphicsContext, self)->_focusStack = [NSMutableArray new];
+    NS_EXTRA(NSGraphicsContext, self)->_isDrawingToScreen = YES;
+    NS_EXTRA(NSGraphicsContext, self)->_isFlipped = NO;
+    NS_EXTRA(NSGraphicsContext, self)->_deviceDescription = [[window deviceDescription] copy];
+    NS_EXTRA(NSGraphicsContext, self)->_shouldAntialias = YES;
+    NS_EXTRA(NSGraphicsContext, self)->_renderingIntent = NSColorRenderingIntentDefault;
+    NS_EXTRA(NSGraphicsContext, self)->_compOperation = NSCompositeSourceOver;
     return self;
 }
 
 - initWithGraphicsPort: (CGContextRef) context flipped: (BOOL) flipped {
-    _graphicsPort = CGContextRetain(context);
-    _focusStack = [NSMutableArray new];
-    _isDrawingToScreen = CGContextIsBitmapContext(context);
-    _isFlipped = flipped;
-    _deviceDescription =
+    NS_EXTRA(NSGraphicsContext, self)->_graphicsPort = CGContextRetain(context);
+    NS_EXTRA(NSGraphicsContext, self)->_focusStack = [NSMutableArray new];
+    NS_EXTRA(NSGraphicsContext, self)->_isDrawingToScreen = CGContextIsBitmapContext(context);
+    NS_EXTRA(NSGraphicsContext, self)->_isFlipped = flipped;
+    NS_EXTRA(NSGraphicsContext, self)->_deviceDescription =
             [[NSDictionary dictionaryWithObject: [NSNumber numberWithBool: NO]
                                          forKey: NSDeviceIsScreen] copy];
-    _shouldAntialias = YES;
-    _renderingIntent = NSColorRenderingIntentDefault;
-    _compOperation = NSCompositeSourceOver;
+    NS_EXTRA(NSGraphicsContext, self)->_shouldAntialias = YES;
+    NS_EXTRA(NSGraphicsContext, self)->_renderingIntent = NSColorRenderingIntentDefault;
+    NS_EXTRA(NSGraphicsContext, self)->_compOperation = NSCompositeSourceOver;
     return self;
 }
 
@@ -82,31 +82,32 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         return nil;
     }
 
-    _graphicsPort = CGBitmapContextCreate(
+    NS_EXTRA(NSGraphicsContext, self)->_graphicsPort = CGBitmapContextCreate(
             [imageRep bitmapData], [imageRep pixelsWide], [imageRep pixelsHigh],
             [imageRep bitsPerSample], [imageRep bytesPerRow], colorSpace,
             [imageRep CGBitmapInfo]);
 
-    if (_graphicsPort == nil) {
+    if (NS_EXTRA(NSGraphicsContext, self)->_graphicsPort == nil) {
         [self dealloc];
         return nil;
     }
 
-    _focusStack = [NSMutableArray new];
-    _isDrawingToScreen = YES;
-    _isFlipped = NO;
-    _deviceDescription =
+    NS_EXTRA(NSGraphicsContext, self)->_focusStack = [NSMutableArray new];
+    NS_EXTRA(NSGraphicsContext, self)->_isDrawingToScreen = YES;
+    NS_EXTRA(NSGraphicsContext, self)->_isFlipped = NO;
+    NS_EXTRA(NSGraphicsContext, self)->_deviceDescription =
             [[NSDictionary dictionaryWithObject: [NSNumber numberWithBool: YES]
                                          forKey: NSDeviceIsScreen] copy];
     return self;
 }
 
 - (void) dealloc {
-    if (_graphicsPort != NULL)
-        CGContextRelease(_graphicsPort);
-    [_ciContext release];
-    [_focusStack release];
-    [_deviceDescription release];
+    if (NS_EXTRA(NSGraphicsContext, self)->_graphicsPort != NULL)
+        CGContextRelease(NS_EXTRA(NSGraphicsContext, self)->_graphicsPort);
+    [NS_EXTRA(NSGraphicsContext, self)->_ciContext release];
+    [NS_EXTRA(NSGraphicsContext, self)->_focusStack release];
+    [NS_EXTRA(NSGraphicsContext, self)->_deviceDescription release];
+    NS_EXTRA_FREE(NSGraphicsContext, self);
     [super dealloc];
 }
 
@@ -160,14 +161,14 @@ CGContextRef NSCurrentGraphicsPort() {
     if (_currentContext() == nil)
         return NULL;
 
-    return _currentContext()->_graphicsPort;
+    return NS_EXTRA(NSGraphicsContext, _currentContext())->_graphicsPort;
 }
 
 NSMutableArray *NSCurrentFocusStack() {
     if (_currentContext() == nil)
         return nil;
 
-    return _currentContext()->_focusStack;
+    return NS_EXTRA(NSGraphicsContext, _currentContext())->_focusStack;
 }
 
 + (NSGraphicsContext *) currentContext {
@@ -209,7 +210,7 @@ NSMutableArray *NSCurrentFocusStack() {
 }
 
 - (void *) graphicsPort {
-    return _graphicsPort;
+    return NS_EXTRA(NSGraphicsContext, self)->_graphicsPort;
 }
 
 - (CGContextRef) CGContext {
@@ -217,149 +218,149 @@ NSMutableArray *NSCurrentFocusStack() {
 }
 
 - (NSMutableArray *) focusStack {
-    return _focusStack;
+    return NS_EXTRA(NSGraphicsContext, self)->_focusStack;
 }
 
 - (BOOL) isDrawingToScreen {
-    return _isDrawingToScreen;
+    return NS_EXTRA(NSGraphicsContext, self)->_isDrawingToScreen;
 }
 
 - (BOOL) isFlipped {
-    NSView *focusView = [_focusStack lastObject];
+    NSView *focusView = [NS_EXTRA(NSGraphicsContext, self)->_focusStack lastObject];
 
     if (focusView != nil)
         return [focusView isFlipped];
 
-    return _isFlipped;
+    return NS_EXTRA(NSGraphicsContext, self)->_isFlipped;
 }
 
 - (void) setShouldAntialias: (BOOL) flag {
-    CGContextSetShouldAntialias(_graphicsPort, flag);
-    _shouldAntialias = flag;
+    CGContextSetShouldAntialias(NS_EXTRA(NSGraphicsContext, self)->_graphicsPort, flag);
+    NS_EXTRA(NSGraphicsContext, self)->_shouldAntialias = flag;
 }
 
 - (void) setImageInterpolation: (NSImageInterpolation) value {
-    CGContextSetInterpolationQuality(_graphicsPort, value);
+    CGContextSetInterpolationQuality(NS_EXTRA(NSGraphicsContext, self)->_graphicsPort, value);
 }
 
 - (void) setColorRenderingIntent: (NSColorRenderingIntent) value {
-    CGContextSetRenderingIntent(_graphicsPort, value);
-    _renderingIntent = value;
+    CGContextSetRenderingIntent(NS_EXTRA(NSGraphicsContext, self)->_graphicsPort, value);
+    NS_EXTRA(NSGraphicsContext, self)->_renderingIntent = value;
 }
 
 - (void) setCompositingOperation: (NSCompositingOperation) value {
     switch ((int)value) {
     case NSCompositeClear:
-        CGContextSetBlendMode(_graphicsPort, kCGBlendModeClear); break;
+        CGContextSetBlendMode(NS_EXTRA(NSGraphicsContext, self)->_graphicsPort, kCGBlendModeClear); break;
     case NSCompositeCopy:
-        CGContextSetBlendMode(_graphicsPort, kCGBlendModeCopy); break;
+        CGContextSetBlendMode(NS_EXTRA(NSGraphicsContext, self)->_graphicsPort, kCGBlendModeCopy); break;
     case NSCompositeSourceOver:
-        CGContextSetBlendMode(_graphicsPort, kCGBlendModeNormal); break;
+        CGContextSetBlendMode(NS_EXTRA(NSGraphicsContext, self)->_graphicsPort, kCGBlendModeNormal); break;
     case NSCompositeSourceIn:
-        CGContextSetBlendMode(_graphicsPort, kCGBlendModeSourceIn); break;
+        CGContextSetBlendMode(NS_EXTRA(NSGraphicsContext, self)->_graphicsPort, kCGBlendModeSourceIn); break;
     case NSCompositeSourceOut:
-        CGContextSetBlendMode(_graphicsPort, kCGBlendModeSourceOut); break;
+        CGContextSetBlendMode(NS_EXTRA(NSGraphicsContext, self)->_graphicsPort, kCGBlendModeSourceOut); break;
     case NSCompositeSourceAtop:
-        CGContextSetBlendMode(_graphicsPort, kCGBlendModeSourceAtop); break;
+        CGContextSetBlendMode(NS_EXTRA(NSGraphicsContext, self)->_graphicsPort, kCGBlendModeSourceAtop); break;
     case NSCompositeDestinationOver:
-        CGContextSetBlendMode(_graphicsPort, kCGBlendModeDestinationOver); break;
+        CGContextSetBlendMode(NS_EXTRA(NSGraphicsContext, self)->_graphicsPort, kCGBlendModeDestinationOver); break;
     case NSCompositeDestinationIn:
-        CGContextSetBlendMode(_graphicsPort, kCGBlendModeDestinationIn); break;
+        CGContextSetBlendMode(NS_EXTRA(NSGraphicsContext, self)->_graphicsPort, kCGBlendModeDestinationIn); break;
     case NSCompositeDestinationOut:
-        CGContextSetBlendMode(_graphicsPort, kCGBlendModeDestinationOut); break;
+        CGContextSetBlendMode(NS_EXTRA(NSGraphicsContext, self)->_graphicsPort, kCGBlendModeDestinationOut); break;
     case NSCompositeDestinationAtop:
-        CGContextSetBlendMode(_graphicsPort, kCGBlendModeDestinationAtop); break;
+        CGContextSetBlendMode(NS_EXTRA(NSGraphicsContext, self)->_graphicsPort, kCGBlendModeDestinationAtop); break;
     case NSCompositeXOR:
-        CGContextSetBlendMode(_graphicsPort, kCGBlendModeXOR); break;
+        CGContextSetBlendMode(NS_EXTRA(NSGraphicsContext, self)->_graphicsPort, kCGBlendModeXOR); break;
     case NSCompositePlusDarker:
-        CGContextSetBlendMode(_graphicsPort, kCGBlendModePlusDarker); break;
+        CGContextSetBlendMode(NS_EXTRA(NSGraphicsContext, self)->_graphicsPort, kCGBlendModePlusDarker); break;
     case NSCompositeHighlight:
-        CGContextSetBlendMode(_graphicsPort, kCGBlendModeNormal); break;
+        CGContextSetBlendMode(NS_EXTRA(NSGraphicsContext, self)->_graphicsPort, kCGBlendModeNormal); break;
     case NSCompositePlusLighter:
-        CGContextSetBlendMode(_graphicsPort, kCGBlendModePlusLighter); break;
+        CGContextSetBlendMode(NS_EXTRA(NSGraphicsContext, self)->_graphicsPort, kCGBlendModePlusLighter); break;
     case NSCompositingOperationMultiply:
-        CGContextSetBlendMode(_graphicsPort, kCGBlendModeMultiply); break;
+        CGContextSetBlendMode(NS_EXTRA(NSGraphicsContext, self)->_graphicsPort, kCGBlendModeMultiply); break;
     case NSCompositingOperationScreen:
-        CGContextSetBlendMode(_graphicsPort, kCGBlendModeScreen); break;
+        CGContextSetBlendMode(NS_EXTRA(NSGraphicsContext, self)->_graphicsPort, kCGBlendModeScreen); break;
     case NSCompositingOperationOverlay:
-        CGContextSetBlendMode(_graphicsPort, kCGBlendModeOverlay); break;
+        CGContextSetBlendMode(NS_EXTRA(NSGraphicsContext, self)->_graphicsPort, kCGBlendModeOverlay); break;
     case NSCompositingOperationDarken:
-        CGContextSetBlendMode(_graphicsPort, kCGBlendModeDarken); break;
+        CGContextSetBlendMode(NS_EXTRA(NSGraphicsContext, self)->_graphicsPort, kCGBlendModeDarken); break;
     case NSCompositingOperationLighten:
-        CGContextSetBlendMode(_graphicsPort, kCGBlendModeLighten); break;
+        CGContextSetBlendMode(NS_EXTRA(NSGraphicsContext, self)->_graphicsPort, kCGBlendModeLighten); break;
     case NSCompositingOperationColorDodge:
-        CGContextSetBlendMode(_graphicsPort, kCGBlendModeColorDodge); break;
+        CGContextSetBlendMode(NS_EXTRA(NSGraphicsContext, self)->_graphicsPort, kCGBlendModeColorDodge); break;
     case NSCompositingOperationColorBurn:
-        CGContextSetBlendMode(_graphicsPort, kCGBlendModeColorBurn); break;
+        CGContextSetBlendMode(NS_EXTRA(NSGraphicsContext, self)->_graphicsPort, kCGBlendModeColorBurn); break;
     case NSCompositingOperationSoftLight:
-        CGContextSetBlendMode(_graphicsPort, kCGBlendModeSoftLight); break;
+        CGContextSetBlendMode(NS_EXTRA(NSGraphicsContext, self)->_graphicsPort, kCGBlendModeSoftLight); break;
     case NSCompositingOperationHardLight:
-        CGContextSetBlendMode(_graphicsPort, kCGBlendModeHardLight); break;
+        CGContextSetBlendMode(NS_EXTRA(NSGraphicsContext, self)->_graphicsPort, kCGBlendModeHardLight); break;
     case NSCompositingOperationDifference:
-        CGContextSetBlendMode(_graphicsPort, kCGBlendModeDifference); break;
+        CGContextSetBlendMode(NS_EXTRA(NSGraphicsContext, self)->_graphicsPort, kCGBlendModeDifference); break;
     case NSCompositingOperationExclusion:
-        CGContextSetBlendMode(_graphicsPort, kCGBlendModeExclusion); break;
+        CGContextSetBlendMode(NS_EXTRA(NSGraphicsContext, self)->_graphicsPort, kCGBlendModeExclusion); break;
     case NSCompositingOperationHue:
-        CGContextSetBlendMode(_graphicsPort, kCGBlendModeHue); break;
+        CGContextSetBlendMode(NS_EXTRA(NSGraphicsContext, self)->_graphicsPort, kCGBlendModeHue); break;
     case NSCompositingOperationSaturation:
-        CGContextSetBlendMode(_graphicsPort, kCGBlendModeSaturation); break;
+        CGContextSetBlendMode(NS_EXTRA(NSGraphicsContext, self)->_graphicsPort, kCGBlendModeSaturation); break;
     case NSCompositingOperationColor:
-        CGContextSetBlendMode(_graphicsPort, kCGBlendModeColor); break;
+        CGContextSetBlendMode(NS_EXTRA(NSGraphicsContext, self)->_graphicsPort, kCGBlendModeColor); break;
     case NSCompositingOperationLuminosity:
-        CGContextSetBlendMode(_graphicsPort, kCGBlendModeLuminosity); break;
+        CGContextSetBlendMode(NS_EXTRA(NSGraphicsContext, self)->_graphicsPort, kCGBlendModeLuminosity); break;
     default:
         return;
     }
-    _compOperation = value;
+    NS_EXTRA(NSGraphicsContext, self)->_compOperation = value;
 }
 
 - (void) setPatternPhase: (NSPoint) phase {
-    CGContextSetPatternPhase(_graphicsPort, CGSizeMake(phase.x, phase.y));
-    _patternPhase = phase;
+    CGContextSetPatternPhase(NS_EXTRA(NSGraphicsContext, self)->_graphicsPort, CGSizeMake(phase.x, phase.y));
+    NS_EXTRA(NSGraphicsContext, self)->_patternPhase = phase;
 }
 
 - (BOOL) shouldAntialias {
-    return _shouldAntialias;
+    return NS_EXTRA(NSGraphicsContext, self)->_shouldAntialias;
 }
 
 - (NSImageInterpolation) imageInterpolation {
-    return CGContextGetInterpolationQuality(_graphicsPort);
+    return CGContextGetInterpolationQuality(NS_EXTRA(NSGraphicsContext, self)->_graphicsPort);
 }
 
 - (NSColorRenderingIntent) colorRenderingIntent {
-    return _renderingIntent;
+    return NS_EXTRA(NSGraphicsContext, self)->_renderingIntent;
 }
 
 - (NSCompositingOperation) compositingOperation {
-    return _compOperation;
+    return NS_EXTRA(NSGraphicsContext, self)->_compOperation;
 }
 
 - (NSPoint) patternPhase {
-    return _patternPhase;
+    return NS_EXTRA(NSGraphicsContext, self)->_patternPhase;
 }
 
 - (CIContext *) CIContext {
-    if (_ciContext == nil)
-        _ciContext = [[CIContext contextWithCGContext: _graphicsPort
+    if (NS_EXTRA(NSGraphicsContext, self)->_ciContext == nil)
+        NS_EXTRA(NSGraphicsContext, self)->_ciContext = [[CIContext contextWithCGContext: NS_EXTRA(NSGraphicsContext, self)->_graphicsPort
                                               options: nil] retain];
 
-    return _ciContext;
+    return NS_EXTRA(NSGraphicsContext, self)->_ciContext;
 }
 
 - (void) saveGraphicsState {
-    CGContextSaveGState(_graphicsPort);
+    CGContextSaveGState(NS_EXTRA(NSGraphicsContext, self)->_graphicsPort);
 }
 
 - (void) restoreGraphicsState {
-    CGContextRestoreGState(_graphicsPort);
+    CGContextRestoreGState(NS_EXTRA(NSGraphicsContext, self)->_graphicsPort);
 }
 
 - (void) flushGraphics {
-    CGContextFlush(_graphicsPort);
+    CGContextFlush(NS_EXTRA(NSGraphicsContext, self)->_graphicsPort);
 }
 
 - (NSDictionary *) deviceDescription {
-    return _deviceDescription;
+    return NS_EXTRA(NSGraphicsContext, self)->_deviceDescription;
 }
 
 @end

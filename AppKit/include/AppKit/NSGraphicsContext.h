@@ -18,6 +18,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSGraphics.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <ApplicationServices/ApplicationServices.h>
 #import <Foundation/Foundation.h>
 
@@ -41,18 +42,20 @@ typedef enum {
     NSColorRenderingIntentSaturation = kCGRenderingIntentSaturation,
 } NSColorRenderingIntent;
 
+#define _NS_SIDE_NSGraphicsContext 0, 1,
 @interface NSGraphicsContext : NSObject {
+    NS_EXTRA_IVARS_BEGIN(NSGraphicsContext)
     CGContextRef _graphicsPort;
     CIContext *_ciContext;
     NSMutableArray *_focusStack;
     BOOL _isDrawingToScreen;
     BOOL _isFlipped;
     NSDictionary *_deviceDescription;
-
     BOOL _shouldAntialias;
     NSColorRenderingIntent _renderingIntent;
     NSCompositingOperation _compOperation;
     NSPoint _patternPhase;
+    NS_SIDE_IVARS_END(NSGraphicsContext)
 }
 
 + (NSGraphicsContext *) graphicsContextWithWindow: (NSWindow *) window;

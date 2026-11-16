@@ -61,17 +61,17 @@ static NSData *dataOfPropertyList(id plist) {
 
 - (id) init {
     if ((self = [super init])) {
-        _orderedTypes = [NSMutableArray new];
-        _data = [NSMutableDictionary new];
-        _providers = [NSMutableDictionary new];
+        NS_EXTRA(NSPasteboardItem, self)->_orderedTypes = [NSMutableArray new];
+        NS_EXTRA(NSPasteboardItem, self)->_data = [NSMutableDictionary new];
+        NS_EXTRA(NSPasteboardItem, self)->_providers = [NSMutableDictionary new];
     }
     return self;
 }
 
 - (id) _initDerivedFromPasteboard: (NSPasteboard *) pasteboard {
     if ((self = [self init])) {
-        _derived = YES;
-        _pasteboard = pasteboard;
+        NS_EXTRA(NSPasteboardItem, self)->_derived = YES;
+        NS_EXTRA(NSPasteboardItem, self)->_pasteboard = pasteboard;
     }
     return self;
 }
@@ -100,44 +100,45 @@ static NSData *dataOfPropertyList(id plist) {
 
 - (void) dealloc {
     // Providers of a standalone item that was never written, or whose pasteboard owners are all gone.
-    if (_promiseOwners == 0 && !_derived)
+    if (NS_EXTRA(NSPasteboardItem, self)->_promiseOwners == 0 && !NS_EXTRA(NSPasteboardItem, self)->_derived)
         [self _finishProviders];
-    [_orderedTypes release];
-    [_data release];
-    [_providers release];
+    [NS_EXTRA(NSPasteboardItem, self)->_orderedTypes release];
+    [NS_EXTRA(NSPasteboardItem, self)->_data release];
+    [NS_EXTRA(NSPasteboardItem, self)->_providers release];
+    NS_EXTRA_FREE(NSPasteboardItem, self);
     [super dealloc];
 }
 
 - (void) _finishProviders {
-    if (_providersFinished)
+    if (NS_EXTRA(NSPasteboardItem, self)->_providersFinished)
         return;
-    _providersFinished = YES;
+    NS_EXTRA(NSPasteboardItem, self)->_providersFinished = YES;
     NSMutableArray *finished = [NSMutableArray array];
-    for (id provider in [_providers allValues]) {
+    for (id provider in [NS_EXTRA(NSPasteboardItem, self)->_providers allValues]) {
         if ([finished containsObject: provider])
             continue;
         [finished addObject: provider];
         if ([provider respondsToSelector: @selector(pasteboardFinishedWithDataProvider:)])
-            [provider pasteboardFinishedWithDataProvider: _pasteboard];
+            [provider pasteboardFinishedWithDataProvider: NS_EXTRA(NSPasteboardItem, self)->_pasteboard];
     }
 }
 
 - (void) _promiseOwnerCreated {
-    _promiseOwners++;
+    NS_EXTRA(NSPasteboardItem, self)->_promiseOwners++;
 }
 
 - (void) _promiseOwnerDestroyed {
     // The pasteboard gave up the last promise: the providers are not needed any more.
-    if (_promiseOwners > 0 && --_promiseOwners == 0)
+    if (NS_EXTRA(NSPasteboardItem, self)->_promiseOwners > 0 && --NS_EXTRA(NSPasteboardItem, self)->_promiseOwners == 0)
         [self _finishProviders];
 }
 
 - (NSArray *) _orderedTypes {
-    return [[_orderedTypes copy] autorelease];
+    return [[NS_EXTRA(NSPasteboardItem, self)->_orderedTypes copy] autorelease];
 }
 
 - (NSData *) _storedDataForType: (NSPasteboardType) type {
-    return [_data objectForKey: type];
+    return [NS_EXTRA(NSPasteboardItem, self)->_data objectForKey: type];
 }
 
 - (id<NSPasteboardTypeOwner>) _promiseOwner {
@@ -148,35 +149,35 @@ static NSData *dataOfPropertyList(id plist) {
 // set on it afterwards, such as the result of a data provider, go to that pasteboard too, as
 // long as nothing else has changed it.
 - (void) _attachToPasteboard: (NSPasteboard *) pasteboard {
-    _pasteboard = pasteboard;
-    _attached = YES;
-    _attachedChangeCount = [pasteboard changeCount];
+    NS_EXTRA(NSPasteboardItem, self)->_pasteboard = pasteboard;
+    NS_EXTRA(NSPasteboardItem, self)->_attached = YES;
+    NS_EXTRA(NSPasteboardItem, self)->_attachedChangeCount = [pasteboard changeCount];
 }
 
 - (BOOL) _isAttachedToCurrentContents {
-    return _attached && _pasteboard != nil && [_pasteboard changeCount] == _attachedChangeCount;
+    return NS_EXTRA(NSPasteboardItem, self)->_attached && NS_EXTRA(NSPasteboardItem, self)->_pasteboard != nil && [NS_EXTRA(NSPasteboardItem, self)->_pasteboard changeCount] == NS_EXTRA(NSPasteboardItem, self)->_attachedChangeCount;
 }
 
 - (void) _fulfillType: (NSPasteboardType) type {
-    if ([_data objectForKey: type] == nil) {
-        id<NSPasteboardItemDataProvider> provider = [_providers objectForKey: type];
-        [provider pasteboard: _pasteboard item: self provideDataForType: type];
+    if ([NS_EXTRA(NSPasteboardItem, self)->_data objectForKey: type] == nil) {
+        id<NSPasteboardItemDataProvider> provider = [NS_EXTRA(NSPasteboardItem, self)->_providers objectForKey: type];
+        [provider pasteboard: NS_EXTRA(NSPasteboardItem, self)->_pasteboard item: self provideDataForType: type];
     }
-    NSData *data = [_data objectForKey: type];
+    NSData *data = [NS_EXTRA(NSPasteboardItem, self)->_data objectForKey: type];
     // A provider that only set the value on the item (after the pasteboard was changed again, say)
     // leaves the pasteboard without it; hand it over.
     if (data != nil && [self _isAttachedToCurrentContents])
-        [_pasteboard setData: data forType: type];
+        [NS_EXTRA(NSPasteboardItem, self)->_pasteboard setData: data forType: type];
 }
 
 - (NSArray<NSPasteboardType> *) types {
-    if (!_derived)
-        return [[_orderedTypes copy] autorelease];
+    if (!NS_EXTRA(NSPasteboardItem, self)->_derived)
+        return [[NS_EXTRA(NSPasteboardItem, self)->_orderedTypes copy] autorelease];
 
     // The flat types of the pasteboard in their UTI spelling. The older file name list and URL
     // types are another spelling of the file URL items, not types of their own.
     NSMutableArray *types = [NSMutableArray array];
-    for (NSPasteboardType type in NSPasteboardCanonicalTypes([_pasteboard types])) {
+    for (NSPasteboardType type in NSPasteboardCanonicalTypes([NS_EXTRA(NSPasteboardItem, self)->_pasteboard types])) {
         if ([type isEqual: NSFilenamesPboardType] || [type isEqual: NSURLPboardType])
             continue;
         [types addObject: type];
@@ -205,13 +206,13 @@ static NSData *dataOfPropertyList(id plist) {
 {
     // A derived item is a view of a pasteboard other code wrote; it has nobody to make the promise
     // to, so only standalone items take providers.
-    if (_derived || dataProvider == nil)
+    if (NS_EXTRA(NSPasteboardItem, self)->_derived || dataProvider == nil)
         return NO;
     for (NSPasteboardType type in NSPasteboardCanonicalTypes(types)) {
-        if (![_orderedTypes containsObject: type])
-            [_orderedTypes addObject: type];
-        [_data removeObjectForKey: type];
-        [_providers setObject: dataProvider forKey: type];
+        if (![NS_EXTRA(NSPasteboardItem, self)->_orderedTypes containsObject: type])
+            [NS_EXTRA(NSPasteboardItem, self)->_orderedTypes addObject: type];
+        [NS_EXTRA(NSPasteboardItem, self)->_data removeObjectForKey: type];
+        [NS_EXTRA(NSPasteboardItem, self)->_providers setObject: dataProvider forKey: type];
     }
     return YES;
 }
@@ -220,14 +221,14 @@ static NSData *dataOfPropertyList(id plist) {
     type = NSPasteboardCanonicalType(type);
     if (data == nil || type == nil)
         return NO;
-    if (_derived)
-        return [_pasteboard setData: data forType: type];
+    if (NS_EXTRA(NSPasteboardItem, self)->_derived)
+        return [NS_EXTRA(NSPasteboardItem, self)->_pasteboard setData: data forType: type];
 
-    if (![_orderedTypes containsObject: type])
-        [_orderedTypes addObject: type];
-    [_data setObject: [[data copy] autorelease] forKey: type];
+    if (![NS_EXTRA(NSPasteboardItem, self)->_orderedTypes containsObject: type])
+        [NS_EXTRA(NSPasteboardItem, self)->_orderedTypes addObject: type];
+    [NS_EXTRA(NSPasteboardItem, self)->_data setObject: [[data copy] autorelease] forKey: type];
     if ([self _isAttachedToCurrentContents])
-        [_pasteboard setData: data forType: type];
+        [NS_EXTRA(NSPasteboardItem, self)->_pasteboard setData: data forType: type];
     return YES;
 }
 
@@ -241,12 +242,12 @@ static NSData *dataOfPropertyList(id plist) {
 
 - (NSData *) dataForType: (NSPasteboardType) type {
     type = NSPasteboardCanonicalType(type);
-    if (_derived)
-        return [_pasteboard dataForType: type];
+    if (NS_EXTRA(NSPasteboardItem, self)->_derived)
+        return [NS_EXTRA(NSPasteboardItem, self)->_pasteboard dataForType: type];
 
-    if ([_data objectForKey: type] == nil && [_providers objectForKey: type] != nil)
+    if ([NS_EXTRA(NSPasteboardItem, self)->_data objectForKey: type] == nil && [NS_EXTRA(NSPasteboardItem, self)->_providers objectForKey: type] != nil)
         [self _fulfillType: type];
-    return [[[_data objectForKey: type] retain] autorelease];
+    return [[[NS_EXTRA(NSPasteboardItem, self)->_data objectForKey: type] retain] autorelease];
 }
 
 - (NSString *) stringForType: (NSPasteboardType) type {

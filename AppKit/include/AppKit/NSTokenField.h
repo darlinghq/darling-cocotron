@@ -18,9 +18,11 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSTextField.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/NSTokenFieldCell.h>
 
 @interface NSTokenField : NSTextField {
+    NS_LEGACY_IVAR_PAD(_NSTokenFieldReserved, 20)
 }
 
 + (NSTimeInterval) defaultCompletionDelay;

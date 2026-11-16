@@ -62,13 +62,13 @@ static BOOL _NSLayoutItemIsWithin(id item, id container)
                           constant:(CGFloat)c
 {
     NSLayoutConstraint *constraint = [[self alloc] init];
-    constraint->_firstItem = view1;
-    constraint->_firstAttribute = attr1;
-    constraint->_relation = relation;
-    constraint->_secondItem = view2;
-    constraint->_secondAttribute = attr2;
-    constraint->_multiplier = multiplier;
-    constraint->_constant = c;
+    NS_EXTRA(NSLayoutConstraint, constraint)->_firstItem = view1;
+    NS_EXTRA(NSLayoutConstraint, constraint)->_firstAttribute = attr1;
+    NS_EXTRA(NSLayoutConstraint, constraint)->_relation = relation;
+    NS_EXTRA(NSLayoutConstraint, constraint)->_secondItem = view2;
+    NS_EXTRA(NSLayoutConstraint, constraint)->_secondAttribute = attr2;
+    NS_EXTRA(NSLayoutConstraint, constraint)->_multiplier = multiplier;
+    NS_EXTRA(NSLayoutConstraint, constraint)->_constant = c;
     return [constraint autorelease];
 }
 
@@ -87,8 +87,8 @@ static BOOL _NSLayoutItemIsWithin(id item, id container)
 - (instancetype)init
 {
     if ((self = [super init])) {
-        _multiplier = 1;
-        _priority = NSLayoutPriorityRequired;
+        NS_EXTRA(NSLayoutConstraint, self)->_multiplier = 1;
+        NS_EXTRA(NSLayoutConstraint, self)->_priority = NSLayoutPriorityRequired;
     }
     return self;
 }
@@ -102,37 +102,37 @@ static BOOL _NSLayoutItemIsWithin(id item, id container)
 
     if ((self = [self init])) {
         // Items are views or layout guides owned by the view hierarchy; don't retain them.
-        _firstItem = [coder decodeObjectForKey:@"NSFirstItem"];
-        _secondItem = [coder decodeObjectForKey:@"NSSecondItem"];
+        NS_EXTRA(NSLayoutConstraint, self)->_firstItem = [coder decodeObjectForKey:@"NSFirstItem"];
+        NS_EXTRA(NSLayoutConstraint, self)->_secondItem = [coder decodeObjectForKey:@"NSSecondItem"];
 
-        _firstAttribute = [coder containsValueForKey:@"NSFirstAttributeV2"]
+        NS_EXTRA(NSLayoutConstraint, self)->_firstAttribute = [coder containsValueForKey:@"NSFirstAttributeV2"]
             ? [coder decodeIntegerForKey:@"NSFirstAttributeV2"]
             : [coder decodeIntegerForKey:@"NSFirstAttribute"];
-        _secondAttribute = [coder containsValueForKey:@"NSSecondAttributeV2"]
+        NS_EXTRA(NSLayoutConstraint, self)->_secondAttribute = [coder containsValueForKey:@"NSSecondAttributeV2"]
             ? [coder decodeIntegerForKey:@"NSSecondAttributeV2"]
             : [coder decodeIntegerForKey:@"NSSecondAttribute"];
-        if (_secondItem == nil)
-            _secondAttribute = NSLayoutAttributeNotAnAttribute;
+        if (NS_EXTRA(NSLayoutConstraint, self)->_secondItem == nil)
+            NS_EXTRA(NSLayoutConstraint, self)->_secondAttribute = NSLayoutAttributeNotAnAttribute;
 
-        _relation = [coder containsValueForKey:@"NSRelation"]
+        NS_EXTRA(NSLayoutConstraint, self)->_relation = [coder containsValueForKey:@"NSRelation"]
             ? [coder decodeIntegerForKey:@"NSRelation"]
             : NSLayoutRelationEqual;
 
         if ([coder containsValueForKey:@"NSMultiplier"])
-            _multiplier = [coder decodeDoubleForKey:@"NSMultiplier"];
+            NS_EXTRA(NSLayoutConstraint, self)->_multiplier = [coder decodeDoubleForKey:@"NSMultiplier"];
 
         if ([coder containsValueForKey:@"NSConstantV2"])
-            _constant = [coder decodeDoubleForKey:@"NSConstantV2"];
+            NS_EXTRA(NSLayoutConstraint, self)->_constant = [coder decodeDoubleForKey:@"NSConstantV2"];
         else if ([coder containsValueForKey:@"NSConstant"])
-            _constant = [coder decodeDoubleForKey:@"NSConstant"];
+            NS_EXTRA(NSLayoutConstraint, self)->_constant = [coder decodeDoubleForKey:@"NSConstant"];
 
         if ([coder containsValueForKey:@"NSPriority"])
-            _priority = [coder decodeFloatForKey:@"NSPriority"];
+            NS_EXTRA(NSLayoutConstraint, self)->_priority = [coder decodeFloatForKey:@"NSPriority"];
 
-        _symbolicConstant = [[coder decodeObjectForKey:@"NSSymbolicConstant"] retain];
-        _identifier = [[coder decodeObjectForKey:@"NSLayoutIdentifier"] retain];
-        _shouldBeArchived = [coder decodeBoolForKey:@"NSShouldBeArchived"];
-        _active = YES;
+        NS_EXTRA(NSLayoutConstraint, self)->_symbolicConstant = [[coder decodeObjectForKey:@"NSSymbolicConstant"] retain];
+        NS_EXTRA(NSLayoutConstraint, self)->_identifier = [[coder decodeObjectForKey:@"NSLayoutIdentifier"] retain];
+        NS_EXTRA(NSLayoutConstraint, self)->_shouldBeArchived = [coder decodeBoolForKey:@"NSShouldBeArchived"];
+        NS_EXTRA(NSLayoutConstraint, self)->_active = YES;
     }
     return self;
 }
@@ -142,60 +142,61 @@ static BOOL _NSLayoutItemIsWithin(id item, id container)
     if (![coder allowsKeyedCoding])
         return;
 
-    [coder encodeConditionalObject:_firstItem forKey:@"NSFirstItem"];
-    [coder encodeInteger:_firstAttribute forKey:@"NSFirstAttribute"];
-    [coder encodeInteger:_firstAttribute forKey:@"NSFirstAttributeV2"];
-    if (_relation != NSLayoutRelationEqual)
-        [coder encodeInteger:_relation forKey:@"NSRelation"];
-    if (_secondItem != nil) {
-        [coder encodeConditionalObject:_secondItem forKey:@"NSSecondItem"];
-        [coder encodeInteger:_secondAttribute forKey:@"NSSecondAttribute"];
-        [coder encodeInteger:_secondAttribute forKey:@"NSSecondAttributeV2"];
+    [coder encodeConditionalObject:NS_EXTRA(NSLayoutConstraint, self)->_firstItem forKey:@"NSFirstItem"];
+    [coder encodeInteger:NS_EXTRA(NSLayoutConstraint, self)->_firstAttribute forKey:@"NSFirstAttribute"];
+    [coder encodeInteger:NS_EXTRA(NSLayoutConstraint, self)->_firstAttribute forKey:@"NSFirstAttributeV2"];
+    if (NS_EXTRA(NSLayoutConstraint, self)->_relation != NSLayoutRelationEqual)
+        [coder encodeInteger:NS_EXTRA(NSLayoutConstraint, self)->_relation forKey:@"NSRelation"];
+    if (NS_EXTRA(NSLayoutConstraint, self)->_secondItem != nil) {
+        [coder encodeConditionalObject:NS_EXTRA(NSLayoutConstraint, self)->_secondItem forKey:@"NSSecondItem"];
+        [coder encodeInteger:NS_EXTRA(NSLayoutConstraint, self)->_secondAttribute forKey:@"NSSecondAttribute"];
+        [coder encodeInteger:NS_EXTRA(NSLayoutConstraint, self)->_secondAttribute forKey:@"NSSecondAttributeV2"];
     }
-    if (_multiplier != 1)
-        [coder encodeDouble:_multiplier forKey:@"NSMultiplier"];
-    if (_constant != 0) {
-        [coder encodeDouble:_constant forKey:@"NSConstant"];
-        [coder encodeDouble:_constant forKey:@"NSConstantV2"];
+    if (NS_EXTRA(NSLayoutConstraint, self)->_multiplier != 1)
+        [coder encodeDouble:NS_EXTRA(NSLayoutConstraint, self)->_multiplier forKey:@"NSMultiplier"];
+    if (NS_EXTRA(NSLayoutConstraint, self)->_constant != 0) {
+        [coder encodeDouble:NS_EXTRA(NSLayoutConstraint, self)->_constant forKey:@"NSConstant"];
+        [coder encodeDouble:NS_EXTRA(NSLayoutConstraint, self)->_constant forKey:@"NSConstantV2"];
     }
-    if (_priority != NSLayoutPriorityRequired)
-        [coder encodeFloat:_priority forKey:@"NSPriority"];
-    if (_symbolicConstant)
-        [coder encodeObject:_symbolicConstant forKey:@"NSSymbolicConstant"];
-    if (_identifier)
-        [coder encodeObject:_identifier forKey:@"NSLayoutIdentifier"];
-    [coder encodeBool:_shouldBeArchived forKey:@"NSShouldBeArchived"];
+    if (NS_EXTRA(NSLayoutConstraint, self)->_priority != NSLayoutPriorityRequired)
+        [coder encodeFloat:NS_EXTRA(NSLayoutConstraint, self)->_priority forKey:@"NSPriority"];
+    if (NS_EXTRA(NSLayoutConstraint, self)->_symbolicConstant)
+        [coder encodeObject:NS_EXTRA(NSLayoutConstraint, self)->_symbolicConstant forKey:@"NSSymbolicConstant"];
+    if (NS_EXTRA(NSLayoutConstraint, self)->_identifier)
+        [coder encodeObject:NS_EXTRA(NSLayoutConstraint, self)->_identifier forKey:@"NSLayoutIdentifier"];
+    [coder encodeBool:NS_EXTRA(NSLayoutConstraint, self)->_shouldBeArchived forKey:@"NSShouldBeArchived"];
 }
 
 - (void)dealloc
 {
-    [_identifier release];
-    [_symbolicConstant release];
+    [NS_EXTRA(NSLayoutConstraint, self)->_identifier release];
+    [NS_EXTRA(NSLayoutConstraint, self)->_symbolicConstant release];
+    NS_EXTRA_FREE(NSLayoutConstraint, self);
     [super dealloc];
 }
 
-- (id)firstItem { return _firstItem; }
-- (id)secondItem { return _secondItem; }
-- (NSLayoutAttribute)firstAttribute { return _firstAttribute; }
-- (NSLayoutAttribute)secondAttribute { return _secondAttribute; }
-- (NSLayoutRelation)relation { return _relation; }
-- (CGFloat)multiplier { return _multiplier; }
+- (id)firstItem { return NS_EXTRA(NSLayoutConstraint, self)->_firstItem; }
+- (id)secondItem { return NS_EXTRA(NSLayoutConstraint, self)->_secondItem; }
+- (NSLayoutAttribute)firstAttribute { return NS_EXTRA(NSLayoutConstraint, self)->_firstAttribute; }
+- (NSLayoutAttribute)secondAttribute { return NS_EXTRA(NSLayoutConstraint, self)->_secondAttribute; }
+- (NSLayoutRelation)relation { return NS_EXTRA(NSLayoutConstraint, self)->_relation; }
+- (CGFloat)multiplier { return NS_EXTRA(NSLayoutConstraint, self)->_multiplier; }
 
-- (CGFloat)constant { return _constant; }
-- (void)setConstant:(CGFloat)constant { _constant = constant; }
+- (CGFloat)constant { return NS_EXTRA(NSLayoutConstraint, self)->_constant; }
+- (void)setConstant:(CGFloat)constant { NS_EXTRA(NSLayoutConstraint, self)->_constant = constant; }
 
-- (NSLayoutPriority)priority { return _priority; }
-- (void)setPriority:(NSLayoutPriority)priority { _priority = priority; }
+- (NSLayoutPriority)priority { return NS_EXTRA(NSLayoutConstraint, self)->_priority; }
+- (void)setPriority:(NSLayoutPriority)priority { NS_EXTRA(NSLayoutConstraint, self)->_priority = priority; }
 
-- (NSString *)identifier { return _identifier; }
+- (NSString *)identifier { return NS_EXTRA(NSLayoutConstraint, self)->_identifier; }
 - (void)setIdentifier:(NSString *)identifier
 {
     NSString *copy = [identifier copy];
-    [_identifier release];
-    _identifier = copy;
+    [NS_EXTRA(NSLayoutConstraint, self)->_identifier release];
+    NS_EXTRA(NSLayoutConstraint, self)->_identifier = copy;
 }
 
-- (BOOL)isActive { return _active; }
+- (BOOL)isActive { return NS_EXTRA(NSLayoutConstraint, self)->_active; }
 
 // Activation installs the constraint on the closest common ancestor of its two
 // items (the first item itself for a one-item constraint) and raises if the
@@ -204,18 +205,18 @@ static BOOL _NSLayoutItemIsWithin(id item, id container)
 - (void)setActive:(BOOL)active
 {
     if (!active) {
-        id owner = _owner;
+        id owner = NS_EXTRA(NSLayoutConstraint, self)->_owner;
         if (owner != nil)
             [owner removeConstraint:self];
-        _active = NO;
+        NS_EXTRA(NSLayoutConstraint, self)->_active = NO;
         return;
     }
-    if (_active && _owner != nil)
+    if (NS_EXTRA(NSLayoutConstraint, self)->_active && NS_EXTRA(NSLayoutConstraint, self)->_owner != nil)
         return;
 
-    id owner = _firstItem;
-    if (_secondItem != nil) {
-        while (owner != nil && !_NSLayoutItemIsWithin(_secondItem, owner))
+    id owner = NS_EXTRA(NSLayoutConstraint, self)->_firstItem;
+    if (NS_EXTRA(NSLayoutConstraint, self)->_secondItem != nil) {
+        while (owner != nil && !_NSLayoutItemIsWithin(NS_EXTRA(NSLayoutConstraint, self)->_secondItem, owner))
             owner = _NSLayoutItemParent(owner);
     }
     // QUIRK: the exception is NSGenericException, not NSInvalidArgumentException,
@@ -230,30 +231,30 @@ static BOOL _NSLayoutItemIsWithin(id item, id container)
 
 - (void)_attachToOwner:(id)owner
 {
-    if (_owner != nil && _owner != owner)
-        [_owner removeConstraint:self];
-    _owner = owner;
-    _active = YES;
+    if (NS_EXTRA(NSLayoutConstraint, self)->_owner != nil && NS_EXTRA(NSLayoutConstraint, self)->_owner != owner)
+        [NS_EXTRA(NSLayoutConstraint, self)->_owner removeConstraint:self];
+    NS_EXTRA(NSLayoutConstraint, self)->_owner = owner;
+    NS_EXTRA(NSLayoutConstraint, self)->_active = YES;
 }
 
 - (void)_detachFromOwner:(id)owner
 {
-    if (_owner == owner) {
-        _owner = nil;
-        _active = NO;
+    if (NS_EXTRA(NSLayoutConstraint, self)->_owner == owner) {
+        NS_EXTRA(NSLayoutConstraint, self)->_owner = nil;
+        NS_EXTRA(NSLayoutConstraint, self)->_active = NO;
     }
 }
 
-- (BOOL)shouldBeArchived { return _shouldBeArchived; }
-- (void)setShouldBeArchived:(BOOL)shouldBeArchived { _shouldBeArchived = shouldBeArchived; }
+- (BOOL)shouldBeArchived { return NS_EXTRA(NSLayoutConstraint, self)->_shouldBeArchived; }
+- (void)setShouldBeArchived:(BOOL)shouldBeArchived { NS_EXTRA(NSLayoutConstraint, self)->_shouldBeArchived = shouldBeArchived; }
 
 - (NSString *)description
 {
     static const char *const relations[] = { "<=", "==", ">=" };
-    const char *relation = (_relation >= -1 && _relation <= 1) ? relations[_relation + 1] : "?";
+    const char *relation = (NS_EXTRA(NSLayoutConstraint, self)->_relation >= -1 && NS_EXTRA(NSLayoutConstraint, self)->_relation <= 1) ? relations[NS_EXTRA(NSLayoutConstraint, self)->_relation + 1] : "?";
     return [NSString stringWithFormat:@"<%@ %p %@.%ld %s %@.%ld * %g + %g @%g>", [self class], self,
-            [_firstItem class], (long)_firstAttribute, relation, [_secondItem class], (long)_secondAttribute,
-            _multiplier, _constant, _priority];
+            [NS_EXTRA(NSLayoutConstraint, self)->_firstItem class], (long)NS_EXTRA(NSLayoutConstraint, self)->_firstAttribute, relation, [NS_EXTRA(NSLayoutConstraint, self)->_secondItem class], (long)NS_EXTRA(NSLayoutConstraint, self)->_secondAttribute,
+            NS_EXTRA(NSLayoutConstraint, self)->_multiplier, NS_EXTRA(NSLayoutConstraint, self)->_constant, NS_EXTRA(NSLayoutConstraint, self)->_priority];
 }
 
 @end

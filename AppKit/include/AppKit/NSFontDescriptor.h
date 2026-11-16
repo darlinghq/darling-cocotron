@@ -18,6 +18,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/AppKitExport.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <Foundation/NSObject.h>
 
 @class NSDictionary, NSAffineTransform, NSArray, NSSet, NSFontDescriptor;
@@ -125,6 +126,7 @@ APPKIT_EXPORT NSFontDescriptorSystemDesign const NSFontDescriptorSystemDesignRou
 
 @interface NSFontDescriptor : NSObject <NSCopying> {
     NSDictionary *_attributes;
+    NS_LEGACY_IVAR_PAD(_NSFontDescriptorReserved, 20)
 }
 
 - initWithFontAttributes: (NSDictionary *) attributes;

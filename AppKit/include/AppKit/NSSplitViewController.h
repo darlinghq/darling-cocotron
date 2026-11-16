@@ -18,6 +18,7 @@
 */
 
 #import <AppKit/AppKitExport.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <Foundation/Foundation.h>
 #import <AppKit/NSViewController.h>
 
@@ -26,6 +27,7 @@
 @interface NSSplitViewController : NSViewController {
     NSSplitView *_splitView;
     NSMutableArray *_splitViewItems;
+    NS_LEGACY_IVAR_PAD(_NSSplitViewControllerReserved, 4)
 }
 
 // The controller's view; a new NSSplitView unless one was set before the view

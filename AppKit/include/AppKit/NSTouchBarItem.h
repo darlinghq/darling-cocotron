@@ -18,6 +18,7 @@
 */
 
 #import <AppKit/AppKitExport.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <Foundation/Foundation.h>
 
 typedef NSString *NSTouchBarItemIdentifier NS_EXTENSIBLE_STRING_ENUM;
@@ -43,6 +44,7 @@ APPKIT_EXPORT NSTouchBarItemIdentifier const
 
 @interface NSTouchBarItem : NSObject <NSCoding> {
     NSTouchBarItemIdentifier _identifier;
+    NS_LEGACY_IVAR_PAD(_NSTouchBarItemReserved, 28)
 }
 
 - (instancetype) initWithIdentifier: (NSTouchBarItemIdentifier) identifier;

@@ -31,14 +31,15 @@ NSNotificationName const NSScreenColorSpaceDidChangeNotification = @"NSScreenCol
 @implementation NSScreen
 
 - initWithFrame: (NSRect) frame visibleFrame: (NSRect) visibleFrame {
-    _frame = frame;
-    _visibleFrame = visibleFrame;
+    NS_EXTRA(NSScreen, self)->_frame = frame;
+    NS_EXTRA(NSScreen, self)->_visibleFrame = visibleFrame;
     return self;
 }
 
 - (void) dealloc {
-    if (_edid)
-        [_edid release];
+    if (NS_EXTRA(NSScreen, self)->_edid)
+        [NS_EXTRA(NSScreen, self)->_edid release];
+    NS_EXTRA_FREE(NSScreen, self);
     [super dealloc];
 }
 
@@ -56,15 +57,15 @@ NSNotificationName const NSScreenColorSpaceDidChangeNotification = @"NSScreenCol
 }
 
 - (NSWindowDepth) depth {
-    return _depth;
+    return NS_EXTRA(NSScreen, self)->_depth;
 }
 
 - (NSRect) frame {
-    return _frame;
+    return NS_EXTRA(NSScreen, self)->_frame;
 }
 
 - (NSRect) visibleFrame {
-    return _visibleFrame;
+    return NS_EXTRA(NSScreen, self)->_visibleFrame;
 }
 
 - (CGFloat) userSpaceScaleFactor {
@@ -156,8 +157,8 @@ NSNotificationName const NSScreenColorSpaceDidChangeNotification = @"NSScreenCol
 - (id) description {
     return [NSString stringWithFormat: @"< %@ - frame %@, visible %@ >",
                                        [super description],
-                                       NSStringFromRect(_frame),
-                                       NSStringFromRect(_visibleFrame)];
+                                       NSStringFromRect(NS_EXTRA(NSScreen, self)->_frame),
+                                       NSStringFromRect(NS_EXTRA(NSScreen, self)->_visibleFrame)];
 }
 
 - (NSDictionary<NSDeviceDescriptionKey, id> *) deviceDescription {
@@ -169,7 +170,7 @@ NSNotificationName const NSScreenColorSpaceDidChangeNotification = @"NSScreenCol
     return @{
         @"NSScreenNumber" :
                 [NSNumber numberWithUnsignedInt: [self cgDirectDisplayID]],
-        NSDeviceSize : [NSValue valueWithSize: _frame.size],
+        NSDeviceSize : [NSValue valueWithSize: NS_EXTRA(NSScreen, self)->_frame.size],
         NSDeviceResolution : [NSValue valueWithSize: NSMakeSize(dpi, dpi)],
         NSDeviceIsScreen : @"YES",
         NSDeviceColorSpaceName : NSCalibratedRGBColorSpace,
@@ -181,21 +182,21 @@ NSNotificationName const NSScreenColorSpaceDidChangeNotification = @"NSScreenCol
 
 @implementation NSScreen (Darling)
 - (NSData *) edid {
-    return self->_edid;
+    return NS_EXTRA(NSScreen, self)->_edid;
 }
 
 - (void) setEdid: (NSData *) data {
-    NSData *old = self->_edid;
-    self->_edid = [data retain];
+    NSData *old = NS_EXTRA(NSScreen, self)->_edid;
+    NS_EXTRA(NSScreen, self)->_edid = [data retain];
     [old release];
 }
 
 - (CGDirectDisplayID) cgDirectDisplayID {
-    return self->_directDisplayID;
+    return NS_EXTRA(NSScreen, self)->_directDisplayID;
 }
 
 - (void) setCgDirectDisplayID: (CGDirectDisplayID) displayID {
-    self->_directDisplayID = displayID;
+    NS_EXTRA(NSScreen, self)->_directDisplayID = displayID;
 }
 
 @end

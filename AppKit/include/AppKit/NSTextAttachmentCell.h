@@ -17,6 +17,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSCell.h>
+#import <AppKit/AppKitIvarLayout.h>
 
 @class NSTextAttachment, NSTextContainer, NSLayoutManager, NSImage;
 
@@ -64,9 +65,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @end
 
+#define _NS_SIDE_NSTextAttachmentCell 0, 1,
 @interface NSTextAttachmentCell : NSCell <NSTextAttachmentCell> {
     NSTextAttachment *_attachment;
+    NS_EXTRA_IVARS_BEGIN(NSTextAttachmentCell)
     NSImage *_attachmentImage;
+    NS_SIDE_IVARS_END(NSTextAttachmentCell)
 }
 
 @end

@@ -18,6 +18,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <CoreGraphics/CGDirectDisplay.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <Foundation/Foundation.h>
 
 @class NSColorSpace;
@@ -27,11 +28,14 @@ extern NSNotificationName const NSScreenColorSpaceDidChangeNotification;
 typedef NSString *NSDeviceDescriptionKey;
 
 @interface NSScreen : NSObject {
+    NS_LEGACY_IVAR_PAD(_NSScreenReserved, 24)
+    NS_EXTRA_IVARS_BEGIN(NSScreen)
     NSWindowDepth _depth;
     NSRect _frame;
     NSRect _visibleFrame;
     NSData *_edid;
     CGDirectDisplayID _directDisplayID;
+    NS_EXTRA_IVARS_END(NSScreen)
 }
 
 @property(readonly) NSWindowDepth depth;

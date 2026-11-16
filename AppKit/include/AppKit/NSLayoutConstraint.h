@@ -18,6 +18,7 @@
 */
 
 #import <AppKit/AppKitExport.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <CoreGraphics/CoreGraphics.h>
 #import <Foundation/NSObject.h>
 #import <Foundation/NSArray.h>
@@ -80,6 +81,8 @@ typedef NS_OPTIONS(NSUInteger, NSLayoutFormatOptions) {
 
 @interface NSLayoutConstraint : NSObject
 {
+    NS_LEGACY_IVAR_PAD(_NSLayoutConstraintReserved, 44)
+    NS_EXTRA_IVARS_BEGIN(NSLayoutConstraint)
     id _firstItem;
     NSInteger _firstAttribute;
     NSInteger _relation;
@@ -93,6 +96,7 @@ typedef NS_OPTIONS(NSUInteger, NSLayoutFormatOptions) {
     BOOL _active;
     BOOL _shouldBeArchived;
     id _owner;
+    NS_EXTRA_IVARS_END(NSLayoutConstraint)
 }
 
 + (instancetype) constraintWithItem: (id) view1

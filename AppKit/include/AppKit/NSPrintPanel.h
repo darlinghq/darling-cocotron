@@ -1,5 +1,6 @@
 #import <AppKit/AppKitExport.h>
 #import <Foundation/NSObject.h>
+#import <AppKit/AppKitIvarLayout.h>
 
 @class NSArray, NSMutableArray, NSMutableDictionary, NSViewController;
 
@@ -24,6 +25,7 @@ typedef NS_ENUM(NSInteger, NSPrintPanelResult) {
     NSMutableDictionary *_attributes;
     NSInteger _options;
     NSMutableArray *_accessoryControllers;
+    NS_LEGACY_IVAR_PAD(_NSPrintPanelReserved, 232)
 }
 
 + (NSPrintPanel *) printPanel;

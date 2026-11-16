@@ -18,6 +18,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSActionCell.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <Foundation/NSDate.h>
 
 @class NSColor, NSCalendar, NSLocale, NSTimeZone;
@@ -82,6 +83,7 @@ enum {
     NSUInteger _selectedUnit;
     BOOL _isUpHighlighted;
     BOOL _isDownHighlighted;
+    NS_LEGACY_IVAR_PAD(_NSDatePickerCellReserved, 4)
 }
 
 - delegate;

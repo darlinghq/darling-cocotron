@@ -18,14 +18,18 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSImageRep.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <ApplicationServices/ApplicationServices.h>
 
 // An image representation of a QuickDraw picture (PICT version 2): the bitmaps
 // the picture draws are decoded when the representation is created.
 @interface NSPICTImageRep : NSImageRep <NSCopying> {
+    NS_LEGACY_IVAR_PAD(_NSPICTImageRepReserved, 16)
+    NS_EXTRA_IVARS_BEGIN(NSPICTImageRep)
     NSData *_pict;
     NSRect _boundingBox;
     NSMutableArray *_bitmaps;
+    NS_EXTRA_IVARS_END(NSPICTImageRep)
 }
 
 - initWithData: (NSData *) data;

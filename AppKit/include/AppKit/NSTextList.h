@@ -17,6 +17,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/AppKitExport.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <Foundation/NSObject.h>
 
 APPKIT_EXPORT NSString *const NSTextListMarkerDecimal;
@@ -28,6 +29,7 @@ enum { NSTextListPrependEnclosingMarker = 0x01 };
 @interface NSTextList : NSObject {
     NSString *_markerFormat;
     unsigned _options;
+    NS_LEGACY_IVAR_PAD(_NSTextListReserved, 8)
 }
 
 - initWithMarkerFormat: (NSString *) format options: (unsigned) options;

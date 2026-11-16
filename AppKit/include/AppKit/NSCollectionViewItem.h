@@ -17,12 +17,14 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSViewController.h>
+#import <AppKit/AppKitIvarLayout.h>
 
 @class NSCollectionView;
 
 @interface NSCollectionViewItem : NSViewController <NSCoding, NSCopying> {
     NSCollectionView *_collectionView;
     BOOL _isSelected;
+    NS_LEGACY_IVAR_PAD(_NSCollectionViewItemReserved, 8)
 }
 
 - (NSCollectionView *) collectionView;

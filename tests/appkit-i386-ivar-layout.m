@@ -49,6 +49,42 @@ static const struct {
     {"NSComboBox", 104},  {"NSTableHeaderView", 116},
     {"NSMenuView", 156},  {"NSPrintInfo", 12},
     {"NSEvent", 60},      {"NSDocumentController", 24},
+    // the public classes that differed from the Mac in instance size (the
+    // larger ones overlapped an application's subclass); each is a class that
+    // an application can subclass or whose instance variables it can read
+    {"NSAlert", 120}, {"NSAnimation", 76}, {"NSAnimationContext", 32},
+    {"NSAppearance", 32}, {"NSArrayController", 132}, {"NSBezierPath", 88},
+    {"NSBrowserCell", 20}, {"NSCachedImageRep", 44}, {"NSCollectionView", 272},
+    {"NSCollectionViewItem", 68}, {"NSColorList", 36}, {"NSColorPanel", 252},
+    {"NSColorSpace", 36}, {"NSComboBoxCell", 88}, {"NSController", 60},
+    {"NSCursor", 20}, {"NSCustomImageRep", 40}, {"NSCustomTouchBarItem", 72},
+    {"NSDatePickerCell", 104}, {"NSDictionaryController", 184},
+    {"NSDockTile", 60}, {"NSDrawer", 100}, {"NSEPSImageRep", 44},
+    {"NSFontDescriptor", 28}, {"NSFontManager", 52}, {"NSFontPanel", 612},
+    {"NSGestureRecognizer", 72}, {"NSGradient", 32},
+    {"NSGraphicsContext", 4}, {"NSGroupTouchBarItem", 60},
+    {"NSHelpManager", 32}, {"NSLayoutConstraint", 52}, {"NSLayoutGuide", 96},
+    {"NSLayoutManager", 216}, {"NSLevelIndicatorCell", 120},
+    {"NSNib", 32}, {"NSObjectController", 92},
+    {"NSOpenGLPixelBuffer", 16}, {"NSOpenGLPixelFormat", 24},
+    {"NSPDFImageRep", 44}, {"NSPICTImageRep", 48}, {"NSPageLayout", 188},
+    {"NSPasteboardItem", 24}, {"NSPathCell", 104},
+    {"NSPathComponentCell", 76}, {"NSPathControl", 112}, {"NSPopover", 96},
+    {"NSPrintOperation", 4}, {"NSPrintPanel", 248}, {"NSPrinter", 48},
+    {"NSRulerView", 144}, {"NSRunningApplication", 80}, {"NSScreen", 32},
+    {"NSSearchFieldCell", 96}, {"NSSegmentedCell", 84}, {"NSShadow", 40},
+    {"NSSharingService", 8}, {"NSSharingServicePicker", 8},
+    {"NSSliderCell", 104}, {"NSSound", 40}, {"NSSpellChecker", 84},
+    {"NSSplitViewController", 64}, {"NSSplitViewItem", 12},
+    {"NSStackView", 148}, {"NSStatusBar", 20}, {"NSStepperCell", 88},
+    {"NSStoryboard", 8}, {"NSTabViewItem", 72}, {"NSTableCellView", 104},
+    {"NSTextAttachmentCell", 24},
+    {"NSTextList", 20}, {"NSTitlebarAccessoryViewController", 88},
+    {"NSTokenField", 120}, {"NSTokenFieldCell", 128}, {"NSToolbarItem", 72},
+    {"NSToolbarItemGroup", 84}, {"NSTouchBar", 52}, {"NSTouchBarItem", 36},
+    {"NSTrackingArea", 40}, {"NSTreeController", 140}, {"NSTreeNode", 32},
+    {"NSUserDefaultsController", 84},
+    {"NSViewAnimation", 120}, {"NSVisualEffectView", 140}, {"NSWorkspace", 20},
     // the instance size agreed already; the instance variables did not
     {"NSTextContainer", 28}, {"NSProgressIndicator", 144},
 };
@@ -201,6 +237,36 @@ static void checkExtraState(void) {
     CHECK([panel worksWhenModal], "NSPanel lost worksWhenModal");
     CHECK([panel becomesKeyOnlyIfNeeded], "NSPanel lost becomesKeyOnlyIfNeeded");
     [panel release];
+
+    // copies of objects with extra state or side storage keep the state and do
+    // not share it
+    NSBrowserCell *cell = [[NSBrowserCell alloc] initTextCell: @"cell"];
+    [cell setLeaf: YES];
+    [cell setLoaded: YES];
+    NSBrowserCell *cellCopy = [cell copy];
+    [cell setLeaf: NO];
+    CHECK([cellCopy isLeaf] && [cellCopy isLoaded], "NSBrowserCell copy lost its state");
+    CHECK(![cell isLeaf] && [cellCopy isLeaf], "NSBrowserCell copy shares its state");
+    [cellCopy release];
+    [cell release];
+
+    NSToolbarItem *item = [[NSToolbarItem alloc] initWithItemIdentifier: @"item"];
+    [item setLabel: @"label"];
+    [item setTag: 5];
+    NSToolbarItem *itemCopy = [item copy];
+    [item setTag: 6];
+    CHECK([[itemCopy label] isEqualToString: @"label"] && [itemCopy tag] == 5,
+          "NSToolbarItem copy lost or shares its state");
+    [itemCopy release];
+    [item release];
+
+    NSImage *image = [[NSImage alloc] initWithSize: NSMakeSize(8, 8)];
+    NSTextAttachmentCell *attachmentCell = [[NSTextAttachmentCell alloc] initImageCell: image];
+    NSTextAttachmentCell *attachmentCellCopy = [attachmentCell copy];
+    CHECK([attachmentCellCopy image] == image, "NSTextAttachmentCell copy lost its image");
+    [attachmentCellCopy release];
+    [attachmentCell release];
+    [image release];
 }
 
 int main(void) {

@@ -18,6 +18,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/AppKitExport.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <Foundation/NSGeometry.h>
 #import <Foundation/NSObject.h>
 #import <Foundation/NSTextCheckingResult.h>
@@ -63,6 +64,7 @@ typedef NS_ENUM(NSInteger, NSCorrectionResponse) {
     NSMutableSet *_learnedWords;
     NSString *_language;
     BOOL _automaticallyIdentifiesLanguages;
+    NS_LEGACY_IVAR_PAD(_NSSpellCheckerReserved, 48)
 }
 
 #pragma mark -

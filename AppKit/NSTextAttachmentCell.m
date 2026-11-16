@@ -27,18 +27,18 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
  * `_attachmentImage` nil and `_bounds` zero), so the cell decodes and caches one. Cached because -cellSize is called
  * repeatedly by the layout manager while it measures a line fragment. */
 - (NSImage *) attachmentImage {
-    if (_attachmentImage == nil) {
+    if (NS_EXTRA(NSTextAttachmentCell, self)->_attachmentImage == nil) {
         NSData *contents = [_attachment contents];
         if (contents != nil && [contents length] > 0)
-            _attachmentImage = [[NSImage alloc] initWithData: contents];
+            NS_EXTRA(NSTextAttachmentCell, self)->_attachmentImage = [[NSImage alloc] initWithData: contents];
     }
-    return _attachmentImage;
+    return NS_EXTRA(NSTextAttachmentCell, self)->_attachmentImage;
 }
 
 - (void) setAttachment: (NSTextAttachment *) attachment {
     if (attachment != _attachment) {
-        [_attachmentImage release];
-        _attachmentImage = nil;
+        [NS_EXTRA(NSTextAttachmentCell, self)->_attachmentImage release];
+        NS_EXTRA(NSTextAttachmentCell, self)->_attachmentImage = nil;
     }
     /* Unretained on purpose: the attachment owns the cell, so a strong reference back would be a
      * retain cycle and -dealloc would never run. The cell only reads the attachment while the
@@ -143,8 +143,18 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [self drawWithFrame: frame inView: view characterIndex: 0 layoutManager: nil];
 }
 
+- copyWithZone: (NSZone *) zone {
+    NSTextAttachmentCell *copy = [super copyWithZone: zone];
+
+    // the extra state is not shared between the copies
+    NS_EXTRA_COPY(NSTextAttachmentCell, copy, self);
+    [NS_EXTRA(NSTextAttachmentCell, copy)->_attachmentImage retain];
+    return copy;
+}
+
 - (void) dealloc {
-    [_attachmentImage release];
+    [NS_EXTRA(NSTextAttachmentCell, self)->_attachmentImage release];
+    NS_EXTRA_FREE(NSTextAttachmentCell, self);
     [super dealloc];
 }
 

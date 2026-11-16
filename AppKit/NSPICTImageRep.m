@@ -554,16 +554,16 @@ longSized:
         return nil;
 
     // The representation is the picture without the file header.
-    _pict = [[data subdataWithRange: NSMakeRange(start, length - start)] retain];
-    bytes = [_pict bytes];
-    length = [_pict length];
+    NS_EXTRA(NSPICTImageRep, self)->_pict = [[data subdataWithRange: NSMakeRange(start, length - start)] retain];
+    bytes = [NS_EXTRA(NSPICTImageRep, self)->_pict bytes];
+    length = [NS_EXTRA(NSPICTImageRep, self)->_pict length];
 
     PICTReader reader = {bytes, length, 2, NO};
     PICTRect frame = readRect(&reader);
 
-    _boundingBox = NSMakeRect(frame.left, frame.top, frame.right - frame.left,
+    NS_EXTRA(NSPICTImageRep, self)->_boundingBox = NSMakeRect(frame.left, frame.top, frame.right - frame.left,
                               frame.bottom - frame.top);
-    _size = _boundingBox.size;
+    _size = NS_EXTRA(NSPICTImageRep, self)->_boundingBox.size;
     _pixelsWide = (int) _size.width;
     _pixelsHigh = (int) _size.height;
     _colorSpaceName = [NSDeviceRGBColorSpace copy];
@@ -571,7 +571,7 @@ longSized:
     _isOpaque = NO;
     _bitsPerSample = 8;
 
-    _bitmaps = [[NSMutableArray alloc] init];
+    NS_EXTRA(NSPICTImageRep, self)->_bitmaps = [[NSMutableArray alloc] init];
 
     CGRect clip = cgRect(frame);
 
@@ -603,7 +603,7 @@ longSized:
         }
         if (op == 0x90 || op == 0x91 || op == 0x98 || op == 0x99 || op == 0x9a ||
             op == 0x9b) {
-            if (!readBitmapOp(&reader, op, clip, _bitmaps))
+            if (!readBitmapOp(&reader, op, clip, NS_EXTRA(NSPICTImageRep, self)->_bitmaps))
                 break;
             continue;
         }
@@ -618,30 +618,32 @@ longSized:
 }
 
 - (void) dealloc {
-    [_pict release];
-    [_bitmaps release];
+    [NS_EXTRA(NSPICTImageRep, self)->_pict release];
+    [NS_EXTRA(NSPICTImageRep, self)->_bitmaps release];
+    NS_EXTRA_FREE(NSPICTImageRep, self);
     [super dealloc];
 }
 
 - copyWithZone: (NSZone *) zone {
     NSPICTImageRep *result = [super copyWithZone: zone];
+    NS_EXTRA_COPY(NSPICTImageRep, result, self);
 
-    result->_pict = [_pict retain];
-    result->_bitmaps = [_bitmaps retain];
+    NS_EXTRA(NSPICTImageRep, result)->_pict = [NS_EXTRA(NSPICTImageRep, self)->_pict retain];
+    NS_EXTRA(NSPICTImageRep, result)->_bitmaps = [NS_EXTRA(NSPICTImageRep, self)->_bitmaps retain];
     return result;
 }
 
 - (NSData *) PICTRepresentation {
-    return _pict;
+    return NS_EXTRA(NSPICTImageRep, self)->_pict;
 }
 
 - (NSRect) boundingBox {
-    return _boundingBox;
+    return NS_EXTRA(NSPICTImageRep, self)->_boundingBox;
 }
 
 - (BOOL) draw {
     CGContextRef context = [[NSGraphicsContext currentContext] graphicsPort];
-    NSSize size = _boundingBox.size;
+    NSSize size = NS_EXTRA(NSPICTImageRep, self)->_boundingBox.size;
 
     if (context == NULL)
         return NO;
@@ -650,10 +652,10 @@ longSized:
 
     CGContextSaveGState(context);
     // Picture coordinates have y pointing down from the frame's top left corner.
-    CGContextTranslateCTM(context, -_boundingBox.origin.x,
-                          _boundingBox.origin.y + size.height);
+    CGContextTranslateCTM(context, -NS_EXTRA(NSPICTImageRep, self)->_boundingBox.origin.x,
+                          NS_EXTRA(NSPICTImageRep, self)->_boundingBox.origin.y + size.height);
     CGContextScaleCTM(context, 1, -1);
-    for (NSPICTBitmap *bitmap in _bitmaps) {
+    for (NSPICTBitmap *bitmap in NS_EXTRA(NSPICTImageRep, self)->_bitmaps) {
         CGRect pixels = bitmap->pixelBounds;
         CGRect src = bitmap->srcRect;
         CGRect dst = bitmap->dstRect;

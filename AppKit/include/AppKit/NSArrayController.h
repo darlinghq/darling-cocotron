@@ -19,6 +19,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSObjectController.h>
+#import <AppKit/AppKitIvarLayout.h>
 
 @class NSPredicate, NSIndexSet, NSMutableIndexSet;
 
@@ -37,6 +38,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     NSArray *_sortDescriptors;
     id _filterPredicate;
     NSMutableArray *_arrangedObjects; // A cache of the current arrangement
+    NS_LEGACY_IVAR_PAD(_NSArrayControllerReserved, 20)
 }
 
 #pragma mark -

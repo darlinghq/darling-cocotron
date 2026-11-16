@@ -18,8 +18,10 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <Foundation/NSBundle.h>
+#import <AppKit/AppKitIvarLayout.h>
 
 @interface NSSound : NSObject {
+    NS_LEGACY_IVAR_PAD(_NSSoundReserved, 36)
 }
 
 + (NSArray *) soundUnfilteredFileTypes;
