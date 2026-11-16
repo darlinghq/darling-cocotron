@@ -26,7 +26,14 @@
 #import <Foundation/Foundation.h>
 
 NS_SWIFT_NAME(NSDiffableDataSourceSnapshotReference)
-@interface NSDiffableDataSourceSnapshot : NSObject <NSCopying>
+@interface NSDiffableDataSourceSnapshot : NSObject <NSCopying> {
+@private
+    // Storage, see the implementation. Declared here because the 32-bit runtime has no ivars in @implementation.
+    NSMutableArray *_sections;
+    NSMutableArray *_items;
+    NSMutableArray *_reloadedSections;
+    NSMutableArray *_reloadedItems;
+}
 
 @property(readonly) NSInteger numberOfItems;
 @property(readonly) NSInteger numberOfSections;
