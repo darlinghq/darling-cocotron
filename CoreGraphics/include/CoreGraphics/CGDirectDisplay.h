@@ -47,6 +47,9 @@ COREGRAPHICS_EXPORT CGError CGGetDisplaysWithOpenGLDisplayMask(
 COREGRAPHICS_EXPORT CGDirectDisplayID
 CGOpenGLDisplayMaskToDisplayID(CGOpenGLDisplayMask mask);
 
+COREGRAPHICS_EXPORT CGOpenGLDisplayMask
+CGDisplayIDToOpenGLDisplayMask(CGDirectDisplayID display);
+
 COREGRAPHICS_EXPORT CGError CGGetDisplaysWithPoint(
         CGPoint point, uint32_t maxDisplays, CGDirectDisplayID *displays,
         uint32_t *matchingDisplayCount);

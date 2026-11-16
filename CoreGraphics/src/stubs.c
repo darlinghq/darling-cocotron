@@ -37,12 +37,6 @@ boolean_t CGCursorIsVisible(void) {
     return false;
 }
 
-CGOpenGLDisplayMask CGDisplayIDToOpenGLDisplayMask(CGDirectDisplayID a) {
-    if(verbose)
-        puts("STUB: CGDisplayIDToOpenGLDisplayMask called");
-    return 0;
-}
-
 void CGDisplayRestoreColorSyncSettings(void) {
     if(verbose)
         puts("STUB: CGDisplayRestoreColorSyncSettings called");
