@@ -49,6 +49,7 @@ NSString *kO2ImagePropertyTIFFOrientation = @"Orientation";
                            @"O2ImageSource_BMP",
                            @"O2ImageSource_GIF",
                            @"O2ImageSource_ICNS",
+                           @"O2ImageSource_PSD",
                            nil};
     int i;
 
