@@ -26,6 +26,8 @@
 #import <CoreGraphics/CGWindowPrivate.h>
 #import <CoreGraphics/CGSSurface.h>
 #include <pthread.h>
+#include <stdio.h>
+#include <CoreFoundation/CFNotificationCenter.h>
 
 static NSMutableDictionary<NSNumber*, CGSConnection*>* g_connections = nil;
 static Boolean g_denyConnections = FALSE;
@@ -113,6 +115,14 @@ static void _CGSLoadBackend(void)
 	[backends release];
 }
 
+static void _CGSLoadBackendOnce(void)
+{
+	static dispatch_once_t once;
+	dispatch_once(&once, ^{
+		_CGSLoadBackend();
+	});
+}
+
 CGError CGSNewConnection(CGSDictionaryObj attribs, CGSConnectionID* connId)
 {
 	*connId = -1;
@@ -120,10 +130,7 @@ CGError CGSNewConnection(CGSDictionaryObj attribs, CGSConnectionID* connId)
 	if (g_denyConnections)
 		return kCGErrorCannotComplete;
 
-	static dispatch_once_t once;
-	dispatch_once(&once, ^{
-		_CGSLoadBackend();
-	});
+	_CGSLoadBackendOnce();
 
 	if (!g_backendClass)
 		return kCGErrorCannotComplete;
@@ -143,6 +150,30 @@ CGError CGSNewConnection(CGSDictionaryObj attribs, CGSConnectionID* connId)
 	}
 	else
 		return kCGErrorFailure;
+}
+
+CGError _CGSActivateProcess(pid_t pid, uint32_t options)
+{
+	if (pid <= 0)
+		return kCGErrorIllegalArgument;
+
+	// The display server first, directly. Whatever it cannot do (it has no such request, or the
+	// process has no window of its own kind there, as a Wayland client has none on an X server
+	// that Xwayland provides) is asked of the process itself.
+	_CGSLoadBackendOnce();
+	if (g_backendClass != nil &&
+		[g_backendClass activateWindowsOfProcess: pid options: options] == kCGErrorSuccess)
+		return kCGErrorSuccess;
+
+	char name[64];
+	snprintf(name, sizeof(name), kCGSProcessActivationNotificationPrefix "%d", (int) pid);
+	CFStringRef notification = CFStringCreateWithCString(NULL, name, kCFStringEncodingUTF8);
+	if (notification == NULL)
+		return kCGErrorCannotComplete;
+	CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(),
+		notification, NULL, NULL, true);
+	CFRelease(notification);
+	return kCGErrorSuccess;
 }
 
 CGSConnection* _CGSConnectionForID(CGSConnectionID connId)
