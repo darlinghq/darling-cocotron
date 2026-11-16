@@ -5,6 +5,7 @@
 # the X server holds for each window the test names.
 #   run.sh hidden      GUEST_BIN=<cross-compiled hidden-window in the guest>
 #   run.sh decorations GUEST_BIN=<cross-compiled decorations in the guest>
+#   run.sh invisible   GUEST_BIN=<cross-compiled invisible-window in the guest>
 # Exit status 0 when every window is as expected.
 #
 # Expectations come from the documented AppKit contract: -orderOut: and
@@ -20,7 +21,7 @@ set -euo pipefail
 here=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 mode=${1:?hidden or decorations}
 temp=$(mktemp -d); trap 'rm -rf "$temp"' EXIT
-cc -Wall "$here/probe.c" -lX11 -o "$temp/probe"
+cc -Wall "$here/probe.c" -lX11 -lXext -o "$temp/probe"
 export DISPLAY=:99
 DARLING_APPKIT_BACKEND=x11 timeout -s KILL 90 darling shell "${GUEST_BIN:?path of the cross-compiled test in the guest}" \
     </dev/null >"$temp/guest.log" 2>&1 &
@@ -46,7 +47,7 @@ hidden)
     ;;
 decorations)
     framed="motif=none"
-    frameless="motif=flags:2 functions:0 decorations:0$"
+    frameless="motif=flags:2 functions:0 decorations:0( |$)"
     # Resizable without Titled gets the full frame too (follows Mac OS X 10.14)
     check deco-titled "$framed"
     check deco-borderless "$frameless"
@@ -57,6 +58,15 @@ decorations)
     check deco-untitled-to-fixed "$frameless"
     check deco-untitled-to-titled "$framed"
     check deco-titled-transparent "$framed"
+    ;;
+invisible)
+    # Windows with alpha 0 and no compositor: frameless, empty shape, still mapped. Only meaningful
+    # on a display without a compositing manager (xfwm4 --compositor=off on :99).
+    check inv-alpha0-titled "mapped=1 motif=flags:2 functions:0 decorations:0 shape=0 frameshape=0 compositor=0"
+    check inv-alpha0-borderless "mapped=1 motif=flags:2 functions:0 decorations:0 shape=0 frameshape=0 compositor=0"
+    check inv-alpha1-titled "mapped=1 motif=none shape=1 frameshape=[1-9][0-9]* compositor=0"
+    check inv-restored-titled "mapped=1 motif=none shape=1 frameshape=[1-9][0-9]* compositor=0"
+    check inv-partial-titled "mapped=1 motif=none shape=1 frameshape=[1-9][0-9]* compositor=0"
     ;;
 *) echo "unknown mode $mode"; exit 2 ;;
 esac

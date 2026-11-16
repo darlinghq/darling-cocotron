@@ -6,11 +6,15 @@
 // Host-side helper for the x11-window-state tests: waits up to ten seconds for
 // the client window whose WM_NAME is argv[1], then prints how the X server
 // sees it:
-//   mapped=<0|1> motif=<none|flags:<hex> functions:<hex> decorations:<hex>>
+//   mapped=<0|1> motif=<none|flags:<hex> functions:<hex> decorations:<hex>> shape=<n> frameshape=<n> compositor=<0|1>
+// shape is the number of rectangles of the window's bounding region (1 for an unshaped window, 0 when it is
+// empty, so nothing of the window is drawn), frameshape the same for the top-level window of the window
+// manager's frame around it, and compositor whether a compositing manager owns the screen.
 // "motif" is the _MOTIF_WM_HINTS property the AppKit backend uses to ask the
 // window manager for no frame. Build: cc probe.c -lX11
 #include <X11/Xatom.h>
 #include <X11/Xlib.h>
+#include <X11/extensions/shape.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
@@ -70,6 +74,27 @@ int main(int argc, char **argv) {
     }
     if (data)
         XFree(data);
-    printf("mapped=%d motif=%s\n", attributes.map_state != IsUnmapped, motif);
+    int rectangles = -1, frameRectangles = -1, ordering;
+    XRectangle *list = XShapeGetRectangles(d, w, ShapeBounding, &rectangles, &ordering);
+    if (list)
+        XFree(list);
+    // the ancestor that is a child of the root window
+    Window top = w, root, parent, *children = NULL;
+    unsigned int childCount = 0;
+    while (XQueryTree(d, top, &root, &parent, &children, &childCount)) {
+        if (children)
+            XFree(children);
+        if (parent == root || parent == None)
+            break;
+        top = parent;
+    }
+    list = XShapeGetRectangles(d, top, ShapeBounding, &frameRectangles, &ordering);
+    if (list)
+        XFree(list);
+    char selection[32];
+    snprintf(selection, sizeof selection, "_NET_WM_CM_S%d", DefaultScreen(d));
+    int compositor = XGetSelectionOwner(d, XInternAtom(d, selection, False)) != None;
+    printf("mapped=%d motif=%s shape=%d frameshape=%d compositor=%d\n", attributes.map_state != IsUnmapped, motif,
+           rectangles, frameRectangles, compositor);
     return 0;
 }
