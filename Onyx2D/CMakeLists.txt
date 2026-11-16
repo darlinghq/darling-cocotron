@@ -87,6 +87,7 @@ set(Onyx2D_sources
 	O2ImageSource_JPEG.m
 	O2ImageSource.m
 	O2ImageSource_PNG.m
+	O2ImageSource_PSD.m
 	O2ImageSource_TIFF.m
 	O2Layer.m
 	O2LZW.m
