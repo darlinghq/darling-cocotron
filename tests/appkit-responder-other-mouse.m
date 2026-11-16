@@ -10,11 +10,16 @@ static void expect(BOOL condition, NSString *message)
     }
 }
 
-@interface Catcher : NSResponder
+@interface Catcher : NSResponder {
+    // The legacy 32-bit runtime neither synthesizes properties nor creates
+    // their instance variables.
+    NSInteger _downs, _ups, _drags;
+}
 @property NSInteger downs, ups, drags;
 @end
 
 @implementation Catcher
+@synthesize downs = _downs, ups = _ups, drags = _drags;
 - (void)otherMouseDown:(NSEvent *)event { self.downs++; }
 - (void)otherMouseUp:(NSEvent *)event { self.ups++; }
 - (void)otherMouseDragged:(NSEvent *)event { self.drags++; }
