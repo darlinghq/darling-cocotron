@@ -88,6 +88,18 @@ CGColorSpaceRef CGColorSpaceCreateIndexed(CGColorSpaceRef baseSpace, size_t last
     return (CGColorSpaceRef)O2ColorSpaceCreateIndexed((O2ColorSpaceRef)baseSpace, lastIndex, colorTable);
 }
 
+CGColorSpaceRef CGColorSpaceGetBaseColorSpace(CGColorSpaceRef self) {
+    return (CGColorSpaceRef)O2ColorSpaceGetBaseColorSpace((O2ColorSpaceRef)self);
+}
+
+size_t CGColorSpaceGetColorTableCount(CGColorSpaceRef self) {
+    return O2ColorSpaceGetColorTableCount((O2ColorSpaceRef)self);
+}
+
+void CGColorSpaceGetColorTable(CGColorSpaceRef self, uint8_t *table) {
+    O2ColorSpaceGetColorTable((O2ColorSpaceRef)self, table);
+}
+
 CGColorSpaceModel CGColorSpaceGetModel(CGColorSpaceRef self) {
     return (CGColorSpaceModel)O2ColorSpaceGetModel((O2ColorSpaceRef)self);
 }

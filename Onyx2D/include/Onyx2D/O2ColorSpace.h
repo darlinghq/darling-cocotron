@@ -49,6 +49,7 @@ typedef enum {
     O2ColorSpaceModel _type;
     BOOL _isPlatformRGB;
     CFStringRef _name;
+    O2ColorSpace *_patternBase;
 }
 
 - (O2ColorSpaceModel) type;
@@ -77,6 +78,13 @@ BOOL O2ColorSpaceGetColorProfile(O2ColorSpaceRef self, O2ColorProfile *profile);
 CFDataRef O2ColorSpaceCopyICCData(O2ColorSpaceRef self);
 
 size_t O2ColorSpaceGetNumberOfComponents(O2ColorSpaceRef self);
+
+// The space an indexed space picks its colors from, or the underlying space of a pattern space; NULL for other spaces.
+O2ColorSpaceRef O2ColorSpaceGetBaseColorSpace(O2ColorSpaceRef self);
+// The number of entries in an indexed space's table; 0 for other spaces.
+size_t O2ColorSpaceGetColorTableCount(O2ColorSpaceRef self);
+// Copies the table of an indexed space (entries times the base's components bytes); does nothing for other spaces.
+void O2ColorSpaceGetColorTable(O2ColorSpaceRef self, unsigned char *table);
 
 O2ColorSpaceModel O2ColorSpaceGetModel(O2ColorSpaceRef self);
 

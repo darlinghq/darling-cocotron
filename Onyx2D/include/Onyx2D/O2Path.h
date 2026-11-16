@@ -81,6 +81,9 @@ O2PathRef O2PathCreateCopy(O2PathRef self);
 O2PathRef O2PathCreateCopyByStrokingPath(O2PathRef self,
     const O2AffineTransform *transform, O2Float width, int cap, int join,
     O2Float miterLimit);
+// The "on" stretches of a dash pattern along the path as open subpaths; see CGPathCreateCopyByDashingPath.
+O2PathRef O2PathCreateCopyByDashingPath(O2PathRef self, const O2AffineTransform *transform, O2Float phase,
+    const O2Float *lengths, size_t count);
 BOOL O2PathContainsPoint(O2PathRef self, const O2AffineTransform *xform,
                          O2Point point, BOOL evenOdd);
 
