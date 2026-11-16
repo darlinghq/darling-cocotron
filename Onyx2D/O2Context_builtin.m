@@ -65,7 +65,7 @@ void O2DContextClipAndFillEdges(O2Context_builtin *self, int fillRuleMask);
 - initWithSurface: (O2Surface *) surface flipped: (BOOL) flipped {
     [super initWithSurface: surface flipped: flipped];
 
-    _clipContext = nil;
+    _clipMask = nil;
 
     O2PaintRef paint =
             [[O2Paint_color alloc] initWithGray: 0
@@ -96,7 +96,7 @@ void O2DContextClipAndFillEdges(O2Context_builtin *self, int fillRuleMask);
 }
 
 - (void) dealloc {
-    [_clipContext release];
+    [_clipMask release];
     [_paint release];
 
     if (_edges != NULL) {
@@ -256,12 +256,17 @@ void O2ContextDeviceClipToEvenOddPath_builtin(O2Context_builtin *self,
     O2ContextClipViewportToPath(self, path);
 }
 
+static void O2ContextDeviceClipToMask_builtin(O2Context_builtin *self,
+                                              O2ClipPhase *phase);
+
 - (void) clipToState: (O2ClipState *) clipState {
     O2GState *gState = O2ContextCurrentGState(self);
     NSArray *phases = [O2GStateClipState(gState) clipPhases];
     int i, count = [phases count];
 
     O2ContextDeviceClipReset_builtin(self);
+    [_clipMask release];
+    _clipMask = nil;
 
     for (i = 0; i < count; i++) {
         O2ClipPhase *phase = [phases objectAtIndex: i];
@@ -280,6 +285,7 @@ void O2ContextDeviceClipToEvenOddPath_builtin(O2Context_builtin *self,
             break;
 
         case O2ClipPhaseMask:
+            O2ContextDeviceClipToMask_builtin(self, phase);
             break;
         }
     }
@@ -529,7 +535,7 @@ ONYX2D_STATIC BOOL drawImagePixelForPixel(O2Context_builtin *self,
     const O2Float epsilon = 1.0e-4;
 
     if (O2ImageGetMask(image) != NULL || O2ImageIsMask(image) ||
-        O2ImageGetDecode(image) != NULL || self->_clipContext != nil ||
+        O2ImageGetDecode(image) != NULL || self->_clipMask != nil ||
         [self->_layerStack count] > 0 || gState->_alpha != 1 ||
         (gState->_blendMode != kO2BlendModeNormal &&
          gState->_blendMode != kO2BlendModeCopy))
@@ -645,6 +651,132 @@ ONYX2D_STATIC BOOL drawImagePixelForPixel(O2Context_builtin *self,
             }
     }
     return YES;
+}
+
+// The coverage that a sample of a mask image gives to the pixels it covers:
+// the alpha of an image that has one, the value of a gray image, and the
+// inverse of an image mask (whose sample 0 marks the area to paint).
+static uint8_t O2ClipMaskCoverage(O2Image *image, O2argb8u pixel) {
+    if (O2ImageIsMask(image))
+        return 255 - pixel.r;
+
+    switch (O2ImageGetAlphaInfo(image)) {
+    case kO2ImageAlphaPremultipliedLast:
+    case kO2ImageAlphaPremultipliedFirst:
+    case kO2ImageAlphaLast:
+    case kO2ImageAlphaFirst:
+    case kO2ImageAlphaOnly:
+        return pixel.a;
+    default:
+        return (pixel.r + pixel.g + pixel.b) / 3;
+    }
+}
+
+// Clipping to a mask keeps only the area of the mask image, weighted by its
+// coverage, so the result is kept per device pixel and multiplied into what
+// earlier masks left. Where a pixel of the surface falls outside the image
+// nothing is painted.
+static void O2ContextDeviceClipToMask_builtin(O2Context_builtin *self,
+                                              O2ClipPhase *phase)
+{
+    O2Image *image = O2ClipPhaseObject(phase);
+    size_t imageWidth = O2ImageGetWidth(image);
+    size_t imageHeight = O2ImageGetHeight(image);
+    size_t width = O2ImageGetWidth(self->_surface);
+    size_t height = O2ImageGetHeight(self->_surface);
+    O2Rect rect = O2ClipPhaseRect(phase);
+
+    if (width == 0 || height == 0)
+        return;
+
+    if (self->_clipMask == nil) {
+        O2ColorSpaceRef gray = O2ColorSpaceCreateDeviceGray();
+
+        self->_clipMask = [[O2Surface alloc] initWithBytes: NULL
+                                                     width: width
+                                                    height: height
+                                          bitsPerComponent: 8
+                                               bytesPerRow: 0
+                                                colorSpace: gray
+                                                bitmapInfo: kO2ImageAlphaNone];
+        O2ColorSpaceRelease(gray);
+        if (self->_clipMask == nil)
+            return;
+        memset(O2SurfaceGetPixelBytes(self->_clipMask), 0xFF,
+               O2SurfaceGetBytesPerRow(self->_clipMask) * height);
+    }
+
+    uint8_t *bytes = O2SurfaceGetPixelBytes(self->_clipMask);
+    size_t bytesPerRow = O2SurfaceGetBytesPerRow(self->_clipMask);
+    O2AffineTransform imageToSurface = createImageToSurfaceTransform(
+            image, rect, O2ClipPhaseTransform(phase));
+    O2AffineTransform surfaceToImage = O2AffineTransformInvert(imageToSurface);
+
+    BOOL degenerate = imageWidth == 0 || imageHeight == 0 ||
+                      rect.size.width == 0 || rect.size.height == 0;
+
+    // The area of the image on the surface, in whole pixels.
+    O2Point corners[4] = {
+        O2PointMake(0, 0), O2PointMake(imageWidth, 0),
+        O2PointMake(imageWidth, imageHeight), O2PointMake(0, imageHeight)};
+    O2Float minX = 0, maxX = 0, minY = 0, maxY = 0;
+    for (int i = 0; i < 4; i++) {
+        O2Point p = O2PointApplyAffineTransform(corners[i], imageToSurface);
+        if (i == 0 || p.x < minX)
+            minX = p.x;
+        if (i == 0 || p.x > maxX)
+            maxX = p.x;
+        if (i == 0 || p.y < minY)
+            minY = p.y;
+        if (i == 0 || p.y > maxY)
+            maxY = p.y;
+    }
+    long x0 = degenerate ? 0 : MAX(0, (long) floor(minX));
+    long x1 = degenerate ? 0 : MIN((long) width, (long) ceil(maxX));
+    long y0 = degenerate ? 0 : MAX(0, (long) floor(minY));
+    long y1 = degenerate ? 0 : MIN((long) height, (long) ceil(maxY));
+
+    O2argb8u *row = malloc(imageWidth * sizeof(O2argb8u));
+    long rowIndex = -1;
+
+    for (long y = 0; y < (long) height; y++) {
+        uint8_t *line = bytes + y * bytesPerRow;
+
+        if (y < y0 || y >= y1) {
+            memset(line, 0, width);
+            continue;
+        }
+        for (long x = 0; x < (long) width; x++) {
+            if (x < x0 || x >= x1) {
+                line[x] = 0;
+                continue;
+            }
+
+            O2Point p = O2PointApplyAffineTransform(
+                    O2PointMake(x + 0.5, y + 0.5), surfaceToImage);
+            long u = (long) floor(p.x);
+            long v = (long) floor(p.y);
+
+            if (u < 0 || v < 0 || u >= (long) imageWidth ||
+                v >= (long) imageHeight)
+            {
+                line[x] = 0;
+                continue;
+            }
+
+            if (v != rowIndex) {
+                O2argb8u *direct =
+                        O2Image_read_argb8u(image, 0, (int) v, row,
+                                            (int) imageWidth);
+                if (direct != NULL)
+                    memcpy(row, direct, imageWidth * sizeof(O2argb8u));
+                rowIndex = v;
+            }
+            line[x] = (line[x] * (unsigned) O2ClipMaskCoverage(image, row[u]) +
+                       127) / 255;
+        }
+    }
+    free(row);
 }
 
 - (void) drawImage: (O2Image *) image inRect: (O2Rect) rect {
@@ -1176,6 +1308,18 @@ void O2DContextFillEdgesOnSurface(O2Context_builtin *self, O2Surface *surface,
     CoverageNode *freeCoverage = NULL;
     CoverageNode *currentCoverage = NULL;
 
+    // The shortcuts for the usual blend modes paint a whole span with one
+    // coverage; with a mask clipping the context the span is blended pixel by
+    // pixel.
+    void (*writeCoverage)() = self->_writeCoverageFunction;
+    void (*blendFunction)() = self->_blendFunction;
+    if (mask != nil && self->_writeCoverage_argb8u_PRE != NULL &&
+        self->_blend_argb8u_PRE != NULL)
+    {
+        writeCoverage = O2RasterizeWriteCoverageSpan8888;
+        blendFunction = self->_blend_argb8u_PRE;
+    }
+
     sortEdgesByMinY(edges, edgeCount, self->_sortCache);
 
     int ylimit = self->_vpy + self->_vpheight;
@@ -1270,9 +1414,9 @@ void O2DContextFillEdgesOnSurface(O2Context_builtin *self, O2Surface *surface,
         NSLog(@"xlimit=%d,ylimit=%d",xlimit,ylimit);
         }
 #endif
-                    self->_writeCoverageFunction(
-                            surface, mask, paint, node->scanx, scany,
-                            node->coverage, node->length, self->_blendFunction);
+                    writeCoverage(surface, mask, paint, node->scanx, scany,
+                                  node->coverage, node->length,
+                                  blendFunction);
                 }
                 continue;
             }
@@ -1470,9 +1614,8 @@ void O2DContextFillEdgesOnSurface(O2Context_builtin *self, O2Surface *surface,
         NSLog(@"xlimit=%d,ylimit=%d",xlimit,ylimit);
         }
 #endif
-            self->_writeCoverageFunction(surface, mask, paint, node->scanx,
-                                         scany, node->coverage, node->length,
-                                         self->_blendFunction);
+            writeCoverage(surface, mask, paint, node->scanx, scany,
+                          node->coverage, node->length, blendFunction);
         }
     }
 
@@ -1491,8 +1634,7 @@ void O2DContextFillEdgesOnSurface(O2Context_builtin *self, O2Surface *surface,
 }
 
 void O2DContextClipAndFillEdges(O2Context_builtin *self, int fillRuleMask) {
-    O2Image *mask =
-            (self->_clipContext != nil) ? self->_clipContext->_surface : nil;
+    O2Image *mask = self->_clipMask;
     O2Surface *surface;
 
     if ([self->_layerStack count] > 0)

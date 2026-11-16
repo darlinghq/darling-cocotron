@@ -29,6 +29,8 @@ O2ClipPhase *O2ClipPhaseInitWithNonZeroPath(O2ClipPhase *self, O2Path *path);
 
 O2ClipPhaseType O2ClipPhasePhaseType(O2ClipPhase *self);
 id O2ClipPhaseObject(O2ClipPhase *self);
+O2Rect O2ClipPhaseRect(O2ClipPhase *self);
+O2AffineTransform O2ClipPhaseTransform(O2ClipPhase *self);
 
 @end
 

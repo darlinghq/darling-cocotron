@@ -75,7 +75,9 @@ typedef void (*O2WriteCoverage_argb8u)(O2Surface *surface, O2Surface *mask,
 @interface O2Context_builtin : O2BitmapContext {
 
     O2Paint *_paint;
-    O2Context_builtin *_clipContext;
+    // Coverage (8-bit gray, one byte per device pixel) left by clipping to masks;
+    // nil while no mask clips the context.
+    O2Surface *_clipMask;
 
     O2BlendSpan_argb8u _blend_argb8u_PRE;
     O2BlendSpan_argb32f _blend_argb32f_PRE;
