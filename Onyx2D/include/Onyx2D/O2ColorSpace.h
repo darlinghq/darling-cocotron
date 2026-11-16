@@ -24,6 +24,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 typedef O2ColorSpace *O2ColorSpaceRef;
 
 #import <Onyx2D/O2ColorConversion.h>
+#import <CoreFoundation/CFData.h>
 #import <Onyx2D/O2Function.h>
 
 typedef enum {
@@ -70,6 +71,10 @@ BOOL O2ColorSpaceIsPlatformRGB(O2ColorSpaceRef self);
 // The colorimetric profile of a named color space (see O2ColorConversion.h);
 // NO for device, indexed, pattern and DeviceN spaces and for names without one.
 BOOL O2ColorSpaceGetColorProfile(O2ColorSpaceRef self, O2ColorProfile *profile);
+
+// A synthesized ICC profile for the named spaces with a colorimetric profile;
+// NULL for every other space.
+CFDataRef O2ColorSpaceCopyICCData(O2ColorSpaceRef self);
 
 size_t O2ColorSpaceGetNumberOfComponents(O2ColorSpaceRef self);
 

@@ -49,6 +49,7 @@ set(Onyx2D_sources
 	O2ClipState.m
 	O2Color.m
 	O2ColorConversion.m
+	O2ColorICC.m
 	O2ColorSpace.m
 	O2ColorSpace+PDF.m
 	O2Context_builtin.m

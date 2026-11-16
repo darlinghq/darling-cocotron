@@ -20,6 +20,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <CoreFoundation/CFBase.h>
 #import <Foundation/NSString.h>
 #import <Onyx2D/O2ColorSpace.h>
+#import <Onyx2D/O2ColorICC.h>
+#include <string.h>
 
 const CFStringRef kO2ColorSpaceDisplayP3 = CFSTR("kCGColorSpaceDisplayP3");
 const CFStringRef kO2ColorSpaceGenericGray = CFSTR("kCGColorSpaceGenericGray");
@@ -214,6 +216,50 @@ BOOL O2ColorSpaceGetColorProfile(O2ColorSpaceRef self, O2ColorProfile *profile) 
         return NO;
     // The profile and the model must agree (a gray profile for a gray space).
     return profile->isGray == (self->_type == kO2ColorSpaceModelMonochrome);
+}
+
+// Profile description for the names O2ColorProfileForName understands, with
+// the optional "Extended" prefix already removed.
+static const char *profileDescription(const char *suffix) {
+    static const struct {
+        const char *suffix;
+        const char *description;
+    } names[] = {
+        {"SRGB", "sRGB IEC61966-2.1"},
+        {"LinearSRGB", "sRGB IEC61966-2.1 Linear"},
+        {"DisplayP3", "Display P3"},
+        {"LinearDisplayP3", "Display P3 Linear"},
+        {"GenericRGB", "Generic RGB"},
+        {"GenericRGBLinear", "Generic RGB Linear"},
+        {"AdobeRGB1998", "Adobe RGB (1998)"},
+        {"ITUR_709", "Rec. ITU-R BT.709"},
+        {"ITUR_2020", "Rec. ITU-R BT.2020"},
+        {"LinearITUR_2020", "Rec. ITU-R BT.2020 Linear"},
+        {"GenericGray", "Generic Gray"},
+        {"GenericGrayGamma2_2", "Generic Gray Gamma 2.2"},
+        {"Gray", "Gray"},
+        {"LinearGray", "Linear Gray"},
+    };
+    for (size_t i = 0; i < sizeof(names) / sizeof(names[0]); i++)
+        if (strcmp(names[i].suffix, suffix) == 0)
+            return names[i].description;
+    return NULL;
+}
+
+CFDataRef O2ColorSpaceCopyICCData(O2ColorSpaceRef self) {
+    O2ColorProfile profile;
+    char name[64];
+
+    if (self == NULL || self->_name == NULL ||
+        !O2ColorSpaceGetColorProfile(self, &profile) ||
+        !CFStringGetCString(self->_name, name, sizeof(name), kCFStringEncodingASCII))
+        return NULL;
+
+    const char *suffix = name + strlen("kCGColorSpace");
+    if (strncmp(suffix, "Extended", 8) == 0)
+        suffix += 8;
+    const char *description = profileDescription(suffix);
+    return description ? O2ColorProfileCopyICCData(&profile, description) : NULL;
 }
 
 BOOL O2ColorSpaceIsPlatformRGB(O2ColorSpaceRef self) {
