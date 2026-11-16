@@ -4047,6 +4047,9 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
     NSMutableArray *entered = [NSMutableArray array];
     NSMutableArray *moved = [NSMutableArray array];
     NSMutableArray *update = [NSMutableArray array];
+    // Cursor-update areas the pointer was in and still is in.
+    NSMutableArray *remaining = [NSMutableArray array];
+    BOOL cursorAreaExited = NO;
 
     BOOL cursorIsSet = NO;
     BOOL raiseToolTipWindow = NO;
@@ -4160,10 +4163,10 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
                 cursorIsSet = YES;
                 [update addObject: area];
             }
-#if 0
-            if (options & NSTrackingCursorUpdate && mouseIsInside)
-                cursorIsSet = YES;
-#endif
+            if (options & NSTrackingCursorUpdate && mouseWasInside &&
+                mouseIsInside && !(options & NSTrackingActiveAlways)) {
+                [remaining addObject: area];
+            }
         }
         // (not) ToolTip
 
@@ -4174,11 +4177,30 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
     // The order of the other two is not specific at this time
 
     for (NSTrackingArea *check in exited) {
-        id owner = [check owner];
-
         if ([check options] & NSTrackingCursorUpdate) {
-            [[NSCursor arrowCursor] set];
+            cursorAreaExited = YES;
         }
+    }
+
+    // The cursor goes back to the arrow when the pointer leaves a cursor-update
+    // area. This happens before the owners are told about exits and entries,
+    // which may set a cursor of their own, and before cursorUpdate: is sent for
+    // the areas the pointer entered.
+    if (cursorAreaExited) {
+        [[NSCursor arrowCursor] set];
+
+        // If the pointer is still inside another cursor-update area (it left
+        // an area nested in, or overlapping, a larger one) and entered no
+        // other, that area decides the cursor again. Of several the one
+        // collected last, which is the frontmost, is used.
+        if ([update count] == 0 && [remaining count] > 0) {
+            [update addObject: [remaining lastObject]];
+            cursorIsSet = YES;
+        }
+    }
+
+    for (NSTrackingArea *check in exited) {
+        id owner = [check owner];
 
         if ([owner respondsToSelector: @selector(mouseExited:)]) {
             NSEvent *event = [NSEvent
