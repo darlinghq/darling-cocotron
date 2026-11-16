@@ -22,6 +22,7 @@
 #import <AppKit/NSColor.h>
 #import <AppKit/NSFont.h>
 #import <AppKit/NSFontManager.h>
+#import <AppKit/NSDisplay.h>
 #import <AppKit/NSRichTextReader.h>
 #import <AppKit/NSTextAttachment.h>
 
@@ -284,6 +285,17 @@ static inline void flushPreviousString(NSRichTextReader *self) {
     }
 }
 
+// Whether a font of this name is installed: a face of an installed family, or
+// a name the font system maps to an installed family (such as an alias for a
+// metric-compatible font).
+- (BOOL) _installedFontNamed: (NSString *) name {
+    if ([[[NSFontManager sharedFontManager] availableFonts]
+                containsObject: name])
+        return YES;
+    return [[NSDisplay currentDisplay] fontFamilyNameForGenericFamily: name] !=
+           nil;
+}
+
 - (void) flushFontName {
     _range.length--;
     if ([_bufferIn length] > 0) {
@@ -484,13 +496,11 @@ static inline void flushPreviousString(NSRichTextReader *self) {
 
             _currentCharset = [[info objectForKey: @"charset"] integerValue];
 
-            // Turns out fontWithName:size: is still returning fonts for font
-            // names it doesn't have For example "Helvetica". This check ensures
-            // that we only ask for fonts we have... Of course this is a general
-            // problem... so the full fix is elsewhere...
-            NSArray *availableFonts =
-                    [[NSFontManager sharedFontManager] availableFonts];
-            if ([availableFonts containsObject: fontname]) {
+            // fontWithName:size: answers for names that no installed font
+            // has (the font system substitutes one), so only a name of an
+            // installed face, or one the font system has an alias for, is
+            // used; the family of the table entry picks a default otherwise.
+            if ([fontname length] > 0 && [self _installedFontNamed: fontname]) {
                 font = [NSFont fontWithName: fontname size: 12];
             }
 
@@ -519,11 +529,18 @@ static inline void flushPreviousString(NSRichTextReader *self) {
                 NSFont *currentFont =
                         [_currentAttributes objectForKey: NSFontAttributeName];
                 if (currentFont) {
-                    // We'll try to keep the traits, size of the current font
-                    // and just change the family name
-                    font = [[NSFontManager sharedFontManager]
-                            convertFont: currentFont
-                               toFamily: [font familyName]];
+                    // The font keeps its own name, and takes the size and the
+                    // bold and italic switches that are in effect.
+                    NSFontManager *manager = [NSFontManager sharedFontManager];
+                    NSFontTraitMask mask = NSBoldFontMask | NSItalicFontMask;
+                    NSFontTraitMask missing =
+                            [manager traitsOfFont: currentFont] & mask &
+                            ~[manager traitsOfFont: font];
+
+                    font = [NSFont fontWithName: [font fontName]
+                                           size: [currentFont pointSize]];
+                    if (missing != 0)
+                        font = [manager convertFont: font toHaveTrait: missing];
                 }
                 [_currentAttributes setObject: font
                                        forKey: NSFontAttributeName];

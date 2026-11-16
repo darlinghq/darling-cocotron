@@ -62,6 +62,7 @@ set(QuartzCore_sources
 	CAFilter.m
 	CAGradientLayer.m
 	CAShapeLayer.m
+	CATiledLayer.m
 	CAMediaTiming.m
 	CAReplicatorLayer.m
 	CAScrollLayer.m

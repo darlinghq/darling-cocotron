@@ -194,9 +194,35 @@ extern uint32_t CGContextGetFontSmoothingStyle(CGContextRef context);
 extern void CGContextSetFontSmoothingStyle(CGContextRef context, uint32_t style);
 
 // Darling extras, e.g. for CGL
+// Asks the window system to give the windows of a process the input focus and raise them,
+// as a pager would (the window manager may still refuse). The pid is a Darling process
+// id. With kCGSActivateProcessFrontWindowOnly only the process' frontmost window is
+// activated; otherwise all of its windows are raised, keeping their stacking order.
+// A process this system has no direct way to activate (Wayland offers none) is asked
+// through a per-process Darwin notification that the process' own windowing backend
+// answers; so success only means the request was made. Returns kCGErrorIllegalArgument
+// for a pid that is not positive, kCGErrorSuccess otherwise, and
+// kCGErrorCannotComplete when no request could be made.
+#define kCGSActivateProcessFrontWindowOnly 1
+CGError _CGSActivateProcess(pid_t pid, uint32_t options);
+// The name of the Darwin notification that asks the process with this pid to activate its
+// windows (see above); a windowing backend observes the name of its own process.
+#define kCGSProcessActivationNotificationPrefix "org.darlinghq.process-activation."
+
 void* _CGSNativeDisplay(CGSConnectionID connId);
 void* _CGSNativeWindowForID(CGSConnectionID connId, CGSWindowID winId);
 void* _CGSNativeWindowForSurfaceID(CGSConnectionID connId, CGSWindowID winId, CGSSurfaceID surfaceId);
+
+// Private context functions (see CGContext.m). The composite operation is the
+// context's blend mode under a different numbering.
+extern size_t CGContextGetLineDashCount(CGContextRef context);
+extern void CGContextGetLineDashPattern(CGContextRef context, CGFloat *phase, CGFloat *lengths, size_t capacity);
+extern int CGContextGetCompositeOperation(CGContextRef context);
+extern void CGContextSetCompositeOperation(CGContextRef context, int operation);
+
+// Private numeric helpers.
+extern bool CGFloatIsValid(CGFloat value);
+extern size_t CGBitmapGetAlignedBytesPerRow(size_t bytesPerRow);
 
 extern CGEventRef CGEventCreateWithEventRecord(const CGSEventRecordPtr event, uint32_t eventRecordSize);
 extern CGError CGEventGetEventRecord(CGEventRef event, CGSEventRecordPtr eventRecord, uint32_t eventRecordSize);

@@ -21,10 +21,13 @@
 #include <dispatch/dispatch.h>
 #include <stdatomic.h>
 #import <CoreGraphics/CGSConnection.h>
+#import <CoreGraphics/CGSKeyboardLayout.h>
 #import <CoreGraphics/CGSWindow.h>
 #import <CoreGraphics/CGWindowPrivate.h>
 #import <CoreGraphics/CGSSurface.h>
 #include <pthread.h>
+#include <stdio.h>
+#include <CoreFoundation/CFNotificationCenter.h>
 
 static NSMutableDictionary<NSNumber*, CGSConnection*>* g_connections = nil;
 static Boolean g_denyConnections = FALSE;
@@ -112,6 +115,14 @@ static void _CGSLoadBackend(void)
 	[backends release];
 }
 
+static void _CGSLoadBackendOnce(void)
+{
+	static dispatch_once_t once;
+	dispatch_once(&once, ^{
+		_CGSLoadBackend();
+	});
+}
+
 CGError CGSNewConnection(CGSDictionaryObj attribs, CGSConnectionID* connId)
 {
 	*connId = -1;
@@ -119,10 +130,7 @@ CGError CGSNewConnection(CGSDictionaryObj attribs, CGSConnectionID* connId)
 	if (g_denyConnections)
 		return kCGErrorCannotComplete;
 
-	static dispatch_once_t once;
-	dispatch_once(&once, ^{
-		_CGSLoadBackend();
-	});
+	_CGSLoadBackendOnce();
 
 	if (!g_backendClass)
 		return kCGErrorCannotComplete;
@@ -142,6 +150,30 @@ CGError CGSNewConnection(CGSDictionaryObj attribs, CGSConnectionID* connId)
 	}
 	else
 		return kCGErrorFailure;
+}
+
+CGError _CGSActivateProcess(pid_t pid, uint32_t options)
+{
+	if (pid <= 0)
+		return kCGErrorIllegalArgument;
+
+	// The display server first, directly. Whatever it cannot do (it has no such request, or the
+	// process has no window of its own kind there, as a Wayland client has none on an X server
+	// that Xwayland provides) is asked of the process itself.
+	_CGSLoadBackendOnce();
+	if (g_backendClass != nil &&
+		[g_backendClass activateWindowsOfProcess: pid options: options] == kCGErrorSuccess)
+		return kCGErrorSuccess;
+
+	char name[64];
+	snprintf(name, sizeof(name), kCGSProcessActivationNotificationPrefix "%d", (int) pid);
+	CFStringRef notification = CFStringCreateWithCString(NULL, name, kCFStringEncodingUTF8);
+	if (notification == NULL)
+		return kCGErrorCannotComplete;
+	CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(),
+		notification, NULL, NULL, true);
+	CFRelease(notification);
+	return kCGErrorSuccess;
 }
 
 CGSConnection* _CGSConnectionForID(CGSConnectionID connId)
@@ -570,4 +602,29 @@ void _CGSPostHotKeyEvent(CGSConnectionID connection, int uid, BOOL pressed, CGEv
 		const NotifyProcEntry* e = [entry bytes];
 		e->proc(e->notificationType, &record, sizeof(record), e->private);
 	}
+}
+
+// The current keyboard layout of the window-system backend: a dictionary with the 'uchr' data
+// (key "data", CFData) and the layout's "name" and "fullName" strings, or NULL when the backend has
+// no layout (no connection, or a backend that does not provide one). The caller releases it.
+// Used by the Text Input Sources API (HIToolbox).
+CFDictionaryRef _CGSCopyCurrentKeyboardLayoutInfo(void)
+{
+	CGSConnection* connection = _CGSConnectionForID(_CGSDefaultConnection());
+	CGSKeyboardLayout* layout = [connection createKeyboardLayout];
+	if (!layout || !layout.layout || layout.layoutLength == 0)
+	{
+		[layout release];
+		return NULL;
+	}
+
+	CFDataRef data = CFDataCreate(NULL, (const UInt8*) layout.layout, layout.layoutLength);
+	NSDictionary* info = @{
+		@"data": (id) data,
+		@"name": layout.name ?: @"?",
+		@"fullName": layout.fullName ?: @"?",
+	};
+	CFRelease(data);
+	[layout release];
+	return (CFDictionaryRef) [info retain];
 }

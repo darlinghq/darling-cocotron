@@ -32,6 +32,8 @@
 #import "WaylandProtocol.h"
 #import "WaylandWindow.h"
 #import <CoreGraphics/CGSKeySymToUnicodePrivate.h>
+#import <CoreGraphics/CoreGraphicsPrivate.h>
+#import <CoreFoundation/CFNotificationCenter.h>
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSCursor.h>
 #import <AppKit/NSScreen.h>
@@ -199,6 +201,16 @@ static void socketCallback(CFSocketRef socket, CFSocketCallBackType type,
     [(WaylandDisplay *) info processPendingEvents];
 }
 
+// A process asked (CGS, _CGSActivateProcess) that this one activate its windows.
+static void activationRequestedCallback(CFNotificationCenterRef center, void *observer,
+                                        CFNotificationName name, const void *object,
+                                        CFDictionaryRef userInfo)
+{
+    [(WaylandDisplay *) observer performSelectorOnMainThread: @selector(requestActivation)
+                                                  withObject: nil
+                                               waitUntilDone: NO];
+}
+
 static void repeatTimerCallback(CFRunLoopTimerRef timer, void *info) {
     [(WaylandDisplay *) info performSelector: @selector(repeatKey)];
 }
@@ -341,6 +353,20 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
     }
     CFRunLoopAddSource(CFRunLoopGetMain(), _wlSource, kCFRunLoopCommonModes);
 
+    // Another process asks for the activation of this one's windows with a Darwin
+    // notification named after this process (see _CGSActivateProcess).
+    char notificationName[64];
+    snprintf(notificationName, sizeof(notificationName),
+             kCGSProcessActivationNotificationPrefix "%d", (int) getpid());
+    CFStringRef notification = CFStringCreateWithCString(NULL, notificationName,
+                                                         kCFStringEncodingUTF8);
+    if (notification != NULL) {
+        CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), self,
+                                        activationRequestedCallback, notification, NULL,
+                                        CFNotificationSuspensionBehaviorDeliverImmediately);
+        CFRelease(notification);
+    }
+
     [self runAfterDispatchBlocks];
     [self flush];
 
@@ -359,6 +385,9 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
     [self stopKeyRepeat];
     [self cancelPendingModifier];
     [_heldKeyIdentities release];
+
+    CFNotificationCenterRemoveEveryObserver(CFNotificationCenterGetDarwinNotifyCenter(), self);
+    [self cancelActivationRequest];
 
     if (_wlSource != NULL) {
         CFRunLoopRemoveSource(CFRunLoopGetMain(), _wlSource,
@@ -385,7 +414,7 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
                                       _lockedPointer, _relativePointer, _pointerConstraints, _relativePointerManager,
                                       _pinchGesture, _pointerGestures, _pointer, _keyboard,
                                       _seat, _decorationManager, _dataDeviceManager, _wmBase,
-                                      _shm, _viewporter, _fractionalScaleManager, _subcompositor, _logicalOutputManager,
+                                      _shm, _viewporter, _fractionalScaleManager, _activationToken, _activation, _subcompositor, _logicalOutputManager,
                                       _legacyLogicalOutputManager, _compositor, _registry};
         for (size_t i = 0; i < sizeof(proxies) / sizeof(proxies[0]); i++)
             if (proxies[i] != NULL)
@@ -464,7 +493,7 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
     WL.wl_display_flush(_wlDisplay);
 }
 
-- (NSEvent *) nextEventMatchingMask: (NSEventMask) mask
+- (NSEvent *) nextEventMatchingMask: (NSUInteger) mask
                           untilDate: (NSDate *) untilDate
                              inMode: (NSRunLoopMode) mode
                             dequeue: (BOOL) dequeue
@@ -520,6 +549,10 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         _fractionalScaleManagerName = name;
         _fractionalScaleManager = [self bindGlobal: name interface: &wp_fractional_scale_manager_v1_interface
                                           version: 1 kind: 0 object: nil];
+    } else if (strcmp(interface, "xdg_activation_v1") == 0 && _activation == NULL) {
+        _activationName = name;
+        _activation = [self bindGlobal: name interface: &xdg_activation_v1_interface
+                               version: 1 kind: 0 object: nil];
     } else if (strcmp(interface, "wl_subcompositor") == 0 && _subcompositor == NULL) {
         _subcompositor = [self bindGlobal: name interface: &wl_subcompositor_interface
                                   version: 1 kind: 0 object: nil];
@@ -679,6 +712,12 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         WaylandMarshal(_fractionalScaleManager, WP_FRACTIONAL_MANAGER_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
         _fractionalScaleManager = NULL; _fractionalScaleManagerName = 0;
         return; // Existing surface preferences survive factory removal.
+    }
+    if (_activation && name == _activationName) {
+        [self cancelActivationRequest];
+        WaylandMarshal(_activation, WP_ACTIVATION_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
+        _activation = NULL; _activationName = 0;
+        return;
     }
     if (_viewporter && name == _viewporterName) {
         WaylandMarshal(_viewporter, WP_VIEWPORTER_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
@@ -858,6 +897,11 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
 
     case WaylandObjectPinchGesture:
         [self pinchEvent: opcode arguments: args];
+        break;
+
+    case WaylandObjectActivationToken:
+        if (proxy == _activationToken && opcode == WP_ACTIVATION_TOKEN_EV_DONE)
+            [self activationTokenDone: args[0].s];
         break;
 
     case WaylandObjectLockedPointer:
@@ -2487,9 +2531,83 @@ static NSUInteger modifierDeviceMask(int code) {
     return _pressedButtons;
 }
 
-// Wayland has no protocol to activate another client's window.
+#pragma mark - Activation
+
+// Wayland has no protocol to activate another client's window: the request goes
+// to the process, as a Darwin notification that its own backend answers with
+// -requestActivation (see _CGSActivateProcess).
 - (BOOL) activateProcessIdentifier: (pid_t) processIdentifier {
-    return NO;
+    if (processIdentifier <= 0 || processIdentifier == getpid())
+        return NO;
+    return _CGSActivateProcess(processIdentifier, kCGSActivateProcessFrontWindowOnly) ==
+           kCGErrorSuccess;
+}
+
+// The window an activation request is for: the key window, else the main window,
+// else the window that was active most recently.
+- (WaylandWindow *) windowForActivation {
+    NSWindow *candidates[] = {[NSApp keyWindow], [NSApp mainWindow]};
+    for (size_t i = 0; i < sizeof(candidates) / sizeof(candidates[0]); i++) {
+        id platform = [candidates[i] platformWindow];
+        if ([platform isKindOfClass: [WaylandWindow class]] && [platform isMapped] &&
+            ![platform isPopup])
+            return platform;
+    }
+    for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++) {
+        WaylandWindow *window = (WaylandWindow *) CFArrayGetValueAtIndex(_windows, i);
+        if ([window isMapped] && ![window isPopup])
+            return window;
+    }
+    return nil;
+}
+
+// Asks the compositor, through xdg-activation, to focus one of our windows. The
+// compositor decides: it may only mark the window as wanting attention. The token
+// carries the serial of the last input event when there is one, because
+// compositors refuse requests that cannot be tied to user input.
+- (void) requestActivation {
+    if (_activation == NULL || _activationToken != NULL)
+        return;
+    WaylandWindow *window = [self windowForActivation];
+    struct wl_proxy *surface = [window surface];
+    if (surface == NULL)
+        return;
+
+    union wl_argument none[1] = {{.o = NULL}};
+    _activationToken = WaylandCreateObject(_activation, WP_ACTIVATION_GET_TOKEN,
+                                           &xdg_activation_token_v1_interface, none,
+                                           WaylandObjectActivationToken, self);
+    if (_inputSerial != 0 && _seat != NULL) {
+        union wl_argument serial[2] = {{.u = _inputSerial}, {.o = (struct wl_object *) _seat}};
+        WaylandMarshal(_activationToken, WP_ACTIVATION_TOKEN_SET_SERIAL, NULL, 0, serial);
+    }
+    union wl_argument forSurface[1] = {{.o = (struct wl_object *) surface}};
+    WaylandMarshal(_activationToken, WP_ACTIVATION_TOKEN_SET_SURFACE, NULL, 0, forSurface);
+    WaylandMarshal(_activationToken, WP_ACTIVATION_TOKEN_COMMIT, NULL, 0, NULL);
+    _activationWindow = [window retain];
+    [self flush];
+}
+
+- (void) cancelActivationRequest {
+    if (_activationToken != NULL) {
+        WaylandMarshal(_activationToken, WP_ACTIVATION_TOKEN_DESTROY, NULL,
+                       WL_MARSHAL_FLAG_DESTROY, NULL);
+        _activationToken = NULL;
+    }
+    [_activationWindow release];
+    _activationWindow = nil;
+}
+
+- (void) activationTokenDone: (const char *) token {
+    WaylandWindow *window = _activationWindow;
+    struct wl_proxy *surface = [window isInvalidated] ? NULL : [window surface];
+
+    if (_activation != NULL && surface != NULL) {
+        union wl_argument args[2] = {{.s = token}, {.o = (struct wl_object *) surface}};
+        WaylandMarshal(_activation, WP_ACTIVATION_ACTIVATE, NULL, 0, args);
+    }
+    [self cancelActivationRequest];
+    [self flush];
 }
 
 @end

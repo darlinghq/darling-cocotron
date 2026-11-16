@@ -18,6 +18,7 @@
 
 #import "WaylandPasteboard.h"
 #import "DarlingFileURIList.h"
+#import "NSPasteboardAliases.h"
 #import "WaylandDropSession.h"
 #import "WaylandLibrary.h"
 #import "WaylandProtocol.h"
@@ -100,7 +101,7 @@ void WaylandSendData(WaylandDisplay *display, NSData *data, int fd) {
 
 + (NSArray *) mimeTypesForType: (NSString *) type {
     if ([type isEqual:NSFilenamesPboardType]) return @[@"text/uri-list"];
-    if ([type isEqual: NSStringPboardType])
+    if ([NSPasteboardCanonicalType(type) isEqual: NSPasteboardTypeString])
         return @[@"text/plain;charset=utf-8", @"text/plain", @"UTF8_STRING"];
     if ([type isEqual: NSPasteboardTypePNG] || [type isEqual: @"NSPNGPPboardType"])
         return @[@"image/png"];
@@ -111,7 +112,7 @@ void WaylandSendData(WaylandDisplay *display, NSData *data, int fd) {
 + (NSString *) typeForMime: (NSString *) mime {
     if ([mime isEqual: @"text/plain;charset=utf-8"] || [mime isEqual: @"text/plain"] ||
         [mime isEqual: @"UTF8_STRING"])
-        return NSStringPboardType;
+        return NSPasteboardTypeString;
     if ([mime isEqual: @"image/png"])
         return NSPasteboardTypePNG;
     if ([mime isEqual: @"image/tiff"])
@@ -219,7 +220,9 @@ void WaylandSendData(WaylandDisplay *display, NSData *data, int fd) {
     return [self addTypes: types owner: owner];
 }
 - (NSInteger) addTypes: (NSArray *) types owner: (id) owner {
-    for (NSString *type in types) {
+    for (NSString *declared in types) {
+        // Stored under the UTI spelling; the 10.0 name of the same type reaches it too.
+        NSString *type = NSPasteboardCanonicalType(declared);
         if (![_types containsObject: type]) [_types addObject: type];
         [_data removeObjectForKey: type];
         if (owner) [_owners setObject: owner forKey: type];
@@ -229,6 +232,7 @@ void WaylandSendData(WaylandDisplay *display, NSData *data, int fd) {
     return _changeCount;
 }
 - (BOOL) setData: (NSData *) data forType: (NSString *) type {
+    type = NSPasteboardCanonicalType(type);
     if (data == nil || type == nil || [data length] > TransferLimit) return NO;
     if (![_types containsObject: type]) [_types addObject: type];
     [_data setObject: [[data copy] autorelease] forKey: type];
@@ -238,23 +242,23 @@ void WaylandSendData(WaylandDisplay *display, NSData *data, int fd) {
 }
 - (BOOL) setString: (NSString *) string forType: (NSString *) type {
     return [self setData: [string dataUsingEncoding:
-            [type isEqual: NSStringPboardType] ? NSUTF8StringEncoding : NSUnicodeStringEncoding]
+            [NSPasteboardCanonicalType(type) isEqual: NSPasteboardTypeString] ? NSUTF8StringEncoding : NSUnicodeStringEncoding]
                  forType: type];
 }
 - (NSString *) stringForType: (NSString *) type {
     NSData *data = [self dataForType: type];
     return data ? [[[NSString alloc] initWithData: data encoding:
-            [type isEqual: NSStringPboardType] ? NSUTF8StringEncoding : NSUnicodeStringEncoding] autorelease] : nil;
+            [NSPasteboardCanonicalType(type) isEqual: NSPasteboardTypeString] ? NSUTF8StringEncoding : NSUnicodeStringEncoding] autorelease] : nil;
 }
 - (NSArray *) types {
     [_display processPendingEvents];
-    if (_owned || !_device) return [[_types copy] autorelease];
+    if (_owned || !_device) return NSPasteboardTypesWithAliases(_types);
     NSMutableArray *types = [NSMutableArray array];
     for (NSString *mime in [_offers objectForKey: [NSValue valueWithPointer: _selection]]) {
         for (NSString *type in [WaylandPasteboard typesForMime:mime])
             if (![types containsObject:type]) [types addObject:type];
     }
-    return types;
+    return NSPasteboardTypesWithAliases(types);
 }
 - (NSData *) localDataForType: (NSString *) type {
     id owner = [[[_owners objectForKey: type] retain] autorelease];
@@ -295,6 +299,7 @@ void WaylandSendData(WaylandDisplay *display, NSData *data, int fd) {
     [_display flush];
 }
 - (NSData *) dataForType: (NSString *) type {
+    type = NSPasteboardCanonicalType(type);
     [_display processPendingEvents];
     if (_owned || !_device) return [self localDataForType: type];
     NSString *mime = nil;

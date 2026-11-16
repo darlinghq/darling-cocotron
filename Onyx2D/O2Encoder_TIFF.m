@@ -1,5 +1,6 @@
 #import <Onyx2D/O2Decoder_TIFF.h>
 #import <Onyx2D/O2Encoder_TIFF.h>
+#import <Onyx2D/O2ImageSource.h>
 
 O2TIFFEncoderRef O2TIFFEncoderCreate(O2DataConsumerRef consumer) {
     O2TIFFEncoderRef self = NSZoneCalloc(NULL, 1, sizeof(struct O2TIFFEncoder));
@@ -333,7 +334,11 @@ void O2TIFFEncoderWriteImage(O2TIFFEncoderRef self, O2ImageRef image,
 
     beginBuffering(self);
 
-    putUnsigned32(self, currentPosition(self) + 4);
+    // The first image's IFD is reached from the offset word of the file header; the IFD of a later
+    // image is reached from the previous IFD's next-IFD offset, which points right here.
+    if (!self->_wroteFirstImage)
+        putUnsigned32(self, currentPosition(self) + 4);
+    self->_wroteFirstImage = true;
 
     putUnsigned16(self, imageHasAlpha ? 13 : 12);
     putUnsigned16(self, NSTIFFTagImageWidth);
@@ -401,8 +406,18 @@ void O2TIFFEncoderWriteImage(O2TIFFEncoderRef self, O2ImageRef image,
     uint16_t bps[4] = {8, 8, 8, 8};
     encodeArrayOfUnsigned16AtPosition(self, bps, tiffSamplesPerPixel,
                                       bpsPosition);
-    encodeRationalAtPosition(self, 72.0, xResolutionPosition);
-    encodeRationalAtPosition(self, 72.0, yResolutionPosition);
+    // The resolution says how many pixels make a point: 72 for an image of one pixel per point
+    double xResolution = 72.0, yResolution = 72.0;
+    if (properties != NULL) {
+        id xValue = (id) CFDictionaryGetValue(properties, kO2ImagePropertyDPIWidth);
+        id yValue = (id) CFDictionaryGetValue(properties, kO2ImagePropertyDPIHeight);
+        if ([xValue respondsToSelector: @selector(doubleValue)] && [xValue doubleValue] > 0)
+            xResolution = [xValue doubleValue];
+        if ([yValue respondsToSelector: @selector(doubleValue)] && [yValue doubleValue] > 0)
+            yResolution = [yValue doubleValue];
+    }
+    encodeRationalAtPosition(self, xResolution, xResolutionPosition);
+    encodeRationalAtPosition(self, yResolution, yResolutionPosition);
 
     if (!lastImage)
         putUnsigned32AtPosition(self, currentPosition(self),

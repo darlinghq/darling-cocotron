@@ -151,7 +151,6 @@ set(AppKit_sources
 	nib.subproj/NSNibControlConnector.m
 	nib.subproj/NSNibOutletConnector.m
 	nib.subproj/NSNib.m
-	nib.subproj/NSNibArchive.m
 	nib.subproj/NSWindowTemplate.m
 	nib.subproj/NSViewTemplate.m
 	nib.subproj/NSMenuTemplate.m
@@ -163,7 +162,6 @@ set(AppKit_sources
 	nib.subproj/NSNibAuxiliaryActionConnector.m
 	nib.subproj/NSNibExternalObjectPlaceholder.m
 	nib.subproj/NSIBHelpConnector.m
-	nib.subproj/UINibCoding.m
 
 	NSTextFieldCell.m
 	NSFormCell.m
@@ -257,6 +255,7 @@ set(AppKit_sources
 	NSViewController.m
 
 	NSTextView.subproj/NSTextView.m
+	NSTextView.subproj/NSTextViewCommands.m
 	NSTextView.subproj/NSBidiHelper.m
 	NSTextView.subproj/NSLayoutManager.m
 	NSTextView.subproj/NSTextViewSharedData.m
@@ -308,8 +307,10 @@ set(AppKit_sources
 	NSPrintProgressPanelController.m
 	NSHelpManager.m
 	NSProgressIndicator.m
+	NSQuickDrawView.m
 	NSFontCollection.m
 	NSFontDescriptor.m
+	UIFontNames.m
 	NSDisplay.m
 	DarlingDisplay.m
 
@@ -442,6 +443,7 @@ set(AppKit_sources
 	NSGroupTouchBarItem.m
 	NSKeyBindingManager.m
 	NSPasteboardItem.m
+	NSPasteboardSupport.m
 	NSPopoverTouchBarItem.m
 	NSSpaceTouchBarItem.m
 	NSStackView.m
@@ -608,6 +610,7 @@ add_framework(AppKit
 
 reexport(AppKit Foundation ${CMAKE_BINARY_DIR}/src/external/foundation/Foundation)
 reexport(AppKit ApplicationServices ${CMAKE_BINARY_DIR}/src/frameworks/ApplicationServices/ApplicationServices)
+reexport(AppKit UIFoundation ${CMAKE_BINARY_DIR}/src/private-frameworks/UIFoundation/UIFoundation)
 
 target_include_directories(AppKit PRIVATE
 	private-include

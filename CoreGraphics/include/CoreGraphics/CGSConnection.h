@@ -39,6 +39,13 @@
 -(void) dealloc;
 -(CGSWindow*) windowForId:(CGSWindowID)winId;
 -(CGSWindow*) newWindow:(CGSRegionRef)region;
+
+// Activates the windows of another process directly through the display server (see
+// _CGSActivateProcess() for the options). Returns kCGErrorSuccess when a request was sent and
+// kCGErrorNoneAvailable when the process has no window that can be activated this way. The
+// default implementation does nothing and returns kCGErrorNotImplemented: the display server
+// offers no way to activate another process' windows.
++(CGError) activateWindowsOfProcess:(pid_t)pid options:(uint32_t)options;
 -(CGError) destroyWindow:(CGSWindowID)winId;
 
 // The windows of Darling processes, front to back, each described with the

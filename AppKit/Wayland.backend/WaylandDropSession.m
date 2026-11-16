@@ -18,6 +18,7 @@
 
 #import "WaylandDropSession.h"
 #import "WaylandPasteboard.h"
+#import "NSPasteboardAliases.h"
 #import "WaylandDragOperations.h"
 #import "WaylandDraggingManager.h"
 #import "WaylandWindow.h"
@@ -87,12 +88,13 @@
 }
 - (void) sourceActions: (uint32_t) actions { if (!_dropAnnounced) _sourceActions = actions; }
 - (void) selectedAction: (uint32_t) action { if (!_dropAnnounced) _action = action; }
-- (NSArray *) types { return _types; }
+- (NSArray *) types { return NSPasteboardTypesWithAliases(_types); }
 - (NSString *) availableTypeFromArray: (NSArray *) types {
-    for (NSString *type in types) if ([_types containsObject: type]) return type;
+    for (NSString *type in types) if ([_types containsObject: NSPasteboardCanonicalType(type)]) return type;
     return nil;
 }
 - (NSString *) mimeForType: (NSString *) type {
+    type = NSPasteboardCanonicalType(type);
     if (!type || [type isEqual: @"DELETE"]) return nil;
     if (_localSnapshot) return [self hasLocalAccess] && [_localSnapshot objectForKey:type] ? [_mimes objectAtIndex:0] : nil;
     for (NSString *mime in [WaylandPasteboard mimeTypesForType: type])
@@ -108,6 +110,7 @@
     return data;
 }
 - (NSData *) dataForType: (NSString *) type {
+    type = NSPasteboardCanonicalType(type);
     if ([type isEqual: @"DELETE"]) return nil;
     if (_localSnapshot) {
         if (![self hasLocalAccess]) { _transferFailed = YES; return nil; }
@@ -164,7 +167,7 @@
 - (NSString *) stringForType: (NSString *) type {
     NSData *data = [self dataForType: type];
     return data ? [[[NSString alloc] initWithData: data encoding:
-        [type isEqual: NSStringPboardType] ? NSUTF8StringEncoding : NSUnicodeStringEncoding] autorelease] : nil;
+        [NSPasteboardCanonicalType(type) isEqual: NSPasteboardTypeString] ? NSUTF8StringEncoding : NSUnicodeStringEncoding] autorelease] : nil;
 }
 - (void) motion: (CGPoint) point {
     if (!_offer || _dropped) return;

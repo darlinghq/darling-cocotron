@@ -29,6 +29,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSGraphicsContext.h>
 
 #import <AppKit/NSPasteboard.h>
+#import "NSPasteboardAliases.h"
 #import <Foundation/NSKeyedArchiver.h>
 
 #import <objc/runtime.h>
@@ -135,6 +136,10 @@ static NSColor *constantWhite(CGFloat white, CGFloat alpha) {
 
     if ([coder allowsKeyedCoding]) {
         NSColorSpaceName spaceName = [self colorSpaceName];
+        // An sRGB color is tagged with the named color space but has no catalog entry: it is
+        // archived by its RGB components
+        if ([spaceName isEqualToString: NSNamedColorSpace] && [self type] != NSColorTypeCatalog)
+            spaceName = NSCalibratedRGBColorSpace;
 
         if ([spaceName isEqualToString: NSCalibratedRGBColorSpace]) {
             CGFloat r, g, b, a;
@@ -202,6 +207,8 @@ static NSColor *constantWhite(CGFloat white, CGFloat alpha) {
         // The layout -initWithCoder: reads: a color space byte followed by
         // the components as floats (or the names, for a catalog color).
         NSColorSpaceName spaceName = [self colorSpaceName];
+        if ([spaceName isEqualToString: NSNamedColorSpace] && [self type] != NSColorTypeCatalog)
+            spaceName = NSCalibratedRGBColorSpace;
 
         if ([spaceName isEqualToString: NSCalibratedRGBColorSpace] ||
             [spaceName isEqualToString: NSDeviceRGBColorSpace]) {
@@ -676,6 +683,49 @@ static NSColor *systemCatalogColor(NSColorName name, NSColor *fallback) {
                               constantWhite(0.0, 0.1));
 }
 
+// The Aqua values (the appearance of this implementation) of colors that macOS's System catalog
+// has; a display backend may register another value.
++ (NSColor *) quinaryLabelColor {
+    return systemCatalogColor(@"quinaryLabelColor", constantWhite(0.0, 0.047));
+}
+
++ (NSColor *) placeholderTextColor {
+    // QUIRK: macOS 10.14 answers black at 0.247 alpha and macOS 26.7.3 black at 0.498; the lighter
+    // older value is used (the same difference as tertiaryLabelColor). Not documented.
+    // Evidence: black-box observation on both (tier 2, MAC-EVIDENCE V615, probe v615_color_values.m).
+    // Test: tests/appkit-color-api.m (testSystemColors)
+    return systemCatalogColor(@"placeholderTextColor", constantWhite(0.0, 0.247));
+}
+
++ (NSColor *) underPageBackgroundColor {
+    return systemCatalogColor(@"underPageBackgroundColor", constantWhite(0.588, 0.898));
+}
+
++ (NSColor *) findHighlightColor {
+    return systemCatalogColor(@"findHighlightColor", constantRGB(1.0, 1.0, 0.0, 1.0));
+}
+
+// Fills for controls: black at decreasing alpha (macOS 11 and later; the Aqua values of 26.7.3).
++ (NSColor *) systemFillColor {
+    return systemCatalogColor(@"systemFillColor", constantWhite(0.0, 0.098));
+}
+
++ (NSColor *) secondarySystemFillColor {
+    return systemCatalogColor(@"secondarySystemFillColor", constantWhite(0.0, 0.078));
+}
+
++ (NSColor *) tertiarySystemFillColor {
+    return systemCatalogColor(@"tertiarySystemFillColor", constantWhite(0.0, 0.047));
+}
+
++ (NSColor *) quaternarySystemFillColor {
+    return systemCatalogColor(@"quaternarySystemFillColor", constantWhite(0.0, 0.027));
+}
+
++ (NSColor *) quinarySystemFillColor {
+    return systemCatalogColor(@"quinarySystemFillColor", constantWhite(0.0, 0.008));
+}
+
 + (NSColor *) systemRedColor {
     return systemCatalogColor(@"systemRedColor",
                               constantRGB(1.0, 0.23, 0.19, 1.0));
@@ -990,6 +1040,43 @@ static NSColor *systemCatalogColor(NSColorName name, NSColor *fallback) {
                                 spaceName: NSCustomColorSpace];
 }
 
++ (NSColor *) colorWithColorSpace: (NSColorSpace *) space
+                              hue: (CGFloat) hue
+                       saturation: (CGFloat) saturation
+                       brightness: (CGFloat) brightness
+                            alpha: (CGFloat) alpha
+{
+    CGColorSpaceRef cgSpace = [space CGColorSpace];
+    if (cgSpace == NULL || CGColorSpaceGetModel(cgSpace) != kCGColorSpaceModelRGB) {
+        [NSException raise: NSInvalidArgumentException
+                    format: @"+[NSColor colorWithColorSpace:hue:saturation:brightness:alpha:]: an RGB color space is required"];
+    }
+
+    hue = MIN(1.0, MAX(0.0, hue));
+    saturation = MIN(1.0, MAX(0.0, saturation));
+    brightness = MIN(1.0, MAX(0.0, brightness));
+
+    // The standard hexcone conversion of the hue, in sixths.
+    CGFloat sector = hue >= 1.0 ? 0.0 : hue * 6.0;
+    int index = (int) sector;
+    CGFloat fraction = sector - index;
+    CGFloat p = brightness * (1.0 - saturation);
+    CGFloat q = brightness * (1.0 - saturation * fraction);
+    CGFloat t = brightness * (1.0 - saturation * (1.0 - fraction));
+    CGFloat r, g, b;
+    switch (index) {
+    case 0: r = brightness; g = t; b = p; break;
+    case 1: r = q; g = brightness; b = p; break;
+    case 2: r = p; g = brightness; b = t; break;
+    case 3: r = p; g = q; b = brightness; break;
+    case 4: r = t; g = p; b = brightness; break;
+    default: r = brightness; g = p; b = q; break;
+    }
+
+    CGFloat components[4] = { r, g, b, MIN(1.0, MAX(0.0, alpha)) };
+    return [NSColor colorWithColorSpace: space components: components count: 4];
+}
+
 + (NSColor *) colorWithName: (NSColorName) colorName dynamicProvider: (NSColor * (^)(NSAppearance *)) dynamicProvider {
     if (dynamicProvider == nil)
         [NSException raise: NSInvalidArgumentException format: @"+[NSColor colorWithName:dynamicProvider:]: nil provider"];
@@ -1273,6 +1360,115 @@ static void releasePatternInfo(void *info) {
     }
 }
 
+// The color this color stands for right now: a catalog or dynamic color gives the color it resolves
+// to for the current appearance, any other color itself.
+- (NSColor *) _resolvedColor {
+    return self;
+}
+
+// A color moved toward the highlight color (white) or the shadow color (black); levels outside 0...1
+// are limited to it. The blend is that of -blendedColorWithFraction:ofColor:, alpha included. nil
+// where the color has no RGB form (a pattern).
+- (NSColor *) highlightWithLevel: (CGFloat) level {
+    return [self blendedColorWithFraction: MIN(1.0, MAX(0.0, level)) ofColor: [NSColor highlightColor]];
+}
+
+- (NSColor *) shadowWithLevel: (CGFloat) level {
+    return [self blendedColorWithFraction: MIN(1.0, MAX(0.0, level)) ofColor: [NSColor shadowColor]];
+}
+
+// QUIRK: the effects change a color the way a control's pressed, rolled-over and disabled states
+// do, by numbers macOS does not document. Pressed is about c * 0.92 - 0.08 per RGB channel with the
+// alpha moved 59% of the way to opaque, deep pressed and rollover about c * 0.86 - 0.14 with an
+// opaque alpha, disabled 0.35 of the alpha; fitted to the results of macOS 10.14.4 and 26.7.3 for
+// sRGB and system colors in the Aqua appearance, within 0.01. The result is a dynamic (catalog)
+// color, as on macOS, so it follows the appearance of what it is applied to.
+// Evidence: black-box observation (tier 2, MAC-EVIDENCE V615, probe v615_color_values.m).
+// Test: tests/appkit-color-api.m (testSystemEffects)
+static NSColor *colorWithEffect(NSColor *color, NSColorSystemEffect effect) {
+    NSColor *rgb = [color colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
+    if (rgb == nil)
+        return color;
+    CGFloat r, g, b, a;
+    [rgb getRed: &r green: &g blue: &b alpha: &a];
+
+    CGFloat slope = 1.0, offset = 0.0, alpha = a;
+    switch (effect) {
+    case NSColorSystemEffectPressed:
+        slope = 0.9226;
+        offset = -0.0795;
+        alpha = a + (1.0 - a) * 0.59;
+        break;
+    case NSColorSystemEffectDeepPressed:
+    case NSColorSystemEffectRollover:
+        slope = 0.8598;
+        offset = -0.1422;
+        alpha = 1.0;
+        break;
+    case NSColorSystemEffectDisabled:
+        alpha = a * 0.35;
+        break;
+    case NSColorSystemEffectNone:
+    default:
+        break;
+    }
+    return constantRGB(MAX(0.0, r * slope + offset), MAX(0.0, g * slope + offset),
+                       MAX(0.0, b * slope + offset), alpha);
+}
+
+- (NSColor *) colorWithSystemEffect: (NSColorSystemEffect) effect {
+    NSColor *base = self;
+    return [NSColor colorWithName: nil
+                  dynamicProvider: ^NSColor *(NSAppearance *appearance) {
+                      return colorWithEffect([base _resolvedColor], effect);
+                  }];
+}
+
+// A color is component based (RGB, white, CMYK), a catalog color (a named color, or one that
+// depends on the appearance) or a pattern. A catalog color converts to what it stands for when that
+// is component based; every other conversion between the kinds fails.
+- (NSColor *) colorUsingType: (NSColorType) type {
+    if ([self type] == type)
+        return self;
+    if (type == NSColorTypeComponentBased && [self type] == NSColorTypeCatalog) {
+        NSColor *resolved = [self _resolvedColor];
+        return [resolved type] == NSColorTypeComponentBased ? resolved : nil;
+    }
+    return nil;
+}
+
+// QUIRK: macOS answers "Developer" for the localized name of the System catalog and the color name
+// itself for the localized name of a color (no localization tables are consulted). Not documented.
+// Evidence: black-box observation on macOS 10.14.4 and 26.7.3 (tier 2, MAC-EVIDENCE V615).
+// Test: tests/appkit-color-api.m (testCatalogNames)
+- (NSString *) localizedCatalogNameComponent {
+    // The localized names are only for catalog colors; any other color raises (macOS 26.7.3 and
+    // 10.14.4, test appkit-color-api.m testCatalogNames)
+    if ([self type] != NSColorTypeCatalog)
+        [NSException raise: NSInvalidArgumentException format: @"-[NSColor localizedCatalogNameComponent]: not a catalog color"];
+    NSString *name = [self catalogNameComponent];
+    return [name isEqual: @"System"] ? @"Developer" : name;
+}
+
+- (NSString *) localizedColorNameComponent {
+    if ([self type] != NSColorTypeCatalog)
+        [NSException raise: NSInvalidArgumentException format: @"-[NSColor localizedColorNameComponent]: not a catalog color"];
+    return [self colorNameComponent];
+}
+
+// There is no extended dynamic range here: every color is standard dynamic range, which is exposure 1.
+- (CGFloat) linearExposure {
+    return 1.0;
+}
+
+- (NSColor *) standardDynamicRangeColor {
+    return [[self copy] autorelease];
+}
+
+- (NSColor *) colorByApplyingContentHeadroom: (CGFloat) contentHeadroom {
+    return self;
+}
+
 - (void) set {
     [self setStroke];
     [self setFill];
@@ -1306,6 +1502,27 @@ static void releasePatternInfo(void *info) {
     NSData *data = [NSKeyedArchiver archivedDataWithRootObject: self];
 
     [pasteboard setData: data forType: NSColorPboardType];
+}
+
+#pragma mark NSPasteboardWriting, NSPasteboardReading
+
+- (NSArray<NSPasteboardType> *) writableTypesForPasteboard: (NSPasteboard *) pasteboard {
+    return [NSArray arrayWithObject: NSPasteboardTypeColor];
+}
+
+- (id) pasteboardPropertyListForType: (NSPasteboardType) type {
+    if (!NSPasteboardTypeConformsTo(type, NSPasteboardTypeColor))
+        return nil;
+    return [NSKeyedArchiver archivedDataWithRootObject: self];
+}
+
++ (NSArray<NSPasteboardType> *) readableTypesForPasteboard: (NSPasteboard *) pasteboard {
+    return [NSArray arrayWithObject: NSPasteboardTypeColor];
+}
+
+// The data of the type is an archive of the color: the object that comes out of it is the result.
++ (NSPasteboardReadingOptions) readingOptionsForType: (NSPasteboardType) type pasteboard: (NSPasteboard *) pasteboard {
+    return NSPasteboardReadingAsKeyedArchive;
 }
 
 + (void) setIgnoresAlpha: (BOOL) ignores {

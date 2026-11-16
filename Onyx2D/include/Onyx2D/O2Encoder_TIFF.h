@@ -11,6 +11,7 @@ typedef struct O2TIFFEncoder {
     size_t _bufferCount;
     uint8_t *_mutableBytes;
     CFIndex _length;
+    bool _wroteFirstImage;
     O2DataConsumerRef _consumer;
 } * O2TIFFEncoderRef;
 

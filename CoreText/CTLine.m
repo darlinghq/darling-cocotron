@@ -2,6 +2,7 @@
 #import <CoreText/CTRun.h>
 #import "KTCoreTextInternal.h"
 #include <stdlib.h>
+#include <math.h>
 #include <CoreFoundation/CFRuntime.h>
 #include <pthread.h>
 
@@ -425,6 +426,28 @@ static CFRange clippedStringRange(CFRange range, CFIndex start, CFIndex end)
     return CFRangeMake(location, limit > location ? limit - location : 0);
 }
 
+// Wraps already built runs into a line object. The string range is the range of `string` the line stands for.
+static CTLineRef createLineObject(CFAttributedStringRef string, CFRange range, CFArrayRef runs,
+                                  CGFloat width, CGFloat ascent, CGFloat descent, CGFloat leading)
+{
+    CFMutableDictionaryRef line = CFDictionaryCreateMutable(
+            kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks,
+            &kCFTypeDictionaryValueCallBacks);
+    if (line == NULL)
+        return NULL;
+    CFDictionarySetValue(line, KTLineAttributedStringKey, string);
+    CFDictionarySetValue(line, KTLineRunsKey, runs);
+    KTCoreTextDictionarySetIndex(line, KTLineRangeLocationKey, range.location);
+    KTCoreTextDictionarySetIndex(line, KTLineRangeLengthKey, range.length);
+    KTCoreTextDictionarySetFloat(line, KTLineWidthKey, width);
+    KTCoreTextDictionarySetFloat(line, KTLineAscentKey, ascent);
+    KTCoreTextDictionarySetFloat(line, KTLineDescentKey, descent);
+    KTCoreTextDictionarySetFloat(line, KTLineLeadingKey, leading);
+    CTLineRef result = (CTLineRef)KTCoreTextCreateObject(CTLineGetTypeID(), line);
+    CFRelease(line);
+    return result;
+}
+
 CTLineRef KTCoreTextCreateLineWithRange(CFAttributedStringRef attrString, CFRange stringRange)
 {
     if (attrString == NULL || stringRange.location < 0 || stringRange.length < 0)
@@ -484,23 +507,10 @@ CTLineRef KTCoreTextCreateLineWithRange(CFAttributedStringRef attrString, CFRang
         cursor = range.location + range.length;
     }
 
-    CFMutableDictionaryRef line = CFDictionaryCreateMutable(
-            kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks,
-            &kCFTypeDictionaryValueCallBacks);
-    if (line == NULL)
-        goto failed;
-    CFDictionarySetValue(line, KTLineAttributedStringKey, copy);
-    CFDictionarySetValue(line, KTLineRunsKey, runs);
-    KTCoreTextDictionarySetIndex(line, KTLineRangeLocationKey, stringRange.location);
-    KTCoreTextDictionarySetIndex(line, KTLineRangeLengthKey, stringRange.length);
-    KTCoreTextDictionarySetFloat(line, KTLineWidthKey, width);
-    KTCoreTextDictionarySetFloat(line, KTLineAscentKey, ascent);
-    KTCoreTextDictionarySetFloat(line, KTLineDescentKey, descent);
-    KTCoreTextDictionarySetFloat(line, KTLineLeadingKey, leading);
+    CTLineRef result = createLineObject(copy, stringRange, runs, width, ascent,
+                                        descent, leading);
     CFRelease(copy);
     CFRelease(runs);
-    CTLineRef result = (CTLineRef)KTCoreTextCreateObject(CTLineGetTypeID(), line);
-    CFRelease(line);
     return result;
 
 failed:
@@ -517,21 +527,305 @@ CTLineRef CTLineCreateWithAttributedString(CFAttributedStringRef attrString)
             CFRangeMake(0, CFAttributedStringGetLength(attrString)));
 }
 
+// A copy of a run moved right by dx, with every glyph attributed to forcedIndex unless that is kCFNotFound.
+static CFDictionaryRef createShiftedRun(CTRunRef run, CGFloat dx, CFIndex forcedIndex, CFRange forcedRange)
+{
+    CFDictionaryRef source = KTCoreTextObjectDictionary(run);
+    CFMutableDictionaryRef copy = CFDictionaryCreateMutableCopy(kCFAllocatorDefault, 0, source);
+    CFIndex count = CTRunGetGlyphCount(run);
+    CGPoint *positions = malloc((size_t)count * sizeof(*positions) + 1);
+    CFIndex *indices = malloc((size_t)count * sizeof(*indices) + 1);
+    if (copy == NULL || positions == NULL || indices == NULL) {
+        free(positions);
+        free(indices);
+        if (copy != NULL)
+            CFRelease(copy);
+        return NULL;
+    }
+    CTRunGetPositions(run, CFRangeMake(0, 0), positions);
+    CTRunGetStringIndices(run, CFRangeMake(0, 0), indices);
+    for (CFIndex index = 0; index < count; ++index) {
+        positions[index].x += dx;
+        if (forcedIndex != kCFNotFound)
+            indices[index] = forcedIndex;
+    }
+    CFDataRef data = CFDataCreate(kCFAllocatorDefault, (const UInt8 *)positions, count * sizeof(*positions));
+    CFDictionarySetValue(copy, KTRunPositionsKey, data);
+    CFRelease(data);
+    data = CFDataCreate(kCFAllocatorDefault, (const UInt8 *)indices, count * sizeof(*indices));
+    CFDictionarySetValue(copy, KTRunIndicesKey, data);
+    CFRelease(data);
+    if (forcedIndex != kCFNotFound) {
+        KTCoreTextDictionarySetIndex(copy, KTRunRangeLocationKey, forcedRange.location);
+        KTCoreTextDictionarySetIndex(copy, KTRunRangeLengthKey, forcedRange.length);
+    }
+    free(positions);
+    free(indices);
+    return copy;
+}
+
+// Appends the runs of `piece` to `runs`, moved right by dx. Accumulates the line metrics.
+static bool appendShiftedRuns(CFMutableArrayRef runs, CTLineRef piece, CGFloat dx, CFIndex forcedIndex,
+                              CFRange forcedRange, CGFloat *ascent, CGFloat *descent, CGFloat *leading)
+{
+    CFArrayRef source = CTLineGetGlyphRuns(piece);
+    for (CFIndex index = 0; index < CFArrayGetCount(source); ++index) {
+        CFDictionaryRef run = createShiftedRun((CTRunRef)CFArrayGetValueAtIndex(source, index), dx,
+                                               forcedIndex, forcedRange);
+        if (!appendRun(runs, run, ascent, descent, leading))
+            return false;
+    }
+    return true;
+}
+
+static CTLineRef createPiece(CFAttributedStringRef string, CFIndex from, CFIndex to)
+{
+    return from < to ? KTCoreTextCreateLineWithRange(string, CFRangeMake(from, to - from)) : NULL;
+}
+
 CTLineRef CTLineCreateTruncatedLine(CTLineRef line, double width,
                                     CTLineTruncationType truncationType,
                                     CTLineRef truncationToken)
 {
-    // Preserve the unimplemented result rather than pretending to truncate.
-    printf("STUB %s\n", __PRETTY_FUNCTION__);
-    return NULL;
+    if (line == NULL || width < 0)
+        return NULL;
+    double lineWidth = CTLineGetTypographicBounds(line, NULL, NULL, NULL);
+    if (lineWidth <= width)
+        return (CTLineRef)CFRetain(line);
+
+    CFAttributedStringRef string = (CFAttributedStringRef)CFDictionaryGetValue(
+            KTCoreTextObjectDictionary(line), KTLineAttributedStringKey);
+    CFStringRef characters = CFAttributedStringGetString(string);
+    CFRange range = CTLineGetStringRange(line);
+    CFIndex end = range.location + range.length;
+
+    // A NULL token means no token: the text is simply cut off.
+    CTLineRef token = truncationToken != NULL ? (CTLineRef)CFRetain(truncationToken) : NULL;
+    double tokenWidth = token != NULL ? CTLineGetTypographicBounds(token, NULL, NULL, NULL) : 0;
+    if (tokenWidth > width) {
+        CFRelease(token);
+        return NULL;
+    }
+
+    // Keep [range.location, keepEnd) and [resume, end). The cut points are cluster boundaries.
+    CFIndex keepEnd = range.location, resume = end;
+    CFIndex prefixNext = range.location, suffixNext = end;
+    double available = width - tokenWidth;
+    bool prefixOpen = truncationType != kCTLineTruncationStart;
+    bool suffixOpen = truncationType != kCTLineTruncationEnd;
+    while (prefixOpen || suffixOpen) {
+        if (prefixNext >= resume)
+            prefixOpen = false;
+        if (suffixNext <= keepEnd)
+            suffixOpen = false;
+        if (prefixOpen) {
+            CFRange cluster = CFStringGetRangeOfComposedCharactersAtIndex(characters, prefixNext);
+            CFIndex next = cluster.location + cluster.length;
+            double used = CTLineGetOffsetForStringIndex(line, next, NULL) +
+                    (lineWidth - CTLineGetOffsetForStringIndex(line, resume, NULL));
+            if (next < resume && used <= available) {
+                keepEnd = prefixNext = next;
+            } else {
+                prefixOpen = false;
+            }
+        }
+        if (suffixOpen) {
+            CFRange cluster = CFStringGetRangeOfComposedCharactersAtIndex(characters, suffixNext - 1);
+            double used = CTLineGetOffsetForStringIndex(line, keepEnd, NULL) +
+                    (lineWidth - CTLineGetOffsetForStringIndex(line, cluster.location, NULL));
+            if (cluster.location > keepEnd && used <= available) {
+                resume = suffixNext = cluster.location;
+            } else {
+                suffixOpen = false;
+            }
+        }
+    }
+
+    // QUIRK: whitespace next to the truncation point is dropped as well: the kept head does not end in
+    // whitespace and the kept tail does not start with any, even where it would still fit. Not documented.
+    // Evidence: black-box calls on macOS 26.7.3 (tier 2): "The quick brown fox" in a 20 pt font cut at a width that
+    // admits "The quick " plus the token keeps "The quick" for end truncation, and a width that admits " brown fox"
+    // plus the token keeps "brown fox" for start truncation.
+    // Test: tests/coretext-line-truncation.m (QUIRK checks)
+    CFCharacterSetRef whitespace = CFCharacterSetGetPredefined(kCFCharacterSetWhitespaceAndNewline);
+    CFIndex headEnd = keepEnd, tailStart = resume;
+    while (headEnd > range.location &&
+           CFCharacterSetIsCharacterMember(whitespace, CFStringGetCharacterAtIndex(characters, headEnd - 1)))
+        --headEnd;
+    while (tailStart < end &&
+           CFCharacterSetIsCharacterMember(whitespace, CFStringGetCharacterAtIndex(characters, tailStart)))
+        ++tailStart;
+    keepEnd = headEnd;
+    resume = tailStart;
+    CTLineRef head = createPiece(string, range.location, keepEnd);
+    CTLineRef tail = createPiece(string, resume, end);
+    CFMutableArrayRef runs = CFArrayCreateMutable(kCFAllocatorDefault, 0, &kCFTypeArrayCallBacks);
+    CGFloat ascent = 0, descent = 0, leading = 0, x = 0;
+    bool ok = runs != NULL;
+    if (ok && head != NULL) {
+        ok = appendShiftedRuns(runs, head, 0, kCFNotFound, CFRangeMake(0, 0), &ascent, &descent, &leading);
+        x = CTLineGetTypographicBounds(head, NULL, NULL, NULL);
+    }
+    if (ok && token != NULL)
+        ok = appendShiftedRuns(runs, token, x, keepEnd, CFRangeMake(keepEnd, resume - keepEnd),
+                               &ascent, &descent, &leading);
+    x += tokenWidth;
+    if (ok && tail != NULL)
+        ok = appendShiftedRuns(runs, tail, x, kCFNotFound, CFRangeMake(0, 0), &ascent, &descent, &leading);
+    if (tail != NULL)
+        x += CTLineGetTypographicBounds(tail, NULL, NULL, NULL);
+    CTLineRef result = ok ? createLineObject(string, range, runs, x, ascent, descent, leading) : NULL;
+    if (runs != NULL)
+        CFRelease(runs);
+    if (head != NULL)
+        CFRelease(head);
+    if (tail != NULL)
+        CFRelease(tail);
+    if (token != NULL)
+        CFRelease(token);
+    return result;
+}
+
+static bool isJustificationSpace(UniChar c)
+{
+    return c == 0x0020 || c == 0x00A0 || c == 0x3000;
+}
+
+// A copy of a run with extra[i] added to the advance of glyph i, and every glyph moved right by the extras of the
+// glyphs before it. A glyph at the same x as its predecessor (a combining mark) is not moved by that predecessor's extra.
+static CFDictionaryRef createWidenedRun(CTRunRef run, const CGFloat *extra, CGFloat *carried, CGFloat *pending,
+                                        CGFloat *pendingX)
+{
+    CFDictionaryRef source = KTCoreTextObjectDictionary(run);
+    CFMutableDictionaryRef copy = CFDictionaryCreateMutableCopy(kCFAllocatorDefault, 0, source);
+    CFIndex count = CTRunGetGlyphCount(run);
+    CGPoint *positions = malloc((size_t)count * sizeof(*positions) + 1);
+    CGSize *advances = malloc((size_t)count * sizeof(*advances) + 1);
+    if (copy == NULL || positions == NULL || advances == NULL) {
+        free(positions);
+        free(advances);
+        if (copy != NULL)
+            CFRelease(copy);
+        return NULL;
+    }
+    CTRunGetPositions(run, CFRangeMake(0, 0), positions);
+    CTRunGetAdvances(run, CFRangeMake(0, 0), advances);
+    CGFloat width = 0;
+    for (CFIndex index = 0; index < count; ++index) {
+        if (positions[index].x > *pendingX) {
+            *carried += *pending;
+            *pending = 0;
+        }
+        positions[index].x += *carried;
+        if (extra[index] != 0) {
+            advances[index].width += extra[index];
+            *pending = extra[index];
+            *pendingX = positions[index].x - *carried;
+        }
+        width += advances[index].width;
+    }
+    CFDataRef data = CFDataCreate(kCFAllocatorDefault, (const UInt8 *)positions, count * sizeof(*positions));
+    CFDictionarySetValue(copy, KTRunPositionsKey, data);
+    CFRelease(data);
+    data = CFDataCreate(kCFAllocatorDefault, (const UInt8 *)advances, count * sizeof(*advances));
+    CFDictionarySetValue(copy, KTRunAdvancesKey, data);
+    CFRelease(data);
+    KTCoreTextDictionarySetFloat(copy, KTRunWidthKey, width);
+    free(positions);
+    free(advances);
+    return copy;
 }
 
 CTLineRef CTLineCreateJustifiedLine(CTLineRef line,
                                     CGFloat justificationFactor,
                                     double justificationWidth)
 {
-    printf("STUB %s\n", __PRETTY_FUNCTION__);
-    return NULL;
+    if (line == NULL)
+        return NULL;
+    CFDictionaryRef dictionary = KTCoreTextObjectDictionary(line);
+    CFAttributedStringRef string = (CFAttributedStringRef)CFDictionaryGetValue(dictionary, KTLineAttributedStringKey);
+    CFStringRef characters = CFAttributedStringGetString(string);
+    CFArrayRef source = CTLineGetGlyphRuns(line);
+    CFRange range = CTLineGetStringRange(line);
+    double lineWidth = CTLineGetTypographicBounds(line, NULL, NULL, NULL);
+    double trailing = CTLineGetTrailingWhitespaceWidth(line);
+
+    // Spaces are the places that stretch. A line without any stretches between its glyphs instead. The whitespace at
+    // the end of the line neither stretches nor counts towards the width that is justified.
+    CFIndex trailingStart = range.location + range.length;
+    CFCharacterSetRef whitespace = CFCharacterSetGetPredefined(kCFCharacterSetWhitespaceAndNewline);
+    while (trailingStart > range.location &&
+           CFCharacterSetIsCharacterMember(whitespace, CFStringGetCharacterAtIndex(characters, trailingStart - 1)))
+        --trailingStart;
+    CFIndex runCount = CFArrayGetCount(source), spaces = 0, gaps = 0, lastAdvancing = kCFNotFound, glyphTotal = 0;
+    for (CFIndex r = 0; r < runCount; ++r) {
+        CTRunRef run = (CTRunRef)CFArrayGetValueAtIndex(source, r);
+        const CFIndex *indices = CTRunGetStringIndicesPtr(run);
+        const CGSize *advances = CTRunGetAdvancesPtr(run);
+        for (CFIndex i = 0; i < CTRunGetGlyphCount(run); ++i, ++glyphTotal) {
+            if (indices[i] >= trailingStart || advances[i].width <= 0)
+                continue;
+            if (isJustificationSpace(CFStringGetCharacterAtIndex(characters, indices[i])))
+                ++spaces;
+            ++gaps;
+            lastAdvancing = glyphTotal;
+        }
+    }
+    CFIndex opportunities = spaces > 0 ? spaces : gaps - 1;
+    // 1.0 and above is full justification, 0 and below none.
+    justificationFactor = justificationFactor > 1 ? 1 : justificationFactor < 0 ? 0 : justificationFactor;
+    double contentWidth = lineWidth - trailing;
+    // QUIRK: a partial justification (a factor between 0 and 1) of a line that is already wider than the requested
+    // width gives NULL, while a factor of 1 squeezes the line and a factor of 0 or less returns it unchanged.
+    // Not documented. Evidence: black-box calls on macOS 26.7.3 (tier 2): a 60.04 pt line with factors 0.1, 0.5 and 0.9
+    // and widths 0, 30, 40, 55 and 59 gives NULL; factor 1 with widths 0, 40 and 59 gives lines of that width;
+    // factor 0.5 with a width equal to the line's gives the line unchanged.
+    // Test: tests/coretext-line-justification.m (QUIRK checks)
+    if (justificationFactor > 0 && justificationFactor < 1 && justificationWidth < contentWidth)
+        return NULL;
+    double delta = (justificationWidth - contentWidth) * justificationFactor;
+    if (opportunities <= 0 || delta == 0)
+        return (CTLineRef)CFRetain(line);
+    CGFloat each = (CGFloat)(delta / opportunities);
+
+    CFMutableArrayRef runs = CFArrayCreateMutable(kCFAllocatorDefault, 0, &kCFTypeArrayCallBacks);
+    CGFloat ascent = 0, descent = 0, leading = 0, carried = 0, pending = 0, pendingX = -INFINITY, width = 0;
+    bool ok = runs != NULL;
+    glyphTotal = 0;
+    for (CFIndex r = 0; ok && r < runCount; ++r) {
+        CTRunRef run = (CTRunRef)CFArrayGetValueAtIndex(source, r);
+        CFIndex count = CTRunGetGlyphCount(run);
+        const CFIndex *indices = CTRunGetStringIndicesPtr(run);
+        const CGSize *advances = CTRunGetAdvancesPtr(run);
+        CGFloat *extra = calloc((size_t)count + 1, sizeof(*extra));
+        if (extra == NULL) {
+            ok = false;
+            break;
+        }
+        for (CFIndex i = 0; i < count; ++i, ++glyphTotal) {
+            if (indices[i] >= trailingStart) {
+                // QUIRK: the justified line has no advance for its trailing whitespace, so the line is exactly
+                // as wide as requested. Evidence: black-box calls on macOS 26.7.3 (tier 2): "a b  " justified to 100 pt
+                // has two trailing spaces of advance 0 at x = 100, and its trailing whitespace width reads 0.
+                // Test: tests/coretext-line-justification.m (QUIRK checks)
+                extra[i] = -advances[i].width;
+                continue;
+            }
+            if (advances[i].width <= 0)
+                continue;
+            bool space = isJustificationSpace(CFStringGetCharacterAtIndex(characters, indices[i]));
+            if (spaces > 0 ? space : glyphTotal != lastAdvancing)
+                extra[i] = each;
+        }
+        ok = appendRun(runs, createWidenedRun(run, extra, &carried, &pending, &pendingX), &ascent, &descent, &leading);
+        free(extra);
+    }
+    if (ok)
+        width = (CGFloat)(contentWidth + delta);
+    CTLineRef result = ok ? createLineObject(string, range, runs, width, ascent, descent, leading) : NULL;
+    if (runs != NULL)
+        CFRelease(runs);
+    return result;
 }
 
 CFIndex CTLineGetGlyphCount(CTLineRef line)
@@ -613,7 +907,28 @@ CGRect CTLineGetBoundsWithOptions(CTLineRef line, CTLineBoundsOptions options)
 
 double CTLineGetTrailingWhitespaceWidth(CTLineRef line)
 {
-    return 0;
+    if (line == NULL)
+        return 0;
+    CFDictionaryRef dictionary = KTCoreTextObjectDictionary(line);
+    CFStringRef string = CFAttributedStringGetString(
+            (CFAttributedStringRef)CFDictionaryGetValue(dictionary, KTLineAttributedStringKey));
+    CFRange range = CTLineGetStringRange(line);
+    CFCharacterSetRef space = CFCharacterSetGetPredefined(kCFCharacterSetWhitespaceAndNewline);
+    CFIndex start = range.location + range.length;
+    while (start > range.location &&
+           CFCharacterSetIsCharacterMember(space, CFStringGetCharacterAtIndex(string, start - 1)))
+        --start;
+    double width = 0;
+    CFArrayRef runs = CTLineGetGlyphRuns(line);
+    for (CFIndex runIndex = 0; runIndex < CFArrayGetCount(runs); ++runIndex) {
+        CTRunRef run = (CTRunRef)CFArrayGetValueAtIndex(runs, runIndex);
+        const CFIndex *indices = CTRunGetStringIndicesPtr(run);
+        const CGSize *advances = CTRunGetAdvancesPtr(run);
+        for (CFIndex index = 0; index < CTRunGetGlyphCount(run); ++index)
+            if (indices[index] >= start)
+                width += advances[index].width;
+    }
+    return width;
 }
 
 CGRect CTLineGetImageBounds(CTLineRef line, CGContextRef context)
@@ -661,4 +976,35 @@ CGFloat CTLineGetOffsetForStringIndex(CTLineRef line, CFIndex charIndex,
     }
     return KTCoreTextDictionaryGetFloat(KTCoreTextObjectDictionary(line),
                                          KTLineWidthKey);
+}
+
+void CTLineEnumerateCaretOffsets(CTLineRef line, void (^block)(double offset, CFIndex charIndex, bool leadingEdge, bool *stop))
+{
+    if (line == NULL || block == NULL)
+        return;
+    CFStringRef characters = CFAttributedStringGetString((CFAttributedStringRef)CFDictionaryGetValue(
+            KTCoreTextObjectDictionary(line), KTLineAttributedStringKey));
+    bool stop = false;
+    CFArrayRef runs = CTLineGetGlyphRuns(line);
+    for (CFIndex runIndex = 0; !stop && runIndex < CFArrayGetCount(runs); ++runIndex) {
+        CTRunRef run = (CTRunRef)CFArrayGetValueAtIndex(runs, runIndex);
+        const CGPoint *positions = CTRunGetPositionsPtr(run);
+        const CGSize *advances = CTRunGetAdvancesPtr(run);
+        const CFIndex *indices = CTRunGetStringIndicesPtr(run);
+        CFIndex count = CTRunGetGlyphCount(run);
+        for (CFIndex index = 0; !stop && index < count; ++index) {
+            // A glyph without advance is a mark of the cluster before it and has no caret of its own.
+            if (advances[index].width <= 0)
+                continue;
+            // QUIRK: the trailing edge reports the index of the last UTF-16 unit of the character cluster
+            // (the combining mark of "e" + U+0301), the leading edge the first. Not documented.
+            // Evidence: black-box calls on macOS 26.7.3 (tier 2): "ab e" + U+0301 + "f" reports index 3 for the
+            // leading and 4 for the trailing edge of the accented letter.
+            // Test: tests/coretext-line-caret-offsets.m (QUIRK check)
+            CFRange cluster = CFStringGetRangeOfComposedCharactersAtIndex(characters, indices[index]);
+            block(positions[index].x, indices[index], true, &stop);
+            if (!stop)
+                block(positions[index].x + advances[index].width, cluster.location + cluster.length - 1, false, &stop);
+        }
+    }
 }

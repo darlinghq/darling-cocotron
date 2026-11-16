@@ -1044,6 +1044,13 @@ O2argb8u *O2ImageRead_GA88_to_argb8u(O2Image *self, int x, int y,
     return NULL;
 }
 
+// The alpha byte of a NoneSkip pixel is padding, not coverage: such pixels are opaque.
+static inline BOOL imageSkipsAlpha(O2Image *self) {
+    O2BitmapInfo alpha = self->_bitmapInfo & kO2BitmapAlphaInfoMask;
+    return alpha == kO2ImageAlphaNoneSkipLast ||
+           alpha == kO2ImageAlphaNoneSkipFirst;
+}
+
 O2argb8u *O2ImageRead_RGBA8888_to_argb8u(O2Image *self, int x, int y,
                                          O2argb8u *span, int length)
 {
@@ -1060,7 +1067,7 @@ O2argb8u *O2ImageRead_RGBA8888_to_argb8u(O2Image *self, int x, int y,
         result.r = scanline[0];
         result.g = scanline[1];
         result.b = scanline[2];
-        result.a = scanline[3];
+        result.a = imageSkipsAlpha(self) ? 255 : scanline[3];
         if ((self->_bitmapInfo & kO2BitmapAlphaInfoMask) == kO2ImageAlphaLast) {
             result.r = (result.r * result.a + 127) / 255;
             result.g = (result.g * result.a + 127) / 255;
@@ -1086,6 +1093,8 @@ O2argb8u *O2ImageRead_ABGR8888_to_argb8u(O2Image *self, int x, int y,
         O2argb8u result;
 
         result.a = *scanline++;
+        if (imageSkipsAlpha(self))
+            result.a = 255;
         result.b = *scanline++;
         result.g = *scanline++;
         result.r = *scanline++;
@@ -1187,6 +1196,8 @@ O2argb8u *O2ImageRead_XRGB8888_to_argb8u(O2Image *self, int x, int y,
         O2argb8u result;
 
         result.a = *scanline++;
+        if (imageSkipsAlpha(self))
+            result.a = 255;
         result.r = *scanline++;
         result.g = *scanline++;
         result.b = *scanline++;

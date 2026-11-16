@@ -143,6 +143,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSPrintPanel.h>
 #import <AppKit/NSPrinter.h>
 #import <AppKit/NSProgressIndicator.h>
+#import <AppKit/NSQuickDrawView.h>
 #import <AppKit/NSResponder.h>
 #import <AppKit/NSRuleEditor.h>
 #import <AppKit/NSRulerMarker.h>

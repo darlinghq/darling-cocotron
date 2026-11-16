@@ -183,6 +183,7 @@ static int untitled_document_number = 0;
     [NS_EXTRA(NSDocument, self)->_printInfo release];
     [NS_EXTRA(NSDocument, self)->_undoManager release];
     [NS_EXTRA(NSDocument, self)->_activeEditors release];
+    [NS_EXTRA(NSDocument, self)->_displayName release];
 
     NS_EXTRA_FREE(NSDocument, self);
     [super dealloc];
@@ -247,6 +248,14 @@ static int untitled_document_number = 0;
     url = [url copy];
     [NS_EXTRA(NSDocument, self)->_fileURL release];
     NS_EXTRA(NSDocument, self)->_fileURL = url;
+    // QUIRK: assigning a file URL (or nil) discards a name given with
+    // -setDisplayName:, so the name derived from the file shows again.
+    // Not documented. Evidence: black-box observation on macOS 26.7.3 and
+    // 10.14.4 (tier 2, see the test).
+    // Test: appkit-document-display-name (set name, then setFileURL:)
+    [NS_EXTRA(NSDocument, self)->_displayName release];
+    NS_EXTRA(NSDocument, self)->_displayName = nil;
+    NS_EXTRA(NSDocument, self)->_displayNameReset = NO;
     [NS_EXTRA(NSDocument, self)->_windowControllers makeObjectsPerformSelector: @selector
                         (synchronizeWindowTitleWithDocumentName)];
 }
@@ -380,8 +389,24 @@ static int untitled_document_number = 0;
     [NS_EXTRA(NSDocument, self)->_windowControllers removeObjectIdenticalTo: controller];
 }
 
+// NSDocument.h: the name the document is given for presentation; nil goes back
+// to the default name.
+- (void) setDisplayName: (NSString *) displayNameOrNil {
+    NSString *name = [displayNameOrNil copy];
+
+    [NS_EXTRA(NSDocument, self)->_displayName release];
+    NS_EXTRA(NSDocument, self)->_displayName = name;
+    // QUIRK: setting nil makes -displayName answer the "Untitled" default even when the document
+    // has a file URL, until a file URL is assigned again. Not documented. Evidence: black-box
+    // observation on macOS 26.7.3 and 10.14.4 (tier 2).
+    // Test: tests/appkit-document-display-name.m (nil after a file URL)
+    NS_EXTRA(NSDocument, self)->_displayNameReset = (name == nil);
+}
+
 - (NSString *) displayName {
-    if (NS_EXTRA(NSDocument, self)->_fileURL == nil) {
+    if (NS_EXTRA(NSDocument, self)->_displayName != nil)
+        return NS_EXTRA(NSDocument, self)->_displayName;
+    if (NS_EXTRA(NSDocument, self)->_fileURL == nil || NS_EXTRA(NSDocument, self)->_displayNameReset) {
         NSString *untitledName = NSLocalizedStringFromTableInBundle(
                 @"Untitled", nil, [NSBundle bundleForClass: [NSDocument class]],
                 @"The name of a untitled document");

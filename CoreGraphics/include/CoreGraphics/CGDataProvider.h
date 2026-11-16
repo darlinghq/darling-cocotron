@@ -35,6 +35,7 @@ COREGRAPHICS_EXPORT CGDataProviderRef CGDataProviderRetain(CGDataProviderRef pro
 COREGRAPHICS_EXPORT void CGDataProviderRelease(CGDataProviderRef provider);
 
 COREGRAPHICS_EXPORT CGDataProviderRef CGDataProviderCreateWithCFData(CFDataRef data);
+COREGRAPHICS_EXPORT CGDataProviderRef CGDataProviderCreateWithFilename(const char *filename);
 
 COREGRAPHICS_EXPORT CGDataProviderRef CGDataProviderCreateWithData(void *info, const void *data, size_t size, CGDataProviderReleaseDataCallback releaseCallback);
 

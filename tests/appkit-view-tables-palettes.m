@@ -57,7 +57,15 @@ static void testTable(void) {
     table.delegate = delegate;
     expect([table viewAtColumn: 0 row: 1 makeIfNecessary: YES] == cell,
            "viewAtColumn:row: returns the delegate's view");
-    expect([table viewAtColumn: 5 row: 0 makeIfNecessary: YES] == nil, "an invalid column gives nil");
+    // macOS 26.7.3 and 10.14.4 raise NSInternalInconsistencyException for a column beyond the columns
+    // (MAC-EVIDENCE V611, probe v611-table-viewatcolumn-range.m); this line used to expect nil.
+    BOOL raised = NO;
+    @try {
+        [table viewAtColumn: 5 row: 0 makeIfNecessary: YES];
+    } @catch (NSException *exception) {
+        raised = [[exception name] isEqual: NSInternalInconsistencyException];
+    }
+    expect(raised, "an invalid column raises NSInternalInconsistencyException");
     expect([table makeViewWithIdentifier: @"unregistered" owner: nil] == nil,
            "an identifier with no registered nib gives no view");
     expect([table makeViewWithIdentifier: nil owner: nil] == nil, "a nil identifier gives no view");

@@ -129,6 +129,14 @@ O2ColorSpaceRef O2ColorSpaceCreatePattern(O2ColorSpaceRef baseSpace) {
     return [[O2ColorSpace alloc] initWithPattern];
 }
 
+O2ColorSpaceRef O2ColorSpaceCreateIndexed(O2ColorSpaceRef baseSpace, size_t lastIndex, const unsigned char *colorTable) {
+    if (baseSpace == NULL || colorTable == NULL)
+        return NULL;
+    return [[O2ColorSpace_indexed alloc] initWithColorSpace: baseSpace
+                                                      hival: lastIndex
+                                                      bytes: colorTable];
+}
+
 O2ColorSpaceRef O2ColorSpaceCreateDeviceN(const char **names,
                                           O2ColorSpaceRef alternateSpace,
                                           O2FunctionRef tintTransform)

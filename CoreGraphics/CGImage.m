@@ -166,6 +166,19 @@ CGImageRef CGImageCreateWithMaskingColors(CGImageRef self,
     return (CGImageRef)O2ImageCreateWithMaskingColors((O2ImageRef)self, components);
 }
 
+// CGImageRef is an O2Image; give it CGImage's type ID for CFGetTypeID.
+@implementation O2Image (CGImageTypeID)
+
+- (CFTypeID) _cfTypeID {
+    return CGImageGetTypeID();
+}
+
+@end
+
+CFTypeID CGImageGetTypeID(void) {
+    return (CFTypeID) [O2Image self];
+}
+
 size_t CGImageGetWidth(CGImageRef self) {
     return O2ImageGetWidth((O2ImageRef)self);
 }

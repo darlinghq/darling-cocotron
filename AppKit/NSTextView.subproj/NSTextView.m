@@ -51,6 +51,7 @@
 #import <AppKit/NSTextTab.h>
 #import <AppKit/NSTextView.h>
 #import <AppKit/NSWindow.h>
+#import <AppKit/NSWorkspace.h>
 #import <Foundation/NSKeyedArchiver.h>
 
 #import "NSRulerMarker+NSTextExtensions.h"
@@ -59,6 +60,8 @@
 NSString *const NSTextViewDidChangeSelectionNotification =
         @"NSTextViewDidChangeSelectionNotification";
 NSString *const NSOldSelectedCharacterRange = @"NSOldSelectedCharacterRange";
+NSString *const NSTextViewDidChangeTypingAttributesNotification =
+        @"NSTextViewDidChangeTypingAttributesNotification";
 NSString *const NSAllRomanInputSourcesLocaleIdentifier =
         @"NSAllRomanInputSourcesLocaleIdentifier";
 NSString *const NSTouchBarItemIdentifierTextStyle =
@@ -83,7 +86,17 @@ NSString *const NSTouchBarItemIdentifierTextList =
 @end
 
 @interface NSTextView ()
+- (NSUInteger) _linkedCharacterIndexAtPoint: (NSPoint) point;
+- (NSUInteger) glyphIndexForPoint: (NSPoint) point
+        fractionOfDistanceThroughGlyph: (CGFloat *) fraction;
 - (void) _updateTypingAttributes;
+- (void) _setDefaultSettings;
+- (void) _applyTypedTextSubstitutionsForRange: (NSRange) typed;
+- (void) _pasteRestrictedToTypes: (NSArray *) types;
+- (void) _applySharedData: (NSTextViewSharedData *) sharedData;
+- (void) _clearMarkedText;
+- (BOOL) _delegateChangeTextInRanges: (NSArray *) ranges
+                   replacementStrings: (NSArray *) strings;
 - (void) _replaceCharactersInRange: (NSRange) range
                         withString: (id) string
                useTypingAttributes: (BOOL) useTypingAttributes
@@ -201,39 +214,6 @@ static NSTextView *s_targetTextView = nil;
 @end
 
 @implementation NSTextView
-
-+ (NSScrollView *) scrollableTextView {
-    NSScrollView *scrollView =
-            [[[NSScrollView alloc] initWithFrame: NSMakeRect(0, 0, 200, 100)]
-                    autorelease];
-
-    [scrollView setHasVerticalScroller: YES];
-    [scrollView setBorderType: NSBezelBorder];
-
-    // Fill the visible area once the scroller and border are accounted for,
-    // so that autoresizing keeps the text view as wide as the content area.
-    NSSize contentSize = [scrollView contentSize];
-    NSTextView *textView = [[[self alloc]
-            initWithFrame: NSMakeRect(0, 0, contentSize.width,
-                                      contentSize.height)] autorelease];
-
-    // The text view grows downwards without limit as text is added.
-    [textView setMinSize: NSMakeSize(0, contentSize.height)];
-    [textView setMaxSize: NSMakeSize(FLT_MAX, FLT_MAX)];
-    [textView setVerticallyResizable: YES];
-    [textView setHorizontallyResizable: NO];
-    [textView setAutoresizingMask: NSViewWidthSizable];
-    // The container follows the view's width but not its height, which
-    // setVerticallyResizable: would otherwise make it track.
-    [[textView textContainer] setWidthTracksTextView: YES];
-    [[textView textContainer] setHeightTracksTextView: NO];
-    [[textView textContainer]
-            setContainerSize: NSMakeSize(contentSize.width, FLT_MAX)];
-
-    [scrollView setDocumentView: textView];
-
-    return scrollView;
-}
 
 - (void) configureMenu {
     static NSMenu *menu = nil;
@@ -366,6 +346,8 @@ static NSTextView *s_targetTextView = nil;
         NS_EXTRA(NSTextView, self)->_insertionPointColor = [[sharedData insertionColor] retain];
 
         NS_EXTRA(NSTextView, self)->_usesFontPanel = YES;
+        [self _setDefaultSettings];
+        [self _applySharedData: sharedData];
 
         NS_EXTRA(NSTextView, self)->_isFieldEditor = NO;
         NS_EXTRA(NSTextView, self)->_maxSize = [self bounds].size;
@@ -419,10 +401,7 @@ static NSTextView *s_targetTextView = nil;
                     format: @"-[%@ %s] is not implemented for coder %@",
                             [self class], sel_getName(_cmd), coder];
     }
-    [self registerForDraggedTypes: [NSArray
-                                           arrayWithObjects: NSRTFPboardType,
-                                                             NSStringPboardType,
-                                                             nil]];
+    [self updateDragTypeRegistration];
 
     return self;
 }
@@ -470,6 +449,7 @@ static NSTextView *s_targetTextView = nil;
                                           [NSColor selectedTextBackgroundColor],
                                           NSBackgroundColorAttributeName, nil]
             retain];
+    [self _setDefaultSettings];
 
     [self _setTextStorage: [[container layoutManager] textStorage]];
 
@@ -477,10 +457,7 @@ static NSTextView *s_targetTextView = nil;
                                        -NS_EXTRA(NSTextView, self)->_textContainerInset.height)];
     [self configureMenu];
 
-    [self registerForDraggedTypes: [NSArray
-                                           arrayWithObjects: NSRTFPboardType,
-                                                             NSStringPboardType,
-                                                             nil]];
+    [self updateDragTypeRegistration];
 
     return self;
 }
@@ -533,6 +510,7 @@ static NSTextView *s_targetTextView = nil;
     [NS_EXTRA(NSTextView, self)->_markedTextAttributes release];
     [NS_EXTRA(NSTextView, self)->_fieldEditorUndoManager release];
     [NS_EXTRA(NSTextView, self)->_undoTyping release];
+    [NS_EXTRA(NSTextView, self)->_allowedInputSourceLocales release];
     NS_EXTRA_FREE(NSTextView, self);
     [super dealloc];
 }
@@ -677,12 +655,36 @@ static NSTextView *s_targetTextView = nil;
     NS_EXTRA(NSTextView, self)->_insertionPointColor = color;
 }
 
+// A change of the typing attributes goes through the delegate, which may veto
+// or modify it, and is announced afterwards (observed on macOS 10.14.4 and
+// 26.7.3: any change of the dictionary, whatever caused it).
+// Test: appkit-textview-editing-api.m (typing attributes delegation)
 - (void) setTypingAttributes: (NSDictionary *) attributes {
+    NSDictionary *old = NS_EXTRA(NSTextView, self)->_typingAttributes;
+    BOOL changed = ![old isEqual: attributes] && !(old == nil && attributes == nil);
+    id delegate = NS_EXTRA(NSTextView, self)->_delegate;
+
+    if (changed && attributes != nil &&
+        [delegate respondsToSelector: @selector
+                  (textView:shouldChangeTypingAttributes:toAttributes:)]) {
+        NSDictionary *result = [delegate textView: self
+                shouldChangeTypingAttributes: old != nil ? old : [NSDictionary dictionary]
+                                toAttributes: attributes];
+        if (result != nil)
+            attributes = result;
+        changed = ![old isEqual: attributes];
+    }
+
     attributes = [attributes retain];
     [NS_EXTRA(NSTextView, self)->_typingAttributes release];
     NS_EXTRA(NSTextView, self)->_typingAttributes = attributes;
 
     [self updateRuler];
+
+    if (changed)
+        [[NSNotificationCenter defaultCenter]
+                postNotificationName: NSTextViewDidChangeTypingAttributesNotification
+                              object: self];
 }
 
 - (void) setDefaultParagraphStyle: (NSParagraphStyle *) paragraphStyle {
@@ -751,6 +753,10 @@ static NSTextView *s_targetTextView = nil;
         [NSException raise: NSInvalidArgumentException
                     format: @"-[%@ %s] ranges should not be empty",
                             [self class], _cmd];
+
+    // Moving the selection ends marked text (the text stays).
+    if (!NS_EXTRA(NSTextView, self)->_updatingMarkedText)
+        [self _clearMarkedText];
 
     // Save the initial selected ranges so we can use it when we're done with
     // the selection change
@@ -887,7 +893,14 @@ static NSTextView *s_targetTextView = nil;
     }
 }
 
+// Nothing can be written without a selection; plain text offers only the
+// string (observed on macOS 10.14.4 and 26.7.3).
+// Test: appkit-textview-editing-api.m (writable pasteboard types)
 - (NSArray *) writablePasteboardTypes {
+    if ([self selectedRange].length == 0)
+        return [NSArray array];
+    if (!NS_EXTRA(NSTextView, self)->_isRichText)
+        return [NSArray arrayWithObject: NSStringPboardType];
     return [NSArray arrayWithObjects: NSRTFPboardType, NSStringPboardType, nil];
 }
 
@@ -957,6 +970,39 @@ static NSTextView *s_targetTextView = nil;
 
     return [self _delegateChangeTextInRange: changeInRange
                           replacementString: replacementString];
+}
+
+// The ranges are nil when the matching single-range method gives
+// NSNotFound (the view is not editable).
+- (NSArray *) rangesForUserTextChange {
+    NSRange range = [self rangeForUserTextChange];
+    if (range.location == NSNotFound)
+        return nil;
+    return [NSArray arrayWithObject: [NSValue valueWithRange: range]];
+}
+
+- (NSArray *) rangesForUserCharacterAttributeChange {
+    NSRange range = [self rangeForUserCharacterAttributeChange];
+    if (range.location == NSNotFound)
+        return nil;
+    return [NSArray arrayWithObject: [NSValue valueWithRange: range]];
+}
+
+- (NSArray *) rangesForUserParagraphAttributeChange {
+    NSRange range = [self rangeForUserParagraphAttributeChange];
+    if (range.location == NSNotFound)
+        return nil;
+    return [NSArray arrayWithObject: [NSValue valueWithRange: range]];
+}
+
+- (BOOL) shouldChangeTextInRanges: (NSArray *) affectedRanges
+               replacementStrings: (NSArray *) replacementStrings
+{
+    if (![self isEditable])
+        return NO;
+
+    return [self _delegateChangeTextInRanges: affectedRanges
+                          replacementStrings: replacementStrings];
 }
 
 - (void) didChangeText {
@@ -1185,30 +1231,7 @@ static NSTextView *s_targetTextView = nil;
 }
 
 - (void) paste: sender {
-    id string = nil;
-
-    NSPasteboard *pboard = [NSPasteboard generalPasteboard];
-    if (NS_EXTRA(NSTextView, self)->_isRichText) {
-        NSData *data = [pboard dataForType: NSRTFPboardType];
-        if (data && data.length > 0) {
-            string =
-                    [[[NSAttributedString alloc] initWithRTF: data
-                                          documentAttributes: nil] autorelease];
-        }
-    }
-    if (string == nil) {
-        string = [pboard stringForType: NSStringPboardType];
-    }
-    if ([string length] > 0) {
-        if (![self _delegateChangeTextInRange: [self selectedRange]
-                            replacementString: string])
-            return;
-
-        [self _replaceCharactersInRange: [self selectedRange]
-                             withString: string
-                    useTypingAttributes: NO];
-        [self didChangeText];
-    }
+    [self _pasteRestrictedToTypes: nil];
 }
 
 - (void) selectAll: sender {
@@ -2468,6 +2491,8 @@ static NSTextView *s_targetTextView = nil;
             {@selector(textDidChange:), NSTextDidChangeNotification},
             {@selector(textViewDidChangeSelection:),
              NSTextViewDidChangeSelectionNotification},
+            {@selector(textViewDidChangeTypingAttributes:),
+             NSTextViewDidChangeTypingAttributesNotification},
             {NULL, nil}};
     int i;
 
@@ -2485,11 +2510,27 @@ static NSTextView *s_targetTextView = nil;
                          object: self];
 }
 
+// QUIRK: -setString: and -replaceCharactersInRange:withString: do not ask the
+// delegate for permission (shouldChangeTextInRange:...); the delegate is only
+// consulted for user-driven edits. Observed on macOS 10.14.4 and 26.7.3 (tier
+// 2, MAC-EVIDENCE V613).
+// Test: appkit-textview-editing-api.m (programmatic changes skip the delegate)
 - (void) setString: (NSString *) string {
-    if (![self _delegateChangeTextInRange: NSMakeRange(0, [NS_EXTRA(NSTextView, self)->_textStorage length])
-                        replacementString: string])
-        return;
-
+    // The new text starts from the view's own attributes: typing attributes that earlier
+    // typing or pasting changed are dropped (macOS 26.7.3, black-box probe: after pasting
+    // 20 point text, setString: leaves typing attributes and text at the view's font).
+    {
+        NSMutableDictionary *reset = [NSMutableDictionary dictionary];
+        if (NS_EXTRA(NSTextView, self)->_font != nil)
+            [reset setObject: NS_EXTRA(NSTextView, self)->_font forKey: NSFontAttributeName];
+        if (NS_EXTRA(NSTextView, self)->_textColor != nil)
+            [reset setObject: NS_EXTRA(NSTextView, self)->_textColor forKey: NSForegroundColorAttributeName];
+        id paragraph = [NS_EXTRA(NSTextView, self)->_typingAttributes objectForKey: NSParagraphStyleAttributeName];
+        if (paragraph != nil)
+            [reset setObject: paragraph forKey: NSParagraphStyleAttributeName];
+        [NS_EXTRA(NSTextView, self)->_typingAttributes release];
+        NS_EXTRA(NSTextView, self)->_typingAttributes = [reset retain];
+    }
     [self _replaceCharactersInRange: NSMakeRange(0, [NS_EXTRA(NSTextView, self)->_textStorage length])
                          withString: string];
     // this does not didChangeText
@@ -2627,9 +2668,6 @@ static NSTextView *s_targetTextView = nil;
 - (void) replaceCharactersInRange: (NSRange) range
                        withString: (NSString *) string
 {
-    if (![self _delegateChangeTextInRange: range replacementString: string])
-        return;
-
     [self _replaceCharactersInRange: range
                          withString: string
                 useTypingAttributes: NO];
@@ -2646,6 +2684,10 @@ static NSTextView *s_targetTextView = nil;
         range = NSMakeRange([NS_EXTRA(NSTextView, self)->_textStorage length], 0);
     if (range.location + range.length > [NS_EXTRA(NSTextView, self)->_textStorage length])
         range.length = [NS_EXTRA(NSTextView, self)->_textStorage length] - range.location;
+
+    // Any change of the text other than marking ends marked text.
+    if (!NS_EXTRA(NSTextView, self)->_updatingMarkedText)
+        [self _clearMarkedText];
 
     NSUndoManager *undoManager = [self undoManager];
 
@@ -2811,6 +2853,7 @@ static NSTextView *s_targetTextView = nil;
 
 - (void) setEditable: (BOOL) flag {
     NS_EXTRA(NSTextView, self)->_isEditable = flag;
+    [self updateDragTypeRegistration];
 }
 
 - (void) setSelectable: (BOOL) flag {
@@ -2938,8 +2981,10 @@ static NSTextView *s_targetTextView = nil;
 }
 
 - (void) setSelectedRange: (NSRange) range {
+    // The plain setter resets the affinity to upstream (as on macOS 26.7.3 and 10.14.4;
+    // test appkit-textview-api-defaults)
     [self setSelectedRange: range
-                  affinity: NS_EXTRA(NSTextView, self)->_selectionAffinity
+                  affinity: NSSelectionAffinityUpstream
             stillSelecting: NO];
 }
 
@@ -3149,11 +3194,11 @@ static NSTextView *s_targetTextView = nil;
     NS_EXTRA(NSTextView, self)->_firstResponderButNotEditingYet = YES;
     NS_EXTRA(NSTextView, self)->_didSendTextDidEndNotification = NO;
 
+    // usesRuler only allows a ruler; it does not make one appear, and becoming
+    // first responder does not change the scroll view's rulers (observed on
+    // macOS 10.14.4 and 26.7.3). An already visible ruler gets this client.
+    // Test: appkit-textview-api-defaults.m (rulers)
     NSScrollView *enclosingScrollView = [self enclosingScrollView];
-    if ([self usesRuler] == NO) {
-        BOOL usesRuler = [enclosingScrollView rulersVisible];
-        [self setUsesRuler: usesRuler];
-    }
     if ([self usesRuler]) {
         [[enclosingScrollView horizontalRulerView] setClientView: self];
         [self updateRuler];
@@ -3254,7 +3299,10 @@ static NSTextView *s_targetTextView = nil;
         replacementString = [object string];
     }
 
-    NSRange range = [self selectedRange];
+    // Inserted text replaces marked text, which the input method is committing.
+    NSRange range = NS_EXTRA(NSTextView, self)->_hasMarkedText
+            ? NS_EXTRA(NSTextView, self)->_markedRange
+            : [self selectedRange];
     if (range.location == NSNotFound || range.location > [NS_EXTRA(NSTextView, self)->_textStorage length])
         range = NSMakeRange([NS_EXTRA(NSTextView, self)->_textStorage length], 0);
 
@@ -3266,6 +3314,8 @@ static NSTextView *s_targetTextView = nil;
                          withString: object
              allowsTypingCoalescing: YES];
     [self didChangeText];
+    if (NS_EXTRA(NSTextView, self)->_processingKeyEvent)
+        [self _applyTypedTextSubstitutionsForRange: NSMakeRange(range.location, [replacementString length])];
     [self scrollRangeToVisible: [self selectedRange]];
 }
 
@@ -3306,21 +3356,129 @@ static NSTextView *s_targetTextView = nil;
 }
 
 - (BOOL) hasMarkedText {
-    return NO;
+    return NS_EXTRA(NSTextView, self)->_hasMarkedText;
 }
 
+// QUIRK: without marked text the marked range is {length of the text, 0}, not
+// {NSNotFound, 0} as the NSTextInputClient documentation says. Observed on
+// macOS 10.14.4 and 26.7.3 (tier 2, MAC-EVIDENCE V613).
+// Test: appkit-textview-editing-api.m (marked range without marked text)
 - (NSRange) markedRange {
-    return NSMakeRange(NSNotFound, 0);
+    NSUInteger length = [NS_EXTRA(NSTextView, self)->_textStorage length];
+    if (NS_EXTRA(NSTextView, self)->_hasMarkedText) {
+        // text changed behind our back (straight in the text storage) may have
+        // cut the marked text off
+        if (NSMaxRange(NS_EXTRA(NSTextView, self)->_markedRange) <= length)
+            return NS_EXTRA(NSTextView, self)->_markedRange;
+        [self _clearMarkedText];
+    }
+    return NSMakeRange(length, 0);
 }
 
+// Forgets the marked state and takes the marked text attributes off; the text
+// stays.
+- (void) _clearMarkedText {
+    if (!NS_EXTRA(NSTextView, self)->_hasMarkedText)
+        return;
+
+    NSRange range = NSIntersectionRange(NS_EXTRA(NSTextView, self)->_markedRange,
+                                        NSMakeRange(0, [NS_EXTRA(NSTextView, self)->_textStorage length]));
+    NS_EXTRA(NSTextView, self)->_hasMarkedText = NO;
+    NS_EXTRA(NSTextView, self)->_markedRange = NSMakeRange(NSNotFound, 0);
+    if (range.length > 0) {
+        for (NSString *key in [NS_EXTRA(NSTextView, self)->_markedTextAttributes allKeys])
+            [[self layoutManager] removeTemporaryAttribute: key forCharacterRange: range];
+    }
+}
+
+// Replaces the marked range (else the replacement range, else the selection)
+// with the string, marks it, and selects selectedRange inside it, counted from
+// the start of the marked text. The text takes the typing attributes; the
+// attributes of an attributed string are not kept (observed on macOS 10.14.4
+// and 26.7.3). The delegate is asked about the change but is not told the text
+// changed until the text is committed. Marking does nothing in a view that is
+// not editable.
+// Test: appkit-textview-editing-api.m (marked text)
+- (void) setMarkedText: (id) string
+         selectedRange: (NSRange) selRange
+      replacementRange: (NSRange) replRange
+{
+    if (![self isEditable])
+        return;
+
+    NSString *plain = [string isKindOfClass: [NSAttributedString class]]
+            ? [string string] : (NSString *) string;
+    NSTextStorage *storage = NS_EXTRA(NSTextView, self)->_textStorage;
+    NSUInteger length = [storage length];
+    BOOL hadMarked = NS_EXTRA(NSTextView, self)->_hasMarkedText;
+    NSRange target;
+
+    if (hadMarked)
+        target = NS_EXTRA(NSTextView, self)->_markedRange;
+    else if (replRange.location != NSNotFound && NSMaxRange(replRange) <= length)
+        target = replRange;
+    else
+        target = [self selectedRange];
+    if (target.location > length)
+        target = NSMakeRange(length, 0);
+    if (NSMaxRange(target) > length)
+        target.length = length - target.location;
+
+    if ([plain length] == 0 && !hadMarked)
+        return;
+    if (![self shouldChangeTextInRange: target replacementString: plain])
+        return;
+
+    NS_EXTRA(NSTextView, self)->_updatingMarkedText = YES;
+    [self _clearMarkedText];
+
+    NSAttributedString *marked = [[[NSAttributedString alloc]
+            initWithString: plain
+                attributes: [self typingAttributes]] autorelease];
+    [storage replaceCharactersInRange: target withAttributedString: marked];
+
+    NSRange markedRange = NSMakeRange(target.location, [plain length]);
+    if ([plain length] > 0) {
+        NS_EXTRA(NSTextView, self)->_hasMarkedText = YES;
+        NS_EXTRA(NSTextView, self)->_markedRange = markedRange;
+        NSDictionary *attributes = NS_EXTRA(NSTextView, self)->_markedTextAttributes;
+        if (attributes != nil)
+            [[self layoutManager] addTemporaryAttributes: attributes
+                                       forCharacterRange: markedRange];
+    }
+
+    if (selRange.location > markedRange.length)
+        selRange.location = markedRange.length;
+    if (NSMaxRange(selRange) > markedRange.length)
+        selRange.length = markedRange.length - selRange.location;
+    [self setSelectedRange: NSMakeRange(markedRange.location + selRange.location,
+                                        selRange.length)];
+    NS_EXTRA(NSTextView, self)->_updatingMarkedText = NO;
+
+    [self setNeedsDisplay: YES];
+}
+
+// Commits the marked text: it stays and stops being marked, and the delegate
+// is told the text changed.
 - (void) unmarkText {
+    if (!NS_EXTRA(NSTextView, self)->_hasMarkedText)
+        return;
+    [self _clearMarkedText];
+    [self didChangeText];
 }
 
-- (void) setMarkedText: (id) string selectedRange: (NSRange) selRange replacementRange: (NSRange) replRange {
-}
-
+// The attributes an input method may put in marked text (names as seen in the
+// list macOS returns, 10.14.4 and 26.7.3).
 - (NSArray *) validAttributesForMarkedText {
-    return [NSArray array];
+    return [NSArray arrayWithObjects: NSAttachmentAttributeName, NSBackgroundColorAttributeName,
+                                      NSForegroundColorAttributeName,
+                                      NSFontAttributeName, NSGlyphInfoAttributeName,
+                                      @"NSLanguage", NSMarkedClauseSegmentAttributeName,
+                                      NSTextAlternativesAttributeName,
+                                      @"NSTextInputReplacementRangeAttributeName",
+                                      @"NSTextInsertionUndoable",
+                                      NSUnderlineStyleAttributeName,
+                                      NSUnderlineColorAttributeName, nil];
 }
 
 - (NSAttributedString *) attributedSubstringForProposedRange: (NSRange) range actualRange: (NSRangePointer) actualRange {
@@ -3331,6 +3489,21 @@ static NSTextView *s_targetTextView = nil;
     if (intersection.length > 0)
         return [NS_EXTRA(NSTextView, self)->_textStorage attributedSubstringFromRange: intersection];
     return nil;
+}
+
+// Optional NSTextInputClient methods (attributedString is below).
+- (CGFloat) fractionOfDistanceThroughGlyphForPoint: (NSPoint) point {
+    CGFloat fraction = 0;
+    [self glyphIndexForPoint: point fractionOfDistanceThroughGlyph: &fraction];
+    return fraction;
+}
+
+- (BOOL) drawsVerticallyForCharacterAtIndex: (NSUInteger) charIndex {
+    return NS_EXTRA(NSTextView, self)->_layoutOrientation == NSTextLayoutOrientationVertical;
+}
+
+- (NSInteger) windowLevel {
+    return [[self window] level];
 }
 
 - (NSRect) firstRectForCharacterRange: (NSRange) range actualRange: (NSRangePointer) actualRange {
@@ -3403,10 +3576,7 @@ static NSTextView *s_targetTextView = nil;
     if (gRange.location == NSNotFound)
         gRange = [layoutManager glyphRangeForTextContainer: [self textContainer]];
 
-    if ([self drawsBackground]) {
-        [NS_EXTRA(NSTextView, self)->_backgroundColor setFill];
-        NSRectFill(rect);
-    }
+    [self drawViewBackgroundInRect: rect];
     [layoutManager drawBackgroundForGlyphRange: gRange atPoint: origin];
     [layoutManager drawGlyphsForGlyphRange: gRange atPoint: origin];
     if ([self shouldDrawInsertionPoint]) {
@@ -3423,7 +3593,9 @@ static NSTextView *s_targetTextView = nil;
     CGFloat fraction = 0;
     NSRange firstRange, lastRange, selection;
     NSSelectionAffinity affinity = NSSelectionAffinityUpstream;
-    NSSelectionGranularity granularity = [event clickCount] - 1;
+    NSSelectionGranularity granularity = [event clickCount] > 0 ? [event clickCount] - 1 : 0;
+    if (granularity > NSSelectByParagraph)
+        granularity = NSSelectByParagraph;
     // Set when the press carries Shift, so the tracking loop keeps extending from the existing
     // selection's anchor instead of unioning with the press point.
     BOOL shiftExtend = NO;
@@ -3431,6 +3603,41 @@ static NSTextView *s_targetTextView = nil;
 
     if (![self isSelectable])
         return;
+
+    // A plain click on a link follows it on release and leaves the selection
+    // alone (observed on macOS 10.14.4 and 26.7.3, in editable and read-only
+    // text alike); a drag that starts on a link selects text as usual.
+    // Test: appkit-textview-editing-api.m (clicking a link)
+    if ([event clickCount] == 1 && !([event modifierFlags] & NSShiftKeyMask)) {
+        NSUInteger linkIndex = [self _linkedCharacterIndexAtPoint: point];
+        if (linkIndex != NSNotFound) {
+            NSEvent *tracked;
+            BOOL dragged = NO;
+            do {
+                tracked = [[self window] nextEventMatchingMask: NSLeftMouseUpMask |
+                                                                NSLeftMouseDraggedMask];
+                if ([tracked type] == NSLeftMouseDragged) {
+                    NSPoint now = [self convertPoint: [tracked locationInWindow]
+                                            fromView: nil];
+                    if (fabs(now.x - point.x) > 3 || fabs(now.y - point.y) > 3) {
+                        dragged = YES;
+                        break;
+                    }
+                }
+            } while ([tracked type] != NSLeftMouseUp);
+
+            if (!dragged) {
+                NSPoint up = [self convertPoint: [tracked locationInWindow] fromView: nil];
+                if ([self _linkedCharacterIndexAtPoint: up] == linkIndex)
+                    [self clickedOnLink: [NS_EXTRA(NSTextView, self)->_textStorage
+                                                 attribute: NSLinkAttributeName
+                                                   atIndex: linkIndex
+                                            effectiveRange: NULL]
+                                atIndex: linkIndex];
+                return;
+            }
+        }
+    }
 
     firstRange.location = [self glyphIndexForPoint: point
                     fractionOfDistanceThroughGlyph: &fraction];
@@ -3543,6 +3750,59 @@ static NSTextView *s_targetTextView = nil;
     [NSEvent stopPeriodicEvents];
 
     [self setSelectedRange: selection affinity: affinity stillSelecting: NO];
+    // The selection command that extended by words or paragraphs is kept until
+    // the selection changes again.
+    NS_EXTRA(NSTextView, self)->_selectionGranularity = granularity;
+}
+
+// The index of the character at the point (in view coordinates) when it has a
+// link attribute, else NSNotFound.
+- (NSUInteger) _linkedCharacterIndexAtPoint: (NSPoint) point {
+    NSTextStorage *storage = NS_EXTRA(NSTextView, self)->_textStorage;
+    NSLayoutManager *layoutManager = [self layoutManager];
+    if ([storage length] == 0 || layoutManager == nil)
+        return NSNotFound;
+
+    CGFloat fraction = 0;
+    NSUInteger glyph = [self glyphIndexForPoint: point fractionOfDistanceThroughGlyph: &fraction];
+    if (glyph == NSNotFound || glyph >= [layoutManager numberOfGlyphs])
+        return NSNotFound;
+
+    NSRect rect = [layoutManager boundingRectForGlyphRange: NSMakeRange(glyph, 1)
+                                           inTextContainer: NS_EXTRA(NSTextView, self)->_textContainer];
+    NSPoint origin = [self textContainerOrigin];
+    rect.origin.x += origin.x;
+    rect.origin.y += origin.y;
+    if (!NSPointInRect(point, rect))
+        return NSNotFound;
+
+    NSUInteger index = [layoutManager characterIndexForGlyphAtIndex: glyph];
+    if (index >= [storage length])
+        return NSNotFound;
+    return [storage attribute: NSLinkAttributeName atIndex: index effectiveRange: NULL] != nil
+            ? index : NSNotFound;
+}
+
+// Gives the delegate the chance to handle the link; otherwise opens it.
+- (void) clickedOnLink: (id) link atIndex: (NSUInteger) charIndex {
+    id delegate = NS_EXTRA(NSTextView, self)->_delegate;
+
+    if ([delegate respondsToSelector: @selector(textView:clickedOnLink:atIndex:)]) {
+        if ([delegate textView: self clickedOnLink: link atIndex: charIndex])
+            return;
+    } else if ([delegate respondsToSelector: @selector(textView:clickedOnLink:)]) {
+        // the form that predates the index
+        if ([delegate textView: self clickedOnLink: link])
+            return;
+    }
+
+    NSURL *url = nil;
+    if ([link isKindOfClass: [NSURL class]])
+        url = link;
+    else if ([link isKindOfClass: [NSString class]])
+        url = [NSURL URLWithString: link];
+    if (url != nil)
+        [[NSWorkspace sharedWorkspace] openURL: url];
 }
 
 - (NSUndoManager *) undoManager {
@@ -3579,6 +3839,49 @@ static NSTextView *s_targetTextView = nil;
     else if ([item action] == @selector(toggleContinuousSpellChecking:)) {
         [item setState: [self isContinuousSpellCheckingEnabled]];
     }
+
+    // The toggles show their state; they and the commands that change the text
+    // or its attributes are only available in an editable view (observed on
+    // macOS 10.14.4 and 26.7.3).
+    // Test: appkit-textview-editing-api.m (validating menu items)
+    SEL action = [item action];
+    if (action == @selector(toggleAutomaticQuoteSubstitution:) ||
+        action == @selector(toggleAutomaticDashSubstitution:) ||
+        action == @selector(toggleAutomaticLinkDetection:) ||
+        action == @selector(toggleAutomaticDataDetection:) ||
+        action == @selector(toggleAutomaticTextReplacement:) ||
+        action == @selector(toggleAutomaticSpellingCorrection:) ||
+        action == @selector(toggleSmartInsertDelete:) ||
+        action == @selector(toggleGrammarChecking:)) {
+        BOOL on = NO;
+        if (action == @selector(toggleAutomaticQuoteSubstitution:))
+            on = [self isAutomaticQuoteSubstitutionEnabled];
+        else if (action == @selector(toggleAutomaticDashSubstitution:))
+            on = [self isAutomaticDashSubstitutionEnabled];
+        else if (action == @selector(toggleAutomaticLinkDetection:))
+            on = [self isAutomaticLinkDetectionEnabled];
+        else if (action == @selector(toggleAutomaticDataDetection:))
+            on = [self isAutomaticDataDetectionEnabled];
+        else if (action == @selector(toggleAutomaticTextReplacement:))
+            on = [self isAutomaticTextReplacementEnabled];
+        else if (action == @selector(toggleAutomaticSpellingCorrection:))
+            on = [self isAutomaticSpellingCorrectionEnabled];
+        else if (action == @selector(toggleSmartInsertDelete:))
+            on = [self smartInsertDeleteEnabled];
+        else
+            on = [self isGrammarCheckingEnabled];
+        [item setState: on ? NSOnState : NSOffState];
+        return NS_EXTRA(NSTextView, self)->_isEditable;
+    }
+    if (action == @selector(turnOffKerning:) || action == @selector(tightenKerning:) ||
+        action == @selector(loosenKerning:) || action == @selector(useStandardKerning:) ||
+        action == @selector(turnOffLigatures:) || action == @selector(useStandardLigatures:) ||
+        action == @selector(useAllLigatures:) || action == @selector(raiseBaseline:) ||
+        action == @selector(lowerBaseline:) || action == @selector(outline:) ||
+        action == @selector(superscript:) || action == @selector(subscript:) ||
+        action == @selector(unscript:) || action == @selector(pasteAsPlainText:) ||
+        action == @selector(pasteAsRichText:))
+        return NS_EXTRA(NSTextView, self)->_isEditable;
     return YES;
 }
 
@@ -3764,18 +4067,38 @@ static NSTextView *s_targetTextView = nil;
     NS_EXTRA(NSTextView, self)->_undoTyping = nil;
 }
 
-- (BOOL) _delegateChangeTextInRange: (NSRange) range
-                  replacementString: (NSString *) string
+// textView:shouldChangeTextInRanges:replacementStrings: supersedes the single
+// range method: a delegate that has both is asked only the first (observed on
+// macOS 10.14.4 and 26.7.3).
+// Test: appkit-textview-editing-api.m (delegate prefers the multiple-range form)
+- (BOOL) _delegateChangeTextInRanges: (NSArray *) ranges
+                   replacementStrings: (NSArray *) strings
 {
-    if ([NS_EXTRA(NSTextView, self)->_delegate respondsToSelector: @selector
-                   (textView:shouldChangeTextInRange:replacementString:)]) {
-        if ([NS_EXTRA(NSTextView, self)->_delegate textView: self
-                    shouldChangeTextInRange: range
-                          replacementString: string] == NO)
-            return NO;
+    id delegate = NS_EXTRA(NSTextView, self)->_delegate;
+    if ([delegate respondsToSelector: @selector
+                  (textView:shouldChangeTextInRanges:replacementStrings:)])
+        return [delegate textView: self
+                shouldChangeTextInRanges: ranges
+                      replacementStrings: strings];
+
+    if ([delegate respondsToSelector: @selector
+                  (textView:shouldChangeTextInRange:replacementString:)]) {
+        NSRange range = [[ranges objectAtIndex: 0] rangeValue];
+        NSString *string = strings != nil ? [strings objectAtIndex: 0] : nil;
+        return [delegate textView: self
+                shouldChangeTextInRange: range
+                      replacementString: string];
     }
 
     return YES;
+}
+
+- (BOOL) _delegateChangeTextInRange: (NSRange) range
+                  replacementString: (NSString *) string
+{
+    NSArray *ranges = [NSArray arrayWithObject: [NSValue valueWithRange: range]];
+    NSArray *strings = string != nil ? [NSArray arrayWithObject: string] : nil;
+    return [self _delegateChangeTextInRanges: ranges replacementStrings: strings];
 }
 
 - (NSArray *) _delegateChangeSelectionFromRanges: (NSArray *) from
@@ -3970,10 +4293,11 @@ static NSTextView *s_targetTextView = nil;
     CGFloat fraction;
 
     NSMenu *menu = [[[NSMenu alloc] initWithTitle: @""] autorelease];
+    NSUInteger clickedIndex = NSNotFound;
 
     @try {
-        NSUInteger clickedIndex = [self glyphIndexForPoint: point
-                                fractionOfDistanceThroughGlyph: &fraction];
+        clickedIndex = [self glyphIndexForPoint: point
+                    fractionOfDistanceThroughGlyph: &fraction];
         NSRange range = [NS_EXTRA(NSTextView, self)->_textStorage doubleClickAtIndex: clickedIndex];
 
         // A contextual click inside an existing selection should operate on
@@ -4049,6 +4373,14 @@ static NSTextView *s_targetTextView = nil;
                     action: @selector(selectAll:)
              keyEquivalent: @""];
 
+    // The delegate may adjust or replace the menu.
+    if ([NS_EXTRA(NSTextView, self)->_delegate respondsToSelector: @selector
+                  (textView:menu:forEvent:atIndex:)])
+        menu = [NS_EXTRA(NSTextView, self)->_delegate textView: self
+                                                          menu: menu
+                                                      forEvent: event
+                                                       atIndex: clickedIndex];
+
     return menu;
 }
 
@@ -4106,15 +4438,72 @@ static NSTextView *s_targetTextView = nil;
 - (void) toggleAutomaticSpellingCorrection: sender {
     NS_EXTRA(NSTextView, self)->_isAutomaticSpellingCorrectionEnabled =
             !NS_EXTRA(NSTextView, self)->_isAutomaticSpellingCorrectionEnabled;
-    NSUnimplementedMethod();
 }
 
+// The checking types are the substitution and checking switches plus a few
+// bits that no switch covers. _enabledTextCheckingTypes holds only those other
+// bits; the switches are folded in when the types are read and split out when
+// they are set. Layout read off a text view whose switches and types were set
+// one at a time (black-box observation on macOS 10.14.4 and 26.7.3, same on
+// both): spelling 0x2 is continuous checking, grammar 0x4 only shows while
+// spelling is on, link 0x20, quote 0x40, dash 0x80, replacement 0x100,
+// correction 0x200, date/address 0x18 together with 0x1800 mean data
+// detection. A fresh text view has 0x2001 as the other bits.
+// Test: appkit-textview-api-defaults.m (text checking types)
+enum {
+    _NSTextViewTypeSpelling = 0x2,
+    _NSTextViewTypeGrammar = 0x4,
+    _NSTextViewTypeLink = 0x20,
+    _NSTextViewTypeQuote = 0x40,
+    _NSTextViewTypeDash = 0x80,
+    _NSTextViewTypeReplacement = 0x100,
+    _NSTextViewTypeCorrection = 0x200,
+    _NSTextViewTypeDataDetection = 0x18,
+    _NSTextViewTypeDataDetectionExtra = 0x1800,
+    _NSTextViewTypesWithSwitch = 0x2 | 0x4 | 0x20 | 0x40 | 0x80 | 0x100 | 0x200,
+    _NSTextViewDefaultOtherTypes = 0x2001,
+};
+
 - (NSTextCheckingTypes) enabledTextCheckingTypes {
-    return NS_EXTRA(NSTextView, self)->_enabledTextCheckingTypes;
+    NSTextCheckingTypes types = NS_EXTRA(NSTextView, self)->_enabledTextCheckingTypes;
+    if (NS_EXTRA(NSTextView, self)->_isContinuousSpellCheckingEnabled) {
+        types |= _NSTextViewTypeSpelling;
+        if (NS_EXTRA(NSTextView, self)->_grammarCheckingEnabled)
+            types |= _NSTextViewTypeGrammar;
+    }
+    if (NS_EXTRA(NSTextView, self)->_automaticLinkDetectionEnabled)
+        types |= _NSTextViewTypeLink;
+    if (NS_EXTRA(NSTextView, self)->_automaticQuoteSubstitutionEnabled)
+        types |= _NSTextViewTypeQuote;
+    if (NS_EXTRA(NSTextView, self)->_automaticDashSubstitutionEnabled)
+        types |= _NSTextViewTypeDash;
+    if (NS_EXTRA(NSTextView, self)->_automaticTextReplacementEnabled)
+        types |= _NSTextViewTypeReplacement;
+    if (NS_EXTRA(NSTextView, self)->_isAutomaticSpellingCorrectionEnabled)
+        types |= _NSTextViewTypeCorrection;
+    // Data detection reads back with the date/address bits that were set; with none set, both
+    if (NS_EXTRA(NSTextView, self)->_automaticDataDetectionEnabled && (types & _NSTextViewTypeDataDetection) == 0)
+        types |= _NSTextViewTypeDataDetection;
+    return types;
 }
 
 - (void) setEnabledTextCheckingTypes: (NSTextCheckingTypes) checkingTypes {
-    NS_EXTRA(NSTextView, self)->_enabledTextCheckingTypes = checkingTypes;
+    BOOL wasChecking = NS_EXTRA(NSTextView, self)->_isContinuousSpellCheckingEnabled;
+    NS_EXTRA(NSTextView, self)->_isContinuousSpellCheckingEnabled = (checkingTypes & _NSTextViewTypeSpelling) != 0;
+    NS_EXTRA(NSTextView, self)->_grammarCheckingEnabled = (checkingTypes & _NSTextViewTypeGrammar) != 0;
+    NS_EXTRA(NSTextView, self)->_automaticLinkDetectionEnabled = (checkingTypes & _NSTextViewTypeLink) != 0;
+    NS_EXTRA(NSTextView, self)->_automaticQuoteSubstitutionEnabled = (checkingTypes & _NSTextViewTypeQuote) != 0;
+    NS_EXTRA(NSTextView, self)->_automaticDashSubstitutionEnabled = (checkingTypes & _NSTextViewTypeDash) != 0;
+    NS_EXTRA(NSTextView, self)->_automaticTextReplacementEnabled = (checkingTypes & _NSTextViewTypeReplacement) != 0;
+    NS_EXTRA(NSTextView, self)->_isAutomaticSpellingCorrectionEnabled = (checkingTypes & _NSTextViewTypeCorrection) != 0;
+    NS_EXTRA(NSTextView, self)->_automaticDataDetectionEnabled = (checkingTypes & _NSTextViewTypeDataDetection) != 0;
+
+    NSTextCheckingTypes other = checkingTypes & ~(NSTextCheckingTypes) _NSTextViewTypesWithSwitch;
+    if (NS_EXTRA(NSTextView, self)->_automaticDataDetectionEnabled)
+        other |= _NSTextViewTypeDataDetectionExtra;
+    NS_EXTRA(NSTextView, self)->_enabledTextCheckingTypes = other;
+    if (wasChecking != NS_EXTRA(NSTextView, self)->_isContinuousSpellCheckingEnabled)
+        [self _continuousSpellCheck];
 }
 
 - (BOOL) smartInsertDeleteEnabled {
@@ -4134,6 +4523,12 @@ static NSTextView *s_targetTextView = nil;
 }
 
 - (void) setSpellingState: (NSInteger) value range: (NSRange) characterRange {
+    id delegate = NS_EXTRA(NSTextView, self)->_delegate;
+    if ([delegate respondsToSelector: @selector
+                  (textView:shouldSetSpellingState:range:)])
+        value = [delegate textView: self
+                shouldSetSpellingState: value
+                                 range: characterRange];
     [[self layoutManager]
             addTemporaryAttribute: NSSpellingStateAttributeName
                             value: [NSNumber numberWithLong: value]
@@ -4534,10 +4929,182 @@ static NSTextView *s_targetTextView = nil;
 
 - (void) setAutomaticDataDetectionEnabled: (BOOL) value {
     NS_EXTRA(NSTextView, self)->_automaticDataDetectionEnabled = value;
+    if (value)
+        NS_EXTRA(NSTextView, self)->_enabledTextCheckingTypes |= _NSTextViewTypeDataDetectionExtra;
+    else
+        NS_EXTRA(NSTextView, self)->_enabledTextCheckingTypes &= ~(NSTextCheckingTypes) (_NSTextViewTypeDataDetectionExtra | _NSTextViewTypeDataDetection);
 }
 
 - (void) setAutomaticTextReplacementEnabled: (BOOL) value {
     NS_EXTRA(NSTextView, self)->_automaticTextReplacementEnabled = value;
+}
+
+// The bit positions of NSFlags were read off keyed archives of text views whose
+// settings were changed one at a time (black-box observation on macOS 10.14.4
+// and 26.7.3, same layout on both): selectable 0x1, editable 0x2, rich text 0x4,
+// imports graphics 0x8, field editor 0x10, uses font panel 0x20, uses ruler 0x40,
+// continuous spell checking 0x80, draws background 0x100, smart insert/delete
+// 0x200, allows undo 0x400, uses find panel 0x2000, allows document background
+// colour change 0x4000, grammar checking 0x8000, allows image editing 0x10000,
+// quote substitution 0x20000, link detection 0x40000, link tool tips off
+// 0x80000, ruler visible 0x100000, orthography checking off 0x200000, data
+// detection 0xC00000, dash substitution 0x1000000, text replacement 0x2000000,
+// spelling correction 0x4000000, incremental searching 0x40000000, inspector
+// bar 0x80000000. NSMoreFlags: bit 0 rollover button on, bit 1 character picker
+// item off. Not applied: the ruler bits and the field editor bit (the text view
+// derives the ruler state from its scroll view, and field editors are made by
+// their owner), and the text replacement and spelling correction bits, which
+// are written but not read back: a text view made from an archive has both on
+// whatever the bits say (observed on both systems).
+// Test: appkit-textview-archive-flags.m
+- (void) _applySharedData: (NSTextViewSharedData *) sharedData {
+    unsigned f = [sharedData flags];
+
+    NS_EXTRA(NSTextView, self)->_importsGraphics = (f & 0x8) != 0;
+    NS_EXTRA(NSTextView, self)->_usesFontPanel = (f & 0x20) != 0;
+    NS_EXTRA(NSTextView, self)->_isContinuousSpellCheckingEnabled = (f & 0x80) != 0;
+    NS_EXTRA(NSTextView, self)->_smartInsertDeleteEnabled = (f & 0x200) != 0;
+    NS_EXTRA(NSTextView, self)->_usesFindPanel = (f & 0x2000) != 0;
+    NS_EXTRA(NSTextView, self)->_allowsDocumentBackgroundColorChange = (f & 0x4000) != 0;
+    NS_EXTRA(NSTextView, self)->_grammarCheckingEnabled = (f & 0x8000) != 0;
+    NS_EXTRA(NSTextView, self)->_allowsImageEditing = (f & 0x10000) != 0;
+    NS_EXTRA(NSTextView, self)->_automaticQuoteSubstitutionEnabled = (f & 0x20000) != 0;
+    NS_EXTRA(NSTextView, self)->_automaticLinkDetectionEnabled = (f & 0x40000) != 0;
+    NS_EXTRA(NSTextView, self)->_displaysLinkToolTipsDisabled = (f & 0x80000) != 0;
+    NS_EXTRA(NSTextView, self)->_automaticDataDetectionEnabled = (f & 0xC00000) != 0;
+    NS_EXTRA(NSTextView, self)->_automaticDashSubstitutionEnabled = (f & 0x1000000) != 0;
+    if (f & 0x200000)
+        NS_EXTRA(NSTextView, self)->_enabledTextCheckingTypes &= ~(NSTextCheckingTypes) 0x1;
+    NS_EXTRA(NSTextView, self)->_incrementalSearchingEnabled = (f & 0x40000000) != 0;
+    NS_EXTRA(NSTextView, self)->_usesInspectorBar = (f & 0x80000000) != 0;
+
+    if ([sharedData hasMoreFlags]) {
+        NS_EXTRA(NSTextView, self)->_usesRolloverButtonDisabled = ([sharedData moreFlags] & 0x1) == 0;
+        NS_EXTRA(NSTextView, self)->_allowsCharacterPickerDisabled = ([sharedData moreFlags] & 0x2) != 0;
+    }
+    // NSPreferredTextFinderStyle: 1 find panel, 2 find bar (observed alongside the flag above)
+    if ([sharedData finderStyle] == 2)
+        NS_EXTRA(NSTextView, self)->_usesFindBar = YES;
+    NS_EXTRA(NSTextView, self)->_automaticTextCompletionDisabled = [sharedData automaticTextCompletionDisabled];
+
+    if ([sharedData linkAttributes] != nil) {
+        [NS_EXTRA(NSTextView, self)->_linkTextAttributes release];
+        NS_EXTRA(NSTextView, self)->_linkTextAttributes = [[sharedData linkAttributes] copy];
+    }
+    if ([sharedData markedAttributes] != nil) {
+        [NS_EXTRA(NSTextView, self)->_markedTextAttributes release];
+        NS_EXTRA(NSTextView, self)->_markedTextAttributes = [[sharedData markedAttributes] copy];
+    }
+    if ([sharedData selectedAttributes] != nil) {
+        [NS_EXTRA(NSTextView, self)->_selectedTextAttributes release];
+        NS_EXTRA(NSTextView, self)->_selectedTextAttributes = [[sharedData selectedAttributes] retain];
+    }
+}
+
+// Settings a text view starts with. Found on a fresh text view on macOS
+// 10.14.4 and 26.7.3 (black-box observation, MAC-EVIDENCE V613): rulers
+// allowed, smart insert/delete, text replacement and spelling correction on, quote
+// and dash substitution, link and data detection and grammar checking off.
+// macOS 26.7.3 differs from 10.14.4 in having quote and dash substitution and
+// grammar checking on; the older values are used here. usesRuler is YES
+// (it only allows a ruler; isRulerVisible stays NO).
+// Test: appkit-textview-api-defaults.m
+- (void) _setDefaultSettings {
+    NS_EXTRA(NSTextView, self)->_usesRuler = YES;
+    NS_EXTRA(NSTextView, self)->_smartInsertDeleteEnabled = YES;
+    NS_EXTRA(NSTextView, self)->_automaticTextReplacementEnabled = YES;
+    NS_EXTRA(NSTextView, self)->_isAutomaticSpellingCorrectionEnabled = YES;
+    NS_EXTRA(NSTextView, self)->_enabledTextCheckingTypes = _NSTextViewDefaultOtherTypes;
+    // markedTextAttributes: the fixed defaults of a text view
+    NS_EXTRA(NSTextView, self)->_markedTextAttributes = [[NSDictionary
+            dictionaryWithObjectsAndKeys: [NSColor textColor],
+                                          NSForegroundColorAttributeName,
+                                          [NSColor yellowColor],
+                                          NSBackgroundColorAttributeName, nil]
+            retain];
+}
+
+- (NSSelectionAffinity) selectionAffinity {
+    return NS_EXTRA(NSTextView, self)->_selectionAffinity;
+}
+
+- (NSSelectionGranularity) selectionGranularity {
+    return NS_EXTRA(NSTextView, self)->_selectionGranularity;
+}
+
+- (void) setSelectionGranularity: (NSSelectionGranularity) granularity {
+    NS_EXTRA(NSTextView, self)->_selectionGranularity = granularity;
+}
+
+- (BOOL) displaysLinkToolTips {
+    return !NS_EXTRA(NSTextView, self)->_displaysLinkToolTipsDisabled;
+}
+
+- (void) setDisplaysLinkToolTips: (BOOL) value {
+    NS_EXTRA(NSTextView, self)->_displaysLinkToolTipsDisabled = !value;
+}
+
+// Stored only: there is no image editing UI.
+- (BOOL) allowsImageEditing {
+    return NS_EXTRA(NSTextView, self)->_allowsImageEditing;
+}
+
+- (void) setAllowsImageEditing: (BOOL) value {
+    NS_EXTRA(NSTextView, self)->_allowsImageEditing = value;
+}
+
+// Stored only: there are no extension services to offer in a selection.
+- (BOOL) usesRolloverButtonForSelection {
+    return !NS_EXTRA(NSTextView, self)->_usesRolloverButtonDisabled;
+}
+
+- (void) setUsesRolloverButtonForSelection: (BOOL) value {
+    NS_EXTRA(NSTextView, self)->_usesRolloverButtonDisabled = !value;
+}
+
+// Stored only: there is no Touch Bar.
+- (BOOL) isAutomaticTextCompletionEnabled {
+    return !NS_EXTRA(NSTextView, self)->_automaticTextCompletionDisabled;
+}
+
+- (void) setAutomaticTextCompletionEnabled: (BOOL) value {
+    NS_EXTRA(NSTextView, self)->_automaticTextCompletionDisabled = !value;
+}
+
+- (void) toggleAutomaticTextCompletion: (id) sender {
+    [self setAutomaticTextCompletionEnabled: ![self isAutomaticTextCompletionEnabled]];
+}
+
+- (BOOL) allowsCharacterPickerTouchBarItem {
+    return !NS_EXTRA(NSTextView, self)->_allowsCharacterPickerDisabled;
+}
+
+- (void) setAllowsCharacterPickerTouchBarItem: (BOOL) value {
+    NS_EXTRA(NSTextView, self)->_allowsCharacterPickerDisabled = !value;
+}
+
+// Stored only: input sources are not switched per text view.
+- (NSArray *) allowedInputSourceLocales {
+    return NS_EXTRA(NSTextView, self)->_allowedInputSourceLocales;
+}
+
+- (void) setAllowedInputSourceLocales: (NSArray *) locales {
+    NSArray *copy = [locales copy];
+    [NS_EXTRA(NSTextView, self)->_allowedInputSourceLocales release];
+    NS_EXTRA(NSTextView, self)->_allowedInputSourceLocales = copy;
+}
+
+// Stored only: the find bar is not shown; find actions use the find panel.
+- (BOOL) usesFindPanel {
+    return NS_EXTRA(NSTextView, self)->_usesFindPanel;
+}
+
+- (void) setUsesFindPanel: (BOOL) value {
+    NS_EXTRA(NSTextView, self)->_usesFindPanel = value;
+}
+
+- (BOOL) isCoalescingUndo {
+    return NS_EXTRA(NSTextView, self)->_undoTyping != nil;
 }
 
 // Stored only: dropped or pasted graphics aren't handled differently.

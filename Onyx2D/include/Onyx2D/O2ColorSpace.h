@@ -59,6 +59,7 @@ O2ColorSpaceRef O2ColorSpaceCreateDeviceGray(void);
 O2ColorSpaceRef O2ColorSpaceCreateDeviceRGB(void);
 O2ColorSpaceRef O2ColorSpaceCreateDeviceCMYK(void);
 O2ColorSpaceRef O2ColorSpaceCreatePattern(O2ColorSpaceRef baseSpace);
+O2ColorSpaceRef O2ColorSpaceCreateIndexed(O2ColorSpaceRef baseSpace, size_t lastIndex, const unsigned char *colorTable);
 O2ColorSpaceRef O2ColorSpaceCreateDeviceN(const char **names,
                                           O2ColorSpaceRef alternateSpace,
                                           O2FunctionRef tintTransform);
