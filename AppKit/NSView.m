@@ -128,12 +128,17 @@ const NSViewFullScreenModeOptionKey NSFullScreenModeAllScreens =
 // The refresh rate of the screen the view's window is on (the main screen
 // while it has none), in Hz.
 - (double)refreshRate {
-    NSView *view = [_view anyObject];
-    NSScreen *screen = [[view window] screen];
-    if (screen == nil)
-        screen = [NSScreen mainScreen];
-    NSTimeInterval interval = [screen minimumRefreshInterval];
-    return interval > 0 ? 1.0 / interval : 0;
+    // The provider runs while the link is scheduled, possibly right before the
+    // caller drops its last reference to the view. Keep the autoreleased view
+    // from outliving that release.
+    @autoreleasepool {
+        NSView *view = [_view anyObject];
+        NSScreen *screen = [[view window] screen];
+        if (screen == nil)
+            screen = [NSScreen mainScreen];
+        NSTimeInterval interval = [screen minimumRefreshInterval];
+        return interval > 0 ? 1.0 / interval : 0;
+    }
 }
 - (void)dealloc {
     [_view release];
