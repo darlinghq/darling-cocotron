@@ -205,9 +205,20 @@ extern void CGContextSetFontSmoothingStyle(CGContextRef context, uint32_t style)
 // kCGErrorCannotComplete when no request could be made.
 #define kCGSActivateProcessFrontWindowOnly 1
 CGError _CGSActivateProcess(pid_t pid, uint32_t options);
+// The Darling process that has the input focus. The display server answers where it can (X11:
+// the owner of _NET_ACTIVE_WINDOW). A Wayland compositor does not tell clients, so the answer
+// is the process that most recently reported (through _CGSSetFrontProcess) that it was
+// activated, shared by all Darling processes. Returns kCGErrorSuccess and sets *pid,
+// kCGErrorNoneAvailable when no process is known, kCGErrorIllegalArgument for a NULL pid.
+CGError _CGSGetFrontProcess(pid_t* pid);
+// Reports that the process with this pid got the input focus. A windowing backend calls it
+// with its own pid when its windows get the focus on a display server that cannot be asked.
+CGError _CGSSetFrontProcess(pid_t pid);
 // The name of the Darwin notification that asks the process with this pid to activate its
 // windows (see above); a windowing backend observes the name of its own process.
 #define kCGSProcessActivationNotificationPrefix "org.darlinghq.process-activation."
+// The libnotify name whose state holds the pid _CGSSetFrontProcess() stored.
+#define kCGSFrontProcessNotificationName "org.darlinghq.front-process"
 
 void* _CGSNativeDisplay(CGSConnectionID connId);
 void* _CGSNativeWindowForID(CGSConnectionID connId, CGSWindowID winId);
