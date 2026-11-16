@@ -297,6 +297,33 @@ typedef struct __VFlags {
     }
 }
 
+// The Auto Layout state of a view archive: the translation of the autoresizing mask, the content
+// priorities and the constraints. It is shared with NSCustomView, which makes a view of a custom
+// class from the archive of a stand-in.
+- (void) _decodeAutoLayoutStateFromKeyedCoder: (NSKeyedUnarchiver *) coder {
+    // Auto Layout state. The nib key is the inverse of the property, and is only there for views
+    // that are laid out by constraints.
+    if ([coder containsValueForKey: @"NSDoNotTranslateAutoresizingMask"])
+        NS_EXTRA(NSView, self)->_translatesAutoresizingMaskIntoConstraints =
+                ![coder decodeBoolForKey: @"NSDoNotTranslateAutoresizingMask"];
+    if ([coder containsValueForKey: @"NSHuggingPriority"]) {
+        NSSize priorities = NSSizeFromString([coder decodeObjectForKey: @"NSHuggingPriority"]);
+
+        [self setContentHuggingPriority: priorities.width forOrientation: NSLayoutConstraintOrientationHorizontal];
+        [self setContentHuggingPriority: priorities.height forOrientation: NSLayoutConstraintOrientationVertical];
+    }
+    if ([coder containsValueForKey: @"NSAntiCompressionPriority"]) {
+        NSSize priorities = NSSizeFromString([coder decodeObjectForKey: @"NSAntiCompressionPriority"]);
+
+        [self setContentCompressionResistancePriority: priorities.width
+                                       forOrientation: NSLayoutConstraintOrientationHorizontal];
+        [self setContentCompressionResistancePriority: priorities.height
+                                       forOrientation: NSLayoutConstraintOrientationVertical];
+    }
+    // The items of the constraints are this view and its subviews, which are decoded by now.
+    [self addConstraints: [coder decodeObjectForKey: @"NSViewConstraints"]];
+}
+
 - initWithCoder: (NSCoder *) coder {
     // Decoding the next responder (the superview) can decode the whole
     // hierarchy around this view, and the superview then creates the layer of
@@ -392,27 +419,7 @@ typedef struct __VFlags {
         [self setCanDrawConcurrently:
                         [keyed decodeBoolForKey: @"NSViewCanDrawConcurrently"]];
 
-        // Auto Layout state. The nib key is the inverse of the property, and is only there for views
-        // that are laid out by constraints.
-        if ([keyed containsValueForKey: @"NSDoNotTranslateAutoresizingMask"])
-            NS_EXTRA(NSView, self)->_translatesAutoresizingMaskIntoConstraints =
-                    ![keyed decodeBoolForKey: @"NSDoNotTranslateAutoresizingMask"];
-        if ([keyed containsValueForKey: @"NSHuggingPriority"]) {
-            NSSize priorities = NSSizeFromString([keyed decodeObjectForKey: @"NSHuggingPriority"]);
-
-            [self setContentHuggingPriority: priorities.width forOrientation: NSLayoutConstraintOrientationHorizontal];
-            [self setContentHuggingPriority: priorities.height forOrientation: NSLayoutConstraintOrientationVertical];
-        }
-        if ([keyed containsValueForKey: @"NSAntiCompressionPriority"]) {
-            NSSize priorities = NSSizeFromString([keyed decodeObjectForKey: @"NSAntiCompressionPriority"]);
-
-            [self setContentCompressionResistancePriority: priorities.width
-                                           forOrientation: NSLayoutConstraintOrientationHorizontal];
-            [self setContentCompressionResistancePriority: priorities.height
-                                           forOrientation: NSLayoutConstraintOrientationVertical];
-        }
-        // The items of the constraints are this view and its subviews, which are decoded by now.
-        [self addConstraints: [keyed decodeObjectForKey: @"NSViewConstraints"]];
+        [self _decodeAutoLayoutStateFromKeyedCoder: keyed];
 
         // TODO: NSViewLayoutGuides, ...
 
