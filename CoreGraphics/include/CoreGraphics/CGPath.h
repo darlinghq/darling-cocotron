@@ -149,6 +149,15 @@ COREGRAPHICS_EXPORT CGPathRef _Nullable CGPathCreateCopyByTransformingPath(
         CGPathRef _Nullable path, const CGAffineTransform * _Nullable transform)
     CF_SWIFT_NAME(CGPath.copy(self:using:));
 
+COREGRAPHICS_EXPORT CGMutablePathRef _Nullable CGPathCreateMutableCopyByTransformingPath(
+        CGPathRef _Nullable path, const CGAffineTransform * _Nullable transform)
+    CF_SWIFT_NAME(CGPath.mutableCopy(self:using:));
+
+// Private: not in the public documentation (GUESS, see CGPath.m).
+COREGRAPHICS_EXPORT CGPathRef CGPathCreateWithContinuousRoundedRect(
+        CGRect rect, CGFloat cornerWidth, CGFloat cornerHeight,
+        const CGAffineTransform * _Nullable transform);
+
 #if __has_feature(blocks)
 typedef void (^CGPathApplyBlock)(const CGPathElement *element);
 

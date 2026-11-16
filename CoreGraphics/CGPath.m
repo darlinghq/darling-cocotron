@@ -247,6 +247,30 @@ CGPathRef CGPathCreateCopyByTransformingPath(CGPathRef path,
     return (CGPathRef)copy;
 }
 
+// Onyx2D has one path class and its copies are mutable, so the "immutable" and the mutable transformed copy are one
+// implementation.
+CGMutablePathRef CGPathCreateMutableCopyByTransformingPath(CGPathRef path,
+                                                           const CGAffineTransform *transform)
+{
+    return (CGMutablePathRef)CGPathCreateCopyByTransformingPath(path, transform);
+}
+
+// GUESS (not in the public documentation): the private continuous ("squircle") rounded rectangle is answered with the
+// ordinary rounded rectangle of CGPathCreateWithRoundedRect, which is also what WebKit draws where the continuous
+// form is unavailable (PathCG.cpp, "Continuous rounded rects are unavailable. Paint a normal rounded rect instead.").
+// The argument order (rect, cornerWidth, cornerHeight, transform) is copied from CGPathCreateWithRoundedRect and is a
+// GUESS too. The corners are visibly rounder than the real continuous curve at large radii; the first call says so
+// on stderr.
+CGPathRef CGPathCreateWithContinuousRoundedRect(CGRect rect, CGFloat cornerWidth, CGFloat cornerHeight,
+                                                const CGAffineTransform *transform)
+{
+    static int reported;
+    if (!__atomic_exchange_n(&reported, 1, __ATOMIC_RELAXED))
+        fprintf(stderr, "CoreGraphics: CGPathCreateWithContinuousRoundedRect draws an ordinary rounded rectangle "
+                        "(GUESS: not in the public documentation)\n");
+    return CGPathCreateWithRoundedRect(rect, cornerWidth, cornerHeight, transform);
+}
+
 CGPathRef CGPathCreateCopyByStrokingPath(CGPathRef path,
     const CGAffineTransform *transform, CGFloat width, CGLineCap cap,
     CGLineJoin join, CGFloat miterLimit)
