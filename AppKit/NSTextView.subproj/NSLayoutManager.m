@@ -1633,9 +1633,10 @@ static inline void _appendRectToCache(NSLayoutManager *self, NSRect rect) {
                             // Not yet part of intersect - advance the fill rect
                             // origin
                             fill.origin.x += advance;
-                        } else if (range.location + i <=
+                        } else if (range.location + i <
                                    NSMaxRange(intersect)) {
-                            // Part of intersect - grow the width
+                            // Part of intersect - grow the width (the glyph
+                            // at the end of the range is not part of it)
                             fill.size.width += advance;
                         }
                         previousGlyph = glyph;

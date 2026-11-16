@@ -80,6 +80,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return self;
 }
 
+- initWithString: (NSString *) string attributes: (NSDictionary *) attributes {
+    // NSAttributedString only provides this initializer for its own concrete
+    // classes, so the text storage supplies it for itself.
+    if ((self = [self initWithString: string]) != nil && [attributes count] > 0)
+        [self setAttributes: attributes range: NSMakeRange(0, [string length])];
+    return self;
+}
+
 - initWithAttributedString: (NSAttributedString *) attributedString {
     if ((self = [self initWithString: @""]) != nil)
         [self setAttributedString: attributedString];
