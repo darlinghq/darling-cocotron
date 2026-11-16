@@ -42,9 +42,9 @@ typedef NS_ENUM(NSUInteger, NSLineMovementDirection) {
 // before the extras keep their position in the original order. Add new state
 // to the extra struct, never as an ivar.
 @interface NSTextContainer : NSObject {
-    NSSize _size;
-    NSTextView *_textView;
     NSLayoutManager *_layoutManager;
+    NSTextView *_textView;
+    NSSize _size;
     CGFloat _lineFragmentPadding;
     NS_EXTRA_IVARS_BEGIN(NSTextContainer)
         NSUInteger _maximumNumberOfLines;

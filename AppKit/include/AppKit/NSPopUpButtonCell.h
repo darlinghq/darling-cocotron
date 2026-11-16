@@ -19,6 +19,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSMenuItemCell.h>
 
+#import <AppKit/AppKitIvarLayout.h>
 @class NSMenuItem;
 
 APPKIT_EXPORT NSNotificationName NSPopUpButtonCellWillPopUpNotification;
@@ -29,15 +30,20 @@ typedef NS_ENUM(NSUInteger, NSPopUpArrowPosition) {
     NSPopUpArrowAtBottom = 2
 };
 
+// Legacy ObjC ABI (i386): instance size must stay 0x80, Apple's; an
+// application's subclass is laid out right after it. New state goes to a
+// side structure, never to a larger ivar block.
 @interface NSPopUpButtonCell : NSMenuItemCell {
     NSMenu *_menu;
     NSInteger _selectedIndex;
-    BOOL _pullsDown;
-    BOOL _autoenablesItems;
-    BOOL _usesItemFromMenu;
-    NSPopUpArrowPosition _arrowPosition;
-    NSRectEdge _preferredEdge;
-    BOOL _syncTitleNeeded;
+    NS_EXTRA_IVARS_BEGIN(NSPopUpButtonCell)
+        BOOL _pullsDown;
+        BOOL _autoenablesItems;
+        BOOL _usesItemFromMenu;
+        NSPopUpArrowPosition _arrowPosition;
+        NSRectEdge _preferredEdge;
+        BOOL _syncTitleNeeded;
+    NS_EXTRA_IVARS_END(NSPopUpButtonCell)
 }
 
 - initTextCell: (NSString *) string pullsDown: (BOOL) pullDown;

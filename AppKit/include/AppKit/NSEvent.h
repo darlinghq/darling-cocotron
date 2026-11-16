@@ -19,6 +19,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/AppKitExport.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <Foundation/Foundation.h>
 #import <CoreGraphics/CGEventTypes.h>
 
@@ -303,12 +304,17 @@ typedef NS_OPTIONS(NSUInteger, NSEventSwipeTrackingOptions) {
     NSEventSwipeTrackingClampGestureAmount = 0x1 << 1,
 };
 
+// Legacy ObjC ABI (i386): instance size must stay 0x3c, Apple's; an
+// application's subclass is laid out right after it. New state goes to a
+// side structure, never to a larger ivar block.
 @interface NSEvent : NSObject {
     NSEventType _type;
-    NSTimeInterval _timestamp;
     NSPoint _locationInWindow;
     NSEventModifierFlags _modifierFlags;
+    NS_LEGACY_IVAR_PAD(_NSEventReserved1, 4)
+    NSTimeInterval _timestamp;
     NSInteger _windowNumber;
+    NS_LEGACY_IVAR_PAD(_NSEventReserved2, 24)
 }
 
 @property(class, readonly) NSPoint mouseLocation;

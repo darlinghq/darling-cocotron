@@ -18,10 +18,15 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/AppKit.h>
+#import <AppKit/AppKitIvarLayout.h>
 
+// Legacy ObjC ABI (i386): instance size must stay 0x9c, Apple's; an
+// application's subclass is laid out right after it. New state goes to a
+// side structure, never to a larger ivar block.
 @interface NSMenuView : NSView {
     NSUInteger _selectedItemIndex;
     NSMutableArray *_visibleArray;
+    NS_LEGACY_IVAR_PAD(_NSMenuViewReserved1, 68)
 }
 
 - (NSUInteger) itemIndexAtPoint: (NSPoint) point;

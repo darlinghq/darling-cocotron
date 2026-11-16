@@ -18,12 +18,17 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSView.h>
+#import <AppKit/AppKitIvarLayout.h>
 
 @class NSTableView;
 
+// Legacy ObjC ABI (i386): instance size must stay 0x74, Apple's; an
+// application's subclass is laid out right after it. New state goes to a
+// side structure, never to a larger ivar block.
 @interface NSTableHeaderView : NSView {
     NSTableView *_tableView;
     NSInteger _resizedColumn;
+    NS_LEGACY_IVAR_PAD(_NSTableHeaderViewReserved1, 28)
 }
 
 - (NSTableView *) tableView;

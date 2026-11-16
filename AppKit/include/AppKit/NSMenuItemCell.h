@@ -19,11 +19,16 @@
 
 #import <AppKit/NSButtonCell.h>
 
+#import <AppKit/AppKitIvarLayout.h>
 @class NSMenuItem;
 
+// Legacy ObjC ABI (i386): instance size must stay 0x74, Apple's; an
+// application's subclass is laid out right after it. New state goes to a
+// side structure, never to a larger ivar block.
 @interface NSMenuItemCell : NSButtonCell  {
     // In Apple's AppKit this is stored in _extraData (NSExtraMICData)
     NSMenuItem *_menuItem;
+    NS_LEGACY_IVAR_PAD(_NSMenuItemCellReserved1, 44)
  }
 
 @property(retain) NSMenuItem *menuItem;

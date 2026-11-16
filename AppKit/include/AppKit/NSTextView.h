@@ -92,9 +92,9 @@ typedef NS_ENUM(NSUInteger, NSFindPanelSubstringMatchType) {
     NSFindPanelSubstringMatchTypeEndsWith = 3,
 };
 
-// Legacy ObjC ABI (i386): instance size must stay 0x54, Apple's; the ivars
-// before the extras sit at Apple's offsets. Add new state to the extra
-// struct, never as an ivar.
+// Legacy ObjC ABI (i386): instance size must stay 0x54, Apple's. All state
+// is in the extra struct, which NSText holds the pointer to. Add new state to
+// the extra struct, never as an ivar.
 @interface NSTextView : NSText <NSTextInput, NSTextInputClient, NSTextLayoutOrientationProvider> {
     NS_EXTRA_IVARS_BEGIN(NSTextView)
         NSTextStorage *_textStorage;
@@ -195,7 +195,7 @@ typedef NS_ENUM(NSUInteger, NSFindPanelSubstringMatchType) {
         BOOL _pendingTypedRangeValid;
         NSRange _pendingTypedRange;
         BOOL _applyAllTextCheckingResults;
-    NS_EXTRA_IVARS_END(NSTextView)
+    NS_EXTRA_IVARS_END_IN_SUPER(NSTextView)
 }
 
 - initWithFrame: (NSRect) frame textContainer: (NSTextContainer *) container;
