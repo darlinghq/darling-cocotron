@@ -6,6 +6,8 @@
  *   hold SECONDS        only runs for SECONDS (a window system process that makes the host clipboard visible)
  *   paste SECONDS TEXT  runs until the general pasteboard holds TEXT (exit 0) or SECONDS have passed (exit 1)
  *   count               prints the change count of the general pasteboard
+ * With HOSTCLIP_WINDOW set in the environment the process also shows a window: a Wayland compositor only
+ * tells a client about the clipboard (and takes it from one) while a window of the client has the keyboard focus.
  */
 #import <AppKit/AppKit.h>
 #include <stdio.h>
@@ -29,6 +31,13 @@ int main(int argc, char **argv) {
         // The application brings up the window system connection, which connects the general pasteboard
         // with the host clipboard.
         [NSApplication sharedApplication];
+        if (getenv("HOSTCLIP_WINDOW") != NULL) {
+            NSWindow *window = [[NSWindow alloc] initWithContentRect: NSMakeRect(100, 100, 200, 100)
+                                                           styleMask: NSWindowStyleMaskTitled
+                                                             backing: NSBackingStoreBuffered
+                                                               defer: NO];
+            [window makeKeyAndOrderFront: nil];
+        }
         NSPasteboard *pasteboard = [NSPasteboard generalPasteboard];
         if (strcmp(argv[1], "copy") == 0 && argc == 4) {
             [pasteboard declareTypes: @[ NSPasteboardTypeString ] owner: nil];
