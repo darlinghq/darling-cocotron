@@ -18,14 +18,17 @@
 */
 
 #import <AppKit/AppKitExport.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <Foundation/Foundation.h>
 
 typedef NSString *NSStoryboardName NS_SWIFT_BRIDGED_TYPEDEF;
 typedef NSString *NSStoryboardSceneIdentifier NS_SWIFT_BRIDGED_TYPEDEF;
 
 @interface NSStoryboard : NSObject {
+    NS_EXTRA_IVARS_BEGIN(NSStoryboard)
     NSString *_path;
     NSDictionary *_info;
+    NS_EXTRA_IVARS_END(NSStoryboard)
 }
 
 @property(class, readonly, strong) NSStoryboard *mainStoryboard;

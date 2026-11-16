@@ -18,6 +18,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <Foundation/Foundation.h>
+#import <AppKit/AppKitIvarLayout.h>
 
 @class NSPrintInfo, NSPrintPanel, NSView, NSGraphicsContext;
 
@@ -33,7 +34,9 @@ typedef NS_ENUM(NSInteger, NSPrintRenderingQuality) {
     NSPrintRenderingQualityResponsive,
 };
 
+#define _NS_SIDE_NSPrintOperation 0, 1,
 @interface NSPrintOperation : NSObject {
+    NS_EXTRA_IVARS_BEGIN(NSPrintOperation)
     NSView *_view;
     NSPrintInfo *_printInfo;
     NSView *_accessoryView;
@@ -47,6 +50,7 @@ typedef NS_ENUM(NSInteger, NSPrintRenderingQuality) {
     int _type;
     BOOL _showsPrintProgressPanel;
     NSString *_jobTitle;
+    NS_SIDE_IVARS_END(NSPrintOperation)
 }
 
 + (NSPrintOperation *) currentOperation;

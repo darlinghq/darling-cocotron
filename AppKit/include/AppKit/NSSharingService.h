@@ -18,6 +18,7 @@
 */
 
 #import <AppKit/AppKitExport.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <Foundation/NSObject.h>
 
 typedef NSString *NSSharingServiceName NS_EXTENSIBLE_STRING_ENUM;
@@ -46,12 +47,14 @@ typedef NS_ENUM(NSInteger, NSSharingContentScope) {
 };
 
 @interface NSSharingService : NSObject {
+    NS_EXTRA_IVARS_BEGIN(NSSharingService)
     NSString *_title;
     NSImage *_image;
     NSImage *_alternateImage;
     NSString *_menuItemTitle;
     id <NSSharingServiceDelegate> _delegate;
     void (^_handler)(void);
+    NS_EXTRA_IVARS_END(NSSharingService)
 }
 
 @property (readonly, copy) NSString *title;
@@ -70,8 +73,10 @@ typedef NS_ENUM(NSInteger, NSSharingContentScope) {
 @end
 
 @interface NSSharingServicePicker : NSObject {
+    NS_EXTRA_IVARS_BEGIN(NSSharingServicePicker)
     NSArray *_items;
     id <NSSharingServicePickerDelegate> _delegate;
+    NS_EXTRA_IVARS_END(NSSharingServicePicker)
 }
 
 @property (assign) id <NSSharingServicePickerDelegate> delegate;

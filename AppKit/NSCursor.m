@@ -217,7 +217,7 @@ static NSMutableArray *_cursorStack = nil;
 }
 
 - initWithName: (NSString *) name {
-    _platformCursor = NSPlatformCreateCursorImpWithName(name);
+    NS_EXTRA(NSCursor, self)->_platformCursor = NSPlatformCreateCursorImpWithName(name);
     return self;
 }
 
@@ -396,40 +396,41 @@ static NSMutableArray *_cursorStack = nil;
 }
 
 - initWithImage: (NSImage *) image hotSpot: (NSPoint) hotSpot {
-    _image = [image retain];
-    _hotSpot = hotSpot;
-    _platformCursor = NSPlatformCreateCursorImpWithImage(image, hotSpot);
+    NS_EXTRA(NSCursor, self)->_image = [image retain];
+    NS_EXTRA(NSCursor, self)->_hotSpot = hotSpot;
+    NS_EXTRA(NSCursor, self)->_platformCursor = NSPlatformCreateCursorImpWithImage(image, hotSpot);
     return self;
 }
 
 - (void) dealloc {
-    [_image release];
-    NSPlatformReleaseCursorImp(_platformCursor);
+    [NS_EXTRA(NSCursor, self)->_image release];
+    NSPlatformReleaseCursorImp(NS_EXTRA(NSCursor, self)->_platformCursor);
+    NS_EXTRA_FREE(NSCursor, self);
     [super dealloc];
 }
 
 - (NSImage *) image {
-    return _image;
+    return NS_EXTRA(NSCursor, self)->_image;
 }
 
 - (NSPoint) hotSpot {
-    return _hotSpot;
+    return NS_EXTRA(NSCursor, self)->_hotSpot;
 }
 
 - (BOOL) isSetOnMouseEntered {
-    return _isSetOnMouseEntered;
+    return NS_EXTRA(NSCursor, self)->_isSetOnMouseEntered;
 }
 
 - (BOOL) isSetOnMouseExited {
-    return _isSetOnMouseExited;
+    return NS_EXTRA(NSCursor, self)->_isSetOnMouseExited;
 }
 
 - (void) setOnMouseEntered: (BOOL) value {
-    _isSetOnMouseEntered = value;
+    NS_EXTRA(NSCursor, self)->_isSetOnMouseEntered = value;
 }
 
 - (void) setOnMouseExited: (BOOL) value {
-    _isSetOnMouseExited = value;
+    NS_EXTRA(NSCursor, self)->_isSetOnMouseExited = value;
 }
 
 - (void) mouseEntered: (NSEvent *) event {
@@ -449,12 +450,12 @@ static NSMutableArray *_cursorStack = nil;
         [_cursorStack removeLastObject];
 
     [_cursorStack addObject: self];
-    NSPlatformSetCursorImp(_platformCursor);
+    NSPlatformSetCursorImp(NS_EXTRA(NSCursor, self)->_platformCursor);
 }
 
 - (void) push {
     [_cursorStack addObject: self];
-    NSPlatformSetCursorImp(_platformCursor);
+    NSPlatformSetCursorImp(NS_EXTRA(NSCursor, self)->_platformCursor);
 }
 
 + (void) pop {
@@ -468,7 +469,7 @@ static NSMutableArray *_cursorStack = nil;
     if (cursor == nil)
         cursor = [NSCursor arrowCursor];
 
-    NSPlatformSetCursorImp(cursor->_platformCursor);
+    NSPlatformSetCursorImp(NS_EXTRA(NSCursor, cursor)->_platformCursor);
 }
 
 @end

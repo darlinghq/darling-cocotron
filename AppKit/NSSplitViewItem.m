@@ -22,10 +22,33 @@
 
 @implementation NSSplitViewItem
 
-@synthesize collapsed = _collapsed;
-@synthesize canCollapse = _canCollapse;
-@synthesize holdingPriority = _holdingPriority;
-@synthesize behavior = _behavior;
+- (BOOL) isCollapsed {
+    return NS_EXTRA(NSSplitViewItem, self)->_collapsed;
+}
+
+- (void) setCollapsed: (BOOL) collapsed {
+    NS_EXTRA(NSSplitViewItem, self)->_collapsed = collapsed;
+}
+
+- (BOOL) canCollapse {
+    return NS_EXTRA(NSSplitViewItem, self)->_canCollapse;
+}
+
+- (void) setCanCollapse: (BOOL) canCollapse {
+    NS_EXTRA(NSSplitViewItem, self)->_canCollapse = canCollapse;
+}
+
+- (NSLayoutPriority) holdingPriority {
+    return NS_EXTRA(NSSplitViewItem, self)->_holdingPriority;
+}
+
+- (void) setHoldingPriority: (NSLayoutPriority) holdingPriority {
+    NS_EXTRA(NSSplitViewItem, self)->_holdingPriority = holdingPriority;
+}
+
+- (NSSplitViewItemBehavior) behavior {
+    return NS_EXTRA(NSSplitViewItem, self)->_behavior;
+}
 
 + (instancetype) splitViewItemWithViewController: (NSViewController *) viewController {
     NSSplitViewItem *item = [[[self alloc] init] autorelease];
@@ -35,21 +58,21 @@
 
 + (instancetype) sidebarWithViewController: (NSViewController *) viewController {
     NSSplitViewItem *item = [self splitViewItemWithViewController: viewController];
-    item->_behavior = NSSplitViewItemBehaviorSidebar;
-    item->_canCollapse = YES;
-    item->_holdingPriority = NSLayoutPriorityDefaultLow + 10;
+    NS_EXTRA(NSSplitViewItem, item)->_behavior = NSSplitViewItemBehaviorSidebar;
+    NS_EXTRA(NSSplitViewItem, item)->_canCollapse = YES;
+    NS_EXTRA(NSSplitViewItem, item)->_holdingPriority = NSLayoutPriorityDefaultLow + 10;
     return item;
 }
 
 + (instancetype) contentListWithViewController: (NSViewController *) viewController {
     NSSplitViewItem *item = [self splitViewItemWithViewController: viewController];
-    item->_behavior = NSSplitViewItemBehaviorContentList;
+    NS_EXTRA(NSSplitViewItem, item)->_behavior = NSSplitViewItemBehaviorContentList;
     return item;
 }
 
 - (instancetype) init {
     if ((self = [super init]))
-        _holdingPriority = NSLayoutPriorityDefaultLow;
+        NS_EXTRA(NSSplitViewItem, self)->_holdingPriority = NSLayoutPriorityDefaultLow;
     return self;
 }
 
@@ -64,25 +87,26 @@
 
     [self setViewController: [coder decodeObjectForKey: @"NSSplitViewItemViewController"]];
     if ([coder containsValueForKey: @"NSHoldingPriority"])
-        _holdingPriority = [coder decodeFloatForKey: @"NSHoldingPriority"];
-    _collapsed = [coder decodeBoolForKey: @"NSCollapsed"];
-    _behavior = [coder decodeIntegerForKey: @"NSBehavior"];
+        NS_EXTRA(NSSplitViewItem, self)->_holdingPriority = [coder decodeFloatForKey: @"NSHoldingPriority"];
+    NS_EXTRA(NSSplitViewItem, self)->_collapsed = [coder decodeBoolForKey: @"NSCollapsed"];
+    NS_EXTRA(NSSplitViewItem, self)->_behavior = [coder decodeIntegerForKey: @"NSBehavior"];
     return self;
 }
 
 - (void) dealloc {
-    [_viewController release];
+    [NS_EXTRA(NSSplitViewItem, self)->_viewController release];
+    NS_EXTRA_FREE(NSSplitViewItem, self);
     [super dealloc];
 }
 
 - (NSViewController *) viewController {
-    return _viewController;
+    return NS_EXTRA(NSSplitViewItem, self)->_viewController;
 }
 
 - (void) setViewController: (NSViewController *) viewController {
     viewController = [viewController retain];
-    [_viewController release];
-    _viewController = viewController;
+    [NS_EXTRA(NSSplitViewItem, self)->_viewController release];
+    NS_EXTRA(NSSplitViewItem, self)->_viewController = viewController;
 }
 
 - (instancetype) animator {

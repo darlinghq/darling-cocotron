@@ -55,85 +55,86 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 {
     self = [super init];
     if (self != nil) {
-        _rect = rect;
-        _options = options;
-        _owner = [owner retain];
-        _userData = userData;
-        _retainUserData = retainUserData;
-        if (_retainUserData)
-            _userData = [(id) userData retain];
+        NS_EXTRA(NSTrackingArea, self)->_rect = rect;
+        NS_EXTRA(NSTrackingArea, self)->_options = options;
+        NS_EXTRA(NSTrackingArea, self)->_owner = [owner retain];
+        NS_EXTRA(NSTrackingArea, self)->_userData = userData;
+        NS_EXTRA(NSTrackingArea, self)->_retainUserData = retainUserData;
+        if (NS_EXTRA(NSTrackingArea, self)->_retainUserData)
+            NS_EXTRA(NSTrackingArea, self)->_userData = [(id) userData retain];
 
-        if (_options & NSTrackingAssumeInside)
-            _mouseInside = YES;
+        if (NS_EXTRA(NSTrackingArea, self)->_options & NSTrackingAssumeInside)
+            NS_EXTRA(NSTrackingArea, self)->_mouseInside = YES;
         else
-            _mouseInside = NO;
-        _view = nil;
-        _rectInWindow = NSZeroRect;
-        _isToolTip = isToolTip;
-        _legacy = legacy;
+            NS_EXTRA(NSTrackingArea, self)->_mouseInside = NO;
+        NS_EXTRA(NSTrackingArea, self)->_view = nil;
+        NS_EXTRA(NSTrackingArea, self)->_rectInWindow = NSZeroRect;
+        NS_EXTRA(NSTrackingArea, self)->_isToolTip = isToolTip;
+        NS_EXTRA(NSTrackingArea, self)->_legacy = legacy;
     }
     return self;
 }
 
 - (void) dealloc {
-    [_owner release];
-    if (_retainUserData)
-        [(id) _userData release];
+    [NS_EXTRA(NSTrackingArea, self)->_owner release];
+    if (NS_EXTRA(NSTrackingArea, self)->_retainUserData)
+        [(id) NS_EXTRA(NSTrackingArea, self)->_userData release];
+    NS_EXTRA_FREE(NSTrackingArea, self);
     [super dealloc];
 }
 
 - (NSRect) rect {
-    return _rect;
+    return NS_EXTRA(NSTrackingArea, self)->_rect;
 }
 
 - (NSTrackingAreaOptions) options {
-    return _options;
+    return NS_EXTRA(NSTrackingArea, self)->_options;
 }
 
 - (id) owner {
-    return _owner;
+    return NS_EXTRA(NSTrackingArea, self)->_owner;
 }
 
 - (NSDictionary *) userInfo {
-    return (id) _userData;
+    return (id) NS_EXTRA(NSTrackingArea, self)->_userData;
 }
 
 - (NSRect) _rectInWindow {
-    return _rectInWindow;
+    return NS_EXTRA(NSTrackingArea, self)->_rectInWindow;
 }
 
 - (void) _setRectInWindow: (NSRect) rectInWindow {
-    _rectInWindow = rectInWindow;
+    NS_EXTRA(NSTrackingArea, self)->_rectInWindow = rectInWindow;
 }
 
 - (void) _setRect: (NSRect) rect {
-    _rect = rect;
+    NS_EXTRA(NSTrackingArea, self)->_rect = rect;
 }
 
 - (NSView *) _view {
-    return _view;
+    return NS_EXTRA(NSTrackingArea, self)->_view;
 }
 
 - (void) _setView: (NSView *) newView {
     // Don't retain or we could create a retain loop between the view array of
     // tracking areas and this tracking area
-    _view = newView;
+    NS_EXTRA(NSTrackingArea, self)->_view = newView;
 }
 
 - (BOOL) _isToolTip {
-    return _isToolTip;
+    return NS_EXTRA(NSTrackingArea, self)->_isToolTip;
 }
 
 - (BOOL) _isLegacy {
-    return _legacy;
+    return NS_EXTRA(NSTrackingArea, self)->_legacy;
 }
 
 - (BOOL) _mouseInside {
-    return _mouseInside;
+    return NS_EXTRA(NSTrackingArea, self)->_mouseInside;
 }
 
 - (void) _setMouseInside: (BOOL) inside {
-    _mouseInside = inside;
+    NS_EXTRA(NSTrackingArea, self)->_mouseInside = inside;
 }
 
 - (NSString *) description {
@@ -141,10 +142,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
             stringWithFormat:
                     @"<%@[%p] rect:%@ options:%d owner:%@ userInfo:%p view:%@ "
                     @"rectInWindow:%@ mouseInside:%@ isToolTip:%@>",
-                    [self class], self, NSStringFromRect(_rect), _options,
-                    [_owner class], _userData, [_view class],
-                    NSStringFromRect(_rectInWindow),
-                    _mouseInside ? @"YES" : @"NO", _isToolTip ? @"YES" : @"NO"];
+                    [self class], self, NSStringFromRect(NS_EXTRA(NSTrackingArea, self)->_rect), NS_EXTRA(NSTrackingArea, self)->_options,
+                    [NS_EXTRA(NSTrackingArea, self)->_owner class], NS_EXTRA(NSTrackingArea, self)->_userData, [NS_EXTRA(NSTrackingArea, self)->_view class],
+                    NSStringFromRect(NS_EXTRA(NSTrackingArea, self)->_rectInWindow),
+                    NS_EXTRA(NSTrackingArea, self)->_mouseInside ? @"YES" : @"NO", NS_EXTRA(NSTrackingArea, self)->_isToolTip ? @"YES" : @"NO"];
 }
 
 @end

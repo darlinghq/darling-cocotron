@@ -18,13 +18,15 @@
 */
 
 #import <Foundation/NSObject.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/NSPasteboard.h>
 
 @protocol NSPasteboardItemDataProvider;
 
 // One item of a pasteboard: the data of one thing, offered in one or more types (UTIs).
 @interface NSPasteboardItem : NSObject <NSPasteboardWriting, NSPasteboardReading> {
-@private
+    NS_LEGACY_IVAR_PAD(_NSPasteboardItemReserved, 16)
+    NS_EXTRA_IVARS_BEGIN(NSPasteboardItem)
     NSMutableArray *_orderedTypes;
     NSMutableDictionary *_data;
     NSMutableDictionary *_providers;
@@ -34,6 +36,7 @@
     BOOL _attached;
     BOOL _providersFinished;
     NSUInteger _promiseOwners;
+    NS_EXTRA_IVARS_END(NSPasteboardItem)
 }
 
 @property(readonly, copy) NSArray<NSPasteboardType> *types;

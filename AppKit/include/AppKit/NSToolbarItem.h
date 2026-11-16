@@ -18,6 +18,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/AppKitExport.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/NSUserInterfaceValidation.h>
 #import <Foundation/NSGeometry.h>
 #import <Foundation/NSObject.h>
@@ -49,6 +50,8 @@ APPKIT_EXPORT NSToolbarItemIdentifier
 APPKIT_EXPORT NSToolbarItemIdentifier NSToolbarWritingToolsItemIdentifier;
 
 @interface NSToolbarItem : NSObject <NSCopying, NSValidatedUserInterfaceItem> {
+    NS_LEGACY_IVAR_PAD(_NSToolbarItemReserved, 64)
+    NS_EXTRA_IVARS_BEGIN(NSToolbarItem)
     NSToolbarItemIdentifier _itemIdentifier;
     NSToolbar *_toolbar;
     NSToolbarItemView *_enclosingView;
@@ -59,16 +62,14 @@ APPKIT_EXPORT NSToolbarItemIdentifier NSToolbarWritingToolsItemIdentifier;
     NSString *_paletteLabel;
     id _target;
     SEL _action;
-
     NSMenuItem *_menuFormRepresentation;
-
     NSView *_view;
-
     NSSize _minSize;
     NSSize _maxSize;
     NSInteger _visibilityPriority;
     BOOL _autovalidates;
     BOOL _isEnabled;
+    NS_EXTRA_IVARS_END(NSToolbarItem)
 }
 
 - (instancetype) initWithItemIdentifier: (NSToolbarItemIdentifier) identifier;

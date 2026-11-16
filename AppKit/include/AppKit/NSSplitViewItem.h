@@ -18,6 +18,7 @@
 */
 
 #import <AppKit/AppKitExport.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <Foundation/Foundation.h>
 #import <AppKit/NSLayoutConstraint.h>
 
@@ -37,11 +38,14 @@ typedef NS_ENUM(NSInteger, NSSplitViewItemCollapseBehavior) {
 };
 
 @interface NSSplitViewItem : NSObject <NSCoding> {
+    NS_LEGACY_IVAR_PAD(_NSSplitViewItemReserved, 4)
+    NS_EXTRA_IVARS_BEGIN(NSSplitViewItem)
     NSViewController *_viewController;
     NSSplitViewItemBehavior _behavior;
     BOOL _collapsed;
     BOOL _canCollapse;
     NSLayoutPriority _holdingPriority;
+    NS_EXTRA_IVARS_END(NSSplitViewItem)
 }
 
 + (instancetype) splitViewItemWithViewController: (NSViewController *) viewController;
