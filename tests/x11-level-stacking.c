@@ -18,6 +18,13 @@ static void levelRule(void) {
     CHECK(!X11UnmanagedBelowManaged(true, 8, 0), "raised unmanaged window of a higher level stays above");
 }
 
+static void unmanagedPairRule(void) {
+    // anchorLevel, otherLevel
+    CHECK(X11UnmanagedBelowUnmanaged(24, 1000), "the menu bar ordered in last stays below a full screen window");
+    CHECK(!X11UnmanagedBelowUnmanaged(1000, 24), "a full screen window ordered in last goes above the menu bar");
+    CHECK(!X11UnmanagedBelowUnmanaged(0, 0), "equal levels: the window ordered in last is in front");
+}
+
 static Window make(Display *display, Window parent, bool overrideRedirect) {
     XSetWindowAttributes attributes = {0};
     attributes.override_redirect = overrideRedirect;
@@ -57,6 +64,7 @@ int main(void) {
         return 2;
     }
     levelRule();
+    unmanagedPairRule();
     restacking(display);
     XCloseDisplay(display);
     printf(failures ? "FAILED\n" : "PASSED\n");

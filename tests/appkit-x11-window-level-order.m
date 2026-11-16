@@ -66,6 +66,24 @@ int main(void) {
         [dialog setLevel:NSFloatingWindowLevel];
         settle();
         CHECK(front() == dialog, "raising the level puts the window in front of the unmanaged window, front is %s", [[front() title] UTF8String]);
+
+        // Two windows that cannot become key (the menu bar and a game's full screen window are such): the one
+        // of the higher level is in front, also when the lower one is ordered in later.
+        [dialog orderOut:nil];
+        NSWindow *bar = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 600, 800, 24)
+                                                     styleMask:NSWindowStyleMaskBorderless
+                                                       backing:NSBackingStoreBuffered defer:NO];
+        [bar setTitle:@"bar"];
+        [bar setLevel:NSMainMenuWindowLevel];
+        [plain setLevel:NSScreenSaverWindowLevel];
+        [plain orderFront:nil];
+        settle();
+        [bar orderFront:nil];
+        settle();
+        CHECK(front() == plain, "unmanaged window of a higher level stays in front of one ordered in later, front is %s", [[front() title] UTF8String]);
+        [bar setLevel:NSScreenSaverWindowLevel + 1];
+        settle();
+        CHECK(front() == bar, "raising the level puts the unmanaged window in front of the other one, front is %s", [[front() title] UTF8String]);
     }
     printf(failures ? "FAILED\n" : "PASSED\n");
     return failures != 0;
