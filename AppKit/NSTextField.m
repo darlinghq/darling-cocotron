@@ -24,6 +24,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSParagraphStyle.h>
 #import <AppKit/NSDragging.h>
 #import <AppKit/NSPasteboard.h>
+#import <AppKit/NSStringDrawer.h>
 #import <AppKit/NSTextField.h>
 #import <AppKit/NSTextFieldCell.h>
 #import <AppKit/NSTextStorage.h>
@@ -37,6 +38,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (NSString *) _fontFamilyName;
 - (void) _setFontFamilyName: (NSString *) familyName;
 
+@end
+
+@interface NSTextFieldCell (NSTextFieldInset)
+- (NSSize) _textInsetSize;
 @end
 
 @implementation NSTextField
@@ -165,6 +170,22 @@ NS_EXTRA_DEALLOC(NSTextField)
         [NSException raise: NSInvalidArchiveOperationException
                     format: @"TODO: support unkeyed encoding in NSTextField"];
     }
+}
+
+// With a preferred maximum width, the cell's text wraps at that width: the intrinsic height is
+// that of the wrapped lines and the width that of the widest of them.
+- (NSSize) intrinsicContentSize {
+    CGFloat maxWidth = NS_EXTRA(NSTextField, self)->_preferredMaxLayoutWidth;
+    NSCell *cell = [self cell];
+
+    if (maxWidth > 0 && [cell wraps]) {
+        NSSize size = [cell cellSizeForBounds: NSMakeRect(0, 0, maxWidth, NSStringDrawerLargeDimension)];
+
+        NSSize inset = [(NSTextFieldCell *) cell _textInsetSize];
+
+        return NSMakeSize(ceil(size.width - inset.width), size.height);
+    }
+    return [super intrinsicContentSize];
 }
 
 - initWithFrame: (NSRect) frame {

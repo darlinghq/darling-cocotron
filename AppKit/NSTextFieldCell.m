@@ -310,6 +310,31 @@ NS_EXTRA_SYNTHESIZE_COPY(NSTextFieldCell, allowedInputSourceLocales, _allowedInp
     }
 }
 
+// The space around the text that cellSize adds for the cell's border style.
+- (NSSize) _textInsetSize {
+    if ([self isBezeled])
+        return NSMakeSize(6, 6);
+    if ([self isBordered])
+        return NSMakeSize(4, 4);
+    return NSMakeSize(4, 0);
+}
+
+// A cell that wraps its text needs more height as the width shrinks: the width is that of the
+// widest line the text breaks into (never more than offered) and the height that of all the
+// lines, capped at the height offered.
+- (NSSize) cellSizeForBounds: (NSRect) rect {
+    if (![self wraps])
+        return [super cellSizeForBounds: rect];
+
+    NSSize inset = [self _textInsetSize];
+    NSSize room = NSMakeSize(MAX(rect.size.width - inset.width, 1), NSStringDrawerLargeDimension);
+    NSSize text = [[NSStringDrawer sharedStringDrawer] sizeOfAttributedString: [self attributedStringValue]
+                                                                       inSize: room];
+
+    return NSMakeSize(MIN(rect.size.width, text.width + inset.width),
+                      MIN(rect.size.height, ceil(text.height) + inset.height));
+}
+
 - (NSSize) cellSize {
     NSSize size = [[self attributedStringValue] size];
 
