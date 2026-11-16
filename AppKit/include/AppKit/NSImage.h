@@ -86,6 +86,7 @@ typedef NS_ENUM(NSUInteger, NSImageLoadStatus) {
         // the bitmap an image-level -lockFocus draws into, and its context
         NSBitmapImageRep *_focusSnapshot;
         NSGraphicsContext *_focusSnapshotContext;
+        BOOL _focusSnapshotDropsAlpha;
     NS_EXTRA_IVARS_END(NSImage)
 }
 

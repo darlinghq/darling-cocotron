@@ -28,6 +28,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import "NSCoder+AppKit.h"
 #import <AppKit/NSAppearance.h>
 #import "NSImageDrawingCache.h"
+#import <AppKit/NSLinkedOnOrAfter.h>
 #import <AppKit/NSImageRep.h>
 #import <AppKit/NSPDFImageRep.h>
 #import <AppKit/NSPasteboard.h>
@@ -1504,6 +1505,7 @@ static CGFloat repScale(NSImageRep *rep, NSSize imageSize) {
         [snapshot setSize: size];
 
         NSImageRep *uncached = [self _bestUncachedRepresentationForDevice: nil];
+        NS_EXTRA(NSImage, self)->_focusSnapshotDropsAlpha = [self _focusBitmapHasNoAlphaForOldPrograms];
         [self lockFocusOnRepresentation: snapshot];
         // Remembered before drawing, so that focus changes made by the drawing itself pair up.
         NS_EXTRA(NSImage, self)->_focusSnapshot = [snapshot retain];
@@ -1547,6 +1549,69 @@ static CGFloat repScale(NSImageRep *rep, NSSize imageSize) {
     }
 }
 
+// QUIRK: for a program built against an SDK older than 10.6, the bitmap that results from
+// focusing an image that has no alpha channel (-lockFocus, drawing, -unlockFocus) has no alpha
+// channel either: 3 samples per pixel, 24 bits per pixel. Before 10.6 the focus was an offscreen
+// window whose bitmap had 3 or 4 samples depending on whether the image had alpha; from 10.6 on it
+// is a buffer that always has alpha (4 samples, 32 bits), which programs built for newer SDKs get.
+// Programs from the older era read the bitmap data of such an image (typically via
+// -TIFFRepresentation and +imageRepWithData:) at 3 bytes per pixel.
+// Evidence (tier 1, public documentation): the AppKit release notes for 10.6, section "NSImage,
+// CGImage, and CoreGraphics impedance matching" (the focus no longer draws into an offscreen
+// window); a message by an Apple AppKit engineer on cocoa-dev, 2004-06-18, "Setting a
+// NSPitmapImageRep which NSImages draw to" (a rep from initWithFocusedViewRect: inside an image's
+// lockFocus has 8 bits per sample and 3 or 4 samples per pixel, depending on whether the image has
+// alpha), https://web.archive.org/web/20140116080313/https://lists.apple.com/archives/Cocoa-dev/2004/Jun/msg01243.html
+// Black-box observation on macOS 10.14.4: 4 samples, 32 bits (the newer behaviour, kept for
+// programs built for 10.6 and later).
+// Affected: programs built against SDKs before 10.6 (NSProgramLinkedOnOrAfterSDK). An image counts
+// as having no alpha when it has at least one representation and none of them has alpha.
+// Test: tests/appkit-image-lockfocus-old-sdk-opaque-bitmap.m (the quirk test; the same source built
+// for a newer SDK pins the 10.6 behaviour).
+- (BOOL) _focusBitmapHasNoAlphaForOldPrograms {
+    if (NSProgramLinkedOnOrAfterSDK(NS_SDK_VERSION_MACOSX_10_6))
+        return NO;
+
+    NSArray *representations = NS_EXTRA(NSImage, self)->_representations;
+
+    if ([representations count] == 0)
+        return NO;
+    for (NSImageRep *representation in representations)
+        if ([representation hasAlpha])
+            return NO;
+    return YES;
+}
+
+// The snapshot's color samples as a 3 sample, 24 bit rep. The snapshot holds premultiplied
+// samples, so dropping alpha leaves the picture composited over black.
+- (NSBitmapImageRep *) _bitmapWithoutAlphaFromSnapshot: (NSBitmapImageRep *) snapshot {
+    NSInteger width = [snapshot pixelsWide], height = [snapshot pixelsHigh];
+    NSBitmapImageRep *opaque = [[[NSBitmapImageRep alloc]
+            initWithBitmapDataPlanes: NULL
+                          pixelsWide: width
+                          pixelsHigh: height
+                       bitsPerSample: 8
+                     samplesPerPixel: 3
+                            hasAlpha: NO
+                            isPlanar: NO
+                      colorSpaceName: NSDeviceRGBColorSpace
+                         bytesPerRow: 0
+                        bitsPerPixel: 24] autorelease];
+
+    if (opaque == nil)
+        return snapshot;
+
+    const unsigned char *source = [snapshot bitmapData];
+    unsigned char *destination = [opaque bitmapData];
+    NSInteger sourceRow = [snapshot bytesPerRow], destinationRow = [opaque bytesPerRow];
+
+    for (NSInteger y = 0; y < height; y++)
+        for (NSInteger x = 0; x < width; x++)
+            memcpy(destination + y * destinationRow + x * 3, source + y * sourceRow + x * 4, 3);
+    [opaque setSize: [snapshot size]];
+    return opaque;
+}
+
 // The bitmap an image-level lock drew into becomes the image's content: the previous
 // representations are dropped, as they were drawn into it when the focus was locked.
 - (void) _finishFocusSnapshot {
@@ -1554,8 +1619,13 @@ static CGFloat repScale(NSImageRep *rep, NSSize imageSize) {
 
     NS_EXTRA(NSImage, self)->_focusSnapshot = nil;
     NS_EXTRA(NSImage, self)->_focusSnapshotContext = nil;
+    NSBitmapImageRep *result = snapshot;
+
+    if (NS_EXTRA(NSImage, self)->_focusSnapshotDropsAlpha)
+        result = [self _bitmapWithoutAlphaFromSnapshot: snapshot];
+    NS_EXTRA(NSImage, self)->_focusSnapshotDropsAlpha = NO;
     [NS_EXTRA(NSImage, self)->_representations removeAllObjects];
-    [NS_EXTRA(NSImage, self)->_representations addObject: snapshot];
+    [NS_EXTRA(NSImage, self)->_representations addObject: result];
     [snapshot release];
     [self recache];
 }
