@@ -165,8 +165,52 @@ void NSColorSetCatalogColor(NSColorListName catalogName, NSColorName colorName, 
                                     blue: 0.60f
                                     alpha: 1.0f];
 
-    NSLog(@"missing color for %@", colorName);
-    return [NSColor redColor];
+    // The label, background, accent and system colors of the System catalog. The values are those
+    // of macOS 10.14 in the light appearance, measured with black-box probes
+    // (mac-probes/ua3-system-colors.m): later releases move some of them slightly.
+    if ([colorName isEqual: @"secondaryLabelColor"])
+        return [NSColor colorWithSRGBRed: 0.0f green: 0.0f blue: 0.0f alpha: 0.498f];
+    if ([colorName isEqual: @"tertiaryLabelColor"])
+        return [NSColor colorWithSRGBRed: 0.0f green: 0.0f blue: 0.0f alpha: 0.247f];
+    if ([colorName isEqual: @"quaternaryLabelColor"])
+        return [NSColor colorWithSRGBRed: 0.0f green: 0.0f blue: 0.0f alpha: 0.098f];
+    if ([colorName isEqual: @"placeholderTextColor"])
+        return [NSColor colorWithSRGBRed: 0.0f green: 0.0f blue: 0.0f alpha: 0.247f];
+    if ([colorName isEqual: @"windowFrameTextColor"])
+        return [NSColor colorWithSRGBRed: 0.0f green: 0.0f blue: 0.0f alpha: 0.847f];
+    if ([colorName isEqual: @"separatorColor"])
+        return [NSColor colorWithSRGBRed: 0.0f green: 0.0f blue: 0.0f alpha: 0.098f];
+    if ([colorName isEqual: @"windowBackgroundColor"])
+        return [NSColor colorWithSRGBRed: 0.925f green: 0.925f blue: 0.925f alpha: 1.0f];
+    if ([colorName isEqual: @"underPageBackgroundColor"])
+        return [NSColor colorWithSRGBRed: 0.588f green: 0.588f blue: 0.588f alpha: 0.898f];
+    if ([colorName isEqual: @"findHighlightColor"])
+        return [NSColor colorWithSRGBRed: 1.0f green: 1.0f blue: 0.0f alpha: 1.0f];
+    if ([colorName isEqual: @"unemphasizedSelectedTextBackgroundColor"])
+        return [NSColor colorWithSRGBRed: 0.863f green: 0.863f blue: 0.863f alpha: 1.0f];
+    if ([colorName isEqual: @"controlAccentColor"])
+        return [NSColor colorWithSRGBRed: 0.0f green: 0.478f blue: 1.0f alpha: 1.0f];
+    if ([colorName isEqual: @"systemRedColor"])
+        return [NSColor colorWithSRGBRed: 1.0f green: 0.231f blue: 0.188f alpha: 1.0f];
+    if ([colorName isEqual: @"systemGreenColor"])
+        return [NSColor colorWithSRGBRed: 0.157f green: 0.804f blue: 0.255f alpha: 1.0f];
+    if ([colorName isEqual: @"systemBlueColor"])
+        return [NSColor colorWithSRGBRed: 0.0f green: 0.478f blue: 1.0f alpha: 1.0f];
+    if ([colorName isEqual: @"systemOrangeColor"])
+        return [NSColor colorWithSRGBRed: 1.0f green: 0.584f blue: 0.0f alpha: 1.0f];
+    if ([colorName isEqual: @"systemYellowColor"])
+        return [NSColor colorWithSRGBRed: 1.0f green: 0.8f blue: 0.0f alpha: 1.0f];
+    if ([colorName isEqual: @"systemBrownColor"])
+        return [NSColor colorWithSRGBRed: 0.635f green: 0.518f blue: 0.369f alpha: 1.0f];
+    if ([colorName isEqual: @"systemPinkColor"])
+        return [NSColor colorWithSRGBRed: 1.0f green: 0.176f blue: 0.333f alpha: 1.0f];
+    if ([colorName isEqual: @"systemPurpleColor"])
+        return [NSColor colorWithSRGBRed: 0.686f green: 0.322f blue: 0.871f alpha: 1.0f];
+    if ([colorName isEqual: @"systemGrayColor"])
+        return [NSColor colorWithSRGBRed: 0.557f green: 0.557f blue: 0.576f alpha: 1.0f];
+
+    // A name the catalog does not have has no color.
+    return nil;
 }
 
 - (void) _addSystemColor: (NSColor *) result forName: (NSString *) colorName {

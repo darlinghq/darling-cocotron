@@ -80,12 +80,18 @@ NSColor *NSColorGetCatalogColor(NSColorListName catalogName,
 + (NSColor *) colorWithCatalogName: (NSColorListName) catalogName
                          colorName: (NSColorName) colorName
 {
-    return [[[self alloc]
-            initWithCatalogName: catalogName
-                      colorName: colorName
-                          color: [[NSDisplay currentDisplay]
-                                         colorWithName: colorName]]
-            autorelease];
+    // The display's own colors come first, then the ones registered through
+    // +colorWithCatalogName:colorName:color:. A name in neither has no color.
+    NSColor *color = [[NSDisplay currentDisplay] colorWithName: colorName];
+
+    if (color == nil)
+        color = NSColorGetCatalogColor(catalogName, colorName);
+    if (color == nil)
+        return nil;
+
+    return [[[self alloc] initWithCatalogName: catalogName
+                                    colorName: colorName
+                                        color: color] autorelease];
 }
 
 + (NSColor *) colorWithCatalogName: (NSColorListName) catalogName
