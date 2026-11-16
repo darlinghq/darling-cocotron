@@ -38,6 +38,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSScrollView.h>
 #import <AppKit/NSTrackingArea.h>
 #import <AppKit/NSView.h>
+#import <AppKit/NSScreen.h>
 #import <AppKit/NSBitmapImageRep.h>
 #import <AppKit/NSViewBackingLayer.h>
 #import <AppKit/NSWindow-Private.h>
@@ -89,6 +90,10 @@ const NSViewFullScreenModeOptionKey NSFullScreenModeAllScreens =
 - (void) _removeLayerFromSuperlayer;
 @end
 
+@interface CADisplayLink (AppKitRefreshRate)
+- (void)_setRefreshRateProvider:(double (^)(void))provider;
+@end
+
 @interface _NSViewDisplayLinkTarget : NSObject {
     NSHashTable *_view;
     id _target;
@@ -96,6 +101,7 @@ const NSViewFullScreenModeOptionKey NSFullScreenModeAllScreens =
 }
 - (instancetype)initWithView:(NSView *)view target:(id)target selector:(SEL)selector;
 - (void)frame:(CADisplayLink *)link;
+- (double)refreshRate;
 @end
 
 @implementation _NSViewDisplayLinkTarget
@@ -118,6 +124,21 @@ const NSViewFullScreenModeOptionKey NSFullScreenModeAllScreens =
     if (view && ![view isHiddenOrHasHiddenAncestor] && [window isVisible] &&
         ![window isMiniaturized] && [window screen])
         ((void (*)(id, SEL, id))objc_msgSend)(_target, _selector, link);
+}
+// The refresh rate of the screen the view's window is on (the main screen
+// while it has none), in Hz.
+- (double)refreshRate {
+    // The provider runs while the link is scheduled, possibly right before the
+    // caller drops its last reference to the view. Keep the autoreleased view
+    // from outliving that release.
+    @autoreleasepool {
+        NSView *view = [_view anyObject];
+        NSScreen *screen = [[view window] screen];
+        if (screen == nil)
+            screen = [NSScreen mainScreen];
+        NSTimeInterval interval = [screen minimumRefreshInterval];
+        return interval > 0 ? 1.0 / interval : 0;
+    }
 }
 - (void)dealloc {
     [_view release];
@@ -2565,6 +2586,11 @@ static void clearNeedsDisplay(NSView *self) {
     _NSViewDisplayLinkTarget *proxy = [[_NSViewDisplayLinkTarget alloc]
         initWithView:self target:target selector:selector];
     CADisplayLink *link = [CADisplayLink displayLinkWithTarget:proxy selector:@selector(frame:)];
+    // The link follows the refresh rate of the screen the window is on; the
+    // proxy only holds the view weakly and is owned by the link.
+    [link _setRefreshRateProvider:^double {
+        return [proxy refreshRate];
+    }];
     [proxy release];
     return link;
 }
