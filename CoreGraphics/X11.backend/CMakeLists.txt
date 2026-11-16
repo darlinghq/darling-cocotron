@@ -15,7 +15,6 @@ add_backend(X11
 		# native libraries
 		X11
 		XRandR
-		Xext
 		Xcursor
 		fontconfig
 		xkbfile

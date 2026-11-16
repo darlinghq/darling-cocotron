@@ -211,9 +211,11 @@ static void beforeWaitingCallback(CFRunLoopObserverRef observer,
 }
 
 // A display overlay window (CGLSetFullScreen) belongs to no NSWindow, so the
-// application's keyboard input for it is taken up here: its keys are selected
-// on this connection, and the keyboard focus goes to it. Pointer input is not
-// selected: the overlay passes it through to the windows below.
+// application's input for it is taken up here: its key and pointer events are
+// selected on this connection and the keyboard focus goes to it. Its events
+// reach the application with no window and screen coordinates, as those of a
+// captured display do on macOS. Relative mouse mode, if the application asked
+// for it, takes its grab on the overlay.
 - (void) _displayOverlayWindowCreated: (NSNotification *) notification {
     if (![NSThread isMainThread]) {
         [self performSelectorOnMainThread: _cmd
@@ -225,13 +227,34 @@ static void beforeWaitingCallback(CFRunLoopObserverRef observer,
     if (native == nil)
         return;
     Window overlay = (Window) [native unsignedLongValue];
-    XSelectInput(_display, overlay, KeyPressMask | KeyReleaseMask);
+    if (_overlayWindows == nil)
+        _overlayWindows = [NSMutableSet new];
+    [_overlayWindows addObject: native];
+    _overlayWindow = overlay;
+    _overlayPointerKnown = NO;
+    XSelectInput(_display, overlay,
+                 KeyPressMask | KeyReleaseMask | ButtonPressMask |
+                 ButtonReleaseMask | PointerMotionMask | StructureNotifyMask);
     XSetInputFocus(_display, overlay, RevertToPointerRoot, CurrentTime);
     XFlush(_display);
+    if (_relativeRequested && !_relativeMouse.active)
+        [self beginRelativeMouse];
+}
+
+// The overlay is gone: the server released any grab on it.
+- (void) _overlayWindowDestroyed: (Window) overlay {
+    if (![_overlayWindows containsObject: @((unsigned long) overlay)])
+        return;
+    [_overlayWindows removeObject: @((unsigned long) overlay)];
+    if (_overlayWindow == overlay)
+        _overlayWindow = None;
+    if (_relativeWindow == overlay)
+        [self suspendRelativeMouse];
 }
 
 - (void) dealloc {
     [[NSNotificationCenter defaultCenter] removeObserver: self];
+    [_overlayWindows release];
 #ifdef DARLING
     // The observer uses the connection, so it goes before XCloseDisplay().
     if (_beforeWaitingObserver != NULL) {
@@ -1322,10 +1345,24 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
     return YES;
 }
 
+// The Cocoa screen point (points, origin at the main monitor's bottom-left,
+// y up) of a root pixel position: where an event for a display overlay window
+// is located, as the window of such an event is nil.
+- (NSPoint) screenPointFromRootX: (double) x y: (double) y {
+    CGFloat scale = [self backingScale];
+    X11Point point = X11PointFromRoot([self primaryFrameInPoints],
+                                      (X11Point){x / scale, y / scale});
+    return NSMakePoint(point.x, point.y);
+}
+
 - (void) postXEvent: (XEvent *) ev {
     id event = nil;
     NSEventType type;
     X11Window* window = (X11Window*) [self windowForID: ev->xany.window];
+    // Pointer events of a display overlay have no window; they are located in
+    // screen coordinates.
+    BOOL overlay = window == nil &&
+            [_overlayWindows containsObject: @((unsigned long) ev->xany.window)];
 
     id delegate = [window delegate];
 
@@ -1504,10 +1541,16 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
         break;
 
     case ButtonPress:;
-        pos = [window
-                logicalPoint: NSMakePoint(ev->xbutton.x, ev->xbutton.y)];
-        if (_relativeMouse.active)
-            relativeEventPoint(_display, window, &_relativeMouse, &pos);
+        pos = overlay ? [self screenPointFromRootX: ev->xbutton.x_root
+                                                 y: ev->xbutton.y_root]
+                      : [window logicalPoint: NSMakePoint(ev->xbutton.x, ev->xbutton.y)];
+        if (_relativeMouse.active) {
+            if (overlay)
+                pos = [self screenPointFromRootX: _relativeMouse.virtualX
+                                               y: _relativeMouse.virtualY];
+            else
+                relativeEventPoint(_display, window, &_relativeMouse, &pos);
+        }
 
         // A wheel notch arrives as a press/release pair and belongs to exactly
         // one of them, or the notch scrolls twice. The press carries it: a
@@ -1576,10 +1619,16 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
             ev->xbutton.button <= HorizontalScrollRightButton)
             break;
 
-        pos = [window
-                logicalPoint: NSMakePoint(ev->xbutton.x, ev->xbutton.y)];
-        if (_relativeMouse.active)
-            relativeEventPoint(_display, window, &_relativeMouse, &pos);
+        pos = overlay ? [self screenPointFromRootX: ev->xbutton.x_root
+                                                 y: ev->xbutton.y_root]
+                      : [window logicalPoint: NSMakePoint(ev->xbutton.x, ev->xbutton.y)];
+        if (_relativeMouse.active) {
+            if (overlay)
+                pos = [self screenPointFromRootX: _relativeMouse.virtualX
+                                               y: _relativeMouse.virtualY];
+            else
+                relativeEventPoint(_display, window, &_relativeMouse, &pos);
+        }
 
         // The up of a click reports the count its down was given, so that a
         // double click's two downs are matched by their own ups. A release
@@ -1619,8 +1668,10 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
             // ev->xmotion.y_root);
 
             CGPoint lastMotionPos = [window mouseLocationOutsideOfEventStream];
-            pos = [window
-                    logicalPoint: NSMakePoint(ev->xmotion.x, ev->xmotion.y)];
+            pos = overlay ? [self screenPointFromRootX: ev->xmotion.x_root
+                                                     y: ev->xmotion.y_root]
+                          : [window logicalPoint: NSMakePoint(ev->xmotion.x,
+                                                              ev->xmotion.y)];
 
             CGFloat deltaX, deltaY;
 
@@ -1639,12 +1690,25 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
                 if (!relative.post)
                     break;
                 // Deltas are in points, like the absolute ones.
-                deltaX = relative.deltaX / [window backingScaleFactor];
-                deltaY = relative.deltaY / [window backingScaleFactor];
+                CGFloat deltaScale = overlay ? [self backingScale]
+                                             : [window backingScaleFactor];
+                deltaX = relative.deltaX / deltaScale;
+                deltaY = relative.deltaY / deltaScale;
                 // The window's origin in root coordinates is (x_root - x, y_root - y).
-                pos = [window logicalPoint: NSMakePoint(
-                        _relativeMouse.virtualX - (ev->xmotion.x_root - ev->xmotion.x),
-                        _relativeMouse.virtualY - (ev->xmotion.y_root - ev->xmotion.y))];
+                if (overlay)
+                    pos = [self screenPointFromRootX: _relativeMouse.virtualX
+                                                   y: _relativeMouse.virtualY];
+                else
+                    pos = [window logicalPoint: NSMakePoint(
+                            _relativeMouse.virtualX - (ev->xmotion.x_root - ev->xmotion.x),
+                            _relativeMouse.virtualY - (ev->xmotion.y_root - ev->xmotion.y))];
+            } else if (overlay) {
+                // Root pixels moved since the previous motion; y grows downwards.
+                CGFloat scale = [self backingScale];
+                deltaX = _overlayPointerKnown
+                        ? (ev->xmotion.x_root - _overlayPointerX) / scale : 0;
+                deltaY = _overlayPointerKnown
+                        ? (ev->xmotion.y_root - _overlayPointerY) / scale : 0;
             } else {
                 // Mouse deltas are in screen orientation, y growing downwards
                 // (as CGEvent's kCGMouseEventDeltaY), while pos is window-local
@@ -1654,6 +1718,11 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
                 deltaY = lastMotionPos.y - pos.y;
             }
             [window setLastKnownCursorPosition: pos];
+            if (overlay) {
+                _overlayPointerKnown = YES;
+                _overlayPointerX = ev->xmotion.x_root;
+                _overlayPointerY = ev->xmotion.y_root;
+            }
             [self accumulateMouseDeltaX: deltaX y: deltaY];
 
             // X11 numbers the right button 3 (Button3Mask); Button2Mask is
@@ -1671,7 +1740,7 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
             // The pointer moved: a cursor hidden until then comes back, even
             // when the application does not want the mouse-moved event.
             [self pointerMoved];
-            if (type == NSMouseMoved && ![delegate acceptsMouseMovedEvents])
+            if (type == NSMouseMoved && !overlay && ![delegate acceptsMouseMovedEvents])
                 break;
 
             // Events the queue is about to drop in favour of this one carry
@@ -1825,6 +1894,7 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
         break;
 
     case DestroyNotify:;
+        [self _overlayWindowDestroyed: ev->xany.window];
         // we should never get this message before the WM_DELETE_WINDOW
         // ClientNotify so normally, window should be nil here.
         [window invalidate];
@@ -2125,23 +2195,29 @@ void CGNativeBorderFrameWidthsForStyle(NSUInteger styleMask, CGFloat *top,
 // Without the keyboard focus nothing is grabbed (a grab would take the pointer
 // from whichever client has it); FocusIn retries the preserved request.
 - (void) beginRelativeMouse {
-    NSWindow *nswin = [NSApp keyWindow];
-    if (!nswin)
-        nswin = [NSApp mainWindow];
-    if (!nswin) {
-        NSArray *windows = [NSApp windows];
-        for (NSWindow *w in windows) {
-            if ([w isVisible]) {
-                nswin = w;
-                break;
+    // A display overlay covers the screen above every window, so it is the
+    // window the pointer is grabbed for while there is one.
+    X11Window *xwin = nil;
+    Window win = _overlayWindow;
+    if (win == None) {
+        NSWindow *nswin = [NSApp keyWindow];
+        if (!nswin)
+            nswin = [NSApp mainWindow];
+        if (!nswin) {
+            NSArray *windows = [NSApp windows];
+            for (NSWindow *w in windows) {
+                if ([w isVisible]) {
+                    nswin = w;
+                    break;
+                }
             }
+            if (!nswin && [windows count] > 0)
+                nswin = [windows objectAtIndex: 0];
         }
-        if (!nswin && [windows count] > 0)
-            nswin = [windows objectAtIndex: 0];
-    }
 
-    X11Window *xwin = (X11Window *) [nswin platformWindow];
-    Window win = xwin ? [xwin windowHandle] : None;
+        xwin = (X11Window *) [nswin platformWindow];
+        win = xwin ? [xwin windowHandle] : None;
+    }
     if (win == None) {
         NSLog(@"Relative mouse mode: no window to grab the pointer for\n");
         return;
