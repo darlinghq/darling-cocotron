@@ -18,6 +18,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <ApplicationServices/ApplicationServices.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <Foundation/NSObject.h>
 
 typedef NS_ENUM(NSInteger, NSColorSpaceModel) {
@@ -33,6 +34,7 @@ typedef NS_ENUM(NSInteger, NSColorSpaceModel) {
 
 @interface NSColorSpace : NSObject {
     CGColorSpaceRef _cgColorSpace;
+    NS_LEGACY_IVAR_PAD(_NSColorSpaceReserved, 28)
 }
 
 @property(class, strong, readonly) NSColorSpace *deviceRGBColorSpace;

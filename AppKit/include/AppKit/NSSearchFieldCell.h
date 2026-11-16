@@ -18,6 +18,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSTextFieldCell.h>
+#import <AppKit/AppKitIvarLayout.h>
 
 @class NSButtonCell;
 
@@ -38,6 +39,7 @@ enum {
     NSButtonCell *_cancelButtonCell;
     NSMenu *_searchMenuTemplate;
     BOOL _resignsFirstResponderWithCancel;
+    NS_LEGACY_IVAR_PAD(_NSSearchFieldCellReserved, 16)
 }
 
 - (NSArray *) recentSearches;

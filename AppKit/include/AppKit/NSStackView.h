@@ -18,6 +18,7 @@
 */
 
 #import <AppKit/NSView.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/NSLayoutConstraint.h>
 #include <float.h>
 
@@ -69,6 +70,7 @@ static const CGFloat NSStackViewSpacingUseDefault = FLT_MAX;
     BOOL _changingViews;
     BOOL _keepsDecodedFrames;
     NSMutableArray *_entries;
+    NS_LEGACY_IVAR_PAD(_NSStackViewReserved, 24)
 }
 
 + (instancetype) stackViewWithViews: (NSArray *) views;

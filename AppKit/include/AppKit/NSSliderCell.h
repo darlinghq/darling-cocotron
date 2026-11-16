@@ -18,6 +18,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSActionCell.h>
+#import <AppKit/AppKitIvarLayout.h>
 
 typedef NS_ENUM(NSUInteger, NSTickMarkPosition) {
     NSTickMarkPositionBelow = 0,
@@ -56,6 +57,7 @@ enum {
     int _numberOfTickMarks;
     NSTickMarkPosition _tickMarkPosition;
     BOOL _allowsTickMarkValuesOnly;
+    NS_LEGACY_IVAR_PAD(_NSSliderCellReserved, 8)
 }
 
 - (NSSliderType) sliderType;

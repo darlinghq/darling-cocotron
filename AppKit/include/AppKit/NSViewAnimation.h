@@ -17,6 +17,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSAnimation.h>
+#import <AppKit/AppKitIvarLayout.h>
 
 APPKIT_EXPORT NSString *const NSViewAnimationStartFrameKey;
 APPKIT_EXPORT NSString *const NSViewAnimationEndFrameKey;
@@ -28,6 +29,7 @@ APPKIT_EXPORT NSString *const NSViewAnimationFadeOutEffect;
 
 @interface NSViewAnimation : NSAnimation {
     NSArray *_animations;
+    NS_LEGACY_IVAR_PAD(_NSViewAnimationReserved, 40)
 }
 
 - initWithViewAnimations: (NSArray *) animations;

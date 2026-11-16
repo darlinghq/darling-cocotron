@@ -18,6 +18,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSResponder.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <Foundation/NSGeometry.h>
 
 @class NSString, NSView, NSWindow;
@@ -48,6 +49,7 @@ APPKIT_EXPORT NSString *const NSDrawerDidCloseNotification;
     id _delegate;
     NSSize _minContentSize;
     NSSize _maxContentSize;
+    NS_LEGACY_IVAR_PAD(_NSDrawerReserved, 32)
 }
 
 // Geometry methods. Not in Apple's AppKit.

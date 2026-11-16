@@ -18,6 +18,7 @@
 */
 
 #import <AppKit/AppKitExport.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <Foundation/Foundation.h>
 
 @class NSEvent, NSGestureRecognizer, NSView;
@@ -49,6 +50,7 @@ typedef NS_ENUM(NSInteger, NSGestureRecognizerState) {
 #if !__OBJC2__
 {
     _NSGESTURERECOGNIZER_IVARS
+    NS_LEGACY_IVAR_PAD(_NSGestureRecognizerReserved, 40)
 }
 #endif
 

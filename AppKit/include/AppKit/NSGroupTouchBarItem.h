@@ -18,11 +18,13 @@
 */
 
 #import <AppKit/NSTouchBarItem.h>
+#import <AppKit/AppKitIvarLayout.h>
 
 @class NSTouchBar;
 
 @interface NSGroupTouchBarItem : NSTouchBarItem {
     NSTouchBar *_groupTouchBar;
+    NS_LEGACY_IVAR_PAD(_NSGroupTouchBarItemReserved, 20)
 }
 + (instancetype) alertStyleGroupItemWithIdentifier: (NSTouchBarItemIdentifier) identifier;
 @property(retain) NSTouchBar *groupTouchBar;

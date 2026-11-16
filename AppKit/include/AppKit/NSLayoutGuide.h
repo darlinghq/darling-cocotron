@@ -18,6 +18,7 @@
 */
 
 #import <AppKit/AppKitExport.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <Foundation/Foundation.h>
 #import <AppKit/NSUserInterfaceItemIdentification.h>
 
@@ -27,6 +28,7 @@
     NSRect _frame;
     NSView *_owningView;
     NSString *_identifier;
+    NS_LEGACY_IVAR_PAD(_NSLayoutGuideReserved, 68)
 }
 
 - (instancetype) init;

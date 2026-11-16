@@ -18,6 +18,7 @@
 */
 
 #import <AppKit/AppKitExport.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/NSTouchBarItem.h>
 #import <Foundation/Foundation.h>
 
@@ -26,6 +27,7 @@
 @interface NSCustomTouchBarItem : NSTouchBarItem {
     NSView *_view;
     NSString *_customizationLabel;
+    NS_LEGACY_IVAR_PAD(_NSCustomTouchBarItemReserved, 28)
 }
 @property(retain) NSView *view;
 @property(copy) NSString *customizationLabel;

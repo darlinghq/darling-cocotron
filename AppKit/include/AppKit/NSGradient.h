@@ -18,6 +18,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <Foundation/NSGeometry.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <Foundation/NSObject.h>
 
 @class NSColor, NSMutableArray, NSArray, NSColorSpace, NSBezierPath;
@@ -33,6 +34,7 @@ typedef NS_OPTIONS(NSUInteger, NSGradientDrawingOptions) {
     NSInteger _numberOfComponents;
     CGFloat **_components;
     CGFloat *_locations;
+    NS_LEGACY_IVAR_PAD(_NSGradientReserved, 8)
 }
 
 - initWithColors: (NSArray *) colors

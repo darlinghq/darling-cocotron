@@ -18,6 +18,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/AppKitExport.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <Foundation/NSObject.h>
 
 @class NSURL, NSBundle, NSDictionary, NSArray, NSData, NSMutableArray, NSNib;
@@ -36,6 +37,7 @@ APPKIT_EXPORT NSString *const NSNibTopLevelObjects;
         unsigned int _inheritsDecodeTimeBundle : 1;
         unsigned int _reserved : 30;
     } _flags;
+    NS_LEGACY_IVAR_PAD(_NSNibReserved, 12)
 }
 
 - initWithCoder: (NSCoder *) coder;

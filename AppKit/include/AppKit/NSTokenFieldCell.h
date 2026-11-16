@@ -18,6 +18,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSTextFieldCell.h>
+#import <AppKit/AppKitIvarLayout.h>
 
 typedef NS_ENUM(NSUInteger, NSTokenStyle) {
     NSTokenStyleDefault,
@@ -37,6 +38,7 @@ enum {
     NSCharacterSet *_set;
     NSTimeInterval _completionDelay;
     id _delegate;
+    NS_LEGACY_IVAR_PAD(_NSTokenFieldCellReserved, 60)
 }
 
 + (NSTimeInterval) defaultCompletionDelay;

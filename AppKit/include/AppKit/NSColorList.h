@@ -18,6 +18,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/AppKit.h>
+#import <AppKit/AppKitIvarLayout.h>
 
 @class NSColor;
 
@@ -28,6 +29,7 @@ APPKIT_EXPORT NSString *const NSColorListDidChangeNotification;
     NSMutableArray *_colors;
     NSString *_name;
     NSString *_path;
+    NS_LEGACY_IVAR_PAD(_NSColorListReserved, 16)
 }
 
 + (NSArray *) availableColorLists;

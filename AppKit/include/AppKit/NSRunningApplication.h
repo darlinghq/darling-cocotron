@@ -18,6 +18,7 @@
 */
 
 #import <Foundation/NSObject.h>
+#import <AppKit/AppKitIvarLayout.h>
 #include <sys/types.h>
 
 @class NSString;
@@ -35,6 +36,7 @@ typedef NS_OPTIONS(NSUInteger, NSApplicationActivationOptions) {
 
 @interface NSRunningApplication : NSObject {
     pid_t _processIdentifier;
+    NS_LEGACY_IVAR_PAD(_NSRunningApplicationReserved, 72)
 }
 
 + (NSArray<NSRunningApplication *> *) runningApplicationsWithBundleIdentifier: (NSString *) bundleIdentifier;

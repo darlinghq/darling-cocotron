@@ -18,6 +18,7 @@
 */
 
 #import <Foundation/NSObject.h>
+#import <AppKit/AppKitIvarLayout.h>
 
 @class NSArray, NSMutableArray, NSIndexPath;
 
@@ -25,6 +26,7 @@
     id _representedObject;
     NSTreeNode *_parentNode;
     NSMutableArray *_childNodes;
+    NS_LEGACY_IVAR_PAD(_NSTreeNodeReserved, 16)
 }
 
 + (instancetype) treeNodeWithRepresentedObject: (id) modelObject;

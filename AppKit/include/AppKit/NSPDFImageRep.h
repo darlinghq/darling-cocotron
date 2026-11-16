@@ -18,12 +18,14 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSImageRep.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <ApplicationServices/ApplicationServices.h>
 
 @interface NSPDFImageRep : NSImageRep <NSCopying> {
     NSData *_pdf;
     int _currentPage;
     CGPDFDocumentRef _document;
+    NS_LEGACY_IVAR_PAD(_NSPDFImageRepReserved, 4)
 }
 
 - initWithData: (NSData *) data;

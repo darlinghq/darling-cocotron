@@ -18,11 +18,13 @@
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  SOFTWARE. */
 #import <Foundation/NSDate.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <Foundation/NSObject.h>
 
 // Animations aren't run: changes made in a group take effect immediately.
 @interface NSAnimationContext : NSObject <NSCopying> {
     NSTimeInterval _duration;
+    NS_LEGACY_IVAR_PAD(_NSAnimationContextReserved, 20)
 }
 
 + (void) runAnimationGroup: (void (^)(NSAnimationContext *context)) changes

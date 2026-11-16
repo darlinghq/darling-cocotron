@@ -18,6 +18,7 @@
 */
 
 #import <AppKit/AppKitExport.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/NSResponder.h>
 #import <Foundation/NSGeometry.h>
 #import <Foundation/NSNotification.h>
@@ -49,6 +50,7 @@ typedef NS_ENUM(NSInteger, NSPopoverAppearance) {
     id<NSPopoverDelegate> _delegate;
     NSRect _positioningRect;
     NSPanel *_panel;
+    NS_LEGACY_IVAR_PAD(_NSPopoverReserved, 44)
 }
 
 @property NSPopoverBehavior behavior;

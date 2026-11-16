@@ -18,6 +18,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSNibLoading.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/NSPanel.h>
 
 @class NSButton, NSColorWell, NSMatrix, NSView, NSColorList, NSSplitView,
@@ -82,6 +83,7 @@ APPKIT_EXPORT NSString *const NSColorPanelColorDidChangeNotification;
     NSMutableArray *_colorPickers;
     id _target;
     SEL _action;
+    NS_LEGACY_IVAR_PAD(_NSColorPanelReserved, 56)
 }
 
 + (BOOL) sharedColorPanelExists;

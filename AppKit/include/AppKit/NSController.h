@@ -17,6 +17,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/AppKitExport.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <Foundation/NSArray.h>
 #import <Foundation/NSObject.h>
 
@@ -28,6 +29,7 @@ APPKIT_EXPORT BOOL NSIsControllerMarker(id object);
 
 @interface NSController : NSObject <NSCoding> {
     NSMutableArray *_editors;
+    NS_LEGACY_IVAR_PAD(_NSControllerReserved, 52)
 }
 
 - (BOOL) commitEditing;
