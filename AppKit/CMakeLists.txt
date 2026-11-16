@@ -533,6 +533,11 @@ set(AppKit_resources
 	NSMenuArrow.tiff NSMenu.subproj/NSMenuArrow.tiff
 	NSMenuViewDoubleRightArrowGray.tiff NSMenu.subproj/NSMenuViewDoubleRightArrowGray.tiff
 	NSMenuViewDoubleRightArrow.tiff NSMenu.subproj/NSMenuViewDoubleRightArrow.tiff
+	NSMenuCheckmark.png NSMenu.subproj/NSMenuCheckmark.png
+	NSMenuMixedState.png NSMenu.subproj/NSMenuMixedState.png
+	NSMenuOnState.png NSMenu.subproj/NSMenuOnState.png
+	NSMenuOnStateTemplate.png NSMenu.subproj/NSMenuOnStateTemplate.png
+	NSMenuMixedStateTemplate.png NSMenu.subproj/NSMenuMixedStateTemplate.png
 
 	NSToolbarOverflowArrow.tiff NSToolbar.subproj/NSToolbarOverflowArrow.tiff
 	NSToolbarPrintItem.tiff NSToolbar.subproj/NSToolbarPrintItem.tiff
