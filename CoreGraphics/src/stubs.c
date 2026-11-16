@@ -54,11 +54,6 @@ CGError CGGetDisplayTransferByTable(CGDirectDisplayID a, uint32_t b, CGGammaValu
     return (CGError)0;
 }
 
-void CGGetLastMouseDelta(int32_t *a, int32_t *b) {
-    if(verbose)
-        puts("STUB: CGGetLastMouseDelta called");
-}
-
 CGError CGSetDisplayTransferByFormula(CGDirectDisplayID a, CGGammaValue b, CGGammaValue c, CGGammaValue d, CGGammaValue e, CGGammaValue f, CGGammaValue g, CGGammaValue h, CGGammaValue i, CGGammaValue j) {
     if(verbose)
         puts("STUB: CGSetDisplayTransferByFormula called");

@@ -1654,6 +1654,7 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
                 deltaY = lastMotionPos.y - pos.y;
             }
             [window setLastKnownCursorPosition: pos];
+            [self accumulateMouseDeltaX: deltaX y: deltaY];
 
             // X11 numbers the right button 3 (Button3Mask); Button2Mask is
             // the middle button, whose drags are other-mouse drags.
