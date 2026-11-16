@@ -61,14 +61,14 @@ static const struct {
     {"NSDatePickerCell", 104}, {"NSDictionaryController", 184},
     {"NSDockTile", 60}, {"NSDrawer", 100}, {"NSEPSImageRep", 44},
     {"NSFontDescriptor", 28}, {"NSFontManager", 52}, {"NSFontPanel", 612},
-    {"NSGestureRecognizer", 72}, {"NSGradient", 32},
+    {"NSGestureRecognizer", 72}, {"NSGlyphInfo", 8}, {"NSGradient", 32},
     {"NSGraphicsContext", 4}, {"NSGroupTouchBarItem", 60},
     {"NSHelpManager", 32}, {"NSLayoutConstraint", 52}, {"NSLayoutGuide", 96},
     {"NSLayoutManager", 216}, {"NSLevelIndicatorCell", 120},
-    {"NSNib", 32}, {"NSObjectController", 92},
+    {"NSMutableParagraphStyle", 48}, {"NSNib", 32}, {"NSObjectController", 92},
     {"NSOpenGLPixelBuffer", 16}, {"NSOpenGLPixelFormat", 24},
     {"NSPDFImageRep", 44}, {"NSPICTImageRep", 48}, {"NSPageLayout", 188},
-    {"NSPasteboardItem", 24}, {"NSPathCell", 104},
+    {"NSParagraphStyle", 48}, {"NSPasteboardItem", 24}, {"NSPathCell", 104},
     {"NSPathComponentCell", 76}, {"NSPathControl", 112}, {"NSPopover", 96},
     {"NSPrintOperation", 4}, {"NSPrintPanel", 248}, {"NSPrinter", 48},
     {"NSRulerView", 144}, {"NSRunningApplication", 80}, {"NSScreen", 32},
@@ -78,12 +78,13 @@ static const struct {
     {"NSSplitViewController", 64}, {"NSSplitViewItem", 12},
     {"NSStackView", 148}, {"NSStatusBar", 20}, {"NSStepperCell", 88},
     {"NSStoryboard", 8}, {"NSTabViewItem", 72}, {"NSTableCellView", 104},
-    {"NSTextAttachmentCell", 24},
-    {"NSTextList", 20}, {"NSTitlebarAccessoryViewController", 88},
+    {"NSTextAttachment", 16}, {"NSTextAttachmentCell", 24},
+    {"NSTextBlock", 32}, {"NSTextList", 20}, {"NSTextTable", 52},
+    {"NSTextTableBlock", 60}, {"NSTitlebarAccessoryViewController", 88},
     {"NSTokenField", 120}, {"NSTokenFieldCell", 128}, {"NSToolbarItem", 72},
     {"NSToolbarItemGroup", 84}, {"NSTouchBar", 52}, {"NSTouchBarItem", 36},
     {"NSTrackingArea", 40}, {"NSTreeController", 140}, {"NSTreeNode", 32},
-    {"NSUserDefaultsController", 84},
+    {"NSTypesetter", 12}, {"NSUserDefaultsController", 84},
     {"NSViewAnimation", 120}, {"NSVisualEffectView", 140}, {"NSWorkspace", 20},
     // the instance size agreed already; the instance variables did not
     {"NSTextContainer", 28}, {"NSProgressIndicator", 144},
@@ -267,6 +268,17 @@ static void checkExtraState(void) {
     [attachmentCellCopy release];
     [attachmentCell release];
     [image release];
+
+    NSMutableParagraphStyle *style = [[NSMutableParagraphStyle alloc] init];
+    [style setLineSpacing: 4];
+    NSParagraphStyle *styleCopy = [style copy];
+    NSMutableParagraphStyle *styleMutableCopy = [style mutableCopy];
+    [style setLineSpacing: 9];
+    CHECK([styleCopy lineSpacing] == 4 && [styleMutableCopy lineSpacing] == 4,
+          "NSParagraphStyle copies lost or share their state");
+    [styleCopy release];
+    [styleMutableCopy release];
+    [style release];
 }
 
 int main(void) {

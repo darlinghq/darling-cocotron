@@ -7,7 +7,9 @@
 // write into those bytes nor read its own state back from them. The expected
 // sizes are what Mac OS X 10.14.4 reports. Besides NSBrowser and NSColorWell,
 // the classes that used to be larger than Apple's (NSCursor, NSTrackingArea,
-// NSToolbarItem, NSSplitViewItem, NSPasteboardItem, NSBrowserCell, NSTextAttachmentCell, NSCustomImageRep,
+// NSToolbarItem, NSSplitViewItem, NSPasteboardItem, NSTextAttachment,
+// NSMutableParagraphStyle, NSTypesetter, NSTextBlock, NSTextTable,
+// NSTextTableBlock, NSBrowserCell, NSTextAttachmentCell, NSCustomImageRep,
 // NSLayoutConstraint) are covered by the table-driven checks at the end.
 //
 // Two checks per class:
@@ -133,7 +135,9 @@ static const struct {
     size_t appleSize;
 } cases[] = {
     {"NSCursor", 20}, {"NSTrackingArea", 40}, {"NSToolbarItem", 72},
-    {"NSSplitViewItem", 12}, {"NSPasteboardItem", 24}, {"NSBrowserCell", 20},
+    {"NSSplitViewItem", 12}, {"NSPasteboardItem", 24}, {"NSTextAttachment", 16},
+    {"NSMutableParagraphStyle", 48}, {"NSTypesetter", 12}, {"NSTextBlock", 32},
+    {"NSTextTable", 52}, {"NSTextTableBlock", 60}, {"NSBrowserCell", 20},
     {"NSTextAttachmentCell", 24}, {"NSCustomImageRep", 40},
     {"NSLayoutConstraint", 52},
 };
@@ -169,6 +173,18 @@ static const struct {
 @implementation SubNSSplitViewItem OWN_IMPL
 @interface SubNSPasteboardItem : NSPasteboardItem OWN_IVARS
 @implementation SubNSPasteboardItem OWN_IMPL
+@interface SubNSTextAttachment : NSTextAttachment OWN_IVARS
+@implementation SubNSTextAttachment OWN_IMPL
+@interface SubNSMutableParagraphStyle : NSMutableParagraphStyle OWN_IVARS
+@implementation SubNSMutableParagraphStyle OWN_IMPL
+@interface SubNSTypesetter : NSTypesetter OWN_IVARS
+@implementation SubNSTypesetter OWN_IMPL
+@interface SubNSTextBlock : NSTextBlock OWN_IVARS
+@implementation SubNSTextBlock OWN_IMPL
+@interface SubNSTextTable : NSTextTable OWN_IVARS
+@implementation SubNSTextTable OWN_IMPL
+@interface SubNSTextTableBlock : NSTextTableBlock OWN_IVARS
+@implementation SubNSTextTableBlock OWN_IMPL
 @interface SubNSBrowserCell : NSBrowserCell OWN_IVARS
 @implementation SubNSBrowserCell OWN_IMPL
 @interface SubNSTextAttachmentCell : NSTextAttachmentCell OWN_IVARS
@@ -225,6 +241,69 @@ static void caseBlocks(const char *name, CreateBlock *create, TouchBlock *touch,
         *touch = ^(id o) { [o setString: @"text" forType: NSPasteboardTypeString]; };
         *state = ^long(id o) {
             return (long) [[o types] count] + (long) [[o stringForType: NSPasteboardTypeString] length] * 10;
+        };
+    } else if (strcmp(name, "NSTextAttachment") == 0) {
+        *create = ^id(id o) {
+            NSFileWrapper *wrapper = [[[NSFileWrapper alloc] initRegularFileWithContents: [NSData data]] autorelease];
+            return [o initWithFileWrapper: wrapper];
+        };
+        *touch = ^(id o) {
+            NSTextAttachmentCell *cell = [[[NSTextAttachmentCell alloc] initImageCell: image] autorelease];
+            [o setAttachmentCell: cell];
+        };
+        *state = ^long(id o) {
+            return ([o fileWrapper] != nil) + ([[o attachmentCell] image] == image) * 10;
+        };
+    } else if (strcmp(name, "NSMutableParagraphStyle") == 0) {
+        *create = ^id(id o) { return [o init]; };
+        *touch = ^(id o) {
+            [o setAlignment: NSCenterTextAlignment];
+            [o setLineSpacing: 3];
+            [o setParagraphSpacing: 5];
+            [o setFirstLineHeadIndent: 7];
+            [o setLineBreakMode: NSLineBreakByClipping];
+        };
+        *state = ^long(id o) {
+            return (long) [o alignment] + (long) [o lineSpacing] * 10 + (long) [o paragraphSpacing] * 100 +
+                   (long) [o firstLineHeadIndent] * 1000 + (long) [o lineBreakMode] * 10000;
+        };
+    } else if (strcmp(name, "NSTypesetter") == 0) {
+        *create = ^id(id o) { return [o init]; };
+        *touch = ^(id o) {
+            [o setHyphenationFactor: 0.5];
+            [o setLineFragmentPadding: 3];
+            [o setUsesFontLeading: NO];
+        };
+        *state = ^long(id o) {
+            return (long) ([o hyphenationFactor] * 10) + (long) [o lineFragmentPadding] * 100 +
+                   [o usesFontLeading] * 10000;
+        };
+    } else if (strcmp(name, "NSTextBlock") == 0) {
+        *create = ^id(id o) { return [o init]; };
+        *touch = ^(id o) {
+            [o setBackgroundColor: [NSColor redColor]];
+            [o setContentWidth: 25 type: NSTextBlockAbsoluteValueType];
+            [o setWidth: 4 type: NSTextBlockAbsoluteValueType forLayer: NSTextBlockPadding];
+        };
+        *state = ^long(id o) {
+            return ([o backgroundColor] != nil) + (long) [o contentWidth] * 10 +
+                   (long) [o widthForLayer: NSTextBlockPadding edge: NSMinXEdge] * 1000;
+        };
+    } else if (strcmp(name, "NSTextTable") == 0) {
+        *create = ^id(id o) { return [o init]; };
+        *touch = ^(id o) { [o setNumberOfColumns: 3]; [o setCollapsesBorders: YES]; [o setHidesEmptyCells: YES]; };
+        *state = ^long(id o) {
+            return (long) [o numberOfColumns] + [o collapsesBorders] * 10 + [o hidesEmptyCells] * 100;
+        };
+    } else if (strcmp(name, "NSTextTableBlock") == 0) {
+        *create = ^id(id o) {
+            return [o initWithTable: [[[NSTextTable alloc] init] autorelease]
+                        startingRow: 2 rowSpan: 3 startingColumn: 4 columnSpan: 5];
+        };
+        *touch = ^(id o) { [o setBackgroundColor: [NSColor blueColor]]; };
+        *state = ^long(id o) {
+            return (long) [o startingRow] + [o rowSpan] * 10 + [o startingColumn] * 100 +
+                   [o columnSpan] * 1000 + ([o table] != nil) * 10000 + ([o backgroundColor] != nil) * 100000;
         };
     } else if (strcmp(name, "NSBrowserCell") == 0) {
         *create = ^id(id o) { return [o initTextCell: @"cell"]; };
