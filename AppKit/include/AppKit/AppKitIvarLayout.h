@@ -85,6 +85,17 @@
     *_##cls##Extra;
 #define NS_SIDE_IVARS_END(cls)                                                 \
     };
+// For a class whose Apple footprint has no room of its own for the pointer to
+// the extras, but whose superclass has a spare word (Apple's NSText keeps one
+// for NSTextView): the superclass declares the pointer with
+// NS_EXTRA_SLOT_FOR_SUBCLASS(NSTextView), the subclass ends its (otherwise
+// ordinary) extras with NS_EXTRA_IVARS_END_IN_SUPER and uses NS_EXTRA,
+// NS_EXTRA_FREE and NS_EXTRA_COPY as any class with a pointer of its own.
+#define NS_EXTRA_SLOT_FOR_SUBCLASS(sub)                                        \
+  @public                                                                      \
+    struct sub##ExtraIvars *_##sub##Extra;
+#define NS_EXTRA_IVARS_END_IN_SUPER(cls)                                       \
+    };
 
 // The accessors are only used by AppKit's own (manual reference counting)
 // sources; ARC code that includes the AppKit headers needs only the
@@ -231,6 +242,8 @@ static inline void _NSExtraIvarsUnshare(void **slot, size_t size) {
 #define NS_EXTRA_IVARS_BEGIN(cls)
 #define NS_EXTRA_IVARS_END(cls)
 #define NS_SIDE_IVARS_END(cls)
+#define NS_EXTRA_SLOT_FOR_SUBCLASS(sub)
+#define NS_EXTRA_IVARS_END_IN_SUPER(cls)
 #define NS_EXTRA(cls, obj) ((cls *) (obj))
 #define NS_EXTRA_FREE(cls, obj) do { } while (0)
 #define NS_EXTRA_COPY(cls, dst, src) do { } while (0)

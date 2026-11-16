@@ -54,36 +54,36 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         NSString *firstTitle =
                 [keyed decodeObjectForKey: @"NSFirstColumnTitle"];
 
-        _explicitTitles = [NSMutableArray new];
+        NS_EXTRA(NSBrowser, self)->_explicitTitles = [NSMutableArray new];
         if (firstTitle != nil)
-            [_explicitTitles addObject: firstTitle];
+            [NS_EXTRA(NSBrowser, self)->_explicitTitles addObject: firstTitle];
         _titles = [NSMutableArray new];
 
-        _matrices = [NSMutableArray new];
-        _scrollViews = [NSMutableArray new];
+        NS_EXTRA(NSBrowser, self)->_matrices = [NSMutableArray new];
+        NS_EXTRA(NSBrowser, self)->_scrollViews = [NSMutableArray new];
 
-        _backgroundColor = [[NSColor whiteColor] copy];
+        NS_EXTRA(NSBrowser, self)->_backgroundColor = [[NSColor whiteColor] copy];
 
         _matrixClass = [NSMatrix class];
-        _cellClass = [[self class] cellClass];
+        NS_EXTRA(NSBrowser, self)->_cellClass = [[self class] cellClass];
         _cellPrototype = nil;
 
-        _numberOfVisibleColumns =
+        NS_EXTRA(NSBrowser, self)->_numberOfVisibleColumns =
                 [keyed decodeIntForKey: @"NSNumberOfVisibleColumns"];
-        _selectedColumn = -1;
+        NS_EXTRA(NSBrowser, self)->_selectedColumn = -1;
 
-        _allowsMultipleSelection = (flags & 0x80000000) ? YES : NO;
-        _allowsEmptySelection = (flags & 0x00020000) ? NO : YES;
-        _allowsBranchSelection = (flags & 0x40000000) ? YES : NO;
-        _separatesColumns = (flags & 0x04000000) ? YES : NO;
-        _isTitled = (flags & 0x10000000) ? YES : NO;
-        _hasHorizontalScroller = (flags & 0x00010000) ? YES : NO;
-        _horizontalScroller = nil; // not stored
-        [self setHasHorizontalScroller: _hasHorizontalScroller];
-        _acceptsArrowKeys = (flags & 0x00100000) ? YES : NO;
-        _sendsActionOnArrowKeys = (flags & 0x00040000) ? YES : NO;
+        NS_EXTRA(NSBrowser, self)->_allowsMultipleSelection = (flags & 0x80000000) ? YES : NO;
+        NS_EXTRA(NSBrowser, self)->_allowsEmptySelection = (flags & 0x00020000) ? NO : YES;
+        NS_EXTRA(NSBrowser, self)->_allowsBranchSelection = (flags & 0x40000000) ? YES : NO;
+        NS_EXTRA(NSBrowser, self)->_separatesColumns = (flags & 0x04000000) ? YES : NO;
+        NS_EXTRA(NSBrowser, self)->_isTitled = (flags & 0x10000000) ? YES : NO;
+        NS_EXTRA(NSBrowser, self)->_hasHorizontalScroller = (flags & 0x00010000) ? YES : NO;
+        NS_EXTRA(NSBrowser, self)->_horizontalScroller = nil; // not stored
+        [self setHasHorizontalScroller: NS_EXTRA(NSBrowser, self)->_hasHorizontalScroller];
+        NS_EXTRA(NSBrowser, self)->_acceptsArrowKeys = (flags & 0x00100000) ? YES : NO;
+        NS_EXTRA(NSBrowser, self)->_sendsActionOnArrowKeys = (flags & 0x00040000) ? YES : NO;
 
-        _takesTitleFromPreviousColumn = YES;
+        NS_EXTRA(NSBrowser, self)->_takesTitleFromPreviousColumn = YES;
 
         [self tile];
     } else {
@@ -113,38 +113,38 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         [separator release];
         [unknownObject release];
 
-        _explicitTitles = [NSMutableArray new];
-        [_explicitTitles addObject: @"Browser"];
+        NS_EXTRA(NSBrowser, self)->_explicitTitles = [NSMutableArray new];
+        [NS_EXTRA(NSBrowser, self)->_explicitTitles addObject: @"Browser"];
         _titles = [NSMutableArray new];
-        _matrices = [NSMutableArray new];
-        _scrollViews = [NSMutableArray new];
-        _backgroundColor = [[NSColor whiteColor] copy];
+        NS_EXTRA(NSBrowser, self)->_matrices = [NSMutableArray new];
+        NS_EXTRA(NSBrowser, self)->_scrollViews = [NSMutableArray new];
+        NS_EXTRA(NSBrowser, self)->_backgroundColor = [[NSColor whiteColor] copy];
 
         _matrixClass = matrixClass != Nil ? matrixClass : [NSMatrix class];
         if ([prototype isKindOfClass: [NSCell class]]) {
             _cellPrototype = prototype;
-            _cellClass = [prototype class];
+            NS_EXTRA(NSBrowser, self)->_cellClass = [prototype class];
         } else {
             [prototype release];
-            _cellClass = [[self class] cellClass];
+            NS_EXTRA(NSBrowser, self)->_cellClass = [[self class] cellClass];
         }
         [self setAction: action];
         [self setDoubleAction: doubleAction];
-        _maxVisibleColumns = maxVisibleColumns;
-        _numberOfVisibleColumns = 1;
-        _selectedColumn = -1;
+        NS_EXTRA(NSBrowser, self)->_maxVisibleColumns = maxVisibleColumns;
+        NS_EXTRA(NSBrowser, self)->_numberOfVisibleColumns = 1;
+        NS_EXTRA(NSBrowser, self)->_selectedColumn = -1;
 
-        _allowsMultipleSelection = (flags & 0x80000000) ? YES : NO;
-        _allowsBranchSelection = (flags & 0x40000000) ? YES : NO;
-        _reusesColumns = (flags & 0x20000000) ? YES : NO;
-        _isTitled = (flags & 0x10000000) ? YES : NO;
-        _takesTitleFromPreviousColumn = (flags & 0x08000000) ? YES : NO;
-        _separatesColumns = (flags & 0x04000000) ? YES : NO;
-        _acceptsArrowKeys = (flags & 0x00100000) ? YES : NO;
-        _sendsActionOnArrowKeys = (flags & 0x00040000) ? YES : NO;
-        _allowsEmptySelection = (flags & 0x00020000) ? NO : YES;
-        _hasHorizontalScroller = (flags & 0x00010000) ? YES : NO;
-        [self setHasHorizontalScroller: _hasHorizontalScroller];
+        NS_EXTRA(NSBrowser, self)->_allowsMultipleSelection = (flags & 0x80000000) ? YES : NO;
+        NS_EXTRA(NSBrowser, self)->_allowsBranchSelection = (flags & 0x40000000) ? YES : NO;
+        NS_EXTRA(NSBrowser, self)->_reusesColumns = (flags & 0x20000000) ? YES : NO;
+        NS_EXTRA(NSBrowser, self)->_isTitled = (flags & 0x10000000) ? YES : NO;
+        NS_EXTRA(NSBrowser, self)->_takesTitleFromPreviousColumn = (flags & 0x08000000) ? YES : NO;
+        NS_EXTRA(NSBrowser, self)->_separatesColumns = (flags & 0x04000000) ? YES : NO;
+        NS_EXTRA(NSBrowser, self)->_acceptsArrowKeys = (flags & 0x00100000) ? YES : NO;
+        NS_EXTRA(NSBrowser, self)->_sendsActionOnArrowKeys = (flags & 0x00040000) ? YES : NO;
+        NS_EXTRA(NSBrowser, self)->_allowsEmptySelection = (flags & 0x00020000) ? NO : YES;
+        NS_EXTRA(NSBrowser, self)->_hasHorizontalScroller = (flags & 0x00010000) ? YES : NO;
+        [self setHasHorizontalScroller: NS_EXTRA(NSBrowser, self)->_hasHorizontalScroller];
 
         [self tile];
     }
@@ -154,44 +154,45 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - initWithFrame: (NSRect) frame {
     [super initWithFrame: frame];
 
-    _explicitTitles = [NSMutableArray new];
-    [_explicitTitles addObject: @"Browser"];
+    NS_EXTRA(NSBrowser, self)->_explicitTitles = [NSMutableArray new];
+    [NS_EXTRA(NSBrowser, self)->_explicitTitles addObject: @"Browser"];
     _titles = [NSMutableArray new];
 
-    _matrices = [NSMutableArray new];
-    _scrollViews = [NSMutableArray new];
+    NS_EXTRA(NSBrowser, self)->_matrices = [NSMutableArray new];
+    NS_EXTRA(NSBrowser, self)->_scrollViews = [NSMutableArray new];
 
-    _horizontalScroller = nil;
-    _backgroundColor = [[NSColor whiteColor] copy];
+    NS_EXTRA(NSBrowser, self)->_horizontalScroller = nil;
+    NS_EXTRA(NSBrowser, self)->_backgroundColor = [[NSColor whiteColor] copy];
     _matrixClass = [NSMatrix class];
-    _cellClass = [[self class] cellClass];
+    NS_EXTRA(NSBrowser, self)->_cellClass = [[self class] cellClass];
     _cellPrototype = nil;
 
-    _numberOfVisibleColumns = 1;
-    _allowsMultipleSelection = NO;
-    _allowsEmptySelection = NO;
-    _allowsBranchSelection = NO;
-    _separatesColumns = NO;
-    _isTitled = YES;
-    _hasHorizontalScroller = NO;
+    NS_EXTRA(NSBrowser, self)->_numberOfVisibleColumns = 1;
+    NS_EXTRA(NSBrowser, self)->_allowsMultipleSelection = NO;
+    NS_EXTRA(NSBrowser, self)->_allowsEmptySelection = NO;
+    NS_EXTRA(NSBrowser, self)->_allowsBranchSelection = NO;
+    NS_EXTRA(NSBrowser, self)->_separatesColumns = NO;
+    NS_EXTRA(NSBrowser, self)->_isTitled = YES;
+    NS_EXTRA(NSBrowser, self)->_hasHorizontalScroller = NO;
 
-    _takesTitleFromPreviousColumn = YES;
+    NS_EXTRA(NSBrowser, self)->_takesTitleFromPreviousColumn = YES;
 
     return self;
 }
 
 - (void) dealloc {
     [_cellPrototype release];
-    [_explicitTitles release];
+    [NS_EXTRA(NSBrowser, self)->_explicitTitles release];
     [_titles release];
-    [_matrices release];
-    [_scrollViews release];
-    [_horizontalScroller release];
+    [NS_EXTRA(NSBrowser, self)->_matrices release];
+    [NS_EXTRA(NSBrowser, self)->_scrollViews release];
+    [NS_EXTRA(NSBrowser, self)->_horizontalScroller release];
+    NS_EXTRA_FREE(NSBrowser, self);
     [super dealloc];
 }
 
 - (Class) cellClass {
-    return _cellClass;
+    return NS_EXTRA(NSBrowser, self)->_cellClass;
 }
 
 - (id) cellPrototype {
@@ -203,23 +204,23 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [_cellPrototype release];
     _cellPrototype = cell;
     if (cell != nil)
-        _cellClass = [cell class];
+        NS_EXTRA(NSBrowser, self)->_cellClass = [cell class];
 }
 
 - target {
-    return _target;
+    return NS_EXTRA(NSBrowser, self)->_target;
 }
 
 - (SEL) action {
-    return _action;
+    return NS_EXTRA(NSBrowser, self)->_action;
 }
 
 - (void) setTarget: target {
-    _target = target;
+    NS_EXTRA(NSBrowser, self)->_target = target;
 }
 
 - (void) setAction: (SEL) action {
-    _action = action;
+    NS_EXTRA(NSBrowser, self)->_action = action;
 }
 
 - delegate {
@@ -227,7 +228,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (NSColor *) backgroundColor {
-    return _backgroundColor;
+    return NS_EXTRA(NSBrowser, self)->_backgroundColor;
 }
 
 - (SEL) doubleAction {
@@ -239,70 +240,70 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (NSInteger) maxVisibleColumns {
-    return _maxVisibleColumns;
+    return NS_EXTRA(NSBrowser, self)->_maxVisibleColumns;
 }
 
 - (BOOL) hasHorizontalScroller {
-    return _hasHorizontalScroller;
+    return NS_EXTRA(NSBrowser, self)->_hasHorizontalScroller;
 }
 
 - (BOOL) separatesColumns {
-    return _separatesColumns;
+    return NS_EXTRA(NSBrowser, self)->_separatesColumns;
 }
 
 - (BOOL) isTitled {
-    return _isTitled;
+    return NS_EXTRA(NSBrowser, self)->_isTitled;
 }
 
 - (BOOL) takesTitleFromPreviousColumn {
-    return _takesTitleFromPreviousColumn;
+    return NS_EXTRA(NSBrowser, self)->_takesTitleFromPreviousColumn;
 }
 
 - (BOOL) allowsMultipleSelection {
-    return _allowsMultipleSelection;
+    return NS_EXTRA(NSBrowser, self)->_allowsMultipleSelection;
 }
 
 - (BOOL) allowsBranchSelection {
-    return _allowsBranchSelection;
+    return NS_EXTRA(NSBrowser, self)->_allowsBranchSelection;
 }
 
 - (BOOL) allowsEmptySelection {
-    return _allowsEmptySelection;
+    return NS_EXTRA(NSBrowser, self)->_allowsEmptySelection;
 }
 
 - (BOOL) acceptsArrowKeys {
-    return _acceptsArrowKeys;
+    return NS_EXTRA(NSBrowser, self)->_acceptsArrowKeys;
 }
 
 - (BOOL) sendsActionOnArrowKeys {
-    return _sendsActionOnArrowKeys;
+    return NS_EXTRA(NSBrowser, self)->_sendsActionOnArrowKeys;
 }
 
 - (BOOL) reusesColumns {
-    return _reusesColumns;
+    return NS_EXTRA(NSBrowser, self)->_reusesColumns;
 }
 
 - (NSInteger) lastColumn {
-    return [_matrices count] - 1;
+    return [NS_EXTRA(NSBrowser, self)->_matrices count] - 1;
 }
 
 - (NSInteger) lastVisibleColumn {
-    return [self firstVisibleColumn] + (_numberOfVisibleColumns - 1);
+    return [self firstVisibleColumn] + (NS_EXTRA(NSBrowser, self)->_numberOfVisibleColumns - 1);
 }
 
 - (NSInteger) firstVisibleColumn {
-    return _firstVisibleColumn;
+    return NS_EXTRA(NSBrowser, self)->_firstVisibleColumn;
 }
 
 - (NSMatrix *) matrixInColumn: (NSInteger) column {
-    if (column < [_matrices count])
-        return [_matrices objectAtIndex: column];
+    if (column < [NS_EXTRA(NSBrowser, self)->_matrices count])
+        return [NS_EXTRA(NSBrowser, self)->_matrices objectAtIndex: column];
 
     return nil;
 }
 
 - (NSInteger) columnOfMatrix: (NSMatrix *) matrix {
-    return [_matrices indexOfObjectIdenticalTo: matrix];
+    return [NS_EXTRA(NSBrowser, self)->_matrices indexOfObjectIdenticalTo: matrix];
 }
 
 - (NSString *) titleOfColumn: (NSInteger) column {
@@ -314,8 +315,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         result = [_titles objectAtIndex: column];
 
         if (result == [NSNull null]) {
-            if (column < [_explicitTitles count])
-                result = [_explicitTitles objectAtIndex: column];
+            if (column < [NS_EXTRA(NSBrowser, self)->_explicitTitles count])
+                result = [NS_EXTRA(NSBrowser, self)->_explicitTitles objectAtIndex: column];
             else
                 result = @"";
         }
@@ -325,11 +326,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (NSArray *) selectedCells {
-    return [[self matrixInColumn: _selectedColumn] selectedCells];
+    return [[self matrixInColumn: NS_EXTRA(NSBrowser, self)->_selectedColumn] selectedCells];
 }
 
 - selectedCell {
-    return [self selectedCellInColumn: _selectedColumn];
+    return [self selectedCellInColumn: NS_EXTRA(NSBrowser, self)->_selectedColumn];
 }
 
 - selectedCellInColumn: (NSInteger) column {
@@ -337,12 +338,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 // This needs to be computed, manipulating individual cell state bypasses
-// _selectedColumn We should get rid of _selectedColumn eventually
+// NS_EXTRA(NSBrowser, self)->_selectedColumn We should get rid of NS_EXTRA(NSBrowser, self)->_selectedColumn eventually
 - (NSInteger) selectedColumn {
-    NSInteger i, count = [_matrices count];
+    NSInteger i, count = [NS_EXTRA(NSBrowser, self)->_matrices count];
 
     for (i = 0; i < count; i++) {
-        NSMatrix *matrix = [_matrices objectAtIndex: i];
+        NSMatrix *matrix = [NS_EXTRA(NSBrowser, self)->_matrices objectAtIndex: i];
 
         if ([matrix selectedCell] == nil)
             break;
@@ -365,13 +366,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (NSRect) titleFrameOfColumn: (NSInteger) column {
     NSRect result;
-    CGFloat columnGap = _separatesColumns ? [self seperatorWidth] : 0;
+    CGFloat columnGap = NS_EXTRA(NSBrowser, self)->_separatesColumns ? [self seperatorWidth] : 0;
 
     column -= [self firstVisibleColumn];
 
     result.size.width = ([self bounds].size.width -
-                         (_numberOfVisibleColumns - 1) * columnGap) /
-                        _numberOfVisibleColumns;
+                         (NS_EXTRA(NSBrowser, self)->_numberOfVisibleColumns - 1) * columnGap) /
+                        NS_EXTRA(NSBrowser, self)->_numberOfVisibleColumns;
     result.size.height = [self titleHeight];
     result.origin.x = column * (result.size.width + columnGap);
     result.origin.y = [self bounds].size.height - result.size.height;
@@ -415,7 +416,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (NSRect) frameOfInsideOfColumn: (NSInteger) column {
-    NSScrollView *scrollView = [_scrollViews objectAtIndex: 0];
+    NSScrollView *scrollView = [NS_EXTRA(NSBrowser, self)->_scrollViews objectAtIndex: 0];
     NSSize size = [scrollView contentSize];
 
     return NSMakeRect(0, 0, size.width, size.height);
@@ -438,8 +439,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (void) setBackgroundColor: (NSColor *) color {
     color = [color retain];
-    [_backgroundColor release];
-    _backgroundColor = color;
+    [NS_EXTRA(NSBrowser, self)->_backgroundColor release];
+    NS_EXTRA(NSBrowser, self)->_backgroundColor = color;
 }
 
 - (void) setDoubleAction: (SEL) action {
@@ -451,87 +452,87 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (void) setCellClass: (Class) class {
-    _cellClass = class;
+    NS_EXTRA(NSBrowser, self)->_cellClass = class;
     [_cellPrototype release];
     _cellPrototype = nil;
 }
 
 - (void) setMaxVisibleColumns: (NSInteger) count {
-    _maxVisibleColumns = count;
-    _numberOfVisibleColumns = count;
+    NS_EXTRA(NSBrowser, self)->_maxVisibleColumns = count;
+    NS_EXTRA(NSBrowser, self)->_numberOfVisibleColumns = count;
     [self tile];
     [self setNeedsDisplay: YES];
 }
 
 - (void) setHasHorizontalScroller: (BOOL) flag {
-    _hasHorizontalScroller = flag;
+    NS_EXTRA(NSBrowser, self)->_hasHorizontalScroller = flag;
     if (flag) {
-        if (_horizontalScroller == nil) {
-            _horizontalScroller =
+        if (NS_EXTRA(NSBrowser, self)->_horizontalScroller == nil) {
+            NS_EXTRA(NSBrowser, self)->_horizontalScroller =
                     [[NSScroller alloc] initWithFrame: [self frameOfScroller]];
-            [_horizontalScroller setTarget: self];
-            [_horizontalScroller setAction: @selector(scrollViaScroller:)];
+            [NS_EXTRA(NSBrowser, self)->_horizontalScroller setTarget: self];
+            [NS_EXTRA(NSBrowser, self)->_horizontalScroller setAction: @selector(scrollViaScroller:)];
         }
     } else {
-        [_horizontalScroller release];
-        _horizontalScroller = nil;
+        [NS_EXTRA(NSBrowser, self)->_horizontalScroller release];
+        NS_EXTRA(NSBrowser, self)->_horizontalScroller = nil;
     }
 }
 
 - (void) setSeparatesColumns: (BOOL) flag {
-    _separatesColumns = flag;
+    NS_EXTRA(NSBrowser, self)->_separatesColumns = flag;
     [self tile];
     [self setNeedsDisplay: YES];
 }
 
 - (void) setTitled: (BOOL) flag {
-    _isTitled = flag;
+    NS_EXTRA(NSBrowser, self)->_isTitled = flag;
     [self tile];
     [self setNeedsDisplay: YES];
 }
 
 - (void) setTakesTitleFromPreviousColumn: (BOOL) flag {
-    _takesTitleFromPreviousColumn = flag;
+    NS_EXTRA(NSBrowser, self)->_takesTitleFromPreviousColumn = flag;
 }
 
 - (void) setAllowsMultipleSelection: (BOOL) flag {
-    _allowsMultipleSelection = flag;
+    NS_EXTRA(NSBrowser, self)->_allowsMultipleSelection = flag;
 }
 
 - (void) setAllowsBranchSelection: (BOOL) flag {
-    _allowsBranchSelection = flag;
+    NS_EXTRA(NSBrowser, self)->_allowsBranchSelection = flag;
 }
 
 - (void) setAllowsEmptySelection: (BOOL) flag {
-    _allowsEmptySelection = flag;
+    NS_EXTRA(NSBrowser, self)->_allowsEmptySelection = flag;
 }
 
 - (void) setAcceptsArrowKeys: (BOOL) flag {
-    _acceptsArrowKeys = flag;
+    NS_EXTRA(NSBrowser, self)->_acceptsArrowKeys = flag;
 }
 
 - (void) setSendsActionOnArrowKeys: (BOOL) flag {
-    _sendsActionOnArrowKeys = flag;
+    NS_EXTRA(NSBrowser, self)->_sendsActionOnArrowKeys = flag;
 }
 
 - (void) setReusesColumns: (BOOL) flag {
-    _reusesColumns = flag ? YES : NO;
+    NS_EXTRA(NSBrowser, self)->_reusesColumns = flag ? YES : NO;
 }
 
 - (void) setTitle: (NSString *) title ofColumn: (NSInteger) column {
-    while ([_explicitTitles count] <= column)
-        [_explicitTitles addObject: @""];
+    while ([NS_EXTRA(NSBrowser, self)->_explicitTitles count] <= column)
+        [NS_EXTRA(NSBrowser, self)->_explicitTitles addObject: @""];
 
-    [_explicitTitles replaceObjectAtIndex: column withObject: title];
+    [NS_EXTRA(NSBrowser, self)->_explicitTitles replaceObjectAtIndex: column withObject: title];
     [self setNeedsDisplay: YES];
 }
 
 - (void) _unloadAfterColumn: (NSInteger) column {
-    while ([_matrices count] > column + 1) {
-        NSMatrix *matrix = [_matrices lastObject];
+    while ([NS_EXTRA(NSBrowser, self)->_matrices count] > column + 1) {
+        NSMatrix *matrix = [NS_EXTRA(NSBrowser, self)->_matrices lastObject];
 
         [matrix removeFromSuperview];
-        [_matrices removeLastObject];
+        [NS_EXTRA(NSBrowser, self)->_matrices removeLastObject];
         [_titles removeLastObject];
     }
 
@@ -545,28 +546,28 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
     [_cell autorelease];
     _cell = [[matrix selectedCell] retain];
-    _selectedColumn = column;
+    NS_EXTRA(NSBrowser, self)->_selectedColumn = column;
 
     // if multiple cells are selected, the display of that branch is invalid and
     // must be unloaded.
     if ([selectedCells count] > 1)
-        [self _unloadAfterColumn: _selectedColumn];
+        [self _unloadAfterColumn: NS_EXTRA(NSBrowser, self)->_selectedColumn];
     else if (_cell != nil && ![_cell isLeaf]) {
-        [self reloadColumn: _selectedColumn + 1];
-        [self _unloadAfterColumn: _selectedColumn + 1];
+        [self reloadColumn: NS_EXTRA(NSBrowser, self)->_selectedColumn + 1];
+        [self _unloadAfterColumn: NS_EXTRA(NSBrowser, self)->_selectedColumn + 1];
 
-        if (_selectedColumn == [self lastVisibleColumn])
+        if (NS_EXTRA(NSBrowser, self)->_selectedColumn == [self lastVisibleColumn])
             [self scrollColumnsRightBy: 1];
     } else if (_cell != nil) // valid cell, no following branch
-        [self _unloadAfterColumn: _selectedColumn];
+        [self _unloadAfterColumn: NS_EXTRA(NSBrowser, self)->_selectedColumn];
 
-    [self scrollColumnToVisible: _selectedColumn];
+    [self scrollColumnToVisible: NS_EXTRA(NSBrowser, self)->_selectedColumn];
 }
 
 - (void) selectRow: (NSInteger) row inColumn: (NSInteger) column {
-    _selectedColumn = column;
+    NS_EXTRA(NSBrowser, self)->_selectedColumn = column;
 
-    if (column < [_matrices count]) {
+    if (column < [NS_EXTRA(NSBrowser, self)->_matrices count]) {
         NSMatrix *matrix = [self matrixInColumn: column];
 
 #if 0
@@ -601,7 +602,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [self _reloadSelectionInColumn: [self columnOfMatrix: sender]];
 
     if ([[[self window] currentEvent] type] != NSKeyDown ||
-        _sendsActionOnArrowKeys == YES)
+        NS_EXTRA(NSBrowser, self)->_sendsActionOnArrowKeys == YES)
         [self sendAction];
 }
 
@@ -610,17 +611,17 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (void) unloadLastColumn {
-    NSMatrix *matrix = [_matrices lastObject];
+    NSMatrix *matrix = [NS_EXTRA(NSBrowser, self)->_matrices lastObject];
 
     [(NSClipView *) [matrix superview] setDocumentView: nil];
-    [_matrices removeLastObject];
+    [NS_EXTRA(NSBrowser, self)->_matrices removeLastObject];
     [_titles removeLastObject];
     [self setNeedsDisplay: YES];
     [self updateScroller];
 }
 
 - (void) loadColumnZero {
-    while ([_matrices count] > 1)
+    while ([NS_EXTRA(NSBrowser, self)->_matrices count] > 1)
         [self unloadLastColumn];
 
     [self reloadColumn: 0];
@@ -629,8 +630,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (void) viewWillDraw {
     // This should be a flag really
 
-    if ([_matrices count] == 0 ||
-        [[_matrices objectAtIndex: 0] numberOfRows] == 0) {
+    if ([NS_EXTRA(NSBrowser, self)->_matrices count] == 0 ||
+        [[NS_EXTRA(NSBrowser, self)->_matrices objectAtIndex: 0] numberOfRows] == 0) {
         [self loadColumnZero];
     }
 
@@ -638,7 +639,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (NSMatrix *) createMatrixInColumn: (NSInteger) column {
-    while ([_matrices count] <= column) {
+    while ([NS_EXTRA(NSBrowser, self)->_matrices count] <= column) {
         NSRect frame = [self frameOfInsideOfColumn: column];
         NSMatrix *matrix =
                 [[[_matrixClass alloc] initWithFrame: frame] autorelease];
@@ -663,30 +664,30 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #if 0
     if(column>=[self firstVisibleColumn] && column<=[self lastVisibleColumn]){
-     NSScrollView *scrollView=[_scrollViews objectAtIndex:column-[self firstVisibleColumn]];
+     NSScrollView *scrollView=[NS_EXTRA(NSBrowser, self)->_scrollViews objectAtIndex:column-[self firstVisibleColumn]];
 
      [scrollView setDocumentView:matrix];
     }
 #endif
 
         [_titles addObject: [NSNull null]];
-        [_matrices addObject: matrix];
+        [NS_EXTRA(NSBrowser, self)->_matrices addObject: matrix];
     }
 
     if (column >= [self firstVisibleColumn] &&
         column <= [self lastVisibleColumn]) {
-        NSScrollView *scrollView = [_scrollViews
+        NSScrollView *scrollView = [NS_EXTRA(NSBrowser, self)->_scrollViews
                 objectAtIndex: column - [self firstVisibleColumn]];
 
-        [scrollView setDocumentView: [_matrices objectAtIndex: column]];
-        [scrollView setLineScroll: [[_matrices objectAtIndex: column] cellSize]
+        [scrollView setDocumentView: [NS_EXTRA(NSBrowser, self)->_matrices objectAtIndex: column]];
+        [scrollView setLineScroll: [[NS_EXTRA(NSBrowser, self)->_matrices objectAtIndex: column] cellSize]
                                            .height];
         [scrollView
                 setPageScroll: [[scrollView contentView] frame].size.height];
     }
 
     [self updateScroller];
-    return [_matrices objectAtIndex: column];
+    return [NS_EXTRA(NSBrowser, self)->_matrices objectAtIndex: column];
 }
 
 - (NSMatrix *) _reloadColumn: (NSInteger) column
@@ -728,7 +729,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
     if ([_delegate respondsToSelector: @selector(browser:titleOfColumn:)])
         title = [_delegate browser: self titleOfColumn: column];
-    else if (_takesTitleFromPreviousColumn) {
+    else if (NS_EXTRA(NSBrowser, self)->_takesTitleFromPreviousColumn) {
         if (column > 0) {
             title = [[[self matrixInColumn: column - 1] selectedCell]
                     stringValue];
@@ -751,8 +752,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (void) setLastColumn: (NSInteger) column {
     [self _reloadColumn: column preserveSelection: YES];
 
-    while ([_matrices count] > column + 1)
-        [_matrices removeLastObject];
+    while ([NS_EXTRA(NSBrowser, self)->_matrices count] > column + 1)
+        [NS_EXTRA(NSBrowser, self)->_matrices removeLastObject];
 
     [self tile];
 }
@@ -780,20 +781,20 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (void) scrollColumnsLeftBy: (NSInteger) offset {
     NSInteger i, scrollViewIndex = 0;
 
-    if (_firstVisibleColumn - offset < 0)
-        offset = _firstVisibleColumn;
+    if (NS_EXTRA(NSBrowser, self)->_firstVisibleColumn - offset < 0)
+        offset = NS_EXTRA(NSBrowser, self)->_firstVisibleColumn;
 
     if (offset < 1)
         return;
 
-    _firstVisibleColumn -= offset;
+    NS_EXTRA(NSBrowser, self)->_firstVisibleColumn -= offset;
 
-    for (i = _firstVisibleColumn;
-         i <= [self lastVisibleColumn] && i < [_matrices count]; i++) {
+    for (i = NS_EXTRA(NSBrowser, self)->_firstVisibleColumn;
+         i <= [self lastVisibleColumn] && i < [NS_EXTRA(NSBrowser, self)->_matrices count]; i++) {
         NSView *matrix =
-                (i < [_matrices count]) ? [_matrices objectAtIndex: i] : nil;
+                (i < [NS_EXTRA(NSBrowser, self)->_matrices count]) ? [NS_EXTRA(NSBrowser, self)->_matrices objectAtIndex: i] : nil;
 
-        [[_scrollViews objectAtIndex: scrollViewIndex++]
+        [[NS_EXTRA(NSBrowser, self)->_scrollViews objectAtIndex: scrollViewIndex++]
                 setDocumentView: matrix];
     }
 
@@ -803,20 +804,20 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (void) scrollColumnsRightBy: (NSInteger) offset {
     NSInteger i, scrollViewIndex = 0;
 
-    if ([self lastVisibleColumn] + offset >= [_matrices count])
-        offset = [_matrices count] - [self lastVisibleColumn] - 1;
+    if ([self lastVisibleColumn] + offset >= [NS_EXTRA(NSBrowser, self)->_matrices count])
+        offset = [NS_EXTRA(NSBrowser, self)->_matrices count] - [self lastVisibleColumn] - 1;
 
     if (offset < 1)
         return;
 
-    _firstVisibleColumn += offset;
+    NS_EXTRA(NSBrowser, self)->_firstVisibleColumn += offset;
 
     // NB here we swap in reverse, since a view doesn't display properly if it
     // is the docView of two scrollViews at once. bug or feature?
-    scrollViewIndex = [_scrollViews count] - 1;
-    for (i = [self lastVisibleColumn]; i >= _firstVisibleColumn; --i) {
-        [[_scrollViews objectAtIndex: scrollViewIndex--]
-                setDocumentView: [_matrices objectAtIndex: i]];
+    scrollViewIndex = [NS_EXTRA(NSBrowser, self)->_scrollViews count] - 1;
+    for (i = [self lastVisibleColumn]; i >= NS_EXTRA(NSBrowser, self)->_firstVisibleColumn; --i) {
+        [[NS_EXTRA(NSBrowser, self)->_scrollViews objectAtIndex: scrollViewIndex--]
+                setDocumentView: [NS_EXTRA(NSBrowser, self)->_matrices objectAtIndex: i]];
     }
 
     [self updateScroller];
@@ -827,8 +828,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         column <= [self lastVisibleColumn])
         return; // already visible
 
-    if (column < _firstVisibleColumn)
-        [self scrollColumnsLeftBy: _firstVisibleColumn - column];
+    if (column < NS_EXTRA(NSBrowser, self)->_firstVisibleColumn)
+        [self scrollColumnsLeftBy: NS_EXTRA(NSBrowser, self)->_firstVisibleColumn - column];
     else
         [self scrollColumnsRightBy: column - [self lastVisibleColumn]];
 }
@@ -847,7 +848,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
     case NSScrollerKnob:
     case NSScrollerKnobSlot:
-        [self scrollColumnToVisible: [sender floatValue] * [_matrices count]];
+        [self scrollColumnToVisible: [sender floatValue] * [NS_EXTRA(NSBrowser, self)->_matrices count]];
         break;
 
     default:
@@ -858,24 +859,24 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (void) updateScroller {
-    if (_firstVisibleColumn + _numberOfVisibleColumns > [_matrices count])
+    if (NS_EXTRA(NSBrowser, self)->_firstVisibleColumn + NS_EXTRA(NSBrowser, self)->_numberOfVisibleColumns > [NS_EXTRA(NSBrowser, self)->_matrices count])
         [self scrollColumnsLeftBy: 1];
 
-    if ([_matrices count] == 0 ||
-        [_matrices count] <= _numberOfVisibleColumns) {
-        [_horizontalScroller setFloatValue: 0.0 knobProportion: 1.0];
-        [_horizontalScroller setEnabled: NO];
+    if ([NS_EXTRA(NSBrowser, self)->_matrices count] == 0 ||
+        [NS_EXTRA(NSBrowser, self)->_matrices count] <= NS_EXTRA(NSBrowser, self)->_numberOfVisibleColumns) {
+        [NS_EXTRA(NSBrowser, self)->_horizontalScroller setFloatValue: 0.0 knobProportion: 1.0];
+        [NS_EXTRA(NSBrowser, self)->_horizontalScroller setEnabled: NO];
     } else {
-        CGFloat val = (CGFloat) _firstVisibleColumn /
-                      (CGFloat)([_matrices count] - _numberOfVisibleColumns);
+        CGFloat val = (CGFloat) NS_EXTRA(NSBrowser, self)->_firstVisibleColumn /
+                      (CGFloat)([NS_EXTRA(NSBrowser, self)->_matrices count] - NS_EXTRA(NSBrowser, self)->_numberOfVisibleColumns);
         CGFloat knobP =
-                (CGFloat) _numberOfVisibleColumns / (CGFloat)[_matrices count];
+                (CGFloat) NS_EXTRA(NSBrowser, self)->_numberOfVisibleColumns / (CGFloat)[NS_EXTRA(NSBrowser, self)->_matrices count];
 
-        [_horizontalScroller setFloatValue: val knobProportion: knobP];
-        [_horizontalScroller setEnabled: YES];
+        [NS_EXTRA(NSBrowser, self)->_horizontalScroller setFloatValue: val knobProportion: knobP];
+        [NS_EXTRA(NSBrowser, self)->_horizontalScroller setEnabled: YES];
     }
 
-    [_horizontalScroller setNeedsDisplay: YES];
+    [NS_EXTRA(NSBrowser, self)->_horizontalScroller setNeedsDisplay: YES];
 }
 
 - (void) drawTitleOfColumn: (NSInteger) column inRect: (NSRect) rect {
@@ -891,8 +892,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (NSScrollView *) createScrollViewAtIndex: (NSInteger) index {
-    while ([_scrollViews count] <= index) {
-        NSInteger column = _firstVisibleColumn + [_scrollViews count];
+    while ([NS_EXTRA(NSBrowser, self)->_scrollViews count] <= index) {
+        NSInteger column = NS_EXTRA(NSBrowser, self)->_firstVisibleColumn + [NS_EXTRA(NSBrowser, self)->_scrollViews count];
         NSRect frame = [self frameOfColumn: column];
         NSScrollView *view =
                 [[[NSScrollView alloc] initWithFrame: frame] autorelease];
@@ -902,37 +903,37 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         [view setHasHorizontalScroller: NO];
         [view setAutoresizesSubviews: YES];
 
-        [_scrollViews addObject: view];
+        [NS_EXTRA(NSBrowser, self)->_scrollViews addObject: view];
         [self addSubview: view];
     }
 
-    return [_scrollViews objectAtIndex: index];
+    return [NS_EXTRA(NSBrowser, self)->_scrollViews objectAtIndex: index];
 }
 
 - (void) tile {
     NSInteger i;
 
-    for (i = 0; i < _numberOfVisibleColumns; i++) {
-        NSInteger column = _firstVisibleColumn + i;
+    for (i = 0; i < NS_EXTRA(NSBrowser, self)->_numberOfVisibleColumns; i++) {
+        NSInteger column = NS_EXTRA(NSBrowser, self)->_firstVisibleColumn + i;
         NSRect frame = [self frameOfColumn: column];
         NSView *scrollView = [self createScrollViewAtIndex: i];
 
         [scrollView setFrame: frame];
     }
 
-    while ([_scrollViews count] > _firstVisibleColumn + i) {
-        [[_scrollViews lastObject] removeFromSuperview];
-        [_scrollViews removeLastObject];
+    while ([NS_EXTRA(NSBrowser, self)->_scrollViews count] > NS_EXTRA(NSBrowser, self)->_firstVisibleColumn + i) {
+        [[NS_EXTRA(NSBrowser, self)->_scrollViews lastObject] removeFromSuperview];
+        [NS_EXTRA(NSBrowser, self)->_scrollViews removeLastObject];
     }
 
-    [_horizontalScroller setFrame: [self frameOfScroller]];
+    [NS_EXTRA(NSBrowser, self)->_horizontalScroller setFrame: [self frameOfScroller]];
 }
 
 - (void) setEnabled: (BOOL) enabled {
-    NSInteger count = [_matrices count];
+    NSInteger count = [NS_EXTRA(NSBrowser, self)->_matrices count];
 
     while (--count >= 0) {
-        [[_matrices objectAtIndex: count] setEnabled: enabled];
+        [[NS_EXTRA(NSBrowser, self)->_matrices objectAtIndex: count] setEnabled: enabled];
     }
     [self setNeedsDisplay: YES];
 }
@@ -940,7 +941,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (void) drawRect: (NSRect) rect {
     NSInteger i;
 
-    [_backgroundColor setFill];
+    [NS_EXTRA(NSBrowser, self)->_backgroundColor setFill];
     NSRectFill(rect);
 
     if ([self isTitled]) {
@@ -971,32 +972,32 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (void) keyDown: (NSEvent *) event {
-    if (_acceptsArrowKeys == YES)
+    if (NS_EXTRA(NSBrowser, self)->_acceptsArrowKeys == YES)
         [self interpretKeyEvents: [NSArray arrayWithObject: event]];
 }
 
 //  up arrow
 - (void) moveBackward: sender {
-    NSInteger selectedRow = [self selectedRowInColumn: _selectedColumn];
+    NSInteger selectedRow = [self selectedRowInColumn: NS_EXTRA(NSBrowser, self)->_selectedColumn];
 
     if (selectedRow > 0) {
         if (!([[[self window] currentEvent] modifierFlags] & NSShiftKeyMask))
-            [[self matrixInColumn: _selectedColumn] deselectAllCells];
+            [[self matrixInColumn: NS_EXTRA(NSBrowser, self)->_selectedColumn] deselectAllCells];
 
-        [self selectRow: selectedRow - 1 inColumn: _selectedColumn];
-        [self doClick: [self matrixInColumn: _selectedColumn]];
+        [self selectRow: selectedRow - 1 inColumn: NS_EXTRA(NSBrowser, self)->_selectedColumn];
+        [self doClick: [self matrixInColumn: NS_EXTRA(NSBrowser, self)->_selectedColumn]];
     }
 }
 
 - (void) moveForward: sender {
-    NSInteger selectedRow = [self selectedRowInColumn: _selectedColumn];
+    NSInteger selectedRow = [self selectedRowInColumn: NS_EXTRA(NSBrowser, self)->_selectedColumn];
     if (selectedRow <
-        [[self matrixInColumn: _selectedColumn] numberOfRows] - 1) {
+        [[self matrixInColumn: NS_EXTRA(NSBrowser, self)->_selectedColumn] numberOfRows] - 1) {
         if (!([[[self window] currentEvent] modifierFlags] & NSShiftKeyMask))
-            [[self matrixInColumn: _selectedColumn] deselectAllCells];
+            [[self matrixInColumn: NS_EXTRA(NSBrowser, self)->_selectedColumn] deselectAllCells];
 
-        [self selectRow: selectedRow + 1 inColumn: _selectedColumn];
-        [self doClick: [self matrixInColumn: _selectedColumn]];
+        [self selectRow: selectedRow + 1 inColumn: NS_EXTRA(NSBrowser, self)->_selectedColumn];
+        [self doClick: [self matrixInColumn: NS_EXTRA(NSBrowser, self)->_selectedColumn]];
     }
 }
 
@@ -1009,26 +1010,26 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (void) moveLeft: sender {
-    if (_selectedColumn > 0) {
+    if (NS_EXTRA(NSBrowser, self)->_selectedColumn > 0) {
         if (![[self selectedCell] isLeaf])
-            [self _unloadAfterColumn: _selectedColumn];
+            [self _unloadAfterColumn: NS_EXTRA(NSBrowser, self)->_selectedColumn];
         if ([self allowsEmptySelection] == YES)
-            [[self matrixInColumn: _selectedColumn] deselectAllCells];
+            [[self matrixInColumn: NS_EXTRA(NSBrowser, self)->_selectedColumn] deselectAllCells];
 
-        //        [self selectRow:0 inColumn:_selectedColumn - 1];
-        _selectedColumn--;
+        //        [self selectRow:0 inColumn:NS_EXTRA(NSBrowser, self)->_selectedColumn - 1];
+        NS_EXTRA(NSBrowser, self)->_selectedColumn--;
         // NSLog(@"selectedColumn %d count %d", _selectedColumn, [_matrices
         // count]);
-        [self doClick: [self matrixInColumn: _selectedColumn]];
+        [self doClick: [self matrixInColumn: NS_EXTRA(NSBrowser, self)->_selectedColumn]];
     }
 }
 
 - (void) moveRight: sender {
     if (![[self selectedCell] isLeaf]) {
         [self selectRow: 0
-                inColumn: _selectedColumn +
-                          1]; // nb this changes _selectedColumn
-        [self doClick: [self matrixInColumn: _selectedColumn]];
+                inColumn: NS_EXTRA(NSBrowser, self)->_selectedColumn +
+                          1]; // nb this changes NS_EXTRA(NSBrowser, self)->_selectedColumn
+        [self doClick: [self matrixInColumn: NS_EXTRA(NSBrowser, self)->_selectedColumn]];
     }
 }
 

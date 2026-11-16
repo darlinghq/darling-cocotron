@@ -37,12 +37,29 @@ static const struct {
     {"NSResponder", 8},   {"NSView", 80},   {"NSWindow", 132},
     {"NSPanel", 132},     {"NSApplication", 76}, {"NSControl", 92},
     {"NSButton", 92},     {"NSCell", 20},
+    // larger in Darling than on the Mac, so an application's subclass
+    // overlapped them
+    {"NSBrowser", 160},   {"NSColorWell", 108},
+    // smaller in Darling than on the Mac
+    {"NSText", 84},       {"NSTextView", 84},
+    {"NSSavePanel", 248}, {"NSOpenPanel", 256},
+    {"NSTabView", 148},   {"NSMenuItemCell", 116},
+    {"NSPopUpButtonCell", 128}, {"NSStepper", 108},
+    {"NSSegmentedControl", 108}, {"NSSearchField", 116},
+    {"NSComboBox", 104},  {"NSTableHeaderView", 116},
+    {"NSMenuView", 156},  {"NSPrintInfo", 12},
+    {"NSEvent", 60},      {"NSDocumentController", 24},
+    // the instance size agreed already; the instance variables did not
+    {"NSTextContainer", 28}, {"NSProgressIndicator", 144},
 };
 
+// An instance variable that Darling and the Mac name differently is listed
+// with both names (alt); the one that exists is checked.
 static const struct {
     const char *cls;
     const char *ivar;
     ptrdiff_t offset;
+    const char *alt;
 } offsets[] = {
     {"NSResponder", "_nextResponder", 4},
     {"NSView", "_frame", 8},       {"NSView", "_bounds", 24},
@@ -55,6 +72,26 @@ static const struct {
     {"NSApplication", "_mainWindow", 20},  {"NSApplication", "_delegate", 24},
     {"NSApplication", "_running", 50},     {"NSApplication", "_mainMenu", 56},
     {"NSControl", "_aux", 80},     {"NSControl", "_cell", 84},
+    {"NSTextContainer", "_layoutManager", 4}, {"NSTextContainer", "_textView", 8},
+    {"NSTextContainer", "_size", 12}, {"NSTextContainer", "_lineFragmentPadding", 20},
+    {"NSProgressIndicator", "_isBezeled", 80},
+    {"NSProgressIndicator", "_isIndeterminate", 81},
+    {"NSProgressIndicator", "_minimum", 84, "_minValue"},
+    {"NSProgressIndicator", "_maximum", 92, "_maxValue"},
+    {"NSProgressIndicator", "_value", 100},
+    {"NSProgressIndicator", "_animationDelay", 112},
+    {"NSColorWell", "_color", 92},
+    {"NSBrowser", "_delegate", 100}, {"NSBrowser", "_doubleAction", 104},
+    {"NSBrowser", "_matrixClass", 108}, {"NSBrowser", "_cellPrototype", 112},
+    {"NSBrowser", "_titles", 132},
+    {"NSTabView", "_tabViewItems", 80, "_items"},
+    {"NSTabView", "_selectedTabViewItem", 84, "_selectedItem"},
+    {"NSTabView", "_font", 88}, {"NSTabView", "_delegate", 100},
+    {"NSTabView", "_drawsBackground", 105},
+    {"NSPopUpButtonCell", "_menu", 116}, {"NSPopUpButtonCell", "_selectedIndex", 120},
+    {"NSEvent", "_type", 4}, {"NSEvent", "_location", 8, "_locationInWindow"},
+    {"NSEvent", "_modifierFlags", 16}, {"NSEvent", "_timestamp", 24},
+    {"NSEvent", "_windowNumber", 32},
 };
 
 // classes whose subclass chains an application can extend
@@ -63,6 +100,10 @@ static const char *chained[] = {
     "NSApplication", "NSControl", "NSButton", "NSPopUpButton", "NSTextField",
     "NSViewController", "NSWindowController", "NSOpenGLView", "NSClipView",
     "NSScrollView", "NSMatrix", "NSTableView", "NSOutlineView",
+    "NSText", "NSTextView", "NSTabView", "NSBrowser", "NSColorWell",
+    "NSButtonCell", "NSMenuItemCell", "NSPopUpButtonCell", "NSStepper",
+    "NSSegmentedControl", "NSSearchField", "NSComboBox", "NSTableHeaderView",
+    "NSMenuView", "NSProgressIndicator",
 };
 
 static ptrdiff_t ivarOffset(Class cls, const char *name) {
@@ -90,6 +131,8 @@ static void checkLayout(void) {
         if (cls == Nil)
             continue;
         ptrdiff_t offset = ivarOffset(cls, offsets[i].ivar);
+        if (offset < 0 && offsets[i].alt != NULL)
+            offset = ivarOffset(cls, offsets[i].alt);
         CHECK(offset == offsets[i].offset, "%s.%s at %td, expected %td",
               offsets[i].cls, offsets[i].ivar, offset, offsets[i].offset);
     }

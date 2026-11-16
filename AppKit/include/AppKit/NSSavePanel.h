@@ -18,6 +18,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSNibLoading.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/NSPanel.h>
 #import <Foundation/NSURL.h>
 
@@ -28,6 +29,9 @@ enum {
     NSFileHandlingPanelOKButton = NSOKButton,
 };
 
+// Legacy ObjC ABI (i386): instance size must stay 0xf8, Apple's; an
+// application's subclass is laid out right after it. New state goes to a
+// side structure, never to a larger ivar block.
 @interface NSSavePanel : NSPanel {
     NSString *_dialogTitle;
 
@@ -55,6 +59,7 @@ enum {
     BOOL _runsModeless;
     id _modelessCompletionHandler;
     NSArray *_allowedContentTypes;
+    NS_LEGACY_IVAR_PAD(_NSSavePanelReserved1, 44)
 }
 
 @property (copy) NSString *nameFieldStringValue;

@@ -18,6 +18,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/AppKitExport.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <Foundation/NSGeometry.h>
 #import <Foundation/NSObject.h>
 
@@ -84,8 +85,12 @@ typedef NS_ENUM(NSInteger, NSPaperOrientation) {
     NSPaperOrientationLandscape = 1,
 };
 
+// Legacy ObjC ABI (i386): instance size must stay 0xc, Apple's; an
+// application's subclass is laid out right after it. New state goes to a
+// side structure, never to a larger ivar block.
 @interface NSPrintInfo : NSObject <NSCopying> {
     NSMutableDictionary *_attributes;
+    NS_LEGACY_IVAR_PAD(_NSPrintInfoReserved1, 4)
 }
 
 + (NSPrintInfo *) sharedPrintInfo;

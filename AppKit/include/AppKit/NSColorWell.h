@@ -21,15 +21,18 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSColor;
 
+// Legacy ObjC ABI (i386): instance size must stay 0x6c, Apple's.
 @interface NSColorWell : NSControl {
     NSColor *_color;
     id _target;
     SEL _action;
-    BOOL _isEnabled;
-    BOOL _isContinuous;
-    BOOL _isBordered;
-    BOOL _isActive;
-    BOOL _notifyingColorPanel;
+    // five flags in one 32-bit unit, so that the class keeps its Apple size
+    // (on the legacy ObjC ABI an application's subclass sits right after it)
+    unsigned _isEnabled : 1;
+    unsigned _isContinuous : 1;
+    unsigned _isBordered : 1;
+    unsigned _isActive : 1;
+    unsigned _notifyingColorPanel : 1;
 }
 
 - (NSColor *) color;
