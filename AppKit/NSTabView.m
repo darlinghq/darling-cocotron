@@ -25,6 +25,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSPopUpButton.h> // for indexOfSelectedItem definition
 #import <AppKit/NSRaise.h>
 #import <AppKit/NSTabView.h>
+#import <AppKit/NSGraphicsContext.h>
 #import <AppKit/NSTabViewItem.h>
 #import <AppKit/NSWindow.h>
 #import <Foundation/NSKeyedArchiver.h>
@@ -59,40 +60,6 @@ id _NSTabViewFloatingCell = nil;
             _font = [[NSFont boldSystemFontOfSize: 13 - _controlSize * 2]
                     retain];
         _type = (flags & 0x7);
-
-        switch (_type) {
-        case NSTopTabsBezelBorder:
-        case NSLeftTabsBezelBorder:
-        case NSBottomTabsBezelBorder:
-        case NSRightTabsBezelBorder: {
-            // adjust the layout rectangle
-            NSRect frame = [self frame];
-            frame.origin.x += 8;
-            frame.size.width -= 15;
-            switch (_controlSize) {
-            case NSRegularControlSize:
-            case NSControlSizeLarge:
-                frame.origin.y += 12;
-                frame.size.height -= 16;
-                break;
-            case NSSmallControlSize:
-                frame.origin.y += 9;
-                frame.size.height -= 13;
-                break;
-            case NSMiniControlSize:
-                frame.origin.y += 8;
-                frame.size.height -= 12;
-                break;
-            }
-            [self setFrame: frame];
-        }
-
-        case NSNoTabsBezelBorder:
-        case NSNoTabsLineBorder:
-        case NSNoTabsNoBorder:
-        default:
-            break;
-        }
     } else {
         // Layout per class version as recorded from Mac archives: the tab view items, the
         // selected item and the font, the tab type, the allows-truncated-labels byte
@@ -195,44 +162,72 @@ id _NSTabViewFloatingCell = nil;
     return NSMakeSize(0, 0); // correct?
 }
 
-- (NSRect) rectForBorder {
-    NSRect result = [self bounds];
+/* Distances from the view's edges to the content area (left, top, right, bottom), measured
+   on macOS for a flipped tab view. The tab strip adds to the side that carries the tabs. */
+typedef struct {
+    CGFloat left, top, right, bottom;
+} NSTabViewMargins;
 
-    switch (_type) {
+static NSTabViewMargins NSTabViewContentMargins(NSTabViewType type, NSControlSize size) {
+    static const NSTabViewMargins top[3] = {{10, 33, 10, 13}, {10, 25, 10, 13}, {10, 19, 10, 13}};
+    static const NSTabViewMargins left[3] = {{32, 7, 10, 13}, {30, 7, 10, 13}, {28, 7, 10, 13}};
+    static const NSTabViewMargins bottom[3] = {{10, 7, 10, 31}, {10, 7, 10, 29}, {10, 7, 10, 28}};
+    static const NSTabViewMargins right[3] = {{10, 7, 31, 13}, {10, 7, 29, 13}, {10, 7, 28, 13}};
+    int index = size == NSSmallControlSize ? 1 : (size == NSMiniControlSize ? 2 : 0);
+
+    switch (type) {
     case NSTopTabsBezelBorder:
+        return top[index];
     case NSLeftTabsBezelBorder:
+        return left[index];
     case NSBottomTabsBezelBorder:
+        return bottom[index];
     case NSRightTabsBezelBorder:
-        result.size.height -= 24;
-        break;
-
+        return right[index];
     case NSNoTabsBezelBorder:
+        return (NSTabViewMargins){10, 7, 10, 13};
     case NSNoTabsLineBorder:
+        return (NSTabViewMargins){1, 1, 1, 1};
     case NSNoTabsNoBorder:
     default:
-        break;
+        return (NSTabViewMargins){0, 0, 0, 0};
     }
+}
 
-    return result;
+- (BOOL) isFlipped {
+    return YES;
 }
 
 - (NSRect) contentRect {
-    NSRect result = [self rectForBorder];
+    NSTabViewMargins m = NSTabViewContentMargins(_type, _controlSize);
+    NSRect bounds = [self bounds];
 
+    return NSMakeRect(m.left, m.top, bounds.size.width - m.left - m.right,
+                      bounds.size.height - m.top - m.bottom);
+}
+
+/* The bezel or pane drawn around the content. The tab strip sits above it. Only top tabs have a
+   drawn layout of their own: the other three tab positions draw like top tabs. */
+- (NSRect) rectForBorder {
     switch (_type) {
     case NSTopTabsBezelBorder:
     case NSLeftTabsBezelBorder:
     case NSBottomTabsBezelBorder:
-    case NSRightTabsBezelBorder:
+    case NSRightTabsBezelBorder: {
+        NSTabViewMargins m = NSTabViewContentMargins(NSTopTabsBezelBorder, _controlSize);
+        NSRect bounds = [self bounds];
+
+        return NSMakeRect(m.left - 2, m.top - 2, bounds.size.width - m.left - m.right + 4,
+                          bounds.size.height - m.top - m.bottom + 4);
+    }
+
     case NSNoTabsBezelBorder:
-        return NSInsetRect(result, 2, 2);
+        return NSInsetRect([self contentRect], -2, -2);
 
     case NSNoTabsLineBorder:
-        return NSInsetRect(result, 1, 1);
-
     case NSNoTabsNoBorder:
     default:
-        return result;
+        return [self bounds];
     }
 }
 
@@ -302,7 +297,7 @@ id _NSTabViewFloatingCell = nil;
 
 - (NSRect) rectForItemLabelAtIndex: (NSUInteger) index {
     NSInteger i, count = [_items count];
-    NSPoint base = NSMakePoint(0, [self bounds].size.height - 22);
+    NSPoint base = NSMakePoint(0, 0);
     NSSize size;
 
     base.x += 6;
@@ -314,6 +309,8 @@ id _NSTabViewFloatingCell = nil;
     }
 
     size = [[_items objectAtIndex: index] sizeOfLabel: NO];
+
+    base.y = NSMinY([self rectForBorder]) - 2 - size.height;
 
     return NSMakeRect(base.x, base.y, size.width, size.height);
 }
@@ -497,11 +494,38 @@ id _NSTabViewFloatingCell = nil;
 - (NSRect) rectForItemBorderAtIndex: (unsigned) index {
     NSRect result = [self rectForItemLabelAtIndex: index];
 
+    CGFloat paneTop = NSMinY([self rectForBorder]);
+    CGFloat height = MIN(24 - (CGFloat) _controlSize, paneTop);
+
     result = NSInsetRect(result, -4, 0);
-    result.origin.y = [self bounds].size.height - 24 - _controlSize;
-    result.size.height = 24 - _controlSize;
+    result.origin.y = paneTop - height;
+    result.size.height = height;
 
     return result;
+}
+
+/* The tab and pane shapes of the graphics style are drawn for a coordinate system with the origin
+   at the bottom. The view is flipped, so the shapes are drawn through a mirrored, unflipped
+   context; _mirrored converts a view rectangle for it. */
+- (NSRect) _mirrored: (NSRect) rect {
+    rect.origin.y = [self bounds].size.height - NSMaxY(rect);
+    return rect;
+}
+
+- (NSGraphicsContext *) _beginUnflippedDrawing {
+    NSGraphicsContext *current = [NSGraphicsContext currentContext];
+    CGContextRef port = [current graphicsPort];
+
+    CGContextSaveGState(port);
+    CGContextTranslateCTM(port, 0, [self bounds].size.height);
+    CGContextScaleCTM(port, 1, -1);
+    [NSGraphicsContext setCurrentContext: [NSGraphicsContext graphicsContextWithGraphicsPort: port flipped: NO]];
+    return current;
+}
+
+- (void) _endUnflippedDrawing: (NSGraphicsContext *) saved {
+    CGContextRestoreGState([saved graphicsPort]);
+    [NSGraphicsContext setCurrentContext: saved];
 }
 
 - (void) drawRect: (NSRect) rect {
@@ -513,35 +537,41 @@ id _NSTabViewFloatingCell = nil;
     case NSBottomTabsBezelBorder:
     case NSRightTabsBezelBorder: {
         NSInteger i, count = [_items count];
+        NSRect mirroredClip = [self _mirrored: rect];
 
         for (i = 0; i < count; i++) {
             NSTabViewItem *item = [_items objectAtIndex: i];
 
             // defer selected item for overlap
             if (item != _selectedItem) {
-                [style drawTabInRect: [self rectForItemBorderAtIndex: i]
-                            clipRect: rect
+                NSGraphicsContext *saved = [self _beginUnflippedDrawing];
+                [style drawTabInRect: [self _mirrored: [self rectForItemBorderAtIndex: i]]
+                            clipRect: mirroredClip
                                color: [item color]
                             selected: NO];
+                [self _endUnflippedDrawing: saved];
                 [item drawLabel: _allowsTruncatedLabels
                          inRect: [self rectForItemLabelAtIndex: i]];
             }
         }
 
-        [style drawTabPaneInRect: [self rectForBorder]];
+        NSGraphicsContext *saved = [self _beginUnflippedDrawing];
+        [style drawTabPaneInRect: [self _mirrored: [self rectForBorder]]];
+        [self _endUnflippedDrawing: saved];
 
         if ((i = [_items indexOfObjectIdenticalTo: _selectedItem]) !=
             NSNotFound) {
             // now do selected item
-            i = [_items indexOfObject: _selectedItem];
-            [style drawTabInRect: [self rectForItemBorderAtIndex: i]
-                        clipRect: rect
+            NSGraphicsContext *saved = [self _beginUnflippedDrawing];
+            [style drawTabInRect: [self _mirrored: [self rectForItemBorderAtIndex: i]]
+                        clipRect: mirroredClip
                            color: [_selectedItem color]
                         selected: YES];
+            [self _endUnflippedDrawing: saved];
             [[_selectedItem view] setNeedsDisplay: YES];
 
             NSRect labelRect = [self rectForItemLabelAtIndex: i];
-            labelRect.origin.y += 2;
+            labelRect.origin.y -= 2;
 
             [_selectedItem drawLabel: _allowsTruncatedLabels inRect: labelRect];
 
