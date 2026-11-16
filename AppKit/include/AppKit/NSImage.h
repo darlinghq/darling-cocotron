@@ -83,6 +83,9 @@ typedef NS_ENUM(NSUInteger, NSImageLoadStatus) {
         NSImageSymbolConfiguration *_symbolConfiguration;
         NSMutableArray *_scaledRepCache;
         id _drawingHandlerRepCache;
+        // the bitmap an image-level -lockFocus draws into, and its context
+        NSBitmapImageRep *_focusSnapshot;
+        NSGraphicsContext *_focusSnapshotContext;
     NS_EXTRA_IVARS_END(NSImage)
 }
 

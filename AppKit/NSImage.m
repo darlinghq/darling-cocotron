@@ -792,6 +792,7 @@ NSImageName const NSImageNameTouchBarVolumeUpTemplate =
     [NS_EXTRA(NSImage, self)->_symbolConfiguration release];
     [NS_EXTRA(NSImage, self)->_scaledRepCache release];
     [NS_EXTRA(NSImage, self)->_drawingHandlerRepCache release];
+    [NS_EXTRA(NSImage, self)->_focusSnapshot release];
     NS_EXTRA_FREE(NSImage, self);
     [super dealloc];
 }
@@ -1478,28 +1479,37 @@ static CGFloat repScale(NSImageRep *rep, NSSize imageSize) {
     CGContextRef graphicsPort;
 
     if (representation == nil) {
-        // FIXME: Cocoa doesn't add the cached rep until the unlockFocus, it
-        // just creates the drawing context then snaps the image during unlock
-        // and adds it
-        representation = [self _cachedImageRepCreateIfNeeded];
+        // Focusing the image draws into a bitmap that starts out with what the image shows.
+        // -unlockFocus then makes that bitmap the image's only representation (see
+        // -_finishFocusSnapshot), so no window-backed cache and no second copy of the pixels
+        // is kept.
+        NSSize size = [self size];
+        NSBitmapImageRep *snapshot = [[[NSBitmapImageRep alloc]
+                initWithBitmapDataPlanes: NULL
+                              pixelsWide: MAX(1, (NSInteger) ceil(size.width))
+                              pixelsHigh: MAX(1, (NSInteger) ceil(size.height))
+                           bitsPerSample: 8
+                         samplesPerPixel: 4
+                                hasAlpha: YES
+                                isPlanar: NO
+                          colorSpaceName: NSDeviceRGBColorSpace
+                             bytesPerRow: 0
+                            bitsPerPixel: 32] autorelease];
+        if (snapshot == nil) {
+            [NSException raise: NSInvalidArgumentException
+                        format: @"-[NSImage lockFocus]: cannot create a bitmap for an image of size %@",
+                                NSStringFromSize(size)];
+            return;
+        }
+        [snapshot setSize: size];
 
-        [self lockFocusOnRepresentation: representation];
-        NSRect rect;
         NSImageRep *uncached = [self _bestUncachedRepresentationForDevice: nil];
-        rect.origin.x = 0;
-        rect.origin.y = 0;
-        rect.size = [self size];
-
-        //    if([self scalesWhenResized])
-        [uncached drawInRect: rect];
-        // drawAtPoint: is not working with NSPDFImageRep
-        // Should probably ditch all the caching stuff anyway as it is
-        // deprecated
-        //   else
-        //   [uncached drawAtPoint:rect.origin];
-
-        [self unlockFocus];
-        NS_EXTRA(NSImage, self)->_cacheIsValid = YES;
+        [self lockFocusOnRepresentation: snapshot];
+        // Remembered before drawing, so that focus changes made by the drawing itself pair up.
+        NS_EXTRA(NSImage, self)->_focusSnapshot = [snapshot retain];
+        NS_EXTRA(NSImage, self)->_focusSnapshotContext = [NSGraphicsContext currentContext];
+        [uncached drawInRect: NSMakeRect(0, 0, size.width, size.height)];
+        return;
     }
 
     if ([representation isKindOfClass: [NSCachedImageRep class]])
@@ -1537,7 +1547,23 @@ static CGFloat repScale(NSImageRep *rep, NSSize imageSize) {
     }
 }
 
+// The bitmap an image-level lock drew into becomes the image's content: the previous
+// representations are dropped, as they were drawn into it when the focus was locked.
+- (void) _finishFocusSnapshot {
+    NSBitmapImageRep *snapshot = NS_EXTRA(NSImage, self)->_focusSnapshot;
+
+    NS_EXTRA(NSImage, self)->_focusSnapshot = nil;
+    NS_EXTRA(NSImage, self)->_focusSnapshotContext = nil;
+    [NS_EXTRA(NSImage, self)->_representations removeAllObjects];
+    [NS_EXTRA(NSImage, self)->_representations addObject: snapshot];
+    [snapshot release];
+    [self recache];
+}
+
 - (void) unlockFocus {
+    BOOL finishesSnapshot = NS_EXTRA(NSImage, self)->_focusSnapshot != nil &&
+            [NSGraphicsContext currentContext] == NS_EXTRA(NSImage, self)->_focusSnapshotContext;
+
     // Remove the pushed view
     [[[NSGraphicsContext currentContext] focusStack] removeLastObject];
 
@@ -1551,6 +1577,9 @@ static CGFloat repScale(NSImageRep *rep, NSSize imageSize) {
         NS_EXTRA(NSImage, self)->_isFlipped = NS_EXTRA(NSImage, self)->_lockedFlippedPrevious;
         NS_EXTRA(NSImage, self)->_lockedFlippedActive = NO;
     }
+
+    if (finishesSnapshot)
+        [self _finishFocusSnapshot];
 }
 
 - (BOOL) drawRepresentation: (NSImageRep *) representation
