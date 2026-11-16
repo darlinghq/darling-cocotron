@@ -954,23 +954,6 @@ static NSLock *_cacheLock = nil;
     return nil;
 }
 
-NSInteger NSConvertGlyphsToPackedGlyphs(NSGlyph *glyphs, NSInteger length,
-                                        NSMultibyteGlyphPacking packing,
-                                        char *outputX)
-{
-    NSInteger i, result = 0;
-    CGGlyph *output = (CGGlyph *) outputX;
-
-    for (i = 0; i < length; i++) {
-        NSGlyph check = glyphs[i];
-
-        if (check != NSNullGlyph && check != NSControlGlyph)
-            output[result++] = check;
-    }
-
-    return result * 2;
-}
-
 @end
 
 #ifndef DARLING

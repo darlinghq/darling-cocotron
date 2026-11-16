@@ -248,16 +248,11 @@ set(AppKit_sources
 
 	NSTextView.subproj/NSTextView.m
 	NSTextView.subproj/NSTextViewCommands.m
-	NSTextView.subproj/NSBidiHelper.m
-	NSTextView.subproj/NSLayoutManager.m
+	NSTextView.subproj/NSLayoutManager+AppKit.m
 	NSTextView.subproj/NSTextViewSharedData.m
 	NSTextView.subproj/NSTextKit2.m
-	NSTextView.subproj/NSTypesetter_concrete.m
 	NSTextView.subproj/NSSubTextStorage.m
-	NSTextView.subproj/NSTypesetter.m
 	NSTextView.subproj/NSRulerMarker+NSTextExtensions.m
-	NSTextView.subproj/NSRangeArray.m
-	NSTextView.subproj/NSTextContainer.m
 	NSTextView.subproj/NSSecureLayoutManager.m
 	NSTextView.subproj/NSUndoTextOperation.m
 	NSTextView.subproj/NSSecureTextView.m
@@ -439,7 +434,6 @@ set(AppKit_sources
 	NSTouchBar.m
 	NSTreeNode.m
 	NSVisualEffectView.m
-	NSATSTypesetter.m
 	NSOpenGLLayer.m
 	NSCollectionViewGridLayout.m
 
