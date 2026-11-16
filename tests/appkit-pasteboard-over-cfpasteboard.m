@@ -77,6 +77,53 @@ static NSArray *cfFlavors(CFPasteboardRef cf, CFIndex index) {
     return [(NSArray *) flavors autorelease];
 }
 
+// An application's subclass of NSPasteboard declares ivars of its own. On the legacy ABI (i386) they sit right
+// after Apple's instance size, so NSPasteboard's own state must not be stored beyond it: the subclass's ivars
+// and the pasteboard have to survive each other.
+@interface NSPasteboard (CFBacked)
+- (id) _initWithCFPasteboard: (CFPasteboardRef) cf unique: (BOOL) unique;
+@end
+
+@interface SubPasteboard : NSPasteboard {
+    int ownCounter;
+    id ownObject;
+    double ownValue;
+}
+- (void) setOwn;
+- (BOOL) ownIntact;
+@end
+
+@implementation SubPasteboard
+- (void) setOwn {
+    ownCounter = 0x5a5a;
+    ownObject = [@"own" retain];
+    ownValue = 2.5;
+}
+- (BOOL) ownIntact {
+    return ownCounter == 0x5a5a && [ownObject isEqual: @"own"] && ownValue == 2.5;
+}
+- (void) dealloc {
+    [ownObject release];
+    [super dealloc];
+}
+@end
+
+static void testSubclass(void) {
+    CFPasteboardRef cf = CFPasteboardCreateUnique(NULL);
+    CHECK(cf != NULL, "unique CF pasteboard");
+    SubPasteboard *sub = [[SubPasteboard alloc] _initWithCFPasteboard: cf unique: NO];
+    [sub setOwn];
+    CHECK([sub ownIntact], "own ivars set");
+    CHECK([sub setString: @"in subclass" forType: NSPasteboardTypeString], "subclass writes");
+    CHECK([[sub stringForType: NSPasteboardTypeString] isEqualToString: @"in subclass"], "subclass reads");
+    CHECK([sub changeCount] == CFPasteboardGetChangeCount(cf), "subclass sees the change count");
+    CHECK([sub ownIntact], "own ivars survive the pasteboard state");
+    [sub setOwn];
+    CHECK([[sub stringForType: NSPasteboardTypeString] isEqualToString: @"in subclass"], "the pasteboard survives own ivars");
+    [sub release];
+    CFRelease(cf);
+}
+
 static void testNSToCF(void) {
     NSPasteboard *ns = [NSPasteboard pasteboardWithUniqueName];
     CHECK(ns != nil, "unique pasteboard");
@@ -252,6 +299,7 @@ int main(int argc, char **argv) {
         return runChild(argv[2]);
     @autoreleasepool {
         testNSToCF();
+        testSubclass();
         testCFToNS();
         testItems();
         testPromises();
