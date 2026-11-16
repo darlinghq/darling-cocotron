@@ -266,6 +266,31 @@ typedef struct __VFlags {
         [coder encodeObject: NS_EXTRA(NSView, self)->_contentFilters forKey: @"NSViewContentFilters"];
         [coder encodeBool: NS_EXTRA(NSView, self)->_wantsBestResolutionOpenGLSurface
                    forKey: @"NSViewWantsBestResolutionOpenGLSurface"];
+
+        // Auto Layout state, under the keys nibs use: a flag for views laid out by constraints,
+        // the constraints that were set up in Interface Builder (the others are rebuilt by code),
+        // and the content hugging and compression resistance priorities when they are not the
+        // defaults, as {horizontal, vertical} sizes.
+        if (![self translatesAutoresizingMaskIntoConstraints])
+            [coder encodeBool: YES forKey: @"NSDoNotTranslateAutoresizingMask"];
+        NSMutableArray *archivedConstraints = nil;
+        for (NSLayoutConstraint *constraint in [self constraints]) {
+            if ([constraint shouldBeArchived]) {
+                if (archivedConstraints == nil)
+                    archivedConstraints = [NSMutableArray array];
+                [archivedConstraints addObject: constraint];
+            }
+        }
+        if (archivedConstraints != nil)
+            [coder encodeObject: archivedConstraints forKey: @"NSViewConstraints"];
+        NSSize hugging = NSMakeSize([self contentHuggingPriorityForOrientation: NSLayoutConstraintOrientationHorizontal],
+                                    [self contentHuggingPriorityForOrientation: NSLayoutConstraintOrientationVertical]);
+        if (hugging.width != NSLayoutPriorityDefaultLow || hugging.height != NSLayoutPriorityDefaultLow)
+            [coder encodeObject: NSStringFromSize(hugging) forKey: @"NSHuggingPriority"];
+        NSSize compression = NSMakeSize([self contentCompressionResistancePriorityForOrientation: NSLayoutConstraintOrientationHorizontal],
+                                        [self contentCompressionResistancePriorityForOrientation: NSLayoutConstraintOrientationVertical]);
+        if (compression.width != NSLayoutPriorityDefaultHigh || compression.height != NSLayoutPriorityDefaultHigh)
+            [coder encodeObject: NSStringFromSize(compression) forKey: @"NSAntiCompressionPriority"];
     } else {
         [NSException raise: NSInvalidArchiveOperationException
                     format: @"TODO: support unkeyed encoding in NSView"];
@@ -282,7 +307,7 @@ typedef struct __VFlags {
     NS_EXTRA(NSView, self)->_alphaValue = 1.0;
     [super initWithCoder: coder];
 
-    // TODO: decode this
+    // The defaults; the Auto Layout state of the archive is decoded below.
     NS_EXTRA(NSView, self)->_translatesAutoresizingMaskIntoConstraints = YES;
     NS_EXTRA(NSView, self)->_allowedTouchTypes = NSTouchTypeMaskDirect;
     [self _setDefaultLayoutPriorities];
@@ -367,7 +392,29 @@ typedef struct __VFlags {
         [self setCanDrawConcurrently:
                         [keyed decodeBoolForKey: @"NSViewCanDrawConcurrently"]];
 
-        // TODO: NSViewConstraints, NSViewLayoutGuides, ...
+        // Auto Layout state. The nib key is the inverse of the property, and is only there for views
+        // that are laid out by constraints.
+        if ([keyed containsValueForKey: @"NSDoNotTranslateAutoresizingMask"])
+            NS_EXTRA(NSView, self)->_translatesAutoresizingMaskIntoConstraints =
+                    ![keyed decodeBoolForKey: @"NSDoNotTranslateAutoresizingMask"];
+        if ([keyed containsValueForKey: @"NSHuggingPriority"]) {
+            NSSize priorities = NSSizeFromString([keyed decodeObjectForKey: @"NSHuggingPriority"]);
+
+            [self setContentHuggingPriority: priorities.width forOrientation: NSLayoutConstraintOrientationHorizontal];
+            [self setContentHuggingPriority: priorities.height forOrientation: NSLayoutConstraintOrientationVertical];
+        }
+        if ([keyed containsValueForKey: @"NSAntiCompressionPriority"]) {
+            NSSize priorities = NSSizeFromString([keyed decodeObjectForKey: @"NSAntiCompressionPriority"]);
+
+            [self setContentCompressionResistancePriority: priorities.width
+                                           forOrientation: NSLayoutConstraintOrientationHorizontal];
+            [self setContentCompressionResistancePriority: priorities.height
+                                           forOrientation: NSLayoutConstraintOrientationVertical];
+        }
+        // The items of the constraints are this view and its subviews, which are decoded by now.
+        [self addConstraints: [keyed decodeObjectForKey: @"NSViewConstraints"]];
+
+        // TODO: NSViewLayoutGuides, ...
 
         NS_EXTRA(NSView, self)->_needsDisplay = YES;
         NS_EXTRA(NSView, self)->_invalidRectCount = 0;
