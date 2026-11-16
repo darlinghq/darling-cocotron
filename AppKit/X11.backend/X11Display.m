@@ -23,6 +23,7 @@
 #import "X11Cursor.h"
 #import "X11DraggingManager.h"
 #import "X11Pasteboard.h"
+#import "X11LevelStacking.h"
 #import "X11Window.h"
 #import "X11AppMenu.h"
 #import "../private-include/AppKit/NSGlobalMenu+Private.h"
@@ -1432,6 +1433,47 @@ static int ignoreBadWindowWhileOrdering(Display *display, XErrorEvent *errorEven
     return result;
 }
 
+// An unmanaged window is above the frames that the window manager restacks around it, so the order
+// by window level (see X11LevelStacking.h) is made by moving the unmanaged windows, never the
+// managed ones. Called from the window code after it made its own request, and again when the window
+// manager has framed and mapped a window (ReparentNotify, MapNotify), because it stacks a new frame
+// by itself.
+- (void) restackWindowsForLevelsAround: (X11Window *) anchor {
+    if (![anchor takesPartInLevelStacking])
+        return;
+
+    XErrorHandler previousHandler = XSetErrorHandler(ignoreBadWindowWhileOrdering);
+    previousOrderingErrorHandler = previousHandler;
+    @try {
+        BOOL anchorUnmanaged = [anchor isUnmanaged];
+        Window anchorTop = X11TopLevelAncestor(_display, [anchor windowHandle]);
+
+        for (NSNumber *xid in [_windowsByID allKeys]) {
+            id candidate = _windowsByID[xid];
+            if (candidate == anchor || ![candidate isKindOfClass: [X11Window class]])
+                continue;
+            X11Window *other = candidate;
+            if (![other takesPartInLevelStacking] || [other isUnmanaged] == anchorUnmanaged)
+                continue;
+
+            X11Window *unmanaged = anchorUnmanaged ? anchor : other;
+            X11Window *managed = anchorUnmanaged ? other : anchor;
+            if (!X11UnmanagedBelowManaged(anchorUnmanaged, [unmanaged stackingLevel],
+                                          [managed stackingLevel]))
+                continue;
+
+            Window otherTop = X11TopLevelAncestor(_display, [other windowHandle]);
+            Window unmanagedTop = anchorUnmanaged ? anchorTop : otherTop;
+            Window managedTop = anchorUnmanaged ? otherTop : anchorTop;
+            if (unmanagedTop != None && managedTop != None)
+                X11StackBelowIfAbove(_display, unmanagedTop, managedTop);
+        }
+    } @finally {
+        XSetErrorHandler(previousHandler);
+        previousOrderingErrorHandler = NULL;
+    }
+}
+
 // Xlib names only the first five buttons. 6 and 7 are conventionally the
 // horizontal wheel, to the left and to the right.
 enum {
@@ -2029,10 +2071,14 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
     case ReparentNotify:
         // A window manager frame has to point back at our window through XdndProxy
         // before a drag source can find it under the pointer.
-        if ([window isKindOfClass: [X11Window class]])
+        if ([window isKindOfClass: [X11Window class]]) {
             [(X11DraggingManager *) [self draggingManager]
                     windowReparented: (X11Window *) window
                               intoParent: ev->xreparent.parent];
+            // A new frame is stacked by the window manager as it sees fit: put the
+            // unmanaged windows that are meant to be below it where they belong.
+            [(X11Window *) window restackForLevels];
+        }
         break;
 
     case ConfigureNotify:; {

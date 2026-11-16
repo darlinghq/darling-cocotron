@@ -100,6 +100,15 @@
 - (O2Rect) deviceRect: (O2Rect) rect;
 
 - (Window) windowHandle;
+// What the stacking of unmanaged and managed windows by level looks at (see
+// X11LevelStacking.h). A menu, pop-up and the menu bar are not stacked by
+// level: they are above the windows they belong to by their own means.
+- (int) stackingLevel;
+- (BOOL) isUnmanaged;
+- (BOOL) takesPartInLevelStacking;
+// Restacks the windows of the other kind around this one after it was
+// ordered to the front, mapped or given another level.
+- (void) restackForLevels;
 - (BOOL) isMapped;
 // Whether the window is fullscreen (_NET_WM_STATE_FULLSCREEN), as last asked
 // for or as the window manager last set it.
