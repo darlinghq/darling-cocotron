@@ -10,6 +10,11 @@
 #import <AppKit/NSTextView.h>
 #import <Foundation/NSKeyedArchiver.h>
 
+// Private to NSView, which keeps the superview of a view decoded from a classic archive.
+@interface NSView (NSViewTemplatePlacement)
+- (void) _setSuperview: (id) superview;
+@end
+
 // A size archived as two floats (the size members are doubles here).
 static void decodeSize(NSCoder *coder, NSSize *size)
 {
@@ -78,8 +83,15 @@ static void decodeSize(NSCoder *coder, NSSize *size)
     return real;
 }
 
+// The archive holds the superview inside the template and the containing view has the template
+// among its subviews, which is replaced by the real view. The real view is made with only a frame,
+// so it has to be told that it sits in the template's superview. Without it a text view
+// of a scroll view is not drawn through its clip view.
 - (id) awakeAfterUsingCoder: (NSCoder *) coder {
-    return [[self createRealObject] autorelease];
+    NSView *real = [[self createRealObject] autorelease];
+
+    [real _setSuperview: [self superview]];
+    return real;
 }
 
 @end
