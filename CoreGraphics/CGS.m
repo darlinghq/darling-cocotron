@@ -202,6 +202,10 @@ CGError _CGSCreateDisplayOverlayWindow(CGSConnectionID connId, CGRect bounds,
 
 	*winId = wid;
 	*drawable = native;
+	[[NSNotificationCenter defaultCenter]
+		postNotificationName: (NSString*) _kCGSDisplayOverlayWindowCreated
+		object: nil
+		userInfo: @{ @"NativeWindow": @((uintptr_t) native) }];
 	return kCGSErrorSuccess;
 }
 

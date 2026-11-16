@@ -203,6 +203,13 @@ void* _CGSNativeWindowForSurfaceID(CGSConnectionID connId, CGSWindowID winId, CG
 // context can fill a display (CGLSetFullScreen) while the application's own
 // windows keep receiving input. *drawable is the native window handle a GL
 // surface is created on. Release it with CGSReleaseWindow.
+//
+// Once the window is shown, _kCGSDisplayOverlayWindowCreated is posted to the
+// default notification center, with the drawable as the NSNumber
+// "NativeWindow" in the user info. The window system backend of the
+// application's UI layer takes it up to receive the application's keyboard
+// input for the overlay, which has no window of the application's own.
+#define _kCGSDisplayOverlayWindowCreated CFSTR("_CGSDisplayOverlayWindowCreated")
 CGError _CGSCreateDisplayOverlayWindow(CGSConnectionID connId, CGRect bounds,
                                        CGSWindowID* winId, void** drawable);
 
