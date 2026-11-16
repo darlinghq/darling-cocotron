@@ -273,11 +273,17 @@ typedef struct __VFlags {
 }
 
 - initWithCoder: (NSCoder *) coder {
+    // Decoding the next responder (the superview) can decode the whole
+    // hierarchy around this view, and the superview then creates the layer of
+    // this still unfinished view from its alpha value. A nib that refers to a
+    // control before its superview (as the connectors of user defined runtime
+    // attributes do) reaches that state, so the alpha value must be set before
+    // the superclass decodes anything.
+    NS_EXTRA(NSView, self)->_alphaValue = 1.0;
     [super initWithCoder: coder];
 
     // TODO: decode this
     NS_EXTRA(NSView, self)->_translatesAutoresizingMaskIntoConstraints = YES;
-    NS_EXTRA(NSView, self)->_alphaValue = 1.0;
     NS_EXTRA(NSView, self)->_allowedTouchTypes = NSTouchTypeMaskDirect;
     [self _setDefaultLayoutPriorities];
 
