@@ -19,6 +19,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSBezierPath.h>
 #import <AppKit/NSColor.h>
+#import <AppKit/NSDisplay.h>
 #import <AppKit/NSColor_CGColor.h>
 #import <AppKit/NSColor_catalog.h>
 #import <AppKit/NSColorSpace.h>
@@ -465,9 +466,8 @@ static NSColor *constantWhite(CGFloat white, CGFloat alpha) {
     return [NSColor colorWithCatalogName: @"System" colorName: @"gridColor"];
 }
 
-// macOS 10.14+; approximation: opaque gray instead of semitransparent
 + (NSColor *) separatorColor {
-    return constantWhite(0.85, 1.0);
+    return [NSColor colorWithCatalogName: @"System" colorName: @"separatorColor"];
 }
 
 + (NSColor *) textInsertionPointColor {
@@ -613,7 +613,8 @@ static NSColor *constantWhite(CGFloat white, CGFloat alpha) {
 }
 
 + (NSColor *) windowBackgroundColor {
-    return [NSColor controlColor];
+    return [NSColor colorWithCatalogName: @"System"
+                               colorName: @"windowBackgroundColor"];
 }
 
 + (NSColor *) windowFrameColor {
@@ -622,7 +623,7 @@ static NSColor *constantWhite(CGFloat white, CGFloat alpha) {
 }
 
 + (NSColor *) windowFrameTextColor {
-    return [NSColor textColor];
+    return [NSColor colorWithCatalogName: @"System" colorName: @"windowFrameTextColor"];
 }
 
 + (NSColor *) selectedMenuItemColor {
@@ -661,7 +662,10 @@ NSColor *NSColorGetCatalogColor(NSColorListName catalogName,
 // A System catalog color that display backends may not know: the value a
 // backend registered in the catalog, else the given default.
 static NSColor *systemCatalogColor(NSColorName name, NSColor *fallback) {
-    NSColor *color = NSColorGetCatalogColor(@"System", name);
+    NSColor *color = [[NSDisplay currentDisplay] colorWithName: name];
+
+    if (color == nil)
+        color = NSColorGetCatalogColor(@"System", name);
     return [NSColor_catalog colorWithCatalogName: @"System"
                                        colorName: name
                                            color: color ? color : fallback];
