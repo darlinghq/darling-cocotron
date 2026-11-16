@@ -18,15 +18,23 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSTextBlock.h>
+#import <AppKit/AppKitIvarLayout.h>
 
 @class NSTextTable;
 
+// Tells the implementation (UIFoundation) that the instance variables are in
+// the extra-state structure, to be reached with NS_EXTRA.
+#define _NS_HAS_EXTRA_IVARS_NSTextTableBlock 1
+
 @interface NSTextTableBlock : NSTextBlock {
+    NS_LEGACY_IVAR_PAD(_NSTextTableBlockReserved, 24)
+    NS_EXTRA_IVARS_BEGIN(NSTextTableBlock)
     NSTextTable *_table;
     int _startingRow;
     int _rowSpan;
     int _startingColumn;
     int _columnSpan;
+    NS_EXTRA_IVARS_END(NSTextTableBlock)
 }
 
 - initWithTable: (NSTextTable *) table

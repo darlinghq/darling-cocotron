@@ -1,5 +1,6 @@
 #import <AppKit/NSFont.h>
 #import <AppKit/NSGlyphGenerator.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/NSLayoutManager.h>
 #import <AppKit/NSText.h>
 
@@ -18,20 +19,25 @@ typedef enum {
     NSTypesetterContainerBreakAction,
 } NSTypesetterControlCharacterAction;
 
+// Tells the implementation (UIFoundation) that the instance variables are in
+// the extra-state structure, to be reached with NS_EXTRA.
+#define _NS_HAS_EXTRA_IVARS_NSTypesetter 1
+
 @interface NSTypesetter : NSObject <NSGlyphStorage> {
+    NS_LEGACY_IVAR_PAD(_NSTypesetterReserved, 4)
+    NS_EXTRA_IVARS_BEGIN(NSTypesetter)
     NSTypesetterBehavior _behavior;
     CGFloat _hyphenationFactor;
     CGFloat _lineFragmentPadding;
     BOOL _usesFontLeading;
     BOOL _bidiProcessingEnabled;
-
     NSLayoutManager *_layoutManager;
     NSArray *_textContainers;
     NSAttributedString *_attributedString;
     NSString *_string;
-
     NSTextContainer *_currentTextContainer;
     NSParagraphStyle *_currentParagraphStyle;
+    NS_EXTRA_IVARS_END(NSTypesetter)
 }
 
 + (NSTypesetterBehavior) defaultTypesetterBehavior;

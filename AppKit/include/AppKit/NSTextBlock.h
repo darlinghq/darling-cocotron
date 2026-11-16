@@ -18,6 +18,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <Foundation/NSGeometry.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <Foundation/NSObject.h>
 #import <Foundation/NSRange.h>
 
@@ -50,7 +51,13 @@ typedef NS_ENUM(NSUInteger, NSTextBlockLayer) {
     NSTextBlockMargin,
 };
 
+// Tells the implementation (UIFoundation) that the instance variables are in
+// the extra-state structure, to be reached with NS_EXTRA.
+#define _NS_HAS_EXTRA_IVARS_NSTextBlock 1
+
 @interface NSTextBlock : NSObject {
+    NS_LEGACY_IVAR_PAD(_NSTextBlockReserved, 24)
+    NS_EXTRA_IVARS_BEGIN(NSTextBlock)
     NSColor *_backgroundColor;
     NSMutableArray *_borderColors;
     NSTextBlockVerticalAlignment _verticalAlignment;
@@ -60,6 +67,7 @@ typedef NS_ENUM(NSUInteger, NSTextBlockLayer) {
     CGFloat _dimensionValueTypes[NSTextBlockMaximumHeight + 1];
     CGFloat _layerWidths[NSTextBlockMargin + 1][NSMaxYEdge + 1];
     CGFloat _layerValueTypes[NSTextBlockMargin + 1][NSMaxYEdge + 1];
+    NS_EXTRA_IVARS_END(NSTextBlock)
 }
 
 - init;

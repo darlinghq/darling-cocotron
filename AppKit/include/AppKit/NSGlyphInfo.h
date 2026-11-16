@@ -18,14 +18,21 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSFont.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <Foundation/NSObject.h>
 
 typedef NSInteger NSCharacterCollection;
 
+// Tells the implementation (UIFoundation) that the instance variables are in
+// the extra-state structure, to be reached with NS_EXTRA.
+#define _NS_HAS_EXTRA_IVARS_NSGlyphInfo 1
+
 @interface NSGlyphInfo : NSObject {
+    NS_EXTRA_IVARS_BEGIN(NSGlyphInfo)
     NSUInteger _identifier;
     NSCharacterCollection _collection;
     NSString *_glyphName;
+    NS_EXTRA_IVARS_END(NSGlyphInfo)
 }
 
 + (NSGlyphInfo *)

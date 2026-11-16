@@ -18,6 +18,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSTextAttachmentCell.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <CoreGraphics/CoreGraphics.h>
 #import <Foundation/Foundation.h>
 
@@ -51,7 +52,13 @@ enum { NSAttachmentCharacter = 0xFFFC };
 
 // i386's fragile runtime needs these in the @interface; elsewhere the
 // implementation declares them, keeping the interface identical to Apple's.
+// Tells the implementation (UIFoundation) that the instance variables are in
+// the extra-state structure, to be reached with NS_EXTRA.
+#define _NS_HAS_EXTRA_IVARS_NSTextAttachment 1
+
 #define _NSTEXTATTACHMENT_IVARS \
+    NS_LEGACY_IVAR_PAD(_NSTextAttachmentReserved, 8) \
+    NS_EXTRA_IVARS_BEGIN(NSTextAttachment) \
     NSData *_contents; \
     NSString *_fileType; \
     NSImage *_image; \
@@ -59,7 +66,8 @@ enum { NSAttachmentCharacter = 0xFFFC };
     NSFileWrapper *_fileWrapper; \
     id<NSTextAttachmentCell> _cell; \
     CGFloat _lineLayoutPadding; \
-    BOOL _allowsTextAttachmentView;
+    BOOL _allowsTextAttachmentView; \
+    NS_EXTRA_IVARS_END(NSTextAttachment)
 
 @interface NSTextAttachment : NSObject <NSTextAttachmentLayout, NSSecureCoding>
 #if !__OBJC2__
