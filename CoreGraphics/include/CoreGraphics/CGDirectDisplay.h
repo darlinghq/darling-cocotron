@@ -12,14 +12,26 @@
 typedef uint32_t CGDirectDisplayID;
 typedef uint32_t CGOpenGLDisplayMask;
 typedef double CGRefreshRate;
+typedef int32_t CGDisplayCoord;
 
-#define kCGDirectMainDisplay 69989856
-#define kCGDisplayBitsPerPixel 8200
+#import <CoreGraphics/CGDirectPalette.h>
+
+#define kCGDirectMainDisplay CGMainDisplayID()
 #define kCGDisplayBlendNormal 0
 #define kCGDisplayBlendSolidColor 1
-#define kCGDisplayRefreshRate 8200
-#define kCGDisplayHeight 8200
-#define kCGDisplayWidth 8200
+
+// Keys of the display mode dictionaries of CGDisplayAvailableModes,
+// CGDisplayCurrentMode and CGDisplayBestModeForParameters.
+#define kCGDisplayWidth CFSTR("Width")
+#define kCGDisplayHeight CFSTR("Height")
+#define kCGDisplayMode CFSTR("Mode")
+#define kCGDisplayBitsPerPixel CFSTR("BitsPerPixel")
+#define kCGDisplayBitsPerSample CFSTR("BitsPerSample")
+#define kCGDisplaySamplesPerPixel CFSTR("SamplesPerPixel")
+#define kCGDisplayRefreshRate CFSTR("RefreshRate")
+#define kCGDisplayModeUsableForDesktopGUI CFSTR("UsableForDesktopGUI")
+#define kCGDisplayIOFlags CFSTR("IOFlags")
+#define kCGDisplayBytesPerRow CFSTR("kCGDisplayBytesPerRow")
 #define kCGMaxDisplayReservationInterval 15
 #define kCGNullDirectDisplay 0
 
@@ -65,6 +77,22 @@ COREGRAPHICS_EXPORT boolean_t CGDisplayUsesOpenGLAcceleration(CGDirectDisplayID 
 COREGRAPHICS_EXPORT CGDirectDisplayID
 CGDisplayMirrorsDisplay(CGDirectDisplayID display);
 
+COREGRAPHICS_EXPORT CFDictionaryRef
+CGDisplayBestModeForParameters(CGDirectDisplayID display, size_t bitsPerPixel,
+                               size_t width, size_t height,
+                               boolean_t *exactMatch);
+COREGRAPHICS_EXPORT void *CGDisplayBaseAddress(CGDirectDisplayID display);
+COREGRAPHICS_EXPORT void *CGDisplayAddressForPosition(CGDirectDisplayID display,
+                                                      CGDisplayCoord x,
+                                                      CGDisplayCoord y);
+COREGRAPHICS_EXPORT size_t CGDisplayBytesPerRow(CGDirectDisplayID display);
+COREGRAPHICS_EXPORT size_t CGDisplayBitsPerPixel(CGDirectDisplayID display);
+COREGRAPHICS_EXPORT size_t CGDisplayBitsPerSample(CGDirectDisplayID display);
+COREGRAPHICS_EXPORT size_t CGDisplaySamplesPerPixel(CGDirectDisplayID display);
+COREGRAPHICS_EXPORT uint32_t CGDisplayBeamPosition(CGDirectDisplayID display);
+COREGRAPHICS_EXPORT boolean_t CGDisplayCanSetPalette(CGDirectDisplayID display);
+COREGRAPHICS_EXPORT CGError CGDisplaySetPalette(CGDirectDisplayID display,
+                                                const CGDirectPaletteRef palette);
 COREGRAPHICS_EXPORT CFDictionaryRef
 CGDisplayBestModeForParametersAndRefreshRate(CGDirectDisplayID display,
                                              size_t bitsPerPixel, size_t width,
