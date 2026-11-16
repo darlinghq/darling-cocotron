@@ -40,6 +40,7 @@
 #import "../../CoreGraphics/X11.backend/X11WindowOwner.h"
 #import "X11Fullscreen.h"
 #import "X11InputShape.h"
+#import "X11InvisibleWindow.h"
 #import "X11SubWindow.h"
 #import "X11Window.h"
 #import "X11AppMenu.h"
@@ -283,6 +284,7 @@ static NSData *makeWindowIcon() {
     if (isSheetPanel)
         _styleMask = NSBorderlessWindowMask;
     _hasAlpha = [self wantsAlphaVisual];
+    _appliedAlpha = 1.0;
     if (![self createXWindow]) {
         [self release];
         return nil;
@@ -626,7 +628,7 @@ static NSData *makeWindowIcon() {
 // bar and the window can become key. macOS 26 shows no title bar for such
 // windows and they cannot become key. We follow 10.14.
 - (void) updateDecorationsForStyleMask: (NSUInteger) mask {
-    if (mask & (NSWindowStyleMaskTitled | NSWindowStyleMaskResizable))
+    if ((mask & (NSWindowStyleMaskTitled | NSWindowStyleMaskResizable)) && !_invisibleWithoutCompositor)
         XDeleteProperty(_display, _window,
                         XInternAtom(_display, "_MOTIF_WM_HINTS", False));
     else
@@ -758,6 +760,11 @@ static NSData *makeWindowIcon() {
     }
     XDestroyWindow(_display, oldWindow);
 
+    // the new window has neither opacity nor shape yet
+    _invisibleWithoutCompositor = NO;
+    if (_appliedAlpha < 1.0)
+        [self setAlphaValue: _appliedAlpha];
+
     NSString *title = [_delegate title];
     if (title != nil)
         [self setTitle: title];
@@ -859,12 +866,16 @@ static NSData *makeWindowIcon() {
 
     // Click-through windows (overlays, tooltips) must not take the pointer from
     // the window below. Only a change needs a request.
-    BOOL ignoresMouseEvents = [_delegate ignoresMouseEvents];
+    BOOL ignoresMouseEvents = [_delegate ignoresMouseEvents] || _invisibleWithoutCompositor;
     if (ignoresMouseEvents != _ignoresMouseEvents && _window != 0 &&
         X11WindowSetIgnoresMouseEvents(_display, _window, ignoresMouseEvents)) {
         _ignoresMouseEvents = ignoresMouseEvents;
         XFlush(_display);
     }
+
+    // An alpha value set before the window had its X window (or its delegate) is applied now.
+    if (_window != 0 && _delegate != nil && [_delegate alphaValue] != _appliedAlpha)
+        [self setAlphaValue: [_delegate alphaValue]];
 
     // TODO: background color
 }
@@ -887,7 +898,33 @@ static NSData *makeWindowIcon() {
         XChangeProperty(_display, _window, opacity, XA_CARDINAL, 32,
                         PropModeReplace, (unsigned char *) &cardinal, 1);
     }
+    _appliedAlpha = value;
+    _alphaIsZero = value <= 0.0;
+    [self updateInvisibility];
     XFlush(_display);
+}
+
+// Without a compositing manager nothing applies _NET_WM_WINDOW_OPACITY, so a window with alpha 0 would stay
+// visible, including the window manager's frame. It is made invisible instead, while staying mapped (and so able
+// to keep the keyboard focus and stay the key window): the window manager is asked for no frame and the bounding
+// shape of the window is emptied. Partial alpha without a compositor is left alone, and with a compositor the
+// opacity property is all that is needed. The compositor is looked for whenever the alpha changes, not watched
+// for: a compositor that starts or stops while the window has alpha 0 takes effect at the next change.
+- (void) updateInvisibility {
+    BOOL invisible = _alphaIsZero && !X11CompositorRunning(_display, DefaultScreen(_display));
+
+    if (invisible == _invisibleWithoutCompositor || _window == 0)
+        return;
+    if (!X11WindowSetBoundingEmpty(_display, _window, invisible))
+        return;
+    _invisibleWithoutCompositor = invisible;
+    // A frame follows the shape, but its decorations would come back with a window manager that draws them
+    // outside the client, and the window must not take pointer events from what is below it either.
+    [self updateDecorationsForStyleMask: _styleMask];
+    BOOL ignoresMouseEvents = invisible || [_delegate ignoresMouseEvents];
+    if (ignoresMouseEvents != _ignoresMouseEvents &&
+        X11WindowSetIgnoresMouseEvents(_display, _window, ignoresMouseEvents))
+        _ignoresMouseEvents = ignoresMouseEvents;
 }
 
 - (void) invalidate {
