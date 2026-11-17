@@ -40,6 +40,7 @@
 #import "../../CoreGraphics/X11.backend/X11WindowOwner.h"
 #import "X11Fullscreen.h"
 #import "X11InputShape.h"
+#import "X11RoundedShape.h"
 #import "X11InvisibleWindow.h"
 #import "X11SubWindow.h"
 #import "X11Window.h"
@@ -639,6 +640,55 @@ static NSData *makeWindowIcon() {
                         XInternAtom(_display, "_MOTIF_WM_HINTS", False));
     else
         [[self class] removeDecorationForWindow: _window onDisplay: _display];
+    _chromeless = titlebarInvisible && (mask & NSWindowStyleMaskTitled) != 0;
+    [self updateWindowShape];
+}
+
+// Corner radius, in points, of a window that has no frame of its own to be drawn by the window manager.
+// QUIRK: macOS draws such a window (a titled window with a full-size content view and a transparent title
+// bar) with rounded corners of about 5 points, a thin outline and a shadow; the window manager draws none of
+// them for a window it was asked not to decorate. The corners are cut with the SHAPE extension and the outline
+// is drawn into the window (-flushBuffer), neither of which needs a compositor; the shadow can only come from
+// a compositor and is not drawn. Evidence: black-box observation of such windows on macOS 10.14.4 (tier 2).
+// Test: tests/x11-chromeless-corners.sh (shape of the window), tests/x11-rounded-shape.c (the shape).
+static const int X11ChromelessCornerRadius = 5;
+
+// The bounding shape follows the window's size and whether it is drawn without a frame; a window that is
+// invisible without a compositor keeps its empty shape.
+- (void) updateWindowShape {
+    if (_window == 0 || _invisibleWithoutCompositor || (!_chromeless && !_roundedShapeSet))
+        return;
+    CGFloat scale = [self backingScaleFactor];
+    NSSize device = [self deviceSize: _frame.size];
+    if (X11WindowSetRoundedCorners(_display, _window, (int) device.width, (int) device.height,
+                                   _chromeless ? (int) lround(X11ChromelessCornerRadius * scale) : 0))
+        _roundedShapeSet = _chromeless;
+}
+
+// The outline of a window without a frame: one device pixel along the rounded edge, drawn over the content
+// every time the window is flushed (opaque, so that drawing it again changes nothing).
+- (void) drawChromelessOutline {
+    if (!_chromeless || _context == nil || _invisibleWithoutCompositor)
+        return;
+    CGFloat width = _frame.size.width, height = _frame.size.height, radius = X11ChromelessCornerRadius;
+    CGFloat line = 1.0 / [self backingScaleFactor];
+    CGFloat inset = line / 2;
+    if (width < 2 * radius + 2 || height < 2 * radius + 2)
+        return;
+    O2ContextRef context = _context;
+    O2ContextSaveGState(context);
+    O2Float color[4] = {0.45, 0.45, 0.45, 1.0};
+    O2ContextSetStrokeColor(context, color);
+    O2ContextSetLineWidth(context, line);
+    O2ContextBeginPath(context);
+    O2ContextMoveToPoint(context, inset + radius, inset);
+    O2ContextAddArcToPoint(context, width - inset, inset, width - inset, inset + radius, radius);
+    O2ContextAddArcToPoint(context, width - inset, height - inset, width - inset - radius, height - inset, radius);
+    O2ContextAddArcToPoint(context, inset, height - inset, inset, height - inset - radius, radius);
+    O2ContextAddArcToPoint(context, inset, inset, inset + radius, inset, radius);
+    O2ContextClosePath(context);
+    O2ContextStrokePath(context);
+    O2ContextRestoreGState(context);
 }
 
 - (void) setStyleMaskInternal: (NSUInteger) mask force: (BOOL) force {
@@ -1079,6 +1129,7 @@ static NSData *makeWindowIcon() {
                       deviceFrame.size.height);
     [self invalidateContextWithNewSize: frame.size];
     _frame = frame;
+    [self updateWindowShape];
     // A non-resizable window hints PMinSize == PMaxSize, and a window manager
     // refuses any resize that falls outside the pair, so the hints have to follow
     // the size. Only on a real change so a drag does not re-issue them per pixel.
@@ -1422,6 +1473,7 @@ BOOL X11WindowManagerIsRunning(Display *display) {
 - (void) flushBuffer {
     if (_context == nil)
         return;
+    [self drawChromelessOutline];
     O2ContextFlush(_context);
     [self openGLFlushBuffer];
 }
@@ -1498,6 +1550,7 @@ static int ignoreBadWindow(Display *display, XErrorEvent *errorEvent) {
                           rect.size.width / scale, rect.size.height / scale);
         [self invalidateContextWithNewSize: rect.size];
         _frame = rect;
+        [self updateWindowShape];
     } @finally {
         XSetErrorHandler(previousHandler);
     }
