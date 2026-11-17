@@ -21,6 +21,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import "NSManagedObjectID-Private.h"
 #import "NSXMLPersistentStore.h"
 #import <CoreData/NSManagedObject.h>
+#import <CoreData/CoreDataErrors.h>
 #import <CoreData/NSManagedObjectModel.h>
 #import <CoreData/NSPersistentStoreCoordinator.h>
 #import <Foundation/NSRaise.h>
@@ -29,7 +30,7 @@ NSString *const NSStoreTypeKey = @"NSStoreTypeKey";
 NSString *const NSStoreUUIDKey = @"NSStoreUUIDKey";
 
 NSString *const NSXMLStoreType = @"XML";
-NSString *const NSInMemoryStoreType = @"Memory";
+NSString *const NSInMemoryStoreType = @"InMemory";
 NSString *const NSSQLiteStoreType = @"SQLite";
 NSString *const NSBinaryStoreType = @"Binary";
 NSString *const NSMigratePersistentStoresAutomaticallyOption =
@@ -49,6 +50,8 @@ NSString *const NSInferMappingModelAutomaticallyOption =
 NSString *const NSReadOnlyPersistentStoreOption =
         @"NSReadOnlyPersistentStoreOption";
 NSString *const NSSQLiteManualVacuumOption = @"NSSQLiteManualVacuumOption";
+NSString *const NSSQLitePragmasOption = @"NSSQLitePragmasOption";
+NSString *const NSPersistentStoreTimeoutOption = @"NSPersistentStoreTimeoutOption";
 NSString *const NSStoreModelVersionHashesKey =
         @"NSStoreModelVersionHashesKey";
 
@@ -113,7 +116,31 @@ static NSMutableDictionary *_storeTypes = nil;
         }
     }
 
+    if (storeType == nil) {
+        if (error != NULL)
+            *error = [NSError
+                    errorWithDomain: NSCocoaErrorDomain
+                               code: NSPersistentStoreInvalidTypeError
+                           userInfo: [NSDictionary
+                                             dictionaryWithObject:
+                                                     @"unknown or nil storeType argument or otherwise unable to infer storeType argument.  Inference requires an existing file with valid metadata."
+                                                           forKey: @"message"]];
+        return nil;
+    }
+
     Class class = [[[self class] registeredStoreTypes] objectForKey: storeType];
+    if (class == Nil)
+        [NSException raise: NSInvalidArgumentException
+                    format: @"Unsupported store type."];
+    /* File-backed stores need a file URL; the in-memory store takes any URL. */
+    if ([storeType isEqual: NSXMLStoreType] ||
+        [storeType isEqual: NSSQLiteStoreType]) {
+        if (storeURL != nil && ![storeURL isFileURL])
+            [NSException raise: NSInvalidArgumentException
+                        format: @"CoreData %@ stores only support file URLs (got %@).",
+                                [storeType isEqual: NSXMLStoreType] ? @"XML" : @"SQL",
+                                storeURL];
+    }
     NSAtomicStore *store = [[[class alloc]
             initWithPersistentStoreCoordinator: self
                              configurationName: configuration
