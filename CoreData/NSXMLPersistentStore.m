@@ -499,7 +499,7 @@
             }
             valueSet = value;
         } else {
-            valueSet = [NSSet setWithObject: value];
+            valueSet = value != nil ? [NSSet setWithObject: value] : [NSSet set];
         }
 
         [relationshipElement
@@ -524,7 +524,8 @@
                     [self cacheNodeForEntity: destinationEntity
                              referenceObject: referenceObject];
 
-            [cacheNodeSet addObject: relNode];
+            if (relNode != nil)
+                [cacheNodeSet addObject: relNode];
         }
 
         [relationshipElement
@@ -582,8 +583,8 @@
 
     [[self databaseElement] addChild: entityElement];
 
-    [self updateCacheNode: cacheNode fromManagedObject: managedObject];
-
+    // The properties are filled in by -updateCacheNode:fromManagedObject:, which the context calls
+    // once the nodes of all objects saved together exist (relationships may point at them).
     return cacheNode;
 }
 

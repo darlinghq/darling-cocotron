@@ -20,6 +20,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import "NSSQLitePersistentStore.h"
 #import <CoreData/NSMergePolicy.h>
 #import <Foundation/NSComparisonPredicate.h>
+#import <Foundation/NSCompoundPredicate.h>
 #import <Foundation/NSExpression.h>
 #import "NSManagedObject-Private.h"
 #import "NSManagedObjectID-Private.h"
@@ -80,6 +81,75 @@ NSString *const NSInvalidatedObjectIDsKey = @"invalidated_objectIDs";
 @end
 
 static char ContextQueueKey;
+
+// Evaluates fetch predicates in memory against the managed objects. Stores that run fetches as
+// SQL treat a comparison with a missing (nil) value as unknown, so a row whose value is nil
+// matches neither the predicate nor its negation; that is reproduced here for SQLite stores.
+//
+// QUIRK: for SQLite stores a nil value compared with a non-nil value by ==, !=, <, <=, >, >=, IN
+// or BETWEEN is neither true nor false (negations do not match either), while the string
+// operators (BEGINSWITH, CONTAINS, LIKE, ...) simply do not match, so their negations do.
+// Not documented. Evidence: black-box observation on macOS 10.14.4 and 26.7.3 (tier 2).
+// Test: tests/coredata-fetch-predicates.m (the nil-title and nil-writer cases)
+typedef enum { DarlingPredicateFalse = 0, DarlingPredicateTrue = 1, DarlingPredicateUnknown = 2 } DarlingPredicateResult;
+
+static DarlingPredicateResult _DarlingPredicateMatches(NSPredicate *predicate, NSManagedObject *object, BOOL sqlNulls) {
+    if (!sqlNulls)
+        return [predicate evaluateWithObject: object] ? DarlingPredicateTrue : DarlingPredicateFalse;
+
+    if ([predicate isKindOfClass: [NSCompoundPredicate class]]) {
+        NSCompoundPredicate *compound = (NSCompoundPredicate *) predicate;
+        NSCompoundPredicateType type = [compound compoundPredicateType];
+        BOOL sawUnknown = NO;
+
+        for (NSPredicate *sub in [compound subpredicates]) {
+            DarlingPredicateResult result = _DarlingPredicateMatches(sub, object, sqlNulls);
+
+            if (type == NSNotPredicateType) {
+                if (result == DarlingPredicateUnknown)
+                    return DarlingPredicateUnknown;
+                return result == DarlingPredicateTrue ? DarlingPredicateFalse : DarlingPredicateTrue;
+            }
+            if (result == DarlingPredicateUnknown)
+                sawUnknown = YES;
+            else if (type == NSAndPredicateType && result == DarlingPredicateFalse)
+                return DarlingPredicateFalse;
+            else if (type == NSOrPredicateType && result == DarlingPredicateTrue)
+                return DarlingPredicateTrue;
+        }
+        if (type == NSNotPredicateType)
+            return DarlingPredicateTrue;
+        if (sawUnknown)
+            return DarlingPredicateUnknown;
+        return type == NSAndPredicateType ? DarlingPredicateTrue : DarlingPredicateFalse;
+    }
+
+    if ([predicate isKindOfClass: [NSComparisonPredicate class]]) {
+        NSComparisonPredicate *comparison = (NSComparisonPredicate *) predicate;
+
+        switch ([comparison predicateOperatorType]) {
+        case NSEqualToPredicateOperatorType:
+        case NSNotEqualToPredicateOperatorType:
+        case NSLessThanPredicateOperatorType:
+        case NSLessThanOrEqualToPredicateOperatorType:
+        case NSGreaterThanPredicateOperatorType:
+        case NSGreaterThanOrEqualToPredicateOperatorType:
+        case NSInPredicateOperatorType:
+        case NSBetweenPredicateOperatorType:
+            if ([comparison comparisonPredicateModifier] == NSDirectPredicateModifier) {
+                id left = [[comparison leftExpression] expressionValueWithObject: object context: nil];
+                id right = [[comparison rightExpression] expressionValueWithObject: object context: nil];
+
+                if ((left == nil || left == [NSNull null]) && right != nil && right != [NSNull null])
+                    return DarlingPredicateUnknown;
+            }
+            break;
+        default:
+            break;
+        }
+    }
+    return [predicate evaluateWithObject: object] ? DarlingPredicateTrue : DarlingPredicateFalse;
+}
 
 @implementation NSManagedObjectContext
 
@@ -448,25 +518,73 @@ static char ContextQueueKey;
     return result;
 }
 
+// Predicates may compare against object IDs (a relationship or SELF with an NSManagedObjectID, or
+// a collection of them); evaluation works on objects, so those constants become the objects.
+- (id) _valueByResolvingObjectIDs: (id) value {
+    if ([value isKindOfClass: [NSManagedObjectID class]])
+        return [self objectWithID: value];
+    if ([value isKindOfClass: [NSArray class]] || [value isKindOfClass: [NSSet class]]) {
+        NSMutableArray *resolved = [NSMutableArray array];
+        BOOL changed = NO;
+
+        for (id item in value) {
+            id replacement = [self _valueByResolvingObjectIDs: item];
+            changed = changed || replacement != item;
+            [resolved addObject: replacement];
+        }
+        if (!changed)
+            return value;
+        return [value isKindOfClass: [NSSet class]] ? (id) [NSSet setWithArray: resolved] : (id) resolved;
+    }
+    return value;
+}
+
+- (NSPredicate *) _predicateByResolvingObjectIDs: (NSPredicate *) predicate {
+    if ([predicate isKindOfClass: [NSCompoundPredicate class]]) {
+        NSCompoundPredicate *compound = (NSCompoundPredicate *) predicate;
+        NSMutableArray *subpredicates = [NSMutableArray array];
+
+        for (NSPredicate *sub in [compound subpredicates])
+            [subpredicates addObject: [self _predicateByResolvingObjectIDs: sub]];
+        return [[[NSCompoundPredicate alloc] initWithType: [compound compoundPredicateType]
+                                            subpredicates: subpredicates] autorelease];
+    }
+    if ([predicate isKindOfClass: [NSComparisonPredicate class]]) {
+        NSComparisonPredicate *comparison = (NSComparisonPredicate *) predicate;
+        NSExpression *sides[2] = { [comparison leftExpression], [comparison rightExpression] };
+        BOOL changed = NO;
+
+        for (int i = 0; i < 2; i++) {
+            if ([sides[i] expressionType] == NSConstantValueExpressionType) {
+                id value = [sides[i] constantValue];
+                id resolved = [self _valueByResolvingObjectIDs: value];
+
+                if (resolved != value) {
+                    sides[i] = [NSExpression expressionForConstantValue: resolved];
+                    changed = YES;
+                }
+            }
+        }
+        if (changed) {
+            return [[[NSComparisonPredicate alloc]
+                    initWithLeftExpression: sides[0]
+                           rightExpression: sides[1]
+                                  modifier: [comparison comparisonPredicateModifier]
+                                      type: [comparison predicateOperatorType]
+                                   options: [comparison options]] autorelease];
+        }
+    }
+    return predicate;
+}
+
 - (NSArray *) executeFetchRequest: (NSFetchRequest *) fetchRequest
                             error: (NSError **) error
 {
     NSEntityDescription *requestedEntity = [fetchRequest _entityIfKnown];
     if (!requestedEntity) requestedEntity = [[[_storeCoordinator managedObjectModel] entitiesByName] objectForKey:[fetchRequest entityName]];
     BOOL supported = requestedEntity && [[[_storeCoordinator managedObjectModel] entities] containsObject:requestedEntity] &&
-        [fetchRequest resultType] == NSManagedObjectResultType && ![fetchRequest fetchOffset] && ![fetchRequest fetchBatchSize] &&
+        [fetchRequest resultType] == NSManagedObjectResultType &&
         [fetchRequest includesPendingChanges] && ![fetchRequest returnsDistinctResults] && ![[fetchRequest propertiesToFetch] count] && ![[fetchRequest relationshipKeyPathsForPrefetching] count];
-    NSPredicate *predicate = [fetchRequest predicate];
-    if (predicate) {
-        supported = supported && [predicate isKindOfClass:[NSComparisonPredicate class]];
-        if (supported) {
-            NSComparisonPredicate *comparison = (NSComparisonPredicate *)predicate;
-            NSExpression *left = [comparison leftExpression], *right = [comparison rightExpression];
-            supported = [comparison predicateOperatorType] == NSEqualToPredicateOperatorType && [comparison comparisonPredicateModifier] == NSDirectPredicateModifier && ![comparison options] &&
-                [left expressionType] == NSKeyPathExpressionType && [right expressionType] == NSConstantValueExpressionType &&
-                [[[requestedEntity attributesByName] objectForKey:[left keyPath]] attributeType] == NSStringAttributeType && [[right constantValue] isKindOfClass:[NSString class]];
-        }
-    }
     for (NSSortDescriptor *descriptor in [fetchRequest sortDescriptors]) {
         NSAttributeDescription *attribute = [[requestedEntity attributesByName] objectForKey:[descriptor key]];
         NSAttributeType type = [attribute attributeType];
@@ -539,10 +657,28 @@ static char ContextQueueKey;
     NSPredicate *p = [fetchRequest predicate];
 
     if (p != nil) {
-        [result filterUsingPredicate: p];
+        BOOL sqlNulls = [affectedStores count] > 0;
+
+        for (NSPersistentStore *store in affectedStores) {
+            if (![store isKindOfClass: [NSSQLitePersistentStore class]])
+                sqlNulls = NO;
+        }
+        p = [self _predicateByResolvingObjectIDs: p];
+
+        NSMutableArray *matching = [NSMutableArray array];
+
+        for (NSManagedObject *object in result) {
+            if (_DarlingPredicateMatches(p, object, sqlNulls) == DarlingPredicateTrue)
+                [matching addObject: object];
+        }
+        result = matching;
     }
 
     [result sortUsingDescriptors: [fetchRequest sortDescriptors]];
+
+    NSUInteger fetchOffset = [fetchRequest fetchOffset];
+    if (fetchOffset > 0)
+        [result removeObjectsInRange: NSMakeRange(0, MIN(fetchOffset, [result count]))];
 
     NSUInteger fetchLimit = [fetchRequest fetchLimit];
     if (fetchLimit > 0 && [result count] > fetchLimit) {
@@ -849,6 +985,10 @@ static char ContextQueueKey;
                     [store addCacheNodes:[NSSet setWithObject:node]];
                     [node release];
                 }
+                // Objects saved together may refer to each other, so the properties are set once
+                // all their nodes exist.
+                for (NSManagedObject *object in storeInserted)
+                    [store updateCacheNode:[store cacheNodeForObjectID:[object objectID]] fromManagedObject:object];
                 for (NSManagedObject *object in storeUpdated) if (![storeDeleted containsObject:object]) [store updateCacheNode:[store cacheNodeForObjectID:[object objectID]] fromManagedObject:object];
                 success = [store save:error];
             }

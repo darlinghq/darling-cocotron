@@ -87,11 +87,11 @@ int main(int argc, char **argv) {
         // Object IDs of the deleted rows, with a comparison and an IN predicate.
         NSManagedObjectContext *reader = openContext(model, url);
         NSFetchRequest *all = [NSFetchRequest fetchRequestWithEntityName:@"Item"];
-        all.predicate = [NSPredicate predicateWithFormat:@"kind == %@", @"y"];
+        all.predicate = [NSPredicate predicateWithFormat:@"weight > 1 AND title IN %@", @[@"b", @"q"]];
         NSArray *expected = [[reader executeFetchRequest:all error:NULL] valueForKey:@"objectID"];
         CHECK([expected count] == 1);
         NSFetchRequest *byIDs = [NSFetchRequest fetchRequestWithEntityName:@"Item"];
-        byIDs.predicate = [NSPredicate predicateWithFormat:@"kind == %@", @"y"];
+        byIDs.predicate = [NSPredicate predicateWithFormat:@"weight > 1 AND title IN %@", @[@"b", @"q"]];
         delete = [[NSBatchDeleteRequest alloc] initWithFetchRequest:byIDs];
         delete.resultType = NSBatchDeleteResultTypeObjectIDs;
         result = (NSBatchDeleteResult *)[context executeRequest:delete error:&error];
@@ -104,7 +104,7 @@ int main(int argc, char **argv) {
 
         // A predicate that selects nothing deletes nothing; status only reports success.
         fetch = [NSFetchRequest fetchRequestWithEntityName:@"Item"];
-        fetch.predicate = [NSPredicate predicateWithFormat:@"kind == %@", @"q"];
+        fetch.predicate = [NSPredicate predicateWithFormat:@"title BEGINSWITH[c] %@", @"Q"];
         delete = [[NSBatchDeleteRequest alloc] initWithFetchRequest:fetch];
         delete.resultType = NSBatchDeleteResultTypeCount;
         result = (NSBatchDeleteResult *)[context executeRequest:delete error:&error];
