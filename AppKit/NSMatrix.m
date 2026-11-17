@@ -819,6 +819,19 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     NS_EXTRA(NSMatrix, self)->_keyCellIndex = -1;
 }
 
+// The intrinsic size of a matrix is that of its cells and the spacing between them, and none for a
+// matrix without cells.
+// QUIRK: not documented. Evidence: black-box observation on macOS 10.14.4 and 26.7.3 (tier 2) of
+// a three-row radio matrix: intrinsic size = cell width x (rows x cell height + (rows - 1) x
+// spacing), and 0x0 for an empty matrix. Test: tests/appkit-matrix-intrinsic-size.m
+// (test_quirk_matrix_intrinsic_size)
+- (NSSize) intrinsicContentSize {
+    if (_numberOfRows <= 0 || _numberOfColumns <= 0)
+        return NSZeroSize;
+    return NSMakeSize(_numberOfColumns * _cellSize.width + (_numberOfColumns - 1) * _intercellSpacing.width,
+                      _numberOfRows * _cellSize.height + (_numberOfRows - 1) * _intercellSpacing.height);
+}
+
 - (void) sizeToCells {
     [self sizeToFit];
 }
