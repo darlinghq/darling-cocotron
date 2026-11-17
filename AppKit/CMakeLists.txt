@@ -111,6 +111,7 @@ set(AppKit_sources
 	NSMutableAttributedString.m
 	NSRuleEditor.m
 	NSWorkspace.m
+	NSWorkspaceVolumeEvents.m
 	NSBezierPath.m
 	NSWindowAnimationContext.m
 	NSCellUndoManager.m

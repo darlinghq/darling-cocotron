@@ -3,6 +3,7 @@
 #import <AppKit/NSImage.h>
 #import <AppKit/NSRunningApplication.h>
 #import <AppKit/NSRaise.h>
+#import "NSWorkspaceVolumeEvents.h"
 #include <LaunchServices/LaunchServices.h>
 #include <LaunchServices/LaunchServicesPriv.h>
 #include <DiskArbitration/DiskArbitration.h>
@@ -951,12 +952,19 @@ static BOOL eject_request_wait(struct eject_request *request) {
         struct eject_request unmount = { NO, NO }, eject = { NO, NO };
 
         DASessionScheduleWithRunLoop(session, runLoop, (CFStringRef) NSWorkspaceEjectRunLoopMode);
+        // On the main thread, the process's own notification session must answer the unmount approval (and post
+        // the notifications) while the eject waits, or the request would wait for its approval timeout.
+        BOOL onMain = runLoop == CFRunLoopGetMain();
+        if (onMain)
+            NSWorkspaceVolumeEventsSchedule((CFStringRef) NSWorkspaceEjectRunLoopMode, YES);
         DADiskUnmount(whole, kDADiskUnmountOptionWhole, eject_request_completed, &unmount);
         if (eject_request_wait(&unmount)) {
             DADiskEject(whole, kDADiskEjectOptionDefault, eject_request_completed, &eject);
             ejected = eject_request_wait(&eject);
         }
         // A request that timed out can no longer call back: its session is unscheduled and released here.
+        if (onMain)
+            NSWorkspaceVolumeEventsSchedule((CFStringRef) NSWorkspaceEjectRunLoopMode, NO);
         DASessionUnscheduleFromRunLoop(session, runLoop, (CFStringRef) NSWorkspaceEjectRunLoopMode);
     }
     if (whole)
