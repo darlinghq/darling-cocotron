@@ -110,6 +110,35 @@ int main(void)
         extent(rep, 100, 1, &first, &last);
         CHECK(first == 3 && last == 8);
 
+        // a spinning indicator sizes to 32, 16 and 10 points and draws spokes inside that square
+        static const struct { NSControlSize size; int side; } spinners[] = {
+            { NSControlSizeRegular, 32 }, { NSControlSizeSmall, 16 }, { NSControlSizeMini, 10 }
+        };
+        for (int i = 0; i < 3; i++) {
+            NSProgressIndicator *spinner = [[NSProgressIndicator alloc] initWithFrame: NSMakeRect(0, 0, 50, 50)];
+            [spinner setStyle: NSProgressIndicatorStyleSpinning];
+            [spinner setIndeterminate: YES];
+            [spinner setUsesThreadedAnimation: NO];
+            [spinner setControlSize: spinners[i].size];
+            [spinner sizeToFit];
+            CHECK([spinner frame].size.width == spinners[i].side && [spinner frame].size.height == spinners[i].side);
+            NSBitmapImageRep *srep = [spinner bitmapImageRepForCachingDisplayInRect: [spinner bounds]];
+            [spinner cacheDisplayInRect: [spinner bounds] toBitmapImageRep: srep];
+            int minX = 1000, maxX = -1, dark = 0;
+            for (int x = 0; x < spinners[i].side; x++)
+                for (int y = 0; y < spinners[i].side; y++) {
+                    rgba(srep, x, y, c);
+                    if (c[3] > 30) {
+                        minX = MIN(minX, x);
+                        maxX = MAX(maxX, x);
+                    }
+                    dark += c[3] > 150 && c[0] < 100;
+                }
+            // the spokes reach the edge of the square, and the head spoke is dark
+            CHECK(minX <= 1 && maxX >= spinners[i].side - 2);
+            CHECK(dark >= 1);
+        }
+
         // an indicator is displayed when stopped by default, and an indeterminate bar is filled with blue all the way
         CHECK([[[NSProgressIndicator alloc] initWithFrame: NSMakeRect(0, 0, 10, 10)] isDisplayedWhenStopped]);
         rep = render(0, YES, 20, NSControlSizeRegular);
