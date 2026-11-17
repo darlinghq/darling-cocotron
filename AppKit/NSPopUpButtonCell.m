@@ -446,8 +446,41 @@ NSNotificationName NSPopUpButtonCellWillPopUpNotification =
     }
 }
 
+// QUIRK: a pop-up button (not a pull-down) is as wide as its widest item, not as the item that is
+// shown, so that the selection changing does not resize it: the widest title plus a fixed amount
+// for the bezel and the arrows, rounded up. The amount depends on the control size. Not documented.
+// Evidence: black-box observation on macOS 10.14.4 (tier 2) of the intrinsic width with titles of
+// 156, 135 and 113 points at the three control sizes, probe mac-probes/ua5-intrinsic.m of the
+// Darling research notes; 26.7.3 differs and is not followed.
+// Test: tests/appkit-popup-stepper-intrinsic-size.m (test_quirk_popup_widest_item_width)
+- (CGFloat) _widestItemWidthForPopUp {
+    NSFont *font = [self font];
+    NSDictionary *attributes = font != nil ? [NSDictionary dictionaryWithObject: font forKey: NSFontAttributeName] : nil;
+    CGFloat widest = 0;
+
+    for (NSMenuItem *item in [self itemArray]) {
+        NSString *title = [item title];
+
+        if (title != nil)
+            widest = MAX(widest, [title sizeWithAttributes: attributes].width);
+    }
+    return widest;
+}
+
 - (NSSize) cellSize {
     NSSize result = [super cellSize];
+
+    if (!NS_EXTRA(NSPopUpButtonCell, self)->_pullsDown && [[self itemArray] count] > 0) {
+        CGFloat extra = 32;
+
+        if ([self controlSize] == NSSmallControlSize)
+            extra = 28;
+        else if ([self controlSize] == NSMiniControlSize)
+            extra = 33;
+        CGFloat fitted = ceil([self _widestItemWidthForPopUp] + extra);
+
+        result.width = MAX(result.width, fitted);
+    }
 
     switch ([self controlSize]) {
 
