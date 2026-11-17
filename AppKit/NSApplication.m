@@ -1568,10 +1568,26 @@ static NSMutableArray *pendingOpenURLs = nil;
 }
 
 - (NSModalResponse) runModalSession: (NSModalSession) session {
+    return [self _runModalSession: session untilDate: [NSDate date]];
+}
+
+// Whether the modal window of the session, or a sheet attached to it (or to a sheet of it), is `window`: the
+// windows the user can work with while the session runs.
+static BOOL isModalWindowOrItsSheet(NSWindow *window, NSWindow *modalWindow) {
+    for (NSWindow *candidate = modalWindow; candidate != nil; candidate = [candidate attachedSheet]) {
+        if (candidate == window)
+            return YES;
+    }
+    return NO;
+}
+
+// Processes the events that arrive until the date; returns the stop code. runModalSession: passes the current date
+// (poll), runModalForWindow: a short time ahead, so that a modal loop sleeps between events instead of spinning.
+- (NSModalResponse) _runModalSession: (NSModalSession) session untilDate: (NSDate *) untilDate {
     while ([session stopCode] == NSRunContinuesResponse) {
         NSAutoreleasePool *pool = [NSAutoreleasePool new];
         NSEvent *event = [self nextEventMatchingMask: NSAnyEventMask
-                                           untilDate: [NSDate date]
+                                           untilDate: untilDate
                                               inMode: NSModalPanelRunLoopMode
                                              dequeue: YES];
 
@@ -1588,7 +1604,7 @@ static NSMutableArray *pendingOpenURLs = nil;
         if ([event type] == NSKeyDown && window == [session modalWindow])
             [self interpretKeyEvents: @[ event ]];
 
-        if (window == [session modalWindow] || [window worksWhenModal])
+        if (isModalWindowOrItsSheet(window, [session modalWindow]) || [window worksWhenModal])
             [self sendEvent: event];
         else if ([event type] == NSLeftMouseDown)
             [[session modalWindow] makeKeyAndOrderFront: self];
@@ -1647,7 +1663,10 @@ static NSMutableArray *pendingOpenURLs = nil;
     NSModalSession session = [self beginModalSessionForWindow: window];
     NSModalResponse result;
 
-    while ((result = [NSApp runModalSession: session]) ==
+    // Wait for events a short while at a time: the window's own stop (from a timer or a button) is noticed within
+    // that time, and the thread is not kept busy in between.
+    while ((result = [self _runModalSession: session
+                                  untilDate: [NSDate dateWithTimeIntervalSinceNow: 0.05]]) ==
            NSRunContinuesResponse)
         ;
     [self endModalSession: session];
