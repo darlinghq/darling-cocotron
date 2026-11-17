@@ -23,6 +23,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSMenu.h>
 #import <AppKit/NSRaise.h>
 #import <AppKit/NSSearchFieldCell.h>
+#import <AppKit/NSGraphicsStyle.h>
+#import <AppKit/NSView.h>
 #import <AppKit/NSTextField.h>
 #import <AppKit/NSWindow.h>
 
@@ -163,22 +165,15 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return [self titleRectForBounds: rect];
 }
 
+// QUIRK: the magnifying glass is 14 points wide and 4 points from the left edge of a search field, the cancel
+// button a 14 point disc 4 points from the right edge. Not documented. Evidence: black-box renders on macOS
+// 10.14.4 (tier 2). Test: appkit-textfield-aqua.m
 - (NSRect) searchButtonRectForBounds: (NSRect) rect {
-    NSRect result = [self titleRectForBounds: rect];
-
-    result.size.width = result.size.height;
-    result.origin.x -= result.size.width;
-
-    return result;
+    return NSMakeRect(NSMinX(rect) + 4, NSMinY(rect), 14, NSHeight(rect));
 }
 
 - (NSRect) cancelButtonRectForBounds: (NSRect) rect {
-    NSRect result = [self titleRectForBounds: rect];
-
-    result.origin.x += result.size.width;
-    result.size.width = result.size.height;
-
-    return result;
+    return NSMakeRect(NSMaxX(rect) - 4 - 14, NSMidY(rect) - 7, 14, 14);
 }
 
 - (void) _setResignsFirstResponderWithCancel: (BOOL) value {
@@ -194,10 +189,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (NSRect) titleRectForBounds: (NSRect) rect {
-    CGFloat radius = rect.size.height / 2;
     NSRect result = [super titleRectForBounds: rect];
 
-    result = NSInsetRect(result, radius, 0);
+    // between the magnifying glass and the cancel button
+    result.origin.x = NSMinX(rect) + 20;
+    result.size.width = NSWidth(rect) - 20 - 22;
 
     return result;
 }
@@ -229,15 +225,16 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                 untilMouseUp: untilMouseUp];
 }
 
+- (void) _drawSquareBezelInRect: (NSRect) frame inView: (NSView *) control {
+    [[control graphicsStyle] drawRoundedTextFieldBezelInRect: frame radius: 4];
+}
+
 - (void) drawWithFrame: (NSRect) frame inView: (NSView *) control {
     [super drawWithFrame: frame inView: control];
 
-    [_searchButtonCell drawWithFrame: [self searchButtonRectForBounds: frame]
-                              inView: control];
+    [[control graphicsStyle] drawSearchGlyphInRect: [self searchButtonRectForBounds: frame]];
     if ([[self attributedStringValue] length] > 0)
-        [_cancelButtonCell
-                drawWithFrame: [self cancelButtonRectForBounds: frame]
-                       inView: control];
+        [[control graphicsStyle] drawSearchCancelGlyphInRect: [self cancelButtonRectForBounds: frame]];
 }
 
 @end

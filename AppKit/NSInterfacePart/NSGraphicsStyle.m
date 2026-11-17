@@ -950,9 +950,18 @@ static void NSAquaDrawProgressTrack(NSRect bar) {
 - (void) drawTextFieldBorderInRect: (NSRect) rect
                     bezeledNotLine: (BOOL) bezeledNotLine
 {
-    if (bezeledNotLine)
-        NSDrawWhiteBezel(rect, rect);
-    else {
+    if (bezeledNotLine) {
+        // QUIRK: the bezel of a text field on macOS 10.14 (light appearance) is a white rectangle with a
+        // one point outline of black at 20%. Not documented. Evidence: black-box renders of NSTextField
+        // on macOS 10.14.4 at 1x (tier 2). Test: appkit-textfield-aqua.m
+        [[NSColor whiteColor] setFill];
+        NSRectFill(NSInsetRect(rect, 1, 1));
+        [[NSColor colorWithCalibratedWhite: 0 alpha: 0.2] setFill];
+        NSRectFill(NSMakeRect(NSMinX(rect), NSMinY(rect), NSWidth(rect), 1));
+        NSRectFill(NSMakeRect(NSMinX(rect), NSMaxY(rect) - 1, NSWidth(rect), 1));
+        NSRectFill(NSMakeRect(NSMinX(rect), NSMinY(rect) + 1, 1, NSHeight(rect) - 2));
+        NSRectFill(NSMakeRect(NSMaxX(rect) - 1, NSMinY(rect) + 1, 1, NSHeight(rect) - 2));
+    } else {
         [[NSColor blackColor] setStroke];
         NSFrameRect(rect);
     }
@@ -1307,6 +1316,64 @@ static void NSAquaDrawToggle(NSRect rect, BOOL radio, NSInteger state, BOOL high
     [[NSColor colorWithCalibratedWhite: 0 alpha: 0.07] setStroke];
     [path setLineWidth: 1];
     [path stroke];
+}
+
+@end
+
+@implementation NSGraphicsStyle (NSSearchFieldAqua)
+
+// QUIRK: the rounded text field and search field look of macOS 10.14 (light appearance): a white rounded
+// rectangle with a one point outline of black at 20%; a search field has a dark gray magnifying glass at its
+// left and, when it has text, a gray disc with a white cross at its right. Not documented. Evidence:
+// black-box renders of NSSearchField on macOS 10.14.4 at 1x and 2x (tier 2). Test: appkit-textfield-aqua.m
+- (void) drawRoundedTextFieldBezelInRect: (NSRect) rect radius: (CGFloat) radius {
+    NSBezierPath *outline = [NSBezierPath bezierPathWithRoundedRect: NSInsetRect(rect, 0.5, 0.5)
+                                                            xRadius: radius - 0.5
+                                                            yRadius: radius - 0.5];
+
+    // the edge is a translucent line over the background, so the white stops inside it
+    [[NSColor whiteColor] setFill];
+    [[NSBezierPath bezierPathWithRoundedRect: NSInsetRect(rect, 1, 1) xRadius: MAX(radius - 1, 0)
+                                     yRadius: MAX(radius - 1, 0)] fill];
+    [[NSColor colorWithCalibratedWhite: 0 alpha: 0.2] setStroke];
+    [outline setLineWidth: 1];
+    [outline stroke];
+}
+
+- (void) drawSearchGlyphInRect: (NSRect) rect {
+    // "down" is the direction of increasing y when looking at the glyph: +1 in a flipped coordinate system
+    CGFloat down = [[NSGraphicsContext currentContext] isFlipped] ? 1 : -1;
+    CGFloat r = MIN(NSWidth(rect), NSHeight(rect)) * 0.27;
+    NSPoint center = NSMakePoint(NSMinX(rect) + 1.5 + r, NSMidY(rect) - down * 1.5);
+    NSBezierPath *glass = [NSBezierPath bezierPathWithOvalInRect: NSMakeRect(center.x - r, center.y - r, 2 * r, 2 * r)];
+    NSBezierPath *handle = [NSBezierPath bezierPath];
+
+    [[NSColor colorWithCalibratedWhite: 0.35 alpha: 1] setStroke];
+    [glass setLineWidth: 1.1];
+    [glass stroke];
+    [handle moveToPoint: NSMakePoint(center.x + r * 0.707, center.y + down * r * 0.707)];
+    [handle lineToPoint: NSMakePoint(center.x + r * 0.707 + 3, center.y + down * (r * 0.707 + 3))];
+    [handle setLineWidth: 1.4];
+    [handle setLineCapStyle: NSRoundLineCapStyle];
+    [handle stroke];
+}
+
+- (void) drawSearchCancelGlyphInRect: (NSRect) rect {
+    CGFloat d = MIN(NSWidth(rect), NSHeight(rect));
+    NSRect disc = NSMakeRect(NSMidX(rect) - d / 2, NSMidY(rect) - d / 2, d, d);
+    NSBezierPath *cross = [NSBezierPath bezierPath];
+    CGFloat r = d * 0.2;
+
+    [[NSColor colorWithCalibratedWhite: 0.5 alpha: 1] setFill];
+    [[NSBezierPath bezierPathWithOvalInRect: disc] fill];
+    [cross moveToPoint: NSMakePoint(NSMidX(disc) - r, NSMidY(disc) - r)];
+    [cross lineToPoint: NSMakePoint(NSMidX(disc) + r, NSMidY(disc) + r)];
+    [cross moveToPoint: NSMakePoint(NSMidX(disc) - r, NSMidY(disc) + r)];
+    [cross lineToPoint: NSMakePoint(NSMidX(disc) + r, NSMidY(disc) - r)];
+    [[NSColor whiteColor] setStroke];
+    [cross setLineWidth: 1.5];
+    [cross setLineCapStyle: NSRoundLineCapStyle];
+    [cross stroke];
 }
 
 @end

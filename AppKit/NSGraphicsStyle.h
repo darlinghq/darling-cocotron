@@ -255,3 +255,11 @@ typedef struct _Margins {
 - (void) drawAquaBoxInRect: (NSRect) rect;
 @end
 
+@interface NSGraphicsStyle (NSSearchFieldAqua)
+/* A rounded white bezel (a 4 point radius for a search field, a capsule for a rounded text field). */
+- (void) drawRoundedTextFieldBezelInRect: (NSRect) rect radius: (CGFloat) radius;
+/* The magnifying glass and the cancel button of a search field. */
+- (void) drawSearchGlyphInRect: (NSRect) rect;
+- (void) drawSearchCancelGlyphInRect: (NSRect) rect;
+@end
+

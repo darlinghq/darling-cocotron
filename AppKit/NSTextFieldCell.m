@@ -416,6 +416,10 @@ static void drawRoundedBezel(CGContextRef context, CGRect frame) {
     CGContextFillPath(context);
 }
 
+- (void) _drawSquareBezelInRect: (NSRect) frame inView: (NSView *) control {
+    [[control graphicsStyle] drawTextFieldBorderInRect: frame bezeledNotLine: YES];
+}
+
 - (void) drawWithFrame: (NSRect) frame inView: (NSView *) control {
     NSRect backRect = [self drawingRectForBounds: frame];
 
@@ -425,12 +429,15 @@ static void drawRoundedBezel(CGContextRef context, CGRect frame) {
         switch ([self bezelStyle]) {
         default:
         case NSTextFieldSquareBezel:
-            [[control graphicsStyle] drawTextFieldBorderInRect: frame
-                                                bezeledNotLine: YES];
+            [self _drawSquareBezelInRect: frame inView: control];
             backRect = NSInsetRect(backRect, -1, -1);
             break;
 
         case NSTextFieldRoundedBezel:;
+            if (YES) {
+                [[control graphicsStyle] drawRoundedTextFieldBezelInRect: frame radius: floor(frame.size.height / 2)];
+                break;
+            }
             CGContextRef context =
                     [[NSGraphicsContext currentContext] graphicsPort];
             NSRect roundedFrame = frame;
