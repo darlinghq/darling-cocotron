@@ -21,7 +21,11 @@ static NSString *installNameOfImageDefining(Class cls) {
     Dl_info info;
     if (cls == Nil || !dladdr((const void *) cls, &info) || info.dli_fbase == NULL)
         return nil;
+#ifdef __LP64__
     const struct mach_header_64 *header = (const struct mach_header_64 *) info.dli_fbase;
+#else
+    const struct mach_header *header = (const struct mach_header *) info.dli_fbase;
+#endif
     const uint8_t *command = (const uint8_t *) (header + 1);
     for (uint32_t i = 0; i < header->ncmds; i++) {
         const struct load_command *lc = (const struct load_command *) command;
