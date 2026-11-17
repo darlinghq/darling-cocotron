@@ -96,7 +96,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     _style = NSProgressIndicatorBarStyle;
     _size = NSRegularControlSize;
     _tint = 0;
-    _displayWhenStopped = NO;
+    // documented default: the indicator is shown while it is not animating
+    _displayWhenStopped = YES;
     _isBezeled = YES;
     _isIndeterminate = YES;
     _usesThreadedAnimation = NO;

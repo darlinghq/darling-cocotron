@@ -514,43 +514,71 @@ static NSDictionary *sScrollerButtonAttributes = nil;
     NSRectFill(rect);
 }
 
-// rough estimates
-#define BLOCK_WIDTH 8.0
-#define BLOCK_SPACING 2.0
+// QUIRK: the progress bar look of macOS 10.14 (light appearance). Not documented. Evidence: black-box
+// renders of NSProgressIndicator (bar style) on macOS 10.14.4 at 1x (tier 2): the bar is 6 points high at every
+// control size, centred in the view and inset 1 point from its left and right edges; the track is black at
+// 7% with a darker edge, the fill is the blue (61,130,253) with a slightly darker edge, both with fully
+// rounded ends; an indeterminate bar is the fill with a horizontal gradient towards a lighter blue.
+// Test: appkit-progress-aqua.m
+static const CGFloat NSAquaProgressBarHeight = 6;
+
+static NSRect NSAquaProgressBarRect(NSRect rect) {
+    return NSMakeRect(NSMinX(rect) + 1, round(NSMidY(rect) - NSAquaProgressBarHeight / 2),
+                      NSWidth(rect) - 2, NSAquaProgressBarHeight);
+}
+
+static void NSAquaDrawProgressFill(NSRect bar, NSRect fill, double animation, BOOL indeterminate) {
+    CGContextRef ctx = [[NSGraphicsContext currentContext] graphicsPort];
+    CGFloat radius = NSHeight(bar) / 2;
+
+    CGContextSaveGState(ctx);
+    [[NSBezierPath bezierPathWithRoundedRect: bar xRadius: radius yRadius: radius] addClip];
+    if (indeterminate) {
+        CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB();
+        CGFloat comps[8] = {61 / 255.0, 130 / 255.0, 253 / 255.0, 1, 108 / 255.0, 162 / 255.0, 1, 1};
+        CGGradientRef gradient = CGGradientCreateWithColorComponents(space, comps, NULL, 2);
+        // the gradient travels along the bar and wraps around
+        CGFloat span = NSWidth(bar), offset = fmod(animation, 1) * span;
+
+        for (int k = -1; k <= 1; k++) {
+            CGFloat x0 = NSMinX(bar) + offset + k * span;
+            CGContextDrawLinearGradient(ctx, gradient, CGPointMake(x0, 0), CGPointMake(x0 + span, 0), 0);
+        }
+        CGGradientRelease(gradient);
+        CGColorSpaceRelease(space);
+    } else {
+        // the end of a partial fill is square; the track's rounded shape clips the ends of a full one
+        [[NSColor colorWithCalibratedRed: 61 / 255.0 green: 130 / 255.0 blue: 253 / 255.0 alpha: 1] setFill];
+        NSRectFill(fill);
+        [[NSColor colorWithCalibratedRed: 53 / 255.0 green: 113 / 255.0 blue: 220 / 255.0 alpha: 1] setFill];
+        NSRectFill(NSMakeRect(NSMinX(fill), NSMinY(fill), NSWidth(fill), 1));
+        NSRectFill(NSMakeRect(NSMinX(fill), NSMaxY(fill) - 1, NSWidth(fill), 1));
+    }
+    CGContextRestoreGState(ctx);
+}
+
+static void NSAquaDrawProgressTrack(NSRect bar) {
+    CGFloat radius = NSHeight(bar) / 2;
+
+    [[NSColor colorWithCalibratedWhite: 0 alpha: 0.07] setFill];
+    [[NSBezierPath bezierPathWithRoundedRect: bar xRadius: radius yRadius: radius] fill];
+    [[NSColor colorWithCalibratedWhite: 0 alpha: 0.12] setStroke];
+    NSBezierPath *edge = [NSBezierPath bezierPathWithRoundedRect: NSInsetRect(bar, 0.5, 0.5)
+                                                         xRadius: radius - 0.5
+                                                         yRadius: radius - 0.5];
+    [edge setLineWidth: 1];
+    [edge stroke];
+}
 
 - (void) drawProgressIndicatorIndeterminate: (NSRect) rect
                                    clipRect: (NSRect) clipRect
                                     bezeled: (BOOL) bezeled
                                   animation: (double) animation
 {
-    if (bezeled)
-        rect = [self drawProgressIndicatorBackground: rect
-                                            clipRect: clipRect
-                                             bezeled: bezeled];
+    NSRect bar = NSAquaProgressBarRect(rect);
 
-    NSRect progressRect = rect;
-    NSRect blockRect = progressRect;
-    int numBlocks;
-
-    numBlocks = (animation * progressRect.size.width) /
-                (BLOCK_WIDTH + BLOCK_SPACING);
-
-    if (numBlocks > 0)
-        numBlocks++;
-
-    while (numBlocks-- >= 0) {
-        blockRect.size.width = BLOCK_WIDTH;
-
-        if (NSMaxX(blockRect) > NSMaxX(progressRect))
-            blockRect.size.width -= (NSMaxX(blockRect) - NSMaxX(progressRect));
-
-        if (blockRect.size.width > 0) {
-            if (numBlocks < 2) {
-                [self drawProgressIndicatorChunk: blockRect];
-            }
-            blockRect.origin.x += BLOCK_WIDTH + BLOCK_SPACING;
-        }
-    }
+    NSAquaDrawProgressTrack(bar);
+    NSAquaDrawProgressFill(bar, bar, animation, YES);
 }
 
 - (void) drawProgressIndicatorDeterminate: (NSRect) rect
@@ -558,32 +586,14 @@ static NSDictionary *sScrollerButtonAttributes = nil;
                                   bezeled: (BOOL) bezeled
                                     value: (double) value
 {
-    if (bezeled)
-        rect = [self drawProgressIndicatorBackground: rect
-                                            clipRect: clipRect
-                                             bezeled: bezeled];
+    NSRect bar = NSAquaProgressBarRect(rect);
+    NSRect fill = bar;
 
-    NSRect progressRect = rect;
-    NSRect blockRect = progressRect;
-    int numBlocks;
-
-    numBlocks =
-            (value * progressRect.size.width) / (BLOCK_WIDTH + BLOCK_SPACING);
-
-    if (numBlocks > 0)
-        numBlocks++;
-
-    while (numBlocks-- >= 0) {
-        blockRect.size.width = BLOCK_WIDTH;
-
-        if (NSMaxX(blockRect) > NSMaxX(progressRect))
-            blockRect.size.width -= (NSMaxX(blockRect) - NSMaxX(progressRect));
-
-        if (blockRect.size.width > 0) {
-            [self drawProgressIndicatorChunk: blockRect];
-            blockRect.origin.x += BLOCK_WIDTH + BLOCK_SPACING;
-        }
-    }
+    value = MAX(0, MIN(1, value));
+    fill.size.width = round(NSWidth(bar) * value);
+    NSAquaDrawProgressTrack(bar);
+    if (NSWidth(fill) > 0)
+        NSAquaDrawProgressFill(bar, fill, 0, NO);
 }
 
 @end
