@@ -207,6 +207,36 @@ int main(void)
         CHECK(c[0] < 110);
         gActive = YES;
 
+        // a button with the Return key equivalent becomes the window's default button on its own (observed on
+        // Mac OS X 10.14.4 and macOS 26.7.3); one added to the window later does not take over, one given the key equivalent in the window does
+        {
+            NSWindow *plain = [[NSWindow alloc] initWithContentRect: NSMakeRect(0, 0, 200, 100)
+                                                          styleMask: NSWindowStyleMaskTitled
+                                                            backing: NSBackingStoreBuffered
+                                                              defer: NO];
+            NSButton *ok = [NSButton buttonWithTitle: @"OK" target: nil action: nil];
+            [ok setKeyEquivalent: @"\r"];
+            [[plain contentView] addSubview: ok];
+            CHECK([plain defaultButtonCell] == [ok cell]);
+            NSButton *other = [NSButton buttonWithTitle: @"Other" target: nil action: nil];
+            [[plain contentView] addSubview: other];
+            [other setKeyEquivalent: @"\r"];
+            CHECK([plain defaultButtonCell] == [other cell]);
+            NSButton *early = [NSButton buttonWithTitle: @"Early" target: nil action: nil];
+            [early setKeyEquivalent: @"\r"];
+            [[plain contentView] addSubview: early];
+            CHECK([plain defaultButtonCell] == [other cell]);
+            NSButton *late = [NSButton buttonWithTitle: @"Late" target: nil action: nil];
+            NSWindow *second = [[NSWindow alloc] initWithContentRect: NSMakeRect(0, 0, 200, 100)
+                                                           styleMask: NSWindowStyleMaskTitled
+                                                             backing: NSBackingStoreBuffered
+                                                               defer: NO];
+            [[second contentView] addSubview: late];
+            CHECK([second defaultButtonCell] == nil);
+            [late setKeyEquivalent: @"\r"];
+            CHECK([second defaultButtonCell] == [late cell]);
+        }
+
         // rounded push button: white bezel; blue gradient when default or pressed; fainter when disabled.
         // Columns are sampled away from the title; rows are relative to the bezel's top and bottom edge.
         int top, bottom;

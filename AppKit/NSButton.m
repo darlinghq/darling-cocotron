@@ -192,8 +192,28 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [self setNeedsDisplay: YES];
 }
 
+/* QUIRK: a button whose key equivalent is Return becomes the window's default button without a call to
+   -setDefaultButtonCell:: when it is added to a window that has no default button yet (a second such button
+   added later does not take over), and when its key equivalent is set to Return while it is in a window (this
+   replaces an earlier default button). Not documented. Evidence: black-box observation on macOS 10.14.4 and
+   26.7.3 (tier 2). Test: appkit-button-aqua.m */
+- (void) _adoptAsDefaultButtonIfReturn: (BOOL) replace {
+    NSWindow *window = [self window];
+
+    if (window != nil && (replace || [window defaultButtonCell] == nil) &&
+        [_cell isKindOfClass: [NSButtonCell class]] && [[_cell keyEquivalent] isEqualToString: @"\r"] &&
+        [_cell keyEquivalentModifierMask] == 0 && [window defaultButtonCell] != _cell)
+        [window setDefaultButtonCell: _cell];
+}
+
+- (void) viewDidMoveToWindow {
+    [super viewDidMoveToWindow];
+    [self _adoptAsDefaultButtonIfReturn: NO];
+}
+
 - (void) setKeyEquivalent: (NSString *) value {
     [_cell setKeyEquivalent: value];
+    [self _adoptAsDefaultButtonIfReturn: YES];
     [self setNeedsDisplay: YES];
 }
 
