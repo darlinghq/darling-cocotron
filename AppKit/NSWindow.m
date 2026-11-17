@@ -2276,6 +2276,8 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
         [_firstResponder performSelector: _cmd];
 
     [self postNotificationName: NSWindowDidBecomeKeyNotification];
+    // controls draw differently in a window that is not key (see NSGraphicsStyle), so redraw them
+    [[self contentView] setNeedsDisplay: YES];
 }
 
 - (void) resignKeyWindow {
@@ -2283,6 +2285,7 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
         [_firstResponder performSelector: _cmd];
 
     [self postNotificationName: NSWindowDidResignKeyNotification];
+    [[self contentView] setNeedsDisplay: YES];
 }
 
 - (void) becomeMainWindow {

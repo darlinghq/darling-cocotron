@@ -96,7 +96,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     _style = NSProgressIndicatorBarStyle;
     _size = NSRegularControlSize;
     _tint = 0;
-    _displayWhenStopped = NO;
+    // documented default: the indicator is shown while it is not animating
+    _displayWhenStopped = YES;
     _isBezeled = YES;
     _isIndeterminate = YES;
     _usesThreadedAnimation = NO;
@@ -154,9 +155,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     CGFloat angle = 0; // MI_PI*2.0/4.0;
     CGFloat arc = M_PI * 2.0 / numberOfRays;
     CGFloat minAxis = MIN(bounds.size.width, bounds.size.height);
-    CGFloat lineWidth = minAxis / numberOfRays / 2;
+    // QUIRK: the spokes of the spinning style are 10% of the diameter wide, from black at the head to light gray at the
+    // tail, 12 of them. Evidence: black-box renders on macOS 10.14.4 at 1x and 2x (tier 2).
+    // Test: appkit-progress-aqua.m
+    CGFloat lineWidth = MAX(1, minAxis * 0.1);
 
-    lineWidth += lineWidth * 0.50;
     CGContextSaveGState(context);
     CGContextSetLineWidth(context, lineWidth);
     CGContextSetLineCap(context, kCGLineCapRound);
@@ -328,7 +331,15 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [self setDoubleValue: _value + value];
 }
 
+// QUIRK: a spinning indicator sizes itself to a square of 32, 16 or 10 points for the regular, small and mini
+// control sizes. Not documented. Evidence: black-box observation on macOS 10.14.4 (tier 2) of the frame after
+// -sizeToFit. Test: appkit-progress-aqua.m
 - (void) sizeToFit {
+    if (_style == NSProgressIndicatorSpinningStyle) {
+        CGFloat side = _size == NSSmallControlSize ? 16 : (_size == NSMiniControlSize ? 10 : 32);
+
+        [self setFrameSize: NSMakeSize(side, side)];
+    }
 }
 
 - (void) _runThreadedAnimation: (id) arg {

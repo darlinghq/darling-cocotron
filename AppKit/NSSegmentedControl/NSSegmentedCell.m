@@ -19,7 +19,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import "NSSegmentItem.h"
 #import <AppKit/NSButtonCell.h>
+#import <AppKit/NSGraphicsStyle.h>
 #import <AppKit/NSPopUpWindow.h>
+#import <AppKit/NSGraphics.h>
+#import <AppKit/NSWindow.h>
 #import <AppKit/NSRaise.h>
 #import <AppKit/NSSegmentedCell.h>
 
@@ -172,6 +175,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (void) setSegmentStyle: (NSSegmentStyle) value {
     _style = value;
+    [self _recomputeSegmentWidths];
 }
 
 - (void) setTrackingMode: (NSSegmentSwitchTracking) trackingMode {
@@ -259,6 +263,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [self _recomputeSegmentWidths];
 }
 
+- (NSFont *) _aquaFont {
+    NSFont *font = [self font];
+
+    return font != nil ? font : [NSFont systemFontOfSize: [NSFont systemFontSizeForControlSize: [self controlSize]]];
+}
+
 - (NSButtonCell *) _cellForSegment: (NSInteger) idx {
     NSSegmentItem *segment = [_segments objectAtIndex: idx];
     NSButtonCell *cell = [[NSButtonCell new] autorelease];
@@ -311,6 +321,17 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         if (w <= 0.0) {
             NSCell *cell = [self _cellForSegment: i];
             w = [cell cellSize].width;
+            if ((_style == NSSegmentStyleAutomatic || _style == NSSegmentStyleRounded) && [segment image] == nil) {
+                // QUIRK: the automatic width of a text segment of a rounded control is the width of the
+                // label plus 30.5, 27 or 22.5 points (regular, small, mini). Not documented. Evidence:
+                // black-box renders on macOS 10.14.4 (tier 2): total widths of 162, 139 and 116 points for
+                // the labels One, Two and Three. Test: appkit-segmented-aqua.m
+                static const CGFloat padding[3] = {30.5, 27, 22.5};
+                NSDictionary *attributes = [NSDictionary dictionaryWithObject: [self _aquaFont] forKey: NSFontAttributeName];
+                int index = [self controlSize] == NSSmallControlSize ? 1 : ([self controlSize] == NSMiniControlSize ? 2 : 0);
+
+                w = ceil([[segment label] sizeWithAttributes: attributes].width + padding[index]);
+            }
         }
         [_segmentComputedWidths addObject: [NSNumber numberWithDouble: w]];
     }
@@ -326,6 +347,75 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [cell drawWithFrame: frame inView: view];
 }
 
+/* QUIRK: a rounded (or automatic) segmented control is drawn like the tab strip of a tab view: one white
+   rounded strip 20, 17 or 14 points high (regular, small, mini), a blue segment for the selected one (gray in a
+   window that is not active, and when the control is disabled), light dividers between segments that do not
+   touch the selected one, and the selected label in white on blue. Not documented. Evidence: black-box
+   renders of NSSegmentedControl on macOS 10.14.4 at 1x (tier 2), the same metrics as the tab strip. The other
+   styles keep drawing button bezels. Test: appkit-segmented-aqua.m */
+- (void) _drawAquaWithFrame: (NSRect) cellFrame inView: (NSView *) controlView {
+    static const CGFloat heights[3] = {20, 17, 14};
+    int index = [self controlSize] == NSSmallControlSize ? 1 : ([self controlSize] == NSMiniControlSize ? 2 : 0);
+    int i, count = [self segmentCount];
+    CGFloat total = 0;
+    NSGraphicsStyle *style = [controlView graphicsStyle];
+    BOOL active = [[controlView window] isKeyWindow] && [self isEnabled];
+
+    for (i = 0; i < count; i++)
+        total += [[_segmentComputedWidths objectAtIndex: i] doubleValue];
+
+    NSRect strip = NSMakeRect(NSMinX(cellFrame), floor(NSMidY(cellFrame) - heights[index] / 2), total, heights[index]);
+    CGFloat x = NSMinX(strip);
+    NSInteger selected = -1;
+
+    [style drawTabStripInRect: strip];
+    for (i = 0; i < count; i++) {
+        NSRect segmentFrame = NSMakeRect(x, NSMinY(strip), [[_segmentComputedWidths objectAtIndex: i] doubleValue],
+                                         NSHeight(strip));
+
+        if ([self isSelectedForSegment: i]) {
+            selected = i;
+            [style drawSelectedTabInRect: segmentFrame stripRect: strip active: active];
+        }
+        x += NSWidth(segmentFrame);
+    }
+    x = NSMinX(strip);
+    for (i = 0; i < count; i++) {
+        NSRect segmentFrame = NSMakeRect(x, NSMinY(strip), [[_segmentComputedWidths objectAtIndex: i] doubleValue],
+                                         NSHeight(strip));
+
+        if (i > 0 && i != selected && i - 1 != selected)
+            [style drawTabDividerInRect: NSMakeRect(NSMinX(segmentFrame), NSMinY(segmentFrame) + 1, 1,
+                                                    NSHeight(segmentFrame) - 2)];
+        NSButtonCell *cell = [self _cellForSegment: i];
+        BOOL white = i == selected && active;
+        NSString *label = [[_segments objectAtIndex: i] label];
+
+        if ([label length] > 0) {
+            NSMutableAttributedString *title = [[[NSMutableAttributedString alloc] initWithString: label] autorelease];
+            NSMutableParagraphStyle *paragraph = [[[NSParagraphStyle defaultParagraphStyle] mutableCopy] autorelease];
+
+            [paragraph setAlignment: NSCenterTextAlignment];
+            [paragraph setLineBreakMode: NSLineBreakByTruncatingTail];
+            [title addAttribute: NSParagraphStyleAttributeName value: paragraph range: NSMakeRange(0, [label length])];
+            [title addAttribute: NSFontAttributeName value: [self _aquaFont] range: NSMakeRange(0, [label length])];
+            [title addAttribute: NSForegroundColorAttributeName
+                          value: white ? [NSColor whiteColor]
+                                       : ([self isEnabled] ? [NSColor controlTextColor] : [NSColor disabledControlTextColor])
+                          range: NSMakeRange(0, [label length])];
+            [cell setAttributedTitle: title];
+        }
+        [cell setHighlighted: NO];
+        [cell setBordered: NO];
+        [cell setControlView: controlView];
+        [NSGraphicsContext saveGraphicsState];
+        NSRectClip(segmentFrame);
+        [cell drawInteriorWithFrame: segmentFrame inView: controlView];
+        [NSGraphicsContext restoreGraphicsState];
+        x += NSWidth(segmentFrame);
+    }
+}
+
 - (void) drawWithFrame: (NSRect) cellFrame inView: (NSView *) controlView {
 
     int i = 0, count = [self segmentCount];
@@ -333,6 +423,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
     if ([_segmentComputedWidths count] != count)
         [self _recomputeSegmentWidths];
+
+    if (_style == NSSegmentStyleAutomatic || _style == NSSegmentStyleRounded) {
+        [self _drawAquaWithFrame: cellFrame inView: controlView];
+        _lastDrawRect = cellFrame;
+        return;
+    }
 
     for (i = 0; i < count; i++) {
         segmentFrame.size.width =
@@ -353,6 +449,18 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (NSSize) cellSize {
     NSSize cellSize = NSMakeSize(0., 0.);
+
+    if ((_style == NSSegmentStyleAutomatic || _style == NSSegmentStyleRounded) &&
+        [_segmentComputedWidths count] == [self segmentCount]) {
+        // the segments' widths are those of the strip, and it is as high as the control size says
+        static const CGFloat heights[3] = {21, 18, 15};
+        int index = [self controlSize] == NSSmallControlSize ? 1 : ([self controlSize] == NSMiniControlSize ? 2 : 0);
+
+        for (NSNumber *width in _segmentComputedWidths)
+            cellSize.width += [width doubleValue];
+        cellSize.height = heights[index] + 1;
+        return cellSize;
+    }
     for (int i = 0; i < [self segmentCount]; ++i) {
         NSCell *cell = [self _cellForSegment: i];
         NSSize size = [cell cellSize];

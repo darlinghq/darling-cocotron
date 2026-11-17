@@ -862,6 +862,13 @@ static const CGFloat kImageMargin = 2.;
     }
 }
 
+- (BOOL) _isStockToggleImage: (NSImage *) image {
+    NSString *name = [image name];
+
+    return [name isEqualToString: @"NSSwitch"] || [name isEqualToString: @"NSHighlightedSwitch"] ||
+           [name isEqualToString: @"NSRadioButton"] || [name isEqualToString: @"NSHighlightedRadioButton"];
+}
+
 - (NSRect) imageRectForBounds: (NSRect) rect {
     // Make sure we use the same image as will be drawn!
     NSImage *image = [self imageForHighlight];
@@ -874,6 +881,19 @@ static const CGFloat kImageMargin = 2.;
                 [[[self controlView] graphicsStyle] sizeOfButtonImage: image
                                                               enabled: enabled
                                                                 mixed: mixed];
+    }
+    NSString *name = [image name];
+
+    if ([name isEqualToString: @"NSSwitch"] || [name isEqualToString: @"NSHighlightedSwitch"] ||
+        [name isEqualToString: @"NSRadioButton"] || [name isEqualToString: @"NSHighlightedRadioButton"]) {
+        // QUIRK: the title of a check box or radio button starts 18 points from the left edge of the cell
+        // (15 at the mini size), clear of the box; its ink starts 20 points from the edge on macOS, with
+        // the glyph's own margin (a title that started further right would not fit the cell, which is as
+        // wide as the title and 18 points). Not documented. Evidence: black-box renders on macOS 10.14.4 (tier 2),
+        // regular, small and mini, equal for check boxes and radio buttons.
+        // The width of the image area is what the title is placed after.
+        // Test: appkit-button-aqua.m
+        imageSize.width = [self controlSize] == NSMiniControlSize ? 11 : 14;
     }
     return NSMakeRect(rect.origin.x, rect.origin.y, imageSize.width,
                       imageSize.height);
@@ -1077,6 +1097,25 @@ static void drawRoundedBezel(CGContextRef context, CGRect frame) {
     CGContextFillPath(context);
 }
 
+/* Pop-up and pull-down buttons with a rounded bezel and an arrow are drawn whole by the graphics style (the
+   arrows are part of the end cap). Answers NO for every other button. */
+- (BOOL) _drawsPopUpBezelInRect: (NSRect) frame {
+    if (![self isKindOfClass: [NSPopUpButtonCell class]] ||
+        NS_EXTRA(NSButtonCell, self)->_bezelStyle != NSRoundedBezelStyle ||
+        [(NSPopUpButtonCell *) self arrowPosition] == NSPopUpNoArrow)
+        return NO;
+
+    BOOL pressed = ([self highlightsBy] & NSPushInCellMask) && [self isHighlighted];
+
+    [[_controlView graphicsStyle] drawPopUpButtonInRect: frame
+                                              pullsDown: [(NSPopUpButtonCell *) self pullsDown]
+                                                pressed: pressed
+                                                enabled: [self isEnabled]
+                                                 active: [[_controlView window] isKeyWindow]
+                                            controlSize: [self controlSize]];
+    return YES;
+}
+
 - (void) drawBezelWithFrame: (NSRect) frame inView: (NSView *) controlView {
     BOOL defaulted = ([[controlView window] defaultButtonCell] == self);
 
@@ -1164,17 +1203,15 @@ static void drawRoundedBezel(CGContextRef context, CGRect frame) {
                     drawUnborderedButtonInRect: frame
                                      defaulted: defaulted];
         } else {
-            if (([self highlightsBy] & NSPushInCellMask) &&
-                [self isHighlighted])
-                [[_controlView graphicsStyle]
-                        drawPushButtonPressedInRect: frame];
-            else if ([self isVisuallyHighlighted])
-                [[_controlView graphicsStyle]
-                        drawPushButtonHighlightedInRect: frame];
-            else
-                [[_controlView graphicsStyle]
-                        drawPushButtonNormalInRect: frame
-                                         defaulted: defaulted];
+            // pressed push-in buttons and default buttons are blue when drawn by the style
+            BOOL pressed = ([self highlightsBy] & NSPushInCellMask) && [self isHighlighted];
+
+            if (![self _drawsPopUpBezelInRect: frame])
+                [[_controlView graphicsStyle] drawPushButtonInRect: frame
+                                                         defaulted: defaulted
+                                                           pressed: pressed || [self isVisuallyHighlighted]
+                                                           enabled: [self isEnabled]
+                                                            active: [[controlView window] isKeyWindow]];
         }
         if (mirror)
             CGContextRestoreGState(context);
@@ -1197,11 +1234,40 @@ static void drawRoundedBezel(CGContextRef context, CGRect frame) {
         CGContextTranslateCTM(ctx, 0, rect.size.height);
         CGContextScaleCTM(ctx, 1, -1);
     }
-    [[controlView graphicsStyle]
-            drawButtonImage: image
-                     inRect: NSMakeRect(0, 0, rect.size.width, rect.size.height)
-                    enabled: enabled
-                      mixed: mixed];
+    NSString *name = [image name];
+    BOOL isSwitch = [name isEqualToString: @"NSSwitch"] || [name isEqualToString: @"NSHighlightedSwitch"];
+    BOOL isRadio = [name isEqualToString: @"NSRadioButton"] || [name isEqualToString: @"NSHighlightedRadioButton"];
+    NSRect local = NSMakeRect(0, 0, rect.size.width, rect.size.height);
+
+    if (isSwitch || isRadio) {
+        // the stock check box and radio button are drawn for the cell's state and size, whichever of
+        // the images the cell's state selected. The style places the box relative to the left edge of the
+        // cell, which is where the image margin starts.
+        local.origin.x -= kImageMargin;
+        local.size.width += kImageMargin;
+        NSInteger state = [self state];
+        BOOL active = [[controlView window] isKeyWindow];
+
+        if (isSwitch)
+            [[controlView graphicsStyle] drawCheckBoxInRect: local
+                                                      state: state
+                                                highlighted: [self isHighlighted]
+                                                    enabled: [self isEnabled]
+                                                     active: active
+                                                controlSize: [self controlSize]];
+        else
+            [[controlView graphicsStyle] drawRadioButtonInRect: local
+                                                         state: state
+                                                   highlighted: [self isHighlighted]
+                                                       enabled: [self isEnabled]
+                                                        active: active
+                                                   controlSize: [self controlSize]];
+    } else
+        [[controlView graphicsStyle]
+                drawButtonImage: image
+                         inRect: local
+                        enabled: enabled
+                          mixed: mixed];
     CGContextRestoreGState(ctx);
 }
 
@@ -1307,6 +1373,24 @@ static NSSize scaledImageSizeInFrameSize(NSSize imageSize, NSSize frameSize,
 
     NSAttributedString *title = [self titleForHighlight];
     NSImage *image = [self imageForHighlight];
+
+    // QUIRK: the title of a plain-text rounded push button is white on the blue bezel of a default button in an
+    // active window or of a pressed button. Evidence: black-box renders on macOS 10.14.4 (tier 2).
+    // Test: appkit-button-aqua.m
+    if ([self isBordered] && image == nil && [title length] > 0 &&
+        NS_EXTRA(NSButtonCell, self)->_bezelStyle == NSRoundedBezelStyle &&
+        [NS_EXTRA(NSCell, self)->_titleOrAttributedTitle isKindOfClass: [NSString class]] && [self isEnabled]) {
+        BOOL pressed = ([self highlightsBy] & NSPushInCellMask) && [self isHighlighted];
+
+        if (pressed || (defaulted && [[controlView window] isKeyWindow])) {
+            NSMutableAttributedString *white = [[title mutableCopy] autorelease];
+
+            [white addAttribute: NSForegroundColorAttributeName
+                          value: [NSColor whiteColor]
+                          range: NSMakeRange(0, [white length])];
+            title = white;
+        }
+    }
     BOOL enabled = [self isEnabled] ? YES : ![self imageDimsWhenDisabled];
     BOOL mixed = ([self state] == NSMixedState) ? YES : NO;
     NSRect imageRect = [self imageRectForBounds: frame];
@@ -1348,6 +1432,10 @@ static NSSize scaledImageSizeInFrameSize(NSSize imageSize, NSSize frameSize,
         imageOrigin.x = frame.origin.x + kImageMargin;
         titleRect.origin.x += imageSize.width + 4;
         titleRect.size.width -= imageSize.width + 4;
+        if ([self _isStockToggleImage: image])
+            // a cell is as wide as its title and 18 points; the title may use the room the margin to the
+            // right of it leaves, so that it is not truncated by the width of the image area
+            titleRect.size.width += 4;
         break;
 
     case NSImageRight:

@@ -138,13 +138,18 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
     [super initWithFrame: frame];
 
-    NS_EXTRA(NSBox, self)->_isTransparent = YES;
+    // QUIRK: a new box is not transparent, has a groove border and its title at the top, and its content
+    // view is inset 8 points from the left, right and bottom and 15 from the top of the view. Documented
+    // for the first three; the content view frame was observed on macOS 10.14.4 (tier 2), for a 200 x 100
+    // box, as (8, 8, 184, 77). Test: appkit-box-aqua.m
+    NS_EXTRA(NSBox, self)->_isTransparent = NO;
     _titleCell = [[NSTextFieldCell alloc] initTextCell: @""];
-    NS_EXTRA(NSBox, self)->_borderType = NSLineBorder;
-    NS_EXTRA(NSBox, self)->_titlePosition = NSAboveTop;
+    NS_EXTRA(NSBox, self)->_borderType = NSGrooveBorder;
+    NS_EXTRA(NSBox, self)->_titlePosition = NSAtTop;
+    _contentViewMargins = NSMakeSize(5, 5);
 
     contentview = [[NSView alloc]
-            initWithFrame: NSMakeRect(0, 0, NSWidth(frame), NSHeight(frame))];
+            initWithFrame: NSMakeRect(8, 8, MAX(0, NSWidth(frame) - 16), MAX(0, NSHeight(frame) - 23))];
     [contentview setAutoresizingMask: NSViewWidthSizable | NSViewHeightSizable];
     [self addSubview: contentview];
     [contentview release];
@@ -369,7 +374,22 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         break;
     }
 
-    if (NS_EXTRA(NSBox, self)->_boxType != NSBoxSeparator) {
+    BOOL aqua = NS_EXTRA(NSBox, self)->_boxType == NSBoxPrimary || NS_EXTRA(NSBox, self)->_boxType == NSBoxSecondary;
+
+    if (aqua) {
+        // QUIRK: the box of a titled primary or secondary box starts below the title and is inset 3 points
+        // from the sides and 4 from the bottom; without a title it is inset 3 points from the sides and
+        // 4 from the top and bottom. Evidence: black-box renders on macOS 10.14.4 (tier 2).
+        // Test: appkit-box-aqua.m
+        grooveRect = NSInsetRect(_bounds, 3, 4);
+        if (drawTitle && NS_EXTRA(NSBox, self)->_titlePosition == NSAtTop) {
+            CGFloat above = floor(titleRect.size.height);
+
+            grooveRect.size.height = NSHeight(_bounds) - 4 - above;
+            grooveRect.origin.y = 4;
+        }
+        [[self graphicsStyle] drawAquaBoxInRect: grooveRect];
+    } else if (NS_EXTRA(NSBox, self)->_boxType != NSBoxSeparator) {
         // Separator are transparent except for drawing a line
         [[NSColor controlColor] setFill];
         NSRectFill(grooveRect);
@@ -401,7 +421,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                                            NSMaxY(grooveRect))];
         }
         [line stroke];
-    } else {
+    } else if (!aqua) {
         switch (NS_EXTRA(NSBox, self)->_borderType) {
         case NSNoBorder:
             break;

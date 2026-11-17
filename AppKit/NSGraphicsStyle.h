@@ -199,3 +199,88 @@ typedef struct _Margins {
 @interface NSView (NSGraphicsStyle)
 - (NSGraphicsStyle *) graphicsStyle;
 @end
+
+@interface NSGraphicsStyle (NSTabViewAqua)
+/* The tinted rounded box behind a tab view's content, and the segmented strip of tabs that straddles
+   its top edge. All rectangles are in the coordinates of the current context, whatever its
+   orientation. */
+- (void) drawTabViewBoxInRect: (NSRect) rect;
+- (void) drawTabStripInRect: (NSRect) rect;
+- (void) drawSelectedTabInRect: (NSRect) rect stripRect: (NSRect) stripRect active: (BOOL) active;
+- (void) drawTabDividerInRect: (NSRect) rect;
+@end
+
+@interface NSGraphicsStyle (NSButtonAqua)
+/* Check boxes and radio buttons. rect is in an unflipped coordinate system; its left edge is the left
+   edge of the cell, and the box is placed relative to it and centred vertically in it. state is
+   NSOffState, NSOnState or NSMixedState (radio buttons have no mixed look). */
+- (void) drawCheckBoxInRect: (NSRect) rect
+                      state: (NSInteger) state
+                highlighted: (BOOL) highlighted
+                    enabled: (BOOL) enabled
+                     active: (BOOL) active
+                controlSize: (NSControlSize) controlSize;
+- (void) drawRadioButtonInRect: (NSRect) rect
+                         state: (NSInteger) state
+                   highlighted: (BOOL) highlighted
+                       enabled: (BOOL) enabled
+                        active: (BOOL) active
+                   controlSize: (NSControlSize) controlSize;
+@end
+
+@interface NSGraphicsStyle (NSPushButtonAqua)
+/* The bezel of a rounded push button. rect is in an unflipped coordinate system and includes the one
+   point shadow below the bezel. A default button is blue in an active window; a pressed one is blue too. */
+- (void) drawPushButtonInRect: (NSRect) rect
+                    defaulted: (BOOL) defaulted
+                      pressed: (BOOL) pressed
+                      enabled: (BOOL) enabled
+                       active: (BOOL) active;
+@end
+
+@interface NSGraphicsStyle (NSPopUpButtonAqua)
+/* The bezel of a pop-up or pull-down button: a white bezel with a blue end cap on the right that holds the
+   up and down chevrons (a single down chevron for a pull-down). Same rectangle conventions as
+   -drawPushButtonInRect:defaulted:pressed:enabled:active:. */
+- (void) drawPopUpButtonInRect: (NSRect) rect
+                     pullsDown: (BOOL) pullsDown
+                       pressed: (BOOL) pressed
+                       enabled: (BOOL) enabled
+                        active: (BOOL) active
+                   controlSize: (NSControlSize) controlSize;
+@end
+
+@interface NSGraphicsStyle (NSBoxAqua)
+/* The primary and secondary box: a lightly tinted rounded rectangle with a thin outline. */
+- (void) drawAquaBoxInRect: (NSRect) rect;
+@end
+
+@interface NSGraphicsStyle (NSSearchFieldAqua)
+/* A rounded white bezel (a 4 point radius for a search field, a capsule for a rounded text field). */
+- (void) drawRoundedTextFieldBezelInRect: (NSRect) rect radius: (CGFloat) radius;
+/* The magnifying glass and the cancel button of a search field. */
+- (void) drawSearchGlyphInRect: (NSRect) rect;
+- (void) drawSearchCancelGlyphInRect: (NSRect) rect;
+@end
+
+@interface NSGraphicsStyle (NSSliderAqua)
+/* The track of a slider: 3 points thick, blue from its start to the knob (gray when the window is not active or
+   the control is disabled) and light after the knob; and the round white knob. */
+- (void) drawAquaSliderTrackInRect: (NSRect) rect
+                          vertical: (BOOL) vertical
+                           knobRect: (NSRect) knobRect
+                           enabled: (BOOL) enabled
+                            active: (BOOL) active
+                           flipped: (BOOL) flipped;
+- (void) drawAquaSliderKnobInRect: (NSRect) rect controlSize: (NSControlSize) controlSize enabled: (BOOL) enabled;
+@end
+
+@interface NSGraphicsStyle (NSStepperAqua)
+/* The whole stepper: one white capsule with an up and a down chevron. rect is the capsule including its
+   one point shadow below. */
+- (void) drawAquaStepperInRect: (NSRect) rect
+                       enabled: (BOOL) enabled
+                 upHighlighted: (BOOL) upHighlighted
+               downHighlighted: (BOOL) downHighlighted;
+@end
+
