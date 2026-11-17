@@ -647,11 +647,90 @@ static LSLaunchFlags launchFlagsForConfiguration(
     return openURLsWithFlags(urls, appURL, flags) == noErr;
 }
 
+// The file viewer is the application named by NSFileViewer in the global defaults (a bundle identifier), or the
+// Finder. It is asked to show items by the events that open them (observed on macOS 26.7.3, tier 2): an open-documents
+// event listing the items as bookmark data (file URLs where no bookmark can be made), or a reopen event for no items,
+// both with the boolean parameter 'aapd' set to true, which tells a reveal from an open.
+
+// Sends the event to the running application with the bundle identifier; fails with procNotFound when it is not running
+// (or has not yet started to receive events).
+static OSStatus sendRevealEvent(NSString *bundleIdentifier, NSArray<NSURL *> *urls) {
+    NSAppleEventDescriptor *target = [NSAppleEventDescriptor
+            descriptorWithDescriptorType: typeApplicationBundleID
+                                    data: [bundleIdentifier dataUsingEncoding: NSUTF8StringEncoding]];
+    NSAppleEventDescriptor *event = [NSAppleEventDescriptor
+            appleEventWithEventClass: kCoreEventClass
+                             eventID: [urls count] > 0 ? kAEOpenDocuments : kAEReopenApplication
+                    targetDescriptor: target
+                            returnID: kAutoGenerateReturnID
+                       transactionID: kAnyTransactionID];
+    if ([urls count] > 0) {
+        NSAppleEventDescriptor *list = [NSAppleEventDescriptor listDescriptor];
+        for (NSURL *url in urls) {
+            NSData *bookmark = [url bookmarkDataWithOptions: 0
+                             includingResourceValuesForKeys: nil
+                                              relativeToURL: nil
+                                                      error: NULL];
+            NSAppleEventDescriptor *item = bookmark != nil
+                    ? [NSAppleEventDescriptor descriptorWithDescriptorType: 'bmrk' data: bookmark]
+                    : [NSAppleEventDescriptor descriptorWithDescriptorType: typeFileURL
+                                                                      data: [[url absoluteString]
+                                                                                dataUsingEncoding: NSUTF8StringEncoding]];
+            [list insertDescriptor: item atIndex: 0];
+        }
+        [event setParamDescriptor: list forKeyword: keyDirectObject];
+    }
+    [event setParamDescriptor: [NSAppleEventDescriptor descriptorWithBoolean: YES] forKeyword: 'aapd'];
+    return AESendMessage([event aeDesc], NULL, kAENoReply, 5 * 60);
+}
+
+- (void) _revealURLs: (NSArray<NSURL *> *) urls {
+    NSString *viewerID = [[NSUserDefaults standardUserDefaults] stringForKey: @"NSFileViewer"];
+    if ([viewerID length] == 0)
+        viewerID = @"com.apple.finder";
+
+    NSURL *viewerURL = [self URLForApplicationWithBundleIdentifier: viewerID];
+    if (viewerURL != nil) {
+        OSStatus status = sendRevealEvent(viewerID, urls);
+        if (status == procNotFound && [self launchApplication: [viewerURL path]]) {
+            // The first event must not be lost while the application starts: it is delivered as soon as the
+            // application takes events, so keep trying for a limited time.
+            for (int attempt = 0; attempt < 100 && status == procNotFound; attempt++) {
+                usleep(100000);
+                status = sendRevealEvent(viewerID, urls);
+            }
+        }
+        if (status == noErr)
+            return;
+    }
+
+    // No usable viewer (a prefix may have no Finder): open the items' folders instead.
+    NSMutableSet *folders = [NSMutableSet set];
+    for (NSURL *url in urls) {
+        if (![url isFileURL])
+            continue;
+        NSString *path = [[url path] stringByDeletingLastPathComponent];
+        if ([path length] > 0 && [folders member: path] == nil) {
+            [folders addObject: path];
+            [self openFile: path];
+        }
+    }
+}
+
+// Documented to return YES when the file was selected; the viewer is asked and not waited for, and a viewer that
+// cannot be found is not an error (observed on macOS 26.7.3, tier 2: YES in every case, the root path is not sent).
 - (BOOL) selectFile: (NSString *) path
         inFileViewerRootedAtPath: (NSString *) rootedAtPath
 {
-    // TODO: call activateFileViewerSelectingURLs
-    NSUnimplementedMethod();
+    if ([path length] > 0) {
+        [self _revealURLs: [NSArray arrayWithObject: [NSURL fileURLWithPath: path]]];
+        return YES;
+    }
+    // no file: the viewer is only brought to the front
+    if ([rootedAtPath length] > 0) {
+        [self _revealURLs: [NSArray array]];
+        return YES;
+    }
     return NO;
 }
 
@@ -850,11 +929,8 @@ static LSLaunchFlags launchFlagsForConfiguration(
 }
 
 - (void) activateFileViewerSelectingURLs: (NSArray<NSURL *> *) fileURLs {
-    // TODO: Get the current file viewer app by calling [[NSUserDefaults
-    // standardUserDefaults] stringForKey: @"NSFileViewer"] Get its path via
-    // [[NSWorkspace sharedWorkspace] URLForApplicationWithBundleIdentifier]
-    // Call [self openFile:withApplication:]
-    NSUnimplementedMethod();
+    // one event for all the URLs, in order, even across folders (observed on macOS 26.7.3, tier 2)
+    [self _revealURLs: fileURLs != nil ? fileURLs : [NSArray array]];
 }
 
 - (NSURL *) URLForApplicationToOpenURL: (NSURL *) url {
