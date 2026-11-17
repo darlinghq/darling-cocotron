@@ -205,18 +205,20 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     BOOL drawDottedRect = NO;
 
     _controlView = controlView;
-    [[_controlView graphicsStyle]
-            drawStepperButtonInRect: [self _upArrowFrameForFrame: frame]
-                           clipRect: frame
-                            enabled: [self isEnabled]
-                        highlighted: _isUpHighlighted
-                          upNotDown: YES];
-    [[_controlView graphicsStyle]
-            drawStepperButtonInRect: [self _downArrowFrameForFrame: frame]
-                           clipRect: frame
-                            enabled: [self isEnabled]
-                        highlighted: _isDownHighlighted
-                          upNotDown: NO];
+    // QUIRK: the capsule is inset from the cell frame by 3 points from the sides and 3 from the top at the
+    // regular size (2 and 1 at the small size, 2 and 0 at the mini size), and is 21, 18 and 14 points high.
+    // Evidence: black-box renders on macOS 10.14.4 (tier 2). Test: appkit-stepper-aqua.m
+    static const CGFloat sideInset[3] = {3, 2, 2}, topInset[3] = {3, 1, 0}, capsuleHeight[3] = {22, 19, 15};
+    int index = [self controlSize] == NSSmallControlSize ? 1 : ([self controlSize] == NSMiniControlSize ? 2 : 0);
+    BOOL flipped = [controlView isFlipped];
+    NSRect capsule = NSMakeRect(NSMinX(frame) + sideInset[index], 0, NSWidth(frame) - 2 * sideInset[index],
+                                capsuleHeight[index]);
+
+    capsule.origin.y = flipped ? NSMinY(frame) + topInset[index] : NSMaxY(frame) - topInset[index] - capsuleHeight[index];
+    [[_controlView graphicsStyle] drawAquaStepperInRect: capsule
+                                                enabled: [self isEnabled]
+                                          upHighlighted: _isUpHighlighted
+                                        downHighlighted: _isDownHighlighted];
 
     if ([[controlView window] firstResponder] == controlView) {
         if ([controlView isKindOfClass: [NSMatrix class]]) {

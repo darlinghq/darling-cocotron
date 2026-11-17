@@ -1454,6 +1454,71 @@ static void NSAquaDrawToggle(NSRect rect, BOOL radio, NSInteger state, BOOL high
 
 @end
 
+@implementation NSGraphicsStyle (NSStepperAqua)
+
+// QUIRK: the stepper look of macOS 10.14 (light appearance). Not documented. Evidence: black-box renders of
+// NSStepper on macOS 10.14.4 at 1x and 2x (tier 2): one white capsule (13, 11 and 9 points wide and 21, 18 and
+// 14 high for the control sizes) with a gray outline and a short shadow below, and a dark gray up and down
+// chevron; the capsule is inset 3, 2 and 2 points from the sides of the 19, 15 and 13 point wide view.
+// Test: appkit-stepper-aqua.m
+- (void) drawAquaStepperInRect: (NSRect) rect
+                       enabled: (BOOL) enabled
+                 upHighlighted: (BOOL) upHighlighted
+               downHighlighted: (BOOL) downHighlighted
+{
+    BOOL flipped = [[NSGraphicsContext currentContext] isFlipped];
+    CGFloat alpha = enabled ? 1 : 0.5;
+    // the capsule without its shadow row; the shadow is below it
+    NSRect body = NSMakeRect(NSMinX(rect), flipped ? NSMinY(rect) : NSMinY(rect) + 1, NSWidth(rect), NSHeight(rect) - 1);
+    CGFloat radius = NSWidth(body) / 2;
+    NSBezierPath *shape = [NSBezierPath bezierPathWithRoundedRect: body xRadius: radius yRadius: radius];
+    NSBezierPath *outline = [NSBezierPath bezierPathWithRoundedRect: NSInsetRect(body, 0.5, 0.5)
+                                                            xRadius: radius - 0.5
+                                                            yRadius: radius - 0.5];
+
+    [[NSColor colorWithCalibratedWhite: 0 alpha: 0.07 * alpha] setFill];
+    [[NSBezierPath bezierPathWithRoundedRect: NSOffsetRect(body, 0, flipped ? 1 : -1) xRadius: radius yRadius: radius] fill];
+    [[NSColor colorWithCalibratedWhite: 1 alpha: alpha] setFill];
+    [shape fill];
+    if (upHighlighted || downHighlighted) {
+        // the pressed half is light gray: its half of the capsule, without the rounded corners cut off
+        NSRect half = NSMakeRect(NSMinX(body), NSMinY(body), NSWidth(body), NSHeight(body) / 2);
+        BOOL halfAtMinY = upHighlighted == flipped;
+
+        if (!halfAtMinY)
+            half.origin.y = NSMidY(body);
+        [[NSColor colorWithCalibratedWhite: 0.87 alpha: alpha] setFill];
+        [[NSBezierPath bezierPathWithRoundedRect: NSInsetRect(half, 1, 0.5) xRadius: radius - 1 yRadius: MIN(radius - 1, NSHeight(half) / 2)] fill];
+    }
+    [[NSColor colorWithCalibratedWhite: 0 alpha: 0.25 * alpha] setStroke];
+    [outline setLineWidth: 1];
+    [outline stroke];
+
+    // the chevrons, a quarter and three quarters of the way down the capsule
+    CGFloat w = MAX(2.6, NSWidth(body) * 0.22), h = MAX(1.8, NSWidth(body) * 0.16);
+    NSBezierPath *chevrons = [NSBezierPath bezierPath];
+
+    CGFloat upDirection = flipped ? -1 : 1; // the direction of "up" along y
+
+    for (int i = 0; i < 2; i++) {
+        BOOL up = i == 0;
+        CGFloat fraction = up ? 0.27 : 0.73; // of the height, from the top
+        CGFloat y = flipped ? NSMinY(body) + NSHeight(body) * fraction : NSMaxY(body) - NSHeight(body) * fraction;
+        CGFloat tip = h * (up ? upDirection : -upDirection);
+
+        [chevrons moveToPoint: NSMakePoint(NSMidX(body) - w, y - tip / 2)];
+        [chevrons lineToPoint: NSMakePoint(NSMidX(body), y + tip / 2)];
+        [chevrons lineToPoint: NSMakePoint(NSMidX(body) + w, y - tip / 2)];
+    }
+    [[NSColor colorWithCalibratedWhite: 0.25 alpha: alpha] setStroke];
+    [chevrons setLineWidth: 1.4];
+    [chevrons setLineCapStyle: NSRoundLineCapStyle];
+    [chevrons setLineJoinStyle: NSRoundLineJoinStyle];
+    [chevrons stroke];
+}
+
+@end
+
 @implementation NSView (NSGraphicsStyle)
 
 - (NSGraphicsStyle *) graphicsStyle {

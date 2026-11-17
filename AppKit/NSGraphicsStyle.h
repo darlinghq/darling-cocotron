@@ -275,3 +275,12 @@ typedef struct _Margins {
 - (void) drawAquaSliderKnobInRect: (NSRect) rect controlSize: (NSControlSize) controlSize enabled: (BOOL) enabled;
 @end
 
+@interface NSGraphicsStyle (NSStepperAqua)
+/* The whole stepper: one white capsule with an up and a down chevron. rect is the capsule including its
+   one point shadow below. */
+- (void) drawAquaStepperInRect: (NSRect) rect
+                       enabled: (BOOL) enabled
+                 upHighlighted: (BOOL) upHighlighted
+               downHighlighted: (BOOL) downHighlighted;
+@end
+

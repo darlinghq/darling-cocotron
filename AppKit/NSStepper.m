@@ -99,15 +99,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (void) sizeToFit {
-    NSSize size = _bounds.size;
-    NSSize size1 = [[_cell _stepUpImage] size];
-    NSSize size2 = [[_cell _stepDownImage] size];
-
-    size.width = MAX(size1.width, size2.width);
-    size.width += 12;
-    size.height = size1.height + size.height;
-    size.height += 4;
-    [self setBoundsSize: size];
+    // the stepper's own size (it used to ask for two images that do not exist, which raised an exception)
+    [self setFrameSize: [self intrinsicContentSize]];
 }
 
 - (void) mouseDown: (NSEvent *) event {
