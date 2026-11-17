@@ -90,6 +90,25 @@ static void applyCoverageToSpan_lRGBA8888_PRE(O2argb8u *dst,
     }
 }
 
+/* The AppleFontSmoothing default: 0 turns smoothing off, 1 light, 2 medium and
+ * 3 strong. Not set means medium, as on macOS. */
+static unsigned O2ContextFontSmoothingLevel(void) {
+    unsigned level = 2;
+    CFPropertyListRef value = CFPreferencesCopyValue(
+            CFSTR("AppleFontSmoothing"), kCFPreferencesAnyApplication,
+            kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+
+    if (value != NULL) {
+        int number;
+        if (CFGetTypeID(value) == CFNumberGetTypeID() &&
+            CFNumberGetValue(value, kCFNumberIntType, &number) && number >= 0) {
+            level = number > 3 ? 3 : (unsigned) number;
+        }
+        CFRelease(value);
+    }
+    return level;
+}
+
 static void renderFreeTypeBitmap(O2Context_builtin_FT *self, O2Surface *surface,
                                  FT_Bitmap *bitmap, NSInteger x, NSInteger y,
                                  O2Paint *paint)
@@ -250,14 +269,59 @@ static void renderFreeTypeBitmap(O2Context_builtin_FT *self, O2Surface *surface,
 
         const O2Size *useAdvances = (advances != NULL) ? advances : defaultAdvances;
 
+        // Text settings of the context and graphics state.
+        BOOL antialias = gState->_shouldAntialias && _allowsAntialiasing;
+        unsigned smoothing = (antialias && gState->_shouldSmoothFonts && _allowsFontSmoothing)
+                ? O2ContextFontSmoothingLevel() : 0;
+        BOOL subpixel = _allowsFontSubpixelPositioning && _shouldSubpixelPositionFonts;
+        BOOL quantize = _allowsFontSubpixelQuantization && _shouldSubpixelQuantizeFonts;
+        NSUInteger steps = O2FreeTypeSubpixelSteps(quantize);
+
+        // Rotation and shear of the text rendering matrix are applied to the
+        // glyph outlines; plain scaling is already folded into the size.
+        O2FreeTypeGlyphMatrix glyphMatrix = { 0x10000, 0, 0, 0x10000 };
+        const O2FreeTypeGlyphMatrix *matrix = NULL;
+        O2Float scale = scaleY;
+        if (scale > 0 && (fabs(Trm.b) > 1e-6 || fabs(Trm.c) > 1e-6)) {
+            // Device y points down while FreeType's y points up; the upright
+            // rendering corresponds to a negative d.
+            O2Float flip = Trm.d < 0 || (Trm.d == 0 && Trm.b > 0) ? 1 : -1;
+            glyphMatrix.xx = (FT_Fixed) lround(Trm.a / scale * 0x10000);
+            glyphMatrix.xy = (FT_Fixed) lround(Trm.c / scale * 0x10000);
+            glyphMatrix.yx = (FT_Fixed) lround(flip * -Trm.b / scale * 0x10000);
+            glyphMatrix.yy = (FT_Fixed) lround(flip * -Trm.d / scale * 0x10000);
+            matrix = &glyphMatrix;
+        }
+
         for (i = 0; i < count; i++) {
+            // Glyph origin on the pixel grid plus the fractional offset the
+            // bitmap is rendered at; without subpixel positioning the origin
+            // is rounded to a whole pixel.
+            NSInteger originX;
+            unsigned subpixelIndex = 0;
+            if (subpixel) {
+                O2Float quantized = floor(point.x * steps + 0.5);
+                O2Float whole = floor(quantized / steps);
+                originX = (NSInteger) whole;
+                subpixelIndex = (unsigned) (quantized - whole * steps);
+            } else {
+                originX = (NSInteger) floor(point.x + 0.5);
+            }
+            NSInteger originY = (NSInteger) floor(point.y + 0.5);
+
             O2FreeTypeCachedGlyph *cached =
-                    [font rasterizeGlyph: glyphs[i] pointSize: fontSize.height];
+                    [font rasterizeGlyph: glyphs[i]
+                               pointSize: fontSize.height
+                                  matrix: matrix
+                                 options: antialias ? O2FreeTypeGlyphAntialiased : 0
+                               smoothing: smoothing
+                           subpixelIndex: subpixelIndex
+                           subpixelSteps: (unsigned) steps];
 
             if (cached != nil)
                 renderFreeTypeBitmap(self, _surface, &cached->bitmap,
-                                     point.x + cached->left,
-                                     point.y - cached->top, paint);
+                                     originX + cached->left,
+                                     originY - cached->top, paint);
 
             if (advances != NULL) {
                 // Advances are in text space, so only the linear part of Trm

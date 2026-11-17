@@ -1,12 +1,21 @@
 #import <Onyx2D/O2Font_freetype.h>
 #ifdef FREETYPE_PRESENT
 #import <Onyx2D/O2Encoding.h>
+
+/* Font smoothing thickens the outlines: macOS renders smoothed text with about
+ * 15% more coverage than the plain outline at every size, which scales with the
+ * size like the stem width does. The factor is the added stem width per pixel of
+ * font size at the default (medium, level 2) setting, fitted to coverage totals
+ * measured on macOS 10.14.4; levels 1 and 3 scale it by 1/2 and 3/2. */
+#define O2FONT_SMOOTHING_WIDENING 0.0125
 #import <string.h>
 #include <limits.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <dispatch/dispatch.h>
 #import FT_TRUETYPE_TABLES_H
+#import FT_OUTLINE_H
+#include <math.h>
 
 @implementation O2Font_freetype
 
@@ -763,38 +772,66 @@ FT_Face O2FontFreeTypeFace(O2Font_freetype *self) {
 }
 
 /* Cache entries are keyed by everything that determines the rendered bitmap:
- * the glyph, the 26.6 pixel size handed to FT_Set_Char_Size and the FreeType
- * load flags and render mode. The text rendering matrix only reaches this
- * point as its scale (folded into the pixel size by the caller; shear and
- * rotation are not applied to FreeType bitmaps), and the context's
- * antialiasing flag is not consulted by the FreeType backend (coverage is
- * always the 8-bit gray bitmap). If the backend starts honouring either, the
- * extra input has to become part of this key. */
-#define O2FONT_GLYPH_LOAD_FLAGS FT_LOAD_DEFAULT
-#define O2FONT_GLYPH_RENDER_MODE FT_RENDER_MODE_NORMAL
-#define O2FONT_GLYPH_SIZE_KEY_BITS 24
+ * the glyph, the 26.6 pixel size handed to FT_Set_Char_Size, the glyph matrix,
+ * the render options, the smoothing level and the subpixel offset. Glyphs are
+ * loaded unhinted: macOS positions and sizes text exactly, and does not snap
+ * outlines to the pixel grid. */
+#define O2FONT_GLYPH_LOAD_FLAGS (FT_LOAD_NO_HINTING)
+
+typedef struct {
+    uint32_t glyph;
+    uint32_t size64;
+    uint32_t options;
+    uint32_t smoothing;
+    uint32_t subpixelIndex;
+    uint32_t subpixelSteps;
+    FT_Fixed xx, xy, yx, yy;
+} O2FreeTypeGlyphKey;
+
+NSUInteger O2FreeTypeSubpixelSteps(BOOL quantized) {
+    // A quantized position is one of four offsets, as on macOS.
+    return quantized ? 4 : 16;
+}
 
 - (O2FreeTypeCachedGlyph *) rasterizeGlyph: (O2Glyph) glyph
                                   pointSize: (O2Float) pointSize
+                                     matrix: (const O2FreeTypeGlyphMatrix *) matrix
+                                    options: (unsigned) options
+                                  smoothing: (unsigned) smoothing
+                              subpixelIndex: (unsigned) subpixelIndex
+                              subpixelSteps: (unsigned) subpixelSteps
 {
-    if (_face == NULL || !(pointSize > 0)) {
+    if (_face == NULL || !(pointSize > 0) || subpixelSteps == 0) {
         return nil;
+    }
+
+    BOOL antialiased = (options & O2FreeTypeGlyphAntialiased) != 0;
+    if (!antialiased) {
+        smoothing = 0;
     }
 
     /* The size is set here, under the font lock, so a hit or a miss never
      * depends on what size the face was left at by metric queries. */
     O2Float size64 = pointSize * 64;
-    BOOL cacheable = size64 < (O2Float)(1 << O2FONT_GLYPH_SIZE_KEY_BITS);
+    BOOL cacheable = size64 < (O2Float)(1 << 24);
 
     @synchronized(self) {
-        NSNumber *key = nil;
+        NSData *key = nil;
 
         if (cacheable) {
-            uint64_t keyValue =
-                    ((uint64_t)(uint32_t)(long) size64
-                     << (64 - O2FONT_GLYPH_SIZE_KEY_BITS)) |
-                    ((uint64_t)O2FONT_GLYPH_RENDER_MODE << 32) | glyph;
-            key = [NSNumber numberWithUnsignedLongLong: keyValue];
+            O2FreeTypeGlyphKey keyValue = {
+                .glyph = glyph,
+                .size64 = (uint32_t)(long) size64,
+                .options = options,
+                .smoothing = smoothing,
+                .subpixelIndex = subpixelIndex,
+                .subpixelSteps = subpixelSteps,
+                .xx = matrix != NULL ? matrix->xx : 0x10000,
+                .xy = matrix != NULL ? matrix->xy : 0,
+                .yx = matrix != NULL ? matrix->yx : 0,
+                .yy = matrix != NULL ? matrix->yy : 0x10000,
+            };
+            key = [NSData dataWithBytes: &keyValue length: sizeof(keyValue)];
 
             O2FreeTypeCachedGlyph *hit = [_glyphCache objectForKey: key];
             if (hit != nil) {
@@ -806,11 +843,30 @@ FT_Face O2FontFreeTypeFace(O2Font_freetype *self) {
             return nil;
         }
 
-        if (FT_Load_Glyph(_face, glyph, O2FONT_GLYPH_LOAD_FLAGS) != 0) {
-            return nil;
-        }
+        FT_Matrix ftMatrix = {
+            matrix != NULL ? matrix->xx : 0x10000, matrix != NULL ? matrix->xy : 0,
+            matrix != NULL ? matrix->yx : 0, matrix != NULL ? matrix->yy : 0x10000
+        };
+        // The pen's fractional x as a 26.6 offset applied to the outline.
+        FT_Vector delta = { (FT_Pos)(subpixelIndex * 64 / subpixelSteps), 0 };
+        FT_Set_Transform(_face, &ftMatrix, &delta);
 
-        if (FT_Render_Glyph(_face->glyph, O2FONT_GLYPH_RENDER_MODE) != 0) {
+        FT_Error error = FT_Load_Glyph(_face, glyph, O2FONT_GLYPH_LOAD_FLAGS);
+        if (error == 0 && smoothing > 0 &&
+            _face->glyph->format == FT_GLYPH_FORMAT_OUTLINE) {
+            // Widen the outline, keeping it centred on the original.
+            FT_Pos strength = (FT_Pos) lround(
+                    O2FONT_SMOOTHING_WIDENING * (smoothing / 2.0) * pointSize * 64);
+            FT_Outline_Embolden(&_face->glyph->outline, strength);
+            FT_Outline_Translate(&_face->glyph->outline, -strength / 2, -strength / 2);
+        }
+        if (error == 0) {
+            error = FT_Render_Glyph(_face->glyph,
+                                    antialiased ? FT_RENDER_MODE_NORMAL
+                                                : FT_RENDER_MODE_MONO);
+        }
+        FT_Set_Transform(_face, NULL, NULL);
+        if (error != 0) {
             return nil;
         }
 
@@ -875,8 +931,18 @@ FT_Face O2FontFreeTypeFace(O2Font_freetype *self) {
         unsigned char *data = NSZoneMalloc(NULL, bytes);
 
         for (FT_Int row = 0; row < bitmap.rows; row++) {
-            memcpy(data + row * bitmap.width,
-                   srcBitmap->buffer + row * srcBitmap->pitch, bitmap.width);
+            const unsigned char *srcRow = srcBitmap->buffer + row * srcBitmap->pitch;
+            unsigned char *dstRow = data + row * bitmap.width;
+
+            if (srcBitmap->pixel_mode == FT_PIXEL_MODE_MONO) {
+                // One bit per pixel, most significant bit first: aliased
+                // coverage is either 0 or 255.
+                for (FT_Int x = 0; x < bitmap.width; x++) {
+                    dstRow[x] = (srcRow[x >> 3] & (0x80 >> (x & 7))) ? 255 : 0;
+                }
+            } else {
+                memcpy(dstRow, srcRow, bitmap.width);
+            }
         }
 
         bitmap.buffer = data;

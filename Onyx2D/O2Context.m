@@ -63,6 +63,12 @@ void O2ContextDefaultShowText(O2ContextRef self, const char *text,
     _path = [[O2MutablePath alloc] init];
     _allowsAntialiasing = YES;
     _allowsFontSmoothing = YES;
+    // Text is positioned at fractional pixel offsets, quantized to quarter
+    // pixels, unless a client turns that off.
+    _allowsFontSubpixelPositioning = YES;
+    _shouldSubpixelPositionFonts = YES;
+    _allowsFontSubpixelQuantization = YES;
+    _shouldSubpixelQuantizeFonts = YES;
     _textMatrix = O2AffineTransformIdentity;
     _showTextFunction = O2ContextDefaultShowText;
     _showGlyphsFunction = (O2ContextShowGlyphsFunction)

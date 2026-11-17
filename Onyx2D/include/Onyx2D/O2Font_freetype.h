@@ -18,7 +18,7 @@
 #undef __linux__
 #endif
 
-#define O2FONT_GLYPH_CACHE_LIMIT 512
+#define O2FONT_GLYPH_CACHE_LIMIT 2048
 #define O2FONT_GLYPH_CACHE_BYTES_LIMIT (4 * 1024 * 1024)
 
 @class O2FreeTypeCachedGlyph;
@@ -57,8 +57,32 @@ O2FontRef O2FontCreateWithCodePointCoverage(const uint32_t *codePoints,
                                            size_t count, FT_Face baseFace,
                                            const char *language);
 
+/* How a glyph is rendered. The fractional part of the pen position is
+ * rendered into the bitmap as one of O2FreeTypeSubpixelSteps(quantized)
+ * offsets, so the bitmap's left edge already includes it. */
+enum {
+    O2FreeTypeGlyphAntialiased = 1, /* 8-bit coverage; otherwise 0 or 255 */
+};
+
+typedef struct {
+    /* Linear part of the text rendering matrix relative to the upright
+     * rendering at the given size, 16.16 as FT_Matrix, y up. Identity
+     * for upright text. */
+    FT_Fixed xx, xy, yx, yy;
+} O2FreeTypeGlyphMatrix;
+
+/* Number of horizontal subpixel offsets a glyph is rendered at. */
+NSUInteger O2FreeTypeSubpixelSteps(BOOL quantized);
+
+/* smoothing is the AppleFontSmoothing level 0...3 (0 adds no weight);
+ * it has no effect on an aliased glyph. */
 - (O2FreeTypeCachedGlyph *) rasterizeGlyph: (O2Glyph) glyph
-                                  pointSize: (O2Float) pointSize;
+                                  pointSize: (O2Float) pointSize
+                                     matrix: (const O2FreeTypeGlyphMatrix *) matrix
+                                    options: (unsigned) options
+                                  smoothing: (unsigned) smoothing
+                              subpixelIndex: (unsigned) subpixelIndex
+                              subpixelSteps: (unsigned) subpixelSteps;
 
 @end
 
