@@ -44,8 +44,8 @@ typedef NS_OPTIONS(NSUInteger, NSTouchTypeMask) {
 
 // See Cocoa Event Handling Guide : Using Tracking-Area Objects : Compatibility
 // Issues
-typedef NSTrackingArea *NSTrackingRectTag NS_SWIFT_NAME(NSView.TrackingRectTag);
-typedef NSTrackingArea *NSToolTipTag NS_SWIFT_NAME(NSView.ToolTipTag);
+typedef NSInteger NSTrackingRectTag NS_SWIFT_NAME(NSView.TrackingRectTag);
+typedef NSInteger NSToolTipTag NS_SWIFT_NAME(NSView.ToolTipTag);
 typedef NSString *NSViewFullScreenModeOptionKey NS_STRING_ENUM;
 
 typedef NS_OPTIONS(NSUInteger, NSAutoresizingMaskOptions) {

@@ -63,6 +63,14 @@ typedef NS_OPTIONS(NSUInteger, NSTrackingAreaOptions) {
     // be discarded by -[NSView discardCursorRects] (and -[NSWindow
     // discardCursorRects]).
     BOOL _legacy;
+    // Identifies the area to the tag based API (-addTrackingRect:...,
+    // -addToolTipRect:...) and in events (-[NSEvent trackingNumber]). Unique
+    // for the life of the process, so a tag that outlives its area never
+    // names another area.
+    NSInteger _tag;
+    // YES for an area created through the tag based API; events of such areas
+    // have no -trackingArea.
+    BOOL _fromTagAPI;
     NS_EXTRA_IVARS_END(NSTrackingArea)
 }
 
@@ -93,6 +101,9 @@ typedef NS_OPTIONS(NSUInteger, NSTrackingAreaOptions) {
 - (void) _setView: (NSView *) newView;
 - (BOOL) _isToolTip;
 - (BOOL) _isLegacy;
+- (NSInteger) _tag;
+- (BOOL) _isFromTagAPI;
+- (void) _setFromTagAPI: (BOOL) fromTagAPI;
 - (BOOL) _mouseInside;
 - (void) _setMouseInside: (BOOL) mouseInside;
 

@@ -88,6 +88,7 @@ const NSViewFullScreenModeOptionKey NSFullScreenModeAllScreens =
 - (CGAffineTransform) transformToWindow;
 - (CGAffineTransform) transformToLayer;
 - (void) _trackingAreasChanged;
+- (void) _removeAreaWithTag: (NSInteger) tag;
 - (void) _addLayerToSuperlayer;
 - (void) _updateLayerVisibility;
 - (void) _removeLayerFromSuperlayer;
@@ -1934,16 +1935,35 @@ static void postFrameChange(NSView *self) {
                                   retainUserData: NO
                                        isToolTip: YES
                                         isLegacy: NO];
+    [area _setFromTagAPI: YES];
+    NSToolTipTag tag = [area _tag];
     [NS_EXTRA(NSView, self)->_trackingAreas addObject: area];
     [area release];
 
     [self _trackingAreasChanged];
 
-    return area;
+    return tag;
+}
+
+// A tag that does not name an area of this view (it was removed, or was never
+// issued) is ignored.
+- (void) _removeAreaWithTag: (NSInteger) tag {
+    NSMutableArray *areas = NS_EXTRA(NSView, self)->_trackingAreas;
+    NSInteger count = [areas count];
+
+    while (--count >= 0) {
+        NSTrackingArea *area = [areas objectAtIndex: count];
+
+        if ([area _isFromTagAPI] && [area _tag] == tag) {
+            [areas removeObjectAtIndex: count];
+            [self _trackingAreasChanged];
+            break;
+        }
+    }
 }
 
 - (void) removeToolTip: (NSToolTipTag) tag {
-    [self removeTrackingArea: tag];
+    [self _removeAreaWithTag: tag];
 }
 
 - (void) removeAllToolTips {
@@ -2097,16 +2117,18 @@ static void postFrameChange(NSView *self) {
                                   retainUserData: NO
                                        isToolTip: NO
                                         isLegacy: NO];
+    [area _setFromTagAPI: YES];
+    NSTrackingRectTag tag = [area _tag];
     [NS_EXTRA(NSView, self)->_trackingAreas addObject: area];
     [area release];
 
     [self _trackingAreasChanged];
 
-    return area;
+    return tag;
 }
 
 - (void) removeTrackingRect: (NSTrackingRectTag) tag {
-    [self removeTrackingArea: tag];
+    [self _removeAreaWithTag: tag];
 }
 
 static char inputContextKey;
