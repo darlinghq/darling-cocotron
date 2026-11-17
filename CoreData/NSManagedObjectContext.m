@@ -29,7 +29,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <CoreData/NSAttributeDescription.h>
 #import <CoreData/NSRelationshipDescription.h>
 #import <CoreData/NSEntityDescription.h>
+#import <CoreData/NSBatchDeleteRequest.h>
+#import <CoreData/NSBatchUpdateRequest.h>
 #import <CoreData/NSFetchRequest.h>
+#import <CoreData/NSPersistentStoreRequest.h>
+#import "NSBatchRequests-Private.h"
 #import <CoreData/NSManagedObject.h>
 #import <CoreData/NSManagedObjectContext.h>
 #import <CoreData/NSManagedObjectModel.h>
@@ -37,18 +41,39 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Foundation/NSRaise.h>
 #import <Foundation/NSUndoManager.h>
 
-NSString *const NSManagedObjectContextObjectsDidChangeNotification = @"NSManagedObjectContextObjectsDidChangeNotification";
+// QUIRK: several of these notification names and keys have string values that are not spelled
+// like the symbol (for example the "inserted" key and the NSManagingContext...Notification
+// names). Not documented: the headers declare only the symbols. Evidence: black-box observation
+// of the exported constants on macOS 26.7.3 (tier 2); macOS 10.14.4 agrees for the notification
+// names, the inserted and updated keys and the object-ID keys.
+// Test: tests/coredata-context-notification-names.m
 NSString *const NSManagedObjectContextWillSaveNotification =
-        @"NSManagedObjectContextWillSaveNotification";
+        @"NSManagingContextWillSaveChangesNotification";
 NSString *const NSManagedObjectContextDidSaveNotification =
-        @"NSManagedObjectContextDidSaveNotification";
+        @"NSManagingContextDidSaveChangesNotification";
+NSString *const NSManagedObjectContextObjectsDidChangeNotification =
+        @"NSObjectsChangedInManagingContextNotification";
+NSString *const NSManagedObjectContextDidSaveObjectIDsNotification =
+        @"NSManagedObjectContextDidSaveObjectIDsNotification";
+NSString *const NSManagedObjectContextDidMergeChangesObjectIDsNotification =
+        @"NSManagedObjectContextDidMergeChangesObjectIDsNotification";
 
-NSString *const NSInsertedObjectsKey = @"NSInsertedObjectsKey";
-NSString *const NSUpdatedObjectsKey = @"NSUpdatedObjectsKey";
-NSString *const NSDeletedObjectsKey = @"NSDeletedObjectsKey";
-NSString *const NSRefreshedObjectsKey = @"NSRefreshedObjectsKey";
-NSString *const NSInvalidatedObjectsKey = @"NSInvalidatedObjectsKey";
-NSString *const NSInvalidatedAllObjectsKey = @"NSInvalidatedAllObjectsKey";
+NSString *const NSInsertedObjectsKey = @"inserted";
+NSString *const NSUpdatedObjectsKey = @"updated";
+NSString *const NSDeletedObjectsKey = @"deleted";
+NSString *const NSRefreshedObjectsKey = @"refreshed";
+NSString *const NSInvalidatedObjectsKey = @"invalidated";
+NSString *const NSInvalidatedAllObjectsKey = @"invalidatedAll";
+
+NSString *const NSInsertedObjectIDsKey = @"inserted_objectIDs";
+NSString *const NSUpdatedObjectIDsKey = @"updated_objectIDs";
+NSString *const NSDeletedObjectIDsKey = @"deleted_objectIDs";
+NSString *const NSRefreshedObjectIDsKey = @"refreshed_objectIDs";
+NSString *const NSInvalidatedObjectIDsKey = @"invalidated_objectIDs";
+
+@interface NSFetchRequest (DarlingEntityLookup)
+- (NSEntityDescription *) _entityIfKnown;
+@end
 
 @interface NSAtomicStore (private)
 - (void) _uniqueObjectID: (NSManagedObjectID *) objectID;
@@ -426,7 +451,7 @@ static char ContextQueueKey;
 - (NSArray *) executeFetchRequest: (NSFetchRequest *) fetchRequest
                             error: (NSError **) error
 {
-    NSEntityDescription *requestedEntity = [fetchRequest entity];
+    NSEntityDescription *requestedEntity = [fetchRequest _entityIfKnown];
     if (!requestedEntity) requestedEntity = [[[_storeCoordinator managedObjectModel] entitiesByName] objectForKey:[fetchRequest entityName]];
     BOOL supported = requestedEntity && [[[_storeCoordinator managedObjectModel] entities] containsObject:requestedEntity] &&
         [fetchRequest resultType] == NSManagedObjectResultType && ![fetchRequest fetchOffset] && ![fetchRequest fetchBatchSize] &&
@@ -532,6 +557,114 @@ static char ContextQueueKey;
 {
     NSArray *result = [self executeFetchRequest:request error:error];
     return result ? [result count] : NSNotFound;
+}
+
+// The documented contract: the changes of a batch request go to the stores directly, so the
+// calling context's pending changes are neither saved nor affected. They run through a context
+// of their own that is saved before the result is returned.
+- (id) executeRequest: (NSPersistentStoreRequest *) request
+                error: (NSError **) error
+{
+    NSBatchUpdateRequest *update = nil;
+    NSBatchDeleteRequest *delete = nil;
+
+    if ([request isKindOfClass: [NSBatchUpdateRequest class]])
+        update = (NSBatchUpdateRequest *) request;
+    else if ([request isKindOfClass: [NSBatchDeleteRequest class]])
+        delete = (NSBatchDeleteRequest *) request;
+
+    if (_storeCoordinator == nil || (update == nil && delete == nil)) {
+        if (error != NULL)
+            *error = [NSError errorWithDomain: NSCocoaErrorDomain
+                                         code: NSPersistentStoreOperationError
+                                     userInfo: nil];
+        return nil;
+    }
+
+    NSManagedObjectContext *context =
+            [[[NSManagedObjectContext alloc] init] autorelease];
+    [context setPersistentStoreCoordinator: _storeCoordinator];
+
+    NSArray *objects;
+    NSFetchRequest *fetch;
+
+    if (update != nil) {
+        fetch = [NSFetchRequest fetchRequestWithEntityName: [update entityName]];
+        [fetch setEntity: [update _entityIfKnown]];
+        [fetch setPredicate: [update predicate]];
+        [fetch setIncludesSubentities: [update includesSubentities]];
+    } else if ([delete _objectIDs] != nil) {
+        NSMutableArray *found = [NSMutableArray array];
+
+        for (NSManagedObjectID *objectID in [delete _objectIDs])
+            [found addObject: [context objectWithID: objectID]];
+        objects = found;
+        fetch = nil;
+    } else {
+        fetch = [delete fetchRequest];
+    }
+
+    if (fetch != nil) {
+        if ([request affectedStores] != nil)
+            [fetch setAffectedStores: [request affectedStores]];
+        objects = [context executeFetchRequest: fetch error: error];
+        if (objects == nil)
+            return nil;
+    }
+
+    NSMutableArray *objectIDs = [NSMutableArray array];
+
+    if (update != nil) {
+        NSDictionary *changes = [update propertiesToUpdate];
+
+        for (NSManagedObject *object in objects) {
+            for (NSString *key in changes)
+                [object setValue: [changes objectForKey: key] forKey: key];
+            [objectIDs addObject: [object objectID]];
+        }
+    } else {
+        for (NSManagedObject *object in objects) {
+            [objectIDs addObject: [object objectID]];
+            [context deleteObject: object];
+        }
+    }
+
+    if (![context save: error])
+        return nil;
+
+    if (update != nil) {
+        id value;
+
+        switch ([update resultType]) {
+        case NSUpdatedObjectIDsResultType:
+            value = objectIDs;
+            break;
+        case NSUpdatedObjectsCountResultType:
+            value = [NSNumber numberWithUnsignedInteger: [objectIDs count]];
+            break;
+        default:
+            value = [NSNumber numberWithBool: YES];
+            break;
+        }
+        return [[[NSBatchUpdateResult alloc] _initWithResult: value
+                                                        type: [update resultType]] autorelease];
+    }
+
+    id value;
+
+    switch ([delete resultType]) {
+    case NSBatchDeleteResultTypeObjectIDs:
+        value = objectIDs;
+        break;
+    case NSBatchDeleteResultTypeCount:
+        value = [NSNumber numberWithUnsignedInteger: [objectIDs count]];
+        break;
+    default:
+        value = [NSNumber numberWithBool: YES];
+        break;
+    }
+    return [[[NSBatchDeleteResult alloc] _initWithResult: value
+                                                    type: [delete resultType]] autorelease];
 }
 
 - (void) insertObject: (NSManagedObject *) object {

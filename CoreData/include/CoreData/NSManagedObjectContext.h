@@ -25,11 +25,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSSet, NSMutableSet, NSNotification, NSUndoManager, NSMapTable;
 @class NSManagedObject, NSManagedObjectID, NSFetchRequest, NSPersistentStore,
-        NSPersistentStoreCoordinator;
+        NSPersistentStoreCoordinator, NSPersistentStoreRequest;
 
 COREDATA_EXPORT NSString *const NSManagedObjectContextObjectsDidChangeNotification;
 COREDATA_EXPORT NSString *const NSManagedObjectContextWillSaveNotification;
 COREDATA_EXPORT NSString *const NSManagedObjectContextDidSaveNotification;
+COREDATA_EXPORT NSString *const NSManagedObjectContextObjectsDidChangeNotification;
+COREDATA_EXPORT NSString *const NSManagedObjectContextDidSaveObjectIDsNotification;
+COREDATA_EXPORT NSString *const NSManagedObjectContextDidMergeChangesObjectIDsNotification;
 
 COREDATA_EXPORT NSString *const NSInsertedObjectsKey;
 COREDATA_EXPORT NSString *const NSUpdatedObjectsKey;
@@ -37,6 +40,13 @@ COREDATA_EXPORT NSString *const NSDeletedObjectsKey;
 COREDATA_EXPORT NSString *const NSRefreshedObjectsKey;
 COREDATA_EXPORT NSString *const NSInvalidatedObjectsKey;
 COREDATA_EXPORT NSString *const NSInvalidatedAllObjectsKey;
+
+COREDATA_EXPORT NSString *const NSInsertedObjectIDsKey;
+COREDATA_EXPORT NSString *const NSUpdatedObjectIDsKey;
+COREDATA_EXPORT NSString *const NSDeletedObjectIDsKey;
+COREDATA_EXPORT NSString *const NSRefreshedObjectIDsKey;
+COREDATA_EXPORT NSString *const NSInvalidatedObjectIDsKey;
+
 COREDATA_EXPORT NSString *const NSPersistentStoreSaveConflictsErrorKey;
 
 typedef NS_ENUM(NSUInteger, NSManagedObjectContextConcurrencyType) {
@@ -120,6 +130,11 @@ typedef NS_ENUM(NSUInteger, NSManagedObjectContextConcurrencyType) {
 - (NSUInteger) countForFetchRequest: (NSFetchRequest *) request
                               error: (NSError **) error NS_SWIFT_NAME(count(for:))
         __attribute__((swift_error(nonnull_error)));
+
+// Runs an NSBatchUpdateRequest or NSBatchDeleteRequest and returns its result object. Other
+// request kinds are not supported: nil is returned with NSPersistentStoreOperationError.
+- (id) executeRequest: (NSPersistentStoreRequest *) request
+                error: (NSError **) error;
 
 - (void) insertObject: (NSManagedObject *) object;
 - (void) deleteObject: (NSManagedObject *) object;

@@ -1,5 +1,7 @@
 #import <CoreData/CoreDataErrors.h>
 #import <CoreData/NSAttributeDescription.h>
+#import <CoreData/NSBatchDeleteRequest.h>
+#import <CoreData/NSBatchUpdateRequest.h>
 #import <CoreData/NSEntityDescription.h>
 #import <CoreData/NSEntityMapping.h>
 #import <CoreData/NSFetchRequest.h>
@@ -12,6 +14,7 @@
 #import <CoreData/NSMappingModel.h>
 #import <CoreData/NSMergeConflict.h>
 #import <CoreData/NSPersistentStoreCoordinator.h>
+#import <CoreData/NSPersistentStoreRequest.h>
 #import <CoreData/NSPropertyDescription.h>
 #import <CoreData/NSPropertyMapping.h>
 #import <CoreData/NSRelationshipDescription.h>

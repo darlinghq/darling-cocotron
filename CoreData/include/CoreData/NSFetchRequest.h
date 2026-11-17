@@ -17,6 +17,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Foundation/NSObject.h>
+#import <CoreData/NSPersistentStoreRequest.h>
 #import <Foundation/NSObjCRuntime.h>
 
 @class NSEntityDescription, NSPredicate, NSArray, NSManagedObjectContext;
@@ -38,13 +39,12 @@ typedef NS_ENUM(NSUInteger, NSFetchRequestResultType) {
 
 // The type parameter is the element type of the fetch result; Swift imports the class as
 // NSFetchRequest<ResultType>.
-@interface NSFetchRequest<__covariant ResultType : id<NSFetchRequestResult>> : NSObject <NSCoding, NSCopying> {
+@interface NSFetchRequest<__covariant ResultType : id<NSFetchRequestResult>> : NSPersistentStoreRequest <NSCoding, NSCopying> {
     NSFetchRequestResultType _resultType;
     NSEntityDescription *_entity;
     NSString *_entityName;
     NSPredicate *_predicate;
     NSArray *_sortDescriptors;
-    NSArray *_affectedStores;
     NSUInteger _fetchLimit;
     NSUInteger _fetchBatchSize;
     NSUInteger _fetchOffset;
@@ -57,16 +57,16 @@ typedef NS_ENUM(NSUInteger, NSFetchRequestResultType) {
     NSArray *_relationshipKeyPathsForPrefetching;
 }
 
-+ (instancetype)fetchRequestWithEntityName:(NSString *)entityName;
-- (instancetype)initWithEntityName:(NSString *)entityName;
-- (NSString *)entityName;
++ (instancetype) fetchRequestWithEntityName: (NSString *) entityName;
+- (instancetype) initWithEntityName: (NSString *) entityName;
+// The name the request was created with, or the name of the entity once one is set.
+- (NSString *) entityName;
 
 - (NSFetchRequestResultType) resultType;
 
 - (NSEntityDescription *) entity;
 - (NSPredicate *) predicate;
 - (NSArray *) sortDescriptors;
-- (NSArray *) affectedStores;
 
 - (NSUInteger) fetchLimit;
 - (NSUInteger) fetchBatchSize;
@@ -87,7 +87,6 @@ typedef NS_ENUM(NSUInteger, NSFetchRequestResultType) {
 - (void) setEntity: (NSEntityDescription *) value;
 - (void) setPredicate: (NSPredicate *) value;
 - (void) setSortDescriptors: (NSArray *) value;
-- (void) setAffectedStores: (NSArray *) value;
 
 - (void) setFetchLimit: (NSUInteger) value;
 - (void) setFetchBatchSize: (NSUInteger) value;

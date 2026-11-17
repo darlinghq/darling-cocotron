@@ -28,6 +28,8 @@ set(CoreData_sources
     NSAtomicStoreCacheNode.m
     NSAtomicStore.m
     NSAttributeDescription.m
+    NSBatchDeleteRequest.m
+    NSBatchUpdateRequest.m
     NSEntityDescription.m
     NSEntityMapping.m
     NSFetchedPropertyDescription.m
@@ -46,6 +48,7 @@ set(CoreData_sources
     NSPersistentStoreDescription.m
     NSPersistentStoreCoordinator.m
     NSPersistentStore.m
+    NSPersistentStoreRequest.m
     NSPropertyDescription.m
     NSPropertyMapping.m
     NSRelationshipDescription.m
