@@ -150,6 +150,9 @@ typedef NS_ENUM(NSInteger, NSScrollViewFindBarPosition) {
 @property(nonatomic) CGFloat maxMagnification;
 @property(nonatomic) BOOL allowsMagnification;
 
+- (void) setMagnification: (CGFloat) magnification centeredAtPoint: (NSPoint) point;
+- (void) magnifyToFitRect: (NSRect) rect;
+
 - (void) setDocumentView: (NSView *) view;
 - (NSScrollerKnobStyle) scrollerKnobStyle;
 - (void) setScrollerKnobStyle: (NSScrollerKnobStyle) knobStyle;
