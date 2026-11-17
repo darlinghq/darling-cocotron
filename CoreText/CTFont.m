@@ -873,6 +873,15 @@ CFDataRef CTFontCopyTable(CTFontRef font, CTFontTableTag table, CTFontTableOptio
     return data;
 }
 
+bool CTFontHasTable(CTFontRef font, CTFontTableTag table)
+{
+    CFDataRef data = CTFontCopyTable(font, table, kCTFontTableOptionNoOptions);
+    if (data == NULL)
+        return false;
+    CFRelease(data);
+    return true;
+}
+
 CFTypeID CTFontGetTypeID(void)
 {
     return (CFTypeID) [KTFont self];

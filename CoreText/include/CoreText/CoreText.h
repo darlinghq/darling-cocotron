@@ -21,3 +21,4 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 #import <CoreText/CTLine.h>
 #import <CoreText/CTRun.h>
 #import <CoreText/CTTypesetter.h>
+#import <CoreText/SFNTLayoutTypes.h>
