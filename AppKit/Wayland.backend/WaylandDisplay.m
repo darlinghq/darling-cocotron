@@ -331,11 +331,6 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
                                         &wl_surface_interface, args, 0, nil);
 
     _cursorFractionalScale = [self newFractionalScaleForSurface: _cursorSurface owner: (id)self];
-    if (_cursorFractionalScale) {
-        union wl_argument viewport[] = {{.o = NULL}, {.o = (struct wl_object *)_cursorSurface}};
-        _cursorViewport = WaylandCreateObject(_viewporter, WP_VIEWPORTER_GET_VIEWPORT,
-            &wp_viewport_interface, viewport, 0, nil);
-    }
 
     CFSocketContext context = {.version = 0, .info = self};
     _wlSocket = CFSocketCreateWithNative(NULL, WL.wl_display_get_fd(_wlDisplay),
@@ -412,7 +407,7 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
     _outputManager = nil;
     if (_wlDisplay != NULL) {
         // wl_display_disconnect() doesn't free proxies.
-        struct wl_proxy *proxies[] = {_imageCursorBuffer, _cursorFractionalScale, _cursorViewport, _cursorSurface,
+        struct wl_proxy *proxies[] = {_imageCursorBuffer, _cursorFractionalScale, _cursorSurface,
                                       _lockedPointer, _relativePointer, _pointerConstraints, _relativePointerManager,
                                       _pinchGesture, _pointerGestures, _pointer, _keyboard,
                                       _seat, _decorationManager, _dataDeviceManager, _wmBase,
@@ -2094,11 +2089,16 @@ static uint32_t WaylandKeyLayoutCodepoint(void *context, uint32_t keysym) {
 - (struct wl_proxy *) seat { return _seat; }
 
 - (WaylandWindow *) popupParentForWindow: (WaylandWindow *) window {
+    // A tool tip belongs to the window the pointer is over, whatever was clicked last. Its
+    // position comes from the pointer in that window: without one it is not shown.
+    if ([window isTooltip])
+        return _pointerWindow != window && [_pointerWindow isMapped] ? _pointerWindow : nil;
     // Menu tracking can open nested menus with keyboard or timer events. The
     // newest mapped popup is the parent even if pointer focus has not moved.
     for (CFIndex i = CFArrayGetCount(_windows); i > 0; i--) {
         WaylandWindow *candidate = (WaylandWindow *) CFArrayGetValueAtIndex(_windows, i - 1);
-        if (candidate != window && [candidate isMapped] && [candidate isPopup])
+        if (candidate != window && [candidate isMapped] && [candidate isPopup] &&
+            ![candidate isTooltip])
             return candidate;
     }
     if (_inputWindow != window && [_inputWindow isMapped])
@@ -2142,11 +2142,14 @@ static uint32_t WaylandKeyLayoutCodepoint(void *context, uint32_t keysym) {
 - (void) unmapPopupsForParent: (WaylandWindow *) parent {
     // Retain a snapshot: unmapping releases each child's parent reference.
     NSMutableArray *children = [NSMutableArray array];
+    NSMutableArray *tooltips = [NSMutableArray array];
     for (CFIndex i = CFArrayGetCount(_windows); i > 0; i--) {
         WaylandWindow *window = (WaylandWindow *) CFArrayGetValueAtIndex(_windows, i - 1);
         if ([window popupParent] == parent)
-            [children addObject: window];
+            [([window isTooltip] ? tooltips : children) addObject: window];
     }
+    for (WaylandWindow *window in tooltips)
+        [window unmap];
     if ([children count] != 0 && ![parent isPopup]) {
         [self cancelPopupMenus];
         return;
@@ -2161,7 +2164,7 @@ static uint32_t WaylandKeyLayoutCodepoint(void *context, uint32_t keysym) {
     NSMutableArray *popups = [NSMutableArray array];
     for (CFIndex i = CFArrayGetCount(_windows); i > 0; i--) {
         WaylandWindow *window = (WaylandWindow *) CFArrayGetValueAtIndex(_windows, i - 1);
-        if ([window isPopup])
+        if ([window isPopup] && ![window isTooltip])
             [popups addObject: window];
     }
     if ([popups count] == 0)
@@ -2259,15 +2262,19 @@ static uint32_t WaylandKeyLayoutCodepoint(void *context, uint32_t keysym) {
 
 #pragma mark - Cursors
 
-// The output scale must be applied exactly once. A cursor surface without a
-// wp_viewport cannot express a logical size, so pre-scaling the raster and then
-// setting wl_surface.set_buffer_scale to the same factor asks the compositor to
-// scale it twice: a 24pt cursor then covers 96 physical px on a 2x output.
-// With a viewporter the client owns the scaling and pins buffer_scale to 1;
-// without one the compositor owns it, so hand over a 1x raster at buffer_scale 1.
+// The output scale must be applied exactly once. wl_surface.set_buffer_scale is the
+// one mechanism every compositor applies to a cursor surface; a wp_viewport
+// destination is not (Hyprland derives the logical size from buffer size / buffer
+// scale and ignores it, wlroots honours it). A raster pinned to buffer_scale 1 and
+// cropped by a viewport therefore shows 2x too large on a 2x Hyprland. So the raster is
+// made at the next whole scale and tagged with it; the compositor scales it down
+// to a fractional output. Without a fractional-scale manager, or without
+// set_buffer_scale, the compositor owns the scaling: hand over a 1x raster.
 - (uint32_t) cursorRenderScale120 {
-    if (_cursorFractionalScale) return _cursorPreferredScale120 ?: (_pointerWindow ? [_pointerWindow renderScale120] : 120);
-    return 120;
+    // set_buffer_scale needs wl_surface v3.
+    if (!_cursorFractionalScale || _compositorVersion < 3) return 120;
+    return WaylandCursorBufferScale120(
+            _cursorPreferredScale120 ?: (_pointerWindow ? [_pointerWindow renderScale120] : 120));
 }
 - (void) preferredScaleChanged: (uint32_t) scale120 {
     if (!_cursorFractionalScale || !scale120 || scale120 == _cursorPreferredScale120) return;
@@ -2355,8 +2362,7 @@ static uint32_t WaylandKeyLayoutCodepoint(void *context, uint32_t keysym) {
         return;
 
     uint32_t scale120 = [self cursorRenderScale120];
-    BOOL fractional = _cursorFractionalScale != NULL;
-    int32_t wireScale = fractional ? 1 : (int32_t)(scale120 / 120);
+    int32_t wireScale = (int32_t)(scale120 / 120);
     struct wl_proxy *buffer = decoration ? NULL : [self imageCursorBufferForScale120: scale120 cursor: cursor];
     if (_cursorApplyPending || cursor != _cursor || pointer != _pointer ||
         surface != _cursorSurface || serial != _pointerEnterSerial ||
@@ -2398,33 +2404,19 @@ static uint32_t WaylandKeyLayoutCodepoint(void *context, uint32_t keysym) {
         if (buffer == NULL)
             return;
         if (!image->width || !image->height || image->width > INT32_MAX || image->height > INT32_MAX) return;
-        if (fractional) {
-            uint64_t width = ((uint64_t)image->width * 120 + _cursorThemeScale120 / 2) / _cursorThemeScale120;
-            uint64_t height = ((uint64_t)image->height * 120 + _cursorThemeScale120 / 2) / _cursorThemeScale120;
-            if (width > INT32_MAX || height > INT32_MAX) return;
-            logical = NSMakeSize(MAX(1, width), MAX(1, height));
-            hotSpot = NSMakePoint(MIN(logical.width - 1, floor(image->hotspot_x * logical.width / image->width)),
-                MIN(logical.height - 1, floor(image->hotspot_y * logical.height / image->height)));
-        } else {
-            // No wp_viewport: the theme is loaded at the compositor's nominal
-            // size (_cursorThemeScale120 is 120, since cursorRenderScale120
-            // hands scaling to the compositor) and the surface stays at
-            // buffer_scale 1, so the hotspot is used unscaled.
-            wireScale = (int32_t)(_cursorThemeScale120 / 120);
-            if (wireScale < 1 || image->width % wireScale || image->height % wireScale) wireScale = 1;
-            logical = NSMakeSize(image->width / wireScale, image->height / wireScale);
-            hotSpot = NSMakePoint(image->hotspot_x / wireScale, image->hotspot_y / wireScale);
-        }
+        // The theme was loaded at the nominal size times the whole scale: the
+        // surface is tagged with that scale, so the logical size and the hotspot
+        // are the image's divided by it. A theme without that exact size hands
+        // back its nearest one, which the scale may not divide.
+        wireScale = WaylandCursorWireScale((int32_t)image->width, (int32_t)image->height,
+                                           (int32_t)(_cursorThemeScale120 / 120));
+        logical = NSMakeSize(image->width / wireScale, image->height / wireScale);
+        hotSpot = NSMakePoint(image->hotspot_x / wireScale, image->hotspot_y / wireScale);
     }
 
     if (_compositorVersion >= 3) {
         union wl_argument scaleArgs[1] = {{.i = wireScale}};
         WaylandMarshal(_cursorSurface, WP_SURFACE_SET_BUFFER_SCALE, NULL, 0, scaleArgs);
-    }
-
-    if (_cursorViewport) {
-        union wl_argument destination[] = {{.i = (int32_t)logical.width}, {.i = (int32_t)logical.height}};
-        WaylandMarshal(_cursorViewport, WP_VIEWPORT_SET_DESTINATION, NULL, 0, destination);
     }
 
     union wl_argument attach[3] = {{.o = (struct wl_object *) buffer}, {.i = 0}, {.i = 0}};

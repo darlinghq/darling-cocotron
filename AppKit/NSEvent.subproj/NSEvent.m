@@ -522,5 +522,6 @@ static NSTimer *_periodicTimer = nil;
 @end
 
 NSEventMask NSEventMaskFromType(NSEventType type) {
-    return 1 << type;
+    // Types from 32 up (touches) need the full width; NSAppKitSystem has no bit.
+    return type < 64 ? 1ULL << type : 0;
 }
