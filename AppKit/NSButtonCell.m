@@ -1355,6 +1355,8 @@ static NSSize scaledImageSizeInFrameSize(NSSize imageSize, NSSize frameSize,
        out
      */
     BOOL defaulted = ([[controlView window] defaultButtonCell] == self);
+    // The title area of a pop-up button is measured from the whole frame, not from the bezel's.
+    NSRect wholeFrame = frame;
     NSRect adjustment =
             [self getControlSizeAdjustment: [controlView isFlipped]];
     frame.size.width -= adjustment.size.width;
@@ -1398,6 +1400,12 @@ static NSSize scaledImageSizeInFrameSize(NSSize imageSize, NSSize frameSize,
     NSPoint imageOrigin = imageRect.origin;
     NSSize titleSize = [title size];
     NSRect titleRect = [self titleRectForBounds: frame];
+    if ([self isKindOfClass: [NSPopUpButtonCell class]]) {
+        NSRect whole = [self titleRectForBounds: wholeFrame];
+
+        titleRect.origin.x = whole.origin.x;
+        titleRect.size.width = whole.size.width;
+    }
     BOOL drawImage = YES, drawTitle = YES;
     NSCellImagePosition imagePosition = [self imagePosition];
 
@@ -1430,6 +1438,10 @@ static NSSize scaledImageSizeInFrameSize(NSSize imageSize, NSSize frameSize,
 
     case NSImageLeft:
         imageOrigin.x = frame.origin.x + kImageMargin;
+        // a pop-up button without an image has no image area: its title area is already placed (see
+        // -[NSPopUpButtonCell titleRectForBounds:])
+        if (image == nil && [self isKindOfClass: [NSPopUpButtonCell class]])
+            break;
         titleRect.origin.x += imageSize.width + 4;
         titleRect.size.width -= imageSize.width + 4;
         if ([self _isStockToggleImage: image])

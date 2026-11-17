@@ -43,6 +43,8 @@ NSNotificationName NSPopUpButtonCellWillPopUpNotification =
     // black-box observation on macOS 10.14.4 (tier 2): -bezelStyle of a new NSPopUpButton is 1
     // (NSRoundedBezelStyle). Test: appkit-popup-aqua.m
     NS_EXTRA(NSButtonCell, self)->_bezelStyle = NSRoundedBezelStyle;
+    // QUIRK: left aligned title, as in -initTextCell:pullsDown: (test_quirk_popup_title_left_aligned).
+    [self setAlignment: NSTextAlignmentLeft];
     return self;
 }
 
@@ -96,6 +98,10 @@ NSNotificationName NSPopUpButtonCellWillPopUpNotification =
     NS_EXTRA(NSPopUpButtonCell, self)->_arrowPosition = NSPopUpArrowAtCenter;
     NS_EXTRA(NSPopUpButtonCell, self)->_preferredEdge = NSMaxYEdge;
     NS_EXTRA(NSPopUpButtonCell, self)->_pullsDown = pullDown;
+    // QUIRK: the title of a new pop-up or pull-down button is left aligned (a plain button's is centered). Not
+    // documented. Evidence: black-box observation on macOS 10.14.4 (tier 2): -alignment is 0 and the rendered title
+    // starts at the title area's left edge. Test: tests/appkit-popup-title-rect.m (test_quirk_popup_title_left_aligned)
+    [self setAlignment: NSTextAlignmentLeft];
     // QUIRK: a new pop-up or pull-down button has the rounded bezel style. Not documented. Evidence:
     // black-box observation on macOS 10.14.4 (tier 2): -bezelStyle of a new NSPopUpButton is 1
     // (NSRoundedBezelStyle). Test: appkit-popup-aqua.m
@@ -424,14 +430,75 @@ NSNotificationName NSPopUpButtonCellWillPopUpNotification =
     return result;
 }
 
+// QUIRK: the title area of a bordered pop-up or pull-down button with an arrow starts a fixed distance from the left
+// edge and leaves a fixed width at the right for the bezel's arrows, which is why a pop-up button sized to its widest
+// title (see -cellSize) shows that title in full. The distances depend on the type and the control size (left, then
+// total width taken, at the regular, small and mini sizes): pop-up 11/32, 11/31, 11/32; pull-down 12/34, 11/33, 10/31.
+// Not documented. Evidence: black-box observation on macOS 10.14.4 (tier 2) of -titleRectForBounds: with bounds 60 and
+// 200 points wide, and of the ink of a rendered title.
+// Test: tests/appkit-popup-title-rect.m (test_quirk_popup_title_rect)
+static void popUpTitleInsets(BOOL pullsDown, NSControlSize size, CGFloat *left, CGFloat *taken) {
+    switch (size) {
+    case NSSmallControlSize:
+        *left = 11;
+        *taken = pullsDown ? 33 : 31;
+        break;
+    case NSMiniControlSize:
+        *left = pullsDown ? 10 : 11;
+        *taken = pullsDown ? 31 : 32;
+        break;
+    default:
+        *left = pullsDown ? 12 : 11;
+        *taken = pullsDown ? 34 : 32;
+        break;
+    }
+}
+
 - (NSRect) titleRectForBounds: (NSRect) rect {
     rect = [super titleRectForBounds: rect];
     if (NS_EXTRA(NSPopUpButtonCell, self)->_arrowPosition != NSPopUpNoArrow) {
+        if ([self isBordered]) {
+            CGFloat left, taken;
+
+            popUpTitleInsets(NS_EXTRA(NSPopUpButtonCell, self)->_pullsDown, [self controlSize], &left, &taken);
+            rect.origin.x += left;
+            rect.size.width = MAX(0, rect.size.width - taken);
+            return rect;
+        }
         // Don't use the room used by the arrow, with some margin
         NSRect arrowRect = [self _arrowRectForRect: rect];
         rect.size.width = NSMinX(arrowRect) - NSMinX(rect) - 5.;
     }
     return rect;
+}
+
+// QUIRK: a title that is a little too wide for its area is drawn with tighter spacing (here: squeezed horizontally) before it
+// is shortened with an ellipsis: the overflow is taken up as long as it is at most 4% of the text's width. Not
+// documented for this cell (the documented NSParagraphStyle property allowsDefaultTighteningForTruncation names the
+// idea, not the limit). Evidence: black-box observation on macOS 10.14.4 (tier 2) of the rendered ink of a 13 and an
+// 11 point title in areas 2 to 6 points narrower than the text: it narrows by the overflow up to about 4 points of
+// 104 and 89, and loses a character from about 6 and 5 points on.
+// Test: tests/appkit-popup-title-rect.m (test_quirk_popup_title_tightened)
+- (NSRect) drawTitle: (NSAttributedString *) title withFrame: (NSRect) titleRect inView: (NSView *) controlView {
+    CGFloat width = ceil([title size].width);
+    CGFloat excess = width - titleRect.size.width;
+
+    if (excess > 0 && excess <= width * 0.04) {
+        // The text is squeezed horizontally into the area (its letters and the spaces between them).
+        CGContextRef context = [[NSGraphicsContext currentContext] graphicsPort];
+        NSRect wide = titleRect;
+        NSRect result;
+
+        wide.size.width = width;
+        CGContextSaveGState(context);
+        CGContextTranslateCTM(context, titleRect.origin.x, 0);
+        CGContextScaleCTM(context, titleRect.size.width / width, 1);
+        CGContextTranslateCTM(context, -titleRect.origin.x, 0);
+        result = [super drawTitle: title withFrame: wide inView: controlView];
+        CGContextRestoreGState(context);
+        return result;
+    }
+    return [super drawTitle: title withFrame: titleRect inView: controlView];
 }
 
 - (void) drawBezelWithFrame: (NSRect) frame inView: (NSView *) controlView {
