@@ -965,6 +965,70 @@ static NSDictionary *sScrollerButtonAttributes = nil;
 
 @end
 
+@implementation NSGraphicsStyle (NSTabViewAqua)
+
+// QUIRK: the tab strip and box look of macOS 10.14 (light appearance). Not documented. Evidence: black-box
+// renders of NSTabView on macOS 10.14.4 at 2x (tier 2): the box is a 4 point rounded rectangle
+// filled with black at 4% and outlined with black at about 6%; the strip is a white 4 point rounded
+// rectangle with a gray outline and a short shadow below it; the selected tab is a vertical gradient from
+// (110,163,250) to (13,97,255) in an active window and light gray in an inactive one.
+// Test: appkit-tabview-aqua.m
+static const CGFloat NSAquaTabCornerRadius = 4;
+
+static NSBezierPath *NSAquaRoundedPath(NSRect rect, CGFloat radius) {
+    return [NSBezierPath bezierPathWithRoundedRect: rect xRadius: radius yRadius: radius];
+}
+
+- (void) drawTabViewBoxInRect: (NSRect) rect {
+    NSBezierPath *path = NSAquaRoundedPath(NSInsetRect(rect, 0.5, 0.5), NSAquaTabCornerRadius);
+
+    [[NSColor colorWithCalibratedWhite: 0 alpha: 0.04] setFill];
+    [path fill];
+    [[NSColor colorWithCalibratedWhite: 0 alpha: 0.07] setStroke];
+    [path setLineWidth: 1];
+    [path stroke];
+}
+
+- (void) drawTabStripInRect: (NSRect) rect {
+    BOOL flipped = [[NSGraphicsContext currentContext] isFlipped];
+
+    [[NSColor colorWithCalibratedWhite: 0 alpha: 0.14] setFill];
+    [NSAquaRoundedPath(NSOffsetRect(rect, 0, flipped ? 0.5 : -0.5), NSAquaTabCornerRadius) fill];
+    [[NSColor whiteColor] setFill];
+    [NSAquaRoundedPath(NSInsetRect(rect, 0.5, 0.5), NSAquaTabCornerRadius - 0.5) fill];
+    [[NSColor colorWithCalibratedWhite: 0 alpha: 0.2] setStroke];
+    NSBezierPath *edge = NSAquaRoundedPath(NSInsetRect(rect, 0.5, 0.5), NSAquaTabCornerRadius - 0.5);
+    [edge setLineWidth: 1];
+    [edge stroke];
+}
+
+- (void) drawSelectedTabInRect: (NSRect) rect stripRect: (NSRect) stripRect active: (BOOL) active {
+    CGContextRef ctx = [[NSGraphicsContext currentContext] graphicsPort];
+    BOOL flipped = [[NSGraphicsContext currentContext] isFlipped];
+    CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB();
+    CGFloat blue[8] = {110 / 255.0, 163 / 255.0, 250 / 255.0, 1, 13 / 255.0, 97 / 255.0, 1, 1};
+    CGFloat gray[8] = {0.93, 0.93, 0.93, 1, 0.87, 0.87, 0.87, 1};
+    CGGradientRef gradient = CGGradientCreateWithColorComponents(space, active ? blue : gray, NULL, 2);
+    NSRect inner = NSInsetRect(stripRect, 0.5, 0.5);
+
+    CGContextSaveGState(ctx);
+    [NSAquaRoundedPath(inner, NSAquaTabCornerRadius - 0.5) addClip];
+    CGContextClipToRect(ctx, NSIntersectionRect(rect, inner));
+    CGContextDrawLinearGradient(ctx, gradient,
+                                CGPointMake(0, flipped ? NSMinY(inner) : NSMaxY(inner)),
+                                CGPointMake(0, flipped ? NSMaxY(inner) : NSMinY(inner)), 0);
+    CGContextRestoreGState(ctx);
+    CGGradientRelease(gradient);
+    CGColorSpaceRelease(space);
+}
+
+- (void) drawTabDividerInRect: (NSRect) rect {
+    [[NSColor colorWithCalibratedWhite: 0.898 alpha: 1] setFill];
+    NSRectFill(rect);
+}
+
+@end
+
 @implementation NSView (NSGraphicsStyle)
 
 - (NSGraphicsStyle *) graphicsStyle {

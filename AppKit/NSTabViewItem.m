@@ -217,6 +217,10 @@ NSString *_NSTruncatedStringWithAttributesInRect(NSString *string,
 
 // This is private Apple API, BGHUDAppKit uses it, override for custom color
 - _labelColor {
+    // QUIRK: the selected tab of an active window is drawn on a blue segment, so its label is white.
+    // Evidence: black-box renders on macOS 10.14.4 (tier 2). Test: appkit-tabview-aqua.m
+    if ([_tabView selectedTabViewItem] == self && [[_tabView window] isKeyWindow])
+        return [NSColor whiteColor];
     return [NSColor blackColor];
 }
 

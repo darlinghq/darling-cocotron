@@ -199,3 +199,14 @@ typedef struct _Margins {
 @interface NSView (NSGraphicsStyle)
 - (NSGraphicsStyle *) graphicsStyle;
 @end
+
+@interface NSGraphicsStyle (NSTabViewAqua)
+/* The tinted rounded box behind a tab view's content, and the segmented strip of tabs that straddles
+   its top edge. All rectangles are in the coordinates of the current context, whatever its
+   orientation. */
+- (void) drawTabViewBoxInRect: (NSRect) rect;
+- (void) drawTabStripInRect: (NSRect) rect;
+- (void) drawSelectedTabInRect: (NSRect) rect stripRect: (NSRect) stripRect active: (BOOL) active;
+- (void) drawTabDividerInRect: (NSRect) rect;
+@end
+
