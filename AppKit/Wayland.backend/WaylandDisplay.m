@@ -16,6 +16,7 @@
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  SOFTWARE. */
 
+#import <AppKit/NSTextInputBackend.h>
 #import "WaylandDisplay.h"
 #import "../private-include/AppKit/CarbonKeys.h"
 #import "NSEvent_gesture.h"
@@ -409,7 +410,7 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         // wl_display_disconnect() doesn't free proxies.
         struct wl_proxy *proxies[] = {_imageCursorBuffer, _cursorFractionalScale, _cursorSurface,
                                       _lockedPointer, _relativePointer, _pointerConstraints, _relativePointerManager,
-                                      _pinchGesture, _pointerGestures, _pointer, _keyboard,
+                                      _textInput, _textInputManager, _pinchGesture, _pointerGestures, _pointer, _keyboard,
                                       _seat, _decorationManager, _dataDeviceManager, _wmBase,
                                       _shm, _viewporter, _fractionalScaleManager, _activationToken, _activation, _subcompositor, _logicalOutputManager,
                                       _legacyLogicalOutputManager, _compositor, _registry};
@@ -583,6 +584,11 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         _pointerGestures = [self bindGlobal: name interface: &zwp_pointer_gestures_v1_interface
                                     version: MIN(version, 2) kind: 0 object: nil];
         [self attachPinchGesture];
+    } else if (strcmp(interface, "zwp_text_input_manager_v3") == 0 && _textInputManager == NULL) {
+        _textInputManagerName = name;
+        _textInputManager = [self bindGlobal: name interface: &zwp_text_input_manager_v3_interface
+                                     version: 1 kind: 0 object: nil];
+        [self attachTextInput];
     } else if (strcmp(interface, "zwp_pointer_constraints_v1") == 0 && _pointerConstraints == NULL) {
         _pointerConstraintsName = name;
         _pointerConstraints = [self bindGlobal: name interface: &zwp_pointer_constraints_v1_interface
@@ -600,6 +606,7 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
                          version: MIN(version, 5)
                             kind: WaylandObjectSeat
                           object: self];
+        [self attachTextInput];
     } else if (strcmp(interface, "zxdg_output_manager_v1") == 0 && _logicalOutputManager == NULL) {
         _logicalOutputManagerName = name;
         _logicalOutputManager = [self bindGlobal: name interface: &zxdg_output_manager_v1_interface
@@ -683,6 +690,12 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
 }
 
 - (void) registryGlobalRemoved: (uint32_t) name {
+    if (_textInputManager && name == _textInputManagerName) {
+        [self detachTextInput];
+        WaylandMarshal(_textInputManager, WP_TEXT_INPUT_MANAGER_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
+        _textInputManager = NULL; _textInputManagerName = 0;
+        return;
+    }
     if (_pointerGestures && name == _pointerGesturesName) {
         [self detachPinchGesture];
         if (WL.wl_proxy_get_version(_pointerGestures) >= 2)
@@ -894,6 +907,10 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
 
     case WaylandObjectPinchGesture:
         [self pinchEvent: opcode arguments: args];
+        break;
+
+    case WaylandObjectTextInput:
+        [self textInputEvent: opcode arguments: args];
         break;
 
     case WaylandObjectActivationToken:
@@ -1251,6 +1268,204 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
                         deltaX: deltaX
                         deltaY: deltaY];
     [self postEvent: event atStart: NO];
+}
+
+#pragma mark - Text input (text-input-v3)
+
+// The compositor's input method sends the composition (preedit_string) and the final text
+// (commit_string) between enter and leave, as one state applied at done. They go to the
+// text input client of the window's first responder through its NSTextInputContext.
+
+- (void) attachTextInput {
+    if (_textInputManager == NULL || _seat == NULL || _textInput != NULL)
+        return;
+    union wl_argument args[2] = {{.o = NULL}, {.o = (struct wl_object *) _seat}};
+    _textInput = WaylandCreateObject(_textInputManager, WP_TEXT_INPUT_MANAGER_GET_TEXT_INPUT,
+                                     &zwp_text_input_v3_interface, args,
+                                     WaylandObjectTextInput, self);
+}
+
+- (void) detachTextInput {
+    if (_textInput == NULL)
+        return;
+    [self textInputLeft];
+    WaylandMarshal(_textInput, WP_TEXT_INPUT_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
+    _textInput = NULL;
+}
+
+- (NSTextInputContext *) textInputContext {
+    return _textInputWindow != nil
+            ? [NSTextInputContext inputContextForWindow: [_textInputWindow delegate]] : nil;
+}
+
+// Sends the text input state to the compositor: whether the first responder takes text and where
+// its caret is. Only a change is sent, because the compositor answers every commit.
+- (void) syncTextInput {
+    if (_textInput == NULL || _textInputWindow == nil)
+        return;
+
+    NSTextInputContext *context = [self textInputContext];
+    BOOL wanted = context != nil;
+    BOOL changed = NO;
+
+    if (wanted != _textInputEnabled) {
+        WaylandMarshal(_textInput, wanted ? WP_TEXT_INPUT_ENABLE : WP_TEXT_INPUT_DISABLE,
+                       NULL, 0, NULL);
+        _textInputEnabled = wanted;
+        changed = YES;
+        if (!wanted) {
+            [_textInputPreedit release];
+            _textInputPreedit = nil;
+        }
+    }
+    if (wanted) {
+        // The caret rectangle in the surface's logical coordinates, y down.
+        NSRect screenRect = [context candidateRectOnScreen];
+        NSRect rect = NSZeroRect;
+        if (!NSEqualRects(screenRect, NSZeroRect)) {
+            NSRect windowRect = [[_textInputWindow delegate] convertRectFromScreen: screenRect];
+            NSPoint offset = [_textInputWindow contentOffset];
+            rect = NSMakeRect(NSMinX(windowRect) + offset.x,
+                              [_textInputWindow frame].size.height - NSMaxY(windowRect) + offset.y,
+                              NSWidth(windowRect), NSHeight(windowRect));
+        }
+        if (!NSEqualRects(rect, _textInputRect) || changed) {
+            union wl_argument args[4] = {{.i = (int32_t) floor(rect.origin.x)},
+                                         {.i = (int32_t) floor(rect.origin.y)},
+                                         {.i = (int32_t) ceil(rect.size.width)},
+                                         {.i = (int32_t) ceil(rect.size.height)}};
+            WaylandMarshal(_textInput, WP_TEXT_INPUT_SET_CURSOR_RECTANGLE, NULL, 0, args);
+            _textInputRect = rect;
+            changed = YES;
+        }
+    }
+    if (changed) {
+        WaylandMarshal(_textInput, WP_TEXT_INPUT_COMMIT, NULL, 0, NULL);
+        [self flush];
+    }
+}
+
+- (void) textInputCandidateRectChangedInWindow: (NSWindow *) window {
+    if (_textInputWindow != nil && [_textInputWindow delegate] == window)
+        [self syncTextInput];
+}
+
+// The compositor took the text input away from the window: a composition that was showing is
+// removed, as no commit can follow it.
+- (void) textInputLeft {
+    NSTextInputContext *context = [self textInputContext];
+
+    if (_textInputPreedit != nil)
+        [context cancelComposition];
+    [_textInputPreedit release];
+    _textInputPreedit = nil;
+    [_textInputPendingPreedit release];
+    _textInputPendingPreedit = nil;
+    [_textInputPendingCommit release];
+    _textInputPendingCommit = nil;
+    _textInputWindow = nil;
+    _textInputEnabled = NO;
+    _textInputRect = NSZeroRect;
+}
+
+// Converts a byte offset in the UTF-8 string to a UTF-16 offset in `text`.
+static NSUInteger utf16OffsetOfUTF8Offset(NSString *text, int byteOffset) {
+    if (byteOffset < 0)
+        return [text length];
+
+    NSUInteger length = [text length];
+    NSUInteger offset = 0;
+    int bytes = 0;
+
+    while (offset < length && bytes < byteOffset) {
+        unichar c = [text characterAtIndex: offset];
+        if (c >= 0xD800 && c < 0xDC00 && offset + 1 < length) {
+            bytes += 4;
+            offset += 2;
+        } else {
+            bytes += c < 0x80 ? 1 : (c < 0x800 ? 2 : 3);
+            offset++;
+        }
+    }
+    return offset;
+}
+
+// Applies one done batch in the order the protocol gives: the old composition goes, the
+// committed text is inserted, the new composition is shown with its caret.
+- (void) textInputDone {
+    NSTextInputContext *context = [self textInputContext];
+    NSString *commit = [_textInputPendingCommit autorelease];
+    NSString *preedit = [_textInputPendingPreedit autorelease];
+    int cursorBegin = _textInputPendingCursorBegin;
+    int cursorEnd = _textInputPendingCursorEnd;
+
+    _textInputPendingCommit = nil;
+    _textInputPendingPreedit = nil;
+    _textInputPendingCursorBegin = _textInputPendingCursorEnd = -1;
+
+    if (context == nil)
+        return;
+    if ([preedit length] == 0)
+        preedit = nil;
+    // Nothing the client has not already got: the compositor answers each commit with a done.
+    BOOL samePreedit = preedit == nil ? _textInputPreedit == nil : [preedit isEqualToString: _textInputPreedit];
+    if ([commit length] == 0 && samePreedit)
+        return;
+
+    if ([commit length] > 0) {
+        [context cancelComposition];
+        [_textInputPreedit release];
+        _textInputPreedit = nil;
+        [context commitComposition: commit];
+    }
+    if (preedit == nil) {
+        if (_textInputPreedit != nil)
+            [context cancelComposition];
+        [_textInputPreedit release];
+        _textInputPreedit = nil;
+        return;
+    }
+    NSUInteger begin = utf16OffsetOfUTF8Offset(preedit, cursorBegin);
+    NSUInteger end = cursorEnd < 0 ? begin : utf16OffsetOfUTF8Offset(preedit, cursorEnd);
+    if (end < begin)
+        end = begin;
+    [_textInputPreedit release];
+    _textInputPreedit = [preedit copy];
+    [context updateComposition: preedit selection: NSMakeRange(begin, end - begin)];
+}
+
+- (void) textInputEvent: (uint32_t) opcode arguments: (union wl_argument *) args {
+    switch (opcode) {
+    case WP_TEXT_INPUT_EV_ENTER:
+        [self textInputLeft];
+        _textInputWindow = [self windowForSurface: (struct wl_proxy *) args[0].o];
+        [self syncTextInput];
+        break;
+
+    case WP_TEXT_INPUT_EV_LEAVE:
+        [self textInputLeft];
+        break;
+
+    case WP_TEXT_INPUT_EV_PREEDIT_STRING:
+        [_textInputPendingPreedit release];
+        _textInputPendingPreedit = args[0].s != NULL ? [[NSString alloc] initWithUTF8String: args[0].s] : nil;
+        _textInputPendingCursorBegin = args[1].i;
+        _textInputPendingCursorEnd = args[2].i;
+        break;
+
+    case WP_TEXT_INPUT_EV_COMMIT_STRING:
+        [_textInputPendingCommit release];
+        _textInputPendingCommit = args[0].s != NULL ? [[NSString alloc] initWithUTF8String: args[0].s] : nil;
+        break;
+
+    case WP_TEXT_INPUT_EV_DELETE_SURROUNDING_TEXT:
+        // No surrounding text is reported to the input method, so it has nothing to delete.
+        break;
+
+    case WP_TEXT_INPUT_EV_DONE:
+        [self textInputDone];
+        break;
+    }
 }
 
 #pragma mark - Pinch gestures
@@ -2215,6 +2430,8 @@ static uint32_t WaylandKeyLayoutCodepoint(void *context, uint32_t keysym) {
     }
     if (_wlLastClickWindow == window)
         _wlLastClickWindow = nil;
+    if (_textInputWindow == window)
+        [self textInputLeft];
     if (_pinchWindow == window)
         [self postPinchPhase: NSEventPhaseCancelled];
     [_draggingManager windowUnmapped: window];

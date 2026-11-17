@@ -6,6 +6,10 @@
 #import <AppKit/NSKeyboardBinding.h>
 #import <AppKit/NSKeyboardBindingManager.h>
 #import <AppKit/NSTextInputClient.h>
+#import <AppKit/NSDisplay.h>
+#import <AppKit/NSTextInputBackend.h>
+#import <AppKit/NSView.h>
+#import <objc/runtime.h>
 
 // The NSTextInputClient methods a context sends.
 @interface NSObject (NSTextInputContextClient)
@@ -46,6 +50,7 @@ NSString *const NSTextInputReplacementRangeAttributeName = @"NSTextInputReplacem
 }
 
 - (void) invalidateCharacterCoordinates {
+    [self notifyDisplayOfCandidateRectChange];
 }
 
 // Without an input method, the only marked text is the client's own.
@@ -98,6 +103,18 @@ static BOOL isInsertableText(NSString *text) {
     return YES;
 }
 
+// Tells the window system backend, if it has an input method, that its
+// candidate window belongs somewhere else now.
+- (void) notifyDisplayOfCandidateRectChange {
+    NSWindow *window = [(NSView *) _client isKindOfClass: [NSView class]]
+            ? [(NSView *) _client window] : nil;
+    NSDisplay *display = [NSDisplay currentDisplay];
+
+    if (window != nil &&
+        [display respondsToSelector: @selector(textInputCandidateRectChangedInWindow:)])
+        [display textInputCandidateRectChangedInWindow: window];
+}
+
 + (NSString *) localizedNameForInputSource: (NSTextInputSourceIdentifier) inputSourceIdentifier {
     return @"U.S.";
 }
@@ -111,6 +128,96 @@ static BOOL isInsertableText(NSString *text) {
 
 - (NSArray *) keyboardInputSources {
     return [NSArray arrayWithObject: @"com.apple.keylayout.US"];
+}
+
+@end
+
+@implementation NSTextInputContext (BackendInputMethod)
+
+static char compositionSelectionKey;
+
+// The caret inside the composition last sent to the client. The context has no
+// instance variable for it (see AppKit/NSTextInput.h), so it is kept as an
+// associated value.
+- (NSRange) compositionSelection {
+    NSValue *value = objc_getAssociatedObject(self, &compositionSelectionKey);
+
+    return value != nil ? [value rangeValue] : NSMakeRange(0, 0);
+}
+
+- (void) setCompositionSelection: (NSRange) range {
+    objc_setAssociatedObject(self, &compositionSelectionKey,
+                             [NSValue valueWithRange: range],
+                             OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
+
++ (NSTextInputContext *) inputContextForWindow: (NSWindow *) window {
+    NSResponder *responder = [window firstResponder];
+
+    if ([responder respondsToSelector: @selector(inputContext)])
+        return [(id) responder inputContext];
+    return nil;
+}
+
+- (void) updateComposition: (NSString *) text selection: (NSRange) selection {
+    if ([text length] == 0) {
+        [self cancelComposition];
+        return;
+    }
+    if (![_client respondsToSelector:
+            @selector(setMarkedText:selectedRange:replacementRange:)])
+        return;
+    if (selection.location > [text length])
+        selection.location = [text length];
+    if (NSMaxRange(selection) > [text length])
+        selection.length = [text length] - selection.location;
+    [self setCompositionSelection: selection];
+    [_client setMarkedText: text
+             selectedRange: selection
+          replacementRange: NSMakeRange(NSNotFound, 0)];
+    [self notifyDisplayOfCandidateRectChange];
+}
+
+- (void) cancelComposition {
+    if (![_client respondsToSelector: @selector(hasMarkedText)] ||
+        ![_client hasMarkedText])
+        return;
+    // Empty marked text removes the composition from the client's text.
+    [_client setMarkedText: @""
+             selectedRange: NSMakeRange(0, 0)
+          replacementRange: NSMakeRange(NSNotFound, 0)];
+    if ([_client hasMarkedText])
+        [_client unmarkText];
+    [self setCompositionSelection: NSMakeRange(0, 0)];
+}
+
+- (void) commitComposition: (NSString *) text {
+    if ([text length] == 0 ||
+        ![_client respondsToSelector: @selector(insertText:replacementRange:)])
+        return;
+    [_client insertText: text replacementRange: NSMakeRange(NSNotFound, 0)];
+    [self setCompositionSelection: NSMakeRange(0, 0)];
+    [self notifyDisplayOfCandidateRectChange];
+}
+
+- (NSRect) candidateRectOnScreen {
+    if (![_client respondsToSelector:
+            @selector(firstRectForCharacterRange:actualRange:)])
+        return NSZeroRect;
+
+    NSRange range;
+    if ([_client respondsToSelector: @selector(hasMarkedText)] &&
+        [_client hasMarkedText]) {
+        range = [_client markedRange];
+        range = NSMakeRange(range.location + [self compositionSelection].location, 0);
+    } else if ([_client respondsToSelector: @selector(selectedRange)]) {
+        range = [_client selectedRange];
+        range.length = 0;
+    } else
+        return NSZeroRect;
+    if (range.location == NSNotFound)
+        return NSZeroRect;
+    return [_client firstRectForCharacterRange: range actualRange: NULL];
 }
 
 @end

@@ -761,6 +761,13 @@ static void crtcBoundingBox(Display *display, XRRScreenResources *resources, RRC
     return dict;
 }
 
+- (void) textInputCandidateRectChangedInWindow: (NSWindow *) window {
+    X11Window *platformWindow = (X11Window *) [window platformWindow];
+
+    if ([platformWindow isKindOfClass: [X11Window class]])
+        [platformWindow updateInputMethodSpot];
+}
+
 - (int) keyboardLayoutId {
     int major = XkbMajorVersion, minor = XkbMinorVersion;
     XkbStateRec state;
@@ -1933,8 +1940,10 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
         if (window != nil)
             window->_receivingFocus = NO;
         lastFocusedWindow = delegate;
-        if (window != nil)
+        if (window != nil && window->_xic != NULL) {
             XSetICFocus(window->_xic);
+            [window updateInputMethodSpot];
+        }
         [self resyncModifierKeysOnFocusIn: window];
         // Losing the focus released the pointer grab; the application still
         // wants relative mode.

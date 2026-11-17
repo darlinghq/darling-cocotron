@@ -2221,11 +2221,22 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
     _firstResponder = responder;
 
     if ([_firstResponder becomeFirstResponder]) {
+        [self textInputFirstResponderChanged];
         return YES;
     } else {
         _firstResponder = self;
+        [self textInputFirstResponderChanged];
         return NO;
     }
+}
+
+// An input method of the window system follows the first responder: it only wants to compose
+// text for a text input client, next to that client's caret.
+- (void) textInputFirstResponderChanged {
+    NSDisplay *display = [NSDisplay currentDisplay];
+
+    if ([display respondsToSelector: @selector(textInputCandidateRectChangedInWindow:)])
+        [display textInputCandidateRectChangedInWindow: self];
 }
 
 - (void) makeKeyWindow {

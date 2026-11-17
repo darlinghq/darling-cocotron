@@ -78,6 +78,12 @@ extern NSString *const X11WindowBackingDidFlushNotification;
 
 @public
     XIC _xic;
+    // Set once the context delivers the composition through callbacks (on-the-spot
+    // preedit), with the callbacks and the composition's code points and caret.
+    BOOL _onTheSpotPreedit;
+    XIMCallback _preeditCallbacks[4];
+    NSMutableData *_preedit;
+    int _preeditCaret;
     // YES while X11Display delivers FocusIn for this window (see -makeKey).
     BOOL _receivingFocus;
     // -isMiniaturized as last read from _NET_WM_STATE; PropertyNotify on that
@@ -88,6 +94,16 @@ extern NSString *const X11WindowBackingDidFlushNotification;
 
 + (void) removeDecorationForWindow: (Window) w onDisplay: (Display *) dpy;
 - (instancetype) initWithDelegate: (NSWindow *) delegate;
+- (void) createXInputContext;
+// The input method's composition, as its preedit callbacks report it, passed on to the
+// text input client of the window's first responder (see NSTextInputContext).
+- (void) preeditReplaceCharactersFrom: (int) first
+                               length: (int) length
+                             withText: (NSString *) text
+                                caret: (int) caret;
+- (void) preeditMoveCaretTo: (int) position direction: (XIMCaretDirection) direction;
+- (void) preeditDone;
+- (void) updateInputMethodSpot;
 - (O2Rect) frame;
 - (Visual *) visual;
 - (Drawable) drawable;
