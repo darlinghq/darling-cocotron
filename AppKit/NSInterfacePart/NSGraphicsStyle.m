@@ -781,19 +781,26 @@ static void NSAquaDrawProgressTrack(NSRect bar) {
 
 @implementation NSGraphicsStyle (NSTableView)
 
+// QUIRK: the table header look of macOS 10.14 (light appearance). Not documented. Evidence: black-box
+// renders of NSTableHeaderView on macOS 10.14.4 at 1x (tier 2): a white cell with a one point (214,214,214)
+// line along its top and bottom edge, and a (229,229,229) separator line, 3 points shorter than the cell at each
+// end, at the left edge of every column except the first. Test: appkit-table-header-aqua.m
 - (void) drawTableViewHeaderInRect: (NSRect) rect
                        highlighted: (BOOL) highlighted
 {
-    NSDrawButton(rect, rect);
-
-    if (highlighted) {
-        [[NSColor darkGrayColor] setFill];
-        NSRectFill(NSInsetRect(rect, 2, 2));
+    [[NSColor colorWithCalibratedWhite: highlighted ? 0.88 : 1 alpha: 1] setFill];
+    NSRectFill(rect);
+    [[NSColor colorWithCalibratedWhite: 214 / 255.0 alpha: 1] setFill];
+    NSRectFill(NSMakeRect(NSMinX(rect), NSMinY(rect), NSWidth(rect), 1));
+    NSRectFill(NSMakeRect(NSMinX(rect), NSMaxY(rect) - 1, NSWidth(rect), 1));
+    if (NSMinX(rect) > 0.5 && NSHeight(rect) > 8) {
+        [[NSColor colorWithCalibratedWhite: 229 / 255.0 alpha: 1] setFill];
+        NSRectFill(NSMakeRect(NSMinX(rect), NSMinY(rect) + 3, 1, NSHeight(rect) - 6));
     }
 }
 
 - (void) drawTableViewCornerInRect: (NSRect) rect {
-    NSDrawButton(rect, rect);
+    [self drawTableViewHeaderInRect: rect highlighted: NO];
 }
 
 @end
