@@ -2322,14 +2322,28 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
     }
 }
 
+// While the new key view is made first responder, -keyViewSelectionDirection
+// tells it which way the selection is moving (a view that tracks an inner
+// selection can start from its first or last item).
+// QUIRK: the direction is NSDirectSelection again once the method returns.
+// Not documented. Evidence: black-box observation (tier 2) on macOS 26.7.3
+// and 10.14.4.
+// Test: tests/appkit-window-key-view-selection-direction.m
+- (void) _makeFirstResponder: (NSResponder *) responder
+                 selecting: (NSSelectionDirection) direction {
+    NSSelectionDirection saved = NS_EXTRA(NSWindow, self)->_keyViewSelectionDirection;
+
+    NS_EXTRA(NSWindow, self)->_keyViewSelectionDirection = direction;
+    [self makeFirstResponder: responder];
+    NS_EXTRA(NSWindow, self)->_keyViewSelectionDirection = saved;
+}
+
 - (void) selectKeyViewFollowingView: (NSView *) view {
-    NSView *next = [view nextValidKeyView];
-    [self makeFirstResponder: next];
+    [self _makeFirstResponder: [view nextValidKeyView] selecting: NSSelectingNext];
 }
 
 - (void) selectKeyViewPrecedingView: (NSView *) view {
-    NSView *next = [view previousValidKeyView];
-    [self makeFirstResponder: next];
+    [self _makeFirstResponder: [view previousValidKeyView] selecting: NSSelectingPrevious];
 }
 
 - (void) recalculateKeyViewLoopIfNeeded {
@@ -2354,9 +2368,8 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
     [self recalculateKeyViewLoopIfNeeded];
 }
 
-// Key view selection is not tracked, so it is always direct.
 - (NSSelectionDirection) keyViewSelectionDirection {
-    return NSDirectSelection;
+    return NS_EXTRA(NSWindow, self)->_keyViewSelectionDirection;
 }
 
 - (void) disableKeyEquivalentForDefaultButtonCell {
