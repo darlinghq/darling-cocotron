@@ -396,11 +396,13 @@ static NSArray *pathsOfDocumentsEvent(NSAppleEventDescriptor *event) {
     for (NSInteger i = 1; i <= count; i++) {
         NSAppleEventDescriptor *item =
                 [object descriptorType] == typeAEList ? [object descriptorAtIndex: i] : object;
-        NSData *data = [item data];
         NSString *string = nil;
 
-        if ([item descriptorType] == typeFileURL || [item descriptorType] == typeUTF8Text)
-            string = [[[NSString alloc] initWithData: data encoding: NSUTF8StringEncoding] autorelease];
+        // Items are file URLs, text, or anything that coerces to a file URL (such as bookmark data).
+        if ([item descriptorType] != typeUTF8Text)
+            item = [item coerceToDescriptorType: typeFileURL];
+        if (item != nil)
+            string = [[[NSString alloc] initWithData: [item data] encoding: NSUTF8StringEncoding] autorelease];
 
         NSURL *url = string != nil ? [NSURL URLWithString: string] : nil;
         if ([url isFileURL] && [[url path] length] > 0)
