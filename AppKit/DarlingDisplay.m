@@ -140,10 +140,13 @@ void NSColorSetCatalogColor(NSColorListName catalogName, NSColorName colorName, 
     if ([colorName isEqual: @"highlightColor"])
         return [NSColor colorWithGenericGamma22White: 1.0f alpha: 1.0f];
     if ([colorName isEqual: @"keyboardFocusIndicatorColor"])
-        return [NSColor colorWithSRGBRed: 0.231373f
-                                   green: 0.60f
-                                    blue: 0.988235f
-                                    alpha: 1.0f];
+        // QUIRK: the indicator colour is a translucent blue, not an opaque one. Evidence: black-box read of
+        // +[NSColor keyboardFocusIndicatorColor] converted to sRGB on macOS 10.14.4, Blue control tint (tier 2).
+        // Test: appkit-focus-ring.m (test_quirk_keyboard_focus_indicator_color)
+        return [NSColor colorWithSRGBRed: 0.0f
+                                   green: 0.403922f
+                                    blue: 0.956863f
+                                    alpha: 0.247059f];
     if ([colorName isEqual: @"knobColor"])
         return [NSColor colorWithSRGBRed: 0.60f
                                    green: 0.60f

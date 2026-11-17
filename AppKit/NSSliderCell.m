@@ -545,23 +545,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         break;
     }
 
-    BOOL drawDottedRect = NO;
+}
 
-    // would be nice to put this code in some superclass
-    if ([[controlView window] firstResponder] == controlView) {
-        if ([controlView isKindOfClass: [NSMatrix class]]) {
-            NSMatrix *matrix = (NSMatrix *) controlView;
-
-            drawDottedRect = ([matrix keyCell] == self) ? YES : NO;
-        } else if ([controlView isKindOfClass: [NSControl class]]) {
-            NSControl *control = (NSControl *) controlView;
-
-            drawDottedRect = ([control selectedCell] == self) ? YES : NO;
-        }
-    }
-
-    if (drawDottedRect)
-        NSDottedFrameRect(NSInsetRect(frame, 1, 1)); // fugly
+// the ring is drawn around the knob
+- (NSBezierPath *) _focusRingPathWithFrame: (NSRect) frame inView: (NSView *) controlView {
+    return [NSBezierPath bezierPathWithOvalInRect: [self knobRectFlipped: [controlView isFlipped]]];
 }
 
 - (void) setClosestDoubleValue: (double) value {

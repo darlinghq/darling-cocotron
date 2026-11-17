@@ -26,7 +26,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSApplication.h>
 #import <Foundation/NSNotification.h>
 
-@class NSFont, NSImage, NSView;
+@class NSBezierPath, NSFont, NSImage, NSView;
 
 typedef NS_ENUM(NSUInteger, NSCellType) {
     NSNullCellType,
@@ -227,6 +227,15 @@ APPKIT_EXPORT NSNotificationName NSControlTintDidChangeNotification;
 @property(nonatomic, assign) id representedObject;
 @property NSControlSize controlSize;
 @property(nonatomic) NSFocusRingType focusRingType;
+
+- (NSRect) focusRingMaskBoundsForFrame: (NSRect) cellFrame inView: (NSView *) controlView;
+- (void) drawFocusRingMaskWithFrame: (NSRect) cellFrame inView: (NSView *) controlView;
+
+// Private: whether the cell is the one of the control that has the keyboard focus in a key window.
+- (BOOL) _hasKeyboardFocusInView: (NSView *) controlView;
+// Private: the shape of the ring the control draws for the cell's keyboard focus when the cell has the focus, in
+// the coordinates of the control; nil for a cell that has no shape of its own.
+- (NSBezierPath *) _focusRingPathWithFrame: (NSRect) frame inView: (NSView *) controlView;
 @property(nonatomic) NSBackgroundStyle backgroundStyle;
 
 // The background style the cell draws its interior for (read-only).

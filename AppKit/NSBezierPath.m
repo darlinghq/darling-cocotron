@@ -22,6 +22,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSRaise.h>
 #import <ApplicationServices/ApplicationServices.h>
 #import <Foundation/NSAffineTransform.h>
+#import "NSGraphics-Private.h"
 
 @implementation NSBezierPath
 
@@ -1366,31 +1367,78 @@ static void _addPathToContext(NSBezierPath *self, CGContextRef context) {
     }
 }
 
+// The outline of the path as a CGPath, for the focus ring style; NULL when no focus ring is asked for.
+static CGPathRef focusRingPathForBezierPath(NSBezierPath *self) {
+    if ([[NSGraphicsContext currentContext] _focusRingPlacement] == 0)
+        return NULL;
+
+    CGMutablePathRef path = CGPathCreateMutable();
+    CGPoint *points = self->_points;
+
+    for (int i = 0; i < self->_numberOfElements; i++) {
+        switch (self->_elements[i]) {
+        case NSMoveToBezierPathElement:
+            CGPathMoveToPoint(path, NULL, points[0].x, points[0].y);
+            points += 1;
+            break;
+        case NSLineToBezierPathElement:
+            CGPathAddLineToPoint(path, NULL, points[0].x, points[0].y);
+            points += 1;
+            break;
+        case NSCurveToBezierPathElement:
+            CGPathAddCurveToPoint(path, NULL, points[0].x, points[0].y, points[1].x, points[1].y, points[2].x,
+                                  points[2].y);
+            points += 3;
+            break;
+        case NSClosePathBezierPathElement:
+            CGPathCloseSubpath(path);
+            break;
+        }
+    }
+    return path;
+}
+
 - (void) stroke {
     CGContextRef context = [[NSGraphicsContext currentContext] graphicsPort];
+    CGPathRef ringPath = focusRingPathForBezierPath(self);
+    BOOL paint = ringPath == NULL ? YES : _NSFocusRingBeforePaintingPath(context, ringPath);
 
-    CGContextSaveGState(context);
-    CGContextSetLineWidth(context, [self lineWidth]);
-    CGContextSetMiterLimit(context, [self miterLimit]);
-    CGContextSetFlatness(context, [self flatness]);
-    CGContextSetLineCap(context, [self lineCapStyle]);
-    CGContextSetLineJoin(context, [self lineJoinStyle]);
-    CGContextSetLineDash(context, _dashPhase, _dashes, _dashCount);
-    CGContextBeginPath(context);
-    _addPathToContext(self, context);
-    CGContextStrokePath(context);
-    CGContextRestoreGState(context);
+    if (paint) {
+        CGContextSaveGState(context);
+        CGContextSetLineWidth(context, [self lineWidth]);
+        CGContextSetMiterLimit(context, [self miterLimit]);
+        CGContextSetFlatness(context, [self flatness]);
+        CGContextSetLineCap(context, [self lineCapStyle]);
+        CGContextSetLineJoin(context, [self lineJoinStyle]);
+        CGContextSetLineDash(context, _dashPhase, _dashes, _dashCount);
+        CGContextBeginPath(context);
+        _addPathToContext(self, context);
+        CGContextStrokePath(context);
+        CGContextRestoreGState(context);
+    }
+    if (ringPath != NULL) {
+        _NSFocusRingAfterPaintingPath(context, ringPath);
+        CGPathRelease(ringPath);
+    }
 }
 
 - (void) fill {
     CGContextRef context = [[NSGraphicsContext currentContext] graphicsPort];
+    CGPathRef ringPath = focusRingPathForBezierPath(self);
+    BOOL paint = ringPath == NULL ? YES : _NSFocusRingBeforePaintingPath(context, ringPath);
 
-    CGContextBeginPath(context);
-    _addPathToContext(self, context);
-    if ([self windingRule] == NSNonZeroWindingRule)
-        CGContextFillPath(context);
-    else
-        CGContextEOFillPath(context);
+    if (paint) {
+        CGContextBeginPath(context);
+        _addPathToContext(self, context);
+        if ([self windingRule] == NSNonZeroWindingRule)
+            CGContextFillPath(context);
+        else
+            CGContextEOFillPath(context);
+    }
+    if (ringPath != NULL) {
+        _NSFocusRingAfterPaintingPath(context, ringPath);
+        CGPathRelease(ringPath);
+    }
 }
 
 - (void) addClip {

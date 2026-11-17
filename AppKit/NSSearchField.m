@@ -19,11 +19,17 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSSearchField.h>
 #import <AppKit/NSSearchFieldCell.h>
+#import <AppKit/NSBezierPath.h>
 
 @implementation NSSearchField
 
 + (Class) cellClass {
     return [NSSearchFieldCell class];
+}
+
+// The ring follows the rounded corners of the search field's bezel (see NSSearchFieldCell).
+- (void) drawFocusRingMask {
+    [[NSBezierPath bezierPathWithRoundedRect: [self bounds] xRadius: 4 yRadius: 4] fill];
 }
 
 - (NSSearchFieldCell *) _searchCell {

@@ -974,11 +974,15 @@ static void NSAquaDrawProgressTrack(NSRect bar) {
         // on macOS 10.14.4 at 1x (tier 2). Test: appkit-textfield-aqua.m
         [[NSColor whiteColor] setFill];
         NSRectFill(NSInsetRect(rect, 1, 1));
+        // the outline is blended over what is under it (NSRectFill would replace the pixels, so that a window,
+        // which has no transparency, showed the outline as solid black)
         [[NSColor colorWithCalibratedWhite: 0 alpha: 0.2] setFill];
-        NSRectFill(NSMakeRect(NSMinX(rect), NSMinY(rect), NSWidth(rect), 1));
-        NSRectFill(NSMakeRect(NSMinX(rect), NSMaxY(rect) - 1, NSWidth(rect), 1));
-        NSRectFill(NSMakeRect(NSMinX(rect), NSMinY(rect) + 1, 1, NSHeight(rect) - 2));
-        NSRectFill(NSMakeRect(NSMaxX(rect) - 1, NSMinY(rect) + 1, 1, NSHeight(rect) - 2));
+        NSRect outline[4] = {NSMakeRect(NSMinX(rect), NSMinY(rect), NSWidth(rect), 1),
+                             NSMakeRect(NSMinX(rect), NSMaxY(rect) - 1, NSWidth(rect), 1),
+                             NSMakeRect(NSMinX(rect), NSMinY(rect) + 1, 1, NSHeight(rect) - 2),
+                             NSMakeRect(NSMaxX(rect) - 1, NSMinY(rect) + 1, 1, NSHeight(rect) - 2)};
+
+        NSRectFillListUsingOperation(outline, 4, NSCompositeSourceOver);
     } else {
         [[NSColor blackColor] setStroke];
         NSFrameRect(rect);
@@ -1193,6 +1197,15 @@ static void NSAquaDrawToggle(NSRect rect, BOOL radio, NSInteger state, BOOL high
                    controlSize: (NSControlSize) controlSize
 {
     NSAquaDrawToggle(rect, YES, state, highlighted, enabled, active, controlSize);
+}
+
+- (NSBezierPath *) toggleBoxPathInRect: (NSRect) rect radio: (BOOL) radio controlSize: (NSControlSize) controlSize {
+    CGFloat size = NSAquaToggleBoxSize(radio, controlSize);
+    NSRect box = NSMakeRect(NSMinX(rect) + NSAquaToggleBoxInset(radio, controlSize),
+                            ceil(NSMidY(rect) - size / 2), size, size);
+
+    return radio ? [NSBezierPath bezierPathWithOvalInRect: box]
+                 : [NSBezierPath bezierPathWithRoundedRect: box xRadius: size * 3.5 / 14 yRadius: size * 3.5 / 14];
 }
 
 @end

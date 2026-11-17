@@ -55,6 +55,10 @@ typedef enum {
     NSColorRenderingIntent _renderingIntent;
     NSCompositingOperation _compOperation;
     NSPoint _patternPhase;
+    // Focus ring style set by NSSetFocusRingStyle (0 = none, else placement + 1) and its saved states
+    NSInteger _focusRingPlacement;
+    BOOL _focusRingOuterOnly;
+    NSMutableArray *_focusRingStack;
     NS_SIDE_IVARS_END(NSGraphicsContext)
 }
 
