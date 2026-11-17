@@ -3,6 +3,8 @@
 #import <Foundation/Foundation.h>
 #import <Onyx2D/O2Font_freetype.h>
 
+const CFStringRef kCTFontManagerErrorDomain = CFSTR("com.apple.CoreText.CTFontManagerErrorDomain");
+const CFStringRef kCTFontManagerErrorFontURLsKey = CFSTR("CTFontManagerErrorFontURLs");
 const CFStringRef kCTFontManagerRegisteredFontsChangedNotification = CFSTR("CTFontManagerFontChangedNotification");
 
 bool CTFontManagerRegisterGraphicsFont(CGFontRef font, CFErrorRef* error)
