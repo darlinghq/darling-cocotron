@@ -108,12 +108,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return [super resignFirstResponder];
 }
 
-#if 0
-// This results in no button being drawn if there's no image.
--(BOOL)isFlipped {
-   return YES;
+- (BOOL) isFlipped {
+    return YES;
 }
-#endif
 - (BOOL) isOpaque {
     return [_cell isOpaque];
 }

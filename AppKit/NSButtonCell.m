@@ -951,7 +951,9 @@ static const CGFloat kImageMargin = 2.;
             frame.size.width = 10 - step * 2;
             frame.size.height = 10 - step * 2;
             frame.origin.x = 5 - step;
-            frame.origin.y = flipped ? step * 2 - 3 : 7 - step * 2;
+            // The room for the shadow is below the bezel: 7 (5 small) from the bottom, so the rest of the
+            // inset, 3, is above it.
+            frame.origin.y = flipped ? 3 : 7 - step * 2;
             break;
         }
 
@@ -1148,7 +1150,17 @@ static void drawRoundedBezel(CGContextRef context, CGRect frame) {
         }
         break;
 
-    default:
+    default: {
+        // The graphics style draws its images for a view that is not flipped; in a flipped view they
+        // are mirrored about the frame so that they come out the right way up.
+        CGContextRef context = [[NSGraphicsContext currentContext] graphicsPort];
+        BOOL mirror = [controlView isFlipped];
+
+        if (mirror) {
+            CGContextSaveGState(context);
+            CGContextTranslateCTM(context, 0, 2 * frame.origin.y + frame.size.height);
+            CGContextScaleCTM(context, 1, -1);
+        }
         if (![self isBordered]) {
             [[_controlView graphicsStyle]
                     drawUnborderedButtonInRect: frame
@@ -1166,7 +1178,10 @@ static void drawRoundedBezel(CGContextRef context, CGRect frame) {
                         drawPushButtonNormalInRect: frame
                                          defaulted: defaulted];
         }
+        if (mirror)
+            CGContextRestoreGState(context);
         break;
+    }
     }
 }
 
@@ -1196,6 +1211,19 @@ static void drawRoundedBezel(CGContextRef context, CGRect frame) {
            withFrame: (NSRect) titleRect
               inView: (NSView *) controlView
 {
+
+    // The title is centered vertically in the frame it is given, which may be taller than the text; the
+    // rectangle it was drawn in is returned.
+    // QUIRK: not documented. Evidence: black-box observation on macOS 10.14.4 (flipped view) and 26.7.3
+    // (flipped and unflipped view) of a 40 point frame with a 13 point title: the returned rectangle is the
+    // height of the text and centered in the frame, and the ink lies in the middle rows. Mojave puts the
+    // title at the top edge in a view that is not flipped; that is not followed because buttons are views
+    // that are flipped there. Test: tests/appkit-button-cell-draw-title-centered.m
+    // (test_quirk_button_cell_title_centered)
+    NSSize textSize = [title size];
+    CGFloat textHeight = MIN(ceil(textSize.height), titleRect.size.height);
+    titleRect.origin.y += floor((titleRect.size.height - textHeight) / 2 + 0.5);
+    titleRect.size.height = textHeight;
 
     [title _clipAndDrawInRect: titleRect];
 
