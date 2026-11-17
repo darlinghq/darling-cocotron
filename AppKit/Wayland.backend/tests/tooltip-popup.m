@@ -55,6 +55,7 @@ static id gDriver;
     BOOL clicked;
 }
 - (void) step: (NSTimer *) timer;
+- (void) placeTip;
 @end
 
 @implementation ClickView
@@ -64,11 +65,19 @@ static id gDriver;
     Driver *d = gDriver;
     if ([self window] != d->a || d->clicked) return;
     d->clicked = YES;
+    [d placeTip];
     [d->tip orderFrontRegardless];
 }
 @end
 
 @implementation Driver
+// The tool tip window is ordered front without NSToolTipWindow's own placement, so put it where
+// the checker expects it: 12 points right of and 4 points below the pointer.
+- (void) placeTip {
+    NSPoint mouse = [NSEvent mouseLocation];
+    [tip setFrameTopLeftPoint: NSMakePoint(mouse.x + 12, mouse.y - 4)];
+}
+
 - (void) checkShownOver: (NSWindow *) parent label: (const char *) label {
     id tipPlatform = [tip platformWindow];
     char text[160];
@@ -120,6 +129,7 @@ static id gDriver;
             if (now - since > 60) { expect(NO, "the pointer moved into window B"); stage = 99; }
             return;
         }
+        [self placeTip];
         [tip orderFrontRegardless];
         stage = 4; until = now + 1.5;
         break;
@@ -129,6 +139,7 @@ static id gDriver;
         stage = 5; until = now + 0.5;
         break;
     case 5:
+        [self placeTip];
         [tip orderFrontRegardless];
         stage = 6; until = now + 0.7;
         break;
@@ -142,6 +153,7 @@ static id gDriver;
         stage = ++cycle < 3 ? 5 : 8;
         break;
     case 8:
+        [self placeTip];
         [tip orderFrontRegardless];
         stage = 9; until = now + 1;
         break;
