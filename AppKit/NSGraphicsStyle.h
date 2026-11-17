@@ -263,3 +263,15 @@ typedef struct _Margins {
 - (void) drawSearchCancelGlyphInRect: (NSRect) rect;
 @end
 
+@interface NSGraphicsStyle (NSSliderAqua)
+/* The track of a slider: 3 points thick, blue from its start to the knob (gray when the window is not active or
+   the control is disabled) and light after the knob; and the round white knob. */
+- (void) drawAquaSliderTrackInRect: (NSRect) rect
+                          vertical: (BOOL) vertical
+                           knobRect: (NSRect) knobRect
+                           enabled: (BOOL) enabled
+                            active: (BOOL) active
+                           flipped: (BOOL) flipped;
+- (void) drawAquaSliderKnobInRect: (NSRect) rect controlSize: (NSControlSize) controlSize enabled: (BOOL) enabled;
+@end
+

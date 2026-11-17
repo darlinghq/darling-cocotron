@@ -695,15 +695,18 @@ static void NSAquaDrawProgressTrack(NSRect bar) {
 
     switch (controlSize) {
     default:
-    case NSRegularControlSize:     // aqua is 17x19
-        return NSMakeSize(12, 15); // this is Windows specific, uxtheme part
-                                   // size request was failing, hardcoded, sigh
+    // QUIRK: the knob rectangle of a slider is a square of 21, 15 and 12 points for the regular, small and
+    // mini control sizes; the visible circle is 6, 4 and 3 points smaller (the rest is room for its shadow).
+    // Not documented. Evidence: black-box observation on macOS 10.14.4 (tier 2) of -knobRectFlipped:
+    // and renders. Test: appkit-slider-aqua.m
+    case NSRegularControlSize:
+        return NSMakeSize(21, 21);
 
-    case NSSmallControlSize: // aqua is 13x15
-        return NSMakeSize(9, 13);
+    case NSSmallControlSize:
+        return NSMakeSize(15, 15);
 
-    case NSMiniControlSize: // aqua is 11x11
-        return NSMakeSize(11, 11);
+    case NSMiniControlSize:
+        return NSMakeSize(12, 12);
     }
 }
 
@@ -1374,6 +1377,79 @@ static void NSAquaDrawToggle(NSRect rect, BOOL radio, NSInteger state, BOOL high
     [cross setLineWidth: 1.5];
     [cross setLineCapStyle: NSRoundLineCapStyle];
     [cross stroke];
+}
+
+@end
+
+@implementation NSGraphicsStyle (NSSliderAqua)
+
+// QUIRK: the slider look of macOS 10.14 (light appearance). Not documented. Evidence: black-box renders of
+// NSSlider on macOS 10.14.4 at 1x and 2x (tier 2): a track 3 points thick inset 3 points from the ends of the
+// view, rounded, blue (61,130,253) from the start to the knob and black at 22% after it; a white round knob,
+// 15, 11 and 9 points across for the three control sizes, with a thin dark outline and a shadow below.
+// Test: appkit-slider-aqua.m
+- (void) drawAquaSliderTrackInRect: (NSRect) rect
+                          vertical: (BOOL) vertical
+                           knobRect: (NSRect) knobRect
+                           enabled: (BOOL) enabled
+                            active: (BOOL) active
+                           flipped: (BOOL) flipped
+{
+    NSRect track;
+    CGFloat alpha = enabled ? 1 : 0.5;
+
+    if (vertical)
+        track = NSMakeRect(floor(NSMidX(rect) - 1.5), NSMinY(rect) + 3, 3, NSHeight(rect) - 6);
+    else
+        // half a point is rounded towards the top of the view
+        track = NSMakeRect(NSMinX(rect) + 3, flipped ? floor(NSMidY(rect) - 1.5) : ceil(NSMidY(rect) - 1.5),
+                           NSWidth(rect) - 6, 3);
+
+    NSBezierPath *shape = [NSBezierPath bezierPathWithRoundedRect: track xRadius: 1.5 yRadius: 1.5];
+
+    [[NSColor colorWithCalibratedWhite: 0 alpha: 0.22 * alpha] setFill];
+    [shape fill];
+
+    NSRect fill = track;
+    if (vertical) {
+        // the minimum is at the bottom of an unflipped view and at the top of a flipped one in the
+        // cell's own geometry; the fill runs from the end that holds the minimum to the knob
+        CGFloat y = NSMidY(knobRect);
+        if (flipped)
+            fill.size.height = MAX(0, MIN(NSHeight(track), NSMaxY(track) - y));
+        else
+            fill.size.height = MAX(0, MIN(NSHeight(track), y - NSMinY(track)));
+        if (flipped)
+            fill.origin.y = NSMaxY(track) - fill.size.height;
+    } else
+        fill.size.width = MAX(0, MIN(NSWidth(track), NSMidX(knobRect) - NSMinX(track)));
+    if (NSWidth(fill) > 0 && NSHeight(fill) > 0) {
+        BOOL blue = enabled && active;
+
+        [(blue ? [NSColor colorWithCalibratedRed: 61 / 255.0 green: 130 / 255.0 blue: 253 / 255.0 alpha: 1]
+               : [NSColor colorWithCalibratedWhite: 0.55 alpha: alpha]) setFill];
+        [[NSBezierPath bezierPathWithRoundedRect: fill xRadius: 1.5 yRadius: 1.5] fill];
+    }
+}
+
+- (void) drawAquaSliderKnobInRect: (NSRect) rect controlSize: (NSControlSize) controlSize enabled: (BOOL) enabled {
+    static const CGFloat insets[3] = {3, 2, 1.5};
+    int index = controlSize == NSSmallControlSize ? 1 : (controlSize == NSMiniControlSize ? 2 : 0);
+    CGFloat alpha = enabled ? 1 : 0.5;
+    NSRect circle = NSInsetRect(rect, insets[index], insets[index]);
+    BOOL flipped = [[NSGraphicsContext currentContext] isFlipped];
+
+    // a soft shadow below, then the white disc and its outline
+    for (int i = 3; i >= 1; i--) {
+        [[NSColor colorWithCalibratedWhite: 0 alpha: 0.05 * alpha] setFill];
+        [[NSBezierPath bezierPathWithOvalInRect: NSOffsetRect(NSInsetRect(circle, -i * 0.4, -i * 0.4), 0, flipped ? 0.8 : -0.8)] fill];
+    }
+    [[NSColor colorWithCalibratedWhite: 1 alpha: alpha] setFill];
+    [[NSBezierPath bezierPathWithOvalInRect: circle] fill];
+    [[NSColor colorWithCalibratedWhite: 0 alpha: 0.28 * alpha] setStroke];
+    NSBezierPath *outline = [NSBezierPath bezierPathWithOvalInRect: NSInsetRect(circle, 0.5, 0.5)];
+    [outline setLineWidth: 1];
+    [outline stroke];
 }
 
 @end
