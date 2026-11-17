@@ -645,19 +645,46 @@ static NSDictionary *sScrollerButtonAttributes = nil;
     }
 }
 
+// The knob is a capsule across the middle of the track: 8 points wide in the 15 point track of a scroller
+// (4 points in from the edge it is next to, 3 from the other), mid gray, and one point shorter at each end
+// than its rectangle.
+// QUIRK: not documented. Evidence: pixel measurement of legacy scrollers drawn by macOS 10.14.4 (tier 2),
+// probe mac-probes/ua5-scroller-draw.m. Test: tests/appkit-scroller-parts.m (test_quirk_scroller_drawing)
 - (void) drawScrollerKnobInRect: (NSRect) rect
                        vertical: (BOOL) vertical
                       highlight: (BOOL) highlight
 {
-    [self drawPushButtonNormalInRect: rect defaulted: NO];
+    CGFloat thickness = vertical ? rect.size.width : rect.size.height;
+    CGFloat inset = floor((thickness - 8) / 2) + (thickness >= 15 ? 1 : 0);
+    CGFloat across = MAX(thickness - 2 * inset + (thickness >= 15 ? 1 : 0), 2);
+    NSRect capsule = vertical ? NSMakeRect(NSMinX(rect) + inset, NSMinY(rect) + 1, across, rect.size.height - 2)
+                              : NSMakeRect(NSMinX(rect) + 1, NSMinY(rect) + inset, rect.size.width - 2, across);
+
+    if (capsule.size.width < 1 || capsule.size.height < 1)
+        return;
+    CGFloat radius = MIN(capsule.size.width, capsule.size.height) / 2;
+    CGFloat gray = highlight ? 0.55 : 0.76;
+
+    [[NSColor colorWithCalibratedWhite: gray alpha: 1] setFill];
+    [[NSBezierPath bezierPathWithRoundedRect: capsule xRadius: radius yRadius: radius] fill];
 }
 
+// The track is a very light gray with a darker line along each of its long edges.
+// QUIRK: same evidence as the knob. Test: tests/appkit-scroller-parts.m (test_quirk_scroller_drawing)
 - (void) drawScrollerTrackInRect: (NSRect) rect
                         vertical: (BOOL) vertical
                         upOrLeft: (BOOL) upOrLeft
 {
-    [[NSColor colorWithCalibratedWhite: 0.9 alpha: 1] setFill];
+    [[NSColor colorWithCalibratedWhite: 0.98 alpha: 1] setFill];
     NSRectFill(rect);
+    [[NSColor colorWithCalibratedWhite: 0.91 alpha: 1] setFill];
+    if (vertical) {
+        NSRectFill(NSMakeRect(NSMinX(rect), NSMinY(rect), 1, rect.size.height));
+        NSRectFill(NSMakeRect(NSMaxX(rect) - 1, NSMinY(rect), 1, rect.size.height));
+    } else {
+        NSRectFill(NSMakeRect(NSMinX(rect), NSMinY(rect), rect.size.width, 1));
+        NSRectFill(NSMakeRect(NSMinX(rect), NSMaxY(rect) - 1, rect.size.width, 1));
+    }
 }
 
 - (void) drawScrollerTrackInRect: (NSRect) rect vertical: (BOOL) vertical {

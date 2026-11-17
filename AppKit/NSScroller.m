@@ -398,112 +398,66 @@ static inline CGFloat roundFloat(CGFloat value) {
     return (int) value;
 }
 
+// The scroller's own geometry along its length: the knob's travel starts and ends two points inside the
+// slot, and the knob is as long as the knob proportion of that travel, and at least 20 points.
+// QUIRK: not documented. Evidence: black-box observation on macOS 10.14.4 (tier 2) of the part
+// rectangles of enabled legacy scrollers 60, 120 and 300 points long, with knob proportions 0.05 to 1 and
+// values 0, 0.25, 0.5 and 1 (probe mac-probes/ua5-scroller-parts.m): the knob is floor(proportion x
+// (length - 4)) long, 20 at least; its position is 2 + (length - 4 - length of knob before rounding) x
+// value, rounded up; the page before it ends at that position rounded down and the
+// page after it starts at the end of the knob rounded up. A scroller shows no arrow buttons (the line
+// parts are empty), also when it is not enabled, and its knob rectangle is the same when it is not
+// enabled. Known deviation: where the position has a fraction, macOS rounds it up or down by a rule not
+// found, so the knob can be one point off. Test: tests/appkit-scroller-parts.m (test_quirk_scroller_part_geometry)
+static void scrollerKnobGeometry(CGFloat length, CGFloat proportion, CGFloat value, CGFloat *knobStart,
+                                 CGFloat *knobLength, CGFloat *positionBeforeRounding,
+                                 CGFloat *lengthBeforeRounding) {
+    CGFloat travel = MAX(length - 4, 0);
+    CGFloat rawLength = MIN(MAX(proportion * travel, 20), MAX(travel, 0));
+    CGFloat rawStart = 2 + (travel - rawLength) * value;
+
+    *lengthBeforeRounding = rawLength;
+    *positionBeforeRounding = rawStart;
+    *knobLength = floor(rawLength);
+    *knobStart = ceil(rawStart);
+}
+
 - (NSRect) rectForPart: (NSScrollerPart) part {
     NSRect bounds = [self bounds];
-    NSRect decLine = bounds;
-    NSRect incLine;
-    NSRect knobSlot = bounds;
-    NSRect knob;
-    NSRect result = NSZeroRect;
+    BOOL vertical = [self isVertical];
+    CGFloat length = vertical ? bounds.size.height : bounds.size.width;
+    CGFloat knobStart, knobLength, rawStart, rawLength;
 
-    if ([self isVertical]) {
-        if (NS_EXTRA(NSScroller, self)->_arrowsPosition == NSScrollerArrowsNone) {
-            decLine = NSZeroRect;
-            incLine = NSZeroRect;
-        } else {
-            decLine.size.height = decLine.size.width;
-            if (decLine.size.height * 2 > bounds.size.height)
-                decLine.size.height = floor(bounds.size.height / 2);
+    scrollerKnobGeometry(length, _knobProportion, _floatValue, &knobStart, &knobLength, &rawStart, &rawLength);
 
-            incLine = decLine;
-
-            if (appleScrollBarVariant(self) == NSAppleScrollBarVariantSingle) {
-                incLine.origin.y = bounds.size.height - incLine.size.height;
-                knobSlot.origin.y += decLine.size.height;
-                knobSlot.size.height -=
-                        decLine.size.height + incLine.size.height;
-            } else {
-                knobSlot.size.height -=
-                        decLine.size.height + incLine.size.height;
-
-                if (NS_EXTRA(NSScroller, self)->_arrowsPosition == NSScrollerArrowsMaxEnd) {
-                    incLine.origin.y = bounds.size.height - incLine.size.height;
-                    decLine.origin.y = incLine.origin.y - decLine.size.height;
-                } else if (NS_EXTRA(NSScroller, self)->_arrowsPosition == NSScrollerArrowsMinEnd) {
-                    incLine.origin.y = NSMaxY(decLine);
-                    knobSlot.origin.y = NSMaxY(incLine);
-                }
-            }
-        }
-
-        knob = knobSlot;
-        knob.size.height = roundFloat(knobSlot.size.height * _knobProportion);
-        if (knob.size.height < knob.size.width)
-            knob.size.height = knob.size.width;
-        knob.origin.y +=
-                floor((knobSlot.size.height - knob.size.height) * _floatValue);
-
-        if (floor(knob.size.height) >= floor(knobSlot.size.height))
-            knob = NSZeroRect;
-    } else {
-        if (NS_EXTRA(NSScroller, self)->_arrowsPosition == NSScrollerArrowsNone) {
-            decLine = NSZeroRect;
-            incLine = NSZeroRect;
-        } else {
-            decLine.size.width = decLine.size.height;
-            if (decLine.size.width * 2 > bounds.size.width)
-                decLine.size.width = floor(bounds.size.width / 2);
-
-            incLine = decLine;
-            incLine.origin.x = bounds.size.width - incLine.size.width;
-        }
-
-        knobSlot.origin.x += decLine.size.width;
-        knobSlot.size.width -= decLine.size.width + incLine.size.width;
-
-        knob = knobSlot;
-        knob.size.width = roundFloat(knobSlot.size.width * _knobProportion);
-        if (knob.size.width < knob.size.height)
-            knob.size.width = knob.size.height;
-        knob.origin.x +=
-                floor((knobSlot.size.width - knob.size.width) * _floatValue);
-        if (floor(knob.size.width) >= floor(knobSlot.size.width))
-            knob = NSZeroRect;
-    }
+    CGFloat start = 0, size = 0;
 
     switch (part) {
-    case NSScrollerNoPart:
-        result = NSZeroRect;
-        break;
-
-    case NSScrollerKnob:
-        result = [self isEnabled] ? knob : NSZeroRect;
-        break;
-
     case NSScrollerKnobSlot:
-        result = knobSlot;
+        start = 0;
+        size = length;
         break;
-
-    case NSScrollerIncrementLine:
-        result = incLine;
+    case NSScrollerKnob:
+        start = knobStart;
+        size = knobLength;
         break;
-
-    case NSScrollerDecrementLine:
-        result = decLine;
-        break;
-
-    case NSScrollerIncrementPage:
-        result = [self frameOfIncrementPage];
-        break;
-
     case NSScrollerDecrementPage:
-        result = [self frameOfDecrementPage];
+        start = 0;
+        size = floor(rawStart);
+        break;
+    case NSScrollerIncrementPage: {
+        CGFloat end = ceil(rawStart + rawLength);
+
+        start = end;
+        size = MAX(length - end, 0);
         break;
     }
-
-    result = [self centerScanRect: result];
-
-    return result;
+    default:
+        return NSZeroRect;
+    }
+    if (vertical)
+        return NSMakeRect(bounds.origin.x, bounds.origin.y + start, bounds.size.width, size);
+    return NSMakeRect(bounds.origin.x + start, bounds.origin.y, size, bounds.size.height);
 }
 
 - (void) checkSpaceForParts {
@@ -531,7 +485,7 @@ static inline CGFloat roundFloat(CGFloat value) {
 - (void) drawKnob {
     NSRect knob = [self rectForPart: NSScrollerKnob];
 
-    if (!NSIsEmptyRect(knob))
+    if ([self isEnabled] && !NSIsEmptyRect(knob))
         [[self graphicsStyle] drawScrollerKnobInRect: knob
                                             vertical: [self isVertical]
                                            highlight: NS_EXTRA(NSScroller, self)->_isHighlighted];
@@ -551,30 +505,11 @@ static inline CGFloat roundFloat(CGFloat value) {
 }
 
 - (void) drawRect: (NSRect) rect {
-    NSRect decPage = [self rectForPart: NSScrollerDecrementPage];
-    NSRect incPage = [self rectForPart: NSScrollerIncrementPage];
     NSRect slot = [self rectForPart: NSScrollerKnobSlot];
-    NSRect knob = [self rectForPart: NSScrollerKnob];
-    BOOL high;
 
-    high = (NS_EXTRA(NSScroller, self)->_hitPart == NSScrollerIncrementLine) && NS_EXTRA(NSScroller, self)->_isHighlighted;
-    [self drawArrow: NSScrollerIncrementArrow highlight: high];
-    high = (NS_EXTRA(NSScroller, self)->_hitPart == NSScrollerDecrementLine) && NS_EXTRA(NSScroller, self)->_isHighlighted;
-    [self drawArrow: NSScrollerDecrementArrow highlight: high];
-
-    if (!NSIsEmptyRect(decPage))
-        [[self graphicsStyle] drawScrollerTrackInRect: decPage
-                                             vertical: [self isVertical]
-                                             upOrLeft: YES];
-
-    if (!NSIsEmptyRect(incPage))
-        [[self graphicsStyle] drawScrollerTrackInRect: incPage
-                                             vertical: [self isVertical]
-                                             upOrLeft: NO];
-
-    if (NSIsEmptyRect(knob) && !NSIsEmptyRect(slot))
-        [[self graphicsStyle] drawScrollerTrackInRect: slot
-                                             vertical: [self isVertical]];
+    // No arrow buttons: the line parts are empty, so nothing is drawn for them.
+    if (!NSIsEmptyRect(slot))
+        [[self graphicsStyle] drawScrollerTrackInRect: slot vertical: [self isVertical]];
 
     [self drawKnob];
 }
@@ -608,10 +543,11 @@ static inline CGFloat roundFloat(CGFloat value) {
     CGFloat totalSize;
     CGFloat startFloatValue = _floatValue;
 
+    // The knob travels from two points inside one end of the slot to two points inside the other.
     if ([self isVertical])
-        totalSize = slotRect.size.height - knobRect.size.height;
+        totalSize = slotRect.size.height - 4 - knobRect.size.height;
     else
-        totalSize = slotRect.size.width - knobRect.size.width;
+        totalSize = slotRect.size.width - 4 - knobRect.size.width;
 
     do {
         NSPoint point;
