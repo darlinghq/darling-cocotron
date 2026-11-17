@@ -924,6 +924,18 @@ static void crtcBoundingBox(Display *display, XRRScreenResources *resources, RRC
         xname = "top_side";
     else if ([name isEqualToString: @"resizeUpDownCursor"])
         xname = "v_double_arrow";
+    else if ([name isEqualToString: @"frameResizeNorthWestCursor"])
+        xname = "top_left_corner";
+    else if ([name isEqualToString: @"frameResizeNorthEastCursor"])
+        xname = "top_right_corner";
+    else if ([name isEqualToString: @"frameResizeSouthEastCursor"])
+        xname = "bottom_right_corner";
+    else if ([name isEqualToString: @"frameResizeSouthWestCursor"])
+        xname = "bottom_left_corner";
+    else if ([name isEqualToString: @"frameResizeNorthWestSouthEastCursor"])
+        xname = "fd_double_arrow";
+    else if ([name isEqualToString: @"frameResizeNorthEastSouthWestCursor"])
+        xname = "bd_double_arrow";
 
     return [[[X11Cursor alloc] initWithName: xname] autorelease];
 }

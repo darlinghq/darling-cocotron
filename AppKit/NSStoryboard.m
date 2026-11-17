@@ -147,6 +147,32 @@ static void setCurrentInstantiatingStoryboard(NSStoryboard *storyboard) {
     return identifier == nil ? nil : [self instantiateControllerWithIdentifier: identifier];
 }
 
+// The creator variants (documented in Apple's public documentation as taking a block that receives the scene's
+// NSCoder and returns the controller, which a nil result leaves to the default initializer).
+// GUESS (not in the public documentation, not observed): a nil block is the plain method (the Swift declaration's
+// default is nil). A block raises NSInvalidArgumentException and is never called: handing it the scene's coder needs
+// a hook in the nib decoder that does not exist here, and building the controller the default way instead would
+// skip the initializer the caller asked for.
+- (void) _rejectCreator: (NSStoryboardControllerCreator) block selector: (SEL) selector {
+    if (block != nil)
+        [NSException raise: NSInvalidArgumentException
+                    format: @"-[NSStoryboard %@] with a creator block is not implemented: the nib decoder has no hook "
+                             "that hands a scene's coder to the block",
+                            NSStringFromSelector(selector)];
+}
+
+- (id) instantiateInitialControllerWithCreator: (NSStoryboardControllerCreator) block {
+    [self _rejectCreator: block selector: _cmd];
+    return [self instantiateInitialController];
+}
+
+- (id) instantiateControllerWithIdentifier: (NSStoryboardSceneIdentifier) identifier
+                                   creator: (NSStoryboardControllerCreator) block
+{
+    [self _rejectCreator: block selector: _cmd];
+    return [self instantiateControllerWithIdentifier: identifier];
+}
+
 - (id) instantiateControllerWithIdentifier: (NSStoryboardSceneIdentifier) identifier {
     NSString *nibName = [[NS_EXTRA(NSStoryboard, self)->_info objectForKey: NSStoryboardNibNamesKey] objectForKey: identifier];
     if (nibName == nil)

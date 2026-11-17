@@ -2485,6 +2485,12 @@ static uint32_t WaylandKeyLayoutCodepoint(void *context, uint32_t keysym) {
             {@"resizeRightCursor", "e-resize", "right_side"},
             {@"resizeUpCursor", "n-resize", "top_side"},
             {@"resizeUpDownCursor", "ns-resize", "v_double_arrow"},
+            {@"frameResizeNorthWestCursor", "nw-resize", "top_left_corner"},
+            {@"frameResizeNorthEastCursor", "ne-resize", "top_right_corner"},
+            {@"frameResizeSouthEastCursor", "se-resize", "bottom_right_corner"},
+            {@"frameResizeSouthWestCursor", "sw-resize", "bottom_left_corner"},
+            {@"frameResizeNorthWestSouthEastCursor", "nwse-resize", "fd_double_arrow"},
+            {@"frameResizeNorthEastSouthWestCursor", "nesw-resize", "bd_double_arrow"},
     };
 
     for (size_t i = 0; i < sizeof(names) / sizeof(names[0]); i++)

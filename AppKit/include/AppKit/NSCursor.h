@@ -23,6 +23,28 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSImage, NSColor, NSEvent;
 
+// macOS 15: the edge or corner of a rectangular frame a resize cursor is for, and the directions the frame can
+// resize in. The documentation names the cases and gives no raw values. GUESS (not in the public documentation, not
+// observed): the raw values follow the order of the documentation's table of cursors (top, bottom, left, right, topLeft,
+// topRight, bottomLeft, bottomRight; an earlier draft used top, left, bottom, right) and the bits are inward 1,
+// outward 2. The Swift name is the documented NSCursor.FrameResizePosition (Journal imports Swift symbols that name it).
+typedef NS_ENUM(NSUInteger, NSCursorFrameResizePosition) {
+    NSCursorFrameResizePositionTop,
+    NSCursorFrameResizePositionBottom,
+    NSCursorFrameResizePositionLeft,
+    NSCursorFrameResizePositionRight,
+    NSCursorFrameResizePositionTopLeft,
+    NSCursorFrameResizePositionTopRight,
+    NSCursorFrameResizePositionBottomLeft,
+    NSCursorFrameResizePositionBottomRight,
+} NS_SWIFT_NAME(NSCursor.FrameResizePosition);
+
+typedef NS_OPTIONS(NSUInteger, NSCursorFrameResizeDirections) {
+    NSCursorFrameResizeDirectionsInward = 1 << 0,
+    NSCursorFrameResizeDirectionsOutward = 1 << 1,
+    NSCursorFrameResizeDirectionsAll = NSCursorFrameResizeDirectionsInward | NSCursorFrameResizeDirectionsOutward,
+};
+
 @interface NSCursor : NSObject <NSCoding> {
     NS_LEGACY_IVAR_PAD(_NSCursorReserved, 12)
     NS_EXTRA_IVARS_BEGIN(NSCursor)
@@ -51,6 +73,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 @property(class, readonly, retain, nonnull) NSCursor *resizeRightCursor;
 @property(class, readonly, retain, nonnull) NSCursor *resizeUpCursor;
 @property(class, readonly, retain, nonnull) NSCursor *resizeUpDownCursor;
+
+// The cursor for resizing a frame from an edge or corner; directions must not be empty.
++ (NSCursor *) frameResizeCursorFromPosition: (NSCursorFrameResizePosition) position
+                                 inDirections: (NSCursorFrameResizeDirections) directions;
 
 @property(class, readonly, retain, nonnull) NSCursor *dragCopyCursor;
 @property(class, readonly, retain, nonnull) NSCursor *dragLinkCursor;
