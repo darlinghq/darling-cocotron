@@ -951,7 +951,9 @@ static const CGFloat kImageMargin = 2.;
             frame.size.width = 10 - step * 2;
             frame.size.height = 10 - step * 2;
             frame.origin.x = 5 - step;
-            frame.origin.y = flipped ? step * 2 - 3 : 7 - step * 2;
+            // The room for the shadow is below the bezel: 7 (5 small) from the bottom, so the rest of the
+            // inset, 3, is above it.
+            frame.origin.y = flipped ? 3 : 7 - step * 2;
             break;
         }
 
