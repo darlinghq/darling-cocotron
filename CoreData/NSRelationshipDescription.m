@@ -92,13 +92,20 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (void) setMaxCount: (NSUInteger) value {
     [self _checkMutable];
 
-    _maxCount = value;
+    /*
+     * QUIRK: the cardinality is kept as a 32-bit value; a larger NSUInteger is
+     * truncated on assignment (0xFFFFFFFF + 7 reads back as 6).
+     * Evidence: black-box observation on macOS 10.14.4 (x86_64, i386) and
+     * macOS 26.7.3 (tier 2).
+     * Test: coredata-container-contract (relationship cardinality is 32 bits).
+     */
+    _maxCount = (uint32_t)value;
 }
 
 - (void) setMinCount: (NSUInteger) value {
     [self _checkMutable];
 
-    _minCount = value;
+    _minCount = (uint32_t)value; /* 32-bit, see the QUIRK in -setMaxCount: */
 }
 
 - (void) setDeleteRule: (NSDeleteRule) value {
