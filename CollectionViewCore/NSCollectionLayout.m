@@ -26,6 +26,15 @@
 #import <AppKit/NSCollectionViewCompositionalLayout.h>
 
 // The value classes below are immutable: a copy is the object itself.
+// Two optional property values are equal when both are nil or the first is equal to the second.
+static BOOL propertiesEqual(id a, id b) {
+    return a == b || (a != nil && [a isEqual: b]);
+}
+
+static BOOL insetsEqual(NSDirectionalEdgeInsets a, NSDirectionalEdgeInsets b) {
+    return a.top == b.top && a.leading == b.leading && a.bottom == b.bottom && a.trailing == b.trailing;
+}
+
 enum {
     DimensionKindFractionalWidth,
     DimensionKindFractionalHeight,
@@ -87,6 +96,15 @@ enum {
     return _dimension;
 }
 
+- (BOOL) isEqual: (id) object {
+    if (object == self)
+        return YES;
+    if (![object isKindOfClass: [NSCollectionLayoutDimension class]])
+        return NO;
+    NSCollectionLayoutDimension *other = object;
+    return _kind == other->_kind && _dimension == other->_dimension;
+}
+
 - (id) copyWithZone: (NSZone *) zone {
     return [self retain];
 }
@@ -116,6 +134,16 @@ enum {
 
 - (NSCollectionLayoutDimension *) heightDimension {
     return _heightDimension;
+}
+
+- (BOOL) isEqual: (id) object {
+    if (object == self)
+        return YES;
+    if (![object isKindOfClass: [NSCollectionLayoutSize class]])
+        return NO;
+    NSCollectionLayoutSize *other = object;
+    return propertiesEqual(_widthDimension, other->_widthDimension) &&
+           propertiesEqual(_heightDimension, other->_heightDimension);
 }
 
 - (id) copyWithZone: (NSZone *) zone {
@@ -151,6 +179,15 @@ enum {
 
 - (BOOL) isFixedSpacing {
     return !_flexible;
+}
+
+- (BOOL) isEqual: (id) object {
+    if (object == self)
+        return YES;
+    if (![object isKindOfClass: [NSCollectionLayoutSpacing class]])
+        return NO;
+    NSCollectionLayoutSpacing *other = object;
+    return _spacing == other->_spacing && _flexible == other->_flexible;
 }
 
 - (id) copyWithZone: (NSZone *) zone {
@@ -196,6 +233,16 @@ enum {
 
 - (NSCollectionLayoutSpacing *) bottom {
     return _bottom;
+}
+
+- (BOOL) isEqual: (id) object {
+    if (object == self)
+        return YES;
+    if (![object isKindOfClass: [NSCollectionLayoutEdgeSpacing class]])
+        return NO;
+    NSCollectionLayoutEdgeSpacing *other = object;
+    return propertiesEqual(_leading, other->_leading) && propertiesEqual(_top, other->_top) &&
+           propertiesEqual(_trailing, other->_trailing) && propertiesEqual(_bottom, other->_bottom);
 }
 
 - (id) copyWithZone: (NSZone *) zone {
@@ -256,6 +303,16 @@ enum {
 
 - (BOOL) isFractionalOffset {
     return _fractional;
+}
+
+- (BOOL) isEqual: (id) object {
+    if (object == self)
+        return YES;
+    if (![object isKindOfClass: [NSCollectionLayoutAnchor class]])
+        return NO;
+    NSCollectionLayoutAnchor *other = object;
+    return _edges == other->_edges && _offset.x == other->_offset.x && _offset.y == other->_offset.y &&
+           _fractional == other->_fractional;
 }
 
 - (id) copyWithZone: (NSZone *) zone {
@@ -344,6 +401,27 @@ enum {
 }
 
 // A copy keeps every property; the subclasses add theirs on top of this.
+// QUIRK: the value classes of the compositional layout (dimension, size, spacing, edge spacing, anchor, item and its
+// subclasses, section) compare by their properties, but do not override -hash: equal objects have different hashes,
+// and a copy of an item, group or section is equal to the original. An item takes any item, including a group or a
+// supplementary item with equal item properties, as equal; a subclass additionally requires the other object to be
+// of that subclass, and the subitems and supplementary items are compared in order, each by the receiver's -isEqual:.
+// The group's item provider and the section's invalidation handler are not compared by value (two different blocks are
+// equal); a handler on one section and none on the other is a difference. A custom group item and the compositional
+// layout configuration compare by identity. Not documented. Evidence: black-box observation on macOS 26.7.3 and
+// 27.0.1 (tier 2), vd-upstream/mac-probes/collectionlayout/equality-*.
+// Test: tests/appkit-collection-layout-equality.m.
+- (BOOL) isEqual: (id) object {
+    if (object == self)
+        return YES;
+    if (![object isKindOfClass: [NSCollectionLayoutItem class]])
+        return NO;
+    NSCollectionLayoutItem *other = object;
+    return insetsEqual(_contentInsets, other->_contentInsets) && propertiesEqual(_edgeSpacing, other->_edgeSpacing) &&
+           propertiesEqual(_layoutSize, other->_layoutSize) &&
+           propertiesEqual(_supplementaryItems, other->_supplementaryItems);
+}
+
 - (id) copyWithZone: (NSZone *) zone {
     NSCollectionLayoutItem *copy = [[[self class] allocWithZone: zone] init];
 
@@ -409,6 +487,15 @@ enum {
 
 - (NSCollectionLayoutAnchor *) itemAnchor {
     return _itemAnchor;
+}
+
+- (BOOL) isEqual: (id) object {
+    if (![object isKindOfClass: [NSCollectionLayoutSupplementaryItem class]])
+        return NO;
+    NSCollectionLayoutSupplementaryItem *other = object;
+    return [super isEqual: object] && _zIndex == other->_zIndex && propertiesEqual(_elementKind, other->_elementKind) &&
+           propertiesEqual(_containerAnchor, other->_containerAnchor) &&
+           propertiesEqual(_itemAnchor, other->_itemAnchor);
 }
 
 - (id) copyWithZone: (NSZone *) zone {
@@ -477,6 +564,15 @@ enum {
     return _offset;
 }
 
+- (BOOL) isEqual: (id) object {
+    if (![object isKindOfClass: [NSCollectionLayoutBoundarySupplementaryItem class]])
+        return NO;
+    NSCollectionLayoutBoundarySupplementaryItem *other = object;
+    return [super isEqual: object] && _extendsBoundary == other->_extendsBoundary &&
+           _pinToVisibleBounds == other->_pinToVisibleBounds && _alignment == other->_alignment &&
+           _offset.x == other->_offset.x && _offset.y == other->_offset.y;
+}
+
 - (id) copyWithZone: (NSZone *) zone {
     NSCollectionLayoutBoundarySupplementaryItem *copy =
             [super copyWithZone: zone];
@@ -521,6 +617,13 @@ enum {
 
 - (NSString *) elementKind {
     return _elementKind;
+}
+
+- (BOOL) isEqual: (id) object {
+    if (![object isKindOfClass: [NSCollectionLayoutDecorationItem class]])
+        return NO;
+    NSCollectionLayoutDecorationItem *other = object;
+    return [super isEqual: object] && _zIndex == other->_zIndex && propertiesEqual(_elementKind, other->_elementKind);
 }
 
 - (id) copyWithZone: (NSZone *) zone {
@@ -658,6 +761,14 @@ enum {
     interItemSpacing = [interItemSpacing copy];
     [_interItemSpacing release];
     _interItemSpacing = interItemSpacing;
+}
+
+- (BOOL) isEqual: (id) object {
+    if (![object isKindOfClass: [NSCollectionLayoutGroup class]])
+        return NO;
+    NSCollectionLayoutGroup *other = object;
+    return [super isEqual: object] && propertiesEqual(_subitems, other->_subitems) && _count == other->_count &&
+           _vertical == other->_vertical && propertiesEqual(_interItemSpacing, other->_interItemSpacing);
 }
 
 - (id) copyWithZone: (NSZone *) zone {
@@ -799,6 +910,21 @@ enum {
     handler = [handler copy];
     [_visibleItemsInvalidationHandler release];
     _visibleItemsInvalidationHandler = handler;
+}
+
+- (BOOL) isEqual: (id) object {
+    if (object == self)
+        return YES;
+    if (![object isKindOfClass: [NSCollectionLayoutSection class]])
+        return NO;
+    NSCollectionLayoutSection *other = object;
+    return propertiesEqual(_group, other->_group) && insetsEqual(_contentInsets, other->_contentInsets) &&
+           _interGroupSpacing == other->_interGroupSpacing &&
+           propertiesEqual(_boundarySupplementaryItems, other->_boundarySupplementaryItems) &&
+           propertiesEqual(_decorationItems, other->_decorationItems) &&
+           _supplementariesFollowContentInsets == other->_supplementariesFollowContentInsets &&
+           _orthogonalScrollingBehavior == other->_orthogonalScrollingBehavior &&
+           (_visibleItemsInvalidationHandler != nil) == (other->_visibleItemsInvalidationHandler != nil);
 }
 
 - (id) copyWithZone: (NSZone *) zone {
