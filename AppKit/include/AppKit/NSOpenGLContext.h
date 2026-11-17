@@ -61,6 +61,7 @@ enum {
         CGSubWindow *_subwindow;
         CGLWindowRef _cglWindow;
         BOOL _hasPrepared, _drawableAttachmentSucceeded;
+        int _viewportResetPending;
     NS_SIDE_IVARS_END(NSOpenGLContext)
 }
 

@@ -23,11 +23,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSView.h>
 #import <AppKit/NSWindow-Private.h>
 #import <OpenGL/OpenGL.h>
+#import <OpenGL/gl.h>
 
 @interface NSOpenGLContext (private)
 - (void) _clearCurrentContext;
 - (void) _startObservingView;
 - (void) _stopObservingView;
+- (void) _applyPendingViewportReset;
 @end
 
 @implementation NSOpenGLContext
@@ -253,6 +255,7 @@ static inline void _clearCurrentContext() {
 
     _setCurrentContext(self);
     NS_EXTRA(NSOpenGLContext, self)->_drawableAttachmentSucceeded = YES;
+    [self _applyPendingViewportReset];
 
     if (!NS_EXTRA(NSOpenGLContext, self)->_hasPrepared) {
         NS_EXTRA(NSOpenGLContext, self)->_hasPrepared = YES;
@@ -320,8 +323,48 @@ static inline void _clearCurrentContext() {
         ? [NS_EXTRA(NSOpenGLContext, self)->_subwindow drawablePixelSize] : NSZeroSize;
 }
 
+// QUIRK: when the view the context is attached to has
+// wantsBestResolutionOpenGLSurface set (YES by default for programs linked
+// against SDK 10.15 or later, see -[NSView wantsBestResolutionOpenGLSurface]),
+// -update also sets the current viewport to (0, 0, width, height) of the
+// drawable's new pixel size, replacing a viewport the application set with
+// glViewport; the scissor box is not changed. The NSOpenGLView.h comment on the
+// property only says that glViewport is called before update and reshape for
+// such views. Evidence: that header comment (tier 1) and black-box
+// observation (tier 2): macOS 26.7.3 x86_64 resets on update when the property
+// is YES (its default for a new SDK) and not when it is NO; a binary linked
+// against SDK 10.14 resets only if the property is set to YES; Mac OS X
+// 10.14.4 (x86_64, i386) resets on update when the property is set to YES, its
+// default is NO. It applies to a plain NSView as well as to an NSOpenGLView;
+// CGLUpdateContext alone does not reset; the property is read when update is
+// called.
+// Test: tests/appkit-opengl-update-viewport.m (test_quirk_update_resets_viewport).
+//
+// The viewport belongs to the GL context, which has to be current on the
+// calling thread to change it; a context another thread holds gets the reset
+// when a thread next makes it current.
+- (void) _resetViewportToDrawable {
+    NSView *view = NS_EXTRA(NSOpenGLContext, self)->_view;
+    if (view == nil || ![view wantsBestResolutionOpenGLSurface]) return;
+    __atomic_store_n(&NS_EXTRA(NSOpenGLContext, self)->_viewportResetPending, 1, __ATOMIC_RELEASE);
+    if (CGLGetCurrentContext() == _glContext)
+        [self _applyPendingViewportReset];
+}
+
+// Sets the viewport of the context current on this thread, if an update asked
+// for it since.
+- (void) _applyPendingViewportReset {
+    if (!__atomic_load_n(&NS_EXTRA(NSOpenGLContext, self)->_viewportResetPending, __ATOMIC_ACQUIRE)) return;
+    NSSize pixels = [self _drawablePixelSize];
+    // No drawable (yet): nothing to follow; the first bind sets the viewport.
+    if (pixels.width < 1 || pixels.height < 1) return;
+    if (!__atomic_exchange_n(&NS_EXTRA(NSOpenGLContext, self)->_viewportResetPending, 0, __ATOMIC_ACQ_REL)) return;
+    glViewport(0, 0, (GLsizei) pixels.width, (GLsizei) pixels.height);
+}
+
 - (void) update {
     [self updateViewParameters];
+    [self _resetViewportToDrawable];
 }
 
 - (void) clearDrawable {
