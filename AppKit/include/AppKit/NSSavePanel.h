@@ -29,6 +29,17 @@ enum {
     NSFileHandlingPanelOKButton = NSOKButton,
 };
 
+@protocol NSOpenSavePanelDelegate <NSObject>
+@optional
+// Return NO to make the URL unselectable in the panel's list.
+- (BOOL) panel: (id) sender shouldEnableURL: (NSURL *) url;
+// Return NO (and set the error) to keep the panel up when the chosen URL is not acceptable.
+- (BOOL) panel: (id) sender validateURL: (NSURL *) url error: (NSError **) outError;
+// Sent when the folder shown by the panel changes, and once when it is shown.
+- (void) panel: (id) sender didChangeToDirectoryURL: (NSURL *) url;
+- (void) panelSelectionDidChange: (id) sender;
+@end
+
 // Legacy ObjC ABI (i386): instance size must stay 0xf8, Apple's; an
 // application's subclass is laid out right after it. New state goes to a
 // side structure, never to a larger ivar block.
@@ -122,12 +133,10 @@ enum {
                  didEndSelector: (SEL) didEndSelector
                     contextInfo: (void *) contextInfo;
 
+- (void) ok: (id) sender;
+- (void) cancel: (id) sender;
+// Like NSWindow's delegate, typed for the panel's own delegate protocol.
+@property(assign) id<NSOpenSavePanelDelegate> delegate;
 - (IBAction) _selectFile: (id) sender;
 - (IBAction) _cancel: (id) sender;
-@end
-
-@protocol NSOpenSavePanelDelegate <NSObject>
-
-// TODO
-
 @end
