@@ -34,19 +34,39 @@ int main(void) {
         NSCollectionLayoutSize *fill = [sizeClass sizeWithWidthDimension: [dimensionClass fractionalWidthDimension: 1.0]
                                                          heightDimension: [dimensionClass fractionalHeightDimension: 1.0]];
         NSCollectionLayoutItem *item = [itemClass itemWithLayoutSize: fill];
-        NSCollectionLayoutItem *other = [itemClass itemWithLayoutSize: fill];
+        NSCollectionLayoutSize *otherSize = [sizeClass sizeWithWidthDimension: [dimensionClass absoluteDimension: 7]
+                                                              heightDimension: [dimensionClass absoluteDimension: 9]];
+        NSCollectionLayoutItem *other = [itemClass itemWithLayoutSize: otherSize];
 
         NSCollectionLayoutGroup *horizontal = [groupClass horizontalGroupWithLayoutSize: fill subitems: @[item, other]];
-        expect([horizontal layoutSize] == fill, @"the group keeps its layout size");
-        expect([[horizontal subitems] isEqual: @[item, other]], @"the group keeps its subitems in order");
-        expect([horizontal interItemSpacing] == nil, @"inter item spacing starts nil");
+        expect(sameSize([horizontal layoutSize], fill), @"the group keeps its layout size");
+        expect(sameItemSizes([horizontal subitems], @[item, other]), @"the group keeps its subitems in order");
+        expect([[horizontal interItemSpacing] isFixedSpacing] && [[horizontal interItemSpacing] spacing] == 0,
+               @"quirk: inter item spacing starts as fixed zero spacing (macOS 26.7.3)");
 
-        NSCollectionLayoutGroup *counted = [groupClass verticalGroupWithLayoutSize: fill subitem: item count: 3];
-        expect([[counted subitems] count] == 3, @"a counted group repeats its subitem count times");
-        for (NSCollectionLayoutItem *subitem in [counted subitems])
-            expect(subitem == item, @"every repeated subitem is the given one");
-        expect([[groupClass horizontalGroupWithLayoutSize: fill subitem: item count: 0] subitems].count == 0,
-               @"a count of zero gives no subitems");
+        // quirk: a repeating group holds one copy of the subitem, resized along the group's direction to 1 / count; a count
+        // below 1 raises (macOS 26.7.3).
+        NSCollectionLayoutSize *absoluteSize = [sizeClass sizeWithWidthDimension: [dimensionClass absoluteDimension: 10]
+                                                                 heightDimension: [dimensionClass estimatedDimension: 20]];
+        NSCollectionLayoutItem *absoluteItem = [itemClass itemWithLayoutSize: absoluteSize];
+        NSCollectionLayoutGroup *counted = [groupClass verticalGroupWithLayoutSize: fill subitem: absoluteItem count: 3];
+        expect([[counted subitems] count] == 1, @"quirk: a repeating group has one subitem (macOS 26.7.3)");
+        NSCollectionLayoutSize *countedSize = [[[counted subitems] objectAtIndex: 0] layoutSize];
+        expect([[countedSize widthDimension] isAbsolute] && [[countedSize widthDimension] dimension] == 10 &&
+                       [[countedSize heightDimension] isFractionalHeight] && fabs([[countedSize heightDimension] dimension] - 1.0 / 3) < 1e-6,
+               @"quirk: a vertical repeating group's subitem is 1 / count of its height (macOS 26.7.3)");
+        NSCollectionLayoutGroup *countedHorizontal = [groupClass horizontalGroupWithLayoutSize: fill subitem: absoluteItem count: 4];
+        countedSize = [[[countedHorizontal subitems] objectAtIndex: 0] layoutSize];
+        expect([[countedSize widthDimension] isFractionalWidth] && [[countedSize widthDimension] dimension] == 0.25 &&
+                       [[countedSize heightDimension] isEstimated] && [[countedSize heightDimension] dimension] == 20,
+               @"quirk: a horizontal repeating group's subitem is 1 / count of its width (macOS 26.7.3)");
+        expect([[absoluteItem layoutSize] widthDimension].isAbsolute, @"the given subitem is not changed");
+        expect([[[counted copy] autorelease] subitems].count == 1, @"a repeating group's copy keeps it");
+        NSString *zeroName = nil, *negativeName = nil;
+        @try { [groupClass horizontalGroupWithLayoutSize: fill subitem: item count: 0]; } @catch (NSException *e) { zeroName = [e name]; }
+        @try { [groupClass verticalGroupWithLayoutSize: fill subitem: item count: -1]; } @catch (NSException *e) { negativeName = [e name]; }
+        expect([zeroName isEqualToString: NSInternalInconsistencyException] && [negativeName isEqualToString: NSInternalInconsistencyException],
+               @"a repeating group with a count below 1 raises NSInternalInconsistencyException (macOS 26.7.3)");
 
         NSCollectionLayoutSpacing *gap = [spacingClass fixedSpacing: 6];
         [horizontal setInterItemSpacing: gap];
@@ -55,8 +75,8 @@ int main(void) {
         [horizontal setContentInsets: NSDirectionalEdgeInsetsMake(1, 2, 3, 4)];
         NSCollectionLayoutGroup *copy = [[horizontal copy] autorelease];
         expect([copy isMemberOfClass: groupClass] && copy != horizontal, @"a group copies to a new group");
-        expect([[copy subitems] isEqual: @[item, other]] && [[copy interItemSpacing] spacing] == 6 &&
-                       [copy layoutSize] == fill && [copy contentInsets].trailing == 4,
+        expect(sameItemSizes([copy subitems], @[item, other]) && [[copy interItemSpacing] spacing] == 6 &&
+                       sameSize([copy layoutSize], fill) && [copy contentInsets].trailing == 4,
                @"the copy keeps the subitems, spacing, size and insets");
         [copy setInterItemSpacing: [spacingClass fixedSpacing: 9]];
         expect([[horizontal interItemSpacing] spacing] == 6, @"changing the copy leaves the original alone");
@@ -72,25 +92,40 @@ int main(void) {
         expect([[horizontal supplementaryItems] isEqual: @[tag]], @"a group's supplementary items round-trip as a copy");
         expect([[[[horizontal copy] autorelease] supplementaryItems] isEqual: @[tag]], @"a group's copy keeps them");
         [horizontal setSupplementaryItems: nil];
-        expect([[horizontal supplementaryItems] isEqual: @[]], @"setting nil gives the empty array, not nil");
-        // A copy is built by the item's copy and then filled in, so the direction has to be copied explicitly; the
-        // vertical group is the one that shows it, because a lost direction reads as horizontal.
-        NSCollectionLayoutGroup *verticalGroup = [groupClass verticalGroupWithLayoutSize: fill subitems: @[item, other]];
-        NSCollectionLayoutGroup *verticalCopy = [[verticalGroup copy] autorelease];
-        expect([[verticalCopy visualDescription] containsString: @"vertical"] && [[copy visualDescription] containsString: @"horizontal"],
-               @"a group's copy keeps its direction");
-        expect([[[groupClass horizontalGroupWithLayoutSize: fill subitems: @[item]] visualDescription] containsString: @"horizontal"] &&
-                       [[[groupClass verticalGroupWithLayoutSize: fill subitems: @[item, other]] visualDescription] containsString: @"vertical"] &&
-                       [[[groupClass verticalGroupWithLayoutSize: fill subitems: @[item, other]] visualDescription] containsString: @"2 subitems"],
-               @"the visual description names the direction and the subitem count");
+        expect([horizontal supplementaryItems] == nil, @"quirk: nil supplementary items on a group are stored as nil, no exception (macOS 26.7.3)");
+        [horizontal setSupplementaryItems: @[]];
 
+        // A group needs a subitem: none, nil and a nil repeated subitem raise.
+        NSString *emptyName = nil, *nilName = nil, *nilRepeatName = nil, *nilGroupName = nil;
+        @try { [groupClass horizontalGroupWithLayoutSize: fill subitems: @[]]; } @catch (NSException *e) { emptyName = [e name]; }
+        @try { [groupClass verticalGroupWithLayoutSize: fill subitems: nil]; } @catch (NSException *e) { nilName = [e name]; }
+        @try { [groupClass horizontalGroupWithLayoutSize: fill subitem: nil count: 2]; } @catch (NSException *e) { nilRepeatName = [e name]; }
+        @try { [sectionClass sectionWithGroup: nil]; } @catch (NSException *e) { nilGroupName = [e name]; }
+        expect([emptyName isEqualToString: NSInternalInconsistencyException] && [nilName isEqualToString: NSInternalInconsistencyException],
+               @"a group without subitems raises NSInternalInconsistencyException (macOS 26.7.3)");
+        expect([nilRepeatName isEqualToString: NSInvalidArgumentException], @"a nil repeated subitem raises NSInvalidArgumentException (macOS 26.7.3)");
+        expect([nilGroupName isEqualToString: NSInternalInconsistencyException], @"a section without a group raises NSInternalInconsistencyException (macOS 26.7.3)");
+        // The description is a debugging aid whose format is not specified, so only what must hold of any format is
+        // checked: a group and its copy are described alike, and the direction shows in the description.
+        NSCollectionLayoutSize *box = [sizeClass sizeWithWidthDimension: [dimensionClass absoluteDimension: 40]
+                                                        heightDimension: [dimensionClass absoluteDimension: 40]];
+        NSCollectionLayoutGroup *boxVertical = [groupClass verticalGroupWithLayoutSize: box subitems: @[other, other]];
+        NSCollectionLayoutGroup *boxHorizontal = [groupClass horizontalGroupWithLayoutSize: box subitems: @[other, other]];
+        expect([[boxVertical visualDescription] length] > 0 &&
+                       [[[[boxVertical copy] autorelease] visualDescription] isEqualToString: [boxVertical visualDescription]] &&
+                       ![[boxVertical visualDescription] isEqualToString: [boxHorizontal visualDescription]],
+               @"a group's copy keeps its direction, and the description tells the directions apart");
+
+        // macOS makes a custom group. The stand-in has no layout engine to call the provider, so it raises rather than
+        // make a group that silently does nothing; either outcome is accepted here.
         BOOL raised = NO;
+        NSCollectionLayoutGroup *custom = nil;
         @try {
-            [groupClass customGroupWithLayoutSize: fill itemProvider: ^NSArray *(id<NSCollectionLayoutEnvironment> environment) { return @[]; }];
+            custom = [groupClass customGroupWithLayoutSize: fill itemProvider: ^NSArray *(id<NSCollectionLayoutEnvironment> environment) { return @[]; }];
         } @catch (NSException *exception) {
             raised = [[exception reason] containsString: @"not implemented"];
         }
-        expect(raised, @"a custom group fails loud");
+        expect(raised || [custom isKindOfClass: groupClass], @"a custom group is made, or the stand-in fails loud");
 
         NSCollectionLayoutSection *section = [sectionClass sectionWithGroup: horizontal];
         NSDirectionalEdgeInsets zero = [section contentInsets];
@@ -98,7 +133,7 @@ int main(void) {
         expect([section interGroupSpacing] == 0, @"inter group spacing starts at zero");
         expect([[section boundarySupplementaryItems] isEqual: @[]] && [[section decorationItems] isEqual: @[]],
                @"a section starts with empty boundary and decoration item arrays, not nil");
-        expect([section supplementariesFollowContentInsets], @"supplementaries follow content insets by default (GUESS)");
+        expect([section supplementariesFollowContentInsets], @"supplementaries follow content insets by default (macOS 26.7.3)");
 
         NSCollectionLayoutBoundarySupplementaryItem *header = [boundaryClass boundarySupplementaryItemWithLayoutSize: fill
                                                                                                          elementKind: @"header"
@@ -154,8 +189,8 @@ int main(void) {
 
         [section setBoundarySupplementaryItems: nil];
         [section setDecorationItems: nil];
-        expect([[section boundarySupplementaryItems] isEqual: @[]] && [[section decorationItems] isEqual: @[]],
-               @"setting nil gives empty arrays");
+        expect([section boundarySupplementaryItems] == nil && [[section decorationItems] isEqual: @[]],
+               @"quirk: nil on a section gives nil boundary items and an empty array of decoration items (macOS 26.7.3)");
         NSMutableArray *mutableItems = [NSMutableArray arrayWithObject: header];
         [section setBoundarySupplementaryItems: mutableItems];
         [mutableItems removeAllObjects];

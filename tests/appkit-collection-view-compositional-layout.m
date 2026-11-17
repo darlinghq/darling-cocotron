@@ -32,8 +32,10 @@ int main(void) {
                @"the flow layout invalidation context is an invalidation context");
 
         NSCollectionViewFlowLayoutInvalidationContext *context = [[[contextClass alloc] init] autorelease];
-        expect(![context invalidateFlowLayoutDelegateMetrics] && ![context invalidateFlowLayoutAttributes],
-               @"a flow layout invalidation context invalidates nothing to start with");
+        expect([context invalidateFlowLayoutDelegateMetrics] && [context invalidateFlowLayoutAttributes],
+               @"quirk: a new flow layout invalidation context invalidates the delegate metrics and the attributes (macOS 26.7.3)");
+        [context setInvalidateFlowLayoutDelegateMetrics: NO];
+        expect(![context invalidateFlowLayoutDelegateMetrics] && [context invalidateFlowLayoutAttributes], @"the two flags are independent");
         [context setInvalidateFlowLayoutDelegateMetrics: YES];
         [context setInvalidateFlowLayoutAttributes: YES];
         expect([context invalidateFlowLayoutDelegateMetrics] && [context invalidateFlowLayoutAttributes],
@@ -50,10 +52,11 @@ int main(void) {
 
         NSCollectionViewCompositionalLayoutConfiguration *configuration = [[[configurationClass alloc] init] autorelease];
         expect([configuration scrollDirection] == NSCollectionViewScrollDirectionVertical && [configuration interSectionSpacing] == 0 &&
-                       [[configuration boundarySupplementaryItems] isEqual: @[]],
-               @"a configuration starts vertical, without spacing and with an empty (not nil) array of boundary items");
+                       [configuration boundarySupplementaryItems] == nil,
+               @"quirk: a configuration starts vertical, without spacing and with nil boundary items (macOS 26.7.3)");
+        [configuration setBoundarySupplementaryItems: @[header]];
         [configuration setBoundarySupplementaryItems: nil];
-        expect([[configuration boundarySupplementaryItems] isEqual: @[]], @"setting nil gives an empty array");
+        expect([configuration boundarySupplementaryItems] == nil, @"quirk: nil boundary items are stored as nil, no exception (macOS 26.7.3)");
         [configuration setScrollDirection: NSCollectionViewScrollDirectionHorizontal];
         [configuration setInterSectionSpacing: 14];
         [configuration setBoundarySupplementaryItems: @[header]];

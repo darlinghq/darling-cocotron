@@ -1,5 +1,6 @@
 #import <AppKit/AppKit.h>
 #import <objc/runtime.h>
+#include <math.h>
 #include <dlfcn.h>
 #include <mach-o/loader.h>
 #include <stdio.h>
@@ -50,4 +51,26 @@ static void expectFromCollectionViewCore(Class cls) {
     expect([installName isEqualToString: @"/System/Library/PrivateFrameworks/CollectionViewCore.framework/Versions/A/CollectionViewCore"],
            [NSString stringWithFormat: @"%s lives in an image with the CollectionViewCore install name (install name: %@)",
                                        class_getName(cls), installName]);
+}
+
+// Two layout sizes with the same width and height dimensions. A layout size given to an item is not necessarily
+// the object the item answers (macOS answers a copy), so identity is not compared.
+static BOOL sameDimension(NSCollectionLayoutDimension *a, NSCollectionLayoutDimension *b) {
+    return [a isFractionalWidth] == [b isFractionalWidth] && [a isFractionalHeight] == [b isFractionalHeight] &&
+           [a isAbsolute] == [b isAbsolute] && [a isEstimated] == [b isEstimated] && [a dimension] == [b dimension];
+}
+
+static BOOL sameSize(NSCollectionLayoutSize *a, NSCollectionLayoutSize *b) {
+    return a != nil && b != nil && sameDimension([a widthDimension], [b widthDimension]) &&
+           sameDimension([a heightDimension], [b heightDimension]);
+}
+
+// The items of an array match those of another one in order, by layout size (macOS answers copies of the subitems).
+static BOOL sameItemSizes(NSArray *actual, NSArray *expected) {
+    if ([actual count] != [expected count])
+        return NO;
+    for (NSUInteger i = 0; i < [actual count]; i++)
+        if (!sameSize([[actual objectAtIndex: i] layoutSize], [[expected objectAtIndex: i] layoutSize]))
+            return NO;
+    return YES;
 }

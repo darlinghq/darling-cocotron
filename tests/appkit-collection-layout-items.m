@@ -21,11 +21,18 @@ int main(void) {
                                                          heightDimension: [dimensionClass absoluteDimension: 30]];
 
         NSCollectionLayoutItem *item = [itemClass itemWithLayoutSize: size];
-        expect([item layoutSize] == size, @"the item keeps its layout size");
-        expect([[item supplementaryItems] count] == 0, @"an item made without supplementary items has none");
+        expect(sameSize([item layoutSize], size), @"the item keeps its layout size");
+        expect([[item supplementaryItems] isEqual: @[]], @"an item made without supplementary items has an empty array");
+        NSCollectionLayoutItem *nilSupplementary = [itemClass itemWithLayoutSize: size supplementaryItems: nil];
+        expect(nilSupplementary != nil && [nilSupplementary supplementaryItems] == nil,
+               @"quirk: nil supplementary items for the factory are stored as nil, no exception (macOS 26.7.3)");
         NSDirectionalEdgeInsets zero = [item contentInsets];
         expect(zero.top == 0 && zero.leading == 0 && zero.bottom == 0 && zero.trailing == 0, @"content insets start at zero");
-        expect([item edgeSpacing] == nil, @"edge spacing starts nil");
+        NSCollectionLayoutEdgeSpacing *startSpacing = [item edgeSpacing];
+        expect(startSpacing != nil && [[startSpacing leading] isFixedSpacing] && [[startSpacing leading] spacing] == 0 &&
+                       [[startSpacing top] spacing] == 0 && [[startSpacing trailing] spacing] == 0 && [[startSpacing bottom] spacing] == 0 &&
+                       [[startSpacing bottom] isFixedSpacing],
+               @"quirk: edge spacing starts as fixed zero spacing on every edge (macOS 26.7.3)");
 
         [item setContentInsets: NSDirectionalEdgeInsetsMake(1, 2, 3, 4)];
         NSDirectionalEdgeInsets insets = [item contentInsets];
@@ -36,7 +43,7 @@ int main(void) {
 
         NSCollectionLayoutItem *itemCopy = [[item copy] autorelease];
         expect([itemCopy isMemberOfClass: itemClass] && itemCopy != item, @"an item copies to a new item of its class");
-        expect([itemCopy layoutSize] == size && [itemCopy contentInsets].trailing == 4 && [[[itemCopy edgeSpacing] leading] spacing] == 5,
+        expect(sameSize([itemCopy layoutSize], size) && [itemCopy contentInsets].trailing == 4 && [[[itemCopy edgeSpacing] leading] spacing] == 5,
                @"the copy keeps the size, insets and edge spacing");
         [itemCopy setContentInsets: NSDirectionalEdgeInsetsMake(9, 9, 9, 9)];
         expect([item contentInsets].top == 1, @"changing the copy leaves the original alone");
@@ -50,9 +57,10 @@ int main(void) {
                                                                                               itemAnchor: own];
         expect([[badge elementKind] isEqualToString: @"badge"], @"the supplementary item keeps its element kind");
         expect([badge containerAnchor] == container && [badge itemAnchor] == own, @"it keeps both anchors");
-        expect([badge layoutSize] == size && [[badge supplementaryItems] count] == 0, @"it keeps its layout size and has no supplementary items");
+        expect(sameSize([badge layoutSize], size) && [[badge supplementaryItems] count] == 0, @"it keeps its layout size and has no supplementary items");
         NSCollectionLayoutSupplementaryItem *bare = [supplementaryClass supplementaryItemWithLayoutSize: size elementKind: @"bare" containerAnchor: container];
         expect([bare itemAnchor] == nil, @"an item anchor not given is nil");
+        expect([bare zIndex] == 1, @"quirk: a supplementary item starts with z index 1 (macOS 26.7.3)");
         [badge setZIndex: 7];
         NSCollectionLayoutSupplementaryItem *badgeCopy = [[badge copy] autorelease];
         expect([badgeCopy zIndex] == 7 && [[badgeCopy elementKind] isEqualToString: @"badge"] && [badgeCopy itemAnchor] == own &&

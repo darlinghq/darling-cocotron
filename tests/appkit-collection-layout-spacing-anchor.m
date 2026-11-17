@@ -34,6 +34,11 @@ int main(void) {
         NSDirectionalRectEdge both = NSDirectionalRectEdgeTop | NSDirectionalRectEdgeTrailing;
         NSCollectionLayoutAnchor *plain = [anchorClass layoutAnchorWithEdges: both];
         expect([plain edges] == both && [plain offset].x == 0 && [plain offset].y == 0, @"an anchor keeps its edges and has no offset");
+        expect([plain isAbsoluteOffset] && ![plain isFractionalOffset],
+               @"quirk: an anchor without an offset reports an absolute offset (macOS 26.7.3)");
+        NSCollectionLayoutAnchor *plainNone = [anchorClass layoutAnchorWithEdges: NSDirectionalRectEdgeNone];
+        expect([plainNone edges] == NSDirectionalRectEdgeNone && [plainNone isAbsoluteOffset] && ![plainNone isFractionalOffset],
+               @"quirk: an anchor without edges or offset reports an absolute offset (macOS 26.7.3)");
 
         NSCollectionLayoutAnchor *absolute = [anchorClass layoutAnchorWithEdges: NSDirectionalRectEdgeBottom absoluteOffset: NSMakePoint(4, -6)];
         expect([absolute isAbsoluteOffset] && ![absolute isFractionalOffset], @"an absolute offset is absolute");
