@@ -64,6 +64,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     NSRect frame;
 
     frame = [self frame];
+    // The window was created with the control's size: the menu is never narrower than the control it drops from,
+    // as pop-up buttons look on macOS.
+    size.width = MAX(size.width, frame.size.width);
     frame.size = size;
     frame.origin.y -=
             (size.height - selectedRect.origin.y) - selectedRect.size.height;
