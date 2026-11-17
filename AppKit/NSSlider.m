@@ -34,6 +34,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return [NSSliderCell class];
 }
 
+// Sliders are flipped views on macOS 10.14.4 and 26.7.3; the cell mirrors its drawing to match.
+- (BOOL) isFlipped {
+    return YES;
+}
+
 - (double) minValue {
     return [[self selectedCell] minValue];
 }
