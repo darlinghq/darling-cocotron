@@ -29,6 +29,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return [NSSegmentedCell class];
 }
 
+// Segmented controls are flipped views on macOS 10.14.4 and 26.7.3.
+- (BOOL) isFlipped {
+    return YES;
+}
+
 // An NSArchiver archive of a segmented control has four more ints after the control part (unused).
 - initWithCoder: (NSCoder *) coder {
     if ((self = [super initWithCoder: coder]) != nil && ![coder allowsKeyedCoding]) {

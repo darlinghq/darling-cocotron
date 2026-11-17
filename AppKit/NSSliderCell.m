@@ -292,13 +292,16 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         result.origin.x = _lastRect.origin.x;
         if (_tickMarkPosition == NSTickMarkBelow)
             result.origin.x += _lastRect.size.width - TICKHEIGHT;
+        // The minimum of a vertical slider is at the bottom, the larger y in a flipped view.
+        if ([_controlView isFlipped])
+            position = length - position;
         result.origin.y = floor(_lastRect.origin.y + PIXELINSET + position);
         result.size.width = TICKHEIGHT;
         result.size.height = 1;
     } else {
         result.origin.x = floor(_lastRect.origin.x + PIXELINSET + position);
         result.origin.y = _lastRect.origin.y;
-        if (_tickMarkPosition == NSTickMarkAbove)
+        if ([self _tickMarksAtHigherY])
             result.origin.y += _lastRect.size.height - TICKHEIGHT;
         result.size.width = 1;
         result.size.height = TICKHEIGHT;
@@ -314,6 +317,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                      hasTickMarks: (_numberOfTickMarks > 0) ? YES : NO];
 }
 
+// Whether the tick marks of a horizontal slider are at the larger y: above in a view that is not flipped,
+// below in a flipped one.
+- (BOOL) _tickMarksAtHigherY {
+    BOOL above = (_tickMarkPosition == NSTickMarkAbove);
+
+    return [_controlView isFlipped] ? !above : above;
+}
+
 - (NSRect) _sliderRect {
     NSRect result = _lastRect;
 
@@ -324,7 +335,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                 result.origin.x += TICKHEIGHT;
         } else {
             result.size.height -= TICKHEIGHT;
-            if (_tickMarkPosition == NSTickMarkBelow)
+            if (![self _tickMarksAtHigherY])
                 result.origin.y += TICKHEIGHT;
         }
     }
@@ -338,6 +349,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     double percent = (range > 0) ? (value - _minValue) / range : 0;
     NSRect sliderRect = [self _sliderRect];
     NSRect knobRect;
+
+    // The minimum of a vertical slider is at the bottom, which is the larger y in a flipped view.
+    if (flipped && [self isVertical])
+        percent = 1 - percent;
     NSSize knobSize = [[_controlView graphicsStyle]
             sliderKnobSizeForControlSize: [self controlSize]];
 
@@ -483,7 +498,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
     NSPoint knobCenter = NSMakePoint(NSMidX(sliderRect), NSMidY(sliderRect));
     knobCenter.x += knobOffset.x;
-    knobCenter.y -= knobOffset.y;
+    // The knob starts at the top, which is the smaller y in a flipped view.
+    if ([_controlView isFlipped])
+        knobCenter.y += knobOffset.y;
+    else
+        knobCenter.y -= knobOffset.y;
 
     NSRect knobRect = NSMakeRect(knobCenter.x, knobCenter.y, 0, 0);
     knobRect = NSInsetRect(knobRect, -3, -3); // by visual inspection
@@ -587,6 +606,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     if (_isVertical) {
         length = (_lastRect.size.height - (2 * PIXELINSET));
         position = point.y - (_lastRect.origin.y + PIXELINSET);
+        if ([_controlView isFlipped])
+            position = length - position;
     } else {
         length = (_lastRect.size.width - (2 * PIXELINSET));
         position = point.x - (_lastRect.origin.x + PIXELINSET);
