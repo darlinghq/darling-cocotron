@@ -60,6 +60,8 @@
     BOOL _ignoresMouseEvents; // the input region currently set
     CGFloat _appliedAlpha; // the window's alpha value as last applied to the X window
     BOOL _alphaIsZero; // _appliedAlpha is 0
+    BOOL _chromeless; // no window manager frame and no title bar: rounded corners and an outline (see -updateWindowShape)
+    BOOL _roundedShapeSet; // the bounding shape currently has rounded corners
     BOOL _invisibleWithoutCompositor; // alpha 0 made the window invisible by shape (see -updateInvisibility)
     // The subwindow whose layer tree draws into _cglWindow instead of its
     // own drawable (see -[X11SubWindow sharedCGLWindow]), and whether its
