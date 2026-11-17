@@ -250,3 +250,8 @@ typedef struct _Margins {
                    controlSize: (NSControlSize) controlSize;
 @end
 
+@interface NSGraphicsStyle (NSBoxAqua)
+/* The primary and secondary box: a lightly tinted rounded rectangle with a thin outline. */
+- (void) drawAquaBoxInRect: (NSRect) rect;
+@end
+

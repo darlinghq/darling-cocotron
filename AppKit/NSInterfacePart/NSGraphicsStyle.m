@@ -1293,6 +1293,24 @@ static void NSAquaDrawToggle(NSRect rect, BOOL radio, NSInteger state, BOOL high
 
 @end
 
+@implementation NSGraphicsStyle (NSBoxAqua)
+
+// QUIRK: the box look of macOS 10.14 (light appearance), the same for primary and secondary boxes. Not
+// documented. Evidence: black-box renders of NSBox on macOS 10.14.4 at 1x and 2x (tier 2): a 4 point
+// rounded rectangle filled with black at 4% and outlined with black at about 6% (about 10% along the top
+// edge), inset 3 points from the sides of the view. Test: appkit-box-aqua.m
+- (void) drawAquaBoxInRect: (NSRect) rect {
+    NSBezierPath *path = [NSBezierPath bezierPathWithRoundedRect: NSInsetRect(rect, 0.5, 0.5) xRadius: 4 yRadius: 4];
+
+    [[NSColor colorWithCalibratedWhite: 0 alpha: 0.04] setFill];
+    [path fill];
+    [[NSColor colorWithCalibratedWhite: 0 alpha: 0.07] setStroke];
+    [path setLineWidth: 1];
+    [path stroke];
+}
+
+@end
+
 @implementation NSView (NSGraphicsStyle)
 
 - (NSGraphicsStyle *) graphicsStyle {
