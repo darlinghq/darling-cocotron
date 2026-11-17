@@ -27,6 +27,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSImage.h>
 #import "NSCoder+AppKit.h"
 #import <AppKit/NSAppearance.h>
+#import <AppKit/NSApplication.h>
 #import "NSImageDrawingCache.h"
 #import <AppKit/NSLinkedOnOrAfter.h>
 #import <AppKit/NSImageRep.h>
@@ -309,6 +310,10 @@ NSImageName const NSImageNameTouchBarVolumeUpTemplate =
                  fraction: (CGFloat) fraction;
 @end
 
+@interface NSApplication (BundleIcon)
+- (NSImage *) _bundleApplicationIconImage;
+@end
+
 @implementation NSImage
 
 + (NSArray *) imageFileTypes {
@@ -382,6 +387,14 @@ NSImageName const NSImageNameTouchBarVolumeUpTemplate =
 + imageNamed: (NSString *) name {
     if (name == nil)
         return nil;
+
+    // The application icon is the icon of the main bundle. Setting the application icon image does not
+    // change it (observed on macOS 10.14.4 and 26.7.3, tests/appkit-application-icon-image.m).
+    if ([name isEqualToString: NSImageNameApplicationIcon] && NSApp != nil) {
+        NSImage *icon = [NSApp _bundleApplicationIconImage];
+        if (icon != nil)
+            return icon;
+    }
 
     NSImage *image = [[self allImages] objectForKey: name];
     if (image == nil) {
