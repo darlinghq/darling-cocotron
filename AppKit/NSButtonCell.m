@@ -118,14 +118,12 @@ static const CGFloat kImageMargin = 2.;
     NS_EXTRA(NSCell, self)->_isBordered =
             (flags & 0x00800000) ? YES : NO; // err, this flag is in NSCell too
 
-    NS_EXTRA(NSButtonCell, self)->_bezelStyle = (flags2 & 0x7) | (flags2 & 0x20 >> 2);
+    // The archive stores the style in the low three bits of the second flag word and, for the styles
+    // from 8 up (textured, round rect, recessed, inline and so on), the fourth bit in bit 5.
+    NS_EXTRA(NSButtonCell, self)->_bezelStyle = (flags2 & 0x7) | ((flags2 & 0x20) >> 2);
 
-    if (NS_EXTRA(NSButtonCell, self)->_bezelStyle == 0) // this is how textured buttons are encoded by IB
+    if (NS_EXTRA(NSButtonCell, self)->_bezelStyle == 0) // no style at all: how older archives encode textured buttons
         NS_EXTRA(NSButtonCell, self)->_bezelStyle = NSTexturedSquareBezelStyle;
-    if (NS_EXTRA(NSButtonCell, self)->_bezelStyle == 3)
-        NS_EXTRA(NSButtonCell, self)->_bezelStyle = NSTexturedRoundedBezelStyle;
-    if (NS_EXTRA(NSButtonCell, self)->_bezelStyle == 4)
-        NS_EXTRA(NSButtonCell, self)->_bezelStyle = NSRoundRectBezelStyle;
 
     NS_EXTRA(NSButtonCell, self)->_isTransparent = (flags & 0x00008000) ? YES : NO;
     NS_EXTRA(NSButtonCell, self)->_imageDimsWhenDisabled = (flags & 0x00002000) ? NO : YES;
