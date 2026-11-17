@@ -140,6 +140,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (void) keyboardLayoutName: (NSString **) name
                    fullName: (NSString **) fullName;
 
+// The text input client of `window` moved or changed its text: the platform's
+// input method wants to place its candidate window next to the insertion point
+// again. Optional; backends without an input method protocol don't implement it.
+- (void) textInputCandidateRectChangedInWindow: (NSWindow *) window;
+
 // position is in CoreGraphics' global space (origin at the main screen's top-left
 // corner, y down), as CGWarpMouseCursorPosition() takes it.
 - (void) warpMouse: (NSPoint) position;
