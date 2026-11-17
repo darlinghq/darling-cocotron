@@ -385,6 +385,8 @@ typedef NS_ENUM(NSInteger, NSWindowUserTabbingPreference) {
         BOOL _canBecomeVisibleWithoutLogin;
         // Zeroing weak reference to the appearance source.
         id _appearanceSource;
+        // Direction of the key view selection in progress; zero (direct) otherwise.
+        NSSelectionDirection _keyViewSelectionDirection;
     NS_EXTRA_IVARS_END(NSWindow)
 }
 
