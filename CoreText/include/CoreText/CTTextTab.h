@@ -5,6 +5,8 @@ CF_IMPLICIT_BRIDGING_ENABLED
 
 typedef const struct __CTTextTab *CTTextTabRef;
 
+CORETEXT_EXPORT const CFStringRef kCTTabColumnTerminatorsAttributeName;
+
 CORETEXT_EXPORT CTTextTabRef CTTextTabCreate(CTTextAlignment alignment, double location, CFDictionaryRef options);
 CORETEXT_EXPORT CTTextAlignment CTTextTabGetAlignment(CTTextTabRef tab);
 CORETEXT_EXPORT double CTTextTabGetLocation(CTTextTabRef tab);

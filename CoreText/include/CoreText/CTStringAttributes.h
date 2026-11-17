@@ -8,3 +8,7 @@ CORETEXT_EXPORT const CFStringRef kCTGlyphInfoAttributeName;
 CORETEXT_EXPORT const CFStringRef kCTLigatureAttributeName;
 CORETEXT_EXPORT const CFStringRef kCTUnderlineStyleAttributeName;
 CORETEXT_EXPORT const CFStringRef kCTRunDelegateAttributeName;
+CORETEXT_EXPORT const CFStringRef kCTTrackingAttributeName;
+CORETEXT_EXPORT const CFStringRef kCTHorizontalInVerticalFormsAttributeName;
+CORETEXT_EXPORT const CFStringRef kCTStrokeColorAttributeName;
+CORETEXT_EXPORT const CFStringRef kCTWritingDirectionAttributeName;

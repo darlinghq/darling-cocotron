@@ -1,5 +1,6 @@
 #import <CoreText/CTFontDescriptor.h>
 #import <CoreGraphics/CoreGraphics.h>
+#import <CoreText/CTFontManagerErrors.h>
 
 CF_IMPLICIT_BRIDGING_ENABLED
 
