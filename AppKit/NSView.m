@@ -1640,8 +1640,14 @@ static void postFrameChange(NSView *self) {
             [view _removeFromSuperviewSendingMoveHooks: NO];
         }
 
-        [view _setWindow: _window];
+        // QUIRK: the new superview (and with it the responder chain) is in
+        // place before -viewWillMoveToWindow: and -viewDidMoveToWindow: run.
+        // Not documented. Evidence: black-box observation (tier 2) on macOS
+        // 26.7.3 and 10.14.4. Removal clears the superview before the window
+        // callbacks in the same way.
+        // Test: tests/appkit-view-window-callbacks-superview.m
         [view _setSuperview: self];
+        [view _setWindow: _window];
     }
 
     if (index == NSNotFound)
