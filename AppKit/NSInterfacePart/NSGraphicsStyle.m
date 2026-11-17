@@ -20,6 +20,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSBezierPath.h>
 #import <AppKit/NSColor.h>
 #import <AppKit/NSFont.h>
+#import <AppKit/NSGraphicsContext.h>
 #import <AppKit/NSGraphicsContextFunctions.h>
 #import <AppKit/NSGraphicsStyle.h>
 #import <AppKit/NSImage.h>
@@ -730,26 +731,28 @@ static NSDictionary *sScrollerButtonAttributes = nil;
                      highlighted: (BOOL) highlighted
                        upNotDown: (BOOL) upNotDown
 {
-    unichar code = upNotDown ? 0x74 : 0x75;
-    NSInterfacePart *arrow;
-
-    if (enabled)
-        arrow = [[[NSInterfacePartAttributedString alloc]
-                initWithMarlettCharacter: code] autorelease];
-    else
-        arrow = [[[NSInterfacePartDisabledAttributedString alloc]
-                initWithMarlettCharacter: code] autorelease];
-
     if (highlighted)
         NSDrawWhiteBezel(rect, clipRect);
     else
         NSDrawButton(rect, clipRect);
 
-    rect.origin.x += rect.size.width / 2;
-    rect.origin.x -= [arrow size].width / 2;
-    rect.origin.y += rect.size.height / 2;
-    rect.origin.y -= [arrow size].height / 2;
-    [arrow drawAtPoint: rect.origin];
+    // The arrow is a small solid triangle centred in the button, pointing up or down. (It was a glyph of
+    // the Windows Marlett font, which other platforms do not have: letters were drawn instead.)
+    CGFloat halfWidth = MIN(3.0, floor(rect.size.width / 4));
+    CGFloat height = MIN(halfWidth, floor(rect.size.height / 3));
+    CGFloat centerX = NSMidX(rect), centerY = NSMidY(rect);
+    BOOL flipped = [[NSGraphicsContext currentContext] isFlipped];
+    BOOL tipAtSmallerY = (upNotDown == flipped);
+    CGFloat tipY = centerY + (tipAtSmallerY ? -height : height) / 2;
+    CGFloat baseY = centerY + (tipAtSmallerY ? height : -height) / 2;
+    NSBezierPath *arrow = [NSBezierPath bezierPath];
+
+    [arrow moveToPoint: NSMakePoint(centerX, tipY)];
+    [arrow lineToPoint: NSMakePoint(centerX + halfWidth, baseY)];
+    [arrow lineToPoint: NSMakePoint(centerX - halfWidth, baseY)];
+    [arrow closePath];
+    [(enabled ? [NSColor controlTextColor] : [NSColor disabledControlTextColor]) setFill];
+    [arrow fill];
 }
 
 @end
