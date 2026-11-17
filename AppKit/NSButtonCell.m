@@ -1077,6 +1077,25 @@ static void drawRoundedBezel(CGContextRef context, CGRect frame) {
     CGContextFillPath(context);
 }
 
+/* Pop-up and pull-down buttons with a rounded bezel and an arrow are drawn whole by the graphics style (the
+   arrows are part of the end cap). Answers NO for every other button. */
+- (BOOL) _drawsPopUpBezelInRect: (NSRect) frame {
+    if (![self isKindOfClass: [NSPopUpButtonCell class]] ||
+        NS_EXTRA(NSButtonCell, self)->_bezelStyle != NSRoundedBezelStyle ||
+        [(NSPopUpButtonCell *) self arrowPosition] == NSPopUpNoArrow)
+        return NO;
+
+    BOOL pressed = ([self highlightsBy] & NSPushInCellMask) && [self isHighlighted];
+
+    [[_controlView graphicsStyle] drawPopUpButtonInRect: frame
+                                              pullsDown: [(NSPopUpButtonCell *) self pullsDown]
+                                                pressed: pressed
+                                                enabled: [self isEnabled]
+                                                 active: [[_controlView window] isKeyWindow]
+                                            controlSize: [self controlSize]];
+    return YES;
+}
+
 - (void) drawBezelWithFrame: (NSRect) frame inView: (NSView *) controlView {
     BOOL defaulted = ([[controlView window] defaultButtonCell] == self);
 
@@ -1167,11 +1186,12 @@ static void drawRoundedBezel(CGContextRef context, CGRect frame) {
             // pressed push-in buttons and default buttons are blue when drawn by the style
             BOOL pressed = ([self highlightsBy] & NSPushInCellMask) && [self isHighlighted];
 
-            [[_controlView graphicsStyle] drawPushButtonInRect: frame
-                                                     defaulted: defaulted
-                                                       pressed: pressed || [self isVisuallyHighlighted]
-                                                       enabled: [self isEnabled]
-                                                        active: [[controlView window] isKeyWindow]];
+            if (![self _drawsPopUpBezelInRect: frame])
+                [[_controlView graphicsStyle] drawPushButtonInRect: frame
+                                                         defaulted: defaulted
+                                                           pressed: pressed || [self isVisuallyHighlighted]
+                                                           enabled: [self isEnabled]
+                                                            active: [[controlView window] isKeyWindow]];
         }
         if (mirror)
             CGContextRestoreGState(context);

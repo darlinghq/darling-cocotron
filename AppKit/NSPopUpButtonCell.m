@@ -39,6 +39,10 @@ NSNotificationName NSPopUpButtonCellWillPopUpNotification =
     _selectedIndex = -1;
     NS_EXTRA(NSPopUpButtonCell, self)->_arrowPosition = NSPopUpArrowAtCenter;
     NS_EXTRA(NSPopUpButtonCell, self)->_preferredEdge = NSMaxYEdge;
+    // QUIRK: a new pop-up or pull-down button has the rounded bezel style. Not documented. Evidence:
+    // black-box observation on macOS 10.14.4 (tier 2): -bezelStyle of a new NSPopUpButton is 1
+    // (NSRoundedBezelStyle). Test: appkit-popup-aqua.m
+    NS_EXTRA(NSButtonCell, self)->_bezelStyle = NSRoundedBezelStyle;
     return self;
 }
 
@@ -92,6 +96,10 @@ NSNotificationName NSPopUpButtonCellWillPopUpNotification =
     NS_EXTRA(NSPopUpButtonCell, self)->_arrowPosition = NSPopUpArrowAtCenter;
     NS_EXTRA(NSPopUpButtonCell, self)->_preferredEdge = NSMaxYEdge;
     NS_EXTRA(NSPopUpButtonCell, self)->_pullsDown = pullDown;
+    // QUIRK: a new pop-up or pull-down button has the rounded bezel style. Not documented. Evidence:
+    // black-box observation on macOS 10.14.4 (tier 2): -bezelStyle of a new NSPopUpButton is 1
+    // (NSRoundedBezelStyle). Test: appkit-popup-aqua.m
+    NS_EXTRA(NSButtonCell, self)->_bezelStyle = NSRoundedBezelStyle;
     return self;
 }
 
@@ -430,7 +438,9 @@ NSNotificationName NSPopUpButtonCellWillPopUpNotification =
 
     [super drawBezelWithFrame: frame inView: controlView];
 
-    // Now draw the arrow
+    // Now draw the arrow, unless the bezel included it
+    if ([self isBordered] && NS_EXTRA(NSButtonCell, self)->_bezelStyle == NSRoundedBezelStyle)
+        return;
     if (NS_EXTRA(NSPopUpButtonCell, self)->_arrowPosition != NSPopUpNoArrow) {
         NSImage *arrowImage =
                 (NS_EXTRA(NSPopUpButtonCell, self)->_arrowPosition != NSPopUpNoArrow) ? [self arrowImage] : NULL;

@@ -1211,6 +1211,71 @@ static void NSAquaDrawToggle(NSRect rect, BOOL radio, NSInteger state, BOOL high
 
 @end
 
+@implementation NSGraphicsStyle (NSPopUpButtonAqua)
+
+// QUIRK: the pop-up and pull-down button look of macOS 10.14 (light appearance). Not documented.
+// Evidence: black-box renders of NSPopUpButton on macOS 10.14.4 at 1x and 2x (tier 2): the bezel is the
+// white push button bezel with an end cap on the right that is 16, 14 and 12 points wide for the regular,
+// small and mini control sizes, filled like a default push button (a pressed one like a pressed button),
+// holding two white chevrons (one down chevron for a pull-down); a disabled button is white at half
+// strength with gray chevrons, and the cap is not blue in a window that is not active.
+// Test: appkit-popup-aqua.m
+- (void) drawPopUpButtonInRect: (NSRect) rect
+                     pullsDown: (BOOL) pullsDown
+                       pressed: (BOOL) pressed
+                       enabled: (BOOL) enabled
+                        active: (BOOL) active
+                   controlSize: (NSControlSize) controlSize
+{
+    static const CGFloat capWidths[3] = {16, 14, 12};
+    int index = controlSize == NSSmallControlSize ? 1 : (controlSize == NSMiniControlSize ? 2 : 0);
+    CGContextRef ctx = [[NSGraphicsContext currentContext] graphicsPort];
+    NSRect body = NSMakeRect(NSMinX(rect), NSMinY(rect) + 1, NSWidth(rect), NSHeight(rect) - 1);
+    CGFloat radius = MIN(4.5, NSHeight(body) / 4.5);
+    CGFloat capWidth = capWidths[index];
+    NSRect cap = NSMakeRect(NSMaxX(body) - capWidth, NSMinY(body), capWidth, NSHeight(body));
+    BOOL blue = enabled && (active || pressed);
+
+    [self drawPushButtonInRect: rect defaulted: NO pressed: NO enabled: enabled active: active];
+    if (blue) {
+        CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB();
+        CGFloat normal[8] = {110 / 255.0, 163 / 255.0, 250 / 255.0, 1, 13 / 255.0, 97 / 255.0, 1, 1};
+        CGFloat down[8] = {76 / 255.0, 139 / 255.0, 253 / 255.0, 1, 15 / 255.0, 88 / 255.0, 231 / 255.0, 1};
+        CGGradientRef gradient = CGGradientCreateWithColorComponents(space, pressed ? down : normal, NULL, 2);
+
+        CGContextSaveGState(ctx);
+        [[NSBezierPath bezierPathWithRoundedRect: body xRadius: radius yRadius: radius] addClip];
+        CGContextClipToRect(ctx, cap);
+        CGContextDrawLinearGradient(ctx, gradient, CGPointMake(0, NSMaxY(body)), CGPointMake(0, NSMinY(body)), 0);
+        CGContextRestoreGState(ctx);
+        CGGradientRelease(gradient);
+        CGColorSpaceRelease(space);
+    }
+
+    NSColor *mark = blue ? [NSColor whiteColor]
+                         : [NSColor colorWithCalibratedWhite: 0 alpha: enabled ? 0.55 : 0.3];
+    CGFloat scale = capWidth / 16.5;
+    CGFloat cx = NSMidX(cap), cy = NSMidY(cap) + 0.5;
+    NSBezierPath *chevrons = [NSBezierPath bezierPath];
+
+    if (!pullsDown) {
+        [chevrons moveToPoint: NSMakePoint(cx - 3.2 * scale, cy + 2.2 * scale)];
+        [chevrons lineToPoint: NSMakePoint(cx, cy + 5.4 * scale)];
+        [chevrons lineToPoint: NSMakePoint(cx + 3.2 * scale, cy + 2.2 * scale)];
+    }
+    CGFloat down = pullsDown ? 0 : -2.2 * scale;
+    [chevrons moveToPoint: NSMakePoint(cx - 3.2 * scale, cy + down + (pullsDown ? 1.6 : 0) * scale)];
+    [chevrons lineToPoint: NSMakePoint(cx, cy + down - (pullsDown ? 1.6 : 3.2) * scale)];
+    [chevrons lineToPoint: NSMakePoint(cx + 3.2 * scale, cy + down + (pullsDown ? 1.6 : 0) * scale)];
+    [mark setStroke];
+    [chevrons setLineWidth: MAX(1.2, 1.5 * scale)];
+    [chevrons setLineCapStyle: NSRoundLineCapStyle];
+    [chevrons setLineJoinStyle: NSRoundLineJoinStyle];
+    [chevrons stroke];
+}
+
+@end
+
 @implementation NSView (NSGraphicsStyle)
 
 - (NSGraphicsStyle *) graphicsStyle {

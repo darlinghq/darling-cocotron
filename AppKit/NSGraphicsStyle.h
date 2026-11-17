@@ -238,3 +238,15 @@ typedef struct _Margins {
                        active: (BOOL) active;
 @end
 
+@interface NSGraphicsStyle (NSPopUpButtonAqua)
+/* The bezel of a pop-up or pull-down button: a white bezel with a blue end cap on the right that holds the
+   up and down chevrons (a single down chevron for a pull-down). Same rectangle conventions as
+   -drawPushButtonInRect:defaulted:pressed:enabled:active:. */
+- (void) drawPopUpButtonInRect: (NSRect) rect
+                     pullsDown: (BOOL) pullsDown
+                       pressed: (BOOL) pressed
+                       enabled: (BOOL) enabled
+                        active: (BOOL) active
+                   controlSize: (NSControlSize) controlSize;
+@end
+
