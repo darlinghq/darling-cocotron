@@ -1494,11 +1494,48 @@ static NSSize scaledImageSizeInFrameSize(NSSize imageSize, NSSize frameSize,
         result.height += 4;
     }
 
+    [self _applyStockButtonMetricsToSize: &result titleWidth: titleSize.width];
+
     NSRect adjustment = [self getControlSizeAdjustment: NO];
     result.width += adjustment.size.width;
     result.height += adjustment.size.height;
 
     return result;
+}
+
+// QUIRK: a rounded push button, a checkbox and a radio button have a size of their own derived from the
+// title width: the title width plus a fixed amount per control size, rounded up. A push button also has a
+// fixed height per control size. Not documented. Evidence: black-box observation on macOS 10.14.4 (tier 2)
+// of the intrinsic content size with titles of 0 to 196 points at the three control sizes; 26.7.3 differs
+// and is not followed. The amounts are 28, 16 and 22 for push buttons (regular, small, mini; heights 21, 18
+// and 15), 18, 17 and 16 for checkboxes and 19, 19 and 17 for radio buttons. The heights of checkboxes and
+// radio buttons stay as they are, because the frame is not inset by the alignment insets here and the
+// glyphs would be cut off.
+// Test: tests/appkit-button-stock-intrinsic-size.m (test_quirk_stock_button_widths)
+- (void) _applyStockButtonMetricsToSize: (NSSize *) size titleWidth: (CGFloat) titleWidth {
+    NSControlSize controlSize = NS_EXTRA(NSCell, self)->_controlSize;
+    int index = controlSize == NSSmallControlSize ? 1 : (controlSize == NSMiniControlSize ? 2 : 0);
+    NSImage *image = [self image];
+
+    if (image == nil) {
+        static const CGFloat pushPadding[3] = {28, 16, 22};
+        static const CGFloat pushHeight[3] = {21, 18, 15};
+
+        if (NS_EXTRA(NSButtonCell, self)->_bezelStyle != NSRoundedBezelStyle || ![self isBordered] ||
+            [self imagePosition] == NSImageOnly || [self isKindOfClass: [NSPopUpButtonCell class]])
+            return;
+        size->width = ceil(titleWidth + pushPadding[index]);
+        size->height = pushHeight[index];
+        return;
+    }
+
+    static const CGFloat switchPadding[3] = {18, 17, 16};
+    static const CGFloat radioPadding[3] = {19, 19, 17};
+    BOOL isSwitch = [[image name] isEqualToString: @"NSSwitch"];
+    BOOL isRadio = [[image name] isEqualToString: @"NSRadioButton"];
+
+    if ((isSwitch || isRadio) && [self imagePosition] == NSImageLeft)
+        size->width = ceil(titleWidth + (isSwitch ? switchPadding[index] : radioPadding[index]));
 }
 
 - (void) drawWithFrame: (NSRect) frame inView: (NSView *) control {
