@@ -30,6 +30,9 @@ typedef float NSLayoutPriority NS_TYPED_EXTENSIBLE_ENUM NS_SWIFT_NAME(NSLayoutCo
 static const NSLayoutPriority NSLayoutPriorityRequired NS_SWIFT_NAME(required) = 1000;
 static const NSLayoutPriority NSLayoutPriorityDefaultHigh NS_SWIFT_NAME(defaultHigh) = 750;
 static const NSLayoutPriority NSLayoutPriorityDefaultLow NS_SWIFT_NAME(defaultLow) = 250;
+static const NSLayoutPriority NSLayoutPriorityDragThatCanResizeWindow NS_SWIFT_NAME(dragThatCanResizeWindow) = 510;
+static const NSLayoutPriority NSLayoutPriorityWindowSizeStayPut NS_SWIFT_NAME(windowSizeStayPut) = 500;
+static const NSLayoutPriority NSLayoutPriorityDragThatCannotResizeWindow NS_SWIFT_NAME(dragThatCannotResizeWindow) = 490;
 static const NSLayoutPriority NSLayoutPriorityFittingSizeCompression NS_SWIFT_NAME(fittingSizeCompression) = 50;
 
 typedef NS_ENUM(NSInteger, NSLayoutAttribute) {
