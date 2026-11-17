@@ -325,9 +325,20 @@ static BOOL SetIcnsResourceFork(NSString *path, NSArray *elements) {
 
 @implementation MacWorkspace
 
+// The icon of a file that has no icon of its own: the one for its type, which comes from the filename
+// extension. A path that is empty or does not exist still gets one, as on macOS.
+- (NSImage *) _iconByTypeForPath: (NSString *) path isDirectory: (BOOL) isDirectory {
+    NSString *extension = [path pathExtension];
+
+    if (isDirectory)
+        return [self iconForFileType: [extension isEqualToString: @"app"] ? @"app" : @"public.folder"];
+
+    return [self iconForFileType: [extension length] > 0 ? extension : @"public.data"];
+}
+
 - (NSImage *) iconForFile: (NSString *) path {
     if (path == nil || [path length] == 0)
-        return nil;
+        return [self _iconByTypeForPath: @"" isDirectory: NO];
 
     NSImage *cached = [WorkspaceIconCache() objectForKey: path];
     if (cached != nil)
@@ -335,7 +346,7 @@ static BOOL SetIcnsResourceFork(NSString *path, NSArray *elements) {
 
     BOOL isDirectory = NO;
     if (![[NSFileManager defaultManager] fileExistsAtPath: path isDirectory: &isDirectory])
-        return nil;
+        return [self _iconByTypeForPath: path isDirectory: NO];
 
     NSImage *custom = CustomIconForPath(path, isDirectory);
     if (custom != nil) {
@@ -343,12 +354,12 @@ static BOOL SetIcnsResourceFork(NSString *path, NSArray *elements) {
         return custom;
     }
     if (!isDirectory)
-        return nil;
+        return [self _iconByTypeForPath: path isDirectory: NO];
 
     NSDictionary *info = [NSDictionary dictionaryWithContentsOfFile:
             [path stringByAppendingPathComponent: @"Contents/Info.plist"]];
     if (info == nil)
-        return nil;
+        return [self _iconByTypeForPath: path isDirectory: YES];
 
     NSMutableArray *names = [NSMutableArray array];
     id value = [info objectForKey: @"CFBundleIconName"];
@@ -378,12 +389,15 @@ static BOOL SetIcnsResourceFork(NSString *path, NSArray *elements) {
         }
     }
 
-    return nil;
+    return [self _iconByTypeForPath: path isDirectory: YES];
 }
 
+// One file gets its own icon; a group (or nothing) gets the generic document icon.
 - (NSImage *) iconForFiles: (NSArray *) array {
-    NSUnimplementedMethod();
-    return NULL;
+    if ([array count] == 1)
+        return [self iconForFile: [array objectAtIndex: 0]];
+
+    return [self _iconByTypeForPath: @"" isDirectory: NO];
 }
 
 // A file type is a UTI, a filename extension, or an HFS type code in quotes.
