@@ -609,6 +609,7 @@ add_framework(AppKit
 		compression
 		UIFoundation
 		dbus
+		DiskArbitration
 )
 
 # Applications bind the NSCollectionLayout* names to AppKit, so AppKit re-exports the framework that defines them.

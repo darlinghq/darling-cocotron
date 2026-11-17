@@ -5,6 +5,9 @@
 #import <AppKit/NSRaise.h>
 #include <LaunchServices/LaunchServices.h>
 #include <LaunchServices/LaunchServicesPriv.h>
+#include <DiskArbitration/DiskArbitration.h>
+#include <CarbonCore/MacErrors.h>
+#include <stdlib.h>
 #include <dispatch/dispatch.h>
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 #include <string.h>
@@ -834,10 +837,26 @@ static OSStatus sendRevealEvent(NSString *bundleIdentifier, NSArray<NSURL *> *ur
     if (!path)
         return NO;
 
-    // TODO: call statfs() to get filesystem information
-    // Use DiskArbitration for the rest.
-    NSUnimplementedMethod();
-    return NO;
+    NSDictionary *values = [[NSURL fileURLWithPath: path]
+        resourceValuesForKeys: @[NSURLVolumeURLKey, NSURLVolumeIsRemovableKey, NSURLVolumeIsReadOnlyKey,
+                                 NSURLVolumeTypeNameKey]
+                        error: NULL];
+    if (values[NSURLVolumeURLKey] == nil)
+        return NO;
+
+    BOOL removable = [values[NSURLVolumeIsRemovableKey] boolValue];
+    if (isRemovable)
+        *isRemovable = removable;
+    if (isWritable)
+        *isWritable = ![values[NSURLVolumeIsReadOnlyKey] boolValue];
+    // A removable volume (a disk image) is the one kind that can be unmounted and ejected.
+    if (isUnmountable)
+        *isUnmountable = removable;
+    if (description)
+        *description = values[NSURLVolumeTypeNameKey];
+    if (type)
+        *type = values[NSURLVolumeTypeNameKey];
+    return YES;
 }
 
 - (BOOL) getInfoForFile: (NSString *) path
@@ -857,25 +876,99 @@ static OSStatus sendRevealEvent(NSString *bundleIdentifier, NSArray<NSURL *> *ur
 }
 
 - (NSArray *) mountedRemovableMedia {
-    // TODO: call [[NSFileManager defaultManager]
-    // mountedVolumeURLsIncludingResourceValuesForKeys:@[NSURLVolumeIsRemovableKey]
-    // options:NSVolumeEnumerationSkipHiddenVolumes]
-    NSUnimplementedMethod();
-    return @[];
+    NSArray *volumes = [[NSFileManager defaultManager]
+        mountedVolumeURLsIncludingResourceValuesForKeys: @[NSURLVolumeIsRemovableKey] options: 0];
+    NSMutableArray *paths = [NSMutableArray array];
+    for (NSURL *volume in volumes) {
+        NSNumber *removable = nil;
+        [volume getResourceValue: &removable forKey: NSURLVolumeIsRemovableKey error: NULL];
+        if ([removable boolValue])
+            [paths addObject: [volume path]];
+    }
+    return paths;
 }
 
 - (NSArray *) mountedLocalVolumePaths {
-    // TODO: call [[NSFileManager defaultManager]
-    // mountedVolumeURLsIncludingResourceValuesForKeys:@[]
-    // options:NSVolumeEnumerationSkipHiddenVolumes]
-    NSUnimplementedMethod();
-    return @[];
+    // Every volume, hidden ones included (macOS lists even its automounted ones here).
+    NSArray *volumes = [[NSFileManager defaultManager] mountedVolumeURLsIncludingResourceValuesForKeys: nil options: 0];
+    NSMutableArray *paths = [NSMutableArray arrayWithCapacity: [volumes count]];
+    for (NSURL *volume in volumes)
+        [paths addObject: [volume path]];
+    return paths;
 }
 
 - (BOOL) unmountAndEjectDeviceAtPath: (NSString *) path {
-    // TODO: call FSEjectVolumeSync()
-    NSUnimplementedMethod();
-    return NO;
+    if (!path)
+        return NO;
+    return [self unmountAndEjectDeviceAtURL: [NSURL fileURLWithPath: path] error: NULL];
+}
+
+// The run loop mode an eject waits in: only its own DiskArbitration session, and the one that posts the mount
+// notifications (NSWorkspaceVolumeEvents.h), are scheduled in it.
+static NSString *const NSWorkspaceEjectRunLoopMode = @"NSWorkspaceEjectRunLoopMode";
+
+struct eject_request {
+    BOOL done;
+    BOOL dissented;
+};
+
+static void eject_request_completed(DADiskRef disk, DADissenterRef dissenter, void *context) {
+    struct eject_request *request = context;
+    request->dissented = dissenter != NULL;
+    request->done = YES;
+}
+
+// Waits for a DiskArbitration request; a request always completes (diskarbitrationd answers within its approval
+// timeout), but the wait is bounded so that a daemon that has gone away cannot hang the caller.
+static BOOL eject_request_wait(struct eject_request *request) {
+    NSDate *limit = [NSDate dateWithTimeIntervalSinceNow: 60];
+    while (!request->done && [limit timeIntervalSinceNow] > 0)
+        CFRunLoopRunInMode((CFStringRef) NSWorkspaceEjectRunLoopMode, 0.25, true);
+    return request->done && !request->dissented;
+}
+
+- (BOOL) unmountAndEjectDeviceAtURL: (NSURL *) url error: (NSError **) error {
+    char resolved[PATH_MAX];
+    if (error)
+        *error = nil;
+    if (![url isFileURL] || realpath([url fileSystemRepresentation], resolved) == NULL) {
+        if (error)
+            *error = [NSError errorWithDomain: NSOSStatusErrorDomain code: ioErr userInfo: nil];
+        return NO;
+    }
+
+    NSURL *volume = nil;
+    [[NSURL fileURLWithPath: [[NSFileManager defaultManager] stringWithFileSystemRepresentation: resolved
+                                                                                       length: strlen(resolved)]]
+        getResourceValue: &volume forKey: NSURLVolumeURLKey error: NULL];
+
+    BOOL ejected = NO;
+    DASessionRef session = DASessionCreate(kCFAllocatorDefault);
+    DADiskRef disk = (session && volume) ? DADiskCreateFromVolumePath(kCFAllocatorDefault, session, (CFURLRef) volume) : NULL;
+    DADiskRef whole = disk ? DADiskCopyWholeDisk(disk) : NULL;
+    if (whole) {
+        CFRunLoopRef runLoop = CFRunLoopGetCurrent();
+        struct eject_request unmount = { NO, NO }, eject = { NO, NO };
+
+        DASessionScheduleWithRunLoop(session, runLoop, (CFStringRef) NSWorkspaceEjectRunLoopMode);
+        DADiskUnmount(whole, kDADiskUnmountOptionWhole, eject_request_completed, &unmount);
+        if (eject_request_wait(&unmount)) {
+            DADiskEject(whole, kDADiskEjectOptionDefault, eject_request_completed, &eject);
+            ejected = eject_request_wait(&eject);
+        }
+        // A request that timed out can no longer call back: its session is unscheduled and released here.
+        DASessionUnscheduleFromRunLoop(session, runLoop, (CFStringRef) NSWorkspaceEjectRunLoopMode);
+    }
+    if (whole)
+        CFRelease(whole);
+    if (disk)
+        CFRelease(disk);
+    if (session)
+        CFRelease(session);
+
+    if (!ejected && error)
+        *error = [NSError errorWithDomain: NSOSStatusErrorDomain code: fBsyErr userInfo: nil];
+    return ejected;
 }
 
 - (BOOL) fileSystemChanged {

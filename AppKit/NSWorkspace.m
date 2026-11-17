@@ -343,6 +343,11 @@ static NSRunningApplication *QueryFrontApplication(void) {
     return 0;
 }
 
+- (BOOL) unmountAndEjectDeviceAtURL: (NSURL *) url error: (NSError **) error {
+    NSInvalidAbstractInvocation();
+    return 0;
+}
+
 - (BOOL) fileSystemChanged {
     NSInvalidAbstractInvocation();
     return 0;
