@@ -1,3 +1,4 @@
+#import <CoreData/NSPersistentStore.h>
 #import <CoreData/NSManagedObjectID.h>
 
 @interface NSManagedObjectID (private)
@@ -12,4 +13,9 @@
 - (void) setStoreIdentifier: (NSString *) storeIdentifier;
 - (void) setReferenceObject: value;
 - (void) setPersistentStore: (NSPersistentStore *) store;
+@end
+
+@interface NSPersistentStore (DarlingObjectIDURI)
+- (NSString *) _URIComponentForReferenceObject: (id) reference;
+- (id) _referenceObjectForURIComponent: (NSString *) component;
 @end

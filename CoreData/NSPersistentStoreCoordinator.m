@@ -301,19 +301,30 @@ static NSMutableDictionary *_storeTypes = nil;
 }
 
 - (NSManagedObjectID *) managedObjectIDForURIRepresentation: (NSURL *) URL {
-    NSString *scheme = [URL scheme];
     NSString *host = [URL host];
     NSString *path = [URL path];
-    NSString *referenceObject = [path lastPathComponent];
+    NSString *component = [path lastPathComponent];
     NSString *entityName =
             [[path stringByDeletingLastPathComponent] lastPathComponent];
     NSManagedObjectModel *model = [self managedObjectModel];
     NSEntityDescription *entity =
             [[model entitiesByName] objectForKey: entityName];
 
-    return [(NSAtomicStore *) [self _persistentStoreWithIdentifier: host]
-            objectIDForEntity: entity
-              referenceObject: referenceObject];
+    if (![[URL scheme] isEqualToString: @"x-coredata"] || [host length] == 0 || entity == nil)
+        [NSException raise: NSInvalidArgumentException
+                    format: @"The specified URI is not a valid Core Data URI: %@", URL];
+
+    NSPersistentStore *store = [self _persistentStoreWithIdentifier: host];
+
+    if (![store isKindOfClass: [NSAtomicStore class]])
+        return nil;
+
+    id referenceObject = [store _referenceObjectForURIComponent: component];
+
+    if (referenceObject == nil)
+        return nil;
+    return [(NSAtomicStore *) store objectIDForEntity: entity
+                                      referenceObject: referenceObject];
 }
 
 @end

@@ -1,4 +1,5 @@
 #import "NSXMLPersistentStore.h"
+#import "NSManagedObjectID-Private.h"
 #import <CoreData/NSAtomicStoreCacheNode.h>
 #import <CoreData/NSAttributeDescription.h>
 #import <CoreData/NSEntityDescription.h>
@@ -614,6 +615,21 @@
                                     stringWithFormat: @"%d", nextInteger + 1]];
 
     return [[NSString alloc] initWithFormat: @"r%d", nextInteger];
+}
+
+// References of this store are the strings r<N>; they show as p<N> in URIs.
+- (NSString *) _URIComponentForReferenceObject: (id) reference {
+    NSString *text = [reference description];
+
+    if ([text length] > 1 && [text characterAtIndex: 0] == 'r')
+        return [@"p" stringByAppendingString: [text substringFromIndex: 1]];
+    return text;
+}
+
+- (id) _referenceObjectForURIComponent: (NSString *) component {
+    id number = [super _referenceObjectForURIComponent: component];
+
+    return number != nil ? [@"r" stringByAppendingString: [number stringValue]] : nil;
 }
 
 - (void) willRemoveCacheNodes: (NSSet *) cacheNodes {
