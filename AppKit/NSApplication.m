@@ -337,9 +337,16 @@ static NSArray *pathsOfDocumentsEvent(NSAppleEventDescriptor *event) {
 }
 
 // Every launch receives one initial Apple Event: kAEOpenDocuments or kAEPrintDocuments when the
-// application was started to open documents, otherwise kAEOpenApplication. -finishLaunching waits
-// for it, handles it, and only then posts NSApplicationDidFinishLaunchingNotification.
-enum { InitialEventNone, InitialEventOpenApplication, InitialEventOpenDocuments, InitialEventPrintDocuments };
+// application was started to open documents, kAEGetURL when it was started to open a URL, otherwise
+// kAEOpenApplication. -finishLaunching waits for it, handles it, and only then posts
+// NSApplicationDidFinishLaunchingNotification.
+enum {
+    InitialEventNone,
+    InitialEventOpenApplication,
+    InitialEventOpenDocuments,
+    InitialEventPrintDocuments,
+    InitialEventOpenURLs
+};
 
 // How long -finishLaunching waits for the initial event. The event is expected to arrive; this
 // only keeps an application running when nothing can send it.
@@ -352,8 +359,9 @@ static BOOL initialEventHandled = NO;
 static BOOL launchComplete = NO;
 static BOOL finishLaunchingDeferred = NO;
 static BOOL argumentDocumentsOpened = NO;
-// Documents that arrive during launch after the initial event; opened when launching is done.
+// Documents and URLs that arrive during launch after the initial event; opened when launching is done.
 static NSMutableArray *pendingOpenFiles = nil;
+static NSMutableArray *pendingOpenURLs = nil;
 
 - (void) _launchEvent: (int) kind paths: (NSArray *) paths {
     if (initialEventHandled || (initialEventKind != InitialEventNone && !waitingForInitialEvent)) {
@@ -361,6 +369,10 @@ static NSMutableArray *pendingOpenFiles = nil;
             if (pendingOpenFiles == nil)
                 pendingOpenFiles = [[NSMutableArray alloc] init];
             [pendingOpenFiles addObjectsFromArray: paths];
+        } else if (kind == InitialEventOpenURLs && [paths count] > 0) {
+            if (pendingOpenURLs == nil)
+                pendingOpenURLs = [[NSMutableArray alloc] init];
+            [pendingOpenURLs addObjectsFromArray: paths];
         }
         return;
     }
@@ -408,6 +420,36 @@ static NSMutableArray *pendingOpenFiles = nil;
         [self _printFileNames: paths];
     else
         [self _launchEvent: InitialEventPrintDocuments paths: paths];
+}
+
+- (void) _openURLs: (NSArray *) urls {
+    if ([urls count] > 0 && [_delegate respondsToSelector: @selector(application:openURLs:)])
+        [_delegate application: self openURLs: urls];
+}
+
+- (void) _handleGetURLEvent: (NSAppleEventDescriptor *) event
+             withReplyEvent: (NSAppleEventDescriptor *) reply
+{
+    NSAppleEventDescriptor *object = [event paramDescriptorForKeyword: keyDirectObject];
+    NSMutableArray *urls = [NSMutableArray array];
+
+    // The direct object is the URL's text, or a list of them.
+    NSInteger count = [object descriptorType] == typeAEList ? [object numberOfItems] : 1;
+    for (NSInteger i = 1; object != nil && i <= count; i++) {
+        NSAppleEventDescriptor *item =
+                [object descriptorType] == typeAEList ? [object descriptorAtIndex: i] : object;
+        NSString *string = [item stringValue];
+        NSURL *url = string != nil ? [NSURL URLWithString: string] : nil;
+
+        if (url != nil)
+            [urls addObject: url];
+    }
+
+    // A URL that launched the application is the launch's own event.
+    if (launchComplete)
+        [self _openURLs: urls];
+    else
+        [self _launchEvent: InitialEventOpenURLs paths: urls];
 }
 
 - (void) _handleOpenApplicationEvent: (NSAppleEventDescriptor *) event
@@ -1039,12 +1081,14 @@ static NSMutableArray *pendingOpenFiles = nil;
             [self _openUntitledFileIfNeeded];
     } else if (kind == InitialEventOpenDocuments) {
         [self _openFileNames: paths];
+    } else if (kind == InitialEventOpenURLs) {
+        [self _openURLs: paths];
     } else {
         [self _printFileNames: paths];
     }
 
     // The did-finish notification follows the open-application event within its handling, but a
-    // documents event once its handling is over.
+    // documents or URL event once its handling is over.
     if (kind == InitialEventOpenApplication)
         [self _finishLaunchingIsDefault: YES];
     else
@@ -1075,6 +1119,12 @@ static NSMutableArray *pendingOpenFiles = nil;
 
         pendingOpenFiles = nil;
         [self _openFileNames: paths];
+    }
+    if ([pendingOpenURLs count] > 0) {
+        NSArray *urls = [pendingOpenURLs autorelease];
+
+        pendingOpenURLs = nil;
+        [self _openURLs: urls];
     }
 }
 
