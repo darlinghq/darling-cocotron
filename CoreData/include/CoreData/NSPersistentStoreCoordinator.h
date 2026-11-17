@@ -42,6 +42,8 @@ COREDATA_EXPORT NSString *const NSPersistentStoreSaveConflictsErrorKey;
 COREDATA_EXPORT NSString *const NSInferMappingModelAutomaticallyOption;
 COREDATA_EXPORT NSString *const NSReadOnlyPersistentStoreOption;
 COREDATA_EXPORT NSString *const NSSQLiteManualVacuumOption;
+COREDATA_EXPORT NSString *const NSSQLitePragmasOption;
+COREDATA_EXPORT NSString *const NSPersistentStoreTimeoutOption;
 
 @interface NSPersistentStoreCoordinator : NSObject <NSLocking> {
     NSLock *_lock;

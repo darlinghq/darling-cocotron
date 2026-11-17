@@ -27,11 +27,41 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Foundation/NSKeyedUnarchiver.h>
 #import <Foundation/NSRaise.h>
 #import <ctype.h>
+#import "NSEntityDescription-Private.h"
+#import "NSPropertyDescription-Private.h"
+#import "NSManagedObjectModel-Private.h"
 #import <objc/objc-class.h>
 #import <stdint.h>
 #import <string.h>
 
 @implementation NSEntityDescription
+
+- init {
+    self = [super init];
+    if (self) {
+        _properties = [[NSMutableDictionary alloc] init];
+        _subentities = [[NSMutableDictionary alloc] init];
+        _selectorPropertyMap = [[NSMutableDictionary alloc] init];
+    }
+    return self;
+}
+
+- (void)_setManagedObjectModel:(NSManagedObjectModel *)model {
+    _model = model;
+}
+
+- (void)_setInUse {
+    _hasBeenInstantiated = YES;
+}
+
+- (void)_renameProperty:(NSPropertyDescription *)property from:(NSString *)oldName to:(NSString *)newName {
+    NSPropertyDescription *existing = [_properties objectForKey:newName];
+    if (existing && existing != property)
+        [NSException raise:NSInvalidArgumentException format:@"Property names must be unique within an entity."];
+    [_properties setObject:property forKey:newName];
+    if (oldName && ![oldName isEqual:newName])
+        [_properties removeObjectForKey:oldName];
+}
 
 static id getValue(id self, SEL selector) {
     NSPropertyDescription *property =
@@ -101,7 +131,7 @@ static void appendMethodToList(Class class, NSString *selectorName, IMP imp,
     _className = [[coder decodeObjectForKey: @"NSClassNameForEntity"] retain];
     _name = [[coder decodeObjectForKey: @"NSEntityName"] retain];
     _model = [coder decodeObjectForKey: @"NSManagedObjectModel"];
-    _properties = [[coder decodeObjectForKey: @"NSProperties"] retain];
+    _properties = [[coder decodeObjectForKey: @"NSProperties"] mutableCopy];
     _subentities = [[coder decodeObjectForKey: @"NSSubentities"] retain];
     _superentity = [[coder decodeObjectForKey: @"NSSuperentity"] retain];
     _userInfo = [[coder decodeObjectForKey: @"NSUserInfo"] retain];
@@ -354,30 +384,30 @@ static void appendMethodToList(Class class, NSString *selectorName, IMP imp,
 }
 
 - (void) setName: (NSString *) value {
-    if (_hasBeenInstantiated) {
-        NSLog(@"Attempt to modify entity after instantiating it.");
-        return;
-    }
+    if (_hasBeenInstantiated)
+        [NSException raise:NSInvalidArgumentException format:@"The managed object model is in use."];
 
-    value = [value copy];
+    NSString *name = [value copy];
+    @try {
+        [_model _renameEntity:self from:_name to:name];
+    } @catch (id exception) {
+        [name release];
+        @throw;
+    }
     [_name release];
-    _name = value;
+    _name = name;
 }
 
 - (void) setAbstract: (BOOL) value {
-    if (_hasBeenInstantiated) {
-        NSLog(@"Attempt to modify entity after instantiating it.");
-        return;
-    }
+    if (_hasBeenInstantiated)
+        [NSException raise:NSInvalidArgumentException format:@"The managed object model is in use."];
 
     _isAbstract = value;
 }
 
 - (void) setManagedObjectClassName: (NSString *) value {
-    if (_hasBeenInstantiated) {
-        NSLog(@"Attempt to modify entity after instantiating it.");
-        return;
-    }
+    if (_hasBeenInstantiated)
+        [NSException raise:NSInvalidArgumentException format:@"The managed object model is in use."];
 
     value = [value copy];
     [_className release];
@@ -385,28 +415,34 @@ static void appendMethodToList(Class class, NSString *selectorName, IMP imp,
 }
 
 - (void) setProperties: (NSArray *) value {
-    if (_hasBeenInstantiated) {
-        NSLog(@"Attempt to modify entity after instantiating it.");
-        return;
+    if (_hasBeenInstantiated)
+        [NSException raise:NSInvalidArgumentException format:@"The managed object model is in use."];
+    NSMutableDictionary *properties = [NSMutableDictionary dictionary];
+    for (NSPropertyDescription *property in value) {
+        if (![property isKindOfClass:[NSPropertyDescription class]] || ![[property name] length] ||
+            ([property entity] && [property entity] != self) || [properties objectForKey:[property name]])
+            [NSException raise:NSInvalidArgumentException format:@"Invalid or duplicate entity property."];
+        [properties setObject:property forKey:[property name]];
     }
-
-    NSUnimplementedMethod();
+    for (NSPropertyDescription *property in [_properties allValues])
+        if ([properties objectForKey:[property name]] != property)
+            [property _setEntity:nil];
+    for (NSPropertyDescription *property in [properties allValues])
+        [property _setEntity:self];
+    [_properties release];
+    _properties = [properties retain];
 }
 
 - (void) setSubentities: (NSArray *) value {
-    if (_hasBeenInstantiated) {
-        NSLog(@"Attempt to modify entity after instantiating it.");
-        return;
-    }
+    if (_hasBeenInstantiated)
+        [NSException raise:NSInvalidArgumentException format:@"The managed object model is in use."];
 
     NSUnimplementedMethod();
 }
 
 - (void) setUserInfo: (NSDictionary *) value {
-    if (_hasBeenInstantiated) {
-        NSLog(@"Attempt to modify entity after instantiating it.");
-        return;
-    }
+    if (_hasBeenInstantiated)
+        [NSException raise:NSInvalidArgumentException format:@"The managed object model is in use."];
 
     value = [value copy];
     [_userInfo release];

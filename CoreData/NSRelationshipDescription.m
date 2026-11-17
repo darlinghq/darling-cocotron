@@ -20,7 +20,16 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <CoreData/NSRelationshipDescription.h>
 #import <Foundation/NSKeyedUnarchiver.h>
 
+#import "NSPropertyDescription-Private.h"
+
 @implementation NSRelationshipDescription
+
+- init {
+    self = [super init];
+    if (self)
+        _deleteRule = NSNullifyDeleteRule;
+    return self;
+}
 
 - initWithCoder: (NSCoder *) coder {
     if (![coder allowsKeyedCoding])
@@ -38,11 +47,17 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     _minCount = [coder decodeIntForKey: @"NSMinCount"];
 
     _destinationEntityName =
-            [coder decodeObjectForKey: @"_NSDestinationEntityName"];
+            [[coder decodeObjectForKey: @"_NSDestinationEntityName"] copy];
     _inverseRelationshipName =
-            [coder decodeObjectForKey: @"_NSInverseRelationshipName"];
+            [[coder decodeObjectForKey: @"_NSInverseRelationshipName"] copy];
 
     return self;
+}
+
+- (void)dealloc {
+    [_destinationEntityName release];
+    [_inverseRelationshipName release];
+    [super dealloc];
 }
 
 - (NSString *) description {
@@ -51,14 +66,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (BOOL) isToMany {
-    return (_minCount == 1 && _maxCount == 1) ? NO : YES;
+    return _maxCount != 1;
 }
 
-- (int) maxCount {
+- (NSUInteger) maxCount {
     return _maxCount;
 }
 
-- (int) minCount {
+- (NSUInteger) minCount {
     return _minCount;
 }
 
@@ -74,51 +89,45 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return _inverseRelationship;
 }
 
-- (void) setMaxCount: (int) value {
-    if ([_entity _hasBeenInstantiated]) {
-        NSLog(@"Attempt to modify entity after instantiating it.");
-        return;
-    }
+- (void) setMaxCount: (NSUInteger) value {
+    [self _checkMutable];
 
-    _maxCount = value;
+    /*
+     * QUIRK: the cardinality is kept as a 32-bit value; a larger NSUInteger is
+     * truncated on assignment (0xFFFFFFFF + 7 reads back as 6).
+     * Evidence: black-box observation on macOS 10.14.4 (x86_64, i386) and
+     * macOS 26.7.3 (tier 2).
+     * Test: coredata-container-contract (relationship cardinality is 32 bits).
+     */
+    _maxCount = (uint32_t)value;
 }
 
-- (void) setMinCount: (int) value {
-    if ([_entity _hasBeenInstantiated]) {
-        NSLog(@"Attempt to modify entity after instantiating it.");
-        return;
-    }
+- (void) setMinCount: (NSUInteger) value {
+    [self _checkMutable];
 
-    _minCount = value;
+    _minCount = (uint32_t)value; /* 32-bit, see the QUIRK in -setMaxCount: */
 }
 
 - (void) setDeleteRule: (NSDeleteRule) value {
-    if ([_entity _hasBeenInstantiated]) {
-        NSLog(@"Attempt to modify entity after instantiating it.");
-        return;
-    }
+    [self _checkMutable];
 
     _deleteRule = value;
 }
 
 - (void) setDestinationEntity: (NSEntityDescription *) value {
-    if ([_entity _hasBeenInstantiated]) {
-        NSLog(@"Attempt to modify entity after instantiating it.");
-        return;
-    }
+    [self _checkMutable];
 
     _destinationEntity = value;
-    _destinationEntityName = [value name];
+    [_destinationEntityName release];
+    _destinationEntityName = [[value name] copy];
 }
 
 - (void) setInverseRelationship: (NSRelationshipDescription *) value {
-    if ([_entity _hasBeenInstantiated]) {
-        NSLog(@"Attempt to modify entity after instantiating it.");
-        return;
-    }
+    [self _checkMutable];
 
     _inverseRelationship = value;
-    _inverseRelationshipName = [value name];
+    [_inverseRelationshipName release];
+    _inverseRelationshipName = [[value name] copy];
 }
 
 @end

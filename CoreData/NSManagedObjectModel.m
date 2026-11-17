@@ -21,6 +21,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <Foundation/NSKeyedUnarchiver.h>
 #import <Foundation/NSRaise.h>
+#import "NSEntityDescription-Private.h"
+#import "NSManagedObjectModel-Private.h"
 
 @implementation NSManagedObjectModel
 
@@ -78,12 +80,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                             [coder class]];
 
     NSDictionary *decoded = [coder decodeObjectForKey: @"NSEntities"];
-    _entities = [decoded mutableCopy];
+    _entities = [[NSMutableDictionary alloc] init];
     for (NSEntityDescription *entity in [decoded allValues]) {
-        NSString *name = [entity name];
-        if (name != nil) {
-            [_entities setObject: entity forKey: name];
-            [_entities setObject: entity forKey: [name uppercaseString]];
+        if ([[entity name] length]) {
+            [_entities setObject:entity forKey:[entity name]];
+            [entity _setManagedObjectModel:self];
         }
     }
 
@@ -138,12 +139,38 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (void) setEntities: (NSArray *) entities {
-    [_entities removeAllObjects];
-
+    if (_inUse)
+        [NSException raise:NSInvalidArgumentException format:@"The managed object model is in use."];
+    NSMutableDictionary *configured = [NSMutableDictionary dictionary];
     for (NSEntityDescription *entity in entities) {
-        [_entities setObject: entity forKey: [entity name]];
-        [_entities setObject: entity forKey: [[entity name] uppercaseString]];
+        if (![entity isKindOfClass:[NSEntityDescription class]] || ![[entity name] length] ||
+            ([entity managedObjectModel] && [entity managedObjectModel] != self) ||
+            [configured objectForKey:[entity name]])
+            [NSException raise:NSInvalidArgumentException format:@"Invalid or duplicate model entity."];
+        [configured setObject:entity forKey:[entity name]];
     }
+    for (NSEntityDescription *entity in [_entities allValues])
+        if ([configured objectForKey:[entity name]] != entity)
+            [entity _setManagedObjectModel:nil];
+    for (NSEntityDescription *entity in [configured allValues])
+        [entity _setManagedObjectModel:self];
+    [_entities release];
+    _entities = [configured retain];
+}
+
+- (void)_renameEntity:(NSEntityDescription *)entity from:(NSString *)oldName to:(NSString *)newName {
+    NSEntityDescription *existing = [_entities objectForKey:newName];
+    if (existing && existing != entity)
+        [NSException raise:NSInvalidArgumentException format:@"Entity names must be unique within a model."];
+    [_entities setObject:entity forKey:newName];
+    if (oldName && ![oldName isEqual:newName])
+        [_entities removeObjectForKey:oldName];
+}
+
+- (void)_setInUse {
+    _inUse = YES;
+    for (NSEntityDescription *entity in [_entities allValues])
+        [entity _setInUse];
 }
 
 - (void) setLocalizationDictionary: (NSDictionary *) dictionary {
