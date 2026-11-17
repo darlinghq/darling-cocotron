@@ -406,6 +406,17 @@ static inline void flushPreviousString(NSRichTextReader *self) {
     } else if ([self isEqualToString: @"comment"]) {
         // We don't support comments
         [self setCurrentDestination: DESTINATION_IGNORE];
+    } else if ([self isEqualToString: @"plain"]) {
+        // \plain resets the character formatting: the font returns to the
+        // default font and size (dropping bold and italic), and underline,
+        // strikethrough and the text color are removed. Paragraph attributes
+        // are left alone.
+        [_currentAttributes setObject: [NSFont systemFontOfSize: 0]
+                               forKey: NSFontAttributeName];
+        [_currentAttributes removeObjectForKey: NSUnderlineStyleAttributeName];
+        [_currentAttributes removeObjectForKey: NSUnderlineColorAttributeName];
+        [_currentAttributes removeObjectForKey: NSStrikethroughStyleAttributeName];
+        [_currentAttributes removeObjectForKey: NSForegroundColorAttributeName];
     } else if ([self isEqualToString: @"ul"]) {
         [_currentAttributes
                 setObject: [NSNumber numberWithInteger: NSUnderlineStyleSingle]
