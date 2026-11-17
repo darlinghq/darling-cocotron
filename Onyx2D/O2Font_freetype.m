@@ -460,8 +460,25 @@ O2FontRef O2FontCreateWithCodePointCoverage(const uint32_t *codePoints,
     _ascent = face->ascender;
     _descent = face->descender;
     _leading = 0;
-    _capHeight = face->height;
-    _xHeight = face->height;
+    _capHeight = 0;
+    _xHeight = 0;
+    // sCapHeight and sxHeight exist from OS/2 version 2 on.
+    TT_OS2 *os2 = FT_Get_Sfnt_Table(face, FT_SFNT_OS2);
+    if (os2 != NULL && os2->version >= 2) {
+        _capHeight = os2->sCapHeight;
+        _xHeight = os2->sxHeight;
+    }
+    // Older tables: take the height of the flat-topped letters instead.
+    if (_capHeight <= 0 || _xHeight <= 0) {
+        NSInteger *targets[2] = { &_capHeight, &_xHeight };
+        FT_ULong letters[2] = { 'H', 'x' };
+        for (int i = 0; i < 2; i++) {
+            FT_UInt g = *targets[i] > 0 ? 0 : FT_Get_Char_Index(face, letters[i]);
+            if (g != 0 &&
+                FT_Load_Glyph(face, g, FT_LOAD_NO_SCALE | FT_LOAD_NO_HINTING) == 0)
+                *targets[i] = face->glyph->metrics.horiBearingY;
+        }
+    }
     _italicAngle = 0;
     _stemV = 0;
     _bbox.origin.x = face->bbox.xMin;
@@ -610,14 +627,17 @@ FT_Face O2FontFreeTypeFace(O2Font_freetype *self) {
 
 - (void) fetchAdvances {
     @synchronized(self) {
-        FT_Set_Char_Size(_face, 0, _unitsPerEm * 64, 72, 72);
-
         _advances = NSZoneMalloc(NULL, sizeof(NSInteger) * _numberOfGlyphs);
 
+        // Design-unit advances: unscaled and unhinted, so that scaling them to
+        // any point size gives the exact fractional advance.
         for (O2Glyph glyph = 0; glyph < _numberOfGlyphs; glyph++) {
-            FT_Load_Glyph(_face, glyph, FT_LOAD_DEFAULT);
-
-            _advances[glyph] = _face->glyph->advance.x / (O2Float)(2 << 5);
+            if (FT_Load_Glyph(_face, glyph,
+                              FT_LOAD_NO_SCALE | FT_LOAD_NO_HINTING |
+                                      FT_LOAD_IGNORE_TRANSFORM) == 0)
+                _advances[glyph] = _face->glyph->advance.x;
+            else
+                _advances[glyph] = 0;
         }
     }
 }

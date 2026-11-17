@@ -189,44 +189,20 @@ static BOOL KTUIFontSpecForType(CTFontUIFontType type, KTUIFontSpec *spec) {
     }
 }
 
-- (void) getAdvancements: (CGSize *) advancements
-               forGlyphs: (const CGGlyph *) glyphs
-                   count: (NSUInteger) count
-{
-    O2Font_freetype *o2Font = (O2Font_freetype *) _font;
-    @synchronized(o2Font) {
-        FT_Face face = [o2Font face];
-
-        int i;
-        FT_Set_Pixel_Sizes(face, _size, _size);
-
-        for (i = 0; i < count; i++) {
-            FT_Load_Glyph(face, glyphs[i], FT_LOAD_DEFAULT);
-            advancements[i] = CGSizeMake(face->glyph->advance.x / (O2Float)(2 << 5),
-                           face->glyph->advance.y / (O2Float)(2 << 5));
-        }
-    }
-}
-
+// The advance of the glyph for layout: the unscaled and unhinted design width at
+// the exact point size (the layout code takes it as the glyph's own advance).
 - (CGPoint) positionOfGlyph: (CGGlyph) current
             precededByGlyph: (CGGlyph) previous
                   isNominal: (BOOL *) isNominalp
 {
-    O2Font_freetype *o2Font = (O2Font_freetype *) _font;
-    @synchronized(o2Font) {
-        FT_Face face = [o2Font face];
+    *isNominalp = YES;
 
-        *isNominalp = YES;
+    if (!current)
+        return NSZeroPoint;
 
-        if (!current)
-            return NSZeroPoint;
-
-        FT_Set_Pixel_Sizes(face, _size, _size);
-
-        FT_Load_Glyph(face, current, FT_LOAD_DEFAULT);
-        return NSMakePoint(face->glyph->advance.x / (O2Float)(2 << 5),
-                           face->glyph->advance.y / (O2Float)(2 << 5));
-    }
+    CGSize advance = CGSizeZero;
+    [self getAdvancements: &advance forGlyphs: &current count: 1];
+    return CGPointMake(advance.width, advance.height);
 }
 
 // FreeType reports the face's post table underline metrics in font units,
