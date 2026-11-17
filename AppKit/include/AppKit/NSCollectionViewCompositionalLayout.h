@@ -231,14 +231,6 @@ typedef NS_ENUM(NSInteger, NSCollectionLayoutSectionOrthogonalScrollingBehavior)
     NSCollectionLayoutSectionOrthogonalScrollingBehaviorGroupPagingCentered,
 };
 
-// The category of a layout element. The case order is the documented one; the values are a GUESS.
-typedef NS_ENUM(NSInteger, NSCollectionElementCategory) {
-    NSCollectionElementCategoryItem,
-    NSCollectionElementCategorySupplementaryView,
-    NSCollectionElementCategoryDecorationView,
-    NSCollectionElementCategoryInterItemGap,
-};
-
 // An item that is on screen, as a visible items invalidation handler sees it.
 @protocol NSCollectionLayoutVisibleItem <NSObject>
 @property(readonly) NSString *name;
