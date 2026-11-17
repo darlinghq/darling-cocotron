@@ -4,7 +4,7 @@
 // exact (fractional) point size, not whole-pixel hinted advances. Expected
 // numbers were measured on macOS 10.14.4 with the same font file (DejaVu Sans,
 // loaded from data, so both systems use identical font data). Line widths are
-// measured with pair kerning switched off, which this implementation does not do.
+// measured with pair kerning switched off, so they are sums of the advances.
 // usage: coretext-font-unhinted-advances tests/fixtures/fonts/DejaVuSans.ttf
 #import <AppKit/AppKit.h>
 #import <CoreText/CoreText.h>

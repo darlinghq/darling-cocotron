@@ -144,6 +144,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     // box, as (8, 8, 184, 77). Test: appkit-box-aqua.m
     NS_EXTRA(NSBox, self)->_isTransparent = NO;
     _titleCell = [[NSTextFieldCell alloc] initTextCell: @""];
+    // QUIRK: the title of a new box is drawn in the 11 point system font (the small system font size), not
+    // the 13 point font of a text field cell; the title rect of a box titled "Title" is 14 points high.
+    // Evidence: black-box observation on macOS 10.14.4 (tier 2) of -[NSBox titleFont] and -titleRect.
+    // Test: appkit-box-aqua.m
+    [_titleCell setFont: [NSFont systemFontOfSize: 11]];
     NS_EXTRA(NSBox, self)->_borderType = NSGrooveBorder;
     NS_EXTRA(NSBox, self)->_titlePosition = NSAtTop;
     _contentViewMargins = NSMakeSize(5, 5);

@@ -16,13 +16,17 @@ static CTFontRef font;
 static CFStringRef text;
 
 static CTLineRef lineFor(CFStringRef string) {
-    const void *keys[] = {kCTFontAttributeName};
-    const void *values[] = {font};
-    CFDictionaryRef attributes = CFDictionaryCreate(NULL, keys, values, 1, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    // Pair kerning is off: the expected widths are sums of the font's own advances.
+    int zero = 0;
+    CFNumberRef noKerning = CFNumberCreate(NULL, kCFNumberIntType, &zero);
+    const void *keys[] = {kCTFontAttributeName, kCTKernAttributeName};
+    const void *values[] = {font, noKerning};
+    CFDictionaryRef attributes = CFDictionaryCreate(NULL, keys, values, 2, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
     CFAttributedStringRef attributed = CFAttributedStringCreate(NULL, string, attributes);
     CTLineRef line = CTLineCreateWithAttributedString(attributed);
     CFRelease(attributed);
     CFRelease(attributes);
+    CFRelease(noKerning);
     return line;
 }
 

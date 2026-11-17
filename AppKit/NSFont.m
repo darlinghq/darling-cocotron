@@ -187,7 +187,8 @@ static NSLock *_cacheLock = nil;
     NSUInteger i = [self _cacheIndexOfFontWithName: [font fontName]
                                               size: [font pointSize]];
 
-    if (i != NSNotFound)
+    // Screen fonts share the name and size of the cached font without being it.
+    if (i != NSNotFound && _fontCache[i] == font)
         _fontCache[i] = nil;
     [_cacheLock unlock];
 }
@@ -516,6 +517,8 @@ static NSLock *_cacheLock = nil;
     if (NS_EXTRA_ALLOCATED(NSFont, self)) {
         CGFontRelease(NS_EXTRA(NSFont, self)->_cgFont);
         [NS_EXTRA(NSFont, self)->_ctFont release];
+        for (NSInteger i = 0; i < 4; i++)
+            [NS_EXTRA(NSFont, self)->_screenFonts[i] release];
     }
     NS_EXTRA_FREE(NSFont, self);
     [super dealloc];
@@ -629,8 +632,8 @@ static NSLock *_cacheLock = nil;
 }
 
 - (NSFontRenderingMode) renderingMode {
-    NSUnimplementedMethod();
-    return 0;
+    return NS_EXTRA(NSFont, self)->_isScreenFont ? NS_EXTRA(NSFont, self)->_renderingMode
+                                                  : NSFontAntialiasedRenderingMode;
 }
 
 - (NSCharacterSet *) coveredCharacterSet {
@@ -725,13 +728,62 @@ static NSLock *_cacheLock = nil;
     return self;
 }
 
-- (NSFont *) screenFont {
-    return self;
+// Whether the font lays out with whole-pixel advances.
+static BOOL fontUsesIntegerAdvancements(NSFont *font) {
+    return NS_EXTRA(NSFont, font)->_isScreenFont &&
+           (NS_EXTRA(NSFont, font)->_renderingMode & NSFontIntegerAdvancementsRenderingMode) != 0;
 }
 
+// QUIRK: -screenFont always has whole-pixel advances (antialiased integer advancements), at every point
+// size, while -screenFontWithRenderingMode: with the default mode stops rounding above 16 pt.
+// Evidence and test as for NSFontDefaultScreenIntegerAdvancementsLimit (the quirk_ checks of appkit-screen-font-metrics).
+- (NSFont *) screenFont {
+    return [self screenFontWithRenderingMode: NSFontAntialiasedIntegerAdvancementsRenderingMode];
+}
+
+// The largest point size for which NSFontDefaultRenderingMode asks for a
+// screen font with whole-pixel advances.
+//
+// QUIRK: the default screen font rounds the glyph advances to whole pixels up
+// to 16 pt and keeps the exact advances above that; NSFontIntegerAdvancements-
+// RenderingMode (without antialiasing) rounds differently from the
+// antialiased variant at some sizes, and is treated like it here.
+// Evidence: black-box measurements of -[NSFont screenFontWithRenderingMode:]
+// and -renderingMode on macOS 10.14.4 (tier 2), sizes 9 to 20 in 0.5 pt steps,
+// Helvetica, Times-Roman, Courier and DejaVu Sans.
+// Test: appkit-screen-font-metrics
+static const CGFloat NSFontDefaultScreenIntegerAdvancementsLimit = 16;
+
 - (NSFont *) screenFontWithRenderingMode: (NSFontRenderingMode) mode {
-    NSUnimplementedMethod();
-    return [[self copy] autorelease];
+    if (mode == NSFontDefaultRenderingMode)
+        mode = _pointSize <= NSFontDefaultScreenIntegerAdvancementsLimit
+                ? NSFontAntialiasedIntegerAdvancementsRenderingMode
+                : NSFontAntialiasedRenderingMode;
+    else if (mode < NSFontAntialiasedRenderingMode || mode > NSFontAntialiasedIntegerAdvancementsRenderingMode)
+        return nil;
+
+    if (NS_EXTRA(NSFont, self)->_isScreenFont && NS_EXTRA(NSFont, self)->_renderingMode == mode)
+        return self;
+
+    NSFont *result;
+    @synchronized(self) {
+        result = NS_EXTRA(NSFont, self)->_screenFonts[mode];
+        if (result == nil) {
+            // Not entered in the font cache: -fontWithName:size: keeps returning the ordinary font.
+            result = [[[self class] alloc] init];
+            result->_name = [_name copy];
+            result->_pointSize = _pointSize;
+            memcpy(NS_EXTRA(NSFont, result)->_matrix, NS_EXTRA(NSFont, self)->_matrix,
+                   sizeof(NS_EXTRA(NSFont, self)->_matrix));
+            NS_EXTRA(NSFont, result)->_encoding = NS_EXTRA(NSFont, self)->_encoding;
+            NS_EXTRA(NSFont, result)->_cgFont = CGFontRetain(NS_EXTRA(NSFont, self)->_cgFont);
+            NS_EXTRA(NSFont, result)->_ctFont = (CTFontRef) [(id) NS_EXTRA(NSFont, self)->_ctFont retain];
+            NS_EXTRA(NSFont, result)->_isScreenFont = YES;
+            NS_EXTRA(NSFont, result)->_renderingMode = mode;
+            NS_EXTRA(NSFont, self)->_screenFonts[mode] = result;
+        }
+    }
+    return result;
 }
 
 // The CTFont behind this font, for CoreText functions given an NSFont.
@@ -771,6 +823,8 @@ static NSLock *_cacheLock = nil;
 
     CTFontGetAdvancesForGlyphs(NS_EXTRA(NSFont, self)->_ctFont, 0, cgGlyphs, &cgSize, 1);
 
+    if (fontUsesIntegerAdvancements(self))
+        cgSize.width = floor(cgSize.width + 0.5);
     return NSMakeSize(cgSize.width, cgSize.height);
 }
 
@@ -785,7 +839,10 @@ static NSLock *_cacheLock = nil;
 
     CTFontGetAdvancesForGlyphs(NS_EXTRA(NSFont, self)->_ctFont, 0, glyphs, advances, glyphCount);
 
+    BOOL integerAdvancements = fontUsesIntegerAdvancements(self);
     for (glyph = 0; glyph < glyphCount; glyph++) {
+        if (integerAdvancements)
+            advances[glyph].width = floor(advances[glyph].width + 0.5);
         max.width = MAX(max.width, advances[glyph].width);
         max.height = MAX(max.height, advances[glyph].height);
     }
@@ -814,9 +871,21 @@ static NSLock *_cacheLock = nil;
     return CTFontGetLeading(NS_EXTRA(NSFont, self)->_ctFont);
 }
 
+// The line height is the sum of the individually rounded ascent, descent and
+// leading, not the rounded sum.
+//
+// QUIRK: the rounding is applied per component; for DejaVu Sans at 11.5 pt
+// (ascent 10.675, descent 2.712, no leading) the height is 14, not 13.
+// Evidence: black-box measurement of -[NSLayoutManager defaultLineHeightForFont:]
+// on macOS 10.14.4 (tier 2) for all 23 sizes from 9 to 20 pt in 0.5 pt steps of
+// DejaVu Sans (no line gap); the screen font gives the same height. Fonts with
+// a line gap (Helvetica, Times-Roman and Courier on that system) have larger
+// heights than their reported ascent, descent and leading add up to; that is
+// not covered here.
+// Test: appkit-screen-font-metrics
 - (CGFloat) defaultLineHeightForFont {
-    return roundf(CTFontGetAscent(NS_EXTRA(NSFont, self)->_ctFont) + CTFontGetDescent(NS_EXTRA(NSFont, self)->_ctFont) +
-                  CTFontGetLeading(NS_EXTRA(NSFont, self)->_ctFont));
+    CTFontRef font = NS_EXTRA(NSFont, self)->_ctFont;
+    return floor(CTFontGetAscent(font) + 0.5) + floor(CTFontGetDescent(font) + 0.5) + floor(CTFontGetLeading(font) + 0.5);
 }
 
 - (BOOL) isFixedPitch {
@@ -882,6 +951,13 @@ static NSLock *_cacheLock = nil;
             precededByGlyph: (NSGlyph) previous
                   isNominal: (BOOL *) isNominalp
 {
+    if (fontUsesIntegerAdvancements(self)) {
+        // Whole-pixel advances of a screen font are not kerned.
+        *isNominalp = YES;
+        if (current == 0)
+            return NSZeroPoint;
+        return NSMakePoint([self advancementForGlyph: current].width, 0);
+    }
     return [NS_EXTRA(NSFont, self)->_ctFont positionOfGlyph: current
                     precededByGlyph: previous
                           isNominal: isNominalp];
@@ -898,6 +974,10 @@ static NSLock *_cacheLock = nil;
         cgGlyphs[i] = glyphs[i];
 
     CTFontGetAdvancesForGlyphs(NS_EXTRA(NSFont, self)->_ctFont, 0, cgGlyphs, advancements, count);
+
+    if (fontUsesIntegerAdvancements(self))
+        for (i = 0; i < count; i++)
+            advancements[i].width = floor(advancements[i].width + 0.5);
 }
 
 - (void) getAdvancements: (NSSize *) advancements
@@ -905,6 +985,10 @@ static NSLock *_cacheLock = nil;
                   length: (NSUInteger) length
 {
     CTFontGetAdvancesForGlyphs(NS_EXTRA(NSFont, self)->_ctFont, 0, packed, advancements, length);
+
+    if (fontUsesIntegerAdvancements(self))
+        for (NSUInteger i = 0; i < length; i++)
+            advancements[i].width = floor(advancements[i].width + 0.5);
 }
 
 - (void) getBoundingRects: (NSRect *) rects

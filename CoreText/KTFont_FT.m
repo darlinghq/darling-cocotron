@@ -202,7 +202,27 @@ static BOOL KTUIFontSpecForType(CTFontUIFontType type, KTUIFontSpec *spec) {
 
     CGSize advance = CGSizeZero;
     [self getAdvancements: &advance forGlyphs: &current count: 1];
-    return CGPointMake(advance.width, advance.height);
+    // The kerning with the glyph before is folded into the width of the glyph
+    // that follows it, so the widths of a run still add up to the kerned line.
+    return CGPointMake(advance.width + [self kerningBetweenGlyph: previous andGlyph: current],
+                       advance.height);
+}
+
+// Pair kerning from the face's kern table, in design units scaled to the
+// exact point size. Fonts that carry their pair adjustments only in OpenType
+// layout tables (GPOS) have none here.
+- (CGFloat) kerningBetweenGlyph: (CGGlyph) first andGlyph: (CGGlyph) second {
+    if (first == 0 || second == 0 || _unitsPerEm == 0)
+        return 0;
+    O2Font_freetype *o2Font = (O2Font_freetype *) _font;
+    @synchronized(o2Font) {
+        FT_Face face = [o2Font face];
+        FT_Vector delta;
+        if (face == NULL || !FT_HAS_KERNING(face) ||
+            FT_Get_Kerning(face, first, second, FT_KERNING_UNSCALED, &delta) != 0)
+            return 0;
+        return delta.x * _size / _unitsPerEm;
+    }
 }
 
 // FreeType reports the face's post table underline metrics in font units,

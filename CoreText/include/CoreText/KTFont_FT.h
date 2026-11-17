@@ -45,4 +45,6 @@ typedef int ptrdiff_t;
             precededByGlyph: (CGGlyph) previous
                   isNominal: (BOOL *) isNominalp;
 
+- (CGFloat) kerningBetweenGlyph: (CGGlyph) first andGlyph: (CGGlyph) second;
+
 @end

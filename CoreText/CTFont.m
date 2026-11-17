@@ -21,6 +21,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <CoreText/CoreText.h>
 #import <CoreText/KTFont.h>
 #import "CTFontSPI.h"
+#import "KTCoreTextInternal.h"
 #import <CoreGraphics/CGContext.h>
 #import <CoreGraphics/CGDataProvider.h>
 #import <CoreGraphics/CGFont.h>
@@ -664,6 +665,12 @@ CGRect CTFontGetBoundingRectsForGlyphs(CTFontRef font, CTFontOrientation orienta
     }
     CGFontRelease(graphicsFont);
     return total;
+}
+
+CGFloat KTFontGetPairKerning(CTFontRef font, CGGlyph first, CGGlyph second)
+{
+    KTFont *object = ktFont(font);
+    return object != nil ? [object kerningBetweenGlyph: first andGlyph: second] : 0;
 }
 
 double CTFontGetAdvancesForGlyphs(CTFontRef font, CTFontOrientation orientation,
