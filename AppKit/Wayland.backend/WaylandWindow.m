@@ -250,18 +250,8 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
         _levelParent = nil;
         [self updateLevelParent];
 
-        if (_display->_decorationManager != NULL && (_styleMask & NSWindowStyleMaskTitled)) {
-            args[0].o = NULL;
-            args[1].o = (struct wl_object *) _toplevel;
-            _decoration = WaylandCreateObject(
-                    _display->_decorationManager,
-                    WP_DECORATION_MANAGER_GET_TOPLEVEL_DECORATION,
-                    &zxdg_toplevel_decoration_v1_interface, args,
-                    WaylandObjectDecoration, self);
-            args[0].u = forceClient ? WP_TOPLEVEL_DECORATION_MODE_CLIENT_SIDE
-                                     : WP_TOPLEVEL_DECORATION_MODE_SERVER_SIDE;
-            WaylandMarshal(_decoration, WP_TOPLEVEL_DECORATION_SET_MODE, NULL, 0, args);
-        }
+        _decorationForcedClient = forceClient;
+        [self updateDecorationMode];
     }
 
     _pendingWidth = _pendingHeight = 0;
@@ -456,8 +446,68 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     return _styleMask;
 }
 
-- (void) setStyleMask: (NSUInteger) mask {
+// A full-size content view with a transparent title bar leaves nothing for the platform to draw
+// as a title bar: the application draws its own header. Such a window gets no frame, neither from
+// the compositor nor from the client-side fallback.
+- (BOOL) wantsChromeless {
+    return (_styleMask & NSWindowStyleMaskFullSizeContentView) != 0 && [_delegate titlebarAppearsTransparent];
+}
+
+// Whether this window should draw the client-side frame, given what the compositor asked for.
+- (BOOL) wantsClientDecoration {
+    return _toplevel != NULL && (_styleMask & NSWindowStyleMaskTitled) && ![self wantsChromeless] &&
+            _pendingClientDecorated && !_pendingFullscreen;
+}
+
+// Tells the compositor which side draws the frame. A chromeless window declares client-side
+// decorations explicitly because compositors differ on the default for a window that says nothing.
+- (void) updateDecorationMode {
+    if (_toplevel == NULL || _display->_decorationManager == NULL)
+        return;
+    union wl_argument args[2];
+    if (!(_styleMask & NSWindowStyleMaskTitled)) {
+        if (_decoration != NULL)
+            sendRequest(_decoration, WP_TOPLEVEL_DECORATION_UNSET_MODE, 0);
+        return;
+    }
+    if (_decoration == NULL) {
+        args[0].o = NULL;
+        args[1].o = (struct wl_object *) _toplevel;
+        _decoration = WaylandCreateObject(
+                _display->_decorationManager,
+                WP_DECORATION_MANAGER_GET_TOPLEVEL_DECORATION,
+                &zxdg_toplevel_decoration_v1_interface, args,
+                WaylandObjectDecoration, self);
+    }
+    args[0].u = (_decorationForcedClient || [self wantsChromeless])
+            ? WP_TOPLEVEL_DECORATION_MODE_CLIENT_SIDE
+            : WP_TOPLEVEL_DECORATION_MODE_SERVER_SIDE;
+    WaylandMarshal(_decoration, WP_TOPLEVEL_DECORATION_SET_MODE, NULL, 0, args);
+}
+
+// Called when the style mask or the title bar transparency of a window changes. On a mapped
+// window the mode is updated and the client-side frame switched on or off right away, keeping
+// the content size.
+- (void) updateDecorationsForStyleMask: (NSUInteger) mask {
     _styleMask = mask;
+    if (_toplevel == NULL)
+        return;
+    [self updateDecorationMode];
+    if (!_configured || [self wantsClientDecoration] == _clientDecorated) {
+        [_display flush];
+        return;
+    }
+    if (!_pendingMaximized && !_pendingFullscreen) {
+        BOOL framed = [self wantsClientDecoration];
+        _pendingWidth = (int32_t) ceil(_frame.size.width) + (framed ? 2 * WaylandBorder : 0);
+        _pendingHeight = (int32_t) ceil(_frame.size.height) + (framed ? 2 * WaylandBorder + WaylandTitleHeight : 0);
+    }
+    [self applyConfigure];
+    [_display flush];
+}
+
+- (void) setStyleMask: (NSUInteger) mask {
+    [self updateDecorationsForStyleMask: mask];
     [self updateSizeLimits];
     [self updateFullscreen];
 }
@@ -1083,8 +1133,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 
 - (void) applyConfigure {
     // A fullscreen window has no frame of its own to draw.
-    BOOL clientDecorated = _toplevel != NULL && (_styleMask & NSWindowStyleMaskTitled) &&
-            _pendingClientDecorated && !_pendingFullscreen;
+    BOOL clientDecorated = [self wantsClientDecoration];
     BOOL decorationChanged = clientDecorated != _clientDecorated;
     _clientDecorated = clientDecorated;
     _maximized = _pendingMaximized;

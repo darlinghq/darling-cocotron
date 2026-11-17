@@ -352,6 +352,8 @@ bool WaylandCheckOpcodes(void) {
              WP_TOPLEVEL_DECORATION_DESTROY, "destroy"},
             {&zxdg_toplevel_decoration_v1_interface, false,
              WP_TOPLEVEL_DECORATION_SET_MODE, "set_mode"},
+            {&zxdg_toplevel_decoration_v1_interface, false,
+             WP_TOPLEVEL_DECORATION_UNSET_MODE, "unset_mode"},
     };
 
     for (size_t i = 0; i < sizeof(checks) / sizeof(checks[0]); i++) {
