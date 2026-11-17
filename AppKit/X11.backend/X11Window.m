@@ -666,7 +666,12 @@ static const int X11ChromelessCornerRadius = 5;
 }
 
 // The outline of a window without a frame: one device pixel along the rounded edge, drawn over the content
-// every time the window is flushed (opaque, so that drawing it again changes nothing).
+// every time the window is flushed. The window's backing keeps what is drawn on it, so drawing it again must
+// change nothing: every pixel is either the opaque outline colour or untouched. The straight sides are
+// pixel-aligned rectangles, because a stroked outline is not exact along its whole length (its side drifts by a
+// fraction of a pixel, and from some row on it colours the pixel beside the edge too, which showed as a second
+// line along part of the left edge). The corners are quarter arcs drawn without antialiasing, so that their
+// partial coverage cannot accumulate over repeated flushes.
 - (void) drawChromelessOutline {
     if (!_chromeless || _context == nil || _invisibleWithoutCompositor)
         return;
@@ -678,15 +683,23 @@ static const int X11ChromelessCornerRadius = 5;
     O2ContextRef context = _context;
     O2ContextSaveGState(context);
     O2Float color[4] = {0.45, 0.45, 0.45, 1.0};
+    O2ContextSetFillColor(context, color);
     O2ContextSetStrokeColor(context, color);
+    O2ContextSetShouldAntialias(context, NO);
+    O2ContextFillRect(context, O2RectMake(radius, 0, width - 2 * radius, line));
+    O2ContextFillRect(context, O2RectMake(radius, height - line, width - 2 * radius, line));
+    O2ContextFillRect(context, O2RectMake(0, radius, line, height - 2 * radius));
+    O2ContextFillRect(context, O2RectMake(width - line, radius, line, height - 2 * radius));
     O2ContextSetLineWidth(context, line);
     O2ContextBeginPath(context);
-    O2ContextMoveToPoint(context, inset + radius, inset);
-    O2ContextAddArcToPoint(context, width - inset, inset, width - inset, inset + radius, radius);
-    O2ContextAddArcToPoint(context, width - inset, height - inset, width - inset - radius, height - inset, radius);
-    O2ContextAddArcToPoint(context, inset, height - inset, inset, height - inset - radius, radius);
+    O2ContextMoveToPoint(context, inset, inset + radius);
     O2ContextAddArcToPoint(context, inset, inset, inset + radius, inset, radius);
-    O2ContextClosePath(context);
+    O2ContextMoveToPoint(context, width - inset - radius, inset);
+    O2ContextAddArcToPoint(context, width - inset, inset, width - inset, inset + radius, radius);
+    O2ContextMoveToPoint(context, width - inset, height - inset - radius);
+    O2ContextAddArcToPoint(context, width - inset, height - inset, width - inset - radius, height - inset, radius);
+    O2ContextMoveToPoint(context, inset + radius, height - inset);
+    O2ContextAddArcToPoint(context, inset, height - inset, inset, height - inset - radius, radius);
     O2ContextStrokePath(context);
     O2ContextRestoreGState(context);
 }
