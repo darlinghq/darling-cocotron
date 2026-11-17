@@ -1197,11 +1197,40 @@ static void drawRoundedBezel(CGContextRef context, CGRect frame) {
         CGContextTranslateCTM(ctx, 0, rect.size.height);
         CGContextScaleCTM(ctx, 1, -1);
     }
-    [[controlView graphicsStyle]
-            drawButtonImage: image
-                     inRect: NSMakeRect(0, 0, rect.size.width, rect.size.height)
-                    enabled: enabled
-                      mixed: mixed];
+    NSString *name = [image name];
+    BOOL isSwitch = [name isEqualToString: @"NSSwitch"] || [name isEqualToString: @"NSHighlightedSwitch"];
+    BOOL isRadio = [name isEqualToString: @"NSRadioButton"] || [name isEqualToString: @"NSHighlightedRadioButton"];
+    NSRect local = NSMakeRect(0, 0, rect.size.width, rect.size.height);
+
+    if (isSwitch || isRadio) {
+        // the stock check box and radio button are drawn for the cell's state and size, whichever of
+        // the images the cell's state selected. The style places the box relative to the left edge of the
+        // cell, which is where the image margin starts.
+        local.origin.x -= kImageMargin;
+        local.size.width += kImageMargin;
+        NSInteger state = [self state];
+        BOOL active = [[controlView window] isKeyWindow];
+
+        if (isSwitch)
+            [[controlView graphicsStyle] drawCheckBoxInRect: local
+                                                      state: state
+                                                highlighted: [self isHighlighted]
+                                                    enabled: [self isEnabled]
+                                                     active: active
+                                                controlSize: [self controlSize]];
+        else
+            [[controlView graphicsStyle] drawRadioButtonInRect: local
+                                                         state: state
+                                                   highlighted: [self isHighlighted]
+                                                       enabled: [self isEnabled]
+                                                        active: active
+                                                   controlSize: [self controlSize]];
+    } else
+        [[controlView graphicsStyle]
+                drawButtonImage: image
+                         inRect: local
+                        enabled: enabled
+                          mixed: mixed];
     CGContextRestoreGState(ctx);
 }
 

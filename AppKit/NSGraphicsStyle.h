@@ -210,3 +210,21 @@ typedef struct _Margins {
 - (void) drawTabDividerInRect: (NSRect) rect;
 @end
 
+@interface NSGraphicsStyle (NSButtonAqua)
+/* Check boxes and radio buttons. rect is in an unflipped coordinate system; its left edge is the left
+   edge of the cell, and the box is placed relative to it and centred vertically in it. state is
+   NSOffState, NSOnState or NSMixedState (radio buttons have no mixed look). */
+- (void) drawCheckBoxInRect: (NSRect) rect
+                      state: (NSInteger) state
+                highlighted: (BOOL) highlighted
+                    enabled: (BOOL) enabled
+                     active: (BOOL) active
+                controlSize: (NSControlSize) controlSize;
+- (void) drawRadioButtonInRect: (NSRect) rect
+                         state: (NSInteger) state
+                   highlighted: (BOOL) highlighted
+                       enabled: (BOOL) enabled
+                        active: (BOOL) active
+                   controlSize: (NSControlSize) controlSize;
+@end
+

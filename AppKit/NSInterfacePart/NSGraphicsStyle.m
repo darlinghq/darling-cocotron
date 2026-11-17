@@ -1029,6 +1029,145 @@ static NSBezierPath *NSAquaRoundedPath(NSRect rect, CGFloat radius) {
 
 @end
 
+@implementation NSGraphicsStyle (NSButtonAqua)
+
+// QUIRK: the check box and radio button look of macOS 10.14 (light appearance). Not documented.
+// Evidence: black-box renders of NSButton on macOS 10.14.4 at 1x and 2x (tier 2). The box is 14, 12 or 10
+// points (a radio button 16, 14 or 10) for the regular, small and mini control sizes; the off look is white
+// with a gray outline and a short shade below the top edge; the on and mixed looks are a flat blue
+// ((61,130,253), pressed (15,98,253)) with a white mark, and in a window that is not active the on and
+// mixed looks are white with a dark mark.
+// Test: appkit-button-aqua.m
+static CGFloat NSAquaToggleBoxSize(BOOL radio, NSControlSize size) {
+    static const CGFloat check[3] = {14, 12, 10}, round_[3] = {16, 14, 10};
+    int index = size == NSSmallControlSize ? 1 : (size == NSMiniControlSize ? 2 : 0);
+
+    return radio ? round_[index] : check[index];
+}
+
+static CGFloat NSAquaToggleBoxInset(BOOL radio, NSControlSize size) {
+    static const CGFloat check[3] = {2, 3, 4}, round_[3] = {1, 2, 4};
+    int index = size == NSSmallControlSize ? 1 : (size == NSMiniControlSize ? 2 : 0);
+
+    return radio ? round_[index] : check[index];
+}
+
+/* Moves a rectangle's origin onto the device pixel grid (the transform is a scale and a translation
+   there), so that the 1 point outlines of the controls are one crisp device pixel at 1x. */
+static NSRect NSAquaSnapToDevicePixels(CGContextRef ctx, NSRect rect) {
+    CGAffineTransform t = CGContextGetCTM(ctx);
+
+    if (t.b != 0 || t.c != 0 || t.a == 0 || t.d == 0)
+        return rect;
+    rect.origin.x = (round(rect.origin.x * t.a + t.tx) - t.tx) / t.a;
+    rect.origin.y = (round(rect.origin.y * t.d + t.ty) - t.ty) / t.d;
+    return rect;
+}
+
+static void NSAquaDrawToggle(NSRect rect, BOOL radio, NSInteger state, BOOL highlighted, BOOL enabled,
+                             BOOL active, NSControlSize controlSize)
+{
+    CGFloat size = NSAquaToggleBoxSize(radio, controlSize);
+    NSRect box = NSMakeRect(NSMinX(rect) + NSAquaToggleBoxInset(radio, controlSize),
+                            ceil(NSMidY(rect) - size / 2), size, size);
+    box = NSAquaSnapToDevicePixels([[NSGraphicsContext currentContext] graphicsPort], box);
+    NSBezierPath *outline = radio ? [NSBezierPath bezierPathWithOvalInRect: NSInsetRect(box, 0.5, 0.5)]
+                                  : [NSBezierPath bezierPathWithRoundedRect: NSInsetRect(box, 0.5, 0.5)
+                                                                    xRadius: size * 3 / 14
+                                                                    yRadius: size * 3 / 14];
+    NSBezierPath *shape = radio ? [NSBezierPath bezierPathWithOvalInRect: box]
+                                : [NSBezierPath bezierPathWithRoundedRect: box
+                                                                  xRadius: size * 3.5 / 14
+                                                                  yRadius: size * 3.5 / 14];
+    BOOL blue = state != NSOffState && enabled && (active || highlighted);
+    BOOL marked = state != NSOffState;
+    CGContextRef ctx = [[NSGraphicsContext currentContext] graphicsPort];
+
+    // a disabled control is drawn at half strength (explicitly: not every context honours a global alpha)
+    CGFloat alpha = enabled ? 1 : 0.5;
+
+    CGContextSaveGState(ctx);
+    if (blue) {
+        [highlighted ? [NSColor colorWithCalibratedRed: 15 / 255.0 green: 98 / 255.0 blue: 253 / 255.0 alpha: alpha]
+                     : [NSColor colorWithCalibratedRed: 61 / 255.0 green: 130 / 255.0 blue: 253 / 255.0 alpha: alpha] setFill];
+        [shape fill];
+        [highlighted ? [NSColor colorWithCalibratedRed: 4 / 255.0 green: 89 / 255.0 blue: 253 / 255.0 alpha: alpha]
+                     : [NSColor colorWithCalibratedRed: 46 / 255.0 green: 120 / 255.0 blue: 253 / 255.0 alpha: alpha] setStroke];
+        [outline setLineWidth: 1];
+        [outline stroke];
+    } else {
+        CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB();
+        CGFloat base = highlighted ? 0.94 : 1.0;
+        CGFloat top = highlighted ? 0.86 : 0.95;
+        CGFloat comps[8] = {top, top, top, alpha, base, base, base, alpha};
+        CGGradientRef gradient = CGGradientCreateWithColorComponents(space, comps, NULL, 2);
+
+        [[NSColor colorWithCalibratedWhite: base alpha: alpha] setFill];
+        [shape fill];
+        CGContextSaveGState(ctx);
+        [shape addClip];
+        // the shade below the top edge, which is its maximum y in this unflipped system
+        CGContextDrawLinearGradient(ctx, gradient, CGPointMake(0, NSMaxY(box)),
+                                    CGPointMake(0, NSMaxY(box) - size * 0.12), 0);
+        CGContextRestoreGState(ctx);
+        CGGradientRelease(gradient);
+        CGColorSpaceRelease(space);
+        [[NSColor colorWithCalibratedWhite: 0.68 alpha: alpha] setStroke];
+        [outline setLineWidth: 1];
+        [outline stroke];
+    }
+
+    if (marked) {
+        NSColor *mark = blue ? [NSColor colorWithCalibratedWhite: 1 alpha: alpha]
+                             : [NSColor colorWithCalibratedWhite: 0.25 alpha: alpha];
+        CGFloat scale = size / 14.0;
+        NSBezierPath *path = [NSBezierPath bezierPath];
+
+        [mark setStroke];
+        [mark setFill];
+        if (radio) {
+            CGFloat r = size * 2.5 / 16;
+            [[NSBezierPath bezierPathWithOvalInRect: NSMakeRect(NSMidX(box) - r, NSMidY(box) - r, 2 * r, 2 * r)] fill];
+        } else {
+            if (state == NSMixedState) {
+                [path moveToPoint: NSMakePoint(NSMinX(box) + 3.5 * scale, NSMinY(box) + 7 * scale)];
+                [path lineToPoint: NSMakePoint(NSMinX(box) + 10.5 * scale, NSMinY(box) + 7 * scale)];
+            } else {
+                [path moveToPoint: NSMakePoint(NSMinX(box) + 3.3 * scale, NSMinY(box) + 7.2 * scale)];
+                [path lineToPoint: NSMakePoint(NSMinX(box) + 5.8 * scale, NSMinY(box) + 4.2 * scale)];
+                [path lineToPoint: NSMakePoint(NSMinX(box) + 10.6 * scale, NSMinY(box) + 10.6 * scale)];
+            }
+            [path setLineWidth: MAX(1.2, 1.7 * scale)];
+            [path setLineCapStyle: NSRoundLineCapStyle];
+            [path setLineJoinStyle: NSRoundLineJoinStyle];
+            [path stroke];
+        }
+    }
+    CGContextRestoreGState(ctx);
+}
+
+- (void) drawCheckBoxInRect: (NSRect) rect
+                      state: (NSInteger) state
+                highlighted: (BOOL) highlighted
+                    enabled: (BOOL) enabled
+                     active: (BOOL) active
+                controlSize: (NSControlSize) controlSize
+{
+    NSAquaDrawToggle(rect, NO, state, highlighted, enabled, active, controlSize);
+}
+
+- (void) drawRadioButtonInRect: (NSRect) rect
+                         state: (NSInteger) state
+                   highlighted: (BOOL) highlighted
+                       enabled: (BOOL) enabled
+                        active: (BOOL) active
+                   controlSize: (NSControlSize) controlSize
+{
+    NSAquaDrawToggle(rect, YES, state, highlighted, enabled, active, controlSize);
+}
+
+@end
+
 @implementation NSView (NSGraphicsStyle)
 
 - (NSGraphicsStyle *) graphicsStyle {
