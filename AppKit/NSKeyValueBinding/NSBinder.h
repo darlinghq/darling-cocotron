@@ -68,6 +68,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (BOOL) allowsEditingMultipleValues;
 - (BOOL) createsSortDescriptor;
 - (BOOL) raisesForNotApplicableKeys;
+- (BOOL) isDisplayPatternBinding;
 - (BOOL) continuouslyUpdatesValue;
 - (id) multipleValuesPlaceholder;
 - (id) noSelectionPlaceholder;
