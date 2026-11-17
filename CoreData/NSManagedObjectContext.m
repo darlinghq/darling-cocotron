@@ -601,7 +601,12 @@ static char ContextQueueKey;
         objects = found;
         fetch = nil;
     } else {
+        // The fetch request only selects the rows: whatever it says about the result type, the
+        // pending changes or batching does not change which objects are deleted.
         fetch = [delete fetchRequest];
+        [fetch setResultType: NSManagedObjectResultType];
+        [fetch setIncludesPendingChanges: YES];
+        [fetch setFetchBatchSize: 0];
     }
 
     if (fetch != nil) {
