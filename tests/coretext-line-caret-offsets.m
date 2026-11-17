@@ -13,8 +13,11 @@ static int failures;
 
 int main(void) { @autoreleasepool {
     CTFontRef font = CTFontCreateWithName(CFSTR(FONT_NAME), 18, NULL);
-    const void *keys[] = {kCTFontAttributeName}, *values[] = {font};
-    CFDictionaryRef attributes = CFDictionaryCreate(NULL, keys, values, 1, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    // Pair kerning is off: the expected offsets are sums of the font's own advances.
+    int zero = 0;
+    CFNumberRef noKerning = CFNumberCreate(NULL, kCFNumberIntType, &zero);
+    const void *keys[] = {kCTFontAttributeName, kCTKernAttributeName}, *values[] = {font, noKerning};
+    CFDictionaryRef attributes = CFDictionaryCreate(NULL, keys, values, 2, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
     CFStringRef string = CFSTR("Wide i");
     CFAttributedStringRef attributed = CFAttributedStringCreate(NULL, string, attributes);
     CTLineRef line = CTLineCreateWithAttributedString(attributed);

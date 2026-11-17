@@ -152,6 +152,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return CGPointMake(((CGFloat) advancement / _unitsPerEm) * _size, 0);
 }
 
+- (CGFloat) kerningBetweenGlyph: (CGGlyph) first andGlyph: (CGGlyph) second {
+    return 0;
+}
+
 - (void) getGlyphs: (CGGlyph *) glyphs
         forCharacters: (const unichar *) characters
                length: (NSUInteger) length

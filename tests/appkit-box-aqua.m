@@ -26,6 +26,8 @@ int main(void)
             [box cacheDisplayInRect: [box bounds] toBitmapImageRep: rep];
             int a;
             CHECK(![box isTransparent] && [box borderType] == NSGrooveBorder && [box titlePosition] == NSAtTop);
+            // observed on macOS 10.14.4: the default title font is the 11 point system font
+            CHECK([[box titleFont] pointSize] == 11);
             CHECK(NSEqualSizes([box contentViewMargins], NSMakeSize(5, 5)));
             CHECK(NSEqualRects([[box contentView] frame], NSMakeRect(8, 8, 184, 77)));
 

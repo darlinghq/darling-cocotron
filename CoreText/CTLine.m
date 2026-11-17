@@ -1,5 +1,6 @@
 #import <CoreText/CTLine.h>
 #import <CoreText/CTRun.h>
+#import <CoreText/CTStringAttributes.h>
 #import "KTCoreTextInternal.h"
 #include <stdlib.h>
 #include <math.h>
@@ -153,6 +154,9 @@ static CFDictionaryRef createRun(CFAttributedStringRef attributedString,
                                advances, range.length);
 
     CFStringRef string = CFAttributedStringGetString(attributedString);
+    // Pair kerning applies unless the run carries an explicit kerning value (0 switches it off).
+    bool pairKerning = CFDictionaryGetValue(attributes, kCTKernAttributeName) == NULL;
+    CFIndex previousBase = -1;
     CGFloat runWidth = 0;
     for (CFIndex index = 0; index < range.length; ++index) {
         CFIndex characterIndex = range.location + index;
@@ -165,9 +169,15 @@ static CFDictionaryRef createRun(CFAttributedStringRef attributedString,
             advances[index] = CGSizeZero;
             indices[index] = cluster.location;
         } else {
+            if (pairKerning && previousBase >= 0) {
+                CGFloat kerning = KTFontGetPairKerning(font, glyphs[previousBase], glyphs[index]);
+                advances[previousBase].width += kerning;
+                runWidth += kerning;
+            }
             positions[index] = CGPointMake(*linePosition + runWidth, 0);
             indices[index] = characterIndex;
             runWidth += advances[index].width;
+            previousBase = index;
         }
     }
     *linePosition += runWidth;

@@ -68,6 +68,12 @@ typedef enum {
 
         CGFontRef _cgFont;
         CTFontRef _ctFont;
+
+        // Set on the fonts -screenFontWithRenderingMode: returns; an ordinary
+        // font reports NSFontAntialiasedRenderingMode.
+        BOOL _isScreenFont;
+        NSFontRenderingMode _renderingMode;
+        NSFont *_screenFonts[NSFontAntialiasedIntegerAdvancementsRenderingMode + 1];
     NS_EXTRA_IVARS_END(NSFont)
 }
 

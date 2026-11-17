@@ -29,6 +29,9 @@ extern const CFStringRef KTRunAscentKey;
 extern const CFStringRef KTRunDescentKey;
 extern const CFStringRef KTRunLeadingKey;
 
+// The pair kerning adjustment in points between two glyphs of a font, to be added to the advance of the first.
+CGFloat KTFontGetPairKerning(CTFontRef font, CGGlyph first, CGGlyph second);
+
 CFIndex KTCoreTextDictionaryGetIndex(CFDictionaryRef dictionary,
                                     CFStringRef key);
 CGFloat KTCoreTextDictionaryGetFloat(CFDictionaryRef dictionary,

@@ -86,7 +86,8 @@ typedef NS_OPTIONS(NSInteger, NSControlCharacterAction) {
     NSFont *_textFont;
     NSImageScaling _defaultAttachmentScaling;
     BOOL _usesDefaultHyphenation;
-    NS_LEGACY_IVAR_PAD(_NSLayoutManagerReserved, 112)
+    BOOL _doesNotUseScreenFonts; // inverted: a zeroed layout manager uses screen fonts
+    NS_LEGACY_IVAR_PAD(_NSLayoutManagerReserved, 111)
 }
 
 - init;

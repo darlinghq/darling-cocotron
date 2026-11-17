@@ -56,6 +56,10 @@ enum { CGNullGlyph = 0x0 };
             precededByGlyph: (CGGlyph) previous
                   isNominal: (BOOL *) isNominalp;
 
+// The pair kerning adjustment in points between two glyphs, to be added to the
+// advance of the first. Zero for a font without kerning data.
+- (CGFloat) kerningBetweenGlyph: (CGGlyph) first andGlyph: (CGGlyph) second;
+
 - (void) getGlyphs: (CGGlyph *) glyphs
         forCharacters: (const unichar *) characters
                length: (NSUInteger) length;
