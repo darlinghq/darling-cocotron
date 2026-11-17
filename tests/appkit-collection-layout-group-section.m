@@ -116,16 +116,60 @@ int main(void) {
                        ![[boxVertical visualDescription] isEqualToString: [boxHorizontal visualDescription]],
                @"a group's copy keeps its direction, and the description tells the directions apart");
 
-        // macOS makes a custom group. The stand-in has no layout engine to call the provider, so it raises rather than
-        // make a group that silently does nothing; either outcome is accepted here.
-        BOOL raised = NO;
-        NSCollectionLayoutGroup *custom = nil;
-        @try {
-            custom = [groupClass customGroupWithLayoutSize: fill itemProvider: ^NSArray *(id<NSCollectionLayoutEnvironment> environment) { return @[]; }];
-        } @catch (NSException *exception) {
-            raised = [[exception reason] containsString: @"not implemented"];
-        }
-        expect(raised || [custom isKindOfClass: groupClass], @"a custom group is made, or the stand-in fails loud");
+        // quirk: a custom group has no subitems, keeps the provider without calling it at creation, and a nil layout size
+        // or provider raises NSInternalInconsistencyException (macOS 26.7.3 and 27.0.1).
+        Class customItemClass = NSClassFromString(@"NSCollectionLayoutGroupCustomItem");
+        expect(customItemClass != Nil, @"the custom item class exists");
+        expectFromCollectionViewCore(customItemClass);
+        __block int providerCalls = 0;
+        NSCollectionLayoutGroup *custom = [groupClass customGroupWithLayoutSize: fill
+                                                                   itemProvider: ^NSArray *(id<NSCollectionLayoutEnvironment> environment) {
+                                                                       providerCalls++;
+                                                                       return @[];
+                                                                   }];
+        expect([custom isKindOfClass: groupClass] && sameSize([custom layoutSize], fill), @"quirk: a custom group is a group with the layout size (macOS 26.7.3)");
+        expect(providerCalls == 0, @"quirk: the provider is not called when a custom group is made (macOS 26.7.3)");
+        expect([custom subitems] != nil && [[custom subitems] count] == 0, @"quirk: a custom group has an empty subitems array (macOS 26.7.3)");
+        expect([[custom supplementaryItems] isEqual: @[]], @"a custom group has no supplementary items");
+        expect([[custom interItemSpacing] isFixedSpacing] && [[custom interItemSpacing] spacing] == 0, @"quirk: a custom group's inter item spacing is fixed zero (macOS 26.7.3)");
+        expect([custom edgeSpacing] != nil, @"a custom group has an edge spacing");
+        NSDirectionalEdgeInsets customInsets = [custom contentInsets];
+        expect(customInsets.top == 0 && customInsets.leading == 0 && customInsets.bottom == 0 && customInsets.trailing == 0, @"a custom group's insets are zero");
+        expect(providerCalls == 0, @"the provider is not called by reading a custom group's properties (macOS 26.7.3)");
+        // macOS calls the provider from -visualDescription, which is a debugging aid; whether the provider is called there is not pinned.
+        expect([[custom visualDescription] length] > 0, @"a custom group has a description");
+        NSCollectionLayoutGroup *customCopy = [[custom copy] autorelease];
+        expect(customCopy != custom && [customCopy isKindOfClass: groupClass] && [[customCopy subitems] count] == 0 &&
+                       sameSize([customCopy layoutSize], fill),
+               @"a custom group's copy is a new custom group");
+        [custom setInterItemSpacing: [spacingClass fixedSpacing: 5]];
+        expect([[custom interItemSpacing] spacing] == 5, @"a custom group's inter item spacing is settable");
+        expect([sectionClass sectionWithGroup: custom] != nil, @"a custom group makes a section");
+        NSCollectionLayoutGroupCustomItemProvider emptyProvider = ^NSArray *(id<NSCollectionLayoutEnvironment> environment) { return @[]; };
+        NSString *nilSizeName = nil, *nilProviderName = nil, *nilBothName = nil;
+        @try { [groupClass customGroupWithLayoutSize: nil itemProvider: emptyProvider]; } @catch (NSException *e) { nilSizeName = [e name]; }
+        @try { [groupClass customGroupWithLayoutSize: fill itemProvider: nil]; } @catch (NSException *e) { nilProviderName = [e name]; }
+        @try { [groupClass customGroupWithLayoutSize: nil itemProvider: nil]; } @catch (NSException *e) { nilBothName = [e name]; }
+        expect([nilSizeName isEqualToString: NSInternalInconsistencyException], @"quirk: a custom group without a layout size raises NSInternalInconsistencyException (macOS 26.7.3)");
+        expect([nilProviderName isEqualToString: NSInternalInconsistencyException], @"quirk: a custom group without a provider raises NSInternalInconsistencyException (macOS 26.7.3)");
+        expect([nilBothName isEqualToString: NSInternalInconsistencyException], @"a custom group without either raises NSInternalInconsistencyException");
+
+        // The custom item: an immutable frame and zIndex (default 0). quirk: equality is identity, and a copy is a new,
+        // unequal object (macOS 26.7.3 and 27.0.1).
+        NSCollectionLayoutGroupCustomItem *plain = [customItemClass customItemWithFrame: NSMakeRect(1, 2, 3, 4)];
+        NSCollectionLayoutGroupCustomItem *layered = [customItemClass customItemWithFrame: NSMakeRect(1, 2, 3, 4) zIndex: 5];
+        expect(NSEqualRects([plain frame], NSMakeRect(1, 2, 3, 4)) && [plain zIndex] == 0, @"a custom item keeps its frame and has zIndex 0 by default");
+        expect(NSEqualRects([layered frame], NSMakeRect(1, 2, 3, 4)) && [layered zIndex] == 5, @"a custom item keeps its zIndex");
+        expect([[customItemClass customItemWithFrame: NSMakeRect(0, 0, 1, 1) zIndex: -3] zIndex] == -3, @"a custom item's zIndex may be negative");
+        expect([plain conformsToProtocol: @protocol(NSCopying)] && ![plain respondsToSelector: @selector(setFrame:)] &&
+                       ![plain respondsToSelector: @selector(setZIndex:)],
+               @"a custom item is copyable and immutable");
+        NSCollectionLayoutGroupCustomItem *layeredCopy = [[layered copy] autorelease];
+        expect(layeredCopy != layered && NSEqualRects([layeredCopy frame], [layered frame]) && [layeredCopy zIndex] == 5,
+               @"a custom item's copy is a new item with the same frame and zIndex");
+        expect(![layeredCopy isEqual: layered] && ![plain isEqual: [customItemClass customItemWithFrame: NSMakeRect(1, 2, 3, 4)]] &&
+                       [plain isEqual: plain],
+               @"quirk: custom items are equal only to themselves (macOS 26.7.3)");
 
         NSCollectionLayoutSection *section = [sectionClass sectionWithGroup: horizontal];
         NSDirectionalEdgeInsets zero = [section contentInsets];
