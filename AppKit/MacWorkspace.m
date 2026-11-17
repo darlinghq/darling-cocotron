@@ -921,6 +921,60 @@ static OSStatus sendRevealEvent(NSString *bundleIdentifier, NSArray<NSURL *> *ur
     return paths;
 }
 
+// QUIRK: the failures of a recycle are listed under the userInfo key "NSUnderlyingErrors", not under the documented
+// NSMultipleUnderlyingErrorsKey (whose value is a different string). Not documented. Evidence: black-box observation
+// on macOS 26.7.3 (tier 2): a recycle of a file and a missing file gives an error whose userInfo has exactly
+// NSLocalizedDescription and NSUnderlyingErrors. Test: nsworkspace-recycle.m.
+static NSString *const RecycleUnderlyingErrorsKey = @"NSUnderlyingErrors";
+
+- (void) recycleURLs: (NSArray<NSURL *> *) URLs
+   completionHandler: (void (^)(NSDictionary<NSURL *, NSURL *> *newURLs, NSError *error)) handler {
+    NSArray *items = [[URLs copy] autorelease];
+    void (^completion)(NSDictionary *, NSError *) = [[handler copy] autorelease];
+
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        @autoreleasepool {
+            NSFileManager *fileManager = [[[NSFileManager alloc] init] autorelease];
+            NSMutableDictionary *moved = [NSMutableDictionary dictionary];
+            NSMutableArray *failures = [NSMutableArray array];
+            NSURL *firstFailed = nil;
+
+            for (NSURL *item in items) {
+                NSURL *result = nil;
+                NSError *error = nil;
+                if ([fileManager trashItemAtURL: item resultingItemURL: &result error: &error] && result != nil)
+                    moved[item] = result;
+                else {
+                    if (firstFailed == nil)
+                        firstFailed = item;
+                    [failures addObject: error ?: [NSError errorWithDomain: NSCocoaErrorDomain
+                                                                      code: NSFileWriteUnknownError
+                                                                  userInfo: nil]];
+                }
+            }
+
+            NSError *error = nil;
+            if ([failures count] > 0) {
+                NSString *description = [NSString stringWithFormat:
+                    @"The file \u201C%@\u201D could not be moved to the trash.", [firstFailed lastPathComponent]];
+                error = [NSError errorWithDomain: NSCocoaErrorDomain
+                                            code: [[failures objectAtIndex: 0] code]
+                                        userInfo: @{
+                                            NSLocalizedDescriptionKey: description,
+                                            RecycleUnderlyingErrorsKey: failures,
+                                        }];
+            }
+
+            if (completion != nil) {
+                NSDictionary *newURLs = [[moved copy] autorelease];
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    completion(newURLs, error);
+                });
+            }
+        }
+    });
+}
+
 - (BOOL) unmountAndEjectDeviceAtPath: (NSString *) path {
     if (!path)
         return NO;

@@ -356,6 +356,11 @@ static NSRunningApplication *QueryFrontApplication(void) {
     return 0;
 }
 
+- (void) recycleURLs: (NSArray<NSURL *> *) URLs
+   completionHandler: (void (^)(NSDictionary<NSURL *, NSURL *> *newURLs, NSError *error)) handler {
+    NSInvalidAbstractInvocation();
+}
+
 - (BOOL) fileSystemChanged {
     NSInvalidAbstractInvocation();
     return 0;
