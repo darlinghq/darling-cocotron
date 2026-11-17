@@ -381,8 +381,21 @@ O2FontRef O2FontCreateWithCodePointCoverage(const uint32_t *codePoints,
         return nil;
     }
 
+    // FreeType reads the font from one block of memory that must outlive the
+    // face. Direct-access providers (CFData, bytes, URL) already expose such a
+    // block; a file provider is sequential and has none, so read its contents.
     const void *bytes = [provider bytes];
     size_t length = [provider length];
+    if (bytes == NULL) {
+        CFDataRef contents = O2DataProviderCopyData(provider);
+        if (contents == NULL) {
+            [self release];
+            return nil;
+        }
+        _faceData = (NSData *) contents;
+        bytes = [_faceData bytes];
+        length = [_faceData length];
+    }
 
     FT_Face face;
     int error = FT_New_Memory_Face(O2FontSharedFreeTypeLibrary(), bytes, length,
@@ -501,6 +514,7 @@ O2FontRef O2FontCreateWithCodePointCoverage(const uint32_t *codePoints,
 
 - (void) dealloc {
     FT_Done_Face(_face);
+    [_faceData release];
     [_glyphCache release];
     [_macRomanEncoding release];
     [_macExpertEncoding release];
