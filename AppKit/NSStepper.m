@@ -82,6 +82,22 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [_cell setValueWraps: flag];
 }
 
+// The size of a stepper's two arrows, by control size.
+// QUIRK: a stepper has an intrinsic size of its own, 19x27, 15x22 and 13x15 points at the regular,
+// small and mini control sizes. Not documented. Evidence: black-box observation on macOS 10.14.4
+// (tier 2) of the intrinsic size and alignment insets; 26.7.3 differs and is not followed.
+// Test: tests/appkit-popup-stepper-intrinsic-size.m (test_quirk_stepper_intrinsic_size)
+- (NSSize) intrinsicContentSize {
+    switch ([[self cell] controlSize]) {
+    case NSSmallControlSize:
+        return NSMakeSize(15, 22);
+    case NSMiniControlSize:
+        return NSMakeSize(13, 15);
+    default:
+        return NSMakeSize(19, 27);
+    }
+}
+
 - (void) sizeToFit {
     NSSize size = _bounds.size;
     NSSize size1 = [[_cell _stepUpImage] size];
