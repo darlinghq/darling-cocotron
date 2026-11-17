@@ -134,6 +134,9 @@ static NSMutableDictionary *_storeTypes = nil;
     if (class == Nil)
         [NSException raise: NSInvalidArgumentException
                     format: @"Unsupported store type."];
+    if (storeURL == nil && [storeType isEqual: NSSQLiteStoreType])
+        [NSException raise: NSInvalidArgumentException
+                    format: @"Cannot create an SQL store with a nil URL."];
     /* File-backed stores need a file URL; the in-memory store takes any URL. */
     if ([storeType isEqual: NSXMLStoreType] ||
         [storeType isEqual: NSSQLiteStoreType]) {

@@ -208,7 +208,11 @@ static NSString *newIdentifier(void) {
     NSString *path = [[self URL] path];
     struct stat metadata;
     BOOL exists = stat([path fileSystemRepresentation], &metadata) == 0;
-    if ((exists && !S_ISREG(metadata.st_mode)) || (_isReadOnly && !exists)) return storeError(error, NSPersistentStoreOpenError);
+    if (_isReadOnly && !exists) {
+        if (error) *error = [NSError errorWithDomain:NSCocoaErrorDomain code:NSFileReadNoSuchFileError userInfo:nil];
+        return NO;
+    }
+    if (exists && !S_ISREG(metadata.st_mode)) return storeError(error, NSPersistentStoreOpenError);
     int flags = (_isReadOnly ? SQLITE_OPEN_READONLY : SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE) | SQLITE_OPEN_FULLMUTEX;
     if (sqlite3_open_v2([path fileSystemRepresentation], &_database, flags, NULL) != SQLITE_OK) return storeError(error, NSPersistentStoreOpenError);
     if (![self _execute:"PRAGMA foreign_keys=ON"]) return storeError(error, NSPersistentStoreOpenError);
