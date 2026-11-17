@@ -36,6 +36,52 @@ NSString *const kCARendererColorSpace = @"kCARendererColorSpace";
     _clearsToTransparent = value;
 }
 
+- (void) _setBackdropImage: (CGImageRef) image {
+    if (image != NULL)
+        CGImageRetain(image);
+    CGImageRelease(_backdropImage);
+    _backdropImage = image;
+}
+
+- (void) dealloc {
+    // The texture goes with the GL context, which may not be current here.
+    CGImageRelease(_backdropImage);
+    [super dealloc];
+}
+
+// Draws the backdrop over the whole drawable, in clip coordinates.
+- (void) _drawBackdrop {
+    if (_backdropImage == NULL)
+        return;
+    if (_backdropTexture == 0)
+        glGenTextures(1, &_backdropTexture);
+
+    glEnable(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, _backdropTexture);
+    CATexImage2DCGImage(_backdropImage);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+
+    // Texture row 0 is the top of the image, which is the top of the drawable.
+    static const GLfloat texture[4 * 2] = {0, 1, 1, 1, 0, 0, 1, 0};
+    static const GLfloat vertices[4 * 2] = {-1, -1, 1, -1, -1, 1, 1, 1};
+
+    glMatrixMode(GL_PROJECTION);
+    glPushMatrix();
+    glLoadIdentity();
+    glEnableClientState(GL_VERTEX_ARRAY);
+    glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+    glTexCoordPointer(2, GL_FLOAT, 0, texture);
+    glVertexPointer(2, GL_FLOAT, 0, vertices);
+    glColor4f(1, 1, 1, 1);
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    glDisableClientState(GL_TEXTURE_COORD_ARRAY);
+    glDisable(GL_TEXTURE_2D);
+    glPopMatrix();
+}
+
 - initWithCGLContext: (void *) cglContext options: (NSDictionary *) options {
     _cglContext = cglContext;
     _bounds = CGRectZero;
@@ -633,6 +679,9 @@ static void displayLayerTreeIfNeeded(CALayer *layer) {
 
     glClearColor(0, 0, 0, _clearsToTransparent ? 0 : 1);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+    [self _drawBackdrop];
 
     // Painter's order instead of depth testing: every layer used to get z+1,
     // which put layers nested two or more deep outside the [-1, 1] depth range

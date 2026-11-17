@@ -39,11 +39,28 @@
     // clear it to a background first.
     XSetWindowBackgroundPixmap(_display, _window, None);
 
+    [[NSNotificationCenter defaultCenter] addObserver: self
+                                             selector: @selector(parentBackingDidFlush:)
+                                                 name: X11WindowBackingDidFlushNotification
+                                               object: parent];
     [self show];
     return self;
 }
 
+- (void) parentBackingDidFlush: (NSNotification *) note {
+    [[NSNotificationCenter defaultCenter]
+            postNotificationName: CGSubWindowBackdropDidChangeNotification
+                          object: self];
+}
+
+// The parent's drawn pixels beneath the subwindow; a child window is a plain
+// opaque X window, so the layer tree blends against these itself.
+- (CGImageRef) createBackdropImage {
+    return (CGImageRef) [_parent createBackingImageInDeviceRect: [_parent deviceRect: _drawableFrame]];
+}
+
 - (void) dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver: self];
     if (_usingParentDrawable)
         [_parent releaseLayerDrawable: self];
     XDestroyWindow(_display, _window);

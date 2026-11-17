@@ -67,4 +67,7 @@
 // Clear to transparent rather than opaque black before drawing, for frames
 // that are composited again elsewhere.
 - (void) _setClearsToTransparent: (BOOL) value;
+// An image drawn over the cleared drawable before the layers, for a drawable that cannot
+// blend with what is behind it (nil for none; retained). Fills the drawable.
+- (void) _setBackdropImage: (CGImageRef) image;
 @end
