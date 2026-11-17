@@ -41,6 +41,9 @@ NSString *const NSScrollViewWillStartLiveMagnifyNotification =
 NSString *const NSScrollViewDidEndLiveMagnifyNotification =
         @"NSScrollViewDidEndLiveMagnifyNotification";
 
+// The smallest minMagnification the scroll view accepts.
+static const CGFloat NSScrollViewMinimumMagnificationFloor = 0.0001;
+
 @implementation NSScrollView
 
 NS_EXTRA_SYNTHESIZE_ASSIGN(NSScrollView, horizontalScrollElasticity, _horizontalScrollElasticity, NSScrollElasticity, horizontalScrollElasticity, setHorizontalScrollElasticity:)
@@ -194,6 +197,25 @@ static Class _rulerViewClass = nil;
             [_clipView setCopiesOnScroll: YES];
         } else {
             NS_EXTRA(NSScrollView, self)->_drawsBackground = [_clipView drawsBackground];
+        }
+
+        NS_EXTRA(NSScrollView, self)->_magnification = 1.0;
+        NS_EXTRA(NSScrollView, self)->_minMagnification = 0.25;
+        NS_EXTRA(NSScrollView, self)->_maxMagnification = 4.0;
+        if ([keyed containsValueForKey: @"NSMinMagnification"] && [keyed containsValueForKey: @"NSMaxMagnification"]) {
+            CGFloat minimum = [keyed decodeDoubleForKey: @"NSMinMagnification"];
+            CGFloat maximum = [keyed decodeDoubleForKey: @"NSMaxMagnification"];
+
+            if (minimum >= NSScrollViewMinimumMagnificationFloor && maximum >= minimum) {
+                NS_EXTRA(NSScrollView, self)->_minMagnification = minimum;
+                NS_EXTRA(NSScrollView, self)->_maxMagnification = maximum;
+            }
+        }
+        if ([keyed containsValueForKey: @"NSMagnification"]) {
+            CGFloat value = [keyed decodeDoubleForKey: @"NSMagnification"];
+
+            if (value > 0)
+                NS_EXTRA(NSScrollView, self)->_magnification = value;
         }
 
         NS_EXTRA(NSScrollView, self)->_verticalLineScroll = 10.0; // the default value in IB is 10
@@ -530,6 +552,9 @@ static Class _rulerViewClass = nil;
     NS_EXTRA(NSScrollView, self)->_drawsBackground = YES;
     NS_EXTRA(NSScrollView, self)->_borderType = NSNoBorder;
     NS_EXTRA(NSScrollView, self)->_backgroundColor = [[NSColor controlBackgroundColor] copy];
+    NS_EXTRA(NSScrollView, self)->_magnification = 1.0;
+    NS_EXTRA(NSScrollView, self)->_minMagnification = 0.25;
+    NS_EXTRA(NSScrollView, self)->_maxMagnification = 4.0;
 
     [self setLineScroll: 1.0];
     [self setPageScroll: 10.0]; // entirely arbitrary
@@ -957,32 +982,97 @@ static Class _rulerViewClass = nil;
     // FIXME: tile or hide/show scrollers?
 }
 
-- (void) setMagnification: (CGFloat) value {
-    if (value == NS_EXTRA(NSScrollView, self)->_magnification)
-        return;
-
-    NS_EXTRA(NSScrollView, self)->_magnification = value;
-
-    if (NS_EXTRA(NSScrollView, self)->_magnification < NS_EXTRA(NSScrollView, self)->_minMagnification)
-        NS_EXTRA(NSScrollView, self)->_magnification = NS_EXTRA(NSScrollView, self)->_minMagnification;
-    if (NS_EXTRA(NSScrollView, self)->_magnification < NS_EXTRA(NSScrollView, self)->_maxMagnification)
-        NS_EXTRA(NSScrollView, self)->_magnification = NS_EXTRA(NSScrollView, self)->_maxMagnification;
-
-    // TODO: calculate new bounds and call setBounds
+static CGFloat clampMagnification(NSScrollView *self, CGFloat value) {
+    if (value < NS_EXTRA(NSScrollView, self)->_minMagnification)
+        value = NS_EXTRA(NSScrollView, self)->_minMagnification;
+    if (value > NS_EXTRA(NSScrollView, self)->_maxMagnification)
+        value = NS_EXTRA(NSScrollView, self)->_maxMagnification;
+    return value;
 }
 
-- (void) setMinMagnification: (CGFloat) value {
-    NS_EXTRA(NSScrollView, self)->_minMagnification = value;
+// Magnification is carried by the content view: its bounds are the frame size
+// divided by the magnification, and the document view is left alone.
+// pointInClip stays at the same place on screen.
+- (void) _setMagnification: (CGFloat) value anchoredAtClipPoint: (NSPoint) pointInClip {
+    CGFloat magnification = clampMagnification(self, value);
 
-    if (NS_EXTRA(NSScrollView, self)->_minMagnification > NS_EXTRA(NSScrollView, self)->_magnification)
-        [self setMagnification: value];
+    if (magnification == NS_EXTRA(NSScrollView, self)->_magnification)
+        return;
+
+    NSRect oldBounds = [_clipView bounds];
+    NSSize frameSize = [_clipView frame].size;
+    NSSize newSize = NSMakeSize(frameSize.width / magnification, frameSize.height / magnification);
+    NSPoint origin = oldBounds.origin;
+
+    if (oldBounds.size.width > 0 && oldBounds.size.height > 0) {
+        origin.x = pointInClip.x - (pointInClip.x - oldBounds.origin.x) * newSize.width / oldBounds.size.width;
+        origin.y = pointInClip.y - (pointInClip.y - oldBounds.origin.y) * newSize.height / oldBounds.size.height;
+    }
+
+    NS_EXTRA(NSScrollView, self)->_magnification = magnification;
+    [_clipView setBoundsSize: newSize];
+    [_clipView scrollToPoint: origin];
+    [self reflectScrolledClipView: _clipView];
+}
+
+- (void) setMagnification: (CGFloat) value {
+    NSRect visible = [self documentVisibleRect];
+    NSPoint center = NSMakePoint(NSMidX(visible), NSMidY(visible));
+
+    [self setMagnification: value centeredAtPoint: center];
+}
+
+- (void) setMagnification: (CGFloat) value centeredAtPoint: (NSPoint) point {
+    NSView *documentView = [self documentView];
+    NSPoint pointInClip = documentView != nil ? [_clipView convertPoint: point fromView: documentView] : point;
+
+    [self _setMagnification: value anchoredAtClipPoint: pointInClip];
+}
+
+- (void) magnifyToFitRect: (NSRect) rect {
+    NSSize frameSize = [_clipView frame].size;
+    NSView *documentView = [self documentView];
+    NSRect clipRect = documentView != nil ? [_clipView convertRect: rect fromView: documentView] : rect;
+    NSRect visible = [_clipView bounds];
+
+    // Scale about the middle of the visible area, then bring the middle of the
+    // rect there. A zero-sized rect divides by zero and so ends up at the
+    // maximum magnification.
+    [self _setMagnification: MIN(frameSize.width / rect.size.width, frameSize.height / rect.size.height)
+            anchoredAtClipPoint: NSMakePoint(NSMidX(visible), NSMidY(visible))];
+    visible = [_clipView bounds];
+
+    // QUIRK: the origin of the resulting bounds is rounded down to whole
+    // units (setMagnification:centeredAtPoint: keeps fractions). Not
+    // documented. Evidence: black-box observation on macOS 10.14.4 and 26.7.3
+    // (tier 2) with rects at fractional origins. Test:
+    // appkit-scroll-view-magnification.m (quirk: magnifyToFitRect: origin).
+    [_clipView scrollToPoint: NSMakePoint(floor(NSMidX(clipRect) - visible.size.width / 2),
+                                          floor(NSMidY(clipRect) - visible.size.height / 2))];
+    [self reflectScrolledClipView: _clipView];
+}
+
+// QUIRK: a minimum below 0.0001 becomes 0.0001, and a minimum above the
+// maximum (or a maximum below the minimum) raises NSInvalidArgumentException.
+// The current magnification is not re-clamped to a new range. Not
+// documented. Evidence: black-box observation on macOS 10.14.4 and 26.7.3
+// (tier 2). Test: appkit-scroll-view-magnification.m (quirk: min/max).
+- (void) setMinMagnification: (CGFloat) value {
+    if (!(value >= NSScrollViewMinimumMagnificationFloor))
+        value = NSScrollViewMinimumMagnificationFloor;
+    if (value > NS_EXTRA(NSScrollView, self)->_maxMagnification)
+        [NSException raise: NSInvalidArgumentException
+                    format: @"-[NSScrollView setMinMagnification:]: %g is above the maximum magnification %g",
+                            value, NS_EXTRA(NSScrollView, self)->_maxMagnification];
+    NS_EXTRA(NSScrollView, self)->_minMagnification = value;
 }
 
 - (void) setMaxMagnification: (CGFloat) value {
+    if (!(value >= NS_EXTRA(NSScrollView, self)->_minMagnification))
+        [NSException raise: NSInvalidArgumentException
+                    format: @"-[NSScrollView setMaxMagnification:]: %g is below the minimum magnification %g",
+                            value, NS_EXTRA(NSScrollView, self)->_minMagnification];
     NS_EXTRA(NSScrollView, self)->_maxMagnification = value;
-
-    if (NS_EXTRA(NSScrollView, self)->_maxMagnification < NS_EXTRA(NSScrollView, self)->_magnification)
-        [self setMagnification: value];
 }
 
 // The content insets live on the clip view, where nibs archive them.
