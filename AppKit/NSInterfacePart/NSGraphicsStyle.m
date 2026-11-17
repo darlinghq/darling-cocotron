@@ -399,26 +399,11 @@ static NSDictionary *sScrollerButtonAttributes = nil;
 }
 
 - (void) drawPushButtonNormalInRect: (NSRect) rect defaulted: (BOOL) defaulted {
-    if (defaulted) {
-        [[NSColor blackColor] setFill];
-        NSRectFill(rect);
-        rect = NSInsetRect(rect, 1, 1);
-    }
-
-    [[NSColor colorWithCalibratedWhite: 0.78 alpha: 1.0] set];
-    [[NSBezierPath bezierPathWithRoundedRect: rect xRadius: 4 yRadius: 4] fill];
-    rect = NSInsetRect(rect, 1, 1);
-    [[NSColor whiteColor] set];
-    [[NSBezierPath bezierPathWithRoundedRect: rect xRadius: 4 yRadius: 4] fill];
+    [self drawPushButtonInRect: rect defaulted: defaulted pressed: NO enabled: YES active: YES];
 }
 
 - (void) drawPushButtonPressedInRect: (NSRect) rect {
-    [[NSColor colorWithCalibratedWhite: 0.78 alpha: 1.0] set];
-    [[NSBezierPath bezierPathWithRoundedRect: rect xRadius: 4 yRadius: 4] fill];
-    rect = NSInsetRect(rect, 1, 1);
-    [[NSColor colorWithCalibratedRed: 0.0 green: 0.58 blue: 0.97
-                               alpha: 1.0] set];
-    [[NSBezierPath bezierPathWithRoundedRect: rect xRadius: 4 yRadius: 4] fill];
+    [self drawPushButtonInRect: rect defaulted: NO pressed: YES enabled: YES active: YES];
 }
 
 - (void) drawPushButtonHighlightedInRect: (NSRect) rect {
@@ -1164,6 +1149,64 @@ static void NSAquaDrawToggle(NSRect rect, BOOL radio, NSInteger state, BOOL high
                    controlSize: (NSControlSize) controlSize
 {
     NSAquaDrawToggle(rect, YES, state, highlighted, enabled, active, controlSize);
+}
+
+@end
+
+@implementation NSGraphicsStyle (NSPushButtonAqua)
+
+// QUIRK: the rounded push button look of macOS 10.14 (light appearance). Not documented. Evidence:
+// black-box renders of NSButton (rounded bezel) on macOS 10.14.4 at 1x (tier 2): the normal bezel is white
+// with a black outline at about 18% and a one pixel shadow below; a default button in an active window is
+// a vertical blue gradient from (107,161,250) to (17,100,255); a pressed button is a blue gradient from
+// (76,139,253) to (15,88,231); a disabled button is the normal one at half strength.
+// Test: appkit-button-aqua.m
+- (void) drawPushButtonInRect: (NSRect) rect
+                    defaulted: (BOOL) defaulted
+                      pressed: (BOOL) pressed
+                      enabled: (BOOL) enabled
+                       active: (BOOL) active
+{
+    CGContextRef ctx = [[NSGraphicsContext currentContext] graphicsPort];
+    NSRect body = NSMakeRect(NSMinX(rect), NSMinY(rect) + 1, NSWidth(rect), NSHeight(rect) - 1);
+    CGFloat radius = MIN(4.5, NSHeight(body) / 4.5);
+    CGFloat alpha = enabled ? 1 : 0.5;
+    BOOL blue = pressed || (defaulted && enabled && active);
+    NSBezierPath *outline = [NSBezierPath bezierPathWithRoundedRect: NSInsetRect(body, 0.5, 0.5)
+                                                            xRadius: radius
+                                                            yRadius: radius];
+    NSBezierPath *shape = [NSBezierPath bezierPathWithRoundedRect: body xRadius: radius yRadius: radius];
+
+    if (NSWidth(rect) < 2 || NSHeight(rect) < 4)
+        return;
+
+    // the shadow below the bezel
+    [[NSColor colorWithCalibratedWhite: 0 alpha: 0.07 * alpha] setFill];
+    [[NSBezierPath bezierPathWithRoundedRect: NSOffsetRect(body, 0, -1) xRadius: radius yRadius: radius] fill];
+
+    if (blue) {
+        CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB();
+        CGFloat normal[8] = {107 / 255.0, 161 / 255.0, 250 / 255.0, 1, 17 / 255.0, 100 / 255.0, 1, 1};
+        CGFloat down[8] = {76 / 255.0, 139 / 255.0, 253 / 255.0, 1, 15 / 255.0, 88 / 255.0, 231 / 255.0, 1};
+        CGGradientRef gradient = CGGradientCreateWithColorComponents(space, pressed ? down : normal, NULL, 2);
+
+        CGContextSaveGState(ctx);
+        [shape addClip];
+        CGContextDrawLinearGradient(ctx, gradient, CGPointMake(0, NSMaxY(body)), CGPointMake(0, NSMinY(body)), 0);
+        CGContextRestoreGState(ctx);
+        CGGradientRelease(gradient);
+        CGColorSpaceRelease(space);
+        [[NSColor colorWithCalibratedRed: 0.1 green: 0.4 blue: 0.98 alpha: 0.7] setStroke];
+    } else {
+        // the edge is a translucent line over the background, so the white stops inside it
+        [[NSColor colorWithCalibratedWhite: 1 alpha: alpha] setFill];
+        [[NSBezierPath bezierPathWithRoundedRect: NSInsetRect(body, 1, 1)
+                                         xRadius: MAX(radius - 1, 0)
+                                         yRadius: MAX(radius - 1, 0)] fill];
+        [[NSColor colorWithCalibratedWhite: 0 alpha: 0.18 * alpha] setStroke];
+    }
+    [outline setLineWidth: 1];
+    [outline stroke];
 }
 
 @end

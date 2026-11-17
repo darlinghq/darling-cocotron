@@ -228,3 +228,13 @@ typedef struct _Margins {
                    controlSize: (NSControlSize) controlSize;
 @end
 
+@interface NSGraphicsStyle (NSPushButtonAqua)
+/* The bezel of a rounded push button. rect is in an unflipped coordinate system and includes the one
+   point shadow below the bezel. A default button is blue in an active window; a pressed one is blue too. */
+- (void) drawPushButtonInRect: (NSRect) rect
+                    defaulted: (BOOL) defaulted
+                      pressed: (BOOL) pressed
+                      enabled: (BOOL) enabled
+                       active: (BOOL) active;
+@end
+

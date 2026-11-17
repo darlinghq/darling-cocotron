@@ -2,7 +2,8 @@
 //
 // Check boxes and radio buttons look like the Aqua ones of macOS 10.14 in the light appearance: a white box
 // with a gray outline when off, a blue box with a white mark when on or mixed in an active window, a
-// darker blue while pressed, and a white box with a dark mark in a window that is not active.
+// darker blue while pressed, and a white box with a dark mark in a window that is not active. Rounded push
+// buttons have a white bezel, and a blue one when default or pressed.
 // Expected values were sampled from renders of title-less buttons in 60x18 frames on Mac OS X 10.14.4
 // (black-box observation; QUIRK-tagged drawing in NSGraphicsStyle (NSButtonAqua)).
 #import <AppKit/AppKit.h>
@@ -68,6 +69,39 @@ static int coverage(NSBitmapImageRep *rep, int y) {
             n++;
     }
     return n;
+}
+
+static NSBitmapImageRep *renderPush(BOOL defaulted, BOOL pressed, BOOL enabled) {
+    NSButton *button = [[NSButton alloc] initWithFrame: NSMakeRect(0, 0, 80, 32)];
+    [[window contentView] addSubview: button];
+    [button setBezelStyle: NSBezelStyleRounded];
+    [button setTitle: @"Button"];
+    [button sizeToFit];
+    [button setFrameSize: NSMakeSize(80, [button frame].size.height)];
+    [button setEnabled: enabled];
+    if (defaulted) {
+        [button setKeyEquivalent: @"\r"];
+        [window setDefaultButtonCell: [button cell]];
+    }
+    [[button cell] setHighlighted: pressed];
+    NSBitmapImageRep *rep = [button bitmapImageRepForCachingDisplayInRect: [button bounds]];
+    [button cacheDisplayInRect: [button bounds] toBitmapImageRep: rep];
+    [window setDefaultButtonCell: nil];
+    [button removeFromSuperview];
+    return rep;
+}
+
+// first row with alpha of at least 25 and last fully opaque row in the column
+static void pushRows(NSBitmapImageRep *rep, int x, int *top, int *bottom) {
+    int c[4];
+    *top = *bottom = -1;
+    for (int y = 0; y < (int) [rep pixelsHigh]; y++) {
+        rgba(rep, x, y, c);
+        if (c[3] >= 25 && *top < 0)
+            *top = y;
+        if (c[3] == 255)
+            *bottom = y;
+    }
 }
 
 int main(void)
@@ -146,6 +180,41 @@ int main(void)
         CHECK(near(c, 255, 255, 255, 12));
         rgba(rep, 5, 9, c);
         CHECK(c[0] < 110);
+        gActive = YES;
+
+        // rounded push button: white bezel; blue gradient when default or pressed; fainter when disabled.
+        // Columns are sampled away from the title; rows are relative to the bezel's top and bottom edge.
+        int top, bottom;
+        rep = renderPush(NO, NO, YES);
+        pushRows(rep, 10, &top, &bottom);
+        CHECK(top >= 0 && bottom - top >= 17 && bottom - top <= 21);
+        rgba(rep, 10, top + 5, c);
+        CHECK(near(c, 255, 255, 255, 4));
+        rgba(rep, 10, top, c);
+        CHECK(c[3] > 0 && c[3] < 140 && c[0] < 40);
+        rep = renderPush(YES, NO, YES);
+        pushRows(rep, 10, &top, &bottom);
+        rgba(rep, 10, top + 1, c);
+        CHECK(near(c, 107, 161, 250, 28));
+        rgba(rep, 10, bottom - 1, c);
+        CHECK(near(c, 17, 100, 255, 28));
+        rep = renderPush(NO, YES, YES);
+        pushRows(rep, 10, &top, &bottom);
+        rgba(rep, 10, top + 1, c);
+        CHECK(near(c, 76, 139, 253, 28));
+        rgba(rep, 10, bottom - 1, c);
+        CHECK(near(c, 15, 88, 231, 28));
+        rep = renderPush(NO, NO, NO);
+        pushRows(rep, 10, &top, &bottom);
+        rgba(rep, 10, top + 8, c);
+        CHECK(c[3] > 90 && c[3] < 200);
+        // a default button is not blue in a window that is not active
+        gActive = NO;
+        window = inactiveWindow;
+        rep = renderPush(YES, NO, YES);
+        pushRows(rep, 10, &top, &bottom);
+        rgba(rep, 10, top + 5, c);
+        CHECK(near(c, 255, 255, 255, 4));
         gActive = YES;
     }
     if (failures)

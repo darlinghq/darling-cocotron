@@ -1164,17 +1164,14 @@ static void drawRoundedBezel(CGContextRef context, CGRect frame) {
                     drawUnborderedButtonInRect: frame
                                      defaulted: defaulted];
         } else {
-            if (([self highlightsBy] & NSPushInCellMask) &&
-                [self isHighlighted])
-                [[_controlView graphicsStyle]
-                        drawPushButtonPressedInRect: frame];
-            else if ([self isVisuallyHighlighted])
-                [[_controlView graphicsStyle]
-                        drawPushButtonHighlightedInRect: frame];
-            else
-                [[_controlView graphicsStyle]
-                        drawPushButtonNormalInRect: frame
-                                         defaulted: defaulted];
+            // pressed push-in buttons and default buttons are blue when drawn by the style
+            BOOL pressed = ([self highlightsBy] & NSPushInCellMask) && [self isHighlighted];
+
+            [[_controlView graphicsStyle] drawPushButtonInRect: frame
+                                                     defaulted: defaulted
+                                                       pressed: pressed || [self isVisuallyHighlighted]
+                                                       enabled: [self isEnabled]
+                                                        active: [[controlView window] isKeyWindow]];
         }
         if (mirror)
             CGContextRestoreGState(context);
@@ -1336,6 +1333,24 @@ static NSSize scaledImageSizeInFrameSize(NSSize imageSize, NSSize frameSize,
 
     NSAttributedString *title = [self titleForHighlight];
     NSImage *image = [self imageForHighlight];
+
+    // QUIRK: the title of a plain-text rounded push button is white on the blue bezel of a default button in an
+    // active window or of a pressed button. Evidence: black-box renders on macOS 10.14.4 (tier 2).
+    // Test: appkit-button-aqua.m
+    if ([self isBordered] && image == nil && [title length] > 0 &&
+        NS_EXTRA(NSButtonCell, self)->_bezelStyle == NSRoundedBezelStyle &&
+        [NS_EXTRA(NSCell, self)->_titleOrAttributedTitle isKindOfClass: [NSString class]] && [self isEnabled]) {
+        BOOL pressed = ([self highlightsBy] & NSPushInCellMask) && [self isHighlighted];
+
+        if (pressed || (defaulted && [[controlView window] isKeyWindow])) {
+            NSMutableAttributedString *white = [[title mutableCopy] autorelease];
+
+            [white addAttribute: NSForegroundColorAttributeName
+                          value: [NSColor whiteColor]
+                          range: NSMakeRange(0, [white length])];
+            title = white;
+        }
+    }
     BOOL enabled = [self isEnabled] ? YES : ![self imageDimsWhenDisabled];
     BOOL mixed = ([self state] == NSMixedState) ? YES : NO;
     NSRect imageRect = [self imageRectForBounds: frame];
