@@ -342,7 +342,12 @@ typedef NSCollectionLayoutSection * (^NSCollectionViewCompositionalLayoutSection
 
 // AppKit defines the two classes below (they are not part of CollectionViewCore): they are layouts, subclasses of
 // AppKit's NSCollectionViewLayout, and hold the sections built from the classes above.
-@interface NSCollectionViewCompositionalLayoutConfiguration : NSObject <NSCopying>
+@interface NSCollectionViewCompositionalLayoutConfiguration : NSObject <NSCopying> {
+@private
+    NSCollectionViewScrollDirection _scrollDirection;
+    CGFloat _interSectionSpacing;
+    NSArray *_boundarySupplementaryItems;
+}
 
 @property NSCollectionViewScrollDirection scrollDirection;
 @property CGFloat interSectionSpacing;
@@ -350,7 +355,12 @@ typedef NSCollectionLayoutSection * (^NSCollectionViewCompositionalLayoutSection
 
 @end
 
-@interface NSCollectionViewCompositionalLayout : NSCollectionViewLayout
+@interface NSCollectionViewCompositionalLayout : NSCollectionViewLayout {
+@private
+    NSCollectionLayoutSection *_section;
+    NSCollectionViewCompositionalLayoutSectionProvider _sectionProvider;
+    NSCollectionViewCompositionalLayoutConfiguration *_configuration;
+}
 
 - (instancetype) initWithSection: (NSCollectionLayoutSection *) section;
 - (instancetype) initWithSection: (NSCollectionLayoutSection *) section

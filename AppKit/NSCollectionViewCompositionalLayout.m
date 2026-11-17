@@ -21,11 +21,7 @@
 // CollectionViewCore: this file uses only their public methods, never their instance variables, because on a
 // dyld-cache stage they are the cache's classes.
 
-@implementation NSCollectionViewCompositionalLayoutConfiguration {
-    NSCollectionViewScrollDirection _scrollDirection;
-    CGFloat _interSectionSpacing;
-    NSArray *_boundarySupplementaryItems;
-}
+@implementation NSCollectionViewCompositionalLayoutConfiguration
 
 // The documentation declares the boundary items as a non-optional array: empty to start with.
 - (instancetype) init {
@@ -77,11 +73,7 @@
 
 @end
 
-@implementation NSCollectionViewCompositionalLayout {
-    NSCollectionLayoutSection *_section;
-    NSCollectionViewCompositionalLayoutSectionProvider _sectionProvider;
-    NSCollectionViewCompositionalLayoutConfiguration *_configuration;
-}
+@implementation NSCollectionViewCompositionalLayout
 
 - (instancetype) initWithSection: (NSCollectionLayoutSection *) section {
     return [self initWithSection: section configuration: nil];
