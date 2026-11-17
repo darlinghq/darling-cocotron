@@ -534,10 +534,25 @@ static void NSAquaDrawProgressFill(NSRect bar, NSRect fill, double animation, BO
     CGContextSaveGState(ctx);
     [[NSBezierPath bezierPathWithRoundedRect: bar xRadius: radius yRadius: radius] addClip];
     if (indeterminate) {
+        // QUIRK: an indeterminate bar is the fill blue (61,130,253) with a lighter band, (113,166,254) at its
+        // centre, that is a smooth hump over the bar's length and travels along it; at rest the band is in
+        // the middle. Evidence: black-box renders of an indeterminate NSProgressIndicator on macOS 10.14.4 at
+        // 1x (tier 2). Test: appkit-progress-aqua.m
         CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB();
-        CGFloat comps[8] = {61 / 255.0, 130 / 255.0, 253 / 255.0, 1, 108 / 255.0, 162 / 255.0, 1, 1};
-        CGGradientRef gradient = CGGradientCreateWithColorComponents(space, comps, NULL, 2);
-        // the gradient travels along the bar and wraps around
+        enum { Stops = 9 };
+        CGFloat comps[Stops * 4], locations[Stops];
+
+        for (int i = 0; i < Stops; i++) {
+            CGFloat u = (CGFloat) i / (Stops - 1), f = pow(sin(M_PI * u), 2.5);
+
+            locations[i] = u;
+            comps[i * 4] = (61 + (113 - 61) * f) / 255;
+            comps[i * 4 + 1] = (130 + (166 - 130) * f) / 255;
+            comps[i * 4 + 2] = (253 + (254 - 253) * f) / 255;
+            comps[i * 4 + 3] = 1;
+        }
+        CGGradientRef gradient = CGGradientCreateWithColorComponents(space, comps, locations, Stops);
+        // the band travels along the bar and wraps around
         CGFloat span = NSWidth(bar), offset = fmod(animation, 1) * span;
 
         for (int k = -1; k <= 1; k++) {

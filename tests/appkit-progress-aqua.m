@@ -143,7 +143,12 @@ int main(void)
         CHECK([[[NSProgressIndicator alloc] initWithFrame: NSMakeRect(0, 0, 10, 10)] isDisplayedWhenStopped]);
         rep = render(0, YES, 20, NSControlSizeRegular);
         rgba(rep, 100, 9, c);
-        CHECK(c[3] == 255 && c[2] > 240 && c[0] < 130);
+        CHECK(c[3] == 255 && c[2] > 240 && c[0] > 100 && c[0] < 125);
+        // the band is lighter in the middle than at the ends (Mojave at rest: 62 at the ends, 113 in the middle)
+        rgba(rep, 8, 9, c);
+        CHECK(c[0] > 50 && c[0] < 80);
+        rgba(rep, 60, 9, c);
+        CHECK(c[0] > 78 && c[0] < 100);
     }
     if (failures)
         return 1;
