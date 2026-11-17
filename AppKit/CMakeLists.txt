@@ -434,6 +434,7 @@ set(AppKit_sources
 	NSVisualEffectView.m
 	NSOpenGLLayer.m
 	NSCollectionViewGridLayout.m
+	NSCollectionViewCompositionalLayout.m
 
 	NSSharingService.m
 	MacWorkspace.m
@@ -579,6 +580,7 @@ add_framework(AppKit
 		Onyx2D
 		CoreText
 		CoreData
+		CollectionViewCore
 		OpenGL
 		QuartzCore
 		CoreGraphics
@@ -593,6 +595,8 @@ add_framework(AppKit
 		dbus
 )
 
+# Applications bind the NSCollectionLayout* names to AppKit, so AppKit re-exports the framework that defines them.
+reexport(AppKit CollectionViewCore ${CMAKE_BINARY_DIR}/src/external/cocotron/CollectionViewCore/CollectionViewCore)
 reexport(AppKit Foundation ${CMAKE_BINARY_DIR}/src/external/foundation/Foundation)
 reexport(AppKit ApplicationServices ${CMAKE_BINARY_DIR}/src/frameworks/ApplicationServices/ApplicationServices)
 # AppKit re-exports the layout classes too, so that programs built for SDKs that declare them in AppKit bind them

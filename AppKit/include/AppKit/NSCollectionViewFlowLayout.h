@@ -21,6 +21,7 @@
 #import <AppKit/AppKitIvarLayout.h>
 #import <Foundation/NSString.h>
 #import <AppKit/NSCollectionViewLayout.h>
+#import <AppKit/NSCollectionViewLayoutInvalidationContext.h>
 
 APPKIT_EXPORT NSString *const NSCollectionElementKindSectionHeader;
 APPKIT_EXPORT NSString *const NSCollectionElementKindSectionFooter;
@@ -43,5 +44,17 @@ typedef NS_ENUM(NSInteger, NSCollectionViewScrollDirection) {
 @property NSEdgeInsets sectionInset;
 @property CGFloat minimumLineSpacing;
 @property CGFloat minimumInteritemSpacing;
+
+@end
+
+@interface NSCollectionViewFlowLayoutInvalidationContext : NSCollectionViewLayoutInvalidationContext
+{
+    BOOL _invalidateFlowLayoutDelegateMetrics;
+    BOOL _invalidateFlowLayoutAttributes;
+    NS_LEGACY_IVAR_PAD(_NSCollectionViewFlowLayoutInvalidationContextReserved, 2)
+}
+
+@property BOOL invalidateFlowLayoutDelegateMetrics;
+@property BOOL invalidateFlowLayoutAttributes;
 
 @end
