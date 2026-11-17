@@ -2,7 +2,9 @@
 
 // NSCollectionViewCompositionalLayout, its configuration and NSCollectionViewFlowLayoutInvalidationContext
 // (macOS 10.15): the layout objects Notes, Podcasts and Activity Monitor create. Unlike the NSCollectionLayout*
-// data classes these are AppKit's own, so they must not come from CollectionViewCore.
+// data classes the layout and its configuration are AppKit's own, so they must not come from CollectionViewCore.
+// The invalidation context is declared by AppKit but implemented with the other collection view layout classes in
+// UIFoundation.
 
 static void expectFromAppKit(Class cls) {
     const char *image = cls != Nil ? class_getImageName(cls) : NULL;
@@ -25,7 +27,6 @@ int main(void) {
         expect(layoutClass != Nil && configurationClass != Nil && contextClass != Nil, @"the layout classes exist");
         expectFromAppKit(layoutClass);
         expectFromAppKit(configurationClass);
-        expectFromAppKit(contextClass);
         expect([layoutClass isSubclassOfClass: [NSCollectionViewLayout class]], @"a compositional layout is a collection view layout");
         expect([contextClass isSubclassOfClass: [NSCollectionViewLayoutInvalidationContext class]],
                @"the flow layout invalidation context is an invalidation context");
