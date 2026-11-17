@@ -6,6 +6,11 @@
 #include <dispatch/dispatch.h>
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <errno.h>
+#include <sys/xattr.h>
+#include <unistd.h>
 
 static NSCache *_workspaceIconCache;
 
@@ -29,8 +34,7 @@ static NSImage *ImageFromIconFile(NSString *file) {
     return icon;
 }
 
-static NSImage *ImageFromIcnsFile(NSString *file) {
-    NSData *data = [NSData dataWithContentsOfFile: file];
+static NSImage *ImageFromIcnsData(NSData *data) {
     if (data == nil)
         return nil;
 
@@ -86,6 +90,231 @@ static NSImage *ImageFromIcnsFile(NSString *file) {
     return best;
 }
 
+static NSImage *ImageFromIcnsFile(NSString *file) {
+    return ImageFromIcnsData([NSData dataWithContentsOfFile: file]);
+}
+
+// Custom icons. An item's custom icon is an 'icns' resource (ID -16455) in its resource fork, and the
+// Finder flag kHasCustomIcon is set in its FinderInfo. A folder cannot hold a resource fork of its own, so
+// the resource fork is on an invisible file named "Icon\r" inside it, and only the flag is on the folder.
+static NSString *const kFinderInfoName = @"com.apple.FinderInfo";
+static NSString *const kResourceForkName = @"com.apple.ResourceFork";
+static const uint16_t kHasCustomIconFlag = 0x0400;
+static const uint16_t kIsInvisibleFlag = 0x4000;
+static const int16_t kCustomIconResourceID = -16455;
+static const NSUInteger kFinderInfoLength = 32;
+static const NSUInteger kResourceForkHeaderLength = 256;
+static const NSUInteger kResourceMapLength = 50;
+
+static NSString *CustomIconFilePath(NSString *folder) {
+    return [folder stringByAppendingPathComponent: @"Icon\r"];
+}
+
+static NSData *CopyXattr(NSString *path, NSString *name) {
+    const char *fsPath = [path fileSystemRepresentation];
+    ssize_t length = getxattr(fsPath, [name UTF8String], NULL, 0, 0, 0);
+    if (length < 0)
+        return nil;
+    NSMutableData *data = [NSMutableData dataWithLength: (NSUInteger)length];
+    if (length > 0 && getxattr(fsPath, [name UTF8String], [data mutableBytes], (size_t)length, 0, 0) != length)
+        return nil;
+    return data;
+}
+
+static BOOL SetXattr(NSString *path, NSString *name, NSData *data) {
+    return setxattr([path fileSystemRepresentation], [name UTF8String], [data bytes], [data length], 0, 0) == 0;
+}
+
+static BOOL RemoveXattr(NSString *path, NSString *name) {
+    return removexattr([path fileSystemRepresentation], [name UTF8String], 0) == 0 || errno == ENOATTR;
+}
+
+static uint32_t ReadBE32(const unsigned char *p) {
+    return ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) | ((uint32_t)p[2] << 8) | p[3];
+}
+
+static void WriteBE32(unsigned char *p, uint32_t v) {
+    p[0] = v >> 24; p[1] = v >> 16; p[2] = v >> 8; p[3] = v;
+}
+
+static uint16_t FinderFlags(NSData *finderInfo) {
+    if ([finderInfo length] < kFinderInfoLength)
+        return 0;
+    const unsigned char *b = [finderInfo bytes];
+    return (uint16_t)((b[8] << 8) | b[9]);
+}
+
+// Returns FinderInfo with the Finder flags changed; the other bytes are kept. Nil when nothing is left set.
+static NSData *FinderInfoWithFlags(NSData *finderInfo, uint16_t set, uint16_t clear) {
+    NSMutableData *info = [NSMutableData dataWithLength: kFinderInfoLength];
+    if ([finderInfo length] == kFinderInfoLength)
+        [info setData: finderInfo];
+    unsigned char *b = [info mutableBytes];
+    uint16_t flags = (uint16_t)(((b[8] << 8) | b[9]) & ~clear) | set;
+    b[8] = flags >> 8;
+    b[9] = flags & 0xff;
+    for (NSUInteger i = 0; i < kFinderInfoLength; i++)
+        if (b[i] != 0)
+            return info;
+    return nil;
+}
+
+// A resource fork that holds just the custom icon: the 256 byte header area, the length-prefixed icns data,
+// and a resource map with one 'icns' resource.
+static NSData *ResourceForkForIcns(NSData *icns) {
+    uint32_t dataLength = (uint32_t)([icns length] + 4);
+    uint32_t mapOffset = (uint32_t)kResourceForkHeaderLength + dataLength;
+    NSMutableData *fork = [NSMutableData dataWithLength: mapOffset + kResourceMapLength];
+    unsigned char *b = [fork mutableBytes];
+
+    WriteBE32(b, (uint32_t)kResourceForkHeaderLength);
+    WriteBE32(b + 4, mapOffset);
+    WriteBE32(b + 8, dataLength);
+    WriteBE32(b + 12, (uint32_t)kResourceMapLength);
+    WriteBE32(b + kResourceForkHeaderLength, (uint32_t)[icns length]);
+    memcpy(b + kResourceForkHeaderLength + 4, [icns bytes], [icns length]);
+
+    unsigned char *map = b + mapOffset;
+    memcpy(map, b, 16);
+    map[24] = 0; map[25] = 28;           // offset of the type list
+    map[26] = 0; map[27] = 50;           // offset of the name list
+    unsigned char *types = map + 28;
+    types[0] = 0; types[1] = 0;          // one type
+    memcpy(types + 2, "icns", 4);
+    types[6] = 0; types[7] = 0;          // one resource of that type
+    types[8] = 0; types[9] = 10;         // offset of its reference list
+    types[10] = (unsigned char)((uint16_t)kCustomIconResourceID >> 8);
+    types[11] = (unsigned char)((uint16_t)kCustomIconResourceID & 0xff);
+    types[12] = 0xff; types[13] = 0xff;  // no name
+    return fork;
+}
+
+// The 'icns' resource of a resource fork, preferring the custom icon ID. Nil if there is none.
+static NSData *IcnsFromResourceFork(NSData *fork) {
+    const unsigned char *b = [fork bytes];
+    NSUInteger length = [fork length];
+    if (length < kResourceForkHeaderLength + 30)
+        return nil;
+
+    uint32_t dataOffset = ReadBE32(b), mapOffset = ReadBE32(b + 4), dataLength = ReadBE32(b + 8), mapLength = ReadBE32(b + 12);
+    if ((uint64_t)mapOffset + mapLength > length || (uint64_t)dataOffset + dataLength > length || mapLength < 30)
+        return nil;
+
+    const unsigned char *map = b + mapOffset;
+    uint32_t typeListOffset = (map[24] << 8) | map[25];
+    if (typeListOffset + 2 > mapLength)
+        return nil;
+    const unsigned char *types = map + typeListOffset;
+    uint32_t typeCount = (uint32_t)(((types[0] << 8) | types[1]) + 1) & 0xffff;
+
+    NSData *found = nil;
+    for (uint32_t t = 0; t < typeCount; t++) {
+        if (typeListOffset + 2 + (t + 1) * 8 > mapLength)
+            return found;
+        const unsigned char *type = types + 2 + t * 8;
+        if (memcmp(type, "icns", 4) != 0)
+            continue;
+        uint32_t count = (uint32_t)(((type[4] << 8) | type[5]) + 1) & 0xffff;
+        uint32_t refOffset = typeListOffset + ((type[6] << 8) | type[7]);
+        for (uint32_t r = 0; r < count; r++) {
+            if (refOffset + (r + 1) * 12 > mapLength)
+                break;
+            const unsigned char *ref = map + refOffset + r * 12;
+            int16_t resourceID = (int16_t)((ref[0] << 8) | ref[1]);
+            uint32_t offset = ((uint32_t)ref[5] << 16) | ((uint32_t)ref[6] << 8) | ref[7];
+            if ((uint64_t)offset + 4 > dataLength)
+                continue;
+            uint32_t size = ReadBE32(b + dataOffset + offset);
+            if ((uint64_t)offset + 4 + size > dataLength)
+                continue;
+            found = [NSData dataWithBytes: b + dataOffset + offset + 4 length: size];
+            if (resourceID == kCustomIconResourceID)
+                return found;
+        }
+    }
+    return found;
+}
+
+static NSImage *CustomIconForPath(NSString *path, BOOL isDirectory) {
+    if ((FinderFlags(CopyXattr(path, kFinderInfoName)) & kHasCustomIconFlag) == 0)
+        return nil;
+    NSData *fork = CopyXattr(isDirectory ? CustomIconFilePath(path) : path, kResourceForkName);
+    NSData *icns = fork != nil ? IcnsFromResourceFork(fork) : nil;
+    if (icns == nil)
+        return nil;
+    NSImage *icon = ImageFromIcnsData(icns);
+    return icon;
+}
+
+// The PNG elements of an icns file for the image, smallest first. Each element is scaled to fit its
+// pixel size.
+static NSArray *IcnsElementsForImage(NSImage *image) {
+    static const struct { const char *type; NSInteger pixels; } elements[] = {
+        { "ic11", 32 }, { "ic12", 64 }, { "ic07", 128 }, { "ic08", 256 }, { "ic09", 512 },
+    };
+    NSMutableArray *result = [NSMutableArray array];
+
+    for (size_t i = 0; i < sizeof(elements) / sizeof(elements[0]); i++) {
+        NSInteger pixels = elements[i].pixels;
+        NSBitmapImageRep *rep = [[[NSBitmapImageRep alloc]
+                initWithBitmapDataPlanes: NULL pixelsWide: pixels pixelsHigh: pixels bitsPerSample: 8
+                         samplesPerPixel: 4 hasAlpha: YES isPlanar: NO colorSpaceName: NSDeviceRGBColorSpace
+                             bytesPerRow: 0 bitsPerPixel: 32] autorelease];
+        NSGraphicsContext *context = rep != nil ? [NSGraphicsContext graphicsContextWithBitmapImageRep: rep] : nil;
+        if (context == nil)
+            return nil;
+
+        NSSize size = [image size];
+        CGFloat scale = MIN((CGFloat)pixels / size.width, (CGFloat)pixels / size.height);
+        NSRect target = NSMakeRect(((CGFloat)pixels - size.width * scale) / 2.0, ((CGFloat)pixels - size.height * scale) / 2.0,
+                size.width * scale, size.height * scale);
+
+        [NSGraphicsContext saveGraphicsState];
+        [NSGraphicsContext setCurrentContext: context];
+        [image drawInRect: target fromRect: NSZeroRect operation: NSCompositingOperationSourceOver fraction: 1.0];
+        [context flushGraphics];
+        [NSGraphicsContext restoreGraphicsState];
+
+        NSData *png = [rep representationUsingType: NSPNGFileType properties: @{}];
+        if ([png length] == 0)
+            return nil;
+        NSMutableData *element = [NSMutableData dataWithCapacity: [png length] + 8];
+        unsigned char header[8];
+        memcpy(header, elements[i].type, 4);
+        WriteBE32(header + 4, (uint32_t)([png length] + 8));
+        [element appendBytes: header length: 8];
+        [element appendData: png];
+        [result addObject: element];
+    }
+    return result;
+}
+
+static NSData *IcnsDataFromElements(NSArray *elements, NSUInteger count) {
+    NSMutableData *icns = [NSMutableData data];
+    unsigned char header[8] = { 'i', 'c', 'n', 's' };
+    NSUInteger total = 8;
+
+    for (NSUInteger i = 0; i < count; i++)
+        total += [[elements objectAtIndex: i] length];
+    WriteBE32(header + 4, (uint32_t)total);
+    [icns appendBytes: header length: 8];
+    for (NSUInteger i = 0; i < count; i++)
+        [icns appendData: [elements objectAtIndex: i]];
+    return icns;
+}
+
+// Stores the icns data as the resource fork of path. The filesystem limits the size of an extended
+// attribute, so when the fork does not fit, the largest elements are left out until it does.
+static BOOL SetIcnsResourceFork(NSString *path, NSArray *elements) {
+    for (NSUInteger count = [elements count]; count > 0; count--) {
+        if (SetXattr(path, kResourceForkName, ResourceForkForIcns(IcnsDataFromElements(elements, count))))
+            return YES;
+        if (errno != ENOSPC && errno != E2BIG && errno != ERANGE)
+            return NO;
+    }
+    return NO;
+}
+
 @implementation NSWorkspace (macos)
 
 + allocWithZone: (NSZone *) zone {
@@ -105,8 +334,15 @@ static NSImage *ImageFromIcnsFile(NSString *file) {
         return cached;
 
     BOOL isDirectory = NO;
-    if (![[NSFileManager defaultManager] fileExistsAtPath: path isDirectory: &isDirectory] ||
-        !isDirectory)
+    if (![[NSFileManager defaultManager] fileExistsAtPath: path isDirectory: &isDirectory])
+        return nil;
+
+    NSImage *custom = CustomIconForPath(path, isDirectory);
+    if (custom != nil) {
+        [WorkspaceIconCache() setObject: custom forKey: path];
+        return custom;
+    }
+    if (!isDirectory)
         return nil;
 
     NSDictionary *info = [NSDictionary dictionaryWithContentsOfFile:
@@ -550,13 +786,53 @@ static LSLaunchFlags launchFlagsForConfiguration(
          forFile: (NSString *) fullPath
          options: (NSWorkspaceIconCreationOptions) options
 {
-    // For directories, we would call the NSFileManager to create a file named
-    // "Icon\r" with icon data. For files, we would call
-    // FSCreateResFile/FSOpenResFile, FSSetCatalogInfo and other historical
-    // functions. But none of these would have effect when viewed from Linux
-    // desktop environments...
-    NSUnimplementedMethod();
-    return NO;
+    // The icon is written as PNG elements only, so neither the 10.4 nor the QuickDraw elements
+    // are ever included and the options need no handling.
+    if (fullPath == nil || [fullPath length] == 0)
+        return NO;
+
+    BOOL isDirectory = NO;
+    if (![[NSFileManager defaultManager] fileExistsAtPath: fullPath isDirectory: &isDirectory])
+        return NO;
+
+    [WorkspaceIconCache() removeObjectForKey: fullPath];
+    NSData *finderInfo = CopyXattr(fullPath, kFinderInfoName);
+    NSString *forkPath = isDirectory ? CustomIconFilePath(fullPath) : fullPath;
+
+    if (image == nil) {
+        if ((FinderFlags(finderInfo) & kHasCustomIconFlag) == 0)
+            return YES;
+        // The fork of a file may hold other resources, so only a fork that is exactly the icon is removed.
+        NSData *fork = CopyXattr(forkPath, kResourceForkName);
+        NSData *icns = fork != nil ? IcnsFromResourceFork(fork) : nil;
+        if (isDirectory) {
+            if (unlink([forkPath fileSystemRepresentation]) != 0 && errno != ENOENT)
+                return NO;
+        } else if (icns != nil && [fork isEqualToData: ResourceForkForIcns(icns)] && !RemoveXattr(fullPath, kResourceForkName))
+            return NO;
+
+        NSData *remaining = FinderInfoWithFlags(finderInfo, 0, kHasCustomIconFlag);
+        return remaining != nil ? SetXattr(fullPath, kFinderInfoName, remaining) : RemoveXattr(fullPath, kFinderInfoName);
+    }
+
+    NSSize size = [image size];
+    NSArray *elements = (size.width > 0.0 && size.height > 0.0) ? IcnsElementsForImage(image) : nil;
+    if ([elements count] == 0)
+        return NO;
+
+    if (isDirectory) {
+        // The file is invisible both through its Finder flags and the hidden file flag.
+        int fd = open([forkPath fileSystemRepresentation], O_WRONLY | O_CREAT, 0644);
+        if (fd < 0)
+            return NO;
+        close(fd);
+        chflags([forkPath fileSystemRepresentation], UF_HIDDEN);
+        if (!SetXattr(forkPath, kFinderInfoName, FinderInfoWithFlags(nil, kIsInvisibleFlag, 0)))
+            return NO;
+    }
+    if (!SetIcnsResourceFork(forkPath, elements))
+        return NO;
+    return SetXattr(fullPath, kFinderInfoName, FinderInfoWithFlags(finderInfo, kHasCustomIconFlag, 0));
 }
 
 - (void) activateFileViewerSelectingURLs: (NSArray<NSURL *> *) fileURLs {
