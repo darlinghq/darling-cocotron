@@ -23,13 +23,6 @@
 
 @implementation NSCollectionViewCompositionalLayoutConfiguration
 
-// The documentation declares the boundary items as a non-optional array: empty to start with.
-- (instancetype) init {
-    if ((self = [super init]) != nil)
-        _boundarySupplementaryItems = [@[] retain];
-    return self;
-}
-
 - (NSCollectionViewScrollDirection) scrollDirection {
     return _scrollDirection;
 }
@@ -50,9 +43,11 @@
     return _boundarySupplementaryItems;
 }
 
-// GUESS, not in the public documentation: setting nil on this non-optional array is treated as the empty array.
+// QUIRK: setting nil does not raise and leaves the property nil, which is also its value on a new configuration. Not
+// documented. Evidence: black-box observation on macOS 26.7.3 and 27.0.1 (tier 2).
+// Test: tests/appkit-collection-view-compositional-layout.m ("quirk: nil boundary items ...").
 - (void) setBoundarySupplementaryItems: (NSArray<NSCollectionLayoutBoundarySupplementaryItem *> *) items {
-    items = [(items ? items : @[]) copy];
+    items = [items copy];
     [_boundarySupplementaryItems release];
     _boundarySupplementaryItems = items;
 }

@@ -218,8 +218,10 @@ enum {
     return self;
 }
 
-// GUESS: with no offset the anchor sits on its edges (offset zero) and the zero offset is an absolute one; which
-// kind it reports is not in the public documentation.
+// QUIRK: an anchor made without an offset has a zero offset and reports it as an absolute offset (isAbsoluteOffset is
+// YES, isFractionalOffset NO), whatever the edges. Not documented. Evidence: black-box observation on macOS 26.7.3
+// and 27.0.1 (tier 2), vd-upstream/mac-probes/collectionlayout.
+// Test: tests/appkit-collection-layout-spacing-anchor.m ("quirk: an anchor without an offset ...").
 + (instancetype) layoutAnchorWithEdges: (NSDirectionalRectEdge) edges {
     return [[[self alloc] _initWithEdges: edges
                                   offset: NSZeroPoint
@@ -264,12 +266,13 @@ enum {
 
 @interface NSCollectionLayoutItem ()
 - (void) _setSupplementaryItems: (NSArray *) supplementaryItems;
+- (void) _setLayoutSize: (NSCollectionLayoutSize *) layoutSize;
 @end
 
 @implementation NSCollectionLayoutItem
 
 + (instancetype) itemWithLayoutSize: (NSCollectionLayoutSize *) layoutSize {
-    return [self itemWithLayoutSize: layoutSize supplementaryItems: nil];
+    return [self itemWithLayoutSize: layoutSize supplementaryItems: @[]];
 }
 
 + (instancetype) itemWithLayoutSize: (NSCollectionLayoutSize *) layoutSize
@@ -279,9 +282,15 @@ enum {
     NSCollectionLayoutItem *item = [[[self alloc] init] autorelease];
 
     item->_layoutSize = [layoutSize retain];
-    // GUESS, not in the public documentation: passing nil for this non-optional array is treated as the empty array.
-    item->_supplementaryItems =
-            [(supplementaryItems ? supplementaryItems : @[]) copy];
+    // QUIRK: passing nil for the supplementary items does not raise and leaves the property nil (an item made without
+    // them has an empty array). Not documented. Evidence: black-box observation on macOS 26.7.3 and 27.0.1 (tier 2).
+    // Test: tests/appkit-collection-layout-items.m ("quirk: nil supplementary items ...").
+    item->_supplementaryItems = [supplementaryItems copy];
+    // QUIRK: a new item, supplementary item or group has an edge spacing, with a fixed spacing of zero on every edge,
+    // not nil (a decoration item has none). Not documented. Evidence: black-box observation on macOS 26.7.3 (tier 2).
+    // Test: tests/appkit-collection-layout-items.m ("quirk: edge spacing starts ...").
+    NSCollectionLayoutSpacing *none = [NSCollectionLayoutSpacing fixedSpacing: 0];
+    item->_edgeSpacing = [[NSCollectionLayoutEdgeSpacing spacingForLeading: none top: none trailing: none bottom: none] retain];
     return item;
 }
 
@@ -314,10 +323,18 @@ enum {
     return _layoutSize;
 }
 
+- (void) _setLayoutSize: (NSCollectionLayoutSize *) layoutSize {
+    layoutSize = [layoutSize retain];
+    [_layoutSize release];
+    _layoutSize = layoutSize;
+}
+
 // Readonly on an item; the group, which declares it settable, goes through this.
-// GUESS, not in the public documentation: setting nil on this non-optional array is treated as the empty array.
+// QUIRK: setting nil does not raise and leaves the property nil. Not documented. Evidence: black-box observation on
+// macOS 26.7.3 and 27.0.1 (tier 2). Test: tests/appkit-collection-layout-group-section.m ("quirk: nil supplementary
+// items ...").
 - (void) _setSupplementaryItems: (NSArray *) supplementaryItems {
-    supplementaryItems = [(supplementaryItems ? supplementaryItems : @[]) copy];
+    supplementaryItems = [supplementaryItems copy];
     [_supplementaryItems release];
     _supplementaryItems = supplementaryItems;
 }
@@ -360,6 +377,10 @@ enum {
     item->_elementKind = [elementKind copy];
     item->_containerAnchor = [containerAnchor retain];
     item->_itemAnchor = [itemAnchor retain];
+    // QUIRK: a supplementary item (a boundary one too) starts with a z index of 1, not 0. Not documented. Evidence:
+    // black-box observation on macOS 26.7.3 and 27.0.1 (tier 2).
+    // Test: tests/appkit-collection-layout-items.m and appkit-collection-layout-boundary-decoration.m.
+    item->_zIndex = 1;
     return item;
 }
 
@@ -402,31 +423,6 @@ enum {
 
 @end
 
-// The edges of the container a boundary supplementary item with this alignment is anchored to.
-static NSDirectionalRectEdge EdgesForAlignment(NSRectAlignment alignment) {
-    switch (alignment) {
-    case NSRectAlignmentTop:
-        return NSDirectionalRectEdgeTop;
-    case NSRectAlignmentTopLeading:
-        return NSDirectionalRectEdgeTop | NSDirectionalRectEdgeLeading;
-    case NSRectAlignmentLeading:
-        return NSDirectionalRectEdgeLeading;
-    case NSRectAlignmentBottomLeading:
-        return NSDirectionalRectEdgeBottom | NSDirectionalRectEdgeLeading;
-    case NSRectAlignmentBottom:
-        return NSDirectionalRectEdgeBottom;
-    case NSRectAlignmentBottomTrailing:
-        return NSDirectionalRectEdgeBottom | NSDirectionalRectEdgeTrailing;
-    case NSRectAlignmentTrailing:
-        return NSDirectionalRectEdgeTrailing;
-    case NSRectAlignmentTopTrailing:
-        return NSDirectionalRectEdgeTop | NSDirectionalRectEdgeTrailing;
-    case NSRectAlignmentNone:
-        break;
-    }
-    return NSDirectionalRectEdgeNone;
-}
-
 @implementation NSCollectionLayoutBoundarySupplementaryItem
 
 + (instancetype) boundarySupplementaryItemWithLayoutSize: (NSCollectionLayoutSize *) layoutSize
@@ -438,9 +434,10 @@ static NSDirectionalRectEdge EdgesForAlignment(NSRectAlignment alignment) {
                                           absoluteOffset: NSZeroPoint];
 }
 
-// GUESS, none of it in the public documentation: the container anchor is the alignment's edges (no item anchor),
-// and a boundary item extends the boundary by default (the same property of UIKit's twin class defaults to true) and
-// is not pinned.
+// QUIRK: a boundary item has no container anchor and no item anchor whatever its alignment (its alignment and offset
+// say where it goes), extends the boundary and is not pinned to the visible bounds. Only the last two are documented
+// by the header's property names alone. Evidence: black-box observation on macOS 26.7.3 and 27.0.1 (tier 2), all nine
+// alignments. Test: tests/appkit-collection-layout-boundary-decoration.m.
 + (instancetype) boundarySupplementaryItemWithLayoutSize: (NSCollectionLayoutSize *) layoutSize
                                              elementKind: (NSString *) elementKind
                                                alignment: (NSRectAlignment) alignment
@@ -448,9 +445,7 @@ static NSDirectionalRectEdge EdgesForAlignment(NSRectAlignment alignment) {
     NSCollectionLayoutBoundarySupplementaryItem *item = [self
             supplementaryItemWithLayoutSize: layoutSize
                                 elementKind: elementKind
-                            containerAnchor: [NSCollectionLayoutAnchor
-                                                     layoutAnchorWithEdges: EdgesForAlignment(alignment)
-                                                            absoluteOffset: absoluteOffset]];
+                            containerAnchor: nil];
 
     item->_alignment = alignment;
     item->_offset = absoluteOffset;
@@ -497,7 +492,9 @@ static NSDirectionalRectEdge EdgesForAlignment(NSRectAlignment alignment) {
 
 @implementation NSCollectionLayoutDecorationItem
 
-// GUESS: a background decoration fills its section, so its size is the whole container (not in the public documentation).
+// QUIRK: a background decoration item has a layout size of the full width and full height of its container (both
+// fractional, 1.0), a z index of 0, no content insets and no edge spacing. Not documented. Evidence: black-box
+// observation on macOS 26.7.3 and 27.0.1 (tier 2). Test: tests/appkit-collection-layout-boundary-decoration.m.
 + (instancetype) backgroundDecorationItemWithElementKind: (NSString *) elementKind {
     NSCollectionLayoutDecorationItem *item = [self
             itemWithLayoutSize: [NSCollectionLayoutSize
@@ -505,6 +502,7 @@ static NSDirectionalRectEdge EdgesForAlignment(NSRectAlignment alignment) {
                                                heightDimension: [NSCollectionLayoutDimension fractionalHeightDimension: 1.0]]];
 
     item->_elementKind = [elementKind copy];
+    [item setEdgeSpacing: nil];
     return item;
 }
 
@@ -543,10 +541,18 @@ static NSDirectionalRectEdge EdgesForAlignment(NSRectAlignment alignment) {
 + (instancetype) _groupWithLayoutSize: (NSCollectionLayoutSize *) layoutSize
                              subitems: (NSArray *) subitems
                              vertical: (BOOL) vertical {
+    // A group needs at least one subitem; nil and an empty array both raise (observed on macOS 26.7.3 and 27.0.1;
+    // tests/appkit-collection-layout-group-section.m).
+    if ([subitems count] == 0)
+        [NSException raise: NSInternalInconsistencyException format: @"At least 1 subitem is required for a group"];
+
     NSCollectionLayoutGroup *group = [self itemWithLayoutSize: layoutSize];
 
     group->_subitems = [subitems copy];
     group->_vertical = vertical;
+    // QUIRK: a new group has a fixed inter item spacing of zero, not nil. Not documented. Evidence: black-box
+    // observation on macOS 26.7.3 (tier 2). Test: tests/appkit-collection-layout-group-section.m.
+    group->_interItemSpacing = [[NSCollectionLayoutSpacing fixedSpacing: 0] retain];
     return group;
 }
 
@@ -559,19 +565,41 @@ static NSDirectionalRectEdge EdgesForAlignment(NSRectAlignment alignment) {
     return nil;
 }
 
-+ (NSArray *) _repeatedItem: (NSCollectionLayoutItem *) item count: (NSInteger) count {
-    NSMutableArray *items = [NSMutableArray array];
+// QUIRK: a repeating group (a subitem and a count) holds one copy of the subitem, not count of them, and the copy's
+// size along the group's direction (the width of a horizontal group, the height of a vertical one) becomes the
+// fractional dimension 1 / count; the other dimension is kept. A count below 1 raises NSInternalInconsistencyException
+// and a nil subitem NSInvalidArgumentException. Not documented. Evidence: black-box observation on macOS 26.7.3 (tier
+// 2). Test: tests/appkit-collection-layout-group-section.m ("quirk: a repeating group ...").
++ (instancetype) _groupWithLayoutSize: (NSCollectionLayoutSize *) layoutSize
+                              subitem: (NSCollectionLayoutItem *) subitem
+                                count: (NSInteger) count
+                             vertical: (BOOL) vertical {
+    if (count < 1)
+        [NSException raise: NSInternalInconsistencyException
+                    format: @"A repeating %@ group should specify a count >= 1", vertical ? @"vertical" : @"horizontal"];
+    if (subitem == nil)
+        [NSException raise: NSInvalidArgumentException format: @"attempt to insert nil subitem"];
 
-    for (NSInteger i = 0; i < count; i++)
-        [items addObject: item];
-    return items;
+    NSCollectionLayoutItem *repeated = [[subitem copy] autorelease];
+    NSCollectionLayoutDimension *share = vertical ? [NSCollectionLayoutDimension fractionalHeightDimension: 1.0 / count]
+                                                  : [NSCollectionLayoutDimension fractionalWidthDimension: 1.0 / count];
+    NSCollectionLayoutSize *size = [repeated layoutSize];
+
+    [repeated _setLayoutSize: vertical ? [NSCollectionLayoutSize sizeWithWidthDimension: [size widthDimension]
+                                                                         heightDimension: share]
+                                       : [NSCollectionLayoutSize sizeWithWidthDimension: share
+                                                                         heightDimension: [size heightDimension]]];
+
+    NSCollectionLayoutGroup *group = [self _groupWithLayoutSize: layoutSize subitems: @[repeated] vertical: vertical];
+
+    group->_count = count;
+    return group;
 }
 
 + (instancetype) horizontalGroupWithLayoutSize: (NSCollectionLayoutSize *) layoutSize
                                        subitem: (NSCollectionLayoutItem *) subitem
                                          count: (NSInteger) count {
-    return [self horizontalGroupWithLayoutSize: layoutSize
-                                      subitems: [self _repeatedItem: subitem count: count]];
+    return [self _groupWithLayoutSize: layoutSize subitem: subitem count: count vertical: NO];
 }
 
 + (instancetype) horizontalGroupWithLayoutSize: (NSCollectionLayoutSize *) layoutSize
@@ -582,8 +610,7 @@ static NSDirectionalRectEdge EdgesForAlignment(NSRectAlignment alignment) {
 + (instancetype) verticalGroupWithLayoutSize: (NSCollectionLayoutSize *) layoutSize
                                      subitem: (NSCollectionLayoutItem *) subitem
                                        count: (NSInteger) count {
-    return [self verticalGroupWithLayoutSize: layoutSize
-                                    subitems: [self _repeatedItem: subitem count: count]];
+    return [self _groupWithLayoutSize: layoutSize subitem: subitem count: count vertical: YES];
 }
 
 + (instancetype) verticalGroupWithLayoutSize: (NSCollectionLayoutSize *) layoutSize
@@ -601,6 +628,8 @@ static NSDirectionalRectEdge EdgesForAlignment(NSRectAlignment alignment) {
     [self _setSupplementaryItems: supplementaryItems];
 }
 
+// A debugging aid: macOS answers a text drawing of the group's frame, whose exact shape nothing should depend on.
+// This answers a one-line summary of the group instead.
 - (NSString *) visualDescription {
     return [NSString stringWithFormat: @"<%@: %@ group, %lu subitems, %lu supplementary items>", [self class],
                                        _vertical ? @"vertical" : @"horizontal", (unsigned long) [_subitems count],
@@ -626,6 +655,7 @@ static NSDirectionalRectEdge EdgesForAlignment(NSRectAlignment alignment) {
 
     copy->_subitems = [_subitems copy];
     copy->_vertical = _vertical;
+    copy->_count = _count;
     copy->_interItemSpacing = [_interItemSpacing copy];
     return copy;
 }
@@ -635,11 +665,16 @@ static NSDirectionalRectEdge EdgesForAlignment(NSRectAlignment alignment) {
 @implementation NSCollectionLayoutSection
 
 + (instancetype) sectionWithGroup: (NSCollectionLayoutGroup *) group {
+    // A nil group raises (observed on macOS 26.7.3 and 27.0.1; tests/appkit-collection-layout-group-section.m).
+    if (group == nil)
+        [NSException raise: NSInternalInconsistencyException format: @"Invalid parameter not satisfying: group"];
+
     NSCollectionLayoutSection *section = [[[self alloc] init] autorelease];
 
     section->_group = [group retain];
     section->_boundarySupplementaryItems = [@[] retain];
     section->_decorationItems = [@[] retain];
+    // The default is YES (observed on macOS 26.7.3 and 27.0.1; tests/appkit-collection-layout-group-section.m).
     section->_supplementariesFollowContentInsets = YES;
     return section;
 }
@@ -672,9 +707,10 @@ static NSDirectionalRectEdge EdgesForAlignment(NSRectAlignment alignment) {
     return _boundarySupplementaryItems;
 }
 
-// GUESS, not in the public documentation: setting nil on this non-optional array is treated as the empty array.
+// QUIRK: setting nil does not raise and leaves the property nil. Not documented. Evidence: black-box observation on
+// macOS 26.7.3 and 27.0.1 (tier 2). Test: tests/appkit-collection-layout-group-section.m ("quirk: nil on a section").
 - (void) setBoundarySupplementaryItems: (NSArray<NSCollectionLayoutBoundarySupplementaryItem *> *) items {
-    items = [(items ? items : @[]) copy];
+    items = [items copy];
     [_boundarySupplementaryItems release];
     _boundarySupplementaryItems = items;
 }
@@ -691,7 +727,9 @@ static NSDirectionalRectEdge EdgesForAlignment(NSRectAlignment alignment) {
     return _decorationItems;
 }
 
-// GUESS, not in the public documentation: setting nil on this non-optional array is treated as the empty array.
+// QUIRK: setting nil does not raise and leaves an empty array (unlike the boundary items, which become nil). Not
+// documented. Evidence: black-box observation on macOS 26.7.3 and 27.0.1 (tier 2).
+// Test: tests/appkit-collection-layout-group-section.m ("quirk: nil on a section").
 - (void) setDecorationItems: (NSArray<NSCollectionLayoutDecorationItem *> *) items {
     items = [(items ? items : @[]) copy];
     [_decorationItems release];

@@ -31,7 +31,6 @@
 
 @class NSCollectionLayoutSupplementaryItem;
 // Edge specification interpreted according to the user interface layout direction.
-// The case order is the documented one; the values are a GUESS (the documentation gives no raw values).
 typedef NS_OPTIONS(NSUInteger, NSDirectionalRectEdge) {
     NSDirectionalRectEdgeNone = 0,
     NSDirectionalRectEdgeTop = 1 << 0,
@@ -42,7 +41,6 @@ typedef NS_OPTIONS(NSUInteger, NSDirectionalRectEdge) {
                                NSDirectionalRectEdgeBottom | NSDirectionalRectEdgeTrailing
 };
 // Alignment specification interpreted according to the user interface layout direction.
-// The case order is the documented one; the values are a GUESS (the documentation gives no raw values).
 typedef NS_ENUM(NSInteger, NSRectAlignment) {
     NSRectAlignmentNone = 0,
     NSRectAlignmentTop,
@@ -241,6 +239,7 @@ typedef NSArray<NSCollectionLayoutGroupCustomItem *> * (^NSCollectionLayoutGroup
 @interface NSCollectionLayoutGroup : NSCollectionLayoutItem {
 @private
     NSArray *_subitems;
+    NSInteger _count;
     BOOL _vertical;
     NSCollectionLayoutSpacing *_interItemSpacing;
 }
@@ -265,13 +264,12 @@ typedef NSArray<NSCollectionLayoutGroupCustomItem *> * (^NSCollectionLayoutGroup
 // Settable on a group (readonly on an item).
 @property(copy) NSArray<NSCollectionLayoutSupplementaryItem *> *supplementaryItems;
 
-// A description of the group for debugging its layout. GUESS: the documentation gives no format.
+// A description of the group for debugging its layout; do not parse it.
 - (NSString *) visualDescription;
 
 @end
 
-// How a section scrolls across the main axis of its layout. The case order is the documented one; the values are a
-// GUESS (the documentation gives no raw values).
+// How a section scrolls across the main axis of its layout.
 typedef NS_ENUM(NSInteger, NSCollectionLayoutSectionOrthogonalScrollingBehavior) {
     NSCollectionLayoutSectionOrthogonalScrollingBehaviorNone = 0,
     NSCollectionLayoutSectionOrthogonalScrollingBehaviorContinuous,
@@ -318,7 +316,6 @@ typedef void (^NSCollectionLayoutSectionVisibleItemsInvalidationHandler)(
 @property NSDirectionalEdgeInsets contentInsets;
 @property CGFloat interGroupSpacing;
 @property(copy) NSArray<NSCollectionLayoutBoundarySupplementaryItem *> *boundarySupplementaryItems;
-// GUESS: YES by default; the documentation does not give the default.
 @property BOOL supplementariesFollowContentInsets;
 @property(copy) NSArray<NSCollectionLayoutDecorationItem *> *decorationItems;
 @property NSCollectionLayoutSectionOrthogonalScrollingBehavior orthogonalScrollingBehavior;
