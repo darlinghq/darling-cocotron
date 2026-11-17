@@ -232,7 +232,7 @@ typedef NS_ENUM(NSInteger, NSRectAlignment) {
 @protocol NSCollectionLayoutEnvironment;
 @class NSCollectionLayoutGroupCustomItem;
 
-// Supplies the arrangement of a custom group. Custom groups are not implemented (see +customGroupWithLayoutSize:itemProvider:).
+// Supplies the arrangement of a custom group. A custom group only stores it: there is no layout engine to call it.
 typedef NSArray<NSCollectionLayoutGroupCustomItem *> * (^NSCollectionLayoutGroupCustomItemProvider)(
         id<NSCollectionLayoutEnvironment> layoutEnvironment);
 
@@ -242,6 +242,7 @@ typedef NSArray<NSCollectionLayoutGroupCustomItem *> * (^NSCollectionLayoutGroup
     NSInteger _count;
     BOOL _vertical;
     NSCollectionLayoutSpacing *_interItemSpacing;
+    NSCollectionLayoutGroupCustomItemProvider _itemProvider;
 }
 
 + (instancetype) horizontalGroupWithLayoutSize: (NSCollectionLayoutSize *) layoutSize
@@ -255,7 +256,8 @@ typedef NSArray<NSCollectionLayoutGroupCustomItem *> * (^NSCollectionLayoutGroup
 + (instancetype) verticalGroupWithLayoutSize: (NSCollectionLayoutSize *) layoutSize
                                     subitems: (NSArray<NSCollectionLayoutItem *> *) subitems;
 
-// Raises: no layout engine exists to call the provider, and NSCollectionLayoutGroupCustomItem is not defined either.
+// The group has no subitems and the provider is kept, not called: there is no layout engine here.
+// Raises NSInternalInconsistencyException for a nil layout size or a nil provider.
 + (instancetype) customGroupWithLayoutSize: (NSCollectionLayoutSize *) layoutSize
                               itemProvider: (NSCollectionLayoutGroupCustomItemProvider) itemProvider;
 
@@ -266,6 +268,24 @@ typedef NSArray<NSCollectionLayoutGroupCustomItem *> * (^NSCollectionLayoutGroup
 
 // A description of the group for debugging its layout; do not parse it.
 - (NSString *) visualDescription;
+
+@end
+
+// One item placed by the provider of a custom group. Immutable; two items are equal only if they are the same object.
+@interface NSCollectionLayoutGroupCustomItem : NSObject <NSCopying> {
+@private
+    NSRect _frame;
+    NSInteger _zIndex;
+}
+
++ (instancetype) customItemWithFrame: (NSRect) frame;
+// The zIndex is 0 for the first form.
++ (instancetype) customItemWithFrame: (NSRect) frame zIndex: (NSInteger) zIndex;
+
+@property(readonly) NSRect frame;
+@property(readonly) NSInteger zIndex;
+
+- (instancetype) init NS_UNAVAILABLE;
 
 @end
 

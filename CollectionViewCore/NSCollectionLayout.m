@@ -540,10 +540,11 @@ enum {
 
 + (instancetype) _groupWithLayoutSize: (NSCollectionLayoutSize *) layoutSize
                              subitems: (NSArray *) subitems
-                             vertical: (BOOL) vertical {
+                             vertical: (BOOL) vertical
+                              checked: (BOOL) checked {
     // A group needs at least one subitem; nil and an empty array both raise (observed on macOS 26.7.3 and 27.0.1;
     // tests/appkit-collection-layout-group-section.m).
-    if ([subitems count] == 0)
+    if (checked && [subitems count] == 0)
         [NSException raise: NSInternalInconsistencyException format: @"At least 1 subitem is required for a group"];
 
     NSCollectionLayoutGroup *group = [self itemWithLayoutSize: layoutSize];
@@ -556,13 +557,21 @@ enum {
     return group;
 }
 
-// No layout engine exists to call the provider, and NSCollectionLayoutGroupCustomItem is not defined, so a custom group
-// could only be a silent stub: fail loud instead.
+// QUIRK: a custom group has no subitems (an empty array, not nil), keeps the provider without calling it at creation
+// (it is called only while laying out), and has a zero fixed inter item spacing like any group. A nil layout size raises NSInternalInconsistencyException (checked first), and so does a nil provider.
+// Not documented. Evidence: black-box observation on macOS 26.7.3 and 27.0.1 arm64 (tier 2). Test:
+// tests/appkit-collection-layout-group-section.m ("quirk: a custom group ...").
 + (instancetype) customGroupWithLayoutSize: (NSCollectionLayoutSize *) layoutSize
                               itemProvider: (NSCollectionLayoutGroupCustomItemProvider) itemProvider {
-    [NSException raise: NSGenericException
-                format: @"+[NSCollectionLayoutGroup customGroupWithLayoutSize:itemProvider:] is not implemented"];
-    return nil;
+    if (layoutSize == nil)
+        [NSException raise: NSInternalInconsistencyException format: @"A size is required."];
+    if (itemProvider == nil)
+        [NSException raise: NSInternalInconsistencyException format: @"At least 1 subitem is required for a group"];
+
+    NSCollectionLayoutGroup *group = [self _groupWithLayoutSize: layoutSize subitems: @[] vertical: NO checked: NO];
+
+    group->_itemProvider = [itemProvider copy];
+    return group;
 }
 
 // QUIRK: a repeating group (a subitem and a count) holds one copy of the subitem, not count of them, and the copy's
@@ -590,7 +599,7 @@ enum {
                                        : [NSCollectionLayoutSize sizeWithWidthDimension: share
                                                                          heightDimension: [size heightDimension]]];
 
-    NSCollectionLayoutGroup *group = [self _groupWithLayoutSize: layoutSize subitems: @[repeated] vertical: vertical];
+    NSCollectionLayoutGroup *group = [self _groupWithLayoutSize: layoutSize subitems: @[repeated] vertical: vertical checked: YES];
 
     group->_count = count;
     return group;
@@ -604,7 +613,7 @@ enum {
 
 + (instancetype) horizontalGroupWithLayoutSize: (NSCollectionLayoutSize *) layoutSize
                                       subitems: (NSArray *) subitems {
-    return [self _groupWithLayoutSize: layoutSize subitems: subitems vertical: NO];
+    return [self _groupWithLayoutSize: layoutSize subitems: subitems vertical: NO checked: YES];
 }
 
 + (instancetype) verticalGroupWithLayoutSize: (NSCollectionLayoutSize *) layoutSize
@@ -615,12 +624,13 @@ enum {
 
 + (instancetype) verticalGroupWithLayoutSize: (NSCollectionLayoutSize *) layoutSize
                                     subitems: (NSArray *) subitems {
-    return [self _groupWithLayoutSize: layoutSize subitems: subitems vertical: YES];
+    return [self _groupWithLayoutSize: layoutSize subitems: subitems vertical: YES checked: YES];
 }
 
 - (void) dealloc {
     [_subitems release];
     [_interItemSpacing release];
+    [_itemProvider release];
     [super dealloc];
 }
 
@@ -657,6 +667,43 @@ enum {
     copy->_vertical = _vertical;
     copy->_count = _count;
     copy->_interItemSpacing = [_interItemSpacing copy];
+    copy->_itemProvider = [_itemProvider copy];
+    return copy;
+}
+
+@end
+
+@implementation NSCollectionLayoutGroupCustomItem
+
++ (instancetype) customItemWithFrame: (NSRect) frame {
+    return [self customItemWithFrame: frame zIndex: 0];
+}
+
++ (instancetype) customItemWithFrame: (NSRect) frame zIndex: (NSInteger) zIndex {
+    NSCollectionLayoutGroupCustomItem *item = [[[self alloc] init] autorelease];
+
+    item->_frame = frame;
+    item->_zIndex = zIndex;
+    return item;
+}
+
+- (NSRect) frame {
+    return _frame;
+}
+
+- (NSInteger) zIndex {
+    return _zIndex;
+}
+
+// QUIRK: a copy of a custom item is a new object that keeps the frame and zIndex but is not equal to the original,
+// and two items made alike are not equal either: no -isEqual: or -hash is defined, so equality is identity. Not
+// documented. Evidence: black-box observation on macOS 26.7.3 and 27.0.1 arm64 (tier 2). Test:
+// tests/appkit-collection-layout-group-section.m ("quirk: a custom item ...").
+- (id) copyWithZone: (NSZone *) zone {
+    NSCollectionLayoutGroupCustomItem *copy = [[[self class] allocWithZone: zone] init];
+
+    copy->_frame = _frame;
+    copy->_zIndex = _zIndex;
     return copy;
 }
 
