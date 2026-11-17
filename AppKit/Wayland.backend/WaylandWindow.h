@@ -76,7 +76,7 @@ struct WaylandBuffer {
     uint32_t _preferredScale120, _renderScale120;
     struct wl_proxy *_fractionalScale, *_viewport;
     BOOL _scaleUpdatePending, _subwindowRedrawPending, _subwindowRedrawNeeded;
-    BOOL _clientDecorated, _pendingClientDecorated;
+    BOOL _clientDecorated, _pendingClientDecorated, _decorationForcedClient;
     BOOL _maximized, _pendingMaximized;
     // Whether the current xdg_toplevel was asked for fullscreen, what the last
     // configure said, and the size to go back to.
