@@ -12,6 +12,8 @@ CA_EXPORT NSString *const kCARendererColorSpace;
     CGRect _bounds;
     CALayer *_rootLayer;
     BOOL _clearsToTransparent;
+    CGImageRef _backdropImage;
+    unsigned int _backdropTexture;
 }
 
 @property(assign) CGRect bounds;

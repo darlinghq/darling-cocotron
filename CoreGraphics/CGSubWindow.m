@@ -1,6 +1,8 @@
 #import <CoreGraphics/CGSubWindow.h>
 #import <Onyx2D/O2Exceptions.h>
 
+NSString *const CGSubWindowBackdropDidChangeNotification = @"CGSubWindowBackdropDidChange";
+
 @implementation CGSubWindow
 
 - (void *) nativeWindow {
@@ -19,6 +21,7 @@
     return NULL;
 }
 
+- (CGImageRef) createBackdropImage { return NULL; }
 - (CGFloat) backingScaleFactor { return 1.0; }
 - (CGSize) drawablePixelSize { return CGSizeZero; }
 - (void) flush {}

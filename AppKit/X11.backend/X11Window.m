@@ -1476,6 +1476,23 @@ BOOL X11WindowManagerIsRunning(Display *display) {
     [self drawChromelessOutline];
     O2ContextFlush(_context);
     [self openGLFlushBuffer];
+    // Layer trees in child windows show the pixels drawn beneath them (see
+    // -[X11SubWindow createBackdropImage]).
+    [[NSNotificationCenter defaultCenter]
+            postNotificationName: X11WindowBackingDidFlushNotification
+                          object: self];
+}
+
+- (O2ImageRef) createBackingImageInDeviceRect: (O2Rect) rect {
+    if (_context == nil)
+        return NULL;
+    O2Surface *surface = [(O2Context_builtin *) _context surface];
+    O2ImageRef whole = O2SurfaceCreateImage(surface);
+    O2Rect bounds = O2RectMake(0, 0, O2SurfaceGetWidth(surface), O2SurfaceGetHeight(surface));
+    O2ImageRef result = whole != NULL ? O2ImageCreateWithImageInRect(whole, O2RectIntersection(rect, bounds)) : NULL;
+
+    O2ImageRelease(whole);
+    return result;
 }
 
 // The point is in window coordinates in points (y up), as an event reports it.
@@ -1501,6 +1518,8 @@ BOOL X11WindowManagerIsRunning(Display *display) {
 - (O2Rect) frame {
     return [self untransformFrame: _frame];
 }
+
+NSString *const X11WindowBackingDidFlushNotification = @"X11WindowBackingDidFlush";
 
 static int ignoreBadWindow(Display *display, XErrorEvent *errorEvent) {
     if (errorEvent->error_code == BadWindow)

@@ -21,12 +21,16 @@
 #import <CoreGraphics/CGWindowPrivate.h>
 #import <GL/glx.h>
 #import <Onyx2D/O2Geometry.h>
+#import <Onyx2D/O2Image.h>
 #import <OpenGL/CGLInternal.h>
 #import <X11/Xlib.h>
 #import <X11/Xresource.h>
 #import <X11/Xlocale.h>
 
 @class X11Display, CAWindowOpenGLContext, NSWindow, O2Context;
+
+// Posted, with the window as the object, after its backing pixels were flushed.
+extern NSString *const X11WindowBackingDidFlushNotification;
 
 @interface X11Window : CGWindow {
     int _level; // TODO: care about this value
@@ -108,6 +112,9 @@
 // and the backing surface, which the GL viewport follows.
 - (NSSize) deviceSize: (NSSize) size;
 - (O2Rect) deviceRect: (O2Rect) rect;
+// A copy of the window's drawn pixels in a rectangle of device pixels from the top-left
+// corner, or NULL if the window has no backing yet. Release it.
+- (O2ImageRef) createBackingImageInDeviceRect: (O2Rect) rect;
 
 - (Window) windowHandle;
 // What the stacking of unmanaged and managed windows by level looks at (see

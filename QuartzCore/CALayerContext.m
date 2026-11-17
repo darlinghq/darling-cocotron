@@ -64,6 +64,7 @@
     // context can still receive texture-cleanup requests from _setContext:.
     if ([_layer _context] == self)
         [_layer _setContext: nil];
+    [[NSNotificationCenter defaultCenter] removeObserver: self];
     [_renderer release];
     [_deleteTextureIds release];
     CGLReleaseContext(_glContext);
@@ -111,6 +112,12 @@
         [_subwindow show];
 }
 
+// The pixels beneath the subwindow were redrawn: the layers blend with them again.
+- (void) backdropDidChange: (NSNotification *) note {
+    if (_layer != nil)
+        [self startTimerIfNeeded];
+}
+
 - (void) setSubwindow: (CGSubWindow*) subwindow
 {
     CGSubWindow* oldSubwindow = _subwindow;
@@ -119,7 +126,15 @@
         CGLDestroyWindow(_cglWindow);
     }
 
+    [[NSNotificationCenter defaultCenter] removeObserver: self
+                                                    name: CGSubWindowBackdropDidChangeNotification
+                                                  object: oldSubwindow];
     _subwindow = [subwindow retain];
+    if (_subwindow != nil)
+        [[NSNotificationCenter defaultCenter] addObserver: self
+                                                 selector: @selector(backdropDidChange:)
+                                                     name: CGSubWindowBackdropDidChangeNotification
+                                                   object: _subwindow];
     _cglWindow = CGLGetWindowForContext(_glContext, [_subwindow nativeWindow]);
     _ownsCglWindow = _cglWindow != NULL;
     _swapInterval = -1;
@@ -356,6 +371,11 @@ static BOOL drawableSizes(CGSubWindow *subwindow, CGSize size, GLint *width,
     [self assignTextureIdsToLayerTree: layer];
 
     [self prepareMetalLayersInLayerTree: layer];
+
+    // A subwindow that cannot blend with its parent supplies what is beneath it.
+    CGImageRef backdrop = [_subwindow createBackdropImage];
+    [_renderer _setBackdropImage: backdrop];
+    CGImageRelease(backdrop);
 
     [_renderer render];
 }

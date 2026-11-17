@@ -1,7 +1,12 @@
 #ifdef __OBJC__
 
 #import <CoreGraphics/CGGeometry.h>
+#import <CoreGraphics/CGImage.h>
 #import <Foundation/Foundation.h>
+
+// Posted, with the subwindow as the object, when the parent window's pixels under it
+// have been redrawn.
+extern NSString *const CGSubWindowBackdropDidChangeNotification;
 
 @interface CGSubWindow : NSObject
 
@@ -23,6 +28,12 @@
 // Exact allocated drawable size, or CGSizeZero when this backend does not
 // expose it. Nonzero dimensions must be positive integral physical pixels.
 - (CGSize) drawablePixelSize;
+
+// A native child window cannot blend with its parent, so a layer tree drawn into it
+// shows its transparent areas through to what the parent window has drawn beneath
+// the subwindow, which the owner draws first. Returns a copy of those pixels as a
+// new image to release, or NULL when the backend blends on its own (or has none).
+- (CGImageRef) createBackdropImage;
 
 // Present after a successful drawable swap, on the window/UI thread.
 - (void) flush;
