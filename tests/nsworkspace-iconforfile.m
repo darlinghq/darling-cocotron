@@ -9,8 +9,8 @@
 //  - repeated lookups return the same image object (cached);
 //  - a truncated .icns file is not an icon and does not crash.
 // With the argument "strict" it also checks that a bundle without any icon
-// and a plain file give no image (Darling's behaviour; macOS hands out generic
-// icons for both, so this is not part of the portable run).
+// and a plain file get generic icons, as on macOS: an application icon that is
+// not the plain file's, and the plain file's type icon.
 #import <AppKit/AppKit.h>
 #include <stdio.h>
 #include <string.h>
@@ -112,10 +112,15 @@ int main(int argc, char **argv) {
 
         if (strict) {
             NSString *bare = makeApp(root, @"NoIcon", @{@"CFBundleName" : @"NoIcon"}, @{});
-            CHECK([workspace iconForFile: bare] == nil, "a bundle without an icon gives no image");
+            NSImage *bareIcon = [workspace iconForFile: bare];
+            CHECK(bareIcon != nil, "a bundle without an icon gets the generic application icon");
             NSString *plain = [root stringByAppendingPathComponent: @"plain.txt"];
             [@"x" writeToFile: plain atomically: YES encoding: NSUTF8StringEncoding error: NULL];
-            CHECK([workspace iconForFile: plain] == nil, "a plain file gives no image");
+            NSImage *plainIcon = [workspace iconForFile: plain];
+            CHECK(plainIcon != nil && [[plainIcon TIFFRepresentation] isEqual: [[workspace iconForFileType: @"txt"] TIFFRepresentation]],
+                  "a plain file gets its type's icon");
+            CHECK(bareIcon == nil || ![[bareIcon TIFFRepresentation] isEqual: [plainIcon TIFFRepresentation]],
+                  "the application icon is not the plain file's");
         }
 
         [[NSFileManager defaultManager] removeItemAtPath: root error: NULL];

@@ -518,6 +518,10 @@ set(AppKit_resources
 	NSApplicationIcon.tiff NSSystemInfoPanel/NSApplicationIcon.tiff
 
 	NSComputer.png SystemImages/NSComputer.png
+	NSDiskImage.png SystemImages/NSDiskImage.png
+	NSMultipleDocuments.png SystemImages/NSMultipleDocuments.png
+	NSVolumeInternal.png SystemImages/NSVolumeInternal.png
+	NSVolumeRemovable.png SystemImages/NSVolumeRemovable.png
 	NSFolder.png SystemImages/NSFolder.png
 	NSNetwork.png SystemImages/NSNetwork.png
 	NSTrashEmpty.png SystemImages/NSTrashEmpty.png

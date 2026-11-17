@@ -335,6 +335,17 @@ static BOOL SetIcnsResourceFork(NSString *path, NSArray *elements) {
 
 @implementation MacWorkspace
 
+static NSImage *ImageForGenericIcon(NSString *name);
+
+// The icon of a mount point (one for removable volumes, one for the others), or nil for any other directory.
+static NSImage *VolumeIconForPath(NSString *path) {
+    NSDictionary *volume = [[NSURL fileURLWithPath: path isDirectory: YES]
+        resourceValuesForKeys: @[NSURLIsVolumeKey, NSURLVolumeIsRemovableKey] error: NULL];
+    if (![volume[NSURLIsVolumeKey] boolValue])
+        return nil;
+    return ImageForGenericIcon([volume[NSURLVolumeIsRemovableKey] boolValue] ? @"NSVolumeRemovable" : @"NSVolumeInternal");
+}
+
 // The icon of a file that has no icon of its own: the one for its type, which comes from the filename
 // extension. A path that is empty or does not exist still gets one, as on macOS.
 - (NSImage *) _iconByTypeForPath: (NSString *) path isDirectory: (BOOL) isDirectory {
@@ -365,6 +376,10 @@ static BOOL SetIcnsResourceFork(NSString *path, NSArray *elements) {
     }
     if (!isDirectory)
         return [self _iconByTypeForPath: path isDirectory: NO];
+
+    NSImage *volumeIcon = VolumeIconForPath(path);
+    if (volumeIcon != nil)
+        return volumeIcon;
 
     NSDictionary *info = [NSDictionary dictionaryWithContentsOfFile:
             [path stringByAppendingPathComponent: @"Contents/Info.plist"]];
@@ -402,12 +417,13 @@ static BOOL SetIcnsResourceFork(NSString *path, NSArray *elements) {
     return [self _iconByTypeForPath: path isDirectory: YES];
 }
 
-// One file gets its own icon; a group (or nothing) gets the generic document icon.
+// No files have no icon, one file its own, and several the multiple documents image (as on macOS 26).
 - (NSImage *) iconForFiles: (NSArray *) array {
+    if ([array count] == 0)
+        return nil;
     if ([array count] == 1)
         return [self iconForFile: [array objectAtIndex: 0]];
-
-    return [self _iconByTypeForPath: @"" isDirectory: NO];
+    return [NSImage imageNamed: NSImageNameMultipleDocuments];
 }
 
 // A file type is a UTI, a filename extension, or an HFS type code in quotes.
@@ -456,8 +472,15 @@ static NSImage *DeclaredIconForType(UTType *uti) {
         return icon;
 
     UTType *uti = TypeForFileType(type);
-    if ([uti conformsToType: UTTypeDirectory])
+    // applications and volumes are directories too
+    if ([uti conformsToType: UTTypeVolume])
+        icon = ImageForGenericIcon(@"NSVolumeInternal");
+    else if ([uti conformsToType: UTTypeApplication])
+        icon = ImageForGenericIcon(@"application-x-executable");
+    else if ([uti conformsToType: UTTypeDirectory])
         icon = [NSImage imageNamed: NSImageNameFolder];
+    else if ([uti conformsToType: UTTypeDiskImage])
+        icon = ImageForGenericIcon(@"NSDiskImage");
     else {
         icon = DeclaredIconForType(uti);
         if (icon == nil) {
