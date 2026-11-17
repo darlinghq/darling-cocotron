@@ -1,4 +1,5 @@
 #import "NSXMLPersistentStore.h"
+#import "NSManagedObjectID-Private.h"
 #import <CoreData/NSAtomicStoreCacheNode.h>
 #import <CoreData/NSAttributeDescription.h>
 #import <CoreData/NSEntityDescription.h>
@@ -499,7 +500,7 @@
             }
             valueSet = value;
         } else {
-            valueSet = [NSSet setWithObject: value];
+            valueSet = value != nil ? [NSSet setWithObject: value] : [NSSet set];
         }
 
         [relationshipElement
@@ -524,7 +525,8 @@
                     [self cacheNodeForEntity: destinationEntity
                              referenceObject: referenceObject];
 
-            [cacheNodeSet addObject: relNode];
+            if (relNode != nil)
+                [cacheNodeSet addObject: relNode];
         }
 
         [relationshipElement
@@ -582,8 +584,8 @@
 
     [[self databaseElement] addChild: entityElement];
 
-    [self updateCacheNode: cacheNode fromManagedObject: managedObject];
-
+    // The properties are filled in by -updateCacheNode:fromManagedObject:, which the context calls
+    // once the nodes of all objects saved together exist (relationships may point at them).
     return cacheNode;
 }
 
@@ -613,6 +615,21 @@
                                     stringWithFormat: @"%d", nextInteger + 1]];
 
     return [[NSString alloc] initWithFormat: @"r%d", nextInteger];
+}
+
+// References of this store are the strings r<N>; they show as p<N> in URIs.
+- (NSString *) _URIComponentForReferenceObject: (id) reference {
+    NSString *text = [reference description];
+
+    if ([text length] > 1 && [text characterAtIndex: 0] == 'r')
+        return [@"p" stringByAppendingString: [text substringFromIndex: 1]];
+    return text;
+}
+
+- (id) _referenceObjectForURIComponent: (NSString *) component {
+    id number = [super _referenceObjectForURIComponent: component];
+
+    return number != nil ? [@"r" stringByAppendingString: [number stringValue]] : nil;
 }
 
 - (void) willRemoveCacheNodes: (NSSet *) cacheNodes {

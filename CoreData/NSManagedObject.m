@@ -198,7 +198,28 @@ NSString *const NSValidationValueErrorKey = @"NSValidationErrorValue";
 }
 
 - (NSDictionary *) _committedValues {
+    NSManagedObjectContext *parent = [_context parentContext];
 
+    if (parent != nil) {
+        // A child context starts from the values its parent has for the object (including the
+        // parent's unsaved changes); an object inserted in the child itself has none.
+        if (_committedValues == nil && !_isInserted) {
+            NSDictionary *snapshot = [parent _snapshotForObjectID: [self objectID]];
+
+            if (snapshot != nil) {
+                NSMutableDictionary *values = [[NSMutableDictionary alloc] init];
+
+                for (NSString *key in snapshot) {
+                    id value = [snapshot objectForKey: key];
+
+                    [values setObject: ([value isKindOfClass: [NSSet class]] ? [[value copy] autorelease] : value)
+                               forKey: key];
+                }
+                _committedValues = values;
+            }
+        }
+        return _committedValues;
+    }
     if ([[self objectID] isTemporaryID])
         return nil;
 

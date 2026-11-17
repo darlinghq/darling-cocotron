@@ -123,6 +123,26 @@
 - (void) willRemoveCacheNodes: (NSSet *) cacheNodes {
 }
 
+// The path component an object ID of this store has in its URI representation, and the way back.
+// Stores that number their objects with integers show them as p<N>.
+- (NSString *) _URIComponentForReferenceObject: (id) reference {
+    if ([reference isKindOfClass: [NSNumber class]])
+        return [NSString stringWithFormat: @"p%@", reference];
+    return [reference description];
+}
+
+- (id) _referenceObjectForURIComponent: (NSString *) component {
+    long long number;
+
+    if ([component length] > 1 && [component characterAtIndex: 0] == 'p') {
+        NSScanner *scanner = [NSScanner scannerWithString: [component substringFromIndex: 1]];
+
+        if ([scanner scanLongLong: &number] && [scanner isAtEnd] && number > 0)
+            return [NSNumber numberWithLongLong: number];
+    }
+    return nil;
+}
+
 - newReferenceObjectForManagedObject: (NSManagedObject *) managedObject {
     NSInvalidAbstractInvocation();
     return 0;

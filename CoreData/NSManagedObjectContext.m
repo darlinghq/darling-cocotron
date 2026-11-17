@@ -20,6 +20,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import "NSSQLitePersistentStore.h"
 #import <CoreData/NSMergePolicy.h>
 #import <Foundation/NSComparisonPredicate.h>
+#import <Foundation/NSCompoundPredicate.h>
 #import <Foundation/NSExpression.h>
 #import "NSManagedObject-Private.h"
 #import "NSManagedObjectID-Private.h"
@@ -81,6 +82,98 @@ NSString *const NSInvalidatedObjectIDsKey = @"invalidated_objectIDs";
 
 static char ContextQueueKey;
 
+
+// The userInfo of the change and save notifications: only the kinds of change that occurred have a
+// key.
+//
+// QUIRK: the keys of kinds without any object are absent rather than mapped to empty sets. macOS
+// 10.14 differs for the save notification only (its inserted and updated keys are always present,
+// possibly empty); the form of the change notification and of the later systems is followed.
+// Not documented. Evidence: black-box observation on macOS 10.14.4 and 26.7.3 (tier 2).
+// Test: tests/coredata-child-context.m (the change notification's keys)
+static NSDictionary *_DarlingChangeNotificationInfo(NSSet *inserted, NSSet *updated, NSSet *deleted, NSSet *refreshed) {
+    NSMutableDictionary *info = [NSMutableDictionary dictionary];
+
+    if ([inserted count])
+        [info setObject: [NSSet setWithSet: inserted] forKey: NSInsertedObjectsKey];
+    if ([updated count])
+        [info setObject: [NSSet setWithSet: updated] forKey: NSUpdatedObjectsKey];
+    if ([deleted count])
+        [info setObject: [NSSet setWithSet: deleted] forKey: NSDeletedObjectsKey];
+    if ([refreshed count])
+        [info setObject: [NSSet setWithSet: refreshed] forKey: NSRefreshedObjectsKey];
+    return info;
+}
+
+// Evaluates fetch predicates in memory against the managed objects. Stores that run fetches as
+// SQL treat a comparison with a missing (nil) value as unknown, so a row whose value is nil
+// matches neither the predicate nor its negation; that is reproduced here for SQLite stores.
+//
+// QUIRK: for SQLite stores a nil value compared with a non-nil value by ==, !=, <, <=, >, >=, IN
+// or BETWEEN is neither true nor false (negations do not match either), while the string
+// operators (BEGINSWITH, CONTAINS, LIKE, ...) simply do not match, so their negations do.
+// Not documented. Evidence: black-box observation on macOS 10.14.4 and 26.7.3 (tier 2).
+// Test: tests/coredata-fetch-predicates.m (the nil-title and nil-writer cases)
+typedef enum { DarlingPredicateFalse = 0, DarlingPredicateTrue = 1, DarlingPredicateUnknown = 2 } DarlingPredicateResult;
+
+static DarlingPredicateResult _DarlingPredicateMatches(NSPredicate *predicate, NSManagedObject *object, BOOL sqlNulls) {
+    if (!sqlNulls)
+        return [predicate evaluateWithObject: object] ? DarlingPredicateTrue : DarlingPredicateFalse;
+
+    if ([predicate isKindOfClass: [NSCompoundPredicate class]]) {
+        NSCompoundPredicate *compound = (NSCompoundPredicate *) predicate;
+        NSCompoundPredicateType type = [compound compoundPredicateType];
+        BOOL sawUnknown = NO;
+
+        for (NSPredicate *sub in [compound subpredicates]) {
+            DarlingPredicateResult result = _DarlingPredicateMatches(sub, object, sqlNulls);
+
+            if (type == NSNotPredicateType) {
+                if (result == DarlingPredicateUnknown)
+                    return DarlingPredicateUnknown;
+                return result == DarlingPredicateTrue ? DarlingPredicateFalse : DarlingPredicateTrue;
+            }
+            if (result == DarlingPredicateUnknown)
+                sawUnknown = YES;
+            else if (type == NSAndPredicateType && result == DarlingPredicateFalse)
+                return DarlingPredicateFalse;
+            else if (type == NSOrPredicateType && result == DarlingPredicateTrue)
+                return DarlingPredicateTrue;
+        }
+        if (type == NSNotPredicateType)
+            return DarlingPredicateTrue;
+        if (sawUnknown)
+            return DarlingPredicateUnknown;
+        return type == NSAndPredicateType ? DarlingPredicateTrue : DarlingPredicateFalse;
+    }
+
+    if ([predicate isKindOfClass: [NSComparisonPredicate class]]) {
+        NSComparisonPredicate *comparison = (NSComparisonPredicate *) predicate;
+
+        switch ([comparison predicateOperatorType]) {
+        case NSEqualToPredicateOperatorType:
+        case NSNotEqualToPredicateOperatorType:
+        case NSLessThanPredicateOperatorType:
+        case NSLessThanOrEqualToPredicateOperatorType:
+        case NSGreaterThanPredicateOperatorType:
+        case NSGreaterThanOrEqualToPredicateOperatorType:
+        case NSInPredicateOperatorType:
+        case NSBetweenPredicateOperatorType:
+            if ([comparison comparisonPredicateModifier] == NSDirectPredicateModifier) {
+                id left = [[comparison leftExpression] expressionValueWithObject: object context: nil];
+                id right = [[comparison rightExpression] expressionValueWithObject: object context: nil];
+
+                if ((left == nil || left == [NSNull null]) && right != nil && right != [NSNull null])
+                    return DarlingPredicateUnknown;
+            }
+            break;
+        default:
+            break;
+        }
+    }
+    return [predicate evaluateWithObject: object] ? DarlingPredicateTrue : DarlingPredicateFalse;
+}
+
 @implementation NSManagedObjectContext
 
 - init {
@@ -109,6 +202,7 @@ static char ContextQueueKey;
     _pendingInserted = [NSMutableSet new];
     _pendingUpdated = [NSMutableSet new];
     _pendingDeleted = [NSMutableSet new];
+    _pendingRefreshed = [NSMutableSet new];
     _lock = [[NSLock alloc] init];
     _storeCoordinator = nil;
     _undoManager = [[NSUndoManager alloc] init];
@@ -163,6 +257,9 @@ static char ContextQueueKey;
         dispatch_release(_contextQueue);
     [[NSNotificationCenter defaultCenter] removeObserver:self];
     [_storeCoordinator release];
+    [_parentContext release];
+    [_name release];
+    [_pendingRefreshed release];
     [_undoManager release];
     [_registeredObjects release];
     [_insertedObjects release];
@@ -178,7 +275,7 @@ static char ContextQueueKey;
 }
 
 - (NSPersistentStoreCoordinator *) persistentStoreCoordinator {
-    return _storeCoordinator;
+    return [self _coordinator];
 }
 
 - (NSUndoManager *) undoManager {
@@ -206,7 +303,12 @@ static char ContextQueueKey;
 
 - (void)_siblingDidSave:(NSNotification *)notification {
     NSManagedObjectContext *source = [notification object];
-    if (source == self || !_automaticallyMergesChangesFromParent || [source persistentStoreCoordinator] != _storeCoordinator) return;
+    if (source == self || !_automaticallyMergesChangesFromParent) return;
+    // A child context follows its parent's saves only; contexts with a coordinator follow the
+    // saves of other contexts of that coordinator that reach the store (not those of child contexts).
+    if (_parentContext != nil) {
+        if (source != _parentContext) return;
+    } else if ([source parentContext] != nil || [source persistentStoreCoordinator] != _storeCoordinator) return;
     NSMutableDictionary *identifiers = [NSMutableDictionary dictionary];
     for (NSString *key in @[NSInsertedObjectsKey, NSUpdatedObjectsKey, NSDeletedObjectsKey]) {
         NSMutableArray *ids = [NSMutableArray array];
@@ -220,7 +322,7 @@ static char ContextQueueKey;
                 NSManagedObject *object = [self objectRegisteredForID:objectID];
                 if (object && ![_deletedObjects containsObject:object]) {
                     [object _mergeCommittedValues];
-                    [_pendingUpdated addObject:object];
+                    [_pendingRefreshed addObject:object];
                 }
             }
             for (NSManagedObjectID *objectID in [identifiers objectForKey:NSInsertedObjectsKey]) {
@@ -242,6 +344,75 @@ static char ContextQueueKey;
         [self processPendingChanges];
     };
     if (_contextQueue) [self performBlock:merge]; else merge();
+}
+
+// The coordinator the context works on: its own, or the one of the root of its parent chain.
+- (NSPersistentStoreCoordinator *) _coordinator {
+    return _parentContext != nil ? [_parentContext _coordinator] : _storeCoordinator;
+}
+
+// Runs the block on the context's own queue and waits for it.
+- (void) _performSync: (void (^)(void)) block {
+    if (_contextQueue == NULL || [self _isOnContextQueue])
+        block();
+    else
+        dispatch_sync(_contextQueue, ^{ @autoreleasepool { block(); } });
+}
+
+- (NSManagedObjectContext *) parentContext {
+    return _parentContext;
+}
+
+- (void) setParentContext: (NSManagedObjectContext *) parent {
+    if (parent == nil)
+        [NSException raise: NSInvalidArgumentException
+                    format: @"Parent NSManagedObjectContext must not be nil."];
+    if (_storeCoordinator != nil || _parentContext != nil)
+        [NSException raise: NSInternalInconsistencyException
+                    format: @"Context already has a coordinator;  cannot replace."];
+    _parentContext = [parent retain];
+    [[NSNotificationCenter defaultCenter] addObserver: self
+                                             selector: @selector(_siblingDidSave:)
+                                                 name: NSManagedObjectContextDidSaveNotification
+                                               object: nil];
+}
+
+- (NSString *) name {
+    return _name;
+}
+
+- (void) setName: (NSString *) value {
+    value = [value copy];
+    [_name release];
+    _name = value;
+}
+
+// The values (committed ones with the pending changes laid over them) a child context starts
+// from for an object of this context; nil if this context does not know the object.
+- (NSDictionary *) _snapshotForObjectID: (NSManagedObjectID *) objectID {
+    __block NSDictionary *result = nil;
+
+    [self _performSync: ^{
+        NSManagedObject *object = [self objectRegisteredForID: objectID];
+
+        if (object == nil && ![objectID isTemporaryID])
+            object = [self objectWithID: objectID];
+        if (object != nil) {
+            NSMutableDictionary *values = [NSMutableDictionary dictionaryWithDictionary: [object _committedValues]];
+            NSDictionary *changed = [object changedValues];
+
+            for (NSString *key in changed) {
+                id value = [changed objectForKey: key];
+
+                if (value == [NSNull null])
+                    [values removeObjectForKey: key];
+                else
+                    [values setObject: value forKey: key];
+            }
+            result = [values retain];
+        }
+    }];
+    return [result autorelease];
 }
 
 - (void) persistentStoresDidChange: (NSNotification *) note {
@@ -273,6 +444,9 @@ static char ContextQueueKey;
 }
 
 - (void) setPersistentStoreCoordinator: (NSPersistentStoreCoordinator *) value {
+    if (_parentContext != nil)
+        [NSException raise: NSInternalInconsistencyException
+                    format: @"Context already has a coordinator;  cannot replace."];
     if (_contextQueue && ![self _isOnContextQueue]) {
         [self performBlockAndWait:^{ [self setPersistentStoreCoordinator:value]; }];
         return;
@@ -408,7 +582,7 @@ static char ContextQueueKey;
 - (NSAtomicStoreCacheNode *) _cacheNodeForObjectID:
         (NSManagedObjectID *) objectID
 {
-    NSAtomicStore *store = (NSAtomicStore *) [_storeCoordinator
+    NSAtomicStore *store = (NSAtomicStore *) [[self _coordinator]
             _persistentStoreForObjectID: objectID];
 
     return [store cacheNodeForObjectID: objectID];
@@ -448,25 +622,73 @@ static char ContextQueueKey;
     return result;
 }
 
+// Predicates may compare against object IDs (a relationship or SELF with an NSManagedObjectID, or
+// a collection of them); evaluation works on objects, so those constants become the objects.
+- (id) _valueByResolvingObjectIDs: (id) value {
+    if ([value isKindOfClass: [NSManagedObjectID class]])
+        return [self objectWithID: value];
+    if ([value isKindOfClass: [NSArray class]] || [value isKindOfClass: [NSSet class]]) {
+        NSMutableArray *resolved = [NSMutableArray array];
+        BOOL changed = NO;
+
+        for (id item in value) {
+            id replacement = [self _valueByResolvingObjectIDs: item];
+            changed = changed || replacement != item;
+            [resolved addObject: replacement];
+        }
+        if (!changed)
+            return value;
+        return [value isKindOfClass: [NSSet class]] ? (id) [NSSet setWithArray: resolved] : (id) resolved;
+    }
+    return value;
+}
+
+- (NSPredicate *) _predicateByResolvingObjectIDs: (NSPredicate *) predicate {
+    if ([predicate isKindOfClass: [NSCompoundPredicate class]]) {
+        NSCompoundPredicate *compound = (NSCompoundPredicate *) predicate;
+        NSMutableArray *subpredicates = [NSMutableArray array];
+
+        for (NSPredicate *sub in [compound subpredicates])
+            [subpredicates addObject: [self _predicateByResolvingObjectIDs: sub]];
+        return [[[NSCompoundPredicate alloc] initWithType: [compound compoundPredicateType]
+                                            subpredicates: subpredicates] autorelease];
+    }
+    if ([predicate isKindOfClass: [NSComparisonPredicate class]]) {
+        NSComparisonPredicate *comparison = (NSComparisonPredicate *) predicate;
+        NSExpression *sides[2] = { [comparison leftExpression], [comparison rightExpression] };
+        BOOL changed = NO;
+
+        for (int i = 0; i < 2; i++) {
+            if ([sides[i] expressionType] == NSConstantValueExpressionType) {
+                id value = [sides[i] constantValue];
+                id resolved = [self _valueByResolvingObjectIDs: value];
+
+                if (resolved != value) {
+                    sides[i] = [NSExpression expressionForConstantValue: resolved];
+                    changed = YES;
+                }
+            }
+        }
+        if (changed) {
+            return [[[NSComparisonPredicate alloc]
+                    initWithLeftExpression: sides[0]
+                           rightExpression: sides[1]
+                                  modifier: [comparison comparisonPredicateModifier]
+                                      type: [comparison predicateOperatorType]
+                                   options: [comparison options]] autorelease];
+        }
+    }
+    return predicate;
+}
+
 - (NSArray *) executeFetchRequest: (NSFetchRequest *) fetchRequest
                             error: (NSError **) error
 {
     NSEntityDescription *requestedEntity = [fetchRequest _entityIfKnown];
-    if (!requestedEntity) requestedEntity = [[[_storeCoordinator managedObjectModel] entitiesByName] objectForKey:[fetchRequest entityName]];
-    BOOL supported = requestedEntity && [[[_storeCoordinator managedObjectModel] entities] containsObject:requestedEntity] &&
-        [fetchRequest resultType] == NSManagedObjectResultType && ![fetchRequest fetchOffset] && ![fetchRequest fetchBatchSize] &&
+    if (!requestedEntity) requestedEntity = [[[[self _coordinator] managedObjectModel] entitiesByName] objectForKey:[fetchRequest entityName]];
+    BOOL supported = requestedEntity && [[[[self _coordinator] managedObjectModel] entities] containsObject:requestedEntity] &&
+        [fetchRequest resultType] == NSManagedObjectResultType &&
         [fetchRequest includesPendingChanges] && ![fetchRequest returnsDistinctResults] && ![[fetchRequest propertiesToFetch] count] && ![[fetchRequest relationshipKeyPathsForPrefetching] count];
-    NSPredicate *predicate = [fetchRequest predicate];
-    if (predicate) {
-        supported = supported && [predicate isKindOfClass:[NSComparisonPredicate class]];
-        if (supported) {
-            NSComparisonPredicate *comparison = (NSComparisonPredicate *)predicate;
-            NSExpression *left = [comparison leftExpression], *right = [comparison rightExpression];
-            supported = [comparison predicateOperatorType] == NSEqualToPredicateOperatorType && [comparison comparisonPredicateModifier] == NSDirectPredicateModifier && ![comparison options] &&
-                [left expressionType] == NSKeyPathExpressionType && [right expressionType] == NSConstantValueExpressionType &&
-                [[[requestedEntity attributesByName] objectForKey:[left keyPath]] attributeType] == NSStringAttributeType && [[right constantValue] isKindOfClass:[NSString class]];
-        }
-    }
     for (NSSortDescriptor *descriptor in [fetchRequest sortDescriptors]) {
         NSAttributeDescription *attribute = [[requestedEntity attributesByName] objectForKey:[descriptor key]];
         NSAttributeType type = [attribute attributeType];
@@ -482,7 +704,7 @@ static char ContextQueueKey;
     NSArray *affectedStores = [fetchRequest affectedStores];
 
     if (affectedStores == nil)
-        affectedStores = [_storeCoordinator persistentStores];
+        affectedStores = [[self _coordinator] persistentStores];
 
     NSMutableSet *resultSet = [NSMutableSet set];
 
@@ -516,7 +738,39 @@ static char ContextQueueKey;
         }
     }
 
-    for (NSAtomicStore *store in affectedStores) {
+    if (_parentContext != nil) {
+        // The parent's objects (with its unsaved changes) are what this context sees besides
+        // its own changes.
+        NSFetchRequest *parentFetch = [[[NSFetchRequest alloc] init] autorelease];
+        __block NSArray *parentIDs = nil;
+        __block NSError *parentError = nil;
+
+        [parentFetch setEntity: requestedEntity];
+        [parentFetch setAffectedStores: [fetchRequest affectedStores]];
+        [_parentContext _performSync: ^{
+            NSArray *found = [_parentContext executeFetchRequest: parentFetch error: &parentError];
+            NSMutableArray *ids = [NSMutableArray array];
+
+            for (NSManagedObject *object in found)
+                [ids addObject: [object objectID]];
+            parentIDs = found != nil ? [ids retain] : nil;
+            [parentError retain];
+        }];
+        [parentIDs autorelease];
+        [parentError autorelease];
+        if (parentIDs == nil) {
+            if (error) *error = parentError;
+            return nil;
+        }
+        for (NSManagedObjectID *checkID in parentIDs) {
+            NSManagedObject *check = [self objectWithID: checkID];
+
+            if (![_deletedObjects containsObject: check])
+                [resultSet addObject: check];
+        }
+    }
+
+    for (NSAtomicStore *store in (_parentContext != nil ? @[] : affectedStores)) {
         NSSet *nodes = [store cacheNodes];
 
         for (NSAtomicStoreCacheNode *node in nodes) {
@@ -539,10 +793,28 @@ static char ContextQueueKey;
     NSPredicate *p = [fetchRequest predicate];
 
     if (p != nil) {
-        [result filterUsingPredicate: p];
+        BOOL sqlNulls = [affectedStores count] > 0;
+
+        for (NSPersistentStore *store in affectedStores) {
+            if (![store isKindOfClass: [NSSQLitePersistentStore class]])
+                sqlNulls = NO;
+        }
+        p = [self _predicateByResolvingObjectIDs: p];
+
+        NSMutableArray *matching = [NSMutableArray array];
+
+        for (NSManagedObject *object in result) {
+            if (_DarlingPredicateMatches(p, object, sqlNulls) == DarlingPredicateTrue)
+                [matching addObject: object];
+        }
+        result = matching;
     }
 
     [result sortUsingDescriptors: [fetchRequest sortDescriptors]];
+
+    NSUInteger fetchOffset = [fetchRequest fetchOffset];
+    if (fetchOffset > 0)
+        [result removeObjectsInRange: NSMakeRange(0, MIN(fetchOffset, [result count]))];
 
     NSUInteger fetchLimit = [fetchRequest fetchLimit];
     if (fetchLimit > 0 && [result count] > fetchLimit) {
@@ -573,7 +845,7 @@ static char ContextQueueKey;
     else if ([request isKindOfClass: [NSBatchDeleteRequest class]])
         delete = (NSBatchDeleteRequest *) request;
 
-    if (_storeCoordinator == nil || (update == nil && delete == nil)) {
+    if ([self _coordinator] == nil || (update == nil && delete == nil)) {
         if (error != NULL)
             *error = [NSError errorWithDomain: NSCocoaErrorDomain
                                          code: NSPersistentStoreOperationError
@@ -583,7 +855,7 @@ static char ContextQueueKey;
 
     NSManagedObjectContext *context =
             [[[NSManagedObjectContext alloc] init] autorelease];
-    [context setPersistentStoreCoordinator: _storeCoordinator];
+    [context setPersistentStoreCoordinator: [self _coordinator]];
 
     NSArray *objects;
     NSFetchRequest *fetch;
@@ -601,7 +873,12 @@ static char ContextQueueKey;
         objects = found;
         fetch = nil;
     } else {
+        // The fetch request only selects the rows: whatever it says about the result type, the
+        // pending changes or batching does not change which objects are deleted.
         fetch = [delete fetchRequest];
+        [fetch setResultType: NSManagedObjectResultType];
+        [fetch setIncludesPendingChanges: YES];
+        [fetch setFetchBatchSize: 0];
     }
 
     if (fetch != nil) {
@@ -669,7 +946,7 @@ static char ContextQueueKey;
 
 - (void) insertObject: (NSManagedObject *) object {
     NSPersistentStore *store =
-            [_storeCoordinator _persistentStoreForObject: object];
+            [[self _coordinator] _persistentStoreForObject: object];
 
     [[object objectID] setStoreIdentifier: [store identifier]];
     [[object objectID] setPersistentStore: store];
@@ -690,6 +967,10 @@ static char ContextQueueKey;
             [NSException raise:NSInvalidArgumentException format:@"Unsupported delete rule."];
         [object setValue:([relationship isToMany] ? (id)[NSSet set] : nil) forKey:[relationship name]];
     }
+    [self _markDeleted:object];
+}
+
+- (void) _markDeleted: (NSManagedObject *) object {
     [_deletedObjects addObject:object];
     [_pendingDeleted addObject:object];
     [_pendingUpdated removeObject:object];
@@ -741,9 +1022,9 @@ static char ContextQueueKey;
 
 - (void) _processPendingChanges {
     _requestedProcessPendingChanges = NO;
-    if ([_pendingInserted count] || [_pendingUpdated count] || [_pendingDeleted count]) {
-        NSDictionary *changes = @{NSInsertedObjectsKey:[NSSet setWithSet:_pendingInserted], NSUpdatedObjectsKey:[NSSet setWithSet:_pendingUpdated], NSDeletedObjectsKey:[NSSet setWithSet:_pendingDeleted]};
-        [_pendingInserted removeAllObjects]; [_pendingUpdated removeAllObjects]; [_pendingDeleted removeAllObjects];
+    if ([_pendingInserted count] || [_pendingUpdated count] || [_pendingDeleted count] || [_pendingRefreshed count]) {
+        NSDictionary *changes = _DarlingChangeNotificationInfo(_pendingInserted, _pendingUpdated, _pendingDeleted, _pendingRefreshed);
+        [_pendingInserted removeAllObjects]; [_pendingUpdated removeAllObjects]; [_pendingDeleted removeAllObjects]; [_pendingRefreshed removeAllObjects];
         [[NSNotificationCenter defaultCenter] postNotificationName:NSManagedObjectContextObjectsDidChangeNotification object:self userInfo:changes];
     }
 }
@@ -814,13 +1095,102 @@ static char ContextQueueKey;
     return YES;
 }
 
+// Takes over the changes of a child context that is saving: objects inserted there appear here
+// as inserted (with the same temporary IDs), updated ones receive the changed values, deleted
+// ones are deleted. Nothing reaches the stores until this context is saved.
+- (void) _adoptChangesInserted: (NSSet *) inserted updated: (NSSet *) updated deleted: (NSSet *) deleted {
+    for (NSManagedObject *child in inserted) {
+        NSManagedObject *object = [self objectRegisteredForID: [child objectID]];
+
+        if (object == nil)
+            object = [[[NSManagedObject alloc] initWithObjectID: [child objectID]
+                                           managedObjectContext: self] autorelease];
+
+        NSDictionary *values = [child changedValues];
+
+        for (NSString *key in values)
+            [object setPrimitiveValue: [values objectForKey: key] forKey: key];
+        [_insertedObjects addObject: object];
+        [object _setInserted: YES updated: NO deleted: NO];
+        _hasChanges = YES;
+        [_pendingInserted addObject: object];
+        if (NSMapGet(_objectIdToObject, [object objectID]) != object)
+            [self _registerObject: object];
+        [self _requestProcessPendingChanges];
+    }
+    for (NSManagedObject *child in updated) {
+        NSManagedObject *object = [self objectWithID: [child objectID]];
+        NSDictionary *values = [[[child changedValues] copy] autorelease];
+
+        for (NSString *key in values) {
+            [object willChangeValueForKey: key];
+            [object setPrimitiveValue: [values objectForKey: key] forKey: key];
+            [object didChangeValueForKey: key];
+        }
+    }
+    for (NSManagedObject *child in deleted) {
+        NSManagedObject *object = [self objectWithID: [child objectID]];
+
+        if (![_deletedObjects containsObject: object])
+            [self _markDeleted: object];
+    }
+    [self processPendingChanges];
+}
+
+// The save of a child context: the changes move into the parent context.
+- (BOOL) _saveToParent: (NSError **) error {
+    [[NSNotificationCenter defaultCenter] postNotificationName:NSManagedObjectContextWillSaveNotification object:self];
+    [self processPendingChanges];
+
+    NSMutableSet *inserted = [NSMutableSet setWithSet: _insertedObjects];
+    NSMutableSet *updated = [NSMutableSet setWithSet: _updatedObjects];
+    NSMutableSet *deleted = [NSMutableSet setWithSet: _deletedObjects];
+
+    [inserted minusSet: _deletedObjects];
+    [updated minusSet: _deletedObjects];
+    [updated minusSet: _insertedObjects];
+
+    // Objects that were inserted and deleted again never existed for the parent.
+    NSMutableSet *pushedDeletes = [NSMutableSet setWithSet: deleted];
+
+    [pushedDeletes minusSet: _insertedObjects];
+    if ([inserted count] || [updated count] || [pushedDeletes count]) {
+        [_parentContext _performSync: ^{
+            [_parentContext _adoptChangesInserted: inserted updated: updated deleted: pushedDeletes];
+        }];
+    }
+
+    for (NSManagedObject *object in _registeredObjects) {
+        if ([_deletedObjects containsObject: object])
+            continue;
+        if ([inserted containsObject: object] || [updated containsObject: object])
+            [object _didCommit];
+    }
+    for (NSManagedObject *object in _deletedObjects) {
+        for (NSString *key in [[[object entity] propertiesByName] allKeys])
+            [object removeObserver: self forKeyPath: key];
+        NSMapRemove(_objectIdToObject, [object objectID]);
+        [_registeredObjects removeObject: object];
+    }
+    [_insertedObjects removeAllObjects];
+    [_updatedObjects removeAllObjects];
+    [_deletedObjects removeAllObjects];
+    _hasChanges = NO;
+    [[NSNotificationCenter defaultCenter] postNotificationName: NSManagedObjectContextDidSaveNotification
+                                                        object: self
+                                                      userInfo: _DarlingChangeNotificationInfo(inserted, updated, deleted, nil)];
+    return YES;
+}
+
 - (BOOL)save:(NSError **)error {
+    if (_parentContext != nil)
+        return [self _saveToParent: error];
     [[NSNotificationCenter defaultCenter] postNotificationName:NSManagedObjectContextWillSaveNotification object:self];
     [self processPendingChanges];
     NSMutableSet *inserted = [NSMutableSet setWithSet:_insertedObjects];
     [inserted minusSet:_deletedObjects];
     if (![self obtainPermanentIDsForObjects:[inserted allObjects] error:error]) return NO;
-    NSDictionary *changes = @{NSInsertedObjectsKey:[NSSet setWithSet:inserted], NSUpdatedObjectsKey:[NSSet setWithSet:_updatedObjects], NSDeletedObjectsKey:[NSSet setWithSet:_deletedObjects]};
+    NSDictionary *changes = _DarlingChangeNotificationInfo(inserted, _updatedObjects, _deletedObjects, nil);
     BOOL success = YES;
     [_storeCoordinator lock];
     @try {
@@ -844,6 +1214,10 @@ static char ContextQueueKey;
                     [store addCacheNodes:[NSSet setWithObject:node]];
                     [node release];
                 }
+                // Objects saved together may refer to each other, so the properties are set once
+                // all their nodes exist.
+                for (NSManagedObject *object in storeInserted)
+                    [store updateCacheNode:[store cacheNodeForObjectID:[object objectID]] fromManagedObject:object];
                 for (NSManagedObject *object in storeUpdated) if (![storeDeleted containsObject:object]) [store updateCacheNode:[store cacheNodeForObjectID:[object objectID]] fromManagedObject:object];
                 success = [store save:error];
             }

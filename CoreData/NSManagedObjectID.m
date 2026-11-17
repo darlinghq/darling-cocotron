@@ -1,3 +1,4 @@
+#import "NSManagedObjectID-Private.h"
 #import <CoreData/NSEntityDescription.h>
 #import <CoreData/NSManagedObjectID.h>
 #import <CoreData/NSManagedObjectModel.h>
@@ -53,8 +54,15 @@
 }
 
 - (NSURL *) URIRepresentation {
-    NSString *path =
-            [[@"/" stringByAppendingPathComponent:[_entity name]] stringByAppendingPathComponent:_referenceObject];
+    // Permanent IDs of stores that number their objects read p<N>, temporary IDs t<UUID>.
+    NSString *component;
+    if (_isTemporaryID)
+        component = [@"t" stringByAppendingString:_referenceObject];
+    else if (_persistentStore != nil)
+        component = [_persistentStore _URIComponentForReferenceObject:_referenceObject];
+    else
+        component = [_referenceObject description];
+    NSString *path = [[@"/" stringByAppendingPathComponent:[_entity name]] stringByAppendingPathComponent:component];
     NSString *host = _isTemporaryID ? @"" : _storeIdentifier;
 
     return [[[NSURL alloc] initWithScheme: @"x-coredata" host: host

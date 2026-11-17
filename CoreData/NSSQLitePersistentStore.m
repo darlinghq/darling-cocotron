@@ -27,11 +27,28 @@ static int bindString(sqlite3_stmt *statement, int column, NSString *string) {
     return sqlite3_bind_text(statement, column, [data length] ? [data bytes] : "", (int)[data length], SQLITE_TRANSIENT);
 }
 
-static NSString *newIdentifier(void) {
-    CFUUIDRef uuid = CFUUIDCreate(NULL);
-    NSString *result = [(NSString *)CFUUIDCreateString(NULL, uuid) autorelease];
-    CFRelease(uuid);
-    return result;
+// Objects are numbered per entity (the number is what shows as p<N> in the object ID URI). The
+// database identifies a row by the entity name and the number, so equal numbers of different
+// entities do not collide.
+static NSString *rowKey(NSString *entityName, NSNumber *number) {
+    return [NSString stringWithFormat:@"%@/%@", entityName, number];
+}
+
+static NSString *rowKeyForObjectID(NSManagedObjectID *objectID) {
+    return rowKey([[objectID entity] name], [objectID referenceObject]);
+}
+
+// The number part of a row identifier of the given entity, or nil if it is not of that form.
+static NSNumber *numberFromRowKey(NSString *key, NSString *entityName) {
+    NSString *prefix = [entityName stringByAppendingString:@"/"];
+    if (![key hasPrefix:prefix] || [key length] == [prefix length] || [key length] - [prefix length] > 18) return nil;
+    long long value = 0;
+    for (NSUInteger index = [prefix length]; index < [key length]; index++) {
+        unichar c = [key characterAtIndex:index];
+        if (c < '0' || c > '9') return nil;
+        value = value * 10 + (c - '0');
+    }
+    return value > 0 ? [NSNumber numberWithLongLong:value] : nil;
 }
 
 @implementation NSSQLitePersistentStore
@@ -60,6 +77,7 @@ static NSString *newIdentifier(void) {
     sqlite3_close(_database);
     [_modelDescription release];
     [_selectedEntities release];
+    [_lastNumbers release];
     [super dealloc];
 }
 
@@ -131,8 +149,11 @@ static NSString *newIdentifier(void) {
     while ((status = sqlite3_step(statement)) == SQLITE_ROW) {
         NSString *reference = columnString(statement, 0);
         NSEntityDescription *entity = [[model entitiesByName] objectForKey:columnString(statement, 1)];
-        if (![reference length] || ![_selectedEntities containsObject:entity]) { status = SQLITE_CORRUPT; break; }
-        NSManagedObjectID *objectID = [self objectIDForEntity:entity referenceObject:reference];
+        NSNumber *number = [_selectedEntities containsObject:entity] ? numberFromRowKey(reference, [entity name]) : nil;
+        if (!number) { status = SQLITE_CORRUPT; break; }
+        NSNumber *last = [_lastNumbers objectForKey:[entity name]];
+        if (!last || [last longLongValue] < [number longLongValue]) [_lastNumbers setObject:number forKey:[entity name]];
+        NSManagedObjectID *objectID = [self objectIDForEntity:entity referenceObject:number];
         NSAtomicStoreCacheNode *node = [[[NSAtomicStoreCacheNode alloc] initWithObjectID:objectID] autorelease];
         [nodes setObject:node forKey:reference];
         [caches setObject:[NSMutableDictionary dictionary] forKey:reference];
@@ -216,9 +237,20 @@ static NSString *newIdentifier(void) {
     int flags = (_isReadOnly ? SQLITE_OPEN_READONLY : SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE) | SQLITE_OPEN_FULLMUTEX;
     if (sqlite3_open_v2([path fileSystemRepresentation], &_database, flags, NULL) != SQLITE_OK) return storeError(error, NSPersistentStoreOpenError);
     if (![self _execute:"PRAGMA foreign_keys=ON"]) return storeError(error, NSPersistentStoreOpenError);
+    [_lastNumbers release];
+    _lastNumbers = [[NSMutableDictionary alloc] init];
+    if (exists && !_isReadOnly && ![self _execute:"CREATE TABLE IF NOT EXISTS darling_counters(entity TEXT PRIMARY KEY,last INTEGER NOT NULL)"])
+        return storeError(error, NSPersistentStoreOpenError);
+    // Numbers of deleted objects are not handed out again, so the highest number ever used is kept.
+    sqlite3_stmt *counters = exists ? [self _prepare:"SELECT entity,last FROM darling_counters"] : NULL;
+    while (counters && sqlite3_step(counters) == SQLITE_ROW) {
+        NSString *entityName = columnString(counters, 0);
+        if (entityName) [_lastNumbers setObject:[NSNumber numberWithLongLong:sqlite3_column_int64(counters, 1)] forKey:entityName];
+    }
+    sqlite3_finalize(counters);
     if (!exists) {
         if (![self _execute:"BEGIN IMMEDIATE"] ||
-            ![self _execute:"CREATE TABLE darling_metadata(format TEXT NOT NULL,version INTEGER NOT NULL,uuid TEXT NOT NULL,model BLOB NOT NULL,revision INTEGER NOT NULL); CREATE TABLE darling_objects(identifier TEXT PRIMARY KEY,entity TEXT NOT NULL,revision INTEGER NOT NULL); CREATE TABLE darling_values(object TEXT NOT NULL REFERENCES darling_objects(identifier) ON DELETE CASCADE,key TEXT NOT NULL,kind INTEGER NOT NULL,integer_value INTEGER,real_value REAL,bytes_value BLOB,PRIMARY KEY(object,key)); CREATE TABLE darling_edges(source TEXT NOT NULL REFERENCES darling_objects(identifier) ON DELETE CASCADE,key TEXT NOT NULL,target TEXT NOT NULL REFERENCES darling_objects(identifier) ON DELETE CASCADE,PRIMARY KEY(source,key,target))"]) {
+            ![self _execute:"CREATE TABLE darling_metadata(format TEXT NOT NULL,version INTEGER NOT NULL,uuid TEXT NOT NULL,model BLOB NOT NULL,revision INTEGER NOT NULL); CREATE TABLE darling_objects(identifier TEXT PRIMARY KEY,entity TEXT NOT NULL,revision INTEGER NOT NULL); CREATE TABLE darling_values(object TEXT NOT NULL REFERENCES darling_objects(identifier) ON DELETE CASCADE,key TEXT NOT NULL,kind INTEGER NOT NULL,integer_value INTEGER,real_value REAL,bytes_value BLOB,PRIMARY KEY(object,key)); CREATE TABLE darling_edges(source TEXT NOT NULL REFERENCES darling_objects(identifier) ON DELETE CASCADE,key TEXT NOT NULL,target TEXT NOT NULL REFERENCES darling_objects(identifier) ON DELETE CASCADE,PRIMARY KEY(source,key,target)); CREATE TABLE darling_counters(entity TEXT PRIMARY KEY,last INTEGER NOT NULL)"]) {
             [self _execute:"ROLLBACK"]; return storeError(error, NSPersistentStoreOpenError);
         }
         sqlite3_stmt *statement = [self _prepare:"INSERT INTO darling_metadata VALUES('DarlingCoreData',1,?,?,0)"];
@@ -242,13 +274,19 @@ static NSString *newIdentifier(void) {
     return [self _readCache:error];
 }
 
-- newReferenceObjectForManagedObject:(NSManagedObject *)object { return [newIdentifier() copy]; }
+- newReferenceObjectForManagedObject:(NSManagedObject *)object {
+    NSString *name = [[object entity] name];
+    long long next = [[_lastNumbers objectForKey:name] longLongValue] + 1;
+    NSNumber *number = [NSNumber numberWithLongLong:next];
+    [_lastNumbers setObject:number forKey:name];
+    return [number retain];
+}
 
 - (long long)_versionForObjectID:(NSManagedObjectID *)objectID {
     @synchronized(self) {
         sqlite3_stmt *statement = [self _prepare:"SELECT revision FROM darling_objects WHERE identifier=?"];
         long long version = -1;
-        if (statement && bindString(statement, 1, [objectID referenceObject]) == SQLITE_OK && sqlite3_step(statement) == SQLITE_ROW)
+        if (statement && bindString(statement, 1, rowKeyForObjectID(objectID)) == SQLITE_OK && sqlite3_step(statement) == SQLITE_ROW)
             version = sqlite3_column_int64(statement, 0);
         sqlite3_finalize(statement);
         return version;
@@ -293,7 +331,7 @@ static NSString *newIdentifier(void) {
 }
 
 - (BOOL)_writeObject:(NSManagedObject *)object inserted:(BOOL)inserted {
-    NSString *reference = [[object objectID] referenceObject];
+    NSString *reference = rowKeyForObjectID([object objectID]);
     sqlite3_stmt *statement = [self _prepare:inserted ? "INSERT INTO darling_objects VALUES(?,?,?)" : "SELECT entity,revision FROM darling_objects WHERE identifier=?"];
     BOOL success = statement && bindString(statement, 1, reference) == SQLITE_OK;
     if (inserted) success = success && bindString(statement, 2, [[object entity] name]) == SQLITE_OK && sqlite3_bind_int64(statement, 3, _revision + 1) == SQLITE_OK && sqlite3_step(statement) == SQLITE_DONE;
@@ -340,7 +378,7 @@ static NSString *newIdentifier(void) {
         for (NSManagedObjectID *target in targets) {
             if ([target isTemporaryID] || [target persistentStore] != self || [target entity] != [relationship destinationEntity]) return NO;
             statement = [self _prepare:"INSERT INTO darling_edges VALUES(?,?,?)"];
-            success = statement && bindString(statement, 1, reference) == SQLITE_OK && bindString(statement, 2, [relationship name]) == SQLITE_OK && bindString(statement, 3, [target referenceObject]) == SQLITE_OK && sqlite3_step(statement) == SQLITE_DONE;
+            success = statement && bindString(statement, 1, reference) == SQLITE_OK && bindString(statement, 2, [relationship name]) == SQLITE_OK && bindString(statement, 3, rowKeyForObjectID(target)) == SQLITE_OK && sqlite3_step(statement) == SQLITE_DONE;
             sqlite3_finalize(statement);
             if (!success) return NO;
         }
@@ -372,7 +410,14 @@ static NSString *newIdentifier(void) {
         for (NSManagedObject *object in deleted) {
             if ([inserted containsObject:object]) continue;
             statement = success ? [self _prepare:"DELETE FROM darling_objects WHERE identifier=? AND revision=?"] : NULL;
-            if (success) success = statement && bindString(statement, 1, [[object objectID] referenceObject]) == SQLITE_OK && sqlite3_bind_int64(statement, 2, [object _storeVersion]) == SQLITE_OK && sqlite3_step(statement) == SQLITE_DONE && sqlite3_changes(_database) == 1;
+            if (success) success = statement && bindString(statement, 1, rowKeyForObjectID([object objectID])) == SQLITE_OK && sqlite3_bind_int64(statement, 2, [object _storeVersion]) == SQLITE_OK && sqlite3_step(statement) == SQLITE_DONE && sqlite3_changes(_database) == 1;
+            sqlite3_finalize(statement);
+        }
+        for (NSString *name in [_lastNumbers allKeys]) {
+            if (!success) break;
+            statement = [self _prepare:"INSERT OR REPLACE INTO darling_counters VALUES(?,?)"];
+            success = statement && bindString(statement, 1, name) == SQLITE_OK &&
+                sqlite3_bind_int64(statement, 2, [[_lastNumbers objectForKey:name] longLongValue]) == SQLITE_OK && sqlite3_step(statement) == SQLITE_DONE;
             sqlite3_finalize(statement);
         }
         NSDictionary *nodes = success ? [self _readNodes:error] : nil;

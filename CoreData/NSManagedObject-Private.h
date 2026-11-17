@@ -8,4 +8,5 @@
 - (long long)_storeVersion;
 - (void)_mergeCommittedValues;
 - (void)_discardPendingValues;
+- (NSDictionary *) _committedValues;
 @end
