@@ -554,7 +554,7 @@ typedef struct __VFlags {
 }
 
 - init {
-    return [self initWithFrame: NSMakeRect(0, 0, 1, 1)];
+    return [self initWithFrame: NSZeroRect];
 }
 
 - initWithFrame: (NSRect) frame {
