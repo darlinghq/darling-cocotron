@@ -244,16 +244,123 @@ ONYX2D_STATIC void O2ContextClipViewportToPath(O2Context_builtin *self,
     self->_vpheight = viewport.size.height;
 }
 
+/* Clipping to a path keeps the area the path covers, with the coverage of its
+   edge pixels, in the per pixel clip mask that masks and earlier paths also
+   use. An axis aligned rectangle only narrows the viewport, as before, so
+   the common rectangular clips need no mask. The path is in device space. */
+ONYX2D_STATIC void O2ContextClipToPathShape(O2Context_builtin *self,
+                                            O2Path *path, BOOL evenOdd)
+{
+    O2Rect rect;
+
+    if (O2PathIsRect(path, &rect)) {
+        O2ContextClipViewportToPath(self, path);
+        return;
+    }
+    O2ContextClipViewportToPath(self, path);
+
+    size_t width = O2ImageGetWidth(self->_surface);
+    size_t height = O2ImageGetHeight(self->_surface);
+
+    if (width == 0 || height == 0)
+        return;
+
+    if (self->_clipMask == nil) {
+        O2ColorSpaceRef gray = O2ColorSpaceCreateDeviceGray();
+
+        self->_clipMask = [[O2Surface alloc] initWithBytes: NULL
+                                                     width: width
+                                                    height: height
+                                          bitsPerComponent: 8
+                                               bytesPerRow: 0
+                                                colorSpace: gray
+                                                bitmapInfo: kO2ImageAlphaNone];
+        O2ColorSpaceRelease(gray);
+        if (self->_clipMask == nil)
+            return;
+        memset(O2SurfaceGetPixelBytes(self->_clipMask), 0xFF,
+               O2SurfaceGetBytesPerRow(self->_clipMask) * height);
+    }
+
+    uint8_t *bytes = O2SurfaceGetPixelBytes(self->_clipMask);
+    size_t bytesPerRow = O2SurfaceGetBytesPerRow(self->_clipMask);
+
+    // The area the path can cover, in whole pixels of the surface.
+    O2Rect box = O2PathGetBoundingBox(path);
+    long x0 = MAX(0, (long) floor(box.origin.x));
+    long y0 = MAX(0, (long) floor(box.origin.y));
+    long x1 = MIN((long) width, (long) ceil(box.origin.x + box.size.width));
+    long y1 = MIN((long) height, (long) ceil(box.origin.y + box.size.height));
+    long boxWidth = x1 - x0, boxHeight = y1 - y0;
+
+    // Everything outside the area is clipped away.
+    for (long y = 0; y < (long) height; y++) {
+        uint8_t *line = bytes + y * bytesPerRow;
+
+        if (y < y0 || y >= y1 || boxWidth <= 0) {
+            memset(line, 0, width);
+        } else {
+            memset(line, 0, x0);
+            memset(line + x1, 0, width - x1);
+        }
+    }
+    if (boxWidth <= 0 || boxHeight <= 0)
+        return;
+
+    // Coverage of the path, rendered white on black by the context's own
+    // anti-aliasing rasterizer into a surface of the area's size.
+    O2ColorSpaceRef gray = O2ColorSpaceCreateDeviceGray();
+    O2Surface *coverage = [[O2Surface alloc] initWithBytes: NULL
+                                                     width: boxWidth
+                                                    height: boxHeight
+                                          bitsPerComponent: 8
+                                               bytesPerRow: 0
+                                                colorSpace: gray
+                                                bitmapInfo: kO2ImageAlphaNone];
+
+    O2ColorSpaceRelease(gray);
+    if (coverage == nil)
+        return;
+    memset(O2SurfaceGetPixelBytes(coverage), 0,
+           O2SurfaceGetBytesPerRow(coverage) * boxHeight);
+
+    O2Context_builtin *context = [[[self class] alloc] initWithSurface: coverage
+                                                               flipped: NO];
+    O2MutablePathRef moved = O2PathCreateMutableCopy(path);
+
+    O2PathApplyTransform(moved, O2AffineTransformMakeTranslation(-x0, -y0));
+    O2ContextAddPath(context, moved);
+    O2ContextSetGrayFillColor(context, 1, 1);
+    if (evenOdd)
+        O2ContextEOFillPath(context);
+    else
+        O2ContextFillPath(context);
+    O2PathRelease(moved);
+
+    uint8_t *source = O2SurfaceGetPixelBytes(coverage);
+    size_t sourceBytesPerRow = O2SurfaceGetBytesPerRow(coverage);
+
+    for (long y = 0; y < boxHeight; y++) {
+        uint8_t *line = bytes + (y0 + y) * bytesPerRow + x0;
+        uint8_t *from = source + y * sourceBytesPerRow;
+
+        for (long x = 0; x < boxWidth; x++)
+            line[x] = (line[x] * (unsigned) from[x] + 127) / 255;
+    }
+    O2ContextRelease(context);
+    [coverage release];
+}
+
 void O2ContextDeviceClipToNonZeroPath_builtin(O2Context_builtin *self,
                                               O2Path *path)
 {
-    O2ContextClipViewportToPath(self, path);
+    O2ContextClipToPathShape(self, path, NO);
 }
 
 void O2ContextDeviceClipToEvenOddPath_builtin(O2Context_builtin *self,
                                               O2Path *path)
 {
-    O2ContextClipViewportToPath(self, path);
+    O2ContextClipToPathShape(self, path, YES);
 }
 
 static void O2ContextDeviceClipToMask_builtin(O2Context_builtin *self,
