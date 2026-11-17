@@ -77,10 +77,18 @@ class Layout {
         }
     }
 
-    void add(const kiwi::Constraint &constraint) {
-        if (constraint.strength() == kiwi::strength::required)
-            solver.addConstraint(constraint);
-        else
+    // A required constraint that conflicts with the ones added before it is broken: the layout
+    // goes on without it and the conflict is logged, rather than the whole layout being abandoned.
+    // `source` is the constraint it stands for, nil for a view's own frame.
+    void add(const kiwi::Constraint &constraint, NSLayoutConstraint *source = nil) {
+        if (constraint.strength() == kiwi::strength::required) {
+            try {
+                solver.addConstraint(constraint);
+            } catch (const kiwi::UnsatisfiableConstraint &) {
+                NSLog(@"Unable to simultaneously satisfy constraints. Will attempt to recover by breaking constraint %@",
+                      source ? [source description] : @"(a view frame)");
+            }
+        } else
             optional[constraint.strength()].push_back(constraint);
     }
 
@@ -186,9 +194,9 @@ private:
                 expression = expression - attribute([constraint secondItem], [constraint secondAttribute]) * [constraint multiplier];
             expression = expression - [constraint constant];
             switch ([constraint relation]) {
-            case NSLayoutRelationEqual: add((expression == 0.0) | strength); break;
-            case NSLayoutRelationLessThanOrEqual: add((expression <= 0.0) | strength); break;
-            case NSLayoutRelationGreaterThanOrEqual: add((expression >= 0.0) | strength); break;
+            case NSLayoutRelationEqual: add((expression == 0.0) | strength, constraint); break;
+            case NSLayoutRelationLessThanOrEqual: add((expression <= 0.0) | strength, constraint); break;
+            case NSLayoutRelationGreaterThanOrEqual: add((expression >= 0.0) | strength, constraint); break;
             default: [NSException raise:NSInvalidArgumentException format:@"Invalid constraint relation: %@", constraint];
             }
         }
