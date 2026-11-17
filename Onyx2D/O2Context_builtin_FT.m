@@ -266,12 +266,13 @@ static void renderFreeTypeBitmap(O2Context_builtin_FT *self, O2Surface *surface,
 
                 point.x += step.width;
                 point.y += step.height;
-            } else if (cached != nil) {
-                // Keep FreeType's hinted advance here; defaultAdvances would
-                // change what this path renders today. Cost: the draw step and
-                // the text-position update below then come from different
-                // sources, so chained runs drift by the hinting delta.
-                point.x += cached->advance >> 6;
+            } else {
+                // The same unhinted fractional advances that the text matrix
+                // update below applies, so chained runs do not drift.
+                O2Size step = O2SizeApplyAffineTransform(defaultAdvances[i], Trm);
+
+                point.x += step.width;
+                point.y += step.height;
             }
         }
 
