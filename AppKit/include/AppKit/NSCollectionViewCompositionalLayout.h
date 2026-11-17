@@ -55,7 +55,11 @@ typedef NS_ENUM(NSInteger, NSRectAlignment) {
     NSRectAlignmentTopTrailing,
 };
 
-@interface NSCollectionLayoutDimension : NSObject <NSCopying>
+@interface NSCollectionLayoutDimension : NSObject <NSCopying> {
+@private
+    NSInteger _kind;
+    CGFloat _dimension;
+}
 
 // A fraction of the width or height of the containing group.
 + (instancetype) fractionalWidthDimension: (CGFloat) fractionalWidth;
@@ -73,7 +77,11 @@ typedef NS_ENUM(NSInteger, NSRectAlignment) {
 
 @end
 
-@interface NSCollectionLayoutSize : NSObject <NSCopying>
+@interface NSCollectionLayoutSize : NSObject <NSCopying> {
+@private
+    NSCollectionLayoutDimension *_widthDimension;
+    NSCollectionLayoutDimension *_heightDimension;
+}
 
 + (instancetype) sizeWithWidthDimension: (NSCollectionLayoutDimension *) width
                         heightDimension: (NSCollectionLayoutDimension *) height;
@@ -83,7 +91,11 @@ typedef NS_ENUM(NSInteger, NSRectAlignment) {
 
 @end
 
-@interface NSCollectionLayoutSpacing : NSObject <NSCopying>
+@interface NSCollectionLayoutSpacing : NSObject <NSCopying> {
+@private
+    CGFloat _spacing;
+    BOOL _flexible;
+}
 
 // A flexible spacing is a minimum (>=); a fixed spacing is exact (==).
 + (instancetype) flexibleSpacing: (CGFloat) flexibleSpacing;
@@ -95,7 +107,13 @@ typedef NS_ENUM(NSInteger, NSRectAlignment) {
 
 @end
 
-@interface NSCollectionLayoutEdgeSpacing : NSObject <NSCopying>
+@interface NSCollectionLayoutEdgeSpacing : NSObject <NSCopying> {
+@private
+    NSCollectionLayoutSpacing *_leading;
+    NSCollectionLayoutSpacing *_top;
+    NSCollectionLayoutSpacing *_trailing;
+    NSCollectionLayoutSpacing *_bottom;
+}
 
 // Additional outsets around items; an edge may be omitted.
 + (instancetype) spacingForLeading: (NSCollectionLayoutSpacing *) leading
@@ -110,7 +128,12 @@ typedef NS_ENUM(NSInteger, NSRectAlignment) {
 
 @end
 
-@interface NSCollectionLayoutAnchor : NSObject <NSCopying>
+@interface NSCollectionLayoutAnchor : NSObject <NSCopying> {
+@private
+    NSDirectionalRectEdge _edges;
+    NSPoint _offset;
+    BOOL _fractional;
+}
 
 + (instancetype) layoutAnchorWithEdges: (NSDirectionalRectEdge) edges;
 + (instancetype) layoutAnchorWithEdges: (NSDirectionalRectEdge) edges
@@ -125,7 +148,13 @@ typedef NS_ENUM(NSInteger, NSRectAlignment) {
 
 @end
 
-@interface NSCollectionLayoutItem : NSObject <NSCopying>
+@interface NSCollectionLayoutItem : NSObject <NSCopying> {
+@private
+    NSDirectionalEdgeInsets _contentInsets;
+    NSCollectionLayoutEdgeSpacing *_edgeSpacing;
+    NSCollectionLayoutSize *_layoutSize;
+    NSArray *_supplementaryItems;
+}
 
 + (instancetype) itemWithLayoutSize: (NSCollectionLayoutSize *) layoutSize;
 + (instancetype) itemWithLayoutSize: (NSCollectionLayoutSize *) layoutSize
@@ -142,7 +171,13 @@ typedef NS_ENUM(NSInteger, NSRectAlignment) {
 
 @end
 
-@interface NSCollectionLayoutSupplementaryItem : NSCollectionLayoutItem
+@interface NSCollectionLayoutSupplementaryItem : NSCollectionLayoutItem {
+@private
+    NSInteger _zIndex;
+    NSString *_elementKind;
+    NSCollectionLayoutAnchor *_containerAnchor;
+    NSCollectionLayoutAnchor *_itemAnchor;
+}
 
 + (instancetype) supplementaryItemWithLayoutSize: (NSCollectionLayoutSize *) layoutSize
                                      elementKind: (NSString *) elementKind
@@ -159,7 +194,13 @@ typedef NS_ENUM(NSInteger, NSRectAlignment) {
 
 @end
 
-@interface NSCollectionLayoutBoundarySupplementaryItem : NSCollectionLayoutSupplementaryItem
+@interface NSCollectionLayoutBoundarySupplementaryItem : NSCollectionLayoutSupplementaryItem {
+@private
+    BOOL _extendsBoundary;
+    BOOL _pinToVisibleBounds;
+    NSRectAlignment _alignment;
+    NSPoint _offset;
+}
 
 + (instancetype) boundarySupplementaryItemWithLayoutSize: (NSCollectionLayoutSize *) layoutSize
                                              elementKind: (NSString *) elementKind
@@ -176,7 +217,11 @@ typedef NS_ENUM(NSInteger, NSRectAlignment) {
 
 @end
 
-@interface NSCollectionLayoutDecorationItem : NSCollectionLayoutItem
+@interface NSCollectionLayoutDecorationItem : NSCollectionLayoutItem {
+@private
+    NSInteger _zIndex;
+    NSString *_elementKind;
+}
 
 + (instancetype) backgroundDecorationItemWithElementKind: (NSString *) elementKind;
 
@@ -193,7 +238,12 @@ typedef NS_ENUM(NSInteger, NSRectAlignment) {
 typedef NSArray<NSCollectionLayoutGroupCustomItem *> * (^NSCollectionLayoutGroupCustomItemProvider)(
         id<NSCollectionLayoutEnvironment> layoutEnvironment);
 
-@interface NSCollectionLayoutGroup : NSCollectionLayoutItem
+@interface NSCollectionLayoutGroup : NSCollectionLayoutItem {
+@private
+    NSArray *_subitems;
+    BOOL _vertical;
+    NSCollectionLayoutSpacing *_interItemSpacing;
+}
 
 + (instancetype) horizontalGroupWithLayoutSize: (NSCollectionLayoutSize *) layoutSize
                                        subitem: (NSCollectionLayoutItem *) subitem
@@ -251,7 +301,17 @@ typedef void (^NSCollectionLayoutSectionVisibleItemsInvalidationHandler)(
         NSArray<id<NSCollectionLayoutVisibleItem>> *visibleItems, NSPoint contentOffset,
         id<NSCollectionLayoutEnvironment> layoutEnvironment);
 
-@interface NSCollectionLayoutSection : NSObject <NSCopying>
+@interface NSCollectionLayoutSection : NSObject <NSCopying> {
+@private
+    NSCollectionLayoutGroup *_group;
+    NSDirectionalEdgeInsets _contentInsets;
+    CGFloat _interGroupSpacing;
+    NSArray *_boundarySupplementaryItems;
+    NSArray *_decorationItems;
+    BOOL _supplementariesFollowContentInsets;
+    NSCollectionLayoutSectionOrthogonalScrollingBehavior _orthogonalScrollingBehavior;
+    NSCollectionLayoutSectionVisibleItemsInvalidationHandler _visibleItemsInvalidationHandler;
+}
 
 + (instancetype) sectionWithGroup: (NSCollectionLayoutGroup *) group;
 

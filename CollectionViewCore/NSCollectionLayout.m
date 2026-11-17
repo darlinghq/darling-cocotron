@@ -20,7 +20,8 @@
 // stage, where the cache's CollectionViewCore provides them (see CollectionViewCore/CMakeLists.txt).
 //
 // This file imports nothing from AppKit but its public header: AppKit links and re-exports this framework.
-// Instance variables are private to each @implementation, so no other image depends on them.
+// The instance variables are declared @private in the public header: the legacy Objective-C ABI (i386) cannot
+// declare them in an @implementation. No other image accesses them.
 
 #import <AppKit/NSCollectionViewCompositionalLayout.h>
 
@@ -32,10 +33,7 @@ enum {
     DimensionKindEstimated,
 };
 
-@implementation NSCollectionLayoutDimension {
-    NSInteger _kind;
-    CGFloat _dimension;
-}
+@implementation NSCollectionLayoutDimension
 
 - (instancetype) _initWithKind: (NSInteger) kind
                      dimension: (CGFloat) dimension {
@@ -95,10 +93,7 @@ enum {
 
 @end
 
-@implementation NSCollectionLayoutSize {
-    NSCollectionLayoutDimension *_widthDimension;
-    NSCollectionLayoutDimension *_heightDimension;
-}
+@implementation NSCollectionLayoutSize
 
 + (instancetype) sizeWithWidthDimension: (NSCollectionLayoutDimension *) width
                         heightDimension: (NSCollectionLayoutDimension *) height {
@@ -129,10 +124,7 @@ enum {
 
 @end
 
-@implementation NSCollectionLayoutSpacing {
-    CGFloat _spacing;
-    BOOL _flexible;
-}
+@implementation NSCollectionLayoutSpacing
 
 + (instancetype) flexibleSpacing: (CGFloat) flexibleSpacing {
     NSCollectionLayoutSpacing *spacing = [[[self alloc] init] autorelease];
@@ -167,12 +159,7 @@ enum {
 
 @end
 
-@implementation NSCollectionLayoutEdgeSpacing {
-    NSCollectionLayoutSpacing *_leading;
-    NSCollectionLayoutSpacing *_top;
-    NSCollectionLayoutSpacing *_trailing;
-    NSCollectionLayoutSpacing *_bottom;
-}
+@implementation NSCollectionLayoutEdgeSpacing
 
 + (instancetype) spacingForLeading: (NSCollectionLayoutSpacing *) leading
                                top: (NSCollectionLayoutSpacing *) top
@@ -217,11 +204,7 @@ enum {
 
 @end
 
-@implementation NSCollectionLayoutAnchor {
-    NSDirectionalRectEdge _edges;
-    NSPoint _offset;
-    BOOL _fractional;
-}
+@implementation NSCollectionLayoutAnchor
 
 - (instancetype) _initWithEdges: (NSDirectionalRectEdge) edges
                          offset: (NSPoint) offset
@@ -283,12 +266,7 @@ enum {
 - (void) _setSupplementaryItems: (NSArray *) supplementaryItems;
 @end
 
-@implementation NSCollectionLayoutItem {
-    NSDirectionalEdgeInsets _contentInsets;
-    NSCollectionLayoutEdgeSpacing *_edgeSpacing;
-    NSCollectionLayoutSize *_layoutSize;
-    NSArray *_supplementaryItems;
-}
+@implementation NSCollectionLayoutItem
 
 + (instancetype) itemWithLayoutSize: (NSCollectionLayoutSize *) layoutSize {
     return [self itemWithLayoutSize: layoutSize supplementaryItems: nil];
@@ -361,12 +339,7 @@ enum {
 
 @end
 
-@implementation NSCollectionLayoutSupplementaryItem {
-    NSInteger _zIndex;
-    NSString *_elementKind;
-    NSCollectionLayoutAnchor *_containerAnchor;
-    NSCollectionLayoutAnchor *_itemAnchor;
-}
+@implementation NSCollectionLayoutSupplementaryItem
 
 + (instancetype) supplementaryItemWithLayoutSize: (NSCollectionLayoutSize *) layoutSize
                                      elementKind: (NSString *) elementKind
@@ -454,12 +427,7 @@ static NSDirectionalRectEdge EdgesForAlignment(NSRectAlignment alignment) {
     return NSDirectionalRectEdgeNone;
 }
 
-@implementation NSCollectionLayoutBoundarySupplementaryItem {
-    BOOL _extendsBoundary;
-    BOOL _pinToVisibleBounds;
-    NSRectAlignment _alignment;
-    NSPoint _offset;
-}
+@implementation NSCollectionLayoutBoundarySupplementaryItem
 
 + (instancetype) boundarySupplementaryItemWithLayoutSize: (NSCollectionLayoutSize *) layoutSize
                                              elementKind: (NSString *) elementKind
@@ -527,10 +495,7 @@ static NSDirectionalRectEdge EdgesForAlignment(NSRectAlignment alignment) {
 
 @end
 
-@implementation NSCollectionLayoutDecorationItem {
-    NSInteger _zIndex;
-    NSString *_elementKind;
-}
+@implementation NSCollectionLayoutDecorationItem
 
 // GUESS: a background decoration fills its section, so its size is the whole container (not in the public documentation).
 + (instancetype) backgroundDecorationItemWithElementKind: (NSString *) elementKind {
@@ -570,11 +535,7 @@ static NSDirectionalRectEdge EdgesForAlignment(NSRectAlignment alignment) {
 
 @end
 
-@implementation NSCollectionLayoutGroup {
-    NSArray *_subitems;
-    BOOL _vertical;
-    NSCollectionLayoutSpacing *_interItemSpacing;
-}
+@implementation NSCollectionLayoutGroup
 
 // The getter is the item's; -setSupplementaryItems: is below.
 @dynamic supplementaryItems;
@@ -671,16 +632,7 @@ static NSDirectionalRectEdge EdgesForAlignment(NSRectAlignment alignment) {
 
 @end
 
-@implementation NSCollectionLayoutSection {
-    NSCollectionLayoutGroup *_group;
-    NSDirectionalEdgeInsets _contentInsets;
-    CGFloat _interGroupSpacing;
-    NSArray *_boundarySupplementaryItems;
-    NSArray *_decorationItems;
-    BOOL _supplementariesFollowContentInsets;
-    NSCollectionLayoutSectionOrthogonalScrollingBehavior _orthogonalScrollingBehavior;
-    NSCollectionLayoutSectionVisibleItemsInvalidationHandler _visibleItemsInvalidationHandler;
-}
+@implementation NSCollectionLayoutSection
 
 + (instancetype) sectionWithGroup: (NSCollectionLayoutGroup *) group {
     NSCollectionLayoutSection *section = [[[self alloc] init] autorelease];
