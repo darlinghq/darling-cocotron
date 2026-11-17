@@ -41,7 +41,7 @@ int main(void)
         NSButtonCell *pushCell = [push cell];
         NSRect regularInset = [pushCell getControlSizeAdjustment:NO];
         NSRect regularFlipped = [pushCell getControlSizeAdjustment:YES];
-        expect(regularFlipped.origin.y == -3, @"flipped regular bezel inset is signed");
+        expect(regularFlipped.origin.y == 3, @"flipped regular bezel inset is signed (the room for the shadow is below the bezel)");
         for (NSControlSize size = NSControlSizeLarge; size <= NSControlSizeExtraLarge; size++)
         {
             [pushCell setControlSize:size];
