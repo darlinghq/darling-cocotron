@@ -24,6 +24,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSRaise.h>
 #import <AppKit/NSStepper.h>
 #import <AppKit/NSStepperCell.h>
+#import <AppKit/NSBezierPath.h>
 #import <AppKit/NSWindow.h>
 
 @implementation NSStepperCell
@@ -200,40 +201,35 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return sendAction;
 }
 
-// I don't believe there are < > horizontal steppers?
-- (void) drawWithFrame: (NSRect) frame inView: (NSView *) controlView {
-    BOOL drawDottedRect = NO;
-
-    _controlView = controlView;
-    // QUIRK: the capsule is inset from the cell frame by 3 points from the sides and 3 from the top at the
-    // regular size (2 and 1 at the small size, 2 and 0 at the mini size), and is 21, 18 and 14 points high.
-    // Evidence: black-box renders on macOS 10.14.4 (tier 2). Test: appkit-stepper-aqua.m
+// QUIRK: the capsule is inset from the cell frame by 3 points from the sides and 3 from the top at the
+// regular size (2 and 1 at the small size, 2 and 0 at the mini size), and is 21, 18 and 14 points high.
+// Evidence: black-box renders on macOS 10.14.4 (tier 2). Test: appkit-stepper-aqua.m
+- (NSRect) _capsuleRectInFrame: (NSRect) frame flipped: (BOOL) flipped {
     static const CGFloat sideInset[3] = {3, 2, 2}, topInset[3] = {3, 1, 0}, capsuleHeight[3] = {22, 19, 15};
     int index = [self controlSize] == NSSmallControlSize ? 1 : ([self controlSize] == NSMiniControlSize ? 2 : 0);
-    BOOL flipped = [controlView isFlipped];
     NSRect capsule = NSMakeRect(NSMinX(frame) + sideInset[index], 0, NSWidth(frame) - 2 * sideInset[index],
                                 capsuleHeight[index]);
 
     capsule.origin.y = flipped ? NSMinY(frame) + topInset[index] : NSMaxY(frame) - topInset[index] - capsuleHeight[index];
+    return capsule;
+}
+
+// I don't believe there are < > horizontal steppers?
+- (void) drawWithFrame: (NSRect) frame inView: (NSView *) controlView {
+
+    _controlView = controlView;
+    NSRect capsule = [self _capsuleRectInFrame: frame flipped: [controlView isFlipped]];
     [[_controlView graphicsStyle] drawAquaStepperInRect: capsule
                                                 enabled: [self isEnabled]
                                           upHighlighted: _isUpHighlighted
                                         downHighlighted: _isDownHighlighted];
+}
 
-    if ([[controlView window] firstResponder] == controlView) {
-        if ([controlView isKindOfClass: [NSMatrix class]]) {
-            NSMatrix *matrix = (NSMatrix *) controlView;
+// the ring is drawn around the capsule
+- (NSBezierPath *) _focusRingPathWithFrame: (NSRect) frame inView: (NSView *) controlView {
+    NSRect capsule = [self _capsuleRectInFrame: frame flipped: [controlView isFlipped]];
 
-            drawDottedRect = ([matrix keyCell] == self) ? YES : NO;
-        } else if ([controlView isKindOfClass: [NSControl class]]) {
-            NSControl *control = (NSControl *) controlView;
-
-            drawDottedRect = ([control selectedCell] == self) ? YES : NO;
-        }
-    }
-
-    if (drawDottedRect)
-        NSDottedFrameRect(NSInsetRect(frame, 2, 2)); // fugly
+    return [NSBezierPath bezierPathWithRoundedRect: capsule xRadius: 6 yRadius: 6];
 }
 
 // *!* hmm. this is too fast! it's not visually discernible.

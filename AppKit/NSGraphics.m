@@ -19,6 +19,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSColor.h>
 #import <AppKit/NSGraphics.h>
+#import <AppKit/NSGraphicsContext.h>
 #import <AppKit/NSGraphicsContextFunctions.h>
 #import <AppKit/NSRaise.h>
 #import <AppKit/NSView.h>
@@ -27,6 +28,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <ApplicationServices/ApplicationServices.h>
 
 #import "NSPoofAnimation.h"
+#import "NSGraphics-Private.h"
 
 const CGFloat NSBlack = 0;
 const CGFloat NSDarkGray = 0.333;
@@ -87,6 +89,31 @@ void NSRectClip(NSRect rect) {
     CGContextClipToRect(graphicsPort, rect);
 }
 
+static BOOL focusRingBeforeRects(CGContextRef context, const NSRect *rects, NSInteger count) {
+    BOOL paint = YES;
+
+    if ([[NSGraphicsContext currentContext] _focusRingPlacement] == 0)
+        return YES;
+    for (NSInteger i = 0; i < count; i++) {
+        CGPathRef path = CGPathCreateWithRect(rects[i], NULL);
+
+        paint = _NSFocusRingBeforePaintingPath(context, path);
+        CGPathRelease(path);
+    }
+    return paint;
+}
+
+static void focusRingAfterRects(CGContextRef context, const NSRect *rects, NSInteger count) {
+    if ([[NSGraphicsContext currentContext] _focusRingPlacement] == 0)
+        return;
+    for (NSInteger i = 0; i < count; i++) {
+        CGPathRef path = CGPathCreateWithRect(rects[i], NULL);
+
+        _NSFocusRingAfterPaintingPath(context, path);
+        CGPathRelease(path);
+    }
+}
+
 void NSRectFillListWithColors(const NSRect *rects,
                               NSColor *const _Nonnull *_Nonnull colors,
                               NSInteger count)
@@ -128,18 +155,18 @@ void NSRectFillListWithGrays(const NSRect *rects, const CGFloat *grays,
 
 void NSRectFillList(const NSRect *rects, NSInteger count) {
     CGContextRef context = NSCurrentGraphicsPort();
+    BOOL paint = focusRingBeforeRects(context, rects, count);
+
     CGContextSaveGState(context);
     CGContextSetBlendMode(context, kCGBlendModeCopy);
-    CGContextFillRects(NSCurrentGraphicsPort(), rects, count);
+    if (paint)
+        CGContextFillRects(NSCurrentGraphicsPort(), rects, count);
     CGContextRestoreGState(context);
+    focusRingAfterRects(context, rects, count);
 }
 
 void NSRectFill(NSRect rect) {
-    CGContextRef context = NSCurrentGraphicsPort();
-    CGContextSaveGState(context);
-    CGContextSetBlendMode(context, kCGBlendModeCopy);
-    CGContextFillRect(NSCurrentGraphicsPort(), rect);
-    CGContextRestoreGState(context);
+    NSRectFillList(&rect, 1);
 }
 
 void NSEraseRect(NSRect rect) {
@@ -155,10 +182,14 @@ void NSRectFillListUsingOperation(const NSRect *rects, NSInteger count,
                                   NSCompositingOperation operation)
 {
     CGContextRef context = NSCurrentGraphicsPort();
+    BOOL paint = focusRingBeforeRects(context, rects, count);
+
     CGContextSaveGState(context);
     CGContextSetBlendMode(context, blendModeForCompositeOp(operation));
-    CGContextFillRects(NSCurrentGraphicsPort(), rects, count);
+    if (paint)
+        CGContextFillRects(NSCurrentGraphicsPort(), rects, count);
     CGContextRestoreGState(context);
+    focusRingAfterRects(context, rects, count);
 }
 
 void NSRectFillListWithColorsUsingOperation(
@@ -623,5 +654,79 @@ void NSShowAnimationEffect(NSAnimationEffect effect, NSPoint center,
 }
 
 void NSSetFocusRingStyle(NSFocusRingPlacement placement) {
-    printf("STUB: %s\n", __PRETTY_FUNCTION__);
+    [[NSGraphicsContext currentContext] _setFocusRingPlacement: (NSInteger) placement + 1 outerOnly: NO];
+}
+
+// The focus ring is a band along the outline of the shape: two points outside it (a bright first point and a faint
+// second one) and, unless the ring is drawn from outside the shape, two points inside it.
+//
+// QUIRK: the band profile and colour are the ones sampled from a keyboard-focused push button rendered on macOS
+// 10.14.4 at 1x (black-box observation, tier 2): over a white bezel the rows across the edge, from outside inwards,
+// were about 7%, 49%, then 42% of one blue (62, 150, 253), 0% two points out. The documentation only describes a
+// soft blue ring in the keyboard focus indicator colour. Test: appkit-focus-ring.m
+// (test_quirk_focus_ring_push_button_profile)
+static const CGFloat kFocusRingRed = 62.0 / 255.0, kFocusRingGreen = 150.0 / 255.0, kFocusRingBlue = 253.0 / 255.0;
+
+static void focusRingStroke(CGContextRef context, CGPathRef path, CGFloat width, CGFloat alpha) {
+    CGContextSetRGBStrokeColor(context, kFocusRingRed, kFocusRingGreen, kFocusRingBlue, alpha);
+    CGContextSetLineWidth(context, width);
+    CGContextSetLineDash(context, 0, NULL, 0);
+    CGContextSetLineJoin(context, kCGLineJoinRound);
+    CGContextBeginPath(context);
+    CGContextAddPath(context, path);
+    CGContextStrokePath(context);
+}
+
+static void focusRingBand(CGContextRef context, CGPathRef path, BOOL outside, BOOL inside) {
+    // a rectangle around the shape, for the clip that leaves out the inside of the shape
+    CGRect clipBounds = CGRectInset(CGPathGetBoundingBox(path), -8, -8);
+
+    if (outside) {
+        CGContextSaveGState(context);
+        CGContextBeginPath(context);
+        CGContextAddRect(context, clipBounds);
+        CGContextAddPath(context, path);
+        CGContextEOClip(context);
+        // 2 points out at 7%, the first point out at 49% in all (7% below it)
+        focusRingStroke(context, path, 4.0, 0.075);
+        focusRingStroke(context, path, 2.0, 0.449);
+        CGContextRestoreGState(context);
+    }
+    if (inside) {
+        CGContextSaveGState(context);
+        CGContextBeginPath(context);
+        CGContextAddPath(context, path);
+        CGContextClip(context);
+        focusRingStroke(context, path, 4.0, 0.45);
+        CGContextRestoreGState(context);
+    }
+}
+
+// Called by the fill and stroke functions with the shape about to be painted; draws what the focus ring style asks
+// for before the shape and returns NO if the shape itself is not to be painted (NSFocusRingOnly).
+BOOL _NSFocusRingBeforePaintingPath(CGContextRef context, CGPathRef path) {
+    NSGraphicsContext *current = [NSGraphicsContext currentContext];
+    NSInteger placement = [current _focusRingPlacement];
+
+    if (placement == 0 || [current graphicsPort] != context)
+        return YES;
+
+    BOOL outerOnly = [current _focusRingOuterOnly];
+
+    if (placement - 1 == NSFocusRingAbove)
+        return YES;
+    CGContextSaveGState(context);
+    focusRingBand(context, path, YES, !outerOnly && placement - 1 == NSFocusRingOnly);
+    CGContextRestoreGState(context);
+    return placement - 1 != NSFocusRingOnly;
+}
+
+void _NSFocusRingAfterPaintingPath(CGContextRef context, CGPathRef path) {
+    NSGraphicsContext *current = [NSGraphicsContext currentContext];
+
+    if ([current _focusRingPlacement] - 1 != NSFocusRingAbove || [current graphicsPort] != context)
+        return;
+    CGContextSaveGState(context);
+    focusRingBand(context, path, YES, ![current _focusRingOuterOnly]);
+    CGContextRestoreGState(context);
 }

@@ -21,6 +21,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSCell.h>
 #import <AppKit/NSClipView.h>
 #import <AppKit/NSControl.h>
+#import <AppKit/NSMatrix.h>
+#import <AppKit/NSBezierPath.h>
 #import <AppKit/NSControlAuxiliary.h>
 #import <AppKit/NSEvent.h>
 #import <AppKit/NSFont.h>
@@ -587,6 +589,18 @@ static NSMutableDictionary *cellClassDictionary = nil;
 
 - (NSInteger) sendActionOn: (NSInteger) mask {
     return [_cell sendActionOn: mask];
+}
+
+// A control whose single cell draws its own bezel or glyph has the ring drawn along it (see NSCell).
+- (NSBezierPath *) _focusRingShape {
+    if ([self isKindOfClass: [NSMatrix class]])
+        return nil;
+
+    NSCell *cell = [self selectedCell];
+
+    if (![cell _hasKeyboardFocusInView: self])
+        return nil;
+    return [cell _focusRingPathWithFrame: [self bounds] inView: self];
 }
 
 - (NSText *) currentEditor {

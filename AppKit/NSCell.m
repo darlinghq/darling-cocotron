@@ -20,7 +20,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSAttributedString.h>
 #import <AppKit/NSCell.h>
 #import <AppKit/NSClipView.h>
+#import <AppKit/NSBezierPath.h>
 #import <AppKit/NSColor.h>
+#import <AppKit/NSMatrix.h>
 #import <AppKit/NSControl.h>
 #import <AppKit/NSCursor.h>
 #import <AppKit/NSEvent.h>
@@ -564,6 +566,40 @@ NS_EXTRA_SYNTHESIZE_ASSIGN(NSCell, userInterfaceLayoutDirection, _userInterfaceL
 
 - (BOOL) showsFirstResponder {
     return NS_EXTRA(NSCell, self)->_showsFirstResponder;
+}
+
+// A cell has no mask of its own by default, so the focus ring of a control is the one its view draws, or the control
+// asks a cell with a look of its own for the shape of the ring (see _focusRingPathWithFrame:inView:).
+- (NSRect) focusRingMaskBoundsForFrame: (NSRect) cellFrame inView: (NSView *) controlView {
+    return NSZeroRect;
+}
+
+- (void) drawFocusRingMaskWithFrame: (NSRect) cellFrame inView: (NSView *) controlView {
+}
+
+- (BOOL) _hasKeyboardFocusInView: (NSView *) controlView {
+    NSWindow *window = [controlView window];
+
+    if (window == nil || ![window isKeyWindow] || [window firstResponder] != controlView)
+        return NO;
+    if ([controlView isKindOfClass: [NSMatrix class]]) {
+        if ([(NSMatrix *) controlView keyCell] != self)
+            return NO;
+    } else if ([controlView isKindOfClass: [NSControl class]]) {
+        if ([(NSControl *) controlView selectedCell] != self)
+            return NO;
+    } else
+        return NO;
+
+    NSFocusRingType viewType = [controlView focusRingType];
+
+    if (viewType == NSFocusRingTypeDefault)
+        viewType = [[controlView class] defaultFocusRingType];
+    return viewType != NSFocusRingTypeNone && NS_EXTRA(NSCell, self)->_focusRingType != NSFocusRingTypeNone;
+}
+
+- (NSBezierPath *) _focusRingPathWithFrame: (NSRect) frame inView: (NSView *) controlView {
+    return nil;
 }
 
 - (BOOL) refusesFirstResponder {

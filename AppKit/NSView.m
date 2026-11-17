@@ -36,6 +36,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSPrintOperation.h>
 #import <AppKit/NSRaise.h>
 #import <AppKit/NSScrollView.h>
+#import <AppKit/NSText.h>
 #import <AppKit/NSTrackingArea.h>
 #import <AppKit/NSView.h>
 #import <AppKit/NSScreen.h>
@@ -64,6 +65,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #include <mach-o/dyld_priv.h>
 #import "NSGestureRecognizer-Private.h"
 #import "DarlingLayout.h"
+#import "NSGraphics-Private.h"
 
 @class IBMetricsTable;
 
@@ -1006,6 +1008,80 @@ static inline void buildTransformsIfNeeded(NSView *self) {
                                                   bitsPerPixel: 0] autorelease];
 }
 
+// The view that a first responder stands for in focus ring drawing: the view itself, or the control that a field
+// editor is editing.
+static NSView *focusRingViewForResponder(NSResponder *responder) {
+    if ([responder isKindOfClass: [NSView class]]) {
+        if ([responder isKindOfClass: [NSText class]] && [(NSText *) responder isFieldEditor]) {
+            id delegate = [(NSText *) responder delegate];
+
+            if ([delegate isKindOfClass: [NSView class]])
+                return delegate;
+        }
+        return (NSView *) responder;
+    }
+    return nil;
+}
+
+// A view shows a focus ring while it has the keyboard focus (or its field editor does) in the key window, unless
+// its focus ring type is NSFocusRingTypeNone, and only if it reports a mask for the ring.
+static BOOL viewShowsFocusRing(NSView *view) {
+    NSWindow *window = [view window];
+
+    if (window == nil || [view isHidden] || ![window isKeyWindow])
+        return NO;
+    if (focusRingViewForResponder([window firstResponder]) != view)
+        return NO;
+
+    NSFocusRingType type = [view focusRingType];
+
+    if (type == NSFocusRingTypeDefault)
+        type = [[view class] defaultFocusRingType];
+    if (type == NSFocusRingTypeNone)
+        return NO;
+    return [view _focusRingShape] != nil || !NSIsEmptyRect([view focusRingMaskBounds]);
+}
+
+static BOOL anySubviewShowsFocusRing(NSView *view) {
+    for (NSView *child in [view subviews]) {
+        if (viewShowsFocusRing(child))
+            return YES;
+    }
+    return NO;
+}
+
+// Draws the focus rings of the subviews that have one, outside the shape of their mask. A ring reaches outside the
+// view that owns it, so it is drawn by the superview, over the subviews, in its coordinates and clip; the port's
+// clip is the rectangle being drawn, so a ring is painted again only together with the pixels under it.
+static void drawSubviewFocusRings(NSView *view, CGContextRef port) {
+    for (NSView *child in [view subviews]) {
+        if (!viewShowsFocusRing(child))
+            continue;
+
+        NSRect frame = [child frame];
+        NSGraphicsContext *context = [NSGraphicsContext graphicsContextWithGraphicsPort: port flipped: [child isFlipped]];
+
+        [NSGraphicsContext saveGraphicsState];
+        [NSGraphicsContext setCurrentContext: context];
+        CGContextSaveGState(port);
+        CGContextTranslateCTM(port, frame.origin.x, frame.origin.y);
+        if ([child isFlipped] != [view isFlipped]) {
+            CGContextTranslateCTM(port, 0, frame.size.height);
+            CGContextScaleCTM(port, 1, -1);
+        }
+        CGContextTranslateCTM(port, -[child bounds].origin.x, -[child bounds].origin.y);
+        [context _setFocusRingPlacement: (NSInteger) NSFocusRingOnly + 1 outerOnly: YES];
+        NSBezierPath *shape = [child _focusRingShape];
+
+        if (shape != nil)
+            [shape fill];
+        else
+            [child drawFocusRingMask];
+        CGContextRestoreGState(port);
+        [NSGraphicsContext restoreGraphicsState];
+    }
+}
+
 // Draws the view and its visible subviews, in their own coordinates, into the
 // current CGContext. The context's origin is the view's bounds origin.
 static void drawViewTreeInContext(NSView *view, CGContextRef port, NSRect rect) {
@@ -1037,6 +1113,13 @@ static void drawViewTreeInContext(NSView *view, CGContextRef port, NSRect rect) 
         }
         CGContextTranslateCTM(port, -[child bounds].origin.x, -[child bounds].origin.y);
         drawViewTreeInContext(child, port, childRect);
+        CGContextRestoreGState(port);
+    }
+
+    if (anySubviewShowsFocusRing(view)) {
+        CGContextSaveGState(port);
+        CGContextClipToRect(port, rect);
+        drawSubviewFocusRings(view, port);
         CGContextRestoreGState(port);
     }
 }
@@ -2789,8 +2872,30 @@ static void clearNeedsDisplay(NSView *self) {
     [[self window] setViewsNeedDisplay: YES];
 }
 
+// The ring is drawn by the superview, around the mask, so the area to redraw is the rectangle in the superview
+// widened by the reach of the ring.
 - (void) setKeyboardFocusRingNeedsDisplayInRect: (NSRect) rect {
-    NSUnimplementedMethod();
+    NSView *superview = [self superview];
+
+    if (superview == nil)
+        return;
+    [superview setNeedsDisplayInRect: NSInsetRect([self convertRect: rect toView: superview], -4, -4)];
+}
+
+- (NSBezierPath *) _focusRingShape {
+    return nil;
+}
+
+// A change of the keyboard focus to or from this view (or its field editor): redraw its ring, which is gone from
+// the mask bounds once the view has lost the focus.
+- (void) _focusRingStateChanged {
+    NSRect mask = [self focusRingMaskBounds];
+
+    [self setKeyboardFocusRingNeedsDisplayInRect: NSIsEmptyRect(mask) ? [self bounds] : mask];
+}
+
++ (NSView *) _focusRingViewForResponder: (NSResponder *) responder {
+    return focusRingViewForResponder(responder);
 }
 
 // No mask by default; subclasses that draw one also report its bounds.
@@ -3186,6 +3291,15 @@ static NSView *viewBeingPrinted = nil;
 
             if (!NSIsEmptyRect(check))
                 [child displayRectIgnoringOpacity: check];
+        }
+
+        if (anySubviewShowsFocusRing(self)) {
+            [self lockFocus];
+            CGContextRef port = [[NSGraphicsContext currentContext] graphicsPort];
+
+            CGContextClipToRect(port, rect);
+            drawSubviewFocusRings(self, port);
+            [self unlockFocus];
         }
     }
 
@@ -3857,15 +3971,11 @@ static NSMutableArray *installedViewLayoutGuides(NSView *view, BOOL create) {
 }
 
 - (void) noteFocusRingMaskChanged {
-    // Only a view that is drawing a ring has anything to redraw. The ring is
-    // drawn outside the mask bounds, so invalidate a margin around them.
-    if ([[self window] firstResponder] != self)
+    // Only a view that is drawing a ring has anything to redraw.
+    if (focusRingViewForResponder([[self window] firstResponder]) != self)
         return;
 
-    NSRect rect = NSInsetRect([self focusRingMaskBounds], -8, -8);
-    if (NSIsEmptyRect(rect))
-        rect = [self bounds];
-    [self setNeedsDisplayInRect: NSInsetRect(rect, -8, -8)];
+    [self _focusRingStateChanged];
 }
 
 - (void) willOpenMenu: (NSMenu *) menu withEvent: (NSEvent *) event {

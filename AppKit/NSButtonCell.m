@@ -20,6 +20,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSAttributedString.h>
 #import <AppKit/NSButtonCell.h>
+#import <objc/runtime.h>
 #import <AppKit/NSButtonImageSource.h>
 #import <AppKit/NSColor.h>
 #import <AppKit/NSComboBoxCell.h>
@@ -1262,6 +1263,19 @@ static void drawRoundedBezel(CGContextRef context, CGRect frame) {
                                                        enabled: [self isEnabled]
                                                         active: active
                                                    controlSize: [self controlSize]];
+        // the box, in the coordinates of the control (the drawing is translated to the image's rectangle and mirrored
+        // in a flipped control)
+        NSBezierPath *box = [[[controlView graphicsStyle] toggleBoxPathInRect: local
+                                                                         radio: isRadio
+                                                                   controlSize: [self controlSize]] copy];
+        NSAffineTransform *toControl = [NSAffineTransform transform];
+
+        [toControl translateXBy: NSMinX(rect) yBy: [controlView isFlipped] ? NSMaxY(rect) : NSMinY(rect)];
+        if ([controlView isFlipped])
+            [toControl scaleXBy: 1 yBy: -1];
+        [box transformUsingAffineTransform: toControl];
+        objc_setAssociatedObject(self, &toggleFocusRingPathKey, box, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        [box release];
     } else
         [[controlView graphicsStyle]
                 drawButtonImage: image
@@ -1290,24 +1304,6 @@ static void drawRoundedBezel(CGContextRef context, CGRect frame) {
     titleRect.size.height = textHeight;
 
     [title _clipAndDrawInRect: titleRect];
-
-    BOOL drawDottedRect = NO;
-
-    if ([[controlView window] firstResponder] == controlView) {
-
-        if ([controlView isKindOfClass: [NSMatrix class]]) {
-            NSMatrix *matrix = (NSMatrix *) controlView;
-
-            drawDottedRect = ([matrix keyCell] == self) ? YES : NO;
-        } else if ([controlView isKindOfClass: [NSControl class]]) {
-            NSControl *control = (NSControl *) controlView;
-
-            drawDottedRect = ([control selectedCell] == self) ? YES : NO;
-        }
-    }
-
-    if (drawDottedRect)
-        NSDottedFrameRect(NSInsetRect(titleRect, 1, 1));
 
     return titleRect; // FIXME: wrong value
 }
@@ -1672,6 +1668,47 @@ static NSSize scaledImageSizeInFrameSize(NSSize imageSize, NSSize frameSize,
 
     [self drawBezelWithFrame: frame inView: control];
     [self drawInteriorWithFrame: frame inView: control];
+}
+
+// The ring of a bordered button follows its bezel, the one of a check box or radio button the box (recorded when
+// the box is drawn, see drawImage:withFrame:inView:). The bezel of a rounded-style button is its adjusted frame
+// without the row of shadow below it.
+static char toggleFocusRingPathKey;
+
+- (NSBezierPath *) _focusRingPathWithFrame: (NSRect) frame inView: (NSView *) controlView {
+    NSBezierPath *toggle = objc_getAssociatedObject(self, &toggleFocusRingPathKey);
+
+    if (toggle != nil)
+        return toggle;
+    if (![self isBordered])
+        return nil;
+
+    NSRect adjustment = [self getControlSizeAdjustment: [controlView isFlipped]];
+    frame.size.width -= adjustment.size.width;
+    frame.size.height -= adjustment.size.height;
+    frame.origin.x += adjustment.origin.x;
+    frame.origin.y += adjustment.origin.y;
+
+    switch (NS_EXTRA(NSButtonCell, self)->_bezelStyle) {
+    case NSDisclosureBezelStyle:
+    case NSRecessedBezelStyle:
+        return nil;
+    case NSRegularSquareBezelStyle:
+    case NSTexturedSquareBezelStyle:
+    case NSTexturedRoundedBezelStyle:
+    case NSShadowlessSquareBezelStyle:
+        return [NSBezierPath bezierPathWithRect: frame];
+    default: {
+        NSRect body = frame;
+
+        body.size.height -= 1;
+        if (![controlView isFlipped])
+            body.origin.y += 1;
+        CGFloat radius = MIN(4.5, NSHeight(body) / 4.5);
+
+        return [NSBezierPath bezierPathWithRoundedRect: body xRadius: radius yRadius: radius];
+    }
+    }
 }
 
 - (void) performClick: sender {

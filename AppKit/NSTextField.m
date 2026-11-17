@@ -358,6 +358,15 @@ NS_EXTRA_DEALLOC(NSTextField)
     return YES;
 }
 
+// The ring of a text field is drawn around its bounds while it is being edited (its field editor has the focus).
+- (NSRect) focusRingMaskBounds {
+    return [self currentEditor] != nil ? [self bounds] : NSZeroRect;
+}
+
+- (void) drawFocusRingMask {
+    NSRectFill([self bounds]);
+}
+
 - (BOOL) becomeFirstResponder {
     [self selectText: nil];
     return YES;

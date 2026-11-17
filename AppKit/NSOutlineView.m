@@ -937,8 +937,10 @@ static void loadItemIntoMapTables(NSOutlineView *self, id item,
             [_editingCell setControlView: self];
             [_editingCell drawWithFrame: NS_EXTRA(NSTableView, self)->_editingFrame inView: self];
             if ([_editingCell focusRingType] != NSFocusRingTypeNone) {
-                [[NSColor keyboardFocusIndicatorColor] setStroke];
-                NSFrameRectWithWidth(NS_EXTRA(NSTableView, self)->_editingBorder, 2.0);
+                [NSGraphicsContext saveGraphicsState];
+                NSSetFocusRingStyle(NSFocusRingOnly);
+                NSRectFill(NS_EXTRA(NSTableView, self)->_editingBorder);
+                [NSGraphicsContext restoreGraphicsState];
             }
         } else {
             NSCell *dataCell = [self preparedCellAtColumn: drawThisColumn

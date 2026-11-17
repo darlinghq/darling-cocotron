@@ -37,7 +37,7 @@ typedef NS_OPTIONS(NSUInteger, NSTouchTypeMask) {
     NSTouchTypeMaskIndirect = 1 << 1,
 };
 
-@class CADisplayLink, NSWindow, NSMenu, NSMenuItem, NSCursor, NSClipView, NSPasteboard,
+@class CADisplayLink, NSBezierPath, NSWindow, NSMenu, NSMenuItem, NSCursor, NSClipView, NSPasteboard,
         NSTextInputContext, NSImage, NSBitmapImageRep, NSScrollView,
         NSTrackingArea, NSShadow, NSScreen, CALayer, CIFilter, CALayerContext, NSView,
         NSLayoutGuide, NSGestureRecognizer, NSLayoutDimension, NSLayoutXAxisAnchor, NSLayoutYAxisAnchor;
@@ -640,6 +640,11 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeAllScreens;
 
 // Invalidates the area the focus ring is drawn in after its mask changed.
 - (void) noteFocusRingMaskChanged;
++ (NSView *) _focusRingViewForResponder: (NSResponder *) responder;
+- (void) _focusRingStateChanged;
+// The shape of the focus ring when it is not the mask of -drawFocusRingMask (a control whose cell draws a bezel
+// or glyph of its own), in the view's coordinates; nil by default.
+- (NSBezierPath *) _focusRingShape;
 
 @end
 

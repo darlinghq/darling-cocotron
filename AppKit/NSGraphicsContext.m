@@ -24,6 +24,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSWindow-Private.h>
 #import <ApplicationServices/ApplicationServices.h>
 #import <QuartzCore/CIContext.h>
+#import "NSGraphics-Private.h"
 
 @class NSColor;
 
@@ -106,6 +107,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         CGContextRelease(NS_EXTRA(NSGraphicsContext, self)->_graphicsPort);
     [NS_EXTRA(NSGraphicsContext, self)->_ciContext release];
     [NS_EXTRA(NSGraphicsContext, self)->_focusStack release];
+    [NS_EXTRA(NSGraphicsContext, self)->_focusRingStack release];
     [NS_EXTRA(NSGraphicsContext, self)->_deviceDescription release];
     NS_EXTRA_FREE(NSGraphicsContext, self);
     [super dealloc];
@@ -349,10 +351,38 @@ NSMutableArray *NSCurrentFocusStack() {
 
 - (void) saveGraphicsState {
     CGContextSaveGState(NS_EXTRA(NSGraphicsContext, self)->_graphicsPort);
+    // the focus ring style is part of the graphics state
+    if (NS_EXTRA(NSGraphicsContext, self)->_focusRingStack == nil)
+        NS_EXTRA(NSGraphicsContext, self)->_focusRingStack = [[NSMutableArray alloc] init];
+    NSInteger packed = NS_EXTRA(NSGraphicsContext, self)->_focusRingPlacement * 2 +
+                       (NS_EXTRA(NSGraphicsContext, self)->_focusRingOuterOnly ? 1 : 0);
+    [NS_EXTRA(NSGraphicsContext, self)->_focusRingStack addObject: [NSNumber numberWithInteger: packed]];
 }
 
 - (void) restoreGraphicsState {
     CGContextRestoreGState(NS_EXTRA(NSGraphicsContext, self)->_graphicsPort);
+    NSMutableArray *stack = NS_EXTRA(NSGraphicsContext, self)->_focusRingStack;
+
+    if ([stack count] > 0) {
+        NSInteger packed = [[stack lastObject] integerValue];
+
+        NS_EXTRA(NSGraphicsContext, self)->_focusRingPlacement = packed / 2;
+        NS_EXTRA(NSGraphicsContext, self)->_focusRingOuterOnly = (packed & 1) ? YES : NO;
+        [stack removeLastObject];
+    }
+}
+
+- (NSInteger) _focusRingPlacement {
+    return NS_EXTRA(NSGraphicsContext, self)->_focusRingPlacement;
+}
+
+- (BOOL) _focusRingOuterOnly {
+    return NS_EXTRA(NSGraphicsContext, self)->_focusRingOuterOnly;
+}
+
+- (void) _setFocusRingPlacement: (NSInteger) placement outerOnly: (BOOL) outerOnly {
+    NS_EXTRA(NSGraphicsContext, self)->_focusRingPlacement = placement;
+    NS_EXTRA(NSGraphicsContext, self)->_focusRingOuterOnly = outerOnly;
 }
 
 - (void) flushGraphics {

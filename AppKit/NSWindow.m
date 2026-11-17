@@ -2214,6 +2214,9 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
         return YES;
     }
 
+    // a field editor forgets its control once it resigns, so find the control first
+    NSView *previousView = [NSView _focusRingViewForResponder: _firstResponder];
+
     if (![_firstResponder resignFirstResponder]) {
         return NO;
     }
@@ -2222,10 +2225,14 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
 
     if ([_firstResponder becomeFirstResponder]) {
         [self textInputFirstResponderChanged];
+        // the focus rings of both views are drawn by their superviews
+        [previousView _focusRingStateChanged];
+        [[NSView _focusRingViewForResponder: _firstResponder] _focusRingStateChanged];
         return YES;
     } else {
         _firstResponder = self;
         [self textInputFirstResponderChanged];
+        [previousView _focusRingStateChanged];
         return NO;
     }
 }

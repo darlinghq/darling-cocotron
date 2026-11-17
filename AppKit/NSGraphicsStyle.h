@@ -226,6 +226,10 @@ typedef struct _Margins {
                        enabled: (BOOL) enabled
                         active: (BOOL) active
                    controlSize: (NSControlSize) controlSize;
+
+// The outline of the box of a check box or radio button drawn in the rect (as the draw methods place it), for the
+// keyboard focus ring.
+- (NSBezierPath *) toggleBoxPathInRect: (NSRect) rect radio: (BOOL) radio controlSize: (NSControlSize) controlSize;
 @end
 
 @interface NSGraphicsStyle (NSPushButtonAqua)
