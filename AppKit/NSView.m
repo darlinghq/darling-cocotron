@@ -1418,6 +1418,15 @@ static BOOL applyFrame(NSView *self, NSRect frame) {
 
     NSSize oldSize = self->_bounds.size;
 
+    // QUIRK: a change of the frame size marks the view as needing layout, whether the new size came
+    // from the constraint solver, autoresizing or a direct call, and also outside of a window.
+    // Not documented. Evidence: black-box observation on macOS 10.14.4 (tier 2): needsLayout is
+    // YES after -setFrameSize: of a settled view with and without a window, and -layout of a view
+    // is called after constraints change its size.
+    // Test: tests/appkit-layout-repeat-passes.m (frame size change sets needsLayout)
+    if (!NSEqualSizes(self->_frame.size, frame.size))
+        NS_EXTRA(NSView, self)->_needsLayout = YES;
+
     if (self->_bounds.size.width == 0 || self->_bounds.size.height == 0) {
         // No valid current bounds value - just update it to use the frame size
         self->_bounds.size = frame.size;
@@ -4028,11 +4037,29 @@ static NSMutableArray *installedViewLayoutGuides(NSView *view, BOOL create) {
     }
 }
 
+- (BOOL) _subtreeNeedsUpdateConstraints {
+    if (NS_EXTRA(NSView, self)->_needsUpdateConstraints)
+        return YES;
+    for (NSView *child in _subviews) {
+        if ([child _subtreeNeedsUpdateConstraints])
+            return YES;
+    }
+    return NO;
+}
+
+// A pass can invalidate constraints: a view's -layout may change what its intrinsic size depends on
+// (a wrapping label setting its preferredMaxLayoutWidth from its new width is the usual case). The
+// passes then repeat until nothing is invalidated, so the sizes that result from the last layout
+// are applied. The count is bounded so that views that keep invalidating each other cannot hang.
 - (void) layoutSubtreeIfNeeded {
-    // Finish the update phase for the whole subtree before laying out any view.
-    [self updateConstraintsForSubtreeIfNeeded];
-    DarlingLayoutSubtree(self);
-    [self _layoutSubtreeAfterUpdatingConstraints];
+    for (int pass = 0; pass < 10; ++pass) {
+        // Finish the update phase for the whole subtree before laying out any view.
+        [self updateConstraintsForSubtreeIfNeeded];
+        DarlingLayoutSubtree(self);
+        [self _layoutSubtreeAfterUpdatingConstraints];
+        if (![self _subtreeNeedsUpdateConstraints])
+            break;
+    }
 }
 
 @end

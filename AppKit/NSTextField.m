@@ -46,7 +46,18 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @implementation NSTextField
 
-NS_EXTRA_SYNTHESIZE_ASSIGN(NSTextField, preferredMaxLayoutWidth, _preferredMaxLayoutWidth, CGFloat, preferredMaxLayoutWidth, setPreferredMaxLayoutWidth:)
+- (CGFloat) preferredMaxLayoutWidth {
+    return NS_EXTRA(NSTextField, self)->_preferredMaxLayoutWidth;
+}
+
+// The width wrapped text is laid out in is part of the intrinsic size, so a change invalidates it.
+- (void) setPreferredMaxLayoutWidth: (CGFloat) width {
+    if (NS_EXTRA(NSTextField, self)->_preferredMaxLayoutWidth == width)
+        return;
+    NS_EXTRA(NSTextField, self)->_preferredMaxLayoutWidth = width;
+    [self invalidateIntrinsicContentSize];
+}
+
 NS_EXTRA_DEALLOC(NSTextField)
 
 // A non-editable, non-selectable, borderless field without background that shows
