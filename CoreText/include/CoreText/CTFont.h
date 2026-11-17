@@ -294,6 +294,7 @@ CORETEXT_EXPORT CTFontRef CTFontCreateWithQuickdrawInstance(ConstStr255Param nam
 
 CORETEXT_EXPORT CFArrayRef CTFontCopyAvailableTables(CTFontRef font, CTFontTableOptions options);
 CORETEXT_EXPORT CFDataRef CTFontCopyTable(CTFontRef font, CTFontTableTag table, CTFontTableOptions options);
+CORETEXT_EXPORT bool CTFontHasTable(CTFontRef font, CTFontTableTag table);
 
 CORETEXT_EXPORT CFTypeID CTFontGetTypeID(void);
 

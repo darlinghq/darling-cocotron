@@ -99,3 +99,28 @@ CFArrayRef CTFontManagerCreateFontDescriptorsFromURL(CFURLRef fileURL)
     CFRelease(withURL);
     return result;
 }
+
+// CTFontManagerIsSupportedFont decides from the file name and the file's size, without looking at the font data: a
+// regular file on the local file system whose name ends (in any letter case) in one of the extensions below, and which
+// holds at least four bytes. A file URL for a missing file, a directory, an empty file or a name with another extension
+// (including woff, woff2, fon, bdf, pcf) is not supported; neither is a URL that is not a file URL.
+// QUIRK: the four-byte minimum is not documented. Evidence: black-box observation on macOS 26.7.3 (tier 2): .ttf files
+// of 0 to 3 bytes are refused and of 4 to 16 bytes accepted.
+// Test: tests/coretext-manager-supported-font.c (test_quirk_four_byte_minimum)
+bool CTFontManagerIsSupportedFont(CFURLRef fontURL)
+{
+    if (fontURL == NULL || ![(NSURL *) fontURL isFileURL])
+        return false;
+    NSString *path = [(NSURL *) fontURL path];
+    static NSSet *extensions;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        extensions = [[NSSet alloc] initWithObjects: @"ttf", @"otf", @"ttc", @"otc", @"dfont", @"pfb", @"pfa", @"suit", nil];
+    });
+    if (![extensions containsObject: [[path pathExtension] lowercaseString]])
+        return false;
+    NSDictionary *attributes = [[NSFileManager defaultManager] attributesOfItemAtPath: path error: NULL];
+    if (![[attributes fileType] isEqualToString: NSFileTypeRegular])
+        return false;
+    return [attributes fileSize] >= 4;
+}
