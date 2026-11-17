@@ -38,6 +38,7 @@ set(WAYLAND_PROTOCOL_FILES
 	"${WAYLAND_PROTOCOLS_DIR}/unstable/pointer-gestures/pointer-gestures-unstable-v1.xml"
 	"${WAYLAND_PROTOCOLS_DIR}/unstable/relative-pointer/relative-pointer-unstable-v1.xml"
 	"${WAYLAND_PROTOCOLS_DIR}/unstable/pointer-constraints/pointer-constraints-unstable-v1.xml"
+	"${WAYLAND_PROTOCOLS_DIR}/unstable/text-input/text-input-unstable-v3.xml"
 	# wlr-output-management is not part of wayland-protocols (it is a wlroots protocol), so the XML
 	# is kept in this tree; see protocols/README.md.
 	"${CMAKE_CURRENT_LIST_DIR}/protocols/wlr-output-management-unstable-v1.xml")
