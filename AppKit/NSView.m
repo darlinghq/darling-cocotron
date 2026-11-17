@@ -61,6 +61,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSTextInputClient.h>
 #import <objc/runtime.h>
 #include <math.h>
+#include <mach-o/dyld_priv.h>
 #import "NSGestureRecognizer-Private.h"
 #import "DarlingLayout.h"
 
@@ -152,7 +153,20 @@ const NSViewFullScreenModeOptionKey NSFullScreenModeAllScreens =
 NS_EXTRA_SYNTHESIZE_COPY(NSView, identifier, _identifier, NSUserInterfaceItemIdentifier, identifier, setIdentifier:)
 NS_EXTRA_SYNTHESIZE_ASSIGN(NSView, translatesAutoresizingMaskIntoConstraints, _translatesAutoresizingMaskIntoConstraints, BOOL, translatesAutoresizingMaskIntoConstraints, setTranslatesAutoresizingMaskIntoConstraints:)
 NS_EXTRA_SYNTHESIZE_RETAIN(NSView, appearance, _appearance, NSAppearance *, appearance, setAppearance:)
-NS_EXTRA_SYNTHESIZE_ASSIGN(NSView, wantsBestResolutionOpenGLSurface, _wantsBestResolutionOpenGLSurface, BOOL, wantsBestResolutionOpenGLSurface, setWantsBestResolutionOpenGLSurface:)
+// Until the application sets it, the property is YES for programs linked
+// against SDK 10.15 or later and NO for older ones (the NSView.h documentation
+// of the NSOpenGLSurfaceResolution category). A program's SDK version is what
+// dyld reports for its executable.
+- (BOOL) wantsBestResolutionOpenGLSurface {
+    if (NS_EXTRA(NSView, self)->_wantsBestResolutionOpenGLSurfaceSet)
+        return NS_EXTRA(NSView, self)->_wantsBestResolutionOpenGLSurface;
+    return dyld_get_program_sdk_version() >= DYLD_MACOSX_VERSION_10_15;
+}
+
+- (void) setWantsBestResolutionOpenGLSurface: (BOOL) value {
+    NS_EXTRA(NSView, self)->_wantsBestResolutionOpenGLSurface = value;
+    NS_EXTRA(NSView, self)->_wantsBestResolutionOpenGLSurfaceSet = YES;
+}
 
 static BOOL NSViewLayersEnabled = YES;
 static BOOL NSShowAllViews = NO;
@@ -369,8 +383,12 @@ typedef struct __VFlags {
         // alternative for enabling it when it should be.
         NS_EXTRA(NSView, self)->_autoresizesSubviews = YES;
         NS_EXTRA(NSView, self)->_isHidden = (vFlags & 0x80000000) ? YES : NO;
-        NS_EXTRA(NSView, self)->_wantsBestResolutionOpenGLSurface = [keyed
-                decodeBoolForKey: @"NSViewWantsBestResolutionOpenGLSurface"];
+        // An archive without the key leaves the SDK-dependent default.
+        if ([keyed containsValueForKey: @"NSViewWantsBestResolutionOpenGLSurface"]) {
+            NS_EXTRA(NSView, self)->_wantsBestResolutionOpenGLSurface = [keyed
+                    decodeBoolForKey: @"NSViewWantsBestResolutionOpenGLSurface"];
+            NS_EXTRA(NSView, self)->_wantsBestResolutionOpenGLSurfaceSet = YES;
+        }
         NS_EXTRA(NSView, self)->_tag = 0; // IB assigns a default tag id of 0 - which is different from
                   // the default in the docs.
         if ([keyed containsValueForKey: @"NSTag"])

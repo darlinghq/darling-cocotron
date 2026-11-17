@@ -151,6 +151,7 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeAllScreens;
         NSUserInterfaceItemIdentifier _identifier;
         NSLayoutPriority _horizontalContentHuggingPriority;
         BOOL _wantsBestResolutionOpenGLSurface;
+        BOOL _wantsBestResolutionOpenGLSurfaceSet;
         NSLayoutPriority _verticalContentHuggingPriority;
         NSLayoutPriority _horizontalContentCompressionResistancePriority;
         NSLayoutPriority _verticalContentCompressionResistancePriority;
