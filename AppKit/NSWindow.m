@@ -24,6 +24,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSDisplay.h>
 #import <AppKit/NSDraggingManager.h>
 #import <AppKit/NSEvent.h>
+#import <AppKit/NSEvent_mouse.h>
 #import <AppKit/NSEvent_CoreGraphics.h>
 #import <AppKit/NSGraphics.h>
 #import <AppKit/NSImage.h>
@@ -4275,7 +4276,7 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
                     NSPoint pt = [[area _view] convertPoint: mousePoint
                                                    fromView: nil];
                     tooltip = [owner view: [area _view]
-                            stringForToolTip: area
+                            stringForToolTip: [area _tag]
                                        point: pt
                                     userData: [area userInfo]];
                 } else {
@@ -4392,8 +4393,9 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
                               windowNumber: [self windowNumber]
                                    context: [self graphicsContext]
                                eventNumber: 0 // NSEvent currently ignores this.
-                            trackingNumber: (NSInteger) check
+                            trackingNumber: [check _tag]
                                   userData: [check userInfo]];
+            [(NSEvent_mouse *) event _setTrackingArea: check];
             [owner mouseExited: event];
         }
     }
@@ -4411,8 +4413,9 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
                               windowNumber: [self windowNumber]
                                    context: [self graphicsContext]
                                eventNumber: 0 // NSEvent currently ignores this.
-                            trackingNumber: (NSInteger) check
+                            trackingNumber: [check _tag]
                                   userData: [check userInfo]];
+            [(NSEvent_mouse *) event _setTrackingArea: check];
             [owner mouseEntered: event];
         }
     }
@@ -4448,8 +4451,9 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
                               windowNumber: [self windowNumber]
                                    context: [self graphicsContext]
                                eventNumber: 0 // NSEvent currently ignores this.
-                            trackingNumber: (NSInteger) check
+                            trackingNumber: [check _tag]
                                   userData: [check userInfo]];
+            [(NSEvent_mouse *) event _setTrackingArea: check];
             [owner cursorUpdate: event];
         }
     }

@@ -29,6 +29,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSTrackingArea.h>
 #import <AppKit/NSView.h>
 
+static NSInteger lastTag;
+
 @implementation NSTrackingArea
 
 - (id) initWithRect: (NSRect) rect
@@ -71,6 +73,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         NS_EXTRA(NSTrackingArea, self)->_rectInWindow = NSZeroRect;
         NS_EXTRA(NSTrackingArea, self)->_isToolTip = isToolTip;
         NS_EXTRA(NSTrackingArea, self)->_legacy = legacy;
+        NS_EXTRA(NSTrackingArea, self)->_tag = __sync_add_and_fetch(&lastTag, 1);
     }
     return self;
 }
@@ -127,6 +130,18 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (BOOL) _isLegacy {
     return NS_EXTRA(NSTrackingArea, self)->_legacy;
+}
+
+- (NSInteger) _tag {
+    return NS_EXTRA(NSTrackingArea, self)->_tag;
+}
+
+- (BOOL) _isFromTagAPI {
+    return NS_EXTRA(NSTrackingArea, self)->_fromTagAPI;
+}
+
+- (void) _setFromTagAPI: (BOOL) fromTagAPI {
+    NS_EXTRA(NSTrackingArea, self)->_fromTagAPI = fromTagAPI;
 }
 
 - (BOOL) _mouseInside {

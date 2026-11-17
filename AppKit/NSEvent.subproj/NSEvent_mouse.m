@@ -19,6 +19,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSEvent_mouse.h>
+#import <AppKit/NSTrackingArea.h>
 #import <AppKit/NSWindow.h>
 #import <AppKit/NSScreen.h>
 #import <CoreGraphics/CGEvent.h>
@@ -206,8 +207,22 @@ static NSInteger defaultButtonNumber(NSEventType type) {
 //
 // Accordingly, it's unclear wether there's a difference between -trackingArea
 // and -trackingNumber at all (as of 10.6 docs). Let's assume they are the same.
+// Only the events of areas made with NSTrackingArea have one; the number of the
+// others is the tag returned by -addTrackingRect:owner:userData:assumeInside:.
 - (NSTrackingArea *) trackingArea {
-    return (NSTrackingArea *) _trackingNumber;
+    return [_trackingArea _isFromTagAPI] ? nil : _trackingArea;
+}
+
+- (void) _setTrackingArea: (NSTrackingArea *) area {
+    if (_trackingArea != area) {
+        [_trackingArea release];
+        _trackingArea = [area retain];
+    }
+}
+
+- (void) dealloc {
+    [_trackingArea release];
+    [super dealloc];
 }
 
 - (NSInteger) trackingNumber {

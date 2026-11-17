@@ -25,10 +25,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     CGFloat _deltaX;
     CGFloat _deltaY;
     NSInteger _trackingNumber;
+    NSTrackingArea *_trackingArea;
     void *_userData;
     NSInteger _buttonNumber;
     NSInteger _eventNumber;
 }
+
+- (void) _setTrackingArea: (NSTrackingArea *) area;
 
 - (instancetype) initWithType: (NSEventType) type
                      location: (NSPoint) location
