@@ -61,11 +61,19 @@ static const CGFloat sidebarWidth = 150, margin = 16, gap = 12;
     return self;
 }
 
-- (void) dealloc {
+- (void) detachFromViews {
     [_list setDataSource: nil];
     [_list setDelegate: nil];
+    [_list setTarget: nil];
     [_sidebar setDataSource: nil];
     [_sidebar setDelegate: nil];
+    _list = nil;
+    _sidebar = nil;
+}
+
+- (void) dealloc {
+    // The list and sidebar belong to the panel's windows and are gone by now: detachFromViews already ran, while the
+    // panel was being deallocated and its views were alive.
     _source.enabledBlock = nil;
     [_source release];
     [_places release];

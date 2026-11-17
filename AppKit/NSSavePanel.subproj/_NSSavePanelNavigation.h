@@ -56,6 +56,8 @@
 - (void) reloadList;
 - (void) panelWillShow;
 - (void) panelDidEnd;
+// Breaks the links from the panel's views back to this object; called when the panel is deallocated.
+- (void) detachFromViews;
 
 - (void) goUp;
 - (IBAction) goBack: (id) sender;

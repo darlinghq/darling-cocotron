@@ -192,6 +192,8 @@ static NSSavePanel *_newPanel = nil;
 }
 
 - (void) dealloc {
+    // while the views are still alive: the navigation object is released after them
+    [[_NSSavePanelNavigation navigationForPanel: self] detachFromViews];
     [_dialogTitle release];
     [_nameFieldStringValue release];
     [_filename release];
