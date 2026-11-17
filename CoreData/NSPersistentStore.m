@@ -45,6 +45,9 @@
 
 - (void) dealloc {
     [_identifier release];
+    [_configurationName release];
+    [_url release];
+    [_options release];
     [super dealloc];
 }
 
@@ -90,7 +93,7 @@
 }
 
 - (void) setReadOnly: (BOOL) value {
-    NSUnimplementedMethod();
+    _isReadOnly = value;
 }
 
 - (void) setIdentifier: (NSString *) value {

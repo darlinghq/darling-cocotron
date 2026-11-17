@@ -27,6 +27,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 @class NSManagedObject, NSManagedObjectID, NSFetchRequest, NSPersistentStore,
         NSPersistentStoreCoordinator;
 
+COREDATA_EXPORT NSString *const NSManagedObjectContextObjectsDidChangeNotification;
 COREDATA_EXPORT NSString *const NSManagedObjectContextWillSaveNotification;
 COREDATA_EXPORT NSString *const NSManagedObjectContextDidSaveNotification;
 
@@ -60,10 +61,12 @@ typedef NS_ENUM(NSUInteger, NSManagedObjectContextConcurrencyType) {
     NSMutableSet *_insertedObjects;
     NSMutableSet *_updatedObjects;
     NSMutableSet *_deletedObjects;
+    NSMutableSet *_pendingInserted, *_pendingUpdated, *_pendingDeleted;
 
     NSMapTable *_objectIdToObject;
 
     BOOL _hasChanges;
+    BOOL _automaticallyMergesChangesFromParent, _mergingChanges;
 
     //
     BOOL _requestedProcessPendingChanges;
@@ -80,6 +83,7 @@ typedef NS_ENUM(NSUInteger, NSManagedObjectContextConcurrencyType) {
 - (BOOL) propagatesDeletesAtEndOfEvent;
 - (NSTimeInterval) stalenessInterval;
 - (id) mergePolicy;
+@property(nonatomic) BOOL automaticallyMergesChangesFromParent;
 
 - (void) setPersistentStoreCoordinator: (NSPersistentStoreCoordinator *) value;
 - (void) setUndoManager: (NSUndoManager *) value;

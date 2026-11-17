@@ -25,6 +25,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 @implementation NSFetchRequest
 
 - init {
+    _includesPendingChanges = YES;
+    _includesPropertyValues = YES;
+    _includesSubentities = YES;
+    _returnsObjectsAsFaults = YES;
     _entity = nil;
     _predicate = nil;
     _sortDescriptors = nil;
@@ -32,6 +36,17 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     _fetchLimit = 0;
     return self;
 }
+
+ + (instancetype)fetchRequestWithEntityName:(NSString *)name {
+    return [[[self alloc] initWithEntityName:name] autorelease];
+}
+
+- (instancetype)initWithEntityName:(NSString *)name {
+    if ((self = [self init])) _entityName = [name copy];
+    return self;
+}
+
+- (NSString *)entityName { return _entity ? [_entity name] : _entityName; }
 
 - initWithCoder: (NSCoder *) coder {
     NSUnimplementedMethod();
@@ -45,6 +60,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - copyWithZone: (NSZone *) zone {
     NSFetchRequest *result = NSCopyObject(self, 0, zone);
 
+    result->_entityName = [_entityName copy];
     result->_entity = [_entity retain];
     result->_predicate = [_predicate copy];
     result->_sortDescriptors = [_sortDescriptors copy];
@@ -57,6 +73,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (void) dealloc {
+    [_entityName release];
     [_entity release];
     [_predicate release];
     [_sortDescriptors release];
@@ -197,8 +214,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (NSUInteger) _countInContext: (NSManagedObjectContext *) _context {
-    NSLog(@"Stub called: _countInContext in %@", [self class]);
-    return 0;
+    return [_context countForFetchRequest:self error:NULL];
 }
 
 @end
