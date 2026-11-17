@@ -9,10 +9,11 @@
     NSPersistentStoreCoordinator *_persistentStoreCoordinator;
     NSManagedObjectContext *_viewContext;
     NSArray *_persistentStoreDescriptions;
-    NSError *_modelError;
 }
 
 + (NSURL *)defaultDirectoryURL;
++ (instancetype)persistentContainerWithName:(NSString *)name;
++ (instancetype)persistentContainerWithName:(NSString *)name managedObjectModel:(NSManagedObjectModel *)model;
 - (instancetype)initWithName:(NSString *)name;
 - (instancetype)initWithName:(NSString *)name managedObjectModel:(NSManagedObjectModel *)model;
 @property(readonly, copy) NSString *name;

@@ -6,11 +6,6 @@
 #import <CoreData/CoreDataErrors.h>
 #import <dispatch/dispatch.h>
 
-static NSError *ContainerError(NSInteger code, NSString *message) {
-    return [NSError errorWithDomain:NSCocoaErrorDomain code:code
-                          userInfo:@{NSLocalizedDescriptionKey:message}];
-}
-
 @implementation NSPersistentContainer
 
 @synthesize name = _name;
@@ -20,8 +15,17 @@ static NSError *ContainerError(NSInteger code, NSString *message) {
 @synthesize persistentStoreDescriptions = _persistentStoreDescriptions;
 
 + (NSURL *)defaultDirectoryURL {
-    return [[[NSFileManager defaultManager] URLsForDirectory:NSApplicationSupportDirectory
-                                                  inDomains:NSUserDomainMask] firstObject];
+    NSURL *support = [[[NSFileManager defaultManager] URLsForDirectory:NSApplicationSupportDirectory
+                                                             inDomains:NSUserDomainMask] firstObject];
+    return [support URLByAppendingPathComponent:[[NSProcessInfo processInfo] processName]];
+}
+
++ (instancetype)persistentContainerWithName:(NSString *)name {
+    return [[[self alloc] initWithName:name] autorelease];
+}
+
++ (instancetype)persistentContainerWithName:(NSString *)name managedObjectModel:(NSManagedObjectModel *)model {
+    return [[[self alloc] initWithName:name managedObjectModel:model] autorelease];
 }
 
 - (instancetype)initWithName:(NSString *)name {
@@ -50,6 +54,11 @@ static NSError *ContainerError(NSInteger code, NSString *message) {
             model = nil;
         }
     }
+    if (!model) {
+        NSLog(@"CoreData: error: Failed to load model named %@", name);
+        [self release];
+        return nil;
+    }
     self = [self initWithName:name managedObjectModel:model];
     [model release];
     return self;
@@ -60,12 +69,8 @@ static NSError *ContainerError(NSInteger code, NSString *message) {
     if (self) {
         _name = [name copy];
         _managedObjectModel = [model retain];
-        if (!model)
-            _modelError = [ContainerError(NSPersistentStoreIncompatibleSchemaError,
-                                         @"The managed object model could not be loaded.") retain];
-        else
-            _persistentStoreCoordinator = [[NSPersistentStoreCoordinator alloc]
-                initWithManagedObjectModel:model];
+        _persistentStoreCoordinator = [[NSPersistentStoreCoordinator alloc]
+            initWithManagedObjectModel:model];
         _viewContext = [[NSManagedObjectContext alloc] initWithConcurrencyType:NSMainQueueConcurrencyType];
         [_viewContext setPersistentStoreCoordinator:_persistentStoreCoordinator];
         NSURL *URL = [[[self class] defaultDirectoryURL]
@@ -79,43 +84,33 @@ static NSError *ContainerError(NSInteger code, NSString *message) {
 
 - (void)loadDescription:(NSPersistentStoreDescription *)description
             completion:(void (^)(NSPersistentStoreDescription *, NSError *))block {
-    NSError *error = _modelError;
-    if (!error && ![[NSPersistentStoreCoordinator registeredStoreTypes] objectForKey:description.type])
-        error = ContainerError(NSPersistentStoreInvalidTypeError, @"The requested persistent store type is unsupported.");
-    if (!error && ![description.type isEqual:NSInMemoryStoreType]) {
-        if (![description.URL isFileURL])
-            error = ContainerError(NSPersistentStoreOpenError, @"A file URL is required for this persistent store.");
-        else if (description.isReadOnly && ![[NSFileManager defaultManager] fileExistsAtPath:[description.URL path]])
-            error = ContainerError(NSPersistentStoreOpenError, @"The read-only persistent store does not exist.");
-        else if (!description.isReadOnly && ![[NSFileManager defaultManager]
-                createDirectoryAtURL:[description.URL URLByDeletingLastPathComponent]
-                withIntermediateDirectories:YES attributes:nil error:&error] && !error)
-            error = ContainerError(NSPersistentStoreOpenError, @"The persistent store directory could not be created.");
+    NSError *error = nil;
+    NSURL *URL = description.URL;
+    if (![description.type isEqual:NSInMemoryStoreType] && !description.isReadOnly && [URL isFileURL])
+        [[NSFileManager defaultManager] createDirectoryAtURL:[URL URLByDeletingLastPathComponent]
+                                 withIntermediateDirectories:YES attributes:nil error:NULL];
+    NSDictionary *options = description.options;
+    [_persistentStoreCoordinator lock];
+    @try {
+        [_persistentStoreCoordinator addPersistentStoreWithType:description.type
+            configuration:description.configuration URL:URL options:options error:&error];
+    } @finally {
+        [_persistentStoreCoordinator unlock];
     }
-    if (!error) {
-        NSMutableDictionary *options = [[description.options mutableCopy] autorelease];
-        [_persistentStoreCoordinator lock];
-        @try {
-            if (![_persistentStoreCoordinator addPersistentStoreWithType:description.type
-                    configuration:description.configuration URL:description.URL options:options error:&error] && !error)
-                error = ContainerError(NSPersistentStoreOpenError, @"The persistent store could not be opened.");
-        } @catch (NSException *exception) {
-            error = ContainerError(NSPersistentStoreOpenError, @"The persistent store could not be opened.");
-        } @finally {
-            [_persistentStoreCoordinator unlock];
-        }
-    }
-    block(description, error);
+    block([[description copy] autorelease], error);
 }
 
 - (void)loadPersistentStoresWithCompletionHandler:(void (^)(NSPersistentStoreDescription *, NSError *))block {
     if (!block)
         [NSException raise:NSInvalidArgumentException format:@"A persistent store completion handler is required"];
+    block = [[block copy] autorelease];
     for (NSPersistentStoreDescription *description in [[_persistentStoreDescriptions copy] autorelease]) {
         if (description.shouldAddStoreAsynchronously)
             dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
                 @autoreleasepool {
-                    [self loadDescription:description completion:block];
+                    [self loadDescription:description completion:^(NSPersistentStoreDescription *loaded, NSError *error) {
+                        dispatch_async(dispatch_get_main_queue(), ^{ block(loaded, error); });
+                    }];
                 }
             });
         else
@@ -142,7 +137,6 @@ static NSError *ContainerError(NSInteger code, NSString *message) {
     [_persistentStoreCoordinator release];
     [_viewContext release];
     [_persistentStoreDescriptions release];
-    [_modelError release];
     [super dealloc];
 }
 
