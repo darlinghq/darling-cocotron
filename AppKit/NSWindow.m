@@ -231,6 +231,7 @@ NSInteger NSBitsPerPixelFromDepth(NSWindowDepth depth) {
 
 @interface NSView (NSWindowBackingProperties)
 - (void) _backingPropertiesDidChange;
+- (void) _updateLayerContextFrames;
 @end
 
 @implementation NSWindowSheetCompletion
@@ -1282,6 +1283,9 @@ static BOOL _allowsAutomaticWindowTabbing;
     [_platformWindow setFrame: _frame];
 
     if (didSize) {
+        // The views were resized before the platform window, which places the native windows of root layers
+        // from its own height; place them again now that it has the new size.
+        [_backgroundView _updateLayerContextFrames];
         [self resetCursorRects];
         [self postNotificationName: NSWindowDidResizeNotification];
     }

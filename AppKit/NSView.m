@@ -1390,6 +1390,26 @@ NSRect _NSAlignRectToPixelGrid(NSRect rect, NSAlignmentOptions options) {
     NS_EXTRA(NSView, self)->_accessibilityTitle = title;
 }
 
+// The frame of the native window that hosts a root layer, in window coordinates. A view's own frame is in
+// its superview's coordinates, which are the same only for the window's content view.
+static NSRect layerContextFrame(NSView *self) {
+    NSRect frame = self->_frame;
+
+    if (self->_superview != nil)
+        frame = [self->_superview convertRect: frame toView: nil];
+
+    return frame;
+}
+
+// Moves the native windows of the root layers in a view's subtree after the view moved or resized, since their
+// frames are in window coordinates.
+static void updateLayerContextFrames(NSView *self) {
+    [NS_EXTRA(NSView, self)->_layerContext setFrame: layerContextFrame(self)];
+
+    for (NSView *child in self->_subviews)
+        updateLayerContextFrames(child);
+}
+
 // Stores a new frame and lays out the subviews, without posting
 // NSViewFrameDidChangeNotification. Returns whether the frame changed.
 static BOOL applyFrame(NSView *self, NSRect frame) {
@@ -1428,12 +1448,7 @@ static BOOL applyFrame(NSView *self, NSRect frame) {
         [self resizeSubviewsWithOldSize: oldSize];
     }
 
-    NSRect layerFrame = self->_frame;
-
-    if (self->_superview != nil)
-        layerFrame = [self->_superview convertRect: layerFrame toView: nil];
-
-    [NS_EXTRA(NSView, self)->_layerContext setFrame: layerFrame];
+    updateLayerContextFrames(self);
 
     invalidateTransform(self);
 
@@ -1558,7 +1573,7 @@ static void postFrameChange(NSView *self) {
         if (NS_EXTRA(NSView, self)->_layerContext && _window == nil) {
             [self _removeLayerFromSuperlayer];
         } else if (NS_EXTRA(NSView, self)->_layerContext) {
-            [NS_EXTRA(NSView, self)->_layerContext setSubwindow: [_window _createSubWindowWithFrame: [self frame]]];
+            [NS_EXTRA(NSView, self)->_layerContext setSubwindow: [_window _createSubWindowWithFrame: layerContextFrame(self)]];
             [self _updateLayerVisibility];
         } else if (_layer != nil && _window != nil) {
             [self _addLayerToSuperlayer];
@@ -2406,6 +2421,12 @@ static char inputContextKey;
 }
 
 // Native root-layer windows must follow the view tree as well as CALayer.
+// The native windows of root layers are placed from the top of the platform window, so they must follow a
+// window resize even when no view frame changed.
+- (void) _updateLayerContextFrames {
+    updateLayerContextFrames(self);
+}
+
 - (void) _updateLayerVisibility {
     BOOL hidden = [self isHiddenOrHasHiddenAncestor];
     [_layer setHidden: hidden];
@@ -2416,10 +2437,10 @@ static char inputContextKey;
 
 - (void) _createLayerContextIfNeeded {
     if (NS_EXTRA(NSView, self)->_layerContext == nil && [_superview layer] == nil && _window != nil) {
-        NS_EXTRA(NSView, self)->_layerContext = [[CALayerContext alloc] initWithFrame: [self frame]];
+        NS_EXTRA(NSView, self)->_layerContext = [[CALayerContext alloc] initWithFrame: layerContextFrame(self)];
         [NS_EXTRA(NSView, self)->_layerContext setLayer: _layer];
         if (_window) {
-            [NS_EXTRA(NSView, self)->_layerContext setSubwindow: [_window _createSubWindowWithFrame: [self frame]]];
+            [NS_EXTRA(NSView, self)->_layerContext setSubwindow: [_window _createSubWindowWithFrame: layerContextFrame(self)]];
             [self _updateLayerVisibility];
         }
     }
