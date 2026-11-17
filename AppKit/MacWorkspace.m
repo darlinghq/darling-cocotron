@@ -741,8 +741,26 @@ static LSLaunchFlags launchFlagsForConfiguration(
 - (void) noteUserDefaultsChanged {
 }
 
+// A package is a folder that is presented as one file. Without a type
+// registry to ask, this recognizes the folders whose extension marks a
+// well-known package or bundle type.
 - (BOOL) isFilePackageAtPath: (NSString *) path {
-    NSUnimplementedMethod();
+    BOOL isDirectory = NO;
+    if (![[NSFileManager defaultManager] fileExistsAtPath: path
+                                               isDirectory: &isDirectory] ||
+        !isDirectory)
+        return NO;
+    NSArray *extensions = @[
+        @"app", @"bundle", @"framework", @"plugin", @"kext", @"xpc", @"appex",
+        @"prefPane", @"saver", @"qlgenerator", @"mdimporter", @"component",
+        @"rtfd", @"pkg", @"mpkg", @"xcodeproj", @"xcworkspace", @"playground",
+        @"photoslibrary", @"dSYM", @"lproj"
+    ];
+    NSString *extension = [path pathExtension];
+    for (NSString *known in extensions)
+        if ([known caseInsensitiveCompare: extension] == NSOrderedSame)
+            return YES;
+    return NO;
 }
 
 - (NSString *) absolutePathForAppBundleWithIdentifier: (NSString *) identifier {

@@ -388,6 +388,7 @@ set(AppKit_sources
 	NSSavePanel.subproj/_NSFileSystemDataSource.m
 	NSSavePanel.subproj/NSOpenPanel.m
 	NSSavePanel.subproj/NSSavePanel.m
+	NSSavePanel.subproj/_NSSavePanelNavigation.m
 
 	NSDockTile.m
 	NSGraphics.m

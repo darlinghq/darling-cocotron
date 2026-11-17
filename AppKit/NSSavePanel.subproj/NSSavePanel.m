@@ -26,7 +26,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSScrollView.h>
 #import <AppKit/NSTextField.h>
 #import <AppKit/NSView.h>
+#import <AppKit/NSWorkspace.h>
 #import "_NSFileSystemDataSource.h"
+#import "_NSSavePanelNavigation.h"
 
 // UTType; Darling's UTType may not implement it.
 @interface NSObject (NSSavePanelContentTypes)
@@ -36,6 +38,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 @implementation NSSavePanel
 
 @synthesize showsHiddenFiles=_showsHiddenFiles;
+@dynamic delegate; // the window's, typed here as an NSOpenSavePanelDelegate
 @synthesize canSelectHiddenExtension = _canSelectHiddenExtension;
 @synthesize extensionHidden = _extensionHidden;
 
@@ -81,6 +84,7 @@ static NSSavePanel *_newPanel = nil;
     } else {
         [NSBundle loadNibNamed: @"NSSavePanel" owner: self];
         [_newPanel _addNameField];
+        [_newPanel _installNavigation];
     }
     // FIXME: release it?
     return [_newPanel resetToDefaultValues];
@@ -115,6 +119,71 @@ static NSSavePanel *_newPanel = nil;
     [_nameField setTarget: self];
     [_nameField setAction: @selector(_selectFile:)];
     [[browser superview] addSubview: _nameField];
+}
+
+// The folder navigation controls of the nib-based panel; see _NSSavePanelNavigation.
+- (void) _installNavigation {
+    if (_outlineView == nil)
+        return;
+    _NSSavePanelNavigation *navigation =
+            [[_NSSavePanelNavigation alloc] initWithPanel: self
+                                              outlineView: _outlineView
+                                                nameField: _nameField];
+    [navigation installLayout];
+    [navigation release]; // owned by the panel now
+}
+
+- (void) setShowsHiddenFiles: (BOOL) flag {
+    _showsHiddenFiles = flag;
+    [[_NSSavePanelNavigation navigationForPanel: self] reloadList];
+}
+
+- (BOOL) performKeyEquivalent: (NSEvent *) event {
+    if ([[_NSSavePanelNavigation navigationForPanel: self]
+                handleKeyEquivalent: event])
+        return YES;
+    return [super performKeyEquivalent: event];
+}
+
+- (BOOL) _packageAtURL: (NSURL *) url {
+    return !_treatsFilePackagesAsDirectories &&
+           [[NSWorkspace sharedWorkspace] isFilePackageAtPath: [url path]];
+}
+
+// The extension test of allowedFileTypes. A type that is not a plain
+// extension (a UTI) is not interpreted here and lets the file through, so
+// that no file is ever made unselectable by a type this panel cannot read.
+- (BOOL) _fileURLMatchesAllowedTypes: (NSURL *) url {
+    NSArray *types = [self allowedFileTypes];
+    if ([types count] == 0)
+        return YES;
+    NSString *extension = [url pathExtension];
+    for (NSString *type in types) {
+        if ([type rangeOfString: @"."].location != NSNotFound)
+            return YES;
+        if ([type caseInsensitiveCompare: extension] == NSOrderedSame)
+            return YES;
+    }
+    return NO;
+}
+
+// A save panel lists files, but only folders can be entered.
+- (BOOL) _canSelectURL: (NSURL *) url isDirectory: (BOOL) isDirectory {
+    return isDirectory && ![self _packageAtURL: url];
+}
+
+- (void) _navigationSelectionChanged {
+    id delegate = [self delegate];
+    if ([delegate respondsToSelector: @selector(panelSelectionDidChange:)])
+        [delegate panelSelectionDidChange: self];
+}
+
+- (void) ok: (id) sender {
+    [self _selectFile: sender];
+}
+
+- (void) cancel: (id) sender {
+    [self _cancel: sender];
 }
 
 - init {
@@ -236,17 +305,51 @@ static NSSavePanel *_newPanel = nil;
     [self _setFilename: [paths firstObject]];
 }
 
+// Asks the delegate whether each chosen URL is acceptable; the panel stays up when one is not.
+- (BOOL) _validatePaths: (NSArray *) paths {
+    id delegate = [self delegate];
+    if (![delegate respondsToSelector: @selector(panel:validateURL:error:)])
+        return YES;
+    for (NSString *path in paths) {
+        NSError *error = nil;
+        if (![delegate panel: self
+                  validateURL: [NSURL fileURLWithPath: path]
+                        error: &error]) {
+            if (error != nil)
+                [NSApp presentError: error];
+            else
+                NSBeep();
+            return NO;
+        }
+    }
+    return YES;
+}
+
 - (IBAction) _selectFile: (id) sender {
     if (_nameField == nil) {
         NSArray *paths = [self _acceptablePaths];
         if ([paths count] == 0) {
-            NSBeep();
+            // Nothing to accept, but a selected folder is opened instead.
+            NSURL *folder = [[_NSSavePanelNavigation navigationForPanel: self]
+                    selectedFolderToOpen];
+            if (folder != nil)
+                [self setDirectory: [folder path]];
+            else
+                NSBeep();
             return;
         }
+        if (![self _validatePaths: paths])
+            return;
         [self _setAcceptedPaths: paths];
     } else {
         NSString *name = [self nameFieldStringValue];
         if ([name length] == 0) {
+            NSURL *folder = [[_NSSavePanelNavigation navigationForPanel: self]
+                    selectedFolderToOpen];
+            if (folder != nil) {
+                [self setDirectory: [folder path]];
+                return;
+            }
             [_nameField selectText: self];
             NSBeep();
             return;
@@ -256,10 +359,12 @@ static NSSavePanel *_newPanel = nil;
         if (![path isAbsolutePath])
             path = [[self _selectedDirectory]
                     stringByAppendingPathComponent: name];
-        [self _setFilename: [[path stringByDeletingLastPathComponent]
-                                    stringByAppendingPathComponent:
-                                            [self _nameWithAllowedExtension:
-                                                          [path lastPathComponent]]]];
+        NSString *target = [[path stringByDeletingLastPathComponent]
+                stringByAppendingPathComponent:
+                        [self _nameWithAllowedExtension: [path lastPathComponent]]];
+        if (![self _validatePaths: @[ target ]])
+            return;
+        [self _setFilename: target];
     }
 
     [self _endWithCode: NSOKButton];
@@ -274,6 +379,7 @@ static NSSavePanel *_newPanel = nil;
 }
 
 - (void) _endWithCode: (NSModalResponse) code {
+    [[_NSSavePanelNavigation navigationForPanel: self] panelDidEnd];
     if (_runsAsSheet) {
         [NSApp endSheet: self returnCode: code];
     } else if (_runsModeless) {
@@ -310,6 +416,7 @@ static NSSavePanel *_newPanel = nil;
 
     _modelessCompletionHandler = [handler copy];
     _runsModeless = YES;
+    [[_NSSavePanelNavigation navigationForPanel: self] panelWillShow];
     [self center];
     [_nameField selectText: self];
     [self makeKeyAndOrderFront: nil];
@@ -368,6 +475,7 @@ static NSSavePanel *_newPanel = nil;
     _sheetCompletionHandler = [handler copy];
     _styleMaskBeforeSheet = [self styleMask];
     _runsAsSheet = YES;
+    [[_NSSavePanelNavigation navigationForPanel: self] panelWillShow];
     [NSApp beginSheet: self
             modalForWindow: window
              modalDelegate: self
@@ -409,6 +517,7 @@ static NSSavePanel *_newPanel = nil;
                                runModalForDirectory: [self directory]
                                                file: [self filename]];
     } else {
+        [[_NSSavePanelNavigation navigationForPanel: self] panelWillShow];
         // Like macOS, show the panel centered rather than at the (screen-clamped) origin saved in its nib.
         [self center];
         [_nameField selectText: self];
@@ -439,15 +548,7 @@ static NSSavePanel *_newPanel = nil;
 // The file browser lists the panel's directory, as documented for
 // directoryURL; without one it lists "/".
 - (void) _showDirectory {
-    id dataSource = [_outlineView dataSource];
-    if (![dataSource respondsToSelector: @selector(setRootURL:)])
-        return;
-    NSURL *root = nil;
-    if ([_directory length] > 0)
-        root = [NSURL fileURLWithPath: _directory isDirectory: YES];
-    [dataSource setRootURL: root];
-    [_outlineView deselectAll: nil];
-    [_outlineView reloadData];
+    [[_NSSavePanelNavigation navigationForPanel: self] directoryDidChange];
 }
 
 - (void) setDirectory: (NSString *) directory {
