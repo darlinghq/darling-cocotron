@@ -71,7 +71,9 @@ typedef NS_ENUM(NSUInteger, NSManagedObjectContextConcurrencyType) {
     NSMutableSet *_insertedObjects;
     NSMutableSet *_updatedObjects;
     NSMutableSet *_deletedObjects;
-    NSMutableSet *_pendingInserted, *_pendingUpdated, *_pendingDeleted;
+    NSMutableSet *_pendingInserted, *_pendingUpdated, *_pendingDeleted, *_pendingRefreshed;
+    NSManagedObjectContext *_parentContext;
+    NSString *_name;
 
     NSMapTable *_objectIdToObject;
 
@@ -94,6 +96,9 @@ typedef NS_ENUM(NSUInteger, NSManagedObjectContextConcurrencyType) {
 - (NSTimeInterval) stalenessInterval;
 - (id) mergePolicy;
 @property(nonatomic) BOOL automaticallyMergesChangesFromParent;
+// The context that saves of this context are pushed to; nil for a context that works on a coordinator.
+@property(nullable, nonatomic, retain) NSManagedObjectContext *parentContext;
+@property(nullable, nonatomic, copy) NSString *name;
 
 - (void) setPersistentStoreCoordinator: (NSPersistentStoreCoordinator *) value;
 - (void) setUndoManager: (NSUndoManager *) value;
