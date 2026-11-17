@@ -168,6 +168,31 @@ int main(void)
         CHECK(coverage(render(NSButtonTypeRadio, NSControlSizeSmall, NSControlStateValueOff, NO, YES), 9) == 14);
         CHECK(coverage(render(NSButtonTypeRadio, NSControlSizeMini, NSControlStateValueOff, NO, YES), 9) == 10);
 
+        // the title starts clear of the box: column 17 (the box ends at 15 or 16, the title and its ink start at 18 or later) are empty
+        for (int radio = 0; radio < 2; radio++) {
+            NSButton *titled = [[NSButton alloc] initWithFrame: NSMakeRect(0, 0, 100, 20)];
+            [[window contentView] addSubview: titled];
+            [titled setButtonType: radio ? NSButtonTypeRadio : NSButtonTypeSwitch];
+            [titled setTitle: @"Option"];
+            NSBitmapImageRep *tr = [titled bitmapImageRepForCachingDisplayInRect: [titled bounds]];
+            [titled cacheDisplayInRect: [titled bounds] toBitmapImageRep: tr];
+            [titled removeFromSuperview];
+            int inkAfter = 0;
+            for (int x = 17; x < 18; x++)
+                for (int y = 0; y < 20; y++) {
+                    rgba(tr, x, y, c);
+                    inkAfter += c[3] > 30;
+                }
+            CHECK(inkAfter == 0);
+            int firstInk = -1;
+            for (int x = 18; x < 40 && firstInk < 0; x++)
+                for (int y = 0; y < 20; y++) {
+                    rgba(tr, x, y, c);
+                    if (c[3] > 30) { firstInk = x; break; }
+                }
+            CHECK(firstInk >= 18 && firstInk <= 22);
+        }
+
         // disabled: the box is fainter than the enabled one
         rep = render(NSButtonTypeSwitch, NSControlSizeRegular, NSControlStateValueOff, NO, NO);
         rgba(rep, 2, 9, c);

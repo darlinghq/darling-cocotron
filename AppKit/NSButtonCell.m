@@ -862,6 +862,13 @@ static const CGFloat kImageMargin = 2.;
     }
 }
 
+- (BOOL) _isStockToggleImage: (NSImage *) image {
+    NSString *name = [image name];
+
+    return [name isEqualToString: @"NSSwitch"] || [name isEqualToString: @"NSHighlightedSwitch"] ||
+           [name isEqualToString: @"NSRadioButton"] || [name isEqualToString: @"NSHighlightedRadioButton"];
+}
+
 - (NSRect) imageRectForBounds: (NSRect) rect {
     // Make sure we use the same image as will be drawn!
     NSImage *image = [self imageForHighlight];
@@ -874,6 +881,19 @@ static const CGFloat kImageMargin = 2.;
                 [[[self controlView] graphicsStyle] sizeOfButtonImage: image
                                                               enabled: enabled
                                                                 mixed: mixed];
+    }
+    NSString *name = [image name];
+
+    if ([name isEqualToString: @"NSSwitch"] || [name isEqualToString: @"NSHighlightedSwitch"] ||
+        [name isEqualToString: @"NSRadioButton"] || [name isEqualToString: @"NSHighlightedRadioButton"]) {
+        // QUIRK: the title of a check box or radio button starts 18 points from the left edge of the cell
+        // (15 at the mini size), clear of the box; its ink starts 20 points from the edge on macOS, with
+        // the glyph's own margin (a title that started further right would not fit the cell, which is as
+        // wide as the title and 18 points). Not documented. Evidence: black-box renders on macOS 10.14.4 (tier 2),
+        // regular, small and mini, equal for check boxes and radio buttons.
+        // The width of the image area is what the title is placed after.
+        // Test: appkit-button-aqua.m
+        imageSize.width = [self controlSize] == NSMiniControlSize ? 11 : 14;
     }
     return NSMakeRect(rect.origin.x, rect.origin.y, imageSize.width,
                       imageSize.height);
@@ -1412,6 +1432,10 @@ static NSSize scaledImageSizeInFrameSize(NSSize imageSize, NSSize frameSize,
         imageOrigin.x = frame.origin.x + kImageMargin;
         titleRect.origin.x += imageSize.width + 4;
         titleRect.size.width -= imageSize.width + 4;
+        if ([self _isStockToggleImage: image])
+            // a cell is as wide as its title and 18 points; the title may use the room the margin to the
+            // right of it leaves, so that it is not truncated by the width of the image area
+            titleRect.size.width += 4;
         break;
 
     case NSImageRight:
