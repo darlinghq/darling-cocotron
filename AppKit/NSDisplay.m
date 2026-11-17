@@ -219,7 +219,7 @@ static NSDisplay *processDisplay = nil;
     NSInvalidAbstractInvocation();
 }
 
-- (NSEvent *) nextEventMatchingMask: (NSEventMask) mask
+- (NSEvent *) nextEventMatchingMask: (NSUInteger) mask
                           untilDate: (NSDate *) untilDate
                              inMode: (NSString *) mode
                             dequeue: (BOOL) dequeue
@@ -277,7 +277,7 @@ static NSDisplay *processDisplay = nil;
     return result;
 }
 
-- (void) discardEventsMatchingMask: (NSEventMask) mask
+- (void) discardEventsMatchingMask: (NSUInteger) mask
                        beforeEvent: (NSEvent *) event
 {
     [_eventQueueLock lock];
@@ -303,6 +303,28 @@ static NSDisplay *processDisplay = nil;
     } @finally {
         [_eventQueueLock unlock];
     }
+}
+
+- (void) accumulateMouseDeltaX: (CGFloat) dx y: (CGFloat) dy {
+    [_eventQueueLock lock];
+    _mouseDeltaX += dx;
+    _mouseDeltaY += dy;
+    [_eventQueueLock unlock];
+}
+
+// Whole units are taken; the fraction stays for the next call, so a slow
+// motion in a fractional scale is not lost.
+- (void) takeMouseDeltaX: (int32_t *) dx y: (int32_t *) dy {
+    [_eventQueueLock lock];
+    double wholeX = _mouseDeltaX < 0 ? ceil(_mouseDeltaX) : floor(_mouseDeltaX);
+    double wholeY = _mouseDeltaY < 0 ? ceil(_mouseDeltaY) : floor(_mouseDeltaY);
+    _mouseDeltaX -= wholeX;
+    _mouseDeltaY -= wholeY;
+    [_eventQueueLock unlock];
+    if (dx != NULL)
+        *dx = (int32_t) wholeX;
+    if (dy != NULL)
+        *dy = (int32_t) wholeY;
 }
 
 - (void) postEvent: (NSEvent *) event atStart: (BOOL) atStart {
@@ -391,6 +413,10 @@ static NSDisplay *processDisplay = nil;
 
 - (NSArray *) fontTypefacesForFamilyName: (NSString *) name {
     NSInvalidAbstractInvocation();
+    return nil;
+}
+
+- (NSString *) substituteFamilyName: (NSString *) familyName {
     return nil;
 }
 

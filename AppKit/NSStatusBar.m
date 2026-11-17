@@ -77,6 +77,9 @@ static NSStatusBar *_statusBar = nil;
 - (void) removeStatusItem: (NSStatusItem *) item {
     // The default name of a removed item is free for the next item to take.
     [_statusItems removeObjectIdenticalTo: item];
+#ifndef WIN32
+    [item _detachFromStatusBar];
+#endif
 }
 
 // Default autosave names are "Item-N" with the lowest N no other item holds.
@@ -99,6 +102,9 @@ static NSStatusBar *_statusBar = nil;
     [item setLength: length];
     [item _setDefaultAutosaveName: [self _unusedDefaultAutosaveName]];
     [_statusItems addObject: item];
+#ifndef WIN32
+    [item _attachToStatusBar];
+#endif
     return [item autorelease];
 }
 - (CGFloat) thickness {
@@ -117,7 +123,8 @@ static NSStatusBar *_statusBar = nil;
         return 30;
     }
 #endif
-    return 42;
+    // The menu bar's thickness, as observed on macOS 10.14 and 26.
+    return 22;
 }
 
 #ifdef WIN32
@@ -146,6 +153,11 @@ static NSStatusBar *_statusBar = nil;
 #endif
 
 - (void) handleApplicationClose {
+#ifndef WIN32
+    // Leaving the tray before the process goes away spares it a stale icon.
+    for (NSStatusItem *item in _statusItems)
+        [item _detachFromStatusBar];
+#endif
 #ifdef WIN32
     for (int i = 0; i < _statusItems.count; i++) {
         NSStatusItem *item = [_statusItems objectAtIndex: i];

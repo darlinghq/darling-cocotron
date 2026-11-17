@@ -18,12 +18,49 @@
 */
 
 #import <Foundation/NSObject.h>
+#import <AppKit/AppKitIvarLayout.h>
+#import <AppKit/NSPasteboard.h>
 
-@interface NSPasteboardItem : NSObject
+@protocol NSPasteboardItemDataProvider;
+
+// One item of a pasteboard: the data of one thing, offered in one or more types (UTIs).
+@interface NSPasteboardItem : NSObject <NSPasteboardWriting, NSPasteboardReading> {
+    NS_LEGACY_IVAR_PAD(_NSPasteboardItemReserved, 16)
+    NS_EXTRA_IVARS_BEGIN(NSPasteboardItem)
+    NSMutableArray *_orderedTypes;
+    NSMutableDictionary *_data;
+    NSMutableDictionary *_providers;
+    NSPasteboard *_pasteboard;
+    NSInteger _attachedChangeCount;
+    uint64_t _itemID;
+    BOOL _hasItemID;
+    BOOL _derived;
+    BOOL _attached;
+    BOOL _providersFinished;
+    NSUInteger _promiseOwners;
+    NS_EXTRA_IVARS_END(NSPasteboardItem)
+}
+
+@property(readonly, copy) NSArray<NSPasteboardType> *types;
+- (NSPasteboardType) availableTypeFromArray: (NSArray<NSPasteboardType> *) types;
+
+- (BOOL) setDataProvider: (id<NSPasteboardItemDataProvider>) dataProvider
+                forTypes: (NSArray<NSPasteboardType> *) types;
+- (BOOL) setData: (NSData *) data forType: (NSPasteboardType) type;
+- (BOOL) setString: (NSString *) string forType: (NSPasteboardType) type;
+- (BOOL) setPropertyList: (id) propertyList forType: (NSPasteboardType) type;
+
+- (NSData *) dataForType: (NSPasteboardType) type;
+- (NSString *) stringForType: (NSPasteboardType) type;
+- (id) propertyListForType: (NSPasteboardType) type;
+
 @end
 
 @protocol NSPasteboardItemDataProvider <NSObject>
-
-// TODO
-
+@required
+- (void) pasteboard: (NSPasteboard *) pasteboard
+                item: (NSPasteboardItem *) item
+  provideDataForType: (NSPasteboardType) type;
+@optional
+- (void) pasteboardFinishedWithDataProvider: (NSPasteboard *) pasteboard;
 @end

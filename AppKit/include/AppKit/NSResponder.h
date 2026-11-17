@@ -23,6 +23,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSMenu, NSUndoManager, NSTouchBar;
 
+#define _NS_SIDE_NSResponder 0, 1,
 // Legacy ObjC ABI (i386): instance size must stay 0x8, Apple's (only
 // _nextResponder, at 0x4). Add new state to the extra struct, never as an ivar.
 @interface NSResponder : NSObject <NSCoding> {

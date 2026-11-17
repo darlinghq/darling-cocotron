@@ -1,5 +1,6 @@
 #import <AppKit/NSActionCell.h>
 #import <AppKit/NSSavePanel.h>
+#import <AppKit/AppKitIvarLayout.h>
 
 @class NSPathComponentCell, NSURL, NSColor;
 
@@ -19,6 +20,7 @@ typedef NS_ENUM(NSInteger, NSPathStyle) {
     NSColor *_backgroundColor;
     NSArray *_allowedTypes;
     NSAttributedString *_placeholder;
+    NS_LEGACY_IVAR_PAD(_NSPathCellReserved, 32)
 }
 
 - (void) mouseEntered: (NSEvent *) event

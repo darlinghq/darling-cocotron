@@ -47,8 +47,8 @@ find_package(OpenGL REQUIRED)
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(PC_CAIRO cairo)
-# The X11 backend exports the main menu on the host's D-Bus session bus, through
-# the dbus wrapper library of the native libdbus-1.
+# The main menu (X11 backend) and the status items (NSStatusItem) are exported on the
+# host's D-Bus session bus, through the dbus wrapper library of the native libdbus-1.
 pkg_check_modules(PC_DBUS REQUIRED dbus-1)
 pkg_check_modules(PC_FONTCONFIG fontconfig)
 
@@ -96,6 +96,7 @@ set(AppKit_sources
 	NSButtonCell.m
 	NSLevelIndicatorCell.m
 	NSPDFImageRep.m
+	NSPICTImageRep.m
 	NSScroller.m
 	NSCustomImageRep.m
 	NSClipView.m
@@ -123,7 +124,6 @@ set(AppKit_sources
 	NSSecureTextField.m
 	NSScreen.m
 	NSPrintOperation.m
-	NSTextList.m
 	NSComboBoxWindow.m
 	NSSlider.m
 	NSTableHeaderView.m
@@ -151,7 +151,6 @@ set(AppKit_sources
 	nib.subproj/NSNibControlConnector.m
 	nib.subproj/NSNibOutletConnector.m
 	nib.subproj/NSNib.m
-	nib.subproj/NSNibArchive.m
 	nib.subproj/NSWindowTemplate.m
 	nib.subproj/NSViewTemplate.m
 	nib.subproj/NSMenuTemplate.m
@@ -163,14 +162,11 @@ set(AppKit_sources
 	nib.subproj/NSNibAuxiliaryActionConnector.m
 	nib.subproj/NSNibExternalObjectPlaceholder.m
 	nib.subproj/NSIBHelpConnector.m
-	nib.subproj/UINibCoding.m
 
 	NSTextFieldCell.m
 	NSFormCell.m
 	NSStepperCell.m
-	NSParagraphStyle.m
 	NSDatePicker.m
-	NSGlyphGenerator.m
 
 	CoreData_/_NSManagedProxy.m
 	CoreData_/NSPersistentDocument.m
@@ -186,11 +182,6 @@ set(AppKit_sources
 	NSForm.m
 	NSSheetContext.m
 
-	NSTextTable/NSTextTableBlock.m
-	NSTextTable/NSTextTable.m
-	NSTextTable/NSTextBlock.m
-
-	NSMutableParagraphStyle.m
 	NSBrowser.m
 	NSToolTipWindow.m
 	NSTitlebarAccessoryViewController.m
@@ -257,22 +248,15 @@ set(AppKit_sources
 	NSViewController.m
 
 	NSTextView.subproj/NSTextView.m
-	NSTextView.subproj/NSBidiHelper.m
-	NSTextView.subproj/NSLayoutManager.m
+	NSTextView.subproj/NSTextViewCommands.m
+	NSTextView.subproj/NSLayoutManager+AppKit.m
 	NSTextView.subproj/NSTextViewSharedData.m
-	NSTextView.subproj/NSTextStorage.m
 	NSTextView.subproj/NSTextKit2.m
-	NSTextView.subproj/NSTypesetter_concrete.m
-	NSTextView.subproj/NSTextStorage_concrete.m
 	NSTextView.subproj/NSSubTextStorage.m
-	NSTextView.subproj/NSTypesetter.m
 	NSTextView.subproj/NSRulerMarker+NSTextExtensions.m
-	NSTextView.subproj/NSRangeArray.m
-	NSTextView.subproj/NSTextContainer.m
 	NSTextView.subproj/NSSecureLayoutManager.m
 	NSTextView.subproj/NSUndoTextOperation.m
 	NSTextView.subproj/NSSecureTextView.m
-	NSTextView.subproj/NSTextTab.m
 
 	NSTableColumn.m
 	NSTextField.m
@@ -287,7 +271,6 @@ set(AppKit_sources
 
 	NSButton.m
 	NSPrintPanel.m
-	NSGlyphInfo.m
 	NSWindowController.m
 	NSColorSampler.m
 	NSColorSpace.m
@@ -300,7 +283,8 @@ set(AppKit_sources
 
 	NSDocumentController.m
 	NSStatusItem.m
-	NSShadow.m
+	NSStatusItemNotifier.m
+	NSDBusMenu.m
 	NSPathComponentCell.m
 	NSCachedImageRep.m
 	NSWindow-Drag.m
@@ -308,8 +292,10 @@ set(AppKit_sources
 	NSPrintProgressPanelController.m
 	NSHelpManager.m
 	NSProgressIndicator.m
+	NSQuickDrawView.m
 	NSFontCollection.m
 	NSFontDescriptor.m
+	UIFontNames.m
 	NSDisplay.m
 	DarlingDisplay.m
 
@@ -348,6 +334,7 @@ set(AppKit_sources
 	NSImageView.m
 	NSActionCell.m
 	NSAttributedString.m
+	NSUIFoundationProvider.m
 	RTF.subproj/NSRichTextReader.m
 	RTF.subproj/NSRichTextWriter.m
 	NSRulerMarker.m
@@ -412,12 +399,12 @@ set(AppKit_sources
 	NSKeyboardBinding/NSKeyboardBindingManager.m
 	NSKeyboardBinding/NSKeyboardBinding.m
 
-	NSTextAttachment.m
 
 	NSCollectionView/NSCollectionViewItem.m
 	NSCollectionView/NSCollectionView.m
 
 	NSStepper.m
+	NSDiffableDataSourceSnapshot.m
 	NSAccessibility.m
 	NSAppearance.m
 	NSAccessibilityCustomAction.m
@@ -425,15 +412,8 @@ set(AppKit_sources
 	NSAccessibilityRemoteUIElement.m
 	NSKeyValueBinding.m
 	NSCandidateListTouchBarItem.m
-	NSCollectionViewFlowLayout.m
 	NSTouchBarItem.m
 	NSInspectorBarItemIdentifiers.m
-	NSLayoutConstraint.m
-	NSLayoutAnchor.m
-	NSAutoresizingMaskLayoutConstraint.m
-	NSContentSizeLayoutConstraint.m
-	NSIBPrototypingLayoutConstraint.m
-	NSDictionaryOfVariableBindings.m
 	NSSpeechSynthesizer.m
 	NSCustomTouchBarItem.m
 	NSGestureRecognizer.m
@@ -442,6 +422,8 @@ set(AppKit_sources
 	NSGroupTouchBarItem.m
 	NSKeyBindingManager.m
 	NSPasteboardItem.m
+	NSPasteboardHostBridge.m
+	NSPasteboardSupport.m
 	NSPopoverTouchBarItem.m
 	NSSpaceTouchBarItem.m
 	NSStackView.m
@@ -450,9 +432,8 @@ set(AppKit_sources
 	NSTouchBar.m
 	NSTreeNode.m
 	NSVisualEffectView.m
-	NSATSTypesetter.m
 	NSOpenGLLayer.m
-	NSCollectionViewLayout.m
+	NSCollectionViewGridLayout.m
 	NSCollectionViewCompositionalLayout.m
 
 	NSSharingService.m
@@ -477,9 +458,8 @@ set(AppKit_sources
 	NSSplitViewItem.m
 	NSTabViewController.m
 	NSTableViewRowAction.m
-	NSCollectionViewLayoutAttributes.m
-	NSCollectionViewLayoutInvalidationContext.m
 	NSLayoutGuide.m
+	NSViewLayoutConstants.m
 	NSPressGestureRecognizer.m
 	NSGridView.m
 	NSHaptics.m
@@ -540,6 +520,11 @@ set(AppKit_resources
 	NSMenuArrow.tiff NSMenu.subproj/NSMenuArrow.tiff
 	NSMenuViewDoubleRightArrowGray.tiff NSMenu.subproj/NSMenuViewDoubleRightArrowGray.tiff
 	NSMenuViewDoubleRightArrow.tiff NSMenu.subproj/NSMenuViewDoubleRightArrow.tiff
+	NSMenuCheckmark.png NSMenu.subproj/NSMenuCheckmark.png
+	NSMenuMixedState.png NSMenu.subproj/NSMenuMixedState.png
+	NSMenuOnState.png NSMenu.subproj/NSMenuOnState.png
+	NSMenuOnStateTemplate.png NSMenu.subproj/NSMenuOnStateTemplate.png
+	NSMenuMixedStateTemplate.png NSMenu.subproj/NSMenuMixedStateTemplate.png
 
 	NSToolbarOverflowArrow.tiff NSToolbar.subproj/NSToolbarOverflowArrow.tiff
 	NSToolbarPrintItem.tiff NSToolbar.subproj/NSToolbarPrintItem.tiff
@@ -591,6 +576,7 @@ add_framework(AppKit
 		system
 		CoreFoundation
 		Foundation
+		CoreAutoLayout
 		Onyx2D
 		CoreText
 		CoreData
@@ -606,15 +592,22 @@ add_framework(AppKit
 		CoreServices
 		UniformTypeIdentifiers
 		HIToolbox
+		dbus
 )
 
 # Applications bind the NSCollectionLayout* names to AppKit, so AppKit re-exports the framework that defines them.
 reexport(AppKit CollectionViewCore ${CMAKE_BINARY_DIR}/src/external/cocotron/CollectionViewCore/CollectionViewCore)
 reexport(AppKit Foundation ${CMAKE_BINARY_DIR}/src/external/foundation/Foundation)
 reexport(AppKit ApplicationServices ${CMAKE_BINARY_DIR}/src/frameworks/ApplicationServices/ApplicationServices)
+# AppKit re-exports the layout classes too, so that programs built for SDKs that declare them in AppKit bind them
+# with AppKit as the library
+reexport(AppKit CoreAutoLayout ${CMAKE_BINARY_DIR}/src/external/cocotron/CoreAutoLayout/CoreAutoLayout)
+reexport(AppKit UIFoundation ${CMAKE_BINARY_DIR}/src/private-frameworks/UIFoundation/UIFoundation)
 
 target_include_directories(AppKit PRIVATE
 	private-include
+	# NSLayoutConstraintInternal.h, the view-facing SPI of CoreAutoLayout's constraint class
+	${CMAKE_CURRENT_SOURCE_DIR}/../CoreAutoLayout
 )
 
 function(add_backend name)
@@ -651,7 +644,6 @@ add_backend(X11
 	SOURCES
 		X11.backend/X11Display.m
 		X11.backend/X11AppMenu.m
-		X11.backend/X11DBusMenu.m
 		X11.backend/X11Window.m
 		X11.backend/X11SubWindow.m
 		X11.backend/X11Event.m
@@ -673,7 +665,6 @@ add_backend(X11
 		QuartzCore
 		# native libraries
                 X11
-		dbus
 		Xext
 		XRandR
 		Xcursor
@@ -697,6 +688,7 @@ if (WAYLAND_PROTOCOLS_USABLE)
 		SOURCES
 			Wayland.backend/WaylandCursor.m
 			Wayland.backend/WaylandDisplay.m
+			Wayland.backend/WaylandOutputManager.m
 			# Client glue shared with the CoreGraphics Wayland backend, which sits below AppKit.
 			../CoreGraphics/WaylandSupport/WaylandLibrary.m
 			Wayland.backend/WaylandDropSession.m

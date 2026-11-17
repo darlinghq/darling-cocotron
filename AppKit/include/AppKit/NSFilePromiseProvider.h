@@ -18,6 +18,9 @@
 */
 
 #import <Foundation/NSObject.h>
+#import <AppKit/AppKitIvarLayout.h>
 
-@interface NSFilePromiseProvider : NSObject
+@interface NSFilePromiseProvider : NSObject {
+    NS_LEGACY_IVAR_PAD(_NSFilePromiseProviderReserved, 40)
+}
 @end

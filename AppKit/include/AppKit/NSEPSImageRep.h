@@ -18,9 +18,11 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSImageRep.h>
+#import <AppKit/AppKitIvarLayout.h>
 
 @interface NSEPSImageRep : NSImageRep {
     NSData *_data;
+    NS_LEGACY_IVAR_PAD(_NSEPSImageRepReserved, 12)
 }
 
 + (NSArray *) imageRepsWithData: (NSData *) data;

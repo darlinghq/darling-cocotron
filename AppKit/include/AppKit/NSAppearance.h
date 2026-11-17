@@ -18,6 +18,7 @@
 */
 
 #import <AppKit/AppKitExport.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <Foundation/NSObject.h>
 #import <Foundation/NSString.h>
 
@@ -40,6 +41,7 @@ APPKIT_EXPORT BOOL NSSolariumEnabled(void);
 
 @interface NSAppearance : NSObject <NSSecureCoding> {
     NSAppearanceName _name;
+    NS_LEGACY_IVAR_PAD(_NSAppearanceReserved, 24)
 }
 
 // One shared appearance per known name; nil for any other name.

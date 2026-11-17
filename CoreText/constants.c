@@ -31,8 +31,21 @@ const CFStringRef kCTKernAttributeName = CFSTR("CTKernAttributeName");
 const CFStringRef kCTLanguageAttributeName = CFSTR("CTLanguageAttributeName");
 const CFStringRef kCTTypesetterOptionForcedEmbeddingLevel = CFSTR("CTTypesetterOptionForcedEmbeddingLevel");
 const CFStringRef kCTVerticalFormsAttributeName = CFSTR("CTVerticalFormsAttributeName");
+
+// Documented attribute names (CTStringAttributes.h, CTTextTab.h) that were missing. The SDK headers give the names
+// and types but not the strings; the strings were read from the exported constants on macOS 26.7.3 and on 10.14.4
+// (black-box observation; see the test that pins them).
+const CFStringRef kCTTrackingAttributeName = CFSTR("CTTracking");
+const CFStringRef kCTHorizontalInVerticalFormsAttributeName = CFSTR("CTHorizontalInVerticalForms");
+const CFStringRef kCTStrokeColorAttributeName = CFSTR("CTStrokeColor");
+const CFStringRef kCTWritingDirectionAttributeName = CFSTR("NSWritingDirection");
+const CFStringRef kCTTabColumnTerminatorsAttributeName = CFSTR("NSTabColumnTerminatorsAttributeName");
 const CFStringRef kCTFontWeightTrait = CFSTR("NSCTFontWeightTrait");
 const CFStringRef kCTFontWidthTrait = CFSTR("NSCTFontWidthTrait");
 const CFStringRef kCTFontSlantTrait = CFSTR("NSCTFontSlantTrait");
 const CFStringRef kCTFontOpenTypeFeatureTag = CFSTR("CTFeatureOpenTypeTag");
 const CFStringRef kCTFontOpenTypeFeatureValue = CFSTR("CTFeatureOpenTypeValue");
+
+// Not declared in the public SDK headers, but exported by macOS's CoreText (as an NSString attribute name) and bound by
+// applications. The string was read from the exported constant on macOS 26.7.3 (black-box observation; absent on macOS 10.14).
+const CFStringRef NSTextEncapsulationAttributeName = CFSTR("NSTextEncapsulation");

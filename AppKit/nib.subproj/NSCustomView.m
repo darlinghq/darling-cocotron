@@ -21,6 +21,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Foundation/NSString.h>
 #import <objc/runtime.h>
 
+@interface NSView (NSCustomViewAutoLayoutState)
+- (void) _decodeAutoLayoutStateFromKeyedCoder: (NSKeyedUnarchiver *) coder;
+@end
+
 @implementation NSCustomView
 
 - (id) initWithCoder: (NSCoder *) coder {
@@ -78,6 +82,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                     makeObjectsPerformSelector: @selector(_setSuperview:)
                                     withObject: newView];
             [_subviews removeAllObjects];
+
+            // The view of the custom class takes the Auto Layout state of the archive too: the
+            // constraints of a view are decoded with their items resolving to newView.
+            [newView _decodeAutoLayoutStateFromKeyedCoder: (NSKeyedUnarchiver *) coder];
 
             [newView setWantsLayer: [coder decodeBoolForKey:
                                                     @"NSViewIsLayerTreeHost"]];

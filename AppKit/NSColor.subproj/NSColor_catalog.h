@@ -38,6 +38,5 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 + (NSColor *) colorWithArchivedCatalogName: (NSColorListName) catalogName
                                  colorName: (NSColorName) colorName
                              fallbackColor: (NSColor *) fallback;
-- (NSColor *) highlightWithLevel: (CGFloat) level;
 
 @end

@@ -152,6 +152,10 @@ static BOOL isViewable(Display* display, Window window)
 			return kCGSErrorSuccess;
 		case kCGSOrderAbove:
 			XMapRaised(_display, _window);
+			// Another connection (the application's UI layer) grabs the
+			// pointer on the window once it is announced, so it must be
+			// mapped on the server by then.
+			XSync(_display, False);
 			return kCGSErrorSuccess;
 		case kCGSOrderBelow:
 		default:
@@ -161,6 +165,26 @@ static BOOL isViewable(Display* display, Window window)
 				"another window is not available on X11", (int) self.windowId, (int) place);
 			return kCGErrorNotImplemented;
 	}
+}
+
+-(CGError) becomeDisplayOverlay:(void**) drawable
+{
+	if (drawable == NULL)
+		return kCGErrorIllegalArgument;
+
+	// Override-redirect: the window manager neither decorates, places nor
+	// focuses the window, and it stays where it was stacked when it was mapped.
+	XSetWindowAttributes attributes = { .override_redirect = True };
+	XChangeWindowAttributes(_display, _window, CWOverrideRedirect, &attributes);
+
+	// The drawable is used through other connections to the server (the GL
+	// library's), which only know the window once this connection's requests
+	// have reached the server.
+	XSync(_display, False);
+
+	// The window itself is the drawable: it is the one that gets mapped.
+	*drawable = (void*) (uintptr_t) _window;
+	return kCGSErrorSuccess;
 }
 
 -(CGError) moveTo:(const CGPoint*) point

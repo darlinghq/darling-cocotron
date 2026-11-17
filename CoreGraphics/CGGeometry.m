@@ -39,6 +39,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #warning MAX is already defined, MAX(a, b) may not not behave as expected.
 #endif
 
+#include <math.h>
 #import <CoreGraphics/CGGeometry.h>
 
 const CGRect CGRectZero = {{0, 0}, {0, 0}};
@@ -372,4 +373,25 @@ void CGRectDivide(CGRect rect, CGRect *slice, CGRect *remainder,
         remainder->size.height -= amount;
         break;
     }
+}
+
+// Private. True for every finite value, false for NaN and the infinities.
+// Evidence: black-box calls on macOS 26.7.3 (tier 2) with 0, -0, 1, -1, the
+// smallest subnormal, DBL_MAX, 1e39, NaN, -NaN, +inf and -inf.
+// Test: coregraphics-private-context-functions.c
+bool CGFloatIsValid(CGFloat value) {
+    return isfinite(value);
+}
+
+// The same rectangle with a non-negative width and height. A negative size
+// moves the origin by the size. Observed on macOS 26.7.3: CGRectNull and
+// CGRectInfinite come back unchanged, and a size of -0 becomes +0.
+CGRect CGRectStandardize(CGRect rect) {
+    if (rect.size.width < 0)
+        rect.origin.x += rect.size.width;
+    if (rect.size.height < 0)
+        rect.origin.y += rect.size.height;
+    rect.size.width = fabs(rect.size.width);
+    rect.size.height = fabs(rect.size.height);
+    return rect;
 }

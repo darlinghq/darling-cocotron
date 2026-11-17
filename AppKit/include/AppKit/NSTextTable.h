@@ -18,17 +18,25 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSTextBlock.h>
+#import <AppKit/AppKitIvarLayout.h>
 
 typedef NS_ENUM(NSUInteger, NSTextTableLayoutAlgorithm) {
     NSTextTableAutomaticLayoutAlgorithm,
     NSTextTableFixedLayoutAlgorithm
 };
 
+// Tells the implementation (UIFoundation) that the instance variables are in
+// the extra-state structure, to be reached with NS_EXTRA.
+#define _NS_HAS_EXTRA_IVARS_NSTextTable 1
+
 @interface NSTextTable : NSTextBlock {
+    NS_LEGACY_IVAR_PAD(_NSTextTableReserved, 16)
+    NS_EXTRA_IVARS_BEGIN(NSTextTable)
     unsigned _numberOfColumns;
     BOOL _collapsesBorders;
     BOOL _hidesEmptyCells;
     NSTextTableLayoutAlgorithm _layoutAlgorithm;
+    NS_EXTRA_IVARS_END(NSTextTable)
 }
 
 - (unsigned) numberOfColumns;

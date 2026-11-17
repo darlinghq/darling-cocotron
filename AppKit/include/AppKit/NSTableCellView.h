@@ -18,6 +18,7 @@
 */
 
 #import <AppKit/NSView.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/NSCell.h>
 #import <AppKit/NSTableView.h>
 
@@ -29,6 +30,7 @@
     id _objectValue;
     NSBackgroundStyle _backgroundStyle;
     NSTableViewRowSizeStyle _rowSizeStyle;
+    NS_LEGACY_IVAR_PAD(_NSTableCellViewReserved, 4)
 }
 
 @property (assign) IBOutlet NSTextField *textField;

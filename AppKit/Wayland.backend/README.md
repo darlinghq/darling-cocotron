@@ -21,6 +21,9 @@ because the native libwayland resolves it outside the container. The choice is m
 
 `WaylandDecorations` (`org.darlinghq.AppKit`) or `DARLING_WAYLAND_DECORATIONS`, set to `client`, makes the
 backend draw the window frame itself even when the compositor offers server-side decorations.
+A window with a full-size content view and a transparent title bar never gets a frame: it declares client-side
+decorations and the backend draws none, as the application draws its own title bar. Changing the style mask or
+the transparency of a shown window updates this at once.
 
 ## What it provides
 
@@ -96,6 +99,7 @@ wayland-protocols XML and `wayland-scanner`; the backend is skipped when any of 
 ## Tests
 
 `../../tests/appkit-wayland-backend-selection.m` needs no compositor. `../../tests/appkit-wayland-window-state.m`
-needs a compositor and checks screens, scale and window frames through the API. The programs in `tests/` here
+needs a compositor and checks screens, scale and window frames through the API.
+`../../tests/appkit-wayland-window-chrome.sh` checks which windows get a frame, on headless sway. The programs in `tests/` here
 are manual fixtures that exercise one feature each against a real or private test compositor; their file
 names say what they cover.

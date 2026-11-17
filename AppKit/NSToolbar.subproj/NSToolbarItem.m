@@ -70,7 +70,7 @@ extern NSSize _NSToolbarIconSizeRegular;
 extern NSSize _NSToolbarIconSizeSmall;
 
 - (void) _configureAsStandardItemIfNeeded {
-    if ([_itemIdentifier isEqualToString: NSToolbarSeparatorItemIdentifier]) {
+    if ([NS_EXTRA(NSToolbarItem, self)->_itemIdentifier isEqualToString: NSToolbarSeparatorItemIdentifier]) {
         NSSize size;
 
         [self setLabel: @""];
@@ -89,7 +89,7 @@ extern NSSize _NSToolbarIconSizeSmall;
         size.width = floor(size.width / 2);
         [self setMaxSize: size];
 
-    } else if ([_itemIdentifier
+    } else if ([NS_EXTRA(NSToolbarItem, self)->_itemIdentifier
                        isEqualToString: NSToolbarSpaceItemIdentifier]) {
         NSSize size;
 
@@ -109,7 +109,7 @@ extern NSSize _NSToolbarIconSizeSmall;
         size.width /= 2;
         [self setMaxSize: size];
 
-    } else if ([_itemIdentifier
+    } else if ([NS_EXTRA(NSToolbarItem, self)->_itemIdentifier
                        isEqualToString: NSToolbarFlexibleSpaceItemIdentifier]) {
         NSSize size;
 
@@ -127,7 +127,7 @@ extern NSSize _NSToolbarIconSizeSmall;
         [self setMinSize: size];
         [self setMaxSize: NSMakeSize(-1, [self maxSize].height)];
 
-    } else if ([_itemIdentifier
+    } else if ([NS_EXTRA(NSToolbarItem, self)->_itemIdentifier
                        isEqualToString: NSToolbarShowColorsItemIdentifier]) {
         [self setLabel: NSLocalizedStringFromTableInBundle(
                                 @"Colors", nil,
@@ -149,7 +149,7 @@ extern NSSize _NSToolbarIconSizeSmall;
                                   [NSBundle bundleForClass: [NSToolbarItem
                                                                     class]],
                                   @"Reveals a color picker")];
-    } else if ([_itemIdentifier
+    } else if ([NS_EXTRA(NSToolbarItem, self)->_itemIdentifier
                        isEqualToString: NSToolbarShowFontsItemIdentifier]) {
         [self setLabel: NSLocalizedStringFromTableInBundle(
                                 @"Fonts", nil,
@@ -170,7 +170,7 @@ extern NSSize _NSToolbarIconSizeSmall;
                                   [NSBundle bundleForClass: [NSToolbarItem
                                                                     class]],
                                   @"Reveals a font picker")];
-    } else if ([_itemIdentifier
+    } else if ([NS_EXTRA(NSToolbarItem, self)->_itemIdentifier
                        isEqualToString:
                                NSToolbarCustomizeToolbarItemIdentifier]) {
         [self setLabel: NSLocalizedStringFromTableInBundle(
@@ -194,7 +194,7 @@ extern NSSize _NSToolbarIconSizeSmall;
                                   [NSBundle bundleForClass: [NSToolbarItem
                                                                     class]],
                                   @"Reveals a toolbar customization dialog")];
-    } else if ([_itemIdentifier
+    } else if ([NS_EXTRA(NSToolbarItem, self)->_itemIdentifier
                        isEqualToString: NSToolbarPrintItemIdentifier]) {
         [self setLabel: NSLocalizedStringFromTableInBundle(
                                 @"Print", nil,
@@ -219,38 +219,39 @@ extern NSSize _NSToolbarIconSizeSmall;
 }
 
 - (instancetype) initWithItemIdentifier: (NSToolbarItemIdentifier) identifier {
-    _itemIdentifier = [identifier retain];
-    _toolbar = nil;
-    _enclosingView = [[NSToolbarItemView alloc] init];
-    [_enclosingView setToolbarItem: self];
-    _image = nil;
-    _label = @"";
-    _paletteLabel = @"";
-    _target = nil;
-    _action = NULL;
-    _menuFormRepresentation = nil;
-    _view = nil;
-    _minSize = NSZeroSize;
-    _maxSize = NSZeroSize;
-    _visibilityPriority = NSToolbarItemVisibilityPriorityStandard;
-    _autovalidates = NO;
-    _isEnabled = YES;
+    NS_EXTRA(NSToolbarItem, self)->_itemIdentifier = [identifier retain];
+    NS_EXTRA(NSToolbarItem, self)->_toolbar = nil;
+    NS_EXTRA(NSToolbarItem, self)->_enclosingView = [[NSToolbarItemView alloc] init];
+    [NS_EXTRA(NSToolbarItem, self)->_enclosingView setToolbarItem: self];
+    NS_EXTRA(NSToolbarItem, self)->_image = nil;
+    NS_EXTRA(NSToolbarItem, self)->_label = @"";
+    NS_EXTRA(NSToolbarItem, self)->_paletteLabel = @"";
+    NS_EXTRA(NSToolbarItem, self)->_target = nil;
+    NS_EXTRA(NSToolbarItem, self)->_action = NULL;
+    NS_EXTRA(NSToolbarItem, self)->_menuFormRepresentation = nil;
+    NS_EXTRA(NSToolbarItem, self)->_view = nil;
+    NS_EXTRA(NSToolbarItem, self)->_minSize = NSZeroSize;
+    NS_EXTRA(NSToolbarItem, self)->_maxSize = NSZeroSize;
+    NS_EXTRA(NSToolbarItem, self)->_visibilityPriority = NSToolbarItemVisibilityPriorityStandard;
+    NS_EXTRA(NSToolbarItem, self)->_autovalidates = NO;
+    NS_EXTRA(NSToolbarItem, self)->_isEnabled = YES;
     [self _configureAsStandardItemIfNeeded];
 
     return self;
 }
 
 - (void) dealloc {
-    [_itemIdentifier release];
-    _toolbar = nil;
-    [_enclosingView setToolbarItem: nil];
-    [_enclosingView release];
-    [_toolTip release];
-    [_image release];
-    [_label release];
-    [_paletteLabel release];
-    [_menuFormRepresentation release];
-    [_view release];
+    [NS_EXTRA(NSToolbarItem, self)->_itemIdentifier release];
+    NS_EXTRA(NSToolbarItem, self)->_toolbar = nil;
+    [NS_EXTRA(NSToolbarItem, self)->_enclosingView setToolbarItem: nil];
+    [NS_EXTRA(NSToolbarItem, self)->_enclosingView release];
+    [NS_EXTRA(NSToolbarItem, self)->_toolTip release];
+    [NS_EXTRA(NSToolbarItem, self)->_image release];
+    [NS_EXTRA(NSToolbarItem, self)->_label release];
+    [NS_EXTRA(NSToolbarItem, self)->_paletteLabel release];
+    [NS_EXTRA(NSToolbarItem, self)->_menuFormRepresentation release];
+    [NS_EXTRA(NSToolbarItem, self)->_view release];
+    NS_EXTRA_FREE(NSToolbarItem, self);
     [super dealloc];
 }
 
@@ -267,82 +268,83 @@ static NSView *copyToolbarItemView(NSView *view) {
 
 - copyWithZone: (NSZone *) zone {
     NSToolbarItem *copy = NSCopyObject(self, 0, zone);
+    NS_EXTRA_COPY(NSToolbarItem, copy, self);
 
-    copy->_itemIdentifier = [_itemIdentifier copy];
-    copy->_toolbar = nil;
-    copy->_toolTip = [_toolTip copy];
-    copy->_image = [_image copy];
-    copy->_label = [_label copy];
-    copy->_paletteLabel = [_paletteLabel copy];
-    copy->_menuFormRepresentation = [_menuFormRepresentation copy];
-    copy->_view = copyToolbarItemView(_view);
-    copy->_enclosingView = [[NSToolbarItemView alloc]
-            initWithFrame: [_enclosingView frame]];
-    [copy->_enclosingView setToolbarItem: copy];
-    [copy->_enclosingView setSubview: copy->_view];
+    NS_EXTRA(NSToolbarItem, copy)->_itemIdentifier = [NS_EXTRA(NSToolbarItem, self)->_itemIdentifier copy];
+    NS_EXTRA(NSToolbarItem, copy)->_toolbar = nil;
+    NS_EXTRA(NSToolbarItem, copy)->_toolTip = [NS_EXTRA(NSToolbarItem, self)->_toolTip copy];
+    NS_EXTRA(NSToolbarItem, copy)->_image = [NS_EXTRA(NSToolbarItem, self)->_image copy];
+    NS_EXTRA(NSToolbarItem, copy)->_label = [NS_EXTRA(NSToolbarItem, self)->_label copy];
+    NS_EXTRA(NSToolbarItem, copy)->_paletteLabel = [NS_EXTRA(NSToolbarItem, self)->_paletteLabel copy];
+    NS_EXTRA(NSToolbarItem, copy)->_menuFormRepresentation = [NS_EXTRA(NSToolbarItem, self)->_menuFormRepresentation copy];
+    NS_EXTRA(NSToolbarItem, copy)->_view = copyToolbarItemView(NS_EXTRA(NSToolbarItem, self)->_view);
+    NS_EXTRA(NSToolbarItem, copy)->_enclosingView = [[NSToolbarItemView alloc]
+            initWithFrame: [NS_EXTRA(NSToolbarItem, self)->_enclosingView frame]];
+    [NS_EXTRA(NSToolbarItem, copy)->_enclosingView setToolbarItem: copy];
+    [NS_EXTRA(NSToolbarItem, copy)->_enclosingView setSubview: NS_EXTRA(NSToolbarItem, copy)->_view];
 
     return copy;
 }
 
 - (NSView *) _enclosingView {
-    return _enclosingView;
+    return NS_EXTRA(NSToolbarItem, self)->_enclosingView;
 }
 
 - (void) _setToolbar: (NSToolbar *) toolbar {
-    _toolbar = toolbar;
+    NS_EXTRA(NSToolbarItem, self)->_toolbar = toolbar;
 }
 
 - (NSToolbarItemIdentifier) itemIdentifier {
-    return _itemIdentifier;
+    return NS_EXTRA(NSToolbarItem, self)->_itemIdentifier;
 }
 
 - (NSToolbar *) toolbar {
-    return _toolbar;
+    return NS_EXTRA(NSToolbarItem, self)->_toolbar;
 }
 
 - (NSString *) label {
-    return _label;
+    return NS_EXTRA(NSToolbarItem, self)->_label;
 }
 
 - (NSString *) paletteLabel {
-    return _paletteLabel;
+    return NS_EXTRA(NSToolbarItem, self)->_paletteLabel;
 }
 
 // By default, this method returns a singleton menu item with item label as the
 // title.  For standard items, the target, action is set.
 - (NSMenuItem *) menuFormRepresentation {
     // FIX should update standard item for action/target/label changes?
-    if (_menuFormRepresentation == nil && [self label] != nil) {
-        _menuFormRepresentation =
+    if (NS_EXTRA(NSToolbarItem, self)->_menuFormRepresentation == nil && [self label] != nil) {
+        NS_EXTRA(NSToolbarItem, self)->_menuFormRepresentation =
                 [[NSMenuItem alloc] initWithTitle: [self label]
                                            action: [self action]
                                     keyEquivalent: @""];
-        [_menuFormRepresentation setImage: [self image]];
-        [_menuFormRepresentation setTarget: [self target]];
-        [_menuFormRepresentation setRepresentedObject: self];
+        [NS_EXTRA(NSToolbarItem, self)->_menuFormRepresentation setImage: [self image]];
+        [NS_EXTRA(NSToolbarItem, self)->_menuFormRepresentation setTarget: [self target]];
+        [NS_EXTRA(NSToolbarItem, self)->_menuFormRepresentation setRepresentedObject: self];
     }
 
-    return _menuFormRepresentation;
+    return NS_EXTRA(NSToolbarItem, self)->_menuFormRepresentation;
 }
 
 - (NSView *) view {
-    return _view;
+    return NS_EXTRA(NSToolbarItem, self)->_view;
 }
 
 - (NSSize) minSize {
-    return _minSize;
+    return NS_EXTRA(NSToolbarItem, self)->_minSize;
 }
 
 - (NSSize) maxSize {
-    return _maxSize;
+    return NS_EXTRA(NSToolbarItem, self)->_maxSize;
 }
 
 - (NSInteger) visibilityPriority {
-    return _visibilityPriority;
+    return NS_EXTRA(NSToolbarItem, self)->_visibilityPriority;
 }
 
 - (BOOL) autovalidates {
-    return _autovalidates;
+    return NS_EXTRA(NSToolbarItem, self)->_autovalidates;
 }
 
 - (BOOL) allowsDuplicatesInToolbar {
@@ -354,60 +356,60 @@ static NSView *copyToolbarItemView(NSView *view) {
     // this call is not helping
     // [_toolbar itemSizeDidChange];
 
-    [_enclosingView setNeedsDisplay: YES];
+    [NS_EXTRA(NSToolbarItem, self)->_enclosingView setNeedsDisplay: YES];
 }
 
 - (void) setLabel: (NSString *) label {
     // does not forward to view
     label = [label copy];
-    [_label release];
-    _label = label;
+    [NS_EXTRA(NSToolbarItem, self)->_label release];
+    NS_EXTRA(NSToolbarItem, self)->_label = label;
     [self _didChange];
 }
 
 - (void) setPaletteLabel: (NSString *) label {
     // does not forward to view
-    [_paletteLabel release];
-    _paletteLabel = [label retain];
+    [NS_EXTRA(NSToolbarItem, self)->_paletteLabel release];
+    NS_EXTRA(NSToolbarItem, self)->_paletteLabel = [label retain];
     [self _didChange];
 }
 
 - (void) setMenuFormRepresentation: (NSMenuItem *) menuItem {
     // does not forward to view
     menuItem = [menuItem retain];
-    [_menuFormRepresentation release];
-    _menuFormRepresentation = menuItem;
+    [NS_EXTRA(NSToolbarItem, self)->_menuFormRepresentation release];
+    NS_EXTRA(NSToolbarItem, self)->_menuFormRepresentation = menuItem;
 }
 
 - (void) setView: (NSView *) view {
     view = [view retain];
-    [_view release];
-    _view = view;
+    [NS_EXTRA(NSToolbarItem, self)->_view release];
+    NS_EXTRA(NSToolbarItem, self)->_view = view;
     if (view != nil) {
-        _minSize = [_view frame].size;
-        _maxSize = [_view frame].size;
+        NS_EXTRA(NSToolbarItem, self)->_minSize = [NS_EXTRA(NSToolbarItem, self)->_view frame].size;
+        NS_EXTRA(NSToolbarItem, self)->_maxSize = [NS_EXTRA(NSToolbarItem, self)->_view frame].size;
     }
-    [_enclosingView setSubview: _view];
+    [NS_EXTRA(NSToolbarItem, self)->_enclosingView setSubview: NS_EXTRA(NSToolbarItem, self)->_view];
     [self _didChange];
 }
 
 - (void) setMinSize: (NSSize) size {
-    _minSize = size;
+    NS_EXTRA(NSToolbarItem, self)->_minSize = size;
     [self _didChange];
 }
 
 - (void) setMaxSize: (NSSize) size {
-    _maxSize = size;
+    NS_EXTRA(NSToolbarItem, self)->_maxSize = size;
     [self _didChange];
 }
 
 - (void) setVisibilityPriority: (NSInteger) value {
-    _visibilityPriority = value;
+    NS_EXTRA(NSToolbarItem, self)->_visibilityPriority = value;
     [self _didChange];
 }
 
 - (void) setAutovalidates: (BOOL) value {
-    _autovalidates = value;
+    NS_EXTRA(NSToolbarItem, self)->_autovalidates = value;
 }
 
 /* The understanding is that NSToolbarItem only forwards
@@ -416,86 +418,86 @@ static NSView *copyToolbarItemView(NSView *view) {
  */
 
 - (NSImage *) image {
-    if ([_view respondsToSelector: @selector(image)])
-        return [(id) _view image];
+    if ([NS_EXTRA(NSToolbarItem, self)->_view respondsToSelector: @selector(image)])
+        return [(id) NS_EXTRA(NSToolbarItem, self)->_view image];
 
-    return _image;
+    return NS_EXTRA(NSToolbarItem, self)->_image;
 }
 
 - target {
-    if ([_view respondsToSelector: @selector(target)])
-        return [(id) _view target];
+    if ([NS_EXTRA(NSToolbarItem, self)->_view respondsToSelector: @selector(target)])
+        return [(id) NS_EXTRA(NSToolbarItem, self)->_view target];
 
-    return _target;
+    return NS_EXTRA(NSToolbarItem, self)->_target;
 }
 
 - (SEL) action {
-    if ([_view respondsToSelector: @selector(action)])
-        return [(id) _view action];
+    if ([NS_EXTRA(NSToolbarItem, self)->_view respondsToSelector: @selector(action)])
+        return [(id) NS_EXTRA(NSToolbarItem, self)->_view action];
 
-    return _action;
+    return NS_EXTRA(NSToolbarItem, self)->_action;
 }
 
 - (NSInteger) tag {
-    if ([_view respondsToSelector: @selector(tag)])
-        return [(id) _view tag];
+    if ([NS_EXTRA(NSToolbarItem, self)->_view respondsToSelector: @selector(tag)])
+        return [(id) NS_EXTRA(NSToolbarItem, self)->_view tag];
 
-    return _tag;
+    return NS_EXTRA(NSToolbarItem, self)->_tag;
 }
 
 - (BOOL) isEnabled {
-    if ([_view respondsToSelector: @selector(isEnabled)])
-        return [(id) _view isEnabled];
+    if ([NS_EXTRA(NSToolbarItem, self)->_view respondsToSelector: @selector(isEnabled)])
+        return [(id) NS_EXTRA(NSToolbarItem, self)->_view isEnabled];
 
-    return _isEnabled;
+    return NS_EXTRA(NSToolbarItem, self)->_isEnabled;
 }
 
 - (NSString *) toolTip {
-    return _toolTip;
+    return NS_EXTRA(NSToolbarItem, self)->_toolTip;
 }
 
 - (void) setImage: (NSImage *) image {
     image = [image retain];
-    [_image release];
-    _image = image;
+    [NS_EXTRA(NSToolbarItem, self)->_image release];
+    NS_EXTRA(NSToolbarItem, self)->_image = image;
 
-    if ([_view respondsToSelector: @selector(setImage:)]) {
-        [(id) _view setImage: image];
+    if ([NS_EXTRA(NSToolbarItem, self)->_view respondsToSelector: @selector(setImage:)]) {
+        [(id) NS_EXTRA(NSToolbarItem, self)->_view setImage: image];
     }
     [self _didChange];
 }
 
 - (void) setTarget: target {
-    _target = target;
+    NS_EXTRA(NSToolbarItem, self)->_target = target;
 
-    if ([_view respondsToSelector: @selector(setTarget:)])
-        [(id) _view setTarget: target];
+    if ([NS_EXTRA(NSToolbarItem, self)->_view respondsToSelector: @selector(setTarget:)])
+        [(id) NS_EXTRA(NSToolbarItem, self)->_view setTarget: target];
 }
 
 - (void) setAction: (SEL) action {
-    _action = action;
+    NS_EXTRA(NSToolbarItem, self)->_action = action;
 
-    if ([_view respondsToSelector: @selector(setAction:)])
-        [(id) _view setAction: action];
+    if ([NS_EXTRA(NSToolbarItem, self)->_view respondsToSelector: @selector(setAction:)])
+        [(id) NS_EXTRA(NSToolbarItem, self)->_view setAction: action];
 }
 
 - (void) setTag: (NSInteger) tag {
-    _tag = tag;
-    if ([_view respondsToSelector: @selector(setTag:)])
-        [(id) _view setTag: tag];
+    NS_EXTRA(NSToolbarItem, self)->_tag = tag;
+    if ([NS_EXTRA(NSToolbarItem, self)->_view respondsToSelector: @selector(setTag:)])
+        [(id) NS_EXTRA(NSToolbarItem, self)->_view setTag: tag];
 }
 
 - (void) setEnabled: (BOOL) enabled {
-    _isEnabled = enabled;
-    if ([_view respondsToSelector: @selector(setEnabled:)])
-        [(id) _view setEnabled: enabled];
+    NS_EXTRA(NSToolbarItem, self)->_isEnabled = enabled;
+    if ([NS_EXTRA(NSToolbarItem, self)->_view respondsToSelector: @selector(setEnabled:)])
+        [(id) NS_EXTRA(NSToolbarItem, self)->_view setEnabled: enabled];
     [self _didChange];
 }
 
 - (void) setToolTip: (NSString *) tip {
     tip = [tip copy];
-    [_toolTip release];
-    _toolTip = tip;
+    [NS_EXTRA(NSToolbarItem, self)->_toolTip release];
+    NS_EXTRA(NSToolbarItem, self)->_toolTip = tip;
 }
 
 - (void) validate {
@@ -526,7 +528,7 @@ static NSView *copyToolbarItemView(NSView *view) {
 }
 
 - (NSSize) _labelSize {
-    switch ([_toolbar displayMode]) {
+    switch ([NS_EXTRA(NSToolbarItem, self)->_toolbar displayMode]) {
     case NSToolbarDisplayModeIconOnly:
         return NSZeroSize;
 
@@ -534,9 +536,9 @@ static NSView *copyToolbarItemView(NSView *view) {
     case NSToolbarDisplayModeIconAndLabel:
     case NSToolbarDisplayModeDefault:
     default:
-        return [_label
-                sizeWithAttributes: [_toolbar _labelAttributesForSizeMode:
-                                                      [_toolbar sizeMode]]];
+        return [NS_EXTRA(NSToolbarItem, self)->_label
+                sizeWithAttributes: [NS_EXTRA(NSToolbarItem, self)->_toolbar _labelAttributesForSizeMode:
+                                                      [NS_EXTRA(NSToolbarItem, self)->_toolbar sizeMode]]];
     }
 }
 
@@ -568,8 +570,8 @@ static NSView *copyToolbarItemView(NSView *view) {
     if (maxSize.height > 0 && result.height > maxSize.height)
         result.height = maxSize.height;
 
-    NSSize labelSize = [_label
-            sizeWithAttributes: [_toolbar
+    NSSize labelSize = [NS_EXTRA(NSToolbarItem, self)->_label
+            sizeWithAttributes: [NS_EXTRA(NSToolbarItem, self)->_toolbar
                                         _labelAttributesForSizeMode: sizeMode]];
     labelSize.width += 8; // label margins
 
@@ -600,27 +602,27 @@ static NSView *copyToolbarItemView(NSView *view) {
 {
     return [self sizeForSizeMode: sizeMode
                      displayMode: displayMode
-                         minSize: _minSize
-                         maxSize: _maxSize];
+                         minSize: NS_EXTRA(NSToolbarItem, self)->_minSize
+                         maxSize: NS_EXTRA(NSToolbarItem, self)->_maxSize];
 }
 
 - (NSSize) constrainedSize {
-    return [self sizeForSizeMode: [_toolbar sizeMode]
-                     displayMode: [_toolbar displayMode]
-                         minSize: _minSize
-                         maxSize: _maxSize];
+    return [self sizeForSizeMode: [NS_EXTRA(NSToolbarItem, self)->_toolbar sizeMode]
+                     displayMode: [NS_EXTRA(NSToolbarItem, self)->_toolbar displayMode]
+                         minSize: NS_EXTRA(NSToolbarItem, self)->_minSize
+                         maxSize: NS_EXTRA(NSToolbarItem, self)->_maxSize];
 }
 
 - (void) _setItemViewFrame: (NSRect) rect {
-    [_enclosingView setFrame: rect];
+    [NS_EXTRA(NSToolbarItem, self)->_enclosingView setFrame: rect];
 }
 
 - (CGFloat) _expandWidth: (CGFloat) width {
     if ([self view] != nil) {
-        return MIN(width, _maxSize.width);
+        return MIN(width, NS_EXTRA(NSToolbarItem, self)->_maxSize.width);
     }
 
-    if ([_itemIdentifier isEqualToString: NSToolbarFlexibleSpaceItemIdentifier])
+    if ([NS_EXTRA(NSToolbarItem, self)->_itemIdentifier isEqualToString: NSToolbarFlexibleSpaceItemIdentifier])
         return width;
 
     return [self constrainedSize].width;
@@ -628,7 +630,7 @@ static NSView *copyToolbarItemView(NSView *view) {
 
 - (void) drawInRect: (NSRect) bounds highlighted: (BOOL) highlighted {
 
-    if ([_itemIdentifier isEqualToString: NSToolbarSeparatorItemIdentifier]) {
+    if ([NS_EXTRA(NSToolbarItem, self)->_itemIdentifier isEqualToString: NSToolbarSeparatorItemIdentifier]) {
         bounds.origin.x = floor(bounds.origin.x + (bounds.size.width / 2));
         bounds.size.width = 1;
         [[NSColor blackColor] set];
@@ -639,16 +641,16 @@ static NSView *copyToolbarItemView(NSView *view) {
     CGFloat labelHeight = 0;
     CGFloat padding = 4;
 
-    if ([_toolbar displayMode] != NSToolbarDisplayModeIconOnly) {
+    if ([NS_EXTRA(NSToolbarItem, self)->_toolbar displayMode] != NSToolbarDisplayModeIconOnly) {
         NSMutableDictionary *attributes = [NSMutableDictionary
-                dictionaryWithDictionary: [_toolbar _labelAttributes]];
+                dictionaryWithDictionary: [NS_EXTRA(NSToolbarItem, self)->_toolbar _labelAttributes]];
         NSColor *color = [self isEnabled] ? [NSColor controlTextColor]
                                           : [NSColor disabledControlTextColor];
 
         [attributes setObject: color forKey: NSForegroundColorAttributeName];
 
         NSRect labelRect;
-        labelRect.size = [_label sizeWithAttributes: attributes];
+        labelRect.size = [NS_EXTRA(NSToolbarItem, self)->_label sizeWithAttributes: attributes];
         labelRect.origin.x =
                 floor((bounds.size.width - labelRect.size.width) / 2);
         labelRect.origin.y = bounds.origin.y;
@@ -663,21 +665,21 @@ static NSView *copyToolbarItemView(NSView *view) {
 
             shadowRect.origin.y--;
 
-            [_label _clipAndDrawInRect: shadowRect
+            [NS_EXTRA(NSToolbarItem, self)->_label _clipAndDrawInRect: shadowRect
                         withAttributes: shadowAttributes];
         }
 
-        [_label _clipAndDrawInRect: labelRect withAttributes: attributes];
+        [NS_EXTRA(NSToolbarItem, self)->_label _clipAndDrawInRect: labelRect withAttributes: attributes];
         labelHeight = labelRect.size.height;
         labelHeight += padding;
     }
 
-    if ([_toolbar displayMode] != NSToolbarDisplayModeLabelOnly) {
+    if ([NS_EXTRA(NSToolbarItem, self)->_toolbar displayMode] != NSToolbarDisplayModeLabelOnly) {
         if ([self view] == nil) {
             NSImage *image = [self image];
             NSRect imageRect;
 
-            if ([_toolbar sizeMode] == NSToolbarSizeModeSmall)
+            if ([NS_EXTRA(NSToolbarItem, self)->_toolbar sizeMode] == NSToolbarSizeModeSmall)
                 imageRect.size = _NSToolbarIconSizeSmall;
             else
                 imageRect.size = _NSToolbarIconSizeRegular;
@@ -708,19 +710,19 @@ static NSView *copyToolbarItemView(NSView *view) {
 - (NSString *) description {
     return [NSString
             stringWithFormat: @"<%@[%p] %@ label: \"%@\" image: %@ view: %@>",
-                              [self class], self, _itemIdentifier, _label,
-                              [self image], _view];
+                              [self class], self, NS_EXTRA(NSToolbarItem, self)->_itemIdentifier, NS_EXTRA(NSToolbarItem, self)->_label,
+                              [self image], NS_EXTRA(NSToolbarItem, self)->_view];
 }
 
 - initWithCoder: (NSCoder *) coder {
     if (![coder allowsKeyedCoding])
         NSUnimplementedMethod();
     else {
-        _itemIdentifier =
+        NS_EXTRA(NSToolbarItem, self)->_itemIdentifier =
                 [[coder decodeObjectForKey: @"NSToolbarItemIdentifier"] retain];
 
-        _enclosingView = [[NSToolbarItemView alloc] init];
-        [_enclosingView setToolbarItem: self];
+        NS_EXTRA(NSToolbarItem, self)->_enclosingView = [[NSToolbarItemView alloc] init];
+        [NS_EXTRA(NSToolbarItem, self)->_enclosingView setToolbarItem: self];
         [self setView: [coder decodeObjectForKey: @"NSToolbarItemView"]];
         [self setTarget: [coder decodeObjectForKey: @"NSToolbarItemTarget"]];
         [self setAction: NSSelectorFromString([coder
@@ -731,8 +733,8 @@ static NSView *copyToolbarItemView(NSView *view) {
         [self setPaletteLabel: [coder decodeObjectForKey:
                                                @"NSToolbarItemPaletteLabel"]];
 
-        _maxSize = [coder decodeSizeForKey: @"NSToolbarItemMaxSize"];
-        _minSize = [coder decodeSizeForKey: @"NSToolbarItemMinSize"];
+        NS_EXTRA(NSToolbarItem, self)->_maxSize = [coder decodeSizeForKey: @"NSToolbarItemMaxSize"];
+        NS_EXTRA(NSToolbarItem, self)->_minSize = [coder decodeSizeForKey: @"NSToolbarItemMinSize"];
         [self setEnabled: [coder decodeBoolForKey: @"NSToolbarItemEnabled"]];
         [self setTag: [coder decodeIntForKey: @"NSToolbarItemTag"]];
 

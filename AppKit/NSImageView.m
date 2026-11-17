@@ -89,6 +89,21 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return [_cell imageFrameStyle];
 }
 
+// The intrinsic size is the size of the image (zero without one), so a view that pins the image view to
+// its edges is not asked for the "no preference" size of a plain cell. QUIRK: with an image frame style
+// other than NSImageFrameNone the view has no intrinsic size at all (NSViewNoIntrinsicMetric in both
+// dimensions). Not documented. Evidence: black-box observation on macOS 10.14.4 and 26.7.3 (tier 2),
+// identical on both; probe vd-upstream mac-probes/ua7-imageview-size.m.
+// Test: tests/appkit-image-view-intrinsic-size.m (test_quirk_image_view_frame_style_has_no_intrinsic_size)
+- (NSSize) intrinsicContentSize {
+    if ([self imageFrameStyle] != NSImageFrameNone)
+        return NSMakeSize(NSViewNoIntrinsicMetric, NSViewNoIntrinsicMetric);
+
+    NSImage *image = [self image];
+
+    return image != nil ? [image size] : NSZeroSize;
+}
+
 - (NSImageScaling) imageScaling {
     return [_cell imageScaling];
 }
@@ -118,6 +133,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (void) setImage: (NSImage *) image {
     [_cell setImage: image];
+    [self invalidateIntrinsicContentSize];
     [self setNeedsDisplay: YES];
 }
 
@@ -125,12 +141,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     NSImage *image =
             [[[NSImage alloc] initWithContentsOfFile: path] autorelease];
     [_cell setImage: image];
+    [self invalidateIntrinsicContentSize];
     [self setNeedsDisplay: YES];
 }
 
 - (void) setValueURL: (NSURL *) url {
     NSImage *image = [[[NSImage alloc] initWithContentsOfURL: url] autorelease];
     [_cell setImage: image];
+    [self invalidateIntrinsicContentSize];
     [self setNeedsDisplay: YES];
 }
 
@@ -141,6 +159,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (void) setImageFrameStyle: (NSImageFrameStyle) frameStyle {
     [_cell setImageFrameStyle: frameStyle];
+    [self invalidateIntrinsicContentSize];
     [self setNeedsDisplay: YES];
 }
 

@@ -19,11 +19,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 // -*- mode: objc -*-
 
 #import <AppKit/NSDocument.h>
+#import <AppKit/AppKitIvarLayout.h>
 
 @class NSManagedObjectContext;
 @class NSManagedObjectModel;
 @interface NSPersistentDocument : NSDocument {
     NSManagedObjectContext *_context;
+    NS_LEGACY_IVAR_PAD(_NSPersistentDocumentReserved, 24)
 }
 
 - (NSManagedObjectContext *) managedObjectContext;

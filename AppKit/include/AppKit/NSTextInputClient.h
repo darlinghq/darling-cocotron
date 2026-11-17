@@ -14,4 +14,11 @@
 - (NSRect) firstRectForCharacterRange: (NSRange) range actualRange: (NSRangePointer) actualRange;
 - (void) doCommandBySelector: (SEL) selector;
 
+@optional
+- (NSAttributedString *) attributedString;
+- (CGFloat) fractionOfDistanceThroughGlyphForPoint: (NSPoint) point;
+- (CGFloat) baselineDeltaForCharacterAtIndex: (NSUInteger) anIndex;
+- (BOOL) drawsVerticallyForCharacterAtIndex: (NSUInteger) charIndex;
+- (NSInteger) windowLevel;
+
 @end

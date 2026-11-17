@@ -190,7 +190,25 @@ static NSMutableArray *_cursorStack = nil;
 }
 
 - initWithCoder: (NSCoder *) coder {
-    // TODO: Need to implement
+    if (![coder allowsKeyedCoding]) {
+        // QUIRK: a cursor archived with NSArchiver decodes to the standard arrow cursor,
+        // whichever cursor (standard or created from an image) was archived. The archive holds
+        // the hot spot as two floats, the image (nil for standard cursors) and two flag bytes,
+        // all of which are read and dropped. Not documented. Evidence: black-box observation on
+        // macOS 10.14.4, i386 and x86_64 (tier 2): 17 standard cursors and one image cursor
+        // all unarchive to +arrowCursor, also while another cursor is current.
+        // Test: tests/src/typedstream_appkit.m (test_quirk_cursor_decodes_as_arrow)
+        float hotSpot[2];
+        id image = nil;
+        char flags[2];
+
+        [coder decodeValuesOfObjCTypes: "ff", &hotSpot[0], &hotSpot[1]];
+        [coder decodeValueOfObjCType: @encode(id) at: &image];
+        [coder decodeValueOfObjCType: @encode(char) at: &flags[0]];
+        [coder decodeValueOfObjCType: @encode(char) at: &flags[1]];
+        [image release];
+        return [self initWithName: @"arrowCursor"];
+    }
     return self;
 }
 
@@ -199,7 +217,7 @@ static NSMutableArray *_cursorStack = nil;
 }
 
 - initWithName: (NSString *) name {
-    _platformCursor = NSPlatformCreateCursorImpWithName(name);
+    NS_EXTRA(NSCursor, self)->_platformCursor = NSPlatformCreateCursorImpWithName(name);
     return self;
 }
 
@@ -329,6 +347,73 @@ static NSMutableArray *_cursorStack = nil;
     return shared;
 }
 
+// A corner's cursor is one of six diagonal arrows, shared like the named ones and looked up by these private names by
+// every backend (-initWithName:); a backend that does not know a name draws the arrow cursor.
++ (NSCursor *) _diagonalFrameResizeCursorNamed: (NSString *) name {
+    static NSMutableDictionary *shared = nil;
+    NSCursor *cursor;
+
+    @synchronized([NSCursor class]) {
+        if (shared == nil)
+            shared = [[NSMutableDictionary alloc] init];
+        cursor = [shared objectForKey: name];
+        if (cursor == nil) {
+            cursor = [[[self alloc] initWithName: name] autorelease];
+            [shared setObject: cursor forKey: name];
+        }
+    }
+    return cursor;
+}
+
+// Apple's documentation gives the cursor for every position and direction set as a table of pictures, each showing
+// the arrows the edge or corner can move along; this follows the arrows' compass directions (top outward is north,
+// inward south, both north-south; topLeft outward is north-west, inward south-east, both north-west to south-east;
+// likewise for the others). The empty set is documented as not allowed.
+// GUESS (not in the public documentation, not observed): which of this tree's cursors stands for each picture (the
+// four edge arrows are the existing arrow cursors, the corners are the diagonal arrows above) and that an empty set
+// raises NSInvalidArgumentException.
++ (NSCursor *) frameResizeCursorFromPosition: (NSCursorFrameResizePosition) position
+                                 inDirections: (NSCursorFrameResizeDirections) directions
+{
+    BOOL inward = (directions & NSCursorFrameResizeDirectionsInward) != 0;
+    BOOL outward = (directions & NSCursorFrameResizeDirectionsOutward) != 0;
+    if (!inward && !outward)
+        [NSException raise: NSInvalidArgumentException
+                    format: @"+[NSCursor frameResizeCursorFromPosition:inDirections:] needs at least one direction"];
+
+    BOOL both = inward && outward;
+    switch (position) {
+    case NSCursorFrameResizePositionTop:
+        return both ? [self resizeUpDownCursor] : outward ? [self resizeUpCursor] : [self resizeDownCursor];
+    case NSCursorFrameResizePositionBottom:
+        return both ? [self resizeUpDownCursor] : outward ? [self resizeDownCursor] : [self resizeUpCursor];
+    case NSCursorFrameResizePositionLeft:
+        return both ? [self resizeLeftRightCursor] : outward ? [self resizeLeftCursor] : [self resizeRightCursor];
+    case NSCursorFrameResizePositionRight:
+        return both ? [self resizeLeftRightCursor] : outward ? [self resizeRightCursor] : [self resizeLeftCursor];
+    case NSCursorFrameResizePositionTopLeft:
+        return [self _diagonalFrameResizeCursorNamed: both ? @"frameResizeNorthWestSouthEastCursor"
+                                                    : outward ? @"frameResizeNorthWestCursor"
+                                                              : @"frameResizeSouthEastCursor"];
+    case NSCursorFrameResizePositionBottomRight:
+        return [self _diagonalFrameResizeCursorNamed: both ? @"frameResizeNorthWestSouthEastCursor"
+                                                    : outward ? @"frameResizeSouthEastCursor"
+                                                              : @"frameResizeNorthWestCursor"];
+    case NSCursorFrameResizePositionTopRight:
+        return [self _diagonalFrameResizeCursorNamed: both ? @"frameResizeNorthEastSouthWestCursor"
+                                                    : outward ? @"frameResizeNorthEastCursor"
+                                                              : @"frameResizeSouthWestCursor"];
+    case NSCursorFrameResizePositionBottomLeft:
+        return [self _diagonalFrameResizeCursorNamed: both ? @"frameResizeNorthEastSouthWestCursor"
+                                                    : outward ? @"frameResizeSouthWestCursor"
+                                                              : @"frameResizeNorthEastCursor"];
+    }
+    [NSException raise: NSInvalidArgumentException
+                format: @"+[NSCursor frameResizeCursorFromPosition:inDirections:]: unknown position %lu",
+                        (unsigned long) position];
+    return nil;
+}
+
 + (NSCursor *) dragCopyCursor {
     static NSCursor *shared = nil;
 
@@ -378,40 +463,41 @@ static NSMutableArray *_cursorStack = nil;
 }
 
 - initWithImage: (NSImage *) image hotSpot: (NSPoint) hotSpot {
-    _image = [image retain];
-    _hotSpot = hotSpot;
-    _platformCursor = NSPlatformCreateCursorImpWithImage(image, hotSpot);
+    NS_EXTRA(NSCursor, self)->_image = [image retain];
+    NS_EXTRA(NSCursor, self)->_hotSpot = hotSpot;
+    NS_EXTRA(NSCursor, self)->_platformCursor = NSPlatformCreateCursorImpWithImage(image, hotSpot);
     return self;
 }
 
 - (void) dealloc {
-    [_image release];
-    NSPlatformReleaseCursorImp(_platformCursor);
+    [NS_EXTRA(NSCursor, self)->_image release];
+    NSPlatformReleaseCursorImp(NS_EXTRA(NSCursor, self)->_platformCursor);
+    NS_EXTRA_FREE(NSCursor, self);
     [super dealloc];
 }
 
 - (NSImage *) image {
-    return _image;
+    return NS_EXTRA(NSCursor, self)->_image;
 }
 
 - (NSPoint) hotSpot {
-    return _hotSpot;
+    return NS_EXTRA(NSCursor, self)->_hotSpot;
 }
 
 - (BOOL) isSetOnMouseEntered {
-    return _isSetOnMouseEntered;
+    return NS_EXTRA(NSCursor, self)->_isSetOnMouseEntered;
 }
 
 - (BOOL) isSetOnMouseExited {
-    return _isSetOnMouseExited;
+    return NS_EXTRA(NSCursor, self)->_isSetOnMouseExited;
 }
 
 - (void) setOnMouseEntered: (BOOL) value {
-    _isSetOnMouseEntered = value;
+    NS_EXTRA(NSCursor, self)->_isSetOnMouseEntered = value;
 }
 
 - (void) setOnMouseExited: (BOOL) value {
-    _isSetOnMouseExited = value;
+    NS_EXTRA(NSCursor, self)->_isSetOnMouseExited = value;
 }
 
 - (void) mouseEntered: (NSEvent *) event {
@@ -431,12 +517,12 @@ static NSMutableArray *_cursorStack = nil;
         [_cursorStack removeLastObject];
 
     [_cursorStack addObject: self];
-    NSPlatformSetCursorImp(_platformCursor);
+    NSPlatformSetCursorImp(NS_EXTRA(NSCursor, self)->_platformCursor);
 }
 
 - (void) push {
     [_cursorStack addObject: self];
-    NSPlatformSetCursorImp(_platformCursor);
+    NSPlatformSetCursorImp(NS_EXTRA(NSCursor, self)->_platformCursor);
 }
 
 + (void) pop {
@@ -450,7 +536,7 @@ static NSMutableArray *_cursorStack = nil;
     if (cursor == nil)
         cursor = [NSCursor arrowCursor];
 
-    NSPlatformSetCursorImp(cursor->_platformCursor);
+    NSPlatformSetCursorImp(NS_EXTRA(NSCursor, cursor)->_platformCursor);
 }
 
 @end

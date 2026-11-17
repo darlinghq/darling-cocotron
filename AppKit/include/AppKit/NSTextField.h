@@ -69,6 +69,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 // bezeled text field
 + (instancetype) wrappingLabelWithString: (NSString *) stringValue;
 + (instancetype) textFieldWithString: (NSString *) stringValue;
++ (instancetype) labelWithAttributedString: (NSAttributedString *) attributedStringValue;
 
 @end
 

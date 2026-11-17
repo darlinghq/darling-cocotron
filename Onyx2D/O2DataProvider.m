@@ -28,7 +28,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 @implementation O2DataProvider
 
 - initWithData: (NSData *) data {
-    _inputStream = [[NSInputStream inputStreamWithData: data] retain];
+    // Owned outright: a convenience constructor would also leave the stream (and the data or
+    // file it holds) in the autorelease pool until the pool drains, after the provider is gone.
+    _inputStream = [[NSInputStream alloc] initWithData: data];
     [_inputStream open];
     _data = [data retain];
     _isDirectAccess = YES;
@@ -52,7 +54,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     _path = [[[NSFileManager defaultManager]
             stringWithFileSystemRepresentation: pathCString
                                         length: len] copy];
-    _inputStream = [[NSInputStream inputStreamWithFileAtPath: _path] retain];
+    if (![[NSFileManager defaultManager] isReadableFileAtPath: _path]) {
+        // A file that cannot be opened for reading gives no provider.
+        [self release];
+        return nil;
+    }
+    _inputStream = [[NSInputStream alloc] initWithFileAtPath: _path];
     [_inputStream open];
     _data = nil;
     _isDirectAccess = NO;

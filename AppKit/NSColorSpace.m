@@ -19,6 +19,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSColorSpace.h>
 #import <Foundation/NSRaise.h>
+#import <dispatch/dispatch.h>
 
 // not sure where these belong
 NSString *const _NSColorCoreUICatalogMainBundleID =
@@ -44,6 +45,20 @@ NSString *const _NSColorCoreUICatalogNamePrefix =
             [[[self alloc] initWithCGColorSpace: srgb] autorelease];
     CGColorSpaceRelease(srgb);
     return colorSpace;
+}
+
++ (NSColorSpace *) extendedSRGBColorSpace {
+    static NSColorSpace *shared = nil;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+      CGColorSpaceRef space =
+              CGColorSpaceCreateWithName(kCGColorSpaceExtendedSRGB);
+      if (space != NULL) {
+          shared = [[self alloc] initWithCGColorSpace: space];
+          CGColorSpaceRelease(space);
+      }
+    });
+    return shared;
 }
 
 // The generic spaces fall back to sRGB / device gray if the named space cannot be created.
@@ -102,6 +117,38 @@ NSString *const _NSColorCoreUICatalogNamePrefix =
 
 - (CGColorSpaceRef) CGColorSpace {
     return _cgColorSpace;
+}
+
+// The name macOS shows for the space (its profile description). Only the named spaces of this class
+// are told apart; any other space gets the name of its model.
+- (NSString *) localizedName {
+    struct {
+        CFStringRef creator;
+        NSString *name;
+    } named[] = {
+        { kCGColorSpaceSRGB, @"sRGB IEC61966-2.1" },
+        { kCGColorSpaceDisplayP3, @"Display P3" },
+        { kCGColorSpaceGenericRGB, @"Generic RGB Profile" },
+        { kCGColorSpaceGenericGray, @"Generic Gray Profile" },
+        { kCGColorSpaceGenericGrayGamma2_2, @"Generic Gray Gamma 2.2 Profile" },
+    };
+    for (size_t i = 0; i < sizeof(named) / sizeof(named[0]); i++) {
+        CGColorSpaceRef space = CGColorSpaceCreateWithName(named[i].creator);
+        BOOL same = space != NULL && CFEqual(space, _cgColorSpace);
+        CGColorSpaceRelease(space);
+        if (same)
+            return named[i].name;
+    }
+    switch (CGColorSpaceGetModel(_cgColorSpace)) {
+    case kCGColorSpaceModelMonochrome:
+        return @"Gray";
+    case kCGColorSpaceModelRGB:
+        return @"RGB";
+    case kCGColorSpaceModelCMYK:
+        return @"CMYK";
+    default:
+        return @"Color Space";
+    }
 }
 
 @end

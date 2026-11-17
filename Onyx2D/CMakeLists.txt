@@ -49,6 +49,7 @@ set(Onyx2D_sources
 	O2ClipState.m
 	O2Color.m
 	O2ColorConversion.m
+	O2ColorICC.m
 	O2ColorSpace.m
 	O2ColorSpace+PDF.m
 	O2Context_builtin.m
@@ -87,6 +88,7 @@ set(Onyx2D_sources
 	O2ImageSource_JPEG.m
 	O2ImageSource.m
 	O2ImageSource_PNG.m
+	O2ImageSource_PSD.m
 	O2ImageSource_TIFF.m
 	O2Layer.m
 	O2LZW.m
@@ -99,6 +101,7 @@ set(Onyx2D_sources
 	O2Paint_radialGradient.m
 	O2Paint_ramp.m
 	O2Path.m
+	O2PathDashing.m
 	O2Pattern.m
 	O2PDFArray.m
 	O2PDFBlock.m

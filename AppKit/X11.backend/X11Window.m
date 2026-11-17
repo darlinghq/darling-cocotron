@@ -40,6 +40,8 @@
 #import "../../CoreGraphics/X11.backend/X11WindowOwner.h"
 #import "X11Fullscreen.h"
 #import "X11InputShape.h"
+#import "X11RoundedShape.h"
+#import "X11InvisibleWindow.h"
 #import "X11SubWindow.h"
 #import "X11Window.h"
 #import "X11AppMenu.h"
@@ -283,6 +285,7 @@ static NSData *makeWindowIcon() {
     if (isSheetPanel)
         _styleMask = NSBorderlessWindowMask;
     _hasAlpha = [self wantsAlphaVisual];
+    _appliedAlpha = 1.0;
     if (![self createXWindow]) {
         [self release];
         return nil;
@@ -535,7 +538,17 @@ static NSData *makeWindowIcon() {
     if (_mapped) {
         _fullscreenRequested = X11FullscreenIsSet(_display, _window);
         [self updateLayerPresentationHints];
+        if (_fullscreenRequested != _fullscreenReported) {
+            _fullscreenReported = _fullscreenRequested;
+            if ([_delegate respondsToSelector: @selector(platformWindow:didChangeFullScreen:)])
+                [_delegate platformWindow: self didChangeFullScreen: _fullscreenReported];
+        }
     }
+}
+
+// Whether the window manager currently holds the window fullscreen.
+- (BOOL) isFullScreen {
+    return _mapped && _fullscreenReported;
 }
 
 // Hints for a compositor about a window that presents a full-size layer tree
@@ -616,11 +629,66 @@ static NSData *makeWindowIcon() {
 // bar and the window can become key. macOS 26 shows no title bar for such
 // windows and they cannot become key. We follow 10.14.
 - (void) updateDecorationsForStyleMask: (NSUInteger) mask {
-    if (mask & (NSWindowStyleMaskTitled | NSWindowStyleMaskResizable))
+    // A full-size content view with a transparent title bar shows no title bar at all: the content
+    // is all there is (the application draws its own header), so the window manager's frame would
+    // be a second title bar on top of it.
+    BOOL titlebarInvisible = (mask & NSWindowStyleMaskFullSizeContentView) && [_delegate titlebarAppearsTransparent];
+
+    if ((mask & (NSWindowStyleMaskTitled | NSWindowStyleMaskResizable)) && !_invisibleWithoutCompositor &&
+        !titlebarInvisible)
         XDeleteProperty(_display, _window,
                         XInternAtom(_display, "_MOTIF_WM_HINTS", False));
     else
         [[self class] removeDecorationForWindow: _window onDisplay: _display];
+    _chromeless = titlebarInvisible && (mask & NSWindowStyleMaskTitled) != 0;
+    [self updateWindowShape];
+}
+
+// Corner radius, in points, of a window that has no frame of its own to be drawn by the window manager.
+// QUIRK: macOS draws such a window (a titled window with a full-size content view and a transparent title
+// bar) with rounded corners of about 5 points, a thin outline and a shadow; the window manager draws none of
+// them for a window it was asked not to decorate. The corners are cut with the SHAPE extension and the outline
+// is drawn into the window (-flushBuffer), neither of which needs a compositor; the shadow can only come from
+// a compositor and is not drawn. Evidence: black-box observation of such windows on macOS 10.14.4 (tier 2).
+// Test: tests/x11-chromeless-corners.sh (shape of the window), tests/x11-rounded-shape.c (the shape).
+static const int X11ChromelessCornerRadius = 5;
+
+// The bounding shape follows the window's size and whether it is drawn without a frame; a window that is
+// invisible without a compositor keeps its empty shape.
+- (void) updateWindowShape {
+    if (_window == 0 || _invisibleWithoutCompositor || (!_chromeless && !_roundedShapeSet))
+        return;
+    CGFloat scale = [self backingScaleFactor];
+    NSSize device = [self deviceSize: _frame.size];
+    if (X11WindowSetRoundedCorners(_display, _window, (int) device.width, (int) device.height,
+                                   _chromeless ? (int) lround(X11ChromelessCornerRadius * scale) : 0))
+        _roundedShapeSet = _chromeless;
+}
+
+// The outline of a window without a frame: one device pixel along the rounded edge, drawn over the content
+// every time the window is flushed (opaque, so that drawing it again changes nothing).
+- (void) drawChromelessOutline {
+    if (!_chromeless || _context == nil || _invisibleWithoutCompositor)
+        return;
+    CGFloat width = _frame.size.width, height = _frame.size.height, radius = X11ChromelessCornerRadius;
+    CGFloat line = 1.0 / [self backingScaleFactor];
+    CGFloat inset = line / 2;
+    if (width < 2 * radius + 2 || height < 2 * radius + 2)
+        return;
+    O2ContextRef context = _context;
+    O2ContextSaveGState(context);
+    O2Float color[4] = {0.45, 0.45, 0.45, 1.0};
+    O2ContextSetStrokeColor(context, color);
+    O2ContextSetLineWidth(context, line);
+    O2ContextBeginPath(context);
+    O2ContextMoveToPoint(context, inset + radius, inset);
+    O2ContextAddArcToPoint(context, width - inset, inset, width - inset, inset + radius, radius);
+    O2ContextAddArcToPoint(context, width - inset, height - inset, width - inset - radius, height - inset, radius);
+    O2ContextAddArcToPoint(context, inset, height - inset, inset, height - inset - radius, radius);
+    O2ContextAddArcToPoint(context, inset, inset, inset + radius, inset, radius);
+    O2ContextClosePath(context);
+    O2ContextStrokePath(context);
+    O2ContextRestoreGState(context);
 }
 
 - (void) setStyleMaskInternal: (NSUInteger) mask force: (BOOL) force {
@@ -629,9 +697,9 @@ static NSData *makeWindowIcon() {
         [self updateSizeHints: mask];
     }
     if (force ||
-        (mask & (NSWindowStyleMaskTitled | NSWindowStyleMaskResizable)) !=
-                (_styleMask &
-                 (NSWindowStyleMaskTitled | NSWindowStyleMaskResizable))) {
+        (mask & (NSWindowStyleMaskTitled | NSWindowStyleMaskResizable | NSWindowStyleMaskFullSizeContentView)) !=
+                (_styleMask & (NSWindowStyleMaskTitled | NSWindowStyleMaskResizable |
+                               NSWindowStyleMaskFullSizeContentView))) {
         [self updateDecorationsForStyleMask: mask];
     }
 
@@ -748,6 +816,11 @@ static NSData *makeWindowIcon() {
     }
     XDestroyWindow(_display, oldWindow);
 
+    // the new window has neither opacity nor shape yet
+    _invisibleWithoutCompositor = NO;
+    if (_appliedAlpha < 1.0)
+        [self setAlphaValue: _appliedAlpha];
+
     NSString *title = [_delegate title];
     if (title != nil)
         [self setTitle: title];
@@ -849,12 +922,16 @@ static NSData *makeWindowIcon() {
 
     // Click-through windows (overlays, tooltips) must not take the pointer from
     // the window below. Only a change needs a request.
-    BOOL ignoresMouseEvents = [_delegate ignoresMouseEvents];
+    BOOL ignoresMouseEvents = [_delegate ignoresMouseEvents] || _invisibleWithoutCompositor;
     if (ignoresMouseEvents != _ignoresMouseEvents && _window != 0 &&
         X11WindowSetIgnoresMouseEvents(_display, _window, ignoresMouseEvents)) {
         _ignoresMouseEvents = ignoresMouseEvents;
         XFlush(_display);
     }
+
+    // An alpha value set before the window had its X window (or its delegate) is applied now.
+    if (_window != 0 && _delegate != nil && [_delegate alphaValue] != _appliedAlpha)
+        [self setAlphaValue: [_delegate alphaValue]];
 
     // TODO: background color
 }
@@ -877,7 +954,33 @@ static NSData *makeWindowIcon() {
         XChangeProperty(_display, _window, opacity, XA_CARDINAL, 32,
                         PropModeReplace, (unsigned char *) &cardinal, 1);
     }
+    _appliedAlpha = value;
+    _alphaIsZero = value <= 0.0;
+    [self updateInvisibility];
     XFlush(_display);
+}
+
+// Without a compositing manager nothing applies _NET_WM_WINDOW_OPACITY, so a window with alpha 0 would stay
+// visible, including the window manager's frame. It is made invisible instead, while staying mapped (and so able
+// to keep the keyboard focus and stay the key window): the window manager is asked for no frame and the bounding
+// shape of the window is emptied. Partial alpha without a compositor is left alone, and with a compositor the
+// opacity property is all that is needed. The compositor is looked for whenever the alpha changes, not watched
+// for: a compositor that starts or stops while the window has alpha 0 takes effect at the next change.
+- (void) updateInvisibility {
+    BOOL invisible = _alphaIsZero && !X11CompositorRunning(_display, DefaultScreen(_display));
+
+    if (invisible == _invisibleWithoutCompositor || _window == 0)
+        return;
+    if (!X11WindowSetBoundingEmpty(_display, _window, invisible))
+        return;
+    _invisibleWithoutCompositor = invisible;
+    // A frame follows the shape, but its decorations would come back with a window manager that draws them
+    // outside the client, and the window must not take pointer events from what is below it either.
+    [self updateDecorationsForStyleMask: _styleMask];
+    BOOL ignoresMouseEvents = invisible || [_delegate ignoresMouseEvents];
+    if (ignoresMouseEvents != _ignoresMouseEvents &&
+        X11WindowSetIgnoresMouseEvents(_display, _window, ignoresMouseEvents))
+        _ignoresMouseEvents = ignoresMouseEvents;
 }
 
 - (void) invalidate {
@@ -1026,6 +1129,7 @@ static NSData *makeWindowIcon() {
                       deviceFrame.size.height);
     [self invalidateContextWithNewSize: frame.size];
     _frame = frame;
+    [self updateWindowShape];
     // A non-resizable window hints PMinSize == PMaxSize, and a window manager
     // refuses any resize that falls outside the pair, so the hints have to follow
     // the size. Only on a real change so a drag does not re-issue them per pixel.
@@ -1040,7 +1144,27 @@ static NSData *makeWindowIcon() {
 }
 
 - (void) setLevel: (int) value {
+    if (value == _level)
+        return;
     _level = value;
+    [self restackForLevels];
+}
+
+- (int) stackingLevel {
+    return _level;
+}
+
+- (BOOL) isUnmanaged {
+    return _overrideRedirect;
+}
+
+- (BOOL) takesPartInLevelStacking {
+    return _mapped && !_dock && !_menuWindow && _window != 0;
+}
+
+- (void) restackForLevels {
+    if ([self takesPartInLevelStacking])
+        [(X11Display *) [NSDisplay currentDisplay] restackWindowsForLevelsAround: self];
 }
 
 - (void) setOpaque: (BOOL) value {
@@ -1074,6 +1198,7 @@ static NSData *makeWindowIcon() {
         [(X11Display *) [NSDisplay currentDisplay] menuWindowUnmapped: self];
     // The window manager drops the fullscreen state of a withdrawn window.
     _fullscreenRequested = NO;
+    _fullscreenReported = NO;
     // A focus request still waiting for MapNotify is void once the window is
     // ordered out; otherwise a later non-key orderFront would take focus.
     _wantsInputFocus = NO;
@@ -1089,6 +1214,7 @@ static NSData *makeWindowIcon() {
         Window w[2] = {_window, other->_window};
         XRestackWindows(_display, w, 2);
     }
+    [self restackForLevels];
 }
 
 - (void) placeBelowWindow: (NSInteger) otherNumber {
@@ -1182,6 +1308,8 @@ BOOL X11WindowManagerIsRunning(Display *display) {
 }
 
 - (void) mapNotified {
+    // The window manager has stacked the frame by now.
+    [self restackForLevels];
     if (_wantsInputFocus)
         [self requestInputFocus];
 }
@@ -1202,6 +1330,7 @@ BOOL X11WindowManagerIsRunning(Display *display) {
     if (_receivingFocus)
         return;
     XRaiseWindow(_display, _window);
+    [self restackForLevels];
     [self requestInputFocus];
 }
 
@@ -1344,6 +1473,7 @@ BOOL X11WindowManagerIsRunning(Display *display) {
 - (void) flushBuffer {
     if (_context == nil)
         return;
+    [self drawChromelessOutline];
     O2ContextFlush(_context);
     [self openGLFlushBuffer];
 }
@@ -1420,6 +1550,7 @@ static int ignoreBadWindow(Display *display, XErrorEvent *errorEvent) {
                           rect.size.width / scale, rect.size.height / scale);
         [self invalidateContextWithNewSize: rect.size];
         _frame = rect;
+        [self updateWindowShape];
     } @finally {
         XSetErrorHandler(previousHandler);
     }
@@ -1463,6 +1594,25 @@ static int ignoreBadWindow(Display *display, XErrorEvent *errorEvent) {
 
 - (CGFloat) backingScaleFactor {
     return [(X11Display *) [NSDisplay currentDisplay] backingScale];
+}
+
+// The display's device pixels per point changed. _frame stays in points, so the
+// X window is resized to the same points at the new scale, the backing surface
+// is rebuilt at the new device size, and the window and its views are told
+// before they redraw.
+- (void) displayBackingScaleChangedFrom: (CGFloat) oldScale {
+    O2Rect deviceFrame = [self deviceRect: _frame];
+    XMoveResizeWindow(_display, _window, deviceFrame.origin.x,
+                      deviceFrame.origin.y, deviceFrame.size.width,
+                      deviceFrame.size.height);
+    [_context release];
+    _context = nil;
+    [_delegate platformWindowDidInvalidateCGContext: self];
+    if ([_delegate respondsToSelector: @selector(platformWindow:didChangeBackingScaleFrom:)])
+        [_delegate platformWindow: self didChangeBackingScaleFrom: oldScale];
+    [_delegate platformWindowExposed: self
+                              inRect: NSMakeRect(0, 0, _frame.size.width,
+                                                 _frame.size.height)];
 }
 
 // Rounds points to whole device pixels. Origins are rounded plainly, extents

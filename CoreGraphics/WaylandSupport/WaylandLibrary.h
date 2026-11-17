@@ -66,6 +66,7 @@
     X(xkb_keymap_key_repeats)                                                  \
     X(xkb_keymap_key_get_syms_by_level)                                        \
     X(xkb_keymap_layout_get_name)                                              \
+    X(xkb_keymap_mod_get_index)                                                \
     X(xkb_state_new)                                                           \
     X(xkb_state_unref)                                                         \
     X(xkb_state_update_mask)                                                   \

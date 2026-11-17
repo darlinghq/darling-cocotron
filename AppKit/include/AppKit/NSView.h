@@ -172,6 +172,11 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeAllScreens;
         BOOL _clipsToBounds;
         BOOL _hasPreparedContentRect;
         NSRect _preparedContentRect;
+        BOOL _acceptsTouchEvents;
+        BOOL _wantsRestingTouches;
+        BOOL _layerUsesCoreImageFilters;
+        BOOL _prefersCompactControlSizeMetrics;
+        NSEdgeInsets _additionalSafeAreaInsets;
     NS_EXTRA_IVARS_END(NSView)
 }
 
@@ -409,6 +414,13 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeAllScreens;
 // NSEdgeInsetsZero here; subclasses whose content sits inside their frame
 // override it, and the two conversions below follow.
 @property(readonly) NSEdgeInsets alignmentRectInsets;
+// Distances from the top and the bottom of the alignment rectangle to the first
+// and last baselines of the view's text (0 for a view without text).
+@property(readonly) CGFloat firstBaselineOffsetFromTop;
+@property(readonly) CGFloat lastBaselineOffsetFromBottom;
+@property(readonly) CGFloat baselineOffsetFromBottom;
+// The smallest size the view's constraints allow; its frame is not changed.
+@property(readonly) NSSize fittingSize;
 - (NSRect) alignmentRectForFrame: (NSRect) frame;
 - (NSRect) frameForAlignmentRect: (NSRect) alignmentRect;
 // Stored; subviews are drawn into their own layers either way.
@@ -583,6 +595,61 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeAllScreens;
 @property(readonly, retain) NSLayoutYAxisAnchor *topAnchor;
 @property(readonly, retain) NSLayoutYAxisAnchor *bottomAnchor;
 @property(readonly, retain) NSLayoutYAxisAnchor *centerYAnchor;
+@property(readonly, retain) NSLayoutYAxisAnchor *firstBaselineAnchor;
+@property(readonly, retain) NSLayoutYAxisAnchor *lastBaselineAnchor;
+
+@end
+
+@interface NSView (NSViewLayerGeometry)
+
+// Conversions between the view's coordinate system and that of its backing
+// layer. A view without a layer returns the value unchanged; for a flipped
+// layer-backed view the y axis is mirrored within the bounds, as the layer's
+// own y axis points up.
+- (NSPoint) convertPointToLayer: (NSPoint) point;
+- (NSPoint) convertPointFromLayer: (NSPoint) point;
+- (NSSize) convertSizeToLayer: (NSSize) size;
+- (NSSize) convertSizeFromLayer: (NSSize) size;
+- (NSRect) convertRectToLayer: (NSRect) rect;
+- (NSRect) convertRectFromLayer: (NSRect) rect;
+
+// Stored; Core Image filters on layers are not applied by Darling's layers.
+@property BOOL layerUsesCoreImageFilters;
+
+@end
+
+@interface NSView (NSViewHooks)
+
+// Contextual menu notifications, sent around a menu shown for this view;
+// the default implementations do nothing.
+- (void) willOpenMenu: (NSMenu *) menu withEvent: (NSEvent *) event;
+- (void) didCloseMenu: (NSMenu *) menu withEvent: (NSEvent *) event;
+
+// Smart magnify (double tap with two fingers): the default asks for no zoom.
+- (NSRect) rectForSmartMagnificationAtPoint: (NSPoint) location
+                                     inRect: (NSRect) visibleRect;
+
+// Responsive scrolling: the default views are compatible, and the
+// recommended rectangle becomes the preparedContentRect.
+@property(class, readonly, getter=isCompatibleWithResponsiveScrolling) BOOL compatibleWithResponsiveScrolling;
+- (void) prepareContentInRect: (NSRect) rect;
+
+// NO by default; vibrancy isn't composited by this implementation.
+@property(readonly) BOOL allowsVibrancy;
+
+// Invalidates the area the focus ring is drawn in after its mask changed.
+- (void) noteFocusRingMaskChanged;
+
+@end
+
+@interface NSView (NSViewSafeAreas)
+
+// No view has a safe area of its own here: the insets are the additional
+// insets and the rect is the bounds inside them.
+@property(readonly) NSEdgeInsets safeAreaInsets;
+@property NSEdgeInsets additionalSafeAreaInsets;
+@property(readonly) NSRect safeAreaRect;
+@property BOOL prefersCompactControlSizeMetrics;
 
 @end
 

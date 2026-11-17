@@ -18,6 +18,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <CoreFoundation/CFBase.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <Foundation/NSObject.h>
 #define NSVariableStatusItemLength (-1)
 #define NSSquareStatusItemLength (-2)
@@ -29,6 +30,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #ifdef WIN32
     Win32Window *_fakeWindow;
 #endif
+    NS_LEGACY_IVAR_PAD(_NSStatusBarReserved, 12)
 }
 + (NSStatusBar *) systemStatusBar;
 

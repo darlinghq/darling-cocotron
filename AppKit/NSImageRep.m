@@ -21,6 +21,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSGraphicsContextFunctions.h>
 #import <AppKit/NSImageRep.h>
 #import <AppKit/NSPDFImageRep.h>
+#import <AppKit/NSPICTImageRep.h>
 #import <AppKit/NSPasteboard.h>
 #import <AppKit/NSRaise.h>
 
@@ -33,6 +34,7 @@ static NSMutableArray *_registeredClasses = nil;
         _registeredClasses = [NSMutableArray new];
         [_registeredClasses addObject: [NSBitmapImageRep class]];
         [_registeredClasses addObject: [NSPDFImageRep class]];
+        [_registeredClasses addObject: [NSPICTImageRep class]];
     }
 }
 
@@ -79,6 +81,9 @@ static NSArray *typesForFileTypes(NSArray *fileTypes) {
         @"bmp" : @"com.microsoft.bmp",
         @"icns" : @"com.apple.icns",
         @"pdf" : @"com.adobe.pdf",
+        @"pict" : @"com.apple.pict",
+        @"pct" : @"com.apple.pict",
+        @"pic" : @"com.apple.pict",
     };
     NSMutableArray *result = [NSMutableArray array];
 

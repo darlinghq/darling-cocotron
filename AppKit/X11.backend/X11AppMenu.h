@@ -20,7 +20,7 @@
 #import <AppKit/NSWindow.h>
 #import <X11/Xlib.h>
 
-@class NSMenu, NSMainMenuView, X11DBusMenu;
+@class NSMenu, NSMainMenuView, NSDBusMenu;
 
 // The window along the top of the screen that shows the main menu of the
 // active application when the desktop has no global menu. It is a dock window
@@ -52,7 +52,7 @@
 @interface X11AppMenu : NSObject {
     Display *_display;
     NSMenu *_menu;
-    X11DBusMenu *_exporter;
+    NSDBusMenu *_exporter;
     BOOL _connectionTried;
     X11MenuBarWindow *_bar;
     BOOL _barShown;

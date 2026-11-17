@@ -121,13 +121,39 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         return nil;
     }
 
-    // clamp premultiplied data, this should probably be moved into the O2Image
-    // init
-    int i;
-    for (i = 0; i < bytesPerRow * height; i += 4) {
-        bytes[i] = MIN(bytes[i], bytes[i + 3]);
-        bytes[i + 1] = MIN(bytes[i + 1], bytes[i + 3]);
-        bytes[i + 2] = MIN(bytes[i + 2], bytes[i + 3]);
+    unsigned opaqueSamples = [directory opaqueSamplesPerPixel];
+
+    if (opaqueSamples != 0) {
+        // An image stored without an alpha channel (3 samples RGB or 1 sample gray) is
+        // returned in that shape, like ImageIO does: 24 or 8 bits per pixel, no alpha.
+        size_t bytesPerPixel = opaqueSamples, opaqueRow = bytesPerPixel * width;
+        unsigned char *opaqueBytes = NSZoneMalloc([self zone], opaqueRow * height);
+
+        if (opaqueBytes != NULL) {
+            int x, y;
+
+            for (y = 0; y < height; y++)
+                for (x = 0; x < width; x++)
+                    memcpy(opaqueBytes + y * opaqueRow + x * bytesPerPixel,
+                           bytes + y * bytesPerRow + x * 4, bytesPerPixel);
+            NSZoneFree([self zone], bytes);
+            bytes = opaqueBytes;
+            bytesPerRow = opaqueRow;
+            bitsPerPixel = bytesPerPixel * 8;
+        } else {
+            opaqueSamples = 0;
+        }
+    }
+
+    if (opaqueSamples == 0) {
+        // clamp premultiplied data, this should probably be moved into the O2Image
+        // init
+        int i;
+        for (i = 0; i < bytesPerRow * height; i += 4) {
+            bytes[i] = MIN(bytes[i], bytes[i + 3]);
+            bytes[i + 1] = MIN(bytes[i + 1], bytes[i + 3]);
+            bytes[i + 2] = MIN(bytes[i + 2], bytes[i + 3]);
+        }
     }
 
     bitmap = [[NSData alloc] initWithBytesNoCopy: bytes
@@ -135,7 +161,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
     O2DataProvider *provider =
             O2DataProviderCreateWithCFData((CFDataRef) bitmap);
-    O2ColorSpaceRef colorSpace = O2ColorSpaceCreateDeviceRGB();
+    O2ColorSpaceRef colorSpace = opaqueSamples == 1 ? O2ColorSpaceCreateDeviceGray() : O2ColorSpaceCreateDeviceRGB();
     O2Image *image =
             [[O2Image alloc] initWithWidth: width
                                     height: height
@@ -143,8 +169,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                               bitsPerPixel: bitsPerPixel
                                bytesPerRow: bytesPerRow
                                 colorSpace: colorSpace
-                                bitmapInfo: kO2BitmapByteOrder32Big |
-                                            kO2ImageAlphaPremultipliedLast
+                                bitmapInfo: opaqueSamples != 0
+                                                    ? kO2ImageAlphaNone
+                                                    : (kO2BitmapByteOrder32Big | kO2ImageAlphaPremultipliedLast)
                                    decoder: NULL
                                   provider: provider
                                     decode: NULL

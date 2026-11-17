@@ -1,0 +1,29 @@
+/*
+ This file is part of Darling.
+
+ Copyright (C) 2026 Lubos Dolezel
+
+ Darling is free software: you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation, either version 3 of the License, or
+ (at your option) any later version.
+
+ Darling is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
+
+ You should have received a copy of the GNU General Public License
+ along with Darling.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+#import <AppKit/NSLayoutConstraint.h>
+
+// AppKit's own layout constants. The layout classes they are declared next to live in CoreAutoLayout.
+
+// 0xbff0000000000000 is the bit pattern of -1.0, not the value; as a CGFloat
+// initialiser it yielded 1.38e19, so every "no intrinsic metric" test failed.
+const CGFloat NSViewNoInstrinsicMetric = -1.0;
+const CGFloat NSViewNoIntrinsicMetric = -1.0;
+
+const NSDirectionalEdgeInsets NSDirectionalEdgeInsetsZero = {0, 0, 0, 0};

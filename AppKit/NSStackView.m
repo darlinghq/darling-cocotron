@@ -18,9 +18,11 @@
 */
 
 #import <AppKit/NSStackView.h>
+#import "NSViewLayoutInternal.h"
 #import <Foundation/NSArray.h>
 #import <Foundation/NSException.h>
 #import <Foundation/NSKeyValueObserving.h>
+#import <objc/runtime.h>
 
 static void *const HiddenContext = (void *) &HiddenContext;
 static const CGFloat DefaultSpacing = 8;
@@ -36,6 +38,7 @@ static const CGFloat DefaultSpacing = 8;
     CGFloat spacingAfter;
     NSStackViewVisibilityPriority visibilityPriority;
     BOOL detached;
+    BOOL tamicSetByStack;
     NSSize naturalSize, assignedSize;
 }
 @end
@@ -498,6 +501,10 @@ typedef struct {
 }
 
 - (NSSize) intrinsicContentSize {
+    // A stack view that arranges its views with constraints has no intrinsic
+    // size of its own; its constraints size it.
+    if ([self _constraintArrangementIsActive])
+        return NSMakeSize(NSViewNoIntrinsicMetric, NSViewNoIntrinsicMetric);
     // Measuring decoded views with the undecoded default settings would be wrong.
     NSArray *attached = _keepsDecodedFrames ? [NSArray array] : [self _attachedEntries];
     NSUInteger i, count = [attached count];
@@ -633,6 +640,10 @@ typedef struct {
     _keepsDecodedFrames = NO;
     if (count == 0)
         return;
+    if ([self _constraintArrangementIsActive]) {
+        [self setNeedsUpdateConstraints: YES];
+        return;
+    }
 
     NSRect bounds = [self bounds];
     BOOL vertical = [self _isVertical], flipped = [self isFlipped];
@@ -722,10 +733,267 @@ typedef struct {
     [self _arrangeViews];
 }
 
+// An arranged view whose content changed has another natural size; the arrangement is redone at the
+// next layout pass, and the stack's own intrinsic size changes with it.
+- (void) _subviewIntrinsicContentSizeDidChange: (NSView *) subview {
+    if (_changingViews || [self _entryForView: subview] == nil)
+        return;
+    [self setNeedsLayout: YES];
+    [self invalidateIntrinsicContentSize];
+}
+
 - (void) layout {
     if (!_keepsDecodedFrames)
         [self _arrangeViews];
     [super layout];
+}
+
+#pragma mark - Constraint-based arrangement
+
+static const char arrangementConstraintsKey;
+static const char constraintModeKey;
+
+// When an arranged view takes part in Auto Layout (it has constraints of its
+// own, or the client turned its autoresizing translation off), the stack view
+// arranges all its views with constraints, as the engine would otherwise pin
+// the frames this stack view set and report the view's own constraints as
+// unsatisfiable. A stack view whose arranged views are all frame-based keeps
+// arranging them by frames.
+- (BOOL) _entryTakesPartInAutoLayout: (NSStackViewEntry *) entry {
+    NSView *view = entry->view;
+
+    if (![view translatesAutoresizingMaskIntoConstraints] && !entry->tamicSetByStack)
+        return YES;
+    return [[view constraints] count] != 0;
+}
+
+- (BOOL) _constraintArrangementIsActive {
+    if (_keepsDecodedFrames)
+        return NO;
+    // A stack view that Auto Layout places is laid out by constraints throughout: on macOS its
+    // views are arranged by constraints, and with equal hugging priorities the first view of a
+    // fill distribution stretches there, while a stack view laid out by frames stretches the last
+    // (observed on macOS 26.7.3 and 10.14.4; tests appkit-stack-view-constraint-arrangement and
+    // appkit-stack-view-layout).
+    if (![self translatesAutoresizingMaskIntoConstraints] && [_entries count] != 0)
+        return YES;
+    for (NSStackViewEntry *entry in _entries)
+        if (!entry->detached && [self _entryTakesPartInAutoLayout: entry])
+            return YES;
+    return NO;
+}
+
+// Arranged views of a constraint-arranged stack view are placed by constraints,
+// so their autoresizing translation is turned off; it is turned back on for
+// the views this stack view changed when it returns to frame arrangement.
+- (void) _applyArrangementMode: (BOOL) active {
+    for (NSStackViewEntry *entry in _entries) {
+        if (active && !entry->detached && [entry->view translatesAutoresizingMaskIntoConstraints]) {
+            [entry->view setTranslatesAutoresizingMaskIntoConstraints: NO];
+            entry->tamicSetByStack = YES;
+        } else if (!active && entry->tamicSetByStack) {
+            [entry->view setTranslatesAutoresizingMaskIntoConstraints: YES];
+            entry->tamicSetByStack = NO;
+        }
+    }
+    objc_setAssociatedObject(self, &constraintModeKey, active ? @YES : nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
+
+// The constraints of an arranged view can change without telling the stack view.
+- (void) updateConstraintsForSubtreeIfNeeded {
+    BOOL active = [self _constraintArrangementIsActive];
+    BOOL was = objc_getAssociatedObject(self, &constraintModeKey) != nil;
+
+    if (active != was)
+        [self setNeedsUpdateConstraints: YES];
+    [super updateConstraintsForSubtreeIfNeeded];
+}
+
+static NSLayoutConstraint *arrangeConstraint(id item, NSLayoutAttribute attribute, NSLayoutRelation relation,
+                                             id other, NSLayoutAttribute otherAttribute,
+                                             CGFloat constant, NSLayoutPriority priority) {
+    NSLayoutConstraint *constraint = [NSLayoutConstraint constraintWithItem: item attribute: attribute relatedBy: relation
+                                                                     toItem: other attribute: otherAttribute
+                                                                 multiplier: 1 constant: constant];
+
+    [constraint setPriority: priority];
+    return constraint;
+}
+
+// Priorities of the constraints this stack view creates. Edge containment and
+// fixed spacing are high but not required, so a view that insists on a size
+// the stack cannot give breaks a stack constraint instead of making the whole
+// window's layout unsatisfiable.
+static const NSLayoutPriority HighPriority = NSLayoutPriorityRequired - 1;
+static const NSLayoutPriority GravityEdgePriority = 750;
+static const NSLayoutPriority GravitySpacingPriority = 749.99;
+static const NSLayoutPriority GravityCenterPriority = 748;
+static const NSLayoutPriority CrossAlignmentPriority = 260;
+// Below the default content hugging priority, so a stack view that is larger
+// than its views does not stretch views that hug their content.
+static const NSLayoutPriority SizingPriority = 249;
+
+- (CGFloat) _mainSizeForConstraints: (NSView *) view {
+    NSSize intrinsic = [view intrinsicContentSize];
+    CGFloat size = [self _isVertical] ? intrinsic.height : intrinsic.width;
+
+    return size != NSViewNoIntrinsicMetric ? size : -1;
+}
+
+- (NSArray *) _arrangementConstraintsForEntries: (NSArray *) entries {
+    NSMutableArray *created = [NSMutableArray array];
+    NSUInteger i, count = [entries count];
+    BOOL vertical = [self _isVertical];
+    NSLayoutAttribute start = vertical ? NSLayoutAttributeTop : NSLayoutAttributeLeading;
+    NSLayoutAttribute end = vertical ? NSLayoutAttributeBottom : NSLayoutAttributeTrailing;
+    NSLayoutAttribute length = vertical ? NSLayoutAttributeHeight : NSLayoutAttributeWidth;
+    NSLayoutAttribute crossStart = vertical ? NSLayoutAttributeLeading : NSLayoutAttributeTop;
+    NSLayoutAttribute crossEnd = vertical ? NSLayoutAttributeTrailing : NSLayoutAttributeBottom;
+    NSLayoutAttribute crossCenter = vertical ? NSLayoutAttributeCenterX : NSLayoutAttributeCenterY;
+    CGFloat insetStart = vertical ? _edgeInsets.top : _edgeInsets.left;
+    CGFloat insetEnd = vertical ? _edgeInsets.bottom : _edgeInsets.right;
+    CGFloat insetCrossStart = vertical ? _edgeInsets.left : _edgeInsets.top;
+    CGFloat insetCrossEnd = vertical ? _edgeInsets.right : _edgeInsets.bottom;
+    NSLayoutConstraintOrientation axis = vertical ? NSLayoutConstraintOrientationVertical
+                                                  : NSLayoutConstraintOrientationHorizontal;
+    BOOL gravityAreas = _distribution == NSStackViewDistributionGravityAreas;
+    NSLayoutAttribute alignment = [self alignment];
+
+    // An alignment for the other axis is ignored, as when frames are used.
+    if ([self _alignmentIsVertical: alignment] == vertical)
+        alignment = crossCenter;
+    switch (alignment) {
+    case NSLayoutAttributeLeft: alignment = NSLayoutAttributeLeading; break;
+    case NSLayoutAttributeRight: alignment = NSLayoutAttributeTrailing; break;
+    case NSLayoutAttributeFirstBaseline: alignment = NSLayoutAttributeTop; break;
+    case NSLayoutAttributeBaseline: alignment = NSLayoutAttributeBottom; break;
+    // Width and height are not alignments of a stack view; the views end up at the far edge.
+    case NSLayoutAttributeWidth:
+    case NSLayoutAttributeHeight: alignment = crossEnd; break;
+    default: break;
+    }
+
+    // Cross axis: contained in the stack view, aligned, and wrapped by it when
+    // the stack view has no size of its own.
+    for (i = 0; i < count; i++) {
+        NSView *view = ((NSStackViewEntry *) [entries objectAtIndex: i])->view;
+
+        [created addObject: arrangeConstraint(view, crossStart, NSLayoutRelationGreaterThanOrEqual, self, crossStart, insetCrossStart, HighPriority)];
+        [created addObject: arrangeConstraint(view, crossEnd, NSLayoutRelationLessThanOrEqual, self, crossEnd, -insetCrossEnd, HighPriority)];
+        [created addObject: arrangeConstraint(view, crossStart, NSLayoutRelationEqual, self, crossStart, insetCrossStart, SizingPriority)];
+        [created addObject: arrangeConstraint(view, crossEnd, NSLayoutRelationEqual, self, crossEnd, -insetCrossEnd, SizingPriority)];
+        if (alignment == crossStart)
+            [created addObject: arrangeConstraint(view, crossStart, NSLayoutRelationEqual, self, crossStart, insetCrossStart, HighPriority)];
+        if (alignment == crossEnd)
+            [created addObject: arrangeConstraint(view, crossEnd, NSLayoutRelationEqual, self, crossEnd, -insetCrossEnd, HighPriority)];
+        if (alignment == crossCenter)
+            [created addObject: arrangeConstraint(view, crossCenter, NSLayoutRelationEqual, self, crossCenter, 0, CrossAlignmentPriority)];
+    }
+
+    // Main axis: the ends, and the gap after each view but the last.
+    NSStackViewEntry *first = [entries objectAtIndex: 0], *last = [entries lastObject];
+
+    [created addObject: arrangeConstraint(first->view, start, NSLayoutRelationGreaterThanOrEqual, self, start, insetStart, HighPriority)];
+    [created addObject: arrangeConstraint(last->view, end, NSLayoutRelationLessThanOrEqual, self, end, -insetEnd, HighPriority)];
+    if (gravityAreas) {
+        [created addObject: arrangeConstraint(first->view, start, NSLayoutRelationEqual, self, start, insetStart,
+                                              first->gravity == NSStackViewGravityLeading ? GravityEdgePriority : SizingPriority)];
+        [created addObject: arrangeConstraint(last->view, end, NSLayoutRelationEqual, self, end, -insetEnd,
+                                              last->gravity == NSStackViewGravityTrailing ? GravityEdgePriority : SizingPriority)];
+    } else {
+        [created addObject: arrangeConstraint(first->view, start, NSLayoutRelationEqual, self, start, insetStart, HighPriority)];
+        [created addObject: arrangeConstraint(last->view, end, NSLayoutRelationEqual, self, end, -insetEnd, HighPriority)];
+    }
+
+    for (i = 0; i + 1 < count; i++) {
+        NSStackViewEntry *entry = [entries objectAtIndex: i], *next = [entries objectAtIndex: i + 1];
+        CGFloat gap = [self _spacingAfter: entry];
+
+        [created addObject: arrangeConstraint(next->view, start, NSLayoutRelationGreaterThanOrEqual, entry->view, end, gap, HighPriority)];
+        if (!gravityAreas)
+            // Equal spacing and equal centering are arranged like fill here: the
+            // constraint engine has no layout guides to space the views evenly.
+            [created addObject: arrangeConstraint(next->view, start, NSLayoutRelationEqual, entry->view, end, gap, HighPriority)];
+        else if (entry->gravity == next->gravity)
+            [created addObject: arrangeConstraint(next->view, start, NSLayoutRelationEqual, entry->view, end, gap, GravitySpacingPriority)];
+    }
+
+    if (gravityAreas) {
+        // The center area is centered in the stack view, from the sizes its views have now.
+        NSInteger firstCenter = -1, lastCenter = -1;
+        CGFloat groupLength = 0;
+
+        for (i = 0; i < count; i++) {
+            NSStackViewEntry *entry = [entries objectAtIndex: i];
+            CGFloat size = [self _mainSizeForConstraints: entry->view];
+
+            if (entry->gravity != NSStackViewGravityCenter)
+                continue;
+            if (firstCenter < 0)
+                firstCenter = i;
+            else
+                groupLength += [self _spacingAfter: [entries objectAtIndex: lastCenter]];
+            lastCenter = i;
+            groupLength += size >= 0 ? size : (vertical ? NSHeight([entry->view frame]) : NSWidth([entry->view frame]));
+        }
+        if (firstCenter >= 0)
+            [created addObject: arrangeConstraint(((NSStackViewEntry *) [entries objectAtIndex: firstCenter])->view, start,
+                                                  NSLayoutRelationEqual, self, vertical ? NSLayoutAttributeCenterY : NSLayoutAttributeCenterX,
+                                                  -groupLength / 2, GravityCenterPriority)];
+    } else {
+        // Views that hug their content least take the space the stack view has
+        // to spare. With equal priorities the earlier view takes it: the later
+        // views get a slightly stronger hold on their size.
+        for (i = 1; i < count; i++) {
+            NSView *view = ((NSStackViewEntry *) [entries objectAtIndex: i])->view;
+            CGFloat size = [self _mainSizeForConstraints: view];
+
+            if (size >= 0)
+                [created addObject: arrangeConstraint(view, length, NSLayoutRelationLessThanOrEqual, nil, NSLayoutAttributeNotAnAttribute,
+                                                      size, MIN(HighPriority, [view contentHuggingPriorityForOrientation: axis] + 0.5))];
+        }
+
+        if (_distribution == NSStackViewDistributionFillEqually || _distribution == NSStackViewDistributionFillProportionally) {
+            NSView *base = first->view;
+            CGFloat baseSize = [self _mainSizeForConstraints: base];
+
+            for (i = 1; i < count; i++) {
+                NSView *view = ((NSStackViewEntry *) [entries objectAtIndex: i])->view;
+                CGFloat size = [self _mainSizeForConstraints: view];
+                CGFloat multiplier = 1;
+                NSLayoutConstraint *equal;
+
+                if (_distribution == NSStackViewDistributionFillProportionally && baseSize > 0 && size > 0)
+                    multiplier = size / baseSize;
+                equal = [NSLayoutConstraint constraintWithItem: view attribute: length relatedBy: NSLayoutRelationEqual
+                                                        toItem: base attribute: length multiplier: multiplier constant: 0];
+                [equal setPriority: HighPriority];
+                [created addObject: equal];
+            }
+        }
+    }
+    return created;
+}
+
+- (void) updateConstraints {
+    NSArray *old = objc_getAssociatedObject(self, &arrangementConstraintsKey);
+
+    if (old != nil) {
+        [[old retain] autorelease];
+        objc_setAssociatedObject(self, &arrangementConstraintsKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        [self removeConstraints: old];
+    }
+
+    BOOL active = [self _constraintArrangementIsActive];
+
+    [self _applyArrangementMode: active];
+    if (active) {
+        NSArray *created = [self _arrangementConstraintsForEntries: [self _attachedEntries]];
+
+        [self addConstraints: created];
+        objc_setAssociatedObject(self, &arrangementConstraintsKey, created, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    [super updateConstraints];
 }
 
 @end

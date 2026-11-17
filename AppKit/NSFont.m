@@ -651,7 +651,7 @@ static NSLock *_cacheLock = nil;
         while ([nameComponents count] > 1 && familyName == nil) {
             [nameComponents removeLastObject];
             familyName = [[NSFontFamily
-                    fontFamilyWithName:
+                    installedFontFamilyWithName:
                             [nameComponents componentsJoinedByString: blank]]
                     name];
         }
@@ -666,7 +666,8 @@ static NSLock *_cacheLock = nil;
 
 - (NSString *) displayName {
     NSFontTypeface *typeFace = [NSFontFamily fontTypefaceWithName: _name];
-    return [typeFace displayName];
+    // A name no family lists (the system font is "San Francisco") has no typeface; nil is not an option for callers.
+    return [typeFace displayName] ?: _name;
 }
 
 - (NSDictionary *) _fontTraitsAsDictionary {
@@ -951,23 +952,6 @@ static NSLock *_cacheLock = nil;
 - (id) _metaType {
     NSUnimplementedMethod();
     return nil;
-}
-
-NSInteger NSConvertGlyphsToPackedGlyphs(NSGlyph *glyphs, NSInteger length,
-                                        NSMultibyteGlyphPacking packing,
-                                        char *outputX)
-{
-    NSInteger i, result = 0;
-    CGGlyph *output = (CGGlyph *) outputX;
-
-    for (i = 0; i < length; i++) {
-        NSGlyph check = glyphs[i];
-
-        if (check != NSNullGlyph && check != NSControlGlyph)
-            output[result++] = check;
-    }
-
-    return result * 2;
 }
 
 @end

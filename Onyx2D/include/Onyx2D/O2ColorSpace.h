@@ -24,6 +24,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 typedef O2ColorSpace *O2ColorSpaceRef;
 
 #import <Onyx2D/O2ColorConversion.h>
+#import <CoreFoundation/CFData.h>
 #import <Onyx2D/O2Function.h>
 
 typedef enum {
@@ -48,6 +49,7 @@ typedef enum {
     O2ColorSpaceModel _type;
     BOOL _isPlatformRGB;
     CFStringRef _name;
+    O2ColorSpace *_patternBase;
 }
 
 - (O2ColorSpaceModel) type;
@@ -59,6 +61,7 @@ O2ColorSpaceRef O2ColorSpaceCreateDeviceGray(void);
 O2ColorSpaceRef O2ColorSpaceCreateDeviceRGB(void);
 O2ColorSpaceRef O2ColorSpaceCreateDeviceCMYK(void);
 O2ColorSpaceRef O2ColorSpaceCreatePattern(O2ColorSpaceRef baseSpace);
+O2ColorSpaceRef O2ColorSpaceCreateIndexed(O2ColorSpaceRef baseSpace, size_t lastIndex, const unsigned char *colorTable);
 O2ColorSpaceRef O2ColorSpaceCreateDeviceN(const char **names,
                                           O2ColorSpaceRef alternateSpace,
                                           O2FunctionRef tintTransform);
@@ -70,7 +73,18 @@ BOOL O2ColorSpaceIsPlatformRGB(O2ColorSpaceRef self);
 // NO for device, indexed, pattern and DeviceN spaces and for names without one.
 BOOL O2ColorSpaceGetColorProfile(O2ColorSpaceRef self, O2ColorProfile *profile);
 
+// A synthesized ICC profile for the named spaces with a colorimetric profile;
+// NULL for every other space.
+CFDataRef O2ColorSpaceCopyICCData(O2ColorSpaceRef self);
+
 size_t O2ColorSpaceGetNumberOfComponents(O2ColorSpaceRef self);
+
+// The space an indexed space picks its colors from, or the underlying space of a pattern space; NULL for other spaces.
+O2ColorSpaceRef O2ColorSpaceGetBaseColorSpace(O2ColorSpaceRef self);
+// The number of entries in an indexed space's table; 0 for other spaces.
+size_t O2ColorSpaceGetColorTableCount(O2ColorSpaceRef self);
+// Copies the table of an indexed space (entries times the base's components bytes); does nothing for other spaces.
+void O2ColorSpaceGetColorTable(O2ColorSpaceRef self, unsigned char *table);
 
 O2ColorSpaceModel O2ColorSpaceGetModel(O2ColorSpaceRef self);
 

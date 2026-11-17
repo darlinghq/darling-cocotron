@@ -18,8 +18,11 @@
 */
 
 #import <AppKit/AppKitExport.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <Foundation/Foundation.h>
 
-@interface NSCollectionViewLayoutAttributes : NSObject
+@interface NSCollectionViewLayoutAttributes : NSObject {
+    NS_LEGACY_IVAR_PAD(_NSCollectionViewLayoutAttributesReserved, 252)
+}
 
 @end

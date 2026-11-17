@@ -18,6 +18,7 @@
 */
 
 #import <AppKit/AppKitExport.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <CoreGraphics/CoreGraphics.h>
 #import <Foundation/NSObject.h>
 #import <Foundation/NSArray.h>
@@ -29,6 +30,9 @@ typedef float NSLayoutPriority NS_TYPED_EXTENSIBLE_ENUM NS_SWIFT_NAME(NSLayoutCo
 static const NSLayoutPriority NSLayoutPriorityRequired NS_SWIFT_NAME(required) = 1000;
 static const NSLayoutPriority NSLayoutPriorityDefaultHigh NS_SWIFT_NAME(defaultHigh) = 750;
 static const NSLayoutPriority NSLayoutPriorityDefaultLow NS_SWIFT_NAME(defaultLow) = 250;
+static const NSLayoutPriority NSLayoutPriorityDragThatCanResizeWindow NS_SWIFT_NAME(dragThatCanResizeWindow) = 510;
+static const NSLayoutPriority NSLayoutPriorityWindowSizeStayPut NS_SWIFT_NAME(windowSizeStayPut) = 500;
+static const NSLayoutPriority NSLayoutPriorityDragThatCannotResizeWindow NS_SWIFT_NAME(dragThatCannotResizeWindow) = 490;
 static const NSLayoutPriority NSLayoutPriorityFittingSizeCompression NS_SWIFT_NAME(fittingSizeCompression) = 50;
 
 typedef NS_ENUM(NSInteger, NSLayoutAttribute) {
@@ -80,6 +84,8 @@ typedef NS_OPTIONS(NSUInteger, NSLayoutFormatOptions) {
 
 @interface NSLayoutConstraint : NSObject
 {
+    NS_LEGACY_IVAR_PAD(_NSLayoutConstraintReserved, 44)
+    NS_EXTRA_IVARS_BEGIN(NSLayoutConstraint)
     id _firstItem;
     NSInteger _firstAttribute;
     NSInteger _relation;
@@ -93,6 +99,7 @@ typedef NS_OPTIONS(NSUInteger, NSLayoutFormatOptions) {
     BOOL _active;
     BOOL _shouldBeArchived;
     id _owner;
+    NS_EXTRA_IVARS_END(NSLayoutConstraint)
 }
 
 + (instancetype) constraintWithItem: (id) view1

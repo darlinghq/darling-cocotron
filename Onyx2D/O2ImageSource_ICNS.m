@@ -21,6 +21,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Onyx2D/O2DataProvider.h>
 #import <Onyx2D/O2Image.h>
 #import <Onyx2D/O2ImageSource_ICNS.h>
+#import <Onyx2D/O2ImageSource_PNG.h>
 
 typedef struct O2ICNSNode {
     struct O2ICNSNode *next;
@@ -232,6 +233,48 @@ static uint32_t nextUnsigned32(O2ImageSource_ICNS *self) {
     return result;
 }
 
+// The elements of the modern icon types (ic07 to ic14, and icp4 to icp6 in their PNG form) hold a whole PNG
+// file instead of the sample data of the classic types.
+static bool isPNGElementType(uint32_t type) {
+    switch (type) {
+    case BigEndianOSType('i', 'c', '0', '7'):
+    case BigEndianOSType('i', 'c', '0', '8'):
+    case BigEndianOSType('i', 'c', '0', '9'):
+    case BigEndianOSType('i', 'c', '1', '0'):
+    case BigEndianOSType('i', 'c', '1', '1'):
+    case BigEndianOSType('i', 'c', '1', '2'):
+    case BigEndianOSType('i', 'c', '1', '3'):
+    case BigEndianOSType('i', 'c', '1', '4'):
+    case BigEndianOSType('i', 'c', 'p', '4'):
+    case BigEndianOSType('i', 'c', 'p', '5'):
+    case BigEndianOSType('i', 'c', 'p', '6'):
+        return true;
+    }
+    return false;
+}
+
+// Decodes the PNG payload of an element and adds the image. Returns false when the payload is not a PNG
+// file or does not decode, which leaves the element ignored like any unknown one.
+- (bool) addPNGElementWithLength: (uint32_t) length {
+    NSData *payload = [NSData dataWithBytes: _bytes + _position length: length];
+    O2DataProviderRef provider = O2DataProviderCreateWithCFData((CFDataRef) payload);
+    bool added = false;
+
+    if ([O2ImageSource_PNG isPresentInDataProvider: provider]) {
+        O2ImageSource_PNG *source = [[O2ImageSource_PNG alloc] initWithDataProvider: provider options: nil];
+        O2Image *image = [source createImageAtIndex: 0 options: nil];
+
+        if (image != nil) {
+            [_images addObject: image];
+            O2ImageRelease(image);
+            added = true;
+        }
+        [source release];
+    }
+    O2DataProviderRelease(provider);
+    return added;
+}
+
 - (void) parseIcon {
     uint32_t type = nextUnsigned32(self);
     uint32_t elementLength = nextUnsigned32(self);
@@ -252,6 +295,11 @@ static uint32_t nextUnsigned32(O2ImageSource_ICNS *self) {
     bool maskFollows = FALSE;
 
     // NSLog(@" .icns icon type=%c %c %c %c",type>>24,type>>16,type>>8,type);
+
+    if (isPNGElementType(type) && [self addPNGElementWithLength: length]) {
+        _position += length;
+        return;
+    }
 
     switch (type) {
 
@@ -675,6 +723,15 @@ static uint32_t nextUnsigned32(O2ImageSource_ICNS *self) {
         free(iconNode);
     }
     _maskNodes = NULL;
+
+    // The images are listed from the largest to the smallest, equal sizes in file order.
+    [_images sortWithOptions: NSSortStable
+             usingComparator: ^NSComparisonResult(O2Image *a, O2Image *b) {
+                 size_t areaA = O2ImageGetWidth(a) * O2ImageGetHeight(a);
+                 size_t areaB = O2ImageGetWidth(b) * O2ImageGetHeight(b);
+
+                 return areaA == areaB ? NSOrderedSame : (areaA > areaB ? NSOrderedAscending : NSOrderedDescending);
+             }];
 }
 
 - (void) parseIfNeeded {

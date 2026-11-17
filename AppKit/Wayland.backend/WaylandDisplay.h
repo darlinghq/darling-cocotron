@@ -42,6 +42,7 @@ struct xkb_context;
 struct xkb_keymap;
 struct xkb_state;
 
+@class WaylandOutputManager;
 @class WaylandCursor, WaylandWindow, WaylandPasteboard, WaylandDraggingManager;
 
 @protocol WaylandFractionalScaleOwner
@@ -72,6 +73,11 @@ typedef enum {
     WaylandObjectFractionalScale,
     WaylandObjectLockedPointer,
     WaylandObjectRelativePointer,
+    WaylandObjectOutputManager,
+    WaylandObjectOutputHead,
+    WaylandObjectOutputHeadMode,
+    WaylandObjectOutputConfiguration,
+    WaylandObjectActivationToken,
 } WaylandObjectKind;
 
 // The dispatcher installed on every proxy (see WaylandLibrary.h for why listeners
@@ -94,9 +100,18 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     struct wl_proxy *_registry;
     struct wl_proxy *_compositor;
     struct wl_proxy *_viewporter, *_fractionalScaleManager;
+    // xdg-activation: asks the compositor to focus one of our windows (see
+    // -requestActivation). The token object and the window it is for exist only
+    // while a request waits for the compositor's token.
+    struct wl_proxy *_activation, *_activationToken;
+    uint32_t _activationName;
+    WaylandWindow *_activationWindow;
     uint32_t _viewporterName, _fractionalScaleManagerName;
     struct wl_proxy *_logicalOutputManager, *_legacyLogicalOutputManager;
     uint32_t _logicalOutputManagerName;
+    // wlr-output-management, when the compositor has it: the only way to change a mode.
+    WaylandOutputManager *_outputManager;
+    uint32_t _outputManagerName;
     struct wl_proxy *_subcompositor;
     BOOL _eglAvailable;
     struct wl_proxy *_shm;
@@ -154,6 +169,8 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     struct xkb_context *_xkbContext;
     struct xkb_keymap *_xkbKeymap;
     struct xkb_state *_xkbState;
+    struct xkb_keymap *_publishedKeymap; // Not retained; compared only.
+    uint32_t _publishedGroup;
     WaylandWindow *_keyboardWindow;
     BOOL _syncModifierFlags;
     BOOL _classifyHeldKeys;
@@ -176,7 +193,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     WaylandCursor *_cursor;
     BOOL _applyingCursor, _cursorApplyPending, _cursorApplyQueued;
     WaylandPasteboard *_generalPasteboard;
-    NSMutableDictionary *_namedPasteboards;
 }
 
 - (WaylandWindow *) windowForSurface: (struct wl_proxy *) surface;
@@ -194,6 +210,7 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 - (void) preferredScaleChanged: (uint32_t) scale120;
 - (void) windowScaleChanged: (WaylandWindow *) window;
 - (WaylandWindow *) popupParentForWindow: (WaylandWindow *) window;
+- (WaylandWindow *) levelParentForWindow: (WaylandWindow *) window;
 - (uint32_t) popupGrabSerialForParent: (WaylandWindow *) parent;
 - (struct wl_proxy *) seat;
 // Fills `result` and `proxies` with up to `max` outputs in -screens order: their
@@ -221,4 +238,5 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 - (void) windowDestroyed: (WaylandWindow *) window;
 
 - (struct wl_proxy *) newFractionalScaleForSurface: (struct wl_proxy *) surface owner: (id<WaylandFractionalScaleOwner>) owner;
+- (void)publishKeyboardLayout;
 @end

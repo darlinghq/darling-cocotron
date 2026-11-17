@@ -771,10 +771,24 @@ void O2ContextSetStrokeColor(O2ContextRef self, const O2Float *components) {
     O2ColorRelease(color);
 }
 
+// QUIRK: a NULL color, passed as the new fill or stroke color, selects opaque black instead of being ignored or
+// rejected; later painting is black. This is not documented. Evidence: black-box observation on macOS 26.7 (tier 2):
+// filling and stroking after setting a NULL color gives opaque black pixels where the previous color was red or green.
+// Test: tests/coregraphics-context-null-color.c (test_quirk_null_color_is_black)
+static O2ColorRef O2ContextCreateColorForNull(void) {
+    return O2ColorCreateGenericGray(0, 1);
+}
+
 void O2ContextSetStrokeColorWithColor(O2ContextRef self, O2ColorRef color) {
     if (self == nil)
         return;
 
+    if (color == NULL) {
+        color = O2ContextCreateColorForNull();
+        O2GStateSetStrokeColor(O2ContextCurrentGState(self), color);
+        O2ColorRelease(color);
+        return;
+    }
     O2GStateSetStrokeColor(O2ContextCurrentGState(self), color);
 }
 
@@ -841,6 +855,12 @@ void O2ContextSetFillColorWithColor(O2ContextRef self, O2ColorRef color) {
     if (self == nil)
         return;
 
+    if (color == NULL) {
+        color = O2ContextCreateColorForNull();
+        O2GStateSetFillColor(O2ContextCurrentGState(self), color);
+        O2ColorRelease(color);
+        return;
+    }
     O2GStateSetFillColor(O2ContextCurrentGState(self), color);
 }
 

@@ -18,6 +18,9 @@
 */
 
 #import <AppKit/NSView.h>
+#import <AppKit/AppKitIvarLayout.h>
 
-@interface NSTableRowView : NSView
+@interface NSTableRowView : NSView {
+    NS_LEGACY_IVAR_PAD(_NSTableRowViewReserved, 32)
+}
 @end

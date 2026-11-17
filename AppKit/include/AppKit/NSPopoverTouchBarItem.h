@@ -18,6 +18,9 @@
 */
 
 #import <AppKit/NSTouchBarItem.h>
+#import <AppKit/AppKitIvarLayout.h>
 
-@interface NSPopoverTouchBarItem : NSTouchBarItem
+@interface NSPopoverTouchBarItem : NSTouchBarItem {
+    NS_LEGACY_IVAR_PAD(_NSPopoverTouchBarItemReserved, 44)
+}
 @end

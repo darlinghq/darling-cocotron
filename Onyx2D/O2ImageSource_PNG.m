@@ -76,7 +76,7 @@ static void png_read_data(png_structp pngPtr, png_bytep data, png_size_t length)
 
 // Load an unpacked image into outData - RGBA 8 bits/pixels
 // Adapted from libpng sample code
-bool load_png_image(const unsigned char *buffer, int length, int *outWidth, int *outHeight, void **outData) {
+bool load_png_image(const unsigned char *buffer, int length, int *outWidth, int *outHeight, int *outComp, void **outData) {
     png_structp png_ptr;
     png_infop info_ptr;
     unsigned int sig_read = 0;
@@ -167,6 +167,7 @@ bool load_png_image(const unsigned char *buffer, int length, int *outWidth, int 
 
         *outWidth = width;
         *outHeight = height;
+        *outComp = nb_comp; // 3: no alpha channel in the file, 4: alpha
     } @catch (NSException *ex) {
         NSLog(@"Error reading PNG: %@", ex);
         png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
@@ -185,11 +186,12 @@ bool load_png_image(const unsigned char *buffer, int length, int *outWidth, int 
 unsigned char *stbi_png_load_from_memory(const unsigned char *buffer, int len, int *x, int *y, int *comp, int req_comp)
 {
 	void* result = NULL;
-	if (comp) {
-		*comp = 4;
-	}
-	if (load_png_image(buffer, len, x, y, &result) == NO) {
+	int channels = 4;
+	if (load_png_image(buffer, len, x, y, &channels, &result) == NO) {
 		result = NULL;
+	}
+	if (comp) {
+		*comp = channels;
 	}
 	return result;
 }
@@ -712,9 +714,13 @@ unsigned char *stbi_png_load_from_memory(const unsigned char *buffer, int len, i
     if (pixels == NULL)
         return nil;
 
+    // A file without alpha (gray, RGB or palette without transparency) yields an image
+    // without an alpha channel: its fourth byte is padding.
+    BOOL hasAlpha = comp == 2 || comp == 4;
+
     // PNG stores straight alpha; the image below is declared premultiplied.
     int i;
-    for (i = 0; i < bytesPerRow * height; i += 4) {
+    for (i = 0; hasAlpha && i < bytesPerRow * height; i += 4) {
         unsigned a = pixels[i + 3];
         if (a != 0xff) {
             pixels[i + 0] = (unsigned char) ((pixels[i + 0] * a + 127) / 255);
@@ -736,7 +742,8 @@ unsigned char *stbi_png_load_from_memory(const unsigned char *buffer, int len, i
                               bitsPerPixel: bitsPerPixel
                                bytesPerRow: bytesPerRow
                                 colorSpace: colorSpace
-                                bitmapInfo: kO2ImageAlphaPremultipliedLast |
+                                bitmapInfo: (hasAlpha ? kO2ImageAlphaPremultipliedLast
+                                                      : kO2ImageAlphaNoneSkipLast) |
                                             kO2BitmapByteOrder32Big
                                    decoder: NULL
                                   provider: provider

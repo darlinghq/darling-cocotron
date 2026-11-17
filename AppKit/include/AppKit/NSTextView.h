@@ -38,7 +38,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 NS_ASSUME_NONNULL_BEGIN
 
 @class NSTextStorage, NSLayoutManager, NSTextContainer, NSUndoManager;
-@class NSRulerView, NSRulerMarker;
+@class NSRulerView, NSRulerMarker, NSOrthography, NSSharingServicePicker, NSTextAttachment, NSMenu, NSEvent;
+@protocol NSTextAttachmentCell;
 
 typedef NS_ENUM(NSUInteger, NSTextViewSelectionGranularity) {
     NSSelectByCharacter = 0,
@@ -74,6 +75,7 @@ typedef enum {
 
 APPKIT_EXPORT NSString *const NSTextViewDidChangeSelectionNotification;
 APPKIT_EXPORT NSString *const NSOldSelectedCharacterRange;
+APPKIT_EXPORT NSString *const NSTextViewDidChangeTypingAttributesNotification;
 APPKIT_EXPORT NSString *const NSAllRomanInputSourcesLocaleIdentifier;
 
 APPKIT_EXPORT NSString *const NSTouchBarItemIdentifierTextStyle;
@@ -90,9 +92,9 @@ typedef NS_ENUM(NSUInteger, NSFindPanelSubstringMatchType) {
     NSFindPanelSubstringMatchTypeEndsWith = 3,
 };
 
-// Legacy ObjC ABI (i386): instance size must stay 0x54, Apple's; the ivars
-// before the extras sit at Apple's offsets. Add new state to the extra
-// struct, never as an ivar.
+// Legacy ObjC ABI (i386): instance size must stay 0x54, Apple's. All state
+// is in the extra struct, which NSText holds the pointer to. Add new state to
+// the extra struct, never as an ivar.
 @interface NSTextView : NSText <NSTextInput, NSTextInputClient, NSTextLayoutOrientationProvider> {
     NS_EXTRA_IVARS_BEGIN(NSTextView)
         NSTextStorage *_textStorage;
@@ -177,12 +179,30 @@ typedef NS_ENUM(NSUInteger, NSFindPanelSubstringMatchType) {
         BOOL _acceptsGlyphInfo;
         BOOL _usesAdaptiveColorMappingForDarkAppearance;
         BOOL _importsGraphics;
-    NS_EXTRA_IVARS_END(NSTextView)
+
+        // New state sits here, inverted where the documented default is YES, so that
+        // zero-filled storage means the default.
+        BOOL _displaysLinkToolTipsDisabled;
+        BOOL _usesRolloverButtonDisabled;
+        BOOL _allowsImageEditing;
+        BOOL _usesFindPanel;
+        BOOL _automaticTextCompletionDisabled;
+        BOOL _allowsCharacterPickerDisabled;
+        NSArray *_allowedInputSourceLocales;
+        BOOL _hasMarkedText;
+        NSRange _markedRange;
+        BOOL _updatingMarkedText;
+        BOOL _pendingTypedRangeValid;
+        NSRange _pendingTypedRange;
+        BOOL _applyAllTextCheckingResults;
+    NS_EXTRA_IVARS_END_IN_SUPER(NSTextView)
 }
 
 - initWithFrame: (NSRect) frame textContainer: (NSTextContainer *) container;
 
 - initWithFrame: (NSRect) frame;
+// TextKit 2 backing is not available; both values give the TextKit 1 network.
+- (instancetype) initUsingTextLayoutManager: (BOOL) usingTextLayoutManager;
 
 @property(nonatomic) BOOL acceptsGlyphInfo;
 
@@ -192,6 +212,9 @@ typedef NS_ENUM(NSUInteger, NSFindPanelSubstringMatchType) {
 - (void) replaceTextStorage: (NSTextStorage *) textStorage;
 
 @property(nonatomic, retain) NSTextContainer *textContainer;
+// Swaps the container, keeping the layout manager and text storage.
+- (void) replaceTextContainer: (NSTextContainer *) newContainer;
+- (void) invalidateTextContainerOrigin;
 
 @property(nonatomic) NSSize textContainerInset;
 @property(nonatomic, readonly) NSPoint textContainerOrigin;
@@ -201,6 +224,42 @@ typedef NS_ENUM(NSUInteger, NSFindPanelSubstringMatchType) {
 
 - (void) insertText: (id) string;
 - (void) insertText: (id) string replacementRange: (NSRange) replacementRange;
+
+// Sets the frame size, limited by minSize and maxSize in the directions the
+// view may resize in.
+- (void) setConstrainedFrameSize: (NSSize) desiredSize;
+- (void) setAlignment: (NSTextAlignment) alignment range: (NSRange) range;
+
+// Font menu commands
+- (void) turnOffKerning: (nullable id) sender;
+- (void) tightenKerning: (nullable id) sender;
+- (void) loosenKerning: (nullable id) sender;
+- (void) useStandardKerning: (nullable id) sender;
+- (void) turnOffLigatures: (nullable id) sender;
+- (void) useStandardLigatures: (nullable id) sender;
+- (void) useAllLigatures: (nullable id) sender;
+- (void) raiseBaseline: (nullable id) sender;
+- (void) lowerBaseline: (nullable id) sender;
+- (void) outline: (nullable id) sender;
+- (void) toggleTraditionalCharacterShape: (nullable id) sender;
+
+// Text commands
+- (void) changeColor: (nullable id) sender;
+- (void) changeAttributes: (nullable id) sender;
+- (void) changeDocumentBackgroundColor: (nullable id) sender;
+// No spacing, list or table panels exist: these do nothing.
+- (void) orderFrontSpacingPanel: (nullable id) sender;
+- (void) orderFrontListPanel: (nullable id) sender;
+- (void) orderFrontTablePanel: (nullable id) sender;
+
+// Override points
+- (void) drawViewBackgroundInRect: (NSRect) rect;
+- (void) updateDragTypeRegistration;
+- (void) clickedOnLink: (id) link atIndex: (NSUInteger) charIndex;
+- (NSUInteger) characterIndexForInsertionAtPoint: (NSPoint) point;
++ (BOOL) stronglyReferencesTextStorage;
+- (BOOL) performValidatedReplacementInRange: (NSRange) range
+                       withAttributedString: (NSAttributedString *) attributedString;
 
 @property(nonatomic) BOOL usesRuler;
 @property(nonatomic, getter=isRulerVisible) BOOL rulerVisible;
@@ -293,12 +352,60 @@ typedef NS_ENUM(NSUInteger, NSFindPanelSubstringMatchType) {
 - (void) toggleAutomaticSpellingCorrection: sender;
 
 @property(nonatomic) NSTextCheckingTypes enabledTextCheckingTypes;
+- (void) toggleAutomaticQuoteSubstitution: (nullable id) sender;
+- (void) toggleAutomaticLinkDetection: (nullable id) sender;
+- (void) toggleAutomaticDataDetection: (nullable id) sender;
+- (void) toggleAutomaticDashSubstitution: (nullable id) sender;
+- (void) toggleAutomaticTextReplacement: (nullable id) sender;
+- (void) toggleAutomaticTextCompletion: (nullable id) sender;
+- (void) checkTextInRange: (NSRange) range
+                    types: (NSTextCheckingTypes) checkingTypes
+                  options: (NSDictionary *) options;
+- (void) handleTextCheckingResults: (NSArray *) results
+                          forRange: (NSRange) range
+                             types: (NSTextCheckingTypes) checkingTypes
+                           options: (NSDictionary *) options
+                       orthography: (nullable NSOrthography *) orthography
+                         wordCount: (NSInteger) wordCount;
+// No substitutions panel exists: does nothing.
+- (void) orderFrontSubstitutionsPanel: (nullable id) sender;
+- (void) checkTextInSelection: (nullable id) sender;
+- (void) checkTextInDocument: (nullable id) sender;
+@property(nonatomic) BOOL usesFindPanel;
 
 @property(nonatomic) BOOL smartInsertDeleteEnabled;
+- (NSRange) smartDeleteRangeForProposedRange: (NSRange) proposedCharRange;
+- (void) toggleSmartInsertDelete: (nullable id) sender;
+- (void) smartInsertForString: (NSString *) pasteString
+               replacingRange: (NSRange) charRangeToReplace
+                 beforeString: (NSString *_Nullable *_Nullable) beforeString
+                  afterString: (NSString *_Nullable *_Nullable) afterString;
+- (nullable NSString *) smartInsertBeforeStringForString: (NSString *) pasteString
+                                          replacingRange: (NSRange) charRangeToReplace;
+- (nullable NSString *) smartInsertAfterStringForString: (NSString *) pasteString
+                                         replacingRange: (NSRange) charRangeToReplace;
 
 @property(nonatomic) BOOL allowsDocumentBackgroundColorChange;
 
 - (void) setSpellingState: (NSInteger) value range: (NSRange) characterRange;
+- (void) toggleGrammarChecking: (nullable id) sender;
+
+@property(nonatomic, readonly) NSSelectionAffinity selectionAffinity;
+@property(nonatomic) NSSelectionGranularity selectionGranularity;
+// If set, link attributes act as implicit tool tips. Default YES.
+@property(nonatomic) BOOL displaysLinkToolTips;
+@property(nonatomic) BOOL allowsImageEditing;
+@property(nonatomic) BOOL usesRolloverButtonForSelection;
+@property(nonatomic, getter=isAutomaticTextCompletionEnabled) BOOL automaticTextCompletionEnabled;
+@property(nonatomic) BOOL allowsCharacterPickerTouchBarItem;
+@property(nonatomic, copy, nullable) NSArray<NSString *> *allowedInputSourceLocales;
+@property(nonatomic, readonly, getter=isCoalescingUndo) BOOL coalescingUndo;
+// The multiple-range forms; nil when the change is not permitted.
+- (BOOL) shouldChangeTextInRanges: (NSArray *) affectedRanges
+                replacementStrings: (nullable NSArray *) replacementStrings;
+@property(nonatomic, readonly, copy, nullable) NSArray *rangesForUserTextChange;
+@property(nonatomic, readonly, copy, nullable) NSArray *rangesForUserCharacterAttributeChange;
+@property(nonatomic, readonly, copy, nullable) NSArray *rangesForUserParagraphAttributeChange;
 
 @property(nonatomic, getter=isIncrementalSearchingEnabled) BOOL incrementalSearchingEnabled;
 @property(nonatomic) BOOL usesFindBar;
@@ -316,6 +423,11 @@ typedef NS_ENUM(NSUInteger, NSFindPanelSubstringMatchType) {
 
 // An NSTextView wrapped in a configured, vertically-scrolling NSScrollView (10.14)
 + (NSScrollView *) scrollableTextView;
+// A text view configured as a field editor (10.14)
++ (instancetype) fieldEditor;
+// Text views for document contents, rich and plain, in a scroll view (10.14)
++ (NSScrollView *) scrollableDocumentContentTextView;
++ (NSScrollView *) scrollablePlainDocumentContentTextView;
 
 @end
 
@@ -349,6 +461,93 @@ typedef NS_ENUM(NSUInteger, NSFindPanelSubstringMatchType) {
 @end
 
 @protocol NSTextViewDelegate <NSTextDelegate>
+@optional
+- (BOOL) textView: (NSTextView *) textView clickedOnLink: (id) link atIndex: (NSUInteger) charIndex;
+- (void) textView: (NSTextView *) textView
+        clickedOnCell: (id<NSTextAttachmentCell>) cell
+               inRect: (NSRect) cellFrame
+              atIndex: (NSUInteger) charIndex;
+- (void) textView: (NSTextView *) textView
+        doubleClickedOnCell: (id<NSTextAttachmentCell>) cell
+                     inRect: (NSRect) cellFrame
+                    atIndex: (NSUInteger) charIndex;
+- (void) textView: (NSTextView *) view
+        draggedCell: (id<NSTextAttachmentCell>) cell
+             inRect: (NSRect) rect
+              event: (NSEvent *) event
+            atIndex: (NSUInteger) charIndex;
+- (NSArray *) textView: (NSTextView *) view
+        writablePasteboardTypesForCell: (id<NSTextAttachmentCell>) cell
+                               atIndex: (NSUInteger) charIndex;
+- (BOOL) textView: (NSTextView *) view
+          writeCell: (id<NSTextAttachmentCell>) cell
+            atIndex: (NSUInteger) charIndex
+       toPasteboard: (NSPasteboard *) pboard
+               type: (NSString *) type;
+- (NSRange) textView: (NSTextView *) textView
+        willChangeSelectionFromCharacterRange: (NSRange) oldSelectedCharRange
+                             toCharacterRange: (NSRange) newSelectedCharRange;
+- (NSArray *) textView: (NSTextView *) textView
+        willChangeSelectionFromCharacterRanges: (NSArray *) oldSelectedCharRanges
+                             toCharacterRanges: (NSArray *) newSelectedCharRanges;
+- (BOOL) textView: (NSTextView *) textView
+        shouldChangeTextInRanges: (NSArray *) affectedRanges
+               replacementStrings: (nullable NSArray *) replacementStrings;
+- (NSDictionary *) textView: (NSTextView *) textView
+        shouldChangeTypingAttributes: (NSDictionary *) oldTypingAttributes
+                        toAttributes: (NSDictionary *) newTypingAttributes;
+- (void) textViewDidChangeSelection: (NSNotification *) notification;
+- (void) textViewDidChangeTypingAttributes: (NSNotification *) notification;
+- (nullable NSString *) textView: (NSTextView *) textView
+                willDisplayToolTip: (NSString *) tooltip
+              forCharacterAtIndex: (NSUInteger) characterIndex;
+- (NSArray *) textView: (NSTextView *) textView
+                completions: (NSArray *) words
+        forPartialWordRange: (NSRange) charRange
+        indexOfSelectedItem: (nullable NSInteger *) index;
+- (BOOL) textView: (NSTextView *) textView
+        shouldChangeTextInRange: (NSRange) affectedCharRange
+              replacementString: (nullable NSString *) replacementString;
+- (BOOL) textView: (NSTextView *) textView doCommandBySelector: (SEL) commandSelector;
+- (NSInteger) textView: (NSTextView *) textView
+        shouldSetSpellingState: (NSInteger) value
+                         range: (NSRange) affectedCharRange;
+- (nullable NSMenu *) textView: (NSTextView *) view
+                          menu: (NSMenu *) menu
+                      forEvent: (NSEvent *) event
+                       atIndex: (NSUInteger) charIndex;
+- (NSDictionary *) textView: (NSTextView *) view
+        willCheckTextInRange: (NSRange) range
+                     options: (NSDictionary *) options
+                       types: (NSTextCheckingTypes *) checkingTypes;
+- (NSArray *) textView: (NSTextView *) view
+        didCheckTextInRange: (NSRange) range
+                      types: (NSTextCheckingTypes) checkingTypes
+                    options: (NSDictionary *) options
+                    results: (NSArray *) results
+                orthography: (NSOrthography *) orthography
+                  wordCount: (NSInteger) wordCount;
+- (nullable NSURL *) textView: (NSTextView *) textView
+        URLForContentsOfTextAttachment: (NSTextAttachment *) textAttachment
+                               atIndex: (NSUInteger) charIndex;
+- (nullable NSSharingServicePicker *) textView: (NSTextView *) textView
+                  willShowSharingServicePicker: (NSSharingServicePicker *) servicePicker
+                                      forItems: (NSArray *) items;
+- (nullable NSUndoManager *) undoManagerForTextView: (NSTextView *) view;
+// Not sent: there is no Touch Bar, candidate list or Writing Tools here.
+- (NSArray *) textView: (NSTextView *) textView
+        shouldUpdateTouchBarItemIdentifiers: (NSArray *) identifiers;
+- (nullable NSArray *) textView: (NSTextView *) textView
+                candidatesForSelectedRange: (NSRange) selectedRange;
+- (NSArray *) textView: (NSTextView *) textView
+                candidates: (NSArray *) candidates
+          forSelectedRange: (NSRange) selectedRange;
+- (BOOL) textView: (NSTextView *) textView shouldSelectCandidateAtIndex: (NSUInteger) index;
+// The forms that predate the character index.
+- (BOOL) textView: (NSTextView *) textView clickedOnLink: (id) link;
+- (void) textView: (NSTextView *) textView clickedOnCell: (id<NSTextAttachmentCell>) cell inRect: (NSRect) cellFrame;
+- (void) textView: (NSTextView *) textView doubleClickedOnCell: (id<NSTextAttachmentCell>) cell inRect: (NSRect) cellFrame;
+- (void) textView: (NSTextView *) view draggedCell: (id<NSTextAttachmentCell>) cell inRect: (NSRect) rect event: (NSEvent *) event;
 @end
 
 NS_ASSUME_NONNULL_END
@@ -370,3 +569,18 @@ NS_ASSUME_NONNULL_END
 - (BOOL) readSelectionFromPasteboard: (NSPasteboard *) pasteboard type: (NSString *) type;
 @end
 
+
+@interface NSTextView (NSPasteboard)
+@property(nonatomic, readonly, copy) NSArray *readablePasteboardTypes;
+- (NSString *) preferredPasteboardTypeFromArray: (NSArray *) availableTypes
+                     restrictedToTypesFromArray: (NSArray *) allowedTypes;
+- (BOOL) readSelectionFromPasteboard: (NSPasteboard *) pasteboard;
++ (void) registerForServices;
+- (id) validRequestorForSendType: (NSString *) sendType returnType: (NSString *) returnType;
+- (void) pasteAsPlainText: (id) sender;
+- (void) pasteAsRichText: (id) sender;
+@end
+
+@interface NSTextView (NSDragging)
+@property(nonatomic, readonly, copy) NSArray *acceptableDragTypes;
+@end

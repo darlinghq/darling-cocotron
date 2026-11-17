@@ -66,6 +66,14 @@
     // arrive as their Command shortcuts.
     BOOL _controlActsAsCommand;
     Window _confinedWindow;
+    // Display overlay windows (CGLSetFullScreen) belong to no NSWindow; their
+    // key and pointer input is taken up here and reaches the application as
+    // events with no window and screen coordinates. _overlayWindow is the one
+    // that holds the keyboard focus and the relative mouse grab.
+    NSMutableSet *_overlayWindows;
+    Window _overlayWindow;
+    BOOL _overlayPointerKnown;
+    int _overlayPointerX, _overlayPointerY;
     // The menu and pop-up windows that are on the screen, oldest first, while
     // the pointer is held for them (see -menuWindowMapped:).
     NSMutableArray *_openMenuWindows;
@@ -101,6 +109,11 @@
 
 - (Display *) display;
 
+// Keeps the unmanaged windows (see -[X11Window isUnmanaged]) and the managed
+// ones in the order their levels give, after `anchor` was ordered to the
+// front, mapped or given another level (see X11LevelStacking.h).
+- (void) restackWindowsForLevelsAround: (X11Window *) anchor;
+
 // The main monitor's rectangle in root coordinates. It is the origin of the
 // global coordinate space; see X11Monitors.h.
 - (NSRect) primaryRootFrame;
@@ -121,6 +134,10 @@
 - (void) menuWindowMapped: (X11Window *) window;
 - (void) menuWindowUnmapped: (X11Window *) window;
 - (id) windowForID: (XID) i;
+
+// Re-reads the backing scale and, when it changed, resizes the windows to the
+// new scale and notifies them.
+- (void) reevaluateBackingScale;
 
 // The object that shows the main menu outside the windows, created on first
 // use; nil if the menu is drawn inside the windows (DarlingInWindowMenuBar).

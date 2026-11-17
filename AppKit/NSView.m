@@ -38,6 +38,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSScrollView.h>
 #import <AppKit/NSTrackingArea.h>
 #import <AppKit/NSView.h>
+#import <AppKit/NSScreen.h>
 #import <AppKit/NSBitmapImageRep.h>
 #import <AppKit/NSViewBackingLayer.h>
 #import <AppKit/NSWindow-Private.h>
@@ -55,6 +56,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSLayoutConstraint.h>
 #import <AppKit/NSLayoutGuide.h>
 #import "NSLayoutConstraintInternal.h"
+#import "NSViewLayoutInternal.h"
 #import <AppKit/NSTextInput.h>
 #import <AppKit/NSTextInputClient.h>
 #import <objc/runtime.h>
@@ -88,6 +90,10 @@ const NSViewFullScreenModeOptionKey NSFullScreenModeAllScreens =
 - (void) _removeLayerFromSuperlayer;
 @end
 
+@interface CADisplayLink (AppKitRefreshRate)
+- (void)_setRefreshRateProvider:(double (^)(void))provider;
+@end
+
 @interface _NSViewDisplayLinkTarget : NSObject {
     NSHashTable *_view;
     id _target;
@@ -95,6 +101,7 @@ const NSViewFullScreenModeOptionKey NSFullScreenModeAllScreens =
 }
 - (instancetype)initWithView:(NSView *)view target:(id)target selector:(SEL)selector;
 - (void)frame:(CADisplayLink *)link;
+- (double)refreshRate;
 @end
 
 @implementation _NSViewDisplayLinkTarget
@@ -117,6 +124,21 @@ const NSViewFullScreenModeOptionKey NSFullScreenModeAllScreens =
     if (view && ![view isHiddenOrHasHiddenAncestor] && [window isVisible] &&
         ![window isMiniaturized] && [window screen])
         ((void (*)(id, SEL, id))objc_msgSend)(_target, _selector, link);
+}
+// The refresh rate of the screen the view's window is on (the main screen
+// while it has none), in Hz.
+- (double)refreshRate {
+    // The provider runs while the link is scheduled, possibly right before the
+    // caller drops its last reference to the view. Keep the autoreleased view
+    // from outliving that release.
+    @autoreleasepool {
+        NSView *view = [_view anyObject];
+        NSScreen *screen = [[view window] screen];
+        if (screen == nil)
+            screen = [NSScreen mainScreen];
+        NSTimeInterval interval = [screen minimumRefreshInterval];
+        return interval > 0 ? 1.0 / interval : 0;
+    }
 }
 - (void)dealloc {
     [_view release];
@@ -158,8 +180,7 @@ static BOOL NSShowAllViews = NO;
 }
 
 + (NSFocusRingType) defaultFocusRingType {
-    NSUnimplementedMethod();
-    return 0;
+    return NSFocusRingTypeExterior;
 }
 
 typedef struct __VFlags {
@@ -245,18 +266,76 @@ typedef struct __VFlags {
         [coder encodeObject: NS_EXTRA(NSView, self)->_contentFilters forKey: @"NSViewContentFilters"];
         [coder encodeBool: NS_EXTRA(NSView, self)->_wantsBestResolutionOpenGLSurface
                    forKey: @"NSViewWantsBestResolutionOpenGLSurface"];
+
+        // Auto Layout state, under the keys nibs use: a flag for views laid out by constraints,
+        // the constraints that were set up in Interface Builder (the others are rebuilt by code),
+        // and the content hugging and compression resistance priorities when they are not the
+        // defaults, as {horizontal, vertical} sizes.
+        if (![self translatesAutoresizingMaskIntoConstraints])
+            [coder encodeBool: YES forKey: @"NSDoNotTranslateAutoresizingMask"];
+        NSMutableArray *archivedConstraints = nil;
+        for (NSLayoutConstraint *constraint in [self constraints]) {
+            if ([constraint shouldBeArchived]) {
+                if (archivedConstraints == nil)
+                    archivedConstraints = [NSMutableArray array];
+                [archivedConstraints addObject: constraint];
+            }
+        }
+        if (archivedConstraints != nil)
+            [coder encodeObject: archivedConstraints forKey: @"NSViewConstraints"];
+        NSSize hugging = NSMakeSize([self contentHuggingPriorityForOrientation: NSLayoutConstraintOrientationHorizontal],
+                                    [self contentHuggingPriorityForOrientation: NSLayoutConstraintOrientationVertical]);
+        if (hugging.width != NSLayoutPriorityDefaultLow || hugging.height != NSLayoutPriorityDefaultLow)
+            [coder encodeObject: NSStringFromSize(hugging) forKey: @"NSHuggingPriority"];
+        NSSize compression = NSMakeSize([self contentCompressionResistancePriorityForOrientation: NSLayoutConstraintOrientationHorizontal],
+                                        [self contentCompressionResistancePriorityForOrientation: NSLayoutConstraintOrientationVertical]);
+        if (compression.width != NSLayoutPriorityDefaultHigh || compression.height != NSLayoutPriorityDefaultHigh)
+            [coder encodeObject: NSStringFromSize(compression) forKey: @"NSAntiCompressionPriority"];
     } else {
         [NSException raise: NSInvalidArchiveOperationException
                     format: @"TODO: support unkeyed encoding in NSView"];
     }
 }
 
+// The Auto Layout state of a view archive: the translation of the autoresizing mask, the content
+// priorities and the constraints. It is shared with NSCustomView, which makes a view of a custom
+// class from the archive of a stand-in.
+- (void) _decodeAutoLayoutStateFromKeyedCoder: (NSKeyedUnarchiver *) coder {
+    // Auto Layout state. The nib key is the inverse of the property, and is only there for views
+    // that are laid out by constraints.
+    if ([coder containsValueForKey: @"NSDoNotTranslateAutoresizingMask"])
+        NS_EXTRA(NSView, self)->_translatesAutoresizingMaskIntoConstraints =
+                ![coder decodeBoolForKey: @"NSDoNotTranslateAutoresizingMask"];
+    if ([coder containsValueForKey: @"NSHuggingPriority"]) {
+        NSSize priorities = NSSizeFromString([coder decodeObjectForKey: @"NSHuggingPriority"]);
+
+        [self setContentHuggingPriority: priorities.width forOrientation: NSLayoutConstraintOrientationHorizontal];
+        [self setContentHuggingPriority: priorities.height forOrientation: NSLayoutConstraintOrientationVertical];
+    }
+    if ([coder containsValueForKey: @"NSAntiCompressionPriority"]) {
+        NSSize priorities = NSSizeFromString([coder decodeObjectForKey: @"NSAntiCompressionPriority"]);
+
+        [self setContentCompressionResistancePriority: priorities.width
+                                       forOrientation: NSLayoutConstraintOrientationHorizontal];
+        [self setContentCompressionResistancePriority: priorities.height
+                                       forOrientation: NSLayoutConstraintOrientationVertical];
+    }
+    // The items of the constraints are this view and its subviews, which are decoded by now.
+    [self addConstraints: [coder decodeObjectForKey: @"NSViewConstraints"]];
+}
+
 - initWithCoder: (NSCoder *) coder {
+    // Decoding the next responder (the superview) can decode the whole
+    // hierarchy around this view, and the superview then creates the layer of
+    // this still unfinished view from its alpha value. A nib that refers to a
+    // control before its superview (as the connectors of user defined runtime
+    // attributes do) reaches that state, so the alpha value must be set before
+    // the superclass decodes anything.
+    NS_EXTRA(NSView, self)->_alphaValue = 1.0;
     [super initWithCoder: coder];
 
-    // TODO: decode this
+    // The defaults; the Auto Layout state of the archive is decoded below.
     NS_EXTRA(NSView, self)->_translatesAutoresizingMaskIntoConstraints = YES;
-    NS_EXTRA(NSView, self)->_alphaValue = 1.0;
     NS_EXTRA(NSView, self)->_allowedTouchTypes = NSTouchTypeMaskDirect;
     [self _setDefaultLayoutPriorities];
 
@@ -340,7 +419,9 @@ typedef struct __VFlags {
         [self setCanDrawConcurrently:
                         [keyed decodeBoolForKey: @"NSViewCanDrawConcurrently"]];
 
-        // TODO: NSViewConstraints, NSViewLayoutGuides, ...
+        [self _decodeAutoLayoutStateFromKeyedCoder: keyed];
+
+        // TODO: NSViewLayoutGuides, ...
 
         NS_EXTRA(NSView, self)->_needsDisplay = YES;
         NS_EXTRA(NSView, self)->_invalidRectCount = 0;
@@ -473,7 +554,7 @@ typedef struct __VFlags {
 }
 
 - init {
-    return [self initWithFrame: NSMakeRect(0, 0, 1, 1)];
+    return [self initWithFrame: NSZeroRect];
 }
 
 - initWithFrame: (NSRect) frame {
@@ -800,7 +881,13 @@ static inline void buildTransformsIfNeeded(NSView *self) {
 }
 
 - (NSView *) ancestorSharedWithView: (NSView *) view {
-    NSUnimplementedMethod();
+    // The closest view that is the receiver, or an ancestor of it, and that
+    // is also the other view or one of its ancestors.
+    for (NSView *candidate = self; candidate != nil;
+            candidate = [candidate superview]) {
+        if ([view isDescendantOf: candidate])
+            return candidate;
+    }
     return nil;
 }
 
@@ -874,8 +961,8 @@ static inline void buildTransformsIfNeeded(NSView *self) {
 }
 
 - (BOOL) wantsDefaultClipping {
-    NSUnimplementedMethod();
-    return NO;
+    // Documented default: the view is clipped to its bounds before drawing.
+    return YES;
 }
 
 - (NSBitmapImageRep *) bitmapImageRepForCachingDisplayInRect: (NSRect) rect {
@@ -1303,6 +1390,26 @@ NSRect _NSAlignRectToPixelGrid(NSRect rect, NSAlignmentOptions options) {
     NS_EXTRA(NSView, self)->_accessibilityTitle = title;
 }
 
+// The frame of the native window that hosts a root layer, in window coordinates. A view's own frame is in
+// its superview's coordinates, which are the same only for the window's content view.
+static NSRect layerContextFrame(NSView *self) {
+    NSRect frame = self->_frame;
+
+    if (self->_superview != nil)
+        frame = [self->_superview convertRect: frame toView: nil];
+
+    return frame;
+}
+
+// Moves the native windows of the root layers in a view's subtree after the view moved or resized, since their
+// frames are in window coordinates.
+static void updateLayerContextFrames(NSView *self) {
+    [NS_EXTRA(NSView, self)->_layerContext setFrame: layerContextFrame(self)];
+
+    for (NSView *child in self->_subviews)
+        updateLayerContextFrames(child);
+}
+
 // Stores a new frame and lays out the subviews, without posting
 // NSViewFrameDidChangeNotification. Returns whether the frame changed.
 static BOOL applyFrame(NSView *self, NSRect frame) {
@@ -1341,14 +1448,19 @@ static BOOL applyFrame(NSView *self, NSRect frame) {
         [self resizeSubviewsWithOldSize: oldSize];
     }
 
-    NSRect layerFrame = self->_frame;
-
-    if (self->_superview != nil)
-        layerFrame = [self->_superview convertRect: layerFrame toView: nil];
-
-    [NS_EXTRA(NSView, self)->_layerContext setFrame: layerFrame];
+    updateLayerContextFrames(self);
 
     invalidateTransform(self);
+
+    // QUIRK: a frame change marks both the view and its superview as needing display; a call that
+    // leaves the frame as it is marks neither. Not documented. Evidence: black-box observation on
+    // Mac OS X 10.14.4 (tier 2, MAC-EVIDENCE "setFrame: marks views for display"). macOS 26.7.3
+    // keeps both flags clear because every view is layer-backed there, but the window shows the
+    // view redrawn at its new size on both. The software window backing needs the repaint,
+    // otherwise a view that layout resizes keeps the pixels of its old size.
+    // Test: tests/appkit-view-set-frame-needs-display.m
+    [self setNeedsDisplay: YES];
+    [self->_superview setNeedsDisplay: YES];
     return YES;
 }
 
@@ -1461,7 +1573,7 @@ static void postFrameChange(NSView *self) {
         if (NS_EXTRA(NSView, self)->_layerContext && _window == nil) {
             [self _removeLayerFromSuperlayer];
         } else if (NS_EXTRA(NSView, self)->_layerContext) {
-            [NS_EXTRA(NSView, self)->_layerContext setSubwindow: [_window _createSubWindowWithFrame: [self frame]]];
+            [NS_EXTRA(NSView, self)->_layerContext setSubwindow: [_window _createSubWindowWithFrame: layerContextFrame(self)]];
             [self _updateLayerVisibility];
         } else if (_layer != nil && _window != nil) {
             [self _addLayerToSuperlayer];
@@ -1498,15 +1610,44 @@ static void postFrameChange(NSView *self) {
 - (void) _insertSubview: (NSView *) view atIndex: (NSInteger) index {
 
     [view retain];
-    if ([view superview] == self)
+
+    // Adding a view announces the move to the new superview first. A view
+    // that already has a superview, this one included, is taken out of it
+    // with -willRemoveSubview: and then added again, so the hooks run in the
+    // same order for a move between superviews and for a re-add.
+    // QUIRK: adding a view that is already a subview of this view
+    // (-addSubview:, -addSubview:positioned:relativeTo:, -replaceSubview:with:
+    // with such a view) runs all four hooks even when the order does not
+    // change. Not documented. Evidence: black-box observation (tier 2) on
+    // macOS 10.14.4 (x86_64 and i386); macOS 26.7.3 runs them only for
+    // -addSubview: that changes the order and not for the positioned
+    // variant, and the older behaviour is followed. Reorders done by
+    // -sortSubviewsUsingFunction:context: and -setSubviews: run none.
+    // Test: tests/appkit-view-subview-hooks.m
+    [view viewWillMoveToSuperview: self];
+
+    NSView *oldSuperview = [view superview];
+    if (oldSuperview == self) {
+        [self willRemoveSubview: view];
+        // the index refers to the subviews before the view was taken out
+        NSUInteger oldIndex = [_subviews indexOfObjectIdenticalTo: view];
         [_subviews removeObjectIdenticalTo: view];
-    else {
-        [view removeFromSuperview];
+        if (index != NSNotFound && oldIndex < (NSUInteger) index)
+            index--;
+    } else {
+        if (oldSuperview != nil) {
+            [oldSuperview setNeedsDisplayInRect: [view frame]];
+            [view _removeFromSuperviewSendingMoveHooks: NO];
+        }
 
-        [view _setWindow: _window];
-
-        [view viewWillMoveToSuperview: self];
+        // QUIRK: the new superview (and with it the responder chain) is in
+        // place before -viewWillMoveToWindow: and -viewDidMoveToWindow: run.
+        // Not documented. Evidence: black-box observation (tier 2) on macOS
+        // 26.7.3 and 10.14.4. Removal clears the superview before the window
+        // callbacks in the same way.
+        // Test: tests/appkit-view-window-callbacks-superview.m
         [view _setSuperview: self];
+        [view _setWindow: _window];
     }
 
     if (index == NSNotFound)
@@ -1518,6 +1659,8 @@ static void postFrameChange(NSView *self) {
     invalidateTransform(view);
 
     [self setNeedsDisplayInRect: [view frame]];
+
+    [self didAddSubview: view];
 
     [view viewDidMoveToSuperview];
 
@@ -1550,24 +1693,44 @@ static void postFrameChange(NSView *self) {
 }
 
 - (void) replaceSubview: (NSView *) oldView with: (NSView *) newView {
+    if (oldView == newView)
+        return;
+
     NSUInteger index = [_subviews indexOfObjectIdenticalTo: oldView];
 
+    // The new view is added at the position of the old one before the old
+    // one is removed (this is the order of the hooks on macOS).
     [oldView retain];
-    [oldView removeFromSuperview];
     [self _insertSubview: newView atIndex: index];
+    [oldView removeFromSuperview];
     [oldView release];
 }
 
 - (void) setSubviews: (NSArray *) array {
     // This method marks as needing display per doc.s
 
-    while ([_subviews count])
-        [[_subviews lastObject] removeFromSuperview];
+    NSArray *wanted = [[array copy] autorelease];
 
-    for (NSView *view in array) {
-        [self addSubview: view];
+    // Views that are not in the new list are removed, the new ones are added
+    // with the usual hooks.
+    for (NSView *view in [[_subviews copy] autorelease]) {
+        if ([wanted indexOfObjectIdenticalTo: view] == NSNotFound)
+            [view removeFromSuperview];
+    }
+
+    NSMutableArray *ordered = [NSMutableArray arrayWithCapacity: [wanted count]];
+    for (NSView *view in wanted) {
+        if ([view superview] != self)
+            [self addSubview: view];
+        if ([ordered indexOfObjectIdenticalTo: view] == NSNotFound)
+            [ordered addObject: view];
         [view setNeedsDisplay: YES];
     }
+
+    // Subviews that stay are only put in the order of the list, without
+    // hooks (macOS runs none for a reorder done through this method).
+    if (![_subviews isEqualToArray: ordered])
+        [_subviews setArray: ordered];
 }
 
 - (void) sortSubviewsUsingFunction:
@@ -1582,11 +1745,11 @@ static void postFrameChange(NSView *self) {
 }
 
 - (void) didAddSubview: (NSView *) subview {
-    NSUnimplementedMethod();
+    // Override hook; the default implementation does nothing.
 }
 
 - (void) willRemoveSubview: (NSView *) subview {
-    NSUnimplementedMethod();
+    // Override hook; the default implementation does nothing.
 }
 
 - (void) setAutoresizesSubviews: (BOOL) flag {
@@ -1620,26 +1783,26 @@ static void postFrameChange(NSView *self) {
 }
 
 - (BOOL) acceptsFirstMouse: (NSEvent *) event {
-    NSUnimplementedMethod();
+    // Documented default: a click that activates the window isn't passed on.
     return NO;
 }
 
+// There are no touch devices on this platform, so no touches are ever
+// delivered; the flags are stored as the documented (deprecated) properties.
 - (BOOL) acceptsTouchEvents {
-    NSUnimplementedMethod();
-    return NO;
+    return NS_EXTRA(NSView, self)->_acceptsTouchEvents;
 }
 
 - (void) setAcceptsTouchEvents: (BOOL) accepts {
-    NSUnimplementedMethod();
+    NS_EXTRA(NSView, self)->_acceptsTouchEvents = accepts;
 }
 
 - (BOOL) wantsRestingTouches {
-    NSUnimplementedMethod();
-    return NO;
+    return NS_EXTRA(NSView, self)->_wantsRestingTouches;
 }
 
 - (void) setWantsRestingTouches: (BOOL) wants {
-    NSUnimplementedMethod();
+    NS_EXTRA(NSView, self)->_wantsRestingTouches = wants;
 }
 
 - (void) setToolTip: (NSString *) string {
@@ -1888,9 +2051,21 @@ static char inputContextKey;
 }
 
 - (void) removeFromSuperviewWithoutNeedingDisplay {
+    [self _removeFromSuperviewSendingMoveHooks: YES];
+}
+
+// With hooks the superview change is announced to the view itself, as
+// -viewWillMoveToSuperview: nil and -viewDidMoveToSuperview. Adding the view
+// to another superview announces its own move and passes NO.
+- (void) _removeFromSuperviewSendingMoveHooks: (BOOL) moveHooks {
     [[self retain] autorelease];
     NSView *removeFrom = [_superview retain];
+    moveHooks = moveHooks && removeFrom != nil;
     NSWindow *window = [[self window] retain];
+
+    if (moveHooks)
+        [self viewWillMoveToSuperview: nil];
+    [removeFrom willRemoveSubview: self];
 
     for (NSView *ancestor = _superview; ancestor != nil; ancestor = [ancestor superview]) {
         for (NSLayoutConstraint *constraint in [ancestor constraints]) {
@@ -1906,6 +2081,8 @@ static char inputContextKey;
     [self _setWindow: nil];
 
     [removeFrom _removeViewWithoutDisplay: self];
+    if (moveHooks)
+        [self viewDidMoveToSuperview];
     [window _invalidateTrackingAreas];
     [window release];
     [removeFrom release];
@@ -1922,6 +2099,14 @@ static char inputContextKey;
 - (void) viewDidChangeBackingProperties {
 }
 
+// Tells this view and, depth first, its subviews that the window's backing
+// properties changed.
+- (void) _backingPropertiesDidChange {
+    [self viewDidChangeBackingProperties];
+    for (NSView *subview in [[[self subviews] copy] autorelease])
+        [subview _backingPropertiesDidChange];
+}
+
 - (void) viewDidChangeEffectiveAppearance {
 }
 
@@ -1934,7 +2119,7 @@ static char inputContextKey;
 }
 
 - (BOOL) shouldDelayWindowOrderingForEvent: (NSEvent *) event {
-    NSUnimplementedMethod();
+    // Subclasses return YES to keep a click from bringing the window forward.
     return NO;
 }
 
@@ -2020,12 +2205,11 @@ static char inputContextKey;
 }
 
 - (BOOL) preservesContentDuringLiveResize {
-    NSUnimplementedMethod();
     return NO;
 }
 
 - (NSRect) rectPreservedDuringLiveResize {
-    NSUnimplementedMethod();
+    // Nothing is preserved unless a subclass opts in.
     return NSZeroRect;
 }
 
@@ -2183,6 +2367,22 @@ static char inputContextKey;
 
 // The insets are measured in the view's own coordinates, so which of top and
 // bottom touches the frame's origin depends on whether the view is flipped.
+- (CGFloat) firstBaselineOffsetFromTop {
+    return 0;
+}
+
+- (CGFloat) lastBaselineOffsetFromBottom {
+    return 0;
+}
+
+- (CGFloat) baselineOffsetFromBottom {
+    return [self lastBaselineOffsetFromBottom];
+}
+
+- (NSSize) fittingSize {
+    return DarlingLayoutFittingSize(self);
+}
+
 - (NSRect) frameForAlignmentRect: (NSRect) alignmentRect {
     NSEdgeInsets insets = [self alignmentRectInsets];
     CGFloat originInset = [self isFlipped] ? insets.top : insets.bottom;
@@ -2227,6 +2427,12 @@ static char inputContextKey;
 }
 
 // Native root-layer windows must follow the view tree as well as CALayer.
+// The native windows of root layers are placed from the top of the platform window, so they must follow a
+// window resize even when no view frame changed.
+- (void) _updateLayerContextFrames {
+    updateLayerContextFrames(self);
+}
+
 - (void) _updateLayerVisibility {
     BOOL hidden = [self isHiddenOrHasHiddenAncestor];
     [_layer setHidden: hidden];
@@ -2237,10 +2443,10 @@ static char inputContextKey;
 
 - (void) _createLayerContextIfNeeded {
     if (NS_EXTRA(NSView, self)->_layerContext == nil && [_superview layer] == nil && _window != nil) {
-        NS_EXTRA(NSView, self)->_layerContext = [[CALayerContext alloc] initWithFrame: [self frame]];
+        NS_EXTRA(NSView, self)->_layerContext = [[CALayerContext alloc] initWithFrame: layerContextFrame(self)];
         [NS_EXTRA(NSView, self)->_layerContext setLayer: _layer];
         if (_window) {
-            [NS_EXTRA(NSView, self)->_layerContext setSubwindow: [_window _createSubWindowWithFrame: [self frame]]];
+            [NS_EXTRA(NSView, self)->_layerContext setSubwindow: [_window _createSubWindowWithFrame: layerContextFrame(self)]];
             [self _updateLayerVisibility];
         }
     }
@@ -2501,6 +2707,11 @@ static void clearNeedsDisplay(NSView *self) {
     _NSViewDisplayLinkTarget *proxy = [[_NSViewDisplayLinkTarget alloc]
         initWithView:self target:target selector:selector];
     CADisplayLink *link = [CADisplayLink displayLinkWithTarget:proxy selector:@selector(frame:)];
+    // The link follows the refresh rate of the screen the window is on; the
+    // proxy only holds the view weakly and is owned by the link.
+    [link _setRefreshRateProvider:^double {
+        return [proxy refreshRate];
+    }];
     [proxy release];
     return link;
 }
@@ -2787,7 +2998,8 @@ static NSView *viewBeingPrinted = nil;
 }
 
 - (BOOL) shouldDrawColor {
-    NSUnimplementedMethod();
+    // Documented default: views draw in colour, printing to a black and white
+    // device is the only case that turns it off.
     return YES;
 }
 
@@ -3468,6 +3680,20 @@ static CGFloat backingScaleFactor(NSView *view) {
 }
 
 - (void) invalidateIntrinsicContentSize {
+    // A view that is laid out with constraints has its intrinsic size taken into the layout when the
+    // constraints are updated, so it is queued for an update; the next layout pass reads the size again.
+    // QUIRK: a view whose autoresizing mask is translated into constraints is not queued, and
+    // -needsLayout of the view and its superview does not change. Not documented. Evidence: black-box
+    // observation on macOS 26.7.3 and 10.14.4 (tier 2, MAC-EVIDENCE V619).
+    // Test: tests/appkit-view-invalidate-intrinsic-size.m (flags after invalidation)
+    if (![self translatesAutoresizingMaskIntoConstraints]) {
+        NS_EXTRA(NSView, self)->_needsUpdateConstraints = YES;
+        [[self window] setViewsNeedDisplay: YES];
+    }
+    [[self superview] _subviewIntrinsicContentSizeDidChange: self];
+}
+
+- (void) _subviewIntrinsicContentSizeDidChange: (NSView *) subview {
 }
 
 - (NSArray *) constraints {
@@ -3576,6 +3802,148 @@ static NSMutableArray *installedViewLayoutGuides(NSView *view, BOOL create) {
         return;
     [recognizer _setView: nil];
     [NS_EXTRA(NSView, self)->_gestureRecognizers removeObjectIdenticalTo: recognizer];
+}
+
+@end
+
+@implementation NSView (NSViewHooks)
+
+- (void) prepareContentInRect: (NSRect) rect {
+    // The recommended area is simply adopted.
+    [self setPreparedContentRect: rect];
+}
+
++ (BOOL) isCompatibleWithResponsiveScrolling {
+    return YES;
+}
+
+- (NSRect) rectForSmartMagnificationAtPoint: (NSPoint) location
+                                     inRect: (NSRect) visibleRect
+{
+    // Documented default: no suggestion, which makes the scroll view fall
+    // back to its own smart magnification.
+    return NSZeroRect;
+}
+
+- (BOOL) allowsVibrancy {
+    return NO;
+}
+
+- (void) noteFocusRingMaskChanged {
+    // Only a view that is drawing a ring has anything to redraw. The ring is
+    // drawn outside the mask bounds, so invalidate a margin around them.
+    if ([[self window] firstResponder] != self)
+        return;
+
+    NSRect rect = NSInsetRect([self focusRingMaskBounds], -8, -8);
+    if (NSIsEmptyRect(rect))
+        rect = [self bounds];
+    [self setNeedsDisplayInRect: NSInsetRect(rect, -8, -8)];
+}
+
+- (void) willOpenMenu: (NSMenu *) menu withEvent: (NSEvent *) event {
+    // Notification hook; the default implementation does nothing.
+}
+
+- (void) didCloseMenu: (NSMenu *) menu withEvent: (NSEvent *) event {
+    // Notification hook; the default implementation does nothing.
+}
+
+@end
+
+@implementation NSView (NSViewLayerGeometry)
+
+- (BOOL) layerUsesCoreImageFilters {
+    return NS_EXTRA(NSView, self)->_layerUsesCoreImageFilters;
+}
+
+- (void) setLayerUsesCoreImageFilters: (BOOL) flag {
+    NS_EXTRA(NSView, self)->_layerUsesCoreImageFilters = flag;
+}
+
+// The layer's y axis points up, so a flipped view's y axis is mirrored within
+// its bounds to get to layer coordinates (and back, which is the same
+// mirroring).
+// QUIRK: macOS 10.14 mirrors like this; macOS 26 returns the value unchanged
+// for a layer-backed flipped view. We follow the older behaviour, as the
+// older platform is the wider one. Evidence: black-box observation on macOS
+// 10.14.4 and 26.7.3 (tier 2). Test: appkit-view-geometry-api.
+- (NSPoint) _layerPoint: (NSPoint) point {
+    if ([self layer] == nil || ![self isFlipped])
+        return point;
+    NSRect bounds = [self bounds];
+    point.y = NSMinY(bounds) + NSMaxY(bounds) - point.y;
+    return point;
+}
+
+- (NSPoint) convertPointToLayer: (NSPoint) point {
+    return [self _layerPoint: point];
+}
+
+- (NSPoint) convertPointFromLayer: (NSPoint) point {
+    return [self _layerPoint: point];
+}
+
+- (NSSize) convertSizeToLayer: (NSSize) size {
+    return size;
+}
+
+- (NSSize) convertSizeFromLayer: (NSSize) size {
+    return size;
+}
+
+- (NSRect) convertRectToLayer: (NSRect) rect {
+    if ([self layer] == nil || ![self isFlipped])
+        return rect;
+    NSRect bounds = [self bounds];
+    rect.origin.y = NSMinY(bounds) + NSMaxY(bounds) - NSMaxY(rect);
+    return rect;
+}
+
+- (NSRect) convertRectFromLayer: (NSRect) rect {
+    return [self convertRectToLayer: rect];
+}
+
+@end
+
+@implementation NSView (NSViewSafeAreas)
+
+- (BOOL) prefersCompactControlSizeMetrics {
+    return NS_EXTRA(NSView, self)->_prefersCompactControlSizeMetrics;
+}
+
+- (void) setPrefersCompactControlSizeMetrics: (BOOL) flag {
+    NS_EXTRA(NSView, self)->_prefersCompactControlSizeMetrics = flag;
+}
+
+- (NSEdgeInsets) additionalSafeAreaInsets {
+    return NS_EXTRA(NSView, self)->_additionalSafeAreaInsets;
+}
+
+- (void) setAdditionalSafeAreaInsets: (NSEdgeInsets) insets {
+    NS_EXTRA(NSView, self)->_additionalSafeAreaInsets = insets;
+}
+
+- (NSEdgeInsets) safeAreaInsets {
+    // No screen furniture overlaps views here, so only the additional
+    // insets remain.
+    return [self additionalSafeAreaInsets];
+}
+
+- (NSRect) safeAreaRect {
+    NSRect rect = [self bounds];
+    NSEdgeInsets insets = [self safeAreaInsets];
+    rect.origin.x += insets.left;
+    rect.size.width -= insets.left + insets.right;
+    // The insets are given from the visual top/bottom: with a flipped view
+    // the top is at the low y end.
+    if ([self isFlipped]) {
+        rect.origin.y += insets.top;
+    } else {
+        rect.origin.y += insets.bottom;
+    }
+    rect.size.height -= insets.top + insets.bottom;
+    return rect;
 }
 
 @end
@@ -3710,6 +4078,14 @@ static id anchorForView(NSView *view, Class anchorClass, NSLayoutAttribute attri
 
 - (NSLayoutYAxisAnchor *) bottomAnchor {
     return anchorForView(self, [NSLayoutYAxisAnchor class], NSLayoutAttributeBottom);
+}
+
+- (NSLayoutYAxisAnchor *) firstBaselineAnchor {
+    return anchorForView(self, [NSLayoutYAxisAnchor class], NSLayoutAttributeFirstBaseline);
+}
+
+- (NSLayoutYAxisAnchor *) lastBaselineAnchor {
+    return anchorForView(self, [NSLayoutYAxisAnchor class], NSLayoutAttributeLastBaseline);
 }
 
 - (NSLayoutYAxisAnchor *) centerYAnchor {

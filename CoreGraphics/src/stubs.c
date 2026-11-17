@@ -37,12 +37,6 @@ boolean_t CGCursorIsVisible(void) {
     return false;
 }
 
-CGOpenGLDisplayMask CGDisplayIDToOpenGLDisplayMask(CGDirectDisplayID a) {
-    if(verbose)
-        puts("STUB: CGDisplayIDToOpenGLDisplayMask called");
-    return 0;
-}
-
 void CGDisplayRestoreColorSyncSettings(void) {
     if(verbose)
         puts("STUB: CGDisplayRestoreColorSyncSettings called");
@@ -58,11 +52,6 @@ CGError CGGetDisplayTransferByTable(CGDirectDisplayID a, uint32_t b, CGGammaValu
     if(verbose)
         puts("STUB: CGGetDisplayTransferByTable called");
     return (CGError)0;
-}
-
-void CGGetLastMouseDelta(int32_t *a, int32_t *b) {
-    if(verbose)
-        puts("STUB: CGGetLastMouseDelta called");
 }
 
 CGError CGSetDisplayTransferByFormula(CGDirectDisplayID a, CGGammaValue b, CGGammaValue c, CGGammaValue d, CGGammaValue e, CGGammaValue f, CGGammaValue g, CGGammaValue h, CGGammaValue i, CGGammaValue j) {

@@ -17,6 +17,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/NSSpellProtocol.h>
 #import <AppKit/NSView.h>
 
@@ -99,7 +100,12 @@ typedef NS_ENUM(NSInteger, NSTextMovement) {
     NSTextMovementOther = 0,
 };
 
-@interface NSText : NSView <NSChangeSpelling, NSIgnoreMisspelledWords>
+// Legacy ObjC ABI (i386): instance size must stay 0x54, Apple's. The word is
+// NSTextView's pointer to its extra state (Apple's NSText has a word of its
+// own for what NSTextView keeps).
+@interface NSText : NSView <NSChangeSpelling, NSIgnoreMisspelledWords> {
+    NS_EXTRA_SLOT_FOR_SUBCLASS(NSTextView)
+}
 
 - (instancetype) initWithCoder: (NSCoder *) coder;
 - (instancetype) initWithFrame: (NSRect) frameRect;
@@ -145,6 +151,7 @@ typedef NS_ENUM(NSInteger, NSTextMovement) {
 - (void) setFont: (NSFont *) font range: (NSRange) range;
 - (void) setBaseWritingDirection: (NSWritingDirection) direction
                            range: (NSRange) range;
+@property(nonatomic) NSWritingDirection baseWritingDirection;
 
 - (void) setTextColor: (NSColor *) color range: (NSRange) range;
 
@@ -160,6 +167,11 @@ typedef NS_ENUM(NSInteger, NSTextMovement) {
 - (void) alignLeft: sender;
 - (void) alignRight: sender;
 - (void) underline: sender;
+- (void) superscript: sender;
+- (void) subscript: sender;
+- (void) unscript: sender;
+- (void) copyFont: sender;
+- (void) pasteFont: sender;
 - (void) selectAll: sender;
 - (void) delete: sender;
 - (void) toggleRuler: sender;

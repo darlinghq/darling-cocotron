@@ -19,6 +19,7 @@
  SOFTWARE. */
 
 #import <AppKit/NSArrayController.h>
+#import <AppKit/AppKitIvarLayout.h>
 
 @class NSDictionary, NSArray;
 
@@ -28,6 +29,7 @@
     id _excludedKeys;
     NSString *_initialKey;
     id _initialValue;
+    NS_LEGACY_IVAR_PAD(_NSDictionaryControllerReserved, 32)
 }
 
 - (NSString *) initialKey;

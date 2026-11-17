@@ -37,20 +37,22 @@ typedef NS_ENUM(NSUInteger, NSProgressIndicatorThickness) {
     NSProgressIndicatorPreferredAquaThickness = 12,
 };
 
+// Legacy ObjC ABI (i386): instance size is 0x90, Apple's, with the flags and
+// the three doubles where Apple has them.
 @interface NSProgressIndicator : NSView {
+    BOOL _isBezeled;
+    BOOL _isIndeterminate;
+    BOOL _usesThreadedAnimation;
+    BOOL _displayWhenStopped;
     double _minValue;
     double _maxValue;
     double _value;
-    NSTimeInterval _animationDelay;
     NSTimer *_animationTimer;
+    NSTimeInterval _animationDelay;
     double _animationValue;
     NSProgressIndicatorStyle _style;
     NSControlSize _size;
     NSControlTint _tint;
-    BOOL _displayWhenStopped;
-    BOOL _isBezeled;
-    BOOL _isIndeterminate;
-    BOOL _usesThreadedAnimation;
     BOOL _endThreadedAnimation;
 }
 

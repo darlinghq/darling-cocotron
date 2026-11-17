@@ -18,6 +18,7 @@
 */
 
 #import <AppKit/NSView.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/NSLayoutConstraint.h>
 #include <float.h>
 
@@ -54,8 +55,10 @@ static const NSStackViewVisibilityPriority NSStackViewVisibilityPriorityNotVisib
 
 static const CGFloat NSStackViewSpacingUseDefault = FLT_MAX;
 
-// Frame-based: there is no constraint solver, so the stack view sets its
-// views' frames itself whenever its contents, settings or size change.
+// The stack view sets its views' frames itself whenever its contents, settings
+// or size change, unless an arranged view takes part in Auto Layout (it has
+// constraints of its own); then the stack view arranges all its views with
+// constraints.
 @interface NSStackView : NSView {
     id<NSStackViewDelegate> _delegate;
     NSUserInterfaceLayoutOrientation _orientation;
@@ -67,6 +70,7 @@ static const CGFloat NSStackViewSpacingUseDefault = FLT_MAX;
     BOOL _changingViews;
     BOOL _keepsDecodedFrames;
     NSMutableArray *_entries;
+    NS_LEGACY_IVAR_PAD(_NSStackViewReserved, 24)
 }
 
 + (instancetype) stackViewWithViews: (NSArray *) views;

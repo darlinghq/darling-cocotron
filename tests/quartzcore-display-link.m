@@ -1,5 +1,6 @@
 #import <Foundation/Foundation.h>
 #import <QuartzCore/CADisplayLink.h>
+#include <math.h>
 
 @interface CADisplayLink (DisplayLinkPrivateTest)
 + (instancetype)displayLinkWithDisplay:(id)display target:(id)target selector:(SEL)selector;
@@ -42,7 +43,7 @@ int main(void) {
         DisplayLinkTarget *target = [[DisplayLinkTarget alloc] init];
         CADisplayLink *link = [CADisplayLink displayLinkWithTarget:target
                                                         selector:@selector(frame:)];
-        if (!link || link.duration <= 0 || link.preferredFramesPerSecond != 60)
+        if (!link || link.duration <= 0 || link.preferredFramesPerSecond != 0)
             return 10;
 
         link.paused = YES;
@@ -57,7 +58,8 @@ int main(void) {
             return 12;
 
         link.preferredFramesPerSecond = 30;
-        if (link.preferredFramesPerSecond != 30 || link.frameInterval != 2)
+        if (link.preferredFramesPerSecond != 30 ||
+            link.frameInterval != (NSInteger) llround(1.0 / link.duration / 30))
             return 13;
         NSUInteger previous = target->frames;
         run_for(0.10);

@@ -18,6 +18,7 @@
 */
 
 #import <AppKit/NSTouchBarItem.h>
+#import <AppKit/AppKitIvarLayout.h>
 
 NSTouchBarItemIdentifier const NSTouchBarItemIdentifierFixedSpaceLarge =
         @"NSTouchBarItemIdentifierFixedSpaceLarge";
@@ -32,13 +33,19 @@ NSTouchBarItemIdentifier const NSTouchBarItemIdentifierCandidateList =
 NSTouchBarItemIdentifier const NSTouchBarItemIdentifierCharacterPicker =
         @"NSTouchBarItemIdentifierCharacterPicker";
 
-@interface NSColorPickerTouchBarItem : NSTouchBarItem
+@interface NSColorPickerTouchBarItem : NSTouchBarItem {
+    NS_LEGACY_IVAR_PAD(_NSColorPickerTouchBarItemReserved, 64)
+}
 @end
 
-@interface NSSharingServicePickerTouchBarItem : NSTouchBarItem
+@interface NSSharingServicePickerTouchBarItem : NSTouchBarItem {
+    NS_LEGACY_IVAR_PAD(_NSSharingServicePickerTouchBarItemReserved, 32)
+}
 @end
 
-@interface NSSliderTouchBarItem : NSTouchBarItem
+@interface NSSliderTouchBarItem : NSTouchBarItem {
+    NS_LEGACY_IVAR_PAD(_NSSliderTouchBarItemReserved, 36)
+}
 @end
 
 @implementation NSTouchBarItem

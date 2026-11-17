@@ -18,11 +18,13 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSImageRep.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/NSWindow.h>
 
 @interface NSCachedImageRep : NSImageRep {
     NSWindow *_window;
     NSPoint _origin;
+    NS_LEGACY_IVAR_PAD(_NSCachedImageRepReserved, 4)
 }
 
 - initWithWindow: (NSWindow *) window rect: (NSRect) rect;

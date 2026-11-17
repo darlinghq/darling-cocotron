@@ -24,6 +24,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @interface NSColor (NSAppKitPrivate)
 - (CGColorRef) CGColorRef;
+- (NSColor *) _resolvedColor;
 @end
 
 void NSColorSetCatalogColor(NSColorListName catalogName, NSColorName colorName,
@@ -79,12 +80,18 @@ NSColor *NSColorGetCatalogColor(NSColorListName catalogName,
 + (NSColor *) colorWithCatalogName: (NSColorListName) catalogName
                          colorName: (NSColorName) colorName
 {
-    return [[[self alloc]
-            initWithCatalogName: catalogName
-                      colorName: colorName
-                          color: [[NSDisplay currentDisplay]
-                                         colorWithName: colorName]]
-            autorelease];
+    // The display's own colors come first, then the ones registered through
+    // +colorWithCatalogName:colorName:color:. A name in neither has no color.
+    NSColor *color = [[NSDisplay currentDisplay] colorWithName: colorName];
+
+    if (color == nil)
+        color = NSColorGetCatalogColor(catalogName, colorName);
+    if (color == nil)
+        return nil;
+
+    return [[[self alloc] initWithCatalogName: catalogName
+                                    colorName: colorName
+                                        color: color] autorelease];
 }
 
 + (NSColor *) colorWithCatalogName: (NSColorListName) catalogName
@@ -173,10 +180,9 @@ NSColor *NSColorGetCatalogColor(NSColorListName catalogName,
     [_color setStroke];
 }
 
-- (NSColor *) highlightWithLevel: (CGFloat) level {
-    level = MIN(1.0, MAX(0.0, level));
-
-    return self;
+// The color the catalog entry stands for now (a dynamic one resolves for the current appearance).
+- (NSColor *) _resolvedColor {
+    return [_color _resolvedColor];
 }
 
 @end

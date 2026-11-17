@@ -1,5 +1,6 @@
 #import <Foundation/NSGeometry.h>
 #import <Foundation/NSObject.h>
+#import <AppKit/AppKitIvarLayout.h>
 
 @class NSView;
 
@@ -9,6 +10,7 @@
     NSString *_badgeLabel;
     NSView *_contentView;
     BOOL _showsApplicationBadge;
+    NS_LEGACY_IVAR_PAD(_NSDockTileReserved, 32)
 }
 
 - (NSSize) size;

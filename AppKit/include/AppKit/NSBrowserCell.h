@@ -18,11 +18,15 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSCell.h>
+#import <AppKit/AppKitIvarLayout.h>
 
+#define _NS_SIDE_NSBrowserCell 0, 1,
 @interface NSBrowserCell : NSCell {
+    NS_EXTRA_IVARS_BEGIN(NSBrowserCell)
     NSImage *_alternateImage;
     BOOL _isLeaf;
     BOOL _isLoaded;
+    NS_SIDE_IVARS_END(NSBrowserCell)
 }
 
 + (NSImage *) branchImage;

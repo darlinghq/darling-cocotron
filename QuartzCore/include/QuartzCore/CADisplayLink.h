@@ -14,6 +14,9 @@
     CFTimeInterval _timestamp;
     CFTimeInterval _targetTimestamp;
     CFTimeInterval _duration;
+    double _refreshRate;
+    CFTimeInterval _refreshRateCheckedAt;
+    double (^_refreshRateProvider)(void);
     NSInteger _preferredFramesPerSecond;
     CAFrameRateRange _preferredFrameRateRange;
     BOOL _paused;
@@ -25,6 +28,7 @@
 @property (nonatomic, readonly) CFTimeInterval timestamp;
 @property (nonatomic, readonly) CFTimeInterval targetTimestamp;
 @property (nonatomic, readonly) CFTimeInterval duration;
+// 0 (the default) means the display's maximum refresh rate.
 @property (nonatomic) NSInteger preferredFramesPerSecond;
 @property (nonatomic) NSInteger frameInterval;
 // A range with a nonzero maximum overrides preferredFramesPerSecond.

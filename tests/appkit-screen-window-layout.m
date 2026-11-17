@@ -20,11 +20,16 @@ static void expect(BOOL condition, const char *what) {
     }
 }
 
-@interface Counter : NSObject
+@interface Counter : NSObject {
+    // The legacy 32-bit runtime neither synthesizes properties nor creates
+    // their instance variables.
+    int _count;
+}
 @property int count;
 @end
 
 @implementation Counter
+@synthesize count = _count;
 - (void) observeValueForKeyPath: (NSString *) keyPath
                        ofObject: (id) object
                          change: (NSDictionary *) change

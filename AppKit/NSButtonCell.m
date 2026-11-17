@@ -118,14 +118,12 @@ static const CGFloat kImageMargin = 2.;
     NS_EXTRA(NSCell, self)->_isBordered =
             (flags & 0x00800000) ? YES : NO; // err, this flag is in NSCell too
 
-    NS_EXTRA(NSButtonCell, self)->_bezelStyle = (flags2 & 0x7) | (flags2 & 0x20 >> 2);
+    // The archive stores the style in the low three bits of the second flag word and, for the styles
+    // from 8 up (textured, round rect, recessed, inline and so on), the fourth bit in bit 5.
+    NS_EXTRA(NSButtonCell, self)->_bezelStyle = (flags2 & 0x7) | ((flags2 & 0x20) >> 2);
 
-    if (NS_EXTRA(NSButtonCell, self)->_bezelStyle == 0) // this is how textured buttons are encoded by IB
+    if (NS_EXTRA(NSButtonCell, self)->_bezelStyle == 0) // no style at all: how older archives encode textured buttons
         NS_EXTRA(NSButtonCell, self)->_bezelStyle = NSTexturedSquareBezelStyle;
-    if (NS_EXTRA(NSButtonCell, self)->_bezelStyle == 3)
-        NS_EXTRA(NSButtonCell, self)->_bezelStyle = NSTexturedRoundedBezelStyle;
-    if (NS_EXTRA(NSButtonCell, self)->_bezelStyle == 4)
-        NS_EXTRA(NSButtonCell, self)->_bezelStyle = NSRoundRectBezelStyle;
 
     NS_EXTRA(NSButtonCell, self)->_isTransparent = (flags & 0x00008000) ? YES : NO;
     NS_EXTRA(NSButtonCell, self)->_imageDimsWhenDisabled = (flags & 0x00002000) ? NO : YES;
@@ -951,7 +949,9 @@ static const CGFloat kImageMargin = 2.;
             frame.size.width = 10 - step * 2;
             frame.size.height = 10 - step * 2;
             frame.origin.x = 5 - step;
-            frame.origin.y = flipped ? step * 2 - 3 : 7 - step * 2;
+            // The room for the shadow is below the bezel: 7 (5 small) from the bottom, so the rest of the
+            // inset, 3, is above it.
+            frame.origin.y = flipped ? 3 : 7 - step * 2;
             break;
         }
 
@@ -1148,7 +1148,17 @@ static void drawRoundedBezel(CGContextRef context, CGRect frame) {
         }
         break;
 
-    default:
+    default: {
+        // The graphics style draws its images for a view that is not flipped; in a flipped view they
+        // are mirrored about the frame so that they come out the right way up.
+        CGContextRef context = [[NSGraphicsContext currentContext] graphicsPort];
+        BOOL mirror = [controlView isFlipped];
+
+        if (mirror) {
+            CGContextSaveGState(context);
+            CGContextTranslateCTM(context, 0, 2 * frame.origin.y + frame.size.height);
+            CGContextScaleCTM(context, 1, -1);
+        }
         if (![self isBordered]) {
             [[_controlView graphicsStyle]
                     drawUnborderedButtonInRect: frame
@@ -1166,7 +1176,10 @@ static void drawRoundedBezel(CGContextRef context, CGRect frame) {
                         drawPushButtonNormalInRect: frame
                                          defaulted: defaulted];
         }
+        if (mirror)
+            CGContextRestoreGState(context);
         break;
+    }
     }
 }
 
@@ -1196,6 +1209,19 @@ static void drawRoundedBezel(CGContextRef context, CGRect frame) {
            withFrame: (NSRect) titleRect
               inView: (NSView *) controlView
 {
+
+    // The title is centered vertically in the frame it is given, which may be taller than the text; the
+    // rectangle it was drawn in is returned.
+    // QUIRK: not documented. Evidence: black-box observation on macOS 10.14.4 (flipped view) and 26.7.3
+    // (flipped and unflipped view) of a 40 point frame with a 13 point title: the returned rectangle is the
+    // height of the text and centered in the frame, and the ink lies in the middle rows. Mojave puts the
+    // title at the top edge in a view that is not flipped; that is not followed because buttons are views
+    // that are flipped there. Test: tests/appkit-button-cell-draw-title-centered.m
+    // (test_quirk_button_cell_title_centered)
+    NSSize textSize = [title size];
+    CGFloat textHeight = MIN(ceil(textSize.height), titleRect.size.height);
+    titleRect.origin.y += floor((titleRect.size.height - textHeight) / 2 + 0.5);
+    titleRect.size.height = textHeight;
 
     [title _clipAndDrawInRect: titleRect];
 
@@ -1494,11 +1520,48 @@ static NSSize scaledImageSizeInFrameSize(NSSize imageSize, NSSize frameSize,
         result.height += 4;
     }
 
+    [self _applyStockButtonMetricsToSize: &result titleWidth: titleSize.width];
+
     NSRect adjustment = [self getControlSizeAdjustment: NO];
     result.width += adjustment.size.width;
     result.height += adjustment.size.height;
 
     return result;
+}
+
+// QUIRK: a rounded push button, a checkbox and a radio button have a size of their own derived from the
+// title width: the title width plus a fixed amount per control size, rounded up. A push button also has a
+// fixed height per control size. Not documented. Evidence: black-box observation on macOS 10.14.4 (tier 2)
+// of the intrinsic content size with titles of 0 to 196 points at the three control sizes; 26.7.3 differs
+// and is not followed. The amounts are 28, 16 and 22 for push buttons (regular, small, mini; heights 21, 18
+// and 15), 18, 17 and 16 for checkboxes and 19, 19 and 17 for radio buttons. The heights of checkboxes and
+// radio buttons stay as they are, because the frame is not inset by the alignment insets here and the
+// glyphs would be cut off.
+// Test: tests/appkit-button-stock-intrinsic-size.m (test_quirk_stock_button_widths)
+- (void) _applyStockButtonMetricsToSize: (NSSize *) size titleWidth: (CGFloat) titleWidth {
+    NSControlSize controlSize = NS_EXTRA(NSCell, self)->_controlSize;
+    int index = controlSize == NSSmallControlSize ? 1 : (controlSize == NSMiniControlSize ? 2 : 0);
+    NSImage *image = [self image];
+
+    if (image == nil) {
+        static const CGFloat pushPadding[3] = {28, 16, 22};
+        static const CGFloat pushHeight[3] = {21, 18, 15};
+
+        if (NS_EXTRA(NSButtonCell, self)->_bezelStyle != NSRoundedBezelStyle || ![self isBordered] ||
+            [self imagePosition] == NSImageOnly || [self isKindOfClass: [NSPopUpButtonCell class]])
+            return;
+        size->width = ceil(titleWidth + pushPadding[index]);
+        size->height = pushHeight[index];
+        return;
+    }
+
+    static const CGFloat switchPadding[3] = {18, 17, 16};
+    static const CGFloat radioPadding[3] = {19, 19, 17};
+    BOOL isSwitch = [[image name] isEqualToString: @"NSSwitch"];
+    BOOL isRadio = [[image name] isEqualToString: @"NSRadioButton"];
+
+    if ((isSwitch || isRadio) && [self imagePosition] == NSImageLeft)
+        size->width = ceil(titleWidth + (isSwitch ? switchPadding[index] : radioPadding[index]));
 }
 
 - (void) drawWithFrame: (NSRect) frame inView: (NSView *) control {

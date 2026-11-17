@@ -66,6 +66,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSDatePicker.h>
 #import <AppKit/NSDatePickerCell.h>
 #import <AppKit/NSDictionaryController.h>
+#import <AppKit/NSDiffableDataSourceSnapshot.h>
 #import <AppKit/NSDockTile.h>
 #import <AppKit/NSDocument.h>
 #import <AppKit/NSDocumentController.h>
@@ -126,6 +127,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSOpenPanel.h>
 #import <AppKit/NSOutlineView.h>
 #import <AppKit/NSPDFImageRep.h>
+#import <AppKit/NSPICTImageRep.h>
 #import <AppKit/NSPageController.h>
 #import <AppKit/NSPageLayout.h>
 #import <AppKit/NSPanel.h>
@@ -144,6 +146,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSPrintPanel.h>
 #import <AppKit/NSPrinter.h>
 #import <AppKit/NSProgressIndicator.h>
+#import <AppKit/NSQuickDrawView.h>
 #import <AppKit/NSResponder.h>
 #import <AppKit/NSRuleEditor.h>
 #import <AppKit/NSRulerMarker.h>

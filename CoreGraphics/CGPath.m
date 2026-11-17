@@ -190,6 +190,13 @@ void CGPathAddArc(CGMutablePathRef self, const CGAffineTransform *xform,
                  startRadian, endRadian, clockwise);
 }
 
+void CGPathAddRelativeArc(CGMutablePathRef self, const CGAffineTransform *xform,
+                          CGFloat x, CGFloat y, CGFloat radius, CGFloat startAngle,
+                          CGFloat delta)
+{
+    O2PathAddRelativeArc((O2MutablePathRef)self, O2AffineTransformPtrFromCG(xform), x, y, radius, startAngle, delta);
+}
+
 void CGPathAddArcToPoint(CGMutablePathRef self, const CGAffineTransform *xform,
                          CGFloat tx1, CGFloat ty1, CGFloat tx2, CGFloat ty2,
                          CGFloat radius)
@@ -245,6 +252,37 @@ CGPathRef CGPathCreateCopyByTransformingPath(CGPathRef path,
     if (transform != NULL)
         O2PathApplyTransform(copy, *(O2AffineTransform *) transform);
     return (CGPathRef)copy;
+}
+
+// Onyx2D has one path class and its copies are mutable, so the "immutable" and the mutable transformed copy are one
+// implementation.
+CGMutablePathRef CGPathCreateMutableCopyByTransformingPath(CGPathRef path,
+                                                           const CGAffineTransform *transform)
+{
+    return (CGMutablePathRef)CGPathCreateCopyByTransformingPath(path, transform);
+}
+
+// GUESS (not in the public documentation): the private continuous ("squircle") rounded rectangle is answered with the
+// ordinary rounded rectangle of CGPathCreateWithRoundedRect, which is also what WebKit draws where the continuous
+// form is unavailable (PathCG.cpp, "Continuous rounded rects are unavailable. Paint a normal rounded rect instead.").
+// The argument order (rect, cornerWidth, cornerHeight, transform) is copied from CGPathCreateWithRoundedRect and is a
+// GUESS too. The corners are visibly rounder than the real continuous curve at large radii; the first call says so
+// on stderr.
+CGPathRef CGPathCreateWithContinuousRoundedRect(CGRect rect, CGFloat cornerWidth, CGFloat cornerHeight,
+                                                const CGAffineTransform *transform)
+{
+    static int reported;
+    if (!__atomic_exchange_n(&reported, 1, __ATOMIC_RELAXED))
+        fprintf(stderr, "CoreGraphics: CGPathCreateWithContinuousRoundedRect draws an ordinary rounded rectangle "
+                        "(GUESS: not in the public documentation)\n");
+    return CGPathCreateWithRoundedRect(rect, cornerWidth, cornerHeight, transform);
+}
+
+CGPathRef CGPathCreateCopyByDashingPath(CGPathRef path, const CGAffineTransform *transform, CGFloat phase,
+    const CGFloat *lengths, size_t count)
+{
+    return (CGPathRef)O2PathCreateCopyByDashingPath((O2PathRef)path, O2AffineTransformPtrFromCG(transform), phase,
+        lengths, count);
 }
 
 CGPathRef CGPathCreateCopyByStrokingPath(CGPathRef path,

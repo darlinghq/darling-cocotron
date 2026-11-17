@@ -1,5 +1,6 @@
 #import <AppKit/NSViewController.h>
 #import <AppKit/NSLayoutConstraint.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <Foundation/Foundation.h>
 
 @class NSScrollEdgeEffectStyle;
@@ -10,6 +11,7 @@
     BOOL _hidden;
     CGFloat _fullScreenMinHeight;
     NSLayoutAttribute _layoutAttribute;
+    NS_LEGACY_IVAR_PAD(_NSTitlebarAccessoryViewControllerReserved, 20)
 }
 
 @property (retain) NSScrollEdgeEffectStyle *preferredScrollEdgeEffectStyle;

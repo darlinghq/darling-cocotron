@@ -18,6 +18,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSCell.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/NSFont.h>
 #import <Foundation/Foundation.h>
 
@@ -85,6 +86,7 @@ typedef NS_OPTIONS(NSInteger, NSControlCharacterAction) {
     NSFont *_textFont;
     NSImageScaling _defaultAttachmentScaling;
     BOOL _usesDefaultHyphenation;
+    NS_LEGACY_IVAR_PAD(_NSLayoutManagerReserved, 112)
 }
 
 - init;

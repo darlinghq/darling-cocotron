@@ -20,6 +20,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <CoreFoundation/CFBase.h>
 #import <Foundation/NSString.h>
 #import <Onyx2D/O2ColorSpace.h>
+#import <Onyx2D/O2ColorICC.h>
+#include <string.h>
 
 const CFStringRef kO2ColorSpaceDisplayP3 = CFSTR("kCGColorSpaceDisplayP3");
 const CFStringRef kO2ColorSpaceGenericGray = CFSTR("kCGColorSpaceGenericGray");
@@ -86,6 +88,7 @@ const CFStringRef kO2ColorSpaceExtendedLinearGray =
 - (void)dealloc {
     if (_name != NULL)
         CFRelease(_name);
+    [_patternBase release];
     [super dealloc];
 }
 
@@ -126,7 +129,17 @@ O2ColorSpaceRef O2ColorSpaceCreatePlatformRGB(void) {
 }
 
 O2ColorSpaceRef O2ColorSpaceCreatePattern(O2ColorSpaceRef baseSpace) {
-    return [[O2ColorSpace alloc] initWithPattern];
+    O2ColorSpace *space = [[O2ColorSpace alloc] initWithPattern];
+    space->_patternBase = [baseSpace retain];
+    return space;
+}
+
+O2ColorSpaceRef O2ColorSpaceCreateIndexed(O2ColorSpaceRef baseSpace, size_t lastIndex, const unsigned char *colorTable) {
+    if (baseSpace == NULL || colorTable == NULL)
+        return NULL;
+    return [[O2ColorSpace_indexed alloc] initWithColorSpace: baseSpace
+                                                      hival: lastIndex
+                                                      bytes: colorTable];
 }
 
 O2ColorSpaceRef O2ColorSpaceCreateDeviceN(const char **names,
@@ -208,6 +221,50 @@ BOOL O2ColorSpaceGetColorProfile(O2ColorSpaceRef self, O2ColorProfile *profile) 
     return profile->isGray == (self->_type == kO2ColorSpaceModelMonochrome);
 }
 
+// Profile description for the names O2ColorProfileForName understands, with
+// the optional "Extended" prefix already removed.
+static const char *profileDescription(const char *suffix) {
+    static const struct {
+        const char *suffix;
+        const char *description;
+    } names[] = {
+        {"SRGB", "sRGB IEC61966-2.1"},
+        {"LinearSRGB", "sRGB IEC61966-2.1 Linear"},
+        {"DisplayP3", "Display P3"},
+        {"LinearDisplayP3", "Display P3 Linear"},
+        {"GenericRGB", "Generic RGB"},
+        {"GenericRGBLinear", "Generic RGB Linear"},
+        {"AdobeRGB1998", "Adobe RGB (1998)"},
+        {"ITUR_709", "Rec. ITU-R BT.709"},
+        {"ITUR_2020", "Rec. ITU-R BT.2020"},
+        {"LinearITUR_2020", "Rec. ITU-R BT.2020 Linear"},
+        {"GenericGray", "Generic Gray"},
+        {"GenericGrayGamma2_2", "Generic Gray Gamma 2.2"},
+        {"Gray", "Gray"},
+        {"LinearGray", "Linear Gray"},
+    };
+    for (size_t i = 0; i < sizeof(names) / sizeof(names[0]); i++)
+        if (strcmp(names[i].suffix, suffix) == 0)
+            return names[i].description;
+    return NULL;
+}
+
+CFDataRef O2ColorSpaceCopyICCData(O2ColorSpaceRef self) {
+    O2ColorProfile profile;
+    char name[64];
+
+    if (self == NULL || self->_name == NULL ||
+        !O2ColorSpaceGetColorProfile(self, &profile) ||
+        !CFStringGetCString(self->_name, name, sizeof(name), kCFStringEncodingASCII))
+        return NULL;
+
+    const char *suffix = name + strlen("kCGColorSpace");
+    if (strncmp(suffix, "Extended", 8) == 0)
+        suffix += 8;
+    const char *description = profileDescription(suffix);
+    return description ? O2ColorProfileCopyICCData(&profile, description) : NULL;
+}
+
 BOOL O2ColorSpaceIsPlatformRGB(O2ColorSpaceRef self) {
     return self->_isPlatformRGB;
 }
@@ -233,6 +290,28 @@ size_t O2ColorSpaceGetNumberOfComponents(O2ColorSpaceRef self) {
     default:
         return 0;
     }
+}
+
+O2ColorSpaceRef O2ColorSpaceGetBaseColorSpace(O2ColorSpaceRef self) {
+    if ([self isKindOfClass: [O2ColorSpace_indexed class]])
+        return [(O2ColorSpace_indexed *) self baseColorSpace];
+    if (self != nil && self->_type == kO2ColorSpaceModelPattern)
+        return self->_patternBase;
+    return NULL;
+}
+
+size_t O2ColorSpaceGetColorTableCount(O2ColorSpaceRef self) {
+    if ([self isKindOfClass: [O2ColorSpace_indexed class]])
+        return [(O2ColorSpace_indexed *) self hival] + 1;
+    return 0;
+}
+
+void O2ColorSpaceGetColorTable(O2ColorSpaceRef self, unsigned char *table) {
+    if (table == NULL || ![self isKindOfClass: [O2ColorSpace_indexed class]])
+        return;
+    O2ColorSpace_indexed *indexed = (O2ColorSpace_indexed *) self;
+    memcpy(table, [indexed paletteBytes],
+           O2ColorSpaceGetNumberOfComponents([indexed baseColorSpace]) * ([indexed hival] + 1));
 }
 
 O2ColorSpaceModel O2ColorSpaceGetModel(O2ColorSpaceRef self) {

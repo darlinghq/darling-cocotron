@@ -20,6 +20,7 @@
 #import "WaylandSubWindow.h"
 #import "WaylandLibrary.h"
 #import "WaylandProtocol.h"
+#import "WaylandWindowLevel.h"
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSWindow.h>
 #import <AppKit/NSGraphicsContext.h>
@@ -246,19 +247,11 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
         _fullscreenRequested = NO;
         [self updateFullscreen];
         [self updateSizeLimits];
+        _levelParent = nil;
+        [self updateLevelParent];
 
-        if (_display->_decorationManager != NULL && (_styleMask & NSWindowStyleMaskTitled)) {
-            args[0].o = NULL;
-            args[1].o = (struct wl_object *) _toplevel;
-            _decoration = WaylandCreateObject(
-                    _display->_decorationManager,
-                    WP_DECORATION_MANAGER_GET_TOPLEVEL_DECORATION,
-                    &zxdg_toplevel_decoration_v1_interface, args,
-                    WaylandObjectDecoration, self);
-            args[0].u = forceClient ? WP_TOPLEVEL_DECORATION_MODE_CLIENT_SIDE
-                                     : WP_TOPLEVEL_DECORATION_MODE_SERVER_SIDE;
-            WaylandMarshal(_decoration, WP_TOPLEVEL_DECORATION_SET_MODE, NULL, 0, args);
-        }
+        _decorationForcedClient = forceClient;
+        [self updateDecorationMode];
     }
 
     _pendingWidth = _pendingHeight = 0;
@@ -371,12 +364,14 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     [self destroyBuffers];
 
     _mapped = NO;
+    _levelParent = nil;
     _configureUpdatePending = NO;
     _configured = NO;
     _activated = NO;
     // The tracker survives hiding: _frame keeps the fullscreen size, so the size
     // from before fullscreen would be lost if the next map saved it again.
     _fullscreenRequested = _pendingFullscreen = _fullscreenRecheckPending = NO;
+    _fullscreenReported = NO;
     [_display windowUnmapped: self];
     [_display flush];
 }
@@ -451,8 +446,68 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     return _styleMask;
 }
 
-- (void) setStyleMask: (NSUInteger) mask {
+// A full-size content view with a transparent title bar leaves nothing for the platform to draw
+// as a title bar: the application draws its own header. Such a window gets no frame, neither from
+// the compositor nor from the client-side fallback.
+- (BOOL) wantsChromeless {
+    return (_styleMask & NSWindowStyleMaskFullSizeContentView) != 0 && [_delegate titlebarAppearsTransparent];
+}
+
+// Whether this window should draw the client-side frame, given what the compositor asked for.
+- (BOOL) wantsClientDecoration {
+    return _toplevel != NULL && (_styleMask & NSWindowStyleMaskTitled) && ![self wantsChromeless] &&
+            _pendingClientDecorated && !_pendingFullscreen;
+}
+
+// Tells the compositor which side draws the frame. A chromeless window declares client-side
+// decorations explicitly because compositors differ on the default for a window that says nothing.
+- (void) updateDecorationMode {
+    if (_toplevel == NULL || _display->_decorationManager == NULL)
+        return;
+    union wl_argument args[2];
+    if (!(_styleMask & NSWindowStyleMaskTitled)) {
+        if (_decoration != NULL)
+            sendRequest(_decoration, WP_TOPLEVEL_DECORATION_UNSET_MODE, 0);
+        return;
+    }
+    if (_decoration == NULL) {
+        args[0].o = NULL;
+        args[1].o = (struct wl_object *) _toplevel;
+        _decoration = WaylandCreateObject(
+                _display->_decorationManager,
+                WP_DECORATION_MANAGER_GET_TOPLEVEL_DECORATION,
+                &zxdg_toplevel_decoration_v1_interface, args,
+                WaylandObjectDecoration, self);
+    }
+    args[0].u = (_decorationForcedClient || [self wantsChromeless])
+            ? WP_TOPLEVEL_DECORATION_MODE_CLIENT_SIDE
+            : WP_TOPLEVEL_DECORATION_MODE_SERVER_SIDE;
+    WaylandMarshal(_decoration, WP_TOPLEVEL_DECORATION_SET_MODE, NULL, 0, args);
+}
+
+// Called when the style mask or the title bar transparency of a window changes. On a mapped
+// window the mode is updated and the client-side frame switched on or off right away, keeping
+// the content size.
+- (void) updateDecorationsForStyleMask: (NSUInteger) mask {
     _styleMask = mask;
+    if (_toplevel == NULL)
+        return;
+    [self updateDecorationMode];
+    if (!_configured || [self wantsClientDecoration] == _clientDecorated) {
+        [_display flush];
+        return;
+    }
+    if (!_pendingMaximized && !_pendingFullscreen) {
+        BOOL framed = [self wantsClientDecoration];
+        _pendingWidth = (int32_t) ceil(_frame.size.width) + (framed ? 2 * WaylandBorder : 0);
+        _pendingHeight = (int32_t) ceil(_frame.size.height) + (framed ? 2 * WaylandBorder + WaylandTitleHeight : 0);
+    }
+    [self applyConfigure];
+    [_display flush];
+}
+
+- (void) setStyleMask: (NSUInteger) mask {
+    [self updateDecorationsForStyleMask: mask];
     [self updateSizeLimits];
     [self updateFullscreen];
 }
@@ -523,6 +578,36 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 
 - (void) setLevel: (int) value {
     _level = value;
+    [self updateLevelParent];
+}
+
+// xdg-shell cannot stack a window above arbitrary windows, but it can keep a
+// window in front of another toplevel of the application: a window whose level is
+// above the normal one but below the main menu's (floating panels, modal panels,
+// utility windows) is made transient for the key window, so it stays in front of
+// the window the user works in. Higher levels need a layering protocol that
+// xdg-shell does not have and stay ordinary windows (see DarlingWindowLevelPolicy.h).
+- (void) updateLevelParent {
+    if (_toplevel == NULL)
+        return;
+
+    WaylandWindow *parent = nil;
+    if (DarlingWindowRoleForLevel(_level) == DarlingWindowRoleTransient)
+        parent = [_display levelParentForWindow: self];
+    if (parent == _levelParent || (parent != nil && parent->_toplevel == NULL))
+        return;
+    _levelParent = parent;
+    WaylandToplevelSetParent(_toplevel, parent != nil ? parent->_toplevel : NULL);
+    [_display flush];
+}
+
+- (WaylandWindow *) levelParent {
+    return _levelParent;
+}
+
+// The compositor drops the relation when the parent unmaps.
+- (void) levelParentUnmapped {
+    _levelParent = nil;
 }
 
 - (void) updateTitle {
@@ -717,6 +802,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
         uint32_t render = self->_fractionalScale && self->_preferredScale120
             ? WaylandIntegralScale120(self->_preferredScale120) : (uint32_t)MIN((uint64_t)scale * 120, UINT32_MAX);
         if (scale == self->_bufferScale && render == self->_renderScale120) return;
+        CGFloat oldScale = self->_renderScale120 / 120.0;
         self->_bufferScale = scale;
         self->_renderScale120 = render;
         [self updateSubwindows];
@@ -724,6 +810,9 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
         self->_context = nil;
         self->_needsPresent = NO;
         [self->_delegate platformWindowDidInvalidateCGContext: self];
+        // The window and its views learn of the new scale before they redraw.
+        if ([self->_delegate respondsToSelector: @selector(platformWindow:didChangeBackingScaleFrom:)])
+            [self->_delegate platformWindow: self didChangeBackingScaleFrom: oldScale];
         [self->_delegate platformWindowExposed: self
                                       inRect: NSMakeRect(0, 0, self->_frame.size.width,
                                                          self->_frame.size.height)];
@@ -1044,8 +1133,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 
 - (void) applyConfigure {
     // A fullscreen window has no frame of its own to draw.
-    BOOL clientDecorated = _toplevel != NULL && (_styleMask & NSWindowStyleMaskTitled) &&
-            _pendingClientDecorated && !_pendingFullscreen;
+    BOOL clientDecorated = [self wantsClientDecoration];
     BOOL decorationChanged = clientDecorated != _clientDecorated;
     _clientDecorated = clientDecorated;
     _maximized = _pendingMaximized;
@@ -1064,6 +1152,10 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
             &width, &height);
     BOOL firstConfigure = !_configured;
     _configured = YES;
+
+    // Tell the delegate when the compositor's fullscreen state changes.
+    BOOL fullscreenChanged = _pendingFullscreen != _fullscreenReported;
+    _fullscreenReported = _pendingFullscreen;
 
     BOOL sized = NO;
     BOOL moved = NO;
@@ -1091,6 +1183,14 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 
     [self updateSubwindows];
     [self recheckFullscreen];
+
+    if (fullscreenChanged) {
+        BOOL fullscreen = _fullscreenReported;
+        [_display performAfterDispatch: ^{
+          if ([self->_delegate respondsToSelector: @selector(platformWindow:didChangeFullScreen:)])
+              [self->_delegate platformWindow: self didChangeFullScreen: fullscreen];
+        }];
+    }
 
     BOOL activationChanged = _pendingActivated != _activated;
     BOOL activated = _pendingActivated;
@@ -1128,6 +1228,11 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     }
 
     [self presentIfPossible];
+}
+
+// Whether the compositor currently holds the window fullscreen.
+- (BOOL) isFullScreen {
+    return _mapped && _fullscreenReported;
 }
 
 - (void) closeRequested {

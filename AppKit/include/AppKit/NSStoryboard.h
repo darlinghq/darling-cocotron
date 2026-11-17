@@ -18,14 +18,19 @@
 */
 
 #import <AppKit/AppKitExport.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <Foundation/Foundation.h>
 
 typedef NSString *NSStoryboardName NS_SWIFT_BRIDGED_TYPEDEF;
 typedef NSString *NSStoryboardSceneIdentifier NS_SWIFT_BRIDGED_TYPEDEF;
+// Builds a scene's controller from the coder that holds its storyboard data, with the caller's own initializer.
+typedef id (^NSStoryboardControllerCreator)(NSCoder *coder);
 
 @interface NSStoryboard : NSObject {
+    NS_EXTRA_IVARS_BEGIN(NSStoryboard)
     NSString *_path;
     NSDictionary *_info;
+    NS_EXTRA_IVARS_END(NSStoryboard)
 }
 
 @property(class, readonly, strong) NSStoryboard *mainStoryboard;
@@ -35,5 +40,10 @@ typedef NSString *NSStoryboardSceneIdentifier NS_SWIFT_BRIDGED_TYPEDEF;
 
 - (id) instantiateInitialController;
 - (id) instantiateControllerWithIdentifier: (NSStoryboardSceneIdentifier) identifier;
+// A nil creator is the plain method. A creator raises NSInvalidArgumentException: the nib decoder here has no hook
+// that hands a scene's coder to a block.
+- (id) instantiateInitialControllerWithCreator: (NSStoryboardControllerCreator) block;
+- (id) instantiateControllerWithIdentifier: (NSStoryboardSceneIdentifier) identifier
+                                   creator: (NSStoryboardControllerCreator) block;
 
 @end

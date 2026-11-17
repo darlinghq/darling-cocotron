@@ -1,5 +1,6 @@
 #import <CoreText/CTFontDescriptor.h>
 #import <CoreGraphics/CoreGraphics.h>
+#import <CoreText/CTFontManagerErrors.h>
 
 CF_IMPLICIT_BRIDGING_ENABLED
 
@@ -22,6 +23,7 @@ CORETEXT_EXPORT CFArrayRef CTFontManagerCopyAvailableFontFamilyNames(void);
 CORETEXT_EXPORT CTFontDescriptorRef CTFontManagerCreateFontDescriptorFromData(CFDataRef data);
 CORETEXT_EXPORT CFArrayRef CTFontManagerCreateFontDescriptorsFromData(CFDataRef data);
 CORETEXT_EXPORT CFArrayRef CTFontManagerCreateFontDescriptorsFromURL(CFURLRef fileURL);
+CORETEXT_EXPORT bool CTFontManagerIsSupportedFont(CFURLRef fontURL);
 
 CORETEXT_EXPORT bool CTFontManagerRegisterFontsForURL(CFURLRef fontURL, CTFontManagerScope scope, CFErrorRef * error);
 

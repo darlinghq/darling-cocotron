@@ -61,6 +61,10 @@ COREGRAPHICS_EXPORT CGPathRef _Nullable CGPathCreateCopyByStrokingPath(CGPathRef
     const CGAffineTransform * _Nullable transform, CGFloat width, CGLineCap cap,
     CGLineJoin join, CGFloat miterLimit);
 
+COREGRAPHICS_EXPORT CGPathRef _Nullable CGPathCreateCopyByDashingPath(CGPathRef path,
+    const CGAffineTransform * _Nullable transform, CGFloat phase,
+    const CGFloat * _Nullable lengths, size_t count);
+
 COREGRAPHICS_EXPORT void CGPathRelease(CGPathRef self);
 COREGRAPHICS_EXPORT CGPathRef CGPathRetain(CGPathRef self);
 
@@ -116,6 +120,10 @@ COREGRAPHICS_EXPORT void CGPathAddArc(CGMutablePathRef self,
                                       CGFloat y, CGFloat radius,
                                       CGFloat startRadian, CGFloat endRadian,
                                       bool clockwise);
+COREGRAPHICS_EXPORT void CGPathAddRelativeArc(CGMutablePathRef self,
+                                              const CGAffineTransform * _Nullable xform, CGFloat x,
+                                              CGFloat y, CGFloat radius,
+                                              CGFloat startAngle, CGFloat delta);
 COREGRAPHICS_EXPORT void CGPathAddArcToPoint(CGMutablePathRef self,
                                              const CGAffineTransform * _Nullable xform,
                                              CGFloat tx1, CGFloat ty1,
@@ -148,6 +156,15 @@ COREGRAPHICS_EXPORT CGRect CGPathGetPathBoundingBox(CGPathRef path);
 COREGRAPHICS_EXPORT CGPathRef _Nullable CGPathCreateCopyByTransformingPath(
         CGPathRef _Nullable path, const CGAffineTransform * _Nullable transform)
     CF_SWIFT_NAME(CGPath.copy(self:using:));
+
+COREGRAPHICS_EXPORT CGMutablePathRef _Nullable CGPathCreateMutableCopyByTransformingPath(
+        CGPathRef _Nullable path, const CGAffineTransform * _Nullable transform)
+    CF_SWIFT_NAME(CGPath.mutableCopy(self:using:));
+
+// Private: not in the public documentation (GUESS, see CGPath.m).
+COREGRAPHICS_EXPORT CGPathRef CGPathCreateWithContinuousRoundedRect(
+        CGRect rect, CGFloat cornerWidth, CGFloat cornerHeight,
+        const CGAffineTransform * _Nullable transform);
 
 #if __has_feature(blocks)
 typedef void (^CGPathApplyBlock)(const CGPathElement *element);

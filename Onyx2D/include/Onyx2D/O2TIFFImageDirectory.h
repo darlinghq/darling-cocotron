@@ -89,6 +89,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (int) imageLength;
 - (int) imageWidth;
 
+// The number of samples per pixel (3: RGB, 1: gray) when the directory holds 8 bit
+// chunky samples without an alpha or other extra sample, else 0. Such an image is
+// decoded without an alpha channel.
+- (unsigned) opaqueSamplesPerPixel;
+
 - (BOOL) getRGBAImageBytes: (unsigned char *) bytes data: (NSData *) data;
 
 - (NSDictionary *) properties;

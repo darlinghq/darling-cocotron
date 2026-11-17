@@ -79,8 +79,8 @@ static void setCurrentInstantiatingStoryboard(NSStoryboard *storyboard) {
                     format: @"Could not find a storyboard named '%@' in bundle %@", name, bundle];
 
     NSStoryboard *storyboard = [[[self alloc] init] autorelease];
-    storyboard->_path = [path copy];
-    storyboard->_info = [info retain];
+    NS_EXTRA(NSStoryboard, storyboard)->_path = [path copy];
+    NS_EXTRA(NSStoryboard, storyboard)->_info = [info retain];
     return storyboard;
 }
 
@@ -89,13 +89,14 @@ static void setCurrentInstantiatingStoryboard(NSStoryboard *storyboard) {
 }
 
 - (void) dealloc {
-    [_path release];
-    [_info release];
+    [NS_EXTRA(NSStoryboard, self)->_path release];
+    [NS_EXTRA(NSStoryboard, self)->_info release];
+    NS_EXTRA_FREE(NSStoryboard, self);
     [super dealloc];
 }
 
 - (NSString *) _pathForNibNamed: (NSString *) name {
-    NSString *path = [[_path stringByAppendingPathComponent: name] stringByAppendingPathExtension: @"nib"];
+    NSString *path = [[NS_EXTRA(NSStoryboard, self)->_path stringByAppendingPathComponent: name] stringByAppendingPathExtension: @"nib"];
     return [[NSFileManager defaultManager] fileExistsAtPath: path] ? path : nil;
 }
 
@@ -118,7 +119,7 @@ static void setCurrentInstantiatingStoryboard(NSStoryboard *storyboard) {
     }
     if (!loaded)
         [NSException raise: NSInternalInconsistencyException
-                    format: @"Unable to load nib %@ of storyboard %@", name, _path];
+                    format: @"Unable to load nib %@ of storyboard %@", name, NS_EXTRA(NSStoryboard, self)->_path];
     // The nib load retains top-level objects for its caller; this array keeps them instead.
     [topLevelObjects makeObjectsPerformSelector: @selector(autorelease)];
     return topLevelObjects;
@@ -127,7 +128,7 @@ static void setCurrentInstantiatingStoryboard(NSStoryboard *storyboard) {
 // NSApplicationMain's counterpart of loading NSMainNibFile: the storyboard's main menu, then its
 // initial window controller, shown and kept for the life of the app.
 - (void) _instantiateAsMainStoryboard {
-    NSString *menuName = [_info objectForKey: NSStoryboardMainMenuKey];
+    NSString *menuName = [NS_EXTRA(NSStoryboard, self)->_info objectForKey: NSStoryboardMainMenuKey];
     if (menuName != nil)
         [self _instantiateNibNamed: menuName owner: NSApp];
 
@@ -136,21 +137,47 @@ static void setCurrentInstantiatingStoryboard(NSStoryboard *storyboard) {
         return;
     if (![controller isKindOfClass: [NSWindowController class]])
         [NSException raise: NSInternalInconsistencyException
-                    format: @"Initial controller %@ of main storyboard %@ is not a window controller", controller, _path];
+                    format: @"Initial controller %@ of main storyboard %@ is not a window controller", controller, NS_EXTRA(NSStoryboard, self)->_path];
     [controller retain];
     [controller showWindow: nil];
 }
 
 - (id) instantiateInitialController {
-    NSString *identifier = [_info objectForKey: NSStoryboardInitialIdentifierKey];
+    NSString *identifier = [NS_EXTRA(NSStoryboard, self)->_info objectForKey: NSStoryboardInitialIdentifierKey];
     return identifier == nil ? nil : [self instantiateControllerWithIdentifier: identifier];
 }
 
+// The creator variants (documented in Apple's public documentation as taking a block that receives the scene's
+// NSCoder and returns the controller, which a nil result leaves to the default initializer).
+// GUESS (not in the public documentation, not observed): a nil block is the plain method (the Swift declaration's
+// default is nil). A block raises NSInvalidArgumentException and is never called: handing it the scene's coder needs
+// a hook in the nib decoder that does not exist here, and building the controller the default way instead would
+// skip the initializer the caller asked for.
+- (void) _rejectCreator: (NSStoryboardControllerCreator) block selector: (SEL) selector {
+    if (block != nil)
+        [NSException raise: NSInvalidArgumentException
+                    format: @"-[NSStoryboard %@] with a creator block is not implemented: the nib decoder has no hook "
+                             "that hands a scene's coder to the block",
+                            NSStringFromSelector(selector)];
+}
+
+- (id) instantiateInitialControllerWithCreator: (NSStoryboardControllerCreator) block {
+    [self _rejectCreator: block selector: _cmd];
+    return [self instantiateInitialController];
+}
+
+- (id) instantiateControllerWithIdentifier: (NSStoryboardSceneIdentifier) identifier
+                                   creator: (NSStoryboardControllerCreator) block
+{
+    [self _rejectCreator: block selector: _cmd];
+    return [self instantiateControllerWithIdentifier: identifier];
+}
+
 - (id) instantiateControllerWithIdentifier: (NSStoryboardSceneIdentifier) identifier {
-    NSString *nibName = [[_info objectForKey: NSStoryboardNibNamesKey] objectForKey: identifier];
+    NSString *nibName = [[NS_EXTRA(NSStoryboard, self)->_info objectForKey: NSStoryboardNibNamesKey] objectForKey: identifier];
     if (nibName == nil)
         [NSException raise: NSInvalidArgumentException
-                    format: @"Storyboard %@ doesn't contain a controller with identifier '%@'", _path, identifier];
+                    format: @"Storyboard %@ doesn't contain a controller with identifier '%@'", NS_EXTRA(NSStoryboard, self)->_path, identifier];
 
     // A scene nib may hold several controllers. The scene's own one is the object
     // its File's Owner reaches through the sceneController outlet; the rest are

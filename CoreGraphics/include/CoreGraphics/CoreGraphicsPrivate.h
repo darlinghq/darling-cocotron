@@ -194,14 +194,72 @@ extern uint32_t CGContextGetFontSmoothingStyle(CGContextRef context);
 extern void CGContextSetFontSmoothingStyle(CGContextRef context, uint32_t style);
 
 // Darling extras, e.g. for CGL
+// Asks the window system to give the windows of a process the input focus and raise them,
+// as a pager would (the window manager may still refuse). The pid is a Darling process
+// id. With kCGSActivateProcessFrontWindowOnly only the process' frontmost window is
+// activated; otherwise all of its windows are raised, keeping their stacking order.
+// A process this system has no direct way to activate (Wayland offers none) is asked
+// through a per-process Darwin notification that the process' own windowing backend
+// answers; so success only means the request was made. Returns kCGErrorIllegalArgument
+// for a pid that is not positive, kCGErrorSuccess otherwise, and
+// kCGErrorCannotComplete when no request could be made.
+#define kCGSActivateProcessFrontWindowOnly 1
+CGError _CGSActivateProcess(pid_t pid, uint32_t options);
+// The Darling process that has the input focus. The display server answers where it can (X11:
+// the owner of _NET_ACTIVE_WINDOW). A Wayland compositor does not tell clients, so the answer
+// is the process that most recently reported (through _CGSSetFrontProcess) that it was
+// activated, shared by all Darling processes. Returns kCGErrorSuccess and sets *pid,
+// kCGErrorNoneAvailable when no process is known, kCGErrorIllegalArgument for a NULL pid.
+CGError _CGSGetFrontProcess(pid_t* pid);
+// Reports that the process with this pid got the input focus. A windowing backend calls it
+// with its own pid when its windows get the focus on a display server that cannot be asked.
+CGError _CGSSetFrontProcess(pid_t pid);
+// The name of the Darwin notification that asks the process with this pid to activate its
+// windows (see above); a windowing backend observes the name of its own process.
+#define kCGSProcessActivationNotificationPrefix "org.darlinghq.process-activation."
+// The libnotify name whose state holds the pid _CGSSetFrontProcess() stored.
+#define kCGSFrontProcessNotificationName "org.darlinghq.front-process"
+
 void* _CGSNativeDisplay(CGSConnectionID connId);
 void* _CGSNativeWindowForID(CGSConnectionID connId, CGSWindowID winId);
 void* _CGSNativeWindowForSurfaceID(CGSConnectionID connId, CGSWindowID winId, CGSSurfaceID surfaceId);
+
+// Creates a window covering `bounds` (global display coordinates), above ordinary
+// windows and shown, so that a GL context can fill a display (CGLSetFullScreen).
+// The window is not one of the application's own: its keyboard and pointer input
+// is the application's, delivered as events with no window. *drawable is the
+// native window handle a GL surface is created on. Release it with
+// CGSReleaseWindow.
+//
+// Once the window is shown, _kCGSDisplayOverlayWindowCreated is posted to the
+// default notification center, with the drawable as the NSNumber
+// "NativeWindow" in the user info. The window system backend of the
+// application's UI layer takes it up to receive the application's input for
+// the overlay (keys, and the pointer where the backend supports it).
+#define _kCGSDisplayOverlayWindowCreated CFSTR("_CGSDisplayOverlayWindowCreated")
+CGError _CGSCreateDisplayOverlayWindow(CGSConnectionID connId, CGRect bounds,
+                                       CGSWindowID* winId, void** drawable);
+
+// Private context functions (see CGContext.m). The composite operation is the
+// context's blend mode under a different numbering.
+extern size_t CGContextGetLineDashCount(CGContextRef context);
+extern void CGContextGetLineDashPattern(CGContextRef context, CGFloat *phase, CGFloat *lengths, size_t capacity);
+extern int CGContextGetCompositeOperation(CGContextRef context);
+extern void CGContextSetCompositeOperation(CGContextRef context, int operation);
+
+// Private numeric helpers.
+extern bool CGFloatIsValid(CGFloat value);
+extern size_t CGBitmapGetAlignedBytesPerRow(size_t bytesPerRow);
 
 extern CGEventRef CGEventCreateWithEventRecord(const CGSEventRecordPtr event, uint32_t eventRecordSize);
 extern CGError CGEventGetEventRecord(CGEventRef event, CGSEventRecordPtr eventRecord, uint32_t eventRecordSize);
 extern CGError CGEventSetEventRecord(CGEventRef event, CGSEventRecordPtr eventRecord, uint32_t eventRecordSize);
 extern uint32_t CGEventGetEventRecordSize(CGEventRef event);
+
+// Registers the 'uchr' keyboard layout (a UCKeyboardLayout blob of `length` bytes, copied) of the
+// window system's current keymap, for a backend that cannot read the keymap itself. The Text Input
+// Sources API returns it. NULL or a zero length removes it.
+extern void _CGSSetProvidedKeyboardLayout(const void* uchr, uint32_t length, CFStringRef name, CFStringRef fullName);
 
 #ifdef __OBJC__
 @class CGSConnection;

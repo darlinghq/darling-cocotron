@@ -500,8 +500,22 @@ static NSMutableArray *pendingOpenFiles = nil;
     _keyWindow = window;
 }
 
+// The icon of the main bundle, named by CFBundleIconFile (the name may leave out the .icns extension).
+// Without an image set by the application, this is the application icon.
+- (NSImage *) _bundleApplicationIconImage {
+    NSString *name = [[[NSBundle mainBundle] infoDictionary] objectForKey: @"CFBundleIconFile"];
+    if (![name isKindOfClass: [NSString class]] || [name length] == 0)
+        return nil;
+
+    if ([[name pathExtension] length] == 0)
+        name = [name stringByAppendingPathExtension: @"icns"];
+    return [NSImage imageNamed: name];
+}
+
 - (NSImage *) applicationIconImage {
-    return NS_EXTRA(NSApplication, self)->_applicationIconImage;
+    NSImage *image = NS_EXTRA(NSApplication, self)->_applicationIconImage;
+
+    return image != nil ? image : [self _bundleApplicationIconImage];
 }
 
 - (BOOL) isActiveExcludingWindow: (NSWindow *) exclude {
@@ -937,15 +951,6 @@ static NSMutableArray *pendingOpenFiles = nil;
     NS_HANDLER [self reportException: localException];
     NS_ENDHANDLER
 
-    // Load the application icon if we have one
-    NSString *iconName = [[[NSBundle mainBundle] infoDictionary]
-            objectForKey: @"CFBundleIconFile"];
-    if (iconName) {
-        iconName = [iconName stringByAppendingPathExtension: @"icns"];
-        NSImage *image = [NSImage imageNamed: iconName];
-        [self setApplicationIconImage: image];
-    }
-
     // Give us a first event
     [NSTimer scheduledTimerWithTimeInterval: 0.1
                                      target: nil
@@ -1231,8 +1236,10 @@ static NSMutableArray *pendingOpenFiles = nil;
     NSArray *windows = [[NSApp windows] copy];
     @try {
         for (NSWindow *window in windows) {
-            if ([window isVisible] && ![window isMiniaturized])
+            if ([window isVisible] && ![window isMiniaturized]) {
+                [window _fitContentSizeToConstraints];
                 [[window _backgroundView] layoutSubtreeIfNeeded];
+            }
             [window displayIfNeeded];
         }
     } @finally {
@@ -1240,7 +1247,7 @@ static NSMutableArray *pendingOpenFiles = nil;
     }
 }
 
-- (NSEvent *) nextEventMatchingMask: (NSEventMask) mask
+- (NSEvent *) nextEventMatchingMask: (NSUInteger) mask
                           untilDate: (NSDate *) untilDate
                              inMode: (NSRunLoopMode) mode
                             dequeue: (BOOL) dequeue
@@ -1303,7 +1310,7 @@ static NSMutableArray *pendingOpenFiles = nil;
     return [result autorelease];
 }
 
-- (void) discardEventsMatchingMask: (NSEventMask) mask
+- (void) discardEventsMatchingMask: (NSUInteger) mask
                        beforeEvent: (NSEvent *) event
 {
     [NS_EXTRA(NSApplication, self)->_display discardEventsMatchingMask: mask beforeEvent: event];

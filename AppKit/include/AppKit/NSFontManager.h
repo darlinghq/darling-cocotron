@@ -18,6 +18,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <Foundation/Foundation.h>
+#import <AppKit/AppKitIvarLayout.h>
 
 @class NSFont, NSFontDescriptor, NSFontPanel;
 
@@ -63,6 +64,7 @@ typedef NS_OPTIONS(NSUInteger, NSFontCollectionOptions) {
     BOOL _isMultiple;
     NSFontAction _currentFontAction;
     int _currentTrait;
+    NS_LEGACY_IVAR_PAD(_NSFontManagerReserved, 16)
 }
 
 @property(class, readonly, retain, nonnull) NSFontManager *sharedFontManager;

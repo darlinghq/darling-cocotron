@@ -84,6 +84,22 @@ CGColorSpaceRef CGColorSpaceCreatePattern(CGColorSpaceRef baseSpace) {
     return (CGColorSpaceRef)O2ColorSpaceCreatePattern((O2ColorSpaceRef)baseSpace);
 }
 
+CGColorSpaceRef CGColorSpaceCreateIndexed(CGColorSpaceRef baseSpace, size_t lastIndex, const unsigned char *colorTable) {
+    return (CGColorSpaceRef)O2ColorSpaceCreateIndexed((O2ColorSpaceRef)baseSpace, lastIndex, colorTable);
+}
+
+CGColorSpaceRef CGColorSpaceGetBaseColorSpace(CGColorSpaceRef self) {
+    return (CGColorSpaceRef)O2ColorSpaceGetBaseColorSpace((O2ColorSpaceRef)self);
+}
+
+size_t CGColorSpaceGetColorTableCount(CGColorSpaceRef self) {
+    return O2ColorSpaceGetColorTableCount((O2ColorSpaceRef)self);
+}
+
+void CGColorSpaceGetColorTable(CGColorSpaceRef self, uint8_t *table) {
+    O2ColorSpaceGetColorTable((O2ColorSpaceRef)self, table);
+}
+
 CGColorSpaceModel CGColorSpaceGetModel(CGColorSpaceRef self) {
     return (CGColorSpaceModel)O2ColorSpaceGetModel((O2ColorSpaceRef)self);
 }
@@ -108,9 +124,9 @@ CFStringRef CGColorSpaceCopyName(CGColorSpaceRef colorSpace) {
 }
 
 CFDataRef CGColorSpaceCopyICCData(CGColorSpaceRef colorSpace) {
-    // Onyx2D color spaces are not built from ICC profiles and carry none;
-    // a color space without a profile reports NULL.
-    return NULL;
+    // Only the named spaces with a colorimetric profile have ICC data
+    // (synthesized from that profile); device and other spaces report NULL.
+    return O2ColorSpaceCopyICCData((O2ColorSpaceRef)colorSpace);
 }
 
 CGColorSpaceRef CGColorSpaceCreateICCBased(size_t nComponents, const CGFloat *range,
@@ -194,4 +210,26 @@ bool CGColorSpaceUsesITUR_2100TF(CGColorSpaceRef space) {
 bool CGColorSpaceIsHLGBased(CGColorSpaceRef space) {
     CFStringRef name = space != NULL ? CGColorSpaceGetName(space) : NULL;
     return name != NULL && CFEqual(name, kCGColorSpaceITUR_2100_HLG);
+}
+
+// QUIRK: which spaces count as HDR is not documented. Observed on macOS 26.7.3
+// (tier 2, one query per named space): true for kCGColorSpaceITUR_2100_PQ,
+// kCGColorSpaceITUR_2100_HLG and kCGColorSpaceDisplayP3_PQ, false for sRGB,
+// linear and extended sRGB, Display P3, ITU-R 709 and 2020, DCI-P3, ROMM, ACEScg,
+// the generic gray, RGB, CMYK, Lab and XYZ spaces and a device RGB space. That is
+// the BT.2100 transfer function test. A NULL space is not observed and gives false.
+// Test: tests/coregraphics-colorspace-hdr-output.c
+bool CGColorSpaceIsHDR(CGColorSpaceRef space) {
+    return space != NULL && CGColorSpaceUsesITUR_2100TF(space);
+}
+
+// QUIRK: observed on macOS 26.7.3 (tier 2): true for every RGB, gray, CMYK, Lab
+// and XYZ space queried, false for an indexed space (and a pattern space, which
+// cannot be created here). A NULL space is not observed and gives false.
+// Test: tests/coregraphics-colorspace-hdr-output.c
+bool CGColorSpaceSupportsOutput(CGColorSpaceRef space) {
+    if (space == NULL)
+        return false;
+    CGColorSpaceModel model = CGColorSpaceGetModel(space);
+    return model != kCGColorSpaceModelIndexed && model != kCGColorSpaceModelPattern;
 }

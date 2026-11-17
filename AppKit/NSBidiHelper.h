@@ -1,1 +1,0 @@
-NSTextView.subproj/NSBidiHelper.h

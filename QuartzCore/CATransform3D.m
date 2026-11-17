@@ -205,3 +205,10 @@ CATransform3D CATransform3DMakeAffineTransform(CGAffineTransform m) {
 }
 
 @end
+
+// The 2D part of the matrix: m11, m12, m21, m22, m41, m42. The other elements
+// are ignored. Observed on macOS 26.7.3 for a matrix with non-zero m13 and m33
+// and for one with m14 set.
+CGAffineTransform CATransform3DGetAffineTransform(CATransform3D t) {
+    return CGAffineTransformMake(t.m11, t.m12, t.m21, t.m22, t.m41, t.m42);
+}

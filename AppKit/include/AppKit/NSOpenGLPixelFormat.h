@@ -18,6 +18,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <Foundation/NSObject.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <OpenGL/OpenGL.h>
 
 enum {
@@ -72,6 +73,7 @@ typedef uint32_t NSOpenGLPixelFormatAttribute;
 @interface NSOpenGLPixelFormat : NSObject {
     void *_cglPixelFormat;
     GLint _numberOfVirtualScreens;
+    NS_LEGACY_IVAR_PAD(_NSOpenGLPixelFormatReserved, 12)
 }
 
 - (instancetype) initWithAttributes:

@@ -47,7 +47,27 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @end
 
+// The object +addGlobalMonitorForEventsMatchingMask:handler: returns. It keeps
+// its handler only so that the monitor lives until it is removed; the handler
+// is never called (see the method).
+@interface NSGlobalEventMonitor : NSObject {
+@public
+    NSEventMask _mask;
+    void (^_handler)(NSEvent *);
+}
+@end
+
+@implementation NSGlobalEventMonitor
+
+- (void) dealloc {
+    [_handler release];
+    [super dealloc];
+}
+
+@end
+
 static NSMutableArray *localEventMonitors = nil;
+static NSMutableArray *globalEventMonitors = nil;
 
 __attribute__((visibility("hidden")))
 NSEvent *NSEventApplyLocalMonitors(NSEvent *event) {
@@ -469,8 +489,34 @@ static NSTimer *_periodicTimer = nil;
     return [monitor autorelease];
 }
 
++ (id) addGlobalMonitorForEventsMatchingMask: (NSEventMask) mask
+                                      handler: (void (^)(NSEvent *event)) block
+{
+    // A global monitor is for events that go to other applications. Neither
+    // X11 nor Wayland lets a client see another client's input (Wayland
+    // deliberately; X11 only through grabs or XInput2 root-window selection,
+    // which would also steal or duplicate this application's own input), so
+    // the handler never fires. The returned monitor is a valid token that
+    // removeMonitor: accepts, which is all that callers can observe on a
+    // system where the event stream of the other applications is hidden from
+    // them, as when macOS withholds it without accessibility permission.
+    if (block == nil)
+        return nil;
+
+    if (globalEventMonitors == nil)
+        globalEventMonitors = [[NSMutableArray alloc] init];
+
+    NSGlobalEventMonitor *monitor = [[NSGlobalEventMonitor alloc] init];
+    monitor->_mask = mask;
+    monitor->_handler = [block copy];
+    [globalEventMonitors addObject: monitor];
+    return [monitor autorelease];
+}
+
 + (void) removeMonitor: (id) eventMonitor {
+    // Removing a monitor that is already removed, or nil, does nothing.
     [localEventMonitors removeObjectIdenticalTo: eventMonitor];
+    [globalEventMonitors removeObjectIdenticalTo: eventMonitor];
 }
 
 @end

@@ -51,12 +51,18 @@
     BOOL _dock; // the menu bar window (see X11MenuBarWindow)
     BOOL _menuWindow; // a menu or pop-up window
     BOOL _fullscreenRequested;
+    BOOL _fullscreenReported; // what the window manager last said, told to the delegate
     BOOL _isOpaque;
     BOOL _hasAlpha;   // created with the 32-bit visual and an alpha surface
     BOOL _wasMapped;  // the visual is settled when the window is first mapped
     BOOL _hasShadow;
     BOOL _wantsInputFocus;
     BOOL _ignoresMouseEvents; // the input region currently set
+    CGFloat _appliedAlpha; // the window's alpha value as last applied to the X window
+    BOOL _alphaIsZero; // _appliedAlpha is 0
+    BOOL _chromeless; // no window manager frame and no title bar: rounded corners and an outline (see -updateWindowShape)
+    BOOL _roundedShapeSet; // the bounding shape currently has rounded corners
+    BOOL _invisibleWithoutCompositor; // alpha 0 made the window invisible by shape (see -updateInvisibility)
     // The subwindow whose layer tree draws into _cglWindow instead of its
     // own drawable (see -[X11SubWindow sharedCGLWindow]), and whether its
     // frames wait for the display refresh.
@@ -93,6 +99,10 @@
 // would win).
 - (CGFloat) backingScaleFactor;
 
+// Called by the display after it re-read a changed scale (see
+// -[X11Display reevaluateBackingScale]).
+- (void) displayBackingScaleChangedFrom: (CGFloat) oldScale;
+
 // Points to the device pixels libX11 takes. AppKit-level geometry is in points;
 // every value handed to X is in device pixels. One rounding serves the X window
 // and the backing surface, which the GL viewport follows.
@@ -100,6 +110,15 @@
 - (O2Rect) deviceRect: (O2Rect) rect;
 
 - (Window) windowHandle;
+// What the stacking of unmanaged and managed windows by level looks at (see
+// X11LevelStacking.h). A menu, pop-up and the menu bar are not stacked by
+// level: they are above the windows they belong to by their own means.
+- (int) stackingLevel;
+- (BOOL) isUnmanaged;
+- (BOOL) takesPartInLevelStacking;
+// Restacks the windows of the other kind around this one after it was
+// ordered to the front, mapped or given another level.
+- (void) restackForLevels;
 - (BOOL) isMapped;
 // Whether the window is fullscreen (_NET_WM_STATE_FULLSCREEN), as last asked
 // for or as the window manager last set it.

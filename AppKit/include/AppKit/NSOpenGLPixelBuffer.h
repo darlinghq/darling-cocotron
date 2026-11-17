@@ -18,9 +18,11 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <Foundation/NSObject.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <OpenGL/gl.h>
 
 @interface NSOpenGLPixelBuffer : NSObject {
+    NS_LEGACY_IVAR_PAD(_NSOpenGLPixelBufferReserved, 12)
 }
 
 - (instancetype) initWithTextureTarget: (GLenum) textureTarget

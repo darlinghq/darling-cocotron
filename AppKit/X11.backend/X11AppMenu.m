@@ -18,7 +18,7 @@
 */
 
 #import "X11AppMenu.h"
-#import "X11DBusMenu.h"
+#import "../private-include/AppKit/NSDBusMenu.h"
 #import "../NSWindow-Private.h"
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSMainMenuView.h>
@@ -158,7 +158,7 @@ static NSString *applicationName(void) {
         return;
     _connectionTried = YES;
 
-    _exporter = [[X11DBusMenu alloc] initWithSessionBus];
+    _exporter = [[NSDBusMenu alloc] initWithSessionBus];
     [_exporter setDelegate: self];
     [_exporter setApplicationName: applicationName()];
 }
@@ -167,7 +167,7 @@ static NSString *applicationName(void) {
 
 - (void) publishMenuOnWindow: (Window) window {
     NSString *service = [_exporter busName];
-    NSString *path = [X11DBusMenu menuObjectPath];
+    NSString *path = [NSDBusMenu menuObjectPath];
 
     XChangeProperty(_display, window,
                     XInternAtom(_display, SERVICE_NAME_PROPERTY, False),
@@ -250,7 +250,7 @@ static NSString *applicationName(void) {
     [self updateBar];
 }
 
-- (void) dbusMenuRegistrarChanged: (X11DBusMenu *) menu {
+- (void) dbusMenuRegistrarChanged: (NSDBusMenu *) menu {
     [self updateBar];
 }
 

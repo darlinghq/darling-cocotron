@@ -18,6 +18,7 @@ along with Darling.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #import "X11Pasteboard.h"
+#import "NSPasteboardAliases.h"
 
 static const NSUInteger X11IncrChunkSize = 64 * 1024;
 static const NSTimeInterval kSelectionPollInterval = 0.02;
@@ -59,8 +60,6 @@ static const NSTimeInterval kSelectionPollInterval = 0.02;
 
 @implementation X11Pasteboard
 
-static NSMutableDictionary<NSPasteboardName, X11Pasteboard *> *nameToPboard;
-
 static const NSTimeInterval SelectionTimeout = 5;
 
 // The Wayland backend bounds its clipboard transfers the same way, so the two
@@ -77,28 +76,30 @@ static size_t MaximumPropertyBytes(Display *display) {
     return (size_t) units * 4 / 2;
 }
 
-+ (X11Pasteboard *) pasteboardWithName: (NSPasteboardName) name {
+// Endpoints that are reachable by name, because an INCR transfer they serve is paced by events of another
+// client's window that only they can claim (see +dispatchPropertyNotify:).
+static NSMutableDictionary<NSPasteboardName, X11Pasteboard *> *nameToPboard;
+
++ (X11Pasteboard *) hostClipboardOfDisplay: (X11Display *) display {
     static dispatch_once_t once;
     dispatch_once(&once, ^{
       nameToPboard = [NSMutableDictionary new];
     });
 
-    if ([name isEqual: NSGeneralPboard] || [name isEqual: NSPasteboardNameGeneral] || [name isEqual: @"Apple CFPasteboard general"]) {
-        name = @"CLIPBOARD";
+    @synchronized(nameToPboard) {
+        if (nameToPboard[@"CLIPBOARD"] == nil)
+            nameToPboard[@"CLIPBOARD"] = [[[X11Pasteboard alloc] initWithName: @"CLIPBOARD" display: display] autorelease];
+        return nameToPboard[@"CLIPBOARD"];
     }
-
-    if (nameToPboard[name] == nil) {
-        nameToPboard[name] = [[X11Pasteboard alloc] initWithName: name];
-    }
-
-    return nameToPboard[name];
 }
 
 - (instancetype) initWithName: (NSPasteboardName) name {
+    return [self initWithName: name display: (X11Display *) [NSDisplay currentDisplay]];
+}
+
+- (instancetype) initWithName: (NSPasteboardName) name display: (X11Display *) x11Display {
     self = [super init];
     _name = [name retain];
-
-    X11Display *x11Display = (X11Display *) [NSDisplay currentDisplay];
 
     _display = [x11Display display];
     _selectionName = XInternAtom(_display, [name UTF8String], False);
@@ -142,6 +143,8 @@ static size_t MaximumPropertyBytes(Display *display) {
         _typeToData = [NSMutableDictionary new];
     if (_typeToOwner == nil)
         _typeToOwner = [NSMutableDictionary new];
+    if (_typeOrder == nil)
+        _typeOrder = [NSMutableArray new];
     [self discardRemoteTypes];
 
     _changeCount++;
@@ -156,6 +159,7 @@ static size_t MaximumPropertyBytes(Display *display) {
     NSArray *owners = [_typeToOwner allValues];
     [_typeToOwner removeAllObjects];
     [_typeToData removeAllObjects];
+    [_typeOrder removeAllObjects];
     // Bump here rather than only in ensureSelectionOwner, which fires once per ownership
     // transition: clearing twice in a row used to leave -changeCount unchanged, so a
     // poller saw no change even though the contents were replaced.
@@ -176,6 +180,8 @@ static size_t MaximumPropertyBytes(Display *display) {
 
     [_typeToData release];
     _typeToData = nil;
+    [_typeOrder release];
+    _typeOrder = nil;
 
     [self discardRemoteTypes];
     _changeCount++;
@@ -232,14 +238,29 @@ static size_t MaximumPropertyBytes(Display *display) {
 }
 
 + (NSArray<NSString *> *) targetsForType: (NSPasteboardType) type {
-    if ([type isEqual: NSStringPboardType]) {
+    if ([NSPasteboardCanonicalType(type) isEqual: NSPasteboardTypeString]) {
         return @[
             @"UTF8_STRING", @"STRING", @"TEXT", @"text/plain",
             @"text/plain;charset=utf-8"
         ];
     }
-    // TODO...
+    NSString *mime = [X11Pasteboard mimeTypeForType: NSPasteboardCanonicalType(type)];
+    if (mime != nil)
+        return @[ mime, type ];
     return @[ type ];
+}
+
+// The MIME types other X clients use for the types most pasteboards hold.
++ (NSString *) mimeTypeForType: (NSPasteboardType) type {
+    if ([type isEqual: NSPasteboardTypeHTML])
+        return @"text/html";
+    if ([type isEqual: NSPasteboardTypePNG])
+        return @"image/png";
+    if ([type isEqual: NSPasteboardTypeTIFF])
+        return @"image/tiff";
+    if ([type isEqual: NSPasteboardTypeRTF])
+        return @"text/rtf";
+    return nil;
 }
 
 + (NSPasteboardType) typeForTarget: (NSString *) target {
@@ -247,9 +268,12 @@ static size_t MaximumPropertyBytes(Display *display) {
         [target isEqual: @"text/plain"] ||
         [target isEqual: @"text/plain;charset=utf-8"] ||
         [target isEqual: @"UTF8_STRING"]) {
-        return NSStringPboardType;
+        return NSPasteboardTypeString;
     }
-    // TODO...
+    for (NSPasteboardType type in @[ NSPasteboardTypeHTML, NSPasteboardTypePNG, NSPasteboardTypeTIFF, NSPasteboardTypeRTF ]) {
+        if ([target isEqual: [X11Pasteboard mimeTypeForType: type]])
+            return type;
+    }
     return target;
 }
 
@@ -505,6 +529,7 @@ static size_t MaximumPropertyBytes(Display *display) {
 }
 
 - (NSData *) dataForType: (NSPasteboardType) type {
+    type = NSPasteboardCanonicalType(type);
 
     if (_typeToOwner != nil) {
         // We're the owner; just fetch the data directly.
@@ -527,7 +552,7 @@ static size_t MaximumPropertyBytes(Display *display) {
                                          deadline: deadline];
         if (data == nil)
             continue;
-        if (![type isEqual: NSStringPboardType])
+        if (![type isEqual: NSPasteboardTypeString])
             return data;
         // Text is kept as UTF-8. ICCCM's STRING is ISO Latin-1, and a TEXT
         // reply is in whichever encoding its type names.
@@ -552,19 +577,23 @@ static size_t MaximumPropertyBytes(Display *display) {
     if (data == nil)
         return nil;
 
-    NSStringEncoding encoding = NSUnicodeStringEncoding;
-    if ([type isEqual: NSStringPboardType]) {
-        encoding = NSUTF8StringEncoding;
-    }
-    return [[[NSString alloc] initWithData: data
-                                  encoding: encoding] autorelease];
+    // UTF-8 is what macOS reads strings of other clients' types as; data that is not valid UTF-8
+    // (what -setString:forType: stores for a type other than the string type) is read as Unicode.
+    NSString *string = [[[NSString alloc] initWithData: data encoding: NSUTF8StringEncoding] autorelease];
+    if (string == nil && ![NSPasteboardCanonicalType(type) isEqual: NSPasteboardTypeString])
+        string = [[[NSString alloc] initWithData: data encoding: NSUnicodeStringEncoding] autorelease];
+    return string;
 }
 
 - (NSInteger) addTypes: (NSArray<NSPasteboardType> *) types
                  owner: (id<NSPasteboardTypeOwner>) owner
 {
     [self ensureSelectionOwner];
-    for (NSPasteboardType type in types) {
+    for (NSPasteboardType declared in types) {
+        // Stored under the UTI spelling; the 10.0 name of the same type reaches it too.
+        NSPasteboardType type = NSPasteboardCanonicalType(declared);
+        if (![_typeOrder containsObject: type])
+            [_typeOrder addObject: type];
         [_typeToData removeObjectForKey: type];
         // A nil owner is valid: an object that does not want pasteboardChangedOwner: callbacks
         // declares its types with none, which is what -[NSTextView copy:] does. Storing nil in
@@ -586,7 +615,10 @@ static size_t MaximumPropertyBytes(Display *display) {
 }
 
 - (BOOL) setData: (NSData *) data forType: (NSPasteboardType) type {
+    type = NSPasteboardCanonicalType(type);
     [self ensureSelectionOwner];
+    if (![_typeOrder containsObject: type])
+        [_typeOrder addObject: type];
     // Make sure to retain data before releasing the owner,
     // because it might be the owner that is providing us
     // with this data.
@@ -600,7 +632,7 @@ static size_t MaximumPropertyBytes(Display *display) {
 
 - (BOOL) setString: (NSString *) string forType: (NSPasteboardType) type {
     NSStringEncoding encoding = NSUnicodeStringEncoding;
-    if ([type isEqual: NSStringPboardType]) {
+    if ([NSPasteboardCanonicalType(type) isEqual: NSPasteboardTypeString]) {
         encoding = NSUTF8StringEncoding;
     }
     NSData *data = [string dataUsingEncoding: encoding];
@@ -609,8 +641,10 @@ static size_t MaximumPropertyBytes(Display *display) {
 
 - (NSArray<NSPasteboardType> *) localTypes {
     NSMutableArray *types = [NSMutableArray array];
-    [types addObjectsFromArray: [_typeToData allKeys]];
-    [types addObjectsFromArray: [_typeToOwner allKeys]];
+    // Every declared type is listed, also one declared without an owner and not yet given data
+    // (declareTypes:owner: with a nil owner)
+    for (NSPasteboardType type in _typeOrder)
+        [types addObject: type];
     return types;
 }
 
@@ -683,9 +717,9 @@ static size_t MaximumPropertyBytes(Display *display) {
 
 - (NSArray<NSPasteboardType> *) types {
     if (_typeToOwner != nil)
-        return [self localTypes];
+        return NSPasteboardTypesWithAliases([self localTypes]);
 
-    return [self remoteTypes];
+    return NSPasteboardTypesWithAliases([self remoteTypes]);
 }
 
 - (void) selectionNotify: (XSelectionEvent *) event {
@@ -789,7 +823,7 @@ static size_t MaximumPropertyBytes(Display *display) {
     // fit is refused and the requestor can ask for UTF8_STRING instead; TEXT
     // leaves the encoding to the owner, and the reply's type names it.
     Atom replyType = event->target;
-    if ([type isEqual: NSStringPboardType]) {
+    if ([type isEqual: NSPasteboardTypeString]) {
         if (event->target == XA_STRING) {
             NSString *text = [[[NSString alloc]
                     initWithData: data
@@ -908,6 +942,43 @@ static size_t MaximumPropertyBytes(Display *display) {
                                                    data: data] autorelease];
 
     XFlush(_display);
+}
+
+#pragma mark NSPasteboardHostClipboard
+
+- (BOOL) ownsHostClipboard {
+    return _typeToOwner != nil;
+}
+
+- (void) setHostClipboardChangeHandler: (void (^)(void)) handler {
+    [_hostChangeHandler release];
+    _hostChangeHandler = [handler copy];
+    if (_hostWatcher != nil || handler == nil)
+        return;
+
+    _hostWatcher = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue());
+    dispatch_source_set_timer(_hostWatcher, dispatch_time(DISPATCH_TIME_NOW, 0), 200 * NSEC_PER_MSEC, 50 * NSEC_PER_MSEC);
+    dispatch_source_set_event_handler(_hostWatcher, ^{
+      [self pollHostOwner];
+    });
+    dispatch_resume(_hostWatcher);
+}
+
+// Another client having taken the selection is noticed by its owner changing. The owner is not looked at
+// while this endpoint believes it owns the selection: the X server's SelectionClear tells it first.
+- (void) pollHostOwner {
+    if (_typeToOwner != nil)
+        return;
+    Window owner = XGetSelectionOwner(_display, _selectionName);
+    if (owner == _watchedOwner)
+        return;
+    _watchedOwner = owner;
+    if (owner == None || owner == _window)
+        return;
+    // Drops what was known about the previous owner and counts the change.
+    [self observeSelectionOwner];
+    if (_hostChangeHandler != nil)
+        _hostChangeHandler();
 }
 
 - (Window) windowHandle {

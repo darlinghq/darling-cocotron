@@ -17,6 +17,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSToolbarItem.h>
+#import <AppKit/AppKitIvarLayout.h>
 
 @class NSArray;
 
@@ -34,6 +35,7 @@ typedef NS_ENUM(NSInteger, NSToolbarItemGroupControlRepresentation) {
 
 @interface NSToolbarItemGroup : NSToolbarItem {
     NSArray *_subitems;
+    NS_LEGACY_IVAR_PAD(_NSToolbarItemGroupReserved, 8)
 }
 
 - (NSArray *) subitems;

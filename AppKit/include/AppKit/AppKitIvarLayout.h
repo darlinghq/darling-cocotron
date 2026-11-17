@@ -29,7 +29,8 @@
 //   - all other state in an "extra ivars" struct, reached through a single
 //     pointer ivar (NS_EXTRA_IVARS_END) allocated on first use and freed in
 //     -dealloc, or, for a class whose Apple footprint has no room left for a
-//     pointer, kept in storage associated with the object (NS_SIDE_IVARS_END).
+//     pointer, kept in storage associated with the object (NS_SIDE_IVARS_END,
+//     which declares no instance variable at all).
 // On the non-fragile ABI (x86_64, arm64) every macro here expands to plain
 // ivars and plain ivar accesses: no indirection and no extra allocation.
 //
@@ -37,6 +38,15 @@
 //     NS_EXTRA_IVARS_BEGIN(NSView)
 //         NSMenu *_menu;
 //     NS_EXTRA_IVARS_END(NSView)        // or NS_SIDE_IVARS_END(NSView)
+// A class that ends its block with NS_SIDE_IVARS_END also has to say so to the
+// accessor macros, with this line in its header before the @interface:
+//     #define _NS_SIDE_NSView 0, 1,
+// (NS_SIDE_IVARS_END cannot define a macro; a class missing the line fails to
+// compile at its first NS_EXTRA use.) The extras of such a class are not an
+// instance variable because the runtime lists every instance variable, and a
+// zero-sized one sitting at the end of the class would look to the fragile
+// superclass check (OBJC_DEBUG_FRAGILE_SUPERCLASSES) like an overlap with the
+// first instance variable of every subclass.
 // Accessing, the same in source on both ABIs:
 //     NS_EXTRA(NSView, self)->_menu, NS_EXTRA(NSView, otherView)->_menu
 // NS_EXTRA_ALLOCATED(NSView, self) tells whether the extras exist yet, so
@@ -74,8 +84,18 @@
     }                                                                          \
     *_##cls##Extra;
 #define NS_SIDE_IVARS_END(cls)                                                 \
-    }                                                                          \
-    _##cls##Extra[0];
+    };
+// For a class whose Apple footprint has no room of its own for the pointer to
+// the extras, but whose superclass has a spare word (Apple's NSText keeps one
+// for NSTextView): the superclass declares the pointer with
+// NS_EXTRA_SLOT_FOR_SUBCLASS(NSTextView), the subclass ends its (otherwise
+// ordinary) extras with NS_EXTRA_IVARS_END_IN_SUPER and uses NS_EXTRA,
+// NS_EXTRA_FREE and NS_EXTRA_COPY as any class with a pointer of its own.
+#define NS_EXTRA_SLOT_FOR_SUBCLASS(sub)                                        \
+  @public                                                                      \
+    struct sub##ExtraIvars *_##sub##Extra;
+#define NS_EXTRA_IVARS_END_IN_SUPER(cls)                                       \
+    };
 
 // The accessors are only used by AppKit's own (manual reference counting)
 // sources; ARC code that includes the AppKit headers needs only the
@@ -132,8 +152,19 @@ static inline void _NSExtraIvarsUnshare(void **slot, size_t size) {
 
 #endif
 
-#define _NS_EXTRA_IS_SIDE(cls) (sizeof(((cls *) 0)->_##cls##Extra) == 0)
-#define _NS_EXTRA_SLOT(cls, obj) ((void **) &((cls *) (obj))->_##cls##Extra)
+// _NS_SIDE_<cls> is defined as "0, 1," by a class with side storage, so the
+// second of the arguments below is 1 for it and 0 for any other class.
+#define _NS_SIDE_SECOND(a, b, ...) b
+#define _NS_SIDE_PROBE(...) _NS_SIDE_SECOND(__VA_ARGS__)
+#define _NS_EXTRA_IS_SIDE(cls) _NS_SIDE_PROBE(_NS_SIDE_##cls, 0, 0)
+#define _NS_EXTRA_SLOT_0(cls, obj) ((void **) &((cls *) (obj))->_##cls##Extra)
+// never evaluated: side storage has no pointer; only has to compile
+#define _NS_EXTRA_SLOT_1(cls, obj) ((void **) (obj))
+#define _NS_EXTRA_SLOT_PASTE(side, cls, obj) _NS_EXTRA_SLOT_##side(cls, obj)
+// the extra level expands the side argument before it is pasted
+#define _NS_EXTRA_SLOT_PICK(side, cls, obj) _NS_EXTRA_SLOT_PASTE(side, cls, obj)
+#define _NS_EXTRA_SLOT(cls, obj)                                               \
+    _NS_EXTRA_SLOT_PICK(_NS_EXTRA_IS_SIDE(cls), cls, obj)
 #define _NS_EXTRA_KEY(cls) @selector(cls##ExtraIvars)
 
 #define NS_EXTRA(cls, obj)                                                     \
@@ -211,6 +242,8 @@ static inline void _NSExtraIvarsUnshare(void **slot, size_t size) {
 #define NS_EXTRA_IVARS_BEGIN(cls)
 #define NS_EXTRA_IVARS_END(cls)
 #define NS_SIDE_IVARS_END(cls)
+#define NS_EXTRA_SLOT_FOR_SUBCLASS(sub)
+#define NS_EXTRA_IVARS_END_IN_SUPER(cls)
 #define NS_EXTRA(cls, obj) ((cls *) (obj))
 #define NS_EXTRA_FREE(cls, obj) do { } while (0)
 #define NS_EXTRA_COPY(cls, dst, src) do { } while (0)

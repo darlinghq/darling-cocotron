@@ -18,6 +18,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSView.h>
+#import <AppKit/AppKitIvarLayout.h>
 
 @class NSString, NSMutableArray, NSScrollView, NSRulerMarker, NSMeasurementUnit;
 
@@ -40,6 +41,7 @@ typedef NS_ENUM(NSUInteger, NSRulerOrientation) {
     CGFloat _thicknessForAccessoryView;
 
     NSRulerOrientation _orientation;
+    NS_LEGACY_IVAR_PAD(_NSRulerViewReserved, 20)
 }
 
 + (void) registerUnitWithName: (NSString *) name

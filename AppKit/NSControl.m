@@ -84,6 +84,7 @@ static NSMutableDictionary *cellClassDictionary = nil;
 
 - (void) setControlSize: (NSControlSize) size {
     [_cell setControlSize: size];
+    [self invalidateIntrinsicContentSize];
     [self setNeedsDisplay: YES];
 }
 
@@ -354,17 +355,24 @@ static NSMutableDictionary *cellClassDictionary = nil;
 }
 
 - (void) setFont: (NSFont *) font {
+    NSFont *before = [[_cell font] retain];
+
     [_cell setFont: font];
+    if (!(before == font || [before isEqual: font]))
+        [self invalidateIntrinsicContentSize];
+    [before release];
     [self setNeedsDisplay: YES];
 }
 
 - (void) setImage: (NSImage *) image {
     [[self cell] setImage: image];
+    [self invalidateIntrinsicContentSize];
     [self setNeedsDisplay: YES];
 }
 
 - (void) setAlignment: (NSTextAlignment) alignment {
     [_cell setAlignment: alignment];
+    [self invalidateIntrinsicContentSize];
     [self setNeedsDisplay: YES];
 }
 
@@ -394,11 +402,13 @@ static NSMutableDictionary *cellClassDictionary = nil;
 
 - (void) setBordered: (BOOL) flag {
     [_cell setBordered: flag];
+    [self invalidateIntrinsicContentSize];
     [self setNeedsDisplay: YES];
 }
 
 - (void) setBezeled: (BOOL) flag {
     [_cell setBezeled: flag];
+    [self invalidateIntrinsicContentSize];
     [self setNeedsDisplay: YES];
 }
 
@@ -423,81 +433,116 @@ static NSMutableDictionary *cellClassDictionary = nil;
     [_cell setUsesSingleLineMode: flag];
 }
 
+// The value a control shows is part of its intrinsic size; setting the value it already has changes nothing.
+- (void) _intrinsicContentSizeMayHaveChangedFromValue: (id) before {
+    id after = [[self selectedCell] objectValue];
+
+    if (!(before == after || [before isEqual: after]))
+        [self invalidateIntrinsicContentSize];
+    [before release];
+}
+
 - (void) setObjectValue: (id<NSCopying>) object {
     [self abortEditing];
+    id before = [[[self selectedCell] objectValue] retain];
     [(NSCell *) [self selectedCell] setObjectValue: object];
+    [self _intrinsicContentSizeMayHaveChangedFromValue: before];
     [self setNeedsDisplay: YES];
 }
 
 - (void) setStringValue: (NSString *) value {
     [self abortEditing];
+    id before = [[[self selectedCell] objectValue] retain];
     [[self selectedCell] setStringValue: value];
+    [self _intrinsicContentSizeMayHaveChangedFromValue: before];
     [self setNeedsDisplay: YES];
 }
 
 - (void) setIntValue: (int) value {
     [self abortEditing];
+    id before = [[[self selectedCell] objectValue] retain];
     [[self selectedCell] setIntValue: value];
+    [self _intrinsicContentSizeMayHaveChangedFromValue: before];
     [self setNeedsDisplay: YES];
 }
 
 - (void) setFloatValue: (float) value {
     [self abortEditing];
+    id before = [[[self selectedCell] objectValue] retain];
     [[self selectedCell] setFloatValue: value];
+    [self _intrinsicContentSizeMayHaveChangedFromValue: before];
     [self setNeedsDisplay: YES];
 }
 
 - (void) setDoubleValue: (double) value {
     [self abortEditing];
+    id before = [[[self selectedCell] objectValue] retain];
     [[self selectedCell] setDoubleValue: value];
+    [self _intrinsicContentSizeMayHaveChangedFromValue: before];
     [self setNeedsDisplay: YES];
 }
 
 - (void) setIntegerValue: (NSInteger) value {
     [self abortEditing];
+    id before = [[[self selectedCell] objectValue] retain];
     [[self selectedCell] setIntegerValue: value];
+    [self _intrinsicContentSizeMayHaveChangedFromValue: before];
     [self setNeedsDisplay: YES];
 }
 
 - (void) setAttributedStringValue: (NSAttributedString *) value {
     [self abortEditing];
+    id before = [[[self selectedCell] objectValue] retain];
     [[self selectedCell] setAttributedStringValue: value];
+    [self _intrinsicContentSizeMayHaveChangedFromValue: before];
     [self setNeedsDisplay: YES];
 }
 
 - (void) takeObjectValueFrom: sender {
     [self abortEditing];
+    id before = [[[self selectedCell] objectValue] retain];
     [[self selectedCell] takeObjectValueFrom: sender];
+    [self _intrinsicContentSizeMayHaveChangedFromValue: before];
     [self setNeedsDisplay: YES];
 }
 
 - (void) takeStringValueFrom: sender {
     [self abortEditing];
+    id before = [[[self selectedCell] objectValue] retain];
     [[self selectedCell] takeStringValueFrom: sender];
+    [self _intrinsicContentSizeMayHaveChangedFromValue: before];
     [self setNeedsDisplay: YES];
 }
 
 - (void) takeIntValueFrom: sender {
     [self abortEditing];
+    id before = [[[self selectedCell] objectValue] retain];
     [[self selectedCell] takeIntValueFrom: sender];
+    [self _intrinsicContentSizeMayHaveChangedFromValue: before];
     [self setNeedsDisplay: YES];
 }
 
 - (void) takeFloatValueFrom: sender {
     [self abortEditing];
+    id before = [[[self selectedCell] objectValue] retain];
     [[self selectedCell] takeFloatValueFrom: sender];
+    [self _intrinsicContentSizeMayHaveChangedFromValue: before];
     [self setNeedsDisplay: YES];
 }
 
 - (void) takeDoubleValueFrom: sender {
     [self abortEditing];
+    id before = [[[self selectedCell] objectValue] retain];
     [[self selectedCell] takeDoubleValueFrom: sender];
+    [self _intrinsicContentSizeMayHaveChangedFromValue: before];
     [self setNeedsDisplay: YES];
 }
 
 - (void) takeIntegerValueFrom: sender {
     [self abortEditing];
+    id before = [[[self selectedCell] objectValue] retain];
     [[self selectedCell] takeIntegerValueFrom: sender];
+    [self _intrinsicContentSizeMayHaveChangedFromValue: before];
     [self setNeedsDisplay: YES];
 }
 
@@ -607,6 +652,45 @@ static NSMutableDictionary *cellClassDictionary = nil;
 
 - (NSSize) intrinsicContentSize {
     return [[self cell] cellSize];
+}
+
+// Text is centered vertically in the alignment rectangle, whose height is the
+// control's intrinsic height when it has one (it is the height of one line of
+// the font otherwise): the first baseline is below the top by the space above
+// the line and the ascent, the last above the bottom by the space below it and
+// the descent. A control without a font has no baselines.
+- (CGFloat) _textBaselineSpaceAbove: (BOOL) above {
+    NSFont *font = [self font];
+
+    if (font == nil)
+        return -1;
+
+    CGFloat ascent = ceil([font ascender]);
+    CGFloat descent = ceil(-[font descender]);
+    CGFloat height = [self intrinsicContentSize].height;
+
+    // The two offsets always add up to the control's height: when the
+    // intrinsic height is less than the rounded-up ascent plus descent, the
+    // descent gives way.
+    if (height > 0 && height < ascent + descent)
+        descent = MAX(height - ascent, 0);
+
+    CGFloat spare = height > ascent + descent ? height - ascent - descent : 0;
+    CGFloat spaceAbove = floor(spare / 2);
+
+    return above ? spaceAbove + ascent : spare - spaceAbove + descent;
+}
+
+- (CGFloat) firstBaselineOffsetFromTop {
+    CGFloat offset = [self _textBaselineSpaceAbove: YES];
+
+    return offset >= 0 ? offset : [super firstBaselineOffsetFromTop];
+}
+
+- (CGFloat) lastBaselineOffsetFromBottom {
+    CGFloat offset = [self _textBaselineSpaceAbove: NO];
+
+    return offset >= 0 ? offset : [super lastBaselineOffsetFromBottom];
 }
 
 - (void) sizeToFit {

@@ -39,6 +39,18 @@
 -(void) dealloc;
 -(CGSWindow*) windowForId:(CGSWindowID)winId;
 -(CGSWindow*) newWindow:(CGSRegionRef)region;
+
+// Activates the windows of another process directly through the display server (see
+// _CGSActivateProcess() for the options). Returns kCGErrorSuccess when a request was sent and
+// kCGErrorNoneAvailable when the process has no window that can be activated this way. The
+// default implementation does nothing and returns kCGErrorNotImplemented: the display server
+// offers no way to activate another process' windows.
++(CGError) activateWindowsOfProcess:(pid_t)pid options:(uint32_t)options;
+// The Darling process that owns the window with the input focus, as far as the display server
+// tells. Returns kCGErrorSuccess and sets *pid, kCGErrorNoneAvailable when no Darling process
+// has the focus, and kCGErrorNotImplemented (the default) when the display server does not say
+// who has it, as on Wayland.
++(CGError) copyFrontProcessID:(pid_t*)pid;
 -(CGError) destroyWindow:(CGSWindowID)winId;
 
 // The windows of Darling processes, front to back, each described with the

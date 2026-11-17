@@ -20,6 +20,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSCell.h>
 #import <AppKit/NSView.h>
 
+#import <AppKit/AppKitIvarLayout.h>
 @class NSTabViewItem, NSFont;
 
 typedef NS_ENUM(NSUInteger, NSTabViewType) {
@@ -57,16 +58,21 @@ typedef NS_ENUM(NSUInteger, NSTabViewBorderType) {
     NSTabViewBorderTypeBezel = 2,
 };
 
+// Legacy ObjC ABI (i386): instance size must stay 0x94, Apple's; an
+// application's subclass is laid out right after it. New state goes to a
+// side structure, never to a larger ivar block.
 @interface NSTabView : NSView {
     NSMutableArray *_items;
     NSTabViewItem *_selectedItem;
     NSFont *_font;
     NSTabViewType _type;
-    NSTabPosition _position;
     BOOL _allowsTruncatedLabels;
     id _delegate;
+    NS_LEGACY_IVAR_PAD(_NSTabViewReserved1, 1)
     BOOL _drawsBackground;
+    NSTabPosition _position;
     NSControlSize _controlSize;
+    NS_LEGACY_IVAR_PAD(_NSTabViewReserved2, 32)
 }
 
 - delegate;

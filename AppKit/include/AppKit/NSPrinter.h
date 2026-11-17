@@ -18,6 +18,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <Foundation/NSObject.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <Foundation/NSGeometry.h>
 
 @class NSArray, NSDictionary, NSString;
@@ -31,6 +32,7 @@ typedef NS_ENUM(NSUInteger, NSPrinterTableStatus) {
 @interface NSPrinter : NSObject {
     NSString *_name;
     NSString *_type;
+    NS_LEGACY_IVAR_PAD(_NSPrinterReserved, 36)
 }
 
 + (NSArray *) printerNames;

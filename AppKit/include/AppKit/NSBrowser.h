@@ -17,6 +17,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/NSControl.h>
 
 @class NSMatrix, NSScroller;
@@ -32,38 +33,45 @@ typedef NS_ENUM(NSUInteger, NSBrowserDropOperation) {
     NSBrowserDropAbove,
 };
 
+// Legacy ObjC ABI (i386): instance size must stay 0xa0, Apple's; the ivars
+// before the extras sit at Apple's offsets. Add new state to the extra
+// struct, never as an ivar.
 @interface NSBrowser : NSControl {
-    id _target;
-    SEL _action;
-    SEL _doubleAction;
-
+    NS_LEGACY_IVAR_PAD(_NSBrowserReserved1, 8)
     id _delegate;
-
-    NSMutableArray *_explicitTitles;
-    NSMutableArray *_titles;
-    NSMutableArray *_matrices;
-    NSMutableArray *_scrollViews;
-    NSScroller *_horizontalScroller;
-    NSColor *_backgroundColor;
-
+    SEL _doubleAction;
     Class _matrixClass;
-    Class _cellClass;
     id _cellPrototype;
-    int _numberOfVisibleColumns;
-    int _minColumnWidth;
-    int _firstVisibleColumn;
-    int _maxVisibleColumns;
-    int _selectedColumn;
-    BOOL _reusesColumns;
-    BOOL _hasHorizontalScroller;
-    BOOL _separatesColumns;
-    BOOL _isTitled;
-    BOOL _allowsMultipleSelection;
-    BOOL _allowsBranchSelection;
-    BOOL _allowsEmptySelection;
-    BOOL _takesTitleFromPreviousColumn;
-    BOOL _acceptsArrowKeys;
-    BOOL _sendsActionOnArrowKeys;
+    NS_LEGACY_IVAR_PAD(_NSBrowserReserved2, 16)
+    NSMutableArray *_titles;
+    NS_LEGACY_IVAR_PAD(_NSBrowserReserved3, 20)
+    NS_EXTRA_IVARS_BEGIN(NSBrowser)
+        id _target;
+        SEL _action;
+
+        NSMutableArray *_explicitTitles;
+        NSMutableArray *_matrices;
+        NSMutableArray *_scrollViews;
+        NSScroller *_horizontalScroller;
+        NSColor *_backgroundColor;
+
+        Class _cellClass;
+        int _numberOfVisibleColumns;
+        int _minColumnWidth;
+        int _firstVisibleColumn;
+        int _maxVisibleColumns;
+        int _selectedColumn;
+        BOOL _reusesColumns;
+        BOOL _hasHorizontalScroller;
+        BOOL _separatesColumns;
+        BOOL _isTitled;
+        BOOL _allowsMultipleSelection;
+        BOOL _allowsBranchSelection;
+        BOOL _allowsEmptySelection;
+        BOOL _takesTitleFromPreviousColumn;
+        BOOL _acceptsArrowKeys;
+        BOOL _sendsActionOnArrowKeys;
+    NS_EXTRA_IVARS_END(NSBrowser)
 }
 
 - delegate;

@@ -59,9 +59,20 @@
 	NSInvalidAbstractInvocation();
 }
 
++(CGError) activateWindowsOfProcess:(pid_t)pid options:(uint32_t)options
+{
+	return kCGErrorNotImplemented;
+}
+
++(CGError) copyFrontProcessID:(pid_t*)pid
+{
+	return kCGErrorNotImplemented;
+}
+
+// A backend that can read the window system's keymap overrides this; nil means it has no layout.
 -(CGSKeyboardLayout*) createKeyboardLayout
 {
-	NSInvalidAbstractInvocation();
+	return nil;
 }
 
 -(CGPoint) mouseLocation

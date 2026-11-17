@@ -63,6 +63,10 @@ NS_EXTRA_SYNTHESIZE_COPY(NSMenu, identifier, _identifier, NSUserInterfaceItemIde
         NSMenuView *menuView = [menuWindow menuView];
         NSMenuItem *item;
 
+        // The view whose contextual menu this is gets told when it opens and
+        // when it has closed, before the chosen item's action is sent.
+        [view willOpenMenu: menu withEvent: event];
+
         [menuWindow setReleasedWhenClosed: YES];
         [menuWindow setFrameTopLeftPoint: [window convertBaseToScreen: point]];
         [menuWindow orderFront: nil];
@@ -70,6 +74,8 @@ NS_EXTRA_SYNTHESIZE_COPY(NSMenu, identifier, _identifier, NSUserInterfaceItemIde
         item = [menuView trackForEvent: event];
 
         [menuWindow close];
+
+        [view didCloseMenu: menu withEvent: event];
 
         if (item != nil) {
             NSMenu *owner = [item menu] != nil ? [item menu] : menu;
