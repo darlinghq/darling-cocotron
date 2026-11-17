@@ -1148,7 +1148,17 @@ static void drawRoundedBezel(CGContextRef context, CGRect frame) {
         }
         break;
 
-    default:
+    default: {
+        // The graphics style draws its images for a view that is not flipped; in a flipped view they
+        // are mirrored about the frame so that they come out the right way up.
+        CGContextRef context = [[NSGraphicsContext currentContext] graphicsPort];
+        BOOL mirror = [controlView isFlipped];
+
+        if (mirror) {
+            CGContextSaveGState(context);
+            CGContextTranslateCTM(context, 0, 2 * frame.origin.y + frame.size.height);
+            CGContextScaleCTM(context, 1, -1);
+        }
         if (![self isBordered]) {
             [[_controlView graphicsStyle]
                     drawUnborderedButtonInRect: frame
@@ -1166,7 +1176,10 @@ static void drawRoundedBezel(CGContextRef context, CGRect frame) {
                         drawPushButtonNormalInRect: frame
                                          defaulted: defaulted];
         }
+        if (mirror)
+            CGContextRestoreGState(context);
         break;
+    }
     }
 }
 
