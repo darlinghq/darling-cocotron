@@ -419,7 +419,43 @@ NSImageName const NSImageNameTouchBarVolumeUpTemplate =
         }
     }
 
+    if (image == nil)
+        image = [self _drawnTemplateNamed: name];
+
     // Cocoa AppKit always returns the same shared cached image
+    return image;
+}
+
+// The Add and Remove template images have no artwork installed with AppKit, so they are drawn: a plus in an
+// 18 x 16 image and a minus in an 18 x 4 image (the sizes of the named images on macOS 26.7.3), both template images.
+// Test: tests/appkit-add-remove-template-images.m
++ (NSImage *) _drawnTemplateNamed: (NSString *) name {
+    BOOL add = [name isEqualToString: NSImageNameAddTemplate];
+
+    if (!add && ![name isEqualToString: NSImageNameRemoveTemplate])
+        return nil;
+
+    NSSize size = add ? NSMakeSize(18, 16) : NSMakeSize(18, 4);
+    NSImage *image = [self imageWithSize: size
+                                 flipped: NO
+                          drawingHandler: ^BOOL(NSRect rect) {
+        NSBezierPath *path = [NSBezierPath bezierPath];
+        CGFloat middleY = size.height / 2;
+
+        [path setLineWidth: 2.0];
+        [path moveToPoint: NSMakePoint(2.0, middleY)];
+        [path lineToPoint: NSMakePoint(size.width - 2.0, middleY)];
+        if (add) {
+            [path moveToPoint: NSMakePoint(size.width / 2, 1.0)];
+            [path lineToPoint: NSMakePoint(size.width / 2, size.height - 1.0)];
+        }
+        [[NSColor blackColor] setStroke];
+        [path stroke];
+        return YES;
+    }];
+
+    [image setTemplate: YES];
+    [image setName: name];
     return image;
 }
 
