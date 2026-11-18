@@ -325,11 +325,25 @@ static Indium::PixelFormat indiumPixelFormat(MTLPixelFormat pixelFormat) {
 	}
 };
 
-// The defaults key that makes every Metal layer present through the layer context's OpenGL rendering
-// even where it could present through a swapchain on its own native window.
+// CAMetalLayerForceOpenGL makes every Metal layer present through the layer context's OpenGL
+// rendering even where it could present through a swapchain on its own native window. The
+// application's own value wins; otherwise the user's org.darlinghq.QuartzCore domain decides, so
+// it can be set for all applications. NO when unset. Read once per process.
 static BOOL forcesOpenGLPresentation(void) {
-	return [[NSUserDefaults standardUserDefaults] boolForKey: @"CAMetalLayerForceOpenGL"];
-};
+	static BOOL value;
+	static dispatch_once_t once;
+
+	dispatch_once(&once, ^{
+		CFStringRef key = CFSTR("CAMetalLayerForceOpenGL");
+		Boolean valid = false;
+		Boolean flag = CFPreferencesGetAppBooleanValue(key, kCFPreferencesCurrentApplication, &valid);
+
+		if (!valid)
+			flag = CFPreferencesGetAppBooleanValue(key, CFSTR("org.darlinghq.QuartzCore"), &valid);
+		value = valid && flag;
+	});
+	return value;
+}
 
 #endif
 
