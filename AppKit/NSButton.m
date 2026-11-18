@@ -28,6 +28,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSKeyEquivalentMatching.h>
 #import <AppKit/NSWindow.h>
 
+@interface NSButtonCell (NSButtonAlignmentPrivate)
+- (BOOL) _hasStockRoundedPushBezel;
+- (NSEdgeInsets) _roundedPushAlignmentInsets;
+@end
+
 @implementation NSButton
 
 + (Class) cellClass {
@@ -110,6 +115,16 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (BOOL) isFlipped {
     return YES;
+}
+
+// A rounded push button is laid out by its bezel, not by its frame, which also holds the room for the
+// bezel's shadow (see -[NSButtonCell _roundedPushAlignmentInsets]).
+- (NSEdgeInsets) alignmentRectInsets {
+    NSButtonCell *cell = [self cell];
+
+    if ([cell isKindOfClass: [NSButtonCell class]] && [cell _hasStockRoundedPushBezel])
+        return [cell _roundedPushAlignmentInsets];
+    return [super alignmentRectInsets];
 }
 - (BOOL) isOpaque {
     return [_cell isOpaque];

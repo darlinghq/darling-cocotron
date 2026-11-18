@@ -906,6 +906,32 @@ static const CGFloat kImageMargin = 2.;
             (([self showsStateBy] & NSChangeGrayCellMask) && [self state]));
 }
 
+// A push button of the rounded style that highlights by pushing in, as the buttons of a nib mostly are.
+- (BOOL) _hasStockRoundedPushBezel {
+    return ![self isKindOfClass: [NSPopUpButtonCell class]] &&
+           NS_EXTRA(NSButtonCell, self)->_bezelStyle == NSRoundedBezelStyle &&
+           (NS_EXTRA(NSButtonCell, self)->_highlightsBy & NSPushInCellMask) &&
+           (NS_EXTRA(NSButtonCell, self)->_highlightsBy & NSChangeGrayCellMask) &&
+           NS_EXTRA(NSButtonCell, self)->_showsStateBy == NSNoCellMask;
+}
+
+// QUIRK: a stock rounded push button's alignment insets (the frame minus the alignment rectangle, which is also
+// where its bezel is drawn) are (top, left, bottom, right) = (4, 6, 7, 6) regular, (3, 5, 6, 5) small and
+// (0, 1, 1, 1) mini, in a view that is not flipped with the top and bottom shares swapped. Not documented.
+// Evidence: black-box observation on macOS 10.14.4 (tier 2): -alignmentRectInsets of the button and the ink
+// of a bitmap of the button's frame, at the three control sizes. Large buttons use the regular insets.
+// Test: tests/appkit-push-button-alignment-insets.m
+- (NSEdgeInsets) _roundedPushAlignmentInsets {
+    switch (NS_EXTRA(NSCell, self)->_controlSize) {
+    case NSSmallControlSize:
+        return NSEdgeInsetsMake(3, 5, 6, 5);
+    case NSMiniControlSize:
+        return NSEdgeInsetsMake(0, 1, 1, 1);
+    default:
+        return NSEdgeInsetsMake(4, 6, 7, 6);
+    }
+}
+
 - (NSRect) getControlSizeAdjustment: (BOOL) flipped {
     /*
     Aqua Push Buttons actually have a frame much larger than told by IB to make
@@ -959,26 +985,14 @@ static const CGFloat kImageMargin = 2.;
             // Mini controls don't need adjusting they're small enough already.
             break;
         }
-    } else if ((NS_EXTRA(NSButtonCell, self)->_bezelStyle == NSRoundedBezelStyle) &&
-               (NS_EXTRA(NSButtonCell, self)->_highlightsBy & NSPushInCellMask) &&
-               (NS_EXTRA(NSButtonCell, self)->_highlightsBy & NSChangeGrayCellMask) &&
-               (NS_EXTRA(NSButtonCell, self)->_showsStateBy == NSNoCellMask)) {
-        switch (NS_EXTRA(NSCell, self)->_controlSize) {
-        default: {
-            // Signed, so the flipped offset doesn't wrap; the large sizes keep the regular inset.
-            CGFloat step = (NS_EXTRA(NSCell, self)->_controlSize == NSSmallControlSize) ? 1 : 0;
-            frame.size.width = 10 - step * 2;
-            frame.size.height = 10 - step * 2;
-            frame.origin.x = 5 - step;
-            // The room for the shadow is below the bezel: 7 (5 small) from the bottom, so the rest of the
-            // inset, 3, is above it.
-            frame.origin.y = flipped ? 3 : 7 - step * 2;
-            break;
-        }
-
-        case NSMiniControlSize:
-            break;
-        }
+    } else if ([self _hasStockRoundedPushBezel]) {
+        // The bezel is the frame without the alignment insets: the frame is larger than the bezel by the room for
+        // the shadow, which is below the bezel (the insets' bottom share), so the space above is the top share.
+        NSEdgeInsets insets = [self _roundedPushAlignmentInsets];
+        frame.size.width = insets.left + insets.right;
+        frame.size.height = insets.top + insets.bottom;
+        frame.origin.x = insets.left;
+        frame.origin.y = flipped ? insets.top : insets.bottom;
     } else if (NS_EXTRA(NSButtonCell, self)->_bezelStyle == NSRegularSquareBezelStyle) {
     }
 

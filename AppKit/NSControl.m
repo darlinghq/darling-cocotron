@@ -664,8 +664,14 @@ static NSMutableDictionary *cellClassDictionary = nil;
     // do nothing
 }
 
+// The cell's size is that of the frame; the intrinsic size is that of the alignment rectangle.
 - (NSSize) intrinsicContentSize {
-    return [[self cell] cellSize];
+    NSSize size = [[self cell] cellSize];
+    NSEdgeInsets insets = [self alignmentRectInsets];
+
+    size.width = MAX(size.width - insets.left - insets.right, 0);
+    size.height = MAX(size.height - insets.top - insets.bottom, 0);
+    return size;
 }
 
 // Text is centered vertically in the alignment rectangle, whose height is the
