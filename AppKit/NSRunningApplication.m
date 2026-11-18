@@ -105,6 +105,18 @@ static BOOL processExists(pid_t pid) {
     return !processExists(_processIdentifier);
 }
 
+// The application that has the input focus is the one CoreGraphics reports as the front process. A
+// window system that cannot say (no process known) leaves every application inactive.
+- (BOOL) isActive {
+    pid_t front = 0;
+    return _CGSGetFrontProcess(&front) == kCGErrorSuccess && front == _processIdentifier;
+}
+
+// There is one menu bar per application, so the application that has the focus owns it.
+- (BOOL) ownsMenuBar {
+    return [self isActive];
+}
+
 - (BOOL) activateWithOptions: (NSApplicationActivationOptions) options {
     if ([self isTerminated])
         return NO;

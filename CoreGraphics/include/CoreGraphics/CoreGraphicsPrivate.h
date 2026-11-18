@@ -224,11 +224,19 @@ Boolean _CGSProcessHasConnection(pid_t pid);
 CGError _CGSGetFrontProcess(pid_t* pid);
 // Reports that the process with this pid got the input focus. A windowing backend calls it
 // with its own pid when its windows get the focus on a display server that cannot be asked.
+// Every call posts the libnotify name kCGSFrontProcessNotificationName (below), so that processes
+// that follow the front process can ask _CGSGetFrontProcess() again.
 CGError _CGSSetFrontProcess(pid_t pid);
+// Reports that the process with this pid lost the input focus. When it is still the recorded front
+// process, no process is known to have the focus until one reports (a window system that cannot be
+// asked, such as a Wayland compositor, has focus on a process that is not a Darling process, or on
+// none). Posts the same name as _CGSSetFrontProcess().
+CGError _CGSResignFrontProcess(pid_t pid);
 // The name of the Darwin notification that asks the process with this pid to activate its
 // windows (see above); a windowing backend observes the name of its own process.
 #define kCGSProcessActivationNotificationPrefix "org.darlinghq.process-activation."
-// The libnotify name whose state holds the pid _CGSSetFrontProcess() stored.
+// The libnotify name whose state holds the pid _CGSSetFrontProcess() stored, and which is posted
+// whenever the front process may have changed.
 #define kCGSFrontProcessNotificationName "org.darlinghq.front-process"
 
 void* _CGSNativeDisplay(CGSConnectionID connId);

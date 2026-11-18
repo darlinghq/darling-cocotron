@@ -1857,10 +1857,6 @@ static NSUInteger modifierDeviceMask(int code) {
     case WP_KEYBOARD_EV_ENTER: {
         [self resetKeyboardModifiers];
         _keyboardWindow = [self windowForSurface: (struct wl_proxy *) args[1].o];
-        // The compositor does not say which client has the focus; GetFrontProcess() asks
-        // CoreGraphics, which keeps the last process that reported it.
-        if (_keyboardWindow != nil)
-            _CGSSetFrontProcess(getpid());
         if (_heldKeyIdentities == nil)
             _heldKeyIdentities = [NSMutableDictionary new];
         struct wl_array *keys = args[2].a;

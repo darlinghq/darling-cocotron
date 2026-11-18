@@ -21,6 +21,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSWorkspace.h>
 #import <AppKit/NSRunningApplication.h>
 #import <Foundation/Foundation.h>
+#import <CoreGraphics/CoreGraphicsPrivate.h>
+#include <dispatch/dispatch.h>
+#include <notify.h>
 
 NSString *const NSWorkspaceApplicationKey = @"NSWorkspaceApplicationKey";
 
@@ -82,9 +85,86 @@ NSNotificationName NSWorkspaceWillUnmountNotification = @"NSWorkspaceWillUnmount
     return NSThreadSharedInstance(@"NSWorkspace");
 }
 
+// The front application, as last seen by this process, and whether a refresh is under way (key-value
+// observing reads the old value through the getter, which must not start another one). Both are
+// guarded by @synchronized([NSWorkspace class]).
+static NSRunningApplication *frontApplication;
+static BOOL refreshingFrontApplication;
+
+// The front process is kept by CoreGraphics (the display server answers where it can) and
+// every change is posted under kCGSFrontProcessNotificationName; this only turns the pid into
+// the application object registered for it.
+static NSRunningApplication *QueryFrontApplication(void) {
+    pid_t pid = 0;
+    if (_CGSGetFrontProcess(&pid) != kCGErrorSuccess || pid <= 0)
+        return nil;
+    return [NSRunningApplication runningApplicationWithProcessIdentifier: pid];
+}
+
+// Compares the front application with the one seen last, and when it differs reports the
+// change: key-value observers, then the deactivation of the old and the activation of the new
+// application. Without notify, only the stored value is brought up to date.
+- (void) _refreshFrontApplicationPosting: (BOOL) post {
+    @synchronized([NSWorkspace class]) {
+        if (refreshingFrontApplication)
+            return;
+        NSRunningApplication *now = QueryFrontApplication();
+        NSRunningApplication *old = frontApplication;
+        if (now == old || (now != nil && [now isEqual: old]))
+            return;
+
+        if (!post) {
+            frontApplication = [now retain];
+            [old release];
+            return;
+        }
+
+        refreshingFrontApplication = YES;
+        [self willChangeValueForKey: @"frontmostApplication"];
+        [self willChangeValueForKey: @"menuBarOwningApplication"];
+        frontApplication = [now retain];
+        [self didChangeValueForKey: @"menuBarOwningApplication"];
+        [self didChangeValueForKey: @"frontmostApplication"];
+        refreshingFrontApplication = NO;
+
+        if (old != nil)
+            [_notificationCenter postNotificationName: NSWorkspaceDidDeactivateApplicationNotification
+                                               object: self
+                                             userInfo: @{NSWorkspaceApplicationKey : old}];
+        if (now != nil)
+            [_notificationCenter postNotificationName: NSWorkspaceDidActivateApplicationNotification
+                                               object: self
+                                             userInfo: @{NSWorkspaceApplicationKey : now}];
+        [old release];
+    }
+}
+
 - init {
     _notificationCenter = [[NSNotificationCenter alloc] init];
+
+    [self _refreshFrontApplicationPosting: NO];
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        int token;
+        notify_register_dispatch(kCGSFrontProcessNotificationName, &token, dispatch_get_main_queue(),
+            ^(int unused) {
+                [[NSWorkspace sharedWorkspace] _refreshFrontApplicationPosting: YES];
+            });
+    });
     return self;
+}
+
+- (NSRunningApplication *) frontmostApplication {
+    [self _refreshFrontApplicationPosting: YES];
+    @synchronized([NSWorkspace class]) {
+        return [[frontApplication retain] autorelease];
+    }
+}
+
+// Darling has no menu bar of its own that another application could own while it is not the
+// front application: the menu bar belongs to the application that has the focus.
+- (NSRunningApplication *) menuBarOwningApplication {
+    return [self frontmostApplication];
 }
 
 - (NSNotificationCenter *) notificationCenter {

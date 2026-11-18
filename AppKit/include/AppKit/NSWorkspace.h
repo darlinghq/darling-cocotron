@@ -163,6 +163,10 @@ typedef NS_ENUM(NSInteger, NSWorkspaceAuthorizationType) {
 - (null_unspecified NSString *) pathForApplication: (null_unspecified NSString *) application;
 - (nullable NSArray *) launchedApplications;
 @property(nonatomic, readonly) NSArray<NSRunningApplication *> *runningApplications;
+// The application that has the input focus, and the one that owns the menu bar. Both are
+// key-value observable and nil when no application is known to have the focus.
+@property(nonatomic, readonly, nullable) NSRunningApplication *frontmostApplication;
+@property(nonatomic, readonly, nullable) NSRunningApplication *menuBarOwningApplication;
 - (BOOL) launchApplication: (NSString *) application;
 - (BOOL) launchApplication: (NSString *) application
                   showIcon: (BOOL) showIcon

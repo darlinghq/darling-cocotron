@@ -274,6 +274,60 @@ static int frontProcessToken(void)
 	return token;
 }
 
+// Whether each process has the input focus is kept by the process itself, under a libnotify name
+// of its own pid (state: its start time while it has the focus, 0 once it resigned), so that no
+// two processes ever write the same state; the front process name only says who reported last.
+static BOOL focusName(pid_t pid, char* name, size_t size)
+{
+	return snprintf(name, size, "org.darlinghq.process-focus.%d", (int) pid) < (int) size;
+}
+
+static CGError setProcessFocus(pid_t pid, BOOL focused)
+{
+	static pid_t token_pid;
+	static int token = -1;
+	char name[64];
+
+	@synchronized([CGSConnection class])
+	{
+		if (token < 0 || token_pid != pid)
+		{
+			// The names of other processes' pids are only set on their behalf; the token of the
+			// previous pid is not needed any more.
+			if (token >= 0)
+				notify_cancel(token);
+			token = -1;
+			if (!focusName(pid, name, sizeof(name)) || notify_register_check(name, &token) != NOTIFY_STATUS_OK)
+			{
+				token = -1;
+				return kCGErrorCannotComplete;
+			}
+			token_pid = pid;
+		}
+		uint64_t start = processStartTime(pid);
+		if (notify_set_state(token, focused ? (start != 0 ? start : 1) : 0) != NOTIFY_STATUS_OK)
+			return kCGErrorCannotComplete;
+	}
+	return kCGErrorSuccess;
+}
+
+static BOOL processHasFocus(pid_t pid)
+{
+	char name[64];
+	int token;
+	uint64_t state = 0;
+
+	if (!focusName(pid, name, sizeof(name)) || notify_register_check(name, &token) != NOTIFY_STATUS_OK)
+		return NO;
+	if (notify_get_state(token, &state) != NOTIFY_STATUS_OK)
+		state = 0;
+	notify_cancel(token);
+	if (state == 0)
+		return NO;
+	uint64_t start = processStartTime(pid);
+	return start == 0 ? state == 1 : state == start;
+}
+
 CGError _CGSGetFrontProcess(pid_t* pid)
 {
 	if (pid == NULL)
@@ -297,7 +351,7 @@ CGError _CGSGetFrontProcess(pid_t* pid)
 	uint64_t state = 0;
 	if (token < 0 || notify_get_state(token, &state) != NOTIFY_STATUS_OK)
 		return kCGErrorCannotComplete;
-	if (state == 0 || state > INT32_MAX)
+	if (state == 0 || state > INT32_MAX || !processHasFocus((pid_t) state))
 		return kCGErrorNoneAvailable;
 	*pid = (pid_t) state;
 	return kCGErrorSuccess;
@@ -309,8 +363,25 @@ CGError _CGSSetFrontProcess(pid_t pid)
 		return kCGErrorIllegalArgument;
 
 	int token = frontProcessToken();
+	CGError err = setProcessFocus(pid, YES);
+	if (err != kCGErrorSuccess)
+		return err;
 	if (token < 0 || notify_set_state(token, (uint64_t) pid) != NOTIFY_STATUS_OK)
 		return kCGErrorCannotComplete;
+	// Every process that follows the front process (see kCGSFrontProcessNotificationName) asks again.
+	notify_post(kCGSFrontProcessNotificationName);
+	return kCGErrorSuccess;
+}
+
+CGError _CGSResignFrontProcess(pid_t pid)
+{
+	if (pid <= 0)
+		return kCGErrorIllegalArgument;
+
+	CGError err = setProcessFocus(pid, NO);
+	if (err != kCGErrorSuccess)
+		return err;
+	notify_post(kCGSFrontProcessNotificationName);
 	return kCGErrorSuccess;
 }
 
