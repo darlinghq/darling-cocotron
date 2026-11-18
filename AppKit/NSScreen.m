@@ -24,6 +24,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSGraphics.h>
 #import <AppKit/NSScreen.h>
 #import <AppKit/NSWindow.h>
+#import <AppKit/NSWindow-Private.h>
 #include <math.h>
 
 NSNotificationName const NSScreenColorSpaceDidChangeNotification = @"NSScreenColorSpaceDidChangeNotification";
@@ -102,6 +103,36 @@ static NSString *monitorNameFromEDID(NSData *edid) {
 // backend, with a configured scale) override this.
 - (CGFloat) backingScaleFactor {
     return 1.0;
+}
+
+// Whether the screen can show the gamut. Screens are described as sRGB (see -colorSpace), so only
+// the sRGB gamut is representable; wider ones are not.
+- (BOOL) canRepresentDisplayGamut: (NSDisplayGamut) displayGamut {
+    return displayGamut == NSDisplayGamutSRGB;
+}
+
+// The backing store of a screen has -backingScaleFactor pixels per point; the conversions scale the
+// rect and nothing else.
+- (NSRect) convertRectToBacking: (NSRect) rect {
+    CGFloat scale = [self backingScaleFactor];
+
+    return NSMakeRect(rect.origin.x * scale, rect.origin.y * scale,
+                      rect.size.width * scale, rect.size.height * scale);
+}
+
+- (NSRect) convertRectFromBacking: (NSRect) rect {
+    CGFloat scale = [self backingScaleFactor];
+
+    if (!(scale > 0))
+        scale = 1.0;
+    return NSMakeRect(rect.origin.x / scale, rect.origin.y / scale,
+                      rect.size.width / scale, rect.size.height / scale);
+}
+
+// The rect with its edges moved onto whole backing pixels as the options ask.
+- (NSRect) backingAlignedRect: (NSRect) rect options: (NSAlignmentOptions) options {
+    return [self convertRectFromBacking:
+                         _NSAlignRectToPixelGrid([self convertRectToBacking: rect], options)];
 }
 
 // No ICC profile is read from the display, so the screen is described as sRGB.
