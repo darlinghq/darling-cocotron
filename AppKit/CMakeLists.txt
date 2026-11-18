@@ -267,6 +267,7 @@ set(AppKit_sources
 	NSEvent.subproj/NSEvent_other.m
 	NSEvent.subproj/NSEvent_keyboard.m
 	NSEvent.subproj/NSEvent_gesture.m
+	NSTouch.m
 	NSEvent.subproj/NSEvent.m
 
 	NSButton.m
@@ -656,6 +657,7 @@ add_backend(X11
 		X11.backend/X11Cursor.m
 		X11.backend/X11DropSession.m
 		X11.backend/X11DraggingManager.m
+		X11.backend/X11Touch.m
 	INFO_PLIST
 		X11.backend/Info.plist
 	DEPENDENCIES

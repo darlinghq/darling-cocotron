@@ -105,6 +105,18 @@ static BOOL _mouseCoalescingEnabled = YES;
     return [NSSet set];
 }
 
+- (NSSet *) allTouches {
+    return [NSSet set];
+}
+
+- (NSSet *) touchesForView: (NSView *) view {
+    return [NSSet set];
+}
+
+- (NSArray *) coalescedTouchesForTouch: (id) touch {
+    return @[];
+}
+
 + (NSPoint) mouseLocation {
     return [[NSDisplay currentDisplay] mouseLocation];
 }

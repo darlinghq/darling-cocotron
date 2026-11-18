@@ -322,6 +322,22 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [_nextResponder performSelector: _cmd withObject: event];
 }
 
+- (void) touchesBeganWithEvent: (NSEvent *) event {
+    [_nextResponder performSelector: _cmd withObject: event];
+}
+
+- (void) touchesMovedWithEvent: (NSEvent *) event {
+    [_nextResponder performSelector: _cmd withObject: event];
+}
+
+- (void) touchesEndedWithEvent: (NSEvent *) event {
+    [_nextResponder performSelector: _cmd withObject: event];
+}
+
+- (void) touchesCancelledWithEvent: (NSEvent *) event {
+    [_nextResponder performSelector: _cmd withObject: event];
+}
+
 - (void) mouseUp: (NSEvent *) event {
     [_nextResponder performSelector: _cmd withObject: event];
 }
