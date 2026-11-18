@@ -1182,7 +1182,8 @@ static void drawViewTreeInContext(NSView *view, CGContextRef port, NSRect rect) 
         }
 
         [self _updateLayerVisibility];
-        [[self superview] setNeedsDisplay: YES];
+        // Only where the view is shows or hides something.
+        [[self superview] setNeedsDisplayInRect: [self frame]];
 
         if (NS_EXTRA(NSView, self)->_isHidden)
             [self viewDidHide];
