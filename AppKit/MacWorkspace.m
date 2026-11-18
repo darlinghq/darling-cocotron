@@ -647,6 +647,9 @@ static LSLaunchFlags launchFlagsForConfiguration(
     return openURLsWithFlags(urls, appURL, flags) == noErr;
 }
 
+// Private LaunchServices: shows a file in the host desktop's file manager (not in older LaunchServices).
+extern OSStatus _LSOpenFileOnHost(CFURLRef fileURL, Boolean reveal) __attribute__((weak_import));
+
 // The file viewer is the application named by NSFileViewer in the global defaults (a bundle identifier), or the
 // Finder. It is asked to show items by the events that open them (observed on macOS 26.7.3, tier 2): an open-documents
 // event listing the items as bookmark data (file URLs where no bookmark can be made), or a reopen event for no items,
@@ -704,10 +707,13 @@ static OSStatus sendRevealEvent(NSString *bundleIdentifier, NSArray<NSURL *> *ur
             return;
     }
 
-    // No usable viewer (a prefix may have no Finder): open the items' folders instead.
+    // No usable viewer (a prefix may have no Finder): the host's file manager shows the items, selected in their
+    // folders. Items that it cannot show have their folders opened instead.
     NSMutableSet *folders = [NSMutableSet set];
     for (NSURL *url in urls) {
         if (![url isFileURL])
+            continue;
+        if (_LSOpenFileOnHost != NULL && _LSOpenFileOnHost((CFURLRef) url, true) == noErr)
             continue;
         NSString *path = [[url path] stringByDeletingLastPathComponent];
         if ([path length] > 0 && [folders member: path] == nil) {
