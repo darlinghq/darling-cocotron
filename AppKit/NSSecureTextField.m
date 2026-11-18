@@ -27,6 +27,36 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return [NSSecureTextFieldCell class];
 }
 
+// QUIRK: an archive (a nib compiled by the Interface Builder tools, for one)
+// may store the cell of a secure text field as a plain NSTextFieldCell; macOS
+// still gives the decoded field a secure cell (bullets, secure field editor).
+// So that archived class is read as NSSecureTextFieldCell; other cell classes,
+// such as subclasses, are kept. Not documented. Evidence: black-box
+// observation on macOS 10.14.4 (tier 2). Test: tests/appkit-secure-text-field.m.
+- initWithCoder: (NSCoder *) coder {
+    static NSString *const plainCellName = @"NSTextFieldCell";
+    // The keyed unarchiver and the decoder of compiled nibs both map the class
+    // names of an archive to classes.
+    BOOL mapsClasses = [coder allowsKeyedCoding] &&
+                       [coder respondsToSelector: @selector(setClass:forClassName:)] &&
+                       [coder respondsToSelector: @selector(classForClassName:)];
+    Class previous = Nil;
+
+    if (mapsClasses) {
+        previous = [(NSKeyedUnarchiver *) coder classForClassName: plainCellName];
+        [(NSKeyedUnarchiver *) coder setClass: [NSSecureTextFieldCell class]
+                                 forClassName: plainCellName];
+    }
+
+    self = [super initWithCoder: coder];
+
+    if (mapsClasses) {
+        // Mappings of other classes of the same decoder stay as they were.
+        [(NSKeyedUnarchiver *) coder setClass: previous forClassName: plainCellName];
+    }
+    return self;
+}
+
 - (BOOL) echosBullets {
     return [[self cell] echosBullets];
 }
