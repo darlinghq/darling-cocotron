@@ -151,8 +151,9 @@ static BOOL addressAllowed(const char *address) {
     return strstr(address, "unixexec") == NULL;
 }
 
-// The address to connect to, or nil.
-static NSString *sessionBusAddress(void) {
+// The address to connect to, or nil. Shared with the other users of the
+// session bus in AppKit (declared in NSDBusMenu.h).
+NSString *DarlingSessionBusAddress(void) {
     const char *env = getenv("DBUS_SESSION_BUS_ADDRESS");
 
     if (env != NULL && env[0] != '\0')
@@ -304,7 +305,7 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type,
     if ((self = [super init]) == nil)
         return nil;
 
-    NSString *address = sessionBusAddress();
+    NSString *address = DarlingSessionBusAddress();
     DBusError error;
     dbus_error_init(&error);
 

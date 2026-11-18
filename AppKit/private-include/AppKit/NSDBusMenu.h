@@ -102,3 +102,7 @@
 // NSDBusMenu.m). Values are addresses of variables of the matching C type.
 __attribute__((visibility("hidden"))) BOOL NSDBusAppendArgument(DBusMessage *message, int type, const void *value);
 __attribute__((visibility("hidden"))) BOOL NSDBusReadArguments(DBusMessage *message, const int *types, unsigned count, void **values);
+
+// The address of the desktop session bus from the environment (a plain socket
+// address only), or nil.
+NSString *DarlingSessionBusAddress(void);
