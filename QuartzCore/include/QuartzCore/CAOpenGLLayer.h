@@ -18,18 +18,21 @@
 */
 
 #import <QuartzCore/CALayer.h>
+#import <QuartzCore/LegacyIvarLayout.h>
 #import <OpenGL/OpenGL.h>
 #import <CoreVideo/CVBase.h>
 
 @interface CAOpenGLLayer : CALayer {
-    BOOL _asynchronous;
-    CGLPixelFormatObj _pixelFormat;
-    CGLContextObj _cglContext;
-    BOOL _wantsExtendedDynamicRangeContent;
-    GLuint _fbo;
-    GLuint _colorTex;
-    GLuint _depthRb;
-    CGSize _allocatedSize;
+    NS_EXTRA_IVARS_BEGIN(CAOpenGLLayer)
+        BOOL _asynchronous;
+        CGLPixelFormatObj _pixelFormat;
+        CGLContextObj _cglContext;
+        BOOL _wantsExtendedDynamicRangeContent;
+        GLuint _fbo;
+        GLuint _colorTex;
+        GLuint _depthRb;
+        CGSize _allocatedSize;
+    NS_EXTRA_IVARS_END(CAOpenGLLayer)
 }
 
 @property(getter=isAsynchronous) BOOL asynchronous;

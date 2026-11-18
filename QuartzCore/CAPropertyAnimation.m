@@ -4,9 +4,9 @@
 
 - initWithKeyPath: (NSString *) keyPath {
     [super init];
-    _keyPath = [keyPath copy];
-    _additive = NO;
-    _cumulative = NO;
+    NS_EXTRA(CAPropertyAnimation, self)->_keyPath = [keyPath copy];
+    NS_EXTRA(CAPropertyAnimation, self)->_additive = NO;
+    NS_EXTRA(CAPropertyAnimation, self)->_cumulative = NO;
     return self;
 }
 
@@ -15,29 +15,29 @@
 }
 
 - (NSString *) keyPath {
-    return _keyPath;
+    return NS_EXTRA(CAPropertyAnimation, self)->_keyPath;
 }
 
 - (void) setKeyPath: (NSString *) value {
     value = [value copy];
-    [_keyPath release];
-    _keyPath = value;
+    [NS_EXTRA(CAPropertyAnimation, self)->_keyPath release];
+    NS_EXTRA(CAPropertyAnimation, self)->_keyPath = value;
 }
 
 - (BOOL) isAdditive {
-    return _additive;
+    return NS_EXTRA(CAPropertyAnimation, self)->_additive;
 }
 
 - (void) setAdditive: (BOOL) value {
-    _additive = value;
+    NS_EXTRA(CAPropertyAnimation, self)->_additive = value;
 }
 
 - (BOOL) isCumulative {
-    return _cumulative;
+    return NS_EXTRA(CAPropertyAnimation, self)->_cumulative;
 }
 
 - (void) setCumulative: (BOOL) value {
-    _cumulative = value;
+    NS_EXTRA(CAPropertyAnimation, self)->_cumulative = value;
 }
 
 @end

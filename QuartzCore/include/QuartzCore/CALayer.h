@@ -1,5 +1,6 @@
 
 #import <ApplicationServices/ApplicationServices.h>
+#import <QuartzCore/LegacyIvarLayout.h>
 #import <Foundation/Foundation.h>
 #import <QuartzCore/CAAction.h>
 #import <QuartzCore/CATransform3D.h>
@@ -90,67 +91,70 @@ CA_EXPORT CAToneMapMode const CAToneMapModeNever;
 CA_EXPORT CAToneMapMode const CAToneMapModeIfSupported;
 
 @interface CALayer : NSObject <NSSecureCoding> {
-    CALayerContext *_context;
-    CALayer *_superlayer;
-    NSArray *_sublayers;
-    id _delegate;
-    CGPoint _anchorPoint;
-    CGPoint _position;
-    CGRect _bounds;
-    CGFloat _opacity;
-    BOOL _opaque;
-    id _contents;
-    CGFloat _contentsScale;
-    CGRect _contentsCenter;
-    NSString *_contentsFormat;
-    NSString *_contentsGravity;
-    NSString *_cornerCurve;
-    BOOL _allowsGroupOpacity;
-    CGPathRef _shadowPath;
-    BOOL _needsLayout;
-    NSString *_preferredDynamicRange;
-    NSString *_toneMapMode;
-    BOOL _allowsEdgeAntialiasing;
-    CAEdgeAntialiasingMask _edgeAntialiasingMask;
-    CATransform3D _transform;
-    CATransform3D _sublayerTransform;
-    NSString *_minificationFilter;
-    NSString *_magnificationFilter;
-    BOOL _needsDisplay;
-    NSMutableDictionary *_animations;
-    NSNumber *_textureId;
-    CGColorRef _backgroundColor;
-    CGColorRef _borderColor;
-    CGFloat _borderWidth;
-    CGFloat _cornerRadius;
-    BOOL _masksToBounds;
-    CALayer *_mask;
-    NSArray *_filters;
-    id _compositingFilter;
-    CGColorRef _shadowColor;
-    float _shadowOpacity;
-    CGFloat _shadowRadius;
-    CGSize _shadowOffset;
-    BOOL _hidden;
-    id _textureContents;
-    uint32_t _textureSeed;
-    BOOL _needsDisplayOnBoundsChange;
-    NSString *_name;
-    id _layoutManager;
-    NSArray *_constraints;
-    BOOL _geometryFlipped;
-    CAAutoresizingMask _autoresizingMask;
-    CGFloat _zPosition;
-    CGFloat _anchorPointZ;
-    BOOL _doubleSided;
-    CGRect _contentsRect;
-    float _minificationFilterBias;
-    BOOL _shouldRasterize;
-    CGFloat _rasterizationScale;
-    BOOL _drawsAsynchronously;
-    NSArray *_backgroundFilters;
-    NSDictionary *_actions;
-    NSDictionary *_style;
+    NS_LEGACY_IVAR_PAD(_legacyPadCALayer, 40)
+    NS_EXTRA_IVARS_BEGIN(CALayer)
+        CALayerContext *_context;
+        CALayer *_superlayer;
+        NSArray *_sublayers;
+        id _delegate;
+        CGPoint _anchorPoint;
+        CGPoint _position;
+        CGRect _bounds;
+        CGFloat _opacity;
+        BOOL _opaque;
+        id _contents;
+        CGFloat _contentsScale;
+        CGRect _contentsCenter;
+        NSString *_contentsFormat;
+        NSString *_contentsGravity;
+        NSString *_cornerCurve;
+        BOOL _allowsGroupOpacity;
+        CGPathRef _shadowPath;
+        BOOL _needsLayout;
+        NSString *_preferredDynamicRange;
+        NSString *_toneMapMode;
+        BOOL _allowsEdgeAntialiasing;
+        CAEdgeAntialiasingMask _edgeAntialiasingMask;
+        CATransform3D _transform;
+        CATransform3D _sublayerTransform;
+        NSString *_minificationFilter;
+        NSString *_magnificationFilter;
+        BOOL _needsDisplay;
+        NSMutableDictionary *_animations;
+        NSNumber *_textureId;
+        CGColorRef _backgroundColor;
+        CGColorRef _borderColor;
+        CGFloat _borderWidth;
+        CGFloat _cornerRadius;
+        BOOL _masksToBounds;
+        CALayer *_mask;
+        NSArray *_filters;
+        id _compositingFilter;
+        CGColorRef _shadowColor;
+        float _shadowOpacity;
+        CGFloat _shadowRadius;
+        CGSize _shadowOffset;
+        BOOL _hidden;
+        id _textureContents;
+        uint32_t _textureSeed;
+        BOOL _needsDisplayOnBoundsChange;
+        NSString *_name;
+        id _layoutManager;
+        NSArray *_constraints;
+        BOOL _geometryFlipped;
+        CAAutoresizingMask _autoresizingMask;
+        CGFloat _zPosition;
+        CGFloat _anchorPointZ;
+        BOOL _doubleSided;
+        CGRect _contentsRect;
+        float _minificationFilterBias;
+        BOOL _shouldRasterize;
+        CGFloat _rasterizationScale;
+        BOOL _drawsAsynchronously;
+        NSArray *_backgroundFilters;
+        NSDictionary *_actions;
+        NSDictionary *_style;
+    NS_EXTRA_IVARS_END(CALayer)
 }
 
 + layer;

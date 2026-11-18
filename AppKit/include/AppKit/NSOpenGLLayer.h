@@ -20,5 +20,7 @@
 #import <AppKit/AppKitExport.h>
 #import <QuartzCore/CAOpenGLLayer.h>
 
-@interface NSOpenGLLayer : CAOpenGLLayer
+@interface NSOpenGLLayer : CAOpenGLLayer {
+    NS_LEGACY_IVAR_PAD(_legacyPadNSOpenGLLayer, 28)
+}
 @end

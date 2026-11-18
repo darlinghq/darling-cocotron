@@ -15,15 +15,17 @@ NSString *const kCAMediaTimingFunctionDefault =
 
 @implementation CAMediaTimingFunction
 
+NS_EXTRA_DEALLOC(CAMediaTimingFunction)
+
 - initWithControlPoints: (float)
                     c1x: (float) c1y
                        :(float) c2x
                        :(float) c2y
 {
-    _c1x = c1x;
-    _c1y = c1y;
-    _c2x = c2x;
-    _c2y = c2y;
+    NS_EXTRA(CAMediaTimingFunction, self)->_c1x = c1x;
+    NS_EXTRA(CAMediaTimingFunction, self)->_c1y = c1y;
+    NS_EXTRA(CAMediaTimingFunction, self)->_c2x = c2x;
+    NS_EXTRA(CAMediaTimingFunction, self)->_c2y = c2y;
     return self;
 }
 
@@ -67,13 +69,13 @@ NSString *const kCAMediaTimingFunctionDefault =
         break;
 
     case 1:
-        ptr[0] = _c1x;
-        ptr[1] = _c1y;
+        ptr[0] = NS_EXTRA(CAMediaTimingFunction, self)->_c1x;
+        ptr[1] = NS_EXTRA(CAMediaTimingFunction, self)->_c1y;
         break;
 
     case 2:
-        ptr[0] = _c2x;
-        ptr[1] = _c2y;
+        ptr[0] = NS_EXTRA(CAMediaTimingFunction, self)->_c2x;
+        ptr[1] = NS_EXTRA(CAMediaTimingFunction, self)->_c2y;
         break;
 
     case 3:
@@ -112,12 +114,12 @@ static double bezierDerivative(double a, double b, double s) {
     BOOL converged = NO;
 
     for (int i = 0; i < 8; i++) {
-        double error = bezier(_c1x, _c2x, s) - t;
+        double error = bezier(NS_EXTRA(CAMediaTimingFunction, self)->_c1x, NS_EXTRA(CAMediaTimingFunction, self)->_c2x, s) - t;
         if (fabs(error) < 1e-9) {
             converged = YES;
             break;
         }
-        double slope = bezierDerivative(_c1x, _c2x, s);
+        double slope = bezierDerivative(NS_EXTRA(CAMediaTimingFunction, self)->_c1x, NS_EXTRA(CAMediaTimingFunction, self)->_c2x, s);
         if (fabs(slope) < 1e-6)
             break;
         s -= error / slope;
@@ -129,7 +131,7 @@ static double bezierDerivative(double a, double b, double s) {
         double lo = 0.0, hi = 1.0;
         s = t;
         for (int i = 0; i < 64; i++) {
-            if (bezier(_c1x, _c2x, s) < t)
+            if (bezier(NS_EXTRA(CAMediaTimingFunction, self)->_c1x, NS_EXTRA(CAMediaTimingFunction, self)->_c2x, s) < t)
                 lo = s;
             else
                 hi = s;
@@ -137,7 +139,7 @@ static double bezierDerivative(double a, double b, double s) {
         }
     }
 
-    return bezier(_c1y, _c2y, s);
+    return bezier(NS_EXTRA(CAMediaTimingFunction, self)->_c1y, NS_EXTRA(CAMediaTimingFunction, self)->_c2y, s);
 }
 
 @end

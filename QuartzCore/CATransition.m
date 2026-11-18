@@ -3,39 +3,39 @@
 @implementation CATransition
 
 - (NSString *) type {
-    return _type;
+    return NS_EXTRA(CATransition, self)->_type;
 }
 
 - (void) setType: (NSString *) value {
     value = [value copy];
-    [_type release];
-    _type = value;
+    [NS_EXTRA(CATransition, self)->_type release];
+    NS_EXTRA(CATransition, self)->_type = value;
 }
 
 - (NSString *) subtype {
-    return _subtype;
+    return NS_EXTRA(CATransition, self)->_subtype;
 }
 
 - (void) setSubtype: (NSString *) value {
     value = [value copy];
-    [_subtype release];
-    _subtype = value;
+    [NS_EXTRA(CATransition, self)->_subtype release];
+    NS_EXTRA(CATransition, self)->_subtype = value;
 }
 
 - (CGFloat) startProgress {
-    return _startProgress;
+    return NS_EXTRA(CATransition, self)->_startProgress;
 }
 
 - (void) setStartProgress: (CGFloat) value {
-    _startProgress = value;
+    NS_EXTRA(CATransition, self)->_startProgress = value;
 }
 
 - (CGFloat) endProgress {
-    return _endProgress;
+    return NS_EXTRA(CATransition, self)->_endProgress;
 }
 
 - (void) setEndProgress: (CGFloat) value {
-    _endProgress = value;
+    NS_EXTRA(CATransition, self)->_endProgress = value;
 }
 
 @end

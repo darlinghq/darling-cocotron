@@ -57,13 +57,14 @@ NSString *const kCAAnimationRotateAutoReverse = @"autoReverse";
 }
 
 - init {
-    _duration = [CATransaction animationDuration];
-    _timingFunction = [[CATransaction animationTimingFunction] retain];
+    NS_EXTRA(CAAnimation, self)->_duration = [CATransaction animationDuration];
+    NS_EXTRA(CAAnimation, self)->_timingFunction = [[CATransaction animationTimingFunction] retain];
     return self;
 }
 
 - (void) dealloc {
-    [_timingFunction release];
+    [NS_EXTRA(CAAnimation, self)->_timingFunction release];
+    NS_EXTRA_FREE(CAAnimation, self);
     [super dealloc];
 }
 
@@ -73,97 +74,97 @@ NSString *const kCAAnimationRotateAutoReverse = @"autoReverse";
 }
 
 - delegate {
-    return _delegate;
+    return NS_EXTRA(CAAnimation, self)->_delegate;
 }
 
 - (void) setDelegate: object {
     object = [object retain];
-    [_delegate release];
-    _delegate = object;
+    [NS_EXTRA(CAAnimation, self)->_delegate release];
+    NS_EXTRA(CAAnimation, self)->_delegate = object;
 }
 
 - (BOOL) isRemovedOnCompletion {
-    return _removedOnCompletion;
+    return NS_EXTRA(CAAnimation, self)->_removedOnCompletion;
 }
 
 - (void) setRemovedOnCompletion: (BOOL) value {
-    _removedOnCompletion = value;
+    NS_EXTRA(CAAnimation, self)->_removedOnCompletion = value;
 }
 
 - (CAMediaTimingFunction *) timingFunction {
-    return _timingFunction;
+    return NS_EXTRA(CAAnimation, self)->_timingFunction;
 }
 
 - (void) setTimingFunction: (CAMediaTimingFunction *) value {
     value = [value retain];
-    [_timingFunction release];
-    _timingFunction = value;
+    [NS_EXTRA(CAAnimation, self)->_timingFunction release];
+    NS_EXTRA(CAAnimation, self)->_timingFunction = value;
 }
 
 - (BOOL) autoreverses {
-    return _autoreverses;
+    return NS_EXTRA(CAAnimation, self)->_autoreverses;
 }
 
 - (void) setAutoreverses: (BOOL) value {
-    _autoreverses = value;
+    NS_EXTRA(CAAnimation, self)->_autoreverses = value;
 }
 
 - (CFTimeInterval) beginTime {
-    return _beginTime;
+    return NS_EXTRA(CAAnimation, self)->_beginTime;
 }
 
 - (void) setBeginTime: (CFTimeInterval) value {
-    _beginTime = value;
+    NS_EXTRA(CAAnimation, self)->_beginTime = value;
 }
 
 - (CFTimeInterval) duration {
-    return _duration;
+    return NS_EXTRA(CAAnimation, self)->_duration;
 }
 
 - (void) setDuration: (CFTimeInterval) value {
-    _duration = value;
+    NS_EXTRA(CAAnimation, self)->_duration = value;
 }
 
 - (NSString *) fillMode {
-    return _fillMode;
+    return NS_EXTRA(CAAnimation, self)->_fillMode;
 }
 
 - (void) setFillMode: (NSString *) value {
     value = [value copy];
-    [_fillMode release];
-    _fillMode = value;
+    [NS_EXTRA(CAAnimation, self)->_fillMode release];
+    NS_EXTRA(CAAnimation, self)->_fillMode = value;
 }
 
 - (CGFloat) repeatCount {
-    return _repeatCount;
+    return NS_EXTRA(CAAnimation, self)->_repeatCount;
 }
 
 - (void) setRepeatCount: (CGFloat) value {
-    _repeatCount = value;
+    NS_EXTRA(CAAnimation, self)->_repeatCount = value;
 }
 
 - (CFTimeInterval) repeatDuration {
-    return _repeatDuration;
+    return NS_EXTRA(CAAnimation, self)->_repeatDuration;
 }
 
 - (void) setRepeatDuration: (CFTimeInterval) value {
-    _repeatDuration = value;
+    NS_EXTRA(CAAnimation, self)->_repeatDuration = value;
 }
 
 - (CGFloat) speed {
-    return _speed;
+    return NS_EXTRA(CAAnimation, self)->_speed;
 }
 
 - (void) setSpeed: (CGFloat) value {
-    _speed = value;
+    NS_EXTRA(CAAnimation, self)->_speed = value;
 }
 
 - (CFTimeInterval) timeOffset {
-    return _timeOffset;
+    return NS_EXTRA(CAAnimation, self)->_timeOffset;
 }
 
 - (void) setTimeOffset: (CFTimeInterval) value {
-    _timeOffset = value;
+    NS_EXTRA(CAAnimation, self)->_timeOffset = value;
 }
 
 @end

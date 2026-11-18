@@ -18,6 +18,7 @@
 */
 
 #import <Foundation/Foundation.h>
+#import <QuartzCore/LegacyIvarLayout.h>
 #import <QuartzCore/CABase.h>
 #import <QuartzCore/CALayer.h>
 
@@ -34,14 +35,16 @@ CA_EXPORT NSString *const kCATruncationMiddle;
 
 // Draws a plain string into the layer's contents.
 @interface CATextLayer : CALayer {
-    id _string;
-    CFTypeRef _font;
-    CGFloat _fontSize;
-    CGColorRef _foregroundColor;
-    BOOL _wrapped;
-    NSString *_alignmentMode;
-    NSString *_truncationMode;
-    BOOL _allowsFontSubpixelQuantization;
+    NS_EXTRA_IVARS_BEGIN(CATextLayer)
+        id _string;
+        CFTypeRef _font;
+        CGFloat _fontSize;
+        CGColorRef _foregroundColor;
+        BOOL _wrapped;
+        NSString *_alignmentMode;
+        NSString *_truncationMode;
+        BOOL _allowsFontSubpixelQuantization;
+    NS_EXTRA_IVARS_END(CATextLayer)
 }
 
 @property(copy) id string;          // NSString or NSAttributedString (drawn as plain text)

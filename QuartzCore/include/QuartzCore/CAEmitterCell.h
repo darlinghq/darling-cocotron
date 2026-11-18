@@ -19,7 +19,10 @@
 
 #import <Foundation/NSObject.h>
 #import <QuartzCore/CAMediaTiming.h>
+#import <QuartzCore/LegacyIvarLayout.h>
 
-@interface CAEmitterCell : NSObject <NSCoding, CAMediaTiming>
+@interface CAEmitterCell : NSObject <NSCoding, CAMediaTiming> {
+    NS_LEGACY_IVAR_PAD(_legacyPadCAEmitterCell, 16)
+}
 
 @end

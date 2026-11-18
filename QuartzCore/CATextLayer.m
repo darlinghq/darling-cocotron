@@ -116,11 +116,11 @@ static CGFloat layoutLine(CTFontRef font, NSString *line, CGGlyph **outGlyphs,
 @implementation CATextLayer
 
 - (void) _setTextDefaults {
-    _fontSize = 36;
-    _foregroundColor = CGColorCreateGenericRGB(1, 1, 1, 1);
-    _alignmentMode = [kCAAlignmentNatural copy];
-    _truncationMode = [kCATruncationNone copy];
-    _needsDisplay = YES;
+    NS_EXTRA(CATextLayer, self)->_fontSize = 36;
+    NS_EXTRA(CATextLayer, self)->_foregroundColor = CGColorCreateGenericRGB(1, 1, 1, 1);
+    NS_EXTRA(CATextLayer, self)->_alignmentMode = [kCAAlignmentNatural copy];
+    NS_EXTRA(CATextLayer, self)->_truncationMode = [kCATruncationNone copy];
+    NS_EXTRA(CALayer, self)->_needsDisplay = YES;
 }
 
 - init {
@@ -135,27 +135,27 @@ static CGFloat layoutLine(CTFontRef font, NSString *line, CGGlyph **outGlyphs,
 // comes back without a font.
 - (void) _encodeAttributes: (CAArchiveWriter *) w {
     [super _encodeAttributes: w];
-    if (_string != nil)
-        [w encodeObject: _string forKey: @"string"];
-    if (_font != NULL)
-        [w encodeObject: [(id) _font isKindOfClass: [NSString class]] ? (id) _font : (id) [NSNull null]
+    if (NS_EXTRA(CATextLayer, self)->_string != nil)
+        [w encodeObject: NS_EXTRA(CATextLayer, self)->_string forKey: @"string"];
+    if (NS_EXTRA(CATextLayer, self)->_font != NULL)
+        [w encodeObject: [(id) NS_EXTRA(CATextLayer, self)->_font isKindOfClass: [NSString class]] ? (id) NS_EXTRA(CATextLayer, self)->_font : (id) [NSNull null]
                  forKey: @"font"];
-    if (_fontSize != 36)
-        [w encodeDouble: _fontSize forKey: @"fontSize"];
-    if (_foregroundColor != NULL) {
-        const CGFloat *c = CGColorGetComponents(_foregroundColor);
-        BOOL white = CGColorGetNumberOfComponents(_foregroundColor) == 4 && c[0] == 1 && c[1] == 1 &&
+    if (NS_EXTRA(CATextLayer, self)->_fontSize != 36)
+        [w encodeDouble: NS_EXTRA(CATextLayer, self)->_fontSize forKey: @"fontSize"];
+    if (NS_EXTRA(CATextLayer, self)->_foregroundColor != NULL) {
+        const CGFloat *c = CGColorGetComponents(NS_EXTRA(CATextLayer, self)->_foregroundColor);
+        BOOL white = CGColorGetNumberOfComponents(NS_EXTRA(CATextLayer, self)->_foregroundColor) == 4 && c[0] == 1 && c[1] == 1 &&
                      c[2] == 1 && c[3] == 1;
         if (!white)
-            [w encodeColor: _foregroundColor forKey: @"foregroundColor"];
+            [w encodeColor: NS_EXTRA(CATextLayer, self)->_foregroundColor forKey: @"foregroundColor"];
     }
-    if (_wrapped)
+    if (NS_EXTRA(CATextLayer, self)->_wrapped)
         [w encodeBool: YES forKey: @"wrapped"];
-    if (![_alignmentMode isEqualToString: kCAAlignmentNatural])
-        [w encodeObject: _alignmentMode forKey: @"alignmentMode"];
-    if (![_truncationMode isEqualToString: kCATruncationNone])
-        [w encodeObject: _truncationMode forKey: @"truncationMode"];
-    if (_allowsFontSubpixelQuantization)
+    if (![NS_EXTRA(CATextLayer, self)->_alignmentMode isEqualToString: kCAAlignmentNatural])
+        [w encodeObject: NS_EXTRA(CATextLayer, self)->_alignmentMode forKey: @"alignmentMode"];
+    if (![NS_EXTRA(CATextLayer, self)->_truncationMode isEqualToString: kCATruncationNone])
+        [w encodeObject: NS_EXTRA(CATextLayer, self)->_truncationMode forKey: @"truncationMode"];
+    if (NS_EXTRA(CATextLayer, self)->_allowsFontSubpixelQuantization)
         [w encodeBool: YES forKey: @"allowsFontSubpixelQuantization"];
 }
 
@@ -172,14 +172,14 @@ static CGFloat layoutLine(CTFontRef font, NSString *line, CGGlyph **outGlyphs,
     double real;
     BOOL flag;
     if ([r decodeDouble: &real forKey: @"fontSize"])
-        _fontSize = real;
+        NS_EXTRA(CATextLayer, self)->_fontSize = real;
     CGColorRef color = [r copyColorForKey: @"foregroundColor"];
     if (color != NULL) {
         [self setForegroundColor: color];
         CGColorRelease(color);
     }
     if ([r decodeBool: &flag forKey: @"wrapped"])
-        _wrapped = flag;
+        NS_EXTRA(CATextLayer, self)->_wrapped = flag;
     NSString *mode = [r decodeStringForKey: @"alignmentMode"];
     if (mode != nil)
         [self setAlignmentMode: mode];
@@ -187,7 +187,7 @@ static CGFloat layoutLine(CTFontRef font, NSString *line, CGGlyph **outGlyphs,
     if (mode != nil)
         [self setTruncationMode: mode];
     if ([r decodeBool: &flag forKey: @"allowsFontSubpixelQuantization"])
-        _allowsFontSubpixelQuantization = flag;
+        NS_EXTRA(CATextLayer, self)->_allowsFontSubpixelQuantization = flag;
 }
 
 - initWithLayer: (id) layer {
@@ -198,95 +198,96 @@ static CGFloat layoutLine(CTFontRef font, NSString *line, CGGlyph **outGlyphs,
 }
 
 - (void) dealloc {
-    [_string release];
-    if (_font)
-        CFRelease(_font);
-    if (_foregroundColor)
-        CGColorRelease(_foregroundColor);
-    [_alignmentMode release];
-    [_truncationMode release];
+    [NS_EXTRA(CATextLayer, self)->_string release];
+    if (NS_EXTRA(CATextLayer, self)->_font)
+        CFRelease(NS_EXTRA(CATextLayer, self)->_font);
+    if (NS_EXTRA(CATextLayer, self)->_foregroundColor)
+        CGColorRelease(NS_EXTRA(CATextLayer, self)->_foregroundColor);
+    [NS_EXTRA(CATextLayer, self)->_alignmentMode release];
+    [NS_EXTRA(CATextLayer, self)->_truncationMode release];
+    NS_EXTRA_FREE(CATextLayer, self);
     [super dealloc];
 }
 
 - (id) string {
-    return _string;
+    return NS_EXTRA(CATextLayer, self)->_string;
 }
 
 - (void) setString: (id) string {
     string = [string copy];
-    [_string release];
-    _string = string;
+    [NS_EXTRA(CATextLayer, self)->_string release];
+    NS_EXTRA(CATextLayer, self)->_string = string;
     [self setNeedsDisplay];
 }
 
 - (CFTypeRef) font {
-    return _font;
+    return NS_EXTRA(CATextLayer, self)->_font;
 }
 
 - (void) setFont: (CFTypeRef) font {
     if (font)
         CFRetain(font);
-    if (_font)
-        CFRelease(_font);
-    _font = font;
+    if (NS_EXTRA(CATextLayer, self)->_font)
+        CFRelease(NS_EXTRA(CATextLayer, self)->_font);
+    NS_EXTRA(CATextLayer, self)->_font = font;
     [self setNeedsDisplay];
 }
 
 - (CGFloat) fontSize {
-    return _fontSize;
+    return NS_EXTRA(CATextLayer, self)->_fontSize;
 }
 
 - (void) setFontSize: (CGFloat) size {
-    _fontSize = size;
+    NS_EXTRA(CATextLayer, self)->_fontSize = size;
     [self setNeedsDisplay];
 }
 
 - (CGColorRef) foregroundColor {
-    return _foregroundColor;
+    return NS_EXTRA(CATextLayer, self)->_foregroundColor;
 }
 
 - (void) setForegroundColor: (CGColorRef) color {
-    replaceColor(&_foregroundColor, color);
+    replaceColor(&NS_EXTRA(CATextLayer, self)->_foregroundColor, color);
     [self setNeedsDisplay];
 }
 
 - (BOOL) isWrapped {
-    return _wrapped;
+    return NS_EXTRA(CATextLayer, self)->_wrapped;
 }
 
 - (void) setWrapped: (BOOL) wrapped {
-    _wrapped = wrapped;
+    NS_EXTRA(CATextLayer, self)->_wrapped = wrapped;
     [self setNeedsDisplay];
 }
 
 - (NSString *) alignmentMode {
-    return _alignmentMode;
+    return NS_EXTRA(CATextLayer, self)->_alignmentMode;
 }
 
 - (void) setAlignmentMode: (NSString *) mode {
     mode = [mode copy];
-    [_alignmentMode release];
-    _alignmentMode = mode;
+    [NS_EXTRA(CATextLayer, self)->_alignmentMode release];
+    NS_EXTRA(CATextLayer, self)->_alignmentMode = mode;
     [self setNeedsDisplay];
 }
 
 - (NSString *) truncationMode {
-    return _truncationMode;
+    return NS_EXTRA(CATextLayer, self)->_truncationMode;
 }
 
 - (void) setTruncationMode: (NSString *) mode {
     mode = [mode copy];
-    [_truncationMode release];
-    _truncationMode = mode;
+    [NS_EXTRA(CATextLayer, self)->_truncationMode release];
+    NS_EXTRA(CATextLayer, self)->_truncationMode = mode;
     [self setNeedsDisplay];
 }
 
 - (BOOL) allowsFontSubpixelQuantization {
-    return _allowsFontSubpixelQuantization;
+    return NS_EXTRA(CATextLayer, self)->_allowsFontSubpixelQuantization;
 }
 
 - (void) setAllowsFontSubpixelQuantization: (BOOL) value {
-    _allowsFontSubpixelQuantization = value;
+    NS_EXTRA(CATextLayer, self)->_allowsFontSubpixelQuantization = value;
 }
 
 // Splits the text at line breaks and, when wrapped, at spaces to fit the width.
@@ -308,7 +309,7 @@ static CGFloat layoutLine(CTFontRef font, NSString *line, CGGlyph **outGlyphs,
                 [text substringWithRange: NSMakeRange(start, contentsEnd - start)]];
         index = end;
     }
-    if (!_wrapped || width <= 0)
+    if (!NS_EXTRA(CATextLayer, self)->_wrapped || width <= 0)
         return paragraphs;
 
     NSMutableArray *lines = [NSMutableArray array];
@@ -335,18 +336,18 @@ static CGFloat layoutLine(CTFontRef font, NSString *line, CGGlyph **outGlyphs,
     [super drawInContext: context];
 
     NSString *text = nil;
-    if ([_string isKindOfClass: [NSAttributedString class]])
-        text = [_string string];
-    else if ([_string isKindOfClass: [NSString class]])
-        text = _string;
-    if ([text length] == 0 || _fontSize <= 0 || _foregroundColor == NULL)
+    if ([NS_EXTRA(CATextLayer, self)->_string isKindOfClass: [NSAttributedString class]])
+        text = [NS_EXTRA(CATextLayer, self)->_string string];
+    else if ([NS_EXTRA(CATextLayer, self)->_string isKindOfClass: [NSString class]])
+        text = NS_EXTRA(CATextLayer, self)->_string;
+    if ([text length] == 0 || NS_EXTRA(CATextLayer, self)->_fontSize <= 0 || NS_EXTRA(CATextLayer, self)->_foregroundColor == NULL)
         return;
 
-    CGFontRef graphicsFont = createGraphicsFont(_font);
+    CGFontRef graphicsFont = createGraphicsFont(NS_EXTRA(CATextLayer, self)->_font);
     if (graphicsFont == NULL)
         return;
     CTFontRef font =
-            CTFontCreateWithGraphicsFont(graphicsFont, _fontSize, NULL, NULL);
+            CTFontCreateWithGraphicsFont(graphicsFont, NS_EXTRA(CATextLayer, self)->_fontSize, NULL, NULL);
     if (font == NULL) {
         CGFontRelease(graphicsFont);
         return;
@@ -358,9 +359,9 @@ static CGFloat layoutLine(CTFontRef font, NSString *line, CGGlyph **outGlyphs,
     CGFloat lineHeight = ceil(ascent + descent + CTFontGetLeading(font));
 
     CGContextSaveGState(context);
-    CGContextSetFillColorWithColor(context, _foregroundColor);
+    CGContextSetFillColorWithColor(context, NS_EXTRA(CATextLayer, self)->_foregroundColor);
     CGContextSetFont(context, graphicsFont);
-    CGContextSetFontSize(context, _fontSize);
+    CGContextSetFontSize(context, NS_EXTRA(CATextLayer, self)->_fontSize);
     CGContextSetTextMatrix(context, CGAffineTransformIdentity);
 
     CGFloat baseline = CGRectGetMaxY(bounds) - ascent;
@@ -375,9 +376,9 @@ static CGFloat layoutLine(CTFontRef font, NSString *line, CGGlyph **outGlyphs,
         CGFloat width = layoutLine(font, line, &glyphs, &advances);
 
         CGFloat x = CGRectGetMinX(bounds);
-        if ([_alignmentMode isEqualToString: kCAAlignmentRight])
+        if ([NS_EXTRA(CATextLayer, self)->_alignmentMode isEqualToString: kCAAlignmentRight])
             x = CGRectGetMaxX(bounds) - width;
-        else if ([_alignmentMode isEqualToString: kCAAlignmentCenter])
+        else if ([NS_EXTRA(CATextLayer, self)->_alignmentMode isEqualToString: kCAAlignmentCenter])
             x = CGRectGetMinX(bounds) + (bounds.size.width - width) / 2;
 
         if ([line length] > 0) {

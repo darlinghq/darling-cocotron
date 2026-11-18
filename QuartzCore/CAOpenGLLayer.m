@@ -28,19 +28,19 @@
 @implementation CAOpenGLLayer
 
 - (BOOL) isAsynchronous {
-    return _asynchronous;
+    return NS_EXTRA(CAOpenGLLayer, self)->_asynchronous;
 }
 
 - (void) setAsynchronous: (BOOL) async {
-    _asynchronous = async;
+    NS_EXTRA(CAOpenGLLayer, self)->_asynchronous = async;
 }
 
 - (BOOL) wantsExtendedDynamicRangeContent {
-    return _wantsExtendedDynamicRangeContent;
+    return NS_EXTRA(CAOpenGLLayer, self)->_wantsExtendedDynamicRangeContent;
 }
 
 - (void) setWantsExtendedDynamicRangeContent: (BOOL) val {
-    _wantsExtendedDynamicRangeContent = val;
+    NS_EXTRA(CAOpenGLLayer, self)->_wantsExtendedDynamicRangeContent = val;
 }
 
 - (BOOL) canDrawInCGLContext: (CGLContextObj) ctx pixelFormat: (CGLPixelFormatObj) pf forLayerTime: (CFTimeInterval) t displayTime: (const CVTimeStamp *) ts {
@@ -79,25 +79,25 @@
 - (CGLContextObj) copyCGLContextForPixelFormat: (CGLPixelFormatObj) pf {
     if (!pf) return NULL;
     CGLContextObj ctx = NULL;
-    CGLCreateContext(pf, [_context glContext], &ctx);
+    CGLCreateContext(pf, [NS_EXTRA(CALayer, self)->_context glContext], &ctx);
     return ctx;
 }
 
 - (void) display {
     @synchronized(self) {
-        if (!_pixelFormat) {
+        if (!NS_EXTRA(CAOpenGLLayer, self)->_pixelFormat) {
             if ([self respondsToSelector: @selector(copyCGLPixelFormatForDisplayMask:)]) {
-                _pixelFormat = [(id)self copyCGLPixelFormatForDisplayMask: 0];
+                NS_EXTRA(CAOpenGLLayer, self)->_pixelFormat = [(id)self copyCGLPixelFormatForDisplayMask: 0];
             }
         }
-        if (!_cglContext) {
+        if (!NS_EXTRA(CAOpenGLLayer, self)->_cglContext) {
             if ([self respondsToSelector: @selector(copyCGLContextForPixelFormat:)]) {
-                _cglContext = [self copyCGLContextForPixelFormat: _pixelFormat];
+                NS_EXTRA(CAOpenGLLayer, self)->_cglContext = [self copyCGLContextForPixelFormat: NS_EXTRA(CAOpenGLLayer, self)->_pixelFormat];
             }
         }
     }
 
-    if (_cglContext) {
+    if (NS_EXTRA(CAOpenGLLayer, self)->_cglContext) {
         CGRect bounds = [self bounds];
         CGFloat scale = [self contentsScale];
         if (scale <= 0.0) scale = 1.0;
@@ -108,52 +108,52 @@
             return;
 
         CGLContextObj prevCtx = CGLGetCurrentContext();
-        BOOL needBind = (prevCtx != _cglContext);
+        BOOL needBind = (prevCtx != NS_EXTRA(CAOpenGLLayer, self)->_cglContext);
         if (needBind) {
-            CGLLockContext(_cglContext);
-            CGLSetCurrentContext(_cglContext);
+            CGLLockContext(NS_EXTRA(CAOpenGLLayer, self)->_cglContext);
+            CGLSetCurrentContext(NS_EXTRA(CAOpenGLLayer, self)->_cglContext);
         }
 
-        if (_fbo == 0 || _allocatedSize.width != width || _allocatedSize.height != height) {
-            if (_colorTex != 0) { glDeleteTextures(1, &_colorTex); _colorTex = 0; }
-            if (_depthRb != 0) { glDeleteRenderbuffers(1, &_depthRb); _depthRb = 0; }
-            if (_fbo != 0) { glDeleteFramebuffers(1, &_fbo); _fbo = 0; }
+        if (NS_EXTRA(CAOpenGLLayer, self)->_fbo == 0 || NS_EXTRA(CAOpenGLLayer, self)->_allocatedSize.width != width || NS_EXTRA(CAOpenGLLayer, self)->_allocatedSize.height != height) {
+            if (NS_EXTRA(CAOpenGLLayer, self)->_colorTex != 0) { glDeleteTextures(1, &NS_EXTRA(CAOpenGLLayer, self)->_colorTex); NS_EXTRA(CAOpenGLLayer, self)->_colorTex = 0; }
+            if (NS_EXTRA(CAOpenGLLayer, self)->_depthRb != 0) { glDeleteRenderbuffers(1, &NS_EXTRA(CAOpenGLLayer, self)->_depthRb); NS_EXTRA(CAOpenGLLayer, self)->_depthRb = 0; }
+            if (NS_EXTRA(CAOpenGLLayer, self)->_fbo != 0) { glDeleteFramebuffers(1, &NS_EXTRA(CAOpenGLLayer, self)->_fbo); NS_EXTRA(CAOpenGLLayer, self)->_fbo = 0; }
 
-            glGenTextures(1, &_colorTex);
-            glBindTexture(GL_TEXTURE_2D, _colorTex);
+            glGenTextures(1, &NS_EXTRA(CAOpenGLLayer, self)->_colorTex);
+            glBindTexture(GL_TEXTURE_2D, NS_EXTRA(CAOpenGLLayer, self)->_colorTex);
             glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
-            glGenRenderbuffers(1, &_depthRb);
-            glBindRenderbuffer(GL_RENDERBUFFER, _depthRb);
+            glGenRenderbuffers(1, &NS_EXTRA(CAOpenGLLayer, self)->_depthRb);
+            glBindRenderbuffer(GL_RENDERBUFFER, NS_EXTRA(CAOpenGLLayer, self)->_depthRb);
             glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, width, height);
 
-            glGenFramebuffers(1, &_fbo);
-            glBindFramebuffer(GL_FRAMEBUFFER, _fbo);
-            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, _colorTex, 0);
-            glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, _depthRb);
+            glGenFramebuffers(1, &NS_EXTRA(CAOpenGLLayer, self)->_fbo);
+            glBindFramebuffer(GL_FRAMEBUFFER, NS_EXTRA(CAOpenGLLayer, self)->_fbo);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, NS_EXTRA(CAOpenGLLayer, self)->_colorTex, 0);
+            glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, NS_EXTRA(CAOpenGLLayer, self)->_depthRb);
 
             GLenum fboStatus = glCheckFramebufferStatus(GL_FRAMEBUFFER);
             if (fboStatus != GL_FRAMEBUFFER_COMPLETE) {
                 NSLog(@"CAOpenGLLayer: FBO incomplete (0x%x)", fboStatus);
                 glBindFramebuffer(GL_FRAMEBUFFER, 0);
-                if (_colorTex != 0) { glDeleteTextures(1, &_colorTex); _colorTex = 0; }
-                if (_depthRb != 0) { glDeleteRenderbuffers(1, &_depthRb); _depthRb = 0; }
-                if (_fbo != 0) { glDeleteFramebuffers(1, &_fbo); _fbo = 0; }
-                _allocatedSize = CGSizeZero;
+                if (NS_EXTRA(CAOpenGLLayer, self)->_colorTex != 0) { glDeleteTextures(1, &NS_EXTRA(CAOpenGLLayer, self)->_colorTex); NS_EXTRA(CAOpenGLLayer, self)->_colorTex = 0; }
+                if (NS_EXTRA(CAOpenGLLayer, self)->_depthRb != 0) { glDeleteRenderbuffers(1, &NS_EXTRA(CAOpenGLLayer, self)->_depthRb); NS_EXTRA(CAOpenGLLayer, self)->_depthRb = 0; }
+                if (NS_EXTRA(CAOpenGLLayer, self)->_fbo != 0) { glDeleteFramebuffers(1, &NS_EXTRA(CAOpenGLLayer, self)->_fbo); NS_EXTRA(CAOpenGLLayer, self)->_fbo = 0; }
+                NS_EXTRA(CAOpenGLLayer, self)->_allocatedSize = CGSizeZero;
                 if (needBind) {
                     CGLSetCurrentContext(prevCtx);
-                    CGLUnlockContext(_cglContext);
+                    CGLUnlockContext(NS_EXTRA(CAOpenGLLayer, self)->_cglContext);
                 }
                 return;
             }
 
-            _allocatedSize = CGSizeMake(width, height);
+            NS_EXTRA(CAOpenGLLayer, self)->_allocatedSize = CGSizeMake(width, height);
         } else {
-            glBindFramebuffer(GL_FRAMEBUFFER, _fbo);
+            glBindFramebuffer(GL_FRAMEBUFFER, NS_EXTRA(CAOpenGLLayer, self)->_fbo);
         }
 
         GLint prevViewport[4];
@@ -169,8 +169,8 @@
         ts.videoTimeScale = 1000000000;
         ts.flags = kCVTimeStampVideoTimeValid;
 
-        if ([self canDrawInCGLContext: _cglContext pixelFormat: _pixelFormat forLayerTime: layerTime displayTime: &ts]) {
-            [self drawInCGLContext: _cglContext pixelFormat: _pixelFormat forLayerTime: layerTime displayTime: &ts];
+        if ([self canDrawInCGLContext: NS_EXTRA(CAOpenGLLayer, self)->_cglContext pixelFormat: NS_EXTRA(CAOpenGLLayer, self)->_pixelFormat forLayerTime: layerTime displayTime: &ts]) {
+            [self drawInCGLContext: NS_EXTRA(CAOpenGLLayer, self)->_cglContext pixelFormat: NS_EXTRA(CAOpenGLLayer, self)->_pixelFormat forLayerTime: layerTime displayTime: &ts];
         }
 
         glFlush();
@@ -179,18 +179,18 @@
 
         if (needBind) {
             CGLSetCurrentContext(prevCtx);
-            CGLUnlockContext(_cglContext);
+            CGLUnlockContext(NS_EXTRA(CAOpenGLLayer, self)->_cglContext);
         }
 
-        [_context startTimerIfNeeded];
+        [NS_EXTRA(CALayer, self)->_context startTimerIfNeeded];
     }
 }
 
 // An asynchronous layer redraws with every frame, a synchronous one only
 // after -setNeedsDisplay.
 - (void) displayIfNeeded {
-    if (_asynchronous) {
-        _needsDisplay = NO;
+    if (NS_EXTRA(CAOpenGLLayer, self)->_asynchronous) {
+        NS_EXTRA(CALayer, self)->_needsDisplay = NO;
         [self display];
     } else {
         [super displayIfNeeded];
@@ -198,7 +198,7 @@
 }
 
 - (BOOL) _drawLayerContents: (CGRect) bounds opacity: (CGFloat) opacity {
-    if (_colorTex == 0)
+    if (NS_EXTRA(CAOpenGLLayer, self)->_colorTex == 0)
         return NO;
 
     GLint prevPrgm = 0;
@@ -214,7 +214,7 @@
     glEnable(GL_TEXTURE_2D);
     glEnableClientState(GL_TEXTURE_COORD_ARRAY);
     glEnableClientState(GL_VERTEX_ARRAY);
-    glBindTexture(GL_TEXTURE_2D, _colorTex);
+    glBindTexture(GL_TEXTURE_2D, NS_EXTRA(CAOpenGLLayer, self)->_colorTex);
 
     const GLfloat uprightTexture[4 * 2] = {0, 0, 1, 0, 0, 1, 1, 1};
     const GLfloat vertices[4 * 2] = {
@@ -248,20 +248,21 @@
 }
 
 - (void) dealloc {
-    if (_cglContext) {
-        if (CGLLockContext(_cglContext) == kCGLNoError) {
+    if (NS_EXTRA(CAOpenGLLayer, self)->_cglContext) {
+        if (CGLLockContext(NS_EXTRA(CAOpenGLLayer, self)->_cglContext) == kCGLNoError) {
             CGLContextObj prevCtx = CGLGetCurrentContext();
-            if (CGLSetCurrentContext(_cglContext) == kCGLNoError) {
-                if (_colorTex) glDeleteTextures(1, &_colorTex);
-                if (_depthRb) glDeleteRenderbuffers(1, &_depthRb);
-                if (_fbo) glDeleteFramebuffers(1, &_fbo);
-                if (prevCtx != _cglContext) CGLSetCurrentContext(prevCtx);
+            if (CGLSetCurrentContext(NS_EXTRA(CAOpenGLLayer, self)->_cglContext) == kCGLNoError) {
+                if (NS_EXTRA(CAOpenGLLayer, self)->_colorTex) glDeleteTextures(1, &NS_EXTRA(CAOpenGLLayer, self)->_colorTex);
+                if (NS_EXTRA(CAOpenGLLayer, self)->_depthRb) glDeleteRenderbuffers(1, &NS_EXTRA(CAOpenGLLayer, self)->_depthRb);
+                if (NS_EXTRA(CAOpenGLLayer, self)->_fbo) glDeleteFramebuffers(1, &NS_EXTRA(CAOpenGLLayer, self)->_fbo);
+                if (prevCtx != NS_EXTRA(CAOpenGLLayer, self)->_cglContext) CGLSetCurrentContext(prevCtx);
             }
-            CGLUnlockContext(_cglContext);
+            CGLUnlockContext(NS_EXTRA(CAOpenGLLayer, self)->_cglContext);
         }
     }
-    if (_pixelFormat) [self releaseCGLPixelFormat: _pixelFormat];
-    if (_cglContext) [self releaseCGLContext: _cglContext];
+    if (NS_EXTRA(CAOpenGLLayer, self)->_pixelFormat) [self releaseCGLPixelFormat: NS_EXTRA(CAOpenGLLayer, self)->_pixelFormat];
+    if (NS_EXTRA(CAOpenGLLayer, self)->_cglContext) [self releaseCGLContext: NS_EXTRA(CAOpenGLLayer, self)->_cglContext];
+    NS_EXTRA_FREE(CAOpenGLLayer, self);
     [super dealloc];
 }
 

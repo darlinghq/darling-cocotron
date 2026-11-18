@@ -43,14 +43,14 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
 @implementation CAShapeLayer
 
 - (void) _setShapeDefaults {
-    _fillColor = CGColorCreateGenericRGB(0, 0, 0, 1);
-    _fillRule = [kCAFillRuleNonZero copy];
-    _strokeEnd = 1;
-    _lineWidth = 1;
-    _miterLimit = 10;
-    _lineCap = [kCALineCapButt copy];
-    _lineJoin = [kCALineJoinMiter copy];
-    _needsDisplay = YES;
+    NS_EXTRA(CAShapeLayer, self)->_fillColor = CGColorCreateGenericRGB(0, 0, 0, 1);
+    NS_EXTRA(CAShapeLayer, self)->_fillRule = [kCAFillRuleNonZero copy];
+    NS_EXTRA(CAShapeLayer, self)->_strokeEnd = 1;
+    NS_EXTRA(CAShapeLayer, self)->_lineWidth = 1;
+    NS_EXTRA(CAShapeLayer, self)->_miterLimit = 10;
+    NS_EXTRA(CAShapeLayer, self)->_lineCap = [kCALineCapButt copy];
+    NS_EXTRA(CAShapeLayer, self)->_lineJoin = [kCALineJoinMiter copy];
+    NS_EXTRA(CALayer, self)->_needsDisplay = YES;
 }
 
 - init {
@@ -63,34 +63,34 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
 // Keys are written only when they differ from the defaults.
 - (void) _encodeAttributes: (CAArchiveWriter *) w {
     [super _encodeAttributes: w];
-    if (_path != NULL)
-        [w encodePath: _path forKey: @"path"];
-    if (_fillColor != NULL && !(CGColorGetNumberOfComponents(_fillColor) == 4 &&
-                                CGColorGetComponents(_fillColor)[0] == 0 &&
-                                CGColorGetComponents(_fillColor)[1] == 0 &&
-                                CGColorGetComponents(_fillColor)[2] == 0 &&
-                                CGColorGetComponents(_fillColor)[3] == 1))
-        [w encodeColor: _fillColor forKey: @"fillColor"];
-    if (![_fillRule isEqualToString: kCAFillRuleNonZero])
-        [w encodeObject: _fillRule forKey: @"fillRule"];
-    if (_strokeColor != NULL)
-        [w encodeColor: _strokeColor forKey: @"strokeColor"];
-    if (_strokeStart != 0)
-        [w encodeDouble: _strokeStart forKey: @"strokeStart"];
-    if (_strokeEnd != 1)
-        [w encodeDouble: _strokeEnd forKey: @"strokeEnd"];
-    if (_lineWidth != 1)
-        [w encodeDouble: _lineWidth forKey: @"lineWidth"];
-    if (_miterLimit != 10)
-        [w encodeDouble: _miterLimit forKey: @"miterLimit"];
-    if (![_lineCap isEqualToString: kCALineCapButt])
-        [w encodeObject: _lineCap forKey: @"lineCap"];
-    if (![_lineJoin isEqualToString: kCALineJoinMiter])
-        [w encodeObject: _lineJoin forKey: @"lineJoin"];
-    if (_lineDashPhase != 0)
-        [w encodeDouble: _lineDashPhase forKey: @"lineDashPhase"];
-    if (_lineDashPattern != nil)
-        [w encodeArray: _lineDashPattern forKey: @"lineDashPattern"];
+    if (NS_EXTRA(CAShapeLayer, self)->_path != NULL)
+        [w encodePath: NS_EXTRA(CAShapeLayer, self)->_path forKey: @"path"];
+    if (NS_EXTRA(CAShapeLayer, self)->_fillColor != NULL && !(CGColorGetNumberOfComponents(NS_EXTRA(CAShapeLayer, self)->_fillColor) == 4 &&
+                                CGColorGetComponents(NS_EXTRA(CAShapeLayer, self)->_fillColor)[0] == 0 &&
+                                CGColorGetComponents(NS_EXTRA(CAShapeLayer, self)->_fillColor)[1] == 0 &&
+                                CGColorGetComponents(NS_EXTRA(CAShapeLayer, self)->_fillColor)[2] == 0 &&
+                                CGColorGetComponents(NS_EXTRA(CAShapeLayer, self)->_fillColor)[3] == 1))
+        [w encodeColor: NS_EXTRA(CAShapeLayer, self)->_fillColor forKey: @"fillColor"];
+    if (![NS_EXTRA(CAShapeLayer, self)->_fillRule isEqualToString: kCAFillRuleNonZero])
+        [w encodeObject: NS_EXTRA(CAShapeLayer, self)->_fillRule forKey: @"fillRule"];
+    if (NS_EXTRA(CAShapeLayer, self)->_strokeColor != NULL)
+        [w encodeColor: NS_EXTRA(CAShapeLayer, self)->_strokeColor forKey: @"strokeColor"];
+    if (NS_EXTRA(CAShapeLayer, self)->_strokeStart != 0)
+        [w encodeDouble: NS_EXTRA(CAShapeLayer, self)->_strokeStart forKey: @"strokeStart"];
+    if (NS_EXTRA(CAShapeLayer, self)->_strokeEnd != 1)
+        [w encodeDouble: NS_EXTRA(CAShapeLayer, self)->_strokeEnd forKey: @"strokeEnd"];
+    if (NS_EXTRA(CAShapeLayer, self)->_lineWidth != 1)
+        [w encodeDouble: NS_EXTRA(CAShapeLayer, self)->_lineWidth forKey: @"lineWidth"];
+    if (NS_EXTRA(CAShapeLayer, self)->_miterLimit != 10)
+        [w encodeDouble: NS_EXTRA(CAShapeLayer, self)->_miterLimit forKey: @"miterLimit"];
+    if (![NS_EXTRA(CAShapeLayer, self)->_lineCap isEqualToString: kCALineCapButt])
+        [w encodeObject: NS_EXTRA(CAShapeLayer, self)->_lineCap forKey: @"lineCap"];
+    if (![NS_EXTRA(CAShapeLayer, self)->_lineJoin isEqualToString: kCALineJoinMiter])
+        [w encodeObject: NS_EXTRA(CAShapeLayer, self)->_lineJoin forKey: @"lineJoin"];
+    if (NS_EXTRA(CAShapeLayer, self)->_lineDashPhase != 0)
+        [w encodeDouble: NS_EXTRA(CAShapeLayer, self)->_lineDashPhase forKey: @"lineDashPhase"];
+    if (NS_EXTRA(CAShapeLayer, self)->_lineDashPattern != nil)
+        [w encodeArray: NS_EXTRA(CAShapeLayer, self)->_lineDashPattern forKey: @"lineDashPattern"];
 }
 
 - (void) _decodeAttributes: (CAArchiveReader *) r {
@@ -122,15 +122,15 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
         [self setLineJoin: string];
     double real;
     if ([r decodeDouble: &real forKey: @"strokeStart"])
-        _strokeStart = real;
+        NS_EXTRA(CAShapeLayer, self)->_strokeStart = real;
     if ([r decodeDouble: &real forKey: @"strokeEnd"])
-        _strokeEnd = real;
+        NS_EXTRA(CAShapeLayer, self)->_strokeEnd = real;
     if ([r decodeDouble: &real forKey: @"lineWidth"])
-        _lineWidth = real;
+        NS_EXTRA(CAShapeLayer, self)->_lineWidth = real;
     if ([r decodeDouble: &real forKey: @"miterLimit"])
-        _miterLimit = real;
+        NS_EXTRA(CAShapeLayer, self)->_miterLimit = real;
     if ([r decodeDouble: &real forKey: @"lineDashPhase"])
-        _lineDashPhase = real;
+        NS_EXTRA(CAShapeLayer, self)->_lineDashPhase = real;
     NSArray *pattern = [r decodeArrayForKey: @"lineDashPattern"];
     if (pattern != nil)
         [self setLineDashPattern: pattern];
@@ -144,135 +144,135 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
 }
 
 - (void) dealloc {
-    if (_path)
-        CGPathRelease(_path);
-    if (_fillColor)
-        CGColorRelease(_fillColor);
-    if (_strokeColor)
-        CGColorRelease(_strokeColor);
-    [_fillRule release];
-    [_lineCap release];
-    [_lineJoin release];
-    [_lineDashPattern release];
+    if (NS_EXTRA(CAShapeLayer, self)->_path)
+        CGPathRelease(NS_EXTRA(CAShapeLayer, self)->_path);
+    if (NS_EXTRA(CAShapeLayer, self)->_fillColor)
+        CGColorRelease(NS_EXTRA(CAShapeLayer, self)->_fillColor);
+    if (NS_EXTRA(CAShapeLayer, self)->_strokeColor)
+        CGColorRelease(NS_EXTRA(CAShapeLayer, self)->_strokeColor);
+    [NS_EXTRA(CAShapeLayer, self)->_fillRule release];
+    [NS_EXTRA(CAShapeLayer, self)->_lineCap release];
+    [NS_EXTRA(CAShapeLayer, self)->_lineJoin release];
+    [NS_EXTRA(CAShapeLayer, self)->_lineDashPattern release];
     [super dealloc];
 }
 
 - (CGPathRef) path {
-    return _path;
+    return NS_EXTRA(CAShapeLayer, self)->_path;
 }
 
 - (void) setPath: (CGPathRef) path {
     CGPathRef copy = path ? CGPathCreateCopy(path) : NULL;
-    if (_path)
-        CGPathRelease(_path);
-    _path = copy;
+    if (NS_EXTRA(CAShapeLayer, self)->_path)
+        CGPathRelease(NS_EXTRA(CAShapeLayer, self)->_path);
+    NS_EXTRA(CAShapeLayer, self)->_path = copy;
     [self setNeedsDisplay];
 }
 
 - (CGColorRef) fillColor {
-    return _fillColor;
+    return NS_EXTRA(CAShapeLayer, self)->_fillColor;
 }
 
 - (void) setFillColor: (CGColorRef) color {
-    replaceColor(&_fillColor, color);
+    replaceColor(&NS_EXTRA(CAShapeLayer, self)->_fillColor, color);
     [self setNeedsDisplay];
 }
 
 - (NSString *) fillRule {
-    return _fillRule;
+    return NS_EXTRA(CAShapeLayer, self)->_fillRule;
 }
 
 - (void) setFillRule: (NSString *) rule {
     rule = [rule copy];
-    [_fillRule release];
-    _fillRule = rule;
+    [NS_EXTRA(CAShapeLayer, self)->_fillRule release];
+    NS_EXTRA(CAShapeLayer, self)->_fillRule = rule;
     [self setNeedsDisplay];
 }
 
 - (CGColorRef) strokeColor {
-    return _strokeColor;
+    return NS_EXTRA(CAShapeLayer, self)->_strokeColor;
 }
 
 - (void) setStrokeColor: (CGColorRef) color {
-    replaceColor(&_strokeColor, color);
+    replaceColor(&NS_EXTRA(CAShapeLayer, self)->_strokeColor, color);
     [self setNeedsDisplay];
 }
 
 - (CGFloat) strokeStart {
-    return _strokeStart;
+    return NS_EXTRA(CAShapeLayer, self)->_strokeStart;
 }
 
 - (void) setStrokeStart: (CGFloat) value {
-    _strokeStart = value;
+    NS_EXTRA(CAShapeLayer, self)->_strokeStart = value;
     [self setNeedsDisplay];
 }
 
 - (CGFloat) strokeEnd {
-    return _strokeEnd;
+    return NS_EXTRA(CAShapeLayer, self)->_strokeEnd;
 }
 
 - (void) setStrokeEnd: (CGFloat) value {
-    _strokeEnd = value;
+    NS_EXTRA(CAShapeLayer, self)->_strokeEnd = value;
     [self setNeedsDisplay];
 }
 
 - (CGFloat) lineWidth {
-    return _lineWidth;
+    return NS_EXTRA(CAShapeLayer, self)->_lineWidth;
 }
 
 - (void) setLineWidth: (CGFloat) value {
-    _lineWidth = value;
+    NS_EXTRA(CAShapeLayer, self)->_lineWidth = value;
     [self setNeedsDisplay];
 }
 
 - (CGFloat) miterLimit {
-    return _miterLimit;
+    return NS_EXTRA(CAShapeLayer, self)->_miterLimit;
 }
 
 - (void) setMiterLimit: (CGFloat) value {
-    _miterLimit = value;
+    NS_EXTRA(CAShapeLayer, self)->_miterLimit = value;
     [self setNeedsDisplay];
 }
 
 - (NSString *) lineCap {
-    return _lineCap;
+    return NS_EXTRA(CAShapeLayer, self)->_lineCap;
 }
 
 - (void) setLineCap: (NSString *) cap {
     cap = [cap copy];
-    [_lineCap release];
-    _lineCap = cap;
+    [NS_EXTRA(CAShapeLayer, self)->_lineCap release];
+    NS_EXTRA(CAShapeLayer, self)->_lineCap = cap;
     [self setNeedsDisplay];
 }
 
 - (NSString *) lineJoin {
-    return _lineJoin;
+    return NS_EXTRA(CAShapeLayer, self)->_lineJoin;
 }
 
 - (void) setLineJoin: (NSString *) join {
     join = [join copy];
-    [_lineJoin release];
-    _lineJoin = join;
+    [NS_EXTRA(CAShapeLayer, self)->_lineJoin release];
+    NS_EXTRA(CAShapeLayer, self)->_lineJoin = join;
     [self setNeedsDisplay];
 }
 
 - (CGFloat) lineDashPhase {
-    return _lineDashPhase;
+    return NS_EXTRA(CAShapeLayer, self)->_lineDashPhase;
 }
 
 - (void) setLineDashPhase: (CGFloat) value {
-    _lineDashPhase = value;
+    NS_EXTRA(CAShapeLayer, self)->_lineDashPhase = value;
     [self setNeedsDisplay];
 }
 
 - (NSArray *) lineDashPattern {
-    return _lineDashPattern;
+    return NS_EXTRA(CAShapeLayer, self)->_lineDashPattern;
 }
 
 - (void) setLineDashPattern: (NSArray *) pattern {
     pattern = [pattern copy];
-    [_lineDashPattern release];
-    _lineDashPattern = pattern;
+    [NS_EXTRA(CAShapeLayer, self)->_lineDashPattern release];
+    NS_EXTRA(CAShapeLayer, self)->_lineDashPattern = pattern;
     [self setNeedsDisplay];
 }
 
@@ -284,15 +284,15 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
 - (void) drawInContext: (CGContextRef) context {
     [super drawInContext: context];
 
-    if (_path == NULL)
+    if (NS_EXTRA(CAShapeLayer, self)->_path == NULL)
         return;
 
     CGContextSaveGState(context);
 
-    if (_fillColor != NULL) {
-        CGContextAddPath(context, _path);
-        CGContextSetFillColorWithColor(context, _fillColor);
-        if ([_fillRule isEqualToString: kCAFillRuleEvenOdd])
+    if (NS_EXTRA(CAShapeLayer, self)->_fillColor != NULL) {
+        CGContextAddPath(context, NS_EXTRA(CAShapeLayer, self)->_path);
+        CGContextSetFillColorWithColor(context, NS_EXTRA(CAShapeLayer, self)->_fillColor);
+        if ([NS_EXTRA(CAShapeLayer, self)->_fillRule isEqualToString: kCAFillRuleEvenOdd])
             CGContextEOFillPath(context);
         else
             CGContextFillPath(context);
@@ -300,33 +300,33 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
 
     // Trimming to strokeStart/strokeEnd isn't implemented, but an empty range
     // (e.g. the 0/0 start of a "draw the outline" animation) strokes nothing.
-    if (_strokeColor != NULL && _lineWidth > 0 &&
-        MIN(_strokeEnd, 1) > MAX(_strokeStart, 0)) {
+    if (NS_EXTRA(CAShapeLayer, self)->_strokeColor != NULL && NS_EXTRA(CAShapeLayer, self)->_lineWidth > 0 &&
+        MIN(NS_EXTRA(CAShapeLayer, self)->_strokeEnd, 1) > MAX(NS_EXTRA(CAShapeLayer, self)->_strokeStart, 0)) {
         CGLineCap cap = kCGLineCapButt;
-        if ([_lineCap isEqualToString: kCALineCapRound])
+        if ([NS_EXTRA(CAShapeLayer, self)->_lineCap isEqualToString: kCALineCapRound])
             cap = kCGLineCapRound;
-        else if ([_lineCap isEqualToString: kCALineCapSquare])
+        else if ([NS_EXTRA(CAShapeLayer, self)->_lineCap isEqualToString: kCALineCapSquare])
             cap = kCGLineCapSquare;
 
         CGLineJoin join = kCGLineJoinMiter;
-        if ([_lineJoin isEqualToString: kCALineJoinRound])
+        if ([NS_EXTRA(CAShapeLayer, self)->_lineJoin isEqualToString: kCALineJoinRound])
             join = kCGLineJoinRound;
-        else if ([_lineJoin isEqualToString: kCALineJoinBevel])
+        else if ([NS_EXTRA(CAShapeLayer, self)->_lineJoin isEqualToString: kCALineJoinBevel])
             join = kCGLineJoinBevel;
 
-        CGContextAddPath(context, _path);
-        CGContextSetStrokeColorWithColor(context, _strokeColor);
-        CGContextSetLineWidth(context, _lineWidth);
-        CGContextSetMiterLimit(context, _miterLimit);
+        CGContextAddPath(context, NS_EXTRA(CAShapeLayer, self)->_path);
+        CGContextSetStrokeColorWithColor(context, NS_EXTRA(CAShapeLayer, self)->_strokeColor);
+        CGContextSetLineWidth(context, NS_EXTRA(CAShapeLayer, self)->_lineWidth);
+        CGContextSetMiterLimit(context, NS_EXTRA(CAShapeLayer, self)->_miterLimit);
         CGContextSetLineCap(context, cap);
         CGContextSetLineJoin(context, join);
 
-        NSUInteger count = [_lineDashPattern count];
+        NSUInteger count = [NS_EXTRA(CAShapeLayer, self)->_lineDashPattern count];
         if (count > 0) {
             CGFloat lengths[count];
             for (NSUInteger i = 0; i < count; i++)
-                lengths[i] = [[_lineDashPattern objectAtIndex: i] doubleValue];
-            CGContextSetLineDash(context, _lineDashPhase, lengths, count);
+                lengths[i] = [[NS_EXTRA(CAShapeLayer, self)->_lineDashPattern objectAtIndex: i] doubleValue];
+            CGContextSetLineDash(context, NS_EXTRA(CAShapeLayer, self)->_lineDashPhase, lengths, count);
         }
 
         CGContextStrokePath(context);

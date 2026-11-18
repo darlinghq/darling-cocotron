@@ -27,7 +27,9 @@
 
 struct _CAMetalLayerPrivate;
 
-@interface CAMetalLayer : CALayer
+@interface CAMetalLayer : CALayer {
+    NS_LEGACY_IVAR_PAD(_legacyPadCAMetalLayer, 4)
+}
 
 @property(retain) id<MTLDevice> device;
 @property(readonly) id<MTLDevice> preferredDevice;

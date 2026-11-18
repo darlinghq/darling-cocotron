@@ -1,4 +1,5 @@
 #import <Foundation/NSObject.h>
+#import <QuartzCore/LegacyIvarLayout.h>
 #import <QuartzCore/CABase.h>
 
 typedef NSString *CAMediaTimingFunctionName NS_TYPED_ENUM;
@@ -10,10 +11,12 @@ CA_EXPORT CAMediaTimingFunctionName const kCAMediaTimingFunctionEaseInEaseOut;
 CA_EXPORT CAMediaTimingFunctionName const kCAMediaTimingFunctionDefault;
 
 @interface CAMediaTimingFunction : NSObject {
-    float _c1x;
-    float _c1y;
-    float _c2x;
-    float _c2y;
+    NS_EXTRA_IVARS_BEGIN(CAMediaTimingFunction)
+        float _c1x;
+        float _c1y;
+        float _c2x;
+        float _c2y;
+    NS_EXTRA_IVARS_END(CAMediaTimingFunction)
 }
 
 - (id) initWithControlPoints: (float)

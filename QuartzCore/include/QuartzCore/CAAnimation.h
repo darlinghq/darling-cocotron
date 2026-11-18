@@ -1,4 +1,5 @@
 #import <Foundation/NSObject.h>
+#import <QuartzCore/LegacyIvarLayout.h>
 #import <QuartzCore/CAAction.h>
 #import <QuartzCore/CABase.h>
 #import <QuartzCore/CAMediaTiming.h>
@@ -25,17 +26,20 @@ CA_EXPORT NSString *const kCAAnimationRotateAuto;
 CA_EXPORT NSString *const kCAAnimationRotateAutoReverse;
 
 @interface CAAnimation : NSObject <NSCopying, CAMediaTiming, CAAction> {
-    id _delegate;
-    BOOL _removedOnCompletion;
-    CAMediaTimingFunction *_timingFunction;
-    BOOL _autoreverses;
-    CFTimeInterval _beginTime;
-    CFTimeInterval _duration;
-    NSString *_fillMode;
-    CGFloat _repeatCount;
-    CFTimeInterval _repeatDuration;
-    CGFloat _speed;
-    CFTimeInterval _timeOffset;
+    NS_LEGACY_IVAR_PAD(_legacyPadCAAnimation, 4)
+    NS_EXTRA_IVARS_BEGIN(CAAnimation)
+        id _delegate;
+        BOOL _removedOnCompletion;
+        CAMediaTimingFunction *_timingFunction;
+        BOOL _autoreverses;
+        CFTimeInterval _beginTime;
+        CFTimeInterval _duration;
+        NSString *_fillMode;
+        CGFloat _repeatCount;
+        CFTimeInterval _repeatDuration;
+        CGFloat _speed;
+        CFTimeInterval _timeOffset;
+    NS_EXTRA_IVARS_END(CAAnimation)
 }
 
 + animation;
@@ -53,10 +57,13 @@ CA_EXPORT NSString *const kCAAnimationRotateAutoReverse;
 - (void) animationDidStop: (CAAnimation *) animation finished: (BOOL) finished;
 @end
 
+#define _NS_SIDE_CAPropertyAnimation 0, 1,
 @interface CAPropertyAnimation : CAAnimation {
-    NSString *_keyPath;
-    BOOL _additive;
-    BOOL _cumulative;
+    NS_EXTRA_IVARS_BEGIN(CAPropertyAnimation)
+        NSString *_keyPath;
+        BOOL _additive;
+        BOOL _cumulative;
+    NS_SIDE_IVARS_END(CAPropertyAnimation)
 }
 
 + (instancetype) animationWithKeyPath: (NSString *) keyPath __attribute__((returns_nonnull));
@@ -70,10 +77,13 @@ CA_EXPORT NSString *const kCAAnimationRotateAutoReverse;
 
 @end
 
+#define _NS_SIDE_CABasicAnimation 0, 1,
 @interface CABasicAnimation : CAPropertyAnimation {
-    id _fromValue;
-    id _toValue;
-    id _byValue;
+    NS_EXTRA_IVARS_BEGIN(CABasicAnimation)
+        id _fromValue;
+        id _toValue;
+        id _byValue;
+    NS_SIDE_IVARS_END(CABasicAnimation)
 }
 
 @property(retain) id fromValue;

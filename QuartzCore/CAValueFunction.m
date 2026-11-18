@@ -18,12 +18,13 @@ NSString *const kCAValueFunctionRotateZ = @"kCAValueFunctionRotateZ";
 @implementation CAValueFunction
 
 - initWithName: (NSString *) name {
-    _name = [name copy];
+    NS_EXTRA(CAValueFunction, self)->_name = [name copy];
     return self;
 }
 
 - (void) dealloc {
-    [_name release];
+    [NS_EXTRA(CAValueFunction, self)->_name release];
+    NS_EXTRA_FREE(CAValueFunction, self);
     [super dealloc];
 }
 
@@ -32,7 +33,7 @@ NSString *const kCAValueFunctionRotateZ = @"kCAValueFunctionRotateZ";
 }
 
 - (NSString *) name {
-    return _name;
+    return NS_EXTRA(CAValueFunction, self)->_name;
 }
 
 @end

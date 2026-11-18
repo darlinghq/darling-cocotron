@@ -18,6 +18,7 @@
 */
 
 #import <Foundation/Foundation.h>
+#import <QuartzCore/LegacyIvarLayout.h>
 #import <QuartzCore/CABase.h>
 
 CA_EXPORT NSString *const kCAFilterAlphaThreshold;
@@ -58,10 +59,13 @@ CA_EXPORT NSString *const kCAFilterInputValues;
 // CAFilter themselves. Inputs are stored with key-value coding under their
 // input keys; CARenderer does not apply filters yet.
 @interface CAFilter : NSObject <NSCopying, NSSecureCoding> {
-    NSString *_type;
-    NSString *_name;
-    BOOL _enabled;
-    NSMutableDictionary *_inputs;
+    NS_LEGACY_IVAR_PAD(_legacyPadCAFilter, 16)
+    NS_EXTRA_IVARS_BEGIN(CAFilter)
+        NSString *_type;
+        NSString *_name;
+        BOOL _enabled;
+        NSMutableDictionary *_inputs;
+    NS_EXTRA_IVARS_END(CAFilter)
 }
 
 + (instancetype) filterWithType: (NSString *) type;

@@ -18,16 +18,20 @@
 */
 
 #import <QuartzCore/CAAnimation.h>
+#import <QuartzCore/LegacyIvarLayout.h>
 
 // Animates along a damped spring (mass on a spring with a damper) from
 // fromValue to toValue instead of a timing function. Time is in seconds
 // since the animation began; set duration to settlingDuration to let the
 // spring come to rest.
+#define _NS_SIDE_CASpringAnimation 0, 1,
 @interface CASpringAnimation : CABasicAnimation {
-    CGFloat _mass;
-    CGFloat _stiffness;
-    CGFloat _damping;
-    CGFloat _initialVelocity;
+    NS_EXTRA_IVARS_BEGIN(CASpringAnimation)
+        CGFloat _mass;
+        CGFloat _stiffness;
+        CGFloat _damping;
+        CGFloat _initialVelocity;
+    NS_SIDE_IVARS_END(CASpringAnimation)
 }
 
 @property CGFloat mass;            // default 1; a value <= 0 resets it to 1

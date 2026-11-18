@@ -277,28 +277,28 @@ static void handleHostMessages(void *context) {
 @implementation CALayerHost
 
 - (void) dealloc {
-    [_connection cancel];
-    [_connection release];
+    [NS_EXTRA(CALayerHost, self)->_connection cancel];
+    [NS_EXTRA(CALayerHost, self)->_connection release];
     [super dealloc];
 }
 
 - (CAContextID) contextId {
-    return _contextId;
+    return NS_EXTRA(CALayerHost, self)->_contextId;
 }
 
 - (void) setContextId: (CAContextID) contextId {
     // Setting the ID again connects again only if the context has gone.
-    if (contextId == _contextId && (contextId == 0 || [_connection isConnected]))
+    if (contextId == NS_EXTRA(CALayerHost, self)->_contextId && (contextId == 0 || [NS_EXTRA(CALayerHost, self)->_connection isConnected]))
         return;
-    _contextId = contextId;
+    NS_EXTRA(CALayerHost, self)->_contextId = contextId;
 
-    [_connection cancel];
-    [_connection release];
-    _connection = nil;
+    [NS_EXTRA(CALayerHost, self)->_connection cancel];
+    [NS_EXTRA(CALayerHost, self)->_connection release];
+    NS_EXTRA(CALayerHost, self)->_connection = nil;
 
     // An ID that names no context (any more) is kept, and shows nothing.
     if (contextId != 0)
-        _connection = [[CALayerHostConnection alloc] initWithHost: self
+        NS_EXTRA(CALayerHost, self)->_connection = [[CALayerHostConnection alloc] initWithHost: self
                                                         contextId: contextId];
     [self _frameDidChange];
 }
@@ -308,7 +308,7 @@ static void handleHostMessages(void *context) {
 }
 
 - (id) _contentsForRendering: (CGRect *) rect {
-    IOSurfaceRef frame = [_connection frame];
+    IOSurfaceRef frame = [NS_EXTRA(CALayerHost, self)->_connection frame];
     if (frame == NULL)
         return [super _contentsForRendering: rect];
     // The hosted tree is drawn at its own size, from the host's origin.

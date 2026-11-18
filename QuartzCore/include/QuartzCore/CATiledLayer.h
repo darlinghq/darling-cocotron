@@ -18,14 +18,18 @@
 */
 
 #import <QuartzCore/CALayer.h>
+#import <QuartzCore/LegacyIvarLayout.h>
 
 // A layer for very large content. The tile size and level of detail
 // properties are stored, copied by -initWithLayer: and archived, but the layer
 // does not split its drawing into tiles: -drawInContext: receives the whole layer.
+#define _NS_SIDE_CATiledLayer 0, 1,
 @interface CATiledLayer : CALayer {
-    CGSize _tileSize;
-    size_t _levelsOfDetail;
-    size_t _levelsOfDetailBias;
+    NS_EXTRA_IVARS_BEGIN(CATiledLayer)
+        CGSize _tileSize;
+        size_t _levelsOfDetail;
+        size_t _levelsOfDetailBias;
+    NS_SIDE_IVARS_END(CATiledLayer)
 }
 
 // Seconds a newly drawn tile takes to fade in; 0.25.
