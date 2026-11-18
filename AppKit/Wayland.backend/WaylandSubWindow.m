@@ -46,6 +46,15 @@ static BOOL validFrame(CGRect frame) {
         frame.size.height <= WaylandMaxSubWindowDimension;
 }
 
+// The Wayland objects of one Metal layer's surface.
+@interface WaylandMetalSurface : NSObject {
+@public
+    struct wl_proxy *surface, *subsurface, *viewport;
+}
+@end
+@implementation WaylandMetalSurface
+@end
+
 @implementation WaylandSubWindow
 - (id) initWithParentWindow: (WaylandWindow *) parent frame: (CGRect) frame {
     if (!(self = [super init])) return nil;
@@ -82,6 +91,9 @@ static BOOL validFrame(CGRect frame) {
     }
 }
 - (void) dealloc {
+    for (CAMetalLayer *layer in [[_metalSurfaces keyEnumerator] allObjects])
+        [self destroyMetalSurfaceForLayer: layer];
+    [_metalSurfaces release];
     [_parent removeSubwindow: self];
     if (_eglWindow) WL.wl_egl_window_destroy(_eglWindow);
     [self removeRole];
@@ -220,4 +232,124 @@ static BOOL validFrame(CGRect frame) {
     _scaleRedrawRequested = NO;
     [[_parent waylandDisplay] flush];
 }
+
+// A Metal layer's surface is a desynchronized subsurface of the parent window, above this
+// window's own subsurface, where the layer is in the tree. Its buffers come from the
+// Vulkan swapchain; only the place and size are set here.
+
+- (CGSize) pixelSizeForMetalSurfaceFrame: (CGRect) frame {
+    int32_t width, height;
+    uint32_t scale = [self renderScale120];
+    if (!WaylandScaleExtent((int32_t) ceil(frame.size.width), scale, WaylandMaxSubWindowDimension, &width) ||
+        !WaylandScaleExtent((int32_t) ceil(frame.size.height), scale, WaylandMaxSubWindowDimension, &height))
+        return CGSizeMake(1, 1);
+    return CGSizeMake(width, height);
+}
+
+- (void) placeMetalSurface: (WaylandMetalSurface *) metal frame: (CGRect) frame {
+    NSPoint offset = [_parent contentOffset];
+    CGRect inParent = CGRectOffset(frame, _frame.origin.x, _frame.origin.y);
+    int32_t x = (int32_t) floor(inParent.origin.x + offset.x);
+    int32_t y = (int32_t) floor([_parent frame].size.height - CGRectGetMaxY(inParent) + offset.y);
+    union wl_argument position[] = {{.i = x}, {.i = y}};
+    WaylandMarshal(metal->subsurface, WP_SUBSURFACE_SET_POSITION, NULL, 0, position);
+
+    WaylandDisplay *display = [_parent waylandDisplay];
+    if (metal->viewport) {
+        union wl_argument destination[] = {{.i = (int32_t) ceil(frame.size.width)},
+                                          {.i = (int32_t) ceil(frame.size.height)}};
+        WaylandMarshal(metal->viewport, WP_VIEWPORT_SET_DESTINATION, NULL, 0, destination);
+    }
+    if (display->_compositorVersion >= 3) {
+        union wl_argument scaling[] = {{.i = metal->viewport ? 1 : [_parent bufferScale]}};
+        WaylandMarshal(metal->surface, WP_SURFACE_SET_BUFFER_SCALE, NULL, 0, scaling);
+    }
+    // the position applies with the parent's commit
+    struct wl_proxy *parentSurface = [_parent ensureSurface];
+    if (parentSurface)
+        request(parentSurface, WP_SURFACE_COMMIT, 0);
+    [display flush];
+}
+
+- (void) describeMetalSurface: (WaylandMetalSurface *) metal
+                        frame: (CGRect) frame
+                      surface: (CANativeSurface *) surface {
+    surface->kind = CANativeSurfaceKindWayland;
+    surface->display = [_parent waylandDisplay]->_wlDisplay;
+    surface->window = 0;
+    surface->surface = metal->surface;
+    surface->pixelSize = [self pixelSizeForMetalSurfaceFrame: frame];
+}
+
+- (BOOL) createMetalSurface: (CANativeSurface *) surface
+                   forLayer: (CAMetalLayer *) layer
+                      frame: (CGRect) frame {
+    if (_metalSurfaces == nil)
+        _metalSurfaces = [[NSMapTable mapTableWithWeakToStrongObjects] retain];
+    WaylandMetalSurface *existing = [_metalSurfaces objectForKey: layer];
+    if (existing != nil)
+        return [self updateMetalSurface: surface forLayer: layer frame: frame];
+    if (!validFrame(frame) || [_parent isInvalidated])
+        return NO;
+    WaylandDisplay *display = [_parent waylandDisplay];
+    struct wl_proxy *parentSurface = [_parent ensureSurface];
+    if (!parentSurface || !display->_subcompositor)
+        return NO;
+
+    WaylandMetalSurface *metal = [[[WaylandMetalSurface alloc] init] autorelease];
+    union wl_argument args[3] = {{.o = NULL}};
+    metal->surface = WaylandCreateObject(display->_compositor, WP_COMPOSITOR_CREATE_SURFACE,
+                                         &wl_surface_interface, args, 0, nil);
+    if (display->_viewporter) {
+        args[0].o = NULL; args[1].o = (struct wl_object *) metal->surface;
+        metal->viewport = WaylandCreateObject(display->_viewporter, WP_VIEWPORTER_GET_VIEWPORT,
+                                              &wp_viewport_interface, args, 0, nil);
+    }
+    // the layer's pixels do not take input of their own: the parent's hit-testing applies
+    args[0].o = NULL;
+    struct wl_proxy *region = WaylandCreateObject(display->_compositor, WP_COMPOSITOR_CREATE_REGION,
+                                                  &wl_region_interface, args, 0, nil);
+    args[0].o = (struct wl_object *) region;
+    WaylandMarshal(metal->surface, WP_SURFACE_SET_INPUT_REGION, NULL, 0, args);
+    request(region, WP_REGION_DESTROY, WL_MARSHAL_FLAG_DESTROY);
+
+    union wl_argument sub[] = {{.o = NULL}, {.o = (struct wl_object *) metal->surface},
+                               {.o = (struct wl_object *) parentSurface}};
+    metal->subsurface = WaylandCreateObject(display->_subcompositor, WP_SUBCOMPOSITOR_GET_SUBSURFACE,
+                                            &wl_subsurface_interface, sub, 0, nil);
+    // frames are shown as the swapchain presents them, not with the parent's commits
+    request(metal->subsurface, WP_SUBSURFACE_SET_DESYNC, 0);
+
+    [_metalSurfaces setObject: metal forKey: layer];
+    [self placeMetalSurface: metal frame: frame];
+    [self describeMetalSurface: metal frame: frame surface: surface];
+    return YES;
+}
+
+- (BOOL) updateMetalSurface: (CANativeSurface *) surface
+                   forLayer: (CAMetalLayer *) layer
+                      frame: (CGRect) frame {
+    WaylandMetalSurface *metal = [_metalSurfaces objectForKey: layer];
+    if (metal == nil || !validFrame(frame))
+        return NO;
+    [self placeMetalSurface: metal frame: frame];
+    [self describeMetalSurface: metal frame: frame surface: surface];
+    return YES;
+}
+
+- (void) destroyMetalSurfaceForLayer: (CAMetalLayer *) layer {
+    WaylandMetalSurface *metal = [[_metalSurfaces objectForKey: layer] retain];
+    if (metal == nil)
+        return;
+    [_metalSurfaces removeObjectForKey: layer];
+    if (metal->viewport) request(metal->viewport, WP_VIEWPORT_DESTROY, WL_MARSHAL_FLAG_DESTROY);
+    request(metal->subsurface, WP_SUBSURFACE_DESTROY, WL_MARSHAL_FLAG_DESTROY);
+    request(metal->surface, WP_SURFACE_DESTROY, WL_MARSHAL_FLAG_DESTROY);
+    struct wl_proxy *parentSurface = [_parent ensureSurface];
+    if (parentSurface && ![_parent isInvalidated])
+        request(parentSurface, WP_SURFACE_COMMIT, 0);
+    [[_parent waylandDisplay] flush];
+    [metal release];
+}
+
 @end

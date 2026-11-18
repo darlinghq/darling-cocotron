@@ -17,13 +17,14 @@
  SOFTWARE. */
 
 #import <CoreGraphics/CGSubWindow.h>
+#import <QuartzCore/CAMetalLayerSurface.h>
 @class WaylandWindow;
 struct wl_proxy;
 struct wl_egl_window;
 
 // UI-thread geometry, EGL swap and flush form one presentation transaction.
 // CALayerContext releases its EGL surface before releasing this native window.
-@interface WaylandSubWindow : CGSubWindow {
+@interface WaylandSubWindow : CGSubWindow <CAMetalLayerSurfaceProvider> {
     WaylandWindow *_parent;
     struct wl_proxy *_surface, *_subsurface, *_viewport, *_fractionalScale;
     uint32_t _preferredScale120;
@@ -32,6 +33,8 @@ struct wl_egl_window;
     CGSize _drawablePixelSize;
     CGRect _frame, _fullRect, _pendingRect, _presentedRect;
     BOOL _visible, _clipped;
+    // The surfaces Metal layers present to, by layer (not retained): WaylandMetalSurface objects.
+    NSMapTable *_metalSurfaces;
 }
 - (id) initWithParentWindow: (WaylandWindow *) parent frame: (CGRect) frame;
 - (void) updateGeometry;
