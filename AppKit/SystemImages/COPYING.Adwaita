@@ -18,5 +18,6 @@ application-x-executable.png   mimetypes/application-x-executable
 application-x-generic.png      mimetypes/application-x-generic
 audio-x-generic.png            mimetypes/audio-x-generic
 image-x-generic.png            mimetypes/image-x-generic
+package-x-generic.png          mimetypes/package-x-generic
 text-x-generic.png             mimetypes/text-x-generic
 video-x-generic.png            mimetypes/video-x-generic

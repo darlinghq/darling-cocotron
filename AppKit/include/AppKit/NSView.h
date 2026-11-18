@@ -30,16 +30,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSUserInterfaceItemIdentification.h>
 #import <AppKit/NSLayoutConstraint.h>
 #import <AppKit/NSAppearance.h>
+#import <AppKit/NSTouch.h>
 #import <AppKit/NSUserInterfaceLayoutDirection.h>
 
 @class NSLayoutConstraint;
 
 NS_ASSUME_NONNULL_BEGIN
-
-typedef NS_OPTIONS(NSUInteger, NSTouchTypeMask) {
-    NSTouchTypeMaskDirect = 1 << 0,
-    NSTouchTypeMaskIndirect = 1 << 1,
-};
 
 @class CADisplayLink, NSBezierPath, NSWindow, NSMenu, NSMenuItem, NSCursor, NSClipView, NSPasteboard,
         NSTextInputContext, NSImage, NSBitmapImageRep, NSScrollView,

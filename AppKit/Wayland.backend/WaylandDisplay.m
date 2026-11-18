@@ -17,6 +17,8 @@
  SOFTWARE. */
 
 #import <AppKit/NSTextInputBackend.h>
+#import <AppKit/NSTouch.h>
+#import "../private-include/AppKit/NSTouchBackend.h"
 #import "WaylandDisplay.h"
 #import "../private-include/AppKit/CarbonKeys.h"
 #import "NSEvent_gesture.h"
@@ -57,10 +59,20 @@
 @interface WaylandScreen : NSScreen {
 @public
     CGFloat _waylandScale;
+    NSString *_outputName;
 }
 @end
 @implementation WaylandScreen
 - (CGFloat) backingScaleFactor { return _waylandScale; }
+// The output's description or name as the compositor reports it, else the name from an EDID set on the screen, else the
+// generic name.
+- (NSString *) localizedName {
+    return _outputName != nil && [self edid] == nil ? _outputName : [super localizedName];
+}
+- (void) dealloc {
+    [_outputName release];
+    [super dealloc];
+}
 @end
 
 // Mode pixels are untransformed. Publish v2 properties together at wl_output.done.
@@ -82,12 +94,18 @@ typedef struct {
     WaylandLogicalOutputState _logicalCurrent, _logicalPending;
     NSArray *_modes;
     NSMutableArray *_pendingModes;
+    // wl_output version 4: the connector name and the human readable description, published at done.
+    NSString *_name, *_pendingName, *_description, *_pendingDescription;
 }
 @end
 
 @implementation WaylandOutput
 
 - (void) dealloc {
+    [_name release];
+    [_pendingName release];
+    [_description release];
+    [_pendingDescription release];
     [_modes release];
     [_pendingModes release];
     [super dealloc];
@@ -624,7 +642,8 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         output->_globalName = name;
         output->_display = self;
         output->_current.scale = output->_pending.scale = 1;
-        output->_version = MIN(version, 2);
+        // Version 2 has scale and done, version 4 the name and the description.
+        output->_version = MIN(version, MIN(4u, wl_output_interface.version));
         output->_pendingModes = [NSMutableArray new];
         output->_modes = [NSArray new];
         // Version 2 has scale and done.
@@ -798,6 +817,10 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
     BOOL changed = output->_current.width > 0 && output->_current.height > 0 &&
                    memcmp(&output->_current, &output->_pending, sizeof output->_current) != 0;
     output->_current = output->_pending;
+    [output->_name release];
+    output->_name = [output->_pendingName copy];
+    [output->_description release];
+    output->_description = [output->_pendingDescription copy];
     if (output->_logicalVersion >= 3)
         output->_logicalCurrent = output->_logicalPending;
     [output->_modes release];
@@ -856,6 +879,18 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
     case WP_OUTPUT_EV_SCALE:
         output->_pending.scale = MAX(args[0].i, 1);
         break;
+    case WP_OUTPUT_EV_NAME:
+    case WP_OUTPUT_EV_DESCRIPTION: {
+        NSString *text = args[0].s != NULL ? [NSString stringWithUTF8String: args[0].s] : nil;
+        if (opcode == WP_OUTPUT_EV_NAME) {
+            [output->_pendingName release];
+            output->_pendingName = [text copy];
+        } else {
+            [output->_pendingDescription release];
+            output->_pendingDescription = [text copy];
+        }
+        return; // Published with the next done event.
+    }
     case WP_OUTPUT_EV_DONE:
         [self publishOutput: output];
         return;
@@ -940,6 +975,10 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         [self keyboardEvent: opcode arguments: args];
         break;
 
+    case WaylandObjectTouch:
+        [self touchEvent: opcode arguments: args];
+        break;
+
     default:
         break;
     }
@@ -985,6 +1024,15 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         [_buttonClickCounts removeAllObjects];
     }
 
+    if ((capabilities & WP_SEAT_CAPABILITY_TOUCH) && _touch == NULL) {
+        args[0].o = NULL;
+        _touch = WaylandCreateObject(_seat, WP_SEAT_GET_TOUCH, &wl_touch_interface, args,
+                                     WaylandObjectTouch, self);
+    } else if (!(capabilities & WP_SEAT_CAPABILITY_TOUCH) && _touch != NULL) {
+        [self releaseInputDevice: &_touch opcode: WP_TOUCH_RELEASE];
+        [self touchCancel];
+    }
+
     if ((capabilities & WP_SEAT_CAPABILITY_KEYBOARD) && _keyboard == NULL) {
         args[0].o = NULL;
         _keyboard = WaylandCreateObject(_seat, WP_SEAT_GET_KEYBOARD,
@@ -1008,6 +1056,56 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
             return window;
     }
     return nil;
+}
+
+#pragma mark - Touch
+
+// Fingers go to AppKit's touch router, which moves the mouse for views that
+// take no touches: compositors emulate no pointer from a touch screen.
+- (void) touchEvent: (uint32_t) opcode arguments: (union wl_argument *) args {
+    if (_touchWindows == nil)
+        _touchWindows = [NSMutableDictionary new];
+    switch (opcode) {
+    case WP_TOUCH_EV_DOWN: {
+        WaylandWindow *window = [self windowForSurface: (struct wl_proxy *) args[2].o];
+        if (window == nil)
+            break;
+        _inputSerial = args[0].u;
+        [_touchWindows setObject: [NSValue valueWithNonretainedObject: window] forKey: @(args[3].i)];
+        CGPoint point = CGPointMake(wl_fixed_to_double(args[4].f), wl_fixed_to_double(args[5].f));
+        NSTouchPost([window delegate], args[3].i, NSTouchPhaseBegan, [window transformPoint: point], 0);
+        break;
+    }
+    case WP_TOUCH_EV_MOTION: {
+        WaylandWindow *window = [[_touchWindows objectForKey: @(args[1].i)] nonretainedObjectValue];
+        if (window == nil || ![self windowIsKnown: window])
+            break;
+        CGPoint point = CGPointMake(wl_fixed_to_double(args[2].f), wl_fixed_to_double(args[3].f));
+        NSTouchPost([window delegate], args[1].i, NSTouchPhaseMoved, [window transformPoint: point], 0);
+        break;
+    }
+    case WP_TOUCH_EV_UP: {
+        WaylandWindow *window = [[_touchWindows objectForKey: @(args[2].i)] nonretainedObjectValue];
+        [_touchWindows removeObjectForKey: @(args[2].i)];
+        if (window == nil || ![self windowIsKnown: window])
+            break;
+        // Up carries no position: the finger leaves where it last was.
+        NSTouchPost([window delegate], args[2].i, NSTouchPhaseEnded, NSMakePoint(NAN, NAN), 0);
+        break;
+    }
+    case WP_TOUCH_EV_CANCEL:
+        [self touchCancel];
+        break;
+    }
+}
+
+- (void) touchCancel {
+    [_touchWindows removeAllObjects];
+    NSTouchCancelAll(nil);
+}
+
+- (BOOL) windowIsKnown: (WaylandWindow *) window {
+    return CFArrayContainsValue(_windows, CFRangeMake(0, CFArrayGetCount(_windows)), window);
 }
 
 #pragma mark - Pointer
@@ -2204,6 +2302,8 @@ static uint32_t WaylandKeyLayoutCodepoint(void *context, uint32_t keysym) {
             wholeScale = MAX(wholeScale, ceil(ratio - 0.01));
         }
         screen->_waylandScale = wholeScale;
+        NSString *outputName = [output->_description length] > 0 ? output->_description : output->_name;
+        screen->_outputName = [outputName length] > 0 ? [outputName copy] : nil;
         [screen setCgDirectDisplayID: [screens count] + 1];
         [screens addObject: screen];
         x += frame.size.width;
