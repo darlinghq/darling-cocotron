@@ -219,6 +219,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSToolbarItem.h>
 #import <AppKit/NSToolbarItemGroup.h>
 #import <AppKit/NSMenuToolbarItem.h>
+#import <AppKit/NSTouch.h>
 #import <AppKit/NSTouchBar.h>
 #import <AppKit/NSTouchBarItem.h>
 #import <AppKit/NSTrackingArea.h>

@@ -48,6 +48,7 @@ extern const struct wl_interface wl_buffer_interface;
 extern const struct wl_interface wl_seat_interface;
 extern const struct wl_interface wl_pointer_interface;
 extern const struct wl_interface wl_keyboard_interface;
+extern const struct wl_interface wl_touch_interface;
 extern const struct wl_interface wl_output_interface;
 extern const struct wl_interface zxdg_output_manager_v1_interface;
 extern const struct wl_interface zxdg_output_v1_interface;
@@ -161,6 +162,7 @@ enum {
 
     WP_SEAT_GET_POINTER = 0,
     WP_SEAT_GET_KEYBOARD = 1,
+    WP_SEAT_GET_TOUCH = 2,
     WP_SEAT_EV_CAPABILITIES = 0,
 
     WP_POINTER_SET_CURSOR = 0,
@@ -206,6 +208,13 @@ enum {
     WP_LOCKED_POINTER_SET_CURSOR_POSITION_HINT = 1,
     WP_LOCKED_POINTER_EV_LOCKED = 0,
     WP_LOCKED_POINTER_EV_UNLOCKED = 1,
+
+    WP_TOUCH_RELEASE = 0,
+    WP_TOUCH_EV_DOWN = 0,
+    WP_TOUCH_EV_UP = 1,
+    WP_TOUCH_EV_MOTION = 2,
+    WP_TOUCH_EV_FRAME = 3,
+    WP_TOUCH_EV_CANCEL = 4,
 
     WP_KEYBOARD_RELEASE = 0,
     WP_KEYBOARD_EV_KEYMAP = 0,
@@ -309,6 +318,7 @@ enum {
 enum {
     WP_SEAT_CAPABILITY_POINTER = 1,
     WP_SEAT_CAPABILITY_KEYBOARD = 2,
+    WP_SEAT_CAPABILITY_TOUCH = 4,
     WP_POINTER_BUTTON_STATE_PRESSED = 1,
     WP_POINTER_AXIS_VERTICAL_SCROLL = 0,
     WP_POINTER_AXIS_HORIZONTAL_SCROLL = 1,

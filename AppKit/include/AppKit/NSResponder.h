@@ -77,6 +77,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (void) beginGestureWithEvent: (NSEvent *) event NS_SWIFT_NAME(beginGesture(with:));
 - (void) endGestureWithEvent: (NSEvent *) event NS_SWIFT_NAME(endGesture(with:));
 - (void) pressureChangeWithEvent: (NSEvent *) event NS_SWIFT_NAME(pressureChange(with:));
+- (void) touchesBeganWithEvent: (NSEvent *) event;
+- (void) touchesMovedWithEvent: (NSEvent *) event;
+- (void) touchesEndedWithEvent: (NSEvent *) event;
+- (void) touchesCancelledWithEvent: (NSEvent *) event;
 
 - (void) mouseUp: (NSEvent *) event NS_SWIFT_NAME(mouseUp(with:));
 - (void) mouseDown: (NSEvent *) event NS_SWIFT_NAME(mouseDown(with:));

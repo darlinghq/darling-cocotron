@@ -26,6 +26,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSEvent.h>
 #import <AppKit/NSEvent_mouse.h>
 #import <AppKit/NSEvent_CoreGraphics.h>
+#import <AppKit/NSEvent_touch.h>
+#import <AppKit/NSTouchBackend.h>
 #import <AppKit/NSGraphics.h>
 #import <AppKit/NSImage.h>
 #import <AppKit/NSImageView.h>
@@ -2725,6 +2727,7 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
     if (NS_EXTRA(NSWindow, self)->_isClosed)
         return;
     NS_EXTRA(NSWindow, self)->_isClosed = YES;
+    NSTouchCancelAll(self);
     /*
       I am not sure if orderOut comes before the notification or not. If we
       order out after the notification, Windows sends the window a bunch of
@@ -2984,6 +2987,36 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
     [self makeKeyWindow];
 }
 
+// Each view with a finger that changed hears of it once per phase, began
+// first, as in AppKit. A finger always goes to the view it began in.
+- (void) _sendTouchEvent: (NSEvent *) event {
+    NSMutableArray *views = [NSMutableArray array];
+    NSTouchPhase phases = 0;
+    for (NSTouch *touch in [event allTouches]) {
+        if ([touch phase] == NSTouchPhaseStationary)
+            continue;
+        phases |= [touch phase];
+        if (![views containsObject: [touch _view]])
+            [views addObject: [touch _view]];
+    }
+    if ((phases & NSTouchPhaseBegan) && ![self isKeyWindow])
+        [self makeKeyAndOrderFront: nil];
+    for (NSView *view in views) {
+        NSTouchPhase viewPhases = 0;
+        for (NSTouch *touch in [event allTouches])
+            if ([touch _view] == view)
+                viewPhases |= [touch phase];
+        if (viewPhases & NSTouchPhaseBegan)
+            [view touchesBeganWithEvent: event];
+        if (viewPhases & NSTouchPhaseMoved)
+            [view touchesMovedWithEvent: event];
+        if (viewPhases & NSTouchPhaseEnded)
+            [view touchesEndedWithEvent: event];
+        if (viewPhases & NSTouchPhaseCancelled)
+            [view touchesCancelledWithEvent: event];
+    }
+}
+
 - (void) sendEvent: (NSEvent *) event {
     // Some events can cause our window to be destroyed
     // So make sure self lives at least through this current run loop...
@@ -3141,6 +3174,10 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
     case NSEventTypeRotate:
         [[_backgroundView hitTest: [event locationInWindow]]
                 rotateWithEvent: event];
+        break;
+
+    case NSEventTypeDirectTouch:
+        [self _sendTouchEvent: event];
         break;
 
     case NSAppKitDefined:

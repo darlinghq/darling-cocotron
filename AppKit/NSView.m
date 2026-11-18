@@ -61,6 +61,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSTextInput.h>
 #import <AppKit/NSTextInputClient.h>
 #import <objc/runtime.h>
+#import <AppKit/NSTouch.h>
 #include <math.h>
 #include <mach-o/dyld_priv.h>
 #import "NSGestureRecognizer-Private.h"

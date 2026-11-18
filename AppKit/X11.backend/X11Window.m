@@ -20,6 +20,7 @@
 
 #import <AppKit/NSColor.h>
 #import <AppKit/NSGraphics.h>
+#import "X11Touch.h"
 #import <AppKit/NSMenuWindow.h>
 #import <AppKit/NSPanel.h>
 #import <AppKit/NSTextInput.h>
@@ -1191,6 +1192,7 @@ static const int X11ChromelessCornerRadius = 5;
         mask |= PointerMotionMask;
     }
     XSelectInput(_display, _window, mask);
+    X11TouchSelectWindow(_display, _window);
 
     // Click-through windows (overlays, tooltips) must not take the pointer from
     // the window below. Only a change needs a request.
