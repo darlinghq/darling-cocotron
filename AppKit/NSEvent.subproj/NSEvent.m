@@ -28,6 +28,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSWindow.h>
 #import <Foundation/NSDate.h>
 #import <Foundation/NSException.h>
+#import "../private-include/AppKit/NSEventTime.h"
 #import <Foundation/NSRaise.h>
 
 // The object +addLocalMonitorForEventsMatchingMask:handler: returns.
@@ -135,7 +136,8 @@ static BOOL _mouseCoalescingEnabled = YES;
                        window: (NSWindow *) window
 {
     _type = type;
-    _timestamp = [NSDate timeIntervalSinceReferenceDate];
+    // Event times are seconds since the system started (see -[NSEvent timestamp]).
+    _timestamp = NSEventCurrentTime();
     _locationInWindow = location;
     _modifierFlags = modifierFlags;
     _windowNumber = [window windowNumber];
