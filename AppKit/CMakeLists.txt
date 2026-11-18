@@ -359,10 +359,12 @@ set(AppKit_sources
 	NSFileWrapperExtensions.m
 
 	NSToolbar.subproj/NSToolbarItemGroup.m
+	NSToolbar.subproj/NSTrackingSeparatorToolbarItem.m
 	NSToolbar.subproj/NSToolbarCustomizationView.m
 	NSToolbar.subproj/NSToolbarView.m
 	NSToolbar.subproj/NSToolbar.m
 	NSToolbar.subproj/NSToolbarItem.m
+	NSToolbar.subproj/NSMenuToolbarItem.m
 	NSToolbar.subproj/NSSearchToolbarItem.m
 	NSToolbar.subproj/NSToolbarCustomizationPalette.m
 	NSToolbar.subproj/NSToolbarItemView.m
@@ -438,6 +440,7 @@ set(AppKit_sources
 	NSCollectionViewCompositionalLayout.m
 
 	NSSharingService.m
+	NSUserInterfaceCompressionOptions.m
 	MacWorkspace.m
 	NSCoder+AppKit.m
 
@@ -457,6 +460,7 @@ set(AppKit_sources
 	NSTouchDevice.m
 	NSSplitViewController.m
 	NSSplitViewItem.m
+	NSSplitViewItemAccessoryViewController.m
 	NSTabViewController.m
 	NSTableViewRowAction.m
 	NSLayoutGuide.m
