@@ -48,6 +48,13 @@ static BOOL _NSLayoutItemIsWithin(id item, id container)
     return NO;
 }
 
+// A layout item is a view or a layout guide; the factories take no other kind of object. CoreAutoLayout sits
+// below AppKit, so the two kinds are told by the selectors that place an item in a view hierarchy.
+static BOOL _NSLayoutItemIsLegal(id item)
+{
+    return [item respondsToSelector:@selector(superview)] || [item respondsToSelector:@selector(owningView)];
+}
+
 // A model of a layout constraint: it stores and archives the constraint's description.
 // AppKit owns the installed constraint and applies its layout equations.
 @implementation NSLayoutConstraint
@@ -60,6 +67,14 @@ static BOOL _NSLayoutItemIsWithin(id item, id container)
                         multiplier:(CGFloat)multiplier
                           constant:(CGFloat)c
 {
+    // QUIRK: an item that is nil (first item only) or is neither a view nor a layout guide raises
+    // NSInvalidArgumentException when the constraint is made. Not documented beyond "views and layout guides".
+    // Evidence: black-box observation on macOS 26.7.3 (tier 2).
+    // Test: tests/appkit-layout-constraint-legal-items.m
+    if (!_NSLayoutItemIsLegal(view1) || (view2 != nil && !_NSLayoutItemIsLegal(view2)))
+        [NSException raise:NSInvalidArgumentException
+                    format:@"A layout constraint relates views and layout guides; %@ is neither", !_NSLayoutItemIsLegal(view1) ? view1 : view2];
+
     NSLayoutConstraint *constraint = [[self alloc] init];
     NS_EXTRA(NSLayoutConstraint, constraint)->_firstItem = view1;
     NS_EXTRA(NSLayoutConstraint, constraint)->_firstAttribute = attr1;
