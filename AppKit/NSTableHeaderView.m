@@ -30,6 +30,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSTableView.h>
 #import <AppKit/NSWindow.h>
 #import <Foundation/NSKeyedArchiver.h>
+#import <AppKit/NSLinkedOnOrAfter.h>
 
 @interface NSTableView (NSTableView_private)
 - (void) noteColumnDidResizeWithOldWidth: (CGFloat) oldWidth;
@@ -40,6 +41,19 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 @end
 
 @implementation NSTableHeaderView
+
+// QUIRK: the default height of a table header is 25 points for a program built against the 10.11 SDK or later and
+// 17 for one built against an older SDK; a header view made with -init has it too. Not documented. Evidence:
+// black-box observation on macOS 10.14.4 (tier 2): the header of a new table, of one in a scroll view, and a view
+// from -[[NSTableHeaderView alloc] init], in programs recording SDK 10.9 and 10.10 (17) and 10.11 and later (25).
+// Test: tests/appkit-table-header-default-height.m
++ (CGFloat) _defaultHeight {
+    return NSProgramLinkedOnOrAfterSDK(NS_SDK_VERSION_MACOSX_10_11) ? 25.0 : 17.0;
+}
+
+- init {
+    return [self initWithFrame: NSMakeRect(0, 0, 0, [NSTableHeaderView _defaultHeight])];
+}
 
 - initWithCoder: (NSCoder *) coder {
     [super initWithCoder: coder];

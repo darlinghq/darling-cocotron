@@ -68,6 +68,10 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
 
 @end
 
+@interface NSTableHeaderView (NSTableHeaderViewDefaultHeight)
++ (CGFloat) _defaultHeight;
+@end
+
 @implementation NSTableView
 
 // The accessors are in the NSTableViewStyle category below.
@@ -263,10 +267,9 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
     NS_EXTRA(NSTableView, self)->_allowsEmptySelection = YES;
     NS_EXTRA(NSTableView, self)->_allowsColumnSelection = YES;
 
+    // The default header height is a QUIRK, see +[NSTableHeaderView _defaultHeight].
     _headerView = [[NSTableHeaderView alloc]
-            initWithFrame: NSMakeRect(0, 0, [self bounds].size.width,
-                                      _standardRowHeight +
-                                              _intercellSpacing.height)];
+            initWithFrame: NSMakeRect(0, 0, [self bounds].size.width, [NSTableHeaderView _defaultHeight])];
     [_headerView setTableView: self];
 
     _cornerView = [[NSTableCornerView alloc]
