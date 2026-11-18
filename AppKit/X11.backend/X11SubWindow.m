@@ -60,6 +60,8 @@
 }
 
 - (void) dealloc {
+    // the child windows go with this one
+    [_metalWindows release];
     [[NSNotificationCenter defaultCenter] removeObserver: self];
     if (_usingParentDrawable)
         [_parent releaseLayerDrawable: self];
@@ -91,8 +93,9 @@
 // it cannot do for a child window. Any other subwindow keeps its own drawable.
 - (void *) sharedCGLWindow {
     CGSize parentSize = [_parent frame].size;
+    // A Metal layer's window is a child of this one, which has to stay mapped for it to show.
     BOOL coversParent =
-            _allowsParentDrawable && _visible &&
+            _allowsParentDrawable && _visible && [_metalWindows count] == 0 &&
             !([_parent styleMask] & NSWindowStyleMaskTitled) &&
             CGRectEqualToRect(_drawableFrame,
                               CGRectMake(0, 0, parentSize.width, parentSize.height));
@@ -154,6 +157,85 @@
 - (CGSize) drawablePixelSize {
     NSSize device = [_parent deviceSize: _drawableFrame.size];
     return CGSizeMake(device.width, device.height);
+}
+
+
+// A Metal layer's surface is a child window of this one, where the layer is in the tree.
+
+// The layer's frame (points, lower left origin, relative to this window's content) in the
+// pixels of the child window, whose origin is at the upper left.
+- (O2Rect) metalDeviceRectForFrame: (CGRect) frame {
+    CGFloat scale = [_parent backingScaleFactor];
+    CGFloat top = _drawableFrame.size.height - CGRectGetMaxY(frame);
+    O2Rect device;
+    device.origin.x = floor(frame.origin.x * scale + 0.5);
+    device.origin.y = floor(top * scale + 0.5);
+    device.size = [_parent deviceSize: frame.size];
+    device.size.width = fmax(device.size.width, 1.0);
+    device.size.height = fmax(device.size.height, 1.0);
+    return device;
+}
+
+- (CGSize) pixelSizeForMetalSurfaceFrame: (CGRect) frame {
+    O2Rect device = [self metalDeviceRectForFrame: frame];
+    return CGSizeMake(device.size.width, device.size.height);
+}
+
+- (void) describeMetalWindow: (Window) window
+                      device: (O2Rect) device
+                     surface: (CANativeSurface *) surface {
+    surface->kind = CANativeSurfaceKindXlib;
+    surface->display = _display;
+    surface->window = window;
+    surface->surface = NULL;
+    surface->pixelSize = CGSizeMake(device.size.width, device.size.height);
+}
+
+- (BOOL) createMetalSurface: (CANativeSurface *) surface
+                   forLayer: (CAMetalLayer *) layer
+                      frame: (CGRect) frame {
+    if (_metalWindows == nil)
+        _metalWindows = [[NSMapTable mapTableWithWeakToStrongObjects] retain];
+    if ([_metalWindows objectForKey: layer] != nil)
+        return [self updateMetalSurface: surface forLayer: layer frame: frame];
+
+    O2Rect device = [self metalDeviceRectForFrame: frame];
+    Window window = XCreateSimpleWindow(_display, _window, device.origin.x, device.origin.y,
+                                        device.size.width, device.size.height, 0, 0, 0);
+    if (window == None)
+        return NO;
+    // the layer's frames cover every pixel
+    XSetWindowBackgroundPixmap(_display, window, None);
+    XMapWindow(_display, window);
+    // the Vulkan surface is made for a window the server knows
+    XSync(_display, False);
+
+    [_metalWindows setObject: [NSNumber numberWithUnsignedLong: window] forKey: layer];
+    [self describeMetalWindow: window device: device surface: surface];
+    return YES;
+}
+
+- (BOOL) updateMetalSurface: (CANativeSurface *) surface
+                   forLayer: (CAMetalLayer *) layer
+                      frame: (CGRect) frame {
+    NSNumber *handle = [_metalWindows objectForKey: layer];
+    if (handle == nil)
+        return NO;
+
+    Window window = [handle unsignedLongValue];
+    O2Rect device = [self metalDeviceRectForFrame: frame];
+    XMoveResizeWindow(_display, window, device.origin.x, device.origin.y,
+                      device.size.width, device.size.height);
+    [self describeMetalWindow: window device: device surface: surface];
+    return YES;
+}
+
+- (void) destroyMetalSurfaceForLayer: (CAMetalLayer *) layer {
+    NSNumber *handle = [_metalWindows objectForKey: layer];
+    if (handle == nil)
+        return;
+    XDestroyWindow(_display, [handle unsignedLongValue]);
+    [_metalWindows removeObjectForKey: layer];
 }
 
 @end
