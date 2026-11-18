@@ -58,8 +58,9 @@ only paths below `/Volumes/SystemRoot` (host paths) are offered to other process
 OpenGL views and layer-backed content are EGL child surfaces (`wl_subsurface`, `wl_egl_window`,
 [viewporter](https://gitlab.freedesktop.org/wayland/wayland-protocols/-/blob/main/stable/viewporter/viewporter.xml))
 of the window surface, clipped and committed together with it. The EGL display is handed to OpenGL through
-`CGLRegisterNativeDisplayForPlatform`. Rendering and presentation happen on the main thread only
-(`requiresMainThreadPresentation`); the drawable size in pixels and the scale are reported by the subwindow
+`CGLRegisterNativeDisplayForPlatform`. A context can be made current and swapped on any thread, as on the X11 backend; the parts of a swap that
+touch window state (crop, position, stacking, the parent's commit) are done by the main thread, which a swap
+on another thread asks through the main run loop. The drawable size in pixels and the scale are reported by the subwindow
 (`drawablePixelSize`, `backingScaleFactor`), and `NSOpenGLView` reshapes when the allocation changes.
 
 Scale follows the output a surface is on: the integer `wl_surface.set_buffer_scale`, or, when the compositor offers
