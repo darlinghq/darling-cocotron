@@ -99,6 +99,7 @@ set(CoreGraphics_sources
 	CGPDFDocument.m
 	CGPDFPage.m
 	CGPDFString.m
+	CGScreenRefresh.m
 	CGShading.m
 	CGWindow.m
 	CGWindowLevel.m
