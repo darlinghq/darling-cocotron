@@ -207,6 +207,21 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     return _fullyTransparent;
 }
 
+// Whether the application asked for this window to become the key window and the activation now
+// arriving is the answer to that; reading it clears the request.
+- (BOOL) takeKeyRequest {
+    BOOL requested = _keyRequested;
+    _keyRequested = NO;
+    return requested;
+}
+
+// Mapped, or ordered in but kept unmapped because it is fully transparent. Such a window counts as
+// on screen for the window order (and so for the choice of the next key window), as on X11 where
+// it is mapped with no opacity.
+- (BOOL) isOrderedIn {
+    return _mapped || (_fullyTransparent && _shouldBeMapped && !_invalidated);
+}
+
 - (BOOL) isPopup { return _popup != NULL; }
 - (BOOL) isTooltip {
     return [_delegate isKindOfClass: NSClassFromString(@"NSToolTipWindow")];
@@ -370,6 +385,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 // shown again, so the role objects are destroyed and created again on show.
 - (void) unmap {
     _shouldBeMapped = NO;
+    _keyRequested = NO;
     if (!_mapped)
         return;
 
@@ -452,6 +468,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 }
 
 - (void) makeKey {
+    _keyRequested = YES;
     [self ensureMapped];
     if (!_fullyTransparent)
         return;

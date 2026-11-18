@@ -2473,7 +2473,7 @@ static uint32_t WaylandKeyLayoutCodepoint(void *context, uint32_t keysym) {
     for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++) {
         WaylandWindow *window =
                 (WaylandWindow *) CFArrayGetValueAtIndex(_windows, i);
-        if ([window isMapped])
+        if ([window isOrderedIn])
             [result addObject: @([window windowNumber])];
     }
     return result;

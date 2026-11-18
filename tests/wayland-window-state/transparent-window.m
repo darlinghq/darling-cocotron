@@ -12,7 +12,7 @@
 #include <stdio.h>
 
 static int failures;
-static int hiddenKeys, visibleKeys;
+static int hiddenKeys, visibleKeys, dialogKeys;
 
 static void expect(BOOL condition, const char *what) {
     if (!condition) {
@@ -23,6 +23,8 @@ static void expect(BOOL condition, const char *what) {
 
 @interface CountingWindow : NSWindow {
     int *counter;
+@public
+    BOOL canBeKey;
 }
 - (void) setCounter: (int *) value;
 @end
@@ -32,7 +34,7 @@ static void expect(BOOL condition, const char *what) {
 - (void) keyDown: (NSEvent *) event {
     (*counter)++;
 }
-- (BOOL) canBecomeKeyWindow { return YES; }
+- (BOOL) canBecomeKeyWindow { return canBeKey; }
 @end
 
 static NSWindow *makeWindow(NSString *title, CGFloat alpha, int *counter) {
@@ -41,6 +43,7 @@ static NSWindow *makeWindow(NSString *title, CGFloat alpha, int *counter) {
                                                                  backing: NSBackingStoreBuffered
                                                                    defer: NO];
     [window setCounter: counter];
+    window->canBeKey = YES;
     [window setTitle: title];
     [window setAlphaValue: alpha];
     return window;
@@ -64,12 +67,29 @@ int main(int argc, char **argv) {
         NSTimeInterval wait = argc > 1 ? atof(argv[1]) : 12;
 
         NSWindow *visible = makeWindow(@"tw-visible", 1.0, &visibleKeys);
+        // Like the main window of a game: it never becomes key, so the key status stays with the
+        // alpha-0 window and returns to it when a dialog goes away.
+        ((CountingWindow *) visible)->canBeKey = NO;
         [visible orderFront: nil];
         NSWindow *hidden = makeWindow(@"tw-hidden", 0.0, &hiddenKeys);
         [hidden makeKeyAndOrderFront: nil];
         spin(2);
         expect([hidden isVisible], "the alpha-0 window is ordered in");
         expect([hidden isKeyWindow], "the alpha-0 window is the key window");
+
+        // A modal dialog the application asks to be key takes the key status; when it is ordered out
+        // the key status goes back to the alpha-0 window, which is still on screen as far as the
+        // window order is concerned.
+        NSWindow *dialog = makeWindow(@"tw-dialog", 1.0, &dialogKeys);
+        NSTimer *stop = [NSTimer timerWithTimeInterval: 2 repeats: NO block: ^(NSTimer *timer) {
+            expect([dialog isKeyWindow], "the modal dialog is the key window");
+            [NSApp stopModal];
+        }];
+        [[NSRunLoop currentRunLoop] addTimer: stop forMode: NSRunLoopCommonModes];
+        [NSApp runModalForWindow: dialog];
+        [dialog orderOut: nil];
+        spin(1);
+        expect([hidden isKeyWindow], "the alpha-0 window is key again after the modal dialog");
         printf("READY\n");
         fflush(stdout);
 
