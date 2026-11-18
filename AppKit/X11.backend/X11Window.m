@@ -1474,6 +1474,7 @@ static const int X11ChromelessCornerRadius = 5;
     // A focus request still waiting for MapNotify is void once the window is
     // ordered out; otherwise a later non-key orderFront would take focus.
     _wantsInputFocus = NO;
+    _keyRequested = NO;
 }
 
 - (void) placeAboveWindow: (NSInteger) otherNumber {
@@ -1586,13 +1587,27 @@ BOOL X11WindowManagerIsRunning(Display *display) {
         [self requestInputFocus];
 }
 
+// A window with alphaValue 0 is ordered in (mapped, and invisible by opacity or shape) and can be the
+// key window; the window manager's focus moving to another window of the application does not take
+// the key status from it (see -[NSWindow platformWindowActivated:displayIfNeeded:]).
+- (BOOL) isFullyTransparent {
+    return _alphaIsZero;
+}
+
+// Whether the application asked for this window to become the key window and the focus now arriving
+// is the answer to that; reading it clears the request. Without one, the focus the window manager
+// gives a window that was ordered in is not a request for the key status.
+- (BOOL) takeKeyRequest {
+    BOOL requested = _keyRequested;
+    _keyRequested = NO;
+    return requested;
+}
+
+- (BOOL) isMenuOrPopup {
+    return _menuWindow || _overrideRedirect;
+}
+
 - (void) makeKey {
-    // Making a window key does not put it on the screen: one that has not been
-    // ordered in has no mapped X window, and cannot take the input focus
-    // before it has. Ordering a window in (which maps it) comes first when
-    // an application asks for both.
-    if (!_mapped)
-        return;
     // FocusIn activates the NSWindow, which makes it key again and ends up here.
     // The focus change came from the window manager, which also stacks the
     // window, so leave both alone. Answering a FocusIn that is already stale
@@ -1601,9 +1616,23 @@ BOOL X11WindowManagerIsRunning(Display *display) {
     // them, then bounce focus between two windows forever.
     if (_receivingFocus)
         return;
+    _keyRequested = YES;
+    // Making a window key does not put it on the screen: one that has not been
+    // ordered in has no mapped X window, and cannot take the input focus
+    // before it has. Ordering a window in (which maps it) comes first when
+    // an application asks for both.
+    if (!_mapped)
+        return;
     XRaiseWindow(_display, _window);
     [self restackForLevels];
     [self requestInputFocus];
+    // The window already holds the focus (the window manager gave it when the window was ordered in
+    // and that did not make it key), so no FocusIn follows to report the request.
+    Window focused;
+    int revert;
+    XGetInputFocus(_display, &focused, &revert);
+    if (focused == _window && ![_delegate isKeyWindow])
+        [(X11Display *) [NSDisplay currentDisplay] windowHoldsFocus: self];
 }
 
 - (void) makeMain {

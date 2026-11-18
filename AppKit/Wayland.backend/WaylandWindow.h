@@ -73,6 +73,8 @@ struct WaylandBuffer {
     BOOL _fullyTransparent;
     // -makeKey was called and the activation it asks for has not arrived yet.
     BOOL _keyRequested;
+    // The activation is being reported to the NSWindow; its -becomeKeyWindow asks -makeKey, which is no new request.
+    BOOL _reportingActivation;
     BOOL _configured;
     BOOL _needsPresent;
     BOOL _activated;
@@ -112,6 +114,7 @@ struct WaylandBuffer {
 - (BOOL) isFullyTransparent;
 - (BOOL) isOrderedIn;
 - (BOOL) takeKeyRequest;
+- (void) reportActivationDisplayingIfNeeded: (BOOL) displayIfNeeded;
 - (int32_t) bufferScale;
 - (uint32_t) renderScale120;
 - (uint32_t) refreshMillihertz;

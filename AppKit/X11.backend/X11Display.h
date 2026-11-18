@@ -134,6 +134,7 @@
 - (void) menuWindowMapped: (X11Window *) window;
 - (void) menuWindowUnmapped: (X11Window *) window;
 - (id) windowForID: (XID) i;
+- (void) windowHoldsFocus: (X11Window *) window;
 
 // Re-reads the backing scale and, when it changed, resizes the windows to the
 // new scale and notifies them.
