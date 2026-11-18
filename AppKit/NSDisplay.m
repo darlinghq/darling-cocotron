@@ -461,6 +461,10 @@ static NSDisplay *processDisplay = nil;
     return NO;
 }
 
+- (NSString *) portalParentHandleForWindow: (NSWindow *) window {
+    return nil;
+}
+
 - (int) savePanel: (NSSavePanel *) savePanel
         runModalForDirectory: (NSString *) directory
                         file: (NSString *) file
