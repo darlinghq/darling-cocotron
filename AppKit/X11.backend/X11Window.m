@@ -1467,6 +1467,7 @@ static const int X11ChromelessCornerRadius = 5;
 - (void) hideWindow {
     XUnmapWindow(_display, _window);
     _mapped = NO;
+    _occluded = NO;
     _miniaturizedKnown = NO;
     if (_menuWindow)
         [(X11Display *) [NSDisplay currentDisplay] menuWindowUnmapped: self];
@@ -1686,6 +1687,14 @@ BOOL X11WindowManagerIsRunning(Display *display) {
         _miniaturizedKnown = YES;
     }
     return _miniaturized;
+}
+
+- (BOOL) isOccluded {
+    return _occluded;
+}
+
+- (void) setOccluded: (BOOL) occluded {
+    _occluded = occluded;
 }
 
 - (BOOL) readMiniaturized {

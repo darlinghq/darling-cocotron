@@ -52,6 +52,7 @@
 #import <CoreGraphics/CGSKeySymToUnicodePrivate.h>
 #import "X11KeyEvent.h"
 #import "X11Touch.h"
+#import "X11Occlusion.h"
 #import <X11/XKBlib.h>
 #import <X11/Xutil.h>
 #import <X11/extensions/XKBrules.h>
@@ -199,6 +200,9 @@ static void beforeWaitingCallback(CFRunLoopObserverRef observer,
         if (XRRQueryExtension(_display, &_rrEventBase, &errorBase)) {
             XRRSelectInput(_display, DefaultRootWindow(_display), X11_RANDR_EVENT_MASK);
         }
+        // The window manager publishes the focused window and the stacking order on the root window.
+        XSelectInput(_display, DefaultRootWindow(_display), PropertyChangeMask);
+        _occlusionDirty = YES;
 
         X11TouchInit(_display);
 
@@ -1524,10 +1528,102 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
     }
 }
 
+// Marks the occlusion state for a new judgement when the event can change it. Returns YES for the
+// root window's and the watched foreign window's events, which nothing else is interested in.
+- (BOOL) noteOcclusionEvent: (XEvent *) ev window: (X11Window *) window {
+    Window target = ev->xany.window;
+    if (target == DefaultRootWindow(_display)) {
+        if (ev->type != PropertyNotify)
+            return NO; // RandR notifications
+        Atom atom = ev->xproperty.atom;
+        if (atom == XInternAtom(_display, "_NET_ACTIVE_WINDOW", False) ||
+            atom == XInternAtom(_display, "_NET_CLIENT_LIST_STACKING", False))
+            _occlusionDirty = YES;
+        return YES;
+    }
+    if (window == nil) {
+        if (target == None || target != _occlusionWatchWindow)
+            return NO;
+        if (ev->type == DestroyNotify)
+            _occlusionWatchWindow = None;
+        _occlusionDirty = YES;
+        // A property deleted on that window may be the end of a transfer another part is waiting for.
+        return !(ev->type == PropertyNotify && ev->xproperty.state == PropertyDelete);
+    }
+    switch (ev->type) {
+    case MapNotify:
+    case UnmapNotify:
+    case ConfigureNotify:
+        _occlusionDirty = YES;
+        break;
+    }
+    return NO;
+}
+
+// Judges every window of ours against the focused foreign window and tells the ones whose state changed.
+- (void) updateOcclusion {
+    _occlusionDirty = NO;
+    Window root = DefaultRootWindow(_display);
+
+    Window active = X11OcclusionActiveWindow(_display);
+    // The application's own windows never cover each other here.
+    if (active != None && [self windowForID: active] != nil)
+        active = None;
+
+    // Watch the focused foreign window for size, fullscreen and unmap changes. Selecting input replaces
+    // this client's earlier selection on that window.
+    if (active != _occlusionWatchWindow) {
+        if (_occlusionWatchWindow != None)
+            XSelectInput(_display, _occlusionWatchWindow, NoEventMask);
+        _occlusionWatchWindow = active;
+        if (active != None)
+            XSelectInput(_display, active, StructureNotifyMask | PropertyChangeMask);
+    }
+
+    NSSet *windows = [NSSet setWithArray: [_windowsByID allValues]];
+    X11FullscreenRect cover = {0};
+    bool coverFullscreen = false, coverOpaque = false;
+    unsigned long *stack = NULL, stackCount = 0;
+    if (active != None && [windows count] > 0 &&
+        X11OcclusionCoverInfo(_display, active, &cover, &coverFullscreen, &coverOpaque) &&
+        coverFullscreen && coverOpaque)
+        stack = X11OcclusionStackingList(_display, &stackCount);
+
+    for (X11Window *platform in windows) {
+        if (![platform isKindOfClass: [X11Window class]])
+            continue;
+        NSWindow *delegate = [platform delegate];
+        Window handle = [platform windowHandle];
+        BOOL occluded = NO;
+        if (stack != NULL && delegate != nil && handle != None) {
+            XWindowAttributes attributes;
+            Window child;
+            int x, y;
+            if (XGetWindowAttributes(_display, handle, &attributes) && attributes.map_state == IsViewable &&
+                XTranslateCoordinates(_display, handle, root, 0, 0, &x, &y, &child)) {
+                X11FullscreenRect own = {x, y, (unsigned int) attributes.width, (unsigned int) attributes.height};
+                occluded = X11OcclusionCovers(own, cover, coverFullscreen, coverOpaque,
+                                              X11OcclusionStackIndex(stack, stackCount, handle),
+                                              X11OcclusionStackIndex(stack, stackCount, active));
+            }
+        }
+        if (occluded == [platform isOccluded])
+            continue;
+        [platform setOccluded: occluded];
+        if ([delegate respondsToSelector: @selector(platformWindowOcclusionChanged:)])
+            [delegate platformWindowOcclusionChanged: platform];
+    }
+    if (stack != NULL)
+        XFree(stack);
+}
+
 - (void) postXEvent: (XEvent *) ev {
     id event = nil;
     NSEventType type;
     X11Window* window = (X11Window*) [self windowForID: ev->xany.window];
+
+    if ([self noteOcclusionEvent: ev window: window])
+        return;
     // Pointer events of a display overlay have no window; they are located in
     // screen coordinates.
     BOOL overlay = window == nil &&
@@ -2259,6 +2355,8 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
         else
             [self postXEvent: &e];
     }
+    if (_occlusionDirty)
+        [self updateOcclusion];
 }
 
 - (int) handleError: (XErrorEvent *) errorEvent {

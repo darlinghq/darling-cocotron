@@ -91,6 +91,8 @@ extern NSString *const X11WindowBackingDidFlushNotification;
     // property, mapping and unmapping make it read again.
     BOOL _miniaturizedKnown;
     BOOL _miniaturized;
+    // Whether X11Display found the window covered (see X11Occlusion.h).
+    BOOL _occluded;
 }
 
 + (void) removeDecorationForWindow: (Window) w onDisplay: (Display *) dpy;
@@ -144,6 +146,7 @@ extern NSString *const X11WindowBackingDidFlushNotification;
 // ordered to the front, mapped or given another level.
 - (void) restackForLevels;
 - (BOOL) isMapped;
+- (void) setOccluded: (BOOL) occluded;
 // Whether the window is fullscreen (_NET_WM_STATE_FULLSCREEN), as last asked
 // for or as the window manager last set it.
 - (BOOL) isFullscreen;

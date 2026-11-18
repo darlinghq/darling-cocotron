@@ -247,6 +247,10 @@ static NSInteger nextWindowNumber = 1;
     return NO;
 }
 
+- (BOOL) isOccluded {
+    return NO;
+}
+
 - (void) disableFlushWindow {
 }
 
