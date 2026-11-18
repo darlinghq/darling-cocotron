@@ -18,6 +18,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSBitmapImageRep.h>
+#import <AppKit/NSGraphicsContext.h>
 #import <AppKit/NSGraphicsContextFunctions.h>
 #import <AppKit/NSImageRep.h>
 #import <AppKit/NSPDFImageRep.h>
@@ -400,6 +401,38 @@ static NSArray *typesForFileTypes(NSArray *fileTypes) {
     }
 
     return result;
+}
+
+// An image of the representation drawn at the proposed size (its own size without a rect); NSBitmapImageRep
+// overrides this with the image it holds. The caller does not own the result.
+- (CGImageRef) CGImageForProposedRect: (NSRect *) proposedDestRect
+                              context: (NSGraphicsContext *) context
+                                hints: (NSDictionary<NSString *, id> *) hints
+{
+    NSSize size = proposedDestRect != NULL ? proposedDestRect->size : [self size];
+    if (!(size.width > 0 && size.height > 0 && isfinite(size.width) && isfinite(size.height)))
+        return NULL;
+    size_t width = ceil(size.width), height = ceil(size.height);
+
+    CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
+    // An explicit byte order: Onyx2D stores the default order as ABGR, unlike Apple's RGBA.
+    CGContextRef bitmap = CGBitmapContextCreate(NULL, width, height, 8, width * 4, colorSpace,
+                                                kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big);
+    CGColorSpaceRelease(colorSpace);
+    if (bitmap == NULL)
+        return NULL;
+    CGContextClearRect(bitmap, CGRectMake(0, 0, width, height));
+
+    // The thread dictionary may be the only owner of the current context.
+    NSGraphicsContext *previous = [[NSGraphicsContext currentContext] retain];
+    [NSGraphicsContext setCurrentContext: [NSGraphicsContext graphicsContextWithGraphicsPort: bitmap flipped: NO]];
+    [self drawInRect: NSMakeRect(0, 0, width, height)];
+    [NSGraphicsContext setCurrentContext: previous];
+    [previous release];
+
+    CGImageRef image = CGBitmapContextCreateImage(bitmap);
+    CGContextRelease(bitmap);
+    return (CGImageRef) [(id) image autorelease];
 }
 
 - (BOOL) drawInRect: (NSRect) rect {

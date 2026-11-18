@@ -103,6 +103,12 @@ int main(void) {
         CHECK([[cmyk colorSpace] colorSpaceModel] == NSColorSpaceModelCMYK, "CMYK model");
         CHECK([[cmyk colorSpace] numberOfColorComponents] == 4, "CMYK components");
 
+        // -CGImageForProposedRect:context:hints: of an NSImageRep gives the image, in the rep's space
+        CGImageRef proposed = [(NSImageRep *) p3 CGImageForProposedRect: NULL context: nil hints: nil];
+        CHECK(proposed != NULL && CGImageGetWidth(proposed) == 1 &&
+                      CFEqual(CGImageGetColorSpace(proposed), [[NSColorSpace displayP3ColorSpace] CGColorSpace]),
+              "CGImageForProposedRect: of a P3 bitmap rep");
+
         // NSColorSpace equality and hash follow the CoreGraphics space
         CGColorSpaceRef raw = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
         NSColorSpace *wrapped = [[[NSColorSpace alloc] initWithCGColorSpace: raw] autorelease];

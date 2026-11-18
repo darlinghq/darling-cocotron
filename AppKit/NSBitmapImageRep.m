@@ -1108,6 +1108,13 @@ NSBitmapImageRepPropertyKey NSImageCurrentFrame = @"NSImageCurrentFrame";
     return (CGImageRef)[(id)[self createCGImageIfNeeded] autorelease];
 }
 
+- (CGImageRef) CGImageForProposedRect: (NSRect *) proposedDestRect
+                              context: (NSGraphicsContext *) context
+                                hints: (NSDictionary<NSString *, id> *) hints
+{
+    return [self CGImage];
+}
+
 - (BOOL) draw {
     CGContextRef context = NSCurrentGraphicsPort();
     if (context == NULL)
