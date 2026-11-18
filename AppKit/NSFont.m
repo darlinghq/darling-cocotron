@@ -105,6 +105,9 @@ FOUNDATION_EXPORT char *NSUnicodeToSymbol(const unichar *characters,
 @end
 #endif
 
+static const CGFloat identityFontMatrix[6] = { 1, 0, 0, 1, 0, 0 };
+const CGFloat *NSFontIdentityMatrix = identityFontMatrix;
+
 @implementation NSFont
 
 #ifndef DARLING
