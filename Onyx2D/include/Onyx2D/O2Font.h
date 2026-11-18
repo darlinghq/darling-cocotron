@@ -96,6 +96,9 @@ typedef enum {
 - (O2Float) nativeSizeForSize: (O2Float) size;
 
 - (void) fetchAdvances;
+// The vertical-layout advance of a glyph in design units (the font's vhea/vmtx
+// value), or 0 where the font has no vertical metrics.
+- (int) verticalAdvanceForGlyph: (O2Glyph) glyph;
 
 - (O2Encoding *) createEncodingForTextEncoding: (O2TextEncoding) encoding;
 
@@ -124,6 +127,9 @@ NSCharacterSet *O2FontGetCoveredCharacterSet(O2FontRef self);
 size_t O2FontGetNumberOfGlyphs(O2FontRef self);
 BOOL O2FontGetGlyphAdvances(O2FontRef self, const O2Glyph *glyphs, size_t count,
                             int *advances);
+
+BOOL O2FontGetGlyphVerticalAdvances(O2FontRef self, const O2Glyph *glyphs, size_t count,
+                                    int *advances);
 
 O2Glyph O2FontGetGlyphWithGlyphName(O2FontRef self, CFStringRef name);
 NSString *O2FontCopyGlyphNameForGlyph(O2FontRef self, O2Glyph glyph);

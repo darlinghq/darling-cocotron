@@ -68,6 +68,10 @@ enum { CGNullGlyph = 0x0 };
                forGlyphs: (const CGGlyph *) glyphs
                    count: (NSUInteger) count;
 
+- (void) getVerticalAdvancements: (CGSize *) advancements
+                       forGlyphs: (const CGGlyph *) glyphs
+                           count: (NSUInteger) count;
+
 // The Unicode characters the font has glyphs for, or NULL when unknown.
 // The caller owns the returned set.
 - (CFCharacterSetRef) copyCharacterSet;

@@ -99,6 +99,10 @@ static NSArray *_preferredFontNames = nil;
     O2InvalidAbstractInvocation();
 }
 
+- (int) verticalAdvanceForGlyph: (O2Glyph) glyph {
+    return 0;
+}
+
 - (NSCharacterSet *) coveredCharacterSet {
     return _coveredCharSet;
 }
@@ -529,6 +533,15 @@ BOOL O2FontGetGlyphAdvances(O2FontRef self, const O2Glyph *glyphs, size_t count,
             advances[i] = 0;
         }
     }
+    return YES;
+}
+
+BOOL O2FontGetGlyphVerticalAdvances(O2FontRef self, const O2Glyph *glyphs, size_t count,
+                                    int *advances)
+{
+    for (size_t i = 0; i < count; i++)
+        advances[i] = glyphs[i] < self->_numberOfGlyphs
+                ? [self verticalAdvanceForGlyph: glyphs[i]] : 0;
     return YES;
 }
 
