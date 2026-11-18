@@ -62,6 +62,7 @@
     X(xkb_context_new)                                                         \
     X(xkb_context_unref)                                                       \
     X(xkb_keymap_new_from_buffer)                                              \
+    X(xkb_keymap_new_from_names)                                               \
     X(xkb_keymap_unref)                                                        \
     X(xkb_keymap_key_repeats)                                                  \
     X(xkb_keymap_key_get_syms_by_level)                                        \
