@@ -1,6 +1,7 @@
 #import <AppKit/NSRunningApplication.h>
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSDisplay.h>
+#import <CoreGraphics/CoreGraphicsPrivate.h>
 #import <Foundation/NSBundle.h>
 #import <Foundation/NSProcessInfo.h>
 #import <Foundation/NSString.h>
@@ -54,7 +55,9 @@ static BOOL processExists(pid_t pid) {
 + (instancetype) runningApplicationWithProcessIdentifier: (pid_t) pid {
     if (pid == getpid())
         return [self currentApplication];
-    if (!processExists(pid))
+    // Only processes that connected to the window system are applications; command line tools
+    // and daemons are not.
+    if (!processExists(pid) || !_CGSProcessHasConnection(pid))
         return nil;
     return [[[self alloc] _initWithProcessIdentifier: pid] autorelease];
 }

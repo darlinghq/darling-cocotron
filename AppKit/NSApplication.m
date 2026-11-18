@@ -250,6 +250,9 @@ NS_EXTRA_DEALLOC(NSApplication)
         NSAssert(!NSApp, @"NSApplication is a singleton");
     NSApp = self;
     NS_EXTRA(NSApplication, self)->_display = [[NSDisplay currentDisplay] retain];
+    // An application connects to the window system as it starts, which is also what makes it
+    // known as an application to other processes.
+    (void) CGSMainConnectionID();
 
     _windows = [NSMutableArray new];
     _mainMenu = nil;

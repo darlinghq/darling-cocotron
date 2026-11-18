@@ -29,6 +29,10 @@
 #include <stdio.h>
 #include <CoreFoundation/CFNotificationCenter.h>
 #include <notify.h>
+#include <errno.h>
+#include <stdlib.h>
+#include <string.h>
+#include <signal.h>
 
 static NSMutableDictionary<NSNumber*, CGSConnection*>* g_connections = nil;
 static Boolean g_denyConnections = FALSE;
@@ -124,6 +128,8 @@ static void _CGSLoadBackendOnce(void)
 	});
 }
 
+static void registerProcessConnection(void);
+
 CGError CGSNewConnection(CGSDictionaryObj attribs, CGSConnectionID* connId)
 {
 	*connId = -1;
@@ -142,6 +148,7 @@ CGError CGSNewConnection(CGSDictionaryObj attribs, CGSConnectionID* connId)
 	if (conn != nil)
 	{
 		*connId = newConnID;
+		registerProcessConnection();
 		@synchronized(g_connections)
 		{
 			[g_connections setObject: conn forKey: [NSNumber numberWithInt: newConnID]];
@@ -153,10 +160,87 @@ CGError CGSNewConnection(CGSDictionaryObj attribs, CGSConnectionID* connId)
 		return kCGErrorFailure;
 }
 
+// The window server registry of processes that checked in: a process that opened a connection to
+// the window system records itself under a libnotify name of its own pid. The state is the
+// process' start time (in clock ticks since boot), so the entry of a process that ended is not
+// taken for the one that got its pid afterwards. Both sides run without the window system.
+static uint64_t processStartTime(pid_t pid)
+{
+	char path[64];
+	snprintf(path, sizeof(path), "/proc/%d/stat", (int) pid);
+	FILE* file = fopen(path, "r");
+	if (file == NULL)
+		return 0;
+
+	char line[1024];
+	size_t length = fread(line, 1, sizeof(line) - 1, file);
+	fclose(file);
+	line[length] = 0;
+
+	// The process name (field 2) is in parentheses and may contain anything; the start time is
+	// field 22, that is the 20th field after the closing parenthesis.
+	char* cursor = strrchr(line, ')');
+	if (cursor == NULL)
+		return 0;
+	for (int field = 0; field < 20 && cursor != NULL; field++)
+	{
+		cursor = strchr(cursor + 1, ' ');
+		if (cursor == NULL)
+			return 0;
+	}
+	return strtoull(cursor + 1, NULL, 10);
+}
+
+static BOOL registryName(pid_t pid, char* name, size_t size)
+{
+	return snprintf(name, size, kCGSProcessConnectionNotificationPrefix "%d", (int) pid) < (int) size;
+}
+
+static void registerProcessConnection(void)
+{
+	static dispatch_once_t once;
+	dispatch_once(&once, ^{
+		char name[64];
+		int token;
+		uint64_t start = processStartTime(getpid());
+
+		if (!registryName(getpid(), name, sizeof(name)) ||
+			notify_register_check(name, &token) != NOTIFY_STATUS_OK)
+			return;
+		notify_set_state(token, start != 0 ? start : 1);
+		// The token stays registered; the entry is replaced by the next process with this pid.
+	});
+}
+
+Boolean _CGSProcessHasConnection(pid_t pid)
+{
+	if (pid <= 0 || (kill(pid, 0) != 0 && errno != EPERM))
+		return false;
+
+	char name[64];
+	int token;
+	uint64_t state = 0;
+
+	if (!registryName(pid, name, sizeof(name)) || notify_register_check(name, &token) != NOTIFY_STATUS_OK)
+		return false;
+	if (notify_get_state(token, &state) != NOTIFY_STATUS_OK)
+		state = 0;
+	notify_cancel(token);
+	if (state == 0)
+		return false;
+
+	uint64_t start = processStartTime(pid);
+	return start == 0 ? state == 1 : state == start;
+}
+
 CGError _CGSActivateProcess(pid_t pid, uint32_t options)
 {
 	if (pid <= 0)
 		return kCGErrorIllegalArgument;
+
+	// A process that never connected to the window system has no windows to activate.
+	if (pid != getpid() && !_CGSProcessHasConnection(pid))
+		return kCGErrorCannotComplete;
 
 	// The display server first, directly. Whatever it cannot do (it has no such request, or the
 	// process has no window of its own kind there, as a Wayland client has none on an X server
