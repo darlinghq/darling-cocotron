@@ -22,6 +22,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSTimer;
 
+NS_ASSUME_NONNULL_BEGIN
+
 typedef NS_ENUM(NSUInteger, NSProgressIndicatorStyle) {
     NSProgressIndicatorStyleBar = 0,
     NSProgressIndicatorStyleSpinning = 1
@@ -76,8 +78,10 @@ typedef NS_ENUM(NSUInteger, NSProgressIndicatorThickness) {
 
 - (void) sizeToFit;
 
-- (void) startAnimation: sender;
-- (void) stopAnimation: sender;
-- (void) animate: sender;
+- (void) startAnimation: (nullable id) sender;
+- (void) stopAnimation: (nullable id) sender;
+- (void) animate: (nullable id) sender;
 
 @end
+
+NS_ASSUME_NONNULL_END

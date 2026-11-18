@@ -24,6 +24,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 @class NSColor, NSFont;
 @protocol NSTextDelegate;
 
+NS_ASSUME_NONNULL_BEGIN
+
 enum {
     NSEnterCharacter = 0x0003,
     NSBackspaceCharacter = 0x0008,
@@ -107,13 +109,13 @@ typedef NS_ENUM(NSInteger, NSTextMovement) {
     NS_EXTRA_SLOT_FOR_SUBCLASS(NSTextView)
 }
 
-- (instancetype) initWithCoder: (NSCoder *) coder;
+- (nullable instancetype) initWithCoder: (NSCoder *) coder;
 - (instancetype) initWithFrame: (NSRect) frameRect;
 
-- delegate;
+- (null_unspecified id) delegate;
 @property(nonatomic, copy) NSString *string;
-- (NSData *) RTFFromRange: (NSRange) range;
-- (NSData *) RTFDFromRange: (NSRange) range;
+- (nullable NSData *) RTFFromRange: (NSRange) range;
+- (nullable NSData *) RTFDFromRange: (NSRange) range;
 
 @property(nonatomic, getter=isEditable) BOOL editable;
 @property(nonatomic, getter=isSelectable) BOOL selectable;
@@ -122,13 +124,13 @@ typedef NS_ENUM(NSInteger, NSTextMovement) {
 @property(nonatomic) BOOL usesFontPanel;
 @property(nonatomic) BOOL importsGraphics;
 
-@property(nonatomic, retain) NSFont *font;
+@property(nullable, nonatomic, retain) NSFont *font;
 @property(nonatomic) NSTextAlignment alignment;
 
-@property(nonatomic, retain) NSColor *textColor;
+@property(nullable, nonatomic, retain) NSColor *textColor;
 
 @property(nonatomic) BOOL drawsBackground;
-@property(nonatomic, retain) NSColor *backgroundColor;
+@property(nullable, nonatomic, retain) NSColor *backgroundColor;
 
 @property(nonatomic, getter=isHorizontallyResizable) BOOL horizontallyResizable;
 @property(nonatomic, getter=isVerticallyResizable) BOOL verticallyResizable;
@@ -137,7 +139,7 @@ typedef NS_ENUM(NSInteger, NSTextMovement) {
 
 @property(nonatomic) NSRange selectedRange;
 
-- (void) setDelegate: delegate;
+- (void) setDelegate: (null_unspecified id) delegate;
 
 - (void) replaceCharactersInRange: (NSRange) range
                        withString: (NSString *) string;
@@ -153,7 +155,7 @@ typedef NS_ENUM(NSInteger, NSTextMovement) {
                            range: (NSRange) range;
 @property(nonatomic) NSWritingDirection baseWritingDirection;
 
-- (void) setTextColor: (NSColor *) color range: (NSRange) range;
+- (void) setTextColor: (nullable NSColor *) color range: (NSRange) range;
 
 
 
@@ -162,24 +164,24 @@ typedef NS_ENUM(NSInteger, NSTextMovement) {
 
 - (void) scrollRangeToVisible: (NSRange) range;
 
-- (void) changeFont: (id) sender;
-- (void) alignCenter: sender;
-- (void) alignLeft: sender;
-- (void) alignRight: sender;
-- (void) underline: sender;
-- (void) superscript: sender;
-- (void) subscript: sender;
-- (void) unscript: sender;
-- (void) copyFont: sender;
-- (void) pasteFont: sender;
-- (void) selectAll: sender;
-- (void) delete: sender;
-- (void) toggleRuler: sender;
-- (void) copyRuler: sender;
-- (void) pasteRuler: sender;
+- (void) changeFont: (nullable id) sender;
+- (void) alignCenter: (nullable id) sender;
+- (void) alignLeft: (nullable id) sender;
+- (void) alignRight: (nullable id) sender;
+- (void) underline: (nullable id) sender;
+- (void) superscript: (nullable id) sender;
+- (void) subscript: (nullable id) sender;
+- (void) unscript: (nullable id) sender;
+- (void) copyFont: (nullable id) sender;
+- (void) pasteFont: (nullable id) sender;
+- (void) selectAll: (nullable id) sender;
+- (void) delete: (nullable id) sender;
+- (void) toggleRuler: (nullable id) sender;
+- (void) copyRuler: (nullable id) sender;
+- (void) pasteRuler: (nullable id) sender;
 
-- (void) showGuessPanel: sender;
-- (void) checkSpelling: sender;
+- (void) showGuessPanel: (nullable id) sender;
+- (void) checkSpelling: (nullable id) sender;
 
 @end
 
@@ -208,3 +210,5 @@ typedef NS_ENUM(NSInteger, NSTextMovement) {
 @end
 
 APPKIT_EXPORT NSString * const NSTextMovementUserInfoKey;
+
+NS_ASSUME_NONNULL_END

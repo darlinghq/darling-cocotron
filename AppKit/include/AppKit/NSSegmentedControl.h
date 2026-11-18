@@ -21,6 +21,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/NSControl.h>
 
+NS_ASSUME_NONNULL_BEGIN
+
 typedef NS_ENUM(NSUInteger, NSSegmentSwitchTracking) {
     NSSegmentSwitchTrackingSelectOne,
     NSSegmentSwitchTrackingSelectAny,
@@ -56,11 +58,11 @@ typedef NS_ENUM(NSInteger, NSSegmentDistribution) {
 @property(nonatomic) NSSegmentSwitchTracking trackingMode;
 
 - (NSInteger) tagForSegment: (NSInteger) segment;
-- (NSImage *) imageForSegment: (NSInteger) segment;
+- (nullable NSImage *) imageForSegment: (NSInteger) segment;
 - (BOOL) isEnabledForSegment: (NSInteger) segment;
-- (NSString *) labelForSegment: (NSInteger) segment;
-- (NSMenu *) menuForSegment: (NSInteger) segment;
-- (NSString *) toolTipForSegment: (NSInteger) segment;
+- (nullable NSString *) labelForSegment: (NSInteger) segment;
+- (nullable NSMenu *) menuForSegment: (NSInteger) segment;
+- (nullable NSString *) toolTipForSegment: (NSInteger) segment;
 - (CGFloat) widthForSegment: (NSInteger) segment;
 - (NSImageScaling) imageScalingForSegment: (NSInteger) segment;
 
@@ -69,11 +71,11 @@ typedef NS_ENUM(NSInteger, NSSegmentDistribution) {
 
 
 - (void) setTag: (NSInteger) tag forSegment: (NSInteger) segment;
-- (void) setImage: (NSImage *) image forSegment: (NSInteger) segment;
+- (void) setImage: (nullable NSImage *) image forSegment: (NSInteger) segment;
 - (void) setEnabled: (BOOL) enabled forSegment: (NSInteger) segment;
 - (void) setLabel: (NSString *) label forSegment: (NSInteger) segment;
-- (void) setMenu: (NSMenu *) menu forSegment: (NSInteger) segment;
-- (void) setToolTip: (NSString *) string forSegment: (NSInteger) segment;
+- (void) setMenu: (nullable NSMenu *) menu forSegment: (NSInteger) segment;
+- (void) setToolTip: (nullable NSString *) string forSegment: (NSInteger) segment;
 - (void) setWidth: (CGFloat) width forSegment: (NSInteger) segment;
 - (void) setImageScaling: (NSImageScaling) value
               forSegment: (NSInteger) segment;
@@ -82,3 +84,5 @@ typedef NS_ENUM(NSInteger, NSSegmentDistribution) {
 - (void) setSelected: (BOOL) flag forSegment: (NSInteger) segment;
 
 @end
+
+NS_ASSUME_NONNULL_END

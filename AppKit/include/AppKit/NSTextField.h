@@ -24,6 +24,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 // Legacy ObjC ABI (i386): instance size must stay 0x64, Apple's; the ivars
 // before the extras sit at Apple's offsets. Add new state to the extra
 // struct, never as an ivar.
+NS_ASSUME_NONNULL_BEGIN
+
 @interface NSTextField : NSControl {
     id _delegate;
     NS_EXTRA_IVARS_BEGIN(NSTextField)
@@ -38,11 +40,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 @property NSTextFieldBezelStyle bezelStyle;
 @property(getter=isAutomaticTextCompletionEnabled) BOOL automaticTextCompletionEnabled;
 
-- delegate;
-- (void) setDelegate: delegate;
+- (null_unspecified id) delegate;
+- (void) setDelegate: (null_unspecified id) delegate;
 
-@property(nonatomic, retain) NSColor *backgroundColor;
-@property(nonatomic, retain) NSColor *textColor;
+@property(nullable, nonatomic, retain) NSColor *backgroundColor;
+@property(nullable, nonatomic, retain) NSColor *textColor;
 @property(nonatomic) BOOL drawsBackground;
 
 - (NSTextFieldBezelStyle) bezelStyle;
@@ -51,18 +53,18 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 @property(nonatomic) BOOL allowsEditingTextAttributes;
 
 - (NSInteger) maximumNumberOfLines;
-@property(copy) NSString *placeholderString;
-@property(copy) NSAttributedString *placeholderAttributedString;
+@property(nullable, copy) NSString *placeholderString;
+@property(nullable, copy) NSAttributedString *placeholderAttributedString;
 
-- (void) selectText: sender;
+- (void) selectText: (nullable id) sender;
 
-- previousText;
-- nextText;
+- (null_unspecified id) previousText;
+- (null_unspecified id) nextText;
 
-- (void) setPreviousText: text;
-- (void) setNextText: text;
+- (void) setPreviousText: (null_unspecified id) text;
+- (void) setNextText: (null_unspecified id) text;
 
-- (void) setTitleWithMnemonic: (NSString *) value;
+- (void) setTitleWithMnemonic: (null_unspecified NSString *) value;
 
 // Convenience constructor for a non-editable, borderless label (10.12)
 + (instancetype) labelWithString: (NSString *) stringValue;
@@ -79,3 +81,5 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 // TODO
 
 @end
+
+NS_ASSUME_NONNULL_END

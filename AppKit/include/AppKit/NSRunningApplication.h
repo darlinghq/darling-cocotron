@@ -23,6 +23,8 @@
 
 @class NSString;
 
+NS_ASSUME_NONNULL_BEGIN
+
 typedef NS_ENUM(NSInteger, NSApplicationActivationPolicy) {
     NSApplicationActivationPolicyRegular,
     NSApplicationActivationPolicyAccessory,
@@ -40,12 +42,12 @@ typedef NS_OPTIONS(NSUInteger, NSApplicationActivationOptions) {
 }
 
 + (NSArray<NSRunningApplication *> *) runningApplicationsWithBundleIdentifier: (NSString *) bundleIdentifier;
-+ (instancetype) runningApplicationWithProcessIdentifier: (pid_t) pid;
-+ (NSRunningApplication *) currentApplication;
++ (nullable instancetype) runningApplicationWithProcessIdentifier: (pid_t) pid;
++ (__kindof NSRunningApplication *) currentApplication;
 
 @property(readonly) pid_t processIdentifier;
-@property(readonly, copy) NSString *bundleIdentifier;
-@property(readonly, copy) NSString *localizedName;
+@property(nullable, readonly, copy) NSString *bundleIdentifier;
+@property(nullable, readonly, copy) NSString *localizedName;
 @property(readonly, getter=isTerminated) BOOL terminated;
 
 - (BOOL) activateWithOptions: (NSApplicationActivationOptions) options;
@@ -53,3 +55,5 @@ typedef NS_OPTIONS(NSUInteger, NSApplicationActivationOptions) {
                          options: (NSApplicationActivationOptions) options;
 
 @end
+
+NS_ASSUME_NONNULL_END

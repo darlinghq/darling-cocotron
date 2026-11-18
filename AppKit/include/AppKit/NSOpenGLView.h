@@ -25,6 +25,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 // Legacy ObjC ABI (i386): instance size must stay 0x64, Apple's; the ivars
 // before the extras sit at Apple's offsets. Add new state to the extra
 // struct, never as an ivar.
+NS_ASSUME_NONNULL_BEGIN
+
 @interface NSOpenGLView : NSView {
   @private
     NSOpenGLContext *_context;
@@ -37,16 +39,16 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     NS_EXTRA_IVARS_END(NSOpenGLView)
 }
 
-+ (NSOpenGLPixelFormat *) defaultPixelFormat;
++ (NSOpenGLPixelFormat*) defaultPixelFormat;
 
-- (id) initWithFrame: (NSRect) frame
-         pixelFormat: (NSOpenGLPixelFormat *) pixelFormat;
+- (nullable instancetype) initWithFrame: (NSRect) frame
+         pixelFormat: (nullable NSOpenGLPixelFormat*) pixelFormat;
 
-- (NSOpenGLPixelFormat *) pixelFormat;
-- (NSOpenGLContext *) openGLContext;
+- (nullable NSOpenGLPixelFormat *) pixelFormat;
+- (nullable NSOpenGLContext *) openGLContext;
 
-- (void) setPixelFormat: (NSOpenGLPixelFormat *) pixelFormat;
-- (void) setOpenGLContext: (NSOpenGLContext *) context;
+- (void) setPixelFormat: (nullable NSOpenGLPixelFormat *) pixelFormat;
+- (void) setOpenGLContext: (nullable NSOpenGLContext *) context;
 
 - (void) update;
 - (void) reshape;
@@ -55,3 +57,5 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (void) clearGLContext;
 
 @end
+
+NS_ASSUME_NONNULL_END

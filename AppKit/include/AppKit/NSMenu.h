@@ -26,6 +26,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @protocol NSMenuDelegate;
 
+NS_ASSUME_NONNULL_BEGIN
+
 APPKIT_EXPORT const NSNotificationName NSMenuWillSendActionNotification;
 APPKIT_EXPORT const NSNotificationName NSMenuDidSendActionNotification;
 APPKIT_EXPORT const NSNotificationName NSMenuDidBeginTrackingNotification;
@@ -68,36 +70,36 @@ typedef NS_OPTIONS(NSUInteger, NSMenuProperties) {
 
 @property BOOL showsStateColumn;
 
-+ (void) popUpContextMenu: (NSMenu *) menu
-                withEvent: (NSEvent *) event
-                  forView: (NSView *) view;
++ (void) popUpContextMenu: (NSMenu*) menu
+                withEvent: (NSEvent*) event
+                  forView: (NSView*) view;
 
-+ (NSZone *) menuZone;
++ (null_unspecified NSZone *) menuZone;
 
-- initWithTitle: (NSString *) title;
+- (instancetype) initWithTitle: (NSString *) title;
 
-@property(nonatomic, retain) NSMenu *supermenu;
+@property(nullable, nonatomic, retain) NSMenu *supermenu;
 @property(nonatomic, copy) NSString *title;
 @property(nonatomic, readonly) NSInteger numberOfItems;
 - (NSArray<NSMenuItem *> *) itemArray;
 @property(nonatomic) BOOL autoenablesItems;
 
-- (NSMenuItem *) itemAtIndex: (NSInteger) index;
-- (NSMenuItem *) itemWithTag: (NSInteger) tag;
-- (NSMenuItem *) itemWithTitle: (NSString *) title;
+- (nullable NSMenuItem *) itemAtIndex: (NSInteger) index;
+- (nullable NSMenuItem *) itemWithTag: (NSInteger) tag;
+- (nullable NSMenuItem *) itemWithTitle: (NSString *) title;
 
 - (NSInteger) indexOfItem: (NSMenuItem *) item;
 - (NSInteger) indexOfItemWithTag: (NSInteger) tag;
 - (NSInteger) indexOfItemWithTitle: (NSString *) title;
-- (NSInteger) indexOfItemWithRepresentedObject: object;
-- (NSInteger) indexOfItemWithTarget: (id) target andAction: (SEL) action;
-- (NSInteger) indexOfItemWithSubmenu: (NSMenu *) menu;
+- (NSInteger) indexOfItemWithRepresentedObject: (nullable id) object;
+- (NSInteger) indexOfItemWithTarget: (nullable id) target andAction: (nullable SEL) action;
+- (NSInteger) indexOfItemWithSubmenu: (nullable NSMenu *) menu;
 
 - (void) setMenuChangedMessagesEnabled: (BOOL) flag;
 
 - (void) addItem: (NSMenuItem *) item;
 - (NSMenuItem *) addItemWithTitle: (NSString *) title
-                           action: (SEL) action
+                           action: (nullable SEL) action
                     keyEquivalent: (NSString *) keyEquivalent;
 
 - (void) removeAllItems; // private, don't use outside framework
@@ -106,11 +108,11 @@ typedef NS_OPTIONS(NSUInteger, NSMenuProperties) {
 
 - (void) insertItem: (NSMenuItem *) item atIndex: (NSInteger) index;
 - (NSMenuItem *) insertItemWithTitle: (NSString *) title
-                              action: (SEL) action
+                              action: (nullable SEL) action
                        keyEquivalent: (NSString *) keyEquivalent
                              atIndex: (NSInteger) index;
 
-- (void) setSubmenu: (NSMenu *) submenu forItem: (NSMenuItem *) item;
+- (void) setSubmenu: (nullable NSMenu *) submenu forItem: (NSMenuItem *) item;
 
 - (void) update;
 
@@ -119,7 +121,7 @@ typedef NS_OPTIONS(NSUInteger, NSMenuProperties) {
 
 - (BOOL) performKeyEquivalent: (NSEvent *) event;
 
-@property(nonatomic, assign) id<NSMenuDelegate> delegate;
+@property(nullable, nonatomic, assign) id<NSMenuDelegate> delegate;
 
 // The size the menu has when it is shown as a pop-up, in points.
 @property(readonly) NSSize size;
@@ -135,19 +137,21 @@ typedef NS_OPTIONS(NSUInteger, NSMenuProperties) {
 @optional
 
 - (NSRect) confinementRectForMenu: (NSMenu *) menu
-                         onScreen: (NSScreen *) screen;
-- (BOOL) menuHasKeyEquivalent: (NSMenu *) menu
-                     forEvent: (NSEvent *) event
-                       target: (id *) target
-                       action: (SEL *) action;
-- (void) menuNeedsUpdate: (NSMenu *) menu;
+                         onScreen: (nullable NSScreen *) screen;
+- (BOOL) menuHasKeyEquivalent: (NSMenu*) menu
+                     forEvent: (NSEvent*) event
+                       target: (_Nullable id* _Nonnull) target
+                       action: (_Nullable SEL* _Nonnull) action;
+- (void) menuNeedsUpdate: (NSMenu*) menu;
 - (void) menuWillOpen: (NSMenu *) menu;
 - (void) menuDidClose: (NSMenu *) menu;
-- (NSInteger) numberOfItemsInMenu: (NSMenu *) menu;
-- (void) menu: (NSMenu *) menu willHighlightItem: (NSMenuItem *) item;
-- (BOOL) menu: (NSMenu *) menu
-          updateItem: (NSMenuItem *) item
+- (NSInteger) numberOfItemsInMenu: (NSMenu*) menu;
+- (void) menu: (NSMenu *) menu willHighlightItem: (nullable NSMenuItem *) item;
+- (BOOL) menu: (NSMenu*) menu
+          updateItem: (NSMenuItem*) item
              atIndex: (NSInteger) index
         shouldCancel: (BOOL) shouldCancel;
 
 @end
+
+NS_ASSUME_NONNULL_END

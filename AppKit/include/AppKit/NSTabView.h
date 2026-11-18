@@ -23,6 +23,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/AppKitIvarLayout.h>
 @class NSTabViewItem, NSFont;
 
+NS_ASSUME_NONNULL_BEGIN
+
 typedef NS_ENUM(NSUInteger, NSTabViewType) {
     NSTabViewTypeTopTabsBezelBorder,
     NSTabViewTypeLeftTabsBezelBorder,
@@ -75,7 +77,7 @@ typedef NS_ENUM(NSUInteger, NSTabViewBorderType) {
     NS_LEGACY_IVAR_PAD(_NSTabViewReserved2, 32)
 }
 
-- delegate;
+- (null_unspecified id) delegate;
 
 - (NSSize) minimumSize;
 - (NSRect) contentRect;
@@ -87,28 +89,28 @@ typedef NS_ENUM(NSUInteger, NSTabViewBorderType) {
 @property(nonatomic) BOOL drawsBackground;
 @property(nonatomic) BOOL allowsTruncatedLabels;
 
-- (void) setDelegate: delegate;
+- (void) setDelegate: (null_unspecified id) delegate;
 
 - (NSInteger) numberOfTabViewItems;
-- (NSArray *) tabViewItems;
+- (NSArray<__kindof NSTabViewItem *> *) tabViewItems;
 - (NSTabViewItem *) tabViewItemAtIndex: (NSInteger) index;
-- (NSTabViewItem *) tabViewItemAtPoint: (NSPoint) point;
+- (nullable NSTabViewItem *) tabViewItemAtPoint: (NSPoint) point;
 - (NSInteger) indexOfTabViewItem: (NSTabViewItem *) item;
-- (NSInteger) indexOfTabViewItemWithIdentifier: identifier;
+- (NSInteger) indexOfTabViewItemWithIdentifier: (id) identifier;
 
 - (void) addTabViewItem: (NSTabViewItem *) item;
 - (void) removeTabViewItem: (NSTabViewItem *) item;
 - (void) insertTabViewItem: (NSTabViewItem *) item atIndex: (NSInteger) index;
 
-- (NSTabViewItem *) selectedTabViewItem;
-- (void) selectTabViewItem: (NSTabViewItem *) item;
+- (nullable NSTabViewItem *) selectedTabViewItem;
+- (void) selectTabViewItem: (nullable NSTabViewItem *) item;
 - (void) selectTabViewItemAtIndex: (NSInteger) index;
-- (void) selectTabViewItemWithIdentifier: identifier;
-- (void) selectFirstTabViewItem: sender;
-- (void) selectLastTabViewItem: sender;
-- (void) takeSelectedTabViewItemFromSender: sender;
+- (void) selectTabViewItemWithIdentifier: (id) identifier;
+- (void) selectFirstTabViewItem: (nullable id) sender;
+- (void) selectLastTabViewItem: (nullable id) sender;
+- (void) takeSelectedTabViewItemFromSender: (nullable id) sender;
 
-- (void) _itemViewDidChange: (NSTabViewItem *) item;
+- (void) _itemViewDidChange: (null_unspecified NSTabViewItem *) item;
 
 @end
 
@@ -116,9 +118,11 @@ typedef NS_ENUM(NSUInteger, NSTabViewBorderType) {
 - (void) tabViewDidChangeNumberOfTabViewItems: (NSTabView *) tabView;
 
 - (BOOL) tabView: (NSTabView *) tabView
-        shouldSelectTabViewItem: (NSTabViewItem *) item;
+        shouldSelectTabViewItem: (nullable NSTabViewItem *) item;
 - (void) tabView: (NSTabView *) tabView
-        willSelectTabViewItem: (NSTabViewItem *) item;
+        willSelectTabViewItem: (nullable NSTabViewItem *) item;
 - (void) tabView: (NSTabView *) tabView
-        didSelectTabViewItem: (NSTabViewItem *) item;
+        didSelectTabViewItem: (nullable NSTabViewItem *) item;
 @end
+
+NS_ASSUME_NONNULL_END

@@ -23,6 +23,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSLayoutManager, NSFont;
 
+NS_ASSUME_NONNULL_BEGIN
+
 enum {
     NSTextStorageEditedCharacters = 0x01,
     NSTextStorageEditedAttributes = 0x02,
@@ -45,16 +47,16 @@ APPKIT_EXPORT NSString *const NSTextStorageDidProcessEditingNotification;
     NS_EXTRA_IVARS_END(NSTextStorage)
 }
 
-- delegate;
-- (NSArray *) layoutManagers;
+- (null_unspecified id) delegate;
+- (null_unspecified NSArray *) layoutManagers;
 
 - (int) changeInLength;
 - (unsigned) editedMask;
 - (NSRange) editedRange;
 
-- (void) setDelegate: delegate;
-- (void) addLayoutManager: (NSLayoutManager *) layoutManager;
-- (void) removeLayoutManager: (NSLayoutManager *) layoutManager;
+- (void) setDelegate: (null_unspecified id) delegate;
+- (void) addLayoutManager: (null_unspecified NSLayoutManager *) layoutManager;
+- (void) removeLayoutManager: (null_unspecified NSLayoutManager *) layoutManager;
 
 - (void) processEditing;
 
@@ -62,7 +64,7 @@ APPKIT_EXPORT NSString *const NSTextStorageDidProcessEditingNotification;
                  range: (NSRange) range
         changeInLength: (int) delta;
 
-- (void) setFont: (NSFont *) font;
+- (void) setFont: (nullable NSFont *) font;
 
 @end
 
@@ -70,3 +72,5 @@ APPKIT_EXPORT NSString *const NSTextStorageDidProcessEditingNotification;
 - (void) textStorageWillProcessEditing: (NSNotification *) note;
 - (void) textStorageDidProcessEditing: (NSNotification *) note;
 @end
+
+NS_ASSUME_NONNULL_END

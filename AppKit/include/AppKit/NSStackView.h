@@ -25,6 +25,10 @@
 @class NSMutableArray;
 @protocol NSStackViewDelegate;
 
+@class NSView;
+
+NS_ASSUME_NONNULL_BEGIN
+
 typedef NS_ENUM(NSInteger, NSUserInterfaceLayoutOrientation) {
     NSUserInterfaceLayoutOrientationHorizontal = 0,
     NSUserInterfaceLayoutOrientationVertical = 1,
@@ -73,26 +77,26 @@ static const CGFloat NSStackViewSpacingUseDefault = FLT_MAX;
     NS_LEGACY_IVAR_PAD(_NSStackViewReserved, 24)
 }
 
-+ (instancetype) stackViewWithViews: (NSArray *) views;
++ (instancetype) stackViewWithViews: (NSArray<NSView *> *) views;
 
-@property(assign) id<NSStackViewDelegate> delegate;
+@property(nullable, assign) id<NSStackViewDelegate> delegate;
 @property NSUserInterfaceLayoutOrientation orientation;
 @property NSLayoutAttribute alignment;
 @property NSStackViewDistribution distribution;
 @property CGFloat spacing;
 @property NSEdgeInsets edgeInsets;
 @property BOOL detachesHiddenViews;
-@property(readonly, copy) NSArray *views;
-@property(readonly, copy) NSArray *arrangedSubviews;
-@property(readonly, copy) NSArray *detachedViews;
+@property(readonly, copy) NSArray<__kindof NSView *> *views;
+@property(readonly, copy) NSArray<__kindof NSView *> *arrangedSubviews;
+@property(readonly, copy) NSArray<__kindof NSView *> *detachedViews;
 
 - (void) addView: (NSView *) view inGravity: (NSStackViewGravity) gravity;
 - (void) insertView: (NSView *) view
             atIndex: (NSUInteger) index
           inGravity: (NSStackViewGravity) gravity;
 - (void) removeView: (NSView *) view;
-- (NSArray *) viewsInGravity: (NSStackViewGravity) gravity;
-- (void) setViews: (NSArray *) views inGravity: (NSStackViewGravity) gravity;
+- (NSArray<__kindof NSView *> *) viewsInGravity: (NSStackViewGravity) gravity;
+- (void) setViews: (NSArray<NSView *> *) views inGravity: (NSStackViewGravity) gravity;
 
 - (void) addArrangedSubview: (NSView *) view;
 - (void) insertArrangedSubview: (NSView *) view atIndex: (NSInteger) index;
@@ -109,6 +113,8 @@ static const CGFloat NSStackViewSpacingUseDefault = FLT_MAX;
 
 @protocol NSStackViewDelegate <NSObject>
 @optional
-- (void) stackView: (NSStackView *) stackView willDetachViews: (NSArray *) views;
-- (void) stackView: (NSStackView *) stackView didReattachViews: (NSArray *) views;
+- (void) stackView: (NSStackView *) stackView willDetachViews: (NSArray<NSView *> *) views;
+- (void) stackView: (NSStackView *) stackView didReattachViews: (NSArray<NSView *> *) views;
 @end
+
+NS_ASSUME_NONNULL_END

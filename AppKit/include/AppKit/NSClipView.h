@@ -25,6 +25,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 // Legacy ObjC ABI (i386): instance size must stay 0x84, Apple's; the ivars
 // before the extras sit at Apple's offsets. Add new state to the extra
 // struct, never as an ivar.
+NS_ASSUME_NONNULL_BEGIN
+
 @interface NSClipView : NSView {
     NSColor *_backgroundColor;
     NSView *_docView;
@@ -46,14 +48,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (BOOL) drawsBackground;
 - (BOOL) copiesOnScroll;
 - (NSColor *) backgroundColor;
-- (NSCursor *) documentCursor;
-- documentView;
+- (nullable NSCursor *) documentCursor;
+- (null_unspecified id) documentView;
 
 - (void) setDrawsBackground: (BOOL) value;
 - (void) setCopiesOnScroll: (BOOL) value;
 - (void) setBackgroundColor: (NSColor *) color;
-- (void) setDocumentCursor: (NSCursor *) value;
-- (void) setDocumentView: (NSView *) view;
+- (void) setDocumentCursor: (nullable NSCursor *) value;
+- (void) setDocumentView: (nullable __kindof NSView *) view;
 
 - (NSRect) documentRect;
 - (NSRect) documentVisibleRect;
@@ -67,3 +69,5 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (void) scrollToPoint: (NSPoint) point;
 
 @end
+
+NS_ASSUME_NONNULL_END

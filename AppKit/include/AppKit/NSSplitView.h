@@ -21,6 +21,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSView.h>
 #import <AppKit/NSLayoutConstraint.h>
 
+@class NSView;
+
+NS_ASSUME_NONNULL_BEGIN
+
 APPKIT_EXPORT NSString *const NSSplitViewDidResizeSubviewsNotification;
 APPKIT_EXPORT NSString *const NSSplitViewWillResizeSubviewsNotification;
 
@@ -44,11 +48,11 @@ typedef NS_ENUM(NSInteger, NSSplitViewDividerStyle) {
     NS_EXTRA_IVARS_END(NSSplitView)
 }
 
-@property(nonatomic, assign) id delegate;
+@property(null_unspecified, nonatomic, assign) id delegate;
 @property(nonatomic, getter=isVertical) BOOL vertical;
 
 
-@property(readonly, copy) NSArray *arrangedSubviews;
+@property(readonly, copy) NSArray<__kindof NSView *> *arrangedSubviews;
 @property BOOL arrangesAllSubviews;
 
 - (void) addArrangedSubview: (NSView *) view;
@@ -67,7 +71,7 @@ typedef NS_ENUM(NSInteger, NSSplitViewDividerStyle) {
 
 @property(nonatomic) NSSplitViewDividerStyle dividerStyle;
 
-@property(nonatomic, copy) NSString *autosaveName;
+@property(null_unspecified, nonatomic, copy) NSString *autosaveName;
 
 /* Get the minimum or maximum possible position of a divider */
 - (CGFloat) minPossiblePositionOfDividerAtIndex: (int) index;
@@ -93,9 +97,9 @@ typedef NS_ENUM(NSInteger, NSSplitViewDividerStyle) {
         constrainMaxCoordinate: (CGFloat) proposedMaximumPosition
                    ofSubviewAt: (int) index;
 
-- (void) splitView: (NSSplitView *) splitView
-        constrainMinCoordinate: (CGFloat *) min
-                 maxCoordinate: (CGFloat *) max
+- (void) splitView: (null_unspecified NSSplitView *) splitView
+        constrainMinCoordinate: (null_unspecified CGFloat *) min
+                 maxCoordinate: (null_unspecified CGFloat *) max
                    ofSubviewAt: (int) index;
 - (CGFloat) splitView: (NSSplitView *) splitView
         constrainSplitPosition: (CGFloat) pos
@@ -118,3 +122,5 @@ typedef NS_ENUM(NSInteger, NSSplitViewDividerStyle) {
 - (void) splitViewDidResizeSubviews: (NSNotification *) note;
 - (void) splitViewWillResizeSubviews: (NSNotification *) note;
 @end
+
+NS_ASSUME_NONNULL_END

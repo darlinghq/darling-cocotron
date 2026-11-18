@@ -23,6 +23,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSImage, NSView, NSRunningApplication, NSWorkspaceOpenConfiguration;
 
+NS_ASSUME_NONNULL_BEGIN
+
 APPKIT_EXPORT NSString *const NSWorkspaceApplicationKey;
 
 APPKIT_EXPORT NSString *const NSWorkspaceWillPowerOffNotification;
@@ -93,59 +95,59 @@ typedef NS_ENUM(NSInteger, NSWorkspaceAuthorizationType) {
 @property(readonly, getter=isSwitchControlEnabled) BOOL switchControlEnabled;
 
 - (NSImage *) iconForFile: (NSString *) path;
-- (NSImage *) iconForFiles: (NSArray *) array;
+- (nullable NSImage *) iconForFiles: (NSArray<NSString *> *) array;
 - (NSImage *) iconForFileType: (NSString *) type;
-- (NSString *) localizedDescriptionForType: (NSString *) type;
+- (nullable NSString *) localizedDescriptionForType: (NSString *) type;
 - (BOOL) filenameExtension: (NSString *) extension
             isValidForType: (NSString *) type;
-- (NSString *) preferredFilenameExtensionForType: (NSString *) type;
+- (nullable NSString *) preferredFilenameExtensionForType: (NSString *) type;
 - (BOOL) type: (NSString *) type conformsToType: (NSString *) conformsToType;
-- (NSString *) typeOfFile: (NSString *) path error: (NSError **) error;
+- (nullable NSString *) typeOfFile: (NSString *) path error: (NSError **) error;
 
 - (BOOL) openFile: (NSString *) path;
-- (BOOL) openFile: (NSString *) path withApplication: (NSString *) application;
+- (BOOL) openFile: (NSString *) path withApplication: (nullable NSString *) application;
 - (BOOL) openTempFile: (NSString *) path;
 - (BOOL) openFile: (NSString *) path
-        fromImage: (NSImage *) image
+        fromImage: (nullable NSImage *) image
                at: (NSPoint) point
-           inView: (NSView *) view;
+           inView: (nullable NSView *) view;
 - (BOOL) openFile: (NSString *) path
-        withApplication: (NSString *) application
+        withApplication: (nullable NSString *) application
           andDeactivate: (BOOL) deactivate;
 - (BOOL) openURL: (NSURL *) url;
 - (void) openURL: (NSURL *) url
         configuration: (NSWorkspaceOpenConfiguration *) configuration
-    completionHandler: (void (^)(NSRunningApplication *app, NSError *error)) completionHandler;
+    completionHandler: (void (^ _Nullable)(NSRunningApplication *_Nullable app, NSError *_Nullable error)) completionHandler;
 - (BOOL) openURLs: (NSArray<NSURL *> *) urls
-           withAppBundleIdentifier: (NSString *) bundleIdentifier
+           withAppBundleIdentifier: (nullable NSString *) bundleIdentifier
                            options: (NSWorkspaceLaunchOptions) options
-    additionalEventParamDescriptor: (NSAppleEventDescriptor *) descriptor
-                 launchIdentifiers: (NSArray **) identifiers;
+    additionalEventParamDescriptor: (nullable NSAppleEventDescriptor *) descriptor
+                 launchIdentifiers: (NSArray<NSNumber *> * _Nullable * _Nullable) identifiers;
 
-- (BOOL) selectFile: (NSString *) path
+- (BOOL) selectFile: (nullable NSString *) path
         inFileViewerRootedAtPath: (NSString *) rootedAtPath;
 - (void) slideImage: (NSImage *) image from: (NSPoint) from to: (NSPoint) to;
-- (BOOL) performFileOperation: (NSString *) operation
+- (BOOL) performFileOperation: (null_unspecified NSString *) operation
                        source: (NSString *) source
                   destination: (NSString *) destination
                         files: (NSArray *) files
-                          tag: (NSInteger *) tag;
+                          tag: (nullable NSInteger *) tag;
 
 - (BOOL) getFileSystemInfoForPath: (NSString *) path
-                      isRemovable: (BOOL *) isRemovable
-                       isWritable: (BOOL *) isWritable
-                    isUnmountable: (BOOL *) isUnmountable
-                      description: (NSString **) description
-                             type: (NSString **) type;
+                      isRemovable: (nullable BOOL *) isRemovable
+                       isWritable: (nullable BOOL *) isWritable
+                    isUnmountable: (nullable BOOL *) isUnmountable
+                      description: (NSString * _Nullable * _Nullable) description
+                             type: (NSString * _Nullable * _Nullable) type;
 
 - (BOOL) getInfoForFile: (NSString *) path
-            application: (NSString **) application
-                   type: (NSString **) type;
+            application: (NSString * _Nullable* _Nullable) application
+                   type: (NSString * _Nullable* _Nullable) type;
 
 - (void) checkForRemovableMedia;
-- (NSArray *) mountNewRemovableMedia;
-- (NSArray *) mountedRemovableMedia;
-- (NSArray *) mountedLocalVolumePaths;
+- (nullable NSArray *) mountNewRemovableMedia;
+- (nullable NSArray *) mountedRemovableMedia;
+- (nullable NSArray *) mountedLocalVolumePaths;
 
 - (BOOL) unmountAndEjectDeviceAtPath: (NSString *) path;
 
@@ -157,29 +159,29 @@ typedef NS_ENUM(NSInteger, NSWorkspaceAuthorizationType) {
 - (void) noteUserDefaultsChanged;
 
 - (BOOL) isFilePackageAtPath: (NSString *) path;
-- (NSString *) absolutePathForAppBundleWithIdentifier: (NSString *) identifier;
-- (NSString *) pathForApplication: (NSString *) application;
-- (NSArray *) launchedApplications;
-@property(nonatomic, readonly) NSArray *runningApplications;
+- (nullable NSString *) absolutePathForAppBundleWithIdentifier: (NSString *) identifier;
+- (null_unspecified NSString *) pathForApplication: (null_unspecified NSString *) application;
+- (nullable NSArray *) launchedApplications;
+@property(nonatomic, readonly) NSArray<NSRunningApplication *> *runningApplications;
 - (BOOL) launchApplication: (NSString *) application;
 - (BOOL) launchApplication: (NSString *) application
                   showIcon: (BOOL) showIcon
                 autolaunch: (BOOL) autolaunch;
 
 - (void) findApplications;
-- (NSDictionary *) activeApplication;
+- (nullable NSDictionary *) activeApplication;
 - (void) hideOtherApplications;
 
 - (NSInteger) extendPowerOffBy: (NSInteger) milliseconds;
 
-- (BOOL) setIcon: (NSImage *) image
+- (BOOL) setIcon: (nullable NSImage *) image
          forFile: (NSString *) fullPath
          options: (NSWorkspaceIconCreationOptions) options;
 - (void) activateFileViewerSelectingURLs: (NSArray<NSURL *> *) fileURLs;
-- (NSURL *) URLForApplicationToOpenURL: (NSURL *) url;
-- (NSURL *) URLForApplicationWithBundleIdentifier:
+- (nullable NSURL *) URLForApplicationToOpenURL: (NSURL *) url;
+- (nullable NSURL *) URLForApplicationWithBundleIdentifier:
         (NSString *) bundleIdentifier;
-- (NSString *) fullPathForApplication: (NSString *) appName;
+- (nullable NSString *) fullPathForApplication: (NSString *) appName;
 
 @end
 
@@ -188,7 +190,7 @@ typedef NS_ENUM(NSInteger, NSWorkspaceAuthorizationType) {
 // Cocoa should provide a simple method for this - but it doesn't. You have to
 // build it with Launch Services But so many files are typically hidden from
 // users in GUI browsers that this just makes life better for everyone...
-- (BOOL) isFileHiddenAtPath: (NSString *) path;
+- (BOOL) isFileHiddenAtPath: (null_unspecified NSString *) path;
 
 @end
 
@@ -218,7 +220,7 @@ typedef NS_ENUM(NSInteger, NSWorkspaceAuthorizationType) {
 @property BOOL hides;
 @property BOOL hidesOthers;
 @property BOOL promptsUserIfNeeded;
-@property (strong) NSAppleEventDescriptor *appleEvent;
+@property (nullable, strong) NSAppleEventDescriptor *appleEvent;
 @property (copy) NSArray<NSString *> *arguments;
 @property (copy) NSDictionary<NSString *, NSString *> *environment;
 @property cpu_type_t architecture;
@@ -228,7 +230,7 @@ typedef NS_ENUM(NSInteger, NSWorkspaceAuthorizationType) {
 @class NSRunningApplication;
 
 @interface NSWorkspace (NSOpenURLsWithApplication)
-- (NSRunningApplication *) openURLs: (NSArray<NSURL *> *) urls
+- (nullable NSRunningApplication *) openURLs: (NSArray<NSURL *> *) urls
                withApplicationAtURL: (NSURL *) applicationURL
                             options: (NSUInteger) options
                       configuration: (NSDictionary *) configuration
@@ -243,3 +245,5 @@ APPKIT_EXPORT NSString * const NSWorkspaceVolumeOldLocalizedNameKey;
 APPKIT_EXPORT NSString * const NSWorkspaceVolumeOldURLKey;
 APPKIT_EXPORT NSNotificationName const NSWorkspaceDidRenameVolumeNotification;
 APPKIT_EXPORT NSNotificationName const NSWorkspaceDidChangeFileLabelsNotification;
+
+NS_ASSUME_NONNULL_END

@@ -193,7 +193,7 @@ NSNotificationName NSWorkspaceWillUnmountNotification = @"NSWorkspaceWillUnmount
            withAppBundleIdentifier: (NSString *) bundleIdentifier
                            options: (NSWorkspaceLaunchOptions) options
     additionalEventParamDescriptor: (NSAppleEventDescriptor *) descriptor
-                 launchIdentifiers: (NSArray **) identifiers
+                 launchIdentifiers: (NSArray<NSNumber *> * _Nullable * _Nullable) identifiers
 {
     NSInvalidAbstractInvocation();
     return NO;

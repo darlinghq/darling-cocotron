@@ -22,6 +22,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSFont, NSFontDescriptor, NSFontPanel;
 
+NS_ASSUME_NONNULL_BEGIN
+
 typedef unsigned NSFontTraitMask;
 
 typedef enum {
@@ -69,15 +71,15 @@ typedef NS_OPTIONS(NSUInteger, NSFontCollectionOptions) {
 
 @property(class, readonly, retain, nonnull) NSFontManager *sharedFontManager;
 
-+ (void) setFontManagerFactory: (Class) value;
-+ (void) setFontPanelFactory: (Class) value;
++ (void) setFontManagerFactory: (nullable Class) value;
++ (void) setFontPanelFactory: (nullable Class) value;
 
-- delegate;
-- target;
+- (nullable id) delegate;
+- (nullable id) target;
 @property(nonatomic) SEL action;
 
-- (void) setDelegate: delegate;
-- (void) setTarget: target;
+- (void) setDelegate: (nullable id) delegate;
+- (void) setTarget: (nullable id) target;
 
 - (NSFontAction) currentFontAction;
 
@@ -87,17 +89,17 @@ typedef NS_OPTIONS(NSUInteger, NSFontCollectionOptions) {
                toCollection: (NSString *) name;
 - (BOOL) removeCollection: (NSString *) name;
 
-- (NSArray *) fontDescriptorsInCollection: (NSString *) name;
+- (nullable NSArray *) fontDescriptorsInCollection: (NSString *) name;
 
-- (NSArray *) availableFonts;
-- (NSArray *) availableFontFamilies;
-- (NSArray *) availableMembersOfFontFamily: (NSString *) name;
-- (NSArray *) availableFontNamesMatchingFontDescriptor:
+- (NSArray<NSString *> *) availableFonts;
+- (NSArray<NSString *> *) availableFontFamilies;
+- (nullable NSArray<NSArray *> *) availableMembersOfFontFamily: (NSString *) name;
+- (nullable NSArray *) availableFontNamesMatchingFontDescriptor:
         (NSFontDescriptor *) descriptor;
-- (NSArray *) availableFontNamesWithTraits: (NSFontTraitMask) traits;
+- (nullable NSArray<NSString *> *) availableFontNamesWithTraits: (NSFontTraitMask) traits;
 
 - (BOOL) fontNamed: (NSString *) name hasTraits: (NSFontTraitMask) traits;
-- (NSFont *) fontWithFamily: (NSString *) family
+- (nullable NSFont *) fontWithFamily: (NSString *) family
                      traits: (NSFontTraitMask) traits
                      weight: (int) weight
                        size: (CGFloat) size;
@@ -105,19 +107,19 @@ typedef NS_OPTIONS(NSUInteger, NSFontCollectionOptions) {
 - (NSFontTraitMask) traitsOfFont: (NSFont *) font;
 
 - (NSString *) localizedNameForFamily: (NSString *) family
-                                 face: (NSString *) face;
+                                 face: (nullable NSString *) face;
 
-- (NSFontPanel *) fontPanel: (BOOL) create;
+- (nullable NSFontPanel *) fontPanel: (BOOL) create;
 
 - (BOOL) sendAction;
 
 - (BOOL) isEnabled;
 - (BOOL) isMultiple;
-- (NSFont *) selectedFont;
+- (nullable NSFont *) selectedFont;
 
 - (void) setSelectedFont: (NSFont *) font isMultiple: (BOOL) isMultiple;
 // Uses the NSFontAttributeName font; other attributes are ignored.
-- (void) setSelectedAttributes: (NSDictionary *) attributes isMultiple: (BOOL) flag;
+- (void) setSelectedAttributes: (NSDictionary<NSString *, id> *) attributes isMultiple: (BOOL) flag;
 
 - (NSFont *) convertFont: (NSFont *) font;
 - (NSFont *) convertFont: (NSFont *) font toSize: (CGFloat) size;
@@ -125,22 +127,24 @@ typedef NS_OPTIONS(NSUInteger, NSFontCollectionOptions) {
 - (NSFont *) convertFont: (NSFont *) font
           toNotHaveTrait: (NSFontTraitMask) trait;
 
-- (NSFont *) convertFont: (NSFont *) font toFace: (NSString *) typeface;
+- (nullable NSFont *) convertFont: (NSFont *) font toFace: (NSString *) typeface;
 - (NSFont *) convertFont: (NSFont *) font toFamily: (NSString *) family;
 - (NSFont *) convertWeight: (BOOL) heavierNotLighter ofFont: (NSFont *) font;
 
-- (NSDictionary *) convertAttributes: (NSDictionary *) attributes;
+- (NSDictionary<NSString *, id> *) convertAttributes: (NSDictionary<NSString *, id> *) attributes;
 
-- (void) addFontTrait: sender;
-- (void) modifyFont: sender;
-- (void) modifyFontViaPanel: sender;
-- (void) removeFontTrait: sender;
+- (void) addFontTrait: (nullable id) sender;
+- (void) modifyFont: (nullable id) sender;
+- (void) modifyFontViaPanel: (nullable id) sender;
+- (void) removeFontTrait: (nullable id) sender;
 
-- (void) orderFrontFontPanel: sender;
-- (void) orderFrontStylesPanel: sender;
+- (void) orderFrontFontPanel: (nullable id) sender;
+- (void) orderFrontStylesPanel: (nullable id) sender;
 
 @end
 
 @interface NSObject (NSFontManager_delegate)
-- (BOOL) fontManager: sender willIncludeFont: (NSString *) fontName;
+- (BOOL) fontManager: (id) sender willIncludeFont: (NSString *) fontName;
 @end
+
+NS_ASSUME_NONNULL_END

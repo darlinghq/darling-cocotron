@@ -23,6 +23,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSImageRep.h>
 #import <ApplicationServices/ApplicationServices.h>
 
+@class NSImageRep;
+
+NS_ASSUME_NONNULL_BEGIN
+
 typedef NS_ENUM(NSUInteger, NSBitmapImageFileType) {
     NSBitmapImageFileTypeTIFF,
     NSBitmapImageFileTypeBMP,
@@ -113,52 +117,52 @@ typedef NS_ENUM(NSInteger, NSImageRepLoadStatus) {
     NS_EXTRA_IVARS_END(NSBitmapImageRep)
 }
 
-+ (void) getTIFFCompressionTypes: (const NSTIFFCompression **) types
-                           count: (int *) count;
-+ (NSString *) localizedNameForTIFFCompressionType: (NSTIFFCompression) type;
-+ (NSData *) TIFFRepresentationOfImageRepsInArray: (NSArray *) array;
-+ (NSData *) TIFFRepresentationOfImageRepsInArray: (NSArray *) array
++ (void) getTIFFCompressionTypes: (const NSTIFFCompression * _Nullable * _Nonnull) types
+                           count: (null_unspecified int *) count;
++ (nullable NSString *) localizedNameForTIFFCompressionType: (NSTIFFCompression) type;
++ (nullable NSData *) TIFFRepresentationOfImageRepsInArray: (NSArray<NSImageRep *> *) array;
++ (nullable NSData *) TIFFRepresentationOfImageRepsInArray: (NSArray<NSImageRep *> *) array
                                  usingCompression:
                                          (NSTIFFCompression) compression
                                            factor: (float) factor;
 
-+ (NSData *) representationOfImageRepsInArray: (NSArray *) array
++ (nullable NSData *) representationOfImageRepsInArray: (NSArray<NSImageRep *> *) array
                                     usingType: (NSBitmapImageFileType) type
-                                   properties: (NSDictionary *) properties;
+                                   properties: (NSDictionary<NSBitmapImageRepPropertyKey, id> *) properties;
 
-+ (NSArray *) imageRepsWithData: (NSData *) data;
-+ imageRepWithData: (NSData *) data;
++ (NSArray<NSImageRep *> *) imageRepsWithData: (NSData *) data;
++ (null_unspecified id) imageRepWithData: (NSData *) data;
 
-- initWithBitmapDataPlanes: (unsigned char **) planes
+- (nullable instancetype) initWithBitmapDataPlanes: (unsigned char *_Nullable *_Nullable) planes
                 pixelsWide: (int) width
                 pixelsHigh: (int) height
              bitsPerSample: (int) bitsPerSample
            samplesPerPixel: (int) samplesPerPixel
                   hasAlpha: (BOOL) hasAlpha
                   isPlanar: (BOOL) isPlanar
-            colorSpaceName: (NSString *) colorSpaceName
+            colorSpaceName: (null_unspecified NSString *) colorSpaceName
               bitmapFormat: (NSBitmapFormat) bitmapFormat
                bytesPerRow: (int) bytesPerRow
               bitsPerPixel: (int) bitsPerPixel;
 
-- initWithBitmapDataPlanes: (unsigned char **) planes
+- (nullable instancetype) initWithBitmapDataPlanes: (unsigned char *_Nullable *_Nullable) planes
                 pixelsWide: (int) width
                 pixelsHigh: (int) height
              bitsPerSample: (int) bitsPerSample
            samplesPerPixel: (int) samplesPerPixel
                   hasAlpha: (BOOL) hasAlpha
                   isPlanar: (BOOL) isPlanar
-            colorSpaceName: (NSString *) colorSpaceName
+            colorSpaceName: (null_unspecified NSString *) colorSpaceName
                bytesPerRow: (int) bytesPerRow
               bitsPerPixel: (int) bitsPerPixel;
 
-- initForIncrementalLoad;
+- (instancetype) initForIncrementalLoad;
 
-- initWithFocusedViewRect: (NSRect) rect;
+- (nullable instancetype) initWithFocusedViewRect: (NSRect) rect;
 
-- initWithData: (NSData *) data;
-- initWithContentsOfFile: (NSString *) path;
-- initWithCGImage: (CGImageRef) cgImage;
+- (nullable instancetype) initWithData: (NSData *) data;
+- (nullable instancetype) initWithContentsOfFile: (NSString *) path;
+- (instancetype) initWithCGImage: (CGImageRef) cgImage;
 
 - (int) incrementalLoadFromData: (NSData *) data complete: (BOOL) complete;
 
@@ -170,39 +174,41 @@ typedef NS_ENUM(NSInteger, NSImageRepLoadStatus) {
 - (int) bytesPerPlane;
 
 - (NSBitmapFormat) bitmapFormat;
-- (unsigned char *) bitmapData;
+- (nullable unsigned char *) bitmapData;
 
-- (void) getBitmapDataPlanes: (unsigned char **) planes;
+- (void) getBitmapDataPlanes: (unsigned char *_Nullable *_Nonnull) planes;
 
-- (void) getPixel: (NSUInteger[]) pixel atX: (NSInteger) x y: (NSInteger) y;
-- (void) setPixel: (NSUInteger[]) pixel atX: (NSInteger) x y: (NSInteger) y;
+- (void) getPixel: (NSUInteger[_Nonnull]) pixel atX: (NSInteger) x y: (NSInteger) y;
+- (void) setPixel: (NSUInteger[_Nonnull]) pixel atX: (NSInteger) x y: (NSInteger) y;
 
-- (NSColor *) colorAtX: (NSInteger) x y: (NSInteger) y;
+- (nullable NSColor *) colorAtX: (NSInteger) x y: (NSInteger) y;
 - (void) setColor: (NSColor *) color atX: (NSInteger) x y: (NSInteger) y;
 
-- valueForProperty: (NSString *) property;
-- (void) setProperty: (NSString *) property withValue: value;
+- (nullable id) valueForProperty: (null_unspecified NSString *) property;
+- (void) setProperty: (null_unspecified NSString *) property withValue: (nullable id) value;
 
 - (void) colorizeByMappingGray: (CGFloat) gray
-                       toColor: (NSColor *) color
-                  blackMapping: (NSColor *) blackMapping
-                  whiteMapping: (NSColor *) whiteMapping;
+                       toColor: (nullable NSColor *) color
+                  blackMapping: (nullable NSColor *) blackMapping
+                  whiteMapping: (nullable NSColor *) whiteMapping;
 
-- (void) getCompression: (NSTIFFCompression *) compression
-                 factor: (float *) factor;
+- (void) getCompression: (nullable NSTIFFCompression *) compression
+                 factor: (nullable float *) factor;
 - (void) setCompression: (NSTIFFCompression) compression factor: (float) factor;
 
 - (BOOL) canBeCompressedUsing: (NSTIFFCompression) compression;
 
-- (NSData *) representationUsingType: (NSBitmapImageFileType) type
-                          properties: (NSDictionary *) properties;
+- (nullable NSData *) representationUsingType: (NSBitmapImageFileType) type
+                          properties: (NSDictionary<NSBitmapImageRepPropertyKey, id> *) properties;
 
-- (NSData *) TIFFRepresentation;
-- (NSData *) TIFFRepresentationUsingCompression: (NSTIFFCompression) compression
+- (nullable NSData *) TIFFRepresentation;
+- (nullable NSData *) TIFFRepresentationUsingCompression: (NSTIFFCompression) compression
                                          factor: (float) factor;
 
-- (CGImageRef) CGImage;
+- (nullable CGImageRef) CGImage;
 
-- (NSBitmapImageRep *) bitmapImageRepByRetaggingWithColorSpace: (NSColorSpace *) newSpace;
+- (nullable NSBitmapImageRep *) bitmapImageRepByRetaggingWithColorSpace: (NSColorSpace *) newSpace;
 
 @end
+
+NS_ASSUME_NONNULL_END

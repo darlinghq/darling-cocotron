@@ -20,6 +20,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/NSControl.h>
 
+@class NSCell;
+
+NS_ASSUME_NONNULL_BEGIN
+
 typedef NS_ENUM(NSUInteger, NSMatrixMode) {
     NSRadioModeMatrix,
     NSHighlightModeMatrix,
@@ -66,26 +70,26 @@ typedef NS_ENUM(NSUInteger, NSMatrixMode) {
     NS_EXTRA_IVARS_END(NSMatrix)
 }
 
-- initWithFrame: (NSRect) frame
+- (instancetype) initWithFrame: (NSRect) frame
                    mode: (NSMatrixMode) mode
               prototype: (NSCell *) prototype
            numberOfRows: (NSInteger) rows
         numberOfColumns: (NSInteger) columns;
-- initWithFrame: (NSRect) frame
+- (instancetype) initWithFrame: (NSRect) frame
                    mode: (NSMatrixMode) mode
-              cellClass: (Class) cls
+              cellClass: (nullable Class) cls
            numberOfRows: (NSInteger) rows
         numberOfColumns: (NSInteger) columns;
 
-- delegate;
+- (null_unspecified id) delegate;
 @property(nonatomic) SEL doubleAction;
 
 @property(nonatomic) Class cellClass;
-- prototype;
+- (null_unspecified id) prototype;
 
-- (NSArray *) cells;
-- cellWithTag: (NSInteger) tag;
-- cellAtRow: (NSInteger) row column: (NSInteger) column;
+- (NSArray<NSCell *> *) cells;
+- (null_unspecified id) cellWithTag: (NSInteger) tag;
+- (null_unspecified id) cellAtRow: (NSInteger) row column: (NSInteger) column;
 - (NSRect) cellFrameAtRow: (NSInteger) row column: (NSInteger) column;
 - (BOOL) getRow: (NSInteger *) row
          column: (NSInteger *) column
@@ -96,11 +100,11 @@ typedef NS_ENUM(NSUInteger, NSMatrixMode) {
 
 - (NSInteger) numberOfRows;
 - (NSInteger) numberOfColumns;
-- (void) getNumberOfRows: (NSInteger *) rows columns: (NSInteger *) columns;
+- (void) getNumberOfRows: (nullable NSInteger *) rows columns: (nullable NSInteger *) columns;
 
-- (NSString *) toolTipForCell: (NSCell *) cell;
+- (nullable NSString *) toolTipForCell: (NSCell *) cell;
 
-- keyCell;
+- (null_unspecified id) keyCell;
 
 @property(nonatomic) NSMatrixMode mode;
 @property(nonatomic) BOOL allowsEmptySelection;
@@ -114,16 +118,16 @@ typedef NS_ENUM(NSUInteger, NSMatrixMode) {
 @property(nonatomic, retain) NSColor *backgroundColor;
 
 @property(nonatomic) BOOL drawsCellBackground;
-@property(nonatomic, retain) NSColor *cellBackgroundColor;
+@property(nullable, nonatomic, retain) NSColor *cellBackgroundColor;
 
 @property(nonatomic, getter=isAutoscroll) BOOL autoscroll;
 
 - (NSInteger) selectedRow;
 - (NSInteger) selectedColumn;
-- (NSArray *) selectedCells;
+- (NSArray<__kindof NSCell *> *) selectedCells;
 
-- (void) setDelegate: delegate;
-- (void) setPrototype: (NSCell *) cell;
+- (void) setDelegate: (null_unspecified id) delegate;
+- (void) setPrototype: (nullable __kindof NSCell *) cell;
 
 - (void) renewRows: (NSInteger) rows columns: (NSInteger) columns;
 - (NSCell *) makeCellAtRow: (NSInteger) row column: (NSInteger) col;
@@ -134,14 +138,14 @@ typedef NS_ENUM(NSUInteger, NSMatrixMode) {
 - (void) addRow;
 - (void) insertRow: (NSInteger) row;
 - (void) removeRow: (NSInteger) row;
-- (void) insertRow: (NSInteger) row withCells: (NSArray *) cells;
+- (void) insertRow: (NSInteger) row withCells: (nullable NSArray<NSCell *> *) cells;
 
 - (void) addColumn;
 - (void) removeColumn: (NSInteger) col;
 
-- (void) setToolTip: (NSString *) tip forCell: (NSCell *) cell;
+- (void) setToolTip: (nullable NSString *) tip forCell: (NSCell *) cell;
 
-- (void) setKeyCell: cell;
+- (void) setKeyCell: (null_unspecified id) cell;
 
 
 
@@ -150,7 +154,7 @@ typedef NS_ENUM(NSUInteger, NSMatrixMode) {
 - (void) selectCellAtRow: (NSInteger) row column: (NSInteger) column;
 - (void) selectCell: (NSCell *) cell;
 - (BOOL) selectCellWithTag: (NSInteger) tag;
-- (void) selectAll: sender;
+- (void) selectAll: (nullable id) sender;
 - (void) setSelectionFrom: (NSInteger) from
                        to: (NSInteger) to
                    anchor: (NSInteger) anchor
@@ -180,3 +184,5 @@ typedef NS_ENUM(NSUInteger, NSMatrixMode) {
 // TODO
 
 @end
+
+NS_ASSUME_NONNULL_END

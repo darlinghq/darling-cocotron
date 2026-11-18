@@ -23,6 +23,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 // Legacy ObjC ABI (i386): instance size must stay 0x6c, Apple's; an
 // application's subclass is laid out right after it. New state goes to a
 // side structure, never to a larger ivar block.
+NS_ASSUME_NONNULL_BEGIN
+
 @interface NSStepper : NSControl {
     NS_LEGACY_IVAR_PAD(_NSStepperReserved1, 16)
 }
@@ -37,3 +39,5 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 
 @end
+
+NS_ASSUME_NONNULL_END

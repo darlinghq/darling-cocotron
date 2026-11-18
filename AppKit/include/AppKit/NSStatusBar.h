@@ -20,6 +20,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <CoreFoundation/CFBase.h>
 #import <AppKit/AppKitIvarLayout.h>
 #import <Foundation/NSObject.h>
+NS_ASSUME_NONNULL_BEGIN
+
 #define NSVariableStatusItemLength (-1)
 #define NSSquareStatusItemLength (-2)
 
@@ -39,3 +41,5 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (NSStatusItem *) statusItemWithLength: (CGFloat) length;
 - (CGFloat) thickness;
 @end
+
+NS_ASSUME_NONNULL_END

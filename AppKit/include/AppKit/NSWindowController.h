@@ -26,6 +26,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 // Legacy ObjC ABI (i386): instance size must stay 0x28, Apple's; the ivars
 // before the extras sit at Apple's offsets. Add new state to the extra
 // struct, never as an ivar.
+NS_ASSUME_NONNULL_BEGIN
+
 @interface NSWindowController : NSResponder {
     NSWindow *_window;
     NSString *_nibName;
@@ -44,41 +46,43 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     NS_EXTRA_IVARS_END(NSWindowController)
 }
 
-- initWithWindow: (NSWindow *) window;
-- initWithWindowNibName: (NSNibName) nibName;
-- initWithWindowNibName: (NSNibName) nibName owner: owner;
-- initWithWindowNibPath: (NSString *) nibPath owner: owner;
+- (instancetype) initWithWindow: (nullable NSWindow *) window;
+- (instancetype) initWithWindowNibName: (NSNibName) nibName;
+- (instancetype) initWithWindowNibName: (NSNibName) nibName owner: (id) owner;
+- (instancetype) initWithWindowNibPath: (NSString *) nibPath owner: (id) owner;
 
-@property(readonly, strong) NSStoryboard *storyboard;
+@property(nullable, readonly, strong) NSStoryboard *storyboard;
 
 // Loads the window first if it isn't loaded and a nib name is set, as
 // subclasses that build the window in -loadWindow rely on.
-@property(nonatomic, retain) NSWindow *window;
-@property (retain) NSViewController *contentViewController;
+@property(nullable, nonatomic, retain) NSWindow *window;
+@property (nullable, retain) NSViewController *contentViewController;
 
 - (BOOL) isWindowLoaded;
 - (void) loadWindow;
 - (void) windowWillLoad;
 - (void) windowDidLoad;
 
-- (void) showWindow: sender;
+- (void) showWindow: (nullable id) sender;
 
-- (void) setDocument: (NSDocument *) document;
-- document;
+- (void) setDocument: (null_unspecified NSDocument *) document;
+- (nullable id) document;
 - (void) setDocumentEdited: (BOOL) flag;
 
 - (void) close;
 @property(nonatomic) BOOL shouldCloseDocument;
 
-- owner;
+- (id) owner;
 @property (readonly, copy) NSNibName windowNibName;
-- (NSString *) windowNibPath;
+- (nullable NSString *) windowNibPath;
 
 @property(nonatomic) BOOL shouldCascadeWindows;
 
-@property(nonatomic, copy) NSString *windowFrameAutosaveName;
+@property(null_unspecified, nonatomic, copy) NSString *windowFrameAutosaveName;
 
 - (void) synchronizeWindowTitleWithDocumentName;
 - (NSString *) windowTitleForDocumentDisplayName: (NSString *) displayName;
 
 @end
+
+NS_ASSUME_NONNULL_END

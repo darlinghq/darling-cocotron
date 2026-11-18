@@ -22,6 +22,8 @@
 #import <Foundation/NSObject.h>
 #import <Foundation/NSString.h>
 
+NS_ASSUME_NONNULL_BEGIN
+
 typedef NSString* NSAppearanceName NS_EXTENSIBLE_STRING_ENUM;
 
 APPKIT_EXPORT const NSAppearanceName NSAppearanceNameAqua;
@@ -45,19 +47,19 @@ APPKIT_EXPORT BOOL NSSolariumEnabled(void);
 }
 
 // One shared appearance per known name; nil for any other name.
-+ (NSAppearance *) appearanceNamed: (NSAppearanceName) name;
++ (nullable NSAppearance *) appearanceNamed: (NSAppearanceName) name;
 
 @property(readonly, copy) NSAppearanceName name;
-- (NSAppearanceName) bestMatchFromAppearancesWithNames:
+- (nullable NSAppearanceName) bestMatchFromAppearancesWithNames:
         (NSArray<NSAppearanceName> *) appearances;
 
 // The appearance AppKit draws with on the calling thread: the one
 // -performAsCurrentDrawingAppearance: or +setCurrentAppearance: installed,
 // else the application's effective appearance.
 + (NSAppearance *) currentDrawingAppearance;
-- (void) performAsCurrentDrawingAppearance: (void (^)(void)) block;
+- (void) performAsCurrentDrawingAppearance: (void (NS_NOESCAPE ^)(void)) block;
 + (NSAppearance *) currentAppearance;
-+ (void) setCurrentAppearance: (NSAppearance *) appearance;
++ (void) setCurrentAppearance: (nullable NSAppearance *) appearance;
 
 @end
 
@@ -66,7 +68,7 @@ APPKIT_EXPORT BOOL NSSolariumEnabled(void);
 @interface NSAppearance (NSAppearanceColorAdjustment)
 // Private AppKit: the color blended a fixed fraction towards black (darker)
 // or white.
-+ (NSColor *) colorByAdjustingLightnessOfColor: (NSColor *) color darker: (BOOL) darker;
++ (null_unspecified NSColor *) colorByAdjustingLightnessOfColor: (null_unspecified NSColor *) color darker: (BOOL) darker;
 @end
 
 @protocol NSAppearanceCustomization <NSObject>
@@ -76,3 +78,5 @@ APPKIT_EXPORT BOOL NSSolariumEnabled(void);
 @property (readonly, strong, nonnull) NSAppearance *effectiveAppearance;
 
 @end
+
+NS_ASSUME_NONNULL_END

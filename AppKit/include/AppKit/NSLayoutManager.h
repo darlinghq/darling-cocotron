@@ -22,6 +22,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSFont.h>
 #import <Foundation/Foundation.h>
 
+@class NSRulerMarker;
+
+NS_ASSUME_NONNULL_BEGIN
+
 @class NSTextStorage, NSGlyphGenerator, NSTypesetter, NSTextContainer,
         NSTextView, NSRulerView;
 @class NSWindow, NSColor, NSCell;
@@ -90,33 +94,33 @@ typedef NS_OPTIONS(NSInteger, NSControlCharacterAction) {
     NS_LEGACY_IVAR_PAD(_NSLayoutManagerReserved, 111)
 }
 
-- init;
+- (null_unspecified instancetype) init;
 
-@property(nonatomic, retain) NSFont *textFont;
+@property(null_unspecified, nonatomic, retain) NSFont *textFont;
 
 @property(nonatomic) BOOL showsControlCharacters;
 @property(nonatomic) BOOL showsInvisibleCharacters;
 @property(nonatomic) BOOL usesFontLeading;
 @property(nonatomic) BOOL backgroundLayoutEnabled;
 
-@property(nonatomic, retain) NSTextStorage *textStorage;
+@property(nullable, nonatomic, retain) NSTextStorage *textStorage;
 @property(nonatomic, retain) NSGlyphGenerator *glyphGenerator;
-@property(nonatomic, retain) NSTypesetter *typesetter;
-- delegate;
-- (NSArray *) textContainers;
+@property(null_unspecified, nonatomic, retain) NSTypesetter *typesetter;
+- (null_unspecified id) delegate;
+- (nullable NSArray<NSTextContainer *> *) textContainers;
 
-- (NSTextView *) firstTextView;
-- (NSTextView *) textViewForBeginningOfSelection;
+- (nullable NSTextView *) firstTextView;
+- (nullable NSTextView *) textViewForBeginningOfSelection;
 - (BOOL) layoutManagerOwnsFirstResponderInWindow: (NSWindow *) window;
 
-- (void) replaceTextStorage: (NSTextStorage *) textStorage;
-- (void) setDelegate: delegate;
+- (void) replaceTextStorage: (null_unspecified NSTextStorage *) textStorage;
+- (void) setDelegate: (null_unspecified id) delegate;
 
 @property(nonatomic) BOOL usesScreenFonts;
 
-- (void) addTextContainer: (NSTextContainer *) container;
+- (void) addTextContainer: (null_unspecified NSTextContainer *) container;
 - (void) removeTextContainerAtIndex: (NSUInteger) index;
-- (void) insertTextContainer: (NSTextContainer *) container
+- (void) insertTextContainer: (null_unspecified NSTextContainer *) container
                      atIndex: (NSUInteger) index;
 
 - (void) insertGlyph: (NSGlyph) glyph
@@ -134,21 +138,21 @@ typedef NS_OPTIONS(NSInteger, NSControlCharacterAction) {
                      forGlyphAtIndex: (NSUInteger) glyphIndex;
 
 - (NSUInteger) numberOfGlyphs;
-- (NSUInteger) getGlyphs: (NSGlyph *) glyphs range: (NSRange) glyphRange;
+- (NSUInteger) getGlyphs: (nullable NSGlyph *) glyphs range: (NSRange) glyphRange;
 
 - (NSUInteger) getGlyphsInRange: (NSRange) range
-                         glyphs: (NSGlyph *) glyphs
-               characterIndexes: (NSUInteger *) charIndexes
-              glyphInscriptions: (NSGlyphInscription *) inscriptions
-                    elasticBits: (BOOL *) elasticBits;
+                         glyphs: (nullable NSGlyph *) glyphs
+               characterIndexes: (nullable NSUInteger *) charIndexes
+              glyphInscriptions: (nullable NSGlyphInscription *) inscriptions
+                    elasticBits: (nullable BOOL *) elasticBits;
 - (NSUInteger) getGlyphsInRange: (NSRange) range
-                         glyphs: (NSGlyph *) glyphs
-               characterIndexes: (NSUInteger *) charIndexes
-              glyphInscriptions: (NSGlyphInscription *) inscriptions
-                    elasticBits: (BOOL *) elasticBits
-                     bidiLevels: (unsigned char *) bidiLevels;
+                         glyphs: (nullable NSGlyph *) glyphs
+               characterIndexes: (nullable NSUInteger *) charIndexes
+              glyphInscriptions: (nullable NSGlyphInscription *) inscriptions
+                    elasticBits: (nullable BOOL *) elasticBits
+                     bidiLevels: (nullable unsigned char *) bidiLevels;
 
-- (NSTextContainer *) textContainerForGlyphAtIndex: (NSUInteger) glyphIndex
+- (null_unspecified NSTextContainer *) textContainerForGlyphAtIndex: (NSUInteger) glyphIndex
                                     effectiveRange: (NSRangePointer)
                                                             effectiveGlyphRange;
 - (NSRect) lineFragmentRectForGlyphAtIndex: (NSUInteger) glyphIndex
@@ -163,14 +167,14 @@ typedef NS_OPTIONS(NSInteger, NSControlCharacterAction) {
                                                         NSTextContainer *textContainer,
                                                         NSRange lineGlyphRange,
                                                         BOOL *stop)) block;
-- (NSRect) usedRectForTextContainer: (NSTextContainer *) container;
+- (NSRect) usedRectForTextContainer: (null_unspecified NSTextContainer *) container;
 - (NSRect) extraLineFragmentRect;
 - (NSRect) extraLineFragmentUsedRect;
-- (NSTextContainer *) extraLineFragmentTextContainer;
+- (null_unspecified NSTextContainer *) extraLineFragmentTextContainer;
 
 @property(nonatomic) BOOL allowsNonContiguousLayout;
 
-- (void) setTextContainer: (NSTextContainer *) container
+- (void) setTextContainer: (null_unspecified NSTextContainer *) container
             forGlyphRange: (NSRange) glyphRange;
 - (void) setLineFragmentRect: (NSRect) fragmentRect
                forGlyphRange: (NSRange) glyphRange
@@ -180,14 +184,14 @@ typedef NS_OPTIONS(NSInteger, NSControlCharacterAction) {
 
 - (void) setExtraLineFragmentRect: (NSRect) fragmentRect
                          usedRect: (NSRect) usedRect
-                    textContainer: (NSTextContainer *) container;
+                    textContainer: (null_unspecified NSTextContainer *) container;
 
 - (void) invalidateGlyphsForCharacterRange: (NSRange) charRange
                             changeInLength: (NSInteger) delta
                       actualCharacterRange: (NSRangePointer) actualCharRange;
 - (void) invalidateLayoutForCharacterRange: (NSRange) charRange
                                     isSoft: (BOOL) isSoft
-                      actualCharacterRange: (NSRangePointer) actualCharRange;
+                      actualCharacterRange: (nullable NSRangePointer) actualCharRange;
 - (void) invalidateDisplayForGlyphRange: (NSRange) glyphRange;
 - (void) invalidateDisplayForCharacterRange: (NSRange) charRange;
 
@@ -197,51 +201,51 @@ typedef NS_OPTIONS(NSInteger, NSControlCharacterAction) {
           changeInLength: (NSInteger) changeInLength
         invalidatedRange: (NSRange) invalidateRange;
 
-- (void) textContainerChangedGeometry: (NSTextContainer *) container;
-- (void) ensureLayoutForTextContainer: (NSTextContainer *) container;
+- (void) textContainerChangedGeometry: (null_unspecified NSTextContainer *) container;
+- (void) ensureLayoutForTextContainer: (null_unspecified NSTextContainer *) container;
 - (void) ensureLayoutForGlyphRange: (NSRange) glyphRange;
 - (void) ensureLayoutForCharacterRange: (NSRange) charRange;
 
 - (NSUInteger) glyphIndexForPoint: (NSPoint) point
-                       inTextContainer: (NSTextContainer *) container
-        fractionOfDistanceThroughGlyph: (CGFloat *) fraction;
+                       inTextContainer: (null_unspecified NSTextContainer *) container
+        fractionOfDistanceThroughGlyph: (null_unspecified CGFloat *) fraction;
 - (NSUInteger) glyphIndexForPoint: (NSPoint) point
-                  inTextContainer: (NSTextContainer *) container;
+                  inTextContainer: (null_unspecified NSTextContainer *) container;
 - (CGFloat) fractionOfDistanceThroughGlyphForPoint: (NSPoint) point
                                    inTextContainer:
-                                           (NSTextContainer *) container;
+                                           (null_unspecified NSTextContainer *) container;
 
-- (NSRange) glyphRangeForTextContainer: (NSTextContainer *) container;
+- (NSRange) glyphRangeForTextContainer: (null_unspecified NSTextContainer *) container;
 - (NSRange) glyphRangeForCharacterRange: (NSRange) charRange
-                   actualCharacterRange: (NSRangePointer) actualCharRange;
+                   actualCharacterRange: (nullable NSRangePointer) actualCharRange;
 - (NSRange) glyphRangeForBoundingRect: (NSRect) bounds
-                      inTextContainer: (NSTextContainer *) container;
+                      inTextContainer: (null_unspecified NSTextContainer *) container;
 - (NSRange) glyphRangeForBoundingRectWithoutAdditionalLayout: (NSRect) bounds
                                              inTextContainer:
-                                                     (NSTextContainer *)
+                                                     (null_unspecified NSTextContainer *)
                                                              container;
 - (NSRange) rangeOfNominallySpacedGlyphsContainingIndex:
         (NSUInteger) glyphIndex;
 
 - (NSRect) boundingRectForGlyphRange: (NSRange) glyphRange
-                     inTextContainer: (NSTextContainer *) container;
-- (NSRect *) rectArrayForGlyphRange: (NSRange) glyphRange
+                     inTextContainer: (null_unspecified NSTextContainer *) container;
+- (null_unspecified NSRect *) rectArrayForGlyphRange: (NSRange) glyphRange
            withinSelectedGlyphRange: (NSRange) selectedGlyphRange
                     inTextContainer: (NSTextContainer *) container
                           rectCount: (NSUInteger *) rectCount;
 
 - (NSUInteger) characterIndexForGlyphAtIndex: (NSUInteger) glyphIndex;
 - (NSRange) characterRangeForGlyphRange: (NSRange) glyphRange
-                       actualGlyphRange: (NSRange *) actualGlyphRange;
-- (NSRect *) rectArrayForCharacterRange: (NSRange) characterRange
+                       actualGlyphRange: (null_unspecified NSRange *) actualGlyphRange;
+- (null_unspecified NSRect *) rectArrayForCharacterRange: (NSRange) characterRange
            withinSelectedCharacterRange: (NSRange) selectedCharRange
                         inTextContainer: (NSTextContainer *) container
                               rectCount: (NSUInteger *) rectCount;
 
 - (NSUInteger) firstUnlaidGlyphIndex;
 - (NSUInteger) firstUnlaidCharacterIndex;
-- (void) getFirstUnlaidCharacterIndex: (NSUInteger *) charIndex
-                           glyphIndex: (NSUInteger *) glyphIndex;
+- (void) getFirstUnlaidCharacterIndex: (null_unspecified NSUInteger *) charIndex
+                           glyphIndex: (null_unspecified NSUInteger *) glyphIndex;
 
 - (void) showPackedGlyphs: (char *) glyphs
                     length: (NSUInteger) length
@@ -280,38 +284,38 @@ typedef NS_OPTIONS(NSInteger, NSControlCharacterAction) {
           lineFragmentGlyphRange: (NSRange) lineGlyphRange
                  containerOrigin: (NSPoint) containerOrigin;
 
-- (CGFloat) defaultLineHeightForFont: (NSFont *) font;
-- (CGFloat) defaultBaselineOffsetForFont: (NSFont *) font;
+- (CGFloat) defaultLineHeightForFont: (null_unspecified NSFont *) font;
+- (CGFloat) defaultBaselineOffsetForFont: (null_unspecified NSFont *) font;
 
-- (NSDictionary *) temporaryAttributesAtCharacterIndex: (NSUInteger) charIndex
+- (null_unspecified NSDictionary *) temporaryAttributesAtCharacterIndex: (NSUInteger) charIndex
                                         effectiveRange:
                                                 (NSRangePointer)
                                                         effectiveCharRange;
-- (void) setTemporaryAttributes: (NSDictionary *) attrs
+- (void) setTemporaryAttributes: (null_unspecified NSDictionary *) attrs
               forCharacterRange: (NSRange) charRange;
-- (void) addTemporaryAttributes: (NSDictionary *) attrs
+- (void) addTemporaryAttributes: (null_unspecified NSDictionary *) attrs
               forCharacterRange: (NSRange) charRange;
-- (void) removeTemporaryAttribute: (NSString *) attrName
+- (void) removeTemporaryAttribute: (null_unspecified NSString *) attrName
                 forCharacterRange: (NSRange) charRange;
 
-- (id) temporaryAttribute: (NSString *) attrName
+- (null_unspecified id) temporaryAttribute: (null_unspecified NSString *) attrName
          atCharacterIndex: (NSUInteger) location
            effectiveRange: (NSRangePointer) range;
-- (id) temporaryAttribute: (NSString *) attrName
+- (null_unspecified id) temporaryAttribute: (null_unspecified NSString *) attrName
              atCharacterIndex: (NSUInteger) location
         longestEffectiveRange: (NSRangePointer) range
                       inRange: (NSRange) rangeLimit;
-- (NSDictionary *) temporaryAttributesAtCharacterIndex: (NSUInteger) location
+- (null_unspecified NSDictionary *) temporaryAttributesAtCharacterIndex: (NSUInteger) location
                                  longestEffectiveRange: (NSRangePointer) range
                                                inRange: (NSRange) rangeLimit;
-- (void) addTemporaryAttribute: (NSString *) attrName
-                         value: (id) value
+- (void) addTemporaryAttribute: (null_unspecified NSString *) attrName
+                         value: (null_unspecified id) value
              forCharacterRange: (NSRange) charRange;
 
-- (NSArray *) rulerMarkersForTextView: (NSTextView *) view
+- (NSArray<NSRulerMarker *> *) rulerMarkersForTextView: (NSTextView *) view
                        paragraphStyle: (NSParagraphStyle *) style
                                 ruler: (NSRulerView *) ruler;
-- (NSView *) rulerAccessoryViewForTextView: (NSTextView *) view
+- (nullable __kindof NSView *) rulerAccessoryViewForTextView: (NSTextView *) view
                             paragraphStyle: (NSParagraphStyle *) style
                                      ruler: (NSRulerView *) ruler
                                    enabled: (BOOL) isEnabled;
@@ -327,13 +331,13 @@ typedef NS_OPTIONS(NSInteger, NSControlCharacterAction) {
 @protocol NSLayoutManagerDelegate <NSObject>
 @optional
 - (void) layoutManager: (NSLayoutManager *) layoutManager
-        didCompleteLayoutForTextContainer: (NSTextContainer *) textContainer
+        didCompleteLayoutForTextContainer: (nullable NSTextContainer *) textContainer
                                     atEnd: (BOOL) layoutFinishedFlag;
-- (NSDictionary *) layoutManager: (NSLayoutManager *) layoutManager
-        shouldUseTemporaryAttributes: (NSDictionary *) attrs
+- (nullable NSDictionary<NSAttributedStringKey, id> *) layoutManager: (NSLayoutManager *) layoutManager
+        shouldUseTemporaryAttributes: (NSDictionary<NSAttributedStringKey, id> *) attrs
                   forDrawingToScreen: (BOOL) toScreen
                     atCharacterIndex: (NSUInteger) charIndex
-                      effectiveRange: (NSRangePointer) effectiveCharRange;
+                      effectiveRange: (nullable NSRangePointer) effectiveCharRange;
 @end
 
 @protocol NSTextLayoutOrientationProvider
@@ -341,3 +345,5 @@ typedef NS_OPTIONS(NSInteger, NSControlCharacterAction) {
 - (NSTextLayoutOrientation) layoutOrientation;
 
 @end
+
+NS_ASSUME_NONNULL_END

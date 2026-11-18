@@ -24,6 +24,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSView, NSOutlineView, NSTextField;
 
+NS_ASSUME_NONNULL_BEGIN
+
 enum {
     NSFileHandlingPanelCancelButton = NSCancelButton,
     NSFileHandlingPanelOKButton = NSOKButton,
@@ -36,8 +38,8 @@ enum {
 // Return NO (and set the error) to keep the panel up when the chosen URL is not acceptable.
 - (BOOL) panel: (id) sender validateURL: (NSURL *) url error: (NSError **) outError;
 // Sent when the folder shown by the panel changes, and once when it is shown.
-- (void) panel: (id) sender didChangeToDirectoryURL: (NSURL *) url;
-- (void) panelSelectionDidChange: (id) sender;
+- (void) panel: (id) sender didChangeToDirectoryURL: (nullable NSURL *) url;
+- (void) panelSelectionDidChange: (nullable id) sender;
 @end
 
 // Legacy ObjC ABI (i386): instance size must stay 0xf8, Apple's; an
@@ -81,29 +83,29 @@ enum {
 
 + (NSSavePanel *) savePanel;
 
-- (NSURL *) URL;
+- (nullable NSURL *) URL;
 - (NSString *) filename;
 
 - (void) beginWithCompletionHandler: (void (^)(NSModalResponse result)) handler;
 - (void) beginSheetModalForWindow: (NSWindow *) window
                 completionHandler: (void (^)(NSModalResponse result)) handler;
 
-- (NSModalResponse) runModalForDirectory: (NSString *) directory
-                                    file: (NSString *) file;
+- (NSModalResponse) runModalForDirectory: (nullable NSString *) directory
+                                    file: (nullable NSString *) file;
 - (NSModalResponse) runModal;
 
-@property(nonatomic, copy) NSString *directory;
+@property(null_resettable, nonatomic, copy) NSString *directory;
 @property(nonatomic) BOOL treatsFilePackagesAsDirectories;
-@property(nonatomic, retain) NSView *accessoryView;
+@property(nullable, nonatomic, retain) NSView *accessoryView;
 
-- (void) setTitle: (NSString *) title;
+- (void) setTitle: (nullable NSString *) title;
 
 
-- (void) setRequiredFileType: (NSString *) type;
+- (void) setRequiredFileType: (nullable NSString *) type;
 
-@property(nonatomic, copy) NSURL *directoryURL;
+@property(nullable, nonatomic, copy) NSURL *directoryURL;
 
-@property(nonatomic, copy) NSArray *allowedFileTypes;
+@property(nullable, nonatomic, copy) NSArray<NSString *> *allowedFileTypes;
 
 - (void) setCanCreateDirectories: (BOOL) value;
 // UTType objects (macOS 11). Setting them also sets allowedFileTypes to their
@@ -111,32 +113,34 @@ enum {
 @property(nonatomic, copy) NSArray *allowedContentTypes;
 - (void) setAllowsOtherFileTypes: (BOOL) value;
 
-@property(nonatomic, copy) NSString *message;
+@property(null_resettable, nonatomic, copy) NSString *message;
 
-@property(nonatomic, copy) NSString *prompt;
+@property(null_resettable, nonatomic, copy) NSString *prompt;
 
-@property(nonatomic, copy) NSString *nameFieldLabel;
+@property(null_resettable, nonatomic, copy) NSString *nameFieldLabel;
 @property(nonatomic) BOOL showsTagField;
-@property(nonatomic, copy) NSArray *tagNames;
+@property(nullable, nonatomic, copy) NSArray<NSString *> *tagNames;
 - (void) setExtensionHidden: (BOOL) flag;
 - (BOOL) isExtensionHidden;
 - (void) setCanSelectHiddenExtension: (BOOL) flag;
 - (BOOL) canSelectHiddenExtension;
 
-- (void) cancelOperation: (id) sender;
+- (void) cancelOperation: (nullable id) sender;
 - (void) beginWithCompletionHandler: (void (^)(NSModalResponse result)) handler;
 
-- (void) beginSheetForDirectory: (NSString *) path
-                           file: (NSString *) name
-                 modalForWindow: (NSWindow *) docWindow
-                  modalDelegate: (id) modalDelegate
-                 didEndSelector: (SEL) didEndSelector
-                    contextInfo: (void *) contextInfo;
+- (void) beginSheetForDirectory: (nullable NSString *) path
+                           file: (nullable NSString *) name
+                 modalForWindow: (nullable NSWindow *) docWindow
+                  modalDelegate: (nullable id) modalDelegate
+                 didEndSelector: (nullable SEL) didEndSelector
+                    contextInfo: (nullable void *) contextInfo;
 
-- (void) ok: (id) sender;
-- (void) cancel: (id) sender;
+- (void) ok: (nullable id) sender;
+- (void) cancel: (nullable id) sender;
 // Like NSWindow's delegate, typed for the panel's own delegate protocol.
-@property(assign) id<NSOpenSavePanelDelegate> delegate;
-- (IBAction) _selectFile: (id) sender;
-- (IBAction) _cancel: (id) sender;
+@property(nullable, assign) id<NSOpenSavePanelDelegate> delegate;
+- (IBAction) _selectFile: (null_unspecified id) sender;
+- (IBAction) _cancel: (null_unspecified id) sender;
 @end
+
+NS_ASSUME_NONNULL_END

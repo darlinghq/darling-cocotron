@@ -26,6 +26,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSClipView, NSScroller, NSColor, NSRulerView;
 
+NS_ASSUME_NONNULL_BEGIN
+
 APPKIT_EXPORT NSString *const NSScrollViewDidEndLiveScrollNotification;
 APPKIT_EXPORT NSString *const NSScrollViewWillStartLiveScrollNotification;
 APPKIT_EXPORT NSString *const NSScrollViewDidLiveScrollNotification;
@@ -93,8 +95,8 @@ typedef NS_ENUM(NSInteger, NSScrollViewFindBarPosition) {
                hasVerticalScroller: (BOOL) hasVerticalScroller
                         borderType: (NSBorderType) borderType;
 + (NSSize)frameSizeForContentSize: (NSSize)cSize 
-          horizontalScrollerClass: (Class)horizontalScrollerClass 
-            verticalScrollerClass: (Class)verticalScrollerClass 
+          horizontalScrollerClass: (nullable Class)horizontalScrollerClass 
+            verticalScrollerClass: (nullable Class)verticalScrollerClass 
                        borderType: (NSBorderType)type 
                       controlSize: (NSControlSize)controlSize 
                     scrollerStyle: (NSScrollerStyle)scrollerStyle;
@@ -103,28 +105,28 @@ typedef NS_ENUM(NSInteger, NSScrollViewFindBarPosition) {
                hasVerticalScroller: (BOOL) hasVerticalScroller
                         borderType: (NSBorderType) borderType;
 + (NSSize)contentSizeForFrameSize: (NSSize)fSize 
-          horizontalScrollerClass: (Class)horizontalScrollerClass 
-            verticalScrollerClass: (Class)verticalScrollerClass 
+          horizontalScrollerClass: (nullable Class)horizontalScrollerClass 
+            verticalScrollerClass: (nullable Class)verticalScrollerClass 
                        borderType: (NSBorderType)type 
                       controlSize: (NSControlSize)controlSize 
                     scrollerStyle: (NSScrollerStyle)scrollerStyle;
 
-+ (void) setRulerViewClass: (Class) aClass;
++ (void) setRulerViewClass: (nullable Class) aClass;
 + (Class) rulerViewClass;
 
 - (NSSize) contentSize;
 
-- documentView;
+- (null_unspecified id) documentView;
 @property(nonatomic, retain) NSClipView *contentView;
 - (NSRect) documentVisibleRect;
 
 @property(nonatomic) BOOL drawsBackground;
 @property(nonatomic, retain) NSColor *backgroundColor;
 @property(nonatomic) NSBorderType borderType;
-@property(nonatomic, retain) NSScroller *verticalScroller;
-@property(nonatomic, retain) NSScroller *horizontalScroller;
-@property(nonatomic, retain) NSRulerView *verticalRulerView;
-@property(nonatomic, retain) NSRulerView *horizontalRulerView;
+@property(nullable, nonatomic, retain) NSScroller *verticalScroller;
+@property(nullable, nonatomic, retain) NSScroller *horizontalScroller;
+@property(nullable, nonatomic, retain) NSRulerView *verticalRulerView;
+@property(nullable, nonatomic, retain) NSRulerView *horizontalRulerView;
 @property(nonatomic) BOOL hasVerticalScroller;
 @property(nonatomic) BOOL hasHorizontalScroller;
 @property(nonatomic) BOOL hasVerticalRuler;
@@ -144,7 +146,7 @@ typedef NS_ENUM(NSInteger, NSScrollViewFindBarPosition) {
 - (void) setHorizontalScrollElasticity: (NSScrollElasticity) elasticity;
 - (void) setVerticalScrollElasticity: (NSScrollElasticity) elasticity;
 
-@property(nonatomic, retain) NSCursor *documentCursor;
+@property(nullable, nonatomic, retain) NSCursor *documentCursor;
 @property(nonatomic) CGFloat magnification;
 @property(nonatomic) CGFloat minMagnification;
 @property(nonatomic) CGFloat maxMagnification;
@@ -153,7 +155,7 @@ typedef NS_ENUM(NSInteger, NSScrollViewFindBarPosition) {
 - (void) setMagnification: (CGFloat) magnification centeredAtPoint: (NSPoint) point;
 - (void) magnifyToFitRect: (NSRect) rect;
 
-- (void) setDocumentView: (NSView *) view;
+- (void) setDocumentView: (nullable __kindof NSView *) view;
 - (NSScrollerKnobStyle) scrollerKnobStyle;
 - (void) setScrollerKnobStyle: (NSScrollerKnobStyle) knobStyle;
 - (NSScrollerStyle) scrollerStyle;
@@ -166,3 +168,5 @@ typedef NS_ENUM(NSInteger, NSScrollViewFindBarPosition) {
 
 APPKIT_EXPORT NSNotificationName const NSScrollViewWillStartLiveMagnifyNotification;
 APPKIT_EXPORT NSNotificationName const NSScrollViewDidEndLiveMagnifyNotification;
+
+NS_ASSUME_NONNULL_END

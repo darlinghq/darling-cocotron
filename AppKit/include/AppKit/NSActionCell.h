@@ -23,6 +23,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 // Legacy ObjC ABI (i386): instance size must stay 0x24, Apple's; these ivars
 // sit at Apple's offsets. New state needs an extra ivars struct
 // (AppKitIvarLayout.h), never a new ivar.
+NS_ASSUME_NONNULL_BEGIN
+
 @interface NSActionCell : NSCell {
     NSInteger _tag;
     id _target;
@@ -30,12 +32,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     NSView *_controlView;
 }
 
-- target;
-- (SEL) action;
+- (nullable id) target;
+- (nullable SEL) action;
 - (NSInteger) tag;
 
-- (void) setTarget: target;
-- (void) setAction: (SEL) action;
+- (void) setTarget: (nullable id) target;
+- (void) setAction: (nullable SEL) action;
 - (void) setTag: (NSInteger) tag;
 
 @end
+
+NS_ASSUME_NONNULL_END

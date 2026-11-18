@@ -25,6 +25,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 // Legacy ObjC ABI (i386): instance size must stay 0x68, Apple's; these ivars
 // sit at Apple's offsets. New state needs an extra ivars struct
 // (AppKitIvarLayout.h), never a new ivar.
+NS_ASSUME_NONNULL_BEGIN
+
 @interface NSImageView : NSControl {
     NS_LEGACY_IVAR_PAD(_NSImageViewReserved1, 4)
     id _target;
@@ -33,12 +35,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @property(nonatomic) BOOL allowsCutCopyPaste;
 @property(nonatomic) BOOL animates;
-+ (NSImageView *) imageViewWithImage: (NSImage *) image;
-- (instancetype) initWithImage: (NSImage *) image;
-@property(nonatomic, retain) NSImage *image;
++ (null_unspecified NSImageView *) imageViewWithImage: (NSImage *) image;
+- (null_unspecified instancetype) initWithImage: (null_unspecified NSImage *) image;
+@property(nullable, nonatomic, retain) NSImage *image;
 @property(nonatomic) NSImageAlignment imageAlignment;
 @property(nonatomic) NSImageFrameStyle imageFrameStyle;
 @property(nonatomic) NSImageScaling imageScaling;
 @property(nonatomic, getter=isEditable) BOOL editable;
 
 @end
+
+NS_ASSUME_NONNULL_END

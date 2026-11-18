@@ -25,6 +25,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSView;
 
+NS_ASSUME_NONNULL_BEGIN
+
 typedef NS_OPTIONS(NSUInteger, NSTrackingAreaOptions) {
     NSTrackingMouseEnteredAndExited = (1 << 0),
     NSTrackingMouseMoved = (1 << 1),
@@ -75,21 +77,21 @@ typedef NS_OPTIONS(NSUInteger, NSTrackingAreaOptions) {
 }
 
 // Apple documented
-- (id) initWithRect: (NSRect) rect
+- (instancetype) initWithRect: (NSRect) rect
             options: (NSTrackingAreaOptions) options
-              owner: (id) owner
-           userInfo: (NSDictionary *) userInfo;
+              owner: (nullable id) owner
+           userInfo: (nullable NSDictionary<id, id> *) userInfo;
 
 - (NSRect) rect;
 - (NSTrackingAreaOptions) options;
-- (id) owner;
-- (NSDictionary *) userInfo;
+- (nullable id) owner;
+- (nullable NSDictionary<id, id> *) userInfo;
 
 // undocumented
-- (id) _initWithRect: (NSRect) rect
+- (null_unspecified id) _initWithRect: (NSRect) rect
                options: (NSTrackingAreaOptions) options
-                 owner: (id) owner
-              userData: (void *) userData
+                 owner: (null_unspecified id) owner
+              userData: (null_unspecified void *) userData
         retainUserData: (BOOL) retainUserData
              isToolTip: (BOOL) isToolTip
               isLegacy: (BOOL) legacy;
@@ -97,8 +99,8 @@ typedef NS_OPTIONS(NSUInteger, NSTrackingAreaOptions) {
 //-(void)_setRect:(NSRect)rect;
 - (NSRect) _rectInWindow;
 - (void) _setRectInWindow: (NSRect) rectInWindow;
-- (NSView *) _view;
-- (void) _setView: (NSView *) newView;
+- (null_unspecified NSView *) _view;
+- (void) _setView: (null_unspecified NSView *) newView;
 - (BOOL) _isToolTip;
 - (BOOL) _isLegacy;
 - (NSInteger) _tag;
@@ -108,3 +110,5 @@ typedef NS_OPTIONS(NSUInteger, NSTrackingAreaOptions) {
 - (void) _setMouseInside: (BOOL) mouseInside;
 
 @end
+
+NS_ASSUME_NONNULL_END

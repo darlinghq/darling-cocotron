@@ -25,6 +25,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSString, NSImage, NSView, NSMenuItem, NSToolbar, NSToolbarItemView;
 
+NS_ASSUME_NONNULL_BEGIN
+
 typedef NSInteger NSToolbarItemVisibilityPriority NS_TYPED_EXTENSIBLE_ENUM;
 
 static const NSToolbarItemVisibilityPriority NSToolbarItemVisibilityPriorityStandard = 0;
@@ -75,12 +77,12 @@ APPKIT_EXPORT NSToolbarItemIdentifier NSToolbarWritingToolsItemIdentifier;
 - (instancetype) initWithItemIdentifier: (NSToolbarItemIdentifier) identifier;
 
 - (NSToolbarItemIdentifier) itemIdentifier;
-- (NSToolbar *) toolbar;
+- (nullable NSToolbar *) toolbar;
 
 @property(nonatomic, copy) NSString *label;
 @property(nonatomic, copy) NSString *paletteLabel;
-@property(nonatomic, retain) NSMenuItem *menuFormRepresentation;
-@property(nonatomic, retain) NSView *view;
+@property(nullable, nonatomic, retain) NSMenuItem *menuFormRepresentation;
+@property(nullable, nonatomic, retain) NSView *view;
 @property(nonatomic) NSSize minSize;
 @property(nonatomic) NSSize maxSize;
 @property(nonatomic) NSInteger visibilityPriority;
@@ -88,14 +90,14 @@ APPKIT_EXPORT NSToolbarItemIdentifier NSToolbarWritingToolsItemIdentifier;
 - (BOOL) allowsDuplicatesInToolbar;
 
 
-@property(nonatomic, retain) NSImage *image;
-- target;
+@property(null_unspecified, nonatomic, retain) NSImage *image;
+- (nullable id) target;
 @property(nonatomic) SEL action;
 @property(nonatomic) NSInteger tag;
 @property(nonatomic, getter=isEnabled) BOOL enabled;
-@property(nonatomic, copy) NSString *toolTip;
+@property(nullable, nonatomic, copy) NSString *toolTip;
 
-- (void) setTarget: target;
+- (void) setTarget: (nullable id) target;
 
 - (void) validate;
 
@@ -104,3 +106,5 @@ APPKIT_EXPORT NSToolbarItemIdentifier NSToolbarWritingToolsItemIdentifier;
 @interface NSObject (NSToolbarItem_validation)
 - (BOOL) validateToolbarItem: (NSToolbarItem *) item;
 @end
+
+NS_ASSUME_NONNULL_END

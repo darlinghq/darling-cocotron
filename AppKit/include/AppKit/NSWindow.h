@@ -30,6 +30,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSUserInterfaceItemIdentification.h>
 #import <AppKit/NSAccessibilityProtocols.h>
 
+NS_ASSUME_NONNULL_BEGIN
+
 @class NSView, NSEvent, NSColor, NSColorSpace, NSCursor, NSImage, NSScreen,
         NSText, NSTextView, CGWindow, NSPasteboard, NSSheetContext,
         NSTitlebarAccessoryViewController,
@@ -403,10 +405,10 @@ typedef NS_ENUM(NSInteger, NSWindowUserTabbingPreference) {
                          styleMask: (NSWindowStyleMask) styleMask;
 + (NSInteger) windowNumberAtPoint: (NSPoint) point
         belowWindowWithWindowNumber: (NSInteger) window;
-+ (NSArray *) windowNumbersWithOptions: (NSWindowNumberListOptions) options;
-+ (void) removeFrameUsingName: (NSString *) name;
++ (nullable NSArray<NSNumber *> *) windowNumbersWithOptions: (NSWindowNumberListOptions) options;
++ (void) removeFrameUsingName: (null_unspecified NSString *) name;
 
-+ (NSButton *) standardWindowButton: (NSWindowButton) button
++ (nullable NSButton *) standardWindowButton: (NSWindowButton) button
                        forStyleMask: (NSWindowStyleMask) styleMask;
 + (void) menuChanged: (NSMenu *) menu;
 
@@ -419,26 +421,26 @@ typedef NS_ENUM(NSInteger, NSWindowUserTabbingPreference) {
                            styleMask: (NSWindowStyleMask) styleMask
                              backing: (NSBackingStoreType) backing
                                defer: (BOOL) defer
-                              screen: (NSScreen *) screen;
+                              screen: (nullable NSScreen *) screen;
 
-- (NSWindow *) initWithWindowRef: (void *) carbonRef NS_RETURNS_NOT_RETAINED;
+- (nullable NSWindow *) initWithWindowRef: (void *) carbonRef NS_RETURNS_NOT_RETAINED;
 
-@property(nonatomic, readonly) NSGraphicsContext *graphicsContext;
+@property(nullable, nonatomic, readonly) NSGraphicsContext *graphicsContext;
 @property(nonatomic, readonly) NSDictionary *deviceDescription;
 - (void *) windowRef;
 @property(nonatomic) BOOL allowsConcurrentViewDrawing;
 
-@property (retain) NSView *contentView;
-@property (weak) id<NSWindowDelegate> delegate;
+@property (nullable, retain) __kindof NSView *contentView;
+@property (nullable, weak) id<NSWindowDelegate> delegate;
 // Setting it makes the controller's view the content view.
-@property (retain) NSViewController *contentViewController;
+@property (nullable, retain) NSViewController *contentViewController;
 // A titled, closable, miniaturizable, resizable window sized to the
 // controller's preferredContentSize, or else its view, and titled after it.
 + (instancetype) windowWithContentViewController: (NSViewController *) contentViewController;
 
 @property(nonatomic, copy) NSString *title;
 @property(nonatomic, copy) NSString *representedFilename;
-@property(nonatomic, copy) NSURL *representedURL;
+@property(nullable, nonatomic, copy) NSURL *representedURL;
 
 @property(nonatomic) NSWindowLevel level;
 @property(readonly) NSRect frame;
@@ -484,17 +486,17 @@ typedef NS_ENUM(NSInteger, NSWindowUserTabbingPreference) {
 - (BOOL) autorecalculatesContentBorderThicknessForEdge: (NSRectEdge) edge;
 - (CGFloat) contentBorderThicknessForEdge: (NSRectEdge) edge;
 
-@property(nonatomic, retain) NSImage *miniwindowImage;
-@property(nonatomic, copy) NSString *miniwindowTitle;
+@property(nullable, nonatomic, retain) NSImage *miniwindowImage;
+@property(null_resettable, nonatomic, copy) NSString *miniwindowTitle;
 @property(nonatomic, readonly) NSDockTile *dockTile;
-@property(nonatomic, retain) NSColor *backgroundColor;
+@property(null_resettable, nonatomic, retain) NSColor *backgroundColor;
 @property(nonatomic) CGFloat alphaValue;
 @property(nonatomic) NSWindowDepth depthLimit;
 @property(nonatomic) NSSize resizeIncrements;
 @property(nonatomic) NSSize contentResizeIncrements;
 @property(nonatomic) BOOL preservesContentDuringLiveResize;
-@property(nonatomic, retain) NSToolbar *toolbar;
-- (NSView *) initialFirstResponder;
+@property(nullable, nonatomic, retain) NSToolbar *toolbar;
+- (nullable NSView *) initialFirstResponder;
 
 - (void) setFrame: (NSRect) frame display: (BOOL) display;
 - (void) setFrame: (NSRect) frame display: (BOOL) display animate: (BOOL) flag;
@@ -509,37 +511,37 @@ typedef NS_ENUM(NSInteger, NSWindowUserTabbingPreference) {
                                            forEdge: (NSRectEdge) edge;
 - (void) setTitleWithRepresentedFilename: (NSString *) filename;
 
-- (void) setInitialFirstResponder: (NSView *) view;
+- (void) setInitialFirstResponder: (nullable NSView *) view;
 
-- (BOOL) setFrameUsingName: (NSString *) name;
-- (BOOL) setFrameUsingName: (NSString *) name force: (BOOL) force;
+- (BOOL) setFrameUsingName: (null_unspecified NSString *) name;
+- (BOOL) setFrameUsingName: (null_unspecified NSString *) name force: (BOOL) force;
 - (BOOL) setFrameAutosaveName: (NSWindowFrameAutosaveName) name;
-- (void) saveFrameUsingName: (NSString *) name;
-- (void) setFrameFromString: (NSString *) value;
-- (NSString *) stringWithSavedFrame;
+- (void) saveFrameUsingName: (null_unspecified NSString *) name;
+- (void) setFrameFromString: (null_unspecified NSString *) value;
+- (null_unspecified NSString *) stringWithSavedFrame;
 
 - (NSEventModifierFlags) resizeFlags;
 @property(nonatomic, readonly) CGFloat userSpaceScaleFactor;
 @property(nonatomic, readonly) NSResponder *firstResponder;
 
-- (NSButton *) standardWindowButton: (NSWindowButton) value;
-@property(nonatomic, retain) NSButtonCell *defaultButtonCell;
-@property(nonatomic, readonly) NSWindow *attachedSheet;
-@property(nonatomic, readonly) NSWindow *sheetParent;
-@property(nonatomic, readonly) NSArray<NSWindow *> *tabbedWindows;
+- (nullable NSButton *) standardWindowButton: (NSWindowButton) value;
+@property(nullable, nonatomic, retain) NSButtonCell *defaultButtonCell;
+@property(nullable, nonatomic, readonly) NSWindow *attachedSheet;
+@property(nullable, nonatomic, readonly) NSWindow *sheetParent;
+@property(nullable, nonatomic, readonly) NSArray<NSWindow *> *tabbedWindows;
 
-@property(nonatomic, retain) id windowController;
-- (NSArray *) drawers;
+@property(null_unspecified, nonatomic, retain) id windowController;
+- (null_unspecified NSArray *) drawers;
 
 @property(nonatomic, readonly) NSInteger windowNumber;
 - (int) gState;
 
-@property(readonly, strong) NSScreen *screen;
-@property(readonly, strong) NSScreen *deepestScreen;
+@property(nullable, readonly, strong) NSScreen *screen;
+@property(nullable, readonly, strong) NSScreen *deepestScreen;
 
-- (NSScreen *) screen;
-- (NSScreen *) deepestScreen;
-@property(nonatomic, retain) NSColorSpace *colorSpace;
+- (nullable NSScreen *) screen;
+- (nullable NSScreen *) deepestScreen;
+@property(nullable, nonatomic, retain) NSColorSpace *colorSpace;
 @property(nonatomic, getter=isOnActiveSpace, readonly) BOOL onActiveSpace;
 @property(nonatomic) NSWindowSharingType sharingType;
 @property(nonatomic) NSWindowAnimationBehavior animationBehavior;
@@ -599,15 +601,15 @@ typedef NS_ENUM(NSInteger, NSWindowUserTabbingPreference) {
 @property(readonly) NSRect contentLayoutRect;
 - (NSRect) backingAlignedRect: (NSRect) rect options: (NSAlignmentOptions) options;
 - (NSRect) accessibilityFrame;
-- (NSRect) constrainFrameRect: (NSRect) rect toScreen: (NSScreen *) screen;
+- (NSRect) constrainFrameRect: (NSRect) rect toScreen: (nullable NSScreen *) screen;
 
-@property(nonatomic, retain) NSWindow *parentWindow;
-@property(nonatomic, readonly) NSArray *childWindows;
+@property(nullable, nonatomic, retain) NSWindow *parentWindow;
+@property(nullable, nonatomic, readonly) NSArray<__kindof NSWindow *> *childWindows;
 - (void) addChildWindow: (NSWindow *) child
                 ordered: (NSWindowOrderingMode) ordered;
 - (void) removeChildWindow: (NSWindow *) child;
 
-- (BOOL) makeFirstResponder: (NSResponder *) responder;
+- (BOOL) makeFirstResponder: (nullable NSResponder *) responder;
 
 - (void) makeKeyWindow;
 - (void) makeMainWindow;
@@ -619,8 +621,8 @@ typedef NS_ENUM(NSInteger, NSWindowUserTabbingPreference) {
 
 - (NSTimeInterval) animationResizeTime: (NSRect) frame;
 
-- (void) selectNextKeyView: sender;
-- (void) selectPreviousKeyView: sender;
+- (void) selectNextKeyView: (nullable id) sender;
+- (void) selectPreviousKeyView: (nullable id) sender;
 - (void) selectKeyViewFollowingView: (NSView *) view;
 - (void) selectKeyViewPrecedingView: (NSView *) view;
 - (void) recalculateKeyViewLoop;
@@ -629,8 +631,8 @@ typedef NS_ENUM(NSInteger, NSWindowUserTabbingPreference) {
 - (void) disableKeyEquivalentForDefaultButtonCell;
 - (void) enableKeyEquivalentForDefaultButtonCell;
 
-- (NSText *) fieldEditor: (BOOL) create forObject: object;
-- (void) endEditingFor: object;
+- (nullable NSText *) fieldEditor: (BOOL) create forObject: (nullable id) object;
+- (void) endEditingFor: (nullable id) object;
 
 - (void) disableScreenUpdatesUntilFlush;
 - (void) useOptimizedDrawing: (BOOL) flag;
@@ -665,21 +667,21 @@ typedef NS_ENUM(NSInteger, NSWindowUserTabbingPreference) {
 
 - (NSPoint) mouseLocationOutsideOfEventStream;
 
-- (NSEvent *) currentEvent;
-- (NSEvent *) nextEventMatchingMask: (NSUInteger) mask;
+- (nullable NSEvent *) currentEvent;
+- (nullable NSEvent *) nextEventMatchingMask: (NSUInteger) mask;
 
-- (NSEvent *) nextEventMatchingMask: (NSUInteger) mask
-                          untilDate: (NSDate *) untilDate
+- (nullable NSEvent *) nextEventMatchingMask: (NSUInteger) mask
+                          untilDate: (nullable NSDate *) untilDate
                              inMode: (NSRunLoopMode) mode
                             dequeue: (BOOL) dequeue;
 
 - (void) discardEventsMatchingMask: (NSUInteger) mask
-                       beforeEvent: (NSEvent *) event;
+                       beforeEvent: (nullable NSEvent *) event;
 
 - (void) sendEvent: (NSEvent *) event;
 - (void) postEvent: (NSEvent *) event atStart: (BOOL) atStart;
 
-- (BOOL) tryToPerform: (SEL) selector with: (id) object;
+- (BOOL) tryToPerform: (SEL) selector with: (nullable id) object;
 - (void) keyDown: (NSEvent *) event;
 
 - (NSPoint) cascadeTopLeftFromPoint: (NSPoint) topLeftPoint;
@@ -698,28 +700,28 @@ typedef NS_ENUM(NSInteger, NSWindowUserTabbingPreference) {
             source: (id) source
          slideBack: (BOOL) slideBack;
 
-- (id) validRequestorForSendType: (NSString *) sendType
-                      returnType: (NSString *) returnType;
+- (nullable id) validRequestorForSendType: (null_unspecified NSString *) sendType
+                      returnType: (null_unspecified NSString *) returnType;
 
 - (void) update;
 
-- (void) makeKeyAndOrderFront: sender;
-- (void) orderFront: sender;
-- (void) orderBack: sender;
-- (void) orderOut: sender;
+- (void) makeKeyAndOrderFront: (nullable id) sender;
+- (void) orderFront: (nullable id) sender;
+- (void) orderBack: (nullable id) sender;
+- (void) orderOut: (nullable id) sender;
 
-- (void) performClose: sender;
-- (void) performMiniaturize: sender;
-- (void) performZoom: sender;
+- (void) performClose: (nullable id) sender;
+- (void) performMiniaturize: (nullable id) sender;
+- (void) performZoom: (nullable id) sender;
 
-- (void) zoom: sender;
-- (void) miniaturize: sender;
-- (void) deminiaturize: sender;
-- (void) print: sender;
+- (void) zoom: (nullable id) sender;
+- (void) miniaturize: (nullable id) sender;
+- (void) deminiaturize: (nullable id) sender;
+- (void) print: (nullable id) sender;
 
-- (void) toggleToolbarShown: sender;
-- (void) runToolbarCustomizationPalette: sender;
-- (void) toggleFullScreen: (id) sender;
+- (void) toggleToolbarShown: (nullable id) sender;
+- (void) runToolbarCustomizationPalette: (nullable id) sender;
+- (void) toggleFullScreen: (nullable id) sender;
 
 @end
 
@@ -736,12 +738,12 @@ typedef NS_ENUM(NSInteger, NSWindowUserTabbingPreference) {
 - (void) windowDidExpose: (NSNotification *) note;
 - (BOOL) windowShouldZoom: (NSWindow *) sender toFrame: (NSRect) frame;
 
-- windowWillReturnFieldEditor: (NSWindow *) sender toObject: object;
+- (nullable id) windowWillReturnFieldEditor: (NSWindow *) sender toObject: (nullable id) object;
 
 - (NSRect) windowWillUseStandardFrame: (NSWindow *) sender
                          defaultFrame: (NSRect) frame;
 
-- (NSUndoManager *) windowWillReturnUndoManager: (NSWindow *) window;
+- (nullable NSUndoManager *) windowWillReturnUndoManager: (NSWindow *) window;
 - (void) windowDidBecomeKey: (NSNotification *) note;
 - (void) windowDidResignKey: (NSNotification *) note;
 - (void) windowDidBecomeMain: (NSNotification *) note;
@@ -755,7 +757,7 @@ typedef NS_ENUM(NSInteger, NSWindowUserTabbingPreference) {
 - (NSSize) windowWillResize: (NSWindow *) sender toSize: (NSSize) size;
 - (void) windowDidResize: (NSNotification *) note;
 - (void) windowDidUpdate: (NSNotification *) note;
-- (BOOL) windowShouldClose: sender;
+- (BOOL) windowShouldClose: (null_unspecified id) sender;
 - (void) windowWillClose: (NSNotification *) note;
 
 - (void) windowDidChangeBackingProperties: (NSNotification *) note;
@@ -781,15 +783,15 @@ typedef NS_ENUM(NSInteger, NSWindowUserTabbingPreference) {
 - (NSSize) window: (NSWindow *) window willUseFullScreenContentSize: (NSSize) proposedSize;
 - (NSApplicationPresentationOptions) window: (NSWindow *) window
         willUseFullScreenPresentationOptions: (NSApplicationPresentationOptions) proposedOptions;
-- (NSArray<NSWindow *> *) customWindowsToEnterFullScreenForWindow: (NSWindow *) window;
-- (NSArray<NSWindow *> *) customWindowsToEnterFullScreenForWindow: (NSWindow *) window
+- (nullable NSArray<NSWindow *> *) customWindowsToEnterFullScreenForWindow: (NSWindow *) window;
+- (nullable NSArray<NSWindow *> *) customWindowsToEnterFullScreenForWindow: (NSWindow *) window
                                                          onScreen: (NSScreen *) screen;
 - (void) window: (NSWindow *) window startCustomAnimationToEnterFullScreenWithDuration: (NSTimeInterval) duration;
 - (void) window: (NSWindow *) window
         startCustomAnimationToEnterFullScreenOnScreen: (NSScreen *) screen
                                          withDuration: (NSTimeInterval) duration;
 - (void) windowDidFailToEnterFullScreen: (NSWindow *) window;
-- (NSArray<NSWindow *> *) customWindowsToExitFullScreenForWindow: (NSWindow *) window;
+- (nullable NSArray<NSWindow *> *) customWindowsToExitFullScreenForWindow: (NSWindow *) window;
 - (void) window: (NSWindow *) window startCustomAnimationToExitFullScreenWithDuration: (NSTimeInterval) duration;
 - (void) windowDidFailToExitFullScreen: (NSWindow *) window;
 - (NSSize) window: (NSWindow *) window
@@ -798,13 +800,13 @@ typedef NS_ENUM(NSInteger, NSWindowUserTabbingPreference) {
 - (void) window: (NSWindow *) window willEncodeRestorableState: (NSCoder *) state;
 - (void) window: (NSWindow *) window didDecodeRestorableState: (NSCoder *) state;
 
-- (CGSubWindow *) _createSubWindowWithFrame: (CGRect) frame;
+- (null_unspecified CGSubWindow *) _createSubWindowWithFrame: (CGRect) frame;
 
 @end
 
 @interface NSWindow (NSWindowTitlebarAccessories)
 // Stored only: accessories aren't shown.
-@property(readonly, copy) NSArray *titlebarAccessoryViewControllers;
+@property(readonly, copy) NSArray<__kindof NSTitlebarAccessoryViewController *> *titlebarAccessoryViewControllers;
 - (void) addTitlebarAccessoryViewController:
         (NSTitlebarAccessoryViewController *) controller;
 @end
@@ -820,7 +822,7 @@ typedef NS_ENUM(NSInteger, NSWindowUserTabbingPreference) {
 @interface NSWindow (NSWindowAdditionalAPI)
 
 // The sheets attached to the window: at most one, as sheets aren't queued.
-@property(readonly, copy) NSArray<NSWindow *> *sheets;
+@property(readonly, copy) NSArray<__kindof NSWindow *> *sheets;
 // A critical sheet is presented like any other sheet; there is no separate
 // queue for it.
 - (void) beginCriticalSheet: (NSWindow *) sheetWindow
@@ -861,7 +863,7 @@ typedef NS_ENUM(NSInteger, NSWindowUserTabbingPreference) {
 @end
 
 @interface NSWindow (Darling)
-- (CGWindow *) platformWindow;
+- (null_unspecified CGWindow *) platformWindow;
 @end
 
 // Private AppKit compatibility used by older window subclasses.
@@ -876,3 +878,5 @@ APPKIT_EXPORT const NSNotificationName NSWindowDidAnimateNotification;
 
 APPKIT_EXPORT NSNotificationName const NSWindowDidChangeBackingPropertiesNotification;
 APPKIT_EXPORT NSString * const NSBackingPropertyOldColorSpaceKey;
+
+NS_ASSUME_NONNULL_END

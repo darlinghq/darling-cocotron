@@ -21,6 +21,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/AppKitIvarLayout.h>
 #import <Foundation/Foundation.h>
 
+NS_ASSUME_NONNULL_BEGIN
+
 typedef NSString *NSPasteboardType NS_EXTENSIBLE_STRING_ENUM;
 typedef NSString *NSPasteboardName NS_EXTENSIBLE_STRING_ENUM;
 
@@ -140,31 +142,31 @@ typedef NS_OPTIONS(NSUInteger, NSPasteboardReadingOptions) {
 - (NSInteger) clearContents;
 - (oneway void) releaseGlobally;
 
-- (BOOL) writeObjects: (NSArray<id<NSPasteboardWriting> > *) objects;
-- (NSArray *) readObjectsForClasses: (NSArray<Class> *) classArray
-                            options: (NSDictionary<NSPasteboardReadingOptionKey, id> *) options;
+- (BOOL) writeObjects: (NSArray<id<NSPasteboardWriting>> *) objects;
+- (nullable NSArray *) readObjectsForClasses: (NSArray<Class> *) classArray
+                            options: (nullable NSDictionary<NSPasteboardReadingOptionKey, id> *) options;
 @property(nullable, readonly, copy) NSArray<NSPasteboardItem *> *pasteboardItems;
 - (NSUInteger) indexOfPasteboardItem: (NSPasteboardItem *) pasteboardItem;
 - (BOOL) canReadItemWithDataConformingToTypes: (NSArray<NSString *> *) types;
 - (BOOL) canReadObjectForClasses: (NSArray<Class> *) classArray
-                         options: (NSDictionary<NSPasteboardReadingOptionKey, id> *) options;
+                         options: (nullable NSDictionary<NSPasteboardReadingOptionKey, id> *) options;
 
-- (NSArray<NSPasteboardType> *) types;
-- (NSPasteboardType) availableTypeFromArray:
+- (nullable NSArray<NSPasteboardType> *) types;
+- (nullable NSPasteboardType) availableTypeFromArray:
         (NSArray<NSPasteboardType> *) types;
 
-- (NSData *) dataForType: (NSPasteboardType) type;
-- (NSString *) stringForType: (NSPasteboardType) type;
-- propertyListForType: (NSPasteboardType) type;
+- (nullable NSData *) dataForType: (NSPasteboardType) type;
+- (nullable NSString *) stringForType: (NSPasteboardType) type;
+- (nullable id) propertyListForType: (NSPasteboardType) type;
 
 - (NSInteger) declareTypes: (NSArray<NSPasteboardType> *) types
-                     owner: (id<NSPasteboardTypeOwner>) owner;
+                     owner: (null_unspecified id<NSPasteboardTypeOwner>) owner;
 - (NSInteger) addTypes: (NSArray<NSPasteboardType> *) types
-                 owner: (id<NSPasteboardTypeOwner>) owner;
+                 owner: (null_unspecified id<NSPasteboardTypeOwner>) owner;
 
-- (BOOL) setData: (NSData *) data forType: (NSPasteboardType) type;
+- (BOOL) setData: (nullable NSData *) data forType: (NSPasteboardType) type;
 - (BOOL) setString: (NSString *) string forType: (NSPasteboardType) type;
-- (BOOL) setPropertyList: plist forType: (NSPasteboardType) type;
+- (BOOL) setPropertyList: (id) plist forType: (NSPasteboardType) type;
 
 @end
 
@@ -180,9 +182,9 @@ typedef NS_OPTIONS(NSUInteger, NSPasteboardReadingOptions) {
 // File contents (the NXFileContentsPboardType and file wrapper types).
 @interface NSPasteboard (NSFileContents)
 - (BOOL) writeFileContents: (NSString *) filename;
-- (NSString *) readFileContentsType: (NSPasteboardType) type toFile: (NSString *) filename;
+- (nullable NSString *) readFileContentsType: (nullable NSPasteboardType) type toFile: (NSString *) filename;
 - (BOOL) writeFileWrapper: (NSFileWrapper *) wrapper;
-- (NSFileWrapper *) readFileWrapper;
+- (nullable NSFileWrapper *) readFileWrapper;
 @end
 
 // The informal protocol of the types owners of the 10.0 API; NSPasteboardTypeOwner replaces it.
@@ -213,7 +215,7 @@ typedef NS_OPTIONS(NSUInteger, NSPasteboardReadingOptions) {
 @end
 
 @interface NSURL (NSPasteboardSupport) <NSPasteboardWriting, NSPasteboardReading>
-+ (NSURL *) URLFromPasteboard: (NSPasteboard *) pasteBoard;
++ (nullable NSURL *) URLFromPasteboard: (NSPasteboard *) pasteBoard;
 - (void) writeToPasteboard: (NSPasteboard *) pasteBoard;
 @end
 
@@ -226,3 +228,5 @@ typedef NS_OPTIONS(NSUInteger, NSPasteboardReadingOptions) {
 APPKIT_EXPORT NSPasteboardType const NSPasteboardTypeSound;
 APPKIT_EXPORT NSPasteboardType const NSPasteboardTypeTextFinderOptions;
 APPKIT_EXPORT NSPasteboardType const NSPasteboardTypeFindPanelSearchOptions;
+
+NS_ASSUME_NONNULL_END

@@ -22,6 +22,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSArray, NSData, NSPasteboard, NSURL;
 
+NS_ASSUME_NONNULL_BEGIN
+
 typedef NS_ENUM(NSInteger, NSImageLayoutDirection) {
     NSImageLayoutDirectionUnspecified = -1,
     NSImageLayoutDirectionLeftToRight = 2,
@@ -51,39 +53,39 @@ typedef NS_ENUM(NSInteger, NSImageLayoutDirection) {
 #endif
 }
 
-+ (NSArray *) registeredImageRepClasses;
++ (NSArray<Class> *) registeredImageRepClasses;
 + (void) registerImageRepClass: (Class) aClass;
 + (void) unregisterImageRepClass: (Class) aClass;
 
-+ (NSArray *) imageFileTypes;
-+ (NSArray *) imageUnfilteredFileTypes;
-+ (NSArray *) imageTypes;
-+ (NSArray *) imageUnfilteredTypes;
++ (NSArray<NSString *> *) imageFileTypes;
++ (NSArray<NSString *> *) imageUnfilteredFileTypes;
++ (NSArray<NSString *> *) imageTypes;
++ (NSArray<NSString *> *) imageUnfilteredTypes;
 + (NSArray *) imagePasteboardTypes;
 + (NSArray *) imageUnfilteredPasteboardTypes;
 
 + (BOOL) canInitWithData: (NSData *) data;
 + (BOOL) canInitWithPasteboard: (NSPasteboard *) pasteboard;
 
-+ (Class) imageRepClassForData: (NSData *) data;
-+ (Class) imageRepClassForFileType: (NSString *) type;
-+ (Class) imageRepClassForPasteboardType: (NSString *) type;
++ (nullable Class) imageRepClassForData: (NSData *) data;
++ (nullable Class) imageRepClassForFileType: (NSString *) type;
++ (nullable Class) imageRepClassForPasteboardType: (null_unspecified NSString *) type;
 
-+ (NSArray *) imageRepsWithContentsOfFile: (NSString *) path;
-+ (NSArray *) imageRepsWithContentsOfURL: (NSURL *) url;
-+ (NSArray *) imageRepsWithPasteboard: (NSPasteboard *) pasteboard;
-+ imageRepWithContentsOfFile: (NSString *) path;
-+ imageRepWithContentsOfURL: (NSURL *) url;
-+ imageRepWithPasteboard: (NSPasteboard *) pasteboard;
++ (nullable NSArray<NSImageRep *> *) imageRepsWithContentsOfFile: (NSString *) path;
++ (nullable NSArray<NSImageRep *> *) imageRepsWithContentsOfURL: (NSURL *) url;
++ (nullable NSArray<NSImageRep *> *) imageRepsWithPasteboard: (NSPasteboard *) pasteboard;
++ (null_unspecified id) imageRepWithContentsOfFile: (NSString *) path;
++ (null_unspecified id) imageRepWithContentsOfURL: (NSURL *) url;
++ (null_unspecified id) imageRepWithPasteboard: (NSPasteboard *) pasteboard;
 
-- (instancetype) initWithCoder:(NSCoder *) coder;
+- (nullable instancetype) initWithCoder:(NSCoder *) coder;
 
 @property(nonatomic) NSSize size;
 @property(nonatomic) int pixelsWide;
 @property(nonatomic) int pixelsHigh;
 @property(nonatomic, getter=isOpaque) BOOL opaque;
 - (BOOL) hasAlpha;
-@property(nonatomic, copy) NSString *colorSpaceName;
+@property(null_unspecified, nonatomic, copy) NSString *colorSpaceName;
 @property(nonatomic) NSInteger bitsPerSample;
 
 - (void) setAlpha: (BOOL) value;
@@ -93,3 +95,5 @@ typedef NS_ENUM(NSInteger, NSImageLayoutDirection) {
 - (BOOL) drawInRect: (NSRect) rect;
 
 @end
+
+NS_ASSUME_NONNULL_END
