@@ -1,9 +1,10 @@
 #import <CoreGraphics/CGSubWindow.h>
+#import <QuartzCore/CAMetalLayerSurface.h>
 #import <X11/Xlib.h>
 
 @class X11Window;
 
-@interface X11SubWindow : CGSubWindow {
+@interface X11SubWindow : CGSubWindow <CAMetalLayerSurfaceProvider> {
     X11Window *_parent;
     Display *_display;
     Window _window;
@@ -13,6 +14,8 @@
     BOOL _allowsParentDrawable;
     BOOL _usingParentDrawable;
     BOOL _syncsToDisplay;
+    // The child windows Metal layers present to, by layer (not retained): Window values.
+    NSMapTable *_metalWindows;
 }
 
 - initWithParentWindow: (X11Window *) parent frame: (CGRect) frame;

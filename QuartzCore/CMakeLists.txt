@@ -86,7 +86,7 @@ generate_sdk_framework(QuartzCore
 )
 
 if (BUILD_METAL)
-	set(QUARTZCORE_LINK_INDIUM_PRIVATE indium_private)
+	set(QUARTZCORE_LINK_INDIUM_PRIVATE indium_private indium_kit_private)
 else()
 	set(QUARTZCORE_LINK_INDIUM_PRIVATE "")
 endif()

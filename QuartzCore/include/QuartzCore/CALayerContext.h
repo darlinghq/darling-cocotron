@@ -34,6 +34,9 @@
 - (void) setLayer: (CALayer *) layer;
 - (void) setHidden: (BOOL) hidden;
 - (void) setSubwindow: (CGSubWindow*) subwindow;
+// The native child window the tree is drawn into, and the root of that tree.
+- (CGSubWindow*) subwindow;
+- (CALayer*) layer;
 
 - (void) invalidate;
 

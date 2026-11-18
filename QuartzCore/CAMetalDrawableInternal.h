@@ -26,12 +26,20 @@
 #if DARLING_METAL_ENABLED
 
 #include <indium/indium.private.hpp>
+#include <indium-kit/layer.hpp>
+
+#include <atomic>
+#include <functional>
+#include <memory>
 
 @class CAMetalLayerInternal;
 
 // Whether the current GL context can import Vulkan semaphores (GL_EXT_semaphore_fd).
 // Without it, the compositor waits on the CPU for a drawable's rendering to finish.
 bool CAMetalDrawableGLImportsSemaphores();
+
+// Logs once if the current GL context runs on another GPU than the Metal device.
+void CAMetalDrawableWarnIfDisplayedOnAnotherDevice(const std::shared_ptr<Indium::PrivateDevice>& device);
 
 class CAMetalDrawableTexture: public Indium::PrivateTexture {
 	CGSize _size;
@@ -80,7 +88,28 @@ public:
 	virtual bool needsExportablePresentationSemaphore() const override;
 };
 
-class CAMetalDrawableActual: public Indium::Drawable {
+// What -[CAMetalDrawableInternal] needs of the object behind a drawable, whichever way the
+// layer presents: through its own images that the compositor copies from (CAMetalDrawableActual),
+// or straight to a window through a swapchain (CAMetalSwapchainDrawable).
+class CAMetalDrawableBase: public Indium::Drawable, public std::enable_shared_from_this<CAMetalDrawableBase> {
+public:
+	virtual ~CAMetalDrawableBase() {};
+
+	virtual std::shared_ptr<Indium::Texture> indiumTexture() = 0;
+	virtual NSUInteger drawableID() const = 0;
+	virtual CFTimeInterval presentedTime() const = 0;
+
+	// Called once, when present() is, before anything is presented.
+	virtual void setWantsToPresentCallback(std::function<void()> wantsToPresentCallback) = 0;
+	// Called once, after the drawable was shown or dropped.
+	virtual void setDidPresentCallback(std::function<void()> didPresentCallback) = 0;
+
+	// Marks the drawable as unused again (this has nothing to do with memory management).
+	virtual void release() = 0;
+	virtual void reset() = 0;
+};
+
+class CAMetalDrawableActual: public CAMetalDrawableBase {
 private:
 	std::shared_ptr<CAMetalDrawableTexture> _texture = nullptr;
 	CAMetalLayerInternal* _layer = nil;
@@ -103,11 +132,12 @@ public:
 	virtual void present() override;
 
 	std::shared_ptr<CAMetalDrawableTexture> texture();
-	NSUInteger drawableID() const;
-	CFTimeInterval presentedTime() const;
+	virtual std::shared_ptr<Indium::Texture> indiumTexture() override;
+	virtual NSUInteger drawableID() const override;
+	virtual CFTimeInterval presentedTime() const override;
 
-	void setWantsToPresentCallback(std::function<void()> wantsToPresentCallback);
-	void setDidPresentCallback(std::function<void()> didPresentCallback);
+	virtual void setWantsToPresentCallback(std::function<void()> wantsToPresentCallback) override;
+	virtual void setDidPresentCallback(std::function<void()> didPresentCallback) override;
 
 	void disown();
 
@@ -116,8 +146,38 @@ public:
 	void didPresent();
 	void didDrop();
 	// this has nothing to do with memory management; this indicates that the drawable is no longer in use and can be recycled
-	void release();
-	void reset();
+	virtual void release() override;
+	virtual void reset() override;
+};
+
+// A drawable of a layer that presents to its window through a Vulkan swapchain: the image
+// belongs to the swapchain and presenting hands it to the presentation engine.
+class CAMetalSwapchainDrawable: public CAMetalDrawableBase {
+private:
+	std::shared_ptr<IndiumKit::Drawable> _drawable;
+	CAMetalLayerInternal* _layer = nil;
+	NSUInteger _drawableID;
+	std::atomic<CFTimeInterval> _presentedTime { 0 };
+	std::function<void()> _wantsToPresentCallback = nullptr;
+	std::function<void()> _didPresentCallback = nullptr;
+	std::atomic<bool> _presentRequested { false };
+	std::atomic<bool> _released { false };
+
+public:
+	CAMetalSwapchainDrawable(CAMetalLayerInternal* layer, std::shared_ptr<IndiumKit::Drawable> drawable, NSUInteger drawableID);
+	virtual ~CAMetalSwapchainDrawable();
+
+	virtual void present() override;
+
+	virtual std::shared_ptr<Indium::Texture> indiumTexture() override;
+	virtual NSUInteger drawableID() const override;
+	virtual CFTimeInterval presentedTime() const override;
+
+	virtual void setWantsToPresentCallback(std::function<void()> wantsToPresentCallback) override;
+	virtual void setDidPresentCallback(std::function<void()> didPresentCallback) override;
+
+	virtual void release() override;
+	virtual void reset() override;
 };
 #endif
 
@@ -127,14 +187,14 @@ public:
 {
 	NSUInteger _drawableID;
 	CFTimeInterval _presentedTime;
-	std::shared_ptr<CAMetalDrawableActual> _drawable;
+	std::shared_ptr<CAMetalDrawableBase> _drawable;
 	MTLTextureInternal* _texture;
 	CAMetalLayer* _layer;
 	NSMutableArray<MTLDrawablePresentedHandler>* _presentedHandlers;
 }
 
 - (instancetype)initWithLayer: (CAMetalLayer*)layer
-                     drawable: (std::shared_ptr<CAMetalDrawableActual>)drawable;
+                     drawable: (std::shared_ptr<CAMetalDrawableBase>)drawable;
 #endif
 
 @end
