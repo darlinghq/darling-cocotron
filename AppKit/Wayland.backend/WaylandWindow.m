@@ -135,6 +135,9 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 }
 
 - (void) syncDelegateProperties {
+    // An alpha value set before the platform window existed.
+    if (_delegate != nil)
+        [self setAlphaValue: [_delegate alphaValue]];
 }
 
 - (struct wl_proxy *) surface {
@@ -195,6 +198,31 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     return _mapped;
 }
 
+// A window with alphaValue 0 is ordered in and can be the key window, but nothing of it may be
+// seen or hit. The protocol has no per-surface opacity, and a toplevel without a visible buffer
+// would still get a tile, a tab or a title bar from the compositor, so such a window is not given
+// a role at all: it stays a surface that is never shown, and the keyboard focus the compositor
+// gives to the application's other windows reaches it through the key window (see
+// -[WaylandDisplay postKeyEventForKeycode:pressed:repeat:]).
+- (BOOL) isFullyTransparent {
+    return _fullyTransparent;
+}
+
+// Whether the application asked for this window to become the key window and the activation now
+// arriving is the answer to that; reading it clears the request.
+- (BOOL) takeKeyRequest {
+    BOOL requested = _keyRequested;
+    _keyRequested = NO;
+    return requested;
+}
+
+// Mapped, or ordered in but kept unmapped because it is fully transparent. Such a window counts as
+// on screen for the window order (and so for the choice of the next key window), as on X11 where
+// it is mapped with no opacity.
+- (BOOL) isOrderedIn {
+    return _mapped || (_fullyTransparent && _shouldBeMapped && !_invalidated);
+}
+
 - (BOOL) isPopup { return _popup != NULL; }
 - (BOOL) isTooltip {
     return [_delegate isKindOfClass: NSClassFromString(@"NSToolTipWindow")];
@@ -207,6 +235,12 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 
 - (void) ensureMapped {
     if (_mapped || _invalidated)
+        return;
+    _shouldBeMapped = YES;
+    // The window may have been given its alpha before it had a platform window.
+    if (_delegate != nil)
+        _fullyTransparent = [_delegate alphaValue] <= 0;
+    if (_fullyTransparent)
         return;
     // A client cannot position a toplevel, so a tool tip without a mapped
     // parent stays unmapped rather than being centred by the compositor.
@@ -351,6 +385,8 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 // Unmapping an xdg surface requires a new configure sequence before it can be
 // shown again, so the role objects are destroyed and created again on show.
 - (void) unmap {
+    _shouldBeMapped = NO;
+    _keyRequested = NO;
     if (!_mapped)
         return;
 
@@ -433,7 +469,19 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 }
 
 - (void) makeKey {
+    _keyRequested = YES;
     [self ensureMapped];
+    if (!_fullyTransparent)
+        return;
+    // The compositor never gives the focus to a window that is not shown, so the activation that
+    // makes it the key window is reported here instead.
+    [_display performAfterDispatch: ^{
+        NSWindow *delegate = self->_delegate;
+        if (!self->_fullyTransparent || self->_invalidated || delegate == nil || [delegate isKeyWindow])
+            return;
+        [self->_display windowActivated: self];
+        [delegate platformWindowActivated: self displayIfNeeded: NO];
+    }];
 }
 
 - (void) makeMain {
@@ -666,7 +714,18 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 }
 
 - (void) setAlphaValue: (CGFloat) value {
-    // No client-side opacity on Wayland without an extra protocol.
+    // No client-side opacity on Wayland without an extra protocol, except that a fully
+    // transparent window is not shown at all (see -isFullyTransparent).
+    BOOL transparent = value <= 0;
+    if (transparent == _fullyTransparent)
+        return;
+    _fullyTransparent = transparent;
+    if (transparent) {
+        BOOL ordered = _shouldBeMapped;
+        [self unmap];
+        _shouldBeMapped = ordered;
+    } else if (_shouldBeMapped)
+        [self ensureMapped];
 }
 
 - (void) setHasShadow: (BOOL) value {

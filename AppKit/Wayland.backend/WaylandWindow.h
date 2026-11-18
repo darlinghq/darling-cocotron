@@ -68,6 +68,11 @@ struct WaylandBuffer {
     int32_t _pendingWidth, _pendingHeight;
     BOOL _pendingActivated;
     BOOL _mapped;
+    // The window has been ordered in, whether or not it is mapped (a window with alpha 0 is not).
+    BOOL _shouldBeMapped;
+    BOOL _fullyTransparent;
+    // -makeKey was called and the activation it asks for has not arrived yet.
+    BOOL _keyRequested;
     BOOL _configured;
     BOOL _needsPresent;
     BOOL _activated;
@@ -104,6 +109,9 @@ struct WaylandBuffer {
 - (void) stackSubwindows;
 - (BOOL) isInvalidated;
 - (BOOL) isMapped;
+- (BOOL) isFullyTransparent;
+- (BOOL) isOrderedIn;
+- (BOOL) takeKeyRequest;
 - (int32_t) bufferScale;
 - (uint32_t) renderScale120;
 - (uint32_t) refreshMillihertz;
