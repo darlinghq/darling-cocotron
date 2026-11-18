@@ -57,10 +57,20 @@
 @interface WaylandScreen : NSScreen {
 @public
     CGFloat _waylandScale;
+    NSString *_outputName;
 }
 @end
 @implementation WaylandScreen
 - (CGFloat) backingScaleFactor { return _waylandScale; }
+// The output's description or name as the compositor reports it, else the name from an EDID set on the screen, else the
+// generic name.
+- (NSString *) localizedName {
+    return _outputName != nil && [self edid] == nil ? _outputName : [super localizedName];
+}
+- (void) dealloc {
+    [_outputName release];
+    [super dealloc];
+}
 @end
 
 // Mode pixels are untransformed. Publish v2 properties together at wl_output.done.
@@ -82,12 +92,18 @@ typedef struct {
     WaylandLogicalOutputState _logicalCurrent, _logicalPending;
     NSArray *_modes;
     NSMutableArray *_pendingModes;
+    // wl_output version 4: the connector name and the human readable description, published at done.
+    NSString *_name, *_pendingName, *_description, *_pendingDescription;
 }
 @end
 
 @implementation WaylandOutput
 
 - (void) dealloc {
+    [_name release];
+    [_pendingName release];
+    [_description release];
+    [_pendingDescription release];
     [_modes release];
     [_pendingModes release];
     [super dealloc];
@@ -624,7 +640,8 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         output->_globalName = name;
         output->_display = self;
         output->_current.scale = output->_pending.scale = 1;
-        output->_version = MIN(version, 2);
+        // Version 2 has scale and done, version 4 the name and the description.
+        output->_version = MIN(version, MIN(4u, wl_output_interface.version));
         output->_pendingModes = [NSMutableArray new];
         output->_modes = [NSArray new];
         // Version 2 has scale and done.
@@ -798,6 +815,10 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
     BOOL changed = output->_current.width > 0 && output->_current.height > 0 &&
                    memcmp(&output->_current, &output->_pending, sizeof output->_current) != 0;
     output->_current = output->_pending;
+    [output->_name release];
+    output->_name = [output->_pendingName copy];
+    [output->_description release];
+    output->_description = [output->_pendingDescription copy];
     if (output->_logicalVersion >= 3)
         output->_logicalCurrent = output->_logicalPending;
     [output->_modes release];
@@ -856,6 +877,18 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
     case WP_OUTPUT_EV_SCALE:
         output->_pending.scale = MAX(args[0].i, 1);
         break;
+    case WP_OUTPUT_EV_NAME:
+    case WP_OUTPUT_EV_DESCRIPTION: {
+        NSString *text = args[0].s != NULL ? [NSString stringWithUTF8String: args[0].s] : nil;
+        if (opcode == WP_OUTPUT_EV_NAME) {
+            [output->_pendingName release];
+            output->_pendingName = [text copy];
+        } else {
+            [output->_pendingDescription release];
+            output->_pendingDescription = [text copy];
+        }
+        return; // Published with the next done event.
+    }
     case WP_OUTPUT_EV_DONE:
         [self publishOutput: output];
         return;
@@ -2204,6 +2237,8 @@ static uint32_t WaylandKeyLayoutCodepoint(void *context, uint32_t keysym) {
             wholeScale = MAX(wholeScale, ceil(ratio - 0.01));
         }
         screen->_waylandScale = wholeScale;
+        NSString *outputName = [output->_description length] > 0 ? output->_description : output->_name;
+        screen->_outputName = [outputName length] > 0 ? [outputName copy] : nil;
         [screen setCgDirectDisplayID: [screens count] + 1];
         [screens addObject: screen];
         x += frame.size.width;
