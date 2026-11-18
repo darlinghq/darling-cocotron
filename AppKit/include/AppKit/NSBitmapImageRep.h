@@ -20,6 +20,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/NSColorSpace.h>
 #import <AppKit/NSGraphics.h>
+#import <AppKit/NSGraphicsContext.h>
 #import <AppKit/NSImageRep.h>
 #import <ApplicationServices/ApplicationServices.h>
 
@@ -114,6 +115,7 @@ typedef NS_ENUM(NSInteger, NSImageRepLoadStatus) {
         NSMutableDictionary *_properties;
 
         CGImageRef _cgImage;
+        NSColorSpace *_colorSpace;
     NS_EXTRA_IVARS_END(NSBitmapImageRep)
 }
 
@@ -207,6 +209,10 @@ typedef NS_ENUM(NSInteger, NSImageRepLoadStatus) {
 
 - (nullable CGImageRef) CGImage;
 
+@property(nullable, readonly, strong) NSColorSpace *colorSpace;
+
+- (nullable NSBitmapImageRep *) bitmapImageRepByConvertingToColorSpace: (NSColorSpace *) targetSpace
+                                                       renderingIntent: (NSColorRenderingIntent) renderingIntent;
 - (nullable NSBitmapImageRep *) bitmapImageRepByRetaggingWithColorSpace: (NSColorSpace *) newSpace;
 
 @end
