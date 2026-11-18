@@ -213,6 +213,7 @@ NS_EXTRA_SYNTHESIZE_RETAIN(NSMenuItem, badge, _badge, NSMenuItemBadge *, badge, 
     if (toolTip != NS_EXTRA(NSMenuItem, self)->_toolTip) {
         [NS_EXTRA(NSMenuItem, self)->_toolTip release];
         NS_EXTRA(NSMenuItem, self)->_toolTip = [toolTip copy];
+        [_menu itemChanged: self];
     }
 }
 
@@ -363,6 +364,7 @@ NS_EXTRA_SYNTHESIZE_RETAIN(NSMenuItem, badge, _badge, NSMenuItemBadge *, badge, 
 
 - (void) setIndentationLevel: (NSInteger) indentationLevel {
     NS_EXTRA(NSMenuItem, self)->_indentationLevel = indentationLevel;
+    [_menu itemChanged: self];
 }
 
 - (void) setTag: (NSInteger) tag {
@@ -393,19 +395,29 @@ NS_EXTRA_SYNTHESIZE_RETAIN(NSMenuItem, badge, _badge, NSMenuItemBadge *, badge, 
     [_menu itemChanged: self];
 }
 
+// QUIRK: replacing a state image posts NSMenuDidChangeItemNotification only when it is the image of the item's
+// current state; the other two state images change silently. Not documented. Evidence: black-box observation on
+// macOS 26.7.3 (tier 2).
+// Test: tests/appkit-menu-item-change-notifications.m
+- (void) _replaceStateImage: (NSImage **) slot with: (NSImage *) image forState: (NSControlStateValue) state {
+    if (*slot == image)
+        return;
+    [*slot release];
+    *slot = [image retain];
+    if ([self state] == state)
+        [_menu itemChanged: self];
+}
+
 - (void) setOnStateImage: (NSImage *) image {
-    [NS_EXTRA(NSMenuItem, self)->_onStateImage release];
-    NS_EXTRA(NSMenuItem, self)->_onStateImage = [image retain];
+    [self _replaceStateImage: &NS_EXTRA(NSMenuItem, self)->_onStateImage with: image forState: NSControlStateValueOn];
 }
 
 - (void) setOffStateImage: (NSImage *) image {
-    [NS_EXTRA(NSMenuItem, self)->_offStateImage release];
-    NS_EXTRA(NSMenuItem, self)->_offStateImage = [image retain];
+    [self _replaceStateImage: &NS_EXTRA(NSMenuItem, self)->_offStateImage with: image forState: NSControlStateValueOff];
 }
 
 - (void) setMixedStateImage: (NSImage *) image {
-    [NS_EXTRA(NSMenuItem, self)->_mixedStateImage release];
-    NS_EXTRA(NSMenuItem, self)->_mixedStateImage = [image retain];
+    [self _replaceStateImage: &NS_EXTRA(NSMenuItem, self)->_mixedStateImage with: image forState: NSControlStateValueMixed];
 }
 
 - (void) setRepresentedObject: (id) object {
