@@ -928,6 +928,12 @@ static void crtcBoundingBox(Display *display, XRRScreenResources *resources, RRC
     // shape = XC_left_ptr;
     else if ([name isEqualToString: @"IBeamCursor"])
         xname = "xterm";
+    else if ([name isEqualToString: @"IBeamCursorForVerticalLayout"])
+        xname = "vertical-text";
+    else if ([name isEqualToString: @"zoomInCursor"])
+        xname = "zoom-in";
+    else if ([name isEqualToString: @"zoomOutCursor"])
+        xname = "zoom-out";
     else if ([name isEqualToString: @"openHandCursor"])
         xname = "fleur";
     else if ([name isEqualToString: @"pointingHandCursor"])

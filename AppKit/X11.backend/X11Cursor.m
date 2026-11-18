@@ -51,6 +51,7 @@ static const char *X11CursorAliasesFor(const char *name)
         { "hand2",  "pointer"   },
         { "hand3",  "pointer"   },
         { "xterm",  "text"      },
+        { "vertical-text", "xterm" },
         { "fleur",  "move"      },
     };
     for (size_t i = 0; i < sizeof(aliases) / sizeof(*aliases); i++) {

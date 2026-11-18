@@ -275,6 +275,35 @@ static NSMutableArray *_cursorStack = nil;
     return shared;
 }
 
+// The cursor for text laid out vertically, and the zoom cursors, are looked up by the display
+// backends under the cursor theme names "vertical-text", "zoom-in" and "zoom-out".
++ (NSCursor *) IBeamCursorForVerticalLayout {
+    static NSCursor *shared = nil;
+
+    if (shared == nil)
+        shared = [[self alloc] initWithName: NSStringFromSelector(_cmd)];
+
+    return shared;
+}
+
++ (NSCursor *) zoomInCursor {
+    static NSCursor *shared = nil;
+
+    if (shared == nil)
+        shared = [[self alloc] initWithName: NSStringFromSelector(_cmd)];
+
+    return shared;
+}
+
++ (NSCursor *) zoomOutCursor {
+    static NSCursor *shared = nil;
+
+    if (shared == nil)
+        shared = [[self alloc] initWithName: NSStringFromSelector(_cmd)];
+
+    return shared;
+}
+
 + (NSCursor *) openHandCursor {
     static NSCursor *shared = nil;
 

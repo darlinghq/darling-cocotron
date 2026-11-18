@@ -67,6 +67,9 @@ typedef NS_OPTIONS(NSUInteger, NSCursorFrameResizeDirections) {
 @property(class, readonly, retain, nonnull) NSCursor *crosshairCursor;
 @property(class, readonly, retain, nonnull) NSCursor *disappearingItemCursor;
 @property(class, readonly, retain, nonnull) NSCursor *IBeamCursor;
+@property(class, readonly, retain, nonnull) NSCursor *IBeamCursorForVerticalLayout;
+@property(class, readonly, retain, nonnull) NSCursor *zoomInCursor;
+@property(class, readonly, retain, nonnull) NSCursor *zoomOutCursor;
 @property(class, readonly, retain, nonnull) NSCursor *openHandCursor;
 @property(class, readonly, retain, nonnull) NSCursor *pointingHandCursor;
 @property(class, readonly, retain, nonnull) NSCursor *resizeDownCursor;
