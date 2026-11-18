@@ -22,77 +22,23 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSFontManager.h>
 #import <AppKit/NSMutableAttributedString.h>
 #import <AppKit/NSMutableParagraphStyle.h>
+#import <CoreText/CoreText.h>
 
 @implementation NSMutableAttributedString (NSMutableAttributedString_AppKit)
 
-// Looks for a substitute in the list able to display the given char
-- (NSFont *) _bestFontForCharacter: (unichar) c
-                          userFont: (NSFont *) font
-                    usingFontNames: (NSArray *) fontnameList
-{
-    // We are caching the fontName->charset info, to prevent the
-    // creation/conversion of plenty of fonts
-    static NSMutableDictionary *sNameToCharacterSetCache = nil;
-    if (sNameToCharacterSetCache == nil) {
-        sNameToCharacterSetCache = [[NSMutableDictionary alloc] init];
-    }
-
-    NSFont *substitute = nil;
-    for (NSString *name in fontnameList) {
-
-        NSCharacterSet *fontCharSet =
-                [sNameToCharacterSetCache objectForKey: name];
-        if (fontCharSet == nil) {
-            NSFont *fontCandidate =
-                    [[NSFontManager sharedFontManager] convertFont: font
-                                                            toFace: name];
-            fontCharSet = [fontCandidate coveredCharacterSet];
-            if (fontCharSet != nil) {
-                // Cache the info
-                [sNameToCharacterSetCache setObject: fontCharSet forKey: name];
-            } else {
-                // Cache some empty charset so we don't look for it again
-                [sNameToCharacterSetCache
-                        setObject: [NSCharacterSet
-                                           characterSetWithRange: NSMakeRange(
-                                                                          0, 0)]
-                           forKey: name];
-            }
-        }
-        if (fontCharSet) {
-            if ([fontCharSet characterIsMember: c]) {
-                substitute =
-                        [[NSFontManager sharedFontManager] convertFont: font
-                                                                toFace: name];
-            }
-        }
-        if (substitute) {
-            break;
-        }
-    }
+// The font that displays the text in the range of the characters when the
+// font does not: the one CoreText picks for it, in the style and size of the
+// given font. nil when no installed font covers the text.
+- (NSFont *) _substituteFontForText: (NSString *) text userFont: (NSFont *) font {
+    CTFontRef covering = CTFontCreateForString((CTFontRef) font, (CFStringRef) text,
+                                               CFRangeMake(0, [text length]));
+    if (covering == NULL)
+        return nil;
+    NSString *name = (NSString *) CTFontCopyPostScriptName(covering);
+    NSFont *substitute = name != nil ? [NSFont fontWithName: name size: [font pointSize]] : nil;
+    [name release];
+    CFRelease(covering);
     return substitute;
-}
-
-- (NSFont *) _bestFontForCharacter: (unichar) c userFont: (NSFont *) font {
-    // We first try a limited list of good known candidates - if that fails,
-    // then we'll try all of the other fonts
-    NSArray *list = [NSFont preferredFontNames];
-    NSFont *bestFont = [self _bestFontForCharacter: c
-                                          userFont: font
-                                    usingFontNames: list];
-    if (bestFont == nil) {
-        // We couldn't find any prefered font - try all of them
-        static NSArray *sAllFonts = nil;
-        if (sAllFonts == nil) {
-            sAllFonts =
-                    [[[NSFontManager sharedFontManager] availableFonts] retain];
-        }
-        bestFont = [self _bestFontForCharacter: c
-                                      userFont: font
-                                usingFontNames: sAllFonts];
-    }
-
-    return bestFont;
 }
 
 - (void) fixFontAttributeInRange: (NSRange) range {
@@ -125,25 +71,33 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                 [string getCharacters: chars range: testRange];
                 for (int i = 0; i < testRange.length; ++i) {
                     unichar charToTest = chars[i];
+                    NSUInteger units = 1;
+                    // A surrogate pair is one character.
+                    if (charToTest >= 0xD800 && charToTest <= 0xDBFF && i + 1 < testRange.length &&
+                        chars[i + 1] >= 0xDC00 && chars[i + 1] <= 0xDFFF)
+                        units = 2;
                     // No need to process blanks
                     if ([blankChars characterIsMember: charToTest] == NO &&
                         [controlChars characterIsMember: charToTest] == NO) {
                         if (fontCharSet == nil) {
                             fontCharSet = [font coveredCharacterSet];
                         }
-                        if ([fontCharSet characterIsMember: charToTest] == NO) {
-                            NSFont *substitute =
-                                    [self _bestFontForCharacter: charToTest
-                                                       userFont: font];
-                            if (substitute) {
-                                [self addAttribute: NSFontAttributeName
-                                             value: substitute
-                                             range: NSMakeRange(
-                                                            i + testRange.location,
-                                                            1)];
-                            }
+                        CGGlyph glyphs[2];
+                        BOOL covered = units == 1 ? [fontCharSet characterIsMember: charToTest]
+                                : CTFontGetGlyphsForCharacters((CTFontRef) font, chars + i, glyphs, 2);
+                        NSFont *substitute = nil;
+                        if (!covered) {
+                            NSString *character = [string substringWithRange:
+                                    NSMakeRange(i + testRange.location, units)];
+                            substitute = [self _substituteFontForText: character userFont: font];
+                        }
+                        if (substitute != nil) {
+                            [self addAttribute: NSFontAttributeName
+                                         value: substitute
+                                         range: NSMakeRange(i + testRange.location, units)];
                         }
                     }
+                    i += units - 1;
                 }
                 free(chars);
             }
