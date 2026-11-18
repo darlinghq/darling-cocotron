@@ -35,6 +35,9 @@ COREGRAPHICS_EXPORT const CFStringRef kCGDisplayStreamColorSpace;
 COREGRAPHICS_EXPORT const CFStringRef kCGDisplayStreamMinimumFrameTime;
 COREGRAPHICS_EXPORT const CFStringRef kCGDisplayStreamShowCursor;
 COREGRAPHICS_EXPORT const CFStringRef kCGDisplayStreamQueueDepth;
+COREGRAPHICS_EXPORT const CFStringRef kCGDisplayStreamYCbCrMatrix;
+COREGRAPHICS_EXPORT const CFStringRef kCGDisplayStreamYCbCrMatrix_ITU_R_601_4;
+COREGRAPHICS_EXPORT const CFStringRef kCGDisplayStreamYCbCrMatrix_ITU_R_709_2;
 
 typedef struct CGDisplayStream *CGDisplayStreamRef;
 typedef const struct CGDisplayStreamUpdate *CGDisplayStreamUpdateRef;
