@@ -286,6 +286,7 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
 }
 
 - (void) dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver: self];
     NSZoneFree(NULL, NS_EXTRA(NSTableView, self)->_rowHeights);
     [_headerView release];
     [_cornerView release];
@@ -1531,17 +1532,54 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     }
 }
 
+// The selection is emphasized (drawn with the alternate selected colours) while the table's
+// window is the key window and the table is its first responder; otherwise it is drawn in
+// the secondary, grey colours.
+- (BOOL) _selectionIsEmphasized {
+    NSWindow *window = [self window];
+    id responder = [window firstResponder];
+
+    if (![window isKeyWindow] || responder == nil)
+        return NO;
+    if (responder == self)
+        return YES;
+    // A field editor of this table (editing a cell) keeps the selection emphasized
+    return [responder isKindOfClass: [NSText class]] && [(NSText *) responder delegate] == self;
+}
+
+- (NSColor *) _selectionHighlightColor {
+    return [self _selectionIsEmphasized] ? [NSColor alternateSelectedControlColor]
+                                         : [NSColor secondarySelectedControlColor];
+}
+
+- (void) _keyStateChanged: (NSNotification *) note {
+    [self setNeedsDisplay: YES];
+}
+
+- (BOOL) becomeFirstResponder {
+    [self setNeedsDisplay: YES];
+    return [super becomeFirstResponder];
+}
+
+- (BOOL) resignFirstResponder {
+    [self setNeedsDisplay: YES];
+    return [super resignFirstResponder];
+}
+
 - (void) drawHighlightedSelectionForColumn: (NSInteger) column
                                        row: (NSInteger) row
                                     inRect: (NSRect) rect
 {
-    [[NSColor selectedControlColor] setFill];
+    [[self _selectionHighlightColor] setFill];
     NSRectFill(rect);
 }
 
 - (void) highlightSelectionInClipRect: (NSRect) rect {
     NSInteger row, column;
     NSInteger numberOfRows = [self numberOfRows];
+
+    if ([self selectionHighlightStyle] == NSTableViewSelectionHighlightStyleNone)
+        return;
 
     for (column = 0; column < [_tableColumns count]; ++column)
         for (row = 0; row < numberOfRows; ++row)
@@ -1576,7 +1614,11 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
                                              // dont just set the color so
                                              // custom background works
             [(NSTextFieldCell *) dataCell
-                    setTextColor: [NSColor selectedTextColor]];
+                    setTextColor: ([self selectionHighlightStyle] !=
+                                           NSTableViewSelectionHighlightStyleNone &&
+                                   [self _selectionIsEmphasized])
+                                          ? [NSColor alternateSelectedControlTextColor]
+                                          : [NSColor selectedTextColor]];
         } else
             [(NSTextFieldCell *) dataCell setTextColor: [NSColor textColor]];
     }
@@ -1598,8 +1640,9 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
         NSRange visibleColumns = [self columnsInRect: clipRect];
         NSInteger drawThisColumn = visibleColumns.location;
 
-        if ([self isRowSelected: row]) {
-            [[NSColor selectedControlColor] setFill];
+        if ([self isRowSelected: row] &&
+            [self selectionHighlightStyle] != NSTableViewSelectionHighlightStyleNone) {
+            [[self _selectionHighlightColor] setFill];
             NSRectFill([self rectOfRow: row]);
         }
 
@@ -1841,6 +1884,22 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 // laid out its clip view by the time the table reaches a window.
 - (void) viewDidMoveToWindow {
     [super viewDidMoveToWindow];
+    [[NSNotificationCenter defaultCenter] removeObserver: self
+                                                    name: NSWindowDidBecomeKeyNotification
+                                                  object: nil];
+    [[NSNotificationCenter defaultCenter] removeObserver: self
+                                                    name: NSWindowDidResignKeyNotification
+                                                  object: nil];
+    if ([self window] != nil) {
+        [[NSNotificationCenter defaultCenter] addObserver: self
+                                                 selector: @selector(_keyStateChanged:)
+                                                     name: NSWindowDidBecomeKeyNotification
+                                                   object: [self window]];
+        [[NSNotificationCenter defaultCenter] addObserver: self
+                                                 selector: @selector(_keyStateChanged:)
+                                                     name: NSWindowDidResignKeyNotification
+                                                   object: [self window]];
+    }
     if ([self window] != nil && [[self superview] isKindOfClass: [NSClipView class]])
         [self noteNumberOfRowsChanged];
 }
