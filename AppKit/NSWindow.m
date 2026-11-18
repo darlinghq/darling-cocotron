@@ -1947,10 +1947,10 @@ static BOOL _allowsAutomaticWindowTabbing;
     return NS_EXTRA(NSWindow, self)->_isVisible;
 }
 
-// Visible while the window is ordered in and the window system does not report it as unseen
-// (covered, see -[CGWindow isOccluded]).
+// Visible while the window is ordered in, not miniaturized, and the window system does not
+// report it as unseen (suspended or covered, see -[CGWindow isOccluded]).
 - (NSWindowOcclusionState) occlusionState {
-    if (![self isVisible] || [_platformWindow isOccluded])
+    if (![self isVisible] || [self isMiniaturized] || [_platformWindow isOccluded])
         return 0;
     return NSWindowOcclusionStateVisible;
 }
@@ -4117,6 +4117,7 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
                                 relativeTo: [self windowNumber]];
     }
     [self postNotificationName: NSWindowDidDeminiaturizeNotification];
+    [self _updateOcclusionState];
     [NSApp updateWindows];
 }
 
@@ -4129,6 +4130,7 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
     }
 
     [self postNotificationName: NSWindowDidMiniaturizeNotification];
+    [self _updateOcclusionState];
 
     if ([self isKeyWindow]) {
         [self resignKeyWindow];
