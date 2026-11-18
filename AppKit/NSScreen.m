@@ -28,6 +28,32 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 NSNotificationName const NSScreenColorSpaceDidChangeNotification = @"NSScreenColorSpaceDidChangeNotification";
 
+// The monitor name of an EDID base block: the display product name descriptor (tag 0xFC) among the four 18-byte
+// descriptors that start at offset 54. Its text is at most 13 characters, ended by a line feed and padded with
+// spaces (VESA E-EDID). Answers nil when there is none.
+static NSString *monitorNameFromEDID(NSData *edid) {
+    const uint8_t *bytes = [edid bytes];
+    NSUInteger length = [edid length];
+
+    for (NSUInteger offset = 54; offset <= 108 && offset + 18 <= length; offset += 18) {
+        const uint8_t *descriptor = bytes + offset;
+
+        if (descriptor[0] != 0 || descriptor[1] != 0 || descriptor[3] != 0xFC)
+            continue;
+
+        NSUInteger count = 0;
+        while (count < 13 && descriptor[5 + count] != 0x0A)
+            count++;
+        while (count > 0 && descriptor[5 + count - 1] == ' ')
+            count--;
+        if (count > 0)
+            return [[[NSString alloc] initWithBytes: descriptor + 5
+                                             length: count
+                                           encoding: NSASCIIStringEncoding] autorelease];
+    }
+    return nil;
+}
+
 @implementation NSScreen
 
 - initWithFrame: (NSRect) frame visibleFrame: (NSRect) visibleFrame {
@@ -83,7 +109,13 @@ NSNotificationName const NSScreenColorSpaceDidChangeNotification = @"NSScreenCol
     return [NSColorSpace sRGBColorSpace];
 }
 
+// The name the monitor reports in its EDID when the backend has read one, else a generic name with the display ID.
 - (NSString *) localizedName {
+    NSData *edid = NS_EXTRA(NSScreen, self)->_edid;
+    NSString *name = edid != nil ? monitorNameFromEDID(edid) : nil;
+
+    if (name != nil)
+        return name;
     return [NSString stringWithFormat: @"Display %u",
                                        (unsigned) [self cgDirectDisplayID]];
 }
