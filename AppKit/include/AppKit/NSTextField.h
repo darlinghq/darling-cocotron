@@ -30,6 +30,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         SEL _errorAction;
         CGFloat _preferredMaxLayoutWidth;
         BOOL _automaticTextCompletionEnabled;
+        CGFloat _layoutWidth;
     NS_EXTRA_IVARS_END(NSTextField)
 }
 
