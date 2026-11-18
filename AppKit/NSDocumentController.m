@@ -797,7 +797,7 @@ static NSDocumentController *shared = nil;
         NSMenuItem *item = [[[NSMenuItem alloc]
                 initWithTitle: path
                        action: @selector(_openRecentDocument:)
-                keyEquivalent: nil] autorelease];
+                keyEquivalent: @""] autorelease];
 
         [item setTag: count];
         [menu insertItem: item atIndex: 0];
