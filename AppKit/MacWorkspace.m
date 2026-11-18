@@ -541,6 +541,17 @@ static NSImage *DeclaredIconForType(UTType *uti) {
         withApplication: (NSString *) application
           andDeactivate: (BOOL) deactivate
 {
+    return [self _openFile: path
+            withApplication: application
+              andDeactivate: deactivate];
+}
+
+// Shared by -openFile:withApplication:andDeactivate: and the
+// -launchApplication: family, which launch an application without a file.
+- (BOOL) _openFile: (nullable NSString *) path
+        withApplication: (NSString *) application
+          andDeactivate: (BOOL) deactivate
+{
     // TODO: Implement handling `deactivate` flag
     // TODO: Implement handling race-condition between inter-application (when target app is terminating)
 
@@ -901,14 +912,18 @@ static OSStatus sendRevealEvent(NSString *bundleIdentifier, NSArray<NSURL *> *ur
 }
 
 - (BOOL) launchApplication: (NSString *) application {
-    return [self openFile: nil withApplication: application andDeactivate: YES];
+    return [self _openFile: nil
+            withApplication: application
+              andDeactivate: YES];
 }
 
 - (BOOL) launchApplication: (NSString *) application
                   showIcon: (BOOL) showIcon
                 autolaunch: (BOOL) autolaunch
 {
-    return [self openFile: nil withApplication: application andDeactivate: YES];
+    return [self _openFile: nil
+            withApplication: application
+              andDeactivate: YES];
 }
 
 - (void) findApplications {

@@ -268,7 +268,7 @@
             }
 
             NSPathComponentCell *cell =
-                    [[[pcClass alloc] initTextCell: nil] autorelease];
+                    [[[pcClass alloc] initTextCell: @""] autorelease];
             [cell setURL: currentURL];
             [cell setImage: image];
             [cell setStringValue: title];

@@ -248,7 +248,7 @@ NSNotificationName NSPopUpButtonCellWillPopUpNotification =
 
     [_menu addItemWithTitle: title
                      action: @selector(_popUpItemAction:)
-              keyEquivalent: nil];
+              keyEquivalent: @""];
     NSMenuItem *item = [[_menu itemArray] lastObject];
     [item setTarget: self];
 
@@ -294,7 +294,7 @@ NSNotificationName NSPopUpButtonCellWillPopUpNotification =
 - (void) insertItemWithTitle: (NSString *) title atIndex: (NSInteger) index {
     [_menu insertItemWithTitle: title
                         action: @selector(_popUpItemAction:)
-                 keyEquivalent: nil
+                 keyEquivalent: @""
                        atIndex: index];
     NSMenuItem *check = [_menu itemAtIndex: index];
     [check setTarget: self];

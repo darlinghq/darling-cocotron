@@ -304,7 +304,7 @@ typedef NS_ENUM(NSUInteger, NSFindPanelSubstringMatchType) {
 @property(nonatomic, readonly) NSRange rangeForUserParagraphAttributeChange;
 
 - (BOOL) shouldChangeTextInRange: (NSRange) changeInRange
-               replacementString: (NSString *) replacementString;
+               replacementString: (nullable NSString *) replacementString;
 - (void) didChangeText;
 
 - (BOOL) shouldDrawInsertionPoint;

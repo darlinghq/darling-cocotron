@@ -55,6 +55,8 @@ enum {
 
 enum { NSCancelButton, NSOKButton };
 
+NS_ASSUME_NONNULL_END
+
 APPKIT_EXPORT NSInteger NSRunAlertPanel(NSString *title, NSString *message,
                                         NSString *defaultButton,
                                         NSString *alternateButton,
@@ -101,5 +103,3 @@ NSBeginInformationalAlertSheet(NSString *title, NSString *defaultButton,
                                NSWindow *documentWindow, id modalDelegate,
                                SEL didEndSelector, SEL didDismissSelector,
                                void *contextInfo, NSString *message, ...);
-
-NS_ASSUME_NONNULL_END

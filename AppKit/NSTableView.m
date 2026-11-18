@@ -991,7 +991,7 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
              select: (BOOL) select
 {
     if (_editingCell)
-        [self textDidEndEditing: nil];
+        [self _finishEditingWithTextMovement: NSIllegalTextMovement];
 
     NSCell *editingCell;
     NSTableColumn *editingColumn = [_tableColumns objectAtIndex: column];
@@ -1176,7 +1176,7 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
             if ([NS_EXTRA(NSTableView, self)->_selectedRowIndexes containsIndex: i] !=
                 [newIndexes containsIndex: i]) {
                 if (_editedRow == i && _editingCell != nil)
-                    [self textDidEndEditing: nil];
+                    [self _finishEditingWithTextMovement: NSIllegalTextMovement];
 
                 [self setNeedsDisplay: YES];
                 changed = YES;
@@ -1429,7 +1429,7 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 
     // if there's any editing going on, we'd better stop it.
     if (_editingCell != nil)
-        [self textDidEndEditing: nil];
+        [self _finishEditingWithTextMovement: NSIllegalTextMovement];
 
     if (numberOfRows > 0) {
         size.width = [self rectOfRow: 0].size.width;
@@ -1950,9 +1950,15 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 }
 
 - (void) textDidEndEditing: (NSNotification *) note {
+    [self _finishEditingWithTextMovement:
+                  [[[note userInfo] objectForKey: @"NSTextMovement"] intValue]];
+}
+
+// Commits and ends the current cell edit. Internal callers that stop an edit
+// (row changes, reloads, clicks outside the rows) use this directly instead of
+// synthesizing a notification.
+- (void) _finishEditingWithTextMovement: (NSInteger) textMovement {
     NSTableColumn *editedColumn = [_tableColumns objectAtIndex: _editedColumn];
-    NSInteger textMovement =
-            [[[note userInfo] objectForKey: @"NSTextMovement"] intValue];
     NSInteger numberOfRows = [self numberOfRows];
 
     [_editingCell endEditing: NS_EXTRA(NSControl, self)->_currentEditor];
@@ -2215,7 +2221,7 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 
     if (NS_EXTRA(NSTableView, self)->_clickedRow < 0) { // click beyond the end of the table
         if (_editingCell != nil)
-            [self textDidEndEditing: nil];
+            [self _finishEditingWithTextMovement: NSIllegalTextMovement];
         [self selectRowIndexes: [NSIndexSet indexSet] byExtendingSelection: NO];
         [NS_EXTRA(NSTableView, self)->_selectedColumns removeAllObjects];
         return;
