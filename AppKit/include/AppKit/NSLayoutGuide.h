@@ -22,7 +22,7 @@
 #import <Foundation/Foundation.h>
 #import <AppKit/NSUserInterfaceItemIdentification.h>
 
-@class NSView;
+@class NSView, NSLayoutDimension, NSLayoutXAxisAnchor, NSLayoutYAxisAnchor;
 
 @interface NSLayoutGuide : NSObject <NSCoding, NSUserInterfaceItemIdentification> {
     NSRect _frame;
@@ -38,5 +38,16 @@
 @property (assign) NSView *owningView;
 @property (copy) NSString *identifier;
 @property (readonly) NSRect frame;
+
+@property (readonly, retain) NSLayoutDimension *widthAnchor;
+@property (readonly, retain) NSLayoutDimension *heightAnchor;
+@property (readonly, retain) NSLayoutXAxisAnchor *leadingAnchor;
+@property (readonly, retain) NSLayoutXAxisAnchor *trailingAnchor;
+@property (readonly, retain) NSLayoutXAxisAnchor *leftAnchor;
+@property (readonly, retain) NSLayoutXAxisAnchor *rightAnchor;
+@property (readonly, retain) NSLayoutXAxisAnchor *centerXAnchor;
+@property (readonly, retain) NSLayoutYAxisAnchor *topAnchor;
+@property (readonly, retain) NSLayoutYAxisAnchor *bottomAnchor;
+@property (readonly, retain) NSLayoutYAxisAnchor *centerYAnchor;
 
 @end
