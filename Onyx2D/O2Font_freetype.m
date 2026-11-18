@@ -261,8 +261,9 @@ out:
 /* fontconfig ranks bitmap faces (the X11 .pcf fonts) above outline fonts for some generic
  * families, and a bitmap face has units_per_EM == 0, so every metric derived from it divides
  * by zero. Return the first scalable face of the sorted set, or the first face if none is. */
-static NSString *filenameOfFirstScalableFace(FcFontSet *set) {
+static NSString *filenameOfFirstScalableFace(FcFontSet *set, int *faceIndex) {
     NSString *fallback = nil;
+    int fallbackIndex = 0;
     for (int i = 0; i < set->nfont; i++) {
         FcChar8 *filename = NULL;
         if (FcPatternGetString(set->fonts[i], FC_FILE, 0, &filename) != FcResultMatch) {
@@ -272,15 +273,21 @@ static NSString *filenameOfFirstScalableFace(FcFontSet *set) {
         if (path == nil) {
             continue;
         }
+        /* The face within a font collection (.ttc) file; 0 when the pattern has none. */
+        int index = 0;
+        FcPatternGetInteger(set->fonts[i], FC_INDEX, 0, &index);
         FcBool scalable = FcTrue; /* left untouched when the pattern has no FC_SCALABLE */
         FcPatternGetBool(set->fonts[i], FC_SCALABLE, 0, &scalable);
         if (scalable) {
+            *faceIndex = index;
             return path;
         }
         if (fallback == nil) {
             fallback = path;
+            fallbackIndex = index;
         }
     }
+    *faceIndex = fallbackIndex;
     return fallback;
 }
 
@@ -380,7 +387,38 @@ O2FontRef O2FontCreateWithCodePointCoverage(const uint32_t *codePoints,
     return [[O2Font_freetype alloc] initWithFace: face];
 }
 
-+ (NSString *) filenameForPattern: (NSString *) pattern {
+/* The installed face whose PostScript name is exactly name: its file and the face index in it
+ * (which selects the face within a font collection file and the instance of a variable font). */
++ (NSString *) filenameForPostScriptName: (NSString *) name faceIndex: (int *) faceIndex {
+    FcConfig *config = O2FontSharedFontConfig();
+    FcPattern *pattern = FcPatternCreate();
+    FcObjectSet *objects = FcObjectSetCreate();
+    NSString *result = nil;
+
+    if (pattern != NULL && objects != NULL && [name length] > 0 &&
+        FcPatternAddString(pattern, FC_POSTSCRIPT_NAME, (const FcChar8 *) [name UTF8String]) &&
+        FcObjectSetAdd(objects, FC_FILE) && FcObjectSetAdd(objects, FC_INDEX)) {
+        FcFontSet *set = FcFontList(config, pattern, objects);
+        for (int i = 0; set != NULL && i < set->nfont && result == nil; i++) {
+            FcChar8 *filename = NULL;
+            if (FcPatternGetString(set->fonts[i], FC_FILE, 0, &filename) != FcResultMatch)
+                continue;
+            int index = 0;
+            FcPatternGetInteger(set->fonts[i], FC_INDEX, 0, &index);
+            result = [NSString stringWithUTF8String: (const char *) filename];
+            *faceIndex = index;
+        }
+        if (set != NULL)
+            FcFontSetDestroy(set);
+    }
+    if (objects != NULL)
+        FcObjectSetDestroy(objects);
+    if (pattern != NULL)
+        FcPatternDestroy(pattern);
+    return result;
+}
+
++ (NSString *) filenameForPattern: (NSString *) pattern faceIndex: (int *) faceIndex {
     FcConfig *config = O2FontSharedFontConfig();
 
     FcPattern *pat = FcNameParse((unsigned char *) [pattern UTF8String]);
@@ -394,7 +432,7 @@ O2FontRef O2FontCreateWithCodePointCoverage(const uint32_t *codePoints,
         return nil;
     }
 
-    NSString *res = filenameOfFirstScalableFace(set);
+    NSString *res = filenameOfFirstScalableFace(set, faceIndex);
     FcFontSetDestroy(set);
     return res;
 }
@@ -437,9 +475,15 @@ O2FontRef O2FontCreateWithCodePointCoverage(const uint32_t *codePoints,
 - (instancetype) initWithFontName: (NSString *) name {
     self = [super initWithFontName: name];
 
-    NSString *filename = [[self class] filenameForPattern: name];
+    // The face is found by its PostScript name, else by fontconfig's closest match for the name. A font
+    // collection file holds several faces: the face that was matched is opened, not the first.
+    int faceIndex = 0;
+    NSString *filename = [[self class] filenameForPostScriptName: name faceIndex: &faceIndex];
     if (filename == nil) {
-        filename = [[self class] filenameForPattern: @""];
+        filename = [[self class] filenameForPattern: name faceIndex: &faceIndex];
+    }
+    if (filename == nil) {
+        filename = [[self class] filenameForPattern: @"" faceIndex: &faceIndex];
     }
     if (filename == nil) {
         NSLog(@"No font found for name %@", name);
@@ -449,7 +493,7 @@ O2FontRef O2FontCreateWithCodePointCoverage(const uint32_t *codePoints,
 
     FT_Face face;
     FT_Error error = FT_New_Face(O2FontSharedFreeTypeLibrary(),
-                                 [filename fileSystemRepresentation], 0, &face);
+                                 [filename fileSystemRepresentation], faceIndex, &face);
 
     if (error != 0) {
         NSLog(@"FT_New_Face() = %d", error);
