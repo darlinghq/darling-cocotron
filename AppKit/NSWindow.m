@@ -2972,6 +2972,18 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
     return recognizers;
 }
 
+// A mouse click in a window that is not key makes it key (a click does not wait for the window
+// system's focus, which on its own does not always hand out the key status). A panel that becomes key
+// only if needed takes it only for a click on a view that needs the panel to be key.
+- (void) _makeKeyForMouseDownInView: (NSView *) view {
+    if ([self isKeyWindow] || ![self canBecomeKeyWindow])
+        return;
+    if ([self isKindOfClass: [NSPanel class]] && [(NSPanel *) self becomesKeyOnlyIfNeeded] &&
+        ![view needsPanelToBecomeKey])
+        return;
+    [self makeKeyWindow];
+}
+
 - (void) sendEvent: (NSEvent *) event {
     // Some events can cause our window to be destroyed
     // So make sure self lives at least through this current run loop...
@@ -3021,6 +3033,7 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
     case NSLeftMouseDown: {
         NSView *view = [_backgroundView hitTest: [event locationInWindow]];
 
+        [self _makeKeyForMouseDownInView: view];
         if ([view acceptsFirstResponder]) {
             if ([view needsPanelToBecomeKey]) {
                 [self makeFirstResponder: view];
@@ -3040,6 +3053,7 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
     case NSRightMouseDown: {
         NSView *view = [_backgroundView hitTest: [event locationInWindow]];
 
+        [self _makeKeyForMouseDownInView: view];
         [self _setMouseDownView: view forButton: 1];
         [view rightMouseDown: event];
         break;
@@ -3052,6 +3066,7 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
     case NSOtherMouseDown: {
         NSView *view = [_backgroundView hitTest: [event locationInWindow]];
 
+        [self _makeKeyForMouseDownInView: view];
         [self _setMouseDownView: view forButton: [self _otherButtonOfEvent: event]];
         [view otherMouseDown: event];
         break;

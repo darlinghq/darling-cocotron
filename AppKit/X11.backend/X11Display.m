@@ -1482,6 +1482,29 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
     return NSMakePoint(point.x, point.y);
 }
 
+// The window has the input focus: tell the NSWindow it is active, which makes it the key window unless
+// the rule in -[NSWindow platformWindowActivated:displayIfNeeded:] keeps the key status where it is.
+// Reached by FocusIn, and by -[X11Window makeKey] when the window already held the focus.
+- (void) windowHoldsFocus: (X11Window *) window {
+    id delegate = [window delegate];
+
+    if (lastFocusedWindow) {
+        [lastFocusedWindow platformWindowDeactivated: window
+                             checkForAppDeactivation: NO];
+        lastFocusedWindow = nil;
+    }
+    if (window != nil)
+        window->_receivingFocus = YES;
+    [delegate platformWindowActivated: window displayIfNeeded: YES];
+    if (window != nil)
+        window->_receivingFocus = NO;
+    lastFocusedWindow = delegate;
+    if (window != nil && window->_xic != NULL) {
+        XSetICFocus(window->_xic);
+        [window updateInputMethodSpot];
+    }
+}
+
 - (void) postXEvent: (XEvent *) ev {
     id event = nil;
     NSEventType type;
@@ -1639,6 +1662,19 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
         const int carbonKeyCode = ev->xkey.keycode < 256
                 ? x11ToCarbon[ev->xkey.keycode] : 0;
 
+        // Key events belong to the key window whichever window of the application holds the X focus.
+        // That matters when the key window is one with alpha 0, which does not get the focus once the
+        // window manager moves it to a window that was ordered in. Menus and pop-ups that hold the
+        // focus keep the keys.
+        NSInteger keyEventWindowNumber = [delegate windowNumber];
+        {
+            NSWindow *keyWindow = [NSApp keyWindow];
+            id keyPlatformWindow = [keyWindow platformWindow];
+            if (window != nil && ![window isMenuOrPopup] && keyPlatformWindow != window &&
+                [keyPlatformWindow isKindOfClass: [X11Window class]] && [keyPlatformWindow isMapped])
+                keyEventWindowNumber = [keyWindow windowNumber];
+        }
+
         BOOL isARepeat = NO;
 
         if (ev->type == KeyPress) {
@@ -1653,7 +1689,7 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
                                     location: pos
                                modifierFlags: modifierFlags
                                    timestamp: 0.0
-                                windowNumber: [delegate windowNumber]
+                                windowNumber: keyEventWindowNumber
                                      context: nil
                                   characters: str
                  charactersIgnoringModifiers: strIg
@@ -1938,21 +1974,7 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
             [[delegate attachedSheet] makeKeyAndOrderFront: delegate];
             break;
         }
-        if (lastFocusedWindow) {
-            [lastFocusedWindow platformWindowDeactivated: window
-                                 checkForAppDeactivation: NO];
-            lastFocusedWindow = nil;
-        }
-        if (window != nil)
-            window->_receivingFocus = YES;
-        [delegate platformWindowActivated: window displayIfNeeded: YES];
-        if (window != nil)
-            window->_receivingFocus = NO;
-        lastFocusedWindow = delegate;
-        if (window != nil && window->_xic != NULL) {
-            XSetICFocus(window->_xic);
-            [window updateInputMethodSpot];
-        }
+        [self windowHoldsFocus: window];
         [self resyncModifierKeysOnFocusIn: window];
         // Losing the focus released the pointer grab; the application still
         // wants relative mode.

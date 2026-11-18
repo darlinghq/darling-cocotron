@@ -61,6 +61,7 @@ extern NSString *const X11WindowBackingDidFlushNotification;
     BOOL _wasMapped;  // the visual is settled when the window is first mapped
     BOOL _hasShadow;
     BOOL _wantsInputFocus;
+    BOOL _keyRequested; // the application asked for this window to become key and the focus has not answered yet
     BOOL _ignoresMouseEvents; // the input region currently set
     CGFloat _appliedAlpha; // the window's alpha value as last applied to the X window
     BOOL _alphaIsZero; // _appliedAlpha is 0
@@ -160,6 +161,9 @@ extern NSString *const X11WindowBackingDidFlushNotification;
 - (void) setStyleMaskInternal: (NSUInteger) styleMask force: (BOOL) force;
 
 - (void) requestInputFocus;
+- (BOOL) isFullyTransparent;
+- (BOOL) takeKeyRequest;
+- (BOOL) isMenuOrPopup;
 - (void) mapNotified;
 
 @end

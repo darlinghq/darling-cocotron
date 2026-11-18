@@ -468,19 +468,33 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     [self ensureMapped];
 }
 
+// Reports to the NSWindow that this window is the compositor's focus (or the key window of a window
+// that is never shown). The NSWindow decides whether that makes it key.
+- (void) reportActivationDisplayingIfNeeded: (BOOL) displayIfNeeded {
+    _reportingActivation = YES;
+    [_delegate platformWindowActivated: self displayIfNeeded: displayIfNeeded];
+    _reportingActivation = NO;
+}
+
 - (void) makeKey {
+    // -[NSWindow becomeKeyWindow] asks for this while it answers an activation.
+    if (_reportingActivation)
+        return;
     _keyRequested = YES;
     [self ensureMapped];
-    if (!_fullyTransparent)
+    // Without the compositor's focus a window that is shown waits for it. A window that already has
+    // it (it was ordered in and focused without becoming key) or that is never shown, so never gets
+    // it, is reported as activated now.
+    if (!_fullyTransparent && !_activated)
         return;
-    // The compositor never gives the focus to a window that is not shown, so the activation that
-    // makes it the key window is reported here instead.
     [_display performAfterDispatch: ^{
         NSWindow *delegate = self->_delegate;
-        if (!self->_fullyTransparent || self->_invalidated || delegate == nil || [delegate isKeyWindow])
+        if (self->_invalidated || delegate == nil || [delegate isKeyWindow])
+            return;
+        if (!self->_fullyTransparent && !self->_activated)
             return;
         [self->_display windowActivated: self];
-        [delegate platformWindowActivated: self displayIfNeeded: NO];
+        [self reportActivationDisplayingIfNeeded: NO];
     }];
 }
 
@@ -1305,7 +1319,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
               if ([delegate attachedSheet] != nil)
                   [[delegate attachedSheet] makeKeyAndOrderFront: delegate];
               else
-                  [delegate platformWindowActivated: self displayIfNeeded: YES];
+                  [self reportActivationDisplayingIfNeeded: YES];
           } else if (activationChanged) {
               [delegate platformWindowDeactivated: self
                           checkForAppDeactivation: NO];
