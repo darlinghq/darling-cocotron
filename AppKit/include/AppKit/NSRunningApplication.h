@@ -49,6 +49,9 @@ typedef NS_OPTIONS(NSUInteger, NSApplicationActivationOptions) {
 @property(nullable, readonly, copy) NSString *bundleIdentifier;
 @property(nullable, readonly, copy) NSString *localizedName;
 @property(readonly, getter=isTerminated) BOOL terminated;
+// Whether this is the application that has the input focus, and the one that owns the menu bar.
+@property(readonly, getter=isActive) BOOL active;
+@property(readonly) BOOL ownsMenuBar;
 
 - (BOOL) activateWithOptions: (NSApplicationActivationOptions) options;
 - (BOOL) activateFromApplication: (NSRunningApplication *) application
