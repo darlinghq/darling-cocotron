@@ -574,7 +574,7 @@ static NSData *makeWindowIcon() {
     // receives keyboard focus from a compositor and cannot be made fullscreen.
     // The menu bar window is a dock window: the window manager has to manage
     // it for its strut to count.
-    _dock = [delegate isKindOfClass: [X11MenuBarWindow class]];
+    _dock = [delegate isKindOfClass: [NSMenuBarWindow class]];
     // Menu and pop-up windows are panels, but they are the first kind named
     // above: a managed window would take the input focus from the window the
     // menu belongs to when it is clicked, and the application would see

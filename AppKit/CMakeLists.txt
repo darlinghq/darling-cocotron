@@ -292,6 +292,7 @@ set(AppKit_sources
 	NSStatusItem.m
 	NSStatusItemNotifier.m
 	NSDBusMenu.m
+	NSMenuBarController.m
 	NSPathComponentCell.m
 	NSCachedImageRep.m
 	NSWindow-Drag.m
