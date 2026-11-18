@@ -178,6 +178,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSSplitView.h>
 #import <AppKit/NSSplitViewController.h>
 #import <AppKit/NSSplitViewItem.h>
+#import <AppKit/NSSplitViewItemAccessoryViewController.h>
 #import <AppKit/NSStackView.h>
 #import <AppKit/NSStatusBar.h>
 #import <AppKit/NSStatusItem.h>
@@ -217,12 +218,15 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSToolbar.h>
 #import <AppKit/NSToolbarItem.h>
 #import <AppKit/NSToolbarItemGroup.h>
+#import <AppKit/NSMenuToolbarItem.h>
 #import <AppKit/NSTouchBar.h>
 #import <AppKit/NSTouchBarItem.h>
 #import <AppKit/NSTrackingArea.h>
+#import <AppKit/NSTrackingSeparatorToolbarItem.h>
 #import <AppKit/NSTreeController.h>
 #import <AppKit/NSTreeNode.h>
 #import <AppKit/NSUserDefaultsController.h>
+#import <AppKit/NSUserInterfaceCompressionOptions.h>
 #import <AppKit/NSUserInterfaceItemIdentification.h>
 #import <AppKit/NSUserInterfaceItemSearching.h>
 #import <AppKit/NSView.h>
