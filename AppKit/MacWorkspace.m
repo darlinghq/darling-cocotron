@@ -3,6 +3,7 @@
 #import <AppKit/NSImage.h>
 #import <AppKit/NSRaise.h>
 #include <LaunchServices/LaunchServices.h>
+#include <LaunchServices/LaunchServicesPriv.h>
 #include <dispatch/dispatch.h>
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 #include <string.h>
@@ -417,6 +418,25 @@ static NSImage *ImageForGenericIcon(NSString *name) {
     return path ? [[[NSImage alloc] initWithContentsOfFile: path] autorelease] : nil;
 }
 
+// The icon the applications declare for a type, which LaunchServices locates; nil when none does.
+static NSImage *DeclaredIconForType(UTType *uti) {
+    if ([uti identifier] == nil)
+        return nil;
+
+    NSURL *url = (NSURL *) _LSCopyIconURLForContentType((CFStringRef) [uti identifier]);
+    if (url == nil)
+        return nil;
+
+    NSString *file = [url path];
+    NSImage *icon = ImageFromIconFile(file);
+    if (icon == nil)
+        icon = ImageFromIcnsFile(file);
+    [url release];
+    // Like the generic icons, the icon starts out at 32x32 points; the larger representations stay.
+    [icon setSize: NSMakeSize(32, 32)];
+    return icon;
+}
+
 - (NSImage *) iconForFileType: (NSString *) type {
     if (type == nil)
         return nil;
@@ -430,20 +450,24 @@ static NSImage *ImageForGenericIcon(NSString *name) {
     if ([uti conformsToType: UTTypeDirectory])
         icon = [NSImage imageNamed: NSImageNameFolder];
     else {
-        NSArray *generic = @[
-            @[ UTTypeApplication, @"application-x-executable" ],
-            @[ UTTypeImage, @"image-x-generic" ],
-            @[ UTTypeAudio, @"audio-x-generic" ],
-            @[ UTTypeMovie, @"video-x-generic" ],
-            @[ UTTypeText, @"text-x-generic" ],
-        ];
-        NSString *name = @"application-x-generic";
-        for (NSArray *entry in generic)
-            if ([uti conformsToType: entry[0]]) {
-                name = entry[1];
-                break;
-            }
-        icon = ImageForGenericIcon(name);
+        icon = DeclaredIconForType(uti);
+        if (icon == nil) {
+            NSArray *generic = @[
+                @[ UTTypeApplication, @"application-x-executable" ],
+                @[ UTTypeImage, @"image-x-generic" ],
+                @[ UTTypeAudio, @"audio-x-generic" ],
+                @[ UTTypeMovie, @"video-x-generic" ],
+                @[ UTTypeText, @"text-x-generic" ],
+                @[ UTTypeArchive, @"package-x-generic" ],
+            ];
+            NSString *name = @"application-x-generic";
+            for (NSArray *entry in generic)
+                if ([uti conformsToType: entry[0]]) {
+                    name = entry[1];
+                    break;
+                }
+            icon = ImageForGenericIcon(name);
+        }
     }
 
     if (icon == nil)

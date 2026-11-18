@@ -519,6 +519,7 @@ set(AppKit_resources
 	application-x-generic.png SystemImages/application-x-generic.png
 	audio-x-generic.png SystemImages/audio-x-generic.png
 	image-x-generic.png SystemImages/image-x-generic.png
+	package-x-generic.png SystemImages/package-x-generic.png
 	text-x-generic.png SystemImages/text-x-generic.png
 	video-x-generic.png SystemImages/video-x-generic.png
 	COPYING.Adwaita SystemImages/COPYING.Adwaita
