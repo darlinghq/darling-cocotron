@@ -171,6 +171,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
             [child placeAboveSurface: below];
             below = [child presentedSurface];
         }
+        below = [child stackMetalSurfacesAbove: below];
     }
 }
 - (void) updateSubwindows {
