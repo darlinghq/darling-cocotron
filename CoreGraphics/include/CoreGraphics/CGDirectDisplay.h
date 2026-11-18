@@ -122,6 +122,7 @@ COREGRAPHICS_EXPORT boolean_t CGDisplayIsAsleep(CGDirectDisplayID display);
 COREGRAPHICS_EXPORT double CGDisplayRotation(CGDirectDisplayID display);
 COREGRAPHICS_EXPORT CGColorSpaceRef CGDisplayCopyColorSpace(CGDirectDisplayID display);
 COREGRAPHICS_EXPORT CGImageRef CGDisplayCreateImage(CGDirectDisplayID displayID);
+COREGRAPHICS_EXPORT CGImageRef CGDisplayCreateImageForRect(CGDirectDisplayID display, CGRect rect);
 COREGRAPHICS_EXPORT bool CGDisplayUsesForceToGray(void);
 COREGRAPHICS_EXPORT bool CGPreflightScreenCaptureAccess(void);
 COREGRAPHICS_EXPORT bool CGRequestScreenCaptureAccess(void);

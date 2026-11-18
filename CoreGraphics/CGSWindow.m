@@ -226,6 +226,33 @@ CFArrayRef __nullable CGWindowListCreateDescriptionFromArray(CFArrayRef windowAr
     return (CFArrayRef) descriptions;
 }
 
+CGImageRef __nullable CGWindowListCreateImageFromArray(CGRect screenBounds,
+                                                       CFArrayRef windowArray,
+                                                       CGWindowImageOption imageOption)
+{
+    // The image holds the listed windows composited over a transparent
+    // background, in a bitmap of the bounds' size. Window contents cannot be
+    // read back (there is no screen capture backend), so a list with windows
+    // gives no image, as when screen recording is not permitted. An empty
+    // list has nothing to composite and gives the transparent image.
+    if (windowArray == NULL || CFArrayGetCount(windowArray) != 0 ||
+        CGRectIsNull(screenBounds) || CGRectIsInfinite(screenBounds) ||
+        CGRectIsEmpty(screenBounds))
+        return NULL;
+
+    size_t width = (size_t) ceil(screenBounds.size.width);
+    size_t height = (size_t) ceil(screenBounds.size.height);
+    CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB();
+    CGContextRef context = CGBitmapContextCreate(NULL, width, height, 8, 0, space,
+                                                 kCGImageAlphaPremultipliedFirst);
+    CGColorSpaceRelease(space);
+    if (context == NULL)
+        return NULL;
+    CGImageRef image = CGBitmapContextCreateImage(context);
+    CGContextRelease(context);
+    return image;
+}
+
 CGImageRef __nullable CGWindowListCreateImage(CGRect screenBounds,
                                               CGWindowListOption listOption,
                                               CGWindowID windowID,

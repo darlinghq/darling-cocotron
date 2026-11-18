@@ -1230,9 +1230,27 @@ CGColorSpaceRef CGDisplayCopyColorSpace(CGDirectDisplayID display) {
     return CGColorSpaceCreateDeviceRGB();
 }
 
-CGImageRef CGDisplayCreateImage(CGDirectDisplayID displayID) {
-    // Screen capture is not implemented; the function may return NULL.
+CGImageRef CGDisplayCreateImageForRect(CGDirectDisplayID display, CGRect rect) {
+    // Only an existing display and a non-empty part of it can be captured.
+    NSDisplay *host = currentDisplay();
+    if (!host || !screenForDisplayID([host screens], display) ||
+        CGRectIsEmpty(rect) || CGRectIsNull(rect) ||
+        !CGRectIntersectsRect(rect, CGDisplayBounds(display)))
+        return NULL;
+
+    // Reading the display's contents is a screen capture. No backend can read
+    // pixels back, so the function returns NULL, as it does on a Mac where
+    // screen recording is not permitted (see CGPreflightScreenCaptureAccess).
     return NULL;
+}
+
+CGImageRef CGDisplayCreateImage(CGDirectDisplayID displayID) {
+    return CGDisplayCreateImageForRect(displayID, CGDisplayBounds(displayID));
+}
+
+boolean_t CGCursorIsDrawnInFramebuffer(void) {
+    // The pointer is part of the display contents.
+    return true;
 }
 
 bool CGDisplayUsesForceToGray(void) {

@@ -129,6 +129,14 @@ CFDataRef CGColorSpaceCopyICCData(CGColorSpaceRef colorSpace) {
     return O2ColorSpaceCopyICCData((O2ColorSpaceRef)colorSpace);
 }
 
+CFDataRef CGColorSpaceCopyICCProfile(CGColorSpaceRef colorSpace) {
+    return CGColorSpaceCopyICCData(colorSpace);
+}
+
+CGColorSpaceRef CGColorSpaceCreateWithICCProfile(CFDataRef data) {
+    return (CGColorSpaceRef) O2ColorSpaceCreateWithICCData(data);
+}
+
 CGColorSpaceRef CGColorSpaceCreateICCBased(size_t nComponents, const CGFloat *range,
                                            CGDataProviderRef profile,
                                            CGColorSpaceRef alternate)

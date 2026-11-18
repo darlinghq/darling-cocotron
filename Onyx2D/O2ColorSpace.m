@@ -89,6 +89,8 @@ const CFStringRef kO2ColorSpaceExtendedLinearGray =
     if (_name != NULL)
         CFRelease(_name);
     [_patternBase release];
+    if (_iccData != NULL)
+        CFRelease(_iccData);
     [super dealloc];
 }
 
@@ -253,6 +255,8 @@ CFDataRef O2ColorSpaceCopyICCData(O2ColorSpaceRef self) {
     O2ColorProfile profile;
     char name[64];
 
+    if (self != NULL && self->_iccData != NULL)
+        return (CFDataRef) CFRetain(self->_iccData);
     if (self == NULL || self->_name == NULL ||
         !O2ColorSpaceGetColorProfile(self, &profile) ||
         !CFStringGetCString(self->_name, name, sizeof(name), kCFStringEncodingASCII))
@@ -263,6 +267,66 @@ CFDataRef O2ColorSpaceCopyICCData(O2ColorSpaceRef self) {
         suffix += 8;
     const char *description = profileDescription(suffix);
     return description ? O2ColorProfileCopyICCData(&profile, description) : NULL;
+}
+
+static uint32_t iccWord(const UInt8 *p) {
+    return ((uint32_t) p[0] << 24) | ((uint32_t) p[1] << 16) |
+           ((uint32_t) p[2] << 8) | p[3];
+}
+
+O2ColorSpaceRef O2ColorSpaceCreateWithICCData(CFDataRef profile) {
+    // ICC.1: a 128 byte header, then a tag count and the tag table; the header
+    // starts with the profile size and carries 'acsp' at offset 36 and the
+    // data color space signature at offset 16.
+    if (profile == NULL || CFDataGetLength(profile) < 132)
+        return NULL;
+    const UInt8 *p = CFDataGetBytePtr(profile);
+    if (iccWord(p) != (uint32_t) CFDataGetLength(profile) ||
+        iccWord(p + 36) != 0x61637370 /* 'acsp' */)
+        return NULL;
+
+    O2ColorSpaceModel model;
+    switch (iccWord(p + 16)) {
+    case 0x47524159: /* 'GRAY' */
+        model = kO2ColorSpaceModelMonochrome;
+        break;
+    case 0x52474220: /* 'RGB ' */
+        model = kO2ColorSpaceModelRGB;
+        break;
+    case 0x434D594B: /* 'CMYK' */
+        model = kO2ColorSpaceModelCMYK;
+        break;
+    default:
+        return NULL;
+    }
+
+    static const char *const named[] = {
+        "kCGColorSpaceSRGB", "kCGColorSpaceLinearSRGB",
+        "kCGColorSpaceDisplayP3", "kCGColorSpaceLinearDisplayP3",
+        "kCGColorSpaceGenericRGB", "kCGColorSpaceGenericRGBLinear",
+        "kCGColorSpaceAdobeRGB1998", "kCGColorSpaceITUR_709",
+        "kCGColorSpaceITUR_2020", "kCGColorSpaceExtendedLinearITUR_2020",
+        "kCGColorSpaceGenericGray", "kCGColorSpaceGenericGrayGamma2_2",
+        "kCGColorSpaceLinearGray",
+    };
+    for (size_t i = 0; i < sizeof(named) / sizeof(named[0]); i++) {
+        CFStringRef name = CFStringCreateWithCString(NULL, named[i], kCFStringEncodingASCII);
+        O2ColorSpaceRef candidate = O2ColorSpaceCreateWithName(name);
+        CFRelease(name);
+        CFDataRef data = candidate ? O2ColorSpaceCopyICCData(candidate) : NULL;
+        BOOL same = data != NULL && CFEqual(data, profile);
+        if (data != NULL)
+            CFRelease(data);
+        if (same)
+            return candidate;
+        O2ColorSpaceRelease(candidate);
+    }
+
+    O2ColorSpaceRef cs = [O2ColorSpace allocWithZone: NULL];
+    cs->_type = model;
+    cs->_isPlatformRGB = NO;
+    cs->_iccData = CFDataCreateCopy(NULL, profile);
+    return cs;
 }
 
 BOOL O2ColorSpaceIsPlatformRGB(O2ColorSpaceRef self) {

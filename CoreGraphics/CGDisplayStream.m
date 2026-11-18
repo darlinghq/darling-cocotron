@@ -27,6 +27,9 @@ const CFStringRef kCGDisplayStreamPreserveAspectRatio = CFSTR("kCGDisplayStreamP
 const CFStringRef kCGDisplayStreamColorSpace = CFSTR("kCGDisplayStreamColorSpace");
 const CFStringRef kCGDisplayStreamMinimumFrameTime = CFSTR("kCGDisplayStreamMinimumFrameTime");
 const CFStringRef kCGDisplayStreamQueueDepth = CFSTR("kCGDisplayStreamQueueDepth");
+const CFStringRef kCGDisplayStreamYCbCrMatrix = CFSTR("kCGDisplayStreamYCbCrMatrix");
+const CFStringRef kCGDisplayStreamYCbCrMatrix_ITU_R_601_4 = CFSTR("ITU_R_601_4");
+const CFStringRef kCGDisplayStreamYCbCrMatrix_ITU_R_709_2 = CFSTR("ITU_R_709_2");
 
 // There is no screen capture backend, so a stream never delivers a frame.
 // It can be started and stopped, and stopping it reports
