@@ -1,6 +1,7 @@
 #import "MacWorkspace.h"
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSImage.h>
+#import <AppKit/NSRunningApplication.h>
 #import <AppKit/NSRaise.h>
 #include <LaunchServices/LaunchServices.h>
 #include <LaunchServices/LaunchServicesPriv.h>
@@ -12,6 +13,10 @@
 #include <errno.h>
 #include <sys/xattr.h>
 #include <unistd.h>
+
+@interface NSRunningApplication (LaunchLookup)
++ (NSArray<NSRunningApplication *> *) _runningApplicationsWithBundleURL: (NSURL *) bundleURL;
+@end
 
 static NSCache *_workspaceIconCache;
 
@@ -979,6 +984,218 @@ static OSStatus sendRevealEvent(NSString *bundleIdentifier, NSArray<NSURL *> *ur
 - (void) activateFileViewerSelectingURLs: (NSArray<NSURL *> *) fileURLs {
     // one event for all the URLs, in order, even across folders (observed on macOS 26.7.3, tier 2)
     [self _revealURLs: fileURLs != nil ? fileURLs : [NSArray array]];
+}
+
+#pragma mark - Opening applications and items with an application
+
+// An application URL that names nothing gets the error of a missing file, as the calls report it on
+// macOS (observed on macOS 26.7.3: NSCocoaErrorDomain, NSFileReadNoSuchFileError).
+static NSError *errorForMissingApplication(NSURL *applicationURL) {
+    return [NSError errorWithDomain: NSCocoaErrorDomain
+                               code: NSFileReadNoSuchFileError
+                           userInfo: applicationURL != nil ? @{NSURLErrorKey : applicationURL} : nil];
+}
+
+static BOOL applicationExists(NSURL *applicationURL) {
+    return [applicationURL isFileURL] &&
+           [[NSFileManager defaultManager] fileExistsAtPath: [applicationURL path]];
+}
+
+// The application that was launched, once it is known to the registry of running applications: the
+// launch itself does not report a process, so the registry is polled for a short while.
+static NSRunningApplication *waitForApplicationAtURL(NSURL *applicationURL) {
+    for (int attempt = 0; attempt < 50; attempt++) {
+        NSRunningApplication *application =
+                [[NSRunningApplication _runningApplicationsWithBundleURL: applicationURL] firstObject];
+
+        if (application != nil)
+            return application;
+        usleep(100 * 1000);
+    }
+    return nil;
+}
+
+// Opens the items (none: just launches) with the application. Returns the application's running
+// application when it is one, and sets the error when the request failed.
+static NSRunningApplication *openItemsWithApplication(NSArray<NSURL *> *items, NSURL *applicationURL,
+                                                      LSLaunchFlags flags, NSError **error) {
+    if (!applicationExists(applicationURL)) {
+        if (error != NULL)
+            *error = errorForMissingApplication(applicationURL);
+        return nil;
+    }
+
+    OSStatus status = openURLsWithFlags([items count] > 0 ? items : nil, applicationURL, flags);
+
+    if (status != noErr) {
+        if (error != NULL)
+            *error = [NSError errorWithDomain: NSOSStatusErrorDomain code: status userInfo: nil];
+        return nil;
+    }
+    if (error != NULL)
+        *error = nil;
+    return waitForApplicationAtURL(applicationURL);
+}
+
+static void runOnConcurrentQueue(dispatch_block_t block) {
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), block);
+}
+
+- (void) openApplicationAtURL: (NSURL *) applicationURL
+                configuration: (NSWorkspaceOpenConfiguration *) configuration
+            completionHandler: (void (^)(NSRunningApplication *app, NSError *error)) completionHandler
+{
+    [self openURLs: nil
+            withApplicationAtURL: applicationURL
+                   configuration: configuration
+               completionHandler: completionHandler];
+}
+
+- (void) openURLs: (NSArray<NSURL *> *) urls
+        withApplicationAtURL: (NSURL *) applicationURL
+               configuration: (NSWorkspaceOpenConfiguration *) configuration
+           completionHandler: (void (^)(NSRunningApplication *app, NSError *error)) completionHandler
+{
+    LSLaunchFlags flags = launchFlagsForConfiguration(configuration);
+    NSArray *items = [urls copy];
+    NSURL *application = [applicationURL retain];
+    void (^handler)(NSRunningApplication *, NSError *) = [completionHandler copy];
+
+    runOnConcurrentQueue(^{
+        NSError *error = nil;
+        NSRunningApplication *running = openItemsWithApplication(items, application, flags, &error);
+
+        if (handler != nil)
+            handler(running, error);
+        [handler release];
+        [application release];
+        [items release];
+    });
+}
+
+- (NSRunningApplication *) launchApplicationAtURL: (NSURL *) url
+                                          options: (NSWorkspaceLaunchOptions) options
+                                    configuration: (NSDictionary<NSString *, id> *) configuration
+                                            error: (NSError **) error
+{
+    // The launch options share their values with LaunchServices' launch flags, as for
+    // -openURLs:withAppBundleIdentifier:options:additionalEventParamDescriptor:launchIdentifiers:.
+    LSLaunchFlags flags = kLSLaunchDefaults |
+            (options & (NSWorkspaceLaunchAndPrint |
+                        NSWorkspaceLaunchWithoutAddingToRecents |
+                        NSWorkspaceLaunchWithoutActivation |
+                        NSWorkspaceLaunchAsync |
+                        NSWorkspaceLaunchNewInstance |
+                        NSWorkspaceLaunchAndHide |
+                        NSWorkspaceLaunchAndHideOthers));
+    return openItemsWithApplication(nil, url, flags, error);
+}
+
+#pragma mark - Applications for items and the default application
+
+- (NSArray<NSURL *> *) URLsForApplicationsToOpenURL: (NSURL *) url {
+    CFArrayRef apps = url != nil ? LSCopyApplicationURLsForURL((CFURLRef) url, kLSRolesAll) : NULL;
+
+    return apps != NULL ? [(NSArray *) apps autorelease] : @[];
+}
+
+- (NSArray<NSURL *> *) URLsForApplicationsWithBundleIdentifier: (NSString *) bundleIdentifier {
+    CFArrayRef apps = bundleIdentifier != nil
+            ? LSCopyApplicationURLsForBundleIdentifier((CFStringRef) bundleIdentifier, NULL)
+            : NULL;
+
+    return apps != NULL ? [(NSArray *) apps autorelease] : @[];
+}
+
+- (NSImage *) iconForContentType: (UTType *) contentType {
+    return contentType != nil ? [self iconForFileType: [contentType identifier]] : nil;
+}
+
+// The default handler is stored under the application's bundle identifier. An application that is
+// not there, or has no identifier, cannot be made the default.
+static NSError *errorForDefaultApplication(NSURL *applicationURL, NSString **bundleIdentifier) {
+    if (!applicationExists(applicationURL))
+        return errorForMissingApplication(applicationURL);
+    *bundleIdentifier = [[NSBundle bundleWithURL: applicationURL] bundleIdentifier];
+    if (*bundleIdentifier == nil)
+        return [NSError errorWithDomain: NSOSStatusErrorDomain code: kLSApplicationNotFoundErr userInfo: nil];
+    return nil;
+}
+
+- (void) _setDefaultApplicationAtURL: (NSURL *) applicationURL
+                           forScheme: (NSString *) scheme
+                         contentType: (NSString *) contentType
+                   completionHandler: (void (^)(NSError *error)) completionHandler
+{
+    NSURL *application = [applicationURL retain];
+    NSString *schemeCopy = [scheme copy];
+    NSString *typeCopy = [contentType copy];
+    void (^handler)(NSError *) = [completionHandler copy];
+
+    runOnConcurrentQueue(^{
+        NSString *bundleIdentifier = nil;
+        NSError *error = errorForDefaultApplication(application, &bundleIdentifier);
+
+        if (error == nil) {
+            OSStatus status = schemeCopy != nil
+                    ? LSSetDefaultHandlerForURLScheme((CFStringRef) schemeCopy, (CFStringRef) bundleIdentifier)
+                    : LSSetDefaultRoleHandlerForContentType((CFStringRef) typeCopy, kLSRolesAll,
+                                                            (CFStringRef) bundleIdentifier);
+            if (status != noErr)
+                error = [NSError errorWithDomain: NSOSStatusErrorDomain code: status userInfo: nil];
+        }
+        if (handler != nil)
+            handler(error);
+        [handler release];
+        [typeCopy release];
+        [schemeCopy release];
+        [application release];
+    });
+}
+
+- (void) setDefaultApplicationAtURL: (NSURL *) applicationURL
+               toOpenURLsWithScheme: (NSString *) urlScheme
+                  completionHandler: (void (^)(NSError *error)) completionHandler
+{
+    [self _setDefaultApplicationAtURL: applicationURL
+                            forScheme: urlScheme
+                          contentType: nil
+                    completionHandler: completionHandler];
+}
+
+- (void) setDefaultApplicationAtURL: (NSURL *) applicationURL
+                  toOpenContentType: (UTType *) contentType
+                  completionHandler: (void (^)(NSError *error)) completionHandler
+{
+    [self _setDefaultApplicationAtURL: applicationURL
+                            forScheme: nil
+                          contentType: [contentType identifier]
+                    completionHandler: completionHandler];
+}
+
+// The content type of the file is the one its name extension stands for.
+- (void) setDefaultApplicationAtURL: (NSURL *) applicationURL
+                    toOpenFileAtURL: (NSURL *) url
+                  completionHandler: (void (^)(NSError *error)) completionHandler
+{
+    UTType *type = [[url pathExtension] length] > 0
+            ? [UTType typeWithFilenameExtension: [url pathExtension]]
+            : nil;
+
+    if (type == nil) {
+        NSError *error = [NSError errorWithDomain: NSCocoaErrorDomain
+                                             code: NSFileReadUnknownError
+                                         userInfo: url != nil ? @{NSURLErrorKey : url} : nil];
+        void (^handler)(NSError *) = [completionHandler copy];
+
+        runOnConcurrentQueue(^{
+            if (handler != nil)
+                handler(error);
+            [handler release];
+        });
+        return;
+    }
+    [self setDefaultApplicationAtURL: applicationURL toOpenContentType: type completionHandler: completionHandler];
 }
 
 - (NSURL *) URLForApplicationToOpenURL: (NSURL *) url {

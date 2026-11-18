@@ -21,7 +21,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/AppKitIvarLayout.h>
 #import <Foundation/Foundation.h>
 
-@class NSImage, NSView, NSRunningApplication, NSWorkspaceOpenConfiguration;
+@class NSImage, NSView, NSRunningApplication, NSWorkspaceOpenConfiguration, UTType;
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -239,6 +239,34 @@ typedef NS_ENUM(NSInteger, NSWorkspaceAuthorizationType) {
                             options: (NSUInteger) options
                       configuration: (NSDictionary *) configuration
                               error: (NSError **) error;
+@end
+
+@interface NSWorkspace (NSApplicationLaunching)
+// The completion handlers run on a concurrent queue. The running application is nil when the opened
+// application does not connect to the window system.
+- (void) openApplicationAtURL: (NSURL *) applicationURL
+                configuration: (NSWorkspaceOpenConfiguration *) configuration
+            completionHandler: (void (^ _Nullable)(NSRunningApplication *_Nullable app, NSError *_Nullable error)) completionHandler;
+- (void) openURLs: (NSArray<NSURL *> *) urls
+        withApplicationAtURL: (NSURL *) applicationURL
+               configuration: (NSWorkspaceOpenConfiguration *) configuration
+           completionHandler: (void (^ _Nullable)(NSRunningApplication *_Nullable app, NSError *_Nullable error)) completionHandler;
+- (nullable NSRunningApplication *) launchApplicationAtURL: (NSURL *) url
+                                                   options: (NSWorkspaceLaunchOptions) options
+                                             configuration: (NSDictionary<NSString *, id> *) configuration
+                                                     error: (NSError **) error;
+- (NSArray<NSURL *> *) URLsForApplicationsToOpenURL: (NSURL *) url;
+- (NSArray<NSURL *> *) URLsForApplicationsWithBundleIdentifier: (NSString *) bundleIdentifier;
+- (NSImage *) iconForContentType: (UTType *) contentType;
+- (void) setDefaultApplicationAtURL: (NSURL *) applicationURL
+                  toOpenURLsWithScheme: (NSString *) urlScheme
+                     completionHandler: (void (^ _Nullable)(NSError *_Nullable error)) completionHandler;
+- (void) setDefaultApplicationAtURL: (NSURL *) applicationURL
+                    toOpenContentType: (UTType *) contentType
+                    completionHandler: (void (^ _Nullable)(NSError *_Nullable error)) completionHandler;
+- (void) setDefaultApplicationAtURL: (NSURL *) applicationURL
+                    toOpenFileAtURL: (NSURL *) url
+                  completionHandler: (void (^ _Nullable)(NSError *_Nullable error)) completionHandler;
 @end
 
 APPKIT_EXPORT NSNotificationName const NSWorkspaceDidHideApplicationNotification;
