@@ -1062,6 +1062,8 @@ static BOOL forcesOpenGLPresentation(void) {
 	[_drawableCondition unlock];
 
 	if (drawable) {
+		CAMetalDrawableWarnIfDisplayedOnAnotherDevice(std::dynamic_pointer_cast<Indium::PrivateDevice>(((MTLDeviceInternal*)_device).device));
+
 		// wait for the drawable to be fully rendered before copying it to the render texture
 		// (this is a GPU-side wait)
 		drawable->synchronizeRender();

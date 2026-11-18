@@ -175,11 +175,12 @@ static size_t findImageMemory(const VkMemoryRequirements& reqs, std::shared_ptr<
 };
 
 // The drawable's image is exported from Vulkan and imported into OpenGL, which
-// only works when both run on the same GPU. Say so once if the context that
-// displays the layer reports no device matching the Metal device. Checked in
+// only works when both run on the same GPU. Say so once, when a frame is about
+// to be composited through OpenGL (a layer that presents through a swapchain
+// never is), if the context that displays the layer reports no device matching the Metal device. Checked in
 // the current context; a GL implementation that cannot report its devices is
 // not reported.
-static void warnIfDisplayedOnAnotherDevice(const std::shared_ptr<Indium::PrivateDevice>& device) {
+void CAMetalDrawableWarnIfDisplayedOnAnotherDevice(const std::shared_ptr<Indium::PrivateDevice>& device) {
 	static std::atomic<bool> checked { false };
 
 	if (checked.exchange(true)) {
@@ -227,8 +228,6 @@ CAMetalDrawableTexture::CAMetalDrawableTexture(CGSize size, Indium::PixelFormat 
 	_framebufferOnly(framebufferOnly),
 	_exportsSemaphore(exportsSemaphore)
 {
-	warnIfDisplayedOnAnotherDevice(_device);
-
 	//
 	// create the images
 	//

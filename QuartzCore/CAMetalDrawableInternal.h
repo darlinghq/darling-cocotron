@@ -38,6 +38,9 @@
 // Without it, the compositor waits on the CPU for a drawable's rendering to finish.
 bool CAMetalDrawableGLImportsSemaphores();
 
+// Logs once if the current GL context runs on another GPU than the Metal device.
+void CAMetalDrawableWarnIfDisplayedOnAnotherDevice(const std::shared_ptr<Indium::PrivateDevice>& device);
+
 class CAMetalDrawableTexture: public Indium::PrivateTexture {
 	CGSize _size;
 	VkImage _image = VK_NULL_HANDLE;
