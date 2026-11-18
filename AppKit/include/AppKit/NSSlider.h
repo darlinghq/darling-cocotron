@@ -20,6 +20,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSControl.h>
 #import <AppKit/NSSliderCell.h>
 
+NS_ASSUME_NONNULL_BEGIN
+
 @interface NSSlider : NSControl
 
 @property(nonatomic) double minValue;
@@ -42,6 +44,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (NSRect) rectOfTickMarkAtIndex: (NSInteger) index;
 
-- (BOOL) acceptsFirstMouse: (NSEvent *) event;
+- (BOOL) acceptsFirstMouse: (nullable NSEvent *) event;
 
 @end
+
+NS_ASSUME_NONNULL_END

@@ -28,6 +28,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 // Legacy ObjC ABI (i386): instance size must stay 0x40, Apple's; the ivars
 // before the extras sit at Apple's offsets. Add new state to the extra
 // struct, never as an ivar.
+NS_ASSUME_NONNULL_BEGIN
+
 @interface NSMenuItem : NSObject <NSCopying, NSValidatedUserInterfaceItem, NSUserInterfaceItemIdentification> {
     NSMenu *_menu;
     NSString *_title;
@@ -62,42 +64,42 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     NS_EXTRA_IVARS_END(NSMenuItem)
 }
 
-@property(copy) NSString *toolTip;
+@property(nullable, copy) NSString *toolTip;
 
 @property(getter=isAlternate) BOOL alternate;
 @property BOOL allowsKeyEquivalentWhenHidden;
-@property(retain) NSView *view;
-@property(retain) NSMenuItemBadge *badge;
+@property(nullable, retain) NSView *view;
+@property(nullable, retain) NSMenuItemBadge *badge;
 
 + (NSMenuItem *) separatorItem;
 // macOS 14: a non-selectable item that titles the items after it.
-+ (NSMenuItem *) sectionHeaderWithTitle: (NSString *) title;
++ (null_unspecified NSMenuItem *) sectionHeaderWithTitle: (NSString *) title;
 
 - (instancetype) initWithTitle: (NSString *) title
-                        action: (SEL) action
+                        action: (nullable SEL) action
                  keyEquivalent: (NSString *) keyEquivalent;
 
-- (NSMenu *) menu;
+- (nullable NSMenu *) menu;
 @property(nonatomic, copy) NSString *title;
-@property(nonatomic, copy) NSAttributedString *attributedTitle;
-- (NSString *) mnemonic;
+@property(nullable, nonatomic, copy) NSAttributedString *attributedTitle;
+- (null_unspecified NSString *) mnemonic;
 @property(nonatomic) unsigned mnemonicLocation;
-@property(nonatomic, assign) id target;
+@property(nullable, nonatomic, assign) id target;
 @property(nonatomic) SEL action;
 @property(nonatomic) NSInteger indentationLevel;
 @property(nonatomic) NSInteger tag;
 @property(nonatomic) NSControlStateValue state;
 @property(nonatomic, copy) NSString *keyEquivalent;
 @property(nonatomic) unsigned keyEquivalentModifierMask;
-@property(nonatomic, retain) NSImage *image;
-@property(nonatomic, retain) NSImage *onStateImage;
-@property(nonatomic, retain) NSImage *offStateImage;
-@property(nonatomic, retain) NSImage *mixedStateImage;
+@property(nullable, nonatomic, retain) NSImage *image;
+@property(null_resettable, nonatomic, retain) NSImage *onStateImage;
+@property(nullable, nonatomic, retain) NSImage *offStateImage;
+@property(null_resettable, nonatomic, retain) NSImage *mixedStateImage;
 
-- representedObject;
+- (nullable id) representedObject;
 
 @property(nonatomic, readonly) BOOL hasSubmenu;
-@property(nonatomic, retain) NSMenu *submenu;
+@property(nullable, nonatomic, retain) NSMenu *submenu;
 
 @property(nonatomic, getter=isSeparatorItem, readonly) BOOL separatorItem;
 - (BOOL) isSectionHeader;
@@ -105,10 +107,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 @property(nonatomic, getter=isHidden) BOOL hidden;
 
 - (void) setTitleWithMnemonic: (NSString *) mnemonic;
-- (void) setRepresentedObject: object;
+- (void) setRepresentedObject: (nullable id) object;
 
-- (NSString *) _keyEquivalentDescription;
+- (null_unspecified NSString *) _keyEquivalentDescription;
 
-- (NSString *) _mainMenuTitle;
+- (null_unspecified NSString *) _mainMenuTitle;
 
 @end
+
+NS_ASSUME_NONNULL_END

@@ -20,6 +20,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSTextField.h>
 #import <AppKit/AppKitIvarLayout.h>
 
+NS_ASSUME_NONNULL_BEGIN
+
 APPKIT_EXPORT NSString *const NSComboBoxSelectionDidChangeNotification;
 APPKIT_EXPORT NSString *const NSComboBoxSelectionIsChangingNotification;
 APPKIT_EXPORT NSString *const NSComboBoxWillDismissNotification;
@@ -32,7 +34,7 @@ APPKIT_EXPORT NSString *const NSComboBoxWillPopUpNotification;
     NS_LEGACY_IVAR_PAD(_NSComboBoxReserved1, 4)
 }
 
-- dataSource;
+- (null_unspecified id) dataSource;
 @property(nonatomic) BOOL usesDataSource;
 @property(nonatomic, getter=isButtonBordered) BOOL buttonBordered;
 @property(nonatomic) CGFloat itemHeight;
@@ -41,23 +43,23 @@ APPKIT_EXPORT NSString *const NSComboBoxWillPopUpNotification;
 @property(nonatomic) BOOL completes;
 @property(nonatomic) NSInteger numberOfVisibleItems;
 
-- (void) setDataSource: value;
+- (void) setDataSource: (null_unspecified id) value;
 
 - (NSInteger) numberOfItems;
 - (NSArray *) objectValues;
-- itemObjectValueAtIndex: (NSInteger) index;
-- (NSInteger) indexOfItemWithObjectValue: object;
-- (void) addItemWithObjectValue: object;
+- (id) itemObjectValueAtIndex: (NSInteger) index;
+- (NSInteger) indexOfItemWithObjectValue: (id) object;
+- (void) addItemWithObjectValue: (id) object;
 - (void) addItemsWithObjectValues: (NSArray *) objects;
 - (void) removeAllItems;
 - (void) removeItemAtIndex: (NSInteger) index;
-- (void) removeItemWithObjectValue: value;
-- (void) insertItemWithObjectValue: value atIndex: (NSInteger) index;
+- (void) removeItemWithObjectValue: (id) value;
+- (void) insertItemWithObjectValue: (id) value atIndex: (NSInteger) index;
 
 - (NSInteger) indexOfSelectedItem;
-- objectValueOfSelectedItem;
+- (nullable id) objectValueOfSelectedItem;
 - (void) selectItemAtIndex: (NSInteger) index;
-- (void) selectItemWithObjectValue: value;
+- (void) selectItemWithObjectValue: (nullable id) value;
 - (void) deselectItemAtIndex: (NSInteger) index;
 
 - (void) scrollItemAtIndexToTop: (NSInteger) index;
@@ -80,3 +82,5 @@ APPKIT_EXPORT NSString *const NSComboBoxWillPopUpNotification;
 // TODO
 
 @end
+
+NS_ASSUME_NONNULL_END

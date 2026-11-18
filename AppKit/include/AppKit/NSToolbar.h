@@ -22,6 +22,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Foundation/NSNotification.h>
 #import <Foundation/NSObject.h>
 
+NS_ASSUME_NONNULL_BEGIN
+
 @class NSString, NSMutableArray, NSArray, NSDictionary, NSNotification,
         NSMutableDictionary, NSWindow, NSView, NSToolbarItem, NSToolbarView,
         NSToolbarCustomizationPalette;
@@ -72,19 +74,19 @@ typedef NSString *NSToolbarIdentifier NS_SWIFT_BRIDGED_TYPEDEF;
 - (instancetype) initWithIdentifier: (NSToolbarIdentifier) identifier;
 
 - (NSToolbarIdentifier) identifier;
-@property(nonatomic, assign) id<NSToolbarDelegate> delegate;
+@property(nullable, nonatomic, assign) id<NSToolbarDelegate> delegate;
 @property(nonatomic, getter=isVisible) BOOL visible;
 @property(nonatomic) NSToolbarSizeMode sizeMode;
 @property(nonatomic) NSToolbarDisplayMode displayMode;
 @property(nonatomic) BOOL showsBaselineSeparator;
-- (NSArray *) items;
-- (NSArray *) visibleItems;
-- (NSDictionary *) configurationDictionary;
+- (NSArray<__kindof NSToolbarItem *> *) items;
+- (nullable NSArray<__kindof NSToolbarItem *> *) visibleItems;
+- (NSDictionary<NSString *, id> *) configurationDictionary;
 @property(nonatomic) BOOL autosavesConfiguration;
 @property(nonatomic) BOOL allowsUserCustomization;
-@property(nonatomic, copy) NSString *selectedItemIdentifier;
+@property(null_unspecified, nonatomic, copy) NSString *selectedItemIdentifier;
 
-- (void) setConfigurationFromDictionary: (NSDictionary *) dictionary;
+- (void) setConfigurationFromDictionary: (NSDictionary<NSString *, id> *) dictionary;
 
 - (void) insertItemWithItemIdentifier: (NSToolbarItemIdentifier) identifier
                               atIndex: (NSInteger) index;
@@ -93,28 +95,30 @@ typedef NSString *NSToolbarIdentifier NS_SWIFT_BRIDGED_TYPEDEF;
 - (void) validateVisibleItems;
 
 - (BOOL) customizationPaletteIsRunning;
-- (void) runCustomizationPalette: sender;
+- (void) runCustomizationPalette: (nullable id) sender;
 
 @end
 
 @interface NSToolbar (NSToolbarCustomization)
 
-- (Class) toolbarItemClass;
+- (null_unspecified Class) toolbarItemClass;
 
 @end
 
 @protocol NSToolbarDelegate <NSObject>
 
 @optional
-- (NSToolbarItem *) toolbar: (NSToolbar *) toolbar
+- (nullable NSToolbarItem *) toolbar: (NSToolbar *) toolbar
             itemForItemIdentifier: (NSToolbarItemIdentifier) identifier
         willBeInsertedIntoToolbar: (BOOL) flag;
 
-- (NSArray *) toolbarDefaultItemIdentifiers: (NSToolbar *) toolbar;
-- (NSArray *) toolbarAllowedItemIdentifiers: (NSToolbar *) toolbar;
-- (NSArray *) toolbarSelectableItemIdentifiers: (NSToolbar *) toolbar;
+- (NSArray<NSToolbarItemIdentifier> *) toolbarDefaultItemIdentifiers: (NSToolbar *) toolbar;
+- (NSArray<NSToolbarItemIdentifier> *) toolbarAllowedItemIdentifiers: (NSToolbar *) toolbar;
+- (NSArray<NSToolbarItemIdentifier> *) toolbarSelectableItemIdentifiers: (NSToolbar *) toolbar;
 
 - (void) toolbarWillAddItem: (NSNotification *) note;
 - (void) toolbarDidRemoveItem: (NSNotification *) note;
 
 @end
+
+NS_ASSUME_NONNULL_END

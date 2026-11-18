@@ -22,35 +22,39 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSCalendar;
 
+NS_ASSUME_NONNULL_BEGIN
+
 @interface NSDatePicker : NSControl
 
 @property(nonatomic, getter=isBezeled) BOOL bezeled;
 @property(nonatomic, getter=isBordered) BOOL bordered;
 
-- delegate;
+- (null_unspecified id) delegate;
 
 @property(nonatomic) NSDatePickerElementFlags datePickerElements;
 @property(nonatomic) NSDatePickerMode datePickerMode;
 @property(nonatomic) NSDatePickerStyle datePickerStyle;
 
-@property(nonatomic, retain) NSCalendar *calendar;
-@property(nonatomic, retain) NSLocale *locale;
-@property(nonatomic, retain) NSDate *minDate;
-@property(nonatomic, retain) NSDate *maxDate;
+@property(nullable, nonatomic, retain) NSCalendar *calendar;
+@property(nullable, nonatomic, retain) NSLocale *locale;
+@property(nullable, nonatomic, retain) NSDate *minDate;
+@property(nullable, nonatomic, retain) NSDate *maxDate;
 
 @property(nonatomic, retain) NSDate *dateValue;
 @property(nonatomic) NSTimeInterval timeInterval;
-@property(nonatomic, retain) NSTimeZone *timeZone;
+@property(nullable, nonatomic, retain) NSTimeZone *timeZone;
 
 @property(nonatomic) BOOL drawsBackground;
 @property(nonatomic, retain) NSColor *backgroundColor;
 @property(nonatomic, retain) NSColor *textColor;
 
 
-- (void) setDelegate: delegate;
+- (void) setDelegate: (null_unspecified id) delegate;
 
 
 
 
 
 @end
+
+NS_ASSUME_NONNULL_END

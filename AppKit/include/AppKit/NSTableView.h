@@ -51,6 +51,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSTableHeaderView, NSTableColumn, NSNib, NSTableRowView;
 
+@class NSSortDescriptor;
+
+NS_ASSUME_NONNULL_BEGIN
+
 APPKIT_EXPORT NSString *const NSTableViewSelectionIsChangingNotification;
 APPKIT_EXPORT NSString *const NSTableViewSelectionDidChangeNotification;
 APPKIT_EXPORT NSString *const NSTableViewColumnDidMoveNotification;
@@ -198,34 +202,34 @@ typedef NS_ENUM(NSInteger, NSTableRowActionEdge) {
     NS_EXTRA_IVARS_END(NSTableView)
 }
 
-- (__kindof NSView *) makeViewWithIdentifier: (NSString *) identifier owner: (id) owner;
-- (void) registerNib: (NSNib *) nib forIdentifier: (NSString *) identifier;
-- (void) setIndicatorImage: (NSImage *) image inTableColumn: (NSTableColumn *) tableColumn;
-- (NSImage *) indicatorImageInTableColumn: (NSTableColumn *) tableColumn;
+- (nullable __kindof NSView *) makeViewWithIdentifier: (null_unspecified NSString *) identifier owner: (nullable id) owner;
+- (void) registerNib: (nullable NSNib *) nib forIdentifier: (null_unspecified NSString *) identifier;
+- (void) setIndicatorImage: (nullable NSImage *) image inTableColumn: (NSTableColumn *) tableColumn;
+- (nullable NSImage *) indicatorImageInTableColumn: (NSTableColumn *) tableColumn;
 - (NSInteger) rowForView: (NSView *) view;
 - (NSInteger) columnForView: (NSView *) view;
-- (NSView *) viewAtColumn: (NSInteger) column row: (NSInteger) row makeIfNecessary: (BOOL) makeIfNecessary;
+- (nullable __kindof NSView *) viewAtColumn: (NSInteger) column row: (NSInteger) row makeIfNecessary: (BOOL) makeIfNecessary;
 
 @property(nonatomic) SEL doubleAction;
 
-@property(nonatomic, assign) id dataSource;
-@property(nonatomic, assign) id delegate;
+@property(null_unspecified, nonatomic, assign) id dataSource;
+@property(null_unspecified, nonatomic, assign) id delegate;
 
-@property(nonatomic, retain) NSView *headerView;
-@property(nonatomic, retain) NSView *cornerView;
+@property(null_unspecified, nonatomic, retain) NSView *headerView;
+@property(nullable, nonatomic, retain) NSView *cornerView;
 
 @property(nonatomic) CGFloat rowHeight;
 @property(nonatomic) NSSize intercellSpacing;
 @property(nonatomic, retain) NSColor *backgroundColor;
 @property(nonatomic, retain) NSColor *gridColor;
-@property(nonatomic, copy) NSString *autosaveName;
+@property(null_unspecified, nonatomic, copy) NSString *autosaveName;
 
 @property(nonatomic) BOOL drawsGrid;
 @property(nonatomic) BOOL allowsColumnReordering;
 @property(nonatomic) BOOL allowsColumnResizing;
 @property(nonatomic) BOOL autoresizesAllColumnsToFit;
 @property(nonatomic) NSTableViewColumnAutoresizingStyle columnAutoresizingStyle;
-@property(nonatomic, assign) NSTableColumn *highlightedTableColumn;
+@property(nullable, nonatomic, assign) NSTableColumn *highlightedTableColumn;
 @property(nonatomic) BOOL verticalMotionCanBeginDrag;
 @property(nonatomic) BOOL rowActionsVisible;
 @property(nonatomic) BOOL usesStaticContents;
@@ -249,9 +253,9 @@ typedef NS_ENUM(NSInteger, NSTableRowActionEdge) {
 
 @property(nonatomic, readonly) NSInteger numberOfRows;
 @property(nonatomic, readonly) NSUInteger numberOfColumns;
-@property(nonatomic, readonly) NSArray *tableColumns;
-- (NSInteger) columnWithIdentifier: (id) identifier;
-- (NSTableColumn *) tableColumnWithIdentifier: identifier;
+@property(nonatomic, readonly) NSArray<NSTableColumn *> *tableColumns;
+- (NSInteger) columnWithIdentifier: (null_unspecified id) identifier;
+- (nullable NSTableColumn *) tableColumnWithIdentifier: (null_unspecified id) identifier;
 
 - (NSRect) rectOfRow: (NSInteger) row;
 - (NSRect) rectOfColumn: (NSInteger) column;
@@ -278,7 +282,7 @@ typedef NS_ENUM(NSInteger, NSTableRowActionEdge) {
 @property(nonatomic, readonly) NSInteger editedColumn;
 - (void) editColumn: (NSInteger) column
                 row: (NSInteger) row
-          withEvent: (NSEvent *) event
+          withEvent: (nullable NSEvent *) event
              select: (BOOL) select;
 
 @property(nonatomic, readonly) NSInteger clickedRow;
@@ -301,8 +305,8 @@ typedef NS_ENUM(NSInteger, NSTableRowActionEdge) {
         byExtendingSelection: (BOOL) extend;
 - (NSIndexSet *) columnIndexesInRect: (NSRect) rect;
 
-- (void) selectAll: sender;
-- (void) deselectAll: sender;
+- (void) selectAll: (nullable id) sender;
+- (void) deselectAll: (nullable id) sender;
 
 - (void) scrollRowToVisible: (NSInteger) index;
 - (void) scrollColumnToVisible: (NSInteger) index;
@@ -327,35 +331,35 @@ typedef NS_ENUM(NSInteger, NSTableRowActionEdge) {
 - (void) drawRow: (NSInteger) row clipRect: (NSRect) rect;
 - (void) drawBackgroundInClipRect: (NSRect) rect;
 - (void) drawGridInClipRect: (NSRect) rect;
-- (NSCell *) preparedCellAtColumn: (NSInteger) columnNumber
+- (nullable NSCell *) preparedCellAtColumn: (NSInteger) columnNumber
                               row: (NSInteger) row;
 
 @property(nonatomic, readonly) NSIndexSet *selectedRowIndexes;
 - (void) selectRowIndexes: (NSIndexSet *) indexes
         byExtendingSelection: (BOOL) extend;
 
-@property(nonatomic, copy) NSArray *sortDescriptors;
+@property(nonatomic, copy) NSArray<NSSortDescriptor *> *sortDescriptors;
 @end
 
 @protocol NSTableViewDataSource <NSObject>
 @optional
 - (NSInteger) numberOfRowsInTableView: (NSTableView *) tableView;
-- (id) tableView: (NSTableView *) tableView
-        objectValueForTableColumn: (NSTableColumn *) tableColumn
+- (nullable id) tableView: (NSTableView *) tableView
+        objectValueForTableColumn: (nullable NSTableColumn *) tableColumn
                               row: (NSInteger) row;
 - (void) tableView: (NSTableView *) tableView
-        setObjectValue: object
-        forTableColumn: (NSTableColumn *) tableColumn
+        setObjectValue: (nullable id) object
+        forTableColumn: (nullable NSTableColumn *) tableColumn
                    row: (NSInteger) row;
 - (BOOL) tableView: (NSTableView *) tableView
         writeRowsWithIndexes: (NSIndexSet *) indexes
                 toPasteboard: (NSPasteboard *) pasteboard;
 - (NSDragOperation) tableView: (NSTableView *) tableView
-                 validateDrop: (id<NSDraggingInfo>) draggingInfo
+                 validateDrop: (id <NSDraggingInfo>) draggingInfo
                   proposedRow: (NSInteger) proposedRow
         proposedDropOperation: (NSTableViewDropOperation) dropOperation;
 - (BOOL) tableView: (NSTableView *) tableView
-           acceptDrop: (id<NSDraggingInfo>) draggingInfo
+           acceptDrop: (id <NSDraggingInfo>) draggingInfo
                   row: (NSInteger) row
         dropOperation: (NSTableViewDropOperation) dropOperation;
 - (void) tableView: (NSTableView *) tableView
@@ -365,22 +369,22 @@ typedef NS_ENUM(NSInteger, NSTableRowActionEdge) {
 @protocol NSTableViewDelegate <NSObject>
 @optional
 - (BOOL) tableView: (NSTableView *) tableView
-        shouldEditTableColumn: (NSTableColumn *) tableColumn
+        shouldEditTableColumn: (nullable NSTableColumn *) tableColumn
                           row: (NSInteger) row;
 - (BOOL) selectionShouldChangeInTableView: (NSTableView *) tableView;
 - (CGFloat) tableView: (NSTableView *) tableView heightOfRow: (NSInteger) row;
 - (BOOL) tableView: (NSTableView *) tableView shouldSelectRow: (NSInteger) row;
 - (BOOL) tableView: (NSTableView *) tableView isGroupRow: (NSInteger) row;
 - (BOOL) tableView: (NSTableView *) tableView
-        shouldSelectTableColumn: (NSTableColumn *) tableColumn;
+        shouldSelectTableColumn: (nullable NSTableColumn *) tableColumn;
 - (void) tableView: (NSTableView *) tableView
         mouseDownInHeaderOfTableColumn: (NSTableColumn *) tableColumn;
 - (void) tableView: (NSTableView *) tableView
-        willDisplayCell: cell
-         forTableColumn: (NSTableColumn *) tableColumn
+        willDisplayCell: (id) cell
+         forTableColumn: (nullable NSTableColumn *) tableColumn
                     row: (NSInteger) row;
-- (NSView *) tableView: (NSTableView *) tableView
-    viewForTableColumn: (NSTableColumn *) tableColumn
+- (nullable NSView *) tableView: (NSTableView *) tableView
+    viewForTableColumn: (nullable NSTableColumn *) tableColumn
                    row: (NSInteger) row;
 - (NSIndexSet *) tableView: (NSTableView *) tableView
         selectionIndexesForProposedSelection: (NSIndexSet *) proposedSelectionIndexes;
@@ -390,22 +394,22 @@ typedef NS_ENUM(NSInteger, NSTableRowActionEdge) {
 - (NSString *) tableView: (NSTableView *) tableView
           toolTipForCell: (NSCell *) cell
                     rect: (NSRectPointer) rect
-             tableColumn: (NSTableColumn *) tableColumn
+             tableColumn: (nullable NSTableColumn *) tableColumn
                      row: (NSInteger) row
            mouseLocation: (NSPoint) mouseLocation;
-- (BOOL) tableView: (NSTableView *) tableView shouldShowCellExpansionForTableColumn: (NSTableColumn *) tableColumn row: (NSInteger) row;
+- (BOOL) tableView: (NSTableView *) tableView shouldShowCellExpansionForTableColumn: (nullable NSTableColumn *) tableColumn row: (NSInteger) row;
 - (BOOL) tableView: (NSTableView *) tableView
         shouldTrackCell: (NSCell *) cell
-         forTableColumn: (NSTableColumn *) tableColumn
+         forTableColumn: (nullable NSTableColumn *) tableColumn
                     row: (NSInteger) row;
-- (NSString *) tableView: (NSTableView *) tableView typeSelectStringForTableColumn: (NSTableColumn *) tableColumn row: (NSInteger) row;
+- (nullable NSString *) tableView: (NSTableView *) tableView typeSelectStringForTableColumn: (nullable NSTableColumn *) tableColumn row: (NSInteger) row;
 - (NSInteger) tableView: (NSTableView *) tableView
         nextTypeSelectMatchFromRow: (NSInteger) startRow
                              toRow: (NSInteger) endRow
                          forString: (NSString *) searchString;
 - (BOOL) tableView: (NSTableView *) tableView
         shouldTypeSelectForEvent: (NSEvent *) event
-         withCurrentSearchString: (NSString *) searchString;
+         withCurrentSearchString: (nullable NSString *) searchString;
 @end
 
 @interface NSObject (NSTableView_notifications)
@@ -414,3 +418,5 @@ typedef NS_ENUM(NSInteger, NSTableRowActionEdge) {
 - (void) tableViewColumnDidMove: (NSNotification *) note;
 - (void) tableViewColumnDidResize: (NSNotification *) note;
 @end
+
+NS_ASSUME_NONNULL_END

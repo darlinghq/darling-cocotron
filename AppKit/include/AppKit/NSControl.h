@@ -24,6 +24,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSCell, NSFont, NSText, NSTextView, NSControlAuxiliary;
 
+NS_ASSUME_NONNULL_BEGIN
+
 APPKIT_EXPORT const NSNotificationName NSControlTextDidBeginEditingNotification;
 APPKIT_EXPORT const NSNotificationName NSControlTextDidChangeNotification;
 APPKIT_EXPORT const NSNotificationName NSControlTextDidEndEditingNotification;
@@ -45,16 +47,16 @@ APPKIT_EXPORT const NSNotificationName NSControlTextDidEndEditingNotification;
 @property BOOL allowsExpansionToolTips;
 @property BOOL allowsLogicalLayoutDirection;
 
-+ (Class) cellClass;
-+ (void) setCellClass: (Class) aClass;
++ (nullable Class) cellClass;
++ (void) setCellClass: (nullable Class) aClass;
 
-@property(nonatomic, retain) id cell;
+@property(null_unspecified, nonatomic, retain) id cell;
 
 @property (assign, nullable) id target;
 @property(nonatomic) SEL action;
 @property(nonatomic) NSInteger tag;
-@property (retain) NSFont *font;
-@property(nonatomic, retain) NSImage *image;
+@property (nullable, retain) NSFont *font;
+@property(null_unspecified, nonatomic, retain) NSImage *image;
 @property(nonatomic) NSTextAlignment alignment;
 @property(nonatomic, getter=isEnabled) BOOL enabled;
 @property(nonatomic, getter=isEditable) BOOL editable;
@@ -64,13 +66,13 @@ APPKIT_EXPORT const NSNotificationName NSControlTextDidEndEditingNotification;
 @property(nonatomic, getter=isBezeled) BOOL bezeled;
 @property(nonatomic, getter=isContinuous) BOOL continuous;
 @property(nonatomic) BOOL refusesFirstResponder;
-@property(nonatomic, retain) id formatter;
+@property(null_unspecified, nonatomic, retain) id formatter;
 @property NSLineBreakMode lineBreakMode;
 @property(nonatomic) BOOL usesSingleLineMode;
 // The cell's control size.
 @property(nonatomic) NSControlSize controlSize;
 
-@property(nonatomic, retain) id objectValue;
+@property(nullable, nonatomic, retain) id objectValue;
 @property(nonatomic, copy) NSString *stringValue;
 @property(nonatomic, copy) NSAttributedString *attributedStringValue;
 @property(nonatomic) int intValue;
@@ -78,7 +80,7 @@ APPKIT_EXPORT const NSNotificationName NSControlTextDidEndEditingNotification;
 @property double doubleValue;
 @property(nonatomic) NSInteger integerValue;
 
-@property(nonatomic, readonly) id selectedCell;
+@property(null_unspecified, nonatomic, readonly) id selectedCell;
 @property(nonatomic, readonly) NSInteger selectedTag;
 
 - (void) setFloatingPointFormat: (BOOL) fpp
@@ -86,12 +88,12 @@ APPKIT_EXPORT const NSNotificationName NSControlTextDidEndEditingNotification;
                           right: (NSUInteger) right;
 
 
-- (void) takeObjectValueFrom: (id) sender;
-- (void) takeStringValueFrom: (id) sender;
-- (void) takeIntValueFrom: (id) sender;
-- (void) takeFloatValueFrom: (id) sender;
-- (void) takeDoubleValueFrom: (id) sender;
-- (void) takeIntegerValueFrom: (id) sender;
+- (void) takeObjectValueFrom: (nullable id) sender;
+- (void) takeStringValueFrom: (nullable id) sender;
+- (void) takeIntValueFrom: (nullable id) sender;
+- (void) takeFloatValueFrom: (nullable id) sender;
+- (void) takeDoubleValueFrom: (nullable id) sender;
+- (void) takeIntegerValueFrom: (nullable id) sender;
 
 - (void) selectCell: (NSCell *) cell;
 
@@ -100,11 +102,11 @@ APPKIT_EXPORT const NSNotificationName NSControlTextDidEndEditingNotification;
 - (void) updateCell: (NSCell *) cell;
 - (void) updateCellInside: (NSCell *) cell;
 
-- (void) performClick: sender;
-- (BOOL) sendAction: (SEL) action to: target;
+- (void) performClick: (nullable id) sender;
+- (BOOL) sendAction: (nullable SEL) action to: (nullable id) target;
 - (NSInteger) sendActionOn: (NSInteger) mask;
 
-- (NSText *) currentEditor;
+- (nullable NSText *) currentEditor;
 - (void) validateEditing;
 - (BOOL) abortEditing;
 
@@ -131,9 +133,11 @@ APPKIT_EXPORT const NSNotificationName NSControlTextDidEndEditingNotification;
         textShouldEndEditing: (NSText *) fieldEditor;
 - (BOOL) control: (NSControl *) control
         didFailToFormatString: (NSString *) string
-             errorDescription: (NSString *) error;
+             errorDescription: (nullable NSString *) error;
 - (void) control: (NSControl *) control
         didFailToValidatePartialString: (NSString *) string
-                      errorDescription: (NSString *) error;
-- (BOOL) control: (NSControl *) control isValidObject: (id) obj;
+                      errorDescription: (nullable NSString *) error;
+- (BOOL) control: (NSControl *) control isValidObject: (nullable id) obj;
 @end
+
+NS_ASSUME_NONNULL_END

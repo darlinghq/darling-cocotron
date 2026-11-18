@@ -21,6 +21,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSButton.h>
 #import <AppKit/NSMenuItem.h>
 
+@class NSMenuItem;
+
+NS_ASSUME_NONNULL_BEGIN
+
 APPKIT_EXPORT NSString *const NSPopUpButtonWillPopUpNotification;
 
 // Legacy ObjC ABI (i386): instance size must stay 0x60, Apple's; the ivars
@@ -31,33 +35,33 @@ APPKIT_EXPORT NSString *const NSPopUpButtonWillPopUpNotification;
         BOOL _observerAdded;
     NS_EXTRA_IVARS_END(NSPopUpButton)
 }
-- initWithFrame: (NSRect) frame pullsDown: (BOOL) pullsDown;
+- (instancetype) initWithFrame: (NSRect) frame pullsDown: (BOOL) pullsDown;
 
 @property(nonatomic) BOOL pullsDown;
-@property(nonatomic, retain) NSMenu *menu;
+@property(nullable, nonatomic, retain) NSMenu *menu;
 @property(nonatomic) BOOL autoenablesItems;
 @property(nonatomic) NSRectEdge preferredEdge;
 
-- (NSArray *) itemArray;
+- (NSArray<NSMenuItem *> *) itemArray;
 - (NSInteger) numberOfItems;
 
-- (NSMenuItem *) itemAtIndex: (NSInteger) index;
-- (NSMenuItem *) itemWithTitle: (NSString *) title;
-- (NSMenuItem *) lastItem;
+- (nullable NSMenuItem *) itemAtIndex: (NSInteger) index;
+- (nullable NSMenuItem *) itemWithTitle: (NSString *) title;
+- (nullable NSMenuItem *) lastItem;
 
 - (NSInteger) indexOfItem: (NSMenuItem *) item;
 - (NSInteger) indexOfItemWithTitle: (NSString *) title;
 - (NSInteger) indexOfItemWithTag: (NSInteger) tag;
-- (NSInteger) indexOfItemWithRepresentedObject: object;
-- (NSInteger) indexOfItemWithTarget: target andAction: (SEL) action;
+- (NSInteger) indexOfItemWithRepresentedObject: (nullable id) object;
+- (NSInteger) indexOfItemWithTarget: (nullable id) target andAction: (nullable SEL) action;
 
-- (NSMenuItem *) selectedItem;
-- (NSString *) titleOfSelectedItem;
+- (nullable NSMenuItem *) selectedItem;
+- (nullable NSString *) titleOfSelectedItem;
 - (NSInteger) indexOfSelectedItem;
 
 
 - (void) addItemWithTitle: (NSString *) title;
-- (void) addItemsWithTitles: (NSArray *) titles;
+- (void) addItemsWithTitles: (NSArray<NSString *> *) titles;
 
 - (void) removeAllItems;
 - (void) removeItemAtIndex: (NSInteger) index;
@@ -65,14 +69,16 @@ APPKIT_EXPORT NSString *const NSPopUpButtonWillPopUpNotification;
 
 - (void) insertItemWithTitle: (NSString *) title atIndex: (NSInteger) index;
 
-- (void) selectItem: (NSMenuItem *) item;
+- (void) selectItem: (nullable NSMenuItem *) item;
 - (void) selectItemAtIndex: (NSInteger) index;
 - (void) selectItemWithTitle: (NSString *) title;
 - (BOOL) selectItemWithTag: (NSInteger) tag;
 
 - (NSString *) itemTitleAtIndex: (NSInteger) index;
-- (NSArray *) itemTitles;
+- (NSArray<NSString *> *) itemTitles;
 
 - (void) synchronizeTitleAndSelectedItem;
 
 @end
+
+NS_ASSUME_NONNULL_END

@@ -20,6 +20,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/NSControl.h>
 
+NS_ASSUME_NONNULL_BEGIN
+
 typedef NS_ENUM(NSUInteger, NSScrollerPart) {
     NSScrollerNoPart = 0,
     NSScrollerDecrementPage = 1,
@@ -127,3 +129,5 @@ typedef NS_ENUM(NSInteger, NSScrollerKnobStyle) {
 @end
 
 APPKIT_EXPORT NSNotificationName const NSPreferredScrollerStyleDidChangeNotification;
+
+NS_ASSUME_NONNULL_END

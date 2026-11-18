@@ -169,7 +169,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [self addRow];
     [[[self cells] lastObject] setTitle: title];
 
-    return [[self cells] lastObject];
+    return (NSFormCell *)[[self cells] lastObject];
 }
 
 - (NSFormCell *) insertEntry: (NSString *) title atIndex: (NSInteger) index {

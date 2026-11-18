@@ -20,6 +20,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/NSActionCell.h>
 
+NS_ASSUME_NONNULL_BEGIN
+
 typedef NS_ENUM(NSUInteger, NSTextFieldBezelStyle) {
     NSTextFieldSquareBezel = 0,
     NSTextFieldRoundedBezel = 1,
@@ -39,16 +41,18 @@ typedef NS_ENUM(NSUInteger, NSTextFieldBezelStyle) {
     NS_EXTRA_IVARS_END(NSTextFieldCell)
 }
 
-@property(copy) NSArray<NSString *> *allowedInputSourceLocales;
+@property(nullable, copy) NSArray<NSString *> *allowedInputSourceLocales;
 
-@property(nonatomic, retain) NSColor *backgroundColor;
-@property(nonatomic, retain) NSColor *textColor;
+@property(nullable, nonatomic, retain) NSColor *backgroundColor;
+@property(nullable, nonatomic, retain) NSColor *textColor;
 @property(nonatomic) BOOL drawsBackground;
 @property(nonatomic) NSTextFieldBezelStyle bezelStyle;
 
-@property(nonatomic, copy) NSString *placeholderString;
-@property(nonatomic, copy) NSAttributedString *placeholderAttributedString;
+@property(nullable, nonatomic, copy) NSString *placeholderString;
+@property(nullable, nonatomic, copy) NSAttributedString *placeholderAttributedString;
 
 
 
 @end
+
+NS_ASSUME_NONNULL_END

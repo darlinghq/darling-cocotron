@@ -23,6 +23,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSColorSpace;
 
+NS_ASSUME_NONNULL_BEGIN
+
 extern NSNotificationName const NSScreenColorSpaceDidChangeNotification;
 
 typedef NSString *NSDeviceDescriptionKey;
@@ -41,11 +43,11 @@ typedef NSString *NSDeviceDescriptionKey;
 @property(readonly) NSWindowDepth depth;
 @property(readonly, copy) NSDictionary<NSDeviceDescriptionKey, id> *deviceDescription;
 
-@property (class, readonly, retain) NSScreen *mainScreen;
+@property (nullable, class, readonly, retain) NSScreen *mainScreen;
 
-@property(class, readonly, retain, nonnull) NSArray *screens;
+@property(class, readonly, retain, nonnull) NSArray<NSScreen *> *screens;
 
-- initWithFrame: (NSRect) frame visibleFrame: (NSRect) visibleFrame;
+- (null_unspecified instancetype) initWithFrame: (NSRect) frame visibleFrame: (NSRect) visibleFrame;
 
 @property (readonly) NSRect frame;
 
@@ -53,7 +55,7 @@ typedef NSString *NSDeviceDescriptionKey;
 
 @property(nonatomic, readonly) CGFloat userSpaceScaleFactor;
 @property (readonly) CGFloat backingScaleFactor;
-@property(nonatomic, readonly) NSColorSpace *colorSpace;
+@property(nullable, nonatomic, readonly) NSColorSpace *colorSpace;
 @property(nonatomic, readonly) NSString *localizedName;
 
 @property(nonatomic, readonly) CGFloat maximumExtendedDynamicRangeColorComponentValue;
@@ -72,7 +74,9 @@ typedef NSString *NSDeviceDescriptionKey;
 @end
 
 @interface NSScreen (Darling)
-@property(nonatomic, copy) NSData *edid;
+@property(null_unspecified, nonatomic, copy) NSData *edid;
 
 @property(nonatomic) CGDirectDisplayID cgDirectDisplayID;
 @end
+
+NS_ASSUME_NONNULL_END

@@ -21,6 +21,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSButtonCell.h>
 #import <AppKit/NSControl.h>
 
+NS_ASSUME_NONNULL_BEGIN
+
 #define _NS_SIDE_NSButton 0, 1,
 // Legacy ObjC ABI (i386): instance size must stay 0x5c, Apple's; the ivars
 // before the extras sit at Apple's offsets. Add new state to the extra
@@ -32,23 +34,23 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     NS_SIDE_IVARS_END(NSButton)
 }
 
-+ (instancetype) buttonWithTitle: (NSString *) title image: (NSImage *) image target: (id) target action: (SEL) action;
-+ (instancetype) checkboxWithTitle: (NSString *) title target: (id) target action: (SEL) action;
-+ (instancetype) radioButtonWithTitle: (NSString *) title target: (id) target action: (SEL) action;
++ (instancetype) buttonWithTitle: (NSString *) title image: (NSImage *) image target: (nullable id) target action: (nullable SEL) action;
++ (instancetype) checkboxWithTitle: (NSString *) title target: (nullable id) target action: (nullable SEL) action;
++ (instancetype) radioButtonWithTitle: (NSString *) title target: (nullable id) target action: (nullable SEL) action;
 
 @property(nonatomic, getter=isTransparent) BOOL transparent;
 @property(nonatomic, copy) NSString *keyEquivalent;
 @property(nonatomic) NSEventModifierFlags keyEquivalentModifierMask;
-@property(nonatomic, retain) NSImage *image;
+@property(nullable, nonatomic, retain) NSImage *image;
 @property(nonatomic) NSCellImagePosition imagePosition;
 @property(nonatomic, copy) NSString *title;
 @property(nonatomic) NSControlStateValue state;
 @property(nonatomic) BOOL allowsMixedState;
-@property(nonatomic, retain) NSSound *sound;
+@property(nullable, nonatomic, retain) NSSound *sound;
 
 @property(nonatomic) NSBezelStyle bezelStyle;
 @property(nonatomic, copy) NSString *alternateTitle;
-@property(nonatomic, retain) NSImage *alternateImage;
+@property(nullable, nonatomic, retain) NSImage *alternateImage;
 @property(nonatomic, copy) NSAttributedString *attributedTitle;
 @property(nonatomic, copy) NSAttributedString *attributedAlternateTitle;
 @property(nonatomic) BOOL showsBorderOnlyWhileMouseInside;
@@ -60,28 +62,30 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (void) setPeriodicDelay: (float) delay interval: (float) interval;
 
 - (void) setButtonType: (NSButtonType) value;
-- (void) setTitleWithMnemonic: (NSString *) value;
+- (void) setTitleWithMnemonic: (null_unspecified NSString *) value;
 
 - (void) highlight: (BOOL) value;
 - (BOOL) performKeyEquivalent: (NSEvent *) event;
-- (void) performClick: sender;
+- (void) performClick: (nullable id) sender;
 
 // Convenience constructors (10.12)
 + (instancetype) buttonWithTitle: (NSString *) title
-                          target: (id) target
-                          action: (SEL) action;
+                          target: (nullable id) target
+                          action: (nullable SEL) action;
 + (instancetype) buttonWithImage: (NSImage *) image
-                          target: (id) target
-                          action: (SEL) action;
+                          target: (nullable id) target
+                          action: (nullable SEL) action;
 
 @end
 
 @interface NSButton (NSButtonContentTint)
 // Stored only: the image and title aren't tinted.
-@property(copy) NSColor *contentTintColor;
+@property(nullable, copy) NSColor *contentTintColor;
 @end
 
 @interface NSButton (NSDestructiveAction)
 // macOS 11: marks a button whose action is destructive (stored; not drawn differently).
 @property(nonatomic) BOOL hasDestructiveAction;
 @end
+
+NS_ASSUME_NONNULL_END

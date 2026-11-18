@@ -23,6 +23,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSTextView;
 
+NS_ASSUME_NONNULL_BEGIN
+
 typedef NS_ENUM(NSUInteger, NSLineSweepDirection) {
     NSLineSweepUp,
     NSLineSweepDown,
@@ -53,16 +55,16 @@ typedef NS_ENUM(NSUInteger, NSLineMovementDirection) {
     NS_EXTRA_IVARS_END(NSTextContainer)
 }
 
-- initWithContainerSize: (NSSize) size;
+- (instancetype) initWithContainerSize: (NSSize) size;
 
 @property(nonatomic) NSSize containerSize;
 
-@property(nonatomic, retain) NSTextView *textView;
+@property(nullable, nonatomic, retain) NSTextView *textView;
 @property(readonly) NSTextLayoutOrientation layoutOrientation;
 @property(nonatomic) BOOL widthTracksTextView;
 @property(nonatomic) BOOL heightTracksTextView;
 
-@property(nonatomic, retain) NSLayoutManager *layoutManager;
+@property(nullable, nonatomic, retain) NSLayoutManager *layoutManager;
 
 @property(nonatomic) CGFloat lineFragmentPadding;
 @property(nonatomic) NSUInteger maximumNumberOfLines;
@@ -79,6 +81,8 @@ typedef NS_ENUM(NSUInteger, NSLineMovementDirection) {
 - (NSRect) lineFragmentRectForProposedRect: (NSRect) proposed
                             sweepDirection: (NSLineSweepDirection) sweep
                          movementDirection: (NSLineMovementDirection) movement
-                             remainingRect: (NSRectPointer) remaining;
+                             remainingRect: (nullable NSRectPointer) remaining;
 
 @end
+
+NS_ASSUME_NONNULL_END

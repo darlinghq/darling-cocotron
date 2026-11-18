@@ -23,6 +23,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSTableView, NSCell;
 
+NS_ASSUME_NONNULL_BEGIN
+
 typedef NS_OPTIONS(NSUInteger, NSTableColumnResizingOptions) {
     NSTableColumnNoResizing = 0x00,
     NSTableColumnAutoresizingMask = 0x01,
@@ -55,11 +57,11 @@ typedef NS_OPTIONS(NSUInteger, NSTableColumnResizingOptions) {
 
 @property(copy) NSString *title;
 
-@property(nonatomic, retain) NSTableView *tableView;
+@property(nullable, nonatomic, retain) NSTableView *tableView;
 - (NSString *) title;
-@property(nonatomic, retain) id headerCell;
+@property(null_unspecified, nonatomic, retain) id headerCell;
 @property(nonatomic, retain) id dataCell;
-@property(nonatomic, copy) NSString *headerToolTip;
+@property(nullable, nonatomic, copy) NSString *headerToolTip;
 
 @property(nonatomic, getter=isHidden) BOOL hidden;
 @property(nonatomic) CGFloat width;
@@ -72,13 +74,15 @@ typedef NS_OPTIONS(NSUInteger, NSTableColumnResizingOptions) {
 - (void) setTitle: (NSString *) title;
 
 
-- (NSCell *) dataCellForRow: (NSInteger) row;
+- (null_unspecified NSCell *) dataCellForRow: (NSInteger) row;
 
-@property(nonatomic, retain) NSSortDescriptor *sortDescriptorPrototype;
+@property(nullable, nonatomic, retain) NSSortDescriptor *sortDescriptorPrototype;
 
 // internal
-- (void) prepareCell: (id) cell inRow: (NSInteger) row;
+- (void) prepareCell: (null_unspecified id) cell inRow: (NSInteger) row;
 - (void) _boundValuesChanged;
 - (void) _sort;
 
 @end
+
+NS_ASSUME_NONNULL_END

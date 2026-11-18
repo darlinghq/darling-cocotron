@@ -27,6 +27,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Foundation/NSNotification.h>
 #import <Foundation/NSRunLoop.h>
 
+@class NSDocument;
+
+NS_ASSUME_NONNULL_BEGIN
+
 @class NSWindow, NSImage, NSMenu, NSPasteboard, NSDisplay, NSDockTile,
         NSAppearance;
 @protocol NSApplicationDelegate;
@@ -139,6 +143,8 @@ typedef NS_OPTIONS(NSUInteger, NSRemoteNotificationType) {
 // Legacy ObjC ABI (i386): instance size must stay 0x4c, Apple's; the ivars
 // before the extras sit at Apple's offsets. Add new state to the extra
 // struct, never as an ivar.
+typedef NSString *NSAboutPanelOptionKey NS_TYPED_ENUM;
+
 @interface NSApplication : NSResponder {
     NSEvent *_currentEvent;
     NSMutableArray *_windows;
@@ -190,45 +196,45 @@ typedef NS_OPTIONS(NSUInteger, NSRemoteNotificationType) {
 // The window server connection id, as passed to CGS* calls.
 - (unsigned int) contextID;
 
-@property(strong) NSMenu *helpMenu;
+@property(nullable, strong) NSMenu *helpMenu;
 @property(readonly) NSApplicationPresentationOptions currentSystemPresentationOptions;
 @property NSApplicationPresentationOptions presentationOptions;
-@property(strong) NSAppearance *appearance;
+@property(nullable, strong) NSAppearance *appearance;
 @property(readonly, strong) NSAppearance *effectiveAppearance;
 @property(getter=isAutomaticCustomizeTouchBarMenuItemEnabled)
         BOOL automaticCustomizeTouchBarMenuItemEnabled;
 // Private AppKit flag for the help-viewer's find bar.
 @property(getter=isDefaultHelpBookSearchEnabled) BOOL defaultHelpBookSearchEnabled;
 
-@property (class, readonly, retain, nonnull) NSApplication *sharedApplication;
+@property (class, readonly, retain, nonnull) __kindof NSApplication *sharedApplication;
 
 + (void) detachDrawingThread: (SEL) selector
-                    toTarget: target
-                  withObject: object;
+                    toTarget: (id) target
+                  withObject: (nullable id) object;
 
-- init;
+- (instancetype) init;
 
-- (NSGraphicsContext *) context;
+- (nullable NSGraphicsContext *) context;
 
-@property(assign) id<NSApplicationDelegate> delegate;
-@property(nonatomic, readonly) NSArray *windows;
-- (NSWindow *) windowWithWindowNumber: (NSInteger) number;
+@property(nullable, assign) id<NSApplicationDelegate> delegate;
+@property(nonatomic, readonly) NSArray<NSWindow *> *windows;
+- (nullable NSWindow *) windowWithWindowNumber: (NSInteger) number;
 
-@property(nonatomic, retain) NSMenu *mainMenu;
-@property(nonatomic, retain) NSMenu *windowsMenu;
-@property(nonatomic, readonly) NSWindow *mainWindow;
-@property(nonatomic, readonly) NSWindow *keyWindow;
-@property(nonatomic, retain) NSImage *applicationIconImage;
+@property(nullable, nonatomic, retain) NSMenu *mainMenu;
+@property(nullable, nonatomic, retain) NSMenu *windowsMenu;
+@property(nullable, nonatomic, readonly) NSWindow *mainWindow;
+@property(nullable, nonatomic, readonly) NSWindow *keyWindow;
+@property(null_resettable, nonatomic, retain) NSImage *applicationIconImage;
 @property(nonatomic, getter=isActive, readonly) BOOL active;
 @property (readonly) BOOL isHidden;
 @property(nonatomic, getter=isRunning, readonly) BOOL running;
 @property(nonatomic, getter=isFullKeyboardAccessEnabled, readonly) BOOL fullKeyboardAccessEnabled;
 
-- (NSWindow *) makeWindowsPerform: (SEL) selector inOrder: (BOOL) inOrder;
-- (void) miniaturizeAll: sender;
+- (nullable NSWindow *) makeWindowsPerform: (SEL) selector inOrder: (BOOL) inOrder;
+- (void) miniaturizeAll: (nullable id) sender;
 
-@property(nonatomic, readonly) NSArray *orderedDocuments;
-@property(nonatomic, readonly) NSArray *orderedWindows;
+@property(nonatomic, readonly) NSArray<NSDocument *> *orderedDocuments;
+@property(nonatomic, readonly) NSArray<NSWindow *> *orderedWindows;
 - (void) preventWindowOrdering;
 
 
@@ -249,19 +255,19 @@ typedef NS_OPTIONS(NSUInteger, NSRemoteNotificationType) {
 
 - (void) sendEvent: (NSEvent *) event;
 
-- (NSEvent *) nextEventMatchingMask: (NSUInteger) mask
-                          untilDate: (NSDate *) untilDate
+- (nullable NSEvent *) nextEventMatchingMask: (NSUInteger) mask
+                          untilDate: (nullable NSDate *) untilDate
                              inMode: (NSRunLoopMode) mode
                             dequeue: (BOOL) dequeue;
-@property(nonatomic, readonly) NSEvent *currentEvent;
+@property(nullable, nonatomic, readonly) NSEvent *currentEvent;
 - (void) discardEventsMatchingMask: (NSUInteger) mask
-                       beforeEvent: (NSEvent *) event;
+                       beforeEvent: (nullable NSEvent *) event;
 - (void) postEvent: (NSEvent *) event atStart: (BOOL) atStart;
 
-- targetForAction: (SEL) action;
-- targetForAction: (SEL) action to: target from: sender;
-- (BOOL) sendAction: (SEL) action to: target from: sender;
-- (BOOL) tryToPerform: (SEL) selector with: object;
+- (nullable id) targetForAction: (SEL) action;
+- (nullable id) targetForAction: (SEL) action to: (nullable id) target from: (nullable id) sender;
+- (BOOL) sendAction: (SEL) action to: (nullable id) target from: (nullable id) sender;
+- (BOOL) tryToPerform: (SEL) selector with: (nullable id) object;
 
 - (void) setWindowsNeedUpdate: (BOOL) value;
 - (void) updateWindows;
@@ -272,7 +278,7 @@ typedef NS_OPTIONS(NSUInteger, NSRemoteNotificationType) {
 - (void) yieldActivationToApplication: (NSRunningApplication *) application;
 - (void) yieldActivationToApplicationWithBundleIdentifier: (NSString *) bundleIdentifier;
 
-@property(nonatomic, readonly) NSWindow *modalWindow;
+@property(nullable, nonatomic, readonly) NSWindow *modalWindow;
 - (NSModalSession) beginModalSessionForWindow: (NSWindow *) window;
 - (NSModalResponse) runModalSession: (NSModalSession) session;
 - (void) endModalSession: (NSModalSession) session;
@@ -284,9 +290,9 @@ typedef NS_OPTIONS(NSUInteger, NSRemoteNotificationType) {
 
 - (void) beginSheet: (NSWindow *) sheet
         modalForWindow: (NSWindow *) window
-         modalDelegate: (id) modalDelegate
-        didEndSelector: (SEL) didEndSelector
-           contextInfo: (void *) contextInfo;
+         modalDelegate: (nullable id) modalDelegate
+        didEndSelector: (nullable SEL) didEndSelector
+           contextInfo: (null_unspecified void *) contextInfo;
 
 - (void) endSheet: (NSWindow *) sheet returnCode: (NSModalResponse) returnCode;
 - (void) endSheet: (NSWindow *) sheet;
@@ -296,35 +302,35 @@ typedef NS_OPTIONS(NSUInteger, NSRemoteNotificationType) {
 - (int) requestUserAttention: (NSRequestUserAttentionType) attentionType;
 - (void) cancelUserAttentionRequest: (int) requestNumber;
 
-- (void) runPageLayout: sender;
-- (void) orderFrontColorPanel: sender;
-- (void) orderFrontCharacterPalette: sender;
+- (void) runPageLayout: (nullable id) sender;
+- (void) orderFrontColorPanel: (nullable id) sender;
+- (void) orderFrontCharacterPalette: (nullable id) sender;
 
-- (void) hide: sender;
-- (void) hideOtherApplications: sender;
-- (void) unhide: sender;
-- (void) unhideAllApplications: sender;
+- (void) hide: (nullable id) sender;
+- (void) hideOtherApplications: (nullable id) sender;
+- (void) unhide: (nullable id) sender;
+- (void) unhideAllApplications: (nullable id) sender;
 - (void) unhideWithoutActivation;
-- (void) stop: sender;
-- (void) terminate: sender;
+- (void) stop: (nullable id) sender;
+- (void) terminate: (nullable id) sender;
 
 - (void) replyToApplicationShouldTerminate: (BOOL) terminate;
 - (void) replyToOpenOrPrint: (NSApplicationDelegateReply) reply;
 
-- (void) arrangeInFront: sender;
+- (void) arrangeInFront: (nullable id) sender;
 
-@property(nonatomic, retain) NSMenu *servicesMenu;
-- servicesProvider;
-- (void) setServicesProvider: provider;
+@property(nullable, nonatomic, retain) NSMenu *servicesMenu;
+- (nullable id) servicesProvider;
+- (void) setServicesProvider: (nullable id) provider;
 - (void) registerServicesMenuSendTypes: (NSArray *) sendTypes
                            returnTypes: (NSArray *) returnTypes;
-- validRequestorForSendType: (NSString *) sendType
-                 returnType: (NSString *) returnType;
+- (nullable id) validRequestorForSendType: (null_unspecified NSString *) sendType
+                 returnType: (null_unspecified NSString *) returnType;
 
-- (void) orderFrontStandardAboutPanel: sender;
-- (void) orderFrontStandardAboutPanelWithOptions: (NSDictionary *) options;
-- (void) activateContextHelpMode: sender;
-- (void) showHelp: sender;
+- (void) orderFrontStandardAboutPanel: (nullable id) sender;
+- (void) orderFrontStandardAboutPanelWithOptions: (NSDictionary<NSAboutPanelOptionKey, id> *) options;
+- (void) activateContextHelpMode: (nullable id) sender;
+- (void) showHelp: (nullable id) sender;
 
 @property(nonatomic, readonly) NSDockTile *dockTile;
 
@@ -332,12 +338,12 @@ typedef NS_OPTIONS(NSUInteger, NSRemoteNotificationType) {
 - (void) enableRelaunchOnLogin;
 
 // private
-- (void) _addWindow: (NSWindow *) window;
+- (void) _addWindow: (null_unspecified NSWindow *) window;
 
-- (void) _windowWillBecomeActive: (NSWindow *) window;
-- (void) _windowDidBecomeActive: (NSWindow *) window;
-- (void) _windowWillBecomeDeactive: (NSWindow *) window;
-- (void) _windowDidBecomeDeactive: (NSWindow *) window;
+- (void) _windowWillBecomeActive: (null_unspecified NSWindow *) window;
+- (void) _windowDidBecomeActive: (null_unspecified NSWindow *) window;
+- (void) _windowWillBecomeDeactive: (null_unspecified NSWindow *) window;
+- (void) _windowDidBecomeDeactive: (null_unspecified NSWindow *) window;
 
 @end
 
@@ -353,7 +359,7 @@ APPKIT_EXPORT __kindof NSApplication *NSApp;
 
 - (BOOL) application: (NSApplication *) theApplication
             openFile: (NSString *) filename;
-- (void) application: (NSApplication *) sender openFiles: (NSArray *) filenames;
+- (void) application: (NSApplication *) sender openFiles: (NSArray<NSString *> *) filenames;
 - (void) application: (NSApplication *) application
             openURLs: (NSArray<NSURL *> *) urls;
 - (BOOL) application: (id) sender openFileWithoutUI: (NSString *) filename;
@@ -362,7 +368,7 @@ APPKIT_EXPORT __kindof NSApplication *NSApp;
 - (BOOL) application: (NSApplication *) theApplication
            printFile: (NSString *) filename;
 - (NSApplicationPrintReply) application: (NSApplication *) application
-                             printFiles: (NSArray *) fileNames
+                             printFiles: (NSArray<NSString *> *) fileNames
                            withSettings: (NSDictionary *) printSettings
                         showPrintPanels: (BOOL) showPrintPanels;
 - (NSError *) application: (NSApplication *) application
@@ -374,7 +380,7 @@ APPKIT_EXPORT __kindof NSApplication *NSApp;
 - (void) applicationDidResignActive: (NSNotification *) aNotification;
 - (void) applicationDidUnhide: (NSNotification *) aNotification;
 - (void) applicationDidUpdate: (NSNotification *) aNotification;
-- (NSMenu *) applicationDockMenu: (NSApplication *) sender;
+- (nullable NSMenu *) applicationDockMenu: (NSApplication *) sender;
 - (BOOL) application: (NSApplication *) sender delegateHandlesKey: (NSString *) key;
 - (BOOL) applicationOpenUntitledFile: (NSApplication *) theApplication;
 - (BOOL) applicationShouldHandleReopen: (NSApplication *) theApplication
@@ -403,17 +409,16 @@ APPKIT_EXPORT BOOL NSPerformService(NSString *itemName,
 
 @interface NSApplication (NSWindowEnumeration)
 - (void) enumerateWindowsWithOptions: (NSWindowListOptions) options
-                                usingBlock: (void (^)(NSWindow *window, BOOL *stop)) block;
+                                usingBlock: (void (NS_NOESCAPE ^)(NSWindow *window, BOOL *stop)) block;
 @end
 
 // Performance-test hooks; they do nothing here.
 @interface NSApplication (NSApplicationPerformanceTesting)
-- (void) startedTest: (NSString *) name;
-- (void) finishedTest: (NSString *) name;
-- (void) failedTest: (NSString *) name withFailure: (NSString *) failureReason;
+- (void) startedTest: (null_unspecified NSString *) name;
+- (void) finishedTest: (null_unspecified NSString *) name;
+- (void) failedTest: (null_unspecified NSString *) name withFailure: (null_unspecified NSString *) failureReason;
 @end
 
-typedef NSString *NSAboutPanelOptionKey NS_TYPED_ENUM;
 
 APPKIT_EXPORT NSAboutPanelOptionKey const NSAboutPanelOptionCredits;
 APPKIT_EXPORT NSAboutPanelOptionKey const NSAboutPanelOptionApplicationName;
@@ -422,3 +427,5 @@ APPKIT_EXPORT NSAboutPanelOptionKey const NSAboutPanelOptionVersion;
 APPKIT_EXPORT NSAboutPanelOptionKey const NSAboutPanelOptionApplicationVersion;
 APPKIT_EXPORT NSString * const NSApplicationLaunchRemoteNotificationKey;
 APPKIT_EXPORT NSNotificationName const NSApplicationDidChangeOcclusionStateNotification;
+
+NS_ASSUME_NONNULL_END

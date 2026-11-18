@@ -25,6 +25,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 @class CIContext;
 @class NSWindow, NSBitmapImageRep;
 
+NS_ASSUME_NONNULL_BEGIN
+
 typedef enum {
     NSImageInterpolationDefault = kCGInterpolationDefault,
     NSImageInterpolationNone = kCGInterpolationNone,
@@ -65,13 +67,13 @@ typedef enum {
 + (NSGraphicsContext *) graphicsContextWithWindow: (NSWindow *) window;
 + (NSGraphicsContext *) graphicsContextWithGraphicsPort: (CGContextRef) context
                                                 flipped: (BOOL) flipped;
-+ (NSGraphicsContext *) graphicsContextWithBitmapImageRep:
++ (nullable NSGraphicsContext *) graphicsContextWithBitmapImageRep:
         (NSBitmapImageRep *) imageRep;
 + (NSGraphicsContext *) graphicsContextWithCGContext: (CGContextRef) context
                                              flipped: (BOOL) flipped;
 
-@property (class, readonly, retain) NSGraphicsContext *currentContext NS_SWIFT_NAME(current);
-+ (void) setCurrentContext: (NSGraphicsContext *) context;
+@property (nullable, class, readonly, retain) NSGraphicsContext *currentContext NS_SWIFT_NAME(current);
++ (void) setCurrentContext: (nullable NSGraphicsContext *) context;
 
 + (void) saveGraphicsState;
 + (void) restoreGraphicsState;
@@ -80,7 +82,7 @@ typedef enum {
 
 @property (readonly) void *graphicsPort;
 @property (readonly) CGContextRef CGContext NS_SWIFT_NAME(cgContext);
-- (NSMutableArray *) focusStack;
+- (null_unspecified NSMutableArray *) focusStack;
 
 @property (readonly) BOOL isDrawingToScreen;
 @property (readonly) BOOL isFlipped;
@@ -92,7 +94,7 @@ typedef enum {
 @property NSCompositingOperation compositingOperation;
 @property(nonatomic) NSPoint patternPhase;
 
-- (CIContext *) CIContext;
+- (nullable CIContext *) CIContext;
 
 - (void) saveGraphicsState;
 - (void) restoreGraphicsState;
@@ -116,3 +118,5 @@ typedef enum {
 + (void) setQuartzDebugMode: (BOOL) mode;
 
 @end
+
+NS_ASSUME_NONNULL_END

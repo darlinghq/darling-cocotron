@@ -25,6 +25,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSEvent, NSWindow, NSGraphicsContext, NSTrackingArea, NSView, NSSet;
 
+NS_ASSUME_NONNULL_BEGIN
+
 typedef NS_ENUM(NSUInteger, NSEventType) {
     NSEventTypeLeftMouseDown = 1,
 
@@ -321,73 +323,73 @@ typedef NS_OPTIONS(NSUInteger, NSEventSwipeTrackingOptions) {
 @property (class, readonly) NSEventModifierFlags modifierFlags;
 @property(class, readonly) NSUInteger pressedMouseButtons;
 
-+ (id) addLocalMonitorForEventsMatchingMask: (NSEventMask) mask
++ (nullable id) addLocalMonitorForEventsMatchingMask: (NSEventMask) mask
                                     handler: (NSEvent *_Nullable (^)(NSEvent *_Nonnull event)) block;
-+ (id) addGlobalMonitorForEventsMatchingMask: (NSEventMask) mask
++ (nullable id) addGlobalMonitorForEventsMatchingMask: (NSEventMask) mask
                                       handler: (void (^)(NSEvent *_Nonnull event)) block;
 + (void) removeMonitor: (id) eventMonitor;
 + (void) setMouseCoalescingEnabled: (BOOL) flag;
 + (BOOL) isMouseCoalescingEnabled;
-- (NSSet *) touchesMatchingPhase: (NSUInteger) phase inView: (NSView *) view;
+- (NSSet *) touchesMatchingPhase: (NSUInteger) phase inView: (nullable NSView *) view;
 
-- (instancetype) initWithType: (NSEventType) type
+- (null_unspecified instancetype) initWithType: (NSEventType) type
                      location: (NSPoint) location
                 modifierFlags: (NSEventModifierFlags) modifierFlags
-                       window: (NSWindow *) window;
+                       window: (null_unspecified NSWindow *) window;
 
 // FIXME: get rid of
-+ (NSEvent *) mouseEventWithType: (NSEventType) type
++ (null_unspecified NSEvent *) mouseEventWithType: (NSEventType) type
                         location: (NSPoint) location
                    modifierFlags: (NSEventModifierFlags) modifierFlags
-                          window: (NSWindow *) window
+                          window: (null_unspecified NSWindow *) window
                       clickCount: (NSInteger) clickCount
                           deltaX: (CGFloat) deltaX
                           deltaY: (CGFloat) deltaY;
 
 // FIXME: get rid of
-+ (NSEvent *) mouseEventWithType: (NSEventType) type
++ (null_unspecified NSEvent *) mouseEventWithType: (NSEventType) type
                         location: (NSPoint) location
                    modifierFlags: (NSEventModifierFlags) modifierFlags
-                          window: (NSWindow *) window
+                          window: (null_unspecified NSWindow *) window
                           deltaY: (CGFloat) deltaY;
 
-+ (NSEvent *) enterExitEventWithType: (NSEventType) type
++ (nullable NSEvent *) enterExitEventWithType: (NSEventType) type
                             location: (NSPoint) location
                        modifierFlags: (NSEventModifierFlags) flags
                            timestamp: (NSTimeInterval) timestamp
                         windowNumber: (NSInteger) windowNumber
-                             context: (NSGraphicsContext *) context
+                             context: (null_unspecified NSGraphicsContext *) context
                          eventNumber: (NSInteger) eventNumber
                       trackingNumber: (NSInteger) tracking
-                            userData: (void *) userData;
+                            userData: (nullable void *) userData;
 
-+ (NSEvent *) mouseEventWithType: (NSEventType) type
++ (nullable NSEvent *) mouseEventWithType: (NSEventType) type
                         location: (NSPoint) location
                    modifierFlags: (NSEventModifierFlags) flags
                        timestamp: (NSTimeInterval) timestamp
                     windowNumber: (NSInteger) windowNumber
-                         context: (NSGraphicsContext *) context
+                         context: (null_unspecified NSGraphicsContext *) context
                      eventNumber: (NSInteger) eventNumber
                       clickCount: (NSInteger) clickCount
                         pressure: (float) pressure;
 
-+ (NSEvent *) keyEventWithType: (NSEventType) type
++ (nullable NSEvent *) keyEventWithType: (NSEventType) type
                            location: (NSPoint) location
                       modifierFlags: (NSEventModifierFlags) modifierFlags
                           timestamp: (NSTimeInterval) timestamp
                        windowNumber: (NSInteger) windowNumber
-                            context: (NSGraphicsContext *) context
+                            context: (null_unspecified NSGraphicsContext *) context
                          characters: (NSString *) characters
         charactersIgnoringModifiers: (NSString *) charactersIgnoringModifiers
                           isARepeat: (BOOL) isARepeat
                             keyCode: (unsigned short) keyCode;
 
-+ (NSEvent *) otherEventWithType: (NSEventType) type
++ (nullable NSEvent *) otherEventWithType: (NSEventType) type
                         location: (NSPoint) location
                    modifierFlags: (NSEventModifierFlags) flags
                        timestamp: (NSTimeInterval) timestamp
                     windowNumber: (NSInteger) windowNum
-                         context: (NSGraphicsContext *) context
+                         context: (null_unspecified NSGraphicsContext *) context
                          subtype: (short) subtype
                            data1: (NSInteger) data1
                            data2: (NSInteger) data2;
@@ -396,7 +398,7 @@ typedef NS_OPTIONS(NSUInteger, NSEventSwipeTrackingOptions) {
 @property (readonly) NSTimeInterval timestamp;
 @property (readonly) NSPoint locationInWindow;
 @property (readonly) NSEventModifierFlags modifierFlags;
-@property (readonly, weak) NSWindow *window;
+@property (nullable, readonly, weak) NSWindow *window;
 @property(nonatomic, readonly) NSInteger windowNumber;
 
 @property (readonly) NSInteger clickCount;
@@ -416,10 +418,10 @@ typedef NS_OPTIONS(NSUInteger, NSEventSwipeTrackingOptions) {
 @property(nonatomic, getter=isDirectionInvertedFromDevice, readonly) BOOL directionInvertedFromDevice;
 + (BOOL) isSwipeTrackingFromScrollEventsEnabled;
 
-- (CGEventRef) CGEvent;
+- (nullable CGEventRef) CGEvent;
 
-@property(nonatomic, readonly) NSString *characters;
-@property(readonly, copy) NSString *charactersIgnoringModifiers;
+@property(nullable, nonatomic, readonly) NSString *characters;
+@property(nullable, readonly, copy) NSString *charactersIgnoringModifiers;
 @property(nonatomic, readonly) unsigned short keyCode;
 
 + (void) startPeriodicEventsAfterDelay: (NSTimeInterval) delay
@@ -430,8 +432,8 @@ typedef NS_OPTIONS(NSUInteger, NSEventSwipeTrackingOptions) {
 @property(nonatomic, readonly) NSInteger data1;
 @property(nonatomic, readonly) NSInteger data2;
 @property(nonatomic, readonly) NSInteger trackingNumber;
-@property(nonatomic, readonly) NSTrackingArea *trackingArea;
-@property(nonatomic, readonly) void *userData;
+@property(nullable, nonatomic, readonly) NSTrackingArea *trackingArea;
+@property(nullable, nonatomic, readonly) void *userData;
 
 @property(getter=isARepeat, readonly) BOOL ARepeat;
 @property(nonatomic, getter=isARepeat, readonly) BOOL aRepeat;
@@ -441,3 +443,5 @@ typedef NS_OPTIONS(NSUInteger, NSEventSwipeTrackingOptions) {
 @end
 
 APPKIT_EXPORT NSEventMask NSEventMaskFromType(NSEventType type);
+
+NS_ASSUME_NONNULL_END

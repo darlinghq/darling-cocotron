@@ -20,6 +20,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/NSWindow.h>
 
+NS_ASSUME_NONNULL_BEGIN
+
 enum {
     NSUtilityWindowMask = 0x10,
     NSDocModalWindowMask = 0x40,
@@ -99,3 +101,5 @@ NSBeginInformationalAlertSheet(NSString *title, NSString *defaultButton,
                                NSWindow *documentWindow, id modalDelegate,
                                SEL didEndSelector, SEL didDismissSelector,
                                void *contextInfo, NSString *message, ...);
+
+NS_ASSUME_NONNULL_END

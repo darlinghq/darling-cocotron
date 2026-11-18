@@ -25,6 +25,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSTableColumn, NSButtonCell;
 
+NS_ASSUME_NONNULL_BEGIN
+
 APPKIT_EXPORT NSString *const NSOutlineViewItemWillExpandNotification;
 APPKIT_EXPORT NSString *const NSOutlineViewItemDidExpandNotification;
 APPKIT_EXPORT NSString *const NSOutlineViewItemWillCollapseNotification;
@@ -71,16 +73,16 @@ APPKIT_EXPORT NSString *const NSOutlineViewShowHideButtonKey;
     NS_EXTRA_IVARS_END(NSOutlineView)
 }
 
-@property(nonatomic, retain) NSTableColumn *outlineTableColumn;
+@property(nullable, nonatomic, retain) NSTableColumn *outlineTableColumn;
 
-- itemAtRow: (NSInteger) row;
-- (NSInteger) rowForItem: item;
-- parentForItem: item;
+- (nullable id) itemAtRow: (NSInteger) row;
+- (NSInteger) rowForItem: (nullable id) item;
+- (nullable id) parentForItem: (nullable id) item;
 
-- (BOOL) isExpandable: item;
-- (NSInteger) levelForItem: item;
+- (BOOL) isExpandable: (nullable id) item;
+- (NSInteger) levelForItem: (nullable id) item;
 - (NSInteger) levelForRow: (NSInteger) row;
-- (BOOL) isItemExpanded: item;
+- (BOOL) isItemExpanded: (nullable id) item;
 @property(nonatomic) CGFloat indentationPerLevel;
 
 @property(nonatomic) BOOL autoresizesOutlineColumn;
@@ -89,18 +91,18 @@ APPKIT_EXPORT NSString *const NSOutlineViewShowHideButtonKey;
 
 
 
-- (void) expandItem: item expandChildren: (BOOL) expandChildren;
-- (void) expandItem: item;
-- (void) collapseItem: item collapseChildren: (BOOL) collapseChildren;
-- (void) collapseItem: item;
-- (void) reloadItem: item reloadChildren: (BOOL) reloadChildren;
-- (void) reloadItem: item;
+- (void) expandItem: (nullable id) item expandChildren: (BOOL) expandChildren;
+- (void) expandItem: (nullable id) item;
+- (void) collapseItem: (nullable id) item collapseChildren: (BOOL) collapseChildren;
+- (void) collapseItem: (nullable id) item;
+- (void) reloadItem: (nullable id) item reloadChildren: (BOOL) reloadChildren;
+- (void) reloadItem: (nullable id) item;
 
-- (void) insertItemsAtIndexes: (NSIndexSet *) indexes inParent: (id) parent withAnimation: (NSTableViewAnimationOptions) animationOptions;
-- (void) removeItemsAtIndexes: (NSIndexSet *) indexes inParent: (id) parent withAnimation: (NSTableViewAnimationOptions) animationOptions;
-- (void) moveItemAtIndex: (NSInteger) fromIndex inParent: (id) oldParent toIndex: (NSInteger) toIndex inParent: (id) newParent;
+- (void) insertItemsAtIndexes: (NSIndexSet *) indexes inParent: (nullable id) parent withAnimation: (NSTableViewAnimationOptions) animationOptions;
+- (void) removeItemsAtIndexes: (NSIndexSet *) indexes inParent: (nullable id) parent withAnimation: (NSTableViewAnimationOptions) animationOptions;
+- (void) moveItemAtIndex: (NSInteger) fromIndex inParent: (nullable id) oldParent toIndex: (NSInteger) toIndex inParent: (nullable id) newParent;
 
-- (void) setDropItem: item dropChildIndex: (NSInteger) index;
+- (void) setDropItem: (nullable id) item dropChildIndex: (NSInteger) index;
 - (BOOL) shouldCollapseAutoExpandedItemsForDeposited: (BOOL) collapse;
 
 - (NSRect) frameOfOutlineCellAtRow: (NSInteger) row;
@@ -109,38 +111,38 @@ APPKIT_EXPORT NSString *const NSOutlineViewShowHideButtonKey;
 
 @protocol NSOutlineViewDataSource <NSObject>
 - (NSInteger) outlineView: (NSOutlineView *) outlineView
-        numberOfChildrenOfItem: item;
-- (BOOL) outlineView: (NSOutlineView *) outlineView isItemExpandable: item;
-- outlineView: (NSOutlineView *) outlineView
+        numberOfChildrenOfItem: (nullable id) item;
+- (BOOL) outlineView: (NSOutlineView *) outlineView isItemExpandable: (id) item;
+- (id) outlineView: (NSOutlineView *) outlineView
          child: (NSInteger) index
-        ofItem: item;
-- outlineView: (NSOutlineView *) outlineView
-        objectValueForTableColumn: (NSTableColumn *) tableColumn
-                           byItem: item;
+        ofItem: (nullable id) item;
+- (nullable id) outlineView: (NSOutlineView *) outlineView
+        objectValueForTableColumn: (nullable NSTableColumn *) tableColumn
+                           byItem: (nullable id) item;
 - (void) outlineView: (NSOutlineView *) outlineView
-        setObjectValue: object
-        forTableColumn: (NSTableColumn *) tableColumn
-                byItem: item;
+        setObjectValue: (nullable id) object
+        forTableColumn: (nullable NSTableColumn *) tableColumn
+                byItem: (nullable id) item;
 @end
 
 @protocol NSOutlineViewDelegate <NSControlTextEditingDelegate>
-- (BOOL) outlineView: (NSOutlineView *) outlineView shouldExpandItem: item;
-- (BOOL) outlineView: (NSOutlineView *) outlineView shouldCollapseItem: item;
+- (BOOL) outlineView: (NSOutlineView *) outlineView shouldExpandItem: (id) item;
+- (BOOL) outlineView: (NSOutlineView *) outlineView shouldCollapseItem: (id) item;
 - (BOOL) selectionShouldChangeInOutlineView: (NSOutlineView *) outlineView;
 - (BOOL) outlineView: (NSOutlineView *) outlineView
-        shouldEditTableColumn: (NSTableColumn *) tableColumn
-                         item: item;
-- (BOOL) outlineView: (NSOutlineView *) outlineView shouldSelectItem: item;
+        shouldEditTableColumn: (nullable NSTableColumn *) tableColumn
+                         item: (id) item;
+- (BOOL) outlineView: (NSOutlineView *) outlineView shouldSelectItem: (id) item;
 - (BOOL) outlineView: (NSOutlineView *) outlineView
-        shouldSelectTableColumn: (NSTableColumn *) tableColumn;
+        shouldSelectTableColumn: (nullable NSTableColumn *) tableColumn;
 - (void) outlineView: (NSOutlineView *) outlineView
-        willDisplayCell: cell
-         forTableColumn: (NSTableColumn *) tableColumn
-                   item: item;
+        willDisplayCell: (id) cell
+         forTableColumn: (nullable NSTableColumn *) tableColumn
+                   item: (id) item;
 - (void) outlineView: (NSOutlineView *) outlineView
-        willDisplayOutlineCell: cell
-                forTableColumn: (NSTableColumn *) tableColumn
-                          item: item;
+        willDisplayOutlineCell: (id) cell
+                forTableColumn: (nullable NSTableColumn *) tableColumn
+                          item: (id) item;
 @end
 
 @interface NSObject (NSOutlineView_notifications)
@@ -155,8 +157,10 @@ APPKIT_EXPORT NSString *const NSOutlineViewShowHideButtonKey;
 @end
 
 @interface NSObject (NSOutlineView_cellSizing)
-- (CGFloat) outlineView: (NSOutlineView *) outlineView
-            widthOfCell: cell
-         forTableColumn: (NSTableColumn *) tableColumn
-                 byItem: item;
+- (CGFloat) outlineView: (null_unspecified NSOutlineView *) outlineView
+            widthOfCell: (null_unspecified id) cell
+         forTableColumn: (null_unspecified NSTableColumn *) tableColumn
+                 byItem: (null_unspecified id) item;
 @end
+
+NS_ASSUME_NONNULL_END

@@ -22,6 +22,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSAffineTransform;
 
+NS_ASSUME_NONNULL_BEGIN
+
 typedef NS_ENUM(NSInteger, NSBezierPathElement) {
     NSBezierPathElementMoveTo,
     NSBezierPathElementLineTo,
@@ -129,18 +131,18 @@ enum {
 @property(nonatomic) NSLineCapStyle lineCapStyle;
 @property(nonatomic) NSLineJoinStyle lineJoinStyle;
 
-- (void) getLineDash: (CGFloat *) dashes
-               count: (int *) count
-               phase: (CGFloat *) phase;
+- (void) getLineDash: (nullable CGFloat *) dashes
+               count: (null_unspecified int *) count
+               phase: (nullable CGFloat *) phase;
 
 @property(nonatomic) BOOL cachesBezierPath;
 
 - (int) elementCount;
 - (NSBezierPathElement) elementAtIndex: (int) index;
 - (NSBezierPathElement) elementAtIndex: (int) index
-                      associatedPoints: (NSPoint *) points;
+                      associatedPoints: (null_unspecified NSPoint *) points;
 
-- (void) setLineDash: (const CGFloat *) dashes
+- (void) setLineDash: (nullable const CGFloat *) dashes
                count: (int) count
                phase: (CGFloat) phase;
 
@@ -162,7 +164,7 @@ enum {
                 controlPoint1: (NSPoint) cp1
                 controlPoint2: (NSPoint) cp2;
 
-- (void) appendBezierPathWithPoints: (NSPoint *) points count: (unsigned) count;
+- (void) appendBezierPathWithPoints: (null_unspecified NSPoint *) points count: (unsigned) count;
 - (void) appendBezierPathWithRect: (NSRect) rect;
 - (void) appendBezierPathWithOvalInRect: (NSRect) rect;
 - (void) appendBezierPathWithArcFromPoint: (NSPoint) point
@@ -189,7 +191,7 @@ enum {
 
 - (void) transformUsingAffineTransform: (NSAffineTransform *) matrix;
 - (void) removeAllPoints;
-- (void) setAssociatedPoints: (NSPoint *) points atIndex: (int) index;
+- (void) setAssociatedPoints: (null_unspecified NSPoint *) points atIndex: (int) index;
 
 - (NSBezierPath *) bezierPathByFlatteningPath;
 - (NSBezierPath *) bezierPathByReversingPath;
@@ -201,3 +203,5 @@ enum {
 - (void) setClip;
 
 @end
+
+NS_ASSUME_NONNULL_END

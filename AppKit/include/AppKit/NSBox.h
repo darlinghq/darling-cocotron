@@ -22,6 +22,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSFont;
 
+NS_ASSUME_NONNULL_BEGIN
+
 typedef NS_ENUM(NSUInteger, NSTitlePosition) {
     NSNoTitle,
     NSAboveTop,
@@ -61,17 +63,17 @@ typedef NS_ENUM(NSUInteger, NSBoxType) {
 @property(nonatomic) NSBorderType borderType;
 @property(nonatomic, copy) NSString *title;
 @property(nonatomic, retain) NSFont *titleFont;
-- contentView;
+- (null_unspecified id) contentView;
 @property(nonatomic) NSSize contentViewMargins;
 @property(nonatomic) NSTitlePosition titlePosition;
 @property(nonatomic, getter=isTransparent) BOOL transparent;
 
-- (void) setContentView: (NSView *) view;
-- (void) setTitleWithMnemonic: (NSString *) value;
+- (void) setContentView: (nullable __kindof NSView *) view;
+- (void) setTitleWithMnemonic: (null_unspecified NSString *) value;
 
 - (NSRect) titleRect;
 - (NSRect) borderRect;
-- titleCell;
+- (id) titleCell;
 
 - (void) setFrameFromContentFrame: (NSRect) content;
 - (void) sizeToFit;
@@ -83,3 +85,5 @@ typedef NS_ENUM(NSUInteger, NSBoxType) {
 
 
 @end
+
+NS_ASSUME_NONNULL_END

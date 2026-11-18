@@ -27,6 +27,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 @class NSImageSymbolConfiguration;
 @class NSGraphicsContext;
 
+@class NSColor;
+
+NS_ASSUME_NONNULL_BEGIN
+
 typedef NSString *NSImageHintKey NS_TYPED_ENUM NS_SWIFT_NAME(NSImageRep.HintKey);
 
 typedef NS_ENUM(NSUInteger, NSImageCacheMode) {
@@ -90,37 +94,37 @@ typedef NS_ENUM(NSUInteger, NSImageLoadStatus) {
     NS_EXTRA_IVARS_END(NSImage)
 }
 
-+ (NSArray *) imageFileTypes;
-+ (NSArray *) imageUnfilteredFileTypes;
-+ (NSArray *) imageTypes;
-+ (NSArray *) imageUnfilteredTypes;
-+ (NSArray *) imagePasteboardTypes;
-+ (NSArray *) imageUnfilteredPasteboardTypes;
++ (NSArray<NSString *> *) imageFileTypes;
++ (NSArray<NSString *> *) imageUnfilteredFileTypes;
++ (NSArray<NSString *> *) imageTypes;
++ (NSArray<NSString *> *) imageUnfilteredTypes;
++ (NSArray<NSPasteboardType> *) imagePasteboardTypes;
++ (NSArray<NSPasteboardType> *) imageUnfilteredPasteboardTypes;
 
 + (BOOL) canInitWithPasteboard: (NSPasteboard *) pasteboard;
 
-+ (nullable instancetype) imageNamed: (NSString *) name;
++ (nullable instancetype) imageNamed: (null_unspecified NSString *) name;
 
-- initWithSize: (NSSize) size;
+- (instancetype) initWithSize: (NSSize) size;
 + (instancetype) imageWithSize: (NSSize) size
                        flipped: (BOOL) flipped
                 drawingHandler: (BOOL (^)(NSRect destinationRect)) handler;
-- initWithData: (NSData *) data;
-- initWithContentsOfFile: (NSString *) path;
-- initWithContentsOfURL: (NSURL *) url;
-- initWithCGImage: (CGImageRef) cgImage size: (NSSize) size;
-- (CGImageRef) CGImageForProposedRect: (NSRect *) proposedDestRect
-                              context: (NSGraphicsContext *) context
-                                hints: (NSDictionary *) hints;
+- (nullable instancetype) initWithData: (NSData *) data;
+- (nullable instancetype) initWithContentsOfFile: (NSString *) path;
+- (nullable instancetype) initWithContentsOfURL: (NSURL *) url;
+- (instancetype) initWithCGImage: (CGImageRef) cgImage size: (NSSize) size;
+- (nullable CGImageRef) CGImageForProposedRect: (nullable NSRect *) proposedDestRect
+                              context: (nullable NSGraphicsContext *) context
+                                hints: (nullable NSDictionary<NSImageHintKey, id> *) hints;
 
 // As -initWithData:, but a TIFF or JPEG orientation tag is not applied to the pixels.
-- initWithDataIgnoringOrientation: (NSData *) data;
+- (nullable instancetype) initWithDataIgnoringOrientation: (NSData *) data;
 
-- initWithPasteboard: (NSPasteboard *) pasteboard;
-- initByReferencingFile: (NSString *) path;
-- initByReferencingURL: (NSURL *) url;
+- (nullable instancetype) initWithPasteboard: (NSPasteboard *) pasteboard;
+- (nullable instancetype) initByReferencingFile: (NSString *) path;
+- (instancetype) initByReferencingURL: (NSURL *) url;
 
-- (NSString *) name;
+- (null_unspecified NSString *) name;
 @property NSSize size;
 @property NSRect alignmentRect;
 @property NSEdgeInsets capInsets;
@@ -137,30 +141,30 @@ typedef NS_ENUM(NSUInteger, NSImageLoadStatus) {
 @property(nonatomic, getter=isCachedSeparately) BOOL cachedSeparately;
 @property(nonatomic) BOOL cacheDepthMatchesImageDepth;
 @property(nonatomic, getter=isDataRetained) BOOL dataRetained;
-- delegate;
+- (null_unspecified id) delegate;
 
-- (BOOL) setName: (NSString *) value;
-- (void) setDelegate: delegate;
+- (BOOL) setName: (null_unspecified NSString *) value;
+- (void) setDelegate: (null_unspecified id) delegate;
 
 @property(nonatomic, getter=isValid, readonly) BOOL valid;
 
-@property(nonatomic, readonly) NSArray *representations;
+@property(nonatomic, readonly) NSArray<NSImageRep *> *representations;
 - (void) addRepresentation: (NSImageRep *) representation;
-- (void) addRepresentations: (NSArray *) array;
+- (void) addRepresentations: (NSArray<NSImageRep *> *) array;
 - (void) removeRepresentation: (NSImageRep *) representation;
-- (NSImageRep *) bestRepresentationForDevice: (NSDictionary *) device;
+- (null_unspecified NSImageRep *) bestRepresentationForDevice: (null_unspecified NSDictionary *) device;
 
 // The representation to draw into rect of a context, by the scale of the context (or of the
 // NSImageHintCTM hint).
-- (NSImageRep *) bestRepresentationForRect: (NSRect) rect
-                                   context: (NSGraphicsContext *) referenceContext
-                                     hints: (NSDictionary<NSImageHintKey, id> *) hints;
+- (nullable NSImageRep *) bestRepresentationForRect: (NSRect) rect
+                                   context: (nullable NSGraphicsContext *) referenceContext
+                                     hints: (nullable NSDictionary<NSImageHintKey, id> *) hints;
 // Whether a non-transparent pixel of the image drawn into imageRectDestSpace lies within
 // testRectDestSpace.
 - (BOOL) hitTestRect: (NSRect) testRectDestSpace
         withImageDestinationRect: (NSRect) imageRectDestSpace
-                         context: (NSGraphicsContext *) context
-                           hints: (NSDictionary<NSImageHintKey, id> *) hints
+                         context: (nullable NSGraphicsContext *) context
+                           hints: (nullable NSDictionary<NSImageHintKey, id> *) hints
                          flipped: (BOOL) flipped;
 
 // For CALayer contents: the scale (1x, 2x ...) of the representation that suits a layer with the
@@ -171,13 +175,13 @@ typedef NS_ENUM(NSUInteger, NSImageLoadStatus) {
 - (void) recache;
 - (void) cancelIncrementalLoad;
 
-- (NSData *) TIFFRepresentation;
-- (NSData *) TIFFRepresentationUsingCompression: (NSTIFFCompression) compression
+- (nullable NSData *) TIFFRepresentation;
+- (nullable NSData *) TIFFRepresentationUsingCompression: (NSTIFFCompression) compression
                                          factor: (float) factor;
 
 - (void) lockFocus;
 - (void) lockFocusFlipped: (BOOL) flipped;
-- (void) lockFocusOnRepresentation: (NSImageRep *) representation;
+- (void) lockFocusOnRepresentation: (null_unspecified NSImageRep *) representation;
 - (void) unlockFocus;
 
 - (BOOL) drawRepresentation: (NSImageRep *) representation
@@ -216,22 +220,22 @@ typedef NS_ENUM(NSUInteger, NSImageLoadStatus) {
              operation: (NSCompositingOperation) operation
               fraction: (CGFloat) fraction
         respectFlipped: (BOOL) respectFlipped
-                 hints: (NSDictionary<NSString *, id> *) hints;
+                 hints: (nullable NSDictionary<NSImageHintKey, id> *) hints;
 
 @property (copy, nullable) NSString *accessibilityDescription;
 
 // SF Symbols. Darling has no symbol artwork: these return a generic template
 // placeholder glyph for any non-empty name (nil for a nil or empty name).
-+ (instancetype) imageWithSystemSymbolName: (NSString *) name
-                  accessibilityDescription: (NSString *) description;
-+ (instancetype) imageWithSystemSymbolName: (NSString *) name
++ (nullable instancetype) imageWithSystemSymbolName: (NSString *) name
+                  accessibilityDescription: (nullable NSString *) description;
++ (nullable instancetype) imageWithSystemSymbolName: (NSString *) name
                              variableValue: (double) value
-                  accessibilityDescription: (NSString *) description;
-- (NSImage *) imageWithSymbolConfiguration:
+                  accessibilityDescription: (nullable NSString *) description;
+- (nullable NSImage *) imageWithSymbolConfiguration:
         (NSImageSymbolConfiguration *) configuration;
 @property(nonatomic, readonly) NSImageSymbolConfiguration *symbolConfiguration;
 // Private AppKit spelling of imageWithSystemSymbolName:accessibilityDescription:.
-+ (instancetype) _imageWithSystemSymbolName: (NSString *) name;
++ (null_unspecified instancetype) _imageWithSystemSymbolName: (null_unspecified NSString *) name;
 
 @end
 
@@ -259,23 +263,23 @@ typedef NS_ENUM(NSInteger, NSImageSymbolScale) {
 + (instancetype) configurationWithPaletteColors: (NSArray<NSColor *> *) colors;
 + (instancetype) configurationWithHierarchicalColor: (NSColor *) color;
 + (instancetype) configurationPreferringMulticolor;
-- (NSImageSymbolConfiguration *) configurationByApplyingConfiguration:
+- (null_unspecified NSImageSymbolConfiguration *) configurationByApplyingConfiguration:
         (NSImageSymbolConfiguration *) configuration;
 
 @end
 
 @interface NSBundle (NSImage)
-- (NSString *) pathForImageResource: (NSString *) name;
+- (nullable NSString *) pathForImageResource: (null_unspecified NSString *) name;
 // The file URL of pathForImageResource:, or nil.
-- (NSURL *) URLForImageResource: (NSString *) name;
+- (nullable NSURL *) URLForImageResource: (null_unspecified NSString *) name;
 // A new image from pathForImageResource:, or nil.
-- (NSImage *) imageForResource: (NSString *) name;
+- (nullable NSImage *) imageForResource: (null_unspecified NSString *) name;
 @end
 
 @protocol NSImageDelegate <NSObject>
 @optional
 // Asked when the image has nothing to draw into rect: the image to draw there instead, or nil.
-- (NSImage *) imageDidNotDraw: (NSImage *) sender inRect: (NSRect) rect;
+- (nullable NSImage *) imageDidNotDraw: (NSImage *) sender inRect: (NSRect) rect;
 // Progressive loading (10.0 - 10.3); images are decoded when created, so none of these is sent.
 - (void) image: (NSImage *) image willLoadRepresentation: (NSImageRep *) rep;
 - (void) image: (NSImage *) image didLoadRepresentationHeader: (NSImageRep *) rep;
@@ -431,3 +435,5 @@ APPKIT_EXPORT NSImageName const NSImageNameTouchBarUserTemplate;
 APPKIT_EXPORT NSImageName const NSImageNameTouchBarVolumeDownTemplate;
 APPKIT_EXPORT NSImageName const NSImageNameTouchBarVolumeUpTemplate;
 APPKIT_EXPORT NSImageName const NSImageNameTouchBarPlayheadTemplate;
+
+NS_ASSUME_NONNULL_END

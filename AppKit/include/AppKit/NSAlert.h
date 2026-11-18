@@ -23,6 +23,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 @class NSButton, NSImage, NSArray, NSWindow, NSError, NSView, NSMutableArray;
 
 // NSApplication.h imports this header, so the modal response type is declared here.
+NS_ASSUME_NONNULL_BEGIN
+
 typedef NSInteger NSModalResponse NS_TYPED_EXTENSIBLE_ENUM;
 
 static const NSModalResponse NSModalResponseOK = 1;
@@ -69,38 +71,38 @@ static const NSModalResponse NSAlertThirdButtonReturn = 1002;
 }
 
 + (NSAlert *) alertWithError: (NSError *) error;
-+ (NSAlert *) alertWithMessageText: (NSString *) messageText
-                     defaultButton: (NSString *) defaultTitle
-                   alternateButton: (NSString *) alternateTitle
-                       otherButton: (NSString *) otherTitle
++ (NSAlert *) alertWithMessageText: (nullable NSString *) messageText
+                     defaultButton: (nullable NSString *) defaultTitle
+                   alternateButton: (nullable NSString *) alternateTitle
+                       otherButton: (nullable NSString *) otherTitle
          informativeTextWithFormat: (NSString *) format, ...;
 
-- delegate;
+- (null_unspecified id) delegate;
 @property(nonatomic) NSAlertStyle alertStyle;
-@property(nonatomic, retain) NSImage *icon;
+@property(null_resettable, nonatomic, retain) NSImage *icon;
 @property(nonatomic, copy) NSString *messageText;
 @property(nonatomic, copy) NSString *informativeText;
-@property(nonatomic, retain) NSView *accessoryView;
+@property(nullable, nonatomic, retain) NSView *accessoryView;
 @property(nonatomic) BOOL showsHelp;
 @property(nonatomic) BOOL showsSuppressionButton;
-@property(nonatomic, copy) NSString *helpAnchor;
-@property(nonatomic, readonly) NSArray *buttons;
-@property(nonatomic, readonly) NSButton *suppressionButton;
-- window;
+@property(null_unspecified, nonatomic, copy) NSString *helpAnchor;
+@property(nonatomic, readonly) NSArray<NSButton *> *buttons;
+@property(nullable, nonatomic, readonly) NSButton *suppressionButton;
+- (null_unspecified id) window;
 
-- (void) setDelegate: delegate;
+- (void) setDelegate: (null_unspecified id) delegate;
 
 - (NSButton *) addButtonWithTitle: (NSString *) title;
 
 - (void) layout;
 
 - (void) beginSheetModalForWindow: (NSWindow *) window
-                    modalDelegate: delegate
-                   didEndSelector: (SEL) selector
-                      contextInfo: (void *) info;
+                    modalDelegate: (nullable id) delegate
+                   didEndSelector: (nullable SEL) selector
+                      contextInfo: (nullable void *) info;
 - (void) beginSheetModalForWindow: (NSWindow *) sheetWindow
                 completionHandler:
-                        (void (^)(NSModalResponse returnCode)) handler;
+                        (void (^ _Nullable)(NSModalResponse returnCode)) handler;
 - (NSModalResponse) runModal;
 
 @end
@@ -108,3 +110,5 @@ static const NSModalResponse NSAlertThirdButtonReturn = 1002;
 @protocol NSAlertDelegate <NSObject>
 - (BOOL) alertShowHelp: (NSAlert *) alert;
 @end
+
+NS_ASSUME_NONNULL_END

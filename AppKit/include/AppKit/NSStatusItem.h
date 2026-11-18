@@ -20,6 +20,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <CoreFoundation/CFBase.h>
 #import <Foundation/Foundation.h>
 #import <AppKit/NSButton.h>
+NS_ASSUME_NONNULL_BEGIN
+
 #ifdef WIN32
 #import <windows.h>
 #endif
@@ -68,25 +70,25 @@ typedef NS_OPTIONS(NSUInteger, NSStatusItemBehavior) {
 
 @property(nonatomic) NSStatusItemBehavior behavior;
 
-- (NSStatusBarButton *) button;
+- (nullable NSStatusBarButton *) button;
 
-@property(nonatomic, copy) NSString *autosaveName;
+@property(null_unspecified, nonatomic, copy) NSString *autosaveName;
 
 @property(nonatomic, getter=isVisible) BOOL visible;
 
 @property(nonatomic) SEL action;
 @property(nonatomic) SEL doubleAction;
-@property(nonatomic, assign) id target;
+@property(nullable, nonatomic, assign) id target;
 
-@property(nonatomic, retain) NSImage *image;
-@property(nonatomic, retain) NSImage *alternateImage;
+@property(nullable, nonatomic, retain) NSImage *image;
+@property(nullable, nonatomic, retain) NSImage *alternateImage;
 
-@property(nonatomic, copy) NSString *title;
-- (NSString *) toolTip;
-- (void) setToolTip: (NSString *) toolTip;
-@property(nonatomic, copy) NSAttributedString *attributedTitle;
+@property(nullable, nonatomic, copy) NSString *title;
+- (nullable NSString *) toolTip;
+- (void) setToolTip: (nullable NSString *) toolTip;
+@property(nullable, nonatomic, copy) NSAttributedString *attributedTitle;
 
-@property(nonatomic, retain) NSView *view;
+@property(nullable, nonatomic, retain) NSView *view;
 
 @property(nonatomic) BOOL highlightMode;
 
@@ -94,7 +96,7 @@ typedef NS_OPTIONS(NSUInteger, NSStatusItemBehavior) {
 
 @property(nonatomic) CGFloat length;
 
-@property(nonatomic, retain) NSMenu *menu;
+@property(nullable, nonatomic, retain) NSMenu *menu;
 
 - (void) popUpStatusItemMenu: (NSMenu *) menu;
 - (NSInteger) sendActionOn: (NSInteger) mask;
@@ -103,3 +105,5 @@ typedef NS_OPTIONS(NSUInteger, NSStatusItemBehavior) {
                          withHighlight: (BOOL) highlight;
 
 @end
+
+NS_ASSUME_NONNULL_END

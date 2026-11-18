@@ -25,6 +25,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSFontDescriptor;
 
+NS_ASSUME_NONNULL_BEGIN
+
 #ifndef DARLING
 // Provides an extendable translation scheme for apps that use non-standard
 // fonts in UI elements
@@ -32,8 +34,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 @interface NSNibFontNameTranslator : NSObject {
 }
 
-- (NSString *) translateToNibFontName: (NSString *) fontName;
-- (NSString *) translateFromNibFontName: (NSString *) fontName;
+- (null_unspecified NSString *) translateToNibFontName: (null_unspecified NSString *) fontName;
+- (null_unspecified NSString *) translateFromNibFontName: (null_unspecified NSString *) fontName;
 
 @end
 #endif
@@ -102,22 +104,22 @@ typedef enum {
 + (NSFont *) systemFontOfSize: (CGFloat) size weight: (CGFloat) weight;
 + (NSFont *) titleBarFontOfSize: (CGFloat) size;
 + (NSFont *) toolTipsFontOfSize: (CGFloat) size;
-+ (NSFont *) userFontOfSize: (CGFloat) size;
-+ (NSFont *) userFixedPitchFontOfSize: (CGFloat) size;
++ (nullable NSFont *) userFontOfSize: (CGFloat) size;
++ (nullable NSFont *) userFixedPitchFontOfSize: (CGFloat) size;
 
-+ (void) setUserFont: (NSFont *) value;
-+ (void) setUserFixedPitchFont: (NSFont *) value;
++ (void) setUserFont: (nullable NSFont *) value;
++ (void) setUserFixedPitchFont: (nullable NSFont *) value;
 
-+ (NSFont *) fontWithName: (NSString *) name size: (CGFloat) size;
-+ (NSFont *) fontWithName: (NSString *) name matrix: (const CGFloat *) matrix;
-+ (NSFont *) fontWithDescriptor: (NSFontDescriptor *) descriptor
++ (nullable NSFont *) fontWithName: (NSString *) name size: (CGFloat) size;
++ (nullable NSFont *) fontWithName: (NSString *) name matrix: (const CGFloat *) matrix;
++ (nullable NSFont *) fontWithDescriptor: (NSFontDescriptor *) descriptor
                            size: (CGFloat) size;
-+ (NSFont *) fontWithDescriptor: (NSFontDescriptor *) descriptor
++ (null_unspecified NSFont *) fontWithDescriptor: (null_unspecified NSFontDescriptor *) descriptor
                            size: (CGFloat) size
-                  textTransform: (NSAffineTransform *) transform;
+                  textTransform: (null_unspecified NSAffineTransform *) transform;
 
-+ (NSArray *) preferredFontNames;
-+ (void) setPreferredFontNames: (NSArray *) fontNames;
++ (null_unspecified NSArray *) preferredFontNames;
++ (void) setPreferredFontNames: (null_unspecified NSArray *) fontNames;
 
 @property(nonatomic, readonly) CGFloat pointSize;
 @property(nonatomic, readonly) NSString *fontName;
@@ -126,8 +128,8 @@ typedef enum {
 @property(nonatomic, readonly) NSFontRenderingMode renderingMode;
 @property(nonatomic, readonly) NSCharacterSet *coveredCharacterSet;
 @property(nonatomic, readonly) NSStringEncoding mostCompatibleStringEncoding;
-@property(nonatomic, readonly) NSString *familyName;
-@property(nonatomic, readonly) NSString *displayName;
+@property(nullable, nonatomic, readonly) NSString *familyName;
+@property(nullable, nonatomic, readonly) NSString *displayName;
 @property(nonatomic, readonly) NSFontDescriptor *fontDescriptor;
 
 @property(nonatomic, readonly) NSFont *printerFont;
@@ -160,22 +162,22 @@ typedef enum {
 
 - (NSPoint) positionOfGlyph: (NSGlyph) current
             precededByGlyph: (NSGlyph) previous
-                  isNominal: (BOOL *) isNominalp;
+                  isNominal: (null_unspecified BOOL *) isNominalp;
 
-- (void) getAdvancements: (NSSize *) advancements
+- (void) getAdvancements: (null_unspecified NSSize *) advancements
                forGlyphs: (const NSGlyph *) glyphs
                    count: (NSUInteger) count;
-- (void) getAdvancements: (NSSize *) advancements
+- (void) getAdvancements: (null_unspecified NSSize *) advancements
          forPackedGlyphs: (const void *) packed
                   length: (NSUInteger) length;
-- (void) getBoundingRects: (NSRect *) rects
+- (void) getBoundingRects: (null_unspecified NSRect *) rects
                 forGlyphs: (const NSGlyph *) glyphs
                     count: (NSUInteger) count;
 
 // private
 
-- (NSUInteger) getGlyphs: (NSGlyph *) glyphs
-           forCharacters: (unichar *) characters
+- (NSUInteger) getGlyphs: (null_unspecified NSGlyph *) glyphs
+           forCharacters: (null_unspecified unichar *) characters
                   length: (NSUInteger) length;
 
 @end
@@ -183,8 +185,8 @@ typedef enum {
 #ifndef DARLING
 @interface NSFont (PortatibilityAdditions)
 
-+ (void) setNibFontTranslator: (NSNibFontNameTranslator *) fontTranslator;
-+ (NSNibFontNameTranslator *) nibFontTranslator;
++ (void) setNibFontTranslator: (null_unspecified NSNibFontNameTranslator *) fontTranslator;
++ (null_unspecified NSNibFontNameTranslator *) nibFontTranslator;
 
 @end
 #endif
@@ -203,3 +205,5 @@ extern NSNotificationName NSAntialiasThresholdChangedNotification;
 #ifdef __cplusplus
 }
 #endif
+
+NS_ASSUME_NONNULL_END

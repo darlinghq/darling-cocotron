@@ -4,6 +4,8 @@
 
 @class NSView, NSStoryboard;
 
+NS_ASSUME_NONNULL_BEGIN
+
 typedef NS_OPTIONS(NSUInteger, NSViewControllerTransitionOptions) {
     NSViewControllerTransitionNone = 0x0,
     NSViewControllerTransitionCrossfade = 0x1,
@@ -36,14 +38,14 @@ typedef NS_OPTIONS(NSUInteger, NSViewControllerTransitionOptions) {
     NS_EXTRA_IVARS_END(NSViewController)
 }
 
-- initWithNibName: (NSString *) name bundle: (NSBundle *) bundle;
+- (instancetype) initWithNibName: (null_unspecified NSString *) name bundle: (nullable NSBundle *) bundle;
 
-- (NSString *) nibName;
-- (NSBundle *) nibBundle;
+- (null_unspecified NSString *) nibName;
+- (nullable NSBundle *) nibBundle;
 
 @property (retain, nonnull) NSView *view;
 @property(copy) NSArray<__kindof NSViewController *> *childViewControllers;
-@property(readonly) NSViewController *parentViewController;
+@property(nullable, readonly) NSViewController *parentViewController;
 
 - (void) addChildViewController: (NSViewController *) childViewController;
 // Subclasses that track their children override these two; the other child
@@ -53,13 +55,13 @@ typedef NS_OPTIONS(NSUInteger, NSViewControllerTransitionOptions) {
 - (void) removeChildViewControllerAtIndex: (NSInteger) index;
 - (void) removeFromParentViewController;
 
-@property(readonly, strong) NSStoryboard *storyboard;
+@property(nullable, readonly, strong) NSStoryboard *storyboard;
 // Stored for the controller's presenter; NSZeroSize until set.
 @property NSSize preferredContentSize;
-@property(nonatomic, copy) NSString *title;
-- representedObject;
+@property(nullable, nonatomic, copy) NSString *title;
+- (nullable id) representedObject;
 
-- (void) setRepresentedObject: object;
+- (void) setRepresentedObject: (nullable id) object;
 
 
 
@@ -72,8 +74,10 @@ typedef NS_OPTIONS(NSUInteger, NSViewControllerTransitionOptions) {
 - (void) discardEditing;
 
 - (BOOL) commitEditing;
-- (void) commitEditingWithDelegate: delegate
-                 didCommitSelector: (SEL) didCommitSelector
-                       contextInfo: (void *) contextInfo;
+- (void) commitEditingWithDelegate: (nullable id) delegate
+                 didCommitSelector: (nullable SEL) didCommitSelector
+                       contextInfo: (nullable void *) contextInfo;
 
 @end
+
+NS_ASSUME_NONNULL_END

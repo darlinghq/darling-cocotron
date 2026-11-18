@@ -19,6 +19,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSSavePanel.h>
 
+NS_ASSUME_NONNULL_BEGIN
+
 @interface NSOpenPanel : NSSavePanel {
     NSArray *_filenames;
     BOOL _allowsMultipleSelection;
@@ -30,12 +32,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 + (NSOpenPanel *) openPanel;
 
 - (NSArray *) filenames;
-- (NSArray *) URLs;
+- (NSArray<NSURL *> *) URLs;
 
-- (NSInteger) runModalForDirectory: (NSString *) directory
-                              file: (NSString *) file
-                             types: (NSArray *) types;
-- (NSModalResponse) runModalForTypes: (NSArray *) types;
+- (NSInteger) runModalForDirectory: (nullable NSString *) directory
+                              file: (nullable NSString *) file
+                             types: (nullable NSArray *) types;
+- (NSModalResponse) runModalForTypes: (nullable NSArray *) types;
 
 @property(nonatomic) BOOL allowsMultipleSelection;
 @property(nonatomic) BOOL canChooseDirectories;
@@ -43,12 +45,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 @property(nonatomic) BOOL resolvesAliases;
 
 
-- (void) beginSheetForDirectory: (NSString *) path
-                           file: (NSString *) name
-                          types: (NSArray *) fileTypes
-                 modalForWindow: (NSWindow *) docWindow
-                  modalDelegate: (id) modalDelegate
-                 didEndSelector: (SEL) didEndSelector
-                    contextInfo: (void *) contextInfo;
+- (void) beginSheetForDirectory: (nullable NSString *) path
+                           file: (nullable NSString *) name
+                          types: (nullable NSArray *) fileTypes
+                 modalForWindow: (nullable NSWindow *) docWindow
+                  modalDelegate: (nullable id) modalDelegate
+                 didEndSelector: (nullable SEL) didEndSelector
+                    contextInfo: (nullable void *) contextInfo;
 
 @end
+
+NS_ASSUME_NONNULL_END

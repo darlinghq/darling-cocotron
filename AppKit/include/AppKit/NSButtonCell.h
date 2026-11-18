@@ -23,6 +23,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSSound;
 
+NS_ASSUME_NONNULL_BEGIN
+
 enum {
     NSNoCellMask = 0x00,
     NSContentsCellMask = 0x01,
@@ -137,7 +139,7 @@ typedef NS_ENUM(NSUInteger, NSGradientType) {
 - (NSCellImagePosition) imagePosition;
 - (NSString *) title;
 - (NSString *) alternateTitle;
-- (NSImage *) alternateImage;
+- (nullable NSImage *) alternateImage;
 - (NSAttributedString *) attributedTitle;
 - (NSAttributedString *) attributedAlternateTitle;
 - (int) highlightsBy;
@@ -146,20 +148,20 @@ typedef NS_ENUM(NSUInteger, NSGradientType) {
 - (unsigned) keyEquivalentModifierMask;
 - (NSBezelStyle) bezelStyle;
 - (BOOL) showsBorderOnlyWhileMouseInside;
-- (NSSound *) sound;
+- (nullable NSSound *) sound;
 - (NSGradientType) gradientType;
 - (NSImageScaling) imageScaling;
 - (BOOL) isOpaque;
-- (NSFont *) keyEquivalentFont;
-- (NSColor *) backgroundColor;
+- (nullable NSFont *) keyEquivalentFont;
+- (nullable NSColor *) backgroundColor;
 - (void) getPeriodicDelay: (float *) delay interval: (float *) interval;
 
 - (void) setTransparent: (BOOL) flag;
 - (void) setKeyEquivalent: (NSString *) keyEquivalent;
 - (void) setImagePosition: (NSCellImagePosition) position;
-- (void) setTitle: (NSString *) title;
+- (void) setTitle: (nullable NSString *) title;
 - (void) setAlternateTitle: (NSString *) title;
-- (void) setAlternateImage: (NSImage *) image;
+- (void) setAlternateImage: (nullable NSImage *) image;
 - (void) setAttributedTitle: (NSAttributedString *) title;
 - (void) setAttributedAlternateTitle: (NSAttributedString *) title;
 - (void) setHighlightsBy: (int) type;
@@ -169,15 +171,15 @@ typedef NS_ENUM(NSUInteger, NSGradientType) {
 - (void) setBezelStyle: (NSBezelStyle) bezelStyle;
 - (void) setButtonType: (NSButtonType) buttonType;
 - (void) setShowsBorderOnlyWhileMouseInside: (BOOL) show;
-- (void) setSound: (NSSound *) sound;
+- (void) setSound: (nullable NSSound *) sound;
 - (void) setGradientType: (NSGradientType) value;
-- (void) setBackgroundColor: (NSColor *) value;
+- (void) setBackgroundColor: (nullable NSColor *) value;
 - (void) setImageScaling: (NSImageScaling) value;
-- (void) setKeyEquivalentFont: (NSFont *) value;
+- (void) setKeyEquivalentFont: (nullable NSFont *) value;
 - (void) setKeyEquivalentFont: (NSString *) value size: (CGFloat) size;
 - (void) setPeriodicDelay: (float) delay interval: (float) interval;
 
-- (void) performClick: sender;
+- (void) performClick: (nullable id) sender;
 
 - (void) drawBezelWithFrame: (NSRect) rect inView: (NSView *) view;
 - (void) drawImage: (NSImage *) image
@@ -191,3 +193,5 @@ typedef NS_ENUM(NSUInteger, NSGradientType) {
 - (void) mouseExited: (NSEvent *) event;
 
 @end
+
+NS_ASSUME_NONNULL_END
