@@ -41,4 +41,8 @@ struct wl_egl_window;
 - (void) preferredScaleChanged: (uint32_t) scale120;
 - (struct wl_proxy *) presentedSurface;
 - (void) placeAboveSurface: (struct wl_proxy *) surface;
+// Stacks the Metal layers' surfaces above `below`; returns the topmost surface.
+- (struct wl_proxy *) stackMetalSurfacesAbove: (struct wl_proxy *) below;
+- (void) detachMetalSubsurfaces;
+- (void) attachMetalSubsurfaces;
 @end

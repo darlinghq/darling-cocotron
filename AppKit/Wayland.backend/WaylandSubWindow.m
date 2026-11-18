@@ -50,6 +50,9 @@ static BOOL validFrame(CGRect frame) {
 @interface WaylandMetalSurface : NSObject {
 @public
     struct wl_proxy *surface, *subsurface, *viewport;
+    CAMetalLayer *layer; // not retained
+    CGRect frame;
+    NSUInteger sequence; // creation order, for layers that are not in one tree
 }
 @end
 @implementation WaylandMetalSurface
@@ -174,9 +177,14 @@ static BOOL validFrame(CGRect frame) {
     _visible = NO;
     _scaleRedrawRequested = NO;
     [self removeRole];
+    [self detachMetalSubsurfaces];
     [[_parent waylandDisplay] flush];
 }
-- (void) show { _visible = YES; [self updateGeometry]; }
+- (void) show {
+    _visible = YES;
+    [self updateGeometry];
+    [self attachMetalSubsurfaces];
+}
 - (struct wl_proxy *) presentedSurface { return _subsurface ? _surface : NULL; }
 - (void) placeAboveSurface: (struct wl_proxy *) surface {
     union wl_argument args[] = {{.o = (struct wl_object *)surface}};
@@ -247,12 +255,15 @@ static BOOL validFrame(CGRect frame) {
 }
 
 - (void) placeMetalSurface: (WaylandMetalSurface *) metal frame: (CGRect) frame {
-    NSPoint offset = [_parent contentOffset];
-    CGRect inParent = CGRectOffset(frame, _frame.origin.x, _frame.origin.y);
-    int32_t x = (int32_t) floor(inParent.origin.x + offset.x);
-    int32_t y = (int32_t) floor([_parent frame].size.height - CGRectGetMaxY(inParent) + offset.y);
-    union wl_argument position[] = {{.i = x}, {.i = y}};
-    WaylandMarshal(metal->subsurface, WP_SUBSURFACE_SET_POSITION, NULL, 0, position);
+    metal->frame = frame;
+    if (metal->subsurface) {
+        NSPoint offset = [_parent contentOffset];
+        CGRect inParent = CGRectOffset(frame, _frame.origin.x, _frame.origin.y);
+        int32_t x = (int32_t) floor(inParent.origin.x + offset.x);
+        int32_t y = (int32_t) floor([_parent frame].size.height - CGRectGetMaxY(inParent) + offset.y);
+        union wl_argument position[] = {{.i = x}, {.i = y}};
+        WaylandMarshal(metal->subsurface, WP_SUBSURFACE_SET_POSITION, NULL, 0, position);
+    }
 
     WaylandDisplay *display = [_parent waylandDisplay];
     if (metal->viewport) {
@@ -264,7 +275,8 @@ static BOOL validFrame(CGRect frame) {
         union wl_argument scaling[] = {{.i = metal->viewport ? 1 : [_parent bufferScale]}};
         WaylandMarshal(metal->surface, WP_SURFACE_SET_BUFFER_SCALE, NULL, 0, scaling);
     }
-    // the position applies with the parent's commit
+    // the position and the stacking apply with the parent's commit
+    [_parent stackSubwindows];
     struct wl_proxy *parentSurface = [_parent ensureSurface];
     if (parentSurface)
         request(parentSurface, WP_SURFACE_COMMIT, 0);
@@ -279,6 +291,88 @@ static BOOL validFrame(CGRect frame) {
     surface->window = 0;
     surface->surface = metal->surface;
     surface->pixelSize = [self pixelSizeForMetalSurfaceFrame: frame];
+}
+
+// The role of a Metal layer's surface: a desynchronized subsurface of the parent window, which
+// is destroyed (unmapping the surface) while this subwindow is hidden. The surface keeps the
+// last frame it was given, so showing the subwindow again shows it.
+- (void) attachSubsurfaceOfMetalSurface: (WaylandMetalSurface *) metal {
+    struct wl_proxy *parentSurface = [_parent ensureSurface];
+    WaylandDisplay *display = [_parent waylandDisplay];
+    if (metal->subsurface || !parentSurface || !display->_subcompositor)
+        return;
+    union wl_argument sub[] = {{.o = NULL}, {.o = (struct wl_object *) metal->surface},
+                               {.o = (struct wl_object *) parentSurface}};
+    metal->subsurface = WaylandCreateObject(display->_subcompositor, WP_SUBCOMPOSITOR_GET_SUBSURFACE,
+                                            &wl_subsurface_interface, sub, 0, nil);
+    // frames are shown as the swapchain presents them, not with the parent's commits
+    request(metal->subsurface, WP_SUBSURFACE_SET_DESYNC, 0);
+}
+
+- (void) detachMetalSubsurfaces {
+    BOOL any = NO;
+    for (CAMetalLayer *layer in [[_metalSurfaces keyEnumerator] allObjects]) {
+        WaylandMetalSurface *metal = [_metalSurfaces objectForKey: layer];
+        if (metal->subsurface) {
+            request(metal->subsurface, WP_SUBSURFACE_DESTROY, WL_MARSHAL_FLAG_DESTROY);
+            metal->subsurface = NULL;
+            any = YES;
+        }
+    }
+    struct wl_proxy *parentSurface = [_parent ensureSurface];
+    if (any && parentSurface && ![_parent isInvalidated])
+        request(parentSurface, WP_SURFACE_COMMIT, 0);
+    [[_parent waylandDisplay] flush];
+}
+
+- (void) attachMetalSubsurfaces {
+    for (CAMetalLayer *layer in [[_metalSurfaces keyEnumerator] allObjects]) {
+        WaylandMetalSurface *metal = [_metalSurfaces objectForKey: layer];
+        [self attachSubsurfaceOfMetalSurface: metal];
+        [self placeMetalSurface: metal frame: metal->frame];
+    }
+}
+
+// The layers' order in the layer tree: the one that is earlier among its siblings, or the
+// ancestor, is below.
+static NSArray *layerPath(id layer) {
+    NSMutableArray *path = [NSMutableArray array];
+    for (; layer != nil; layer = [layer superlayer])
+        [path insertObject: layer atIndex: 0];
+    return path;
+}
+
+static NSComparisonResult compareLayerOrder(WaylandMetalSurface *a, WaylandMetalSurface *b, void *unused) {
+    NSArray *pathA = layerPath((id) a->layer), *pathB = layerPath((id) b->layer);
+    NSUInteger i = 0;
+    while (i < [pathA count] && i < [pathB count] && [pathA objectAtIndex: i] == [pathB objectAtIndex: i])
+        i++;
+    if (i == [pathA count] || i == [pathB count])
+        return i == [pathA count] ? (i == [pathB count] ? NSOrderedSame : NSOrderedAscending) : NSOrderedDescending;
+    if (i == 0)
+        return a->sequence < b->sequence ? NSOrderedAscending : NSOrderedDescending;
+    NSArray *siblings = [[pathA objectAtIndex: i - 1] sublayers];
+    NSUInteger indexA = [siblings indexOfObjectIdenticalTo: [pathA objectAtIndex: i]];
+    NSUInteger indexB = [siblings indexOfObjectIdenticalTo: [pathB objectAtIndex: i]];
+    return indexA < indexB ? NSOrderedAscending : (indexA > indexB ? NSOrderedDescending : NSOrderedSame);
+}
+
+// Places the Metal layers' surfaces above `below`, in the order of the layers in the tree, and
+// returns the topmost surface.
+- (struct wl_proxy *) stackMetalSurfacesAbove: (struct wl_proxy *) below {
+    NSMutableArray *surfaces = [NSMutableArray array];
+    for (CAMetalLayer *layer in [[_metalSurfaces keyEnumerator] allObjects]) {
+        WaylandMetalSurface *metal = [_metalSurfaces objectForKey: layer];
+        if (metal->subsurface)
+            [surfaces addObject: metal];
+    }
+    [surfaces sortUsingFunction: (NSInteger (*)(id, id, void *)) compareLayerOrder context: NULL];
+    for (WaylandMetalSurface *metal in surfaces) {
+        union wl_argument args[] = {{.o = (struct wl_object *) below}};
+        WaylandMarshal(metal->subsurface, WP_SUBSURFACE_PLACE_ABOVE, NULL, 0, args);
+        below = metal->surface;
+    }
+    return below;
 }
 
 - (BOOL) createMetalSurface: (CANativeSurface *) surface
@@ -312,13 +406,11 @@ static BOOL validFrame(CGRect frame) {
     args[0].o = (struct wl_object *) region;
     WaylandMarshal(metal->surface, WP_SURFACE_SET_INPUT_REGION, NULL, 0, args);
     request(region, WP_REGION_DESTROY, WL_MARSHAL_FLAG_DESTROY);
-
-    union wl_argument sub[] = {{.o = NULL}, {.o = (struct wl_object *) metal->surface},
-                               {.o = (struct wl_object *) parentSurface}};
-    metal->subsurface = WaylandCreateObject(display->_subcompositor, WP_SUBCOMPOSITOR_GET_SUBSURFACE,
-                                            &wl_subsurface_interface, sub, 0, nil);
-    // frames are shown as the swapchain presents them, not with the parent's commits
-    request(metal->subsurface, WP_SUBSURFACE_SET_DESYNC, 0);
+    metal->layer = layer;
+    static NSUInteger sequence;
+    metal->sequence = ++sequence;
+    if (_visible)
+        [self attachSubsurfaceOfMetalSurface: metal];
 
     [_metalSurfaces setObject: metal forKey: layer];
     [self placeMetalSurface: metal frame: frame];
@@ -343,7 +435,7 @@ static BOOL validFrame(CGRect frame) {
         return;
     [_metalSurfaces removeObjectForKey: layer];
     if (metal->viewport) request(metal->viewport, WP_VIEWPORT_DESTROY, WL_MARSHAL_FLAG_DESTROY);
-    request(metal->subsurface, WP_SUBSURFACE_DESTROY, WL_MARSHAL_FLAG_DESTROY);
+    if (metal->subsurface) request(metal->subsurface, WP_SUBSURFACE_DESTROY, WL_MARSHAL_FLAG_DESTROY);
     request(metal->surface, WP_SURFACE_DESTROY, WL_MARSHAL_FLAG_DESTROY);
     struct wl_proxy *parentSurface = [_parent ensureSurface];
     if (parentSurface && ![_parent isInvalidated])
