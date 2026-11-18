@@ -1853,34 +1853,51 @@ static NSUInteger modifierDeviceMask(int code) {
     }
 }
 
-- (void) keymapWithFormat: (uint32_t) format fd: (int) fd size: (uint32_t) size {
-    char *map = MAP_FAILED;
+// A keymap the client cannot use (format no_keymap, an empty or unreadable xkb_v1 map) leaves the
+// keymap in force as it was. The wl_keyboard protocol sends no_keymap when the client has to
+// interpret raw key codes itself, and a compositor may replace the keymap at any time, so input
+// must survive both. With no keymap yet, the system default layout (the evdev rules, honouring
+// the XKB_DEFAULT_* variables) interprets the raw codes.
+- (struct xkb_keymap *) keymapFromFormat: (uint32_t) format fd: (int) fd size: (uint32_t) size {
+    struct xkb_keymap *keymap = NULL;
 
-    if (_xkbContext == NULL) {
-        // Already logged at startup.
-    } else if (format != WP_KEYBOARD_KEYMAP_FORMAT_XKB_V1 || size == 0) {
-        NSLog(@"Wayland backend: unsupported keymap (format %u, %u bytes), "
-              @"keyboard input is disabled",
-              format, size);
-    } else {
-        map = mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, 0);
-        if (map == MAP_FAILED)
+    if (format == WP_KEYBOARD_KEYMAP_FORMAT_XKB_V1 && size == 0) {
+        NSLog(@"Wayland backend: the compositor sent an empty keymap");
+    } else if (format == WP_KEYBOARD_KEYMAP_FORMAT_XKB_V1) {
+        char *map = mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, 0);
+        if (map == MAP_FAILED) {
             NSLog(@"Wayland backend: cannot map the keymap: %s", strerror(errno));
+        } else {
+            keymap = WL.xkb_keymap_new_from_buffer(
+                    _xkbContext, map, strnlen(map, size), XKB_KEYMAP_FORMAT_TEXT_V1,
+                    XKB_KEYMAP_COMPILE_NO_FLAGS);
+            munmap(map, size);
+            if (keymap == NULL)
+                NSLog(@"Wayland backend: cannot compile the compositor's keymap");
+        }
+    } else if (format != WP_KEYBOARD_KEYMAP_FORMAT_NO_KEYMAP) {
+        NSLog(@"Wayland backend: unsupported keymap format %u", format);
+    }
+    return keymap;
+}
+
+- (void) keymapWithFormat: (uint32_t) format fd: (int) fd size: (uint32_t) size {
+    struct xkb_keymap *keymap = NULL;
+
+    if (_xkbContext != NULL) {
+        keymap = [self keymapFromFormat: format fd: fd size: size];
+        if (keymap == NULL && _xkbKeymap == NULL)
+            keymap = WL.xkb_keymap_new_from_names(_xkbContext, NULL,
+                                                  XKB_KEYMAP_COMPILE_NO_FLAGS);
     }
     close(fd);
-    if (map == MAP_FAILED)
-        return;
-
-    struct xkb_keymap *keymap = WL.xkb_keymap_new_from_buffer(
-            _xkbContext, map, strnlen(map, size), XKB_KEYMAP_FORMAT_TEXT_V1,
-            XKB_KEYMAP_COMPILE_NO_FLAGS);
-    munmap(map, size);
 
     struct xkb_state *state = keymap != NULL ? WL.xkb_state_new(keymap) : NULL;
     if (state == NULL) {
-        NSLog(@"Wayland backend: cannot use the compositor's keymap");
         if (keymap != NULL)
             WL.xkb_keymap_unref(keymap);
+        if (_xkbContext != NULL && _xkbKeymap == NULL)
+            NSLog(@"Wayland backend: no usable keymap, keyboard input is disabled");
         return;
     }
 
