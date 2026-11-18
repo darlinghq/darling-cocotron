@@ -30,6 +30,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSTextStorage.h>
 #import <AppKit/NSTextView.h>
 #import <AppKit/NSWindow.h>
+#import "NSViewLayoutInternal.h"
+#import <AppKit/NSLinkedOnOrAfter.h>
 
 @interface NSTextFieldCell (Private)
 
@@ -197,6 +199,42 @@ NS_EXTRA_DEALLOC(NSTextField)
         return NSMakeSize(ceil(size.width - inset.width), size.height);
     }
     return [super intrinsicContentSize];
+}
+
+// QUIRK: a wrapping text field without a preferredMaxLayoutWidth that is laid out with constraints,
+// in a program built against the 10.11 SDK or later, has the height of its text wrapped at the width
+// layout gave it, while -intrinsicContentSize keeps answering the unwrapped single-paragraph size.
+// With older SDKs the height stays that of the unwrapped text. Not documented. Evidence: black-box
+// observation on macOS 10.14.4 and 26.7.3 (tier 2): a label of two paragraphs, 356 points wide by
+// constraints, ends up 119 points high when the program records SDK 10.11 or later and 34 points
+// (two lines) when it records 10.10 or earlier, with intrinsicContentSize {1602, 34} either way.
+// Test: tests/appkit-wrapping-label-automatic-width.m
+- (BOOL) _wrapsAtLayoutWidth {
+    return NS_EXTRA(NSTextField, self)->_preferredMaxLayoutWidth <= 0 && [[self cell] wraps] &&
+           NSProgramLinkedOnOrAfterSDK(NS_SDK_VERSION_MACOSX_10_11);
+}
+
+- (NSSize) _intrinsicContentSizeForLayout {
+    NSSize size = [self intrinsicContentSize];
+
+    if (![self _wrapsAtLayoutWidth] || size.height == NSViewNoIntrinsicMetric)
+        return size;
+
+    CGFloat width = [self frame].size.width;
+    NS_EXTRA(NSTextField, self)->_layoutWidth = width;
+    if (width <= 0)
+        return size;
+
+    NSSize wrapped = [[self cell] cellSizeForBounds: NSMakeRect(0, 0, width, NSStringDrawerLargeDimension)];
+    size.height = wrapped.height;
+    return size;
+}
+
+// The wrapped height depends on the width the solver produced, so a new width asks for another pass.
+- (void) layout {
+    [super layout];
+    if ([self _wrapsAtLayoutWidth] && [self frame].size.width != NS_EXTRA(NSTextField, self)->_layoutWidth)
+        [self invalidateIntrinsicContentSize];
 }
 
 - initWithFrame: (NSRect) frame {

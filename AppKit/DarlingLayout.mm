@@ -1,5 +1,6 @@
 #import "DarlingLayout.h"
 #import <AppKit/NSLayoutConstraint.h>
+#import "NSViewLayoutInternal.h"
 #import <Foundation/NSException.h>
 #include "third_party/kiwi/kiwi.h"
 #include <map>
@@ -118,7 +119,7 @@ class Layout {
     }
 
     void intrinsic(NSView *view, Geometry &g) {
-        NSSize size = [view intrinsicContentSize];
+        NSSize size = [view _intrinsicContentSizeForLayout];
         NSEdgeInsets insets = [view alignmentRectInsets];
         // The intrinsic size is that of the alignment rectangle.
         kiwi::Expression dimensions[] = {g.width - (insets.left + insets.right),

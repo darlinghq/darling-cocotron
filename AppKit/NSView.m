@@ -3820,6 +3820,12 @@ static CGFloat backingScaleFactor(NSView *view) {
     return NSMakeSize(NSViewNoIntrinsicMetric, NSViewNoIntrinsicMetric);
 }
 
+// What the constraint solver reads as the view's intrinsic size. It is the public size unless a view
+// class has a size that is known to the layout only (NSTextField: wrapped text height).
+- (NSSize) _intrinsicContentSizeForLayout {
+    return [self intrinsicContentSize];
+}
+
 - (NSUserInterfaceLayoutDirection) userInterfaceLayoutDirection {
     return NS_EXTRA(NSView, self)->_hasExplicitUserInterfaceLayoutDirection
                    ? NS_EXTRA(NSView, self)->_userInterfaceLayoutDirection

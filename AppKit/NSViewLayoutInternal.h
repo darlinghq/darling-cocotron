@@ -25,4 +25,8 @@
 // that arranges its subviews from their intrinsic sizes without constraints
 // overrides it to arrange them again; the default does nothing.
 - (void) _subviewIntrinsicContentSizeDidChange: (NSView *) subview;
+// The intrinsic size the constraint solver uses for the view. By default the
+// public -intrinsicContentSize; a text field that wraps at the width layout
+// gives it answers the height of its wrapped text there.
+- (NSSize) _intrinsicContentSizeForLayout;
 @end
