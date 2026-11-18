@@ -402,6 +402,12 @@ static NSDisplay *processDisplay = nil;
     return standard;
 }
 
+- (BOOL) controlStandsInForCommand: (NSEventModifierFlags) flags
+                       keyEquivalent: (unichar) key
+{
+    return NO;
+}
+
 - (void) beep {
     NSInvalidAbstractInvocation();
 }

@@ -18,6 +18,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 // Original - Christopher Lloyd <cjwl@objc.net>
+#import <AppKit/NSDisplay.h>
 #import <AppKit/NSEvent.h>
 #import <AppKit/NSImage.h>
 #import <AppKit/NSMenu.h>
@@ -443,67 +444,92 @@ NS_EXTRA_SYNTHESIZE_RETAIN(NSMenuItem, badge, _badge, NSMenuItemBadge *, badge, 
     return shared;
 }
 
-- (NSString *) _scanModifierMapFor: (NSString *) key longForm: (BOOL) longForm {
-    NSDictionary *modmap = [[NSUserDefaults standardUserDefaults]
-            dictionaryForKey: @"NSModifierFlagMapping"];
+// How a key equivalent's key is shown. The symbols are the ones macOS uses next
+// to the modifier symbols; the names are for the Ctrl+Key form. Characters that
+// have neither show as themselves, upper-cased; function keys show as F1 to F35.
+static NSString *keyEquivalentKeyName(NSString *key, BOOL symbols) {
+    static NSDictionary *glyphs = nil, *names = nil;
 
-    if ([[modmap objectForKey: @"LeftControl"] isEqual: key])
-        return longForm ? @"LCtrl+" : @"Ctrl+";
-    else if ([[modmap objectForKey: @"LeftAlt"] isEqual: key])
-        return longForm ? @"LAlt+" : @"Alt+";
-    else if ([[modmap objectForKey: @"RightAlt"] isEqual: key])
-        return longForm ? @"RAlt+" : @"Alt+";
-    else if ([[modmap objectForKey: @"RightControl"] isEqual: key])
-        return longForm ? @"RCtrl+" : @"Ctrl+";
-    else {
-        if ([key isEqualToString: @"Alt"]) {
-            if ([[modmap objectForKey: @"LeftAlt"] length] == 0)
-                return longForm ? @"LAlt+" : @"Alt+";
-
-            if ([[modmap objectForKey: @"RightAlt"] length] == 0)
-                return longForm ? @"RAlt+" : @"Alt+";
-        }
-        return nil;
+    if (glyphs == nil) {
+        glyphs = [[NSDictionary alloc] initWithObjectsAndKeys:
+                @"\u21E5", @"\t", @"\u21A9", @"\r", @"\u21A9", @"\n",
+                @"\u21A9", @"\x03", @"\u238B", @"\x1b", @"\u232B", @"\x08",
+                @"\u232B", @"\x7f", @"\u2326", @"\uF728", @"\u2191", @"\uF700",
+                @"\u2193", @"\uF701", @"\u2190", @"\uF702", @"\u2192", @"\uF703",
+                @"\u2196", @"\uF729", @"\u2198", @"\uF72B", @"\u21DE", @"\uF72C",
+                @"\u21DF", @"\uF72D", @"Space", @" ", nil];
+        names = [[NSDictionary alloc] initWithObjectsAndKeys:
+                @"Tab", @"\t", @"Return", @"\r", @"Return", @"\n",
+                @"Enter", @"\x03", @"Esc", @"\x1b", @"Backspace", @"\x08",
+                @"Backspace", @"\x7f", @"Delete", @"\uF728", @"Home", @"\uF729",
+                @"End", @"\uF72B", @"PgUp", @"\uF72C", @"PgDn", @"\uF72D",
+                @"Space", @" ", nil];
     }
+
+    NSString *name = symbols ? [glyphs objectForKey: key] : [names objectForKey: key];
+
+    if (name == nil && [key length] == 1) {
+        unichar c = [key characterAtIndex: 0];
+
+        // F1 to F35
+        if (c >= NSF1FunctionKey && c <= NSF35FunctionKey)
+            name = [NSString stringWithFormat: @"F%d", (int) (c - NSF1FunctionKey + 1)];
+    }
+    if (name == nil)
+        name = [key uppercaseString];
+    return name;
 }
 
+// The shortcut as the user types it on this system. The modifiers shown are the
+// ones the input side delivers for those keys: Command is the Super key and is
+// shown as the Command symbol, unless the display delivers Control as Command
+// for the key (-controlStandsInForCommand:keyEquivalent:), when the shortcut is
+// written with names and Command shows as Ctrl. Option is Alt, Shift and
+// Control are themselves. The symbols are in the macOS order.
 - (NSString *) _keyEquivalentDescription {
-    NSString *result = @"";
-    NSString *uppercaseKey = [NS_EXTRA(NSMenuItem, self)->_keyEquivalent uppercaseString];
-    NSString *lowercaseKey = [NS_EXTRA(NSMenuItem, self)->_keyEquivalent lowercaseString];
-    NSDictionary *keyNames = [[self class] keyNames];
-    NSString *keyName;
-    NSString *command = nil, *alt = nil;
-    if (![NS_EXTRA(NSMenuItem, self)->_keyEquivalent
-                isEqualToString: lowercaseKey]) // [key
-                                                // isEqualToString:uppercaseKey]
-                                                // doesn't work for numbers
-        result = @"Shift+";
+    NSString *key = NS_EXTRA(NSMenuItem, self)->_keyEquivalent;
 
-    if (NS_EXTRA(NSMenuItem, self)->_keyEquivalentModifierMask & NSCommandKeyMask)
-        if ((command = [self _scanModifierMapFor: @"Command"
-                                        longForm: NO]) == nil)
-            return @"";
+    if ([key length] == 0)
+        return @"";
 
-    if (NS_EXTRA(NSMenuItem, self)->_keyEquivalentModifierMask & NSAlternateKeyMask)
-        if ((alt = [self _scanModifierMapFor: @"Alt" longForm: NO]) == nil)
-            return @"";
+    NSUInteger mask = NS_EXTRA(NSMenuItem, self)->_keyEquivalentModifierMask;
+    BOOL command = (mask & NSCommandKeyMask) != 0;
+    BOOL control = (mask & NSControlKeyMask) != 0;
+    BOOL alt = (mask & NSAlternateKeyMask) != 0;
+    // an upper-case key equivalent implies Shift
+    BOOL shift = (mask & NSShiftKeyMask) != 0 || ![key isEqualToString: [key lowercaseString]];
+    BOOL controlIsCommand = NO;
 
-    if ([command isEqualToString: alt]) {
-        command = [self _scanModifierMapFor: @"Command" longForm: YES];
-        alt = [self _scanModifierMapFor: @"Alt" longForm: YES];
+    // Control and Command together are two keys, so Control is not Command's stand-in.
+    if (command && !control && [key length] == 1) {
+        NSEventModifierFlags chord = (mask & ~NSCommandKeyMask) | NSControlKeyMask;
+        unichar lower = [[key lowercaseString] characterAtIndex: 0];
+
+        controlIsCommand = [[NSDisplay currentDisplay] controlStandsInForCommand: chord
+                                                                    keyEquivalent: lower];
     }
 
-    if (command != nil)
-        result = [result stringByAppendingString: command];
-    if (alt != nil)
-        result = [result stringByAppendingString: alt];
+    NSMutableString *result = [NSMutableString string];
 
-    if ((keyName = [keyNames objectForKey: NS_EXTRA(NSMenuItem, self)->_keyEquivalent]) == nil)
-        keyName = uppercaseKey;
+    if (controlIsCommand) {
+        [result appendString: @"Ctrl+"];
+        if (alt)
+            [result appendString: @"Alt+"];
+        if (shift)
+            [result appendString: @"Shift+"];
+        [result appendString: keyEquivalentKeyName(key, NO)];
+        return result;
+    }
 
-    result = [result stringByAppendingString: keyName];
-
+    if (control)
+        [result appendString: @"\u2303"];
+    if (alt)
+        [result appendString: @"\u2325"];
+    if (shift)
+        [result appendString: @"\u21E7"];
+    if (command)
+        [result appendString: @"\u2318"];
+    [result appendString: keyEquivalentKeyName(key, YES)];
     return result;
 }
 
