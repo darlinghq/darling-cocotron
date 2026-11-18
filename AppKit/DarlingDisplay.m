@@ -60,7 +60,10 @@ void NSColorSetCatalogColor(NSColorListName catalogName, NSColorName colorName, 
     if ([colorName isEqual: @"controlShadowColor"])
         return [NSColor darkGrayColor];
     if ([colorName isEqual: @"selectedControlColor"])
-        return [NSColor blueColor];
+        return [NSColor colorWithSRGBRed: 0.701961f /* 179 */
+                                   green: 0.843137f /* 215 */
+                                    blue: 1.0f
+                                   alpha: 1.0f];
     if ([colorName isEqual: @"controlBackgroundColor"])
         return [NSColor whiteColor];
     if ([colorName isEqual: @"controlLightHighlightColor"])
@@ -125,8 +128,8 @@ void NSColorSetCatalogColor(NSColorListName catalogName, NSColorName colorName, 
                                          alpha: 1.00f];
     if ([colorName isEqual: @"alternateSelectedControlColor"])
         return [NSColor colorWithSRGBRed: 0.0f
-                                   green: 0.411765f
-                                    blue: 0.850980f
+                                   green: 0.388235f
+                                    blue: 0.882353f
                                     alpha: 1.0f];
     if ([colorName isEqual: @"controlDarkShadowColor"])
         return [NSColor colorWithCalibratedRed: 0.0f
