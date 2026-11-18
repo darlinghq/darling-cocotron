@@ -91,6 +91,7 @@ const NSViewFullScreenModeOptionKey NSFullScreenModeAllScreens =
 - (void) _trackingAreasChanged;
 - (void) _removeAreaWithTag: (NSInteger) tag;
 - (void) _addLayerToSuperlayer;
+- (void) _synchronizeSublayerOrder;
 - (void) _updateLayerVisibility;
 - (void) _removeLayerFromSuperlayer;
 @end
@@ -1779,6 +1780,10 @@ static void postFrameChange(NSView *self) {
 
     if (NS_EXTRA(NSView, self)->_wantsLayer)
         [view setWantsLayer: YES];
+
+    // A layer added to the superlayer goes to the end, and the layer of a view
+    // that was only moved within its superview does not move at all.
+    [self _synchronizeSublayerOrder];
 }
 
 - (void) addSubview: (NSView *) view {
@@ -1842,8 +1847,10 @@ static void postFrameChange(NSView *self) {
 
     // Subviews that stay are only put in the order of the list, without
     // hooks (macOS runs none for a reorder done through this method).
-    if (![_subviews isEqualToArray: ordered])
+    if (![_subviews isEqualToArray: ordered]) {
         [_subviews setArray: ordered];
+        [self _synchronizeSublayerOrder];
+    }
 }
 
 - (void) sortSubviewsUsingFunction:
@@ -1854,6 +1861,7 @@ static void postFrameChange(NSView *self) {
         return;
 
     [_subviews sortUsingFunction: compareFunction context: context];
+    [self _synchronizeSublayerOrder];
     [self setNeedsDisplay: YES];
 }
 
@@ -2599,6 +2607,38 @@ static char inputContextKey;
     } else {
         [self _createLayerContextIfNeeded];
     }
+}
+
+// The sublayers that belong to the subviews are kept in the order of the
+// subviews, so that the view that is last in -subviews is drawn on top. Other
+// sublayers of the view's layer (added by the application) keep their places.
+- (void) _synchronizeSublayerOrder {
+    if (_layer == nil)
+        return;
+
+    NSMutableArray *wanted = [NSMutableArray arrayWithCapacity: [_subviews count]];
+    for (NSView *subview in _subviews) {
+        CALayer *sublayer = [subview layer];
+        if (sublayer != nil && [sublayer superlayer] == _layer)
+            [wanted addObject: sublayer];
+    }
+
+    NSArray *current = [_layer sublayers];
+    NSMutableArray *ordered = [[current mutableCopy] autorelease];
+    NSUInteger next = 0;
+    BOOL changed = NO;
+    for (NSUInteger i = 0; i < [current count] && next < [wanted count]; i++) {
+        if ([wanted indexOfObjectIdenticalTo: [current objectAtIndex: i]] == NSNotFound)
+            continue;
+        CALayer *sublayer = [wanted objectAtIndex: next++];
+        if ([current objectAtIndex: i] != sublayer) {
+            [ordered replaceObjectAtIndex: i withObject: sublayer];
+            changed = YES;
+        }
+    }
+
+    if (changed)
+        [_layer setSublayers: ordered];
 }
 
 /*
