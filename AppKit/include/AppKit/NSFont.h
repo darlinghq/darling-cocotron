@@ -199,6 +199,10 @@ NSInteger NSConvertGlyphsToPackedGlyphs(NSGlyph *glyphs, NSInteger length,
                                         NSMultibyteGlyphPacking packing,
                                         char *output);
 
+// The identity font matrix: six values, 1 0 0 1 0 0. Deprecated; kept for
+// binaries that still import it.
+extern const CGFloat * _Nullable NSFontIdentityMatrix;
+
 extern NSNotificationName NSFontSetChangedNotification;
 extern NSNotificationName NSAntialiasThresholdChangedNotification;
 

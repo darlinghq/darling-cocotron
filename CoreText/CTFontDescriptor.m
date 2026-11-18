@@ -1,6 +1,7 @@
 #import <CoreText/CTFontDescriptor.h>
 #import <CoreText/CTFont.h>
 #import "KTFontDescriptor.h"
+#import "CTFontSPI.h"
 #import <Foundation/Foundation.h>
 #import <Onyx2D/O2Font_freetype.h>
 
@@ -28,6 +29,8 @@ const CFStringRef kCTFontFormatAttribute = CFSTR("NSCTFontFormatAttribute");
 const CFStringRef kCTFontRegistrationScopeAttribute = CFSTR("NSCTFontRegistrationScopeAttribute");
 const CFStringRef kCTFontPriorityAttribute = CFSTR("NSCTFontPriorityAttribute");
 const CFStringRef kCTFontDescriptorLanguageAttribute = CFSTR("CTFontDescriptorLanguageAttribute");
+__attribute__((visibility("hidden")))
+const CFStringRef KTFontSystemUIAttribute = CFSTR("KTFontSystemUIAttribute");
 
 @implementation KTFontDescriptor
 
@@ -152,6 +155,14 @@ CFTypeRef CTFontDescriptorCopyAttribute(CTFontDescriptorRef descriptor, CFString
         return NULL;
     id value = [[descriptorObject(descriptor) attributes] objectForKey: (NSString *) attribute];
     return (CFTypeRef) [value retain];
+}
+
+bool CTFontDescriptorIsSystemUIFont(CTFontDescriptorRef descriptor)
+{
+    if (descriptor == NULL)
+        return false;
+    id value = [[descriptorObject(descriptor) attributes] objectForKey: (NSString *) KTFontSystemUIAttribute];
+    return [value isKindOfClass: [NSNumber class]] && [value boolValue];
 }
 
 CFTypeRef CTFontDescriptorCopyLocalizedAttribute(CTFontDescriptorRef descriptor,
