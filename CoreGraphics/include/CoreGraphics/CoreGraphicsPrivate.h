@@ -202,9 +202,16 @@ extern void CGContextSetFontSmoothingStyle(CGContextRef context, uint32_t style)
 // through a per-process Darwin notification that the process' own windowing backend
 // answers; so success only means the request was made. Returns kCGErrorIllegalArgument
 // for a pid that is not positive, kCGErrorSuccess otherwise, and
-// kCGErrorCannotComplete when no request could be made.
+// kCGErrorCannotComplete when no request could be made, which includes a process (other than the
+// caller) that never connected to the window system, see _CGSProcessHasConnection().
 #define kCGSActivateProcessFrontWindowOnly 1
 CGError _CGSActivateProcess(pid_t pid, uint32_t options);
+// Whether the process with this pid is a live process that has connected to the window system,
+// as every process does that creates a connection (CGSNewConnection, CGSMainConnectionID; AppKit
+// does so when NSApplication is created). Processes that never did, such as command line tools
+// and system daemons, are not applications of the window system.
+Boolean _CGSProcessHasConnection(pid_t pid);
+#define kCGSProcessConnectionNotificationPrefix "org.darlinghq.process-connection."
 // The Darling process that has the input focus. The display server answers where it can (X11:
 // the owner of _NET_ACTIVE_WINDOW). A Wayland compositor does not tell clients, so the answer
 // is the process that most recently reported (through _CGSSetFrontProcess) that it was
