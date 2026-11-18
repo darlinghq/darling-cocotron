@@ -15,19 +15,22 @@ static int failures;
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "FAIL line %d: %s\n", __LINE__, #c); failures++; } } while (0)
 
 // Stands in for NSButtonCell in an archive: only the flag word under test is stored.
-@interface ButtonCellStandIn : NSObject <NSCoding>
-@property int flags2;
+// The flag word is an explicit instance variable: a property is not synthesized on the i386 runtime.
+@interface ButtonCellStandIn : NSObject <NSCoding> {
+@public
+    int flags2;
+}
 @end
 @implementation ButtonCellStandIn
 - (void)encodeWithCoder:(NSCoder *)coder {
-    [coder encodeInt:self.flags2 forKey:@"NSButtonFlags2"];
+    [coder encodeInt:self->flags2 forKey:@"NSButtonFlags2"];
 }
 - (id)initWithCoder:(NSCoder *)coder { return [super init]; }
 @end
 
 static NSBezelStyle decodedStyle(int flags2) {
     ButtonCellStandIn *standIn = [ButtonCellStandIn new];
-    standIn.flags2 = flags2;
+    standIn->flags2 = flags2;
     NSMutableData *data = [NSMutableData data];
     NSKeyedArchiver *archiver = [[NSKeyedArchiver alloc] initForWritingWithMutableData:data];
     [archiver setClassName:@"NSButtonCell" forClass:[ButtonCellStandIn class]];
