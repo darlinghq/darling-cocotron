@@ -30,13 +30,20 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @implementation NSOpenPanel
 
+// QUIRK: an open panel's title is hidden although the window has one, its prompt is "Open", its message is
+// empty and its style mask is 0x8109: titled and resizable with two bits that have no public name. Not
+// documented. Evidence: black-box observation of -title, -prompt, -message, -styleMask and
+// -titleVisibility of a new open panel on macOS 10.14.4 (tier 2). Test: appkit-panel-default-values.m
 - (id) resetToDefaultValues {
     self = [super resetToDefaultValues];
     _filenames = [NSArray new];
-    [_dialogTitle release];
-    _dialogTitle = [NSLocalizedStringFromTableInBundle(
+    NSString *open = NSLocalizedStringFromTableInBundle(
             @"Open", nil, [NSBundle bundleForClass: [NSOpenPanel class]],
-            @"The title of the open panel") copy];
+            @"The title of the open panel");
+    [self setStyleMask: 0x8109];
+    [self setTitleVisibility: NSWindowTitleHidden];
+    [self setTitle: open];
+    [self setPrompt: open];
     _allowsMultipleSelection = NO;
     _canChooseDirectories = NO;
     _canChooseFiles = YES;

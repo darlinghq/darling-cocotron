@@ -54,8 +54,18 @@ static NSString *defaultDirectory(void) {
     return NSHomeDirectory();
 }
 
+// QUIRK: a save panel is titled, not resizable, and shows its title; its prompt is "Save" and its message
+// is empty, with no other style bits. Not documented. Evidence: black-box observation of -title, -prompt,
+// -message, -styleMask and -titleVisibility of a new save panel on macOS 10.14.4 (tier 2).
+// Test: appkit-panel-default-values.m
 - (id) resetToDefaultValues {
-    [self setTitle: @"Save"];
+    NSBundle *bundle = [NSBundle bundleForClass: [NSSavePanel class]];
+    NSString *save = NSLocalizedStringFromTableInBundle(@"Save", nil, bundle, @"The title of the save panel");
+    [self setStyleMask: NSWindowStyleMaskTitled];
+    [self setTitleVisibility: NSWindowTitleVisible];
+    [self setTitle: save];
+    [self setPrompt: save];
+    [self setMessage: @""];
     [self setNameFieldStringValue: @""];
     [self _setFilename: @""];
     [self setDirectory: defaultDirectory()];
@@ -542,6 +552,8 @@ static NSSavePanel *_newPanel = nil;
 }
 
 - (void) setTitle: (NSString *) title {
+    // the title is the one of the window, which is what the window manager shows
+    [super setTitle: title];
     title = [title copy];
     [_dialogTitle release];
     _dialogTitle = title;
