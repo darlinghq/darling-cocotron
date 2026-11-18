@@ -56,6 +56,7 @@
 
 #import "NSRulerMarker+NSTextExtensions.h"
 #import "NSUndoTextOperation.h"
+#import "NSKillRing-Private.h"
 
 NSString *const NSOldSelectedCharacterRange = @"NSOldSelectedCharacterRange";
 NSString *const NSTouchBarItemIdentifierTextStyle =
@@ -1794,28 +1795,51 @@ static NSTextView *s_targetTextView = nil;
     }
 }
 
-// deleteToXXX methods use the kill buffer...
-- (void) _appendStringToKillBuffer: (NSString *) string {
-    if (NS_EXTRA(NSTextView, self)->_killBufferIsAdditive == YES) {
-        if (NS_EXTRA(NSTextView, self)->_killBuffer != nil)
-            [NS_EXTRA(NSTextView, self)->_killBuffer appendString: string];
+// The deleteToXXX commands put what they remove on the kill ring shared by all
+// text views (and by the _NSAppendToKillRing() family). Consecutive kills of
+// one kind at the same insertion point extend one entry; anything else
+// starts a new one.
+//
+// QUIRK: the line kills (to the beginning or end of the line) put their text
+// in front of the entry, the paragraph kills behind it, and a line kill never
+// continues a paragraph kill's entry or the other way round. Not documented.
+// Evidence: black-box observation on macOS 26.7.3 (tier 2); two
+// deleteToEndOfLine: in a row yield "<newline><first kill>", two
+// deleteToEndOfParagraph: yield "<first kill><newline>", and
+// deleteToBeginningOfLine: followed by deleteToEndOfLine: at one insertion
+// point yield the second kill followed by the first.
+// Test: appkit-kill-ring.m (test_quirk_* checks).
+typedef NS_ENUM(NSInteger, NSTextViewKillKind) {
+    NSTextViewKillNone = 0,
+    NSTextViewKillLine,
+    NSTextViewKillParagraph,
+};
+
+- (void) _killRange: (NSRange) range kind: (NSTextViewKillKind) kind {
+    __auto_type extra = NS_EXTRA(NSTextView, self);
+    NSRange selection = [self selectedRange];
+    BOOL continuesSequence = extra->_killSequenceKind == kind &&
+                             selection.length == 0 &&
+                             selection.location == extra->_killSequenceLocation;
+    NSString *killed = [[extra->_textStorage string] substringWithRange: range];
+
+    if (![self _delegateChangeTextInRange: range replacementString: @""])
+        return;
+
+    if ([killed length] > 0) {
+        _NSInitializeKillRing();
+        if (!continuesSequence)
+            _NSNewKillRingSequence();
+        if (kind == NSTextViewKillLine)
+            _NSPrependToKillRing(killed);
         else
-            NS_EXTRA(NSTextView, self)->_killBuffer = [string mutableCopy];
-    } else {
-        [NS_EXTRA(NSTextView, self)->_killBuffer release];
-        NS_EXTRA(NSTextView, self)->_killBuffer = [string copy];
+            _NSAppendToKillRing(killed);
     }
-}
 
-// etc
-- (BOOL) killBufferIsAdditive {
-    return NS_EXTRA(NSTextView, self)->_killBufferIsAdditive;
-}
-
-- (void) setKillBufferAdditive: (BOOL) flag {
-    NS_EXTRA(NSTextView, self)->_killBufferIsAdditive = flag;
-    [NS_EXTRA(NSTextView, self)->_killBuffer release];
-    NS_EXTRA(NSTextView, self)->_killBuffer = nil;
+    [self _replaceCharactersInRange: range withString: @""];
+    extra->_killSequenceKind = kind;
+    extra->_killSequenceLocation = [self selectedRange].location;
+    [self didChangeText];
 }
 
 - (void) deleteToBeginningOfLine: sender {
@@ -1829,32 +1853,28 @@ static NSTextView *s_targetTextView = nil;
         range.length += delta;
     }
 
-    if (![self _delegateChangeTextInRange: range replacementString: @""])
-        return;
-
-    [self _appendStringToKillBuffer: [[NS_EXTRA(NSTextView, self)->_textStorage string]
-                                             substringWithRange: range]];
-    [self _replaceCharactersInRange: range withString: @""];
-    [self didChangeText];
+    [self _killRange: range kind: NSTextViewKillLine];
 }
 
 - (void) deleteToEndOfLine: sender {
     NSRange range = [self selectedRange];
-    NSRange lineRange = [[self layoutManager]
-            _softLineRangeForCharacterAtIndex: NSMaxRange(range)];
-    NSUInteger delta = NSMaxRange(lineRange) - NSMaxRange(range);
 
-    if (range.length ==
-        0) // "implemented to delete the selection, if there is one, *OR*
-        range.length += delta; // all text to the end of a line...
+    // Without a selection: the rest of the line without its line break, or
+    // the line break itself when nothing else is left.
+    if (range.length == 0) {
+        NSString *string = [NS_EXTRA(NSTextView, self)->_textStorage string];
+        NSRange lineRange = [[self layoutManager]
+                _softLineRangeForCharacterAtIndex: range.location];
+        NSUInteger end = NSMaxRange(lineRange);
 
-    if (![self _delegateChangeTextInRange: range replacementString: @""])
-        return;
+        if (end > range.location + 1 && end <= [string length] &&
+            [[NSCharacterSet newlineCharacterSet] characterIsMember: [string characterAtIndex: end - 1]])
+            end--;
+        if (end > range.location)
+            range.length = end - range.location;
+    }
 
-    [self _appendStringToKillBuffer: [[NS_EXTRA(NSTextView, self)->_textStorage string]
-                                             substringWithRange: range]];
-    [self _replaceCharactersInRange: range withString: @""];
-    [self didChangeText];
+    [self _killRange: range kind: NSTextViewKillLine];
 }
 
 - (void) deleteToBeginningOfParagraph: sender {
@@ -1868,34 +1888,27 @@ static NSTextView *s_targetTextView = nil;
         range.length += delta;
     }
 
-    if (![self _delegateChangeTextInRange: range replacementString: @""])
-        return;
-
-    [self _appendStringToKillBuffer: [[NS_EXTRA(NSTextView, self)->_textStorage string]
-                                             substringWithRange: range]];
-    [self _replaceCharactersInRange: range withString: @""];
-    [self didChangeText];
+    [self _killRange: range kind: NSTextViewKillParagraph];
 }
 
 - (void) deleteToEndOfParagraph: sender {
     NSRange range = [self selectedRange];
-    NSRange lineRange = [[NS_EXTRA(NSTextView, self)->_textStorage string] lineRangeForRange: range];
-    NSUInteger max = NSMaxRange(lineRange);
+    NSString *string = [NS_EXTRA(NSTextView, self)->_textStorage string];
+    NSRange lineRange = [string lineRangeForRange: range];
 
-    if (max != lineRange.location && max != [[NS_EXTRA(NSTextView, self)->_textStorage string] length])
-        max--;
+    // Without a selection: the rest of the paragraph without its line
+    // break, or the line break itself when nothing else is left.
+    if (range.length == 0) {
+        NSUInteger end = NSMaxRange(lineRange);
+        NSUInteger contentsEnd;
 
-    // i'm not killing the newline here, not sure how this should work.
-    if (range.length == 0)
-        range.length += (NSMaxRange(lineRange) - NSMaxRange(range)) - 1;
+        [string getLineStart: NULL end: NULL contentsEnd: &contentsEnd forRange: range];
+        if (contentsEnd > range.location)
+            end = contentsEnd;
+        range.length = end - range.location;
+    }
 
-    if (![self _delegateChangeTextInRange: range replacementString: @""])
-        return;
-
-    [self _appendStringToKillBuffer: [[NS_EXTRA(NSTextView, self)->_textStorage string]
-                                             substringWithRange: range]];
-    [self _replaceCharactersInRange: range withString: @""];
-    [self didChangeText];
+    [self _killRange: range kind: NSTextViewKillParagraph];
 }
 
 // deleteToMark: is 5th and final kill-buffer-aware method (marks aren't
@@ -1904,14 +1917,12 @@ static NSTextView *s_targetTextView = nil;
 // the kill buffer, but whatever...
 
 - (void) yank: sender {
-    if (NS_EXTRA(NSTextView, self)->_killBuffer != nil) {
-        [self insertText: NS_EXTRA(NSTextView, self)->_killBuffer];
+    _NSInitializeKillRing();
+    NSString *killed = _NSYankFromKillRing();
 
-        if (NS_EXTRA(NSTextView, self)->_killBufferIsAdditive == YES) {
-            [NS_EXTRA(NSTextView, self)->_killBuffer release];
-            NS_EXTRA(NSTextView, self)->_killBuffer = nil;
-        }
-    }
+    NS_EXTRA(NSTextView, self)->_killSequenceKind = NSTextViewKillNone;
+    if ([killed length] > 0)
+        [self insertText: killed];
 }
 
 - (void) deleteWordBackward: sender {

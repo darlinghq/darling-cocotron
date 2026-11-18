@@ -141,9 +141,8 @@ typedef NS_ENUM(NSUInteger, NSFindPanelSubstringMatchType) {
 
         BOOL _didSendTextDidEndNotification;
         NSUInteger _selectionOrigin; // for keyboard selection sanity.
-        id _killBuffer; // NSString for Emacs-style, NSMutableString for additive
-        BOOL _killBufferIsAdditive; // .. additive == pine/pico style, but possible
-                                    // memory hog
+        NSInteger _killSequenceKind; // the last kill command's kind, 0 after anything else
+        NSUInteger _killSequenceLocation; // insertion point it left behind
 
         NSRange _rangeForUserCompletion; // range of original user completion text.
         NSString *_userCompletionHint;   // original "hint" text which started
