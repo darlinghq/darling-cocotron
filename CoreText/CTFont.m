@@ -176,12 +176,20 @@ CTFontRef CTFontCreateWithFontDescriptorAndOptions(CTFontDescriptorRef descripto
     return CTFontCreateWithFontDescriptor(descriptor, size, matrix);
 }
 
+// Set on the fonts made for the system UI font types; see CTFontDescriptorIsSystemUIFont().
+static char systemUIFontKey;
+
 CTFontRef CTFontCreateUIFontForLanguage(CTFontUIFontType uiFontType,
                                         CGFloat size, CFStringRef language)
 {
-    return (CTFontRef)[[KTFont alloc] initWithUIFontType: uiFontType
+    KTFont *font = [[KTFont alloc] initWithUIFontType: uiFontType
                                          size: size
                                      language: (NSString*)language];
+    // The user and the user fixed-pitch fonts are not system UI fonts.
+    if (font != nil && uiFontType != kCTFontUIFontUser && uiFontType != kCTFontUIFontUserFixedPitch)
+        objc_setAssociatedObject(font, &systemUIFontKey, (id) kCFBooleanTrue,
+                                 OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    return (CTFontRef) font;
 }
 
 CTFontRef CTFontCreateCopyWithAttributes(CTFontRef font, CGFloat size,
@@ -345,6 +353,8 @@ CTFontDescriptorRef CTFontCopyFontDescriptor(CTFontRef font)
     NSArray *cascade = fontCascade(font);
     if (cascade != nil)
         [attributes setObject: cascade forKey: (NSString *) kCTFontCascadeListAttribute];
+    if (objc_getAssociatedObject(object, &systemUIFontKey) != nil)
+        [attributes setObject: (id) kCFBooleanTrue forKey: (NSString *) KTFontSystemUIAttribute];
     [name release];
     [family release];
     [traits release];

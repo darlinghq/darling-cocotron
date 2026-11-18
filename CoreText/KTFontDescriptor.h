@@ -45,3 +45,8 @@ CTFontDescriptorRef KTFontDescriptorCreateWithFontData(CFDictionaryRef attribute
 // Returns NULL unless the descriptor was made from font data. Not retained.
 __attribute__((visibility("hidden")))
 CFDataRef KTFontDescriptorGetFontData(CTFontDescriptorRef descriptor);
+
+// Descriptor attribute (a CFBoolean) that CTFontCopyFontDescriptor() sets for the
+// descriptor of a system UI font; read by CTFontDescriptorIsSystemUIFont().
+__attribute__((visibility("hidden")))
+extern const CFStringRef KTFontSystemUIAttribute;
