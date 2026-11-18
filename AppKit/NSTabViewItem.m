@@ -225,10 +225,14 @@ NSString *_NSTruncatedStringWithAttributesInRect(NSString *string,
 }
 
 - (NSDictionary *) labelAttributes {
-    return [NSDictionary
-            dictionaryWithObjectsAndKeys: [_tabView font], NSFontAttributeName,
-                                          [self _labelColor],
-                                          NSForegroundColorAttributeName, nil];
+    NSMutableDictionary *attributes = [NSMutableDictionary
+            dictionaryWithObject: [self _labelColor]
+                          forKey: NSForegroundColorAttributeName];
+
+    // a tab view decoded from an archive without a font has none; the text then takes the default
+    if ([_tabView font] != nil)
+        [attributes setObject: [_tabView font] forKey: NSFontAttributeName];
+    return attributes;
 }
 
 // our tabs draw too closely to the left mragin.
