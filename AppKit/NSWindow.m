@@ -3995,7 +3995,14 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
                               withObject: self];
 
     NS_EXTRA(NSWindow, self)->_isActive = YES;
-    if ([self canBecomeKeyWindow]) {
+    // A key window that is fully transparent (alphaValue 0) has no focus of its own on a display
+    // where the focus follows the visible windows; the focus arriving in another window of the
+    // application must not take the key status away from it.
+    NSWindow *currentKey = [NSApp keyWindow];
+    id currentKeyPlatform = currentKey != self ? [currentKey platformWindow] : nil;
+    BOOL keyStays = [currentKeyPlatform respondsToSelector: @selector(isFullyTransparent)] &&
+                    [currentKeyPlatform isFullyTransparent];
+    if ([self canBecomeKeyWindow] && !keyStays) {
         [self becomeKeyWindow];
     }
     if ([self canBecomeMainWindow] && ![self isMainWindow]) {

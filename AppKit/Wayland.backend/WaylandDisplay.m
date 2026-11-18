@@ -1954,12 +1954,14 @@ static NSUInteger modifierDeviceMask(int code) {
                         pressed: (BOOL) pressed
                          repeat: (BOOL) repeat
 {
+    // Key events belong to the key window whichever surface of the application the compositor
+    // gave the focus to. That matters when the key window is a window with alpha 0, which is
+    // never shown and so never gets the focus. Menus and pop-ups that hold the focus keep it.
     WaylandWindow *window = _keyboardWindow;
-    if (window == nil) {
-        id platformWindow = [[NSApp keyWindow] platformWindow];
-        if ([platformWindow isKindOfClass: [WaylandWindow class]])
-            window = platformWindow;
-    }
+    id keyPlatformWindow = [[NSApp keyWindow] platformWindow];
+    if ([keyPlatformWindow isKindOfClass: [WaylandWindow class]] &&
+        (window == nil || ![window isPopup]))
+        window = keyPlatformWindow;
     NSWindow *delegate = [window delegate];
     if (delegate == nil)
         return;
