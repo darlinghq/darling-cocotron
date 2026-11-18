@@ -2507,11 +2507,29 @@ static BOOL resignPending;
     // Resigning, if it happens, is decided by -_resignIfNoWindowIsActive.
 }
 
+// Whether a window of the application, other than the ones AppKit makes for
+// itself (menus, tool tips, the menu bar), is shown or minimized.
+- (BOOL) _hasOnScreenWindow {
+    for (NSWindow *window in _windows) {
+        if ([window styleMask] & NSAppKitPrivateWindow)
+            continue;
+        if ([window isVisible] || [window isMiniaturized])
+            return YES;
+    }
+    return NO;
+}
+
+// The focus leaving the last window of the application because that window
+// was closed or hidden is not the user activating another application: the
+// application stays active, and keeps its menu bar, until another application
+// is activated. The focus leaving a window that is still shown resigns.
 - (void) _resignIfNoWindowIsActive {
     if (!resignPending)
         return;
     resignPending = NO;
     if ([self isActiveExcludingWindow: nil])
+        return;
+    if (![self _hasOnScreenWindow])
         return;
 
     [[NSNotificationCenter defaultCenter]
