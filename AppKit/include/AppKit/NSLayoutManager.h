@@ -153,15 +153,15 @@ typedef NS_OPTIONS(NSInteger, NSControlCharacterAction) {
                      bidiLevels: (nullable unsigned char *) bidiLevels;
 
 - (null_unspecified NSTextContainer *) textContainerForGlyphAtIndex: (NSUInteger) glyphIndex
-                                    effectiveRange: (NSRangePointer)
+                                    effectiveRange: (nullable NSRangePointer)
                                                             effectiveGlyphRange;
 - (NSRect) lineFragmentRectForGlyphAtIndex: (NSUInteger) glyphIndex
                             effectiveRange:
-                                    (NSRangePointer) effectiveGlyphRange;
+                                    (nullable NSRangePointer) effectiveGlyphRange;
 - (NSPoint) locationForGlyphAtIndex: (NSUInteger) glyphIndex;
 - (NSRect) lineFragmentUsedRectForGlyphAtIndex: (NSUInteger) glyphIndex
                                 effectiveRange:
-                                        (NSRangePointer) effectiveGlyphRange;
+                                        (nullable NSRangePointer) effectiveGlyphRange;
 - (void) enumerateLineFragmentsForGlyphRange: (NSRange) glyphRange
                                   usingBlock: (void (^)(NSRect lineRect, NSRect usedRect,
                                                         NSTextContainer *textContainer,
@@ -188,7 +188,7 @@ typedef NS_OPTIONS(NSInteger, NSControlCharacterAction) {
 
 - (void) invalidateGlyphsForCharacterRange: (NSRange) charRange
                             changeInLength: (NSInteger) delta
-                      actualCharacterRange: (NSRangePointer) actualCharRange;
+                      actualCharacterRange: (nullable NSRangePointer) actualCharRange;
 - (void) invalidateLayoutForCharacterRange: (NSRange) charRange
                                     isSoft: (BOOL) isSoft
                       actualCharacterRange: (nullable NSRangePointer) actualCharRange;
@@ -289,7 +289,7 @@ typedef NS_OPTIONS(NSInteger, NSControlCharacterAction) {
 
 - (null_unspecified NSDictionary *) temporaryAttributesAtCharacterIndex: (NSUInteger) charIndex
                                         effectiveRange:
-                                                (NSRangePointer)
+                                                (nullable NSRangePointer)
                                                         effectiveCharRange;
 - (void) setTemporaryAttributes: (null_unspecified NSDictionary *) attrs
               forCharacterRange: (NSRange) charRange;
@@ -300,13 +300,13 @@ typedef NS_OPTIONS(NSInteger, NSControlCharacterAction) {
 
 - (null_unspecified id) temporaryAttribute: (null_unspecified NSString *) attrName
          atCharacterIndex: (NSUInteger) location
-           effectiveRange: (NSRangePointer) range;
+           effectiveRange: (nullable NSRangePointer) range;
 - (null_unspecified id) temporaryAttribute: (null_unspecified NSString *) attrName
              atCharacterIndex: (NSUInteger) location
-        longestEffectiveRange: (NSRangePointer) range
+        longestEffectiveRange: (nullable NSRangePointer) range
                       inRange: (NSRange) rangeLimit;
 - (null_unspecified NSDictionary *) temporaryAttributesAtCharacterIndex: (NSUInteger) location
-                                 longestEffectiveRange: (NSRangePointer) range
+                                 longestEffectiveRange: (nullable NSRangePointer) range
                                                inRange: (NSRange) rangeLimit;
 - (void) addTemporaryAttribute: (null_unspecified NSString *) attrName
                          value: (null_unspecified id) value
