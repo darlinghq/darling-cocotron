@@ -33,6 +33,7 @@ struct wl_egl_window;
     CGSize _drawablePixelSize;
     CGRect _frame, _fullRect, _pendingRect, _presentedRect;
     BOOL _visible, _clipped;
+    int _flushPending; // a flush hop to the main thread is queued (atomic)
     // The surfaces Metal layers present to, by layer (not retained): WaylandMetalSurface objects.
     NSMapTable *_metalSurfaces;
 }

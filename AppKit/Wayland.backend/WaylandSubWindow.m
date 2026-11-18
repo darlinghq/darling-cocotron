@@ -190,10 +190,23 @@ static BOOL validFrame(CGRect frame) {
     union wl_argument args[] = {{.o = (struct wl_object *)surface}};
     WaylandMarshal(_subsurface, WP_SUBSURFACE_PLACE_ABOVE, NULL, 0, args);
 }
-- (BOOL) requiresMainThreadPresentation { return YES; }
+- (BOOL) requiresMainThreadPresentation { return NO; }
 - (uint32_t) refreshMillihertz { return [_parent refreshMillihertz]; }
+// Rendering and swapping the EGL surface may happen on any thread, as on the other
+// backends: the EGL platform has its own event queue for the surface, and the
+// wl_egl_window is only resized by updateGeometry (main thread), which EGL picks up at the
+// next swap. What follows a swap (crop, position, stacking, the parent's commit) uses
+// state owned by the main thread, so a swap on another thread asks the main thread to do it.
+// Requests made before the main thread gets to it are merged; it presents the latest
+// geometry, and the parent's commit applies the newest cached buffer.
 - (void) flush {
-    if (![NSThread isMainThread]) return;
+    if (![NSThread isMainThread]) {
+        if (__atomic_exchange_n(&_flushPending, 1, __ATOMIC_ACQ_REL)) return;
+        [self retain];
+        [self performSelectorOnMainThread: @selector(flushOnMainThread) withObject: nil waitUntilDone: NO
+                                    modes: [NSArray arrayWithObject: (NSString *) kCFRunLoopCommonModes]];
+        return;
+    }
     if (!_visible || _clipped || !_eglWindow || [_parent isInvalidated]) return;
     if (_viewport) {
         int width, height;
@@ -239,6 +252,12 @@ static BOOL validFrame(CGRect frame) {
     if (!_scaleUpdatePending) _needsScaleRedraw = NO;
     _scaleRedrawRequested = NO;
     [[_parent waylandDisplay] flush];
+}
+
+- (void) flushOnMainThread {
+    __atomic_store_n(&_flushPending, 0, __ATOMIC_RELEASE);
+    [self flush];
+    [self release];
 }
 
 // A Metal layer's surface is a desynchronized subsurface of the parent window, above this
