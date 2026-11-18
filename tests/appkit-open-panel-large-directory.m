@@ -34,7 +34,7 @@ static long residentMegabytes(void) {
 int main(int argc, char **argv) {
     @autoreleasepool {
         int count = argc > 1 ? atoi(argv[1]) : 8000;
-        long limit = argc > 2 ? atol(argv[2]) : 420;
+        long limit = argc > 2 ? atol(argv[2]) : 400;
         [NSApplication sharedApplication];
 
         NSFileManager *fm = [NSFileManager defaultManager];
