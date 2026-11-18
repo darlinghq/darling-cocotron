@@ -184,15 +184,37 @@ static NSDisplay *processDisplay = nil;
     NSInvalidAbstractInvocation();
 }
 
-- (void) hideCursorCounted {
-    if (_cursorHideCount++ == 0)
+// The backend hides the cursor while something hid it.
+- (void) _applyCursorHidden {
+    BOOL hidden = _cursorHideCount > 0;
+
+    if (hidden == _cursorIsHidden)
+        return;
+    _cursorIsHidden = hidden;
+    if (hidden)
         [self hideCursor];
+    else
+        [self unhideCursor];
+}
+
+- (void) hideCursorCounted {
+    _cursorHideCount++;
+    [self _applyCursorHidden];
 }
 
 // An unhide with nothing hidden does nothing.
 - (void) unhideCursorCounted {
-    if (_cursorHideCount > 0 && --_cursorHideCount == 0)
-        [self unhideCursor];
+    if (_cursorHideCount > 0) {
+        _cursorHideCount--;
+        [self _applyCursorHidden];
+    }
+}
+
+// Shows the cursor and forgets every pending hide (CGSForceShowCursor).
+- (void) forceShowCursor {
+    _cursorHideCount = 0;
+    _cursorHiddenUntilMouseMoves = NO;
+    [self _applyCursorHidden];
 }
 
 // The flag is idempotent and counts as one hide, so the hide/unhide pair stays balanced and an

@@ -686,6 +686,45 @@ CGError CGSSetSurfaceBounds(CGSConnectionID cid, CGSWindowID wid, CGSSurfaceID s
 	return [surface setBounds: rect];
 }
 
+// QUIRK: a failed CGSGetWindowBounds() reports kCGErrorFailure for a window
+// that does not exist, and sets the result to CGRectNull. Not documented.
+// Evidence: black-box observation on macOS 26.7.3 (tier 2).
+// Test: coregraphics-cgs-bounds.c (test_quirk_missing_window_bounds).
+CGError CGSGetWindowBounds(CGSConnectionID cid, CGSWindowID wid, CGRect *outBounds)
+{
+	if (outBounds == NULL)
+		return kCGErrorIllegalArgument;
+
+	CGSWindow* window;
+	CGError err = getWindow(cid, wid, &window);
+
+	if (err == kCGErrorIllegalArgument) {
+		*outBounds = CGRectNull;
+		return kCGErrorFailure;
+	}
+	if (err != kCGSErrorSuccess)
+		return err;
+
+	return [window getRect: outBounds];
+}
+
+// The bounds last given to CGSSetSurfaceBounds(). QUIRK: until then they are
+// CGRectNull. Not documented. Evidence: black-box observation on macOS 26.7.3
+// (tier 2). Test: coregraphics-cgs-bounds.c (test_quirk_surface_bounds_null).
+CGError CGSGetSurfaceBounds(CGSConnectionID cid, CGSWindowID wid, CGSSurfaceID sid, CGRect *outBounds)
+{
+	if (outBounds == NULL)
+		return kCGErrorIllegalArgument;
+
+	CGSSurface* surface;
+	CGError err = getSurface(cid, wid, sid, &surface);
+
+	if (err != kCGSErrorSuccess)
+		return err;
+
+	return [surface getBounds: outBounds];
+}
+
 CGSConnection* _CGSConnectionFromEventRecord(const CGSEventRecordPtr record)
 {
 	if (!record)

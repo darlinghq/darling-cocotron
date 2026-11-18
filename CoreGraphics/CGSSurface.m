@@ -28,11 +28,23 @@
 {
     _window = window;
     _surfaceId = surfaceID;
+    _bounds = CGRectNull;
     return self;
 }
 
 - (CGError) setBounds: (CGRect) rect {
     NSInvalidAbstractInvocation();
+}
+
+- (CGError) getBounds: (CGRect *) outBounds {
+    if (outBounds == NULL)
+        return kCGErrorIllegalArgument;
+    *outBounds = _bounds;
+    return kCGErrorSuccess;
+}
+
+- (void) _boundsDidChange: (CGRect) rect {
+    _bounds = rect;
 }
 
 - (void *) nativeWindow {

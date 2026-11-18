@@ -32,6 +32,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     NSRecursiveLock *_eventQueueLock;
     BOOL _cursorHiddenUntilMouseMoves;
     NSInteger _cursorHideCount;
+    BOOL _cursorIsHidden; // what the backend was last told
     double _mouseDeltaX, _mouseDeltaY;
     CFRunLoopSourceRef _eventSource;
 }
@@ -60,6 +61,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 // +[NSCursor hide], CGDisplayHideCursor and -setCursorHiddenUntilMouseMoves: use these.
 - (void) hideCursorCounted;
 - (void) unhideCursorCounted;
+// Shows the cursor whatever number of hides is pending, and forgets them (CGSForceShowCursor).
+- (void) forceShowCursor;
 // Hides the cursor until the pointer moves (+[NSCursor setHiddenUntilMouseMoves:]).
 // The state is tracked here, so a backend reports motion with -pointerMoved.
 - (void) setCursorHiddenUntilMouseMoves: (BOOL) flag;

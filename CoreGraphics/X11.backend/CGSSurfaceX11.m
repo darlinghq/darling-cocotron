@@ -79,6 +79,7 @@
 
 	XMoveResizeWindow(_display, _xWindow, lround(rect.origin.x), lround(rect.origin.y),
 		lround(rect.size.width), lround(rect.size.height));
+	[self _boundsDidChange: rect];
 	return kCGSErrorSuccess;
 }
 

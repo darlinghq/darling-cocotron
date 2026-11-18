@@ -26,10 +26,15 @@
 @interface CGSSurface : NSObject {
     CGSWindow *_window;
     CGSSurfaceID _surfaceId;
+    CGRect _bounds;
 }
 - (instancetype) initWithWindow: (CGSWindow *) window
                       surfaceID: (CGSSurfaceID) surfaceID;
 - (CGError) setBounds: (CGRect) rect;
+// The bounds last set with -setBounds:, CGRectNull before that.
+- (CGError) getBounds: (CGRect *) outBounds;
+// For the backends' -setBounds: once the new bounds are in effect.
+- (void) _boundsDidChange: (CGRect) rect;
 
 // Used by CGL as EGLNativeWindowType for CGLSetSurface()
 - (void *) nativeWindow;

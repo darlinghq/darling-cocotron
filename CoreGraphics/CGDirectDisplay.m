@@ -285,6 +285,16 @@ CGError CGDisplayShowCursor(CGDirectDisplayID displayIndex) {
     return kCGErrorSuccess;
 }
 
+// Callers pass the connection id and nothing else, and do not use a result;
+// the function returns nothing on macOS. Seen in use around
+// CGDisplayHideCursor()/CGDisplayShowCursor() pairs, which fits "show the
+// cursor whatever the hide count was". The effect itself is not observable
+// from outside; this is the minimal reading of the name.
+// Test: coregraphics-cgs-force-show-cursor.m.
+void CGSForceShowCursor(CGSConnectionID cid) {
+    [currentDisplay() forceShowCursor];
+}
+
 boolean_t CGDisplayIsInMirrorSet(CGDirectDisplayID display) {
     printf("STUB %s\n", __PRETTY_FUNCTION__);
 
