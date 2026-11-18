@@ -746,6 +746,10 @@ std::shared_ptr<CAMetalDrawableTexture> CAMetalDrawableActual::texture() {
 	return _texture;
 };
 
+std::shared_ptr<Indium::Texture> CAMetalDrawableActual::indiumTexture() {
+	return _texture;
+};
+
 NSUInteger CAMetalDrawableActual::drawableID() const {
 	return _drawableID;
 };
@@ -860,6 +864,85 @@ void CAMetalDrawableActual::waitForRenderingOnCPU() {
 	_semaphore = nullptr;
 };
 
+//
+// swapchain drawable
+//
+
+CAMetalSwapchainDrawable::CAMetalSwapchainDrawable(CAMetalLayerInternal* layer, std::shared_ptr<IndiumKit::Drawable> drawable, NSUInteger drawableID):
+	_drawable(std::move(drawable)),
+	_drawableID(drawableID)
+{
+	objc_storeWeak(&_layer, layer);
+};
+
+CAMetalSwapchainDrawable::~CAMetalSwapchainDrawable() {
+	objc_storeWeak(&_layer, nil);
+};
+
+void CAMetalSwapchainDrawable::present() {
+	if (_presentRequested.exchange(true)) {
+		return;
+	}
+
+	if (_wantsToPresentCallback) {
+		_wantsToPresentCallback();
+		_wantsToPresentCallback = nullptr;
+	}
+
+	// The presentation engine has the image once the call returns; that is the closest this gets to
+	// the frame being shown, so the presented handlers run then. The callback is invoked on the thread
+	// that presents, with the drawable kept alive until it has run.
+	_drawable->setPresentCallback([this, keepAlive = shared_from_this()](bool presented) {
+		_presentedTime = presented ? CACurrentMediaTime() : 0;
+
+		if (_didPresentCallback) {
+			auto callback = std::move(_didPresentCallback);
+			_didPresentCallback = nullptr;
+			callback();
+		}
+	});
+
+	_drawable->present();
+};
+
+std::shared_ptr<Indium::Texture> CAMetalSwapchainDrawable::indiumTexture() {
+	return _drawable->texture();
+};
+
+NSUInteger CAMetalSwapchainDrawable::drawableID() const {
+	return _drawableID;
+};
+
+CFTimeInterval CAMetalSwapchainDrawable::presentedTime() const {
+	return _presentedTime;
+};
+
+void CAMetalSwapchainDrawable::setWantsToPresentCallback(std::function<void()> wantsToPresentCallback) {
+	_wantsToPresentCallback = wantsToPresentCallback;
+};
+
+void CAMetalSwapchainDrawable::setDidPresentCallback(std::function<void()> didPresentCallback) {
+	_didPresentCallback = didPresentCallback;
+};
+
+void CAMetalSwapchainDrawable::release() {
+	if (_released.exchange(true)) {
+		return;
+	}
+
+	@autoreleasepool {
+		CAMetalLayerInternal* layer = objc_loadWeak(&_layer);
+		[layer releaseSwapchainDrawable];
+	}
+};
+
+void CAMetalSwapchainDrawable::reset() {
+	_wantsToPresentCallback = nullptr;
+	_didPresentCallback = nullptr;
+	_presentedTime = 0;
+	_presentRequested = false;
+};
+
 static void glDebugCallback(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar* message, const void* context) {
 	fprintf(stderr, "GL CALLBACK: %s type = 0x%x, severity = 0x%x, message = %s\n", (type == GL_DEBUG_TYPE_ERROR ? "** GL ERROR **" : ""), type, severity, message);
 };
@@ -881,7 +964,7 @@ static void glDebugCallback(GLenum source, GLenum type, GLuint id, GLenum severi
 #endif
 
 - (instancetype)initWithLayer: (CAMetalLayer*)layer
-                     drawable: (std::shared_ptr<CAMetalDrawableActual>)drawable
+                     drawable: (std::shared_ptr<CAMetalDrawableBase>)drawable
 {
 	self = [super init];
 	if (self != nil) {
@@ -889,7 +972,7 @@ static void glDebugCallback(GLenum source, GLenum type, GLuint id, GLenum severi
 		_drawableID = drawable->drawableID();
 		_presentedHandlers = [NSMutableArray new];
 		_drawable = drawable;
-		_texture = [[MTLTextureInternal alloc] initWithTexture: drawable->texture() device: layer.device resourceOptions: MTLResourceStorageModeShared];
+		_texture = [[MTLTextureInternal alloc] initWithTexture: drawable->indiumTexture() device: layer.device resourceOptions: MTLResourceStorageModeShared];
 
 		_drawable->reset();
 

@@ -118,6 +118,16 @@
         [self startTimerIfNeeded];
 }
 
+- (CGSubWindow*) subwindow
+{
+    return _subwindow;
+}
+
+- (CALayer*) layer
+{
+    return _layer;
+}
+
 - (void) setSubwindow: (CGSubWindow*) subwindow
 {
     CGSubWindow* oldSubwindow = _subwindow;
