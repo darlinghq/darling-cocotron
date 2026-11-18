@@ -21,6 +21,7 @@
 #define CGREMOTEOPERATION_H
 
 #import <CoreGraphics/CGGeometry.h>
+#import <CoreGraphics/CoreGraphicsExport.h>
 
 #include <CoreGraphics/CGError.h>
 #include <mach/boolean.h>
@@ -64,11 +65,13 @@ typedef void (*CGScreenRefreshCallback)(uint32_t count, const CGRect *rects, voi
 extern CGError CGScreenRegisterMoveCallback(CGScreenUpdateMoveCallback callback, void *userInfo);
 extern void CGScreenUnregisterMoveCallback(CGScreenUpdateMoveCallback callback, void *userInfo);
 
-CGError CGRegisterScreenRefreshCallback(CGScreenRefreshCallback callback, void *userInfo);
-void CGUnregisterScreenRefreshCallback(CGScreenRefreshCallback callback, void *userInfo);
+COREGRAPHICS_EXPORT CGError CGRegisterScreenRefreshCallback(CGScreenRefreshCallback callback, void *userInfo);
+COREGRAPHICS_EXPORT void CGUnregisterScreenRefreshCallback(CGScreenRefreshCallback callback, void *userInfo);
 CGError CGWaitForScreenRefreshRects(CGRect * _Nullable *rects, uint32_t *count);
 void CGReleaseScreenRefreshRects(CGRect *rects);
 CGError CGWaitForScreenUpdateRects(CGScreenUpdateOperation requestedOperations, CGScreenUpdateOperation *currentOperation, CGRect * _Nullable *rects, size_t *rectCount, CGScreenUpdateMoveDelta *delta);
+
+COREGRAPHICS_EXPORT boolean_t CGCursorIsDrawnInFramebuffer(void);
 
 CGError CGWarpMouseCursorPosition(CGPoint newCursorPosition);
 CGError CGAssociateMouseAndMouseCursorPosition(boolean_t connected);
