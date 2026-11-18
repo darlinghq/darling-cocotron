@@ -50,6 +50,7 @@ typedef enum {
     BOOL _isPlatformRGB;
     CFStringRef _name;
     O2ColorSpace *_patternBase;
+    CFDataRef _iccData;
 }
 
 - (O2ColorSpaceModel) type;
@@ -73,9 +74,16 @@ BOOL O2ColorSpaceIsPlatformRGB(O2ColorSpaceRef self);
 // NO for device, indexed, pattern and DeviceN spaces and for names without one.
 BOOL O2ColorSpaceGetColorProfile(O2ColorSpaceRef self, O2ColorProfile *profile);
 
-// A synthesized ICC profile for the named spaces with a colorimetric profile;
-// NULL for every other space.
+// The ICC profile of a space: the profile it was created from, or a
+// synthesized one for the named spaces with a colorimetric profile; NULL for
+// every other space.
 CFDataRef O2ColorSpaceCopyICCData(O2ColorSpaceRef self);
+
+// A space for an ICC profile (gray, RGB or CMYK data color space). A profile
+// that is the one of a named space gives that space; any other is kept as is
+// (so it can be copied back) and its colors are treated as device colors of
+// the same model. NULL when the data is not a usable ICC profile.
+O2ColorSpaceRef O2ColorSpaceCreateWithICCData(CFDataRef profile);
 
 size_t O2ColorSpaceGetNumberOfComponents(O2ColorSpaceRef self);
 
