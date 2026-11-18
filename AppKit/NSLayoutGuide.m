@@ -19,6 +19,7 @@
 
 #import <AppKit/NSLayoutGuide.h>
 #import <AppKit/NSView.h>
+#import <AppKit/NSLayoutAnchor.h>
 
 @implementation NSLayoutGuide
 
@@ -84,6 +85,46 @@
 
 - (void) setFrame: (NSRect) frame {
     _frame = frame;
+}
+
+- (NSLayoutDimension *) widthAnchor {
+    return [[[NSLayoutDimension alloc] initWithItem: self attribute: NSLayoutAttributeWidth] autorelease];
+}
+
+- (NSLayoutDimension *) heightAnchor {
+    return [[[NSLayoutDimension alloc] initWithItem: self attribute: NSLayoutAttributeHeight] autorelease];
+}
+
+- (NSLayoutXAxisAnchor *) leadingAnchor {
+    return [[[NSLayoutXAxisAnchor alloc] initWithItem: self attribute: NSLayoutAttributeLeading] autorelease];
+}
+
+- (NSLayoutXAxisAnchor *) trailingAnchor {
+    return [[[NSLayoutXAxisAnchor alloc] initWithItem: self attribute: NSLayoutAttributeTrailing] autorelease];
+}
+
+- (NSLayoutXAxisAnchor *) leftAnchor {
+    return [[[NSLayoutXAxisAnchor alloc] initWithItem: self attribute: NSLayoutAttributeLeft] autorelease];
+}
+
+- (NSLayoutXAxisAnchor *) rightAnchor {
+    return [[[NSLayoutXAxisAnchor alloc] initWithItem: self attribute: NSLayoutAttributeRight] autorelease];
+}
+
+- (NSLayoutXAxisAnchor *) centerXAnchor {
+    return [[[NSLayoutXAxisAnchor alloc] initWithItem: self attribute: NSLayoutAttributeCenterX] autorelease];
+}
+
+- (NSLayoutYAxisAnchor *) topAnchor {
+    return [[[NSLayoutYAxisAnchor alloc] initWithItem: self attribute: NSLayoutAttributeTop] autorelease];
+}
+
+- (NSLayoutYAxisAnchor *) bottomAnchor {
+    return [[[NSLayoutYAxisAnchor alloc] initWithItem: self attribute: NSLayoutAttributeBottom] autorelease];
+}
+
+- (NSLayoutYAxisAnchor *) centerYAnchor {
+    return [[[NSLayoutYAxisAnchor alloc] initWithItem: self attribute: NSLayoutAttributeCenterY] autorelease];
 }
 
 @end
