@@ -562,12 +562,10 @@ static NSColor *constantWhite(CGFloat white, CGFloat alpha) {
                                colorName: @"controlShadowColor"];
 }
 
-// overwrite this, if you need a different set of alternating background colors
-// NOTE: the list may contain more then two colors
+// The row backgrounds of tables, as in the light appearance of macOS 10.14: white and light grey.
+// NOTE: the list may contain more than two colors
 + (NSArray *) controlAlternatingRowBackgroundColors {
-    return [NSArray arrayWithObjects: [NSColor whiteColor],
-                                      constantRGB(0.90, 0.95, 1.0, 1.0),
-                                      nil];
+    return [self alternatingContentBackgroundColors];
 }
 
 + (NSColor *) textColor {

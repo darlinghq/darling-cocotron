@@ -1672,30 +1672,37 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
         [(NSColor *) [rowColors objectAtIndex: 0] setFill];
         NSRectFill(clipRect);
     } else {
+        NSInteger numberOfRows = [self numberOfRows];
         NSRange rangeOfRows = [self rowsInRect: clipRect];
         NSInteger i;
-        NSRect rectToFill = clipRect;
-        CGFloat heightFilled = 0.;
 
-        for (i = rangeOfRows.location;
-             i < rangeOfRows.location + rangeOfRows.length; i++) {
-            rectToFill = [self rectOfRow: i];
+        for (i = rangeOfRows.location; i < NSMaxRange(rangeOfRows); i++) {
+            NSRect rectToFill = [self rectOfRow: i];
 
+            rectToFill.origin.x = clipRect.origin.x;
+            rectToFill.size.width = clipRect.size.width;
             [(NSColor *) [rowColors objectAtIndex: i % colorCount] setFill];
-            NSRectFill(rectToFill);
-            rectToFill.origin.y +=
-                    rectToFill.size.height; // This is for beyond the loop.
-            heightFilled = rectToFill.origin.y;
+            NSRectFill(NSIntersectionRect(rectToFill, clipRect));
         }
-        if ([self _effectiveRowHeight] > 0.) {
-            rectToFill.size.height =
-                    [self _effectiveRowHeight] + _intercellSpacing.height;
-            while (heightFilled < clipRect.size.height) {
-                [(NSColor *) [rowColors objectAtIndex: i % colorCount] setFill];
-                NSRectFill(rectToFill);
-                heightFilled += rectToFill.size.height;
-                rectToFill.origin.y += rectToFill.size.height;
-                i++;
+
+        // The stripes carry on below the last row at the height of a row, the colors
+        // continuing in sequence with the rows
+        CGFloat pitch = numberOfRows > 0 ? [self rectOfRow: 0].size.height
+                                         : [self _effectiveRowHeight] + _intercellSpacing.height;
+        if (pitch > 0.) {
+            CGFloat y = numberOfRows > 0 ? NSMaxY([self rectOfRow: numberOfRows - 1]) : 0.;
+            NSInteger index = numberOfRows;
+
+            if (NSMinY(clipRect) > y) {
+                NSInteger skipped = (NSInteger) floor((NSMinY(clipRect) - y) / pitch);
+                y += skipped * pitch;
+                index += skipped;
+            }
+            for (; y < NSMaxY(clipRect); y += pitch, index++) {
+                NSRect rectToFill = NSMakeRect(clipRect.origin.x, y, clipRect.size.width, pitch);
+
+                [(NSColor *) [rowColors objectAtIndex: index % colorCount] setFill];
+                NSRectFill(NSIntersectionRect(rectToFill, clipRect));
             }
         }
     }
@@ -1827,6 +1834,15 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 
     [self _autoresizeColumnsToFitClipView];
     [self tile];
+}
+
+// The table extends at least over the visible height of its clip view, so that
+// the alternating row backgrounds continue below the last row. The scroll view has
+// laid out its clip view by the time the table reaches a window.
+- (void) viewDidMoveToWindow {
+    [super viewDidMoveToWindow];
+    if ([self window] != nil && [[self superview] isKindOfClass: [NSClipView class]])
+        [self noteNumberOfRowsChanged];
 }
 
 - (BOOL) isFlipped {
