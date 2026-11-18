@@ -21,7 +21,7 @@
 #import <AppKit/AppKitIvarLayout.h>
 #include <sys/types.h>
 
-@class NSString;
+@class NSString, NSURL, NSImage;
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -52,8 +52,15 @@ typedef NS_OPTIONS(NSUInteger, NSApplicationActivationOptions) {
 // Whether this is the application that has the input focus, and the one that owns the menu bar.
 @property(readonly, getter=isActive) BOOL active;
 @property(readonly) BOOL ownsMenuBar;
+@property(readonly, getter=isHidden) BOOL hidden;
+@property(readonly) NSApplicationActivationPolicy activationPolicy;
+@property(nullable, readonly, copy) NSURL *bundleURL;
+@property(nullable, readonly, strong) NSImage *icon;
 
 - (BOOL) activateWithOptions: (NSApplicationActivationOptions) options;
+- (BOOL) hide;
+- (BOOL) unhide;
+- (BOOL) terminate;
 - (BOOL) activateFromApplication: (NSRunningApplication *) application
                          options: (NSApplicationActivationOptions) options;
 
