@@ -46,12 +46,15 @@ void NSColorSetCatalogColor(NSColorListName catalogName, NSColorName colorName, 
 - (NSColor *) colorWithName: (NSString *) colorName {
     if ([colorName isEqual: @"controlColor"])
         return [NSColor colorWithCalibratedWhite: 0.93 alpha: 1.0];
+    // The disabled text colour and the menu highlight are the values macOS 10.14 returns in the light
+    // appearance, converted to sRGB. There is no public menu background or menu text colour to read back; the
+    // menu text takes the label colour's value and the background is an estimate of the light menu material.
     if ([colorName isEqual: @"disabledControlTextColor"])
-        return [NSColor grayColor];
+        return [NSColor colorWithSRGBRed: 0.0f green: 0.0f blue: 0.0f alpha: 0.247f];
     if ([colorName isEqual: @"controlTextColor"])
         return [NSColor blackColor];
     if ([colorName isEqual: @"menuBackgroundColor"])
-        return [NSColor colorWithCalibratedWhite: 0.9 alpha: 1.0];
+        return [NSColor colorWithSRGBRed: 0.945f green: 0.945f blue: 0.945f alpha: 1.0f];
     if ([colorName isEqual: @"mainMenuBarColor"])
         return [NSColor colorWithCalibratedWhite: 0.9 alpha: 1.0];
     if ([colorName isEqual: @"controlShadowColor"])
@@ -73,11 +76,11 @@ void NSColorSetCatalogColor(NSColorListName catalogName, NSColorName colorName, 
     if ([colorName isEqual: @"headerTextColor"])
         return [NSColor blackColor];
     if ([colorName isEqual: @"menuItemTextColor"])
-        return [NSColor blackColor];
+        return [NSColor colorWithSRGBRed: 0.0f green: 0.0f blue: 0.0f alpha: 0.847f];
     if ([colorName isEqual: @"selectedMenuItemTextColor"])
         return [NSColor whiteColor];
     if ([colorName isEqual: @"selectedMenuItemColor"])
-        return [NSColor blueColor];
+        return [NSColor colorWithSRGBRed: 0.259f green: 0.467f blue: 0.957f alpha: 1.0f];
     if ([colorName isEqual: @"selectedControlTextColor"])
         return [NSColor blackColor];
     if ([colorName isEqual: @"windowFrameColor"])

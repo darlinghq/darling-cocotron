@@ -33,7 +33,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 static NSDictionary *sNormalMenuTextAttributes = nil;
 static NSDictionary *sSelectedMenuTextAttributes = nil;
 static NSDictionary *sDimmedMenuTextAttributes = nil;
-static NSDictionary *sDimmedMenuTextShadowAttributes = nil;
 static NSDictionary *sScrollerButtonAttributes = nil;
 
 + (void) initialize {
@@ -52,15 +51,10 @@ static NSDictionary *sScrollerButtonAttributes = nil;
 
         sDimmedMenuTextAttributes = [[NSDictionary
                 dictionaryWithObjectsAndKeys: menuFont, NSFontAttributeName,
-                                              [NSColor grayColor],
+                                              [NSColor disabledControlTextColor],
                                               NSForegroundColorAttributeName,
                                               nil] retain];
 
-        sDimmedMenuTextShadowAttributes = [[NSDictionary
-                dictionaryWithObjectsAndKeys: menuFont, NSFontAttributeName,
-                                              [NSColor whiteColor],
-                                              NSForegroundColorAttributeName,
-                                              nil] retain];
 
         sScrollerButtonAttributes = [[NSDictionary
                 dictionaryWithObjectsAndKeys: [NSFont labelFontOfSize: 8],
@@ -85,8 +79,8 @@ static NSDictionary *sScrollerButtonAttributes = nil;
 
 @implementation NSGraphicsStyle (NSMenu)
 
-#define TITLE_TOP_MARGIN 2
-#define TITLE_BOTTOM_MARGIN 2
+#define TITLE_TOP_MARGIN 0
+#define TITLE_BOTTOM_MARGIN 0
 #define BRANCH_ARROW_LEFT_MARGIN 2
 #define BRANCH_ARROW_RIGHT_MARGIN 2
 
@@ -207,13 +201,11 @@ static NSDictionary *sScrollerButtonAttributes = nil;
 }
 
 - (void) drawMenuSeparatorInRect: (NSRect) rect {
-    NSPoint point = NSMakePoint(rect.origin.x + 1, rect.origin.y + 3);
-    CGFloat width = rect.size.width - 2;
+    // A single hairline in the separator colour, centred in the row.
+    CGFloat y = rect.origin.y + floor((rect.size.height - 1) / 2);
 
-    [[NSColor grayColor] setFill];
-    NSRectFill(NSMakeRect(point.x, point.y, width, 1));
-    [[NSColor whiteColor] setFill];
-    NSRectFill(NSMakeRect(point.x, point.y + 1, width, 1));
+    [[NSColor separatorColor] setFill];
+    NSRectFillUsingOperation(NSMakeRect(rect.origin.x, y, rect.size.width, 1), NSCompositeSourceOver);
 }
 
 - (void) drawMenuGutterInRect: (NSRect) rect {
@@ -244,13 +236,6 @@ static NSDictionary *sScrollerButtonAttributes = nil;
             [string drawInRect: rect withAttributes: sNormalMenuTextAttributes];
         }
     } else {
-        if (!selected) {
-            NSRect offsetRect = rect;
-            offsetRect.origin.x += 1;
-            offsetRect.origin.y += 1;
-            [string drawInRect: offsetRect
-                    withAttributes: sDimmedMenuTextShadowAttributes];
-        }
         [string drawInRect: rect withAttributes: sDimmedMenuTextAttributes];
     }
 }
@@ -291,13 +276,9 @@ static NSDictionary *sScrollerButtonAttributes = nil;
             [mutableString
                     addAttributes:
                             [NSDictionary
-                                    dictionaryWithObject: [NSColor grayColor]
+                                    dictionaryWithObject: [NSColor disabledControlTextColor]
                                                   forKey: NSForegroundColorAttributeName]
                             range: range];
-            NSRect offsetRect = rect;
-            offsetRect.origin.x += 1;
-            offsetRect.origin.y += 1;
-            [mutableString drawInRect: offsetRect];
         }
         [mutableString drawInRect: rect];
     }
@@ -312,7 +293,7 @@ static NSDictionary *sScrollerButtonAttributes = nil;
     Margins margins = [self menuItemTextMargins];
 
     if (enabled)
-        color = selected ? [NSColor selectedControlTextColor]
+        color = selected ? [NSColor selectedMenuItemTextColor]
                          : [NSColor menuItemTextColor];
     else
         color = [NSColor disabledControlTextColor];
@@ -338,7 +319,7 @@ static NSDictionary *sScrollerButtonAttributes = nil;
     NSRect themeRect = rect;
 
     if (enabled)
-        color = selected ? [NSColor selectedControlTextColor]
+        color = selected ? [NSColor selectedMenuItemTextColor]
                          : [NSColor menuItemTextColor];
     else
         color = [NSColor disabledControlTextColor];
@@ -477,10 +458,7 @@ static NSDictionary *sScrollerButtonAttributes = nil;
 @implementation NSGraphicsStyle (NSPopUpButton)
 
 - (void) drawPopUpButtonWindowBackgroundInRect: (NSRect) rect {
-    [[NSColor menuBackgroundColor] setFill];
-    NSRectFill(rect);
-    [[NSColor blackColor] setStroke];
-    NSFrameRect(rect);
+    [self drawMenuWindowBackgroundInRect: rect];
 }
 
 @end

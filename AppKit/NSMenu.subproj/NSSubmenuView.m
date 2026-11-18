@@ -25,7 +25,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 @implementation NSSubmenuView
 
 #define MIN_TITLE_KEY_GAP 8
-#define WINDOW_BORDER_THICKNESS 3
+// The menu's frame line is one point wide; the item rows start 5 points below the top and end 5 points above the
+// bottom, and the selection runs the full width of the menu.
+#define WINDOW_BORDER_THICKNESS 1
+#define WINDOW_VERTICAL_PADDING 5
 #define IMAGE_TITLE_GAP 8
 
 - (NSSize) sizeForMenuItemImage: (NSMenuItem *) item {
@@ -127,7 +130,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
     // border. Magic constants that may not be right for Win7 vs XP
     result.width += WINDOW_BORDER_THICKNESS * 2;
-    result.height += WINDOW_BORDER_THICKNESS * 2;
+    result.height += WINDOW_VERTICAL_PADDING * 2;
 
     return result;
 }
@@ -151,7 +154,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 static NSRect boundsToTitleAreaRect(NSRect rect) {
-    return NSInsetRect(rect, WINDOW_BORDER_THICKNESS, WINDOW_BORDER_THICKNESS);
+    return NSInsetRect(rect, WINDOW_BORDER_THICKNESS, WINDOW_VERTICAL_PADDING);
 }
 
 - (CGFloat) heightOfMenuItem: (NSMenuItem *) item {

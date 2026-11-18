@@ -24,6 +24,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSMenuItem.h>
 #import <AppKit/NSMenuView.h>
 #import <AppKit/NSMenuWindow.h>
+#import <AppKit/NSSubmenuView.h>
 #import <AppKit/NSKeyEquivalentMatching.h>
 #import <AppKit/NSWindow.h>
 #import <Foundation/NSKeyedArchiver.h>
@@ -183,6 +184,15 @@ NS_EXTRA_SYNTHESIZE_COPY(NSMenu, identifier, _identifier, NSUserInterfaceItemIde
 
 - (NSInteger) numberOfItems {
     return [NS_EXTRA(NSMenu, self)->_itemArray count];
+}
+
+// The size of the pop-up form of the menu: the one its view lays out for the visible items.
+- (NSSize) size {
+    NSSubmenuView *view = [[NSSubmenuView alloc] initWithMenu: self];
+    NSSize result = [view frame].size;
+
+    [view release];
+    return result;
 }
 
 - (NSArray *) itemArray {
