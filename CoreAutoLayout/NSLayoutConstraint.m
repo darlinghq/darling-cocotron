@@ -218,6 +218,9 @@ static BOOL _NSLayoutItemIsWithin(id item, id container)
         while (owner != nil && !_NSLayoutItemIsWithin(NS_EXTRA(NSLayoutConstraint, self)->_secondItem, owner))
             owner = _NSLayoutItemParent(owner);
     }
+    // A layout guide holds no constraints itself: they live on the view that owns it.
+    while (owner != nil && ![owner respondsToSelector:@selector(addConstraint:)])
+        owner = _NSLayoutItemParent(owner);
     // QUIRK: the exception is NSGenericException, not NSInvalidArgumentException,
     // and the constraint stays inactive. Not documented. Evidence: black-box
     // observation on macOS 26.7.3 (tier 2), MAC-EVIDENCE MC26.3.
