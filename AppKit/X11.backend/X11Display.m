@@ -24,6 +24,7 @@
 #import "X11DraggingManager.h"
 #import "X11Pasteboard.h"
 #import "X11LevelStacking.h"
+#import "../private-include/AppKit/NSEventTime.h"
 #import "X11Window.h"
 #import "X11AppMenu.h"
 #import "../private-include/AppKit/NSGlobalMenu+Private.h"
@@ -1253,7 +1254,7 @@ static void setModifierKeyHeld(unsigned char *held, unsigned int keycode, BOOL d
     [self postEvent: [NSEvent keyEventWithType: NSFlagsChanged
             location: [window mouseLocationOutsideOfEventStream]
             modifierFlags: flags
-            timestamp: 0.0
+            timestamp: NSEventCurrentTime()
             windowNumber: [delegate windowNumber]
             context: nil
             characters: @""
@@ -1707,7 +1708,7 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
                                                                    : NSKeyUp
                                     location: pos
                                modifierFlags: modifierFlags
-                                   timestamp: 0.0
+                                   timestamp: NSEventCurrentTime()
                                 windowNumber: keyEventWindowNumber
                                      context: nil
                                   characters: str

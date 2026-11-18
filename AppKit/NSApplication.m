@@ -51,6 +51,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <HIToolbox/CarbonEventsCore.h>
 #import <CoreGraphics/CGWindowPrivate.h>
 #import <Foundation/NSAppleEventManager.h>
+#import "private-include/AppKit/NSEventTime.h"
 #import <Foundation/NSAppleEventDescriptor.h>
 #import <objc/message.h>
 #include <notify.h>
@@ -2257,7 +2258,7 @@ static BOOL resignPending;
     NSEvent *appKitEvent = [NSEvent otherEventWithType: NSAppKitDefined
                                               location: NSZeroPoint
                                          modifierFlags: 0
-                                             timestamp: 0
+                                             timestamp: NSEventCurrentTime()
                                            windowNumber: 0
                                                  context: nil
                                                  subtype: NSApplicationDeactivated

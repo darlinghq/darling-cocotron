@@ -107,6 +107,7 @@ static NSInteger defaultButtonNumber(NSEventType type) {
                  modifierFlags: modifierFlags
                         window: [NSApp windowWithWindowNumber: windowNumber]];
     if (self != nil) {
+        _timestamp = timestamp;
         _eventNumber = eventNumber;
         _trackingNumber = tracking;
         _userData = userData;
@@ -128,6 +129,7 @@ static NSInteger defaultButtonNumber(NSEventType type) {
                  location: location
             modifierFlags: modifierFlags
                    window: [NSApp windowWithWindowNumber: windowNumber]];
+    _timestamp = timestamp;
     _buttonNumber = defaultButtonNumber(type);
     _clickCount = clickCount;
     _eventNumber = eventNumber;
@@ -189,6 +191,9 @@ static NSInteger defaultButtonNumber(NSEventType type) {
     if ([screens count] > 0)
         point.y = NSHeight([[screens objectAtIndex: 0] frame]) - point.y;
     CGEventSetLocation(event, NSPointToCGPoint(point));
+
+    // CGEvent times are nanoseconds on the clock NSEvent times count seconds of.
+    CGEventSetTimestamp(event, (CGEventTimestamp) ([self timestamp] * 1e9));
 
     // NSEventModifierFlags and CGEventFlags use the same bits.
     CGEventSetFlags(event, (CGEventFlags) [self modifierFlags]);
