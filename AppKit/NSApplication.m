@@ -634,6 +634,20 @@ static NSMutableArray *pendingOpenURLs = nil;
     return NS_EXTRA(NSApplication, self)->_isHidden;
 }
 
+// Visible when any of the application's windows is visible, which the documentation allows
+// (visible means at least part of some window can be seen). The application's windows are not
+// tracked for being covered by other windows, so a covered window still counts as visible. A hidden
+// application has no visible window.
+- (NSApplicationOcclusionState) occlusionState {
+    if (NS_EXTRA(NSApplication, self)->_isHidden)
+        return 0;
+    for (NSWindow *window in [[_windows copy] autorelease]) {
+        if ([window isVisible])
+            return NSApplicationOcclusionStateVisible;
+    }
+    return 0;
+}
+
 - (BOOL) isRunning {
     return _running;
 }
