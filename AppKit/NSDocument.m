@@ -18,6 +18,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import "NSKeyValueBinding/NSObject+BindingSupport.h"
+#import "NSDocumentTypeName.h"
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSDocument.h>
 #import <AppKit/NSDocumentController.h>
@@ -52,9 +53,7 @@ static int untitled_document_number = 0;
                 NSClassFromString((NSString *) typeDict[@"NSDocumentClass"]);
         if (documentClass == self && ([typeRole isEqualToString: @"Viewer"] ||
                                       [typeRole isEqualToString: @"Editor"])) {
-            NSString *typeName = typeDict[@"CFBundleTypeName"];
-            if (typeName)
-                [readableTypes addObject: typeName];
+            [readableTypes addObjectsFromArray: NSDocumentTypeNamesForInfo(typeDict)];
         }
     }
 
@@ -71,9 +70,7 @@ static int untitled_document_number = 0;
         Class documentClass =
                 NSClassFromString((NSString *) typeDict[@"NSDocumentClass"]);
         if (documentClass == self && [typeRole isEqualToString: @"Editor"]) {
-            NSString *typeName = typeDict[@"CFBundleTypeName"];
-            if (typeName)
-                [writableTypes addObject: typeName];
+            [writableTypes addObjectsFromArray: NSDocumentTypeNamesForInfo(typeDict)];
         }
     }
 
@@ -87,12 +84,11 @@ static int untitled_document_number = 0;
 
     for (NSDictionary *typeDict in knownDocTypes) {
         NSString *typeRole = typeDict[@"CFBundleTypeRole"];
-        NSString *typeName = typeDict[@"CFBundleTypeName"];
         Class documentClass =
                 NSClassFromString((NSString *) typeDict[@"NSDocumentClass"]);
         result |= documentClass == self &&
                   [typeRole isEqualToString: @"Editor"] &&
-                  [typeName isEqualToString: type];
+                  NSDocumentInfoHasTypeName(typeDict, type);
     }
 
     return result;

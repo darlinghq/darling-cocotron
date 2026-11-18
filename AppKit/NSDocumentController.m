@@ -18,6 +18,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#import "NSDocumentTypeName.h"
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSDocument.h>
 #import <AppKit/NSDocumentController.h>
@@ -147,8 +148,7 @@ static NSDocumentController *shared = nil;
     if ([_fileTypes count] == 0)
         return nil;
 
-    return [(NSDictionary *) [_fileTypes objectAtIndex: 0]
-            objectForKey: @"CFBundleTypeName"];
+    return NSDocumentTypeNameForInfo((NSDictionary *) [_fileTypes objectAtIndex: 0]);
 }
 
 - (NSArray *) documentClassNames {
@@ -166,17 +166,13 @@ static NSDocumentController *shared = nil;
     return _autosavingDelay;
 }
 
-// The CFBundleDocumentTypes entry for a type: its CFBundleTypeName, or one of its
-// LSItemContentTypes (the uniform type identifiers modern apps use as type names).
+// The CFBundleDocumentTypes entry for a type name: one of its LSItemContentTypes, or its
+// CFBundleTypeName when it declares none.
 - (NSDictionary *) _infoForType: (NSString *) type {
     if (type == nil)
         return nil;
     for (NSDictionary *check in _fileTypes) {
-        if ([type isEqualToString: [check objectForKey: @"CFBundleTypeName"]])
-            return check;
-    }
-    for (NSDictionary *check in _fileTypes) {
-        if ([[check objectForKey: @"LSItemContentTypes"] containsObject: type])
+        if (NSDocumentInfoHasTypeName(check, type))
             return check;
     }
     return nil;
@@ -236,7 +232,7 @@ static NSDocumentController *shared = nil;
              [fileType objectForKey: @"CFBundleTypeExtensions"]) {
             if ([[name lowercaseString] isEqual: extension] ||
                 [name isEqual: @"*"])
-                return [fileType objectForKey: @"CFBundleTypeName"];
+                return NSDocumentTypeNameForInfo(fileType);
         }
 
     // Modern bundles may declare only LSItemContentTypes. Keep explicit
@@ -250,7 +246,7 @@ static NSDocumentController *shared = nil;
     if (identifier != nil) {
         for (NSDictionary *fileType in _fileTypes) {
             if ([[fileType objectForKey: @"LSItemContentTypes"] containsObject: identifier])
-                return [fileType objectForKey: @"CFBundleTypeName"];
+                return identifier;
         }
     }
     return nil;
@@ -356,7 +352,7 @@ static NSDocumentController *shared = nil;
         *error = nil;
     for(NSDictionary *fileType in _fileTypes) {
         if (success && UTI != nil && [[fileType objectForKey: @"LSItemContentTypes"] containsObject: UTI]) {
-            return [fileType objectForKey: @"CFBundleTypeName"];
+            return UTI;
         }
     }
     return [self typeFromFileExtension: extension];
