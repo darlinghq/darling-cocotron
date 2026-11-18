@@ -88,8 +88,8 @@ NSString *const kCAFilterInputValues = @"inputValues";
 
 @implementation CAFilter
 
-@synthesize name = _name;
-@synthesize enabled = _enabled;
+NS_EXTRA_SYNTHESIZE_COPY(CAFilter, name, _name, NSString *, name, setName:)
+NS_EXTRA_SYNTHESIZE_ASSIGN(CAFilter, enabled, _enabled, BOOL, isEnabled, setEnabled:)
 
 + (instancetype) filterWithType: (NSString *) type {
     return [[[self alloc] initWithType: type] autorelease];
@@ -109,16 +109,16 @@ NSString *const kCAFilterInputValues = @"inputValues";
 - (instancetype) init {
     self = [super init];
     if (self != nil)
-        _inputs = [[NSMutableDictionary alloc] init];
+        NS_EXTRA(CAFilter, self)->_inputs = [[NSMutableDictionary alloc] init];
     return self;
 }
 
 - (instancetype) initWithType: (NSString *) type {
     self = [self init];
     if (self != nil) {
-        _type = [type copy];
-        _name = [(type != nil ? type : @"<nil>") copy];
-        _enabled = YES;
+        NS_EXTRA(CAFilter, self)->_type = [type copy];
+        NS_EXTRA(CAFilter, self)->_name = [(type != nil ? type : @"<nil>") copy];
+        NS_EXTRA(CAFilter, self)->_enabled = YES;
     }
     return self;
 }
@@ -129,14 +129,15 @@ NSString *const kCAFilterInputValues = @"inputValues";
 }
 
 - (void) dealloc {
-    [_type release];
-    [_name release];
-    [_inputs release];
+    [NS_EXTRA(CAFilter, self)->_type release];
+    [NS_EXTRA(CAFilter, self)->_name release];
+    [NS_EXTRA(CAFilter, self)->_inputs release];
+    NS_EXTRA_FREE(CAFilter, self);
     [super dealloc];
 }
 
 - (NSString *) type {
-    return _type != nil ? _type : @"<nil>";
+    return NS_EXTRA(CAFilter, self)->_type != nil ? NS_EXTRA(CAFilter, self)->_type : @"<nil>";
 }
 
 + (BOOL) supportsSecureCoding {
@@ -147,12 +148,12 @@ NSString *const kCAFilterInputValues = @"inputValues";
 - (void) encodeWithCoder: (NSCoder *) coder {
     if (![coder allowsKeyedCoding])
         [NSException raise: NSInvalidArgumentException format: @"CAFilter needs a keyed coder"];
-    [coder encodeObject: _type forKey: @"CAFilterType"];
-    [coder encodeObject: _name forKey: @"CAFilterName"];
-    [coder encodeBool: _enabled forKey: @"CAFilterEnabled"];
-    if ([_inputs count] > 0) {
+    [coder encodeObject: NS_EXTRA(CAFilter, self)->_type forKey: @"CAFilterType"];
+    [coder encodeObject: NS_EXTRA(CAFilter, self)->_name forKey: @"CAFilterName"];
+    [coder encodeBool: NS_EXTRA(CAFilter, self)->_enabled forKey: @"CAFilterEnabled"];
+    if ([NS_EXTRA(CAFilter, self)->_inputs count] > 0) {
         LKNSDictionaryCodingProxy *proxy = [[LKNSDictionaryCodingProxy alloc] init];
-        proxy->dict = [[NSMutableDictionary alloc] initWithDictionary: _inputs];
+        proxy->dict = [[NSMutableDictionary alloc] initWithDictionary: NS_EXTRA(CAFilter, self)->_inputs];
         [coder encodeObject: proxy forKey: @"CAFilterInputs"];
         [proxy release];
     }
@@ -166,38 +167,38 @@ NSString *const kCAFilterInputValues = @"inputValues";
     self = [self init];
     if (self == nil)
         return nil;
-    _type = [[coder decodeObjectOfClass: [NSString class] forKey: @"CAFilterType"] copy];
-    _name = [[coder decodeObjectOfClass: [NSString class] forKey: @"CAFilterName"] copy];
-    _enabled = [coder decodeBoolForKey: @"CAFilterEnabled"];
+    NS_EXTRA(CAFilter, self)->_type = [[coder decodeObjectOfClass: [NSString class] forKey: @"CAFilterType"] copy];
+    NS_EXTRA(CAFilter, self)->_name = [[coder decodeObjectOfClass: [NSString class] forKey: @"CAFilterName"] copy];
+    NS_EXTRA(CAFilter, self)->_enabled = [coder decodeBoolForKey: @"CAFilterEnabled"];
     LKNSDictionaryCodingProxy *proxy = [coder decodeObjectOfClass: [LKNSDictionaryCodingProxy class] forKey: @"CAFilterInputs"];
     if (proxy != nil && proxy->dict != nil)
-        [_inputs setDictionary: proxy->dict];
+        [NS_EXTRA(CAFilter, self)->_inputs setDictionary: proxy->dict];
     return self;
 }
 
 - (id) copyWithZone: (NSZone *) zone {
-    CAFilter *copy = [[[self class] allocWithZone: zone] initWithType: _type];
-    [copy setName: _name];
-    [copy setEnabled: _enabled];
-    [copy->_inputs setDictionary: _inputs];
+    CAFilter *copy = [[[self class] allocWithZone: zone] initWithType: NS_EXTRA(CAFilter, self)->_type];
+    [copy setName: NS_EXTRA(CAFilter, self)->_name];
+    [copy setEnabled: NS_EXTRA(CAFilter, self)->_enabled];
+    [NS_EXTRA(CAFilter, copy)->_inputs setDictionary: NS_EXTRA(CAFilter, self)->_inputs];
     return copy;
 }
 
 - (id) valueForUndefinedKey: (NSString *) key {
-    return [_inputs objectForKey: key];
+    return [NS_EXTRA(CAFilter, self)->_inputs objectForKey: key];
 }
 
 - (void) setValue: (id) value forUndefinedKey: (NSString *) key {
     if (value == nil) {
-        [_inputs removeObjectForKey: key];
+        [NS_EXTRA(CAFilter, self)->_inputs removeObjectForKey: key];
     } else {
-        [_inputs setObject: value forKey: key];
+        [NS_EXTRA(CAFilter, self)->_inputs setObject: value forKey: key];
     }
 }
 
 - (NSString *) description {
     return [NSString stringWithFormat: @"<%@: %p; type = %@; name = %@; inputs = %@>",
-                                       [self class], self, _type, _name, _inputs];
+                                       [self class], self, NS_EXTRA(CAFilter, self)->_type, NS_EXTRA(CAFilter, self)->_name, NS_EXTRA(CAFilter, self)->_inputs];
 }
 
 @end

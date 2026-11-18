@@ -1,4 +1,5 @@
 #import <Foundation/NSObject.h>
+#import <QuartzCore/LegacyIvarLayout.h>
 #import <QuartzCore/CABase.h>
 
 CA_EXPORT NSString *const kCAValueFunctionTranslate;
@@ -16,7 +17,10 @@ CA_EXPORT NSString *const kCAValueFunctionRotateY;
 CA_EXPORT NSString *const kCAValueFunctionRotateZ;
 
 @interface CAValueFunction : NSObject {
-    NSString *_name;
+    NS_LEGACY_IVAR_PAD(_legacyPadCAValueFunction, 4)
+    NS_EXTRA_IVARS_BEGIN(CAValueFunction)
+        NSString *_name;
+    NS_EXTRA_IVARS_END(CAValueFunction)
 }
 
 + functionWithName: (NSString *) name;

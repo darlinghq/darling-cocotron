@@ -27,6 +27,7 @@
 // context's contextId shows them. See CAContext.m.
 
 #import <Foundation/Foundation.h>
+#import <QuartzCore/LegacyIvarLayout.h>
 #import <QuartzCore/CABase.h>
 #include <mach/port.h>
 
@@ -42,15 +43,18 @@ CA_EXTERN NSString *const kCAContextPortNumber;
 
 @class CARemoteLayerContext;
 
+#define _NS_SIDE_CAContext 0, 1,
 @interface CAContext : NSObject {
-    CAContextID _contextId;
-    CALayer *_layer;
-    CARemoteLayerContext *_renderContext;
-    mach_port_t _port;
-    void *_source;
-    mach_port_t *_subscribers;
-    unsigned int _subscriberCount;
-    BOOL _registered;
+    NS_EXTRA_IVARS_BEGIN(CAContext)
+        CAContextID _contextId;
+        CALayer *_layer;
+        CARemoteLayerContext *_renderContext;
+        mach_port_t _port;
+        void *_source;
+        mach_port_t *_subscribers;
+        unsigned int _subscriberCount;
+        BOOL _registered;
+    NS_SIDE_IVARS_END(CAContext)
 }
 
 // A context whose layer tree other processes can show with a CALayerHost

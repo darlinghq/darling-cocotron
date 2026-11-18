@@ -21,13 +21,17 @@
 // CAContext whose contextId it is given, from any process of the session.
 
 #import <QuartzCore/CALayer.h>
+#import <QuartzCore/LegacyIvarLayout.h>
 #import <QuartzCore/CAContext.h>
 
 @class CALayerHostConnection;
 
+#define _NS_SIDE_CALayerHost 0, 1,
 @interface CALayerHost : CALayer {
-    CAContextID _contextId;
-    CALayerHostConnection *_connection;
+    NS_EXTRA_IVARS_BEGIN(CALayerHost)
+        CAContextID _contextId;
+        CALayerHostConnection *_connection;
+    NS_SIDE_IVARS_END(CALayerHost)
 }
 
 // 0, the default, shows nothing. An ID that names no context is kept and

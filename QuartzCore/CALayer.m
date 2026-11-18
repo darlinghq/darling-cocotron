@@ -54,20 +54,20 @@ NSString *const CAToneMapModeIfSupported = @"ifSupported";
 }
 
 - (CALayerContext *) _context {
-    return _context;
+    return NS_EXTRA(CALayer, self)->_context;
 }
 
 - (void) _setContext: (CALayerContext *) context {
-    if (_context != context) {
-        [_context deleteTextureId: _textureId];
-        [_textureId release];
-        _textureId = nil;
+    if (NS_EXTRA(CALayer, self)->_context != context) {
+        [NS_EXTRA(CALayer, self)->_context deleteTextureId: NS_EXTRA(CALayer, self)->_textureId];
+        [NS_EXTRA(CALayer, self)->_textureId release];
+        NS_EXTRA(CALayer, self)->_textureId = nil;
     }
 
-    _context = context;
-    [_sublayers makeObjectsPerformSelector: @selector(_setContext:)
+    NS_EXTRA(CALayer, self)->_context = context;
+    [NS_EXTRA(CALayer, self)->_sublayers makeObjectsPerformSelector: @selector(_setContext:)
                                 withObject: context];
-    [_mask _setContext: context];
+    [NS_EXTRA(CALayer, self)->_mask _setContext: context];
 }
 
 - (id) _contentsForRendering: (CGRect *) rect {
@@ -75,11 +75,11 @@ NSString *const CAToneMapModeIfSupported = @"ifSupported";
 }
 
 - (CALayer *) superlayer {
-    return _superlayer;
+    return NS_EXTRA(CALayer, self)->_superlayer;
 }
 
 - (NSArray *) sublayers {
-    return _sublayers;
+    return NS_EXTRA(CALayer, self)->_sublayers;
 }
 
 - (void) setSublayers: (NSArray *) sublayers {
@@ -88,67 +88,67 @@ NSString *const CAToneMapModeIfSupported = @"ifSupported";
     // A layer has a single superlayer, so the new sublayers leave the layers
     // they are in now.
     for (CALayer *layer in sublayers) {
-        if (layer->_superlayer != nil && layer->_superlayer != self)
+        if (NS_EXTRA(CALayer, layer)->_superlayer != nil && NS_EXTRA(CALayer, layer)->_superlayer != self)
             [layer removeFromSuperlayer];
     }
 
     // Sublayers that are not kept stop pointing at this layer and its context
     // before the array that may own them goes away.
-    for (CALayer *layer in _sublayers) {
+    for (CALayer *layer in NS_EXTRA(CALayer, self)->_sublayers) {
         if ([sublayers indexOfObjectIdenticalTo: layer] == NSNotFound) {
-            layer->_superlayer = nil;
+            NS_EXTRA(CALayer, layer)->_superlayer = nil;
             [layer _setContext: nil];
         }
     }
 
-    [_sublayers release];
-    _sublayers = sublayers;
-    [_sublayers makeObjectsPerformSelector: @selector(_setSuperLayer:)
+    [NS_EXTRA(CALayer, self)->_sublayers release];
+    NS_EXTRA(CALayer, self)->_sublayers = sublayers;
+    [NS_EXTRA(CALayer, self)->_sublayers makeObjectsPerformSelector: @selector(_setSuperLayer:)
                                 withObject: self];
-    [_sublayers makeObjectsPerformSelector: @selector(_setContext:)
-                                withObject: _context];
+    [NS_EXTRA(CALayer, self)->_sublayers makeObjectsPerformSelector: @selector(_setContext:)
+                                withObject: NS_EXTRA(CALayer, self)->_context];
     [self setNeedsLayout];
 }
 
 - (id<CALayerDelegate>) delegate {
-    return _delegate;
+    return NS_EXTRA(CALayer, self)->_delegate;
 }
 
 - (void) setDelegate: (id<CALayerDelegate>)value {
-    _delegate = value;
+    NS_EXTRA(CALayer, self)->_delegate = value;
 }
 
 - (NSString *) name {
-    return _name;
+    return NS_EXTRA(CALayer, self)->_name;
 }
 
 - (void) setName: (NSString *) value {
     value = [value copy];
-    [_name release];
-    _name = value;
+    [NS_EXTRA(CALayer, self)->_name release];
+    NS_EXTRA(CALayer, self)->_name = value;
 }
 
 - (id<CALayoutManager>) layoutManager {
-    return _layoutManager;
+    return NS_EXTRA(CALayer, self)->_layoutManager;
 }
 
 - (void) setLayoutManager: (id<CALayoutManager>) value {
     [value retain];
-    [_layoutManager release];
-    _layoutManager = value;
+    [NS_EXTRA(CALayer, self)->_layoutManager release];
+    NS_EXTRA(CALayer, self)->_layoutManager = value;
     [self setNeedsLayout];
 }
 
 - (CGPoint) anchorPoint {
-    return _anchorPoint;
+    return NS_EXTRA(CALayer, self)->_anchorPoint;
 }
 
 - (void) setAnchorPoint: (CGPoint) value {
-    _anchorPoint = value;
+    NS_EXTRA(CALayer, self)->_anchorPoint = value;
 }
 
 - (CGPoint) position {
-    return _position;
+    return NS_EXTRA(CALayer, self)->_position;
 }
 
 - (void) setPosition: (CGPoint) value {
@@ -160,11 +160,11 @@ NSString *const CAToneMapModeIfSupported = @"ifSupported";
         [action runActionForKey: @"position" object: self arguments: nil];
     }
 
-    _position = value;
+    NS_EXTRA(CALayer, self)->_position = value;
 }
 
 - (CGRect) bounds {
-    return _bounds;
+    return NS_EXTRA(CALayer, self)->_bounds;
 }
 
 - (void) setBounds: (CGRect) value {
@@ -176,20 +176,20 @@ NSString *const CAToneMapModeIfSupported = @"ifSupported";
         [action runActionForKey: @"bounds" object: self arguments: nil];
     }
 
-    BOOL sizeChanged = !CGSizeEqualToSize(_bounds.size, value.size);
-    _bounds = value;
+    BOOL sizeChanged = !CGSizeEqualToSize(NS_EXTRA(CALayer, self)->_bounds.size, value.size);
+    NS_EXTRA(CALayer, self)->_bounds = value;
     if (sizeChanged)
         [self setNeedsLayout];
-    if (sizeChanged && _needsDisplayOnBoundsChange)
+    if (sizeChanged && NS_EXTRA(CALayer, self)->_needsDisplayOnBoundsChange)
         [self setNeedsDisplay];
 }
 
 - (CGRect) frame {
     CGRect result;
 
-    result.size = _bounds.size;
-    result.origin.x = _position.x - result.size.width * _anchorPoint.x;
-    result.origin.y = _position.y - result.size.height * _anchorPoint.y;
+    result.size = NS_EXTRA(CALayer, self)->_bounds.size;
+    result.origin.x = NS_EXTRA(CALayer, self)->_position.x - result.size.width * NS_EXTRA(CALayer, self)->_anchorPoint.x;
+    result.origin.y = NS_EXTRA(CALayer, self)->_position.y - result.size.height * NS_EXTRA(CALayer, self)->_anchorPoint.y;
 
     return result;
 }
@@ -198,12 +198,12 @@ NSString *const CAToneMapModeIfSupported = @"ifSupported";
 
     CGPoint position;
 
-    position.x = value.origin.x + value.size.width * _anchorPoint.x;
-    position.y = value.origin.y + value.size.height * _anchorPoint.y;
+    position.x = value.origin.x + value.size.width * NS_EXTRA(CALayer, self)->_anchorPoint.x;
+    position.y = value.origin.y + value.size.height * NS_EXTRA(CALayer, self)->_anchorPoint.y;
 
     [self setPosition: position];
 
-    CGRect bounds = _bounds;
+    CGRect bounds = NS_EXTRA(CALayer, self)->_bounds;
 
     bounds.size = value.size;
 
@@ -211,7 +211,7 @@ NSString *const CAToneMapModeIfSupported = @"ifSupported";
 }
 
 - (CGFloat) opacity {
-    return _opacity;
+    return NS_EXTRA(CALayer, self)->_opacity;
 }
 
 - (void) setOpacity: (CGFloat) value {
@@ -223,114 +223,114 @@ NSString *const CAToneMapModeIfSupported = @"ifSupported";
         [action runActionForKey: @"opacity" object: self arguments: nil];
     }
 
-    _opacity = value;
+    NS_EXTRA(CALayer, self)->_opacity = value;
 }
 
 - (BOOL) isOpaque {
-    return _opaque;
+    return NS_EXTRA(CALayer, self)->_opaque;
 }
 
 - (void) setOpaque: (BOOL) value {
-    _opaque = value;
+    NS_EXTRA(CALayer, self)->_opaque = value;
 }
 
 - (id) contents {
-    return _contents;
+    return NS_EXTRA(CALayer, self)->_contents;
 }
 
 - (void) setContents: (id) value {
     value = [value retain];
-    [_contents release];
-    _contents = value;
-    [_context startTimerIfNeeded];
+    [NS_EXTRA(CALayer, self)->_contents release];
+    NS_EXTRA(CALayer, self)->_contents = value;
+    [NS_EXTRA(CALayer, self)->_context startTimerIfNeeded];
 }
 
 - (CGFloat) contentsScale {
-    return _contentsScale;
+    return NS_EXTRA(CALayer, self)->_contentsScale;
 }
 
 - (void) setContentsScale: (CGFloat) value {
-    _contentsScale = value;
+    NS_EXTRA(CALayer, self)->_contentsScale = value;
 }
 
 - (CGRect) contentsCenter {
-    return _contentsCenter;
+    return NS_EXTRA(CALayer, self)->_contentsCenter;
 }
 
 - (void) setContentsCenter: (CGRect) value {
-    _contentsCenter = value;
+    NS_EXTRA(CALayer, self)->_contentsCenter = value;
 }
 
 - (CALayerContentsFormat) contentsFormat {
-    return _contentsFormat;
+    return NS_EXTRA(CALayer, self)->_contentsFormat;
 }
 
 - (void) setContentsFormat: (CALayerContentsFormat) value {
     value = [value copy];
-    [_contentsFormat release];
-    _contentsFormat = value;
+    [NS_EXTRA(CALayer, self)->_contentsFormat release];
+    NS_EXTRA(CALayer, self)->_contentsFormat = value;
 }
 
 - (CALayerContentsGravity) contentsGravity {
-    return _contentsGravity;
+    return NS_EXTRA(CALayer, self)->_contentsGravity;
 }
 
 - (void) setContentsGravity: (CALayerContentsGravity) value {
     value = [value copy];
-    [_contentsGravity release];
-    _contentsGravity = value;
-    [_context startTimerIfNeeded];
+    [NS_EXTRA(CALayer, self)->_contentsGravity release];
+    NS_EXTRA(CALayer, self)->_contentsGravity = value;
+    [NS_EXTRA(CALayer, self)->_context startTimerIfNeeded];
 }
 
 - (CADynamicRange) preferredDynamicRange {
-    return _preferredDynamicRange;
+    return NS_EXTRA(CALayer, self)->_preferredDynamicRange;
 }
 
 - (void) setPreferredDynamicRange: (CADynamicRange) value {
     value = [value copy];
-    [_preferredDynamicRange release];
-    _preferredDynamicRange = value;
+    [NS_EXTRA(CALayer, self)->_preferredDynamicRange release];
+    NS_EXTRA(CALayer, self)->_preferredDynamicRange = value;
 }
 
 - (CAToneMapMode) toneMapMode {
-    return _toneMapMode;
+    return NS_EXTRA(CALayer, self)->_toneMapMode;
 }
 
 - (void) setToneMapMode: (CAToneMapMode) value {
     value = [value copy];
-    [_toneMapMode release];
-    _toneMapMode = value;
+    [NS_EXTRA(CALayer, self)->_toneMapMode release];
+    NS_EXTRA(CALayer, self)->_toneMapMode = value;
 }
 
 - (BOOL) allowsEdgeAntialiasing {
-    return _allowsEdgeAntialiasing;
+    return NS_EXTRA(CALayer, self)->_allowsEdgeAntialiasing;
 }
 
 - (void) setAllowsEdgeAntialiasing: (BOOL) value {
-    _allowsEdgeAntialiasing = value;
+    NS_EXTRA(CALayer, self)->_allowsEdgeAntialiasing = value;
 }
 
 - (CAEdgeAntialiasingMask) edgeAntialiasingMask {
-    return _edgeAntialiasingMask;
+    return NS_EXTRA(CALayer, self)->_edgeAntialiasingMask;
 }
 
 - (void) setEdgeAntialiasingMask: (CAEdgeAntialiasingMask) value {
-    _edgeAntialiasingMask = value;
+    NS_EXTRA(CALayer, self)->_edgeAntialiasingMask = value;
 }
 
 - (CATransform3D) transform {
-    return _transform;
+    return NS_EXTRA(CALayer, self)->_transform;
 }
 
 - (void) setTransform: (CATransform3D) value {
-    _transform = value;
-    [_context startTimerIfNeeded];
+    NS_EXTRA(CALayer, self)->_transform = value;
+    [NS_EXTRA(CALayer, self)->_context startTimerIfNeeded];
 }
 
 - (CGAffineTransform) affineTransform {
-    return CGAffineTransformMake(_transform.m11, _transform.m12,
-                                 _transform.m21, _transform.m22,
-                                 _transform.m41, _transform.m42);
+    return CGAffineTransformMake(NS_EXTRA(CALayer, self)->_transform.m11, NS_EXTRA(CALayer, self)->_transform.m12,
+                                 NS_EXTRA(CALayer, self)->_transform.m21, NS_EXTRA(CALayer, self)->_transform.m22,
+                                 NS_EXTRA(CALayer, self)->_transform.m41, NS_EXTRA(CALayer, self)->_transform.m42);
 }
 
 - (void) setAffineTransform: (CGAffineTransform) value {
@@ -338,68 +338,68 @@ NSString *const CAToneMapModeIfSupported = @"ifSupported";
 }
 
 - (CATransform3D) sublayerTransform {
-    return _sublayerTransform;
+    return NS_EXTRA(CALayer, self)->_sublayerTransform;
 }
 
 - (void) setSublayerTransform: (CATransform3D) value {
-    _sublayerTransform = value;
+    NS_EXTRA(CALayer, self)->_sublayerTransform = value;
 }
 
 - (NSString *) minificationFilter {
-    return _minificationFilter;
+    return NS_EXTRA(CALayer, self)->_minificationFilter;
 }
 
 - (void) setMinificationFilter: (NSString *) value {
     value = [value copy];
-    [_minificationFilter release];
-    _minificationFilter = value;
+    [NS_EXTRA(CALayer, self)->_minificationFilter release];
+    NS_EXTRA(CALayer, self)->_minificationFilter = value;
 }
 
 - (NSString *) magnificationFilter {
-    return _magnificationFilter;
+    return NS_EXTRA(CALayer, self)->_magnificationFilter;
 }
 
 - (void) setMagnificationFilter: (NSString *) value {
     value = [value copy];
-    [_magnificationFilter release];
-    _magnificationFilter = value;
+    [NS_EXTRA(CALayer, self)->_magnificationFilter release];
+    NS_EXTRA(CALayer, self)->_magnificationFilter = value;
 }
 
 // Shared by -init and -initWithLayer:. The latter must not call -init, or a
 // subclass's override of -init would run again on the copy.
 - (void) _setDefaults {
-    _superlayer = nil;
-    _sublayers = [NSArray new];
-    _delegate = nil;
-    _anchorPoint = CGPointMake(0.5, 0.5);
-    _position = CGPointZero;
-    _bounds = CGRectZero;
-    _opacity = 1.0;
-    _opaque = NO;
-    _contents = nil;
-    _contentsScale = 1.0;
+    NS_EXTRA(CALayer, self)->_superlayer = nil;
+    NS_EXTRA(CALayer, self)->_sublayers = [NSArray new];
+    NS_EXTRA(CALayer, self)->_delegate = nil;
+    NS_EXTRA(CALayer, self)->_anchorPoint = CGPointMake(0.5, 0.5);
+    NS_EXTRA(CALayer, self)->_position = CGPointZero;
+    NS_EXTRA(CALayer, self)->_bounds = CGRectZero;
+    NS_EXTRA(CALayer, self)->_opacity = 1.0;
+    NS_EXTRA(CALayer, self)->_opaque = NO;
+    NS_EXTRA(CALayer, self)->_contents = nil;
+    NS_EXTRA(CALayer, self)->_contentsScale = 1.0;
     // The whole contents image stretches, i.e. no fixed border.
-    _contentsCenter = CGRectMake(0, 0, 1, 1);
-    _contentsRect = CGRectMake(0, 0, 1, 1);
-    _doubleSided = YES;
-    _rasterizationScale = 1.0;
-    _contentsFormat = [kCAContentsFormatRGBA8Uint copy];
-    _contentsGravity = [kCAGravityResize copy];
-    _cornerCurve = [kCACornerCurveCircular copy];
-    _allowsGroupOpacity = YES;
-    _shadowColor = CGColorCreateGenericRGB(0, 0, 0, 1);
-    _shadowOpacity = 0;
-    _shadowRadius = 3;
-    _shadowOffset = CGSizeMake(0, -3);
-    _preferredDynamicRange = [CADynamicRangeStandard copy];
-    _toneMapMode = [CAToneMapModeAutomatic copy];
-    _allowsEdgeAntialiasing = NO;
-    _edgeAntialiasingMask = kCALayerLeftEdge | kCALayerRightEdge | kCALayerBottomEdge | kCALayerTopEdge;
-    _transform = CATransform3DIdentity;
-    _sublayerTransform = CATransform3DIdentity;
-    _minificationFilter = kCAFilterLinear;
-    _magnificationFilter = kCAFilterLinear;
-    _animations = [[NSMutableDictionary alloc] init];
+    NS_EXTRA(CALayer, self)->_contentsCenter = CGRectMake(0, 0, 1, 1);
+    NS_EXTRA(CALayer, self)->_contentsRect = CGRectMake(0, 0, 1, 1);
+    NS_EXTRA(CALayer, self)->_doubleSided = YES;
+    NS_EXTRA(CALayer, self)->_rasterizationScale = 1.0;
+    NS_EXTRA(CALayer, self)->_contentsFormat = [kCAContentsFormatRGBA8Uint copy];
+    NS_EXTRA(CALayer, self)->_contentsGravity = [kCAGravityResize copy];
+    NS_EXTRA(CALayer, self)->_cornerCurve = [kCACornerCurveCircular copy];
+    NS_EXTRA(CALayer, self)->_allowsGroupOpacity = YES;
+    NS_EXTRA(CALayer, self)->_shadowColor = CGColorCreateGenericRGB(0, 0, 0, 1);
+    NS_EXTRA(CALayer, self)->_shadowOpacity = 0;
+    NS_EXTRA(CALayer, self)->_shadowRadius = 3;
+    NS_EXTRA(CALayer, self)->_shadowOffset = CGSizeMake(0, -3);
+    NS_EXTRA(CALayer, self)->_preferredDynamicRange = [CADynamicRangeStandard copy];
+    NS_EXTRA(CALayer, self)->_toneMapMode = [CAToneMapModeAutomatic copy];
+    NS_EXTRA(CALayer, self)->_allowsEdgeAntialiasing = NO;
+    NS_EXTRA(CALayer, self)->_edgeAntialiasingMask = kCALayerLeftEdge | kCALayerRightEdge | kCALayerBottomEdge | kCALayerTopEdge;
+    NS_EXTRA(CALayer, self)->_transform = CATransform3DIdentity;
+    NS_EXTRA(CALayer, self)->_sublayerTransform = CATransform3DIdentity;
+    NS_EXTRA(CALayer, self)->_minificationFilter = kCAFilterLinear;
+    NS_EXTRA(CALayer, self)->_magnificationFilter = kCAFilterLinear;
+    NS_EXTRA(CALayer, self)->_animations = [[NSMutableDictionary alloc] init];
 }
 
 - init {
@@ -448,103 +448,103 @@ static BOOL isOpaqueBlack(CGColorRef color) {
 }
 
 - (void) _encodeAttributes: (CAArchiveWriter *) w {
-    [w encodeBool: _allowsEdgeAntialiasing forKey: @"allowsEdgeAntialiasing"];
-    [w encodeBool: _allowsGroupOpacity forKey: @"allowsGroupOpacity"];
-    [w encodeObject: _contentsFormat forKey: @"contentsFormat"];
-    [w encodeObject: _cornerCurve forKey: @"cornerCurve"];
+    [w encodeBool: NS_EXTRA(CALayer, self)->_allowsEdgeAntialiasing forKey: @"allowsEdgeAntialiasing"];
+    [w encodeBool: NS_EXTRA(CALayer, self)->_allowsGroupOpacity forKey: @"allowsGroupOpacity"];
+    [w encodeObject: NS_EXTRA(CALayer, self)->_contentsFormat forKey: @"contentsFormat"];
+    [w encodeObject: NS_EXTRA(CALayer, self)->_cornerCurve forKey: @"cornerCurve"];
 
-    if ([_sublayers count] > 0)
-        [w encodeArray: _sublayers forKey: @"sublayers"];
-    if (_mask != nil)
-        [w encodeObject: _mask forKey: @"mask"];
-    if (_name != nil)
-        [w encodeObject: _name forKey: @"name"];
-    if (_anchorPoint.x != 0.5 || _anchorPoint.y != 0.5)
-        [w encodePoint: _anchorPoint forKey: @"anchorPoint"];
-    if (_anchorPointZ != 0)
-        [w encodeDouble: _anchorPointZ forKey: @"anchorPointZ"];
-    if (_position.x != 0 || _position.y != 0)
-        [w encodePoint: _position forKey: @"position"];
-    if (_zPosition != 0)
-        [w encodeDouble: _zPosition forKey: @"zPosition"];
-    if (!CGRectEqualToRect(_bounds, CGRectZero))
-        [w encodeRect: _bounds forKey: @"bounds"];
-    if (_opacity != 1)
-        [w encodeFloat: _opacity forKey: @"opacity"];
-    if (_opaque)
+    if ([NS_EXTRA(CALayer, self)->_sublayers count] > 0)
+        [w encodeArray: NS_EXTRA(CALayer, self)->_sublayers forKey: @"sublayers"];
+    if (NS_EXTRA(CALayer, self)->_mask != nil)
+        [w encodeObject: NS_EXTRA(CALayer, self)->_mask forKey: @"mask"];
+    if (NS_EXTRA(CALayer, self)->_name != nil)
+        [w encodeObject: NS_EXTRA(CALayer, self)->_name forKey: @"name"];
+    if (NS_EXTRA(CALayer, self)->_anchorPoint.x != 0.5 || NS_EXTRA(CALayer, self)->_anchorPoint.y != 0.5)
+        [w encodePoint: NS_EXTRA(CALayer, self)->_anchorPoint forKey: @"anchorPoint"];
+    if (NS_EXTRA(CALayer, self)->_anchorPointZ != 0)
+        [w encodeDouble: NS_EXTRA(CALayer, self)->_anchorPointZ forKey: @"anchorPointZ"];
+    if (NS_EXTRA(CALayer, self)->_position.x != 0 || NS_EXTRA(CALayer, self)->_position.y != 0)
+        [w encodePoint: NS_EXTRA(CALayer, self)->_position forKey: @"position"];
+    if (NS_EXTRA(CALayer, self)->_zPosition != 0)
+        [w encodeDouble: NS_EXTRA(CALayer, self)->_zPosition forKey: @"zPosition"];
+    if (!CGRectEqualToRect(NS_EXTRA(CALayer, self)->_bounds, CGRectZero))
+        [w encodeRect: NS_EXTRA(CALayer, self)->_bounds forKey: @"bounds"];
+    if (NS_EXTRA(CALayer, self)->_opacity != 1)
+        [w encodeFloat: NS_EXTRA(CALayer, self)->_opacity forKey: @"opacity"];
+    if (NS_EXTRA(CALayer, self)->_opaque)
         [w encodeBool: YES forKey: @"opaque"];
-    if (_contents != nil)
-        [w encodeContents: _contents forKey: @"contents"];
-    if (_contentsScale != 1)
-        [w encodeDouble: _contentsScale forKey: @"contentsScale"];
-    if (!CGRectEqualToRect(_contentsCenter, CGRectMake(0, 0, 1, 1)))
-        [w encodeRect: _contentsCenter forKey: @"contentsCenter"];
-    if (!CGRectEqualToRect(_contentsRect, CGRectMake(0, 0, 1, 1)))
-        [w encodeRect: _contentsRect forKey: @"contentsRect"];
-    if (![_contentsGravity isEqualToString: kCAGravityResize])
-        [w encodeObject: _contentsGravity forKey: @"contentsGravity"];
-    if (_shadowPath != NULL)
-        [w encodePath: _shadowPath forKey: @"shadowPath"];
-    if (_edgeAntialiasingMask != (kCALayerLeftEdge | kCALayerRightEdge | kCALayerBottomEdge | kCALayerTopEdge))
-        [w encodeInt: _edgeAntialiasingMask forKey: @"edgeAntialiasingMask"];
-    if (_autoresizingMask != 0)
-        [w encodeInt: _autoresizingMask forKey: @"autoresizingMask"];
-    if (!CATransform3DIsIdentity(_transform))
-        [w encodeTransform: _transform forKey: @"transform"];
-    if (!CATransform3DIsIdentity(_sublayerTransform))
-        [w encodeTransform: _sublayerTransform forKey: @"sublayerTransform"];
-    if (![_minificationFilter isEqualToString: kCAFilterLinear])
-        [w encodeObject: _minificationFilter forKey: @"minificationFilter"];
-    if (![_magnificationFilter isEqualToString: kCAFilterLinear])
-        [w encodeObject: _magnificationFilter forKey: @"magnificationFilter"];
-    if (_minificationFilterBias != 0)
-        [w encodeFloat: _minificationFilterBias forKey: @"minificationFilterBias"];
-    if (_backgroundColor != NULL)
-        [w encodeColor: _backgroundColor forKey: @"backgroundColor"];
-    if (_borderColor != NULL && !isOpaqueBlack(_borderColor))
-        [w encodeColor: _borderColor forKey: @"borderColor"];
-    if (_borderWidth != 0)
-        [w encodeDouble: _borderWidth forKey: @"borderWidth"];
-    if (_cornerRadius != 0)
-        [w encodeDouble: _cornerRadius forKey: @"cornerRadius"];
-    if (_masksToBounds)
+    if (NS_EXTRA(CALayer, self)->_contents != nil)
+        [w encodeContents: NS_EXTRA(CALayer, self)->_contents forKey: @"contents"];
+    if (NS_EXTRA(CALayer, self)->_contentsScale != 1)
+        [w encodeDouble: NS_EXTRA(CALayer, self)->_contentsScale forKey: @"contentsScale"];
+    if (!CGRectEqualToRect(NS_EXTRA(CALayer, self)->_contentsCenter, CGRectMake(0, 0, 1, 1)))
+        [w encodeRect: NS_EXTRA(CALayer, self)->_contentsCenter forKey: @"contentsCenter"];
+    if (!CGRectEqualToRect(NS_EXTRA(CALayer, self)->_contentsRect, CGRectMake(0, 0, 1, 1)))
+        [w encodeRect: NS_EXTRA(CALayer, self)->_contentsRect forKey: @"contentsRect"];
+    if (![NS_EXTRA(CALayer, self)->_contentsGravity isEqualToString: kCAGravityResize])
+        [w encodeObject: NS_EXTRA(CALayer, self)->_contentsGravity forKey: @"contentsGravity"];
+    if (NS_EXTRA(CALayer, self)->_shadowPath != NULL)
+        [w encodePath: NS_EXTRA(CALayer, self)->_shadowPath forKey: @"shadowPath"];
+    if (NS_EXTRA(CALayer, self)->_edgeAntialiasingMask != (kCALayerLeftEdge | kCALayerRightEdge | kCALayerBottomEdge | kCALayerTopEdge))
+        [w encodeInt: NS_EXTRA(CALayer, self)->_edgeAntialiasingMask forKey: @"edgeAntialiasingMask"];
+    if (NS_EXTRA(CALayer, self)->_autoresizingMask != 0)
+        [w encodeInt: NS_EXTRA(CALayer, self)->_autoresizingMask forKey: @"autoresizingMask"];
+    if (!CATransform3DIsIdentity(NS_EXTRA(CALayer, self)->_transform))
+        [w encodeTransform: NS_EXTRA(CALayer, self)->_transform forKey: @"transform"];
+    if (!CATransform3DIsIdentity(NS_EXTRA(CALayer, self)->_sublayerTransform))
+        [w encodeTransform: NS_EXTRA(CALayer, self)->_sublayerTransform forKey: @"sublayerTransform"];
+    if (![NS_EXTRA(CALayer, self)->_minificationFilter isEqualToString: kCAFilterLinear])
+        [w encodeObject: NS_EXTRA(CALayer, self)->_minificationFilter forKey: @"minificationFilter"];
+    if (![NS_EXTRA(CALayer, self)->_magnificationFilter isEqualToString: kCAFilterLinear])
+        [w encodeObject: NS_EXTRA(CALayer, self)->_magnificationFilter forKey: @"magnificationFilter"];
+    if (NS_EXTRA(CALayer, self)->_minificationFilterBias != 0)
+        [w encodeFloat: NS_EXTRA(CALayer, self)->_minificationFilterBias forKey: @"minificationFilterBias"];
+    if (NS_EXTRA(CALayer, self)->_backgroundColor != NULL)
+        [w encodeColor: NS_EXTRA(CALayer, self)->_backgroundColor forKey: @"backgroundColor"];
+    if (NS_EXTRA(CALayer, self)->_borderColor != NULL && !isOpaqueBlack(NS_EXTRA(CALayer, self)->_borderColor))
+        [w encodeColor: NS_EXTRA(CALayer, self)->_borderColor forKey: @"borderColor"];
+    if (NS_EXTRA(CALayer, self)->_borderWidth != 0)
+        [w encodeDouble: NS_EXTRA(CALayer, self)->_borderWidth forKey: @"borderWidth"];
+    if (NS_EXTRA(CALayer, self)->_cornerRadius != 0)
+        [w encodeDouble: NS_EXTRA(CALayer, self)->_cornerRadius forKey: @"cornerRadius"];
+    if (NS_EXTRA(CALayer, self)->_masksToBounds)
         [w encodeBool: YES forKey: @"masksToBounds"];
-    if (_filters != nil)
-        [w encodeArray: _filters forKey: @"filters"];
-    if (_backgroundFilters != nil)
-        [w encodeArray: _backgroundFilters forKey: @"backgroundFilters"];
-    if (_compositingFilter != nil)
-        [w encodeObject: _compositingFilter forKey: @"compositingFilter"];
-    if (_shadowColor != NULL && !isOpaqueBlack(_shadowColor))
-        [w encodeColor: _shadowColor forKey: @"shadowColor"];
-    if (_shadowOpacity != 0)
-        [w encodeFloat: _shadowOpacity forKey: @"shadowOpacity"];
-    if (_shadowRadius != 3)
-        [w encodeDouble: _shadowRadius forKey: @"shadowRadius"];
-    if (_shadowOffset.width != 0 || _shadowOffset.height != -3)
-        [w encodeSize: _shadowOffset forKey: @"shadowOffset"];
-    if (_hidden)
+    if (NS_EXTRA(CALayer, self)->_filters != nil)
+        [w encodeArray: NS_EXTRA(CALayer, self)->_filters forKey: @"filters"];
+    if (NS_EXTRA(CALayer, self)->_backgroundFilters != nil)
+        [w encodeArray: NS_EXTRA(CALayer, self)->_backgroundFilters forKey: @"backgroundFilters"];
+    if (NS_EXTRA(CALayer, self)->_compositingFilter != nil)
+        [w encodeObject: NS_EXTRA(CALayer, self)->_compositingFilter forKey: @"compositingFilter"];
+    if (NS_EXTRA(CALayer, self)->_shadowColor != NULL && !isOpaqueBlack(NS_EXTRA(CALayer, self)->_shadowColor))
+        [w encodeColor: NS_EXTRA(CALayer, self)->_shadowColor forKey: @"shadowColor"];
+    if (NS_EXTRA(CALayer, self)->_shadowOpacity != 0)
+        [w encodeFloat: NS_EXTRA(CALayer, self)->_shadowOpacity forKey: @"shadowOpacity"];
+    if (NS_EXTRA(CALayer, self)->_shadowRadius != 3)
+        [w encodeDouble: NS_EXTRA(CALayer, self)->_shadowRadius forKey: @"shadowRadius"];
+    if (NS_EXTRA(CALayer, self)->_shadowOffset.width != 0 || NS_EXTRA(CALayer, self)->_shadowOffset.height != -3)
+        [w encodeSize: NS_EXTRA(CALayer, self)->_shadowOffset forKey: @"shadowOffset"];
+    if (NS_EXTRA(CALayer, self)->_hidden)
         [w encodeBool: YES forKey: @"hidden"];
-    if (_geometryFlipped)
+    if (NS_EXTRA(CALayer, self)->_geometryFlipped)
         [w encodeBool: YES forKey: @"geometryFlipped"];
-    if (!_doubleSided)
+    if (!NS_EXTRA(CALayer, self)->_doubleSided)
         [w encodeBool: NO forKey: @"doubleSided"];
-    if (_shouldRasterize)
+    if (NS_EXTRA(CALayer, self)->_shouldRasterize)
         [w encodeBool: YES forKey: @"shouldRasterize"];
-    if (_rasterizationScale != 1)
-        [w encodeDouble: _rasterizationScale forKey: @"rasterizationScale"];
-    if (_drawsAsynchronously)
+    if (NS_EXTRA(CALayer, self)->_rasterizationScale != 1)
+        [w encodeDouble: NS_EXTRA(CALayer, self)->_rasterizationScale forKey: @"rasterizationScale"];
+    if (NS_EXTRA(CALayer, self)->_drawsAsynchronously)
         [w encodeBool: YES forKey: @"drawsAsynchronously"];
-    if (_needsDisplayOnBoundsChange)
+    if (NS_EXTRA(CALayer, self)->_needsDisplayOnBoundsChange)
         [w encodeBool: YES forKey: @"needsDisplayOnBoundsChange"];
-    if (_constraints != nil)
-        [w encodeArray: _constraints forKey: @"constraints"];
-    if (_layoutManager != nil)
-        [w encodeObject: _layoutManager forKey: @"layoutManager"];
-    if (_actions != nil)
-        [w encodeObject: _actions forKey: @"actions"];
-    if (_style != nil)
-        [w encodeObject: _style forKey: @"style"];
+    if (NS_EXTRA(CALayer, self)->_constraints != nil)
+        [w encodeArray: NS_EXTRA(CALayer, self)->_constraints forKey: @"constraints"];
+    if (NS_EXTRA(CALayer, self)->_layoutManager != nil)
+        [w encodeObject: NS_EXTRA(CALayer, self)->_layoutManager forKey: @"layoutManager"];
+    if (NS_EXTRA(CALayer, self)->_actions != nil)
+        [w encodeObject: NS_EXTRA(CALayer, self)->_actions forKey: @"actions"];
+    if (NS_EXTRA(CALayer, self)->_style != nil)
+        [w encodeObject: NS_EXTRA(CALayer, self)->_style forKey: @"style"];
 }
 
 - initWithCoder: (NSCoder *) coder {
@@ -570,9 +570,9 @@ static BOOL isOpaqueBlack(CGColorRef color) {
     CATransform3D transform;
 
     if ([r decodeBool: &flag forKey: @"allowsEdgeAntialiasing"])
-        _allowsEdgeAntialiasing = flag;
+        NS_EXTRA(CALayer, self)->_allowsEdgeAntialiasing = flag;
     if ([r decodeBool: &flag forKey: @"allowsGroupOpacity"])
-        _allowsGroupOpacity = flag;
+        NS_EXTRA(CALayer, self)->_allowsGroupOpacity = flag;
     NSString *string = [r decodeStringForKey: @"contentsFormat"];
     if (string != nil)
         [self setContentsFormat: string];
@@ -597,61 +597,61 @@ static BOOL isOpaqueBlack(CGColorRef color) {
         [self setCompositingFilter: compositingFilter];
 
     if ([r decodePoint: &point forKey: @"anchorPoint"])
-        _anchorPoint = point;
+        NS_EXTRA(CALayer, self)->_anchorPoint = point;
     if ([r decodePoint: &point forKey: @"position"])
-        _position = point;
+        NS_EXTRA(CALayer, self)->_position = point;
     if ([r decodeDouble: &real forKey: @"anchorPointZ"])
-        _anchorPointZ = real;
+        NS_EXTRA(CALayer, self)->_anchorPointZ = real;
     if ([r decodeDouble: &real forKey: @"zPosition"])
-        _zPosition = real;
+        NS_EXTRA(CALayer, self)->_zPosition = real;
     if ([r decodeRect: &rect forKey: @"bounds"])
-        _bounds = rect;
+        NS_EXTRA(CALayer, self)->_bounds = rect;
     if ([r decodeFloat: &single forKey: @"opacity"])
-        _opacity = single;
+        NS_EXTRA(CALayer, self)->_opacity = single;
     if ([r decodeBool: &flag forKey: @"opaque"])
-        _opaque = flag;
+        NS_EXTRA(CALayer, self)->_opaque = flag;
     if ([r decodeDouble: &real forKey: @"contentsScale"])
-        _contentsScale = real;
+        NS_EXTRA(CALayer, self)->_contentsScale = real;
     if ([r decodeRect: &rect forKey: @"contentsCenter"])
-        _contentsCenter = rect;
+        NS_EXTRA(CALayer, self)->_contentsCenter = rect;
     if ([r decodeRect: &rect forKey: @"contentsRect"])
-        _contentsRect = rect;
+        NS_EXTRA(CALayer, self)->_contentsRect = rect;
     if ([r decodeInt: &integer forKey: @"edgeAntialiasingMask"])
-        _edgeAntialiasingMask = integer;
+        NS_EXTRA(CALayer, self)->_edgeAntialiasingMask = integer;
     if ([r decodeInt: &integer forKey: @"autoresizingMask"])
-        _autoresizingMask = integer;
+        NS_EXTRA(CALayer, self)->_autoresizingMask = integer;
     if ([r decodeTransform: &transform forKey: @"transform"])
-        _transform = transform;
+        NS_EXTRA(CALayer, self)->_transform = transform;
     if ([r decodeTransform: &transform forKey: @"sublayerTransform"])
-        _sublayerTransform = transform;
+        NS_EXTRA(CALayer, self)->_sublayerTransform = transform;
     if ([r decodeFloat: &single forKey: @"minificationFilterBias"])
-        _minificationFilterBias = single;
+        NS_EXTRA(CALayer, self)->_minificationFilterBias = single;
     if ([r decodeDouble: &real forKey: @"borderWidth"])
-        _borderWidth = real;
+        NS_EXTRA(CALayer, self)->_borderWidth = real;
     if ([r decodeDouble: &real forKey: @"cornerRadius"])
-        _cornerRadius = real;
+        NS_EXTRA(CALayer, self)->_cornerRadius = real;
     if ([r decodeBool: &flag forKey: @"masksToBounds"])
-        _masksToBounds = flag;
+        NS_EXTRA(CALayer, self)->_masksToBounds = flag;
     if ([r decodeFloat: &single forKey: @"shadowOpacity"])
-        _shadowOpacity = single;
+        NS_EXTRA(CALayer, self)->_shadowOpacity = single;
     if ([r decodeDouble: &real forKey: @"shadowRadius"])
-        _shadowRadius = real;
+        NS_EXTRA(CALayer, self)->_shadowRadius = real;
     if ([r decodeSize: &size forKey: @"shadowOffset"])
-        _shadowOffset = size;
+        NS_EXTRA(CALayer, self)->_shadowOffset = size;
     if ([r decodeBool: &flag forKey: @"hidden"])
-        _hidden = flag;
+        NS_EXTRA(CALayer, self)->_hidden = flag;
     if ([r decodeBool: &flag forKey: @"geometryFlipped"])
-        _geometryFlipped = flag;
+        NS_EXTRA(CALayer, self)->_geometryFlipped = flag;
     if ([r decodeBool: &flag forKey: @"doubleSided"])
-        _doubleSided = flag;
+        NS_EXTRA(CALayer, self)->_doubleSided = flag;
     if ([r decodeBool: &flag forKey: @"shouldRasterize"])
-        _shouldRasterize = flag;
+        NS_EXTRA(CALayer, self)->_shouldRasterize = flag;
     if ([r decodeDouble: &real forKey: @"rasterizationScale"])
-        _rasterizationScale = real;
+        NS_EXTRA(CALayer, self)->_rasterizationScale = real;
     if ([r decodeBool: &flag forKey: @"drawsAsynchronously"])
-        _drawsAsynchronously = flag;
+        NS_EXTRA(CALayer, self)->_drawsAsynchronously = flag;
     if ([r decodeBool: &flag forKey: @"needsDisplayOnBoundsChange"])
-        _needsDisplayOnBoundsChange = flag;
+        NS_EXTRA(CALayer, self)->_needsDisplayOnBoundsChange = flag;
 
     // The copies below have no context yet, so the setters only retain or copy.
     CGColorRef color = [r copyColorForKey: @"backgroundColor"];
@@ -715,35 +715,36 @@ static BOOL isOpaqueBlack(CGColorRef color) {
 }
 
 - (void) dealloc {
-    for (CALayer *layer in _sublayers)
-        layer->_superlayer = nil;
-    [_sublayers release];
-    [_name release];
-    [_layoutManager release];
-    [_constraints release];
-    [_animations release];
-    [_minificationFilter release];
-    [_magnificationFilter release];
-    [_contentsFormat release];
-    [_contentsGravity release];
-    [_cornerCurve release];
-    if (_shadowPath)
-        CGPathRelease(_shadowPath);
-    [_mask release];
-    [_filters release];
-    [_compositingFilter release];
-    [_backgroundFilters release];
-    [_actions release];
-    [_style release];
-    if (_shadowColor)
-        CGColorRelease(_shadowColor);
-    [_preferredDynamicRange release];
-    [_toneMapMode release];
-    if (_backgroundColor)
-        CGColorRelease(_backgroundColor);
-    if (_borderColor)
-        CGColorRelease(_borderColor);
-    [_textureContents release];
+    for (CALayer *layer in NS_EXTRA(CALayer, self)->_sublayers)
+        NS_EXTRA(CALayer, layer)->_superlayer = nil;
+    [NS_EXTRA(CALayer, self)->_sublayers release];
+    [NS_EXTRA(CALayer, self)->_name release];
+    [NS_EXTRA(CALayer, self)->_layoutManager release];
+    [NS_EXTRA(CALayer, self)->_constraints release];
+    [NS_EXTRA(CALayer, self)->_animations release];
+    [NS_EXTRA(CALayer, self)->_minificationFilter release];
+    [NS_EXTRA(CALayer, self)->_magnificationFilter release];
+    [NS_EXTRA(CALayer, self)->_contentsFormat release];
+    [NS_EXTRA(CALayer, self)->_contentsGravity release];
+    [NS_EXTRA(CALayer, self)->_cornerCurve release];
+    if (NS_EXTRA(CALayer, self)->_shadowPath)
+        CGPathRelease(NS_EXTRA(CALayer, self)->_shadowPath);
+    [NS_EXTRA(CALayer, self)->_mask release];
+    [NS_EXTRA(CALayer, self)->_filters release];
+    [NS_EXTRA(CALayer, self)->_compositingFilter release];
+    [NS_EXTRA(CALayer, self)->_backgroundFilters release];
+    [NS_EXTRA(CALayer, self)->_actions release];
+    [NS_EXTRA(CALayer, self)->_style release];
+    if (NS_EXTRA(CALayer, self)->_shadowColor)
+        CGColorRelease(NS_EXTRA(CALayer, self)->_shadowColor);
+    [NS_EXTRA(CALayer, self)->_preferredDynamicRange release];
+    [NS_EXTRA(CALayer, self)->_toneMapMode release];
+    if (NS_EXTRA(CALayer, self)->_backgroundColor)
+        CGColorRelease(NS_EXTRA(CALayer, self)->_backgroundColor);
+    if (NS_EXTRA(CALayer, self)->_borderColor)
+        CGColorRelease(NS_EXTRA(CALayer, self)->_borderColor);
+    [NS_EXTRA(CALayer, self)->_textureContents release];
+    NS_EXTRA_FREE(CALayer, self);
     [super dealloc];
 }
 
@@ -758,289 +759,289 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
 }
 
 - (CGColorRef) backgroundColor {
-    return _backgroundColor;
+    return NS_EXTRA(CALayer, self)->_backgroundColor;
 }
 
 // Appearance changes need a new frame even when no view is redisplayed: the
 // context's timer renders and presents one, then stops again once idle.
 - (void) setBackgroundColor: (CGColorRef) value {
-    replaceColor(&_backgroundColor, value);
-    [_context startTimerIfNeeded];
+    replaceColor(&NS_EXTRA(CALayer, self)->_backgroundColor, value);
+    [NS_EXTRA(CALayer, self)->_context startTimerIfNeeded];
 }
 
 - (CGColorRef) borderColor {
-    return _borderColor;
+    return NS_EXTRA(CALayer, self)->_borderColor;
 }
 
 - (void) setBorderColor: (CGColorRef) value {
-    replaceColor(&_borderColor, value);
-    [_context startTimerIfNeeded];
+    replaceColor(&NS_EXTRA(CALayer, self)->_borderColor, value);
+    [NS_EXTRA(CALayer, self)->_context startTimerIfNeeded];
 }
 
 - (CGFloat) borderWidth {
-    return _borderWidth;
+    return NS_EXTRA(CALayer, self)->_borderWidth;
 }
 
 - (void) setBorderWidth: (CGFloat) value {
-    _borderWidth = value;
-    [_context startTimerIfNeeded];
+    NS_EXTRA(CALayer, self)->_borderWidth = value;
+    [NS_EXTRA(CALayer, self)->_context startTimerIfNeeded];
 }
 
 - (CGFloat) cornerRadius {
-    return _cornerRadius;
+    return NS_EXTRA(CALayer, self)->_cornerRadius;
 }
 
 - (void) setCornerRadius: (CGFloat) value {
-    _cornerRadius = value;
-    [_context startTimerIfNeeded];
+    NS_EXTRA(CALayer, self)->_cornerRadius = value;
+    [NS_EXTRA(CALayer, self)->_context startTimerIfNeeded];
 }
 
 - (CALayerCornerCurve) cornerCurve {
-    return _cornerCurve;
+    return NS_EXTRA(CALayer, self)->_cornerCurve;
 }
 
 - (void) setCornerCurve: (CALayerCornerCurve) value {
     value = [value copy];
-    [_cornerCurve release];
-    _cornerCurve = value;
-    [_context startTimerIfNeeded];
+    [NS_EXTRA(CALayer, self)->_cornerCurve release];
+    NS_EXTRA(CALayer, self)->_cornerCurve = value;
+    [NS_EXTRA(CALayer, self)->_context startTimerIfNeeded];
 }
 
 - (BOOL) masksToBounds {
-    return _masksToBounds;
+    return NS_EXTRA(CALayer, self)->_masksToBounds;
 }
 
 - (void) setMasksToBounds: (BOOL) value {
-    _masksToBounds = value;
-    [_context startTimerIfNeeded];
+    NS_EXTRA(CALayer, self)->_masksToBounds = value;
+    [NS_EXTRA(CALayer, self)->_context startTimerIfNeeded];
 }
 
 - (CALayer *) mask {
-    return _mask;
+    return NS_EXTRA(CALayer, self)->_mask;
 }
 
 - (void) setMask: (CALayer *) value {
-    if (value == _mask)
+    if (value == NS_EXTRA(CALayer, self)->_mask)
         return;
     if (value == self)
         [NSException raise: NSInvalidArgumentException
                     format: @"A layer cannot mask itself"];
     [value retain];
-    [_mask _setContext: nil];
-    [_mask release];
-    _mask = value;
-    [_mask _setContext: _context];
-    [_context startTimerIfNeeded];
+    [NS_EXTRA(CALayer, self)->_mask _setContext: nil];
+    [NS_EXTRA(CALayer, self)->_mask release];
+    NS_EXTRA(CALayer, self)->_mask = value;
+    [NS_EXTRA(CALayer, self)->_mask _setContext: NS_EXTRA(CALayer, self)->_context];
+    [NS_EXTRA(CALayer, self)->_context startTimerIfNeeded];
 }
 
 - (NSArray *) filters {
-    return _filters;
+    return NS_EXTRA(CALayer, self)->_filters;
 }
 
 - (void) setFilters: (NSArray *) value {
     value = [value copy];
-    [_filters release];
-    _filters = value;
-    [_context startTimerIfNeeded];
+    [NS_EXTRA(CALayer, self)->_filters release];
+    NS_EXTRA(CALayer, self)->_filters = value;
+    [NS_EXTRA(CALayer, self)->_context startTimerIfNeeded];
 }
 
 - (id) compositingFilter {
-    return _compositingFilter;
+    return NS_EXTRA(CALayer, self)->_compositingFilter;
 }
 
 - (void) setCompositingFilter: (id) value {
     [value retain];
-    [_compositingFilter release];
-    _compositingFilter = value;
-    [_context startTimerIfNeeded];
+    [NS_EXTRA(CALayer, self)->_compositingFilter release];
+    NS_EXTRA(CALayer, self)->_compositingFilter = value;
+    [NS_EXTRA(CALayer, self)->_context startTimerIfNeeded];
 }
 
 - (CGColorRef) shadowColor {
-    return _shadowColor;
+    return NS_EXTRA(CALayer, self)->_shadowColor;
 }
 
 - (void) setShadowColor: (CGColorRef) value {
-    replaceColor(&_shadowColor, value);
-    [_context startTimerIfNeeded];
+    replaceColor(&NS_EXTRA(CALayer, self)->_shadowColor, value);
+    [NS_EXTRA(CALayer, self)->_context startTimerIfNeeded];
 }
 
 - (float) shadowOpacity {
-    return _shadowOpacity;
+    return NS_EXTRA(CALayer, self)->_shadowOpacity;
 }
 
 - (void) setShadowOpacity: (float) value {
-    _shadowOpacity = value;
-    [_context startTimerIfNeeded];
+    NS_EXTRA(CALayer, self)->_shadowOpacity = value;
+    [NS_EXTRA(CALayer, self)->_context startTimerIfNeeded];
 }
 
 - (CGFloat) shadowRadius {
-    return _shadowRadius;
+    return NS_EXTRA(CALayer, self)->_shadowRadius;
 }
 
 - (void) setShadowRadius: (CGFloat) value {
-    _shadowRadius = value;
-    [_context startTimerIfNeeded];
+    NS_EXTRA(CALayer, self)->_shadowRadius = value;
+    [NS_EXTRA(CALayer, self)->_context startTimerIfNeeded];
 }
 
 - (CGSize) shadowOffset {
-    return _shadowOffset;
+    return NS_EXTRA(CALayer, self)->_shadowOffset;
 }
 
 - (void) setShadowOffset: (CGSize) value {
-    _shadowOffset = value;
-    [_context startTimerIfNeeded];
+    NS_EXTRA(CALayer, self)->_shadowOffset = value;
+    [NS_EXTRA(CALayer, self)->_context startTimerIfNeeded];
 }
 
 - (CGPathRef) shadowPath {
-    return _shadowPath;
+    return NS_EXTRA(CALayer, self)->_shadowPath;
 }
 
 - (void) setShadowPath: (CGPathRef) value {
-    if (_shadowPath == value)
+    if (NS_EXTRA(CALayer, self)->_shadowPath == value)
         return;
     CGPathRef copy = value ? CGPathCreateCopy(value) : NULL;
-    if (_shadowPath)
-        CGPathRelease(_shadowPath);
-    _shadowPath = copy;
-    [_context startTimerIfNeeded];
+    if (NS_EXTRA(CALayer, self)->_shadowPath)
+        CGPathRelease(NS_EXTRA(CALayer, self)->_shadowPath);
+    NS_EXTRA(CALayer, self)->_shadowPath = copy;
+    [NS_EXTRA(CALayer, self)->_context startTimerIfNeeded];
 }
 
 - (BOOL) allowsGroupOpacity {
-    return _allowsGroupOpacity;
+    return NS_EXTRA(CALayer, self)->_allowsGroupOpacity;
 }
 
 - (void) setAllowsGroupOpacity: (BOOL) value {
-    _allowsGroupOpacity = value;
-    [_context startTimerIfNeeded];
+    NS_EXTRA(CALayer, self)->_allowsGroupOpacity = value;
+    [NS_EXTRA(CALayer, self)->_context startTimerIfNeeded];
 }
 
 - (BOOL) isHidden {
-    return _hidden;
+    return NS_EXTRA(CALayer, self)->_hidden;
 }
 
 - (void) setHidden: (BOOL) value {
-    _hidden = value;
-    [_context startTimerIfNeeded];
+    NS_EXTRA(CALayer, self)->_hidden = value;
+    [NS_EXTRA(CALayer, self)->_context startTimerIfNeeded];
 }
 
 - (CAAutoresizingMask) autoresizingMask {
-    return _autoresizingMask;
+    return NS_EXTRA(CALayer, self)->_autoresizingMask;
 }
 
 - (void) setAutoresizingMask: (CAAutoresizingMask) value {
-    _autoresizingMask = value;
+    NS_EXTRA(CALayer, self)->_autoresizingMask = value;
 }
 
 - (CGFloat) zPosition {
-    return _zPosition;
+    return NS_EXTRA(CALayer, self)->_zPosition;
 }
 
 - (void) setZPosition: (CGFloat) value {
-    _zPosition = value;
-    [_context startTimerIfNeeded];
+    NS_EXTRA(CALayer, self)->_zPosition = value;
+    [NS_EXTRA(CALayer, self)->_context startTimerIfNeeded];
 }
 
 - (CGFloat) anchorPointZ {
-    return _anchorPointZ;
+    return NS_EXTRA(CALayer, self)->_anchorPointZ;
 }
 
 - (void) setAnchorPointZ: (CGFloat) value {
-    _anchorPointZ = value;
-    [_context startTimerIfNeeded];
+    NS_EXTRA(CALayer, self)->_anchorPointZ = value;
+    [NS_EXTRA(CALayer, self)->_context startTimerIfNeeded];
 }
 
 - (CGRect) contentsRect {
-    return _contentsRect;
+    return NS_EXTRA(CALayer, self)->_contentsRect;
 }
 
 - (void) setContentsRect: (CGRect) value {
-    _contentsRect = value;
-    [_context startTimerIfNeeded];
+    NS_EXTRA(CALayer, self)->_contentsRect = value;
+    [NS_EXTRA(CALayer, self)->_context startTimerIfNeeded];
 }
 
 - (float) minificationFilterBias {
-    return _minificationFilterBias;
+    return NS_EXTRA(CALayer, self)->_minificationFilterBias;
 }
 
 - (void) setMinificationFilterBias: (float) value {
-    _minificationFilterBias = value;
+    NS_EXTRA(CALayer, self)->_minificationFilterBias = value;
 }
 
 - (NSArray *) backgroundFilters {
-    return _backgroundFilters;
+    return NS_EXTRA(CALayer, self)->_backgroundFilters;
 }
 
 - (void) setBackgroundFilters: (NSArray *) value {
     value = [value copy];
-    [_backgroundFilters release];
-    _backgroundFilters = value;
+    [NS_EXTRA(CALayer, self)->_backgroundFilters release];
+    NS_EXTRA(CALayer, self)->_backgroundFilters = value;
 }
 
 - (BOOL) isDoubleSided {
-    return _doubleSided;
+    return NS_EXTRA(CALayer, self)->_doubleSided;
 }
 
 - (void) setDoubleSided: (BOOL) value {
-    _doubleSided = value;
+    NS_EXTRA(CALayer, self)->_doubleSided = value;
 }
 
 - (BOOL) shouldRasterize {
-    return _shouldRasterize;
+    return NS_EXTRA(CALayer, self)->_shouldRasterize;
 }
 
 - (void) setShouldRasterize: (BOOL) value {
-    _shouldRasterize = value;
+    NS_EXTRA(CALayer, self)->_shouldRasterize = value;
 }
 
 - (CGFloat) rasterizationScale {
-    return _rasterizationScale;
+    return NS_EXTRA(CALayer, self)->_rasterizationScale;
 }
 
 - (void) setRasterizationScale: (CGFloat) value {
-    _rasterizationScale = value;
+    NS_EXTRA(CALayer, self)->_rasterizationScale = value;
 }
 
 - (BOOL) drawsAsynchronously {
-    return _drawsAsynchronously;
+    return NS_EXTRA(CALayer, self)->_drawsAsynchronously;
 }
 
 - (void) setDrawsAsynchronously: (BOOL) value {
-    _drawsAsynchronously = value;
+    NS_EXTRA(CALayer, self)->_drawsAsynchronously = value;
 }
 
 - (NSDictionary *) actions {
-    return _actions;
+    return NS_EXTRA(CALayer, self)->_actions;
 }
 
 - (void) setActions: (NSDictionary *) value {
     value = [value copy];
-    [_actions release];
-    _actions = value;
+    [NS_EXTRA(CALayer, self)->_actions release];
+    NS_EXTRA(CALayer, self)->_actions = value;
 }
 
 - (NSDictionary *) style {
-    return _style;
+    return NS_EXTRA(CALayer, self)->_style;
 }
 
 - (void) setStyle: (NSDictionary *) value {
     value = [value copy];
-    [_style release];
-    _style = value;
+    [NS_EXTRA(CALayer, self)->_style release];
+    NS_EXTRA(CALayer, self)->_style = value;
 }
 
 - (void) _setSuperLayer: (CALayer *) parent {
-    _superlayer = parent;
+    NS_EXTRA(CALayer, self)->_superlayer = parent;
 }
 
 - (void) _removeSublayer: (CALayer *) child {
-    NSMutableArray *layers = [_sublayers mutableCopy];
+    NSMutableArray *layers = [NS_EXTRA(CALayer, self)->_sublayers mutableCopy];
     [layers removeObjectIdenticalTo: child];
     [self setSublayers: layers];
     [layers release];
 }
 
 - (void) addSublayer: (CALayer *) layer {
-    [self insertSublayer: layer atIndex: (unsigned int)[_sublayers count]];
+    [self insertSublayer: layer atIndex: (unsigned int)[NS_EXTRA(CALayer, self)->_sublayers count]];
 }
 
 - (void) insertSublayer: (CALayer *) layer atIndex: (unsigned int) index {
@@ -1048,10 +1049,10 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
         [NSException raise: NSInvalidArgumentException
                     format: @"Cannot insert a nil sublayer"];
     }
-    if (index > [_sublayers count]) {
+    if (index > [NS_EXTRA(CALayer, self)->_sublayers count]) {
         [NSException raise: NSRangeException
                     format: @"Sublayer index %u exceeds count %lu", index,
-                            (unsigned long)[_sublayers count]];
+                            (unsigned long)[NS_EXTRA(CALayer, self)->_sublayers count]];
     }
     for (CALayer *ancestor = self; ancestor != nil; ancestor = [ancestor superlayer]) {
         if (ancestor == layer) {
@@ -1066,14 +1067,14 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
     if ([layer superlayer] != nil)
         [layer removeFromSuperlayer];
 
-    NSMutableArray *layers = [_sublayers mutableCopy];
+    NSMutableArray *layers = [NS_EXTRA(CALayer, self)->_sublayers mutableCopy];
     if (index > [layers count])
         index = (unsigned int)[layers count];
     [layers insertObject: layer atIndex: index];
     [self setSublayers: layers];
     [layers release];
     [layer release];
-    [_context startTimerIfNeeded];
+    [NS_EXTRA(CALayer, self)->_context startTimerIfNeeded];
 }
 
 - (void) insertSublayer: (CALayer *) layer below: (CALayer *) sibling {
@@ -1097,7 +1098,7 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
     if (layer != nil && [layer superlayer] == self)
         [layer removeFromSuperlayer];
 
-    NSUInteger index = [_sublayers indexOfObjectIdenticalTo: sibling];
+    NSUInteger index = [NS_EXTRA(CALayer, self)->_sublayers indexOfObjectIdenticalTo: sibling];
     if (index == NSNotFound) {
         [layer autorelease];
         [NSException raise: NSInvalidArgumentException
@@ -1111,7 +1112,7 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
 - (void) replaceSublayer: (CALayer *) layer with: (CALayer *) other {
     if (layer == other)
         return;
-    if ([_sublayers indexOfObjectIdenticalTo: layer] == NSNotFound)
+    if ([NS_EXTRA(CALayer, self)->_sublayers indexOfObjectIdenticalTo: layer] == NSNotFound)
         return;
     if (other == nil) {
         [layer removeFromSuperlayer];
@@ -1122,14 +1123,14 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
     if ([other superlayer] != nil)
         [other removeFromSuperlayer];
 
-    NSMutableArray *layers = [_sublayers mutableCopy];
+    NSMutableArray *layers = [NS_EXTRA(CALayer, self)->_sublayers mutableCopy];
     [layers replaceObjectAtIndex: [layers indexOfObjectIdenticalTo: layer]
                       withObject: other];
     // Clears the replaced layer's superlayer and context.
     [self setSublayers: layers];
     [layers release];
     [other release];
-    [_context startTimerIfNeeded];
+    [NS_EXTRA(CALayer, self)->_context startTimerIfNeeded];
 }
 
 // Draws the layer's content with -drawInContext: (or the delegate's
@@ -1138,13 +1139,13 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
 // implements -displayLayer: sets the contents itself instead.
 - (void) display {
     if (![self _drawsOwnContent] &&
-        [_delegate respondsToSelector: @selector(displayLayer:)]) {
-        [_delegate displayLayer: self];
+        [NS_EXTRA(CALayer, self)->_delegate respondsToSelector: @selector(displayLayer:)]) {
+        [NS_EXTRA(CALayer, self)->_delegate displayLayer: self];
         return;
     }
 
-    size_t width = (size_t) ceil(MAX(_bounds.size.width, 0));
-    size_t height = (size_t) ceil(MAX(_bounds.size.height, 0));
+    size_t width = (size_t) ceil(MAX(NS_EXTRA(CALayer, self)->_bounds.size.width, 0));
+    size_t height = (size_t) ceil(MAX(NS_EXTRA(CALayer, self)->_bounds.size.height, 0));
     if (width == 0 || height == 0) {
         [self setContents: nil];
         return;
@@ -1165,7 +1166,7 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
         CGContextTranslateCTM(context, 0, height);
         CGContextScaleCTM(context, 1, -1);
     }
-    CGContextTranslateCTM(context, -_bounds.origin.x, -_bounds.origin.y);
+    CGContextTranslateCTM(context, -NS_EXTRA(CALayer, self)->_bounds.origin.x, -NS_EXTRA(CALayer, self)->_bounds.origin.y);
     [self drawInContext: context];
 
     CGImageRef image = CGBitmapContextCreateImage(context);
@@ -1176,84 +1177,84 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
 }
 
 - (void) displayIfNeeded {
-    if (_needsDisplay) {
-        _needsDisplay = NO;
+    if (NS_EXTRA(CALayer, self)->_needsDisplay) {
+        NS_EXTRA(CALayer, self)->_needsDisplay = NO;
         [self display];
     }
 }
 
 - (void) layoutSublayers {
-    if ([_delegate respondsToSelector: @selector(layoutSublayersOfLayer:)])
-        [_delegate layoutSublayersOfLayer: self];
-    else if ([_layoutManager respondsToSelector: @selector(layoutSublayersOfLayer:)])
-        [_layoutManager layoutSublayersOfLayer: self];
+    if ([NS_EXTRA(CALayer, self)->_delegate respondsToSelector: @selector(layoutSublayersOfLayer:)])
+        [NS_EXTRA(CALayer, self)->_delegate layoutSublayersOfLayer: self];
+    else if ([NS_EXTRA(CALayer, self)->_layoutManager respondsToSelector: @selector(layoutSublayersOfLayer:)])
+        [NS_EXTRA(CALayer, self)->_layoutManager layoutSublayersOfLayer: self];
 }
 
 - (void) layoutIfNeeded {
-    if (_needsLayout) {
-        _needsLayout = NO;
+    if (NS_EXTRA(CALayer, self)->_needsLayout) {
+        NS_EXTRA(CALayer, self)->_needsLayout = NO;
         [self layoutSublayers];
     }
-    NSArray *children = [_sublayers copy];
+    NSArray *children = [NS_EXTRA(CALayer, self)->_sublayers copy];
     for (CALayer *child in children)
         [child layoutIfNeeded];
     [children release];
 }
 
 - (void) setNeedsLayout {
-    _needsLayout = YES;
-    [_context startTimerIfNeeded];
+    NS_EXTRA(CALayer, self)->_needsLayout = YES;
+    [NS_EXTRA(CALayer, self)->_context startTimerIfNeeded];
 }
 
 - (BOOL) needsLayout {
-    return _needsLayout;
+    return NS_EXTRA(CALayer, self)->_needsLayout;
 }
 
 - (BOOL) isGeometryFlipped {
-    return _geometryFlipped;
+    return NS_EXTRA(CALayer, self)->_geometryFlipped;
 }
 
 - (void) setGeometryFlipped: (BOOL) value {
-    _geometryFlipped = value;
-    [_context startTimerIfNeeded];
+    NS_EXTRA(CALayer, self)->_geometryFlipped = value;
+    [NS_EXTRA(CALayer, self)->_context startTimerIfNeeded];
 }
 
 - (BOOL) contentsAreFlipped {
     BOOL flipped = NO;
 
-    for (CALayer *layer = self; layer != nil; layer = layer->_superlayer)
-        flipped ^= layer->_geometryFlipped;
+    for (CALayer *layer = self; layer != nil; layer = NS_EXTRA(CALayer, layer)->_superlayer)
+        flipped ^= NS_EXTRA(CALayer, layer)->_geometryFlipped;
     return flipped;
 }
 
 - (BOOL) needsDisplayOnBoundsChange {
-    return _needsDisplayOnBoundsChange;
+    return NS_EXTRA(CALayer, self)->_needsDisplayOnBoundsChange;
 }
 
 - (void) setNeedsDisplayOnBoundsChange: (BOOL) value {
-    _needsDisplayOnBoundsChange = value;
+    NS_EXTRA(CALayer, self)->_needsDisplayOnBoundsChange = value;
 }
 
 - (void) drawInContext: (CGContextRef) context {
-    if ([_delegate respondsToSelector: @selector(drawLayer:inContext:)])
-        [_delegate drawLayer: self inContext: context];
+    if ([NS_EXTRA(CALayer, self)->_delegate respondsToSelector: @selector(drawLayer:inContext:)])
+        [NS_EXTRA(CALayer, self)->_delegate drawLayer: self inContext: context];
 }
 
 - (BOOL) needsDisplay {
-    return _needsDisplay;
+    return NS_EXTRA(CALayer, self)->_needsDisplay;
 }
 
 - (void) removeFromSuperlayer {
-    [_superlayer _removeSublayer: self];
-    _superlayer = nil;
+    [NS_EXTRA(CALayer, self)->_superlayer _removeSublayer: self];
+    NS_EXTRA(CALayer, self)->_superlayer = nil;
     [self _setContext: nil];
 }
 
 - (void) setNeedsDisplay {
-    _needsDisplay = YES;
+    NS_EXTRA(CALayer, self)->_needsDisplay = YES;
     // Get a frame rendered: the context's timer renders, presents, and stops
     // again once no animations are running.
-    [_context startTimerIfNeeded];
+    [NS_EXTRA(CALayer, self)->_context startTimerIfNeeded];
 }
 
 - (void) setNeedsDisplayInRect: (CGRect) rect {
@@ -1263,31 +1264,31 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
 - (void) addAnimation: (CAAnimation *) animation forKey: (NSString *) key {
     // The animation is recorded for any layer, also one that is not part of a
     // hosted layer tree; the context, if there is one, starts driving it.
-    [_animations setObject: animation forKey: key];
-    [_context startTimerIfNeeded];
+    [NS_EXTRA(CALayer, self)->_animations setObject: animation forKey: key];
+    [NS_EXTRA(CALayer, self)->_context startTimerIfNeeded];
 }
 
 - (CAAnimation *) animationForKey: (NSString *) key {
-    return [_animations objectForKey: key];
+    return [NS_EXTRA(CALayer, self)->_animations objectForKey: key];
 }
 
 - (void) removeAllAnimations {
-    [_animations removeAllObjects];
+    [NS_EXTRA(CALayer, self)->_animations removeAllObjects];
 }
 
 - (void) removeAnimationForKey: (NSString *) key {
-    [_animations removeObjectForKey: key];
+    [NS_EXTRA(CALayer, self)->_animations removeObjectForKey: key];
 }
 
 - (NSArray *) animationKeys {
-    return [_animations allKeys];
+    return [NS_EXTRA(CALayer, self)->_animations allKeys];
 }
 
 - valueForKey: (NSString *) key {
     // FIXME: KVC appears broken for structs
 
     if ([key isEqualToString: @"bounds"])
-        return [NSValue valueWithRect: _bounds];
+        return [NSValue valueWithRect: NS_EXTRA(CALayer, self)->_bounds];
     if ([key isEqualToString: @"frame"])
         return [NSValue valueWithRect: [self frame]];
 
@@ -1314,12 +1315,12 @@ static id<CAAction> actionInStyle(NSDictionary *style, NSString *key) {
 - (id<CAAction>) actionForKey: (NSString *) key {
     id<CAAction> action = nil;
 
-    if ([_delegate respondsToSelector: @selector(actionForLayer:forKey:)])
-        action = [_delegate actionForLayer: self forKey: key];
+    if ([NS_EXTRA(CALayer, self)->_delegate respondsToSelector: @selector(actionForLayer:forKey:)])
+        action = [NS_EXTRA(CALayer, self)->_delegate actionForLayer: self forKey: key];
     if (action == nil)
-        action = [_actions objectForKey: key];
+        action = [NS_EXTRA(CALayer, self)->_actions objectForKey: key];
     if (action == nil)
-        action = actionInStyle(_style, key);
+        action = actionInStyle(NS_EXTRA(CALayer, self)->_style, key);
     if (action == nil)
         action = [[self class] defaultActionForKey: key];
     if (action != nil)
@@ -1336,7 +1337,7 @@ static id<CAAction> actionInStyle(NSDictionary *style, NSString *key) {
     // sublayer in a window-hosted tree gets an implicit action. macOS 10.14.4
     // behaves the same.
     // Test: quartzcore-implicit-actions (standalone and window-hosted cases).
-    if (_context == nil)
+    if (NS_EXTRA(CALayer, self)->_context == nil)
         return nil;
 
     CABasicAnimation *basic = [CABasicAnimation animationWithKeyPath: key];
@@ -1347,31 +1348,31 @@ static id<CAAction> actionInStyle(NSDictionary *style, NSString *key) {
 }
 
 - (NSNumber *) _textureId {
-    return _textureId;
+    return NS_EXTRA(CALayer, self)->_textureId;
 }
 
 - (void) _setTextureId: (NSNumber *) value {
     value = [value copy];
-    [_textureId release];
-    _textureId = value;
+    [NS_EXTRA(CALayer, self)->_textureId release];
+    NS_EXTRA(CALayer, self)->_textureId = value;
 }
 
 - (id) _textureContents {
-    return _textureContents;
+    return NS_EXTRA(CALayer, self)->_textureContents;
 }
 
 - (void) _setTextureContents: (id) value {
     value = [value retain];
-    [_textureContents release];
-    _textureContents = value;
+    [NS_EXTRA(CALayer, self)->_textureContents release];
+    NS_EXTRA(CALayer, self)->_textureContents = value;
 }
 
 - (uint32_t) _textureSeed {
-    return _textureSeed;
+    return NS_EXTRA(CALayer, self)->_textureSeed;
 }
 
 - (void) _setTextureSeed: (uint32_t) value {
-    _textureSeed = value;
+    NS_EXTRA(CALayer, self)->_textureSeed = value;
 }
 
 - (BOOL) _drawsOwnContent {

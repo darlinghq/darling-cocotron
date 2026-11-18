@@ -18,6 +18,7 @@
 */
 
 #import <QuartzCore/CALayer.h>
+#import <QuartzCore/LegacyIvarLayout.h>
 
 typedef NSString *CAGradientLayerType NS_TYPED_ENUM;
 
@@ -26,12 +27,15 @@ CA_EXPORT CAGradientLayerType const kCAGradientLayerRadial;
 CA_EXPORT CAGradientLayerType const kCAGradientLayerConic;
 
 // Draws a color gradient into the layer's contents.
+#define _NS_SIDE_CAGradientLayer 0, 1,
 @interface CAGradientLayer : CALayer {
-    NSArray *_colors;
-    NSArray *_locations;
-    CGPoint _startPoint;
-    CGPoint _endPoint;
-    CAGradientLayerType _type;
+    NS_EXTRA_IVARS_BEGIN(CAGradientLayer)
+        NSArray *_colors;
+        NSArray *_locations;
+        CGPoint _startPoint;
+        CGPoint _endPoint;
+        CAGradientLayerType _type;
+    NS_SIDE_IVARS_END(CAGradientLayer)
 }
 
 @property(copy) NSArray *colors;                 // CGColorRefs; default nil (nothing is drawn)

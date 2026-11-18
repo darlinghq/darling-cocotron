@@ -26,9 +26,9 @@ NSString *const kCAGradientLayerConic = @"conic";
 @implementation CAGradientLayer
 
 - (void) _setGradientDefaults {
-    _startPoint = CGPointMake(0.5, 0);
-    _endPoint = CGPointMake(0.5, 1);
-    _type = [kCAGradientLayerAxial copy];
+    NS_EXTRA(CAGradientLayer, self)->_startPoint = CGPointMake(0.5, 0);
+    NS_EXTRA(CAGradientLayer, self)->_endPoint = CGPointMake(0.5, 1);
+    NS_EXTRA(CAGradientLayer, self)->_type = [kCAGradientLayerAxial copy];
 }
 
 - init {
@@ -45,72 +45,72 @@ NSString *const kCAGradientLayerConic = @"conic";
         if ([layer isKindOfClass: [CAGradientLayer class]]) {
             CAGradientLayer *other = layer;
 
-            _colors = [other->_colors copy];
-            _locations = [other->_locations copy];
-            _startPoint = other->_startPoint;
-            _endPoint = other->_endPoint;
-            [_type release];
-            _type = [other->_type copy];
+            NS_EXTRA(CAGradientLayer, self)->_colors = [NS_EXTRA(CAGradientLayer, other)->_colors copy];
+            NS_EXTRA(CAGradientLayer, self)->_locations = [NS_EXTRA(CAGradientLayer, other)->_locations copy];
+            NS_EXTRA(CAGradientLayer, self)->_startPoint = NS_EXTRA(CAGradientLayer, other)->_startPoint;
+            NS_EXTRA(CAGradientLayer, self)->_endPoint = NS_EXTRA(CAGradientLayer, other)->_endPoint;
+            [NS_EXTRA(CAGradientLayer, self)->_type release];
+            NS_EXTRA(CAGradientLayer, self)->_type = [NS_EXTRA(CAGradientLayer, other)->_type copy];
         }
     }
     return self;
 }
 
 - (void) dealloc {
-    [_colors release];
-    [_locations release];
-    [_type release];
+    [NS_EXTRA(CAGradientLayer, self)->_colors release];
+    [NS_EXTRA(CAGradientLayer, self)->_locations release];
+    [NS_EXTRA(CAGradientLayer, self)->_type release];
     [super dealloc];
 }
 
 - (NSArray *) colors {
-    return _colors;
+    return NS_EXTRA(CAGradientLayer, self)->_colors;
 }
 
 - (void) setColors: (NSArray *) colors {
     colors = [colors copy];
-    [_colors release];
-    _colors = colors;
+    [NS_EXTRA(CAGradientLayer, self)->_colors release];
+    NS_EXTRA(CAGradientLayer, self)->_colors = colors;
     [self setNeedsDisplay];
 }
 
 - (NSArray *) locations {
-    return _locations;
+    return NS_EXTRA(CAGradientLayer, self)->_locations;
 }
 
 - (void) setLocations: (NSArray *) locations {
     locations = [locations copy];
-    [_locations release];
-    _locations = locations;
+    [NS_EXTRA(CAGradientLayer, self)->_locations release];
+    NS_EXTRA(CAGradientLayer, self)->_locations = locations;
     [self setNeedsDisplay];
 }
 
 - (CGPoint) startPoint {
-    return _startPoint;
+    return NS_EXTRA(CAGradientLayer, self)->_startPoint;
 }
 
 - (void) setStartPoint: (CGPoint) point {
-    _startPoint = point;
+    NS_EXTRA(CAGradientLayer, self)->_startPoint = point;
     [self setNeedsDisplay];
 }
 
 - (CGPoint) endPoint {
-    return _endPoint;
+    return NS_EXTRA(CAGradientLayer, self)->_endPoint;
 }
 
 - (void) setEndPoint: (CGPoint) point {
-    _endPoint = point;
+    NS_EXTRA(CAGradientLayer, self)->_endPoint = point;
     [self setNeedsDisplay];
 }
 
 - (CAGradientLayerType) type {
-    return _type;
+    return NS_EXTRA(CAGradientLayer, self)->_type;
 }
 
 - (void) setType: (CAGradientLayerType) type {
     type = [type copy];
-    [_type release];
-    _type = type;
+    [NS_EXTRA(CAGradientLayer, self)->_type release];
+    NS_EXTRA(CAGradientLayer, self)->_type = type;
     [self setNeedsDisplay];
 }
 
@@ -122,33 +122,33 @@ NSString *const kCAGradientLayerConic = @"conic";
 - (void) drawInContext: (CGContextRef) context {
     [super drawInContext: context];
 
-    NSUInteger count = [_colors count];
+    NSUInteger count = [NS_EXTRA(CAGradientLayer, self)->_colors count];
 
-    if (count == 0 || ![_type isEqualToString: kCAGradientLayerAxial])
+    if (count == 0 || ![NS_EXTRA(CAGradientLayer, self)->_type isEqualToString: kCAGradientLayerAxial])
         return;
 
     CGRect bounds = [self bounds];
     CGFloat locations[count];
-    BOOL explicitLocations = [_locations count] == count;
+    BOOL explicitLocations = [NS_EXTRA(CAGradientLayer, self)->_locations count] == count;
 
     for (NSUInteger i = 0; i < count; i++) {
         if (explicitLocations)
-            locations[i] = [[_locations objectAtIndex: i] doubleValue];
+            locations[i] = [[NS_EXTRA(CAGradientLayer, self)->_locations objectAtIndex: i] doubleValue];
         else
             locations[i] = count == 1 ? 0 : (CGFloat) i / (count - 1);
     }
 
     CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB();
-    CGGradientRef gradient = CGGradientCreateWithColors(space, (CFArrayRef) _colors, locations);
+    CGGradientRef gradient = CGGradientCreateWithColors(space, (CFArrayRef) NS_EXTRA(CAGradientLayer, self)->_colors, locations);
 
     CGColorSpaceRelease(space);
     if (gradient == NULL)
         return;
 
-    CGPoint start = CGPointMake(bounds.origin.x + _startPoint.x * bounds.size.width,
-                                bounds.origin.y + _startPoint.y * bounds.size.height);
-    CGPoint end = CGPointMake(bounds.origin.x + _endPoint.x * bounds.size.width,
-                              bounds.origin.y + _endPoint.y * bounds.size.height);
+    CGPoint start = CGPointMake(bounds.origin.x + NS_EXTRA(CAGradientLayer, self)->_startPoint.x * bounds.size.width,
+                                bounds.origin.y + NS_EXTRA(CAGradientLayer, self)->_startPoint.y * bounds.size.height);
+    CGPoint end = CGPointMake(bounds.origin.x + NS_EXTRA(CAGradientLayer, self)->_endPoint.x * bounds.size.width,
+                              bounds.origin.y + NS_EXTRA(CAGradientLayer, self)->_endPoint.y * bounds.size.height);
 
     // The area before the start point and after the end point takes the first and last color.
     CGContextSaveGState(context);

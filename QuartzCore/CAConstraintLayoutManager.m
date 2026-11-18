@@ -83,11 +83,11 @@ static BOOL isValidAttribute(CAConstraintAttribute attribute) {
                     format: @"CAConstraint needs a source layer name"];
     }
     if ((self = [super init])) {
-        _attribute = attribute;
-        _sourceName = [sourceName copy];
-        _sourceAttribute = sourceAttribute;
-        _scale = scale;
-        _offset = offset;
+        NS_EXTRA(CAConstraint, self)->_attribute = attribute;
+        NS_EXTRA(CAConstraint, self)->_sourceName = [sourceName copy];
+        NS_EXTRA(CAConstraint, self)->_sourceAttribute = sourceAttribute;
+        NS_EXTRA(CAConstraint, self)->_scale = scale;
+        NS_EXTRA(CAConstraint, self)->_offset = offset;
     }
     return self;
 }
@@ -100,14 +100,14 @@ static BOOL isValidAttribute(CAConstraintAttribute attribute) {
 // they differ from the defaults (no source, 1 and 0).
 - (void) encodeWithCoder: (NSCoder *) coder {
     CAArchiveRequireKeyedCoder(coder);
-    [coder encodeInt: _attribute forKey: @"CAAttr"];
-    if (_sourceName != nil)
-        [coder encodeObject: _sourceName forKey: @"CASrcId"];
-    [coder encodeInt: _sourceAttribute forKey: @"CASrcAttr"];
-    if (_scale != 1)
-        [coder encodeDouble: _scale forKey: @"CAScale"];
-    if (_offset != 0)
-        [coder encodeDouble: _offset forKey: @"CAOffset"];
+    [coder encodeInt: NS_EXTRA(CAConstraint, self)->_attribute forKey: @"CAAttr"];
+    if (NS_EXTRA(CAConstraint, self)->_sourceName != nil)
+        [coder encodeObject: NS_EXTRA(CAConstraint, self)->_sourceName forKey: @"CASrcId"];
+    [coder encodeInt: NS_EXTRA(CAConstraint, self)->_sourceAttribute forKey: @"CASrcAttr"];
+    if (NS_EXTRA(CAConstraint, self)->_scale != 1)
+        [coder encodeDouble: NS_EXTRA(CAConstraint, self)->_scale forKey: @"CAScale"];
+    if (NS_EXTRA(CAConstraint, self)->_offset != 0)
+        [coder encodeDouble: NS_EXTRA(CAConstraint, self)->_offset forKey: @"CAOffset"];
 }
 
 - (instancetype) initWithCoder: (NSCoder *) coder {
@@ -128,28 +128,29 @@ static BOOL isValidAttribute(CAConstraintAttribute attribute) {
 }
 
 - (void) dealloc {
-    [_sourceName release];
+    [NS_EXTRA(CAConstraint, self)->_sourceName release];
+    NS_EXTRA_FREE(CAConstraint, self);
     [super dealloc];
 }
 
 - (CAConstraintAttribute) attribute {
-    return _attribute;
+    return NS_EXTRA(CAConstraint, self)->_attribute;
 }
 
 - (NSString *) sourceName {
-    return _sourceName;
+    return NS_EXTRA(CAConstraint, self)->_sourceName;
 }
 
 - (CAConstraintAttribute) sourceAttribute {
-    return _sourceAttribute;
+    return NS_EXTRA(CAConstraint, self)->_sourceAttribute;
 }
 
 - (CGFloat) scale {
-    return _scale;
+    return NS_EXTRA(CAConstraint, self)->_scale;
 }
 
 - (CGFloat) offset {
-    return _offset;
+    return NS_EXTRA(CAConstraint, self)->_offset;
 }
 
 @end
@@ -157,18 +158,18 @@ static BOOL isValidAttribute(CAConstraintAttribute attribute) {
 @implementation CALayer (CAConstraintLayoutManager)
 
 - (NSArray *) constraints {
-    return _constraints;
+    return NS_EXTRA(CALayer, self)->_constraints;
 }
 
 - (void) setConstraints: (NSArray *) value {
     value = [value copy];
-    [_constraints release];
-    _constraints = value;
-    [_superlayer setNeedsLayout];
+    [NS_EXTRA(CALayer, self)->_constraints release];
+    NS_EXTRA(CALayer, self)->_constraints = value;
+    [NS_EXTRA(CALayer, self)->_superlayer setNeedsLayout];
 }
 
 - (void) addConstraint: (CAConstraint *) constraint {
-    NSArray *constraints = _constraints ? [_constraints arrayByAddingObject: constraint]
+    NSArray *constraints = NS_EXTRA(CALayer, self)->_constraints ? [NS_EXTRA(CALayer, self)->_constraints arrayByAddingObject: constraint]
                                         : [NSArray arrayWithObject: constraint];
     [self setConstraints: constraints];
 }

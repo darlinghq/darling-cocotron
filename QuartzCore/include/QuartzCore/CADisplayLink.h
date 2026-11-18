@@ -1,4 +1,5 @@
 #import <Foundation/NSObject.h>
+#import <QuartzCore/LegacyIvarLayout.h>
 #import <Foundation/NSRunLoop.h>
 #import <QuartzCore/CABase.h>
 #import <QuartzCore/CAFrameRateRange.h>
@@ -7,20 +8,22 @@
 
 @interface CADisplayLink : NSObject {
 @private
-    id _target;
-    SEL _selector;
-    id _display;
-    NSMutableArray *_schedules;
-    CFTimeInterval _timestamp;
-    CFTimeInterval _targetTimestamp;
-    CFTimeInterval _duration;
-    double _refreshRate;
-    CFTimeInterval _refreshRateCheckedAt;
-    double (^_refreshRateProvider)(void);
-    NSInteger _preferredFramesPerSecond;
-    CAFrameRateRange _preferredFrameRateRange;
-    BOOL _paused;
-    BOOL _invalidated;
+    NS_EXTRA_IVARS_BEGIN(CADisplayLink)
+        id _target;
+        SEL _selector;
+        id _display;
+        NSMutableArray *_schedules;
+        CFTimeInterval _timestamp;
+        CFTimeInterval _targetTimestamp;
+        CFTimeInterval _duration;
+        double _refreshRate;
+        CFTimeInterval _refreshRateCheckedAt;
+        double (^_refreshRateProvider)(void);
+        NSInteger _preferredFramesPerSecond;
+        CAFrameRateRange _preferredFrameRateRange;
+        BOOL _paused;
+        BOOL _invalidated;
+    NS_EXTRA_IVARS_END(CADisplayLink)
 }
 
 + (instancetype)displayLinkWithTarget:(id)target selector:(SEL)selector;

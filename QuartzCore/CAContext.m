@@ -265,12 +265,12 @@ static void handleContextMessages(void *context);
     if (self == nil)
         return nil;
 
-    if (mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &_port) != KERN_SUCCESS) {
-        _port = MACH_PORT_NULL;
+    if (mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &NS_EXTRA(CAContext, self)->_port) != KERN_SUCCESS) {
+        NS_EXTRA(CAContext, self)->_port = MACH_PORT_NULL;
         [self release];
         return nil;
     }
-    mach_port_insert_right(mach_task_self(), _port, _port, MACH_MSG_TYPE_MAKE_SEND);
+    mach_port_insert_right(mach_task_self(), NS_EXTRA(CAContext, self)->_port, NS_EXTRA(CAContext, self)->_port, MACH_MSG_TYPE_MAKE_SEND);
 
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
@@ -278,37 +278,37 @@ static void handleContextMessages(void *context);
     // random rather than a counter. Retry on the rare collision.
     // bootstrap_register, unlike bootstrap_check_in, leaves the receive right
     // with this process, so the name goes away when the port dies.
-    for (int attempt = 0; attempt < 16 && !_registered; attempt++) {
+    for (int attempt = 0; attempt < 16 && !NS_EXTRA(CAContext, self)->_registered; attempt++) {
         CAContextID contextId = arc4random();
         if (contextId == 0)
             continue;
         char name[128];
         CARemoteContextServiceName(contextId, name);
-        if (bootstrap_register(bootstrap_port, name, _port) == BOOTSTRAP_SUCCESS) {
-            _contextId = contextId;
-            _registered = YES;
+        if (bootstrap_register(bootstrap_port, name, NS_EXTRA(CAContext, self)->_port) == BOOTSTRAP_SUCCESS) {
+            NS_EXTRA(CAContext, self)->_contextId = contextId;
+            NS_EXTRA(CAContext, self)->_registered = YES;
         }
     }
 #pragma clang diagnostic pop
     // The registration holds its own send right.
-    mach_port_deallocate(mach_task_self(), _port);
+    mach_port_deallocate(mach_task_self(), NS_EXTRA(CAContext, self)->_port);
 
-    if (!_registered) {
+    if (!NS_EXTRA(CAContext, self)->_registered) {
         NSLog(@"CAContext: cannot register a remote context");
         [self release];
         return nil;
     }
 
-    _subscribers = calloc(MAX_SUBSCRIBERS, sizeof(mach_port_t));
-    _renderContext = [[CARemoteLayerContext alloc] initWithOwner: self];
-    if (_subscribers == NULL || _renderContext == nil) {
+    NS_EXTRA(CAContext, self)->_subscribers = calloc(MAX_SUBSCRIBERS, sizeof(mach_port_t));
+    NS_EXTRA(CAContext, self)->_renderContext = [[CARemoteLayerContext alloc] initWithOwner: self];
+    if (NS_EXTRA(CAContext, self)->_subscribers == NULL || NS_EXTRA(CAContext, self)->_renderContext == nil) {
         [self release];
         return nil;
     }
 
     // Subscriptions are handled on the main queue, where the tree is drawn.
     dispatch_source_t source = dispatch_source_create(
-            DISPATCH_SOURCE_TYPE_MACH_RECV, _port, 0, dispatch_get_main_queue());
+            DISPATCH_SOURCE_TYPE_MACH_RECV, NS_EXTRA(CAContext, self)->_port, 0, dispatch_get_main_queue());
     if (source == NULL) {
         [self release];
         return nil;
@@ -316,67 +316,67 @@ static void handleContextMessages(void *context);
     dispatch_set_context(source, self);
     dispatch_source_set_event_handler_f(source, handleContextMessages);
     // The receive right goes away only once the source no longer uses it.
-    mach_port_t port = _port;
+    mach_port_t port = NS_EXTRA(CAContext, self)->_port;
     dispatch_source_set_cancel_handler(source, ^{
         mach_port_mod_refs(mach_task_self(), port, MACH_PORT_RIGHT_RECEIVE, -1);
     });
     dispatch_resume(source);
-    _source = source;
+    NS_EXTRA(CAContext, self)->_source = source;
 
     return self;
 }
 
 - (void) _dropSubscribers {
-    for (unsigned int i = 0; i < _subscriberCount; i++)
-        mach_port_deallocate(mach_task_self(), _subscribers[i]);
-    _subscriberCount = 0;
+    for (unsigned int i = 0; i < NS_EXTRA(CAContext, self)->_subscriberCount; i++)
+        mach_port_deallocate(mach_task_self(), NS_EXTRA(CAContext, self)->_subscribers[i]);
+    NS_EXTRA(CAContext, self)->_subscriberCount = 0;
 }
 
 - (void) invalidate {
     // Destroying the port tells every host that the context is gone, and
     // removes the bootstrap name.
-    if (_source != NULL) {
-        dispatch_source_t source = _source;
-        _source = NULL;
+    if (NS_EXTRA(CAContext, self)->_source != NULL) {
+        dispatch_source_t source = NS_EXTRA(CAContext, self)->_source;
+        NS_EXTRA(CAContext, self)->_source = NULL;
         dispatch_set_context(source, NULL);
         dispatch_source_cancel(source);
         dispatch_release(source);
-    } else if (_port != MACH_PORT_NULL) {
-        mach_port_mod_refs(mach_task_self(), _port, MACH_PORT_RIGHT_RECEIVE, -1);
+    } else if (NS_EXTRA(CAContext, self)->_port != MACH_PORT_NULL) {
+        mach_port_mod_refs(mach_task_self(), NS_EXTRA(CAContext, self)->_port, MACH_PORT_RIGHT_RECEIVE, -1);
     }
-    _port = MACH_PORT_NULL;
-    _registered = NO;
+    NS_EXTRA(CAContext, self)->_port = MACH_PORT_NULL;
+    NS_EXTRA(CAContext, self)->_registered = NO;
 
     [self _dropSubscribers];
-    [_renderContext detach];
-    [_renderContext release];
-    _renderContext = nil;
-    [_layer release];
-    _layer = nil;
+    [NS_EXTRA(CAContext, self)->_renderContext detach];
+    [NS_EXTRA(CAContext, self)->_renderContext release];
+    NS_EXTRA(CAContext, self)->_renderContext = nil;
+    [NS_EXTRA(CAContext, self)->_layer release];
+    NS_EXTRA(CAContext, self)->_layer = nil;
 }
 
 - (void) dealloc {
     [self invalidate];
-    free(_subscribers);
+    free(NS_EXTRA(CAContext, self)->_subscribers);
     [super dealloc];
 }
 
 - (CAContextID) contextId {
-    return _contextId;
+    return NS_EXTRA(CAContext, self)->_contextId;
 }
 
 - (CALayer *) layer {
-    return _layer;
+    return NS_EXTRA(CAContext, self)->_layer;
 }
 
 - (void) setLayer: (CALayer *) layer {
     layer = [layer retain];
-    [_layer release];
-    _layer = layer;
-    [_renderContext setLayer: layer];
+    [NS_EXTRA(CAContext, self)->_layer release];
+    NS_EXTRA(CAContext, self)->_layer = layer;
+    [NS_EXTRA(CAContext, self)->_renderContext setLayer: layer];
     // A new tree reaches the hosts with its first frame; no tree at once.
-    if (layer == nil && _renderContext != nil) {
-        [_renderContext render];
+    if (layer == nil && NS_EXTRA(CAContext, self)->_renderContext != nil) {
+        [NS_EXTRA(CAContext, self)->_renderContext render];
         [self _publishFrame];
     }
 }
@@ -404,39 +404,39 @@ static BOOL sendFrame(mach_port_t destination, mach_port_t surfacePort) {
 }
 
 - (void) _publishFrame {
-    mach_port_t surfacePort = [_renderContext currentSurfacePort];
+    mach_port_t surfacePort = [NS_EXTRA(CAContext, self)->_renderContext currentSurfacePort];
     unsigned int kept = 0;
-    for (unsigned int i = 0; i < _subscriberCount; i++) {
-        if (sendFrame(_subscribers[i], surfacePort))
-            _subscribers[kept++] = _subscribers[i];
+    for (unsigned int i = 0; i < NS_EXTRA(CAContext, self)->_subscriberCount; i++) {
+        if (sendFrame(NS_EXTRA(CAContext, self)->_subscribers[i], surfacePort))
+            NS_EXTRA(CAContext, self)->_subscribers[kept++] = NS_EXTRA(CAContext, self)->_subscribers[i];
         else
-            mach_port_deallocate(mach_task_self(), _subscribers[i]);
+            mach_port_deallocate(mach_task_self(), NS_EXTRA(CAContext, self)->_subscribers[i]);
     }
-    _subscriberCount = kept;
+    NS_EXTRA(CAContext, self)->_subscriberCount = kept;
 }
 
 - (void) _addSubscriber: (mach_port_t) port {
     // Send rights to one port share a name in this task, so a repeated
     // subscription finds the earlier one.
-    for (unsigned int i = 0; i < _subscriberCount; i++) {
-        if (_subscribers[i] == port) {
+    for (unsigned int i = 0; i < NS_EXTRA(CAContext, self)->_subscriberCount; i++) {
+        if (NS_EXTRA(CAContext, self)->_subscribers[i] == port) {
             mach_port_deallocate(mach_task_self(), port);
             return;
         }
     }
-    if (_subscriberCount == MAX_SUBSCRIBERS) {
+    if (NS_EXTRA(CAContext, self)->_subscriberCount == MAX_SUBSCRIBERS) {
         mach_port_deallocate(mach_task_self(), port);
         return;
     }
 
-    mach_port_t surfacePort = [_renderContext currentSurfacePort];
+    mach_port_t surfacePort = [NS_EXTRA(CAContext, self)->_renderContext currentSurfacePort];
     if (surfacePort == MACH_PORT_NULL) {
         // The first frame goes to every subscriber.
-        _subscribers[_subscriberCount++] = port;
-        if (_layer != nil)
-            [_renderContext startTimerIfNeeded];
+        NS_EXTRA(CAContext, self)->_subscribers[NS_EXTRA(CAContext, self)->_subscriberCount++] = port;
+        if (NS_EXTRA(CAContext, self)->_layer != nil)
+            [NS_EXTRA(CAContext, self)->_renderContext startTimerIfNeeded];
     } else if (sendFrame(port, surfacePort)) {
-        _subscribers[_subscriberCount++] = port;
+        NS_EXTRA(CAContext, self)->_subscribers[NS_EXTRA(CAContext, self)->_subscriberCount++] = port;
     } else {
         mach_port_deallocate(mach_task_self(), port);
     }
@@ -462,7 +462,7 @@ static void handleContextMessages(void *context) {
     for (;;) {
         CARemoteReceiveBuffer buffer;
         mach_msg_return_t result = mach_msg(&buffer.header, CA_REMOTE_RECEIVE_OPTIONS,
-                                            0, sizeof(buffer), self->_port, 0,
+                                            0, sizeof(buffer), NS_EXTRA(CAContext, self)->_port, 0,
                                             MACH_PORT_NULL);
         if (result != MACH_MSG_SUCCESS)
             return;

@@ -18,6 +18,7 @@
 */
 
 #import <QuartzCore/CALayer.h>
+#import <QuartzCore/LegacyIvarLayout.h>
 
 typedef NSString *CAShapeLayerFillRule NS_TYPED_ENUM;
 typedef NSString *CAShapeLayerLineJoin NS_TYPED_ENUM;
@@ -33,19 +34,22 @@ CA_EXPORT CAShapeLayerLineCap const kCALineCapRound NS_SWIFT_NAME(CAShapeLayerLi
 CA_EXPORT CAShapeLayerLineCap const kCALineCapSquare NS_SWIFT_NAME(CAShapeLayerLineCap.square);
 
 // Draws a path with an optional fill and stroke into the layer's contents.
+#define _NS_SIDE_CAShapeLayer 0, 1,
 @interface CAShapeLayer : CALayer {
-    CGPathRef _path;
-    CGColorRef _fillColor;
-    NSString *_fillRule;
-    CGColorRef _strokeColor;
-    CGFloat _strokeStart;
-    CGFloat _strokeEnd;
-    CGFloat _lineWidth;
-    CGFloat _miterLimit;
-    NSString *_lineCap;
-    NSString *_lineJoin;
-    CGFloat _lineDashPhase;
-    NSArray *_lineDashPattern;
+    NS_EXTRA_IVARS_BEGIN(CAShapeLayer)
+        CGPathRef _path;
+        CGColorRef _fillColor;
+        NSString *_fillRule;
+        CGColorRef _strokeColor;
+        CGFloat _strokeStart;
+        CGFloat _strokeEnd;
+        CGFloat _lineWidth;
+        CGFloat _miterLimit;
+        NSString *_lineCap;
+        NSString *_lineJoin;
+        CGFloat _lineDashPhase;
+        NSArray *_lineDashPattern;
+    NS_SIDE_IVARS_END(CAShapeLayer)
 }
 
 @property CGPathRef path;

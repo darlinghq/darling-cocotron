@@ -23,42 +23,43 @@ NSString *const kCARendererColorSpace = @"kCARendererColorSpace";
 @implementation CARenderer
 
 - (CGRect) bounds {
-    return _bounds;
+    return NS_EXTRA(CARenderer, self)->_bounds;
 }
 
 - (void) setBounds: (CGRect) value {
-    _bounds = value;
+    NS_EXTRA(CARenderer, self)->_bounds = value;
 }
 
-@synthesize layer = _rootLayer;
+NS_EXTRA_SYNTHESIZE_RETAIN(CARenderer, layer, _rootLayer, CALayer *, layer, setLayer:)
 
 - (void) _setClearsToTransparent: (BOOL) value {
-    _clearsToTransparent = value;
+    NS_EXTRA(CARenderer, self)->_clearsToTransparent = value;
 }
 
 - (void) _setBackdropImage: (CGImageRef) image {
     if (image != NULL)
         CGImageRetain(image);
-    CGImageRelease(_backdropImage);
-    _backdropImage = image;
+    CGImageRelease(NS_EXTRA(CARenderer, self)->_backdropImage);
+    NS_EXTRA(CARenderer, self)->_backdropImage = image;
 }
 
 - (void) dealloc {
     // The texture goes with the GL context, which may not be current here.
-    CGImageRelease(_backdropImage);
+    CGImageRelease(NS_EXTRA(CARenderer, self)->_backdropImage);
+    NS_EXTRA_FREE(CARenderer, self);
     [super dealloc];
 }
 
 // Draws the backdrop over the whole drawable, in clip coordinates.
 - (void) _drawBackdrop {
-    if (_backdropImage == NULL)
+    if (NS_EXTRA(CARenderer, self)->_backdropImage == NULL)
         return;
-    if (_backdropTexture == 0)
-        glGenTextures(1, &_backdropTexture);
+    if (NS_EXTRA(CARenderer, self)->_backdropTexture == 0)
+        glGenTextures(1, &NS_EXTRA(CARenderer, self)->_backdropTexture);
 
     glEnable(GL_TEXTURE_2D);
-    glBindTexture(GL_TEXTURE_2D, _backdropTexture);
-    CATexImage2DCGImage(_backdropImage);
+    glBindTexture(GL_TEXTURE_2D, NS_EXTRA(CARenderer, self)->_backdropTexture);
+    CATexImage2DCGImage(NS_EXTRA(CARenderer, self)->_backdropImage);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
@@ -83,9 +84,9 @@ NSString *const kCARendererColorSpace = @"kCARendererColorSpace";
 }
 
 - initWithCGLContext: (void *) cglContext options: (NSDictionary *) options {
-    _cglContext = cglContext;
-    _bounds = CGRectZero;
-    _rootLayer = nil;
+    NS_EXTRA(CARenderer, self)->_cglContext = cglContext;
+    NS_EXTRA(CARenderer, self)->_bounds = CGRectZero;
+    NS_EXTRA(CARenderer, self)->_rootLayer = nil;
     return self;
 }
 
@@ -116,7 +117,7 @@ static void startAnimationsInLayer(CALayer *layer, CFTimeInterval currentTime) {
 - (void) beginFrameAtTime: (CFTimeInterval) currentTime
                 timeStamp: (CVTimeStamp *) timeStamp
 {
-    startAnimationsInLayer(_rootLayer, currentTime);
+    startAnimationsInLayer(NS_EXTRA(CARenderer, self)->_rootLayer, currentTime);
 }
 
 static CGFloat applyMediaTimingFunction(CAMediaTimingFunction *function,
@@ -546,7 +547,7 @@ static uint32_t texImage2DIOSurface(CGLContextObj context,
 
     if (upload) {
         if (surface != NULL) {
-            [layer _setTextureSeed: texImage2DIOSurface(_cglContext, surface)];
+            [layer _setTextureSeed: texImage2DIOSurface(NS_EXTRA(CARenderer, self)->_cglContext, surface)];
         } else {
             CATexImage2DCGImage((CGImageRef) contents);
         }
@@ -671,13 +672,13 @@ static void displayLayerTreeIfNeeded(CALayer *layer) {
 }
 
 - (void) render {
-    [_rootLayer layoutIfNeeded];
-    displayLayerTreeIfNeeded(_rootLayer);
+    [NS_EXTRA(CARenderer, self)->_rootLayer layoutIfNeeded];
+    displayLayerTreeIfNeeded(NS_EXTRA(CARenderer, self)->_rootLayer);
 
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
 
-    glClearColor(0, 0, 0, _clearsToTransparent ? 0 : 1);
+    glClearColor(0, 0, 0, NS_EXTRA(CARenderer, self)->_clearsToTransparent ? 0 : 1);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
@@ -696,10 +697,10 @@ static void displayLayerTreeIfNeeded(CALayer *layer) {
     glAlphaFunc(GL_GREATER, 0);
     glEnable(GL_ALPHA_TEST);
 
-    [self _renderLayer: _rootLayer
+    [self _renderLayer: NS_EXTRA(CARenderer, self)->_rootLayer
             currentTime: CACurrentMediaTime()
           parentOpacity: 1.0
-          parentFlipped: [_rootLayer.superlayer contentsAreFlipped]];
+          parentFlipped: [NS_EXTRA(CARenderer, self)->_rootLayer.superlayer contentsAreFlipped]];
 
     glFlush();
 }

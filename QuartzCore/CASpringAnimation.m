@@ -37,10 +37,10 @@ static const CGFloat kDefaultDamping = 10;
 @implementation CASpringAnimation
 
 - (void) _setSpringDefaults {
-    _mass = kDefaultMass;
-    _stiffness = kDefaultStiffness;
-    _damping = kDefaultDamping;
-    _initialVelocity = 0;
+    NS_EXTRA(CASpringAnimation, self)->_mass = kDefaultMass;
+    NS_EXTRA(CASpringAnimation, self)->_stiffness = kDefaultStiffness;
+    NS_EXTRA(CASpringAnimation, self)->_damping = kDefaultDamping;
+    NS_EXTRA(CASpringAnimation, self)->_initialVelocity = 0;
 }
 
 - init {
@@ -58,7 +58,7 @@ static const CGFloat kDefaultDamping = 10;
 }
 
 - (CGFloat) mass {
-    return _mass;
+    return NS_EXTRA(CASpringAnimation, self)->_mass;
 }
 
 // QUIRK: assigning a mass that is not positive, a stiffness that is not
@@ -68,31 +68,31 @@ static const CGFloat kDefaultDamping = 10;
 // mac-probes/v315-caspring-validation.m.
 // Test: tests/quartzcore-spring-animation.m (quirk_invalid_values_reset_to_defaults)
 - (void) setMass: (CGFloat) value {
-    _mass = value > 0 ? value : kDefaultMass;
+    NS_EXTRA(CASpringAnimation, self)->_mass = value > 0 ? value : kDefaultMass;
 }
 
 - (CGFloat) stiffness {
-    return _stiffness;
+    return NS_EXTRA(CASpringAnimation, self)->_stiffness;
 }
 
 - (void) setStiffness: (CGFloat) value {
-    _stiffness = value > 0 ? value : kDefaultStiffness;
+    NS_EXTRA(CASpringAnimation, self)->_stiffness = value > 0 ? value : kDefaultStiffness;
 }
 
 - (CGFloat) damping {
-    return _damping;
+    return NS_EXTRA(CASpringAnimation, self)->_damping;
 }
 
 - (void) setDamping: (CGFloat) value {
-    _damping = value >= 0 ? value : kDefaultDamping;
+    NS_EXTRA(CASpringAnimation, self)->_damping = value >= 0 ? value : kDefaultDamping;
 }
 
 - (CGFloat) initialVelocity {
-    return _initialVelocity;
+    return NS_EXTRA(CASpringAnimation, self)->_initialVelocity;
 }
 
 - (void) setInitialVelocity: (CGFloat) value {
-    _initialVelocity = value;
+    NS_EXTRA(CASpringAnimation, self)->_initialVelocity = value;
 }
 
 typedef struct {
@@ -145,7 +145,7 @@ static double restBound(const Spring *s) {
 
 // Fraction of the way from fromValue to toValue, t seconds after the start.
 - (CGFloat) _springProgressAtTime: (CFTimeInterval) t {
-    Spring s = makeSpring(_mass, _stiffness, _damping, _initialVelocity);
+    Spring s = makeSpring(NS_EXTRA(CASpringAnimation, self)->_mass, NS_EXTRA(CASpringAnimation, self)->_stiffness, NS_EXTRA(CASpringAnimation, self)->_damping, NS_EXTRA(CASpringAnimation, self)->_initialVelocity);
     return 1 + displacement(&s, t);
 }
 
@@ -155,9 +155,9 @@ static double restBound(const Spring *s) {
 // mac-probes/v315-caspring-validation.m.
 // Test: tests/quartzcore-spring-animation.m (quirk_undamped_settling_duration)
 - (CFTimeInterval) settlingDuration {
-    if (_damping == 0)
+    if (NS_EXTRA(CASpringAnimation, self)->_damping == 0)
         return FLT_MAX;
-    Spring s = makeSpring(_mass, _stiffness, _damping, _initialVelocity);
+    Spring s = makeSpring(NS_EXTRA(CASpringAnimation, self)->_mass, NS_EXTRA(CASpringAnimation, self)->_stiffness, NS_EXTRA(CASpringAnimation, self)->_damping, NS_EXTRA(CASpringAnimation, self)->_initialVelocity);
     double bound = restBound(&s), lastMoving = 0;
     for (double t = 0; t <= bound; t += kSettlingStep) {
         if (fabs(displacement(&s, t)) >= kRestThreshold)

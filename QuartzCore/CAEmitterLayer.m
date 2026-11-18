@@ -42,31 +42,31 @@ CAEmitterLayerRenderMode const kCAEmitterLayerAdditive = @"additive";
 
 @implementation CAEmitterLayer
 
-@synthesize emitterCells = _emitterCells;
-@synthesize birthRate = _birthRate;
-@synthesize lifetime = _lifetime;
-@synthesize emitterPosition = _emitterPosition;
-@synthesize emitterZPosition = _emitterZPosition;
-@synthesize emitterSize = _emitterSize;
-@synthesize emitterDepth = _emitterDepth;
-@synthesize emitterShape = _emitterShape;
-@synthesize emitterMode = _emitterMode;
-@synthesize renderMode = _renderMode;
-@synthesize preservesDepth = _preservesDepth;
-@synthesize velocity = _velocity;
-@synthesize scale = _scale;
-@synthesize spin = _spin;
-@synthesize seed = _seed;
+NS_EXTRA_SYNTHESIZE_COPY(CAEmitterLayer, emitterCells, _emitterCells, NSArray<CAEmitterCell *> *, emitterCells, setEmitterCells:)
+NS_EXTRA_SYNTHESIZE_ASSIGN(CAEmitterLayer, birthRate, _birthRate, float, birthRate, setBirthRate:)
+NS_EXTRA_SYNTHESIZE_ASSIGN(CAEmitterLayer, lifetime, _lifetime, float, lifetime, setLifetime:)
+NS_EXTRA_SYNTHESIZE_ASSIGN(CAEmitterLayer, emitterPosition, _emitterPosition, CGPoint, emitterPosition, setEmitterPosition:)
+NS_EXTRA_SYNTHESIZE_ASSIGN(CAEmitterLayer, emitterZPosition, _emitterZPosition, CGFloat, emitterZPosition, setEmitterZPosition:)
+NS_EXTRA_SYNTHESIZE_ASSIGN(CAEmitterLayer, emitterSize, _emitterSize, CGSize, emitterSize, setEmitterSize:)
+NS_EXTRA_SYNTHESIZE_ASSIGN(CAEmitterLayer, emitterDepth, _emitterDepth, CGFloat, emitterDepth, setEmitterDepth:)
+NS_EXTRA_SYNTHESIZE_COPY(CAEmitterLayer, emitterShape, _emitterShape, CAEmitterLayerEmitterShape, emitterShape, setEmitterShape:)
+NS_EXTRA_SYNTHESIZE_COPY(CAEmitterLayer, emitterMode, _emitterMode, CAEmitterLayerEmitterMode, emitterMode, setEmitterMode:)
+NS_EXTRA_SYNTHESIZE_COPY(CAEmitterLayer, renderMode, _renderMode, CAEmitterLayerRenderMode, renderMode, setRenderMode:)
+NS_EXTRA_SYNTHESIZE_ASSIGN(CAEmitterLayer, preservesDepth, _preservesDepth, BOOL, preservesDepth, setPreservesDepth:)
+NS_EXTRA_SYNTHESIZE_ASSIGN(CAEmitterLayer, velocity, _velocity, float, velocity, setVelocity:)
+NS_EXTRA_SYNTHESIZE_ASSIGN(CAEmitterLayer, scale, _scale, float, scale, setScale:)
+NS_EXTRA_SYNTHESIZE_ASSIGN(CAEmitterLayer, spin, _spin, float, spin, setSpin:)
+NS_EXTRA_SYNTHESIZE_ASSIGN(CAEmitterLayer, seed, _seed, unsigned int, seed, setSeed:)
 
 - (void) _setEmitterDefaults {
-    _birthRate = 1;
-    _lifetime = 1;
-    _velocity = 1;
-    _scale = 1;
-    _spin = 1;
-    _emitterShape = [kCAEmitterLayerPoint copy];
-    _emitterMode = [kCAEmitterLayerVolume copy];
-    _renderMode = [kCAEmitterLayerUnordered copy];
+    NS_EXTRA(CAEmitterLayer, self)->_birthRate = 1;
+    NS_EXTRA(CAEmitterLayer, self)->_lifetime = 1;
+    NS_EXTRA(CAEmitterLayer, self)->_velocity = 1;
+    NS_EXTRA(CAEmitterLayer, self)->_scale = 1;
+    NS_EXTRA(CAEmitterLayer, self)->_spin = 1;
+    NS_EXTRA(CAEmitterLayer, self)->_emitterShape = [kCAEmitterLayerPoint copy];
+    NS_EXTRA(CAEmitterLayer, self)->_emitterMode = [kCAEmitterLayerVolume copy];
+    NS_EXTRA(CAEmitterLayer, self)->_renderMode = [kCAEmitterLayerUnordered copy];
 }
 
 - init {
@@ -84,10 +84,10 @@ CAEmitterLayerRenderMode const kCAEmitterLayerAdditive = @"additive";
 }
 
 - (void) dealloc {
-    [_emitterCells release];
-    [_emitterShape release];
-    [_emitterMode release];
-    [_renderMode release];
+    [NS_EXTRA(CAEmitterLayer, self)->_emitterCells release];
+    [NS_EXTRA(CAEmitterLayer, self)->_emitterShape release];
+    [NS_EXTRA(CAEmitterLayer, self)->_emitterMode release];
+    [NS_EXTRA(CAEmitterLayer, self)->_renderMode release];
     [super dealloc];
 }
 

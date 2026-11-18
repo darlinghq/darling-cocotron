@@ -3,33 +3,33 @@
 @implementation CABasicAnimation
 
 - fromValue {
-    return _fromValue;
+    return NS_EXTRA(CABasicAnimation, self)->_fromValue;
 }
 
 - (void) setFromValue: value {
     value = [value retain];
-    [_fromValue release];
-    _fromValue = value;
+    [NS_EXTRA(CABasicAnimation, self)->_fromValue release];
+    NS_EXTRA(CABasicAnimation, self)->_fromValue = value;
 }
 
 - toValue {
-    return _toValue;
+    return NS_EXTRA(CABasicAnimation, self)->_toValue;
 }
 
 - (void) setToValue: value {
     value = [value retain];
-    [_toValue release];
-    _toValue = value;
+    [NS_EXTRA(CABasicAnimation, self)->_toValue release];
+    NS_EXTRA(CABasicAnimation, self)->_toValue = value;
 }
 
 - byValue {
-    return _byValue;
+    return NS_EXTRA(CABasicAnimation, self)->_byValue;
 }
 
 - (void) setByValue: value {
     value = [value retain];
-    [_byValue release];
-    _byValue = value;
+    [NS_EXTRA(CABasicAnimation, self)->_byValue release];
+    NS_EXTRA(CABasicAnimation, self)->_byValue = value;
 }
 
 @end

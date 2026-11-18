@@ -70,11 +70,11 @@ static const char kCAMetalLayerInternalKey = 0;
 			internal = (CAMetalLayerInternal *)objc_getAssociatedObject(self, &kCAMetalLayerInternalKey);
 			if (!internal) {
 				internal = [[CAMetalLayerInternal alloc] init];
-				if (_context) {
-					[internal _setContext:_context];
+				if (NS_EXTRA(CALayer, self)->_context) {
+					[internal _setContext:NS_EXTRA(CALayer, self)->_context];
 				}
-				if (!CGSizeEqualToSize(_bounds.size, CGSizeZero)) {
-					[internal setBounds:_bounds];
+				if (!CGSizeEqualToSize(NS_EXTRA(CALayer, self)->_bounds.size, CGSizeZero)) {
+					[internal setBounds:NS_EXTRA(CALayer, self)->_bounds];
 				}
 				objc_setAssociatedObject(self, &kCAMetalLayerInternalKey, internal, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 				[internal release];
@@ -107,8 +107,8 @@ static const char kCAMetalLayerInternalKey = 0;
 	[super _setContext:context];
 	if ([self class] != [CAMetalLayerInternal class]) {
 		CAMetalLayerInternal *internal = [self _metalInternal];
-		if (CGSizeEqualToSize([internal drawableSize], CGSizeZero) && !CGSizeEqualToSize(_bounds.size, CGSizeZero)) {
-			[internal setDrawableSize:_bounds.size];
+		if (CGSizeEqualToSize([internal drawableSize], CGSizeZero) && !CGSizeEqualToSize(NS_EXTRA(CALayer, self)->_bounds.size, CGSizeZero)) {
+			[internal setDrawableSize:NS_EXTRA(CALayer, self)->_bounds.size];
 		}
 		[internal _setContext:context];
 	}
@@ -321,8 +321,8 @@ MTL_UNSUPPORTED_CLASS
 		_pixelFormat = MTLPixelFormatBGRA8Unorm;
 		_framebufferOnly = YES;
 		// Unlike other layers, Metal layers are opaque by default.
-		_opaque = YES;
-		_drawableSize = _bounds.size; // TODO: multiply by contentsScale, once we add that to CALayer
+		NS_EXTRA(CALayer, self)->_opaque = YES;
+		_drawableSize = NS_EXTRA(CALayer, self)->_bounds.size; // TODO: multiply by contentsScale, once we add that to CALayer
 		_displaySyncEnabled = YES;
 		_maximumDrawableCount = 3;
 		_allowsNextDrawableTimeout = YES;
@@ -446,7 +446,7 @@ MTL_UNSUPPORTED_CLASS
 
 - (void)setBounds: (CGRect)value
 {
-	CGSize oldSize = _bounds.size;
+	CGSize oldSize = NS_EXTRA(CALayer, self)->_bounds.size;
 	[super setBounds: value];
 
 	if (!_drawableSizeExplicitlySet) {
@@ -482,7 +482,7 @@ MTL_UNSUPPORTED_CLASS
 		// down, so on the main thread it stays valid, and the retain covers the unlocked
 		// window while a presented handler runs. Other threads never read it.
 		if ([NSThread isMainThread] && _queuedDrawableCount > 0) {
-			CALayerContext* context = [_context retain];
+			CALayerContext* context = [NS_EXTRA(CALayer, self)->_context retain];
 			if (context != nil) {
 				NSUInteger queuedBefore = _queuedDrawableCount;
 				[_drawableCondition unlock];
@@ -656,7 +656,7 @@ MTL_UNSUPPORTED_CLASS
 	}
 	_usableDrawablesBitmap = 0;
 
-	if (!_device || !_context.glContext || _drawableSize.width == 0 || _drawableSize.height == 0) {
+	if (!_device || !NS_EXTRA(CALayer, self)->_context.glContext || _drawableSize.width == 0 || _drawableSize.height == 0) {
 		// can't create new drawables
 		[_drawableCondition unlock];
 		return;
@@ -678,17 +678,17 @@ MTL_UNSUPPORTED_CLASS
 	}
 
 	CGLContextObj prev = CGLGetCurrentContext();
-	CGLSetCurrentContext(_context.glContext);
+	CGLSetCurrentContext(NS_EXTRA(CALayer, self)->_context.glContext);
 
 	// ask the context once whether it can wait on the drawables' semaphores
-	if (_semaphoreProbeContext != _context.glContext) {
+	if (_semaphoreProbeContext != NS_EXTRA(CALayer, self)->_context.glContext) {
 		_glImportsSemaphores = CAMetalDrawableGLImportsSemaphores();
-		_semaphoreProbeContext = _context.glContext;
+		_semaphoreProbeContext = NS_EXTRA(CALayer, self)->_context.glContext;
 	}
 
 	// now let's start creating the new drawables
 	for (size_t i = 0; i < _maximumDrawableCount; ++i) {
-		_drawables[i] = std::make_shared<CAMetalDrawableActual>(self, _drawableSize, i, pixelFormat, ((MTLDeviceInternal*)self.device).device, _context.glContext, _glImportsSemaphores);
+		_drawables[i] = std::make_shared<CAMetalDrawableActual>(self, _drawableSize, i, pixelFormat, ((MTLDeviceInternal*)self.device).device, NS_EXTRA(CALayer, self)->_context.glContext, _glImportsSemaphores);
 		_usableDrawablesBitmap |= 1u << i;
 	}
 
@@ -807,7 +807,7 @@ MTL_UNSUPPORTED_CLASS
 // a blank bitmap, which the contents path would then upload over _tex.
 - (void)display
 {
-	[_context startTimerIfNeeded];
+	[NS_EXTRA(CALayer, self)->_context startTimerIfNeeded];
 }
 
 //
@@ -832,7 +832,7 @@ MTL_UNSUPPORTED_CLASS
 
 - (void)_setContext: (CALayerContext*)context
 {
-	CALayerContext* previous = _context;
+	CALayerContext* previous = NS_EXTRA(CALayer, self)->_context;
 
 	[super _setContext: context];
 

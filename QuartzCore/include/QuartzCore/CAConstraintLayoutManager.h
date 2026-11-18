@@ -18,6 +18,7 @@
 */
 
 #import <Foundation/Foundation.h>
+#import <QuartzCore/LegacyIvarLayout.h>
 #import <QuartzCore/CALayer.h>
 
 typedef NS_ENUM(int, CAConstraintAttribute) {
@@ -32,11 +33,14 @@ typedef NS_ENUM(int, CAConstraintAttribute) {
 };
 
 @interface CAConstraint : NSObject <NSSecureCoding> {
-    CAConstraintAttribute _attribute;
-    NSString *_sourceName;
-    CAConstraintAttribute _sourceAttribute;
-    CGFloat _scale;
-    CGFloat _offset;
+    NS_LEGACY_IVAR_PAD(_legacyPadCAConstraint, 12)
+    NS_EXTRA_IVARS_BEGIN(CAConstraint)
+        CAConstraintAttribute _attribute;
+        NSString *_sourceName;
+        CAConstraintAttribute _sourceAttribute;
+        CGFloat _scale;
+        CGFloat _offset;
+    NS_EXTRA_IVARS_END(CAConstraint)
 }
 
 + (instancetype) constraintWithAttribute: (CAConstraintAttribute) attribute

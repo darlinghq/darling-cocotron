@@ -62,24 +62,24 @@
         return nil;
     }
     if ((self = [super init])) {
-        _target = [target retain];
-        _selector = selector;
-        _display = [display retain];
-        _schedules = [[NSMutableArray alloc] init];
-        _preferredFramesPerSecond = 0;
-        _refreshRate = [self _queryRefreshRate];
-        _duration = 1.0 / _refreshRate;
+        NS_EXTRA(CADisplayLink, self)->_target = [target retain];
+        NS_EXTRA(CADisplayLink, self)->_selector = selector;
+        NS_EXTRA(CADisplayLink, self)->_display = [display retain];
+        NS_EXTRA(CADisplayLink, self)->_schedules = [[NSMutableArray alloc] init];
+        NS_EXTRA(CADisplayLink, self)->_preferredFramesPerSecond = 0;
+        NS_EXTRA(CADisplayLink, self)->_refreshRate = [self _queryRefreshRate];
+        NS_EXTRA(CADisplayLink, self)->_duration = 1.0 / NS_EXTRA(CADisplayLink, self)->_refreshRate;
     }
     return self;
 }
 
-- (id)display { return _display; }
-- (CFTimeInterval)timestamp { return _timestamp; }
-- (CFTimeInterval)targetTimestamp { return _targetTimestamp; }
-- (CFTimeInterval)duration { return _duration; }
-- (NSInteger)preferredFramesPerSecond { return _preferredFramesPerSecond; }
-- (BOOL)isPaused { return _paused; }
-- (void)setPaused:(BOOL)paused { _paused = paused; }
+- (id)display { return NS_EXTRA(CADisplayLink, self)->_display; }
+- (CFTimeInterval)timestamp { return NS_EXTRA(CADisplayLink, self)->_timestamp; }
+- (CFTimeInterval)targetTimestamp { return NS_EXTRA(CADisplayLink, self)->_targetTimestamp; }
+- (CFTimeInterval)duration { return NS_EXTRA(CADisplayLink, self)->_duration; }
+- (NSInteger)preferredFramesPerSecond { return NS_EXTRA(CADisplayLink, self)->_preferredFramesPerSecond; }
+- (BOOL)isPaused { return NS_EXTRA(CADisplayLink, self)->_paused; }
+- (void)setPaused:(BOOL)paused { NS_EXTRA(CADisplayLink, self)->_paused = paused; }
 
 // The refresh rate of the display the link is bound to, in Hz: asked of the
 // provider set by the layer above (the screen of a view or window), else the
@@ -87,8 +87,8 @@
 - (double)_queryRefreshRate {
     double rate = 0;
 
-    if (_refreshRateProvider != NULL) {
-        rate = _refreshRateProvider();
+    if (NS_EXTRA(CADisplayLink, self)->_refreshRateProvider != NULL) {
+        rate = NS_EXTRA(CADisplayLink, self)->_refreshRateProvider();
     } else {
         CGDisplayModeRef mode = CGDisplayCopyDisplayMode(CGMainDisplayID());
         if (mode != NULL) {
@@ -100,8 +100,8 @@
 }
 
 - (void)_setRefreshRateProvider:(double (^)(void))provider {
-    Block_release(_refreshRateProvider);
-    _refreshRateProvider = provider != NULL ? Block_copy(provider) : NULL;
+    Block_release(NS_EXTRA(CADisplayLink, self)->_refreshRateProvider);
+    NS_EXTRA(CADisplayLink, self)->_refreshRateProvider = provider != NULL ? Block_copy(provider) : NULL;
     [self _refreshRateMayHaveChanged];
 }
 
@@ -110,16 +110,16 @@
 - (void)_refreshRateMayHaveChanged {
     double rate = [self _queryRefreshRate];
 
-    _refreshRateCheckedAt = CACurrentMediaTime();
-    if (rate == _refreshRate)
+    NS_EXTRA(CADisplayLink, self)->_refreshRateCheckedAt = CACurrentMediaTime();
+    if (rate == NS_EXTRA(CADisplayLink, self)->_refreshRate)
         return;
-    _refreshRate = rate;
-    _duration = 1.0 / rate;
+    NS_EXTRA(CADisplayLink, self)->_refreshRate = rate;
+    NS_EXTRA(CADisplayLink, self)->_duration = 1.0 / rate;
     [self _rescheduleTimers];
 }
 
 - (NSInteger)frameInterval {
-    return MAX(1, (NSInteger) lround(_refreshRate / [self _effectiveFramesPerSecond]));
+    return MAX(1, (NSInteger) lround(NS_EXTRA(CADisplayLink, self)->_refreshRate / [self _effectiveFramesPerSecond]));
 }
 
 // The rate the timers run at, never above the display's refresh rate. A frame
@@ -127,29 +127,29 @@
 // in the range, else its maximum. Otherwise preferredFramesPerSecond applies,
 // 0 meaning the display's maximum refresh rate.
 - (NSInteger)_effectiveFramesPerSecond {
-    NSInteger display = MAX(1, (NSInteger) lround(_refreshRate));
+    NSInteger display = MAX(1, (NSInteger) lround(NS_EXTRA(CADisplayLink, self)->_refreshRate));
     NSInteger rate = display;
 
-    if (_preferredFrameRateRange.maximum > 0) {
-        float preferred = _preferredFrameRateRange.preferred;
-        if (preferred >= _preferredFrameRateRange.minimum && preferred <= _preferredFrameRateRange.maximum &&
+    if (NS_EXTRA(CADisplayLink, self)->_preferredFrameRateRange.maximum > 0) {
+        float preferred = NS_EXTRA(CADisplayLink, self)->_preferredFrameRateRange.preferred;
+        if (preferred >= NS_EXTRA(CADisplayLink, self)->_preferredFrameRateRange.minimum && preferred <= NS_EXTRA(CADisplayLink, self)->_preferredFrameRateRange.maximum &&
             preferred > 0)
             rate = (NSInteger) lroundf(preferred);
         else
-            rate = (NSInteger) lroundf(_preferredFrameRateRange.maximum);
-    } else if (_preferredFramesPerSecond > 0) {
-        rate = _preferredFramesPerSecond;
+            rate = (NSInteger) lroundf(NS_EXTRA(CADisplayLink, self)->_preferredFrameRateRange.maximum);
+    } else if (NS_EXTRA(CADisplayLink, self)->_preferredFramesPerSecond > 0) {
+        rate = NS_EXTRA(CADisplayLink, self)->_preferredFramesPerSecond;
     }
     return MIN(MAX(1, rate), display);
 }
 
 - (CAFrameRateRange)preferredFrameRateRange {
-    return _preferredFrameRateRange;
+    return NS_EXTRA(CADisplayLink, self)->_preferredFrameRateRange;
 }
 
 - (void)setPreferredFrameRateRange:(CAFrameRateRange)range {
-    if (CAFrameRateRangeIsEqualToRange(_preferredFrameRateRange, range)) return;
-    _preferredFrameRateRange = range;
+    if (CAFrameRateRangeIsEqualToRange(NS_EXTRA(CADisplayLink, self)->_preferredFrameRateRange, range)) return;
+    NS_EXTRA(CADisplayLink, self)->_preferredFrameRateRange = range;
     [self _rescheduleTimers];
 }
 
@@ -158,7 +158,7 @@
         [NSException raise:NSInvalidArgumentException format:@"CADisplayLink frameInterval must be positive"];
         return;
     }
-    [self setPreferredFramesPerSecond:MAX(1, (NSInteger) lround(_refreshRate / frameInterval))];
+    [self setPreferredFramesPerSecond:MAX(1, (NSInteger) lround(NS_EXTRA(CADisplayLink, self)->_refreshRate / frameInterval))];
 }
 
 - (void)setPreferredFramesPerSecond:(NSInteger)rate {
@@ -166,13 +166,13 @@
         [NSException raise:NSInvalidArgumentException format:@"CADisplayLink preferredFramesPerSecond must not be negative"];
         return;
     }
-    if (_preferredFramesPerSecond == rate) return;
-    _preferredFramesPerSecond = rate;
+    if (NS_EXTRA(CADisplayLink, self)->_preferredFramesPerSecond == rate) return;
+    NS_EXTRA(CADisplayLink, self)->_preferredFramesPerSecond = rate;
     [self _rescheduleTimers];
 }
 
 - (void)_rescheduleTimers {
-    NSArray *schedules = [[_schedules copy] autorelease];
+    NSArray *schedules = [[NS_EXTRA(CADisplayLink, self)->_schedules copy] autorelease];
     for (_CADisplayLinkSchedule *schedule in schedules) {
         [schedule->timer invalidate];
         [schedule->timer release];
@@ -192,37 +192,37 @@
 }
 
 - (void)addToRunLoop:(NSRunLoop *)runLoop forMode:(NSRunLoopMode)mode {
-    if (_invalidated || !runLoop || !mode) return;
-    for (_CADisplayLinkSchedule *schedule in _schedules) {
+    if (NS_EXTRA(CADisplayLink, self)->_invalidated || !runLoop || !mode) return;
+    for (_CADisplayLinkSchedule *schedule in NS_EXTRA(CADisplayLink, self)->_schedules) {
         if (schedule->runLoop == runLoop && [schedule->mode isEqualToString:mode]) return;
     }
     _CADisplayLinkSchedule *schedule = [[_CADisplayLinkSchedule alloc] initWithRunLoop:runLoop mode:mode];
     // Before the new schedule exists: a changed rate reschedules the others.
     [self _refreshRateMayHaveChanged];
-    [_schedules addObject:schedule];
+    [NS_EXTRA(CADisplayLink, self)->_schedules addObject:schedule];
     [self _scheduleTimer:schedule];
     [schedule release];
 }
 
 - (void)removeFromRunLoop:(NSRunLoop *)runLoop forMode:(NSRunLoopMode)mode {
-    NSArray *schedules = [[_schedules copy] autorelease];
+    NSArray *schedules = [[NS_EXTRA(CADisplayLink, self)->_schedules copy] autorelease];
     for (_CADisplayLinkSchedule *schedule in schedules) {
         if (schedule->runLoop == runLoop && [schedule->mode isEqualToString:mode]) {
             [schedule->timer invalidate];
-            [_schedules removeObject:schedule];
+            [NS_EXTRA(CADisplayLink, self)->_schedules removeObject:schedule];
         }
     }
 }
 
 - (void)_tick:(NSTimer *)timer {
     (void)timer;
-    if (_paused || _invalidated) return;
-    _timestamp = CACurrentMediaTime();
-    if (_timestamp - _refreshRateCheckedAt >= 1.0)
+    if (NS_EXTRA(CADisplayLink, self)->_paused || NS_EXTRA(CADisplayLink, self)->_invalidated) return;
+    NS_EXTRA(CADisplayLink, self)->_timestamp = CACurrentMediaTime();
+    if (NS_EXTRA(CADisplayLink, self)->_timestamp - NS_EXTRA(CADisplayLink, self)->_refreshRateCheckedAt >= 1.0)
         [self _refreshRateMayHaveChanged];
     NSInteger rate = [self _effectiveFramesPerSecond];
-    _targetTimestamp = _timestamp + 1.0 / rate;
-    ((void (*)(id, SEL, id))objc_msgSend)(_target, _selector, self);
+    NS_EXTRA(CADisplayLink, self)->_targetTimestamp = NS_EXTRA(CADisplayLink, self)->_timestamp + 1.0 / rate;
+    ((void (*)(id, SEL, id))objc_msgSend)(NS_EXTRA(CADisplayLink, self)->_target, NS_EXTRA(CADisplayLink, self)->_selector, self);
 }
 
 - (void)setHighFrameRateReasons:(const uint32_t *)reasons count:(NSInteger)count {
@@ -231,23 +231,24 @@
 }
 
 - (void)invalidate {
-    if (_invalidated) return;
-    _invalidated = YES;
-    NSArray *schedules = [[_schedules copy] autorelease];
+    if (NS_EXTRA(CADisplayLink, self)->_invalidated) return;
+    NS_EXTRA(CADisplayLink, self)->_invalidated = YES;
+    NSArray *schedules = [[NS_EXTRA(CADisplayLink, self)->_schedules copy] autorelease];
     for (_CADisplayLinkSchedule *schedule in schedules) [schedule->timer invalidate];
-    [_schedules removeAllObjects];
-    [_target release];
-    _target = nil;
+    [NS_EXTRA(CADisplayLink, self)->_schedules removeAllObjects];
+    [NS_EXTRA(CADisplayLink, self)->_target release];
+    NS_EXTRA(CADisplayLink, self)->_target = nil;
     // The provider may own what the target owns; release it with the target.
-    Block_release(_refreshRateProvider);
-    _refreshRateProvider = NULL;
+    Block_release(NS_EXTRA(CADisplayLink, self)->_refreshRateProvider);
+    NS_EXTRA(CADisplayLink, self)->_refreshRateProvider = NULL;
 }
 
 - (void)dealloc {
     [self invalidate];
-    [_display release];
-    Block_release(_refreshRateProvider);
-    [_schedules release];
+    [NS_EXTRA(CADisplayLink, self)->_display release];
+    Block_release(NS_EXTRA(CADisplayLink, self)->_refreshRateProvider);
+    [NS_EXTRA(CADisplayLink, self)->_schedules release];
+    NS_EXTRA_FREE(CADisplayLink, self);
     [super dealloc];
 }
 

@@ -18,6 +18,7 @@
 */
 
 #import <QuartzCore/CALayer.h>
+#import <QuartzCore/LegacyIvarLayout.h>
 
 typedef NSString* CAEmitterLayerEmitterShape NS_TYPED_ENUM;
 typedef NSString* CAEmitterLayerEmitterMode NS_TYPED_ENUM;
@@ -25,22 +26,25 @@ typedef NSString* CAEmitterLayerRenderMode NS_TYPED_ENUM;
 
 @class CAEmitterCell;
 
+#define _NS_SIDE_CAEmitterLayer 0, 1,
 @interface CAEmitterLayer : CALayer {
-    NSArray *_emitterCells;
-    float _birthRate;
-    float _lifetime;
-    CGPoint _emitterPosition;
-    CGFloat _emitterZPosition;
-    CGSize _emitterSize;
-    CGFloat _emitterDepth;
-    CAEmitterLayerEmitterShape _emitterShape;
-    CAEmitterLayerEmitterMode _emitterMode;
-    CAEmitterLayerRenderMode _renderMode;
-    BOOL _preservesDepth;
-    float _velocity;
-    float _scale;
-    float _spin;
-    unsigned int _seed;
+    NS_EXTRA_IVARS_BEGIN(CAEmitterLayer)
+        NSArray *_emitterCells;
+        float _birthRate;
+        float _lifetime;
+        CGPoint _emitterPosition;
+        CGFloat _emitterZPosition;
+        CGSize _emitterSize;
+        CGFloat _emitterDepth;
+        CAEmitterLayerEmitterShape _emitterShape;
+        CAEmitterLayerEmitterMode _emitterMode;
+        CAEmitterLayerRenderMode _renderMode;
+        BOOL _preservesDepth;
+        float _velocity;
+        float _scale;
+        float _spin;
+        unsigned int _seed;
+    NS_SIDE_IVARS_END(CAEmitterLayer)
 }
 
 @property (copy) NSArray<CAEmitterCell *> *emitterCells;

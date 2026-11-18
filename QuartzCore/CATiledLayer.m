@@ -31,9 +31,9 @@
 }
 
 - (void) _setTiledDefaults {
-    _tileSize = CGSizeMake(256, 256);
-    _levelsOfDetail = 1;
-    _levelsOfDetailBias = 0;
+    NS_EXTRA(CATiledLayer, self)->_tileSize = CGSizeMake(256, 256);
+    NS_EXTRA(CATiledLayer, self)->_levelsOfDetail = 1;
+    NS_EXTRA(CATiledLayer, self)->_levelsOfDetailBias = 0;
 }
 
 - init {
@@ -49,9 +49,9 @@
         [self _setTiledDefaults];
         if ([layer isKindOfClass: [CATiledLayer class]]) {
             CATiledLayer *other = layer;
-            _tileSize = other->_tileSize;
-            _levelsOfDetail = other->_levelsOfDetail;
-            _levelsOfDetailBias = other->_levelsOfDetailBias;
+            NS_EXTRA(CATiledLayer, self)->_tileSize = NS_EXTRA(CATiledLayer, other)->_tileSize;
+            NS_EXTRA(CATiledLayer, self)->_levelsOfDetail = NS_EXTRA(CATiledLayer, other)->_levelsOfDetail;
+            NS_EXTRA(CATiledLayer, self)->_levelsOfDetailBias = NS_EXTRA(CATiledLayer, other)->_levelsOfDetailBias;
         }
     }
     return self;
@@ -59,12 +59,12 @@
 
 - (void) _encodeAttributes: (CAArchiveWriter *) w {
     [super _encodeAttributes: w];
-    if (_tileSize.width != 256 || _tileSize.height != 256)
-        [w encodeSize: _tileSize forKey: @"tileSize"];
-    if (_levelsOfDetail != 1)
-        [w encodeInt: (int) _levelsOfDetail forKey: @"levelsOfDetail"];
-    if (_levelsOfDetailBias != 0)
-        [w encodeInt: (int) _levelsOfDetailBias forKey: @"levelsOfDetailBias"];
+    if (NS_EXTRA(CATiledLayer, self)->_tileSize.width != 256 || NS_EXTRA(CATiledLayer, self)->_tileSize.height != 256)
+        [w encodeSize: NS_EXTRA(CATiledLayer, self)->_tileSize forKey: @"tileSize"];
+    if (NS_EXTRA(CATiledLayer, self)->_levelsOfDetail != 1)
+        [w encodeInt: (int) NS_EXTRA(CATiledLayer, self)->_levelsOfDetail forKey: @"levelsOfDetail"];
+    if (NS_EXTRA(CATiledLayer, self)->_levelsOfDetailBias != 0)
+        [w encodeInt: (int) NS_EXTRA(CATiledLayer, self)->_levelsOfDetailBias forKey: @"levelsOfDetailBias"];
 }
 
 - (void) _decodeAttributes: (CAArchiveReader *) r {
@@ -73,37 +73,37 @@
     CGSize size;
     int value;
     if ([r decodeSize: &size forKey: @"tileSize"])
-        _tileSize = size;
+        NS_EXTRA(CATiledLayer, self)->_tileSize = size;
     if ([r decodeInt: &value forKey: @"levelsOfDetail"] && value >= 0)
-        _levelsOfDetail = value;
+        NS_EXTRA(CATiledLayer, self)->_levelsOfDetail = value;
     if ([r decodeInt: &value forKey: @"levelsOfDetailBias"] && value >= 0)
-        _levelsOfDetailBias = value;
+        NS_EXTRA(CATiledLayer, self)->_levelsOfDetailBias = value;
 }
 
 - (CGSize) tileSize {
-    return _tileSize;
+    return NS_EXTRA(CATiledLayer, self)->_tileSize;
 }
 
 - (void) setTileSize: (CGSize) size {
-    _tileSize = size;
+    NS_EXTRA(CATiledLayer, self)->_tileSize = size;
     [self setNeedsDisplay];
 }
 
 - (size_t) levelsOfDetail {
-    return _levelsOfDetail;
+    return NS_EXTRA(CATiledLayer, self)->_levelsOfDetail;
 }
 
 - (void) setLevelsOfDetail: (size_t) value {
-    _levelsOfDetail = value;
+    NS_EXTRA(CATiledLayer, self)->_levelsOfDetail = value;
     [self setNeedsDisplay];
 }
 
 - (size_t) levelsOfDetailBias {
-    return _levelsOfDetailBias;
+    return NS_EXTRA(CATiledLayer, self)->_levelsOfDetailBias;
 }
 
 - (void) setLevelsOfDetailBias: (size_t) value {
-    _levelsOfDetailBias = value;
+    NS_EXTRA(CATiledLayer, self)->_levelsOfDetailBias = value;
     [self setNeedsDisplay];
 }
 

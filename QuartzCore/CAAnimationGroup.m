@@ -3,13 +3,13 @@
 @implementation CAAnimationGroup
 
 - (NSArray *) animations {
-    return _animations;
+    return NS_EXTRA(CAAnimationGroup, self)->_animations;
 }
 
 - (void) setAnimations: (NSArray *) value {
     value = [value copy];
-    [_animations release];
-    _animations = value;
+    [NS_EXTRA(CAAnimationGroup, self)->_animations release];
+    NS_EXTRA(CAAnimationGroup, self)->_animations = value;
 }
 
 @end
