@@ -85,6 +85,7 @@
     }
 
     [self windowResizedTo: rect.size];
+    [self _boundsDidChange: rect];
     return kCGSErrorSuccess;
 }
 

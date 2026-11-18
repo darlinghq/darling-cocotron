@@ -248,6 +248,7 @@ set(AppKit_sources
 	NSControlAuxiliary.m
 	NSViewController.m
 
+	NSKillRing.m
 	NSTextView.subproj/NSTextView.m
 	NSTextView.subproj/NSTextViewCommands.m
 	NSTextView.subproj/NSLayoutManager+AppKit.m
