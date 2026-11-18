@@ -28,6 +28,7 @@
 
 #import <Metal/MTLDeviceInternal.h>
 #import <QuartzCore/CAMetalLayerSurface.h>
+#import "CALayerPlane.h"
 
 #if DARLING_METAL_ENABLED
 #include <indium-kit/layer.hpp>
@@ -612,32 +613,11 @@ static BOOL forcesOpenGLPresentation(void) {
 // presenting through a swapchain on a native window
 //
 
-// Where the layer is in its context's native window: points, origin at the lower left. A layer
-// that is rotated or scaled by the layer tree is placed by the frame of its untransformed
-// geometry, as only the placement of the window is tracked.
+// Where the layer is in its context's native window: points, origin at the lower left. Only used while
+// the layer may be on its own plane, which it is only when nothing between it and the root is transformed.
 - (CGRect)frameInContext
 {
-	CALayer* root = [NS_EXTRA(CALayer, self)->_context layer];
-	CGRect rect = CGRectMake(0, 0, NS_EXTRA(CALayer, self)->_bounds.size.width, NS_EXTRA(CALayer, self)->_bounds.size.height);
-	CALayer* layer = self;
-
-	while (layer != nil && layer != root) {
-		CALayer* parent = [layer superlayer];
-		if (parent == nil) {
-			break;
-		}
-
-		CGRect bounds = [layer bounds];
-		CGPoint position = [layer position];
-		CGPoint anchor = [layer anchorPoint];
-		CGPoint parentOrigin = [parent bounds].origin;
-
-		rect.origin.x += position.x - anchor.x * bounds.size.width - bounds.origin.x - parentOrigin.x;
-		rect.origin.y += position.y - anchor.y * bounds.size.height - bounds.origin.y - parentOrigin.y;
-		layer = parent;
-	}
-
-	return rect;
+	return CALayerPlaneFrameInRoot(self, [NS_EXTRA(CALayer, self)->_context layer]);
 }
 
 - (BOOL)presentsThroughSwapchain
@@ -701,13 +681,14 @@ static BOOL forcesOpenGLPresentation(void) {
 
 // Sets up, keeps in step with the layer's properties, or drops the swapchain, and says whether the layer
 // presents through one. Called without the drawable lock held. It presents through a swapchain when the
-// context's native window can give it a surface of its own, the device can present to that, and the
-// drawables are the size of that surface (a swapchain cannot give any other size).
+// layer may be on a plane of its own (nothing is drawn over it, see -prepareRender), the context's native
+// window can give it a surface of its own, the device can present to that, and the drawables are the size
+// of that surface (a swapchain cannot give any other size).
 - (BOOL)updateSwapchain
 {
 	CALayerContext* context = NS_EXTRA(CALayer, self)->_context;
 	id subwindow = [context subwindow];
-	BOOL possible = !forcesOpenGLPresentation() && _device != nil && context != nil &&
+	BOOL possible = !forcesOpenGLPresentation() && _planeAllowed && _device != nil && context != nil &&
 	                _drawableSize.width >= 1 && _drawableSize.height >= 1 &&
 	                [subwindow conformsToProtocol: @protocol(CAMetalLayerSurfaceProvider)];
 	Indium::PixelFormat pixelFormat = indiumPixelFormat(_pixelFormat);
@@ -1047,21 +1028,38 @@ static BOOL forcesOpenGLPresentation(void) {
 
 - (void)prepareRender
 {
-	// A layer on a native window has no frame to composite, but it may have moved with its view.
-	if ([self presentsThroughSwapchain]) {
-		[self syncSurfaceFrame];
-		return;
-	}
+	// The native surface sits above everything the layer context composites, so the layer goes on it only
+	// while that looks the same as compositing it: nothing drawn over it, no transform, opacity or clip
+	// that a plane cannot show. Decided again every pass, as views move, hide and stack differently.
+	CALayerContext* context = NS_EXTRA(CALayer, self)->_context;
+	_planeAllowed = CALayerCanPresentOnOwnPlane(self, [context layer]);
 
-	// The layer's context gets its native window after the layer was configured, so the first render
-	// pass in a window is where a swapchain can be set up. Once for each window and device.
-	id subwindow = [NS_EXTRA(CALayer, self)->_context subwindow];
-	if (subwindow != nil && (subwindow != _attemptedSubwindow || _device != _attemptedDevice)) {
-		_attemptedSubwindow = subwindow;
-		_attemptedDevice = _device;
-		[self recreateDrawables];
-		if ([self presentsThroughSwapchain]) {
+	if ([self presentsThroughSwapchain]) {
+		if (_planeAllowed) {
+			// A layer on a native window has no frame to composite, but it may have moved with its view.
+			[self syncSurfaceFrame];
 			return;
+		}
+		// Covered or changed in a way a plane cannot show: back to compositing, with the drawables
+		// it presents from now on.
+		_attemptedPlane = NO;
+		[self recreateDrawables];
+	} else {
+		// The layer's context gets its native window after the layer was configured, so the first render
+		// pass in a window is where a swapchain can be set up; it is tried again when the window or the
+		// device changes, or when the layer becomes uncovered.
+		id subwindow = [context subwindow];
+		if (subwindow != nil && _planeAllowed &&
+		    (subwindow != _attemptedSubwindow || _device != _attemptedDevice || !_attemptedPlane)) {
+			_attemptedSubwindow = subwindow;
+			_attemptedDevice = _device;
+			_attemptedPlane = YES;
+			[self recreateDrawables];
+			if ([self presentsThroughSwapchain]) {
+				return;
+			}
+		} else if (!_planeAllowed) {
+			_attemptedPlane = NO;
 		}
 	}
 

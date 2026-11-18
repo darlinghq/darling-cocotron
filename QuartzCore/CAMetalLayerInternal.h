@@ -76,9 +76,14 @@ namespace IndiumKit {
 	// The window and device a swapchain could not be made for; not tried again until either changes.
 	id _refusedSubwindow;
 	id _refusedDevice;
-	// The window and device the last render pass looked for a swapchain with.
+	// The window and device the last render pass looked for a swapchain with, and whether the layer
+	// could be shown on its own plane then.
 	id _attemptedSubwindow;
 	id _attemptedDevice;
+	BOOL _attemptedPlane;
+	// Whether the layer, where it is in its tree, may be shown on a native surface of its own above the
+	// composited tree (CALayerCanPresentOnOwnPlane). Decided by every render pass, on the main thread.
+	BOOL _planeAllowed;
 }
 
 - (void)queuePresent: (NSUInteger)drawableID;
