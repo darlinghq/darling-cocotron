@@ -96,21 +96,26 @@ static NSString *guestPathFromHostPath(const char *path) {
 }
 #endif
 
-static void addAppFont(FcConfig *config, NSString *path) {
-    path = [[NSBundle mainBundle] pathForResource: path ofType: nil];
+// Adds a font file, or a directory of them, at a guest path to the application
+// fonts of config. Returns NO when the path does not exist or fontconfig takes nothing from it.
+static BOOL addFontFile(FcConfig *config, NSString *path) {
+    BOOL isDirectory = NO;
+    if (![[NSFileManager defaultManager] fileExistsAtPath: path
+                                              isDirectory: &isDirectory])
+        return NO;
+    path = hostPathFromGuestPath(path);
+    if (isDirectory)
+        return FcConfigAppFontAddDir(config, (const FcChar8 *) [path UTF8String]) != FcFalse;
+    return FcConfigAppFontAddFile(config, (const FcChar8 *) [path UTF8String]) != FcFalse;
+}
+
+static void addAppFont(FcConfig *config, NSString *name) {
+    NSString *path = [[NSBundle mainBundle] pathForResource: name ofType: nil];
     if (path == nil) {
-        NSLog(@"Cannot find font %@ in resources", path);
+        NSLog(@"Cannot find font %@ in resources", name);
         return;
     }
-    BOOL isDirectory;
-    [[NSFileManager defaultManager] fileExistsAtPath: path
-                                         isDirectory: &isDirectory];
-    path = hostPathFromGuestPath(path);
-    if (isDirectory) {
-        FcConfigAppFontAddDir(config, (const FcChar8 *) [path UTF8String]);
-    } else {
-        FcConfigAppFontAddFile(config, (const FcChar8 *) [path UTF8String]);
-    }
+    addFontFile(config, path);
 }
 
 #ifdef DARLING
@@ -177,6 +182,25 @@ FcConfig *O2FontSharedFontConfig() {
     }
 
     return fontConfig;
+}
+
+O2FontRegistrationResult O2FontRegisterFontFile(NSString *path) {
+    static NSMutableSet *registered = nil;
+
+    if (path == nil || ![[NSFileManager defaultManager] fileExistsAtPath: path])
+        return O2FontRegistrationNotFound;
+    path = [path stringByStandardizingPath];
+    @synchronized([O2Font_freetype class]) {
+        if (registered == nil)
+            registered = [[NSMutableSet alloc] init];
+        if ([registered containsObject: path])
+            return O2FontRegistrationAlreadyRegistered;
+        FcConfig *config = O2FontSharedFontConfig();
+        if (config == NULL || !addFontFile(config, path))
+            return O2FontRegistrationUnrecognized;
+        [registered addObject: path];
+    }
+    return O2FontRegistrationSucceeded;
 }
 
 NSArray *O2FontCopyInstalledFaces(NSString *family, NSString *postScriptName,
@@ -662,6 +686,19 @@ FT_Face O2FontFreeTypeFace(O2Font_freetype *self) {
             else
                 _advances[glyph] = 0;
         }
+    }
+}
+
+- (int) verticalAdvanceForGlyph: (O2Glyph) glyph {
+    @synchronized(self) {
+        // With FT_LOAD_VERTICAL_LAYOUT the vertical advance is in advance.y; FreeType
+        // synthesizes one for a font without vhea/vmtx tables.
+        if (FT_Load_Glyph(_face, glyph,
+                          FT_LOAD_NO_SCALE | FT_LOAD_NO_HINTING |
+                                  FT_LOAD_IGNORE_TRANSFORM |
+                                  FT_LOAD_VERTICAL_LAYOUT) != 0)
+            return 0;
+        return (int) _face->glyph->advance.y;
     }
 }
 

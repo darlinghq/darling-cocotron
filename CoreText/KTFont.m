@@ -19,6 +19,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <CoreText/KTFont.h>
 #import <Foundation/NSArray.h>
 #import <Onyx2D/O2Exceptions.h>
+#import <Onyx2D/O2Font.h>
 
 @implementation KTFont
 
@@ -182,6 +183,20 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
     CGFontGetGlyphAdvances(_font, glyphs, count, advances);
     for (int i = 0; i < count; i++) {
+        advancements[i].width =
+                ((CGFloat) advances[i] / (CGFloat) _unitsPerEm) * _size;
+        advancements[i].height = 0;
+    }
+}
+
+- (void) getVerticalAdvancements: (CGSize *) advancements
+                       forGlyphs: (const CGGlyph *) glyphs
+                           count: (NSUInteger) count
+{
+    int advances[count];
+
+    O2FontGetGlyphVerticalAdvances((O2FontRef) _font, glyphs, count, advances);
+    for (NSUInteger i = 0; i < count; i++) {
         advancements[i].width =
                 ((CGFloat) advances[i] / (CGFloat) _unitsPerEm) * _size;
         advancements[i].height = 0;

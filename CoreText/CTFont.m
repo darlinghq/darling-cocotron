@@ -682,10 +682,14 @@ double CTFontGetAdvancesForGlyphs(CTFontRef font, CTFontOrientation orientation,
         return 0;
 
     // The advances array is optional; the total is returned either way.
+    // Vertical text gets the font's vertical advance as the width, and a height of 0.
     double sum = 0;
     for (CFIndex i = 0; i < count; i++) {
         CGSize advance;
-        [object getAdvancements: &advance forGlyphs: &glyphs[i] count: 1];
+        if (orientation == kCTFontOrientationVertical)
+            [object getVerticalAdvancements: &advance forGlyphs: &glyphs[i] count: 1];
+        else
+            [object getAdvancements: &advance forGlyphs: &glyphs[i] count: 1];
         if (advances != NULL)
             advances[i] = advance;
         sum += advance.width;

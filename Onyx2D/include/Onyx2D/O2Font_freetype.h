@@ -43,6 +43,16 @@ FT_Face O2FontFreeTypeFace(O2Font_freetype *self);
 
 FT_Library O2FontSharedFreeTypeLibrary();
 FcConfig *O2FontSharedFontConfig();
+typedef enum {
+    O2FontRegistrationSucceeded,
+    O2FontRegistrationNotFound,
+    O2FontRegistrationUnrecognized,
+    O2FontRegistrationAlreadyRegistered,
+} O2FontRegistrationResult;
+
+// Adds a font file (or a directory of them) at a guest path to the fonts that
+// names resolve to in this process.
+O2FontRegistrationResult O2FontRegisterFontFile(NSString *path);
 
 /* Lists the installed faces whose properties equal all of the non-nil
  * arguments; no substitution takes place. Each element is a dictionary

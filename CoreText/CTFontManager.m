@@ -34,9 +34,31 @@ CFArrayRef CTFontManagerCopyAvailableFontFamilyNames(void)
     return (CFArrayRef) [sorted copy];
 }
 
+// The registration lasts for the process whatever the scope asked for.
 bool CTFontManagerRegisterFontsForURL(CFURLRef fontURL, CTFontManagerScope scope, CFErrorRef * error)
 {
-    printf("STUB %s\n", __PRETTY_FUNCTION__);
+    NSURL *url = (NSURL *) fontURL;
+    O2FontRegistrationResult result = O2FontRegistrationNotFound;
+
+    if (url != nil && [url isFileURL])
+        result = O2FontRegisterFontFile([url path]);
+    if (result == O2FontRegistrationSucceeded) {
+        if (error != NULL)
+            *error = NULL;
+        return true;
+    }
+    if (error != NULL) {
+        CFIndex code = kCTFontManagerErrorFileNotFound;
+        if (result == O2FontRegistrationUnrecognized)
+            code = kCTFontManagerErrorUnrecognizedFormat;
+        else if (result == O2FontRegistrationAlreadyRegistered)
+            code = kCTFontManagerErrorAlreadyRegistered;
+        NSDictionary *userInfo = url == nil ? nil
+            : [NSDictionary dictionaryWithObject: [NSArray arrayWithObject: url]
+                                          forKey: (NSString *) kCTFontManagerErrorFontURLsKey];
+        *error = CFErrorCreate(kCFAllocatorDefault, kCTFontManagerErrorDomain, code,
+                               (CFDictionaryRef) userInfo);
+    }
     return false;
 }
 
