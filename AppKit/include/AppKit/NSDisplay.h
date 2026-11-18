@@ -84,6 +84,16 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (NSEventModifierFlags) modifierForDefault: (NSString *) key
                                    standard: (NSEventModifierFlags) standard;
 
+// Whether the host keyboard chord with these modifier flags (as the backend
+// reports them for a key press) and this key is delivered to the application
+// as the same chord with the Command modifier instead of Control, so that the
+// host's Control+C/V/X can be the copy, paste and cut shortcuts. The one place
+// that decides this: input conversion and the key equivalents menus show both
+// ask it. A key is the character a key equivalent or key event reports.
+// NO unless the backend maps Control.
+- (BOOL) controlStandsInForCommand: (NSEventModifierFlags) flags
+                       keyEquivalent: (unichar) key;
+
 - (void) beep;
 
 - (NSSet *) allFontFamilyNames;

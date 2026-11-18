@@ -1272,7 +1272,8 @@ static NSMutableArray *pendingOpenURLs = nil;
     if ([event type] == NSKeyDown) {
         unsigned modifierFlags = [event modifierFlags];
 
-        if (modifierFlags & (NSCommandKeyMask | NSAlternateKeyMask))
+        // A shortcut written with Control (menus show it as such) works too.
+        if (modifierFlags & (NSCommandKeyMask | NSAlternateKeyMask | NSControlKeyMask))
             if ([self _performKeyEquivalent: event])
                 return;
     }

@@ -1114,6 +1114,17 @@ static void crtcBoundingBox(Display *display, XRRScreenResources *resources, RRC
     return result;
 }
 
+// With ControlKeyActsAsCommand set, Control+C, V and X (without Command or
+// Option; Shift is kept) are the copy, paste and cut shortcuts of macOS; every
+// other Control chord is left alone.
+- (BOOL) controlStandsInForCommand: (NSEventModifierFlags) flags
+                       keyEquivalent: (unichar) key
+{
+    return _controlActsAsCommand && (flags & NSControlKeyMask) &&
+           !(flags & (NSCommandKeyMask | NSAlternateKeyMask)) &&
+           (key == 'c' || key == 'v' || key == 'x');
+}
+
 - (NSEventModifierFlags) modifierFlagsForState: (unsigned int) state {
     NSEventModifierFlags ret = 0;
     if (state & ShiftMask)
@@ -1582,19 +1593,17 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
         // Command or Option, arrive as Command+C, V and X, whose characters
         // are the letters rather than control codes. Other Control
         // combinations are left alone.
-        if (_controlActsAsCommand && (modifierFlags & NSControlKeyMask) &&
-            !(modifierFlags & (NSCommandKeyMask | NSAlternateKeyMask))) {
-            KeySym lower = shortcutKeySym;
-            if (lower >= XK_A && lower <= XK_Z)
-                lower += XK_a - XK_A;
-            if (lower == XK_c || lower == XK_v || lower == XK_x) {
-                modifierFlags = (modifierFlags & ~NSControlKeyMask) | NSCommandKeyMask;
-                if (text != buf)
-                    free(text);
-                text = buf;
-                buf[0] = (char) shortcutKeySym;
-                buf[1] = 0;
-            }
+        KeySym lower = shortcutKeySym;
+        if (lower >= XK_A && lower <= XK_Z)
+            lower += XK_a - XK_A;
+        if (lower < 0x100 && [self controlStandsInForCommand: modifierFlags
+                                                keyEquivalent: (unichar) lower]) {
+            modifierFlags = (modifierFlags & ~NSControlKeyMask) | NSCommandKeyMask;
+            if (text != buf)
+                free(text);
+            text = buf;
+            buf[0] = (char) shortcutKeySym;
+            buf[1] = 0;
         }
 
         // Arrow, function and editing keys produce no text; AppKit reports

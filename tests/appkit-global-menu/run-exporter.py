@@ -73,8 +73,8 @@ try:
     props = lambda label: items[find_item(items, label)][0]
     new_doc = find_item(items, "New__Doc")
     check(new_doc is not None, "underscores in a title are doubled")
-    check(props("New__Doc").get("shortcut") == [["Control", "N"]], "Command+N shown as a shortcut")
-    check(props("Save").get("shortcut") == [["Control", "Shift", "S"]], "Command+Shift+S shown as a shortcut")
+    check(props("New__Doc").get("shortcut") == [["Super", "N"]], "Command+N shown as a shortcut")
+    check(props("Save").get("shortcut") == [["Shift", "Super", "S"]], "Command+Shift+S shown as a shortcut")
     check(any(p.get("type") == "separator" for p, _ in items.values()), "separators exported")
     check(props("Hidden").get("visible") is False, "a hidden item is exported as not visible")
     check(props("Checked").get("toggle-type") == "checkmark" and props("Checked").get("toggle-state") == 1,
