@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Lubos Dolezel
 //
 // A secure text field keeps the typed text in its value but shows a bullet (U+2022) for every character, in the field
-// and in the field editor while editing, and refuses to copy or cut the text out. -echosBullets defaults to YES. A
+// and in the field editor while editing, and refuses to copy the text out. -echosBullets defaults to YES. A
 // secure field decoded from a keyed archive in which its cell is a plain NSTextFieldCell (as nib compilers write it)
 // still gets a secure cell. Black-box behavior of macOS 10.14.4 (cell class and -echosBullets of a field loaded
 // from such a nib; bullet U+2022 as in the NSSecureTextFieldCell documentation).

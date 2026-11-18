@@ -20,6 +20,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 // Original - Christopher Lloyd <cjwl@objc.net>
 #import <AppKit/NSSecureLayoutManager.h>
 #import <AppKit/NSSecureTextView.h>
+#import <AppKit/NSMenuItem.h>
 #import <AppKit/NSTextStorage.h>
 
 @implementation NSSecureTextView
@@ -56,13 +57,24 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return NO;
 }
 
+// QUIRK: cut: deletes the selection without putting it on the pasteboard, paste: inserts the
+// pasteboard text as in any text view, and copy: does nothing; the Cut and Copy menu commands
+// are unavailable. Not documented. Evidence: black-box observation of the field editor of a
+// secure text field on macOS 10.14.4 (tier 2): the pasteboard held its earlier text after copy:
+// and cut:, the selection was removed by cut:, and the pasteboard text was inserted by paste:.
+// Test: appkit-secure-text-field-cut-paste.m
 - (void) cut: sender {
+    if ([self selectedRange].length > 0)
+        [self deleteBackward: sender];
 }
 
 - (void) copy: sender {
 }
 
-- (void) paste: sender {
+- (BOOL) validateMenuItem: (NSMenuItem *) item {
+    if ([item action] == @selector(cut:) || [item action] == @selector(copy:))
+        return NO;
+    return [super validateMenuItem: item];
 }
 
 @end
