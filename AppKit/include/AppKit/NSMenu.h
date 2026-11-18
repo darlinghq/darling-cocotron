@@ -121,6 +121,9 @@ typedef NS_OPTIONS(NSUInteger, NSMenuProperties) {
 
 @property(nonatomic, assign) id<NSMenuDelegate> delegate;
 
+// The size the menu has when it is shown as a pop-up, in points.
+@property(readonly) NSSize size;
+
 @end
 
 @interface NSObject (NSMenu_validateItem)
