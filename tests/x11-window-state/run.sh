@@ -6,6 +6,8 @@
 #   run.sh hidden      GUEST_BIN=<cross-compiled hidden-window in the guest>
 #   run.sh decorations GUEST_BIN=<cross-compiled decorations in the guest>
 #   run.sh invisible   GUEST_BIN=<cross-compiled invisible-window in the guest>
+#   run.sh key-window <mode>  GUEST_BIN=<cross-compiled key-window in the guest>; mode is one of
+#                      orderfront makekey makefront modal nokey click (see key-window.m); needs xdotool
 # Exit status 0 when every window is as expected.
 #
 # Expectations come from the documented AppKit contract: -orderOut: and
@@ -23,7 +25,8 @@ mode=${1:?hidden or decorations}
 temp=$(mktemp -d); trap 'rm -rf "$temp"' EXIT
 cc -Wall "$here/probe.c" -lX11 -lXext -o "$temp/probe"
 export DISPLAY=:99
-DARLING_APPKIT_BACKEND=x11 timeout -s KILL 90 darling shell "${GUEST_BIN:?path of the cross-compiled test in the guest}" \
+[ "$mode" = key-window ] && guestargs=("${2:?orderfront, makekey, makefront, modal, nokey or click}" 14) || guestargs=()
+DARLING_APPKIT_BACKEND=x11 timeout -s KILL 90 darling shell "${GUEST_BIN:?path of the cross-compiled test in the guest}" "${guestargs[@]}" \
     </dev/null >"$temp/guest.log" 2>&1 &
 guest=$!
 for _ in $(seq 1 300); do
@@ -67,6 +70,27 @@ invisible)
     check inv-alpha1-titled "mapped=1 motif=none shape=1 frameshape=[1-9][0-9]* compositor=0"
     check inv-restored-titled "mapped=1 motif=none shape=1 frameshape=[1-9][0-9]* compositor=0"
     check inv-partial-titled "mapped=1 motif=none shape=1 frameshape=[1-9][0-9]* compositor=0"
+    ;;
+key-window)
+    # What the host does while the guest waits: nothing (makekey, makefront, modal, nokey), types
+    # with the window manager's focus on the visible window (orderfront) or clicks into it (click).
+    geometry() { timeout 20 xdotool search --sync --name '^kw-b$' | head -1 | xargs -I{} xdotool getwindowgeometry --shell {}; }
+    case ${2} in
+    orderfront)
+        sleep 1
+        xdotool type --delay 100 abc
+        ;;
+    click)
+        eval "$(geometry)"
+        xdotool mousemove $((X + WIDTH / 2)) $((Y + HEIGHT / 2)) click 1
+        ;;
+    esac
+    xdotool keyup super Super_L shift Shift_L ctrl Control_L alt Alt_L
+    for _ in $(seq 1 200); do
+        grep -q -E '^(DONE|FAILED)' "$temp/guest.log" && break
+        sleep 0.2
+    done
+    grep -q '^DONE' "$temp/guest.log" || fail=1
     ;;
 *) echo "unknown mode $mode"; exit 2 ;;
 esac
