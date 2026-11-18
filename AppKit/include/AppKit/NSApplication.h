@@ -227,6 +227,7 @@ typedef NSString *NSAboutPanelOptionKey NS_TYPED_ENUM;
 @property(null_resettable, nonatomic, retain) NSImage *applicationIconImage;
 @property(nonatomic, getter=isActive, readonly) BOOL active;
 @property (readonly) BOOL isHidden;
+@property (readonly) NSApplicationOcclusionState occlusionState;
 @property(nonatomic, getter=isRunning, readonly) BOOL running;
 @property(nonatomic, getter=isFullKeyboardAccessEnabled, readonly) BOOL fullKeyboardAccessEnabled;
 

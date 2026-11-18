@@ -19,6 +19,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <CoreGraphics/CGDirectDisplay.h>
 #import <AppKit/AppKitIvarLayout.h>
+#import <AppKit/NSGraphics.h>
 #import <Foundation/Foundation.h>
 
 @class NSColorSpace;
@@ -70,6 +71,11 @@ typedef NSString *NSDeviceDescriptionKey;
 @property(readonly) NSRect auxiliaryTopLeftArea;
 @property(readonly) NSRect auxiliaryTopRightArea;
 @property(nonatomic, readonly) NSTimeInterval displayUpdateGranularity;
+
+- (BOOL) canRepresentDisplayGamut: (NSDisplayGamut) displayGamut;
+- (NSRect) convertRectToBacking: (NSRect) rect;
+- (NSRect) convertRectFromBacking: (NSRect) rect;
+- (NSRect) backingAlignedRect: (NSRect) rect options: (NSAlignmentOptions) options;
 
 @end
 

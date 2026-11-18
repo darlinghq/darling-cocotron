@@ -261,6 +261,73 @@ CGError _CGSActivateProcess(pid_t pid, uint32_t options)
 	return kCGErrorSuccess;
 }
 
+#define kCGSProcessHiddenNotificationPrefix "org.darlinghq.process-hidden."
+
+CGError _CGSSendProcessCommand(pid_t pid, uint32_t command)
+{
+	const char* prefix;
+
+	switch (command)
+	{
+		case kCGSProcessCommandHide: prefix = kCGSProcessHideNotificationPrefix; break;
+		case kCGSProcessCommandUnhide: prefix = kCGSProcessUnhideNotificationPrefix; break;
+		case kCGSProcessCommandQuit: prefix = kCGSProcessQuitNotificationPrefix; break;
+		default: return kCGErrorIllegalArgument;
+	}
+	if (pid <= 0)
+		return kCGErrorIllegalArgument;
+	if (pid != getpid() && !_CGSProcessHasConnection(pid))
+		return kCGErrorCannotComplete;
+
+	// libnotify, as the registry and the hidden state: the Darwin center of CFNotificationCenter does
+	// not reach other processes.
+	char name[96];
+	snprintf(name, sizeof(name), "%s%d", prefix, (int) pid);
+	return notify_post(name) == NOTIFY_STATUS_OK ? kCGErrorSuccess : kCGErrorCannotComplete;
+}
+
+// The state of the process' libnotify name is its start time while its application is hidden, else
+// 0, so a later process with the same pid does not inherit it. The process is the only writer.
+void _CGSSetProcessHidden(Boolean hidden)
+{
+	static dispatch_once_t once;
+	static int token = -1;
+
+	dispatch_once(&once, ^{
+		char name[64];
+
+		snprintf(name, sizeof(name), kCGSProcessHiddenNotificationPrefix "%d", (int) getpid());
+		if (notify_register_check(name, &token) != NOTIFY_STATUS_OK)
+			token = -1;
+	});
+	if (token < 0)
+		return;
+	uint64_t start = processStartTime(getpid());
+	notify_set_state(token, hidden ? (start != 0 ? start : 1) : 0);
+}
+
+Boolean _CGSProcessIsHidden(pid_t pid)
+{
+	if (pid <= 0 || (kill(pid, 0) != 0 && errno != EPERM))
+		return false;
+
+	char name[64];
+	int token;
+	uint64_t state = 0;
+
+	snprintf(name, sizeof(name), kCGSProcessHiddenNotificationPrefix "%d", (int) pid);
+	if (notify_register_check(name, &token) != NOTIFY_STATUS_OK)
+		return false;
+	if (notify_get_state(token, &state) != NOTIFY_STATUS_OK)
+		state = 0;
+	notify_cancel(token);
+	if (state == 0)
+		return false;
+
+	uint64_t start = processStartTime(pid);
+	return start == 0 ? state == 1 : state == start;
+}
+
 // The process that was activated last, for a display server that cannot be asked: the state of a
 // libnotify name, which is shared by all processes.
 static int frontProcessToken(void)

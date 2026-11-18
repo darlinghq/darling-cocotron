@@ -53,6 +53,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Foundation/NSAppleEventManager.h>
 #import <Foundation/NSAppleEventDescriptor.h>
 #import <objc/message.h>
+#include <notify.h>
 #import <pthread.h>
 
 // Runs the +[NSEvent addLocalMonitorForEventsMatchingMask:handler:] handlers.
@@ -245,6 +246,32 @@ NS_EXTRA_DEALLOC(NSApplication)
     }
 }
 
+// Another process (NSRunningApplication -hide, -unhide, -terminate) asks this application for the
+// command with a libnotify notification named after this process, see _CGSSendProcessCommand().
+// The requests are handled on the main queue, which the application's run loop serves.
+static void observeProcessCommands(NSApplication *application) {
+    const struct {
+        const char *prefix;
+        SEL action;
+    } commands[] = {
+        {kCGSProcessHideNotificationPrefix, @selector(hide:)},
+        {kCGSProcessUnhideNotificationPrefix, @selector(unhide:)},
+        {kCGSProcessQuitNotificationPrefix, @selector(terminate:)},
+    };
+
+    for (size_t i = 0; i < sizeof(commands) / sizeof(commands[0]); i++) {
+        char name[96];
+        int token;
+        SEL action = commands[i].action;
+
+        snprintf(name, sizeof(name), "%s%d", commands[i].prefix, (int) getpid());
+        // The token stays registered for the life of the process.
+        notify_register_dispatch(name, &token, dispatch_get_main_queue(), ^(int ignored) {
+            [application performSelector: action withObject: nil];
+        });
+    }
+}
+
 - (instancetype) init {
     if (NSApp)
         NSAssert(!NSApp, @"NSApplication is a singleton");
@@ -253,6 +280,7 @@ NS_EXTRA_DEALLOC(NSApplication)
     // An application connects to the window system as it starts, which is also what makes it
     // known as an application to other processes.
     (void) CGSMainConnectionID();
+    observeProcessCommands(self);
 
     _windows = [NSMutableArray new];
     _mainMenu = nil;
@@ -604,6 +632,20 @@ static NSMutableArray *pendingOpenURLs = nil;
 
 - (BOOL) isHidden {
     return NS_EXTRA(NSApplication, self)->_isHidden;
+}
+
+// Visible when any of the application's windows is visible, which the documentation allows
+// (visible means at least part of some window can be seen). The application's windows are not
+// tracked for being covered by other windows, so a covered window still counts as visible. A hidden
+// application has no visible window.
+- (NSApplicationOcclusionState) occlusionState {
+    if (NS_EXTRA(NSApplication, self)->_isHidden)
+        return 0;
+    for (NSWindow *window in [[_windows copy] autorelease]) {
+        if ([window isVisible])
+            return NSApplicationOcclusionStateVisible;
+    }
+    return 0;
 }
 
 - (BOOL) isRunning {
@@ -1845,6 +1887,7 @@ static BOOL isModalWindowOrItsSheet(NSWindow *window, NSWindow *modalWindow) {
             postNotificationName: NSApplicationDidHideNotification
                           object: self];
     NS_EXTRA(NSApplication, self)->_isHidden = YES;
+    _CGSSetProcessHidden(true);
 }
 
 - (void) hideOtherApplications: sender {
@@ -1864,6 +1907,7 @@ static BOOL isModalWindowOrItsSheet(NSWindow *window, NSWindow *modalWindow) {
                               object: self];
     }
     NS_EXTRA(NSApplication, self)->_isHidden = NO;
+    _CGSSetProcessHidden(false);
     //[self activateIgnoringOtherApps:NO]
 }
 
@@ -1884,6 +1928,7 @@ static BOOL isModalWindowOrItsSheet(NSWindow *window, NSWindow *modalWindow) {
                               object: self];
     }
     NS_EXTRA(NSApplication, self)->_isHidden = NO;
+    _CGSSetProcessHidden(false);
 }
 
 - (void) stop: sender {

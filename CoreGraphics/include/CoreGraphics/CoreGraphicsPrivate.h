@@ -235,6 +235,27 @@ CGError _CGSResignFrontProcess(pid_t pid);
 // The name of the Darwin notification that asks the process with this pid to activate its
 // windows (see above); a windowing backend observes the name of its own process.
 #define kCGSProcessActivationNotificationPrefix "org.darlinghq.process-activation."
+
+// Commands for the application of another process: a libnotify notification named after the target
+// process, which AppKit's application object answers (hide, unhide, and the quit request, which takes
+// the application's normal quit path).
+#define kCGSProcessHideNotificationPrefix "org.darlinghq.process-hide."
+#define kCGSProcessUnhideNotificationPrefix "org.darlinghq.process-unhide."
+#define kCGSProcessQuitNotificationPrefix "org.darlinghq.process-quit."
+#define kCGSProcessCommandHide 1
+#define kCGSProcessCommandUnhide 2
+#define kCGSProcessCommandQuit 3
+// Posts the command to the process. Returns kCGErrorIllegalArgument for a pid that is not positive or
+// an unknown command, kCGErrorCannotComplete for a process (other than the caller) that is not a
+// live application of the window system (see _CGSProcessHasConnection()), kCGErrorSuccess otherwise;
+// success means the request was made, not carried out.
+CGError _CGSSendProcessCommand(pid_t pid, uint32_t command);
+// Publishes the hidden state of the calling process' application for other processes.
+void _CGSSetProcessHidden(Boolean hidden);
+// Whether the application of the process with this pid is hidden. False for a process that is gone
+// or is not an application.
+Boolean _CGSProcessIsHidden(pid_t pid);
+
 // The libnotify name whose state holds the pid _CGSSetFrontProcess() stored, and which is posted
 // whenever the front process may have changed.
 #define kCGSFrontProcessNotificationName "org.darlinghq.front-process"
