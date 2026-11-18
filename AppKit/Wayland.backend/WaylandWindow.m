@@ -300,6 +300,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 
     _pendingWidth = _pendingHeight = 0;
     _pendingActivated = NO;
+    _pendingSuspended = NO;
     _pendingFullscreen = NO;
     // The initial commit has no buffer; content follows the first configure.
     sendRequest(_surface, WP_SURFACE_COMMIT, 0);
@@ -425,6 +426,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     _configureUpdatePending = NO;
     _configured = NO;
     _activated = NO;
+    _pendingSuspended = _suspended = NO;
     // The tracker survives hiding: _frame keeps the fullscreen size, so the size
     // from before fullscreen would be lost if the next map saved it again.
     _fullscreenRequested = _pendingFullscreen = _fullscreenRecheckPending = NO;
@@ -518,6 +520,13 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 - (BOOL) isMiniaturized {
     // xdg-shell doesn't report whether a toplevel is minimized.
     return NO;
+}
+
+// What xdg-shell offers of occlusion is the suspended state, sent by compositors that stop repainting a
+// toplevel they do not show (version 6 of xdg_wm_base). A compositor that never sends it leaves the
+// window seen whenever it is mapped.
+- (BOOL) isOccluded {
+    return _mapped && _suspended;
 }
 
 - (void) flashWindow {
@@ -1163,6 +1172,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
             _pendingActivated = WaylandStatesContain(states, WP_TOPLEVEL_STATE_ACTIVATED);
             _pendingMaximized = WaylandStatesContain(states, WP_TOPLEVEL_STATE_MAXIMIZED);
             _pendingFullscreen = WaylandStatesContain(states, WP_TOPLEVEL_STATE_FULLSCREEN);
+            _pendingSuspended = WaylandStatesContain(states, WP_TOPLEVEL_STATE_SUSPENDED);
         } else if (opcode == WP_TOPLEVEL_EV_CLOSE) {
             [self closeRequested];
         }
@@ -1295,6 +1305,15 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     BOOL activationChanged = _pendingActivated != _activated;
     BOOL activated = _pendingActivated;
     _activated = activated;
+
+    BOOL suspendedChanged = _pendingSuspended != _suspended;
+    _suspended = _pendingSuspended;
+    if (suspendedChanged) {
+        [_display performAfterDispatch: ^{
+          if ([self->_delegate respondsToSelector: @selector(platformWindowOcclusionChanged:)])
+              [self->_delegate platformWindowOcclusionChanged: self];
+        }];
+    }
 
     if (firstConfigure || sized || moved || activationChanged || decorationChanged) {
         [_display performAfterDispatch: ^{

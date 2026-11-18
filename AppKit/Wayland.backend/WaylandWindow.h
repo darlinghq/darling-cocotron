@@ -67,6 +67,9 @@ struct WaylandBuffer {
     struct WaylandBuffer _buffers[2];
     int32_t _pendingWidth, _pendingHeight;
     BOOL _pendingActivated;
+    // The compositor's xdg_toplevel suspended state (version 6): the surface is not being repainted,
+    // for instance because it is covered or its workspace is not shown.
+    BOOL _pendingSuspended, _suspended;
     BOOL _mapped;
     // The window has been ordered in, whether or not it is mapped (a window with alpha 0 is not).
     BOOL _shouldBeMapped;

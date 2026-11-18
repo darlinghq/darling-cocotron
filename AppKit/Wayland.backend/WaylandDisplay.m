@@ -584,7 +584,7 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
     } else if (strcmp(interface, "xdg_wm_base") == 0 && _wmBase == NULL) {
         _wmBase = [self bindGlobal: name
                          interface: &xdg_wm_base_interface
-                           version: MIN(version, 3)
+                           version: MIN(version, 6)
                               kind: WaylandObjectWmBase
                             object: self];
     } else if (strcmp(interface, "zxdg_decoration_manager_v1") == 0 &&
