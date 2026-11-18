@@ -382,6 +382,33 @@ O2ColorSpaceModel O2ColorSpaceGetModel(O2ColorSpaceRef self) {
     return self->_type;
 }
 
+// Value equality, so that CFEqual and CGColorSpace users can tell the same space from another one: the model, the
+// name, the ICC data and the pattern base must match. Subclasses compare by identity.
+- (BOOL) isEqual: (id) other {
+    if (other == self)
+        return YES;
+    if ([self class] != [O2ColorSpace class] || [other class] != [O2ColorSpace class])
+        return NO;
+
+    O2ColorSpace *space = other;
+    if (_type != space->_type || _isPlatformRGB != space->_isPlatformRGB)
+        return NO;
+    if ((_name == NULL) != (space->_name == NULL) || (_name != NULL && !CFEqual(_name, space->_name)))
+        return NO;
+    if ((_iccData == NULL) != (space->_iccData == NULL) || (_iccData != NULL && !CFEqual(_iccData, space->_iccData)))
+        return NO;
+    if ((_patternBase == nil) != (space->_patternBase == nil) ||
+        (_patternBase != nil && ![_patternBase isEqual: space->_patternBase]))
+        return NO;
+    return YES;
+}
+
+- (NSUInteger) hash {
+    if ([self class] != [O2ColorSpace class])
+        return [super hash];
+    return (NSUInteger) _type * 31 + (_name != NULL ? (NSUInteger) CFHash(_name) : 0);
+}
+
 - (BOOL) isEqualToColorSpace: (O2ColorSpaceRef) other {
     if (self->_type != other->_type)
         return NO;

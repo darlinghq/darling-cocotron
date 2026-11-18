@@ -524,6 +524,46 @@ NSBitmapImageRepPropertyKey NSImageCurrentFrame = @"NSImageCurrentFrame";
     }
 }
 
+// The NSColorSpaceName a bitmap gets for a CoreGraphics space: the device spaces keep their device names, other RGB
+// and gray spaces are the calibrated families.
++ (NSString *) _colorSpaceNameForCGColorSpace: (CGColorSpaceRef) space {
+    BOOL isDevice = NO;
+    CGColorSpaceRef device = NULL;
+
+    switch (CGColorSpaceGetModel(space)) {
+    case kCGColorSpaceModelMonochrome:
+        device = CGColorSpaceCreateDeviceGray();
+        isDevice = CFEqual(space, device);
+        CGColorSpaceRelease(device);
+        return isDevice ? NSDeviceWhiteColorSpace : NSCalibratedWhiteColorSpace;
+    case kCGColorSpaceModelCMYK:
+        return NSDeviceCMYKColorSpace;
+    case kCGColorSpaceModelRGB:
+        device = CGColorSpaceCreateDeviceRGB();
+        isDevice = CFEqual(space, device);
+        CGColorSpaceRelease(device);
+        return isDevice ? NSDeviceRGBColorSpace : NSCalibratedRGBColorSpace;
+    default:
+        return CGColorSpaceGetNumberOfComponents(space) == 1 ? NSDeviceWhiteColorSpace : NSDeviceRGBColorSpace;
+    }
+}
+
+// The space a colour space name stands for, when it names one. The black variants are inverted gray, and the
+// named custom space has no CoreGraphics counterpart, so they have none.
++ (NSColorSpace *) _colorSpaceForName: (NSString *) name {
+    if ([name isEqualToString: NSDeviceRGBColorSpace])
+        return [NSColorSpace deviceRGBColorSpace];
+    if ([name isEqualToString: NSCalibratedRGBColorSpace])
+        return [NSColorSpace genericRGBColorSpace];
+    if ([name isEqualToString: NSDeviceWhiteColorSpace])
+        return [NSColorSpace deviceGrayColorSpace];
+    if ([name isEqualToString: NSCalibratedWhiteColorSpace])
+        return [NSColorSpace genericGrayColorSpace];
+    if ([name isEqualToString: NSDeviceCMYKColorSpace])
+        return [NSColorSpace deviceCMYKColorSpace];
+    return nil;
+}
+
 - initWithCGImage: (CGImageRef) cgImage {
     NS_EXTRA(NSBitmapImageRep, self)->_cgImage = CGImageRetain(cgImage);
     _size.width = CGImageGetWidth(NS_EXTRA(NSBitmapImageRep, self)->_cgImage);
@@ -531,9 +571,7 @@ NSBitmapImageRepPropertyKey NSImageCurrentFrame = @"NSImageCurrentFrame";
 
     CGColorSpaceRef colorSpace = CGImageGetColorSpace(NS_EXTRA(NSBitmapImageRep, self)->_cgImage);
 
-    // Only RGB and one component (gray) images are mapped to a color space name so far.
-    _colorSpaceName = CGColorSpaceGetNumberOfComponents(colorSpace) == 1 ? NSDeviceWhiteColorSpace
-                                                                         : NSDeviceRGBColorSpace;
+    _colorSpaceName = [NSBitmapImageRep _colorSpaceNameForCGColorSpace: colorSpace];
     _bitsPerSample = CGImageGetBitsPerComponent(NS_EXTRA(NSBitmapImageRep, self)->_cgImage);
     _pixelsWide = CGImageGetWidth(NS_EXTRA(NSBitmapImageRep, self)->_cgImage);
     _pixelsHigh = CGImageGetHeight(NS_EXTRA(NSBitmapImageRep, self)->_cgImage);
@@ -604,6 +642,7 @@ NSBitmapImageRepPropertyKey NSImageCurrentFrame = @"NSImageCurrentFrame";
             NSZoneFree(NULL, NS_EXTRA(NSBitmapImageRep, self)->_bitmapPlanes);
         }
         CGImageRelease(NS_EXTRA(NSBitmapImageRep, self)->_cgImage);
+        [NS_EXTRA(NSBitmapImageRep, self)->_colorSpace release];
     }
     NS_EXTRA_FREE(NSBitmapImageRep, self);
     [super dealloc];
@@ -1069,6 +1108,13 @@ NSBitmapImageRepPropertyKey NSImageCurrentFrame = @"NSImageCurrentFrame";
     return (CGImageRef)[(id)[self createCGImageIfNeeded] autorelease];
 }
 
+- (CGImageRef) CGImageForProposedRect: (NSRect *) proposedDestRect
+                              context: (NSGraphicsContext *) context
+                                hints: (NSDictionary<NSString *, id> *) hints
+{
+    return [self CGImage];
+}
+
 - (BOOL) draw {
     CGContextRef context = NSCurrentGraphicsPort();
     if (context == NULL)
@@ -1086,15 +1132,23 @@ NSBitmapImageRepPropertyKey NSImageCurrentFrame = @"NSImageCurrentFrame";
     return YES;
 }
 
-- (CGColorSpaceRef) CGColorSpace {
-    if ([_colorSpaceName isEqualToString: NSDeviceRGBColorSpace])
-        return (CGColorSpaceRef)[(id) CGColorSpaceCreateDeviceRGB()
-                                         autorelease];
-    if ([_colorSpaceName isEqualToString: NSCalibratedRGBColorSpace])
-        return (CGColorSpaceRef)[(id) CGColorSpaceCreateDeviceRGB()
-                                         autorelease];
+// The space of the pixels: an explicit one from conversion or retagging, the one of the image the rep was created
+// from, or the one the colour space name stands for.
+- (NSColorSpace *) colorSpace {
+    if (NS_EXTRA(NSBitmapImageRep, self)->_colorSpace == nil) {
+        CGImageRef image = NS_EXTRA(NSBitmapImageRep, self)->_cgImage;
+        CGColorSpaceRef space = image != NULL ? CGImageGetColorSpace(image) : NULL;
 
-    return NULL;
+        if (space != NULL)
+            NS_EXTRA(NSBitmapImageRep, self)->_colorSpace = [[NSColorSpace alloc] initWithCGColorSpace: space];
+        else
+            NS_EXTRA(NSBitmapImageRep, self)->_colorSpace = [[NSBitmapImageRep _colorSpaceForName: _colorSpaceName] retain];
+    }
+    return NS_EXTRA(NSBitmapImageRep, self)->_colorSpace;
+}
+
+- (CGColorSpaceRef) CGColorSpace {
+    return [[self colorSpace] CGColorSpace];
 }
 
 - (CGBitmapInfo) CGBitmapInfo {
@@ -1128,9 +1182,139 @@ NSBitmapImageRepPropertyKey NSImageCurrentFrame = @"NSImageCurrentFrame";
     return result;
 }
 
+// A new rep of the given layout that owns zeroed planes; the caller fills them.
+- (NSBitmapImageRep *) _newBitmapLike: (NSBitmapImageRep *) source
+                         samplesPerPixel: (int) samples
+                                hasAlpha: (BOOL) alpha
+                            bitsPerPixel: (int) bpp
+                             bytesPerRow: (int) bytesPerRow
+                          colorSpaceName: (NSString *) name
+                                   space: (NSColorSpace *) space {
+    NSBitmapFormat format = alpha ? ([source bitmapFormat] & NSAlphaFirstBitmapFormat) : 0;
+    NSBitmapImageRep *rep = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes: NULL
+                                                                    pixelsWide: [source pixelsWide]
+                                                                    pixelsHigh: [source pixelsHigh]
+                                                                 bitsPerSample: 8
+                                                               samplesPerPixel: samples
+                                                                      hasAlpha: alpha
+                                                                      isPlanar: NO
+                                                                colorSpaceName: name
+                                                                  bitmapFormat: format
+                                                                   bytesPerRow: bytesPerRow
+                                                                  bitsPerPixel: bpp];
+    if (rep != nil) {
+        [rep setSize: [source size]];
+        NS_EXTRA(NSBitmapImageRep, rep)->_colorSpace = [space retain];
+    }
+    return rep;
+}
+
+// Converts the pixels to targetSpace by drawing the image into a bitmap in that space, so the conversion is done by
+// CoreGraphics. The result has 8-bit samples. RGB results keep the alpha channel (premultiplied) of the source;
+// gray and CMYK results have none, as bitmap contexts of those models have none, and are drawn over black.
+- (NSBitmapImageRep *) bitmapImageRepByConvertingToColorSpace: (NSColorSpace *) targetSpace
+                                              renderingIntent: (NSColorRenderingIntent) renderingIntent {
+    if (targetSpace == nil || [targetSpace CGColorSpace] == NULL)
+        return nil;
+
+    NSColorSpace *current = [self colorSpace];
+    // Converting to the space the rep already has returns the rep itself.
+    if (current != nil && [current isEqual: targetSpace])
+        return self;
+
+    NSBitmapImageRep *result = nil;
+    NSInteger components = [targetSpace numberOfColorComponents];
+    int width = [self pixelsWide], height = [self pixelsHigh];
+    BOOL alpha = NO;
+    CGBitmapInfo info;
+    NSString *name;
+
+    switch ([targetSpace colorSpaceModel]) {
+    case NSColorSpaceModelRGB:
+        alpha = [self hasAlpha];
+        info = alpha ? ((([self bitmapFormat] & NSAlphaFirstBitmapFormat) != 0) ? kCGImageAlphaPremultipliedFirst
+                                                                              : kCGImageAlphaPremultipliedLast)
+                     : kCGImageAlphaNoneSkipLast;
+        break;
+    case NSColorSpaceModelGray:
+    case NSColorSpaceModelCMYK:
+        info = kCGImageAlphaNone;
+        break;
+    default:
+        return nil;
+    }
+    name = [NSBitmapImageRep _colorSpaceNameForCGColorSpace: [targetSpace CGColorSpace]];
+
+    int samples = (int) components + (alpha ? 1 : 0);
+    int bpp = (components == 3 ? 4 : (int) components) * 8;
+    if (components == 3 && !alpha)
+        samples = 3;
+    result = [[self _newBitmapLike: self
+                   samplesPerPixel: samples
+                          hasAlpha: alpha
+                      bitsPerPixel: bpp
+                       bytesPerRow: (int) (((int64_t) width * bpp + 7) / 8)
+                    colorSpaceName: name
+                             space: targetSpace] autorelease];
+    if (result == nil)
+        return nil;
+
+    CGImageRef image = [self CGImage];
+    if (image == NULL)
+        return nil;
+
+    CGContextRef context = CGBitmapContextCreate([result bitmapData], width, height, 8, [result bytesPerRow],
+                                                 [targetSpace CGColorSpace], info);
+    if (context == NULL)
+        return nil;
+    CGContextSetRenderingIntent(context, (CGColorRenderingIntent) renderingIntent);
+    CGContextDrawImage(context, CGRectMake(0, 0, width, height), image);
+    CGContextRelease(context);
+    return result;
+}
+
+// Returns a copy of the pixel data tagged with newSpace, without changing any sample. A space with a different
+// number of components cannot describe the data, which gives nil.
 - (NSBitmapImageRep *) bitmapImageRepByRetaggingWithColorSpace: (NSColorSpace *) newSpace {
-    printf("STUB %s\n", __PRETTY_FUNCTION__);
-    return nil;
+    if (newSpace == nil || [newSpace CGColorSpace] == NULL)
+        return nil;
+
+    NSColorSpace *current = [self colorSpace];
+    int colorSamples = [self samplesPerPixel] - ([self hasAlpha] ? 1 : 0);
+    if (current != nil ? [current numberOfColorComponents] != [newSpace numberOfColorComponents]
+                       : colorSamples != [newSpace numberOfColorComponents])
+        return nil;
+
+    BOOL planar = [self isPlanar];
+    int planes = [self numberOfPlanes];
+    NSBitmapImageRep *rep = [[[NSBitmapImageRep alloc]
+            initWithBitmapDataPlanes: NULL
+                          pixelsWide: [self pixelsWide]
+                          pixelsHigh: [self pixelsHigh]
+                       bitsPerSample: [self bitsPerSample]
+                     samplesPerPixel: [self samplesPerPixel]
+                            hasAlpha: [self hasAlpha]
+                            isPlanar: planar
+                      colorSpaceName: [NSBitmapImageRep _colorSpaceNameForCGColorSpace: [newSpace CGColorSpace]]
+                        bitmapFormat: [self bitmapFormat]
+                         bytesPerRow: [self bytesPerRow]
+                        bitsPerPixel: [self bitsPerPixel]] autorelease];
+    if (rep == nil)
+        return nil;
+
+    [rep setSize: [self size]];
+    // -getBitmapDataPlanes: always fills five entries.
+    unsigned char *sourcePlanes[5];
+    unsigned char *destinationPlanes[5];
+    [self getBitmapDataPlanes: sourcePlanes];
+    [rep getBitmapDataPlanes: destinationPlanes];
+    size_t length = (size_t) [self bytesPerRow] * (size_t) [self pixelsHigh];
+    for (int i = 0; i < planes; i++)
+        if (sourcePlanes[i] != NULL && destinationPlanes[i] != NULL)
+            memcpy(destinationPlanes[i], sourcePlanes[i], length);
+
+    NS_EXTRA(NSBitmapImageRep, rep)->_colorSpace = [newSpace retain];
+    return rep;
 }
 
 @end

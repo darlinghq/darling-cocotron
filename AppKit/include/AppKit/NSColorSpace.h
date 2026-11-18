@@ -44,13 +44,21 @@ typedef NS_ENUM(NSInteger, NSColorSpaceModel) {
 @property(class, strong, readonly) NSColorSpace *genericGrayColorSpace;
 @property(class, strong, readonly) NSColorSpace *genericGamma22GrayColorSpace;
 @property(class, strong, readonly) NSColorSpace *extendedSRGBColorSpace;
+@property(class, strong, readonly) NSColorSpace *deviceGrayColorSpace;
+@property(class, strong, readonly) NSColorSpace *deviceCMYKColorSpace;
+@property(class, strong, readonly) NSColorSpace *genericCMYKColorSpace;
+@property(class, strong, readonly) NSColorSpace *adobeRGB1998ColorSpace;
 
 + (NSColorSpace *) deviceRGBColorSpace;
 
 - initWithCGColorSpace: (CGColorSpaceRef) cgColorSpace;
+- (nullable instancetype) initWithICCProfileData: (NSData *) iccData;
 
 - (CGColorSpaceRef) CGColorSpace;
 
 @property(nullable, readonly, copy) NSString *localizedName;
+@property(readonly) NSColorSpaceModel colorSpaceModel;
+@property(readonly) NSInteger numberOfColorComponents;
+@property(nullable, readonly, copy) NSData *ICCProfileData;
 
 @end

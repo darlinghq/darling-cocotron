@@ -886,7 +886,103 @@ static void O2ContextDeviceClipToMask_builtin(O2Context_builtin *self,
     free(row);
 }
 
+ONYX2D_STATIC void releaseConvertedBytes(void *info, const void *data, size_t size) {
+    free(info);
+}
+
+/* The colour profile an image or surface is interpreted in: its own for the named spaces, sRGB for an unnamed RGB
+   (device) space. Spaces without a profile (device gray, CMYK, indexed ...) are not converted. */
+ONYX2D_STATIC BOOL profileForImageSpace(O2ColorSpaceRef space,
+                                        CFStringRef *name,
+                                        O2ColorProfile *profile)
+{
+    *name = O2ColorSpaceGetName(space);
+    if (*name != NULL)
+        return O2ColorSpaceGetColorProfile(space, profile);
+    if (O2ColorSpaceGetModel(space) != kO2ColorSpaceModelRGB)
+        return NO;
+    *name = CFSTR("kCGColorSpaceSRGB");
+    return O2ColorProfileForName("kCGColorSpaceSRGB", profile);
+}
+
+/* An image drawn into a surface of another profiled space is converted to the surface's space first, as a colour
+   is (see paintFromColor). Returns the converted copy, or NULL when the image can be drawn as it is. The copy is
+   8-bit premultiplied RGBA; for a gray surface every channel holds the converted gray value. */
+ONYX2D_STATIC O2ImageRef createImageInSurfaceSpace(O2Context_builtin *self,
+                                                   O2ImageRef image)
+{
+    O2ColorSpaceRef surfaceSpace = O2ImageGetColorSpace(self->_surface);
+    O2ColorSpaceRef imageSpace = O2ImageGetColorSpace(image);
+    CFStringRef surfaceName, imageName;
+    O2ColorProfile surfaceProfile, imageProfile;
+
+    if (imageSpace == NULL || surfaceSpace == NULL || O2ImageGetMask(image) != NULL)
+        return NULL;
+    if (!profileForImageSpace(surfaceSpace, &surfaceName, &surfaceProfile) ||
+        !profileForImageSpace(imageSpace, &imageName, &imageProfile) ||
+        CFEqual(surfaceName, imageName))
+        return NULL;
+
+    size_t width = O2ImageGetWidth(image), height = O2ImageGetHeight(image);
+    if (width == 0 || height == 0 || width > SIZE_MAX / 4 / height)
+        return NULL;
+
+    uint8_t *bytes = malloc(width * height * 4);
+    O2argb32f *span = malloc(width * sizeof(O2argb32f));
+    if (bytes == NULL || span == NULL) {
+        free(bytes);
+        free(span);
+        return NULL;
+    }
+
+    for (size_t y = 0; y < height; y++) {
+        O2argb32f *row = O2Image_read_argb32f(image, 0, (int) y, span, (int) width);
+        if (row == NULL)
+            row = span;
+        uint8_t *out = bytes + y * width * 4;
+
+        for (size_t x = 0; x < width; x++, out += 4) {
+            O2argb32f pixel = row[x];
+            double in[3] = {0, 0, 0}, result[3] = {0, 0, 0};
+
+            if (pixel.a > 0) {
+                in[0] = pixel.r / pixel.a;
+                in[1] = imageProfile.isGray ? 0 : pixel.g / pixel.a;
+                in[2] = imageProfile.isGray ? 0 : pixel.b / pixel.a;
+                O2ColorProfileConvert(&imageProfile, &surfaceProfile, in, result);
+            }
+            if (surfaceProfile.isGray)
+                result[1] = result[2] = result[0];
+            for (int i = 0; i < 3; i++)
+                out[i] = O2ByteFromFloat(RI_CLAMP(result[i], 0.0, 1.0) * pixel.a);
+            out[3] = O2ByteFromFloat(pixel.a);
+        }
+    }
+    free(span);
+
+    O2ColorSpaceRef resultSpace = surfaceProfile.isGray ? O2ColorSpaceCreateDeviceRGB()
+                                                        : O2ColorSpaceRetain(surfaceSpace);
+    O2DataProviderRef provider = O2DataProviderCreateWithData(bytes, bytes, width * height * 4, releaseConvertedBytes);
+    O2ImageRef converted = O2ImageCreate(width, height, 8, 32, width * 4, resultSpace, kO2ImageAlphaPremultipliedLast,
+                                         provider, NULL, O2ImageGetShouldInterpolate(image),
+                                         kO2RenderingIntentDefault);
+    O2DataProviderRelease(provider);
+    O2ColorSpaceRelease(resultSpace);
+    return converted;
+}
+
 - (void) drawImage: (O2Image *) image inRect: (O2Rect) rect {
+    O2ImageRef converted = createImageInSurfaceSpace(self, image);
+
+    if (converted != NULL) {
+        [self drawImageAsIs: converted inRect: rect];
+        O2ImageRelease(converted);
+        return;
+    }
+    [self drawImageAsIs: image inRect: rect];
+}
+
+- (void) drawImageAsIs: (O2Image *) image inRect: (O2Rect) rect {
     O2GState *gState = O2ContextCurrentGState(self);
     O2ImageRef softMask = O2ImageGetMask(image);
 

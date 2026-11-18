@@ -105,6 +105,40 @@ NSString *const _NSColorCoreUICatalogNamePrefix =
     return result;
 }
 
++ (NSColorSpace *) deviceGrayColorSpace {
+    CGColorSpaceRef space = CGColorSpaceCreateDeviceGray();
+    NSColorSpace *result =
+            [[[self alloc] initWithCGColorSpace: space] autorelease];
+    CGColorSpaceRelease(space);
+    return result;
+}
+
++ (NSColorSpace *) deviceCMYKColorSpace {
+    CGColorSpaceRef space = CGColorSpaceCreateDeviceCMYK();
+    NSColorSpace *result =
+            [[[self alloc] initWithCGColorSpace: space] autorelease];
+    CGColorSpaceRelease(space);
+    return result;
+}
+
++ (NSColorSpace *) _colorSpaceWithCGName: (CFStringRef) name {
+    CGColorSpaceRef space = CGColorSpaceCreateWithName(name);
+    if (space == NULL)
+        return nil;
+    NSColorSpace *result =
+            [[[self alloc] initWithCGColorSpace: space] autorelease];
+    CGColorSpaceRelease(space);
+    return result;
+}
+
++ (NSColorSpace *) genericCMYKColorSpace {
+    return [self _colorSpaceWithCGName: kCGColorSpaceGenericCMYK];
+}
+
++ (NSColorSpace *) adobeRGB1998ColorSpace {
+    return [self _colorSpaceWithCGName: kCGColorSpaceAdobeRGB1998];
+}
+
 - initWithCGColorSpace: (CGColorSpaceRef) cgColorSpace {
     _cgColorSpace = CGColorSpaceRetain(cgColorSpace);
     return self;
@@ -117,6 +151,64 @@ NSString *const _NSColorCoreUICatalogNamePrefix =
 
 - (CGColorSpaceRef) CGColorSpace {
     return _cgColorSpace;
+}
+
+- (NSColorSpaceModel) colorSpaceModel {
+    switch (CGColorSpaceGetModel(_cgColorSpace)) {
+    case kCGColorSpaceModelMonochrome:
+        return NSColorSpaceModelGray;
+    case kCGColorSpaceModelRGB:
+        return NSColorSpaceModelRGB;
+    case kCGColorSpaceModelCMYK:
+        return NSColorSpaceModelCMYK;
+    case kCGColorSpaceModelLab:
+        return NSColorSpaceModelLAB;
+    case kCGColorSpaceModelDeviceN:
+        return NSColorSpaceModelDeviceN;
+    case kCGColorSpaceModelIndexed:
+        return NSColorSpaceModelIndexed;
+    case kCGColorSpaceModelPattern:
+        return NSColorSpaceModelPatterned;
+    default:
+        return NSColorSpaceModelUnknown;
+    }
+}
+
+// An indexed space reports the components of its base space, as CGColorSpaceGetNumberOfComponents does.
+- (NSInteger) numberOfColorComponents {
+    return (NSInteger) CGColorSpaceGetNumberOfComponents(_cgColorSpace);
+}
+
+- (nullable instancetype) initWithICCProfileData: (NSData *) iccData {
+    CGColorSpaceRef space = iccData != nil ? CGColorSpaceCreateWithICCProfile((CFDataRef) iccData) : NULL;
+    if (space == NULL) {
+        [self release];
+        return nil;
+    }
+    self = [self initWithCGColorSpace: space];
+    CGColorSpaceRelease(space);
+    return self;
+}
+
+- (NSData *) ICCProfileData {
+    return [(NSData *) CGColorSpaceCopyICCData(_cgColorSpace) autorelease];
+}
+
+// Equality and hash are those of the CoreGraphics space, so the same space reached through NSColorSpace or through
+// a bitmap's CGImage compares equal.
+- (BOOL) isEqual: (id) other {
+    if (other == self)
+        return YES;
+    if (![other isKindOfClass: [NSColorSpace class]])
+        return NO;
+    CGColorSpaceRef otherSpace = [(NSColorSpace *) other CGColorSpace];
+    if (otherSpace == _cgColorSpace)
+        return YES;
+    return otherSpace != NULL && _cgColorSpace != NULL && CFEqual(_cgColorSpace, otherSpace);
+}
+
+- (NSUInteger) hash {
+    return _cgColorSpace != NULL ? (NSUInteger) CFHash(_cgColorSpace) : 0;
 }
 
 // The name macOS shows for the space (its profile description). Only the named spaces of this class
