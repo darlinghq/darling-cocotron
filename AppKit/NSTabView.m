@@ -56,9 +56,12 @@ id _NSTabViewFloatingCell = nil;
                 [keyed decodeBoolForKey: @"NSAllowTruncatedLabels"];
         _drawsBackground = [keyed decodeBoolForKey: @"NSDrawsBackground"];
         _controlSize = (flags & 0x18000000) >> 27;
-        if (_font == nil)
-            _font = [[NSFont boldSystemFontOfSize: 13 - _controlSize * 2]
-                    retain];
+        // QUIRK: the font is the archived one, with no default of its own: an archive without the
+        // font key gives a tab view whose font is nil, whatever the control size (macOS 10.14.4
+        // black-box observation of -font after decoding keyed archives with and without the key
+        // at the three control sizes; tier 2). The label drawing copes with a nil font.
+        // Test: appkit-tabview-archived-font.m
+        _font = [[keyed decodeObjectForKey: @"NSFont"] retain];
         _type = (flags & 0x7);
     } else {
         // Layout per class version as recorded from Mac archives: the tab view items, the
@@ -87,8 +90,6 @@ id _NSTabViewFloatingCell = nil;
         _type = (NSTabViewType) type;
         _allowsTruncatedLabels = allowsTruncatedLabels != 0;
         _drawsBackground = drawsBackground != 0;
-        if (_font == nil)
-            _font = [[NSFont boldSystemFontOfSize: 13] retain];
     }
 
     return self;
