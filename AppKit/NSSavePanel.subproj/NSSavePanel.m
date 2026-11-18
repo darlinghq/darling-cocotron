@@ -20,6 +20,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSDisplay.h>
+#import "DarlingPortalFileChooser.h"
 #import <AppKit/NSRaise.h>
 #import <AppKit/NSOutlineView.h>
 #import <AppKit/NSSavePanel.h>
@@ -425,6 +426,8 @@ static NSSavePanel *_newPanel = nil;
             handler(result);
         return;
     }
+    if (DarlingPortalBegin(self, nil, handler))
+        return;
 
     _modelessCompletionHandler = [handler copy];
     _runsModeless = YES;
@@ -484,6 +487,10 @@ static NSSavePanel *_newPanel = nil;
         return;
     }
 
+    // The portal's dialog is a window of its own, made a child of the window.
+    if (DarlingPortalBegin(self, window, handler))
+        return;
+
     _sheetCompletionHandler = [handler copy];
     _styleMaskBeforeSheet = [self styleMask];
     _runsAsSheet = YES;
@@ -528,6 +535,8 @@ static NSSavePanel *_newPanel = nil;
         res = [[NSDisplay currentDisplay] savePanel: self
                                runModalForDirectory: [self directory]
                                                file: [self filename]];
+    } else if (DarlingPortalRunModal(self, &res)) {
+        // The desktop's file chooser ran it.
     } else {
         [[_NSSavePanelNavigation navigationForPanel: self] panelWillShow];
         // Like macOS, show the panel centered rather than at the (screen-clamped) origin saved in its nib.
