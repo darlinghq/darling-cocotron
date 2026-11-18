@@ -771,6 +771,16 @@ static void crtcBoundingBox(Display *display, XRRScreenResources *resources, RRC
         [platformWindow updateInputMethodSpot];
 }
 
+// The file chooser portal names a parent window of an X11 client as "x11:"
+// and the window's id in hexadecimal.
+- (NSString *) portalParentHandleForWindow: (NSWindow *) window {
+    X11Window *platformWindow = (X11Window *) [window platformWindow];
+
+    if (![platformWindow isKindOfClass: [X11Window class]])
+        return nil;
+    return [NSString stringWithFormat: @"x11:%lx", (unsigned long) [platformWindow windowHandle]];
+}
+
 - (int) keyboardLayoutId {
     int major = XkbMajorVersion, minor = XkbMinorVersion;
     XkbStateRec state;

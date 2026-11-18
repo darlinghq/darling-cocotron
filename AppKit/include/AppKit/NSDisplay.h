@@ -116,6 +116,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (BOOL) implementsCustomPanelForClass: (Class) panelClass;
 
+// The parent window handle of the desktop file chooser portal for a window
+// ("x11:<id>" with the id in hex), or nil when the window system has none.
+- (NSString *) portalParentHandleForWindow: (NSWindow *) window;
+
 - (int) savePanel: (NSSavePanel *) savePanel
         runModalForDirectory: (NSString *) directory
                         file: (NSString *) file;

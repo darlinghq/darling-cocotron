@@ -189,6 +189,7 @@ set(AppKit_sources
 	NSImageHintSymbolScale.m
 	NSPasteboard.m
 	DarlingFileURIList.m
+	DarlingPortalFileChooser.m
 	NSSearchFieldCell.m
 	NSOutlineView.m
 	NSDocument.m

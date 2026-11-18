@@ -18,6 +18,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSDisplay.h>
+#import "DarlingPortalFileChooser.h"
 #import <AppKit/NSOpenPanel.h>
 #import <Foundation/NSURL.h>
 #import "_NSSavePanelNavigation.h"
@@ -177,6 +178,8 @@ static NSOpenPanel *_newPanel = nil;
                                runModalForDirectory: [self directory]
                                                file: [self filename]
                                               types: [self allowedFileTypes]];
+    } else if (DarlingPortalRunModal(self, &res)) {
+        // The desktop's file chooser ran it.
     } else {
         [[_NSSavePanelNavigation navigationForPanel: self] panelWillShow];
         // Like macOS, show the panel centered rather than at the (screen-clamped) origin saved in its nib.
