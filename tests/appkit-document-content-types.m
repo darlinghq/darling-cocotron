@@ -47,14 +47,14 @@ int main(void) {
                                         @"LSItemContentTypes": @[@"public.plain-text"]};
         NSDictionary *explicitExt = @{@"CFBundleTypeName": @"Explicit document",
                                       @"CFBundleTypeExtensions": @[@"xyz"],
-                                      @"LSItemContentTypes": @[@"public.plain-text"]};
+                                      @"LSItemContentTypes": @[@"public.data"]};
         [controller setTypes:@[byContentType, explicitExt]];
 
         // A type that lists no extensions gets them from its content types.
-        NSArray *ext = [controller fileExtensionsFromType:@"Plain document"];
+        NSArray *ext = [controller fileExtensionsFromType:@"public.plain-text"];
         CHECK([ext containsObject:@"txt"], "content-type-only type: extension from UTType");
         // Listed extensions win.
-        CHECK([[controller fileExtensionsFromType:@"Explicit document"] isEqual:@[@"xyz"]],
+        CHECK([[controller fileExtensionsFromType:@"public.data"] isEqual:@[@"xyz"]],
               "listed extensions are returned as they are");
         // A content type identifier may itself be the type name.
         CHECK([[controller fileExtensionsFromType:@"public.plain-text"] containsObject:@"txt"],

@@ -19,6 +19,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 // Original - David Young <daver@geeks.org>
 #import <AppKit/NSNibHelpConnector.h>
+#import <AppKit/NSCell.h>
+#import <AppKit/NSMatrix.h>
 #import <AppKit/NSView.h>
 
 @implementation NSNibHelpConnector
@@ -49,8 +51,18 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (void) establishConnection {
-    if ([[self file] isEqualToString: @"NSToolTipHelpKey"])
-        [_destination setToolTip: [self marker]];
+    if ([[self file] isEqualToString: @"NSToolTipHelpKey"]) {
+        // The destination of a control's tool tip is its cell, but tool tips belong to views and
+        // NSCell has no -setToolTip:. A cell in a matrix gets its own tip from the matrix.
+        if ([_destination isKindOfClass: [NSCell class]]) {
+            NSView *controlView = [_destination controlView];
+            if ([controlView isKindOfClass: [NSMatrix class]])
+                [(NSMatrix *) controlView setToolTip: [self marker] forCell: _destination];
+            else if ([controlView respondsToSelector: @selector(setToolTip:)])
+                [controlView setToolTip: [self marker]];
+        } else if ([_destination respondsToSelector: @selector(setToolTip:)])
+            [_destination setToolTip: [self marker]];
+    }
 }
 
 - initWithCoder: (NSCoder *) coder {

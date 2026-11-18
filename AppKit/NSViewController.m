@@ -29,12 +29,27 @@ NS_EXTRA_SYNTHESIZE_COPY(NSViewController, identifier, _identifier, NSUserInterf
         if (bundleIdentifier != nil)
             _nibBundle = [NSBundle bundleWithIdentifier: bundleIdentifier];
         NS_EXTRA(NSViewController, self)->_storyboard = [[NSStoryboard _instantiatingStoryboard] retain];
+
+        // The objects the view's nib asks its loader for; a storyboard scene archives them with the
+        // controller. The controller itself is usually one of them: it is stored as NSNull so that
+        // the table does not retain its owner.
+        NSDictionary *external = [coder decodeObjectForKey: @"NSExternalObjectsTableForViewLoading"];
+        if ([external isKindOfClass: [NSDictionary class]]) {
+            NSMutableDictionary *table = [NSMutableDictionary dictionaryWithCapacity: [external count]];
+
+            for (id key in external) {
+                id object = [external objectForKey: key];
+                [table setObject: object == self ? (id) [NSNull null] : object forKey: key];
+            }
+            NS_EXTRA(NSViewController, self)->_externalObjectsTableForViewLoading = [table retain];
+        }
     }
 
     return self;
 }
 
 - (void) dealloc {
+    [NS_EXTRA(NSViewController, self)->_externalObjectsTableForViewLoading release];
     [NS_EXTRA(NSViewController, self)->_identifier release];
     for (NSViewController *child in NS_EXTRA(NSViewController, self)->_childViewControllers)
         NS_EXTRA(NSViewController, child)->_parentViewController = nil;
@@ -195,8 +210,13 @@ NS_EXTRA_SYNTHESIZE_COPY(NSViewController, identifier, _identifier, NSUserInterf
                     format: @"-[%@ %@] nibName is nil and %@ has no nib named %@",
                             [self class], NSStringFromSelector(_cmd), bundle, name];
 
-    NSDictionary *nameTable = [NSDictionary dictionaryWithObject: self
-                                                          forKey: NSNibOwner];
+    NSMutableDictionary *nameTable = [NSMutableDictionary dictionaryWithObject: self forKey: NSNibOwner];
+    NSDictionary *external = NS_EXTRA(NSViewController, self)->_externalObjectsTableForViewLoading;
+
+    for (id key in external) {
+        id object = [external objectForKey: key];
+        [nameTable setObject: object == [NSNull null] ? self : object forKey: key];
+    }
 
     if (path == nil)
         NSLog(@"NSViewController unable to find nib named %@, bundle=%@", name,

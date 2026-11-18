@@ -31,6 +31,7 @@ typedef NS_OPTIONS(NSUInteger, NSViewControllerTransitionOptions) {
         NSMutableArray *_childViewControllers;
         NSViewController *_parentViewController;
         NSStoryboard *_storyboard;
+        NSDictionary *_externalObjectsTableForViewLoading;
         NSSize _preferredContentSize;
     NS_EXTRA_IVARS_END(NSViewController)
 }

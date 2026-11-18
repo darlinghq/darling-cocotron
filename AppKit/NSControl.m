@@ -334,6 +334,8 @@ static NSMutableDictionary *cellClassDictionary = nil;
     cell = [cell retain];
     [_cell release];
     _cell = cell;
+    // The cell belongs to this control from now on, also before the first drawing.
+    [_cell setControlView: self];
 }
 
 - (void) setTarget: target {
