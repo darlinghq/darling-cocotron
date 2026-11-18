@@ -3915,6 +3915,8 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
         return;
     NS_EXTRA(NSWindow, self)->_occlusionState = state;
     [self postNotificationName: NSWindowDidChangeOcclusionStateNotification];
+    // The application is visible while any of its windows is.
+    [NSApp _updateOcclusionState];
 }
 
 - (void) platformWindowOcclusionChanged: (CGWindow *) window {

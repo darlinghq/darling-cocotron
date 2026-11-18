@@ -69,6 +69,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (void) dirtyRect: (NSRect) rect;
 @end
 
+@interface NSApplication (NSApplication_private)
+// Posts NSApplicationDidChangeOcclusionStateNotification when -occlusionState changed.
+- (void) _updateOcclusionState;
+@end
+
 // Defined in NSView.m.
 extern NSRect _NSAlignRectToPixelGrid(NSRect rect,
                                     NSAlignmentOptions options);
