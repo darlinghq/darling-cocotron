@@ -21,6 +21,7 @@
 #import "../private-include/AppKit/NSTouchBackend.h"
 #import "WaylandDisplay.h"
 #import "../private-include/AppKit/CarbonKeys.h"
+#import "../private-include/AppKit/NSEventTime.h"
 #import "NSEvent_gesture.h"
 #import "NSEvent_mouse.h"
 #import "WaylandCursor.h"
@@ -1816,7 +1817,7 @@ static NSUInteger modifierDeviceMask(int code) {
         return;
     NSEvent *event = [NSEvent keyEventWithType: NSFlagsChanged
             location: [_keyboardWindow mouseLocationOutsideOfEventStream]
-            modifierFlags: [self currentModifierFlags] timestamp: 0.0
+            modifierFlags: [self currentModifierFlags] timestamp: NSEventCurrentTime()
             windowNumber: [delegate windowNumber] context: nil
             characters: @"" charactersIgnoringModifiers: @""
             isARepeat: NO keyCode: code];
@@ -2110,7 +2111,7 @@ static NSUInteger modifierDeviceMask(int code) {
                 keyEventWithType: pressed ? NSKeyDown : NSKeyUp
                         location: [window mouseLocationOutsideOfEventStream]
                    modifierFlags: [self currentModifierFlags]
-                       timestamp: 0.0
+                       timestamp: NSEventCurrentTime()
                     windowNumber: [delegate windowNumber]
                          context: nil
                       characters: characters ? characters : @""
@@ -2509,7 +2510,7 @@ static uint32_t WaylandKeyLayoutCodepoint(void *context, uint32_t keysym) {
     }
     _pressedButtons = 0;
     NSEvent *cancel = [NSEvent otherEventWithType: NSAppKitDefined location: NSZeroPoint
-                                   modifierFlags: 0 timestamp: 0 windowNumber: 0 context: nil
+                                   modifierFlags: 0 timestamp: NSEventCurrentTime() windowNumber: 0 context: nil
                                          subtype: NSApplicationDeactivated data1: 0 data2: 0];
     [self postEvent: cancel atStart: YES];
 }

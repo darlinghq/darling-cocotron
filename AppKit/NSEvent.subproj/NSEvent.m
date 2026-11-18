@@ -246,7 +246,7 @@ static BOOL _mouseCoalescingEnabled = YES;
                           isARepeat: (BOOL) isARepeat
                             keyCode: (unsigned short) keyCode
 {
-    return [[[NSEvent_keyboard alloc]
+    NSEvent *event = [[[NSEvent_keyboard alloc]
                            initWithType: type
                                location: location
                           modifierFlags: modifierFlags
@@ -256,6 +256,8 @@ static BOOL _mouseCoalescingEnabled = YES;
             charactersIgnoringModifiers: charactersIgnoringModifiers
                               isARepeat: isARepeat
                                 keyCode: keyCode] autorelease];
+    event->_timestamp = timestamp;
+    return event;
 }
 
 + (instancetype) otherEventWithType: (NSEventType) type
