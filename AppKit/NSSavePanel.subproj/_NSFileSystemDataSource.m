@@ -1,4 +1,5 @@
 #import "_NSFileSystemDataSource.h"
+#include <stdlib.h>
 #import <AppKit/NSOutlineView.h>
 #import <AppKit/NSTableColumn.h>
 
@@ -47,26 +48,46 @@
                                 includingPropertiesForKeys: nil
                                                    options: 0
                                                      error: nil];
-    NSMutableArray *shown = [NSMutableArray arrayWithCapacity: [urls count]];
-    for (NSURL *url in urls) {
-        if (!_showsHiddenFiles && [[url lastPathComponent] hasPrefix: @"."])
-            continue;
-        [shown addObject: url];
+    // A folder can have tens of thousands of entries, so the work per entry must not leave
+    // temporary strings behind (they would all stay alive until the run loop's pool drains):
+    // each name is made once, the sort compares those names, and the loops drain their own pools.
+    NSUInteger count = [urls count];
+    NSMutableArray *names = [NSMutableArray arrayWithCapacity: count];
+    NSUInteger *order = malloc(sizeof(NSUInteger) * (count + 1));
+    NSUInteger shown = 0;
+    for (NSUInteger i = 0; i < count; i++) {
+        @autoreleasepool {
+            NSString *name = [[urls objectAtIndex: i] lastPathComponent];
+            if (!_showsHiddenFiles && [name hasPrefix: @"."])
+                continue;
+            [names addObject: name];
+            order[shown++] = i;
+        }
     }
-    [shown sortUsingComparator: ^NSComparisonResult(NSURL *a, NSURL *b) {
-        return [[a lastPathComponent]
-                localizedStandardCompare: [b lastPathComponent]];
-    }];
+    // order holds URL indexes while names holds the shown names in the same sequence; sort by
+    // position in names, then translate to URL indexes
+    NSUInteger *position = malloc(sizeof(NSUInteger) * (shown + 1));
+    for (NSUInteger i = 0; i < shown; i++)
+        position[i] = i;
+    qsort_b(position, shown, sizeof(NSUInteger), ^int(const void *a, const void *b) {
+        return (int) [[names objectAtIndex: *(const NSUInteger *) a]
+                localizedStandardCompare: [names objectAtIndex: *(const NSUInteger *) b]];
+    });
 
-    for (NSURL *url in shown) {
-        BOOL isDirectory = NO;
-        [_fileManager fileExistsAtPath: [url path] isDirectory: &isDirectory];
-        [_entries addObject: url];
-        [_directoryFlags addObject: [NSNumber numberWithBool: isDirectory]];
-        [_enabledFlags addObject:
-                [NSNumber numberWithBool: _enabledBlock == nil ||
-                                                  _enabledBlock(url, isDirectory)]];
+    for (NSUInteger i = 0; i < shown; i++) {
+        @autoreleasepool {
+            NSURL *url = [urls objectAtIndex: order[position[i]]];
+            BOOL isDirectory = NO;
+            [_fileManager fileExistsAtPath: [url path] isDirectory: &isDirectory];
+            [_entries addObject: url];
+            [_directoryFlags addObject: [NSNumber numberWithBool: isDirectory]];
+            [_enabledFlags addObject:
+                    [NSNumber numberWithBool: _enabledBlock == nil ||
+                                                      _enabledBlock(url, isDirectory)]];
+        }
     }
+    free(position);
+    free(order);
 }
 
 - (NSArray *) entries {
