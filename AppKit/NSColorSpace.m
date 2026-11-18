@@ -179,11 +179,22 @@ NSString *const _NSColorCoreUICatalogNamePrefix =
     return (NSInteger) CGColorSpaceGetNumberOfComponents(_cgColorSpace);
 }
 
+- (nullable instancetype) initWithICCProfileData: (NSData *) iccData {
+    CGColorSpaceRef space = iccData != nil ? CGColorSpaceCreateWithICCProfile((CFDataRef) iccData) : NULL;
+    if (space == NULL) {
+        [self release];
+        return nil;
+    }
+    self = [self initWithCGColorSpace: space];
+    CGColorSpaceRelease(space);
+    return self;
+}
+
 - (NSData *) ICCProfileData {
     return [(NSData *) CGColorSpaceCopyICCData(_cgColorSpace) autorelease];
 }
 
-// Spaces are equal when their CoreGraphics spaces are, so the same space reached through NSColorSpace or through
+// Equality and hash are those of the CoreGraphics space, so the same space reached through NSColorSpace or through
 // a bitmap's CGImage compares equal.
 - (BOOL) isEqual: (id) other {
     if (other == self)

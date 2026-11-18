@@ -112,6 +112,13 @@ int main(void) {
         CHECK(![wrapped isEqual: [NSColorSpace displayP3ColorSpace]], "sRGB equals P3");
         CHECK(![wrapped isEqual: @"sRGB"], "space equals a string");
 
+        // ICC profile data
+        NSData *icc = [[NSColorSpace sRGBColorSpace] ICCProfileData];
+        CHECK([icc length] > 128, "sRGB ICCProfileData is empty");
+        NSColorSpace *fromICC = icc != nil ? [[[NSColorSpace alloc] initWithICCProfileData: icc] autorelease] : nil;
+        CHECK(fromICC != nil && [fromICC colorSpaceModel] == NSColorSpaceModelRGB, "initWithICCProfileData: nil");
+        CHECK([[NSColorSpace deviceRGBColorSpace] ICCProfileData] == nil, "device RGB has ICC data");
+
         // conversion
         NSBitmapImageRep *toP3 = [srgb bitmapImageRepByConvertingToColorSpace: [NSColorSpace displayP3ColorSpace]
                                                               renderingIntent: NSColorRenderingIntentDefault];

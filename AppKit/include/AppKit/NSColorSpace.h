@@ -52,6 +52,7 @@ typedef NS_ENUM(NSInteger, NSColorSpaceModel) {
 + (NSColorSpace *) deviceRGBColorSpace;
 
 - initWithCGColorSpace: (CGColorSpaceRef) cgColorSpace;
+- (nullable instancetype) initWithICCProfileData: (NSData *) iccData;
 
 - (CGColorSpaceRef) CGColorSpace;
 
