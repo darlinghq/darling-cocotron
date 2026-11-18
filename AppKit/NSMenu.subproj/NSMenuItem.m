@@ -43,8 +43,13 @@ NS_EXTRA_SYNTHESIZE_RETAIN(NSMenuItem, view, _view, NSView *, view, setView:)
 NS_EXTRA_SYNTHESIZE_RETAIN(NSMenuItem, badge, _badge, NSMenuItemBadge *, badge, setBadge:)
 
 + (NSMenuItem *) separatorItem {
-    return [[[self alloc] initWithTitle: nil action: NULL
-                          keyEquivalent: nil] autorelease];
+    NSMenuItem *item = [[self alloc] initWithTitle: @""
+                                            action: NULL
+                                     keyEquivalent: @""];
+    // A separator is the item without a title (see -isSeparatorItem).
+    [item->_title release];
+    item->_title = nil;
+    return [item autorelease];
 }
 
 + (NSMenuItem *) sectionHeaderWithTitle: (NSString *) title {

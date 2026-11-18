@@ -330,7 +330,9 @@ static NSString *const NSPopUpButtonBindingObservationContext =
 }
 
 - (void) insertNewline: (id) sender {
-    [self mouseDown: nil];
+    // Return opens the menu, the same as clicking the button.
+    if ([self isEnabled])
+        [self performClick: self];
 }
 
 @end

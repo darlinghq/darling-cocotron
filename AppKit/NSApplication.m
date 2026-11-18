@@ -404,7 +404,7 @@ static NSMutableArray *pendingOpenURLs = nil;
                                               showPrintPanels:)]) {
         [_delegate application: self
                     printFiles: paths
-                  withSettings: nil
+                  withSettings: @{}
                showPrintPanels: YES];
     } else if ([_delegate respondsToSelector: @selector(application:printFile:)]) {
         for (NSString *path in paths)
@@ -995,8 +995,8 @@ static NSMutableArray *pendingOpenURLs = nil;
 
     // Give us a first event
     [NSTimer scheduledTimerWithTimeInterval: 0.1
-                                     target: nil
-                                   selector: NULL
+                                     target: self
+                                   selector: @selector(_firstEventTimerFired:)
                                    userInfo: nil
                                     repeats: NO];
 
@@ -2025,10 +2025,21 @@ static BOOL isModalWindowOrItsSheet(NSWindow *window, NSWindow *modalWindow) {
 }
 
 - (void) orderFrontStandardAboutPanel: sender {
-    [self orderFrontStandardAboutPanelWithOptions: nil];
+    // No options: show the panel with its defaults.
+    [self _orderFrontStandardAboutPanelWithOptions: nil];
+}
+
+// Only exists to make the run loop deliver a first event after launch.
+- (void) _firstEventTimerFired: (NSTimer *) timer {
 }
 
 - (void) orderFrontStandardAboutPanelWithOptions: (NSDictionary *) options {
+    [self _orderFrontStandardAboutPanelWithOptions: options];
+}
+
+- (void) _orderFrontStandardAboutPanelWithOptions:
+        (nullable NSDictionary *) options
+{
     NSSystemInfoPanel *standardAboutPanel =
             [[NSSystemInfoPanel standardAboutPanel] retain];
     [standardAboutPanel showInfoPanel: self withOptions: options];
