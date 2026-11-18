@@ -8,6 +8,7 @@
 //  - pictures with an alpha channel keep 4 samples and hasAlpha.
 // macOS 10.14.4 (black-box observation) gives exactly these layouts; the colors are compared with
 // tolerance since encoders and color management change them a little.
+// The test needs no display: it runs with no window server available.
 #import <AppKit/AppKit.h>
 #import <objc/message.h>
 #include <stdio.h>
@@ -119,8 +120,8 @@ static void checkRedBlue(const char *name, NSBitmapImageRep *rep, int tolerance)
 
 int main(void) {
     @autoreleasepool {
-        [NSApplication sharedApplication];
-
+        // Decoding and drawing into a bitmap need no window server, so the test does not connect to
+        // one (an NSApplication would raise where neither X11 nor Wayland is reachable).
         NSBitmapImageRep *rgb = makeSource(3, NO, NSDeviceRGBColorSpace);
         NSBitmapImageRep *rgba = makeSource(4, YES, NSDeviceRGBColorSpace);
         
