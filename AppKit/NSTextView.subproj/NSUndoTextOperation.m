@@ -40,8 +40,9 @@
         _textStorage = [_textStorage retain];
 
         _attributesArray = [[NSMutableArray alloc] init];
-        int location = range.location;
-        do {
+        // A storage rejects an index past its end, so an empty range at the end has nothing to record.
+        NSUInteger location = range.location;
+        while (location < NSMaxRange(range) && location < [textStorage length]) {
             NSRange effectiveRange;
             NSDictionary *attrs =
                     [textStorage attributesAtIndex: location
@@ -53,7 +54,7 @@
             [_attributesArray addObject: attributes];
 
             location = NSMaxRange(effectiveRange);
-        } while (location < NSMaxRange(range));
+        }
     }
     return self;
 }
