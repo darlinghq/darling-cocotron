@@ -226,7 +226,9 @@ const NSTimeInterval kMouseMovementThreshold = .001f;
                     // Which item is the cursor on top of?
                     NSUInteger itemIndex =
                             [checkView itemIndexAtPoint: checkPoint rect: &lastRect];
-                    lastRectView = checkView;
+                    // A miss can leave lastRect unchanged. Only cache a view
+                    // when its hit test actually supplied an item's rectangle.
+                    lastRectView = itemIndex == NSNotFound ? nil : checkView;
 
                     MENUDEBUG(@"found an item index: %u", itemIndex);
 
