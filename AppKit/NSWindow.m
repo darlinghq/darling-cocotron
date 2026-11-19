@@ -3644,6 +3644,9 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
 }
 
 - (void) miniaturize: (id) sender {
+    if (![self isMiniaturized]) {
+        [self postNotificationName: NSWindowWillMiniaturizeNotification];
+    }
     [[self platformWindow] miniaturize];
 }
 

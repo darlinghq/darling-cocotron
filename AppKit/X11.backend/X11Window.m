@@ -793,7 +793,16 @@ static NSData *makeWindowIcon() {
     if (event->atom != XInternAtom(_display, "_NET_WM_STATE", False))
         return;
     _miniaturizedKnown = NO;
-    // The window manager may have hidden or restored the window (_NET_WM_STATE_HIDDEN).
+    // The window manager may have hidden or restored the window (_NET_WM_STATE_HIDDEN),
+    // whoever asked: tell the delegate when the state differs from the last one told.
+    BOOL miniaturized = [self isMiniaturized];
+    if (miniaturized != _miniaturizedReported) {
+        _miniaturizedReported = miniaturized;
+        SEL changed = miniaturized ? @selector(platformWindowMiniaturized:)
+                                   : @selector(platformWindowDeminiaturized:);
+        if ([_delegate respondsToSelector: changed])
+            [_delegate performSelector: changed withObject: self];
+    }
     if ([_delegate respondsToSelector: @selector(platformWindowOcclusionChanged:)])
         [_delegate platformWindowOcclusionChanged: self];
     if (_mapped) {
