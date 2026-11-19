@@ -19,8 +19,9 @@
 */
 
 // A CALayerHost subscribes to the remote CAContext named by its contextId
-// and draws the frames the context sends, at their size, from its own
-// origin. When the context goes away, it draws nothing again. See CAContext.m
+// and draws the frames the context sends, at their size, where the hosted
+// tree would be as a sublayer of the host. When the context goes away, it
+// draws nothing again. See CAContext.m
 // for the other end and CARemoteContextProtocol.h for the messages.
 
 #import <QuartzCore/CALayerHost.h>
@@ -51,6 +52,7 @@
     IOSurfaceRef _surfaces[2];
     mach_port_t _surfacePorts[2];
     IOSurfaceRef _frame;
+    CARemoteFrameGeometry _geometry;
 }
 - (instancetype) initWithHost: (CALayerHost *) host contextId: (CAContextID) contextId;
 - (void) cancel;
@@ -58,6 +60,8 @@
 - (BOOL) isConnected;
 // The last frame, or NULL.
 - (IOSurfaceRef) frame;
+// Where the last frame lies in the context's coordinate space.
+- (CARemoteFrameGeometry) geometry;
 @end
 
 @implementation CALayerHostConnection
@@ -179,8 +183,14 @@ static void handleHostMessages(void *context);
     return _frame;
 }
 
+- (CARemoteFrameGeometry) geometry {
+    return _geometry;
+}
+
 // Takes the send right in the message.
-- (void) receiveSurfacePort: (mach_port_t) port {
+- (void) receiveSurfacePort: (mach_port_t) port
+                   geometry: (CARemoteFrameGeometry) geometry
+{
     if (!MACH_PORT_VALID(port)) {
         _frame = NULL;
         return;
@@ -191,6 +201,7 @@ static void handleHostMessages(void *context);
         if (_surfacePorts[i] == port) {
             mach_port_deallocate(mach_task_self(), port);
             _frame = _surfaces[i];
+            _geometry = geometry;
             return;
         }
     }
@@ -214,6 +225,7 @@ static void handleHostMessages(void *context);
     _surfaces[slot] = surface;
     _surfacePorts[slot] = port;
     _frame = surface;
+    _geometry = geometry;
 }
 
 - (void) contextDidGoAway {
@@ -264,7 +276,8 @@ static void handleHostMessages(void *context) {
             mach_msg_destroy(header);
             continue;
         }
-        [self receiveSurfacePort: frame->surface.name];
+        [self receiveSurfacePort: frame->surface.name
+                        geometry: frame->geometry];
         changed = YES;
     }
 
@@ -311,8 +324,23 @@ static void handleHostMessages(void *context) {
     IOSurfaceRef frame = [NS_EXTRA(CALayerHost, self)->_connection frame];
     if (frame == NULL)
         return [super _contentsForRendering: rect];
-    // The hosted tree is drawn at its own size, from the host's origin.
-    *rect = CGRectMake(0, 0, IOSurfaceGetWidth(frame), IOSurfaceGetHeight(frame));
+    CARemoteFrameGeometry geometry = [NS_EXTRA(CALayerHost, self)->_connection geometry];
+    CGFloat width = IOSurfaceGetWidth(frame);
+    CGFloat height = IOSurfaceGetHeight(frame);
+    CGFloat y = geometry.originY;
+    // The hosted root layer is placed in this layer's coordinates as a
+    // sublayer would be, but the hosted tree keeps the orientation it has in
+    // its own context: the host's flipped state does not reach into it. In
+    // flipped coordinates, the root's frame is mirrored into place and the
+    // picture around it stays upright.
+    if ([self contentsAreFlipped])
+        y = (CGFloat) geometry.rootMinY + (CGFloat) geometry.rootMaxY -
+            (geometry.originY + height);
+    // Sublayers are positioned relative to the bounds origin; *rect is
+    // relative to the bounds' corner.
+    CGRect bounds = [self bounds];
+    *rect = CGRectMake(geometry.originX - bounds.origin.x, y - bounds.origin.y,
+                       width, height);
     return (id) frame;
 }
 
