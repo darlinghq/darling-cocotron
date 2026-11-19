@@ -78,12 +78,15 @@ NSString *const CAToneMapModeIfSupported = @"ifSupported";
     return NS_EXTRA(CALayer, self)->_superlayer;
 }
 
+// _sublayers is never nil, so the mutators can copy it; the public getter
+// reports a layer without sublayers as nil, as macOS does.
 - (NSArray *) sublayers {
-    return NS_EXTRA(CALayer, self)->_sublayers;
+    NSArray *sublayers = NS_EXTRA(CALayer, self)->_sublayers;
+    return [sublayers count] > 0 ? sublayers : nil;
 }
 
 - (void) setSublayers: (NSArray *) sublayers {
-    sublayers = [sublayers copy];
+    sublayers = sublayers != nil ? [sublayers copy] : [NSArray new];
 
     // A layer has a single superlayer, so the new sublayers leave the layers
     // they are in now.
