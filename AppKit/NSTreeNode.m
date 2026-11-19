@@ -19,7 +19,9 @@
 
 #import <AppKit/NSTreeNode.h>
 #import <Foundation/NSArray.h>
+#import <Foundation/NSException.h>
 #import <Foundation/NSIndexPath.h>
+#import <Foundation/NSKeyValueCoding.h>
 
 @implementation NSTreeNode
 
@@ -52,6 +54,52 @@
 
 - (NSArray *) childNodes {
     return _childNodes ? (NSArray *) _childNodes : [NSArray array];
+}
+
+- (NSMutableArray *) mutableChildNodes {
+    // Like on macOS, a key-value coding proxy over the indexed accessors below, so that
+    // observers of childNodes see the changes.
+    return [self mutableArrayValueForKey: @"childNodes"];
+}
+
+- (NSUInteger) countOfChildNodes {
+    return [_childNodes count];
+}
+
+- (id) objectInChildNodesAtIndex: (NSUInteger) index {
+    return [_childNodes objectAtIndex: index];
+}
+
+- (void) insertObject: (NSTreeNode *) node inChildNodesAtIndex: (NSUInteger) index {
+    if (![node isKindOfClass: [NSTreeNode class]])
+        [NSException raise: NSInvalidArgumentException
+                    format: @"-[NSTreeNode %@]: %@ is not a tree node", NSStringFromSelector(_cmd), node];
+    if (index > [_childNodes count])
+        [NSException raise: NSRangeException
+                    format: @"-[NSTreeNode %@]: index %lu beyond bounds [0 .. %lu]", NSStringFromSelector(_cmd),
+                            (unsigned long) index, (unsigned long) [_childNodes count]];
+
+    [node retain];
+    NSTreeNode *previous = node->_parentNode;
+    if (previous != nil && previous != self) {
+        NSUInteger previousIndex = [previous->_childNodes indexOfObjectIdenticalTo: node];
+        if (previousIndex != NSNotFound)
+            [[previous mutableChildNodes] removeObjectAtIndex: previousIndex];
+    }
+    if (_childNodes == nil)
+        _childNodes = [[NSMutableArray alloc] init];
+    [_childNodes insertObject: node atIndex: index];
+    node->_parentNode = self;
+    [node release];
+}
+
+- (void) removeObjectFromChildNodesAtIndex: (NSUInteger) index {
+    NSTreeNode *node = [[_childNodes objectAtIndex: index] retain];
+    [_childNodes removeObjectAtIndex: index];
+    // A node inserted twice keeps its parent while it is still one of the children.
+    if ([_childNodes indexOfObjectIdenticalTo: node] == NSNotFound)
+        node->_parentNode = nil;
+    [node release];
 }
 
 - (BOOL) isLeaf {
