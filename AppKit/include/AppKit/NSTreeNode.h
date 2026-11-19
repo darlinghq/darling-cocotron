@@ -35,6 +35,10 @@
 - (id) representedObject;
 - (NSTreeNode *) parentNode;
 - (NSArray *) childNodes;
+// A proxy for changing the children: a node inserted through it gets the receiver as its parent
+// and leaves its previous parent; a removed node has no parent.
+- (NSMutableArray *) mutableChildNodes;
+- (void) sortWithSortDescriptors: (NSArray *) sortDescriptors recursively: (BOOL) recursively;
 - (BOOL) isLeaf;
 - (NSIndexPath *) indexPath;
 - (NSTreeNode *) descendantNodeAtIndexPath: (NSIndexPath *) indexPath;
