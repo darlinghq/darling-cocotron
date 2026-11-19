@@ -18,7 +18,6 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 // Original - Christopher Lloyd <cjwl@objc.net>
-#import <AppKit/NSDisplay.h>
 #import <AppKit/NSFontFamily.h>
 #import <AppKit/NSFontTypeface.h>
 #import <AppKit/NSGraphicsContext.h>
@@ -30,6 +29,95 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 + (NSArray *) _familyAndStyleForFontName: (NSString *) name;
 - (NSFontTypeface *) _typefaceWithExactName: (NSString *) name;
 @end
+
+// The font system is asked through CoreText: listing fonts needs no window
+// server.
+
+// The family that the font system uses for a font or family name, or nil.
+static NSString *substituteFamilyName(NSString *name) {
+    CTFontRef font = CTFontCreateWithName((CFStringRef) name, 12, NULL);
+    NSString *family = nil;
+    if (font != NULL) {
+        family = [(NSString *) CTFontCopyFamilyName(font) autorelease];
+        CFRelease(font);
+    }
+    return family;
+}
+
+static NSArray *typefacesFromDescriptors(NSArray *descriptors) {
+    NSMutableArray *faces = [NSMutableArray array];
+    for (id descriptor in descriptors) {
+        NSString *name = [(NSString *) CTFontDescriptorCopyAttribute(
+                (CTFontDescriptorRef) descriptor, kCTFontNameAttribute) autorelease];
+        NSString *style = [(NSString *) CTFontDescriptorCopyAttribute(
+                (CTFontDescriptorRef) descriptor, kCTFontStyleNameAttribute) autorelease];
+        NSDictionary *traitsDictionary = [(NSDictionary *) CTFontDescriptorCopyAttribute(
+                (CTFontDescriptorRef) descriptor, kCTFontTraitsAttribute) autorelease];
+        NSNumber *weightNumber = [traitsDictionary objectForKey: (NSString *) kCTFontWeightTrait];
+        NSNumber *symbolicNumber = [traitsDictionary objectForKey: (NSString *) kCTFontSymbolicTrait];
+        uint32_t symbolic = [symbolicNumber unsignedIntValue];
+        if (name == nil)
+            continue;
+
+        NSFontTraitMask traits = 0;
+        if (symbolic & kCTFontTraitItalic)
+            traits |= NSItalicFontMask;
+        if (symbolic & kCTFontTraitBold)
+            traits |= NSBoldFontMask;
+        if (symbolic & kCTFontTraitCondensed)
+            traits |= NSNarrowFontMask;
+        if (symbolic & kCTFontTraitExpanded)
+            traits |= NSExpandedFontMask;
+
+        // Faces nearest to regular (or bold) weight and normal width come first, then
+        // regular, italic, bold, bold italic: -typefaceWithTraits: takes the first face
+        // with a trait mask.
+        BOOL bold = (symbolic & kCTFontTraitBold) != 0;
+        double weight = [weightNumber doubleValue];
+        long distance = (long) (fabs(weight - (bold ? 0.4 : 0.0)) * 1000) * 1000;
+        if (symbolic & (kCTFontTraitCondensed | kCTFontTraitExpanded))
+            distance += 13;
+        distance = distance * 4 + bold * 2 + ((symbolic & kCTFontTraitItalic) ? 1 : 0);
+
+        NSFontTypeface *face = [[NSFontTypeface alloc]
+                initWithName: name
+                   traitName: style != nil ? style : @"Regular"
+                      traits: traits];
+        [faces addObject: [NSDictionary dictionaryWithObjectsAndKeys:
+                face, @"face", [NSNumber numberWithLong: distance], @"distance", nil]];
+        [face release];
+    }
+    [faces sortUsingComparator: ^NSComparisonResult(NSDictionary *a, NSDictionary *b) {
+        return [[a objectForKey: @"distance"] compare: [b objectForKey: @"distance"]];
+    }];
+    NSMutableArray *result = [NSMutableArray array];
+    for (NSDictionary *entry in faces)
+        [result addObject: [entry objectForKey: @"face"]];
+    return result;
+}
+
+static NSArray *typefacesOfInstalledFamily(NSString *family) {
+    NSDictionary *attributes = [NSDictionary dictionaryWithObject: family
+            forKey: (NSString *) kCTFontFamilyNameAttribute];
+    CTFontDescriptorRef query =
+            CTFontDescriptorCreateWithAttributes((CFDictionaryRef) attributes);
+    NSArray *descriptors = [(NSArray *) CTFontDescriptorCreateMatchingFontDescriptors(
+            query, NULL) autorelease];
+    CFRelease(query);
+    return typefacesFromDescriptors(descriptors);
+}
+
+// The typefaces of a family. A name that is no installed family is answered
+// by the family the font system substitutes for it.
+static NSArray *typefacesForFamilyName(NSString *name) {
+    NSArray *faces = typefacesOfInstalledFamily(name);
+    if ([faces count] > 0)
+        return faces;
+    NSString *substitute = substituteFamilyName(name);
+    if (substitute == nil)
+        return @[];
+    return typefacesOfInstalledFamily(substitute);
+}
 
 @implementation NSFontFamily
 
@@ -84,7 +172,8 @@ static NSMutableDictionary *sharedByName = nil;
 }
 
 + (void) buildFontFamilies {
-    NSSet *initialFamilyNames = [[NSDisplay currentDisplay] allFontFamilyNames];
+    NSArray *initialFamilyNames =
+            [(NSArray *) CTFontManagerCopyAvailableFontFamilyNames() autorelease];
     for (NSString *familyName in initialFamilyNames) {
         [self addFontFamilyWithName: familyName]->_installed = YES;
     }
@@ -203,8 +292,7 @@ static NSMutableDictionary *sharedByName = nil;
     NSFontFamily *family = [self fontFamilyWithTypefaceName: name];
     if (family != nil)
         return family;
-    return [self installedFontFamilyWithName:
-                         [[NSDisplay currentDisplay] substituteFamilyName: name]];
+    return [self installedFontFamilyWithName: substituteFamilyName(name)];
 }
 
 + (NSFontTypeface *) fontTypefaceWithName: (NSString *) name {
@@ -234,8 +322,7 @@ static NSMutableDictionary *sharedByName = nil;
     if (!_typefacesLoaded) {
         @synchronized(self) {
             if (!_typefacesLoaded) {
-                NSArray *typefaces = [[NSDisplay currentDisplay]
-                        fontTypefacesForFamilyName: _name];
+                NSArray *typefaces = typefacesForFamilyName(_name);
                 if (typefaces != nil)
                     [_typefaces addObjectsFromArray: typefaces];
                 _typefacesLoaded = YES;

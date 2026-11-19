@@ -224,6 +224,14 @@ CFArrayRef CTFontDescriptorCreateMatchingFontDescriptors(CTFontDescriptorRef des
             [attributes setObject: value forKey: (NSString *) kCTFontStyleNameAttribute];
         if ((value = [face objectForKey: @"fullName"]) != nil)
             [attributes setObject: value forKey: (NSString *) kCTFontDisplayNameAttribute];
+        NSNumber *symbolic = [face objectForKey: @"symbolicTraits"];
+        NSNumber *weight = [face objectForKey: @"weight"];
+        if (symbolic != nil && weight != nil) {
+            NSDictionary *traits = [NSDictionary dictionaryWithObjectsAndKeys:
+                    symbolic, (NSString *) kCTFontSymbolicTrait,
+                    weight, (NSString *) kCTFontWeightTrait, nil];
+            [attributes setObject: traits forKey: (NSString *) kCTFontTraitsAttribute];
+        }
         if ((value = [face objectForKey: @"path"]) != nil)
             [attributes setObject: [NSURL fileURLWithPath: value]
                            forKey: (NSString *) kCTFontURLAttribute];

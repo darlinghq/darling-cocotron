@@ -57,7 +57,8 @@ O2FontRegistrationResult O2FontRegisterFontFile(NSString *path);
 /* Lists the installed faces whose properties equal all of the non-nil
  * arguments; no substitution takes place. Each element is a dictionary
  * with the NSString keys @"family", @"postScriptName", @"style",
- * @"fullName" and @"path" (any of them may be missing). The path is the
+ * @"fullName" and @"path" (any of them may be missing), and the NSNumber keys
+ * @"symbolicTraits" (CTFontSymbolicTraits bits) and @"weight" (the scale of kCTFontWeightTrait). The path is the
  * font file as guest code sees it, not fontconfig's host path. The caller
  * owns the returned array. */
 NSArray *O2FontCopyInstalledFaces(NSString *family, NSString *postScriptName,

@@ -207,6 +207,44 @@ O2FontRegistrationResult O2FontRegisterFontFile(NSString *path) {
     return O2FontRegistrationSucceeded;
 }
 
+// CTFontSymbolicTraits bits (CTFont.h) of a face, from its fontconfig slant, weight and width.
+static uint32_t symbolicTraitsOfFace(int slant, int weight, int width) {
+    uint32_t traits = 0;
+    if (slant == FC_SLANT_ITALIC || slant == FC_SLANT_OBLIQUE)
+        traits |= 1 << 0; // kCTFontTraitItalic
+    if (weight >= FC_WEIGHT_SEMIBOLD)
+        traits |= 1 << 1; // kCTFontTraitBold
+    if (width >= FC_WIDTH_SEMIEXPANDED)
+        traits |= 1 << 5; // kCTFontTraitExpanded
+    else if (width <= FC_WIDTH_SEMICONDENSED)
+        traits |= 1 << 6; // kCTFontTraitCondensed
+    return traits;
+}
+
+// The weight of a face on the scale of kCTFontWeightTrait (-1 to 1, 0 regular, 0.4 bold),
+// interpolated between the documented kCTFontWeight* values.
+static double normalizedWeightOfFace(int weight) {
+    static const struct { int fontconfig; double normalized; } points[] = {
+        { FC_WEIGHT_THIN, -0.8 },       { FC_WEIGHT_EXTRALIGHT, -0.6 },
+        { FC_WEIGHT_LIGHT, -0.4 },      { FC_WEIGHT_REGULAR, 0.0 },
+        { FC_WEIGHT_MEDIUM, 0.23 },     { FC_WEIGHT_SEMIBOLD, 0.3 },
+        { FC_WEIGHT_BOLD, 0.4 },        { FC_WEIGHT_EXTRABOLD, 0.56 },
+        { FC_WEIGHT_BLACK, 0.62 },
+    };
+    const int count = sizeof(points) / sizeof(points[0]);
+    if (weight <= points[0].fontconfig)
+        return points[0].normalized;
+    for (int i = 1; i < count; i++) {
+        if (weight <= points[i].fontconfig) {
+            double span = points[i].fontconfig - points[i - 1].fontconfig;
+            return points[i - 1].normalized +
+                   (points[i].normalized - points[i - 1].normalized) *
+                           (weight - points[i - 1].fontconfig) / span;
+        }
+    }
+    return points[count - 1].normalized;
+}
+
 NSArray *O2FontCopyInstalledFaces(NSString *family, NSString *postScriptName,
                                   NSString *style, NSString *fullName)
 {
@@ -216,6 +254,7 @@ NSArray *O2FontCopyInstalledFaces(NSString *family, NSString *postScriptName,
                          @"path" };
     NSString *values[] = { family, postScriptName, style, fullName };
     const int count = sizeof(properties) / sizeof(properties[0]);
+    const int filterCount = count - 1; // all but the file, which is not a query property
 
     NSMutableArray *result = [[NSMutableArray alloc] init];
     FcPattern *pattern = FcPatternCreate();
@@ -226,8 +265,11 @@ NSArray *O2FontCopyInstalledFaces(NSString *family, NSString *postScriptName,
         goto out;
     for (int i = 0; i < count; i++)
         FcObjectSetAdd(objects, properties[i]);
+    FcObjectSetAdd(objects, FC_SLANT);
+    FcObjectSetAdd(objects, FC_WEIGHT);
+    FcObjectSetAdd(objects, FC_WIDTH);
 
-    for (int i = 0; i < count - 1; i++) {
+    for (int i = 0; i < filterCount; i++) {
         if (values[i] != nil)
             FcPatternAddString(pattern, properties[i],
                                (const FcChar8 *) [values[i] UTF8String]);
@@ -247,6 +289,16 @@ NSArray *O2FontCopyInstalledFaces(NSString *family, NSString *postScriptName,
                             : [NSString stringWithUTF8String: (const char *) text];
             if (value != nil)
                 [face setObject: value forKey: keys[j]];
+        }
+        if (fonts != NULL) {
+            int slant = FC_SLANT_ROMAN, weight = FC_WEIGHT_REGULAR, width = FC_WIDTH_NORMAL;
+            FcPatternGetInteger(fonts->fonts[i], FC_SLANT, 0, &slant);
+            FcPatternGetInteger(fonts->fonts[i], FC_WEIGHT, 0, &weight);
+            FcPatternGetInteger(fonts->fonts[i], FC_WIDTH, 0, &width);
+            [face setObject: [NSNumber numberWithUnsignedInt: symbolicTraitsOfFace(slant, weight, width)]
+                     forKey: @"symbolicTraits"];
+            [face setObject: [NSNumber numberWithDouble: normalizedWeightOfFace(weight)]
+                     forKey: @"weight"];
         }
         [result addObject: face];
         [face release];
