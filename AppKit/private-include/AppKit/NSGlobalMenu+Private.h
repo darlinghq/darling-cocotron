@@ -31,12 +31,19 @@
 // menu itself takes it from here; the default does nothing.
 - (void) _mainMenuDidChange: (NSMenu *) menu;
 
+// Whether the backend can show the main menu outside the application's windows
+// (in the desktop's global menu or in a menu bar window of its own). When it
+// cannot, the windows draw the menu themselves. Asked once, before the first
+// window frame is computed. The default is YES.
+- (BOOL) _showsMainMenuOutsideWindows;
+
 @end
 
 @interface NSWindow (NSInWindowMenuBar)
 
 // YES if the main menu is drawn as a strip inside titled windows (the
-// DarlingInWindowMenuBar preference) rather than shown globally.
+// DarlingInWindowMenuBar preference, or a backend that has nowhere else to show
+// it) rather than shown globally.
 + (BOOL) _usesInWindowMenuBar;
 
 @end

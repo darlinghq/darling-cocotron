@@ -41,7 +41,9 @@ set(WAYLAND_PROTOCOL_FILES
 	"${WAYLAND_PROTOCOLS_DIR}/unstable/text-input/text-input-unstable-v3.xml"
 	# wlr-output-management is not part of wayland-protocols (it is a wlroots protocol), so the XML
 	# is kept in this tree; see protocols/README.md.
-	"${CMAKE_CURRENT_LIST_DIR}/protocols/wlr-output-management-unstable-v1.xml")
+	"${CMAKE_CURRENT_LIST_DIR}/protocols/wlr-output-management-unstable-v1.xml"
+	# KDE's appmenu protocol (plasma-wayland-protocols), kept in this tree for the same reason.
+	"${CMAKE_CURRENT_LIST_DIR}/protocols/appmenu.xml")
 
 set(WAYLAND_PROTOCOLS_USABLE TRUE)
 foreach (protocol ${WAYLAND_PROTOCOL_FILES})

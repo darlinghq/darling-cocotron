@@ -57,6 +57,8 @@ struct WaylandBuffer {
     struct wl_proxy *_surface;
     struct wl_proxy *_xdgSurface;
     struct wl_proxy *_toplevel;
+    // org_kde_kwin_appmenu of the toplevel, while the main menu is exported.
+    struct wl_proxy *_appMenu;
     struct wl_proxy *_popup;
     WaylandWindow *_popupParent;
     uint32_t _popupGrabSerial;
@@ -137,6 +139,9 @@ struct WaylandBuffer {
 - (uint32_t) popupGrabSerial;
 - (struct wl_proxy *) xdgSurface;
 - (void) unmap;
+// Tells the compositor where the application's main menu is (KDE's appmenu
+// protocol), or takes the address back when there is no menu or no toplevel.
+- (void) updateApplicationMenu;
 - (NSPoint) contentOffset;
 - (BOOL) isDecorationPoint: (CGPoint) point;
 - (BOOL) decorationButton: (uint32_t) button pressed: (BOOL) pressed

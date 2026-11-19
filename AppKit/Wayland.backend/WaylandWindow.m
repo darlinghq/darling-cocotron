@@ -296,6 +296,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 
         _decorationForcedClient = forceClient;
         [self updateDecorationMode];
+        [self updateApplicationMenu];
     }
 
     _pendingWidth = _pendingHeight = 0;
@@ -310,6 +311,28 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     _configured = NO;
     _needsPresent = _context != nil;
     [_display flush];
+}
+
+- (void) updateApplicationMenu {
+    NSString *service = [_display applicationMenuServiceName];
+    NSString *path = [_display applicationMenuObjectPath];
+
+    if (_toplevel == NULL || _display->_appMenuManager == NULL || service == nil || path == nil) {
+        if (_appMenu != NULL) {
+            sendRequest(_appMenu, WP_APPMENU_RELEASE, WL_MARSHAL_FLAG_DESTROY);
+            _appMenu = NULL;
+        }
+        return;
+    }
+
+    if (_appMenu == NULL) {
+        union wl_argument args[2] = {{.o = NULL}, {.o = (struct wl_object *) _surface}};
+        _appMenu = WaylandCreateObject(_display->_appMenuManager, WP_APPMENU_MANAGER_CREATE,
+                                       &org_kde_kwin_appmenu_interface, args, 0, nil);
+    }
+    // Both are ASCII: a unique bus name and an object path.
+    union wl_argument address[2] = {{.s = [service UTF8String]}, {.s = [path UTF8String]}};
+    WaylandMarshal(_appMenu, WP_APPMENU_SET_ADDRESS, NULL, 0, address);
 }
 
 - (struct wl_proxy *) newPopupPositioner {
@@ -408,6 +431,10 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
         [_popupParent release];
         _popupParent = nil;
         _popupGrabSerial = 0;
+    }
+    if (_appMenu != NULL) {
+        sendRequest(_appMenu, WP_APPMENU_RELEASE, WL_MARSHAL_FLAG_DESTROY);
+        _appMenu = NULL;
     }
     if (_toplevel != NULL)
         sendRequest(_toplevel, WP_TOPLEVEL_DESTROY, WL_MARSHAL_FLAG_DESTROY);

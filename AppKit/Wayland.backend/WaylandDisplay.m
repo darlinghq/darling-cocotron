@@ -35,6 +35,8 @@
 #import "WaylandPointerLock.h"
 #import "WaylandProtocol.h"
 #import "WaylandWindow.h"
+#import "WaylandAppMenu.h"
+#import "../private-include/AppKit/NSGlobalMenu+Private.h"
 #import "../DarlingWindowLevelPolicy.h"
 #import "../../CoreGraphics/DarlingUnicodeKeyLayout.h"
 #import "../../CoreGraphics/DarlingUnicodeKeyLayoutCompose.h"
@@ -425,13 +427,15 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         WL.wl_cursor_theme_destroy(_cursorTheme);
     [_outputManager release];
     _outputManager = nil;
+    [_appMenu release];
+    _appMenu = nil;
     if (_wlDisplay != NULL) {
         // wl_display_disconnect() doesn't free proxies.
         struct wl_proxy *proxies[] = {_imageCursorBuffer, _cursorFractionalScale, _cursorSurface,
                                       _lockedPointer, _relativePointer, _pointerConstraints, _relativePointerManager,
                                       _textInput, _textInputManager, _pinchGesture, _pointerGestures, _pointer, _keyboard,
                                       _seat, _decorationManager, _dataDeviceManager, _wmBase,
-                                      _shm, _viewporter, _fractionalScaleManager, _activationToken, _activation, _subcompositor, _logicalOutputManager,
+                                      _shm, _viewporter, _fractionalScaleManager, _activationToken, _activation, _appMenuManager, _subcompositor, _logicalOutputManager,
                                       _legacyLogicalOutputManager, _compositor, _registry};
         for (size_t i = 0; i < sizeof(proxies) / sizeof(proxies[0]); i++)
             if (proxies[i] != NULL)
@@ -570,6 +574,12 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         _activationName = name;
         _activation = [self bindGlobal: name interface: &xdg_activation_v1_interface
                                version: 1 kind: 0 object: nil];
+    } else if (strcmp(interface, "org_kde_kwin_appmenu_manager") == 0 && _appMenuManager == NULL) {
+        // Version 2 adds the manager's release request.
+        _appMenuManagerName = name;
+        _appMenuManagerVersion = MIN(version, 2);
+        _appMenuManager = [self bindGlobal: name interface: &org_kde_kwin_appmenu_manager_interface
+                                   version: _appMenuManagerVersion kind: 0 object: nil];
     } else if (strcmp(interface, "wl_subcompositor") == 0 && _subcompositor == NULL) {
         _subcompositor = [self bindGlobal: name interface: &wl_subcompositor_interface
                                   version: 1 kind: 0 object: nil];
@@ -742,6 +752,18 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         WaylandMarshal(_fractionalScaleManager, WP_FRACTIONAL_MANAGER_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
         _fractionalScaleManager = NULL; _fractionalScaleManagerName = 0;
         return; // Existing surface preferences survive factory removal.
+    }
+    if (_appMenuManager && name == _appMenuManagerName) {
+        struct wl_proxy *manager = _appMenuManager;
+        _appMenuManager = NULL; _appMenuManagerName = 0;
+        // The windows release their appmenu objects while the manager is gone.
+        for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
+            [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) updateApplicationMenu];
+        if (_appMenuManagerVersion >= 2)
+            WaylandMarshal(manager, WP_APPMENU_MANAGER_RELEASE, NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
+        else
+            WL.wl_proxy_destroy(manager);
+        return;
     }
     if (_activation && name == _activationName) {
         [self cancelActivationRequest];
@@ -2517,6 +2539,47 @@ static uint32_t WaylandKeyLayoutCodepoint(void *context, uint32_t keysym) {
 
 - (CGWindow *) newWindowWithDelegate: (NSWindow *) delegate {
     return [[WaylandWindow alloc] initWithDelegate: delegate];
+}
+
+#pragma mark - Main menu
+
+// The main menu goes to the desktop's global menu when the compositor takes the
+// address of a window's menu (KDE's appmenu protocol) and something on the
+// session bus shows application menus (the com.canonical.AppMenu.Registrar
+// name has an owner). Plasma's appmenu service owns that name only while a
+// global menu view, the Global Menu applet or the application menu button of
+// the window title bars, is in use. Otherwise nothing outside the application
+// would show the menu, and a client cannot put a bar of its own along the top
+// of the screen with xdg-shell, so the windows draw it themselves.
+- (BOOL) _showsMainMenuOutsideWindows {
+    if (_appMenuManager == NULL)
+        return NO;
+    if (_appMenu == nil)
+        _appMenu = [WaylandAppMenu new];
+    if ([_appMenu globalMenuPresent])
+        return YES;
+    [_appMenu release];
+    _appMenu = nil;
+    return NO;
+}
+
+- (void) _mainMenuDidChange: (NSMenu *) menu {
+    if ([NSWindow _usesInWindowMenuBar])
+        return;
+    if (_appMenu == nil)
+        _appMenu = [WaylandAppMenu new];
+    [_appMenu setMainMenu: menu];
+    for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
+        [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) updateApplicationMenu];
+    [self flush];
+}
+
+- (NSString *) applicationMenuServiceName {
+    return [_appMenu serviceName];
+}
+
+- (NSString *) applicationMenuObjectPath {
+    return [_appMenu objectPath];
 }
 
 - (void) windowCreated: (WaylandWindow *) window {

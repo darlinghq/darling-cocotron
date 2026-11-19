@@ -12,6 +12,9 @@
 //                                  SECONDS (default 120)
 //   appkit-global-menu LOG strip   print whether titled windows and panels
 //                                  carry the in-window menu strip, and exit
+//   appkit-global-menu LOG window [SECONDS]
+//                                  like panel, with a titled window instead,
+//                                  and log whether it carries the strip
 //   appkit-global-menu LOG hiding  with a titled window as the key window, go
 //                                  through the states in which the menu bar is
 //                                  hidden or shown, logging "STEP <state>" after
@@ -199,10 +202,21 @@ static BOOL hasMainMenu(NSWindow *window) {
     return ((BOOL(*)(id, SEL)) objc_msgSend)(window, sel);
 }
 
+static void showPanel(void) {
+    NSPanel *panel = [[NSPanel alloc] initWithContentRect: NSMakeRect(400, 400, 240, 60)
+                                                styleMask: NSWindowStyleMaskTitled | NSWindowStyleMaskUtilityWindow
+                                                  backing: NSBackingStoreBuffered
+                                                    defer: NO];
+    [panel setTitle: @"Panel"];
+    [panel setFloatingPanel: YES];
+    [panel setHidesOnDeactivate: NO];
+    [panel orderFront: nil];
+}
+
 int main(int argc, char **argv) {
     @autoreleasepool {
         if (argc < 3) {
-            fprintf(stderr, "usage: %s LOG panel|strip\n", argv[0]);
+            fprintf(stderr, "usage: %s LOG panel|strip|hiding|window\n", argv[0]);
             return 2;
         }
         logFile = fopen(argv[1], "a");
@@ -276,14 +290,20 @@ int main(int argc, char **argv) {
             [NSApp run];
             return 0;
         }
-        NSPanel *panel = [[NSPanel alloc] initWithContentRect: NSMakeRect(400, 400, 240, 60)
-                                                    styleMask: NSWindowStyleMaskTitled | NSWindowStyleMaskUtilityWindow
-                                                      backing: NSBackingStoreBuffered
-                                                        defer: NO];
-        [panel setTitle: @"Panel"];
-        [panel setFloatingPanel: YES];
-        [panel setHidesOnDeactivate: NO];
-        [panel orderFront: nil];
+        if (!strcmp(argv[2], "window")) {
+            NSWindow *window = [[NSWindow alloc] initWithContentRect: NSMakeRect(200, 200, 400, 240)
+                                                           styleMask: NSWindowStyleMaskTitled |
+                                                                      NSWindowStyleMaskResizable
+                                                             backing: NSBackingStoreBuffered
+                                                               defer: NO];
+            NSRect frame = [NSWindow frameRectForContentRect: NSMakeRect(0, 0, 300, 200)
+                                                   styleMask: NSWindowStyleMaskTitled];
+            [window setTitle: @"Menu test"];
+            [window makeKeyAndOrderFront: nil];
+            note("strip window=%d extraFrameHeight=%d", (int) hasMainMenu(window),
+                 (int) (frame.size.height - 200));
+        } else
+            showPanel();
 
         // A bounded run, in case the host script goes away.
         int lifetime = argc > 3 ? atoi(argv[3]) : 120;
