@@ -637,31 +637,34 @@ static void NSAquaDrawProgressTrack(NSRect bar) {
     }
 }
 
-// The knob is a capsule across the middle of the track: 8 points wide in the 15 point track of a scroller
-// (4 points in from the edge it is next to, 3 from the other), mid gray, and one point shorter at each end
-// than its rectangle.
-// QUIRK: not documented. Evidence: pixel measurement of legacy scrollers drawn by macOS 10.14.4 (tier 2),
-// probe mac-probes/ua5-scroller-draw.m. Test: tests/appkit-scroller-parts.m (test_quirk_scroller_drawing)
+// The scroller artwork is 15 points thick for the regular control size and 11 points for the small and mini
+// sizes (NSScroller places it against the far edge of a scroller of another thickness). The knob is a capsule
+// across it: 8 points wide, 4 points in from the edge it is next to and 3 from the other, in the regular
+// artwork; 6 points wide, 3 in and 2 from the other edge, in the small artwork. It is mid gray, also while
+// highlighted, and one point shorter at each end than its rectangle.
+// QUIRK: not documented. Evidence: pixel measurement of legacy scrollers of every control size drawn by
+// macOS 10.14.4 (tier 2), probes mac-probes/ua5-scroller-draw.m and mac-probes/aqua-scroller-divider(-mixed).m.
+// Test: tests/appkit-scroller-parts.m (test_quirk_scroller_drawing, test_quirk_scroller_control_sizes)
 - (void) drawScrollerKnobInRect: (NSRect) rect
                        vertical: (BOOL) vertical
                       highlight: (BOOL) highlight
 {
     CGFloat thickness = vertical ? rect.size.width : rect.size.height;
-    CGFloat inset = floor((thickness - 8) / 2) + (thickness >= 15 ? 1 : 0);
-    CGFloat across = MAX(thickness - 2 * inset + (thickness >= 15 ? 1 : 0), 2);
+    CGFloat across = thickness >= 15 ? 8 : 6;
+    CGFloat inset = floor((thickness - across) / 2) + 1;
     NSRect capsule = vertical ? NSMakeRect(NSMinX(rect) + inset, NSMinY(rect) + 1, across, rect.size.height - 2)
                               : NSMakeRect(NSMinX(rect) + 1, NSMinY(rect) + inset, rect.size.width - 2, across);
 
-    if (capsule.size.width < 1 || capsule.size.height < 1)
+    if (thickness < across + 2 || capsule.size.width < 1 || capsule.size.height < 1)
         return;
     CGFloat radius = MIN(capsule.size.width, capsule.size.height) / 2;
-    CGFloat gray = highlight ? 0.55 : 0.76;
 
-    [[NSColor colorWithCalibratedWhite: gray alpha: 1] setFill];
+    [[NSColor colorWithCalibratedWhite: 0.76 alpha: 1] setFill];
     [[NSBezierPath bezierPathWithRoundedRect: capsule xRadius: radius yRadius: radius] fill];
 }
 
-// The track is a very light gray with a darker line along each of its long edges.
+// The track is a very light gray with a darker line along each of its long edges; the line at the near edge
+// (left, or top) is darker and has a lighter line inside it.
 // QUIRK: same evidence as the knob. Test: tests/appkit-scroller-parts.m (test_quirk_scroller_drawing)
 - (void) drawScrollerTrackInRect: (NSRect) rect
                         vertical: (BOOL) vertical
@@ -669,18 +672,57 @@ static void NSAquaDrawProgressTrack(NSRect bar) {
 {
     [[NSColor colorWithCalibratedWhite: 0.98 alpha: 1] setFill];
     NSRectFill(rect);
-    [[NSColor colorWithCalibratedWhite: 0.91 alpha: 1] setFill];
     if (vertical) {
+        [[NSColor colorWithCalibratedWhite: 0.91 alpha: 1] setFill];
         NSRectFill(NSMakeRect(NSMinX(rect), NSMinY(rect), 1, rect.size.height));
+        [[NSColor colorWithCalibratedWhite: 0.973 alpha: 1] setFill];
+        NSRectFill(NSMakeRect(NSMinX(rect) + 1, NSMinY(rect), 1, rect.size.height));
+        [[NSColor colorWithCalibratedWhite: 0.93 alpha: 1] setFill];
         NSRectFill(NSMakeRect(NSMaxX(rect) - 1, NSMinY(rect), 1, rect.size.height));
     } else {
+        [[NSColor colorWithCalibratedWhite: 0.91 alpha: 1] setFill];
         NSRectFill(NSMakeRect(NSMinX(rect), NSMinY(rect), rect.size.width, 1));
+        [[NSColor colorWithCalibratedWhite: 0.973 alpha: 1] setFill];
+        NSRectFill(NSMakeRect(NSMinX(rect), NSMinY(rect) + 1, rect.size.width, 1));
+        [[NSColor colorWithCalibratedWhite: 0.93 alpha: 1] setFill];
         NSRectFill(NSMakeRect(NSMinX(rect), NSMaxY(rect) - 1, rect.size.width, 1));
     }
 }
 
+// The knob of an overlay scroller is a dark translucent capsule, 7 points wide in the 16 point regular
+// artwork and 5 points in the 14 point small artwork, ending 2 points before the far edge, and one point
+// shorter at each end than its rectangle. Over white it is a gray of 0.49.
+// QUIRK: not documented. Evidence: pixel measurement of overlay scroller knobs drawn by macOS 10.14.4 through
+// -drawKnob (tier 2), probe mac-probes/aqua-scroller-divider.m. Test: tests/appkit-scroller-parts.m
+// (test_quirk_overlay_scroller_drawing)
+- (void) drawOverlayScrollerKnobInRect: (NSRect) rect vertical: (BOOL) vertical {
+    CGFloat thickness = vertical ? rect.size.width : rect.size.height;
+    CGFloat across = thickness >= 16 ? 7 : 5;
+    NSRect capsule = vertical ? NSMakeRect(NSMaxX(rect) - 2 - across, NSMinY(rect) + 1, across, rect.size.height - 2)
+                              : NSMakeRect(NSMinX(rect) + 1, NSMaxY(rect) - 2 - across, rect.size.width - 2, across);
+
+    if (thickness < across + 2 || capsule.size.width < 1 || capsule.size.height < 1)
+        return;
+    CGFloat radius = MIN(capsule.size.width, capsule.size.height) / 2;
+
+    [[NSColor colorWithCalibratedWhite: 0 alpha: 0.51] setFill];
+    [[NSBezierPath bezierPathWithRoundedRect: capsule xRadius: radius yRadius: radius] fill];
+}
+
 - (void) drawScrollerTrackInRect: (NSRect) rect vertical: (BOOL) vertical {
     [self drawScrollerTrackInRect: rect vertical: vertical upOrLeft: NO];
+}
+
+// The corner between two legacy scrollers is the track color with the lines of the tracks' far edges along its
+// right and bottom edges.
+// QUIRK: same evidence as -drawScrollerTrackInRect:vertical:upOrLeft:. Test: tests/appkit-scroller-parts.m
+// (test_quirk_scroll_view_corner)
+- (void) drawScrollerCornerInRect: (NSRect) rect flipped: (BOOL) flipped {
+    [[NSColor colorWithCalibratedWhite: 0.98 alpha: 1] setFill];
+    NSRectFill(rect);
+    [[NSColor colorWithCalibratedWhite: 0.93 alpha: 1] setFill];
+    NSRectFill(NSMakeRect(NSMaxX(rect) - 1, NSMinY(rect), 1, rect.size.height));
+    NSRectFill(NSMakeRect(NSMinX(rect), flipped ? NSMaxY(rect) - 1 : NSMinY(rect), rect.size.width, 1));
 }
 
 @end
