@@ -237,6 +237,7 @@ NSString *const _NSToolbarItemIdentifierPboardType = @"NSToolbarItemIdentifierPb
     }
 
     CGFloat x = leftMargin;
+    CGFloat barHeight = setFrame ? resultHeight : NSHeight([self bounds]);
 
     for (NSUInteger i = 0; i < count; i++) {
         NSToolbarItem *item = items[i];
@@ -244,6 +245,8 @@ NSString *const _NSToolbarItemIdentifierPboardType = @"NSToolbarItemIdentifierPb
             [[item _enclosingView] removeFromSuperview];
         } else {
             frames[i].origin.x = x;
+            // Items lower than the toolbar are centred vertically in it, like their views.
+            frames[i].origin.y = floor((barHeight - frames[i].size.height) / 2);
             [item _setItemViewFrame: frames[i]];
             if ([item _enclosingView] != self) {
                 [self addSubview: [item _enclosingView]];
