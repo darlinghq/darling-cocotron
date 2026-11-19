@@ -318,17 +318,51 @@ int O2ColorConvertComponentsToDeviceRGB(O2ColorSpaceRef inputSpace,
 
 // Spaces with colorimetric profiles (the named sRGB, Display P3, generic and
 // gray spaces) convert through CIE XYZ. Any other conversion goes through device
-// RGB; spaces it cannot convert from or to give NULL.
+// RGB; spaces it cannot convert from or to give NULL, as do pattern colours
+// without a base space.
 O2ColorRef O2ColorCreateCopyByMatchingToColorSpace(O2ColorSpaceRef colorSpace,
                                                    O2ColorRef color)
 {
     if (colorSpace == NULL || color == NULL)
         return NULL;
-    if (O2ColorGetPattern(color) != NULL)
-        return NULL;
 
     O2ColorSpaceRef source = O2ColorGetColorSpace(color);
     O2ColorSpaceModel sourceModel = O2ColorSpaceGetModel(source);
+
+    // A pattern colour matches through the colour of its pattern space's base
+    // space (an uncoloured pattern); one without a base space has no colour to
+    // match.
+    if (sourceModel == kO2ColorSpaceModelPattern) {
+        O2ColorSpaceRef base = O2ColorSpaceGetBaseColorSpace(source);
+        if (base == NULL)
+            return NULL;
+        O2ColorRef baseColor = O2ColorCreate(base, O2ColorGetComponents(color));
+        O2ColorRef result =
+                O2ColorCreateCopyByMatchingToColorSpace(colorSpace, baseColor);
+        O2ColorRelease(baseColor);
+        return result;
+    }
+
+    // An indexed colour matches through the palette entry its index selects
+    // (clamped to the table).
+    if (sourceModel == kO2ColorSpaceModelIndexed) {
+        O2ColorSpace_indexed *indexed = (O2ColorSpace_indexed *) source;
+        O2ColorSpaceRef base = [indexed baseColorSpace];
+        size_t count = O2ColorSpaceGetNumberOfComponents(base);
+        O2Float index = O2ColorGetComponents(color)[0];
+        size_t entry = index <= 0 ? 0 : (size_t)(index + 0.5f);
+        if (entry > [indexed hival])
+            entry = [indexed hival];
+        O2Float baseComponents[count + 1];
+        for (size_t i = 0; i < count; i++)
+            baseComponents[i] = [indexed paletteBytes][entry * count + i] / 255.0f;
+        baseComponents[count] = O2ColorGetComponents(color)[1];
+        O2ColorRef baseColor = O2ColorCreate(base, baseComponents);
+        O2ColorRef result =
+                O2ColorCreateCopyByMatchingToColorSpace(colorSpace, baseColor);
+        O2ColorRelease(baseColor);
+        return result;
+    }
     O2ColorSpaceModel targetModel = O2ColorSpaceGetModel(colorSpace);
     const O2Float *components = O2ColorGetComponents(color);
 

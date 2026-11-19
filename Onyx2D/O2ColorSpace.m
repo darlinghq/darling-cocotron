@@ -203,6 +203,13 @@ O2ColorSpaceRef O2ColorSpaceCreateWithName(CFStringRef name) {
             return cs;
         }
     }
+
+    if (CFEqual(name, kO2ColorSpaceGenericCMYK)) {
+        O2ColorSpaceRef cs = [[O2ColorSpace alloc] initWithDeviceCMYK];
+        CFRetain(name);
+        cs->_name = name;
+        return cs;
+    }
     return NULL;
 }
 
@@ -350,6 +357,13 @@ size_t O2ColorSpaceGetNumberOfComponents(O2ColorSpaceRef self) {
 
     case kO2ColorSpaceModelDeviceN:
         return ((O2ColorSpace_DeviceN *) self)->_numberOfComponents;
+
+    case kO2ColorSpaceModelPattern:
+        // A pattern space has the components of its base space, which colour
+        // the pattern when it is an uncoloured one.
+        return self->_patternBase != nil
+                       ? O2ColorSpaceGetNumberOfComponents(self->_patternBase)
+                       : 0;
 
     default:
         return 0;
