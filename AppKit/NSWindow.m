@@ -379,7 +379,6 @@ static NSRect contentRectInFrame(NSWindow *window, NSRect frameRect) {
 
 NS_EXTRA_SYNTHESIZE_RETAIN(NSWindow, appearance, _appearance, NSAppearance *, appearance, setAppearance:)
 NS_EXTRA_SYNTHESIZE_COPY(NSWindow, identifier, _identifier, NSUserInterfaceItemIdentifier, identifier, setIdentifier:)
-NS_EXTRA_SYNTHESIZE_ASSIGN(NSWindow, accessibilityElement, _isAccessible, BOOL, isAccessibilityElement, setAccessibilityElement:)
 NS_EXTRA_SYNTHESIZE_ASSIGN(NSWindow, restorable, _restorable, BOOL, isRestorable, setRestorable:)
 
 static BOOL _allowsAutomaticWindowTabbing;
@@ -4791,11 +4790,6 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
     rect = _NSAlignRectToPixelGrid(rect, options);
     return NSMakeRect(rect.origin.x / scale, rect.origin.y / scale,
                       rect.size.width / scale, rect.size.height / scale);
-}
-
-// The window's frame in screen coordinates.
-- (NSRect) accessibilityFrame {
-    return [self frame];
 }
 
 // effectiveAppearance follows the window's own appearance, and the

@@ -19,18 +19,113 @@
 
 #import <AppKit/NSAccessibilityElement.h>
 #import <Foundation/Foundation.h>
+#import <AppKit/NSView.h>
+#import "NSAccessibilityStorage.h"
+
+// An element an application creates for a part of its interface that has no view of its
+// own. It reports what was set, and takes its window and, when it was given a frame in its
+// parent's space, its frame from its parent.
+static NSString *const frameInParentSpaceKey = @"_NSAccessibilityFrameInParentSpace";
 
 @implementation NSAccessibilityElement
 
-@synthesize accessibilityElement = _isAccessible;
+ACCESSIBILITY_COMMON_METHODS
 
-- (NSMethodSignature *) methodSignatureForSelector: (SEL) aSelector {
-    return [NSMethodSignature signatureWithObjCTypes: "v@:"];
++ (id) accessibilityElementWithRole: (NSString *) role
+                              frame: (NSRect) frame
+                              label: (NSString *) label
+                             parent: (id) parent
+{
+    NSAccessibilityElement *element = [[[self alloc] init] autorelease];
+
+    [element setAccessibilityRole: role];
+    [element setAccessibilityFrame: frame];
+    [element setAccessibilityLabel: label];
+    [element setAccessibilityParent: parent];
+    return element;
 }
 
-- (void) forwardInvocation: (NSInvocation *) anInvocation {
-    NSLog(@"Stub called: %@ in %@",
-          NSStringFromSelector([anInvocation selector]), [self class]);
+- (void) accessibilityAddChildElement: (NSAccessibilityElement *) childElement {
+    NSArray *children = [self accessibilityChildren];
+
+    [self setAccessibilityChildren: children ? [children arrayByAddingObject: childElement]
+                                             : [NSArray arrayWithObject: childElement]];
+    [childElement setAccessibilityParent: self];
+}
+
+- (BOOL) isAccessibilityElement {
+    return _NSAccessibilityStoredBool(self, _NSAccessibilityElementKey, YES);
+}
+
+- (void) setAccessibilityElement: (BOOL) value {
+    _NSAccessibilitySetStoredValue(self, _NSAccessibilityElementKey, [NSNumber numberWithBool: value]);
+}
+
+- (NSAccessibilityRole) accessibilityRole {
+    return _NSAccessibilityStoredObject(self, NSAccessibilityRoleAttribute, nil);
+}
+
+- (NSArray *) accessibilityChildren {
+    return _NSAccessibilityStoredObject(self, NSAccessibilityChildrenAttribute, nil);
+}
+
+- (id) accessibilityParent {
+    return _NSAccessibilityStoredObject(self, NSAccessibilityParentAttribute, nil);
+}
+
+- (id) accessibilityWindow {
+    return _NSAccessibilityStoredObject(self, NSAccessibilityWindowAttribute, [[self accessibilityParent] accessibilityWindow]);
+}
+
+- (id) accessibilityTopLevelUIElement {
+    return _NSAccessibilityStoredObject(self, NSAccessibilityTopLevelUIElementAttribute,
+                        [[self accessibilityParent] accessibilityTopLevelUIElement]);
+}
+
+- (NSRect) accessibilityFrameInParentSpace {
+    return _NSAccessibilityStoredRect(self, frameInParentSpaceKey, NSZeroRect);
+}
+
+// The last of the two frames set is the one that counts.
+- (void) setAccessibilityFrameInParentSpace: (NSRect) frame {
+    _NSAccessibilitySetStoredValue(self, frameInParentSpaceKey, [NSValue valueWithRect: frame]);
+    _NSAccessibilityRemoveStoredValue(self, _NSAccessibilityFrameKey);
+}
+
+- (void) setAccessibilityFrame: (NSRect) frame {
+    _NSAccessibilitySetStoredValue(self, _NSAccessibilityFrameKey, [NSValue valueWithRect: frame]);
+    _NSAccessibilityRemoveStoredValue(self, frameInParentSpaceKey);
+}
+
+- (NSRect) accessibilityFrame {
+    id value;
+    if (!_NSAccessibilityStoredValue(self, frameInParentSpaceKey, &value))
+        return _NSAccessibilityStoredRect(self, _NSAccessibilityFrameKey, NSZeroRect);
+
+    NSRect frame = [value rectValue];
+    id parent = [self accessibilityParent];
+
+    if ([parent isKindOfClass: [NSView class]])
+        return NSAccessibilityFrameInView(parent, frame);
+
+    NSPoint origin = [parent accessibilityFrame].origin;
+    return NSOffsetRect(frame, origin.x, origin.y);
+}
+
+- (NSString *) accessibilityLabel {
+    return _NSAccessibilityStoredObject(self, NSAccessibilityDescriptionAttribute, nil);
+}
+
+- (NSString *) accessibilityTitle {
+    return _NSAccessibilityStoredObject(self, NSAccessibilityTitleAttribute, nil);
+}
+
+- (id) accessibilityValue {
+    return _NSAccessibilityStoredObject(self, NSAccessibilityValueAttribute, nil);
+}
+
+- (BOOL) isAccessibilityEnabled {
+    return _NSAccessibilityStoredBool(self, NSAccessibilityEnabledAttribute, NO);
 }
 
 @end

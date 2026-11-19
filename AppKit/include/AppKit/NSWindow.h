@@ -249,7 +249,7 @@ typedef NS_ENUM(NSInteger, NSWindowUserTabbingPreference) {
 // Legacy ObjC ABI (i386): instance size must stay 0x84, Apple's; the ivars
 // before the extras sit at Apple's offsets. Add new state to the extra
 // struct, never as an ivar.
-@interface NSWindow : NSResponder <NSAnimatablePropertyContainer, NSUserInterfaceItemIdentification, NSAccessibility, NSAppearanceCustomization> {
+@interface NSWindow : NSResponder <NSAnimatablePropertyContainer, NSUserInterfaceItemIdentification, NSAppearanceCustomization> {
     NSRect _frame;
     NSView *_contentView;
     id<NSWindowDelegate> _delegate;
@@ -364,7 +364,6 @@ typedef NS_ENUM(NSInteger, NSWindowUserTabbingPreference) {
         NSUserInterfaceItemIdentifier _identifier;
         NSColorSpace *_colorSpace;
 
-        BOOL _isAccessible;
         BOOL _restorable;
         NSWindowTabbingMode _tabbingMode;
         NSWindowCollectionBehavior _collectionBehavior;
@@ -603,7 +602,6 @@ typedef NS_ENUM(NSInteger, NSWindowUserTabbingPreference) {
 - (NSRect) contentRectForFrameRect: (NSRect) rect;
 @property(readonly) NSRect contentLayoutRect;
 - (NSRect) backingAlignedRect: (NSRect) rect options: (NSAlignmentOptions) options;
-- (NSRect) accessibilityFrame;
 - (NSRect) constrainFrameRect: (NSRect) rect toScreen: (nullable NSScreen *) screen;
 
 @property(nullable, nonatomic, retain) NSWindow *parentWindow;
@@ -805,6 +803,9 @@ typedef NS_ENUM(NSInteger, NSWindowUserTabbingPreference) {
 
 - (null_unspecified CGSubWindow *) _createSubWindowWithFrame: (CGRect) frame;
 
+@end
+
+@interface NSWindow (NSAccessibility) <NSAccessibility, NSAccessibilityElement>
 @end
 
 @interface NSWindow (NSWindowTitlebarAccessories)

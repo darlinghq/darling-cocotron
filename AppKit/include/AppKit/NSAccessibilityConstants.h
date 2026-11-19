@@ -3,6 +3,8 @@
 #import <AppKit/NSAttributedString.h>
 
 typedef NSString *NSAccessibilityActionName;
+typedef NSString *NSAccessibilityAttributeName;
+typedef NSString *NSAccessibilitySubrole;
 
 APPKIT_EXPORT NSString *const NSAccessibilityChildrenAttribute;
 APPKIT_EXPORT NSString *const NSAccessibilityContentsAttribute;
@@ -27,6 +29,7 @@ APPKIT_EXPORT NSString *const NSAccessibilityValueAttribute;
 APPKIT_EXPORT NSString *const NSAccessibilityValueDescriptionAttribute;
 APPKIT_EXPORT NSString *const NSAccessibilityVisibleChildrenAttribute;
 APPKIT_EXPORT NSString *const NSAccessibilityWindowAttribute;
+APPKIT_EXPORT NSString *const NSAccessibilityIdentifierAttribute;
 
 APPKIT_EXPORT NSString *const NSAccessibilityInsertionPointLineNumberAttribute;
 APPKIT_EXPORT NSString *const NSAccessibilityNumberOfCharactersAttribute;

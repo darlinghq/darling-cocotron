@@ -413,6 +413,7 @@ set(AppKit_sources
 	NSStepper.m
 	NSDiffableDataSourceSnapshot.m
 	NSAccessibility.m
+	NSAccessibilityProtocols.m
 	NSAppearance.m
 	NSAccessibilityCustomAction.m
 	NSAccessibilityElement.m
