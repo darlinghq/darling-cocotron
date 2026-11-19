@@ -37,13 +37,17 @@ static void unsetViewportSource(struct wl_proxy *viewport) {
 // bogus frame is refused instead of reaching wl_egl_window_resize.
 static const int32_t WaylandMaxSubWindowDimension = 16384;
 
-static BOOL validFrame(CGRect frame) {
+static BOOL validFrameOrEmpty(CGRect frame) {
     return isfinite(frame.origin.x) && isfinite(frame.origin.y) &&
         fabs(frame.origin.x) <= INT32_MAX / 2 && fabs(frame.origin.y) <= INT32_MAX / 2 &&
         isfinite(frame.size.width) && isfinite(frame.size.height) &&
-        frame.size.width > 0 && frame.size.height > 0 &&
+        frame.size.width >= 0 && frame.size.height >= 0 &&
         frame.size.width <= WaylandMaxSubWindowDimension &&
         frame.size.height <= WaylandMaxSubWindowDimension;
+}
+
+static BOOL validFrame(CGRect frame) {
+    return validFrameOrEmpty(frame) && frame.size.width > 0 && frame.size.height > 0;
 }
 
 // The Wayland objects of one Metal layer's surface.
@@ -61,7 +65,9 @@ static BOOL validFrame(CGRect frame) {
 @implementation WaylandSubWindow
 - (id) initWithParentWindow: (WaylandWindow *) parent frame: (CGRect) frame {
     if (!(self = [super init])) return nil;
-    if (!validFrame(frame)) { [self release]; return nil; }
+    // A view often gets its layer before its size. An empty frame is accepted, as on the
+    // other backends, and shows nothing (updateGeometry clips it) until it gets a size.
+    if (!validFrameOrEmpty(frame)) { [self release]; return nil; }
     _parent = [parent retain]; _frame = frame; _visible = YES;
     WaylandDisplay *display = [parent waylandDisplay];
     union wl_argument args[2] = {{.o = NULL}};
@@ -170,7 +176,8 @@ static BOOL validFrame(CGRect frame) {
     // No parent commit either: position changes belong to the post-swap flush.
 }
 - (void) setFrame: (CGRect) frame {
-    if (!validFrame(frame)) return;
+    // An empty frame hides the content until the next nonempty one.
+    if (!validFrameOrEmpty(frame)) return;
     _frame = frame; [self updateGeometry];
 }
 - (void) hide {
