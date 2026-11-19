@@ -601,6 +601,7 @@ add_framework(AppKit
 		CoreServices
 		UniformTypeIdentifiers
 		HIToolbox
+		UIFoundation
 		dbus
 )
 

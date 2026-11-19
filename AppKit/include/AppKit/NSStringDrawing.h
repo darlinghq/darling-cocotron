@@ -28,6 +28,14 @@ typedef NS_OPTIONS(NSInteger, NSStringDrawingOptions) {
     NSStringDrawingTruncatesLastVisibleLine = 0x20,
 };
 
+@interface NSStringDrawingContext : NSObject
+@property CGFloat minimumScaleFactor;
+@property CGFloat minimumTrackingAdjustment;
+@property(readonly) CGFloat actualScaleFactor;
+@property(readonly) CGFloat actualTrackingAdjustment;
+@property(readonly) NSRect totalBounds;
+@end
+
 @interface NSString (NSStringDrawing)
 - (void) drawAtPoint: (NSPoint) point
         withAttributes: (NSDictionary *) attributes;
@@ -37,6 +45,17 @@ typedef NS_OPTIONS(NSInteger, NSStringDrawingOptions) {
 - (NSRect) boundingRectWithSize: (NSSize) size
                         options: (NSStringDrawingOptions) options
                      attributes: (NSDictionary *) attributes;
+- (NSRect) boundingRectWithSize: (NSSize) size
+                        options: (NSStringDrawingOptions) options
+                     attributes: (NSDictionary *) attributes
+                        context: (NSStringDrawingContext *) context;
+- (void) drawWithRect: (NSRect) rect
+              options: (NSStringDrawingOptions) options
+           attributes: (NSDictionary *) attributes;
+- (void) drawWithRect: (NSRect) rect
+              options: (NSStringDrawingOptions) options
+           attributes: (NSDictionary *) attributes
+              context: (NSStringDrawingContext *) context;
 
 @end
 
@@ -44,6 +63,14 @@ typedef NS_OPTIONS(NSInteger, NSStringDrawingOptions) {
 - (void) drawAtPoint: (NSPoint) point;
 - (void) drawInRect: (NSRect) rect;
 - (void) drawWithRect: (NSRect) rect options: (NSStringDrawingOptions) options;
+- (void) drawWithRect: (NSRect) rect
+              options: (NSStringDrawingOptions) options
+              context: (NSStringDrawingContext *) context;
+- (NSRect) boundingRectWithSize: (NSSize) size
+                        options: (NSStringDrawingOptions) options;
+- (NSRect) boundingRectWithSize: (NSSize) size
+                        options: (NSStringDrawingOptions) options
+                        context: (NSStringDrawingContext *) context;
 
 - (NSSize) size;
 
