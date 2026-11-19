@@ -22,6 +22,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSCursor.h>
 #import <AppKit/NSEvent.h>
 #import <AppKit/NSGraphics.h>
+#import <AppKit/NSGraphicsStyle.h>
 #import <AppKit/NSRaise.h>
 #import <AppKit/NSRulerView.h>
 #import <AppKit/NSScrollView.h>
@@ -1216,6 +1217,20 @@ static CGFloat clampMagnification(NSScrollView *self, CGFloat value) {
     if (NS_EXTRA(NSScrollView, self)->_drawsBackground) {
         [[self backgroundColor] setFill];
         NSRectFill(rect);
+    }
+
+    // The square between a vertical and a horizontal legacy scroller is drawn like their tracks.
+    // QUIRK: not documented. Evidence: pixel measurement of a scroll view with both legacy scrollers drawn by
+    // macOS 10.14.4 (tier 2), probe mac-probes/aqua-scroller-divider.m. Test: tests/appkit-scroller-parts.m
+    // (test_quirk_scroll_view_corner)
+    if ([self scrollerStyle] == NSScrollerStyleLegacy && [self hasVerticalScroller] &&
+        [self hasHorizontalScroller] && ![_verticalScroller isHidden] && ![_horizontalScroller isHidden])
+    {
+        NSRect vertical = [_verticalScroller frame], horizontal = [_horizontalScroller frame];
+        NSRect corner = NSMakeRect(NSMinX(vertical), NSMinY(horizontal), NSWidth(vertical), NSHeight(horizontal));
+
+        if (NSIntersectsRect(corner, rect))
+            [[self graphicsStyle] drawScrollerCornerInRect: corner flipped: [self isFlipped]];
     }
 
     switch (NS_EXTRA(NSScrollView, self)->_borderType) {

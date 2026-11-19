@@ -10,6 +10,17 @@
 //  - test_quirk_scroller_drawing: a 15 point wide scroller has a track of very light gray with a darker line
 //    along each long edge, and a mid gray knob 8 points wide in the middle (4 points in from the left edge);
 //    a scroller that is not enabled shows no knob.
+//  - test_quirk_scroller_widths: scrollerWidthForControlSize:scrollerStyle: is 15, 11 and 11 for legacy
+//    scrollers of the regular, small and mini control sizes, and 16, 14 and 14 for overlay scrollers.
+//  - test_quirk_scroller_control_sizes: a small (or mini) scroller has an 11 point artwork with a knob 6
+//    points wide, 3 points in from the left; the artwork lies against the right edge, so a regular knob in an
+//    11 point scroller starts at its left edge, and a small knob in a 15 point scroller starts 7 points in.
+//    The knob keeps its color while highlighted.
+//  - test_quirk_overlay_scroller_drawing: -drawKnob of an overlay scroller draws a dark capsule 7 points
+//    wide (5 for the small size) that ends 2 points before the right edge; over white it is a gray of 0.49.
+//  - test_quirk_scroll_view_corner: the square between the vertical and horizontal legacy scrollers of a scroll
+//    view is the track's very light gray, with a line of 0.93 along its right and bottom edges.
+// The drawing values are from mac-probes/aqua-scroller-divider.m and -mixed.m run on 10.14.4.
 //
 // Rows where the knob's position is a fraction of a point before rounding are left out: macOS 10.14.4 rounds
 // those up or down in a way the probe did not explain, and the knob is then one point off here.
@@ -93,11 +104,140 @@ static void test_quirk_scroller_drawing(void) {
     CHECK(fabs([pixel(rep, 7, 60) whiteComponent] - 0.98) < 0.03);   // no knob when not enabled
 }
 
+static void test_quirk_scroller_widths(void) {
+    CHECK([NSScroller scrollerWidthForControlSize:NSControlSizeRegular scrollerStyle:NSScrollerStyleLegacy] == 15);
+    CHECK([NSScroller scrollerWidthForControlSize:NSControlSizeSmall scrollerStyle:NSScrollerStyleLegacy] == 11);
+    CHECK([NSScroller scrollerWidthForControlSize:NSControlSizeMini scrollerStyle:NSScrollerStyleLegacy] == 11);
+    CHECK([NSScroller scrollerWidthForControlSize:NSControlSizeRegular scrollerStyle:NSScrollerStyleOverlay] == 16);
+    CHECK([NSScroller scrollerWidthForControlSize:NSControlSizeSmall scrollerStyle:NSScrollerStyleOverlay] == 14);
+    CHECK([NSScroller scrollerWidthForControlSize:NSControlSizeMini scrollerStyle:NSScrollerStyleOverlay] == 14);
+}
+
+static BOOL isKnob(NSBitmapImageRep *rep, NSInteger x, NSInteger y) {
+    NSColor *c = [rep colorAtX:x y:y];
+    return [c alphaComponent] > 0.9 && fabs([pixel(rep, x, y) whiteComponent] - 0.76) < 0.04;
+}
+
+// The columns of row y that the knob covers, as first and last column; -1 when there are none.
+static void knobColumns(NSBitmapImageRep *rep, NSInteger y, NSInteger *first, NSInteger *last) {
+    *first = *last = -1;
+    for (NSInteger x = 0; x < [rep pixelsWide]; x++)
+        if (isKnob(rep, x, y)) {
+            if (*first < 0)
+                *first = x;
+            *last = x;
+        }
+}
+
+static NSScroller *legacyScroller(CGFloat width, NSControlSize size) {
+    NSScroller *s = [[NSScroller alloc] initWithFrame:NSMakeRect(0, 0, width, 120)];
+    [s setScrollerStyle:NSScrollerStyleLegacy];
+    [s setControlSize:size];
+    [s setEnabled:YES];
+    [s setKnobProportion:0.3];
+    [s setDoubleValue:0.5];
+    return s;
+}
+
+static void test_quirk_scroller_control_sizes(void) {
+    NSInteger first, last;
+    NSBitmapImageRep *rep = render(legacyScroller(11, NSControlSizeSmall));
+
+    knobColumns(rep, 60, &first, &last);
+    CHECK(first == 3 && last == 8);
+    CHECK(fabs([pixel(rep, 0, 20) whiteComponent] - 0.91) < 0.04);   // the line along the left edge
+    CHECK(fabs([pixel(rep, 10, 20) whiteComponent] - 0.93) < 0.04);  // and along the right edge
+    CHECK(fabs([pixel(rep, 5, 20) whiteComponent] - 0.98) < 0.03);
+
+    rep = render(legacyScroller(11, NSControlSizeMini));
+    knobColumns(rep, 60, &first, &last);
+    CHECK(first == 3 && last == 8);
+
+    rep = render(legacyScroller(11, NSControlSizeRegular));
+    knobColumns(rep, 60, &first, &last);
+    CHECK(first == 0 && last == 7);
+
+    rep = render(legacyScroller(15, NSControlSizeSmall));
+    knobColumns(rep, 60, &first, &last);
+    CHECK(first == 7 && last == 12);
+
+    NSScroller *h = legacyScroller(15, NSControlSizeRegular);
+    [h highlight:YES];
+    rep = render(h);
+    knobColumns(rep, 60, &first, &last);
+    CHECK(first == 4 && last == 11);
+
+    // a horizontal small scroller: the knob is 3 points below the top edge and 6 points high
+    NSScroller *hs = [[NSScroller alloc] initWithFrame:NSMakeRect(0, 0, 120, 11)];
+    [hs setScrollerStyle:NSScrollerStyleLegacy];
+    [hs setControlSize:NSControlSizeSmall];
+    [hs setEnabled:YES];
+    [hs setKnobProportion:0.3];
+    [hs setDoubleValue:0.5];
+    rep = render(hs);
+    CHECK(!isKnob(rep, 60, 2) && isKnob(rep, 60, 3) && isKnob(rep, 60, 8) && !isKnob(rep, 60, 9));
+}
+
+static void test_quirk_overlay_scroller_drawing(void) {
+    for (int i = 0; i < 2; i++) {
+        NSControlSize size = i ? NSControlSizeSmall : NSControlSizeRegular;
+        CGFloat width = [NSScroller scrollerWidthForControlSize:size scrollerStyle:NSScrollerStyleOverlay];
+        NSScroller *s = [[NSScroller alloc] initWithFrame:NSMakeRect(0, 0, width, 120)];
+        [s setScrollerStyle:NSScrollerStyleOverlay];
+        [s setControlSize:size];
+        [s setEnabled:YES];
+        [s setKnobProportion:0.3];
+        [s setDoubleValue:0.5];
+
+        // draw the knob alone over white, through the public drawing method
+        NSBitmapImageRep *rep = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL pixelsWide:(NSInteger) width
+                pixelsHigh:120 bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES isPlanar:NO
+                colorSpaceName:NSCalibratedRGBColorSpace bytesPerRow:0 bitsPerPixel:0];
+        [NSGraphicsContext saveGraphicsState];
+        [NSGraphicsContext setCurrentContext:[NSGraphicsContext graphicsContextWithBitmapImageRep:rep]];
+        [[NSColor whiteColor] setFill];
+        NSRectFill(NSMakeRect(0, 0, width, 120));
+        [s drawKnob];
+        [NSGraphicsContext restoreGraphicsState];
+
+        NSInteger first = -1, last = -1;
+        for (NSInteger x = 0; x < (NSInteger) width; x++)
+            if (fabs([pixel(rep, x, 60) whiteComponent] - 0.49) < 0.05) {
+                if (first < 0)
+                    first = x;
+                last = x;
+            }
+        CHECK(last == (NSInteger) width - 3);
+        CHECK(last - first + 1 == (i ? 5 : 7));
+        CHECK(fabs([pixel(rep, 1, 60) whiteComponent] - 1) < 0.03);   // no track under the knob
+    }
+}
+
+static void test_quirk_scroll_view_corner(void) {
+    NSScrollView *view = [[NSScrollView alloc] initWithFrame:NSMakeRect(0, 0, 120, 100)];
+    [view setHasVerticalScroller:YES];
+    [view setHasHorizontalScroller:YES];
+    [view setScrollerStyle:NSScrollerStyleLegacy];
+    [view setBorderType:NSNoBorder];
+    [view setDocumentView:[[NSView alloc] initWithFrame:NSMakeRect(0, 0, 400, 400)]];
+    NSBitmapImageRep *rep = render(view);
+    [view tile];
+    rep = render(view);
+    // the corner is x 105..119, y 85..99 from the top left
+    CHECK(fabs([pixel(rep, 112, 92) whiteComponent] - 0.98) < 0.012);
+    CHECK(fabs([pixel(rep, 119, 92) whiteComponent] - 0.93) < 0.03);
+    CHECK(fabs([pixel(rep, 112, 99) whiteComponent] - 0.93) < 0.03);
+}
+
 int main(void) {
     @autoreleasepool {
         [NSApplication sharedApplication];
         test_quirk_scroller_part_geometry();
         test_quirk_scroller_drawing();
+        test_quirk_scroller_widths();
+        test_quirk_scroller_control_sizes();
+        test_quirk_overlay_scroller_drawing();
+        test_quirk_scroll_view_corner();
     }
     if (failures) return 1;
     printf("PASS\n");
