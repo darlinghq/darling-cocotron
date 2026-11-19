@@ -102,6 +102,11 @@
     NSRect _primaryRootFrame;
     BOOL _primaryRootFrameValid;
     CGFloat _backingScale;
+    // Root properties and the focused foreign window (_occlusionWatchWindow) are watched for changes
+    // that can cover or uncover a window of ours (see X11Occlusion.h); the windows are judged once
+    // per batch of events, when _occlusionDirty is set.
+    BOOL _occlusionDirty;
+    Window _occlusionWatchWindow;
 
 @public
     XIM _xim;

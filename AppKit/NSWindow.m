@@ -155,7 +155,7 @@ NSInteger NSBitsPerPixelFromDepth(NSWindowDepth depth) {
 @interface NSWindow ()
 
 - (NSRect) zoomedFrame;
-- (void) _postOcclusionChangeIfVisibleWas: (BOOL) wasVisible;
+- (void) _updateOcclusionState;
 
 @end
 
@@ -1947,8 +1947,12 @@ static BOOL _allowsAutomaticWindowTabbing;
     return NS_EXTRA(NSWindow, self)->_isVisible;
 }
 
+// Visible while the window is ordered in, not miniaturized, and the window system does not
+// report it as unseen (suspended or covered, see -[CGWindow isOccluded]).
 - (NSWindowOcclusionState) occlusionState {
-    return [self isVisible] ? NSWindowOcclusionStateVisible : 0;
+    if (![self isVisible] || [self isMiniaturized] || [_platformWindow isOccluded])
+        return 0;
+    return NSWindowOcclusionStateVisible;
 }
 
 - (BOOL) isKeyWindow {
@@ -2839,7 +2843,7 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
         break;
     }
 
-    [self _postOcclusionChangeIfVisibleWas: wasVisible];
+    [self _updateOcclusionState];
     [self postNotificationName: NSWindowDidMoveNotification];
 }
 
@@ -3521,7 +3525,7 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
     } else {
         [[self platformWindow] hideWindow];
     }
-    [self _postOcclusionChangeIfVisibleWas: !visible];
+    [self _updateOcclusionState];
 }
 
 - (void) orderFront: (id) sender {
@@ -3900,14 +3904,23 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
     BOOL wasVisible = NS_EXTRA(NSWindow, self)->_isVisible;
 
     NS_EXTRA(NSWindow, self)->_isVisible = visible;
-    [self _postOcclusionChangeIfVisibleWas: wasVisible];
+    [self _updateOcclusionState];
 }
 
-// The occlusion state follows visibility (see -occlusionState), so it
-// changes whenever the window is shown or hidden.
-- (void) _postOcclusionChangeIfVisibleWas: (BOOL) wasVisible {
-    if (wasVisible != NS_EXTRA(NSWindow, self)->_isVisible)
-        [self postNotificationName: NSWindowDidChangeOcclusionStateNotification];
+// Called wherever something -occlusionState depends on may have changed: posts the notification
+// when the state differs from the one last reported.
+- (void) _updateOcclusionState {
+    NSWindowOcclusionState state = [self occlusionState];
+    if (state == NS_EXTRA(NSWindow, self)->_occlusionState)
+        return;
+    NS_EXTRA(NSWindow, self)->_occlusionState = state;
+    [self postNotificationName: NSWindowDidChangeOcclusionStateNotification];
+    // The application is visible while any of its windows is.
+    [NSApp _updateOcclusionState];
+}
+
+- (void) platformWindowOcclusionChanged: (CGWindow *) window {
+    [self _updateOcclusionState];
 }
 
 // default NSDraggingDestination
@@ -3994,7 +4007,7 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
 
     BOOL sheetWasVisible = NS_EXTRA(NSWindow, sheet)->_isVisible;
     NS_EXTRA(NSWindow, sheet)->_isVisible = YES;
-    [sheet _postOcclusionChangeIfVisibleWas: sheetWasVisible];
+    [sheet _updateOcclusionState];
     [sheet display];
     [[sheet platformWindow] sheetOrderFrontFromFrame: sheetFrame
                                          aboveWindow: [self platformWindow]];
@@ -4020,7 +4033,7 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
     BOOL sheetWasVisible = NS_EXTRA(NSWindow, sheet)->_isVisible;
     NS_EXTRA(NSWindow, sheet)->_isVisible = NO;
     [[sheet platformWindow] sheetOrderOutToFrame: sheetFrame];
-    [sheet _postOcclusionChangeIfVisibleWas: sheetWasVisible];
+    [sheet _updateOcclusionState];
     [(NSThemeFrame *) [sheet _backgroundView] setWindowBorderType: NSNoBorder];
 
     [NS_EXTRA(NSWindow, self)->_sheetContext release];
@@ -4106,6 +4119,7 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
                                 relativeTo: [self windowNumber]];
     }
     [self postNotificationName: NSWindowDidDeminiaturizeNotification];
+    [self _updateOcclusionState];
     [NSApp updateWindows];
 }
 
@@ -4118,6 +4132,7 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
     }
 
     [self postNotificationName: NSWindowDidMiniaturizeNotification];
+    [self _updateOcclusionState];
 
     if ([self isKeyWindow]) {
         [self resignKeyWindow];

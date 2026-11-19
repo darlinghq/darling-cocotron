@@ -389,6 +389,8 @@ typedef NS_ENUM(NSInteger, NSWindowUserTabbingPreference) {
         id _appearanceSource;
         // Direction of the key view selection in progress; zero (direct) otherwise.
         NSSelectionDirection _keyViewSelectionDirection;
+        // The occlusion state last reported, so a change is notified once.
+        NSWindowOcclusionState _occlusionState;
     NS_EXTRA_IVARS_END(NSWindow)
 }
 

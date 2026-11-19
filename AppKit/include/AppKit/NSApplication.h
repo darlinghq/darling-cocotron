@@ -188,6 +188,8 @@ typedef NSString *NSAboutPanelOptionKey NS_TYPED_ENUM;
         BOOL _windowClosedSinceTerminateCheck;
         BOOL _automaticCustomizeTouchBarMenuItemEnabled;
         BOOL _defaultHelpBookSearchEnabled;
+        // The occlusion state last reported, so a change is notified once.
+        NSApplicationOcclusionState _occlusionState;
     NS_EXTRA_IVARS_END(NSApplication)
 }
 

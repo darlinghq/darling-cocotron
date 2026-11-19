@@ -97,6 +97,10 @@ typedef enum {
 - (void) miniaturize;
 - (void) deminiaturize;
 - (BOOL) isMiniaturized;
+// Whether the window system reports an ordered-in window as not being seen: held
+// back by the window manager or compositor, or covered by another client's
+// opaque fullscreen window. Always NO where the window system cannot tell.
+- (BOOL) isOccluded;
 
 - (void) disableFlushWindow;
 - (void) enableFlushWindow;
@@ -140,6 +144,10 @@ typedef enum {
 
 - (void) platformWindowWillMove: (CGWindow *) window;
 - (void) platformWindowDidMove: (CGWindow *) window;
+
+// The window system's report of what is seen of the window changed (see -isOccluded),
+// or it was miniaturized or deminiaturized by the window manager.
+- (void) platformWindowOcclusionChanged: (CGWindow *) window;
 
 - (void) platformWindowDeminiaturized: (CGWindow *) window;
 - (void) platformWindowMiniaturized: (CGWindow *) window;

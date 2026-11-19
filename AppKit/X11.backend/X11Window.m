@@ -793,6 +793,9 @@ static NSData *makeWindowIcon() {
     if (event->atom != XInternAtom(_display, "_NET_WM_STATE", False))
         return;
     _miniaturizedKnown = NO;
+    // The window manager may have hidden or restored the window (_NET_WM_STATE_HIDDEN).
+    if ([_delegate respondsToSelector: @selector(platformWindowOcclusionChanged:)])
+        [_delegate platformWindowOcclusionChanged: self];
     if (_mapped) {
         _fullscreenRequested = X11FullscreenIsSet(_display, _window);
         [self updateLayerPresentationHints];
@@ -1467,6 +1470,7 @@ static const int X11ChromelessCornerRadius = 5;
 - (void) hideWindow {
     XUnmapWindow(_display, _window);
     _mapped = NO;
+    _occluded = NO;
     _miniaturizedKnown = NO;
     if (_menuWindow)
         [(X11Display *) [NSDisplay currentDisplay] menuWindowUnmapped: self];
@@ -1673,8 +1677,10 @@ BOOL X11WindowManagerIsRunning(Display *display) {
     XIconifyWindow(_display, _window, DefaultScreen(_display));
 }
 
+// ICCCM: a client asks to leave the iconic state by mapping its window again (raising an iconified
+// window does not restore it).
 - (void) deminiaturize {
-    XRaiseWindow(_display, _window);
+    XMapRaised(_display, _window);
 }
 
 // NSWindow asks this of every window on each pass of the event loop, and
@@ -1686,6 +1692,14 @@ BOOL X11WindowManagerIsRunning(Display *display) {
         _miniaturizedKnown = YES;
     }
     return _miniaturized;
+}
+
+- (BOOL) isOccluded {
+    return _occluded;
+}
+
+- (void) setOccluded: (BOOL) occluded {
+    _occluded = occluded;
 }
 
 - (BOOL) readMiniaturized {

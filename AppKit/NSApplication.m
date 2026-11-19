@@ -636,17 +636,30 @@ static NSMutableArray *pendingOpenURLs = nil;
 }
 
 // Visible when any of the application's windows is visible, which the documentation allows
-// (visible means at least part of some window can be seen). The application's windows are not
-// tracked for being covered by other windows, so a covered window still counts as visible. A hidden
+// (visible means at least part of some window can be seen): a window counts when its own
+// occlusionState says so, so one the window system reports as unseen does not. A hidden
 // application has no visible window.
 - (NSApplicationOcclusionState) occlusionState {
     if (NS_EXTRA(NSApplication, self)->_isHidden)
         return 0;
     for (NSWindow *window in [[_windows copy] autorelease]) {
-        if ([window isVisible])
+        if ([window occlusionState] & NSWindowOcclusionStateVisible)
             return NSApplicationOcclusionStateVisible;
     }
     return 0;
+}
+
+// Called wherever something -occlusionState depends on may have changed (a window's occlusion
+// state, hiding, unhiding, the window list): posts the notification when the state differs from
+// the one last reported.
+- (void) _updateOcclusionState {
+    NSApplicationOcclusionState state = [self occlusionState];
+    if (state == NS_EXTRA(NSApplication, self)->_occlusionState)
+        return;
+    NS_EXTRA(NSApplication, self)->_occlusionState = state;
+    [[NSNotificationCenter defaultCenter]
+            postNotificationName: NSApplicationDidChangeOcclusionStateNotification
+                          object: self];
 }
 
 - (BOOL) isRunning {
@@ -1193,6 +1206,7 @@ static NSMutableArray *pendingOpenURLs = nil;
             }
 
             [_windows removeObjectAtIndex: count];
+            [self _updateOcclusionState];
         }
     }
 }
@@ -1889,6 +1903,7 @@ static BOOL isModalWindowOrItsSheet(NSWindow *window, NSWindow *modalWindow) {
                           object: self];
     NS_EXTRA(NSApplication, self)->_isHidden = YES;
     _CGSSetProcessHidden(true);
+    [self _updateOcclusionState];
 }
 
 - (void) hideOtherApplications: sender {
@@ -1909,6 +1924,7 @@ static BOOL isModalWindowOrItsSheet(NSWindow *window, NSWindow *modalWindow) {
     }
     NS_EXTRA(NSApplication, self)->_isHidden = NO;
     _CGSSetProcessHidden(false);
+    [self _updateOcclusionState];
     //[self activateIgnoringOtherApps:NO]
 }
 
@@ -1930,6 +1946,7 @@ static BOOL isModalWindowOrItsSheet(NSWindow *window, NSWindow *modalWindow) {
     }
     NS_EXTRA(NSApplication, self)->_isHidden = NO;
     _CGSSetProcessHidden(false);
+    [self _updateOcclusionState];
 }
 
 - (void) stop: sender {
