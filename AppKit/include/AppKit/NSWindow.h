@@ -362,6 +362,7 @@ typedef NS_ENUM(NSInteger, NSWindowUserTabbingPreference) {
 
         NSAppearance *_appearance;
         NSUserInterfaceItemIdentifier _identifier;
+        NSColorSpace *_colorSpace;
 
         BOOL _isAccessible;
         BOOL _restorable;

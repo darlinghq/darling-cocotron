@@ -712,6 +712,7 @@ static BOOL _allowsAutomaticWindowTabbing;
     [NS_EXTRA(NSWindow, self)->_threadToContext release];
     [NS_EXTRA(NSWindow, self)->_undoManager release];
     [NS_EXTRA(NSWindow, self)->_identifier release];
+    [NS_EXTRA(NSWindow, self)->_colorSpace release];
     [NS_EXTRA(NSWindow, self)->_titlebarAccessoryViewControllers release];
     NS_EXTRA_FREE(NSWindow, self);
     [super dealloc];
@@ -1903,13 +1904,18 @@ static BOOL _allowsAutomaticWindowTabbing;
     return 0;
 }
 
+// The color space the window's content is in. Without one set (or after setting
+// nil) it is that of the window's screen. The setting is only stored: no color
+// management is applied to the content.
 - (NSColorSpace *) colorSpace {
-    NSUnimplementedMethod();
-    return nil;
+    NSColorSpace *colorSpace = NS_EXTRA(NSWindow, self)->_colorSpace;
+    return colorSpace != nil ? colorSpace : [[self screen] colorSpace];
 }
 
 - (void) setColorSpace: (NSColorSpace *) newColorSpace {
-    NSUnimplementedMethod();
+    NSColorSpace *old = NS_EXTRA(NSWindow, self)->_colorSpace;
+    NS_EXTRA(NSWindow, self)->_colorSpace = [newColorSpace retain];
+    [old release];
 }
 
 // There is a single space, so every window is on the active one.
