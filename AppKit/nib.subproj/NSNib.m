@@ -26,6 +26,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSNibLoading.h>
 #import <AppKit/NSRaise.h>
 #import <AppKit/NSTableCornerView.h>
+#import <AppKit/NSToolbar.h>
 #import <Foundation/NSKeyedArchiver.h>
 #import <Foundation/NSProcessInfo.h>
 #import <Foundation/NSURL.h>
@@ -35,6 +36,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 NSString *const NSNibOwner = @"NSOwner";
 NSString *const NSNibTopLevelObjects = @"NSNibTopLevelObjects";
+
+@interface NSToolbar (NSNibConnections)
+- (void) _nibDidConnectObjects;
+@end
 
 @implementation NSNib
 
@@ -304,6 +309,12 @@ NSString *const NSNibTopLevelObjects = @"NSNibTopLevelObjects";
         }
 
         [objectData buildConnectionsWithNameTable: _nameTable];
+
+        // A toolbar asks its delegate for its default items once the delegate's own outlets are
+        // connected, before anything is awakened.
+        for (id object in _allObjects)
+            if ([object isKindOfClass: [NSToolbar class]])
+                [(NSToolbar *) object _nibDidConnectObjects];
 
         if (unkeyedObjects != nil) {
             id owner = [objectData rootObject];

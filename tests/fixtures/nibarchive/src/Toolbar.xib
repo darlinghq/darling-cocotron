@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<document type="com.apple.InterfaceBuilder3.Cocoa.XIB" version="3.0" toolsVersion="23727" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES">
+    <dependencies>
+        <deployment version="101300" identifier="macosx"/>
+        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="23727"/>
+    </dependencies>
+    <objects>
+        <customObject id="-2" userLabel="File's Owner" customClass="ToolbarOwner">
+            <connections>
+                <outlet property="window" destination="w1" id="o1"/>
+            </connections>
+        </customObject>
+        <customObject id="-1" userLabel="First Responder" customClass="FirstResponder"/>
+        <customObject id="-3" userLabel="Application" customClass="NSObject"/>
+        <window title="Toolbar" allowsToolTipsWhenApplicationIsInactive="NO" autorecalculatesKeyViewLoop="NO" releasedWhenClosed="NO" visibleAtLaunch="NO" animationBehavior="default" id="w1">
+            <windowStyleMask key="styleMask" titled="YES" closable="YES"/>
+            <rect key="contentRect" x="100" y="100" width="480" height="270"/>
+            <rect key="screenRect" x="0.0" y="0.0" width="1920" height="1055"/>
+            <view key="contentView" id="cv1">
+                <rect key="frame" x="0.0" y="0.0" width="480" height="270"/>
+                <autoresizingMask key="autoresizingMask"/>
+            </view>
+            <toolbar key="toolbar" customClass="LoggingToolbar" implicitIdentifier="7E1C2A40-5B7D-4C1E-9F00-2B9C3D4E5F60" autosavesConfiguration="NO" displayMode="iconOnly" sizeMode="regular" id="tb1">
+                <allowedToolbarItems>
+                    <toolbarItem implicitItemIdentifier="ItemA" label="A" paletteLabel="A" image="NSAddTemplate" id="iA"/>
+                    <toolbarItem implicitItemIdentifier="ItemB" label="B" paletteLabel="B" image="NSRemoveTemplate" id="iB"/>
+                </allowedToolbarItems>
+                <defaultToolbarItems>
+                    <toolbarItem reference="iA"/>
+                </defaultToolbarItems>
+                <connections>
+                    <outlet property="delegate" destination="d1" id="c1"/>
+                </connections>
+            </toolbar>
+            <point key="canvasLocation" x="0" y="0"/>
+        </window>
+        <customObject id="d1" customClass="ToolbarDelegate"/>
+    </objects>
+    <resources>
+        <image name="NSAddTemplate" width="18" height="16"/>
+        <image name="NSRemoveTemplate" width="18" height="4"/>
+    </resources>
+</document>
