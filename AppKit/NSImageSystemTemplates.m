@@ -17,7 +17,8 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
-// The system template images that +[NSImage imageNamed:] answers for the NSImageName...Template constants.
+// The system template images that +[NSImage imageNamed:] answers for the NSImageName...Template constants and
+// the table sort indicators.
 // AppKit installs no artwork for them, so each is drawn here from simple shapes (our own glyphs, in black on
 // a transparent background; template drawing only uses their coverage). The images have the point sizes the
 // named images have on macOS 10.14.4 (black-box: -[NSImage size] of +imageNamed:); the Touch Bar images are
@@ -540,12 +541,44 @@ static void speaker(NSRect box, int waves) {
 static void volumeDown(NSRect box) { speaker(box, 1); }
 static void volumeUp(NSRect box) { speaker(box, 3); }
 
+// QUIRK: the sort indicators are 9 x 9 point template images of a chevron about 1.25 points thick, black at 75%
+// opacity, 7 points wide and 4 points high in the middle of the image (pointing up for ascending, down for
+// descending), its tip flattened and its ends cut square. Evidence: black-box renders of
+// +[NSImage imageNamed:@"NSAscendingSortIndicator"] / @"NSDescendingSortIndicator" over white on macOS 10.14.4 at
+// 1x and 3x (tier 2): size 9 x 9, isTemplate YES, coverage rows 2..6 from the top (3..7 for descending), darkest
+// (64,64,64). The outline below is our own polygon fitted to those renders.
+// Test: appkit-table-header-aqua.m (test_quirk_sort_indicator_images)
+static void sortChevron(NSRect box, BOOL up) {
+    // (x, y) in a 9 x 9 box, y measured from the top for a chevron pointing up
+    static const CGFloat outline[][2] = {{1.0, 5.23}, {4.23, 2.0}, {4.77, 2.0}, {8.0, 5.23}, {8.0, 6.0},
+                                         {6.9, 6.0},  {4.5, 3.6},  {2.1, 6.0},  {1.0, 6.0}};
+    NSBezierPath *path = [NSBezierPath bezierPath];
+    CGFloat sx = NSWidth(box) / 9.0, sy = NSHeight(box) / 9.0;
+
+    for (size_t i = 0; i < sizeof(outline) / sizeof(outline[0]); i++) {
+        CGFloat y = up ? 9.0 - outline[i][1] : outline[i][1];
+        NSPoint point = NSMakePoint(NSMinX(box) + outline[i][0] * sx, NSMinY(box) + y * sy);
+
+        if (i == 0)
+            [path moveToPoint: point];
+        else
+            [path lineToPoint: point];
+    }
+    [path closePath];
+    [[NSColor colorWithCalibratedWhite: 0 alpha: 0.75] setFill];
+    [path fill];
+}
+static void ascendingSortIndicator(NSRect box) { sortChevron(box, YES); }
+static void descendingSortIndicator(NSRect box) { sortChevron(box, NO); }
+
 // Point sizes from macOS 10.14.4. The Touch Bar images are 30 points high; their glyph is drawn in the
 // middle, in the height given by kTouchBarGlyphHeight.
 static const CGFloat kTouchBarGlyphHeight = 14;
 
 static const NSSystemTemplate systemTemplates[] = {
         {@"NSActionTemplate", 14, 14, gear},
+        {@"NSAscendingSortIndicator", 9, 9, ascendingSortIndicator},
+        {@"NSDescendingSortIndicator", 9, 9, descendingSortIndicator},
         {@"NSBluetoothTemplate", 7, 14, bluetooth},
         {@"NSBookmarksTemplate", 17, 18, bookmarks},
         {@"NSColumnViewTemplate", 16, 10, columnView},
@@ -607,7 +640,7 @@ static const NSSystemTemplate systemTemplates[] = {
 };
 
 NSImage *NSImageSystemTemplateNamed(NSString *name) {
-    if (![name hasSuffix: @"Template"])
+    if (![name hasSuffix: @"Template"] && ![name hasSuffix: @"SortIndicator"])
         return nil;
 
     for (size_t i = 0; i < sizeof(systemTemplates) / sizeof(systemTemplates[0]); i++) {

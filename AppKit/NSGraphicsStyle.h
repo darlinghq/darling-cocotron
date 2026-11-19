@@ -170,6 +170,8 @@ typedef struct _Margins {
 - (void) drawTableViewHeaderInRect: (NSRect) rect
                        highlighted: (BOOL) highlighted;
 - (void) drawTableViewCornerInRect: (NSRect) rect;
+// An indicator image of a column (-[NSTableView setIndicatorImage:inTableColumn:]) in its header
+- (void) drawTableViewHeaderIndicatorImage: (NSImage *) image inRect: (NSRect) rect;
 @end
 
 @interface NSGraphicsStyle (NSBox)
