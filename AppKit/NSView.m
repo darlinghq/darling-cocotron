@@ -94,6 +94,8 @@ const NSViewFullScreenModeOptionKey NSFullScreenModeAllScreens =
 - (void) _synchronizeSublayerOrder;
 - (void) _updateLayerVisibility;
 - (void) _removeLayerFromSuperlayer;
+- (void) _createLayersInTreeIfNeeded;
+- (void) _removeLayerBackedViewsFromTree;
 @end
 
 @interface CADisplayLink (AppKitRefreshRate)
@@ -750,6 +752,43 @@ static CGAffineTransform concatViewTransform(CGAffineTransform result,
     }
 }
 
+// Places the layer in its superlayer. Layer coordinates have their y axis
+// pointing up, so in the layer of a flipped superview the layer is mirrored
+// within the superview's bounds: it hangs from its top-left corner (anchor
+// point 0, 1), which goes to where the view's frame origin is on screen.
+// QUIRK: macOS 10.14 places sublayers in a flipped superview like this, and
+// the sublayers keep their positions when their own view is flipped. macOS 26
+// instead keeps every layer frame equal to the view frame and sets
+// geometryFlipped on the layer of a view whose flipping differs from its
+// superview's. Both put the subviews in the same places on screen; the older
+// behaviour is followed, as convertPointToLayer: does. Evidence: black-box
+// observation on macOS 10.14.4 and 26.7.3 (tier 2), a flipped layer-backed
+// view with plain and flipped subviews. Where the flipped superview's bounds
+// origin is not zero, the mirroring here also takes that origin in, as the
+// superview's layer has the same bounds as the view.
+// Test: tests/appkit-layer-flipped-superview.m
+static void configureLayerPosition(NSView *self) {
+    CALayer *layer = self->_layer;
+    NSView *superview = self->_superview;
+
+    if (layer == nil)
+        return;
+
+    if ([layer superlayer] == nil) {
+        [layer setAnchorPoint: CGPointMake(0, 0)];
+        [layer setPosition: CGPointMake(0, 0)];
+    } else if (superview != nil && [superview isFlipped]) {
+        NSRect superBounds = superview->_bounds;
+
+        [layer setAnchorPoint: CGPointMake(0, 1)];
+        [layer setPosition: CGPointMake(NSMinX(self->_frame),
+                                        2 * NSMinY(superBounds) + NSHeight(superBounds) - NSMinY(self->_frame))];
+    } else {
+        [layer setAnchorPoint: CGPointMake(0, 0)];
+        [layer setPosition: self->_frame.origin];
+    }
+}
+
 static inline void configureLayerGeometry(NSView *self) {
     CALayer *layer = self->_layer;
 
@@ -759,14 +798,15 @@ static inline void configureLayerGeometry(NSView *self) {
     [CATransaction begin];
     [CATransaction setDisableActions: YES];
 
-    [layer setAnchorPoint: CGPointMake(0, 0)];
-
-    if ([layer superlayer] == nil)
-        [layer setPosition: CGPointMake(0, 0)];
-    else
-        [layer setPosition: self->_frame.origin];
-
+    configureLayerPosition(self);
     [layer setBounds: self->_bounds];
+
+    // The sublayers of a flipped view are placed from its bounds, so they
+    // move when the bounds change even if the subviews' frames stay.
+    if ([self isFlipped])
+        for (NSView *child in self->_subviews)
+            configureLayerPosition(child);
+
     [CATransaction commit];
 }
 
@@ -1778,8 +1818,18 @@ static void postFrameChange(NSView *self) {
 
     [view viewDidMoveToSuperview];
 
-    if (NS_EXTRA(NSView, self)->_wantsLayer)
-        [view setWantsLayer: YES];
+    // A view added to a layer-backed view is layer-backed as well: it gets a
+    // backing layer, as do its subviews, but does not itself want one, so it
+    // loses it again when the view above stops being layer-backed, or when it
+    // is moved into a view that is not layer-backed. This holds
+    // whether the view above wants its layer or got it from its own superview
+    // (black-box observation on macOS 10.14.4 and 26.7.3).
+    // Test: tests/appkit-layer-backed-subviews.m
+    if (_layer != nil && [view layer] == nil &&
+        (NS_EXTRA(NSView, self)->_wantsLayer || [_superview layer] != nil))
+        [view _createLayersInTreeIfNeeded];
+    else if (_layer == nil && ![view wantsLayer] && [[view layer] isKindOfClass: [NSViewBackingLayer class]])
+        [view _removeLayerBackedViewsFromTree];
 
     // A layer added to the superlayer goes to the end, and the layer of a view
     // that was only moved within its superview does not move at all.
@@ -2603,9 +2653,12 @@ static char inputContextKey;
         if ([_layer superlayer] != superlayer || NS_EXTRA(NSView, self)->_layerContext != nil) {
             [self _removeLayerFromSuperlayer];
             [superlayer addSublayer: _layer];
+            // where the layer goes depends on the superview it now has
+            configureLayerGeometry(self);
         }
     } else {
         [self _createLayerContextIfNeeded];
+        configureLayerGeometry(self);
     }
 }
 

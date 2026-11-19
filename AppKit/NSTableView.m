@@ -56,6 +56,9 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
 - (void) _recycleView: (NSView *) view;
 - (void) _recycleCellViewsOutsideRows: (NSRange) rows;
 - (NSView *) _cellViewAtColumn: (NSInteger) column row: (NSInteger) row make: (BOOL) make;
+- (void) _setObjectValueOfCellView: (NSView *) view column: (NSTableColumn *) column row: (NSInteger) row;
+- (BOOL) _delegateMakesCellViews;
+- (NSView *) _delegateCellViewForTableColumn: (NSTableColumn *) column row: (NSInteger) row;
 - (BOOL) _typeSelectEvent: (NSEvent *) event;
 - (void) _updateToolTipAreas;
 - (void) noteSelectionIsChanging;
@@ -152,6 +155,20 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
         NS_EXTRA(NSTableView, self)->_selectedRowIndexes = [[NSIndexSet alloc] init];
         NS_EXTRA(NSTableView, self)->_selectedColumns = [[NSMutableArray alloc] init];
         NS_EXTRA(NSTableView, self)->_registeredNibs = [[NSMutableDictionary alloc] init];
+        // The cell views drawn into a view-based table in Interface Builder
+        // are archived as one nib per view identifier, for
+        // -makeViewWithIdentifier:owner: to make the views from, as if they
+        // had been registered with -registerNib:forIdentifier:.
+        // Test: tests/appkit-table-archived-cell-views.m
+        id reusableViews = [keyed decodeObjectForKey: @"NSTableViewArchivedReusableViewsKey"];
+        if ([reusableViews isKindOfClass: [NSDictionary class]]) {
+            for (id identifier in reusableViews) {
+                id nib = [reusableViews objectForKey: identifier];
+
+                if ([identifier isKindOfClass: [NSString class]] && [nib isKindOfClass: [NSNib class]])
+                    [NS_EXTRA(NSTableView, self)->_registeredNibs setObject: nib forKey: identifier];
+            }
+        }
         NS_EXTRA(NSTableView, self)->_cellViews = [[NSMutableDictionary alloc] init];
         NS_EXTRA(NSTableView, self)->_reuseQueues = [[NSMutableDictionary alloc] init];
         _editedColumn = -1;
@@ -939,7 +956,7 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 - (id) dataSourceObjectValueForTableColumn: (NSTableColumn *) tableColumn
                                        row: (NSInteger) row
 {
-    if ([_delegate respondsToSelector: @selector(tableView:viewForTableColumn:row:)])
+    if ([self _delegateMakesCellViews])
         return nil;
 
     if (_dataSource != nil &&
@@ -1639,7 +1656,7 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 }
 
 - (void) drawRow: (NSInteger) row clipRect: (NSRect) clipRect {
-    if ([_delegate respondsToSelector: @selector(tableView:viewForTableColumn:row:)]) {
+    if ([self _delegateMakesCellViews]) {
         NSRange visibleColumns = [self columnsInRect: clipRect];
         NSInteger drawThisColumn = visibleColumns.location;
 
@@ -2078,7 +2095,7 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
         }
     }
 
-    if ([_delegate respondsToSelector: @selector(tableView:viewForTableColumn:row:)]) {
+    if ([self _delegateMakesCellViews]) {
         // Views of rows that are no longer visible leave the table for the reuse queue
         [self _recycleCellViewsOutsideRows: [self rowsInRect: [self visibleRect]]];
     } else if ([_delegate respondsToSelector: @selector(tableView:toolTipForCell:rect:tableColumn:row:mouseLocation:)]) {
@@ -2484,7 +2501,7 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 
     if ([_delegate respondsToSelector: @selector(tableView:sizeToFitWidthOfColumn:)])
         width = [_delegate tableView: self sizeToFitWidthOfColumn: columnIndex];
-    else if ([_delegate respondsToSelector: @selector(tableView:viewForTableColumn:row:)])
+    else if ([self _delegateMakesCellViews])
         width = oldWidth; // views have no cell to measure
     else
         width = [self _naturalWidthOfColumn: column];
@@ -2791,7 +2808,7 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 
     if (view != self || row < 0 || column < 0 ||
         ![_delegate respondsToSelector: @selector(tableView:toolTipForCell:rect:tableColumn:row:mouseLocation:)] ||
-        [_delegate respondsToSelector: @selector(tableView:viewForTableColumn:row:)])
+        [self _delegateMakesCellViews])
         return nil;
 
     NSRect rect = [self frameOfCellAtColumn: column row: row];
@@ -2989,15 +3006,18 @@ static NSNumber *CellViewKey(NSInteger row, NSInteger column, BOOL group) {
         NSRect frame;
 
         if (group) {
-            view = [_delegate tableView: self viewForTableColumn: nil row: row];
+            view = [self _delegateCellViewForTableColumn: nil row: row];
             frame = [self rectOfRow: row];
         } else {
-            view = [_delegate tableView: self viewForTableColumn: [_tableColumns objectAtIndex: column] row: row];
+            view = [self _delegateCellViewForTableColumn: [_tableColumns objectAtIndex: column] row: row];
             frame = [self frameOfCellAtColumn: column row: row];
         }
         if (view != nil) {
             [view setFrame: frame];
             [NS_EXTRA(NSTableView, self)->_cellViews setObject: view forKey: key];
+            [self _setObjectValueOfCellView: view
+                                     column: group ? nil : [_tableColumns objectAtIndex: column]
+                                        row: row];
         }
     } else if (view != nil) {
         [view setFrame: group ? [self rectOfRow: row] : [self frameOfCellAtColumn: column row: row]];
@@ -3007,8 +3027,33 @@ static NSNumber *CellViewKey(NSInteger row, NSInteger column, BOOL group) {
     return view;
 }
 
+// Whether the table is view-based: its delegate makes the cell views. An
+// outline view asks its delegate with the outline view methods instead.
+- (BOOL) _delegateMakesCellViews {
+    return [_delegate respondsToSelector: @selector(tableView:viewForTableColumn:row:)];
+}
+
+- (NSView *) _delegateCellViewForTableColumn: (NSTableColumn *) column row: (NSInteger) row {
+    return [_delegate tableView: self viewForTableColumn: column row: row];
+}
+
+// A view-based table gives a new cell view the object value the data source
+// has for its cell, after the delegate made the view (a group row's view gets
+// the value for no column), when the view takes one (NSTableCellView does) and
+// the data source implements tableView:objectValueForTableColumn:row:.
+// Bindings in the cell view, such as a text field bound to objectValue, show
+// that value. Documented for NSTableViewDataSource; the order and the nil
+// column of a group row are black-box observations on macOS 10.14.4 and
+// 26.7.3. Test: tests/appkit-table-cell-view-object-value.m
+- (void) _setObjectValueOfCellView: (NSView *) view column: (NSTableColumn *) column row: (NSInteger) row {
+    if (![view respondsToSelector: @selector(setObjectValue:)] ||
+        ![_dataSource respondsToSelector: @selector(tableView:objectValueForTableColumn:row:)])
+        return;
+    [(id) view setObjectValue: [_dataSource tableView: self objectValueForTableColumn: column row: row]];
+}
+
 - (NSView *) viewAtColumn: (NSInteger) column row: (NSInteger) row makeIfNecessary: (BOOL) makeIfNecessary {
-    if (![_delegate respondsToSelector: @selector(tableView:viewForTableColumn:row:)])
+    if (![self _delegateMakesCellViews])
         return nil;
 
     // Bad indexes raise as on macOS: a row beyond the table is an NSTableViewException, a
