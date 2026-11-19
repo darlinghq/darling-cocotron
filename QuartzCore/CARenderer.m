@@ -682,27 +682,76 @@ static CGRect contentsRectForGravity(NSString *gravity, CGRect rect, CGSize size
                                  fabs(part.size.height) * pixelsHigh / scale);
     rect = contentsRectForGravity(layer.contentsGravity, rect, partSize);
 
-    // Texture row 0 (t = 0) is the top of the image.
-    const GLfloat s0 = CGRectGetMinX(part), s1 = CGRectGetMaxX(part);
-    GLfloat tBottom, tTop;
-    if (flipped) {
-        tBottom = CGRectGetMinY(part);
-        tTop = CGRectGetMaxY(part);
-    } else {
-        tBottom = 1 - CGRectGetMinY(part);
-        tTop = 1 - CGRectGetMaxY(part);
+    // contentsCenter, in the unit coordinates of the part, splits the contents
+    // into nine parts. The corners keep their size (in points, so pixels divided
+    // by contentsScale), the edges stretch along their length and the centre in
+    // both directions to fill what is left of rect. Corners that don't fit shrink
+    // in proportion. The default, the unit rectangle, stretches everything.
+    CGRect center = interpolateRectInLayerKey(layer, @"contentsCenter", currentTime);
+    center = CGRectIntersection(CGRectStandardize(center), CGRectMake(0, 0, 1, 1));
+    if (CGRectIsNull(center))
+        center = CGRectMake(0, 0, 1, 1);
+
+    // Where the nine parts begin and end across (x) and up (y) the rectangle,
+    // and the contents coordinates (s, v) that go with them.
+    part = CGRectStandardize(part);
+    CGFloat x[4], y[4], s[4], v[4];
+    CGFloat leftFixed = center.origin.x * partSize.width;
+    CGFloat rightFixed = (1 - CGRectGetMaxX(center)) * partSize.width;
+    CGFloat bottomFixed = center.origin.y * partSize.height;
+    CGFloat topFixed = (1 - CGRectGetMaxY(center)) * partSize.height;
+    if (leftFixed + rightFixed > rect.size.width) {
+        CGFloat shrink = rect.size.width / (leftFixed + rightFixed);
+        leftFixed *= shrink;
+        rightFixed *= shrink;
     }
-    const GLfloat textureVertices[4 * 2] = {s0, tBottom, s1, tBottom,
-                                            s0, tTop, s1, tTop};
-    const GLfloat left = CGRectGetMinX(rect), right = CGRectGetMaxX(rect);
-    const GLfloat bottom = CGRectGetMinY(rect), top = CGRectGetMaxY(rect);
-    const GLfloat vertices[4 * 2] = {left, bottom, right, bottom,
-                                     left, top, right, top};
+    if (bottomFixed + topFixed > rect.size.height) {
+        CGFloat shrink = rect.size.height / (bottomFixed + topFixed);
+        bottomFixed *= shrink;
+        topFixed *= shrink;
+    }
+    x[0] = CGRectGetMinX(rect);
+    x[1] = x[0] + leftFixed;
+    x[3] = CGRectGetMaxX(rect);
+    x[2] = x[3] - rightFixed;
+    y[0] = CGRectGetMinY(rect);
+    y[1] = y[0] + bottomFixed;
+    y[3] = CGRectGetMaxY(rect);
+    y[2] = y[3] - topFixed;
+    s[0] = CGRectGetMinX(part);
+    s[1] = s[0] + center.origin.x * part.size.width;
+    s[2] = s[0] + CGRectGetMaxX(center) * part.size.width;
+    s[3] = CGRectGetMaxX(part);
+    v[0] = CGRectGetMinY(part);
+    v[1] = v[0] + center.origin.y * part.size.height;
+    v[2] = v[0] + CGRectGetMaxY(center) * part.size.height;
+    v[3] = CGRectGetMaxY(part);
+
+    // Texture row 0 (t = 0) is the top of the image.
+    GLfloat vertices[9 * 6 * 2], textureVertices[9 * 6 * 2];
+    int count = 0;
+    for (int row = 0; row < 3; row++) {
+        for (int column = 0; column < 3; column++) {
+            if (!(x[column + 1] > x[column] && y[row + 1] > y[row]))
+                continue;
+            const CGFloat xs[6] = {x[column], x[column + 1], x[column], x[column + 1], x[column], x[column + 1]};
+            const CGFloat ys[6] = {y[row], y[row], y[row + 1], y[row], y[row + 1], y[row + 1]};
+            const CGFloat ss[6] = {s[column], s[column + 1], s[column], s[column + 1], s[column], s[column + 1]};
+            const CGFloat vs[6] = {v[row], v[row], v[row + 1], v[row], v[row + 1], v[row + 1]};
+            for (int i = 0; i < 6; i++) {
+                vertices[2 * count] = xs[i];
+                vertices[2 * count + 1] = ys[i];
+                textureVertices[2 * count] = ss[i];
+                textureVertices[2 * count + 1] = flipped ? vs[i] : 1 - vs[i];
+                count++;
+            }
+        }
+    }
 
     glTexCoordPointer(2, GL_FLOAT, 0, textureVertices);
     glVertexPointer(2, GL_FLOAT, 0, vertices);
     glColor4f(opacity, opacity, opacity, opacity);
-    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    glDrawArrays(GL_TRIANGLES, 0, count);
 
     glDisableClientState(GL_TEXTURE_COORD_ARRAY);
     glDisable(GL_TEXTURE_2D);
