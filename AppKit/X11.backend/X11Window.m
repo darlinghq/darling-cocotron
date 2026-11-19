@@ -28,6 +28,7 @@
 #import <AppKit/NSPopUpWindow.h>
 #import <AppKit/NSRaise.h>
 #import <AppKit/NSWindow.h>
+#import "../NSWindow-Private.h"
 #import <Foundation/NSBundle.h>
 #import <Foundation/NSException.h>
 #import <Foundation/NSMutableData.h>
@@ -732,10 +733,12 @@ static NSData *makeWindowIcon() {
         sh->min_height = sh->max_height = device.height;
     }
 
-    // An untitled window that is managed (a borderless game or custom-chrome window)
-    // positions itself: say so, or a window manager may place it as it likes
-    // (ICCCM 4.1.2.3).
-    if (!_overrideRedirect && !(mask & NSWindowStyleMaskTitled))
+    // An untitled window that is managed (a borderless game or custom-chrome window),
+    // or a titled one that the window manager does not frame because it shows no
+    // title bar, positions itself: say so, or a window manager may place it as it
+    // likes (ICCCM 4.1.2.3).
+    if (!_overrideRedirect &&
+        (!(mask & NSWindowStyleMaskTitled) || [self hasInvisibleTitlebarForStyleMask: mask]))
         sh->flags |= USPosition | PPosition;
 
     XSetWMSizeHints(_display, _window, sh, XA_WM_NORMAL_HINTS);
@@ -899,10 +902,10 @@ static NSData *makeWindowIcon() {
 // bar and the window can become key. macOS 26 shows no title bar for such
 // windows and they cannot become key. We follow 10.14.
 - (void) updateDecorationsForStyleMask: (NSUInteger) mask {
-    // A full-size content view with a transparent title bar shows no title bar at all: the content
-    // is all there is (the application draws its own header), so the window manager's frame would
-    // be a second title bar on top of it.
-    BOOL titlebarInvisible = (mask & NSWindowStyleMaskFullSizeContentView) && [_delegate titlebarAppearsTransparent];
+    // A window that shows nothing of a title bar of its own (see NSWindow) has the content as all
+    // there is (the application draws its own header), so the window manager's frame would be a
+    // second title bar on top of it.
+    BOOL titlebarInvisible = [self hasInvisibleTitlebarForStyleMask: mask];
 
     if ((mask & (NSWindowStyleMaskTitled | NSWindowStyleMaskResizable)) && !_invisibleWithoutCompositor &&
         !titlebarInvisible)
@@ -910,16 +913,28 @@ static NSData *makeWindowIcon() {
                         XInternAtom(_display, "_MOTIF_WM_HINTS", False));
     else
         [[self class] removeDecorationForWindow: _window onDisplay: _display];
-    _chromeless = titlebarInvisible && (mask & NSWindowStyleMaskTitled) != 0;
+    BOOL chromeless = titlebarInvisible && (mask & NSWindowStyleMaskTitled) != 0;
+    if (_window != 0 && chromeless != _chromeless) {
+        _chromeless = chromeless;
+        // Whether the window positions itself depends on it.
+        [self updateSizeHints: mask];
+    }
+    _chromeless = chromeless;
     [self updateWindowShape];
 }
 
+- (BOOL) hasInvisibleTitlebarForStyleMask: (NSUInteger) mask {
+    return [_delegate respondsToSelector: @selector(_hasInvisibleTitlebarForStyleMask:)] &&
+           [(NSWindow *) _delegate _hasInvisibleTitlebarForStyleMask: mask];
+}
+
 // Corner radius, in points, of a window that has no frame of its own to be drawn by the window manager.
-// QUIRK: macOS draws such a window (a titled window with a full-size content view and a transparent title
-// bar) with rounded corners of about 5 points, a thin outline and a shadow; the window manager draws none of
-// them for a window it was asked not to decorate. The corners are cut with the SHAPE extension and the outline
-// is drawn into the window (-flushBuffer), neither of which needs a compositor; the shadow can only come from
-// a compositor and is not drawn. Evidence: black-box observation of such windows on macOS 10.14.4 (tier 2).
+// QUIRK: macOS draws such a window (a titled window that shows no title bar of its own, see
+// -[NSWindow _hasInvisibleTitlebarForStyleMask:]) with rounded corners of about 5 points, a thin outline and
+// a shadow; the window manager draws none of them for a window it was asked not to decorate. The corners are
+// cut with the SHAPE extension and the outline is drawn into the window (-flushBuffer), neither of which needs
+// a compositor; the shadow can only come from a compositor and is not drawn. Evidence: black-box observation
+// of such windows on macOS 10.14.4 (tier 2).
 // Test: tests/x11-chromeless-corners.sh (shape of the window), tests/x11-rounded-shape.c (the shape).
 static const int X11ChromelessCornerRadius = 5;
 

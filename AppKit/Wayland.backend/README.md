@@ -21,9 +21,10 @@ because the native libwayland resolves it outside the container. The choice is m
 
 `WaylandDecorations` (`org.darlinghq.AppKit`) or `DARLING_WAYLAND_DECORATIONS`, set to `client`, makes the
 backend draw the window frame itself even when the compositor offers server-side decorations.
-A window with a full-size content view and a transparent title bar never gets a frame: it declares client-side
-decorations and the backend draws none, as the application draws its own title bar. Changing the style mask or
-the transparency of a shown window updates this at once.
+A window that shows nothing of a title bar of its own never gets a frame: a titled window with a transparent title
+bar and either a full-size content view or a hidden title and hidden close, miniaturize and zoom buttons. It
+declares client-side decorations and the backend draws none, as the application draws its own title bar. Changing
+the style mask, the transparency or the title visibility of a shown window updates this at once.
 
 ## What it provides
 

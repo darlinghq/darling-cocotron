@@ -143,6 +143,8 @@ NSInteger NSBitsPerPixelFromDepth(NSWindowDepth depth) {
 
 @interface CGWindow (private)
 - (void) dirtyRect: (CGRect) rect;
+// Optional, for backends whose window system can do it.
+- (void) updateDecorationsForStyleMask: (NSUInteger) styleMask;
 @end
 
 @interface NSToolbar (NSToolbar_privateForWindow)
@@ -2048,6 +2050,40 @@ static BOOL _allowsAutomaticWindowTabbing;
 
 - (void) setTitleVisibility: (NSWindowTitleVisibility) value {
     NS_EXTRA(NSWindow, self)->_titleVisibility = value;
+    [self _titlebarVisibilityChanged];
+}
+
+// A titled window shows nothing of a title bar of its own when the title bar
+// is transparent and either the content view extends under it or there is
+// nothing in it to show: the title is hidden and so are the close, miniaturize
+// and zoom buttons. The application then draws whatever header the window
+// has, so the window system must not add a title bar around it either. A
+// window with a hidden title that keeps a button, and no full-size content
+// view, keeps its frame: the button would otherwise have nowhere to go.
+- (BOOL) _hasInvisibleTitlebarForStyleMask: (NSUInteger) styleMask {
+    if (!(styleMask & NSWindowStyleMaskTitled) ||
+        !NS_EXTRA(NSWindow, self)->_titlebarAppearsTransparent)
+        return NO;
+    if (styleMask & NSWindowStyleMaskFullSizeContentView)
+        return YES;
+    if (NS_EXTRA(NSWindow, self)->_titleVisibility != NSWindowTitleHidden)
+        return NO;
+    for (NSWindowButton b = NSWindowCloseButton; b <= NSWindowZoomButton; b++) {
+        NSButton *button = NS_EXTRA(NSWindow, self)->_standardWindowButtons[b];
+        // A button that was never asked for is created visible.
+        if (button == nil)
+            button = [self standardWindowButton: b];
+        if (button != nil && ![button isHidden])
+            return NO;
+    }
+    return YES;
+}
+
+// Whether the platform draws a title bar depends on the transparency of the
+// title bar, the title's visibility and the standard buttons.
+- (void) _titlebarVisibilityChanged {
+    if ([_platformWindow respondsToSelector: @selector(updateDecorationsForStyleMask:)])
+        [_platformWindow updateDecorationsForStyleMask: NS_EXTRA(NSWindow, self)->_styleMask];
 }
 
 - (BOOL) titlebarAppearsTransparent {
@@ -2056,9 +2092,7 @@ static BOOL _allowsAutomaticWindowTabbing;
 
 - (void) setTitlebarAppearsTransparent: (BOOL) value {
     NS_EXTRA(NSWindow, self)->_titlebarAppearsTransparent = value;
-    // Whether the platform draws a title bar depends on it for full-size content views.
-    if ([_platformWindow respondsToSelector: @selector(updateDecorationsForStyleMask:)])
-        [(id) _platformWindow updateDecorationsForStyleMask: NS_EXTRA(NSWindow, self)->_styleMask];
+    [self _titlebarVisibilityChanged];
 }
 
 - (NSTitlebarSeparatorStyle) titlebarSeparatorStyle {
@@ -2795,6 +2829,9 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
         NS_EXTRA(NSWindow, self)->_isClosed = NO;
         if (!wasVisible && ![self isMiniaturized]) {
             [self _constrainFrameBeforeOrderingIn];
+            // The standard buttons have no way to tell the window they were
+            // hidden, so the frame is decided again when the window is shown.
+            [self _titlebarVisibilityChanged];
         }
         [self update];
         NS_EXTRA(NSWindow, self)->_isVisible = YES;
@@ -2817,6 +2854,9 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
         NS_EXTRA(NSWindow, self)->_isClosed = NO;
         if (!wasVisible && ![self isMiniaturized]) {
             [self _constrainFrameBeforeOrderingIn];
+            // The standard buttons have no way to tell the window they were
+            // hidden, so the frame is decided again when the window is shown.
+            [self _titlebarVisibilityChanged];
         }
         [self update];
         NS_EXTRA(NSWindow, self)->_isVisible = YES;
