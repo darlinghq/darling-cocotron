@@ -143,6 +143,12 @@ APPKIT_EXPORT NSString *const NSOutlineViewShowHideButtonKey;
         willDisplayOutlineCell: (id) cell
                 forTableColumn: (nullable NSTableColumn *) tableColumn
                           item: (id) item;
+@optional
+- (nullable NSView *) outlineView: (NSOutlineView *) outlineView
+               viewForTableColumn: (nullable NSTableColumn *) tableColumn
+                             item: (id) item;
+- (BOOL) outlineView: (NSOutlineView *) outlineView isGroupItem: (id) item;
+- (BOOL) outlineView: (NSOutlineView *) outlineView shouldShowOutlineCellForItem: (id) item;
 @end
 
 @interface NSObject (NSOutlineView_notifications)
