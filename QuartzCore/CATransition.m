@@ -22,19 +22,19 @@
     NS_EXTRA(CATransition, self)->_subtype = value;
 }
 
-- (CGFloat) startProgress {
+- (float) startProgress {
     return NS_EXTRA(CATransition, self)->_startProgress;
 }
 
-- (void) setStartProgress: (CGFloat) value {
+- (void) setStartProgress: (float) value {
     NS_EXTRA(CATransition, self)->_startProgress = value;
 }
 
-- (CGFloat) endProgress {
+- (float) endProgress {
     return NS_EXTRA(CATransition, self)->_endProgress;
 }
 
-- (void) setEndProgress: (CGFloat) value {
+- (void) setEndProgress: (float) value {
     NS_EXTRA(CATransition, self)->_endProgress = value;
 }
 

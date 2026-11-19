@@ -135,11 +135,11 @@ NSString *const kCAAnimationRotateAutoReverse = @"autoReverse";
     NS_EXTRA(CAAnimation, self)->_fillMode = value;
 }
 
-- (CGFloat) repeatCount {
+- (float) repeatCount {
     return NS_EXTRA(CAAnimation, self)->_repeatCount;
 }
 
-- (void) setRepeatCount: (CGFloat) value {
+- (void) setRepeatCount: (float) value {
     NS_EXTRA(CAAnimation, self)->_repeatCount = value;
 }
 
@@ -151,11 +151,11 @@ NSString *const kCAAnimationRotateAutoReverse = @"autoReverse";
     NS_EXTRA(CAAnimation, self)->_repeatDuration = value;
 }
 
-- (CGFloat) speed {
+- (float) speed {
     return NS_EXTRA(CAAnimation, self)->_speed;
 }
 
-- (void) setSpeed: (CGFloat) value {
+- (void) setSpeed: (float) value {
     NS_EXTRA(CAAnimation, self)->_speed = value;
 }
 

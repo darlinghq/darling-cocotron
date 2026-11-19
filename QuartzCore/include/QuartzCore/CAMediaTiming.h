@@ -19,11 +19,11 @@ CA_EXPORT CAMediaTimingFillMode const kCAFillModeRemoved NS_SWIFT_NAME(CAMediaTi
 
 @property(copy) CAMediaTimingFillMode fillMode;
 
-@property CGFloat repeatCount;
+@property float repeatCount;
 
 @property CFTimeInterval repeatDuration;
 
-@property CGFloat speed;
+@property float speed;
 
 @property CFTimeInterval timeOffset;
 

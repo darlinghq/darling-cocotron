@@ -6,14 +6,14 @@
     NS_EXTRA_IVARS_BEGIN(CATransition)
         NSString *_type;
         NSString *_subtype;
-        CGFloat _startProgress;
-        CGFloat _endProgress;
+        float _startProgress;
+        float _endProgress;
     NS_SIDE_IVARS_END(CATransition)
 }
 
 @property(copy) NSString *type;
 @property(copy) NSString *subtype;
-@property CGFloat startProgress;
-@property CGFloat endProgress;
+@property float startProgress;
+@property float endProgress;
 
 @end
