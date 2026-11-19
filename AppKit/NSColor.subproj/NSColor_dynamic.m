@@ -19,6 +19,7 @@
 
 #import <AppKit/NSAppearance.h>
 #import <AppKit/NSColor.h>
+#import <Foundation/NSUUID.h>
 
 // A color from +colorWithName:dynamicProvider:, resolved against the current appearance each time it is used.
 @interface NSColor_dynamic : NSColor {
@@ -64,6 +65,32 @@
 
 - (NSColorName) colorNameComponent {
     return _colorName;
+}
+
+// QUIRK: a dynamic color archives as a catalog color of the list "#$customDynamic", named after the
+// color (a unique name when it has none), with the color it resolves to now as the fallback; that is
+// what a reader gets back. Not documented. Evidence: black-box observation of the archive and of
+// unarchiving on macOS 26.7.3 (tier 2). Test: tests/appkit-color-secure-coding.m
+- (void) encodeWithCoder: (NSCoder *) coder {
+    NSColorName name = _colorName ? _colorName : [[NSUUID UUID] UUIDString];
+    NSColorListName catalog = @"#$customDynamic";
+    NSColor *resolved = [[self _resolvedColor] colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
+
+    if (resolved == nil)
+        [NSException raise: NSInvalidArgumentException
+                    format: @"%@ can not encodeWithCoder:%@: it does not resolve to an RGB color",
+                            [self class], [coder class]];
+
+    if ([coder allowsKeyedCoding]) {
+        [coder encodeInt: 6 forKey: @"NSColorSpace"];
+        [coder encodeObject: catalog forKey: @"NSCatalogName"];
+        [coder encodeObject: name forKey: @"NSColorName"];
+        [coder encodeObject: resolved forKey: @"NSColor"];
+    } else {
+        uint8_t space = 6;
+        [coder encodeValueOfObjCType: "c" at: &space];
+        [coder encodeValuesOfObjCTypes: "@@@", &catalog, &name, &resolved];
+    }
 }
 
 - (NSColorSpaceName) colorSpaceName {

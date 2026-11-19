@@ -62,7 +62,7 @@ typedef NS_ENUM(NSInteger, NSColorSystemEffect) {
 // concrete subclasses (NSColor_CGColor, NSColor_catalog, NSColor_dynamic),
 // which declare their share of it themselves on that ABI. Never add an ivar
 // to NSColor itself.
-@interface NSColor : NSObject <NSCopying, NSCoding, NSPasteboardWriting, NSPasteboardReading> {
+@interface NSColor : NSObject <NSCopying, NSSecureCoding, NSPasteboardWriting, NSPasteboardReading> {
 #if __OBJC2__
     NSColorListName _catalogName;
     NSColorName _colorName;

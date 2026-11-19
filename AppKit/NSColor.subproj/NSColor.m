@@ -133,6 +133,10 @@ static NSColor *constantWhite(CGFloat white, CGFloat alpha) {
     return result;
 }
 
++ (BOOL) supportsSecureCoding {
+    return YES;
+}
+
 - (void) encodeWithCoder: (NSCoder *) coder {
 
     if ([coder allowsKeyedCoding]) {
@@ -201,7 +205,10 @@ static NSColor *constantWhite(CGFloat white, CGFloat alpha) {
                          forKey: @"NSCatalogName"];
             [coder encodeObject: [self colorNameComponent]
                          forKey: @"NSColorName"];
-            // FIXME: encode @"NSColor"
+            // What the color stands for, for a reader that does not know the catalog
+            NSColor *fallback = [self colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
+            if (fallback != nil && fallback != self)
+                [coder encodeObject: fallback forKey: @"NSColor"];
         }
 
     } else {
@@ -402,9 +409,9 @@ static NSColor *constantWhite(CGFloat white, CGFloat alpha) {
         NSColor *color;
 
         if (keyed != nil) {
-            catalogName = [keyed decodeObjectForKey: @"NSCatalogName"];
-            colorName = [keyed decodeObjectForKey: @"NSColorName"];
-            color = [keyed decodeObjectForKey: @"NSColor"];
+            catalogName = [keyed decodeObjectOfClass: [NSString class] forKey: @"NSCatalogName"];
+            colorName = [keyed decodeObjectOfClass: [NSString class] forKey: @"NSColorName"];
+            color = [keyed decodeObjectOfClass: [NSColor class] forKey: @"NSColor"];
         } else {
             [coder decodeValuesOfObjCTypes: "@@@", &catalogName, &colorName,
                                             &color];
