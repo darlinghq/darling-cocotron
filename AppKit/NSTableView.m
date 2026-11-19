@@ -129,6 +129,8 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
         NSKeyedUnarchiver *keyed = (NSKeyedUnarchiver *) coder;
         unsigned flags = [keyed decodeIntForKey: @"NSTvFlags"];
 
+        NS_EXTRA(NSTableView, self)->_awaitingAwakeFromNib = YES;
+
         _headerView = [[keyed decodeObjectForKey: @"NSHeaderView"] retain];
         [_headerView setTableView: self];
         _cornerView = [[keyed decodeObjectForKey: @"NSCornerView"] retain];
@@ -471,7 +473,29 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
     return NS_EXTRA(NSTableView, self)->_gridStyleMask;
 }
 
+// The data source must answer numberOfRowsInTableView: unless the table gets
+// its rows from a content binding. A data source that does not is reported
+// once, when it is set, or, for one a nib sets, on the first -numberOfRows
+// after the nib is loaded, by which time the nib's bindings are made.
+// Observed on macOS 26.7.3 and Mac OS X 10.14.4 (tests/appkit-table-data-source-check.m).
+- (void) _checkDataSource {
+    NS_EXTRA(NSTableView, self)->_dataSourceCheckPending = NO;
+    if (_dataSource == nil || [self _binderForBinding: @"content"] != nil ||
+        [_dataSource respondsToSelector: @selector(numberOfRowsInTableView:)])
+        return;
+    NSLog(@"*** Illegal NSTableView data source (%@).  Must implement "
+          @"numberOfRowsInTableView: and tableView:objectValueForTableColumn:row:",
+          _dataSource);
+}
+
+- (void) awakeFromNib {
+    [super awakeFromNib];
+    NS_EXTRA(NSTableView, self)->_awaitingAwakeFromNib = NO;
+}
+
 - (NSInteger) numberOfRows {
+    if (NS_EXTRA(NSTableView, self)->_dataSourceCheckPending && !NS_EXTRA(NSTableView, self)->_awaitingAwakeFromNib)
+        [self _checkDataSource];
 
     if (NS_EXTRA(NSTableView, self)->_numberOfRows < 0) {
         id binding = [self _binderForBinding: @"content"];
@@ -482,18 +506,10 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
         if (NS_EXTRA(NSTableView, self)->_numberOfRows < 0) {
             if (_dataSource == nil)
                 NS_EXTRA(NSTableView, self)->_numberOfRows = 0;
-            else {
-                if ([_dataSource respondsToSelector: @selector
-                                 (numberOfRowsInTableView:)] == YES)
-                    NS_EXTRA(NSTableView, self)->_numberOfRows = [_dataSource numberOfRowsInTableView: self];
-                else {
-                    // Apple AppKit only logs here, so we do the same.
-                    NSLog(@"data source %@ does not respond to "
-                          @"numberOfRowsInTableView:",
-                          _dataSource);
-                    NS_EXTRA(NSTableView, self)->_numberOfRows = 0;
-                }
-            }
+            else if ([_dataSource respondsToSelector: @selector(numberOfRowsInTableView:)])
+                NS_EXTRA(NSTableView, self)->_numberOfRows = [_dataSource numberOfRowsInTableView: self];
+            else
+                NS_EXTRA(NSTableView, self)->_numberOfRows = 0;
         }
     }
 
@@ -736,6 +752,10 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 
 - (void) setDataSource: dataSource {
     _dataSource = dataSource;
+    if (NS_EXTRA(NSTableView, self)->_awaitingAwakeFromNib)
+        NS_EXTRA(NSTableView, self)->_dataSourceCheckPending = YES;
+    else
+        [self _checkDataSource];
     [self tile]; // documented
 }
 

@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Copyright (C) 2026 Lubos Dolezel. Hand-written test input for ibtool: a table whose content is bound to an array controller and whose data source lacks the data source methods. -->
+<document type="com.apple.InterfaceBuilder3.Cocoa.XIB" version="3.0" toolsVersion="25408" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none">
+    <dependencies>
+        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="25408"/>
+    </dependencies>
+    <objects>
+        <customObject id="-2" userLabel="File's Owner" customClass="NSObject"/>
+        <customObject id="-1" userLabel="First Responder" customClass="FirstResponder"/>
+        <customObject id="-3" userLabel="Application" customClass="NSObject"/>
+        <arrayController id="ac1"/>
+        <scrollView autohidesScrollers="YES" horizontalLineScroll="19" horizontalPageScroll="10" verticalLineScroll="19" verticalPageScroll="10" usesPredominantAxisScrolling="NO" id="sv1">
+            <rect key="frame" x="0.0" y="0.0" width="200" height="100"/>
+            <autoresizingMask key="autoresizingMask"/>
+            <clipView key="contentView" id="cv1">
+                <rect key="frame" x="1" y="1" width="198" height="98"/>
+                <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                <subviews>
+                    <tableView verticalHuggingPriority="750" allowsExpansionToolTips="YES" columnAutoresizingStyle="lastColumnOnly" columnSelection="YES" multipleSelection="NO" autosaveColumns="NO" rowSizeStyle="automatic" viewBased="YES" id="tv1">
+                        <rect key="frame" x="0.0" y="0.0" width="198" height="98"/>
+                        <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                        <size key="intercellSpacing" width="3" height="2"/>
+                        <color key="backgroundColor" name="controlBackgroundColor" catalog="System" colorSpace="catalog"/>
+                        <color key="gridColor" name="gridColor" catalog="System" colorSpace="catalog"/>
+                        <tableColumns>
+                            <tableColumn identifier="c" width="190" minWidth="40" maxWidth="1000" id="tc1">
+                                <tableHeaderCell key="headerCell" lineBreakMode="truncatingTail" borderStyle="border" id="th1">
+                                    <font key="font" metaFont="system"/>
+                                </tableHeaderCell>
+                                <textFieldCell key="dataCell" lineBreakMode="truncatingTail" selectable="YES" editable="YES" title="Text Cell" id="dc1">
+                                    <font key="font" metaFont="system"/>
+                                </textFieldCell>
+                                <tableColumnResizingMask key="resizingMask" resizeWithTable="YES" userResizable="YES"/>
+                            </tableColumn>
+                        </tableColumns>
+                        <connections>
+                            <binding destination="ac1" name="content" keyPath="arrangedObjects" id="bd1"/>
+                            <binding destination="ac1" name="selectionIndexes" keyPath="selectionIndexes" previousBinding="bd1" id="bd2"/>
+                            <outlet property="dataSource" destination="-2" id="o1"/>
+                        </connections>
+                    </tableView>
+                </subviews>
+            </clipView>
+            
+        </scrollView>
+    </objects>
+</document>
