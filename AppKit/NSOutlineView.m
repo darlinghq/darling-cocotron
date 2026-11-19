@@ -64,6 +64,9 @@ NSString *const NSOutlineViewShowHideButtonKey =
 @interface NSTableView (NSTableView_notifications)
 
 - (BOOL) delegateShouldSelectTableColumn: (NSTableColumn *) tableColumn;
+- (BOOL) _isGroupRow: (NSInteger) row;
+- (BOOL) _delegateMakesCellViews;
+- (void) _recycleAllCellViews;
 - (BOOL) delegateShouldSelectRow: (NSInteger) row;
 - (BOOL) delegateShouldEditTableColumn: (NSTableColumn *) tableColumn
                                    row: (NSInteger) row;
@@ -557,6 +560,10 @@ static inline id childOfItemAtIndex(NSOutlineView *self, id item,
 
 - (void) noteNumberOfRowsChanged {
     [self invalidateRowCache];
+    // Expanding or collapsing moves items to other rows; cell views are kept
+    // per row, so they are made again for the items now there.
+    if ([self _delegateMakesCellViews])
+        [self _recycleAllCellViews];
     [super noteNumberOfRowsChanged];
 }
 
@@ -815,7 +822,8 @@ static void loadItemIntoMapTables(NSOutlineView *self, id item,
                 [self _objectValueForTableColumn: tableColumn
                                           byItem: [self itemAtRow: row]];
 
-        if (objectValue != nil)
+        // A cell view is indented whatever its object value.
+        if (objectValue != nil || [self _delegateMakesCellViews])
             return [self _adjustedFrameOfCellAtColumn: column
                                                   row: row
                                           objectValue: objectValue];
@@ -924,7 +932,64 @@ static void loadItemIntoMapTables(NSOutlineView *self, id item,
     return result;
 }
 
+#pragma mark View-based outline views
+
+// An outline view is view-based when its delegate makes the cell views with
+// outlineView:viewForTableColumn:item:. The table view machinery for cell
+// views is used with the outline view's delegate and data source methods,
+// which take items instead of rows; the cell view of the outline column is
+// indented by the item's level, as frameOfCellAtColumn:row: gives.
+// Test: tests/appkit-outline-view-cell-views.m
+- (BOOL) _delegateMakesCellViews {
+    return [_delegate respondsToSelector: @selector(outlineView:viewForTableColumn:item:)];
+}
+
+- (NSView *) _delegateCellViewForTableColumn: (NSTableColumn *) column row: (NSInteger) row {
+    return [_delegate outlineView: self viewForTableColumn: column item: [self itemAtRow: row]];
+}
+
+- (void) _setObjectValueOfCellView: (NSView *) view column: (NSTableColumn *) column row: (NSInteger) row {
+    if (![view respondsToSelector: @selector(setObjectValue:)] ||
+        ![_dataSource respondsToSelector: @selector(outlineView:objectValueForTableColumn:byItem:)])
+        return;
+    [(id) view setObjectValue: [_dataSource outlineView: self objectValueForTableColumn: column byItem: [self itemAtRow: row]]];
+}
+
+- (BOOL) _isGroupRow: (NSInteger) row {
+    return [_delegate respondsToSelector: @selector(outlineView:isGroupItem:)] &&
+           [_delegate outlineView: self isGroupItem: [self itemAtRow: row]];
+}
+
+// The disclosure triangle of an expandable item, which the delegate can hide
+// with outlineView:shouldShowOutlineCellForItem:.
+- (void) _drawOutlineCellAtRow: (NSInteger) row {
+    id item = [self itemAtRow: row];
+
+    if (![self isExpandable: item])
+        return;
+    if ([_delegate respondsToSelector: @selector(outlineView:shouldShowOutlineCellForItem:)] &&
+        ![_delegate outlineView: self shouldShowOutlineCellForItem: item])
+        return;
+
+    NSRect outlineCellFrame = [self frameOfOutlineCellAtRow: row];
+    if (NSIsEmptyRect(outlineCellFrame))
+        return;
+    [_markerCell setState: isItemExpanded(self, item) ? NSOnState : NSOffState];
+    [_markerCell setControlView: self];
+    [_markerCell drawWithFrame: outlineCellFrame inView: self];
+}
+
 - (void) drawRow: (NSInteger) row clipRect: (NSRect) rect {
+    if ([self _delegateMakesCellViews]) {
+        if (row < 0 || row >= [self numberOfRows])
+            [NSException raise: NSInvalidArgumentException
+                        format: @"invalid row in drawRow:clipRect:"];
+        [super drawRow: row clipRect: rect];
+        if (_outlineTableColumn != nil && ![self _isGroupRow: row])
+            [self _drawOutlineCellAtRow: row];
+        return;
+    }
+
     // FIXME: This should be changed to just call super, then draw the markers
     // But there are some fine differences with _adjustedFrame in NSTableView
     NSRange visibleColumns = [self columnsInRect: rect];
