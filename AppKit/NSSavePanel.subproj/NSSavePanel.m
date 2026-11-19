@@ -76,6 +76,10 @@ static NSString *defaultDirectory(void) {
     _treatsFilePackagesAsDirectories = NO;
     [self setAccessoryView: nil];
     _showsHiddenFiles = false;
+    // QUIRK: a new save panel allows making folders (canCreateDirectories is YES). Not documented.
+    // Evidence: black-box observation on macOS 10.14.4 and 26.7.3 (tier 2).
+    // Test: appkit-panel-create-directories.m
+    _canCreateDirectories = YES;
     return self;
 }
 
@@ -651,7 +655,11 @@ static NSSavePanel *_newPanel = nil;
 }
 
 - (void) setCanCreateDirectories: (BOOL) value {
-    NSUnimplementedMethod();
+    _canCreateDirectories = value;
+}
+
+- (BOOL) canCreateDirectories {
+    return _canCreateDirectories;
 }
 
 - (void) setAllowedFileTypes: (NSArray *) value {
