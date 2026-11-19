@@ -9,7 +9,7 @@ titled window back.
 
 The guest program is `../appkit-global-menu.m`; the host scripts start it and
 inspect it from outside. Everything runs against Xvfb `:99` with a window manager
-(xfwm4). Build the guest programs with the guest cross-compiler (host clang, ld64
+(xfwm4), except `run-kwin.py`, which starts a KWin of its own. Build the guest programs with the guest cross-compiler (host clang, ld64
 and the SDK of the source tree), then run the scripts on the host:
 
     guest-cc.sh -o /tmp/agm ../appkit-global-menu.m -framework Foundation -framework AppKit
@@ -20,6 +20,8 @@ and the SDK of the source tree), then run the scripts on the host:
     ./run-bar-hiding.py /tmp/agm
     ./run-strip.py /tmp/agm
     ./run-sticky.py /tmp/appkit-menu-sticky-click
+    ./run-kwin.py /tmp/agm
+    ./run-kwin.py --registrar kded /tmp/agm
     darling shell env DISPLAY=:99 /Volumes/SystemRoot/tmp/amc </dev/null
 
 | Script | What it checks |
@@ -28,6 +30,7 @@ and the SDK of the source tree), then run the scripts on the host:
 | `run-bar.py` | No registrar: a dock window at the top, full width, with a strut, is shown while the application is active and hidden while another client has the focus; with `xdotool` it opens a menu and chooses an item. Then without any session bus. |
 | `run-bar-hiding.py` | `../appkit-global-menu.m` in its `hiding` mode: the application's own menu bar is shown, and hidden while the key window has the full screen style and while the presentation options hide the menu bar (`NSApplicationPresentationHideMenuBar`, `NSApplicationPresentationAutoHideMenuBar`), and shown again afterwards. |
 | `run-strip.py` | The `DarlingInWindowMenuBar` preference. |
+| `run-kwin.py` | Under a private virtual KWin (`kwin_wayland --virtual --xwayland`) with its own session bus, on Wayland and on X11 (KWin's Xwayland): with a global menu (`fake-registrar.c`, or with `--registrar kded` Plasma's own appmenu service in `kded6`, switched on by owning `org.kde.kappmenuview` as the Global Menu applet does) the window has no strip, the menu is exported, and KWin reports the menu's address for the window (read with `appmenu-watcher.py` through `org_kde_plasma_window_management`, as the applet reads it); without one the window draws the strip on Wayland, and the application's menu bar is at the top of the screen on X11. Needs `kwin_wayland`, `Xwayland`, and for `--registrar kded` `kded6` and python3-dbus. |
 | `run-sticky.py` | `../appkit-menu-sticky-click.m` in four modes (the menu bar, the in-window strip, a pop-up button and a context menu): a menu opened by a click that is released at once stays open; a second click on an item chooses it; a click outside closes it without choosing; Escape closes it and Return chooses the item under the pointer; the application never resigns while its menu is open. |
 
 `fake-registrar.c` can be built on its own:

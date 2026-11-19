@@ -392,8 +392,9 @@ static BOOL _allowsAutomaticWindowTabbing;
 // main menu as a strip inside each titled window instead of in the desktop's
 // global menu or the application's own menu bar. It is read from the
 // application's preferences, falling back to NSGlobalDomain, and from the
-// org.darlinghq.AppKit domain. The answer is fixed at first use, because the
-// frame of every window depends on it.
+// org.darlinghq.AppKit domain. The strip is drawn as well when the display
+// backend has nowhere else to show the menu, so that it is never missing. The
+// answer is fixed at first use, because the frame of every window depends on it.
 + (BOOL) _usesInWindowMenuBar {
     static BOOL value;
     static dispatch_once_t once;
@@ -407,7 +408,8 @@ static BOOL _allowsAutomaticWindowTabbing;
       if (!valid)
           flag = CFPreferencesGetAppBooleanValue(
                   key, CFSTR("org.darlinghq.AppKit"), &valid);
-      value = valid && flag;
+      value = (valid && flag) ||
+              ![[NSDisplay currentDisplay] _showsMainMenuOutsideWindows];
     });
     return value;
 }

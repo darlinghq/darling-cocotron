@@ -47,7 +47,7 @@ find_package(OpenGL REQUIRED)
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(PC_CAIRO cairo)
-# The main menu (X11 backend) and the status items (NSStatusItem) are exported on the
+# The main menu (X11 and Wayland backends) and the status items (NSStatusItem) are exported on the
 # host's D-Bus session bus, through the dbus wrapper library of the native libdbus-1.
 pkg_check_modules(PC_DBUS REQUIRED dbus-1)
 pkg_check_modules(PC_FONTCONFIG fontconfig)
@@ -696,6 +696,7 @@ if (WAYLAND_PROTOCOLS_USABLE)
 
 	add_backend(Wayland
 		SOURCES
+			Wayland.backend/WaylandAppMenu.m
 			Wayland.backend/WaylandCursor.m
 			Wayland.backend/WaylandDisplay.m
 			Wayland.backend/WaylandOutputManager.m

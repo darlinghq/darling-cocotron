@@ -29,6 +29,7 @@ the transparency of a shown window updates this at once.
 
 - Windows: xdg toplevels, resize, hide and show, compositor close, nested popup menus, client or
   server-side decorations.
+- The main menu in Plasma's global menu, or in the windows: see below.
 - Input: pointer with click grouping and scroll frames, keyboard through xkbcommon with the compositor's
   keymap and key repeat, aggregate and left/right modifier changes, touchpad pinch as magnify and rotate
   events.
@@ -36,6 +37,19 @@ the transparency of a shown window updates this at once.
 - Clipboard and drag-and-drop, OpenGL and scale, fullscreen and pointer lock: see below.
 - Outputs: output batches are applied atomically, rotation and the xdg-output logical layout feed `NSScreen`,
   integer buffer scale follows the outputs a window is on.
+
+## Main menu
+
+When the compositor offers KDE's appmenu protocol (`org_kde_kwin_appmenu_manager`, from
+[plasma-wayland-protocols](https://invent.kde.org/libraries/plasma-wayland-protocols)) and the session bus has an
+owner of `com.canonical.AppMenu.Registrar`, the main menu goes to the desktop's global menu: it is exported on
+the session bus with the [`com.canonical.dbusmenu`](https://github.com/AyatanaIndicators/libdbusmenu) protocol
+(`AppKit/NSDBusMenu.m`, shared with the X11 backend) and every toplevel tells the compositor its address with
+`org_kde_kwin_appmenu.set_address`. Plasma owns the registrar name only while a global menu view is in use (the
+Global Menu applet or the application menu button of the title bars), so the name is the sign that the menu will
+be seen. Otherwise titled windows draw the menu in a strip of their own, as with the `DarlingInWindowMenuBar`
+preference: an xdg-shell client cannot put a menu bar window of its own along the top of the screen as the X11
+backend does. The choice is made once, before the first window frame is computed.
 
 ## Clipboard and drag-and-drop
 
