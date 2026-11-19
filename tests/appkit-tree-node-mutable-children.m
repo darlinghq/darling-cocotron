@@ -3,7 +3,8 @@
 // -[NSTreeNode mutableChildNodes], as observed on macOS 26.7.3 (black-box): a node added through
 // it gets the receiver as its parent, a node moved to another parent leaves the old one, a removed
 // or replaced node has no parent, childNodes is the live list, and observers of childNodes are
-// told about each insertion and removal with its kind and indexes.
+// told about each insertion and removal with its kind and indexes. -sortWithSortDescriptors:recursively:
+// compares the represented objects and sets the children as a whole.
 //
 // Build: clang -framework AppKit appkit-tree-node-mutable-children.m
 #import <AppKit/AppKit.h>
@@ -74,6 +75,28 @@ int main(void) {
 
         [children replaceObjectAtIndex: 0 withObject: d];
         CHECK([names(a) isEqualToString: @"d"] && [b parentNode] == nil && [d parentNode] == a);
+
+        // Sorting compares the represented objects; observers see the list set as a whole.
+        NSTreeNode *root = [NSTreeNode treeNodeWithRepresentedObject: @"root"];
+        for (NSString *name in [NSArray arrayWithObjects: @"bb", @"a", @"ccc", nil]) {
+            NSTreeNode *node = [NSTreeNode treeNodeWithRepresentedObject: name];
+            [[root mutableChildNodes] addObject: node];
+            [[node mutableChildNodes] addObject: [NSTreeNode treeNodeWithRepresentedObject: [name stringByAppendingString: @"y"]]];
+            [[node mutableChildNodes] addObject: [NSTreeNode treeNodeWithRepresentedObject: [name stringByAppendingString: @"z"]]];
+        }
+        [root addObserver: log forKeyPath: @"childNodes" options: 0 context: NULL];
+        [log->changes removeAllObjects];
+        NSArray *byLength = [NSArray arrayWithObject: [NSSortDescriptor sortDescriptorWithKey: @"length" ascending: YES]];
+        [root sortWithSortDescriptors: byLength recursively: NO];
+        CHECK([names(root) isEqualToString: @"a,bb,ccc"]);
+        CHECK([log->changes count] == 1 && [[log->changes objectAtIndex: 0] hasPrefix: @"root:1@"]);
+        NSArray *descending = [NSArray arrayWithObject: [NSSortDescriptor sortDescriptorWithKey: @"self" ascending: NO]];
+        [root sortWithSortDescriptors: descending recursively: YES];
+        CHECK([names(root) isEqualToString: @"ccc,bb,a"]);
+        CHECK([names([[root childNodes] objectAtIndex: 0]) isEqualToString: @"cccz,cccy"]);
+        [root sortWithSortDescriptors: [NSArray array] recursively: YES];
+        CHECK([names(root) isEqualToString: @"ccc,bb,a"]);
+        [root removeObserver: log forKeyPath: @"childNodes"];
 
         [a removeObserver: log forKeyPath: @"childNodes"];
         [b removeObserver: log forKeyPath: @"childNodes"];
