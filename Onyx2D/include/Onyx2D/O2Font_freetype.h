@@ -63,6 +63,14 @@ O2FontRegistrationResult O2FontRegisterFontFile(NSString *path);
 NSArray *O2FontCopyInstalledFaces(NSString *family, NSString *postScriptName,
                                   NSString *style, NSString *fullName);
 
+/* macOS always has a set of font families (Times, Helvetica, Lucida Grande, ...) that
+ * applications name without checking that they exist. When family (compared without regard
+ * to case) is one of them and no installed family has that name, returns the installed
+ * family that stands in for it, chosen by fontconfig as for any other font name. Returns nil
+ * for every other name, including installed families and unknown names. The caller owns the
+ * returned string. */
+NSString *O2FontCopyInstalledFamilyForStandardFamily(NSString *family);
+
 // Returns an owned font covering all supplied Unicode scalar values, or nil.
 O2FontRef O2FontCreateWithCodePointCoverage(const uint32_t *codePoints,
                                            size_t count, FT_Face baseFace,

@@ -189,12 +189,27 @@ CFArrayRef CTFontDescriptorCreateMatchingFontDescriptors(CTFontDescriptorRef des
 
     // Match installed faces on the name attributes of the query. Faces are
     // listed, not substituted: a family that is not installed matches
-    // nothing.
+    // nothing, except for the families every macOS provides (Times,
+    // Helvetica, ...). Those are answered by the installed family that stands
+    // in for them, which is also the family its faces and fonts report.
+    NSString *family = stringAttribute(query, kCTFontFamilyNameAttribute);
     NSArray *faces = O2FontCopyInstalledFaces(
-            stringAttribute(query, kCTFontFamilyNameAttribute),
+            family,
             stringAttribute(query, kCTFontNameAttribute),
             stringAttribute(query, kCTFontStyleNameAttribute),
             stringAttribute(query, kCTFontDisplayNameAttribute));
+    if (family != nil && [faces count] == 0) {
+        NSString *installedFamily = O2FontCopyInstalledFamilyForStandardFamily(family);
+        if (installedFamily != nil) {
+            [faces release];
+            faces = O2FontCopyInstalledFaces(
+                    installedFamily,
+                    stringAttribute(query, kCTFontNameAttribute),
+                    stringAttribute(query, kCTFontStyleNameAttribute),
+                    stringAttribute(query, kCTFontDisplayNameAttribute));
+            [installedFamily release];
+        }
+    }
 
     NSMutableArray *matches = [NSMutableArray array];
     NSMutableSet *seen = [NSMutableSet set];
