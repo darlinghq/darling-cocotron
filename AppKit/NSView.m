@@ -1202,6 +1202,20 @@ static void drawViewTreeInContext(NSView *view, CGContextRef port, NSRect rect) 
     return NS_EXTRA(NSView, self)->_isHidden;
 }
 
+// Sends -viewDidHide or -viewDidUnhide to a view whose hidden state, its own
+// or inherited, changed, and to the subviews that inherit it, superviews
+// before their subviews. A subview that is hidden itself does not change.
+static void sendHiddenStateChange(NSView *view, BOOL hidden) {
+    if (hidden)
+        [view viewDidHide];
+    else
+        [view viewDidUnhide];
+
+    for (NSView *subview in [[view->_subviews copy] autorelease])
+        if (!NS_EXTRA(NSView, subview)->_isHidden)
+            sendHiddenStateChange(subview, hidden);
+}
+
 - (BOOL) isHiddenOrHasHiddenAncestor {
     return NS_EXTRA(NSView, self)->_isHidden || [_superview isHiddenOrHasHiddenAncestor];
 }
@@ -1210,6 +1224,7 @@ static void drawViewTreeInContext(NSView *view, CGContextRef port, NSRect rect) 
     flag = flag ? YES : NO;
 
     if (NS_EXTRA(NSView, self)->_isHidden != flag) {
+        BOOL wasHidden = [self isHiddenOrHasHiddenAncestor];
         invalidateTransform(self);
         if ((NS_EXTRA(NSView, self)->_isHidden = flag)) {
             id view = [_window firstResponder];
@@ -1227,10 +1242,12 @@ static void drawViewTreeInContext(NSView *view, CGContextRef port, NSRect rect) 
         // Only where the view is shows or hides something.
         [[self superview] setNeedsDisplayInRect: [self frame]];
 
-        if (NS_EXTRA(NSView, self)->_isHidden)
-            [self viewDidHide];
-        else
-            [self viewDidUnhide];
+        // The view and the subviews that inherit its state are told when
+        // it changes: not when a hidden ancestor keeps them hidden anyway
+        // (black-box observation on macOS 26.7.3).
+        BOOL hidden = [self isHiddenOrHasHiddenAncestor];
+        if (hidden != wasHidden)
+            sendHiddenStateChange(self, hidden);
     }
 }
 
@@ -1781,6 +1798,7 @@ static void postFrameChange(NSView *self) {
     [view viewWillMoveToSuperview: self];
 
     NSView *oldSuperview = [view superview];
+    BOOL wasHidden = [view isHiddenOrHasHiddenAncestor];
     if (oldSuperview == self) {
         [self willRemoveSubview: view];
         // the index refers to the subviews before the view was taken out
@@ -1801,6 +1819,12 @@ static void postFrameChange(NSView *self) {
         // callbacks in the same way.
         // Test: tests/appkit-view-window-callbacks-superview.m
         [view _setSuperview: self];
+        // A view moved into or out of a hidden superview is told that it was
+        // hidden or shown, before the window callbacks (black-box
+        // observation on macOS 26.7.3).
+        BOOL hidden = [view isHiddenOrHasHiddenAncestor];
+        if (hidden != wasHidden)
+            sendHiddenStateChange(view, hidden);
         [view _setWindow: _window];
     }
 
@@ -2269,7 +2293,12 @@ static char inputContextKey;
     }
 
     [self _deepResignFirstResponder];
+    BOOL wasHidden = [self isHiddenOrHasHiddenAncestor];
     [self _setSuperview: nil];
+    // When the view only moves to another superview, the move itself tells
+    // it whether its hidden state changed.
+    if (moveHooks && wasHidden && !NS_EXTRA(NSView, self)->_isHidden)
+        sendHiddenStateChange(self, NO);
     [self _setWindow: nil];
 
     [removeFrom _removeViewWithoutDisplay: self];
