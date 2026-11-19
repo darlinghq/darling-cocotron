@@ -282,6 +282,72 @@ const CGFloat NSStringDrawerLargeDimension = 1000000.;
     [engine drawAtPoint: point];
 }
 
+- (NSSize) sizeOfAttributedString: (NSAttributedString *) astring
+                    fittingInSize: (NSSize) maxSize
+                    lastLineRange: (NSRange *) lastLine
+                    hasHiddenText: (BOOL *) hasHiddenText
+{
+    if (lastLine != NULL)
+        *lastLine = NSMakeRange(0, 0);
+    if (hasHiddenText != NULL)
+        *hasHiddenText = NO;
+    if ([astring length] == 0)
+        return NSZeroSize;
+
+    // Lay out with an unlimited height: a container that is too short makes the
+    // layout manager emit a clipped fragment for the line that does not fit.
+    [_textContainer setContainerSize: NSMakeSize(maxSize.width, NSStringDrawerLargeDimension)];
+    [_textStorage setAttributedString: astring];
+    NSRange glyphs = [_layoutManager glyphRangeForTextContainer: _textContainer];
+
+    NSMutableArray *lines = [NSMutableArray array];
+    CGFloat height = 0;
+    NSUInteger index = 0;
+    while (index < glyphs.length) {
+        NSRange lineGlyphs;
+        NSRect fragment = [_layoutManager lineFragmentRectForGlyphAtIndex: index
+                                                           effectiveRange: &lineGlyphs];
+        if ([lines count] > 0 && NSMaxY(fragment) > maxSize.height + 0.01)
+            break;
+        NSRect used = [_layoutManager lineFragmentUsedRectForGlyphAtIndex: index
+                                                           effectiveRange: NULL];
+        NSRange chars = [_layoutManager characterRangeForGlyphRange: lineGlyphs
+                                                   actualGlyphRange: NULL];
+        [lines addObject: [NSValue valueWithRange: chars]];
+        [lines addObject: [NSNumber numberWithDouble: used.size.width]];
+        height = NSMaxY(fragment);
+        index = NSMaxRange(lineGlyphs);
+    }
+
+    NSString *plain = [astring string];
+    NSCharacterSet *spaces = [NSCharacterSet whitespaceCharacterSet];
+    CGFloat width = 0;
+    NSRange last = NSMakeRange(0, 0);
+    for (NSUInteger i = 0; i + 1 < [lines count]; i += 2) {
+        NSRange chars = [[lines objectAtIndex: i] rangeValue];
+        CGFloat lineWidth = [[lines objectAtIndex: i + 1] doubleValue];
+        NSUInteger end = NSMaxRange(chars);
+        BOOL wrapped = end < [plain length];
+        if (wrapped && end > chars.location && [spaces characterIsMember: [plain characterAtIndex: end - 1]]) {
+            while (end > chars.location && [spaces characterIsMember: [plain characterAtIndex: end - 1]])
+                end--;
+            // Measured through the cached size path, which reuses the shared layout.
+            lineWidth = [self sizeOfAttributedString:
+                                [astring attributedSubstringFromRange:
+                                        NSMakeRange(chars.location, end - chars.location)]
+                                              inSize: NSZeroSize].width;
+        }
+        width = MAX(width, lineWidth);
+        last = chars;
+    }
+
+    if (lastLine != NULL)
+        *lastLine = last;
+    if (hasHiddenText != NULL)
+        *hasHiddenText = NSMaxRange(last) < [astring length];
+    return NSMakeSize(width, height);
+}
+
 @end
 
 @implementation NSString (NSStringDrawer)

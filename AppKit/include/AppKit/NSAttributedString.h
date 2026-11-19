@@ -264,17 +264,10 @@ typedef NS_ENUM(NSInteger, NSTextScalingType) {
 
 - (void) drawAtPoint: (NSPoint) point;
 - (void) drawInRect: (NSRect) rect;
-- (void) drawWithRect: (NSRect) rect options: (NSStringDrawingOptions) options;
-- (void) drawWithRect: (NSRect) rect
-              options: (NSStringDrawingOptions) options
-              context: (NSStringDrawingContext * _Nullable) context;
 - (NSSize) size;
 
 #pragma mark -
 #pragma mark Getting the Bounding Rectangle of Rendered Strings
-
-- (NSRect) boundingRectWithSize: (NSSize) size
-                        options: (NSStringDrawingOptions) options;
 
 #pragma mark -
 #pragma mark Getting Attribute Data
