@@ -42,6 +42,21 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
             triggerChangeNotificationsForDependentKey: @"contentObject"];
 }
 
+// QUIRK: the controller posts the changes of these keys itself, once per
+// actual change, and observing them leaves the controller's class alone
+// (+automaticallyNotifiesObserversForKey: is NO). Not documented. Evidence:
+// black-box observation on macOS 10.14.4 and 26.7.3 (tier 2).
+// Test: tests/appkit-arraycontroller-kvo.m
++ (BOOL) automaticallyNotifiesObserversForKey: (NSString *) key {
+    static NSSet *manualKeys;
+    if (manualKeys == nil)
+        manualKeys = [[NSSet alloc] initWithObjects: @"content", @"objectClass", @"selectedObjects", @"selection",
+                                                     @"canAdd", @"canRemove", nil];
+    if ([manualKeys containsObject: key])
+        return NO;
+    return [super automaticallyNotifiesObserversForKey: key];
+}
+
 - (id) init {
     if ((self = [super init])) {
         _selection =
@@ -127,12 +142,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (void) setContent: (id) value {
     if (value != _content) {
+        [self willChangeValueForKey: @"content"];
         [self _selectionWillChange];
 
         [_content release];
         _content = [value retain];
 
         [self _selectionDidChange];
+        [self didChangeValueForKey: @"content"];
     }
 }
 
@@ -163,10 +180,15 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (void) setObjectClass: (Class) objectClass {
+    if (objectClass == [self objectClass])
+        return;
+
     NSString *name = objectClass != Nil ? [NSStringFromClass(objectClass) copy] : nil;
 
+    [self willChangeValueForKey: @"objectClass"];
     [_objectClassName release];
     _objectClassName = name;
+    [self didChangeValueForKey: @"objectClass"];
 }
 
 - (id) newObject {
