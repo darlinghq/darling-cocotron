@@ -651,6 +651,20 @@ static const CGFloat kImageMargin = 2.;
     NS_EXTRA(NSButtonCell, self)->_imagePosition = position;
 }
 
+- (void) setImage: (NSImage *) image {
+    [super setImage: image];
+    // QUIRK: giving a button cell an image while its image position is
+    // NSNoImage changes the position to NSImageOnly, so the image shows; a
+    // position set before is kept. Not documented. Evidence: black-box
+    // observation on macOS 10.14.4 and 26.7.3 (tier 2), e.g. a new
+    // -[NSButton initWithFrame:] button reports NSImageOnly after -setImage:.
+    // macOS 26 does not do it again once NSNoImage was set explicitly;
+    // 10.14.4 does, which is followed here.
+    // Test: tests/appkit-button-image-position.m (test_quirk_set_image_shows_image)
+    if (image != nil && NS_EXTRA(NSButtonCell, self)->_imagePosition == NSNoImage)
+        NS_EXTRA(NSButtonCell, self)->_imagePosition = NSImageOnly;
+}
+
 - (void) setTitle: (NSString *) title {
     title = [title copy];
     [NS_EXTRA(NSCell, self)->_titleOrAttributedTitle release];
