@@ -64,10 +64,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (NSRect) availableRectForSubview {
     NSRect rect = [self bounds];
     CGFloat labelHeight = [_toolbarItem _labelSize].height;
-    rect.size.height -= labelHeight;
-    rect.origin.y +=
-            labelHeight +
-            4; // 4 is Cocotron magic padding (see NSToolbarItem drawInRect:
+
+    // The label is drawn at the bottom, 4 points below the view (see -[NSToolbarItem drawInRect:]);
+    // without a label (icon-only mode) the view has the whole height.
+    if (labelHeight > 0) {
+        rect.size.height -= labelHeight + 4;
+        rect.origin.y += labelHeight + 4;
+    }
     return rect;
 }
 
@@ -81,11 +84,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         NSRect availableRect = [self availableRectForSubview];
         NSRect viewRect = [view frame];
 
-        // Center the subview within the available bounds
+        // Center the subview within the available bounds, both ways, so that views of
+        // different heights line up on the middle of the toolbar and none sticks out of it.
         viewRect.origin.x = NSMinX(availableRect) +
                             (NSWidth(availableRect) - NSWidth(viewRect)) / 2.f;
-        // Align top
-        viewRect.origin.y = NSMinY(availableRect);
+        viewRect.origin.y = NSMinY(availableRect) +
+                            floor((NSHeight(availableRect) - NSHeight(viewRect)) / 2);
         [view setFrame: viewRect];
     }
 }
