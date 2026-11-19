@@ -91,6 +91,8 @@ extern NSString *const X11WindowBackingDidFlushNotification;
     // property, mapping and unmapping make it read again.
     BOOL _miniaturizedKnown;
     BOOL _miniaturized;
+    // The state the delegate was last told of (platformWindowMiniaturized: and platformWindowDeminiaturized:).
+    BOOL _miniaturizedReported;
     // Whether X11Display found the window covered (see X11Occlusion.h).
     BOOL _occluded;
 }

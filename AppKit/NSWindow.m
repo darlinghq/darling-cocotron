@@ -3644,11 +3644,29 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
 }
 
 - (void) miniaturize: (id) sender {
+    if (![self isMiniaturized]) {
+        [self postNotificationName: NSWindowWillMiniaturizeNotification];
+    }
     [[self platformWindow] miniaturize];
 }
 
 - (void) deminiaturize: (id) sender {
     [[self platformWindow] deminiaturize];
+}
+
+// Private setter that applications call to change the miniaturized state. On
+// macOS 26 it behaves like -miniaturize: / -deminiaturize: (the state changes
+// asynchronously and the Will/Did notifications are posted); setting the
+// state a window already has does nothing.
+- (void) setIsMiniaturized: (BOOL) miniaturized {
+    if (miniaturized == [self isMiniaturized]) {
+        return;
+    }
+    if (miniaturized) {
+        [self miniaturize: nil];
+    } else {
+        [self deminiaturize: nil];
+    }
 }
 
 - (void) print: (id) sender {
