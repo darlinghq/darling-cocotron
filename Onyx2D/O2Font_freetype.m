@@ -15,6 +15,12 @@
 #include <dispatch/dispatch.h>
 #import FT_TRUETYPE_TABLES_H
 #import FT_OUTLINE_H
+#import FT_MULTIPLE_MASTERS_H
+#import FT_SFNT_NAMES_H
+#import FT_TRUETYPE_IDS_H
+#import FT_MULTIPLE_MASTERS_H
+#import FT_SFNT_NAMES_H
+#import FT_TRUETYPE_IDS_H
 #include <math.h>
 
 @implementation O2Font_freetype
@@ -519,20 +525,28 @@ O2FontRef O2FontCreateWithCodePointCoverage(const uint32_t *codePoints,
     FT_Face face = NULL;
     FT_Error error = FT_New_Face(O2FontSharedFreeTypeLibrary(),
                                  (const char *)filename, faceIndex, &face);
+    NSString *sourcePath = [[NSString alloc] initWithUTF8String: (const char *)filename];
     FcPatternDestroy(match);
-    if (error != 0)
+    if (error != 0) {
+        [sourcePath release];
         return nil;
+    }
     if (FT_Select_Charmap(face, FT_ENCODING_UNICODE) != 0) {
         FT_Done_Face(face);
+        [sourcePath release];
         return nil;
     }
     for (size_t index = 0; index < count; ++index) {
         if (FT_Get_Char_Index(face, codePoints[index]) == 0) {
             FT_Done_Face(face);
+            [sourcePath release];
             return nil;
         }
     }
-    return [[O2Font_freetype alloc] initWithFace: face];
+    O2Font_freetype *font = [[O2Font_freetype alloc] initWithFace: face];
+    font->_sourcePath = sourcePath;
+    font->_sourceFaceIndex = faceIndex;
+    return font;
 }
 
 /* The installed face whose PostScript name is exactly name: its file and the face index in it
@@ -652,6 +666,8 @@ O2FontRef O2FontCreateWithCodePointCoverage(const uint32_t *codePoints,
         return nil;
     }
 
+    _sourcePath = [filename copy];
+    _sourceFaceIndex = faceIndex;
     return [self initWithFace: face];
 }
 
@@ -734,6 +750,8 @@ O2FontRef O2FontCreateWithCodePointCoverage(const uint32_t *codePoints,
 - (void) dealloc {
     FT_Done_Face(_face);
     [_faceData release];
+    [_sourcePath release];
+    [_variation release];
     [_glyphCache release];
     [_macRomanEncoding release];
     [_macExpertEncoding release];
@@ -743,6 +761,147 @@ O2FontRef O2FontCreateWithCodePointCoverage(const uint32_t *codePoints,
 
 - (FT_Face) face {
     return _face;
+}
+
+// The name of a variation axis: its name table entry, the English one if there
+// is more than one.
+static NSString *variationAxisName(FT_Face face, FT_UInt nameID) {
+    FT_UInt count = FT_Get_Sfnt_Name_Count(face);
+    NSString *other = nil;
+    for (FT_UInt i = 0; i < count; i++) {
+        FT_SfntName entry;
+        if (FT_Get_Sfnt_Name(face, i, &entry) != 0 || entry.name_id != nameID)
+            continue;
+        NSStringEncoding encoding;
+        BOOL english;
+        if (entry.platform_id == TT_PLATFORM_MICROSOFT) {
+            encoding = NSUTF16BigEndianStringEncoding;
+            english = entry.language_id == 0x409;
+        } else if (entry.platform_id == TT_PLATFORM_MACINTOSH) {
+            encoding = NSMacOSRomanStringEncoding;
+            english = entry.language_id == 0;
+        } else {
+            continue;
+        }
+        NSString *string = [[NSString alloc] initWithBytes: entry.string
+                                                    length: entry.string_len
+                                                  encoding: encoding];
+        if (string != nil && english) {
+            [other release];
+            return [string autorelease];
+        }
+        if (other == nil)
+            other = string;
+        else
+            [string release];
+    }
+    return [other autorelease];
+}
+
+- (NSArray *) copyVariationAxes {
+    if (!FT_HAS_MULTIPLE_MASTERS(_face))
+        return nil;
+    FT_MM_Var *master = NULL;
+    if (FT_Get_MM_Var(_face, &master) != 0 || master == NULL)
+        return nil;
+    NSMutableArray *axes = [[NSMutableArray alloc] init];
+    for (FT_UInt i = 0; i < master->num_axis; i++) {
+        FT_Var_Axis *axis = &master->axis[i];
+        NSMutableDictionary *info = [NSMutableDictionary dictionary];
+        [info setObject: [NSNumber numberWithUnsignedInt: (unsigned int) axis->tag] forKey: @"tag"];
+        [info setObject: [NSNumber numberWithDouble: axis->minimum / 65536.0] forKey: @"minimum"];
+        [info setObject: [NSNumber numberWithDouble: axis->maximum / 65536.0] forKey: @"maximum"];
+        [info setObject: [NSNumber numberWithDouble: axis->def / 65536.0] forKey: @"default"];
+        NSString *name = variationAxisName(_face, axis->strid);
+        if (name != nil)
+            [info setObject: name forKey: @"name"];
+        FT_UInt flags = 0;
+        FT_Get_Var_Axis_Flags(master, i, &flags);
+        [info setObject: [NSNumber numberWithBool: (flags & FT_VAR_AXIS_FLAG_HIDDEN) != 0]
+                 forKey: @"hidden"];
+        [axes addObject: info];
+    }
+    FT_Done_MM_Var(O2FontSharedFreeTypeLibrary(), master);
+    if ([axes count] == 0) {
+        [axes release];
+        return nil;
+    }
+    return axes;
+}
+
+- (NSDictionary *) copyVariationSettings {
+    NSArray *axes = [self copyVariationAxes];
+    if (axes == nil)
+        return nil;
+    [axes release];
+    return _variation != nil ? [_variation copy] : [[NSDictionary alloc] init];
+}
+
+- (O2Font_freetype *) copyWithVariation: (NSDictionary *) variation {
+    NSArray *axes = [self copyVariationAxes];
+    if (axes == nil)
+        return nil;
+
+    // The settings so far, overridden by the new ones, for the axes the font has.
+    NSMutableDictionary *settings = _variation != nil ? [_variation mutableCopy]
+                                                      : [[NSMutableDictionary alloc] init];
+    for (NSDictionary *axis in axes) {
+        NSNumber *tag = [axis objectForKey: @"tag"];
+        id value = [variation objectForKey: tag];
+        if (![value isKindOfClass: [NSNumber class]])
+            continue;
+        double number = [value doubleValue];
+        double minimum = [[axis objectForKey: @"minimum"] doubleValue];
+        double maximum = [[axis objectForKey: @"maximum"] doubleValue];
+        if (number != number)
+            continue;
+        number = number < minimum ? minimum : (number > maximum ? maximum : number);
+        [settings setObject: [NSNumber numberWithDouble: number] forKey: tag];
+    }
+
+    FT_Face face = NULL;
+    // The font data of a data provider outlives the face through the provider.
+    const void *bytes = _faceData != nil ? [_faceData bytes] : [_provider bytes];
+    size_t length = _faceData != nil ? [_faceData length] : [_provider length];
+    if (_sourcePath == nil && bytes != NULL) {
+        if (FT_New_Memory_Face(O2FontSharedFreeTypeLibrary(), bytes, length,
+                               _sourceFaceIndex, &face) != 0)
+            face = NULL;
+    } else if (_sourcePath != nil) {
+        if (FT_New_Face(O2FontSharedFreeTypeLibrary(), [_sourcePath fileSystemRepresentation],
+                        _sourceFaceIndex, &face) != 0)
+            face = NULL;
+    }
+    if (face == NULL) {
+        [axes release];
+        [settings release];
+        return nil;
+    }
+
+    FT_Fixed *coordinates = calloc([axes count], sizeof(FT_Fixed));
+    for (NSUInteger i = 0; i < [axes count]; i++) {
+        NSDictionary *axis = [axes objectAtIndex: i];
+        NSNumber *value = [settings objectForKey: [axis objectForKey: @"tag"]];
+        if (value == nil)
+            value = [axis objectForKey: @"default"];
+        coordinates[i] = (FT_Fixed) llround([value doubleValue] * 65536.0);
+    }
+    FT_Error error = FT_Set_Var_Design_Coordinates(face, (FT_UInt) [axes count], coordinates);
+    free(coordinates);
+    [axes release];
+    if (error != 0) {
+        FT_Done_Face(face);
+        [settings release];
+        return nil;
+    }
+
+    O2Font_freetype *result = [[O2Font_freetype alloc] initWithFace: face];
+    result->_faceData = [_faceData retain];
+    result->_provider = O2DataProviderRetain(_provider);
+    result->_sourcePath = [_sourcePath copy];
+    result->_sourceFaceIndex = _sourceFaceIndex;
+    result->_variation = settings;
+    return result;
 }
 
 - (NSString *) copyPostScriptName {

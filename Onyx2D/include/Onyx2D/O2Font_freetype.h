@@ -32,12 +32,38 @@
     O2Encoding *_winAnsiEncoding;
     NSMutableDictionary *_glyphCache;
     NSUInteger _glyphCacheBytes;
+    // Where the face was opened from, so a copy with other variation settings
+    // can open its own face: a font file (host path) and face index, or the
+    // font data in _faceData.
+    NSString *_sourcePath;
+    int _sourceFaceIndex;
+    // Tag (NSNumber, the four characters as a 32-bit integer) to value
+    // (NSNumber) of the variation axes this font was explicitly set to.
+    NSDictionary *_variation;
 }
 
 - (instancetype) initWithFace: (FT_Face) face;
 - (instancetype) initWithDataProvider: (O2DataProviderRef) provider;
 
 - (FT_Face) face;
+
+/* Variable font support (an OpenType fvar table). The axes are described by
+ * dictionaries with the keys @"tag" (NSNumber, the four characters as a 32-bit
+ * integer), @"minimum", @"maximum", @"default" (NSNumber double), @"name"
+ * (NSString, may be missing) and @"hidden" (NSNumber BOOL). Returns nil when
+ * the font has no variation axes. The caller owns the result. */
+- (NSArray *) copyVariationAxes;
+
+/* The axes explicitly set on this font, tag to value; an empty dictionary for a
+ * variable font at its defaults, nil for a font without variation axes. The
+ * caller owns the result. */
+- (NSDictionary *) copyVariationSettings;
+
+/* An owned font like this one with the given axes (tag to value) set on top of
+ * the current settings. Tags that are not axes of the font are ignored and
+ * values are clamped to the axis range. Returns nil when the font has no
+ * variation axes or cannot be reopened. */
+- (O2Font_freetype *) copyWithVariation: (NSDictionary *) variation;
 
 FT_Face O2FontFreeTypeFace(O2Font_freetype *self);
 
