@@ -1697,6 +1697,60 @@ BOOL X11WindowManagerIsRunning(Display *display) {
     XFlush(_display);
 }
 
+// Whether the window manager lists the atom in _NET_SUPPORTED on the root window (EWMH).
+static BOOL X11WindowManagerSupports(Display *display, const char *name) {
+    Atom wanted = XInternAtom(display, name, False);
+    Atom type;
+    int format;
+    unsigned long count, after;
+    unsigned char *data = NULL;
+    BOOL found = NO;
+    if (XGetWindowProperty(display, DefaultRootWindow(display),
+                           XInternAtom(display, "_NET_SUPPORTED", False), 0, 4096, False, XA_ATOM,
+                           &type, &format, &count, &after, &data) == Success &&
+        data != NULL && type == XA_ATOM && format == 32) {
+        Atom *atoms = (Atom *) data;
+        for (unsigned long i = 0; i < count && !found; i++)
+            found = atoms[i] == wanted;
+    }
+    if (data != NULL)
+        XFree(data);
+    return found;
+}
+
+// -[NSWindow performWindowDragWithEvent:]: the window manager moves the window
+// for as long as the left button stays down (EWMH _NET_WM_MOVERESIZE). The
+// pointer grab the press gave this client is released first, as EWMH asks, so
+// the button release goes to the window manager. NO when the window manager
+// cannot do it, the window is not managed, or the button is already up.
+- (BOOL) moveByWindowManagerForEvent: (NSEvent *) event {
+    if (_window == 0 || _overrideRedirect ||
+        !X11WindowManagerSupports(_display, "_NET_WM_MOVERESIZE"))
+        return NO;
+
+    Window root, child;
+    int rootX, rootY, winX, winY;
+    unsigned int mask = 0;
+    if (!XQueryPointer(_display, _window, &root, &child, &rootX, &rootY, &winX, &winY, &mask) ||
+        !(mask & Button1Mask))
+        return NO;
+
+    XUngrabPointer(_display, CurrentTime);
+    XEvent message = {0};
+    message.xclient.type = ClientMessage;
+    message.xclient.window = _window;
+    message.xclient.message_type = XInternAtom(_display, "_NET_WM_MOVERESIZE", False);
+    message.xclient.format = 32;
+    message.xclient.data.l[0] = rootX;
+    message.xclient.data.l[1] = rootY;
+    message.xclient.data.l[2] = 8; // _NET_WM_MOVERESIZE_MOVE
+    message.xclient.data.l[3] = Button1;
+    message.xclient.data.l[4] = 1; // source indication: application
+    XSendEvent(_display, root, False, SubstructureRedirectMask | SubstructureNotifyMask, &message);
+    XFlush(_display);
+    return YES;
+}
+
 - (void) miniaturize {
     XIconifyWindow(_display, _window, DefaultScreen(_display));
 }

@@ -145,6 +145,7 @@ NSInteger NSBitsPerPixelFromDepth(NSWindowDepth depth) {
 - (void) dirtyRect: (CGRect) rect;
 // Optional, for backends whose window system can do it.
 - (void) updateDecorationsForStyleMask: (NSUInteger) styleMask;
+- (BOOL) moveByWindowManagerForEvent: (NSEvent *) event;
 @end
 
 @interface NSToolbar (NSToolbar_privateForWindow)
@@ -1378,7 +1379,15 @@ static BOOL _allowsAutomaticWindowTabbing;
     if (!NS_EXTRA(NSWindow, self)->_isMovable || [event type] != NSLeftMouseDown)
         return;
 
-    // Follow the pointer in screen coordinates. An event's location in the
+    // The window system moves the window itself where it can, as the window
+    // server does on macOS: the window manager or compositor then keeps the
+    // window under the pointer until the button is released, and the release
+    // goes to it rather than to the application.
+    if ([_platformWindow respondsToSelector: @selector(moveByWindowManagerForEvent:)] &&
+        [_platformWindow moveByWindowManagerForEvent: event])
+        return;
+
+    // Otherwise follow the pointer in screen coordinates. An event's location in the
     // window is measured against where the window really is, which lags
     // behind -setFrameOrigin: while the window system catches up, so
     // converting it with the new frame would feed that lag back in.

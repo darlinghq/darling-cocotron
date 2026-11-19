@@ -858,6 +858,22 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     return YES;
 }
 
+// -[NSWindow performWindowDragWithEvent:]: a client cannot place a toplevel, so
+// the compositor moves it, for the press the event stands for (xdg_toplevel.move
+// with that press's serial). NO for a popup, or when the event is not the
+// press being dispatched.
+- (BOOL) moveByWindowManagerForEvent: (NSEvent *) event {
+    if (_toplevel == NULL || [_display seat] == NULL)
+        return NO;
+    uint32_t serial = [_display dragSerialForEvent: event];
+    if (serial == 0)
+        return NO;
+    union wl_argument args[2] = {{.o = (struct wl_object *) [_display seat]}, {.u = serial}};
+    WaylandMarshal(_toplevel, WP_TOPLEVEL_MOVE, NULL, 0, args);
+    [_display flush];
+    return YES;
+}
+
 - (void) setLastKnownCursorPosition: (CGPoint) point {
     _lastMotionPos = point;
 }
