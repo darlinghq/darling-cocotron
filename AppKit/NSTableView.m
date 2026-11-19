@@ -56,6 +56,7 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
 - (void) _recycleView: (NSView *) view;
 - (void) _recycleCellViewsOutsideRows: (NSRange) rows;
 - (NSView *) _cellViewAtColumn: (NSInteger) column row: (NSInteger) row make: (BOOL) make;
+- (void) _setObjectValueOfCellView: (NSView *) view column: (NSTableColumn *) column row: (NSInteger) row;
 - (BOOL) _typeSelectEvent: (NSEvent *) event;
 - (void) _updateToolTipAreas;
 - (void) noteSelectionIsChanging;
@@ -2998,6 +2999,9 @@ static NSNumber *CellViewKey(NSInteger row, NSInteger column, BOOL group) {
         if (view != nil) {
             [view setFrame: frame];
             [NS_EXTRA(NSTableView, self)->_cellViews setObject: view forKey: key];
+            [self _setObjectValueOfCellView: view
+                                     column: group ? nil : [_tableColumns objectAtIndex: column]
+                                        row: row];
         }
     } else if (view != nil) {
         [view setFrame: group ? [self rectOfRow: row] : [self frameOfCellAtColumn: column row: row]];
@@ -3005,6 +3009,21 @@ static NSNumber *CellViewKey(NSInteger row, NSInteger column, BOOL group) {
     if (view != nil && [view superview] != self)
         [self addSubview: view];
     return view;
+}
+
+// A view-based table gives a new cell view the object value the data source
+// has for its cell, after the delegate made the view (a group row's view gets
+// the value for no column), when the view takes one (NSTableCellView does) and
+// the data source implements tableView:objectValueForTableColumn:row:.
+// Bindings in the cell view, such as a text field bound to objectValue, show
+// that value. Documented for NSTableViewDataSource; the order and the nil
+// column of a group row are black-box observations on macOS 10.14.4 and
+// 26.7.3. Test: tests/appkit-table-cell-view-object-value.m
+- (void) _setObjectValueOfCellView: (NSView *) view column: (NSTableColumn *) column row: (NSInteger) row {
+    if (![view respondsToSelector: @selector(setObjectValue:)] ||
+        ![_dataSource respondsToSelector: @selector(tableView:objectValueForTableColumn:row:)])
+        return;
+    [(id) view setObjectValue: [_dataSource tableView: self objectValueForTableColumn: column row: row]];
 }
 
 - (NSView *) viewAtColumn: (NSInteger) column row: (NSInteger) row makeIfNecessary: (BOOL) makeIfNecessary {
