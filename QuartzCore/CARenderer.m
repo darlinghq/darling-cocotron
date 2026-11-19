@@ -11,6 +11,7 @@
 #import "CALayerInternal.h"
 
 #include <math.h>
+#include <string.h>
 
 @interface CASpringAnimation (Private)
 - (CGFloat) _springProgressAtTime: (CFTimeInterval) t;
@@ -288,6 +289,21 @@ static void applyLayerTransform(CATransform3D t) {
     glMultMatrixf(matrix);
 }
 
+// Applies a layer's sublayer transform about its anchor point. The matrix has
+// the layer's bounds corner at the origin, so the anchor point is at
+// anchorPoint * size.
+static void applySublayerTransform(CATransform3D t, CGPoint anchorPoint,
+                                   CGRect bounds)
+{
+    if (CATransform3DIsIdentity(t))
+        return;
+    CGFloat ax = bounds.size.width * anchorPoint.x;
+    CGFloat ay = bounds.size.height * anchorPoint.y;
+    glTranslatef(ax, ay, 0);
+    applyLayerTransform(t);
+    glTranslatef(-ax, -ay, 0);
+}
+
 // Specifies the bound texture as a single transparent pixel, for contents
 // that have no pixels to upload, so that nothing stale is drawn.
 static void texImage2DTransparent(void) {
@@ -512,10 +528,60 @@ static uint32_t texImage2DIOSurface(CGLContextObj context,
     return seed;
 }
 
+// Where the selected part of the contents goes in rect (the layer's bounds,
+// relative to their corner, in the layer's own orientation: y = 0 is the
+// bounds origin, which is the bottom on screen unless the layer is flipped).
+// size is the part's size in points. The gravity names refer to the layer's
+// coordinates, so "top" is the maxY edge, which a flipped layer shows at the
+// bottom of the screen.
+static CGRect contentsRectForGravity(NSString *gravity, CGRect rect, CGSize size) {
+    if (gravity == nil || [gravity isEqualToString: kCAGravityResize] ||
+        size.width <= 0 || size.height <= 0)
+        return rect;
+
+    if ([gravity isEqualToString: kCAGravityResizeAspect] ||
+        [gravity isEqualToString: kCAGravityResizeAspectFill]) {
+        CGFloat sx = rect.size.width / size.width;
+        CGFloat sy = rect.size.height / size.height;
+        CGFloat scale = [gravity isEqualToString: kCAGravityResizeAspect] ? MIN(sx, sy) : MAX(sx, sy);
+        size = CGSizeMake(size.width * scale, size.height * scale);
+        return CGRectMake(CGRectGetMidX(rect) - size.width / 2,
+                          CGRectGetMidY(rect) - size.height / 2, size.width,
+                          size.height);
+    }
+
+    BOOL left = [gravity isEqualToString: kCAGravityLeft] ||
+                [gravity isEqualToString: kCAGravityTopLeft] ||
+                [gravity isEqualToString: kCAGravityBottomLeft];
+    BOOL right = [gravity isEqualToString: kCAGravityRight] ||
+                 [gravity isEqualToString: kCAGravityTopRight] ||
+                 [gravity isEqualToString: kCAGravityBottomRight];
+    BOOL top = [gravity isEqualToString: kCAGravityTop] ||
+               [gravity isEqualToString: kCAGravityTopLeft] ||
+               [gravity isEqualToString: kCAGravityTopRight];
+    BOOL bottom = [gravity isEqualToString: kCAGravityBottom] ||
+                  [gravity isEqualToString: kCAGravityBottomLeft] ||
+                  [gravity isEqualToString: kCAGravityBottomRight];
+
+    // An unknown name is treated as the default, resize.
+    if (!left && !right && !top && !bottom &&
+        ![gravity isEqualToString: kCAGravityCenter])
+        return rect;
+
+    CGFloat x = left ? CGRectGetMinX(rect)
+                     : right ? CGRectGetMaxX(rect) - size.width
+                             : CGRectGetMidX(rect) - size.width / 2;
+    CGFloat y = bottom ? CGRectGetMinY(rect)
+                       : top ? CGRectGetMaxY(rect) - size.height
+                             : CGRectGetMidY(rect) - size.height / 2;
+    return CGRectMake(x, y, size.width, size.height);
+}
+
 - (void) _drawContentsOfLayer: (CALayer *) layer
                        bounds: (CGRect) bounds
                       opacity: (CGFloat) opacity
                       flipped: (BOOL) flipped
+                       atTime: (CFTimeInterval) currentTime
 {
     CGRect rect = CGRectMake(0, 0, bounds.size.width, bounds.size.height);
     id contents = [layer _contentsForRendering: &rect];
@@ -561,15 +627,39 @@ static uint32_t texImage2DIOSurface(CGLContextObj context,
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, minFilter);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, magFilter);
 
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        // Parts of contentsRect outside the unit square show the edge
+        // pixels, extended outwards (as the contentsRect documentation says).
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     }
 
-    // Texture row 0 is the top of the image. It goes at the top of the screen
-    // whether or not the layer's coordinate space is flipped.
-    const GLfloat uprightTexture[4 * 2] = {0, 1, 1, 1, 0, 0, 1, 0};
-    const GLfloat flippedTexture[4 * 2] = {0, 0, 1, 0, 0, 1, 1, 1};
-    const GLfloat *textureVertices = flipped ? flippedTexture : uprightTexture;
+    // The part of the contents to show, in the unit coordinates of the
+    // contents. Its y = 0 is the image edge at the layer's bounds origin:
+    // the bottom of the image, or its top when the layer's coordinate space
+    // is flipped on screen. The image itself stays upright.
+    CGRect part = interpolateRectInLayerKey(layer, @"contentsRect", currentTime);
+
+    size_t pixelsWide = surface != NULL ? IOSurfaceGetWidth(surface)
+                                        : CGImageGetWidth((CGImageRef) contents);
+    size_t pixelsHigh = surface != NULL ? IOSurfaceGetHeight(surface)
+                                        : CGImageGetHeight((CGImageRef) contents);
+    CGFloat scale = layer.contentsScale > 0 ? layer.contentsScale : 1;
+    CGSize partSize = CGSizeMake(fabs(part.size.width) * pixelsWide / scale,
+                                 fabs(part.size.height) * pixelsHigh / scale);
+    rect = contentsRectForGravity(layer.contentsGravity, rect, partSize);
+
+    // Texture row 0 (t = 0) is the top of the image.
+    const GLfloat s0 = CGRectGetMinX(part), s1 = CGRectGetMaxX(part);
+    GLfloat tBottom, tTop;
+    if (flipped) {
+        tBottom = CGRectGetMinY(part);
+        tTop = CGRectGetMaxY(part);
+    } else {
+        tBottom = 1 - CGRectGetMinY(part);
+        tTop = 1 - CGRectGetMaxY(part);
+    }
+    const GLfloat textureVertices[4 * 2] = {s0, tBottom, s1, tBottom,
+                                            s0, tTop, s1, tTop};
     const GLfloat left = CGRectGetMinX(rect), right = CGRectGetMaxX(rect);
     const GLfloat bottom = CGRectGetMinY(rect), top = CGRectGetMaxY(rect);
     const GLfloat vertices[4 * 2] = {left, bottom, right, bottom,
@@ -584,6 +674,120 @@ static uint32_t texImage2DIOSurface(CGLContextObj context,
     glDisable(GL_TEXTURE_2D);
 }
 
+// The clip that masking layers (masksToBounds) set up for their contents and
+// sublayers. A layer whose bounds are an axis-aligned rectangle on the
+// drawable narrows the scissor box. Otherwise its bounds are clipped with
+// four user clip planes, which work whatever buffers the drawable has; when
+// the planes run out, the scissor box around its bounds is used instead.
+// Nested clips intersect.
+typedef struct {
+    BOOL scissor;
+    GLint box[4];
+    GLint planes;
+    GLint maxPlanes;
+} CARendererClip;
+
+static BOOL windowPoint(const GLdouble *m, const GLdouble *p, const GLint *viewport,
+                        GLdouble x, GLdouble y, GLdouble out[2])
+{
+    GLdouble eye[4], clip[4];
+    for (int i = 0; i < 4; i++)
+        eye[i] = m[i] * x + m[4 + i] * y + m[12 + i];
+    for (int i = 0; i < 4; i++)
+        clip[i] = p[i] * eye[0] + p[4 + i] * eye[1] + p[8 + i] * eye[2] + p[12 + i] * eye[3];
+    if (!(clip[3] > 0))
+        return NO;
+    out[0] = viewport[0] + (clip[0] / clip[3] + 1) * viewport[2] / 2;
+    out[1] = viewport[1] + (clip[1] / clip[3] + 1) * viewport[3] / 2;
+    return YES;
+}
+
+static void intersectScissor(CARendererClip *clip, GLdouble minX, GLdouble minY,
+                             GLdouble maxX, GLdouble maxY)
+{
+    GLint x0 = (GLint) floor(minX + 0.5), y0 = (GLint) floor(minY + 0.5);
+    GLint x1 = (GLint) floor(maxX + 0.5), y1 = (GLint) floor(maxY + 0.5);
+    if (clip->scissor) {
+        x0 = MAX(x0, clip->box[0]);
+        y0 = MAX(y0, clip->box[1]);
+        x1 = MIN(x1, clip->box[0] + clip->box[2]);
+        y1 = MIN(y1, clip->box[1] + clip->box[3]);
+    }
+    clip->scissor = YES;
+    clip->box[0] = x0;
+    clip->box[1] = y0;
+    clip->box[2] = MAX(x1 - x0, 0);
+    clip->box[3] = MAX(y1 - y0, 0);
+    glEnable(GL_SCISSOR_TEST);
+    glScissor(clip->box[0], clip->box[1], clip->box[2], clip->box[3]);
+}
+
+// Clips to (0, 0, width, height) of the current modelview coordinates.
+static void pushBoundsClip(CARendererClip *clip, CGFloat width, CGFloat height)
+{
+    GLdouble m[16], p[16];
+    GLint viewport[4];
+    glGetDoublev(GL_MODELVIEW_MATRIX, m);
+    glGetDoublev(GL_PROJECTION_MATRIX, p);
+    glGetIntegerv(GL_VIEWPORT, viewport);
+
+    GLdouble corners[4][2];
+    BOOL inFront = windowPoint(m, p, viewport, 0, 0, corners[0]) &&
+                   windowPoint(m, p, viewport, width, 0, corners[1]) &&
+                   windowPoint(m, p, viewport, 0, height, corners[2]) &&
+                   windowPoint(m, p, viewport, width, height, corners[3]);
+
+    if (inFront) {
+        GLdouble minX = INFINITY, minY = INFINITY, maxX = -INFINITY, maxY = -INFINITY;
+        for (int i = 0; i < 4; i++) {
+            minX = MIN(minX, corners[i][0]);
+            maxX = MAX(maxX, corners[i][0]);
+            minY = MIN(minY, corners[i][1]);
+            maxY = MAX(maxY, corners[i][1]);
+        }
+        // The edges from corner 0 run along the window's axes (in either
+        // order) and the far corner closes the rectangle.
+        const GLdouble e = 1.0 / 64;
+        GLdouble ux = corners[1][0] - corners[0][0], uy = corners[1][1] - corners[0][1];
+        GLdouble vx = corners[2][0] - corners[0][0], vy = corners[2][1] - corners[0][1];
+        BOOL aligned = ((fabs(uy) < e && fabs(vx) < e) || (fabs(ux) < e && fabs(vy) < e)) &&
+                       fabs(corners[3][0] - (corners[0][0] + ux + vx)) < e &&
+                       fabs(corners[3][1] - (corners[0][1] + uy + vy)) < e;
+        intersectScissor(clip, minX, minY, maxX, maxY);
+        if (aligned)
+            return;
+    }
+
+    if (clip->planes + 4 > clip->maxPlanes)
+        return;
+    // ax + by + d >= 0 is kept; the planes are given in the current
+    // modelview coordinates.
+    const GLdouble equations[4][4] = {
+        {1, 0, 0, 0},
+        {-1, 0, 0, width},
+        {0, 1, 0, 0},
+        {0, -1, 0, height},
+    };
+    for (int i = 0; i < 4; i++) {
+        glClipPlane(GL_CLIP_PLANE0 + clip->planes + i, equations[i]);
+        glEnable(GL_CLIP_PLANE0 + clip->planes + i);
+    }
+    clip->planes += 4;
+}
+
+static void popClip(CARendererClip *clip, const CARendererClip *saved)
+{
+    for (GLint i = saved->planes; i < clip->planes; i++)
+        glDisable(GL_CLIP_PLANE0 + i);
+    if (saved->scissor) {
+        glEnable(GL_SCISSOR_TEST);
+        glScissor(saved->box[0], saved->box[1], saved->box[2], saved->box[3]);
+    } else {
+        glDisable(GL_SCISSOR_TEST);
+    }
+    *clip = *saved;
+}
+
 // Layers are composited in painter's order: a layer's background, contents and
 // border, then its sublayers in array order. Opacity multiplies down the tree.
 // parentFlipped says whether the parent's coordinate space is y-flipped on screen.
@@ -591,6 +795,7 @@ static uint32_t texImage2DIOSurface(CGLContextObj context,
           currentTime: (CFTimeInterval) currentTime
         parentOpacity: (CGFloat) parentOpacity
         parentFlipped: (BOOL) parentFlipped
+                 clip: (CARendererClip *) clip
 {
     if (layer.hidden)
         return;
@@ -622,8 +827,20 @@ static uint32_t texImage2DIOSurface(CGLContextObj context,
         flipped = !flipped;
     }
 
-    // A transform layer renders only its sublayers.
-    if (![layer isKindOfClass: [CATransformLayer class]]) {
+    // A masking layer clips its contents and its sublayers to its bounds. A
+    // transform layer renders only its sublayers and does not mask.
+    BOOL isTransformLayer = [layer isKindOfClass: [CATransformLayer class]];
+    BOOL masks = layer.masksToBounds && !isTransformLayer;
+    CARendererClip saved = *clip;
+    if (masks) {
+        if (!(bounds.size.width > 0 && bounds.size.height > 0)) {
+            glPopMatrix();
+            return;
+        }
+        pushBoundsClip(clip, bounds.size.width, bounds.size.height);
+    }
+
+    if (!isTransformLayer) {
         [self _drawBackgroundOfLayer: layer bounds: bounds opacity: opacity];
 
         // A layer that draws its own content (CAMetalLayer draws the texture the GPU
@@ -633,7 +850,8 @@ static uint32_t texImage2DIOSurface(CGLContextObj context,
             [self _drawContentsOfLayer: layer
                                 bounds: bounds
                                opacity: opacity
-                               flipped: flipped];
+                               flipped: flipped
+                                atTime: currentTime];
 
         [self _drawBorderOfLayer: layer bounds: bounds opacity: opacity];
     }
@@ -642,14 +860,21 @@ static uint32_t texImage2DIOSurface(CGLContextObj context,
     // bounds.origin, so it belongs that much further left and down than the matrix above
     // puts it. Only the recursion is offset: this layer's own contents already have the
     // origin removed from their image, so translating them too would double-count it.
+    // The sublayer transform applies about the anchor point, in the layer's own
+    // (possibly flipped) coordinates.
     glPushMatrix();
+    applySublayerTransform(layer.sublayerTransform, anchorPoint, bounds);
     glTranslatef(-bounds.origin.x, -bounds.origin.y, 0);
     for (CALayer *child in layer.sublayers)
         [self _renderLayer: child
                 currentTime: currentTime
-parentOpacity: opacity
-              parentFlipped: flipped];
+              parentOpacity: opacity
+              parentFlipped: flipped
+                       clip: clip];
     glPopMatrix();
+
+    if (masks)
+        popClip(clip, &saved);
 
     glPopMatrix();
 }
@@ -746,10 +971,18 @@ static CGRect drawnExtentOfLayer(CALayer *layer, CATransform3D superlayerToRoot,
     if (layer.masksToBounds)
         return extent;
 
-    // Sublayers are positioned relative to the bounds origin.
-    CATransform3D sublayersToRoot = CATransform3DConcat(
-            CATransform3DMakeTranslation(-bounds.origin.x, -bounds.origin.y, 0),
-            toRoot);
+    // Sublayers are positioned relative to the bounds origin, and the
+    // sublayer transform applies about the anchor point, as in -_renderLayer:.
+    CATransform3D sublayers = CATransform3DMakeTranslation(-bounds.origin.x, -bounds.origin.y, 0);
+    CATransform3D sublayerTransform = layer.sublayerTransform;
+    if (!CATransform3DIsIdentity(sublayerTransform)) {
+        CGFloat ax = bounds.size.width * anchorPoint.x;
+        CGFloat ay = bounds.size.height * anchorPoint.y;
+        sublayers = CATransform3DConcat(sublayers, CATransform3DMakeTranslation(-ax, -ay, 0));
+        sublayers = CATransform3DConcat(sublayers, sublayerTransform);
+        sublayers = CATransform3DConcat(sublayers, CATransform3DMakeTranslation(ax, ay, 0));
+    }
+    CATransform3D sublayersToRoot = CATransform3DConcat(sublayers, toRoot);
     for (CALayer *child in layer.sublayers)
         extent = unionOfRects(extent, drawnExtentOfLayer(child, sublayersToRoot,
                                                          currentTime, NULL));
@@ -812,10 +1045,25 @@ static void displayLayerTreeIfNeeded(CALayer *layer) {
     glAlphaFunc(GL_GREATER, 0);
     glEnable(GL_ALPHA_TEST);
 
+    // Masking layers narrow a scissor box the caller may already have set.
+    CARendererClip clip = {NO, {0, 0, 0, 0}, 0, 0};
+    GLboolean callerScissor = glIsEnabled(GL_SCISSOR_TEST);
+    GLint callerBox[4];
+    glGetIntegerv(GL_SCISSOR_BOX, callerBox);
+    clip.scissor = callerScissor;
+    memcpy(clip.box, callerBox, sizeof(callerBox));
+    glGetIntegerv(GL_MAX_CLIP_PLANES, &clip.maxPlanes);
+
     [self _renderLayer: NS_EXTRA(CARenderer, self)->_rootLayer
             currentTime: CACurrentMediaTime()
           parentOpacity: 1.0
-          parentFlipped: [NS_EXTRA(CARenderer, self)->_rootLayer.superlayer contentsAreFlipped]];
+          parentFlipped: [NS_EXTRA(CARenderer, self)->_rootLayer.superlayer contentsAreFlipped]
+                   clip: &clip];
+
+    if (callerScissor)
+        glScissor(callerBox[0], callerBox[1], callerBox[2], callerBox[3]);
+    else
+        glDisable(GL_SCISSOR_TEST);
 
     glFlush();
 }
