@@ -35,9 +35,9 @@ CA_EXPORT NSString *const kCAAnimationRotateAutoReverse;
         CFTimeInterval _beginTime;
         CFTimeInterval _duration;
         NSString *_fillMode;
-        CGFloat _repeatCount;
+        float _repeatCount;
         CFTimeInterval _repeatDuration;
-        CGFloat _speed;
+        float _speed;
         CFTimeInterval _timeOffset;
     NS_EXTRA_IVARS_END(CAAnimation)
 }

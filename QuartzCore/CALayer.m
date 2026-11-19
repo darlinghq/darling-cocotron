@@ -213,11 +213,11 @@ NSString *const CAToneMapModeIfSupported = @"ifSupported";
     [self setBounds: bounds];
 }
 
-- (CGFloat) opacity {
+- (float) opacity {
     return NS_EXTRA(CALayer, self)->_opacity;
 }
 
-- (void) setOpacity: (CGFloat) value {
+- (void) setOpacity: (float) value {
     CAAnimation *animation = [self animationForKey: @"opacity"];
 
     if (animation == nil && ![CATransaction disableActions]) {
@@ -1382,7 +1382,7 @@ static id<CAAction> actionInStyle(NSDictionary *style, NSString *key) {
     return NO;
 }
 
-- (BOOL) _drawLayerContents: (CGRect) bounds opacity: (CGFloat) opacity {
+- (BOOL) _drawLayerContents: (CGRect) bounds opacity: (float) opacity {
     return NO;
 }
 

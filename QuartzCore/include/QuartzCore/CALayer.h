@@ -100,7 +100,7 @@ CA_EXPORT CAToneMapMode const CAToneMapModeIfSupported;
         CGPoint _anchorPoint;
         CGPoint _position;
         CGRect _bounds;
-        CGFloat _opacity;
+        float _opacity;
         BOOL _opaque;
         id _contents;
         CGFloat _contentsScale;
@@ -171,7 +171,7 @@ CA_EXPORT CAToneMapMode const CAToneMapModeIfSupported;
 @property CGFloat anchorPointZ;
 @property CGRect bounds;
 @property CGRect frame;
-@property CGFloat opacity;
+@property float opacity;
 @property(getter=isOpaque) BOOL opaque;
 @property(retain) id contents;
 
