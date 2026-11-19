@@ -213,33 +213,46 @@ static inline void _NSExtraIvarsUnshare(void **slot, size_t size) {
         [super dealloc];                                                       \
     }
 
-// @synthesize can't name a field of the extra struct: plain (nonatomic)
-// accessors instead. setter is written with its colon, e.g. setTag:
-#define NS_EXTRA_SYNTHESIZE_ASSIGN(cls, prop, ivar, type, getter, setter)      \
-    -(type) getter {                                                           \
-        return NS_EXTRA(cls, self)->ivar;                                      \
-    }                                                                          \
-    -(void) setter(type) value {                                               \
-        NS_EXTRA(cls, self)->ivar = value;                                     \
+// All properties using these macros are atomic (the default) in their
+// declarations. Preserve that contract on the fragile ABI too. Retain a
+// getter's result while holding the lock; release replaced values outside it.
+// The object's final release/copy still requires the caller's lifetime rules.
+// setter is written with its colon, e.g. setTag:
+#define NS_EXTRA_SYNTHESIZE_ASSIGN(cls, prop, ivar, type, getter, setter)       \
+    -(type) getter {                                                          \
+        @synchronized(self) {                                                \
+            return NS_EXTRA(cls, self)->ivar;                                 \
+        }                                                                     \
+    }                                                                         \
+    -(void) setter(type) value {                                              \
+        @synchronized(self) {                                                \
+            NS_EXTRA(cls, self)->ivar = value;                                \
+        }                                                                     \
     }
-#define NS_EXTRA_SYNTHESIZE_RETAIN(cls, prop, ivar, type, getter, setter)      \
-    -(type) getter {                                                           \
-        return NS_EXTRA(cls, self)->ivar;                                      \
-    }                                                                          \
-    -(void) setter(type) value {                                               \
-        [value retain];                                                        \
-        [NS_EXTRA(cls, self)->ivar release];                                   \
-        NS_EXTRA(cls, self)->ivar = value;                                     \
+#define _NS_EXTRA_OBJECT_GETTER(cls, ivar, type, getter)                       \
+    -(type) getter {                                                          \
+        type value;                                                           \
+        @synchronized(self) {                                                \
+            value = [NS_EXTRA(cls, self)->ivar retain];                       \
+        }                                                                     \
+        return [value autorelease];                                           \
     }
-#define NS_EXTRA_SYNTHESIZE_COPY(cls, prop, ivar, type, getter, setter)        \
-    -(type) getter {                                                           \
-        return NS_EXTRA(cls, self)->ivar;                                      \
-    }                                                                          \
-    -(void) setter(type) value {                                               \
-        type copied = [value copy];                                            \
-        [NS_EXTRA(cls, self)->ivar release];                                   \
-        NS_EXTRA(cls, self)->ivar = copied;                                    \
+#define _NS_EXTRA_OBJECT_SETTER(cls, ivar, type, setter, acquire)              \
+    -(void) setter(type) value {                                              \
+        type owned = [value acquire];                                         \
+        type old;                                                             \
+        @synchronized(self) {                                                \
+            old = NS_EXTRA(cls, self)->ivar;                                  \
+            NS_EXTRA(cls, self)->ivar = owned;                                \
+        }                                                                     \
+        [old release];                                                        \
     }
+#define NS_EXTRA_SYNTHESIZE_RETAIN(cls, prop, ivar, type, getter, setter)       \
+    _NS_EXTRA_OBJECT_GETTER(cls, ivar, type, getter)                            \
+    _NS_EXTRA_OBJECT_SETTER(cls, ivar, type, setter, retain)
+#define NS_EXTRA_SYNTHESIZE_COPY(cls, prop, ivar, type, getter, setter)         \
+    _NS_EXTRA_OBJECT_GETTER(cls, ivar, type, getter)                            \
+    _NS_EXTRA_OBJECT_SETTER(cls, ivar, type, setter, copy)
 
 #else // non-fragile ABI: plain ivars
 
