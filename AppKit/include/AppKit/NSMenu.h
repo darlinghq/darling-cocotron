@@ -76,6 +76,10 @@ typedef NS_OPTIONS(NSUInteger, NSMenuProperties) {
 
 + (null_unspecified NSZone *) menuZone;
 
+- (BOOL) popUpMenuPositioningItem: (nullable NSMenuItem *) item
+                       atLocation: (NSPoint) location
+                           inView: (nullable NSView *) view;
+
 - (instancetype) initWithTitle: (NSString *) title;
 
 @property(nullable, nonatomic, retain) NSMenu *supermenu;

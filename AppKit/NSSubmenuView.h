@@ -23,5 +23,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - initWithMenu: (NSMenu *) menu;
+// The area of the item at an index of the menu's item array, in this view's
+// (flipped) coordinates, as -itemIndexAtPoint: lays the items out.
+- (NSRect) rectForItemAtIndex: (NSUInteger) index;
 
 @end
