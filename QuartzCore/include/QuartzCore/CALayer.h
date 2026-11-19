@@ -279,6 +279,11 @@ CA_EXPORT CAToneMapMode const CAToneMapModeIfSupported;
 - (void) setNeedsDisplay;
 - (void) setNeedsDisplayInRect: (CGRect) rect;
 
+- (CGPoint) convertPoint: (CGPoint) point fromLayer: (CALayer *) layer;
+- (CGPoint) convertPoint: (CGPoint) point toLayer: (CALayer *) layer;
+- (CGRect) convertRect: (CGRect) rect fromLayer: (CALayer *) layer;
+- (CGRect) convertRect: (CGRect) rect toLayer: (CALayer *) layer;
+
 - (void) addAnimation: (CAAnimation *) animation forKey: (NSString *) key;
 - (CAAnimation *) animationForKey: (NSString *) key;
 - (void) removeAllAnimations;

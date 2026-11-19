@@ -1296,6 +1296,109 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
     return flipped;
 }
 
+// Maps the layer's coordinates to those of its superlayer, after the
+// superlayer's sublayerTransform, or, for a layer without one, to the space
+// the layer is placed in. This is the geometry CARenderer draws with:
+// - the bounds origin is removed and a geometryFlipped layer is flipped
+//   within its bounds;
+// - the anchor point goes to the position, through the layer's transform;
+// - the superlayer's sublayerTransform applies about its anchor point, in
+//   its own coordinates.
+static CATransform3D layerToSuperlayerTransform(CALayer *layer) {
+    CGRect bounds = NS_EXTRA(CALayer, layer)->_bounds;
+    CGPoint anchor = NS_EXTRA(CALayer, layer)->_anchorPoint;
+    CGPoint position = NS_EXTRA(CALayer, layer)->_position;
+    CATransform3D m = CATransform3DMakeTranslation(-bounds.origin.x, -bounds.origin.y, 0);
+
+    if (NS_EXTRA(CALayer, layer)->_geometryFlipped) {
+        m = CATransform3DConcat(m, CATransform3DMakeScale(1, -1, 1));
+        m = CATransform3DConcat(m, CATransform3DMakeTranslation(0, bounds.size.height, 0));
+    }
+    m = CATransform3DConcat(m, CATransform3DMakeTranslation(-bounds.size.width * anchor.x,
+                                                            -bounds.size.height * anchor.y, 0));
+    m = CATransform3DConcat(m, NS_EXTRA(CALayer, layer)->_transform);
+    m = CATransform3DConcat(m, CATransform3DMakeTranslation(position.x, position.y, 0));
+
+    CALayer *superlayer = NS_EXTRA(CALayer, layer)->_superlayer;
+    if (superlayer != nil) {
+        CATransform3D sublayerTransform = NS_EXTRA(CALayer, superlayer)->_sublayerTransform;
+        if (!CATransform3DIsIdentity(sublayerTransform)) {
+            CGRect superBounds = NS_EXTRA(CALayer, superlayer)->_bounds;
+            CGPoint superAnchor = NS_EXTRA(CALayer, superlayer)->_anchorPoint;
+            CGFloat ax = superBounds.origin.x + superBounds.size.width * superAnchor.x;
+            CGFloat ay = superBounds.origin.y + superBounds.size.height * superAnchor.y;
+            m = CATransform3DConcat(m, CATransform3DMakeTranslation(-ax, -ay, 0));
+            m = CATransform3DConcat(m, sublayerTransform);
+            m = CATransform3DConcat(m, CATransform3DMakeTranslation(ax, ay, 0));
+        }
+    }
+    return m;
+}
+
+// Maps the layer's coordinates to the space its tree's root layer is placed
+// in. A nil layer stands for that space.
+static CATransform3D layerToTreeSpaceTransform(CALayer *layer) {
+    CATransform3D m = CATransform3DIdentity;
+    for (; layer != nil; layer = NS_EXTRA(CALayer, layer)->_superlayer)
+        m = CATransform3DConcat(m, layerToSuperlayerTransform(layer));
+    return m;
+}
+
+// The transform from the coordinates of one layer to another's. Layers of
+// different trees are related through the space their roots are placed in.
+static CATransform3D transformBetweenLayers(CALayer *from, CALayer *to) {
+    return CATransform3DConcat(layerToTreeSpaceTransform(from),
+                               CATransform3DInvert(layerToTreeSpaceTransform(to)));
+}
+
+static CGPoint applyToPoint(CATransform3D m, CGPoint p) {
+    CGFloat w = p.x * m.m14 + p.y * m.m24 + m.m44;
+    CGFloat x = p.x * m.m11 + p.y * m.m21 + m.m41;
+    CGFloat y = p.x * m.m12 + p.y * m.m22 + m.m42;
+    if (w != 0 && w != 1) {
+        x /= w;
+        y /= w;
+    }
+    return CGPointMake(x, y);
+}
+
+// The bounding box of the rect's corners.
+static CGRect applyToRect(CATransform3D m, CGRect rect) {
+    if (CGRectIsNull(rect))
+        return rect;
+    CGPoint corners[4] = {
+        applyToPoint(m, CGPointMake(CGRectGetMinX(rect), CGRectGetMinY(rect))),
+        applyToPoint(m, CGPointMake(CGRectGetMaxX(rect), CGRectGetMinY(rect))),
+        applyToPoint(m, CGPointMake(CGRectGetMinX(rect), CGRectGetMaxY(rect))),
+        applyToPoint(m, CGPointMake(CGRectGetMaxX(rect), CGRectGetMaxY(rect))),
+    };
+    CGFloat minX = corners[0].x, maxX = corners[0].x;
+    CGFloat minY = corners[0].y, maxY = corners[0].y;
+    for (int i = 1; i < 4; i++) {
+        minX = MIN(minX, corners[i].x);
+        maxX = MAX(maxX, corners[i].x);
+        minY = MIN(minY, corners[i].y);
+        maxY = MAX(maxY, corners[i].y);
+    }
+    return CGRectMake(minX, minY, maxX - minX, maxY - minY);
+}
+
+- (CGPoint) convertPoint: (CGPoint) point fromLayer: (CALayer *) layer {
+    return applyToPoint(transformBetweenLayers(layer, self), point);
+}
+
+- (CGPoint) convertPoint: (CGPoint) point toLayer: (CALayer *) layer {
+    return applyToPoint(transformBetweenLayers(self, layer), point);
+}
+
+- (CGRect) convertRect: (CGRect) rect fromLayer: (CALayer *) layer {
+    return applyToRect(transformBetweenLayers(layer, self), rect);
+}
+
+- (CGRect) convertRect: (CGRect) rect toLayer: (CALayer *) layer {
+    return applyToRect(transformBetweenLayers(self, layer), rect);
+}
+
 - (BOOL) needsDisplayOnBoundsChange {
     return NS_EXTRA(CALayer, self)->_needsDisplayOnBoundsChange;
 }
