@@ -69,15 +69,17 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 + (void) initialize {
     [self setKeys: [NSArray arrayWithObjects: @"content", nil]
             triggerChangeNotificationsForDependentKey: @"contentArray"];
-    [self setKeys: [NSArray arrayWithObjects: @"content", @"contentArray",
-                                              @"selectionIndexes", nil]
+    // A change of the selection indexes posts "selection" itself (through
+    // -_selectionWillChange and -_selectionDidChange), so the keys that
+    // follow the selection depend on the indexes, not on "selection" as well:
+    // one change, one notification
+    [self setKeys: [NSArray arrayWithObjects: @"content", @"contentArray", nil]
             triggerChangeNotificationsForDependentKey: @"selection"];
     [self setKeys: [NSArray arrayWithObjects: @"content", @"contentArray",
-                                              @"selectionIndexes", @"selection",
-                                              nil]
+                                              @"selectionIndexes", nil]
             triggerChangeNotificationsForDependentKey: @"selectionIndex"];
     [self setKeys: [NSArray arrayWithObjects: @"content", @"contentArray",
-                                              @"selectionIndexes", @"selection",
+                                              @"selectionIndexes", @"arrangedObjects",
                                               nil]
             triggerChangeNotificationsForDependentKey: @"selectedObjects"];
 
@@ -87,6 +89,26 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
             triggerChangeNotificationsForDependentKey: @"canSelectNext"];
     [self setKeys: [NSArray arrayWithObjects: @"selectionIndexes", nil]
             triggerChangeNotificationsForDependentKey: @"canSelectPrevious"];
+}
+
+// QUIRK: the controller posts the changes of these keys itself, once per
+// actual change (-setSelectionIndexes: and the other selection setters return
+// BOOL, which automatic notification does not support), and observing them
+// leaves the controller's class alone. Not documented. Evidence: black-box
+// observation on macOS 10.14.4 and 26.7.3 (tier 2).
+// Test: tests/appkit-arraycontroller-kvo.m
++ (BOOL) automaticallyNotifiesObserversForKey: (NSString *) key {
+    static NSSet *manualKeys;
+    if (manualKeys == nil)
+        manualKeys = [[NSSet alloc] initWithObjects: @"selectionIndexes", @"selectionIndex", @"arrangedObjects",
+                                                     @"sortDescriptors", @"filterPredicate", @"avoidsEmptySelection",
+                                                     @"preservesSelection", @"selectsInsertedObjects",
+                                                     @"automaticallyRearrangesObjects",
+                                                     @"clearsFilterPredicateOnInsertion",
+                                                     @"alwaysUsesMultipleValuesMarker", @"canSelectNext", nil];
+    if ([manualKeys containsObject: key])
+        return NO;
+    return [super automaticallyNotifiesObserversForKey: key];
 }
 
 - (id) initWithCoder: (NSCoder *) coder {
@@ -193,12 +215,19 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #pragma mark Managing Sort Descriptors
 
 - (void) setSortDescriptors: (NSArray *) value {
+    if (value == _sortDescriptors || [value isEqualToArray: _sortDescriptors])
+        return;
+
+    [self willChangeValueForKey: @"sortDescriptors"];
     [_sortDescriptors release];
     _sortDescriptors = [value copy];
+    [self didChangeValueForKey: @"sortDescriptors"];
 
-    if ([self automaticallyRearrangesObjects]) {
-        [self rearrangeObjects];
-    }
+    // QUIRK: new sort descriptors rearrange the objects, as a new filter
+    // predicate does, whether or not the controller rearranges automatically.
+    // Not documented. Evidence: black-box observation on macOS 10.14.4 and
+    // 26.7.3 (tier 2). Test: tests/appkit-arraycontroller-kvo.m
+    [self rearrangeObjects];
 }
 
 - (NSArray *) sortDescriptors {
@@ -315,7 +344,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #pragma mark Selection Attributes
 
 - (void) setAvoidsEmptySelection: (BOOL) value {
+    if (_flags.avoidsEmptySelection == (value != NO))
+        return;
+    [self willChangeValueForKey: @"avoidsEmptySelection"];
     _flags.avoidsEmptySelection = value;
+    [self didChangeValueForKey: @"avoidsEmptySelection"];
 }
 
 - (BOOL) avoidsEmptySelection {
@@ -323,7 +356,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (void) setPreservesSelection: (BOOL) value {
+    if (_flags.preservesSelection == (value != NO))
+        return;
+    [self willChangeValueForKey: @"preservesSelection"];
     _flags.preservesSelection = value;
+    [self didChangeValueForKey: @"preservesSelection"];
 }
 
 - (BOOL) preservesSelection {
@@ -331,7 +368,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (void) setAlwaysUsesMultipleValuesMarker: (BOOL) flag {
+    if (_flags.alwaysUsesMultipleValuesMarker == (flag != NO))
+        return;
+    [self willChangeValueForKey: @"alwaysUsesMultipleValuesMarker"];
     _flags.alwaysUsesMultipleValuesMarker = flag;
+    [self didChangeValueForKey: @"alwaysUsesMultipleValuesMarker"];
 }
 
 - (BOOL) alwaysUsesMultipleValuesMarker {
@@ -354,7 +395,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (void) setSelectsInsertedObjects: (BOOL) flag {
+    if (_flags.selectsInsertedObjects == (flag != NO))
+        return;
+    [self willChangeValueForKey: @"selectsInsertedObjects"];
     _flags.selectsInsertedObjects = flag;
+    [self didChangeValueForKey: @"selectsInsertedObjects"];
 }
 
 - (BOOL) selectsInsertedObjects {
@@ -678,7 +723,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #pragma mark Filtering Content
 
 - (void) setClearsFilterPredicateOnInsertion: (BOOL) flag {
+    if (_flags.clearsFilterPredicateOnInsertion == (flag != NO))
+        return;
+    [self willChangeValueForKey: @"clearsFilterPredicateOnInsertion"];
     _flags.clearsFilterPredicateOnInsertion = flag;
+    [self didChangeValueForKey: @"clearsFilterPredicateOnInsertion"];
 }
 
 - (BOOL) clearsFilterPredicateOnInsertion {
@@ -690,9 +739,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (void) setFilterPredicate: (NSPredicate *) value {
+    if (value == _filterPredicate || [value isEqual: _filterPredicate])
+        return;
+
     value = [value copy];
+    [self willChangeValueForKey: @"filterPredicate"];
     [_filterPredicate release];
     _filterPredicate = value;
+    [self didChangeValueForKey: @"filterPredicate"];
     [self rearrangeObjects];
 }
 
@@ -700,7 +754,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #pragma mark Automatic Content Rearranging
 
 - (void) setAutomaticallyRearrangesObjects: (BOOL) flag {
+    if (_flags.automaticallyRearrangesObjects == (flag != NO))
+        return;
+    [self willChangeValueForKey: @"automaticallyRearrangesObjects"];
     _flags.automaticallyRearrangesObjects = flag;
+    [self didChangeValueForKey: @"automaticallyRearrangesObjects"];
 }
 
 - (BOOL) automaticallyRearrangesObjects {
