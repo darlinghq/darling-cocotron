@@ -179,12 +179,76 @@ NSString *const CAToneMapModeIfSupported = @"ifSupported";
         [action runActionForKey: @"bounds" object: self arguments: nil];
     }
 
-    BOOL sizeChanged = !CGSizeEqualToSize(NS_EXTRA(CALayer, self)->_bounds.size, value.size);
+    CGRect oldBounds = NS_EXTRA(CALayer, self)->_bounds;
+    BOOL sizeChanged = !CGSizeEqualToSize(oldBounds.size, value.size);
     NS_EXTRA(CALayer, self)->_bounds = value;
     if (sizeChanged)
         [self setNeedsLayout];
     if (sizeChanged && NS_EXTRA(CALayer, self)->_needsDisplayOnBoundsChange)
         [self setNeedsDisplay];
+    // Any change of the bounds rectangle, an origin-only one included, informs
+    // the sublayers; the sublayers apply their autoresizing masks synchronously.
+    if (!CGRectEqualToRect(oldBounds, value))
+        [self resizeSublayersWithOldSize: oldBounds.size];
+}
+
+// Splits the change of a superlayer's extent along one axis between the parts of
+// a sublayer that its mask makes flexible. Returns the new origin and length.
+static void CALayerAutoresizeAxis(CGFloat *origin, CGFloat *length, CGFloat delta, BOOL minMargin, BOOL sizable, BOOL maxMargin) {
+    int margins = (minMargin ? 1 : 0) + (maxMargin ? 1 : 0);
+    CGFloat sizeShare = 0, marginShare = 0;
+
+    if (sizable) {
+        // QUIRK: a flexible size takes a third of the change when a margin is
+        // flexible too, and the flexible margins share the rest equally,
+        // whatever the current sizes of the parts (unlike NSView's proportional
+        // split). Not documented. Evidence: black-box observation on macOS 26.7.3
+        // (tier 2). Test: tests/src/quartzcore_autoresizing.m (split cases).
+        sizeShare = margins > 0 ? delta / 3 : delta;
+        if (margins > 0)
+            marginShare = (delta - sizeShare) / margins;
+    } else if (margins > 0) {
+        marginShare = delta / margins;
+    }
+    if (minMargin)
+        *origin += marginShare;
+    *length += sizeShare;
+}
+
+- (void) resizeSublayersWithOldSize: (CGSize) size {
+    NSArray *children = [NS_EXTRA(CALayer, self)->_sublayers copy];
+
+    for (CALayer *child in [children reverseObjectEnumerator])
+        [child resizeWithOldSuperlayerSize: size];
+    [children release];
+}
+
+- (void) resizeWithOldSuperlayerSize: (CGSize) size {
+    CAAutoresizingMask mask = NS_EXTRA(CALayer, self)->_autoresizingMask;
+    CALayer *superlayer = NS_EXTRA(CALayer, self)->_superlayer;
+
+    if (mask == kCALayerNotSizable || superlayer == nil)
+        return;
+
+    CGSize newSize = [superlayer bounds].size;
+    CGRect frame = [self frame];
+
+    CALayerAutoresizeAxis(&frame.origin.x, &frame.size.width, newSize.width - size.width,
+                          (mask & kCALayerMinXMargin) != 0, (mask & kCALayerWidthSizable) != 0, (mask & kCALayerMaxXMargin) != 0);
+    CALayerAutoresizeAxis(&frame.origin.y, &frame.size.height, newSize.height - size.height,
+                          (mask & kCALayerMinYMargin) != 0, (mask & kCALayerHeightSizable) != 0, (mask & kCALayerMaxYMargin) != 0);
+
+    // QUIRK: the result is a whole-number rectangle: the origin rounds down and
+    // the far edges round up, and a negative extent is flipped to a positive one.
+    // Not documented. Evidence: black-box observation on macOS 26.7.3 (tier 2).
+    // Test: tests/src/quartzcore_autoresizing.m (rounding cases).
+    frame = CGRectStandardize(frame);
+    CGFloat minX = floor(CGRectGetMinX(frame)), minY = floor(CGRectGetMinY(frame));
+    CGFloat maxX = ceil(CGRectGetMaxX(frame)), maxY = ceil(CGRectGetMaxY(frame));
+    frame = CGRectMake(minX, minY, maxX - minX, maxY - minY);
+
+    if (!CGRectEqualToRect(frame, [self frame]))
+        [self setFrame: frame];
 }
 
 - (CGRect) frame {

@@ -267,6 +267,10 @@ CA_EXPORT CAToneMapMode const CAToneMapModeIfSupported;
 - (void) displayIfNeeded;
 - (void) layoutSublayers;
 - (void) layoutIfNeeded;
+// Called when the layer's bounds change; the default passes the news to each
+// sublayer, which then applies its autoresizingMask.
+- (void) resizeSublayersWithOldSize: (CGSize) size;
+- (void) resizeWithOldSuperlayerSize: (CGSize) size;
 - (void) setNeedsLayout;
 - (BOOL) needsLayout;
 - (void) drawInContext: (CGContextRef) context;
