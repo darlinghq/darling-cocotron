@@ -667,10 +667,13 @@ O2ImageRef O2ImageCreateWithImageInRect(O2ImageRef self, O2Rect rect) {
         pixelBytes += self->_bytesPerRow;
     }
 
-    NSData *data = [NSData dataWithBytesNoCopy: childPixelBytes
-                                        length: childIndex];
+    // Owned outright, not autoreleased: the pixels go with the image even
+    // when the caller has no autorelease pool, as with CoreGraphics' C API.
+    NSData *data = [[NSData alloc] initWithBytesNoCopy: childPixelBytes
+                                                length: childIndex];
     O2DataProviderRef provider =
             O2DataProviderCreateWithCFData((CFDataRef) data);
+    [data release];
 
     O2ImageRef result = O2ImageCreate(
             width, height, self->_bitsPerComponent, self->_bitsPerPixel,
