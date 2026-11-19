@@ -440,7 +440,10 @@ static NSDictionary *sScrollerButtonAttributes = nil;
         else
             NSInterfaceDrawButton(rect, rect);
 
-        rect = NSInsetRect(rect, 6, 6);
+        // The colour swatch of a bordered well is inset 6 points from each edge, whatever the well's size
+        // (black-box on macOS 10.14.4, tests/appkit-colorwell-swatch-inset.m); the 2-point gray bezel
+        // around it is inside that margin.
+        rect = NSInsetRect(rect, 4, 4);
 
         if (enabled)
             NSDrawGrayBezel(rect, rect);
