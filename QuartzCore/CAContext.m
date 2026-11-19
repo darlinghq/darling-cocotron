@@ -78,6 +78,8 @@ NSString *const kCAContextPortNumber = @"port_number";
     GLint _framebufferHeight;
     IOSurfaceRef _surfaces[2];
     mach_port_t _surfacePorts[2];
+    // Where the frame in each surface lies.
+    CARemoteFrameGeometry _geometries[2];
     // The surface holding the last frame, or -1 when there is nothing to show.
     int _current;
 }
@@ -85,6 +87,8 @@ NSString *const kCAContextPortNumber = @"port_number";
 - (void) detach;
 // A send right the caller does not own, or MACH_PORT_NULL.
 - (mach_port_t) currentSurfacePort;
+// Where the frame in the current surface lies.
+- (CARemoteFrameGeometry) currentGeometry;
 @end
 
 @implementation CARemoteLayerContext
@@ -131,6 +135,11 @@ NSString *const kCAContextPortNumber = @"port_number";
 
 - (mach_port_t) currentSurfacePort {
     return _current >= 0 ? _surfacePorts[_current] : MACH_PORT_NULL;
+}
+
+- (CARemoteFrameGeometry) currentGeometry {
+    CARemoteFrameGeometry none = {0};
+    return _current >= 0 ? _geometries[_current] : none;
 }
 
 // There is no window to show the tree in.
@@ -187,17 +196,49 @@ NSString *const kCAContextPortNumber = @"port_number";
     return surface;
 }
 
+// The pixels a frame covers: the tree's drawn extent, out to whole points,
+// cut down to the largest frame a host accepts. A cut keeps the top-left,
+// where the content starts in a tree laid out from the top.
+static BOOL frameRectForExtent(CGRect extent, CGRect *frame) {
+    if (CGRectIsNull(extent) || CGRectIsEmpty(extent))
+        return NO;
+    double minX = floor(CGRectGetMinX(extent));
+    double minY = floor(CGRectGetMinY(extent));
+    double maxX = ceil(CGRectGetMaxX(extent));
+    double maxY = ceil(CGRectGetMaxY(extent));
+    if (!isfinite(minX) || !isfinite(minY) || !isfinite(maxX) ||
+        !isfinite(maxY))
+        return NO;
+    maxX = fmin(maxX, minX + CA_REMOTE_MAX_FRAME_SIDE);
+    minY = fmax(minY, maxY - CA_REMOTE_MAX_FRAME_SIDE);
+    // The origin goes into the frame message as 32-bit integers.
+    if (minX < INT32_MIN || minY < INT32_MIN || minX > INT32_MAX ||
+        minY > INT32_MAX)
+        return NO;
+    *frame = CGRectMake(minX, minY, maxX - minX, maxY - minY);
+    return YES;
+}
+
 - (void) render {
     CALayer *layer = _layer;
-    CGSize size = layer != nil ? [layer bounds].size : CGSizeZero;
-    GLint width = (GLint) ceil(size.width);
-    GLint height = (GLint) ceil(size.height);
+    CGRect extent = CGRectNull, rootFrame = CGRectNull, frame;
 
-    if (layer == nil || width <= 0 || height <= 0 ||
-        width > CA_REMOTE_MAX_FRAME_SIDE || height > CA_REMOTE_MAX_FRAME_SIDE) {
+    // The tree is not clipped to the root layer's bounds: Core Animation
+    // clips only at layers that mask to their bounds, and a host shows all
+    // of a tree, so the frame covers whatever the tree draws.
+    if (layer != nil) {
+        [layer layoutIfNeeded];
+        extent = [_renderer _drawnExtentOfLayerTree: layer
+                                          rootFrame: &rootFrame
+                                             atTime: CACurrentMediaTime()];
+    }
+
+    if (!frameRectForExtent(extent, &frame)) {
         _current = -1;
         return;
     }
+    GLint width = (GLint) frame.size.width;
+    GLint height = (GLint) frame.size.height;
 
     CGLContextObj previous = CGLGetCurrentContext();
     if (CGLSetCurrentContext(_glContext) != kCGLNoError)
@@ -205,8 +246,7 @@ NSString *const kCAContextPortNumber = @"port_number";
 
     if ([self prepareFramebufferWidth: width height: height]) {
         [self _drawLayerTree: layer
-                       width: width
-                      height: height
+                      inRect: frame
                  topRowFirst: YES];
 
         // Hosts may still be reading the last frame: draw into the other
@@ -226,6 +266,12 @@ NSString *const kCAContextPortNumber = @"port_number";
             glPixelStorei(GL_PACK_ROW_LENGTH, 0);
             // The unlock moves the seed on, so hosts upload the new pixels.
             IOSurfaceUnlock(surface, 0, NULL);
+            _geometries[next] = (CARemoteFrameGeometry) {
+                .originX = (int32_t) frame.origin.x,
+                .originY = (int32_t) frame.origin.y,
+                .rootMinY = (float) CGRectGetMinY(rootFrame),
+                .rootMaxY = (float) CGRectGetMaxY(rootFrame),
+            };
             _current = next;
         } else {
             _current = -1;
@@ -382,7 +428,8 @@ static void handleContextMessages(void *context);
 }
 
 // Returns NO when the host has gone.
-static BOOL sendFrame(mach_port_t destination, mach_port_t surfacePort) {
+static BOOL sendFrame(mach_port_t destination, mach_port_t surfacePort,
+                      CARemoteFrameGeometry geometry) {
     CARemoteFrameMessage message = {0};
     message.header.msgh_bits =
             MACH_MSGH_BITS(MACH_MSG_TYPE_COPY_SEND, 0) | MACH_MSGH_BITS_COMPLEX;
@@ -394,6 +441,7 @@ static BOOL sendFrame(mach_port_t destination, mach_port_t surfacePort) {
     message.surface.disposition = MACH_MSG_TYPE_COPY_SEND;
     message.surface.type = MACH_MSG_PORT_DESCRIPTOR;
     message.version = CA_REMOTE_PROTOCOL_VERSION;
+    message.geometry = geometry;
 
     // Never wait for a host: one whose queue is full has newer frames queued.
     mach_msg_return_t result = mach_msg(&message.header,
@@ -405,9 +453,10 @@ static BOOL sendFrame(mach_port_t destination, mach_port_t surfacePort) {
 
 - (void) _publishFrame {
     mach_port_t surfacePort = [NS_EXTRA(CAContext, self)->_renderContext currentSurfacePort];
+    CARemoteFrameGeometry geometry = [NS_EXTRA(CAContext, self)->_renderContext currentGeometry];
     unsigned int kept = 0;
     for (unsigned int i = 0; i < NS_EXTRA(CAContext, self)->_subscriberCount; i++) {
-        if (sendFrame(NS_EXTRA(CAContext, self)->_subscribers[i], surfacePort))
+        if (sendFrame(NS_EXTRA(CAContext, self)->_subscribers[i], surfacePort, geometry))
             NS_EXTRA(CAContext, self)->_subscribers[kept++] = NS_EXTRA(CAContext, self)->_subscribers[i];
         else
             mach_port_deallocate(mach_task_self(), NS_EXTRA(CAContext, self)->_subscribers[i]);
@@ -435,7 +484,8 @@ static BOOL sendFrame(mach_port_t destination, mach_port_t surfacePort) {
         NS_EXTRA(CAContext, self)->_subscribers[NS_EXTRA(CAContext, self)->_subscriberCount++] = port;
         if (NS_EXTRA(CAContext, self)->_layer != nil)
             [NS_EXTRA(CAContext, self)->_renderContext startTimerIfNeeded];
-    } else if (sendFrame(port, surfacePort)) {
+    } else if (sendFrame(port, surfacePort,
+                         [NS_EXTRA(CAContext, self)->_renderContext currentGeometry])) {
         NS_EXTRA(CAContext, self)->_subscribers[NS_EXTRA(CAContext, self)->_subscriberCount++] = port;
     } else {
         mach_port_deallocate(mach_task_self(), port);

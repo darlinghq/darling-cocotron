@@ -10,6 +10,8 @@
 #import <QuartzCore/CASpringAnimation.h>
 #import "CALayerInternal.h"
 
+#include <math.h>
+
 @interface CASpringAnimation (Private)
 - (CGFloat) _springProgressAtTime: (CFTimeInterval) t;
 @end
@@ -650,6 +652,119 @@ parentOpacity: opacity
     glPopMatrix();
 
     glPopMatrix();
+}
+
+// Maps a point of the layer's own coordinates (bounds origin removed, as its
+// background and contents are drawn) into its superlayer's coordinates, the way
+// the matrix in -_renderLayer: does.
+static CATransform3D layerToSuperlayer(CGPoint position, CGPoint anchorPoint,
+                                       CGRect bounds, CATransform3D transform,
+                                       BOOL geometryFlipped)
+{
+    CATransform3D m = CATransform3DIdentity;
+    if (geometryFlipped)
+        m = CATransform3DConcat(
+                CATransform3DMakeScale(1, -1, 1),
+                CATransform3DMakeTranslation(0, bounds.size.height, 0));
+    m = CATransform3DConcat(
+            m, CATransform3DMakeTranslation(-bounds.size.width * anchorPoint.x,
+                                            -bounds.size.height * anchorPoint.y,
+                                            0));
+    m = CATransform3DConcat(m, transform);
+    return CATransform3DConcat(
+            m, CATransform3DMakeTranslation(position.x, position.y, 0));
+}
+
+// The bounding box of rect under m (CATransform3D maps row vectors), or
+// CGRectNull when no corner lies in front of the viewer.
+static CGRect boundingBoxOfTransformedRect(CGRect rect, CATransform3D m) {
+    const CGFloat xs[2] = {CGRectGetMinX(rect), CGRectGetMaxX(rect)};
+    const CGFloat ys[2] = {CGRectGetMinY(rect), CGRectGetMaxY(rect)};
+    CGFloat minX = INFINITY, minY = INFINITY, maxX = -INFINITY, maxY = -INFINITY;
+
+    for (int i = 0; i < 4; i++) {
+        CGFloat x = xs[i & 1], y = ys[i >> 1];
+        CGFloat w = x * m.m14 + y * m.m24 + m.m44;
+        if (!(w > 0))
+            continue;
+        CGFloat tx = (x * m.m11 + y * m.m21 + m.m41) / w;
+        CGFloat ty = (x * m.m12 + y * m.m22 + m.m42) / w;
+        minX = MIN(minX, tx);
+        maxX = MAX(maxX, tx);
+        minY = MIN(minY, ty);
+        maxY = MAX(maxY, ty);
+    }
+    if (minX > maxX)
+        return CGRectNull;
+    return CGRectMake(minX, minY, maxX - minX, maxY - minY);
+}
+
+static CGRect unionOfRects(CGRect a, CGRect b) {
+    if (CGRectIsNull(a))
+        return b;
+    if (CGRectIsNull(b))
+        return a;
+    CGFloat minX = MIN(CGRectGetMinX(a), CGRectGetMinX(b));
+    CGFloat minY = MIN(CGRectGetMinY(a), CGRectGetMinY(b));
+    CGFloat maxX = MAX(CGRectGetMaxX(a), CGRectGetMaxX(b));
+    CGFloat maxY = MAX(CGRectGetMaxY(a), CGRectGetMaxY(b));
+    return CGRectMake(minX, minY, maxX - minX, maxY - minY);
+}
+
+// What -_renderLayer: draws for the layer and its sublayers, in the
+// coordinates superlayerToRoot maps from. *frame, when not NULL, gets the
+// layer's own frame there.
+static CGRect drawnExtentOfLayer(CALayer *layer, CATransform3D superlayerToRoot,
+                                 CFTimeInterval currentTime, CGRect *frame)
+{
+    CGPoint anchorPoint =
+            interpolatePointInLayerKey(layer, @"anchorPoint", currentTime);
+    CGPoint position =
+            interpolatePointInLayerKey(layer, @"position", currentTime);
+    CGRect bounds = interpolateRectInLayerKey(layer, @"bounds", currentTime);
+    CATransform3D toRoot = CATransform3DConcat(
+            layerToSuperlayer(position, anchorPoint, bounds, layer.transform,
+                              layer.geometryFlipped),
+            superlayerToRoot);
+    CGRect ownRect = CGRectMake(0, 0, bounds.size.width, bounds.size.height);
+    CGRect ownFrame = boundingBoxOfTransformedRect(ownRect, toRoot);
+
+    if (frame != NULL)
+        *frame = ownFrame;
+
+    if (layer.hidden ||
+        interpolateFloatInLayerKey(layer, @"opacity", currentTime) <= 0)
+        return CGRectNull;
+
+    // A layer of zero area draws nothing itself, and a transform layer draws
+    // only its sublayers.
+    BOOL drawsItself = bounds.size.width > 0 && bounds.size.height > 0 &&
+                       ![layer isKindOfClass: [CATransformLayer class]];
+    CGRect extent = drawsItself ? ownFrame : CGRectNull;
+
+    // The sublayers of a masking layer show only inside its bounds.
+    if (layer.masksToBounds)
+        return extent;
+
+    // Sublayers are positioned relative to the bounds origin.
+    CATransform3D sublayersToRoot = CATransform3DConcat(
+            CATransform3DMakeTranslation(-bounds.origin.x, -bounds.origin.y, 0),
+            toRoot);
+    for (CALayer *child in layer.sublayers)
+        extent = unionOfRects(extent, drawnExtentOfLayer(child, sublayersToRoot,
+                                                         currentTime, NULL));
+    return extent;
+}
+
+- (CGRect) _drawnExtentOfLayerTree: (CALayer *) layer
+                         rootFrame: (CGRect *) rootFrame
+                            atTime: (CFTimeInterval) time
+{
+    if (rootFrame != NULL)
+        *rootFrame = CGRectNull;
+    if (layer == nil)
+        return CGRectNull;
+    return drawnExtentOfLayer(layer, CATransform3DIdentity, time, rootFrame);
 }
 
 // Layers that draw their content (-drawInContext:, CATextLayer, CAShapeLayer,

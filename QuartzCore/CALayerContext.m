@@ -333,15 +333,13 @@ static BOOL drawableSizes(CGSubWindow *subwindow, CGSize size, GLint *width,
 }
 
 - (void) _drawLayerTree: (CALayer *) layer
-                  width: (GLint) width
-                 height: (GLint) height
+                 inRect: (CGRect) rect
             topRowFirst: (BOOL) topRowFirst
 {
     [self _drawLayerTree: layer
-                   width: width
-                  height: height
-             pixelsWidth: width
-            pixelsHeight: height
+                  inRect: rect
+             pixelsWidth: (GLsizei) rect.size.width
+            pixelsHeight: (GLsizei) rect.size.height
              topRowFirst: topRowFirst];
 }
 
@@ -350,6 +348,21 @@ static BOOL drawableSizes(CGSubWindow *subwindow, CGSize size, GLint *width,
 - (void) _drawLayerTree: (CALayer *) layer
                   width: (GLint) width
                  height: (GLint) height
+            pixelsWidth: (GLsizei) pixelsWidth
+           pixelsHeight: (GLsizei) pixelsHeight
+            topRowFirst: (BOOL) topRowFirst
+{
+    [self _drawLayerTree: layer
+                  inRect: CGRectMake(0, 0, width, height)
+             pixelsWidth: pixelsWidth
+            pixelsHeight: pixelsHeight
+             topRowFirst: topRowFirst];
+}
+
+// The projection covers rect, in the coordinates of the tree's root layer's
+// superlayer, and the viewport the given number of pixels.
+- (void) _drawLayerTree: (CALayer *) layer
+                 inRect: (CGRect) rect
             pixelsWidth: (GLsizei) pixelsWidth
            pixelsHeight: (GLsizei) pixelsHeight
             topRowFirst: (BOOL) topRowFirst
@@ -363,9 +376,11 @@ static BOOL drawableSizes(CGSubWindow *subwindow, CGSize size, GLint *width,
     // Framebuffer row 0 is the bottom of the picture on a window. Pixels read
     // back into memory whose first row is the top are drawn upside down.
     if (topRowFirst)
-        glOrtho(0, width, height, 0, -1, 1);
+        glOrtho(CGRectGetMinX(rect), CGRectGetMaxX(rect),
+                CGRectGetMaxY(rect), CGRectGetMinY(rect), -1, 1);
     else
-        glOrtho(0, width, 0, height, -1, 1);
+        glOrtho(CGRectGetMinX(rect), CGRectGetMaxX(rect),
+                CGRectGetMinY(rect), CGRectGetMaxY(rect), -1, 1);
 
     GLsizei i = 0;
     GLuint deleteIds[[_deleteTextureIds count]];

@@ -39,7 +39,7 @@
 #include <stdint.h>
 #include <stdio.h>
 
-#define CA_REMOTE_PROTOCOL_VERSION 1
+#define CA_REMOTE_PROTOCOL_VERSION 2
 
 enum {
     kCARemoteSubscribeMessageID = 0x43417331, // 'CAs1'
@@ -54,15 +54,31 @@ typedef struct {
     uint32_t version;
 } CARemoteSubscribeMessage;
 
+// Where a frame lies. The context's coordinate space is that of its root
+// layer's superlayer, where the root's position is, with y up; one pixel of
+// the surface is one point.
+typedef struct {
+    // The surface's bottom-left corner. It covers everything the tree draws,
+    // which need not be inside the root layer's bounds, nor at the origin.
+    int32_t originX;
+    int32_t originY;
+    // The vertical extent of the root layer's own frame. A host whose
+    // coordinates are flipped puts the root's frame where a sublayer's would
+    // be, but keeps the tree it draws upright.
+    float rootMinY;
+    float rootMaxY;
+} CARemoteFrameGeometry;
+
 // One surface per message, as a send right to its IOSurface Mach port, or
-// MACH_PORT_NULL when the context has nothing to show (no layer, or a layer of
-// zero size). The surface's top-left pixel is the top-left of the context's
-// coordinate space, and its size is the frame's size in points.
+// MACH_PORT_NULL when the context has nothing to show (no layer, or a tree
+// that draws nothing). The surface's top-left pixel is at (originX,
+// originY + height) in the context's coordinate space.
 typedef struct {
     mach_msg_header_t header;
     mach_msg_body_t body;
     mach_msg_port_descriptor_t surface;
     uint32_t version;
+    CARemoteFrameGeometry geometry;
 } CARemoteFrameMessage;
 
 // Room for any message either end receives, with an audit trailer.
