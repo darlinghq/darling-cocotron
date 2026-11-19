@@ -16,6 +16,7 @@ FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
 COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
+#import <AppKit/NSButton.h>
 #import <AppKit/NSColor.h>
 #import <AppKit/NSGraphics.h>
 #import <AppKit/NSImage.h>
@@ -141,6 +142,50 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
     contentFrame.size.height -= toolbarFrame.size.height;
     [contentView setFrame: contentFrame];
+}
+
+// The standard buttons go at the top left of the title bar area, 7, 27 and 47
+// points from the left edge and 3 points below the top, as on Mac OS X
+// 10.14.4 (black-box: -[NSButton frame] of the window's buttons in window
+// coordinates; macOS 26.7.3 puts its 14 point buttons at 9, 32 and 55, 9
+// points below the top).
+static NSRect standardButtonFrame(NSWindowButton kind, NSRect bounds) {
+    return NSMakeRect(NSMinX(bounds) + 7 + 20 * kind, NSMaxY(bounds) - 3 - 16, 14, 16);
+}
+
+- (void) _updateStandardWindowButtons {
+    NSWindow *window = [self window];
+    if (window == nil)
+        return;
+    BOOL shown = [window _hasInvisibleTitlebarForStyleMask: [window styleMask]];
+
+    for (NSWindowButton kind = NSWindowCloseButton; kind <= NSWindowZoomButton; kind++) {
+        NSButton *button = [window standardWindowButton: kind];
+        if (button == nil)
+            continue;
+        if (!shown) {
+            if ([button superview] == self)
+                [button removeFromSuperview];
+        } else if ([button superview] == nil) {
+            // Placed once: the application may move them afterwards.
+            [button setFrame: standardButtonFrame(kind, [self bounds])];
+            [button setAutoresizingMask: NSViewMaxXMargin | NSViewMinYMargin];
+            [self addSubview: button positioned: NSWindowAbove relativeTo: nil];
+        }
+    }
+}
+
+// The buttons stay in front of the content, also of a content view set after
+// they were shown.
+- (void) didAddSubview: (NSView *) subview {
+    [super didAddSubview: subview];
+
+    Class buttonClass = NSClassFromString(@"NSStandardWindowButton");
+    if ([subview isKindOfClass: buttonClass])
+        return;
+    for (NSView *view in [[_subviews copy] autorelease])
+        if ([view isKindOfClass: buttonClass])
+            [self addSubview: view positioned: NSWindowAbove relativeTo: nil];
 }
 
 // Height of the title bar of a titled window: 22 points on macOS 10.14

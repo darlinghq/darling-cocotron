@@ -19,6 +19,8 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSApplication.h>
+#import <AppKit/NSBezierPath.h>
+#import <AppKit/NSButtonCell.h>
 #import <AppKit/NSColor.h>
 #import <AppKit/NSCursor.h>
 #import <AppKit/NSDisplay.h>
@@ -359,6 +361,54 @@ static void runPendingSourcesDuringDrag(NSTimeInterval budget) {
     }
 }
 
+// A close, miniaturize or zoom button: a coloured disc, grey when disabled.
+@interface NSStandardWindowButtonCell : NSButtonCell {
+    NSWindowButton _kind;
+}
+@end
+
+@implementation NSStandardWindowButtonCell
+
+- (void) setKind: (NSWindowButton) kind {
+    _kind = kind;
+}
+
+- (void) drawWithFrame: (NSRect) frame inView: (NSView *) view {
+    NSColor *fill;
+    if (![self isEnabled])
+        fill = [NSColor colorWithCalibratedWhite: 0.82 alpha: 1];
+    else if (_kind == NSWindowCloseButton)
+        fill = [NSColor colorWithCalibratedRed: 1.0 green: 0.37 blue: 0.34 alpha: 1];
+    else if (_kind == NSWindowMiniaturizeButton)
+        fill = [NSColor colorWithCalibratedRed: 1.0 green: 0.74 blue: 0.18 alpha: 1];
+    else
+        fill = [NSColor colorWithCalibratedRed: 0.16 green: 0.78 blue: 0.25 alpha: 1];
+
+    NSBezierPath *disc = [NSBezierPath bezierPathWithOvalInRect: NSMakeRect(NSMidX(frame) - 6, NSMidY(frame) - 6, 12, 12)];
+    [fill setFill];
+    [disc fill];
+    [[NSColor colorWithCalibratedWhite: 0 alpha: 0.15] setStroke];
+    [disc setLineWidth: 0.5];
+    [disc stroke];
+    if ([self isHighlighted]) {
+        [[NSColor colorWithCalibratedWhite: 0 alpha: 0.25] setFill];
+        [disc fill];
+    }
+}
+
+@end
+
+@interface NSStandardWindowButton : NSButton
+@end
+
+@implementation NSStandardWindowButton
+
++ (Class) cellClass {
+    return [NSStandardWindowButtonCell class];
+}
+
+@end
+
 @implementation NSWindow
 
 static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen);
@@ -482,8 +532,10 @@ static BOOL _allowsAutomaticWindowTabbing;
     NSUnimplementedMethod();
 }
 
-// The title bar is drawn by the window manager, so these buttons are not
-// shown; they let callers query and configure the buttons a window has.
+// The window manager's frame shows these buttons for a window with a title
+// bar; the window's frame view shows them itself when the window shows no
+// title bar (see NSThemeFrame). They let callers query and configure the
+// buttons a window has either way.
 + (NSButton *) standardWindowButton: (NSWindowButton) button
                        forStyleMask: (NSWindowStyleMask) styleMask
 {
@@ -512,9 +564,11 @@ static BOOL _allowsAutomaticWindowTabbing;
     if (!(styleMask & NSWindowStyleMaskTitled) || !(styleMask & buttonStyles))
         return nil;
 
-    NSButton *result =
-            [[NSButton alloc] initWithFrame: NSMakeRect(0, 0, 14, 14)];
+    // 14 by 16 points, as on Mac OS X 10.14.4 (14 by 14 on macOS 26.7.3).
+    NSButton *result = [[NSStandardWindowButton alloc] initWithFrame: NSMakeRect(0, 0, 14, 16)];
     [result setBordered: NO];
+    [result setTitle: @""];
+    [(NSStandardWindowButtonCell *) [result cell] setKind: button];
     [result setEnabled: (styleMask & enabling) != 0];
     return [result autorelease];
 }
@@ -1849,10 +1903,17 @@ static BOOL _allowsAutomaticWindowTabbing;
 - (NSButton *) standardWindowButton: (NSWindowButton) value {
     if (value > NSWindowZoomButton)
         return nil;
-    if (NS_EXTRA(NSWindow, self)->_standardWindowButtons[value] == nil)
-        NS_EXTRA(NSWindow, self)->_standardWindowButtons[value] = [[[self class]
-                standardWindowButton: value
-                        forStyleMask: NS_EXTRA(NSWindow, self)->_styleMask] retain];
+    if (NS_EXTRA(NSWindow, self)->_standardWindowButtons[value] == nil) {
+        NSButton *button = [[[self class] standardWindowButton: value
+                                                 forStyleMask: NS_EXTRA(NSWindow, self)->_styleMask] retain];
+        // A window's own buttons act on it (on Mac OS X 10.14.4 and macOS 26.7.3
+        // their target is the window).
+        [button setTarget: self];
+        [button setAction: value == NSWindowCloseButton         ? @selector(performClose:)
+                          : value == NSWindowMiniaturizeButton ? @selector(miniaturize:)
+                                                               : @selector(zoom:)];
+        NS_EXTRA(NSWindow, self)->_standardWindowButtons[value] = button;
+    }
     return NS_EXTRA(NSWindow, self)->_standardWindowButtons[value];
 }
 
@@ -2093,6 +2154,8 @@ static BOOL _allowsAutomaticWindowTabbing;
 - (void) _titlebarVisibilityChanged {
     if ([_platformWindow respondsToSelector: @selector(updateDecorationsForStyleMask:)])
         [_platformWindow updateDecorationsForStyleMask: NS_EXTRA(NSWindow, self)->_styleMask];
+    if ([_backgroundView isKindOfClass: [NSThemeFrame class]])
+        [(NSThemeFrame *) _backgroundView _updateStandardWindowButtons];
 }
 
 - (BOOL) titlebarAppearsTransparent {
