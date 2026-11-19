@@ -398,8 +398,12 @@ static BOOL drawableSizes(CGSubWindow *subwindow, CGSize size, GLint *width,
     [self prepareMetalLayersInLayerTree: layer];
 
     // A subwindow that cannot blend with its parent supplies what is beneath it.
+    // One that can (no backdrop) is cleared to transparent, so the window shows
+    // through where the layers leave it uncovered or partly transparent.
     CGImageRef backdrop = [_subwindow createBackdropImage];
     [_renderer _setBackdropImage: backdrop];
+    if (backdrop == NULL)
+        [_renderer _setClearsToTransparent: YES];
     CGImageRelease(backdrop);
 
     [_renderer render];
