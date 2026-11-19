@@ -738,6 +738,15 @@ static NSData *makeWindowIcon() {
     if (!_overrideRedirect && !(mask & NSWindowStyleMaskTitled))
         sh->flags |= USPosition | PPosition;
 
+    // The frame is the client window's own rectangle, so a move must put the
+    // client window, not the window manager's frame around it, where the frame
+    // says (ICCCM 4.1.2.3, StaticGravity); with the default NorthWestGravity a
+    // decorated window lands lower and to the right by the size of its frame.
+    if (!_overrideRedirect) {
+        sh->flags |= PWinGravity;
+        sh->win_gravity = StaticGravity;
+    }
+
     XSetWMSizeHints(_display, _window, sh, XA_WM_NORMAL_HINTS);
     XFree(sh);
 }
