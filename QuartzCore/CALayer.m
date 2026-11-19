@@ -411,6 +411,7 @@ static void CALayerAutoresizeAxis(CGFloat *origin, CGFloat *length, CGFloat delt
 
 - (void) setSublayerTransform: (CATransform3D) value {
     NS_EXTRA(CALayer, self)->_sublayerTransform = value;
+    [NS_EXTRA(CALayer, self)->_context startTimerIfNeeded];
 }
 
 - (NSString *) minificationFilter {

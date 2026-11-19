@@ -288,6 +288,21 @@ static void applyLayerTransform(CATransform3D t) {
     glMultMatrixf(matrix);
 }
 
+// Applies a layer's sublayer transform about its anchor point. The matrix has
+// the layer's bounds corner at the origin, so the anchor point is at
+// anchorPoint * size.
+static void applySublayerTransform(CATransform3D t, CGPoint anchorPoint,
+                                   CGRect bounds)
+{
+    if (CATransform3DIsIdentity(t))
+        return;
+    CGFloat ax = bounds.size.width * anchorPoint.x;
+    CGFloat ay = bounds.size.height * anchorPoint.y;
+    glTranslatef(ax, ay, 0);
+    applyLayerTransform(t);
+    glTranslatef(-ax, -ay, 0);
+}
+
 // Specifies the bound texture as a single transparent pixel, for contents
 // that have no pixels to upload, so that nothing stale is drawn.
 static void texImage2DTransparent(void) {
@@ -717,7 +732,10 @@ static CGRect contentsRectForGravity(NSString *gravity, CGRect rect, CGSize size
     // bounds.origin, so it belongs that much further left and down than the matrix above
     // puts it. Only the recursion is offset: this layer's own contents already have the
     // origin removed from their image, so translating them too would double-count it.
+    // The sublayer transform applies about the anchor point, in the layer's own
+    // (possibly flipped) coordinates.
     glPushMatrix();
+    applySublayerTransform(layer.sublayerTransform, anchorPoint, bounds);
     glTranslatef(-bounds.origin.x, -bounds.origin.y, 0);
     for (CALayer *child in layer.sublayers)
         [self _renderLayer: child
@@ -821,10 +839,18 @@ static CGRect drawnExtentOfLayer(CALayer *layer, CATransform3D superlayerToRoot,
     if (layer.masksToBounds)
         return extent;
 
-    // Sublayers are positioned relative to the bounds origin.
-    CATransform3D sublayersToRoot = CATransform3DConcat(
-            CATransform3DMakeTranslation(-bounds.origin.x, -bounds.origin.y, 0),
-            toRoot);
+    // Sublayers are positioned relative to the bounds origin, and the
+    // sublayer transform applies about the anchor point, as in -_renderLayer:.
+    CATransform3D sublayers = CATransform3DMakeTranslation(-bounds.origin.x, -bounds.origin.y, 0);
+    CATransform3D sublayerTransform = layer.sublayerTransform;
+    if (!CATransform3DIsIdentity(sublayerTransform)) {
+        CGFloat ax = bounds.size.width * anchorPoint.x;
+        CGFloat ay = bounds.size.height * anchorPoint.y;
+        sublayers = CATransform3DConcat(sublayers, CATransform3DMakeTranslation(-ax, -ay, 0));
+        sublayers = CATransform3DConcat(sublayers, sublayerTransform);
+        sublayers = CATransform3DConcat(sublayers, CATransform3DMakeTranslation(ax, ay, 0));
+    }
+    CATransform3D sublayersToRoot = CATransform3DConcat(sublayers, toRoot);
     for (CALayer *child in layer.sublayers)
         extent = unionOfRects(extent, drawnExtentOfLayer(child, sublayersToRoot,
                                                          currentTime, NULL));
