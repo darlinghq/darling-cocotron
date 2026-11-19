@@ -28,6 +28,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSMenuItem.h>
 #import <AppKit/NSNibLoading.h>
 #import <AppKit/NSRaise.h>
+#import <Onyx2D/O2Font_freetype.h>
 
 @implementation NSFontManager
 
@@ -173,8 +174,14 @@ static Class _fontPanelFactory;
         return result;
     // -fontFamilyWithName: pretends to have any family, which would list the
     // fallback font's faces for a name that is not installed.
-    if (![[NSFontFamily allFontFamilyNames] containsObject: familyName])
-        return result;
+    if (![[NSFontFamily allFontFamilyNames] containsObject: familyName]) {
+        // The families every macOS provides (Times, Helvetica, ...) have members
+        // when an installed family stands in for them.
+        NSString *installed = O2FontCopyInstalledFamilyForStandardFamily(familyName);
+        if (installed == nil)
+            return result;
+        familyName = [installed autorelease];
+    }
     NSFontFamily *family = [NSFontFamily fontFamilyWithName: familyName];
     NSArray *typefaces = [family typefaces];
     int i, count = [typefaces count];
