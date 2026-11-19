@@ -29,6 +29,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSAppearance.h>
 #import <AppKit/NSApplication.h>
 #import "NSImageDrawingCache.h"
+#import "NSImage+TemplateDrawing.h"
 #import <AppKit/NSLinkedOnOrAfter.h>
 #import <AppKit/NSImageRep.h>
 #import <AppKit/NSPDFImageRep.h>
@@ -2581,6 +2582,38 @@ static NSUInteger scaledRepCacheBytes(NSArray *cache) {
     [path setLineWidth: line];
     [[NSColor blackColor] setStroke];
     [path stroke];
+}
+
+@end
+
+@implementation NSImage (NSTemplateDrawing)
+
+// The image is drawn into a transparency layer and the colour is put where it left coverage
+// (source-in), so that only the shape of the image is kept, not its colours.
+- (void) _drawTemplateInRect: (NSRect) rect color: (NSColor *) color fraction: (CGFloat) fraction {
+    CGContextRef context = [[NSGraphicsContext currentContext] graphicsPort];
+
+    CGContextSaveGState(context);
+    CGContextSetAlpha(context, fraction);
+    CGContextBeginTransparencyLayerWithRect(context, rect, NULL);
+    [self drawInRect: rect fromRect: NSZeroRect operation: NSCompositeSourceOver fraction: 1.0];
+    [color setFill];
+    NSRectFillUsingOperation(rect, NSCompositeSourceIn);
+    CGContextEndTransparencyLayer(context);
+    CGContextRestoreGState(context);
+}
+
+- (NSImage *) _imageTintedWithColor: (NSColor *) color {
+    NSImage *original = [[self retain] autorelease];
+    NSSize size = [self size];
+    NSImage *tinted = [NSImage imageWithSize: size
+                                     flipped: NO
+                              drawingHandler: ^BOOL(NSRect rect) {
+        [original _drawTemplateInRect: NSMakeRect(0, 0, size.width, size.height) color: color fraction: 1.0];
+        return YES;
+    }];
+
+    return tinted;
 }
 
 @end

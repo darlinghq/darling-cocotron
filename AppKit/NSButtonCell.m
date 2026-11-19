@@ -17,6 +17,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#import "NSImage+TemplateDrawing.h"
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSAttributedString.h>
 #import <AppKit/NSButtonCell.h>
@@ -1290,13 +1291,35 @@ static void drawRoundedBezel(CGContextRef context, CGRect frame) {
         [box transformUsingAffineTransform: toControl];
         objc_setAssociatedObject(self, &toggleFocusRingPathKey, box, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         [box release];
-    } else
+    } else if ([image isTemplate])
+        [image _drawTemplateInRect: local color: [self _templateImageColor] fraction: enabled ? 1.0 : 0.5];
+    else
         [[controlView graphicsStyle]
                 drawButtonImage: image
                          inRect: local
                         enabled: enabled
                           mixed: mixed];
     CGContextRestoreGState(ctx);
+}
+
+// QUIRK: the colour a template image is drawn in depends on the button. With the light appearance, black at
+// 80 % opacity on a bordered button, 60 % on a textured one (white when a textured button shows its on state
+// on its dark bezel) and 50 % without a border; half as opaque when the button is disabled. The image's own
+// colours are not used, only its coverage. Not documented beyond "template images are drawn by the control in
+// a suitable colour". Evidence: black-box renders of buttons with a template image on macOS 10.14.4 (tier 2).
+// Test: tests/appkit-template-image-tint.m (test_quirk_template_image_colours)
+- (NSColor *) _templateImageColor {
+    NSBezelStyle bezel = NS_EXTRA(NSButtonCell, self)->_bezelStyle;
+    BOOL textured = bezel == NSTexturedSquareBezelStyle || bezel == NSTexturedRoundedBezelStyle;
+
+    if (![self isBordered])
+        return [NSColor colorWithCalibratedWhite: 0.0 alpha: 0.5];
+    if (textured) {
+        if ([self state] && ([self showsStateBy] & NSChangeBackgroundCellMask))
+            return [NSColor whiteColor];
+        return [NSColor colorWithCalibratedWhite: 0.0 alpha: 0.6];
+    }
+    return [NSColor colorWithCalibratedWhite: 0.0 alpha: 0.8];
 }
 
 - (NSRect) drawTitle: (NSAttributedString *) title

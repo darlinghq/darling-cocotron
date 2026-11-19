@@ -17,6 +17,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#import "NSImage+TemplateDrawing.h"
 #import <AppKit/NSColor.h>
 #import <AppKit/NSGraphics.h>
 #import <AppKit/NSGraphicsContext.h>
@@ -210,10 +211,20 @@ static NSSize scaledImageSizeInFrameSize(NSSize imageSize, NSSize frameSize,
             CGContextConcatCTM(ctx, flip);
         }
 
-        [[self _imageValue] drawInRect: drawInRect
-                              fromRect: NSZeroRect
-                             operation: NSCompositeSourceOver
+        NSImage *image = [self _imageValue];
+
+        // QUIRK: an image view draws a template image in black at 50 % opacity (light appearance).
+        // Evidence: black-box renders on macOS 10.14.4 (tier 2).
+        // Test: tests/appkit-template-image-tint.m (test_quirk_template_image_colours)
+        if ([image isKindOfClass: [NSImage class]] && [image isTemplate])
+            [image _drawTemplateInRect: drawInRect
+                                 color: [NSColor colorWithCalibratedWhite: 0.0 alpha: 0.5]
                               fraction: 1.0];
+        else
+            [image drawInRect: drawInRect
+                     fromRect: NSZeroRect
+                    operation: NSCompositeSourceOver
+                     fraction: 1.0];
 
         CGContextRestoreGState(ctx);
     }
