@@ -59,3 +59,8 @@ void CGDisplayPostReconfiguration(CGDirectDisplayID display, CGDisplayChangeSumm
         copy[i].callback(display, flags, copy[i].userInfo);
     free(copy);
 }
+
+void CGRestorePermanentDisplayConfiguration()
+{
+    printf("STUB %s\n", __PRETTY_FUNCTION__);
+}
