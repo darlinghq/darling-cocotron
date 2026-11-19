@@ -58,8 +58,10 @@ int main(void) {
                     if ([v isHidden]) { CHECK(NSEqualRects(f, NSMakeRect(0, 0, 20, 20))); continue; }
                     CHECK(isfinite(origin) && isfinite(size) && size >= 0);
                     CHECK(origin >= 0 && origin + size <= extent);
-                    if (mode == 0) CHECK(size == (visible == 2 ? 31 : 30));
-                    if (mode == 2) CHECK(size == 48);
+                    // The panes share the extent less the dividers; the last one takes the remainder.
+                    CGFloat shared = extent - 2 * [split dividerThickness];
+                    if (mode == 0) CHECK(size == (visible == 2 ? shared - 2 * floor(shared / 3) : floor(shared / 3)));
+                    if (mode == 2) CHECK(size == (extent - [split dividerThickness]) / 2);
                     if (mode == 4) CHECK(size == 0);
                     if (mode == 5) CHECK(size == 101 && origin == 0);
                     visible++;

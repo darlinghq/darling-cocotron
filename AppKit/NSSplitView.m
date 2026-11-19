@@ -44,6 +44,13 @@ NSString *const NSSplitViewWillResizeSubviewsNotification =
     NSUnimplementedMethod();
 }
 
+- (instancetype) initWithFrame: (NSRect) frame {
+    self = [super initWithFrame: frame];
+    if (self != nil)
+        NS_EXTRA(NSSplitView, self)->_dividerStyle = NSSplitViewDividerStyleThick;
+    return self;
+}
+
 - initWithCoder: (NSCoder *) coder {
     [super initWithCoder: coder];
 
@@ -51,6 +58,12 @@ NSString *const NSSplitViewWillResizeSubviewsNotification =
         NSKeyedUnarchiver *keyed = (NSKeyedUnarchiver *) coder;
 
         NS_EXTRA(NSSplitView, self)->_isVertical = [keyed decodeBoolForKey: @"NSIsVertical"];
+        // Written for the thin and pane splitter styles; without it the
+        // divider is thick, the default.
+        if ([keyed containsValueForKey: @"NSDividerStyle"])
+            NS_EXTRA(NSSplitView, self)->_dividerStyle = [keyed decodeIntegerForKey: @"NSDividerStyle"];
+        else
+            NS_EXTRA(NSSplitView, self)->_dividerStyle = NSSplitViewDividerStyleThick;
         // The divider thickness in the nib may not be the same as ours
         [self resizeSubviewsWithOldSize: [self bounds].size];
     } else {
@@ -71,6 +84,7 @@ NSString *const NSSplitViewWillResizeSubviewsNotification =
             [coder decodeValueOfObjCType: @encode(char) at: &flags];
         }
         NS_EXTRA(NSSplitView, self)->_isVertical = (flags & 1) ? YES : NO;
+        NS_EXTRA(NSSplitView, self)->_dividerStyle = NSSplitViewDividerStyleThick;
         [self setDelegate: delegate];
     }
 
@@ -514,12 +528,23 @@ static const char preferredLengthKey;
     [self _postNoteDidResize];
 }
 
+// The thicknesses of the divider styles, as macOS 10.14.4 and 26.7.3 report
+// them.
 - (CGFloat) dividerThickness {
-    if (NS_EXTRA(NSSplitView, self)->_dividerStyle == NSSplitViewDividerStyleThick) {
+    switch (NS_EXTRA(NSSplitView, self)->_dividerStyle) {
+    case NSSplitViewDividerStyleThin:
+        return 1;
+    case NSSplitViewDividerStylePaneSplitter:
         return 10;
-    } else {
-        return 5;
+    default:
+        return 9;
     }
+}
+
+- (NSColor *) dividerColor {
+    if (NS_EXTRA(NSSplitView, self)->_dividerStyle == NSSplitViewDividerStyleThin)
+        return [NSColor separatorColor];
+    return [NSColor controlColor];
 }
 
 - (NSImage *) dimpleImage {
@@ -530,10 +555,16 @@ static const char preferredLengthKey;
 }
 
 - (void) drawDividerInRect: (NSRect) rect {
+    // A thin divider is a line, without the dimple.
+    if (NS_EXTRA(NSSplitView, self)->_dividerStyle == NSSplitViewDividerStyleThin) {
+        [[self dividerColor] setFill];
+        NSRectFillUsingOperation(rect, NSCompositingOperationSourceOver);
+        return;
+    }
 
     if (NS_EXTRA(NSSplitView, self)->_dividerStyle != NSSplitViewDividerStylePaneSplitter) {
         // Fill in the view - pane splitter means just draw the dimple
-        [[NSColor controlColor] setFill];
+        [[self dividerColor] setFill];
         NSRectFill(rect);
     }
 
