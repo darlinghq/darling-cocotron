@@ -48,6 +48,7 @@ static const CGFloat NSScrollViewMinimumMagnificationFloor = 0.0001;
 
 NS_EXTRA_SYNTHESIZE_ASSIGN(NSScrollView, horizontalScrollElasticity, _horizontalScrollElasticity, NSScrollElasticity, horizontalScrollElasticity, setHorizontalScrollElasticity:)
 NS_EXTRA_SYNTHESIZE_ASSIGN(NSScrollView, verticalScrollElasticity, _verticalScrollElasticity, NSScrollElasticity, verticalScrollElasticity, setVerticalScrollElasticity:)
+NS_EXTRA_SYNTHESIZE_ASSIGN(NSScrollView, usesPredominantAxisScrolling, _usesPredominantAxisScrolling, BOOL, usesPredominantAxisScrolling, setUsesPredominantAxisScrolling:)
 
 static Class _rulerViewClass = nil;
 
@@ -177,6 +178,7 @@ static Class _rulerViewClass = nil;
         NS_EXTRA(NSScrollView, self)->_hasHorizontalScroller = (flags & 0x20) ? YES : NO;
         NS_EXTRA(NSScrollView, self)->_autohidesScrollers = (flags & 0x200) ? YES : NO;
         NS_EXTRA(NSScrollView, self)->_borderType = flags & 0x03;
+        NS_EXTRA(NSScrollView, self)->_usesPredominantAxisScrolling = (flags & 0x10000) ? YES : NO;
         _clipView = [[keyed decodeObjectForKey: @"NSContentView"] retain];
         _verticalScroller = [[keyed decodeObjectForKey: @"NSVScroller"] retain];
         _horizontalScroller =
@@ -328,6 +330,8 @@ static Class _rulerViewClass = nil;
         NS_EXTRA(NSScrollView, self)->_hasHorizontalScroller = (flags & 0x40000000) ? YES : NO;
         NS_EXTRA(NSScrollView, self)->_scrollsDynamically = (flags & 0x08000000) ? NO : YES;
         NS_EXTRA(NSScrollView, self)->_borderType = (flags >> 25) & 3;
+        // These archives have no bit for it known here; keep the default of a new scroll view.
+        NS_EXTRA(NSScrollView, self)->_usesPredominantAxisScrolling = YES;
         NS_EXTRA(NSScrollView, self)->_autohidesScrollers = (flags & 0x8000) ? YES : NO;
         NS_EXTRA(NSScrollView, self)->_horizontalPageScroll = hPage;
         NS_EXTRA(NSScrollView, self)->_verticalPageScroll = vPage;
@@ -551,6 +555,7 @@ static Class _rulerViewClass = nil;
     NS_EXTRA(NSScrollView, self)->_hasHorizontalScroller = NO;
     NS_EXTRA(NSScrollView, self)->_drawsBackground = YES;
     NS_EXTRA(NSScrollView, self)->_borderType = NSNoBorder;
+    NS_EXTRA(NSScrollView, self)->_usesPredominantAxisScrolling = YES;
     NS_EXTRA(NSScrollView, self)->_backgroundColor = [[NSColor controlBackgroundColor] copy];
     NS_EXTRA(NSScrollView, self)->_magnification = 1.0;
     NS_EXTRA(NSScrollView, self)->_minMagnification = 0.25;

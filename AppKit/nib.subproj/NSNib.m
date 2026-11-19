@@ -31,6 +31,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Foundation/NSURL.h>
 #import <UIFoundation/UIFoundation.h>
 #import <UIFoundation/UINibDecoder.h>
+#include <string.h>
 
 NSString *const NSNibOwner = @"NSOwner";
 NSString *const NSNibTopLevelObjects = @"NSNibTopLevelObjects";
@@ -133,6 +134,21 @@ NSString *const NSNibTopLevelObjects = @"NSNibTopLevelObjects";
 
     _allObjects = [NSMutableArray new];
 
+    return self;
+}
+
+- initWithNibData: (NSData *) data bundle: (NSBundle *) bundle {
+    if (data == nil) {
+        [self release];
+        return nil;
+    }
+    _data = [data copy];
+    // NSArchiver data starts with its typedstream signature; anything else is a keyed archive
+    // or a NIBArchive. The bundle is not kept, as for a nib read from a file.
+    static const char typedstream[] = "\x04\x0bstreamtyped";
+    _flags._isKeyed = !([_data length] >= sizeof(typedstream) - 1 &&
+                        memcmp([_data bytes], typedstream, sizeof(typedstream) - 1) == 0);
+    _allObjects = [NSMutableArray new];
     return self;
 }
 

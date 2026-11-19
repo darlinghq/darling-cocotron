@@ -22,6 +22,20 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Foundation/NSKeyedArchiver.h>
 #import <Foundation/NSString.h>
 #import <Foundation/NSRaise.h>
+#import <objc/runtime.h>
+
+// macOS instantiates the custom class of a nib object even when it is not a subclass of the
+// object's class, such as an NSView subclass set on an image view. The custom class is used
+// here as long as it descends from one of the original class's ancestors below the root
+// class, so a stub class that only descends from NSObject is still replaced by the original.
+static BOOL usableCustomClass(Class custom, Class original) {
+    if ([custom isSubclassOfClass: original])
+        return YES;
+    for (Class c = original; c != Nil && class_getSuperclass(c) != Nil; c = class_getSuperclass(c))
+        if ([custom isSubclassOfClass: c])
+            return YES;
+    return NO;
+}
 
 @implementation NSClassSwapper
 
@@ -56,7 +70,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     Class original = NSClassFromString(_originalClassName);
 
     if (original != Nil &&
-        (class == Nil || ![class isSubclassOfClass: original])) {
+        (class == Nil || !usableCustomClass(class, original))) {
         NSLog(@"NSClassSwapper: %@ is not a known %@ subclass, using %@",
               _className, _originalClassName, _originalClassName);
         class = original;
