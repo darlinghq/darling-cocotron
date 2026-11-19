@@ -40,6 +40,7 @@ NSNotificationName NSPopUpButtonCellWillPopUpNotification =
     NS_EXTRA(NSPopUpButtonCell, self)->_arrowPosition = NSPopUpArrowAtCenter;
     NS_EXTRA(NSPopUpButtonCell, self)->_preferredEdge = NSMaxYEdge;
     NS_EXTRA(NSPopUpButtonCell, self)->_altersStateOfSelectedItem = YES;
+    NS_EXTRA(NSPopUpButtonCell, self)->_usesItemFromMenu = YES;
     // QUIRK: a new pop-up or pull-down button has the rounded bezel style. Not documented. Evidence:
     // black-box observation on macOS 10.14.4 (tier 2): -bezelStyle of a new NSPopUpButton is 1
     // (NSRoundedBezelStyle). Test: appkit-popup-aqua.m
@@ -103,6 +104,7 @@ NSNotificationName NSPopUpButtonCellWillPopUpNotification =
     NS_EXTRA(NSPopUpButtonCell, self)->_preferredEdge = NSMaxYEdge;
     NS_EXTRA(NSPopUpButtonCell, self)->_pullsDown = pullDown;
     NS_EXTRA(NSPopUpButtonCell, self)->_altersStateOfSelectedItem = YES;
+    NS_EXTRA(NSPopUpButtonCell, self)->_usesItemFromMenu = YES;
     // QUIRK: the title of a new pop-up or pull-down button is left aligned (a plain button's is centered). Not
     // documented. Evidence: black-box observation on macOS 10.14.4 (tier 2): -alignment is 0 and the rendered title
     // starts at the title area's left edge. Test: tests/appkit-popup-title-rect.m (test_quirk_popup_title_left_aligned)
@@ -138,6 +140,31 @@ NSNotificationName NSPopUpButtonCellWillPopUpNotification =
 
 - (void) setUsesItemFromMenu: (BOOL) flag {
     NS_EXTRA(NSPopUpButtonCell, self)->_usesItemFromMenu = flag;
+    [self synchronizeTitleAndSelectedItem];
+}
+
+- (void) setMenuItem: (NSMenuItem *) item {
+    [super setMenuItem: item];
+    if (!NS_EXTRA(NSPopUpButtonCell, self)->_usesItemFromMenu)
+        [self synchronizeTitleAndSelectedItem];
+}
+
+// The item whose title and image the button shows: the selected item of a
+// pop-up menu or the first item of a pull-down menu, or, when the cell does
+// not use an item from its menu, the cell's own menu item (none by default).
+- (NSMenuItem *) _displayedItem {
+    if (!NS_EXTRA(NSPopUpButtonCell, self)->_usesItemFromMenu)
+        return [super menuItem];
+
+    NSArray *itemArray = [_menu itemArray];
+
+    if (_selectedIndex < 0 || NS_EXTRA(NSPopUpButtonCell, self)->_pullsDown) {
+        if ([itemArray count] > 0)
+            return [itemArray objectAtIndex: 0];
+    } else if (_selectedIndex < [itemArray count]) {
+        return [itemArray objectAtIndex: _selectedIndex];
+    }
+    return nil;
 }
 
 - (BOOL) autoenablesItems {
@@ -391,15 +418,7 @@ NSNotificationName NSPopUpButtonCellWillPopUpNotification =
 }
 
 - (void) synchronizeTitleAndSelectedItem {
-    NSArray *itemArray = [_menu itemArray];
-    NSMenuItem *item = nil;
-
-    if (_selectedIndex < 0 || NS_EXTRA(NSPopUpButtonCell, self)->_pullsDown) {
-        if ([itemArray count] > 0)
-            item = [itemArray objectAtIndex: 0];
-    } else if (_selectedIndex < [itemArray count]) {
-        item = [itemArray objectAtIndex: _selectedIndex];
-    }
+    NSMenuItem *item = [self _displayedItem];
     // With no items the title is the empty string rather than nil.
     NSString *oldTitle = [[self title] retain];
 
@@ -637,15 +656,7 @@ static void popUpTitleInsets(BOOL pullsDown, NSControlSize size, CGFloat *left, 
 }
 
 - (NSImage *) image {
-    NSArray *itemArray = [_menu itemArray];
-    NSMenuItem *item = nil;
-    if (_selectedIndex < 0 || NS_EXTRA(NSPopUpButtonCell, self)->_pullsDown) {
-        if ([itemArray count] > 0)
-            item = [itemArray objectAtIndex: 0];
-    } else {
-        item = [itemArray objectAtIndex: _selectedIndex];
-    }
-    return [item image];
+    return [[self _displayedItem] image];
 }
 
 - (NSCellImagePosition) imagePosition {
