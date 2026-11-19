@@ -17,6 +17,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#import "NSImageSystemTemplates.h"
 #import <AppKit/NSBezierPath.h>
 #import <AppKit/NSBitmapImageRep.h>
 #import <AppKit/NSCachedImageRep.h>
@@ -421,6 +422,8 @@ NSImageName const NSImageNameTouchBarVolumeUpTemplate =
 
     if (image == nil)
         image = [self _drawnTemplateNamed: name];
+    if (image == nil)
+        image = NSImageSystemTemplateNamed(name);
 
     // Cocoa AppKit always returns the same shared cached image
     return image;
