@@ -97,44 +97,40 @@ static NSMutableArray<NSString *> *_nibPaths(void) {
         externalNameTable: (NSDictionary *) nameTable
                  withZone: (NSZone *) zone
 {
-    NSAutoreleasePool *pool = [NSAutoreleasePool new];
-
     NIBDEBUG(@"- loadNibNamed: '%@' externalNameTable: withZone:", fileName);
 
-    NSString *path = nil;
-    // Build a full path if it's not yet
-    if ([[fileName stringByDeletingLastPathComponent] length] == 0) {
-        NSString *name = [[fileName copy] autorelease];
-        name = [name stringByDeletingPathExtension];
-        NSBundle *bundle = self;
-        NSString *platformName = [name
-                stringByAppendingFormat: @"-%@", NSPlatformResourceNameSuffix];
-
-        path = [bundle pathForResource: platformName ofType: @"nib"];
-        if (path == nil)
-            path = [[NSBundle mainBundle] pathForResource: platformName
-                                                   ofType: @"nib"];
-
-        if (path == nil)
-            path = [bundle pathForResource: name ofType: @"nib"];
-
-        if (path == nil)
-            path = [[NSBundle mainBundle] pathForResource: name ofType: @"nib"];
-    } else {
-        NSLog(@"warning: full path passed when only nib file name should be "
-              @"used");
-        path = fileName;
-    }
-
-    // A nib that cannot be found is a failed load, not a nil entry on the nib-path stack.
-    if (path == nil) {
-        [pool release];
+    if (fileName == nil)
         return NO;
-    }
+
+    // Like on macOS, the argument names a nib resource of the bundle, with or without its
+    // extension; a full path is not looked up as a file and names no nib.
+    NSString *name = [fileName stringByDeletingPathExtension];
+    NSString *platformName =
+            [name stringByAppendingFormat: @"-%@", NSPlatformResourceNameSuffix];
+
+    NSString *path = [self pathForResource: platformName ofType: @"nib"];
+    if (path == nil)
+        path = [[NSBundle mainBundle] pathForResource: platformName ofType: @"nib"];
+    if (path == nil)
+        path = [self pathForResource: name ofType: @"nib"];
+    if (path == nil)
+        path = [[NSBundle mainBundle] pathForResource: name ofType: @"nib"];
+
+    return [self _loadNibAtPath: path externalNameTable: nameTable withZone: zone];
+}
+
+- (BOOL) _loadNibAtPath: (NSString *) path
+        externalNameTable: (NSDictionary *) nameTable
+                 withZone: (NSZone *) zone
+{
+    // A nib that cannot be found is a failed load, not a nil entry on the nib-path stack.
+    if (path == nil)
+        return NO;
 
     [NSBundle pushNibPath: path];
     [NSBundle pushNibLoadingBundle: self];
 
+    NSAutoreleasePool *pool = [NSAutoreleasePool new];
     NSNib *nib = [[[NSNib allocWithZone: zone] initWithContentsOfFile: path]
             autorelease];
 

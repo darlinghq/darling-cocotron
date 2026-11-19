@@ -4,6 +4,12 @@
 #import <AppKit/NSStoryboard-Private.h>
 #import <AppKit/NSViewController.h>
 
+@interface NSBundle (NSNibLoadingPath)
+- (BOOL) _loadNibAtPath: (NSString *) path
+        externalNameTable: (NSDictionary *) nameTable
+                 withZone: (NSZone *) zone;
+@end
+
 @implementation NSViewController
 
 NS_EXTRA_SYNTHESIZE_COPY(NSViewController, identifier, _identifier, NSUserInterfaceItemIdentifier, identifier, setIdentifier:)
@@ -222,7 +228,8 @@ NS_EXTRA_SYNTHESIZE_COPY(NSViewController, identifier, _identifier, NSUserInterf
         NSLog(@"NSViewController unable to find nib named %@, bundle=%@", name,
               bundle);
 
-    [bundle loadNibFile: path externalNameTable: nameTable withZone: NULL];
+    // The path is resolved already; the bundle still supplies the nib's resources.
+    [bundle _loadNibAtPath: path externalNameTable: nameTable withZone: NULL];
 }
 
 - (void) discardEditing {
