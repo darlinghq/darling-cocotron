@@ -20,7 +20,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSCell.h>
 #import <AppKit/NSClipView.h>
 #import <AppKit/NSCursor.h>
+#import <AppKit/NSFontManager.h>
 #import <AppKit/NSGraphics.h>
+#import <AppKit/NSGraphicsStyle.h>
 #import <AppKit/NSImage.h>
 #import <AppKit/NSRaise.h>
 #import <AppKit/NSScrollView.h>
@@ -30,6 +32,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSTableView.h>
 #import <AppKit/NSWindow.h>
 #import <Foundation/NSKeyedArchiver.h>
+#import <Foundation/NSSortDescriptor.h>
 #import <AppKit/NSLinkedOnOrAfter.h>
 
 @interface NSTableView (NSTableView_private)
@@ -122,44 +125,75 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return NSNotFound;
 }
 
+// The column the table is sorted by: the one whose sort descriptor prototype has the key of the table's first
+// sort descriptor.
+- (NSTableColumn *) _primarySortedColumn: (BOOL *) ascending {
+    NSSortDescriptor *primary = [[_tableView sortDescriptors] firstObject];
+    NSString *key = [primary key];
+
+    if (key == nil)
+        return nil;
+    for (NSTableColumn *column in [_tableView tableColumns]) {
+        if ([[[column sortDescriptorPrototype] key] isEqualToString: key]) {
+            *ascending = [primary ascending];
+            return column;
+        }
+    }
+    return nil;
+}
+
+// QUIRK: the header shows the column the table is sorted by (see -_primarySortedColumn:) with a bold title and
+// draws its indicator with -drawSortIndicatorWithFrame:inView:ascending:priority:, instead of an indicator image
+// set for that column; the highlighted table column also has a bold title, without any other change. Evidence:
+// black-box renders on macOS 10.14.4 (tier 2): after -setSortDescriptors: whose first key matches a column's
+// prototype, that column's title is bold and a dark chevron is drawn although -indicatorImageInTableColumn: is nil,
+// also when NSAscendingSortIndicator is set as its indicator image; a descriptor matching no column changes nothing;
+// -setHighlightedTableColumn: makes only the title bold. Test: appkit-table-header-aqua.m (test_quirk_sorted_column)
 - (void) drawRect: (NSRect) rect {
     NSArray *tableColumns = [_tableView tableColumns];
     NSInteger i, count = [tableColumns count];
     NSRect columnRect = _bounds;
     NSSize spacing = [_tableView intercellSpacing];
-
-    // fixes a bizarre drawing bug i couldn't otherwise track down;
-    // uncomment to notice a 1-pixel wide white line just inside
-    // the NSDrawButton bezel of the rightmost NSTableHeaderCell
-    // NSDrawButton(_bounds, _bounds);
+    BOOL ascending = YES;
+    NSTableColumn *sorted = [self _primarySortedColumn: &ascending];
 
     for (i = 0; i < count; ++i) {
         NSTableColumn *column = [tableColumns objectAtIndex: i];
+        NSTableHeaderCell *cell = [column headerCell];
+        BOOL bold = column == sorted || column == [_tableView highlightedTableColumn];
+        NSFont *font = nil;
 
         columnRect.size.width = [column width] + spacing.width;
-        // The selected columns and the table's highlighted column show highlighted
-        [[column headerCell]
-                setHighlighted:
-                        [_tableView isColumnSelected:
-                                            [[_tableView tableColumns]
-                                                    indexOfObject: column]] ||
-                        column == [_tableView highlightedTableColumn]];
-        [[column headerCell] setControlView: self];
-        [[column headerCell] drawWithFrame: columnRect inView: self];
+        // A selected column shows highlighted
+        [cell setHighlighted: [_tableView isColumnSelected: i]];
+        [cell setControlView: self];
+        if (bold) {
+            font = [[cell font] retain];
+            [cell setFont: [[NSFontManager sharedFontManager] convertFont: font toHaveTrait: NSBoldFontMask]];
+        }
+        [cell drawWithFrame: columnRect inView: self];
+        if (bold) {
+            [cell setFont: font];
+            [font release];
+        }
 
-        NSImage *indicator = [_tableView indicatorImageInTableColumn: column];
+        if (column == sorted &&
+            [cell respondsToSelector: @selector(drawSortIndicatorWithFrame:inView:ascending:priority:)]) {
+            [cell drawSortIndicatorWithFrame: columnRect inView: self ascending: ascending priority: 0];
+        } else {
+            NSImage *indicator = [_tableView indicatorImageInTableColumn: column];
 
-        if (indicator != nil) {
-            NSRect indicatorRect = [(NSTableHeaderCell *)[column headerCell] sortIndicatorRectForBounds: columnRect];
-
-            [indicator drawInRect: indicatorRect
-                         fromRect: NSZeroRect
-                        operation: NSCompositeSourceOver
-                         fraction: 1.0
-                   respectFlipped: YES
-                            hints: nil];
+            if (indicator != nil && [cell respondsToSelector: @selector(sortIndicatorRectForBounds:)])
+                [[self graphicsStyle] drawTableViewHeaderIndicatorImage: indicator
+                                                                  inRect: [cell sortIndicatorRectForBounds: columnRect]];
         }
         columnRect.origin.x += [column width] + spacing.width;
+    }
+
+    // Right of the last column the header continues, with its lines but without a separator (macOS 10.14.4)
+    if (NSMinX(columnRect) < NSMaxX(_bounds)) {
+        columnRect.size.width = NSMaxX(_bounds) - NSMinX(columnRect);
+        [[self graphicsStyle] drawTableViewCornerInRect: columnRect];
     }
 }
 

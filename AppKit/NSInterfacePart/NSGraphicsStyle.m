@@ -415,8 +415,11 @@ static NSDictionary *sScrollerButtonAttributes = nil;
 
 @implementation NSGraphicsStyle (NSBrowser)
 
+// QUIRK: a titled browser draws nothing in its title area on macOS 10.14, neither a background nor the title.
+// Evidence: black-box renders on macOS 10.14.4 (tier 2): the title area of a titled NSBrowser (titles set with
+// -setTitle:ofColumn: and from the delegate) stays transparent in -cacheDisplayInRect:toBitmapImageRep:, and
+// -drawTitleOfColumn:inRect: called directly draws no pixels. Test: appkit-browser-title-drawing.m
 - (void) drawBrowserTitleBackgroundInRect: (NSRect) rect {
-    NSInterfaceDrawBrowserHeader(rect, rect);
 }
 
 - (void) drawBrowserHorizontalScrollerWellInRect: (NSRect) rect
@@ -896,26 +899,82 @@ static void NSAquaDrawProgressTrack(NSRect bar) {
 
 @implementation NSGraphicsStyle (NSTableView)
 
-// QUIRK: the table header look of macOS 10.14 (light appearance). Not documented. Evidence: black-box
-// renders of NSTableHeaderView on macOS 10.14.4 at 1x (tier 2): a white cell with a one point (214,214,214)
-// line along its top and bottom edge, and a (229,229,229) separator line, 3 points shorter than the cell at each
-// end, at the left edge of every column except the first. Test: appkit-table-header-aqua.m
+static void NSTableHeaderFill(NSRect rect, CGFloat white) {
+    [[NSColor colorWithCalibratedWhite: white / 255.0 alpha: 1] setFill];
+    NSRectFill(rect);
+}
+
+// QUIRK: the table header look of macOS 10.14 (light appearance). Not documented. Evidence: black-box renders of
+// NSTableHeaderView and of NSTableHeaderCell drawn on its own on macOS 10.14.4 at 1x (tier 2;
+// vd-upstream/mac-probes/aqua-table-header*.m):
+//   - a white cell with a one point (214,214,214) line along its top and bottom edge;
+//   - a one point (229,229,229) separator in the last column of points of every column, the last one included,
+//     3 points shorter than the cell at each end;
+//   - a highlighted (pressed) cell is (220,220,220) from below the top line to 2 points above the bottom edge,
+//     keeps a white line above the bottom line and has no separator.
+// Test: appkit-table-header-aqua.m (test_quirk_header_lines, test_quirk_pressed_cell)
 - (void) drawTableViewHeaderInRect: (NSRect) rect
                        highlighted: (BOOL) highlighted
 {
-    [[NSColor colorWithCalibratedWhite: highlighted ? 0.88 : 1 alpha: 1] setFill];
-    NSRectFill(rect);
-    [[NSColor colorWithCalibratedWhite: 214 / 255.0 alpha: 1] setFill];
-    NSRectFill(NSMakeRect(NSMinX(rect), NSMinY(rect), NSWidth(rect), 1));
-    NSRectFill(NSMakeRect(NSMinX(rect), NSMaxY(rect) - 1, NSWidth(rect), 1));
-    if (NSMinX(rect) > 0.5 && NSHeight(rect) > 8) {
-        [[NSColor colorWithCalibratedWhite: 229 / 255.0 alpha: 1] setFill];
-        NSRectFill(NSMakeRect(NSMinX(rect), NSMinY(rect) + 3, 1, NSHeight(rect) - 6));
-    }
+    BOOL flipped = [[NSGraphicsContext currentContext] isFlipped];
+    CGFloat top = flipped ? NSMinY(rect) : NSMaxY(rect) - 1;
+    CGFloat bottom = flipped ? NSMaxY(rect) - 1 : NSMinY(rect);
+
+    NSTableHeaderFill(rect, 255);
+    if (highlighted && NSHeight(rect) > 3)
+        NSTableHeaderFill(NSMakeRect(NSMinX(rect), flipped ? NSMinY(rect) + 1 : NSMinY(rect) + 2, NSWidth(rect),
+                                     NSHeight(rect) - 3), 220);
+    NSTableHeaderFill(NSMakeRect(NSMinX(rect), top, NSWidth(rect), 1), 214);
+    NSTableHeaderFill(NSMakeRect(NSMinX(rect), bottom, NSWidth(rect), 1), 214);
+    if (!highlighted && NSHeight(rect) > 8 && NSWidth(rect) >= 1)
+        NSTableHeaderFill(NSMakeRect(NSMaxX(rect) - 1, NSMinY(rect) + 3, 1, NSHeight(rect) - 6), 229);
 }
 
+// An empty stretch of header: the corner view, and the header right of its last column.
+// QUIRK: both show the top and bottom lines of a header cell but no separator. Evidence: black-box renders on
+// macOS 10.14.4 (tier 2): the header of three 103 point columns in a 330 point table has no separator from x 309
+// to 329; next to a legacy vertical scroller the corner view is one point wider than the scroller (frame
+// {315,0,16,17} in a 330 point scroll view), so that its own separator lies outside the scroll view. Darling's
+// corner view is as wide as the scroller, so it draws no separator.
+// Test: appkit-table-header-aqua.m (test_quirk_header_lines, test_quirk_corner_view)
 - (void) drawTableViewCornerInRect: (NSRect) rect {
-    [self drawTableViewHeaderInRect: rect highlighted: NO];
+    BOOL flipped = [[NSGraphicsContext currentContext] isFlipped];
+
+    NSTableHeaderFill(rect, 255);
+    NSTableHeaderFill(NSMakeRect(NSMinX(rect), flipped ? NSMinY(rect) : NSMaxY(rect) - 1, NSWidth(rect), 1), 214);
+    NSTableHeaderFill(NSMakeRect(NSMinX(rect), flipped ? NSMaxY(rect) - 1 : NSMinY(rect), NSWidth(rect), 1), 214);
+}
+
+// QUIRK: an indicator image set with -[NSTableView setIndicatorImage:inTableColumn:] is drawn as it is, except a
+// template image, whose coverage is drawn in black at half opacity. Evidence: black-box renders on macOS 10.14.4
+// (tier 2): an opaque 9 x 9 template image draws (128,128,128) over the white header, a red or blue one that is
+// not a template draws red or blue, NSAscendingSortIndicator draws its chevron half as dark as on its own.
+// Test: appkit-table-header-aqua.m (test_quirk_indicator_image)
+- (void) drawTableViewHeaderIndicatorImage: (NSImage *) image inRect: (NSRect) rect {
+    if (![image isTemplate]) {
+        [image drawInRect: rect
+                 fromRect: NSZeroRect
+                operation: NSCompositeSourceOver
+                 fraction: 1.0
+           respectFlipped: YES
+                    hints: nil];
+        return;
+    }
+
+    CGContextRef context = [[NSGraphicsContext currentContext] graphicsPort];
+
+    CGContextSaveGState(context);
+    CGContextBeginTransparencyLayerWithRect(context, rect, NULL);
+    [image drawInRect: rect
+             fromRect: NSZeroRect
+            operation: NSCompositeSourceOver
+             fraction: 1.0
+       respectFlipped: YES
+                hints: nil];
+    [[NSColor colorWithCalibratedWhite: 0 alpha: 0.5] setFill];
+    NSRectFillUsingOperation(rect, NSCompositeSourceIn);
+    CGContextEndTransparencyLayer(context);
+    CGContextRestoreGState(context);
 }
 
 @end

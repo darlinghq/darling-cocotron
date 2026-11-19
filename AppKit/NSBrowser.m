@@ -879,16 +879,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [NS_EXTRA(NSBrowser, self)->_horizontalScroller setNeedsDisplay: YES];
 }
 
+// QUIRK: the title is not drawn: on macOS 10.14 a titled browser keeps the title area (-titleFrameOfColumn:) but
+// draws nothing in it. Evidence: black-box renders on macOS 10.14.4 (tier 2): -drawTitleOfColumn:inRect: called
+// directly for a column with the title "Title" draws no pixels, and the title area of a titled browser stays
+// transparent in -cacheDisplayInRect:toBitmapImageRep:. Subclasses can still draw titles by overriding this method.
+// Test: appkit-browser-title-drawing.m
 - (void) drawTitleOfColumn: (NSInteger) column inRect: (NSRect) rect {
-    NSString *title = [self titleOfColumn: column];
-    NSSize titleSize = [title sizeWithAttributes: nil];
-    NSRect titleFrame = NSInsetRect(rect, 2, 0);
-
-    titleFrame.size.height = titleSize.height;
-    titleFrame.origin.y += floor((rect.size.height - titleSize.height) / 2);
-
-    [[self titleOfColumn: column] _clipAndDrawInRect: titleFrame
-                                      withAttributes: nil];
 }
 
 - (NSScrollView *) createScrollViewAtIndex: (NSInteger) index {

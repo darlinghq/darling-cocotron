@@ -21,6 +21,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSImage;
 
-// A drawn system template image for one of the NSImageName...Template names, or nil for any other name.
+// A drawn system template image for one of the NSImageName...Template names or the NSAscendingSortIndicator /
+// NSDescendingSortIndicator names, or nil for any other name.
 // Private to AppKit (used by +[NSImage imageNamed:]).
 NSImage *NSImageSystemTemplateNamed(NSString *name);
