@@ -43,6 +43,7 @@ typedef NS_ENUM(NSUInteger, NSPopUpArrowPosition) {
         NSPopUpArrowPosition _arrowPosition;
         NSRectEdge _preferredEdge;
         BOOL _syncTitleNeeded;
+        BOOL _altersStateOfSelectedItem;
     NS_EXTRA_IVARS_END(NSPopUpButtonCell)
 }
 
@@ -54,6 +55,8 @@ typedef NS_ENUM(NSUInteger, NSPopUpArrowPosition) {
 - (BOOL) autoenablesItems;
 - (NSRectEdge) preferredEdge;
 - (BOOL) usesItemFromMenu;
+// Whether the selected item of a pop-up (not pull-down) menu is the one with the on state.
+@property BOOL altersStateOfSelectedItem;
 
 - (NSArray *) itemArray;
 - (NSInteger) numberOfItems;

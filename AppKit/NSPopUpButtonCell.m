@@ -39,6 +39,7 @@ NSNotificationName NSPopUpButtonCellWillPopUpNotification =
     _selectedIndex = -1;
     NS_EXTRA(NSPopUpButtonCell, self)->_arrowPosition = NSPopUpArrowAtCenter;
     NS_EXTRA(NSPopUpButtonCell, self)->_preferredEdge = NSMaxYEdge;
+    NS_EXTRA(NSPopUpButtonCell, self)->_altersStateOfSelectedItem = YES;
     // QUIRK: a new pop-up or pull-down button has the rounded bezel style. Not documented. Evidence:
     // black-box observation on macOS 10.14.4 (tier 2): -bezelStyle of a new NSPopUpButton is 1
     // (NSRoundedBezelStyle). Test: appkit-popup-aqua.m
@@ -61,6 +62,8 @@ NSNotificationName NSPopUpButtonCellWillPopUpNotification =
         NS_EXTRA(NSPopUpButtonCell, self)->_arrowPosition = [coder decodeIntForKey: @"NSArrowPosition"];
         NS_EXTRA(NSPopUpButtonCell, self)->_preferredEdge = [coder decodeIntForKey: @"NSPreferredEdge"];
         NS_EXTRA(NSPopUpButtonCell, self)->_usesItemFromMenu = [coder decodeBoolForKey: @"NSUsesItemFromMenu"];
+        // Written only when set (macOS 26.7.3, black-box).
+        NS_EXTRA(NSPopUpButtonCell, self)->_altersStateOfSelectedItem = [coder decodeBoolForKey: @"NSAltersState"];
 
         [self synchronizeTitleAndSelectedItem];
     } else {
@@ -70,10 +73,11 @@ NSNotificationName NSPopUpButtonCellWillPopUpNotification =
 
         // The flag word, in Mac archives: bit 31 pulls down, bits 28-29 the preferred edge,
         // bit 27 uses the item from the menu, bit 26 alters the state of the selected
-        // item (not supported here) and bits 24-25 the arrow position.
+        // item and bits 24-25 the arrow position.
         NS_EXTRA(NSPopUpButtonCell, self)->_pullsDown = (flags >> 31) & 1;
         NS_EXTRA(NSPopUpButtonCell, self)->_preferredEdge = (flags >> 28) & 3;
         NS_EXTRA(NSPopUpButtonCell, self)->_usesItemFromMenu = (flags >> 27) & 1;
+        NS_EXTRA(NSPopUpButtonCell, self)->_altersStateOfSelectedItem = (flags >> 26) & 1;
         NS_EXTRA(NSPopUpButtonCell, self)->_arrowPosition = (flags >> 24) & 3;
 
         // We can't call synchronizeTitleAndSelectedItem, as the _menu may not be finished decoding and we can't access the items
@@ -98,6 +102,7 @@ NSNotificationName NSPopUpButtonCellWillPopUpNotification =
     NS_EXTRA(NSPopUpButtonCell, self)->_arrowPosition = NSPopUpArrowAtCenter;
     NS_EXTRA(NSPopUpButtonCell, self)->_preferredEdge = NSMaxYEdge;
     NS_EXTRA(NSPopUpButtonCell, self)->_pullsDown = pullDown;
+    NS_EXTRA(NSPopUpButtonCell, self)->_altersStateOfSelectedItem = YES;
     // QUIRK: the title of a new pop-up or pull-down button is left aligned (a plain button's is centered). Not
     // documented. Evidence: black-box observation on macOS 10.14.4 (tier 2): -alignment is 0 and the rendered title
     // starts at the title area's left edge. Test: tests/appkit-popup-title-rect.m (test_quirk_popup_title_left_aligned)
@@ -252,8 +257,10 @@ NSNotificationName NSPopUpButtonCellWillPopUpNotification =
     NSMenuItem *item = [[_menu itemArray] lastObject];
     [item setTarget: self];
 
-    if (_selectedIndex < 0)
+    if (_selectedIndex < 0) {
         _selectedIndex = 0;
+        [self _setStateOfItemAtIndex: 0 to: NSControlStateValueOn];
+    }
 }
 
 - (void) addItemWithTitle: (NSString *) title {
@@ -315,9 +322,11 @@ NSNotificationName NSPopUpButtonCellWillPopUpNotification =
 
     if (selectedIndex != _selectedIndex) {
         [self willChangeValueForKey: @"selectedItem"];
+        [self _setStateOfItemAtIndex: _selectedIndex to: NSControlStateValueOff];
         _selectedIndex = selectedIndex;
         [self didChangeValueForKey: @"selectedItem"];
     }
+    [self _setStateOfItemAtIndex: _selectedIndex to: NSControlStateValueOn];
     [self synchronizeTitleAndSelectedItem];
 }
 
@@ -354,6 +363,31 @@ NSNotificationName NSPopUpButtonCellWillPopUpNotification =
         [result addObject: [[array objectAtIndex: i] title]];
 
     return result;
+}
+
+- (BOOL) altersStateOfSelectedItem {
+    return NS_EXTRA(NSPopUpButtonCell, self)->_altersStateOfSelectedItem;
+}
+
+// As on macOS 26.7.3 (black-box): turning it off clears the state of every item, turning it on
+// sets the selected item's state and leaves the others alone.
+- (void) setAltersStateOfSelectedItem: (BOOL) flag {
+    NS_EXTRA(NSPopUpButtonCell, self)->_altersStateOfSelectedItem = flag;
+    if (flag)
+        [self _setStateOfItemAtIndex: _selectedIndex to: NSControlStateValueOn];
+    else
+        for (NSMenuItem *item in [_menu itemArray])
+            [item setState: NSControlStateValueOff];
+}
+
+// With altersStateOfSelectedItem, the item a pop-up menu selects is turned on and the one it
+// selected before is turned off (macOS 26.7.3, black-box). A pull-down menu's items keep their
+// states.
+- (void) _setStateOfItemAtIndex: (NSInteger) index to: (NSControlStateValue) state {
+    if (!NS_EXTRA(NSPopUpButtonCell, self)->_altersStateOfSelectedItem || NS_EXTRA(NSPopUpButtonCell, self)->_pullsDown)
+        return;
+    if (index >= 0 && index < [_menu numberOfItems])
+        [[_menu itemAtIndex: index] setState: state];
 }
 
 - (void) synchronizeTitleAndSelectedItem {
