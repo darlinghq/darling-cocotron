@@ -166,6 +166,7 @@ APPKIT_EXPORT NSNotificationName NSControlTintDidChangeNotification;
         BOOL _allowsUndo;
         NSUserInterfaceLayoutDirection _userInterfaceLayoutDirection;
         NSMenu *_cellMenu;
+        NSControlTint _controlTint;
     NS_EXTRA_IVARS_END(NSCell)
 }
 
@@ -228,6 +229,7 @@ APPKIT_EXPORT NSNotificationName NSControlTintDidChangeNotification;
 @property(nonatomic, copy) NSAttributedString *attributedStringValue;
 @property(nullable, nonatomic, assign) id representedObject;
 @property NSControlSize controlSize;
+@property NSControlTint controlTint;
 @property(nonatomic) NSFocusRingType focusRingType;
 
 - (NSRect) focusRingMaskBoundsForFrame: (NSRect) cellFrame inView: (NSView *) controlView;
