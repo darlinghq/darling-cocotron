@@ -94,6 +94,8 @@ const NSViewFullScreenModeOptionKey NSFullScreenModeAllScreens =
 - (void) _synchronizeSublayerOrder;
 - (void) _updateLayerVisibility;
 - (void) _removeLayerFromSuperlayer;
+- (void) _createLayersInTreeIfNeeded;
+- (void) _removeLayerBackedViewsFromTree;
 @end
 
 @interface CADisplayLink (AppKitRefreshRate)
@@ -1816,8 +1818,18 @@ static void postFrameChange(NSView *self) {
 
     [view viewDidMoveToSuperview];
 
-    if (NS_EXTRA(NSView, self)->_wantsLayer)
-        [view setWantsLayer: YES];
+    // A view added to a layer-backed view is layer-backed as well: it gets a
+    // backing layer, as do its subviews, but does not itself want one, so it
+    // loses it again when the view above stops being layer-backed, or when it
+    // is moved into a view that is not layer-backed. This holds
+    // whether the view above wants its layer or got it from its own superview
+    // (black-box observation on macOS 10.14.4 and 26.7.3).
+    // Test: tests/appkit-layer-backed-subviews.m
+    if (_layer != nil && [view layer] == nil &&
+        (NS_EXTRA(NSView, self)->_wantsLayer || [_superview layer] != nil))
+        [view _createLayersInTreeIfNeeded];
+    else if (_layer == nil && ![view wantsLayer] && [[view layer] isKindOfClass: [NSViewBackingLayer class]])
+        [view _removeLayerBackedViewsFromTree];
 
     // A layer added to the superlayer goes to the end, and the layer of a view
     // that was only moved within its superview does not move at all.
