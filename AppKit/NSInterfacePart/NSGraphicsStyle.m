@@ -415,8 +415,11 @@ static NSDictionary *sScrollerButtonAttributes = nil;
 
 @implementation NSGraphicsStyle (NSBrowser)
 
+// QUIRK: a titled browser draws nothing in its title area on macOS 10.14, neither a background nor the title.
+// Evidence: black-box renders on macOS 10.14.4 (tier 2): the title area of a titled NSBrowser (titles set with
+// -setTitle:ofColumn: and from the delegate) stays transparent in -cacheDisplayInRect:toBitmapImageRep:, and
+// -drawTitleOfColumn:inRect: called directly draws no pixels. Test: appkit-browser-title-drawing.m
 - (void) drawBrowserTitleBackgroundInRect: (NSRect) rect {
-    NSInterfaceDrawBrowserHeader(rect, rect);
 }
 
 - (void) drawBrowserHorizontalScrollerWellInRect: (NSRect) rect
