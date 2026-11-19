@@ -512,10 +512,60 @@ static uint32_t texImage2DIOSurface(CGLContextObj context,
     return seed;
 }
 
+// Where the selected part of the contents goes in rect (the layer's bounds,
+// relative to their corner, in the layer's own orientation: y = 0 is the
+// bounds origin, which is the bottom on screen unless the layer is flipped).
+// size is the part's size in points. The gravity names refer to the layer's
+// coordinates, so "top" is the maxY edge, which a flipped layer shows at the
+// bottom of the screen.
+static CGRect contentsRectForGravity(NSString *gravity, CGRect rect, CGSize size) {
+    if (gravity == nil || [gravity isEqualToString: kCAGravityResize] ||
+        size.width <= 0 || size.height <= 0)
+        return rect;
+
+    if ([gravity isEqualToString: kCAGravityResizeAspect] ||
+        [gravity isEqualToString: kCAGravityResizeAspectFill]) {
+        CGFloat sx = rect.size.width / size.width;
+        CGFloat sy = rect.size.height / size.height;
+        CGFloat scale = [gravity isEqualToString: kCAGravityResizeAspect] ? MIN(sx, sy) : MAX(sx, sy);
+        size = CGSizeMake(size.width * scale, size.height * scale);
+        return CGRectMake(CGRectGetMidX(rect) - size.width / 2,
+                          CGRectGetMidY(rect) - size.height / 2, size.width,
+                          size.height);
+    }
+
+    BOOL left = [gravity isEqualToString: kCAGravityLeft] ||
+                [gravity isEqualToString: kCAGravityTopLeft] ||
+                [gravity isEqualToString: kCAGravityBottomLeft];
+    BOOL right = [gravity isEqualToString: kCAGravityRight] ||
+                 [gravity isEqualToString: kCAGravityTopRight] ||
+                 [gravity isEqualToString: kCAGravityBottomRight];
+    BOOL top = [gravity isEqualToString: kCAGravityTop] ||
+               [gravity isEqualToString: kCAGravityTopLeft] ||
+               [gravity isEqualToString: kCAGravityTopRight];
+    BOOL bottom = [gravity isEqualToString: kCAGravityBottom] ||
+                  [gravity isEqualToString: kCAGravityBottomLeft] ||
+                  [gravity isEqualToString: kCAGravityBottomRight];
+
+    // An unknown name is treated as the default, resize.
+    if (!left && !right && !top && !bottom &&
+        ![gravity isEqualToString: kCAGravityCenter])
+        return rect;
+
+    CGFloat x = left ? CGRectGetMinX(rect)
+                     : right ? CGRectGetMaxX(rect) - size.width
+                             : CGRectGetMidX(rect) - size.width / 2;
+    CGFloat y = bottom ? CGRectGetMinY(rect)
+                       : top ? CGRectGetMaxY(rect) - size.height
+                             : CGRectGetMidY(rect) - size.height / 2;
+    return CGRectMake(x, y, size.width, size.height);
+}
+
 - (void) _drawContentsOfLayer: (CALayer *) layer
                        bounds: (CGRect) bounds
                       opacity: (CGFloat) opacity
                       flipped: (BOOL) flipped
+                       atTime: (CFTimeInterval) currentTime
 {
     CGRect rect = CGRectMake(0, 0, bounds.size.width, bounds.size.height);
     id contents = [layer _contentsForRendering: &rect];
@@ -561,15 +611,39 @@ static uint32_t texImage2DIOSurface(CGLContextObj context,
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, minFilter);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, magFilter);
 
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        // Parts of contentsRect outside the unit square show the edge
+        // pixels, extended outwards (as the contentsRect documentation says).
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     }
 
-    // Texture row 0 is the top of the image. It goes at the top of the screen
-    // whether or not the layer's coordinate space is flipped.
-    const GLfloat uprightTexture[4 * 2] = {0, 1, 1, 1, 0, 0, 1, 0};
-    const GLfloat flippedTexture[4 * 2] = {0, 0, 1, 0, 0, 1, 1, 1};
-    const GLfloat *textureVertices = flipped ? flippedTexture : uprightTexture;
+    // The part of the contents to show, in the unit coordinates of the
+    // contents. Its y = 0 is the image edge at the layer's bounds origin:
+    // the bottom of the image, or its top when the layer's coordinate space
+    // is flipped on screen. The image itself stays upright.
+    CGRect part = interpolateRectInLayerKey(layer, @"contentsRect", currentTime);
+
+    size_t pixelsWide = surface != NULL ? IOSurfaceGetWidth(surface)
+                                        : CGImageGetWidth((CGImageRef) contents);
+    size_t pixelsHigh = surface != NULL ? IOSurfaceGetHeight(surface)
+                                        : CGImageGetHeight((CGImageRef) contents);
+    CGFloat scale = layer.contentsScale > 0 ? layer.contentsScale : 1;
+    CGSize partSize = CGSizeMake(fabs(part.size.width) * pixelsWide / scale,
+                                 fabs(part.size.height) * pixelsHigh / scale);
+    rect = contentsRectForGravity(layer.contentsGravity, rect, partSize);
+
+    // Texture row 0 (t = 0) is the top of the image.
+    const GLfloat s0 = CGRectGetMinX(part), s1 = CGRectGetMaxX(part);
+    GLfloat tBottom, tTop;
+    if (flipped) {
+        tBottom = CGRectGetMinY(part);
+        tTop = CGRectGetMaxY(part);
+    } else {
+        tBottom = 1 - CGRectGetMinY(part);
+        tTop = 1 - CGRectGetMaxY(part);
+    }
+    const GLfloat textureVertices[4 * 2] = {s0, tBottom, s1, tBottom,
+                                            s0, tTop, s1, tTop};
     const GLfloat left = CGRectGetMinX(rect), right = CGRectGetMaxX(rect);
     const GLfloat bottom = CGRectGetMinY(rect), top = CGRectGetMaxY(rect);
     const GLfloat vertices[4 * 2] = {left, bottom, right, bottom,
@@ -633,7 +707,8 @@ static uint32_t texImage2DIOSurface(CGLContextObj context,
             [self _drawContentsOfLayer: layer
                                 bounds: bounds
                                opacity: opacity
-                               flipped: flipped];
+                               flipped: flipped
+                                atTime: currentTime];
 
         [self _drawBorderOfLayer: layer bounds: bounds opacity: opacity];
     }

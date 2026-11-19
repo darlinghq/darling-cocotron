@@ -318,6 +318,7 @@ static void CALayerAutoresizeAxis(CGFloat *origin, CGFloat *length, CGFloat delt
 
 - (void) setContentsScale: (CGFloat) value {
     NS_EXTRA(CALayer, self)->_contentsScale = value;
+    [NS_EXTRA(CALayer, self)->_context startTimerIfNeeded];
 }
 
 - (CGRect) contentsCenter {
