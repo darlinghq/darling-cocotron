@@ -17,6 +17,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#import "../NSImage+TemplateDrawing.h"
 #import "NSSegmentItem.h"
 #import <AppKit/NSButtonCell.h>
 #import <AppKit/NSGraphicsStyle.h>
@@ -283,6 +284,16 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [cell setEnabled: [self isEnabled]];
 
     NSImage *image = [segment image];
+    // QUIRK: a selected segment of a textured control that shows a template image keeps the bezel of the
+    // other segments and shows its image in the accent colour instead. Evidence: black-box renders of a
+    // textured rounded control with a template image on macOS 10.14.4 (tier 2): the selected segment's
+    // bezel is the same as an unselected one's, its glyph blue. Test: tests/appkit-template-image-tint.m
+    // (test_quirk_textured_segment_selected_template)
+    if ([image isTemplate] && [segment isSelected] && [self isEnabled] &&
+        (_style == NSSegmentStyleTexturedRounded || _style == NSSegmentStyleTexturedSquare)) {
+        [cell setHighlighted: NO];
+        image = [image _imageTintedWithColor: [NSColor controlAccentColor]];
+    }
     if (image) {
         [cell setImage: image];
         // a button cell is created as a text cell - so we need to say that we
@@ -405,6 +416,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                           range: NSMakeRange(0, [label length])];
             [cell setAttributedTitle: title];
         }
+        // a template image is drawn like the label: white on the selected segment, dark on the others
+        NSImage *image = [[_segments objectAtIndex: i] image];
+        if ([image isTemplate])
+            [cell setImage: [image _imageTintedWithColor: white ? [NSColor whiteColor]
+                                                                : [NSColor colorWithCalibratedWhite: 0.0 alpha: 0.8]]];
         [cell setHighlighted: NO];
         [cell setBordered: NO];
         [cell setControlView: controlView];
