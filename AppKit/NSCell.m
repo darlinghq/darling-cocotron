@@ -434,6 +434,8 @@ NS_EXTRA_SYNTHESIZE_ASSIGN(NSCell, userInterfaceLayoutDirection, _userInterfaceL
 - copyWithZone: (NSZone *) zone {
     NSCell *copy = NSCopyObject(self, 0, zone);
     NS_EXTRA_COPY(NSCell, copy, self);
+    NS_EXTRA(NSCell, copy)->_identifier =
+        [NS_EXTRA(NSCell, self)->_identifier copyWithZone: zone];
 
     NS_EXTRA(NSCell, copy)->_font = [NS_EXTRA(NSCell, self)->_font retain];
     NS_EXTRA(NSCell, copy)->_objectValue = [NS_EXTRA(NSCell, self)->_objectValue copy];
