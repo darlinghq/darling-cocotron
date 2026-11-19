@@ -30,6 +30,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSAppearance.h>
 #import <AppKit/NSApplication.h>
 #import "NSImageDrawingCache.h"
+#import "NSAssetCatalog.h"
 #import "NSImage+TemplateDrawing.h"
 #import <AppKit/NSLinkedOnOrAfter.h>
 #import <AppKit/NSImageRep.h>
@@ -417,6 +418,16 @@ NSImageName const NSImageNameTouchBarVolumeUpTemplate =
                         [image setTemplate: YES];
                     break;
                 }
+            }
+        }
+    }
+    // Then the image sets of the bundles' asset catalogs.
+    if (image == nil) {
+        for (NSBundle *bundle in [self _checkBundles]) {
+            image = [[NSAssetCatalog catalogForBundle: bundle] imageNamed: name];
+            if (image != nil) {
+                [image setName: name];
+                break;
             }
         }
     }
@@ -2655,10 +2666,11 @@ static NSUInteger scaledRepCacheBytes(NSArray *cache) {
     return [NSURL fileURLWithPath: path];
 }
 
+// An image file of the bundle, else an image set of its asset catalog.
 - (NSImage *) imageForResource: (NSString *) name {
     NSString *path = [self pathForImageResource: name];
     if (path == nil)
-        return nil;
+        return [[NSAssetCatalog catalogForBundle: self] imageNamed: name];
     return [[[NSImage alloc] initWithContentsOfFile: path] autorelease];
 }
 

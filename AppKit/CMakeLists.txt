@@ -600,6 +600,7 @@ add_framework(AppKit
 		CoreServices
 		UniformTypeIdentifiers
 		HIToolbox
+		compression
 		UIFoundation
 		dbus
 )
