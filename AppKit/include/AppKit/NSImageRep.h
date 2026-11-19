@@ -94,6 +94,12 @@ typedef NS_ENUM(NSInteger, NSImageLayoutDirection) {
 - (BOOL) draw;
 - (BOOL) drawAtPoint: (NSPoint) point;
 - (BOOL) drawInRect: (NSRect) rect;
+- (BOOL) drawInRect: (NSRect) rect
+           fromRect: (NSRect) fromRect
+          operation: (NSCompositingOperation) operation
+           fraction: (CGFloat) fraction
+     respectFlipped: (BOOL) respectFlipped
+              hints: (nullable NSDictionary<NSString *, id> *) hints;
 
 - (nullable CGImageRef) CGImageForProposedRect: (nullable NSRect *) proposedDestRect
                                        context: (nullable NSGraphicsContext *) context

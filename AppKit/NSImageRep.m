@@ -20,6 +20,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSBitmapImageRep.h>
 #import <AppKit/NSGraphicsContext.h>
 #import <AppKit/NSGraphicsContextFunctions.h>
+#import <AppKit/NSImage.h>
 #import <AppKit/NSImageRep.h>
 #import <AppKit/NSPDFImageRep.h>
 #import <AppKit/NSPICTImageRep.h>
@@ -450,6 +451,59 @@ static NSArray *typesForFileTypes(NSArray *fileTypes) {
         CGContextRestoreGState(context);
     }
 
+    return result;
+}
+
+// Draws the part of the representation given by fromRect (all of it for an empty rectangle) into
+// rect, scaled, with the given compositing operation and opacity. The NSImageHintInterpolation hint
+// selects the interpolation quality for this drawing only.
+- (BOOL) drawInRect: (NSRect) rect
+           fromRect: (NSRect) fromRect
+          operation: (NSCompositingOperation) operation
+           fraction: (CGFloat) fraction
+     respectFlipped: (BOOL) respectFlipped
+              hints: (NSDictionary<NSString *, id> *) hints
+{
+    NSGraphicsContext *graphicsContext = [NSGraphicsContext currentContext];
+    NSSize size = [self size];
+    if (graphicsContext == nil || !(size.width > 0 && size.height > 0))
+        return NO;
+    if (NSIsEmptyRect(fromRect))
+        fromRect = NSMakeRect(0, 0, size.width, size.height);
+    if (!(fromRect.size.width > 0 && fromRect.size.height > 0))
+        return NO;
+    // Observed on macOS 26.7.3: an empty destination draws nothing and still returns YES.
+    if (!(rect.size.width > 0 && rect.size.height > 0))
+        return YES;
+
+    CGContextRef context = [graphicsContext graphicsPort];
+    NSCompositingOperation previousOperation = [graphicsContext compositingOperation];
+    NSImageInterpolation previousInterpolation = [graphicsContext imageInterpolation];
+    BOOL result;
+
+    CGContextSaveGState(context);
+    @try {
+        CGContextSetAlpha(context, fraction);
+        [graphicsContext setCompositingOperation: operation];
+        id interpolation = [hints objectForKey: NSImageHintInterpolation];
+        if ([interpolation respondsToSelector: @selector(unsignedIntegerValue)])
+            [graphicsContext setImageInterpolation: (NSImageInterpolation) [interpolation unsignedIntegerValue]];
+        CGContextClipToRect(context, NSRectToCGRect(rect));
+        if (respectFlipped && [graphicsContext isFlipped]) {
+            // Upright in a flipped context: mirror the destination about its own centre.
+            CGContextTranslateCTM(context, 0, NSMinY(rect) + NSMaxY(rect));
+            CGContextScaleCTM(context, 1, -1);
+        }
+        CGFloat scaleX = rect.size.width / fromRect.size.width;
+        CGFloat scaleY = rect.size.height / fromRect.size.height;
+        result = [self drawInRect: NSMakeRect(rect.origin.x - fromRect.origin.x * scaleX,
+                                              rect.origin.y - fromRect.origin.y * scaleY,
+                                              size.width * scaleX, size.height * scaleY)];
+    } @finally {
+        CGContextRestoreGState(context);
+        [graphicsContext setCompositingOperation: previousOperation];
+        [graphicsContext setImageInterpolation: previousInterpolation];
+    }
     return result;
 }
 
