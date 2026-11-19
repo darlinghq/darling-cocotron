@@ -54,6 +54,8 @@ class CAMetalDrawableTexture: public Indium::PrivateTexture {
 	bool _framebufferOnly = false;
 	bool _exportsSemaphore = true;
 
+	void destroyVulkanObjects();
+
 public:
 	CAMetalDrawableTexture(CGSize size, Indium::PixelFormat pixelFormat, bool framebufferOnly, bool exportsSemaphore, std::shared_ptr<Indium::PrivateDevice> privateDevice);
 	virtual ~CAMetalDrawableTexture();
