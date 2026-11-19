@@ -152,6 +152,20 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
         NS_EXTRA(NSTableView, self)->_selectedRowIndexes = [[NSIndexSet alloc] init];
         NS_EXTRA(NSTableView, self)->_selectedColumns = [[NSMutableArray alloc] init];
         NS_EXTRA(NSTableView, self)->_registeredNibs = [[NSMutableDictionary alloc] init];
+        // The cell views drawn into a view-based table in Interface Builder
+        // are archived as one nib per view identifier, for
+        // -makeViewWithIdentifier:owner: to make the views from, as if they
+        // had been registered with -registerNib:forIdentifier:.
+        // Test: tests/appkit-table-archived-cell-views.m
+        id reusableViews = [keyed decodeObjectForKey: @"NSTableViewArchivedReusableViewsKey"];
+        if ([reusableViews isKindOfClass: [NSDictionary class]]) {
+            for (id identifier in reusableViews) {
+                id nib = [reusableViews objectForKey: identifier];
+
+                if ([identifier isKindOfClass: [NSString class]] && [nib isKindOfClass: [NSNib class]])
+                    [NS_EXTRA(NSTableView, self)->_registeredNibs setObject: nib forKey: identifier];
+            }
+        }
         NS_EXTRA(NSTableView, self)->_cellViews = [[NSMutableDictionary alloc] init];
         NS_EXTRA(NSTableView, self)->_reuseQueues = [[NSMutableDictionary alloc] init];
         _editedColumn = -1;
