@@ -184,6 +184,9 @@ FcConfig *O2FontSharedFontConfig() {
     return fontConfig;
 }
 
+// Answers of O2FontCopyInstalledFamilyForStandardFamily, dropped when fonts are registered.
+static NSMutableDictionary *standardFamilyCache = nil;
+
 O2FontRegistrationResult O2FontRegisterFontFile(NSString *path) {
     static NSMutableSet *registered = nil;
 
@@ -199,6 +202,7 @@ O2FontRegistrationResult O2FontRegisterFontFile(NSString *path) {
         if (config == NULL || !addFontFile(config, path))
             return O2FontRegistrationUnrecognized;
         [registered addObject: path];
+        [standardFamilyCache removeAllObjects];
     }
     return O2FontRegistrationSucceeded;
 }
@@ -256,6 +260,98 @@ out:
     if (pattern != NULL)
         FcPatternDestroy(pattern);
     return result;
+}
+
+// The families macOS ships, each with the generic class that picks its stand-in, so that a
+// name fontconfig has no alias for (Lucida Grande) still resolves like its siblings.
+static const struct { const char *family; const char *generic; } standardFamilies[] = {
+    { "Times", "serif" },          { "Times New Roman", "serif" },
+    { "Georgia", "serif" },        { "Helvetica", "sans-serif" },
+    { "Helvetica Neue", "sans-serif" }, { "Arial", "sans-serif" },
+    { "Lucida Grande", "sans-serif" }, { "Geneva", "sans-serif" },
+    { "Verdana", "sans-serif" },   { "Courier", "monospace" },
+    { "Courier New", "monospace" }, { "Menlo", "monospace" },
+    { "Monaco", "monospace" },
+};
+
+// The fontconfig pattern for a font name that is one of the families macOS ships: the name
+// followed by its generic class, as "Menlo,monospace". Nil for any other name.
+static NSString *standardFamilyPattern(NSString *name, NSString **canonicalName) {
+    if (name == nil)
+        return nil;
+    for (size_t i = 0; i < sizeof(standardFamilies) / sizeof(standardFamilies[0]); i++) {
+        NSString *candidate = [NSString stringWithUTF8String: standardFamilies[i].family];
+        if ([candidate caseInsensitiveCompare: name] == NSOrderedSame) {
+            if (canonicalName != NULL)
+                *canonicalName = candidate;
+            return [NSString stringWithFormat: @"%@,%s", candidate,
+                                               standardFamilies[i].generic];
+        }
+    }
+    return nil;
+}
+
+NSString *O2FontCopyInstalledFamilyForStandardFamily(NSString *family) {
+    NSString *canonical = nil;
+    NSString *patternName = standardFamilyPattern(family, &canonical);
+    if (patternName == nil)
+        return nil;
+
+    // Each answer is kept until fonts are registered; fontconfig lists are not cheap.
+    id cached;
+    @synchronized([O2Font_freetype class]) {
+        cached = [[standardFamilyCache objectForKey: canonical] retain];
+    }
+    if (cached != nil) {
+        if (![cached isKindOfClass: [NSString class]]) {
+            [cached release];
+            return nil;
+        }
+        return cached;
+    }
+
+    // An installed family of that name is not an alias.
+    NSArray *installed = O2FontCopyInstalledFaces(canonical, nil, nil, nil);
+    BOOL isInstalled = [installed count] > 0;
+    [installed release];
+    if (isInstalled) {
+        @synchronized([O2Font_freetype class]) {
+            if (standardFamilyCache == nil)
+                standardFamilyCache = [[NSMutableDictionary alloc] init];
+            [standardFamilyCache setObject: [NSNull null] forKey: canonical];
+        }
+        return nil;
+    }
+
+    FcConfig *config = O2FontSharedFontConfig();
+    FcPattern *pattern = FcNameParse((const FcChar8 *) [patternName UTF8String]);
+    NSString *result = nil;
+    if (pattern != NULL) {
+        FcConfigSubstitute(config, pattern, FcMatchPattern);
+        FcDefaultSubstitute(pattern);
+        FcResult fcResult;
+        FcFontSet *set = FcFontSort(config, pattern, FcFalse, NULL, &fcResult);
+        for (int i = 0; set != NULL && i < set->nfont && result == nil; i++) {
+            FcBool scalable = FcTrue;
+            FcPatternGetBool(set->fonts[i], FC_SCALABLE, 0, &scalable);
+            FcChar8 *name = NULL;
+            if (scalable &&
+                FcPatternGetString(set->fonts[i], FC_FAMILY, 0, &name) == FcResultMatch)
+                result = [NSString stringWithUTF8String: (const char *) name];
+        }
+        if (set != NULL)
+            FcFontSetDestroy(set);
+    }
+    if (pattern != NULL)
+        FcPatternDestroy(pattern);
+    if (result == nil)
+        return nil;
+    @synchronized([O2Font_freetype class]) {
+        if (standardFamilyCache == nil)
+            standardFamilyCache = [[NSMutableDictionary alloc] init];
+        [standardFamilyCache setObject: result forKey: canonical];
+    }
+    return [result retain];
 }
 
 /* fontconfig ranks bitmap faces (the X11 .pcf fonts) above outline fonts for some generic
@@ -480,7 +576,10 @@ O2FontRef O2FontCreateWithCodePointCoverage(const uint32_t *codePoints,
     int faceIndex = 0;
     NSString *filename = [[self class] filenameForPostScriptName: name faceIndex: &faceIndex];
     if (filename == nil) {
-        filename = [[self class] filenameForPattern: name faceIndex: &faceIndex];
+        // The families macOS ships resolve as O2FontCopyInstalledFamilyForStandardFamily does.
+        NSString *standard = standardFamilyPattern(name, NULL);
+        filename = [[self class] filenameForPattern: standard != nil ? standard : name
+                                         faceIndex: &faceIndex];
     }
     if (filename == nil) {
         filename = [[self class] filenameForPattern: @"" faceIndex: &faceIndex];

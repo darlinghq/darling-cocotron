@@ -1,6 +1,7 @@
 #import <CoreText/CTFontCollection.h>
 #import <CoreText/CTFontDescriptor.h>
 #import <Foundation/Foundation.h>
+#import <Onyx2D/O2Font_freetype.h>
 
 const CFStringRef kCTFontCollectionRemoveDuplicatesOption =
         CFSTR("kCTFontCollectionRemoveDuplicatesOption");
@@ -191,6 +192,25 @@ CFArrayRef CTFontCollectionCreateMatchingFontDescriptorsForFamily(CTFontCollecti
             [matches addObject: match];
         if (family != NULL)
             CFRelease(family);
+    }
+
+    // The families every macOS provides (Times, Helvetica, ...) are answered
+    // by the installed family that stands in for them, as the descriptor
+    // queries do.
+    if ([matches count] == 0) {
+        NSString *installedFamily =
+                O2FontCopyInstalledFamilyForStandardFamily((NSString *) familyName);
+        if (installedFamily != nil) {
+            for (id match in (NSArray *) all) {
+                CFTypeRef family = CTFontDescriptorCopyAttribute(
+                        (CTFontDescriptorRef) match, kCTFontFamilyNameAttribute);
+                if (family != NULL && CFEqual(family, installedFamily))
+                    [matches addObject: match];
+                if (family != NULL)
+                    CFRelease(family);
+            }
+        }
+        [installedFamily release];
     }
     CFRelease(all);
 
