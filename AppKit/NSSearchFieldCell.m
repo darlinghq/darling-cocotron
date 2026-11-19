@@ -23,6 +23,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSMenu.h>
 #import <AppKit/NSRaise.h>
 #import <AppKit/NSSearchFieldCell.h>
+#import <AppKit/NSSearchField.h>
 #import <AppKit/NSGraphicsStyle.h>
 #import <AppKit/NSView.h>
 #import <AppKit/NSTextField.h>
@@ -161,14 +162,46 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     _searchMenuTemplate = menu;
 }
 
+// The search field the cell lays out, if any
+- (NSSearchField *) _searchField {
+    NSView *view = [self controlView];
+
+    if ([view isKindOfClass: [NSSearchField class]] && [(NSSearchField *) view cell] == self)
+        return (NSSearchField *) view;
+    return nil;
+}
+
+// QUIRK: in a search field, the text and the search button go where the
+// field's rectForSearchTextWhenCentered: and rectForSearchButtonWhenCentered:
+// (with YES) put them, so that a subclass of the field can move them; the
+// cancel button is the cell's own. Not documented. Evidence: black-box
+// observation on macOS 10.14.4 and 26.7.3 (tier 2).
+// Test: tests/appkit-searchfield-centered-rects.m
 - (NSRect) searchTextRectForBounds: (NSRect) rect {
+    NSSearchField *field = [self _searchField];
+
+    if (field != nil)
+        return [field rectForSearchTextWhenCentered: YES];
+    return [self _searchTextRectForBounds: rect];
+}
+
+- (NSRect) searchButtonRectForBounds: (NSRect) rect {
+    NSSearchField *field = [self _searchField];
+
+    if (field != nil)
+        return [field rectForSearchButtonWhenCentered: YES];
+    return [self _searchButtonRectForBounds: rect];
+}
+
+// The cell's own layout of its parts
+- (NSRect) _searchTextRectForBounds: (NSRect) rect {
     return [self titleRectForBounds: rect];
 }
 
 // QUIRK: the magnifying glass is 14 points wide and 4 points from the left edge of a search field, the cancel
 // button a 14 point disc 4 points from the right edge. Not documented. Evidence: black-box renders on macOS
 // 10.14.4 (tier 2). Test: appkit-textfield-aqua.m
-- (NSRect) searchButtonRectForBounds: (NSRect) rect {
+- (NSRect) _searchButtonRectForBounds: (NSRect) rect {
     return NSMakeRect(NSMinX(rect) + 4, NSMinY(rect), 14, NSHeight(rect));
 }
 

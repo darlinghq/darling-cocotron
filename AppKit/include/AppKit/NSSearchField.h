@@ -47,5 +47,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 @property(nonatomic, retain) NSButtonCell *cancelButtonCell;
 @property(nonatomic, retain) NSMenu *searchMenuTemplate;
 
+// Whether the placeholder and search button are centred while the field is
+// not being edited. Defaults to NO.
+@property BOOL centersPlaceholder;
+
+// The layout of the field's parts, in its bounds, when they are centred or
+// not; subclasses override them to customise the layout.
+- (NSRect) rectForSearchTextWhenCentered: (BOOL) isCentered;
+- (NSRect) rectForSearchButtonWhenCentered: (BOOL) isCentered;
+- (NSRect) rectForCancelButtonWhenCentered: (BOOL) isCentered;
 
 @end
