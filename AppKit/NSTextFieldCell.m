@@ -155,6 +155,10 @@ NS_EXTRA_SYNTHESIZE_COPY(NSTextFieldCell, allowedInputSourceLocales, _allowedInp
 - copyWithZone: (NSZone *) zone {
     NSTextFieldCell *cell = [super copyWithZone: zone];
     NS_EXTRA_COPY(NSTextFieldCell, cell, self);
+    NS_EXTRA(NSTextFieldCell, cell)->_placeholder =
+        [NS_EXTRA(NSTextFieldCell, self)->_placeholder copyWithZone: zone];
+    NS_EXTRA(NSTextFieldCell, cell)->_allowedInputSourceLocales =
+        [NS_EXTRA(NSTextFieldCell, self)->_allowedInputSourceLocales copyWithZone: zone];
 
     cell->_backgroundColor = [_backgroundColor copy];
     cell->_textColor = [_textColor copy];
