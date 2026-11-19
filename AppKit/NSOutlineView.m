@@ -99,8 +99,11 @@ NSString *const NSOutlineViewShowHideButtonKey =
 // Items come from the data source when it provides content, else from the tree
 // controller's arrangedObjects that "content" is bound to.
 static inline BOOL usesDataSourceContent(NSOutlineView *self) {
-    return [self->_dataSource respondsToSelector: @selector
-                              (outlineView:child:ofItem:)];
+    id dataSource = self->_dataSource;
+
+    return [dataSource respondsToSelector: @selector(outlineView:child:ofItem:)] &&
+           [dataSource respondsToSelector: @selector(outlineView:isItemExpandable:)] &&
+           [dataSource respondsToSelector: @selector(outlineView:numberOfChildrenOfItem:)];
 }
 
 static inline NSTreeNode *boundNode(NSOutlineView *self, id item) {
@@ -600,27 +603,28 @@ static inline id childOfItemAtIndex(NSOutlineView *self, id item,
     return YES;
 }
 
-// override for new outline-related selectors.
-// FIX: Cocoa checks for selectors as they are needed, see -[NSTableView
-// setDataSource].
+// The data source is taken as it is. Only the three methods that give the
+// items are needed for the outline view to get its content from it: a
+// view-based outline view gets its cell views from the delegate and does not
+// need outlineView:objectValueForTableColumn:byItem:, and with bound content
+// a data source may implement only drag and drop methods. A data source with
+// some of the three methods but not all is still set, with a message, as on
+// macOS (black-box observation on macOS 10.14.4 and 26.7.3; 10.14.4 logs a
+// message then, 26.7.3 does not; neither raises). Test: tests/appkit-outline-view-data-source.m
 - (void) setDataSource: dataSource {
-    SEL requiredSelectors[] = {@selector(outlineView:child:ofItem:),
-                               @selector(outlineView:isItemExpandable:),
-                               @selector(outlineView:numberOfChildrenOfItem:),
-                               @selector(outlineView:
-                                       objectValueForTableColumn:byItem:),
-                               NULL};
-    NSInteger i;
+    SEL contentSelectors[] = {@selector(outlineView:child:ofItem:),
+                              @selector(outlineView:isItemExpandable:),
+                              @selector(outlineView:numberOfChildrenOfItem:)};
+    NSInteger i, implemented = 0;
 
-    // With bound content a data source may implement only drag and drop methods.
-    BOOL providesContent = [dataSource respondsToSelector: requiredSelectors[0]];
-    for (i = 0; requiredSelectors[i] != NULL; ++i)
-        if (providesContent &&
-            ![dataSource respondsToSelector: requiredSelectors[i]])
-            [NSException
-                     raise: NSInternalInconsistencyException
-                    format: @"NSOutlineView dataSource does not respond to %@",
-                            NSStringFromSelector(requiredSelectors[i])];
+    for (i = 0; i < 3; ++i)
+        if ([dataSource respondsToSelector: contentSelectors[i]])
+            implemented++;
+    if (implemented != 0 && implemented != 3)
+        NSLog(@"NSOutlineView data source %@ implements only some of outlineView:child:ofItem:, "
+              @"outlineView:isItemExpandable: and outlineView:numberOfChildrenOfItem:, "
+              @"so the outline view does not take its items from it",
+              dataSource);
 
     _dataSource = dataSource;
     [self reloadData];
