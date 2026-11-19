@@ -493,10 +493,8 @@ set(AppKit_resources
 	StandardKeyBindings.keyBindings NSKeyboardBinding/StandardKeyBindings.keybindings
 
 	NSRulerMarkerTab.tiff NSRulerMarkerTab.tiff
-	NSSplitViewVDimple.tiff NSSplitViewVDimple.tiff
 	NSBrowserCellArrow.tiff NSBrowserCellArrow.tiff
 	NSPopUpButtonCellPopUp.tiff NSPopUpButtonCellPopUp.tiff
-	NSSplitViewHDimple.tiff NSSplitViewHDimple.tiff
 	NSHighlightedBrowserCellArrow.tiff NSHighlightedBrowserCellArrow.tiff
 	NSAlertPanelExclamation.tiff NSAlertPanelExclamation.tiff
 	NSSwitch.tiff NSSwitch.tiff

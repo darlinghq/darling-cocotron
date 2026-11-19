@@ -293,3 +293,11 @@ typedef struct _Margins {
                downHighlighted: (BOOL) downHighlighted;
 @end
 
+@interface NSGraphicsStyle (NSSplitViewAqua)
+/* The round dimple in the middle of a thick or pane splitter divider; rect is the dimple's own square. flipped
+   tells whether the current coordinate system is flipped, so that the dimple is shaded from the top of the screen. */
+- (void) drawSplitViewDimpleInRect: (NSRect) rect flipped: (BOOL) flipped;
+/* The background of a pane splitter divider: a light gradient between two gray edge lines. */
+- (void) drawSplitViewPaneSplitterInRect: (NSRect) rect vertical: (BOOL) vertical flipped: (BOOL) flipped;
+@end
+

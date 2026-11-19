@@ -727,6 +727,80 @@ static void NSAquaDrawProgressTrack(NSRect bar) {
 
 @end
 
+@implementation NSGraphicsStyle (NSSplitViewAqua)
+
+// The dimple is a translucent black disc with a darker rim, the rim darkest at the top of the screen and
+// lightest at the bottom, so it darkens whatever the divider was filled with. Over white the middle of the
+// disc is a gray of about 0.86 and its rim about 0.73 at the top, 0.78 at the sides and 0.82 at the bottom.
+// QUIRK: not documented. Evidence: pixel measurement of thick and pane splitter dividers drawn by
+// macOS 10.14.4 (tier 2), also over a red dividerColor, probes mac-probes/aqua-scroller-divider.m and -mixed.m.
+// Test: tests/appkit-split-view-divider-drawing.m (test_quirk_dimple)
+- (void) drawSplitViewDimpleInRect: (NSRect) rect flipped: (BOOL) flipped {
+    NSRect ring = NSInsetRect(rect, 0.5, 0.5);
+    CGFloat third = rect.size.height / 3;
+    // the rim is darker towards the top of the screen
+    CGFloat rim[3] = {0.15, 0.10, 0.045};
+
+    [[NSColor colorWithCalibratedWhite: 0 alpha: 0.14] setFill];
+    [[NSBezierPath bezierPathWithOvalInRect: rect] fill];
+    for (int band = 0; band < 3; band++) {
+        CGFloat y = flipped ? NSMinY(rect) + band * third : NSMaxY(rect) - (band + 1) * third;
+        NSBezierPath *path = [NSBezierPath bezierPathWithOvalInRect: ring];
+
+        [NSGraphicsContext saveGraphicsState];
+        NSRectClip(NSMakeRect(NSMinX(rect), y, rect.size.width, third));
+        [[NSColor colorWithCalibratedWhite: 0 alpha: rim[band]] setStroke];
+        [path setLineWidth: 1];
+        [path stroke];
+        [NSGraphicsContext restoreGraphicsState];
+    }
+}
+
+// A pane splitter is opaque, whatever the divider color: a gray line of 0.835 along its bottom (or left) edge
+// and one of 0.851 along its top (or right) edge, and between them a gradient from 0.984 next to the first
+// line to white next to the second.
+// QUIRK: not documented. Evidence: pixel measurement of pane splitter dividers drawn by macOS 10.14.4 (tier 2),
+// also with a red dividerColor, probes mac-probes/aqua-scroller-divider.m and -mixed.m.
+// Test: tests/appkit-split-view-divider-drawing.m (test_quirk_pane_splitter)
+- (void) drawSplitViewPaneSplitterInRect: (NSRect) rect vertical: (BOOL) vertical flipped: (BOOL) flipped {
+    CGContextRef ctx = (CGContextRef)[[NSGraphicsContext currentContext] graphicsPort];
+    CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB();
+    CGFloat comps[8] = {0.984, 0.984, 0.984, 1, 1, 1, 1, 1};
+    CGGradientRef gradient = CGGradientCreateWithColorComponents(space, comps, NULL, 2);
+    NSRect darkLine, lightLine;
+    CGPoint from, to;
+
+    if (vertical) {
+        // a vertical divider between panes side by side: the darker line is on the left
+        darkLine = NSMakeRect(NSMinX(rect), NSMinY(rect), 1, rect.size.height);
+        lightLine = NSMakeRect(NSMaxX(rect) - 1, NSMinY(rect), 1, rect.size.height);
+        from = CGPointMake(NSMinX(rect) + 1, 0);
+        to = CGPointMake(NSMaxX(rect) - 1, 0);
+    } else {
+        // a horizontal divider between stacked panes: the darker line is at the bottom of the screen
+        CGFloat bottom = flipped ? NSMaxY(rect) - 1 : NSMinY(rect);
+        CGFloat top = flipped ? NSMinY(rect) : NSMaxY(rect) - 1;
+
+        darkLine = NSMakeRect(NSMinX(rect), bottom, rect.size.width, 1);
+        lightLine = NSMakeRect(NSMinX(rect), top, rect.size.width, 1);
+        from = CGPointMake(0, flipped ? NSMaxY(rect) - 1 : NSMinY(rect) + 1);
+        to = CGPointMake(0, flipped ? NSMinY(rect) + 1 : NSMaxY(rect) - 1);
+    }
+    [NSGraphicsContext saveGraphicsState];
+    NSRectClip(NSInsetRect(rect, vertical ? 1 : 0, vertical ? 0 : 1));
+    CGContextDrawLinearGradient(ctx, gradient, from, to, 0);
+    [NSGraphicsContext restoreGraphicsState];
+    CGGradientRelease(gradient);
+    CGColorSpaceRelease(space);
+
+    [[NSColor colorWithCalibratedWhite: 0.835 alpha: 1] setFill];
+    NSRectFill(darkLine);
+    [[NSColor colorWithCalibratedWhite: 0.851 alpha: 1] setFill];
+    NSRectFill(lightLine);
+}
+
+@end
+
 @implementation NSGraphicsStyle (NSSlider)
 
 - (NSSize) sliderKnobSizeForControlSize: (NSControlSize) controlSize {

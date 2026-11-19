@@ -23,6 +23,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSEvent.h>
 #import <AppKit/NSGraphics.h>
 #import <AppKit/NSGraphicsContext.h>
+#import <AppKit/NSGraphicsStyle.h>
 #import <AppKit/NSImage.h>
 #import <AppKit/NSRaise.h>
 #import <AppKit/NSSplitView.h>
@@ -541,50 +542,50 @@ static const char preferredLengthKey;
     }
 }
 
+// Thin dividers are a faint line; thick and pane splitter dividers have a clear divider color, so a thick
+// divider shows only its dimple unless a subclass gives it a color. A pane splitter is drawn opaque,
+// whatever the divider color.
+// QUIRK: the divider color of thick and pane splitter dividers is not documented. Evidence: black-box
+// observation on macOS 10.14.4 (tier 2), probes mac-probes/aqua-scroller-divider.m and -mixed.m: dividerColor
+// is a clear color for both, and drawDividerInRect: fills a thick divider with an overridden red dividerColor
+// but not a pane splitter. Test: tests/appkit-split-view-divider-drawing.m
 - (NSColor *) dividerColor {
     if (NS_EXTRA(NSSplitView, self)->_dividerStyle == NSSplitViewDividerStyleThin)
         return [NSColor separatorColor];
-    return [NSColor controlColor];
+    return [NSColor clearColor];
 }
 
-- (NSImage *) dimpleImage {
-    if ([self isVertical])
-        return [NSImage imageNamed: @"NSSplitViewVDimple"];
-    else
-        return [NSImage imageNamed: @"NSSplitViewHDimple"];
+// The dimple is a disc 6 points across in the middle of the divider, its position rounded down in window
+// coordinates.
+// QUIRK: same evidence as -dividerColor. Test: tests/appkit-split-view-divider-drawing.m (test_quirk_dimple)
+- (NSRect) _dimpleRectInDividerRect: (NSRect) rect {
+    const CGFloat size = 6;
+    NSRect dimple = NSMakeRect(NSMidX(rect) - size / 2, NSMidY(rect) - size / 2, size, size);
+    NSRect base = [self convertRect: dimple toView: nil];
+
+    base.origin.x = floor(base.origin.x + 0.001);
+    base.origin.y = floor(base.origin.y + 0.001);
+    base.size = NSMakeSize(size, size);
+    return [self convertRect: base fromView: nil];
 }
 
 - (void) drawDividerInRect: (NSRect) rect {
-    // A thin divider is a line, without the dimple.
-    if (NS_EXTRA(NSSplitView, self)->_dividerStyle == NSSplitViewDividerStyleThin) {
+    NSSplitViewDividerStyle style = NS_EXTRA(NSSplitView, self)->_dividerStyle;
+
+    if (style == NSSplitViewDividerStylePaneSplitter) {
+        [[self graphicsStyle] drawSplitViewPaneSplitterInRect: rect
+                                                     vertical: [self isVertical]
+                                                      flipped: [self isFlipped]];
+    } else {
         [[self dividerColor] setFill];
         NSRectFillUsingOperation(rect, NSCompositingOperationSourceOver);
-        return;
+        // A thin divider is a line, without the dimple.
+        if (style == NSSplitViewDividerStyleThin)
+            return;
     }
 
-    if (NS_EXTRA(NSSplitView, self)->_dividerStyle != NSSplitViewDividerStylePaneSplitter) {
-        // Fill in the view - pane splitter means just draw the dimple
-        [[self dividerColor] setFill];
-        NSRectFill(rect);
-    }
-
-    NSImage *image = [self dimpleImage];
-    NSSize imageSize = [image size];
-
-    NSPoint point = rect.origin;
-
-    if ([self isVertical]) {
-        point.x += floor((NSWidth(rect) - imageSize.width) / 2);
-        point.y += floor((NSHeight(rect) - imageSize.height) / 2);
-    } else {
-        point.x += floor((NSWidth(rect) - imageSize.width) / 2);
-        point.y += floor((NSHeight(rect) - imageSize.height) / 2);
-    }
-
-    [image drawAtPoint: point
-              fromRect: NSZeroRect
-             operation: NSCompositeSourceOver
-              fraction: 1.0];
+    [[self graphicsStyle] drawSplitViewDimpleInRect: [self _dimpleRectInDividerRect: rect]
+                                            flipped: [self isFlipped]];
 }
 
 #pragma mark Arranged subviews
