@@ -25,6 +25,13 @@ typedef NS_OPTIONS(unsigned int, CAAutoresizingMask) {
     kCALayerMaxYMargin = 0x20,
 };
 
+typedef NS_OPTIONS(NSUInteger, CACornerMask) {
+    kCALayerMinXMinYCorner = 1U << 0,
+    kCALayerMaxXMinYCorner = 1U << 1,
+    kCALayerMinXMaxYCorner = 1U << 2,
+    kCALayerMaxXMaxYCorner = 1U << 3,
+};
+
 typedef NSString *CALayerContentsGravity NS_TYPED_ENUM;
 typedef NSString *CALayerCornerCurve NS_TYPED_ENUM;
 typedef NSString *CALayerContentsFormat NS_TYPED_ENUM;
@@ -108,6 +115,7 @@ CA_EXPORT CAToneMapMode const CAToneMapModeIfSupported;
         NSString *_contentsFormat;
         NSString *_contentsGravity;
         NSString *_cornerCurve;
+        CACornerMask _maskedCorners;
         BOOL _allowsGroupOpacity;
         CGPathRef _shadowPath;
         BOOL _needsLayout;
@@ -202,13 +210,15 @@ CA_EXPORT CAToneMapMode const CAToneMapModeIfSupported;
 @property float minificationFilterBias;
 
 // Appearance. CARenderer draws the background and the border as rounded rects
-// with cornerRadius, and the contents between them (not clipped to the corners).
-// masksToBounds is stored but sublayers aren't clipped yet.
+// with cornerRadius (circular or continuous corners, on the corners maskedCorners
+// selects). A layer with masksToBounds clips its contents and sublayers to its
+// bounds, rounded by cornerRadius.
 @property CGColorRef backgroundColor;
 @property CGColorRef borderColor;
 @property CGFloat borderWidth;
 @property CGFloat cornerRadius;
 @property(copy) CALayerCornerCurve cornerCurve;
+@property CACornerMask maskedCorners;
 @property BOOL masksToBounds;
 // These properties retain the public layer state. CARenderer does not yet
 // apply masks, Core Image filters, or blurred shadows when drawing.

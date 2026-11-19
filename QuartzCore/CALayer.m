@@ -455,6 +455,8 @@ static void CALayerAutoresizeAxis(CGFloat *origin, CGFloat *length, CGFloat delt
     NS_EXTRA(CALayer, self)->_contentsFormat = [kCAContentsFormatRGBA8Uint copy];
     NS_EXTRA(CALayer, self)->_contentsGravity = [kCAGravityResize copy];
     NS_EXTRA(CALayer, self)->_cornerCurve = [kCACornerCurveCircular copy];
+    NS_EXTRA(CALayer, self)->_maskedCorners = kCALayerMinXMinYCorner | kCALayerMaxXMinYCorner |
+                                              kCALayerMinXMaxYCorner | kCALayerMaxXMaxYCorner;
     NS_EXTRA(CALayer, self)->_allowsGroupOpacity = YES;
     NS_EXTRA(CALayer, self)->_shadowColor = CGColorCreateGenericRGB(0, 0, 0, 1);
     NS_EXTRA(CALayer, self)->_shadowOpacity = 0;
@@ -873,6 +875,15 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
     value = [value copy];
     [NS_EXTRA(CALayer, self)->_cornerCurve release];
     NS_EXTRA(CALayer, self)->_cornerCurve = value;
+    [NS_EXTRA(CALayer, self)->_context startTimerIfNeeded];
+}
+
+- (CACornerMask) maskedCorners {
+    return NS_EXTRA(CALayer, self)->_maskedCorners;
+}
+
+- (void) setMaskedCorners: (CACornerMask) value {
+    NS_EXTRA(CALayer, self)->_maskedCorners = value;
     [NS_EXTRA(CALayer, self)->_context startTimerIfNeeded];
 }
 

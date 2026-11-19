@@ -1,8 +1,11 @@
+#define GL_GLEXT_PROTOTYPES 1
 #import <CoreVideo/CoreVideo.h>
 #import <IOSurface/IOSurface.h>
 #import <Onyx2D/O2Color.h>
 #import <Onyx2D/O2Surface.h>
 #import <OpenGL/OpenGL.h>
+#import <OpenGL/gl.h>
+#import <OpenGL/glext.h>
 #import <QuartzCore/CAAnimation.h>
 #import <QuartzCore/CAMediaTimingFunction.h>
 #import <QuartzCore/CARenderer.h>
@@ -418,24 +421,52 @@ static BOOL setPremultipliedColor(CGColorRef color, CGFloat opacity) {
 
 enum { kCornerSegments = 8, kRoundedRectPoints = 4 * (kCornerSegments + 1) };
 
+// A circular corner is a quarter circle of the corner radius. A continuous
+// corner is a smoother curve that departs from the straight edges further away
+// (about 1.53 times the radius) and cuts a little more off the corner. It is
+// drawn as the superellipse |x|^n + |y|^n = 1 over that extent.
+static const CGFloat kContinuousCornerExtent = 1.5286;
+static const CGFloat kContinuousCornerExponent = 3.5;
+
+static BOOL hasContinuousCorners(CALayer *layer) {
+    return [layer.cornerCurve isEqualToString: kCACornerCurveContinuous];
+}
+
+// The distance from a corner at which its curve meets the straight edges. The
+// radius is limited so that the corners fit in the smaller side. The curves of
+// continuous corners may overlap along a short side.
+static CGFloat cornerExtent(CGFloat radius, CGSize size, BOOL continuous) {
+    CGFloat half = MIN(size.width, size.height) / 2;
+    radius = MAX(0, MIN(radius, half));
+    return continuous ? radius * kContinuousCornerExtent : radius;
+}
+
 // Outline of a rounded rect, counter-clockwise from the bottom-right corner.
 // Always kRoundedRectPoints points (a zero radius repeats the corner), so an
 // outer and an inner outline can be zipped into a border triangle strip.
-static void roundedRectOutline(CGRect r, CGFloat radius, GLfloat *xy) {
-    radius = MAX(0, MIN(radius, MIN(r.size.width, r.size.height) / 2));
-
-    const CGFloat cx[4] = {CGRectGetMaxX(r) - radius, CGRectGetMaxX(r) - radius,
-                           CGRectGetMinX(r) + radius, CGRectGetMinX(r) + radius};
-    const CGFloat cy[4] = {CGRectGetMinY(r) + radius, CGRectGetMaxY(r) - radius,
-                           CGRectGetMaxY(r) - radius, CGRectGetMinY(r) + radius};
+// Only the corners in `corners` are rounded.
+static void roundedRectOutline(CGRect r, CGFloat radius, BOOL continuous,
+                               CACornerMask corners, GLfloat *xy)
+{
+    // The outline cannot overlap itself, so its corners stop at the middle of the sides.
+    const CGFloat extent = MIN(cornerExtent(radius, r.size, continuous),
+                               MIN(r.size.width, r.size.height) / 2);
+    const CGFloat power = continuous ? 2 / kContinuousCornerExponent : 1;
+    const CACornerMask cornerBits[4] = {kCALayerMaxXMinYCorner, kCALayerMaxXMaxYCorner,
+                                        kCALayerMinXMaxYCorner, kCALayerMinXMinYCorner};
     int n = 0;
 
     for (int corner = 0; corner < 4; corner++) {
+        CGFloat e = (corners & cornerBits[corner]) ? extent : 0;
+        CGFloat cx = (corner < 2 ? CGRectGetMaxX(r) : CGRectGetMinX(r)) + (corner < 2 ? -e : e);
+        CGFloat cy = (corner == 0 || corner == 3 ? CGRectGetMinY(r) : CGRectGetMaxY(r)) +
+                     (corner == 0 || corner == 3 ? e : -e);
         CGFloat start = (corner - 1) * M_PI_2;
         for (int i = 0; i <= kCornerSegments; i++) {
             CGFloat angle = start + M_PI_2 * i / kCornerSegments;
-            xy[n++] = cx[corner] + radius * cos(angle);
-            xy[n++] = cy[corner] + radius * sin(angle);
+            CGFloat c = cos(angle), s = sin(angle);
+            xy[n++] = cx + e * copysign(pow(fabs(c), power), c);
+            xy[n++] = cy + e * copysign(pow(fabs(s), power), s);
         }
     }
 }
@@ -452,7 +483,8 @@ static void roundedRectOutline(CGRect r, CGFloat radius, GLfloat *xy) {
 
     fan[0] = CGRectGetMidX(rect);
     fan[1] = CGRectGetMidY(rect);
-    roundedRectOutline(rect, layer.cornerRadius, fan + 2);
+    roundedRectOutline(rect, layer.cornerRadius, hasContinuousCorners(layer),
+                       layer.maskedCorners, fan + 2);
     fan[2 * (kRoundedRectPoints + 1)] = fan[2];
     fan[2 * (kRoundedRectPoints + 1) + 1] = fan[3];
 
@@ -477,8 +509,10 @@ static void roundedRectOutline(CGRect r, CGFloat radius, GLfloat *xy) {
     GLfloat outer[2 * kRoundedRectPoints], inner[2 * kRoundedRectPoints];
     GLfloat strip[2 * 2 * (kRoundedRectPoints + 1)];
 
-    roundedRectOutline(outerRect, layer.cornerRadius, outer);
-    roundedRectOutline(innerRect, MAX(0, layer.cornerRadius - width), inner);
+    roundedRectOutline(outerRect, layer.cornerRadius, hasContinuousCorners(layer),
+                       layer.maskedCorners, outer);
+    roundedRectOutline(innerRect, MAX(0, layer.cornerRadius - width),
+                       hasContinuousCorners(layer), layer.maskedCorners, inner);
 
     for (int i = 0; i <= kRoundedRectPoints; i++) {
         int j = i % kRoundedRectPoints;
@@ -788,8 +822,200 @@ static void popClip(CARendererClip *clip, const CARendererClip *saved)
     *clip = *saved;
 }
 
-// Layers are composited in painter's order: a layer's background, contents and
-// border, then its sublayers in array order. Opacity multiplies down the tree.
+// Rounded clips. The drawables have no stencil buffer, so a masking layer
+// with rounded corners draws its contents and sublayers into a temporary
+// texture first. The texture is then drawn over the bounds of the layer with
+// the coverage of the rounded rectangle applied by a fragment shader, which
+// also anti-aliases the curve. Nested rounded clips intersect because the
+// inner layer is composited into the outer layer's texture.
+static const char kRoundedClipVertexShader[] =
+        "#version 120\n"
+        "varying vec2 layerPosition;\n"
+        "void main() {\n"
+        "    layerPosition = gl_Vertex.xy;\n"
+        "    gl_ClipVertex = gl_ModelViewMatrix * gl_Vertex;\n"
+        "    gl_Position = ftransform();\n"
+        "}\n";
+
+static const char kRoundedClipFragmentShader[] =
+        "#version 120\n"
+        "uniform sampler2D content;\n"
+        "uniform vec2 inverseTextureSize;\n"
+        "uniform vec2 layerSize;\n"
+        "uniform float extent;\n"
+        "uniform float exponent;\n"
+        "uniform float pixelsPerUnit;\n"
+        "uniform vec4 rounded;\n" // bottom left, bottom right, top left, top right
+        "varying vec2 layerPosition;\n"
+        "void main() {\n"
+        "    vec2 edge = min(layerPosition, layerSize - layerPosition);\n"
+        "    bool right = layerPosition.x > layerSize.x * 0.5;\n"
+        "    bool top = layerPosition.y > layerSize.y * 0.5;\n"
+        "    float corner = top ? (right ? rounded.w : rounded.z)\n"
+        "                       : (right ? rounded.y : rounded.x);\n"
+        "    float coverage = 1.0;\n"
+        "    if (corner > 0.5 && edge.x < extent && edge.y < extent) {\n"
+        "        vec2 u = max((vec2(extent) - edge) / extent, vec2(0.0));\n"
+        "        float f = pow(pow(u.x, exponent) + pow(u.y, exponent), 1.0 / exponent);\n"
+        "        coverage = clamp(0.5 - (f - 1.0) * extent * pixelsPerUnit, 0.0, 1.0);\n"
+        "    }\n"
+        "    gl_FragColor = texture2D(content, gl_FragCoord.xy * inverseTextureSize) * coverage;\n"
+        "}\n";
+
+static GLuint compileShader(GLenum type, const char *source) {
+    GLuint shader = glCreateShader(type);
+    glShaderSource(shader, 1, &source, NULL);
+    glCompileShader(shader);
+    GLint ok = 0;
+    glGetShaderiv(shader, GL_COMPILE_STATUS, &ok);
+    if (!ok) {
+        glDeleteShader(shader);
+        return 0;
+    }
+    return shader;
+}
+
+typedef struct {
+    GLuint texture, framebuffer;
+    GLint drawFramebuffer, readFramebuffer;
+    GLint width, height;
+} CARendererOffscreen;
+
+// Window pixels per unit of the current modelview coordinates.
+static CGFloat pixelsPerUnit(void) {
+    GLdouble m[16], p[16], a[2], b[2], c[2];
+    GLint viewport[4];
+    glGetDoublev(GL_MODELVIEW_MATRIX, m);
+    glGetDoublev(GL_PROJECTION_MATRIX, p);
+    glGetIntegerv(GL_VIEWPORT, viewport);
+    if (!windowPoint(m, p, viewport, 0, 0, a) || !windowPoint(m, p, viewport, 1, 0, b) ||
+        !windowPoint(m, p, viewport, 0, 1, c))
+        return 1;
+    return (hypot(b[0] - a[0], b[1] - a[1]) + hypot(c[0] - a[0], c[1] - a[1])) / 2;
+}
+
+- (GLuint) _roundedClipProgram {
+    if (NS_EXTRA(CARenderer, self)->_roundedClipProgram != 0 ||
+        NS_EXTRA(CARenderer, self)->_roundedClipUnavailable)
+        return NS_EXTRA(CARenderer, self)->_roundedClipProgram;
+
+    GLuint vertex = compileShader(GL_VERTEX_SHADER, kRoundedClipVertexShader);
+    GLuint fragment = compileShader(GL_FRAGMENT_SHADER, kRoundedClipFragmentShader);
+    GLuint program = 0;
+    if (vertex != 0 && fragment != 0) {
+        program = glCreateProgram();
+        glAttachShader(program, vertex);
+        glAttachShader(program, fragment);
+        glLinkProgram(program);
+        GLint ok = 0;
+        glGetProgramiv(program, GL_LINK_STATUS, &ok);
+        if (!ok) {
+            glDeleteProgram(program);
+            program = 0;
+        }
+    }
+    if (vertex != 0)
+        glDeleteShader(vertex);
+    if (fragment != 0)
+        glDeleteShader(fragment);
+    // The program goes with the GL context, which may not be current when the
+    // renderer is released.
+    NS_EXTRA(CARenderer, self)->_roundedClipProgram = program;
+    NS_EXTRA(CARenderer, self)->_roundedClipUnavailable = program == 0;
+    return program;
+}
+
+// Redirects drawing to a transparent texture that covers the drawable's
+// window coordinates. Returns NO, drawing unchanged, when that isn't possible.
+- (BOOL) _beginOffscreen: (CARendererOffscreen *) pass {
+    GLint viewport[4], previousTexture;
+    glGetIntegerv(GL_VIEWPORT, viewport);
+    pass->width = viewport[0] + viewport[2];
+    pass->height = viewport[1] + viewport[3];
+    if (pass->width <= 0 || pass->height <= 0 || [self _roundedClipProgram] == 0)
+        return NO;
+
+    glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &pass->drawFramebuffer);
+    glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &pass->readFramebuffer);
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &previousTexture);
+
+    glGenTextures(1, &pass->texture);
+    glBindTexture(GL_TEXTURE_2D, pass->texture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, pass->width, pass->height, 0, GL_RGBA,
+                 GL_UNSIGNED_BYTE, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glBindTexture(GL_TEXTURE_2D, previousTexture);
+
+    glGenFramebuffers(1, &pass->framebuffer);
+    glBindFramebuffer(GL_FRAMEBUFFER, pass->framebuffer);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
+                           pass->texture, 0);
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, pass->drawFramebuffer);
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, pass->readFramebuffer);
+        glDeleteFramebuffers(1, &pass->framebuffer);
+        glDeleteTextures(1, &pass->texture);
+        return NO;
+    }
+
+    GLfloat clearColor[4];
+    glGetFloatv(GL_COLOR_CLEAR_VALUE, clearColor);
+    glClearColor(0, 0, 0, 0);
+    glClear(GL_COLOR_BUFFER_BIT);
+    glClearColor(clearColor[0], clearColor[1], clearColor[2], clearColor[3]);
+    return YES;
+}
+
+// Returns to the previous drawing destination and draws the texture over
+// (0, 0, width, height) of the current modelview coordinates, keeping the
+// part inside the rounded rectangle.
+- (void) _endOffscreen: (CARendererOffscreen *) pass
+                 layer: (CALayer *) layer
+                  size: (CGSize) size
+{
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, pass->drawFramebuffer);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, pass->readFramebuffer);
+
+    BOOL continuous = hasContinuousCorners(layer);
+    CACornerMask corners = layer.maskedCorners;
+    GLuint program = [self _roundedClipProgram];
+    GLint previousProgram, previousTexture, previousUnit;
+    glGetIntegerv(GL_CURRENT_PROGRAM, &previousProgram);
+    glGetIntegerv(GL_ACTIVE_TEXTURE, &previousUnit);
+    glActiveTexture(GL_TEXTURE0);
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &previousTexture);
+
+    glUseProgram(program);
+    glBindTexture(GL_TEXTURE_2D, pass->texture);
+    glUniform1i(glGetUniformLocation(program, "content"), 0);
+    glUniform2f(glGetUniformLocation(program, "inverseTextureSize"), 1.0f / pass->width,
+                1.0f / pass->height);
+    glUniform2f(glGetUniformLocation(program, "layerSize"), size.width, size.height);
+    glUniform1f(glGetUniformLocation(program, "extent"),
+                cornerExtent(layer.cornerRadius, size, continuous));
+    glUniform1f(glGetUniformLocation(program, "exponent"),
+                continuous ? kContinuousCornerExponent : 2);
+    glUniform1f(glGetUniformLocation(program, "pixelsPerUnit"), pixelsPerUnit());
+    glUniform4f(glGetUniformLocation(program, "rounded"),
+                (corners & kCALayerMinXMinYCorner) != 0, (corners & kCALayerMaxXMinYCorner) != 0,
+                (corners & kCALayerMinXMaxYCorner) != 0, (corners & kCALayerMaxXMaxYCorner) != 0);
+
+    const GLfloat vertices[4 * 2] = {0, 0, size.width, 0, 0, size.height, size.width, size.height};
+    glVertexPointer(2, GL_FLOAT, 0, vertices);
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+
+    glUseProgram(previousProgram);
+    glBindTexture(GL_TEXTURE_2D, previousTexture);
+    glActiveTexture(previousUnit);
+    glDeleteFramebuffers(1, &pass->framebuffer);
+    glDeleteTextures(1, &pass->texture);
+}
+
+// Layers are composited in painter's order: a layer's background and contents, its
+// sublayers in array order, then its border. Opacity multiplies down the tree.
 // parentFlipped says whether the parent's coordinate space is y-flipped on screen.
 - (void) _renderLayer: (CALayer *) layer
           currentTime: (CFTimeInterval) currentTime
@@ -832,11 +1058,16 @@ static void popClip(CARendererClip *clip, const CARendererClip *saved)
     BOOL isTransformLayer = [layer isKindOfClass: [CATransformLayer class]];
     BOOL masks = layer.masksToBounds && !isTransformLayer;
     CARendererClip saved = *clip;
+    CARendererOffscreen offscreen;
+    BOOL rounded = NO;
     if (masks) {
         if (!(bounds.size.width > 0 && bounds.size.height > 0)) {
             glPopMatrix();
             return;
         }
+        // A rounded clip is drawn through a texture (see -_endOffscreen:...).
+        if (layer.cornerRadius > 0 && layer.maskedCorners != 0)
+            rounded = [self _beginOffscreen: &offscreen];
         pushBoundsClip(clip, bounds.size.width, bounds.size.height);
     }
 
@@ -852,8 +1083,6 @@ static void popClip(CARendererClip *clip, const CARendererClip *saved)
                                opacity: opacity
                                flipped: flipped
                                 atTime: currentTime];
-
-        [self _drawBorderOfLayer: layer bounds: bounds opacity: opacity];
     }
 
     // A child is positioned in this layer's coordinate system, whose origin is
@@ -875,6 +1104,12 @@ static void popClip(CARendererClip *clip, const CARendererClip *saved)
 
     if (masks)
         popClip(clip, &saved);
+    if (rounded)
+        [self _endOffscreen: &offscreen layer: layer size: bounds.size];
+
+    // The border covers the sublayers.
+    if (!isTransformLayer)
+        [self _drawBorderOfLayer: layer bounds: bounds opacity: opacity];
 
     glPopMatrix();
 }

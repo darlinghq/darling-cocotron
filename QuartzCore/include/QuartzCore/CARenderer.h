@@ -16,6 +16,8 @@ CA_EXPORT NSString *const kCARendererColorSpace;
         BOOL _clearsToTransparent;
         CGImageRef _backdropImage;
         unsigned int _backdropTexture;
+        unsigned int _roundedClipProgram;
+        BOOL _roundedClipUnavailable;
     NS_EXTRA_IVARS_END(CARenderer)
 }
 
