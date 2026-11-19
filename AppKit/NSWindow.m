@@ -381,6 +381,62 @@ NS_EXTRA_SYNTHESIZE_RETAIN(NSWindow, appearance, _appearance, NSAppearance *, ap
 NS_EXTRA_SYNTHESIZE_COPY(NSWindow, identifier, _identifier, NSUserInterfaceItemIdentifier, identifier, setIdentifier:)
 NS_EXTRA_SYNTHESIZE_ASSIGN(NSWindow, accessibilityElement, _isAccessible, BOOL, isAccessibilityElement, setAccessibilityElement:)
 NS_EXTRA_SYNTHESIZE_ASSIGN(NSWindow, restorable, _restorable, BOOL, isRestorable, setRestorable:)
+NS_EXTRA_SYNTHESIZE_ASSIGN(NSWindow, restorationClass, _restorationClass, Class, restorationClass, setRestorationClass:)
+
+// Keys of the window's own entries in its restorable state.
+static NSString *const NSWindowRestorationFrameKey = @"NSWindowRestorationFrame";
+static NSString *const NSWindowRestorationClassKey = @"NSWindowRestorationClass";
+
+- (void) encodeRestorableStateWithCoder: (NSCoder *) coder {
+    [super encodeRestorableStateWithCoder: coder];
+    [coder encodeRect: [self frame] forKey: NSWindowRestorationFrameKey];
+    Class restorationClass = NS_EXTRA(NSWindow, self)->_restorationClass;
+    if (restorationClass != Nil)
+        [coder encodeObject: NSStringFromClass(restorationClass) forKey: NSWindowRestorationClassKey];
+    if ([_delegate respondsToSelector: @selector(window:willEncodeRestorableState:)])
+        [_delegate window: self willEncodeRestorableState: coder];
+}
+
+- (void) restoreStateWithCoder: (NSCoder *) coder {
+    [super restoreStateWithCoder: coder];
+    if ([coder containsValueForKey: NSWindowRestorationFrameKey]) {
+        NSRect saved = [coder decodeRectForKey: NSWindowRestorationFrameKey];
+        [self setFrame: [self _restoredFrameFromSavedFrame: saved] display: YES];
+    }
+    if ([_delegate respondsToSelector: @selector(window:didDecodeRestorableState:)])
+        [_delegate window: self didDecodeRestorableState: coder];
+}
+
+// QUIRK: a window that is not resizable keeps its size when its state is
+// restored and only moves to the saved origin. A resizable window takes the
+// whole saved frame. Not documented. Evidence: black-box runs of the test
+// below on Mac OS X 10.14.4 (i386) and macOS 26.7.3 (x86_64) (tier 2): 10.14.4
+// keeps the saved bottom-left corner, 26.7.3 the saved top-left corner; the
+// older behaviour is followed.
+// Test: test_quirk_fixed_size_window_keeps_size in appkit-window-restoration.m.
+- (NSRect) _restoredFrameFromSavedFrame: (NSRect) saved {
+    if (NS_EXTRA(NSWindow, self)->_styleMask & NSWindowStyleMaskResizable)
+        return saved;
+    NSRect frame = [self frame];
+    frame.origin = saved.origin;
+    return frame;
+}
+
++ (Class) _restorationClassFromState: (NSCoder *) state {
+    if (![state containsValueForKey: NSWindowRestorationClassKey])
+        return Nil;
+    id name = [state decodeObjectOfClass: [NSString class] forKey: NSWindowRestorationClassKey];
+    if (![name isKindOfClass: [NSString class]])
+        return Nil;
+    return NSClassFromString(name);
+}
+
+// Snapshots of windows are not kept, so there is nothing to turn off.
+- (void) disableSnapshotRestoration {
+}
+
+- (void) enableSnapshotRestoration {
+}
 
 static BOOL _allowsAutomaticWindowTabbing;
 

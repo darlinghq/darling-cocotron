@@ -28,6 +28,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <ApplicationServices/ApplicationServices.h>
 #import <CoreGraphics/CGSubWindow.h>
 #import <AppKit/NSUserInterfaceItemIdentification.h>
+#import <AppKit/NSWindowRestoration.h>
 #import <AppKit/NSAccessibilityProtocols.h>
 
 NS_ASSUME_NONNULL_BEGIN
@@ -366,6 +367,7 @@ typedef NS_ENUM(NSInteger, NSWindowUserTabbingPreference) {
 
         BOOL _isAccessible;
         BOOL _restorable;
+        Class _restorationClass;
         NSWindowTabbingMode _tabbingMode;
         NSWindowCollectionBehavior _collectionBehavior;
         NSWindowTabbingIdentifier _tabbingIdentifier;
@@ -397,6 +399,10 @@ typedef NS_ENUM(NSInteger, NSWindowUserTabbingPreference) {
 
 @property(class) BOOL allowsAutomaticWindowTabbing;
 @property(getter=isRestorable) BOOL restorable;
+// The class asked to recreate the window when state is restored; Nil by default.
+@property(assign) Class<NSWindowRestoration> restorationClass;
+- (void) disableSnapshotRestoration;
+- (void) enableSnapshotRestoration;
 
 + (NSWindowDepth) defaultDepthLimit;
 

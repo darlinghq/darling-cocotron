@@ -100,11 +100,13 @@ NS_ASSUME_NONNULL_BEGIN
 - (void) otherMouseDown: (NSEvent *) event NS_SWIFT_NAME(otherMouseDown(with:));
 - (void) otherMouseDragged: (NSEvent *) event NS_SWIFT_NAME(otherMouseDragged(with:));
 
-// State restoration hooks. Cocotron never saves state, so these do nothing and no key paths are restorable.
+// State restoration hooks. AppKit itself declares no restorable key paths, and the
+// base implementations encode and restore nothing.
 @property(class, readonly, copy) NSArray<NSString *> *restorableStateKeyPaths;
 - (void) encodeRestorableStateWithCoder: (NSCoder *) coder;
 - (void) encodeRestorableStateWithCoder: (NSCoder *) coder backgroundQueue: (NSOperationQueue *) queue;
 - (void) restoreStateWithCoder: (NSCoder *) coder;
+- (void) invalidateRestorableState;
 // Stored only: this AppKit does not make it current or update it.
 @property(nullable, retain) NSUserActivity *userActivity;
 - (void) updateUserActivityState: (NSUserActivity *) userActivity;

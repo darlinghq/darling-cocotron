@@ -400,6 +400,9 @@ APPKIT_EXPORT __kindof NSApplication *NSApp;
 - (void) applicationWillTerminate: (NSNotification *) aNotification;
 - (void) applicationWillUnhide: (NSNotification *) aNotification;
 - (void) applicationWillUpdate: (NSNotification *) aNotification;
+- (void) application: (NSApplication *) app willEncodeRestorableState: (NSCoder *) coder;
+- (void) application: (NSApplication *) app didDecodeRestorableState: (NSCoder *) coder;
+- (BOOL) applicationSupportsSecureRestorableState: (NSApplication *) app;
 
 @end
 
@@ -413,6 +416,16 @@ APPKIT_EXPORT BOOL NSPerformService(NSString *itemName,
 @interface NSApplication (NSWindowEnumeration)
 - (void) enumerateWindowsWithOptions: (NSWindowListOptions) options
                                 usingBlock: (void (NS_NOESCAPE ^)(NSWindow *window, BOOL *stop)) block;
+@end
+
+@interface NSApplication (NSWindowRestoration)
+// Asks the restoration class recorded in the window state to recreate the
+// window; NO when the state names no usable class.
+- (BOOL) restoreWindowWithIdentifier: (NSString *) identifier
+                               state: (NSCoder *) state
+                   completionHandler: (void (^)(NSWindow *_Nullable window, NSError *_Nullable error)) completionHandler;
+- (void) extendStateRestoration;
+- (void) completeStateRestoration;
 @end
 
 // Performance-test hooks; they do nothing here.
