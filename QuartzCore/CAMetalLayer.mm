@@ -302,6 +302,13 @@ static const char kCAMetalLayerInternalKey = 0;
 
 #else
 
+// Without Metal the accessors are forwarded like every other method; leave
+// them to the runtime so that no instance variables are synthesized for them,
+// which would clash with those of CAMetalLayerInternal.
+@dynamic device, preferredDevice, pixelFormat, colorspace, framebufferOnly, drawableSize,
+	presentsWithTransaction, displaySyncEnabled, wantsExtendedDynamicRangeContent, EDRMetadata,
+	maximumDrawableCount, allowsNextDrawableTimeout, developerHUDProperties;
+
 MTL_UNSUPPORTED_CLASS
 
 #endif
