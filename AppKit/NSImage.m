@@ -418,7 +418,9 @@ NSImageName const NSImageNameTouchBarVolumeUpTemplate =
                 [image setName: name];
                 if (image) {
                     // Images whose name ends in "Template" are template images.
-                    if ([name hasSuffix: @"Template"])
+                    // So are the default state images of menu items.
+                    if ([name hasSuffix: @"Template"] || [name isEqualToString: @"NSMenuCheckmark"] ||
+                        [name isEqualToString: @"NSMenuMixedState"])
                         [image setTemplate: YES];
                     break;
                 }

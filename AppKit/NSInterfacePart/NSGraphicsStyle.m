@@ -95,15 +95,6 @@ static NSDictionary *sScrollerButtonAttributes = nil;
     return sBranchArrow;
 }
 
-- (NSInterfacePartAttributedString *) checkMark {
-    static NSInterfacePartAttributedString *sCheckMark = nil;
-
-    if (sCheckMark == nil)
-        sCheckMark = [[NSInterfacePartAttributedString alloc]
-                initWithMarlettCharacter: 0x61];
-    return sCheckMark;
-}
-
 - (NSSize) menuItemSeparatorSize {
     return NSMakeSize(0, 9);
 }
@@ -122,9 +113,8 @@ static NSDictionary *sScrollerButtonAttributes = nil;
 }
 
 - (NSSize) menuItemCheckMarkSize {
-    NSSize result = [[self checkMark] size];
-
-    return result;
+    // The state mark is an image (a template, drawn in the text colour), 16 points square.
+    return NSMakeSize(16, 16);
 }
 
 - (Margins) menuItemGutterMargins {
@@ -290,25 +280,60 @@ static NSDictionary *sScrollerButtonAttributes = nil;
                          enabled: (BOOL) enabled
                         selected: (BOOL) selected
 {
-    NSColor *color;
-    NSInterfacePartAttributedString *checkMark;
-    Margins margins = [self menuItemTextMargins];
+    [self drawMenuStateImage: [NSImage imageNamed: @"NSMenuCheckmark"]
+                      inRect: rect
+                     enabled: enabled
+                    selected: selected];
+}
 
+// Draws the image of a menu item's state (NSMenuItem onStateImage, mixedStateImage or offStateImage). A template
+// image is filled with the text colour of the item; any other image is drawn as it is.
+- (void) drawMenuStateImage: (NSImage *) image
+                     inRect: (NSRect) rect
+                    enabled: (BOOL) enabled
+                   selected: (BOOL) selected
+{
+    if (image == nil)
+        return;
+
+    NSColor *color;
     if (enabled)
-        color = selected ? [NSColor selectedMenuItemTextColor]
-                         : [NSColor menuItemTextColor];
+        color = selected ? [NSColor selectedMenuItemTextColor] : [NSColor menuItemTextColor];
     else
         color = [NSColor disabledControlTextColor];
 
-    checkMark = [[NSInterfacePartAttributedString alloc]
-            initWithCharacter: 0x61
-                     fontName: @"Marlett"
-                    pointSize: 10
-                        color: color];
-    rect.origin.x += margins.left;
-    rect.origin.y += margins.top;
+    NSSize size = [image size];
+    NSRect imageRect = NSMakeRect(NSMidX(rect) - size.width / 2, NSMidY(rect) - size.height / 2, size.width,
+                                  size.height);
+    BOOL flipped = [[NSGraphicsContext currentContext] isFlipped];
 
-    [checkMark drawAtPoint: rect.origin];
+    if (![image isTemplate]) {
+        [image drawInRect: imageRect
+                 fromRect: NSZeroRect
+                operation: NSCompositeSourceOver
+                 fraction: enabled ? 1.0 : 0.5
+           respectFlipped: YES
+                    hints: nil];
+        return;
+    }
+
+    NSRect proposed = NSMakeRect(0, 0, size.width, size.height);
+    CGImageRef mask = [image CGImageForProposedRect: &proposed context: nil hints: nil];
+    if (mask == NULL)
+        return;
+
+    CGContextRef context = [[NSGraphicsContext currentContext] graphicsPort];
+    CGContextSaveGState(context);
+    CGContextTranslateCTM(context, imageRect.origin.x, imageRect.origin.y);
+    if (flipped) {
+        CGContextTranslateCTM(context, 0, size.height);
+        CGContextScaleCTM(context, 1, -1);
+    }
+    CGRect maskRect = CGRectMake(0, 0, size.width, size.height);
+    CGContextClipToMask(context, maskRect, mask);
+    CGContextSetFillColorWithColor(context, [[color colorUsingColorSpaceName: NSCalibratedRGBColorSpace] CGColor]);
+    CGContextFillRect(context, maskRect);
+    CGContextRestoreGState(context);
 }
 
 - (void) drawMenuBranchArrowInRect: (NSRect) rect

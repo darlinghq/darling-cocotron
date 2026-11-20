@@ -207,11 +207,19 @@ static NSRect boundsToTitleAreaRect(NSRect rect) {
             // Draw the gutter and checkmark (if any)
             CENTER_PART_RECT_VERTICALLY(
                     [[self graphicsStyle] menuItemGutterSize]);
-            if ([item state]) {
+            NSImage *stateImage = nil;
+            if ([item state] == NSControlStateValueOn)
+                stateImage = [item onStateImage];
+            else if ([item state] == NSControlStateValueMixed)
+                stateImage = [item mixedStateImage];
+            else
+                stateImage = [item offStateImage];
+            if (stateImage != nil) {
                 [[self graphicsStyle] drawMenuGutterInRect: partRect];
-                [[self graphicsStyle] drawMenuCheckmarkInRect: partRect
-                                                      enabled: showsEnabled
-                                                     selected: selected];
+                [[self graphicsStyle] drawMenuStateImage: stateImage
+                                                 inRect: partRect
+                                                enabled: showsEnabled
+                                               selected: selected];
             }
 
             partRect.origin.x += [[self graphicsStyle] menuItemGutterGap];
