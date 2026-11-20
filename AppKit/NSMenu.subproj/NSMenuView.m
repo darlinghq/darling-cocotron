@@ -124,6 +124,54 @@ enum {
 const NSTimeInterval kMenuInitialClickThreshold = .3f;
 const NSTimeInterval kMouseMovementThreshold = .001f;
 
+// The menu delegate and notification calls of a tracking session: the menu
+// tracking started in this view gets NSMenuDidBeginTrackingNotification and
+// NSMenuDidEndTrackingNotification; each menu shown, other than the menu bar
+// itself, gets -menuWillOpen: and -menuDidClose: on its delegate.
+- (BOOL) _isMenuBar {
+    return [self isKindOfClass: [NSMainMenuView class]];
+}
+
+- (void) _willBeginTracking {
+    NSMenu *menu = [self menu];
+
+    [[NSNotificationCenter defaultCenter]
+            postNotificationName: NSMenuDidBeginTrackingNotification
+                          object: menu];
+    if (![self _isMenuBar] &&
+        [[menu delegate] respondsToSelector: @selector(menuWillOpen:)])
+        [[menu delegate] menuWillOpen: menu];
+}
+
+- (void) _didEndTracking {
+    NSMenu *menu = [self menu];
+
+    if (![self _isMenuBar] &&
+        [[menu delegate] respondsToSelector: @selector(menuDidClose:)])
+        [[menu delegate] menuDidClose: menu];
+    [[NSNotificationCenter defaultCenter]
+            postNotificationName: NSMenuDidEndTrackingNotification
+                          object: menu];
+}
+
+- (void) _pushBranch: (NSMenuView *) branch onto: (NSMutableArray *) stack {
+    NSMenu *menu = [branch menu];
+
+    [stack addObject: branch];
+    if ([[menu delegate] respondsToSelector: @selector(menuWillOpen:)])
+        [[menu delegate] menuWillOpen: menu];
+}
+
+- (void) _popBranch: (NSMutableArray *) stack {
+    NSMenuView *branch = [stack lastObject];
+    NSMenu *menu = [branch menu];
+
+    [[branch window] close];
+    [stack removeLastObject];
+    if ([[menu delegate] respondsToSelector: @selector(menuDidClose:)])
+        [[menu delegate] menuDidClose: menu];
+}
+
 - (NSMenuItem *) trackForEvent: (NSEvent *) event {
     NSMenuItem *item = nil;
 
@@ -147,6 +195,8 @@ const NSTimeInterval kMouseMovementThreshold = .001f;
 
     // But while we're dealing with menus we want to track the mouse...
     [[self window] setAcceptsMouseMovedEvents: YES];
+
+    [self _willBeginTracking];
 
     // Make sure the menu contents are up to date
     [[self menu] update];
@@ -234,8 +284,7 @@ const NSTimeInterval kMouseMovementThreshold = .001f;
                         while (count + 1 < [viewStack count]) {
                             NSView *view = [viewStack lastObject];
                             MENUDEBUG(@"popping cascading view: %@", view);
-                            [[view window] close];
-                            [viewStack removeLastObject];
+                            [self _popBranch: viewStack];
                         }
 
                         // And now select the new item
@@ -260,7 +309,7 @@ const NSTimeInterval kMouseMovementThreshold = .001f;
                                                 screen]) != nil) {
                                 MENUDEBUG(@"adding a new cascading view: %@",
                                         branch);
-                                [viewStack addObject: branch];
+                                [self _pushBranch: branch onto: viewStack];
                             }
                         }] retain];
                         [[NSRunLoop currentRunLoop] addTimer: delaySubmenu
@@ -360,8 +409,7 @@ const NSTimeInterval kMouseMovementThreshold = .001f;
                 if ([viewStack count] > 1) {
                     NSView *view = [viewStack lastObject];
                     MENUDEBUG(@"popping cascading view: %@", view);
-                    [[view window] close];
-                    [viewStack removeLastObject];
+                    [self _popBranch: viewStack];
                 } else {
                     MENUDEBUG(@"Cancelling");
                     cancelled = YES;
@@ -478,8 +526,7 @@ const NSTimeInterval kMouseMovementThreshold = .001f;
                 if ([viewStack count] > 1) {
                     NSView *view = [viewStack lastObject];
                     MENUDEBUG(@"popping cascading view: %@", view);
-                    [[view window] close];
-                    [viewStack removeLastObject];
+                    [self _popBranch: viewStack];
                 }
                 break;
             case kNSMenuKeyboardNavigationRight: {
@@ -490,15 +537,14 @@ const NSTimeInterval kMouseMovementThreshold = .001f;
                              viewAtSelectedIndexPositionOnScreen: screen]) !=
                     nil) {
                     MENUDEBUG(@"adding a new cascading view: %@", branch);
-                    [viewStack addObject: branch];
+                    [self _pushBranch: branch onto: viewStack];
                 } else {
                     // We'll pop it - they're trying to navigate to the next
                     // menu most likely
                     if ([viewStack count] > 1) {
                         NSView *view = [viewStack lastObject];
                         MENUDEBUG(@"popping cascading view: %@", view);
-                        [[view window] close];
-                        [viewStack removeLastObject];
+                        [self _popBranch: viewStack];
                     }
                 }
             } break;
@@ -659,10 +705,10 @@ const NSTimeInterval kMouseMovementThreshold = .001f;
 
     MENUDEBUG(@"removing the visible menu views");
     while ([viewStack count] > 1) {
-        [[(NSView *) [viewStack lastObject] window] close];
-        [viewStack removeLastObject];
+        [self _popBranch: viewStack];
     }
     [viewStack removeLastObject];
+    [self _didEndTracking];
 
     _selectedItemIndex = NSNotFound;
     [[self window] setAcceptsMouseMovedEvents: oldAcceptsMouseMovedEvents];
