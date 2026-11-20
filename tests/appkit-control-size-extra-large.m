@@ -22,18 +22,17 @@ int main(void)
         expect(NSControlSizeLarge == 3 && NSControlSizeExtraLarge == 4, @"NSControlSize values");
 
         NSButton *button = [[NSButton alloc] initWithFrame:NSMakeRect(0, 0, 80, 30)];
+        CGFloat initialFontSize = [[[button cell] font] pointSize];
         [button setControlSize:NSControlSizeExtraLarge];
         expect([button controlSize] == NSControlSizeExtraLarge && [[button cell] controlSize] == NSControlSizeExtraLarge,
                @"controlSize is stored on the control and its cell");
 
-        // Large sizes get the regular font size rather than shrinking below Mini's.
-        CGFloat regular = [NSFont systemFontSizeForControlSize:NSControlSizeRegular];
-        expect([[[button cell] font] pointSize] == regular, @"extra large cell font size");
+        // The control size leaves the font alone, as at the other sizes (macOS 10.14.4 and 26.7.3).
+        expect([[[button cell] font] pointSize] == initialFontSize, @"extra large cell font size");
         [button setControlSize:NSControlSizeLarge];
-        expect([[[button cell] font] pointSize] == regular, @"large cell font size");
+        expect([[[button cell] font] pointSize] == initialFontSize, @"large cell font size");
         [button setControlSize:NSControlSizeMini];
-        expect([[[button cell] font] pointSize] == [NSFont systemFontSizeForControlSize:NSControlSizeMini],
-               @"mini cell font size");
+        expect([[[button cell] font] pointSize] == initialFontSize, @"mini cell font size");
 
         NSButton *push = [[NSButton alloc] initWithFrame:NSMakeRect(0, 0, 80, 30)];
         [push setButtonType:NSMomentaryPushInButton];

@@ -1046,10 +1046,12 @@ NS_EXTRA_SYNTHESIZE_ASSIGN(NSCell, controlTint, _controlTint, NSControlTint, con
     NS_EXTRA(NSCell, self)->_representedObject = object;
 }
 
+// Changing the control size leaves the font alone, in every cell class: the
+// font for a control size is chosen separately (systemFontSizeForControlSize:
+// gives its size). macOS 10.14.4 and 26.7.3 keep the font of every cell class
+// across control sizes.
 - (void) setControlSize: (NSControlSize) size {
     NS_EXTRA(NSCell, self)->_controlSize = size;
-    [NS_EXTRA(NSCell, self)->_font release];
-    NS_EXTRA(NSCell, self)->_font = [[NSFont userFontOfSize: [NSFont systemFontSizeForControlSize: NS_EXTRA(NSCell, self)->_controlSize]] retain];
     if ([[self controlView] respondsToSelector: @selector(updateCell:)]) {
         [[self controlView] performSelector: @selector(updateCell:)
                                  withObject: self];

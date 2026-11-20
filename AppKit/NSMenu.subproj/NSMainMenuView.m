@@ -33,7 +33,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 @implementation NSMainMenuView
 
 + (NSFont *) menuFont {
-    return [NSFont menuFontOfSize: 0];
+    return [NSFont menuBarFontOfSize: 0];
 }
 
 + (CGFloat) menuHeight {

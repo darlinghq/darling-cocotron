@@ -275,8 +275,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     NSButtonCell *cell = [[NSButtonCell new] autorelease];
     NSString *label = [segment label];
     [cell setTitle: label];
-    [cell setFont: [self font]];
     [cell setControlSize: [self controlSize]];
+    [cell setFont: [self _aquaFont]];
 
     [cell setHighlighted: [segment isSelected]];
 
