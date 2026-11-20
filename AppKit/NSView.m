@@ -3292,9 +3292,31 @@ static NSView *viewBeingPrinted = nil;
     [self displayRect: [self visibleRect]];
 }
 
-- (NSEnumerator *) _subviewsInDisplayOrderEnumerator {
-    // Snapshot subviews so mutating _subviews during display passes is safe
-    return [[[_subviews copy] autorelease] objectEnumerator];
+// The display methods walk a snapshot of the subviews, since drawing may add or remove views. The
+// snapshot is kept on the stack for the usual small counts instead of copying the array for every
+// view displayed; the views in it are retained until the walk ends.
+enum { kSubviewSnapshotInline = 16 };
+typedef struct {
+    NSView **views;
+    NSUInteger count;
+    NSView *inlineViews[kSubviewSnapshotInline];
+} SubviewSnapshot;
+
+static void takeSubviewSnapshot(NSView *self, SubviewSnapshot *snapshot) {
+    NSUInteger count = [self->_subviews count];
+    snapshot->count = count;
+    snapshot->views = count <= kSubviewSnapshotInline ? snapshot->inlineViews : malloc(count * sizeof(NSView *));
+    if (count != 0)
+        [self->_subviews getObjects: snapshot->views range: NSMakeRange(0, count)];
+    for (NSUInteger i = 0; i < count; ++i)
+        [snapshot->views[i] retain];
+}
+
+static void releaseSubviewSnapshot(SubviewSnapshot *snapshot) {
+    for (NSUInteger i = 0; i < snapshot->count; ++i)
+        [snapshot->views[i] release];
+    if (snapshot->views != snapshot->inlineViews)
+        free(snapshot->views);
 }
 
 - (void) _displayIfNeededWithoutViewWillDraw {
@@ -3303,12 +3325,13 @@ static NSView *viewBeingPrinted = nil;
         clearNeedsDisplay(self);
     }
 
-    NSEnumerator *viewEnumerator = [self _subviewsInDisplayOrderEnumerator];
-
-    NSView *subView = nil;
-    while ((subView = [viewEnumerator nextObject])) {
+    SubviewSnapshot snapshot;
+    takeSubviewSnapshot(self, &snapshot);
+    for (NSUInteger index = 0; index < snapshot.count; ++index) {
+        NSView *subView = snapshot.views[index];
         [subView _displayIfNeededWithoutViewWillDraw];
     }
+    releaseSubviewSnapshot(&snapshot);
 }
 
 - (void) displayIfNeeded {
@@ -3323,16 +3346,17 @@ static NSView *viewBeingPrinted = nil;
     if ([self needsDisplay])
         [self displayRect: rect];
 
-    NSEnumerator *viewEnumerator = [self _subviewsInDisplayOrderEnumerator];
-
-    NSView *child = nil;
-    while ((child = [viewEnumerator nextObject])) {
+    SubviewSnapshot snapshot;
+    takeSubviewSnapshot(self, &snapshot);
+    for (NSUInteger index = 0; index < snapshot.count; ++index) {
+        NSView *child = snapshot.views[index];
         NSRect converted = NSIntersectionRect(
                 [self convertRect: rect toView: child], [child bounds]);
         if (!NSIsEmptyRect(converted)) {
             [child displayIfNeededInRect: converted];
         }
     }
+    releaseSubviewSnapshot(&snapshot);
 }
 
 - (void) displayIfNeededInRectIgnoringOpacity: (NSRect) rect {
@@ -3342,10 +3366,10 @@ static NSView *viewBeingPrinted = nil;
     if ([self needsDisplay])
         [self displayRectIgnoringOpacity: rect];
 
-    NSEnumerator *viewEnumerator = [self _subviewsInDisplayOrderEnumerator];
-
-    NSView *child = nil;
-    while ((child = [viewEnumerator nextObject])) {
+    SubviewSnapshot snapshot;
+    takeSubviewSnapshot(self, &snapshot);
+    for (NSUInteger index = 0; index < snapshot.count; ++index) {
+        NSView *child = snapshot.views[index];
         NSRect converted = NSIntersectionRect(
                 [self convertRect: rect toView: child], [child bounds]);
 
@@ -3353,6 +3377,7 @@ static NSView *viewBeingPrinted = nil;
             [child displayIfNeededInRectIgnoringOpacity: converted];
         }
     }
+    releaseSubviewSnapshot(&snapshot);
 }
 
 - (void) displayIfNeededIgnoringOpacity {
@@ -3360,12 +3385,13 @@ static NSView *viewBeingPrinted = nil;
     if ([self needsDisplay])
         [self displayRectIgnoringOpacity: unionOfInvalidRects(self)];
 
-    NSEnumerator *viewEnumerator = [self _subviewsInDisplayOrderEnumerator];
-
-    NSView *child = nil;
-    while ((child = [viewEnumerator nextObject])) {
+    SubviewSnapshot snapshot;
+    takeSubviewSnapshot(self, &snapshot);
+    for (NSUInteger index = 0; index < snapshot.count; ++index) {
+        NSView *child = snapshot.views[index];
         [child displayIfNeededIgnoringOpacity];
     }
+    releaseSubviewSnapshot(&snapshot);
 }
 
 - (void) displayRect: (NSRect) rect {
@@ -3427,10 +3453,10 @@ static NSView *viewBeingPrinted = nil;
 
         [self unlockFocus];
 
-        NSEnumerator *viewEnumerator = [self _subviewsInDisplayOrderEnumerator];
-
-        NSView *child = nil;
-        while ((child = [viewEnumerator nextObject])) {
+        SubviewSnapshot snapshot;
+        takeSubviewSnapshot(self, &snapshot);
+        for (NSUInteger index = 0; index < snapshot.count; ++index) {
+            NSView *child = snapshot.views[index];
             NSRect check = [self convertRect: rect toView: child];
 
             check = NSIntersectionRect(check, [child bounds]);
@@ -3438,6 +3464,7 @@ static NSView *viewBeingPrinted = nil;
             if (!NSIsEmptyRect(check))
                 [child displayRectIgnoringOpacity: check];
         }
+        releaseSubviewSnapshot(&snapshot);
 
         if (anySubviewShowsFocusRing(self)) {
             [self lockFocus];
