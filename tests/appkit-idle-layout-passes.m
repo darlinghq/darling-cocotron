@@ -3,7 +3,9 @@
 // intrinsic sizes of constrained views, call their -layout or update the constraints of a stack view
 // that arranges its views with constraints. Layout still runs, without an explicit
 // -layoutSubtreeIfNeeded, when a constraint constant changes, when an intrinsic size is invalidated
-// (also of a view in the stack view) and when the window is resized.
+// (also of a view in the stack view) and when the window is resized. Resizing a view that is in no
+// view tree, as a scroll view does with a scroller it removed, lays nothing out, while such a view
+// is laid out itself after its size changed.
 #import <Cocoa/Cocoa.h>
 #include <stdio.h>
 
@@ -40,10 +42,16 @@ static long intrinsicReads, layoutCalls, drawCalls, stackConstraintUpdates;
 @interface Poker : NSObject {
 @public
     NSView *view;
+    NSView *lone;
+    int ticks;
 }
 @end
 @implementation Poker
-- (void)poke:(NSTimer *)timer { [view setNeedsDisplay:YES]; }
+- (void)poke:(NSTimer *)timer
+{
+    [view setNeedsDisplay:YES];
+    [lone setFrameSize:NSMakeSize(++ticks % 2 ? 120 : 100, 15)];
+}
 @end
 
 static void spin(double seconds)
@@ -121,6 +129,7 @@ int main(void)
         // 1. Display cycles that only redraw a view lay nothing out.
         Poker *poker = [[Poker alloc] init];
         poker->view = corner;
+        poker->lone = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 100, 15)];
         NSTimer *timer = [NSTimer timerWithTimeInterval:0.01 target:poker selector:@selector(poke:) userInfo:nil repeats:YES];
         [[NSRunLoop currentRunLoop] addTimer:timer forMode:NSRunLoopCommonModes];
         resetCounters();
@@ -166,6 +175,17 @@ int main(void)
         CHECK(stackConstraintUpdates == 0);
 
         [timer invalidate];
+
+        // 6. A view in no view tree is laid out itself after its size changed.
+        RowView *alone = [[RowView alloc] initWithFrame:NSMakeRect(0, 0, 50, 18)];
+        [alone layoutSubtreeIfNeeded];
+        resetCounters();
+        [alone setFrameSize:NSMakeSize(70, 18)];
+        CHECK([alone needsLayout]);
+        [alone layoutSubtreeIfNeeded];
+        CHECK(layoutCalls == 1);
+        CHECK(![alone needsLayout]);
+
         [window orderOut:nil];
     }
     if (failures == 0)

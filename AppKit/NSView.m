@@ -1579,6 +1579,15 @@ static void layoutInputsChanged(NSView *self) {
     [self->_window setViewsNeedDisplay: YES];
 }
 
+// The geometry of a view that is in no view tree (no window, superview or subviews) takes part in
+// no other view's layout; a scroll view resizes its removed scrollers, for one. Its own -layout
+// still runs when it is laid out, as its needsLayout is set.
+static BOOL geometryIsLayoutInput(NSView *self) {
+    if (DarlingLayoutIsPlacing(self))
+        return NO;
+    return self->_window != nil || self->_superview != nil || [self->_subviews count] != 0;
+}
+
 // Moves the native windows of the root layers in a view's subtree after the view moved or resized, since their
 // frames are in window coordinates.
 static void updateLayerContextFrames(NSView *self) {
@@ -1604,7 +1613,7 @@ static BOOL applyFrame(NSView *self, NSRect frame) {
     // Test: tests/appkit-layout-repeat-passes.m (frame size change sets needsLayout)
     if (!NSEqualSizes(self->_frame.size, frame.size))
         NS_EXTRA(NSView, self)->_needsLayout = YES;
-    if (!DarlingLayoutIsPlacing(self))
+    if (geometryIsLayoutInput(self))
         layoutInputsChanged(self);
 
     if (self->_bounds.size.width == 0 || self->_bounds.size.height == 0) {
@@ -1708,7 +1717,7 @@ static void postFrameChange(NSView *self) {
     if (!NSEqualRects(bounds, _bounds)) {
         // The subviews' autoresizing follows the bounds size; scrolling (a new origin) changes
         // no layout result.
-        if (!NSEqualSizes(bounds.size, _bounds.size) && !DarlingLayoutIsPlacing(self))
+        if (!NSEqualSizes(bounds.size, _bounds.size) && geometryIsLayoutInput(self))
             layoutInputsChanged(self);
         _bounds = bounds;
         invalidateTransform(self);
@@ -4404,7 +4413,8 @@ static NSMutableArray *installedViewLayoutGuides(NSView *view, BOOL create) {
 // the layout flags) changed since the last pass over this subtree, so display cycles of an idle
 // window do not lay it out again.
 - (void) layoutSubtreeIfNeeded {
-    if (DarlingLayoutLastGeneration(self, DarlingLayoutKindLayout) == DarlingLayoutGeneration())
+    if (DarlingLayoutLastGeneration(self, DarlingLayoutKindLayout) == DarlingLayoutGeneration() &&
+        !NS_EXTRA(NSView, self)->_needsLayout)
         return;
     uint64_t generation = 0;
     for (int pass = 0; pass < 10; ++pass) {
