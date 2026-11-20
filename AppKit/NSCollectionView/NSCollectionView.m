@@ -164,7 +164,9 @@ static NSInteger compareZIndex(id first, id second, void *context)
     return _maxNumberOfColumns;
 }
 
-// The control background color until others are set (as on macOS 26.7.3 and 10.14.4)
+// QUIRK: until colors are set, the background colors are the control background color alone; the documentation
+// names the alternating row colors instead. Evidence: black-box observation on macOS 26.7.3 and 10.14.4 (tier 2; darling's tests/collection-view.md).
+// Test: appkit-collection-view-layout.m test_default_background
 - (NSArray *) backgroundColors {
     if (_backgroundColors == nil)
         return [NSArray arrayWithObject: [NSColor controlBackgroundColor]];
@@ -328,8 +330,10 @@ static NSInteger compareZIndex(id first, id second, void *context)
     return [_loadedItems objectForKey:path];
 }
 
-// Items no longer shown keep their views as hidden subviews, ready for reuse (as on macOS 26.7.3 and 10.14.4). They
-// are queued in index path order and handed out from the front, so a reload reuses the first items for the first paths.
+// QUIRK: items no longer shown keep their views as hidden subviews, ready for reuse, and a reload hands the first
+// of them to the first index paths. Not documented. Evidence: black-box observation on macOS 26.7.3 and 10.14.4 (tier 2; darling's tests/collection-view.md).
+// Test: appkit-collection-view-layout.m test_scroll_reuses_items, test_reload_after_count_change
+// They are queued in index path order and handed out from the front.
 - (void) _enqueueItems: (NSDictionary *) items {
     for (NSIndexPath *path in [[items allKeys] sortedArrayUsingSelector: @selector(compare:)]) {
         NSCollectionViewItem *item = [items objectForKey: path];
@@ -501,7 +505,8 @@ static NSInteger compareZIndex(id first, id second, void *context)
         [NSException raise:NSInvalidArgumentException format:@"collection data source lacks required methods"];
     [self _enqueueItems: [[_loadedItems copy] autorelease]];
     [_loadedItems removeAllObjects];
-    // Any reload empties the selection (as on macOS 26.7.3 and 10.14.4)
+    // QUIRK: any reload empties the selection. Not documented. Evidence: black-box observation on macOS 26.7.3 and 10.14.4 (tier 2; darling's tests/collection-view.md).
+    // Test: appkit-collection-view-selection.m test_reload_drops_selection
     [self _setSelection: [NSSet set]];
     [self _setAnchor: nil lead: nil];
     if (_collectionViewLayout != nil) {
@@ -646,9 +651,10 @@ static NSInteger compareZIndex(id first, id second, void *context)
     return _selectionIndexPaths ? [[_selectionIndexPaths retain] autorelease] : [NSSet set];
 }
 
-// Changes the selection and shows it on the visible items. The key-value notification comes from the
-// selectionIndexPaths setter only: selecting and deselecting by index path sends none (as on macOS 26.7.3 and
-// 10.14.4, tests/appkit-collection-view-selection.m).
+// Changes the selection and shows it on the visible items.
+// QUIRK: the key-value notification for selectionIndexPaths comes from its setter only: selecting and deselecting
+// by index path sends none. Not documented. Evidence: black-box observation on macOS 26.7.3 and 10.14.4 (tier 2; darling's tests/collection-view.md).
+// Test: appkit-collection-view-selection.m test_kvo_notifies_selection
 - (void) _setSelection: (NSSet *) selection {
     selection = [selection copy];
     [_selectionIndexPaths release];
@@ -833,8 +839,11 @@ static NSInteger compareZIndex(id first, id second, void *context)
 
 // A click on an item highlights it until the mouse goes up, then changes the selection in the order (and with the
 // delegate calls) both Macs use (darling's tests/collection-view.md): ⌘ toggles the item, shift adds it, a plain click
-// selects only it. A plain click on an item that is already selected changes nothing. When the delegate can provide
-// the items' data, moving the mouse far enough drags the selection, after making the change the click would.
+// selects only it. When the delegate can provide the items' data, moving the mouse far enough drags the selection,
+// after making the change the click would.
+// QUIRK: a plain click on an item that is already selected changes nothing and calls no delegate method, even when
+// other items are selected too. Not documented. Evidence: black-box observation on macOS 26.7.3 and 10.14.4 (tier 2; darling's tests/collection-view.md).
+// Test: appkit-collection-view-mouse.m test_click_selected_item_changes_nothing
 - (void) _clickItemAtIndexPath: (NSIndexPath *) path
                         toggle: (BOOL) toggle
                         extend: (BOOL) extend
@@ -1142,7 +1151,7 @@ typedef enum { MoveLeft, MoveRight, MoveUp, MoveDown } MoveDirection;
     [self _moveSelection: MoveDown extend: YES];
 }
 
-// Only with multiple selection (as on macOS 26.7.3 and 10.14.4)
+// Only when the view is selectable and allows multiple selection (the documented contract; both Macs agree)
 - (IBAction) selectAll: (id) sender {
     if (!_allowsMultipleSelection)
         return;
@@ -1243,7 +1252,7 @@ static NSInteger compareIndexPaths(id first, id second, void *context)
         _outsideDragMask = mask;
 }
 
-// Every operation within the application and none outside it until set, as on both Macs
+// Every operation within the application and none outside it until set (the documented default; both Macs agree)
 - (NSDragOperation) draggingSession: (NSDraggingSession *) session
     sourceOperationMaskForDraggingContext: (NSDraggingContext) context
 {
@@ -1366,7 +1375,9 @@ static NSInteger compareIndexPaths(id first, id second, void *context)
                        dropOperation: (NSCollectionViewDropOperation) _dropOperation];
 }
 
-// The drop target stays shown until the drag ends, as on both Macs
+// QUIRK: the drop target stays shown through performDragOperation: and concludeDragOperation: and goes at
+// draggingEnded:. Not documented. Evidence: black-box observation on macOS 26.7.3 and 10.14.4 (tier 2; darling's tests/collection-view.md).
+// Test: appkit-collection-view-drag.m test_drop_target_highlight
 - (void) concludeDragOperation: (id<NSDraggingInfo>) info {
 }
 

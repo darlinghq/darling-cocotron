@@ -53,7 +53,7 @@ typedef NS_ENUM(NSInteger, NSCollectionViewScrollDirection) {
     referenceSizeForFooterInSection: (NSInteger) section;
 @end
 
-// The instance variables fill 76 of the 124 bytes Apple's legacy (i386) layout has
+// The instance variables fill 80 of the 124 bytes Apple's legacy (i386) layout has
 @interface NSCollectionViewFlowLayout : NSCollectionViewLayout
 {
     NSSize _itemSize;
@@ -66,8 +66,9 @@ typedef NS_ENUM(NSInteger, NSCollectionViewScrollDirection) {
     NSSize _footerReferenceSize;
     NSMutableArray *_sectionItems; // per section, the attributes of its items; nil until prepared
     NSMutableArray *_sectionLines; // per section, the rect (an NSValue) of each item's row or column
+    NSMutableArray *_sectionStarts; // per section, where its first line begins (an NSNumber, along the flow)
     NSSize _contentSize;
-    NS_LEGACY_IVAR_PAD(_NSCollectionViewFlowLayoutReserved, 48)
+    NS_LEGACY_IVAR_PAD(_NSCollectionViewFlowLayoutReserved, 44)
 }
 
 @property NSSize itemSize;

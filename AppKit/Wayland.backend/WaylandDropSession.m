@@ -91,8 +91,10 @@
 - (void) sourceActions: (uint32_t) actions { if (!_dropAnnounced) _sourceActions = actions; }
 - (void) selectedAction: (uint32_t) action { if (!_dropAnnounced) _action = action; }
 - (NSArray *) types { return NSPasteboardTypesWithAliases(_types); }
+- (BOOL) _storesFileURLs { return [_types containsObject: NSPasteboardTypeFileURL]; }
 - (NSString *) availableTypeFromArray: (NSArray *) types {
-    for (NSString *type in types) if ([_types containsObject: NSPasteboardCanonicalType(type)]) return type;
+    NSArray *available = [self types];
+    for (NSString *type in types) if ([available containsObject: type]) return type;
     return nil;
 }
 - (NSString *) mimeForType: (NSString *) type {
@@ -114,6 +116,7 @@
 - (NSData *) dataForType: (NSString *) type {
     type = NSPasteboardCanonicalType(type);
     if ([type isEqual: @"DELETE"]) return nil;
+    if (![_types containsObject: type]) return NSPasteboardDerivedDataForType(self, type);
     if (_localSnapshot) {
         if (![self hasLocalAccess]) { _transferFailed = YES; return nil; }
         return [_localSnapshot objectForKey:type];
@@ -168,8 +171,13 @@
 }
 - (NSString *) stringForType: (NSString *) type {
     NSData *data = [self dataForType: type];
-    return data ? [[[NSString alloc] initWithData: data encoding:
-        [NSPasteboardCanonicalType(type) isEqual: NSPasteboardTypeString] ? NSUTF8StringEncoding : NSUnicodeStringEncoding] autorelease] : nil;
+    if (!data) return nil;
+    // UTF-8 is what other clients' data is read as; data that is not valid UTF-8 (what -setString:forType:
+    // stores for a type other than the string type) is read as Unicode, as NSPasteboard does
+    NSString *string = [[[NSString alloc] initWithData: data encoding: NSUTF8StringEncoding] autorelease];
+    if (!string && ![NSPasteboardCanonicalType(type) isEqual: NSPasteboardTypeString])
+        string = [[[NSString alloc] initWithData: data encoding: NSUnicodeStringEncoding] autorelease];
+    return string;
 }
 - (void) motion: (CGPoint) point {
     if (!_offer || _dropped) return;

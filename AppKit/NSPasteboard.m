@@ -145,6 +145,16 @@ NSPasteboardType NSPasteboardLegacyAliasOfType(NSPasteboardType type) {
     return type == nil ? nil : canonicalToLegacy()[type];
 }
 
+NSData *NSPasteboardDerivedDataForType(NSPasteboard *pasteboard, NSPasteboardType type) {
+    if (![NSPasteboardCanonicalType(type) isEqual: NSPasteboardTypeFileURL])
+        return nil;
+    id paths = [pasteboard propertyListForType: NSFilenamesPboardType];
+    if (![paths isKindOfClass: [NSArray class]] || [paths count] == 0 ||
+        ![[paths objectAtIndex: 0] isKindOfClass: [NSString class]])
+        return nil;
+    return [[[NSURL fileURLWithPath: [paths objectAtIndex: 0]] absoluteString] dataUsingEncoding: NSUTF8StringEncoding];
+}
+
 NSArray<NSPasteboardType> *NSPasteboardCanonicalTypes(NSArray<NSPasteboardType> *types) {
     NSMutableArray *result = [NSMutableArray arrayWithCapacity: [types count]];
     for (NSPasteboardType type in types) {
@@ -163,7 +173,10 @@ NSArray<NSPasteboardType> *NSPasteboardTypesWithAliases(NSArray<NSPasteboardType
         if (legacy != nil && ![result containsObject: legacy])
             [result addObject: legacy];
     }
-    // A list of file names is read as one file URL per name (-pasteboardItems), as on both Macs
+    // QUIRK: a pasteboard holding a list of file names lists public.file-url too, reads as one file URL item per
+    // name (-pasteboardItems), and gives the first file's URL as public.file-url data
+    // (NSPasteboardDerivedDataForType). Not documented. Evidence: black-box observation on macOS 26.7.3 and 10.14.4
+    // (tier 2; darling's tests/collection-view.md). Test: appkit-pasteboard-file-urls.m test_filenames_read_as_urls
     if ([result containsObject: NSFilenamesPboardType] && ![result containsObject: NSPasteboardTypeFileURL])
         [result addObject: NSPasteboardTypeFileURL];
     return result;
@@ -646,7 +659,8 @@ static NSMutableDictionary *uniquePasteboards;
     CFPasteboardItemID item = [self _firstItemCreating: NO status: &status];
     if (status != kCFPasteboardSuccess)
         return nil;
-    return [self _dataForType: type ofItemID: item];
+    NSData *data = [self _dataForType: type ofItemID: item];
+    return data != nil ? data : NSPasteboardDerivedDataForType(self, type);
 }
 
 - (NSString *) stringForType: (NSPasteboardType) type {
@@ -841,7 +855,7 @@ static NSMutableDictionary *uniquePasteboards;
 // holds file URLs of its own holds no such list.
 - (NSArray *) _itemsExpandingFileNamesOf: (NSArray *) items {
     NSArray *flat = NSPasteboardCanonicalTypes([self types]);
-    if (![flat containsObject: NSFilenamesPboardType] || [self dataForType: NSPasteboardTypeFileURL] != nil)
+    if (![flat containsObject: NSFilenamesPboardType] || [self _storesFileURLs])
         return nil;
     id paths = [self propertyListForType: NSFilenamesPboardType];
     if (![paths isKindOfClass: [NSArray class]] || [paths count] == 0)
@@ -855,6 +869,17 @@ static NSMutableDictionary *uniquePasteboards;
         [expanded addObject: item];
     }
     return [expanded count] > 0 ? expanded : nil;
+}
+
+- (BOOL) _storesFileURLs {
+    if (CF_STATE(self) != nil) {
+        CFPasteboardStatus status;
+        CFPasteboardItemID item = [self _firstItemCreating: NO status: &status];
+        return status == kCFPasteboardSuccess &&
+               [NSPasteboardCanonicalTypes([self _typesOfItemID: item]) containsObject: NSPasteboardTypeFileURL];
+    }
+    NSData *data = [self dataForType: NSPasteboardTypeFileURL];
+    return data != nil && ![data isEqual: NSPasteboardDerivedDataForType(self, NSPasteboardTypeFileURL)];
 }
 
 - (NSUInteger) indexOfPasteboardItem: (NSPasteboardItem *) pasteboardItem {

@@ -117,7 +117,7 @@ static void enumerateItems(NSPasteboard *pasteboard, NSArray<NSValue *> *frames,
         _source = [(id) source retain];
         _view = [view retain];
         _event = [event retain];
-        // As both Macs report for a new session (darling's tests/collection-view.md)
+        // The documented defaults, which both Macs report for a new session
         _formation = NSDraggingFormationNone;
         _animates = YES;
         _sequenceNumber = nextSequenceNumber();

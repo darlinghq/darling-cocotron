@@ -217,10 +217,19 @@ static X11DraggingManager *X11SharedManager;
 
     // Only the three actions XDND has atoms for can be offered: a target names the
     // one it wants, and the rest could not be named on the wire.
+    // A source that allows nothing outside this application can still be dragged within it: the drag then
+    // offers what it allows within it, to this application's windows only.
+    NSDragOperation xdndOperations = NSDragOperationCopy | NSDragOperationMove | NSDragOperationLink;
     NSDragOperation operations = NSDragOperationCopy;
-    if ([source respondsToSelector: @selector(draggingSourceOperationMaskForLocal:)])
-        operations = [source draggingSourceOperationMaskForLocal: NO];
-    operations &= NSDragOperationCopy | NSDragOperationMove | NSDragOperationLink;
+    BOOL localOnly = NO;
+    if ([source respondsToSelector: @selector(draggingSourceOperationMaskForLocal:)]) {
+        operations = [source draggingSourceOperationMaskForLocal: NO] & xdndOperations;
+        if (operations == NSDragOperationNone) {
+            operations = [source draggingSourceOperationMaskForLocal: YES] & xdndOperations;
+            localOnly = operations != NSDragOperationNone;
+        }
+    }
+    operations &= xdndOperations;
 
     NSArray<NSString *> *names = [self selectionTargetsForPasteboard: pasteboard];
     if (operations == NSDragOperationNone || [names count] == 0) {
@@ -293,6 +302,7 @@ static X11DraggingManager *X11SharedManager;
     _dragPasteboard = board;
     _dragWindow = sourceWindow;
     _offeredOperations = operations;
+    _localOnly = localOnly;
     _localSource = heldSource;
     // The source is told where the image's corner is on the screen: where it started, moved with the mouse
     NSWindow *originWindow = [event window];
@@ -390,6 +400,7 @@ static X11DraggingManager *X11SharedManager;
     _enteredWindow = None;
     _pointerWindow = None;
     _chosenOperations = _offeredOperations = NSDragOperationNone;
+    _localOnly = NO;
     _dropAction = None;
     _suppressionRect = NSZeroRect;
     _targetAccepts = _suppressionWanted = _awaitingStatus = _dropFinished = NO;
@@ -494,6 +505,8 @@ static X11DraggingManager *X11SharedManager;
     // sending a position to a new one has to tell it first: a target that was
     // never sent an XdndEnter does not know a drag is happening at all.
     Window target = [self xdndAwareWindowAtRootX: rootX rootY: rootY];
+    if (_localOnly && target != None && [(X11Display *) [NSDisplay currentDisplay] windowForID: target] == nil)
+        target = None;
     if (target != _enteredWindow) {
         [self sendLeaveTo: _enteredWindow];
         [self sendEnterTo: target];

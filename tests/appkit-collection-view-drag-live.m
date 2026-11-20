@@ -8,8 +8,13 @@
 //              Prints SOURCE willBegin items=<n>,<n> and SOURCE ended op=<n>.
 //   cv-target  six items, takes file URLs and copies them where the collection view proposes. Prints
 //                TARGET accept item=<n> op=<on|before> urls=<path>,<path>
-//              from collectionView:acceptDrop:indexPath:dropOperation:, and half a second later
+//              from collectionView:acceptDrop:indexPath:dropOperation:, then what the dragging pasteboard
+//              gives for public.file-url as a string:
+//                TARGET string <string>
+//              and half a second later
 //                TARGET after highlight=<item's highlight state> gap=<views in the gap>
+// The source keeps the default masks (every operation within the application, none outside it): every drag here
+// stays in this application.
 // The documented contract: the collection view drags the selected items with one pasteboard item each, in index
 // path order, and calls the delegate's dragging session methods with them; a drop goes on an item or before the
 // item after a gap, and its drop target shows until the drag ends.
@@ -109,6 +114,8 @@ static NSString *items(NSSet *paths)
     say([NSString stringWithFormat: @"TARGET accept item=%ld op=%s urls=%@", (long) path.item,
                                     operation == NSCollectionViewDropOn ? "on" : "before",
                                     [paths componentsJoinedByString: @","]]);
+    say([NSString stringWithFormat: @"TARGET string %@",
+                                    [[info draggingPasteboard] stringForType: NSPasteboardTypeFileURL]]);
     [self performSelector: @selector(reportAfter:) withObject: [path copy] afterDelay: 0.5];
     return YES;
 }
@@ -176,7 +183,6 @@ int main(int argc, char **argv)
     target->target = YES;
     NSCollectionView *from = makeWindow(@"cv-source", NSMakePoint(100, 500), source);
     NSCollectionView *to = makeWindow(@"cv-target", NSMakePoint(500, 500), target);
-    [from setDraggingSourceOperationMask: NSDragOperationCopy forLocal: NO];
     [to registerForDraggedTypes: @[NSPasteboardTypeFileURL]];
     from.selectionIndexPaths = [NSSet setWithObjects: [NSIndexPath indexPathForItem: 1 inSection: 0],
                                                       [NSIndexPath indexPathForItem: 4 inSection: 0], nil];

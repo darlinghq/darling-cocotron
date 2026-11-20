@@ -199,11 +199,17 @@
     return NSPasteboardTypesWithAliases(_types);
 }
 
+- (BOOL) _storesFileURLs {
+    return [_types containsObject: NSPasteboardTypeFileURL];
+}
+
 - (NSData *) dataForType: (NSPasteboardType) type {
     type = NSPasteboardCanonicalType(type);
+    if (!_invalidated && ![_types containsObject: type])
+        return NSPasteboardDerivedDataForType(self, type);
     // A source that never offered a type has not failed to send one, so this
     // must not be counted as a broken transfer.
-    if (_invalidated || ![_types containsObject: type])
+    if (_invalidated)
         return nil;
     // NSFilenamesPboardType is an AppKit type with no X counterpart; file
     // managers publish their files as text/uri-list.

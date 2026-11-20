@@ -366,8 +366,9 @@ static NSDisplay *processDisplay = nil;
     [self _postEvent: event atStart: atStart coalesce: YES];
 }
 
-// What an application posts with -[NSApplication postEvent:atStart:] is queued as it is: posted drags are dequeued
-// one by one on macOS 26.7.3 and 10.14.4 (tests/appkit-posted-events-not-coalesced.m)
+// QUIRK: what an application posts with -[NSApplication postEvent:atStart:] is queued as it is: posted drags are
+// dequeued one by one, never coalesced. Not documented. Evidence: black-box observation on macOS 26.7.3 and 10.14.4 (tier 2; darling's tests/collection-view.md).
+// Test: appkit-posted-events-not-coalesced.m
 - (void) _postEventWithoutCoalescing: (NSEvent *) event atStart: (BOOL) atStart {
     [self _postEvent: event atStart: atStart coalesce: NO];
 }

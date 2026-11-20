@@ -82,7 +82,7 @@ static NSString *log_(void)
 }
 @end
 
-enum { ALLOW, REFUSE_DRAG, NIL_WRITER_FOR_4, RETARGET, REFUSE_DROP };
+enum { ALLOW, REFUSE_DRAG, NIL_WRITER_FOR_4, RETARGET, REFUSE_DROP, EMPTY };
 
 @interface Delegate : NSObject <NSCollectionViewDataSource, NSCollectionViewDelegate> {
 @public
@@ -91,7 +91,7 @@ enum { ALLOW, REFUSE_DRAG, NIL_WRITER_FOR_4, RETARGET, REFUSE_DROP };
 @end
 @implementation Delegate
 - (NSInteger) collectionView: (NSCollectionView *) view numberOfItemsInSection: (NSInteger) section {
-    return 10;
+    return mode == EMPTY ? 0 : 10;
 }
 - (NSCollectionViewItem *) collectionView: (NSCollectionView *) view itemForRepresentedObjectAtIndexPath: (NSIndexPath *) path {
     return [view makeItemWithIdentifier: @"item" forIndexPath: path];
@@ -448,6 +448,19 @@ static void test_validate_none_refuses(void)
 }
 
 // The subviews in the gap before an item, other than items
+// A view with no items still takes a drop: before the first item of its first section
+static void test_drop_on_empty_view(void)
+{
+    NSCollectionView *view = makeView();
+    delegate->mode = EMPTY;
+    [view reloadData];
+    [view layoutSubtreeIfNeeded];
+    Info *info = infoFor(view);
+    NSString *got = dropAt(view, info, NSMakePoint(150, 150));
+    expect([got isEqual: @"1 1 1: validate 0 before; accept 0 before"], "a drop on an empty view: [%s]", [got UTF8String]);
+    delegate->mode = ALLOW;
+}
+
 static NSUInteger gapViews(NSCollectionView *view, NSInteger before)
 {
     NSRect gap = [view.collectionViewLayout layoutAttributesForInterItemGapBeforeIndexPath: path(before)].frame;
@@ -522,6 +535,7 @@ int main(void)
     test_background_drop_proposes_gap();
     test_validate_can_retarget();
     test_validate_none_refuses();
+    test_drop_on_empty_view();
     test_drop_target_highlight();
 
     [delegate release];

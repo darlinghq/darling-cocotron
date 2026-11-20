@@ -3767,7 +3767,8 @@ static void releaseSubviewSnapshot(SubviewSnapshot *snapshot) {
                                                 event: (NSEvent *) event
                                                source: (id<NSDraggingSource>) source
 {
-    // As both Macs do (darling's tests/collection-view.md)
+    // QUIRK: an item whose dragging frame has a zero size raises NSRangeException. Not documented. Evidence: black-box observation on macOS 26.7.3 and 10.14.4 (tier 2; darling's tests/collection-view.md).
+    // Test: appkit-dragging-session.m test_begin_returns_session_with_pasteboard_items
     for (NSDraggingItem *item in items)
         if (NSEqualSizes([item draggingFrame].size, NSZeroSize))
             [NSException raise: NSRangeException

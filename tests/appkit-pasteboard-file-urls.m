@@ -75,6 +75,14 @@ static void test_filenames_read_as_urls(NSPasteboard *pasteboard)
     expect([[pasteboard types] containsObject: NSPasteboardTypeFileURL],
            "a pasteboard holding filenames has public.file-url among its types (%s)",
            [joined([pasteboard types]) UTF8String]);
+    expect([[pasteboard availableTypeFromArray: @[NSPasteboardTypeFileURL]] isEqual: NSPasteboardTypeFileURL],
+           "availableTypeFromArray: finds public.file-url");
+    NSString *first = [[NSURL fileURLWithPath: text] absoluteString];
+    NSString *string = [pasteboard stringForType: NSPasteboardTypeFileURL];
+    expect([string isEqual: first], "stringForType: public.file-url is the first file's URL (%s)", [string UTF8String]);
+    NSData *data = [pasteboard dataForType: NSPasteboardTypeFileURL];
+    expect([data isEqual: [first dataUsingEncoding: NSUTF8StringEncoding]], "dataForType: public.file-url is it too (%s)",
+           [[[[NSString alloc] initWithData: data encoding: NSUTF8StringEncoding] autorelease] UTF8String]);
     NSArray *items = [pasteboard pasteboardItems];
     expect([items count] == 2, "the filenames are two items (%lu)", (unsigned long) [items count]);
     NSArray *urls = readURLs(pasteboard, nil);

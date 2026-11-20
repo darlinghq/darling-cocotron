@@ -81,6 +81,7 @@ check "host: driver" "$(cat "$work/driver.out")" "OK"
 sleep 1
 lines=$(tail -n +$((start + 1)) "$out")
 check "host: drop" "$(echo "$lines" | grep '^TARGET accept')" "TARGET accept item=5 op=on urls=/Volumes/SystemRoot$host_file"
+check "host: string" "$(echo "$lines" | grep '^TARGET string')" "TARGET string file:///Volumes/SystemRoot$host_file"
 check "host: source" "$(echo "$lines" | grep -c '^SOURCE')" "0"
 
 kill $pid 2>/dev/null
