@@ -186,7 +186,8 @@ CTFontRef CTFontCreateWithFontDescriptor(CTFontDescriptorRef descriptor, CGFloat
     CFDataRef data = KTFontDescriptorGetFontData(descriptor);
     if (data != NULL) {
         CGDataProviderRef provider = CGDataProviderCreateWithCFData(data);
-        CGFontRef graphicsFont = CGFontCreateWithDataProvider(provider);
+        CGFontRef graphicsFont = (CGFontRef) O2FontCreateWithDataProviderAndFaceIndex(
+                (O2DataProviderRef) provider, KTFontDescriptorGetFaceIndex(descriptor));
         CGDataProviderRelease(provider);
         if (graphicsFont != NULL) {
             CTFontRef result = createFont(graphicsFont, size);

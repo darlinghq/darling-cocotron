@@ -35,6 +35,20 @@ O2FontRef O2FontCreateWithDataProvider_platform(O2DataProviderRef provider) {
     return [[O2Font_freetype alloc] initWithDataProvider: provider];
 }
 
+O2FontRef O2FontCreateWithDataProviderAndFaceIndex(O2DataProviderRef provider, int faceIndex) {
+    return [[O2Font_freetype alloc] initWithDataProvider: provider faceIndex: faceIndex];
+}
+
+long O2FontFaceCountOfData(const void *bytes, size_t length) {
+    FT_Face face = NULL;
+    if (bytes == NULL || length == 0 ||
+        FT_New_Memory_Face(O2FontSharedFreeTypeLibrary(), bytes, length, -1, &face) != 0)
+        return 0;
+    long count = face->num_faces;
+    FT_Done_Face(face);
+    return count;
+}
+
 #endif
 
 FT_Library O2FontSharedFreeTypeLibrary() {
@@ -613,6 +627,11 @@ O2FontRef O2FontCreateWithCodePointCoverage(const uint32_t *codePoints,
 }
 
 - (instancetype) initWithDataProvider: (O2DataProviderRef) provider {
+    return [self initWithDataProvider: provider faceIndex: 0];
+}
+
+- (instancetype) initWithDataProvider: (O2DataProviderRef) provider
+                            faceIndex: (int) faceIndex {
     self = [super initWithDataProvider: provider];
     if (self == nil) {
         return nil;
@@ -636,7 +655,7 @@ O2FontRef O2FontCreateWithCodePointCoverage(const uint32_t *codePoints,
 
     FT_Face face;
     int error = FT_New_Memory_Face(O2FontSharedFreeTypeLibrary(), bytes, length,
-                                   0, &face);
+                                   faceIndex, &face);
 
     if (error != 0) {
         NSLog(@"FT_New_Memory_Face() = %d", error);
@@ -644,6 +663,7 @@ O2FontRef O2FontCreateWithCodePointCoverage(const uint32_t *codePoints,
         return nil;
     }
 
+    _sourceFaceIndex = faceIndex;
     return [self initWithFace: face];
 }
 
