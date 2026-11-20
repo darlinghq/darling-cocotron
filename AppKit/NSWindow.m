@@ -2582,6 +2582,13 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
     NSRect content = [self contentRectForFrameRect: _frame];
     NSSize size = DarlingLayoutPreferredSize(_contentView, content.size);
 
+    // The window gets the nearest whole points: a content view that needs at least 300.5 points
+    // gets 301 and one that needs 300.25 gets 300 (macOS 26.7.3), with no further fitting. A
+    // fractional size would not survive the window system's whole pixels and would ask for the
+    // same fit again after every resize.
+    size.width = round(size.width);
+    size.height = round(size.height);
+
     if (size.width < 0 || size.height < 0 || NSEqualSizes(size, content.size)) {
         DarlingLayoutSetLastGeneration(_contentView, DarlingLayoutKindWindowFit, generation);
         return;

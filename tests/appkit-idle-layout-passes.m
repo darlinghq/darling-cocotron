@@ -5,7 +5,8 @@
 // -layoutSubtreeIfNeeded, when a constraint constant changes, when an intrinsic size is invalidated
 // (also of a view in the stack view) and when the window is resized. Resizing a view that is in no
 // view tree, as a scroll view does with a scroller it removed, lays nothing out, while such a view
-// is laid out itself after its size changed.
+// is laid out itself after its size changed. A window whose content needs a fractional width
+// gets the nearest whole points (300 for 300.25) and then stays idle.
 #import <Cocoa/Cocoa.h>
 #include <stdio.h>
 
@@ -186,6 +187,29 @@ int main(void)
         CHECK(layoutCalls == 1);
         CHECK(![alone needsLayout]);
 
+        // 7. A fractional minimum content width.
+        NSWindow *narrow = [[NSWindow alloc] initWithContentRect:NSMakeRect(100, 100, 200, 150)
+                                                       styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskResizable
+                                                         backing:NSBackingStoreBuffered defer:NO];
+        RowView *fill = [[RowView alloc] initWithFrame:NSZeroRect];
+        fill->_width = NSViewNoIntrinsicMetric;
+        [fill setTranslatesAutoresizingMaskIntoConstraints:NO];
+        NSView *narrowContent = [narrow contentView];
+        [narrowContent addSubview:fill];
+        [[[fill leadingAnchor] constraintEqualToAnchor:[narrowContent leadingAnchor]] setActive:YES];
+        [[[fill trailingAnchor] constraintEqualToAnchor:[narrowContent trailingAnchor]] setActive:YES];
+        [[[fill topAnchor] constraintEqualToAnchor:[narrowContent topAnchor]] setActive:YES];
+        [[[fill bottomAnchor] constraintEqualToAnchor:[narrowContent bottomAnchor]] setActive:YES];
+        [[[fill widthAnchor] constraintGreaterThanOrEqualToConstant:300.25] setActive:YES];
+        [narrow makeKeyAndOrderFront:nil];
+        spin(0.5);
+        fprintf(stderr, "fractional minimum: content width %g\n", NSWidth([narrowContent bounds]));
+        CHECK(NSWidth([narrowContent bounds]) == 300);
+        resetCounters();
+        spin(0.5);
+        CHECK(layoutCalls == 0);
+        CHECK(intrinsicReads == 0);
+        [narrow orderOut:nil];
         [window orderOut:nil];
     }
     if (failures == 0)
