@@ -249,6 +249,14 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     WaylandWindow *tooltipParent = tooltip ? [_display popupParentForWindow: self] : nil;
     if (tooltip && (tooltipParent == nil || !tooltipParent->_configured))
         return;
+    BOOL menu = [_delegate isKindOfClass: NSClassFromString(@"NSMenuWindow")] ||
+                [_delegate isKindOfClass: NSClassFromString(@"NSPopUpWindow")];
+    WaylandWindow *parent = tooltip ? tooltipParent : menu ? [_display popupParentForWindow: self] : nil;
+    // A menu opened before its parent's first configure is mapped when that configure arrives
+    // (-[WaylandDisplay mapPopupsWaitingForParent]), as a popup of that parent.
+    _popupWaitingForParent = parent != nil && !parent->_configured;
+    if (_popupWaitingForParent)
+        return;
     _surfaceGeneration++;
     _configureUpdatePending = NO;
     // WaylandDecorations (org.darlinghq.AppKit) or DARLING_WAYLAND_DECORATIONS set to
@@ -273,10 +281,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
                                       &xdg_surface_interface, args,
                                       WaylandObjectXdgSurface, self);
 
-    BOOL menu = [_delegate isKindOfClass: NSClassFromString(@"NSMenuWindow")] ||
-                [_delegate isKindOfClass: NSClassFromString(@"NSPopUpWindow")];
-    WaylandWindow *parent = tooltip ? tooltipParent : menu ? [_display popupParentForWindow: self] : nil;
-    if (parent != nil && parent->_configured) {
+    if (parent != nil) {
         _popupParent = [parent retain];
         [self createPopupRole];
     } else {
@@ -409,8 +414,11 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 
 // Unmapping an xdg surface requires a new configure sequence before it can be
 // shown again, so the role objects are destroyed and created again on show.
+- (BOOL) isPopupWaitingForParent { return _popupWaitingForParent; }
+
 - (void) unmap {
     _shouldBeMapped = NO;
+    _popupWaitingForParent = NO;
     _keyRequested = NO;
     if (!_mapped)
         return;
@@ -1316,6 +1324,11 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
             &width, &height);
     BOOL firstConfigure = !_configured;
     _configured = YES;
+    if (firstConfigure) {
+        [_display performAfterDispatch: ^{
+          [self->_display mapPopupsWaitingForParent];
+        }];
+    }
 
     // Tell the delegate when the compositor's fullscreen state changes.
     BOOL fullscreenChanged = _pendingFullscreen != _fullscreenReported;

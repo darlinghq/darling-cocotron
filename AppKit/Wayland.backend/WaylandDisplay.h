@@ -244,6 +244,7 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
                          max: (size_t) max
                      entered: (NSSet *) entered;
 - (void) unmapPopupsForParent: (WaylandWindow *) parent;
+- (void) mapPopupsWaitingForParent;
 - (void) cancelPopupMenus;
 - (void) updatePointerLock;
 - (void) releasePointerLock;
