@@ -4,6 +4,20 @@
 #import <AppKit/NSRaise.h>
 #import <AppKit/NSStoryboard-Private.h>
 #import <AppKit/NSViewController.h>
+#import <AppKit/NSViewController-Private.h>
+#import <AppKit/NSView.h>
+#import <AppKit/NSWindow.h>
+
+// How many views have a controller. While it is zero the appearance
+// bookkeeping has nothing to look for and skips walking view hierarchies.
+static NSUInteger linkedViewCount;
+
+static void unlinkView(NSViewController *controller, NSView *view) {
+    if (view != nil && [view _viewController] == controller) {
+        [view _setViewController: nil];
+        linkedViewCount--;
+    }
+}
 
 @interface NSBundle (NSNibLoadingPath)
 - (BOOL) _loadNibAtPath: (NSString *) path
@@ -56,6 +70,7 @@ NS_EXTRA_SYNTHESIZE_COPY(NSViewController, identifier, _identifier, NSUserInterf
 }
 
 - (void) dealloc {
+    unlinkView(self, _view);
     [NS_EXTRA(NSViewController, self)->_externalObjectsTableForViewLoading release];
     [NS_EXTRA(NSViewController, self)->_identifier release];
     for (NSViewController *child in NS_EXTRA(NSViewController, self)->_childViewControllers)
@@ -101,6 +116,18 @@ NS_EXTRA_SYNTHESIZE_COPY(NSViewController, identifier, _identifier, NSUserInterf
 - (void) viewDidLoad {
 }
 
+- (void) viewWillAppear {
+}
+
+- (void) viewDidAppear {
+}
+
+- (void) viewWillDisappear {
+}
+
+- (void) viewDidDisappear {
+}
+
 - (BOOL) isViewLoaded {
     return _view != nil;
 }
@@ -131,8 +158,14 @@ NS_EXTRA_SYNTHESIZE_COPY(NSViewController, identifier, _identifier, NSUserInterf
 
 - (void) setView: (NSView *) value {
     value = [value retain];
+    unlinkView(self, _view);
     [_view release];
     _view = value;
+    if (_view != nil) {
+        if ([_view _viewController] == nil)
+            linkedViewCount++;
+        [_view _setViewController: self];
+    }
 }
 
 - (NSArray *) childViewControllers {
@@ -295,6 +328,97 @@ NS_EXTRA_SYNTHESIZE_COPY(NSViewController, identifier, _identifier, NSUserInterf
             return NO;
     }
     return YES;
+}
+
+@end
+
+static BOOL hiddenInHierarchy(NSView *view, NSView *root, NSView *rootSuperview,
+                              BOOL useRootHidden, BOOL rootHidden) {
+    for (NSView *v = view; v != nil;) {
+        if (v == root) {
+            if (useRootHidden ? rootHidden : [v isHidden])
+                return YES;
+            v = rootSuperview;
+        } else {
+            if ([v isHidden])
+                return YES;
+            v = [v superview];
+        }
+    }
+    return NO;
+}
+
+static void collectTransitions(NSView *view, NSView *root, NSWindow *window, BOOL visible,
+                               NSView *rootSuperview, BOOL useRootHidden, BOOL rootHidden,
+                               NSMutableArray **list) {
+    NSViewController *controller = [view _viewController];
+    if (controller != nil) {
+        BOOL target = visible && window != nil &&
+                      !hiddenInHierarchy(view, root, rootSuperview, useRootHidden, rootHidden);
+        if (target != [controller _appeared]) {
+            if (*list == nil)
+                *list = [NSMutableArray array];
+            [*list addObject: controller];
+            [*list addObject: [NSNumber numberWithBool: target]];
+        }
+    }
+    for (NSView *subview in [view subviews])
+        collectTransitions(subview, root, window, visible, rootSuperview, useRootHidden,
+                           rootHidden, list);
+}
+
+@implementation NSViewController (NSViewController_appearance)
+
+- (BOOL) _appeared {
+    return NS_EXTRA(NSViewController, self)->_appeared;
+}
+
+- (void) _setAppeared: (BOOL) appeared {
+    NS_EXTRA(NSViewController, self)->_appeared = appeared;
+}
+
++ (NSArray *) _appearanceTransitionsUnder: (NSView *) root
+                                   window: (NSWindow *) window
+                            windowVisible: (BOOL) visible
+                            rootSuperview: (NSView *) rootSuperview
+                            useRootHidden: (BOOL) useRootHidden
+                                rootHidden: (BOOL) rootHidden
+{
+    if (linkedViewCount == 0 || root == nil)
+        return nil;
+    NSMutableArray *list = nil;
+    collectTransitions(root, root, window, visible, rootSuperview, useRootHidden, rootHidden,
+                       &list);
+    return list;
+}
+
+// The list alternates controller, target state. The state is recorded before the
+// first callback so that anything the callbacks trigger sees the new one.
++ (void) _willPerformAppearanceTransitions: (NSArray *) transitions {
+    NSUInteger count = [transitions count];
+    for (NSUInteger i = 0; i < count; i += 2) {
+        NSViewController *controller = [transitions objectAtIndex: i];
+        BOOL target = [[transitions objectAtIndex: i + 1] boolValue];
+        [controller _setAppeared: target];
+    }
+    for (NSUInteger i = 0; i < count; i += 2) {
+        NSViewController *controller = [transitions objectAtIndex: i];
+        if ([[transitions objectAtIndex: i + 1] boolValue])
+            [controller viewWillAppear];
+        else
+            [controller viewWillDisappear];
+    }
+}
+
++ (void) _didPerformAppearanceTransitions: (NSArray *) transitions {
+    NSUInteger count = [transitions count];
+    for (NSUInteger i = 0; i < count; i += 2) {
+        NSViewController *controller = [transitions objectAtIndex: i];
+        if ([[transitions objectAtIndex: i + 1] boolValue])
+            [controller viewDidAppear];
+        else
+            [controller viewDidDisappear];
+    }
 }
 
 @end
