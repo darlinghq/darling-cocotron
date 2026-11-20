@@ -1394,6 +1394,7 @@ static BOOL _allowsAutomaticWindowTabbing;
 {
     BOOL didSize = !NSEqualSizes(newFrame.size, _frame.size);
     BOOL didMove = !NSEqualPoints(newFrame.origin, _frame.origin);
+    NSSize moved = NSMakeSize(newFrame.origin.x - _frame.origin.x, newFrame.origin.y - _frame.origin.y);
 
     _frame = newFrame;
     NS_EXTRA(NSWindow, self)->_makeSureIsOnAScreen = YES;
@@ -1410,6 +1411,7 @@ static BOOL _allowsAutomaticWindowTabbing;
     }
 
     if (didMove) {
+        [self _moveChildWindowsBy: moved];
         [self postNotificationName: NSWindowDidMoveNotification];
     }
 
@@ -2349,16 +2351,50 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
     return NS_EXTRA(NSWindow, self)->_childWindows;
 }
 
+// A child window is attached once (adding it again only orders it), is
+// ordered next to this window if this window is on screen, and does not
+// become key (black-box observation on Mac OS X 10.14.4 and macOS 26.7.3).
+// A child added to a hidden parent stays hidden when the parent is shown on
+// 10.14.4 (it appears on 26.7.3); we follow 10.14.4. Added to another parent,
+// it leaves the previous one as on 26.7.3 (10.14.4 keeps listing it there
+// too, although its parentWindow is the new one).
 - (void) addChildWindow: (NSWindow *) child
                 ordered: (NSWindowOrderingMode) ordered
 {
+    if (child == nil || child == self)
+        return;
+    NSWindow *previous = [child parentWindow];
+    if (previous != nil && previous != self)
+        [previous _detachChildWindow: child];
+
     if (NS_EXTRA(NSWindow, self)->_childWindows == nil) {
         NS_EXTRA(NSWindow, self)->_childWindows = [NSMutableArray new];
     }
 
-    [NS_EXTRA(NSWindow, self)->_childWindows addObject: child];
+    if ([NS_EXTRA(NSWindow, self)->_childWindows indexOfObjectIdenticalTo: child] == NSNotFound)
+        [NS_EXTRA(NSWindow, self)->_childWindows addObject: child];
     [child setParentWindow: self];
-    [child makeKeyAndOrderFront: nil];
+    if ([self isVisible])
+        [child orderWindow: ordered == NSWindowBelow ? NSWindowBelow : NSWindowAbove
+                relativeTo: [self windowNumber]];
+}
+
+- (void) _detachChildWindow: (NSWindow *) child {
+    if ([child parentWindow] == self)
+        [child setParentWindow: nil];
+    [NS_EXTRA(NSWindow, self)->_childWindows removeObjectIdenticalTo: child];
+}
+
+// Attached child windows keep their place relative to this window: they move
+// by as much as this window's origin moved, also when it was resized (as on
+// Mac OS X 10.14.4 and macOS 26.7.3).
+- (void) _moveChildWindowsBy: (NSSize) delta {
+    if (delta.width == 0 && delta.height == 0)
+        return;
+    for (NSWindow *child in [[NS_EXTRA(NSWindow, self)->_childWindows copy] autorelease]) {
+        NSPoint origin = [child frame].origin;
+        [child setFrameOrigin: NSMakePoint(origin.x + delta.width, origin.y + delta.height)];
+    }
 }
 
 - (void) removeChildWindow: (NSWindow *) child {
@@ -2383,8 +2419,6 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
     [self orderOut: nil];
 }
 
-- (void) _parentWindowDidChangeFrame: (NSWindow *) parent {
-}
 
 - (void) _parentWindowDidExitMove: (NSWindow *) parent {
     [self orderWindow: NSWindowAbove relativeTo: [NS_EXTRA(NSWindow, self)->_parentWindow windowNumber]];
@@ -3021,6 +3055,13 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
         // Note: _isClosed is deliberately NOT reset here because -[NSWindow close]
         // calls -[self orderOut: nil] with _isClosed = YES already set.
         // Resetting here would immediately defeat double-close protection.
+        // A child window that is ordered out leaves its parent: it no longer
+        // moves with it or comes back with it (black-box observation on
+        // Mac OS X 10.14.4 and macOS 26.7.3).
+        if (NS_EXTRA(NSWindow, self)->_parentWindow != nil) {
+            [[self retain] autorelease];
+            [NS_EXTRA(NSWindow, self)->_parentWindow _detachChildWindow: self];
+        }
         NS_EXTRA(NSWindow, self)->_isVisible = NO;
         [[self platformWindow] hideWindow];
         if (![self isKindOfClass: [NSPanel class]]) {
@@ -4385,16 +4426,16 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
     }
 
     // We don't want the miniaturized frame.
+    NSSize moved = NSZeroSize;
     if (![self isMiniaturized]) {
+        moved = NSMakeSize(frame.origin.x - _frame.origin.x, frame.origin.y - _frame.origin.y);
         _frame = frame;
     }
 
     NS_EXTRA(NSWindow, self)->_makeSureIsOnAScreen = YES;
 
     [self _setSheetOriginAndFront];
-    [NS_EXTRA(NSWindow, self)->_childWindows
-            makeObjectsPerformSelector: @selector(_parentWindowDidChangeFrame:)
-                            withObject: self];
+    [self _moveChildWindowsBy: moved];
     [NS_EXTRA(NSWindow, self)->_drawers makeObjectsPerformSelector: @selector(parentWindowDidChangeFrame:)
                               withObject: self];
 
