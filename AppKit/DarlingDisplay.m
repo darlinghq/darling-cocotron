@@ -51,8 +51,12 @@ void NSColorSetCatalogColor(NSColorListName catalogName, NSColorName colorName, 
     // menu text takes the label colour's value and the background is an estimate of the light menu material.
     if ([colorName isEqual: @"disabledControlTextColor"])
         return [NSColor colorWithSRGBRed: 0.0f green: 0.0f blue: 0.0f alpha: 0.247f];
+    // QUIRK: the control text colours are black at alpha 0.847 in the light appearance, not opaque black.
+    // Evidence: black-box reads of +controlTextColor, +selectedControlTextColor and +windowFrameTextColor
+    // converted to sRGB on macOS 10.14.4 and 26.7.3 (tier 2); the same alpha as +labelColor.
+    // Test: test_quirk_control_text_color_alpha in tests/appkit-system-text-colors.m
     if ([colorName isEqual: @"controlTextColor"])
-        return [NSColor blackColor];
+        return [NSColor colorWithSRGBRed: 0.0f green: 0.0f blue: 0.0f alpha: 0.847059f];
     if ([colorName isEqual: @"menuBackgroundColor"])
         return [NSColor colorWithSRGBRed: 0.945f green: 0.945f blue: 0.945f alpha: 1.0f];
     if ([colorName isEqual: @"mainMenuBarColor"])
@@ -88,7 +92,7 @@ void NSColorSetCatalogColor(NSColorListName catalogName, NSColorName colorName, 
     if ([colorName isEqual: @"selectedMenuItemColor"])
         return [NSColor colorWithSRGBRed: 0.259f green: 0.467f blue: 0.957f alpha: 1.0f];
     if ([colorName isEqual: @"selectedControlTextColor"])
-        return [NSColor blackColor];
+        return [NSColor colorWithSRGBRed: 0.0f green: 0.0f blue: 0.0f alpha: 0.847059f];
     if ([colorName isEqual: @"windowFrameColor"])
         return [NSColor lightGrayColor];
     if ([colorName isEqual: @"shadowColor"])
