@@ -26,3 +26,7 @@ CA_EXPORT NSString *const kCAScrollBoth;
 
 @interface CAScrollLayer : CALayer
 @end
+
+@interface CALayer (CALayerScrolling)
+@property(readonly) CGRect visibleRect;
+@end
