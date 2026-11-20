@@ -102,8 +102,14 @@ NSNotificationName NSPopUpButtonCellWillPopUpNotification =
 
 - initTextCell: (NSString *) string pullsDown: (BOOL) pullDown {
     self = [super initTextCell: string];
-    _menu = [[NSMenu alloc] initWithTitle: string];
-    [_menu addItemWithTitle: string action: [self action] keyEquivalent: @""];
+    _menu = [[NSMenu alloc] initWithTitle: string ?: @""];
+    // The title becomes the first item; an empty title adds none.
+    if ([string length] > 0) {
+        [_menu addItemWithTitle: string action: [self action] keyEquivalent: @""];
+        _selectedIndex = 0;
+    } else {
+        _selectedIndex = -1;
+    }
     NS_EXTRA(NSPopUpButtonCell, self)->_arrowPosition = NSPopUpArrowAtCenter;
     NS_EXTRA(NSPopUpButtonCell, self)->_preferredEdge = NSMaxYEdge;
     NS_EXTRA(NSPopUpButtonCell, self)->_pullsDown = pullDown;
@@ -151,6 +157,11 @@ NSNotificationName NSPopUpButtonCellWillPopUpNotification =
     [super setMenuItem: item];
     if (!NS_EXTRA(NSPopUpButtonCell, self)->_usesItemFromMenu)
         [self synchronizeTitleAndSelectedItem];
+}
+
+// The cell's menu item is the item it shows.
+- (NSMenuItem *) menuItem {
+    return [self _displayedItem];
 }
 
 // The item whose title and image the button shows: the selected item of a
