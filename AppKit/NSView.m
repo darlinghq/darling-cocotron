@@ -3858,7 +3858,14 @@ static void releaseSubviewSnapshot(SubviewSnapshot *snapshot) {
 }
 
 - (void) rightMouseDown: (NSEvent *) event {
-    [NSMenu popUpContextMenu: [self menuForEvent: event]
+    NSMenu *menu = [self menuForEvent: event];
+
+    // A view with no context menu for the click leaves it to the next responder.
+    if (menu == nil) {
+        [super rightMouseDown: event];
+        return;
+    }
+    [NSMenu popUpContextMenu: menu
                    withEvent: event
                      forView: self];
 }
