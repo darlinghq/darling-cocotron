@@ -26,6 +26,7 @@
 #import <AppKit/NSDBusMenu.h>
 #import <AppKit/NSEvent.h>
 #import <AppKit/NSMenu.h>
+#import <AppKit/NSMenu+Private.h>
 #import <AppKit/NSMenuItem.h>
 #import <CoreFoundation/CFSocket.h>
 #import <dbus/dbus.h>
@@ -584,7 +585,13 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type,
         if (shortcut != nil)
             [props setObject: shortcut forKey: @"shortcut"];
     }
-    [props setObject: boolValue(![item isHidden]) forKey: @"visible"];
+    // An alternate folded into the item before it is exported hidden: the
+    // exported menu cannot swap items while modifier keys are held.
+    BOOL visible = ![item isHidden];
+    if (visible && [item isAlternate] && [item menu] != nil)
+        visible = [[[item menu] _shownItemsWithModifierFlags: 0]
+                          indexOfObjectIdenticalTo: item] != NSNotFound;
+    [props setObject: boolValue(visible) forKey: @"visible"];
 
     NSMutableArray *children = [NSMutableArray array];
     if (submenu != nil) {

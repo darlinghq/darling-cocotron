@@ -17,6 +17,7 @@
  along with Darling.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#import <AppKit/NSEvent.h>
 #import <AppKit/NSMenu.h>
 
 @interface NSMenu (Private)
@@ -24,5 +25,12 @@
 // Asks for padding at one edge of the menu. Menus have no edge padding
 // here, so it does nothing.
 - (void) _setHasPadding: (BOOL) hasPadding onEdge: (NSInteger) edge;
+
+// The items the menu shows: those that are not hidden, with each alternate
+// (-[NSMenuItem isAlternate]) folded into the item right before it when the
+// two have the same key equivalent, letter case aside. Of each such group only
+// one item is shown: the one for the modifier keys held in `flags`, else the
+// first.
+- (NSArray *) _shownItemsWithModifierFlags: (NSEventModifierFlags) flags;
 
 @end

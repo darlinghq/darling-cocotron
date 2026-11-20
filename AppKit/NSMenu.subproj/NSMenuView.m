@@ -18,6 +18,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSMainMenuView.h>
+#import <AppKit/NSMenu+Private.h>
 #import <AppKit/NSMenuView.h>
 #import <AppKit/NSMenuWindow.h>
 #import <AppKit/NSRaise.h>
@@ -60,26 +61,18 @@ enum {
     }
 }
 
+// The items as shown, in the order of the selected item index.
 - (NSArray *) itemArray {
-    return [[self menu] itemArray];
+    return [NSArray arrayWithArray: [self visibleItemArray]];
 }
 
+// The items shown: not hidden, and of an item and its alternates only the one
+// for the modifier keys held now.
 - (NSArray *) visibleItemArray {
-    NSArray *items = [[self menu] itemArray];
-
-    // Construct a new array of just the visible items
     if (_visibleArray == NULL)
         _visibleArray = [[NSMutableArray alloc] init];
 
-    [_visibleArray removeAllObjects];
-
-    int i;
-    for (i = 0; i < [items count]; i++) {
-        NSMenuItem *item = [items objectAtIndex: i];
-        if (![item isHidden])
-            [_visibleArray addObject: item];
-    }
-
+    [_visibleArray setArray: [[self menu] _shownItemsWithModifierFlags: [NSEvent modifierFlags]]];
     return _visibleArray;
 }
 
@@ -313,8 +306,18 @@ const NSTimeInterval kMouseMovementThreshold = .001f;
         event = [[self window]
                 nextEventMatchingMask: NSLeftMouseUpMask | NSMouseMovedMask |
                                        NSLeftMouseDraggedMask | NSKeyDownMask |
-                                       NSLeftMouseDownMask | NSAppKitDefinedMask];
+                                       NSLeftMouseDownMask | NSAppKitDefinedMask |
+                                       NSFlagsChangedMask];
         [event retain];
+
+        // The modifier keys held choose which of an item and its alternates
+        // is shown. The pointer stays where it was: keep the hit test working
+        // from its position in the event's window.
+        if ([event type] == NSFlagsChanged) {
+            point = [event locationInWindow];
+            for (NSMenuView *view in viewStack)
+                [view setNeedsDisplay: YES];
+        }
 
         if (keyboardNavigationAction != kNSMenuKeyboardNavigationNone) {
             // We didn't enter the mouse handling loop that predecrements count
@@ -556,7 +559,7 @@ const NSTimeInterval kMouseMovementThreshold = .001f;
         }
 
         if (cancelled == NO && [event type] != NSAppKitDefined &&
-            [event type] != NSKeyDown) {
+            [event type] != NSKeyDown && [event type] != NSFlagsChanged) {
 
             // looks like we can keep rolling
 
