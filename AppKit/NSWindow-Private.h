@@ -56,6 +56,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (void) _detachSheetContextAnimateAndOrderOut;
 - (void) _attachDrawer: (NSDrawer *) drawer;
 - (void) _detachDrawer: (NSDrawer *) drawer;
+// Takes a child window off this window's child windows.
+- (void) _detachChildWindow: (NSWindow *) child;
+// Moves the attached child windows along with this window.
+- (void) _moveChildWindowsBy: (NSSize) delta;
 - (NSView *) _backgroundView;
 - (void) _hideMenuViewIfNeeded;
 - (void) _showMenuViewIfNeeded;
