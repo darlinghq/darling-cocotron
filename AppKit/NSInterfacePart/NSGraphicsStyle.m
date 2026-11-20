@@ -625,7 +625,15 @@ static void NSAquaDrawProgressTrack(NSRect bar) {
     NSRect fill = bar;
 
     value = MAX(0, MIN(1, value));
-    fill.size.width = round(NSWidth(bar) * value);
+    // QUIRK: the filled part ends at floor(view width * fraction) counted from the left edge of the view (the
+    // bar itself starts 1 point in), so it is floor(width * fraction) - 1 points wide, never negative and at
+    // most the bar's width: nothing is drawn below about 1/width, a full value fills the bar with its rounded
+    // ends, and no thin sliver is drawn (the product is taken with a 1e-6 tolerance: 58 percent of 100 points is
+    // 58, not 57). Not documented. Evidence: black-box renders of NSProgressIndicator at
+    // 1x on macOS 10.14.4 (tier 2), the number of blue columns for every value 0 to 100 of a 0 to 100 range in
+    // views 20, 37, 60, 100 and 200 points wide (vd-upstream/mac-probes/aqua-leftovers-progress-3.m).
+    // Test: test_quirk_progress_bar_fill in tests/appkit-progress-bar-fill.m
+    fill.size.width = MAX(0, MIN(NSWidth(bar), floor(NSWidth(rect) * value + 1e-6) - 1));
     NSAquaDrawProgressTrack(bar);
     if (NSWidth(fill) > 0)
         NSAquaDrawProgressFill(bar, fill, 0, NO);
