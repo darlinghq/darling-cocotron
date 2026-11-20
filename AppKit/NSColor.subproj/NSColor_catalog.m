@@ -152,6 +152,10 @@ NSColor *NSColorGetCatalogColor(NSColorListName catalogName,
     return nil;
 }
 
+- (NSColor *) colorUsingColorSpace: (NSColorSpace *) space {
+    return [[self _resolvedColor] colorUsingColorSpace: space];
+}
+
 - (NSColor *) colorUsingColorSpaceName: (NSColorSpaceName) colorSpace {
     return [self colorUsingColorSpaceName: colorSpace device: nil];
 }

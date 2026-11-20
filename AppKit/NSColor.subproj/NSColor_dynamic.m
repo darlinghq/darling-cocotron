@@ -115,6 +115,14 @@
     return [[self _resolvedColor] CGColor];
 }
 
+- (NSColor *) colorUsingColorSpace: (NSColorSpace *) space {
+    return [[self _resolvedColor] colorUsingColorSpace: space];
+}
+
+- (NSColor *) colorUsingColorSpaceName: (NSColorSpaceName) colorSpace {
+    return [self colorUsingColorSpaceName: colorSpace device: nil];
+}
+
 - (NSColor *) colorUsingColorSpaceName: (NSColorSpaceName) colorSpace device: (NSDictionary<NSString *, id> *) device {
     return [[self _resolvedColor] colorUsingColorSpaceName: colorSpace device: device];
 }

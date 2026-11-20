@@ -78,6 +78,11 @@ static void NSColorListLoadKeyedArchive(NSData *data, NSMutableArray *keys, NSMu
 static NSMutableDictionary *_namedColorLists = nil;
 
 + (void) _createDefaultColorLists {
+    if (_namedColorLists != nil)
+        return;
+
+    _namedColorLists = [[NSMutableDictionary alloc] init];
+
     static struct WebColor {
         NSString *name;
         unsigned value;
@@ -230,6 +235,10 @@ static NSMutableDictionary *_namedColorLists = nil;
             [[[NSColorList alloc] initWithName: @"System"] autorelease];
     NSColorList *webColorList =
             [[[NSColorList alloc] initWithName: @"Web"] autorelease];
+
+    [_namedColorLists setObject: basicColorList forKey: @"Basic"];
+    [_namedColorLists setObject: systemColorList forKey: @"System"];
+    [_namedColorLists setObject: webColorList forKey: @"Web"];
     int i;
 
     for (i = 0; webColors[i].name != nil; i++) {
@@ -320,11 +329,6 @@ static NSMutableDictionary *_namedColorLists = nil;
     [systemColorList
             setColor: [NSColor unemphasizedSelectedContentBackgroundColor]
               forKey: @"unemphasizedSelectedContentBackgroundColor"];
-
-    _namedColorLists = [[NSMutableDictionary alloc] init];
-    [_namedColorLists setObject: basicColorList forKey: @"Basic"];
-    [_namedColorLists setObject: systemColorList forKey: @"System"];
-    [_namedColorLists setObject: webColorList forKey: @"Web"];
 }
 
 + (NSArray *) availableColorLists {
@@ -413,6 +417,9 @@ static NSMutableDictionary *_namedColorLists = nil;
 }
 
 - (void) setColor: (NSColor *) color forKey: (NSString *) key {
+    if (color == nil || key == nil)
+        return;
+
     unsigned index;
 
     // if we already have a color with this key, replace it...

@@ -12,11 +12,23 @@
 #include <CoreFoundation/CoreFoundation.h>
 #include <stdio.h>
 #include <math.h>
+#include <unistd.h>
 
 static int g_failures;
 #define CHECK(cond) do { \
         if (!(cond)) { printf("FAIL %d: %s\n", __LINE__, #cond); g_failures++; } \
     } while (0)
+
+@interface NSColor (Internal)
++ (NSColor *) _accentColorForCode: (NSInteger) code;
+@end
+
+@interface NSLayoutConstraint (DeactivateStub)
++ (void) deactivateConstraints: (NSArray *) constraints;
+@end
+@implementation NSLayoutConstraint (DeactivateStub)
++ (void) deactivateConstraints: (NSArray *) constraints {}
+@end
 
 static BOOL near(NSColor *c, CGFloat r, CGFloat g, CGFloat b, CGFloat a)
 {
@@ -155,6 +167,11 @@ int main(void)
             TRUE
         );
 
+        for (int i = 0; i < 50 && (appObserver->kvoCount == 0); i++) {
+            usleep(10000);
+            CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0, false);
+        }
+
         CHECK(appObserver->kvoCount == 1);
         CHECK(winObserver->kvoCount == 1);
         CHECK(explicitWinObserver->kvoCount == 0);
@@ -177,13 +194,16 @@ int main(void)
             {  5, 0.686, 0.322, 0.871 }, // Purple
             {  6, 1.000, 0.176, 0.333 }, // Pink
         };
+#if DARLING
         for (size_t i = 0; i < sizeof(accentExpected) / sizeof(accentExpected[0]); i++) {
             NSColor *color = [NSColor _accentColorForCode: accentExpected[i].code];
             if (!near(color, accentExpected[i].r, accentExpected[i].g, accentExpected[i].b, 1.0)) {
                 printf("FAIL: _accentColorForCode %ld\n", (long)accentExpected[i].code);
                 g_failures++;
             }
-
+        }
+#endif
+        for (size_t i = 0; i < sizeof(accentExpected) / sizeof(accentExpected[0]); i++) {
             set_global_pref(CFSTR("AppleAccentColor"), (CFPropertyListRef)@(accentExpected[i].code));
             NSColor *viaCatalog = [NSColor controlAccentColor];
             if (!near(viaCatalog, accentExpected[i].r, accentExpected[i].g, accentExpected[i].b, 1.0)) {
