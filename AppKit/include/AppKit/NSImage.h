@@ -85,6 +85,8 @@ typedef NS_ENUM(NSUInteger, NSImageLoadStatus) {
         NSImageCacheMode _cacheMode;
         NSString *_accessibilityDescription;
         NSImageSymbolConfiguration *_symbolConfiguration;
+        // The system symbol a symbol image draws, nil for other images.
+        NSString *_symbolName;
         NSMutableArray *_scaledRepCache;
         id _drawingHandlerRepCache;
         // the bitmap an image-level -lockFocus draws into, and its context
@@ -224,8 +226,9 @@ typedef NS_ENUM(NSUInteger, NSImageLoadStatus) {
 
 @property (copy, nullable) NSString *accessibilityDescription;
 
-// SF Symbols. Darling has no symbol artwork: these return a generic template
-// placeholder glyph for any non-empty name (nil for a nil or empty name).
+// SF Symbols. Darling has no symbol artwork: these return a template image of
+// its own drawing for a few symbols, and of a generic placeholder glyph for any
+// other non-empty name (nil for a nil or empty name).
 + (nullable instancetype) imageWithSystemSymbolName: (NSString *) name
                   accessibilityDescription: (nullable NSString *) description;
 + (nullable instancetype) imageWithSystemSymbolName: (NSString *) name
@@ -245,7 +248,7 @@ typedef NS_ENUM(NSInteger, NSImageSymbolScale) {
     NSImageSymbolScaleLarge = 3,
 };
 
-@interface NSImageSymbolConfiguration : NSObject <NSCopying> {
+@interface NSImageSymbolConfiguration : NSObject <NSCopying, NSSecureCoding> {
     CGFloat _pointSize;
     NSFontWeight _weight;
     NSImageSymbolScale _scale;

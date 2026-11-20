@@ -22,6 +22,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 @interface NSCustomResource : NSObject {
     NSString *_className;
     NSString *_resourceName;
+    // "system" for a reference to a system symbol image, and the symbol
+    // configuration the reference applies to it.
+    NSString *_catalogName;
+    id _symbolConfiguration;
 }
 
 @end

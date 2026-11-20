@@ -43,6 +43,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (CGFloat) _placeholderSide;
 @end
 
+// Defined in NSImageSymbolGlyphs.m.
+BOOL NSImageSymbolHasGlyph(NSString *name);
+void NSImageSymbolDrawGlyph(NSString *name, NSRect rect);
+
 NSImageName const NSImageNameActionTemplate = @"NSActionTemplate";
 NSImageName const NSImageNameAddTemplate = @"NSAddTemplate";
 NSImageName const NSImageNameAdvanced = @"NSAdvanced";
@@ -844,6 +848,7 @@ NSImageName const NSImageNameTouchBarVolumeUpTemplate =
     [NS_EXTRA(NSImage, self)->_representations release];
     [NS_EXTRA(NSImage, self)->_accessibilityDescription release];
     [NS_EXTRA(NSImage, self)->_symbolConfiguration release];
+    [NS_EXTRA(NSImage, self)->_symbolName release];
     [NS_EXTRA(NSImage, self)->_scaledRepCache release];
     [NS_EXTRA(NSImage, self)->_drawingHandlerRepCache release];
     [NS_EXTRA(NSImage, self)->_focusSnapshot release];
@@ -860,6 +865,7 @@ NSImageName const NSImageNameTouchBarVolumeUpTemplate =
     NS_EXTRA(NSImage, result)->_representations = [NS_EXTRA(NSImage, self)->_representations mutableCopy];
     NS_EXTRA(NSImage, result)->_accessibilityDescription = [NS_EXTRA(NSImage, self)->_accessibilityDescription copy];
     NS_EXTRA(NSImage, result)->_symbolConfiguration = [NS_EXTRA(NSImage, self)->_symbolConfiguration retain];
+    NS_EXTRA(NSImage, result)->_symbolName = [NS_EXTRA(NSImage, self)->_symbolName copy];
     NS_EXTRA(NSImage, result)->_scaledRepCache = nil;
     NS_EXTRA(NSImage, result)->_drawingHandlerRepCache = nil;
 
@@ -2357,18 +2363,19 @@ static NSUInteger scaledRepCacheBytes(NSArray *cache) {
 }
 
 // Darling does not ship SF Symbols artwork (it is Apple's proprietary asset
-// catalog), so every system symbol is drawn as the same generic template glyph:
-// a rounded square outline sized like a symbol at the configured point size.
-// Apple returns nil for names it doesn't know; here only nil or empty names do,
-// because there is no symbol list to check against and apps usually expect an
-// image for the names they ship with.
-+ (NSImage *) _symbolPlaceholderWithDescription: (NSString *) description
-                                  configuration:
-                                          (NSImageSymbolConfiguration *)
-                                                  configuration
+// catalog). A few symbols that apps commonly use have simple drawings of our
+// own (NSImageSymbolGlyphs.m); every other system symbol is drawn as the same
+// generic template glyph: a rounded square outline. Both are sized like a
+// symbol at the configured point size. Apple returns nil for names it doesn't
+// know; here only nil or empty names do, because there is no symbol list to
+// check against and apps usually expect an image for the names they ship with.
++ (NSImage *) _systemSymbolImageNamed: (NSString *) name
+                          description: (NSString *) description
+                        configuration: (NSImageSymbolConfiguration *) configuration
 {
+    BOOL hasGlyph = NSImageSymbolHasGlyph(name);
     static BOOL logged = NO;
-    if (!logged) {
+    if (!hasGlyph && !logged) {
         logged = YES;
         NSLog(@"NSImage: SF Symbols are not available, system symbol images "
               @"are drawn as placeholders");
@@ -2380,10 +2387,14 @@ static NSUInteger scaledRepCacheBytes(NSArray *cache) {
 
     CGFloat side = [configuration _placeholderSide];
     NSSize size = NSMakeSize(side, side);
+    NSString *glyph = [[name copy] autorelease];
     NSCustomImageRep *rep = [[NSCustomImageRep alloc]
-            initWithDrawSelector: @selector(_drawSymbolPlaceholder:)
-                        delegate: [NSImageSymbolConfiguration class]];
-    [rep setSize: size];
+            initWithSize: size
+                 flipped: NO
+          drawingHandler: ^BOOL(NSRect rect) {
+              NSImageSymbolDrawGlyph(glyph, rect);
+              return YES;
+          }];
 
     NSImage *image = [[[self alloc] initWithSize: size] autorelease];
     [image addRepresentation: rep];
@@ -2391,6 +2402,7 @@ static NSUInteger scaledRepCacheBytes(NSArray *cache) {
     [image setTemplate: YES];
     [image setAccessibilityDescription: description];
     NS_EXTRA(NSImage, image)->_symbolConfiguration = [configuration retain];
+    NS_EXTRA(NSImage, image)->_symbolName = [glyph copy];
     return image;
 }
 
@@ -2399,8 +2411,9 @@ static NSUInteger scaledRepCacheBytes(NSArray *cache) {
 {
     if ([name length] == 0)
         return nil;
-    return [self _symbolPlaceholderWithDescription: description
-                                     configuration: nil];
+    return [self _systemSymbolImageNamed: name
+                             description: description
+                           configuration: nil];
 }
 
 + (instancetype) imageWithSystemSymbolName: (NSString *) name
@@ -2424,8 +2437,9 @@ static NSUInteger scaledRepCacheBytes(NSArray *cache) {
     NSImageSymbolConfiguration *merged = [NS_EXTRA(NSImage, self)->_symbolConfiguration
             configurationByApplyingConfiguration: configuration];
     return [[self class]
-            _symbolPlaceholderWithDescription: NS_EXTRA(NSImage, self)->_accessibilityDescription
-                                configuration: merged];
+            _systemSymbolImageNamed: NS_EXTRA(NSImage, self)->_symbolName
+                        description: NS_EXTRA(NSImage, self)->_accessibilityDescription
+                      configuration: merged];
 }
 
 - (NSImageSymbolConfiguration *) symbolConfiguration {
@@ -2541,6 +2555,26 @@ static NSUInteger scaledRepCacheBytes(NSArray *cache) {
     return [self retain];
 }
 
+// Keys as written by ibtool and by AppKit's own archiving of a configuration.
++ (BOOL) supportsSecureCoding {
+    return YES;
+}
+
+- (instancetype) initWithCoder: (NSCoder *) coder {
+    if ((self = [super init]) == nil)
+        return nil;
+    _pointSize = [coder decodeDoubleForKey: @"NSPointSize"];
+    _weight = [coder decodeDoubleForKey: @"NSFontWeight"];
+    _scale = (NSImageSymbolScale) [coder decodeIntegerForKey: @"NSSymbolScale"];
+    return self;
+}
+
+- (void) encodeWithCoder: (NSCoder *) coder {
+    [coder encodeDouble: _pointSize forKey: @"NSPointSize"];
+    [coder encodeDouble: _weight forKey: @"NSFontWeight"];
+    [coder encodeInteger: _scale forKey: @"NSSymbolScale"];
+}
+
 - (BOOL) isEqual: (id) other {
     if (other == self)
         return YES;
@@ -2571,20 +2605,6 @@ static NSUInteger scaledRepCacheBytes(NSArray *cache) {
     else if (_scale == NSImageSymbolScaleLarge)
         factor = 1.3;
     return ceil(pointSize * factor + 3.0);
-}
-
-+ (void) _drawSymbolPlaceholder: (NSCustomImageRep *) rep {
-    NSSize size = [rep size];
-    CGFloat line = MAX(1.0, floor(size.width / 12.0));
-    NSRect box = NSInsetRect(NSMakeRect(0, 0, size.width, size.height),
-                             line * 1.5, line * 1.5);
-    CGFloat radius = box.size.width / 5.0;
-    NSBezierPath *path = [NSBezierPath bezierPathWithRoundedRect: box
-                                                         xRadius: radius
-                                                         yRadius: radius];
-    [path setLineWidth: line];
-    [[NSColor blackColor] setStroke];
-    [path stroke];
 }
 
 @end
