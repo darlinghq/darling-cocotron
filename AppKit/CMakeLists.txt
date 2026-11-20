@@ -358,6 +358,7 @@ set(AppKit_sources
 	NSKeyValueBinding/NSMultipleValueBinder.m
 	NSKeyValueBinding/NSTextBinder.m
 	NSKeyValueBinding/NSKVOBinder.m
+	NSKeyValueBinding/NSTargetBinder.m
 	NSKeyValueBinding/NSCachingBinder.m
 
 	NSPredicateEditorRowTemplate.m
