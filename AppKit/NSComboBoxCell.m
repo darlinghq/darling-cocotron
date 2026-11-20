@@ -33,8 +33,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @implementation NSComboBoxCell
 
+// QUIRK: a new combo box cell keeps its text on one line, clipped, and scrolls it, where a text field
+// wraps it. Not documented. Evidence: black-box observation of NSComboBox on macOS 10.14.4 and
+// 26.7.3 (tier 2), probe mac-probes/aqua-metric-followups.m of the research notes.
+// Test: appkit-combobox-search-field-cell-size.m (test_quirk_single_line_defaults)
 - (instancetype) initTextCell: (NSString *) string {
     if ((self = [super initTextCell: string])) {
+        [self setWraps: NO];
+        [self setScrollable: YES];
         _objectValues = [NSMutableArray new];
         _numberOfVisibleItems = 5;
         _isButtonBordered = YES;
@@ -312,11 +318,34 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return nil;
 }
 
-- (NSSize) cellSize {
+// The size the list window and the drawing are given: that of the control's frame, less room
+// for the button's edge. Not the cell's content size (see -cellSize).
+- (NSSize) _frameSizeForListAndDrawing {
     NSSize size = [_controlView frame].size;
     size.width -= 3.0;
     size.height -= 2.0;
     return size;
+}
+
+// QUIRK: the size of a combo box's content is the text plus 28, 26 or 23 points across at the
+// regular, small and mini control sizes (rounded up to whole points), and 26, 22 or 18 points
+// high at the system font sizes of those control sizes (13, 11 and 9 points), 19 when the mini
+// size's text is empty. Mojave's height follows the font at other sizes, which is not modelled.
+// It does not depend on the cell's frame. Not documented. Evidence: black-box observation of
+// cellSize and sizeToFit of NSComboBox on macOS 10.14.4 (tier 2; macOS 26.7.3 differs: 42, 32 and
+// 28 across, 24, 20 and 16 high, and Mojave's values are used), probe
+// mac-probes/combobox-searchfield-cellsize.m of the research notes.
+// Test: appkit-combobox-search-field-cell-size.m (test_quirk_combo_box_cell_size)
+- (NSSize) cellSize {
+    static const CGFloat insets[3] = {28, 26, 23}, heights[3] = {26, 22, 18};
+    NSControlSize controlSize = [self controlSize];
+    int index = controlSize == NSSmallControlSize ? 1 : (controlSize == NSMiniControlSize ? 2 : 0);
+    NSSize text = [[self attributedStringValue] size];
+    CGFloat height = heights[index];
+
+    if (index == 2 && [[self stringValue] length] == 0)
+        height = 19;
+    return NSMakeSize(ceil(text.width + insets[index]), height);
 }
 
 - (NSRect) buttonRectForBounds: (NSRect) rect {
@@ -332,7 +361,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 {
     NSComboBoxWindow *window;
     NSPoint origin = [controlView bounds].origin;
-    NSSize size = [self cellSize];
+    NSSize size = [self _frameSizeForListAndDrawing];
     NSPoint check = [controlView convertPoint: [event locationInWindow]
                                      fromView: nil];
     NSUInteger selectedIndex =
@@ -427,12 +456,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (void) drawInteriorWithFrame: (NSRect) frame inView: (NSView *) controlView {
-    frame.size = [self cellSize];
+    frame.size = [self _frameSizeForListAndDrawing];
     [super drawInteriorWithFrame: frame inView: controlView];
 }
 
 - (void) drawWithFrame: (NSRect) frame inView: (NSView *) controlView {
-    frame.size = [self cellSize];
+    frame.size = [self _frameSizeForListAndDrawing];
     [super drawWithFrame: frame inView: controlView];
 
     [[controlView graphicsStyle]
