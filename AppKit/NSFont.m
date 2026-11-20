@@ -554,8 +554,12 @@ static CGFloat sizeOrDefault(CGFloat size, CGFloat defaultSize) {
     [super dealloc];
 }
 
+// A size of 0 or less asks for the default size, 12 points (as on macOS
+// 10.14.4 and 26.7.3). Test: tests/appkit-font-default-size.m
 + (NSFont *) fontWithName: (NSString *) name size: (CGFloat) size {
     NSFont *result;
+
+    size = sizeOrDefault(size, 12.0);
 
     if (name == nil)
         [NSException raise: NSInvalidArgumentException
@@ -578,9 +582,13 @@ static CGFloat sizeOrDefault(CGFloat size, CGFloat defaultSize) {
     return [self fontWithName: name size: matrix[0]];
 }
 
+// A size of 0 or less asks for the descriptor's size, and for the default
+// size when the descriptor has none (as on macOS 10.14.4 and 26.7.3).
+// Test: tests/appkit-font-default-size.m
 + (NSFont *) fontWithDescriptor: (NSFontDescriptor *) descriptor
                            size: (CGFloat) size
 {
+    size = sizeOrDefault(size, [descriptor pointSize]);
 
     NSDictionary *attributes = [descriptor fontAttributes];
     NSString *fontName = [attributes objectForKey: NSFontNameAttribute];
