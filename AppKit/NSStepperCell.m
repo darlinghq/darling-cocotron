@@ -201,16 +201,21 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return sendAction;
 }
 
-// QUIRK: the capsule is inset from the cell frame by 3 points from the sides and 3 from the top at the
-// regular size (2 and 1 at the small size, 2 and 0 at the mini size), and is 21, 18 and 14 points high.
-// Evidence: black-box renders on macOS 10.14.4 (tier 2). Test: appkit-stepper-aqua.m
+// QUIRK: the capsule is 13 x 22, 11 x 19 and 9 x 15 points for the regular, small and mini control sizes,
+// centred across the cell (rounded down); in the frames of -sizeToFit (27, 22 and 15 points high) it is 3, 1 and 0
+// points below the top, and in a taller or shorter frame it moves down by half the difference (rounded down).
+// -setHighlighted: YES draws the lower half pressed. Not documented. Evidence: black-box renders on macOS 10.14.4
+// at 1x in those frames and in 40 point high ones (tier 2). Test: test_quirk_stepper in
+// tests/appkit-small-controls-aqua.m
 - (NSRect) _capsuleRectInFrame: (NSRect) frame flipped: (BOOL) flipped {
-    static const CGFloat sideInset[3] = {3, 2, 2}, topInset[3] = {3, 1, 0}, capsuleHeight[3] = {22, 19, 15};
+    static const CGFloat widths[3] = {13, 11, 9}, heights[3] = {22, 19, 15};
+    static const CGFloat fitHeights[3] = {27, 22, 15}, fitTops[3] = {3, 1, 0};
     int index = [self controlSize] == NSSmallControlSize ? 1 : ([self controlSize] == NSMiniControlSize ? 2 : 0);
-    NSRect capsule = NSMakeRect(NSMinX(frame) + sideInset[index], 0, NSWidth(frame) - 2 * sideInset[index],
-                                capsuleHeight[index]);
+    CGFloat top = fitTops[index] + floor((NSHeight(frame) - fitHeights[index]) / 2);
+    NSRect capsule = NSMakeRect(NSMinX(frame) + floor((NSWidth(frame) - widths[index]) / 2), 0, widths[index],
+                                heights[index]);
 
-    capsule.origin.y = flipped ? NSMinY(frame) + topInset[index] : NSMaxY(frame) - topInset[index] - capsuleHeight[index];
+    capsule.origin.y = flipped ? NSMinY(frame) + top : NSMaxY(frame) - top - heights[index];
     return capsule;
 }
 
@@ -220,9 +225,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     _controlView = controlView;
     NSRect capsule = [self _capsuleRectInFrame: frame flipped: [controlView isFlipped]];
     [[_controlView graphicsStyle] drawAquaStepperInRect: capsule
+                                            controlSize: [self controlSize]
                                                 enabled: [self isEnabled]
                                           upHighlighted: _isUpHighlighted
-                                        downHighlighted: _isDownHighlighted];
+                                        downHighlighted: _isDownHighlighted || [self isHighlighted]];
 }
 
 // the ring is drawn around the capsule

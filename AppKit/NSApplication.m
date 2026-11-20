@@ -20,6 +20,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSAlert.h>
 #import <AppKit/NSAppearance.h>
 #import <AppKit/NSApplication.h>
+#import "DarlingLayout.h"
 #import <AppKit/NSUserInterfaceItemSearching.h>
 #import <AppKit/NSColorPanel.h>
 #import <AppKit/NSDisplay.h>
@@ -184,7 +185,7 @@ static NSArray *NSApplicationDocumentsInArguments(NSArray *arguments) {
 
 NS_EXTRA_DEALLOC(NSApplication)
 
-- (NSUserInterfaceLayoutDirection) userInterfaceLayoutDirection {
+static NSUserInterfaceLayoutDirection computeLayoutDirection(void) {
     // Use the app's selected localization, not the user's regional locale:
     // an app without an RTL localization still presents its LTR interface.
     NSString *language = [[[NSBundle mainBundle] preferredLocalizations] firstObject];
@@ -194,6 +195,46 @@ NS_EXTRA_DEALLOC(NSApplication)
         return NSUserInterfaceLayoutDirectionRightToLeft;
     }
     return NSUserInterfaceLayoutDirectionLeftToRight;
+}
+
+// The direction is read for every leading and trailing edge a layout pass solves, and finding the
+// app's localization is costly, so it is worked out once and again only when the preferred
+// languages (the AppleLanguages default) or the current locale may have changed.
+static NSInteger cachedLayoutDirection = -1;
+
+- (void) _layoutDirectionInputsDidChange: (NSNotification *) note {
+    if (![NSThread isMainThread]) {
+        [self performSelectorOnMainThread: _cmd withObject: nil waitUntilDone: NO];
+        return;
+    }
+    if (cachedLayoutDirection < 0)
+        return;
+    NSUserInterfaceLayoutDirection direction = computeLayoutDirection();
+    if (direction == (NSUserInterfaceLayoutDirection) cachedLayoutDirection)
+        return;
+    cachedLayoutDirection = direction;
+    // Views that inherit the direction lay out their leading and trailing edges again.
+    DarlingLayoutInputsChanged();
+    for (NSWindow *window in [self windows]) {
+        [[window contentView] setNeedsLayout: YES];
+        [[window contentView] setNeedsDisplay: YES];
+    }
+}
+
+- (NSUserInterfaceLayoutDirection) userInterfaceLayoutDirection {
+    if (cachedLayoutDirection < 0) {
+        NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
+        [center addObserver: self
+                   selector: @selector(_layoutDirectionInputsDidChange:)
+                       name: NSUserDefaultsDidChangeNotification
+                     object: nil];
+        [center addObserver: self
+                   selector: @selector(_layoutDirectionInputsDidChange:)
+                       name: NSCurrentLocaleDidChangeNotification
+                     object: nil];
+        cachedLayoutDirection = computeLayoutDirection();
+    }
+    return (NSUserInterfaceLayoutDirection) cachedLayoutDirection;
 }
 
 + (NSApplication *) sharedApplication {
@@ -1052,6 +1093,12 @@ static NSMutableArray *pendingOpenURLs = nil;
     NS_HANDLER [self reportException: localException];
     NS_ENDHANDLER
 
+    // Saved windows are recreated here: after the delegate's applicationWillFinishLaunching:
+    // and before applicationDidFinishLaunching:.
+    NS_DURING [self _restoreWindowsFromSavedState];
+    NS_HANDLER [self reportException: localException];
+    NS_ENDHANDLER
+
     // Give us a first event
     [NSTimer scheduledTimerWithTimeInterval: 0.1
                                      target: self
@@ -1163,6 +1210,11 @@ static NSMutableArray *pendingOpenURLs = nil;
                                           dictionaryWithObject: [NSNumber
                                                                         numberWithBool: isDefault]
                                                         forKey: NSApplicationLaunchIsDefaultLaunchKey]];
+    NS_HANDLER [self reportException: localException];
+    NS_ENDHANDLER
+
+    // The recreated windows receive their saved state once the delegate has been told.
+    NS_DURING [self _finishRestoringWindowsAfterLaunch];
     NS_HANDLER [self reportException: localException];
     NS_ENDHANDLER
 
@@ -1959,6 +2011,11 @@ static BOOL isModalWindowOrItsSheet(NSWindow *window, NSWindow *modalWindow) {
 }
 
 - (void) terminate: sender {
+    // The windows are saved before the documents close them.
+    NS_DURING [self _saveRestorableStateForTermination];
+    NS_HANDLER [self reportException: localException];
+    NS_ENDHANDLER
+
     [[NSDocumentController sharedDocumentController]
             closeAllDocumentsWithDelegate: self
                       didCloseAllSelector: @selector
@@ -2457,6 +2514,49 @@ BOOL NSApplicationLoad(void) {
         if (stop)
             break;
     }
+}
+
+@end
+
+@implementation NSApplication (NSWindowRestoration)
+
+- (void) encodeRestorableStateWithCoder: (NSCoder *) coder {
+    [super encodeRestorableStateWithCoder: coder];
+    id delegate = [self delegate];
+    if ([delegate respondsToSelector: @selector(application:willEncodeRestorableState:)])
+        [delegate application: self willEncodeRestorableState: coder];
+}
+
+- (void) restoreStateWithCoder: (NSCoder *) coder {
+    [super restoreStateWithCoder: coder];
+    id delegate = [self delegate];
+    if ([delegate respondsToSelector: @selector(application:didDecodeRestorableState:)])
+        [delegate application: self didDecodeRestorableState: coder];
+}
+
+- (BOOL) restoreWindowWithIdentifier: (NSString *) identifier
+                               state: (NSCoder *) state
+                   completionHandler: (void (^)(NSWindow *window, NSError *error)) completionHandler
+{
+    Class restorationClass = [NSWindow _restorationClassFromState: state];
+    SEL selector = @selector(restoreWindowWithIdentifier:state:completionHandler:);
+    if (restorationClass == Nil || ![restorationClass respondsToSelector: selector])
+        return NO;
+    [(Class<NSWindowRestoration>) restorationClass restoreWindowWithIdentifier: identifier
+                                                                         state: state
+                                                             completionHandler: completionHandler];
+    return YES;
+}
+
+// The restoration phase at launch ends when no restoration class is outstanding; extending it
+// holds NSApplicationDidFinishRestoringWindowsNotification back until -completeStateRestoration.
+// Outside that phase they do nothing.
+- (void) extendStateRestoration {
+    [self _extendStateRestoration];
+}
+
+- (void) completeStateRestoration {
+    [self _completeStateRestoration];
 }
 
 @end

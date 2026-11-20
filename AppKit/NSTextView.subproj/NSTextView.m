@@ -1049,15 +1049,20 @@ static NSTextView *s_targetTextView = nil;
 
     if (NSIntersectsRect(glyphRect,
                          [[self layoutManager] extraLineFragmentRect])) {
-        glyphRange.location = [layoutManager numberOfGlyphs] - 1;
-        glyphRange.length = 1;
+        // The extra line fragment has no glyph of its own: redraw the last
+        // glyph, if the text has any.
+        NSUInteger glyphCount = [layoutManager numberOfGlyphs];
+        glyphRange = glyphCount > 0 ? NSMakeRange(glyphCount - 1, 1)
+                                    : NSMakeRange(0, 0);
     } else {
         glyphRange =
                 [layoutManager glyphRangeForBoundingRect: glyphRect
                                          inTextContainer: [self textContainer]];
     }
-    [layoutManager drawBackgroundForGlyphRange: glyphRange atPoint: origin];
-    [layoutManager drawGlyphsForGlyphRange: glyphRange atPoint: origin];
+    if (glyphRange.length > 0) {
+        [layoutManager drawBackgroundForGlyphRange: glyphRange atPoint: origin];
+        [layoutManager drawGlyphsForGlyphRange: glyphRange atPoint: origin];
+    }
     if (turnedOn)
         [[self graphicsStyle] drawTextViewInsertionPointInRect: rect
                                                          color: color];

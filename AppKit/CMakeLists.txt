@@ -133,6 +133,7 @@ set(AppKit_sources
 	NSSecureTextFieldCell.m
 	NSPathCell.m
 	NSWindow.m
+	NSStateRestoration.m
 	NSAlert.m
 	NSCursor.m
 	NSFontMetric.m
@@ -276,6 +277,7 @@ set(AppKit_sources
 	NSButton.m
 	NSPrintPanel.m
 	NSWindowController.m
+	NSWindowTabGroup.m
 	NSColorSampler.m
 	NSColorSpace.m
 	DarlingLayout.mm
@@ -346,6 +348,7 @@ set(AppKit_sources
 	NSLevelIndicator.m
 	NSDraggingManager.m
 	NSImage.m
+	NSImageSymbolGlyphs.m
 	NSImageDrawingCache.m
 	NSNextStepFrame.m
 	NSPreviewRepresentingActivityItem.m
@@ -356,6 +359,7 @@ set(AppKit_sources
 	NSKeyValueBinding/NSMultipleValueBinder.m
 	NSKeyValueBinding/NSTextBinder.m
 	NSKeyValueBinding/NSKVOBinder.m
+	NSKeyValueBinding/NSTargetBinder.m
 	NSKeyValueBinding/NSCachingBinder.m
 
 	NSPredicateEditorRowTemplate.m
@@ -413,6 +417,7 @@ set(AppKit_sources
 	NSStepper.m
 	NSDiffableDataSourceSnapshot.m
 	NSAccessibility.m
+	NSAccessibilityProtocols.m
 	NSAppearance.m
 	NSAccessibilityCustomAction.m
 	NSAccessibilityElement.m
@@ -600,6 +605,7 @@ add_framework(AppKit
 		CoreServices
 		UniformTypeIdentifiers
 		HIToolbox
+		compression
 		UIFoundation
 		dbus
 )

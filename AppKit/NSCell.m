@@ -358,6 +358,12 @@ NS_EXTRA_SYNTHESIZE_ASSIGN(NSCell, controlTint, _controlTint, NSControlTint, con
     return self;
 }
 
+// What a keyed archive stores as the cell's contents; subclasses whose
+// contents are not the object value override it.
+- (id) _archivedContents {
+    return NS_EXTRA(NSCell, self)->_objectValue;
+}
+
 - (void) encodeWithCoder: (NSCoder *) coder {
     unsigned int flags = 0;
     unsigned int flags2 = 0;
@@ -367,7 +373,7 @@ NS_EXTRA_SYNTHESIZE_ASSIGN(NSCell, controlTint, _controlTint, NSControlTint, con
     if (coder.allowsKeyedCoding) {
         [coder encodeInt: flags forKey: @"NSCellFlags"];
         [coder encodeInt: flags2 forKey: @"NSCellFlags2"];
-        [coder encodeObject: NS_EXTRA(NSCell, self)->_objectValue forKey: @"NSContents"];
+        [coder encodeObject: [self _archivedContents] forKey: @"NSContents"];
         if (NS_EXTRA(NSCell, self)->_image != nil) {
             [coder encodeObject: NS_EXTRA(NSCell, self)->_image forKey: @"NSNormalImage"];
             if (NS_EXTRA(NSCell, self)->_font != nil)
@@ -400,7 +406,9 @@ NS_EXTRA_SYNTHESIZE_ASSIGN(NSCell, controlTint, _controlTint, NSControlTint, con
     return self;
 }
 
-- initImageCell: (NSImage *) image {
+// The state of a new image cell. -init uses it directly: on macOS -[NSCell init] does not send
+// -initImageCell: or -initTextCell:, so a subclass overriding those is not entered from -init.
+static void initImageCellState(NSCell *self, NSImage *image) {
     NS_EXTRA(NSCell, self)->_focusRingType = [[self class] defaultFocusRingType];
     NS_EXTRA(NSCell, self)->_state = NSControlStateValueOff;
     NS_EXTRA(NSCell, self)->_font = nil;
@@ -416,11 +424,16 @@ NS_EXTRA_SYNTHESIZE_ASSIGN(NSCell, controlTint, _controlTint, NSControlTint, con
     NS_EXTRA(NSCell, self)->_refusesFirstResponder = NO;
     NS_EXTRA(NSCell, self)->_lineBreakMode = NSLineBreakByWordWrapping;
     NS_EXTRA(NSCell, self)->_hasValidObjectValue = YES;
+}
+
+- initImageCell: (NSImage *) image {
+    initImageCellState(self, image);
     return self;
 }
 
 - init {
-    return [self initImageCell: nil];
+    initImageCellState(self, nil);
+    return self;
 }
 
 - (void) dealloc {
@@ -1046,10 +1059,12 @@ NS_EXTRA_SYNTHESIZE_ASSIGN(NSCell, controlTint, _controlTint, NSControlTint, con
     NS_EXTRA(NSCell, self)->_representedObject = object;
 }
 
+// Changing the control size leaves the font alone, in every cell class: the
+// font for a control size is chosen separately (systemFontSizeForControlSize:
+// gives its size). macOS 10.14.4 and 26.7.3 keep the font of every cell class
+// across control sizes.
 - (void) setControlSize: (NSControlSize) size {
     NS_EXTRA(NSCell, self)->_controlSize = size;
-    [NS_EXTRA(NSCell, self)->_font release];
-    NS_EXTRA(NSCell, self)->_font = [[NSFont userFontOfSize: [NSFont systemFontSizeForControlSize: NS_EXTRA(NSCell, self)->_controlSize]] retain];
     if ([[self controlView] respondsToSelector: @selector(updateCell:)]) {
         [[self controlView] performSelector: @selector(updateCell:)
                                  withObject: self];

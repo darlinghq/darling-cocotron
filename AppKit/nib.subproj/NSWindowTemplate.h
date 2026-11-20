@@ -66,6 +66,9 @@ typedef NS_OPTIONS(uint32_t, NSWindowTemplateFlags) {
     NSView *windowView;
     NSString *_windowAutosave;
     NSUserInterfaceItemIdentifier _identifier;
+    // Whether the archive has the Restorable flag, and its value.
+    BOOL _hasRestorableFlag;
+    BOOL _windowIsRestorable;
     NSWindowCollectionBehavior _collectionBehavior;
     NSUInteger _animationBehavior;
     NSSize _minFullScreenContentSize;

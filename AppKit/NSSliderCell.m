@@ -29,8 +29,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSWindow.h>
 #import <Foundation/NSKeyedArchiver.h>
 
-#define PIXELINSET 8
-#define TICKHEIGHT 8
 
 @interface NSColorScaleSliderCell : NSSliderCell
 @end
@@ -130,33 +128,35 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return self;
 }
 
+static void initSliderCellState(NSSliderCell *self) {
+    NS_EXTRA(NSCell, self)->_isContinuous = YES; // NSCell defaults to NO, NSSliderCell defaults to YES
+    self->_type = NSLinearSlider;
+    self->_minValue = 0;
+    self->_maxValue = 1.0;
+    self->_altIncrementValue = 0;
+    self->_isVertical = -1;
+    self->_lastRect = NSZeroRect;
+    self->_numberOfTickMarks = 0;
+    self->_tickMarkPosition = NSTickMarkBelow;
+    self->_allowsTickMarkValuesOnly = NO;
+}
+
+// Like -[NSCell init], this does not go through -initImageCell: or -initTextCell:.
+- init {
+    [super init];
+    initSliderCellState(self);
+    return self;
+}
+
 - initTextCell: (NSString *) string {
     [super initTextCell: string];
-    NS_EXTRA(NSCell, self)->_isContinuous = YES; // NSCell defaults to NO, NSSliderCell defaults to YES
-    _type = NSLinearSlider;
-    _minValue = 0;
-    _maxValue = 1.0;
-    _altIncrementValue = 0;
-    _isVertical = -1;
-    _lastRect = NSZeroRect;
-    _numberOfTickMarks = 0;
-    _tickMarkPosition = NSTickMarkBelow;
-    _allowsTickMarkValuesOnly = NO;
+    initSliderCellState(self);
     return self;
 }
 
 - initImageCell: (NSImage *) image {
     [super initImageCell: image];
-    NS_EXTRA(NSCell, self)->_isContinuous = YES; // NSCell defaults to NO, NSSliderCell defaults to YES
-    _type = NSLinearSlider;
-    _minValue = 0;
-    _maxValue = 1.0;
-    _altIncrementValue = 0;
-    _isVertical = -1;
-    _lastRect = NSZeroRect;
-    _numberOfTickMarks = 0;
-    _tickMarkPosition = NSTickMarkBelow;
-    _allowsTickMarkValuesOnly = NO;
+    initSliderCellState(self);
     return self;
 }
 
@@ -192,8 +192,17 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return _allowsTickMarkValuesOnly;
 }
 
+// QUIRK: 21, 15 and 12 points for the regular, small and mini control sizes; with tick marks 19, 13 and 11 for a
+// horizontal slider and 20, 14 and 12 for a vertical one. Not documented. Evidence: black-box observation on
+// macOS 10.14.4 (tier 2). Test: test_quirk_slider_cell_size in tests/appkit-small-controls-aqua.m
 - (CGFloat) knobThickness {
-    return 0;
+    int z = [self controlSize] == NSSmallControlSize ? 1 : ([self controlSize] == NSMiniControlSize ? 2 : 0);
+
+    if (_numberOfTickMarks <= 0)
+        return (CGFloat[]){21, 15, 12}[z];
+    if ([self isVertical] == 1)
+        return (CGFloat[]){20, 14, 12}[z];
+    return (CGFloat[]){19, 13, 11}[z];
 }
 
 - (void) setSliderType: (NSSliderType) value {
@@ -228,8 +237,30 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     // deprecated, do nothing
 }
 
+// _isVertical is -1 until the orientation is known, then 0 or 1: taken from the frame the cell
+// draws in, or with kVerticalSet added when it was set explicitly, which the frame does not change.
+enum { kVerticalSet = 2 };
+
 - (NSInteger) isVertical {
-    return _isVertical;
+    return _isVertical < 0 ? _isVertical : (_isVertical & 1);
+}
+
+- (void) setVertical: (BOOL) vertical {
+    _isVertical = kVerticalSet | (vertical ? 1 : 0);
+}
+
+// Takes the orientation from a frame unless it is already known; drawing updates it from the
+// frame the cell draws in, as before.
+- (void) _setOrientationFromFrame: (NSRect) frame {
+    if (_isVertical < 0)
+        _isVertical = (frame.size.height > frame.size.width) ? 1 : 0;
+}
+
+// Follows the slider's frame unless the orientation was set with -setVertical:.
+- (void) _setVerticalForSize: (NSSize) size {
+    if (_isVertical >= 0 && (_isVertical & kVerticalSet))
+        return;
+    _isVertical = size.height > size.width ? 1 : 0;
 }
 
 - (NSInteger) indexOfTickMarkAtPoint: (NSPoint) point {
@@ -274,121 +305,208 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (NSRect) trackRect {
-    NSUnimplementedMethod();
-    return NSZeroRect;
+    return _lastRect;
+}
+
+// QUIRK: the geometry of a linear slider on macOS 10.14 (light appearance). Not documented. Evidence: black-box
+// renders of NSSlider on macOS 10.14.4 at 1x (tier 2), vd-upstream/mac-probes/aqua-small-controls.m, at the
+// thickness of -cellSize (19, 15 and 13 points without tick marks, 24, 18 and 15 with them), for the regular, small
+// and mini control sizes:
+// - the knob's centre is at floor(k / 2 + f * (length - k)) points from the minimum end, with f the value's fraction
+//   of the range and k 21, 13 and 11, with or without tick marks; tick marks are at the same positions;
+// - the round knob is 15, 11 and 9 points across, the pointed one as wide and 17, 12 and 9 points long;
+// - the track ends 3, 1 and 1 points from the ends of the view;
+// - across the slider the knob, the track and the tick marks are at the offsets of the table below, and in a
+//   thicker or thinner view they move by half the difference, rounded down for a horizontal slider and up for a
+//   vertical one.
+// Test: test_quirk_slider_geometry in tests/appkit-small-controls-aqua.m
+typedef struct {
+    CGFloat k;          // knob length used for positions
+    CGFloat d;          // knob width along the track
+    CGFloat knobLength; // knob extent across the track
+    CGFloat inset;      // track inset from the ends
+    CGFloat thickness;  // the thickness these offsets were measured at
+    CGFloat knobTop, trackTop, tickTop, tickLength; // offsets across, from the top (left for vertical sliders)
+} NSAquaSliderGeometry;
+
+- (NSAquaSliderGeometry) _aquaGeometry {
+    // index: control size; [vertical][0 no ticks, 1 ticks at bottom or right, 2 ticks at top or left]
+    static const CGFloat knobTop[2][3][3] = {{{2, 2, 1}, {2, 2, 2}, {5, 4, 4}}, {{2, 2, 3}, {2, 2, 2}, {5, 4, 4}}};
+    static const CGFloat trackTop[2][3][3] = {{{8, 6, 4}, {8, 5, 4}, {14, 10, 7}}, {{8, 6, 6}, {7, 5, 5}, {14, 10, 8}}};
+    static const CGFloat tickTop[2][3][3] = {{{0, 0, 0}, {18, 13, 10}, {3, 3, 3}}, {{0, 0, 0}, {17, 12, 9}, {2, 2, 2}}};
+    int z = [self controlSize] == NSSmallControlSize ? 1 : ([self controlSize] == NSMiniControlSize ? 2 : 0);
+    int v = [self isVertical] == 1;
+    int t = _numberOfTickMarks <= 0 ? 0 : (_tickMarkPosition == NSTickMarkBelow ? 1 : 2);
+    NSAquaSliderGeometry g;
+
+    g.k = (CGFloat[]){21, 13, 11}[z];
+    g.d = (CGFloat[]){15, 11, 9}[z];
+    g.knobLength = t ? (CGFloat[]){17, 12, 9}[z] : g.d;
+    g.inset = z == 0 ? 3 : 1;
+    g.thickness = t ? (CGFloat[]){24, 18, 15}[z] : (CGFloat[]){19, 15, 13}[z];
+    g.knobTop = knobTop[v][t][z];
+    g.trackTop = trackTop[v][t][z];
+    g.tickTop = tickTop[v][t][z];
+    g.tickLength = z == 0 ? 4 : 3;
+    return g;
+}
+
+- (BOOL) _drawsFlipped {
+    return _controlView == nil ? NO : [_controlView isFlipped];
+}
+
+// A rectangle in the cell frame given from its top left corner on the screen for a horizontal slider; for a
+// vertical one x is across the slider (from the left) and y along it (from the top).
+- (NSRect) _aquaRectAcross: (CGFloat) across along: (CGFloat) along thickness: (CGFloat) thickness length: (CGFloat) length {
+    NSRect frame = _lastRect;
+    BOOL vertical = [self isVertical] == 1;
+    NSAquaSliderGeometry g = [self _aquaGeometry];
+    CGFloat crossSize = vertical ? NSWidth(frame) : NSHeight(frame);
+    CGFloat x, y, w, h;
+
+    // centred across, odd leftovers going above a horizontal slider and left of a vertical one
+    across += vertical ? ceil((crossSize - g.thickness) / 2) : floor((crossSize - g.thickness) / 2);
+    if (vertical) {
+        x = across;
+        y = along;
+        w = thickness;
+        h = length;
+    } else {
+        x = along;
+        y = across;
+        w = length;
+        h = thickness;
+    }
+    if ([self _drawsFlipped])
+        return NSMakeRect(NSMinX(frame) + x, NSMinY(frame) + y, w, h);
+    return NSMakeRect(NSMinX(frame) + x, NSMaxY(frame) - y - h, w, h);
+}
+
+- (CGFloat) _aquaLength {
+    return [self isVertical] == 1 ? NSHeight(_lastRect) : NSWidth(_lastRect);
+}
+
+// The position of a point along the slider, in points from its top (vertical) or left end, for a value fraction
+// or a tick mark position.
+- (CGFloat) _aquaPositionForFraction: (double) fraction {
+    NSAquaSliderGeometry g = [self _aquaGeometry];
+    CGFloat length = [self _aquaLength];
+    CGFloat p = floor(g.k / 2 + fraction * (length - g.k));
+
+    // the minimum of a vertical slider is at the bottom
+    return [self isVertical] == 1 ? length - 1 - p : p;
+}
+
+- (double) _valueFraction {
+    double range = _maxValue - _minValue;
+    double fraction = (range > 0) ? ([self doubleValue] - _minValue) / range : 0;
+
+    return MAX(0, MIN(1, fraction));
+}
+
+- (double) _tickMarkFractionAtIndex: (NSInteger) index {
+    return (_numberOfTickMarks == 1) ? 0.5 : (double) index / (double) (_numberOfTickMarks - 1);
 }
 
 - (NSRect) rectOfTickMarkAtIndex: (NSInteger) index {
-    NSRect result;
-    CGFloat length =
-            (_isVertical ? _lastRect.size.height : _lastRect.size.width) -
-            2 * PIXELINSET;
-    CGFloat position =
-            floor((_numberOfTickMarks == 1)
-                          ? length / 2
-                          : index * (length / (_numberOfTickMarks - 1)));
+    NSAquaSliderGeometry g = [self _aquaGeometry];
 
-    if (_isVertical) {
-        result.origin.x = _lastRect.origin.x;
-        if (_tickMarkPosition == NSTickMarkBelow)
-            result.origin.x += _lastRect.size.width - TICKHEIGHT;
-        // The minimum of a vertical slider is at the bottom, the larger y in a flipped view.
-        if ([_controlView isFlipped])
-            position = length - position;
-        result.origin.y = floor(_lastRect.origin.y + PIXELINSET + position);
-        result.size.width = TICKHEIGHT;
-        result.size.height = 1;
-    } else {
-        result.origin.x = floor(_lastRect.origin.x + PIXELINSET + position);
-        result.origin.y = _lastRect.origin.y;
-        if ([self _tickMarksAtHigherY])
-            result.origin.y += _lastRect.size.height - TICKHEIGHT;
-        result.size.width = 1;
-        result.size.height = TICKHEIGHT;
-    }
+    if (index < 0 || index >= _numberOfTickMarks)
+        return NSZeroRect;
+    return [self _aquaRectAcross: g.tickTop
+                           along: [self _aquaPositionForFraction: [self _tickMarkFractionAtIndex: index]]
+                       thickness: g.tickLength
+                          length: 1];
+}
 
-    return result;
+- (NSRect) _knobBodyRect {
+    NSAquaSliderGeometry g = [self _aquaGeometry];
+    CGFloat centre = [self _aquaPositionForFraction: [self _valueFraction]];
+
+    return [self _aquaRectAcross: g.knobTop along: centre - (g.d - 1) / 2 thickness: g.knobLength length: g.d];
+}
+
+- (NSRect) _trackRect {
+    NSAquaSliderGeometry g = [self _aquaGeometry];
+
+    return [self _aquaRectAcross: g.trackTop along: g.inset thickness: 3 length: [self _aquaLength] - 2 * g.inset];
 }
 
 - (void) drawBarInside: (NSRect) frame flipped: (BOOL) isFlipped {
-    if (_numberOfTickMarks == 0 && [self sliderType] == NSSliderTypeLinear) {
-        // without tick marks the slider is drawn as on macOS: a blue track up to the knob
-        [[_controlView graphicsStyle] drawAquaSliderTrackInRect: _lastRect
-                                                       vertical: [self isVertical]
-                                                       knobRect: [self knobRectFlipped: isFlipped]
-                                                        enabled: [self isEnabled]
-                                                         active: [[_controlView window] isKeyWindow]
-                                                        flipped: isFlipped];
-        return;
+    NSRect track = [self _trackRect];
+    NSRect fill = NSZeroRect;
+
+    if (_numberOfTickMarks <= 0 && [self sliderType] == NSSliderTypeLinear) {
+        // the blue part runs from the minimum to the middle of the knob
+        NSRect body = [self _knobBodyRect];
+
+        fill = track;
+        if ([self isVertical] == 1) {
+            BOOL minAtLowY = !isFlipped;
+            if (minAtLowY)
+                fill.size.height = MAX(0, NSMidY(body) - NSMinY(track));
+            else {
+                fill.origin.y = MIN(NSMaxY(track), NSMidY(body));
+                fill.size.height = NSMaxY(track) - fill.origin.y;
+            }
+        } else
+            fill.size.width = MAX(0, NSMidX(body) - NSMinX(track));
     }
-    [[_controlView graphicsStyle]
-            drawSliderTrackInRect: frame
-                         vertical: [self isVertical]
-                     hasTickMarks: (_numberOfTickMarks > 0) ? YES : NO];
+    [[_controlView graphicsStyle] drawAquaSliderTrackInRect: track
+                                                   fillRect: fill
+                                                    enabled: [self isEnabled]
+                                                     active: [[_controlView window] isKeyWindow]];
 }
 
-// Whether the tick marks of a horizontal slider are at the larger y: above in a view that is not flipped,
-// below in a flipped one.
-- (BOOL) _tickMarksAtHigherY {
-    BOOL above = (_tickMarkPosition == NSTickMarkAbove);
-
-    return [_controlView isFlipped] ? !above : above;
-}
-
-- (NSRect) _sliderRect {
-    NSRect result = _lastRect;
-
-    if (_numberOfTickMarks > 0) {
-        if ([self isVertical]) {
-            result.size.width -= TICKHEIGHT;
-            if (_tickMarkPosition == NSTickMarkLeft)
-                result.origin.x += TICKHEIGHT;
-        } else {
-            result.size.height -= TICKHEIGHT;
-            if (![self _tickMarksAtHigherY])
-                result.origin.y += TICKHEIGHT;
-        }
-    }
-
-    return result;
-}
-
+// QUIRK: the knob rectangle is -knobThickness long along the slider and, across it, as thick as the knob without
+// tick marks (21, 15 or 12 points), 22, 17 or 12 points with tick marks below and 24, 17 or 12 above a horizontal
+// slider, and 23, 17 or 11 points with tick marks on a vertical slider. Not documented. Evidence: black-box
+// observation on macOS 10.14.4 (tier 2). There the rectangle of a slider without tick marks is centred on the
+// drawn knob (rounded up); with tick marks it is offset from it, which is not replicated: here it is centred too.
+// Test: test_quirk_slider_knob_rect in tests/appkit-small-controls-aqua.m
 - (NSRect) knobRectFlipped: (BOOL) flipped {
-    double value = [self doubleValue];
-    double range = _maxValue - _minValue;
-    double percent = (range > 0) ? (value - _minValue) / range : 0;
-    NSRect sliderRect = [self _sliderRect];
-    NSRect knobRect;
+    int z = [self controlSize] == NSSmallControlSize ? 1 : ([self controlSize] == NSMiniControlSize ? 2 : 0);
+    BOOL vertical = [self isVertical] == 1;
+    NSRect body = [self _knobBodyRect];
+    CGFloat along = [self knobThickness], across;
 
-    // The minimum of a vertical slider is at the bottom, which is the larger y in a flipped view.
-    if (flipped && [self isVertical])
-        percent = 1 - percent;
-    NSSize knobSize = [[_controlView graphicsStyle]
-            sliderKnobSizeForControlSize: [self controlSize]];
+    if (_numberOfTickMarks <= 0)
+        across = along;
+    else if (vertical)
+        across = (CGFloat[]){23, 17, 11}[z];
+    else
+        across = _tickMarkPosition == NSTickMarkBelow ? (CGFloat[]){22, 17, 12}[z] : (CGFloat[]){24, 17, 12}[z];
+    if (vertical)
+        return NSMakeRect(floor(NSMidX(body) - across / 2 + 0.5), floor(NSMidY(body) - along / 2 + 0.5), across, along);
+    return NSMakeRect(floor(NSMidX(body) - along / 2 + 0.5), floor(NSMidY(body) - across / 2 + 0.5), along, across);
+}
 
-    if ([self isVertical]) {
-        knobRect.size.height = knobSize.width;
-        knobRect.size.width = knobSize.height;
-        knobRect.origin.x =
-                floor(sliderRect.origin.x +
-                      (sliderRect.size.width - knobSize.height) / 2);
-        knobRect.origin.y =
-                floor(sliderRect.origin.y + PIXELINSET +
-                      percent * (sliderRect.size.height - (PIXELINSET * 2)) -
-                      knobSize.width / 2);
-    } else {
-        knobRect.size.width = knobSize.width;
-        knobRect.size.height = knobSize.height;
-        knobRect.origin.x =
-                floor(sliderRect.origin.x + PIXELINSET +
-                      percent * (sliderRect.size.width - (PIXELINSET * 2)) -
-                      knobSize.width / 2);
-        knobRect.origin.y =
-                floor(sliderRect.origin.y +
-                      (sliderRect.size.height - knobSize.height) / 2);
-    }
+// QUIRK: the bar rectangle of a linear slider is the track grown across the slider: 5 points thick (4 at the mini
+// size), starting 3 points (1 for small and mini) from the minimum end and ending as far from the maximum end.
+// Across the slider it starts at floor((thickness of the view - c) / 2) from the bottom of the view when `flipped`
+// is NO and from its top when it is YES, with c from the table below, which depends on the control size, on
+// whether and where the tick marks are, and (for a horizontal slider only) on `flipped`. It is computed for the
+// view's bounds whether or not the slider has been drawn. Not documented. Evidence: black-box observation on
+// macOS 10.14.4 (tier 2) of -barRectFlipped: for view thicknesses 10 to 40 points, all control sizes, tick mark
+// positions and both values of the argument (vd-upstream/mac-probes/aqua-leftovers-bar.m); circular sliders
+// are not covered. Test: test_quirk_slider_bar_rect in tests/appkit-slider-bar-rect.m
+- (NSRect) barRectFlipped: (BOOL) flipped {
+    // c by [vertical][ticks: none, below or right, above or left][control size][flipped: NO, YES]
+    static const int offsets[2][3][3][2] = {
+        {{{5, 5}, {5, 5}, {5, 5}}, {{0, 10}, {0, 10}, {1, 7}}, {{12, -2}, {10, 0}, {7, 1}}},
+        {{{4, 4}, {4, 4}, {2, 2}}, {{11, 11}, {9, 9}, {6, 6}}, {{-3, -3}, {-1, -1}, {0, 0}}}};
+    NSRect frame = NSIsEmptyRect(_lastRect) && _controlView != nil ? [_controlView bounds] : _lastRect;
+    int z = [self controlSize] == NSSmallControlSize ? 1 : ([self controlSize] == NSMiniControlSize ? 2 : 0);
+    int v = [self isVertical] == 1;
+    int t = _numberOfTickMarks <= 0 ? 0 : (_tickMarkPosition == NSTickMarkBelow ? 1 : 2);
+    CGFloat inset = z == 0 ? 3 : 1, thickness = z == 2 ? 4 : 5;
+    CGFloat crossSize = v ? NSWidth(frame) : NSHeight(frame);
+    CGFloat across = floor((crossSize - offsets[v][t][z][flipped ? 1 : 0]) / 2);
+    CGFloat length = (v ? NSHeight(frame) : NSWidth(frame)) - 2 * inset;
 
-    return knobRect;
+    if (v)
+        return NSMakeRect(NSMinX(frame) + across, NSMinY(frame) + inset, thickness, length);
+    return NSMakeRect(NSMinX(frame) + inset, NSMinY(frame) + across, length, thickness);
 }
 
 - (void) drawKnob {
@@ -396,140 +514,74 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (void) drawKnob: (NSRect) rect {
-    if (_numberOfTickMarks == 0) {
-        [[_controlView graphicsStyle] drawAquaSliderKnobInRect: rect
-                                                   controlSize: [self controlSize]
-                                                       enabled: [self isEnabled]];
-        return;
+    // the knob is drawn where -knobRectFlipped: puts it, moved along with the given rectangle
+    NSRect own = [self knobRectFlipped: [_controlView isFlipped]];
+    NSRect body = NSOffsetRect([self _knobBodyRect], NSMinX(rect) - NSMinX(own), NSMinY(rect) - NSMinY(own));
+    NSInteger pointing = -1;
+
+    if (_numberOfTickMarks > 0) {
+        if ([self isVertical] == 1)
+            pointing = _tickMarkPosition == NSTickMarkRight ? NSMaxXEdge : NSMinXEdge;
+        else
+            pointing = _tickMarkPosition == NSTickMarkBelow ? NSMinYEdge : NSMaxYEdge;
     }
-    [[_controlView graphicsStyle]
-            drawSliderKnobInRect: rect
-                        vertical: [self isVertical]
-                     highlighted: [self isHighlighted]
-                    hasTickMarks: (_numberOfTickMarks > 0) ? YES : NO
-                tickMarkPosition: _tickMarkPosition];
+    [[_controlView graphicsStyle] drawAquaSliderKnobInRect: body
+                                                  pointing: pointing
+                                                   enabled: [self isEnabled]
+                                                   flipped: [self _drawsFlipped]];
 }
 
 - (void) drawTickMarks {
     NSGraphicsStyle *style = [_controlView graphicsStyle];
-    int i;
+    NSInteger i;
 
     for (i = 0; i < _numberOfTickMarks; i++)
-        [style drawSliderTickInRect: [self rectOfTickMarkAtIndex: i]];
+        [style drawAquaSliderTickInRect: [self rectOfTickMarkAtIndex: i]];
 }
 
 - (void) drawLinearSliderWithFrame: (NSRect) frame
                             inView: (NSView *) controlView
 {
-    _isVertical = (frame.size.height > frame.size.width) ? 1 : 0;
+    if (!(_isVertical >= 0 && (_isVertical & kVerticalSet)))
+        _isVertical = (frame.size.height > frame.size.width) ? 1 : 0;
 
-    [self drawBarInside: [self _sliderRect] flipped: [controlView isFlipped]];
+    [self drawBarInside: frame flipped: [controlView isFlipped]];
     [self drawTickMarks];
     [self drawKnob];
 }
 
-- (NSGradient *) circularSliderBackgroundGradient {
-    static NSGradient *gradient = nil;
-    if (gradient == nil) {
-        gradient = [[NSGradient alloc]
-                initWithColorsAndLocations: [NSColor whiteColor], 0,
-                                            [NSColor lightGrayColor], 0.5,
-                                            [NSColor whiteColor], 1, nil];
-    }
-    return gradient;
-}
-
-- (NSGradient *) circularSliderForegroundGradient {
-    static NSGradient *gradient = nil;
-    if (gradient == nil) {
-        gradient = [[NSGradient alloc]
-                initWithColorsAndLocations: [NSColor grayColor], 0,
-                                            [NSColor clearColor], 0.3,
-                                            [NSColor clearColor], 0.7,
-                                            [NSColor grayColor], 1, nil];
-    }
-    return gradient;
-}
-
-- (NSGradient *) circularSliderKnobGradient {
-    static NSGradient *gradient = nil;
-    if (gradient == nil) {
-        gradient = [[NSGradient alloc]
-                initWithColorsAndLocations: [NSColor darkGrayColor], 0,
-                                            [NSColor darkGrayColor], 0.49,
-                                            [NSColor lightGrayColor], 0.51,
-                                            [NSColor lightGrayColor], 1, nil];
-    }
-    return gradient;
-}
-
+// QUIRK: a circular slider is a disc 22 points across (16 for the small size; the mini size draws the regular one),
+// centred in the view (rounded down), with a dark dot 6 points across whose centre is 4 points inside the edge of
+// the disc, clockwise from the top as the value grows; tick marks are not drawn. Not documented. Evidence:
+// black-box renders on macOS 10.14.4 at 1x (tier 2). Test: test_quirk_circular_slider in
+// tests/appkit-small-controls-aqua.m
 - (void) drawCircularSliderWithFrame: (NSRect) frame
                               inView: (NSView *) controlView
 {
-    NSRect sliderRect = frame;
-    // Square it up
-    if (frame.size.width > frame.size.height) {
-        sliderRect = NSInsetRect(
-                sliderRect, (frame.size.width - frame.size.height) / 2.f, 0);
-    } else {
-        sliderRect = NSInsetRect(sliderRect, 0,
-                                 (frame.size.height - frame.size.width) / 2.f);
-    }
+    CGFloat d = [self controlSize] == NSSmallControlSize ? 16 : 22;
+    BOOL flipped = [self _drawsFlipped];
+    CGFloat left = floor((NSWidth(frame) - d) / 2), top = floor((NSHeight(frame) - d) / 2);
+    NSRect disc = NSMakeRect(NSMinX(frame) + left, flipped ? NSMinY(frame) + top : NSMaxY(frame) - top - d, d, d);
+    double angle = [self _valueFraction] * 2 * M_PI;
+    CGFloat distance = d / 2 - 4;
+    // clockwise from the top on the screen
+    CGFloat dx = sin(angle) * distance, dyDown = -cos(angle) * distance;
+    NSPoint centre = NSMakePoint(NSMidX(disc) + dx, NSMidY(disc) + (flipped ? dyDown : -dyDown));
+    NSRect knob = NSMakeRect(centre.x - 3, centre.y - 3, 6, 6);
 
-    // Get it away from the edges of the frames - to ensure we're not clipped
-    sliderRect = NSInsetRect(sliderRect, 3, 3);
+    [[controlView graphicsStyle] drawAquaCircularSliderInRect: disc knobRect: knob enabled: [self isEnabled] flipped: flipped];
+}
 
-    if (NSIsEmptyRect(sliderRect)) {
-        return;
-    }
+// QUIRK: -cellSize is 40000 points along a linear slider and 19, 15 or 13 points across it (24, 18 or 15 with tick
+// marks); a circular slider's is 28 x 30 points (18 x 20 for the small size). Not documented. Evidence:
+// black-box observation on macOS 10.14.4 (tier 2). Test: test_quirk_slider_cell_size in
+// tests/appkit-small-controls-aqua.m
+- (NSSize) cellSize {
+    if ([self sliderType] == NSCircularSlider)
+        return [self controlSize] == NSSmallControlSize ? NSMakeSize(18, 20) : NSMakeSize(28, 30);
+    CGFloat thickness = [self _aquaGeometry].thickness;
 
-    NSBezierPath *path = [NSBezierPath bezierPathWithOvalInRect: sliderRect];
-
-    if ([self isEnabled]) {
-        [[NSColor whiteColor] set];
-    } else {
-        [[NSColor controlColor] set];
-    }
-    [path fill];
-
-    NSGradient *backgroundGradient = [self circularSliderBackgroundGradient];
-    [backgroundGradient drawInBezierPath: path angle: 90];
-
-    [[NSColor grayColor] set];
-    [path stroke];
-
-    double percent = 0.;
-    if (_maxValue != _minValue) {
-        double value = [self doubleValue];
-        percent = (value - _minValue) / (_maxValue - _minValue);
-    }
-
-    double angle = percent * 360;
-
-    NSPoint knobOffset = NSMakePoint(0, -(NSHeight(sliderRect) / 2.f) + 5);
-
-    NSAffineTransform *rotateTransform = [NSAffineTransform transform];
-    [rotateTransform rotateByDegrees: angle];
-    knobOffset = [rotateTransform transformPoint: knobOffset];
-
-    NSPoint knobCenter = NSMakePoint(NSMidX(sliderRect), NSMidY(sliderRect));
-    knobCenter.x += knobOffset.x;
-    // The knob starts at the top, which is the smaller y in a flipped view.
-    if ([_controlView isFlipped])
-        knobCenter.y += knobOffset.y;
-    else
-        knobCenter.y -= knobOffset.y;
-
-    NSRect knobRect = NSMakeRect(knobCenter.x, knobCenter.y, 0, 0);
-    knobRect = NSInsetRect(knobRect, -3, -3); // by visual inspection
-
-    NSBezierPath *knobPath = [NSBezierPath bezierPathWithOvalInRect: knobRect];
-
-    [[NSColor controlColor] set];
-    [knobPath fill];
-
-    [[NSColor grayColor] set];
-    [knobPath stroke];
+    return [self isVertical] == 1 ? NSMakeSize(thickness, 40000) : NSMakeSize(40000, thickness);
 }
 
 - (void) drawWithFrame: (NSRect) frame inView: (NSView *) controlView {
@@ -603,21 +655,18 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 //	2. test hit in bar. if hit, move knob to click location
 //	3. track knob.
 - (void) _setLinearDoubleValueFromPoint: (NSPoint) point {
-    // ((pointX-cellX)/cellW)*((max-min)+min)!
-    double length, position;
-    double percentPixels;
+    // the inverse of -_aquaPositionForFraction:, so that the knob follows the mouse
+    NSAquaSliderGeometry g = [self _aquaGeometry];
+    CGFloat length = [self _aquaLength] - g.k;
+    CGFloat position;
 
-    if (_isVertical) {
-        length = (_lastRect.size.height - (2 * PIXELINSET));
-        position = point.y - (_lastRect.origin.y + PIXELINSET);
-        if ([_controlView isFlipped])
-            position = length - position;
-    } else {
-        length = (_lastRect.size.width - (2 * PIXELINSET));
-        position = point.x - (_lastRect.origin.x + PIXELINSET);
-    }
+    if ([self isVertical] == 1) {
+        // from the bottom on the screen
+        position = [_controlView isFlipped] ? NSMaxY(_lastRect) - point.y : point.y - NSMinY(_lastRect);
+    } else
+        position = point.x - NSMinX(_lastRect);
 
-    percentPixels = position / length;
+    double percentPixels = length > 0 ? (position - g.k / 2) / length : 0;
 
     if (percentPixels > 1.0)
         percentPixels = 1.0;

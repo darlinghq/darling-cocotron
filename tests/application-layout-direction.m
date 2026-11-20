@@ -4,6 +4,9 @@
 // Romanian, mixed lists in both orders and an empty list; the original method
 // is restored before exit. Expected: "layout direction checks=8 failures=0".
 // It checks the application API and localization selection only, not view mirroring.
+// The direction is worked out once and again when the current locale or the user defaults change,
+// so each substituted list is announced with NSCurrentLocaleDidChangeNotification. (macOS 26.7.3
+// keeps its first answer here even then: this checks Darling's mapping, not a macOS behaviour.)
 #import <AppKit/AppKit.h>
 #import <objc/runtime.h>
 #include <stdio.h>
@@ -25,6 +28,7 @@ int main(void) {
         int failures = 0;
         for (NSUInteger i = 0; i < [cases count]; i++) {
             localizations = [cases objectAtIndex:i];
+            [[NSNotificationCenter defaultCenter] postNotificationName:NSCurrentLocaleDidChangeNotification object:nil];
             NSInteger actual = [app userInterfaceLayoutDirection];
             if (actual != expected[i]) { printf("FAIL case %lu: got %ld expected %ld\n", (unsigned long)i, (long)actual, (long)expected[i]); failures++; }
         }

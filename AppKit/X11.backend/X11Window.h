@@ -73,6 +73,9 @@ extern NSString *const X11WindowBackingDidFlushNotification;
     // frames wait for the display refresh.
     id _layerDrawableOwner;
     BOOL _layerDrawableSyncs;
+    // The union of a series of Expose events received so far (see -addExposedRect:isLast:exposedUnion:).
+    O2Rect _pendingExpose;
+    BOOL _hasPendingExpose;
     // The presentation hints as last written to the window.
     BOOL _bypassCompositorHint;
     BOOL _variableRefreshHint;
@@ -171,6 +174,9 @@ extern NSString *const X11WindowBackingDidFlushNotification;
 - (BOOL) isMenuOrPopup;
 - (void) mapNotified;
 
+// X reports an exposed area as a series of rectangles. Collects them and, for the last one of
+// the series, returns YES with their union in *exposedUnion.
+- (BOOL) addExposedRect: (O2Rect) rect isLast: (BOOL) last exposedUnion: (O2Rect *) exposedUnion;
 @end
 
 // Whether an EWMH window manager is running on the display.

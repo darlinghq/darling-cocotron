@@ -30,6 +30,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 NSNotificationName NSPopUpButtonCellWillPopUpNotification =
         @"NSPopUpButtonCellWillPopUpNotification";
 
+@interface NSButtonCell (AquaToolbarBezel)
+- (NSRect) _aquaBezelArtworkRectForFrame: (NSRect) frame inView: (NSView *) controlView;
+@end
+
 @implementation NSPopUpButtonCell
 
 - init {
@@ -98,8 +102,14 @@ NSNotificationName NSPopUpButtonCellWillPopUpNotification =
 
 - initTextCell: (NSString *) string pullsDown: (BOOL) pullDown {
     self = [super initTextCell: string];
-    _menu = [[NSMenu alloc] initWithTitle: string];
-    [_menu addItemWithTitle: string action: [self action] keyEquivalent: @""];
+    _menu = [[NSMenu alloc] initWithTitle: string ?: @""];
+    // The title becomes the first item; an empty title adds none.
+    if ([string length] > 0) {
+        [_menu addItemWithTitle: string action: [self action] keyEquivalent: @""];
+        _selectedIndex = 0;
+    } else {
+        _selectedIndex = -1;
+    }
     NS_EXTRA(NSPopUpButtonCell, self)->_arrowPosition = NSPopUpArrowAtCenter;
     NS_EXTRA(NSPopUpButtonCell, self)->_preferredEdge = NSMaxYEdge;
     NS_EXTRA(NSPopUpButtonCell, self)->_pullsDown = pullDown;
@@ -147,6 +157,11 @@ NSNotificationName NSPopUpButtonCellWillPopUpNotification =
     [super setMenuItem: item];
     if (!NS_EXTRA(NSPopUpButtonCell, self)->_usesItemFromMenu)
         [self synchronizeTitleAndSelectedItem];
+}
+
+// The cell's menu item is the item it shows.
+- (NSMenuItem *) menuItem {
+    return [self _displayedItem];
 }
 
 // The item whose title and image the button shows: the selected item of a
@@ -507,13 +522,26 @@ static void popUpTitleInsets(BOOL pullsDown, NSControlSize size, CGFloat *left, 
     }
 }
 
+// QUIRK: with the textured rounded bezel style the title area starts 7 points from the left edge and leaves 23
+// points (pop-up) or 24 (pull-down) at the right for the chevrons, 22 for a small pop-up. Not documented. Evidence:
+// black-box observation of -titleRectForBounds: with 100 point bounds on macOS 10.14.4 (tier 2), probe
+// mac-probes/aqua-toolbar.m of the research notes. Test: appkit-toolbar-controls-aqua.m (test_quirk_textured_popup)
+static void texturedPopUpTitleInsets(BOOL pullsDown, NSControlSize size, CGFloat *left, CGFloat *taken) {
+    *left = 7;
+    *taken = pullsDown ? 24 : (size == NSSmallControlSize ? 22 : 23);
+}
+
 - (NSRect) titleRectForBounds: (NSRect) rect {
     rect = [super titleRectForBounds: rect];
     if (NS_EXTRA(NSPopUpButtonCell, self)->_arrowPosition != NSPopUpNoArrow) {
         if ([self isBordered]) {
             CGFloat left, taken;
 
-            popUpTitleInsets(NS_EXTRA(NSPopUpButtonCell, self)->_pullsDown, [self controlSize], &left, &taken);
+            if (NS_EXTRA(NSButtonCell, self)->_bezelStyle == NSTexturedRoundedBezelStyle)
+                texturedPopUpTitleInsets(NS_EXTRA(NSPopUpButtonCell, self)->_pullsDown, [self controlSize], &left,
+                                         &taken);
+            else
+                popUpTitleInsets(NS_EXTRA(NSPopUpButtonCell, self)->_pullsDown, [self controlSize], &left, &taken);
             rect.origin.x += left;
             rect.size.width = MAX(0, rect.size.width - taken);
             return rect;
@@ -561,6 +589,26 @@ static void popUpTitleInsets(BOOL pullsDown, NSControlSize size, CGFloat *left, 
     // Now draw the arrow, unless the bezel included it
     if ([self isBordered] && NS_EXTRA(NSButtonCell, self)->_bezelStyle == NSRoundedBezelStyle)
         return;
+    if ([self isBordered] && NS_EXTRA(NSButtonCell, self)->_bezelStyle == NSTexturedRoundedBezelStyle) {
+        if (NS_EXTRA(NSPopUpButtonCell, self)->_arrowPosition == NSPopUpNoArrow)
+            return;
+
+        // the chevrons are drawn by the style, on the bezel's artwork, for a view that is not flipped
+        NSRect art = [self _aquaBezelArtworkRectForFrame: frame inView: controlView];
+        CGContextRef context = [[NSGraphicsContext currentContext] graphicsPort];
+
+        CGContextSaveGState(context);
+        if ([controlView isFlipped]) {
+            CGContextTranslateCTM(context, 0, 2 * art.origin.y + art.size.height);
+            CGContextScaleCTM(context, 1, -1);
+        }
+        [[controlView graphicsStyle] drawTexturedPopUpArrowsInRect: art
+                                                         pullsDown: NS_EXTRA(NSPopUpButtonCell, self)->_pullsDown
+                                                           enabled: [self isEnabled]
+                                                       controlSize: [self controlSize]];
+        CGContextRestoreGState(context);
+        return;
+    }
     if (NS_EXTRA(NSPopUpButtonCell, self)->_arrowPosition != NSPopUpNoArrow) {
         NSImage *arrowImage =
                 (NS_EXTRA(NSPopUpButtonCell, self)->_arrowPosition != NSPopUpNoArrow) ? [self arrowImage] : NULL;

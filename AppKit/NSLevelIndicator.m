@@ -19,8 +19,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSLevelIndicator.h>
 #import <AppKit/NSLevelIndicatorCell.h>
+#import <AppKit/NSImage.h>
 
 @implementation NSLevelIndicator
+
++ (Class) cellClass {
+    return [NSLevelIndicatorCell class];
+}
 
 - (NSLevelIndicatorCell *) _indicatorCell {
     return [self cell];
@@ -87,6 +92,59 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (void) setTickMarkPosition: (NSTickMarkPosition) position {
     [[self _indicatorCell] setTickMarkPosition: position];
     [self setNeedsDisplay: YES];
+}
+
+- (NSLevelIndicatorStyle) levelIndicatorStyle {
+    return [[self _indicatorCell] levelIndicatorStyle];
+}
+
+- (void) setLevelIndicatorStyle: (NSLevelIndicatorStyle) style {
+    [[self _indicatorCell] setLevelIndicatorStyle: style];
+    [self invalidateIntrinsicContentSize];
+    [self setNeedsDisplay: YES];
+}
+
+- (NSImage *) ratingImage {
+    return [[self _indicatorCell] ratingImage];
+}
+
+- (void) setRatingImage: (NSImage *) image {
+    [[self _indicatorCell] setRatingImage: image];
+    [self invalidateIntrinsicContentSize];
+    [self setNeedsDisplay: YES];
+}
+
+- (NSImage *) ratingPlaceholderImage {
+    return [[self _indicatorCell] ratingPlaceholderImage];
+}
+
+- (void) setRatingPlaceholderImage: (NSImage *) image {
+    [[self _indicatorCell] setRatingPlaceholderImage: image];
+    [self setNeedsDisplay: YES];
+}
+
+// An editable rating indicator takes the rating of the unit that is clicked or dragged over, and sends its action
+// whenever that changes (tracking as documented for controls; the unit mapping is the QUIRK in the cell).
+- (void) mouseDown: (NSEvent *) event {
+    NSLevelIndicatorCell *cell = [self _indicatorCell];
+
+    if (![self isEnabled] || ![self isEditable] || [cell levelIndicatorStyle] != NSRatingLevelIndicatorStyle) {
+        [super mouseDown: event];
+        return;
+    }
+    do {
+        double value = [cell _ratingValueAtPoint: [self convertPoint: [event locationInWindow] fromView: nil]
+                                          inRect: [self bounds]];
+
+        if (value != [cell doubleValue]) {
+            [cell setDoubleValue: value];
+            [self setNeedsDisplay: YES];
+            [self sendAction: [self action] to: [self target]];
+        }
+        if ([event type] == NSLeftMouseUp)
+            break;
+        event = [[self window] nextEventMatchingMask: NSLeftMouseUpMask | NSLeftMouseDraggedMask];
+    } while (event != nil);
 }
 
 - (double) tickMarkValueAtIndex: (int) index {

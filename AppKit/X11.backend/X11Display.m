@@ -2060,7 +2060,6 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
         }
 
     case EnterNotify:
-        NSLog(@"EnterNotify");
         if (!_relativeMouse.active)
             [window setLastKnownCursorPosition:
                             [window logicalPoint: NSMakePoint(
@@ -2069,7 +2068,6 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
         break;
 
     case LeaveNotify:
-        NSLog(@"LeaveNotify");
         break;
 
     case FocusIn:
@@ -2120,7 +2118,6 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
         break;
 
     case KeymapNotify:
-        NSLog(@"KeymapNotify");
         break;
 
     case Expose:;
@@ -2134,28 +2131,24 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
 
         rect.origin.y =
                 [window frame].size.height - rect.origin.y - rect.size.height;
-        // rect=NSInsetRect(rect, -10, -10);
-        // [_backingContext addToDirtyRect:rect];
-        if (ev->xexpose.count == 0)
-            [window flushBuffer];
-
+        // The server sends one event per rectangle of an exposed area; the window is flushed
+        // and the delegate told once, for their union, after the last one.
+        if (![window addExposedRect: rect isLast: ev->xexpose.count == 0 exposedUnion: &rect])
+            break;
+        [window flushBuffer];
         [delegate platformWindowExposed: window inRect: rect];
         break;
 
     case GraphicsExpose:
-        NSLog(@"GraphicsExpose");
         break;
 
     case NoExpose:
-        NSLog(@"NoExpose");
         break;
 
     case VisibilityNotify:
-        NSLog(@"VisibilityNotify");
         break;
 
     case CreateNotify:
-        NSLog(@"CreateNotify");
         break;
 
     case DestroyNotify:;
@@ -2166,7 +2159,6 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
         break;
 
     case UnmapNotify:
-        NSLog(@"UnmapNotify");
         // The server released a grab whose window became unviewable.
         if (ev->xany.window == _relativeWindow)
             [self suspendRelativeMouse];
@@ -2175,13 +2167,11 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
         break;
 
     case MapNotify:
-        NSLog(@"MapNotify");
         [window mapNotified];
         [self updatePointerConfinement];
         break;
 
     case MapRequest:
-        NSLog(@"MapRequest");
         break;
 
     case ReparentNotify:
@@ -2216,23 +2206,18 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
         }
 
     case ConfigureRequest:
-        NSLog(@"ConfigureRequest");
         break;
 
     case GravityNotify:
-        NSLog(@"GravityNotify");
         break;
 
     case ResizeRequest:
-        NSLog(@"ResizeRequest");
         break;
 
     case CirculateNotify:
-        NSLog(@"CirculateNotify");
         break;
 
     case CirculateRequest:
-        NSLog(@"CirculateRequest");
         break;
 
     case PropertyNotify:
@@ -2275,7 +2260,6 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
         break;
 
     case ColormapNotify:
-        NSLog(@"ColormapNotify");
         break;
 
     case ClientMessage:
@@ -2297,7 +2281,6 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
         if (ev->xclient.format == 32 &&
             ev->xclient.data.l[0] ==
                     XInternAtom(_display, "WM_DELETE_WINDOW", False)) {
-            NSLog(@"ClientMessage:WM_DELETE_WINDOW");
             [[NSRunLoop currentRunLoop] cancelPerformSelector: @selector(platformWindowWillClose:)
                                                        target: delegate
                                                      argument: window];
@@ -2313,7 +2296,6 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
         break;
 
     case MappingNotify:
-        NSLog(@"MappingNotify");
         // Xlib caches the keyboard and modifier mappings, and the client has
         // to tell it when they change, or XLookupString() and
         // XKeycodeToKeysym() keep answering for the old layout.
@@ -2323,8 +2305,8 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
         break;
 
     case GenericEvent:
-        if (!X11TouchHandleEvent(self, ev))
-            NSLog(@"GenericEvent");
+        // events of other extensions are not used
+        X11TouchHandleEvent(self, ev);
         break;
 
     default:

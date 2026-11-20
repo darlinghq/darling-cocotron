@@ -31,6 +31,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
         _className = [[keyed decodeObjectForKey: @"NSClassName"] retain];
         _resourceName = [[keyed decodeObjectForKey: @"NSResourceName"] retain];
+        _catalogName = [[keyed decodeObjectForKey: @"NSCatalogName"] retain];
+        _symbolConfiguration = [[keyed decodeObjectForKey: @"NSImageSymbolConfiguration"] retain];
     } else {
         [coder decodeValuesOfObjCTypes:"@@", &_className, &_resourceName];
     }
@@ -41,11 +43,29 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (void) dealloc {
     [_className release];
     [_resourceName release];
+    [_catalogName release];
+    [_symbolConfiguration release];
     [super dealloc];
 }
 
+// A reference to a system symbol gives the image of
+// +imageWithSystemSymbolName:accessibilityDescription: with the configuration
+// of the reference applied; other image references are looked up by name.
+- (NSImage *) _systemSymbolImage {
+    NSImage *image = [NSImage imageWithSystemSymbolName: _resourceName accessibilityDescription: nil];
+    if (image != nil && [_symbolConfiguration isKindOfClass: [NSImageSymbolConfiguration class]])
+        image = [image imageWithSymbolConfiguration: _symbolConfiguration];
+    return image;
+}
+
 - awakeAfterUsingCoder: (NSCoder *) coder {
-    if ([_className isEqualToString: @"NSImage"]) {
+    if ([_className isEqualToString: @"NSImage"] && [_catalogName isEqualToString: @"system"]) {
+        NSImage *image = [self _systemSymbolImage];
+        if (image != nil) {
+            [self release];
+            return [image retain];
+        }
+    } else if ([_className isEqualToString: @"NSImage"]) {
         NSImage *image = [NSImage imageNamed: _resourceName];
 
         if ([_resourceName hasSuffix: @"Template"])

@@ -29,6 +29,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSTextField.h>
 #import <AppKit/NSWindow.h>
 
+@interface NSTextFieldCell (AquaRoundedBezel)
+- (CGFloat) _aquaRoundedBezelHeight;
+- (NSRect) _aquaRoundedBezelRectForFrame: (NSRect) frame inView: (NSView *) control;
+@end
+
 @implementation NSSearchFieldCell
 
 - initWithCoder: (NSCoder *) coder {
@@ -69,8 +74,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return self;
 }
 
+// QUIRK: a new search field cell keeps its text on one line, clipped, where a text field wraps it. Not
+// documented. Evidence: black-box observation of NSSearchField on macOS 10.14.4 and 26.7.3 (tier 2),
+// probe mac-probes/aqua-metric-followups.m of the research notes.
+// Test: appkit-combobox-search-field-cell-size.m (test_quirk_single_line_defaults)
 - initTextCell: (NSString *) string {
     [super initTextCell: string];
+    [self setWraps: NO];
     _searchButtonCell = [[NSButtonCell alloc]
             initImageCell: [NSImage imageNamed: @"NSSearchGlass"]];
     [_searchButtonCell setImageScaling: NSImageScaleProportionallyUpOrDown];
@@ -221,6 +231,22 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     NSUnimplementedMethod();
 }
 
+// QUIRK: the size of a search field's content is the text plus 42, 41 or 40 points across at the
+// regular, small and mini control sizes (21 more than a rounded text field adds), rounded up to
+// whole points, and as high as a rounded bezel (22, 19 or 17 points). Not documented. Evidence:
+// black-box observation of cellSize and sizeToFit of NSSearchField on macOS 10.14.4 (tier 2;
+// macOS 26.7.3 differs: 24/20/16 high and other widths, and Mojave's values are used), probe
+// mac-probes/combobox-searchfield-cellsize.m of the research notes.
+// Test: appkit-combobox-search-field-cell-size.m (test_quirk_search_field_cell_size)
+- (NSSize) cellSize {
+    static const CGFloat insets[3] = {42, 41, 40};
+    NSControlSize controlSize = [self controlSize];
+    NSSize text = [[self attributedStringValue] size];
+
+    return NSMakeSize(ceil(text.width + insets[controlSize == NSSmallControlSize ? 1 : (controlSize == NSMiniControlSize ? 2 : 0)]),
+                      [self _aquaRoundedBezelHeight]);
+}
+
 - (NSRect) titleRectForBounds: (NSRect) rect {
     NSRect result = [super titleRectForBounds: rect];
 
@@ -259,15 +285,19 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (void) _drawSquareBezelInRect: (NSRect) frame inView: (NSView *) control {
-    [[control graphicsStyle] drawRoundedTextFieldBezelInRect: frame radius: 4];
+    [[control graphicsStyle] drawRoundedTextFieldBezelInRect: [self _aquaRoundedBezelRectForFrame: frame inView: control]
+                                                      radius: 4
+                                                     enabled: [self isEnabled]];
 }
 
 - (void) drawWithFrame: (NSRect) frame inView: (NSView *) control {
     [super drawWithFrame: frame inView: control];
 
-    [[control graphicsStyle] drawSearchGlyphInRect: [self searchButtonRectForBounds: frame]];
+    [[control graphicsStyle] drawSearchGlyphInRect: [self searchButtonRectForBounds: frame]
+                                       controlSize: [self controlSize]];
     if ([[self attributedStringValue] length] > 0)
-        [[control graphicsStyle] drawSearchCancelGlyphInRect: [self cancelButtonRectForBounds: frame]];
+        [[control graphicsStyle] drawSearchCancelGlyphInRect: [self cancelButtonRectForBounds: frame]
+                                                 controlSize: [self controlSize]];
 }
 
 @end

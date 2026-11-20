@@ -301,7 +301,7 @@ static NSRect boundsToTitleAreaRect(NSRect rect) {
 }
 
 - (NSUInteger) itemIndexAtPoint: (NSPoint) point {
-    NSArray *items = [[self menu] itemArray];
+    NSArray *items = [self itemArray];
     NSUInteger i, count = [items count];
     NSRect check = boundsToTitleAreaRect([self bounds]);
 
@@ -320,7 +320,7 @@ static NSRect boundsToTitleAreaRect(NSRect rect) {
 }
 
 - (NSUInteger) itemIndexAtPoint: (NSPoint) point rect: (NSRect*) rect {
-    NSArray *items = [[self menu] itemArray];
+    NSArray *items = [self itemArray];
     NSUInteger i, count = [items count];
     NSRect check = boundsToTitleAreaRect([self bounds]);
 
@@ -340,12 +340,26 @@ static NSRect boundsToTitleAreaRect(NSRect rect) {
     return NSNotFound;
 }
 
+- (NSRect) rectForItemAtIndex: (NSUInteger) index {
+    NSArray *items = [self itemArray];
+    NSUInteger i, count = [items count];
+    NSRect rect = boundsToTitleAreaRect([self bounds]);
+
+    for (i = 0; i < count; i++) {
+        rect.size.height = [self heightOfMenuItem: [items objectAtIndex: i]];
+        if (i == index)
+            return rect;
+        rect.origin.y += rect.size.height;
+    }
+    return NSZeroRect;
+}
+
 - (void) positionBranchForSelectedItem: (NSWindow *) branch
                                 screen: (NSScreen *) screen
 {
     NSRect branchFrame = [branch frame];
     NSRect screenVisible = [screen visibleFrame];
-    NSArray *items = [[self menu] itemArray];
+    NSArray *items = [self itemArray];
     NSUInteger i, count = [items count];
     NSRect itemRect = boundsToTitleAreaRect([self bounds]);
     NSPoint topLeft = NSZeroPoint;

@@ -33,4 +33,9 @@
 
 @property(retain) NSMenuItem *menuItem;
 
+- (CGFloat) stateImageWidth;
+- (CGFloat) imageWidth;
+- (CGFloat) titleWidth;
+- (CGFloat) keyEquivalentWidth;
+
 @end

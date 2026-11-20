@@ -36,6 +36,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 
 - (NSInteger) isVertical;
+- (void) setVertical: (BOOL) vertical API_AVAILABLE(macos(10.12));
 
 - (NSInteger) indexOfTickMarkAtPoint: (NSPoint) point;
 

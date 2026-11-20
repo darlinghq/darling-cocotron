@@ -866,26 +866,20 @@ static OSStatus sendRevealEvent(NSString *bundleIdentifier, NSArray<NSURL *> *ur
 - (void) noteUserDefaultsChanged {
 }
 
-// A package is a folder that is presented as one file. Without a type
-// registry to ask, this recognizes the folders whose extension marks a
-// well-known package or bundle type.
+// A package is a folder that is presented as one file. This is the same answer
+// as NSURLIsPackageKey, which LaunchServices gives from the type registry; an
+// item that cannot be read, and a symbolic link, are not packages.
 - (BOOL) isFilePackageAtPath: (NSString *) path {
-    BOOL isDirectory = NO;
-    if (![[NSFileManager defaultManager] fileExistsAtPath: path
-                                               isDirectory: &isDirectory] ||
-        !isDirectory)
+    if (path == nil)
         return NO;
-    NSArray *extensions = @[
-        @"app", @"bundle", @"framework", @"plugin", @"kext", @"xpc", @"appex",
-        @"prefPane", @"saver", @"qlgenerator", @"mdimporter", @"component",
-        @"rtfd", @"pkg", @"mpkg", @"xcodeproj", @"xcworkspace", @"playground",
-        @"photoslibrary", @"dSYM", @"lproj"
-    ];
-    NSString *extension = [path pathExtension];
-    for (NSString *known in extensions)
-        if ([known caseInsensitiveCompare: extension] == NSOrderedSame)
-            return YES;
-    return NO;
+
+    NSNumber *isPackage = nil;
+    NSURL *url = [NSURL fileURLWithPath: path];
+    if (![url getResourceValue: &isPackage
+                        forKey: NSURLIsPackageKey
+                         error: NULL])
+        return NO;
+    return [isPackage boolValue];
 }
 
 - (NSString *) absolutePathForAppBundleWithIdentifier: (NSString *) identifier {

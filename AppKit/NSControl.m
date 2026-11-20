@@ -34,6 +34,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Foundation/NSKeyedArchiver.h>
 //#import <AppKit/NSObject+BindingSupport.h>
 #import <AppKit/NSKeyValueBinding.h>
+#import "NSKeyValueBinding/NSObject+BindingSupport.h"
+#import "NSKeyValueBinding/NSTargetBinder.h"
 #import <objc/runtime.h>
 
 NSString *const NSControlTextDidBeginEditingNotification =
@@ -256,6 +258,10 @@ static NSMutableDictionary *cellClassDictionary = nil;
     return [_cell isEnabled];
 }
 
+- (BOOL) isHighlighted {
+    return [_cell isHighlighted];
+}
+
 - (BOOL) isEditable {
     return [_cell isEditable];
 }
@@ -396,6 +402,11 @@ static NSMutableDictionary *cellClassDictionary = nil;
 
 - (void) setEnabled: (BOOL) flag {
     [_cell setEnabled: flag];
+    [self setNeedsDisplay: YES];
+}
+
+- (void) setHighlighted: (BOOL) flag {
+    [_cell setHighlighted: flag];
     [self setNeedsDisplay: YES];
 }
 
@@ -592,8 +603,17 @@ static NSMutableDictionary *cellClassDictionary = nil;
     //   NSUnimplementedMethod();
 }
 
+// The target and argument bindings name a message of their own, sent with
+// the control's action; they do not change the control's target and action.
++ (Class) _binderClassForBinding: (id) binding {
+    if (_NSIsTargetOrArgumentBinding(binding))
+        return [_NSTargetBinder class];
+    return [super _binderClassForBinding: binding];
+}
+
 - (BOOL) sendAction: (SEL) action to: target {
-    return [NSApp sendAction: action to: target from: self];
+    BOOL sentBound = _NSSendTargetBindingAction(self);
+    return [NSApp sendAction: action to: target from: self] || sentBound;
 }
 
 - (NSInteger) sendActionOn: (NSInteger) mask {

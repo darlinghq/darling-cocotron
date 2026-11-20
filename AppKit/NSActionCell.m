@@ -25,7 +25,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (void) encodeWithCoder: (NSCoder *) coder {
     [super encodeWithCoder: coder];
-    [coder encodeInt: _tag forKey: @"NSActionCell tag"];
+    // the keys -initWithCoder: reads
+    [coder encodeInt: (int) _tag forKey: @"NSTag"];
+    if (_action != NULL)
+        [coder encodeObject: NSStringFromSelector(_action) forKey: @"NSAction"];
+    [coder encodeConditionalObject: [self target] forKey: @"NSTarget"];
 }
 
 - initWithCoder: (NSCoder *) coder {
