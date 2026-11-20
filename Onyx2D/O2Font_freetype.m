@@ -275,6 +275,7 @@ NSArray *O2FontCopyInstalledFaces(NSString *family, NSString *postScriptName,
         goto out;
     for (int i = 0; i < count; i++)
         FcObjectSetAdd(objects, properties[i]);
+    FcObjectSetAdd(objects, FC_VARIABLE);
     FcObjectSetAdd(objects, FC_SLANT);
     FcObjectSetAdd(objects, FC_WEIGHT);
     FcObjectSetAdd(objects, FC_WIDTH);
@@ -287,6 +288,14 @@ NSArray *O2FontCopyInstalledFaces(NSString *family, NSString *postScriptName,
 
     FcFontSet *fonts = FcFontList(O2FontSharedFontConfig(), pattern, objects);
     for (int i = 0; fonts != NULL && i < fonts->nfont; i++) {
+        // fontconfig lists a variable font once for each of its named
+        // instances and once more as the variable font itself, which has no
+        // PostScript or full name. A face is a named instance, so the variable
+        // entry is left out; every face reported has a PostScript name.
+        FcBool variable = FcFalse;
+        if (FcPatternGetBool(fonts->fonts[i], FC_VARIABLE, 0, &variable) == FcResultMatch &&
+            variable)
+            continue;
         NSMutableDictionary *face = [[NSMutableDictionary alloc] init];
         for (int j = 0; j < count; j++) {
             FcChar8 *text = NULL;
@@ -949,6 +958,15 @@ static NSString *variationAxisName(FT_Face face, FT_UInt nameID) {
     if (_face->style_name == NULL)
         return [super copyStyleName];
     return [[NSString alloc] initWithUTF8String: _face->style_name];
+}
+
+// The name the font was created with, or for a font made from data (which has
+// none) the full font name of its name table.
+- (NSString *) copyFullName {
+    NSString *name = [super copyFullName];
+    if (name != nil)
+        return name;
+    return [variationAxisName(_face, TT_NAME_ID_FULL_NAME) copy];
 }
 
 // The face has a single glyph slot, so every FT_Load_Glyph on it is
