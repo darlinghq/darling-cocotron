@@ -18,12 +18,19 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#import "NSViewLayoutInternal.h"
 #import <AppKit/NSImage.h>
 #import <AppKit/NSImageCell.h>
 #import <AppKit/NSImageView.h>
 #import <AppKit/NSRaise.h>
 
 @implementation NSImageView
+
+// An image view hugs like a plain view (observed on macOS 10.14.4 and 26.7.3).
+- (NSLayoutPriority) _defaultContentHuggingPriorityForOrientation: (NSLayoutConstraintOrientation) orientation {
+    return NSLayoutPriorityDefaultLow;
+}
+
 
 + (Class) cellClass {
     return [NSImageCell class];

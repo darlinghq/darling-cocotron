@@ -65,10 +65,23 @@ static Class _rulerViewClass = nil;
                         borderType: (NSBorderType) borderType
 {
 
+    return [self _frameSizeForContentSize: contentSize
+                    hasHorizontalScroller: hasHorizontalScroller
+                      hasVerticalScroller: hasVerticalScroller
+                               borderType: borderType
+                           scrollerLength: [NSScroller scrollerWidth]];
+}
+
++ (NSSize) _frameSizeForContentSize: (NSSize) contentSize
+              hasHorizontalScroller: (BOOL) hasHorizontalScroller
+                hasVerticalScroller: (BOOL) hasVerticalScroller
+                         borderType: (NSBorderType) borderType
+                     scrollerLength: (CGFloat) scrollerLength
+{
     if (hasHorizontalScroller)
-        contentSize.height += [NSScroller scrollerWidth];
+        contentSize.height += scrollerLength;
     if (hasVerticalScroller)
-        contentSize.width += [NSScroller scrollerWidth];
+        contentSize.width += scrollerLength;
 
     switch (borderType) {
     case NSNoBorder:
@@ -100,12 +113,14 @@ static Class _rulerViewClass = nil;
                        controlSize: (NSControlSize) controlSize
                      scrollerStyle: (NSScrollerStyle) scrollerStyle
 {
-    // Only legacy scrollers take up space; the control size isn't used.
+    // Only legacy scrollers take up space, as wide as the control size makes them.
     BOOL legacy = scrollerStyle == NSScrollerStyleLegacy;
-    return [self frameSizeForContentSize: cSize
-                   hasHorizontalScroller: legacy && horizontalScrollerClass != Nil
-                     hasVerticalScroller: legacy && verticalScrollerClass != Nil
-                              borderType: type];
+    return [self _frameSizeForContentSize: cSize
+                    hasHorizontalScroller: legacy && horizontalScrollerClass != Nil
+                      hasVerticalScroller: legacy && verticalScrollerClass != Nil
+                               borderType: type
+                           scrollerLength: [NSScroller scrollerWidthForControlSize: controlSize
+                                                                     scrollerStyle: NSScrollerStyleLegacy]];
 }
 
 + (NSSize) contentSizeForFrameSize: (NSSize) frameSize
@@ -114,10 +129,23 @@ static Class _rulerViewClass = nil;
                         borderType: (NSBorderType) borderType
 {
 
+    return [self _contentSizeForFrameSize: frameSize
+                    hasHorizontalScroller: hasHorizontalScroller
+                      hasVerticalScroller: hasVerticalScroller
+                               borderType: borderType
+                           scrollerLength: [NSScroller scrollerWidth]];
+}
+
++ (NSSize) _contentSizeForFrameSize: (NSSize) frameSize
+              hasHorizontalScroller: (BOOL) hasHorizontalScroller
+                hasVerticalScroller: (BOOL) hasVerticalScroller
+                         borderType: (NSBorderType) borderType
+                     scrollerLength: (CGFloat) scrollerLength
+{
     if (hasHorizontalScroller)
-        frameSize.height -= [NSScroller scrollerWidth];
+        frameSize.height -= scrollerLength;
     if (hasVerticalScroller)
-        frameSize.width -= [NSScroller scrollerWidth];
+        frameSize.width -= scrollerLength;
 
     switch (borderType) {
     case NSNoBorder:
@@ -150,10 +178,12 @@ static Class _rulerViewClass = nil;
                      scrollerStyle: (NSScrollerStyle) scrollerStyle
 {
     BOOL legacy = scrollerStyle == NSScrollerStyleLegacy;
-    return [self contentSizeForFrameSize: fSize
-                   hasHorizontalScroller: legacy && horizontalScrollerClass != Nil
-                     hasVerticalScroller: legacy && verticalScrollerClass != Nil
-                              borderType: type];
+    return [self _contentSizeForFrameSize: fSize
+                    hasHorizontalScroller: legacy && horizontalScrollerClass != Nil
+                      hasVerticalScroller: legacy && verticalScrollerClass != Nil
+                               borderType: type
+                           scrollerLength: [NSScroller scrollerWidthForControlSize: controlSize
+                                                                     scrollerStyle: NSScrollerStyleLegacy]];
 }
 
 + (void) setRulerViewClass: (Class) class {
@@ -394,6 +424,29 @@ static Class _rulerViewClass = nil;
     return nil;
 }
 
+// The thickness of a scroller as tiled: the width its control size gives it in
+// the scroll view's scroller style.
+- (CGFloat) _thicknessOfScroller: (NSScroller *) scroller {
+    return [NSScroller scrollerWidthForControlSize: [scroller controlSize]
+                                     scrollerStyle: [self scrollerStyle]];
+}
+
+// The space a scroller takes from the content: its thickness for a visible
+// legacy scroller, none for an overlay scroller, which is drawn over the
+// content, as AppKit documents for NSScrollerStyleOverlay.
+- (CGFloat) _layoutWidthOfVerticalScroller {
+    if (![self hasVerticalScroller] || [_verticalScroller isHidden] || [self scrollerStyle] == NSScrollerStyleOverlay)
+        return 0;
+    return [self _thicknessOfScroller: _verticalScroller];
+}
+
+- (CGFloat) _layoutWidthOfHorizontalScroller {
+    if (![self hasHorizontalScroller] || [_horizontalScroller isHidden] ||
+        [self scrollerStyle] == NSScrollerStyleOverlay)
+        return 0;
+    return [self _thicknessOfScroller: _horizontalScroller];
+}
+
 - (NSRect) headerClipViewFrame {
     NSView *headerView = [self _headerView];
 
@@ -402,7 +455,7 @@ static Class _rulerViewClass = nil;
 
     NSRect result = [self insetBounds];
     result.size.height = [headerView bounds].size.height;
-    result.size.width -= [NSScroller scrollerWidth];
+    result.size.width -= [self _layoutWidthOfVerticalScroller];
 
     return result;
 }
@@ -413,12 +466,19 @@ static Class _rulerViewClass = nil;
     if (headerView == nil)
         return NSZeroRect;
 
+    // QUIRK: the corner view starts where the vertical scroller does and is
+    // one point wider than the scroller (16 points next to a regular legacy
+    // scroller, 12 next to a small one, 17 next to a regular overlay one), so
+    // it reaches one point past the scroll view's edge. Not documented.
+    // Evidence: black-box observation on macOS 10.14.4 (tier 2), probe
+    // mac-probes/aqua-metric-followups-2.m of the research notes.
+    // Test: appkit-scroll-view-scroller-width.m (test_quirk_corner_view_frame)
     NSRect bounds = [self insetBounds];
+    CGFloat thickness = [self _thicknessOfScroller: _verticalScroller];
     NSRect frame;
-    frame.origin.x =
-            bounds.origin.x + bounds.size.width - [NSScroller scrollerWidth];
+    frame.origin.x = NSMaxX(bounds) - thickness;
     frame.origin.y = bounds.origin.y;
-    frame.size.width = [NSScroller scrollerWidth];
+    frame.size.width = thickness + 1;
     frame.size.height = [headerView bounds].size.height;
 
     return frame;
@@ -454,18 +514,13 @@ static Class _rulerViewClass = nil;
     result.origin.x = bounds.origin.x;
     result.origin.y = bounds.origin.y;
 
-    result.size.width = bounds.size.width;
-    if ([self hasVerticalScroller] && ![_verticalScroller isHidden])
-        result.size.width -= [NSScroller scrollerWidth];
+    result.size.width = bounds.size.width - [self _layoutWidthOfVerticalScroller];
     if ([self rulersVisible] && [self hasVerticalRuler]) {
         result.origin.x += [self verticalRulerFrame].size.width;
         result.size.width -= [self verticalRulerFrame].size.width;
     }
 
-    result.size.height = bounds.size.height;
-    if ([self hasHorizontalScroller] && ![_horizontalScroller isHidden]) {
-        result.size.height -= [NSScroller scrollerWidth];
-    }
+    result.size.height = bounds.size.height - [self _layoutWidthOfHorizontalScroller];
     if ([self rulersVisible] && [self hasHorizontalRuler]) {
         result.origin.y += [self horizontalRulerFrame].size.height;
         result.size.height -= [self horizontalRulerFrame].size.height;
@@ -483,13 +538,12 @@ static Class _rulerViewClass = nil;
     NSRect bounds = [self insetBounds];
     NSRect result;
 
-    result.origin.x =
-            bounds.origin.x + bounds.size.width - [NSScroller scrollerWidth];
+    CGFloat thickness = [self _thicknessOfScroller: _verticalScroller];
+
+    result.origin.x = NSMaxX(bounds) - thickness;
     result.origin.y = bounds.origin.y;
-    result.size.width = [NSScroller scrollerWidth];
-    result.size.height = bounds.size.height;
-    if ([self hasHorizontalScroller] && ![_horizontalScroller isHidden])
-        result.size.height -= [NSScroller scrollerWidth];
+    result.size.width = thickness;
+    result.size.height = bounds.size.height - [self _layoutWidthOfHorizontalScroller];
 
     if ([self _headerView] != nil) {
         result.origin.y += [self headerClipViewFrame].size.height;
@@ -507,14 +561,12 @@ static Class _rulerViewClass = nil;
     NSRect bounds = [self insetBounds];
     NSRect result;
 
-    result.origin.x = bounds.origin.x;
-    result.origin.y =
-            (bounds.origin.y + bounds.size.height) - [NSScroller scrollerWidth];
-    result.size.width = bounds.size.width;
-    if ([self hasVerticalScroller] && ![_verticalScroller isHidden])
-        result.size.width -= [NSScroller scrollerWidth];
+    CGFloat thickness = [self _thicknessOfScroller: _horizontalScroller];
 
-    result.size.height = [NSScroller scrollerWidth];
+    result.origin.x = bounds.origin.x;
+    result.origin.y = NSMaxY(bounds) - thickness;
+    result.size.width = bounds.size.width - [self _layoutWidthOfVerticalScroller];
+    result.size.height = thickness;
 
     if ([self rulersVisible] && [self hasVerticalRuler]) {
         result.origin.x += [NS_EXTRA(NSScrollView, self)->_verticalRuler requiredThickness];

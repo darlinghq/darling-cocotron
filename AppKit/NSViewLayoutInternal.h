@@ -29,4 +29,7 @@
 // public -intrinsicContentSize; a text field that wraps at the width layout
 // gives it answers the height of its wrapped text there.
 - (NSSize) _intrinsicContentSizeForLayout;
+// The content hugging priority of a view whose priority was not set: NSLayoutPriorityDefaultLow,
+// unless the class (or its state, as a button's bezel) calls for another one.
+- (NSLayoutPriority) _defaultContentHuggingPriorityForOrientation: (NSLayoutConstraintOrientation) orientation;
 @end

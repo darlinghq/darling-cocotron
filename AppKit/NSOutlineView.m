@@ -264,7 +264,8 @@ static inline id childOfItemAtIndex(NSOutlineView *self, id item,
     _markerCell = [[NSButtonCell alloc] initImageCell: nil];
     [_markerCell setBezelStyle: NSDisclosureBezelStyle];
 
-    [self setIndentationPerLevel: _standardRowHeight]; // square it off
+    // 16 points, one less than the default row height (macOS 10.14.4)
+    [self setIndentationPerLevel: 16];
 
     [self setIndentationMarkerFollowsCell: YES];
     [self setAutoresizesOutlineColumn: YES];

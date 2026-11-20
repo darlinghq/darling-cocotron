@@ -3,16 +3,20 @@
 
  Licensed under the MIT license, the same as the rest of this project.
 */
-// X11 backend: the window manager frames a window whose style mask has a
-// title bar (NSWindowStyleMaskTitled) or Resizable; a mask with neither bit
-// asks for no frame, at creation and after -setStyleMask:. Resizable without
-// Titled gets the full frame because Mac OS X 10.14 gives such a window a
-// title bar (macOS 26 does not). A titled window keeps its frame when its
-// title bar is transparent and its title hidden.
+// X11 backend: the window manager frames a window that has a title bar: one
+// whose style mask has NSWindowStyleMaskTitled, or Resizable in a program
+// built against an SDK older than 10.7 (as on Mac OS X 10.14.4 and macOS
+// 26.7.3); other masks ask for no frame, at creation and after -setStyleMask:.
+// A titled window keeps its frame when its title bar is transparent and its
+// title hidden. The program prints "old-sdk 1" when it was built against an
+// SDK older than 10.7, else "old-sdk 0".
 // Run by x11-window-state/run.sh with DARLING_APPKIT_BACKEND=x11, which reads
 // _MOTIF_WM_HINTS from the X server with the host helper.
 #import <AppKit/AppKit.h>
 #include <stdio.h>
+#include <stdint.h>
+
+extern uint32_t dyld_get_program_sdk_version(void);
 
 static void spin(NSTimeInterval seconds) {
     NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow: seconds];
@@ -63,6 +67,7 @@ int main(void) {
         [transparent setTitlebarAppearsTransparent: YES];
         [transparent setTitleVisibility: NSWindowTitleHidden];
 
+        printf("old-sdk %d\n", dyld_get_program_sdk_version() < 0x000a0700);
         printf("READY\n");
         fflush(stdout);
         spin(12);

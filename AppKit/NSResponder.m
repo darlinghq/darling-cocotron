@@ -403,6 +403,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (void) restoreStateWithCoder: (NSCoder *) coder {
 }
 
+// Marks the receiver's state as changed. State is only written when something
+// calls -encodeRestorableStateWithCoder:, so there is nothing to schedule.
+- (void) invalidateRestorableState {
+}
+
 - (NSUserActivity *) userActivity {
     return NS_EXTRA(NSResponder, self)->_userActivity;
 }

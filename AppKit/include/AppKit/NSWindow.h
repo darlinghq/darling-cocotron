@@ -28,6 +28,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <ApplicationServices/ApplicationServices.h>
 #import <CoreGraphics/CGSubWindow.h>
 #import <AppKit/NSUserInterfaceItemIdentification.h>
+#import <AppKit/NSWindowRestoration.h>
 #import <AppKit/NSAccessibilityProtocols.h>
 
 NS_ASSUME_NONNULL_BEGIN
@@ -249,7 +250,7 @@ typedef NS_ENUM(NSInteger, NSWindowUserTabbingPreference) {
 // Legacy ObjC ABI (i386): instance size must stay 0x84, Apple's; the ivars
 // before the extras sit at Apple's offsets. Add new state to the extra
 // struct, never as an ivar.
-@interface NSWindow : NSResponder <NSAnimatablePropertyContainer, NSUserInterfaceItemIdentification, NSAccessibility, NSAppearanceCustomization> {
+@interface NSWindow : NSResponder <NSAnimatablePropertyContainer, NSUserInterfaceItemIdentification, NSAppearanceCustomization> {
     NSRect _frame;
     NSView *_contentView;
     id<NSWindowDelegate> _delegate;
@@ -364,8 +365,8 @@ typedef NS_ENUM(NSInteger, NSWindowUserTabbingPreference) {
         NSUserInterfaceItemIdentifier _identifier;
         NSColorSpace *_colorSpace;
 
-        BOOL _isAccessible;
         BOOL _restorable;
+        Class _restorationClass;
         NSWindowTabbingMode _tabbingMode;
         NSWindowCollectionBehavior _collectionBehavior;
         NSWindowTabbingIdentifier _tabbingIdentifier;
@@ -397,6 +398,10 @@ typedef NS_ENUM(NSInteger, NSWindowUserTabbingPreference) {
 
 @property(class) BOOL allowsAutomaticWindowTabbing;
 @property(getter=isRestorable) BOOL restorable;
+// The class asked to recreate the window when state is restored; Nil by default.
+@property(assign) Class<NSWindowRestoration> restorationClass;
+- (void) disableSnapshotRestoration;
+- (void) enableSnapshotRestoration;
 
 + (NSWindowDepth) defaultDepthLimit;
 
@@ -603,7 +608,6 @@ typedef NS_ENUM(NSInteger, NSWindowUserTabbingPreference) {
 - (NSRect) contentRectForFrameRect: (NSRect) rect;
 @property(readonly) NSRect contentLayoutRect;
 - (NSRect) backingAlignedRect: (NSRect) rect options: (NSAlignmentOptions) options;
-- (NSRect) accessibilityFrame;
 - (NSRect) constrainFrameRect: (NSRect) rect toScreen: (nullable NSScreen *) screen;
 
 @property(nullable, nonatomic, retain) NSWindow *parentWindow;
@@ -805,6 +809,9 @@ typedef NS_ENUM(NSInteger, NSWindowUserTabbingPreference) {
 
 - (null_unspecified CGSubWindow *) _createSubWindowWithFrame: (CGRect) frame;
 
+@end
+
+@interface NSWindow (NSAccessibility) <NSAccessibility, NSAccessibilityElement>
 @end
 
 @interface NSWindow (NSWindowTitlebarAccessories)

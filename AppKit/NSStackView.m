@@ -74,11 +74,47 @@ static const CGFloat DefaultSpacing = 8;
     return self;
 }
 
-// Stack view settings are not decoded, so the decoded subviews become leading
-// arranged views and keep their archived frames until the stack view changes.
+// The stack view's settings, under the keys macOS archives them with (observed in
+// NSKeyedArchiver output and compiled nibs of macOS 26.7.3 and 10.14.4). A setting that is
+// not in the archive keeps its default.
+- (void) _decodeSettingsWithCoder: (NSKeyedUnarchiver *) keyed {
+    if ([keyed containsValueForKey: @"NSStackViewOrientation"])
+        _orientation = [keyed decodeIntegerForKey: @"NSStackViewOrientation"];
+    if ([keyed containsValueForKey: @"NSStackViewAlignment"])
+        _alignment = [keyed decodeIntegerForKey: @"NSStackViewAlignment"];
+    // Fill (0) and the other explicit distributions are archived; gravity areas is not.
+    if ([keyed containsValueForKey: @"NSStackViewdistribution"])
+        _distribution = [keyed decodeIntegerForKey: @"NSStackViewdistribution"];
+    if ([keyed containsValueForKey: @"NSStackViewSpacing"])
+        _spacing = [keyed decodeDoubleForKey: @"NSStackViewSpacing"];
+    if ([keyed containsValueForKey: @"NSStackViewEdgeInsets.top"])
+        _edgeInsets = NSEdgeInsetsMake([keyed decodeDoubleForKey: @"NSStackViewEdgeInsets.top"],
+                                       [keyed decodeDoubleForKey: @"NSStackViewEdgeInsets.left"],
+                                       [keyed decodeDoubleForKey: @"NSStackViewEdgeInsets.bottom"],
+                                       [keyed decodeDoubleForKey: @"NSStackViewEdgeInsets.right"]);
+    if ([keyed containsValueForKey: @"NSStackViewDetachesHiddenViews"])
+        _detachesHiddenViews = [keyed decodeBoolForKey: @"NSStackViewDetachesHiddenViews"];
+    if ([keyed containsValueForKey: @"NSStackViewHorizontalHugging"])
+        [self setHuggingPriority: [keyed decodeFloatForKey: @"NSStackViewHorizontalHugging"]
+                  forOrientation: NSLayoutConstraintOrientationHorizontal];
+    if ([keyed containsValueForKey: @"NSStackViewVerticalHugging"])
+        [self setHuggingPriority: [keyed decodeFloatForKey: @"NSStackViewVerticalHugging"]
+                  forOrientation: NSLayoutConstraintOrientationVertical];
+    if ([keyed containsValueForKey: @"NSStackViewHorizontalClippingResistance"])
+        [self setClippingResistancePriority: [keyed decodeFloatForKey: @"NSStackViewHorizontalClippingResistance"]
+                             forOrientation: NSLayoutConstraintOrientationHorizontal];
+    if ([keyed containsValueForKey: @"NSStackViewVerticalClippingResistance"])
+        [self setClippingResistancePriority: [keyed decodeFloatForKey: @"NSStackViewVerticalClippingResistance"]
+                             forOrientation: NSLayoutConstraintOrientationVertical];
+}
+
+// The decoded subviews become leading arranged views and keep their archived frames
+// until the stack view changes. Views archived in gravity containers are not decoded.
 - (instancetype) initWithCoder: (NSCoder *) coder {
     if ((self = [super initWithCoder: coder]) != nil) {
         [self _setUpStackView];
+        if ([coder allowsKeyedCoding])
+            [self _decodeSettingsWithCoder: (NSKeyedUnarchiver *) coder];
         _changingViews = YES;
         for (NSView *view in [[[self subviews] copy] autorelease]) {
             NSStackViewEntry *entry = [self _newEntryForView: view
@@ -173,6 +209,48 @@ static const CGFloat DefaultSpacing = 8;
 - (void) setDistribution: (NSStackViewDistribution) distribution {
     _distribution = distribution;
     [self _arrangeViews];
+}
+
+static const char huggingKey;
+static const char clippingResistanceKey;
+
+// Priorities per orientation, kept outside the instance, whose ivar layout is fixed.
+static NSLayoutPriority priorityFor(id object, const char *key, NSLayoutConstraintOrientation orientation,
+                                    NSLayoutPriority fallback) {
+    NSArray *priorities = objc_getAssociatedObject(object, key);
+
+    return priorities ? [[priorities objectAtIndex: orientation] floatValue] : fallback;
+}
+
+static void setPriorityFor(id object, const char *key, NSLayoutConstraintOrientation orientation,
+                           NSLayoutPriority priority, NSLayoutPriority fallback) {
+    NSMutableArray *priorities = [[objc_getAssociatedObject(object, key) mutableCopy] autorelease];
+
+    if (priorities == nil)
+        priorities = [NSMutableArray arrayWithObjects: [NSNumber numberWithFloat: fallback],
+                                                       [NSNumber numberWithFloat: fallback], nil];
+    [priorities replaceObjectAtIndex: orientation withObject: [NSNumber numberWithFloat: priority]];
+    objc_setAssociatedObject(object, key, priorities, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
+
+- (NSLayoutPriority) huggingPriorityForOrientation: (NSLayoutConstraintOrientation) orientation {
+    return priorityFor(self, &huggingKey, orientation, NSLayoutPriorityDefaultLow);
+}
+
+- (void) setHuggingPriority: (NSLayoutPriority) priority
+             forOrientation: (NSLayoutConstraintOrientation) orientation
+{
+    setPriorityFor(self, &huggingKey, orientation, priority, NSLayoutPriorityDefaultLow);
+}
+
+- (NSLayoutPriority) clippingResistancePriorityForOrientation: (NSLayoutConstraintOrientation) orientation {
+    return priorityFor(self, &clippingResistanceKey, orientation, NSLayoutPriorityRequired);
+}
+
+- (void) setClippingResistancePriority: (NSLayoutPriority) priority
+                        forOrientation: (NSLayoutConstraintOrientation) orientation
+{
+    setPriorityFor(self, &clippingResistanceKey, orientation, priority, NSLayoutPriorityRequired);
 }
 
 - (CGFloat) spacing {

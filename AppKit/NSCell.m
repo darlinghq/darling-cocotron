@@ -358,6 +358,12 @@ NS_EXTRA_SYNTHESIZE_ASSIGN(NSCell, controlTint, _controlTint, NSControlTint, con
     return self;
 }
 
+// What a keyed archive stores as the cell's contents; subclasses whose
+// contents are not the object value override it.
+- (id) _archivedContents {
+    return NS_EXTRA(NSCell, self)->_objectValue;
+}
+
 - (void) encodeWithCoder: (NSCoder *) coder {
     unsigned int flags = 0;
     unsigned int flags2 = 0;
@@ -367,7 +373,7 @@ NS_EXTRA_SYNTHESIZE_ASSIGN(NSCell, controlTint, _controlTint, NSControlTint, con
     if (coder.allowsKeyedCoding) {
         [coder encodeInt: flags forKey: @"NSCellFlags"];
         [coder encodeInt: flags2 forKey: @"NSCellFlags2"];
-        [coder encodeObject: NS_EXTRA(NSCell, self)->_objectValue forKey: @"NSContents"];
+        [coder encodeObject: [self _archivedContents] forKey: @"NSContents"];
         if (NS_EXTRA(NSCell, self)->_image != nil) {
             [coder encodeObject: NS_EXTRA(NSCell, self)->_image forKey: @"NSNormalImage"];
             if (NS_EXTRA(NSCell, self)->_font != nil)
@@ -1046,10 +1052,12 @@ NS_EXTRA_SYNTHESIZE_ASSIGN(NSCell, controlTint, _controlTint, NSControlTint, con
     NS_EXTRA(NSCell, self)->_representedObject = object;
 }
 
+// Changing the control size leaves the font alone, in every cell class: the
+// font for a control size is chosen separately (systemFontSizeForControlSize:
+// gives its size). macOS 10.14.4 and 26.7.3 keep the font of every cell class
+// across control sizes.
 - (void) setControlSize: (NSControlSize) size {
     NS_EXTRA(NSCell, self)->_controlSize = size;
-    [NS_EXTRA(NSCell, self)->_font release];
-    NS_EXTRA(NSCell, self)->_font = [[NSFont userFontOfSize: [NSFont systemFontSizeForControlSize: NS_EXTRA(NSCell, self)->_controlSize]] retain];
     if ([[self controlView] respondsToSelector: @selector(updateCell:)]) {
         [[self controlView] performSelector: @selector(updateCell:)
                                  withObject: self];

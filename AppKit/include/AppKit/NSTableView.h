@@ -199,6 +199,10 @@ typedef NS_ENUM(NSInteger, NSTableRowActionEdge) {
         BOOL _rowActionsVisible;
         BOOL _usesStaticContents;
         NSTableViewDraggingDestinationFeedbackStyle _draggingDestinationFeedbackStyle;
+        // Decoded from a nib and not yet sent -awakeFromNib.
+        BOOL _awaitingAwakeFromNib;
+        // A data source set while loading from a nib is checked on the next -numberOfRows.
+        BOOL _dataSourceCheckPending;
     NS_EXTRA_IVARS_END(NSTableView)
 }
 

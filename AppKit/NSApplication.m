@@ -2502,6 +2502,45 @@ BOOL NSApplicationLoad(void) {
 
 @end
 
+@implementation NSApplication (NSWindowRestoration)
+
+- (void) encodeRestorableStateWithCoder: (NSCoder *) coder {
+    [super encodeRestorableStateWithCoder: coder];
+    id delegate = [self delegate];
+    if ([delegate respondsToSelector: @selector(application:willEncodeRestorableState:)])
+        [delegate application: self willEncodeRestorableState: coder];
+}
+
+- (void) restoreStateWithCoder: (NSCoder *) coder {
+    [super restoreStateWithCoder: coder];
+    id delegate = [self delegate];
+    if ([delegate respondsToSelector: @selector(application:didDecodeRestorableState:)])
+        [delegate application: self didDecodeRestorableState: coder];
+}
+
+- (BOOL) restoreWindowWithIdentifier: (NSString *) identifier
+                               state: (NSCoder *) state
+                   completionHandler: (void (^)(NSWindow *window, NSError *error)) completionHandler
+{
+    Class restorationClass = [NSWindow _restorationClassFromState: state];
+    SEL selector = @selector(restoreWindowWithIdentifier:state:completionHandler:);
+    if (restorationClass == Nil || ![restorationClass respondsToSelector: selector])
+        return NO;
+    [(Class<NSWindowRestoration>) restorationClass restoreWindowWithIdentifier: identifier
+                                                                         state: state
+                                                             completionHandler: completionHandler];
+    return YES;
+}
+
+// Restoration is never in progress at launch, so there is no phase to extend.
+- (void) extendStateRestoration {
+}
+
+- (void) completeStateRestoration {
+}
+
+@end
+
 @implementation NSApplication (NSApplicationPerformanceTesting)
 
 - (void) startedTest: (NSString *) name {
