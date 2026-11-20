@@ -295,6 +295,20 @@ void CGSForceShowCursor(CGSConnectionID cid) {
     [currentDisplay() forceShowCursor];
 }
 
+// The image of a cursor the window server has registered under a name (for
+// example the one currently shown, "com.apple.coregraphics.GlobalCurrent"), with
+// its hot spot in outHotspot. A name that is not registered gives NULL and leaves
+// the hot spot alone, and so does any name here: the backends do not tell what
+// cursor the window system shows and cannot read its image, in line with
+// CGDisplayCreateImageForRect(), which has no pixels to return either. Callers
+// that draw a cursor onto a capture skip it when they get NULL.
+// Seen: the call takes the connection id, the name and an optional hot spot
+// pointer, and returns a new CGImage that the caller releases.
+// Test: coregraphics-registered-cursor-image.c.
+CGImageRef CGSCreateRegisteredCursorImage(CGSConnectionID cid, const char *cursorName, CGPoint *outHotspot) {
+    return NULL;
+}
+
 boolean_t CGDisplayIsInMirrorSet(CGDirectDisplayID display) {
     printf("STUB %s\n", __PRETTY_FUNCTION__);
 
