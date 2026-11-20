@@ -22,6 +22,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @implementation NSLevelIndicator
 
++ (Class) cellClass {
+    return [NSLevelIndicatorCell class];
+}
+
 - (NSLevelIndicatorCell *) _indicatorCell {
     return [self cell];
 }

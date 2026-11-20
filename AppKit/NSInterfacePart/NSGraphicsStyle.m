@@ -434,31 +434,65 @@ static NSDictionary *sScrollerButtonAttributes = nil;
 
 @implementation NSGraphicsStyle (NSColorWell)
 
+// QUIRK: the colour well of macOS 10.14 (light appearance). Not documented. Evidence: black-box renders of
+// NSColorWell on macOS 10.14.4 at 1x (tier 2): a bordered well is a square bezel with a 1 point gray (175) outline
+// around a vertical gradient from 227 at the top through 240 halfway to 247 at the bottom, and the swatch is inset 6 points inside a 1
+// point gray (138) frame; a disabled well has the bezel at half opacity and a lighter (168) frame. A borderless well
+// has a 1 point frame, 142 along the top and 190 elsewhere, and the swatch 2 points inside. The well looks the same
+// while it is active. Test: test_quirk_color_well in tests/appkit-small-controls-aqua.m
 - (NSRect) drawColorWellBorderInRect: (NSRect) rect
                              enabled: (BOOL) enabled
                             bordered: (BOOL) bordered
                               active: (BOOL) active
 {
-    if (bordered) {
-        if (active)
-            NSInterfaceDrawHighlightedButton(rect, rect);
-        else
-            NSInterfaceDrawButton(rect, rect);
+    BOOL flipped = [[NSGraphicsContext currentContext] isFlipped];
+    // edges on the screen
+    NSRect top = NSMakeRect(NSMinX(rect), flipped ? NSMinY(rect) : NSMaxY(rect) - 1, NSWidth(rect), 1);
+    NSRect bottom = NSMakeRect(NSMinX(rect), flipped ? NSMaxY(rect) - 1 : NSMinY(rect), NSWidth(rect), 1);
+    NSRect left = NSMakeRect(NSMinX(rect), NSMinY(rect), 1, NSHeight(rect));
+    NSRect right = NSMakeRect(NSMaxX(rect) - 1, NSMinY(rect), 1, NSHeight(rect));
 
-        // The colour swatch of a bordered well is inset 6 points from each edge, whatever the well's size
-        // (black-box on macOS 10.14.4, tests/appkit-colorwell-swatch-inset.m); the 2-point gray bezel
-        // around it is inside that margin.
-        rect = NSInsetRect(rect, 4, 4);
-
-        if (enabled)
-            NSDrawGrayBezel(rect, rect);
-    } else {
-        if (enabled) {
-            NSDrawGrayBezel(rect, rect);
-        }
+    if (!bordered) {
+        [[NSColor colorWithCalibratedWhite: 190 / 255.0 alpha: 1] setFill];
+        NSRectFill(left);
+        NSRectFill(right);
+        NSRectFill(bottom);
+        [[NSColor colorWithCalibratedWhite: 142 / 255.0 alpha: 1] setFill];
+        NSRectFill(top);
+        return NSInsetRect(rect, 2, 2);
     }
 
-    return NSInsetRect(rect, 2, 2);
+    CGFloat alpha = enabled ? 1 : 0.5;
+    CGContextRef ctx = [[NSGraphicsContext currentContext] graphicsPort];
+    NSRect inside = NSInsetRect(rect, 1, 1);
+    CGColorSpaceRef space = CGColorSpaceCreateDeviceGray();
+    CGFloat comps[6] = {227 / 255.0, alpha, 240 / 255.0, alpha, 247 / 255.0, alpha};
+    CGFloat locations[3] = {0, 0.5, 1};
+    CGGradientRef gradient = CGGradientCreateWithColorComponents(space, comps, locations, 3);
+    // from the centre of the top row to the centre of the bottom row of the inside, on the screen
+    CGFloat yTop = flipped ? NSMinY(inside) + 0.5 : NSMaxY(inside) - 0.5;
+    CGFloat yBottom = flipped ? NSMaxY(inside) - 0.5 : NSMinY(inside) + 0.5;
+
+    CGContextSaveGState(ctx);
+    CGContextClipToRect(ctx, inside);
+    CGContextDrawLinearGradient(ctx, gradient, CGPointMake(0, yTop), CGPointMake(0, yBottom),
+                                kCGGradientDrawsBeforeStartLocation | kCGGradientDrawsAfterEndLocation);
+    CGContextRestoreGState(ctx);
+    CGGradientRelease(gradient);
+    CGColorSpaceRelease(space);
+    [[NSColor colorWithCalibratedWhite: 175 / 255.0 alpha: alpha] setFill];
+    NSRectFillUsingOperation(top, NSCompositeSourceOver);
+    NSRectFillUsingOperation(bottom, NSCompositeSourceOver);
+    NSRectFillUsingOperation(NSInsetRect(left, 0, 1), NSCompositeSourceOver);
+    NSRectFillUsingOperation(NSInsetRect(right, 0, 1), NSCompositeSourceOver);
+
+    NSRect frame = NSInsetRect(rect, 5, 5);
+    [[NSColor colorWithCalibratedWhite: (enabled ? 138 : 168) / 255.0 alpha: 1] setFill];
+    NSRectFill(NSMakeRect(NSMinX(frame), NSMinY(frame), NSWidth(frame), 1));
+    NSRectFill(NSMakeRect(NSMinX(frame), NSMaxY(frame) - 1, NSWidth(frame), 1));
+    NSRectFill(NSMakeRect(NSMinX(frame), NSMinY(frame), 1, NSHeight(frame)));
+    NSRectFill(NSMakeRect(NSMaxX(frame) - 1, NSMinY(frame), 1, NSHeight(frame)));
+    return NSInsetRect(rect, 6, 6);
 }
 
 @end
@@ -1260,12 +1294,28 @@ static NSRect NSAquaSnapToDevicePixels(CGContextRef ctx, NSRect rect) {
     return rect;
 }
 
+// QUIRK: the box is placed in an 18 point high rectangle centred in the cell (rounded down), 2, 3 and 5
+// points below its top for a check box and 1, 2 and 4 for a radio button, for the regular, small and mini sizes.
+// Not documented. Evidence: black-box renders of NSButton on macOS 10.14.4 at 1x in 18 and 40 point high frames
+// (tier 2). Test: test_quirk_toggle_placement in tests/appkit-small-controls-aqua.m
+static NSRect NSAquaToggleBoxRect(NSRect rect, BOOL radio, NSControlSize controlSize) {
+    static const CGFloat check[3] = {2, 3, 5}, round_[3] = {1, 2, 4};
+    int index = controlSize == NSSmallControlSize ? 1 : (controlSize == NSMiniControlSize ? 2 : 0);
+    CGFloat size = NSAquaToggleBoxSize(radio, controlSize);
+    // rect is unflipped (its top is its maximum y) and is the image's rectangle, which the cell centres in its frame
+    // rounding its top down; the 18 point rectangle the offsets are measured from is centred the same way
+    CGFloat top = -floor((18 - NSHeight(rect)) / 2) + (radio ? round_[index] : check[index]);
+
+    return NSMakeRect(NSMinX(rect) + NSAquaToggleBoxInset(radio, controlSize), NSMaxY(rect) - top - size, size, size);
+}
+
 static void NSAquaDrawToggle(NSRect rect, BOOL radio, NSInteger state, BOOL highlighted, BOOL enabled,
                              BOOL active, NSControlSize controlSize)
 {
     CGFloat size = NSAquaToggleBoxSize(radio, controlSize);
-    NSRect box = NSMakeRect(NSMinX(rect) + NSAquaToggleBoxInset(radio, controlSize),
-                            ceil(NSMidY(rect) - size / 2), size, size);
+    NSRect box = NSAquaToggleBoxRect(rect, radio, controlSize);
+    // a disabled button shows no pressed look
+    highlighted = highlighted && enabled;
     box = NSAquaSnapToDevicePixels([[NSGraphicsContext currentContext] graphicsPort], box);
     NSBezierPath *outline = radio ? [NSBezierPath bezierPathWithOvalInRect: NSInsetRect(box, 0.5, 0.5)]
                                   : [NSBezierPath bezierPathWithRoundedRect: NSInsetRect(box, 0.5, 0.5)
@@ -1321,14 +1371,27 @@ static void NSAquaDrawToggle(NSRect rect, BOOL radio, NSInteger state, BOOL high
 
         [mark setStroke];
         [mark setFill];
-        if (radio) {
+        if (state == NSMixedState) {
+            // QUIRK: the mixed state of check boxes and radio buttons alike is a bar 8, 7 or 6 points long and 2 high,
+            // centred, with a dark line under it on the blue look. Not documented. Evidence: black-box renders of
+            // NSButton on macOS 10.14.4 at 1x (tier 2). Test: test_quirk_toggle_mixed in
+            // tests/appkit-small-controls-aqua.m
+            static const CGFloat lengths[3] = {8, 7, 6};
+            CGFloat length = lengths[controlSize == NSSmallControlSize ? 1 : (controlSize == NSMiniControlSize ? 2 : 0)];
+            NSRect bar = NSAquaSnapToDevicePixels([[NSGraphicsContext currentContext] graphicsPort],
+                                                  NSMakeRect(NSMidX(box) - length / 2, NSMidY(box) - 1, length, 2));
+
+            if (blue) {
+                [[NSColor colorWithCalibratedWhite: 0 alpha: 0.5 * alpha] setFill];
+                NSRectFillUsingOperation(NSOffsetRect(bar, 0, -1), NSCompositeSourceOver);
+            }
+            [mark setFill];
+            NSRectFillUsingOperation(bar, NSCompositeSourceOver);
+        } else if (radio) {
             CGFloat r = size * 2.5 / 16;
             [[NSBezierPath bezierPathWithOvalInRect: NSMakeRect(NSMidX(box) - r, NSMidY(box) - r, 2 * r, 2 * r)] fill];
         } else {
-            if (state == NSMixedState) {
-                [path moveToPoint: NSMakePoint(NSMinX(box) + 3.5 * scale, NSMinY(box) + 7 * scale)];
-                [path lineToPoint: NSMakePoint(NSMinX(box) + 10.5 * scale, NSMinY(box) + 7 * scale)];
-            } else {
+            {
                 [path moveToPoint: NSMakePoint(NSMinX(box) + 3.3 * scale, NSMinY(box) + 7.2 * scale)];
                 [path lineToPoint: NSMakePoint(NSMinX(box) + 5.8 * scale, NSMinY(box) + 4.2 * scale)];
                 [path lineToPoint: NSMakePoint(NSMinX(box) + 10.6 * scale, NSMinY(box) + 10.6 * scale)];
@@ -1364,8 +1427,7 @@ static void NSAquaDrawToggle(NSRect rect, BOOL radio, NSInteger state, BOOL high
 
 - (NSBezierPath *) toggleBoxPathInRect: (NSRect) rect radio: (BOOL) radio controlSize: (NSControlSize) controlSize {
     CGFloat size = NSAquaToggleBoxSize(radio, controlSize);
-    NSRect box = NSMakeRect(NSMinX(rect) + NSAquaToggleBoxInset(radio, controlSize),
-                            ceil(NSMidY(rect) - size / 2), size, size);
+    NSRect box = NSAquaToggleBoxRect(rect, radio, controlSize);
 
     return radio ? [NSBezierPath bezierPathWithOvalInRect: box]
                  : [NSBezierPath bezierPathWithRoundedRect: box xRadius: size * 3.5 / 14 yRadius: size * 3.5 / 14];
@@ -1776,72 +1838,118 @@ static void NSAquaFillGradient(NSBezierPath *path, NSRect rect, const CGFloat *t
 @implementation NSGraphicsStyle (NSSliderAqua)
 
 // QUIRK: the slider look of macOS 10.14 (light appearance). Not documented. Evidence: black-box renders of
-// NSSlider on macOS 10.14.4 at 1x and 2x (tier 2): a track 3 points thick inset 3 points from the ends of the
-// view, rounded, blue (61,130,253) from the start to the knob and black at 22% after it; a white round knob,
-// 15, 11 and 9 points across for the three control sizes, with a thin dark outline and a shadow below.
-// Test: appkit-slider-aqua.m
+// NSSlider on macOS 10.14.4 at 1x (tier 2), vd-upstream/mac-probes/aqua-small-controls.m: the track is 3 points
+// thick and rounded, black at 22% (11% when disabled); without tick marks it is blue (61,130,253) from the minimum
+// to the knob in an enabled slider; the knob is white (251 when disabled) with a thin dark rim that is heavier
+// below it (half as strong when disabled); with tick marks it has a point towards them; tick marks are 1 point
+// black lines at 36%. setHighlighted: does not change the look. Test: test_quirk_slider_* in
+// tests/appkit-small-controls-aqua.m
 - (void) drawAquaSliderTrackInRect: (NSRect) rect
-                          vertical: (BOOL) vertical
-                           knobRect: (NSRect) knobRect
+                          fillRect: (NSRect) fillRect
                            enabled: (BOOL) enabled
                             active: (BOOL) active
-                           flipped: (BOOL) flipped
 {
-    NSRect track;
-    CGFloat alpha = enabled ? 1 : 0.5;
-
-    if (vertical)
-        track = NSMakeRect(floor(NSMidX(rect) - 1.5), NSMinY(rect) + 3, 3, NSHeight(rect) - 6);
-    else
-        // half a point is rounded towards the top of the view
-        track = NSMakeRect(NSMinX(rect) + 3, flipped ? floor(NSMidY(rect) - 1.5) : ceil(NSMidY(rect) - 1.5),
-                           NSWidth(rect) - 6, 3);
-
-    NSBezierPath *shape = [NSBezierPath bezierPathWithRoundedRect: track xRadius: 1.5 yRadius: 1.5];
-
-    [[NSColor colorWithCalibratedWhite: 0 alpha: 0.22 * alpha] setFill];
-    [shape fill];
-
-    NSRect fill = track;
-    if (vertical) {
-        // the minimum is at the bottom of an unflipped view and at the top of a flipped one in the
-        // cell's own geometry; the fill runs from the end that holds the minimum to the knob
-        CGFloat y = NSMidY(knobRect);
-        if (flipped)
-            fill.size.height = MAX(0, MIN(NSHeight(track), NSMaxY(track) - y));
-        else
-            fill.size.height = MAX(0, MIN(NSHeight(track), y - NSMinY(track)));
-        if (flipped)
-            fill.origin.y = NSMaxY(track) - fill.size.height;
-    } else
-        fill.size.width = MAX(0, MIN(NSWidth(track), NSMidX(knobRect) - NSMinX(track)));
-    if (NSWidth(fill) > 0 && NSHeight(fill) > 0) {
-        BOOL blue = enabled && active;
-
-        [(blue ? [NSColor colorWithCalibratedRed: 61 / 255.0 green: 130 / 255.0 blue: 253 / 255.0 alpha: 1]
-               : [NSColor colorWithCalibratedWhite: 0.55 alpha: alpha]) setFill];
-        [[NSBezierPath bezierPathWithRoundedRect: fill xRadius: 1.5 yRadius: 1.5] fill];
+    [[NSColor colorWithCalibratedWhite: 0 alpha: enabled ? 0.22 : 0.11] setFill];
+    [[NSBezierPath bezierPathWithRoundedRect: rect xRadius: 1.5 yRadius: 1.5] fill];
+    if (enabled && NSWidth(fillRect) > 0 && NSHeight(fillRect) > 0) {
+        // in a window that is not active the fill is gray, like the other accent-coloured parts
+        [(active ? [NSColor colorWithCalibratedRed: 61 / 255.0 green: 130 / 255.0 blue: 253 / 255.0 alpha: 1]
+                 : [NSColor colorWithCalibratedWhite: 0.55 alpha: 1]) setFill];
+        [[NSBezierPath bezierPathWithRoundedRect: fillRect xRadius: 1.5 yRadius: 1.5] fill];
     }
 }
 
-- (void) drawAquaSliderKnobInRect: (NSRect) rect controlSize: (NSControlSize) controlSize enabled: (BOOL) enabled {
-    static const CGFloat insets[3] = {3, 2, 1.5};
-    int index = controlSize == NSSmallControlSize ? 1 : (controlSize == NSMiniControlSize ? 2 : 0);
-    CGFloat alpha = enabled ? 1 : 0.5;
-    NSRect circle = NSInsetRect(rect, insets[index], insets[index]);
-    BOOL flipped = [[NSGraphicsContext currentContext] isFlipped];
-
-    // a soft shadow below, then the white disc and its outline
-    for (int i = 3; i >= 1; i--) {
-        [[NSColor colorWithCalibratedWhite: 0 alpha: 0.05 * alpha] setFill];
-        [[NSBezierPath bezierPathWithOvalInRect: NSOffsetRect(NSInsetRect(circle, -i * 0.4, -i * 0.4), 0, flipped ? 0.8 : -0.8)] fill];
+/* Adds the outline of a knob to the context's path, in a coordinate system whose origin is the top left corner of
+   the knob's rectangle on the screen and whose y axis points down the screen. */
+static void NSAquaAddKnobPath(CGContextRef ctx, CGFloat width, CGFloat height, NSInteger pointing) {
+    if (pointing < 0) {
+        CGContextAddEllipseInRect(ctx, CGRectMake(0, 0, width, height));
+        return;
     }
-    [[NSColor colorWithCalibratedWhite: 1 alpha: alpha] setFill];
-    [[NSBezierPath bezierPathWithOvalInRect: circle] fill];
-    [[NSColor colorWithCalibratedWhite: 0 alpha: 0.28 * alpha] setStroke];
-    NSBezierPath *outline = [NSBezierPath bezierPathWithOvalInRect: NSInsetRect(circle, 0.5, 0.5)];
-    [outline setLineWidth: 1];
-    [outline stroke];
+    BOOL across = (pointing == NSMinXEdge || pointing == NSMaxXEdge);
+    // the knob pointing down: d across, h long; sides are straight for s, then the point at 45 degrees
+    CGFloat d = across ? height : width, h = across ? width : height;
+    CGFloat r = d > 12 ? 2 : 1.5, s = h - d / 2;
+    CGPoint pts[6] = {{0, 0}, {d, 0}, {d, s}, {d / 2, h}, {0, s}, {0, 0}};
+
+    for (int i = 0; i < 6; i++) {
+        CGFloat u = pts[i].x, v = pts[i].y;
+
+        if (pointing == NSMaxYEdge)
+            v = h - v;
+        else if (pointing == NSMinXEdge) {
+            CGFloat t = u;
+            u = h - v;
+            v = t;
+        } else if (pointing == NSMaxXEdge) {
+            CGFloat t = u;
+            u = v;
+            v = t;
+        }
+        pts[i] = CGPointMake(u, v);
+    }
+    // start in the middle of the side opposite to the point; the two corners there are rounded
+    CGContextMoveToPoint(ctx, (pts[0].x + pts[1].x) / 2, (pts[0].y + pts[1].y) / 2);
+    CGContextAddArcToPoint(ctx, pts[1].x, pts[1].y, pts[2].x, pts[2].y, r);
+    CGContextAddLineToPoint(ctx, pts[2].x, pts[2].y);
+    CGContextAddLineToPoint(ctx, pts[3].x, pts[3].y);
+    CGContextAddLineToPoint(ctx, pts[4].x, pts[4].y);
+    CGContextAddArcToPoint(ctx, pts[0].x, pts[0].y, pts[1].x, pts[1].y, r);
+    CGContextClosePath(ctx);
+}
+
+/* Moves the origin to the top left corner of rect on the screen, with y pointing down the screen. */
+static void NSAquaBeginScreenDown(CGContextRef ctx, NSRect rect, BOOL flipped) {
+    CGContextSaveGState(ctx);
+    if (flipped)
+        CGContextTranslateCTM(ctx, NSMinX(rect), NSMinY(rect));
+    else {
+        CGContextTranslateCTM(ctx, NSMinX(rect), NSMaxY(rect));
+        CGContextScaleCTM(ctx, 1, -1);
+    }
+}
+
+/* A white knob shape with the rim of the Aqua slider knobs: dark at 13% around it and 15% more one point below. */
+static void NSAquaDrawKnobShape(CGContextRef ctx, NSRect rect, NSInteger pointing, BOOL enabled, BOOL flipped) {
+    CGFloat strength = enabled ? 1 : 0.5;
+
+    NSAquaBeginScreenDown(ctx, rect, flipped);
+    CGContextSetRGBFillColor(ctx, 0, 0, 0, 0.15 * strength);
+    CGContextSaveGState(ctx);
+    CGContextTranslateCTM(ctx, 0, 1);
+    NSAquaAddKnobPath(ctx, NSWidth(rect), NSHeight(rect), pointing);
+    CGContextFillPath(ctx);
+    CGContextRestoreGState(ctx);
+    CGContextSetRGBStrokeColor(ctx, 0, 0, 0, 0.13 * strength);
+    CGContextSetLineWidth(ctx, 2);
+    NSAquaAddKnobPath(ctx, NSWidth(rect), NSHeight(rect), pointing);
+    CGContextStrokePath(ctx);
+    CGContextSetGrayFillColor(ctx, enabled ? 1 : 251 / 255.0, 1);
+    NSAquaAddKnobPath(ctx, NSWidth(rect), NSHeight(rect), pointing);
+    CGContextFillPath(ctx);
+    CGContextRestoreGState(ctx);
+}
+
+- (void) drawAquaSliderKnobInRect: (NSRect) rect
+                         pointing: (NSInteger) pointing
+                          enabled: (BOOL) enabled
+                          flipped: (BOOL) flipped
+{
+    NSAquaDrawKnobShape([[NSGraphicsContext currentContext] graphicsPort], rect, pointing, enabled, flipped);
+}
+
+- (void) drawAquaSliderTickInRect: (NSRect) rect {
+    [[NSColor colorWithCalibratedWhite: 0 alpha: 0.36] setFill];
+    NSRectFillUsingOperation(rect, NSCompositeSourceOver);
+}
+
+// QUIRK: a circular slider is a white disc with the same rim as the knob of a linear slider, and a dark gray
+// (75) dot for its knob. Not documented. Evidence: black-box renders of a circular NSSlider on macOS 10.14.4 at
+// 1x (tier 2). Test: test_quirk_circular_slider in tests/appkit-small-controls-aqua.m
+- (void) drawAquaCircularSliderInRect: (NSRect) rect knobRect: (NSRect) knobRect enabled: (BOOL) enabled flipped: (BOOL) flipped {
+    NSAquaDrawKnobShape([[NSGraphicsContext currentContext] graphicsPort], rect, -1, enabled, flipped);
+    [[NSColor colorWithCalibratedWhite: 75 / 255.0 alpha: enabled ? 1 : 0.5] setFill];
+    [[NSBezierPath bezierPathWithOvalInRect: knobRect] fill];
 }
 
 @end
@@ -1849,64 +1957,202 @@ static void NSAquaFillGradient(NSBezierPath *path, NSRect rect, const CGFloat *t
 @implementation NSGraphicsStyle (NSStepperAqua)
 
 // QUIRK: the stepper look of macOS 10.14 (light appearance). Not documented. Evidence: black-box renders of
-// NSStepper on macOS 10.14.4 at 1x and 2x (tier 2): one white capsule (13, 11 and 9 points wide and 21, 18 and
-// 14 high for the control sizes) with a gray outline and a short shadow below, and a dark gray up and down
-// chevron; the capsule is inset 3, 2 and 2 points from the sides of the 19, 15 and 13 point wide view.
-// Test: appkit-stepper-aqua.m
+// NSStepper on macOS 10.14.4 at 1x (tier 2): a white capsule (13 x 22, 11 x 19 and 9 x 15 points for the three
+// control sizes, corner radius 5, 4 and 4) with a black rim at 18%, heavier along the bottom, and a faint shadow
+// below; two dark (black at 80%) chevrons, 5 points wide and 2.5 high (4 and 2 at the mini size), whose tips are
+// 6, 5 and 4 points from the ends; a pressed half is a blue gradient ((39,109,239) to (3,71,220)) with a white chevron; a disabled
+// stepper is drawn at half strength. Test: test_quirk_stepper in tests/appkit-small-controls-aqua.m
 - (void) drawAquaStepperInRect: (NSRect) rect
+                   controlSize: (NSControlSize) controlSize
                        enabled: (BOOL) enabled
                  upHighlighted: (BOOL) upHighlighted
                downHighlighted: (BOOL) downHighlighted
 {
+    static const CGFloat radii[3] = {5, 4, 4}, tips[3] = {6, 5, 4}, arms[3] = {2.5, 2.5, 2};
+    int index = controlSize == NSSmallControlSize ? 1 : (controlSize == NSMiniControlSize ? 2 : 0);
     BOOL flipped = [[NSGraphicsContext currentContext] isFlipped];
-    CGFloat alpha = enabled ? 1 : 0.5;
-    // the capsule without its shadow row; the shadow is below it
-    NSRect body = NSMakeRect(NSMinX(rect), flipped ? NSMinY(rect) : NSMinY(rect) + 1, NSWidth(rect), NSHeight(rect) - 1);
-    CGFloat radius = NSWidth(body) / 2;
-    NSBezierPath *shape = [NSBezierPath bezierPathWithRoundedRect: body xRadius: radius yRadius: radius];
-    NSBezierPath *outline = [NSBezierPath bezierPathWithRoundedRect: NSInsetRect(body, 0.5, 0.5)
-                                                            xRadius: radius - 0.5
-                                                            yRadius: radius - 0.5];
+    CGContextRef ctx = [[NSGraphicsContext currentContext] graphicsPort];
+    CGFloat w = NSWidth(rect), h = NSHeight(rect), r = radii[index];
 
-    [[NSColor colorWithCalibratedWhite: 0 alpha: 0.07 * alpha] setFill];
-    [[NSBezierPath bezierPathWithRoundedRect: NSOffsetRect(body, 0, flipped ? 1 : -1) xRadius: radius yRadius: radius] fill];
-    [[NSColor colorWithCalibratedWhite: 1 alpha: alpha] setFill];
-    [shape fill];
-    if (upHighlighted || downHighlighted) {
-        // the pressed half is light gray: its half of the capsule, without the rounded corners cut off
-        NSRect half = NSMakeRect(NSMinX(body), NSMinY(body), NSWidth(body), NSHeight(body) / 2);
-        BOOL halfAtMinY = upHighlighted == flipped;
+    // a disabled stepper is drawn at half strength (explicitly: not every context honours a global alpha)
+    CGFloat k = enabled ? 1 : 0.5;
 
-        if (!halfAtMinY)
-            half.origin.y = NSMidY(body);
-        [[NSColor colorWithCalibratedWhite: 0.87 alpha: alpha] setFill];
-        [[NSBezierPath bezierPathWithRoundedRect: NSInsetRect(half, 1, 0.5) xRadius: radius - 1 yRadius: MIN(radius - 1, NSHeight(half) / 2)] fill];
-    }
-    [[NSColor colorWithCalibratedWhite: 0 alpha: 0.25 * alpha] setStroke];
-    [outline setLineWidth: 1];
-    [outline stroke];
+    NSAquaBeginScreenDown(ctx, rect, flipped);
+    CGRect body = CGRectMake(0, 0, w, h);
+    CGPathRef shape = CGPathCreateWithRoundedRect(body, r, r, NULL);
+    CGPathRef inner = CGPathCreateWithRoundedRect(CGRectInset(body, 1, 1), r - 1, r - 1, NULL);
 
-    // the chevrons, a quarter and three quarters of the way down the capsule
-    CGFloat w = MAX(2.6, NSWidth(body) * 0.22), h = MAX(1.8, NSWidth(body) * 0.16);
-    NSBezierPath *chevrons = [NSBezierPath bezierPath];
-
-    CGFloat upDirection = flipped ? -1 : 1; // the direction of "up" along y
+    // the faint shadow below
+    CGContextSaveGState(ctx);
+    CGContextClipToRect(ctx, CGRectMake(0, h / 2, w, h / 2 + 1));
+    CGContextAddPath(ctx, shape);
+    CGContextTranslateCTM(ctx, 0, 1);
+    CGContextAddPath(ctx, shape);
+    CGContextSetRGBFillColor(ctx, 0, 0, 0, 0.03 * k);
+    CGContextEOFillPath(ctx);
+    CGContextRestoreGState(ctx);
+    // the rim (between the outline and the white inside), and its heavier bottom row
+    CGContextAddPath(ctx, shape);
+    CGContextAddPath(ctx, inner);
+    CGContextSetRGBFillColor(ctx, 0, 0, 0, 0.18 * k);
+    CGContextEOFillPath(ctx);
+    CGContextSaveGState(ctx);
+    CGContextAddPath(ctx, shape);
+    CGContextClip(ctx);
+    CGContextAddPath(ctx, shape);
+    CGContextTranslateCTM(ctx, 0, -1);
+    CGContextAddPath(ctx, shape);
+    CGContextSetRGBFillColor(ctx, 0, 0, 0, 0.11 * k);
+    CGContextEOFillPath(ctx);
+    CGContextRestoreGState(ctx);
+    CGContextAddPath(ctx, inner);
+    CGContextSetGrayFillColor(ctx, 1, k);
+    CGContextFillPath(ctx);
 
     for (int i = 0; i < 2; i++) {
         BOOL up = i == 0;
-        CGFloat fraction = up ? 0.27 : 0.73; // of the height, from the top
-        CGFloat y = flipped ? NSMinY(body) + NSHeight(body) * fraction : NSMaxY(body) - NSHeight(body) * fraction;
-        CGFloat tip = h * (up ? upDirection : -upDirection);
+        BOOL pressed = up ? upHighlighted : downHighlighted;
+        CGFloat tipY = up ? tips[index] : h - tips[index];
+        CGFloat arm = arms[index], armY = up ? tipY + arm : tipY - arm;
 
-        [chevrons moveToPoint: NSMakePoint(NSMidX(body) - w, y - tip / 2)];
-        [chevrons lineToPoint: NSMakePoint(NSMidX(body), y + tip / 2)];
-        [chevrons lineToPoint: NSMakePoint(NSMidX(body) + w, y - tip / 2)];
+        if (pressed) {
+            CGRect half = up ? CGRectMake(0, 0, w, floor(h / 2)) : CGRectMake(0, floor(h / 2), w, h - floor(h / 2));
+            CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB();
+            CGFloat comps[8] = {39 / 255.0, 109 / 255.0, 239 / 255.0, k, 3 / 255.0, 71 / 255.0, 220 / 255.0, k};
+            CGGradientRef gradient = CGGradientCreateWithColorComponents(space, comps, NULL, 2);
+
+            CGContextSaveGState(ctx);
+            CGContextAddPath(ctx, shape);
+            CGContextClip(ctx);
+            CGContextClipToRect(ctx, half);
+            CGContextDrawLinearGradient(ctx, gradient, CGPointMake(0, CGRectGetMinY(half)),
+                                        CGPointMake(0, CGRectGetMaxY(half)), 0);
+            // the rim over the blue
+            CGContextAddPath(ctx, shape);
+            CGContextAddPath(ctx, inner);
+            CGContextSetRGBFillColor(ctx, 0, 0, 0, 0.1 * k);
+            CGContextEOFillPath(ctx);
+            CGContextRestoreGState(ctx);
+            CGGradientRelease(gradient);
+            CGColorSpaceRelease(space);
+        }
+        CGContextMoveToPoint(ctx, w / 2 - arm, armY);
+        CGContextAddLineToPoint(ctx, w / 2, tipY);
+        CGContextAddLineToPoint(ctx, w / 2 + arm, armY);
+        if (pressed)
+            CGContextSetRGBStrokeColor(ctx, 1, 1, 1, k);
+        else
+            CGContextSetRGBStrokeColor(ctx, 0, 0, 0, 0.8 * k);
+        CGContextSetLineWidth(ctx, 1.25);
+        CGContextSetLineCap(ctx, kCGLineCapButt);
+        CGContextSetLineJoin(ctx, kCGLineJoinMiter);
+        CGContextStrokePath(ctx);
     }
-    [[NSColor colorWithCalibratedWhite: 0.25 alpha: alpha] setStroke];
-    [chevrons setLineWidth: 1.4];
-    [chevrons setLineCapStyle: NSRoundLineCapStyle];
-    [chevrons setLineJoinStyle: NSRoundLineJoinStyle];
-    [chevrons stroke];
+    CGPathRelease(shape);
+    CGPathRelease(inner);
+    CGContextRestoreGState(ctx);
+}
+
+@end
+
+@implementation NSGraphicsStyle (NSProgressIndicatorAqua)
+
+// QUIRK: the spinning progress indicator of macOS 10.14 (light appearance). Not documented. Evidence: black-box
+// renders of NSProgressIndicator (spinning style) on macOS 10.14.4 at 1x (tier 2): 12 black spokes with round
+// ends, 3, 2 and 1.25 points wide in the 32, 16 and 10 point sizes, from the edge of the square to 27% of its
+// width from the centre; the leading spoke is opaque and each one behind it, counterclockwise, has 85% of the
+// alpha of the one before. The determinate style is a ring and a wedge, both black at 50%, filled clockwise from
+// the top. Test: test_quirk_spinning_indicator in tests/appkit-small-controls-aqua.m
+- (void) drawSpinningProgressIndicatorInRect: (NSRect) rect phase: (NSInteger) phase {
+    CGContextRef ctx = [[NSGraphicsContext currentContext] graphicsPort];
+    CGFloat d = MIN(NSWidth(rect), NSHeight(rect));
+    CGFloat width = d >= 32 ? 3 * d / 32 : (d >= 16 ? 2 * d / 16 : 1.25 * d / 10);
+    CGFloat outer = d / 2 - width / 2, inner = d * 0.27;
+    BOOL flipped = [[NSGraphicsContext currentContext] isFlipped];
+
+    CGContextSaveGState(ctx);
+    CGContextTranslateCTM(ctx, NSMidX(rect), NSMidY(rect));
+    if (!flipped)
+        CGContextScaleCTM(ctx, 1, -1);
+    // now y points down the screen; spoke i is i twelfths of a turn clockwise from the top
+    CGContextSetLineWidth(ctx, width);
+    CGContextSetLineCap(ctx, kCGLineCapRound);
+    for (int i = 0; i < 12; i++) {
+        int behind = (int) (((phase - i) % 12 + 12) % 12);
+        CGFloat angle = i * M_PI / 6, sx = sin(angle), sy = -cos(angle);
+
+        CGContextSetRGBStrokeColor(ctx, 0, 0, 0, pow(0.85, behind));
+        CGContextMoveToPoint(ctx, sx * inner, sy * inner);
+        CGContextAddLineToPoint(ctx, sx * outer, sy * outer);
+        CGContextStrokePath(ctx);
+    }
+    CGContextRestoreGState(ctx);
+}
+
+- (void) drawSpinningProgressPieInRect: (NSRect) rect value: (double) value flipped: (BOOL) flipped {
+    CGContextRef ctx = [[NSGraphicsContext currentContext] graphicsPort];
+    CGFloat d = MIN(NSWidth(rect), NSHeight(rect));
+    NSRect square = NSMakeRect(NSMidX(rect) - d / 2, NSMidY(rect) - d / 2, d, d);
+
+    value = MAX(0, MIN(1, value));
+    NSAquaBeginScreenDown(ctx, square, flipped);
+    CGContextSetRGBStrokeColor(ctx, 0, 0, 0, 0.5);
+    CGContextSetLineWidth(ctx, 1);
+    CGContextStrokeEllipseInRect(ctx, CGRectMake(0.5, 0.5, d - 1, d - 1));
+    if (value > 0) {
+        CGFloat c = d / 2, radius = d / 2 - 1;
+
+        CGContextMoveToPoint(ctx, c, c);
+        // y points down the screen, so increasing angles turn clockwise
+        CGContextAddArc(ctx, c, c, radius, -M_PI_2, -M_PI_2 + value * 2 * M_PI, 0);
+        CGContextClosePath(ctx);
+        CGContextSetRGBFillColor(ctx, 0, 0, 0, 0.5);
+        CGContextFillPath(ctx);
+    }
+    CGContextRestoreGState(ctx);
+}
+
+@end
+
+@implementation NSGraphicsStyle (NSLevelIndicatorAqua)
+
+// QUIRK: the capacity level indicators of macOS 10.14 (light appearance). Not documented. Evidence: black-box
+// renders of NSLevelIndicator on macOS 10.14.4 at 1x (tier 2): a bar (or each segment of a discrete one) is a
+// rounded rectangle (radius 3) 16 points high, black at 7% inside a 1 point rim at 19%; the filled part is
+// green (54,210,66), yellow (254,206,9) at the warning value and red (252,44,49) at the critical value, each with
+// a rim 13% darker; tick marks are 1 point black lines below, 6 points at 25% (major) or 3 points at 19%.
+// A disabled indicator looks the same. Test: test_quirk_level_indicator in tests/appkit-small-controls-aqua.m
+- (void) drawLevelIndicatorTrackInRect: (NSRect) rect {
+    NSBezierPath *shape = [NSBezierPath bezierPathWithRoundedRect: rect xRadius: 3 yRadius: 3];
+    NSBezierPath *inner = [NSBezierPath bezierPathWithRoundedRect: NSInsetRect(rect, 1, 1) xRadius: 2 yRadius: 2];
+
+    [[NSColor colorWithCalibratedWhite: 0 alpha: 0.07] setFill];
+    [inner fill];
+    [shape appendBezierPath: inner];
+    [shape setWindingRule: NSEvenOddWindingRule];
+    [[NSColor colorWithCalibratedWhite: 0 alpha: 0.19] setFill];
+    [shape fill];
+}
+
+- (void) drawLevelIndicatorFillInRect: (NSRect) rect clipRect: (NSRect) clipRect color: (NSColor *) color {
+    NSColor *rgb = [color colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
+    NSColor *rim = [NSColor colorWithCalibratedRed: [rgb redComponent] * 0.87 green: [rgb greenComponent] * 0.87
+                                              blue: [rgb blueComponent] * 0.87 alpha: [rgb alphaComponent]];
+    NSBezierPath *shape = [NSBezierPath bezierPathWithRoundedRect: rect xRadius: 3 yRadius: 3];
+    NSBezierPath *inner = [NSBezierPath bezierPathWithRoundedRect: NSInsetRect(rect, 1, 1) xRadius: 2 yRadius: 2];
+
+    [NSGraphicsContext saveGraphicsState];
+    NSRectClip(clipRect);
+    [rim setFill];
+    [shape fill];
+    [rgb setFill];
+    [inner fill];
+    [NSGraphicsContext restoreGraphicsState];
+}
+
+- (void) drawLevelIndicatorTickInRect: (NSRect) rect major: (BOOL) major {
+    [[NSColor colorWithCalibratedWhite: 0 alpha: major ? 0.25 : 0.19] setFill];
+    NSRectFillUsingOperation(rect, NSCompositeSourceOver);
 }
 
 @end

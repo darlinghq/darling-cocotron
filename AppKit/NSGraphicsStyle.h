@@ -222,7 +222,7 @@ typedef struct _Margins {
 @interface NSGraphicsStyle (NSButtonAqua)
 /* Check boxes and radio buttons. rect is in an unflipped coordinate system; its left edge is the left
    edge of the cell, and the box is placed relative to it and centred vertically in it. state is
-   NSOffState, NSOnState or NSMixedState (radio buttons have no mixed look). */
+   NSOffState, NSOnState or NSMixedState. */
 - (void) drawCheckBoxInRect: (NSRect) rect
                       state: (NSInteger) state
                 highlighted: (BOOL) highlighted
@@ -312,24 +312,46 @@ typedef struct _Margins {
 @end
 
 @interface NSGraphicsStyle (NSSliderAqua)
-/* The track of a slider: 3 points thick, blue from its start to the knob (gray when the window is not active or
-   the control is disabled) and light after the knob; and the round white knob. */
+/* The parts of a linear slider. Every rectangle is in the coordinates of the current context and on whole
+   points; flipped tells whether that context is flipped. The track is 3 points thick and rounded; fillRect is
+   the blue part of it (empty for none). */
 - (void) drawAquaSliderTrackInRect: (NSRect) rect
-                          vertical: (BOOL) vertical
-                           knobRect: (NSRect) knobRect
+                          fillRect: (NSRect) fillRect
                            enabled: (BOOL) enabled
-                            active: (BOOL) active
-                           flipped: (BOOL) flipped;
-- (void) drawAquaSliderKnobInRect: (NSRect) rect controlSize: (NSControlSize) controlSize enabled: (BOOL) enabled;
+                            active: (BOOL) active;
+/* The knob: rect is its white body. pointing is -1 for a round knob, otherwise the screen direction its point
+   faces: NSMinYEdge for down, NSMaxYEdge for up, NSMinXEdge for left and NSMaxXEdge for right. */
+- (void) drawAquaSliderKnobInRect: (NSRect) rect
+                         pointing: (NSInteger) pointing
+                          enabled: (BOOL) enabled
+                          flipped: (BOOL) flipped;
+- (void) drawAquaSliderTickInRect: (NSRect) rect;
+/* A circular slider: the white disc in rect and the dark knob in knobRect. */
+- (void) drawAquaCircularSliderInRect: (NSRect) rect knobRect: (NSRect) knobRect enabled: (BOOL) enabled flipped: (BOOL) flipped;
 @end
 
 @interface NSGraphicsStyle (NSStepperAqua)
-/* The whole stepper: one white capsule with an up and a down chevron. rect is the capsule including its
-   one point shadow below. */
+/* The whole stepper: one white capsule with an up and a down chevron. rect is the capsule without its shadow,
+   which is drawn below it. A pressed half is blue with a white chevron. */
 - (void) drawAquaStepperInRect: (NSRect) rect
+                   controlSize: (NSControlSize) controlSize
                        enabled: (BOOL) enabled
                  upHighlighted: (BOOL) upHighlighted
                downHighlighted: (BOOL) downHighlighted;
+@end
+
+@interface NSGraphicsStyle (NSProgressIndicatorAqua)
+/* The spinning style: 12 spokes in the square rect, the one at the top (phase 0) the darkest. */
+- (void) drawSpinningProgressIndicatorInRect: (NSRect) rect phase: (NSInteger) phase;
+/* The determinate spinning style: a ring with a wedge for the value (0 to 1), clockwise from the top. */
+- (void) drawSpinningProgressPieInRect: (NSRect) rect value: (double) value flipped: (BOOL) flipped;
+@end
+
+@interface NSGraphicsStyle (NSLevelIndicatorAqua)
+/* A capacity bar or one segment of it: a rounded rectangle, empty (a light track) or filled with color. */
+- (void) drawLevelIndicatorTrackInRect: (NSRect) rect;
+- (void) drawLevelIndicatorFillInRect: (NSRect) rect clipRect: (NSRect) clipRect color: (NSColor *) color;
+- (void) drawLevelIndicatorTickInRect: (NSRect) rect major: (BOOL) major;
 @end
 
 @interface NSGraphicsStyle (NSSplitViewAqua)
