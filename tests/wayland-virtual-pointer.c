@@ -3,7 +3,7 @@
 // Test helper: a persistent wlr-virtual-pointer on the seat of the compositor in $WAYLAND_DISPLAY (a headless sway
 // has no pointer device of its own). Prints READY, then for each "x y" line on stdin moves the pointer to that
 // point of a 1920x1080 output, clicks the left button and prints CLICKED; for each "drag x y dx dy" line it
-// presses the left button at x, y, moves the pointer by dx, dy in eight steps, releases it and prints DRAGGED.
+// presses the left button at x, y, moves the pointer by dx, dy in eight steps, releases it and prints DRAGGED; for each "move x y" line it only moves the pointer there and prints MOVED.
 // Build: wayland-scanner client-header and private-code on wlr-virtual-pointer-unstable-v1.xml (wlr-protocols), then
 // cc wayland-virtual-pointer.c wlr-virtual-pointer-unstable-v1.c -lwayland-client
 #define _GNU_SOURCE
@@ -69,6 +69,14 @@ int main(void) {
             zwlr_virtual_pointer_v1_frame(pointer);
             wl_display_roundtrip(display);
             puts("DRAGGED");
+            fflush(stdout);
+            continue;
+        }
+        if (sscanf(line, "move %d %d", &x, &y) == 2) {
+            zwlr_virtual_pointer_v1_motion_absolute(pointer, time += 10, x, y, 1920, 1080);
+            zwlr_virtual_pointer_v1_frame(pointer);
+            wl_display_roundtrip(display);
+            puts("MOVED");
             fflush(stdout);
             continue;
         }
