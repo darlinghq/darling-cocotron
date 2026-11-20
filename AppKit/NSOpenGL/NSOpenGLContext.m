@@ -153,7 +153,32 @@ static inline void _clearCurrentContext() {
     CGLSetParameter(_glContext, parameter, vals);
 }
 
+// Makes the view's window the drawable of the CGL context without changing
+// which context is current on this thread: a context that the application
+// makes current later with CGLSetCurrentContext() (not -makeCurrentContext)
+// then draws to and presents on the view, as it does on macOS once -setView:
+// has been called.
+- (void) _attachDrawable {
+    CGLWindowRef window = NS_EXTRA(NSOpenGLContext, self)->_cglWindow;
+    if (window == NULL)
+        return;
+    CGLContextObj previous = CGLGetCurrentContext();
+    if (CGLContextMakeCurrentAndAttachToWindow(_glContext, window) == kCGLNoError && previous != _glContext)
+        CGLSetCurrentContext(previous);
+}
+
 - (void) updateViewParameters {
+    [self _updateViewParametersAttaching: YES];
+}
+
+// -makeCurrentContext attaches the drawable itself, on the calling thread, so
+// it does not need the extra attach (which would bind the context to the main
+// thread while another thread may be holding it).
+- (void) _updateViewParametersForMakeCurrent {
+    [self _updateViewParametersAttaching: NO];
+}
+
+- (void) _updateViewParametersAttaching: (BOOL) attach {
     if (NS_EXTRA(NSOpenGLContext, self)->_view == nil || [NS_EXTRA(NSOpenGLContext, self)->_view window] == nil) return;
     NSRect rect = [NS_EXTRA(NSOpenGLContext, self)->_view bounds];
 
@@ -162,6 +187,8 @@ static inline void _clearCurrentContext() {
     if (NS_EXTRA(NSOpenGLContext, self)->_subwindow == nil) {
         NS_EXTRA(NSOpenGLContext, self)->_subwindow = [[[NS_EXTRA(NSOpenGLContext, self)->_view window] _createSubWindowWithFrame: rect] retain];
         NS_EXTRA(NSOpenGLContext, self)->_cglWindow = CGLGetWindowForContext(_glContext, [NS_EXTRA(NSOpenGLContext, self)->_subwindow nativeWindow]);
+        if (attach)
+            [self _attachDrawable];
     } else {
         [NS_EXTRA(NSOpenGLContext, self)->_subwindow setFrame: rect];
     }
@@ -242,9 +269,9 @@ static inline void _clearCurrentContext() {
     // background resource uploads must not wait for a main-thread run loop.
     if (NS_EXTRA(NSOpenGLContext, self)->_subwindow == nil && NS_EXTRA(NSOpenGLContext, self)->_view != nil) {
         if ([NSThread isMainThread]) {
-            [self updateViewParameters];
+            [self _updateViewParametersForMakeCurrent];
         } else {
-            [self performSelectorOnMainThread: @selector(updateViewParameters)
+            [self performSelectorOnMainThread: @selector(_updateViewParametersForMakeCurrent)
                                    withObject: nil
                                 waitUntilDone: YES];
         }
