@@ -381,125 +381,90 @@ static const char preferredLengthKey;
     return result;
 }
 
-/** adjust all the non-collapsed subviews so that they are equally spaced
- * horizontally within the splitview */
-- (void) _adjustSubviewWidths {
-    // Set all the subview heights to the bounds height of the split view
-    CGFloat height = NSHeight([self bounds]);
-
-    int i, count = [[self _arrangedList] count];
-
-    CGFloat totalWidthBefore = 0.;
-    NSUInteger visibleCount = 0;
-    BOOL hasEmptySubview = NO;
-
-    // The available width to the subviews
-    CGFloat totalWidthAfter =
-            [self bounds].size.width - [self dividerThickness] * (count - 1);
+// Lays the arranged subviews out along the split axis (x for vertical split
+// views, y otherwise) so that they and the dividers fill the split view, and
+// sizes them across it to the split view's bounds.
+//
+// The visible subviews keep the proportions of their lengths, as AppKit
+// documents for adjustSubviews. Each subview ends where the running sum of
+// the lengths before it ends, scaled to the space and rounded to the nearest
+// point (half points up), so the rounding never builds up and the last subview
+// ends at the far edge. A divider follows every arranged subview but the last,
+// hidden (collapsed) ones included; a hidden subview takes no space and keeps
+// its frame. When no visible subview has a length, they share the space
+// equally. Constraint-based split views whose subviews hold their lengths at
+// different priorities use those priorities instead
+// (-_lengthsByHoldingPriorityForTotal:).
+//
+// QUIRK: the rounding to the nearest point of the running sum and the divider
+// kept for hidden subviews are not documented. Evidence: black-box observation
+// of adjustSubviews and of split view resizing on macOS 10.14.4 and 26.7.3
+// (tier 2; both agree), probes mac-probes/aqua-metric-followups.m and -2.m of
+// the research notes: two 40-point subviews in a 100-point split view become
+// 46 and 45 points with the thick divider, 50 and 49 with the thin one.
+// Test: appkit-split-view-proportional.m (test_quirk_rounding,
+// test_quirk_hidden_subviews)
+- (void) _adjustSubviewLengths {
+    BOOL vertical = [self isVertical];
+    NSArray *arranged = [self _arrangedList];
+    NSRect bounds = [self bounds];
+    CGFloat start = vertical ? NSMinX(bounds) : NSMinY(bounds);
+    CGFloat thickness = [self dividerThickness];
+    NSUInteger i, count = [arranged count], visibleCount = 0;
+    CGFloat total = 0;
 
     for (i = 0; i < count; i++) {
-        NSView *subview = [[self _arrangedList] objectAtIndex: i];
-        if ([self isSubviewCollapsed: subview] == NO) {
-            ++visibleCount;
-            if (NSWidth([subview frame]) <= 0)
-                hasEmptySubview = YES;
-            totalWidthBefore += NSWidth([subview frame]);
-        }
-    }
+        NSView *subview = [arranged objectAtIndex: i];
 
+        if ([self isSubviewCollapsed: subview])
+            continue;
+        ++visibleCount;
+        total += MAX(0, vertical ? NSWidth([subview frame]) : NSHeight([subview frame]));
+    }
     if (visibleCount == 0)
         return;
-    totalWidthAfter = MAX(0, NSWidth([self bounds]) -
-                            [self dividerThickness] * (visibleCount - 1));
-    BOOL distributeEqually = hasEmptySubview || totalWidthBefore <= 0;
-    CGFloat delta = distributeEqually ? 0 : totalWidthAfter / totalWidthBefore;
-    NSUInteger remaining = visibleCount;
-    NSArray *held = distributeEqually ? nil : [self _lengthsByHoldingPriorityForTotal: totalWidthAfter];
+
+    CGFloat space = MAX(0, (vertical ? NSWidth(bounds) : NSHeight(bounds)) - thickness * (count - 1));
+    NSArray *held = total > 0 ? [self _lengthsByHoldingPriorityForTotal: space] : nil;
     NSUInteger visibleIndex = 0;
+    CGFloat sum = 0, end = 0, position = start;
 
-    NSRect frame = [self bounds];
     for (i = 0; i < count; i++) {
-        NSView *subview = [[self _arrangedList] objectAtIndex: i];
-        if ([self isSubviewCollapsed: subview] == NO) {
-            --remaining;
-            CGFloat available = MAX(0, NSMaxX([self bounds]) - frame.origin.x);
-            CGFloat proposed = held
-                ? [[held objectAtIndex: visibleIndex++] doubleValue]
-                : distributeEqually
-                ? floor(totalWidthAfter / visibleCount)
-                : floor(NSWidth([subview frame]) * delta);
-            frame.size.width = remaining == 0 ? available
-                : MIN(available, MAX(0, proposed));
-            frame.size.height = height;
+        NSView *subview = [arranged objectAtIndex: i];
 
-            NSSize oldSize = [subview frame].size;
+        if (![self isSubviewCollapsed: subview]) {
+            CGFloat length;
 
+            ++visibleIndex;
+            if (held != nil) {
+                length = [[held objectAtIndex: visibleIndex - 1] doubleValue];
+            } else {
+                CGFloat newEnd;
+
+                sum += total > 0 ? MAX(0, vertical ? NSWidth([subview frame]) : NSHeight([subview frame])) : 1;
+                newEnd = visibleIndex == visibleCount
+                                 ? space
+                                 : floor(sum * space / (total > 0 ? total : visibleCount) + 0.5);
+                length = MAX(0, newEnd - end);
+                end = newEnd;
+            }
+            if (visibleIndex == visibleCount)
+                length = MAX(0, start + (vertical ? NSWidth(bounds) : NSHeight(bounds)) - position);
+
+            NSRect frame = bounds;
+
+            if (vertical) {
+                frame.origin.x = position;
+                frame.size.width = length;
+            } else {
+                frame.origin.y = position;
+                frame.size.height = length;
+            }
             [subview setFrame: frame];
-
-            frame.origin.x = MIN(NSMaxX([self bounds]),
-                NSMaxX(frame) + [self dividerThickness]);
+            position += length;
         }
-    }
-}
-
-- (void) _adjustSubviewHeights {
-    // Set all the subview widths to the bounds width of the split view
-    CGFloat width = NSWidth([self bounds]);
-
-    int i, count = [[self _arrangedList] count];
-
-    // We've got to figure out how much the delta is between the old and new
-    // heights and multiply all the heights to the new delta to get them to fit
-    // (or something like that...) Apple says They resize proportionally
-    CGFloat totalHeightBefore = 0.;
-    NSUInteger visibleCount = 0;
-    BOOL hasEmptySubview = NO;
-    CGFloat totalHeightAfter =
-            [self bounds].size.height - [self dividerThickness] * (count - 1);
-
-    for (i = 0; i < count; i++) {
-        NSView *subview = [[self _arrangedList] objectAtIndex: i];
-        if ([self isSubviewCollapsed: subview] == NO) {
-            NSRect subviewFrame = [subview frame];
-            ++visibleCount;
-            if (NSHeight(subviewFrame) <= 0)
-                hasEmptySubview = YES;
-            totalHeightBefore += NSHeight(subviewFrame);
-        }
-    }
-
-    if (visibleCount == 0)
-        return;
-    totalHeightAfter = MAX(0, NSHeight([self bounds]) -
-                             [self dividerThickness] * (visibleCount - 1));
-    BOOL distributeEqually = hasEmptySubview || totalHeightBefore <= 0;
-    CGFloat delta = distributeEqually ? 0 : totalHeightAfter / totalHeightBefore;
-    NSUInteger remaining = visibleCount;
-    NSArray *held = distributeEqually ? nil : [self _lengthsByHoldingPriorityForTotal: totalHeightAfter];
-    NSUInteger visibleIndex = 0;
-
-    NSRect frame = [self bounds];
-    for (i = 0; i < count; i++) {
-        NSView *subview = [[self _arrangedList] objectAtIndex: i];
-        if ([self isSubviewCollapsed: subview] == NO) {
-            --remaining;
-            CGFloat available = MAX(0, NSMaxY([self bounds]) - frame.origin.y);
-            CGFloat proposed = held
-                ? [[held objectAtIndex: visibleIndex++] doubleValue]
-                : distributeEqually
-                ? floor(totalHeightAfter / visibleCount)
-                : floor(NSHeight([subview frame]) * delta);
-            frame.size.height = remaining == 0 ? available
-                : MIN(available, MAX(0, proposed));
-            frame.size.width = width;
-
-            NSSize oldSize = [subview frame].size;
-
-            [subview setFrame: frame];
-
-            frame.origin.y = MIN(NSMaxY([self bounds]),
-                NSMaxY(frame) + [self dividerThickness]);
-        }
+        if (i + 1 < count)
+            position = MIN(start + (vertical ? NSWidth(bounds) : NSHeight(bounds)), position + thickness);
     }
 }
 
@@ -520,11 +485,7 @@ static const char preferredLengthKey;
 
     [self _postNoteWillResize];
 
-    if ([self isVertical]) {
-        [self _adjustSubviewWidths];
-    } else {
-        [self _adjustSubviewHeights];
-    }
+    [self _adjustSubviewLengths];
     [self setNeedsDisplay: YES];
     [self _postNoteDidResize];
 }
@@ -693,11 +654,12 @@ static const char preferredLengthKey;
     [self setNeedsUpdateConstraints: YES];
 }
 
+// Adding a subview leaves the frames alone; adjustSubviews (or a resize of the
+// split view) lays the subviews out, as on macOS 10.14.4 and 26.7.3.
 - (void) addSubview: (NSView *) view {
     [self _recordPreferredLengthOfSubview: view];
     [super addSubview: view];
     [self setNeedsUpdateConstraints: YES];
-    [self adjustSubviews];
 }
 
 static const char arrangedConstraintsKey;

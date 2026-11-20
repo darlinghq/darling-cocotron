@@ -346,6 +346,7 @@ set(AppKit_sources
 	NSLevelIndicator.m
 	NSDraggingManager.m
 	NSImage.m
+	NSImageSymbolGlyphs.m
 	NSImageDrawingCache.m
 	NSNextStepFrame.m
 	NSPreviewRepresentingActivityItem.m
@@ -413,6 +414,7 @@ set(AppKit_sources
 	NSStepper.m
 	NSDiffableDataSourceSnapshot.m
 	NSAccessibility.m
+	NSAccessibilityProtocols.m
 	NSAppearance.m
 	NSAccessibilityCustomAction.m
 	NSAccessibilityElement.m
@@ -600,6 +602,7 @@ add_framework(AppKit
 		CoreServices
 		UniformTypeIdentifiers
 		HIToolbox
+		compression
 		UIFoundation
 		dbus
 )

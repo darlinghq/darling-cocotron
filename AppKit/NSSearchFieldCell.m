@@ -29,6 +29,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSTextField.h>
 #import <AppKit/NSWindow.h>
 
+@interface NSTextFieldCell (AquaRoundedBezel)
+- (NSRect) _aquaRoundedBezelRectForFrame: (NSRect) frame inView: (NSView *) control;
+@end
+
 @implementation NSSearchFieldCell
 
 - initWithCoder: (NSCoder *) coder {
@@ -259,15 +263,19 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (void) _drawSquareBezelInRect: (NSRect) frame inView: (NSView *) control {
-    [[control graphicsStyle] drawRoundedTextFieldBezelInRect: frame radius: 4];
+    [[control graphicsStyle] drawRoundedTextFieldBezelInRect: [self _aquaRoundedBezelRectForFrame: frame inView: control]
+                                                      radius: 4
+                                                     enabled: [self isEnabled]];
 }
 
 - (void) drawWithFrame: (NSRect) frame inView: (NSView *) control {
     [super drawWithFrame: frame inView: control];
 
-    [[control graphicsStyle] drawSearchGlyphInRect: [self searchButtonRectForBounds: frame]];
+    [[control graphicsStyle] drawSearchGlyphInRect: [self searchButtonRectForBounds: frame]
+                                       controlSize: [self controlSize]];
     if ([[self attributedStringValue] length] > 0)
-        [[control graphicsStyle] drawSearchCancelGlyphInRect: [self cancelButtonRectForBounds: frame]];
+        [[control graphicsStyle] drawSearchCancelGlyphInRect: [self cancelButtonRectForBounds: frame]
+                                                 controlSize: [self controlSize]];
 }
 
 @end

@@ -16,9 +16,10 @@
 # a window whose mask lacks Titled has no title bar (frame and content height
 # are equal), while a titled window keeps its 32 point title bar when
 # titlebarAppearsTransparent is YES and titleVisibility is hidden. A mask with
-# Resizable but without Titled has no title bar on 26.7.3 but a 22 point one on
-# macOS 10.14.4; we follow 10.14.4, so under X11 it gets the full window
-# manager frame like a titled window. Closable alone and Borderless have none.
+# Resizable but without Titled has a title bar (22 points on 10.14.4, 28 on
+# 26.7.3) only in a program built against an SDK older than 10.7, on both
+# versions; under X11 such a window then gets the full window manager frame.
+# Closable alone and Borderless have none.
 set -euo pipefail
 here=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 mode=${1:?hidden or decorations}
@@ -51,13 +52,15 @@ hidden)
 decorations)
     framed="motif=none"
     frameless="motif=flags:2 functions:0 decorations:0( |$)"
-    # Resizable without Titled gets the full frame too (follows Mac OS X 10.14)
+    # Resizable without Titled gets the full frame only in a program built against an SDK older than 10.7
+    resizable=$frameless
+    grep -q '^old-sdk 1$' "$temp/guest.log" && resizable=$framed
     check deco-titled "$framed"
     check deco-borderless "$frameless"
-    check deco-untitled "$framed"
+    check deco-untitled "$resizable"
     check deco-untitled-fixed "$frameless"
-    check deco-borderless-resizable "$framed"
-    check deco-titled-to-untitled "$framed"
+    check deco-borderless-resizable "$resizable"
+    check deco-titled-to-untitled "$resizable"
     check deco-untitled-to-fixed "$frameless"
     check deco-untitled-to-titled "$framed"
     check deco-titled-transparent "$framed"

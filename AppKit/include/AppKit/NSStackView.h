@@ -102,6 +102,13 @@ static const CGFloat NSStackViewSpacingUseDefault = FLT_MAX;
 - (void) insertArrangedSubview: (NSView *) view atIndex: (NSInteger) index;
 - (void) removeArrangedSubview: (NSView *) view;
 
+- (NSLayoutPriority) huggingPriorityForOrientation: (NSLayoutConstraintOrientation) orientation;
+- (void) setHuggingPriority: (NSLayoutPriority) priority
+             forOrientation: (NSLayoutConstraintOrientation) orientation;
+- (NSLayoutPriority) clippingResistancePriorityForOrientation: (NSLayoutConstraintOrientation) orientation;
+- (void) setClippingResistancePriority: (NSLayoutPriority) priority
+                        forOrientation: (NSLayoutConstraintOrientation) orientation;
+
 - (void) setCustomSpacing: (CGFloat) spacing afterView: (NSView *) view;
 - (CGFloat) customSpacingAfterView: (NSView *) view;
 

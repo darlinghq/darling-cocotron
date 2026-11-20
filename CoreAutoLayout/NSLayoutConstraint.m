@@ -39,6 +39,8 @@ static id _NSLayoutItemParent(id item)
     return nil;
 }
 
+static CGFloat _NSLayoutStandardSpacing(id first, id second);
+
 static BOOL _NSLayoutItemIsWithin(id item, id container)
 {
     for (; item != nil; item = _NSLayoutItemParent(item)) {
@@ -135,7 +137,14 @@ static BOOL _NSLayoutItemIsLegal(id item)
         if ([coder containsValueForKey:@"NSMultiplier"])
             NS_EXTRA(NSLayoutConstraint, self)->_multiplier = [coder decodeDoubleForKey:@"NSMultiplier"];
 
-        if ([coder containsValueForKey:@"NSConstantV2"])
+        NS_EXTRA(NSLayoutConstraint, self)->_symbolicConstant = [[coder decodeObjectForKey:@"NSSymbolicConstant"] retain];
+        // A standard space (the "-" of the visual format language, Interface Builder's "standard"
+        // spacing) is archived by name, without a constant, and is the standard space even when
+        // the archive has a constant (observed on macOS 10.14.4 and 26.7.3).
+        if ([NS_EXTRA(NSLayoutConstraint, self)->_symbolicConstant isEqualToString:@"NSSpace"])
+            NS_EXTRA(NSLayoutConstraint, self)->_constant = _NSLayoutStandardSpacing(NS_EXTRA(NSLayoutConstraint, self)->_firstItem,
+                                                                                     NS_EXTRA(NSLayoutConstraint, self)->_secondItem);
+        else if ([coder containsValueForKey:@"NSConstantV2"])
             NS_EXTRA(NSLayoutConstraint, self)->_constant = [coder decodeDoubleForKey:@"NSConstantV2"];
         else if ([coder containsValueForKey:@"NSConstant"])
             NS_EXTRA(NSLayoutConstraint, self)->_constant = [coder decodeDoubleForKey:@"NSConstant"];
@@ -143,7 +152,6 @@ static BOOL _NSLayoutItemIsLegal(id item)
         if ([coder containsValueForKey:@"NSPriority"])
             NS_EXTRA(NSLayoutConstraint, self)->_priority = [coder decodeFloatForKey:@"NSPriority"];
 
-        NS_EXTRA(NSLayoutConstraint, self)->_symbolicConstant = [[coder decodeObjectForKey:@"NSSymbolicConstant"] retain];
         NS_EXTRA(NSLayoutConstraint, self)->_identifier = [[coder decodeObjectForKey:@"NSLayoutIdentifier"] retain];
         NS_EXTRA(NSLayoutConstraint, self)->_shouldBeArchived = [coder decodeBoolForKey:@"NSShouldBeArchived"];
         NS_EXTRA(NSLayoutConstraint, self)->_active = YES;
@@ -196,11 +204,32 @@ static BOOL _NSLayoutItemIsLegal(id item)
 - (NSLayoutRelation)relation { return NS_EXTRA(NSLayoutConstraint, self)->_relation; }
 - (CGFloat)multiplier { return NS_EXTRA(NSLayoutConstraint, self)->_multiplier; }
 
+// An installed constraint tells its owner when its constant or priority changes, so the owner's
+// layout is updated without the owner having to compare the constraints it holds.
+static void constraintDidChange(NSLayoutConstraint *self)
+{
+    id owner = NS_EXTRA(NSLayoutConstraint, self)->_owner;
+    if (owner != nil && [owner respondsToSelector:@selector(_layoutConstraintDidChange:)])
+        [owner _layoutConstraintDidChange:self];
+}
+
 - (CGFloat)constant { return NS_EXTRA(NSLayoutConstraint, self)->_constant; }
-- (void)setConstant:(CGFloat)constant { NS_EXTRA(NSLayoutConstraint, self)->_constant = constant; }
+- (void)setConstant:(CGFloat)constant
+{
+    if (NS_EXTRA(NSLayoutConstraint, self)->_constant == constant)
+        return;
+    NS_EXTRA(NSLayoutConstraint, self)->_constant = constant;
+    constraintDidChange(self);
+}
 
 - (NSLayoutPriority)priority { return NS_EXTRA(NSLayoutConstraint, self)->_priority; }
-- (void)setPriority:(NSLayoutPriority)priority { NS_EXTRA(NSLayoutConstraint, self)->_priority = priority; }
+- (void)setPriority:(NSLayoutPriority)priority
+{
+    if (NS_EXTRA(NSLayoutConstraint, self)->_priority == priority)
+        return;
+    NS_EXTRA(NSLayoutConstraint, self)->_priority = priority;
+    constraintDidChange(self);
+}
 
 - (NSString *)identifier { return NS_EXTRA(NSLayoutConstraint, self)->_identifier; }
 - (void)setIdentifier:(NSString *)identifier
@@ -279,6 +308,14 @@ static BOOL _NSLayoutItemIsLegal(id item)
 // "-" between two views, and between a view and its superview's edge.
 static const CGFloat VFLStandardSiblingSpacing = 8;
 static const CGFloat VFLStandardSuperviewSpacing = 20;
+
+// The standard space between two items: to the edge of the item's container, or between siblings.
+static CGFloat _NSLayoutStandardSpacing(id first, id second)
+{
+    if (second != nil && (_NSLayoutItemParent(first) == second || _NSLayoutItemParent(second) == first))
+        return VFLStandardSuperviewSpacing;
+    return VFLStandardSiblingSpacing;
+}
 
 typedef struct {
     NSString *format;

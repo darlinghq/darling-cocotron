@@ -192,6 +192,9 @@ FcConfig *O2FontSharedFontConfig() {
 
 // Answers of O2FontCopyInstalledFamilyForStandardFamily, dropped when fonts are registered.
 static NSMutableDictionary *standardFamilyCache = nil;
+// The font file and face index each name passed to -initWithFontName: resolved to, as an array of
+// the file name and an NSNumber. The fonts only change when fonts are registered, which drops it.
+static NSMutableDictionary *fontFileCache = nil;
 
 O2FontRegistrationResult O2FontRegisterFontFile(NSString *path) {
     static NSMutableSet *registered = nil;
@@ -209,6 +212,7 @@ O2FontRegistrationResult O2FontRegisterFontFile(NSString *path) {
             return O2FontRegistrationUnrecognized;
         [registered addObject: path];
         [standardFamilyCache removeAllObjects];
+        [fontFileCache removeAllObjects];
     }
     return O2FontRegistrationSucceeded;
 }
@@ -634,21 +638,45 @@ O2FontRef O2FontCreateWithCodePointCoverage(const uint32_t *codePoints,
     return [self initWithFace: face];
 }
 
+// The installed face for a font name: by its PostScript name, else fontconfig's closest match.
+static NSString *resolveFontFile(Class cls, NSString *name, int *faceIndex) {
+    NSString *filename = [cls filenameForPostScriptName: name faceIndex: faceIndex];
+    if (filename == nil) {
+        // The families macOS ships resolve as O2FontCopyInstalledFamilyForStandardFamily does.
+        NSString *standard = standardFamilyPattern(name, NULL);
+        filename = [cls filenameForPattern: standard != nil ? standard : name faceIndex: faceIndex];
+    }
+    if (filename == nil)
+        filename = [cls filenameForPattern: @"" faceIndex: faceIndex];
+    return filename;
+}
+
 - (instancetype) initWithFontName: (NSString *) name {
     self = [super initWithFontName: name];
 
     // The face is found by its PostScript name, else by fontconfig's closest match for the name. A font
     // collection file holds several faces: the face that was matched is opened, not the first.
     int faceIndex = 0;
-    NSString *filename = [[self class] filenameForPostScriptName: name faceIndex: &faceIndex];
-    if (filename == nil) {
-        // The families macOS ships resolve as O2FontCopyInstalledFamilyForStandardFamily does.
-        NSString *standard = standardFamilyPattern(name, NULL);
-        filename = [[self class] filenameForPattern: standard != nil ? standard : name
-                                         faceIndex: &faceIndex];
+    NSString *filename = nil;
+    NSArray *cached = nil;
+    if (name != nil) {
+        @synchronized([O2Font_freetype class]) {
+            cached = [[fontFileCache objectForKey: name] retain];
+        }
     }
-    if (filename == nil) {
-        filename = [[self class] filenameForPattern: @"" faceIndex: &faceIndex];
+    if (cached != nil) {
+        filename = [[[cached objectAtIndex: 0] retain] autorelease];
+        faceIndex = [[cached objectAtIndex: 1] intValue];
+        [cached release];
+    } else {
+        filename = resolveFontFile([self class], name, &faceIndex);
+        if (filename != nil && name != nil) {
+            @synchronized([O2Font_freetype class]) {
+                if (fontFileCache == nil)
+                    fontFileCache = [[NSMutableDictionary alloc] init];
+                [fontFileCache setObject: @[ filename, @(faceIndex) ] forKey: name];
+            }
+        }
     }
     if (filename == nil) {
         NSLog(@"No font found for name %@", name);

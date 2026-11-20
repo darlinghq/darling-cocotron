@@ -30,5 +30,9 @@ typedef enum {
 }
 - (NSWindowBorderType) windowBorderType;
 - (void) setWindowBorderType: (NSWindowBorderType) borderType;
+// Shows the window's standard buttons in this view when the window shows no
+// title bar of its own (the window manager's frame is not there to show
+// them), and takes them out again when it does.
+- (void) _updateStandardWindowButtons;
 
 @end

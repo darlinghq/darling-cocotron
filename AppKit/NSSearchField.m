@@ -36,6 +36,11 @@ static char centersPlaceholderKey;
     return [NSSearchFieldCell class];
 }
 
+// A new search field draws no background of its own (macOS 10.14.4).
+- (void) _setDefaultBackground {
+    [[self cell] setDrawsBackground: NO];
+}
+
 // The ring follows the rounded corners of the search field's bezel (see NSSearchFieldCell).
 - (void) drawFocusRingMask {
     [[NSBezierPath bezierPathWithRoundedRect: [self bounds] xRadius: 4 yRadius: 4] fill];

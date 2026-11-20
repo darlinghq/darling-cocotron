@@ -20,8 +20,18 @@
 #import <AppKit/NSAccessibility.h>
 #import <Foundation/NSObject.h>
 
-@interface NSAccessibilityElement : NSObject <NSAccessibility> {
-    BOOL _isAccessible;
-}
+@interface NSAccessibilityElement : NSObject <NSAccessibility, NSAccessibilityElement>
+
++ (id) accessibilityElementWithRole: (NSString *) role
+                              frame: (NSRect) frame
+                              label: (NSString *) label
+                             parent: (id) parent;
+
+- (void) accessibilityAddChildElement: (NSAccessibilityElement *) childElement;
+
+// The element's frame in the coordinates of its parent: a view's own coordinates, or
+// relative to the origin of any other parent's accessibilityFrame. Once set,
+// accessibilityFrame follows the parent.
+@property NSRect accessibilityFrameInParentSpace;
 
 @end
