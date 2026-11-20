@@ -483,23 +483,35 @@ static NSImage *DeclaredIconForType(UTType *uti) {
 }
 
 - (NSString *) localizedDescriptionForType: (NSString *) type {
-    // TODO: call UTTypeCopyDescription()
-    NSUnimplementedMethod();
-    return NULL;
+    if (type == nil)
+        return nil;
+    return [(NSString *) UTTypeCopyDescription((CFStringRef) type) autorelease];
 }
 
 - (BOOL) filenameExtension: (NSString *) extension
             isValidForType: (NSString *) type
 {
-    // TODO: call UTTypeCreateAllIdentifiersForTag
-    NSUnimplementedMethod();
+    if (extension == nil || type == nil || [extension length] == 0)
+        return NO;
+
+    // The types declared for the extension, any case. Dynamic identifiers
+    // stand in for undeclared extensions and do not make an extension valid.
+    NSArray *identifiers = [(NSArray *) UTTypeCreateAllIdentifiersForTag(
+        kUTTagClassFilenameExtension, (CFStringRef) extension, NULL) autorelease];
+    for (NSString *identifier in identifiers) {
+        if ([identifier hasPrefix: @"dyn."])
+            continue;
+        if (UTTypeConformsTo((CFStringRef) identifier, (CFStringRef) type))
+            return YES;
+    }
     return NO;
 }
 
 - (NSString *) preferredFilenameExtensionForType: (NSString *) type {
-    // TODO: call UTTypeCopyPreferredTagWithClass(kUTTagClassFilenameExtension)
-    NSUnimplementedMethod();
-    return NULL;
+    if (type == nil)
+        return nil;
+    return [(NSString *) UTTypeCopyPreferredTagWithClass(
+        (CFStringRef) type, kUTTagClassFilenameExtension) autorelease];
 }
 
 - (BOOL) type: (NSString *) type conformsToType: (NSString *) conformsToType {
@@ -509,9 +521,29 @@ static NSImage *DeclaredIconForType(UTType *uti) {
 }
 
 - (NSString *) typeOfFile: (NSString *) path error: (NSError **) error {
-    // TODO: call LSCopyItemAttribute(kLSItemContentType)
-    NSUnimplementedMethod();
-    return NULL;
+    // The type is the file's content type as NSURL reports it, so it is the
+    // same one LaunchServices gives for the item. A missing item is a
+    // read error, as it is for the file manager.
+    NSString *type = nil;
+    NSInteger code = NSFileReadUnknownError;
+
+    if ([path length] > 0) {
+        struct stat st;
+        if (lstat([path fileSystemRepresentation], &st) != 0) {
+            if (errno == ENOENT)
+                code = NSFileReadNoSuchFileError;
+        } else {
+            NSURL *url = [NSURL fileURLWithPath: path];
+            id value = nil;
+            if ([url getResourceValue: &value forKey: NSURLTypeIdentifierKey error: NULL] &&
+                [value isKindOfClass: [NSString class]])
+                type = value;
+        }
+    }
+
+    if (type == nil && error != NULL)
+        *error = [NSError errorWithDomain: NSCocoaErrorDomain code: code userInfo: nil];
+    return type;
 }
 
 - (BOOL) openFile: (NSString *) path {
