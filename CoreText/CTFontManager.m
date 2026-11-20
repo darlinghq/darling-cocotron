@@ -77,12 +77,20 @@ CTFontDescriptorRef CTFontManagerCreateFontDescriptorFromData(CFDataRef data)
     NSMutableDictionary *attributes = [NSMutableDictionary dictionary];
     NSString *name = (NSString *) CGFontCopyPostScriptName(font);
     NSString *family = (NSString *) O2FontCopyFamilyName((O2FontRef) font);
+    NSString *fullName = (NSString *) O2FontCopyFullName((O2FontRef) font);
+    NSString *style = (NSString *) O2FontCopyStyleName((O2FontRef) font);
     if (name != nil)
         [attributes setObject: name forKey: (NSString *) kCTFontNameAttribute];
     if (family != nil)
         [attributes setObject: family forKey: (NSString *) kCTFontFamilyNameAttribute];
+    if (fullName != nil)
+        [attributes setObject: fullName forKey: (NSString *) kCTFontDisplayNameAttribute];
+    if (style != nil)
+        [attributes setObject: style forKey: (NSString *) kCTFontStyleNameAttribute];
     [name release];
     [family release];
+    [fullName release];
+    [style release];
     CGFontRelease(font);
 
     // The descriptor keeps the data, so CTFontCreateWithFontDescriptor
