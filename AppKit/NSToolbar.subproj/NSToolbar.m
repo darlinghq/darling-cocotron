@@ -431,6 +431,16 @@ static BOOL isStandardItemIdentifier(NSString *identifier) {
     [_view layoutViewsWithWidth: width setFrame: YES];
 }
 
+- (void) _itemViewIntrinsicSizeDidChange: (NSToolbarItem *) item {
+    // The layout resizes views, which must not start another layout.
+    static BOOL laidOut;
+    if (laidOut)
+        return;
+    laidOut = YES;
+    [_view layoutViews];
+    laidOut = NO;
+}
+
 - (void) itemSizeDidChange {
     [_window _toolbarSizeDidChangeFromOldHeight: [self visibleHeight]];
 }

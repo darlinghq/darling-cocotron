@@ -331,11 +331,34 @@ static NSView *copyToolbarItemView(NSView *view) {
     return NS_EXTRA(NSToolbarItem, self)->_view;
 }
 
+// The size of an item whose view brings its own: the view's intrinsic content size, or
+// its frame in a dimension without one. On macOS an item with a view and no explicit
+// minimum and maximum size reports that size as both (black-box observation on macOS
+// 26.7.3, tests/appkit-toolbar-item-view-sizes.m).
+- (BOOL) _sizeFollowsView {
+    return NS_EXTRA(NSToolbarItem, self)->_view != nil && !NS_EXTRA(NSToolbarItem, self)->_hasExplicitSizes;
+}
+
+- (NSSize) _viewSize {
+    NSView *view = NS_EXTRA(NSToolbarItem, self)->_view;
+    NSSize size = [view intrinsicContentSize];
+    NSSize frameSize = [view frame].size;
+    if (size.width == NSViewNoIntrinsicMetric)
+        size.width = frameSize.width;
+    if (size.height == NSViewNoIntrinsicMetric)
+        size.height = frameSize.height;
+    return size;
+}
+
 - (NSSize) minSize {
+    if ([self _sizeFollowsView])
+        return [self _viewSize];
     return NS_EXTRA(NSToolbarItem, self)->_minSize;
 }
 
 - (NSSize) maxSize {
+    if ([self _sizeFollowsView])
+        return [self _viewSize];
     return NS_EXTRA(NSToolbarItem, self)->_maxSize;
 }
 
@@ -385,21 +408,19 @@ static NSView *copyToolbarItemView(NSView *view) {
     view = [view retain];
     [NS_EXTRA(NSToolbarItem, self)->_view release];
     NS_EXTRA(NSToolbarItem, self)->_view = view;
-    if (view != nil) {
-        NS_EXTRA(NSToolbarItem, self)->_minSize = [NS_EXTRA(NSToolbarItem, self)->_view frame].size;
-        NS_EXTRA(NSToolbarItem, self)->_maxSize = [NS_EXTRA(NSToolbarItem, self)->_view frame].size;
-    }
     [NS_EXTRA(NSToolbarItem, self)->_enclosingView setSubview: NS_EXTRA(NSToolbarItem, self)->_view];
     [self _didChange];
 }
 
 - (void) setMinSize: (NSSize) size {
     NS_EXTRA(NSToolbarItem, self)->_minSize = size;
+    NS_EXTRA(NSToolbarItem, self)->_hasExplicitSizes = YES;
     [self _didChange];
 }
 
 - (void) setMaxSize: (NSSize) size {
     NS_EXTRA(NSToolbarItem, self)->_maxSize = size;
+    NS_EXTRA(NSToolbarItem, self)->_hasExplicitSizes = YES;
     [self _didChange];
 }
 
@@ -602,15 +623,15 @@ static NSView *copyToolbarItemView(NSView *view) {
 {
     return [self sizeForSizeMode: sizeMode
                      displayMode: displayMode
-                         minSize: NS_EXTRA(NSToolbarItem, self)->_minSize
-                         maxSize: NS_EXTRA(NSToolbarItem, self)->_maxSize];
+                         minSize: [self minSize]
+                         maxSize: [self maxSize]];
 }
 
 - (NSSize) constrainedSize {
     return [self sizeForSizeMode: [NS_EXTRA(NSToolbarItem, self)->_toolbar sizeMode]
                      displayMode: [NS_EXTRA(NSToolbarItem, self)->_toolbar displayMode]
-                         minSize: NS_EXTRA(NSToolbarItem, self)->_minSize
-                         maxSize: NS_EXTRA(NSToolbarItem, self)->_maxSize];
+                         minSize: [self minSize]
+                         maxSize: [self maxSize]];
 }
 
 - (void) _setItemViewFrame: (NSRect) rect {
@@ -619,7 +640,7 @@ static NSView *copyToolbarItemView(NSView *view) {
 
 - (CGFloat) _expandWidth: (CGFloat) width {
     if ([self view] != nil) {
-        return MIN(width, NS_EXTRA(NSToolbarItem, self)->_maxSize.width);
+        return MIN(width, [self maxSize].width);
     }
 
     if ([NS_EXTRA(NSToolbarItem, self)->_itemIdentifier isEqualToString: NSToolbarFlexibleSpaceItemIdentifier])
@@ -735,6 +756,9 @@ static NSView *copyToolbarItemView(NSView *view) {
 
         NS_EXTRA(NSToolbarItem, self)->_maxSize = [coder decodeSizeForKey: @"NSToolbarItemMaxSize"];
         NS_EXTRA(NSToolbarItem, self)->_minSize = [coder decodeSizeForKey: @"NSToolbarItemMinSize"];
+        // An item that ignores its minimum and maximum size is as big as its view wants to be.
+        NS_EXTRA(NSToolbarItem, self)->_hasExplicitSizes =
+                ![coder decodeBoolForKey: @"NSToolbarItemIgnoreMinMaxSizes"];
         [self setEnabled: [coder decodeBoolForKey: @"NSToolbarItemEnabled"]];
         [self setTag: [coder decodeIntForKey: @"NSToolbarItemTag"]];
 
