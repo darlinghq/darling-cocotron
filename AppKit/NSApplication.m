@@ -1052,6 +1052,12 @@ static NSMutableArray *pendingOpenURLs = nil;
     NS_HANDLER [self reportException: localException];
     NS_ENDHANDLER
 
+    // Saved windows are recreated here: after the delegate's applicationWillFinishLaunching:
+    // and before applicationDidFinishLaunching:.
+    NS_DURING [self _restoreWindowsFromSavedState];
+    NS_HANDLER [self reportException: localException];
+    NS_ENDHANDLER
+
     // Give us a first event
     [NSTimer scheduledTimerWithTimeInterval: 0.1
                                      target: self
@@ -1163,6 +1169,11 @@ static NSMutableArray *pendingOpenURLs = nil;
                                           dictionaryWithObject: [NSNumber
                                                                         numberWithBool: isDefault]
                                                         forKey: NSApplicationLaunchIsDefaultLaunchKey]];
+    NS_HANDLER [self reportException: localException];
+    NS_ENDHANDLER
+
+    // The recreated windows receive their saved state once the delegate has been told.
+    NS_DURING [self _finishRestoringWindowsAfterLaunch];
     NS_HANDLER [self reportException: localException];
     NS_ENDHANDLER
 
@@ -1959,6 +1970,11 @@ static BOOL isModalWindowOrItsSheet(NSWindow *window, NSWindow *modalWindow) {
 }
 
 - (void) terminate: sender {
+    // The windows are saved before the documents close them.
+    NS_DURING [self _saveRestorableStateForTermination];
+    NS_HANDLER [self reportException: localException];
+    NS_ENDHANDLER
+
     [[NSDocumentController sharedDocumentController]
             closeAllDocumentsWithDelegate: self
                       didCloseAllSelector: @selector
@@ -2491,11 +2507,15 @@ BOOL NSApplicationLoad(void) {
     return YES;
 }
 
-// Restoration is never in progress at launch, so there is no phase to extend.
+// The restoration phase at launch ends when no restoration class is outstanding; extending it
+// holds NSApplicationDidFinishRestoringWindowsNotification back until -completeStateRestoration.
+// Outside that phase they do nothing.
 - (void) extendStateRestoration {
+    [self _extendStateRestoration];
 }
 
 - (void) completeStateRestoration {
+    [self _completeStateRestoration];
 }
 
 @end

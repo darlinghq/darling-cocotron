@@ -133,6 +133,7 @@ set(AppKit_sources
 	NSSecureTextFieldCell.m
 	NSPathCell.m
 	NSWindow.m
+	NSStateRestoration.m
 	NSAlert.m
 	NSCursor.m
 	NSFontMetric.m

@@ -76,6 +76,29 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (void) _updateOcclusionState;
 @end
 
+// Used by the persistent window state restoration in NSStateRestoration.m.
+@interface NSView (NSStateRestoration)
+// Whether -invalidateRestorableState was called.
+- (BOOL) _hasInvalidatedRestorableState;
+@end
+
+@interface NSWindow (NSStateRestoration)
+// Whether the window was closed and not ordered in since.
+- (BOOL) _isClosedForRestoration;
+@end
+
+// Persistent window state restoration, in NSStateRestoration.m.
+@interface NSApplication (NSStateRestoration)
+- (void) _saveRestorableStateForTermination;
+- (void) _restoreWindowsFromSavedState;
+- (void) _finishRestoringWindowsAfterLaunch;
+- (void) _applyRestoredState: (NSData *) stateData toWindow: (NSWindow *) window;
+- (void) _postDidFinishRestoringWindowsIfDone;
+- (void) _extendStateRestoration;
+- (void) _completeStateRestoration;
+- (BOOL) _restorableStateUsesSecureCoding;
+@end
+
 // Defined in NSView.m.
 extern NSRect _NSAlignRectToPixelGrid(NSRect rect,
                                     NSAlignmentOptions options);

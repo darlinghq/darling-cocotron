@@ -431,6 +431,10 @@ static NSString *const NSWindowRestorationClassKey = @"NSWindowRestorationClass"
     return NSClassFromString(name);
 }
 
+- (BOOL) _isClosedForRestoration {
+    return NS_EXTRA(NSWindow, self)->_isClosed;
+}
+
 // Snapshots of windows are not kept, so there is nothing to turn off.
 - (void) disableSnapshotRestoration {
 }
