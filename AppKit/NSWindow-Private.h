@@ -74,6 +74,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (void) redo: sender;
 - (BOOL) validateMenuItem: (NSMenuItem *) item;
 - (void) dirtyRect: (NSRect) rect;
+// The restoration class that -encodeRestorableStateWithCoder: recorded in state, or Nil.
++ (Class) _restorationClassFromState: (NSCoder *) state;
 @end
 
 @interface NSApplication (NSApplication_private)
