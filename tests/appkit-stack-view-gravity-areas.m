@@ -551,6 +551,12 @@ static void test_nib_gravity_views(const char *directory)
           "the views are in their archived order");
     CHECK([[stack views] count] == 4, "four views");
     CHECK([stack huggingPriorityForOrientation:H] > 249.9 && [stack huggingPriorityForOrientation:H] < 250, "stack hugging is archived");
+    // the custom spacing and visibility priorities live in NSMapTables with weak, view-keyed entries
+    CHECK([stack customSpacingAfterView:a] == 3, "custom spacing after A is %g", [stack customSpacingAfterView:a]);
+    CHECK([stack customSpacingAfterView:b] == NSStackViewSpacingUseDefault, "no custom spacing after B: %g", [stack customSpacingAfterView:b]);
+    CHECK([stack visibilityPriorityForView:a] == NSStackViewVisibilityPriorityMustHold, "A's visibility priority is %g", [stack visibilityPriorityForView:a]);
+    CHECK([stack visibilityPriorityForView:b] == 600, "B's visibility priority is %g", [stack visibilityPriorityForView:b]);
+    CHECK([stack visibilityPriorityForView:d] == NSStackViewVisibilityPriorityNotVisible, "D's visibility priority is %g", [stack visibilityPriorityForView:d]);
 
     // in a window the stack view arranges its views at once, the center area centered
     NSWindow *window = [[[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 400, 100)
