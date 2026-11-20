@@ -406,7 +406,9 @@ NS_EXTRA_SYNTHESIZE_ASSIGN(NSCell, controlTint, _controlTint, NSControlTint, con
     return self;
 }
 
-- initImageCell: (NSImage *) image {
+// The state of a new image cell. -init uses it directly: on macOS -[NSCell init] does not send
+// -initImageCell: or -initTextCell:, so a subclass overriding those is not entered from -init.
+static void initImageCellState(NSCell *self, NSImage *image) {
     NS_EXTRA(NSCell, self)->_focusRingType = [[self class] defaultFocusRingType];
     NS_EXTRA(NSCell, self)->_state = NSControlStateValueOff;
     NS_EXTRA(NSCell, self)->_font = nil;
@@ -422,11 +424,16 @@ NS_EXTRA_SYNTHESIZE_ASSIGN(NSCell, controlTint, _controlTint, NSControlTint, con
     NS_EXTRA(NSCell, self)->_refusesFirstResponder = NO;
     NS_EXTRA(NSCell, self)->_lineBreakMode = NSLineBreakByWordWrapping;
     NS_EXTRA(NSCell, self)->_hasValidObjectValue = YES;
+}
+
+- initImageCell: (NSImage *) image {
+    initImageCellState(self, image);
     return self;
 }
 
 - init {
-    return [self initImageCell: nil];
+    initImageCellState(self, nil);
+    return self;
 }
 
 - (void) dealloc {

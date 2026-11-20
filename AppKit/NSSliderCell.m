@@ -128,33 +128,35 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return self;
 }
 
+static void initSliderCellState(NSSliderCell *self) {
+    NS_EXTRA(NSCell, self)->_isContinuous = YES; // NSCell defaults to NO, NSSliderCell defaults to YES
+    self->_type = NSLinearSlider;
+    self->_minValue = 0;
+    self->_maxValue = 1.0;
+    self->_altIncrementValue = 0;
+    self->_isVertical = -1;
+    self->_lastRect = NSZeroRect;
+    self->_numberOfTickMarks = 0;
+    self->_tickMarkPosition = NSTickMarkBelow;
+    self->_allowsTickMarkValuesOnly = NO;
+}
+
+// Like -[NSCell init], this does not go through -initImageCell: or -initTextCell:.
+- init {
+    [super init];
+    initSliderCellState(self);
+    return self;
+}
+
 - initTextCell: (NSString *) string {
     [super initTextCell: string];
-    NS_EXTRA(NSCell, self)->_isContinuous = YES; // NSCell defaults to NO, NSSliderCell defaults to YES
-    _type = NSLinearSlider;
-    _minValue = 0;
-    _maxValue = 1.0;
-    _altIncrementValue = 0;
-    _isVertical = -1;
-    _lastRect = NSZeroRect;
-    _numberOfTickMarks = 0;
-    _tickMarkPosition = NSTickMarkBelow;
-    _allowsTickMarkValuesOnly = NO;
+    initSliderCellState(self);
     return self;
 }
 
 - initImageCell: (NSImage *) image {
     [super initImageCell: image];
-    NS_EXTRA(NSCell, self)->_isContinuous = YES; // NSCell defaults to NO, NSSliderCell defaults to YES
-    _type = NSLinearSlider;
-    _minValue = 0;
-    _maxValue = 1.0;
-    _altIncrementValue = 0;
-    _isVertical = -1;
-    _lastRect = NSZeroRect;
-    _numberOfTickMarks = 0;
-    _tickMarkPosition = NSTickMarkBelow;
-    _allowsTickMarkValuesOnly = NO;
+    initSliderCellState(self);
     return self;
 }
 
@@ -235,11 +237,29 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     // deprecated, do nothing
 }
 
+// _isVertical is -1 until the orientation is known, then 0 or 1: taken from the frame the cell
+// draws in, or with kVerticalSet added when it was set explicitly, which the frame does not change.
+enum { kVerticalSet = 2 };
+
 - (NSInteger) isVertical {
-    return _isVertical;
+    return _isVertical < 0 ? _isVertical : (_isVertical & 1);
 }
 
+- (void) setVertical: (BOOL) vertical {
+    _isVertical = kVerticalSet | (vertical ? 1 : 0);
+}
+
+// Takes the orientation from a frame unless it is already known; drawing updates it from the
+// frame the cell draws in, as before.
+- (void) _setOrientationFromFrame: (NSRect) frame {
+    if (_isVertical < 0)
+        _isVertical = (frame.size.height > frame.size.width) ? 1 : 0;
+}
+
+// Follows the slider's frame unless the orientation was set with -setVertical:.
 - (void) _setVerticalForSize: (NSSize) size {
+    if (_isVertical >= 0 && (_isVertical & kVerticalSet))
+        return;
     _isVertical = size.height > size.width ? 1 : 0;
 }
 
@@ -494,7 +514,8 @@ typedef struct {
 - (void) drawLinearSliderWithFrame: (NSRect) frame
                             inView: (NSView *) controlView
 {
-    _isVertical = (frame.size.height > frame.size.width) ? 1 : 0;
+    if (!(_isVertical >= 0 && (_isVertical & kVerticalSet)))
+        _isVertical = (frame.size.height > frame.size.width) ? 1 : 0;
 
     [self drawBarInside: frame flipped: [controlView isFlipped]];
     [self drawTickMarks];
