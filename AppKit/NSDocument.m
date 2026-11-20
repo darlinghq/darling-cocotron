@@ -608,12 +608,6 @@ static int untitled_document_number = 0;
     } else {
         status = [self writeToURL: url ofType: type error: error];
     }
-    if (status == YES && [self fileURL] == nil) {
-        // It's a new file that's been successfully saved to a url...
-        // so note it for the open recent menu
-        [[NSDocumentController sharedDocumentController]
-                noteNewRecentDocumentURL: url];
-    }
     return status;
 }
 
@@ -883,7 +877,8 @@ static int untitled_document_number = 0;
                          contextInfo: info];
         }
     } else {
-        [self runModalSavePanelForSaveOperation: NSSaveOperation
+        // A document without a file is saved as a new one.
+        [self runModalSavePanelForSaveOperation: NSSaveAsOperation
                                        delegate: delegate
                                 didSaveSelector: selector
                                     contextInfo: info];
@@ -910,6 +905,11 @@ static int untitled_document_number = 0;
                 [self setFileModificationDate: [NSDate date]];
             }
             [self updateChangeCount: NSChangeCleared];
+            // A document saved under a new name is a recent document, however
+            // a subclass writes its contents.
+            if (operation == NSSaveAsOperation)
+                [[NSDocumentController sharedDocumentController]
+                        noteNewRecentDocument: self];
         }
         return success;
     }
