@@ -89,6 +89,8 @@ const CFStringRef KTFontSystemUIAttribute = CFSTR("KTFontSystemUIAttribute");
 
 @end
 
+static NSString *stringAttribute(NSDictionary *attributes, CFStringRef key);
+
 static KTFontDescriptor *descriptorObject(CTFontDescriptorRef descriptor) {
     return (KTFontDescriptor *) descriptor;
 }
@@ -149,11 +151,45 @@ CFDictionaryRef CTFontDescriptorCopyAttributes(CTFontDescriptorRef descriptor) {
     return (CFDictionaryRef) [[descriptorObject(descriptor) attributes] copy];
 }
 
+// A descriptor is often made with the PostScript name alone, or from a font
+// object, and its other naming attributes are those of the installed face of
+// that name. The attribute is read from that face when the descriptor does not
+// carry it. A descriptor that holds font data is not looked up: the face it
+// describes is not necessarily an installed one.
+static id installedFaceAttribute(KTFontDescriptor *descriptor, CFStringRef attribute)
+{
+    const char *faceKey = NULL;
+    if (CFEqual(attribute, kCTFontFamilyNameAttribute))
+        faceKey = "family";
+    else if (CFEqual(attribute, kCTFontDisplayNameAttribute))
+        faceKey = "fullName";
+    else if (CFEqual(attribute, kCTFontStyleNameAttribute))
+        faceKey = "style";
+    else if (CFEqual(attribute, kCTFontURLAttribute))
+        faceKey = "path";
+    if (faceKey == NULL || [descriptor fontData] != nil)
+        return nil;
+
+    NSString *name = stringAttribute([descriptor attributes], kCTFontNameAttribute);
+    if (name == nil)
+        return nil;
+    NSArray *faces = O2FontCopyInstalledFaces(nil, name, nil, nil);
+    id value = nil;
+    if ([faces count] > 0)
+        value = [[faces objectAtIndex: 0] objectForKey: [NSString stringWithUTF8String: faceKey]];
+    [faces release];
+    if (value != nil && strcmp(faceKey, "path") == 0)
+        value = [NSURL fileURLWithPath: value];
+    return value;
+}
+
 CFTypeRef CTFontDescriptorCopyAttribute(CTFontDescriptorRef descriptor, CFStringRef attribute)
 {
     if (descriptor == NULL || attribute == NULL)
         return NULL;
     id value = [[descriptorObject(descriptor) attributes] objectForKey: (NSString *) attribute];
+    if (value == nil)
+        value = installedFaceAttribute(descriptorObject(descriptor), attribute);
     return (CFTypeRef) [value retain];
 }
 
