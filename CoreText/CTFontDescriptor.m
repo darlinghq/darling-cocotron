@@ -291,9 +291,17 @@ CFArrayRef CTFontDescriptorCreateMatchingFontDescriptors(CTFontDescriptorRef des
         NSNumber *symbolic = [face objectForKey: @"symbolicTraits"];
         NSNumber *weight = [face objectForKey: @"weight"];
         if (symbolic != nil && weight != nil) {
-            NSDictionary *traits = [NSDictionary dictionaryWithObjectsAndKeys:
+            // All four traits are reported, as CTFontCopyTraits does: callers read the width and
+            // slant values without a check for their presence.
+            NSMutableDictionary *traits = [NSMutableDictionary dictionaryWithObjectsAndKeys:
                     symbolic, (NSString *) kCTFontSymbolicTrait,
                     weight, (NSString *) kCTFontWeightTrait, nil];
+            NSNumber *width = [face objectForKey: @"width"];
+            NSNumber *slant = [face objectForKey: @"slant"];
+            if (width != nil)
+                [traits setObject: width forKey: (NSString *) kCTFontWidthTrait];
+            if (slant != nil)
+                [traits setObject: slant forKey: (NSString *) kCTFontSlantTrait];
             [attributes setObject: traits forKey: (NSString *) kCTFontTraitsAttribute];
         }
         if ((value = [face objectForKey: @"path"]) != nil)
