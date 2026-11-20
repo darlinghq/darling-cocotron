@@ -164,6 +164,9 @@ NS_EXTRA_SYNTHESIZE_RETAIN(NSMenuItem, badge, _badge, NSMenuItemBadge *, badge, 
     NS_EXTRA(NSMenuItem, self)->_indentationLevel = 0;
     NS_EXTRA(NSMenuItem, self)->_enabled = YES;
     NS_EXTRA(NSMenuItem, self)->_hidden = NO;
+    // The documented defaults: a check mark for the on state, a dash for the mixed state and nothing for off.
+    NS_EXTRA(NSMenuItem, self)->_onStateImage = [[NSImage imageNamed: @"NSMenuCheckmark"] retain];
+    NS_EXTRA(NSMenuItem, self)->_mixedStateImage = [[NSImage imageNamed: @"NSMenuMixedState"] retain];
 
     return self;
 }
