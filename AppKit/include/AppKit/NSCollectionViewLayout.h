@@ -42,8 +42,45 @@ typedef NS_ENUM(NSInteger, NSCollectionUpdateAction) {
     NSCollectionUpdateActionNone,
 };
 
-@interface NSCollectionViewLayout : NSObject {
-    NS_LEGACY_IVAR_PAD(_NSCollectionViewLayoutReserved, 124)
+@class NSCollectionViewLayoutAttributes, NSCollectionViewLayoutInvalidationContext, NSNib;
+
+// The instance variables fill 8 of the 124 bytes Apple's legacy (i386) layout has
+@interface NSCollectionViewLayout : NSObject <NSCoding> {
+    NSCollectionView *_collectionView; // not retained: the collection view owns its layout
+    NSMutableDictionary *_decorationViews;
+    NS_LEGACY_IVAR_PAD(_NSCollectionViewLayoutReserved, 116)
 }
+
+@property(readonly, weak) NSCollectionView *collectionView;
+
+- (void) invalidateLayout;
+- (void) invalidateLayoutWithContext: (NSCollectionViewLayoutInvalidationContext *) context;
+
+- (void) registerClass: (Class) viewClass forDecorationViewOfKind: (NSCollectionViewDecorationElementKind) elementKind;
+- (void) registerNib: (NSNib *) nib forDecorationViewOfKind: (NSCollectionViewDecorationElementKind) elementKind;
+
+@end
+
+@interface NSCollectionViewLayout (NSSubclassingHooks)
+
+@property(class, readonly) Class layoutAttributesClass;
+@property(class, readonly) Class invalidationContextClass;
+
+- (void) prepareLayout;
+- (NSArray<__kindof NSCollectionViewLayoutAttributes *> *) layoutAttributesForElementsInRect: (NSRect) rect;
+- (NSCollectionViewLayoutAttributes *) layoutAttributesForItemAtIndexPath: (NSIndexPath *) indexPath;
+- (NSCollectionViewLayoutAttributes *) layoutAttributesForSupplementaryViewOfKind: (NSCollectionViewSupplementaryElementKind) elementKind
+                                                                      atIndexPath: (NSIndexPath *) indexPath;
+- (NSCollectionViewLayoutAttributes *) layoutAttributesForDecorationViewOfKind: (NSCollectionViewDecorationElementKind) elementKind
+                                                                   atIndexPath: (NSIndexPath *) indexPath;
+- (NSCollectionViewLayoutAttributes *) layoutAttributesForDropTargetAtPoint: (NSPoint) pointInCollectionView;
+- (NSCollectionViewLayoutAttributes *) layoutAttributesForInterItemGapBeforeIndexPath: (NSIndexPath *) indexPath;
+
+- (BOOL) shouldInvalidateLayoutForBoundsChange: (NSRect) newBounds;
+- (NSCollectionViewLayoutInvalidationContext *) invalidationContextForBoundsChange: (NSRect) newBounds;
+
+- (NSPoint) targetContentOffsetForProposedContentOffset: (NSPoint) proposedContentOffset;
+
+@property(readonly) NSSize collectionViewContentSize;
 
 @end

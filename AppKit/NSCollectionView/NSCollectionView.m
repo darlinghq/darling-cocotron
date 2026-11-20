@@ -27,8 +27,12 @@ APPKIT_EXPORT NSString *const NSCollectionElementKindSelectionRectIndicator;
 NSString *const NSCollectionElementKindSelectionRectIndicator =
         @"NSCollectionElementKindSelectionRectIndicator";
 
+// The private interface to UIFoundation's collection view layouts (UIFoundation's NSCollectionViewLayoutPrivate.h)
+@interface NSCollectionViewLayout (NSCollectionViewPrivate)
+- (void) _setCollectionView: (NSCollectionView *) collectionView;
+@end
+
 @implementation NSCollectionView
-@synthesize collectionViewLayout = _collectionViewLayout;
 @synthesize dataSource = _dataSource;
 @synthesize delegate = _delegate;
 @synthesize selectionIndexPaths = _selectionIndexPaths;
@@ -148,12 +152,28 @@ NSString *const NSCollectionElementKindSelectionRectIndicator =
     [_itemPrototype release];
     [_backgroundColors release];
     [_selectionIndexes release];
+    [_collectionViewLayout _setCollectionView: nil];
     [_collectionViewLayout release];
     [_selectionIndexPaths release];
     [_itemClasses release];
     [_loadedItems release];
     [_loadedPaths release];
     [super dealloc];
+}
+
+- (NSCollectionViewLayout *) collectionViewLayout {
+    return _collectionViewLayout;
+}
+
+// The layout learns which collection view it lays out; the one it replaces no longer has one
+- (void) setCollectionViewLayout: (NSCollectionViewLayout *) layout {
+    if (layout == _collectionViewLayout)
+        return;
+    [_collectionViewLayout _setCollectionView: nil];
+    [layout retain];
+    [_collectionViewLayout release];
+    _collectionViewLayout = layout;
+    [_collectionViewLayout _setCollectionView: self];
 }
 
 - (BOOL)isFlipped { return YES; }
