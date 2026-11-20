@@ -23,7 +23,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSColor;
 
-@interface NSShadow : NSObject <NSCoding, NSCopying> {
+@interface NSShadow : NSObject <NSSecureCoding, NSCopying> {
     NSSize _offset;
     NSColor *_color;
     CGFloat _blurRadius;
