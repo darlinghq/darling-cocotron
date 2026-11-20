@@ -84,7 +84,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nullable, nonatomic, copy) NSAttributedString *attributedTitle;
 - (null_unspecified NSString *) mnemonic;
 @property(nonatomic) unsigned mnemonicLocation;
-@property(nullable, nonatomic, assign) id target;
+@property(nullable, weak) id target;
 @property(nonatomic) SEL action;
 @property(nonatomic) NSInteger indentationLevel;
 @property(nonatomic) NSInteger tag;

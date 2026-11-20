@@ -26,6 +26,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSObject+BindingSupport.h>
 #import <Foundation/NSKeyedArchiver.h>
 #import <AppKit/NSButtonCell.h>
+#import <objc/runtime.h>
 
 // Not declared in a public header.
 APPKIT_EXPORT NSString *const NSAppleMenuName;
@@ -69,7 +70,7 @@ NS_EXTRA_SYNTHESIZE_RETAIN(NSMenuItem, badge, _badge, NSMenuItemBadge *, badge, 
     [coder encodeObject: NS_EXTRA(NSMenuItem, self)->_submenu forKey: @"NSSubmenu"];
     [coder encodeInt: NS_EXTRA(NSMenuItem, self)->_tag forKey: @"NSTag"];
     [coder encodeObject: NSStringFromSelector(NS_EXTRA(NSMenuItem, self)->_action) forKey: @"NSAction"];
-    [coder encodeObject: NS_EXTRA(NSMenuItem, self)->_target forKey: @"NSTarget"];
+    [coder encodeObject: [self target] forKey: @"NSTarget"];
 }
 
 - initWithCoder: (NSCoder *) coder {
@@ -131,12 +132,12 @@ NS_EXTRA_SYNTHESIZE_RETAIN(NSMenuItem, badge, _badge, NSMenuItemBadge *, badge, 
 
         if (version <= 320) {
             if (NS_EXTRA(NSMenuItem, self)->_action != @selector(submenuAction:)) {
-                NS_EXTRA(NSMenuItem, self)->_target = [coder decodeObject];
+                objc_storeWeak(&NS_EXTRA(NSMenuItem, self)->_target, [coder decodeObject]);
             } else {
                 NS_EXTRA(NSMenuItem, self)->_submenu = [[coder decodeObject] retain];
             }
         } else {
-            NS_EXTRA(NSMenuItem, self)->_target = [coder decodeObject];
+            objc_storeWeak(&NS_EXTRA(NSMenuItem, self)->_target, [coder decodeObject]);
             NS_EXTRA(NSMenuItem, self)->_submenu = [[coder decodeObject] retain];
         }
         [NS_EXTRA(NSMenuItem, self)->_submenu setSupermenu: _menu];
@@ -153,7 +154,7 @@ NS_EXTRA_SYNTHESIZE_RETAIN(NSMenuItem, badge, _badge, NSMenuItemBadge *, badge, 
         keyEquivalent: (NSString *) keyEquivalent
 {
     _title = [title copy];
-    NS_EXTRA(NSMenuItem, self)->_target = nil;
+    objc_storeWeak(&NS_EXTRA(NSMenuItem, self)->_target, nil);
     NS_EXTRA(NSMenuItem, self)->_action = action;
     NS_EXTRA(NSMenuItem, self)->_keyEquivalent = [keyEquivalent copy];
     NS_EXTRA(NSMenuItem, self)->_keyEquivalentModifierMask = NSCommandKeyMask;
@@ -169,6 +170,7 @@ NS_EXTRA_SYNTHESIZE_RETAIN(NSMenuItem, badge, _badge, NSMenuItemBadge *, badge, 
 }
 
 - (void) dealloc {
+    objc_storeWeak(&NS_EXTRA(NSMenuItem, self)->_target, nil);
     [_title release];
     [NS_EXTRA(NSMenuItem, self)->_atitle release];
     [NS_EXTRA(NSMenuItem, self)->_keyEquivalent release];
@@ -190,6 +192,9 @@ NS_EXTRA_SYNTHESIZE_RETAIN(NSMenuItem, badge, _badge, NSMenuItemBadge *, badge, 
 - copyWithZone: (NSZone *) zone {
     NSMenuItem *copy = NSCopyObject(self, 0, zone);
     NS_EXTRA_COPY(NSMenuItem, copy, self);
+    // The copied weak slot is not registered with the runtime yet.
+    NS_EXTRA(NSMenuItem, copy)->_target = nil;
+    objc_storeWeak(&NS_EXTRA(NSMenuItem, copy)->_target, [self target]);
 
     copy->_title = [_title copyWithZone: zone];
     NS_EXTRA(NSMenuItem, copy)->_atitle = [NS_EXTRA(NSMenuItem, self)->_atitle copyWithZone: zone];
@@ -263,8 +268,9 @@ NS_EXTRA_SYNTHESIZE_RETAIN(NSMenuItem, badge, _badge, NSMenuItemBadge *, badge, 
     return NS_EXTRA(NSMenuItem, self)->_mnemonicLocation;
 }
 
+// The target is weak: it reads nil once the object is deallocated.
 - (id) target {
-    return NS_EXTRA(NSMenuItem, self)->_target;
+    return objc_loadWeak(&NS_EXTRA(NSMenuItem, self)->_target);
 }
 
 - (SEL) action {
@@ -360,7 +366,7 @@ NS_EXTRA_SYNTHESIZE_RETAIN(NSMenuItem, badge, _badge, NSMenuItemBadge *, badge, 
 }
 
 - (void) setTarget: (id) target {
-    NS_EXTRA(NSMenuItem, self)->_target = target;
+    objc_storeWeak(&NS_EXTRA(NSMenuItem, self)->_target, target);
 }
 
 - (void) setAction: (SEL) action {
