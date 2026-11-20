@@ -20,9 +20,34 @@
 #import <AppKit/AppKitExport.h>
 #import <AppKit/AppKitIvarLayout.h>
 #import <Foundation/Foundation.h>
+#import <AppKit/NSCollectionViewLayout.h>
 
-@interface NSCollectionViewLayoutAttributes : NSObject {
-    NS_LEGACY_IVAR_PAD(_NSCollectionViewLayoutAttributesReserved, 252)
+// The instance variables fill 37 of the 252 bytes Apple's legacy (i386) layout has
+@interface NSCollectionViewLayoutAttributes : NSObject <NSCopying> {
+    NSRect _frame;
+    CGFloat _alpha;
+    NSInteger _zIndex;
+    NSIndexPath *_indexPath;
+    NSString *_representedElementKind;
+    NSCollectionElementCategory _representedElementCategory;
+    BOOL _hidden;
+    NS_LEGACY_IVAR_PAD(_NSCollectionViewLayoutAttributesReserved, 215)
 }
+
++ (instancetype) layoutAttributesForItemWithIndexPath: (NSIndexPath *) indexPath;
++ (instancetype) layoutAttributesForInterItemGapBeforeIndexPath: (NSIndexPath *) indexPath;
++ (instancetype) layoutAttributesForSupplementaryViewOfKind: (NSCollectionViewSupplementaryElementKind) elementKind
+                                              withIndexPath: (NSIndexPath *) indexPath;
++ (instancetype) layoutAttributesForDecorationViewOfKind: (NSCollectionViewDecorationElementKind) decorationViewKind
+                                           withIndexPath: (NSIndexPath *) indexPath;
+
+@property NSRect frame;
+@property NSSize size;
+@property CGFloat alpha;
+@property NSInteger zIndex;
+@property(getter=isHidden) BOOL hidden;
+@property(strong) NSIndexPath *indexPath;
+@property(readonly) NSCollectionElementCategory representedElementCategory;
+@property(readonly) NSString *representedElementKind;
 
 @end
