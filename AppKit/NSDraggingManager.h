@@ -20,7 +20,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Foundation/NSGeometry.h>
 #import <Foundation/NSObject.h>
 
-@class NSWindow, NSImage, NSEvent, NSPasteboard, NSArray;
+@class NSWindow, NSImage, NSEvent, NSPasteboard, NSArray, NSView, NSDraggingItem;
 
 @interface NSDraggingManager : NSObject
 
@@ -47,6 +47,15 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 // What the dragging managers and the NSDraggingInfo implementations share
 @interface NSDraggingSession (NSDraggingManager)
+
+// A session dragging items whose data is already on pasteboard, from view, which the mouse event began; it starts
+// on the next pass of the run loop
+- (instancetype) _initWithItems: (NSArray<NSDraggingItem *> *) items
+                           view: (NSView *) view
+                          event: (NSEvent *) event
+                         source: (id<NSDraggingSource>) source
+                     pasteboard: (NSPasteboard *) pasteboard;
+- (void) _scheduleStart;
 
 // The object a drag's destination sees as its source: a session's source, or the source given to
 // -dragImage:at:offset:event:pasteboard:source:slideBack:

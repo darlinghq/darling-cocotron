@@ -159,6 +159,9 @@
     if (performed != NSDragOperationNone)
         [_receiver concludeDragOperation: self];
     [self invalidate];
+    // Whether or not it was performed, the drop ends the drag for its destination
+    if ([_receiver respondsToSelector: @selector(draggingEnded:)])
+        [_receiver draggingEnded: self];
     return performed;
 }
 

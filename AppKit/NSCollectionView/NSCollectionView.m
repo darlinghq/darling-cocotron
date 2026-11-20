@@ -29,6 +29,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSBezierPath.h>
 #import <AppKit/NSEvent.h>
+#import <AppKit/NSDraggingItem.h>
+#import <AppKit/NSDraggingManager.h>
+#import <AppKit/NSImage.h>
+#import <AppKit/NSBitmapImageRep.h>
 #import <Foundation/NSNotification.h>
 #include <math.h>
 
@@ -82,6 +86,28 @@ static NSSize sizeInClipView(NSCollectionViewLayout *layout, NSSize content, NSS
     [NSBezierPath strokeRect: bounds];
 }
 @end
+
+// The bar a drop between items shows in the gap it goes to
+@interface _NSCollectionViewDropGapIndicator : NSView
+@end
+
+@implementation _NSCollectionViewDropGapIndicator
+- (NSView *) hitTest: (NSPoint) point {
+    return nil;
+}
+- (void) drawRect: (NSRect) dirtyRect {
+    NSRect bounds = [self bounds];
+    BOOL vertical = NSHeight(bounds) >= NSWidth(bounds);
+    CGFloat thickness = 2;
+    NSRect bar = vertical ? NSMakeRect(NSMidX(bounds) - thickness / 2, NSMinY(bounds), thickness, NSHeight(bounds))
+                          : NSMakeRect(NSMinX(bounds), NSMidY(bounds) - thickness / 2, NSWidth(bounds), thickness);
+    [[NSColor alternateSelectedControlColor] setFill];
+    NSRectFill(bar);
+}
+@end
+
+// How far the mouse moves from where it was pressed on an item before a drag starts
+static const CGFloat dragThreshold = 3;
 
 // Orders item views by their layout attributes' zIndex; views that aren't items (the background view) stay below
 static NSInteger compareZIndex(id first, id second, void *context)
@@ -252,6 +278,10 @@ static NSInteger compareZIndex(id first, id second, void *context)
     [_backgroundView release];
     [_selectionAnchor release];
     [_selectionLead release];
+    [_draggedIndexPaths release];
+    [_dropIndexPath release];
+    [_dropTargetItem release];
+    [_dropGapIndicator release];
     [super dealloc];
 }
 
@@ -803,19 +833,49 @@ static NSInteger compareZIndex(id first, id second, void *context)
 
 // A click on an item highlights it until the mouse goes up, then changes the selection in the order (and with the
 // delegate calls) both Macs use (darling's tests/collection-view.md): ⌘ toggles the item, shift adds it, a plain click
-// selects only it.
-- (void) _clickItemAtIndexPath: (NSIndexPath *) path toggle: (BOOL) toggle extend: (BOOL) extend {
-    NSSet *clicked = [NSSet setWithObject: path];
+// selects only it. A plain click on an item that is already selected changes nothing. When the delegate can provide
+// the items' data, moving the mouse far enough drags the selection, after making the change the click would.
+- (void) _clickItemAtIndexPath: (NSIndexPath *) path
+                        toggle: (BOOL) toggle
+                        extend: (BOOL) extend
+                         event: (NSEvent *) down
+{
     BOOL wasSelected = [[self selectionIndexPaths] containsObject: path];
+    BOOL changes = toggle || extend || !wasSelected;
     BOOL deselect = toggle && wasSelected;
-    [self _highlightIndexPaths: clicked
-                         state: deselect ? NSCollectionViewItemHighlightForDeselection
-                                         : NSCollectionViewItemHighlightForSelection];
-    while ([[self _nextTrackingEvent] type] != NSEventTypeLeftMouseUp)
-        ;
+    if (changes)
+        [self _highlightIndexPaths: [NSSet setWithObject: path]
+                             state: deselect ? NSCollectionViewItemHighlightForDeselection
+                                             : NSCollectionViewItemHighlightForSelection];
 
+    BOOL draggable = !deselect && [self _delegateProvidesDragData];
+    NSPoint start = [down locationInWindow];
+    for (;;) {
+        NSEvent *event = [self _nextTrackingEvent];
+        if ([event type] == NSEventTypeLeftMouseUp)
+            break;
+        NSPoint point = [event locationInWindow];
+        if (!draggable || MAX(fabs(point.x - start.x), fabs(point.y - start.y)) < dragThreshold)
+            continue;
+        if (changes) {
+            [self _changeSelectionForClickAtIndexPath: path toggle: toggle extend: extend wasSelected: wasSelected];
+            changes = NO;
+        }
+        if ([self _dragSelectionWithEvent: down])
+            return;
+    }
+    if (changes)
+        [self _changeSelectionForClickAtIndexPath: path toggle: toggle extend: extend wasSelected: wasSelected];
+}
+
+- (void) _changeSelectionForClickAtIndexPath: (NSIndexPath *) path
+                                      toggle: (BOOL) toggle
+                                      extend: (BOOL) extend
+                                 wasSelected: (BOOL) wasSelected
+{
+    NSSet *clicked = [NSSet setWithObject: path];
     BOOL unhighlighted = NO;
-    if (deselect) {
+    if (toggle && wasSelected) {
         if (self.allowsEmptySelection || [[self selectionIndexPaths] count] > 1)
             [self _userRemove: clicked];
     } else if (_allowsMultipleSelection && (toggle || extend))
@@ -932,7 +992,7 @@ static NSInteger compareZIndex(id first, id second, void *context)
         // The first click selected the item; a double click is the item's (or its view's) to handle
         if ([event clickCount] > 1)
             return;
-        [self _clickItemAtIndexPath: path toggle: toggle extend: extend];
+        [self _clickItemAtIndexPath: path toggle: toggle extend: extend event: event];
     } else
         [self _rubberBandFrom: point toggle: toggle extend: extend];
 }
@@ -1091,6 +1151,227 @@ typedef enum { MoveLeft, MoveRight, MoveUp, MoveDown } MoveDirection;
 
 - (IBAction) deselectAll: (id) sender {
     [self _userDeselectIndexPaths: [self selectionIndexPaths]];
+}
+
+#pragma mark - Dragging source
+
+- (BOOL) _delegateProvidesDragData {
+    return [_delegate respondsToSelector: @selector(collectionView:pasteboardWriterForItemAtIndexPath:)] ||
+           [_delegate respondsToSelector: @selector(collectionView:writeItemsAtIndexPaths:toPasteboard:)];
+}
+
+static NSInteger compareIndexPaths(id first, id second, void *context)
+{
+    return [(NSIndexPath *) first compare: (NSIndexPath *) second];
+}
+
+// Where an item is dragged from: its view where it shows, or where the layout puts it
+- (NSRect) _draggingFrameForItemAtIndexPath: (NSIndexPath *) path {
+    NSCollectionViewItem *item = [_loadedItems objectForKey: path];
+    if ([item view] != nil && [[item view] superview] == self)
+        return [[item view] frame];
+    return [self layoutAttributesForItemAtIndexPath: path].frame;
+}
+
+// A picture of an item's view, or nil when it isn't shown
+- (NSImage *) _draggingImageForItemAtIndexPath: (NSIndexPath *) path {
+    NSView *view = [[_loadedItems objectForKey: path] view];
+    NSRect bounds = [view bounds];
+    if (view == nil || NSIsEmptyRect(bounds))
+        return nil;
+    NSBitmapImageRep *rep = [view bitmapImageRepForCachingDisplayInRect: bounds];
+    if (rep == nil)
+        return nil;
+    [view cacheDisplayInRect: bounds toBitmapImageRep: rep];
+    NSImage *image = [[[NSImage alloc] initWithSize: bounds.size] autorelease];
+    [image addRepresentation: rep];
+    return image;
+}
+
+// Starts dragging the selected items if the delegate lets them be dragged and provides their data: one dragging
+// item per item with a pasteboard writer, in index path order, framed where the item is. Returns whether it did.
+- (BOOL) _dragSelectionWithEvent: (NSEvent *) down {
+    NSSet *selection = [self selectionIndexPaths];
+    if ([selection count] == 0)
+        return NO;
+    if ([_delegate respondsToSelector: @selector(collectionView:canDragItemsAtIndexPaths:withEvent:)] &&
+        ![_delegate collectionView: self canDragItemsAtIndexPaths: selection withEvent: down])
+        return NO;
+    NSArray *paths = [[selection allObjects] sortedArrayUsingFunction: compareIndexPaths context: NULL];
+
+    NSMutableArray *items = [NSMutableArray array];
+    NSMutableSet *dragged = [NSMutableSet set];
+    BOOL writers = [_delegate respondsToSelector: @selector(collectionView:pasteboardWriterForItemAtIndexPath:)];
+    NSPasteboard *pasteboard = [NSPasteboard pasteboardWithName: NSPasteboardNameDrag];
+    if (!writers && ![_delegate collectionView: self writeItemsAtIndexPaths: selection toPasteboard: pasteboard])
+        return NO;
+    for (NSIndexPath *path in paths) {
+        id<NSPasteboardWriting> writer = nil;
+        if (writers && (writer = [_delegate collectionView: self pasteboardWriterForItemAtIndexPath: path]) == nil)
+            continue;
+        NSRect frame = [self _draggingFrameForItemAtIndexPath: path];
+        if (NSIsEmptyRect(frame))
+            continue;
+        NSDraggingItem *item = [[[NSDraggingItem alloc] initWithPasteboardWriter: writer] autorelease];
+        [item setDraggingFrame: frame contents: [self _draggingImageForItemAtIndexPath: path]];
+        [items addObject: item];
+        [dragged addObject: path];
+    }
+    if ([items count] == 0)
+        return NO;
+
+    [_draggedIndexPaths release];
+    _draggedIndexPaths = [dragged copy];
+    if (writers)
+        [self beginDraggingSessionWithItems: items event: down source: self];
+    else {
+        // The delegate wrote the data itself: the items only show what is dragged
+        NSDraggingSession *session = [[[NSDraggingSession alloc] _initWithItems: items
+                                                                           view: self
+                                                                          event: down
+                                                                         source: self
+                                                                     pasteboard: pasteboard] autorelease];
+        [session _scheduleStart];
+    }
+    return YES;
+}
+
+- (void) setDraggingSourceOperationMask: (NSDragOperation) mask forLocal: (BOOL) localDestination {
+    if (localDestination)
+        _localDragMaskInverted = ~mask;
+    else
+        _outsideDragMask = mask;
+}
+
+// Every operation within the application and none outside it until set, as on both Macs
+- (NSDragOperation) draggingSession: (NSDraggingSession *) session
+    sourceOperationMaskForDraggingContext: (NSDraggingContext) context
+{
+    return context == NSDraggingContextWithinApplication ? ~_localDragMaskInverted : _outsideDragMask;
+}
+
+- (NSDragOperation) draggingSourceOperationMaskForLocal: (BOOL) local {
+    return local ? ~_localDragMaskInverted : _outsideDragMask;
+}
+
+- (void) draggingSession: (NSDraggingSession *) session willBeginAtPoint: (NSPoint) screenPoint {
+    if ([_delegate respondsToSelector: @selector(collectionView:draggingSession:willBeginAtPoint:forItemsAtIndexPaths:)])
+        [_delegate collectionView: self
+                  draggingSession: session
+                 willBeginAtPoint: screenPoint
+             forItemsAtIndexPaths: _draggedIndexPaths];
+}
+
+- (void) draggingSession: (NSDraggingSession *) session
+            endedAtPoint: (NSPoint) screenPoint
+               operation: (NSDragOperation) operation
+{
+    if ([_delegate respondsToSelector: @selector(collectionView:draggingSession:endedAtPoint:dragOperation:)])
+        [_delegate collectionView: self draggingSession: session endedAtPoint: screenPoint dragOperation: operation];
+    [_draggedIndexPaths release];
+    _draggedIndexPaths = nil;
+}
+
+#pragma mark - Drop target
+
+// Shows where a drop would go: the item it would go on as the drop target, or a bar in the gap it would go to
+- (void) _showDropAtIndexPath: (NSIndexPath *) path operation: (NSCollectionViewDropOperation) operation {
+    NSCollectionViewItem *target =
+        path != nil && operation == NSCollectionViewDropOn ? [_loadedItems objectForKey: path] : nil;
+    if (target != _dropTargetItem) {
+        if (_dropTargetItem.highlightState == NSCollectionViewItemHighlightAsDropTarget)
+            _dropTargetItem.highlightState = NSCollectionViewItemHighlightNone;
+        [_dropTargetItem release];
+        _dropTargetItem = [target retain];
+        _dropTargetItem.highlightState = NSCollectionViewItemHighlightAsDropTarget;
+    }
+
+    NSCollectionViewLayoutAttributes *gap = nil;
+    if (path != nil && operation == NSCollectionViewDropBefore)
+        gap = [_collectionViewLayout layoutAttributesForInterItemGapBeforeIndexPath: path];
+    if (gap == nil || NSIsEmptyRect(gap.frame)) {
+        [_dropGapIndicator removeFromSuperview];
+        [_dropGapIndicator release];
+        _dropGapIndicator = nil;
+        return;
+    }
+    if (_dropGapIndicator == nil)
+        _dropGapIndicator = [[_NSCollectionViewDropGapIndicator alloc] initWithFrame: gap.frame];
+    else
+        [_dropGapIndicator setFrame: gap.frame];
+    if ([_dropGapIndicator superview] != self)
+        [self addSubview: _dropGapIndicator positioned: NSWindowAbove relativeTo: nil];
+    [_dropGapIndicator setNeedsDisplay: YES];
+}
+
+- (void) _setDropIndexPath: (NSIndexPath *) path
+                 operation: (NSCollectionViewDropOperation) operation
+             dragOperation: (NSDragOperation) dragOperation
+{
+    [path retain];
+    [_dropIndexPath release];
+    _dropIndexPath = path;
+    _dropOperation = operation;
+    _dropDragOperation = dragOperation;
+    [self _showDropAtIndexPath: dragOperation != NSDragOperationNone ? path : nil operation: operation];
+}
+
+// Proposes the drop the layout finds at the drag's location (on an item, or before the item after a gap) and lets
+// the delegate validate or change it
+- (NSDragOperation) _validateDrop: (id<NSDraggingInfo>) info {
+    NSIndexPath *path = nil;
+    NSCollectionViewDropOperation operation = NSCollectionViewDropOn;
+    NSDragOperation result = NSDragOperationNone;
+    if ([_delegate respondsToSelector: @selector(collectionView:validateDrop:proposedIndexPath:dropOperation:)]) {
+        [self _prepareLayoutIfNeeded];
+        NSPoint point = [self convertPoint: [info draggingLocation] fromView: nil];
+        NSCollectionViewLayoutAttributes *target = [_collectionViewLayout layoutAttributesForDropTargetAtPoint: point];
+        if (target.indexPath != nil) {
+            path = target.indexPath;
+            operation = target.representedElementCategory == NSCollectionElementCategoryItem ? NSCollectionViewDropOn
+                                                                                              : NSCollectionViewDropBefore;
+            result = [_delegate collectionView: self
+                                  validateDrop: info
+                             proposedIndexPath: &path
+                                 dropOperation: &operation];
+        }
+    }
+    [self _setDropIndexPath: path operation: operation dragOperation: result];
+    return result;
+}
+
+- (NSDragOperation) draggingEntered: (id<NSDraggingInfo>) info {
+    return [self _validateDrop: info];
+}
+
+- (NSDragOperation) draggingUpdated: (id<NSDraggingInfo>) info {
+    return [self _validateDrop: info];
+}
+
+- (void) draggingExited: (id<NSDraggingInfo>) info {
+    [self _setDropIndexPath: nil operation: NSCollectionViewDropOn dragOperation: NSDragOperationNone];
+}
+
+- (BOOL) prepareForDragOperation: (id<NSDraggingInfo>) info {
+    return YES;
+}
+
+- (BOOL) performDragOperation: (id<NSDraggingInfo>) info {
+    if (_dropDragOperation == NSDragOperationNone || _dropIndexPath == nil ||
+        ![_delegate respondsToSelector: @selector(collectionView:acceptDrop:indexPath:dropOperation:)])
+        return NO;
+    return [_delegate collectionView: self
+                          acceptDrop: info
+                           indexPath: _dropIndexPath
+                       dropOperation: (NSCollectionViewDropOperation) _dropOperation];
+}
+
+// The drop target stays shown until the drag ends, as on both Macs
+- (void) concludeDragOperation: (id<NSDraggingInfo>) info {
+}
+
+- (void) draggingEnded: (id<NSDraggingInfo>) info {
+    [self _setDropIndexPath: nil operation: NSCollectionViewDropOn dragOperation: NSDragOperationNone];
 }
 
 - (void) registerClass: (Class) itemClass forItemWithIdentifier: (NSString *) identifier {

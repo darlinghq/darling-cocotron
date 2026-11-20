@@ -252,7 +252,13 @@
             [self invalidate];
             [_receiver concludeDragOperation: self];
         }
-    } @finally { [self invalidate]; [_display flush]; }
+    } @finally {
+        [self invalidate];
+        [_display flush];
+        // Whether or not it was performed, the drop ends the drag for its destination
+        if ([_receiver respondsToSelector: @selector(draggingEnded:)])
+            [_receiver draggingEnded: self];
+    }
 }
 - (void) leave {
     // Compositors may send leave immediately after drop; the queued transfer

@@ -254,6 +254,16 @@ static void test_click_selects_only_that_item(void)
            "the clicked item is selected and no longer highlighted (%ld)", (long) item.highlightState);
 }
 
+static void test_click_selected_item_changes_nothing(void)
+{
+    NSCollectionView *view = makeView(NULL);
+    view.selectionIndexPaths = [NSSet setWithObjects: [NSIndexPath indexPathForItem: 1 inSection: 0],
+                                                      [NSIndexPath indexPathForItem: 4 inSection: 0], nil];
+    [calls removeAllObjects];
+    click(view, 1, 0);
+    checkCalls("click selected 1 of 1,4", view, @"", @"1,4");
+}
+
 static void test_command_click_toggles(void)
 {
     NSCollectionView *view = makeView(NULL);
@@ -426,6 +436,7 @@ int main(void)
         [NSApp sendEvent: event];
 
     test_click_selects_only_that_item();
+    test_click_selected_item_changes_nothing();
     test_command_click_toggles();
     test_shift_click_extends();
     test_click_background_deselects();

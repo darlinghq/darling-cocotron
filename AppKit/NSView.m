@@ -27,14 +27,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSDragging.h>
 #import <AppKit/NSDraggingManager.h>
 
-@interface NSDraggingSession (NSViewDragging)
-- (instancetype) _initWithItems: (NSArray<NSDraggingItem *> *) items
-                           view: (NSView *) view
-                          event: (NSEvent *) event
-                         source: (id<NSDraggingSource>) source
-                     pasteboard: (NSPasteboard *) pasteboard;
-- (void) _scheduleStart;
-@end
 #import <AppKit/NSEvent.h>
 #import <AppKit/NSGraphics.h>
 #import <AppKit/NSGraphicsContextFunctions.h>

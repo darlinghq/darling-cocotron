@@ -10,6 +10,7 @@
 #include <linux/input-event-codes.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 #include <wayland-client.h>
 
@@ -25,6 +26,14 @@ static void global(void *data, struct wl_registry *registry, uint32_t id, const 
         manager = wl_registry_bind(registry, id, &zwlr_virtual_pointer_manager_v1_interface, 1);
 }
 static void global_remove(void *data, struct wl_registry *registry, uint32_t id) {}
+
+// Event timestamps are in milliseconds of a monotonic clock, as a real device's are: a client groups presses into
+// double clicks by them
+static uint32_t now(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint32_t) (ts.tv_sec * 1000 + ts.tv_nsec / 1000000);
+}
 static const struct wl_registry_listener listener = {global, global_remove};
 
 int main(void) {
@@ -45,27 +54,26 @@ int main(void) {
     puts("READY");
     fflush(stdout);
     int x, y, dx, dy;
-    uint32_t time = 0;
     char line[128];
     while (fgets(line, sizeof(line), stdin) != NULL) {
         if (sscanf(line, "drag %d %d %d %d", &x, &y, &dx, &dy) == 4) {
-            zwlr_virtual_pointer_v1_motion_absolute(pointer, time += 10, x, y, 1920, 1080);
+            zwlr_virtual_pointer_v1_motion_absolute(pointer, now(), x, y, 1920, 1080);
             zwlr_virtual_pointer_v1_frame(pointer);
             wl_display_roundtrip(display);
             usleep(300000);
-            zwlr_virtual_pointer_v1_button(pointer, time += 10, BTN_LEFT, WL_POINTER_BUTTON_STATE_PRESSED);
+            zwlr_virtual_pointer_v1_button(pointer, now(), BTN_LEFT, WL_POINTER_BUTTON_STATE_PRESSED);
             zwlr_virtual_pointer_v1_frame(pointer);
             wl_display_roundtrip(display);
             usleep(300000);
             for (int i = 1; i <= 8; i++) {
-                zwlr_virtual_pointer_v1_motion_absolute(pointer, time += 10, x + dx * i / 8, y + dy * i / 8, 1920,
+                zwlr_virtual_pointer_v1_motion_absolute(pointer, now(), x + dx * i / 8, y + dy * i / 8, 1920,
                                                         1080);
                 zwlr_virtual_pointer_v1_frame(pointer);
                 wl_display_roundtrip(display);
                 usleep(50000);
             }
             usleep(300000);
-            zwlr_virtual_pointer_v1_button(pointer, time += 10, BTN_LEFT, WL_POINTER_BUTTON_STATE_RELEASED);
+            zwlr_virtual_pointer_v1_button(pointer, now(), BTN_LEFT, WL_POINTER_BUTTON_STATE_RELEASED);
             zwlr_virtual_pointer_v1_frame(pointer);
             wl_display_roundtrip(display);
             puts("DRAGGED");
@@ -73,7 +81,7 @@ int main(void) {
             continue;
         }
         if (sscanf(line, "move %d %d", &x, &y) == 2) {
-            zwlr_virtual_pointer_v1_motion_absolute(pointer, time += 10, x, y, 1920, 1080);
+            zwlr_virtual_pointer_v1_motion_absolute(pointer, now(), x, y, 1920, 1080);
             zwlr_virtual_pointer_v1_frame(pointer);
             wl_display_roundtrip(display);
             puts("MOVED");
@@ -82,15 +90,15 @@ int main(void) {
         }
         if (sscanf(line, "%d %d", &x, &y) != 2)
             break;
-        zwlr_virtual_pointer_v1_motion_absolute(pointer, time += 10, x, y, 1920, 1080);
+        zwlr_virtual_pointer_v1_motion_absolute(pointer, now(), x, y, 1920, 1080);
         zwlr_virtual_pointer_v1_frame(pointer);
         wl_display_roundtrip(display);
         usleep(300000);
-        zwlr_virtual_pointer_v1_button(pointer, time += 10, BTN_LEFT, WL_POINTER_BUTTON_STATE_PRESSED);
+        zwlr_virtual_pointer_v1_button(pointer, now(), BTN_LEFT, WL_POINTER_BUTTON_STATE_PRESSED);
         zwlr_virtual_pointer_v1_frame(pointer);
         wl_display_roundtrip(display);
         usleep(100000);
-        zwlr_virtual_pointer_v1_button(pointer, time += 10, BTN_LEFT, WL_POINTER_BUTTON_STATE_RELEASED);
+        zwlr_virtual_pointer_v1_button(pointer, now(), BTN_LEFT, WL_POINTER_BUTTON_STATE_RELEASED);
         zwlr_virtual_pointer_v1_frame(pointer);
         wl_display_roundtrip(display);
         puts("CLICKED");

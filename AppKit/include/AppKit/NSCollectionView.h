@@ -19,8 +19,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSCollectionViewItem.h>
 #import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/NSView.h>
+#import <AppKit/NSDragging.h>
+#import <AppKit/NSPasteboard.h>
 
-@class NSCollectionViewLayout, NSCollectionView, NSCollectionViewLayoutAttributes, NSNib;
+@class NSCollectionViewLayout, NSCollectionView, NSCollectionViewLayoutAttributes, NSNib, NSDraggingSession;
 @protocol NSCollectionViewDelegate;
 typedef NS_ENUM(NSInteger, NSCollectionViewDropOperation) {
     NSCollectionViewDropOn = 0,
@@ -50,7 +52,7 @@ typedef NS_OPTIONS(NSUInteger, NSCollectionViewScrollPosition) {
 
 typedef NSString *NSCollectionViewSupplementaryElementKind NS_SWIFT_BRIDGED_TYPEDEF;
 
-@interface NSCollectionView : NSView {
+@interface NSCollectionView : NSView <NSDraggingSource> {
     NSArray *_content;
     NSCollectionViewItem *_itemPrototype;
     BOOL _isSelectable;
@@ -68,17 +70,25 @@ typedef NSString *NSCollectionViewSupplementaryElementKind NS_SWIFT_BRIDGED_TYPE
     id<NSCollectionViewDelegate> _delegate;
     NSMutableDictionary *_loadedItems; // the visible items, by index path
     NSArray *_loadedPaths;              // unused
-    // The rest fills 27 of the 116 bytes Apple's legacy (i386) layout has
+    // The rest fills 59 of the 116 bytes Apple's legacy (i386) layout has
     NSMutableDictionary *_reuseQueues;     // identifier -> items not shown, ready for reuse
     NSMutableDictionary *_itemNibs;        // identifier -> NSNib registered for it
     NSMutableDictionary *_itemIdentifiers; // item (unretained NSValue) -> identifier it was made for
     NSView *_backgroundView;
     NSIndexPath *_selectionAnchor; // where a keyboard range starts
     NSIndexPath *_selectionLead;   // where the arrow keys move from
+    NSSet *_draggedIndexPaths;        // the items of the drag this view is the source of
+    NSDragOperation _localDragMaskInverted; // the mask within the application, inverted so that it starts with every operation
+    NSDragOperation _outsideDragMask;
+    NSIndexPath *_dropIndexPath;      // where a drop would go, as the delegate validated it
+    NSInteger _dropOperation;         // an NSCollectionViewDropOperation
+    NSDragOperation _dropDragOperation;
+    NSCollectionViewItem *_dropTargetItem; // the item shown as the drop target
+    NSView *_dropGapIndicator;        // the view shown in the gap a drop goes to
     BOOL _needsPrepareLayout;
     BOOL _backgroundViewScrollsWithContent;
     BOOL _disallowsEmptySelection; // allowsEmptySelection, inverted so that it starts YES
-    NS_LEGACY_IVAR_PAD(_NSCollectionViewReserved, 89)
+    NS_LEGACY_IVAR_PAD(_NSCollectionViewReserved, 57)
 }
 
 - (NSArray *) content;
@@ -148,6 +158,8 @@ typedef NSString *NSCollectionViewSupplementaryElementKind NS_SWIFT_BRIDGED_TYPE
 @property(retain) NSView *backgroundView;
 @property BOOL backgroundViewScrollsWithContent;
 
+- (void) setDraggingSourceOperationMask: (NSDragOperation) mask forLocal: (BOOL) localDestination;
+
 @end
 
 @interface NSIndexPath (NSCollectionViewAdditions)
@@ -171,4 +183,29 @@ typedef NSString *NSCollectionViewSupplementaryElementKind NS_SWIFT_BRIDGED_TYPE
 - (void) collectionView: (NSCollectionView *) collectionView didSelectItemsAtIndexPaths: (NSSet<NSIndexPath *> *) indexPaths;
 - (void) collectionView: (NSCollectionView *) collectionView
     didDeselectItemsAtIndexPaths: (NSSet<NSIndexPath *> *) indexPaths;
+
+- (BOOL) collectionView: (NSCollectionView *) collectionView
+    canDragItemsAtIndexPaths: (NSSet<NSIndexPath *> *) indexPaths
+                   withEvent: (NSEvent *) event;
+- (id<NSPasteboardWriting>) collectionView: (NSCollectionView *) collectionView
+        pasteboardWriterForItemAtIndexPath: (NSIndexPath *) indexPath;
+- (BOOL) collectionView: (NSCollectionView *) collectionView
+    writeItemsAtIndexPaths: (NSSet<NSIndexPath *> *) indexPaths
+              toPasteboard: (NSPasteboard *) pasteboard;
+- (void) collectionView: (NSCollectionView *) collectionView
+        draggingSession: (NSDraggingSession *) session
+       willBeginAtPoint: (NSPoint) screenPoint
+   forItemsAtIndexPaths: (NSSet<NSIndexPath *> *) indexPaths;
+- (void) collectionView: (NSCollectionView *) collectionView
+        draggingSession: (NSDraggingSession *) session
+           endedAtPoint: (NSPoint) screenPoint
+          dragOperation: (NSDragOperation) operation;
+- (NSDragOperation) collectionView: (NSCollectionView *) collectionView
+                      validateDrop: (id<NSDraggingInfo>) draggingInfo
+                 proposedIndexPath: (NSIndexPath **) proposedDropIndexPath
+                     dropOperation: (NSCollectionViewDropOperation *) proposedDropOperation;
+- (BOOL) collectionView: (NSCollectionView *) collectionView
+             acceptDrop: (id<NSDraggingInfo>) draggingInfo
+              indexPath: (NSIndexPath *) indexPath
+          dropOperation: (NSCollectionViewDropOperation) dropOperation;
 @end
