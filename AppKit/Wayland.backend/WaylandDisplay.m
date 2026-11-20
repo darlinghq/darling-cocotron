@@ -2451,7 +2451,7 @@ static uint32_t WaylandKeyLayoutCodepoint(void *context, uint32_t keysym) {
     for (CFIndex i = CFArrayGetCount(_windows); i > 0; i--) {
         WaylandWindow *candidate = (WaylandWindow *) CFArrayGetValueAtIndex(_windows, i - 1);
         if (candidate != window && [candidate isMapped] && [candidate isPopup] &&
-            ![candidate isTooltip])
+            ![candidate isTooltip] && ![candidate isGenericPopup])
             return candidate;
     }
     if (_inputWindow != window && [_inputWindow isMapped])
@@ -2473,13 +2473,28 @@ static uint32_t WaylandKeyLayoutCodepoint(void *context, uint32_t keysym) {
     return nil;
 }
 
-// The window a window of a raised level is made transient for: the application's key
+// The window a pop-up window of the application (see DarlingWindowPresentation.h) is shown as a
+// popup of: the window it is attached to as a child window, else the application's main window,
+// else its key window. It must be mapped (a popup of a window that is not shown is a protocol
+// error); the caller waits for its first configure.
+- (WaylandWindow *) popupParentForGenericPopup: (WaylandWindow *) window {
+    NSWindow *candidates[3] = {[[window delegate] parentWindow], [NSApp mainWindow], [NSApp keyWindow]};
+    for (int i = 0; i < 3; i++) {
+        id platform = [candidates[i] platformWindow];
+        if ([platform isKindOfClass: [WaylandWindow class]] && platform != window && [platform isMapped])
+            return platform;
+    }
+    return nil;
+}
+
+// The window a window of a raised level, or any window that is not an application window, is made
+// transient for: the window it is attached to as a child window, else the application's key
 // window, else its main window, provided it is a mapped toplevel and naming it would
 // not make a window its own ancestor.
 - (WaylandWindow *) levelParentForWindow: (WaylandWindow *) window {
-    NSWindow *candidates[2] = {[NSApp keyWindow], [NSApp mainWindow]};
+    NSWindow *candidates[3] = {[[window delegate] parentWindow], [NSApp keyWindow], [NSApp mainWindow]};
 
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < 3; i++) {
         id platform = [candidates[i] platformWindow];
         if (![platform isKindOfClass: [WaylandWindow class]] || ![platform isMapped] || [platform isPopup])
             continue;
@@ -2508,7 +2523,7 @@ static uint32_t WaylandKeyLayoutCodepoint(void *context, uint32_t keysym) {
     for (CFIndex i = CFArrayGetCount(_windows); i > 0; i--) {
         WaylandWindow *window = (WaylandWindow *) CFArrayGetValueAtIndex(_windows, i - 1);
         if ([window popupParent] == parent)
-            [([window isTooltip] ? tooltips : children) addObject: window];
+            [([window isTooltip] || [window isGenericPopup] ? tooltips : children) addObject: window];
     }
     for (WaylandWindow *window in tooltips)
         [window unmap];
@@ -2539,7 +2554,7 @@ static uint32_t WaylandKeyLayoutCodepoint(void *context, uint32_t keysym) {
     NSMutableArray *popups = [NSMutableArray array];
     for (CFIndex i = CFArrayGetCount(_windows); i > 0; i--) {
         WaylandWindow *window = (WaylandWindow *) CFArrayGetValueAtIndex(_windows, i - 1);
-        if ([window isPopup] && ![window isTooltip])
+        if ([window isPopup] && ![window isTooltip] && ![window isGenericPopup])
             [popups addObject: window];
     }
     if ([popups count] == 0)

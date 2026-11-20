@@ -54,6 +54,8 @@ extern NSString *const X11WindowBackingDidFlushNotification;
     BOOL _overrideRedirect;
     BOOL _dock; // the menu bar window (see X11MenuBarWindow)
     BOOL _menuWindow; // a menu or pop-up window
+    BOOL _skipTaskbar; // not an application window: no task-bar or pager entry (see -updateWindowManagerHints)
+    X11Window *_transientParent; // the window named by WM_TRANSIENT_FOR (retained)
     BOOL _fullscreenRequested;
     BOOL _fullscreenReported; // what the window manager last said, told to the delegate
     BOOL _isOpaque;

@@ -26,6 +26,14 @@ bar and either a full-size content view or a hidden title and hidden close, mini
 declares client-side decorations and the backend draws none, as the application draws its own title bar. Changing
 the style mask, the transparency or the title visibility of a shown window updates this at once.
 
+A window that is not an application window (see `AppKit/DarlingWindowPresentation.h`) is related to the window it
+belongs to: a pop-up window (a borderless window that cannot become main and is a child window, sits at the main
+menu level or above, or ignores the mouse) is an ungrabbed `xdg_popup` of its parent window or the main window,
+placed at the offset AppKit gave it, and other windows that are not application windows (panels, child windows
+with a title bar, windows that cannot become main) are toplevels with `xdg_toplevel.set_parent`. A compositor
+neither lists nor centres them, and a popup does not take the keyboard focus. With no mapped window to belong
+to, such a window is an ordinary toplevel.
+
 ## What it provides
 
 - Windows: xdg toplevels, resize, hide and show, compositor close, nested popup menus, client or
