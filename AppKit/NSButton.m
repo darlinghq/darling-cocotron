@@ -31,6 +31,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 @interface NSButtonCell (NSButtonAlignmentPrivate)
 - (BOOL) _hasStockRoundedPushBezel;
 - (NSEdgeInsets) _roundedPushAlignmentInsets;
+- (int) _stockToggleKind;
+- (NSEdgeInsets) _toggleAlignmentInsets;
 @end
 
 @implementation NSButton
@@ -124,6 +126,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
     if ([cell isKindOfClass: [NSButtonCell class]] && [cell _hasStockRoundedPushBezel])
         return [cell _roundedPushAlignmentInsets];
+    if ([cell isKindOfClass: [NSButtonCell class]] && [cell _stockToggleKind] != 0 &&
+        [cell imagePosition] == NSImageLeft)
+        return [cell _toggleAlignmentInsets];
     return [super alignmentRectInsets];
 }
 - (BOOL) isOpaque {

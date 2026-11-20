@@ -95,6 +95,7 @@ enum {
 
 - (void) drawBarInside: (NSRect) frame flipped: (BOOL) isFlipped;
 - (NSRect) knobRectFlipped: (BOOL) flipped;
+- (NSRect) barRectFlipped: (BOOL) flipped;
 - (void) drawKnob;
 - (void) drawKnob: (NSRect) rect;
 
