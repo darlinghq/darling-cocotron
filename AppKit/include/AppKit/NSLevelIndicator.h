@@ -19,6 +19,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSControl.h>
 #import <AppKit/NSSliderCell.h>
+#import <AppKit/NSLevelIndicatorCell.h>
 
 typedef NS_ENUM(NSInteger, NSLevelIndicatorPlaceholderVisibility) {
     NSLevelIndicatorPlaceholderVisibilityAutomatic = 0,
@@ -28,6 +29,9 @@ typedef NS_ENUM(NSInteger, NSLevelIndicatorPlaceholderVisibility) {
 
 @interface NSLevelIndicator : NSControl
 
+@property NSLevelIndicatorStyle levelIndicatorStyle;
+@property(nullable, strong) NSImage *ratingImage;
+@property(nullable, strong) NSImage *ratingPlaceholderImage;
 @property double minValue;
 @property double maxValue;
 - (double) warningValue;

@@ -22,6 +22,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSGraphicsStyle.h>
 #import <AppKit/NSRaise.h>
 #import <AppKit/NSView.h>
+#import <AppKit/NSImage.h>
+#import <AppKit/NSBezierPath.h>
+#import <objc/runtime.h>
 
 @implementation NSLevelIndicatorCell
 
@@ -136,6 +139,51 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (void) setImage: (NSImage *) image {
 }
 
+// The rating images are kept as associated objects: they are rarely set, and this keeps the instance layout of
+// the cell, which the legacy ABI fixes, unchanged.
+static char ratingImageKey, ratingPlaceholderImageKey;
+
+// Not documented what the defaults are: both are nil in a new cell. Evidence: black-box observation on macOS
+// 10.14.4 and 26.7.3 (tier 2). Test: test_quirk_rating_style in tests/appkit-level-indicator-styles.m
+- (NSImage *) ratingImage {
+    return objc_getAssociatedObject(self, &ratingImageKey);
+}
+
+- (void) setRatingImage: (NSImage *) image {
+    objc_setAssociatedObject(self, &ratingImageKey, image, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
+
+- (NSImage *) ratingPlaceholderImage {
+    return objc_getAssociatedObject(self, &ratingPlaceholderImageKey);
+}
+
+- (void) setRatingPlaceholderImage: (NSImage *) image {
+    objc_setAssociatedObject(self, &ratingPlaceholderImageKey, image, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
+
+// QUIRK: a rating indicator shows round(maximum - minimum) units in a row from the left edge of the cell, each
+// 12 points square (or the size of the rating image when one is set), and a click on a unit makes its number
+// (counted from the minimum) the value; positions past the last unit give the last one. Evidence: black-box
+// observation on macOS 10.14.4 (tier 2). Test: test_quirk_rating_style in tests/appkit-level-indicator-styles.m
+- (NSSize) _ratingUnitSize {
+    NSImage *image = [self ratingImage];
+
+    if (image != nil && [image size].width > 0 && [image size].height > 0)
+        return [image size];
+    return NSMakeSize(12, 12);
+}
+
+- (int) _ratingUnits {
+    return MAX(0, (int) floor(_maxValue - _minValue + 0.5));
+}
+
+- (double) _ratingValueAtPoint: (NSPoint) point inRect: (NSRect) frame {
+    int units = [self _ratingUnits];
+    int unit = (int) floor((point.x - NSMinX(frame)) / [self _ratingUnitSize].width) + 1;
+
+    return _minValue + MAX(1, MIN(units, unit));
+}
+
 - (double) tickMarkValueAtIndex: (int) index {
     if (_numberOfTickMarks <= 1)
         return _minValue;
@@ -175,7 +223,74 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         return NSMakeSize(40000, 18);
     if (_style == NSRelevancyLevelIndicatorStyle)
         return NSMakeSize(40000, 12);
+    if (_style == NSRatingLevelIndicatorStyle) {
+        NSSize unit = [self _ratingUnitSize];
+
+        return NSMakeSize(unit.width * [self _ratingUnits], unit.height);
+    }
     return [super cellSize];
+}
+
+// QUIRK: a relevancy indicator is a 12 point high strip centred in the cell, black at 10% (alpha 26/255), with
+// the part up to round(width * fraction) drawn in columns of alternating strength, black at 55% (140/255) on the
+// even columns counted from the left edge of the cell and 33% (83/255) on the odd ones. It looks the same in
+// every control size and when disabled. Evidence: black-box renders of NSLevelIndicator on macOS 10.14.4 and
+// 26.7.3 at 1x (tier 2). Test: test_quirk_relevancy_style in tests/appkit-level-indicator-styles.m
+- (void) _drawRelevancyInFrame: (NSRect) frame fraction: (double) fraction flipped: (BOOL) flipped {
+    CGFloat top = floor((NSHeight(frame) - 12) / 2);
+    CGFloat y = flipped ? NSMinY(frame) + top : NSMaxY(frame) - top - 12;
+    NSRect strip = NSMakeRect(NSMinX(frame), y, NSWidth(frame), 12);
+    int filled = (int) floor(NSWidth(frame) * fraction + 0.5);
+
+    // the stripes replace the strip, they are not drawn over it
+    [[NSColor colorWithCalibratedWhite: 0 alpha: 26 / 255.0] setFill];
+    NSRectFillUsingOperation(NSMakeRect(NSMinX(strip) + filled, y, NSWidth(strip) - filled, 12), NSCompositeSourceOver);
+    for (int x = 0; x < filled; x++) {
+        [[NSColor colorWithCalibratedWhite: 0 alpha: (x % 2 == 0 ? 140 : 83) / 255.0] setFill];
+        NSRectFillUsingOperation(NSMakeRect(NSMinX(frame) + x, y, 1, 12), NSCompositeSourceOver);
+    }
+}
+
+// QUIRK: the stars of a rating indicator are regular five-pointed stars in a 12 point square, vertically centred
+// in the cell: centre (6, 6.93) from the square's top left corner, tips 6.17 from the centre, inner points
+// 2.41 from it, black at 50% (127/255) when filled and 10% (25/255) when not. Units up to round(value - minimum)
+// are filled. They look the same when disabled, editable or in another control size. Evidence: black-box renders
+// of NSLevelIndicator on macOS 10.14.4 and 26.7.3 at 1x (tier 2), shape fitted to the coverage. A rating image
+// and a placeholder image replace the filled and the empty stars when set (documented API).
+// Test: test_quirk_rating_style in tests/appkit-level-indicator-styles.m
+- (void) _drawRatingInFrame: (NSRect) frame flipped: (BOOL) flipped {
+    NSSize unit = [self _ratingUnitSize];
+    int units = [self _ratingUnits];
+    int filled = (int) floor([self doubleValue] - _minValue + 0.5);
+    CGFloat top = floor((NSHeight(frame) - unit.height) / 2);
+    CGFloat y = flipped ? NSMinY(frame) + top : NSMaxY(frame) - top - unit.height;
+
+    for (int i = 0; i < units; i++) {
+        NSRect box = NSMakeRect(NSMinX(frame) + i * unit.width, y, unit.width, unit.height);
+        NSImage *image = i < filled ? [self ratingImage] : [self ratingPlaceholderImage];
+
+        if ([self ratingImage] != nil) {
+            if (image != nil)
+                [image drawInRect: box fromRect: NSZeroRect operation: NSCompositeSourceOver fraction: 1
+                   respectFlipped: YES hints: nil];
+            continue;
+        }
+        NSBezierPath *star = [NSBezierPath bezierPath];
+
+        for (int k = 0; k < 10; k++) {
+            double angle = (-90 + 36 * k) * M_PI / 180, radius = k % 2 == 0 ? 6.17 : 2.41;
+            CGFloat px = 6 + radius * cos(angle), py = 6.93 + radius * sin(angle);
+            NSPoint point = NSMakePoint(NSMinX(box) + px, flipped ? NSMinY(box) + py : NSMaxY(box) - py);
+
+            if (k == 0)
+                [star moveToPoint: point];
+            else
+                [star lineToPoint: point];
+        }
+        [star closePath];
+        [[NSColor colorWithCalibratedWhite: 0 alpha: (i < filled ? 127 : 25) / 255.0] setFill];
+        [star fill];
+    }
 }
 
 // QUIRK: a capacity indicator is a 16 point high bar along the top of the cell (each segment of a discrete one is
@@ -217,8 +332,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
             else
                 [style drawLevelIndicatorTrackInRect: segment];
         }
-    } else
+    } else if (_style == NSRelevancyLevelIndicatorStyle) {
+        [self _drawRelevancyInFrame: frame fraction: fraction flipped: flipped];
         return;
+    } else {
+        [self _drawRatingInFrame: frame flipped: flipped];
+        return;
+    }
 
     for (int i = 0; i < _numberOfTickMarks; i++) {
         BOOL major = NO;

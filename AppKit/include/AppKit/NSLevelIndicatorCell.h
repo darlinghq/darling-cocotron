@@ -21,6 +21,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/NSSliderCell.h>
 
+@class NSImage;
+
 typedef NS_ENUM(NSUInteger, NSLevelIndicatorStyle) {
     NSLevelIndicatorStyleRelevancy = 0,
     NSLevelIndicatorStyleContinuousCapacity = 1,
@@ -68,6 +70,10 @@ enum {
 - (void) setNumberOfMajorTickMarks: (int) count;
 - (void) setTickMarkPosition: (NSTickMarkPosition) position;
 - (void) setImage: (NSImage *) image;
+
+@property(nullable, strong) NSImage *ratingImage;
+@property(nullable, strong) NSImage *ratingPlaceholderImage;
+- (double) _ratingValueAtPoint: (NSPoint) point inRect: (NSRect) frame;
 
 - (double) tickMarkValueAtIndex: (int) index;
 - (NSRect) rectOfTickMarkAtIndex: (int) index;
