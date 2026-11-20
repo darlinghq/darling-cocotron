@@ -68,15 +68,17 @@ typedef NSString *NSCollectionViewSupplementaryElementKind NS_SWIFT_BRIDGED_TYPE
     id<NSCollectionViewDelegate> _delegate;
     NSMutableDictionary *_loadedItems; // the visible items, by index path
     NSArray *_loadedPaths;              // unused
-    // The rest fills 18 of the 116 bytes Apple's legacy (i386) layout has
+    // The rest fills 27 of the 116 bytes Apple's legacy (i386) layout has
     NSMutableDictionary *_reuseQueues;     // identifier -> items not shown, ready for reuse
     NSMutableDictionary *_itemNibs;        // identifier -> NSNib registered for it
     NSMutableDictionary *_itemIdentifiers; // item (unretained NSValue) -> identifier it was made for
     NSView *_backgroundView;
+    NSIndexPath *_selectionAnchor; // where a keyboard range starts
+    NSIndexPath *_selectionLead;   // where the arrow keys move from
     BOOL _needsPrepareLayout;
     BOOL _backgroundViewScrollsWithContent;
     BOOL _disallowsEmptySelection; // allowsEmptySelection, inverted so that it starts YES
-    NS_LEGACY_IVAR_PAD(_NSCollectionViewReserved, 97)
+    NS_LEGACY_IVAR_PAD(_NSCollectionViewReserved, 89)
 }
 
 - (NSArray *) content;

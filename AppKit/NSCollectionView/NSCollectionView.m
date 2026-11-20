@@ -26,6 +26,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSColor.h>
 #import <AppKit/NSGraphics.h>
 #import <AppKit/NSNib.h>
+#import <AppKit/NSApplication.h>
+#import <AppKit/NSBezierPath.h>
+#import <AppKit/NSEvent.h>
 #import <Foundation/NSNotification.h>
 #include <math.h>
 
@@ -62,6 +65,23 @@ static NSSize sizeInClipView(NSCollectionViewLayout *layout, NSSize content, NSS
         return NSMakeSize(MAX(content.width, clip.width), clip.height);
     return NSMakeSize(clip.width, MAX(content.height, clip.height));
 }
+
+// The translucent rectangle a rubber band selection draws over the items
+@interface _NSCollectionViewRubberBand : NSView
+@end
+
+@implementation _NSCollectionViewRubberBand
+- (NSView *) hitTest: (NSPoint) point {
+    return nil;
+}
+- (void) drawRect: (NSRect) dirtyRect {
+    NSRect bounds = NSInsetRect([self bounds], 0.5, 0.5);
+    [[[NSColor selectedControlColor] colorWithAlphaComponent: 0.3] setFill];
+    NSRectFillUsingOperation([self bounds], NSCompositingOperationSourceOver);
+    [[NSColor selectedControlColor] setStroke];
+    [NSBezierPath strokeRect: bounds];
+}
+@end
 
 // Orders item views by their layout attributes' zIndex; views that aren't items (the background view) stay below
 static NSInteger compareZIndex(id first, id second, void *context)
@@ -230,6 +250,8 @@ static NSInteger compareZIndex(id first, id second, void *context)
     [_itemNibs release];
     [_itemIdentifiers release];
     [_backgroundView release];
+    [_selectionAnchor release];
+    [_selectionLead release];
     [super dealloc];
 }
 
@@ -451,6 +473,7 @@ static NSInteger compareZIndex(id first, id second, void *context)
     [_loadedItems removeAllObjects];
     // Any reload empties the selection (as on macOS 26.7.3 and 10.14.4)
     [self _setSelection: [NSSet set]];
+    [self _setAnchor: nil lead: nil];
     if (_collectionViewLayout != nil) {
         NSCollectionViewLayoutInvalidationContext *context =
             [[[[_collectionViewLayout class] invalidationContextClass] alloc] init];
@@ -687,6 +710,376 @@ static NSInteger compareZIndex(id first, id second, void *context)
     [self setSelectionIndexPaths: selection];
     if ([_delegate respondsToSelector: @selector(collectionView:didDeselectItemsAtIndexPaths:)])
         [_delegate collectionView: self didDeselectItemsAtIndexPaths: deselecting];
+}
+
+- (void) _setAnchor: (NSIndexPath *) anchor lead: (NSIndexPath *) lead {
+    [anchor retain];
+    [_selectionAnchor release];
+    _selectionAnchor = anchor;
+    [lead retain];
+    [_selectionLead release];
+    _selectionLead = lead;
+}
+
+// The delegate's part in a selection the user makes. These return what the delegate allows.
+- (NSSet *) _askSelect: (NSSet *) paths {
+    if ([paths count] > 0 && [_delegate respondsToSelector: @selector(collectionView:shouldSelectItemsAtIndexPaths:)])
+        return [_delegate collectionView: self shouldSelectItemsAtIndexPaths: paths];
+    return paths;
+}
+
+- (void) _tellSelected: (NSSet *) paths {
+    if ([paths count] > 0 && [_delegate respondsToSelector: @selector(collectionView:didSelectItemsAtIndexPaths:)])
+        [_delegate collectionView: self didSelectItemsAtIndexPaths: paths];
+}
+
+- (NSSet *) _askDeselect: (NSSet *) paths {
+    if ([paths count] > 0 && [_delegate respondsToSelector: @selector(collectionView:shouldDeselectItemsAtIndexPaths:)])
+        return [_delegate collectionView: self shouldDeselectItemsAtIndexPaths: paths];
+    return paths;
+}
+
+- (void) _tellDeselected: (NSSet *) paths {
+    if ([paths count] > 0 && [_delegate respondsToSelector: @selector(collectionView:didDeselectItemsAtIndexPaths:)])
+        [_delegate collectionView: self didDeselectItemsAtIndexPaths: paths];
+}
+
+// Asks, changes the selection and tells. Returns what was selected or deselected.
+- (NSSet *) _userAdd: (NSSet *) paths {
+    NSMutableSet *adding = [[paths mutableCopy] autorelease];
+    [adding minusSet: [self selectionIndexPaths]];
+    NSSet *allowed = [self _askSelect: adding];
+    if ([allowed count] > 0) {
+        [self setSelectionIndexPaths: [[self selectionIndexPaths] setByAddingObjectsFromSet: allowed]];
+        [self _tellSelected: allowed];
+    }
+    return allowed;
+}
+
+- (NSSet *) _userRemove: (NSSet *) paths {
+    NSSet *allowed = [self _askDeselect: paths];
+    if ([allowed count] > 0) {
+        NSMutableSet *selection = [[[self selectionIndexPaths] mutableCopy] autorelease];
+        [selection minusSet: allowed];
+        [self setSelectionIndexPaths: selection];
+        [self _tellDeselected: allowed];
+    }
+    return allowed;
+}
+
+// The delegate may narrow the paths; the visible items among the rest take the state
+- (NSSet *) _highlightIndexPaths: (NSSet *) paths state: (NSCollectionViewItemHighlightState) state {
+    if ([paths count] == 0)
+        return paths;
+    if ([_delegate respondsToSelector: @selector(collectionView:shouldChangeItemsAtIndexPaths:toHighlightState:)])
+        paths = [_delegate collectionView: self shouldChangeItemsAtIndexPaths: paths toHighlightState: state];
+    for (NSIndexPath *path in paths)
+        [[_loadedItems objectForKey: path] setHighlightState: state];
+    if ([paths count] > 0 &&
+        [_delegate respondsToSelector: @selector(collectionView:didChangeItemsAtIndexPaths:toHighlightState:)])
+        [_delegate collectionView: self didChangeItemsAtIndexPaths: paths toHighlightState: state];
+    return paths;
+}
+
+- (NSEvent *) _nextTrackingEvent {
+    return [NSApp nextEventMatchingMask: NSEventMaskLeftMouseUp | NSEventMaskLeftMouseDragged
+                              untilDate: [NSDate distantFuture]
+                                 inMode: NSEventTrackingRunLoopMode
+                                dequeue: YES];
+}
+
+- (NSSet *) _itemIndexPathsInRect: (NSRect) rect {
+    NSMutableSet *paths = [NSMutableSet set];
+    for (NSCollectionViewLayoutAttributes *attributes in [_collectionViewLayout layoutAttributesForElementsInRect: rect])
+        if (attributes.representedElementCategory == NSCollectionElementCategoryItem && attributes.indexPath != nil &&
+            NSIntersectsRect(attributes.frame, rect))
+            [paths addObject: attributes.indexPath];
+    return paths;
+}
+
+- (BOOL) acceptsFirstResponder {
+    return _isSelectable;
+}
+
+// A click on an item highlights it until the mouse goes up, then changes the selection in the order (and with the
+// delegate calls) both Macs use (darling's tests/collection-view.md): ⌘ toggles the item, shift adds it, a plain click
+// selects only it.
+- (void) _clickItemAtIndexPath: (NSIndexPath *) path toggle: (BOOL) toggle extend: (BOOL) extend {
+    NSSet *clicked = [NSSet setWithObject: path];
+    BOOL wasSelected = [[self selectionIndexPaths] containsObject: path];
+    BOOL deselect = toggle && wasSelected;
+    [self _highlightIndexPaths: clicked
+                         state: deselect ? NSCollectionViewItemHighlightForDeselection
+                                         : NSCollectionViewItemHighlightForSelection];
+    while ([[self _nextTrackingEvent] type] != NSEventTypeLeftMouseUp)
+        ;
+
+    BOOL unhighlighted = NO;
+    if (deselect) {
+        if (self.allowsEmptySelection || [[self selectionIndexPaths] count] > 1)
+            [self _userRemove: clicked];
+    } else if (_allowsMultipleSelection && (toggle || extend))
+        [self _userAdd: clicked];
+    else if (_allowsMultipleSelection) {
+        NSMutableSet *others = [[[self selectionIndexPaths] mutableCopy] autorelease];
+        [others removeObject: path];
+        if ([others count] > 0) {
+            [self _highlightIndexPaths: others state: NSCollectionViewItemHighlightForDeselection];
+            [self _userRemove: others];
+            [self _highlightIndexPaths: others state: NSCollectionViewItemHighlightNone];
+        }
+        [self _userAdd: clicked];
+    } else if (!wasSelected) {
+        // One item at most: the new one is selected first, then the old one deselected
+        NSMutableSet *others = [[[self selectionIndexPaths] mutableCopy] autorelease];
+        [others removeObject: path];
+        NSSet *allowed = [self _askSelect: clicked];
+        if ([allowed count] > 0) {
+            [self setSelectionIndexPaths: clicked];
+            [self _tellSelected: clicked];
+            [self _highlightIndexPaths: clicked state: NSCollectionViewItemHighlightNone];
+            unhighlighted = YES;
+            if ([others count] > 0) {
+                [self _tellDeselected: [self _askDeselect: others]];
+                [self _highlightIndexPaths: others state: NSCollectionViewItemHighlightNone];
+            }
+        }
+    }
+    if (!unhighlighted)
+        [self _highlightIndexPaths: clicked state: NSCollectionViewItemHighlightNone];
+    if ([[self selectionIndexPaths] containsObject: path])
+        [self _setAnchor: path lead: path];
+}
+
+// A drag from the background selects the items a rectangle covers. Without modifiers the selection is emptied first,
+// as a click on the background does. With ⌘, a band that first reaches a selected item deselects what it covers.
+- (void) _rubberBandFrom: (NSPoint) start toggle: (BOOL) toggle extend: (BOOL) extend {
+    if (!toggle && !extend && self.allowsEmptySelection) {
+        NSSet *selected = [self selectionIndexPaths];
+        if ([selected count] > 0) {
+            [self _userRemove: selected];
+            [self _highlightIndexPaths: selected state: NSCollectionViewItemHighlightNone];
+        }
+    }
+    if (!_allowsMultipleSelection) {
+        while ([[self _nextTrackingEvent] type] != NSEventTypeLeftMouseUp)
+            ;
+        return;
+    }
+
+    _NSCollectionViewRubberBand *band = [[[_NSCollectionViewRubberBand alloc] initWithFrame: NSZeroRect] autorelease];
+    [self addSubview: band positioned: NSWindowAbove relativeTo: nil];
+    NSMutableSet *covered = [NSMutableSet set];
+    NSCollectionViewItemHighlightState state = NSCollectionViewItemHighlightNone;
+    for (;;) {
+        NSEvent *event = [self _nextTrackingEvent];
+        NSPoint point = [self convertPoint: [event locationInWindow] fromView: nil];
+        NSRect rect = NSMakeRect(MIN(start.x, point.x), MIN(start.y, point.y), fabs(point.x - start.x),
+                                 fabs(point.y - start.y));
+        if ([event type] == NSEventTypeLeftMouseDragged)
+            [self autoscroll: event];
+        [band setFrame: rect];
+        [self setNeedsDisplayInRect: NSInsetRect(NSUnionRect(rect, [band frame]), -2, -2)];
+
+        NSSet *inside = [self _itemIndexPathsInRect: rect];
+        if (state == NSCollectionViewItemHighlightNone && [inside count] > 0)
+            state = toggle && [inside intersectsSet: [self selectionIndexPaths]]
+                        ? NSCollectionViewItemHighlightForDeselection
+                        : NSCollectionViewItemHighlightForSelection;
+        NSMutableSet *added = [[inside mutableCopy] autorelease];
+        [added minusSet: covered];
+        NSMutableSet *removed = [[covered mutableCopy] autorelease];
+        [removed minusSet: inside];
+        if ([removed count] > 0) {
+            [self _highlightIndexPaths: removed state: NSCollectionViewItemHighlightNone];
+            [covered minusSet: removed];
+        }
+        if ([added count] > 0) {
+            [self _highlightIndexPaths: added state: state];
+            [covered unionSet: added];
+        }
+        if ([event type] == NSEventTypeLeftMouseUp)
+            break;
+    }
+    [band removeFromSuperview];
+
+    if ([covered count] == 0)
+        return;
+    if (state == NSCollectionViewItemHighlightForDeselection)
+        [self _userRemove: covered];
+    else {
+        NSSet *allowed = [self _askSelect: covered];
+        if ([allowed count] > 0) {
+            [self setSelectionIndexPaths: [[self selectionIndexPaths] setByAddingObjectsFromSet: allowed]];
+            [self _tellSelected: allowed];
+        }
+    }
+    [self _highlightIndexPaths: covered state: NSCollectionViewItemHighlightNone];
+}
+
+- (void) mouseDown: (NSEvent *) event {
+    if (!_isSelectable) {
+        [super mouseDown: event];
+        return;
+    }
+    if ([[self window] firstResponder] != self)
+        [[self window] makeFirstResponder: self];
+    NSPoint point = [self convertPoint: [event locationInWindow] fromView: nil];
+    NSEventModifierFlags flags = [event modifierFlags];
+    BOOL toggle = (flags & NSEventModifierFlagCommand) != 0, extend = (flags & NSEventModifierFlagShift) != 0;
+    NSIndexPath *path = [self indexPathForItemAtPoint: point];
+    if (path != nil) {
+        // The first click selected the item; a double click is the item's (or its view's) to handle
+        if ([event clickCount] > 1)
+            return;
+        [self _clickItemAtIndexPath: path toggle: toggle extend: extend];
+    } else
+        [self _rubberBandFrom: point toggle: toggle extend: extend];
+}
+
+- (void) keyDown: (NSEvent *) event {
+    if (_isSelectable)
+        [self interpretKeyEvents: [NSArray arrayWithObject: event]];
+    else
+        [super keyDown: event];
+}
+
+typedef enum { MoveLeft, MoveRight, MoveUp, MoveDown } MoveDirection;
+
+// The item next to the given one on screen: within its row for left and right, in the nearest row above or below
+// (the item whose middle is closest) for up and down
+- (NSIndexPath *) _indexPathFrom: (NSIndexPath *) from direction: (MoveDirection) direction {
+    NSRect current = [[self layoutAttributesForItemAtIndexPath: from] frame];
+    if (NSIsEmptyRect(current))
+        return nil;
+    NSRect bounds = [self bounds];
+    NSRect search;
+    switch (direction) {
+    case MoveLeft:
+        search = NSMakeRect(NSMinX(bounds), NSMinY(current), NSMinX(current) - NSMinX(bounds), NSHeight(current));
+        break;
+    case MoveRight:
+        search = NSMakeRect(NSMaxX(current), NSMinY(current), NSMaxX(bounds) - NSMaxX(current), NSHeight(current));
+        break;
+    case MoveUp:
+        search = NSMakeRect(NSMinX(bounds), NSMinY(bounds), NSWidth(bounds), NSMinY(current) - NSMinY(bounds));
+        break;
+    default:
+        search = NSMakeRect(NSMinX(bounds), NSMaxY(current), NSWidth(bounds), NSMaxY(bounds) - NSMaxY(current));
+        break;
+    }
+    NSArray *elements = [_collectionViewLayout layoutAttributesForElementsInRect: search];
+    NSCollectionViewLayoutAttributes *best = nil;
+    for (NSCollectionViewLayoutAttributes *a in elements) {
+        if (a.representedElementCategory != NSCollectionElementCategoryItem || [a.indexPath isEqual: from])
+            continue;
+        NSRect frame = a.frame;
+        switch (direction) {
+        case MoveLeft:
+            if (NSMaxX(frame) <= NSMinX(current) && NSMaxY(frame) > NSMinY(current) && NSMinY(frame) < NSMaxY(current) &&
+                (best == nil || NSMaxX(frame) > NSMaxX(best.frame)))
+                best = a;
+            break;
+        case MoveRight:
+            if (NSMinX(frame) >= NSMaxX(current) && NSMaxY(frame) > NSMinY(current) && NSMinY(frame) < NSMaxY(current) &&
+                (best == nil || NSMinX(frame) < NSMinX(best.frame)))
+                best = a;
+            break;
+        case MoveUp:
+            if (NSMaxY(frame) <= NSMinY(current) &&
+                (best == nil || NSMaxY(frame) > NSMaxY(best.frame) ||
+                 (NSMaxY(frame) == NSMaxY(best.frame) &&
+                  fabs(NSMidX(frame) - NSMidX(current)) < fabs(NSMidX(best.frame) - NSMidX(current)))))
+                best = a;
+            break;
+        default:
+            if (NSMinY(frame) >= NSMaxY(current) &&
+                (best == nil || NSMinY(frame) < NSMinY(best.frame) ||
+                 (NSMinY(frame) == NSMinY(best.frame) &&
+                  fabs(NSMidX(frame) - NSMidX(current)) < fabs(NSMidX(best.frame) - NSMidX(current)))))
+                best = a;
+            break;
+        }
+    }
+    return best.indexPath;
+}
+
+// Every index path from one to the other, both included, in index order
+- (NSSet *) _indexPathsFrom: (NSIndexPath *) first to: (NSIndexPath *) last {
+    if ([first compare: last] == NSOrderedDescending) {
+        NSIndexPath *swap = first;
+        first = last;
+        last = swap;
+    }
+    NSMutableSet *paths = [NSMutableSet set];
+    for (NSInteger section = first.section; section <= last.section; section++) {
+        NSInteger count = [self numberOfItemsInSection: section];
+        NSInteger start = section == first.section ? first.item : 0;
+        NSInteger end = section == last.section ? last.item : count - 1;
+        for (NSInteger item = start; item <= end && item < count; item++)
+            [paths addObject: [NSIndexPath indexPathForItem: item inSection: section]];
+    }
+    return paths;
+}
+
+// An arrow key: the selection moves to the next item, deselecting first; with shift it becomes the range from where
+// it started to the new item (both Macs, darling's tests/collection-view.md)
+- (void) _moveSelection: (MoveDirection) direction extend: (BOOL) extend {
+    NSSet *selection = [self selectionIndexPaths];
+    if (!_isSelectable || [selection count] == 0)
+        return;
+    NSIndexPath *lead = _selectionLead;
+    if (lead == nil || ![selection containsObject: lead])
+        lead = [[[selection allObjects] sortedArrayUsingSelector: @selector(compare:)] lastObject];
+    NSIndexPath *target = [self _indexPathFrom: lead direction: direction];
+    if (target == nil)
+        return;
+
+    if (extend && _allowsMultipleSelection) {
+        NSIndexPath *anchor = _selectionAnchor;
+        if (anchor == nil || ![selection containsObject: anchor])
+            anchor = lead;
+        NSSet *range = [self _indexPathsFrom: anchor to: target];
+        NSMutableSet *leaving = [[[self _indexPathsFrom: anchor to: lead] mutableCopy] autorelease];
+        [leaving minusSet: range];
+        [leaving intersectSet: selection];
+        [self _userRemove: leaving];
+        [self _userAdd: range];
+        [self _setAnchor: anchor lead: target];
+    } else {
+        NSMutableSet *others = [[selection mutableCopy] autorelease];
+        [others removeObject: target];
+        [self _userRemove: others];
+        [self _userAdd: [NSSet setWithObject: target]];
+        [self _setAnchor: target lead: target];
+    }
+    [self scrollToItemsAtIndexPaths: [NSSet setWithObject: target]
+                     scrollPosition: NSCollectionViewScrollPositionNearestHorizontalEdge];
+}
+
+- (void) moveLeft: (id) sender {
+    [self _moveSelection: MoveLeft extend: NO];
+}
+- (void) moveRight: (id) sender {
+    [self _moveSelection: MoveRight extend: NO];
+}
+- (void) moveUp: (id) sender {
+    [self _moveSelection: MoveUp extend: NO];
+}
+- (void) moveDown: (id) sender {
+    [self _moveSelection: MoveDown extend: NO];
+}
+- (void) moveLeftAndModifySelection: (id) sender {
+    [self _moveSelection: MoveLeft extend: YES];
+}
+- (void) moveRightAndModifySelection: (id) sender {
+    [self _moveSelection: MoveRight extend: YES];
+}
+- (void) moveUpAndModifySelection: (id) sender {
+    [self _moveSelection: MoveUp extend: YES];
+}
+- (void) moveDownAndModifySelection: (id) sender {
+    [self _moveSelection: MoveDown extend: YES];
 }
 
 // Only with multiple selection (as on macOS 26.7.3 and 10.14.4)
