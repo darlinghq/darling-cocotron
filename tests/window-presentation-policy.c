@@ -16,12 +16,20 @@ static int failures;
 static DarlingWindowPresentation of(DarlingWindowTraits t) { return DarlingWindowPresentationFor(&t); }
 
 int main(void) {
-    // A titled window that can become main is an application window.
+    // A window is an application window, titled or not, whatever it answers to
+    // canBecomeMain and whatever its size: the Dock lists the application's windows, not only the titled ones.
     CHECK(of((DarlingWindowTraits){.hasTitlebar = true, .canBecomeMain = true, .canBecomeKey = true})
           == DarlingWindowPresentationApplication);
-    // So is a borderless window that draws its own chrome and can become main.
-    CHECK(of((DarlingWindowTraits){.canBecomeMain = true, .canBecomeKey = true})
-          == DarlingWindowPresentationApplication);
+    CHECK(of((DarlingWindowTraits){.canBecomeMain = true, .canBecomeKey = true}) == DarlingWindowPresentationApplication);
+    CHECK(of((DarlingWindowTraits){.canBecomeKey = true}) == DarlingWindowPresentationApplication);
+    // The application's activation policy does not matter: an accessory application's windows are on screen and in
+    // Mission Control, and a task bar is the only way to reach them (no trait for it exists).
+    // A window that is transient, stationary or ignores the window cycle (collection behaviour) is left out of
+    // the window list and the cycle, whatever else it is.
+    CHECK(of((DarlingWindowTraits){.canBecomeMain = true, .canBecomeKey = true, .leavesWindowCycle = true})
+          == DarlingWindowPresentationAuxiliary);
+    // So is a window above the normal level.
+    CHECK(of((DarlingWindowTraits){.hasTitlebar = true, .canBecomeMain = true, .level = 3}) == DarlingWindowPresentationAuxiliary);
     // A window attached to another as a child is not, whatever else it can do.
     CHECK(of((DarlingWindowTraits){.hasTitlebar = true, .canBecomeMain = true, .canBecomeKey = true, .hasParent = true})
           == DarlingWindowPresentationAuxiliary);
@@ -32,9 +40,6 @@ int main(void) {
           == DarlingWindowPresentationAuxiliary);
     CHECK(of((DarlingWindowTraits){.hasTitlebar = true, .canBecomeMain = true, .isModal = true})
           == DarlingWindowPresentationAuxiliary);
-    // A titled window that cannot become main is auxiliary.
-    CHECK(of((DarlingWindowTraits){.hasTitlebar = true, .canBecomeKey = true})
-          == DarlingWindowPresentationAuxiliary);
     // A borderless window that cannot become main is a pop-up when it has a parent, sits at the main
     // menu level or above, or ignores the mouse ...
     CHECK(of((DarlingWindowTraits){.canBecomeKey = true, .hasParent = true}) == DarlingWindowPresentationPopup);
@@ -42,8 +47,7 @@ int main(void) {
           == DarlingWindowPresentationPopup);
     CHECK(of((DarlingWindowTraits){.canBecomeKey = true, .level = 101}) == DarlingWindowPresentationPopup);
     CHECK(of((DarlingWindowTraits){.ignoresMouse = true}) == DarlingWindowPresentationPopup);
-    // ... and auxiliary otherwise (an overlay or splash window with nothing to belong to).
-    CHECK(of((DarlingWindowTraits){.canBecomeKey = true}) == DarlingWindowPresentationAuxiliary);
+    // ... and an application window otherwise at the normal level, auxiliary above it.
     CHECK(of((DarlingWindowTraits){.canBecomeKey = true, .level = 3}) == DarlingWindowPresentationAuxiliary);
     // A borderless pop-up that can become main is not a pop-up.
     CHECK(of((DarlingWindowTraits){.canBecomeMain = true, .hasParent = true}) == DarlingWindowPresentationAuxiliary);

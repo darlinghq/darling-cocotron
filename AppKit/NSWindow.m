@@ -2182,6 +2182,9 @@ static BOOL _allowsAutomaticWindowTabbing;
 // window is visible, so -canBecomeMainWindow answers for a window that is on screen).
 - (int) _windowPresentation {
     DarlingWindowTraits traits = {
+        .leavesWindowCycle = ([self collectionBehavior] & (NSWindowCollectionBehaviorTransient |
+                                                          NSWindowCollectionBehaviorStationary |
+                                                          NSWindowCollectionBehaviorIgnoresCycle)) != 0,
         .hasTitlebar = [self _hasTitlebarForStyleMask: NS_EXTRA(NSWindow, self)->_styleMask],
         .canBecomeMain = [self canBecomeMainWindow],
         .canBecomeKey = [self canBecomeKeyWindow],
@@ -2209,6 +2212,11 @@ static BOOL _allowsAutomaticWindowTabbing;
     // unimplemented marker made the setter raise, so ordinary window setup
     // aborted. The value is plain window state and is kept.
     NS_EXTRA(NSWindow, self)->_collectionBehavior = behavior;
+    // The collection behavior decides whether the window is an application window (see
+    // -_windowPresentation), which a window that is already on screen has to tell the window system.
+    id platform = [self platformWindow];
+    if ([platform respondsToSelector: @selector(presentationChanged)])
+        [platform presentationChanged];
 }
 
 - (NSWindowTabbingMode) tabbingMode {
@@ -2526,7 +2534,9 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
 }
 
 - (void) makeKeyWindow {
-    [[self platformWindow] makeKey];
+    // An application that is not active does not take the input focus by making a window key.
+    if ([NSApp _mayTakeInputFocus])
+        [[self platformWindow] makeKey];
 
     if (NS_EXTRA(NSWindow, self)->_hasBeenOnScreen) {
         return;
