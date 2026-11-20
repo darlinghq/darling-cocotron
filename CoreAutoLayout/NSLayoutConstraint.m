@@ -196,11 +196,32 @@ static BOOL _NSLayoutItemIsLegal(id item)
 - (NSLayoutRelation)relation { return NS_EXTRA(NSLayoutConstraint, self)->_relation; }
 - (CGFloat)multiplier { return NS_EXTRA(NSLayoutConstraint, self)->_multiplier; }
 
+// An installed constraint tells its owner when its constant or priority changes, so the owner's
+// layout is updated without the owner having to compare the constraints it holds.
+static void constraintDidChange(NSLayoutConstraint *self)
+{
+    id owner = NS_EXTRA(NSLayoutConstraint, self)->_owner;
+    if (owner != nil && [owner respondsToSelector:@selector(_layoutConstraintDidChange:)])
+        [owner _layoutConstraintDidChange:self];
+}
+
 - (CGFloat)constant { return NS_EXTRA(NSLayoutConstraint, self)->_constant; }
-- (void)setConstant:(CGFloat)constant { NS_EXTRA(NSLayoutConstraint, self)->_constant = constant; }
+- (void)setConstant:(CGFloat)constant
+{
+    if (NS_EXTRA(NSLayoutConstraint, self)->_constant == constant)
+        return;
+    NS_EXTRA(NSLayoutConstraint, self)->_constant = constant;
+    constraintDidChange(self);
+}
 
 - (NSLayoutPriority)priority { return NS_EXTRA(NSLayoutConstraint, self)->_priority; }
-- (void)setPriority:(NSLayoutPriority)priority { NS_EXTRA(NSLayoutConstraint, self)->_priority = priority; }
+- (void)setPriority:(NSLayoutPriority)priority
+{
+    if (NS_EXTRA(NSLayoutConstraint, self)->_priority == priority)
+        return;
+    NS_EXTRA(NSLayoutConstraint, self)->_priority = priority;
+    constraintDidChange(self);
+}
 
 - (NSString *)identifier { return NS_EXTRA(NSLayoutConstraint, self)->_identifier; }
 - (void)setIdentifier:(NSString *)identifier
