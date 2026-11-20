@@ -32,6 +32,18 @@
         GLuint _colorTex;
         GLuint _depthRb;
         CGSize _allocatedSize;
+        // Frame copy for a hosting context that shares no objects with the
+        // layer's context: pixels read from the framebuffer and the texture
+        // made from them in the hosting context.
+        GLubyte *_pixels;
+        size_t _pixelsCapacity;
+        GLsizei _pixelsWidth;
+        GLsizei _pixelsHeight;
+        unsigned long _pixelsSerial;
+        unsigned long _uploadedSerial;
+        GLuint _hostTex;
+        CGLContextObj _hostTexContext;
+        CGSize _hostTexSize;
     NS_EXTRA_IVARS_END(CAOpenGLLayer)
 }
 
