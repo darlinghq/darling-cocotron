@@ -53,7 +53,11 @@ static NSSystemInfoPanel *_sharedInfoPanel = nil;
     if (icon != nil)
         [appIconView setImage: icon];
 
-    [appNameField setStringValue: [[NSBundle mainBundle] objectForInfoDictionaryKey: @"CFBundleName"]];
+    // An executable without an Info.plist has no CFBundleName: the panel shows the process name.
+    NSString *appName = [[NSBundle mainBundle] objectForInfoDictionaryKey: @"CFBundleName"];
+    if (appName == nil)
+        appName = [[NSProcessInfo processInfo] processName];
+    [appNameField setStringValue: appName];
 
     NSString *bundleVersion = [[[NSBundle mainBundle] infoDictionary]
             objectForKey: @"CFBundleVersion"];

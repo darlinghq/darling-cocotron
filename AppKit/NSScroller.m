@@ -551,15 +551,20 @@ static void scrollerKnobGeometry(CGFloat length, CGFloat proportion, CGFloat val
 }
 
 - (NSScrollerPart) testPart: (NSPoint) point {
-    int part;
+    // The parts that lie inside the knob slot come before it, since the slot contains them. The
+    // NSScrollerPart constants are not in this order, so they are listed rather than counted.
+    static const NSScrollerPart order[] = {
+        NSScrollerIncrementLine, NSScrollerDecrementLine, NSScrollerKnob,
+        NSScrollerIncrementPage, NSScrollerDecrementPage, NSScrollerKnobSlot};
+    size_t i;
 
     NS_EXTRA(NSScroller, self)->_hitPart = NSScrollerNoPart;
 
-    for (part = NSScrollerIncrementLine; part <= NSScrollerKnobSlot; part++) {
-        NSRect rect = [self rectForPart: part];
+    for (i = 0; i < sizeof(order) / sizeof(order[0]); i++) {
+        NSRect rect = [self rectForPart: order[i]];
 
         if (NSMouseInRect(point, rect, [self isFlipped])) {
-            NS_EXTRA(NSScroller, self)->_hitPart = part;
+            NS_EXTRA(NSScroller, self)->_hitPart = order[i];
             break;
         }
     }
