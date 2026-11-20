@@ -70,6 +70,7 @@ enum {
 
 - initWithFormat: (NSOpenGLPixelFormat *) pixelFormat
         shareContext: (NSOpenGLContext *) shareContext;
+- (instancetype) initWithCGLContextObj: (CGLContextObj) context;
 
 - (NSView *) view;
 - (NSOpenGLPixelBuffer *) pixelBuffer;

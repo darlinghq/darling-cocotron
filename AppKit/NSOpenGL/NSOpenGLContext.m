@@ -81,6 +81,24 @@ static inline void _clearCurrentContext() {
     return self;
 }
 
+// Wraps a context created with the CGL API. The wrapper owns one reference of
+// the CGL context, which dealloc gives back.
+- (instancetype) initWithCGLContextObj: (CGLContextObj) context {
+    if (context == NULL) {
+        [self release];
+        return nil;
+    }
+
+    if (_glContext != NULL) {
+        CGLReleaseContext(_glContext);
+        _glContext = NULL;
+    }
+    [_pixelFormat release];
+    _pixelFormat = nil;
+    _glContext = CGLRetainContext(context);
+    return self;
+}
+
 - (void) dealloc {
     [self _stopObservingView];
     // FIXME: this doesn't actually work because if we are the current context
