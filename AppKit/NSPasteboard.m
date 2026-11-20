@@ -163,6 +163,9 @@ NSArray<NSPasteboardType> *NSPasteboardTypesWithAliases(NSArray<NSPasteboardType
         if (legacy != nil && ![result containsObject: legacy])
             [result addObject: legacy];
     }
+    // A list of file names is read as one file URL per name (-pasteboardItems), as on both Macs
+    if ([result containsObject: NSFilenamesPboardType] && ![result containsObject: NSPasteboardTypeFileURL])
+        [result addObject: NSPasteboardTypeFileURL];
     return result;
 }
 
@@ -834,10 +837,11 @@ static NSMutableDictionary *uniquePasteboards;
 }
 
 // The single item holding a list of file names as one file URL item per file, or nil if it holds no
-// such list. The list is read from the flat types, which are those of the first item.
+// such list. The list is read from the flat types, which are those of the first item; a pasteboard that
+// holds file URLs of its own holds no such list.
 - (NSArray *) _itemsExpandingFileNamesOf: (NSArray *) items {
     NSArray *flat = NSPasteboardCanonicalTypes([self types]);
-    if (![flat containsObject: NSFilenamesPboardType] || [flat containsObject: NSPasteboardTypeFileURL])
+    if (![flat containsObject: NSFilenamesPboardType] || [self dataForType: NSPasteboardTypeFileURL] != nil)
         return nil;
     id paths = [self propertyListForType: NSFilenamesPboardType];
     if (![paths isKindOfClass: [NSArray class]] || [paths count] == 0)
@@ -1012,6 +1016,26 @@ static NSPasteboardType readableTypeOfItem(NSPasteboardItem *item, Class cls, NS
     return nil;
 }
 
+// Whether a URL read from a pasteboard is one the URL reading options ask for: a file URL when
+// NSPasteboardURLReadingFileURLsOnlyKey is set, and an item whose type conforms to one of the
+// NSPasteboardURLReadingContentsConformToTypesKey types when that is given
+static BOOL urlPassesReadingOptions(NSURL *url, NSDictionary *options)
+{
+    if ([[options objectForKey: NSPasteboardURLReadingFileURLsOnlyKey] boolValue] && ![url isFileURL])
+        return NO;
+    NSArray *types = [options objectForKey: NSPasteboardURLReadingContentsConformToTypesKey];
+    if (types == nil)
+        return YES;
+    id type = nil;
+    if (![url isFileURL] || ![url getResourceValue: &type forKey: NSURLTypeIdentifierKey error: NULL] ||
+        ![type isKindOfClass: [NSString class]])
+        return NO;
+    for (NSString *wanted in types)
+        if ([wanted isKindOfClass: [NSString class]] && NSPasteboardTypeConformsTo(type, wanted))
+            return YES;
+    return NO;
+}
+
 // The item read as the first of the classes it can be read as, or nil
 - (id) _objectForItem: (NSPasteboardItem *) item
               classes: (NSArray<Class> *) classArray
@@ -1040,8 +1064,7 @@ static NSPasteboardType readableTypeOfItem(NSPasteboardItem *item, Class cls, NS
 
         if (object == nil)
             continue;
-        if ([[options objectForKey: NSPasteboardURLReadingFileURLsOnlyKey] boolValue] &&
-            [object isKindOfClass: [NSURL class]] && ![object isFileURL])
+        if ([object isKindOfClass: [NSURL class]] && !urlPassesReadingOptions(object, options))
             continue;
         return object;
     }
@@ -1063,15 +1086,10 @@ static NSPasteboardType readableTypeOfItem(NSPasteboardItem *item, Class cls, NS
 - (BOOL) canReadObjectForClasses: (NSArray<Class> *) classArray
                          options: (NSDictionary<NSPasteboardReadingOptionKey, id> *) options
 {
-    for (NSPasteboardItem *item in [self pasteboardItems]) {
-        for (Class cls in classArray) {
-            if ([cls isSubclassOfClass: [NSPasteboardItem class]])
-                return YES;
-            if ([cls conformsToProtocol: @protocol(NSPasteboardReading)] &&
-                readableTypeOfItem(item, cls, self, options) != nil)
-                return YES;
-        }
-    }
+    // Whatever -readObjectsForClasses:options: would read, so that the two agree
+    for (NSPasteboardItem *item in [self pasteboardItems])
+        if ([self _objectForItem: item classes: classArray options: options] != nil)
+            return YES;
     return NO;
 }
 

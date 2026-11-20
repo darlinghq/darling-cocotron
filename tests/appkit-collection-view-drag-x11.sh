@@ -4,14 +4,19 @@
 #
 # Drags between the collection views of tests/appkit-collection-view-drag-live.m with XTest (xdotool) on $DISPLAY,
 # which must have a window manager: the selected items 1 and 4 of "cv-source" onto item 2 of "cv-target" and into
-# the gap before its item 1. Checks the source's session callbacks, what the target accepted where, and that the drop
-# target shows no longer once the drag is over. Usage:
+# the gap before its item 1, then a text/uri-list from an X client (tests/appkit-x11-xdnd/xdnd-source-driver.c) onto
+# its item 5. Checks the source's session callbacks, what the target accepted where, and that the drop target shows
+# no longer once the drag is over. Usage:
 #   appkit-collection-view-drag-x11.sh <command that runs "appkit-collection-view-drag-live <seconds>">
 # for example: appkit-collection-view-drag-x11.sh darling shell /path/appkit-collection-view-drag-live 40
-# Needs xdotool.
+# Needs xdotool and a C compiler with the X11 headers.
 set -u
+here=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 work=$(mktemp -d)
 out=$work/out
+cc -Wall "$here/appkit-x11-xdnd/xdnd-source-driver.c" -lX11 -o "$work/driver" || exit 1
+host_file=$work/cv-host-file
+: > "$host_file"
 "$@" > "$out" 2>&1 < /dev/null &
 pid=$!
 trap 'kill $pid 2>/dev/null; rm -rf "$work"' EXIT
@@ -67,6 +72,16 @@ for spec in "on-item AT 2 item=2 op=on" "in-gap GAP 1 item=1 op=before"; do
         "TARGET accept $want urls=/private/var/tmp/cv-item-1,/private/var/tmp/cv-item-4"
     check "$name: after" "$(echo "$lines" | grep '^TARGET after')" "TARGET after highlight=0 gap=0"
 done
+
+# A drop from another X client
+start=$(wc -l < "$out")
+at=$(offset AT cv-target 5)
+XDND_TARGET=cv-target XDND_AT="${at/ /,}" XDND_URIS="file://$host_file"$'\r\n' "$work/driver" > "$work/driver.out" 2>&1
+check "host: driver" "$(cat "$work/driver.out")" "OK"
+sleep 1
+lines=$(tail -n +$((start + 1)) "$out")
+check "host: drop" "$(echo "$lines" | grep '^TARGET accept')" "TARGET accept item=5 op=on urls=/Volumes/SystemRoot$host_file"
+check "host: source" "$(echo "$lines" | grep -c '^SOURCE')" "0"
 
 kill $pid 2>/dev/null
 wait $pid 2>/dev/null
