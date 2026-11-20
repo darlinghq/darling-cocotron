@@ -110,7 +110,7 @@ static NSDocumentController *shared = nil;
             // NOTE: it is important that this is `self` and not `NSDocumentController` directly;
             //       Xcode subclasses NSDocumentController and invokes this class method on said subclass,
             //       expecting the shared controller to be allocated as that subclass instead of `NSDocumentController`.
-            shared = [[self alloc] init];
+            [[[self alloc] init] release]; // init makes it the shared controller
             [shared _updateRecentDocumentsMenu];
         }
     }
@@ -119,8 +119,11 @@ static NSDocumentController *shared = nil;
 }
 
 - init {
+    // The first controller made becomes the shared one, however it was made
+    // (an application can make its own subclass instance early, and releases
+    // it), so the shared controller owns itself.
     if (shared == nil)
-        shared = self;
+        shared = [self retain];
 
     _documents = [NSMutableArray new];
     _fileTypes = [[[[NSBundle mainBundle] infoDictionary]
