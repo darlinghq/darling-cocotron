@@ -914,14 +914,23 @@ static NSMutableArray *pendingOpenURLs = nil;
     [image setName: NSImageNameApplicationIcon];
 }
 
+// Until the program sets one, the policy is what the bundle declares (LSUIElement: accessory,
+// LSBackgroundOnly: prohibited; see -[NSRunningApplication activationPolicy]); a program without a
+// bundle is a regular application.
 - (NSApplicationActivationPolicy) activationPolicy {
-    // TODO: Implement
-    return NSApplicationActivationPolicyRegular;
+    if (NS_EXTRA(NSApplication, self)->_activationPolicySet)
+        return (NSApplicationActivationPolicy) NS_EXTRA(NSApplication, self)->_activationPolicy;
+    return [[NSRunningApplication currentApplication] activationPolicy];
 }
 
 - (BOOL) setActivationPolicy: (NSApplicationActivationPolicy) activationPolicy {
-    // TODO: Implement
-    return NO;
+    if (activationPolicy != NSApplicationActivationPolicyRegular &&
+        activationPolicy != NSApplicationActivationPolicyAccessory &&
+        activationPolicy != NSApplicationActivationPolicyProhibited)
+        return NO;
+    NS_EXTRA(NSApplication, self)->_activationPolicy = activationPolicy;
+    NS_EXTRA(NSApplication, self)->_activationPolicySet = YES;
+    return YES;
 }
 
 - (void) setWindowsMenu: (NSMenu *) menu {
@@ -1611,6 +1620,16 @@ static NSMutableArray *pendingOpenURLs = nil;
     [_windows makeObjectsPerformSelector: @selector(update)];
 }
 
+// Whether a window of this application may ask the window system for the input focus now. Ordering a
+// window in and making it key does not make an inactive application the active one (activation is
+// -activateIgnoringOtherApps:, or the user choosing one of its windows), so once launching is over an
+// application that is not active leaves the focus where it is.
+static BOOL activationInProgress;
+
+- (BOOL) _mayTakeInputFocus {
+    return !launchComplete || activationInProgress || [self isActive];
+}
+
 // Unless the display backend activates the process itself, activating means
 // making a window key again, which asks the platform for input focus: the key
 // window, else the main window, else the frontmost window that can become key.
@@ -1638,10 +1657,12 @@ static NSMutableArray *pendingOpenURLs = nil;
         }
     }
 
+    activationInProgress = YES;
     if (window != nil)
         [window makeKeyAndOrderFront: self];
     else
         [self _becomeActive];
+    activationInProgress = NO;
 }
 
 - (void) activate {

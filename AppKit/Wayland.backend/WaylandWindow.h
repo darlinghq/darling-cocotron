@@ -59,6 +59,9 @@ struct WaylandBuffer {
     struct wl_proxy *_toplevel;
     // org_kde_kwin_appmenu of the toplevel, while the main menu is exported.
     struct wl_proxy *_appMenu;
+    // org_kde_plasma_surface of the toplevel while it is not an application window (see
+    // -updateTaskbarPresence).
+    struct wl_proxy *_plasmaSurface;
     struct wl_proxy *_popup;
     WaylandWindow *_popupParent;
     uint32_t _popupGrabSerial;

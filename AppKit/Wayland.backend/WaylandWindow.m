@@ -318,6 +318,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
         _decorationForcedClient = forceClient;
         [self updateDecorationMode];
         [self updateApplicationMenu];
+        [self updateTaskbarPresence];
     }
 
     _pendingWidth = _pendingHeight = 0;
@@ -331,6 +332,40 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     if (_subwindowRedrawNeeded) [self scheduleSubwindowRedraw];
     _configured = NO;
     _needsPresent = _context != nil;
+    [_display flush];
+}
+
+// A toplevel that is not an application window (see DarlingWindowPresentation.h) is left out of the
+// application's window list on macOS. xdg-shell cannot say that, and a client cannot relate a window
+// to another client's window, so a window with nothing of its own application to belong to would be
+// listed. KDE's plasma-shell protocol, which KDE's client libraries use for this, can. Without it
+// (other compositors) the window is only related to its parent, as before.
+- (void) updateTaskbarPresence {
+    if (_toplevel == NULL || _display->_plasmaShell == NULL)
+        return;
+    BOOL skip = [_delegate respondsToSelector: @selector(_windowPresentation)] &&
+                [(NSWindow *) _delegate _windowPresentation] != DarlingWindowPresentationApplication;
+    // The compositor keeps what a plasma surface set after the surface is gone, so a window that
+    // stops being skipped says so before it lets go of the surface.
+    if (_plasmaSurface == NULL && skip) {
+        union wl_argument args[2] = {{.o = NULL}, {.o = (struct wl_object *) _surface}};
+        _plasmaSurface = WaylandCreateObject(_display->_plasmaShell, WP_PLASMA_SHELL_GET_SURFACE,
+                                             &org_kde_plasma_surface_interface, args, 0, nil);
+    }
+    if (_plasmaSurface == NULL)
+        return;
+    union wl_argument value[1] = {{.u = skip ? 1 : 0}};
+    if (_display->_plasmaShellVersion >= 2)
+        WaylandMarshal(_plasmaSurface, WP_PLASMA_SURFACE_SET_SKIP_TASKBAR, NULL, 0, value);
+    if (_display->_plasmaShellVersion >= 5)
+        WaylandMarshal(_plasmaSurface, WP_PLASMA_SURFACE_SET_SKIP_SWITCHER, NULL, 0, value);
+}
+
+// The window's presentation can change while it is mapped (its collection behavior).
+- (void) presentationChanged {
+    if (!_mapped || _toplevel == NULL)
+        return;
+    [self updateTaskbarPresence];
     [_display flush];
 }
 
@@ -465,6 +500,10 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
         sendRequest(_appMenu, WP_APPMENU_RELEASE, WL_MARSHAL_FLAG_DESTROY);
         _appMenu = NULL;
     }
+    if (_plasmaSurface != NULL) {
+        sendRequest(_plasmaSurface, WP_PLASMA_SURFACE_DESTROY, WL_MARSHAL_FLAG_DESTROY);
+        _plasmaSurface = NULL;
+    }
     if (_toplevel != NULL)
         sendRequest(_toplevel, WP_TOPLEVEL_DESTROY, WL_MARSHAL_FLAG_DESTROY);
     sendRequest(_xdgSurface, WP_XDG_SURFACE_DESTROY, WL_MARSHAL_FLAG_DESTROY);
@@ -481,7 +520,19 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     _levelParent = nil;
     _configureUpdatePending = NO;
     _configured = NO;
+    // The compositor moves the focus away from a window that is unmapped without telling the client,
+    // so the window tells its application, which stops being active when no other window of it has
+    // the focus (as the X11 backend learns from the focus-out event).
+    BOOL wasActivated = _activated;
     _activated = NO;
+    if (wasActivated) {
+        [_display performAfterDispatch: ^{
+            NSWindow *delegate = self->_delegate;
+            if (self->_invalidated || self->_activated || delegate == nil || ![delegate _isActive])
+                return;
+            [delegate platformWindowDeactivated: self checkForAppDeactivation: NO];
+        }];
+    }
     _pendingSuspended = _suspended = NO;
     // The tracker survives hiding: _frame keeps the fullscreen size, so the size
     // from before fullscreen would be lost if the next map saved it again.

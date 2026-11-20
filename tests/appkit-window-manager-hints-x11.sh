@@ -4,7 +4,8 @@
 #
 # Runs tests/appkit-window-manager-hints.m on $DISPLAY (a window manager must be running) and checks
 # what the X11 backend told the window manager about each window, and where each window is:
-#  - the main window and the window that draws its own chrome are application windows: type NORMAL,
+#  - the main window, the window that draws its own chrome and the borderless window that cannot become main
+#    (all windows of a regular application, which the Dock lists) are application windows: type NORMAL,
 #    no SKIP_TASKBAR, no WM_TRANSIENT_FOR;
 #  - every other window is not listed in a task bar (SKIP_TASKBAR and SKIP_PAGER) and belongs to the
 #    main window (WM_TRANSIENT_FOR), with the type its kind gives (utility for the panel, pop-up menu
@@ -78,7 +79,7 @@ wmh-main 100 500 500 350 application
 wmh-chrome 1400 400 210 140 application
 wmh-popup 820 560 160 120 popup
 wmh-popup-level 1100 640 200 150 popup
-wmh-loose 1400 700 170 110 aux
+wmh-loose 1400 700 170 110 application
 wmh-child 700 300 150 100 popup
 wmh-panel 1000 300 180 130 panel
 wmh-tooltip 300 200 120 40 tooltip
@@ -86,11 +87,11 @@ EOF
 
 if [ -n "${KWIN_QUERY:-}" ]; then
     kw=$($KWIN_QUERY)
-    for n in wmh-main wmh-chrome; do
+    for n in wmh-main wmh-chrome wmh-loose; do
         l=$(grep "^KWINWIN $n " <<< "$kw")
         if grep -q 'skipTaskbar=false' <<< "$l"; then pass "KWin lists $n in the task bar"; else fail "KWin does not list $n: $l"; fi
     done
-    for n in wmh-popup wmh-popup-level wmh-loose wmh-child wmh-panel wmh-tooltip; do
+    for n in wmh-popup wmh-popup-level wmh-child wmh-panel wmh-tooltip; do
         l=$(grep "^KWINWIN $n " <<< "$kw")
         if [ -z "$l" ] || grep -q 'skipTaskbar=true' <<< "$l"; then pass "KWin keeps $n out of the task bar"; else fail "KWin lists $n in the task bar: $l"; fi
     done

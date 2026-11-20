@@ -29,3 +29,17 @@ session bus the `com.canonical.dbusmenu` object with a window's menu is.
 
 The AppKit Wayland backend uses it to put the application's main menu in the global menu of Plasma (the
 Global Menu applet and the application menu button of window title bars).
+
+## plasma-shell
+
+`plasma-shell.xml` is KDE's `org_kde_plasma_shell` / `org_kde_plasma_surface` protocol, kept unmodified. The AppKit
+Wayland backend uses only `set_skip_taskbar` and `set_skip_switcher`, so that a toplevel that is not an application
+window stays out of task lists and window switchers (xdg-shell cannot say so).
+
+- Source: https://invent.kde.org/libraries/plasma-wayland-protocols, `src/protocols/plasma-shell.xml`
+- Commit: cd65734cccdf2c60b2e446b0e6416400e697755d
+- Copyright: 2013-2014 Pier Luigi Fiorini
+- Licence: LGPL-2.1-or-later (`SPDX-License-Identifier` in the file). See THIRD-PARTY-NOTICES.md.
+- The file warns that the protocol is a desktop-environment detail; KDE's own client libraries use these requests for
+  skip-taskbar on Wayland, and KWin offers the global to ordinary clients.
+- The backend checks the opcodes it uses against the generated tables at start (`WaylandCheckOpcodes`).

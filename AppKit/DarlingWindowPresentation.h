@@ -11,9 +11,15 @@
 // windows, pop-ups, tool tips) belong to a main window or float on their own. A window system
 // that lists every top-level window, centres every window the client did not place and gives the
 // keyboard focus to every new window needs to be told which windows are which:
-//  - an application window is a window that can become the main window and is not attached to
-//    another window as a child and is not a panel: it is listed, placed where AppKit asks and
-//    activated when shown;
+//  - an application window is a window that macOS includes in the application's window list in the
+//    Dock, Mission Control and the window cycling (Cmd-`). A window that is attached to another as a
+//    child, a panel, a modal panel or sheet, a window above the normal level, and a window whose
+//    collection behaviour says it is transient, stationary or ignores the cycle is left out there;
+//    every other window is included, whether it has a title bar or not (a borderless window that
+//    draws its own chrome is a normal window) and whatever the application's activation policy:
+//    an accessory application has no Dock icon of its own, but its windows are on screen and in
+//    Mission Control, and a task bar is the only way to reach them. Application windows are listed,
+//    placed where AppKit asks and activated when shown;
 //  - a pop-up is a window without a title bar that cannot become the main window and either is
 //    attached to a parent, sits at the main menu level or above, or ignores the mouse (a pop-up
 //    menu drawn by a toolkit, a drop-down, a tool tip), and the window system's own menus and
@@ -33,6 +39,7 @@
 
 typedef struct {
     bool hasTitlebar;    // the window system's frame with a title bar (not a borderless window)
+    bool leavesWindowCycle;   // collection behaviour Transient, Stationary or IgnoresCycle
     bool canBecomeMain;
     bool canBecomeKey;
     bool hasParent;      // attached to another window with -addChildWindow:ordered:
@@ -57,7 +64,8 @@ static inline DarlingWindowPresentation DarlingWindowPresentationFor(const Darli
         if (!window->hasTitlebar && !window->canBecomeMain &&
             (window->hasParent || window->level >= DarlingWindowLevelMainMenu || window->ignoresMouse))
             return DarlingWindowPresentationPopup;
-        if (window->canBecomeMain && !window->hasParent)
+        if (!window->hasParent && !window->leavesWindowCycle &&
+            window->level <= DarlingWindowLevelNormal)
             return DarlingWindowPresentationApplication;
     }
     return DarlingWindowPresentationAuxiliary;

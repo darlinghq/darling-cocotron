@@ -760,15 +760,17 @@ static NSData *makeWindowIcon() {
         XDeleteProperty(_display, _window, XA_WM_TRANSIENT_FOR);
 
     // Whether the window takes the input focus when the window manager maps it (ICCCM 4.1.7). A
-    // window that is not an application window is not given the focus by being shown either: the
-    // user time 0 says no user action caused it (EWMH _NET_WM_USER_TIME). Making it the key window
+    // window that is not an application window, or one of an application that is not active, is
+    // not given the focus by being shown either: the user time 0 says no user action caused it
+    // (EWMH _NET_WM_USER_TIME). Making it the key window
     // asks for the focus explicitly (-requestInputFocus).
     XWMHints hints = {0};
     hints.flags = InputHint;
     hints.input = canBecomeKey ? True : False;
     XSetWMHints(_display, _window, &hints);
     Atom userTime = XInternAtom(_display, "_NET_WM_USER_TIME", False);
-    if (!_dock && presentation != DarlingWindowPresentationApplication) {
+    // An application that is not active does not take the focus by showing a window either.
+    if (!_dock && (presentation != DarlingWindowPresentationApplication || ![NSApp _mayTakeInputFocus])) {
         unsigned long zero = 0;
         XChangeProperty(_display, _window, userTime, XA_CARDINAL, 32, PropModeReplace,
                         (const unsigned char *) &zero, 1);
@@ -776,6 +778,29 @@ static NSData *makeWindowIcon() {
         XDeleteProperty(_display, _window, userTime);
     }
     [self updateSizeHints: _styleMask];
+}
+
+// The window's presentation can change while it is on screen (its collection behavior): tell the window
+// manager whether the window is listed in the task bar and pager now.
+- (void) presentationChanged {
+    if (!_mapped || _window == 0 || _dock)
+        return;
+    BOOL wasSkipping = _skipTaskbar;
+    [self updateWindowManagerHints];
+    if (_skipTaskbar == wasSkipping)
+        return;
+    XEvent event = {0};
+    event.xclient.type = ClientMessage;
+    event.xclient.window = _window;
+    event.xclient.message_type = XInternAtom(_display, "_NET_WM_STATE", False);
+    event.xclient.format = 32;
+    event.xclient.data.l[0] = _skipTaskbar ? 1 : 0; // add or remove
+    event.xclient.data.l[1] = (long) XInternAtom(_display, "_NET_WM_STATE_SKIP_TASKBAR", False);
+    event.xclient.data.l[2] = (long) XInternAtom(_display, "_NET_WM_STATE_SKIP_PAGER", False);
+    event.xclient.data.l[3] = 1; // source indication: application
+    XSendEvent(_display, DefaultRootWindow(_display), False,
+               SubstructureRedirectMask | SubstructureNotifyMask, &event);
+    XFlush(_display);
 }
 
 - (void) dealloc {

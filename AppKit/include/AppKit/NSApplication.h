@@ -176,6 +176,8 @@ typedef NSString *NSAboutPanelOptionKey NS_TYPED_ENUM;
         NSImage *_applicationIconImage;
 
         BOOL _isActive;
+        BOOL _activationPolicySet;
+        NSInteger _activationPolicy;
         BOOL _isHidden;
         BOOL _windowsNeedUpdate;
         NSDockTile *_dockTile;
@@ -348,6 +350,7 @@ typedef NSString *NSAboutPanelOptionKey NS_TYPED_ENUM;
 - (void) _windowDidBecomeActive: (null_unspecified NSWindow *) window;
 - (void) _windowWillBecomeDeactive: (null_unspecified NSWindow *) window;
 - (void) _windowDidBecomeDeactive: (null_unspecified NSWindow *) window;
+- (BOOL) _mayTakeInputFocus;
 
 @end
 
