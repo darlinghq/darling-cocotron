@@ -20,7 +20,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/NSView.h>
 
-@class NSCollectionViewLayout, NSCollectionView;
+@class NSCollectionViewLayout, NSCollectionView, NSCollectionViewLayoutAttributes, NSNib;
 @protocol NSCollectionViewDelegate;
 typedef NS_ENUM(NSInteger, NSCollectionViewDropOperation) {
     NSCollectionViewDropOn = 0,
@@ -73,9 +73,16 @@ typedef NSString *NSCollectionViewSupplementaryElementKind NS_SWIFT_BRIDGED_TYPE
     NSSet *_selectionIndexPaths;
     id<NSCollectionViewDataSource> _dataSource;
     id<NSCollectionViewDelegate> _delegate;
-    NSMutableDictionary *_loadedItems;
-    NSArray *_loadedPaths;
-    NS_LEGACY_IVAR_PAD(_NSCollectionViewReserved, 116)
+    NSMutableDictionary *_loadedItems; // the visible items, by index path
+    NSArray *_loadedPaths;              // unused
+    // The rest fills 18 of the 116 bytes Apple's legacy (i386) layout has
+    NSMutableDictionary *_reuseQueues;     // identifier -> items not shown, ready for reuse
+    NSMutableDictionary *_itemNibs;        // identifier -> NSNib registered for it
+    NSMutableDictionary *_itemIdentifiers; // item (unretained NSValue) -> identifier it was made for
+    NSView *_backgroundView;
+    BOOL _needsPrepareLayout;
+    BOOL _backgroundViewScrollsWithContent;
+    NS_LEGACY_IVAR_PAD(_NSCollectionViewReserved, 98)
 }
 
 - (NSArray *) content;
@@ -119,8 +126,21 @@ typedef NSString *NSCollectionViewSupplementaryElementKind NS_SWIFT_BRIDGED_TYPE
 @property(copy) NSSet *selectionIndexPaths;
 
 - (void) registerClass: (Class) itemClass forItemWithIdentifier: (NSString *) identifier;
+- (void) registerNib: (NSNib *) nib forItemWithIdentifier: (NSString *) identifier;
 - (NSCollectionViewItem *) makeItemWithIdentifier: (NSString *) identifier
                                      forIndexPath: (NSIndexPath *) indexPath;
+
+- (NSArray<NSCollectionViewItem *> *) visibleItems;
+- (NSSet<NSIndexPath *> *) indexPathsForVisibleItems;
+- (NSIndexPath *) indexPathForItem: (NSCollectionViewItem *) item;
+- (NSIndexPath *) indexPathForItemAtPoint: (NSPoint) point;
+- (NSCollectionViewLayoutAttributes *) layoutAttributesForItemAtIndexPath: (NSIndexPath *) indexPath;
+- (NSRect) frameForItemAtIndex: (NSUInteger) index;
+- (void) scrollToItemsAtIndexPaths: (NSSet<NSIndexPath *> *) indexPaths
+                    scrollPosition: (NSCollectionViewScrollPosition) scrollPosition;
+
+@property(retain) NSView *backgroundView;
+@property BOOL backgroundViewScrollsWithContent;
 
 @end
 

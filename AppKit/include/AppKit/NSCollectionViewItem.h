@@ -21,7 +21,16 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSCollectionView;
 
-@interface NSCollectionViewItem : NSViewController <NSCoding, NSCopying> {
+@class NSCollectionViewLayoutAttributes;
+
+// Declared with NSCollectionView on macOS; here, so that NSCollectionViewItem can adopt it
+@protocol NSCollectionViewElement <NSObject>
+@optional
+- (void) prepareForReuse;
+- (void) applyLayoutAttributes: (NSCollectionViewLayoutAttributes *) layoutAttributes;
+@end
+
+@interface NSCollectionViewItem : NSViewController <NSCollectionViewElement, NSCoding, NSCopying> {
     NSCollectionView *_collectionView;
     BOOL _isSelected;
     NS_LEGACY_IVAR_PAD(_NSCollectionViewItemReserved, 8)
@@ -32,5 +41,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (BOOL) isSelected;
 
 - (void) setSelected: (BOOL) value;
+
+// Called before the collection view hands out the item again for another index path
+- (void) prepareForReuse;
 
 @end

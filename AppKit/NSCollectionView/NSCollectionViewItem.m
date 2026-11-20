@@ -56,4 +56,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     _isSelected = value;
 }
 
+- (void) prepareForReuse {
+}
+
+// Set by the collection view that shows the item; it doesn't retain the collection view
+- (void) _setCollectionView: (NSCollectionView *) collectionView {
+    _collectionView = collectionView;
+}
+
 @end
