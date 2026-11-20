@@ -38,7 +38,9 @@ NSString *const NSTableViewColumnDidResizeNotification =
 
 NSString *const NSTableViewRowViewKey = @"NSTableViewRowViewKey";
 
-const CGFloat NSTableViewDefaultRowHeight = 16.0f;
+// The row height of a new table view, as macOS 10.14.4 gives it (17 points;
+// the intercell spacing is {3, 2}).
+const CGFloat NSTableViewDefaultRowHeight = 17.0f;
 
 @interface NSTableView (NSTableView_notifications)
 
@@ -350,7 +352,16 @@ const CGFloat NSTableViewDefaultRowHeight = 16.0f;
     return _headerView;
 }
 
+// QUIRK: in a scroll view with overlay scrollers a table view has no corner
+// view of its own: the default corner view comes back when the scroller style
+// changes to legacy, and a corner view the application set is kept. Not
+// documented. Evidence: black-box observation on macOS 10.14.4 and 26.7.3
+// (tier 2), probes mac-probes/aqua-metric-followups.m and -2.m of the research
+// notes. Test: appkit-table-default-metrics.m (test_quirk_corner_view_overlay)
 - (NSView *) cornerView {
+    if ([_cornerView isMemberOfClass: [NSTableCornerView class]] &&
+        [[self enclosingScrollView] scrollerStyle] == NSScrollerStyleOverlay)
+        return nil;
     return [[_cornerView retain] autorelease];
 }
 
@@ -1516,11 +1527,14 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 - (void) tile {
     NSRect rect;
 
-    // Only the last-column style keeps the columns filled whenever the table
-    // is laid out; the other styles adjust widths when the clip view resizes.
-    if (NS_EXTRA(NSTableView, self)->_columnAutoresizingStyle == NSTableViewLastColumnOnlyAutoresizingStyle)
-        [self sizeLastColumnToFit];
+    // Laying the table out leaves the column widths alone, whatever the
+    // autoresizing style; only a change of the clip view's width, or
+    // sizeLastColumnToFit and sizeToFit, resize columns (macOS 10.14.4). The
+    // table is at least as wide as its clip view.
     [self noteNumberOfRowsChanged];
+    if ([[self superview] isKindOfClass: [NSClipView class]] &&
+        NSWidth([self frame]) < NSWidth([[self superview] bounds]))
+        [self setFrameSize: NSMakeSize(NSWidth([[self superview] bounds]), NSHeight([self frame]))];
     rect = [_headerView frame];
     rect.size.width = [self frame].size.width;
     [_headerView setFrameSize: rect.size];
@@ -1860,10 +1874,7 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     NSInteger i;
 
     if (style == NSTableViewUniformColumnAutoresizingStyle) {
-        for (i = 0; i < count; ++i) {
-            NSTableColumn *column = [_tableColumns objectAtIndex: i];
-            [column setWidth: [column width] + floor(delta / count)];
-        }
+        [self _resizeColumnsUniformlyBy: delta];
     } else {
         // Sequential runs from the last column towards the first, the reverse
         // style from the first towards the last, and the first-column style
@@ -1882,20 +1893,45 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     [self setNeedsDisplay: YES];
 }
 
-- (void) resizeWithOldSuperviewSize: (NSSize) oldSize {
-    // Growing: Mac OS X 10.14 leaves the columns unchanged when the clip view
-    // widens, macOS 26 spreads the extra width as the autoresizing style says.
-    // We follow macOS 26 so the last-column fill keeps working (see the V605
-    // section of MAC-EVIDENCE.md, tests/appkit-table-column-autoresizing.m
-    // covers shrinking, where both agree).
-    NSSize size = [self frame].size;
+// Spreads delta over the columns in equal whole points, the points left over
+// going one each to the first columns.
+- (void) _resizeColumnsUniformlyBy: (CGFloat) delta {
+    NSInteger i, count = [_tableColumns count];
 
-    if (size.width < [[self superview] bounds].size.width) {
-        size.width = [[self superview] bounds].size.width;
+    if (count == 0)
+        return;
+
+    CGFloat share = floor(delta / count);
+    NSInteger extra = (NSInteger) (delta - share * count);
+
+    for (i = 0; i < count; ++i) {
+        NSTableColumn *column = [_tableColumns objectAtIndex: i];
+        [column setWidth: [column width] + share + (i < extra ? 1 : 0)];
+    }
+}
+
+// QUIRK: when the clip view changes width, the autoresizing style resizes the
+// columns only if they did not fit the new width (it shrinks) or exactly
+// filled the old width (it grows); columns narrower than the clip view keep
+// their widths while it grows. Not documented. Evidence: black-box observation
+// on macOS 10.14.4 (tier 2), probes mac-probes/aqua-metric-followups.m and -2.m
+// of the research notes; macOS 26.7.3 also widens columns that leave space, we
+// follow 10.14. Test: appkit-table-default-metrics.m
+// (test_quirk_autoresizing_with_space_left)
+- (void) resizeWithOldSuperviewSize: (NSSize) oldSize {
+    NSSize size = [self frame].size;
+    CGFloat newWidth = [[self superview] bounds].size.width;
+    CGFloat columnsWidth = [self _displayWidthOfColumns];
+    BOOL overflows = columnsWidth > newWidth + 0.5;
+    BOOL filled = fabs(columnsWidth - oldSize.width) < 0.5;
+
+    if (size.width < newWidth) {
+        size.width = newWidth;
         [self setFrameSize: size];
     }
 
-    [self _autoresizeColumnsToFitClipView];
+    if ((newWidth < oldSize.width && overflows) || (newWidth > oldSize.width && filled))
+        [self _autoresizeColumnsToFitClipView];
     [self tile];
 }
 
@@ -2515,16 +2551,12 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     [column setMinWidth: [self _naturalWidthOfColumn: column]];
 }
 
+// Resizes the columns by the same amount so that they fit the clip view's
+// width, as AppKit documents (macOS 10.14.4 gives the points left over to the
+// first columns).
 - (void) sizeToFit {
-    NSInteger i, count = [_tableColumns count];
-
-    for (i = 0; i < count; ++i) {
-        NSTableColumn *column = [_tableColumns objectAtIndex: i];
-
-        [self _tightenUpColumn: column];
-        [column setWidth: [column minWidth]];
-    }
-
+    if ([[self superview] isKindOfClass: [NSClipView class]])
+        [self _resizeColumnsUniformlyBy: [[self superview] bounds].size.width - [self _displayWidthOfColumns]];
     [self tile];
 }
 
