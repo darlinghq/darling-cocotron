@@ -46,6 +46,7 @@ wait $pid
 actions=$(grep '^ACTION' "$out" | tr '\n' ' ')
 if [ "$actions" = "ACTION Two ACTION Three " ]; then echo "PASS: actions $actions"
 else echo "FAIL: actions '$actions', expected ACTION Two ACTION Three"; status=1; fi
+grep -q '^PASS clamp' "$out" && grep '^PASS clamp' "$out" || { echo "FAIL: the clamp case did not pass"; status=1; }
 grep -q '^FAIL' "$out" && { grep '^FAIL' "$out"; status=1; }
 [ $status = 0 ] || { echo "--- test output:"; cat "$out"; }
 exit $status

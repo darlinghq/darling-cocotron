@@ -8,7 +8,9 @@
 // coordinates; with no item, the top left of the menu goes there; with no view,
 // the location is in screen coordinates. It returns YES when an item was chosen
 // (after sending its action) and NO when tracking was cancelled; an item that
-// is not in the menu shows nothing and returns NO.
+// is not in the menu shows nothing and returns NO. A menu opened at the
+// bottom right corner of the screen is moved to stay on it ("clamp", checked
+// first and cancelled with Escape).
 //
 // Each click on the window opens the next case from the view's -mouseDown:, as
 // a drop-down control does:
@@ -174,6 +176,48 @@ int main(int argc, char **argv) {
         }];
         [[NSRunLoop currentRunLoop] addTimer: probe forMode: NSRunLoopCommonModes];
         [[NSRunLoop currentRunLoop] addTimer: probe forMode: NSEventTrackingRunLoopMode];
+
+        // The menu stays on the screen: opened at the bottom right corner of
+        // the screen's visible area, it is moved up and to the left to fit.
+        // The probe checks it and cancels the tracking with Escape.
+        NSRect visible = [([host screen] ?: [NSScreen mainScreen]) visibleFrame];
+        __block BOOL clampSeen = NO;
+        NSTimer *clamp = [NSTimer timerWithTimeInterval: 0.2 repeats: YES block: ^(NSTimer *timer) {
+          NSMenuWindow *window = openMenuWindow();
+          if (window == nil || clampSeen || currentCase != 0)
+              return;
+          clampSeen = YES;
+          NSRect f = [window frame];
+          if (NSContainsRect(visible, f))
+              printf("PASS clamp: menu at %g,%g %gx%g inside the visible frame\n", f.origin.x, f.origin.y,
+                     f.size.width, f.size.height);
+          else
+              printf("FAIL clamp: menu at %g,%g %gx%g, visible frame %g,%g %gx%g\n", f.origin.x, f.origin.y,
+                     f.size.width, f.size.height, visible.origin.x, visible.origin.y, visible.size.width,
+                     visible.size.height);
+          [NSApp postEvent: [NSEvent keyEventWithType: NSKeyDown
+                                             location: NSZeroPoint
+                                        modifierFlags: 0
+                                            timestamp: [[NSProcessInfo processInfo] systemUptime]
+                                         windowNumber: [window windowNumber]
+                                              context: nil
+                                           characters: @"\033"
+                          charactersIgnoringModifiers: @"\033"
+                                            isARepeat: NO
+                                              keyCode: 53]
+                   atStart: NO];
+        }];
+        [[NSRunLoop currentRunLoop] addTimer: clamp forMode: NSRunLoopCommonModes];
+        [[NSRunLoop currentRunLoop] addTimer: clamp forMode: NSEventTrackingRunLoopMode];
+        BOOL clampResult = [menu popUpMenuPositioningItem: nil
+                                               atLocation: NSMakePoint(NSMaxX(visible) - 5, NSMinY(visible) + 5)
+                                                   inView: nil];
+        [clamp invalidate];
+        if (!clampSeen)
+            printf("FAIL clamp: no menu window was seen\n");
+        if (clampResult)
+            printf("FAIL clamp: cancelled tracking returned YES\n");
+        fflush(stdout);
 
         printf("READY\n");
         fflush(stdout);
