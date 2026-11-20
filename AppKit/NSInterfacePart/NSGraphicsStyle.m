@@ -1124,15 +1124,20 @@ static void NSTableHeaderFill(NSRect rect, CGFloat white) {
 - (void) drawTextFieldBorderInRect: (NSRect) rect
                     bezeledNotLine: (BOOL) bezeledNotLine
 {
+    [self drawTextFieldBorderInRect: rect bezeledNotLine: bezeledNotLine enabled: YES];
+}
+
+- (void) drawTextFieldBorderInRect: (NSRect) rect bezeledNotLine: (BOOL) bezeledNotLine enabled: (BOOL) enabled {
     if (bezeledNotLine) {
         // QUIRK: the bezel of a text field on macOS 10.14 (light appearance) is a white rectangle with a
-        // one point outline of black at 20%. Not documented. Evidence: black-box renders of NSTextField
-        // on macOS 10.14.4 at 1x (tier 2). Test: appkit-textfield-aqua.m
+        // one point outline of black at 20%, 10% when the field is disabled. Not documented. Evidence: black-box
+        // renders of NSTextField on macOS 10.14.4 at 1x (tier 2), probe mac-probes/aqua-toolbar.m of the
+        // research notes. Tests: appkit-textfield-aqua.m, appkit-toolbar-controls-aqua.m (test_quirk_field_bezels)
         [[NSColor whiteColor] setFill];
         NSRectFill(NSInsetRect(rect, 1, 1));
         // the outline is blended over what is under it (NSRectFill would replace the pixels, so that a window,
         // which has no transparency, showed the outline as solid black)
-        [[NSColor colorWithCalibratedWhite: 0 alpha: 0.2] setFill];
+        [[NSColor colorWithCalibratedWhite: 0 alpha: enabled ? 0.2 : 0.1] setFill];
         NSRect outline[4] = {NSMakeRect(NSMinX(rect), NSMinY(rect), NSWidth(rect), 1),
                              NSMakeRect(NSMinX(rect), NSMaxY(rect) - 1, NSWidth(rect), 1),
                              NSMakeRect(NSMinX(rect), NSMinY(rect) + 1, 1, NSHeight(rect) - 2),
@@ -1510,10 +1515,17 @@ static void NSAquaDrawToggle(NSRect rect, BOOL radio, NSInteger state, BOOL high
 @implementation NSGraphicsStyle (NSSearchFieldAqua)
 
 // QUIRK: the rounded text field and search field look of macOS 10.14 (light appearance): a white rounded
-// rectangle with a one point outline of black at 20%; a search field has a dark gray magnifying glass at its
-// left and, when it has text, a gray disc with a white cross at its right. Not documented. Evidence:
-// black-box renders of NSSearchField on macOS 10.14.4 at 1x and 2x (tier 2). Test: appkit-textfield-aqua.m
+// rectangle with a 4 point radius and a one point outline of black at 20% (10% when disabled); a search field has
+// a dark gray magnifying glass at its left and, when it has text, a disc of black at 50% with a white cross at its
+// right. The glyphs are smaller at the small and mini control sizes. Not documented. Evidence: black-box renders of
+// NSSearchField and NSTextField on macOS 10.14.4 at 1x (tier 2), probes mac-probes/aqua-toolbar.m and
+// aqua-toolbar-2.m of the research notes.
+// Tests: appkit-textfield-aqua.m, appkit-toolbar-controls-aqua.m (test_quirk_field_bezels, test_quirk_search_glyphs)
 - (void) drawRoundedTextFieldBezelInRect: (NSRect) rect radius: (CGFloat) radius {
+    [self drawRoundedTextFieldBezelInRect: rect radius: radius enabled: YES];
+}
+
+- (void) drawRoundedTextFieldBezelInRect: (NSRect) rect radius: (CGFloat) radius enabled: (BOOL) enabled {
     NSBezierPath *outline = [NSBezierPath bezierPathWithRoundedRect: NSInsetRect(rect, 0.5, 0.5)
                                                             xRadius: radius - 0.5
                                                             yRadius: radius - 0.5];
@@ -1522,45 +1534,239 @@ static void NSAquaDrawToggle(NSRect rect, BOOL radio, NSInteger state, BOOL high
     [[NSColor whiteColor] setFill];
     [[NSBezierPath bezierPathWithRoundedRect: NSInsetRect(rect, 1, 1) xRadius: MAX(radius - 1, 0)
                                      yRadius: MAX(radius - 1, 0)] fill];
-    [[NSColor colorWithCalibratedWhite: 0 alpha: 0.2] setStroke];
+    [[NSColor colorWithCalibratedWhite: 0 alpha: enabled ? 0.2 : 0.1] setStroke];
     [outline setLineWidth: 1];
     [outline stroke];
 }
 
+static int NSAquaSizeIndex(NSControlSize controlSize) {
+    return controlSize == NSSmallControlSize ? 1 : (controlSize == NSMiniControlSize ? 2 : 0);
+}
+
 - (void) drawSearchGlyphInRect: (NSRect) rect {
+    [self drawSearchGlyphInRect: rect controlSize: NSRegularControlSize];
+}
+
+- (void) drawSearchGlyphInRect: (NSRect) rect controlSize: (NSControlSize) controlSize {
+    // the radius of the ring (to the middle of its line), how far its centre is above the middle of the rect,
+    // and how far the end of the handle is from the centre, for the regular, small and mini sizes
+    static const CGFloat radii[3] = {4.5, 3.5, 2.5}, raise[3] = {1, 0.5, 0.5}, reach[3] = {9.4, 8.1, 5.5};
+    int index = NSAquaSizeIndex(controlSize);
     // "down" is the direction of increasing y when looking at the glyph: +1 in a flipped coordinate system
     CGFloat down = [[NSGraphicsContext currentContext] isFlipped] ? 1 : -1;
-    CGFloat r = MIN(NSWidth(rect), NSHeight(rect)) * 0.27;
-    NSPoint center = NSMakePoint(NSMinX(rect) + 1.5 + r, NSMidY(rect) - down * 1.5);
+    CGFloat r = radii[index];
+    NSPoint center = NSMakePoint(NSMinX(rect) + 7, NSMidY(rect) - down * raise[index]);
     NSBezierPath *glass = [NSBezierPath bezierPathWithOvalInRect: NSMakeRect(center.x - r, center.y - r, 2 * r, 2 * r)];
     NSBezierPath *handle = [NSBezierPath bezierPath];
+    CGFloat start = (r + 0.5) * M_SQRT1_2, end = reach[index] * M_SQRT1_2;
 
-    [[NSColor colorWithCalibratedWhite: 0.35 alpha: 1] setStroke];
-    [glass setLineWidth: 1.1];
+    [[NSColor colorWithCalibratedWhite: 0 alpha: 0.7] setStroke];
+    [glass setLineWidth: 1];
     [glass stroke];
-    [handle moveToPoint: NSMakePoint(center.x + r * 0.707, center.y + down * r * 0.707)];
-    [handle lineToPoint: NSMakePoint(center.x + r * 0.707 + 3, center.y + down * (r * 0.707 + 3))];
-    [handle setLineWidth: 1.4];
-    [handle setLineCapStyle: NSRoundLineCapStyle];
+    [handle moveToPoint: NSMakePoint(center.x + start, center.y + down * start)];
+    [handle lineToPoint: NSMakePoint(center.x + end, center.y + down * end)];
+    [handle setLineWidth: index == 0 ? 1.5 : 1.2];
+    [handle setLineCapStyle: NSButtLineCapStyle];
     [handle stroke];
 }
 
 - (void) drawSearchCancelGlyphInRect: (NSRect) rect {
-    CGFloat d = MIN(NSWidth(rect), NSHeight(rect));
+    [self drawSearchCancelGlyphInRect: rect controlSize: NSRegularControlSize];
+}
+
+- (void) drawSearchCancelGlyphInRect: (NSRect) rect controlSize: (NSControlSize) controlSize {
+    static const CGFloat diameters[3] = {14, 11, 9};
+    int index = NSAquaSizeIndex(controlSize);
+    CGFloat d = MIN(diameters[index], MIN(NSWidth(rect), NSHeight(rect)));
     NSRect disc = NSMakeRect(NSMidX(rect) - d / 2, NSMidY(rect) - d / 2, d, d);
     NSBezierPath *cross = [NSBezierPath bezierPath];
-    CGFloat r = d * 0.2;
+    CGFloat r = d * 3 / 14;
 
-    [[NSColor colorWithCalibratedWhite: 0.5 alpha: 1] setFill];
+    [[NSColor colorWithCalibratedWhite: 0 alpha: 0.5] setFill];
     [[NSBezierPath bezierPathWithOvalInRect: disc] fill];
     [cross moveToPoint: NSMakePoint(NSMidX(disc) - r, NSMidY(disc) - r)];
     [cross lineToPoint: NSMakePoint(NSMidX(disc) + r, NSMidY(disc) + r)];
     [cross moveToPoint: NSMakePoint(NSMidX(disc) - r, NSMidY(disc) + r)];
     [cross lineToPoint: NSMakePoint(NSMidX(disc) + r, NSMidY(disc) - r)];
     [[NSColor whiteColor] setStroke];
-    [cross setLineWidth: 1.5];
-    [cross setLineCapStyle: NSRoundLineCapStyle];
+    [cross setLineWidth: MAX(1, 1.25 * d / 14)];
+    [cross setLineCapStyle: NSButtLineCapStyle];
     [cross stroke];
+}
+
+@end
+
+@implementation NSGraphicsStyle (NSTexturedControlsAqua)
+
+// QUIRK: the textured button look of macOS 10.14 (light appearance), shared by textured segmented controls and
+// textured pop-up buttons. The bezel is a rounded rectangle (radius 5, 4.5 for the mini size and for the textured
+// square style) with a one point outline of black at 8% (17% along the bottom), filled with a light gradient
+// (white 254 to 246 at 90% opacity) under a white top line. Pressed, the fill is darker (229 to 222) under a 239
+// line. In the on state the bezel is black at 50% to 52% opacity with its outline at 52%, pressed 60% and 62%.
+// Disabled buttons and buttons in a window that is not key keep the bezel. Not documented. Evidence: black-box
+// renders of NSButton, NSSegmentedControl and NSPopUpButton on macOS 10.14.4 at 1x (tier 2), probes
+// mac-probes/aqua-toolbar.m and aqua-toolbar-2.m of the research notes.
+// Test: appkit-toolbar-controls-aqua.m (test_quirk_textured_bezel, test_quirk_textured_segments)
+static NSRect NSAquaTexturedBody(NSRect rect, BOOL square) {
+    if (square)
+        return NSMakeRect(NSMinX(rect) + 1, NSMinY(rect) + 2, NSWidth(rect) - 2, NSHeight(rect) - 3);
+    return NSMakeRect(NSMinX(rect), NSMinY(rect) + 1, NSWidth(rect), NSHeight(rect) - 1);
+}
+
+- (NSRect) texturedBezelInteriorForRect: (NSRect) rect square: (BOOL) square {
+    NSRect body = NSAquaTexturedBody(rect, square);
+
+    return NSInsetRect(body, 0, 1);
+}
+
+static void NSAquaFillGradient(NSBezierPath *path, NSRect rect, const CGFloat *top, const CGFloat *bottom) {
+    CGContextRef ctx = [[NSGraphicsContext currentContext] graphicsPort];
+    CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB();
+    CGFloat components[8] = {top[0], top[0], top[0], top[1], bottom[0], bottom[0], bottom[0], bottom[1]};
+    CGGradientRef gradient = CGGradientCreateWithColorComponents(space, components, NULL, 2);
+
+    CGContextSaveGState(ctx);
+    [path addClip];
+    CGContextDrawLinearGradient(ctx, gradient, CGPointMake(0, NSMaxY(rect)), CGPointMake(0, NSMinY(rect)), 0);
+    CGContextRestoreGState(ctx);
+    CGGradientRelease(gradient);
+    CGColorSpaceRelease(space);
+}
+
+- (void) drawTexturedBezelInRect: (NSRect) rect
+                          square: (BOOL) square
+                         pressed: (BOOL) pressed
+                              on: (BOOL) on
+                     controlSize: (NSControlSize) controlSize
+{
+    NSRect body = NSAquaTexturedBody(rect, square);
+    CGFloat radius = (square || controlSize == NSMiniControlSize) ? 4.5 : 5;
+    radius = MIN(radius, MIN(NSWidth(body), NSHeight(body)) / 2);
+    NSRect inner = NSInsetRect(body, 1, 1);
+    NSBezierPath *outer = [NSBezierPath bezierPathWithRoundedRect: body xRadius: radius yRadius: radius];
+    NSBezierPath *innerPath = [NSBezierPath bezierPathWithRoundedRect: inner
+                                                              xRadius: MAX(radius - 1, 0)
+                                                              yRadius: MAX(radius - 1, 0)];
+    NSBezierPath *ring = [NSBezierPath bezierPath];
+    // fill colours as (white, alpha) at the top and the bottom of the inner area
+    CGFloat normalTop[2] = {254 / 255.0, 0.9}, normalBottom[2] = {246 / 255.0, 0.906};
+    CGFloat pressedTop[2] = {229 / 255.0, 0.91}, pressedBottom[2] = {222 / 255.0, 0.914};
+    CGFloat onTop[2] = {0, 0.5}, onBottom[2] = {0, 0.52};
+    CGFloat onPressedTop[2] = {0, 0.6}, onPressedBottom[2] = {0, 0.61};
+    CGFloat outline = on ? (pressed ? 0.62 : 0.52) : 0.08;
+
+    if (NSWidth(body) < 2 || NSHeight(body) < 2)
+        return;
+
+    [ring appendBezierPath: outer];
+    [ring appendBezierPath: innerPath];
+    [ring setWindingRule: NSEvenOddWindingRule];
+    [[NSColor colorWithCalibratedWhite: 0 alpha: outline] setFill];
+    [ring fill];
+
+    if (on)
+        NSAquaFillGradient(innerPath, inner, pressed ? onPressedTop : onTop, pressed ? onPressedBottom : onBottom);
+    else
+        NSAquaFillGradient(innerPath, inner, pressed ? pressedTop : normalTop, pressed ? pressedBottom : normalBottom);
+
+    [NSGraphicsContext saveGraphicsState];
+    [outer addClip];
+    if (!on) {
+        // the light line along the top of the inner area
+        [[NSColor colorWithCalibratedWhite: pressed ? 239 / 255.0 : 1 alpha: pressed ? 0.94 : 1] setFill];
+        [[NSBezierPath bezierPathWithRect: NSMakeRect(NSMinX(inner), NSMaxY(inner) - 1, NSWidth(inner), 1)] fill];
+    }
+    // the bottom outline line is darker
+    [[NSColor colorWithCalibratedWhite: 0 alpha: 0.1] setFill];
+    [[NSBezierPath bezierPathWithRect: NSMakeRect(NSMinX(body), NSMinY(body), NSWidth(body), 1)] fill];
+    [NSGraphicsContext restoreGraphicsState];
+}
+
+// QUIRK: a textured segmented control draws one textured bezel across its segments; between two segments a one
+// point line of black at 10% runs across the inner area, and a selected segment of a control that selects one
+// segment shows the dark on look with such a line along both of its edges inside it. Evidence and test as for
+// -drawTexturedBezelInRect:square:pressed:on:controlSize:.
+- (void) drawTexturedSegmentSeparatorInRect: (NSRect) rect {
+    [[NSColor colorWithCalibratedWhite: 0 alpha: 0.1] setFill];
+    NSRectFillUsingOperation(rect, NSCompositeSourceOver);
+}
+
+// QUIRK: a recessed button on macOS 10.14 (light appearance) is a rounded rectangle (radius 4, 3 at the mini size)
+// of a near black at 32% opacity, 37% in the on state and 49% while pressed, and draws no bezel when disabled; a
+// round-rect button is a one point outline (radius 4.5 outside) of black at 30% (15% disabled), with black at 10%
+// inside when on or pressed. Not documented. Evidence: black-box renders of NSButton on macOS 10.14.4 at 1x (tier 2),
+// probes mac-probes/aqua-toolbar.m and aqua-toolbar-2.m of the research notes.
+// Test: appkit-toolbar-controls-aqua.m (test_quirk_recessed_bezel, test_quirk_round_rect_bezel)
+- (void) drawRecessedBezelInRect: (NSRect) rect
+                         pressed: (BOOL) pressed
+                              on: (BOOL) on
+                     controlSize: (NSControlSize) controlSize
+{
+    NSRect body = NSMakeRect(NSMinX(rect), NSMinY(rect) + 1, NSWidth(rect), NSHeight(rect) - 1);
+    CGFloat radius = MIN(controlSize == NSMiniControlSize ? 3 : 4, MIN(NSWidth(body), NSHeight(body)) / 2);
+    CGFloat gray = pressed ? 2 / 255.0 : (on ? 5 / 255.0 : 12 / 255.0);
+    CGFloat alpha = pressed ? 0.49 : (on ? 0.37 : 0.32);
+
+    [[NSColor colorWithCalibratedWhite: gray alpha: alpha] setFill];
+    [[NSBezierPath bezierPathWithRoundedRect: body xRadius: radius yRadius: radius] fill];
+}
+
+- (void) drawRoundRectBezelInRect: (NSRect) rect filled: (BOOL) filled enabled: (BOOL) enabled {
+    NSRect body = NSMakeRect(NSMinX(rect), NSMinY(rect) + 1, NSWidth(rect), NSHeight(rect) - 1);
+    CGFloat radius = MIN(4.5, MIN(NSWidth(body), NSHeight(body)) / 2);
+    NSBezierPath *outline = [NSBezierPath bezierPathWithRoundedRect: NSInsetRect(body, 0.5, 0.5)
+                                                            xRadius: MAX(radius - 0.5, 0)
+                                                            yRadius: MAX(radius - 0.5, 0)];
+
+    if (NSWidth(body) < 3 || NSHeight(body) < 3)
+        return;
+    if (filled) {
+        [[NSColor colorWithCalibratedWhite: 0 alpha: 0.1] setFill];
+        [[NSBezierPath bezierPathWithRoundedRect: NSInsetRect(body, 1, 1)
+                                         xRadius: MAX(radius - 1, 0)
+                                         yRadius: MAX(radius - 1, 0)] fill];
+    }
+    [[NSColor colorWithCalibratedWhite: 0 alpha: enabled ? 0.3 : 0.15] setStroke];
+    [outline setLineWidth: 1];
+    [outline stroke];
+}
+
+// QUIRK: a textured pop-up button shows two dark chevrons (up over down) near its right edge and a pull-down one
+// down chevron, in the colour of the title (black at 65%, 30% disabled), on the textured bezel. The chevrons are
+// centred 8.5, 7.5 and 6.5 points from the right edge (regular, small, mini), 6 points wide (4 for a mini pop-up),
+// 3 points high (2), and 2.5, 1.5 and 2 points above and below the middle; a pull-down chevron is centred on the
+// middle. Not documented. Evidence: black-box renders of NSPopUpButton with the textured rounded bezel style on
+// macOS 10.14.4 at 1x (tier 2), probe mac-probes/aqua-toolbar.m of the research notes.
+// Test: appkit-toolbar-controls-aqua.m (test_quirk_textured_popup)
+- (void) drawTexturedPopUpArrowsInRect: (NSRect) rect
+                             pullsDown: (BOOL) pullsDown
+                               enabled: (BOOL) enabled
+                           controlSize: (NSControlSize) controlSize
+{
+    static const CGFloat fromRight[3] = {8.5, 7.5, 6.5}, gap[3] = {2.5, 1.5, 2};
+    int index = NSAquaSizeIndex(controlSize);
+    NSRect body = NSMakeRect(NSMinX(rect), NSMinY(rect) + 1, NSWidth(rect), NSHeight(rect) - 1);
+    CGFloat cx = NSMaxX(body) - fromRight[index], cy = NSMidY(body);
+    CGFloat half = (!pullsDown && index == 2) ? 2 : 3, height = (!pullsDown && index == 2) ? 2 : 3;
+    NSBezierPath *chevrons = [NSBezierPath bezierPath];
+
+    if (pullsDown) {
+        [chevrons moveToPoint: NSMakePoint(cx - half, cy + height / 2)];
+        [chevrons lineToPoint: NSMakePoint(cx, cy - height / 2)];
+        [chevrons lineToPoint: NSMakePoint(cx + half, cy + height / 2)];
+    } else {
+        [chevrons moveToPoint: NSMakePoint(cx - half, cy + gap[index])];
+        [chevrons lineToPoint: NSMakePoint(cx, cy + gap[index] + height)];
+        [chevrons lineToPoint: NSMakePoint(cx + half, cy + gap[index])];
+        [chevrons moveToPoint: NSMakePoint(cx - half, cy - gap[index])];
+        [chevrons lineToPoint: NSMakePoint(cx, cy - gap[index] - height)];
+        [chevrons lineToPoint: NSMakePoint(cx + half, cy - gap[index])];
+    }
+    [[NSColor colorWithCalibratedWhite: 0 alpha: enabled ? 0.65 : 0.3] setStroke];
+    [chevrons setLineWidth: 1.1];
+    [chevrons setLineCapStyle: NSRoundLineCapStyle];
+    [chevrons setLineJoinStyle: NSMiterLineJoinStyle];
+    [chevrons stroke];
 }
 
 @end

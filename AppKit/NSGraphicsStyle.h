@@ -199,6 +199,8 @@ typedef struct _Margins {
 @interface NSGraphicsStyle (NSTextField)
 - (void) drawTextFieldBorderInRect: (NSRect) rect
                     bezeledNotLine: (BOOL) bezeledNotLine;
+/* The square bezel of a text field: a white rectangle and a one point outline, lighter when disabled. */
+- (void) drawTextFieldBorderInRect: (NSRect) rect bezeledNotLine: (BOOL) bezeledNotLine enabled: (BOOL) enabled;
 - (void) drawTextViewInsertionPointInRect: (NSRect) rect
                                     color: (NSColor *) color;
 @end
@@ -267,11 +269,46 @@ typedef struct _Margins {
 @end
 
 @interface NSGraphicsStyle (NSSearchFieldAqua)
-/* A rounded white bezel (a 4 point radius for a search field, a capsule for a rounded text field). */
+/* A rounded white bezel (a 4 point radius for search fields and rounded text fields). The outline is lighter when
+   the field is disabled. */
 - (void) drawRoundedTextFieldBezelInRect: (NSRect) rect radius: (CGFloat) radius;
-/* The magnifying glass and the cancel button of a search field. */
+- (void) drawRoundedTextFieldBezelInRect: (NSRect) rect radius: (CGFloat) radius enabled: (BOOL) enabled;
+/* The magnifying glass and the cancel button of a search field, sized for the control size. rect is the search or
+   cancel button's rectangle, in a flipped or unflipped coordinate system; the handle of the glass points down on
+   the screen either way. */
 - (void) drawSearchGlyphInRect: (NSRect) rect;
 - (void) drawSearchCancelGlyphInRect: (NSRect) rect;
+- (void) drawSearchGlyphInRect: (NSRect) rect controlSize: (NSControlSize) controlSize;
+- (void) drawSearchCancelGlyphInRect: (NSRect) rect controlSize: (NSControlSize) controlSize;
+@end
+
+@interface NSGraphicsStyle (NSTexturedControlsAqua)
+/* The bezels of textured (rounded and square), recessed and round-rect buttons, which textured segmented controls
+   and pop-up buttons share. rect is the artwork rectangle in an unflipped coordinate system: the bezel and the
+   point below it that it leaves free (a textured square bezel leaves one point at the top and the sides and two at
+   the bottom). on is the on state of a button or a selected segment; pressed is a button being clicked. */
+- (void) drawTexturedBezelInRect: (NSRect) rect
+                          square: (BOOL) square
+                         pressed: (BOOL) pressed
+                              on: (BOOL) on
+                     controlSize: (NSControlSize) controlSize;
+/* The bezel's area between its top and bottom outline lines, which segment separators span. */
+- (NSRect) texturedBezelInteriorForRect: (NSRect) rect square: (BOOL) square;
+/* A one point separator between two segments, or along an edge of a selected one. */
+- (void) drawTexturedSegmentSeparatorInRect: (NSRect) rect;
+/* A recessed button: a translucent dark rounded rectangle, darker when on or pressed. */
+- (void) drawRecessedBezelInRect: (NSRect) rect
+                         pressed: (BOOL) pressed
+                              on: (BOOL) on
+                     controlSize: (NSControlSize) controlSize;
+/* A round-rect button: a thin outline, with a light tint inside when on or pressed. */
+- (void) drawRoundRectBezelInRect: (NSRect) rect filled: (BOOL) filled enabled: (BOOL) enabled;
+/* The up and down chevrons of a textured pop-up button (one down chevron for a pull-down), near the right edge of
+   the artwork rectangle rect, in an unflipped coordinate system. */
+- (void) drawTexturedPopUpArrowsInRect: (NSRect) rect
+                             pullsDown: (BOOL) pullsDown
+                               enabled: (BOOL) enabled
+                           controlSize: (NSControlSize) controlSize;
 @end
 
 @interface NSGraphicsStyle (NSSliderAqua)
