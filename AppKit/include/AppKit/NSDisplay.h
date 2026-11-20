@@ -81,6 +81,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                        beforeEvent: (NSEvent *) event;
 
 - (void) postEvent: (NSEvent *) event atStart: (BOOL) atStart;
+- (void) _postEventWithoutCoalescing: (NSEvent *) event atStart: (BOOL) atStart;
 
 - (BOOL) containsAndRemovePeriodicEvents;
 

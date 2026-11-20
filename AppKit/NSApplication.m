@@ -1482,7 +1482,7 @@ static NSMutableArray *pendingOpenURLs = nil;
 }
 
 - (void) postEvent: (NSEvent *) event atStart: (BOOL) atStart {
-    [NS_EXTRA(NSApplication, self)->_display postEvent: event atStart: atStart];
+    [NS_EXTRA(NSApplication, self)->_display _postEventWithoutCoalescing: event atStart: atStart];
 }
 
 - _searchForAction: (SEL) action responder: target {
