@@ -38,6 +38,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSScrollView.h>
 #import <AppKit/NSText.h>
 #import <AppKit/NSTrackingArea.h>
+#import <AppKit/NSAnimatorProxy.h>
 #import <AppKit/NSView.h>
 #import <AppKit/NSScreen.h>
 #import <AppKit/NSBitmapImageRep.h>
@@ -3909,15 +3910,15 @@ static CGFloat backingScaleFactor(NSView *view) {
     NSUnimplementedMethod();
 }
 
+// No implicit animations: a view animates only what its animations dictionary or an animation group asks for.
 + defaultAnimationForKey: (NSString *) key {
-    NSUnimplementedMethod();
     return nil;
 }
 
+// The documented NSAnimatablePropertyContainer proxy: setting a property through it changes the view, as
+// setting it on the view itself does (no animation is run, see NSAnimatorProxy).
 - animator {
-    NSUnimplementedMethod();
-    // should return animating proxy. returning self does not animate.
-    return self;
+    return [NSAnimatorProxy animatorProxyForTarget: self];
 }
 
 - (NSDictionary *) animations {

@@ -286,6 +286,7 @@ set(AppKit_sources
 	NSAnimation/NSAnimation.m
 	NSAnimation/NSViewAnimation.m
 	NSAnimation/NSAnimationContext.m
+	NSAnimation/NSAnimatorProxy.m
 
 	NSDocumentController.m
 	NSStatusItem.m
