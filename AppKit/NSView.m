@@ -627,7 +627,6 @@ typedef struct __VFlags {
 
     _window = nil;
     [NS_EXTRA(NSView, self)->_menu release];
-    [NS_EXTRA(NSView, self)->_accessibilityTitle release];
 
     _superview = nil;
     [_subviews makeObjectsPerformSelector: @selector(_setSuperview:)
@@ -1540,16 +1539,6 @@ NSRect _NSAlignRectToPixelGrid(NSRect rect, NSAlignmentOptions options) {
               swapY ? NSAlignMaxYInward : NSAlignMinYInward,
               swapY ? NSAlignMinYInward : NSAlignMaxYInward, NSAlignHeightInward);
     return inWindow ? [self convertRect: base fromView: nil] : base;
-}
-
-- (NSString *) accessibilityTitle {
-    return NS_EXTRA(NSView, self)->_accessibilityTitle;
-}
-
-- (void) setAccessibilityTitle: (NSString *) title {
-    title = [title copy];
-    [NS_EXTRA(NSView, self)->_accessibilityTitle release];
-    NS_EXTRA(NSView, self)->_accessibilityTitle = title;
 }
 
 // The frame of the native window that hosts a root layer, in window coordinates. A view's own frame is in

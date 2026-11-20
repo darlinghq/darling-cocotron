@@ -32,6 +32,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSAppearance.h>
 #import <AppKit/NSTouch.h>
 #import <AppKit/NSUserInterfaceLayoutDirection.h>
+#import <AppKit/NSAccessibilityProtocols.h>
 
 @class NSLayoutConstraint;
 
@@ -155,7 +156,6 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeAllScreens;
         NSLayoutPriority _verticalContentHuggingPriority;
         NSLayoutPriority _horizontalContentCompressionResistancePriority;
         NSLayoutPriority _verticalContentCompressionResistancePriority;
-        NSString *_accessibilityTitle;
 
         NSAppearance *_appearance;
         NSTouchTypeMask _allowedTouchTypes;
@@ -305,7 +305,6 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeAllScreens;
 - (NSRect) convertRect: (NSRect) rect toView: (nullable NSView *) viewOrNil;
 - (NSRect) centerScanRect: (NSRect) rect;
 - (NSRect) backingAlignedRect: (NSRect) rect options: (NSAlignmentOptions) options;
-@property(nullable, copy) NSString *accessibilityTitle;
 
 - (void) setFrameSize: (NSSize) size;
 - (void) setFrameOrigin: (NSPoint) origin;
@@ -558,6 +557,9 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeAllScreens;
 - (void) _setWindow: (null_unspecified NSWindow *) window;
 - (void) _collectTrackingAreasForWindowInto: (null_unspecified NSMutableArray *) collector;
 
+@end
+
+@interface NSView (NSAccessibility) <NSAccessibility, NSAccessibilityElement>
 @end
 
 @interface NSView (NSViewGestureRecognizers)

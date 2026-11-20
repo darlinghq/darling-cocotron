@@ -26,6 +26,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSUserInterfaceLayoutDirection.h>
 #import <Foundation/NSNotification.h>
 #import <Foundation/NSRunLoop.h>
+#import <AppKit/NSAccessibilityProtocols.h>
 
 @class NSDocument;
 
@@ -348,6 +349,9 @@ typedef NSString *NSAboutPanelOptionKey NS_TYPED_ENUM;
 - (void) _windowWillBecomeDeactive: (null_unspecified NSWindow *) window;
 - (void) _windowDidBecomeDeactive: (null_unspecified NSWindow *) window;
 
+@end
+
+@interface NSApplication (NSAccessibility) <NSAccessibility, NSAccessibilityElement>
 @end
 
 APPKIT_EXPORT __kindof NSApplication *NSApp;
