@@ -539,6 +539,14 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     return _styleMask;
 }
 
+// Whether the window has a title bar for the platform to draw (see -[NSWindow
+// _hasTitlebarForStyleMask:]).
+- (BOOL) hasTitlebar {
+    if ([_delegate respondsToSelector: @selector(_hasTitlebarForStyleMask:)])
+        return [(NSWindow *) _delegate _hasTitlebarForStyleMask: _styleMask];
+    return (_styleMask & NSWindowStyleMaskTitled) != 0;
+}
+
 // A window that shows nothing of a title bar of its own (see NSWindow) leaves nothing for the
 // platform to draw as a title bar: the application draws its own header. Such a window gets no
 // frame, neither from the compositor nor from the client-side fallback.
@@ -549,7 +557,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 
 // Whether this window should draw the client-side frame, given what the compositor asked for.
 - (BOOL) wantsClientDecoration {
-    return _toplevel != NULL && (_styleMask & NSWindowStyleMaskTitled) && ![self wantsChromeless] &&
+    return _toplevel != NULL && [self hasTitlebar] && ![self wantsChromeless] &&
             _pendingClientDecorated && !_pendingFullscreen;
 }
 
@@ -559,7 +567,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     if (_toplevel == NULL || _display->_decorationManager == NULL)
         return;
     union wl_argument args[2];
-    if (!(_styleMask & NSWindowStyleMaskTitled)) {
+    if (![self hasTitlebar]) {
         if (_decoration != NULL)
             sendRequest(_decoration, WP_TOPLEVEL_DECORATION_UNSET_MODE, 0);
         return;

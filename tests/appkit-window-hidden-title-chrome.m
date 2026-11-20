@@ -10,6 +10,13 @@
 //   opaque-hidden    hidden title and buttons, title bar not transparent      frame
 //   late-hidden      transparent title bar and hidden buttons; the title is
 //                    hidden after the window is shown                          frame, then none
+//   resizable        untitled, Resizable                                       see below
+//   mini-resizable   untitled, Miniaturizable | Resizable                      see below
+// An untitled resizable window has a title bar (and can become key) only in a program built against
+// an SDK older than 10.7, as on Mac OS X 10.14.4 and macOS 26.7.3; the program prints
+// "old-sdk 1" when it was, else "old-sdk 0", and checks canBecomeKeyWindow itself (FAIL lines).
+// Build it twice, with the default SDK version and with a newer one
+// (-Wl,-platform_version,macos,<min>,10.13), to cover both.
 // The program prints "win <name> <x> <y> <width> <height>" (the frame AppKit reports, Cocoa screen
 // coordinates) for each window, then "shown"; after the late change the same lines and "changed";
 // then it holds the windows for <seconds> (the first argument). The harnesses
@@ -18,6 +25,9 @@
 #import <AppKit/AppKit.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <mach-o/dyld.h>
+
+extern uint32_t dyld_get_program_sdk_version(void);
 
 static void spin(NSTimeInterval seconds) {
     NSDate *until = [NSDate dateWithTimeIntervalSinceNow: seconds];
@@ -37,6 +47,17 @@ static void report(NSArray<NSWindow *> *windows, const char *phase) {
                w.frame.size.width, w.frame.size.height);
     printf("%s\n", phase);
     fflush(stdout);
+}
+
+static NSWindow *makeUntitled(NSString *title, CGFloat x, NSUInteger style) {
+    NSWindow *w = [[NSWindow alloc] initWithContentRect: NSMakeRect(x, 150, 300, 200)
+                                              styleMask: style
+                                                backing: NSBackingStoreBuffered
+                                                  defer: NO];
+    w.title = title;
+    [w setReleasedWhenClosed: NO];
+    [w orderFront: nil];
+    return w;
 }
 
 static NSWindow *make(NSString *title, CGFloat x, BOOL transparent, BOOL hideTitle, BOOL hideButtons) {
@@ -67,7 +88,14 @@ int main(int argc, char **argv) {
             make(@"transparent", 780, YES, NO, NO),
             make(@"opaque-hidden", 1140, NO, YES, YES),
             make(@"late-hidden", 1500, YES, NO, YES),
+            makeUntitled(@"resizable", 60, NSWindowStyleMaskResizable),
+            makeUntitled(@"mini-resizable", 420, NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable),
         ];
+        BOOL oldSDK = dyld_get_program_sdk_version() < 0x000a0700;
+        printf("old-sdk %d\n", oldSDK);
+        for (NSWindow *w in @[windows[5], windows[6]])
+            if ([w canBecomeKeyWindow] != oldSDK)
+                printf("FAIL: %s: canBecomeKeyWindow %d\n", [w.title UTF8String], [w canBecomeKeyWindow]);
         [NSApp activateIgnoringOtherApps: YES];
         spin(3);
         report(windows, "shown");

@@ -55,6 +55,11 @@ check shown hidden-title normal 0x0
 check shown transparent normal 0x0
 check shown opaque-hidden normal 0x0
 check shown late-hidden normal 0x0
+# untitled resizable windows: framed only in a program built against an SDK older than 10.7
+if grep -q '^old-sdk 1$' "$out"; then untitled=normal; else untitled=csd; fi
+check shown resizable $untitled 0x0
+check shown mini-resizable $untitled 0x0
+grep '^FAIL' "$out" && status=1
 wait_for changed
 sleep 0.5
 STATE=$(state)

@@ -48,6 +48,11 @@ check shown hidden-title yes
 check shown transparent yes
 check shown opaque-hidden yes
 check shown late-hidden yes
+# untitled resizable windows: framed only in a program built against an SDK older than 10.7
+old=no; grep -q '^old-sdk 1$' "$out" && old=yes
+check shown resizable $old
+check shown mini-resizable $old
+grep '^FAIL' "$out" && status=1
 wait_for changed
 sleep 0.5
 check changed late-hidden no

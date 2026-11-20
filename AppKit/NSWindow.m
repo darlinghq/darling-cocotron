@@ -49,6 +49,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSTrackingArea.h>
 #import <AppKit/NSView.h>
 #import <AppKit/NSWindow-Private.h>
+#import <AppKit/NSLinkedOnOrAfter.h>
 #import <AppKit/NSWindow.h>
 #import "DarlingLayout.h"
 #import <AppKit/NSWindowAnimationContext.h>
@@ -2053,19 +2054,31 @@ static BOOL _allowsAutomaticWindowTabbing;
     return NS_EXTRA(NSWindow, self)->_isInLiveResize;
 }
 
+// QUIRK: a window whose style mask has Resizable but not Titled has a title
+// bar (+frameRectForContentRect:styleMask: adds it, and the window can become
+// key) only in a program built against an SDK older than 10.7; from SDK 10.7
+// on it has none and cannot become key. Not documented. Evidence: black-box
+// observation (tier 2) on Mac OS X 10.14.4 and macOS 26.7.3, the same probe
+// recording SDK 10.6 (22 and 28 point title bar) and SDK 10.7 to 14.0 (none),
+// for Resizable and Miniaturizable|Resizable.
+// Test: appkit-window-hidden-title-chrome.m ("resizable", "mini-resizable"),
+// built for SDK 10.6 and for a newer SDK.
+- (BOOL) _hasTitlebarForStyleMask: (NSUInteger) styleMask {
+    if (styleMask & NSWindowStyleMaskTitled)
+        return YES;
+    return (styleMask & NSWindowStyleMaskResizable) && !NSProgramLinkedOnOrAfterSDK(NS_SDK_VERSION_MACOSX_10_7);
+}
+
 - (BOOL) canBecomeKeyWindow {
-    // The NSWindow implementation returns YES if the window has a title bar or
-    // a resize bar, or NO otherwise. Mac OS X 10.14 behaves this way for a
-    // Resizable mask without Titled too; macOS 26 answers NO for it. We follow
-    // 10.14.
-    return (NS_EXTRA(NSWindow, self)->_styleMask & (NSTitledWindowMask | NSResizableWindowMask)) != 0;
+    // The NSWindow implementation returns YES if the window has a title bar
+    // (see the QUIRK above), or NO otherwise.
+    return [self _hasTitlebarForStyleMask: NS_EXTRA(NSWindow, self)->_styleMask];
 }
 
 - (BOOL) canBecomeMainWindow {
     // The NSWindow implementation returns YES if the window is visible and has
-    // a title bar or a resize mechanism. Otherwise it returns NO
-    return [self isVisible] &&
-           (NS_EXTRA(NSWindow, self)->_styleMask & (NSTitledWindowMask | NSResizableWindowMask));
+    // a title bar. Otherwise it returns NO
+    return [self isVisible] && [self _hasTitlebarForStyleMask: NS_EXTRA(NSWindow, self)->_styleMask];
 }
 
 - (BOOL) canBecomeVisibleWithoutLogin {

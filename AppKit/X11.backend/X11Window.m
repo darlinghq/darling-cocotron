@@ -738,7 +738,7 @@ static NSData *makeWindowIcon() {
     // title bar, positions itself: say so, or a window manager may place it as it
     // likes (ICCCM 4.1.2.3).
     if (!_overrideRedirect &&
-        (!(mask & NSWindowStyleMaskTitled) || [self hasInvisibleTitlebarForStyleMask: mask]))
+        (![self hasTitlebarForStyleMask: mask] || [self hasInvisibleTitlebarForStyleMask: mask]))
         sh->flags |= USPosition | PPosition;
 
     XSetWMSizeHints(_display, _window, sh, XA_WM_NORMAL_HINTS);
@@ -891,24 +891,19 @@ static NSData *makeWindowIcon() {
     [self updateLayerPresentationHints];
 }
 
-// A window gets the window manager's full frame (with a title bar) when its
-// style mask has NSWindowStyleMaskTitled or NSWindowStyleMaskResizable; a mask
-// with neither bit asks for no frame. The mask is passed in rather than read
-// from _styleMask because -setStyleMask: hands the new mask here before it
-// stores it.
-//
-// Platform discrepancy: Mac OS X 10.14 treats a Resizable mask without Titled
-// (including Borderless|Resizable) like a titled one: it adds a 22 pt title
-// bar and the window can become key. macOS 26 shows no title bar for such
-// windows and they cannot become key. We follow 10.14.
+// A window gets the window manager's full frame (with a title bar) when it
+// has a title bar (see -[NSWindow _hasTitlebarForStyleMask:]: a titled
+// window, or a resizable one in a program built against an old SDK); other
+// masks ask for no frame. The mask is passed in rather than read from
+// _styleMask because -setStyleMask: hands the new mask here before it stores
+// it.
 - (void) updateDecorationsForStyleMask: (NSUInteger) mask {
     // A window that shows nothing of a title bar of its own (see NSWindow) has the content as all
     // there is (the application draws its own header), so the window manager's frame would be a
     // second title bar on top of it.
     BOOL titlebarInvisible = [self hasInvisibleTitlebarForStyleMask: mask];
 
-    if ((mask & (NSWindowStyleMaskTitled | NSWindowStyleMaskResizable)) && !_invisibleWithoutCompositor &&
-        !titlebarInvisible)
+    if ([self hasTitlebarForStyleMask: mask] && !_invisibleWithoutCompositor && !titlebarInvisible)
         XDeleteProperty(_display, _window,
                         XInternAtom(_display, "_MOTIF_WM_HINTS", False));
     else
@@ -921,6 +916,12 @@ static NSData *makeWindowIcon() {
     }
     _chromeless = chromeless;
     [self updateWindowShape];
+}
+
+- (BOOL) hasTitlebarForStyleMask: (NSUInteger) mask {
+    if ([_delegate respondsToSelector: @selector(_hasTitlebarForStyleMask:)])
+        return [(NSWindow *) _delegate _hasTitlebarForStyleMask: mask];
+    return (mask & NSWindowStyleMaskTitled) != 0;
 }
 
 - (BOOL) hasInvisibleTitlebarForStyleMask: (NSUInteger) mask {
