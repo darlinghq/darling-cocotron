@@ -20,11 +20,22 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 // Original - Christopher Lloyd <cjwl@objc.net>
 #import <AppKit/NSSecureTextField.h>
 #import <AppKit/NSSecureTextFieldCell.h>
+#import <AppKit/NSColor.h>
 
 @implementation NSSecureTextField
 
 + (Class) cellClass {
     return [NSSecureTextFieldCell class];
+}
+
+// QUIRK: a new secure text field draws its background in
+// controlBackgroundColor, not textBackgroundColor. Not documented. Evidence:
+// black-box observation on macOS 10.14.4 and 26.7.3 (tier 2), probe
+// mac-probes/aqua-metric-followups.m of the research notes.
+// Test: appkit-text-field-defaults.m (test_quirk_field_defaults)
+- (void) _setDefaultBackground {
+    [[self cell] setDrawsBackground: YES];
+    [[self cell] setBackgroundColor: [NSColor controlBackgroundColor]];
 }
 
 // QUIRK: an archive (a nib compiled by the Interface Builder tools, for one)
