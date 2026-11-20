@@ -26,6 +26,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <OpenGL/gl.h>
 #import <OpenGL/CGLInternal.h>
 #import <CoreFoundation/CFNotificationCenter.h>
+#import <objc/runtime.h>
 
 @interface NSOpenGLContext (private)
 - (void) _clearCurrentContext;
@@ -34,7 +35,71 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (void) _applyPendingViewportReset;
 @end
 
+@interface _NSOpenGLViewContextEntry : NSObject {
+@public
+    id _context;
+}
+@end
+
+@implementation _NSOpenGLViewContextEntry
+- (void) dealloc {
+    objc_storeWeak(&_context, nil);
+    [super dealloc];
+}
+@end
+
 @implementation NSOpenGLContext
+
+// The contexts that have a view, so that AppKit can find the ones attached to
+// the views of a window (see +_updateContextsAttachedToWindow:). Each entry
+// refers to its context through a zeroing weak reference: a context removes
+// itself when its view is cleared and in dealloc, and a context that is
+// already deallocating on another thread reads back as nil, so it is never
+// retained again while it is being destroyed.
+static NSMutableArray *_viewContexts;
+
+static void _registerViewContext(NSOpenGLContext *context, BOOL attached) {
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        _viewContexts = [[NSMutableArray alloc] init];
+    });
+    @synchronized(_viewContexts) {
+        // Drop this context's entry and any entry whose context is gone.
+        for (NSUInteger i = [_viewContexts count]; i > 0; i--) {
+            _NSOpenGLViewContextEntry *entry = [_viewContexts objectAtIndex: i - 1];
+            id existing = objc_loadWeak(&entry->_context);
+            if (existing == nil || existing == context)
+                [_viewContexts removeObjectAtIndex: i - 1];
+        }
+        if (attached) {
+            _NSOpenGLViewContextEntry *entry = [[_NSOpenGLViewContextEntry alloc] init];
+            objc_storeWeak(&entry->_context, context);
+            [_viewContexts addObject: entry];
+            [entry release];
+        }
+    }
+}
+
+// Sends -update to each context attached to a view of the window. It goes
+// through normal dispatch, so a subclass that overrides -update sees the call.
+// The contexts are retained through their weak references, which fail for one
+// that is being deallocated.
++ (void) _updateContextsAttachedToWindow: (NSWindow *) window {
+    if (_viewContexts == nil)
+        return;
+    NSMutableArray *contexts = [NSMutableArray array];
+    @synchronized(_viewContexts) {
+        for (_NSOpenGLViewContextEntry *entry in _viewContexts) {
+            NSOpenGLContext *context = objc_loadWeak(&entry->_context);
+            if (context != nil)
+                [contexts addObject: context];
+        }
+    }
+    for (NSOpenGLContext *context in contexts) {
+        if ([[context view] window] == window)
+            [context update];
+    }
+}
 
 static inline NSOpenGLContext *_currentContext() {
     return (NSOpenGLContext *) NSThreadSharedInstanceDoNotCreate(
@@ -102,6 +167,7 @@ static inline void _clearCurrentContext() {
 }
 
 - (void) dealloc {
+    _registerViewContext(self, NO);
     [self _stopObservingView];
     // FIXME: this doesn't actually work because if we are the current context
     // we're retained by the thread shared object dict
@@ -286,6 +352,7 @@ static void _swapNotification(CFNotificationCenterRef center, void *observer, CF
     [self _stopObservingView];
     NS_EXTRA(NSOpenGLContext, self)->_view = view;
     [self _startObservingView];
+    _registerViewContext(self, view != nil);
 
     [self _stopObservingPresentation];
     if (NS_EXTRA(NSOpenGLContext, self)->_cglWindow != NULL) {

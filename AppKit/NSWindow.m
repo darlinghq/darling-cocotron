@@ -249,6 +249,10 @@ NSInteger NSBitsPerPixelFromDepth(NSWindowDepth depth) {
 - (void) _updateLayerContextFrames;
 @end
 
+@interface NSOpenGLContext (FullScreenUpdate)
++ (void) _updateContextsAttachedToWindow: (NSWindow *) window;
+@end
+
 @implementation NSWindowSheetCompletion
 
 - initWithHandler: (void (^)(NSInteger returnCode)) handler {
@@ -4006,6 +4010,47 @@ enum {
 // How long the window system has to confirm a full screen change.
 static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
 
+// QUIRK: when a window enters or leaves native full screen, AppKit itself sends
+// -update to the NSOpenGLContexts attached to views of that window, once the
+// window has its new size, so their drawables follow the views (they are not
+// resized by a plain window resize, which sends no -update). Not documented.
+// Evidence (tier 2, black-box): macOS 10.14.4 x86_64 sends -update to such a
+// context (seen by overriding -update) twice on entering and once on leaving
+// full screen, and the drawable follows; macOS 26.7.3 x86_64 sends none and
+// the drawable stays at its old size. Followed per the widest-(older)-version
+// policy. A window resize alone gets no update on either.
+// Test: tests/nsopenglcontext-fullscreen-update.m
+// (test_quirk_fullscreen_transition_sends_update, mode "follow"; "resize" is
+// the control).
+//
+// The update has to follow the size change of the window, which a window
+// system reports before or after it confirms the full screen state: it is sent
+// at each size change of the transition, and when the confirmation came first
+// at the size change that follows it (or, when the window does not change
+// size, once the confirmation has been handled).
+- (void) _updateOpenGLContextsForFullScreenChange {
+    [NSOpenGLContext _updateContextsAttachedToWindow: self];
+}
+
+- (void) _fullScreenChangeConfirmed {
+    if (NS_EXTRA(NSWindow, self)->_fullScreenSized) {
+        [self _updateOpenGLContextsForFullScreenChange];
+        return;
+    }
+    NS_EXTRA(NSWindow, self)->_fullScreenUpdatePending = YES;
+    [self performSelector: @selector(_fullScreenSettled)
+               withObject: nil
+               afterDelay: 0
+                  inModes: @[NSRunLoopCommonModes]];
+}
+
+- (void) _fullScreenSettled {
+    if (!NS_EXTRA(NSWindow, self)->_fullScreenUpdatePending)
+        return;
+    NS_EXTRA(NSWindow, self)->_fullScreenUpdatePending = NO;
+    [self _updateOpenGLContextsForFullScreenChange];
+}
+
 - (void) toggleFullScreen: (id) sender {
     if (NS_EXTRA(NSWindow, self)->_fullScreenTransition != FullScreenIdle)
         return;
@@ -4014,6 +4059,8 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
 
     NS_EXTRA(NSWindow, self)->_fullScreenTransition = entering ? FullScreenEntering : FullScreenExiting;
     NS_EXTRA(NSWindow, self)->_fullScreenTransitionGeneration++;
+    NS_EXTRA(NSWindow, self)->_fullScreenSized = NO;
+    NS_EXTRA(NSWindow, self)->_fullScreenUpdatePending = NO;
     [self postNotificationName: entering ? NSWindowWillEnterFullScreenNotification
                                          : NSWindowWillExitFullScreenNotification];
 
@@ -4075,15 +4122,19 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
 
     if (transition == FullScreenEntering && fullScreen) {
         [self _finishFullScreenTransition];
+        [self _fullScreenChangeConfirmed];
         [self postNotificationName: NSWindowDidEnterFullScreenNotification];
     } else if (transition == FullScreenExiting && !fullScreen) {
         [self _finishFullScreenTransition];
+        [self _fullScreenChangeConfirmed];
         [self postNotificationName: NSWindowDidExitFullScreenNotification];
     } else if (transition == FullScreenIdle && !fullScreen &&
                (NS_EXTRA(NSWindow, self)->_styleMask & NSWindowStyleMaskFullScreen)) {
         // The window system took the window out of full screen on its own.
         [self postNotificationName: NSWindowWillExitFullScreenNotification];
         [self setStyleMask: NS_EXTRA(NSWindow, self)->_styleMask & ~NSWindowStyleMaskFullScreen];
+        NS_EXTRA(NSWindow, self)->_fullScreenSized = NO;
+        [self _fullScreenChangeConfirmed];
         [self postNotificationName: NSWindowDidExitFullScreenNotification];
     }
 }
@@ -4564,6 +4615,13 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
         [self resetCursorRects];
         [self saveFrameUsingName: _autosaveFrameName];
         [self postNotificationName: NSWindowDidResizeNotification];
+        if (NS_EXTRA(NSWindow, self)->_fullScreenTransition != FullScreenIdle) {
+            NS_EXTRA(NSWindow, self)->_fullScreenSized = YES;
+            [self _updateOpenGLContextsForFullScreenChange];
+        } else if (NS_EXTRA(NSWindow, self)->_fullScreenUpdatePending) {
+            NS_EXTRA(NSWindow, self)->_fullScreenUpdatePending = NO;
+            [self _updateOpenGLContextsForFullScreenChange];
+        }
     } else {
         [self saveFrameUsingName: _autosaveFrameName];
         [self postNotificationName: NSWindowDidMoveNotification];
