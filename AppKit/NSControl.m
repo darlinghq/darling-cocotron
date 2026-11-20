@@ -256,6 +256,10 @@ static NSMutableDictionary *cellClassDictionary = nil;
     return [_cell isEnabled];
 }
 
+- (BOOL) isHighlighted {
+    return [_cell isHighlighted];
+}
+
 - (BOOL) isEditable {
     return [_cell isEditable];
 }
@@ -396,6 +400,11 @@ static NSMutableDictionary *cellClassDictionary = nil;
 
 - (void) setEnabled: (BOOL) flag {
     [_cell setEnabled: flag];
+    [self setNeedsDisplay: YES];
+}
+
+- (void) setHighlighted: (BOOL) flag {
+    [_cell setHighlighted: flag];
     [self setNeedsDisplay: YES];
 }
 
