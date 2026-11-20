@@ -238,7 +238,7 @@ int main(void)
         }
 
         // rounded push button: white bezel; blue gradient when default or pressed; fainter when disabled.
-        // Columns are sampled away from the title; rows are relative to the bezel's top and bottom edge.
+        // Columns are sampled away from the title and from the rounded corners (the bezel starts 6 points in); rows are relative to the bezel's top and bottom edge.
         int top, bottom;
         rep = renderPush(NO, NO, YES);
         pushRows(rep, 10, &top, &bottom);
@@ -248,16 +248,16 @@ int main(void)
         rgba(rep, 10, top, c);
         CHECK(c[3] > 0 && c[3] < 140 && c[0] < 40);
         rep = renderPush(YES, NO, YES);
-        pushRows(rep, 10, &top, &bottom);
-        rgba(rep, 10, top + 1, c);
+        pushRows(rep, 16, &top, &bottom);
+        rgba(rep, 16, top + 1, c);
         CHECK(near(c, 107, 161, 250, 28));
-        rgba(rep, 10, bottom - 1, c);
+        rgba(rep, 16, bottom - 1, c);
         CHECK(near(c, 17, 100, 255, 28));
         rep = renderPush(NO, YES, YES);
-        pushRows(rep, 10, &top, &bottom);
-        rgba(rep, 10, top + 1, c);
+        pushRows(rep, 16, &top, &bottom);
+        rgba(rep, 16, top + 1, c);
         CHECK(near(c, 76, 139, 253, 28));
-        rgba(rep, 10, bottom - 1, c);
+        rgba(rep, 16, bottom - 1, c);
         CHECK(near(c, 15, 88, 231, 28));
         rep = renderPush(NO, NO, NO);
         pushRows(rep, 10, &top, &bottom);

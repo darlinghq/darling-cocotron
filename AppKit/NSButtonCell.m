@@ -134,6 +134,9 @@ static const CGFloat kImageMargin = 2.;
     [super encodeWithCoder: coder];
     [coder encodeInt: (int) [self _buttonCellAppleFlags] forKey: @"NSButtonFlags"];
     [coder encodeInt: (int) [self _buttonCellAppleFlags2] forKey: @"NSButtonFlags2"];
+    // in milliseconds, as macOS writes them
+    [coder encodeInt: (int) lroundf(NS_EXTRA(NSButtonCell, self)->_periodicDelay * 1000) forKey: @"NSPeriodicDelay"];
+    [coder encodeInt: (int) lroundf(NS_EXTRA(NSButtonCell, self)->_periodicInterval * 1000) forKey: @"NSPeriodicInterval"];
     if (_alternateTitle != nil)
         [coder encodeObject: _alternateTitle forKey: @"NSAlternateContents"];
     if (NS_EXTRA(NSButtonCell, self)->_alternateImage != nil)
@@ -244,6 +247,10 @@ static const CGFloat kImageMargin = 2.;
         NSKeyedUnarchiver *keyed = (NSKeyedUnarchiver *) coder;
         flags = [keyed decodeIntForKey: @"NSButtonFlags"];
         flags2 = [keyed decodeIntForKey: @"NSButtonFlags2"];
+        [self _applyDefaultHighlightingAndRepeat]; // for archives that have no repeat keys
+        if ([keyed containsValueForKey: @"NSPeriodicDelay"] && [keyed containsValueForKey: @"NSPeriodicInterval"])
+            [self setPeriodicDelay: [keyed decodeIntForKey: @"NSPeriodicDelay"] / 1000.0f
+                          interval: [keyed decodeIntForKey: @"NSPeriodicInterval"] / 1000.0f];
         id check;
 
         NS_EXTRA(NSCell, self)->_titleOrAttributedTitle =
@@ -497,12 +504,24 @@ static const CGFloat kImageMargin = 2.;
     return self;
 }
 
+// QUIRK: a new button cell highlights by pushing in, changing its gray and changing its background (highlightsBy
+// 14) whichever initializer made it, and repeats (for continuous buttons) after 0.4 seconds every 0.075 seconds.
+// Not documented. Evidence: black-box observation on macOS 10.14.4 (tier 2) of cells made with -init,
+// -initTextCell:, -initImageCell: and by NSButton, and of an archived cell's NSPeriodicDelay and
+// NSPeriodicInterval keys (400 and 75, in milliseconds); vd-upstream/mac-probes/aqua-leftovers-buttoncell.m.
+// Test: test_quirk_button_cell_highlight_defaults in tests/appkit-button-cell-highlights.m
+- (void) _applyDefaultHighlightingAndRepeat {
+    NS_EXTRA(NSButtonCell, self)->_highlightsBy = NSPushInCellMask | NSChangeGrayCellMask | NSChangeBackgroundCellMask;
+    NS_EXTRA(NSButtonCell, self)->_periodicDelay = 0.4f;
+    NS_EXTRA(NSButtonCell, self)->_periodicInterval = 0.075f;
+}
+
 - initTextCell: (NSString *) string {
     [super initTextCell: string];
     NS_EXTRA(NSCell, self)->_titleOrAttributedTitle = [string copy];
     _alternateTitle = @"";
     NS_EXTRA(NSButtonCell, self)->_imagePosition = NSNoImage;
-    NS_EXTRA(NSButtonCell, self)->_highlightsBy = NSPushInCellMask;
+    [self _applyDefaultHighlightingAndRepeat];
     NS_EXTRA(NSButtonCell, self)->_showsStateBy = 0;
     NS_EXTRA(NSButtonCell, self)->_isTransparent = NO;
     NS_EXTRA(NSButtonCell, self)->_imageDimsWhenDisabled = NO;
@@ -523,6 +542,7 @@ static const CGFloat kImageMargin = 2.;
     [super initImageCell: image];
     NS_EXTRA(NSCell, self)->_titleOrAttributedTitle = @""; // empty string, not nil
     NS_EXTRA(NSButtonCell, self)->_imagePosition = NSImageOnly;
+    [self _applyDefaultHighlightingAndRepeat];
     [self setObjectValue: [NSNumber numberWithBool: NO]];
 
     return self;
@@ -817,14 +837,19 @@ static const CGFloat kImageMargin = 2.;
 
 - (void) setButtonType: (NSButtonType) buttonType {
     switch (buttonType) {
+    // QUIRK: highlightsBy and showsStateBy per button type are 12 and 0 for momentary light, 14 and 0 for momentary
+    // push in, 14 and 12 for push on push off (the others as before: momentary change 1 and 0, on off 12 and 12,
+    // toggle 3 and 1, switch and radio 1 and 1). Not documented. Evidence: black-box observation on macOS 10.14.4
+    // (tier 2), vd-upstream/mac-probes/aqua-leftovers-buttoncell.m. Test:
+    // test_quirk_button_cell_highlight_defaults in tests/appkit-button-cell-highlights.m
     case NSMomentaryLightButton:
-        NS_EXTRA(NSButtonCell, self)->_highlightsBy = NSChangeBackgroundCellMask;
+        NS_EXTRA(NSButtonCell, self)->_highlightsBy = NSChangeBackgroundCellMask | NSChangeGrayCellMask;
         NS_EXTRA(NSButtonCell, self)->_showsStateBy = NSNoCellMask;
         NS_EXTRA(NSButtonCell, self)->_imageDimsWhenDisabled = YES;
         break;
 
     case NSMomentaryPushInButton:
-        NS_EXTRA(NSButtonCell, self)->_highlightsBy = NSPushInCellMask | NSChangeGrayCellMask;
+        NS_EXTRA(NSButtonCell, self)->_highlightsBy = NSPushInCellMask | NSChangeGrayCellMask | NSChangeBackgroundCellMask;
         NS_EXTRA(NSButtonCell, self)->_showsStateBy = NSNoCellMask;
         NS_EXTRA(NSButtonCell, self)->_imageDimsWhenDisabled = YES;
         break;
@@ -836,8 +861,8 @@ static const CGFloat kImageMargin = 2.;
         break;
 
     case NSPushOnPushOffButton:
-        NS_EXTRA(NSButtonCell, self)->_highlightsBy = NSPushInCellMask | NSChangeGrayCellMask;
-        NS_EXTRA(NSButtonCell, self)->_showsStateBy = NSChangeBackgroundCellMask;
+        NS_EXTRA(NSButtonCell, self)->_highlightsBy = NSPushInCellMask | NSChangeGrayCellMask | NSChangeBackgroundCellMask;
+        NS_EXTRA(NSButtonCell, self)->_showsStateBy = NSChangeBackgroundCellMask | NSChangeGrayCellMask;
         NS_EXTRA(NSButtonCell, self)->_imageDimsWhenDisabled = YES;
         break;
 
