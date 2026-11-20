@@ -9,6 +9,7 @@ from the hand-written sources in `src/` (no Apple application, template or sampl
 |---|---|---|
 | `flat/Menu.nib`, `flat/Custom.nib`, `flat/Tint.nib`, `flat/Swap.nib`, `flat/Scroll.nib`, `flat/Toolbar.nib` | `ibtool --minimum-deployment-target 10.13 --compile flat/<Name>.nib src/<Name>.xib` | a single NIBArchive file |
 | `dirs/Table.nib` | the same command for `src/Table.xib`: with a scroll view and table view ibtool writes a directory | `keyedobjects-101300.nib` and `keyedobjects-110000.nib`, both NIBArchive; the number is the minimum macOS version (10.13.0, 11.0.0) the file is for. They differ in the table view style and column widths |
+| `flat/StackGravity.nib` | `ibtool --minimum-deployment-target 10.13 --compile flat/StackGravity.nib src/StackGravity.xib` | a horizontal stack view of gravity areas (buttons A and B leading, C center, D trailing), custom space after A, visibility priorities 1000/600/1000/0 |
 | `flat/CellViews.nib` | `ibtool --minimum-deployment-target 10.13 --compile CellViews.nib src/CellViews.xib` (a directory, as for `Table.xib`); the file is its `keyedobjects-101300.nib` | a single NIBArchive file |
 | `compat/<Name>.nib/` | `ibtool --minimum-deployment-target 10.10 --compile compat/<Name>.nib src/<Name>.xib` | a directory with `keyedobjects.nib` (an NSKeyedArchiver binary property list, the format before 10.13) next to the NIBArchive file(s) above |
 

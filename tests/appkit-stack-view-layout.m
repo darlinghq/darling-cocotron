@@ -64,7 +64,7 @@ int main(void)
         expect(stack.alignment == NSLayoutAttributeCenterY, @"default horizontal alignment");
         expect(stack.spacing == 8, @"default spacing");
         expect(stack.distribution == NSStackViewDistributionGravityAreas, @"default distribution");
-        expect(stack.detachesHiddenViews, @"hidden views detach by default");
+        expect(!stack.detachesHiddenViews, @"hidden views are not detached by default (macOS 10.14.4)");
 
         // Gravity areas, horizontal.
         NSView *a = box(40, 20), *b = box(30, 20), *c = box(20, 10), *d = box(50, 20);
@@ -97,6 +97,7 @@ int main(void)
         // Detaching.
         Watcher *watcher = [[[Watcher alloc] init] autorelease];
         stack.delegate = watcher;
+        stack.detachesHiddenViews = YES;
         [b setHidden:YES];
         expect([b superview] == nil, @"hidden view detached");
         expect([stack.detachedViews isEqualToArray:(@[b])], @"detachedViews");
@@ -194,6 +195,7 @@ int main(void)
 
         Remover *remover = [[[Remover alloc] init] autorelease];
         flipped.delegate = remover;
+        flipped.detachesHiddenViews = YES;
         [top setHidden:YES];
         expect(![flipped.views containsObject:top] && [top superview] == nil,
                @"a delegate may remove views it is told are detaching");
@@ -212,11 +214,11 @@ int main(void)
         NSStackView *decoded = [NSKeyedUnarchiver unarchiveObjectWithData:
                 [NSKeyedArchiver archivedDataWithRootObject:source]];
         NSArray *arranged = decoded.arrangedSubviews;
-        expect([arranged count] == 2 && [decoded.views count] == 3 && [decoded.detachedViews count] == 1,
-               @"decoded subviews become views, the hidden one detached");
-        NSView *decodedUpper = [arranged objectAtIndex:0], *decodedLower = [arranged objectAtIndex:1];
+        expect([arranged count] == 3 && [decoded.views count] == 3 && [decoded.detachedViews count] == 0,
+               @"decoded subviews become views; the hidden one stays as hidden views are not detached by default");
+        NSView *decodedUpper = [arranged objectAtIndex:0], *decodedLower = [arranged objectAtIndex:2];
         expect(NSWidth([decodedUpper frame]) == 20 && NSWidth([decodedLower frame]) == 10 &&
-                       NSWidth([[decoded.detachedViews objectAtIndex:0] frame]) == 15 &&
+                       NSWidth([[decoded.views objectAtIndex:1] frame]) == 15 &&
                        [[decoded.views objectAtIndex:1] isHidden],
                @"decoded views keep their order");
         expectRect(decodedUpper, NSMakeRect(40, 170, 20, 30), @"decoded: upper frame kept");
@@ -226,6 +228,7 @@ int main(void)
         expect(NSEqualSizes([decoded intrinsicContentSize], NSZeroSize),
                @"an unchanged decoded stack view does not measure with default settings");
 
+        decoded.detachesHiddenViews = YES;
         [decoded setVisibilityPriority:NSStackViewVisibilityPriorityDetachOnlyIfNecessary forView:decodedLower];
         expect([decoded visibilityPriorityForView:decodedLower] == NSStackViewVisibilityPriorityDetachOnlyIfNecessary,
                @"visibility priority applies to a decoded view");
