@@ -61,6 +61,11 @@ const CGFloat NSTableViewDefaultRowHeight = 17.0f;
 - (void) _setObjectValueOfCellView: (NSView *) view column: (NSTableColumn *) column row: (NSInteger) row;
 - (BOOL) _delegateMakesCellViews;
 - (NSView *) _delegateCellViewForTableColumn: (NSTableColumn *) column row: (NSInteger) row;
+- (NSTableRowView *) _delegateRowViewForRow: (NSInteger) row;
+- (void) _delegateDidAddRowView: (NSTableRowView *) rowView forRow: (NSInteger) row;
+- (void) _delegateDidRemoveRowView: (NSTableRowView *) rowView forRow: (NSInteger) row;
+- (NSTableRowView *) _rowViewForRow: (NSInteger) row make: (BOOL) make;
+- (void) _removeRowViewsOutsideRows: (NSRange) rows;
 - (BOOL) _typeSelectEvent: (NSEvent *) event;
 - (void) _updateToolTipAreas;
 - (void) noteSelectionIsChanging;
@@ -174,6 +179,7 @@ const CGFloat NSTableViewDefaultRowHeight = 17.0f;
             }
         }
         NS_EXTRA(NSTableView, self)->_cellViews = [[NSMutableDictionary alloc] init];
+        NS_EXTRA(NSTableView, self)->_rowViews = [[NSMutableDictionary alloc] init];
         NS_EXTRA(NSTableView, self)->_reuseQueues = [[NSMutableDictionary alloc] init];
         _editedColumn = -1;
         _editedRow = -1;
@@ -272,6 +278,7 @@ const CGFloat NSTableViewDefaultRowHeight = 17.0f;
     NS_EXTRA(NSTableView, self)->_selectedColumns = [[NSMutableArray alloc] init];
     NS_EXTRA(NSTableView, self)->_registeredNibs = [[NSMutableDictionary alloc] init];
     NS_EXTRA(NSTableView, self)->_cellViews = [[NSMutableDictionary alloc] init];
+    NS_EXTRA(NSTableView, self)->_rowViews = [[NSMutableDictionary alloc] init];
         NS_EXTRA(NSTableView, self)->_reuseQueues = [[NSMutableDictionary alloc] init];
     _editedColumn = -1;
     _editedRow = -1;
@@ -322,6 +329,7 @@ const CGFloat NSTableViewDefaultRowHeight = 17.0f;
     [NS_EXTRA(NSTableView, self)->_sortDescriptors release];
     [NS_EXTRA(NSTableView, self)->_registeredNibs release];
     [NS_EXTRA(NSTableView, self)->_cellViews release];
+    [NS_EXTRA(NSTableView, self)->_rowViews release];
     [NS_EXTRA(NSTableView, self)->_reuseQueues release];
     [NS_EXTRA(NSTableView, self)->_typeSelectString release];
     [NS_EXTRA(NSTableView, self)->_toolTipSignature release];
@@ -1156,6 +1164,10 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
         [self setNeedsDisplay: YES];
         [_headerView setNeedsDisplay: YES];
     }
+
+    for (NSNumber *key in NS_EXTRA(NSTableView, self)->_rowViews)
+        [[NS_EXTRA(NSTableView, self)->_rowViews objectForKey: key]
+                setSelected: [NS_EXTRA(NSTableView, self)->_selectedRowIndexes containsIndex: [key integerValue]]];
 
     [self noteSelectionDidChange];
 }
@@ -2969,6 +2981,23 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 // The row (column) of the cell a view belongs to: the view is looked up by
 // climbing to the table's direct subview and finding what its frame centre lies in.
 - (NSInteger) _cellIndexForView: (NSView *) view row: (BOOL) wantRow {
+    // A cell view, or a view in one, is found by its key; a row view by its row
+    for (NSView *ancestor = view; ancestor != nil && ancestor != self; ancestor = [ancestor superview]) {
+        NSNumber *key = [[NS_EXTRA(NSTableView, self)->_cellViews allKeysForObject: ancestor] firstObject];
+
+        if (key != nil) {
+            unsigned long long value = [key unsignedLongLongValue];
+            NSInteger column = (NSInteger) (value & 0xFFFFFF);
+
+            if (wantRow)
+                return (NSInteger) (value >> 24);
+            return column == 0xFFFFFF ? -1 : column;
+        }
+        key = [[NS_EXTRA(NSTableView, self)->_rowViews allKeysForObject: ancestor] firstObject];
+        if (key != nil)
+            return wantRow ? [key integerValue] : -1;
+    }
+
     while (view != nil && [view superview] != self)
         view = [view superview];
     if (view == nil)
@@ -3032,6 +3061,7 @@ static NSNumber *CellViewKey(NSInteger row, NSInteger column, BOOL group) {
     for (NSNumber *key in [views allKeys])
         [self _recycleView: [views objectForKey: key]];
     [views removeAllObjects];
+    [self _removeRowViewsOutsideRows: NSMakeRange(0, 0)];
 }
 
 - (void) _recycleCellViewsOutsideRows: (NSRange) rows {
@@ -3045,6 +3075,82 @@ static NSNumber *CellViewKey(NSInteger row, NSInteger column, BOOL group) {
             [views removeObjectForKey: key];
         }
     }
+    [self _removeRowViewsOutsideRows: rows];
+}
+
+// Row views of rows no longer shown leave the table; the delegate is told.
+- (void) _removeRowViewsOutsideRows: (NSRange) rows {
+    NSMutableDictionary *rowViews = NS_EXTRA(NSTableView, self)->_rowViews;
+
+    for (NSNumber *key in [rowViews allKeys]) {
+        NSInteger row = [key integerValue];
+
+        if (NSLocationInRange(row, rows))
+            continue;
+        NSTableRowView *rowView = [[[rowViews objectForKey: key] retain] autorelease];
+
+        [rowViews removeObjectForKey: key];
+        [rowView removeFromSuperview];
+        [self _delegateDidRemoveRowView: rowView forRow: row];
+    }
+}
+
+- (NSTableRowView *) _delegateRowViewForRow: (NSInteger) row {
+    if ([_delegate respondsToSelector: @selector(tableView:rowViewForRow:)])
+        return [_delegate tableView: self rowViewForRow: row];
+    return nil;
+}
+
+- (void) _delegateDidAddRowView: (NSTableRowView *) rowView forRow: (NSInteger) row {
+    if ([_delegate respondsToSelector: @selector(tableView:didAddRowView:forRow:)])
+        [_delegate tableView: self didAddRowView: rowView forRow: row];
+}
+
+- (void) _delegateDidRemoveRowView: (NSTableRowView *) rowView forRow: (NSInteger) row {
+    if ([_delegate respondsToSelector: @selector(tableView:didRemoveRowView:forRow:)])
+        [_delegate tableView: self didRemoveRowView: rowView forRow: row];
+}
+
+// The view of a row of a view-based table, a subview of the table holding the
+// row's cell views. A new one comes from the delegate (a plain NSTableRowView
+// when it gives none); its cell views are made and placed in it before the
+// delegate is told it was added.
+- (NSTableRowView *) _rowViewForRow: (NSInteger) row make: (BOOL) make {
+    NSNumber *key = [NSNumber numberWithInteger: row];
+    NSTableRowView *rowView = [NS_EXTRA(NSTableView, self)->_rowViews objectForKey: key];
+    NSRect frame = [self rectOfRow: row];
+
+    if (rowView != nil) {
+        if (!NSEqualRects([rowView frame], frame))
+            [rowView setFrame: frame];
+        if ([rowView superview] != self)
+            [self addSubview: rowView];
+        return rowView;
+    }
+    if (!make)
+        return nil;
+
+    rowView = [self _delegateRowViewForRow: row];
+    if (rowView == nil)
+        rowView = [[[NSTableRowView alloc] initWithFrame: frame] autorelease];
+    [rowView setFrame: frame];
+    [rowView setGroupRowStyle: [self _isGroupRow: row]];
+    [rowView setSelectionHighlightStyle: [self selectionHighlightStyle]];
+    [rowView setSelected: [self isRowSelected: row]];
+    [NS_EXTRA(NSTableView, self)->_rowViews setObject: rowView forKey: key];
+    [self addSubview: rowView];
+
+    if ([self _isGroupRow: row]) {
+        [self _cellViewAtColumn: 0 row: row make: YES];
+    } else {
+        NSInteger column, count = [_tableColumns count];
+
+        for (column = 0; column < count; column++)
+            if (![[_tableColumns objectAtIndex: column] isHidden])
+                [self _cellViewAtColumn: column row: row make: YES];
+    }
+    [self _delegateDidAddRowView: rowView forRow: row];
+    return rowView;
 }
 
 // The view shown at a cell. It is asked of the delegate once, when the cell
@@ -3053,7 +3159,11 @@ static NSNumber *CellViewKey(NSInteger row, NSInteger column, BOOL group) {
     BOOL group = [self _isGroupRow: row];
     NSNumber *key = CellViewKey(row, column, group);
     NSView *view = [NS_EXTRA(NSTableView, self)->_cellViews objectForKey: key];
+    NSTableRowView *rowView = [self _rowViewForRow: row make: make];
 
+    // Making the row view made its cell views
+    if (view == nil)
+        view = [NS_EXTRA(NSTableView, self)->_cellViews objectForKey: key];
     if (view == nil && make) {
         NSRect frame;
 
@@ -3074,8 +3184,19 @@ static NSNumber *CellViewKey(NSInteger row, NSInteger column, BOOL group) {
     } else if (view != nil) {
         [view setFrame: group ? [self rectOfRow: row] : [self frameOfCellAtColumn: column row: row]];
     }
-    if (view != nil && [view superview] != self)
+    if (view != nil && rowView != nil) {
+        // The row view holds the cell views, in its own coordinates
+        NSRect frame = [view frame];
+        NSRect rowRect = [rowView frame];
+
+        frame.origin.x -= NSMinX(rowRect);
+        frame.origin.y -= NSMinY(rowRect);
+        [view setFrame: frame];
+        if ([view superview] != rowView)
+            [rowView addSubview: view];
+    } else if (view != nil && [view superview] != self) {
         [self addSubview: view];
+    }
     return view;
 }
 
@@ -3124,6 +3245,30 @@ static NSNumber *CellViewKey(NSInteger row, NSInteger column, BOOL group) {
     if (column != 0 && [self _isGroupRow: row])
         return nil;
     return [self _cellViewAtColumn: column row: row make: makeIfNecessary];
+}
+
+// The view of a row of a view-based table: the one shown, else (makeIfNecessary)
+// a new one with its cell views. A row beyond the table raises, as on macOS
+// 10.14.4 and 26.7.3. Test: tests/appkit-table-row-views.m
+- (NSTableRowView *) rowViewAtRow: (NSInteger) row makeIfNecessary: (BOOL) makeIfNecessary {
+    if (row < 0 || row >= [self numberOfRows])
+        [NSException raise: @"NSTableViewException"
+                    format: @"Row index %ld out of row range (numberOfRows: %ld) for %@", (long) row, (long) [self numberOfRows], self];
+    if (![self _delegateMakesCellViews])
+        return nil;
+    return [self _rowViewForRow: row make: makeIfNecessary];
+}
+
+- (void) enumerateAvailableRowViewsUsingBlock: (void (NS_NOESCAPE ^)(__kindof NSTableRowView *rowView, NSInteger row)) handler {
+    NSMutableDictionary *rowViews = NS_EXTRA(NSTableView, self)->_rowViews;
+    NSArray *keys = [[rowViews allKeys] sortedArrayUsingSelector: @selector(compare:)];
+
+    for (NSNumber *key in keys) {
+        NSTableRowView *rowView = [rowViews objectForKey: key];
+
+        if (rowView != nil)
+            handler(rowView, [key integerValue]);
+    }
 }
 
 // Hands out a view for the identifier: one that left the table earlier, else

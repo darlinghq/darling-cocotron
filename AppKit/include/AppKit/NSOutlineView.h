@@ -144,6 +144,9 @@ APPKIT_EXPORT NSString *const NSOutlineViewShowHideButtonKey;
                 forTableColumn: (nullable NSTableColumn *) tableColumn
                           item: (id) item;
 @optional
+- (nullable NSTableRowView *) outlineView: (NSOutlineView *) outlineView rowViewForItem: (id) item;
+- (void) outlineView: (NSOutlineView *) outlineView didAddRowView: (NSTableRowView *) rowView forRow: (NSInteger) row;
+- (void) outlineView: (NSOutlineView *) outlineView didRemoveRowView: (NSTableRowView *) rowView forRow: (NSInteger) row;
 - (nullable NSView *) outlineView: (NSOutlineView *) outlineView
                viewForTableColumn: (nullable NSTableColumn *) tableColumn
                              item: (id) item;

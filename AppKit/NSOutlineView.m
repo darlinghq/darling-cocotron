@@ -953,6 +953,23 @@ static void loadItemIntoMapTables(NSOutlineView *self, id item,
     return [_delegate outlineView: self viewForTableColumn: column item: [self itemAtRow: row]];
 }
 
+// The row views of an outline view come from its delegate's item methods.
+- (NSTableRowView *) _delegateRowViewForRow: (NSInteger) row {
+    if ([_delegate respondsToSelector: @selector(outlineView:rowViewForItem:)])
+        return [_delegate outlineView: self rowViewForItem: [self itemAtRow: row]];
+    return nil;
+}
+
+- (void) _delegateDidAddRowView: (NSTableRowView *) rowView forRow: (NSInteger) row {
+    if ([_delegate respondsToSelector: @selector(outlineView:didAddRowView:forRow:)])
+        [_delegate outlineView: self didAddRowView: rowView forRow: row];
+}
+
+- (void) _delegateDidRemoveRowView: (NSTableRowView *) rowView forRow: (NSInteger) row {
+    if ([_delegate respondsToSelector: @selector(outlineView:didRemoveRowView:forRow:)])
+        [_delegate outlineView: self didRemoveRowView: rowView forRow: row];
+}
+
 - (void) _setObjectValueOfCellView: (NSView *) view column: (NSTableColumn *) column row: (NSInteger) row {
     if (![view respondsToSelector: @selector(setObjectValue:)] ||
         ![_dataSource respondsToSelector: @selector(outlineView:objectValueForTableColumn:byItem:)])
