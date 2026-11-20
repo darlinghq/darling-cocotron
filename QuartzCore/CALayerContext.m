@@ -106,10 +106,15 @@
 
 // A transparent or hidden root layer still has a native child window.
 - (void) setHidden: (BOOL) hidden {
-    if (hidden)
+    _hidden = hidden;
+    if (hidden) {
         [_subwindow hide];
-    else
+    } else {
         [_subwindow show];
+        // Nothing was drawn while it was hidden.
+        if (_layer != nil)
+            [self startTimerIfNeeded];
+    }
 }
 
 // The pixels beneath the subwindow were redrawn: the layers blend with them again.
@@ -449,6 +454,15 @@ static BOOL layerTreeNeedsAnotherFrame(CALayer *layer) {
 }
 
 - (void) timer: (NSTimer *) timer {
+    // Nothing is drawn or presented for a hidden context; showing it again
+    // starts the timer.
+    if (_hidden) {
+        _renderRequested = NO;
+        [_timer invalidate];
+        [_timer release];
+        _timer = nil;
+        return;
+    }
     // Consume requests for this frame before callbacks can request another.
     _renderRequested = NO;
     [_renderer beginFrameAtTime: CACurrentMediaTime() timeStamp: NULL];
