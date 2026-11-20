@@ -56,6 +56,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     _isSelected = value;
 }
 
+- (NSCollectionViewItemHighlightState) highlightState {
+    return (NSCollectionViewItemHighlightState) _highlightState;
+}
+
+- (void) setHighlightState: (NSCollectionViewItemHighlightState) state {
+    _highlightState = (unsigned char) state;
+}
+
 - (void) prepareForReuse {
 }
 

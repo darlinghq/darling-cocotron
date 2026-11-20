@@ -76,7 +76,6 @@ static NSInteger compareZIndex(id first, id second, void *context)
 @implementation NSCollectionView
 @synthesize dataSource = _dataSource;
 @synthesize delegate = _delegate;
-@synthesize selectionIndexPaths = _selectionIndexPaths;
 
 - initWithCoder: (NSCoder *) coder {
     [super initWithCoder: coder];
@@ -130,8 +129,17 @@ static NSInteger compareZIndex(id first, id second, void *context)
     return _allowsMultipleSelection;
 }
 
+// The legacy selection: the items of section 0 in selectionIndexPaths
 - (NSIndexSet *) selectionIndexes {
-    return _selectionIndexes;
+    NSMutableIndexSet *indexes = [NSMutableIndexSet indexSet];
+    for (NSIndexPath *path in [self selectionIndexPaths])
+        if (path.section == 0 && path.item >= 0)
+            [indexes addIndex: path.item];
+    return indexes;
+}
+
++ (NSSet *) keyPathsForValuesAffectingSelectionIndexes {
+    return [NSSet setWithObject: @"selectionIndexPaths"];
 }
 
 - (void) setContent: (NSArray *) value {
@@ -178,9 +186,18 @@ static NSInteger compareZIndex(id first, id second, void *context)
 }
 
 - (void) setSelectionIndexes: (NSIndexSet *) value {
-    value = [value copy];
-    [_selectionIndexes release];
-    _selectionIndexes = value;
+    NSMutableSet *paths = [NSMutableSet set];
+    for (NSUInteger index = [value firstIndex]; index != NSNotFound; index = [value indexGreaterThanIndex: index])
+        [paths addObject: [NSIndexPath indexPathForItem: index inSection: 0]];
+    [self setSelectionIndexPaths: paths];
+}
+
+- (BOOL) allowsEmptySelection {
+    return !_disallowsEmptySelection;
+}
+
+- (void) setAllowsEmptySelection: (BOOL) value {
+    _disallowsEmptySelection = !value;
 }
 
 - (BOOL) isFirstResponder {
@@ -370,6 +387,7 @@ static NSInteger compareZIndex(id first, id second, void *context)
         }
         [shown setObject: item forKey: path];
 
+        [item setSelected: [_selectionIndexPaths containsObject: path]];
         NSView *view = [item view];
         if ([view superview] != self)
             [self addSubview: view];
@@ -431,6 +449,8 @@ static NSInteger compareZIndex(id first, id second, void *context)
         [NSException raise:NSInvalidArgumentException format:@"collection data source lacks required methods"];
     [self _enqueueItems: [[_loadedItems copy] autorelease]];
     [_loadedItems removeAllObjects];
+    // Any reload empties the selection (as on macOS 26.7.3 and 10.14.4)
+    [self _setSelection: [NSSet set]];
     if (_collectionViewLayout != nil) {
         NSCollectionViewLayoutInvalidationContext *context =
             [[[[_collectionViewLayout class] invalidationContextClass] alloc] init];
@@ -570,13 +590,114 @@ static NSInteger compareZIndex(id first, id second, void *context)
 }
 
 - (NSSet *) selectionIndexPaths {
-    return _selectionIndexPaths ? _selectionIndexPaths : [NSSet set];
+    return _selectionIndexPaths ? [[_selectionIndexPaths retain] autorelease] : [NSSet set];
+}
+
+// Changes the selection and shows it on the visible items. The key-value notification comes from the
+// selectionIndexPaths setter only: selecting and deselecting by index path sends none (as on macOS 26.7.3 and
+// 10.14.4, tests/appkit-collection-view-selection.m).
+- (void) _setSelection: (NSSet *) selection {
+    selection = [selection copy];
+    [_selectionIndexPaths release];
+    _selectionIndexPaths = selection;
+    for (NSIndexPath *path in _loadedItems)
+        [[_loadedItems objectForKey: path] setSelected: [_selectionIndexPaths containsObject: path]];
 }
 
 - (void) setSelectionIndexPaths: (NSSet *) value {
-    value = [value copy];
-    [_selectionIndexPaths release];
-    _selectionIndexPaths = value;
+    [self _setSelection: value != nil ? value : [NSSet set]];
+}
+
+// Documented not to consult the delegate; it works whether or not the view is selectable
+- (void) selectItemsAtIndexPaths: (NSSet *) indexPaths scrollPosition: (NSCollectionViewScrollPosition) scrollPosition {
+    [self _setSelection: [[self selectionIndexPaths] setByAddingObjectsFromSet: indexPaths]];
+    if (scrollPosition != NSCollectionViewScrollPositionNone)
+        [self scrollToItemsAtIndexPaths: indexPaths scrollPosition: scrollPosition];
+}
+
+- (void) deselectItemsAtIndexPaths: (NSSet *) indexPaths {
+    NSMutableSet *selection = [[[self selectionIndexPaths] mutableCopy] autorelease];
+    [selection minusSet: indexPaths];
+    [self _setSelection: selection];
+}
+
+- (NSSet *) _allIndexPaths {
+    NSMutableSet *paths = [NSMutableSet set];
+    NSInteger sections = [self numberOfSections];
+    for (NSInteger section = 0; section < sections; section++) {
+        NSInteger count = [self numberOfItemsInSection: section];
+        for (NSInteger item = 0; item < count; item++)
+            [paths addObject: [NSIndexPath indexPathForItem: item inSection: section]];
+    }
+    return paths;
+}
+
+// A selection made by the user: the delegate may narrow it and is told what changed. Without `extend` the paths
+// replace the selection; without multiple selection only one path is kept.
+- (void) _userSelectIndexPaths: (NSSet *) paths byExtending: (BOOL) extend {
+    if (!_isSelectable || [paths count] == 0)
+        return;
+    if (!_allowsMultipleSelection) {
+        paths = [NSSet setWithObject: [paths anyObject]];
+        extend = NO;
+    }
+    NSMutableSet *selecting = [[paths mutableCopy] autorelease];
+    [selecting minusSet: [self selectionIndexPaths]];
+    if ([selecting count] > 0 && [_delegate respondsToSelector: @selector(collectionView:shouldSelectItemsAtIndexPaths:)])
+        selecting = [[[_delegate collectionView: self shouldSelectItemsAtIndexPaths: selecting] mutableCopy] autorelease];
+
+    NSMutableSet *deselecting = [NSMutableSet set];
+    if (!extend) {
+        [deselecting unionSet: [self selectionIndexPaths]];
+        [deselecting minusSet: paths];
+        if ([deselecting count] > 0 &&
+            [_delegate respondsToSelector: @selector(collectionView:shouldDeselectItemsAtIndexPaths:)])
+            deselecting = [[[_delegate collectionView: self shouldDeselectItemsAtIndexPaths: deselecting] mutableCopy]
+                autorelease];
+    }
+    if ([selecting count] == 0 && [deselecting count] == 0)
+        return;
+
+    NSMutableSet *selection = [[[self selectionIndexPaths] mutableCopy] autorelease];
+    [selection minusSet: deselecting];
+    [selection unionSet: selecting];
+    if (!_allowsMultipleSelection && [selection count] > 1)
+        return;
+    if (!self.allowsEmptySelection && [selection count] == 0)
+        return;
+    [self setSelectionIndexPaths: selection];
+    if ([deselecting count] > 0 && [_delegate respondsToSelector: @selector(collectionView:didDeselectItemsAtIndexPaths:)])
+        [_delegate collectionView: self didDeselectItemsAtIndexPaths: deselecting];
+    if ([selecting count] > 0 && [_delegate respondsToSelector: @selector(collectionView:didSelectItemsAtIndexPaths:)])
+        [_delegate collectionView: self didSelectItemsAtIndexPaths: selecting];
+}
+
+- (void) _userDeselectIndexPaths: (NSSet *) paths {
+    NSMutableSet *deselecting = [[paths mutableCopy] autorelease];
+    [deselecting intersectSet: [self selectionIndexPaths]];
+    if ([deselecting count] > 0 && [_delegate respondsToSelector: @selector(collectionView:shouldDeselectItemsAtIndexPaths:)])
+        deselecting = [[[_delegate collectionView: self shouldDeselectItemsAtIndexPaths: deselecting] mutableCopy]
+            autorelease];
+    if ([deselecting count] == 0)
+        return;
+    NSMutableSet *selection = [[[self selectionIndexPaths] mutableCopy] autorelease];
+    [selection minusSet: deselecting];
+    if (!self.allowsEmptySelection && [selection count] == 0)
+        return;
+    [self setSelectionIndexPaths: selection];
+    if ([_delegate respondsToSelector: @selector(collectionView:didDeselectItemsAtIndexPaths:)])
+        [_delegate collectionView: self didDeselectItemsAtIndexPaths: deselecting];
+}
+
+// Only with multiple selection (as on macOS 26.7.3 and 10.14.4)
+- (IBAction) selectAll: (id) sender {
+    if (!_allowsMultipleSelection)
+        return;
+    [self _userSelectIndexPaths: [self _allIndexPaths] byExtending: YES];
+}
+
+- (IBAction) deselectAll: (id) sender {
+    [self _userDeselectIndexPaths: [self selectionIndexPaths]];
 }
 
 - (void) registerClass: (Class) itemClass forItemWithIdentifier: (NSString *) identifier {

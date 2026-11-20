@@ -27,13 +27,6 @@ typedef NS_ENUM(NSInteger, NSCollectionViewDropOperation) {
     NSCollectionViewDropBefore = 1,
 };
 
-typedef NS_ENUM(NSInteger, NSCollectionViewItemHighlightState) {
-    NSCollectionViewItemHighlightNone = 0,
-    NSCollectionViewItemHighlightForSelection = 1,
-    NSCollectionViewItemHighlightForDeselection = 2,
-    NSCollectionViewItemHighlightAsDropTarget = 3,
-};
-
 typedef NS_OPTIONS(NSUInteger, NSCollectionViewScrollPosition) {
     NSCollectionViewScrollPositionNone = 0,
     NSCollectionViewScrollPositionTop = 1 << 0,
@@ -82,7 +75,8 @@ typedef NSString *NSCollectionViewSupplementaryElementKind NS_SWIFT_BRIDGED_TYPE
     NSView *_backgroundView;
     BOOL _needsPrepareLayout;
     BOOL _backgroundViewScrollsWithContent;
-    NS_LEGACY_IVAR_PAD(_NSCollectionViewReserved, 98)
+    BOOL _disallowsEmptySelection; // allowsEmptySelection, inverted so that it starts YES
+    NS_LEGACY_IVAR_PAD(_NSCollectionViewReserved, 97)
 }
 
 - (NSArray *) content;
@@ -123,7 +117,17 @@ typedef NSString *NSCollectionViewSupplementaryElementKind NS_SWIFT_BRIDGED_TYPE
 - (NSInteger)numberOfItemsInSection:(NSInteger)section;
 - (NSCollectionViewItem *)itemAtIndexPath:(NSIndexPath *)path;
 @property(retain) NSCollectionViewLayout *collectionViewLayout;
-@property(copy) NSSet *selectionIndexPaths;
+@property(copy) NSSet<NSIndexPath *> *selectionIndexPaths;
+@property(getter=isSelectable) BOOL selectable;
+@property BOOL allowsMultipleSelection;
+@property BOOL allowsEmptySelection;
+@property(copy) NSIndexSet *selectionIndexes;
+
+- (void) selectItemsAtIndexPaths: (NSSet<NSIndexPath *> *) indexPaths
+                  scrollPosition: (NSCollectionViewScrollPosition) scrollPosition;
+- (void) deselectItemsAtIndexPaths: (NSSet<NSIndexPath *> *) indexPaths;
+- (IBAction) selectAll: (id) sender;
+- (IBAction) deselectAll: (id) sender;
 
 - (void) registerClass: (Class) itemClass forItemWithIdentifier: (NSString *) identifier;
 - (void) registerNib: (NSNib *) nib forItemWithIdentifier: (NSString *) identifier;
@@ -151,5 +155,18 @@ typedef NSString *NSCollectionViewSupplementaryElementKind NS_SWIFT_BRIDGED_TYPE
 @end
 
 @protocol NSCollectionViewDelegate <NSObject>
-// TODO
+@optional
+- (NSSet<NSIndexPath *> *) collectionView: (NSCollectionView *) collectionView
+           shouldChangeItemsAtIndexPaths: (NSSet<NSIndexPath *> *) indexPaths
+                        toHighlightState: (NSCollectionViewItemHighlightState) highlightState;
+- (void) collectionView: (NSCollectionView *) collectionView
+    didChangeItemsAtIndexPaths: (NSSet<NSIndexPath *> *) indexPaths
+              toHighlightState: (NSCollectionViewItemHighlightState) highlightState;
+- (NSSet<NSIndexPath *> *) collectionView: (NSCollectionView *) collectionView
+           shouldSelectItemsAtIndexPaths: (NSSet<NSIndexPath *> *) indexPaths;
+- (NSSet<NSIndexPath *> *) collectionView: (NSCollectionView *) collectionView
+         shouldDeselectItemsAtIndexPaths: (NSSet<NSIndexPath *> *) indexPaths;
+- (void) collectionView: (NSCollectionView *) collectionView didSelectItemsAtIndexPaths: (NSSet<NSIndexPath *> *) indexPaths;
+- (void) collectionView: (NSCollectionView *) collectionView
+    didDeselectItemsAtIndexPaths: (NSSet<NSIndexPath *> *) indexPaths;
 @end
