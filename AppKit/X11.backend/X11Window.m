@@ -1020,8 +1020,6 @@ static const int X11ChromelessCornerRadius = 5;
 }
 
 - (void) setStyleMask: (NSUInteger) mask {
-    NSLog(@"X11Window setStyleMask: 0x%lx\n", (unsigned long) mask);
-
     [self setStyleMaskInternal: mask force: NO];
 
     _styleMask = mask;
