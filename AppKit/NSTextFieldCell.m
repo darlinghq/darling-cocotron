@@ -397,7 +397,7 @@ NS_EXTRA_SYNTHESIZE_COPY(NSTextFieldCell, allowedInputSourceLocales, _allowedInp
                     [[drawValue mutableCopy] autorelease];
             [[placeString mutableString] setString: NS_EXTRA(NSTextFieldCell, self)->_placeholder];
             [placeString addAttribute: NSForegroundColorAttributeName
-                                value: [NSColor disabledControlTextColor]
+                                value: [NSColor placeholderTextColor]
                                 range: NSMakeRange(0, [placeString length])];
             drawValue = placeString;
         }
@@ -406,22 +406,28 @@ NS_EXTRA_SYNTHESIZE_COPY(NSTextFieldCell, allowedInputSourceLocales, _allowedInp
                    lineBreakMode: NS_EXTRA(NSCell, self)->_lineBreakMode];
 }
 
-static void drawRoundedBezel(CGContextRef context, CGRect frame) {
-    CGFloat radius = frame.size.height / 2;
+// QUIRK: the rounded bezel of a text field and the bezel of a search field are 22, 19 and 17 points high (regular,
+// small and mini control sizes) and are centred vertically in a taller frame, the odd point going above. Not
+// documented. Evidence: black-box renders of NSTextField and NSSearchField in frames 14 to 32 points high on macOS
+// 10.14.4 (tier 2), probe mac-probes/aqua-toolbar-2.m of the research notes.
+// Test: appkit-toolbar-controls-aqua.m (test_quirk_field_bezels)
+- (NSRect) _aquaRoundedBezelRectForFrame: (NSRect) frame inView: (NSView *) control {
+    static const CGFloat heights[3] = {22, 19, 17};
+    NSControlSize size = [self controlSize];
+    CGFloat height = heights[size == NSSmallControlSize ? 1 : (size == NSMiniControlSize ? 2 : 0)];
 
-    CGContextBeginPath(context);
-    CGContextAddArc(context, CGRectGetMaxX(frame) - radius,
-                    CGRectGetMinY(frame) + radius, radius, M_PI_2, M_PI_2 * 3,
-                    YES);
-    CGContextAddArc(context, CGRectGetMinX(frame) + radius,
-                    CGRectGetMinY(frame) + radius, radius, M_PI_2 * 3, M_PI_2,
-                    YES);
-    CGContextClosePath(context);
-    CGContextFillPath(context);
+    if (NSHeight(frame) <= height)
+        return frame;
+
+    CGFloat above = ceil((NSHeight(frame) - height) / 2);
+
+    frame.origin.y += [control isFlipped] ? above : NSHeight(frame) - height - above;
+    frame.size.height = height;
+    return frame;
 }
 
 - (void) _drawSquareBezelInRect: (NSRect) frame inView: (NSView *) control {
-    [[control graphicsStyle] drawTextFieldBorderInRect: frame bezeledNotLine: YES];
+    [[control graphicsStyle] drawTextFieldBorderInRect: frame bezeledNotLine: YES enabled: [self isEnabled]];
 }
 
 - (void) drawWithFrame: (NSRect) frame inView: (NSView *) control {
@@ -437,33 +443,21 @@ static void drawRoundedBezel(CGContextRef context, CGRect frame) {
             backRect = NSInsetRect(backRect, -1, -1);
             break;
 
-        case NSTextFieldRoundedBezel:;
-            if (YES) {
-                [[control graphicsStyle] drawRoundedTextFieldBezelInRect: frame radius: floor(frame.size.height / 2)];
-                break;
-            }
-            CGContextRef context =
-                    [[NSGraphicsContext currentContext] graphicsPort];
-            NSRect roundedFrame = frame;
-
-            roundedFrame.size.height--;
-            [[NSColor darkGrayColor] setFill];
-            drawRoundedBezel(context, roundedFrame);
-
-            roundedFrame.origin.y += 1;
-            [[NSColor lightGrayColor] setFill];
-            drawRoundedBezel(context, roundedFrame);
-
-            roundedFrame = NSInsetRect(roundedFrame, 1, 1);
-            [[NSColor whiteColor] setFill];
-            drawRoundedBezel(context, roundedFrame);
+        case NSTextFieldRoundedBezel:
+            // QUIRK: the rounded bezel has a 4 point radius on macOS 10.14, not that of a capsule; see
+            // -drawRoundedTextFieldBezelInRect:radius:enabled:
+            [[control graphicsStyle] drawRoundedTextFieldBezelInRect: [self _aquaRoundedBezelRectForFrame: frame
+                                                                                                  inView: control]
+                                                              radius: 4
+                                                             enabled: [self isEnabled]];
             break;
         }
 
     } else {
         if ([self isBordered]) {
             [[control graphicsStyle] drawTextFieldBorderInRect: frame
-                                                bezeledNotLine: NO];
+                                                bezeledNotLine: NO
+                                                       enabled: [self isEnabled]];
             backRect = NSInsetRect(backRect, -1, -1);
         }
     }
