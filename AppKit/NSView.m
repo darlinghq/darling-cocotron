@@ -3998,8 +3998,13 @@ static CGFloat backingScaleFactor(NSView *view) {
         NS_EXTRA(NSView, self)->_verticalContentHuggingPriority = contentHuggingPriority;
         NS_EXTRA(NSView, self)->_hasVerticalContentHuggingPriority = YES;
     }
-    if (previous != contentHuggingPriority)
+    if (previous != contentHuggingPriority) {
         layoutInputsChanged(self);
+        [[self superview] _subviewContentHuggingPriorityDidChange: self];
+    }
+}
+
+- (void) _subviewContentHuggingPriorityDidChange: (NSView *) subview {
 }
 
 - (NSLayoutPriority) contentCompressionResistancePriorityForOrientation: (NSLayoutConstraintOrientation) orientation {
