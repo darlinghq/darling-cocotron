@@ -23,6 +23,7 @@
 #import "WaylandWindowLevel.h"
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSWindow.h>
+#import "../NSWindow-Private.h"
 #import <AppKit/NSGraphicsContext.h>
 #import <AppKit/NSGraphics.h>
 #import <AppKit/NSBezierPath.h>
@@ -565,16 +566,25 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     return _styleMask;
 }
 
-// A full-size content view with a transparent title bar leaves nothing for the platform to draw
-// as a title bar: the application draws its own header. Such a window gets no frame, neither from
-// the compositor nor from the client-side fallback.
+// Whether the window has a title bar for the platform to draw (see -[NSWindow
+// _hasTitlebarForStyleMask:]).
+- (BOOL) hasTitlebar {
+    if ([_delegate respondsToSelector: @selector(_hasTitlebarForStyleMask:)])
+        return [(NSWindow *) _delegate _hasTitlebarForStyleMask: _styleMask];
+    return (_styleMask & NSWindowStyleMaskTitled) != 0;
+}
+
+// A window that shows nothing of a title bar of its own (see NSWindow) leaves nothing for the
+// platform to draw as a title bar: the application draws its own header. Such a window gets no
+// frame, neither from the compositor nor from the client-side fallback.
 - (BOOL) wantsChromeless {
-    return (_styleMask & NSWindowStyleMaskFullSizeContentView) != 0 && [_delegate titlebarAppearsTransparent];
+    return [_delegate respondsToSelector: @selector(_hasInvisibleTitlebarForStyleMask:)] &&
+           [(NSWindow *) _delegate _hasInvisibleTitlebarForStyleMask: _styleMask];
 }
 
 // Whether this window should draw the client-side frame, given what the compositor asked for.
 - (BOOL) wantsClientDecoration {
-    return _toplevel != NULL && (_styleMask & NSWindowStyleMaskTitled) && ![self wantsChromeless] &&
+    return _toplevel != NULL && [self hasTitlebar] && ![self wantsChromeless] &&
             _pendingClientDecorated && !_pendingFullscreen;
 }
 
@@ -584,7 +594,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     if (_toplevel == NULL || _display->_decorationManager == NULL)
         return;
     union wl_argument args[2];
-    if (!(_styleMask & NSWindowStyleMaskTitled)) {
+    if (![self hasTitlebar]) {
         if (_decoration != NULL)
             sendRequest(_decoration, WP_TOPLEVEL_DECORATION_UNSET_MODE, 0);
         return;
@@ -604,9 +614,10 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     WaylandMarshal(_decoration, WP_TOPLEVEL_DECORATION_SET_MODE, NULL, 0, args);
 }
 
-// Called when the style mask or the title bar transparency of a window changes. On a mapped
-// window the mode is updated and the client-side frame switched on or off right away, keeping
-// the content size.
+// Called when the style mask, the title bar transparency or the title visibility of a window
+// change, and when it is shown (its standard buttons may have been hidden). On a mapped window
+// the mode is updated and the client-side frame switched on or off right away, keeping the
+// content size.
 - (void) updateDecorationsForStyleMask: (NSUInteger) mask {
     _styleMask = mask;
     if (_toplevel == NULL)
@@ -878,6 +889,22 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
         else
             WaylandMarshal(_toplevel, WP_TOPLEVEL_MOVE, NULL, 0, args);
     }
+    [_display flush];
+    return YES;
+}
+
+// -[NSWindow performWindowDragWithEvent:]: a client cannot place a toplevel, so
+// the compositor moves it, for the press the event stands for (xdg_toplevel.move
+// with that press's serial). NO for a popup, or when the event is not the
+// press being dispatched.
+- (BOOL) moveByWindowManagerForEvent: (NSEvent *) event {
+    if (_toplevel == NULL || [_display seat] == NULL)
+        return NO;
+    uint32_t serial = [_display dragSerialForEvent: event];
+    if (serial == 0)
+        return NO;
+    union wl_argument args[2] = {{.o = (struct wl_object *) [_display seat]}, {.u = serial}};
+    WaylandMarshal(_toplevel, WP_TOPLEVEL_MOVE, NULL, 0, args);
     [_display flush];
     return YES;
 }

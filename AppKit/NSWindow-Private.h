@@ -26,6 +26,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @interface NSWindow (NSWindow_private)
 - (CGWindow *) platformWindow;
+// Whether a window with this style mask shows nothing of a title bar of its
+// own; the window system then gives it no frame either.
+- (BOOL) _hasInvisibleTitlebarForStyleMask: (NSUInteger) styleMask;
+// Whether a window with this style mask has a title bar at all: a titled
+// window, or a resizable one in a program built against an SDK older than
+// 10.7 (see the QUIRK in NSWindow.m).
+- (BOOL) _hasTitlebarForStyleMask: (NSUInteger) styleMask;
 - (CGContextRef) cgContext;
 - (BOOL) _isActive;
 - (BOOL) _isHiddenForDeactivation;

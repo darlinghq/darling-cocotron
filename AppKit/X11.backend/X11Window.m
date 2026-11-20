@@ -28,6 +28,7 @@
 #import <AppKit/NSPopUpWindow.h>
 #import <AppKit/NSRaise.h>
 #import <AppKit/NSWindow.h>
+#import "../NSWindow-Private.h"
 #import <Foundation/NSBundle.h>
 #import <Foundation/NSException.h>
 #import <Foundation/NSMutableData.h>
@@ -732,10 +733,12 @@ static NSData *makeWindowIcon() {
         sh->min_height = sh->max_height = device.height;
     }
 
-    // An untitled window that is managed (a borderless game or custom-chrome window)
-    // positions itself: say so, or a window manager may place it as it likes
-    // (ICCCM 4.1.2.3).
-    if (!_overrideRedirect && !(mask & NSWindowStyleMaskTitled))
+    // An untitled window that is managed (a borderless game or custom-chrome window),
+    // or a titled one that the window manager does not frame because it shows no
+    // title bar, positions itself: say so, or a window manager may place it as it
+    // likes (ICCCM 4.1.2.3).
+    if (!_overrideRedirect &&
+        (![self hasTitlebarForStyleMask: mask] || [self hasInvisibleTitlebarForStyleMask: mask]))
         sh->flags |= USPosition | PPosition;
 
     // The frame is the client window's own rectangle, so a move must put the
@@ -897,38 +900,51 @@ static NSData *makeWindowIcon() {
     [self updateLayerPresentationHints];
 }
 
-// A window gets the window manager's full frame (with a title bar) when its
-// style mask has NSWindowStyleMaskTitled or NSWindowStyleMaskResizable; a mask
-// with neither bit asks for no frame. The mask is passed in rather than read
-// from _styleMask because -setStyleMask: hands the new mask here before it
-// stores it.
-//
-// Platform discrepancy: Mac OS X 10.14 treats a Resizable mask without Titled
-// (including Borderless|Resizable) like a titled one: it adds a 22 pt title
-// bar and the window can become key. macOS 26 shows no title bar for such
-// windows and they cannot become key. We follow 10.14.
+// A window gets the window manager's full frame (with a title bar) when it
+// has a title bar (see -[NSWindow _hasTitlebarForStyleMask:]: a titled
+// window, or a resizable one in a program built against an old SDK); other
+// masks ask for no frame. The mask is passed in rather than read from
+// _styleMask because -setStyleMask: hands the new mask here before it stores
+// it.
 - (void) updateDecorationsForStyleMask: (NSUInteger) mask {
-    // A full-size content view with a transparent title bar shows no title bar at all: the content
-    // is all there is (the application draws its own header), so the window manager's frame would
-    // be a second title bar on top of it.
-    BOOL titlebarInvisible = (mask & NSWindowStyleMaskFullSizeContentView) && [_delegate titlebarAppearsTransparent];
+    // A window that shows nothing of a title bar of its own (see NSWindow) has the content as all
+    // there is (the application draws its own header), so the window manager's frame would be a
+    // second title bar on top of it.
+    BOOL titlebarInvisible = [self hasInvisibleTitlebarForStyleMask: mask];
 
-    if ((mask & (NSWindowStyleMaskTitled | NSWindowStyleMaskResizable)) && !_invisibleWithoutCompositor &&
-        !titlebarInvisible)
+    if ([self hasTitlebarForStyleMask: mask] && !_invisibleWithoutCompositor && !titlebarInvisible)
         XDeleteProperty(_display, _window,
                         XInternAtom(_display, "_MOTIF_WM_HINTS", False));
     else
         [[self class] removeDecorationForWindow: _window onDisplay: _display];
-    _chromeless = titlebarInvisible && (mask & NSWindowStyleMaskTitled) != 0;
+    BOOL chromeless = titlebarInvisible && (mask & NSWindowStyleMaskTitled) != 0;
+    if (_window != 0 && chromeless != _chromeless) {
+        _chromeless = chromeless;
+        // Whether the window positions itself depends on it.
+        [self updateSizeHints: mask];
+    }
+    _chromeless = chromeless;
     [self updateWindowShape];
 }
 
+- (BOOL) hasTitlebarForStyleMask: (NSUInteger) mask {
+    if ([_delegate respondsToSelector: @selector(_hasTitlebarForStyleMask:)])
+        return [(NSWindow *) _delegate _hasTitlebarForStyleMask: mask];
+    return (mask & NSWindowStyleMaskTitled) != 0;
+}
+
+- (BOOL) hasInvisibleTitlebarForStyleMask: (NSUInteger) mask {
+    return [_delegate respondsToSelector: @selector(_hasInvisibleTitlebarForStyleMask:)] &&
+           [(NSWindow *) _delegate _hasInvisibleTitlebarForStyleMask: mask];
+}
+
 // Corner radius, in points, of a window that has no frame of its own to be drawn by the window manager.
-// QUIRK: macOS draws such a window (a titled window with a full-size content view and a transparent title
-// bar) with rounded corners of about 5 points, a thin outline and a shadow; the window manager draws none of
-// them for a window it was asked not to decorate. The corners are cut with the SHAPE extension and the outline
-// is drawn into the window (-flushBuffer), neither of which needs a compositor; the shadow can only come from
-// a compositor and is not drawn. Evidence: black-box observation of such windows on macOS 10.14.4 (tier 2).
+// QUIRK: macOS draws such a window (a titled window that shows no title bar of its own, see
+// -[NSWindow _hasInvisibleTitlebarForStyleMask:]) with rounded corners of about 5 points, a thin outline and
+// a shadow; the window manager draws none of them for a window it was asked not to decorate. The corners are
+// cut with the SHAPE extension and the outline is drawn into the window (-flushBuffer), neither of which needs
+// a compositor; the shadow can only come from a compositor and is not drawn. Evidence: black-box observation
+// of such windows on macOS 10.14.4 (tier 2).
 // Test: tests/x11-chromeless-corners.sh (shape of the window), tests/x11-rounded-shape.c (the shape).
 static const int X11ChromelessCornerRadius = 5;
 
@@ -1689,6 +1705,60 @@ BOOL X11WindowManagerIsRunning(Display *display) {
     // Nothing else happens on this path, and an idle run loop may sit on the
     // request until the next event or the next X call.
     XFlush(_display);
+}
+
+// Whether the window manager lists the atom in _NET_SUPPORTED on the root window (EWMH).
+static BOOL X11WindowManagerSupports(Display *display, const char *name) {
+    Atom wanted = XInternAtom(display, name, False);
+    Atom type;
+    int format;
+    unsigned long count, after;
+    unsigned char *data = NULL;
+    BOOL found = NO;
+    if (XGetWindowProperty(display, DefaultRootWindow(display),
+                           XInternAtom(display, "_NET_SUPPORTED", False), 0, 4096, False, XA_ATOM,
+                           &type, &format, &count, &after, &data) == Success &&
+        data != NULL && type == XA_ATOM && format == 32) {
+        Atom *atoms = (Atom *) data;
+        for (unsigned long i = 0; i < count && !found; i++)
+            found = atoms[i] == wanted;
+    }
+    if (data != NULL)
+        XFree(data);
+    return found;
+}
+
+// -[NSWindow performWindowDragWithEvent:]: the window manager moves the window
+// for as long as the left button stays down (EWMH _NET_WM_MOVERESIZE). The
+// pointer grab the press gave this client is released first, as EWMH asks, so
+// the button release goes to the window manager. NO when the window manager
+// cannot do it, the window is not managed, or the button is already up.
+- (BOOL) moveByWindowManagerForEvent: (NSEvent *) event {
+    if (_window == 0 || _overrideRedirect ||
+        !X11WindowManagerSupports(_display, "_NET_WM_MOVERESIZE"))
+        return NO;
+
+    Window root, child;
+    int rootX, rootY, winX, winY;
+    unsigned int mask = 0;
+    if (!XQueryPointer(_display, _window, &root, &child, &rootX, &rootY, &winX, &winY, &mask) ||
+        !(mask & Button1Mask))
+        return NO;
+
+    XUngrabPointer(_display, CurrentTime);
+    XEvent message = {0};
+    message.xclient.type = ClientMessage;
+    message.xclient.window = _window;
+    message.xclient.message_type = XInternAtom(_display, "_NET_WM_MOVERESIZE", False);
+    message.xclient.format = 32;
+    message.xclient.data.l[0] = rootX;
+    message.xclient.data.l[1] = rootY;
+    message.xclient.data.l[2] = 8; // _NET_WM_MOVERESIZE_MOVE
+    message.xclient.data.l[3] = Button1;
+    message.xclient.data.l[4] = 1; // source indication: application
+    XSendEvent(_display, root, False, SubstructureRedirectMask | SubstructureNotifyMask, &message);
+    XFlush(_display);
+    return YES;
 }
 
 - (void) miniaturize {

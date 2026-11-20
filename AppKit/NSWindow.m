@@ -19,6 +19,8 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSApplication.h>
+#import <AppKit/NSBezierPath.h>
+#import <AppKit/NSButtonCell.h>
 #import <AppKit/NSColor.h>
 #import <AppKit/NSCursor.h>
 #import <AppKit/NSDisplay.h>
@@ -47,6 +49,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSTrackingArea.h>
 #import <AppKit/NSView.h>
 #import <AppKit/NSWindow-Private.h>
+#import <AppKit/NSLinkedOnOrAfter.h>
 #import <AppKit/NSWindow.h>
 #import "DarlingLayout.h"
 #import <AppKit/NSWindowAnimationContext.h>
@@ -143,6 +146,9 @@ NSInteger NSBitsPerPixelFromDepth(NSWindowDepth depth) {
 
 @interface CGWindow (private)
 - (void) dirtyRect: (CGRect) rect;
+// Optional, for backends whose window system can do it.
+- (void) updateDecorationsForStyleMask: (NSUInteger) styleMask;
+- (BOOL) moveByWindowManagerForEvent: (NSEvent *) event;
 @end
 
 @interface NSToolbar (NSToolbar_privateForWindow)
@@ -356,6 +362,54 @@ static void runPendingSourcesDuringDrag(NSTimeInterval budget) {
     }
 }
 
+// A close, miniaturize or zoom button: a coloured disc, grey when disabled.
+@interface NSStandardWindowButtonCell : NSButtonCell {
+    NSWindowButton _kind;
+}
+@end
+
+@implementation NSStandardWindowButtonCell
+
+- (void) setKind: (NSWindowButton) kind {
+    _kind = kind;
+}
+
+- (void) drawWithFrame: (NSRect) frame inView: (NSView *) view {
+    NSColor *fill;
+    if (![self isEnabled])
+        fill = [NSColor colorWithCalibratedWhite: 0.82 alpha: 1];
+    else if (_kind == NSWindowCloseButton)
+        fill = [NSColor colorWithCalibratedRed: 1.0 green: 0.37 blue: 0.34 alpha: 1];
+    else if (_kind == NSWindowMiniaturizeButton)
+        fill = [NSColor colorWithCalibratedRed: 1.0 green: 0.74 blue: 0.18 alpha: 1];
+    else
+        fill = [NSColor colorWithCalibratedRed: 0.16 green: 0.78 blue: 0.25 alpha: 1];
+
+    NSBezierPath *disc = [NSBezierPath bezierPathWithOvalInRect: NSMakeRect(NSMidX(frame) - 6, NSMidY(frame) - 6, 12, 12)];
+    [fill setFill];
+    [disc fill];
+    [[NSColor colorWithCalibratedWhite: 0 alpha: 0.15] setStroke];
+    [disc setLineWidth: 0.5];
+    [disc stroke];
+    if ([self isHighlighted]) {
+        [[NSColor colorWithCalibratedWhite: 0 alpha: 0.25] setFill];
+        [disc fill];
+    }
+}
+
+@end
+
+@interface NSStandardWindowButton : NSButton
+@end
+
+@implementation NSStandardWindowButton
+
++ (Class) cellClass {
+    return [NSStandardWindowButtonCell class];
+}
+
+@end
+
 @implementation NSWindow
 
 static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen);
@@ -481,8 +535,10 @@ static BOOL _allowsAutomaticWindowTabbing;
     NSUnimplementedMethod();
 }
 
-// The title bar is drawn by the window manager, so these buttons are not
-// shown; they let callers query and configure the buttons a window has.
+// The window manager's frame shows these buttons for a window with a title
+// bar; the window's frame view shows them itself when the window shows no
+// title bar (see NSThemeFrame). They let callers query and configure the
+// buttons a window has either way.
 + (NSButton *) standardWindowButton: (NSWindowButton) button
                        forStyleMask: (NSWindowStyleMask) styleMask
 {
@@ -511,9 +567,11 @@ static BOOL _allowsAutomaticWindowTabbing;
     if (!(styleMask & NSWindowStyleMaskTitled) || !(styleMask & buttonStyles))
         return nil;
 
-    NSButton *result =
-            [[NSButton alloc] initWithFrame: NSMakeRect(0, 0, 14, 14)];
+    // 14 by 16 points, as on Mac OS X 10.14.4 (14 by 14 on macOS 26.7.3).
+    NSButton *result = [[NSStandardWindowButton alloc] initWithFrame: NSMakeRect(0, 0, 14, 16)];
     [result setBordered: NO];
+    [result setTitle: @""];
+    [(NSStandardWindowButtonCell *) [result cell] setKind: button];
     [result setEnabled: (styleMask & enabling) != 0];
     return [result autorelease];
 }
@@ -1378,7 +1436,15 @@ static BOOL _allowsAutomaticWindowTabbing;
     if (!NS_EXTRA(NSWindow, self)->_isMovable || [event type] != NSLeftMouseDown)
         return;
 
-    // Follow the pointer in screen coordinates. An event's location in the
+    // The window system moves the window itself where it can, as the window
+    // server does on macOS: the window manager or compositor then keeps the
+    // window under the pointer until the button is released, and the release
+    // goes to it rather than to the application.
+    if ([_platformWindow respondsToSelector: @selector(moveByWindowManagerForEvent:)] &&
+        [_platformWindow moveByWindowManagerForEvent: event])
+        return;
+
+    // Otherwise follow the pointer in screen coordinates. An event's location in the
     // window is measured against where the window really is, which lags
     // behind -setFrameOrigin: while the window system catches up, so
     // converting it with the new frame would feed that lag back in.
@@ -1840,10 +1906,17 @@ static BOOL _allowsAutomaticWindowTabbing;
 - (NSButton *) standardWindowButton: (NSWindowButton) value {
     if (value > NSWindowZoomButton)
         return nil;
-    if (NS_EXTRA(NSWindow, self)->_standardWindowButtons[value] == nil)
-        NS_EXTRA(NSWindow, self)->_standardWindowButtons[value] = [[[self class]
-                standardWindowButton: value
-                        forStyleMask: NS_EXTRA(NSWindow, self)->_styleMask] retain];
+    if (NS_EXTRA(NSWindow, self)->_standardWindowButtons[value] == nil) {
+        NSButton *button = [[[self class] standardWindowButton: value
+                                                 forStyleMask: NS_EXTRA(NSWindow, self)->_styleMask] retain];
+        // A window's own buttons act on it (on Mac OS X 10.14.4 and macOS 26.7.3
+        // their target is the window).
+        [button setTarget: self];
+        [button setAction: value == NSWindowCloseButton         ? @selector(performClose:)
+                          : value == NSWindowMiniaturizeButton ? @selector(miniaturize:)
+                                                               : @selector(zoom:)];
+        NS_EXTRA(NSWindow, self)->_standardWindowButtons[value] = button;
+    }
     return NS_EXTRA(NSWindow, self)->_standardWindowButtons[value];
 }
 
@@ -1983,19 +2056,31 @@ static BOOL _allowsAutomaticWindowTabbing;
     return NS_EXTRA(NSWindow, self)->_isInLiveResize;
 }
 
+// QUIRK: a window whose style mask has Resizable but not Titled has a title
+// bar (+frameRectForContentRect:styleMask: adds it, and the window can become
+// key) only in a program built against an SDK older than 10.7; from SDK 10.7
+// on it has none and cannot become key. Not documented. Evidence: black-box
+// observation (tier 2) on Mac OS X 10.14.4 and macOS 26.7.3, the same probe
+// recording SDK 10.6 (22 and 28 point title bar) and SDK 10.7 to 14.0 (none),
+// for Resizable and Miniaturizable|Resizable.
+// Test: appkit-window-hidden-title-chrome.m ("resizable", "mini-resizable"),
+// built for SDK 10.6 and for a newer SDK.
+- (BOOL) _hasTitlebarForStyleMask: (NSUInteger) styleMask {
+    if (styleMask & NSWindowStyleMaskTitled)
+        return YES;
+    return (styleMask & NSWindowStyleMaskResizable) && !NSProgramLinkedOnOrAfterSDK(NS_SDK_VERSION_MACOSX_10_7);
+}
+
 - (BOOL) canBecomeKeyWindow {
-    // The NSWindow implementation returns YES if the window has a title bar or
-    // a resize bar, or NO otherwise. Mac OS X 10.14 behaves this way for a
-    // Resizable mask without Titled too; macOS 26 answers NO for it. We follow
-    // 10.14.
-    return (NS_EXTRA(NSWindow, self)->_styleMask & (NSTitledWindowMask | NSResizableWindowMask)) != 0;
+    // The NSWindow implementation returns YES if the window has a title bar
+    // (see the QUIRK above), or NO otherwise.
+    return [self _hasTitlebarForStyleMask: NS_EXTRA(NSWindow, self)->_styleMask];
 }
 
 - (BOOL) canBecomeMainWindow {
     // The NSWindow implementation returns YES if the window is visible and has
-    // a title bar or a resize mechanism. Otherwise it returns NO
-    return [self isVisible] &&
-           (NS_EXTRA(NSWindow, self)->_styleMask & (NSTitledWindowMask | NSResizableWindowMask));
+    // a title bar. Otherwise it returns NO
+    return [self isVisible] && [self _hasTitlebarForStyleMask: NS_EXTRA(NSWindow, self)->_styleMask];
 }
 
 - (BOOL) canBecomeVisibleWithoutLogin {
@@ -2050,6 +2135,42 @@ static BOOL _allowsAutomaticWindowTabbing;
 
 - (void) setTitleVisibility: (NSWindowTitleVisibility) value {
     NS_EXTRA(NSWindow, self)->_titleVisibility = value;
+    [self _titlebarVisibilityChanged];
+}
+
+// A titled window shows nothing of a title bar of its own when the title bar
+// is transparent and either the content view extends under it or there is
+// nothing in it to show: the title is hidden and so are the close, miniaturize
+// and zoom buttons. The application then draws whatever header the window
+// has, so the window system must not add a title bar around it either. A
+// window with a hidden title that keeps a button, and no full-size content
+// view, keeps its frame: the button would otherwise have nowhere to go.
+- (BOOL) _hasInvisibleTitlebarForStyleMask: (NSUInteger) styleMask {
+    if (!(styleMask & NSWindowStyleMaskTitled) ||
+        !NS_EXTRA(NSWindow, self)->_titlebarAppearsTransparent)
+        return NO;
+    if (styleMask & NSWindowStyleMaskFullSizeContentView)
+        return YES;
+    if (NS_EXTRA(NSWindow, self)->_titleVisibility != NSWindowTitleHidden)
+        return NO;
+    for (NSWindowButton b = NSWindowCloseButton; b <= NSWindowZoomButton; b++) {
+        NSButton *button = NS_EXTRA(NSWindow, self)->_standardWindowButtons[b];
+        // A button that was never asked for is created visible.
+        if (button == nil)
+            button = [self standardWindowButton: b];
+        if (button != nil && ![button isHidden])
+            return NO;
+    }
+    return YES;
+}
+
+// Whether the platform draws a title bar depends on the transparency of the
+// title bar, the title's visibility and the standard buttons.
+- (void) _titlebarVisibilityChanged {
+    if ([_platformWindow respondsToSelector: @selector(updateDecorationsForStyleMask:)])
+        [_platformWindow updateDecorationsForStyleMask: NS_EXTRA(NSWindow, self)->_styleMask];
+    if ([_backgroundView isKindOfClass: [NSThemeFrame class]])
+        [(NSThemeFrame *) _backgroundView _updateStandardWindowButtons];
 }
 
 - (BOOL) titlebarAppearsTransparent {
@@ -2058,9 +2179,7 @@ static BOOL _allowsAutomaticWindowTabbing;
 
 - (void) setTitlebarAppearsTransparent: (BOOL) value {
     NS_EXTRA(NSWindow, self)->_titlebarAppearsTransparent = value;
-    // Whether the platform draws a title bar depends on it for full-size content views.
-    if ([_platformWindow respondsToSelector: @selector(updateDecorationsForStyleMask:)])
-        [(id) _platformWindow updateDecorationsForStyleMask: NS_EXTRA(NSWindow, self)->_styleMask];
+    [self _titlebarVisibilityChanged];
 }
 
 - (NSTitlebarSeparatorStyle) titlebarSeparatorStyle {
@@ -2797,6 +2916,9 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
         NS_EXTRA(NSWindow, self)->_isClosed = NO;
         if (!wasVisible && ![self isMiniaturized]) {
             [self _constrainFrameBeforeOrderingIn];
+            // The standard buttons have no way to tell the window they were
+            // hidden, so the frame is decided again when the window is shown.
+            [self _titlebarVisibilityChanged];
         }
         [self update];
         NS_EXTRA(NSWindow, self)->_isVisible = YES;
@@ -2819,6 +2941,9 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
         NS_EXTRA(NSWindow, self)->_isClosed = NO;
         if (!wasVisible && ![self isMiniaturized]) {
             [self _constrainFrameBeforeOrderingIn];
+            // The standard buttons have no way to tell the window they were
+            // hidden, so the frame is decided again when the window is shown.
+            [self _titlebarVisibilityChanged];
         }
         [self update];
         NS_EXTRA(NSWindow, self)->_isVisible = YES;
