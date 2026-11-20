@@ -123,6 +123,9 @@ NS_EXTRA_SYNTHESIZE_COPY(NSMenu, identifier, _identifier, NSUserInterfaceItemIde
     // Where the anchor (the item's top left, or the menu's) is in the window,
     // measured from the window's top left corner.
     NSPoint anchor = NSZeroPoint;
+    // The menu view counts the items it shows.
+    if (itemIndex != NSNotFound)
+        itemIndex = [[menuView itemArray] indexOfObjectIdenticalTo: item];
     if (itemIndex != NSNotFound) {
         NSRect itemRect = [(NSSubmenuView *) menuView rectForItemAtIndex: itemIndex];
         NSPoint topLeft = [menuView convertPoint: itemRect.origin toView: nil];
@@ -667,6 +670,82 @@ BOOL itemIsEnabled(NSMenuItem *item) {
     }
 
     return nil;
+}
+
+@end
+
+// An alternate goes with the item right before it in the menu when the two
+// have the same key equivalent, letter case aside.
+static BOOL isAlternateOfItem(NSMenuItem *item, NSMenuItem *previous) {
+    return [item isAlternate] && previous != nil && ![previous isSeparatorItem] &&
+           [[item keyEquivalent] caseInsensitiveCompare: [previous keyEquivalent]] == NSOrderedSame;
+}
+
+// The modifier keys an item's key equivalent needs: an upper-case key
+// equivalent includes Shift.
+static NSEventModifierFlags itemModifiers(NSMenuItem *item) {
+    NSEventModifierFlags modifiers = NSCommandKeyMask | NSAlternateKeyMask |
+                                     NSControlKeyMask | NSShiftKeyMask;
+    NSEventModifierFlags mask = [item keyEquivalentModifierMask] & modifiers;
+    NSString *key = [item keyEquivalent];
+
+    if ([key length] > 0 && ![key isEqualToString: [key lowercaseString]])
+        mask |= NSShiftKeyMask;
+    return mask;
+}
+
+// Of an item and its alternates, the one for the modifier keys held: the
+// first one shown unless one of the others is for exactly those keys, or for
+// those keys added to the first one's.
+static NSMenuItem *shownItemOfGroup(NSArray *group, NSEventModifierFlags flags) {
+    NSMenuItem *first = nil;
+
+    for (NSMenuItem *item in group)
+        if (![item isHidden]) {
+            first = item;
+            break;
+        }
+    if (first == nil)
+        return nil;
+
+    NSEventModifierFlags held = flags & (NSCommandKeyMask | NSAlternateKeyMask |
+                                         NSControlKeyMask | NSShiftKeyMask);
+    if (held != 0) {
+        NSEventModifierFlags withFirst = held | itemModifiers(first);
+        for (NSMenuItem *item in group) {
+            NSEventModifierFlags mask = itemModifiers(item);
+            if (item != first && ![item isHidden] && (mask == held || mask == withFirst))
+                return item;
+        }
+    }
+    return first;
+}
+
+@implementation NSMenu (ShownItems)
+
+- (NSArray *) _shownItemsWithModifierFlags: (NSEventModifierFlags) flags {
+    NSMutableArray *shown = [NSMutableArray array];
+    NSMutableArray *group = [NSMutableArray array];
+
+    for (NSMenuItem *item in [self itemArray]) {
+        if ([group count] > 0 && isAlternateOfItem(item, [group lastObject])) {
+            [group addObject: item];
+            continue;
+        }
+        if ([group count] > 0) {
+            NSMenuItem *chosen = shownItemOfGroup(group, flags);
+            if (chosen != nil)
+                [shown addObject: chosen];
+        }
+        [group removeAllObjects];
+        [group addObject: item];
+    }
+    if ([group count] > 0) {
+        NSMenuItem *chosen = shownItemOfGroup(group, flags);
+        if (chosen != nil)
+            [shown addObject: chosen];
+    }
+    return shown;
 }
 
 @end
