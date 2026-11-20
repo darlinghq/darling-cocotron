@@ -56,10 +56,18 @@ static NSString *const NSPopUpButtonBindingObservationContext =
     return self;
 }
 
+// The designated initializer: -initWithFrame: (and so -init and a custom view
+// in a nib) makes a pop-up list through it, so a subclass that sets itself up
+// in its override of it is set up either way (as on macOS 10.14.4 and
+// 26.7.3). Test: tests/appkit-popup-button-designated-init.m
 - initWithFrame: (NSRect) frame pullsDown: (BOOL) pullsDown {
     [super initWithFrame: frame];
     [self setPullsDown: pullsDown];
     return self;
+}
+
+- initWithFrame: (NSRect) frame {
+    return [self initWithFrame: frame pullsDown: NO];
 }
 
 - (void) dealloc {
