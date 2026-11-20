@@ -377,6 +377,7 @@ typedef NS_ENUM(NSInteger, NSWindowUserTabbingPreference) {
         NSSize _maxFullScreenContentSize;
         NSInteger _fullScreenTransition;
         NSUInteger _fullScreenTransitionGeneration;
+        BOOL _fullScreenSized, _fullScreenUpdatePending;
         NSTitlebarSeparatorStyle _titlebarSeparatorStyle;
         NSWindowToolbarStyle _toolbarStyle;
         BOOL _titlebarAppearsTransparent;

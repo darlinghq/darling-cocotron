@@ -36,6 +36,41 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @implementation NSOpenGLContext
 
+// The contexts that have a view, so that AppKit can find the ones attached to
+// the views of a window (see +_updateContextsAttachedToWindow:). It holds no
+// references: a context removes itself when its view is cleared and in dealloc.
+static NSHashTable *_viewContexts;
+
+static void _registerViewContext(NSOpenGLContext *context, BOOL attached) {
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        _viewContexts = [[NSHashTable alloc]
+                initWithOptions: NSPointerFunctionsOpaqueMemory | NSPointerFunctionsOpaquePersonality
+                       capacity: 8];
+    });
+    @synchronized(_viewContexts) {
+        if (attached)
+            [_viewContexts addObject: context];
+        else
+            [_viewContexts removeObject: context];
+    }
+}
+
+// Sends -update to each context attached to a view of the window. It goes
+// through normal dispatch, so a subclass that overrides -update sees the call.
++ (void) _updateContextsAttachedToWindow: (NSWindow *) window {
+    if (_viewContexts == nil)
+        return;
+    NSMutableArray *contexts = [NSMutableArray array];
+    @synchronized(_viewContexts) {
+        for (NSOpenGLContext *context in _viewContexts) {
+            if ([[context view] window] == window)
+                [contexts addObject: context];
+        }
+    }
+    [contexts makeObjectsPerformSelector: @selector(update)];
+}
+
 static inline NSOpenGLContext *_currentContext() {
     return (NSOpenGLContext *) NSThreadSharedInstanceDoNotCreate(
             @"NSOpenGLContext");
@@ -102,6 +137,7 @@ static inline void _clearCurrentContext() {
 }
 
 - (void) dealloc {
+    _registerViewContext(self, NO);
     [self _stopObservingView];
     // FIXME: this doesn't actually work because if we are the current context
     // we're retained by the thread shared object dict
@@ -286,6 +322,7 @@ static void _swapNotification(CFNotificationCenterRef center, void *observer, CF
     [self _stopObservingView];
     NS_EXTRA(NSOpenGLContext, self)->_view = view;
     [self _startObservingView];
+    _registerViewContext(self, view != nil);
 
     [self _stopObservingPresentation];
     if (NS_EXTRA(NSOpenGLContext, self)->_cglWindow != NULL) {
