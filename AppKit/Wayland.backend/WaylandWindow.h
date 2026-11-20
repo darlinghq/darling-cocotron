@@ -76,6 +76,10 @@ struct WaylandBuffer {
     // The window has been ordered in, whether or not it is mapped (a window with alpha 0 is not).
     BOOL _shouldBeMapped;
     BOOL _fullyTransparent;
+    // A menu is ordered in but waits for its parent window's first configure: a popup cannot be
+    // created for a surface that has no role and configuration yet, and as a toplevel the
+    // compositor would place and size it.
+    BOOL _popupWaitingForParent;
     // -makeKey was called and the activation it asks for has not arrived yet.
     BOOL _keyRequested;
     // The activation is being reported to the NSWindow; its -becomeKeyWindow asks -makeKey, which is no new request.
@@ -130,6 +134,8 @@ struct WaylandBuffer {
 // events of the batch (including a configure for the new size) are in.
 - (void) outputsChanged;
 - (BOOL) isPopup;
+- (BOOL) isPopupWaitingForParent;
+- (void) ensureMapped;
 // A tool tip window: placed as an ungrabbed popup next to the pointer.
 - (BOOL) isTooltip;
 - (WaylandWindow *) popupParent;

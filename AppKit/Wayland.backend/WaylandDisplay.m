@@ -2461,6 +2461,15 @@ static uint32_t WaylandKeyLayoutCodepoint(void *context, uint32_t keysym) {
     id key = [[NSApp keyWindow] platformWindow];
     if (key != window && [key isKindOfClass: [WaylandWindow class]] && [key isMapped])
         return key;
+    // No pointer, input or key window yet (the compositor has not configured and activated the
+    // application's first window): the newest mapped window of the application. A toplevel would
+    // be placed and sized by the compositor.
+    for (CFIndex i = CFArrayGetCount(_windows); i > 0; i--) {
+        WaylandWindow *candidate = (WaylandWindow *) CFArrayGetValueAtIndex(_windows, i - 1);
+        if (candidate != window && [candidate isMapped] && ![candidate isPopup] &&
+            ![candidate isTooltip])
+            return candidate;
+    }
     return nil;
 }
 
@@ -2509,6 +2518,19 @@ static uint32_t WaylandKeyLayoutCodepoint(void *context, uint32_t keysym) {
     }
     for (WaylandWindow *window in children)
         [window unmap];
+}
+
+// Menus that were ordered in before their parent's first configure are mapped now that a window
+// has been configured (each decides again which window it belongs to).
+- (void) mapPopupsWaitingForParent {
+    NSMutableArray *waiting = [NSMutableArray array];
+    for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++) {
+        WaylandWindow *window = (WaylandWindow *) CFArrayGetValueAtIndex(_windows, i);
+        if ([window isPopupWaitingForParent])
+            [waiting addObject: window];
+    }
+    for (WaylandWindow *window in waiting)
+        [window ensureMapped];
 }
 
 - (void) cancelPopupMenus {
