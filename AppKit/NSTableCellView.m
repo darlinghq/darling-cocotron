@@ -34,10 +34,6 @@
     [super dealloc];
 }
 
-- (BOOL) isFlipped {
-    return YES;
-}
-
 - (NSView *) hitTest: (NSPoint) aPoint {
     NSView *hit = [super hitTest: aPoint];
     if (hit == self || [hit isKindOfClass: [NSTextField class]] || [hit isKindOfClass: [NSImageView class]]) {

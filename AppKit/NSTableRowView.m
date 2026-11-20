@@ -48,6 +48,12 @@ NS_EXTRA_SYNTHESIZE_COPY(NSTableRowView, backgroundColor, _backgroundColor, NSCo
     [super dealloc];
 }
 
+// A row view is flipped and its cell views are not (as on macOS), so a cell
+// view draws and places its content with the origin at the bottom left.
+- (BOOL) isFlipped {
+    return YES;
+}
+
 - (BOOL) isSelected {
     return NS_EXTRA(NSTableRowView, self)->_selected;
 }
