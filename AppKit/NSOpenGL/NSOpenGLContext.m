@@ -24,6 +24,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSWindow-Private.h>
 #import <OpenGL/OpenGL.h>
 #import <OpenGL/gl.h>
+#import <OpenGL/CGLInternal.h>
+#import <CoreFoundation/CFNotificationCenter.h>
 
 @interface NSOpenGLContext (private)
 - (void) _clearCurrentContext;
@@ -107,6 +109,7 @@ static inline void _clearCurrentContext() {
         _clearCurrentContext();
     [_pixelFormat release];
 
+    [self _stopObservingPresentation];
     if (NS_EXTRA(NSOpenGLContext, self)->_cglWindow != NULL) {
         CGLDestroyWindow(NS_EXTRA(NSOpenGLContext, self)->_cglWindow);
     }
@@ -153,6 +156,39 @@ static inline void _clearCurrentContext() {
     CGLSetParameter(_glContext, parameter, vals);
 }
 
+// A client that swaps through CGLFlushDrawable() directly (not -flushBuffer)
+// is presented by the window backend after the swap too: OpenGL posts a
+// notification for the window's native handle when it swaps a surface, and
+// the subwindow's -flush is what the backend does after a swap. Only backends
+// that do something there need it.
+static void _swapNotification(CFNotificationCenterRef center, void *observer, CFNotificationName name,
+                              const void *object, CFDictionaryRef userInfo) {
+    CGSubWindow *subwindow = [(NSOpenGLContext *) observer _presentationSubwindow];
+    [subwindow flush];
+}
+
+- (CGSubWindow *) _presentationSubwindow {
+    return NS_EXTRA(NSOpenGLContext, self)->_subwindow;
+}
+
+- (void) _startObservingPresentation {
+    CGSubWindow *subwindow = NS_EXTRA(NSOpenGLContext, self)->_subwindow;
+    if (NS_EXTRA(NSOpenGLContext, self)->_presentObserved || subwindow == nil ||
+        [subwindow methodForSelector: @selector(flush)] == [CGSubWindow instanceMethodForSelector: @selector(flush)])
+        return;
+    CFNotificationCenterAddObserver(CFNotificationCenterGetLocalCenter(), self, _swapNotification,
+        kCGLWindowDidSwapNotification, [subwindow nativeWindow], CFNotificationSuspensionBehaviorDeliverImmediately);
+    NS_EXTRA(NSOpenGLContext, self)->_presentObserved = YES;
+}
+
+- (void) _stopObservingPresentation {
+    if (!NS_EXTRA(NSOpenGLContext, self)->_presentObserved)
+        return;
+    CFNotificationCenterRemoveObserver(CFNotificationCenterGetLocalCenter(), self,
+        kCGLWindowDidSwapNotification, [NS_EXTRA(NSOpenGLContext, self)->_subwindow nativeWindow]);
+    NS_EXTRA(NSOpenGLContext, self)->_presentObserved = NO;
+}
+
 // Makes the view's window the drawable of the CGL context without changing
 // which context is current on this thread: a context that the application
 // makes current later with CGLSetCurrentContext() (not -makeCurrentContext)
@@ -187,6 +223,7 @@ static inline void _clearCurrentContext() {
     if (NS_EXTRA(NSOpenGLContext, self)->_subwindow == nil) {
         NS_EXTRA(NSOpenGLContext, self)->_subwindow = [[[NS_EXTRA(NSOpenGLContext, self)->_view window] _createSubWindowWithFrame: rect] retain];
         NS_EXTRA(NSOpenGLContext, self)->_cglWindow = CGLGetWindowForContext(_glContext, [NS_EXTRA(NSOpenGLContext, self)->_subwindow nativeWindow]);
+        [self _startObservingPresentation];
         if (attach)
             [self _attachDrawable];
     } else {
@@ -250,6 +287,7 @@ static inline void _clearCurrentContext() {
     NS_EXTRA(NSOpenGLContext, self)->_view = view;
     [self _startObservingView];
 
+    [self _stopObservingPresentation];
     if (NS_EXTRA(NSOpenGLContext, self)->_cglWindow != NULL) {
         CGLDestroyWindow(NS_EXTRA(NSOpenGLContext, self)->_cglWindow);
         NS_EXTRA(NSOpenGLContext, self)->_cglWindow = NULL;
@@ -438,7 +476,9 @@ static inline void _clearCurrentContext() {
     CGLSetDrawableRefreshRate(_glContext,
         [NS_EXTRA(NSOpenGLContext, self)->_subwindow respondsToSelector: @selector(refreshMillihertz)]
         ? [NS_EXTRA(NSOpenGLContext, self)->_subwindow refreshMillihertz] : 0);
-    if (CGLFlushDrawable(_glContext) == kCGLNoError)
+    // With the notification observer registered CGLFlushDrawable() has already
+    // had the subwindow present the frame.
+    if (CGLFlushDrawable(_glContext) == kCGLNoError && !NS_EXTRA(NSOpenGLContext, self)->_presentObserved)
         [NS_EXTRA(NSOpenGLContext, self)->_subwindow flush];
 }
 
