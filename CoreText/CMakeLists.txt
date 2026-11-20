@@ -24,6 +24,7 @@ set(CoreText_sources
 	CTFontCollection.m
 	CTFontDescriptor.m
 	CTFontManager.m
+	KTFontSuitcase.m
 	CTFrame.m
 	CTFrameSetter.m
 	CTLine.m

@@ -35,11 +35,18 @@ const CFStringRef KTFontSystemUIAttribute = CFSTR("KTFontSystemUIAttribute");
 @implementation KTFontDescriptor
 
 - initWithAttributes: (NSDictionary *) attributes fontData: (NSData *) data {
+    return [self initWithAttributes: attributes fontData: data faceIndex: 0];
+}
+
+- initWithAttributes: (NSDictionary *) attributes
+            fontData: (NSData *) data
+           faceIndex: (int) faceIndex {
     self = [super init];
     if (self == nil)
         return nil;
     _attributes = attributes ? [attributes copy] : [[NSDictionary alloc] init];
     _fontData = [data copy];
+    _faceIndex = faceIndex;
     return self;
 }
 
@@ -65,13 +72,18 @@ const CFStringRef KTFontSystemUIAttribute = CFSTR("KTFontSystemUIAttribute");
     return _fontData;
 }
 
+- (int) faceIndex {
+    return _faceIndex;
+}
+
 - (BOOL) isEqual: (id) other {
     if (other == self)
         return YES;
     if (![other isKindOfClass: [KTFontDescriptor class]])
         return NO;
     KTFontDescriptor *descriptor = other;
-    if (![_attributes isEqual: descriptor->_attributes])
+    if (![_attributes isEqual: descriptor->_attributes] ||
+        _faceIndex != descriptor->_faceIndex)
         return NO;
     if (_fontData == nil || descriptor->_fontData == nil)
         return _fontData == descriptor->_fontData;
@@ -101,6 +113,22 @@ CTFontDescriptorRef KTFontDescriptorCreateWithFontData(CFDictionaryRef attribute
     return (CTFontDescriptorRef) [[KTFontDescriptor alloc]
             initWithAttributes: (NSDictionary *) attributes
                       fontData: (NSData *) data];
+}
+
+CTFontDescriptorRef KTFontDescriptorCreateWithFontDataAndFaceIndex(CFDictionaryRef attributes,
+                                                                   CFDataRef data,
+                                                                   int faceIndex)
+{
+    return (CTFontDescriptorRef) [[KTFontDescriptor alloc]
+            initWithAttributes: (NSDictionary *) attributes
+                      fontData: (NSData *) data
+                     faceIndex: faceIndex];
+}
+
+int KTFontDescriptorGetFaceIndex(CTFontDescriptorRef descriptor) {
+    if (descriptor == NULL)
+        return 0;
+    return [descriptorObject(descriptor) faceIndex];
 }
 
 CFDataRef KTFontDescriptorGetFontData(CTFontDescriptorRef descriptor) {
@@ -139,8 +167,8 @@ CTFontDescriptorRef CTFontDescriptorCreateCopyWithAttributes(CTFontDescriptorRef
     NSMutableDictionary *merged = [[descriptor attributes] mutableCopy];
     if (attributes != NULL)
         [merged addEntriesFromDictionary: (NSDictionary *) attributes];
-    CTFontDescriptorRef result = KTFontDescriptorCreateWithFontData(
-            (CFDictionaryRef) merged, (CFDataRef) [descriptor fontData]);
+    CTFontDescriptorRef result = KTFontDescriptorCreateWithFontDataAndFaceIndex(
+            (CFDictionaryRef) merged, (CFDataRef) [descriptor fontData], [descriptor faceIndex]);
     [merged release];
     return result;
 }
