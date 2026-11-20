@@ -34,6 +34,19 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @implementation NSBox
 
+// The custom box properties, which a box keeps whatever its type. The defaults are those of
+// macOS 10.14.4 and 26.7.3: a one point border in the secondary label color, no corner radius,
+// and a clear fill.
+- (NSMutableDictionary *) _customBoxProperties {
+    if (NS_EXTRA(NSBox, self)->_customData == nil)
+        NS_EXTRA(NSBox, self)->_customData = [[NSMutableDictionary alloc] initWithObjectsAndKeys:
+                [NSNumber numberWithDouble: 1], @"NSBorderWidth2",
+                [NSNumber numberWithDouble: 0], @"NSCornerRadius2",
+                [NSColor secondaryLabelColor], @"NSBorderColor2",
+                [NSColor colorWithCalibratedWhite: 0 alpha: 0], @"NSFillColor2", nil];
+    return NS_EXTRA(NSBox, self)->_customData;
+}
+
 - (void) encodeWithCoder: (NSCoder *) coder {
     [super encodeWithCoder: coder];
     [coder encodeInt: NS_EXTRA(NSBox, self)->_borderType forKey: @"NSBox borderType"];
@@ -61,30 +74,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                 setAutoresizingMask: NSViewWidthSizable | NSViewHeightSizable];
         [[_subviews lastObject] setAutoresizesSubviews: YES];
 
-        if (NS_EXTRA(NSBox, self)->_boxType == NSBoxCustom) {
-            id obj;
-            NS_EXTRA(NSBox, self)->_customData = [[NSMutableDictionary alloc] init];
+        for (NSString *key in @[ @"NSBorderWidth2", @"NSCornerRadius2", @"NSBorderColor2", @"NSFillColor2" ]) {
+            id value = [keyed decodeObjectForKey: key];
 
-            obj = [keyed decodeObjectForKey: @"NSBorderWidth2"];
-            if (obj == nil)
-                obj = [NSNumber numberWithDouble: 1];
-            [NS_EXTRA(NSBox, self)->_customData setObject: obj forKey: @"NSBorderWidth2"];
-
-            obj = [keyed decodeObjectForKey: @"NSCornerRadius2"];
-            if (obj == nil)
-                obj = [NSNumber numberWithDouble: 0];
-
-            [NS_EXTRA(NSBox, self)->_customData setObject: obj forKey: @"NSCornerRadius2"];
-
-            obj = [keyed decodeObjectForKey: @"NSBorderColor2"];
-            if (obj == nil)
-                obj = [NSColor colorWithCalibratedWhite: 0.000 alpha: 0.420];
-            [NS_EXTRA(NSBox, self)->_customData setObject: obj forKey: @"NSBorderColor2"];
-
-            obj = [keyed decodeObjectForKey: @"NSFillColor2"];
-            if (obj == nil)
-                obj = [NSColor colorWithCalibratedWhite: 0.000 alpha: 0.000];
-            [NS_EXTRA(NSBox, self)->_customData setObject: obj forKey: @"NSFillColor2"];
+            if (value != nil)
+                [[self _customBoxProperties] setObject: value forKey: key];
         }
     } else {
         NSInteger version = [coder versionForClassName: @"NSBox"];
@@ -394,17 +388,19 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
             grooveRect.origin.y = 4;
         }
         [[self graphicsStyle] drawAquaBoxInRect: grooveRect];
-    } else if (NS_EXTRA(NSBox, self)->_boxType != NSBoxSeparator) {
+    } else if (NS_EXTRA(NSBox, self)->_boxType != NSBoxSeparator && NS_EXTRA(NSBox, self)->_boxType != NSBoxCustom) {
         // Separator are transparent except for drawing a line
         [[NSColor controlColor] setFill];
         NSRectFill(grooveRect);
     }
 
     if (NS_EXTRA(NSBox, self)->_boxType == NSBoxCustom) {
+        // The fill is drawn over what is behind the box, so a clear fill color (the default)
+        // leaves it showing.
+        CGFloat radius = [self cornerRadius];
 
-        // Ignoring corner radius for now.
-        [[self fillColor] set];
-        NSRectFill(rect);
+        [[self fillColor] setFill];
+        [[NSBezierPath bezierPathWithRoundedRect: _bounds xRadius: radius yRadius: radius] fill];
 
         if (NS_EXTRA(NSBox, self)->_borderType != NSNoBorder) {
             [[self borderColor] set];
@@ -463,37 +459,41 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (CGFloat) borderWidth {
-    return [[NS_EXTRA(NSBox, self)->_customData objectForKey: @"NSBorderWidth2"] doubleValue];
+    return [[[self _customBoxProperties] objectForKey: @"NSBorderWidth2"] doubleValue];
 }
 
 - (CGFloat) cornerRadius; {
-    return [[NS_EXTRA(NSBox, self)->_customData objectForKey: @"NSCornerRadius2"] doubleValue];
+    return [[[self _customBoxProperties] objectForKey: @"NSCornerRadius2"] doubleValue];
 }
 
 - (NSColor *) borderColor; {
-    return [NS_EXTRA(NSBox, self)->_customData objectForKey: @"NSBorderColor2"];
+    return [[self _customBoxProperties] objectForKey: @"NSBorderColor2"];
 }
 
 - (NSColor *) fillColor; {
-    return [NS_EXTRA(NSBox, self)->_customData objectForKey: @"NSFillColor2"];
+    return [[self _customBoxProperties] objectForKey: @"NSFillColor2"];
 }
 
 - (void) setBorderWidth: (CGFloat) value {
-    [NS_EXTRA(NSBox, self)->_customData setObject: [NSNumber numberWithDouble: value]
-                    forKey: @"NSBorderWidth2"];
+    [[self _customBoxProperties] setObject: [NSNumber numberWithDouble: value] forKey: @"NSBorderWidth2"];
+    [self setNeedsDisplay: YES];
 }
 
 - (void) setCornerRadius: (CGFloat) value {
-    [NS_EXTRA(NSBox, self)->_customData setObject: [NSNumber numberWithDouble: value]
-                    forKey: @"NSCornerRadius2"];
+    [[self _customBoxProperties] setObject: [NSNumber numberWithDouble: value] forKey: @"NSCornerRadius2"];
+    [self setNeedsDisplay: YES];
 }
 
 - (void) setBorderColor: (NSColor *) value {
-    [NS_EXTRA(NSBox, self)->_customData setObject: value forKey: @"NSBorderColor2"];
+    if (value != nil)
+        [[self _customBoxProperties] setObject: value forKey: @"NSBorderColor2"];
+    [self setNeedsDisplay: YES];
 }
 
 - (void) setFillColor: (NSColor *) value {
-    [NS_EXTRA(NSBox, self)->_customData setObject: value forKey: @"NSFillColor2"];
+    if (value != nil)
+        [[self _customBoxProperties] setObject: value forKey: @"NSFillColor2"];
+    [self setNeedsDisplay: YES];
 }
 
 - (void) updateCell: (NSCell *) cell {
