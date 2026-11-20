@@ -150,6 +150,9 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeAllScreens;
         CALayerContext *_layerContext;
         id __remove;
         NSUserInterfaceItemIdentifier _identifier;
+        // Whether the hugging priorities were set; until then they are the class's defaults.
+        BOOL _hasHorizontalContentHuggingPriority;
+        BOOL _hasVerticalContentHuggingPriority;
         NSLayoutPriority _horizontalContentHuggingPriority;
         BOOL _wantsBestResolutionOpenGLSurface;
         BOOL _wantsBestResolutionOpenGLSurfaceSet;

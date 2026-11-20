@@ -306,7 +306,8 @@ typedef struct __VFlags {
             [coder encodeObject: archivedConstraints forKey: @"NSViewConstraints"];
         NSSize hugging = NSMakeSize([self contentHuggingPriorityForOrientation: NSLayoutConstraintOrientationHorizontal],
                                     [self contentHuggingPriorityForOrientation: NSLayoutConstraintOrientationVertical]);
-        if (hugging.width != NSLayoutPriorityDefaultLow || hugging.height != NSLayoutPriorityDefaultLow)
+        if (hugging.width != [self _defaultContentHuggingPriorityForOrientation: NSLayoutConstraintOrientationHorizontal] ||
+            hugging.height != [self _defaultContentHuggingPriorityForOrientation: NSLayoutConstraintOrientationVertical])
             [coder encodeObject: NSStringFromSize(hugging) forKey: @"NSHuggingPriority"];
         NSSize compression = NSMakeSize([self contentCompressionResistancePriorityForOrientation: NSLayoutConstraintOrientationHorizontal],
                                         [self contentCompressionResistancePriorityForOrientation: NSLayoutConstraintOrientationVertical]);
@@ -3891,25 +3892,34 @@ static CGFloat backingScaleFactor(NSView *view) {
 }
 
 - (void) _setDefaultLayoutPriorities {
-    NS_EXTRA(NSView, self)->_horizontalContentHuggingPriority = NSLayoutPriorityDefaultLow;
-    NS_EXTRA(NSView, self)->_verticalContentHuggingPriority = NSLayoutPriorityDefaultLow;
+    NS_EXTRA(NSView, self)->_hasHorizontalContentHuggingPriority = NO;
+    NS_EXTRA(NSView, self)->_hasVerticalContentHuggingPriority = NO;
     NS_EXTRA(NSView, self)->_horizontalContentCompressionResistancePriority = NSLayoutPriorityDefaultHigh;
     NS_EXTRA(NSView, self)->_verticalContentCompressionResistancePriority = NSLayoutPriorityDefaultHigh;
 }
 
+- (NSLayoutPriority) _defaultContentHuggingPriorityForOrientation: (NSLayoutConstraintOrientation) orientation {
+    return NSLayoutPriorityDefaultLow;
+}
+
 - (NSLayoutPriority) contentHuggingPriorityForOrientation: (NSLayoutConstraintOrientation) orientation {
     if (orientation == NSLayoutConstraintOrientationHorizontal) {
-        return NS_EXTRA(NSView, self)->_horizontalContentHuggingPriority;
+        if (NS_EXTRA(NSView, self)->_hasHorizontalContentHuggingPriority)
+            return NS_EXTRA(NSView, self)->_horizontalContentHuggingPriority;
     } else {
-        return NS_EXTRA(NSView, self)->_verticalContentHuggingPriority;
+        if (NS_EXTRA(NSView, self)->_hasVerticalContentHuggingPriority)
+            return NS_EXTRA(NSView, self)->_verticalContentHuggingPriority;
     }
+    return [self _defaultContentHuggingPriorityForOrientation: orientation];
 }
 
 - (void) setContentHuggingPriority: (NSLayoutPriority) contentHuggingPriority forOrientation: (NSLayoutConstraintOrientation) orientation {
     if (orientation == NSLayoutConstraintOrientationHorizontal) {
         NS_EXTRA(NSView, self)->_horizontalContentHuggingPriority = contentHuggingPriority;
+        NS_EXTRA(NSView, self)->_hasHorizontalContentHuggingPriority = YES;
     } else {
         NS_EXTRA(NSView, self)->_verticalContentHuggingPriority = contentHuggingPriority;
+        NS_EXTRA(NSView, self)->_hasVerticalContentHuggingPriority = YES;
     }
 }
 
