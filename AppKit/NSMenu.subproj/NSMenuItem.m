@@ -250,6 +250,16 @@ NS_EXTRA_SYNTHESIZE_RETAIN(NSMenuItem, badge, _badge, NSMenuItemBadge *, badge, 
     return _menu;
 }
 
+- (NSMenuItem *) parentItem {
+    NSMenu *supermenu = [_menu supermenu];
+    if (supermenu == nil)
+        return nil;
+    for (NSMenuItem *item in [supermenu itemArray])
+        if ([item submenu] == _menu)
+            return item;
+    return nil;
+}
+
 - (void) _setMenu: (NSMenu *) menu {
     _menu = menu;
     NS_EXTRA(NSMenuItem, self)->_submenu.supermenu = menu;

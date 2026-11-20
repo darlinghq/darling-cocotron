@@ -80,6 +80,8 @@ NS_ASSUME_NONNULL_BEGIN
                  keyEquivalent: (NSString *) keyEquivalent;
 
 - (nullable NSMenu *) menu;
+// The item whose submenu holds this item, nil for an item of a top-level menu.
+@property(nullable, readonly, nonatomic) NSMenuItem *parentItem;
 @property(nonatomic, copy) NSString *title;
 @property(nullable, nonatomic, copy) NSAttributedString *attributedTitle;
 - (null_unspecified NSString *) mnemonic;
