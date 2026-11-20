@@ -59,6 +59,7 @@ APPKIT_EXPORT const NSNotificationName NSControlTextDidEndEditingNotification;
 @property(null_unspecified, nonatomic, retain) NSImage *image;
 @property(nonatomic) NSTextAlignment alignment;
 @property(nonatomic, getter=isEnabled) BOOL enabled;
+@property(getter=isHighlighted) BOOL highlighted;
 @property(nonatomic, getter=isEditable) BOOL editable;
 @property(nonatomic, getter=isSelectable) BOOL selectable;
 @property(nonatomic, getter=isScrollable) BOOL scrollable;
