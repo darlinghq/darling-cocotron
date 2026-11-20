@@ -2492,9 +2492,10 @@ static uint32_t WaylandKeyLayoutCodepoint(void *context, uint32_t keysym) {
 // window, else its main window, provided it is a mapped toplevel and naming it would
 // not make a window its own ancestor.
 - (WaylandWindow *) levelParentForWindow: (WaylandWindow *) window {
-    NSWindow *candidates[3] = {[[window delegate] parentWindow], [NSApp keyWindow], [NSApp mainWindow]};
+    NSWindow *candidates[4] = {[[window delegate] parentWindow], [[window delegate] sheetParent], [NSApp keyWindow],
+                                [NSApp mainWindow]};
 
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < 4; i++) {
         id platform = [candidates[i] platformWindow];
         if (![platform isKindOfClass: [WaylandWindow class]] || ![platform isMapped] || [platform isPopup])
             continue;

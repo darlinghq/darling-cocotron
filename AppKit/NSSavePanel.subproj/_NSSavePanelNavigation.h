@@ -42,6 +42,8 @@
     NSPanel *_goToSheet;
     NSTextField *_goToField;
     NSTextField *_goToMessage;
+    NSInteger _lastClickCount;   // the click count of the latest mouse-down in the list
+    NSInteger _clickCountOffset; // the clicks of that sequence that were made in an earlier listing
 }
 
 + (_NSSavePanelNavigation *) navigationForPanel: (NSSavePanel *) panel;
@@ -63,7 +65,12 @@
 - (IBAction) goBack: (id) sender;
 - (IBAction) goForward: (id) sender;
 - (void) showGoToFolder;
+// The Go to Folder sheet with text already in its field (the character that was typed to open it).
+- (void) showGoToFolderWithText: (NSString *) text;
 // The folder shown in the list, a folder the user chose in it, or nil.
 - (NSURL *) selectedFolderToOpen;
 - (BOOL) handleKeyEquivalent: (NSEvent *) event;
+// The event a mouse-down in the list is handled as: clicks made in a listing that has since been replaced do not
+// count towards a multiple click in the new one.
+- (NSEvent *) listClickEventForEvent: (NSEvent *) event;
 @end
