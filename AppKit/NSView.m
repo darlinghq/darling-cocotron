@@ -157,6 +157,17 @@ const NSViewFullScreenModeOptionKey NSFullScreenModeAllScreens =
 
 @implementation NSView
 
+// A view that has an identifier and invalidated its restorable state is asked to encode it
+// when the window's state is saved.
+- (void) invalidateRestorableState {
+    NS_EXTRA(NSView, self)->_restorableStateInvalidated = YES;
+    [super invalidateRestorableState];
+}
+
+- (BOOL) _hasInvalidatedRestorableState {
+    return NS_EXTRA(NSView, self)->_restorableStateInvalidated;
+}
+
 NS_EXTRA_SYNTHESIZE_COPY(NSView, identifier, _identifier, NSUserInterfaceItemIdentifier, identifier, setIdentifier:)
 - (BOOL) translatesAutoresizingMaskIntoConstraints {
     return NS_EXTRA(NSView, self)->_translatesAutoresizingMaskIntoConstraints;

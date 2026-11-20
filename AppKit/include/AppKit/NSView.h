@@ -180,6 +180,8 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeAllScreens;
         BOOL _wantsRestingTouches;
         BOOL _layerUsesCoreImageFilters;
         BOOL _prefersCompactControlSizeMetrics;
+        // Set by -invalidateRestorableState; such a view with an identifier is saved with its window.
+        BOOL _restorableStateInvalidated;
         NSEdgeInsets _additionalSafeAreaInsets;
     NS_EXTRA_IVARS_END(NSView)
 }
