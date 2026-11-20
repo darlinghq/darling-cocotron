@@ -669,7 +669,10 @@ static const char arrangedConstraintsKey;
 // along the split axis separated by the divider thickness, fill the split view
 // across it, and keep their current length at their holding priority. The
 // subviews with the lowest holding priority are tied to each other in proportion
-// to their current lengths and take up what the others do not hold.
+// to their current lengths and take up what the others do not hold. The tie stays
+// below the priority at which a window resists resizing: it shares out the room
+// the split view has, and must not make the window grow or shrink to the lengths
+// the panes had when they were added.
 - (void) updateConstraints {
     NSArray *old = objc_getAssociatedObject(self, &arrangedConstraintsKey);
 
@@ -714,7 +717,7 @@ static const char arrangedConstraintsKey;
         NSLayoutAttribute length = vertical ? NSLayoutAttributeWidth : NSLayoutAttributeHeight;
         CGFloat thickness = [self dividerThickness];
         NSLayoutPriority lowest = NSLayoutPriorityRequired;
-        NSLayoutPriority tiePriority = NSLayoutPriorityDefaultHigh;
+        NSLayoutPriority tiePriority = NSLayoutPriorityWindowSizeStayPut - 100;
         NSView *tieAnchor = nil;
         CGFloat tieAnchorLength = 0;
 
