@@ -358,6 +358,12 @@ NS_EXTRA_SYNTHESIZE_ASSIGN(NSCell, controlTint, _controlTint, NSControlTint, con
     return self;
 }
 
+// What a keyed archive stores as the cell's contents; subclasses whose
+// contents are not the object value override it.
+- (id) _archivedContents {
+    return NS_EXTRA(NSCell, self)->_objectValue;
+}
+
 - (void) encodeWithCoder: (NSCoder *) coder {
     unsigned int flags = 0;
     unsigned int flags2 = 0;
@@ -367,7 +373,7 @@ NS_EXTRA_SYNTHESIZE_ASSIGN(NSCell, controlTint, _controlTint, NSControlTint, con
     if (coder.allowsKeyedCoding) {
         [coder encodeInt: flags forKey: @"NSCellFlags"];
         [coder encodeInt: flags2 forKey: @"NSCellFlags2"];
-        [coder encodeObject: NS_EXTRA(NSCell, self)->_objectValue forKey: @"NSContents"];
+        [coder encodeObject: [self _archivedContents] forKey: @"NSContents"];
         if (NS_EXTRA(NSCell, self)->_image != nil) {
             [coder encodeObject: NS_EXTRA(NSCell, self)->_image forKey: @"NSNormalImage"];
             if (NS_EXTRA(NSCell, self)->_font != nil)

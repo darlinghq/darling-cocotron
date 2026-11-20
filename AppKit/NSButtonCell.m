@@ -46,22 +46,99 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 // Margin between an image and the Button interior borders
 static const CGFloat kImageMargin = 2.;
 
+// The button flags of a keyed archive, the inverse of
+// -_applyButtonCellAppleFlags:flags2:.
+- (unsigned) _buttonCellAppleFlags {
+    unsigned flags = 0;
+    NSInteger highlightsBy = NS_EXTRA(NSButtonCell, self)->_highlightsBy;
+    NSInteger showsStateBy = NS_EXTRA(NSButtonCell, self)->_showsStateBy;
+
+    switch (NS_EXTRA(NSButtonCell, self)->_imagePosition) {
+    case NSImageOnly:
+        flags |= 0x00400000;
+        break;
+    case NSImageOverlaps:
+        flags |= 0x00480000;
+        break;
+    case NSImageLeft:
+        flags |= 0x00380000;
+        break;
+    case NSImageRight:
+        flags |= 0x00280000;
+        break;
+    case NSImageBelow:
+        flags |= 0x00180000;
+        break;
+    case NSImageAbove:
+        flags |= 0x00080000;
+        break;
+    default:
+        break;
+    }
+
+    if (highlightsBy & NSPushInCellMask)
+        flags |= 0x80000000;
+    if (showsStateBy & NSContentsCellMask)
+        flags |= 0x40000000;
+    if (showsStateBy & NSChangeBackgroundCellMask)
+        flags |= 0x20000000;
+    if (showsStateBy & NSChangeGrayCellMask)
+        flags |= 0x10000000;
+    if (highlightsBy & NSContentsCellMask)
+        flags |= 0x08000000;
+    if (highlightsBy & NSChangeBackgroundCellMask)
+        flags |= 0x04000000;
+    if (highlightsBy & NSChangeGrayCellMask)
+        flags |= 0x02000000;
+    if (NS_EXTRA(NSCell, self)->_isBordered)
+        flags |= 0x00800000;
+    if (NS_EXTRA(NSButtonCell, self)->_isTransparent)
+        flags |= 0x00008000;
+    if (!NS_EXTRA(NSButtonCell, self)->_imageDimsWhenDisabled)
+        flags |= 0x00002000;
+    return flags;
+}
+
+- (unsigned) _buttonCellAppleFlags2 {
+    NSUInteger bezel = NS_EXTRA(NSButtonCell, self)->_bezelStyle;
+    unsigned flags2 = (bezel & 0x7) | ((bezel & 0x8) << 2);
+
+    if (NS_EXTRA(NSButtonCell, self)->_showsBorderOnlyWhileMouseInside)
+        flags2 |= 0x8;
+    switch (NS_EXTRA(NSButtonCell, self)->_imageScaling) {
+    case NSImageScaleProportionallyUpOrDown:
+        flags2 |= 1 << 6;
+        break;
+    case NSImageScaleProportionallyDown:
+        flags2 |= 2 << 6;
+        break;
+    case NSImageScaleAxesIndependently:
+        flags2 |= 3 << 6;
+        break;
+    default:
+        break;
+    }
+    flags2 |= (unsigned) NS_EXTRA(NSButtonCell, self)->_keyEquivalentModifierMask << 8;
+    return flags2;
+}
+
+// The archived contents of a button cell are its title.
+- (id) _archivedContents {
+    return NS_EXTRA(NSCell, self)->_titleOrAttributedTitle;
+}
+
+// Writes the keys that -initWithCoder: reads, as macOS writes them: the
+// button flags, the title as the contents, the alternate title and image and
+// the key equivalent.
 - (void) encodeWithCoder: (NSCoder *) coder {
     [super encodeWithCoder: coder];
-    [coder encodeObject: NS_EXTRA(NSCell, self)->_titleOrAttributedTitle forKey: @"NSButtonCell title"];
-    [coder encodeObject: _alternateTitle
-                 forKey: @"NSButtonCell alternateTitle"];
-    [coder encodeInt: NS_EXTRA(NSButtonCell, self)->_imagePosition forKey: @"NSButtonCell imagePosition"];
-    [coder encodeInt: NS_EXTRA(NSButtonCell, self)->_highlightsBy forKey: @"NSButtonCell highlightsBy"];
-    [coder encodeInt: NS_EXTRA(NSButtonCell, self)->_showsStateBy forKey: @"NSButtonCell showsStateBy"];
-    [coder encodeBool: NS_EXTRA(NSButtonCell, self)->_isTransparent forKey: @"NSButtonCell transparent"];
-    [coder encodeBool: NS_EXTRA(NSButtonCell, self)->_imageDimsWhenDisabled
-               forKey: @"NSButtonCell imageDimsWhenDisabled"];
-    [coder encodeObject: NS_EXTRA(NSButtonCell, self)->_alternateImage
-                 forKey: @"NSButtonCell alternateImage"];
-    [coder encodeObject: _keyEquivalent forKey: @"NSButtonCell keyEquivalent"];
-    [coder encodeInt: NS_EXTRA(NSButtonCell, self)->_keyEquivalentModifierMask
-              forKey: @"NSButtonCell keyEquivalentModifierMask"];
+    [coder encodeInt: (int) [self _buttonCellAppleFlags] forKey: @"NSButtonFlags"];
+    [coder encodeInt: (int) [self _buttonCellAppleFlags2] forKey: @"NSButtonFlags2"];
+    if (_alternateTitle != nil)
+        [coder encodeObject: _alternateTitle forKey: @"NSAlternateContents"];
+    if (NS_EXTRA(NSButtonCell, self)->_alternateImage != nil)
+        [coder encodeObject: NS_EXTRA(NSButtonCell, self)->_alternateImage forKey: @"NSAlternateImage"];
+    [coder encodeObject: _keyEquivalent != nil ? _keyEquivalent : @"" forKey: @"NSKeyEquivalent"];
 }
 
 - (void) _applyButtonCellAppleFlags: (unsigned) flags flags2: (unsigned) flags2 {
@@ -132,27 +209,28 @@ static const CGFloat kImageMargin = 2.;
 
     NS_EXTRA(NSButtonCell, self)->_showsBorderOnlyWhileMouseInside = (flags2 & 0x8) ? YES : NO;
 
-    if ((flags & 0x7e800000) != 0x48000000)
-        [self setButtonType: NSMomentaryPushInButton];
-    else if (flags & 0x100) {
-        id altImageSource = nil;
-        if (flags & 0x100)
-            altImageSource = NS_EXTRA(NSButtonCell, self)->_alternateImage;
-        if ([[altImageSource name] isEqualToString: @"NSSwitch"])
-            [self setButtonType: NSSwitchButton];
-        if ([[altImageSource name] isEqualToString: @"NSRadioButton"])
-            [self setButtonType: NSRadioButton];
-    } else {
-        if (([[[self image] name] isEqualToString: @"NSRadioButton"] &&
-             [[[self alternateImage] name]
-                     isEqualToString: @"NSHighlightedRadioButton"]) &&
-            (flags & 0x20000) == 0) {
-            [self setButtonType: NSRadioButton];
-        } else if (([[[self image] name] isEqualToString: @"NSSwitch"] &&
-                    [[[self alternateImage] name]
-                            isEqualToString: @"NSHighlightedSwitch"]) &&
-                   (flags & 0x20000) == 0) {
-            [self setButtonType: NSMomentaryPushInButton];
+    // The highlight and state masks above are kept as they are; only a cell
+    // that shows and highlights by its contents is checked for the switch and
+    // radio images.
+    if ((flags & 0x7e800000) == 0x48000000) {
+        if (flags & 0x100) {
+            id altImageSource = NS_EXTRA(NSButtonCell, self)->_alternateImage;
+            if ([[altImageSource name] isEqualToString: @"NSSwitch"])
+                [self setButtonType: NSSwitchButton];
+            if ([[altImageSource name] isEqualToString: @"NSRadioButton"])
+                [self setButtonType: NSRadioButton];
+        } else {
+            if (([[[self image] name] isEqualToString: @"NSRadioButton"] &&
+                 [[[self alternateImage] name]
+                         isEqualToString: @"NSHighlightedRadioButton"]) &&
+                (flags & 0x20000) == 0) {
+                [self setButtonType: NSRadioButton];
+            } else if (([[[self image] name] isEqualToString: @"NSSwitch"] &&
+                        [[[self alternateImage] name]
+                                isEqualToString: @"NSHighlightedSwitch"]) &&
+                       (flags & 0x20000) == 0) {
+                [self setButtonType: NSMomentaryPushInButton];
+            }
         }
     }
 }
