@@ -35,6 +35,7 @@ typedef NS_OPTIONS(NSUInteger, NSViewControllerTransitionOptions) {
         NSStoryboard *_storyboard;
         NSDictionary *_externalObjectsTableForViewLoading;
         NSSize _preferredContentSize;
+        NSMutableArray *_editors; // registered via objectDidBeginEditing:
     NS_EXTRA_IVARS_END(NSViewController)
 }
 
@@ -77,6 +78,11 @@ typedef NS_OPTIONS(NSUInteger, NSViewControllerTransitionOptions) {
 - (void) commitEditingWithDelegate: (nullable id) delegate
                  didCommitSelector: (nullable SEL) didCommitSelector
                        contextInfo: (nullable void *) contextInfo;
+- (BOOL) commitEditingAndReturnError: (NSError **) error;
+
+// NSEditorRegistration: the bound controls and objects that have uncommitted changes.
+- (void) objectDidBeginEditing: (id) editor;
+- (void) objectDidEndEditing: (id) editor;
 
 @end
 

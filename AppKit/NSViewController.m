@@ -1,3 +1,4 @@
+#import <objc/message.h>
 #import <AppKit/NSNib.h>
 #import <AppKit/NSNibLoading.h>
 #import <AppKit/NSRaise.h>
@@ -61,6 +62,7 @@ NS_EXTRA_SYNTHESIZE_COPY(NSViewController, identifier, _identifier, NSUserInterf
         NS_EXTRA(NSViewController, child)->_parentViewController = nil;
     [NS_EXTRA(NSViewController, self)->_childViewControllers release];
     [NS_EXTRA(NSViewController, self)->_storyboard release];
+    [NS_EXTRA(NSViewController, self)->_editors release];
 
     NS_EXTRA_FREE(NSViewController, self);
     [super dealloc];
@@ -232,20 +234,67 @@ NS_EXTRA_SYNTHESIZE_COPY(NSViewController, identifier, _identifier, NSUserInterf
     [bundle _loadNibAtPath: path externalNameTable: nameTable withZone: NULL];
 }
 
-- (void) discardEditing {
-    NSUnimplementedMethod();
+// The editors are the objects that announced uncommitted changes with -objectDidBeginEditing:, normally the
+// controls bound to the view controller's content. An editor takes itself off the list with
+// -objectDidEndEditing: once it has committed or discarded.
+- (void) objectDidBeginEditing: (id) editor {
+    if (editor == nil)
+        return;
+    if (NS_EXTRA(NSViewController, self)->_editors == nil)
+        NS_EXTRA(NSViewController, self)->_editors = [[NSMutableArray alloc] init];
+    [NS_EXTRA(NSViewController, self)->_editors addObject: editor];
 }
 
+- (void) objectDidEndEditing: (id) editor {
+    NSMutableArray *editors = NS_EXTRA(NSViewController, self)->_editors;
+    NSUInteger index = [editors indexOfObjectIdenticalTo: editor];
+    if (index != NSNotFound)
+        [editors removeObjectAtIndex: index];
+}
+
+- (void) discardEditing {
+    // An editor may remove itself while it discards, so walk a snapshot.
+    for (id editor in [[NS_EXTRA(NSViewController, self)->_editors copy] autorelease])
+        [editor discardEditing];
+}
+
+// QUIRK: the editors are asked to commit most recently registered first, and the first one that refuses
+// stops the pass (the editors not asked yet keep their uncommitted changes). Not documented. Evidence: black-box
+// observation on macOS 26.7.3, x86_64 (tier 2): with a refusing editor registered after a committing one only the
+// refusing one was asked and -commitEditing returned NO; registered the other way round both were asked.
+// Test: viewcontroller-commit-editing.m (test_quirk_commit_order). YES when nothing is being edited.
 - (BOOL) commitEditing {
-    NSUnimplementedMethod();
-    return NO;
+    for (id editor in [[[NS_EXTRA(NSViewController, self)->_editors copy] autorelease] reverseObjectEnumerator]) {
+        if (![editor commitEditing])
+            return NO;
+    }
+    return YES;
 }
 
 - (void) commitEditingWithDelegate: delegate
                  didCommitSelector: (SEL) didCommitSelector
                        contextInfo: (void *) contextInfo
 {
-    NSUnimplementedMethod();
+    BOOL committed = [self commitEditing];
+
+    if (delegate != nil && didCommitSelector != NULL) {
+        // The selector has the form -editor:didCommit:contextInfo:.
+        void (*send)(id, SEL, id, BOOL, void *) = (void (*)(id, SEL, id, BOOL, void *)) objc_msgSend;
+        send(delegate, didCommitSelector, self, committed, contextInfo);
+    }
+}
+
+// Like -commitEditing (same order, stops at the first refusal), asking each editor for its error where it can
+// give one.
+- (BOOL) commitEditingAndReturnError: (NSError **) error {
+    for (id editor in [[[NS_EXTRA(NSViewController, self)->_editors copy] autorelease] reverseObjectEnumerator]) {
+        BOOL committed = [editor respondsToSelector: @selector(commitEditingAndReturnError:)]
+                ? [editor commitEditingAndReturnError: error]
+                : [editor commitEditing];
+        if (!committed)
+            return NO;
+    }
+    return YES;
 }
 
 @end
