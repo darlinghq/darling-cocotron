@@ -20,6 +20,7 @@
 #define DARLING_WINDOW_LEVEL_POLICY_H
 
 #include <stdbool.h>
+#include <stddef.h>
 
 // kCGNormalWindowLevel and kCGMainMenuWindowLevel as CGWindowLevelForKey returns them.
 enum {

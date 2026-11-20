@@ -29,6 +29,7 @@
 #import <AppKit/NSRaise.h>
 #import <AppKit/NSWindow.h>
 #import "../NSWindow-Private.h"
+#import "../DarlingWindowPresentation.h"
 #import <Foundation/NSBundle.h>
 #import <Foundation/NSException.h>
 #import <Foundation/NSMutableData.h>
@@ -583,8 +584,12 @@ static NSData *makeWindowIcon() {
     BOOL isMenuWindow = [delegate isKindOfClass: [NSMenuWindow class]] ||
                         [delegate isKindOfClass: [NSPopUpWindow class]];
     _menuWindow = isMenuWindow;
+    // Borderless means no frame of any kind; a miniaturizable or closable bit alone does not give a
+    // window a frame, so a pop-up created with such a mask is as borderless as one with none.
+    BOOL borderless = (_styleMask & ~(NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskClosable)) ==
+                      NSBorderlessWindowMask;
     xattr.override_redirect =
-            (_styleMask == NSBorderlessWindowMask && !_dock &&
+            (borderless && !_dock &&
              (isMenuWindow || (!isPanel && ![delegate canBecomeKeyWindow])))
                     ? True
                     : False;
@@ -654,40 +659,7 @@ static NSData *makeWindowIcon() {
     else
         XSetWindowBackgroundPixmap(_display, _window, None);
 
-    _isModal = [delegate isSheet] || [NSApp modalWindow] == delegate;
-    // FIXME: There should be no need for this.
-    _isModal |= [delegate isKindOfClass: NSClassFromString(@"NSSavePanel")];
-
-    const char *windowType;
-    BOOL isTransient = YES;
-    if (_isModal) {
-        windowType = "_NET_WM_WINDOW_TYPE_DIALOG";
-    } else if (_dock) {
-        windowType = "_NET_WM_WINDOW_TYPE_DOCK";
-        isTransient = NO;
-    } else if ([delegate isKindOfClass: [NSMenuWindow class]]) {
-        // EWMH: _MENU is for torn-off managed windows; the menus of a menu bar
-        // are dropdown menus, which are typically unmanaged.
-        windowType = "_NET_WM_WINDOW_TYPE_DROPDOWN_MENU";
-    } else if (isMenuWindow) {
-        windowType = "_NET_WM_WINDOW_TYPE_POPUP_MENU";
-    } else if (isPanel) {
-        windowType = "_NET_WM_WINDOW_TYPE_UTILITY";
-    } else {
-        windowType = "_NET_WM_WINDOW_TYPE_NORMAL";
-        isTransient = NO;
-    }
-    long windowTypeAtom = (long) XInternAtom(_display, windowType, False);
-    XChangeProperty(_display, _window,
-                    XInternAtom(_display, "_NET_WM_WINDOW_TYPE", False),
-                    XA_ATOM, 32, PropModeReplace,
-                    (const unsigned char *) &windowTypeAtom, 1);
-
-    if (isTransient && [NSApp mainWindow]) {
-        X11Window *mainWindow =
-                (X11Window *) [[NSApp mainWindow] platformWindow];
-        XSetTransientForHint(_display, _window, [mainWindow windowHandle]);
-    }
+    [self updateWindowManagerHints];
 
     [self createXInputContext];
 
@@ -703,6 +675,107 @@ static NSData *makeWindowIcon() {
     [self setWindowIcon];
 
     return YES;
+}
+
+// What the window manager is told about the window, from what the window is (see
+// DarlingWindowPresentation.h for the rule and the documentation it rests on): its type, whether it
+// is listed in a task bar or pager, which window it belongs to, whether it takes the input focus,
+// and that it is positioned by the application. Asked at creation and again just before each
+// mapping, as a child window is attached and a window becomes the main window after it was created.
+// A window manager reads these when the window is mapped, and a window whose properties change
+// while it is mapped is not asked to move or restack.
+- (void) updateWindowManagerHints {
+    NSWindow *delegate = _delegate;
+    BOOL isPanel = [delegate isKindOfClass: [NSPanel class]];
+    BOOL isMenu = [delegate isKindOfClass: [NSMenuWindow class]];
+    BOOL isPopUp = [delegate isKindOfClass: [NSPopUpWindow class]];
+    DarlingWindowPresentation presentation = DarlingWindowPresentationApplication;
+    if (!_dock && [delegate respondsToSelector: @selector(_windowPresentation)])
+        presentation = (DarlingWindowPresentation) [delegate _windowPresentation];
+    BOOL canBecomeKey = [delegate canBecomeKeyWindow];
+
+    _isModal = [delegate isSheet] || [NSApp modalWindow] == delegate;
+    // FIXME: There should be no need for this.
+    _isModal |= [delegate isKindOfClass: NSClassFromString(@"NSSavePanel")];
+
+    const char *windowType;
+    BOOL isTransient = YES;
+    if (_isModal) {
+        windowType = "_NET_WM_WINDOW_TYPE_DIALOG";
+    } else if (_dock) {
+        windowType = "_NET_WM_WINDOW_TYPE_DOCK";
+        isTransient = NO;
+    } else if (isMenu) {
+        // EWMH: _MENU is for torn-off managed windows; the menus of a menu bar
+        // are dropdown menus, which are typically unmanaged.
+        windowType = "_NET_WM_WINDOW_TYPE_DROPDOWN_MENU";
+    } else if (isPopUp) {
+        windowType = "_NET_WM_WINDOW_TYPE_POPUP_MENU";
+    } else if (presentation == DarlingWindowPresentationPopup) {
+        // A tool tip never takes the focus and does not react to the mouse; any other pop-up is a
+        // pop-up menu to the window manager.
+        windowType = !canBecomeKey && [delegate ignoresMouseEvents] ? "_NET_WM_WINDOW_TYPE_TOOLTIP"
+                                                                    : "_NET_WM_WINDOW_TYPE_POPUP_MENU";
+    } else if (isPanel) {
+        windowType = "_NET_WM_WINDOW_TYPE_UTILITY";
+    } else if (presentation == DarlingWindowPresentationAuxiliary) {
+        windowType = "_NET_WM_WINDOW_TYPE_NORMAL";
+    } else {
+        windowType = "_NET_WM_WINDOW_TYPE_NORMAL";
+        isTransient = NO;
+    }
+    long windowTypeAtom = (long) XInternAtom(_display, windowType, False);
+    XChangeProperty(_display, _window,
+                    XInternAtom(_display, "_NET_WM_WINDOW_TYPE", False),
+                    XA_ATOM, 32, PropModeReplace,
+                    (const unsigned char *) &windowTypeAtom, 1);
+
+    _skipTaskbar = !_dock && presentation != DarlingWindowPresentationApplication;
+
+    // The window a window belongs to: the one it is attached to as a child window, else the
+    // application's main window. A window must not become its own ancestor.
+    X11Window *parent = nil;
+    if (isTransient) {
+        NSWindow *candidates[3] = {[delegate parentWindow], [NSApp mainWindow], [NSApp keyWindow]};
+        for (int i = 0; i < 3 && parent == nil; i++) {
+            X11Window *platform = (X11Window *) [candidates[i] platformWindow];
+            if (![platform isKindOfClass: [X11Window class]] || platform == self || platform->_window == 0)
+                continue;
+            const void *ancestors[16];
+            int count = 0;
+            for (X11Window *up = platform->_transientParent; up != nil && count < 16; up = up->_transientParent)
+                ancestors[count++] = up;
+            if (DarlingWindowParentAllowed(self, platform, ancestors, count))
+                parent = platform;
+        }
+    }
+    if (parent != _transientParent) {
+        [parent retain];
+        [_transientParent release];
+        _transientParent = parent;
+    }
+    if (parent != nil)
+        XSetTransientForHint(_display, _window, parent->_window);
+    else
+        XDeleteProperty(_display, _window, XA_WM_TRANSIENT_FOR);
+
+    // Whether the window takes the input focus when the window manager maps it (ICCCM 4.1.7). A
+    // window that is not an application window is not given the focus by being shown either: the
+    // user time 0 says no user action caused it (EWMH _NET_WM_USER_TIME). Making it the key window
+    // asks for the focus explicitly (-requestInputFocus).
+    XWMHints hints = {0};
+    hints.flags = InputHint;
+    hints.input = canBecomeKey ? True : False;
+    XSetWMHints(_display, _window, &hints);
+    Atom userTime = XInternAtom(_display, "_NET_WM_USER_TIME", False);
+    if (!_dock && presentation != DarlingWindowPresentationApplication) {
+        unsigned long zero = 0;
+        XChangeProperty(_display, _window, userTime, XA_CARDINAL, 32, PropModeReplace,
+                        (const unsigned char *) &zero, 1);
+    } else {
+        XDeleteProperty(_display, _window, userTime);
+    }
+    [self updateSizeHints: _styleMask];
 }
 
 - (void) dealloc {
@@ -733,12 +806,10 @@ static NSData *makeWindowIcon() {
         sh->min_height = sh->max_height = device.height;
     }
 
-    // An untitled window that is managed (a borderless game or custom-chrome window),
-    // or a titled one that the window manager does not frame because it shows no
-    // title bar, positions itself: say so, or a window manager may place it as it
-    // likes (ICCCM 4.1.2.3).
-    if (!_overrideRedirect &&
-        (![self hasTitlebarForStyleMask: mask] || [self hasInvisibleTitlebarForStyleMask: mask]))
+    // AppKit always gives a window an explicit frame, so every managed window positions itself:
+    // say so, or a window manager may place it as it likes, typically in the middle of the screen
+    // or over its parent (ICCCM 4.1.2.3).
+    if (!_overrideRedirect)
         sh->flags |= USPosition | PPosition;
 
     // The frame is the client window's own rectangle, so a move must put the
@@ -776,8 +847,12 @@ static NSData *makeWindowIcon() {
 
 - (void) requestFullscreen: (BOOL) fullscreen force: (BOOL) force {
     if (!_mapped) {
-        long states[2];
+        long states[4];
         int states_cnt = 0;
+        if (_skipTaskbar) {
+            states[states_cnt++] = (long) XInternAtom(_display, "_NET_WM_STATE_SKIP_TASKBAR", False);
+            states[states_cnt++] = (long) XInternAtom(_display, "_NET_WM_STATE_SKIP_PAGER", False);
+        }
         if (_isModal) {
             states[states_cnt++] =
                     (long) XInternAtom(_display, "_NET_WM_STATE_MODAL", False);
@@ -1139,6 +1214,8 @@ static const int X11ChromelessCornerRadius = 5;
 
 - (void) ensureMapped {
     if (!_mapped) {
+        // What the window is can have changed since it was created or last shown.
+        [self updateWindowManagerHints];
         // A withdrawn window loses _NET_WM_STATE (EWMH), so the window has to say
         // again, before it is mapped, what it is: fullscreen if it covers a monitor,
         // and modal, which requestFullscreen: writes as well.
@@ -1303,6 +1380,8 @@ static const int X11ChromelessCornerRadius = 5;
 
     [_delegate platformWindowDidInvalidateCGContext: self];
     _delegate = nil;
+    [_transientParent release];
+    _transientParent = nil;
 
     [_caContext release];
     _caContext = nil;

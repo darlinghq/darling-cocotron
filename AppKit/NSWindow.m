@@ -38,6 +38,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSMenu.h>
 #import <AppKit/NSMenuItem.h>
 #import <AppKit/NSPanel.h>
+#import <AppKit/NSMenuWindow.h>
+#import <AppKit/NSPopUpWindow.h>
 #import <AppKit/NSPasteboard.h>
 #import <AppKit/NSRaise.h>
 #import <AppKit/NSScreen.h>
@@ -53,6 +55,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSWindow.h>
 #import <AppKit/NSWindowTabGroup+Private.h>
 #import "DarlingLayout.h"
+#import "DarlingWindowPresentation.h"
 #import <AppKit/NSWindowAnimationContext.h>
 #import <ApplicationServices/ApplicationServices.h>
 #import <CoreGraphics/CGWindowPrivate.h>
@@ -2171,6 +2174,26 @@ static BOOL _allowsAutomaticWindowTabbing;
     // The NSWindow implementation returns YES if the window is visible and has
     // a title bar. Otherwise it returns NO
     return [self isVisible] && [self _hasTitlebarForStyleMask: NS_EXTRA(NSWindow, self)->_styleMask];
+}
+
+// What the window is to the window system, for the backends to map onto their hints (see
+// DarlingWindowPresentation.h for the rule and its basis). Asked when the window is about to be
+// shown, as the answers depend on the window's state then (a child window is attached by then, the
+// window is visible, so -canBecomeMainWindow answers for a window that is on screen).
+- (int) _windowPresentation {
+    DarlingWindowTraits traits = {
+        .hasTitlebar = [self _hasTitlebarForStyleMask: NS_EXTRA(NSWindow, self)->_styleMask],
+        .canBecomeMain = [self canBecomeMainWindow],
+        .canBecomeKey = [self canBecomeKeyWindow],
+        .hasParent = [self parentWindow] != nil,
+        .isPanel = [self isKindOfClass: [NSPanel class]],
+        .isMenu = [self isKindOfClass: [NSMenuWindow class]] || [self isKindOfClass: [NSPopUpWindow class]],
+        .isTooltip = [self isKindOfClass: [NSToolTipWindow class]],
+        .isModal = [self isSheet] || [NSApp modalWindow] == self,
+        .ignoresMouse = [self ignoresMouseEvents],
+        .level = [self level],
+    };
+    return DarlingWindowPresentationFor(&traits);
 }
 
 - (BOOL) canBecomeVisibleWithoutLogin {
