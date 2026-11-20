@@ -29,6 +29,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Foundation/NSKeyedArchiver.h>
 
 #import <Onyx2D/O2Font.h>
+#import <CoreText/KTFont.h>
 
 NSNotificationName NSFontSetChangedNotification =
         @"NSFontSetChangedNotification";
@@ -1065,6 +1066,49 @@ static const CGFloat NSFontDefaultScreenIntegerAdvancementsLimit = 16;
 - (id) _metaType {
     NSUnimplementedMethod();
     return nil;
+}
+
+@end
+
+// CTFontRef and NSFont are toll-free bridged, so a font made with a CoreText
+// function may be used as an NSFont. CoreText's font object answers NSFont's
+// metric and glyph messages itself; it sends every other NSFont message to an
+// NSFont that draws with the very same CTFont, so the font keeps the
+// descriptor (features, variations) it was made with.
+@implementation NSFont (CoreTextFonts)
+
++ (NSFont *) _fontWithCoreTextFont: (CTFontRef) ctFont {
+    CGFontRef cgFont = CTFontCopyGraphicsFont(ctFont, NULL);
+    if (cgFont == NULL)
+        return nil;
+    // Not entered in the font cache, like the screen fonts.
+    NSFont *font = [[self alloc] init];
+    font->_name = (NSString *) CTFontCopyPostScriptName(ctFont);
+    font->_pointSize = CTFontGetSize(ctFont);
+    NS_EXTRA(NSFont, font)->_matrix[0] = font->_pointSize;
+    NS_EXTRA(NSFont, font)->_matrix[3] = font->_pointSize;
+    NS_EXTRA(NSFont, font)->_encoding = NSUnicodeStringEncoding;
+    NS_EXTRA(NSFont, font)->_cgFont = cgFont;
+    NS_EXTRA(NSFont, font)->_ctFont = (CTFontRef) [(id) ctFont retain];
+    return [font autorelease];
+}
+
+@end
+
+@implementation KTFont (NSFontMessages)
+
+- (id) forwardingTargetForSelector: (SEL) selector {
+    if ([NSFont instancesRespondToSelector: selector]) {
+        NSFont *font = [NSFont _fontWithCoreTextFont: (CTFontRef) self];
+        if (font != nil)
+            return font;
+    }
+    return [super forwardingTargetForSelector: selector];
+}
+
+- (BOOL) respondsToSelector: (SEL) selector {
+    return [super respondsToSelector: selector] ||
+           [NSFont instancesRespondToSelector: selector];
 }
 
 @end
