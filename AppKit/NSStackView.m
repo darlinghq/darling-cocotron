@@ -808,20 +808,27 @@ typedef struct {
     for (NSView *view in [self subviews])
         if ([self _entryForView: view] == nil)
             [view resizeWithOldSuperviewSize: oldSize];
-    [self _arrangeViews];
+    // The arrangement constraints do not depend on the stack view's size.
+    if (![self _constraintArrangementIsActive])
+        [self _arrangeViews];
 }
 
 // An arranged view whose content changed has another natural size; the arrangement is redone at the
-// next layout pass, and the stack's own intrinsic size changes with it.
+// next layout pass, and the stack's own intrinsic size changes with it. The arrangement constraints
+// depend on the natural sizes, so they are made again.
 - (void) _subviewIntrinsicContentSizeDidChange: (NSView *) subview {
     if (_changingViews || [self _entryForView: subview] == nil)
         return;
+    if ([self _constraintArrangementIsActive])
+        [self setNeedsUpdateConstraints: YES];
     [self setNeedsLayout: YES];
     [self invalidateIntrinsicContentSize];
 }
 
+// Views arranged by constraints are placed by the layout engine; asking for new constraints from
+// here would start another layout pass after every pass.
 - (void) layout {
-    if (!_keepsDecodedFrames)
+    if (!_keepsDecodedFrames && ![self _constraintArrangementIsActive])
         [self _arrangeViews];
     [super layout];
 }

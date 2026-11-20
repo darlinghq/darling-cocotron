@@ -1875,6 +1875,19 @@ static BOOL X11WindowManagerSupports(Display *display, const char *name) {
     CGLSetCurrentContext(prevContext);
 }
 
+- (BOOL) addExposedRect: (O2Rect) rect isLast: (BOOL) last exposedUnion: (O2Rect *) exposedUnion {
+    if (_hasPendingExpose)
+        rect = NSUnionRect(_pendingExpose, rect);
+    if (!last) {
+        _pendingExpose = rect;
+        _hasPendingExpose = YES;
+        return NO;
+    }
+    _hasPendingExpose = NO;
+    *exposedUnion = rect;
+    return YES;
+}
+
 - (void) flushBuffer {
     if (_context == nil)
         return;
