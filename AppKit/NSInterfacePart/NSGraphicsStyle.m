@@ -37,7 +37,9 @@ static NSDictionary *sScrollerButtonAttributes = nil;
 
 + (void) initialize {
     if (sNormalMenuTextAttributes == nil) {
-        NSFont *menuFont = [NSFont menuFontOfSize: 0];
+        // Menu items are drawn in 14 points, the size of a new NSMenu's font
+        // on macOS 10.14.4, which is larger than menuFontOfSize:0.
+        NSFont *menuFont = [NSFont menuFontOfSize: 14];
         sNormalMenuTextAttributes = [[NSDictionary
                 dictionaryWithObjectsAndKeys: menuFont, NSFontAttributeName,
                                               [NSColor menuItemTextColor],
@@ -185,7 +187,7 @@ static NSDictionary *sScrollerButtonAttributes = nil;
 
 - (CGFloat) menuBarHeight {
     NSDictionary *attributes = [NSDictionary
-            dictionaryWithObjectsAndKeys: [NSFont menuFontOfSize: 0],
+            dictionaryWithObjectsAndKeys: [NSFont menuBarFontOfSize: 0],
                                           NSFontAttributeName, nil];
     CGFloat result = [@"Menu" sizeWithAttributes: attributes].height;
 

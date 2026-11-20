@@ -196,16 +196,18 @@ static NSLock *_cacheLock = nil;
     [_cacheLock unlock];
 }
 
+// The sizes of the system, small system and label fonts of the Human Interface
+// Guidelines (13, 11 and 10 points), as macOS 10.14.4 and 26.7.3 report them.
 + (CGFloat) systemFontSize {
-    return 12.0;
+    return 13.0;
 }
 
 + (CGFloat) smallSystemFontSize {
-    return 10.0;
+    return 11.0;
 }
 
 + (CGFloat) labelFontSize {
-    return 12.0;
+    return 10.0;
 }
 
 + (CGFloat) systemFontSizeForControlSize: (NSControlSize) size {
@@ -220,6 +222,12 @@ static NSLock *_cacheLock = nil;
     case NSMiniControlSize:
         return 9.0;
     }
+}
+
+// The font factory methods take 0 or a negative size to mean the default size
+// of the font they return.
+static CGFloat sizeOrDefault(CGFloat size, CGFloat defaultSize) {
+    return size > 0 ? size : defaultSize;
 }
 
 + (NSFont *) _uiFontOfType: (CTFontUIFontType) type
@@ -254,37 +262,46 @@ static NSLock *_cacheLock = nil;
 
 + (NSFont *) controlContentFontOfSize: (CGFloat) size {
     return [self _uiFontOfType: kCTFontControlContentFontType
-                          size: (size == 0) ? 12.0 : size
+                          size: sizeOrDefault(size, 12.0)
                   fallbackName: @"San Francisco"];
 }
 
 + (NSFont *) labelFontOfSize: (CGFloat) size {
     return [self _uiFontOfType: kCTFontLabelFontType
-                          size: (size == 0) ? 12.0 : size
+                          size: sizeOrDefault(size, [self labelFontSize])
                   fallbackName: @"San Francisco"];
 }
 
+// QUIRK: menuFontOfSize: with size 0 gives 13 points, while the menu item UI font
+// type of Core Text defaults to 14; menuBarFontOfSize: gives 14 on 10.14 (13 on
+// macOS 26; we follow 10.14). Not documented. Evidence: black-box observation
+// on macOS 10.14.4 and 26.7.3 (tier 2), probe mac-probes/aqua-metric-followups.m
+// of the research notes. Test: appkit-font-default-sizes.m (test_quirk_menu_fonts)
 + (NSFont *) menuFontOfSize: (CGFloat) size {
     return [self _uiFontOfType: kCTFontMenuItemFontType
-                          size: size
+                          size: sizeOrDefault(size, 13.0)
                   fallbackName: @"San Francisco"];
 }
 
 + (NSFont *) menuBarFontOfSize: (CGFloat) size {
     return [self _uiFontOfType: kCTFontMenuTitleFontType
-                          size: size
+                          size: sizeOrDefault(size, 14.0)
                   fallbackName: @"San Francisco"];
 }
 
 + (NSFont *) messageFontOfSize: (CGFloat) size {
     return [self _uiFontOfType: kCTFontSystemFontType
-                          size: (size == 0) ? 12.0 : size
+                          size: sizeOrDefault(size, [self systemFontSize])
                   fallbackName: @"San Francisco"];
 }
 
+// QUIRK: the palette and tool tip fonts default to 11 points. Not documented.
+// Evidence: black-box observation on macOS 10.14.4 and 26.7.3 (tier 2), probe
+// mac-probes/aqua-metric-followups.m of the research notes.
+// Test: appkit-font-default-sizes.m (test_quirk_palette_tooltip_fonts)
 + (NSFont *) paletteFontOfSize: (CGFloat) size {
     return [self _uiFontOfType: kCTFontPaletteFontType
-                          size: (size == 0) ? 12.0 : size
+                          size: sizeOrDefault(size, 11.0)
                   fallbackName: @"San Francisco"];
 }
 
@@ -319,26 +336,35 @@ static NSLock *_cacheLock = nil;
     return [self systemFontOfSize: size weight: weight];
 }
 
+// The title bar font is the window title UI font: regular, 13 points by default
+// (macOS 10.14.4).
 + (NSFont *) titleBarFontOfSize: (CGFloat) size {
-    return [self boldSystemFontOfSize: size];
+    return [self _uiFontOfType: kCTFontWindowTitleFontType
+                          size: sizeOrDefault(size, [self systemFontSize])
+                  fallbackName: @"San Francisco"];
 }
 
 + (NSFont *) toolTipsFontOfSize: (CGFloat) size {
     return [self _uiFontOfType: kCTFontToolTipFontType
-                          size: (size == 0) ? 10. : size
+                          size: sizeOrDefault(size, 11.0)
                   fallbackName: @"San Francisco"];
 }
 
 + (NSFont *) userFontOfSize: (CGFloat) size {
     return [NSFont fontWithName: [O2Font postscriptNameForDisplayName:
                                                  @"San Francisco"]
-                           size: (size == 0) ? 12.0 : size];
+                           size: sizeOrDefault(size, 12.0)];
 }
 
+// QUIRK: the fixed pitch user font defaults to 10 points on 10.14 (11 on macOS
+// 26; we follow 10.14), as the fixed pitch UI font type of Core Text does. Not
+// documented. Evidence: black-box observation on macOS 10.14.4 and 26.7.3
+// (tier 2), probe mac-probes/aqua-metric-followups.m of the research notes.
+// Test: appkit-font-default-sizes.m (test_quirk_user_fonts)
 + (NSFont *) userFixedPitchFontOfSize: (CGFloat) size {
     return [NSFont
             fontWithName: [O2Font postscriptNameForDisplayName: @"Courier New"]
-                    size: (size == 0) ? 12.0 : size];
+                    size: sizeOrDefault(size, 10.0)];
 }
 
 + (void) setUserFont: (NSFont *) value {
