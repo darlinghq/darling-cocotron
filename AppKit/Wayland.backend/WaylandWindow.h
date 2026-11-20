@@ -80,6 +80,7 @@ struct WaylandBuffer {
     // created for a surface that has no role and configuration yet, and as a toplevel the
     // compositor would place and size it.
     BOOL _popupWaitingForParent;
+    BOOL _genericPopup; // an xdg_popup for a pop-up window that is not a menu or tool tip (see DarlingWindowPresentation.h)
     // -makeKey was called and the activation it asks for has not arrived yet.
     BOOL _keyRequested;
     // The activation is being reported to the NSWindow; its -becomeKeyWindow asks -makeKey, which is no new request.
@@ -138,6 +139,9 @@ struct WaylandBuffer {
 - (void) ensureMapped;
 // A tool tip window: placed as an ungrabbed popup next to the pointer.
 - (BOOL) isTooltip;
+// A pop-up window of the application (a drop-down a toolkit draws, a custom tool tip), shown as an
+// ungrabbed popup of its parent window; it is not part of menu tracking.
+- (BOOL) isGenericPopup;
 - (WaylandWindow *) popupParent;
 - (WaylandWindow *) levelParent;
 - (void) updateLevelParent;

@@ -21,6 +21,7 @@
 #import "WaylandLibrary.h"
 #import "WaylandProtocol.h"
 #import "WaylandWindowLevel.h"
+#import "../DarlingWindowPresentation.h"
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSWindow.h>
 #import "../NSWindow-Private.h"
@@ -228,11 +229,18 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 - (BOOL) isTooltip {
     return [_delegate isKindOfClass: NSClassFromString(@"NSToolTipWindow")];
 }
+- (BOOL) isGenericPopup { return _genericPopup; }
 - (WaylandWindow *) popupParent { return _popupParent; }
 - (uint32_t) popupGrabSerial { return _popupGrabSerial; }
 - (struct wl_proxy *) xdgSurface { return _xdgSurface; }
 
 #pragma mark - Mapping
+
+// Whether AppKit considers this window a pop-up (see -[NSWindow _windowPresentation]).
+- (BOOL) wantsPopupRole {
+    return [_delegate respondsToSelector: @selector(_windowPresentation)] &&
+           [(NSWindow *) _delegate _windowPresentation] == DarlingWindowPresentationPopup;
+}
 
 - (void) ensureMapped {
     if (_mapped || _invalidated)
@@ -251,7 +259,14 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
         return;
     BOOL menu = [_delegate isKindOfClass: NSClassFromString(@"NSMenuWindow")] ||
                 [_delegate isKindOfClass: NSClassFromString(@"NSPopUpWindow")];
-    WaylandWindow *parent = tooltip ? tooltipParent : menu ? [_display popupParentForWindow: self] : nil;
+    // A pop-up window that is neither a menu nor a tool tip (see DarlingWindowPresentation.h) is a
+    // popup of the window it belongs to, so that the compositor places it where AppKit put it,
+    // keeps it out of the task bar and does not give it the keyboard focus. Without a window to
+    // belong to it stays an ordinary window.
+    BOOL genericPopup = !tooltip && !menu && [self wantsPopupRole];
+    WaylandWindow *parent = tooltip ? tooltipParent : menu ? [_display popupParentForWindow: self]
+                          : genericPopup ? [_display popupParentForGenericPopup: self] : nil;
+    _genericPopup = genericPopup && parent != nil;
     // A menu opened before its parent's first configure is mapped when that configure arrives
     // (-[WaylandDisplay mapPopupsWaitingForParent]), as a popup of that parent.
     _popupWaitingForParent = parent != nil && !parent->_configured;
@@ -382,7 +397,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     _popup = WaylandCreateObject(_xdgSurface, WP_XDG_SURFACE_GET_POPUP,
             &xdg_popup_interface, args, WaylandObjectPopup, self);
     sendRequest(positioner, WP_POSITIONER_DESTROY, WL_MARSHAL_FLAG_DESTROY);
-    if ([self isTooltip]) {
+    if ([self isTooltip] || (_genericPopup && [_delegate ignoresMouseEvents])) {
         // No grab, and an empty input region: the pointer keeps its focus on the
         // parent while a tool tip is shown beside it.
         args[0].o = NULL;
@@ -393,6 +408,10 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
         sendRequest(region, WP_REGION_DESTROY, WL_MARSHAL_FLAG_DESTROY);
         return;
     }
+    // A pop-up window of the application ends when the application orders it out; the compositor
+    // dismissing it with a click elsewhere would leave the application showing it.
+    if (_genericPopup)
+        return;
     _popupGrabSerial = [_display popupGrabSerialForParent: _popupParent];
     if (_popupGrabSerial != 0 && [_display seat] != NULL) {
         args[0].o = (struct wl_object *) [_display seat];
@@ -440,6 +459,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
         [_popupParent release];
         _popupParent = nil;
         _popupGrabSerial = 0;
+        _genericPopup = NO;
     }
     if (_appMenu != NULL) {
         sendRequest(_appMenu, WP_APPMENU_RELEASE, WL_MARSHAL_FLAG_DESTROY);
@@ -730,7 +750,12 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
         return;
 
     WaylandWindow *parent = nil;
-    if (DarlingWindowRoleForLevel(_level) == DarlingWindowRoleTransient)
+    // A window of a raised level, and any window that is not an application window (a panel, a
+    // child window, a window that cannot become main: see DarlingWindowPresentation.h), is related
+    // to the window it belongs to, which keeps it in front of that window and out of the task bar.
+    BOOL auxiliary = [_delegate respondsToSelector: @selector(_windowPresentation)] &&
+                     [(NSWindow *) _delegate _windowPresentation] != DarlingWindowPresentationApplication;
+    if (DarlingWindowRoleForLevel(_level) == DarlingWindowRoleTransient || auxiliary)
         parent = [_display levelParentForWindow: self];
     if (parent == _levelParent || (parent != nil && parent->_toplevel == NULL))
         return;
@@ -1258,7 +1283,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
                 if (!self->_mapped || self->_surfaceGeneration != generation)
                     return;
                 // Dismissing a tool tip must not cancel menu tracking.
-                if (tooltip)
+                if (tooltip || self->_genericPopup)
                     [self unmap];
                 else
                     [self->_display cancelPopupMenus];
