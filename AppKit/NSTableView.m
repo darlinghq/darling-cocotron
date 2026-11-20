@@ -84,6 +84,12 @@ const CGFloat NSTableViewDefaultRowHeight = 17.0f;
 
 @implementation NSTableView
 
+// Operated at once: the click that activates the window is delivered to it
+// (see -[NSWindow sendEvent:]).
+- (BOOL) acceptsFirstMouse: (NSEvent *) event {
+    return YES;
+}
+
 // The accessors are in the NSTableViewStyle category below.
 @dynamic style;
 

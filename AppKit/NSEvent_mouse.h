@@ -29,6 +29,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     void *_userData;
     NSInteger _buttonNumber;
     NSInteger _eventNumber;
+    NSInteger _keyStateOnArrival;
 }
 
 - (void) _setTrackingArea: (NSTrackingArea *) area;
@@ -72,5 +73,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (void *) userData;
 
 - (void) _setButtonNumber: (NSInteger) num;
+
+// Whether the window the press was meant for was key when the window system
+// delivered the press. By the time the event is taken from the queue the
+// window system's activation for the same click may have been applied. Unset
+// for events that did not come from a window system.
+- (void) _setWindowWasKeyOnArrival: (BOOL) key;
+- (BOOL) _hasWindowKeyStateOnArrival;
+- (BOOL) _windowWasKeyOnArrival;
 
 @end

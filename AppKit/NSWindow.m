@@ -3303,6 +3303,25 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
 // A mouse click in a window that is not key makes it key (a click does not wait for the window
 // system's focus, which on its own does not always hand out the key status). A panel that becomes key
 // only if needed takes it only for a click on a view that needs the panel to be key.
+// The left click that finds a window not key (the click that activates it) is
+// delivered only to a view that accepts first mouse; for any other view it only
+// makes the window key (if it is not already), and the matching release and
+// drags find no view to go to. A window that cannot become key is not activated by the click, so its
+// views always get it. Only the view under the pointer is asked.
+- (BOOL) _withholdsFirstMouseEvent: (NSEvent *) event fromView: (NSView *) view {
+    if (view == nil || ![self canBecomeKeyWindow])
+        return NO;
+    // A press from the window system carries whether the window was key when it
+    // arrived (the window system's activation for the same click may be applied
+    // before the press is taken from the queue); other events are judged now.
+    BOOL wasKey = [self isKeyWindow];
+    if ([event isKindOfClass: [NSEvent_mouse class]] && [(NSEvent_mouse *) event _hasWindowKeyStateOnArrival])
+        wasKey = [(NSEvent_mouse *) event _windowWasKeyOnArrival];
+    if (wasKey)
+        return NO;
+    return ![view acceptsFirstMouse: event];
+}
+
 - (void) _makeKeyForMouseDownInView: (NSView *) view {
     if ([self isKeyWindow] || ![self canBecomeKeyWindow])
         return;
@@ -3391,6 +3410,10 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
     case NSLeftMouseDown: {
         NSView *view = [_backgroundView hitTest: [event locationInWindow]];
 
+        if ([self _withholdsFirstMouseEvent: event fromView: view]) {
+            [self _makeKeyForMouseDownInView: view];
+            break;
+        }
         [self _makeKeyForMouseDownInView: view];
         if ([view acceptsFirstResponder]) {
             if ([view needsPanelToBecomeKey]) {

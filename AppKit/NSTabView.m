@@ -39,6 +39,12 @@ id _NSTabViewFloatingCell = nil;
 
 @implementation NSTabView
 
+// Operated at once: the click that activates the window is delivered to it
+// (see -[NSWindow sendEvent:]).
+- (BOOL) acceptsFirstMouse: (NSEvent *) event {
+    return YES;
+}
+
 - initWithCoder: (NSCoder *) coder {
     // The class version is asked before the superclass part is decoded.
     NSInteger version = [coder allowsKeyedCoding] ? 0 : [coder versionForClassName: @"NSTabView"];
