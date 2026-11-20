@@ -3129,6 +3129,21 @@ static NSView *viewBeingPrinted = nil;
             CGContextRef graphicsPort = CGBitmapContextCreate(
                     NULL, width, height, 8, 0, colorSpace,
                     kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Host);
+            // The layer keeps what the view drew before: drawing (a redisplay
+            // of a dirty rect, or a lockFocus of the view) only changes the
+            // part it draws, as in a window's backing store.
+            id previous = [_layer contents];
+            if (graphicsPort != NULL && previous != nil &&
+                CFGetTypeID((CFTypeRef) previous) == CGImageGetTypeID()) {
+                CGImageRef image = (CGImageRef) previous;
+                size_t pixelsWide = CGBitmapContextGetWidth(graphicsPort);
+                size_t pixelsHigh = CGBitmapContextGetHeight(graphicsPort);
+                if (CGImageGetWidth(image) == pixelsWide &&
+                    CGImageGetHeight(image) == pixelsHigh)
+                    CGContextDrawImage(graphicsPort,
+                                       CGRectMake(0, 0, pixelsWide, pixelsHigh),
+                                       image);
+            }
             context = [NSGraphicsContext
                     graphicsContextWithGraphicsPort: graphicsPort
                                             flipped: NO];
@@ -3469,6 +3484,11 @@ static void releaseSubviewSnapshot(SubviewSnapshot *snapshot) {
         // clipped
         if (rectsCount > 1)
             CGContextClipToRects(graphicsPort, rects, rectsCount);
+
+        // A layer keeps its earlier contents (see -_lockFocusInContext:), so
+        // the part being redrawn starts out clear, as a new layer does.
+        if (_layer != nil && viewBeingPrinted == nil)
+            CGContextClearRect(graphicsPort, rect);
 
         // [_window dirtyRect:[self convertRect:rect toView:nil]];
         if ([NSGraphicsContext inQuartzDebugMode]) {
