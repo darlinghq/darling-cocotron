@@ -226,6 +226,11 @@ bool WaylandCheckOpcodes(void) {
             {&org_kde_kwin_appmenu_interface, false, WP_APPMENU_SET_ADDRESS, "set_address"},
             {&org_kde_kwin_appmenu_interface, false, WP_APPMENU_RELEASE, "release"},
 
+            {&org_kde_plasma_shell_interface, false, WP_PLASMA_SHELL_GET_SURFACE, "get_surface"},
+            {&org_kde_plasma_surface_interface, false, WP_PLASMA_SURFACE_DESTROY, "destroy"},
+            {&org_kde_plasma_surface_interface, false, WP_PLASMA_SURFACE_SET_SKIP_TASKBAR, "set_skip_taskbar"},
+            {&org_kde_plasma_surface_interface, false, WP_PLASMA_SURFACE_SET_SKIP_SWITCHER, "set_skip_switcher"},
+
             {&zwlr_output_manager_v1_interface, true, WP_WLR_MANAGER_EV_HEAD, "head"},
             {&zwlr_output_manager_v1_interface, true, WP_WLR_MANAGER_EV_DONE, "done"},
             {&zwlr_output_manager_v1_interface, false, WP_WLR_MANAGER_CREATE_CONFIGURATION, "create_configuration"},

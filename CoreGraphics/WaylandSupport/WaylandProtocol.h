@@ -78,6 +78,8 @@ extern const struct wl_interface zwlr_output_configuration_v1_interface;
 extern const struct wl_interface zwlr_output_configuration_head_v1_interface;
 extern const struct wl_interface org_kde_kwin_appmenu_manager_interface;
 extern const struct wl_interface org_kde_kwin_appmenu_interface;
+extern const struct wl_interface org_kde_plasma_shell_interface;
+extern const struct wl_interface org_kde_plasma_surface_interface;
 
 // Opcodes are the zero-based positions of <request> and <event> elements in the
 // protocol XML. WaylandCheckOpcodes() verifies each one against the generated tables.
@@ -284,6 +286,11 @@ enum {
     WP_APPMENU_MANAGER_RELEASE = 1, /* version 2 */
     WP_APPMENU_SET_ADDRESS = 0,
     WP_APPMENU_RELEASE = 1,
+
+    WP_PLASMA_SHELL_GET_SURFACE = 0,
+    WP_PLASMA_SURFACE_DESTROY = 0,
+    WP_PLASMA_SURFACE_SET_SKIP_TASKBAR = 5,  /* version 2 */
+    WP_PLASMA_SURFACE_SET_SKIP_SWITCHER = 9, /* version 5 */
 
     WP_WLR_MANAGER_EV_HEAD = 0,
     WP_WLR_MANAGER_EV_DONE = 1,

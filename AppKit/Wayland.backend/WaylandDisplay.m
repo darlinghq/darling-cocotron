@@ -580,6 +580,12 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         _appMenuManagerVersion = MIN(version, 2);
         _appMenuManager = [self bindGlobal: name interface: &org_kde_kwin_appmenu_manager_interface
                                    version: _appMenuManagerVersion kind: 0 object: nil];
+    } else if (strcmp(interface, "org_kde_plasma_shell") == 0 && _plasmaShell == NULL) {
+        // Version 2 adds set_skip_taskbar, version 5 set_skip_switcher.
+        _plasmaShellName = name;
+        _plasmaShellVersion = MIN(version, 5);
+        _plasmaShell = [self bindGlobal: name interface: &org_kde_plasma_shell_interface
+                                version: _plasmaShellVersion kind: 0 object: nil];
     } else if (strcmp(interface, "wl_subcompositor") == 0 && _subcompositor == NULL) {
         _subcompositor = [self bindGlobal: name interface: &wl_subcompositor_interface
                                   version: 1 kind: 0 object: nil];
@@ -763,6 +769,13 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
             WaylandMarshal(manager, WP_APPMENU_MANAGER_RELEASE, NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
         else
             WL.wl_proxy_destroy(manager);
+        return;
+    }
+    if (_plasmaShell && name == _plasmaShellName) {
+        // The windows' plasma surfaces stay valid on the compositor's side; they are destroyed when
+        // their windows unmap.
+        WL.wl_proxy_destroy(_plasmaShell);
+        _plasmaShell = NULL; _plasmaShellName = 0;
         return;
     }
     if (_activation && name == _activationName) {
