@@ -333,6 +333,12 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
     if (_xkbContext == NULL)
         NSLog(@"Wayland backend: cannot create an xkbcommon context, keyboard "
               @"input is disabled");
+    else
+        // The Text Input Sources API describes a keyboard layout whether or not the
+        // seat has a keyboard (a compositor with no input devices never sends a
+        // keymap), so start with the system default layout; the compositor's keymap
+        // replaces it when one arrives.
+        [self installKeymap: WL.xkb_keymap_new_from_names(_xkbContext, NULL, XKB_KEYMAP_COMPILE_NO_FLAGS)];
 
     if (WL.hasCursor) {
         const char *sizeString = getenv("XCURSOR_SIZE");
@@ -2009,6 +2015,12 @@ static NSUInteger modifierDeviceMask(int code) {
     }
     close(fd);
 
+    [self installKeymap: keymap];
+}
+
+// Makes keymap (nil: none usable; the reference is taken over) the one that interprets key codes
+// and that the Text Input Sources API describes.
+- (void) installKeymap: (struct xkb_keymap *) keymap {
     struct xkb_state *state = keymap != NULL ? WL.xkb_state_new(keymap) : NULL;
     if (state == NULL) {
         if (keymap != NULL)
