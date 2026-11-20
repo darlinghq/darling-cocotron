@@ -2134,11 +2134,11 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
 
         rect.origin.y =
                 [window frame].size.height - rect.origin.y - rect.size.height;
-        // rect=NSInsetRect(rect, -10, -10);
-        // [_backingContext addToDirtyRect:rect];
-        if (ev->xexpose.count == 0)
-            [window flushBuffer];
-
+        // The server sends one event per rectangle of an exposed area; the window is flushed
+        // and the delegate told once, for their union, after the last one.
+        if (![window addExposedRect: rect isLast: ev->xexpose.count == 0 exposedUnion: &rect])
+            break;
+        [window flushBuffer];
         [delegate platformWindowExposed: window inRect: rect];
         break;
 
