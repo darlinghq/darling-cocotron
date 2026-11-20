@@ -68,6 +68,9 @@ APPKIT_EXPORT NSToolbarItemIdentifier NSToolbarWritingToolsItemIdentifier;
     NSView *_view;
     NSSize _minSize;
     NSSize _maxSize;
+    // Whether _minSize and _maxSize were given (set, or decoded from a nib that does not ignore them);
+    // without them an item with a view is as big as the view's intrinsic content size.
+    BOOL _hasExplicitSizes;
     NSInteger _visibilityPriority;
     BOOL _autovalidates;
     BOOL _isEnabled;
