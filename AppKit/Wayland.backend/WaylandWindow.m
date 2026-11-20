@@ -597,6 +597,13 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 // Whether the window has a title bar for the platform to draw (see -[NSWindow
 // _hasTitlebarForStyleMask:]).
 - (BOOL) hasTitlebar {
+    // A sheet is drawn over its window on macOS, but xdg-shell lets the compositor place every toplevel and
+    // gives a client no way to put one at a position over its parent. A sheet left without a frame then
+    // appears as a bare rectangle at a place of the compositor's choosing, which looks like a glitch. It is
+    // presented as what the compositor can show well: a dialog related to its window (see
+    // -updateLevelParent) with the compositor's frame.
+    if ([_delegate respondsToSelector: @selector(isSheet)] && [(NSWindow *) _delegate isSheet])
+        return YES;
     if ([_delegate respondsToSelector: @selector(_hasTitlebarForStyleMask:)])
         return [(NSWindow *) _delegate _hasTitlebarForStyleMask: _styleMask];
     return (_styleMask & NSWindowStyleMaskTitled) != 0;
