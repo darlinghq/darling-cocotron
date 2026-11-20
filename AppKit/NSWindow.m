@@ -51,6 +51,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSTrackingArea.h>
 #import <AppKit/NSView.h>
 #import <AppKit/NSWindow-Private.h>
+#import <AppKit/NSViewController-Private.h>
 #import <AppKit/NSLinkedOnOrAfter.h>
 #import <AppKit/NSWindow.h>
 #import <AppKit/NSWindowTabGroup+Private.h>
@@ -166,6 +167,7 @@ NSInteger NSBitsPerPixelFromDepth(NSWindowDepth depth) {
 
 - (NSRect) zoomedFrame;
 - (void) _updateOcclusionState;
+- (NSArray *) _willChangeViewAppearanceForVisible: (BOOL) visible;
 
 @end
 
@@ -3063,6 +3065,7 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
           relativeTo: (NSInteger) relativeTo
 {
     BOOL wasVisible = NS_EXTRA(NSWindow, self)->_isVisible;
+    NSArray *appearance = nil;
 
     // The move notifications are sent under unknown conditions around
     // orderFront: in the Apple AppKit, we do them all the time here until it's
@@ -3081,6 +3084,7 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
             [self _titlebarVisibilityChanged];
         }
         [self update];
+        appearance = [self _willChangeViewAppearanceForVisible: YES];
         NS_EXTRA(NSWindow, self)->_isVisible = YES;
         [[self platformWindow] placeAboveWindow: relativeTo];
         /* In some instances when a COMMAND is issued from a menu item to bring
@@ -3106,6 +3110,7 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
             [self _titlebarVisibilityChanged];
         }
         [self update];
+        appearance = [self _willChangeViewAppearanceForVisible: YES];
         NS_EXTRA(NSWindow, self)->_isVisible = YES;
         [[self platformWindow] placeBelowWindow: relativeTo];
         /* In some instances when a COMMAND is issued from a menu item to bring
@@ -3133,6 +3138,7 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
             [[self retain] autorelease];
             [NS_EXTRA(NSWindow, self)->_parentWindow _detachChildWindow: self];
         }
+        appearance = [self _willChangeViewAppearanceForVisible: NO];
         NS_EXTRA(NSWindow, self)->_isVisible = NO;
         [[self platformWindow] hideWindow];
         if (![self isKindOfClass: [NSPanel class]]) {
@@ -3144,6 +3150,7 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
     }
 
     [self _updateOcclusionState];
+    [NSViewController _didPerformAppearanceTransitions: appearance];
     [self postNotificationName: NSWindowDidMoveNotification];
 }
 
@@ -3819,6 +3826,7 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
     if (NS_EXTRA(NSWindow, self)->_isVisible == visible) {
         return;
     }
+    NSArray *appearance = [self _willChangeViewAppearanceForVisible: visible];
     NS_EXTRA(NSWindow, self)->_isVisible = visible;
     if (visible) {
         [[self platformWindow] showWindowWithoutActivation];
@@ -3826,6 +3834,7 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
         [[self platformWindow] hideWindow];
     }
     [self _updateOcclusionState];
+    [NSViewController _didPerformAppearanceTransitions: appearance];
 }
 
 - (void) orderFront: (id) sender {
@@ -4219,10 +4228,29 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
 }
 
 - (void) _setVisible: (BOOL) visible {
-    BOOL wasVisible = NS_EXTRA(NSWindow, self)->_isVisible;
-
+    NSArray *appearance = [self _willChangeViewAppearanceForVisible: visible];
     NS_EXTRA(NSWindow, self)->_isVisible = visible;
     [self _updateOcclusionState];
+    [NSViewController _didPerformAppearanceTransitions: appearance];
+}
+
+- (BOOL) _isShownForViewAppearance {
+    return NS_EXTRA(NSWindow, self)->_isVisible && ![self isMiniaturized];
+}
+
+// The view controllers of the window's views hear -viewWillAppear or
+// -viewWillDisappear before the window is shown or hidden, and the matching
+// -viewDid... call after, which the caller sends with
+// +[NSViewController _didPerformAppearanceTransitions:].
+- (NSArray *) _willChangeViewAppearanceForVisible: (BOOL) visible {
+    NSArray *appearance = [NSViewController _appearanceTransitionsUnder: _backgroundView
+                                                                 window: self
+                                                          windowVisible: visible
+                                                          rootSuperview: nil
+                                                          useRootHidden: NO
+                                                             rootHidden: NO];
+    [NSViewController _willPerformAppearanceTransitions: appearance];
+    return appearance;
 }
 
 // Called wherever something -occlusionState depends on may have changed: posts the notification
@@ -4323,9 +4351,10 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
     [self _setSheetOrigin];
     NSRect sheetFrame = [sheet frame];
 
-    BOOL sheetWasVisible = NS_EXTRA(NSWindow, sheet)->_isVisible;
+    NSArray *sheetAppearance = [sheet _willChangeViewAppearanceForVisible: YES];
     NS_EXTRA(NSWindow, sheet)->_isVisible = YES;
     [sheet _updateOcclusionState];
+    [NSViewController _didPerformAppearanceTransitions: sheetAppearance];
     [sheet display];
     [[sheet platformWindow] sheetOrderFrontFromFrame: sheetFrame
                                          aboveWindow: [self platformWindow]];
@@ -4348,10 +4377,11 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
     sheetFrame.origin.y = NSMaxY(sheetFrame);
     sheetFrame.size.height = 0;
 
-    BOOL sheetWasVisible = NS_EXTRA(NSWindow, sheet)->_isVisible;
+    NSArray *sheetAppearance = [sheet _willChangeViewAppearanceForVisible: NO];
     NS_EXTRA(NSWindow, sheet)->_isVisible = NO;
     [[sheet platformWindow] sheetOrderOutToFrame: sheetFrame];
     [sheet _updateOcclusionState];
+    [NSViewController _didPerformAppearanceTransitions: sheetAppearance];
     [(NSThemeFrame *) [sheet _backgroundView] setWindowBorderType: NSNoBorder];
 
     [NS_EXTRA(NSWindow, self)->_sheetContext release];
@@ -4431,6 +4461,9 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
 }
 
 - (void) platformWindowDeminiaturized: (CGWindow *) window {
+    // The window is shown again, so its views appear again.
+    NSArray *appearance = [self _willChangeViewAppearanceForVisible: [self isVisible]];
+    [NSViewController _didPerformAppearanceTransitions: appearance];
     [self _updatePlatformWindowTitle];
     if (NS_EXTRA(NSWindow, self)->_sheetContext != nil) {
         [[NS_EXTRA(NSWindow, self)->_sheetContext sheet] orderWindow: NSWindowAbove
@@ -4443,6 +4476,10 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
 
 - (void) platformWindowMiniaturized: (CGWindow *) window {
     NS_EXTRA(NSWindow, self)->_isActive = NO;
+
+    // A miniaturized window shows none of its views.
+    NSArray *appearance = [self _willChangeViewAppearanceForVisible: NO];
+    [NSViewController _didPerformAppearanceTransitions: appearance];
 
     [self _updatePlatformWindowTitle];
     if (NS_EXTRA(NSWindow, self)->_sheetContext != nil) {

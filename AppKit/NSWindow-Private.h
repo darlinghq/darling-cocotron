@@ -40,6 +40,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (BOOL) _isActive;
 - (BOOL) _isHiddenForDeactivation;
 - (void) _setVisible: (BOOL) visible;
+// Whether the window is shown and not miniaturized, which is when the views
+// in it count as appeared for their view controllers.
+- (BOOL) _isShownForViewAppearance;
 - (NSArray *) _draggedTypes;
 - (void) _addCursorRect: (NSRect) rect
                  cursor: (NSCursor *) cursor

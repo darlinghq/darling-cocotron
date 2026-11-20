@@ -34,7 +34,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSUserInterfaceLayoutDirection.h>
 #import <AppKit/NSAccessibilityProtocols.h>
 
-@class NSLayoutConstraint;
+@class NSLayoutConstraint, NSViewController;
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -183,6 +183,8 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeAllScreens;
         // Set by -invalidateRestorableState; such a view with an identifier is saved with its window.
         BOOL _restorableStateInvalidated;
         NSEdgeInsets _additionalSafeAreaInsets;
+        // Not retained: the controller whose -view this is, set by its -setView:
+        NSViewController *_viewController;
     NS_EXTRA_IVARS_END(NSView)
 }
 
