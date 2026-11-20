@@ -33,6 +33,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 NS_ASSUME_NONNULL_BEGIN
 
+@class NSWindowTabGroup;
 @class NSView, NSEvent, NSColor, NSColorSpace, NSCursor, NSImage, NSScreen,
         NSText, NSTextView, CGWindow, NSPasteboard, NSSheetContext,
         NSTitlebarAccessoryViewController,
@@ -393,6 +394,8 @@ typedef NS_ENUM(NSInteger, NSWindowUserTabbingPreference) {
         NSSelectionDirection _keyViewSelectionDirection;
         // The occlusion state last reported, so a change is notified once.
         NSWindowOcclusionState _occlusionState;
+        // Made on first use, once the window takes part in tabbing.
+        NSWindowTabGroup *_tabGroup;
     NS_EXTRA_IVARS_END(NSWindow)
 }
 
@@ -537,6 +540,9 @@ typedef NS_ENUM(NSInteger, NSWindowUserTabbingPreference) {
 @property(nullable, nonatomic, readonly) NSWindow *attachedSheet;
 @property(nullable, nonatomic, readonly) NSWindow *sheetParent;
 @property(nullable, nonatomic, readonly) NSArray<NSWindow *> *tabbedWindows;
+// The window's tab group (macOS 10.13): nil unless the window allows tabbing
+// and has a tabbing identifier of its own or prefers tabs.
+@property(nullable, nonatomic, readonly) NSWindowTabGroup *tabGroup;
 
 @property(null_unspecified, nonatomic, retain) id windowController;
 - (null_unspecified NSArray *) drawers;

@@ -276,6 +276,7 @@ set(AppKit_sources
 	NSButton.m
 	NSPrintPanel.m
 	NSWindowController.m
+	NSWindowTabGroup.m
 	NSColorSampler.m
 	NSColorSpace.m
 	DarlingLayout.mm
