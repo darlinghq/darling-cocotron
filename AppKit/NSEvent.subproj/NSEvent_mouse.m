@@ -253,4 +253,16 @@ static NSInteger defaultButtonNumber(NSEventType type) {
     _buttonNumber = num;
 }
 
+- (void) _setWindowWasKeyOnArrival: (BOOL) key {
+    _keyStateOnArrival = key ? 1 : 2;
+}
+
+- (BOOL) _hasWindowKeyStateOnArrival {
+    return _keyStateOnArrival != 0;
+}
+
+- (BOOL) _windowWasKeyOnArrival {
+    return _keyStateOnArrival == 1;
+}
+
 @end

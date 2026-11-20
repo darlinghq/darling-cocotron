@@ -48,6 +48,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @implementation NSTextField
 
+// Operated at once: the click that activates the window is delivered to it
+// (see -[NSWindow sendEvent:]).
+- (BOOL) acceptsFirstMouse: (NSEvent *) event {
+    return YES;
+}
+
 - (CGFloat) preferredMaxLayoutWidth {
     return NS_EXTRA(NSTextField, self)->_preferredMaxLayoutWidth;
 }

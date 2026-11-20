@@ -42,6 +42,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @implementation NSButton
 
+// Operated at once: the click that activates the window is delivered to it
+// (see -[NSWindow sendEvent:]).
+- (BOOL) acceptsFirstMouse: (NSEvent *) event {
+    return YES;
+}
+
 // A button's hugging follows its look until a priority is set: check boxes, radio buttons and
 // borderless buttons hug like plain views; bezels drawn at a fixed height hug vertically, and
 // those drawn at a fixed size hug in both directions.

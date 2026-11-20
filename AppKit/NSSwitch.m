@@ -2,6 +2,12 @@
 
 @implementation NSSwitch
 
+// Operated at once: the click that activates the window is delivered to it
+// (see -[NSWindow sendEvent:]).
+- (BOOL) acceptsFirstMouse: (NSEvent *) event {
+    return YES;
+}
+
 - (NSControlStateValue) state {
     return _state;
 }

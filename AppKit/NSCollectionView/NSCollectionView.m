@@ -28,6 +28,12 @@ NSString *const NSCollectionElementKindSelectionRectIndicator =
         @"NSCollectionElementKindSelectionRectIndicator";
 
 @implementation NSCollectionView
+
+// Operated at once: the click that activates the window is delivered to it
+// (see -[NSWindow sendEvent:]).
+- (BOOL) acceptsFirstMouse: (NSEvent *) event {
+    return YES;
+}
 @synthesize collectionViewLayout = _collectionViewLayout;
 @synthesize dataSource = _dataSource;
 @synthesize delegate = _delegate;

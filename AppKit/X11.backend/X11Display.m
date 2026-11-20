@@ -1887,6 +1887,10 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
                             deltaY: 0.0];
         [(NSEvent_mouse *) event
                 _setButtonNumber: cocoaButtonNumber(ev->xbutton.button)];
+        // The window manager may focus the window for this very click, before
+        // or after the press reaches us; the press is judged by what we knew
+        // when it arrived, not by what the queue shows when it is taken.
+        [(NSEvent_mouse *) event _setWindowWasKeyOnArrival: [delegate isKeyWindow]];
         [self postEvent: event atStart: NO];
         break;
 

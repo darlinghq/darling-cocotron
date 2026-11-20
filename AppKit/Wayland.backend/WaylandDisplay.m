@@ -1350,6 +1350,10 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
                         deltaY: 0.0];
     [(NSEvent_mouse *) event _setButtonNumber: number];
     if (pressed) {
+        // The compositor may activate the window for this very click, before
+        // or after the press reaches us; the press is judged by what we knew
+        // when it arrived, not by what the queue shows when it is taken.
+        [(NSEvent_mouse *) event _setWindowWasKeyOnArrival: [[window delegate] isKeyWindow]];
         _inputEvent = [event retain];
         _inputWindow = window;
     }
