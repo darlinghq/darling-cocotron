@@ -41,11 +41,22 @@ NSString *const NSNibTopLevelObjects = @"NSNibTopLevelObjects";
 - (void) _nibDidConnectObjects;
 @end
 
+// NSArchiver data starts with its typedstream signature; anything else is a keyed archive or a
+// NIBArchive.
+static BOOL NSNibDataIsKeyed(NSData *data) {
+    static const char typedstream[] = "\x04\x0bstreamtyped";
+    return !([data length] >= sizeof(typedstream) - 1 &&
+             memcmp([data bytes], typedstream, sizeof(typedstream) - 1) == 0);
+}
+
 @implementation NSNib
 
 - initWithCoder: (NSCoder *) coder {
     if ([coder allowsKeyedCoding]) {
         _data = [[coder decodeObjectForKey: @"NSNibFileData"] retain];
+        // A nib archived inside another nib (the nib of a table's cell views, for one) is
+        // instantiated like any other nib, so it has to know which kind of archive it holds.
+        _flags._isKeyed = NSNibDataIsKeyed(_data);
 
         // TODO: NSNibFileIsKeyed
         // NSNibFileUseParentBundle
@@ -148,11 +159,8 @@ NSString *const NSNibTopLevelObjects = @"NSNibTopLevelObjects";
         return nil;
     }
     _data = [data copy];
-    // NSArchiver data starts with its typedstream signature; anything else is a keyed archive
-    // or a NIBArchive. The bundle is not kept, as for a nib read from a file.
-    static const char typedstream[] = "\x04\x0bstreamtyped";
-    _flags._isKeyed = !([_data length] >= sizeof(typedstream) - 1 &&
-                        memcmp([_data bytes], typedstream, sizeof(typedstream) - 1) == 0);
+    // The bundle is not kept, as for a nib read from a file.
+    _flags._isKeyed = NSNibDataIsKeyed(_data);
     _allObjects = [NSMutableArray new];
     return self;
 }
