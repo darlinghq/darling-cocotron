@@ -1804,8 +1804,7 @@ static NSSize scaledImageSizeInFrameSize(NSSize imageSize, NSSize frameSize,
 // of the intrinsic content size with titles of 0 to 196 points at the three control sizes; 26.7.3 differs
 // and is not followed. The amounts are 28, 16 and 22 for push buttons (regular, small, mini; heights 21, 18
 // and 15), 18, 17 and 16 for checkboxes and 19, 19 and 17 for radio buttons. The heights of checkboxes and
-// radio buttons stay as they are, because the frame is not inset by the alignment insets here and the
-// glyphs would be cut off.
+// radio buttons are described in the QUIRK in the toggle branch below.
 // Test: tests/appkit-button-stock-intrinsic-size.m (test_quirk_stock_button_widths)
 - (void) _applyStockButtonMetricsToSize: (NSSize *) size titleWidth: (CGFloat) titleWidth {
     NSControlSize controlSize = NS_EXTRA(NSCell, self)->_controlSize;
@@ -1829,8 +1828,47 @@ static NSSize scaledImageSizeInFrameSize(NSSize imageSize, NSSize frameSize,
     BOOL isSwitch = [[image name] isEqualToString: @"NSSwitch"];
     BOOL isRadio = [[image name] isEqualToString: @"NSRadioButton"];
 
-    if ((isSwitch || isRadio) && [self imagePosition] == NSImageLeft)
-        size->width = ceil(titleWidth + (isSwitch ? switchPadding[index] : radioPadding[index]));
+    if ((isSwitch || isRadio) && [self imagePosition] == NSImageLeft) {
+        NSEdgeInsets insets = [self _toggleAlignmentInsets];
+
+        // QUIRK: the cell of a check box or radio button is as wide as the title plus the padding above and the
+        // alignment insets (so its intrinsic width stays the title width plus the padding), and 18 points high at
+        // every control size; the intrinsic height is that minus the insets. Not documented. Evidence: black-box
+        // observation on macOS 10.14.4 (tier 2): -cellSize of check boxes and radio buttons with titles of
+        // several widths at the three control sizes (vd-upstream/mac-probes/aqua-leftovers-metrics.m); 26.7.3
+        // differs and is not followed. Test: test_quirk_toggle_metrics in tests/appkit-toggle-metrics.m
+        size->width = ceil(titleWidth + (isSwitch ? switchPadding[index] : radioPadding[index])) + insets.left + insets.right;
+        size->height = 18;
+    }
+}
+
+// 0 for a button that is not a stock check box or radio button, 1 for a check box and 2 for a radio button.
+- (int) _stockToggleKind {
+    NSString *name = [[self image] name];
+
+    if ([name isEqualToString: @"NSSwitch"])
+        return 1;
+    if ([name isEqualToString: @"NSRadioButton"])
+        return 2;
+    return 0;
+}
+
+// QUIRK: the alignment insets (top, left, bottom, right) of a check box are (2, 2, 2, 2) regular, (3, 3, 3, 2)
+// small and (5, 4, 3, 2) mini, those of a radio button (1, 1, 1, 2), (2, 2, 2, 1) and (4, 4, 4, 1), in a flipped
+// button. They are where the box sits in the 18 point high cell. Not documented. Evidence: black-box
+// observation on macOS 10.14.4 (tier 2), -alignmentRectInsets of both at the three control sizes; 26.7.3
+// differs and is not followed. Test: test_quirk_toggle_metrics in tests/appkit-toggle-metrics.m
+- (NSEdgeInsets) _toggleAlignmentInsets {
+    static const CGFloat check[3][4] = {{2, 2, 2, 2}, {3, 3, 3, 2}, {5, 4, 3, 2}};
+    static const CGFloat radio[3][4] = {{1, 1, 1, 2}, {2, 2, 2, 1}, {4, 4, 4, 1}};
+    NSControlSize controlSize = NS_EXTRA(NSCell, self)->_controlSize;
+    int index = controlSize == NSSmallControlSize ? 1 : (controlSize == NSMiniControlSize ? 2 : 0);
+    int kind = [self _stockToggleKind];
+
+    if (kind == 0)
+        return NSEdgeInsetsMake(0, 0, 0, 0);
+    const CGFloat *v = kind == 1 ? check[index] : radio[index];
+    return NSEdgeInsetsMake(v[0], v[1], v[2], v[3]);
 }
 
 - (void) drawWithFrame: (NSRect) frame inView: (NSView *) control {

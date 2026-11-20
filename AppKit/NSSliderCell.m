@@ -481,6 +481,34 @@ typedef struct {
     return NSMakeRect(floor(NSMidX(body) - along / 2 + 0.5), floor(NSMidY(body) - across / 2 + 0.5), along, across);
 }
 
+// QUIRK: the bar rectangle of a linear slider is the track grown across the slider: 5 points thick (4 at the mini
+// size), starting 3 points (1 for small and mini) from the minimum end and ending as far from the maximum end.
+// Across the slider it starts at floor((thickness of the view - c) / 2) from the bottom of the view when `flipped`
+// is NO and from its top when it is YES, with c from the table below, which depends on the control size, on
+// whether and where the tick marks are, and (for a horizontal slider only) on `flipped`. It is computed for the
+// view's bounds whether or not the slider has been drawn. Not documented. Evidence: black-box observation on
+// macOS 10.14.4 (tier 2) of -barRectFlipped: for view thicknesses 10 to 40 points, all control sizes, tick mark
+// positions and both values of the argument (vd-upstream/mac-probes/aqua-leftovers-bar.m); circular sliders
+// are not covered. Test: test_quirk_slider_bar_rect in tests/appkit-slider-bar-rect.m
+- (NSRect) barRectFlipped: (BOOL) flipped {
+    // c by [vertical][ticks: none, below or right, above or left][control size][flipped: NO, YES]
+    static const int offsets[2][3][3][2] = {
+        {{{5, 5}, {5, 5}, {5, 5}}, {{0, 10}, {0, 10}, {1, 7}}, {{12, -2}, {10, 0}, {7, 1}}},
+        {{{4, 4}, {4, 4}, {2, 2}}, {{11, 11}, {9, 9}, {6, 6}}, {{-3, -3}, {-1, -1}, {0, 0}}}};
+    NSRect frame = NSIsEmptyRect(_lastRect) && _controlView != nil ? [_controlView bounds] : _lastRect;
+    int z = [self controlSize] == NSSmallControlSize ? 1 : ([self controlSize] == NSMiniControlSize ? 2 : 0);
+    int v = [self isVertical] == 1;
+    int t = _numberOfTickMarks <= 0 ? 0 : (_tickMarkPosition == NSTickMarkBelow ? 1 : 2);
+    CGFloat inset = z == 0 ? 3 : 1, thickness = z == 2 ? 4 : 5;
+    CGFloat crossSize = v ? NSWidth(frame) : NSHeight(frame);
+    CGFloat across = floor((crossSize - offsets[v][t][z][flipped ? 1 : 0]) / 2);
+    CGFloat length = (v ? NSHeight(frame) : NSWidth(frame)) - 2 * inset;
+
+    if (v)
+        return NSMakeRect(NSMinX(frame) + across, NSMinY(frame) + inset, thickness, length);
+    return NSMakeRect(NSMinX(frame) + inset, NSMinY(frame) + across, length, thickness);
+}
+
 - (void) drawKnob {
     [self drawKnob: [self knobRectFlipped: [[self controlView] isFlipped]]];
 }
