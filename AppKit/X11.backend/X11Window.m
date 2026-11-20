@@ -1095,8 +1095,6 @@ static const int X11ChromelessCornerRadius = 5;
 }
 
 - (void) setStyleMask: (NSUInteger) mask {
-    NSLog(@"X11Window setStyleMask: 0x%lx\n", (unsigned long) mask);
-
     [self setStyleMaskInternal: mask force: NO];
 
     _styleMask = mask;
@@ -1596,6 +1594,17 @@ static const int X11ChromelessCornerRadius = 5;
     _keyRequested = NO;
 }
 
+// Stacks this window directly above or below another top-level window. With a window manager the two client
+// windows live in frames of their own and are not siblings, so a plain stacking request naming the other window
+// as sibling is a BadMatch; XReconfigureWMWindow makes the ICCCM request for that case (a ConfigureRequest sent
+// to the root window, which the window manager carries out for the frames).
+- (void) stackRelativeToWindow: (Window) sibling mode: (int) mode {
+    XWindowChanges changes;
+    changes.sibling = sibling;
+    changes.stack_mode = mode;
+    XReconfigureWMWindow(_display, _window, DefaultScreen(_display), CWSibling | CWStackMode, &changes);
+}
+
 - (void) placeAboveWindow: (NSInteger) otherNumber {
     X11Window *other = [X11Window windowWithWindowNumber: otherNumber];
     [self ensureMappedIfVisible];
@@ -1603,8 +1612,7 @@ static const int X11ChromelessCornerRadius = 5;
     if (!other) {
         XRaiseWindow(_display, _window);
     } else {
-        Window w[2] = {_window, other->_window};
-        XRestackWindows(_display, w, 2);
+        [self stackRelativeToWindow: other->_window mode: Above];
     }
     [self restackForLevels];
 }
@@ -1616,8 +1624,7 @@ static const int X11ChromelessCornerRadius = 5;
     if (!other) {
         XLowerWindow(_display, _window);
     } else {
-        Window w[2] = {other->_window, _window};
-        XRestackWindows(_display, w, 1);
+        [self stackRelativeToWindow: other->_window mode: Below];
     }
 }
 
