@@ -2569,23 +2569,31 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
 /* Resizes the window to the size its content view's constraints ask for. The window resists
    resizing at NSLayoutPriorityWindowSizeStayPut, so constraints of a higher priority (including
    required ones) win, even over the minimum and maximum content sizes. The top left corner stays
-   where it is. */
+   where it is. Nothing is done when no layout input changed since the last fit. */
 - (void) _fitContentSizeToConstraints {
     if (_contentView == nil || [self isMiniaturized])
+        return;
+    if (DarlingLayoutLastGeneration(_contentView, DarlingLayoutKindWindowFit) == DarlingLayoutGeneration())
         return;
 
     [self updateConstraintsIfNeeded];
 
+    uint64_t generation = DarlingLayoutGeneration();
     NSRect content = [self contentRectForFrameRect: _frame];
     NSSize size = DarlingLayoutPreferredSize(_contentView, content.size);
 
-    if (size.width < 0 || size.height < 0 || NSEqualSizes(size, content.size))
+    if (size.width < 0 || size.height < 0 || NSEqualSizes(size, content.size)) {
+        DarlingLayoutSetLastGeneration(_contentView, DarlingLayoutKindWindowFit, generation);
         return;
+    }
 
     content.size = size;
     NSRect frame = [self frameRectForContentRect: content];
     frame.origin.y = NSMaxY(_frame) - NSHeight(frame);
     [self setFrame: frame display: YES];
+    // The window now has the size the constraints ask for, so the frame changes that follow
+    // from it do not call for another fit; they are still new input for the layout pass.
+    DarlingLayoutSetLastGeneration(_contentView, DarlingLayoutKindWindowFit, DarlingLayoutGeneration());
 }
 
 - (void) layoutIfNeeded {
