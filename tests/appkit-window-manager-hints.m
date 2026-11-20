@@ -17,6 +17,10 @@
 //   wmh-popup-level 200x150, the same at the pop-up menu level, without a parent
 //   wmh-loose       170x110, borderless, normal level, can become key but not main, no parent
 //   wmh-child       150x100, borderless child of the main window with the default key/main answers
+//   wmh-dot         1x1, borderless, normal level, can become key and main (as a toolkit's window that
+//                   hosts a rendering context answers), no parent; ordered out and in again repeatedly,
+//                   as the toolkit does. Nothing of it can be seen, so it must get no task-bar entry
+//                   and must not take the focus (on Wayland it is not shown at all)
 //   wmh-panel       180x130, NSPanel with the utility style
 //   wmh-tooltip     120x40, borderless at the pop-up menu level, ignores the mouse, cannot become
 //                   key, child of the main window
@@ -102,6 +106,7 @@ int main(int argc, char **argv) {
                                                         defer: NO];
         [panel setTitle: @"wmh-panel"];
         [panel setReleasedWhenClosed: NO];
+        WMHWindow *dot = make(@"wmh-dot", NSMakeRect(959, 539, 1, 1), NSWindowStyleMaskBorderless, NSNormalWindowLevel, YES, YES);
         WMHWindow *tooltip = make(@"wmh-tooltip", NSMakeRect(0, 0, 120, 40), popupMask, NSPopUpMenuWindowLevel, NO, NO);
         [tooltip setIgnoresMouseEvents: YES];
 
@@ -126,6 +131,15 @@ int main(int argc, char **argv) {
         [loose orderFront: nil];
         [chrome setFrame: NSMakeRect(1400, 400, 210, 140) display: YES];
         [chrome orderFront: nil];
+        [dot setFrameOrigin: NSMakePoint(959, 539)];
+        for (int i = 0; i < 8; i++) {
+            [dot orderFront: nil];
+            [dot makeKeyWindow];
+            spin(0.1);
+            [dot orderOut: nil];
+            spin(0.05);
+        }
+        [dot orderFront: nil];
         // The pop-up was made key when it was shown; the application's own window takes the key
         // status back, as it does when a pop-up is dismissed.
         [main makeKeyAndOrderFront: nil];
@@ -146,6 +160,7 @@ int main(int argc, char **argv) {
         report(loose, @"wmh-loose");
         report(chrome, @"wmh-chrome");
         report(child, @"wmh-child");
+        report(dot, @"wmh-dot");
         report(panel, @"wmh-panel");
         report(tooltip, @"wmh-tooltip");
         printf("KEY %s\n", [[[NSApp keyWindow] title] UTF8String] ?: "-");

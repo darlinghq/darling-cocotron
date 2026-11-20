@@ -19,6 +19,11 @@
 //    menu drawn by a toolkit, a drop-down, a tool tip), and the window system's own menus and
 //    tool tips: it belongs to a window, is not listed, and does not take the focus unless the
 //    application makes it the key window;
+//  - a window of one pixel or less in both directions has nothing a user can see or use (toolkits
+//    keep such windows to host a rendering context): it is never an application window, whatever
+//    it answers for -canBecomeMainWindow, so that it gets no task-bar entry and does not take the
+//    focus from the windows the user is working with; it is auxiliary, and a window system that
+//    cannot show it without a task-bar entry or focus (Wayland) does not show it at all;
 //  - every other window (a panel, a modal panel or sheet, a window that cannot become main, a
 //    child window with a title bar) is auxiliary: not listed, and related to its parent window or
 //    to the application's main window.
@@ -41,6 +46,7 @@ typedef struct {
     bool isTooltip;
     bool isModal;        // a modal panel or a sheet
     bool ignoresMouse;
+    bool isTiny;         // the window is at most one pixel wide and high
     int level;           // as CGWindowLevelForKey returns it
 } DarlingWindowTraits;
 
@@ -57,7 +63,7 @@ static inline DarlingWindowPresentation DarlingWindowPresentationFor(const Darli
         if (!window->hasTitlebar && !window->canBecomeMain &&
             (window->hasParent || window->level >= DarlingWindowLevelMainMenu || window->ignoresMouse))
             return DarlingWindowPresentationPopup;
-        if (window->canBecomeMain && !window->hasParent)
+        if (window->canBecomeMain && !window->hasParent && !window->isTiny)
             return DarlingWindowPresentationApplication;
     }
     return DarlingWindowPresentationAuxiliary;

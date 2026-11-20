@@ -210,6 +210,14 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     return _fullyTransparent;
 }
 
+// A window of one pixel or less in both directions that is not a pop-up (a toolkit's window that
+// only hosts a rendering context) is treated the same way: as a toplevel the compositor would list
+// it in the task bar and give it the focus, taking it from the windows the user is working with,
+// at every order-in (and a new toplevel is created at every order-in). Nothing of it could be seen.
+- (BOOL) isNeverShown {
+    return _fullyTransparent || _tooSmall;
+}
+
 // Whether the application asked for this window to become the key window and the activation now
 // arriving is the answer to that; reading it clears the request.
 - (BOOL) takeKeyRequest {
@@ -222,7 +230,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 // on screen for the window order (and so for the choice of the next key window), as on X11 where
 // it is mapped with no opacity.
 - (BOOL) isOrderedIn {
-    return _mapped || (_fullyTransparent && _shouldBeMapped && !_invalidated);
+    return _mapped || ([self isNeverShown] && _shouldBeMapped && !_invalidated);
 }
 
 - (BOOL) isPopup { return _popup != NULL; }
@@ -242,6 +250,10 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
            [(NSWindow *) _delegate _windowPresentation] == DarlingWindowPresentationPopup;
 }
 
+- (BOOL) hasNoVisibleArea {
+    return _frame.size.width <= 1 && _frame.size.height <= 1;
+}
+
 - (void) ensureMapped {
     if (_mapped || _invalidated)
         return;
@@ -249,6 +261,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     // The window may have been given its alpha before it had a platform window.
     if (_delegate != nil)
         _fullyTransparent = [_delegate alphaValue] <= 0;
+    _tooSmall = NO;
     if (_fullyTransparent)
         return;
     // A client cannot position a toplevel, so a tool tip without a mapped
@@ -267,6 +280,10 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     WaylandWindow *parent = tooltip ? tooltipParent : menu ? [_display popupParentForWindow: self]
                           : genericPopup ? [_display popupParentForGenericPopup: self] : nil;
     _genericPopup = genericPopup && parent != nil;
+    if (parent == nil && [self hasNoVisibleArea]) {
+        _tooSmall = YES;
+        return;
+    }
     // A menu opened before its parent's first configure is mapped when that configure arrives
     // (-[WaylandDisplay mapPopupsWaitingForParent]), as a popup of that parent.
     _popupWaitingForParent = parent != nil && !parent->_configured;
@@ -543,13 +560,13 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     // Without the compositor's focus a window that is shown waits for it. A window that already has
     // it (it was ordered in and focused without becoming key) or that is never shown, so never gets
     // it, is reported as activated now.
-    if (!_fullyTransparent && !_activated)
+    if (![self isNeverShown] && !_activated)
         return;
     [_display performAfterDispatch: ^{
         NSWindow *delegate = self->_delegate;
         if (self->_invalidated || delegate == nil || [delegate isKeyWindow])
             return;
-        if (!self->_fullyTransparent && !self->_activated)
+        if (![self isNeverShown] && !self->_activated)
             return;
         [self->_display windowActivated: self];
         [self reportActivationDisplayingIfNeeded: NO];
@@ -868,6 +885,16 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
         [_display flush];
     }
     [self updateSubwindows];
+    // A window that grows beyond one pixel gets its role; one that shrinks to a pixel loses it.
+    if (sized && _shouldBeMapped && !_fullyTransparent) {
+        if (_tooSmall && ![self hasNoVisibleArea]) {
+            [self ensureMapped];
+        } else if (_mapped && _toplevel != NULL && _popupParent == nil && [self hasNoVisibleArea]) {
+            [self unmap];
+            _shouldBeMapped = YES;
+            _tooSmall = YES;
+        }
+    }
     if (sized) {
         [self updateSizeLimits];
         [self updateFullscreen];

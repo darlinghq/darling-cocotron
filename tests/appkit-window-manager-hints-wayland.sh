@@ -8,6 +8,8 @@
 #  - the main window and the window that draws its own chrome are toplevels without a parent;
 #  - the panel and the window that cannot become main are toplevels related to an application window
 #    (xdg_toplevel.set_parent), so that the compositor keeps them in front of it and out of the task bar;
+#  - the window of one pixel (wmh-dot), which is ordered in and out repeatedly, is never given a role: no
+#    toplevel (it would be centred, listed and take the focus, and a new one would come with every order-in);
 #  - the pop-up windows and the tool tip are xdg_popups of the main window, at the offset from the main
 #    window's frame (as AppKit reports it) that AppKit gave them, and the compositor put them there
 #    (xdg_popup.configure), not toplevels that it would centre and list.
@@ -103,6 +105,11 @@ for line in sys.stdin:
         popups[name] = (m.group(3), p.get("set_anchor_rect", [0, 0, 0, 0]), p.get("set_offset", [0, 0]))
         toplevels.pop(name, None)
         continue
+dots = sum(1 for t in top_name.values() if t == "wmh-dot")
+if dots == 0 and "wmh-dot" not in popups:
+    print("PASS wmh-dot: no xdg_toplevel and no popup for the one-pixel window")
+else:
+    print("FAIL wmh-dot: %d xdg_toplevels for the one-pixel window, expected none" % dots)
 for name, (frame, role, parent) in want.items():
     x, y, w, h = frame
     if role == "toplevel":
@@ -140,7 +147,7 @@ if [ -n "${KWIN_QUERY:-}" ]; then
         if grep -q 'skipTaskbar=false' <<< "$l"; then echo "PASS: KWin lists $n in the task bar"; else echo "FAIL: KWin does not list $n: $l"; status=1; fi
     done
     # A popup is not a window KWin lists at all; a window with a parent is a transient of it.
-    for n in wmh-popup wmh-popup-level wmh-loose wmh-child wmh-panel wmh-tooltip; do
+    for n in wmh-popup wmh-popup-level wmh-loose wmh-child wmh-dot wmh-panel wmh-tooltip; do
         l=$(grep "^KWINWIN $n " <<< "$kw")
         if [ -z "$l" ] || grep -q 'skipTaskbar=true' <<< "$l" || grep -q 'transient=true' <<< "$l"; then echo "PASS: KWin keeps $n out of the task bar"; else echo "FAIL: KWin lists $n in the task bar: $l"; status=1; fi
     done

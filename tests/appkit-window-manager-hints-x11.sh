@@ -6,6 +6,7 @@
 # what the X11 backend told the window manager about each window, and where each window is:
 #  - the main window and the window that draws its own chrome are application windows: type NORMAL,
 #    no SKIP_TASKBAR, no WM_TRANSIENT_FOR;
+#  - a window of one pixel (wmh-dot) is not an application window even though it can become main;
 #  - every other window is not listed in a task bar (SKIP_TASKBAR and SKIP_PAGER) and belongs to the
 #    main window (WM_TRANSIENT_FOR), with the type its kind gives (utility for the panel, pop-up menu
 #    for pop-ups, tool tip for the tool tip);
@@ -33,7 +34,7 @@ screen_h=$(sed -n 's/^SCREEN [0-9]* //p' "$out")
 managed_list=$(xprop -root _NET_CLIENT_LIST)
 main_id=$(xdotool search --name '^wmh-main$' | head -1)
 
-# name x y w h (Cocoa, as requested), kind: application | popup | popup-oor | aux | panel | tooltip
+# name x y w h (Cocoa, as requested), kind: application | popup | popup-oor | aux | tiny | panel | tooltip
 while read -r name x y w h kind; do
     id=$(xdotool search --name "^$name\$" | head -1)
     if [ -z "$id" ]; then fail "$name: no window"; continue; fi
@@ -57,6 +58,9 @@ while read -r name x y w h kind; do
         application) wantType=NORMAL wantSkip=no wantTransient=none;;
         popup)       wantType=POPUP_MENU wantSkip=yes wantTransient=main;;
         aux)         wantType=NORMAL wantSkip=yes wantTransient=main;;
+        # the window it is transient for is whichever window the backend takes as the main window when it is shown,
+        # which depends on which window the window manager focused (any other window is fine)
+        tiny)        wantType=NORMAL wantSkip=yes wantTransient=any;;
         panel)       wantType=UTILITY wantSkip=yes wantTransient=main;;
         tooltip)     wantType=TOOLTIP wantSkip=yes wantTransient=main;;
     esac
@@ -68,7 +72,7 @@ while read -r name x y w h kind; do
     ok=1
     [ "$type" = "$wantType" ] || ok=0
     [ "$skip" = "$wantSkip" ] || ok=0
-    [ "$transient" = "$wantTransient" ] || ok=0
+    [ "$wantTransient" = any ] && [ "$transient" != none ] || [ "$transient" = "$wantTransient" ] || ok=0
     [ "$wantPos" = any ] || [ "$posHints" = "$wantPos" ] || ok=0
     [ "$input" = "$wantInput" ] || ok=0
     [ "$X,$Y" = "$wantX,$wantY" ] || ok=0
@@ -80,6 +84,7 @@ wmh-popup 820 560 160 120 popup
 wmh-popup-level 1100 640 200 150 popup
 wmh-loose 1400 700 170 110 aux
 wmh-child 700 300 150 100 popup
+wmh-dot 959 539 1 1 tiny
 wmh-panel 1000 300 180 130 panel
 wmh-tooltip 300 200 120 40 tooltip
 EOF
@@ -90,7 +95,7 @@ if [ -n "${KWIN_QUERY:-}" ]; then
         l=$(grep "^KWINWIN $n " <<< "$kw")
         if grep -q 'skipTaskbar=false' <<< "$l"; then pass "KWin lists $n in the task bar"; else fail "KWin does not list $n: $l"; fi
     done
-    for n in wmh-popup wmh-popup-level wmh-loose wmh-child wmh-panel wmh-tooltip; do
+    for n in wmh-popup wmh-popup-level wmh-loose wmh-child wmh-dot wmh-panel wmh-tooltip; do
         l=$(grep "^KWINWIN $n " <<< "$kw")
         if [ -z "$l" ] || grep -q 'skipTaskbar=true' <<< "$l"; then pass "KWin keeps $n out of the task bar"; else fail "KWin lists $n in the task bar: $l"; fi
     done

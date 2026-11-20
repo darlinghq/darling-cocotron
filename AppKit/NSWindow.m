@@ -2191,6 +2191,7 @@ static BOOL _allowsAutomaticWindowTabbing;
         .isTooltip = [self isKindOfClass: [NSToolTipWindow class]],
         .isModal = [self isSheet] || [NSApp modalWindow] == self,
         .ignoresMouse = [self ignoresMouseEvents],
+        .isTiny = [self frame].size.width <= 1 && [self frame].size.height <= 1,
         .level = [self level],
     };
     return DarlingWindowPresentationFor(&traits);

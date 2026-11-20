@@ -52,6 +52,13 @@ int main(void) {
     CHECK(of((DarlingWindowTraits){.isTooltip = true}) == DarlingWindowPresentationPopup);
     // A panel at a high level is not a pop-up: it has a title bar of its own.
     CHECK(of((DarlingWindowTraits){.isPanel = true, .hasTitlebar = true, .level = 101}) == DarlingWindowPresentationAuxiliary);
+    // A window of one pixel is never an application window, even one that answers YES for main and key.
+    CHECK(of((DarlingWindowTraits){.canBecomeMain = true, .canBecomeKey = true, .isTiny = true})
+          == DarlingWindowPresentationAuxiliary);
+    CHECK(of((DarlingWindowTraits){.hasTitlebar = true, .canBecomeMain = true, .canBecomeKey = true, .isTiny = true})
+          == DarlingWindowPresentationAuxiliary);
+    // ... but a tiny pop-up stays a pop-up.
+    CHECK(of((DarlingWindowTraits){.canBecomeKey = true, .hasParent = true, .isTiny = true}) == DarlingWindowPresentationPopup);
 
     if (failures == 0)
         printf("PASS\n");
