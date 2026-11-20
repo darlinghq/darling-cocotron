@@ -754,9 +754,7 @@ extern OSStatus _LSOpenFileOnHost(CFURLRef fileURL, Boolean reveal) __attribute_
 // event listing the items as bookmark data (file URLs where no bookmark can be made), or a reopen event for no items,
 // both with the boolean parameter 'aapd' set to true, which tells a reveal from an open.
 
-// Sends the event to the running application with the bundle identifier; fails with procNotFound when it is not running
-// (or has not yet started to receive events).
-static OSStatus sendRevealEvent(NSString *bundleIdentifier, NSArray<NSURL *> *urls) {
+static NSAppleEventDescriptor *makeRevealEvent(NSString *bundleIdentifier, NSArray<NSURL *> *urls) {
     NSAppleEventDescriptor *target = [NSAppleEventDescriptor
             descriptorWithDescriptorType: typeApplicationBundleID
                                     data: [bundleIdentifier dataUsingEncoding: NSUTF8StringEncoding]];
@@ -783,7 +781,24 @@ static OSStatus sendRevealEvent(NSString *bundleIdentifier, NSArray<NSURL *> *ur
         [event setParamDescriptor: list forKeyword: keyDirectObject];
     }
     [event setParamDescriptor: [NSAppleEventDescriptor descriptorWithBoolean: YES] forKeyword: 'aapd'];
-    return AESendMessage([event aeDesc], NULL, kAENoReply, 5 * 60);
+    return event;
+}
+
+// Sends the event to the file viewer, launching it when it is not running. A launched viewer gets the event as the
+// launch's initial event, so it receives only that event and no open-application event (as on macOS 26.7.3: the reveal
+// is the first and only event a file viewer started by it gets).
+static OSStatus sendRevealEvent(NSURL *viewerURL, NSAppleEventDescriptor *event) {
+    OSStatus status = AESendMessage([event aeDesc], NULL, kAENoReply, 5 * 60);
+    FSRef viewer;
+    if (status != procNotFound || !CFURLGetFSRef((CFURLRef) viewerURL, &viewer))
+        return status;
+    LSApplicationParameters parameters = {
+        .version = 0,
+        .flags = kLSLaunchDefaults,
+        .application = &viewer,
+        .initialEvent = (AppleEvent *) [event aeDesc],
+    };
+    return LSOpenApplication(&parameters, NULL);
 }
 
 - (void) _revealURLs: (NSArray<NSURL *> *) urls {
@@ -793,16 +808,7 @@ static OSStatus sendRevealEvent(NSString *bundleIdentifier, NSArray<NSURL *> *ur
 
     NSURL *viewerURL = [self URLForApplicationWithBundleIdentifier: viewerID];
     if (viewerURL != nil) {
-        OSStatus status = sendRevealEvent(viewerID, urls);
-        if (status == procNotFound && [self launchApplication: [viewerURL path]]) {
-            // The first event must not be lost while the application starts: it is delivered as soon as the
-            // application takes events, so keep trying for a limited time.
-            for (int attempt = 0; attempt < 100 && status == procNotFound; attempt++) {
-                usleep(100000);
-                status = sendRevealEvent(viewerID, urls);
-            }
-        }
-        if (status == noErr)
+        if (sendRevealEvent(viewerURL, makeRevealEvent(viewerID, urls)) == noErr)
             return;
     }
 
