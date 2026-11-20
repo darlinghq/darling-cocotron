@@ -70,17 +70,45 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return self;
 }
 
-- (NSImage *) _imageValue {
-    id result = [self image];
+// An image cell's image is its object value: setting either sets both, the
+// image is kept without being copied, and a nib stores it as the contents.
+// Observed on macOS 26.7.3 and Mac OS X 10.14.4. Test: tests/appkit-image-cell-object-value.m
+- initImageCell: (NSImage *) image {
+    self = [super initImageCell: nil];
+    if (self != nil && image != nil) {
+        NS_EXTRA(NSCell, self)->_objectValue = [image retain];
+        NS_EXTRA(NSCell, self)->_hasValidObjectValue = YES;
+    }
+    return self;
+}
 
-    if (result != nil)
-        return result;
+- (NSImage *) image {
+    id value = [self objectValue];
+    return [value isKindOfClass: [NSImage class]] ? value : nil;
+}
 
-    result = [self objectValue];
-    if (![result isKindOfClass: [NSImage class]])
-        result = nil;
+- (void) setImage: (NSImage *) image {
+    [self setObjectValue: image];
+}
 
-    return result;
+- (void) setObjectValue: (id<NSCopying>) value {
+    if (![(id) value isKindOfClass: [NSImage class]]) {
+        [super setObjectValue: value];
+        return;
+    }
+
+    NSView *controlView = [self controlView];
+    [controlView willChangeValueForKey: @"objectValue"];
+    [(id) value retain];
+    [NS_EXTRA(NSCell, self)->_objectValue release];
+    NS_EXTRA(NSCell, self)->_objectValue = value;
+    NS_EXTRA(NSCell, self)->_hasValidObjectValue = YES;
+    [controlView didChangeValueForKey: @"objectValue"];
+
+    if ([controlView respondsToSelector: @selector(updateCell:)])
+        [controlView performSelector: @selector(updateCell:) withObject: self];
+    else
+        [controlView setNeedsDisplay: YES];
 }
 
 - (NSImageAlignment) imageAlignment {
@@ -145,7 +173,7 @@ static NSSize scaledImageSizeInFrameSize(NSSize imageSize, NSSize frameSize,
 }
 
 - (NSRect) _scaledAndAlignedImageFrame: (NSRect) frame {
-    NSSize imageSize = scaledImageSizeInFrameSize([[self _imageValue] size],
+    NSSize imageSize = scaledImageSizeInFrameSize([[self image] size],
                                                   frame.size, _imageScaling);
 
     switch (_imageAlignment) {
@@ -197,7 +225,7 @@ static NSSize scaledImageSizeInFrameSize(NSSize imageSize, NSSize frameSize,
 - (void) drawInteriorWithFrame: (NSRect) controlFrame
                         inView: (NSView *) control
 {
-    if ([self _imageValue] != nil) {
+    if ([self image] != nil) {
 
         CGContextRef ctx = [[NSGraphicsContext currentContext] graphicsPort];
         CGContextSaveGState(ctx);
@@ -211,7 +239,7 @@ static NSSize scaledImageSizeInFrameSize(NSSize imageSize, NSSize frameSize,
             CGContextConcatCTM(ctx, flip);
         }
 
-        NSImage *image = [self _imageValue];
+        NSImage *image = [self image];
 
         // QUIRK: an image view draws a template image in black at 50 % opacity (light appearance).
         // Evidence: black-box renders on macOS 10.14.4 (tier 2).
