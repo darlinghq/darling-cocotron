@@ -51,6 +51,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSWindow-Private.h>
 #import <AppKit/NSLinkedOnOrAfter.h>
 #import <AppKit/NSWindow.h>
+#import <AppKit/NSWindowTabGroup+Private.h>
 #import "DarlingLayout.h"
 #import <AppKit/NSWindowAnimationContext.h>
 #import <ApplicationServices/ApplicationServices.h>
@@ -803,6 +804,8 @@ static BOOL _allowsAutomaticWindowTabbing;
     for (NSUInteger i = 0; i < 3; i++)
         [NS_EXTRA(NSWindow, self)->_standardWindowButtons[i] release];
     [NS_EXTRA(NSWindow, self)->_animations release];
+    [NS_EXTRA(NSWindow, self)->_tabGroup _windowWillDeallocate];
+    [NS_EXTRA(NSWindow, self)->_tabGroup release];
     [NS_EXTRA(NSWindow, self)->_tabbingIdentifier release];
     [NS_EXTRA(NSWindow, self)->_subtitle release];
     [NS_EXTRA(NSWindow, self)->_childWindows release];
@@ -1788,6 +1791,32 @@ static BOOL _allowsAutomaticWindowTabbing;
 
 - (BOOL) bottomCornerRounded {
     return NS_EXTRA(NSWindow, self)->_bottomCornerRounded;
+}
+
+// QUIRK: whether a window has a tab group. Not documented. Evidence:
+// black-box observation on macOS 10.14.4 and 26.7.3 (tier 2): a window has
+// one once it has a tabbing identifier set explicitly, or prefers tabs, and
+// not when tabbing is disallowed; the group keeps the identifier it was made
+// with. macOS 26.7.3 gives a borderless window none; 10.14.4 does, and that
+// is followed here.
+// Test: appkit-window-tab-group (cases named "quirk").
+- (NSWindowTabGroup *) tabGroup {
+    NSWindowTabGroup *group = NS_EXTRA(NSWindow, self)->_tabGroup;
+
+    if (group == nil && [self _participatesInTabbing]) {
+        group = [[NSWindowTabGroup alloc] _initWithWindow: self];
+        NS_EXTRA(NSWindow, self)->_tabGroup = group;
+    }
+    return group;
+}
+
+- (BOOL) _participatesInTabbing {
+    NSWindowTabbingMode mode = NS_EXTRA(NSWindow, self)->_tabbingMode;
+
+    if (mode == NSWindowTabbingModeDisallowed)
+        return NO;
+    return NS_EXTRA(NSWindow, self)->_tabbingIdentifier != nil ||
+           mode == NSWindowTabbingModePreferred;
 }
 
 - (id) tab {
