@@ -10,12 +10,14 @@
 //   wmh-main        500x350, titled, resizable; can become key and main (an application window,
 //                   which has a task-bar presence)
 //   wmh-chrome      210x140, borderless, resizable, miniaturizable, can become key and main (a window
-//                   that draws its own chrome); an application window like the main one
+//                   that draws its own chrome); an application window like the main one (the Dock lists a
+//                   regular application's windows whether or not they have a title bar)
 //   wmh-popup       160x120, borderless, normal level, can become key but not main, child of the main
 //                   window; hidden and shown repeatedly at new positions (a pop-up window created
 //                   hidden and reused)
 //   wmh-popup-level 200x150, the same at the pop-up menu level, without a parent
-//   wmh-loose       170x110, borderless, normal level, can become key but not main, no parent
+//   wmh-loose       170x110, borderless, normal level, can become key but not main, no parent; a window of
+//                   a regular application like any other, so an application window
 //   wmh-child       150x100, borderless child of the main window with the default key/main answers
 //   wmh-panel       180x130, NSPanel with the utility style
 //   wmh-tooltip     120x40, borderless at the pop-up menu level, ignores the mouse, cannot become
