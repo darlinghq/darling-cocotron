@@ -20,6 +20,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSSlider.h>
 #import <AppKit/AppKitIvarLayout.h>
 
+@interface NSSliderCell (NSSliderOrientation)
+- (void) _setOrientationFromFrame: (NSRect) frame;
+@end
+
 @interface NSSliderAccessory : NSObject {
     NS_LEGACY_IVAR_PAD(_NSSliderAccessoryReserved, 28)
 }
@@ -32,6 +36,15 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 + (Class) cellClass {
     return [NSSliderCell class];
+}
+
+- initWithFrame: (NSRect) frame {
+    if ((self = [super initWithFrame: frame]) == nil)
+        return nil;
+    // A new slider reports its orientation before it is drawn (macOS 26.7.3): taller than wide is vertical.
+    if ([[self cell] respondsToSelector: @selector(_setOrientationFromFrame:)])
+        [[self cell] _setOrientationFromFrame: frame];
+    return self;
 }
 
 // Sliders are flipped views on macOS 10.14.4 and 26.7.3; the cell mirrors its drawing to match.
@@ -102,6 +115,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (NSInteger) isVertical {
     return [[self selectedCell] isVertical];
+}
+
+- (void) setVertical: (BOOL) vertical {
+    [[self selectedCell] setVertical: vertical];
+    [self invalidateIntrinsicContentSize];
+    [self setNeedsDisplay: YES];
 }
 
 - (NSInteger) indexOfTickMarkAtPoint: (NSPoint) point {

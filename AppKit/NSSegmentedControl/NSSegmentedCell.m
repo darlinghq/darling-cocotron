@@ -33,13 +33,23 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @implementation NSSegmentedCell
 
-// For manually created segment cells
+static void initSegmentedCellState(NSSegmentedCell *self) {
+    self->_segments = [[NSMutableArray arrayWithCapacity: 5] retain];
+    self->_selectedSegment = NSNotFound;                    // initially empty
+    self->_trackingMode = NSSegmentSwitchTrackingSelectOne; // default
+}
+
+// For manually created segment cells. Like -[NSCell init], this does not go through
+// -initImageCell: or -initTextCell:.
+- (id) init {
+    if ((self = [super init]))
+        initSegmentedCellState(self);
+    return self;
+}
+
 - (id) initImageCell: (NSImage *) image {
-    if ((self = [super initImageCell: image])) {
-        _segments = [[NSMutableArray arrayWithCapacity: 5] retain];
-        _selectedSegment = NSNotFound;                    // initially empty
-        _trackingMode = NSSegmentSwitchTrackingSelectOne; // default
-    }
+    if ((self = [super initImageCell: image]))
+        initSegmentedCellState(self);
     return self;
 }
 

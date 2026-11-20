@@ -130,33 +130,35 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return self;
 }
 
+static void initSliderCellState(NSSliderCell *self) {
+    NS_EXTRA(NSCell, self)->_isContinuous = YES; // NSCell defaults to NO, NSSliderCell defaults to YES
+    self->_type = NSLinearSlider;
+    self->_minValue = 0;
+    self->_maxValue = 1.0;
+    self->_altIncrementValue = 0;
+    self->_isVertical = -1;
+    self->_lastRect = NSZeroRect;
+    self->_numberOfTickMarks = 0;
+    self->_tickMarkPosition = NSTickMarkBelow;
+    self->_allowsTickMarkValuesOnly = NO;
+}
+
+// Like -[NSCell init], this does not go through -initImageCell: or -initTextCell:.
+- init {
+    [super init];
+    initSliderCellState(self);
+    return self;
+}
+
 - initTextCell: (NSString *) string {
     [super initTextCell: string];
-    NS_EXTRA(NSCell, self)->_isContinuous = YES; // NSCell defaults to NO, NSSliderCell defaults to YES
-    _type = NSLinearSlider;
-    _minValue = 0;
-    _maxValue = 1.0;
-    _altIncrementValue = 0;
-    _isVertical = -1;
-    _lastRect = NSZeroRect;
-    _numberOfTickMarks = 0;
-    _tickMarkPosition = NSTickMarkBelow;
-    _allowsTickMarkValuesOnly = NO;
+    initSliderCellState(self);
     return self;
 }
 
 - initImageCell: (NSImage *) image {
     [super initImageCell: image];
-    NS_EXTRA(NSCell, self)->_isContinuous = YES; // NSCell defaults to NO, NSSliderCell defaults to YES
-    _type = NSLinearSlider;
-    _minValue = 0;
-    _maxValue = 1.0;
-    _altIncrementValue = 0;
-    _isVertical = -1;
-    _lastRect = NSZeroRect;
-    _numberOfTickMarks = 0;
-    _tickMarkPosition = NSTickMarkBelow;
-    _allowsTickMarkValuesOnly = NO;
+    initSliderCellState(self);
     return self;
 }
 
@@ -228,8 +230,27 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     // deprecated, do nothing
 }
 
+// _isVertical is -1 until the orientation is known, then 0 or 1: taken from the frame the cell
+// draws in, or with kVerticalSet added when it was set explicitly, which the frame does not change.
+enum { kVerticalSet = 2 };
+
+static BOOL drawsVertically(NSSliderCell *self) {
+    return self->_isVertical > 0 && (self->_isVertical & 1);
+}
+
 - (NSInteger) isVertical {
-    return _isVertical;
+    return _isVertical < 0 ? _isVertical : (_isVertical & 1);
+}
+
+- (void) setVertical: (BOOL) vertical {
+    _isVertical = kVerticalSet | (vertical ? 1 : 0);
+}
+
+// Takes the orientation from a frame unless it is already known; drawing updates it from the
+// frame the cell draws in, as before.
+- (void) _setOrientationFromFrame: (NSRect) frame {
+    if (_isVertical < 0)
+        _isVertical = (frame.size.height > frame.size.width) ? 1 : 0;
 }
 
 - (NSInteger) indexOfTickMarkAtPoint: (NSPoint) point {
@@ -281,14 +302,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (NSRect) rectOfTickMarkAtIndex: (NSInteger) index {
     NSRect result;
     CGFloat length =
-            (_isVertical ? _lastRect.size.height : _lastRect.size.width) -
+            (drawsVertically(self) ? _lastRect.size.height : _lastRect.size.width) -
             2 * PIXELINSET;
     CGFloat position =
             floor((_numberOfTickMarks == 1)
                           ? length / 2
                           : index * (length / (_numberOfTickMarks - 1)));
 
-    if (_isVertical) {
+    if (drawsVertically(self)) {
         result.origin.x = _lastRect.origin.x;
         if (_tickMarkPosition == NSTickMarkBelow)
             result.origin.x += _lastRect.size.width - TICKHEIGHT;
@@ -421,7 +442,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (void) drawLinearSliderWithFrame: (NSRect) frame
                             inView: (NSView *) controlView
 {
-    _isVertical = (frame.size.height > frame.size.width) ? 1 : 0;
+    if (!(_isVertical >= 0 && (_isVertical & kVerticalSet)))
+        _isVertical = (frame.size.height > frame.size.width) ? 1 : 0;
 
     [self drawBarInside: [self _sliderRect] flipped: [controlView isFlipped]];
     [self drawTickMarks];
@@ -607,7 +629,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     double length, position;
     double percentPixels;
 
-    if (_isVertical) {
+    if (drawsVertically(self)) {
         length = (_lastRect.size.height - (2 * PIXELINSET));
         position = point.y - (_lastRect.origin.y + PIXELINSET);
         if ([_controlView isFlipped])
