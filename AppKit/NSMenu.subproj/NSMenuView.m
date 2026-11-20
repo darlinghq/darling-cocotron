@@ -124,6 +124,20 @@ enum {
 const NSTimeInterval kMenuInitialClickThreshold = .3f;
 const NSTimeInterval kMouseMovementThreshold = .001f;
 
+// The index of the item of this view under the point of a mouse event, or
+// NSNotFound if the event is not over this view.
+- (NSUInteger) _itemIndexAtEvent: (NSEvent *) event {
+    NSPoint point = [[event window] convertBaseToScreen: [event locationInWindow]];
+    point = [self convertPoint: [[self window] convertScreenToBase: point]
+                      fromView: nil];
+
+    NSRect rect;
+
+    if (!NSMouseInRect(point, [self bounds], [self isFlipped]))
+        return NSNotFound;
+    return [self itemIndexAtPoint: point rect: &rect];
+}
+
 // The menu delegate and notification calls of a tracking session: the menu
 // tracking started in this view gets NSMenuDidBeginTrackingNotification and
 // NSMenuDidEndTrackingNotification; each menu shown, other than the menu bar
@@ -209,6 +223,10 @@ const NSTimeInterval kMouseMovementThreshold = .001f;
     int keyboardNavigationAction = kNSMenuKeyboardNavigationNone;
 
     BOOL cancelled = NO;
+    // Set when a press lands on the title of the item whose menu is open
+    // while the menu is sticky; the release over the same title closes the
+    // menu.
+    NSUInteger titlePressedIndex = NSNotFound;
     NSTimer* delaySubmenu = nil;
     NSRect lastRect = NSMakeRect(0,0,0,0);
     // The view whose coordinate space lastRect is expressed in.
@@ -655,6 +673,30 @@ const NSTimeInterval kMouseMovementThreshold = .001f;
 
             default:
                 item = [activeView itemAtSelectedIndex];
+                if ([event type] == NSLeftMouseDown) {
+                    // Pressing the title of the open menu again, once the menu
+                    // is sticky, closes the menu when the button is released
+                    // over that title. A press on another title, or inside
+                    // the menu, behaves as before.
+                    NSUInteger pressed = [self _itemIndexAtEvent: event];
+                    titlePressedIndex = NSNotFound;
+                    if (state == STATE_MOUSEUP && pressed != NSNotFound &&
+                        pressed == [self selectedItemIndex] &&
+                        [viewStack count] > 1 &&
+                        [[self itemAtSelectedIndex] hasSubmenu])
+                        titlePressedIndex = pressed;
+                } else if ([event type] == NSLeftMouseUp &&
+                           titlePressedIndex != NSNotFound) {
+                    NSUInteger released = [self _itemIndexAtEvent: event];
+                    BOOL closes = (released == titlePressedIndex);
+
+                    titlePressedIndex = NSNotFound;
+                    if (closes) {
+                        MENUDEBUG(@"title of the open menu clicked - closing");
+                        cancelled = YES;
+                        break;
+                    }
+                }
                 if ([event type] == NSLeftMouseUp) {
                     MENUDEBUG(@"mouseUp on item: %@", item);
                     if (item == nil) {
