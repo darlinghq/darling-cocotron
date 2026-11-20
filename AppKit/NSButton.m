@@ -17,6 +17,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#import "NSViewLayoutInternal.h"
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSButton.h>
 #import <AppKit/NSButtonCell.h>
@@ -33,7 +34,46 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (NSEdgeInsets) _roundedPushAlignmentInsets;
 @end
 
+@interface NSButtonCell (NSButtonLayoutPriorities)
+- (BOOL) _isStockToggleImage: (NSImage *) image;
+@end
+
 @implementation NSButton
+
+// A button's hugging follows its look until a priority is set: check boxes, radio buttons and
+// borderless buttons hug like plain views; bezels drawn at a fixed height hug vertically, and
+// those drawn at a fixed size hug in both directions.
+// QUIRK: macOS changed the default for a few bezels. On macOS 10.14.4 a button without a bezel
+// style (0) hugs at DefaultLow and textured square, small square and inline bezels at
+// DefaultHigh; macOS 26.7.3 has it the other way round. We follow 10.14, which more applications
+// were laid out against. Evidence: black-box observation, also of binaries linked against the
+// 10.13 SDK on 26.7.3 (tier 2). Test: appkit-control-hugging-defaults.
+- (NSLayoutPriority) _defaultContentHuggingPriorityForOrientation: (NSLayoutConstraintOrientation) orientation {
+    NSButtonCell *cell = [self cell];
+
+    if (![cell isKindOfClass: [NSButtonCell class]] || ![cell isBordered] ||
+        [cell _isStockToggleImage: [cell image]])
+        return NSLayoutPriorityDefaultLow;
+
+    switch ([cell bezelStyle]) {
+    case NSBezelStyleDisclosure:
+    case NSBezelStyleCircular:
+    case NSBezelStyleHelpButton:
+    case NSBezelStyleRoundedDisclosure:
+        return NSLayoutPriorityDefaultHigh;
+    case NSBezelStyleRounded:
+    case NSBezelStyleTexturedRounded:
+    case NSBezelStyleRoundRect:
+    case NSBezelStyleRecessed:
+    case NSBezelStyleTexturedSquare:
+    case NSBezelStyleSmallSquare:
+    case NSBezelStyleInline:
+        return orientation == NSLayoutConstraintOrientationVertical ? NSLayoutPriorityDefaultHigh : NSLayoutPriorityDefaultLow;
+    default:
+        return NSLayoutPriorityDefaultLow;
+    }
+}
+
 
 + (Class) cellClass {
     return [NSButtonCell class];

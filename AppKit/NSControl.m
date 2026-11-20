@@ -17,6 +17,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#import "NSViewLayoutInternal.h"
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSCell.h>
 #import <AppKit/NSClipView.h>
@@ -51,6 +52,12 @@ const NSNotificationName NSControlDidEndContinuousTrackingNotification =
         @"NSControlDidEndContinuousTrackingNotification";
 
 @implementation NSControl
+
+// Controls resist growing taller than their content (observed on macOS 10.14.4 and 26.7.3).
+- (NSLayoutPriority) _defaultContentHuggingPriorityForOrientation: (NSLayoutConstraintOrientation) orientation {
+    return orientation == NSLayoutConstraintOrientationVertical ? NSLayoutPriorityDefaultHigh : NSLayoutPriorityDefaultLow;
+}
+
 
 // QUIRK: controls answer NO, whatever their opacity; NSTextField goes back
 // to the view rule. Not documented. Evidence: black-box observation on

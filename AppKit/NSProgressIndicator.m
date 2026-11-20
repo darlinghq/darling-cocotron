@@ -16,6 +16,7 @@ FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
 COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
+#import "NSViewLayoutInternal.h"
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSColor.h>
 #import <AppKit/NSGraphicsContextFunctions.h>
@@ -28,6 +29,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Foundation/NSKeyedArchiver.h>
 
 @implementation NSProgressIndicator
+
+// A progress indicator hugs like a control (observed on macOS 10.14.4 and 26.7.3).
+- (NSLayoutPriority) _defaultContentHuggingPriorityForOrientation: (NSLayoutConstraintOrientation) orientation {
+    return orientation == NSLayoutConstraintOrientationVertical ? NSLayoutPriorityDefaultHigh : NSLayoutPriorityDefaultLow;
+}
+
 
 - (void) encodeWithCoder: (NSCoder *) coder {
     NSUnimplementedMethod();
