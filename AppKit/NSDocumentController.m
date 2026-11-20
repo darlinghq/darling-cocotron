@@ -126,10 +126,23 @@ static NSDocumentController *shared = nil;
     _fileTypes = [[[[NSBundle mainBundle] infoDictionary]
             objectForKey: @"CFBundleDocumentTypes"] retain];
     _autosavingDelay = 0;
+
+    // A controller made before the main menu was set (by the main nib, say)
+    // could not list the recent documents yet; list them once launched.
+    [[NSNotificationCenter defaultCenter]
+            addObserver: self
+               selector: @selector(_applicationDidFinishLaunching:)
+                   name: NSApplicationDidFinishLaunchingNotification
+                 object: nil];
     return self;
 }
 
+- (void) _applicationDidFinishLaunching: (NSNotification *) note {
+    [self _updateRecentDocumentsMenu];
+}
+
 - (void) dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver: self];
     [_documents release];
     [_fileTypes release];
     [super dealloc];
