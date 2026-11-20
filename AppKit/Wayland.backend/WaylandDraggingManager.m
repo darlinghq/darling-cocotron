@@ -124,6 +124,43 @@ static BOOL monotonicSeconds(double *seconds) {
         _finished = YES;
     }
 }
+// The pasteboard's data as the drag offers it: by type for this application's
+// destinations, by MIME type for other clients. Empty when the drag cannot be
+// offered whole; *encodable is NO when that is because data has no form other
+// clients can be given.
+- (NSMutableDictionary *) snapshotOfPasteboard: (NSPasteboard *) pasteboard
+                                     localOnly: (BOOL) localOnly
+                                     encodable: (BOOL *) encodable {
+    NSMutableDictionary *snapshot = [NSMutableDictionary dictionary];
+    NSUInteger bytes = 0;
+    *encodable = YES;
+    for (NSString *type in [[[pasteboard types] copy] autorelease]) {
+        if ([type isEqual:@"DELETE"]) continue;
+        NSData *data = [pasteboard dataForType: type];
+        if (!data) {
+            if ([type isEqual:NSFilenamesPboardType]) { [snapshot removeAllObjects]; break; }
+            continue;
+        }
+        if (!localOnly) data = [WaylandPasteboard encodeData:data forType:type];
+        // A partial filename selection could make a MOVE source remove
+        // files that were never delivered. Reject that drag atomically.
+        if (!data) { *encodable = NO; [snapshot removeAllObjects]; break; }
+        if ([data length] > 16 * 1024 * 1024 - bytes) {
+            [snapshot removeAllObjects]; break;
+        }
+        bytes += [data length];
+        NSData *copy = [[data copy] autorelease];
+        if (localOnly) {
+            [snapshot setObject:copy forKey:type];
+            continue;
+        }
+        for (NSString *mime in [WaylandPasteboard mimeTypesForType: type])
+            if ([type isEqual:mime] || ![snapshot objectForKey:mime])
+                [snapshot setObject:copy forKey:mime];
+    }
+    return snapshot;
+}
+
 - (void) dragImage: (NSImage *) image at: (NSPoint) location
             offset: (NSSize) offset event: (NSEvent *) event
         pasteboard: (NSPasteboard *) pasteboard source: (id) source
@@ -142,6 +179,11 @@ static BOOL monotonicSeconds(double *seconds) {
     ++_localGeneration; _completedLocalAction = 0;
     _origin = [origin retain]; _localSource = [source retain];
     NSImage *heldImage = [image retain];
+    // The source is told where the image's corner is on the screen. Core Wayland reports no global pointer
+    // positions, so that is where the drag started, at its beginning and at its end.
+    NSWindow *originWindow = [event window];
+    NSPoint imageOrigin = originWindow != nil
+            ? [originWindow convertRectToScreen: NSMakeRect(location.x, location.y, 0, 0)].origin : location;
     BOOL began = NO;
     NSDragOperation result = NSDragOperationNone;
     @try {
@@ -151,36 +193,19 @@ static BOOL monotonicSeconds(double *seconds) {
             allowed = [source draggingSourceOperationMaskForLocal: NO];
             _localOperations = [source draggingSourceOperationMaskForLocal: YES];
         }
-        NSMutableDictionary *snapshot = [NSMutableDictionary dictionary];
-        NSUInteger bytes = 0;
         _offeredActions = WaylandActionsFromOperations(allowed);
         _localOnly = !_offeredActions && WaylandActionsFromOperations(_localOperations);
         if (_localOnly) _offeredActions = WaylandActionsFromOperations(_localOperations);
-        if (_offeredActions) {
-            for (NSString *type in [[[pasteboard types] copy] autorelease]) {
-                if ([type isEqual:@"DELETE"]) continue;
-                NSData *data = [pasteboard dataForType: type];
-                if (!data) {
-                    if ([type isEqual:NSFilenamesPboardType]) { [snapshot removeAllObjects]; break; }
-                    continue;
-                }
-                if (!_localOnly) data = [WaylandPasteboard encodeData:data forType:type];
-                // A partial filename selection could make a MOVE source remove
-                // files that were never delivered. Reject that drag atomically.
-                if (!data) { [snapshot removeAllObjects]; break; }
-                if ([data length] > 16 * 1024 * 1024 - bytes) {
-                    [snapshot removeAllObjects]; break;
-                }
-                bytes += [data length];
-                NSData *copy = [[data copy] autorelease];
-                if (_localOnly) {
-                    [snapshot setObject:copy forKey:type];
-                    continue;
-                }
-                for (NSString *mime in [WaylandPasteboard mimeTypesForType: type])
-                    if ([type isEqual:mime] || ![snapshot objectForKey:mime])
-                        [snapshot setObject:copy forKey:mime];
-            }
+        BOOL encodable = YES;
+        NSMutableDictionary *snapshot = _offeredActions ? [self snapshotOfPasteboard: pasteboard
+                                                                           localOnly: _localOnly
+                                                                           encodable: &encodable] : nil;
+        // Data other clients could not be given (files only this application can
+        // see) still goes to the destinations of this application.
+        if (!encodable && !_localOnly && WaylandActionsFromOperations(_localOperations)) {
+            _localOnly = YES;
+            _offeredActions = WaylandActionsFromOperations(_localOperations);
+            snapshot = [self snapshotOfPasteboard: pasteboard localOnly: YES encodable: &encodable];
         }
         if (image != nil && [snapshot count] && !_finished && _display) {
             NSPoint pointer = [event locationInWindow];
@@ -220,7 +245,7 @@ static BOOL monotonicSeconds(double *seconds) {
             [_icon show];
             [_display flush]; began = YES;
             if ([source respondsToSelector: @selector(draggedImage:beganAt:)])
-                [source draggedImage: heldImage beganAt: location];
+                [source draggedImage: heldImage beganAt: imageOrigin];
             while (!_finished && _display != nil) {
                 @autoreleasepool {
                     [_display processPendingEvents];
@@ -261,7 +286,7 @@ static BOOL monotonicSeconds(double *seconds) {
             // Core Wayland supplies no global drop coordinates; retain the
             // documented virtual starting location rather than invent one.
             if (began && [finishedSource respondsToSelector: @selector(draggedImage:endedAt:operation:)])
-                [finishedSource draggedImage: heldImage endedAt: location operation: result];
+                [finishedSource draggedImage: heldImage endedAt: imageOrigin operation: result];
         } @finally { [finishedSource release]; [heldImage release]; [self release]; }
     }
 }

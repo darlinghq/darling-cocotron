@@ -19,6 +19,7 @@
  SOFTWARE. */
 
 #import "X11DropSession.h"
+#import <AppKit/NSDraggingManager.h>
 #import "DarlingFileURIList.h"
 #import "NSPasteboardAliases.h"
 #import "X11Window.h"
@@ -43,6 +44,8 @@
         _sourceOperations = operations;
         static int nextSequence = 0;
         _sequence = ++nextSequence;
+        _validItems = -1;
+        _animatesToDestination = NO;
     }
     return self;
 }
@@ -52,7 +55,14 @@
     [_destination release];
     [_receiver release];
     [_types release];
+    [_localSource release];
     [super dealloc];
+}
+
+- (void) setLocalSource: (id) source {
+    [source retain];
+    [_localSource release];
+    _localSource = source;
 }
 
 - (BOOL) matchesSource: (Window) source {
@@ -109,10 +119,15 @@
     if (actions == NSDragOperationNone)
         actions = _sourceOperations;
 
-    NSDragOperation accepted = operation & _sourceOperations & actions;
+    // The receiver chooses from the mask it was offered (NSDraggingInfo), which is
+    // the source's action list narrowed by the modifier keys; the action the source
+    // requested is the one taken when the receiver allows several.
+    NSDragOperation accepted = operation & [self draggingSourceOperationMask];
     // One operation for the whole drag: the source draws its cursor from
     // XdndStatus and later reports one action in XdndFinished, so narrowing to a
     // single bit keeps the three in step.
+    if (accepted & actions & (NSDragOperationCopy | NSDragOperationMove | NSDragOperationLink))
+        accepted &= actions;
     if (accepted & NSDragOperationCopy)
         accepted = NSDragOperationCopy;
     else if (accepted & NSDragOperationMove)
@@ -211,13 +226,20 @@
 #pragma mark NSDraggingInfo
 
 - (NSPasteboard *) draggingPasteboard {
+    // A dragging session of this application is read where its source wrote it,
+    // the drag pasteboard, item by item, as on macOS. What the older
+    // -dragImage:... offers is read as the drag offers it.
+    if ([_localSource isKindOfClass: [NSDraggingSession class]])
+        return [NSPasteboard pasteboardWithName: NSPasteboardNameDrag];
     return self;
 }
 
 - (NSDragOperation) draggingSourceOperationMask {
     // Once dropped, report the operation this target chose; NSDraggingInfo has no
     // separate accessor for the selected operation.
-    return _dropAnnounced ? _acceptedOperations : _sourceOperations;
+    if (_dropAnnounced)
+        return _acceptedOperations;
+    return [NSDraggingSession _operationMask: _sourceOperations narrowedForSource: _localSource];
 }
 
 - (NSPoint) draggingLocation {
@@ -237,7 +259,53 @@
 }
 
 - (id) draggingSource {
-    return nil; // XDND sources live in other clients.
+    // Nil for a drag from another application, as documented
+    return [NSDraggingSession _sourceForDestination: _localSource];
+}
+
+- (NSDraggingFormation) draggingFormation {
+    return _formation;
+}
+
+- (void) setDraggingFormation: (NSDraggingFormation) formation {
+    _formation = formation;
+}
+
+- (BOOL) animatesToDestination {
+    return _animatesToDestination;
+}
+
+- (void) setAnimatesToDestination: (BOOL) animates {
+    _animatesToDestination = animates;
+}
+
+- (NSInteger) numberOfValidItemsForDrop {
+    return _validItems >= 0 ? _validItems : (NSInteger) [[[self draggingPasteboard] pasteboardItems] count];
+}
+
+- (void) setNumberOfValidItemsForDrop: (NSInteger) count {
+    _validItems = count;
+}
+
+- (void) enumerateDraggingItemsWithOptions: (NSDraggingItemEnumerationOptions) enumOpts
+                                   forView: (NSView *) view
+                                   classes: (NSArray<Class> *) classArray
+                             searchOptions: (NSDictionary *) searchOptions
+                                usingBlock: (void (^)(NSDraggingItem *, NSInteger, BOOL *)) block
+{
+    [NSDraggingSession _enumerateItemsOfDraggingInfo: self
+                                              source: _localSource
+                                             forView: view
+                                             classes: classArray
+                                       searchOptions: searchOptions
+                                          usingBlock: block];
+}
+
+- (NSSpringLoadingHighlight) springLoadingHighlight {
+    return NSSpringLoadingHighlightNone;
+}
+
+- (void) resetSpringLoading {
 }
 
 - (int) draggingSequenceNumber {

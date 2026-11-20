@@ -38,6 +38,10 @@
     NSDragOperation _sourceOperations, _acceptedOperations;
     NSPoint _point;
     int _sequence;
+    id _localSource;          // the drag's source when it comes from this application
+    NSInteger _validItems;    // -1 until a destination sets numberOfValidItemsForDrop
+    NSDraggingFormation _formation;
+    BOOL _animatesToDestination;
     BOOL _dropAnnounced, _transferFailed, _invalidated;
 }
 
@@ -51,6 +55,9 @@
     sourceOperations: (NSDragOperation) operations;
 
 - (BOOL) matchesSource: (Window) source;
+
+// The source of a drag this application runs itself
+- (void) setLocalSource: (id) source;
 
 // Returns the single operation the receiver accepted, NSDragOperationNone if it
 // refused, so the manager can mirror it in XdndStatus.

@@ -25,6 +25,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSAnimation.h>
 #import <AppKit/NSGraphics.h>
 #import <AppKit/NSResponder.h>
+#import <AppKit/NSDragging.h>
 #import <AppKit/NSUserInterfaceItemIdentification.h>
 #import <ApplicationServices/ApplicationServices.h>
 #import <AppKit/NSUserInterfaceItemIdentification.h>
@@ -34,6 +35,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSUserInterfaceLayoutDirection.h>
 #import <AppKit/NSAccessibilityProtocols.h>
 
+@class NSDraggingSession, NSDraggingItem;
 @class NSLayoutConstraint;
 
 NS_ASSUME_NONNULL_BEGIN
@@ -521,6 +523,9 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeAllScreens;
         pasteboard: (NSPasteboard *) pasteboard
             source: (id) source
          slideBack: (BOOL) slideBack;
+- (NSDraggingSession *) beginDraggingSessionWithItems: (NSArray<NSDraggingItem *> *) items
+                                                event: (NSEvent *) event
+                                               source: (id<NSDraggingSource>) source;
 - (BOOL) dragFile: (NSString *) path
          fromRect: (NSRect) rect
         slideBack: (BOOL) slideBack

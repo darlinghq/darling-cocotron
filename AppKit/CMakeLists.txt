@@ -433,6 +433,7 @@ set(AppKit_sources
 	NSGestureRecognizer.m
 	NSClickGestureRecognizer.m
 	NSDraggingItem.m
+	NSDraggingSession.m
 	NSGroupTouchBarItem.m
 	NSKeyBindingManager.m
 	NSPasteboardItem.m

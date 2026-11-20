@@ -18,34 +18,64 @@
 */
 
 #import <AppKit/NSDraggingItem.h>
+#import <Foundation/NSArray.h>
+#import <Foundation/NSString.h>
 
 NSDraggingImageComponentKey const NSDraggingImageComponentIconKey = @"icon";
 NSDraggingImageComponentKey const NSDraggingImageComponentLabelKey = @"label";
 
 @implementation NSDraggingImageComponent
 
-- (NSMethodSignature *)methodSignatureForSelector:(SEL)aSelector
-{
-    return [NSMethodSignature signatureWithObjCTypes: "v@:"];
+@synthesize key = _key, contents = _contents, frame = _frame;
+
++ (instancetype) draggingImageComponentWithKey: (NSDraggingImageComponentKey) key {
+    return [[[self alloc] initWithKey: key] autorelease];
 }
 
-- (void)forwardInvocation:(NSInvocation *)anInvocation
-{
-    NSLog(@"Stub called: %@ in %@", NSStringFromSelector([anInvocation selector]), [self class]);
+- (instancetype) initWithKey: (NSDraggingImageComponentKey) key {
+    if ((self = [super init]))
+        _key = [key copy];
+    return self;
+}
+
+- (void) dealloc {
+    [_key release];
+    [_contents release];
+    [super dealloc];
 }
 
 @end
 
 @implementation NSDraggingItem
 
-- (NSMethodSignature *)methodSignatureForSelector:(SEL)aSelector
-{
-    return [NSMethodSignature signatureWithObjCTypes: "v@:"];
+@synthesize item = _item, draggingFrame = _draggingFrame, imageComponentsProvider = _imageComponentsProvider;
+
+- (instancetype) initWithPasteboardWriter: (id<NSPasteboardWriting>) pasteboardWriter {
+    if ((self = [super init]))
+        _item = [(id) pasteboardWriter retain];
+    return self;
 }
 
-- (void)forwardInvocation:(NSInvocation *)anInvocation
-{
-    NSLog(@"Stub called: %@ in %@", NSStringFromSelector([anInvocation selector]), [self class]);
+- (void) dealloc {
+    [_item release];
+    [_imageComponentsProvider release];
+    [super dealloc];
+}
+
+- (NSArray<NSDraggingImageComponent *> *) imageComponents {
+    return _imageComponentsProvider != nil ? _imageComponentsProvider() : nil;
+}
+
+- (void) setDraggingFrame: (NSRect) frame contents: (id) contents {
+    [self setDraggingFrame: frame];
+    NSSize size = frame.size;
+    [self setImageComponentsProvider: ^NSArray * {
+        NSDraggingImageComponent *icon = [NSDraggingImageComponent draggingImageComponentWithKey:
+                                                                       NSDraggingImageComponentIconKey];
+        [icon setContents: contents];
+        [icon setFrame: NSMakeRect(0, 0, size.width, size.height)];
+        return [NSArray arrayWithObject: icon];
+    }];
 }
 
 @end

@@ -40,3 +40,28 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
          slideBack: (BOOL) slideBack;
 
 @end
+
+#import <AppKit/NSDraggingSession.h>
+
+@protocol NSDraggingInfo;
+
+// What the dragging managers and the NSDraggingInfo implementations share
+@interface NSDraggingSession (NSDraggingManager)
+
+// The object a drag's destination sees as its source: a session's source, or the source given to
+// -dragImage:at:offset:event:pasteboard:source:slideBack:
++ (id) _sourceForDestination: (id) dragSource;
+
+// The mask a destination is offered, narrowed by the modifier keys held now
++ (NSDragOperation) _operationMask: (NSDragOperation) mask narrowedForSource: (id) dragSource;
+
+// -[NSDraggingInfo enumerateDraggingItemsWithOptions:forView:classes:searchOptions:usingBlock:], for a drag
+// whose source is dragSource (nil when it comes from another application)
++ (void) _enumerateItemsOfDraggingInfo: (id<NSDraggingInfo>) info
+                                source: (id) dragSource
+                               forView: (NSView *) view
+                               classes: (NSArray<Class> *) classArray
+                         searchOptions: (NSDictionary *) searchOptions
+                            usingBlock: (void (^)(NSDraggingItem *item, NSInteger index, BOOL *stop)) block;
+
+@end

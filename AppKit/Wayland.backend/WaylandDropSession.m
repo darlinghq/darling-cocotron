@@ -24,6 +24,7 @@
 #import "WaylandWindow.h"
 #import "WaylandLibrary.h"
 #import "WaylandProtocol.h"
+#import <AppKit/NSDraggingManager.h>
 #import <AppKit/NSWindow-Drag.h>
 #import <AppKit/NSWindow.h>
 #include <unistd.h>
@@ -56,6 +57,7 @@
         if (offer && WL.wl_proxy_get_version(offer) < 3) _sourceActions = _action = 1;
         static int nextSequence = 0;
         _sequence = ++nextSequence;
+        _validItems = -1;
     }
     return self;
 }
@@ -259,19 +261,47 @@
     [self invalidate];
     [_receiver draggingExited: self];
 }
-- (NSPasteboard *) draggingPasteboard { return self; }
+- (NSPasteboard *) draggingPasteboard {
+    // A dragging session of this application is read where its source wrote it,
+    // the drag pasteboard, item by item, as on macOS. What the older
+    // -dragImage:... offers is read as the drag offers it.
+    if ([_localSource isKindOfClass: [NSDraggingSession class]])
+        return [NSPasteboard pasteboardWithName: NSPasteboardNameDrag];
+    return self;
+}
 - (NSDragOperation) draggingSourceOperationMask {
     // Once dropped, tell the receiver which operation the compositor chose.
     // NSDraggingInfo has no separate selected-operation accessor.
     uint32_t actions = _dropped ? ([self hasAcceptedAction] ? _action : 0) : _sourceActions;
     NSDragOperation operations = WaylandOperationsFromActions(actions);
-    return _localSource ? (operations & _localOperations) : operations;
+    if (_localSource)
+        operations &= _localOperations;
+    // Until the drop, the mask is narrowed by the modifier keys held (NSDraggingInfo)
+    return _dropped ? operations : [NSDraggingSession _operationMask: operations narrowedForSource: _localSource];
 }
 - (NSPoint) draggingLocation { return _point; }
 - (NSWindow *) draggingDestinationWindow { return _destination; }
 - (NSImage *) draggedImage { return nil; }
 - (NSPoint) draggedImageLocation { return _point; }
-- (id) draggingSource { return _localSource; }
+- (id) draggingSource { return [NSDraggingSession _sourceForDestination: _localSource]; }
+- (NSDraggingFormation) draggingFormation { return _formation; }
+- (void) setDraggingFormation: (NSDraggingFormation) formation { _formation = formation; }
+- (BOOL) animatesToDestination { return _animatesToDestination; }
+- (void) setAnimatesToDestination: (BOOL) animates { _animatesToDestination = animates; }
+- (NSInteger) numberOfValidItemsForDrop {
+    return _validItems >= 0 ? _validItems : (NSInteger) [[[self draggingPasteboard] pasteboardItems] count];
+}
+- (void) setNumberOfValidItemsForDrop: (NSInteger) count { _validItems = count; }
+- (void) enumerateDraggingItemsWithOptions: (NSDraggingItemEnumerationOptions) enumOpts
+                                   forView: (NSView *) view
+                                   classes: (NSArray<Class> *) classArray
+                             searchOptions: (NSDictionary *) searchOptions
+                                usingBlock: (void (^)(NSDraggingItem *, NSInteger, BOOL *)) block {
+    [NSDraggingSession _enumerateItemsOfDraggingInfo: self source: _localSource forView: view
+                                             classes: classArray searchOptions: searchOptions usingBlock: block];
+}
+- (NSSpringLoadingHighlight) springLoadingHighlight { return NSSpringLoadingHighlightNone; }
+- (void) resetSpringLoading {}
 - (int) draggingSequenceNumber { return _sequence; }
 - (void) slideDraggedImageTo: (NSPoint) point {}
 - (NSArray *) namesOfPromisedFilesDroppedAtDestination: (NSURL *) destination { return nil; }

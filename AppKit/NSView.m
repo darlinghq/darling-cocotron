@@ -26,6 +26,15 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSCursorRect.h>
 #import <AppKit/NSDragging.h>
 #import <AppKit/NSDraggingManager.h>
+
+@interface NSDraggingSession (NSViewDragging)
+- (instancetype) _initWithItems: (NSArray<NSDraggingItem *> *) items
+                           view: (NSView *) view
+                          event: (NSEvent *) event
+                         source: (id<NSDraggingSource>) source
+                     pasteboard: (NSPasteboard *) pasteboard;
+- (void) _scheduleStart;
+@end
 #import <AppKit/NSEvent.h>
 #import <AppKit/NSGraphics.h>
 #import <AppKit/NSGraphicsContextFunctions.h>
@@ -3751,7 +3760,53 @@ static void releaseSubviewSnapshot(SubviewSnapshot *snapshot) {
             source: source
          slideBack: (BOOL) slideBack
 {
-    location = [self convertPoint: location toView: nil];
+    [self _dragImage: image
+        atWindowLocation: [self convertPoint: location toView: nil]
+                  offset: offset
+                   event: event
+              pasteboard: pasteboard
+                  source: source
+               slideBack: slideBack];
+}
+
+// Writes each item's writer to the drag pasteboard as an item of its own; the drag itself starts when the event
+// handler that called this has returned
+- (NSDraggingSession *) beginDraggingSessionWithItems: (NSArray<NSDraggingItem *> *) items
+                                                event: (NSEvent *) event
+                                               source: (id<NSDraggingSource>) source
+{
+    // As both Macs do (darling's tests/collection-view.md)
+    for (NSDraggingItem *item in items)
+        if (NSEqualSizes([item draggingFrame].size, NSZeroSize))
+            [NSException raise: NSRangeException
+                        format: @"NSDraggingItem.draggingFrame cannot be set to a zero size %@",
+                                NSStringFromRect([item draggingFrame])];
+
+    NSPasteboard *pasteboard = [NSPasteboard pasteboardWithName: NSPasteboardNameDrag];
+    NSMutableArray *writers = [NSMutableArray arrayWithCapacity: [items count]];
+    for (NSDraggingItem *item in items)
+        [writers addObject: [item item]];
+    [pasteboard clearContents];
+    [pasteboard writeObjects: writers];
+
+    NSDraggingSession *session = [[NSDraggingSession alloc] _initWithItems: items
+                                                                      view: self
+                                                                     event: event
+                                                                    source: source
+                                                                pasteboard: pasteboard];
+    [session _scheduleStart];
+    return [session autorelease];
+}
+
+// -dragImage:at:..., with the image's corner already in the window's coordinates
+- (void) _dragImage: (NSImage *) image
+     atWindowLocation: (NSPoint) location
+               offset: (NSSize) offset
+                event: (NSEvent *) event
+           pasteboard: (NSPasteboard *) pasteboard
+               source: (id) source
+            slideBack: (BOOL) slideBack
+{
     if ([NSDraggingManager draggingManager] == nil) {
         // The window runs the drag in-process.
         [[self window] dragImage: image

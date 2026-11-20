@@ -74,6 +74,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSDocumentController.h>
 #import <AppKit/NSDragging.h>
 #import <AppKit/NSDraggingItem.h>
+#import <AppKit/NSDraggingSession.h>
 #import <AppKit/NSDrawer.h>
 #import <AppKit/NSEPSImageRep.h>
 #import <AppKit/NSEvent.h>

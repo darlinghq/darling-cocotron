@@ -19,7 +19,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <Foundation/Foundation.h>
 
-@class NSPasteboard, NSWindow, NSImage;
+@class NSPasteboard, NSWindow, NSImage, NSView, NSDraggingItem, NSDraggingSession, NSDictionary, NSArray, NSURL;
 
 typedef NS_OPTIONS(NSUInteger, NSDragOperation) {
     NSDragOperationNone = 0x00,
@@ -31,19 +31,6 @@ typedef NS_OPTIONS(NSUInteger, NSDragOperation) {
     NSDragOperationDelete = 0x20,
     NSDragOperationEvery = NSUIntegerMax,
 };
-
-@protocol NSDraggingInfo
-- (NSPasteboard *) draggingPasteboard;
-- (NSDragOperation) draggingSourceOperationMask;
-- (NSPoint) draggingLocation;
-- (NSImage *) draggedImage;
-- (NSPoint) draggedImageLocation;
-- (NSWindow *) draggingDestinationWindow;
-- (id) draggingSource;
-- (void) slideDraggedImageTo: (NSPoint) point;
-- (int) draggingSequenceNumber;
-- (NSArray *) namesOfPromisedFilesDroppedAtDestination: (NSURL *) destination;
-@end
 
 typedef NS_ENUM(NSInteger, NSDraggingFormation) {
     NSDraggingFormationDefault = 0,
@@ -76,6 +63,31 @@ typedef NS_OPTIONS(NSUInteger, NSSpringLoadingOptions) {
     NSSpringLoadingNoHover = 1UL << 3,
 };
 
+@protocol NSDraggingInfo
+- (NSPasteboard *) draggingPasteboard;
+- (NSDragOperation) draggingSourceOperationMask;
+- (NSPoint) draggingLocation;
+- (NSImage *) draggedImage;
+- (NSPoint) draggedImageLocation;
+- (NSWindow *) draggingDestinationWindow;
+- (id) draggingSource;
+- (void) slideDraggedImageTo: (NSPoint) point;
+- (int) draggingSequenceNumber;
+- (NSArray *) namesOfPromisedFilesDroppedAtDestination: (NSURL *) destination;
+
+// What a destination sees of the items, and may change for the rest of the drag
+@property NSDraggingFormation draggingFormation;
+@property BOOL animatesToDestination;
+@property NSInteger numberOfValidItemsForDrop;
+- (void) enumerateDraggingItemsWithOptions: (NSDraggingItemEnumerationOptions) enumOpts
+                                   forView: (NSView *) view
+                                   classes: (NSArray<Class> *) classArray
+                             searchOptions: (NSDictionary *) searchOptions
+                                usingBlock: (void (^)(NSDraggingItem *draggingItem, NSInteger idx, BOOL *stop)) block;
+@property(readonly) NSSpringLoadingHighlight springLoadingHighlight;
+- (void) resetSpringLoading;
+@end
+
 @protocol NSDraggingDestination <NSObject>
 @optional
 - (BOOL) prepareForDragOperation: (id<NSDraggingInfo>) sender;
@@ -91,6 +103,20 @@ typedef NS_OPTIONS(NSUInteger, NSSpringLoadingOptions) {
 @end
 
 @protocol NSDraggingSource <NSObject>
+- (NSDragOperation) draggingSession: (NSDraggingSession *) session
+    sourceOperationMaskForDraggingContext: (NSDraggingContext) context;
+@optional
+- (void) draggingSession: (NSDraggingSession *) session willBeginAtPoint: (NSPoint) screenPoint;
+- (void) draggingSession: (NSDraggingSession *) session movedToPoint: (NSPoint) screenPoint;
+- (void) draggingSession: (NSDraggingSession *) session
+            endedAtPoint: (NSPoint) screenPoint
+               operation: (NSDragOperation) operation;
+- (BOOL) ignoreModifierKeysForDraggingSession: (NSDraggingSession *) session;
+@end
+
+// The source methods of -dragImage:at:offset:event:pasteboard:source:slideBack:, which came before
+// dragging sessions
+@interface NSObject (NSDraggingSourceDeprecated)
 - (BOOL) ignoreModifierKeysWhileDragging;
 - (NSDragOperation) draggingSourceOperationMaskForLocal: (BOOL) flag;
 - (void) draggedImage: (NSImage *) image beganAt: (NSPoint) point;

@@ -1012,43 +1012,50 @@ static NSPasteboardType readableTypeOfItem(NSPasteboardItem *item, Class cls, NS
     return nil;
 }
 
+// The item read as the first of the classes it can be read as, or nil
+- (id) _objectForItem: (NSPasteboardItem *) item
+              classes: (NSArray<Class> *) classArray
+              options: (NSDictionary<NSPasteboardReadingOptionKey, id> *) options
+{
+    for (Class cls in classArray) {
+        if ([cls isSubclassOfClass: [NSPasteboardItem class]])
+            return item;
+        if (![cls conformsToProtocol: @protocol(NSPasteboardReading)])
+            continue;
+
+        NSPasteboardType type = readableTypeOfItem(item, cls, self, options);
+        if (type == nil)
+            continue;
+        id value = readingValue(item, type, cls, self);
+        if (value == nil)
+            continue;
+
+        id object = value;
+        NSPasteboardReadingOptions readingOptions = NSPasteboardReadingAsData;
+        if ([cls respondsToSelector: @selector(readingOptionsForType:pasteboard:)])
+            readingOptions = [cls readingOptionsForType: type pasteboard: self];
+        if (!(readingOptions & NSPasteboardReadingAsKeyedArchive) &&
+            [cls instancesRespondToSelector: @selector(initWithPasteboardPropertyList:ofType:)])
+            object = [[[cls alloc] initWithPasteboardPropertyList: value ofType: type] autorelease];
+
+        if (object == nil)
+            continue;
+        if ([[options objectForKey: NSPasteboardURLReadingFileURLsOnlyKey] boolValue] &&
+            [object isKindOfClass: [NSURL class]] && ![object isFileURL])
+            continue;
+        return object;
+    }
+    return nil;
+}
+
 - (NSArray *) readObjectsForClasses: (NSArray<Class> *) classArray
                             options: (NSDictionary<NSPasteboardReadingOptionKey, id> *) options
 {
     NSMutableArray *result = [NSMutableArray array];
-
     for (NSPasteboardItem *item in [self pasteboardItems]) {
-        for (Class cls in classArray) {
-            if ([cls isSubclassOfClass: [NSPasteboardItem class]]) {
-                [result addObject: item];
-                break;
-            }
-            if (![cls conformsToProtocol: @protocol(NSPasteboardReading)])
-                continue;
-
-            NSPasteboardType type = readableTypeOfItem(item, cls, self, options);
-            if (type == nil)
-                continue;
-            id value = readingValue(item, type, cls, self);
-            if (value == nil)
-                continue;
-
-            id object = value;
-            NSPasteboardReadingOptions readingOptions = NSPasteboardReadingAsData;
-            if ([cls respondsToSelector: @selector(readingOptionsForType:pasteboard:)])
-                readingOptions = [cls readingOptionsForType: type pasteboard: self];
-            if (!(readingOptions & NSPasteboardReadingAsKeyedArchive) &&
-                [cls instancesRespondToSelector: @selector(initWithPasteboardPropertyList:ofType:)])
-                object = [[[cls alloc] initWithPasteboardPropertyList: value ofType: type] autorelease];
-
-            if (object == nil)
-                continue;
-            if ([[options objectForKey: NSPasteboardURLReadingFileURLsOnlyKey] boolValue] &&
-                [object isKindOfClass: [NSURL class]] && ![object isFileURL])
-                continue;
+        id object = [self _objectForItem: item classes: classArray options: options];
+        if (object != nil)
             [result addObject: object];
-            break;
-        }
     }
     return result;
 }

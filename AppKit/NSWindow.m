@@ -283,6 +283,9 @@ NSInteger NSBitsPerPixelFromDepth(NSWindowDepth depth) {
     NSWindow *_destinationWindow;
     NSPoint _screenPoint;
     NSDragOperation _sourceMask;
+    NSInteger _validItems; // -1 until a destination sets numberOfValidItemsForDrop
+    NSDraggingFormation _formation;
+    BOOL _animatesToDestination;
 }
 @end
 
@@ -298,7 +301,7 @@ NSInteger NSBitsPerPixelFromDepth(NSWindowDepth depth) {
 }
 
 - (NSDragOperation) draggingSourceOperationMask {
-    return _sourceMask;
+    return [NSDraggingSession _operationMask: _sourceMask narrowedForSource: _source];
 }
 
 - (NSPoint) draggingLocation {
@@ -320,7 +323,52 @@ NSInteger NSBitsPerPixelFromDepth(NSWindowDepth depth) {
 }
 
 - (id) draggingSource {
-    return _source;
+    return [NSDraggingSession _sourceForDestination: _source];
+}
+
+- (NSDraggingFormation) draggingFormation {
+    return _formation;
+}
+
+- (void) setDraggingFormation: (NSDraggingFormation) formation {
+    _formation = formation;
+}
+
+- (BOOL) animatesToDestination {
+    return _animatesToDestination;
+}
+
+- (void) setAnimatesToDestination: (BOOL) animates {
+    _animatesToDestination = animates;
+}
+
+- (NSInteger) numberOfValidItemsForDrop {
+    return _validItems >= 0 ? _validItems : (NSInteger) [[_pasteboard pasteboardItems] count];
+}
+
+- (void) setNumberOfValidItemsForDrop: (NSInteger) count {
+    _validItems = count;
+}
+
+- (void) enumerateDraggingItemsWithOptions: (NSDraggingItemEnumerationOptions) enumOpts
+                                   forView: (NSView *) view
+                                   classes: (NSArray<Class> *) classArray
+                             searchOptions: (NSDictionary *) searchOptions
+                                usingBlock: (void (^)(NSDraggingItem *, NSInteger, BOOL *)) block
+{
+    [NSDraggingSession _enumerateItemsOfDraggingInfo: self
+                                              source: _source
+                                             forView: view
+                                             classes: classArray
+                                       searchOptions: searchOptions
+                                          usingBlock: block];
+}
+
+- (NSSpringLoadingHighlight) springLoadingHighlight {
+    return NSSpringLoadingHighlightNone;
+}
+
+- (void) resetSpringLoading {
 }
 
 - (void) slideDraggedImageTo: (NSPoint) point {
@@ -3622,6 +3670,7 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
                       source: (id) source
 {
     NSWindowLocalDraggingInfo *info = [[NSWindowLocalDraggingInfo alloc] init];
+    info->_validItems = -1;
     info->_pasteboard = pasteboard;
     info->_image = image;
     info->_source = source;
