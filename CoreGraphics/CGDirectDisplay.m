@@ -95,6 +95,23 @@ CGDirectDisplayID CGMainDisplayID(void) {
     return kCGNullDirectDisplay;
 }
 
+// Hands the display IDs found to the caller as the display list functions
+// document: an array that is NULL (or has no room) is not written and the count
+// is of all the displays; with an array the count is of the IDs written, at
+// most maxDisplays. The count pointer is optional here.
+static void deliverDisplayIDs(const CGDirectDisplayID *ids, uint32_t total,
+                              uint32_t maxDisplays, CGDirectDisplayID *out,
+                              uint32_t *count)
+{
+    BOOL wantsIDs = out != NULL && maxDisplays > 0;
+    uint32_t written = wantsIDs ? MIN(total, maxDisplays) : total;
+
+    for (uint32_t i = 0; wantsIDs && i < written; i++)
+        out[i] = ids[i];
+    if (count != NULL)
+        *count = written;
+}
+
 CGError CGGetOnlineDisplayList(uint32_t maxDisplays,
                                CGDirectDisplayID *onlineDisplays,
                                uint32_t *displayCount)
@@ -105,25 +122,22 @@ CGError CGGetOnlineDisplayList(uint32_t maxDisplays,
 
     NSArray<NSScreen *> *screens = [display screens];
     const CGDirectDisplayID mainDisplay = CGMainDisplayID();
-
-    *displayCount = 0;
+    NSMutableData *storage = [NSMutableData
+            dataWithLength: ([screens count] + 1) * sizeof(CGDirectDisplayID)];
+    CGDirectDisplayID *ids = [storage mutableBytes];
+    uint32_t total = 0;
 
     // Main display should be the first returned
-    if (mainDisplay != kCGNullDirectDisplay) {
-        (*displayCount)++;
-        if (maxDisplays > 0)
-            onlineDisplays[0] = mainDisplay;
-    }
+    if (mainDisplay != kCGNullDirectDisplay)
+        ids[total++] = mainDisplay;
 
     for (NSScreen *screen in screens) {
         CGDirectDisplayID displayID = [screen cgDirectDisplayID];
-        if (displayID != mainDisplay) {
-            if (*displayCount < maxDisplays && onlineDisplays)
-                onlineDisplays[*displayCount] = displayID;
-            (*displayCount)++;
-        }
+        if (displayID != mainDisplay)
+            ids[total++] = displayID;
     }
 
+    deliverDisplayIDs(ids, total, maxDisplays, onlineDisplays, displayCount);
     return kCGErrorSuccess;
 }
 
@@ -160,16 +174,17 @@ CGError CGGetActiveDisplayList(uint32_t maxDisplays,
         return kCGErrorInvalidConnection;
 
     NSArray<NSScreen *> *screens = [display screens];
+    NSMutableData *storage = [NSMutableData
+            dataWithLength: ([screens count] + 1) * sizeof(CGDirectDisplayID)];
+    CGDirectDisplayID *ids = [storage mutableBytes];
+    uint32_t total = 0;
 
-    *displayCount = 0;
     for (NSScreen *screen in screens) {
-        if (!NSIsEmptyRect([screen frame])) {
-            if (*displayCount < maxDisplays && activeDisplays)
-                activeDisplays[*displayCount] = [screen cgDirectDisplayID];
-            (*displayCount)++;
-        }
+        if (!NSIsEmptyRect([screen frame]))
+            ids[total++] = [screen cgDirectDisplayID];
     }
 
+    deliverDisplayIDs(ids, total, maxDisplays, activeDisplays, displayCount);
     return kCGErrorSuccess;
 }
 
@@ -208,50 +223,49 @@ CGDirectDisplayID CGOpenGLDisplayMaskToDisplayID(CGOpenGLDisplayMask mask) {
     return kCGNullDirectDisplay;
 }
 
-CGError CGGetDisplaysWithPoint(CGPoint point, uint32_t maxDisplays,
-                               CGDirectDisplayID *displays,
-                               uint32_t *matchingDisplayCount)
+// The displays a point or a rectangle falls on. As documented, the array may
+// be NULL (or of no room): the count is then of all the displays that match;
+// with an array it is of the IDs written, at most maxDisplays.
+static CGError displaysMatching(CGPoint point, CGRect rect, BOOL isPoint,
+                                uint32_t maxDisplays, CGDirectDisplayID *displays,
+                                uint32_t *matchingDisplayCount)
 {
     NSDisplay *display = currentDisplay();
     if (!display)
         return kCGErrorInvalidConnection;
 
     NSArray<NSScreen *> *screens = [display screens];
-    *matchingDisplayCount = 0;
+    NSMutableData *storage = [NSMutableData
+            dataWithLength: ([screens count] + 1) * sizeof(CGDirectDisplayID)];
+    CGDirectDisplayID *ids = [storage mutableBytes];
+    uint32_t total = 0;
 
     for (NSScreen *screen in screens) {
-        NSRect rect = globalRectForFrame(screens, [screen frame]);
-        if (NSPointInRect(point, rect)) {
-            if (*matchingDisplayCount < maxDisplays)
-                displays[*matchingDisplayCount] = [screen cgDirectDisplayID];
-            (*matchingDisplayCount)++;
-        }
+        NSRect screenRect = globalRectForFrame(screens, [screen frame]);
+        BOOL hit = isPoint ? NSPointInRect(point, screenRect)
+                           : NSIntersectsRect(rect, screenRect);
+        if (hit)
+            ids[total++] = [screen cgDirectDisplayID];
     }
 
+    deliverDisplayIDs(ids, total, maxDisplays, displays, matchingDisplayCount);
     return kCGErrorSuccess;
+}
+
+CGError CGGetDisplaysWithPoint(CGPoint point, uint32_t maxDisplays,
+                               CGDirectDisplayID *displays,
+                               uint32_t *matchingDisplayCount)
+{
+    return displaysMatching(point, CGRectZero, YES, maxDisplays, displays,
+                            matchingDisplayCount);
 }
 
 CGError CGGetDisplaysWithRect(CGRect rect, uint32_t maxDisplays,
                               CGDirectDisplayID *displays,
                               uint32_t *matchingDisplayCount)
 {
-    NSDisplay *display = currentDisplay();
-    if (!display)
-        return kCGErrorInvalidConnection;
-
-    NSArray<NSScreen *> *screens = [display screens];
-    *matchingDisplayCount = 0;
-
-    for (NSScreen *screen in screens) {
-        NSRect screenRect = globalRectForFrame(screens, [screen frame]);
-        if (NSIntersectsRect(rect, screenRect)) {
-            if (*matchingDisplayCount < maxDisplays)
-                displays[*matchingDisplayCount] = [screen cgDirectDisplayID];
-            (*matchingDisplayCount)++;
-        }
-    }
-
-    return kCGErrorSuccess;
+    return displaysMatching(CGPointZero, rect, NO, maxDisplays, displays,
+                            matchingDisplayCount);
 }
 
 CGRect CGDisplayBounds(CGDirectDisplayID displayIndex) {
