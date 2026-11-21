@@ -179,8 +179,11 @@ if (SWIFT_TOOLCHAIN_FOUND AND BUILD_TARGET_64BIT)
 	set_target_properties(swiftCoreGraphics_placeholder PROPERTIES
 		LINKER_LANGUAGE C
 		OUTPUT_NAME "swiftCoreGraphics_placeholder")
-	reexport(CoreGraphics_${APPLE_ARCH_64BIT} swiftCoreGraphics_placeholder
-		"${CMAKE_CURRENT_BINARY_DIR}/libswiftCoreGraphics_placeholder.dylib")
+	# The overlay has every 64-bit slice
+	foreach (arch IN LISTS DARLING_ARCHS_64BIT)
+		reexport(CoreGraphics_${arch} swiftCoreGraphics_placeholder
+			"${CMAKE_CURRENT_BINARY_DIR}/libswiftCoreGraphics_placeholder.dylib")
+	endforeach ()
 elseif (NOT SWIFT_TOOLCHAIN_FOUND)
 	message(STATUS "CoreGraphics: no Swift toolchain, so no Swift overlay to re-export")
 endif ()
