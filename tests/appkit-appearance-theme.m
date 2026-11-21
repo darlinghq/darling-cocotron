@@ -209,6 +209,8 @@ int main(void)
             }
         }
 #endif
+        // the light values: Red, Graphite and Purple differ in the dark appearance
+        [NSAppearance setCurrentAppearance: [NSAppearance appearanceNamed: NSAppearanceNameAqua]];
         for (size_t i = 0; i < sizeof(accentExpected) / sizeof(accentExpected[0]); i++) {
             set_global_pref(CFSTR("AppleAccentColor"), (CFPropertyListRef)@(accentExpected[i].code));
             NSColor *viaCatalog = [NSColor controlAccentColor];
@@ -273,8 +275,40 @@ int main(void)
         }];
 
         CHECK(lightTextW < 0.1 && darkTextW > 0.9);
-        CHECK(lightCtrlW > 0.8 && darkCtrlW < 0.3);
-        CHECK(fabs(lightWinR - 0.925) < 0.01 && fabs(darkWinR - 0.20) < 0.02);
+        CHECK(lightCtrlW > 0.8);
+        (void) darkCtrlW;
+        CHECK(fabs(lightWinR - 0.925) < 0.01 && fabs(darkWinR - 0.196) < 0.01);
+
+        // The dark values of the system colours, read on macOS 10.14.4 (sRGB) in the DarkAqua appearance.
+        static const struct { NSString *name; CGFloat r, g, b, a; } darkExpected[] = {
+            { @"windowBackgroundColor", 0.196, 0.196, 0.196, 1.0 },
+            { @"controlColor", 1.0, 1.0, 1.0, 0.247 },
+            { @"controlBackgroundColor", 0.118, 0.118, 0.118, 1.0 },
+            { @"textBackgroundColor", 0.118, 0.118, 0.118, 1.0 },
+            { @"controlTextColor", 1.0, 1.0, 1.0, 0.847 },
+            { @"selectedControlTextColor", 1.0, 1.0, 1.0, 0.847 },
+            { @"selectedControlColor", 0.247, 0.388, 0.545, 1.0 },
+            { @"selectedTextBackgroundColor", 0.247, 0.388, 0.545, 1.0 },
+            { @"gridColor", 1.0, 1.0, 1.0, 0.098 },
+            { @"headerTextColor", 1.0, 1.0, 1.0, 1.0 },
+            { @"alternatingContentBackgroundColor", 1.0, 1.0, 1.0, 0.047 },
+            { @"disabledControlTextColor", 1.0, 1.0, 1.0, 0.247 },
+            { @"highlightColor", 0.706, 0.706, 0.706, 1.0 },
+            { @"linkColor", 0.255, 0.612, 1.0, 1.0 },
+            { @"keyboardFocusIndicatorColor", 0.102, 0.663, 1.0, 0.298 },
+        };
+        set_global_pref(CFSTR("AppleHighlightColor"), NULL);
+        for (size_t i = 0; i < sizeof(darkExpected) / sizeof(darkExpected[0]); i++) {
+            NSColor *c = [NSColor performSelector: NSSelectorFromString(darkExpected[i].name)];
+            __block BOOL ok = NO;
+            [darkAqua performAsCurrentDrawingAppearance: ^{
+                ok = near(c, darkExpected[i].r, darkExpected[i].g, darkExpected[i].b, darkExpected[i].a);
+            }];
+            if (!ok) {
+                printf("FAIL: dark %s\n", [darkExpected[i].name UTF8String]);
+                g_failures++;
+            }
+        }
 
         // Restore original defaults
         set_global_pref(CFSTR("AppleInterfaceStyle"), (CFPropertyListRef)origStyle);

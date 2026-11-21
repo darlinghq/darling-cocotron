@@ -31,6 +31,7 @@ void NSColorSetCatalogColor(NSColorListName catalogName, NSColorName colorName,
                             NSColor *color);
 NSColor *NSColorGetCatalogColor(NSColorListName catalogName,
                                 NSColorName colorName);
+void NSColorInitializeDynamicSystemColors(void);
 
 @implementation NSColor_catalog
 
@@ -80,6 +81,8 @@ NSColor *NSColorGetCatalogColor(NSColorListName catalogName,
 + (NSColor *) colorWithCatalogName: (NSColorListName) catalogName
                          colorName: (NSColorName) colorName
 {
+    NSColorInitializeDynamicSystemColors();
+
     // The display's own colors come first, then the ones registered through
     // +colorWithCatalogName:colorName:color:. A name in neither has no color.
     NSColor *color = [[NSDisplay currentDisplay] colorWithName: colorName];
@@ -110,6 +113,7 @@ NSColor *NSColorGetCatalogColor(NSColorListName catalogName,
                                  colorName: (NSColorName) colorName
                              fallbackColor: (NSColor *) fallback
 {
+    NSColorInitializeDynamicSystemColors();
     NSColor *named = NSColorGetCatalogColor(catalogName, colorName);
 
     return [[[self alloc] initWithCatalogName: catalogName

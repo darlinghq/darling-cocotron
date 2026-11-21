@@ -47,19 +47,12 @@ void NSColorSetCatalogColor(NSColorListName catalogName, NSColorName colorName, 
     // The disabled text colour and the menu highlight are the values macOS 10.14 returns in the light
     // appearance, converted to sRGB. There is no public menu background or menu text colour to read back; the
     // menu text takes the label colour's value and the background is an estimate of the light menu material.
-    if ([colorName isEqual: @"disabledControlTextColor"])
-        return [NSColor colorWithSRGBRed: 0.0f green: 0.0f blue: 0.0f alpha: 0.247f];
     if ([colorName isEqual: @"menuBackgroundColor"])
         return [NSColor colorWithSRGBRed: 0.945f green: 0.945f blue: 0.945f alpha: 1.0f];
     if ([colorName isEqual: @"mainMenuBarColor"])
         return [NSColor colorWithCalibratedWhite: 0.9 alpha: 1.0];
     if ([colorName isEqual: @"controlShadowColor"])
         return [NSColor darkGrayColor];
-    if ([colorName isEqual: @"selectedControlColor"])
-        return [NSColor colorWithSRGBRed: 0.701961f /* 179 */
-                                   green: 0.843137f /* 215 */
-                                    blue: 1.0f
-                                   alpha: 1.0f];
     if ([colorName isEqual: @"controlLightHighlightColor"])
         return [NSColor lightGrayColor];
     // QUIRK: the header colours of macOS 10.14 (light appearance). Evidence: black-box reads of +headerColor and
@@ -69,8 +62,6 @@ void NSColorSetCatalogColor(NSColorListName catalogName, NSColorName colorName, 
         return [NSColor colorWithSRGBRed: 0.666667f green: 0.666667f blue: 0.666667f alpha: 1.0f];
     if ([colorName isEqual: @"selectedTextColor"])
         return [NSColor whiteColor];
-    if ([colorName isEqual: @"headerTextColor"])
-        return [NSColor colorWithSRGBRed: 0.0f green: 0.0f blue: 0.0f alpha: 0.847059f];
     if ([colorName isEqual: @"menuItemTextColor"])
         return [NSColor colorWithSRGBRed: 0.0f green: 0.0f blue: 0.0f alpha: 0.847f];
     if ([colorName isEqual: @"selectedMenuItemTextColor"])
@@ -85,11 +76,6 @@ void NSColorSetCatalogColor(NSColorListName catalogName, NSColorName colorName, 
         return [NSColor colorWithGenericGamma22White: 0.0f alpha: 1.0f];
     if ([colorName isEqual: @"alternateSelectedControlTextColor"])
         return [NSColor colorWithGenericGamma22White: 1.0f alpha: 1.0f];
-    if ([colorName isEqual: @"alternatingContentBackgroundColor"])
-        return [NSColor colorWithSRGBRed: 0.956863f
-                                   green: 0.960784f
-                                    blue: 0.960784f
-                                   alpha: 1.0f];
     if ([colorName isEqual: @"alternateSelectedControlColor"])
         return [NSColor colorWithSRGBRed: 0.0f
                                    green: 0.388235f
@@ -105,18 +91,6 @@ void NSColorSetCatalogColor(NSColorListName catalogName, NSColorName colorName, 
                                          green: 0.890097f
                                           blue: 0.890097f
                                          alpha: 1.0f];
-    if ([colorName isEqual: @"gridColor"])
-        return [NSColor colorWithGenericGamma22White: 0.80f alpha: 1.0f];
-    if ([colorName isEqual: @"highlightColor"])
-        return [NSColor colorWithGenericGamma22White: 1.0f alpha: 1.0f];
-    if ([colorName isEqual: @"keyboardFocusIndicatorColor"])
-        // QUIRK: the indicator colour is a translucent blue, not an opaque one. Evidence: black-box read of
-        // +[NSColor keyboardFocusIndicatorColor] converted to sRGB on macOS 10.14.4, Blue control tint (tier 2).
-        // Test: appkit-focus-ring.m (test_quirk_keyboard_focus_indicator_color)
-        return [NSColor colorWithSRGBRed: 0.0f
-                                   green: 0.403922f
-                                    blue: 0.956863f
-                                    alpha: 0.247059f];
     if ([colorName isEqual: @"knobColor"])
         return [NSColor colorWithSRGBRed: 0.60f
                                    green: 0.60f

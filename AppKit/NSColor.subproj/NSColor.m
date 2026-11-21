@@ -79,15 +79,9 @@ static NSColor *constantWhite(CGFloat white, CGFloat alpha) {
     return result;
 }
 
-static void _initializeDynamicSystemColors(void);
+void NSColorInitializeDynamicSystemColors(void);
 
 @implementation NSColor
-
-+ (void) initialize {
-    if (self == [NSColor class]) {
-        _initializeDynamicSystemColors();
-    }
-}
 
 - (NSColorType) type {
     return NSColorTypeComponentBased;
@@ -748,27 +742,30 @@ static NSColor *highlightColorFromDefaults(NSAppearance *appearance) {
         }
     }
     if (isDarkAppearance(appearance)) {
-        return [NSColor colorWithSRGBRed: 0.247f green: 0.427f blue: 0.698f alpha: 1.0f];
+        return [NSColor colorWithSRGBRed: 0.247f green: 0.388f blue: 0.545f alpha: 1.0f];
     }
     return [NSColor colorWithSRGBRed: 0.698039f green: 0.843137f blue: 1.0f alpha: 1.0f];
 }
 
-static void _initializeDynamicSystemColors(void) {
+// Registers the system colours that follow the appearance and the accent preferences in the System
+// catalog. Done on the first catalog lookup rather than when the class initializes, so that merely using
+// NSColor does not need a display.
+void NSColorInitializeDynamicSystemColors(void) {
     static BOOL initialized = NO;
     if (initialized)
         return;
     initialized = YES;
 
     registerDynamicSystemColor(@"textColor", constantWhite(0.0, 1.0), constantWhite(1.0, 1.0));
-    registerDynamicSystemColor(@"textBackgroundColor", constantWhite(1.0, 1.0), constantRGB(0.12, 0.12, 0.12, 1.0));
-    registerDynamicSystemColor(@"controlColor", [NSColor colorWithCalibratedWhite: 0.93 alpha: 1.0], constantRGB(0.20, 0.20, 0.20, 1.0));
-    registerDynamicSystemColor(@"controlTextColor", [NSColor colorWithSRGBRed: 0.0f green: 0.0f blue: 0.0f alpha: 0.847059f], constantWhite(1.0, 1.0));
-    registerDynamicSystemColor(@"selectedControlTextColor", [NSColor colorWithSRGBRed: 0.0f green: 0.0f blue: 0.0f alpha: 0.847059f], constantWhite(1.0, 1.0));
-    registerDynamicSystemColor(@"controlBackgroundColor", constantWhite(1.0, 1.0), constantRGB(0.15, 0.15, 0.15, 1.0));
+    registerDynamicSystemColor(@"textBackgroundColor", constantWhite(1.0, 1.0), constantRGB(0.118, 0.118, 0.118, 1.0));
+    registerDynamicSystemColor(@"controlColor", [NSColor colorWithCalibratedWhite: 0.93 alpha: 1.0], constantWhite(1.0, 0.247));
+    registerDynamicSystemColor(@"controlTextColor", [NSColor colorWithSRGBRed: 0.0f green: 0.0f blue: 0.0f alpha: 0.847059f], constantWhite(1.0, 0.847059));
+    registerDynamicSystemColor(@"selectedControlTextColor", [NSColor colorWithSRGBRed: 0.0f green: 0.0f blue: 0.0f alpha: 0.847059f], constantWhite(1.0, 0.847059));
+    registerDynamicSystemColor(@"controlBackgroundColor", constantWhite(1.0, 1.0), constantRGB(0.118, 0.118, 0.118, 1.0));
     registerDynamicSystemColor(@"labelColor", [NSColor colorWithSRGBRed: 0.0f green: 0.0f blue: 0.0f alpha: 0.847059f],
                                             [NSColor colorWithSRGBRed: 1.0f green: 1.0f blue: 1.0f alpha: 0.847059f]);
     registerDynamicSystemColor(@"secondaryLabelColor", [NSColor colorWithSRGBRed: 0.0f green: 0.0f blue: 0.0f alpha: 0.498f],
-                                                     [NSColor colorWithSRGBRed: 1.0f green: 1.0f blue: 1.0f alpha: 0.55f]);
+                                                     [NSColor colorWithSRGBRed: 1.0f green: 1.0f blue: 1.0f alpha: 0.549f]);
     registerDynamicSystemColor(@"tertiaryLabelColor", [NSColor colorWithSRGBRed: 0.0f green: 0.0f blue: 0.0f alpha: 0.247f],
                                                     [NSColor colorWithSRGBRed: 1.0f green: 1.0f blue: 1.0f alpha: 0.25f]);
     registerDynamicSystemColor(@"quaternaryLabelColor", [NSColor colorWithSRGBRed: 0.0f green: 0.0f blue: 0.0f alpha: 0.098f],
@@ -780,9 +777,9 @@ static void _initializeDynamicSystemColors(void) {
     registerDynamicSystemColor(@"separatorColor", [NSColor colorWithSRGBRed: 0.0f green: 0.0f blue: 0.0f alpha: 0.098f],
                                                 [NSColor colorWithSRGBRed: 1.0f green: 1.0f blue: 1.0f alpha: 0.10f]);
     registerDynamicSystemColor(@"linkColor", [NSColor colorWithSRGBRed: 0.0f green: 0.411765f blue: 0.850980f alpha: 1.0f],
-                                           [NSColor colorWithSRGBRed: 0.254902f green: 0.596078f blue: 1.0f alpha: 1.0f]);
+                                           [NSColor colorWithSRGBRed: 0.254902f green: 0.611765f blue: 1.0f alpha: 1.0f]);
     registerDynamicSystemColor(@"windowBackgroundColor", [NSColor colorWithSRGBRed: 0.925f green: 0.925f blue: 0.925f alpha: 1.0f],
-                                                       constantRGB(0.20, 0.20, 0.20, 1.0));
+                                                       constantRGB(0.196, 0.196, 0.196, 1.0));
     registerDynamicSystemColor(@"selectedContentBackgroundColor", [NSColor colorWithSRGBRed: 0.0f green: 0.388235f blue: 0.882353f alpha: 1.0f],
                                                                  [NSColor colorWithSRGBRed: 0.0f green: 0.345098f blue: 0.815686f alpha: 1.0f]);
     registerDynamicSystemColor(@"unemphasizedSelectedContentBackgroundColor", [NSColor colorWithSRGBRed: 0.862745f green: 0.862745f blue: 0.862745f alpha: 1.0f],
@@ -790,6 +787,23 @@ static void _initializeDynamicSystemColors(void) {
     registerDynamicSystemColor(@"unemphasizedSelectedTextColor", constantWhite(0.0, 1.0), constantWhite(1.0, 1.0));
     registerDynamicSystemColor(@"unemphasizedSelectedTextBackgroundColor", [NSColor colorWithSRGBRed: 0.863f green: 0.863f blue: 0.863f alpha: 1.0f],
                                                                           [NSColor colorWithSRGBRed: 0.275f green: 0.275f blue: 0.275f alpha: 1.0f]);
+
+    // Dark values read on macOS 10.14.4 (tier 2, black-box reads of the colours in the DarkAqua appearance);
+    // the light values are those DarlingDisplay returns.
+    registerDynamicSystemColor(@"selectedControlColor", [NSColor colorWithSRGBRed: 0.701961f green: 0.843137f blue: 1.0f alpha: 1.0f],
+                                                       [NSColor colorWithSRGBRed: 0.247f green: 0.388f blue: 0.545f alpha: 1.0f]);
+    registerDynamicSystemColor(@"gridColor", [NSColor colorWithGenericGamma22White: 0.80f alpha: 1.0f], constantWhite(1.0, 0.098));
+    registerDynamicSystemColor(@"headerTextColor", [NSColor colorWithSRGBRed: 0.0f green: 0.0f blue: 0.0f alpha: 0.847059f], constantWhite(1.0, 1.0));
+    registerDynamicSystemColor(@"alternatingContentBackgroundColor", [NSColor colorWithSRGBRed: 0.956863f green: 0.960784f blue: 0.960784f alpha: 1.0f],
+                                                                    constantWhite(1.0, 0.047));
+    registerDynamicSystemColor(@"disabledControlTextColor", [NSColor colorWithSRGBRed: 0.0f green: 0.0f blue: 0.0f alpha: 0.247f], constantWhite(1.0, 0.247));
+    registerDynamicSystemColor(@"highlightColor", [NSColor colorWithGenericGamma22White: 1.0f alpha: 1.0f], constantWhite(0.706, 1.0));
+    // QUIRK: the indicator colour is a translucent blue, not an opaque one. Evidence: black-box read of
+    // +[NSColor keyboardFocusIndicatorColor] converted to sRGB on macOS 10.14.4, Blue control tint (tier 2); other
+    // accents give other tints, which are not followed here.
+    // Test: appkit-focus-ring.m (test_quirk_keyboard_focus_indicator_color)
+    registerDynamicSystemColor(@"keyboardFocusIndicatorColor", [NSColor colorWithSRGBRed: 0.0f green: 0.403922f blue: 0.956863f alpha: 0.247059f],
+                                                              [NSColor colorWithSRGBRed: 0.102f green: 0.663f blue: 1.0f alpha: 0.298f]);
 
     NSColor *dynamicAccent = [NSColor colorWithName: @"controlAccentColor" dynamicProvider: ^NSColor *(NSAppearance *appearance) {
         id val = [[NSUserDefaults standardUserDefaults] objectForKey: @"AppleAccentColor"];
@@ -807,7 +821,7 @@ static void _initializeDynamicSystemColors(void) {
 // A System catalog color that display backends may not know: the value a
 // backend registered in the catalog, else the given default.
 static NSColor *systemCatalogColor(NSColorName name, NSColor *fallback) {
-    _initializeDynamicSystemColors();
+    NSColorInitializeDynamicSystemColors();
     NSColor *color = [[NSDisplay currentDisplay] colorWithName: name];
 
     if (color == nil)
@@ -1162,7 +1176,7 @@ static NSColor *systemCatalogColor(NSColorName name, NSColor *fallback) {
                          colorName: (NSColorName) colorName
 {
     if ([catalogName isEqualToString: @"System"]) {
-        _initializeDynamicSystemColors();
+        NSColorInitializeDynamicSystemColors();
     }
     return [NSColor_catalog colorWithCatalogName: catalogName
                                        colorName: colorName];
