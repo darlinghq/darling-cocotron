@@ -1342,8 +1342,8 @@ static NSRect NSAquaToggleBoxRect(NSRect rect, BOOL radio, NSControlSize control
     return NSMakeRect(NSMinX(rect) + NSAquaToggleBoxInset(radio, controlSize), NSMaxY(rect) - top - size, size, size);
 }
 
-static void NSAquaDrawToggle(NSRect rect, BOOL radio, NSInteger state, BOOL highlighted, BOOL enabled,
-                             BOOL active, NSControlSize controlSize)
+static void NSAquaDrawToggleUncached(NSRect rect, BOOL radio, NSInteger state, BOOL highlighted, BOOL enabled,
+                                     BOOL active, NSControlSize controlSize)
 {
     CGFloat size = NSAquaToggleBoxSize(radio, controlSize);
     NSRect box = NSAquaToggleBoxRect(rect, radio, controlSize);
@@ -1436,6 +1436,86 @@ static void NSAquaDrawToggle(NSRect rect, BOOL radio, NSInteger state, BOOL high
         }
     }
     CGContextRestoreGState(ctx);
+}
+
+/* A toggle looks the same wherever it is drawn: once its box is on the device pixel grid, the pixels depend only
+   on the kind, state, highlight, enabled and active flags, the control size and the scale. Drawing it takes several
+   path rasterizations (fill, shade, outline, mark), and a window of options draws dozens of them every time a
+   view is displayed, so the first draw at a whole number scale renders the toggle into an image that later draws
+   reuse. Other transforms (rotated, skewed, fractional scales) draw directly. */
+#define NSAQUA_TOGGLE_PAD 2 // points around the box in the cached image, for the antialiased outline
+
+static CGImageRef NSAquaCachedToggleImage(BOOL radio, NSInteger state, BOOL highlighted, BOOL enabled, BOOL active,
+                                          NSControlSize controlSize, int scale)
+{
+    static NSMutableDictionary *cache;
+    NSString *key = [NSString stringWithFormat: @"%d.%ld.%d.%d.%d.%ld.%d", radio, (long) state, highlighted, enabled, active,
+                                                 (long) controlSize, scale];
+
+    @synchronized([NSGraphicsStyle class]) {
+        if (cache == nil)
+            cache = [NSMutableDictionary new];
+        id found = [cache objectForKey: key];
+
+        if (found != nil)
+            return (CGImageRef) found == (CGImageRef) [NSNull null] ? NULL : (CGImageRef) found;
+    }
+
+    CGFloat size = NSAquaToggleBoxSize(radio, controlSize);
+    size_t pixels = (size_t) ceil((size + 2 * NSAQUA_TOGGLE_PAD) * scale);
+    CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB();
+    CGContextRef bitmap = CGBitmapContextCreate(NULL, pixels, pixels, 8, 0, space, kCGImageAlphaPremultipliedLast);
+    CGImageRef image = NULL;
+
+    if (bitmap != NULL) {
+        CGContextScaleCTM(bitmap, scale, scale);
+        NSGraphicsContext *context = [NSGraphicsContext graphicsContextWithGraphicsPort: bitmap flipped: NO];
+
+        [NSGraphicsContext saveGraphicsState];
+        [NSGraphicsContext setCurrentContext: context];
+        // A rectangle 18 points high puts the box at the pad from the left and bottom edges of the image.
+        CGFloat topOffset = NSAquaToggleBoxRect(NSMakeRect(0, 0, 18, 18), radio, controlSize).origin.y;
+        NSRect rect = NSMakeRect(NSAQUA_TOGGLE_PAD - NSAquaToggleBoxInset(radio, controlSize),
+                                 NSAQUA_TOGGLE_PAD - topOffset, 18, 18);
+        NSAquaDrawToggleUncached(rect, radio, state, highlighted, enabled, active, controlSize);
+        [NSGraphicsContext restoreGraphicsState];
+        image = CGBitmapContextCreateImage(bitmap);
+        CGContextRelease(bitmap);
+    }
+    CGColorSpaceRelease(space);
+
+    @synchronized([NSGraphicsStyle class]) {
+        [cache setObject: image != NULL ? (id) image : (id) [NSNull null] forKey: key];
+    }
+    if (image != NULL)
+        CGImageRelease(image); // the cache holds it now
+    return image;
+}
+
+static void NSAquaDrawToggle(NSRect rect, BOOL radio, NSInteger state, BOOL highlighted, BOOL enabled,
+                             BOOL active, NSControlSize controlSize)
+{
+    CGContextRef ctx = [[NSGraphicsContext currentContext] graphicsPort];
+    CGAffineTransform t = CGContextGetCTM(ctx);
+    CGFloat sx = fabs(t.a), sy = fabs(t.d);
+    // a disabled button shows no pressed look
+    BOOL pressed = highlighted && enabled;
+
+    if (t.b == 0 && t.c == 0 && sx == sy && sx >= 1 && sx <= 4 && sx == floor(sx)) {
+        NSRect box = NSAquaSnapToDevicePixels(ctx, NSAquaToggleBoxRect(rect, radio, controlSize));
+        // The blue look needs the active flag only when the box is not pressed.
+        BOOL activeKey = active || pressed;
+        CGImageRef image = NSAquaCachedToggleImage(radio, state, pressed, enabled, activeKey, controlSize, (int) sx);
+
+        if (image != NULL) {
+            CGRect target = CGRectMake(NSMinX(box) - NSAQUA_TOGGLE_PAD, NSMinY(box) - NSAQUA_TOGGLE_PAD,
+                                       NSWidth(box) + 2 * NSAQUA_TOGGLE_PAD, NSHeight(box) + 2 * NSAQUA_TOGGLE_PAD);
+
+            CGContextDrawImage(ctx, target, image);
+            return;
+        }
+    }
+    NSAquaDrawToggleUncached(rect, radio, state, highlighted, enabled, active, controlSize);
 }
 
 - (void) drawCheckBoxInRect: (NSRect) rect
