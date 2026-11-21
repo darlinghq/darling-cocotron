@@ -693,19 +693,16 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
             break;
     }
     if (i < numberOfColumns) {
+        // width is now the right edge of column i, the first one the rectangle reaches; take the following
+        // columns while the rectangle extends past the right edge of the last one taken.
+        // Test: tests/appkit-table-view-columns-in-rect.m
         range.location = i;
-
-        for (; i < numberOfColumns; i++) {
-            if (width > rect.origin.x + rect.size.width)
-                break;
-
+        while (width < NSMaxX(rect) && i + 1 < numberOfColumns) {
+            i++;
             width += [[_tableColumns objectAtIndex: i] width] +
                      _intercellSpacing.width;
         }
-        if (i < numberOfColumns)
-            range.length = i - range.location + 1;
-        else
-            range.length = numberOfColumns - range.location;
+        range.length = i - range.location + 1;
     }
 
     return range; // returns 0,0 if not found, not NSNotFound
