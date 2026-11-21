@@ -136,6 +136,18 @@ void _NSMenuCancelTracking(NSMenu *menu) {
 
 - (void) setSelectedItemIndex: (NSUInteger) itemIndex {
     if (_selectedItemIndex != itemIndex) {
+        // The delegate is told before the highlight changes. A nil item means
+        // that nothing is about to be highlighted. GUESS: the documentation
+        // does not say whether the menu bar's delegate hears this too; it does
+        // here, as for any menu. Also GUESS: the reset at the end of tracking
+        // and the closing of submenu views do not go through this setter, so
+        // no nil is sent when a menu closes; the documentation is silent.
+        id delegate = [[self menu] delegate];
+        if ([delegate respondsToSelector: @selector(menu:willHighlightItem:)]) {
+            NSArray *items = [self visibleItemArray];
+            [delegate menu: [self menu]
+                    willHighlightItem: itemIndex < [items count] ? [items objectAtIndex: itemIndex] : nil];
+        }
         _selectedItemIndex = itemIndex;
         [self setNeedsDisplay: YES];
         [self displayIfNeeded];
