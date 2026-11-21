@@ -45,7 +45,9 @@ set(WAYLAND_PROTOCOL_FILES
 	# KDE's appmenu protocol (plasma-wayland-protocols), kept in this tree for the same reason.
 	"${CMAKE_CURRENT_LIST_DIR}/protocols/appmenu.xml"
 	# KDE's plasma-shell (task-bar and switcher exclusion), described in this tree; see protocols/README.md.
-	"${CMAKE_CURRENT_LIST_DIR}/protocols/plasma-shell.xml")
+	"${CMAKE_CURRENT_LIST_DIR}/protocols/plasma-shell.xml"
+	# Likewise wlr-layer-shell (wlroots).
+	"${CMAKE_CURRENT_LIST_DIR}/protocols/wlr-layer-shell-unstable-v1.xml")
 
 set(WAYLAND_PROTOCOLS_USABLE TRUE)
 foreach (protocol ${WAYLAND_PROTOCOL_FILES})

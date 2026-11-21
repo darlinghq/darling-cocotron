@@ -43,3 +43,15 @@ window stays out of task lists and window switchers (xdg-shell cannot say so).
 - The file warns that the protocol is a desktop-environment detail; KDE's own client libraries use these requests for
   skip-taskbar on Wayland, and KWin offers the global to ordinary clients.
 - The backend checks the opcodes it uses against the generated tables at start (`WaylandCheckOpcodes`).
+
+## wlr-layer-shell-unstable-v1.xml
+
+Also a wlroots protocol, kept byte for byte. It is used for the application menu bar, a layer surface
+anchored along the top edge.
+
+- Source: https://gitlab.freedesktop.org/wlroots/wlr-protocols, `unstable/wlr-layer-shell-unstable-v1.xml`
+- Commit: a5028afbe4a1cf0daf020c4104c1565a09d6e58a
+- Copyright: 2017 Drew DeVault
+- Licence: the permission notice at the top of the file (use, copy, modify, distribute and sell without fee,
+  provided the copyright notice appears in all copies and supporting documentation; no warranty). It is
+  permissive and compatible with this project's MIT licence.

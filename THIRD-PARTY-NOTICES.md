@@ -21,6 +21,15 @@ and the licence.
 - Licence: LGPL-2.1-or-later. The file is kept unmodified; `wayland-scanner` generates the interface tables
   from it at build time (as for the other protocol files, the generated code carries the file's notice).
 
+## wlr-layer-shell-unstable-v1.xml
+
+- Location: `CoreGraphics/WaylandSupport/protocols/wlr-layer-shell-unstable-v1.xml`
+- Source: https://gitlab.freedesktop.org/wlroots/wlr-protocols (`unstable/wlr-layer-shell-unstable-v1.xml`)
+- Commit: a5028afbe4a1cf0daf020c4104c1565a09d6e58a
+- Copyright: 2017 Drew DeVault
+- Licence: the permission notice at the top of the file (a permissive notice allowing use, copying,
+  modification, distribution and sale without fee, provided the copyright notice is kept).
+
 ## DejaVuSans.ttf
 
 - Location: `tests/fixtures/fonts/DejaVuSans.ttf`, licence text in `tests/fixtures/fonts/DejaVu-LICENSE.txt`

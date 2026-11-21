@@ -79,6 +79,7 @@ typedef enum {
     WaylandObjectOutputHeadMode,
     WaylandObjectOutputConfiguration,
     WaylandObjectActivationToken,
+    WaylandObjectLayerSurface,
     WaylandObjectTouch,
 } WaylandObjectKind;
 
@@ -130,6 +131,9 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     struct wl_proxy *_shm;
     struct wl_proxy *_wmBase;
     struct wl_proxy *_decorationManager;
+    // wlr-layer-shell, when the compositor has it: the menu bar is a layer surface.
+    struct wl_proxy *_layerShell;
+    uint32_t _layerShellName;
     struct wl_proxy *_dataDeviceManager;
     uint32_t _compositorVersion;
 
