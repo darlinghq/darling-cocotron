@@ -221,6 +221,18 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 // Mapped, or ordered in but kept unmapped because it is fully transparent. Such a window counts as
 // on screen for the window order (and so for the choice of the next key window), as on X11 where
 // it is mapped with no opacity.
+// The keyboard focus is in another client. A window the compositor does not hold active can still be
+// active for AppKit, because a window that is never shown is reported active when it is made key.
+- (BOOL) isActivatedByCompositor {
+    return _activated;
+}
+
+- (void) keyboardFocusLeft {
+    NSWindow *delegate = _delegate;
+    if (delegate != nil && !_activated && [delegate _isActive])
+        [delegate platformWindowDeactivated: self checkForAppDeactivation: NO];
+}
+
 - (BOOL) isOrderedIn {
     return _mapped || (_fullyTransparent && _shouldBeMapped && !_invalidated);
 }
@@ -531,6 +543,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
             if (self->_invalidated || self->_activated || delegate == nil || ![delegate _isActive])
                 return;
             [delegate platformWindowDeactivated: self checkForAppDeactivation: NO];
+            [self->_display applicationFocusMayHaveLeft];
         }];
     }
     _pendingSuspended = _suspended = NO;
@@ -1492,6 +1505,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
           } else if (activationChanged) {
               [delegate platformWindowDeactivated: self
                           checkForAppDeactivation: NO];
+              [self->_display applicationFocusMayHaveLeft];
           }
         }];
     }

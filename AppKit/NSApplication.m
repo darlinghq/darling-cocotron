@@ -2507,6 +2507,18 @@ static BOOL resignPending;
     // Resigning, if it happens, is decided by -_resignIfNoWindowIsActive.
 }
 
+// The window system reports that another client has the input focus. An application becomes active at the
+// end of launching whether or not a window of it ever takes the focus, so for one whose windows never held
+// the focus (they cannot become key, or are never shown) no focus-out arrives that would end it. Without
+// this it would stay active for good and keep asking for the focus when its windows are ordered in. An
+// application one of whose windows still has the focus waits for the focus-out for that window instead.
+- (void) _systemFocusMovedToAnotherClient {
+    if (!NS_EXTRA(NSApplication, self)->_isActive || activationInProgress)
+        return;
+    resignPending = YES;
+    [self _resignIfNoWindowIsActive];
+}
+
 - (void) _resignIfNoWindowIsActive {
     if (!resignPending)
         return;

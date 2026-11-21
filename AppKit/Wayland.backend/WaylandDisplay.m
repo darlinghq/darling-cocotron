@@ -1921,6 +1921,7 @@ static NSUInteger modifierDeviceMask(int code) {
         _keyboardWindow = nil;
         [self stopKeyRepeat];
         [self resetKeyboardModifiers];
+        [self applicationFocusMayHaveLeft];
         break;
 
     case WP_KEYBOARD_EV_KEY: {
@@ -2651,6 +2652,32 @@ static uint32_t WaylandKeyLayoutCodepoint(void *context, uint32_t keysym) {
 
 - (void) windowCreated: (WaylandWindow *) window {
     CFArrayAppendValue(_windows, window);
+}
+
+// A window lost the keyboard focus or the compositor's activation. The focus moving from one of our
+// surfaces to another arrives as a loss and a gain in the same dispatch; a loss that no gain follows
+// means another client has it.
+- (void) applicationFocusMayHaveLeft {
+    [self performAfterDispatch: ^{
+        if (self->_keyboardWindow != nil)
+            return;
+        for (CFIndex i = 0; i < CFArrayGetCount(self->_windows); i++) {
+            if ([(WaylandWindow *) CFArrayGetValueAtIndex(self->_windows, i) isActivatedByCompositor])
+                return;
+        }
+        [self keyboardFocusLeftApplication];
+    }];
+}
+
+// Another client has the keyboard focus: no window of the application is active any more, including
+// one that was only reported active because it is never shown (see -[WaylandWindow makeKey]), which no
+// configure event would ever take the activation from. The application resigns once none is.
+- (void) keyboardFocusLeftApplication {
+    for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++) {
+        WaylandWindow *window = (WaylandWindow *) CFArrayGetValueAtIndex(_windows, i);
+        [window keyboardFocusLeft];
+    }
+    [NSApp _systemFocusMovedToAnotherClient];
 }
 
 - (void) windowActivated: (WaylandWindow *) window {

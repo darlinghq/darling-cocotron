@@ -126,6 +126,8 @@ struct WaylandBuffer {
 - (BOOL) isMapped;
 - (BOOL) isFullyTransparent;
 - (BOOL) isOrderedIn;
+- (void) keyboardFocusLeft;
+- (BOOL) isActivatedByCompositor;
 - (BOOL) takeKeyRequest;
 - (void) reportActivationDisplayingIfNeeded: (BOOL) displayIfNeeded;
 - (int32_t) bufferScale;

@@ -351,6 +351,7 @@ typedef NSString *NSAboutPanelOptionKey NS_TYPED_ENUM;
 - (void) _windowWillBecomeDeactive: (null_unspecified NSWindow *) window;
 - (void) _windowDidBecomeDeactive: (null_unspecified NSWindow *) window;
 - (BOOL) _mayTakeInputFocus;
+- (void) _systemFocusMovedToAnotherClient;
 
 @end
 

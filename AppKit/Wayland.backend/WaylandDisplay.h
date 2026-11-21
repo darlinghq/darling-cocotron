@@ -263,6 +263,7 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 - (void) windowCreated: (WaylandWindow *) window;
 - (void) windowActivated: (WaylandWindow *) window;
 - (void) windowUnmapped: (WaylandWindow *) window;
+- (void) applicationFocusMayHaveLeft;
 - (void) windowDestroyed: (WaylandWindow *) window;
 
 // Where the main menu is exported on the session bus, for the appmenu objects
