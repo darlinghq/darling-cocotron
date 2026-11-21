@@ -3170,38 +3170,39 @@ static NSNumber *CellViewKey(NSInteger row, NSInteger column, BOOL group) {
     // Making the row view made its cell views
     if (view == nil)
         view = [NS_EXTRA(NSTableView, self)->_cellViews objectForKey: key];
-    if (view == nil && make) {
-        NSRect frame;
+    // The frame is set once, in the coordinates of the view's superview: setting the table's
+    // coordinates first and the row view's after would report two frame changes (and move a
+    // layer-backed view through the table's coordinates) on every drawing pass.
+    BOOL madeView = NO;
 
-        if (group) {
-            view = [self _delegateCellViewForTableColumn: nil row: row];
-            frame = [self rectOfRow: row];
-        } else {
-            view = [self _delegateCellViewForTableColumn: [_tableColumns objectAtIndex: column] row: row];
-            frame = [self frameOfCellAtColumn: column row: row];
+    if (view == nil && make) {
+        view = group ? [self _delegateCellViewForTableColumn: nil row: row]
+                     : [self _delegateCellViewForTableColumn: [_tableColumns objectAtIndex: column] row: row];
+        madeView = view != nil;
+    }
+    if (view != nil) {
+        NSRect frame = group ? [self rectOfRow: row] : [self frameOfCellAtColumn: column row: row];
+
+        if (rowView != nil) {
+            // The row view holds the cell views, in its own coordinates
+            NSRect rowRect = [rowView frame];
+
+            frame.origin.x -= NSMinX(rowRect);
+            frame.origin.y -= NSMinY(rowRect);
         }
-        if (view != nil) {
+        if (!NSEqualRects([view frame], frame))
             [view setFrame: frame];
+        if (madeView) {
             [NS_EXTRA(NSTableView, self)->_cellViews setObject: view forKey: key];
             [self _setObjectValueOfCellView: view
                                      column: group ? nil : [_tableColumns objectAtIndex: column]
                                         row: row];
         }
-    } else if (view != nil) {
-        [view setFrame: group ? [self rectOfRow: row] : [self frameOfCellAtColumn: column row: row]];
-    }
-    if (view != nil && rowView != nil) {
-        // The row view holds the cell views, in its own coordinates
-        NSRect frame = [view frame];
-        NSRect rowRect = [rowView frame];
-
-        frame.origin.x -= NSMinX(rowRect);
-        frame.origin.y -= NSMinY(rowRect);
-        [view setFrame: frame];
-        if ([view superview] != rowView)
-            [rowView addSubview: view];
-    } else if (view != nil && [view superview] != self) {
-        [self addSubview: view];
+        if (rowView != nil) {
+            if ([view superview] != rowView)
+                [rowView addSubview: view];
+        } else if ([view superview] != self)
+            [self addSubview: view];
     }
     return view;
 }
