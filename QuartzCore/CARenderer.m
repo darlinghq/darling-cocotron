@@ -828,7 +828,19 @@ static CGRect contentsRectForGravity(NSString *gravity, CGRect rect, CGSize size
     if (CFGetTypeID((CFTypeRef) contents) == IOSurfaceGetTypeID())
         surface = (IOSurfaceRef) contents;
 
+    // Layout and display code runs inside -render, after the layer's context named the tree, so a
+    // sublayer it added has no texture yet. Drawing it without one would upload into whatever texture
+    // is bound and replace that picture. A layer with no context is left as it was: its context is
+    // what deletes the name when the layer goes.
     NSNumber *textureId = [layer _textureId];
+    if (textureId == nil && [layer _context] != nil) {
+        GLuint name = 0;
+        glGenTextures(1, &name);
+        if (name != 0) {
+            textureId = [NSNumber numberWithUnsignedInt: name];
+            [layer _setTextureId: textureId];
+        }
+    }
     GLuint texture = [textureId unsignedIntValue];
 
     // Upload when the texture object doesn't exist yet (check before binding:
