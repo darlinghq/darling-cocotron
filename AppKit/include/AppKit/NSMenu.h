@@ -83,6 +83,9 @@ typedef NS_OPTIONS(NSUInteger, NSMenuProperties) {
                        atLocation: (NSPoint) location
                            inView: (nullable NSView *) view;
 
+- (void) cancelTracking;
+- (void) cancelTrackingWithoutAnimation;
+
 - (instancetype) initWithTitle: (NSString *) title;
 
 @property(nullable, nonatomic, retain) NSMenu *supermenu;

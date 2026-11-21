@@ -3,7 +3,7 @@
 
  Licensed under the MIT license, the same as the rest of this project.
 */
-// Cancelling a menu's mouse tracking (Escape) returns no item, even though one
+// Cancelling a menu's mouse tracking (Escape, or -cancelTracking) returns no item, even though one
 // is highlighted. Needs a window server (for example DARLING_APPKIT_BACKEND=x11
 // on Xvfb).
 #import <AppKit/AppKit.h>
@@ -44,6 +44,17 @@ int main(void) {
         [NSApp postEvent: escape atStart: YES];
         if ([view trackForEvent: start] != nil) {
             fprintf(stderr, "FAIL: cancelling the tracking returned the highlighted item\n");
+            failures++;
+        }
+
+        // -[NSMenu cancelTracking] dismisses the same tracking: no item either.
+        NSTimer *cancel = [NSTimer timerWithTimeInterval: 0.3 repeats: NO block: ^(NSTimer *timer) {
+            [menu cancelTracking];
+        }];
+        [[NSRunLoop currentRunLoop] addTimer: cancel forMode: NSRunLoopCommonModes];
+        [[NSRunLoop currentRunLoop] addTimer: cancel forMode: NSEventTrackingRunLoopMode];
+        if ([view trackForEvent: start] != nil) {
+            fprintf(stderr, "FAIL: -cancelTracking returned the highlighted item\n");
             failures++;
         }
         [menu release];

@@ -49,6 +49,9 @@ NSString *const _NSRecentDocumentsMenuName = @"Recents";
 NSString *const _NSServicesMenuName = @"Services";
 NSString *const _NSWindowsMenuName = @"Window";
 
+// Defined in NSMenuView.m
+extern void _NSMenuCancelTracking(NSMenu *menu);
+
 @implementation NSMenu
 
 NS_EXTRA_SYNTHESIZE_ASSIGN(NSMenu, showsStateColumn, _showsStateColumn, BOOL, showsStateColumn, setShowsStateColumn:)
@@ -207,6 +210,19 @@ NS_EXTRA_SYNTHESIZE_COPY(NSMenu, identifier, _identifier, NSUserInterfaceItemIde
     else
         [NSApp sendAction: [chosen action] to: [chosen target] from: chosen];
     return YES;
+}
+
+// Ends the tracking of this menu, when it is the menu being tracked (a pop-up
+// menu, or the menu bar), as if the user had dismissed it: no item is chosen,
+// so a pop-up menu's popUpMenuPositioningItem:atLocation:inView: returns NO,
+// and NSMenuDidEndTrackingNotification is posted. Animations do not exist
+// here, so both variants end the tracking the same way.
+- (void) cancelTracking {
+    _NSMenuCancelTracking(self);
+}
+
+- (void) cancelTrackingWithoutAnimation {
+    _NSMenuCancelTracking(self);
 }
 
 // The menu bar is visible unless the application's presentation options hide
