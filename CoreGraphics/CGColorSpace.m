@@ -137,6 +137,16 @@ CGColorSpaceRef CGColorSpaceCreateWithICCProfile(CFDataRef data) {
     return (CGColorSpaceRef) O2ColorSpaceCreateWithICCData(data);
 }
 
+// GUESS: the documentation types the parameter CFTypeRef without saying which
+// types it takes, and the vendored header does not either. A CFData, the type
+// CGColorSpaceCreateWithICCProfile takes, is accepted; anything else makes no
+// space.
+CGColorSpaceRef CGColorSpaceCreateWithICCData(CFTypeRef data) {
+    if (data == NULL || CFGetTypeID(data) != CFDataGetTypeID())
+        return NULL;
+    return CGColorSpaceCreateWithICCProfile((CFDataRef) data);
+}
+
 CGColorSpaceRef CGColorSpaceCreateICCBased(size_t nComponents, const CGFloat *range,
                                            CGDataProviderRef profile,
                                            CGColorSpaceRef alternate)

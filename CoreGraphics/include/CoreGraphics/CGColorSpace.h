@@ -87,6 +87,7 @@ COREGRAPHICS_EXPORT CFStringRef CGColorSpaceCopyName(CGColorSpaceRef colorSpace)
 COREGRAPHICS_EXPORT CFDataRef CGColorSpaceCopyICCData(CGColorSpaceRef colorSpace);
 COREGRAPHICS_EXPORT CFDataRef CGColorSpaceCopyICCProfile(CGColorSpaceRef colorSpace);
 COREGRAPHICS_EXPORT CGColorSpaceRef CGColorSpaceCreateWithICCProfile(CFDataRef data);
+COREGRAPHICS_EXPORT CGColorSpaceRef CGColorSpaceCreateWithICCData(CFTypeRef data);
 COREGRAPHICS_EXPORT CGColorSpaceRef CGColorSpaceCreateICCBased(
     size_t nComponents, const CGFloat *range, CGDataProviderRef profile,
     CGColorSpaceRef alternate);
