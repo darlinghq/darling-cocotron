@@ -360,6 +360,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         untilMouseUp: (BOOL) flag
 {
     NSComboBoxWindow *window;
+    NSNotificationCenter *nc = [NSNotificationCenter defaultCenter];
     NSPoint origin = [controlView bounds].origin;
     NSSize size = [self _frameSizeForListAndDrawing];
     NSPoint check = [controlView convertPoint: [event locationInWindow]
@@ -387,14 +388,17 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         [window setFont: [self font]];
 
     _buttonPressed = YES;
+    [nc postNotificationName: NSComboBoxWillPopUpNotification object: controlView];
     [window makeKeyAndOrderFront: self];
     selectedIndex = [window runTrackingWithEvent: event];
+    [nc postNotificationName: NSComboBoxWillDismissNotification object: controlView];
     [window close]; // release when closed=YES
     _buttonPressed = NO;
 
     if (selectedIndex != NSNotFound && selectedIndex < [_objectValues count]) {
         id object = [_objectValues objectAtIndex: selectedIndex];
         [self setObjectValue: object];
+        [nc postNotificationName: NSComboBoxSelectionDidChangeNotification object: controlView];
 
         NSString *string = nil;
         NSAttributedString *attstr = nil;
