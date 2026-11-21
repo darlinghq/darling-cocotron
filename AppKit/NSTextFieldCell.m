@@ -132,9 +132,15 @@ NS_EXTRA_SYNTHESIZE_COPY(NSTextFieldCell, allowedInputSourceLocales, _allowedInp
     return self;
 }
 
+// QUIRK: a new text field cell has textBackgroundColor as its background
+// colour, although it does not draw a background (see -[NSTextField
+// initWithFrame:]). Not documented. Evidence: black-box observation on macOS
+// 10.14.4 and 26.7.3 (tier 2), probe mac-probes/aqua-metric-followups.m of the
+// research notes. Test: appkit-text-field-defaults.m (test_quirk_cell_defaults)
 - initTextCell: (NSString *) string {
     [super initTextCell: string];
     // default for _isBezeled=NO;
+    _backgroundColor = [[NSColor textBackgroundColor] retain];
     return self;
 }
 
@@ -270,10 +276,21 @@ NS_EXTRA_SYNTHESIZE_COPY(NSTextFieldCell, allowedInputSourceLocales, _allowedInp
         else {
             NSMutableAttributedString *result =
                     [[NS_EXTRA(NSCell, self)->_objectValue mutableCopy] autorelease];
+            NSUInteger location = 0, length = [result length];
 
-            [result addAttribute: NSForegroundColorAttributeName
-                           value: _textColor
-                           range: NSMakeRange(0, [result length])];
+            // The text colour fills in where the attributed text has no
+            // colour of its own: the colours of the text are kept (macOS
+            // 10.14.4, tests/appkit-text-field-label-attributed.m).
+            while (location < length) {
+                NSRange range;
+                id color = [result attribute: NSForegroundColorAttributeName
+                                     atIndex: location
+                       longestEffectiveRange: &range
+                                     inRange: NSMakeRange(location, length - location)];
+                if (color == nil)
+                    [result addAttribute: NSForegroundColorAttributeName value: _textColor range: range];
+                location = NSMaxRange(range);
+            }
 
             return result;
         }
@@ -315,12 +332,42 @@ NS_EXTRA_SYNTHESIZE_COPY(NSTextFieldCell, allowedInputSourceLocales, _allowedInp
 }
 
 // The space around the text that cellSize adds for the cell's border style.
+// QUIRK: a square bezel adds 8 points across and 5 down (4 at the mini size),
+// a line border 8 and 4, no border 4 across; a rounded bezel adds 21, 20 and
+// 19 points across at the regular, small and mini sizes, and its height is
+// that of the bezel (see -_aquaRoundedBezelHeight). The bezeled sizes are
+// rounded up to whole points. Not documented. Evidence: black-box observation
+// of cellSize, sizeToFit and titleRectForBounds: on macOS 10.14.4 (tier 2),
+// probes mac-probes/aqua-metric-followups.m and -3.m of the research notes.
+// Test: appkit-text-field-defaults.m (test_quirk_cell_size)
 - (NSSize) _textInsetSize {
-    if ([self isBezeled])
-        return NSMakeSize(6, 6);
+    NSControlSize size = [self controlSize];
+
+    if ([self isBezeled]) {
+        if ([self bezelStyle] == NSTextFieldRoundedBezel)
+            return NSMakeSize(size == NSMiniControlSize ? 19 : (size == NSSmallControlSize ? 20 : 21), 0);
+        return NSMakeSize(8, size == NSMiniControlSize ? 4 : 5);
+    }
     if ([self isBordered])
-        return NSMakeSize(4, 4);
+        return NSMakeSize(8, 4);
     return NSMakeSize(4, 0);
+}
+
+- (CGFloat) _aquaRoundedBezelHeight {
+    static const CGFloat heights[3] = {22, 19, 17};
+    NSControlSize size = [self controlSize];
+
+    return heights[size == NSSmallControlSize ? 1 : (size == NSMiniControlSize ? 2 : 0)];
+}
+
+// Rounds a bezeled cell's size up to whole points and gives a rounded bezel
+// its fixed height.
+- (NSSize) _adjustedCellSize: (NSSize) size {
+    if (![self isBezeled])
+        return size;
+    size.width = ceil(size.width);
+    size.height = [self bezelStyle] == NSTextFieldRoundedBezel ? [self _aquaRoundedBezelHeight] : ceil(size.height);
+    return size;
 }
 
 // A cell that wraps its text needs more height as the width shrinks: the width is that of the
@@ -335,23 +382,16 @@ NS_EXTRA_SYNTHESIZE_COPY(NSTextFieldCell, allowedInputSourceLocales, _allowedInp
     NSSize text = [[NSStringDrawer sharedStringDrawer] sizeOfAttributedString: [self attributedStringValue]
                                                                        inSize: room];
 
-    return NSMakeSize(MIN(rect.size.width, text.width + inset.width),
-                      MIN(rect.size.height, ceil(text.height) + inset.height));
+    NSSize size = [self _adjustedCellSize: NSMakeSize(text.width + inset.width, ceil(text.height) + inset.height)];
+
+    return NSMakeSize(MIN(rect.size.width, size.width), MIN(rect.size.height, size.height));
 }
 
 - (NSSize) cellSize {
     NSSize size = [[self attributedStringValue] size];
+    NSSize inset = [self _textInsetSize];
 
-    if ([self isBezeled]) {
-        size.width += 6;
-        size.height += 6;
-    } else if ([self isBordered]) {
-        size.width += 4;
-        size.height += 4;
-    } else {
-        size.width += 4;
-    }
-    return size;
+    return [self _adjustedCellSize: NSMakeSize(size.width + inset.width, size.height + inset.height)];
 }
 
 - (void) editWithFrame: (NSRect) frame
@@ -397,7 +437,7 @@ NS_EXTRA_SYNTHESIZE_COPY(NSTextFieldCell, allowedInputSourceLocales, _allowedInp
                     [[drawValue mutableCopy] autorelease];
             [[placeString mutableString] setString: NS_EXTRA(NSTextFieldCell, self)->_placeholder];
             [placeString addAttribute: NSForegroundColorAttributeName
-                                value: [NSColor disabledControlTextColor]
+                                value: [NSColor placeholderTextColor]
                                 range: NSMakeRange(0, [placeString length])];
             drawValue = placeString;
         }
@@ -406,22 +446,26 @@ NS_EXTRA_SYNTHESIZE_COPY(NSTextFieldCell, allowedInputSourceLocales, _allowedInp
                    lineBreakMode: NS_EXTRA(NSCell, self)->_lineBreakMode];
 }
 
-static void drawRoundedBezel(CGContextRef context, CGRect frame) {
-    CGFloat radius = frame.size.height / 2;
+// QUIRK: the rounded bezel of a text field and the bezel of a search field are 22, 19 and 17 points high (regular,
+// small and mini control sizes) and are centred vertically in a taller frame, the odd point going above. Not
+// documented. Evidence: black-box renders of NSTextField and NSSearchField in frames 14 to 32 points high on macOS
+// 10.14.4 (tier 2), probe mac-probes/aqua-toolbar-2.m of the research notes.
+// Test: appkit-toolbar-controls-aqua.m (test_quirk_field_bezels)
+- (NSRect) _aquaRoundedBezelRectForFrame: (NSRect) frame inView: (NSView *) control {
+    CGFloat height = [self _aquaRoundedBezelHeight];
 
-    CGContextBeginPath(context);
-    CGContextAddArc(context, CGRectGetMaxX(frame) - radius,
-                    CGRectGetMinY(frame) + radius, radius, M_PI_2, M_PI_2 * 3,
-                    YES);
-    CGContextAddArc(context, CGRectGetMinX(frame) + radius,
-                    CGRectGetMinY(frame) + radius, radius, M_PI_2 * 3, M_PI_2,
-                    YES);
-    CGContextClosePath(context);
-    CGContextFillPath(context);
+    if (NSHeight(frame) <= height)
+        return frame;
+
+    CGFloat above = ceil((NSHeight(frame) - height) / 2);
+
+    frame.origin.y += [control isFlipped] ? above : NSHeight(frame) - height - above;
+    frame.size.height = height;
+    return frame;
 }
 
 - (void) _drawSquareBezelInRect: (NSRect) frame inView: (NSView *) control {
-    [[control graphicsStyle] drawTextFieldBorderInRect: frame bezeledNotLine: YES];
+    [[control graphicsStyle] drawTextFieldBorderInRect: frame bezeledNotLine: YES enabled: [self isEnabled]];
 }
 
 - (void) drawWithFrame: (NSRect) frame inView: (NSView *) control {
@@ -437,33 +481,21 @@ static void drawRoundedBezel(CGContextRef context, CGRect frame) {
             backRect = NSInsetRect(backRect, -1, -1);
             break;
 
-        case NSTextFieldRoundedBezel:;
-            if (YES) {
-                [[control graphicsStyle] drawRoundedTextFieldBezelInRect: frame radius: floor(frame.size.height / 2)];
-                break;
-            }
-            CGContextRef context =
-                    [[NSGraphicsContext currentContext] graphicsPort];
-            NSRect roundedFrame = frame;
-
-            roundedFrame.size.height--;
-            [[NSColor darkGrayColor] setFill];
-            drawRoundedBezel(context, roundedFrame);
-
-            roundedFrame.origin.y += 1;
-            [[NSColor lightGrayColor] setFill];
-            drawRoundedBezel(context, roundedFrame);
-
-            roundedFrame = NSInsetRect(roundedFrame, 1, 1);
-            [[NSColor whiteColor] setFill];
-            drawRoundedBezel(context, roundedFrame);
+        case NSTextFieldRoundedBezel:
+            // QUIRK: the rounded bezel has a 4 point radius on macOS 10.14, not that of a capsule; see
+            // -drawRoundedTextFieldBezelInRect:radius:enabled:
+            [[control graphicsStyle] drawRoundedTextFieldBezelInRect: [self _aquaRoundedBezelRectForFrame: frame
+                                                                                                  inView: control]
+                                                              radius: 4
+                                                             enabled: [self isEnabled]];
             break;
         }
 
     } else {
         if ([self isBordered]) {
             [[control graphicsStyle] drawTextFieldBorderInRect: frame
-                                                bezeledNotLine: NO];
+                                                bezeledNotLine: NO
+                                                       enabled: [self isEnabled]];
             backRect = NSInsetRect(backRect, -1, -1);
         }
     }

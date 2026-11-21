@@ -136,6 +136,10 @@ static NSDisplay *processDisplay = nil;
 - (void) _mainMenuDidChange: (NSMenu *) menu {
 }
 
+- (BOOL) _showsMainMenuOutsideWindows {
+    return YES;
+}
+
 - (NSArray<NSScreen *> *) screens {
     NSInvalidAbstractInvocation();
     return nil;

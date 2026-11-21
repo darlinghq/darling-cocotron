@@ -26,10 +26,23 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @interface NSWindow (NSWindow_private)
 - (CGWindow *) platformWindow;
+// Whether a window with this style mask shows nothing of a title bar of its
+// own; the window system then gives it no frame either.
+- (BOOL) _hasInvisibleTitlebarForStyleMask: (NSUInteger) styleMask;
+// Whether a window with this style mask has a title bar at all: a titled
+// window, or a resizable one in a program built against an SDK older than
+// 10.7 (see the QUIRK in NSWindow.m).
+- (BOOL) _hasTitlebarForStyleMask: (NSUInteger) styleMask;
+// What the window is to the window system: a DarlingWindowPresentation (see
+// DarlingWindowPresentation.h), decided from the window's current state.
+- (int) _windowPresentation;
 - (CGContextRef) cgContext;
 - (BOOL) _isActive;
 - (BOOL) _isHiddenForDeactivation;
 - (void) _setVisible: (BOOL) visible;
+// Whether the window is shown and not miniaturized, which is when the views
+// in it count as appeared for their view controllers.
+- (BOOL) _isShownForViewAppearance;
 - (NSArray *) _draggedTypes;
 - (void) _addCursorRect: (NSRect) rect
                  cursor: (NSCursor *) cursor
@@ -56,6 +69,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (void) _detachSheetContextAnimateAndOrderOut;
 - (void) _attachDrawer: (NSDrawer *) drawer;
 - (void) _detachDrawer: (NSDrawer *) drawer;
+// Takes a child window off this window's child windows.
+- (void) _detachChildWindow: (NSWindow *) child;
+// Moves the attached child windows along with this window.
+- (void) _moveChildWindowsBy: (NSSize) delta;
 - (NSView *) _backgroundView;
 - (void) _hideMenuViewIfNeeded;
 - (void) _showMenuViewIfNeeded;
@@ -67,11 +84,36 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (void) redo: sender;
 - (BOOL) validateMenuItem: (NSMenuItem *) item;
 - (void) dirtyRect: (NSRect) rect;
+// The restoration class that -encodeRestorableStateWithCoder: recorded in state, or Nil.
++ (Class) _restorationClassFromState: (NSCoder *) state;
 @end
 
 @interface NSApplication (NSApplication_private)
 // Posts NSApplicationDidChangeOcclusionStateNotification when -occlusionState changed.
 - (void) _updateOcclusionState;
+@end
+
+// Used by the persistent window state restoration in NSStateRestoration.m.
+@interface NSView (NSStateRestoration)
+// Whether -invalidateRestorableState was called.
+- (BOOL) _hasInvalidatedRestorableState;
+@end
+
+@interface NSWindow (NSStateRestoration)
+// Whether the window was closed and not ordered in since.
+- (BOOL) _isClosedForRestoration;
+@end
+
+// Persistent window state restoration, in NSStateRestoration.m.
+@interface NSApplication (NSStateRestoration)
+- (void) _saveRestorableStateForTermination;
+- (void) _restoreWindowsFromSavedState;
+- (void) _finishRestoringWindowsAfterLaunch;
+- (void) _applyRestoredState: (NSData *) stateData toWindow: (NSWindow *) window;
+- (void) _postDidFinishRestoringWindowsIfDone;
+- (void) _extendStateRestoration;
+- (void) _completeStateRestoration;
+- (BOOL) _restorableStateUsesSecureCoding;
 @end
 
 // Defined in NSView.m.

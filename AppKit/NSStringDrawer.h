@@ -59,6 +59,16 @@ APPKIT_EXPORT const CGFloat NSStringDrawerLargeDimension;
                       atPoint: (NSPoint) point
                        inSize: (NSSize) maxSize;
 
+// Wraps the string to maxSize.width and keeps only the lines that fit
+// completely in maxSize.height (always at least the first one). Returns the
+// size of those lines; trailing white space of a wrapped line is not counted.
+// *lastLine is the character range of the last kept line and *hasHiddenText
+// says whether text follows it. Either may be NULL.
+- (NSSize) sizeOfAttributedString: (NSAttributedString *) astring
+                    fittingInSize: (NSSize) maxSize
+                     lastLineRange: (NSRange *) lastLine
+                    hasHiddenText: (BOOL *) hasHiddenText;
+
 @end
 
 // strange we need this frequently yet nothing like it is public

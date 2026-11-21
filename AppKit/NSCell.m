@@ -83,10 +83,11 @@ typedef NS_OPTIONS(unsigned int, NSCellAppleFlags2) {
     NSCellAppleFlag2AllowsMixedState      = 1u << 24,
     NSCellAppleFlag2InMixedState          = 1u << 23,
     NSCellAppleFlag2ActOnEditingEnd       = 1u << 22,
-    NSCellAppleFlag2Reserved3             = 1u << 21,
-    NSCellAppleFlag2Reserved4             = 1u << 20,
+    // The control tint and the control size as macOS 10.14.4 and 26.7.3 archive them.
+    NSCellAppleFlag2ControlTintShift      = 19,
+    NSCellAppleFlag2ControlTintMask       = 0x07u << NSCellAppleFlag2ControlTintShift,
     NSCellAppleFlag2ControlSizeShift      = 17,
-    NSCellAppleFlag2ControlSizeMask       = 0x07u << NSCellAppleFlag2ControlSizeShift,
+    NSCellAppleFlag2ControlSizeMask       = 0x03u << NSCellAppleFlag2ControlSizeShift,
     NSCellAppleFlag2Reserved5             = 1u << 16,
     NSCellAppleFlag2Reserved6             = 1u << 15,
     NSCellAppleFlag2Reserved7             = 1u << 14,
@@ -114,6 +115,7 @@ NS_EXTRA_SYNTHESIZE_COPY(NSCell, identifier, _identifier, NSUserInterfaceItemIde
 NS_EXTRA_SYNTHESIZE_ASSIGN(NSCell, truncatesLastVisibleLine, _truncatesLastVisibleLine, BOOL, truncatesLastVisibleLine, setTruncatesLastVisibleLine:)
 NS_EXTRA_SYNTHESIZE_ASSIGN(NSCell, allowsUndo, _allowsUndo, BOOL, allowsUndo, setAllowsUndo:)
 NS_EXTRA_SYNTHESIZE_ASSIGN(NSCell, userInterfaceLayoutDirection, _userInterfaceLayoutDirection, NSUserInterfaceLayoutDirection, userInterfaceLayoutDirection, setUserInterfaceLayoutDirection:)
+NS_EXTRA_SYNTHESIZE_ASSIGN(NSCell, controlTint, _controlTint, NSControlTint, controlTint, setControlTint:)
 
 #pragma mark -
 #pragma mark Class Methods
@@ -204,6 +206,7 @@ NS_EXTRA_SYNTHESIZE_ASSIGN(NSCell, userInterfaceLayoutDirection, _userInterfaceL
     // struct from which these are derived.
     NS_EXTRA(NSCell, self)->_lineBreakMode = (flags2 & NSCellAppleFlag2LineBreakModeMask) >> NSCellAppleFlag2LineBreakModeShift;
     NS_EXTRA(NSCell, self)->_controlSize = (flags2 & NSCellAppleFlag2ControlSizeMask) >> NSCellAppleFlag2ControlSizeShift;
+    NS_EXTRA(NSCell, self)->_controlTint = (flags2 & NSCellAppleFlag2ControlTintMask) >> NSCellAppleFlag2ControlTintShift;
 }
 
 // The fields of the second flag word that NSArchiver data (non-keyed decoding) lays out
@@ -271,6 +274,7 @@ NS_EXTRA_SYNTHESIZE_ASSIGN(NSCell, userInterfaceLayoutDirection, _userInterfaceL
 
     *flags2 |= (NS_EXTRA(NSCell, self)->_lineBreakMode << NSCellAppleFlag2LineBreakModeShift) & NSCellAppleFlag2LineBreakModeMask;
     *flags2 |= (NS_EXTRA(NSCell, self)->_controlSize << NSCellAppleFlag2ControlSizeShift) & NSCellAppleFlag2ControlSizeMask;
+    *flags2 |= (NS_EXTRA(NSCell, self)->_controlTint << NSCellAppleFlag2ControlTintShift) & NSCellAppleFlag2ControlTintMask;
 }
 
 - initWithCoder: (NSCoder *) coder {
@@ -354,6 +358,12 @@ NS_EXTRA_SYNTHESIZE_ASSIGN(NSCell, userInterfaceLayoutDirection, _userInterfaceL
     return self;
 }
 
+// What a keyed archive stores as the cell's contents; subclasses whose
+// contents are not the object value override it.
+- (id) _archivedContents {
+    return NS_EXTRA(NSCell, self)->_objectValue;
+}
+
 - (void) encodeWithCoder: (NSCoder *) coder {
     unsigned int flags = 0;
     unsigned int flags2 = 0;
@@ -363,7 +373,7 @@ NS_EXTRA_SYNTHESIZE_ASSIGN(NSCell, userInterfaceLayoutDirection, _userInterfaceL
     if (coder.allowsKeyedCoding) {
         [coder encodeInt: flags forKey: @"NSCellFlags"];
         [coder encodeInt: flags2 forKey: @"NSCellFlags2"];
-        [coder encodeObject: NS_EXTRA(NSCell, self)->_objectValue forKey: @"NSContents"];
+        [coder encodeObject: [self _archivedContents] forKey: @"NSContents"];
         if (NS_EXTRA(NSCell, self)->_image != nil) {
             [coder encodeObject: NS_EXTRA(NSCell, self)->_image forKey: @"NSNormalImage"];
             if (NS_EXTRA(NSCell, self)->_font != nil)
@@ -396,7 +406,9 @@ NS_EXTRA_SYNTHESIZE_ASSIGN(NSCell, userInterfaceLayoutDirection, _userInterfaceL
     return self;
 }
 
-- initImageCell: (NSImage *) image {
+// The state of a new image cell. -init uses it directly: on macOS -[NSCell init] does not send
+// -initImageCell: or -initTextCell:, so a subclass overriding those is not entered from -init.
+static void initImageCellState(NSCell *self, NSImage *image) {
     NS_EXTRA(NSCell, self)->_focusRingType = [[self class] defaultFocusRingType];
     NS_EXTRA(NSCell, self)->_state = NSControlStateValueOff;
     NS_EXTRA(NSCell, self)->_font = nil;
@@ -412,11 +424,16 @@ NS_EXTRA_SYNTHESIZE_ASSIGN(NSCell, userInterfaceLayoutDirection, _userInterfaceL
     NS_EXTRA(NSCell, self)->_refusesFirstResponder = NO;
     NS_EXTRA(NSCell, self)->_lineBreakMode = NSLineBreakByWordWrapping;
     NS_EXTRA(NSCell, self)->_hasValidObjectValue = YES;
+}
+
+- initImageCell: (NSImage *) image {
+    initImageCellState(self, image);
     return self;
 }
 
 - init {
-    return [self initImageCell: nil];
+    initImageCellState(self, nil);
+    return self;
 }
 
 - (void) dealloc {
@@ -1042,10 +1059,12 @@ NS_EXTRA_SYNTHESIZE_ASSIGN(NSCell, userInterfaceLayoutDirection, _userInterfaceL
     NS_EXTRA(NSCell, self)->_representedObject = object;
 }
 
+// Changing the control size leaves the font alone, in every cell class: the
+// font for a control size is chosen separately (systemFontSizeForControlSize:
+// gives its size). macOS 10.14.4 and 26.7.3 keep the font of every cell class
+// across control sizes.
 - (void) setControlSize: (NSControlSize) size {
     NS_EXTRA(NSCell, self)->_controlSize = size;
-    [NS_EXTRA(NSCell, self)->_font release];
-    NS_EXTRA(NSCell, self)->_font = [[NSFont userFontOfSize: [NSFont systemFontSizeForControlSize: NS_EXTRA(NSCell, self)->_controlSize]] retain];
     if ([[self controlView] respondsToSelector: @selector(updateCell:)]) {
         [[self controlView] performSelector: @selector(updateCell:)
                                  withObject: self];

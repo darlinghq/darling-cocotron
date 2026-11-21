@@ -16,6 +16,7 @@ FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
 COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
+#import "NSViewLayoutInternal.h"
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSColor.h>
 #import <AppKit/NSGraphicsContextFunctions.h>
@@ -28,6 +29,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Foundation/NSKeyedArchiver.h>
 
 @implementation NSProgressIndicator
+
+// A progress indicator hugs like a control (observed on macOS 10.14.4 and 26.7.3).
+- (NSLayoutPriority) _defaultContentHuggingPriorityForOrientation: (NSLayoutConstraintOrientation) orientation {
+    return orientation == NSLayoutConstraintOrientationVertical ? NSLayoutPriorityDefaultHigh : NSLayoutPriorityDefaultLow;
+}
+
 
 - (void) encodeWithCoder: (NSCoder *) coder {
     NSUnimplementedMethod();
@@ -145,47 +152,24 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return YES;
 }
 
-- (void) drawIndeterminateCircular {
-    CGContextRef context = [[NSGraphicsContext currentContext] graphicsPort];
-    int i, numberOfRays = 12;
-    int offset = roundf(_animationValue * (numberOfRays - 1));
+// QUIRK: the spinning style is drawn at the size of its control size (32, 16 or 10 points square for the regular,
+// small and mini sizes), centred in the view (rounded down), whatever the view's size. Not documented. Evidence:
+// black-box renders of NSProgressIndicator on macOS 10.14.4 at 1x in 40 x 40 point views (tier 2).
+// Test: test_quirk_spinner_size in tests/appkit-small-controls-aqua.m
+- (NSRect) _spinnerRect {
     NSRect bounds = [self bounds];
-    CGPoint center = CGPointMake(bounds.origin.x + bounds.size.width / 2,
-                                 bounds.origin.y + bounds.size.height / 2);
-    CGFloat angle = 0; // MI_PI*2.0/4.0;
-    CGFloat arc = M_PI * 2.0 / numberOfRays;
-    CGFloat minAxis = MIN(bounds.size.width, bounds.size.height);
-    // QUIRK: the spokes of the spinning style are 10% of the diameter wide, from black at the head to light gray at the
-    // tail, 12 of them. Evidence: black-box renders on macOS 10.14.4 at 1x and 2x (tier 2).
-    // Test: appkit-progress-aqua.m
-    CGFloat lineWidth = MAX(1, minAxis * 0.1);
+    CGFloat side = _size == NSSmallControlSize ? 16 : (_size == NSMiniControlSize ? 10 : 32);
+    CGFloat left = floor((NSWidth(bounds) - side) / 2), top = floor((NSHeight(bounds) - side) / 2);
 
-    CGContextSaveGState(context);
-    CGContextSetLineWidth(context, lineWidth);
-    CGContextSetLineCap(context, kCGLineCapRound);
-    for (i = 0; i < numberOfRays; i++) {
-        CGFloat startGray = 0;
-        CGFloat endGray = 0.90;
-        int place = (i - offset < 0) ? numberOfRays + (i - offset) : i - offset;
-        CGFloat gray =
-                startGray + ((endGray - startGray) / numberOfRays) * place;
-        CGAffineTransform rotate =
-                CGAffineTransformMakeRotation(angle + arc * i);
-        CGPoint ray;
+    return NSMakeRect(NSMinX(bounds) + left, [self isFlipped] ? NSMinY(bounds) + top : NSMaxY(bounds) - top - side,
+                      side, side);
+}
 
-        CGContextSetGrayStrokeColor(context, gray, 1.0);
-        ray.x = 0;
-        ray.y = minAxis / 2 - lineWidth;
-        ray = CGPointApplyAffineTransform(ray, rotate);
-        CGContextMoveToPoint(context, center.x + ray.x, center.y + ray.y);
+- (void) drawIndeterminateCircular {
+    // the leading spoke moves clockwise as the animation runs; at rest it is at the top
+    NSInteger phase = lround(_animationValue * 11);
 
-        ray.x = 0;
-        ray.y = minAxis / 4;
-        ray = CGPointApplyAffineTransform(ray, rotate);
-        CGContextAddLineToPoint(context, center.x + ray.x, center.y + ray.y);
-        CGContextStrokePath(context);
-    }
-    CGContextRestoreGState(context);
+    [[self graphicsStyle] drawSpinningProgressIndicatorInRect: [self _spinnerRect] phase: phase];
 }
 
 - (void) drawRect: (NSRect) clipRect {
@@ -212,9 +196,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                 [self drawIndeterminateCircular];
             }
         } else {
-            // FIXME
-            [[NSColor redColor] set];
-            NSRectFill([self bounds]);
+            double range = _maxValue - _minValue;
+
+            [[self graphicsStyle] drawSpinningProgressPieInRect: [self _spinnerRect]
+                                                          value: range > 0 ? (_value - _minValue) / range : 0
+                                                        flipped: [self isFlipped]];
         }
     }
 }

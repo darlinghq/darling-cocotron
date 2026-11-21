@@ -17,6 +17,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#import "NSImage+TemplateDrawing.h"
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSAttributedString.h>
 #import <AppKit/NSButtonCell.h>
@@ -45,22 +46,102 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 // Margin between an image and the Button interior borders
 static const CGFloat kImageMargin = 2.;
 
+// The button flags of a keyed archive, the inverse of
+// -_applyButtonCellAppleFlags:flags2:.
+- (unsigned) _buttonCellAppleFlags {
+    unsigned flags = 0;
+    NSInteger highlightsBy = NS_EXTRA(NSButtonCell, self)->_highlightsBy;
+    NSInteger showsStateBy = NS_EXTRA(NSButtonCell, self)->_showsStateBy;
+
+    switch (NS_EXTRA(NSButtonCell, self)->_imagePosition) {
+    case NSImageOnly:
+        flags |= 0x00400000;
+        break;
+    case NSImageOverlaps:
+        flags |= 0x00480000;
+        break;
+    case NSImageLeft:
+        flags |= 0x00380000;
+        break;
+    case NSImageRight:
+        flags |= 0x00280000;
+        break;
+    case NSImageBelow:
+        flags |= 0x00180000;
+        break;
+    case NSImageAbove:
+        flags |= 0x00080000;
+        break;
+    default:
+        break;
+    }
+
+    if (highlightsBy & NSPushInCellMask)
+        flags |= 0x80000000;
+    if (showsStateBy & NSContentsCellMask)
+        flags |= 0x40000000;
+    if (showsStateBy & NSChangeBackgroundCellMask)
+        flags |= 0x20000000;
+    if (showsStateBy & NSChangeGrayCellMask)
+        flags |= 0x10000000;
+    if (highlightsBy & NSContentsCellMask)
+        flags |= 0x08000000;
+    if (highlightsBy & NSChangeBackgroundCellMask)
+        flags |= 0x04000000;
+    if (highlightsBy & NSChangeGrayCellMask)
+        flags |= 0x02000000;
+    if (NS_EXTRA(NSCell, self)->_isBordered)
+        flags |= 0x00800000;
+    if (NS_EXTRA(NSButtonCell, self)->_isTransparent)
+        flags |= 0x00008000;
+    if (!NS_EXTRA(NSButtonCell, self)->_imageDimsWhenDisabled)
+        flags |= 0x00002000;
+    return flags;
+}
+
+- (unsigned) _buttonCellAppleFlags2 {
+    NSUInteger bezel = NS_EXTRA(NSButtonCell, self)->_bezelStyle;
+    unsigned flags2 = (bezel & 0x7) | ((bezel & 0x8) << 2);
+
+    if (NS_EXTRA(NSButtonCell, self)->_showsBorderOnlyWhileMouseInside)
+        flags2 |= 0x8;
+    switch (NS_EXTRA(NSButtonCell, self)->_imageScaling) {
+    case NSImageScaleProportionallyUpOrDown:
+        flags2 |= 1 << 6;
+        break;
+    case NSImageScaleProportionallyDown:
+        flags2 |= 2 << 6;
+        break;
+    case NSImageScaleAxesIndependently:
+        flags2 |= 3 << 6;
+        break;
+    default:
+        break;
+    }
+    flags2 |= (unsigned) NS_EXTRA(NSButtonCell, self)->_keyEquivalentModifierMask << 8;
+    return flags2;
+}
+
+// The archived contents of a button cell are its title.
+- (id) _archivedContents {
+    return NS_EXTRA(NSCell, self)->_titleOrAttributedTitle;
+}
+
+// Writes the keys that -initWithCoder: reads, as macOS writes them: the
+// button flags, the title as the contents, the alternate title and image and
+// the key equivalent.
 - (void) encodeWithCoder: (NSCoder *) coder {
     [super encodeWithCoder: coder];
-    [coder encodeObject: NS_EXTRA(NSCell, self)->_titleOrAttributedTitle forKey: @"NSButtonCell title"];
-    [coder encodeObject: _alternateTitle
-                 forKey: @"NSButtonCell alternateTitle"];
-    [coder encodeInt: NS_EXTRA(NSButtonCell, self)->_imagePosition forKey: @"NSButtonCell imagePosition"];
-    [coder encodeInt: NS_EXTRA(NSButtonCell, self)->_highlightsBy forKey: @"NSButtonCell highlightsBy"];
-    [coder encodeInt: NS_EXTRA(NSButtonCell, self)->_showsStateBy forKey: @"NSButtonCell showsStateBy"];
-    [coder encodeBool: NS_EXTRA(NSButtonCell, self)->_isTransparent forKey: @"NSButtonCell transparent"];
-    [coder encodeBool: NS_EXTRA(NSButtonCell, self)->_imageDimsWhenDisabled
-               forKey: @"NSButtonCell imageDimsWhenDisabled"];
-    [coder encodeObject: NS_EXTRA(NSButtonCell, self)->_alternateImage
-                 forKey: @"NSButtonCell alternateImage"];
-    [coder encodeObject: _keyEquivalent forKey: @"NSButtonCell keyEquivalent"];
-    [coder encodeInt: NS_EXTRA(NSButtonCell, self)->_keyEquivalentModifierMask
-              forKey: @"NSButtonCell keyEquivalentModifierMask"];
+    [coder encodeInt: (int) [self _buttonCellAppleFlags] forKey: @"NSButtonFlags"];
+    [coder encodeInt: (int) [self _buttonCellAppleFlags2] forKey: @"NSButtonFlags2"];
+    // in milliseconds, as macOS writes them
+    [coder encodeInt: (int) lroundf(NS_EXTRA(NSButtonCell, self)->_periodicDelay * 1000) forKey: @"NSPeriodicDelay"];
+    [coder encodeInt: (int) lroundf(NS_EXTRA(NSButtonCell, self)->_periodicInterval * 1000) forKey: @"NSPeriodicInterval"];
+    if (_alternateTitle != nil)
+        [coder encodeObject: _alternateTitle forKey: @"NSAlternateContents"];
+    if (NS_EXTRA(NSButtonCell, self)->_alternateImage != nil)
+        [coder encodeObject: NS_EXTRA(NSButtonCell, self)->_alternateImage forKey: @"NSAlternateImage"];
+    [coder encodeObject: _keyEquivalent != nil ? _keyEquivalent : @"" forKey: @"NSKeyEquivalent"];
 }
 
 - (void) _applyButtonCellAppleFlags: (unsigned) flags flags2: (unsigned) flags2 {
@@ -131,27 +212,28 @@ static const CGFloat kImageMargin = 2.;
 
     NS_EXTRA(NSButtonCell, self)->_showsBorderOnlyWhileMouseInside = (flags2 & 0x8) ? YES : NO;
 
-    if ((flags & 0x7e800000) != 0x48000000)
-        [self setButtonType: NSMomentaryPushInButton];
-    else if (flags & 0x100) {
-        id altImageSource = nil;
-        if (flags & 0x100)
-            altImageSource = NS_EXTRA(NSButtonCell, self)->_alternateImage;
-        if ([[altImageSource name] isEqualToString: @"NSSwitch"])
-            [self setButtonType: NSSwitchButton];
-        if ([[altImageSource name] isEqualToString: @"NSRadioButton"])
-            [self setButtonType: NSRadioButton];
-    } else {
-        if (([[[self image] name] isEqualToString: @"NSRadioButton"] &&
-             [[[self alternateImage] name]
-                     isEqualToString: @"NSHighlightedRadioButton"]) &&
-            (flags & 0x20000) == 0) {
-            [self setButtonType: NSRadioButton];
-        } else if (([[[self image] name] isEqualToString: @"NSSwitch"] &&
-                    [[[self alternateImage] name]
-                            isEqualToString: @"NSHighlightedSwitch"]) &&
-                   (flags & 0x20000) == 0) {
-            [self setButtonType: NSMomentaryPushInButton];
+    // The highlight and state masks above are kept as they are; only a cell
+    // that shows and highlights by its contents is checked for the switch and
+    // radio images.
+    if ((flags & 0x7e800000) == 0x48000000) {
+        if (flags & 0x100) {
+            id altImageSource = NS_EXTRA(NSButtonCell, self)->_alternateImage;
+            if ([[altImageSource name] isEqualToString: @"NSSwitch"])
+                [self setButtonType: NSSwitchButton];
+            if ([[altImageSource name] isEqualToString: @"NSRadioButton"])
+                [self setButtonType: NSRadioButton];
+        } else {
+            if (([[[self image] name] isEqualToString: @"NSRadioButton"] &&
+                 [[[self alternateImage] name]
+                         isEqualToString: @"NSHighlightedRadioButton"]) &&
+                (flags & 0x20000) == 0) {
+                [self setButtonType: NSRadioButton];
+            } else if (([[[self image] name] isEqualToString: @"NSSwitch"] &&
+                        [[[self alternateImage] name]
+                                isEqualToString: @"NSHighlightedSwitch"]) &&
+                       (flags & 0x20000) == 0) {
+                [self setButtonType: NSMomentaryPushInButton];
+            }
         }
     }
 }
@@ -165,6 +247,10 @@ static const CGFloat kImageMargin = 2.;
         NSKeyedUnarchiver *keyed = (NSKeyedUnarchiver *) coder;
         flags = [keyed decodeIntForKey: @"NSButtonFlags"];
         flags2 = [keyed decodeIntForKey: @"NSButtonFlags2"];
+        [self _applyDefaultHighlightingAndRepeat]; // for archives that have no repeat keys
+        if ([keyed containsValueForKey: @"NSPeriodicDelay"] && [keyed containsValueForKey: @"NSPeriodicInterval"])
+            [self setPeriodicDelay: [keyed decodeIntForKey: @"NSPeriodicDelay"] / 1000.0f
+                          interval: [keyed decodeIntForKey: @"NSPeriodicInterval"] / 1000.0f];
         id check;
 
         NS_EXTRA(NSCell, self)->_titleOrAttributedTitle =
@@ -418,12 +504,24 @@ static const CGFloat kImageMargin = 2.;
     return self;
 }
 
+// QUIRK: a new button cell highlights by pushing in, changing its gray and changing its background (highlightsBy
+// 14) whichever initializer made it, and repeats (for continuous buttons) after 0.4 seconds every 0.075 seconds.
+// Not documented. Evidence: black-box observation on macOS 10.14.4 (tier 2) of cells made with -init,
+// -initTextCell:, -initImageCell: and by NSButton, and of an archived cell's NSPeriodicDelay and
+// NSPeriodicInterval keys (400 and 75, in milliseconds); vd-upstream/mac-probes/aqua-leftovers-buttoncell.m.
+// Test: test_quirk_button_cell_highlight_defaults in tests/appkit-button-cell-highlights.m
+- (void) _applyDefaultHighlightingAndRepeat {
+    NS_EXTRA(NSButtonCell, self)->_highlightsBy = NSPushInCellMask | NSChangeGrayCellMask | NSChangeBackgroundCellMask;
+    NS_EXTRA(NSButtonCell, self)->_periodicDelay = 0.4f;
+    NS_EXTRA(NSButtonCell, self)->_periodicInterval = 0.075f;
+}
+
 - initTextCell: (NSString *) string {
     [super initTextCell: string];
     NS_EXTRA(NSCell, self)->_titleOrAttributedTitle = [string copy];
     _alternateTitle = @"";
     NS_EXTRA(NSButtonCell, self)->_imagePosition = NSNoImage;
-    NS_EXTRA(NSButtonCell, self)->_highlightsBy = NSPushInCellMask;
+    [self _applyDefaultHighlightingAndRepeat];
     NS_EXTRA(NSButtonCell, self)->_showsStateBy = 0;
     NS_EXTRA(NSButtonCell, self)->_isTransparent = NO;
     NS_EXTRA(NSButtonCell, self)->_imageDimsWhenDisabled = NO;
@@ -444,6 +542,7 @@ static const CGFloat kImageMargin = 2.;
     [super initImageCell: image];
     NS_EXTRA(NSCell, self)->_titleOrAttributedTitle = @""; // empty string, not nil
     NS_EXTRA(NSButtonCell, self)->_imagePosition = NSImageOnly;
+    [self _applyDefaultHighlightingAndRepeat];
     [self setObjectValue: [NSNumber numberWithBool: NO]];
 
     return self;
@@ -651,6 +750,20 @@ static const CGFloat kImageMargin = 2.;
     NS_EXTRA(NSButtonCell, self)->_imagePosition = position;
 }
 
+- (void) setImage: (NSImage *) image {
+    [super setImage: image];
+    // QUIRK: giving a button cell an image while its image position is
+    // NSNoImage changes the position to NSImageOnly, so the image shows; a
+    // position set before is kept. Not documented. Evidence: black-box
+    // observation on macOS 10.14.4 and 26.7.3 (tier 2), e.g. a new
+    // -[NSButton initWithFrame:] button reports NSImageOnly after -setImage:.
+    // macOS 26 does not do it again once NSNoImage was set explicitly;
+    // 10.14.4 does, which is followed here.
+    // Test: tests/appkit-button-image-position.m (test_quirk_set_image_shows_image)
+    if (image != nil && NS_EXTRA(NSButtonCell, self)->_imagePosition == NSNoImage)
+        NS_EXTRA(NSButtonCell, self)->_imagePosition = NSImageOnly;
+}
+
 - (void) setTitle: (NSString *) title {
     title = [title copy];
     [NS_EXTRA(NSCell, self)->_titleOrAttributedTitle release];
@@ -724,14 +837,19 @@ static const CGFloat kImageMargin = 2.;
 
 - (void) setButtonType: (NSButtonType) buttonType {
     switch (buttonType) {
+    // QUIRK: highlightsBy and showsStateBy per button type are 12 and 0 for momentary light, 14 and 0 for momentary
+    // push in, 14 and 12 for push on push off (the others as before: momentary change 1 and 0, on off 12 and 12,
+    // toggle 3 and 1, switch and radio 1 and 1). Not documented. Evidence: black-box observation on macOS 10.14.4
+    // (tier 2), vd-upstream/mac-probes/aqua-leftovers-buttoncell.m. Test:
+    // test_quirk_button_cell_highlight_defaults in tests/appkit-button-cell-highlights.m
     case NSMomentaryLightButton:
-        NS_EXTRA(NSButtonCell, self)->_highlightsBy = NSChangeBackgroundCellMask;
+        NS_EXTRA(NSButtonCell, self)->_highlightsBy = NSChangeBackgroundCellMask | NSChangeGrayCellMask;
         NS_EXTRA(NSButtonCell, self)->_showsStateBy = NSNoCellMask;
         NS_EXTRA(NSButtonCell, self)->_imageDimsWhenDisabled = YES;
         break;
 
     case NSMomentaryPushInButton:
-        NS_EXTRA(NSButtonCell, self)->_highlightsBy = NSPushInCellMask | NSChangeGrayCellMask;
+        NS_EXTRA(NSButtonCell, self)->_highlightsBy = NSPushInCellMask | NSChangeGrayCellMask | NSChangeBackgroundCellMask;
         NS_EXTRA(NSButtonCell, self)->_showsStateBy = NSNoCellMask;
         NS_EXTRA(NSButtonCell, self)->_imageDimsWhenDisabled = YES;
         break;
@@ -743,8 +861,8 @@ static const CGFloat kImageMargin = 2.;
         break;
 
     case NSPushOnPushOffButton:
-        NS_EXTRA(NSButtonCell, self)->_highlightsBy = NSPushInCellMask | NSChangeGrayCellMask;
-        NS_EXTRA(NSButtonCell, self)->_showsStateBy = NSChangeBackgroundCellMask;
+        NS_EXTRA(NSButtonCell, self)->_highlightsBy = NSPushInCellMask | NSChangeGrayCellMask | NSChangeBackgroundCellMask;
+        NS_EXTRA(NSButtonCell, self)->_showsStateBy = NSChangeBackgroundCellMask | NSChangeGrayCellMask;
         NS_EXTRA(NSButtonCell, self)->_imageDimsWhenDisabled = YES;
         break;
 
@@ -1098,20 +1216,6 @@ static const CGFloat kImageMargin = 2.;
     CGContextRestoreGState(ctx);
 }
 
-static void drawRoundedBezel(CGContextRef context, CGRect frame) {
-    CGFloat radius = frame.size.height / 2;
-
-    CGContextBeginPath(context);
-    CGContextAddArc(context, CGRectGetMaxX(frame) - radius,
-                    CGRectGetMinY(frame) + radius, radius, M_PI_2, M_PI_2 * 3,
-                    YES);
-    CGContextAddArc(context, CGRectGetMinX(frame) + radius,
-                    CGRectGetMinY(frame) + radius, radius, M_PI_2 * 3, M_PI_2,
-                    YES);
-    CGContextClosePath(context);
-    CGContextFillPath(context);
-}
-
 /* Pop-up and pull-down buttons with a rounded bezel and an arrow are drawn whole by the graphics style (the
    arrows are part of the end cap). Answers NO for every other button. */
 - (BOOL) _drawsPopUpBezelInRect: (NSRect) frame {
@@ -1131,8 +1235,105 @@ static void drawRoundedBezel(CGContextRef context, CGRect frame) {
     return YES;
 }
 
+// The bezel styles drawn with the Aqua artwork of textured, recessed and round-rect buttons.
+- (BOOL) _hasAquaToolbarBezel {
+    switch (NS_EXTRA(NSButtonCell, self)->_bezelStyle) {
+    case NSTexturedRoundedBezelStyle:
+    case NSTexturedSquareBezelStyle:
+    case NSRecessedBezelStyle:
+    case NSRoundRectBezelStyle:
+        return [self isBordered];
+    default:
+        return NO;
+    }
+}
+
+// Pressed: highlighted by a click, for buttons that show highlighting with their bezel. On: the on (or mixed)
+// state of a button that shows its state with its bezel.
+- (BOOL) _aquaBezelPressed {
+    return [self isHighlighted] &&
+           ([self highlightsBy] & (NSPushInCellMask | NSChangeGrayCellMask | NSChangeBackgroundCellMask));
+}
+
+- (BOOL) _aquaBezelOn {
+    // a pop-up button has no on state of its own (its state is that of the selected item)
+    if ([self isKindOfClass: [NSPopUpButtonCell class]])
+        return NO;
+    return [self state] != NSOffState && ([self showsStateBy] & (NSChangeGrayCellMask | NSChangeBackgroundCellMask));
+}
+
+// QUIRK: the textured rounded, recessed and round-rect bezels have a fixed height for each control size (with the
+// point below the bezel: 23, 19 and 16 points textured; 19, 17 and 15 recessed and round-rect) and are centred
+// vertically in a frame of another height, the odd point going above; the textured square bezel follows the
+// frame. Not documented. Evidence: black-box renders of NSButton in frames 14 to 32 points high on macOS 10.14.4
+// (tier 2), probe mac-probes/aqua-toolbar-2.m of the research notes.
+// Test: appkit-toolbar-controls-aqua.m (test_quirk_bezel_heights)
+- (NSRect) _aquaBezelArtworkRectForFrame: (NSRect) frame inView: (NSView *) controlView {
+    static const CGFloat textured[3] = {23, 19, 16}, recessed[3] = {19, 17, 15};
+    NSControlSize size = [self controlSize];
+    int index = size == NSSmallControlSize ? 1 : (size == NSMiniControlSize ? 2 : 0);
+    CGFloat height;
+
+    switch (NS_EXTRA(NSButtonCell, self)->_bezelStyle) {
+    case NSTexturedRoundedBezelStyle:
+        height = textured[index];
+        break;
+    case NSRecessedBezelStyle:
+    case NSRoundRectBezelStyle:
+        height = recessed[index];
+        break;
+    default:
+        return frame;
+    }
+
+    CGFloat above = ceil((NSHeight(frame) - height) / 2);
+
+    frame.origin.y += [controlView isFlipped] ? above : NSHeight(frame) - height - above;
+    frame.size.height = height;
+    return frame;
+}
+
+- (void) _drawAquaToolbarBezelInFrame: (NSRect) frame inView: (NSView *) controlView {
+    NSBezelStyle bezel = NS_EXTRA(NSButtonCell, self)->_bezelStyle;
+    NSGraphicsStyle *style = [controlView graphicsStyle];
+    NSRect art = [self _aquaBezelArtworkRectForFrame: frame inView: controlView];
+    CGContextRef context = [[NSGraphicsContext currentContext] graphicsPort];
+    BOOL pressed = [self _aquaBezelPressed], on = [self _aquaBezelOn];
+
+    // the style draws for a view that is not flipped; in a flipped view the drawing is mirrored about the artwork
+    CGContextSaveGState(context);
+    if ([controlView isFlipped]) {
+        CGContextTranslateCTM(context, 0, 2 * art.origin.y + art.size.height);
+        CGContextScaleCTM(context, 1, -1);
+    }
+    switch (bezel) {
+    case NSTexturedRoundedBezelStyle:
+    case NSTexturedSquareBezelStyle:
+        [style drawTexturedBezelInRect: art
+                                square: bezel == NSTexturedSquareBezelStyle
+                               pressed: pressed
+                                    on: on
+                           controlSize: [self controlSize]];
+        break;
+    case NSRecessedBezelStyle:
+        // a disabled recessed button shows no bezel
+        if ([self isEnabled])
+            [style drawRecessedBezelInRect: art pressed: pressed on: on controlSize: [self controlSize]];
+        break;
+    default:
+        [style drawRoundRectBezelInRect: art filled: pressed || on enabled: [self isEnabled]];
+        break;
+    }
+    CGContextRestoreGState(context);
+}
+
 - (void) drawBezelWithFrame: (NSRect) frame inView: (NSView *) controlView {
     BOOL defaulted = ([[controlView window] defaultButtonCell] == self);
+
+    if ([self _hasAquaToolbarBezel]) {
+        [self _drawAquaToolbarBezelInFrame: frame inView: controlView];
+        return;
+    }
 
     NSRect adjustment =
             [self getControlSizeAdjustment: [controlView isFlipped]];
@@ -1179,27 +1380,8 @@ static void drawRoundedBezel(CGContextRef context, CGRect frame) {
         }
         break;
 
-    case NSRecessedBezelStyle:;
-        if ([self isBordered] && [self isVisuallyHighlighted]) {
-            CGContextRef context =
-                    [[NSGraphicsContext currentContext] graphicsPort];
-
-            frame.size.height--;
-            frame.origin.y += [controlView isFlipped] ? 1 : 0;
-            [[NSColor lightGrayColor] setFill];
-            drawRoundedBezel(context, frame);
-
-            frame.origin.y += [controlView isFlipped] ? -1 : 1;
-            [[NSColor darkGrayColor] setFill];
-            drawRoundedBezel(context, frame);
-
-            frame.origin.y += [controlView isFlipped] ? 0 : -1;
-            frame.size.height++;
-
-            frame = CGRectInset(frame, 1, 1.5);
-            [[NSColor grayColor] setFill];
-            drawRoundedBezel(context, frame);
-        }
+    case NSRecessedBezelStyle:
+        // drawn above when bordered
         break;
 
     default: {
@@ -1290,13 +1472,60 @@ static void drawRoundedBezel(CGContextRef context, CGRect frame) {
         [box transformUsingAffineTransform: toControl];
         objc_setAssociatedObject(self, &toggleFocusRingPathKey, box, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         [box release];
-    } else
+    } else if ([image isTemplate])
+        [image _drawTemplateInRect: local color: [self _templateImageColor] fraction: enabled ? 1.0 : 0.5];
+    else
         [[controlView graphicsStyle]
                 drawButtonImage: image
                          inRect: local
                         enabled: enabled
                           mixed: mixed];
     CGContextRestoreGState(ctx);
+}
+
+// QUIRK: the title colour of textured, recessed and round-rect buttons with the light appearance. Textured: black
+// at 65% opacity, 85% while pressed, 25% disabled, and white (60% disabled) on the dark bezel of the on state.
+// Recessed: white while pressed or on, otherwise the control text colours. Round-rect: the control text colours.
+// nil means the colours of the title's attributes. Not documented. Evidence: black-box renders of NSButton on
+// macOS 10.14.4 at 1x (tier 2), the darkest title pixel over the bezel in each state, probe
+// mac-probes/aqua-toolbar.m of the research notes. Test: appkit-toolbar-controls-aqua.m (test_quirk_title_colours)
+- (NSColor *) _aquaBezelTitleColor {
+    if (![self _hasAquaToolbarBezel])
+        return nil;
+
+    BOOL enabled = [self isEnabled], pressed = [self _aquaBezelPressed], on = [self _aquaBezelOn];
+
+    switch (NS_EXTRA(NSButtonCell, self)->_bezelStyle) {
+    case NSTexturedRoundedBezelStyle:
+    case NSTexturedSquareBezelStyle:
+        if (on)
+            return [NSColor colorWithCalibratedWhite: 1 alpha: enabled ? 1 : 0.6];
+        return [NSColor colorWithCalibratedWhite: 0 alpha: enabled ? (pressed ? 0.85 : 0.65) : 0.25];
+    case NSRecessedBezelStyle:
+        return (enabled && (pressed || on)) ? [NSColor whiteColor] : nil;
+    default:
+        return nil;
+    }
+}
+
+// QUIRK: the colour a template image is drawn in depends on the button. With the light appearance, black at
+// 80 % opacity on a bordered button, 60 % on a textured one (white when a textured button shows its on state
+// on its dark bezel) and 50 % without a border; half as opaque when the button is disabled. The image's own
+// colours are not used, only its coverage. Not documented beyond "template images are drawn by the control in
+// a suitable colour". Evidence: black-box renders of buttons with a template image on macOS 10.14.4 (tier 2).
+// Test: tests/appkit-template-image-tint.m (test_quirk_template_image_colours)
+- (NSColor *) _templateImageColor {
+    NSBezelStyle bezel = NS_EXTRA(NSButtonCell, self)->_bezelStyle;
+    BOOL textured = bezel == NSTexturedSquareBezelStyle || bezel == NSTexturedRoundedBezelStyle;
+
+    if (![self isBordered])
+        return [NSColor colorWithCalibratedWhite: 0.0 alpha: 0.5];
+    if (textured) {
+        if ([self state] && ([self showsStateBy] & NSChangeBackgroundCellMask))
+            return [NSColor whiteColor];
+        return [NSColor colorWithCalibratedWhite: 0.0 alpha: 0.6];
+    }
+    return [NSColor colorWithCalibratedWhite: 0.0 alpha: 0.8];
 }
 
 - (NSRect) drawTitle: (NSAttributedString *) title
@@ -1403,6 +1632,14 @@ static NSSize scaledImageSizeInFrameSize(NSSize imageSize, NSSize frameSize,
             title = white;
         }
     }
+    NSColor *aquaTitleColor = [self _aquaBezelTitleColor];
+    if (aquaTitleColor != nil && [title length] > 0 &&
+        [NS_EXTRA(NSCell, self)->_titleOrAttributedTitle isKindOfClass: [NSString class]]) {
+        NSMutableAttributedString *colored = [[title mutableCopy] autorelease];
+
+        [colored addAttribute: NSForegroundColorAttributeName value: aquaTitleColor range: NSMakeRange(0, [colored length])];
+        title = colored;
+    }
     BOOL enabled = [self isEnabled] ? YES : ![self imageDimsWhenDisabled];
     BOOL mixed = ([self state] == NSMixedState) ? YES : NO;
     NSRect imageRect = [self imageRectForBounds: frame];
@@ -1495,10 +1732,8 @@ static NSSize scaledImageSizeInFrameSize(NSSize imageSize, NSSize frameSize,
         }
     }
 
-    const BOOL isTextured = (NS_EXTRA(NSButtonCell, self)->_bezelStyle == NSTexturedSquareBezelStyle ||
-                             NS_EXTRA(NSButtonCell, self)->_bezelStyle == NSTexturedRoundedBezelStyle);
-
-    if ([self isBordered] && !isTextured) {
+    // the textured, recessed and round-rect bezels do not move their content while pressed
+    if ([self isBordered] && ![self _hasAquaToolbarBezel]) {
         if (([self highlightsBy] & NSPushInCellMask) && [self isHighlighted]) {
             imageOrigin.x += 1;
             imageOrigin.y += [controlView isFlipped] ? 1 : -1;
@@ -1514,57 +1749,6 @@ static NSSize scaledImageSizeInFrameSize(NSSize imageSize, NSSize frameSize,
     }
 
     if (drawTitle) {
-        if (isTextured && [title length]) {
-            // FIXME: use shadow in attributed string and implement shadow text
-            // drawing
-            const BOOL pressed = [self state] && ([self showsStateBy] &
-                                                  NSChangeBackgroundCellMask);
-            const CGFloat fgGray = (pressed) ? 0.98 : 0.0;
-            const CGFloat fgGrayDisabled = 0.5;
-            const CGFloat shadowGray = (pressed) ? 0.07 : 0.93;
-            const CGFloat shadowAlpha = ([self isHighlighted]) ? 0.15 : 0.25;
-            NSString *baseTitle = [NSString stringWithString: [title string]];
-            NSMutableDictionary *shadowAttrs =
-                    [[[title attributesAtIndex: 0
-                                effectiveRange: NULL] mutableCopy] autorelease];
-
-            if (titleRect.origin.y >
-                frame.origin.y + 1) { // only draw the shadow if it doesn't come
-                                      // too close to the edge
-                [shadowAttrs
-                        setObject: [NSColor colorWithDeviceRed: shadowGray
-                                                         green: shadowGray
-                                                          blue: shadowGray
-                                                         alpha: shadowAlpha]
-                           forKey: NSForegroundColorAttributeName];
-
-                NSAttributedString *shadowTitle = [[[NSAttributedString alloc]
-                        initWithString: baseTitle
-                            attributes: shadowAttrs] autorelease];
-                NSRect shadowRect = NSOffsetRect(titleRect, 0, 1);
-
-                [shadowTitle _clipAndDrawInRect: shadowRect];
-            }
-
-            NSMutableDictionary *fgAttrs =
-                    [[shadowAttrs mutableCopy] autorelease];
-            if ([self isEnabled])
-                [fgAttrs setObject: [NSColor colorWithDeviceRed: fgGray
-                                                          green: fgGray
-                                                           blue: fgGray
-                                                          alpha: 1.0]
-                            forKey: NSForegroundColorAttributeName];
-            else
-                [fgAttrs setObject: [NSColor colorWithDeviceRed: fgGrayDisabled
-                                                          green: fgGrayDisabled
-                                                           blue: fgGrayDisabled
-                                                          alpha: 1.0]
-                            forKey: NSForegroundColorAttributeName];
-            title = [[[NSAttributedString alloc] initWithString: baseTitle
-                                                     attributes: fgAttrs]
-                    autorelease];
-        }
-
         [self drawTitle: title withFrame: titleRect inView: controlView];
     }
 }
@@ -1645,8 +1829,7 @@ static NSSize scaledImageSizeInFrameSize(NSSize imageSize, NSSize frameSize,
 // of the intrinsic content size with titles of 0 to 196 points at the three control sizes; 26.7.3 differs
 // and is not followed. The amounts are 28, 16 and 22 for push buttons (regular, small, mini; heights 21, 18
 // and 15), 18, 17 and 16 for checkboxes and 19, 19 and 17 for radio buttons. The heights of checkboxes and
-// radio buttons stay as they are, because the frame is not inset by the alignment insets here and the
-// glyphs would be cut off.
+// radio buttons are described in the QUIRK in the toggle branch below.
 // Test: tests/appkit-button-stock-intrinsic-size.m (test_quirk_stock_button_widths)
 - (void) _applyStockButtonMetricsToSize: (NSSize *) size titleWidth: (CGFloat) titleWidth {
     NSControlSize controlSize = NS_EXTRA(NSCell, self)->_controlSize;
@@ -1670,8 +1853,47 @@ static NSSize scaledImageSizeInFrameSize(NSSize imageSize, NSSize frameSize,
     BOOL isSwitch = [[image name] isEqualToString: @"NSSwitch"];
     BOOL isRadio = [[image name] isEqualToString: @"NSRadioButton"];
 
-    if ((isSwitch || isRadio) && [self imagePosition] == NSImageLeft)
-        size->width = ceil(titleWidth + (isSwitch ? switchPadding[index] : radioPadding[index]));
+    if ((isSwitch || isRadio) && [self imagePosition] == NSImageLeft) {
+        NSEdgeInsets insets = [self _toggleAlignmentInsets];
+
+        // QUIRK: the cell of a check box or radio button is as wide as the title plus the padding above and the
+        // alignment insets (so its intrinsic width stays the title width plus the padding), and 18 points high at
+        // every control size; the intrinsic height is that minus the insets. Not documented. Evidence: black-box
+        // observation on macOS 10.14.4 (tier 2): -cellSize of check boxes and radio buttons with titles of
+        // several widths at the three control sizes (vd-upstream/mac-probes/aqua-leftovers-metrics.m); 26.7.3
+        // differs and is not followed. Test: test_quirk_toggle_metrics in tests/appkit-toggle-metrics.m
+        size->width = ceil(titleWidth + (isSwitch ? switchPadding[index] : radioPadding[index])) + insets.left + insets.right;
+        size->height = 18;
+    }
+}
+
+// 0 for a button that is not a stock check box or radio button, 1 for a check box and 2 for a radio button.
+- (int) _stockToggleKind {
+    NSString *name = [[self image] name];
+
+    if ([name isEqualToString: @"NSSwitch"])
+        return 1;
+    if ([name isEqualToString: @"NSRadioButton"])
+        return 2;
+    return 0;
+}
+
+// QUIRK: the alignment insets (top, left, bottom, right) of a check box are (2, 2, 2, 2) regular, (3, 3, 3, 2)
+// small and (5, 4, 3, 2) mini, those of a radio button (1, 1, 1, 2), (2, 2, 2, 1) and (4, 4, 4, 1), in a flipped
+// button. They are where the box sits in the 18 point high cell. Not documented. Evidence: black-box
+// observation on macOS 10.14.4 (tier 2), -alignmentRectInsets of both at the three control sizes; 26.7.3
+// differs and is not followed. Test: test_quirk_toggle_metrics in tests/appkit-toggle-metrics.m
+- (NSEdgeInsets) _toggleAlignmentInsets {
+    static const CGFloat check[3][4] = {{2, 2, 2, 2}, {3, 3, 3, 2}, {5, 4, 3, 2}};
+    static const CGFloat radio[3][4] = {{1, 1, 1, 2}, {2, 2, 2, 1}, {4, 4, 4, 1}};
+    NSControlSize controlSize = NS_EXTRA(NSCell, self)->_controlSize;
+    int index = controlSize == NSSmallControlSize ? 1 : (controlSize == NSMiniControlSize ? 2 : 0);
+    int kind = [self _stockToggleKind];
+
+    if (kind == 0)
+        return NSEdgeInsetsMake(0, 0, 0, 0);
+    const CGFloat *v = kind == 1 ? check[index] : radio[index];
+    return NSEdgeInsetsMake(v[0], v[1], v[2], v[3]);
 }
 
 - (void) drawWithFrame: (NSRect) frame inView: (NSView *) control {

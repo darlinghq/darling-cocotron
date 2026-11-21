@@ -24,12 +24,19 @@
 // Animations aren't run: changes made in a group take effect immediately.
 @interface NSAnimationContext : NSObject <NSCopying> {
     NSTimeInterval _duration;
-    NS_LEGACY_IVAR_PAD(_NSAnimationContextReserved, 20)
+    NS_LEGACY_IVAR_PAD(_NSAnimationContextReserved, 16)
+    NS_EXTRA_IVARS_BEGIN(NSAnimationContext)
+        void (^_completionHandler)(void);
+        BOOL _allowsImplicitAnimation;
+    NS_EXTRA_IVARS_END(NSAnimationContext)
 }
 
 + (void) runAnimationGroup: (void (^)(NSAnimationContext *context)) changes
          completionHandler: (void (^)(void)) completionHandler;
 
++ (void) runAnimationGroup: (void (^)(NSAnimationContext *context)) changes;
+
+// Nested groups: -endGrouping runs the completion handler of the group it closes.
 + (void) beginGrouping;
 + (void) endGrouping;
 
@@ -37,5 +44,9 @@
 
 - (void) setDuration: (NSTimeInterval) duration;
 - (NSTimeInterval) duration;
+
+// Called once the group's changes are over; a group applies its changes at once, so that is when it ends.
+@property(copy, nullable) void (^completionHandler)(void);
+@property BOOL allowsImplicitAnimation;
 
 @end

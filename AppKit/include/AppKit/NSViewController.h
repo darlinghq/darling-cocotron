@@ -35,6 +35,8 @@ typedef NS_OPTIONS(NSUInteger, NSViewControllerTransitionOptions) {
         NSStoryboard *_storyboard;
         NSDictionary *_externalObjectsTableForViewLoading;
         NSSize _preferredContentSize;
+        NSMutableArray *_editors; // registered via objectDidBeginEditing:
+        BOOL _appeared; // between -viewWillAppear and -viewWillDisappear
     NS_EXTRA_IVARS_END(NSViewController)
 }
 
@@ -71,12 +73,27 @@ typedef NS_OPTIONS(NSUInteger, NSViewControllerTransitionOptions) {
 // Called once -view has loaded the view with -loadView; does nothing by default.
 - (void) viewDidLoad;
 
+// Sent when the view is about to be, or has just been, put into a visible
+// window (added to one that is shown, or its window is ordered in) and when it is
+// about to be, or has just been, taken out of one (removed, hidden, its window
+// ordered out or closed). Each pair is sent for a controller and its children
+// and does nothing by default.
+- (void) viewWillAppear;
+- (void) viewDidAppear;
+- (void) viewWillDisappear;
+- (void) viewDidDisappear;
+
 - (void) discardEditing;
 
 - (BOOL) commitEditing;
 - (void) commitEditingWithDelegate: (nullable id) delegate
                  didCommitSelector: (nullable SEL) didCommitSelector
                        contextInfo: (nullable void *) contextInfo;
+- (BOOL) commitEditingAndReturnError: (NSError **) error;
+
+// NSEditorRegistration: the bound controls and objects that have uncommitted changes.
+- (void) objectDidBeginEditing: (id) editor;
+- (void) objectDidEndEditing: (id) editor;
 
 @end
 

@@ -58,8 +58,13 @@ int main(void) {
                     if ([v isHidden]) { CHECK(NSEqualRects(f, NSMakeRect(0, 0, 20, 20))); continue; }
                     CHECK(isfinite(origin) && isfinite(size) && size >= 0);
                     CHECK(origin >= 0 && origin + size <= extent);
-                    if (mode == 0) CHECK(size == (visible == 2 ? 31 : 30));
-                    if (mode == 2) CHECK(size == 48);
+                    // The panes share the extent less the dividers, a hidden pane's divider included;
+                    // the pane ends are rounded to whole points (macOS 10.14.4: 28, 27 and 28 of 83
+                    // points, and 42 and 41 with the middle pane hidden).
+                    CGFloat shared = extent - 2 * [split dividerThickness];
+                    CGFloat share = mode == 2 ? shared / 2 : shared / 3;
+                    CGFloat rounded = floor(share * (visible + 1) + 0.5) - floor(share * visible + 0.5);
+                    if (mode == 0 || mode == 2) CHECK(size == rounded);
                     if (mode == 4) CHECK(size == 0);
                     if (mode == 5) CHECK(size == 101 && origin == 0);
                     visible++;

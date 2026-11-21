@@ -80,6 +80,7 @@ typedef NS_ENUM(NSInteger, NSScrollViewFindBarPosition) {
         NSScrollElasticity _horizontalScrollElasticity;
         NSScrollElasticity _verticalScrollElasticity;
         NSScrollerStyle _scrollerStyle;
+        BOOL _usesPredominantAxisScrolling;
     NS_EXTRA_IVARS_END(NSScrollView)
 }
 
@@ -88,6 +89,8 @@ typedef NS_ENUM(NSInteger, NSScrollViewFindBarPosition) {
 @property NSScrollElasticity horizontalScrollElasticity;
 @property NSScrollElasticity verticalScrollElasticity;
 @property BOOL automaticallyAdjustsContentInsets;
+// Stored only: a scroll wheel event scrolls along both of its axes either way.
+@property BOOL usesPredominantAxisScrolling;
 @property NSEdgeInsets contentInsets;
 
 + (NSSize) frameSizeForContentSize: (NSSize) contentSize

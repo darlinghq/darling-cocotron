@@ -105,6 +105,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @implementation NSScroller
 
+// Operated at once: the click that activates the window is delivered to it
+// (see -[NSWindow sendEvent:]).
+- (BOOL) acceptsFirstMouse: (NSEvent *) event {
+    return YES;
+}
+
 NS_EXTRA_DEALLOC(NSScroller)
 
 + (CGFloat) scrollerWidth {
@@ -123,11 +129,18 @@ NS_EXTRA_DEALLOC(NSScroller)
     return NSScrollerStyleLegacy;
 }
 
-// Cocotron draws one scroller size for every control size and style.
+// Legacy scrollers are 15 points thick for the regular control size and 11 for the small and mini sizes;
+// overlay scrollers are 16 and 14 points.
+// QUIRK: the widths are not documented. Evidence: black-box observation on macOS 10.14.4 (tier 2), probe
+// mac-probes/aqua-scroller-divider.m. Test: tests/appkit-scroller-parts.m (test_quirk_scroller_widths)
 + (CGFloat) scrollerWidthForControlSize: (NSControlSize) controlSize
                           scrollerStyle: (NSScrollerStyle) scrollerStyle
 {
-    return [self scrollerWidth];
+    BOOL regular = controlSize == NSControlSizeRegular;
+
+    if (scrollerStyle == NSScrollerStyleOverlay)
+        return regular ? 16 : 14;
+    return regular ? 15 : 11;
 }
 /* OS X has a global default "AppleScrollBarVariant" with the values: Single,
  DoubleMin, DoubleMax, and DoubleBoth This controls the default position of the
@@ -476,16 +489,42 @@ static void scrollerKnobGeometry(CGFloat length, CGFloat proportion, CGFloat val
 }
 
 - (void) drawKnobSlotInRect: (NSRect) rect highlight: (BOOL) flag {
+    if (!NSIsEmptyRect(rect))
+        [[self graphicsStyle] drawScrollerTrackInRect: rect vertical: [self isVertical]];
 }
 
 - (void) drawParts {
     // do nothing
 }
 
+// The knob is drawn for the scroller artwork of the control size and style, which lies against the far edge
+// (the right, or the bottom) of the scroller; a thinner scroller cuts off the near side of it.
+// QUIRK: not documented. Evidence: macOS 10.14.4 draws a regular knob in an 11 point scroller and a small
+// one in a 15 point scroller that way (tier 2, probe mac-probes/aqua-scroller-divider-mixed.m).
+// Test: tests/appkit-scroller-parts.m (test_quirk_scroller_control_sizes)
+- (NSRect) _knobArtworkRect: (NSRect) knob {
+    CGFloat thickness = [NSScroller scrollerWidthForControlSize: [self controlSize]
+                                                  scrollerStyle: [self scrollerStyle]];
+
+    if ([self isVertical]) {
+        knob.origin.x = NSMaxX(knob) - thickness;
+        knob.size.width = thickness;
+    } else {
+        knob.origin.y = NSMaxY(knob) - thickness;
+        knob.size.height = thickness;
+    }
+    return knob;
+}
+
 - (void) drawKnob {
     NSRect knob = [self rectForPart: NSScrollerKnob];
 
-    if ([self isEnabled] && !NSIsEmptyRect(knob))
+    if (![self isEnabled] || NSIsEmptyRect(knob))
+        return;
+    knob = [self _knobArtworkRect: knob];
+    if ([self scrollerStyle] == NSScrollerStyleOverlay)
+        [[self graphicsStyle] drawOverlayScrollerKnobInRect: knob vertical: [self isVertical]];
+    else
         [[self graphicsStyle] drawScrollerKnobInRect: knob
                                             vertical: [self isVertical]
                                            highlight: NS_EXTRA(NSScroller, self)->_isHighlighted];
@@ -505,11 +544,10 @@ static void scrollerKnobGeometry(CGFloat length, CGFloat proportion, CGFloat val
 }
 
 - (void) drawRect: (NSRect) rect {
-    NSRect slot = [self rectForPart: NSScrollerKnobSlot];
-
-    // No arrow buttons: the line parts are empty, so nothing is drawn for them.
-    if (!NSIsEmptyRect(slot))
-        [[self graphicsStyle] drawScrollerTrackInRect: slot vertical: [self isVertical]];
+    // No arrow buttons: the line parts are empty, so nothing is drawn for them. An overlay scroller shows
+    // only its knob, over the content.
+    if ([self scrollerStyle] == NSScrollerStyleLegacy)
+        [self drawKnobSlotInRect: [self rectForPart: NSScrollerKnobSlot] highlight: NO];
 
     [self drawKnob];
 }
@@ -519,15 +557,20 @@ static void scrollerKnobGeometry(CGFloat length, CGFloat proportion, CGFloat val
 }
 
 - (NSScrollerPart) testPart: (NSPoint) point {
-    int part;
+    // The parts that lie inside the knob slot come before it, since the slot contains them. The
+    // NSScrollerPart constants are not in this order, so they are listed rather than counted.
+    static const NSScrollerPart order[] = {
+        NSScrollerIncrementLine, NSScrollerDecrementLine, NSScrollerKnob,
+        NSScrollerIncrementPage, NSScrollerDecrementPage, NSScrollerKnobSlot};
+    size_t i;
 
     NS_EXTRA(NSScroller, self)->_hitPart = NSScrollerNoPart;
 
-    for (part = NSScrollerIncrementLine; part <= NSScrollerKnobSlot; part++) {
-        NSRect rect = [self rectForPart: part];
+    for (i = 0; i < sizeof(order) / sizeof(order[0]); i++) {
+        NSRect rect = [self rectForPart: order[i]];
 
         if (NSMouseInRect(point, rect, [self isFlipped])) {
-            NS_EXTRA(NSScroller, self)->_hitPart = part;
+            NS_EXTRA(NSScroller, self)->_hitPart = order[i];
             break;
         }
     }

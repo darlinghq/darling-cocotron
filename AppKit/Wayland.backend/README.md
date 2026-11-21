@@ -21,14 +21,24 @@ because the native libwayland resolves it outside the container. The choice is m
 
 `WaylandDecorations` (`org.darlinghq.AppKit`) or `DARLING_WAYLAND_DECORATIONS`, set to `client`, makes the
 backend draw the window frame itself even when the compositor offers server-side decorations.
-A window with a full-size content view and a transparent title bar never gets a frame: it declares client-side
-decorations and the backend draws none, as the application draws its own title bar. Changing the style mask or
-the transparency of a shown window updates this at once.
+A window that shows nothing of a title bar of its own never gets a frame: a titled window with a transparent title
+bar and either a full-size content view or a hidden title and hidden close, miniaturize and zoom buttons. It
+declares client-side decorations and the backend draws none, as the application draws its own title bar. Changing
+the style mask, the transparency or the title visibility of a shown window updates this at once.
+
+A window that is not an application window (see `AppKit/DarlingWindowPresentation.h`) is related to the window it
+belongs to: a pop-up window (a borderless window that cannot become main and is a child window, sits at the main
+menu level or above, or ignores the mouse) is an ungrabbed `xdg_popup` of its parent window or the main window,
+placed at the offset AppKit gave it, and other windows that are not application windows (panels, child windows
+with a title bar, windows that cannot become main) are toplevels with `xdg_toplevel.set_parent`. A compositor
+neither lists nor centres them, and a popup does not take the keyboard focus. With no mapped window to belong
+to, such a window is an ordinary toplevel.
 
 ## What it provides
 
 - Windows: xdg toplevels, resize, hide and show, compositor close, nested popup menus, client or
   server-side decorations.
+- The main menu in Plasma's global menu, or in the windows: see below.
 - Input: pointer with click grouping and scroll frames, keyboard through xkbcommon with the compositor's
   keymap and key repeat, aggregate and left/right modifier changes, touchpad pinch as magnify and rotate
   events.
@@ -36,6 +46,19 @@ the transparency of a shown window updates this at once.
 - Clipboard and drag-and-drop, OpenGL and scale, fullscreen and pointer lock: see below.
 - Outputs: output batches are applied atomically, rotation and the xdg-output logical layout feed `NSScreen`,
   integer buffer scale follows the outputs a window is on.
+
+## Main menu
+
+When the compositor offers KDE's appmenu protocol (`org_kde_kwin_appmenu_manager`, from
+[plasma-wayland-protocols](https://invent.kde.org/libraries/plasma-wayland-protocols)) and the session bus has an
+owner of `com.canonical.AppMenu.Registrar`, the main menu goes to the desktop's global menu: it is exported on
+the session bus with the [`com.canonical.dbusmenu`](https://github.com/AyatanaIndicators/libdbusmenu) protocol
+(`AppKit/NSDBusMenu.m`, shared with the X11 backend) and every toplevel tells the compositor its address with
+`org_kde_kwin_appmenu.set_address`. Plasma owns the registrar name only while a global menu view is in use (the
+Global Menu applet or the application menu button of the title bars), so the name is the sign that the menu will
+be seen. Otherwise titled windows draw the menu in a strip of their own, as with the `DarlingInWindowMenuBar`
+preference: an xdg-shell client cannot put a menu bar window of its own along the top of the screen as the X11
+backend does. The choice is made once, before the first window frame is computed.
 
 ## Clipboard and drag-and-drop
 

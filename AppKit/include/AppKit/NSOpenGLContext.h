@@ -60,7 +60,7 @@ enum {
         NSView *_view;
         CGSubWindow *_subwindow;
         CGLWindowRef _cglWindow;
-        BOOL _hasPrepared, _drawableAttachmentSucceeded;
+        BOOL _hasPrepared, _drawableAttachmentSucceeded, _presentObserved;
         int _viewportResetPending;
     NS_SIDE_IVARS_END(NSOpenGLContext)
 }
@@ -70,6 +70,7 @@ enum {
 
 - initWithFormat: (NSOpenGLPixelFormat *) pixelFormat
         shareContext: (NSOpenGLContext *) shareContext;
+- (instancetype) initWithCGLContextObj: (CGLContextObj) context;
 
 - (NSView *) view;
 - (NSOpenGLPixelBuffer *) pixelBuffer;

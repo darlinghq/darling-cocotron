@@ -50,6 +50,7 @@ const NSNotificationName NSToolbarChangeAppearanceNotification =
 
 @interface NSToolbarItem (private)
 - (void) _setToolbar: (NSToolbar *) toolbar;
+- (NSView *) _enclosingView;
 @end
 
 @implementation NSToolbar
@@ -430,6 +431,16 @@ static BOOL isStandardItemIdentifier(NSString *identifier) {
     [_view layoutViewsWithWidth: width setFrame: YES];
 }
 
+- (void) _itemViewIntrinsicSizeDidChange: (NSToolbarItem *) item {
+    // The layout resizes views, which must not start another layout.
+    static BOOL laidOut;
+    if (laidOut)
+        return;
+    laidOut = YES;
+    [_view layoutViews];
+    laidOut = NO;
+}
+
 - (void) itemSizeDidChange {
     [_window _toolbarSizeDidChangeFromOldHeight: [self visibleHeight]];
 }
@@ -451,8 +462,6 @@ static BOOL isStandardItemIdentifier(NSString *identifier) {
                                                             name: notes[i].name
                                                           object: self];
 
-    BOOL isNew = (delegate != nil && delegate != _delegate);
-
     _delegate = delegate;
 
     for (i = 0; notes[i].name != nil; i++)
@@ -462,11 +471,30 @@ static BOOL isStandardItemIdentifier(NSString *identifier) {
                                                          name: notes[i].name
                                                        object: self];
 
-    if (isNew) { // allow the new delegate to reset the layout
-        _loadDefaultItems = YES;
-        [self loadDefaultItemsIfNeeded];
-        [_window _toolbarSizeDidChangeFromOldHeight: [self visibleHeight]];
-    }
+    // The delegate is not asked for its items here: a toolbar loads its default items once, when it is
+    // attached to a window (or, from a nib, once the nib's connections are made), so the delegate may
+    // still be getting its own outlets. Evidence: black-box observation on macOS 10.14.4 and 26.7.3.
+    // Test: tests/appkit-toolbar-default-items.m
+}
+
+// Called by NSNib once every connection of the nib that contains this toolbar is made, before
+// any object of the nib gets -awakeFromNib: the default items are then the delegate's
+// (the items the nib marked as default when the delegate does not list any).
+- (void) _nibDidConnectObjects {
+    if (![_delegate respondsToSelector: @selector(toolbarDefaultItemIdentifiers:)])
+        return;
+
+    CGFloat oldHeight = [self visibleHeight];
+
+    // The nib's own default items have not been seen by anyone yet: they are put aside without
+    // posting NSToolbarDidRemoveItemNotification.
+    for (NSToolbarItem *item in _items)
+        [[item _enclosingView] removeFromSuperview];
+    [_items removeAllObjects];
+
+    _loadDefaultItems = YES;
+    [self loadDefaultItemsIfNeeded];
+    [_window _toolbarSizeDidChangeFromOldHeight: oldHeight];
 }
 
 - (void) didChangeAppearanceGlobal: (BOOL) global {

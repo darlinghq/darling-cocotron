@@ -20,6 +20,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSAlert.h>
 #import <AppKit/NSAppearance.h>
 #import <AppKit/NSApplication.h>
+#import "DarlingLayout.h"
 #import <AppKit/NSUserInterfaceItemSearching.h>
 #import <AppKit/NSColorPanel.h>
 #import <AppKit/NSColor.h>
@@ -198,7 +199,7 @@ static NSArray *NSApplicationDocumentsInArguments(NSArray *arguments) {
 
 NS_EXTRA_DEALLOC(NSApplication)
 
-- (NSUserInterfaceLayoutDirection) userInterfaceLayoutDirection {
+static NSUserInterfaceLayoutDirection computeLayoutDirection(void) {
     // Use the app's selected localization, not the user's regional locale:
     // an app without an RTL localization still presents its LTR interface.
     NSString *language = [[[NSBundle mainBundle] preferredLocalizations] firstObject];
@@ -208,6 +209,46 @@ NS_EXTRA_DEALLOC(NSApplication)
         return NSUserInterfaceLayoutDirectionRightToLeft;
     }
     return NSUserInterfaceLayoutDirectionLeftToRight;
+}
+
+// The direction is read for every leading and trailing edge a layout pass solves, and finding the
+// app's localization is costly, so it is worked out once and again only when the preferred
+// languages (the AppleLanguages default) or the current locale may have changed.
+static NSInteger cachedLayoutDirection = -1;
+
+- (void) _layoutDirectionInputsDidChange: (NSNotification *) note {
+    if (![NSThread isMainThread]) {
+        [self performSelectorOnMainThread: _cmd withObject: nil waitUntilDone: NO];
+        return;
+    }
+    if (cachedLayoutDirection < 0)
+        return;
+    NSUserInterfaceLayoutDirection direction = computeLayoutDirection();
+    if (direction == (NSUserInterfaceLayoutDirection) cachedLayoutDirection)
+        return;
+    cachedLayoutDirection = direction;
+    // Views that inherit the direction lay out their leading and trailing edges again.
+    DarlingLayoutInputsChanged();
+    for (NSWindow *window in [self windows]) {
+        [[window contentView] setNeedsLayout: YES];
+        [[window contentView] setNeedsDisplay: YES];
+    }
+}
+
+- (NSUserInterfaceLayoutDirection) userInterfaceLayoutDirection {
+    if (cachedLayoutDirection < 0) {
+        NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
+        [center addObserver: self
+                   selector: @selector(_layoutDirectionInputsDidChange:)
+                       name: NSUserDefaultsDidChangeNotification
+                     object: nil];
+        [center addObserver: self
+                   selector: @selector(_layoutDirectionInputsDidChange:)
+                       name: NSCurrentLocaleDidChangeNotification
+                     object: nil];
+        cachedLayoutDirection = computeLayoutDirection();
+    }
+    return (NSUserInterfaceLayoutDirection) cachedLayoutDirection;
 }
 
 + (NSApplication *) sharedApplication {
@@ -1005,14 +1046,23 @@ static void _propagateAppearanceChangeToView(NSView *view) {
     [image setName: NSImageNameApplicationIcon];
 }
 
+// Until the program sets one, the policy is what the bundle declares (LSUIElement: accessory,
+// LSBackgroundOnly: prohibited; see -[NSRunningApplication activationPolicy]); a program without a
+// bundle is a regular application.
 - (NSApplicationActivationPolicy) activationPolicy {
-    // TODO: Implement
-    return NSApplicationActivationPolicyRegular;
+    if (NS_EXTRA(NSApplication, self)->_activationPolicySet)
+        return (NSApplicationActivationPolicy) NS_EXTRA(NSApplication, self)->_activationPolicy;
+    return [[NSRunningApplication currentApplication] activationPolicy];
 }
 
 - (BOOL) setActivationPolicy: (NSApplicationActivationPolicy) activationPolicy {
-    // TODO: Implement
-    return NO;
+    if (activationPolicy != NSApplicationActivationPolicyRegular &&
+        activationPolicy != NSApplicationActivationPolicyAccessory &&
+        activationPolicy != NSApplicationActivationPolicyProhibited)
+        return NO;
+    NS_EXTRA(NSApplication, self)->_activationPolicy = activationPolicy;
+    NS_EXTRA(NSApplication, self)->_activationPolicySet = YES;
+    return YES;
 }
 
 - (void) setWindowsMenu: (NSMenu *) menu {
@@ -1184,6 +1234,12 @@ static void _propagateAppearanceChangeToView(NSView *view) {
     NS_HANDLER [self reportException: localException];
     NS_ENDHANDLER
 
+    // Saved windows are recreated here: after the delegate's applicationWillFinishLaunching:
+    // and before applicationDidFinishLaunching:.
+    NS_DURING [self _restoreWindowsFromSavedState];
+    NS_HANDLER [self reportException: localException];
+    NS_ENDHANDLER
+
     // Give us a first event
     [NSTimer scheduledTimerWithTimeInterval: 0.1
                                      target: self
@@ -1295,6 +1351,11 @@ static void _propagateAppearanceChangeToView(NSView *view) {
                                           dictionaryWithObject: [NSNumber
                                                                         numberWithBool: isDefault]
                                                         forKey: NSApplicationLaunchIsDefaultLaunchKey]];
+    NS_HANDLER [self reportException: localException];
+    NS_ENDHANDLER
+
+    // The recreated windows receive their saved state once the delegate has been told.
+    NS_DURING [self _finishRestoringWindowsAfterLaunch];
     NS_HANDLER [self reportException: localException];
     NS_ENDHANDLER
 
@@ -1691,6 +1752,16 @@ static void _propagateAppearanceChangeToView(NSView *view) {
     [_windows makeObjectsPerformSelector: @selector(update)];
 }
 
+// Whether a window of this application may ask the window system for the input focus now. Ordering a
+// window in and making it key does not make an inactive application the active one (activation is
+// -activateIgnoringOtherApps:, or the user choosing one of its windows), so once launching is over an
+// application that is not active leaves the focus where it is.
+static BOOL activationInProgress;
+
+- (BOOL) _mayTakeInputFocus {
+    return !launchComplete || activationInProgress || [self isActive];
+}
+
 // Unless the display backend activates the process itself, activating means
 // making a window key again, which asks the platform for input focus: the key
 // window, else the main window, else the frontmost window that can become key.
@@ -1718,10 +1789,12 @@ static void _propagateAppearanceChangeToView(NSView *view) {
         }
     }
 
+    activationInProgress = YES;
     if (window != nil)
         [window makeKeyAndOrderFront: self];
     else
         [self _becomeActive];
+    activationInProgress = NO;
 }
 
 - (void) activate {
@@ -2091,6 +2164,11 @@ static BOOL isModalWindowOrItsSheet(NSWindow *window, NSWindow *modalWindow) {
 }
 
 - (void) terminate: sender {
+    // The windows are saved before the documents close them.
+    NS_DURING [self _saveRestorableStateForTermination];
+    NS_HANDLER [self reportException: localException];
+    NS_ENDHANDLER
+
     [[NSDocumentController sharedDocumentController]
             closeAllDocumentsWithDelegate: self
                       didCloseAllSelector: @selector
@@ -2589,6 +2667,49 @@ BOOL NSApplicationLoad(void) {
         if (stop)
             break;
     }
+}
+
+@end
+
+@implementation NSApplication (NSWindowRestoration)
+
+- (void) encodeRestorableStateWithCoder: (NSCoder *) coder {
+    [super encodeRestorableStateWithCoder: coder];
+    id delegate = [self delegate];
+    if ([delegate respondsToSelector: @selector(application:willEncodeRestorableState:)])
+        [delegate application: self willEncodeRestorableState: coder];
+}
+
+- (void) restoreStateWithCoder: (NSCoder *) coder {
+    [super restoreStateWithCoder: coder];
+    id delegate = [self delegate];
+    if ([delegate respondsToSelector: @selector(application:didDecodeRestorableState:)])
+        [delegate application: self didDecodeRestorableState: coder];
+}
+
+- (BOOL) restoreWindowWithIdentifier: (NSString *) identifier
+                               state: (NSCoder *) state
+                   completionHandler: (void (^)(NSWindow *window, NSError *error)) completionHandler
+{
+    Class restorationClass = [NSWindow _restorationClassFromState: state];
+    SEL selector = @selector(restoreWindowWithIdentifier:state:completionHandler:);
+    if (restorationClass == Nil || ![restorationClass respondsToSelector: selector])
+        return NO;
+    [(Class<NSWindowRestoration>) restorationClass restoreWindowWithIdentifier: identifier
+                                                                         state: state
+                                                             completionHandler: completionHandler];
+    return YES;
+}
+
+// The restoration phase at launch ends when no restoration class is outstanding; extending it
+// holds NSApplicationDidFinishRestoringWindowsNotification back until -completeStateRestoration.
+// Outside that phase they do nothing.
+- (void) extendStateRestoration {
+    [self _extendStateRestoration];
+}
+
+- (void) completeStateRestoration {
+    [self _completeStateRestoration];
 }
 
 @end

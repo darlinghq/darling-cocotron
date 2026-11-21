@@ -20,11 +20,25 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSSearchField.h>
 #import <AppKit/NSSearchFieldCell.h>
 #import <AppKit/NSBezierPath.h>
+#import <objc/runtime.h>
+
+// centersPlaceholder lives outside the instance: the ivar layout is fixed
+static char centersPlaceholderKey;
+
+@interface NSSearchFieldCell (NSSearchFieldLayout)
+- (NSRect) _searchTextRectForBounds: (NSRect) rect;
+- (NSRect) _searchButtonRectForBounds: (NSRect) rect;
+@end
 
 @implementation NSSearchField
 
 + (Class) cellClass {
     return [NSSearchFieldCell class];
+}
+
+// A new search field draws no background of its own (macOS 10.14.4).
+- (void) _setDefaultBackground {
+    [[self cell] setDrawsBackground: NO];
 }
 
 // The ring follows the rounded corners of the search field's bezel (see NSSearchFieldCell).
@@ -98,6 +112,33 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (void) setSearchMenuTemplate: (NSMenu *) menu {
     [[self _searchCell] setSearchMenuTemplate: menu];
+}
+
+- (BOOL) centersPlaceholder {
+    return [objc_getAssociatedObject(self, &centersPlaceholderKey) boolValue];
+}
+
+- (void) setCentersPlaceholder: (BOOL) flag {
+    objc_setAssociatedObject(self, &centersPlaceholderKey, flag ? @YES : nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    [self setNeedsDisplay: YES];
+}
+
+// The parts are where the cell lays them out in the field's bounds.
+// QUIRK: the centred layout is the same as the other one: both are returned
+// for either argument, whatever centersPlaceholder, the placeholder and the
+// text are. Not documented. Evidence: black-box observation on macOS 10.14.4
+// and 26.7.3 (tier 2). Test: tests/appkit-searchfield-centered-rects.m
+// The cell in turn asks these methods for the text and search button.
+- (NSRect) rectForSearchTextWhenCentered: (BOOL) isCentered {
+    return [[self _searchCell] _searchTextRectForBounds: [self bounds]];
+}
+
+- (NSRect) rectForSearchButtonWhenCentered: (BOOL) isCentered {
+    return [[self _searchCell] _searchButtonRectForBounds: [self bounds]];
+}
+
+- (NSRect) rectForCancelButtonWhenCentered: (BOOL) isCentered {
+    return [[self _searchCell] cancelButtonRectForBounds: [self bounds]];
 }
 
 // The delegate hears that searching started when the field's text becomes

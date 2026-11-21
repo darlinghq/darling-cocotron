@@ -43,6 +43,7 @@ APPKIT_EXPORT NSString *const NSNibTopLevelObjects;
 - initWithCoder: (NSCoder *) coder;
 - initWithContentsOfURL: (NSURL *) url;
 - initWithNibNamed: (NSNibName) name bundle: (NSBundle *) bundle;
+- (instancetype) initWithNibData: (NSData *) data bundle: (NSBundle *) bundle;
 
 - (BOOL) instantiateNibWithExternalNameTable: (NSDictionary *) nameTable;
 - (BOOL) instantiateNibWithOwner: owner topLevelObjects: (NSArray **) objects;

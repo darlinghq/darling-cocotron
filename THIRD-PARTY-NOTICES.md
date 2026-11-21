@@ -12,6 +12,15 @@ and the licence.
 - Licence: the permission notice at the top of the file (a permissive notice allowing use, copying,
   modification, distribution and sale without fee, provided the notice is kept).
 
+## plasma-shell.xml
+
+- Location: `CoreGraphics/WaylandSupport/protocols/plasma-shell.xml`
+- Source: https://invent.kde.org/libraries/plasma-wayland-protocols (`src/protocols/plasma-shell.xml`)
+- Commit: cd65734cccdf2c60b2e446b0e6416400e697755d
+- Copyright: 2013-2014 Pier Luigi Fiorini
+- Licence: LGPL-2.1-or-later. The file is kept unmodified; `wayland-scanner` generates the interface tables
+  from it at build time (as for the other protocol files, the generated code carries the file's notice).
+
 ## DejaVuSans.ttf
 
 - Location: `tests/fixtures/fonts/DejaVuSans.ttf`, licence text in `tests/fixtures/fonts/DejaVu-LICENSE.txt`

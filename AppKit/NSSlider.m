@@ -20,6 +20,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSSlider.h>
 #import <AppKit/AppKitIvarLayout.h>
 
+@interface NSSliderCell (NSSliderOrientation)
+- (void) _setOrientationFromFrame: (NSRect) frame;
+@end
+
 @interface NSSliderAccessory : NSObject {
     NS_LEGACY_IVAR_PAD(_NSSliderAccessoryReserved, 28)
 }
@@ -28,15 +32,59 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 @interface NSSliderAccessoryBehavior : NSObject
 @end
 
+@interface NSSliderCell (NSSliderVertical)
+- (void) _setVerticalForSize: (NSSize) size;
+@end
+
 @implementation NSSlider
 
 + (Class) cellClass {
     return [NSSliderCell class];
 }
 
+- initWithFrame: (NSRect) frame {
+    if ((self = [super initWithFrame: frame]) == nil)
+        return nil;
+    // A new slider reports its orientation before it is drawn (macOS 26.7.3): taller than wide is vertical.
+    if ([[self cell] respondsToSelector: @selector(_setOrientationFromFrame:)])
+        [[self cell] _setOrientationFromFrame: frame];
+    return self;
+}
+
 // Sliders are flipped views on macOS 10.14.4 and 26.7.3; the cell mirrors its drawing to match.
 - (BOOL) isFlipped {
     return YES;
+}
+
+// Like macOS, a slider knows whether it is vertical from its frame before it is first drawn.
+- (void) setFrameSize: (NSSize) size {
+    [super setFrameSize: size];
+    if ([[self cell] isKindOfClass: [NSSliderCell class]])
+        [(NSSliderCell *) [self cell] _setVerticalForSize: size];
+}
+
+// QUIRK: the intrinsic size of a linear slider has no length and is 15, 13 or 12 points thick for the regular, small
+// and mini control sizes (21, 18 or 15 with tick marks below and 22, 17 or 15 above a horizontal slider; 22, 18 or 15 right and 21, 17
+// or 15 left of a vertical one);
+// a circular slider's is 24 x 24 points (18 x 18 for the small size). Not documented. Evidence: black-box
+// observation on macOS 10.14.4 (tier 2). Test: test_quirk_slider_cell_size in tests/appkit-small-controls-aqua.m
+- (NSSize) intrinsicContentSize {
+    NSSliderCell *cell = [self cell];
+    NSControlSize size = [cell controlSize];
+    int z = size == NSSmallControlSize ? 1 : (size == NSMiniControlSize ? 2 : 0);
+
+    if (![cell isKindOfClass: [NSSliderCell class]])
+        return [super intrinsicContentSize];
+    if ([cell sliderType] == NSCircularSlider)
+        return z == 1 ? NSMakeSize(18, 18) : NSMakeSize(24, 24);
+
+    // [no tick marks, horizontal below, horizontal above, vertical right, vertical left][control size]
+    static const CGFloat thickness[5][3] = {{15, 13, 12}, {21, 18, 15}, {22, 17, 15}, {22, 18, 15}, {21, 17, 15}};
+    int t = [cell numberOfTickMarks] <= 0 ? 0 : ([cell tickMarkPosition] == NSTickMarkBelow ? 1 : 2);
+    BOOL vertical = NSHeight([self bounds]) > NSWidth([self bounds]);
+    CGFloat t2 = thickness[vertical && t ? t + 2 : t][z];
+
+    return vertical ? NSMakeSize(t2, NSViewNoIntrinsicMetric) : NSMakeSize(NSViewNoIntrinsicMetric, t2);
 }
 
 - (double) minValue {
@@ -102,6 +150,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (NSInteger) isVertical {
     return [[self selectedCell] isVertical];
+}
+
+- (void) setVertical: (BOOL) vertical {
+    [[self selectedCell] setVertical: vertical];
+    [self invalidateIntrinsicContentSize];
+    [self setNeedsDisplay: YES];
 }
 
 - (NSInteger) indexOfTickMarkAtPoint: (NSPoint) point {

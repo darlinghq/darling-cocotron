@@ -141,6 +141,10 @@ static void _initializeDynamicSystemColors(void);
     return result;
 }
 
++ (BOOL) supportsSecureCoding {
+    return YES;
+}
+
 - (void) encodeWithCoder: (NSCoder *) coder {
 
     if ([coder allowsKeyedCoding]) {
@@ -209,7 +213,10 @@ static void _initializeDynamicSystemColors(void);
                          forKey: @"NSCatalogName"];
             [coder encodeObject: [self colorNameComponent]
                          forKey: @"NSColorName"];
-            // FIXME: encode @"NSColor"
+            // What the color stands for, for a reader that does not know the catalog
+            NSColor *fallback = [self colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
+            if (fallback != nil && fallback != self)
+                [coder encodeObject: fallback forKey: @"NSColor"];
         }
 
     } else {
@@ -410,9 +417,9 @@ static void _initializeDynamicSystemColors(void);
         NSColor *color;
 
         if (keyed != nil) {
-            catalogName = [keyed decodeObjectForKey: @"NSCatalogName"];
-            colorName = [keyed decodeObjectForKey: @"NSColorName"];
-            color = [keyed decodeObjectForKey: @"NSColor"];
+            catalogName = [keyed decodeObjectOfClass: [NSString class] forKey: @"NSCatalogName"];
+            colorName = [keyed decodeObjectOfClass: [NSString class] forKey: @"NSColorName"];
+            color = [keyed decodeObjectOfClass: [NSColor class] forKey: @"NSColor"];
         } else {
             [coder decodeValuesOfObjCTypes: "@@@", &catalogName, &colorName,
                                             &color];
@@ -746,8 +753,8 @@ static void _initializeDynamicSystemColors(void) {
     registerDynamicSystemColor(@"textColor", constantWhite(0.0, 1.0), constantWhite(1.0, 1.0));
     registerDynamicSystemColor(@"textBackgroundColor", constantWhite(1.0, 1.0), constantRGB(0.12, 0.12, 0.12, 1.0));
     registerDynamicSystemColor(@"controlColor", [NSColor colorWithCalibratedWhite: 0.93 alpha: 1.0], constantRGB(0.20, 0.20, 0.20, 1.0));
-    registerDynamicSystemColor(@"controlTextColor", constantWhite(0.0, 1.0), constantWhite(1.0, 1.0));
-    registerDynamicSystemColor(@"selectedControlTextColor", constantWhite(0.0, 1.0), constantWhite(1.0, 1.0));
+    registerDynamicSystemColor(@"controlTextColor", [NSColor colorWithSRGBRed: 0.0f green: 0.0f blue: 0.0f alpha: 0.847059f], constantWhite(1.0, 1.0));
+    registerDynamicSystemColor(@"selectedControlTextColor", [NSColor colorWithSRGBRed: 0.0f green: 0.0f blue: 0.0f alpha: 0.847059f], constantWhite(1.0, 1.0));
     registerDynamicSystemColor(@"controlBackgroundColor", constantWhite(1.0, 1.0), constantRGB(0.15, 0.15, 0.15, 1.0));
     registerDynamicSystemColor(@"labelColor", [NSColor colorWithSRGBRed: 0.0f green: 0.0f blue: 0.0f alpha: 0.847059f],
                                             [NSColor colorWithSRGBRed: 1.0f green: 1.0f blue: 1.0f alpha: 0.847059f]);

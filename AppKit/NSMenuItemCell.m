@@ -18,6 +18,11 @@
  */
 
  #import <AppKit/NSMenuItemCell.h>
+ #import <AppKit/NSAttributedString.h>
+ #import <AppKit/NSFont.h>
+ #import <AppKit/NSImage.h>
+ #import <AppKit/NSMenuItem.h>
+ #import <AppKit/NSStringDrawing.h>
 
  @implementation NSMenuItemCell
 
@@ -52,6 +57,50 @@
  - (void) dealloc {
     [_menuItem release];
     [super dealloc];
+}
+
+// The widths of the parts of a menu item as the cell lays them out: state
+// column, image, title and key equivalent. A cell without a menu item has
+// none of them. The values follow what macOS 26.7.3 reports for cells not
+// drawn by a menu view.
+
+// The state column takes 18 points whatever the font, or the width of the
+// widest state image the item has, if that is more.
+- (CGFloat) stateImageWidth {
+    NSMenuItem *item = [self menuItem];
+    if (item == nil)
+        return 0;
+    CGFloat width = 18;
+    width = MAX(width, [[item onStateImage] size].width);
+    width = MAX(width, [[item offStateImage] size].width);
+    width = MAX(width, [[item mixedStateImage] size].width);
+    return width;
+}
+
+- (CGFloat) imageWidth {
+    NSImage *image = [[self menuItem] image];
+    return image != nil ? [image size].width : 0;
+}
+
+// The width of the title in the cell's font, with 2 points of margin on
+// each side.
+- (CGFloat) titleWidth {
+    NSMenuItem *item = [self menuItem];
+    if (item == nil)
+        return 0;
+    NSAttributedString *attributed = [item attributedTitle];
+    if (attributed != nil)
+        return [attributed size].width + 4;
+    NSString *title = [item title];
+    NSFont *font = [self font];
+    NSDictionary *attributes = font != nil ? [NSDictionary dictionaryWithObject: font forKey: NSFontAttributeName] : nil;
+    return [title sizeWithAttributes: attributes].width + 4;
+}
+
+// Key equivalents are shown only in menus, which draw their items
+// themselves; a cell on its own leaves no room for one.
+- (CGFloat) keyEquivalentWidth {
+    return 0;
 }
 
  @end

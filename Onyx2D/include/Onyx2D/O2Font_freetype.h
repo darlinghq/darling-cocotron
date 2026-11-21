@@ -32,14 +32,51 @@
     O2Encoding *_winAnsiEncoding;
     NSMutableDictionary *_glyphCache;
     NSUInteger _glyphCacheBytes;
+    // Where the face was opened from, so a copy with other variation settings
+    // can open its own face: a font file (host path) and face index, or the
+    // font data in _faceData.
+    NSString *_sourcePath;
+    int _sourceFaceIndex;
+    // Tag (NSNumber, the four characters as a 32-bit integer) to value
+    // (NSNumber) of the variation axes this font was explicitly set to.
+    NSDictionary *_variation;
 }
 
 - (instancetype) initWithFace: (FT_Face) face;
 - (instancetype) initWithDataProvider: (O2DataProviderRef) provider;
+- (instancetype) initWithDataProvider: (O2DataProviderRef) provider
+                            faceIndex: (int) faceIndex;
 
 - (FT_Face) face;
 
+/* Variable font support (an OpenType fvar table). The axes are described by
+ * dictionaries with the keys @"tag" (NSNumber, the four characters as a 32-bit
+ * integer), @"minimum", @"maximum", @"default" (NSNumber double), @"name"
+ * (NSString, may be missing) and @"hidden" (NSNumber BOOL). Returns nil when
+ * the font has no variation axes. The caller owns the result. */
+- (NSArray *) copyVariationAxes;
+
+/* The axes explicitly set on this font, tag to value; an empty dictionary for a
+ * variable font at its defaults, nil for a font without variation axes. The
+ * caller owns the result. */
+- (NSDictionary *) copyVariationSettings;
+
+/* An owned font like this one with the given axes (tag to value) set on top of
+ * the current settings. Tags that are not axes of the font are ignored and
+ * values are clamped to the axis range. Returns nil when the font has no
+ * variation axes or cannot be reopened. */
+- (O2Font_freetype *) copyWithVariation: (NSDictionary *) variation;
+
 FT_Face O2FontFreeTypeFace(O2Font_freetype *self);
+
+/* An owned font for one face of font data that holds several: a font
+ * collection (TrueType/OpenType) or a font suitcase. Returns NULL for an index
+ * outside the data or data that is no font. */
+O2FontRef O2FontCreateWithDataProviderAndFaceIndex(O2DataProviderRef provider, int faceIndex);
+
+/* How many faces FreeType finds in font data (1 for a plain font file, 0 for
+ * data that is no font). */
+long O2FontFaceCountOfData(const void *bytes, size_t length);
 
 FT_Library O2FontSharedFreeTypeLibrary();
 FcConfig *O2FontSharedFontConfig();

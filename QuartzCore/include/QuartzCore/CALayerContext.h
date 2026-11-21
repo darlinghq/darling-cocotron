@@ -21,6 +21,7 @@
     void* _cglWindow;
     BOOL _ownsCglWindow;
     BOOL _renderRequested;
+    BOOL _hidden;
     // The swap interval last set for the Metal layers in the tree, or -1.
     GLint _swapInterval;
     BOOL _renderInProgress;

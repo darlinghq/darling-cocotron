@@ -72,7 +72,8 @@ enum {
     BOOL _runsModeless;
     id _modelessCompletionHandler;
     NSArray *_allowedContentTypes;
-    NS_LEGACY_IVAR_PAD(_NSSavePanelReserved1, 44)
+    BOOL _canCreateDirectories;
+    NS_LEGACY_IVAR_PAD(_NSSavePanelReserved1, 43)
 }
 
 @property (copy) NSString *nameFieldStringValue;
@@ -107,7 +108,8 @@ enum {
 
 @property(nullable, nonatomic, copy) NSArray<NSString *> *allowedFileTypes;
 
-- (void) setCanCreateDirectories: (BOOL) value;
+// Stored only: the panel has no button for making a new folder.
+@property BOOL canCreateDirectories;
 // UTType objects (macOS 11). Setting them also sets allowedFileTypes to their
 // preferred filename extensions, or nil (any file) when none has one.
 @property(nonatomic, copy) NSArray *allowedContentTypes;

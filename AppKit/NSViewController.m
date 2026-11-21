@@ -1,8 +1,29 @@
+#import <objc/message.h>
 #import <AppKit/NSNib.h>
 #import <AppKit/NSNibLoading.h>
 #import <AppKit/NSRaise.h>
 #import <AppKit/NSStoryboard-Private.h>
 #import <AppKit/NSViewController.h>
+#import <AppKit/NSViewController-Private.h>
+#import <AppKit/NSView.h>
+#import <AppKit/NSWindow.h>
+
+// How many views have a controller. While it is zero the appearance
+// bookkeeping has nothing to look for and skips walking view hierarchies.
+static NSUInteger linkedViewCount;
+
+static void unlinkView(NSViewController *controller, NSView *view) {
+    if (view != nil && [view _viewController] == controller) {
+        [view _setViewController: nil];
+        linkedViewCount--;
+    }
+}
+
+@interface NSBundle (NSNibLoadingPath)
+- (BOOL) _loadNibAtPath: (NSString *) path
+        externalNameTable: (NSDictionary *) nameTable
+                 withZone: (NSZone *) zone;
+@end
 
 @implementation NSViewController
 
@@ -49,12 +70,14 @@ NS_EXTRA_SYNTHESIZE_COPY(NSViewController, identifier, _identifier, NSUserInterf
 }
 
 - (void) dealloc {
+    unlinkView(self, _view);
     [NS_EXTRA(NSViewController, self)->_externalObjectsTableForViewLoading release];
     [NS_EXTRA(NSViewController, self)->_identifier release];
     for (NSViewController *child in NS_EXTRA(NSViewController, self)->_childViewControllers)
         NS_EXTRA(NSViewController, child)->_parentViewController = nil;
     [NS_EXTRA(NSViewController, self)->_childViewControllers release];
     [NS_EXTRA(NSViewController, self)->_storyboard release];
+    [NS_EXTRA(NSViewController, self)->_editors release];
 
     NS_EXTRA_FREE(NSViewController, self);
     [super dealloc];
@@ -93,6 +116,18 @@ NS_EXTRA_SYNTHESIZE_COPY(NSViewController, identifier, _identifier, NSUserInterf
 - (void) viewDidLoad {
 }
 
+- (void) viewWillAppear {
+}
+
+- (void) viewDidAppear {
+}
+
+- (void) viewWillDisappear {
+}
+
+- (void) viewDidDisappear {
+}
+
 - (BOOL) isViewLoaded {
     return _view != nil;
 }
@@ -123,8 +158,14 @@ NS_EXTRA_SYNTHESIZE_COPY(NSViewController, identifier, _identifier, NSUserInterf
 
 - (void) setView: (NSView *) value {
     value = [value retain];
+    unlinkView(self, _view);
     [_view release];
     _view = value;
+    if (_view != nil) {
+        if ([_view _viewController] == nil)
+            linkedViewCount++;
+        [_view _setViewController: self];
+    }
 }
 
 - (NSArray *) childViewControllers {
@@ -222,23 +263,162 @@ NS_EXTRA_SYNTHESIZE_COPY(NSViewController, identifier, _identifier, NSUserInterf
         NSLog(@"NSViewController unable to find nib named %@, bundle=%@", name,
               bundle);
 
-    [bundle loadNibFile: path externalNameTable: nameTable withZone: NULL];
+    // The path is resolved already; the bundle still supplies the nib's resources.
+    [bundle _loadNibAtPath: path externalNameTable: nameTable withZone: NULL];
+}
+
+// The editors are the objects that announced uncommitted changes with -objectDidBeginEditing:, normally the
+// controls bound to the view controller's content. An editor takes itself off the list with
+// -objectDidEndEditing: once it has committed or discarded.
+- (void) objectDidBeginEditing: (id) editor {
+    if (editor == nil)
+        return;
+    if (NS_EXTRA(NSViewController, self)->_editors == nil)
+        NS_EXTRA(NSViewController, self)->_editors = [[NSMutableArray alloc] init];
+    [NS_EXTRA(NSViewController, self)->_editors addObject: editor];
+}
+
+- (void) objectDidEndEditing: (id) editor {
+    NSMutableArray *editors = NS_EXTRA(NSViewController, self)->_editors;
+    NSUInteger index = [editors indexOfObjectIdenticalTo: editor];
+    if (index != NSNotFound)
+        [editors removeObjectAtIndex: index];
 }
 
 - (void) discardEditing {
-    NSUnimplementedMethod();
+    // An editor may remove itself while it discards, so walk a snapshot.
+    for (id editor in [[NS_EXTRA(NSViewController, self)->_editors copy] autorelease])
+        [editor discardEditing];
 }
 
+// QUIRK: the editors are asked to commit most recently registered first, and the first one that refuses
+// stops the pass (the editors not asked yet keep their uncommitted changes). Not documented. Evidence: black-box
+// observation on macOS 26.7.3, x86_64 (tier 2): with a refusing editor registered after a committing one only the
+// refusing one was asked and -commitEditing returned NO; registered the other way round both were asked.
+// Test: viewcontroller-commit-editing.m (test_quirk_commit_order). YES when nothing is being edited.
 - (BOOL) commitEditing {
-    NSUnimplementedMethod();
-    return NO;
+    for (id editor in [[[NS_EXTRA(NSViewController, self)->_editors copy] autorelease] reverseObjectEnumerator]) {
+        if (![editor commitEditing])
+            return NO;
+    }
+    return YES;
 }
 
 - (void) commitEditingWithDelegate: delegate
                  didCommitSelector: (SEL) didCommitSelector
                        contextInfo: (void *) contextInfo
 {
-    NSUnimplementedMethod();
+    BOOL committed = [self commitEditing];
+
+    if (delegate != nil && didCommitSelector != NULL) {
+        // The selector has the form -editor:didCommit:contextInfo:.
+        void (*send)(id, SEL, id, BOOL, void *) = (void (*)(id, SEL, id, BOOL, void *)) objc_msgSend;
+        send(delegate, didCommitSelector, self, committed, contextInfo);
+    }
+}
+
+// Like -commitEditing (same order, stops at the first refusal), asking each editor for its error where it can
+// give one.
+- (BOOL) commitEditingAndReturnError: (NSError **) error {
+    for (id editor in [[[NS_EXTRA(NSViewController, self)->_editors copy] autorelease] reverseObjectEnumerator]) {
+        BOOL committed = [editor respondsToSelector: @selector(commitEditingAndReturnError:)]
+                ? [editor commitEditingAndReturnError: error]
+                : [editor commitEditing];
+        if (!committed)
+            return NO;
+    }
+    return YES;
+}
+
+@end
+
+static BOOL hiddenInHierarchy(NSView *view, NSView *root, NSView *rootSuperview,
+                              BOOL useRootHidden, BOOL rootHidden) {
+    for (NSView *v = view; v != nil;) {
+        if (v == root) {
+            if (useRootHidden ? rootHidden : [v isHidden])
+                return YES;
+            v = rootSuperview;
+        } else {
+            if ([v isHidden])
+                return YES;
+            v = [v superview];
+        }
+    }
+    return NO;
+}
+
+static void collectTransitions(NSView *view, NSView *root, NSWindow *window, BOOL visible,
+                               NSView *rootSuperview, BOOL useRootHidden, BOOL rootHidden,
+                               NSMutableArray **list) {
+    NSViewController *controller = [view _viewController];
+    if (controller != nil) {
+        BOOL target = visible && window != nil &&
+                      !hiddenInHierarchy(view, root, rootSuperview, useRootHidden, rootHidden);
+        if (target != [controller _appeared]) {
+            if (*list == nil)
+                *list = [NSMutableArray array];
+            [*list addObject: controller];
+            [*list addObject: [NSNumber numberWithBool: target]];
+        }
+    }
+    for (NSView *subview in [view subviews])
+        collectTransitions(subview, root, window, visible, rootSuperview, useRootHidden,
+                           rootHidden, list);
+}
+
+@implementation NSViewController (NSViewController_appearance)
+
+- (BOOL) _appeared {
+    return NS_EXTRA(NSViewController, self)->_appeared;
+}
+
+- (void) _setAppeared: (BOOL) appeared {
+    NS_EXTRA(NSViewController, self)->_appeared = appeared;
+}
+
++ (NSArray *) _appearanceTransitionsUnder: (NSView *) root
+                                   window: (NSWindow *) window
+                            windowVisible: (BOOL) visible
+                            rootSuperview: (NSView *) rootSuperview
+                            useRootHidden: (BOOL) useRootHidden
+                                rootHidden: (BOOL) rootHidden
+{
+    if (linkedViewCount == 0 || root == nil)
+        return nil;
+    NSMutableArray *list = nil;
+    collectTransitions(root, root, window, visible, rootSuperview, useRootHidden, rootHidden,
+                       &list);
+    return list;
+}
+
+// The list alternates controller, target state. The state is recorded before the
+// first callback so that anything the callbacks trigger sees the new one.
++ (void) _willPerformAppearanceTransitions: (NSArray *) transitions {
+    NSUInteger count = [transitions count];
+    for (NSUInteger i = 0; i < count; i += 2) {
+        NSViewController *controller = [transitions objectAtIndex: i];
+        BOOL target = [[transitions objectAtIndex: i + 1] boolValue];
+        [controller _setAppeared: target];
+    }
+    for (NSUInteger i = 0; i < count; i += 2) {
+        NSViewController *controller = [transitions objectAtIndex: i];
+        if ([[transitions objectAtIndex: i + 1] boolValue])
+            [controller viewWillAppear];
+        else
+            [controller viewWillDisappear];
+    }
+}
+
++ (void) _didPerformAppearanceTransitions: (NSArray *) transitions {
+    NSUInteger count = [transitions count];
+    for (NSUInteger i = 0; i < count; i += 2) {
+        NSViewController *controller = [transitions objectAtIndex: i];
+        if ([[transitions objectAtIndex: i + 1] boolValue])
+            [controller viewDidAppear];
+        else
+            [controller viewDidDisappear];
+    }
 }
 
 @end

@@ -29,18 +29,34 @@
 @interface KTFontDescriptor : NSObject <NSCopying> {
     NSDictionary *_attributes;
     NSData *_fontData;
+    int _faceIndex;
 }
 
 - initWithAttributes: (NSDictionary *) attributes fontData: (NSData *) data;
+- initWithAttributes: (NSDictionary *) attributes
+            fontData: (NSData *) data
+           faceIndex: (int) faceIndex;
 
 - (NSDictionary *) attributes;
 - (NSData *) fontData;
+// Which face of the font data the descriptor describes: the data of a font
+// collection or a font suitcase holds several.
+- (int) faceIndex;
 
 @end
 
 __attribute__((visibility("hidden")))
 CTFontDescriptorRef KTFontDescriptorCreateWithFontData(CFDictionaryRef attributes,
                                                        CFDataRef data);
+
+__attribute__((visibility("hidden")))
+CTFontDescriptorRef KTFontDescriptorCreateWithFontDataAndFaceIndex(CFDictionaryRef attributes,
+                                                                   CFDataRef data,
+                                                                   int faceIndex);
+
+// The face of the font data the descriptor describes; 0 without font data.
+__attribute__((visibility("hidden")))
+int KTFontDescriptorGetFaceIndex(CTFontDescriptorRef descriptor);
 
 // Returns NULL unless the descriptor was made from font data. Not retained.
 __attribute__((visibility("hidden")))

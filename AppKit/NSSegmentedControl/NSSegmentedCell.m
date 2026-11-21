@@ -17,6 +17,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#import "../NSImage+TemplateDrawing.h"
 #import "NSSegmentItem.h"
 #import <AppKit/NSButtonCell.h>
 #import <AppKit/NSGraphicsStyle.h>
@@ -32,13 +33,23 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @implementation NSSegmentedCell
 
-// For manually created segment cells
+static void initSegmentedCellState(NSSegmentedCell *self) {
+    self->_segments = [[NSMutableArray arrayWithCapacity: 5] retain];
+    self->_selectedSegment = NSNotFound;                    // initially empty
+    self->_trackingMode = NSSegmentSwitchTrackingSelectOne; // default
+}
+
+// For manually created segment cells. Like -[NSCell init], this does not go through
+// -initImageCell: or -initTextCell:.
+- (id) init {
+    if ((self = [super init]))
+        initSegmentedCellState(self);
+    return self;
+}
+
 - (id) initImageCell: (NSImage *) image {
-    if ((self = [super initImageCell: image])) {
-        _segments = [[NSMutableArray arrayWithCapacity: 5] retain];
-        _selectedSegment = NSNotFound;                    // initially empty
-        _trackingMode = NSSegmentSwitchTrackingSelectOne; // default
-    }
+    if ((self = [super initImageCell: image]))
+        initSegmentedCellState(self);
     return self;
 }
 
@@ -274,8 +285,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     NSButtonCell *cell = [[NSButtonCell new] autorelease];
     NSString *label = [segment label];
     [cell setTitle: label];
-    [cell setFont: [self font]];
     [cell setControlSize: [self controlSize]];
+    [cell setFont: [self _aquaFont]];
 
     [cell setHighlighted: [segment isSelected]];
 
@@ -283,6 +294,18 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [cell setEnabled: [self isEnabled]];
 
     NSImage *image = [segment image];
+    // QUIRK: a selected segment of a textured control that selects any number of segments and shows a template
+    // image keeps the bezel of the other segments and shows its image in the accent colour instead. Evidence:
+    // black-box renders of a textured rounded control with a template image on macOS 10.14.4 (tier 2): the
+    // selected segment's bezel is the same as an unselected one's, its glyph blue. Test:
+    // tests/appkit-template-image-tint.m (test_quirk_textured_segment_selected_template). Textured controls are
+    // drawn by -_drawTexturedWithFrame:inView:, which follows the same rule for labels.
+    if ([image isTemplate] && [segment isSelected] && [self isEnabled] &&
+        [self trackingMode] == NSSegmentSwitchTrackingSelectAny &&
+        (_style == NSSegmentStyleTexturedRounded || _style == NSSegmentStyleTexturedSquare)) {
+        [cell setHighlighted: NO];
+        image = [image _imageTintedWithColor: [NSColor controlAccentColor]];
+    }
     if (image) {
         [cell setImage: image];
         // a button cell is created as a text cell - so we need to say that we
@@ -321,16 +344,25 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         if (w <= 0.0) {
             NSCell *cell = [self _cellForSegment: i];
             w = [cell cellSize].width;
-            if ((_style == NSSegmentStyleAutomatic || _style == NSSegmentStyleRounded) && [segment image] == nil) {
+            if ((_style == NSSegmentStyleAutomatic || _style == NSSegmentStyleRounded || [self _isTextured]) &&
+                [segment image] == nil) {
                 // QUIRK: the automatic width of a text segment of a rounded control is the width of the
                 // label plus 30.5, 27 or 22.5 points (regular, small, mini). Not documented. Evidence:
                 // black-box renders on macOS 10.14.4 (tier 2): total widths of 162, 139 and 116 points for
                 // the labels One, Two and Three. Test: appkit-segmented-aqua.m
+                // QUIRK: the first and last segments of a textured control are 1 point narrower at the mini size,
+                // and those of a textured rounded control 2 points wider at the regular size (textured rounded: 166,
+                // 139 and 114 points for the same labels; textured square: 162, 139 and 114). Evidence: black-box
+                // renders on macOS 10.14.4 (tier 2), probe mac-probes/aqua-toolbar.m of the research notes.
+                // Test: appkit-toolbar-controls-aqua.m (test_quirk_textured_segments)
                 static const CGFloat padding[3] = {30.5, 27, 22.5};
+                CGFloat texturedEnds[3] = {_style == NSSegmentStyleTexturedRounded ? 2 : 0, 0, -1};
                 NSDictionary *attributes = [NSDictionary dictionaryWithObject: [self _aquaFont] forKey: NSFontAttributeName];
                 int index = [self controlSize] == NSSmallControlSize ? 1 : ([self controlSize] == NSMiniControlSize ? 2 : 0);
 
                 w = ceil([[segment label] sizeWithAttributes: attributes].width + padding[index]);
+                if ([self _isTextured] && (i == 0 || i == count - 1))
+                    w += texturedEnds[index];
             }
         }
         [_segmentComputedWidths addObject: [NSNumber numberWithDouble: w]];
@@ -405,8 +437,134 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                           range: NSMakeRange(0, [label length])];
             [cell setAttributedTitle: title];
         }
+        // a template image is drawn like the label: white on the selected segment, dark on the others
+        NSImage *image = [[_segments objectAtIndex: i] image];
+        if ([image isTemplate])
+            [cell setImage: [image _imageTintedWithColor: white ? [NSColor whiteColor]
+                                                                : [NSColor colorWithCalibratedWhite: 0.0 alpha: 0.8]]];
         [cell setHighlighted: NO];
         [cell setBordered: NO];
+        [cell setControlView: controlView];
+        [NSGraphicsContext saveGraphicsState];
+        NSRectClip(segmentFrame);
+        [cell drawInteriorWithFrame: segmentFrame inView: controlView];
+        [NSGraphicsContext restoreGraphicsState];
+        x += NSWidth(segmentFrame);
+    }
+}
+
+- (BOOL) _isTextured {
+    return _style == NSSegmentStyleTexturedRounded || _style == NSSegmentStyleTexturedSquare;
+}
+
+// QUIRK: a textured segmented control draws its bezel 23, 19 or 16 points high (regular, small, mini, with the
+// point below the bezel) and centres it vertically in a taller frame, the odd point going below. Not documented.
+// Evidence: black-box renders on macOS 10.14.4 (tier 2) in frames 14 to 32 points high, probes
+// mac-probes/aqua-toolbar.m and aqua-toolbar-2.m of the research notes.
+// Test: appkit-toolbar-controls-aqua.m (test_quirk_textured_segments)
+- (CGFloat) _texturedArtworkHeight {
+    static const CGFloat heights[3] = {23, 19, 16};
+
+    return heights[[self controlSize] == NSSmallControlSize ? 1 : ([self controlSize] == NSMiniControlSize ? 2 : 0)];
+}
+
+/* QUIRK: a textured segmented control draws one textured bezel across its segments, with separators between them.
+   In a control that selects one segment the selected segment shows the dark on look of a textured button and a white
+   label; in a control that selects any number of segments a selected segment keeps the light bezel and shows its
+   label in the accent colour; a momentary control shows no selection. Other labels are black at 65% (25% when the
+   control is disabled; a selected label is then white at 60%). Not documented. Evidence: black-box renders of
+   NSSegmentedControl on macOS 10.14.4 at 1x (tier 2), probes mac-probes/aqua-toolbar.m and aqua-toolbar-2.m of the
+   research notes. Test: appkit-toolbar-controls-aqua.m (test_quirk_textured_segments) */
+- (void) _drawTexturedWithFrame: (NSRect) cellFrame inView: (NSView *) controlView {
+    BOOL square = _style == NSSegmentStyleTexturedSquare;
+    BOOL flipped = [controlView isFlipped];
+    BOOL enabled = [self isEnabled];
+    NSSegmentSwitchTracking tracking = [self trackingMode];
+    NSGraphicsStyle *style = [controlView graphicsStyle];
+    CGContextRef context = [[NSGraphicsContext currentContext] graphicsPort];
+    int i, count = [self segmentCount];
+    CGFloat total = 0;
+
+    for (i = 0; i < count; i++)
+        total += [[_segmentComputedWidths objectAtIndex: i] doubleValue];
+
+    NSRect art = NSMakeRect(NSMinX(cellFrame), NSMinY(cellFrame), total, NSHeight(cellFrame));
+    if (!square) {
+        CGFloat height = [self _texturedArtworkHeight];
+        CGFloat above = floor((NSHeight(cellFrame) - height) / 2);
+
+        art.origin.y += flipped ? above : NSHeight(cellFrame) - height - above;
+        art.size.height = height;
+    }
+
+    // the style draws for a view that is not flipped: the bezel is mirrored about the artwork in a flipped view
+    NSRect interior = [style texturedBezelInteriorForRect: art square: square];
+    CGFloat x = NSMinX(art);
+    CGContextSaveGState(context);
+    if (flipped) {
+        CGContextTranslateCTM(context, 0, 2 * art.origin.y + art.size.height);
+        CGContextScaleCTM(context, 1, -1);
+    }
+    for (i = 0; i < count; i++) {
+        CGFloat width = [[_segmentComputedWidths objectAtIndex: i] doubleValue];
+        BOOL dark = tracking == NSSegmentSwitchTrackingSelectOne && [self isSelectedForSegment: i];
+
+        CGContextSaveGState(context);
+        CGContextClipToRect(context, NSMakeRect(x, NSMinY(art), width, NSHeight(art)));
+        [style drawTexturedBezelInRect: art square: square pressed: NO on: dark controlSize: [self controlSize]];
+        CGContextRestoreGState(context);
+        if (dark) {
+            if (i > 0)
+                [style drawTexturedSegmentSeparatorInRect: NSMakeRect(x, NSMinY(interior), 1, NSHeight(interior))];
+            if (i < count - 1)
+                [style drawTexturedSegmentSeparatorInRect: NSMakeRect(x + width - 1, NSMinY(interior), 1,
+                                                                      NSHeight(interior))];
+        } else if (i > 0 && !(tracking == NSSegmentSwitchTrackingSelectOne && [self isSelectedForSegment: i - 1]))
+            [style drawTexturedSegmentSeparatorInRect: NSMakeRect(x, NSMinY(interior), 1, NSHeight(interior))];
+        x += width;
+    }
+    CGContextRestoreGState(context);
+
+    // the labels and images, centred on the bezel without the point below it
+    NSRect body = art;
+    body.size.height -= 1;
+    if (!flipped)
+        body.origin.y += 1;
+    x = NSMinX(art);
+    for (i = 0; i < count; i++) {
+        NSSegmentItem *segment = [_segments objectAtIndex: i];
+        NSRect segmentFrame = NSMakeRect(x, NSMinY(body), [[_segmentComputedWidths objectAtIndex: i] doubleValue],
+                                         NSHeight(body));
+        BOOL selected = [self isSelectedForSegment: i];
+        NSColor *color;
+
+        if (selected && tracking == NSSegmentSwitchTrackingSelectOne)
+            color = [NSColor colorWithCalibratedWhite: 1 alpha: enabled ? 1 : 0.6];
+        else if (selected && tracking == NSSegmentSwitchTrackingSelectAny && enabled)
+            color = [NSColor controlAccentColor];
+        else
+            color = [NSColor colorWithCalibratedWhite: 0 alpha: enabled ? 0.65 : 0.25];
+
+        NSButtonCell *cell = [self _cellForSegment: i];
+        NSString *label = [segment label];
+
+        if ([label length] > 0) {
+            NSMutableAttributedString *title = [[[NSMutableAttributedString alloc] initWithString: label] autorelease];
+            NSMutableParagraphStyle *paragraph = [[[NSParagraphStyle defaultParagraphStyle] mutableCopy] autorelease];
+
+            [paragraph setAlignment: NSCenterTextAlignment];
+            [paragraph setLineBreakMode: NSLineBreakByTruncatingTail];
+            [title addAttribute: NSParagraphStyleAttributeName value: paragraph range: NSMakeRange(0, [label length])];
+            [title addAttribute: NSFontAttributeName value: [self _aquaFont] range: NSMakeRange(0, [label length])];
+            [title addAttribute: NSForegroundColorAttributeName value: color range: NSMakeRange(0, [label length])];
+            [cell setAttributedTitle: title];
+        }
+        NSImage *image = [segment image];
+        if ([image isTemplate])
+            [cell setImage: [image _imageTintedWithColor: color]];
+        [cell setHighlighted: NO];
+        [cell setBordered: NO];
+        [cell setEnabled: YES];
         [cell setControlView: controlView];
         [NSGraphicsContext saveGraphicsState];
         NSRectClip(segmentFrame);
@@ -426,6 +584,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
     if (_style == NSSegmentStyleAutomatic || _style == NSSegmentStyleRounded) {
         [self _drawAquaWithFrame: cellFrame inView: controlView];
+        _lastDrawRect = cellFrame;
+        return;
+    }
+    if ([self _isTextured]) {
+        [self _drawTexturedWithFrame: cellFrame inView: controlView];
         _lastDrawRect = cellFrame;
         return;
     }
@@ -459,6 +622,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         for (NSNumber *width in _segmentComputedWidths)
             cellSize.width += [width doubleValue];
         cellSize.height = heights[index] + 1;
+        return cellSize;
+    }
+    if ([self _isTextured] && [_segmentComputedWidths count] == [self segmentCount]) {
+        // as high as the textured bezel, see -_texturedArtworkHeight
+        for (NSNumber *width in _segmentComputedWidths)
+            cellSize.width += [width doubleValue];
+        cellSize.height = [self _texturedArtworkHeight];
         return cellSize;
     }
     for (int i = 0; i < [self segmentCount]; ++i) {

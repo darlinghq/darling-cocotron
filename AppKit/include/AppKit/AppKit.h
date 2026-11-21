@@ -236,6 +236,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSWindow.h>
 #import <AppKit/NSWindowController.h>
 #import <AppKit/NSWindowRestoration.h>
+#import <AppKit/NSWindowTabGroup.h>
 #import <AppKit/NSWorkspace.h>
 
 #import <ApplicationServices/ApplicationServices.h>

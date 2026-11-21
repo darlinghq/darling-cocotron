@@ -20,6 +20,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSApplication.h>
+#import <AppKit/NSViewController-Private.h>
 #import <AppKit/NSClipView.h>
 #import <AppKit/NSColor.h>
 #import <AppKit/NSCursor.h>
@@ -38,6 +39,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSScrollView.h>
 #import <AppKit/NSText.h>
 #import <AppKit/NSTrackingArea.h>
+#import <AppKit/NSAnimatorProxy.h>
 #import <AppKit/NSView.h>
 #import <AppKit/NSScreen.h>
 #import <AppKit/NSBitmapImageRep.h>
@@ -94,6 +96,8 @@ const NSViewFullScreenModeOptionKey NSFullScreenModeAllScreens =
 - (void) _synchronizeSublayerOrder;
 - (void) _updateLayerVisibility;
 - (void) _removeLayerFromSuperlayer;
+- (void) _createLayersInTreeIfNeeded;
+- (void) _removeLayerBackedViewsFromTree;
 @end
 
 @interface CADisplayLink (AppKitRefreshRate)
@@ -155,8 +159,28 @@ const NSViewFullScreenModeOptionKey NSFullScreenModeAllScreens =
 
 @implementation NSView
 
+// A view that has an identifier and invalidated its restorable state is asked to encode it
+// when the window's state is saved.
+- (void) invalidateRestorableState {
+    NS_EXTRA(NSView, self)->_restorableStateInvalidated = YES;
+    [super invalidateRestorableState];
+}
+
+- (BOOL) _hasInvalidatedRestorableState {
+    return NS_EXTRA(NSView, self)->_restorableStateInvalidated;
+}
+
 NS_EXTRA_SYNTHESIZE_COPY(NSView, identifier, _identifier, NSUserInterfaceItemIdentifier, identifier, setIdentifier:)
-NS_EXTRA_SYNTHESIZE_ASSIGN(NSView, translatesAutoresizingMaskIntoConstraints, _translatesAutoresizingMaskIntoConstraints, BOOL, translatesAutoresizingMaskIntoConstraints, setTranslatesAutoresizingMaskIntoConstraints:)
+- (BOOL) translatesAutoresizingMaskIntoConstraints {
+    return NS_EXTRA(NSView, self)->_translatesAutoresizingMaskIntoConstraints;
+}
+
+- (void) setTranslatesAutoresizingMaskIntoConstraints: (BOOL) flag {
+    if (NS_EXTRA(NSView, self)->_translatesAutoresizingMaskIntoConstraints == flag)
+        return;
+    NS_EXTRA(NSView, self)->_translatesAutoresizingMaskIntoConstraints = flag;
+    layoutInputsChanged(self);
+}
 NS_EXTRA_SYNTHESIZE_RETAIN(NSView, appearance, _appearance, NSAppearance *, appearance, setAppearance:)
 // Until the application sets it, the property is YES for programs linked
 // against SDK 10.15 or later and NO for older ones (the NSView.h documentation
@@ -304,7 +328,8 @@ typedef struct __VFlags {
             [coder encodeObject: archivedConstraints forKey: @"NSViewConstraints"];
         NSSize hugging = NSMakeSize([self contentHuggingPriorityForOrientation: NSLayoutConstraintOrientationHorizontal],
                                     [self contentHuggingPriorityForOrientation: NSLayoutConstraintOrientationVertical]);
-        if (hugging.width != NSLayoutPriorityDefaultLow || hugging.height != NSLayoutPriorityDefaultLow)
+        if (hugging.width != [self _defaultContentHuggingPriorityForOrientation: NSLayoutConstraintOrientationHorizontal] ||
+            hugging.height != [self _defaultContentHuggingPriorityForOrientation: NSLayoutConstraintOrientationVertical])
             [coder encodeObject: NSStringFromSize(hugging) forKey: @"NSHuggingPriority"];
         NSSize compression = NSMakeSize([self contentCompressionResistancePriorityForOrientation: NSLayoutConstraintOrientationHorizontal],
                                         [self contentCompressionResistancePriorityForOrientation: NSLayoutConstraintOrientationVertical]);
@@ -625,7 +650,6 @@ typedef struct __VFlags {
 
     _window = nil;
     [NS_EXTRA(NSView, self)->_menu release];
-    [NS_EXTRA(NSView, self)->_accessibilityTitle release];
 
     _superview = nil;
     [_subviews makeObjectsPerformSelector: @selector(_setSuperview:)
@@ -750,6 +774,43 @@ static CGAffineTransform concatViewTransform(CGAffineTransform result,
     }
 }
 
+// Places the layer in its superlayer. Layer coordinates have their y axis
+// pointing up, so in the layer of a flipped superview the layer is mirrored
+// within the superview's bounds: it hangs from its top-left corner (anchor
+// point 0, 1), which goes to where the view's frame origin is on screen.
+// QUIRK: macOS 10.14 places sublayers in a flipped superview like this, and
+// the sublayers keep their positions when their own view is flipped. macOS 26
+// instead keeps every layer frame equal to the view frame and sets
+// geometryFlipped on the layer of a view whose flipping differs from its
+// superview's. Both put the subviews in the same places on screen; the older
+// behaviour is followed, as convertPointToLayer: does. Evidence: black-box
+// observation on macOS 10.14.4 and 26.7.3 (tier 2), a flipped layer-backed
+// view with plain and flipped subviews. Where the flipped superview's bounds
+// origin is not zero, the mirroring here also takes that origin in, as the
+// superview's layer has the same bounds as the view.
+// Test: tests/appkit-layer-flipped-superview.m
+static void configureLayerPosition(NSView *self) {
+    CALayer *layer = self->_layer;
+    NSView *superview = self->_superview;
+
+    if (layer == nil)
+        return;
+
+    if ([layer superlayer] == nil) {
+        [layer setAnchorPoint: CGPointMake(0, 0)];
+        [layer setPosition: CGPointMake(0, 0)];
+    } else if (superview != nil && [superview isFlipped]) {
+        NSRect superBounds = superview->_bounds;
+
+        [layer setAnchorPoint: CGPointMake(0, 1)];
+        [layer setPosition: CGPointMake(NSMinX(self->_frame),
+                                        2 * NSMinY(superBounds) + NSHeight(superBounds) - NSMinY(self->_frame))];
+    } else {
+        [layer setAnchorPoint: CGPointMake(0, 0)];
+        [layer setPosition: self->_frame.origin];
+    }
+}
+
 static inline void configureLayerGeometry(NSView *self) {
     CALayer *layer = self->_layer;
 
@@ -759,14 +820,15 @@ static inline void configureLayerGeometry(NSView *self) {
     [CATransaction begin];
     [CATransaction setDisableActions: YES];
 
-    [layer setAnchorPoint: CGPointMake(0, 0)];
-
-    if ([layer superlayer] == nil)
-        [layer setPosition: CGPointMake(0, 0)];
-    else
-        [layer setPosition: self->_frame.origin];
-
+    configureLayerPosition(self);
     [layer setBounds: self->_bounds];
+
+    // The sublayers of a flipped view are placed from its bounds, so they
+    // move when the bounds change even if the subviews' frames stay.
+    if ([self isFlipped])
+        for (NSView *child in self->_subviews)
+            configureLayerPosition(child);
+
     [CATransaction commit];
 }
 
@@ -1162,6 +1224,20 @@ static void drawViewTreeInContext(NSView *view, CGContextRef port, NSRect rect) 
     return NS_EXTRA(NSView, self)->_isHidden;
 }
 
+// Sends -viewDidHide or -viewDidUnhide to a view whose hidden state, its own
+// or inherited, changed, and to the subviews that inherit it, superviews
+// before their subviews. A subview that is hidden itself does not change.
+static void sendHiddenStateChange(NSView *view, BOOL hidden) {
+    if (hidden)
+        [view viewDidHide];
+    else
+        [view viewDidUnhide];
+
+    for (NSView *subview in [[view->_subviews copy] autorelease])
+        if (!NS_EXTRA(NSView, subview)->_isHidden)
+            sendHiddenStateChange(subview, hidden);
+}
+
 - (BOOL) isHiddenOrHasHiddenAncestor {
     return NS_EXTRA(NSView, self)->_isHidden || [_superview isHiddenOrHasHiddenAncestor];
 }
@@ -1170,6 +1246,15 @@ static void drawViewTreeInContext(NSView *view, CGContextRef port, NSRect rect) 
     flag = flag ? YES : NO;
 
     if (NS_EXTRA(NSView, self)->_isHidden != flag) {
+        BOOL wasHidden = [self isHiddenOrHasHiddenAncestor];
+        NSArray *appearance = [NSViewController
+                _appearanceTransitionsUnder: self
+                                     window: _window
+                              windowVisible: [_window _isShownForViewAppearance]
+                              rootSuperview: _superview
+                              useRootHidden: YES
+                                 rootHidden: flag];
+        [NSViewController _willPerformAppearanceTransitions: appearance];
         invalidateTransform(self);
         if ((NS_EXTRA(NSView, self)->_isHidden = flag)) {
             id view = [_window firstResponder];
@@ -1187,10 +1272,13 @@ static void drawViewTreeInContext(NSView *view, CGContextRef port, NSRect rect) 
         // Only where the view is shows or hides something.
         [[self superview] setNeedsDisplayInRect: [self frame]];
 
-        if (NS_EXTRA(NSView, self)->_isHidden)
-            [self viewDidHide];
-        else
-            [self viewDidUnhide];
+        // The view and the subviews that inherit its state are told when
+        // it changes: not when a hidden ancestor keeps them hidden anyway
+        // (black-box observation on macOS 26.7.3).
+        BOOL hidden = [self isHiddenOrHasHiddenAncestor];
+        if (hidden != wasHidden)
+            sendHiddenStateChange(self, hidden);
+        [NSViewController _didPerformAppearanceTransitions: appearance];
     }
 }
 
@@ -1485,16 +1573,6 @@ NSRect _NSAlignRectToPixelGrid(NSRect rect, NSAlignmentOptions options) {
     return inWindow ? [self convertRect: base fromView: nil] : base;
 }
 
-- (NSString *) accessibilityTitle {
-    return NS_EXTRA(NSView, self)->_accessibilityTitle;
-}
-
-- (void) setAccessibilityTitle: (NSString *) title {
-    title = [title copy];
-    [NS_EXTRA(NSView, self)->_accessibilityTitle release];
-    NS_EXTRA(NSView, self)->_accessibilityTitle = title;
-}
-
 // The frame of the native window that hosts a root layer, in window coordinates. A view's own frame is in
 // its superview's coordinates, which are the same only for the window's content view.
 static NSRect layerContextFrame(NSView *self) {
@@ -1504,6 +1582,22 @@ static NSRect layerContextFrame(NSView *self) {
         frame = [self->_superview convertRect: frame toView: nil];
 
     return frame;
+}
+
+// Something a layout pass reads changed (a frame, a constraint, an intrinsic size, the view tree): the
+// next display cycle lays the window out again.
+static void layoutInputsChanged(NSView *self) {
+    DarlingLayoutInputsChanged();
+    [self->_window setViewsNeedDisplay: YES];
+}
+
+// The geometry of a view that is in no view tree (no window, superview or subviews) takes part in
+// no other view's layout; a scroll view resizes its removed scrollers, for one. Its own -layout
+// still runs when it is laid out, as its needsLayout is set.
+static BOOL geometryIsLayoutInput(NSView *self) {
+    if (DarlingLayoutIsPlacing(self))
+        return NO;
+    return self->_window != nil || self->_superview != nil || [self->_subviews count] != 0;
 }
 
 // Moves the native windows of the root layers in a view's subtree after the view moved or resized, since their
@@ -1531,6 +1625,8 @@ static BOOL applyFrame(NSView *self, NSRect frame) {
     // Test: tests/appkit-layout-repeat-passes.m (frame size change sets needsLayout)
     if (!NSEqualSizes(self->_frame.size, frame.size))
         NS_EXTRA(NSView, self)->_needsLayout = YES;
+    if (geometryIsLayoutInput(self))
+        layoutInputsChanged(self);
 
     if (self->_bounds.size.width == 0 || self->_bounds.size.height == 0) {
         // No valid current bounds value - just update it to use the frame size
@@ -1631,6 +1727,10 @@ static void postFrameChange(NSView *self) {
 
 - (void) setBounds: (NSRect) bounds {
     if (!NSEqualRects(bounds, _bounds)) {
+        // The subviews' autoresizing follows the bounds size; scrolling (a new origin) changes
+        // no layout result.
+        if (!NSEqualSizes(bounds.size, _bounds.size) && geometryIsLayoutInput(self))
+            layoutInputsChanged(self);
         _bounds = bounds;
         invalidateTransform(self);
         configureLayerGeometry(self);
@@ -1673,13 +1773,31 @@ static void postFrameChange(NSView *self) {
     NS_EXTRA(NSView, self)->_postsNotificationOnBoundsChange = flag;
 }
 
+// -[NSView _setWindow:] runs for a view and then, recursively, for each subview.
+// The view controller appearance transitions of the whole subtree are worked
+// out once, by the outermost call, and reported around it.
+static int setWindowDepth;
+
 - (void) _setWindow: (NSWindow *) window {
     if (_window != window) {
+        NSArray *appearance = nil;
+        if (setWindowDepth == 0) {
+            appearance = [NSViewController
+                    _appearanceTransitionsUnder: self
+                                         window: window
+                                  windowVisible: [window _isShownForViewAppearance]
+                                  rootSuperview: _superview
+                                  useRootHidden: NO
+                                     rootHidden: NO];
+        }
+        setWindowDepth++;
+
         BOOL windowRecalulatesKeyViewLoop =
                 [window autorecalculatesKeyViewLoop];
         if (windowRecalulatesKeyViewLoop)
             [self setNextKeyView: nil];
 
+        [NSViewController _willPerformAppearanceTransitions: appearance];
         [self viewWillMoveToWindow: window];
 
         _window = window;
@@ -1702,12 +1820,17 @@ static void postFrameChange(NSView *self) {
             [_window recalculateKeyViewLoop];
 
         [self viewDidMoveToWindow];
+
+        setWindowDepth--;
+        [NSViewController _didPerformAppearanceTransitions: appearance];
     }
 }
 
 - (void) _setSuperview: superview {
     if (_superview == superview)
         return;
+    layoutInputsChanged(self);
+    [[superview window] setViewsNeedDisplay: YES];
     if (_layer != nil)
         [self _removeLayerFromSuperlayer];
     _superview = superview;
@@ -1741,6 +1864,7 @@ static void postFrameChange(NSView *self) {
     [view viewWillMoveToSuperview: self];
 
     NSView *oldSuperview = [view superview];
+    BOOL wasHidden = [view isHiddenOrHasHiddenAncestor];
     if (oldSuperview == self) {
         [self willRemoveSubview: view];
         // the index refers to the subviews before the view was taken out
@@ -1761,6 +1885,12 @@ static void postFrameChange(NSView *self) {
         // callbacks in the same way.
         // Test: tests/appkit-view-window-callbacks-superview.m
         [view _setSuperview: self];
+        // A view moved into or out of a hidden superview is told that it was
+        // hidden or shown, before the window callbacks (black-box
+        // observation on macOS 26.7.3).
+        BOOL hidden = [view isHiddenOrHasHiddenAncestor];
+        if (hidden != wasHidden)
+            sendHiddenStateChange(view, hidden);
         [view _setWindow: _window];
     }
 
@@ -1778,8 +1908,18 @@ static void postFrameChange(NSView *self) {
 
     [view viewDidMoveToSuperview];
 
-    if (NS_EXTRA(NSView, self)->_wantsLayer)
-        [view setWantsLayer: YES];
+    // A view added to a layer-backed view is layer-backed as well: it gets a
+    // backing layer, as do its subviews, but does not itself want one, so it
+    // loses it again when the view above stops being layer-backed, or when it
+    // is moved into a view that is not layer-backed. This holds
+    // whether the view above wants its layer or got it from its own superview
+    // (black-box observation on macOS 10.14.4 and 26.7.3).
+    // Test: tests/appkit-layer-backed-subviews.m
+    if (_layer != nil && [view layer] == nil &&
+        (NS_EXTRA(NSView, self)->_wantsLayer || [_superview layer] != nil))
+        [view _createLayersInTreeIfNeeded];
+    else if (_layer == nil && ![view wantsLayer] && [[view layer] isKindOfClass: [NSViewBackingLayer class]])
+        [view _removeLayerBackedViewsFromTree];
 
     // A layer added to the superlayer goes to the end, and the layer of a view
     // that was only moved within its superview does not move at all.
@@ -1878,7 +2018,10 @@ static void postFrameChange(NSView *self) {
 }
 
 - (void) setAutoresizingMask: (NSAutoresizingMaskOptions) mask {
+    if (NS_EXTRA(NSView, self)->_autoresizingMask == mask)
+        return;
     NS_EXTRA(NSView, self)->_autoresizingMask = mask;
+    layoutInputsChanged(self);
 }
 
 - (void) setFocusRingType: (NSFocusRingType) value {
@@ -2219,7 +2362,12 @@ static char inputContextKey;
     }
 
     [self _deepResignFirstResponder];
+    BOOL wasHidden = [self isHiddenOrHasHiddenAncestor];
     [self _setSuperview: nil];
+    // When the view only moves to another superview, the move itself tells
+    // it whether its hidden state changed.
+    if (moveHooks && wasHidden && !NS_EXTRA(NSView, self)->_isHidden)
+        sendHiddenStateChange(self, NO);
     [self _setWindow: nil];
 
     [removeFrom _removeViewWithoutDisplay: self];
@@ -2250,6 +2398,14 @@ static char inputContextKey;
 }
 
 - (void) viewDidChangeEffectiveAppearance {
+}
+
+- (NSViewController *) _viewController {
+    return NS_EXTRA(NSView, self)->_viewController;
+}
+
+- (void) _setViewController: (NSViewController *) controller {
+    NS_EXTRA(NSView, self)->_viewController = controller;
 }
 
 - (void) viewWillMoveToWindow: (NSWindow *) window {
@@ -2603,9 +2759,12 @@ static char inputContextKey;
         if ([_layer superlayer] != superlayer || NS_EXTRA(NSView, self)->_layerContext != nil) {
             [self _removeLayerFromSuperlayer];
             [superlayer addSublayer: _layer];
+            // where the layer goes depends on the superview it now has
+            configureLayerGeometry(self);
         }
     } else {
         [self _createLayerContextIfNeeded];
+        configureLayerGeometry(self);
     }
 }
 
@@ -3009,6 +3168,21 @@ static NSView *viewBeingPrinted = nil;
             CGContextRef graphicsPort = CGBitmapContextCreate(
                     NULL, width, height, 8, 0, colorSpace,
                     kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Host);
+            // The layer keeps what the view drew before: drawing (a redisplay
+            // of a dirty rect, or a lockFocus of the view) only changes the
+            // part it draws, as in a window's backing store.
+            id previous = [_layer contents];
+            if (graphicsPort != NULL && previous != nil &&
+                CFGetTypeID((CFTypeRef) previous) == CGImageGetTypeID()) {
+                CGImageRef image = (CGImageRef) previous;
+                size_t pixelsWide = CGBitmapContextGetWidth(graphicsPort);
+                size_t pixelsHigh = CGBitmapContextGetHeight(graphicsPort);
+                if (CGImageGetWidth(image) == pixelsWide &&
+                    CGImageGetHeight(image) == pixelsHigh)
+                    CGContextDrawImage(graphicsPort,
+                                       CGRectMake(0, 0, pixelsWide, pixelsHigh),
+                                       image);
+            }
             context = [NSGraphicsContext
                     graphicsContextWithGraphicsPort: graphicsPort
                                             flipped: NO];
@@ -3210,9 +3384,31 @@ static NSView *viewBeingPrinted = nil;
     [self displayRect: [self visibleRect]];
 }
 
-- (NSEnumerator *) _subviewsInDisplayOrderEnumerator {
-    // Snapshot subviews so mutating _subviews during display passes is safe
-    return [[[_subviews copy] autorelease] objectEnumerator];
+// The display methods walk a snapshot of the subviews, since drawing may add or remove views. The
+// snapshot is kept on the stack for the usual small counts instead of copying the array for every
+// view displayed; the views in it are retained until the walk ends.
+enum { kSubviewSnapshotInline = 16 };
+typedef struct {
+    NSView **views;
+    NSUInteger count;
+    NSView *inlineViews[kSubviewSnapshotInline];
+} SubviewSnapshot;
+
+static void takeSubviewSnapshot(NSView *self, SubviewSnapshot *snapshot) {
+    NSUInteger count = [self->_subviews count];
+    snapshot->count = count;
+    snapshot->views = count <= kSubviewSnapshotInline ? snapshot->inlineViews : malloc(count * sizeof(NSView *));
+    if (count != 0)
+        [self->_subviews getObjects: snapshot->views range: NSMakeRange(0, count)];
+    for (NSUInteger i = 0; i < count; ++i)
+        [snapshot->views[i] retain];
+}
+
+static void releaseSubviewSnapshot(SubviewSnapshot *snapshot) {
+    for (NSUInteger i = 0; i < snapshot->count; ++i)
+        [snapshot->views[i] release];
+    if (snapshot->views != snapshot->inlineViews)
+        free(snapshot->views);
 }
 
 - (void) _displayIfNeededWithoutViewWillDraw {
@@ -3221,12 +3417,13 @@ static NSView *viewBeingPrinted = nil;
         clearNeedsDisplay(self);
     }
 
-    NSEnumerator *viewEnumerator = [self _subviewsInDisplayOrderEnumerator];
-
-    NSView *subView = nil;
-    while ((subView = [viewEnumerator nextObject])) {
+    SubviewSnapshot snapshot;
+    takeSubviewSnapshot(self, &snapshot);
+    for (NSUInteger index = 0; index < snapshot.count; ++index) {
+        NSView *subView = snapshot.views[index];
         [subView _displayIfNeededWithoutViewWillDraw];
     }
+    releaseSubviewSnapshot(&snapshot);
 }
 
 - (void) displayIfNeeded {
@@ -3241,16 +3438,17 @@ static NSView *viewBeingPrinted = nil;
     if ([self needsDisplay])
         [self displayRect: rect];
 
-    NSEnumerator *viewEnumerator = [self _subviewsInDisplayOrderEnumerator];
-
-    NSView *child = nil;
-    while ((child = [viewEnumerator nextObject])) {
+    SubviewSnapshot snapshot;
+    takeSubviewSnapshot(self, &snapshot);
+    for (NSUInteger index = 0; index < snapshot.count; ++index) {
+        NSView *child = snapshot.views[index];
         NSRect converted = NSIntersectionRect(
                 [self convertRect: rect toView: child], [child bounds]);
         if (!NSIsEmptyRect(converted)) {
             [child displayIfNeededInRect: converted];
         }
     }
+    releaseSubviewSnapshot(&snapshot);
 }
 
 - (void) displayIfNeededInRectIgnoringOpacity: (NSRect) rect {
@@ -3260,10 +3458,10 @@ static NSView *viewBeingPrinted = nil;
     if ([self needsDisplay])
         [self displayRectIgnoringOpacity: rect];
 
-    NSEnumerator *viewEnumerator = [self _subviewsInDisplayOrderEnumerator];
-
-    NSView *child = nil;
-    while ((child = [viewEnumerator nextObject])) {
+    SubviewSnapshot snapshot;
+    takeSubviewSnapshot(self, &snapshot);
+    for (NSUInteger index = 0; index < snapshot.count; ++index) {
+        NSView *child = snapshot.views[index];
         NSRect converted = NSIntersectionRect(
                 [self convertRect: rect toView: child], [child bounds]);
 
@@ -3271,6 +3469,7 @@ static NSView *viewBeingPrinted = nil;
             [child displayIfNeededInRectIgnoringOpacity: converted];
         }
     }
+    releaseSubviewSnapshot(&snapshot);
 }
 
 - (void) displayIfNeededIgnoringOpacity {
@@ -3278,12 +3477,13 @@ static NSView *viewBeingPrinted = nil;
     if ([self needsDisplay])
         [self displayRectIgnoringOpacity: unionOfInvalidRects(self)];
 
-    NSEnumerator *viewEnumerator = [self _subviewsInDisplayOrderEnumerator];
-
-    NSView *child = nil;
-    while ((child = [viewEnumerator nextObject])) {
+    SubviewSnapshot snapshot;
+    takeSubviewSnapshot(self, &snapshot);
+    for (NSUInteger index = 0; index < snapshot.count; ++index) {
+        NSView *child = snapshot.views[index];
         [child displayIfNeededIgnoringOpacity];
     }
+    releaseSubviewSnapshot(&snapshot);
 }
 
 - (void) displayRect: (NSRect) rect {
@@ -3324,6 +3524,11 @@ static NSView *viewBeingPrinted = nil;
         if (rectsCount > 1)
             CGContextClipToRects(graphicsPort, rects, rectsCount);
 
+        // A layer keeps its earlier contents (see -_lockFocusInContext:), so
+        // the part being redrawn starts out clear, as a new layer does.
+        if (_layer != nil && viewBeingPrinted == nil)
+            CGContextClearRect(graphicsPort, rect);
+
         // [_window dirtyRect:[self convertRect:rect toView:nil]];
         if ([NSGraphicsContext inQuartzDebugMode]) {
             [[NSColor yellowColor] set];
@@ -3345,10 +3550,10 @@ static NSView *viewBeingPrinted = nil;
 
         [self unlockFocus];
 
-        NSEnumerator *viewEnumerator = [self _subviewsInDisplayOrderEnumerator];
-
-        NSView *child = nil;
-        while ((child = [viewEnumerator nextObject])) {
+        SubviewSnapshot snapshot;
+        takeSubviewSnapshot(self, &snapshot);
+        for (NSUInteger index = 0; index < snapshot.count; ++index) {
+            NSView *child = snapshot.views[index];
             NSRect check = [self convertRect: rect toView: child];
 
             check = NSIntersectionRect(check, [child bounds]);
@@ -3356,6 +3561,7 @@ static NSView *viewBeingPrinted = nil;
             if (!NSIsEmptyRect(check))
                 [child displayRectIgnoringOpacity: check];
         }
+        releaseSubviewSnapshot(&snapshot);
 
         if (anySubviewShowsFocusRing(self)) {
             [self lockFocus];
@@ -3652,7 +3858,14 @@ static NSView *viewBeingPrinted = nil;
 }
 
 - (void) rightMouseDown: (NSEvent *) event {
-    [NSMenu popUpContextMenu: [self menuForEvent: event]
+    NSMenu *menu = [self menuForEvent: event];
+
+    // A view with no context menu for the click leaves it to the next responder.
+    if (menu == nil) {
+        [super rightMouseDown: event];
+        return;
+    }
+    [NSMenu popUpContextMenu: menu
                    withEvent: event
                      forView: self];
 }
@@ -3763,15 +3976,15 @@ static CGFloat backingScaleFactor(NSView *view) {
     NSUnimplementedMethod();
 }
 
+// No implicit animations: a view animates only what its animations dictionary or an animation group asks for.
 + defaultAnimationForKey: (NSString *) key {
-    NSUnimplementedMethod();
     return nil;
 }
 
+// The documented NSAnimatablePropertyContainer proxy: setting a property through it changes the view, as
+// setting it on the view itself does (no animation is run, see NSAnimatorProxy).
 - animator {
-    NSUnimplementedMethod();
-    // should return animating proxy. returning self does not animate.
-    return self;
+    return [NSAnimatorProxy animatorProxyForTarget: self];
 }
 
 - (NSDictionary *) animations {
@@ -3820,26 +4033,45 @@ static CGFloat backingScaleFactor(NSView *view) {
 }
 
 - (void) _setDefaultLayoutPriorities {
-    NS_EXTRA(NSView, self)->_horizontalContentHuggingPriority = NSLayoutPriorityDefaultLow;
-    NS_EXTRA(NSView, self)->_verticalContentHuggingPriority = NSLayoutPriorityDefaultLow;
+    NS_EXTRA(NSView, self)->_hasHorizontalContentHuggingPriority = NO;
+    NS_EXTRA(NSView, self)->_hasVerticalContentHuggingPriority = NO;
     NS_EXTRA(NSView, self)->_horizontalContentCompressionResistancePriority = NSLayoutPriorityDefaultHigh;
     NS_EXTRA(NSView, self)->_verticalContentCompressionResistancePriority = NSLayoutPriorityDefaultHigh;
 }
 
+- (NSLayoutPriority) _defaultContentHuggingPriorityForOrientation: (NSLayoutConstraintOrientation) orientation {
+    return NSLayoutPriorityDefaultLow;
+}
+
 - (NSLayoutPriority) contentHuggingPriorityForOrientation: (NSLayoutConstraintOrientation) orientation {
     if (orientation == NSLayoutConstraintOrientationHorizontal) {
-        return NS_EXTRA(NSView, self)->_horizontalContentHuggingPriority;
+        if (NS_EXTRA(NSView, self)->_hasHorizontalContentHuggingPriority)
+            return NS_EXTRA(NSView, self)->_horizontalContentHuggingPriority;
     } else {
-        return NS_EXTRA(NSView, self)->_verticalContentHuggingPriority;
+        if (NS_EXTRA(NSView, self)->_hasVerticalContentHuggingPriority)
+            return NS_EXTRA(NSView, self)->_verticalContentHuggingPriority;
     }
+    return [self _defaultContentHuggingPriorityForOrientation: orientation];
 }
 
 - (void) setContentHuggingPriority: (NSLayoutPriority) contentHuggingPriority forOrientation: (NSLayoutConstraintOrientation) orientation {
+    // Compare with the effective priority: a view without its own value
+    // reports its class default, which may differ from what is stored.
+    NSLayoutPriority previous = [self contentHuggingPriorityForOrientation: orientation];
     if (orientation == NSLayoutConstraintOrientationHorizontal) {
         NS_EXTRA(NSView, self)->_horizontalContentHuggingPriority = contentHuggingPriority;
+        NS_EXTRA(NSView, self)->_hasHorizontalContentHuggingPriority = YES;
     } else {
         NS_EXTRA(NSView, self)->_verticalContentHuggingPriority = contentHuggingPriority;
+        NS_EXTRA(NSView, self)->_hasVerticalContentHuggingPriority = YES;
     }
+    if (previous != contentHuggingPriority) {
+        layoutInputsChanged(self);
+        [[self superview] _subviewContentHuggingPriorityDidChange: self];
+    }
+}
+
+- (void) _subviewContentHuggingPriorityDidChange: (NSView *) subview {
 }
 
 - (NSLayoutPriority) contentCompressionResistancePriorityForOrientation: (NSLayoutConstraintOrientation) orientation {
@@ -3851,11 +4083,13 @@ static CGFloat backingScaleFactor(NSView *view) {
 }
 
 - (void) setContentCompressionResistancePriority: (NSLayoutPriority) contentCompressionResistancePriority forOrientation: (NSLayoutConstraintOrientation) orientation {
-    if (orientation == NSLayoutConstraintOrientationHorizontal) {
-        NS_EXTRA(NSView, self)->_horizontalContentCompressionResistancePriority = contentCompressionResistancePriority;
-    } else {
-        NS_EXTRA(NSView, self)->_verticalContentCompressionResistancePriority = contentCompressionResistancePriority;
-    }
+    NSLayoutPriority *slot = orientation == NSLayoutConstraintOrientationHorizontal
+                                     ? &NS_EXTRA(NSView, self)->_horizontalContentCompressionResistancePriority
+                                     : &NS_EXTRA(NSView, self)->_verticalContentCompressionResistancePriority;
+    if (*slot == contentCompressionResistancePriority)
+        return;
+    *slot = contentCompressionResistancePriority;
+    layoutInputsChanged(self);
 }
 
 - (NSSize) intrinsicContentSize {
@@ -3883,10 +4117,12 @@ static CGFloat backingScaleFactor(NSView *view) {
     // Test: tests/appkit-view-layout-direction.m (out-of-range directions read back as 1)
     direction = direction != 0 ? NSUserInterfaceLayoutDirectionRightToLeft
                                : NSUserInterfaceLayoutDirectionLeftToRight;
+    BOOL changed = [self userInterfaceLayoutDirection] != direction;
     NS_EXTRA(NSView, self)->_hasExplicitUserInterfaceLayoutDirection = YES;
-    if (NS_EXTRA(NSView, self)->_userInterfaceLayoutDirection == direction)
-        return;
     NS_EXTRA(NSView, self)->_userInterfaceLayoutDirection = direction;
+    if (!changed)
+        return;
+    layoutInputsChanged(self);
     [self setNeedsDisplay: YES];
 }
 
@@ -3897,10 +4133,9 @@ static CGFloat backingScaleFactor(NSView *view) {
     // -needsLayout of the view and its superview does not change. Not documented. Evidence: black-box
     // observation on macOS 26.7.3 and 10.14.4 (tier 2, MAC-EVIDENCE V619).
     // Test: tests/appkit-view-invalidate-intrinsic-size.m (flags after invalidation)
-    if (![self translatesAutoresizingMaskIntoConstraints]) {
+    if (![self translatesAutoresizingMaskIntoConstraints])
         NS_EXTRA(NSView, self)->_needsUpdateConstraints = YES;
-        [[self window] setViewsNeedDisplay: YES];
-    }
+    layoutInputsChanged(self);
     [[self superview] _subviewIntrinsicContentSizeDidChange: self];
 }
 
@@ -3936,6 +4171,11 @@ static CGFloat backingScaleFactor(NSView *view) {
     [self setNeedsUpdateConstraints: YES];
 }
 
+// Sent by an installed constraint whose constant or priority changed.
+- (void) _layoutConstraintDidChange: (NSLayoutConstraint *) constraint {
+    layoutInputsChanged(self);
+}
+
 - (void) removeConstraints: (NSArray *) constraints {
     for (NSLayoutConstraint *constraint in constraints)
         [self removeConstraint: constraint];
@@ -3968,6 +4208,7 @@ static NSMutableArray *installedViewLayoutGuides(NSView *view, BOOL create) {
     if (![guides containsObject: guide]) {
         [guides addObject: guide];
         [guide setOwningView: self];
+        layoutInputsChanged(self);
     }
 }
 
@@ -3978,6 +4219,7 @@ static NSMutableArray *installedViewLayoutGuides(NSView *view, BOOL create) {
         [guides removeObject: guide];
         if ([guide owningView] == self)
             [guide setOwningView: nil];
+        layoutInputsChanged(self);
     }
 }
 
@@ -4163,6 +4405,8 @@ static NSMutableArray *installedViewLayoutGuides(NSView *view, BOOL create) {
 
 - (void) setNeedsLayout: (BOOL) flag {
     NS_EXTRA(NSView, self)->_needsLayout = flag;
+    if (flag)
+        layoutInputsChanged(self);
 }
 
 - (BOOL) needsUpdateConstraints {
@@ -4173,7 +4417,7 @@ static NSMutableArray *installedViewLayoutGuides(NSView *view, BOOL create) {
     NS_EXTRA(NSView, self)->_needsUpdateConstraints = flag;
     if (flag) {
         NS_EXTRA(NSView, self)->_needsLayout = YES;
-        [[self window] setViewsNeedDisplay: YES];
+        layoutInputsChanged(self);
     }
 }
 
@@ -4249,15 +4493,27 @@ static NSMutableArray *installedViewLayoutGuides(NSView *view, BOOL create) {
 // (a wrapping label setting its preferredMaxLayoutWidth from its new width is the usual case). The
 // passes then repeat until nothing is invalidated, so the sizes that result from the last layout
 // are applied. The count is bounded so that views that keep invalidating each other cannot hang.
+//
+// Nothing is done when nothing a pass reads (constraints, frames, intrinsic sizes, the view tree,
+// the layout flags) changed since the last pass over this subtree, so display cycles of an idle
+// window do not lay it out again.
 - (void) layoutSubtreeIfNeeded {
+    if (DarlingLayoutLastGeneration(self, DarlingLayoutKindLayout) == DarlingLayoutGeneration() &&
+        !NS_EXTRA(NSView, self)->_needsLayout)
+        return;
+    uint64_t generation = 0;
     for (int pass = 0; pass < 10; ++pass) {
         // Finish the update phase for the whole subtree before laying out any view.
         [self updateConstraintsForSubtreeIfNeeded];
+        // Changes made while the pass runs (by -layout, by observers of the new frames) are
+        // laid out by the next one.
+        generation = DarlingLayoutGeneration();
         DarlingLayoutSubtree(self);
         [self _layoutSubtreeAfterUpdatingConstraints];
         if (![self _subtreeNeedsUpdateConstraints])
             break;
     }
+    DarlingLayoutSetLastGeneration(self, DarlingLayoutKindLayout, generation);
 }
 
 @end

@@ -62,12 +62,15 @@ void NSColorSetCatalogColor(NSColorListName catalogName, NSColorName colorName, 
                                    alpha: 1.0f];
     if ([colorName isEqual: @"controlLightHighlightColor"])
         return [NSColor lightGrayColor];
+    // QUIRK: the header colours of macOS 10.14 (light appearance). Evidence: black-box reads of +headerColor and
+    // +headerTextColor converted to sRGB on macOS 10.14.4 (tier 2): gray 0.667, and black at alpha 0.847.
+    // Test: appkit-table-header-aqua.m (test_quirk_header_colors)
     if ([colorName isEqual: @"headerColor"])
-        return [NSColor greenColor];
+        return [NSColor colorWithSRGBRed: 0.666667f green: 0.666667f blue: 0.666667f alpha: 1.0f];
     if ([colorName isEqual: @"selectedTextColor"])
         return [NSColor whiteColor];
     if ([colorName isEqual: @"headerTextColor"])
-        return [NSColor blackColor];
+        return [NSColor colorWithSRGBRed: 0.0f green: 0.0f blue: 0.0f alpha: 0.847059f];
     if ([colorName isEqual: @"menuItemTextColor"])
         return [NSColor colorWithSRGBRed: 0.0f green: 0.0f blue: 0.0f alpha: 0.847f];
     if ([colorName isEqual: @"selectedMenuItemTextColor"])
@@ -75,7 +78,7 @@ void NSColorSetCatalogColor(NSColorListName catalogName, NSColorName colorName, 
     if ([colorName isEqual: @"selectedMenuItemColor"])
         return [NSColor colorWithSRGBRed: 0.259f green: 0.467f blue: 0.957f alpha: 1.0f];
     if ([colorName isEqual: @"selectedControlTextColor"])
-        return [NSColor blackColor];
+        return [NSColor colorWithSRGBRed: 0.0f green: 0.0f blue: 0.0f alpha: 0.847059f];
     if ([colorName isEqual: @"windowFrameColor"])
         return [NSColor lightGrayColor];
     if ([colorName isEqual: @"shadowColor"])

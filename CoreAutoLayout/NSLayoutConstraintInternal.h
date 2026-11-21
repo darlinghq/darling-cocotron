@@ -29,3 +29,9 @@
 // the given view.
 - (void) _detachFromOwner: (id) owner;
 @end
+
+// Implemented by owners (NSView) that want to hear when an installed constraint's constant or
+// priority changes.
+@interface NSObject (NSLayoutConstraintOwner)
+- (void) _layoutConstraintDidChange: (NSLayoutConstraint *) constraint;
+@end

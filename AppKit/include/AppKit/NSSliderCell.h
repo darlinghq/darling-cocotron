@@ -83,6 +83,7 @@ enum {
 - (void) setKnobThickness: (CGFloat) thickness;
 
 - (NSInteger) isVertical;
+- (void) setVertical: (BOOL) vertical API_AVAILABLE(macos(10.12));
 
 - (NSInteger) indexOfTickMarkAtPoint: (NSPoint) point;
 
@@ -95,6 +96,7 @@ enum {
 
 - (void) drawBarInside: (NSRect) frame flipped: (BOOL) isFlipped;
 - (NSRect) knobRectFlipped: (BOOL) flipped;
+- (NSRect) barRectFlipped: (BOOL) flipped;
 - (void) drawKnob;
 - (void) drawKnob: (NSRect) rect;
 

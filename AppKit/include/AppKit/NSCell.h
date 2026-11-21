@@ -25,6 +25,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSUserInterfaceItemIdentification.h>
 #import <AppKit/NSApplication.h>
 #import <Foundation/NSNotification.h>
+#import <AppKit/NSAccessibilityProtocols.h>
 
 @class NSBezierPath, NSFont, NSImage, NSView;
 
@@ -166,6 +167,7 @@ APPKIT_EXPORT NSNotificationName NSControlTintDidChangeNotification;
         BOOL _allowsUndo;
         NSUserInterfaceLayoutDirection _userInterfaceLayoutDirection;
         NSMenu *_cellMenu;
+        NSControlTint _controlTint;
     NS_EXTRA_IVARS_END(NSCell)
 }
 
@@ -228,6 +230,7 @@ APPKIT_EXPORT NSNotificationName NSControlTintDidChangeNotification;
 @property(nonatomic, copy) NSAttributedString *attributedStringValue;
 @property(nullable, nonatomic, assign) id representedObject;
 @property NSControlSize controlSize;
+@property NSControlTint controlTint;
 @property(nonatomic) NSFocusRingType focusRingType;
 
 - (NSRect) focusRingMaskBoundsForFrame: (NSRect) cellFrame inView: (NSView *) controlView;
@@ -316,6 +319,9 @@ APPKIT_EXPORT NSNotificationName NSControlTintDidChangeNotification;
                    inRect: (NSRect) rect
                    ofView: (NSView *) view;
 
+@end
+
+@interface NSCell (NSAccessibility) <NSAccessibility, NSAccessibilityElement>
 @end
 
 void NSDrawThreePartImage(NSRect frame, NSImage *startCap, NSImage *centerFill,

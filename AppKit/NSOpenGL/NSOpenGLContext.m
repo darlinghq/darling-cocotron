@@ -24,6 +24,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSWindow-Private.h>
 #import <OpenGL/OpenGL.h>
 #import <OpenGL/gl.h>
+#import <OpenGL/CGLInternal.h>
+#import <CoreFoundation/CFNotificationCenter.h>
+#import <objc/runtime.h>
 
 @interface NSOpenGLContext (private)
 - (void) _clearCurrentContext;
@@ -32,7 +35,71 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (void) _applyPendingViewportReset;
 @end
 
+@interface _NSOpenGLViewContextEntry : NSObject {
+@public
+    id _context;
+}
+@end
+
+@implementation _NSOpenGLViewContextEntry
+- (void) dealloc {
+    objc_storeWeak(&_context, nil);
+    [super dealloc];
+}
+@end
+
 @implementation NSOpenGLContext
+
+// The contexts that have a view, so that AppKit can find the ones attached to
+// the views of a window (see +_updateContextsAttachedToWindow:). Each entry
+// refers to its context through a zeroing weak reference: a context removes
+// itself when its view is cleared and in dealloc, and a context that is
+// already deallocating on another thread reads back as nil, so it is never
+// retained again while it is being destroyed.
+static NSMutableArray *_viewContexts;
+
+static void _registerViewContext(NSOpenGLContext *context, BOOL attached) {
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        _viewContexts = [[NSMutableArray alloc] init];
+    });
+    @synchronized(_viewContexts) {
+        // Drop this context's entry and any entry whose context is gone.
+        for (NSUInteger i = [_viewContexts count]; i > 0; i--) {
+            _NSOpenGLViewContextEntry *entry = [_viewContexts objectAtIndex: i - 1];
+            id existing = objc_loadWeak(&entry->_context);
+            if (existing == nil || existing == context)
+                [_viewContexts removeObjectAtIndex: i - 1];
+        }
+        if (attached) {
+            _NSOpenGLViewContextEntry *entry = [[_NSOpenGLViewContextEntry alloc] init];
+            objc_storeWeak(&entry->_context, context);
+            [_viewContexts addObject: entry];
+            [entry release];
+        }
+    }
+}
+
+// Sends -update to each context attached to a view of the window. It goes
+// through normal dispatch, so a subclass that overrides -update sees the call.
+// The contexts are retained through their weak references, which fail for one
+// that is being deallocated.
++ (void) _updateContextsAttachedToWindow: (NSWindow *) window {
+    if (_viewContexts == nil)
+        return;
+    NSMutableArray *contexts = [NSMutableArray array];
+    @synchronized(_viewContexts) {
+        for (_NSOpenGLViewContextEntry *entry in _viewContexts) {
+            NSOpenGLContext *context = objc_loadWeak(&entry->_context);
+            if (context != nil)
+                [contexts addObject: context];
+        }
+    }
+    for (NSOpenGLContext *context in contexts) {
+        if ([[context view] window] == window)
+            [context update];
+    }
+}
 
 static inline NSOpenGLContext *_currentContext() {
     return (NSOpenGLContext *) NSThreadSharedInstanceDoNotCreate(
@@ -81,7 +148,26 @@ static inline void _clearCurrentContext() {
     return self;
 }
 
+// Wraps a context created with the CGL API. The wrapper owns one reference of
+// the CGL context, which dealloc gives back.
+- (instancetype) initWithCGLContextObj: (CGLContextObj) context {
+    if (context == NULL) {
+        [self release];
+        return nil;
+    }
+
+    if (_glContext != NULL) {
+        CGLReleaseContext(_glContext);
+        _glContext = NULL;
+    }
+    [_pixelFormat release];
+    _pixelFormat = nil;
+    _glContext = CGLRetainContext(context);
+    return self;
+}
+
 - (void) dealloc {
+    _registerViewContext(self, NO);
     [self _stopObservingView];
     // FIXME: this doesn't actually work because if we are the current context
     // we're retained by the thread shared object dict
@@ -89,6 +175,7 @@ static inline void _clearCurrentContext() {
         _clearCurrentContext();
     [_pixelFormat release];
 
+    [self _stopObservingPresentation];
     if (NS_EXTRA(NSOpenGLContext, self)->_cglWindow != NULL) {
         CGLDestroyWindow(NS_EXTRA(NSOpenGLContext, self)->_cglWindow);
     }
@@ -135,7 +222,65 @@ static inline void _clearCurrentContext() {
     CGLSetParameter(_glContext, parameter, vals);
 }
 
+// A client that swaps through CGLFlushDrawable() directly (not -flushBuffer)
+// is presented by the window backend after the swap too: OpenGL posts a
+// notification for the window's native handle when it swaps a surface, and
+// the subwindow's -flush is what the backend does after a swap. Only backends
+// that do something there need it.
+static void _swapNotification(CFNotificationCenterRef center, void *observer, CFNotificationName name,
+                              const void *object, CFDictionaryRef userInfo) {
+    CGSubWindow *subwindow = [(NSOpenGLContext *) observer _presentationSubwindow];
+    [subwindow flush];
+}
+
+- (CGSubWindow *) _presentationSubwindow {
+    return NS_EXTRA(NSOpenGLContext, self)->_subwindow;
+}
+
+- (void) _startObservingPresentation {
+    CGSubWindow *subwindow = NS_EXTRA(NSOpenGLContext, self)->_subwindow;
+    if (NS_EXTRA(NSOpenGLContext, self)->_presentObserved || subwindow == nil ||
+        [subwindow methodForSelector: @selector(flush)] == [CGSubWindow instanceMethodForSelector: @selector(flush)])
+        return;
+    CFNotificationCenterAddObserver(CFNotificationCenterGetLocalCenter(), self, _swapNotification,
+        kCGLWindowDidSwapNotification, [subwindow nativeWindow], CFNotificationSuspensionBehaviorDeliverImmediately);
+    NS_EXTRA(NSOpenGLContext, self)->_presentObserved = YES;
+}
+
+- (void) _stopObservingPresentation {
+    if (!NS_EXTRA(NSOpenGLContext, self)->_presentObserved)
+        return;
+    CFNotificationCenterRemoveObserver(CFNotificationCenterGetLocalCenter(), self,
+        kCGLWindowDidSwapNotification, [NS_EXTRA(NSOpenGLContext, self)->_subwindow nativeWindow]);
+    NS_EXTRA(NSOpenGLContext, self)->_presentObserved = NO;
+}
+
+// Makes the view's window the drawable of the CGL context without changing
+// which context is current on this thread: a context that the application
+// makes current later with CGLSetCurrentContext() (not -makeCurrentContext)
+// then draws to and presents on the view, as it does on macOS once -setView:
+// has been called.
+- (void) _attachDrawable {
+    CGLWindowRef window = NS_EXTRA(NSOpenGLContext, self)->_cglWindow;
+    if (window == NULL)
+        return;
+    CGLContextObj previous = CGLGetCurrentContext();
+    if (CGLContextMakeCurrentAndAttachToWindow(_glContext, window) == kCGLNoError && previous != _glContext)
+        CGLSetCurrentContext(previous);
+}
+
 - (void) updateViewParameters {
+    [self _updateViewParametersAttaching: YES];
+}
+
+// -makeCurrentContext attaches the drawable itself, on the calling thread, so
+// it does not need the extra attach (which would bind the context to the main
+// thread while another thread may be holding it).
+- (void) _updateViewParametersForMakeCurrent {
+    [self _updateViewParametersAttaching: NO];
+}
+
+- (void) _updateViewParametersAttaching: (BOOL) attach {
     if (NS_EXTRA(NSOpenGLContext, self)->_view == nil || [NS_EXTRA(NSOpenGLContext, self)->_view window] == nil) return;
     NSRect rect = [NS_EXTRA(NSOpenGLContext, self)->_view bounds];
 
@@ -144,6 +289,9 @@ static inline void _clearCurrentContext() {
     if (NS_EXTRA(NSOpenGLContext, self)->_subwindow == nil) {
         NS_EXTRA(NSOpenGLContext, self)->_subwindow = [[[NS_EXTRA(NSOpenGLContext, self)->_view window] _createSubWindowWithFrame: rect] retain];
         NS_EXTRA(NSOpenGLContext, self)->_cglWindow = CGLGetWindowForContext(_glContext, [NS_EXTRA(NSOpenGLContext, self)->_subwindow nativeWindow]);
+        [self _startObservingPresentation];
+        if (attach)
+            [self _attachDrawable];
     } else {
         [NS_EXTRA(NSOpenGLContext, self)->_subwindow setFrame: rect];
     }
@@ -204,7 +352,9 @@ static inline void _clearCurrentContext() {
     [self _stopObservingView];
     NS_EXTRA(NSOpenGLContext, self)->_view = view;
     [self _startObservingView];
+    _registerViewContext(self, view != nil);
 
+    [self _stopObservingPresentation];
     if (NS_EXTRA(NSOpenGLContext, self)->_cglWindow != NULL) {
         CGLDestroyWindow(NS_EXTRA(NSOpenGLContext, self)->_cglWindow);
         NS_EXTRA(NSOpenGLContext, self)->_cglWindow = NULL;
@@ -224,9 +374,9 @@ static inline void _clearCurrentContext() {
     // background resource uploads must not wait for a main-thread run loop.
     if (NS_EXTRA(NSOpenGLContext, self)->_subwindow == nil && NS_EXTRA(NSOpenGLContext, self)->_view != nil) {
         if ([NSThread isMainThread]) {
-            [self updateViewParameters];
+            [self _updateViewParametersForMakeCurrent];
         } else {
-            [self performSelectorOnMainThread: @selector(updateViewParameters)
+            [self performSelectorOnMainThread: @selector(_updateViewParametersForMakeCurrent)
                                    withObject: nil
                                 waitUntilDone: YES];
         }
@@ -393,7 +543,9 @@ static inline void _clearCurrentContext() {
     CGLSetDrawableRefreshRate(_glContext,
         [NS_EXTRA(NSOpenGLContext, self)->_subwindow respondsToSelector: @selector(refreshMillihertz)]
         ? [NS_EXTRA(NSOpenGLContext, self)->_subwindow refreshMillihertz] : 0);
-    if (CGLFlushDrawable(_glContext) == kCGLNoError)
+    // With the notification observer registered CGLFlushDrawable() has already
+    // had the subwindow present the frame.
+    if (CGLFlushDrawable(_glContext) == kCGLNoError && !NS_EXTRA(NSOpenGLContext, self)->_presentObserved)
         [NS_EXTRA(NSOpenGLContext, self)->_subwindow flush];
 }
 

@@ -62,6 +62,42 @@ static id cascadeOfAttributes(CTFontDescriptorRef attributes) {
             autorelease];
 }
 
+static O2Font_freetype *copyFreeTypeFont(CTFontRef font) {
+    CGFontRef graphicsFont = CTFontCopyGraphicsFont(font, NULL);
+    if ([(id) graphicsFont isKindOfClass: [O2Font_freetype class]])
+        return (O2Font_freetype *) graphicsFont;
+    if (graphicsFont != NULL)
+        CGFontRelease(graphicsFont);
+    return nil;
+}
+
+static CTFontRef createFont(CGFontRef graphicsFont, CGFloat size);
+
+// Applies the kCTFontVariationAttribute of a descriptor to a font that is
+// owned by the caller. Returns the font itself when there is nothing to apply
+// (no variation, or a font without variation axes), else a new owned font that
+// keeps the size and the cascade list, and releases the old one.
+static CTFontRef fontWithVariationOfAttributes(CTFontRef font, CTFontDescriptorRef attributes) {
+    if (font == NULL || attributes == NULL)
+        return font;
+    NSDictionary *variation =
+            [(id) CTFontDescriptorCopyAttribute(attributes, kCTFontVariationAttribute) autorelease];
+    if (![variation isKindOfClass: [NSDictionary class]] || [variation count] == 0)
+        return font;
+    O2Font_freetype *freeType = copyFreeTypeFont(font);
+    O2Font_freetype *varied = [freeType copyWithVariation: variation];
+    [freeType release];
+    if (varied == nil)
+        return font;
+    CTFontRef result = createFont((CGFontRef) varied, CTFontGetSize(font));
+    [varied release];
+    if (result == NULL)
+        return font;
+    fontWithCascade(result, fontCascade(font));
+    CFRelease(font);
+    return result;
+}
+
 static CTFontRef createFont(CGFontRef graphicsFont, CGFloat size) {
     // A size of 0 means the default size of 12 points.
     if (size == 0)
@@ -150,11 +186,13 @@ CTFontRef CTFontCreateWithFontDescriptor(CTFontDescriptorRef descriptor, CGFloat
     CFDataRef data = KTFontDescriptorGetFontData(descriptor);
     if (data != NULL) {
         CGDataProviderRef provider = CGDataProviderCreateWithCFData(data);
-        CGFontRef graphicsFont = CGFontCreateWithDataProvider(provider);
+        CGFontRef graphicsFont = (CGFontRef) O2FontCreateWithDataProviderAndFaceIndex(
+                (O2DataProviderRef) provider, KTFontDescriptorGetFaceIndex(descriptor));
         CGDataProviderRelease(provider);
         if (graphicsFont != NULL) {
             CTFontRef result = createFont(graphicsFont, size);
             CGFontRelease(graphicsFont);
+            result = fontWithVariationOfAttributes(result, descriptor);
             return fontWithCascade(result, cascadeOfAttributes(descriptor));
         }
     }
@@ -166,6 +204,7 @@ CTFontRef CTFontCreateWithFontDescriptor(CTFontDescriptorRef descriptor, CGFloat
         return NULL;
     CTFontRef result = CTFontCreateWithName(name, size, matrix);
     CFRelease(name);
+    result = fontWithVariationOfAttributes(result, descriptor);
     return fontWithCascade(result, cascadeOfAttributes(descriptor));
 }
 
@@ -210,14 +249,17 @@ CTFontRef CTFontCreateCopyWithAttributes(CTFontRef font, CGFloat size,
         if (name != NULL) {
             CTFontRef result = CTFontCreateWithName(name, size, matrix);
             CFRelease(name);
-            if (result != NULL)
+            if (result != NULL) {
+                result = fontWithVariationOfAttributes(result, attributes);
                 return fontWithCascade(result, cascade);
+            }
         }
     }
 
     CGFontRef graphicsFont = [object copyGraphicsFont];
     CTFontRef result = createFont(graphicsFont, size);
     CGFontRelease(graphicsFont);
+    result = fontWithVariationOfAttributes(result, attributes);
     return fontWithCascade(result, cascade);
 }
 
@@ -355,6 +397,10 @@ CTFontDescriptorRef CTFontCopyFontDescriptor(CTFontRef font)
         [attributes setObject: cascade forKey: (NSString *) kCTFontCascadeListAttribute];
     if (objc_getAssociatedObject(object, &systemUIFontKey) != nil)
         [attributes setObject: (id) kCFBooleanTrue forKey: (NSString *) KTFontSystemUIAttribute];
+    NSDictionary *variation = (NSDictionary *) CTFontCopyVariation(font);
+    if (variation != nil)
+        [attributes setObject: variation forKey: (NSString *) kCTFontVariationAttribute];
+    [variation release];
     [name release];
     [family release];
     [traits release];
@@ -724,14 +770,42 @@ void CTFontGetVerticalTranslationsForGlyphs(CTFontRef font, const CGGlyph *glyph
 
 CFArrayRef CTFontCopyVariationAxes(CTFontRef font)
 {
-    printf("STUB %s\n", __PRETTY_FUNCTION__);
-    return nil;
+    O2Font_freetype *freeType = copyFreeTypeFont(font);
+    NSArray *axes = [freeType copyVariationAxes];
+    [freeType release];
+    if (axes == nil)
+        return NULL;
+
+    NSMutableArray *result = [[NSMutableArray alloc] init];
+    for (NSDictionary *axis in axes) {
+        NSMutableDictionary *info = [NSMutableDictionary dictionary];
+        [info setObject: [axis objectForKey: @"tag"]
+                 forKey: (NSString *) kCTFontVariationAxisIdentifierKey];
+        [info setObject: [axis objectForKey: @"minimum"]
+                 forKey: (NSString *) kCTFontVariationAxisMinimumValueKey];
+        [info setObject: [axis objectForKey: @"maximum"]
+                 forKey: (NSString *) kCTFontVariationAxisMaximumValueKey];
+        [info setObject: [axis objectForKey: @"default"]
+                 forKey: (NSString *) kCTFontVariationAxisDefaultValueKey];
+        NSString *name = [axis objectForKey: @"name"];
+        if (name != nil)
+            [info setObject: name forKey: (NSString *) kCTFontVariationAxisNameKey];
+        // Only the hidden axes carry the key.
+        if ([[axis objectForKey: @"hidden"] boolValue])
+            [info setObject: (id) kCFBooleanTrue
+                     forKey: (NSString *) kCTFontVariationAxisHiddenKey];
+        [result addObject: info];
+    }
+    [axes release];
+    return (CFArrayRef) result;
 }
 
 CFDictionaryRef CTFontCopyVariation(CTFontRef font)
 {
-    printf("STUB %s\n", __PRETTY_FUNCTION__);
-    return nil;
+    O2Font_freetype *freeType = copyFreeTypeFont(font);
+    NSDictionary *settings = [freeType copyVariationSettings];
+    [freeType release];
+    return (CFDictionaryRef) settings;
 }
 
 CFArrayRef CTFontCopyFeatures(CTFontRef font)

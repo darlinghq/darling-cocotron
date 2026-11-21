@@ -116,6 +116,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         windowView = [[keyed decodeObjectForKey: @"NSWindowView"] retain];
         _windowAutosave =
                 [[keyed decodeObjectForKey: @"NSFrameAutosaveName"] retain];
+        _identifier = [[keyed decodeObjectForKey: @"NSUserInterfaceItemIdentifier"] copy];
+        _hasRestorableFlag = [keyed containsValueForKey: @"NSWindowIsRestorable"];
+        _windowIsRestorable = [keyed decodeBoolForKey: @"NSWindowIsRestorable"];
         _collectionBehavior =
                 [keyed decodeIntegerForKey: @"NSWindowCollectionBehavior"];
         _animationBehavior =
@@ -269,6 +272,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         [coder encodeObject: _windowTitle forKey: @"NSWindowTitle"];
         [coder encodeObject: windowView forKey: @"NSWindowView"];
         [coder encodeObject: _windowAutosave forKey: @"NSFrameAutosaveName"];
+        [coder encodeObject: _identifier forKey: @"NSUserInterfaceItemIdentifier"];
+        if (_hasRestorableFlag)
+            [coder encodeBool: _windowIsRestorable forKey: @"NSWindowIsRestorable"];
         [coder encodeInteger: _collectionBehavior
                       forKey: @"NSWindowCollectionBehavior"];
         [coder encodeInteger: _animationBehavior
@@ -328,6 +334,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [result setHidesOnDeactivate: self.hidesOnDeactivate];
     [result setTitle: _windowTitle];
     [result setIdentifier: _identifier];
+    if (_hasRestorableFlag)
+        [result setRestorable: _windowIsRestorable];
     [result setToolbar: _toolbar];
 
     [result setContentView: windowView];
@@ -431,11 +439,17 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     }
 }
 
+// ibtool writes the Restorable flag as NSWindowIsRestorable; the flag word
+// bit is used for templates without that key.
 - (BOOL) isRestorable {
+    if (_hasRestorableFlag)
+        return _windowIsRestorable;
     return (_wtFlags & NSWindowTemplateFlagRestorable) != 0;
 }
 
 - (void) setRestorable: (BOOL) restorable {
+    _hasRestorableFlag = YES;
+    _windowIsRestorable = restorable;
     if (restorable) {
         _wtFlags |= NSWindowTemplateFlagRestorable;
     } else {

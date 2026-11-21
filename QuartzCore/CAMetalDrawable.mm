@@ -286,10 +286,20 @@ CAMetalDrawableTexture::CAMetalDrawableTexture(CGSize size, Indium::PixelFormat 
 	DynamicVK::vkGetImageMemoryRequirements(_device->device(), _image, &reqs);
 
 	// Without framebufferOnly, the texture may be used like any other Metal
-	// texture, so its memory stays CPU-accessible.
+	// texture, so its memory is CPU-accessible where the device allows it.
 	size_t targetIndex = findImageMemory(reqs, _device, _framebufferOnly ? Indium::StorageMode::Private : Indium::StorageMode::Shared);
 
+	// The image is optimally tiled and its memory is never mapped: the CPU
+	// neither writes nor reads a drawable's texture. Some drivers (NVIDIA)
+	// offer host-visible memory to linearly tiled images only, so there the
+	// image goes to device memory, as Indium's own optimally tiled Shared
+	// textures do.
+	if (targetIndex == SIZE_MAX && !_framebufferOnly) {
+		targetIndex = findImageMemory(reqs, _device, Indium::StorageMode::Private);
+	}
+
 	if (targetIndex == SIZE_MAX) {
+		destroyVulkanObjects();
 		throw std::runtime_error("No suitable memory region found for image");
 	}
 
@@ -300,8 +310,8 @@ CAMetalDrawableTexture::CAMetalDrawableTexture(CGSize size, Indium::PixelFormat 
 	allocInfo.memoryTypeIndex = targetIndex;
 
 	if (DynamicVK::vkAllocateMemory(_device->device(), &allocInfo, nullptr, &_memory) != VK_SUCCESS) {
-		// TODO
-		abort();
+		destroyVulkanObjects();
+		throw std::runtime_error("Failed to allocate the memory of a drawable's image");
 	}
 
 	DynamicVK::vkBindImageMemory(_device->device(), _image, _memory, 0);
@@ -315,6 +325,7 @@ CAMetalDrawableTexture::CAMetalDrawableTexture(CGSize size, Indium::PixelFormat 
 	targetIndex = findImageMemory(reqs, _device, Indium::StorageMode::Private);
 
 	if (targetIndex == SIZE_MAX) {
+		destroyVulkanObjects();
 		throw std::runtime_error("No suitable memory region found for internal image");
 	}
 
@@ -335,8 +346,8 @@ CAMetalDrawableTexture::CAMetalDrawableTexture(CGSize size, Indium::PixelFormat 
 	exportAllocInfo.pNext = &dedicatedInfo;
 
 	if (DynamicVK::vkAllocateMemory(_device->device(), &allocInfo, nullptr, &_internalMemory) != VK_SUCCESS) {
-		// TODO
-		abort();
+		destroyVulkanObjects();
+		throw std::runtime_error("Failed to allocate the memory of a drawable's internal image");
 	}
 
 	DynamicVK::vkBindImageMemory(_device->device(), _internalImage, _internalMemory, 0);
@@ -493,11 +504,23 @@ CAMetalDrawableTexture::~CAMetalDrawableTexture() {
 	glDeleteMemoryObjectsEXT(1, &_memoryObject);
 	reportGLErrors();
 
+	destroyVulkanObjects();
+};
+
+// Destroys the Vulkan objects made so far. A handle not made yet is null,
+// which the destroy and free functions ignore. The constructor calls it
+// before it throws, since the destructor does not run then.
+void CAMetalDrawableTexture::destroyVulkanObjects() {
 	DynamicVK::vkDestroyImageView(_device->device(), _imageView, nullptr);
 	DynamicVK::vkDestroyImage(_device->device(), _image, nullptr);
 	DynamicVK::vkFreeMemory(_device->device(), _memory, nullptr);
 	DynamicVK::vkDestroyImage(_device->device(), _internalImage, nullptr);
 	DynamicVK::vkFreeMemory(_device->device(), _internalMemory, nullptr);
+	_imageView = VK_NULL_HANDLE;
+	_image = VK_NULL_HANDLE;
+	_memory = VK_NULL_HANDLE;
+	_internalImage = VK_NULL_HANDLE;
+	_internalMemory = VK_NULL_HANDLE;
 };
 
 GLuint CAMetalDrawableTexture::glTexture() const {

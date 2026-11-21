@@ -27,6 +27,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSSubmenuView.h>
 #import <AppKit/NSKeyEquivalentMatching.h>
 #import <AppKit/NSWindow.h>
+#import <AppKit/NSScreen.h>
+#import <Foundation/NSProcessInfo.h>
 #import <Foundation/NSKeyedArchiver.h>
 
 const NSNotificationName NSMenuWillSendActionNotification = @"NSMenuWillSendActionNotification";
@@ -88,6 +90,123 @@ NS_EXTRA_SYNTHESIZE_COPY(NSMenu, identifier, _identifier, NSUserInterfaceItemIde
                 [NSApp sendAction: [item action] to: [item target] from: item];
         }
     }
+}
+
+// Shows the menu as a pop-up menu and tracks it until an item is chosen or
+// the menu is dismissed. The top left corner of `item` (which must belong to
+// the menu), or of the menu's content when `item` is nil, goes to `location`,
+// given in `view`'s coordinates, or in screen coordinates when `view` is nil;
+// the menu is then moved as little as needed to keep it on that screen. The
+// chosen item's action is sent before this returns. YES when an item was
+// chosen, NO when tracking was cancelled.
+- (BOOL) popUpMenuPositioningItem: (NSMenuItem *) item
+                       atLocation: (NSPoint) location
+                           inView: (NSView *) view
+{
+    NSInteger itemIndex = item == nil ? NSNotFound : [self indexOfItem: item];
+
+    if (item != nil && itemIndex == NSNotFound)
+        return NO;
+    [self update];
+    if ([self numberOfItems] == 0)
+        return NO;
+
+    NSPoint screenPoint = location;
+    if (view != nil) {
+        screenPoint = [view convertPoint: location toView: nil];
+        screenPoint = [[view window] convertBaseToScreen: screenPoint];
+    }
+
+    NSMenuWindow *menuWindow = [[NSMenuWindow alloc] initWithMenu: self];
+    NSMenuView *menuView = [menuWindow menuView];
+    NSSize size = [menuWindow frame].size;
+    // Where the anchor (the item's top left, or the menu's) is in the window,
+    // measured from the window's top left corner.
+    NSPoint anchor = NSZeroPoint;
+    // The menu view counts the items it shows.
+    if (itemIndex != NSNotFound)
+        itemIndex = [[menuView itemArray] indexOfObjectIdenticalTo: item];
+    if (itemIndex != NSNotFound) {
+        NSRect itemRect = [(NSSubmenuView *) menuView rectForItemAtIndex: itemIndex];
+        NSPoint topLeft = [menuView convertPoint: itemRect.origin toView: nil];
+
+        anchor = NSMakePoint(topLeft.x, size.height - topLeft.y);
+    }
+    NSRect frame = NSMakeRect(screenPoint.x - anchor.x, screenPoint.y + anchor.y - size.height, size.width, size.height);
+
+    NSScreen *screen = nil;
+    for (NSScreen *candidate in [NSScreen screens])
+        if (NSPointInRect(screenPoint, [candidate frame])) {
+            screen = candidate;
+            break;
+        }
+    if (screen == nil)
+        screen = [NSScreen mainScreen];
+    if (screen != nil) {
+        NSRect visible = [screen visibleFrame];
+
+        if (NSMaxX(frame) > NSMaxX(visible))
+            frame.origin.x = NSMaxX(visible) - frame.size.width;
+        if (NSMinX(frame) < NSMinX(visible))
+            frame.origin.x = NSMinX(visible);
+        if (NSMinY(frame) < NSMinY(visible))
+            frame.origin.y = NSMinY(visible);
+        if (NSMaxY(frame) > NSMaxY(visible))
+            frame.origin.y = NSMaxY(visible) - frame.size.height;
+    }
+
+    id<NSMenuDelegate> delegate = [self delegate];
+    if ([delegate respondsToSelector: @selector(menuWillOpen:)])
+        [delegate menuWillOpen: self];
+
+    [menuWindow setReleasedWhenClosed: YES];
+    [menuWindow setFrame: frame display: NO];
+    [menuWindow orderFront: nil];
+
+    // Tracking starts from the event that made the menu appear when that was a
+    // button press, so that releasing the button over an item chooses it;
+    // otherwise (a key press, a timer) from the pointer's current position.
+    NSEvent *current = [NSApp currentEvent];
+    NSEventType type = NSLeftMouseDown;
+    NSTimeInterval timestamp = [[NSProcessInfo processInfo] systemUptime];
+    switch ([current type]) {
+    case NSLeftMouseDown:
+    case NSRightMouseDown:
+    case NSOtherMouseDown:
+        type = [current type];
+        timestamp = [current timestamp];
+        break;
+    default:
+        break;
+    }
+    NSEvent *start = [NSEvent mouseEventWithType: type
+                                        location: [menuWindow convertScreenToBase: [NSEvent mouseLocation]]
+                                   modifierFlags: 0
+                                       timestamp: timestamp
+                                    windowNumber: [menuWindow windowNumber]
+                                         context: nil
+                                     eventNumber: 0
+                                      clickCount: 1
+                                        pressure: 0];
+
+    NSMenuItem *chosen = [menuView trackForEvent: start];
+
+    [menuWindow close];
+
+    if ([delegate respondsToSelector: @selector(menuDidClose:)])
+        [delegate menuDidClose: self];
+
+    if (chosen == nil)
+        return NO;
+
+    NSMenu *owner = [chosen menu] != nil ? [chosen menu] : self;
+    NSInteger index = [owner indexOfItem: chosen];
+
+    if (index != NSNotFound)
+        [owner performActionForItemAtIndex: index];
+    else
+        [NSApp sendAction: [chosen action] to: [chosen target] from: chosen];
+    return YES;
 }
 
 + (NSZone *) menuZone {
@@ -551,6 +670,82 @@ BOOL itemIsEnabled(NSMenuItem *item) {
     }
 
     return nil;
+}
+
+@end
+
+// An alternate goes with the item right before it in the menu when the two
+// have the same key equivalent, letter case aside.
+static BOOL isAlternateOfItem(NSMenuItem *item, NSMenuItem *previous) {
+    return [item isAlternate] && previous != nil && ![previous isSeparatorItem] &&
+           [[item keyEquivalent] caseInsensitiveCompare: [previous keyEquivalent]] == NSOrderedSame;
+}
+
+// The modifier keys an item's key equivalent needs: an upper-case key
+// equivalent includes Shift.
+static NSEventModifierFlags itemModifiers(NSMenuItem *item) {
+    NSEventModifierFlags modifiers = NSCommandKeyMask | NSAlternateKeyMask |
+                                     NSControlKeyMask | NSShiftKeyMask;
+    NSEventModifierFlags mask = [item keyEquivalentModifierMask] & modifiers;
+    NSString *key = [item keyEquivalent];
+
+    if ([key length] > 0 && ![key isEqualToString: [key lowercaseString]])
+        mask |= NSShiftKeyMask;
+    return mask;
+}
+
+// Of an item and its alternates, the one for the modifier keys held: the
+// first one shown unless one of the others is for exactly those keys, or for
+// those keys added to the first one's.
+static NSMenuItem *shownItemOfGroup(NSArray *group, NSEventModifierFlags flags) {
+    NSMenuItem *first = nil;
+
+    for (NSMenuItem *item in group)
+        if (![item isHidden]) {
+            first = item;
+            break;
+        }
+    if (first == nil)
+        return nil;
+
+    NSEventModifierFlags held = flags & (NSCommandKeyMask | NSAlternateKeyMask |
+                                         NSControlKeyMask | NSShiftKeyMask);
+    if (held != 0) {
+        NSEventModifierFlags withFirst = held | itemModifiers(first);
+        for (NSMenuItem *item in group) {
+            NSEventModifierFlags mask = itemModifiers(item);
+            if (item != first && ![item isHidden] && (mask == held || mask == withFirst))
+                return item;
+        }
+    }
+    return first;
+}
+
+@implementation NSMenu (ShownItems)
+
+- (NSArray *) _shownItemsWithModifierFlags: (NSEventModifierFlags) flags {
+    NSMutableArray *shown = [NSMutableArray array];
+    NSMutableArray *group = [NSMutableArray array];
+
+    for (NSMenuItem *item in [self itemArray]) {
+        if ([group count] > 0 && isAlternateOfItem(item, [group lastObject])) {
+            [group addObject: item];
+            continue;
+        }
+        if ([group count] > 0) {
+            NSMenuItem *chosen = shownItemOfGroup(group, flags);
+            if (chosen != nil)
+                [shown addObject: chosen];
+        }
+        [group removeAllObjects];
+        [group addObject: item];
+    }
+    if ([group count] > 0) {
+        NSMenuItem *chosen = shownItemOfGroup(group, flags);
+        if (chosen != nil)
+            [shown addObject: chosen];
+    }
+    return shown;
 }
 
 @end

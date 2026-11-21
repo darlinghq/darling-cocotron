@@ -17,6 +17,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#import "NSViewLayoutInternal.h"
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSColor.h>
 #import <AppKit/NSColorPanel.h>
@@ -34,6 +35,18 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Foundation/NSKeyedArchiver.h>
 
 @implementation NSColorWell
+
+// Operated at once: the click that activates the window is delivered to it
+// (see -[NSWindow sendEvent:]).
+- (BOOL) acceptsFirstMouse: (NSEvent *) event {
+    return YES;
+}
+
+// A color well hugs like a plain view (observed on macOS 10.14.4 and 26.7.3).
+- (NSLayoutPriority) _defaultContentHuggingPriorityForOrientation: (NSLayoutConstraintOrientation) orientation {
+    return NSLayoutPriorityDefaultLow;
+}
+
 
 + (void) initialize {
     // FIXME: need [NSObject setKeys:triggerChangeNotificationsForDependentKey:]

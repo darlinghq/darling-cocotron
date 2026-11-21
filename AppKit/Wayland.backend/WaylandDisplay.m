@@ -35,6 +35,8 @@
 #import "WaylandPointerLock.h"
 #import "WaylandProtocol.h"
 #import "WaylandWindow.h"
+#import "WaylandAppMenu.h"
+#import "../private-include/AppKit/NSGlobalMenu+Private.h"
 #import "../DarlingWindowLevelPolicy.h"
 #import "../../CoreGraphics/DarlingUnicodeKeyLayout.h"
 #import "../../CoreGraphics/DarlingUnicodeKeyLayoutCompose.h"
@@ -331,6 +333,12 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
     if (_xkbContext == NULL)
         NSLog(@"Wayland backend: cannot create an xkbcommon context, keyboard "
               @"input is disabled");
+    else
+        // The Text Input Sources API describes a keyboard layout whether or not the
+        // seat has a keyboard (a compositor with no input devices never sends a
+        // keymap), so start with the system default layout; the compositor's keymap
+        // replaces it when one arrives.
+        [self installKeymap: WL.xkb_keymap_new_from_names(_xkbContext, NULL, XKB_KEYMAP_COMPILE_NO_FLAGS)];
 
     if (WL.hasCursor) {
         const char *sizeString = getenv("XCURSOR_SIZE");
@@ -425,13 +433,15 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         WL.wl_cursor_theme_destroy(_cursorTheme);
     [_outputManager release];
     _outputManager = nil;
+    [_appMenu release];
+    _appMenu = nil;
     if (_wlDisplay != NULL) {
         // wl_display_disconnect() doesn't free proxies.
         struct wl_proxy *proxies[] = {_imageCursorBuffer, _cursorFractionalScale, _cursorSurface,
                                       _lockedPointer, _relativePointer, _pointerConstraints, _relativePointerManager,
                                       _textInput, _textInputManager, _pinchGesture, _pointerGestures, _pointer, _keyboard,
                                       _seat, _decorationManager, _dataDeviceManager, _wmBase,
-                                      _shm, _viewporter, _fractionalScaleManager, _activationToken, _activation, _subcompositor, _logicalOutputManager,
+                                      _shm, _viewporter, _fractionalScaleManager, _activationToken, _activation, _appMenuManager, _subcompositor, _logicalOutputManager,
                                       _legacyLogicalOutputManager, _compositor, _registry};
         for (size_t i = 0; i < sizeof(proxies) / sizeof(proxies[0]); i++)
             if (proxies[i] != NULL)
@@ -570,6 +580,18 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         _activationName = name;
         _activation = [self bindGlobal: name interface: &xdg_activation_v1_interface
                                version: 1 kind: 0 object: nil];
+    } else if (strcmp(interface, "org_kde_kwin_appmenu_manager") == 0 && _appMenuManager == NULL) {
+        // Version 2 adds the manager's release request.
+        _appMenuManagerName = name;
+        _appMenuManagerVersion = MIN(version, 2);
+        _appMenuManager = [self bindGlobal: name interface: &org_kde_kwin_appmenu_manager_interface
+                                   version: _appMenuManagerVersion kind: 0 object: nil];
+    } else if (strcmp(interface, "org_kde_plasma_shell") == 0 && _plasmaShell == NULL) {
+        // Version 2 adds set_skip_taskbar, version 5 set_skip_switcher.
+        _plasmaShellName = name;
+        _plasmaShellVersion = MIN(version, 5);
+        _plasmaShell = [self bindGlobal: name interface: &org_kde_plasma_shell_interface
+                                version: _plasmaShellVersion kind: 0 object: nil];
     } else if (strcmp(interface, "wl_subcompositor") == 0 && _subcompositor == NULL) {
         _subcompositor = [self bindGlobal: name interface: &wl_subcompositor_interface
                                   version: 1 kind: 0 object: nil];
@@ -742,6 +764,25 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         WaylandMarshal(_fractionalScaleManager, WP_FRACTIONAL_MANAGER_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
         _fractionalScaleManager = NULL; _fractionalScaleManagerName = 0;
         return; // Existing surface preferences survive factory removal.
+    }
+    if (_appMenuManager && name == _appMenuManagerName) {
+        struct wl_proxy *manager = _appMenuManager;
+        _appMenuManager = NULL; _appMenuManagerName = 0;
+        // The windows release their appmenu objects while the manager is gone.
+        for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
+            [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) updateApplicationMenu];
+        if (_appMenuManagerVersion >= 2)
+            WaylandMarshal(manager, WP_APPMENU_MANAGER_RELEASE, NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
+        else
+            WL.wl_proxy_destroy(manager);
+        return;
+    }
+    if (_plasmaShell && name == _plasmaShellName) {
+        // The windows' plasma surfaces stay valid on the compositor's side; they are destroyed when
+        // their windows unmap.
+        WL.wl_proxy_destroy(_plasmaShell);
+        _plasmaShell = NULL; _plasmaShellName = 0;
+        return;
     }
     if (_activation && name == _activationName) {
         [self cancelActivationRequest];
@@ -1309,6 +1350,10 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
                         deltaY: 0.0];
     [(NSEvent_mouse *) event _setButtonNumber: number];
     if (pressed) {
+        // The compositor may activate the window for this very click, before
+        // or after the press reaches us; the press is judged by what we knew
+        // when it arrived, not by what the queue shows when it is taken.
+        [(NSEvent_mouse *) event _setWindowWasKeyOnArrival: [[window delegate] isKeyWindow]];
         _inputEvent = [event retain];
         _inputWindow = window;
     }
@@ -1987,6 +2032,12 @@ static NSUInteger modifierDeviceMask(int code) {
     }
     close(fd);
 
+    [self installKeymap: keymap];
+}
+
+// Makes keymap (nil: none usable; the reference is taken over) the one that interprets key codes
+// and that the Text Input Sources API describes.
+- (void) installKeymap: (struct xkb_keymap *) keymap {
     struct xkb_state *state = keymap != NULL ? WL.xkb_state_new(keymap) : NULL;
     if (state == NULL) {
         if (keymap != NULL)
@@ -2429,7 +2480,7 @@ static uint32_t WaylandKeyLayoutCodepoint(void *context, uint32_t keysym) {
     for (CFIndex i = CFArrayGetCount(_windows); i > 0; i--) {
         WaylandWindow *candidate = (WaylandWindow *) CFArrayGetValueAtIndex(_windows, i - 1);
         if (candidate != window && [candidate isMapped] && [candidate isPopup] &&
-            ![candidate isTooltip])
+            ![candidate isTooltip] && ![candidate isGenericPopup])
             return candidate;
     }
     if (_inputWindow != window && [_inputWindow isMapped])
@@ -2439,16 +2490,41 @@ static uint32_t WaylandKeyLayoutCodepoint(void *context, uint32_t keysym) {
     id key = [[NSApp keyWindow] platformWindow];
     if (key != window && [key isKindOfClass: [WaylandWindow class]] && [key isMapped])
         return key;
+    // No pointer, input or key window yet (the compositor has not configured and activated the
+    // application's first window): the newest mapped window of the application. A toplevel would
+    // be placed and sized by the compositor.
+    for (CFIndex i = CFArrayGetCount(_windows); i > 0; i--) {
+        WaylandWindow *candidate = (WaylandWindow *) CFArrayGetValueAtIndex(_windows, i - 1);
+        if (candidate != window && [candidate isMapped] && ![candidate isPopup] &&
+            ![candidate isTooltip])
+            return candidate;
+    }
     return nil;
 }
 
-// The window a window of a raised level is made transient for: the application's key
+// The window a pop-up window of the application (see DarlingWindowPresentation.h) is shown as a
+// popup of: the window it is attached to as a child window, else the application's main window,
+// else its key window. It must be mapped (a popup of a window that is not shown is a protocol
+// error); the caller waits for its first configure.
+- (WaylandWindow *) popupParentForGenericPopup: (WaylandWindow *) window {
+    NSWindow *candidates[3] = {[[window delegate] parentWindow], [NSApp mainWindow], [NSApp keyWindow]};
+    for (int i = 0; i < 3; i++) {
+        id platform = [candidates[i] platformWindow];
+        if ([platform isKindOfClass: [WaylandWindow class]] && platform != window && [platform isMapped])
+            return platform;
+    }
+    return nil;
+}
+
+// The window a window of a raised level, or any window that is not an application window, is made
+// transient for: the window it is attached to as a child window, else the application's key
 // window, else its main window, provided it is a mapped toplevel and naming it would
 // not make a window its own ancestor.
 - (WaylandWindow *) levelParentForWindow: (WaylandWindow *) window {
-    NSWindow *candidates[2] = {[NSApp keyWindow], [NSApp mainWindow]};
+    NSWindow *candidates[4] = {[[window delegate] parentWindow], [[window delegate] sheetParent], [NSApp keyWindow],
+                                [NSApp mainWindow]};
 
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < 4; i++) {
         id platform = [candidates[i] platformWindow];
         if (![platform isKindOfClass: [WaylandWindow class]] || ![platform isMapped] || [platform isPopup])
             continue;
@@ -2477,7 +2553,7 @@ static uint32_t WaylandKeyLayoutCodepoint(void *context, uint32_t keysym) {
     for (CFIndex i = CFArrayGetCount(_windows); i > 0; i--) {
         WaylandWindow *window = (WaylandWindow *) CFArrayGetValueAtIndex(_windows, i - 1);
         if ([window popupParent] == parent)
-            [([window isTooltip] ? tooltips : children) addObject: window];
+            [([window isTooltip] || [window isGenericPopup] ? tooltips : children) addObject: window];
     }
     for (WaylandWindow *window in tooltips)
         [window unmap];
@@ -2489,13 +2565,26 @@ static uint32_t WaylandKeyLayoutCodepoint(void *context, uint32_t keysym) {
         [window unmap];
 }
 
+// Menus that were ordered in before their parent's first configure are mapped now that a window
+// has been configured (each decides again which window it belongs to).
+- (void) mapPopupsWaitingForParent {
+    NSMutableArray *waiting = [NSMutableArray array];
+    for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++) {
+        WaylandWindow *window = (WaylandWindow *) CFArrayGetValueAtIndex(_windows, i);
+        if ([window isPopupWaitingForParent])
+            [waiting addObject: window];
+    }
+    for (WaylandWindow *window in waiting)
+        [window ensureMapped];
+}
+
 - (void) cancelPopupMenus {
     // Tracking loops own menu windows. Do not close/release them underneath
     // their stack frames. Clear selection and wake tracking with cancellation.
     NSMutableArray *popups = [NSMutableArray array];
     for (CFIndex i = CFArrayGetCount(_windows); i > 0; i--) {
         WaylandWindow *window = (WaylandWindow *) CFArrayGetValueAtIndex(_windows, i - 1);
-        if ([window isPopup] && ![window isTooltip])
+        if ([window isPopup] && ![window isTooltip] && ![window isGenericPopup])
             [popups addObject: window];
     }
     if ([popups count] == 0)
@@ -2517,6 +2606,47 @@ static uint32_t WaylandKeyLayoutCodepoint(void *context, uint32_t keysym) {
 
 - (CGWindow *) newWindowWithDelegate: (NSWindow *) delegate {
     return [[WaylandWindow alloc] initWithDelegate: delegate];
+}
+
+#pragma mark - Main menu
+
+// The main menu goes to the desktop's global menu when the compositor takes the
+// address of a window's menu (KDE's appmenu protocol) and something on the
+// session bus shows application menus (the com.canonical.AppMenu.Registrar
+// name has an owner). Plasma's appmenu service owns that name only while a
+// global menu view, the Global Menu applet or the application menu button of
+// the window title bars, is in use. Otherwise nothing outside the application
+// would show the menu, and a client cannot put a bar of its own along the top
+// of the screen with xdg-shell, so the windows draw it themselves.
+- (BOOL) _showsMainMenuOutsideWindows {
+    if (_appMenuManager == NULL)
+        return NO;
+    if (_appMenu == nil)
+        _appMenu = [WaylandAppMenu new];
+    if ([_appMenu globalMenuPresent])
+        return YES;
+    [_appMenu release];
+    _appMenu = nil;
+    return NO;
+}
+
+- (void) _mainMenuDidChange: (NSMenu *) menu {
+    if ([NSWindow _usesInWindowMenuBar])
+        return;
+    if (_appMenu == nil)
+        _appMenu = [WaylandAppMenu new];
+    [_appMenu setMainMenu: menu];
+    for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
+        [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) updateApplicationMenu];
+    [self flush];
+}
+
+- (NSString *) applicationMenuServiceName {
+    return [_appMenu serviceName];
+}
+
+- (NSString *) applicationMenuObjectPath {
+    return [_appMenu objectPath];
 }
 
 - (void) windowCreated: (WaylandWindow *) window {

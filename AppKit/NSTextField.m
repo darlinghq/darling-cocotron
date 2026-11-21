@@ -48,6 +48,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @implementation NSTextField
 
+// Operated at once: the click that activates the window is delivered to it
+// (see -[NSWindow sendEvent:]).
+- (BOOL) acceptsFirstMouse: (NSEvent *) event {
+    return YES;
+}
+
 - (CGFloat) preferredMaxLayoutWidth {
     return NS_EXTRA(NSTextField, self)->_preferredMaxLayoutWidth;
 }
@@ -243,10 +249,23 @@ NS_EXTRA_DEALLOC(NSTextField)
     [_cell setEditable: YES];
     [_cell setSelectable: YES];
     [_cell setBezeled: YES];
+    // QUIRK: a new text field draws its background, in textBackgroundColor,
+    // and has controlTextColor as its text colour. Not documented. Evidence:
+    // black-box observation on macOS 10.14.4 and 26.7.3 (tier 2), probe
+    // mac-probes/aqua-metric-followups.m of the research notes.
+    // Test: appkit-text-field-defaults.m (test_quirk_field_defaults)
+    [self _setDefaultBackground];
+    [_cell setTextColor: [NSColor controlTextColor]];
     NS_EXTRA(NSTextField, self)->_automaticTextCompletionEnabled = YES;
     [self registerForDraggedTypes:
                     [NSArray arrayWithObject: NSStringPboardType]];
     return self;
+}
+
+// The background a new field of this class draws; see -initWithFrame:.
+- (void) _setDefaultBackground {
+    [_cell setDrawsBackground: YES];
+    [_cell setBackgroundColor: [NSColor textBackgroundColor]];
 }
 
 - (BOOL) isFlipped {

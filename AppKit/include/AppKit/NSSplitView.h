@@ -21,7 +21,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSView.h>
 #import <AppKit/NSLayoutConstraint.h>
 
-@class NSView;
+@class NSView, NSColor;
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -65,6 +65,7 @@ typedef NS_ENUM(NSInteger, NSSplitViewDividerStyle) {
 - (void) adjustSubviews;
 
 - (CGFloat) dividerThickness;
+@property(readonly, copy) NSColor *dividerColor;
 - (void) drawDividerInRect: (NSRect) rect;
 
 - (BOOL) isSubviewCollapsed: (NSView *) subview;

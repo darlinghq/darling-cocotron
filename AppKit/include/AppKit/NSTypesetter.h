@@ -53,13 +53,13 @@ typedef enum {
 + sharedSystemTypesetter;
 
 - (NSTypesetterBehavior) typesetterBehavior;
-- (CGFloat) hyphenationFactor;
+- (float) hyphenationFactor;
 - (CGFloat) lineFragmentPadding;
 - (BOOL) usesFontLeading;
 - (BOOL) bidiProcessingEnabled;
 
 - (void) setTypesetterBehavior: (NSTypesetterBehavior) behavior;
-- (void) setHyphenationFactor: (CGFloat) factor;
+- (void) setHyphenationFactor: (float) factor;
 - (void) setLineFragmentPadding: (CGFloat) padding;
 - (void) setUsesFontLeading: (BOOL) flag;
 - (void) setBidiProcessingEnabled: (BOOL) flag;
@@ -118,9 +118,9 @@ typedef enum {
 - (BOOL) shouldBreakLineByWordBeforeCharacterAtIndex:
         (NSUInteger) characterIndex;
 
-- (CGFloat) hyphenationFactorForGlyphAtIndex: (NSUInteger) glyphIndex;
+- (float) hyphenationFactorForGlyphAtIndex: (NSUInteger) glyphIndex;
 
-- (unichar) hyphenCharacterForGlyphAtIndex: (NSUInteger) glyphIndex;
+- (UTF32Char) hyphenCharacterForGlyphAtIndex: (NSUInteger) glyphIndex;
 
 - (NSRect) boundingBoxForControlGlyphAtIndex: (NSUInteger) glyphIndex
                             forTextContainer: (NSTextContainer *) textContainer

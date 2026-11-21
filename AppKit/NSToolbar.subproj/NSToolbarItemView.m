@@ -30,10 +30,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 @interface NSToolbarItem (private)
 - (void) drawInRect: (NSRect) bounds highlighted: (BOOL) highlighted;
 - (NSSize) _labelSize;
+- (BOOL) _sizeFollowsView;
+- (NSSize) _viewSize;
 @end
 
 @interface NSToolbar (private)
 - (void) didSelectToolbarItem: (NSString *) identifier;
+- (void) _itemViewIntrinsicSizeDidChange: (NSToolbarItem *) item;
 @end
 
 @implementation NSToolbarItemView
@@ -64,10 +67,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (NSRect) availableRectForSubview {
     NSRect rect = [self bounds];
     CGFloat labelHeight = [_toolbarItem _labelSize].height;
-    rect.size.height -= labelHeight;
-    rect.origin.y +=
-            labelHeight +
-            4; // 4 is Cocotron magic padding (see NSToolbarItem drawInRect:
+
+    // The label is drawn at the bottom, 4 points below the view (see -[NSToolbarItem drawInRect:]);
+    // without a label (icon-only mode) the view has the whole height.
+    if (labelHeight > 0) {
+        rect.size.height -= labelHeight + 4;
+        rect.origin.y += labelHeight + 4;
+    }
     return rect;
 }
 
@@ -81,16 +87,29 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         NSRect availableRect = [self availableRectForSubview];
         NSRect viewRect = [view frame];
 
-        // Center the subview within the available bounds
+        // An item that has no sizes of its own makes its view the size it asks for.
+        if ([_toolbarItem _sizeFollowsView])
+            viewRect.size = [_toolbarItem _viewSize];
+
+        // Center the subview within the available bounds, both ways, so that views of
+        // different heights line up on the middle of the toolbar and none sticks out of it.
         viewRect.origin.x = NSMinX(availableRect) +
                             (NSWidth(availableRect) - NSWidth(viewRect)) / 2.f;
-        // Align top
-        viewRect.origin.y = NSMinY(availableRect);
+        viewRect.origin.y = NSMinY(availableRect) +
+                            floor((NSHeight(availableRect) - NSHeight(viewRect)) / 2);
         [view setFrame: viewRect];
     }
 }
 - (NSView *) view {
     return [[self subviews] lastObject];
+}
+
+// An item that has no sizes of its own is laid out again when its view's intrinsic
+// content size changes (a pop-up button shows a longer title, for example).
+- (void) _subviewIntrinsicContentSizeDidChange: (NSView *) subview {
+    [super _subviewIntrinsicContentSizeDidChange: subview];
+    if (subview == [_toolbarItem view] && [_toolbarItem _sizeFollowsView])
+        [[_toolbarItem toolbar] _itemViewIntrinsicSizeDidChange: _toolbarItem];
 }
 
 typedef struct {

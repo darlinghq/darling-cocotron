@@ -4,6 +4,7 @@
 #import <AppKit/NSAccessibilityConstants.h>
 #import <AppKit/NSErrors.h>
 #import <AppKit/NSView.h>
+#import <AppKit/NSWindow.h>
 
 NSString *const NSAccessibilityChildrenAttribute =
         @"AXChildren";
@@ -600,18 +601,156 @@ NSString *const NSAccessibilityAnnouncementRequestedNotification = @"AXAnnouncem
 NSString *const NSAccessibilityPriorityKey = @"AXPriorityKey";
 
 NSRect NSAccessibilityFrameInView(NSView *parentView, NSRect frame) {
-    printf("STUB %s\n", __PRETTY_FUNCTION__);
-    return frame;
+    NSWindow *window = [parentView window];
+
+    if (window != nil)
+        return [window convertRectToScreen: [parentView convertRect: frame toView: nil]];
+
+    // Outside a window, the frame is in the coordinates of the topmost view.
+    NSView *topView = parentView;
+    while ([topView superview] != nil)
+        topView = [topView superview];
+    return [topView convertRect: frame fromView: parentView];
+}
+
+NSPoint NSAccessibilityPointInView(NSView *parentView, NSPoint point) {
+    return NSAccessibilityFrameInView(parentView, NSMakeRect(point.x, point.y, 0, 0)).origin;
 }
 
 void NSAccessibilityPostNotification(id element, NSString *notification) {
 }
 
+// The English descriptions macOS 26 gives for each role, and for the role and
+// subrole pairs whose description differs from the role's own.
+static NSDictionary *roleDescriptions(void) {
+    static NSDictionary *descriptions;
+    static dispatch_once_t once;
+
+    dispatch_once(&once, ^{
+        descriptions = [@{
+            NSAccessibilityApplicationRole: @"application",
+            NSAccessibilityBrowserRole: @"browser",
+            NSAccessibilityBusyIndicatorRole: @"busy indicator",
+            NSAccessibilityButtonRole: @"button",
+            NSAccessibilityCellRole: @"cell",
+            NSAccessibilityCheckBoxRole: @"checkbox",
+            NSAccessibilityColorWellRole: @"color well",
+            NSAccessibilityColumnRole: @"column",
+            NSAccessibilityComboBoxRole: @"combo box",
+            NSAccessibilityDisclosureTriangleRole: @"disclosure triangle",
+            NSAccessibilityDrawerRole: @"drawer",
+            NSAccessibilityGridRole: @"grid",
+            NSAccessibilityGroupRole: @"group",
+            NSAccessibilityGrowAreaRole: @"grow area",
+            NSAccessibilityHandleRole: @"handle",
+            NSAccessibilityHelpTagRole: @"help tag",
+            NSAccessibilityImageRole: @"image",
+            NSAccessibilityIncrementorRole: @"stepper",
+            NSAccessibilityLayoutAreaRole: @"layout area",
+            NSAccessibilityLayoutItemRole: @"layout item",
+            NSAccessibilityLevelIndicatorRole: @"level indicator",
+            NSAccessibilityLinkRole: @"link",
+            NSAccessibilityListRole: @"list",
+            NSAccessibilityMatteRole: @"matte",
+            NSAccessibilityMenuBarItemRole: @"menu bar item",
+            NSAccessibilityMenuBarRole: @"menu bar",
+            NSAccessibilityMenuButtonRole: @"menu button",
+            NSAccessibilityMenuItemRole: @"menu item",
+            NSAccessibilityMenuRole: @"menu",
+            NSAccessibilityOutlineRole: @"outline",
+            NSAccessibilityPopoverRole: @"popover",
+            NSAccessibilityPopUpButtonRole: @"pop up button",
+            NSAccessibilityProgressIndicatorRole: @"progress indicator",
+            NSAccessibilityRadioButtonRole: @"radio button",
+            NSAccessibilityRadioGroupRole: @"radio group",
+            NSAccessibilityRelevanceIndicatorRole: @"relevance indicator",
+            NSAccessibilityRowRole: @"row",
+            NSAccessibilityRulerMarkerRole: @"ruler marker",
+            NSAccessibilityRulerRole: @"ruler",
+            NSAccessibilityScrollAreaRole: @"scroll area",
+            NSAccessibilityScrollBarRole: @"scroll bar",
+            NSAccessibilitySheetRole: @"sheet",
+            NSAccessibilitySliderRole: @"slider",
+            NSAccessibilitySortButtonRole: @"sort button",
+            NSAccessibilitySplitGroupRole: @"split group",
+            NSAccessibilitySplitterRole: @"splitter",
+            NSAccessibilityStaticTextRole: @"text",
+            NSAccessibilitySystemWideRole: @"system wide element",
+            NSAccessibilityTabGroupRole: @"tab group",
+            NSAccessibilityTableRole: @"table",
+            NSAccessibilityTextAreaRole: @"text entry area",
+            NSAccessibilityTextFieldRole: @"text field",
+            NSAccessibilityToolbarRole: @"toolbar",
+            NSAccessibilityUnknownRole: @"unknown",
+            NSAccessibilityValueIndicatorRole: @"value indicator",
+            NSAccessibilityWindowRole: @"window",
+        } retain];
+    });
+    return descriptions;
+}
+
+static NSDictionary *subroleDescriptions(void) {
+    static NSDictionary *descriptions;
+    static dispatch_once_t once;
+
+    dispatch_once(&once, ^{
+        NSString *(^pair)(NSString *, NSString *) = ^(NSString *role, NSString *subrole) {
+            return [NSString stringWithFormat: @"%@\n%@", role, subrole];
+        };
+        descriptions = [@{
+            pair(NSAccessibilityWindowRole, NSAccessibilityStandardWindowSubrole): @"standard window",
+            pair(NSAccessibilityWindowRole, NSAccessibilityDialogSubrole): @"dialog",
+            pair(NSAccessibilityWindowRole, NSAccessibilitySystemDialogSubrole): @"system dialog",
+            pair(NSAccessibilityWindowRole, NSAccessibilityFloatingWindowSubrole): @"floating window",
+            pair(NSAccessibilityWindowRole, NSAccessibilitySystemFloatingWindowSubrole): @"system floating window",
+            pair(NSAccessibilityButtonRole, NSAccessibilityCloseButtonSubrole): @"close button",
+            pair(NSAccessibilityButtonRole, NSAccessibilityMinimizeButtonSubrole): @"minimize button",
+            pair(NSAccessibilityButtonRole, NSAccessibilityZoomButtonSubrole): @"zoom button",
+            pair(NSAccessibilityButtonRole, NSAccessibilityFullScreenButtonSubrole): @"full screen button",
+            pair(NSAccessibilityButtonRole, NSAccessibilityToolbarButtonSubrole): @"toolbar button",
+            pair(NSAccessibilityButtonRole, NSAccessibilitySortButtonSubrole): @"sort button",
+            pair(NSAccessibilityButtonRole, NSAccessibilityIncrementArrowSubrole): @"increment arrow button",
+            pair(NSAccessibilityButtonRole, NSAccessibilityDecrementArrowSubrole): @"decrement arrow button",
+            pair(NSAccessibilityButtonRole, NSAccessibilityIncrementPageSubrole): @"increment page button",
+            pair(NSAccessibilityButtonRole, NSAccessibilityDecrementPageSubrole): @"decrement page button",
+            pair(NSAccessibilityButtonRole, NSAccessibilityToggleSubrole): @"toggle button",
+            pair(NSAccessibilityCheckBoxRole, NSAccessibilityToggleSubrole): @"toggle button",
+            pair(NSAccessibilityTextFieldRole, NSAccessibilitySearchFieldSubrole): @"search text field",
+            pair(NSAccessibilityTextFieldRole, NSAccessibilitySecureTextFieldSubrole): @"secure text field",
+            pair(NSAccessibilityRowRole, NSAccessibilityOutlineRowSubrole): @"outline row",
+            pair(NSAccessibilityRowRole, NSAccessibilityTableRowSubrole): @"table row",
+            pair(NSAccessibilityRadioButtonRole, NSAccessibilityTabButtonSubrole): @"tab",
+            pair(NSAccessibilityListRole, NSAccessibilityContentListSubrole): @"content list",
+            pair(NSAccessibilityListRole, NSAccessibilityDefinitionListSubrole): @"definition list",
+            pair(NSAccessibilityLinkRole, NSAccessibilityTextLinkSubrole): @"hyperlink",
+            pair(NSAccessibilityImageRole, NSAccessibilityTextAttachmentSubrole): @"attached image",
+            pair(NSAccessibilitySliderRole, NSAccessibilityTimelineSubrole): @"time line",
+        } retain];
+    });
+    return descriptions;
+}
+
 NSString *NSAccessibilityRoleDescription(NSString *role, NSString *subrole) {
-    return nil;
+    if (role == nil)
+        return nil;
+
+    if (subrole != nil) {
+        NSString *key = [NSString stringWithFormat: @"%@\n%@", role, subrole];
+        NSString *description = [subroleDescriptions() objectForKey: key];
+        if (description != nil)
+            return description;
+    }
+
+    // A role AppKit does not define is described by its own name.
+    NSString *description = [roleDescriptions() objectForKey: role];
+    return description ? description : role;
 }
 
 NSString *NSAccessibilityRoleDescriptionForUIElement(id element) {
+    if ([element respondsToSelector: @selector(accessibilityRoleDescription)])
+        return [element accessibilityRoleDescription];
+    if ([element respondsToSelector: @selector(accessibilityRole)])
+        return NSAccessibilityRoleDescription([element accessibilityRole], nil);
     return nil;
 }
 
@@ -623,24 +762,72 @@ void NSAccessibilityRaiseBadArgumentException(id element, NSString *attribute,
                         attribute, element];
 }
 
-// Cocotron never treats an element as ignored, so each of these returns what it was given.
+// An object is ignored when it is not an accessibility element. Objects that only
+// have the legacy methods answer through -accessibilityIsIgnored.
+static BOOL isIgnored(id element) {
+    if ([element respondsToSelector: @selector(isAccessibilityElement)])
+        return ![element isAccessibilityElement];
+    if ([element respondsToSelector: @selector(accessibilityIsIgnored)])
+        return [element accessibilityIsIgnored];
+    return NO;
+}
+
+static NSArray *childrenOf(id element) {
+    if ([element respondsToSelector: @selector(accessibilityChildren)])
+        return [element accessibilityChildren];
+    if ([element respondsToSelector: @selector(accessibilityAttributeValue:)])
+        return [element accessibilityAttributeValue: NSAccessibilityChildrenAttribute];
+    return nil;
+}
+
+static id parentOf(id element) {
+    if ([element respondsToSelector: @selector(accessibilityParent)])
+        return [element accessibilityParent];
+    if ([element respondsToSelector: @selector(accessibilityAttributeValue:)])
+        return [element accessibilityAttributeValue: NSAccessibilityParentAttribute];
+    return nil;
+}
+
 id NSAccessibilityUnignoredAncestor(id element) {
+    while (element != nil && isIgnored(element))
+        element = parentOf(element);
     return element;
 }
 
 id NSAccessibilityUnignoredDescendant(id element) {
+    // Follows an ignored element down through its single children.
+    while (element != nil && isIgnored(element)) {
+        NSArray *children = childrenOf(element);
+        if ([children count] != 1)
+            return nil;
+        element = [children objectAtIndex: 0];
+    }
     return element;
 }
 
+static void addUnignored(NSMutableArray *result, NSArray *children) {
+    for (id child in children) {
+        if (isIgnored(child))
+            addUnignored(result, childrenOf(child));
+        else
+            [result addObject: child];
+    }
+}
+
 NSArray *NSAccessibilityUnignoredChildren(NSArray *originalChildren) {
-    return originalChildren;
+    NSMutableArray *result = [NSMutableArray array];
+
+    addUnignored(result, originalChildren);
+    return result;
 }
 
 NSArray *NSAccessibilityUnignoredChildrenForOnlyChild(id originalChild) {
-    return originalChild ? [NSArray arrayWithObject: originalChild] : [NSArray array];
+    if (originalChild == nil)
+        return [NSArray array];
+    return NSAccessibilityUnignoredChildren([NSArray arrayWithObject: originalChild]);
 }
 
-@implementation NSObject (NSAccessibility)
+@implementation NSObject (NSAccessibilityAdditions)
 
 - (BOOL) accessibilitySetOverrideValue: (id) value forAttribute: (NSString *) attribute {
     return NO;
@@ -652,7 +839,7 @@ void NSAccessibilityPostNotificationWithUserInfo(id element,
                                                  NSAccessibilityNotificationName notification,
                                                  NSDictionary<NSAccessibilityNotificationUserInfoKey, id> *userInfo)
 {
-    printf("STUB %s\n", __PRETTY_FUNCTION__);
+    // Like NSAccessibilityPostNotification: there is no assistive client to tell.
 }
 
 NSString *NSAccessibilityActionDescription(NSString *action) {

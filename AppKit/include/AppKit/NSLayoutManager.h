@@ -190,6 +190,8 @@ typedef NS_OPTIONS(NSInteger, NSControlCharacterAction) {
                             changeInLength: (NSInteger) delta
                       actualCharacterRange: (nullable NSRangePointer) actualCharRange;
 - (void) invalidateLayoutForCharacterRange: (NSRange) charRange
+                      actualCharacterRange: (nullable NSRangePointer) actualCharRange;
+- (void) invalidateLayoutForCharacterRange: (NSRange) charRange
                                     isSoft: (BOOL) isSoft
                       actualCharacterRange: (nullable NSRangePointer) actualCharRange;
 - (void) invalidateDisplayForGlyphRange: (NSRange) glyphRange;

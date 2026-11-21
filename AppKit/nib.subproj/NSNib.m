@@ -26,20 +26,37 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSNibLoading.h>
 #import <AppKit/NSRaise.h>
 #import <AppKit/NSTableCornerView.h>
+#import <AppKit/NSToolbar.h>
 #import <Foundation/NSKeyedArchiver.h>
 #import <Foundation/NSProcessInfo.h>
 #import <Foundation/NSURL.h>
 #import <UIFoundation/UIFoundation.h>
 #import <UIFoundation/UINibDecoder.h>
+#include <string.h>
 
 NSString *const NSNibOwner = @"NSOwner";
 NSString *const NSNibTopLevelObjects = @"NSNibTopLevelObjects";
+
+@interface NSToolbar (NSNibConnections)
+- (void) _nibDidConnectObjects;
+@end
+
+// NSArchiver data starts with its typedstream signature; anything else is a keyed archive or a
+// NIBArchive.
+static BOOL NSNibDataIsKeyed(NSData *data) {
+    static const char typedstream[] = "\x04\x0bstreamtyped";
+    return !([data length] >= sizeof(typedstream) - 1 &&
+             memcmp([data bytes], typedstream, sizeof(typedstream) - 1) == 0);
+}
 
 @implementation NSNib
 
 - initWithCoder: (NSCoder *) coder {
     if ([coder allowsKeyedCoding]) {
         _data = [[coder decodeObjectForKey: @"NSNibFileData"] retain];
+        // A nib archived inside another nib (the nib of a table's cell views, for one) is
+        // instantiated like any other nib, so it has to know which kind of archive it holds.
+        _flags._isKeyed = NSNibDataIsKeyed(_data);
 
         // TODO: NSNibFileIsKeyed
         // NSNibFileUseParentBundle
@@ -133,6 +150,18 @@ NSString *const NSNibTopLevelObjects = @"NSNibTopLevelObjects";
 
     _allObjects = [NSMutableArray new];
 
+    return self;
+}
+
+- initWithNibData: (NSData *) data bundle: (NSBundle *) bundle {
+    if (data == nil) {
+        [self release];
+        return nil;
+    }
+    _data = [data copy];
+    // The bundle is not kept, as for a nib read from a file.
+    _flags._isKeyed = NSNibDataIsKeyed(_data);
+    _allObjects = [NSMutableArray new];
     return self;
 }
 
@@ -288,6 +317,12 @@ NSString *const NSNibTopLevelObjects = @"NSNibTopLevelObjects";
         }
 
         [objectData buildConnectionsWithNameTable: _nameTable];
+
+        // A toolbar asks its delegate for its default items once the delegate's own outlets are
+        // connected, before anything is awakened.
+        for (id object in _allObjects)
+            if ([object isKindOfClass: [NSToolbar class]])
+                [(NSToolbar *) object _nibDidConnectObjects];
 
         if (unkeyedObjects != nil) {
             id owner = [objectData rootObject];

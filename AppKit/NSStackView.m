@@ -18,10 +18,12 @@
 */
 
 #import <AppKit/NSStackView.h>
+#import <AppKit/NSWindow.h>
 #import "NSViewLayoutInternal.h"
 #import <Foundation/NSArray.h>
 #import <Foundation/NSException.h>
 #import <Foundation/NSKeyValueObserving.h>
+#import <Foundation/NSMapTable.h>
 #import <objc/runtime.h>
 
 static void *const HiddenContext = (void *) &HiddenContext;
@@ -38,6 +40,8 @@ static const CGFloat DefaultSpacing = 8;
     CGFloat spacingAfter;
     NSStackViewVisibilityPriority visibilityPriority;
     BOOL detached;
+    // Detached because the stack view is too small for it (see -_updateDroppedViews).
+    BOOL dropped;
     BOOL tamicSetByStack;
     NSSize naturalSize, assignedSize;
 }
@@ -48,6 +52,41 @@ static const CGFloat DefaultSpacing = 8;
     [view release];
     [super dealloc];
 }
+@end
+
+// What an archive of a stack view holds for one gravity area: its views in order, the space after
+// some of them and their visibility priorities. Only the archive is decoded into this; the stack
+// view takes the contents over. The keys are those macOS writes for its NSStackViewContainer
+// (observed in NSKeyedArchiver output and ibtool-compiled nibs of macOS 10.14.4 and 26.7.3).
+@interface NSStackViewContainer : NSView {
+@public
+    NSArray *_views;
+    NSMapTable *_customSpacings, *_visibilityPriorities;
+}
+@end
+
+@implementation NSStackViewContainer
+
+- (instancetype) initWithCoder: (NSCoder *) coder {
+    if ((self = [super initWithCoder: coder]) != nil && [coder allowsKeyedCoding]) {
+        id views = [coder decodeObjectForKey: @"NSStackViewContainerNonDroppedViews"];
+        id spacings = [coder decodeObjectForKey: @"NSStackViewContainerViewToCustomAfterSpaceMap"];
+        id priorities = [coder decodeObjectForKey: @"NSStackViewContainerVisibilityPriorities"];
+
+        _views = [([views isKindOfClass: [NSArray class]] ? views : nil) retain];
+        _customSpacings = [([spacings isKindOfClass: [NSMapTable class]] ? spacings : nil) retain];
+        _visibilityPriorities = [([priorities isKindOfClass: [NSMapTable class]] ? priorities : nil) retain];
+    }
+    return self;
+}
+
+- (void) dealloc {
+    [_views release];
+    [_customSpacings release];
+    [_visibilityPriorities release];
+    [super dealloc];
+}
+
 @end
 
 @implementation NSStackView
@@ -64,7 +103,11 @@ static const CGFloat DefaultSpacing = 8;
     _alignment = NSLayoutAttributeNotAnAttribute;
     _distribution = NSStackViewDistributionGravityAreas;
     _spacing = DefaultSpacing;
-    _detachesHiddenViews = YES;
+    // QUIRK: a new stack view keeps hidden views in its layout (detachesHiddenViews is NO). Not
+    // documented. Evidence: black-box observation of NSStackView on macOS 10.14.4 (tier 2; macOS
+    // 26.7.3 detaches them by default, and archives of both always record the setting). Test:
+    // appkit-stack-view-gravity-areas.m (test_quirk_detaches_hidden_views_default)
+    _detachesHiddenViews = NO;
     _entries = [[NSMutableArray alloc] init];
 }
 
@@ -74,23 +117,129 @@ static const CGFloat DefaultSpacing = 8;
     return self;
 }
 
-// Stack view settings are not decoded, so the decoded subviews become leading
-// arranged views and keep their archived frames until the stack view changes.
-- (instancetype) initWithCoder: (NSCoder *) coder {
-    if ((self = [super initWithCoder: coder]) != nil) {
-        [self _setUpStackView];
-        _changingViews = YES;
-        for (NSView *view in [[[self subviews] copy] autorelease]) {
-            NSStackViewEntry *entry = [self _newEntryForView: view
-                                                   inGravity: NSStackViewGravityLeading];
+// The stack view's settings, under the keys macOS archives them with (observed in
+// NSKeyedArchiver output and compiled nibs of macOS 26.7.3 and 10.14.4). A setting that is
+// not in the archive keeps its default.
+- (void) _decodeSettingsWithCoder: (NSKeyedUnarchiver *) keyed {
+    if ([keyed containsValueForKey: @"NSStackViewOrientation"])
+        _orientation = [keyed decodeIntegerForKey: @"NSStackViewOrientation"];
+    if ([keyed containsValueForKey: @"NSStackViewAlignment"])
+        _alignment = [keyed decodeIntegerForKey: @"NSStackViewAlignment"];
+    // Fill (0) and the other explicit distributions are archived; gravity areas is not.
+    if ([keyed containsValueForKey: @"NSStackViewdistribution"])
+        _distribution = [keyed decodeIntegerForKey: @"NSStackViewdistribution"];
+    if ([keyed containsValueForKey: @"NSStackViewSpacing"])
+        _spacing = [keyed decodeDoubleForKey: @"NSStackViewSpacing"];
+    if ([keyed containsValueForKey: @"NSStackViewEdgeInsets.top"])
+        _edgeInsets = NSEdgeInsetsMake([keyed decodeDoubleForKey: @"NSStackViewEdgeInsets.top"],
+                                       [keyed decodeDoubleForKey: @"NSStackViewEdgeInsets.left"],
+                                       [keyed decodeDoubleForKey: @"NSStackViewEdgeInsets.bottom"],
+                                       [keyed decodeDoubleForKey: @"NSStackViewEdgeInsets.right"]);
+    if ([keyed containsValueForKey: @"NSStackViewDetachesHiddenViews"])
+        _detachesHiddenViews = [keyed decodeBoolForKey: @"NSStackViewDetachesHiddenViews"];
+    if ([keyed containsValueForKey: @"NSStackViewHorizontalHugging"])
+        [self setHuggingPriority: [keyed decodeFloatForKey: @"NSStackViewHorizontalHugging"]
+                  forOrientation: NSLayoutConstraintOrientationHorizontal];
+    if ([keyed containsValueForKey: @"NSStackViewVerticalHugging"])
+        [self setHuggingPriority: [keyed decodeFloatForKey: @"NSStackViewVerticalHugging"]
+                  forOrientation: NSLayoutConstraintOrientationVertical];
+    if ([keyed containsValueForKey: @"NSStackViewHorizontalClippingResistance"])
+        [self setClippingResistancePriority: [keyed decodeFloatForKey: @"NSStackViewHorizontalClippingResistance"]
+                             forOrientation: NSLayoutConstraintOrientationHorizontal];
+    if ([keyed containsValueForKey: @"NSStackViewVerticalClippingResistance"])
+        [self setClippingResistancePriority: [keyed decodeFloatForKey: @"NSStackViewVerticalClippingResistance"]
+                             forOrientation: NSLayoutConstraintOrientationVertical];
+}
 
+// An archive that holds the gravity areas' views gives each its gravity, space after it and visibility
+// priority, and the stack view arranges them at once. Without them (an archive written by something
+// else) the decoded subviews become leading arranged views and keep their archived frames until the
+// stack view changes.
+- (void) _decodeGravityContainers: (NSArray *) containers {
+    static const NSStackViewGravity gravities[3] = {NSStackViewGravityLeading, NSStackViewGravityCenter,
+                                                    NSStackViewGravityTrailing};
+    NSArray *subviews = [[[self subviews] copy] autorelease];
+
+    for (int i = 0; i < 3; i++) {
+        NSStackViewContainer *container = [containers objectAtIndex: i];
+
+        if (![container isKindOfClass: [NSStackViewContainer class]])
+            continue;
+        for (NSView *view in container->_views) {
+            if (![view isKindOfClass: [NSView class]] || [self _entryForView: view] != nil)
+                continue;
+
+            NSStackViewEntry *entry = [self _newEntryForView: view inGravity: gravities[i]];
+            id spacing = [container->_customSpacings objectForKey: view];
+            id priority = [container->_visibilityPriorities objectForKey: view];
+
+            if ([spacing respondsToSelector: @selector(doubleValue)])
+                entry->spacingAfter = [spacing doubleValue];
+            if ([priority respondsToSelector: @selector(floatValue)])
+                entry->visibilityPriority = [priority floatValue];
+            // A view the archive does not list as a subview was detached when it was archived.
+            if (![subviews containsObject: view])
+                entry->dropped = ![self _isDetachedByState: entry];
+            entry->detached = [self _shouldDetach: entry];
             [_entries addObject: entry];
             [entry release];
-            if (entry->detached)
+            if (entry->detached && [view superview] == self)
                 [view removeFromSuperview];
         }
+    }
+    // Subviews no area lists stay arranged, as leading views.
+    for (NSView *view in subviews) {
+        if ([self _entryForView: view] != nil)
+            continue;
+
+        NSStackViewEntry *entry = [self _newEntryForView: view inGravity: NSStackViewGravityLeading];
+
+        [_entries addObject: entry];
+        [entry release];
+        if (entry->detached)
+            [view removeFromSuperview];
+    }
+}
+
+- (instancetype) initWithCoder: (NSCoder *) coder {
+    if ((self = [super initWithCoder: coder]) != nil) {
+        NSArray *containers = nil;
+
+        [self _setUpStackView];
+        if ([coder allowsKeyedCoding]) {
+            NSKeyedUnarchiver *keyed = (NSKeyedUnarchiver *) coder;
+
+            [self _decodeSettingsWithCoder: keyed];
+            if ([keyed containsValueForKey: @"NSStackViewBeginningContainer"] ||
+                [keyed containsValueForKey: @"NSStackViewMiddleContainer"] ||
+                [keyed containsValueForKey: @"NSStackViewEndContainer"]) {
+                id none = [NSNull null];
+                id begin = [keyed decodeObjectForKey: @"NSStackViewBeginningContainer"];
+                id middle = [keyed decodeObjectForKey: @"NSStackViewMiddleContainer"];
+                id end = [keyed decodeObjectForKey: @"NSStackViewEndContainer"];
+
+                containers = [NSArray arrayWithObjects: begin ? begin : none, middle ? middle : none,
+                                                        end ? end : none, nil];
+            }
+        }
+        _changingViews = YES;
+        if (containers != nil) {
+            [self _decodeGravityContainers: containers];
+        } else {
+            for (NSView *view in [[[self subviews] copy] autorelease]) {
+                NSStackViewEntry *entry = [self _newEntryForView: view
+                                                       inGravity: NSStackViewGravityLeading];
+
+                [_entries addObject: entry];
+                [entry release];
+                if (entry->detached)
+                    [view removeFromSuperview];
+            }
+        }
         _changingViews = NO;
-        _keepsDecodedFrames = YES;
+        _keepsDecodedFrames = containers == nil;
+        if (containers != nil)
+            [self setNeedsLayout: YES];
     }
     return self;
 }
@@ -173,6 +322,48 @@ static const CGFloat DefaultSpacing = 8;
 - (void) setDistribution: (NSStackViewDistribution) distribution {
     _distribution = distribution;
     [self _arrangeViews];
+}
+
+static const char huggingKey;
+static const char clippingResistanceKey;
+
+// Priorities per orientation, kept outside the instance, whose ivar layout is fixed.
+static NSLayoutPriority priorityFor(id object, const char *key, NSLayoutConstraintOrientation orientation,
+                                    NSLayoutPriority fallback) {
+    NSArray *priorities = objc_getAssociatedObject(object, key);
+
+    return priorities ? [[priorities objectAtIndex: orientation] floatValue] : fallback;
+}
+
+static void setPriorityFor(id object, const char *key, NSLayoutConstraintOrientation orientation,
+                           NSLayoutPriority priority, NSLayoutPriority fallback) {
+    NSMutableArray *priorities = [[objc_getAssociatedObject(object, key) mutableCopy] autorelease];
+
+    if (priorities == nil)
+        priorities = [NSMutableArray arrayWithObjects: [NSNumber numberWithFloat: fallback],
+                                                       [NSNumber numberWithFloat: fallback], nil];
+    [priorities replaceObjectAtIndex: orientation withObject: [NSNumber numberWithFloat: priority]];
+    objc_setAssociatedObject(object, key, priorities, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
+
+- (NSLayoutPriority) huggingPriorityForOrientation: (NSLayoutConstraintOrientation) orientation {
+    return priorityFor(self, &huggingKey, orientation, NSLayoutPriorityDefaultLow);
+}
+
+- (void) setHuggingPriority: (NSLayoutPriority) priority
+             forOrientation: (NSLayoutConstraintOrientation) orientation
+{
+    setPriorityFor(self, &huggingKey, orientation, priority, NSLayoutPriorityDefaultLow);
+}
+
+- (NSLayoutPriority) clippingResistancePriorityForOrientation: (NSLayoutConstraintOrientation) orientation {
+    return priorityFor(self, &clippingResistanceKey, orientation, NSLayoutPriorityRequired);
+}
+
+- (void) setClippingResistancePriority: (NSLayoutPriority) priority
+                        forOrientation: (NSLayoutConstraintOrientation) orientation
+{
+    setPriorityFor(self, &clippingResistanceKey, orientation, priority, NSLayoutPriorityRequired);
 }
 
 - (CGFloat) spacing {
@@ -397,11 +588,14 @@ static const CGFloat DefaultSpacing = 8;
     return [self _requiredEntryForView: view]->visibilityPriority;
 }
 
-// Views never detach for lack of space: that needs clipping resistance below
-// required, which this stack view does not support.
-- (BOOL) _shouldDetach: (NSStackViewEntry *) entry {
+// A view that is hidden or not visible by its priority, whatever the room there is.
+- (BOOL) _isDetachedByState: (NSStackViewEntry *) entry {
     return entry->visibilityPriority == NSStackViewVisibilityPriorityNotVisible ||
            (_detachesHiddenViews && [entry->view isHidden]);
+}
+
+- (BOOL) _shouldDetach: (NSStackViewEntry *) entry {
+    return entry->dropped || [self _isDetachedByState: entry];
 }
 
 - (void) _updateAttachment {
@@ -500,6 +694,86 @@ typedef struct {
     return attached;
 }
 
+// Each gravity area as the range of entries it holds: first[g]..last[g] (inclusive), with
+// last[g] < first[g] when the area is empty, and the length of its views and the space between them.
+typedef struct {
+    NSInteger first[4], last[4];
+    CGFloat length[4];
+} GravityAreas;
+
+- (GravityAreas) _gravityAreasOfEntries: (NSArray *) entries lengths: (CGFloat *) lengths spacings: (CGFloat *) spacing {
+    GravityAreas areas = {{0, 0, 0, 0}, {-1, -1, -1, -1}, {0, 0, 0, 0}};
+    NSUInteger i, count = [entries count];
+    NSStackViewGravity g;
+
+    for (g = NSStackViewGravityLeading; g <= NSStackViewGravityTrailing; g++)
+        areas.first[g] = count;
+    for (i = 0; i < count; i++) {
+        g = ((NSStackViewEntry *) [entries objectAtIndex: i])->gravity;
+        areas.first[g] = MIN(areas.first[g], (NSInteger) i);
+        areas.last[g] = i;
+    }
+    for (g = NSStackViewGravityLeading; g <= NSStackViewGravityTrailing; g++)
+        for (i = areas.first[g]; (NSInteger) i <= areas.last[g]; i++)
+            areas.length[g] += lengths[i] + ((NSInteger) i < areas.last[g] ? spacing[i] : 0);
+    return areas;
+}
+
+// The length along the stacking axis the entries need, insets included. The center gravity area is
+// centered in the whole stack view, so it counts twice on the side of the longer neighbour.
+- (CGFloat) _fittingMainLengthForEntries: (NSArray *) entries {
+    NSUInteger i, count = [entries count];
+    CGFloat insetStart = [self _isVertical] ? _edgeInsets.top : _edgeInsets.left;
+    CGFloat insetEnd = [self _isVertical] ? _edgeInsets.bottom : _edgeInsets.right;
+    CGFloat lengths[count + 1], spacing[count + 1], sum = 0, gaps = 0, widest = 0, step = 0;
+
+    if (count == 0)
+        return insetStart + insetEnd;
+    for (i = 0; i < count; i++) {
+        NSStackViewEntry *entry = [entries objectAtIndex: i];
+
+        lengths[i] = [self _naturalSizeOfEntry: entry].main;
+        spacing[i] = [self _spacingAfter: entry];
+        sum += lengths[i];
+        widest = MAX(widest, lengths[i]);
+        if (i + 1 < count)
+            gaps += spacing[i];
+    }
+
+    switch (_distribution) {
+    case NSStackViewDistributionFillEqually:
+        return insetStart + insetEnd + widest * count + gaps;
+    case NSStackViewDistributionEqualCentering:
+        // The centers of neighbouring views are as far apart as the widest pair needs.
+        for (i = 0; i + 1 < count; i++)
+            step = MAX(step, lengths[i] / 2 + spacing[i] + lengths[i + 1] / 2);
+        return insetStart + insetEnd + (count == 1 ? lengths[0] : lengths[0] / 2 + step * (count - 1) + lengths[count - 1] / 2);
+    case NSStackViewDistributionGravityAreas:
+        break;
+    default:
+        return insetStart + insetEnd + sum + gaps;
+    }
+
+    GravityAreas areas = [self _gravityAreasOfEntries: entries lengths: lengths spacings: spacing];
+    BOOL lead = areas.last[NSStackViewGravityLeading] >= 0, center = areas.last[NSStackViewGravityCenter] >= 0,
+         trail = areas.last[NSStackViewGravityTrailing] >= 0;
+    CGFloat leadGap = lead ? spacing[areas.last[NSStackViewGravityLeading]] : 0;
+    CGFloat centerGap = center ? spacing[areas.last[NSStackViewGravityCenter]] : 0;
+    CGFloat leading = areas.length[NSStackViewGravityLeading], middle = areas.length[NSStackViewGravityCenter],
+            trailing = areas.length[NSStackViewGravityTrailing];
+    CGFloat fit = insetStart + insetEnd + leading + middle + trailing;
+
+    if (lead && trail)
+        fit = MAX(fit, insetStart + leading + (center ? 0 : leadGap) + trailing + insetEnd);
+    if (center) {
+        CGFloat leftNeed = (lead ? insetStart + leading + leadGap : insetStart) + middle / 2;
+        CGFloat rightNeed = middle / 2 + (trail ? centerGap + trailing + insetEnd : insetEnd);
+
+        fit = MAX(fit, 2 * MAX(leftNeed, rightNeed));
+    }
+    return fit;
+}
+
 - (NSSize) intrinsicContentSize {
     // A stack view that arranges its views with constraints has no intrinsic
     // size of its own; its constraints size it.
@@ -508,20 +782,96 @@ typedef struct {
     // Measuring decoded views with the undecoded default settings would be wrong.
     NSArray *attached = _keepsDecodedFrames ? [NSArray array] : [self _attachedEntries];
     NSUInteger i, count = [attached count];
-    CGFloat main = 0, cross = 0;
+    CGFloat main = [self _fittingMainLengthForEntries: attached], cross = 0;
 
-    for (i = 0; i < count; i++) {
-        NSStackViewEntry *entry = [attached objectAtIndex: i];
-        StackSize size = [self _naturalSizeOfEntry: entry];
-
-        main += size.main + (i + 1 < count ? [self _spacingAfter: entry] : 0);
-        cross = MAX(cross, size.cross);
-    }
+    for (i = 0; i < count; i++)
+        cross = MAX(cross, [self _naturalSizeOfEntry: [attached objectAtIndex: i]].cross);
     if ([self _isVertical])
-        return NSMakeSize(cross + _edgeInsets.left + _edgeInsets.right,
-                          main + _edgeInsets.top + _edgeInsets.bottom);
-    return NSMakeSize(main + _edgeInsets.left + _edgeInsets.right,
-                      cross + _edgeInsets.top + _edgeInsets.bottom);
+        return NSMakeSize(cross + _edgeInsets.left + _edgeInsets.right, main);
+    return NSMakeSize(main, cross + _edgeInsets.top + _edgeInsets.bottom);
+}
+
+// QUIRK: in gravity areas, a view that hugs its content below the default priority (250) is
+// stretched to take the room between its area and the next one (the least hugging view of an
+// area, the first of equals), as far as the space after the area's last view allows: the leading
+// area up to the center area (or the trailing one), the trailing area back to the center area (or
+// the leading one), and the center area, which stays centered, as far as the nearer neighbour
+// allows. A view that hugs at 250 or more is not stretched. Not documented. Evidence: black-box
+// observation of NSStackView on macOS 10.14.4 and 26.7.3 (tier 2), probe
+// mac-probes/stackview-gravity-layout.m of the research notes.
+// Test: appkit-stack-view-gravity-areas.m (test_quirk_gravity_area_stretch)
+// Returns whether a view was stretched; the areas' lengths and starts are updated.
+- (BOOL) _stretchGravityAreas: (GravityAreas *) areas
+                        start: (CGFloat *) start
+                      entries: (NSArray *) entries
+                      lengths: (CGFloat *) lengths
+                     spacings: (CGFloat *) spacing
+                       length: (CGFloat) length
+                         axis: (NSLayoutConstraintOrientation) axis
+{
+    NSInteger stretchy[4];
+    BOOL any = NO;
+    NSStackViewGravity g;
+
+    for (g = NSStackViewGravityLeading; g <= NSStackViewGravityTrailing; g++) {
+        NSLayoutPriority lowest = NSLayoutPriorityDefaultLow;
+
+        stretchy[g] = -1;
+        for (NSInteger i = areas->first[g]; i <= areas->last[g]; i++) {
+            NSView *view = ((NSStackViewEntry *) [entries objectAtIndex: i])->view;
+            NSLayoutPriority hugging = [view contentHuggingPriorityForOrientation: axis];
+
+            if (hugging < lowest) {
+                lowest = hugging;
+                stretchy[g] = i;
+            }
+        }
+        any = any || stretchy[g] >= 0;
+    }
+    if (!any)
+        return NO;
+
+    BOOL lead = areas->last[NSStackViewGravityLeading] >= 0, center = areas->last[NSStackViewGravityCenter] >= 0,
+         trail = areas->last[NSStackViewGravityTrailing] >= 0;
+    CGFloat leadGap = lead ? spacing[areas->last[NSStackViewGravityLeading]] : 0;
+    CGFloat centerGap = center ? spacing[areas->last[NSStackViewGravityCenter]] : 0;
+    BOOL stretched = NO;
+
+    if (lead && stretchy[NSStackViewGravityLeading] >= 0) {
+        CGFloat bound = center ? start[NSStackViewGravityCenter] - leadGap
+                               : (trail ? start[NSStackViewGravityTrailing] - leadGap : length);
+        CGFloat extra = bound - areas->length[NSStackViewGravityLeading];
+
+        if (extra > 0) {
+            lengths[stretchy[NSStackViewGravityLeading]] += extra;
+            areas->length[NSStackViewGravityLeading] += extra;
+            stretched = YES;
+        }
+    }
+    if (trail && stretchy[NSStackViewGravityTrailing] >= 0) {
+        CGFloat bound = center ? start[NSStackViewGravityCenter] + areas->length[NSStackViewGravityCenter] + centerGap
+                               : (lead ? areas->length[NSStackViewGravityLeading] + leadGap : 0);
+        CGFloat extra = start[NSStackViewGravityTrailing] - bound;
+
+        if (extra > 0) {
+            lengths[stretchy[NSStackViewGravityTrailing]] += extra;
+            areas->length[NSStackViewGravityTrailing] += extra;
+            stretched = YES;
+        }
+    }
+    if (center && stretchy[NSStackViewGravityCenter] >= 0) {
+        CGFloat left = start[NSStackViewGravityCenter] - (lead ? areas->length[NSStackViewGravityLeading] + leadGap : 0);
+        CGFloat right = (trail ? length - areas->length[NSStackViewGravityTrailing] - centerGap : length) -
+                        (start[NSStackViewGravityCenter] + areas->length[NSStackViewGravityCenter]);
+        CGFloat extra = MIN(left, right);
+
+        if (extra > 0) {
+            lengths[stretchy[NSStackViewGravityCenter]] += 2 * extra;
+            areas->length[NSStackViewGravityCenter] += 2 * extra;
+            stretched = YES;
+        }
+    }
+    return stretched;
 }
 
 // Offsets along the stacking axis, measured from the leading (left or top) edge.
@@ -548,13 +898,21 @@ typedef struct {
                 : NSLayoutConstraintOrientationHorizontal;
         NSUInteger flexible = 0;
 
-        // The view that hugs its content least absorbs the extra or missing space.
-        for (i = 1; i < count; i++)
-            if ([((NSStackViewEntry *) [entries objectAtIndex: i])->view
-                        contentHuggingPriorityForOrientation: axis] <=
-                [((NSStackViewEntry *) [entries objectAtIndex: flexible])->view
-                        contentHuggingPriorityForOrientation: axis])
+        // The view that hugs its content least absorbs the extra or missing space. Among equals,
+        // views with an intrinsic size give it to the first and the others to the last.
+        for (i = 1; i < count; i++) {
+            NSView *view = ((NSStackViewEntry *) [entries objectAtIndex: i])->view;
+            NSView *chosen = ((NSStackViewEntry *) [entries objectAtIndex: flexible])->view;
+            NSLayoutPriority hugging = [view contentHuggingPriorityForOrientation: axis];
+            NSLayoutPriority chosenHugging = [chosen contentHuggingPriorityForOrientation: axis];
+            NSSize intrinsic = [chosen intrinsicContentSize];
+
+            if (hugging < chosenHugging ||
+                (hugging == chosenHugging &&
+                 (axis == NSLayoutConstraintOrientationVertical ? intrinsic.height : intrinsic.width) ==
+                         NSViewNoIntrinsicMetric))
                 flexible = i;
+        }
         lengths[flexible] = MAX(0, lengths[flexible] + length - sum - gaps);
         break;
     }
@@ -586,42 +944,42 @@ typedef struct {
     }
 
     if (_distribution == NSStackViewDistributionGravityAreas) {
-        // first[g]..last[g] (inclusive) are gravity g's entries; last[g] < first[g] when empty.
-        NSInteger first[4] = {0, 0, 0, 0}, last[4] = {-1, -1, -1, -1};
-        CGFloat start[4], groupLength[4] = {0, 0, 0, 0}, end = 0;
+        GravityAreas areas = [self _gravityAreasOfEntries: entries lengths: lengths spacings: spacing];
+        NSLayoutConstraintOrientation axis = [self _isVertical] ? NSLayoutConstraintOrientationVertical
+                                                                : NSLayoutConstraintOrientationHorizontal;
+        CGFloat insetStart = [self _isVertical] ? _edgeInsets.top : _edgeInsets.left;
+        CGFloat insetEnd = [self _isVertical] ? _edgeInsets.bottom : _edgeInsets.right;
+        CGFloat start[4], end;
         NSStackViewGravity g, previous = 0;
 
-        for (g = NSStackViewGravityLeading; g <= NSStackViewGravityTrailing; g++)
-            first[g] = count;
-        for (i = 0; i < count; i++) {
-            g = ((NSStackViewEntry *) [entries objectAtIndex: i])->gravity;
-            first[g] = MIN(first[g], (NSInteger) i);
-            last[g] = i;
+        // The center area is centered in the whole stack view, which the insets may off-center in
+        // the room the views have, and stays so unless that would crowd a neighbouring area.
+        for (int pass = 0; pass < 2; pass++) {
+            start[NSStackViewGravityLeading] = 0;
+            start[NSStackViewGravityTrailing] = length - areas.length[NSStackViewGravityTrailing];
+            start[NSStackViewGravityCenter] = (length - areas.length[NSStackViewGravityCenter] + insetEnd - insetStart) / 2;
+            if (areas.last[NSStackViewGravityCenter] >= 0 && areas.last[NSStackViewGravityTrailing] >= 0)
+                start[NSStackViewGravityCenter] = MIN(start[NSStackViewGravityCenter],
+                        start[NSStackViewGravityTrailing] - spacing[areas.last[NSStackViewGravityCenter]] -
+                                areas.length[NSStackViewGravityCenter]);
+            // Stretching changes the areas' lengths, so the second pass places them again.
+            if (pass == 1 || ![self _stretchGravityAreas: &areas start: start entries: entries lengths: lengths
+                                                 spacings: spacing length: length axis: axis])
+                break;
         }
-        for (g = NSStackViewGravityLeading; g <= NSStackViewGravityTrailing; g++)
-            for (i = first[g]; (NSInteger) i <= last[g]; i++)
-                groupLength[g] += lengths[i] + ((NSInteger) i < last[g] ? spacing[i] : 0);
 
-        start[NSStackViewGravityLeading] = 0;
-        start[NSStackViewGravityTrailing] = length - groupLength[NSStackViewGravityTrailing];
-        // The center area stays centered unless that would crowd a neighbouring area.
-        start[NSStackViewGravityCenter] = (length - groupLength[NSStackViewGravityCenter]) / 2;
-        if (last[NSStackViewGravityCenter] >= 0 && last[NSStackViewGravityTrailing] >= 0)
-            start[NSStackViewGravityCenter] = MIN(start[NSStackViewGravityCenter],
-                    start[NSStackViewGravityTrailing] - spacing[last[NSStackViewGravityCenter]] -
-                            groupLength[NSStackViewGravityCenter]);
-
+        end = 0;
         for (g = NSStackViewGravityLeading; g <= NSStackViewGravityTrailing; g++) {
             CGFloat position;
 
-            if (last[g] < 0)
+            if (areas.last[g] < 0)
                 continue;
-            position = previous ? MAX(start[g], end + spacing[last[previous]]) : start[g];
-            for (i = first[g]; (NSInteger) i <= last[g]; i++) {
+            position = previous ? MAX(start[g], end + spacing[areas.last[previous]]) : start[g];
+            for (i = areas.first[g]; (NSInteger) i <= areas.last[g]; i++) {
                 offsets[i] = position;
                 position += lengths[i] + spacing[i];
             }
-            end = offsets[last[g]] + lengths[last[g]];
+            end = offsets[areas.last[g]] + lengths[areas.last[g]];
             previous = g;
         }
         return;
@@ -634,10 +992,14 @@ typedef struct {
 
 // Every change to the stack view's views or settings ends here.
 - (void) _arrangeViews {
+    _keepsDecodedFrames = NO;
+    // Detaching or reattaching views for lack of room arranges the views again.
+    if ([self _updateDroppedViews])
+        return;
+
     NSArray *attached = [self _attachedEntries];
     NSUInteger i, count = [attached count];
 
-    _keepsDecodedFrames = NO;
     if (count == 0)
         return;
     if ([self _constraintArrangementIsActive]) {
@@ -714,10 +1076,85 @@ typedef struct {
             frame = NSMakeRect(NSMinX(bounds) + _edgeInsets.left + offsets[i],
                                crossStart + crossOffset, lengths[i], cross);
         }
-        [entry->view setFrame: frame];
+        [entry->view setFrame: [self _frameAlignedToPixels: frame]];
         entry->assignedSize = [entry->view frame].size;
     }
     [self setNeedsDisplay: YES];
+}
+
+// Frames that Auto Layout computes are rounded to whole device pixels at the edges, so a view
+// of the same size can come out one pixel wider than its neighbour. Not documented. Evidence:
+// black-box observation of NSStackView frames on macOS 10.14.4 and 26.7.3 (tier 2): equal
+// spacing of three views in 300 points puts the middle one at 93, not at 93.33.
+// Test: appkit-stack-view-gravity-areas.m (test_quirk_pixel_aligned_frames)
+- (NSRect) _frameAlignedToPixels: (NSRect) frame {
+    CGFloat scale = [[self window] backingScaleFactor];
+    CGFloat left, right, bottom, top;
+
+    if (scale < 1)
+        scale = 1;
+    left = floor(NSMinX(frame) * scale + 0.5) / scale;
+    right = floor(NSMaxX(frame) * scale + 0.5) / scale;
+    bottom = floor(NSMinY(frame) * scale + 0.5) / scale;
+    top = floor(NSMaxY(frame) * scale + 0.5) / scale;
+    return NSMakeRect(left, bottom, right - left, top - bottom);
+}
+
+#pragma mark - Visibility priorities and the room for views
+
+// QUIRK: a stack view whose clipping resistance (in its stacking direction) is below that of a
+// view's compression resistance, 750, and is too small for its views, detaches the views whose
+// visibility priority is below MustHold, the lowest priority first and the views of equal priority
+// together, until what is left fits or only MustHold views are left. It reattaches them when there
+// is room again. The delegate is told as for any detaching. The detached views stay as they are
+// (macOS 26.7.3 also hides them). With the default clipping resistance the views are compressed
+// instead, which this stack view does not do. Not documented. Evidence: black-box observation of
+// NSStackView on macOS 10.14.4 and 26.7.3 (tier 2), probe mac-probes/stackview-gravity-layout.m
+// of the research notes. Test: appkit-stack-view-gravity-areas.m (test_quirk_visibility_priority_drop)
+// Returns whether the views detached or reattached changed.
+- (BOOL) _updateDroppedViews {
+    NSLayoutConstraintOrientation axis = [self _isVertical] ? NSLayoutConstraintOrientationVertical
+                                                            : NSLayoutConstraintOrientationHorizontal;
+    NSSize size = [self bounds].size;
+    CGFloat available = [self _isVertical] ? size.height : size.width;
+    NSMutableArray *candidates = [NSMutableArray array];
+    BOOL changed = NO;
+
+    if (_keepsDecodedFrames)
+        return NO;
+    // A stack view that has no size yet has not been laid out; nothing is too big for it.
+    if (available > 0 && [self clippingResistancePriorityForOrientation: axis] < NSLayoutPriorityDefaultHigh) {
+        for (NSStackViewEntry *entry in _entries)
+            if (![self _isDetachedByState: entry])
+                [candidates addObject: entry];
+        while ([self _fittingMainLengthForEntries: candidates] > available) {
+            NSStackViewVisibilityPriority lowest = NSStackViewVisibilityPriorityMustHold;
+
+            for (NSStackViewEntry *entry in candidates)
+                lowest = MIN(lowest, entry->visibilityPriority);
+            if (lowest >= NSStackViewVisibilityPriorityMustHold)
+                break;
+            for (NSStackViewEntry *entry in [[candidates copy] autorelease])
+                if (entry->visibilityPriority == lowest)
+                    [candidates removeObjectIdenticalTo: entry];
+        }
+    } else {
+        for (NSStackViewEntry *entry in _entries)
+            if (![self _isDetachedByState: entry])
+                [candidates addObject: entry];
+    }
+
+    for (NSStackViewEntry *entry in _entries) {
+        BOOL dropped = ![self _isDetachedByState: entry] && ![candidates containsObject: entry];
+
+        if (entry->dropped != dropped) {
+            entry->dropped = dropped;
+            changed = YES;
+        }
+    }
+    if (changed)
+        [self _updateAttachment];
+    return changed;
 }
 
 // Arranged views are placed by the stack view, not by their autoresizing masks.
@@ -730,20 +1167,39 @@ typedef struct {
     for (NSView *view in [self subviews])
         if ([self _entryForView: view] == nil)
             [view resizeWithOldSuperviewSize: oldSize];
-    [self _arrangeViews];
+    // The arrangement constraints do not depend on the stack view's size.
+    if (![self _constraintArrangementIsActive])
+        [self _arrangeViews];
 }
 
 // An arranged view whose content changed has another natural size; the arrangement is redone at the
-// next layout pass, and the stack's own intrinsic size changes with it.
+// next layout pass, and the stack's own intrinsic size changes with it. The arrangement constraints
+// depend on the natural sizes, so they are made again.
 - (void) _subviewIntrinsicContentSizeDidChange: (NSView *) subview {
     if (_changingViews || [self _entryForView: subview] == nil)
         return;
+    if ([self _constraintArrangementIsActive])
+        [self setNeedsUpdateConstraints: YES];
     [self setNeedsLayout: YES];
     [self invalidateIntrinsicContentSize];
 }
 
+// A view that hugs its content differently takes the room left over in another way.
+- (void) _subviewContentHuggingPriorityDidChange: (NSView *) subview {
+    if (_changingViews || [self _entryForView: subview] == nil)
+        return;
+    [self setNeedsLayout: YES];
+    if ([self _constraintArrangementIsActive])
+        [self setNeedsUpdateConstraints: YES];
+}
+
 - (void) layout {
-    if (!_keepsDecodedFrames)
+    // Views arranged by constraints are placed by the layout engine; it only has to be told when
+    // views no longer fit. Asking for new constraints on every pass would start another layout
+    // pass after each one, so the dropped views only change what is attached when they change.
+    if (!_keepsDecodedFrames && [self _constraintArrangementIsActive])
+        [self _updateDroppedViews];
+    else if (!_keepsDecodedFrames)
         [self _arrangeViews];
     [super layout];
 }
@@ -828,6 +1284,8 @@ static const NSLayoutPriority HighPriority = NSLayoutPriorityRequired - 1;
 static const NSLayoutPriority GravityEdgePriority = 750;
 static const NSLayoutPriority GravitySpacingPriority = 749.99;
 static const NSLayoutPriority GravityCenterPriority = 748;
+// Just below the default content hugging priority.
+static const NSLayoutPriority GravityAreaGapPriority = 249.5;
 static const NSLayoutPriority CrossAlignmentPriority = 260;
 // Below the default content hugging priority, so a stack view that is larger
 // than its views does not stretch views that hug their content.
@@ -893,8 +1351,12 @@ static const NSLayoutPriority SizingPriority = 249;
     // Main axis: the ends, and the gap after each view but the last.
     NSStackViewEntry *first = [entries objectAtIndex: 0], *last = [entries lastObject];
 
-    [created addObject: arrangeConstraint(first->view, start, NSLayoutRelationGreaterThanOrEqual, self, start, insetStart, HighPriority)];
-    [created addObject: arrangeConstraint(last->view, end, NSLayoutRelationLessThanOrEqual, self, end, -insetEnd, HighPriority)];
+    // The stack view's clipping resistance is how strongly it holds its views inside; below the
+    // views' own resistance to compression they overflow instead of shrinking.
+    NSLayoutPriority holdPriority = MIN(HighPriority, [self clippingResistancePriorityForOrientation: axis]);
+
+    [created addObject: arrangeConstraint(first->view, start, NSLayoutRelationGreaterThanOrEqual, self, start, insetStart, holdPriority)];
+    [created addObject: arrangeConstraint(last->view, end, NSLayoutRelationLessThanOrEqual, self, end, -insetEnd, holdPriority)];
     if (gravityAreas) {
         [created addObject: arrangeConstraint(first->view, start, NSLayoutRelationEqual, self, start, insetStart,
                                               first->gravity == NSStackViewGravityLeading ? GravityEdgePriority : SizingPriority)];
@@ -916,6 +1378,10 @@ static const NSLayoutPriority SizingPriority = 249;
             [created addObject: arrangeConstraint(next->view, start, NSLayoutRelationEqual, entry->view, end, gap, HighPriority)];
         else if (entry->gravity == next->gravity)
             [created addObject: arrangeConstraint(next->view, start, NSLayoutRelationEqual, entry->view, end, gap, GravitySpacingPriority)];
+        else
+            // The room between two areas is taken by a view that hugs below the default priority
+            // (see -_stretchGravityAreas:...), and by nothing that hugs at it or above.
+            [created addObject: arrangeConstraint(next->view, start, NSLayoutRelationEqual, entry->view, end, gap, GravityAreaGapPriority)];
     }
 
     if (gravityAreas) {
@@ -987,7 +1453,8 @@ static const NSLayoutPriority SizingPriority = 249;
     BOOL active = [self _constraintArrangementIsActive];
 
     [self _applyArrangementMode: active];
-    if (active) {
+    // Without arranged views (all of them detached) there is nothing to constrain.
+    if (active && [[self _attachedEntries] count] != 0) {
         NSArray *created = [self _arrangementConstraintsForEntries: [self _attachedEntries]];
 
         [self addConstraints: created];

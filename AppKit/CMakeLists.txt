@@ -47,7 +47,7 @@ find_package(OpenGL REQUIRED)
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(PC_CAIRO cairo)
-# The main menu (X11 backend) and the status items (NSStatusItem) are exported on the
+# The main menu (X11 and Wayland backends) and the status items (NSStatusItem) are exported on the
 # host's D-Bus session bus, through the dbus wrapper library of the native libdbus-1.
 pkg_check_modules(PC_DBUS REQUIRED dbus-1)
 pkg_check_modules(PC_FONTCONFIG fontconfig)
@@ -96,6 +96,7 @@ set(AppKit_sources
 	NSButtonCell.m
 	NSLevelIndicatorCell.m
 	NSPDFImageRep.m
+	NSImageSystemTemplates.m
 	NSPICTImageRep.m
 	NSScroller.m
 	NSCustomImageRep.m
@@ -132,6 +133,7 @@ set(AppKit_sources
 	NSSecureTextFieldCell.m
 	NSPathCell.m
 	NSWindow.m
+	NSStateRestoration.m
 	NSAlert.m
 	NSCursor.m
 	NSFontMetric.m
@@ -275,6 +277,7 @@ set(AppKit_sources
 	NSButton.m
 	NSPrintPanel.m
 	NSWindowController.m
+	NSWindowTabGroup.m
 	NSColorSampler.m
 	NSColorSpace.m
 	DarlingLayout.mm
@@ -283,6 +286,7 @@ set(AppKit_sources
 	NSAnimation/NSAnimation.m
 	NSAnimation/NSViewAnimation.m
 	NSAnimation/NSAnimationContext.m
+	NSAnimation/NSAnimatorProxy.m
 
 	NSDocumentController.m
 	NSStatusItem.m
@@ -345,6 +349,7 @@ set(AppKit_sources
 	NSLevelIndicator.m
 	NSDraggingManager.m
 	NSImage.m
+	NSImageSymbolGlyphs.m
 	NSImageDrawingCache.m
 	NSNextStepFrame.m
 	NSPreviewRepresentingActivityItem.m
@@ -355,6 +360,7 @@ set(AppKit_sources
 	NSKeyValueBinding/NSMultipleValueBinder.m
 	NSKeyValueBinding/NSTextBinder.m
 	NSKeyValueBinding/NSKVOBinder.m
+	NSKeyValueBinding/NSTargetBinder.m
 	NSKeyValueBinding/NSCachingBinder.m
 
 	NSPredicateEditorRowTemplate.m
@@ -412,6 +418,7 @@ set(AppKit_sources
 	NSStepper.m
 	NSDiffableDataSourceSnapshot.m
 	NSAccessibility.m
+	NSAccessibilityProtocols.m
 	NSAppearance.m
 	NSAccessibilityCustomAction.m
 	NSAccessibilityElement.m
@@ -492,10 +499,8 @@ set(AppKit_resources
 	StandardKeyBindings.keyBindings NSKeyboardBinding/StandardKeyBindings.keybindings
 
 	NSRulerMarkerTab.tiff NSRulerMarkerTab.tiff
-	NSSplitViewVDimple.tiff NSSplitViewVDimple.tiff
 	NSBrowserCellArrow.tiff NSBrowserCellArrow.tiff
 	NSPopUpButtonCellPopUp.tiff NSPopUpButtonCellPopUp.tiff
-	NSSplitViewHDimple.tiff NSSplitViewHDimple.tiff
 	NSHighlightedBrowserCellArrow.tiff NSHighlightedBrowserCellArrow.tiff
 	NSAlertPanelExclamation.tiff NSAlertPanelExclamation.tiff
 	NSSwitch.tiff NSSwitch.tiff
@@ -601,6 +606,8 @@ add_framework(AppKit
 		CoreServices
 		UniformTypeIdentifiers
 		HIToolbox
+		compression
+		UIFoundation
 		dbus
 )
 
@@ -696,6 +703,7 @@ if (WAYLAND_PROTOCOLS_USABLE)
 
 	add_backend(Wayland
 		SOURCES
+			Wayland.backend/WaylandAppMenu.m
 			Wayland.backend/WaylandCursor.m
 			Wayland.backend/WaylandDisplay.m
 			Wayland.backend/WaylandOutputManager.m

@@ -30,6 +30,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSWorkspace.h>
 #import "_NSFileSystemDataSource.h"
 #import "_NSSavePanelNavigation.h"
+#import <CoreServices/CoreServices.h>
 
 // UTType; Darling's UTType may not implement it.
 @interface NSObject (NSSavePanelContentTypes)
@@ -76,6 +77,10 @@ static NSString *defaultDirectory(void) {
     _treatsFilePackagesAsDirectories = NO;
     [self setAccessoryView: nil];
     _showsHiddenFiles = false;
+    // QUIRK: a new save panel allows making folders (canCreateDirectories is YES). Not documented.
+    // Evidence: black-box observation on macOS 10.14.4 and 26.7.3 (tier 2).
+    // Test: appkit-panel-create-directories.m
+    _canCreateDirectories = YES;
     return self;
 }
 
@@ -277,7 +282,41 @@ static NSSavePanel *_newPanel = nil;
     return [path stringByDeletingLastPathComponent];
 }
 
-// Like macOS, a name without an allowed extension gets the first allowed one.
+// An allowed file type with a dot is a uniform type identifier, any other a
+// filename extension.
+static BOOL isTypeIdentifier(NSString *type) {
+    return [type rangeOfString: @"."].location != NSNotFound;
+}
+
+// Whether a filename extension is one of an allowed type: the same extension,
+// or for a type identifier, an extension whose type conforms to it.
+static BOOL extensionIsOfAllowedType(NSString *extension, NSString *type) {
+    if ([extension length] == 0)
+        return NO;
+    if (!isTypeIdentifier(type))
+        return [type caseInsensitiveCompare: extension] == NSOrderedSame;
+
+    CFStringRef identifier = UTTypeCreatePreferredIdentifierForTag(
+            kUTTagClassFilenameExtension, (CFStringRef) extension, NULL);
+    if (identifier == NULL)
+        return NO;
+    BOOL conforms = UTTypeConformsTo(identifier, (CFStringRef) type);
+    CFRelease(identifier);
+    return conforms;
+}
+
+// The extension a name gets for an allowed type: the type itself, or for a
+// type identifier, its preferred filename extension (nil when it has none).
+static NSString *extensionForAllowedType(NSString *type) {
+    if (!isTypeIdentifier(type))
+        return type;
+    CFStringRef tag = UTTypeCopyPreferredTagWithClass(
+            (CFStringRef) type, kUTTagClassFilenameExtension);
+    return [(NSString *) tag autorelease];
+}
+
+// Like macOS, a name without an allowed extension gets the extension of the
+// first allowed type that has one.
 - (NSString *) _nameWithAllowedExtension: (NSString *) name {
     NSArray *types = [self allowedFileTypes];
     if ([types count] == 0 && [_requiredFileType length] > 0)
@@ -289,10 +328,15 @@ static NSSavePanel *_newPanel = nil;
     if (_allowsOtherFileTypes && [extension length] > 0)
         return name;
     for (NSString *type in types) {
-        if ([type caseInsensitiveCompare: extension] == NSOrderedSame)
+        if (extensionIsOfAllowedType(extension, type))
             return name;
     }
-    return [name stringByAppendingPathExtension: [types objectAtIndex: 0]];
+    for (NSString *type in types) {
+        NSString *allowed = extensionForAllowedType(type);
+        if ([allowed length] > 0)
+            return [name stringByAppendingPathExtension: allowed];
+    }
+    return name;
 }
 
 // The paths of the rows selected in the file browser, in row order.
@@ -651,7 +695,11 @@ static NSSavePanel *_newPanel = nil;
 }
 
 - (void) setCanCreateDirectories: (BOOL) value {
-    NSUnimplementedMethod();
+    _canCreateDirectories = value;
+}
+
+- (BOOL) canCreateDirectories {
+    return _canCreateDirectories;
 }
 
 - (void) setAllowedFileTypes: (NSArray *) value {

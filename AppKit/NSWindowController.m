@@ -149,9 +149,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [[self window] setContentViewController: controller];
 }
 
+// The controller keeps its window when it closes: -window, -close and
+// -showWindow: go on using the same window, which is not released when closed.
 - (void) _windowWillClose: (NSNotification *) note {
-    [self setWindow: nil];
-
     if (_document) {
         [[self retain] autorelease];
 

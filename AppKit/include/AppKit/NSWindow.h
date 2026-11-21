@@ -28,10 +28,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <ApplicationServices/ApplicationServices.h>
 #import <CoreGraphics/CGSubWindow.h>
 #import <AppKit/NSUserInterfaceItemIdentification.h>
+#import <AppKit/NSWindowRestoration.h>
 #import <AppKit/NSAccessibilityProtocols.h>
 
 NS_ASSUME_NONNULL_BEGIN
 
+@class NSWindowTabGroup;
 @class NSView, NSEvent, NSColor, NSColorSpace, NSCursor, NSImage, NSScreen,
         NSText, NSTextView, CGWindow, NSPasteboard, NSSheetContext,
         NSTitlebarAccessoryViewController,
@@ -249,7 +251,7 @@ typedef NS_ENUM(NSInteger, NSWindowUserTabbingPreference) {
 // Legacy ObjC ABI (i386): instance size must stay 0x84, Apple's; the ivars
 // before the extras sit at Apple's offsets. Add new state to the extra
 // struct, never as an ivar.
-@interface NSWindow : NSResponder <NSAnimatablePropertyContainer, NSUserInterfaceItemIdentification, NSAccessibility, NSAppearanceCustomization> {
+@interface NSWindow : NSResponder <NSAnimatablePropertyContainer, NSUserInterfaceItemIdentification, NSAppearanceCustomization> {
     NSRect _frame;
     NSView *_contentView;
     id<NSWindowDelegate> _delegate;
@@ -362,9 +364,10 @@ typedef NS_ENUM(NSInteger, NSWindowUserTabbingPreference) {
 
         NSAppearance *_appearance;
         NSUserInterfaceItemIdentifier _identifier;
+        NSColorSpace *_colorSpace;
 
-        BOOL _isAccessible;
         BOOL _restorable;
+        Class _restorationClass;
         NSWindowTabbingMode _tabbingMode;
         NSWindowCollectionBehavior _collectionBehavior;
         NSWindowTabbingIdentifier _tabbingIdentifier;
@@ -374,6 +377,7 @@ typedef NS_ENUM(NSInteger, NSWindowUserTabbingPreference) {
         NSSize _maxFullScreenContentSize;
         NSInteger _fullScreenTransition;
         NSUInteger _fullScreenTransitionGeneration;
+        BOOL _fullScreenSized, _fullScreenUpdatePending;
         NSTitlebarSeparatorStyle _titlebarSeparatorStyle;
         NSWindowToolbarStyle _toolbarStyle;
         BOOL _titlebarAppearsTransparent;
@@ -391,11 +395,17 @@ typedef NS_ENUM(NSInteger, NSWindowUserTabbingPreference) {
         NSSelectionDirection _keyViewSelectionDirection;
         // The occlusion state last reported, so a change is notified once.
         NSWindowOcclusionState _occlusionState;
+        // Made on first use, once the window takes part in tabbing.
+        NSWindowTabGroup *_tabGroup;
     NS_EXTRA_IVARS_END(NSWindow)
 }
 
 @property(class) BOOL allowsAutomaticWindowTabbing;
 @property(getter=isRestorable) BOOL restorable;
+// The class asked to recreate the window when state is restored; Nil by default.
+@property(assign) Class<NSWindowRestoration> restorationClass;
+- (void) disableSnapshotRestoration;
+- (void) enableSnapshotRestoration;
 
 + (NSWindowDepth) defaultDepthLimit;
 
@@ -531,6 +541,9 @@ typedef NS_ENUM(NSInteger, NSWindowUserTabbingPreference) {
 @property(nullable, nonatomic, readonly) NSWindow *attachedSheet;
 @property(nullable, nonatomic, readonly) NSWindow *sheetParent;
 @property(nullable, nonatomic, readonly) NSArray<NSWindow *> *tabbedWindows;
+// The window's tab group (macOS 10.13): nil unless the window allows tabbing
+// and has a tabbing identifier of its own or prefers tabs.
+@property(nullable, nonatomic, readonly) NSWindowTabGroup *tabGroup;
 
 @property(null_unspecified, nonatomic, retain) id windowController;
 - (null_unspecified NSArray *) drawers;
@@ -602,7 +615,6 @@ typedef NS_ENUM(NSInteger, NSWindowUserTabbingPreference) {
 - (NSRect) contentRectForFrameRect: (NSRect) rect;
 @property(readonly) NSRect contentLayoutRect;
 - (NSRect) backingAlignedRect: (NSRect) rect options: (NSAlignmentOptions) options;
-- (NSRect) accessibilityFrame;
 - (NSRect) constrainFrameRect: (NSRect) rect toScreen: (nullable NSScreen *) screen;
 
 @property(nullable, nonatomic, retain) NSWindow *parentWindow;
@@ -804,6 +816,9 @@ typedef NS_ENUM(NSInteger, NSWindowUserTabbingPreference) {
 
 - (null_unspecified CGSubWindow *) _createSubWindowWithFrame: (CGRect) frame;
 
+@end
+
+@interface NSWindow (NSAccessibility) <NSAccessibility, NSAccessibilityElement>
 @end
 
 @interface NSWindow (NSWindowTitlebarAccessories)

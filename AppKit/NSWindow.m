@@ -19,6 +19,8 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSApplication.h>
+#import <AppKit/NSBezierPath.h>
+#import <AppKit/NSButtonCell.h>
 #import <AppKit/NSColor.h>
 #import <AppKit/NSCursor.h>
 #import <AppKit/NSDisplay.h>
@@ -36,6 +38,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSMenu.h>
 #import <AppKit/NSMenuItem.h>
 #import <AppKit/NSPanel.h>
+#import <AppKit/NSMenuWindow.h>
+#import <AppKit/NSPopUpWindow.h>
 #import <AppKit/NSPasteboard.h>
 #import <AppKit/NSRaise.h>
 #import <AppKit/NSScreen.h>
@@ -47,8 +51,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSTrackingArea.h>
 #import <AppKit/NSView.h>
 #import <AppKit/NSWindow-Private.h>
+#import <AppKit/NSViewController-Private.h>
+#import <AppKit/NSLinkedOnOrAfter.h>
 #import <AppKit/NSWindow.h>
+#import <AppKit/NSWindowTabGroup+Private.h>
 #import "DarlingLayout.h"
+#import "DarlingWindowPresentation.h"
 #import <AppKit/NSWindowAnimationContext.h>
 #import <ApplicationServices/ApplicationServices.h>
 #import <CoreGraphics/CGWindowPrivate.h>
@@ -143,6 +151,9 @@ NSInteger NSBitsPerPixelFromDepth(NSWindowDepth depth) {
 
 @interface CGWindow (private)
 - (void) dirtyRect: (CGRect) rect;
+// Optional, for backends whose window system can do it.
+- (void) updateDecorationsForStyleMask: (NSUInteger) styleMask;
+- (BOOL) moveByWindowManagerForEvent: (NSEvent *) event;
 @end
 
 @interface NSToolbar (NSToolbar_privateForWindow)
@@ -156,6 +167,7 @@ NSInteger NSBitsPerPixelFromDepth(NSWindowDepth depth) {
 
 - (NSRect) zoomedFrame;
 - (void) _updateOcclusionState;
+- (NSArray *) _willChangeViewAppearanceForVisible: (BOOL) visible;
 
 @end
 
@@ -235,6 +247,10 @@ NSInteger NSBitsPerPixelFromDepth(NSWindowDepth depth) {
 @interface NSView (NSWindowBackingProperties)
 - (void) _backingPropertiesDidChange;
 - (void) _updateLayerContextFrames;
+@end
+
+@interface NSOpenGLContext (FullScreenUpdate)
++ (void) _updateContextsAttachedToWindow: (NSWindow *) window;
 @end
 
 @implementation NSWindowSheetCompletion
@@ -356,6 +372,54 @@ static void runPendingSourcesDuringDrag(NSTimeInterval budget) {
     }
 }
 
+// A close, miniaturize or zoom button: a coloured disc, grey when disabled.
+@interface NSStandardWindowButtonCell : NSButtonCell {
+    NSWindowButton _kind;
+}
+@end
+
+@implementation NSStandardWindowButtonCell
+
+- (void) setKind: (NSWindowButton) kind {
+    _kind = kind;
+}
+
+- (void) drawWithFrame: (NSRect) frame inView: (NSView *) view {
+    NSColor *fill;
+    if (![self isEnabled])
+        fill = [NSColor colorWithCalibratedWhite: 0.82 alpha: 1];
+    else if (_kind == NSWindowCloseButton)
+        fill = [NSColor colorWithCalibratedRed: 1.0 green: 0.37 blue: 0.34 alpha: 1];
+    else if (_kind == NSWindowMiniaturizeButton)
+        fill = [NSColor colorWithCalibratedRed: 1.0 green: 0.74 blue: 0.18 alpha: 1];
+    else
+        fill = [NSColor colorWithCalibratedRed: 0.16 green: 0.78 blue: 0.25 alpha: 1];
+
+    NSBezierPath *disc = [NSBezierPath bezierPathWithOvalInRect: NSMakeRect(NSMidX(frame) - 6, NSMidY(frame) - 6, 12, 12)];
+    [fill setFill];
+    [disc fill];
+    [[NSColor colorWithCalibratedWhite: 0 alpha: 0.15] setStroke];
+    [disc setLineWidth: 0.5];
+    [disc stroke];
+    if ([self isHighlighted]) {
+        [[NSColor colorWithCalibratedWhite: 0 alpha: 0.25] setFill];
+        [disc fill];
+    }
+}
+
+@end
+
+@interface NSStandardWindowButton : NSButton
+@end
+
+@implementation NSStandardWindowButton
+
++ (Class) cellClass {
+    return [NSStandardWindowButtonCell class];
+}
+
+@end
+
 @implementation NSWindow
 
 static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen);
@@ -379,8 +443,67 @@ static NSRect contentRectInFrame(NSWindow *window, NSRect frameRect) {
 
 NS_EXTRA_SYNTHESIZE_RETAIN(NSWindow, appearance, _appearance, NSAppearance *, appearance, setAppearance:)
 NS_EXTRA_SYNTHESIZE_COPY(NSWindow, identifier, _identifier, NSUserInterfaceItemIdentifier, identifier, setIdentifier:)
-NS_EXTRA_SYNTHESIZE_ASSIGN(NSWindow, accessibilityElement, _isAccessible, BOOL, isAccessibilityElement, setAccessibilityElement:)
 NS_EXTRA_SYNTHESIZE_ASSIGN(NSWindow, restorable, _restorable, BOOL, isRestorable, setRestorable:)
+NS_EXTRA_SYNTHESIZE_ASSIGN(NSWindow, restorationClass, _restorationClass, Class, restorationClass, setRestorationClass:)
+
+// Keys of the window's own entries in its restorable state.
+static NSString *const NSWindowRestorationFrameKey = @"NSWindowRestorationFrame";
+static NSString *const NSWindowRestorationClassKey = @"NSWindowRestorationClass";
+
+- (void) encodeRestorableStateWithCoder: (NSCoder *) coder {
+    [super encodeRestorableStateWithCoder: coder];
+    [coder encodeRect: [self frame] forKey: NSWindowRestorationFrameKey];
+    Class restorationClass = NS_EXTRA(NSWindow, self)->_restorationClass;
+    if (restorationClass != Nil)
+        [coder encodeObject: NSStringFromClass(restorationClass) forKey: NSWindowRestorationClassKey];
+    if ([_delegate respondsToSelector: @selector(window:willEncodeRestorableState:)])
+        [_delegate window: self willEncodeRestorableState: coder];
+}
+
+- (void) restoreStateWithCoder: (NSCoder *) coder {
+    [super restoreStateWithCoder: coder];
+    if ([coder containsValueForKey: NSWindowRestorationFrameKey]) {
+        NSRect saved = [coder decodeRectForKey: NSWindowRestorationFrameKey];
+        [self setFrame: [self _restoredFrameFromSavedFrame: saved] display: YES];
+    }
+    if ([_delegate respondsToSelector: @selector(window:didDecodeRestorableState:)])
+        [_delegate window: self didDecodeRestorableState: coder];
+}
+
+// QUIRK: a window that is not resizable keeps its size when its state is
+// restored and only moves to the saved origin. A resizable window takes the
+// whole saved frame. Not documented. Evidence: black-box runs of the test
+// below on Mac OS X 10.14.4 (i386) and macOS 26.7.3 (x86_64) (tier 2): 10.14.4
+// keeps the saved bottom-left corner, 26.7.3 the saved top-left corner; the
+// older behaviour is followed.
+// Test: test_quirk_fixed_size_window_keeps_size in appkit-window-restoration.m.
+- (NSRect) _restoredFrameFromSavedFrame: (NSRect) saved {
+    if (NS_EXTRA(NSWindow, self)->_styleMask & NSWindowStyleMaskResizable)
+        return saved;
+    NSRect frame = [self frame];
+    frame.origin = saved.origin;
+    return frame;
+}
+
++ (Class) _restorationClassFromState: (NSCoder *) state {
+    if (![state containsValueForKey: NSWindowRestorationClassKey])
+        return Nil;
+    id name = [state decodeObjectOfClass: [NSString class] forKey: NSWindowRestorationClassKey];
+    if (![name isKindOfClass: [NSString class]])
+        return Nil;
+    return NSClassFromString(name);
+}
+
+- (BOOL) _isClosedForRestoration {
+    return NS_EXTRA(NSWindow, self)->_isClosed;
+}
+
+// Snapshots of windows are not kept, so there is nothing to turn off.
+- (void) disableSnapshotRestoration {
+}
+
+- (void) enableSnapshotRestoration {
+}
 
 static BOOL _allowsAutomaticWindowTabbing;
 
@@ -392,8 +515,9 @@ static BOOL _allowsAutomaticWindowTabbing;
 // main menu as a strip inside each titled window instead of in the desktop's
 // global menu or the application's own menu bar. It is read from the
 // application's preferences, falling back to NSGlobalDomain, and from the
-// org.darlinghq.AppKit domain. The answer is fixed at first use, because the
-// frame of every window depends on it.
+// org.darlinghq.AppKit domain. The strip is drawn as well when the display
+// backend has nowhere else to show the menu, so that it is never missing. The
+// answer is fixed at first use, because the frame of every window depends on it.
 + (BOOL) _usesInWindowMenuBar {
     static BOOL value;
     static dispatch_once_t once;
@@ -407,7 +531,8 @@ static BOOL _allowsAutomaticWindowTabbing;
       if (!valid)
           flag = CFPreferencesGetAppBooleanValue(
                   key, CFSTR("org.darlinghq.AppKit"), &valid);
-      value = valid && flag;
+      value = (valid && flag) ||
+              ![[NSDisplay currentDisplay] _showsMainMenuOutsideWindows];
     });
     return value;
 }
@@ -479,8 +604,10 @@ static BOOL _allowsAutomaticWindowTabbing;
     NSUnimplementedMethod();
 }
 
-// The title bar is drawn by the window manager, so these buttons are not
-// shown; they let callers query and configure the buttons a window has.
+// The window manager's frame shows these buttons for a window with a title
+// bar; the window's frame view shows them itself when the window shows no
+// title bar (see NSThemeFrame). They let callers query and configure the
+// buttons a window has either way.
 + (NSButton *) standardWindowButton: (NSWindowButton) button
                        forStyleMask: (NSWindowStyleMask) styleMask
 {
@@ -509,9 +636,11 @@ static BOOL _allowsAutomaticWindowTabbing;
     if (!(styleMask & NSWindowStyleMaskTitled) || !(styleMask & buttonStyles))
         return nil;
 
-    NSButton *result =
-            [[NSButton alloc] initWithFrame: NSMakeRect(0, 0, 14, 14)];
+    // 14 by 16 points, as on Mac OS X 10.14.4 (14 by 14 on macOS 26.7.3).
+    NSButton *result = [[NSStandardWindowButton alloc] initWithFrame: NSMakeRect(0, 0, 14, 16)];
     [result setBordered: NO];
+    [result setTitle: @""];
+    [(NSStandardWindowButtonCell *) [result cell] setKind: button];
     [result setEnabled: (styleMask & enabling) != 0];
     return [result autorelease];
 }
@@ -684,6 +813,8 @@ static BOOL _allowsAutomaticWindowTabbing;
     for (NSUInteger i = 0; i < 3; i++)
         [NS_EXTRA(NSWindow, self)->_standardWindowButtons[i] release];
     [NS_EXTRA(NSWindow, self)->_animations release];
+    [NS_EXTRA(NSWindow, self)->_tabGroup _windowWillDeallocate];
+    [NS_EXTRA(NSWindow, self)->_tabGroup release];
     [NS_EXTRA(NSWindow, self)->_tabbingIdentifier release];
     [NS_EXTRA(NSWindow, self)->_subtitle release];
     [NS_EXTRA(NSWindow, self)->_childWindows release];
@@ -712,6 +843,7 @@ static BOOL _allowsAutomaticWindowTabbing;
     [NS_EXTRA(NSWindow, self)->_threadToContext release];
     [NS_EXTRA(NSWindow, self)->_undoManager release];
     [NS_EXTRA(NSWindow, self)->_identifier release];
+    [NS_EXTRA(NSWindow, self)->_colorSpace release];
     [NS_EXTRA(NSWindow, self)->_titlebarAccessoryViewControllers release];
     NS_EXTRA_FREE(NSWindow, self);
     [super dealloc];
@@ -1204,7 +1336,11 @@ static BOOL _allowsAutomaticWindowTabbing;
     }
 #endif
 
-    if (changed) {
+    // A window that sits exactly at the limit (a window an application keeps hidden at the screen's corner)
+    // computes its own frame back. Setting it would only restart the check (-setFrame:display: asks for
+    // another one) and make the platform window reconfigure itself, which the window system reports
+    // back: a loop that spins the application's main thread while it is idle.
+    if (changed && !NSEqualRects(frame, _frame)) {
         [self setFrame: frame display: YES];
     }
     NS_EXTRA(NSWindow, self)->_makeSureIsOnAScreen = NO;
@@ -1278,6 +1414,7 @@ static BOOL _allowsAutomaticWindowTabbing;
 {
     BOOL didSize = !NSEqualSizes(newFrame.size, _frame.size);
     BOOL didMove = !NSEqualPoints(newFrame.origin, _frame.origin);
+    NSSize moved = NSMakeSize(newFrame.origin.x - _frame.origin.x, newFrame.origin.y - _frame.origin.y);
 
     _frame = newFrame;
     NS_EXTRA(NSWindow, self)->_makeSureIsOnAScreen = YES;
@@ -1294,6 +1431,7 @@ static BOOL _allowsAutomaticWindowTabbing;
     }
 
     if (didMove) {
+        [self _moveChildWindowsBy: moved];
         [self postNotificationName: NSWindowDidMoveNotification];
     }
 
@@ -1375,7 +1513,15 @@ static BOOL _allowsAutomaticWindowTabbing;
     if (!NS_EXTRA(NSWindow, self)->_isMovable || [event type] != NSLeftMouseDown)
         return;
 
-    // Follow the pointer in screen coordinates. An event's location in the
+    // The window system moves the window itself where it can, as the window
+    // server does on macOS: the window manager or compositor then keeps the
+    // window under the pointer until the button is released, and the release
+    // goes to it rather than to the application.
+    if ([_platformWindow respondsToSelector: @selector(moveByWindowManagerForEvent:)] &&
+        [_platformWindow moveByWindowManagerForEvent: event])
+        return;
+
+    // Otherwise follow the pointer in screen coordinates. An event's location in the
     // window is measured against where the window really is, which lags
     // behind -setFrameOrigin: while the window system catches up, so
     // converting it with the new frame would feed that lag back in.
@@ -1660,6 +1806,32 @@ static BOOL _allowsAutomaticWindowTabbing;
     return NS_EXTRA(NSWindow, self)->_bottomCornerRounded;
 }
 
+// QUIRK: whether a window has a tab group. Not documented. Evidence:
+// black-box observation on macOS 10.14.4 and 26.7.3 (tier 2): a window has
+// one once it has a tabbing identifier set explicitly, or prefers tabs, and
+// not when tabbing is disallowed; the group keeps the identifier it was made
+// with. macOS 26.7.3 gives a borderless window none; 10.14.4 does, and that
+// is followed here.
+// Test: appkit-window-tab-group (cases named "quirk").
+- (NSWindowTabGroup *) tabGroup {
+    NSWindowTabGroup *group = NS_EXTRA(NSWindow, self)->_tabGroup;
+
+    if (group == nil && [self _participatesInTabbing]) {
+        group = [[NSWindowTabGroup alloc] _initWithWindow: self];
+        NS_EXTRA(NSWindow, self)->_tabGroup = group;
+    }
+    return group;
+}
+
+- (BOOL) _participatesInTabbing {
+    NSWindowTabbingMode mode = NS_EXTRA(NSWindow, self)->_tabbingMode;
+
+    if (mode == NSWindowTabbingModeDisallowed)
+        return NO;
+    return NS_EXTRA(NSWindow, self)->_tabbingIdentifier != nil ||
+           mode == NSWindowTabbingModePreferred;
+}
+
 - (id) tab {
     // A window without a tab group has no tab object.
     return nil;
@@ -1837,10 +2009,17 @@ static BOOL _allowsAutomaticWindowTabbing;
 - (NSButton *) standardWindowButton: (NSWindowButton) value {
     if (value > NSWindowZoomButton)
         return nil;
-    if (NS_EXTRA(NSWindow, self)->_standardWindowButtons[value] == nil)
-        NS_EXTRA(NSWindow, self)->_standardWindowButtons[value] = [[[self class]
-                standardWindowButton: value
-                        forStyleMask: NS_EXTRA(NSWindow, self)->_styleMask] retain];
+    if (NS_EXTRA(NSWindow, self)->_standardWindowButtons[value] == nil) {
+        NSButton *button = [[[self class] standardWindowButton: value
+                                                 forStyleMask: NS_EXTRA(NSWindow, self)->_styleMask] retain];
+        // A window's own buttons act on it (on Mac OS X 10.14.4 and macOS 26.7.3
+        // their target is the window).
+        [button setTarget: self];
+        [button setAction: value == NSWindowCloseButton         ? @selector(performClose:)
+                          : value == NSWindowMiniaturizeButton ? @selector(miniaturize:)
+                                                               : @selector(zoom:)];
+        NS_EXTRA(NSWindow, self)->_standardWindowButtons[value] = button;
+    }
     return NS_EXTRA(NSWindow, self)->_standardWindowButtons[value];
 }
 
@@ -1903,13 +2082,18 @@ static BOOL _allowsAutomaticWindowTabbing;
     return 0;
 }
 
+// The color space the window's content is in. Without one set (or after setting
+// nil) it is that of the window's screen. The setting is only stored: no color
+// management is applied to the content.
 - (NSColorSpace *) colorSpace {
-    NSUnimplementedMethod();
-    return nil;
+    NSColorSpace *colorSpace = NS_EXTRA(NSWindow, self)->_colorSpace;
+    return colorSpace != nil ? colorSpace : [[self screen] colorSpace];
 }
 
 - (void) setColorSpace: (NSColorSpace *) newColorSpace {
-    NSUnimplementedMethod();
+    NSColorSpace *old = NS_EXTRA(NSWindow, self)->_colorSpace;
+    NS_EXTRA(NSWindow, self)->_colorSpace = [newColorSpace retain];
+    [old release];
 }
 
 // There is a single space, so every window is on the active one.
@@ -1975,19 +2159,54 @@ static BOOL _allowsAutomaticWindowTabbing;
     return NS_EXTRA(NSWindow, self)->_isInLiveResize;
 }
 
+// QUIRK: a window whose style mask has Resizable but not Titled has a title
+// bar (+frameRectForContentRect:styleMask: adds it, and the window can become
+// key) only in a program built against an SDK older than 10.7; from SDK 10.7
+// on it has none and cannot become key. Not documented. Evidence: black-box
+// observation (tier 2) on Mac OS X 10.14.4 and macOS 26.7.3, the same probe
+// recording SDK 10.6 (22 and 28 point title bar) and SDK 10.7 to 14.0 (none),
+// for Resizable and Miniaturizable|Resizable.
+// Test: appkit-window-hidden-title-chrome.m ("resizable", "mini-resizable"),
+// built for SDK 10.6 and for a newer SDK.
+- (BOOL) _hasTitlebarForStyleMask: (NSUInteger) styleMask {
+    if (styleMask & NSWindowStyleMaskTitled)
+        return YES;
+    return (styleMask & NSWindowStyleMaskResizable) && !NSProgramLinkedOnOrAfterSDK(NS_SDK_VERSION_MACOSX_10_7);
+}
+
 - (BOOL) canBecomeKeyWindow {
-    // The NSWindow implementation returns YES if the window has a title bar or
-    // a resize bar, or NO otherwise. Mac OS X 10.14 behaves this way for a
-    // Resizable mask without Titled too; macOS 26 answers NO for it. We follow
-    // 10.14.
-    return (NS_EXTRA(NSWindow, self)->_styleMask & (NSTitledWindowMask | NSResizableWindowMask)) != 0;
+    // The NSWindow implementation returns YES if the window has a title bar
+    // (see the QUIRK above), or NO otherwise.
+    return [self _hasTitlebarForStyleMask: NS_EXTRA(NSWindow, self)->_styleMask];
 }
 
 - (BOOL) canBecomeMainWindow {
     // The NSWindow implementation returns YES if the window is visible and has
-    // a title bar or a resize mechanism. Otherwise it returns NO
-    return [self isVisible] &&
-           (NS_EXTRA(NSWindow, self)->_styleMask & (NSTitledWindowMask | NSResizableWindowMask));
+    // a title bar. Otherwise it returns NO
+    return [self isVisible] && [self _hasTitlebarForStyleMask: NS_EXTRA(NSWindow, self)->_styleMask];
+}
+
+// What the window is to the window system, for the backends to map onto their hints (see
+// DarlingWindowPresentation.h for the rule and its basis). Asked when the window is about to be
+// shown, as the answers depend on the window's state then (a child window is attached by then, the
+// window is visible, so -canBecomeMainWindow answers for a window that is on screen).
+- (int) _windowPresentation {
+    DarlingWindowTraits traits = {
+        .leavesWindowCycle = ([self collectionBehavior] & (NSWindowCollectionBehaviorTransient |
+                                                          NSWindowCollectionBehaviorStationary |
+                                                          NSWindowCollectionBehaviorIgnoresCycle)) != 0,
+        .hasTitlebar = [self _hasTitlebarForStyleMask: NS_EXTRA(NSWindow, self)->_styleMask],
+        .canBecomeMain = [self canBecomeMainWindow],
+        .canBecomeKey = [self canBecomeKeyWindow],
+        .hasParent = [self parentWindow] != nil,
+        .isPanel = [self isKindOfClass: [NSPanel class]],
+        .isMenu = [self isKindOfClass: [NSMenuWindow class]] || [self isKindOfClass: [NSPopUpWindow class]],
+        .isTooltip = [self isKindOfClass: [NSToolTipWindow class]],
+        .isModal = [self isSheet] || [NSApp modalWindow] == self,
+        .ignoresMouse = [self ignoresMouseEvents],
+        .level = [self level],
+    };
+    return DarlingWindowPresentationFor(&traits);
 }
 
 - (BOOL) canBecomeVisibleWithoutLogin {
@@ -2003,6 +2222,11 @@ static BOOL _allowsAutomaticWindowTabbing;
     // unimplemented marker made the setter raise, so ordinary window setup
     // aborted. The value is plain window state and is kept.
     NS_EXTRA(NSWindow, self)->_collectionBehavior = behavior;
+    // The collection behavior decides whether the window is an application window (see
+    // -_windowPresentation), which a window that is already on screen has to tell the window system.
+    id platform = [self platformWindow];
+    if ([platform respondsToSelector: @selector(presentationChanged)])
+        [platform presentationChanged];
 }
 
 - (NSWindowTabbingMode) tabbingMode {
@@ -2042,6 +2266,42 @@ static BOOL _allowsAutomaticWindowTabbing;
 
 - (void) setTitleVisibility: (NSWindowTitleVisibility) value {
     NS_EXTRA(NSWindow, self)->_titleVisibility = value;
+    [self _titlebarVisibilityChanged];
+}
+
+// A titled window shows nothing of a title bar of its own when the title bar
+// is transparent and either the content view extends under it or there is
+// nothing in it to show: the title is hidden and so are the close, miniaturize
+// and zoom buttons. The application then draws whatever header the window
+// has, so the window system must not add a title bar around it either. A
+// window with a hidden title that keeps a button, and no full-size content
+// view, keeps its frame: the button would otherwise have nowhere to go.
+- (BOOL) _hasInvisibleTitlebarForStyleMask: (NSUInteger) styleMask {
+    if (!(styleMask & NSWindowStyleMaskTitled) ||
+        !NS_EXTRA(NSWindow, self)->_titlebarAppearsTransparent)
+        return NO;
+    if (styleMask & NSWindowStyleMaskFullSizeContentView)
+        return YES;
+    if (NS_EXTRA(NSWindow, self)->_titleVisibility != NSWindowTitleHidden)
+        return NO;
+    for (NSWindowButton b = NSWindowCloseButton; b <= NSWindowZoomButton; b++) {
+        NSButton *button = NS_EXTRA(NSWindow, self)->_standardWindowButtons[b];
+        // A button that was never asked for is created visible.
+        if (button == nil)
+            button = [self standardWindowButton: b];
+        if (button != nil && ![button isHidden])
+            return NO;
+    }
+    return YES;
+}
+
+// Whether the platform draws a title bar depends on the transparency of the
+// title bar, the title's visibility and the standard buttons.
+- (void) _titlebarVisibilityChanged {
+    if ([_platformWindow respondsToSelector: @selector(updateDecorationsForStyleMask:)])
+        [_platformWindow updateDecorationsForStyleMask: NS_EXTRA(NSWindow, self)->_styleMask];
+    if ([_backgroundView isKindOfClass: [NSThemeFrame class]])
+        [(NSThemeFrame *) _backgroundView _updateStandardWindowButtons];
 }
 
 - (BOOL) titlebarAppearsTransparent {
@@ -2050,9 +2310,7 @@ static BOOL _allowsAutomaticWindowTabbing;
 
 - (void) setTitlebarAppearsTransparent: (BOOL) value {
     NS_EXTRA(NSWindow, self)->_titlebarAppearsTransparent = value;
-    // Whether the platform draws a title bar depends on it for full-size content views.
-    if ([_platformWindow respondsToSelector: @selector(updateDecorationsForStyleMask:)])
-        [(id) _platformWindow updateDecorationsForStyleMask: NS_EXTRA(NSWindow, self)->_styleMask];
+    [self _titlebarVisibilityChanged];
 }
 
 - (NSTitlebarSeparatorStyle) titlebarSeparatorStyle {
@@ -2167,16 +2425,50 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
     return NS_EXTRA(NSWindow, self)->_childWindows;
 }
 
+// A child window is attached once (adding it again only orders it), is
+// ordered next to this window if this window is on screen, and does not
+// become key (black-box observation on Mac OS X 10.14.4 and macOS 26.7.3).
+// A child added to a hidden parent stays hidden when the parent is shown on
+// 10.14.4 (it appears on 26.7.3); we follow 10.14.4. Added to another parent,
+// it leaves the previous one as on 26.7.3 (10.14.4 keeps listing it there
+// too, although its parentWindow is the new one).
 - (void) addChildWindow: (NSWindow *) child
                 ordered: (NSWindowOrderingMode) ordered
 {
+    if (child == nil || child == self)
+        return;
+    NSWindow *previous = [child parentWindow];
+    if (previous != nil && previous != self)
+        [previous _detachChildWindow: child];
+
     if (NS_EXTRA(NSWindow, self)->_childWindows == nil) {
         NS_EXTRA(NSWindow, self)->_childWindows = [NSMutableArray new];
     }
 
-    [NS_EXTRA(NSWindow, self)->_childWindows addObject: child];
+    if ([NS_EXTRA(NSWindow, self)->_childWindows indexOfObjectIdenticalTo: child] == NSNotFound)
+        [NS_EXTRA(NSWindow, self)->_childWindows addObject: child];
     [child setParentWindow: self];
-    [child makeKeyAndOrderFront: nil];
+    if ([self isVisible])
+        [child orderWindow: ordered == NSWindowBelow ? NSWindowBelow : NSWindowAbove
+                relativeTo: [self windowNumber]];
+}
+
+- (void) _detachChildWindow: (NSWindow *) child {
+    if ([child parentWindow] == self)
+        [child setParentWindow: nil];
+    [NS_EXTRA(NSWindow, self)->_childWindows removeObjectIdenticalTo: child];
+}
+
+// Attached child windows keep their place relative to this window: they move
+// by as much as this window's origin moved, also when it was resized (as on
+// Mac OS X 10.14.4 and macOS 26.7.3).
+- (void) _moveChildWindowsBy: (NSSize) delta {
+    if (delta.width == 0 && delta.height == 0)
+        return;
+    for (NSWindow *child in [[NS_EXTRA(NSWindow, self)->_childWindows copy] autorelease]) {
+        NSPoint origin = [child frame].origin;
+        [child setFrameOrigin: NSMakePoint(origin.x + delta.width, origin.y + delta.height)];
+    }
 }
 
 - (void) removeChildWindow: (NSWindow *) child {
@@ -2201,8 +2493,6 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
     [self orderOut: nil];
 }
 
-- (void) _parentWindowDidChangeFrame: (NSWindow *) parent {
-}
 
 - (void) _parentWindowDidExitMove: (NSWindow *) parent {
     [self orderWindow: NSWindowAbove relativeTo: [NS_EXTRA(NSWindow, self)->_parentWindow windowNumber]];
@@ -2254,7 +2544,9 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
 }
 
 - (void) makeKeyWindow {
-    [[self platformWindow] makeKey];
+    // An application that is not active does not take the input focus by making a window key.
+    if ([NSApp _mayTakeInputFocus])
+        [[self platformWindow] makeKey];
 
     if (NS_EXTRA(NSWindow, self)->_hasBeenOnScreen) {
         return;
@@ -2561,23 +2853,38 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
 /* Resizes the window to the size its content view's constraints ask for. The window resists
    resizing at NSLayoutPriorityWindowSizeStayPut, so constraints of a higher priority (including
    required ones) win, even over the minimum and maximum content sizes. The top left corner stays
-   where it is. */
+   where it is. Nothing is done when no layout input changed since the last fit. */
 - (void) _fitContentSizeToConstraints {
     if (_contentView == nil || [self isMiniaturized])
+        return;
+    if (DarlingLayoutLastGeneration(_contentView, DarlingLayoutKindWindowFit) == DarlingLayoutGeneration())
         return;
 
     [self updateConstraintsIfNeeded];
 
+    uint64_t generation = DarlingLayoutGeneration();
     NSRect content = [self contentRectForFrameRect: _frame];
     NSSize size = DarlingLayoutPreferredSize(_contentView, content.size);
 
-    if (size.width < 0 || size.height < 0 || NSEqualSizes(size, content.size))
+    // The window gets the nearest whole points: a content view that needs at least 300.5 points
+    // gets 301 and one that needs 300.25 gets 300 (macOS 26.7.3), with no further fitting. A
+    // fractional size would not survive the window system's whole pixels and would ask for the
+    // same fit again after every resize.
+    size.width = round(size.width);
+    size.height = round(size.height);
+
+    if (size.width < 0 || size.height < 0 || NSEqualSizes(size, content.size)) {
+        DarlingLayoutSetLastGeneration(_contentView, DarlingLayoutKindWindowFit, generation);
         return;
+    }
 
     content.size = size;
     NSRect frame = [self frameRectForContentRect: content];
     frame.origin.y = NSMaxY(_frame) - NSHeight(frame);
     [self setFrame: frame display: YES];
+    // The window now has the size the constraints ask for, so the frame changes that follow
+    // from it do not call for another fit; they are still new input for the layout pass.
+    DarlingLayoutSetLastGeneration(_contentView, DarlingLayoutKindWindowFit, DarlingLayoutGeneration());
 }
 
 - (void) layoutIfNeeded {
@@ -2776,6 +3083,7 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
           relativeTo: (NSInteger) relativeTo
 {
     BOOL wasVisible = NS_EXTRA(NSWindow, self)->_isVisible;
+    NSArray *appearance = nil;
 
     // The move notifications are sent under unknown conditions around
     // orderFront: in the Apple AppKit, we do them all the time here until it's
@@ -2789,8 +3097,12 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
         NS_EXTRA(NSWindow, self)->_isClosed = NO;
         if (!wasVisible && ![self isMiniaturized]) {
             [self _constrainFrameBeforeOrderingIn];
+            // The standard buttons have no way to tell the window they were
+            // hidden, so the frame is decided again when the window is shown.
+            [self _titlebarVisibilityChanged];
         }
         [self update];
+        appearance = [self _willChangeViewAppearanceForVisible: YES];
         NS_EXTRA(NSWindow, self)->_isVisible = YES;
         [[self platformWindow] placeAboveWindow: relativeTo];
         /* In some instances when a COMMAND is issued from a menu item to bring
@@ -2811,8 +3123,12 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
         NS_EXTRA(NSWindow, self)->_isClosed = NO;
         if (!wasVisible && ![self isMiniaturized]) {
             [self _constrainFrameBeforeOrderingIn];
+            // The standard buttons have no way to tell the window they were
+            // hidden, so the frame is decided again when the window is shown.
+            [self _titlebarVisibilityChanged];
         }
         [self update];
+        appearance = [self _willChangeViewAppearanceForVisible: YES];
         NS_EXTRA(NSWindow, self)->_isVisible = YES;
         [[self platformWindow] placeBelowWindow: relativeTo];
         /* In some instances when a COMMAND is issued from a menu item to bring
@@ -2833,6 +3149,14 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
         // Note: _isClosed is deliberately NOT reset here because -[NSWindow close]
         // calls -[self orderOut: nil] with _isClosed = YES already set.
         // Resetting here would immediately defeat double-close protection.
+        // A child window that is ordered out leaves its parent: it no longer
+        // moves with it or comes back with it (black-box observation on
+        // Mac OS X 10.14.4 and macOS 26.7.3).
+        if (NS_EXTRA(NSWindow, self)->_parentWindow != nil) {
+            [[self retain] autorelease];
+            [NS_EXTRA(NSWindow, self)->_parentWindow _detachChildWindow: self];
+        }
+        appearance = [self _willChangeViewAppearanceForVisible: NO];
         NS_EXTRA(NSWindow, self)->_isVisible = NO;
         [[self platformWindow] hideWindow];
         if (![self isKindOfClass: [NSPanel class]]) {
@@ -2844,6 +3168,7 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
     }
 
     [self _updateOcclusionState];
+    [NSViewController _didPerformAppearanceTransitions: appearance];
     [self postNotificationName: NSWindowDidMoveNotification];
 }
 
@@ -2982,6 +3307,25 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
 // A mouse click in a window that is not key makes it key (a click does not wait for the window
 // system's focus, which on its own does not always hand out the key status). A panel that becomes key
 // only if needed takes it only for a click on a view that needs the panel to be key.
+// The left click that finds a window not key (the click that activates it) is
+// delivered only to a view that accepts first mouse; for any other view it only
+// makes the window key (if it is not already), and the matching release and
+// drags find no view to go to. A window that cannot become key is not activated by the click, so its
+// views always get it. Only the view under the pointer is asked.
+- (BOOL) _withholdsFirstMouseEvent: (NSEvent *) event fromView: (NSView *) view {
+    if (view == nil || ![self canBecomeKeyWindow])
+        return NO;
+    // A press from the window system carries whether the window was key when it
+    // arrived (the window system's activation for the same click may be applied
+    // before the press is taken from the queue); other events are judged now.
+    BOOL wasKey = [self isKeyWindow];
+    if ([event isKindOfClass: [NSEvent_mouse class]] && [(NSEvent_mouse *) event _hasWindowKeyStateOnArrival])
+        wasKey = [(NSEvent_mouse *) event _windowWasKeyOnArrival];
+    if (wasKey)
+        return NO;
+    return ![view acceptsFirstMouse: event];
+}
+
 - (void) _makeKeyForMouseDownInView: (NSView *) view {
     if ([self isKeyWindow] || ![self canBecomeKeyWindow])
         return;
@@ -3070,6 +3414,10 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
     case NSLeftMouseDown: {
         NSView *view = [_backgroundView hitTest: [event locationInWindow]];
 
+        if ([self _withholdsFirstMouseEvent: event fromView: view]) {
+            [self _makeKeyForMouseDownInView: view];
+            break;
+        }
         [self _makeKeyForMouseDownInView: view];
         if ([view acceptsFirstResponder]) {
             if ([view needsPanelToBecomeKey]) {
@@ -3519,6 +3867,7 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
     if (NS_EXTRA(NSWindow, self)->_isVisible == visible) {
         return;
     }
+    NSArray *appearance = [self _willChangeViewAppearanceForVisible: visible];
     NS_EXTRA(NSWindow, self)->_isVisible = visible;
     if (visible) {
         [[self platformWindow] showWindowWithoutActivation];
@@ -3526,6 +3875,7 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
         [[self platformWindow] hideWindow];
     }
     [self _updateOcclusionState];
+    [NSViewController _didPerformAppearanceTransitions: appearance];
 }
 
 - (void) orderFront: (id) sender {
@@ -3644,11 +3994,29 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
 }
 
 - (void) miniaturize: (id) sender {
+    if (![self isMiniaturized]) {
+        [self postNotificationName: NSWindowWillMiniaturizeNotification];
+    }
     [[self platformWindow] miniaturize];
 }
 
 - (void) deminiaturize: (id) sender {
     [[self platformWindow] deminiaturize];
+}
+
+// Private setter that applications call to change the miniaturized state. On
+// macOS 26 it behaves like -miniaturize: / -deminiaturize: (the state changes
+// asynchronously and the Will/Did notifications are posted); setting the
+// state a window already has does nothing.
+- (void) setIsMiniaturized: (BOOL) miniaturized {
+    if (miniaturized == [self isMiniaturized]) {
+        return;
+    }
+    if (miniaturized) {
+        [self miniaturize: nil];
+    } else {
+        [self deminiaturize: nil];
+    }
 }
 
 - (void) print: (id) sender {
@@ -3669,6 +4037,47 @@ enum {
 // How long the window system has to confirm a full screen change.
 static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
 
+// QUIRK: when a window enters or leaves native full screen, AppKit itself sends
+// -update to the NSOpenGLContexts attached to views of that window, once the
+// window has its new size, so their drawables follow the views (they are not
+// resized by a plain window resize, which sends no -update). Not documented.
+// Evidence (tier 2, black-box): macOS 10.14.4 x86_64 sends -update to such a
+// context (seen by overriding -update) twice on entering and once on leaving
+// full screen, and the drawable follows; macOS 26.7.3 x86_64 sends none and
+// the drawable stays at its old size. Followed per the widest-(older)-version
+// policy. A window resize alone gets no update on either.
+// Test: tests/nsopenglcontext-fullscreen-update.m
+// (test_quirk_fullscreen_transition_sends_update, mode "follow"; "resize" is
+// the control).
+//
+// The update has to follow the size change of the window, which a window
+// system reports before or after it confirms the full screen state: it is sent
+// at each size change of the transition, and when the confirmation came first
+// at the size change that follows it (or, when the window does not change
+// size, once the confirmation has been handled).
+- (void) _updateOpenGLContextsForFullScreenChange {
+    [NSOpenGLContext _updateContextsAttachedToWindow: self];
+}
+
+- (void) _fullScreenChangeConfirmed {
+    if (NS_EXTRA(NSWindow, self)->_fullScreenSized) {
+        [self _updateOpenGLContextsForFullScreenChange];
+        return;
+    }
+    NS_EXTRA(NSWindow, self)->_fullScreenUpdatePending = YES;
+    [self performSelector: @selector(_fullScreenSettled)
+               withObject: nil
+               afterDelay: 0
+                  inModes: @[NSRunLoopCommonModes]];
+}
+
+- (void) _fullScreenSettled {
+    if (!NS_EXTRA(NSWindow, self)->_fullScreenUpdatePending)
+        return;
+    NS_EXTRA(NSWindow, self)->_fullScreenUpdatePending = NO;
+    [self _updateOpenGLContextsForFullScreenChange];
+}
+
 - (void) toggleFullScreen: (id) sender {
     if (NS_EXTRA(NSWindow, self)->_fullScreenTransition != FullScreenIdle)
         return;
@@ -3677,6 +4086,8 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
 
     NS_EXTRA(NSWindow, self)->_fullScreenTransition = entering ? FullScreenEntering : FullScreenExiting;
     NS_EXTRA(NSWindow, self)->_fullScreenTransitionGeneration++;
+    NS_EXTRA(NSWindow, self)->_fullScreenSized = NO;
+    NS_EXTRA(NSWindow, self)->_fullScreenUpdatePending = NO;
     [self postNotificationName: entering ? NSWindowWillEnterFullScreenNotification
                                          : NSWindowWillExitFullScreenNotification];
 
@@ -3738,15 +4149,19 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
 
     if (transition == FullScreenEntering && fullScreen) {
         [self _finishFullScreenTransition];
+        [self _fullScreenChangeConfirmed];
         [self postNotificationName: NSWindowDidEnterFullScreenNotification];
     } else if (transition == FullScreenExiting && !fullScreen) {
         [self _finishFullScreenTransition];
+        [self _fullScreenChangeConfirmed];
         [self postNotificationName: NSWindowDidExitFullScreenNotification];
     } else if (transition == FullScreenIdle && !fullScreen &&
                (NS_EXTRA(NSWindow, self)->_styleMask & NSWindowStyleMaskFullScreen)) {
         // The window system took the window out of full screen on its own.
         [self postNotificationName: NSWindowWillExitFullScreenNotification];
         [self setStyleMask: NS_EXTRA(NSWindow, self)->_styleMask & ~NSWindowStyleMaskFullScreen];
+        NS_EXTRA(NSWindow, self)->_fullScreenSized = NO;
+        [self _fullScreenChangeConfirmed];
         [self postNotificationName: NSWindowDidExitFullScreenNotification];
     }
 }
@@ -3901,10 +4316,29 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
 }
 
 - (void) _setVisible: (BOOL) visible {
-    BOOL wasVisible = NS_EXTRA(NSWindow, self)->_isVisible;
-
+    NSArray *appearance = [self _willChangeViewAppearanceForVisible: visible];
     NS_EXTRA(NSWindow, self)->_isVisible = visible;
     [self _updateOcclusionState];
+    [NSViewController _didPerformAppearanceTransitions: appearance];
+}
+
+- (BOOL) _isShownForViewAppearance {
+    return NS_EXTRA(NSWindow, self)->_isVisible && ![self isMiniaturized];
+}
+
+// The view controllers of the window's views hear -viewWillAppear or
+// -viewWillDisappear before the window is shown or hidden, and the matching
+// -viewDid... call after, which the caller sends with
+// +[NSViewController _didPerformAppearanceTransitions:].
+- (NSArray *) _willChangeViewAppearanceForVisible: (BOOL) visible {
+    NSArray *appearance = [NSViewController _appearanceTransitionsUnder: _backgroundView
+                                                                 window: self
+                                                          windowVisible: visible
+                                                          rootSuperview: nil
+                                                          useRootHidden: NO
+                                                             rootHidden: NO];
+    [NSViewController _willPerformAppearanceTransitions: appearance];
+    return appearance;
 }
 
 // Called wherever something -occlusionState depends on may have changed: posts the notification
@@ -4005,9 +4439,10 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
     [self _setSheetOrigin];
     NSRect sheetFrame = [sheet frame];
 
-    BOOL sheetWasVisible = NS_EXTRA(NSWindow, sheet)->_isVisible;
+    NSArray *sheetAppearance = [sheet _willChangeViewAppearanceForVisible: YES];
     NS_EXTRA(NSWindow, sheet)->_isVisible = YES;
     [sheet _updateOcclusionState];
+    [NSViewController _didPerformAppearanceTransitions: sheetAppearance];
     [sheet display];
     [[sheet platformWindow] sheetOrderFrontFromFrame: sheetFrame
                                          aboveWindow: [self platformWindow]];
@@ -4030,10 +4465,11 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
     sheetFrame.origin.y = NSMaxY(sheetFrame);
     sheetFrame.size.height = 0;
 
-    BOOL sheetWasVisible = NS_EXTRA(NSWindow, sheet)->_isVisible;
+    NSArray *sheetAppearance = [sheet _willChangeViewAppearanceForVisible: NO];
     NS_EXTRA(NSWindow, sheet)->_isVisible = NO;
     [[sheet platformWindow] sheetOrderOutToFrame: sheetFrame];
     [sheet _updateOcclusionState];
+    [NSViewController _didPerformAppearanceTransitions: sheetAppearance];
     [(NSThemeFrame *) [sheet _backgroundView] setWindowBorderType: NSNoBorder];
 
     [NS_EXTRA(NSWindow, self)->_sheetContext release];
@@ -4113,6 +4549,9 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
 }
 
 - (void) platformWindowDeminiaturized: (CGWindow *) window {
+    // The window is shown again, so its views appear again.
+    NSArray *appearance = [self _willChangeViewAppearanceForVisible: [self isVisible]];
+    [NSViewController _didPerformAppearanceTransitions: appearance];
     [self _updatePlatformWindowTitle];
     if (NS_EXTRA(NSWindow, self)->_sheetContext != nil) {
         [[NS_EXTRA(NSWindow, self)->_sheetContext sheet] orderWindow: NSWindowAbove
@@ -4125,6 +4564,10 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
 
 - (void) platformWindowMiniaturized: (CGWindow *) window {
     NS_EXTRA(NSWindow, self)->_isActive = NO;
+
+    // A miniaturized window shows none of its views.
+    NSArray *appearance = [self _willChangeViewAppearanceForVisible: NO];
+    [NSViewController _didPerformAppearanceTransitions: appearance];
 
     [self _updatePlatformWindowTitle];
     if (NS_EXTRA(NSWindow, self)->_sheetContext != nil) {
@@ -4179,16 +4622,16 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
     }
 
     // We don't want the miniaturized frame.
+    NSSize moved = NSZeroSize;
     if (![self isMiniaturized]) {
+        moved = NSMakeSize(frame.origin.x - _frame.origin.x, frame.origin.y - _frame.origin.y);
         _frame = frame;
     }
 
     NS_EXTRA(NSWindow, self)->_makeSureIsOnAScreen = YES;
 
     [self _setSheetOriginAndFront];
-    [NS_EXTRA(NSWindow, self)->_childWindows
-            makeObjectsPerformSelector: @selector(_parentWindowDidChangeFrame:)
-                            withObject: self];
+    [self _moveChildWindowsBy: moved];
     [NS_EXTRA(NSWindow, self)->_drawers makeObjectsPerformSelector: @selector(parentWindowDidChangeFrame:)
                               withObject: self];
 
@@ -4199,6 +4642,13 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
         [self resetCursorRects];
         [self saveFrameUsingName: _autosaveFrameName];
         [self postNotificationName: NSWindowDidResizeNotification];
+        if (NS_EXTRA(NSWindow, self)->_fullScreenTransition != FullScreenIdle) {
+            NS_EXTRA(NSWindow, self)->_fullScreenSized = YES;
+            [self _updateOpenGLContextsForFullScreenChange];
+        } else if (NS_EXTRA(NSWindow, self)->_fullScreenUpdatePending) {
+            NS_EXTRA(NSWindow, self)->_fullScreenUpdatePending = NO;
+            [self _updateOpenGLContextsForFullScreenChange];
+        }
     } else {
         [self saveFrameUsingName: _autosaveFrameName];
         [self postNotificationName: NSWindowDidMoveNotification];
@@ -4765,11 +5215,6 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
     rect = _NSAlignRectToPixelGrid(rect, options);
     return NSMakeRect(rect.origin.x / scale, rect.origin.y / scale,
                       rect.size.width / scale, rect.size.height / scale);
-}
-
-// The window's frame in screen coordinates.
-- (NSRect) accessibilityFrame {
-    return [self frame];
 }
 
 // effectiveAppearance follows the window's own appearance, and the

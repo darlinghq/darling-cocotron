@@ -57,6 +57,11 @@ struct WaylandBuffer {
     struct wl_proxy *_surface;
     struct wl_proxy *_xdgSurface;
     struct wl_proxy *_toplevel;
+    // org_kde_kwin_appmenu of the toplevel, while the main menu is exported.
+    struct wl_proxy *_appMenu;
+    // org_kde_plasma_surface of the toplevel while it is not an application window (see
+    // -updateTaskbarPresence).
+    struct wl_proxy *_plasmaSurface;
     struct wl_proxy *_popup;
     WaylandWindow *_popupParent;
     uint32_t _popupGrabSerial;
@@ -74,6 +79,11 @@ struct WaylandBuffer {
     // The window has been ordered in, whether or not it is mapped (a window with alpha 0 is not).
     BOOL _shouldBeMapped;
     BOOL _fullyTransparent;
+    // A menu is ordered in but waits for its parent window's first configure: a popup cannot be
+    // created for a surface that has no role and configuration yet, and as a toplevel the
+    // compositor would place and size it.
+    BOOL _popupWaitingForParent;
+    BOOL _genericPopup; // an xdg_popup for a pop-up window that is not a menu or tool tip (see DarlingWindowPresentation.h)
     // -makeKey was called and the activation it asks for has not arrived yet.
     BOOL _keyRequested;
     // The activation is being reported to the NSWindow; its -becomeKeyWindow asks -makeKey, which is no new request.
@@ -128,8 +138,13 @@ struct WaylandBuffer {
 // events of the batch (including a configure for the new size) are in.
 - (void) outputsChanged;
 - (BOOL) isPopup;
+- (BOOL) isPopupWaitingForParent;
+- (void) ensureMapped;
 // A tool tip window: placed as an ungrabbed popup next to the pointer.
 - (BOOL) isTooltip;
+// A pop-up window of the application (a drop-down a toolkit draws, a custom tool tip), shown as an
+// ungrabbed popup of its parent window; it is not part of menu tracking.
+- (BOOL) isGenericPopup;
 - (WaylandWindow *) popupParent;
 - (WaylandWindow *) levelParent;
 - (void) updateLevelParent;
@@ -137,6 +152,9 @@ struct WaylandBuffer {
 - (uint32_t) popupGrabSerial;
 - (struct wl_proxy *) xdgSurface;
 - (void) unmap;
+// Tells the compositor where the application's main menu is (KDE's appmenu
+// protocol), or takes the address back when there is no menu or no toplevel.
+- (void) updateApplicationMenu;
 - (NSPoint) contentOffset;
 - (BOOL) isDecorationPoint: (CGPoint) point;
 - (BOOL) decorationButton: (uint32_t) button pressed: (BOOL) pressed

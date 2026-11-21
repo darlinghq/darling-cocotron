@@ -18,9 +18,53 @@
 */
 
 #import <AppKit/NSView.h>
+#import <AppKit/NSTableView.h>
 #import <AppKit/AppKitIvarLayout.h>
 
+NS_ASSUME_NONNULL_BEGIN
+
+@class NSColor;
+
+// The view of one row of a view-based table: the row's cell views are its
+// subviews. It draws the row's background and selection.
 @interface NSTableRowView : NSView {
-    NS_LEGACY_IVAR_PAD(_NSTableRowViewReserved, 32)
+    // Apple's footprint is 32 bytes over NSView's: the extras pointer and padding.
+    NS_LEGACY_IVAR_PAD(_NSTableRowViewReserved, 28)
+    NS_EXTRA_IVARS_BEGIN(NSTableRowView)
+        NSColor *_backgroundColor;
+        NSTableViewSelectionHighlightStyle _selectionHighlightStyle;
+        NSTableViewDraggingDestinationFeedbackStyle _draggingDestinationFeedbackStyle;
+        CGFloat _indentationForDropOperation;
+        BOOL _selected;
+        BOOL _emphasized;
+        BOOL _groupRowStyle;
+        BOOL _floating;
+        BOOL _targetForDropOperation;
+        BOOL _previousRowSelected;
+        BOOL _nextRowSelected;
+    NS_EXTRA_IVARS_END(NSTableRowView)
 }
+
+@property (copy) NSColor *backgroundColor;
+@property NSTableViewSelectionHighlightStyle selectionHighlightStyle;
+@property NSTableViewDraggingDestinationFeedbackStyle draggingDestinationFeedbackStyle;
+@property CGFloat indentationForDropOperation;
+@property (getter=isSelected) BOOL selected;
+@property (getter=isEmphasized) BOOL emphasized;
+@property (getter=isGroupRowStyle) BOOL groupRowStyle;
+@property (getter=isFloating) BOOL floating;
+@property (getter=isTargetForDropOperation) BOOL targetForDropOperation;
+@property (getter=isPreviousRowSelected) BOOL previousRowSelected;
+@property (getter=isNextRowSelected) BOOL nextRowSelected;
+@property (readonly) NSBackgroundStyle interiorBackgroundStyle;
+@property (readonly) NSInteger numberOfColumns;
+
+- (void) drawBackgroundInRect: (NSRect) dirtyRect;
+- (void) drawSelectionInRect: (NSRect) dirtyRect;
+- (void) drawSeparatorInRect: (NSRect) dirtyRect;
+- (void) drawDraggingDestinationFeedbackInRect: (NSRect) dirtyRect;
+- (nullable __kindof NSView *) viewAtColumn: (NSInteger) column;
+
 @end
+
+NS_ASSUME_NONNULL_END
